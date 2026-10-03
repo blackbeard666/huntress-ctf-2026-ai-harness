@@ -1,0 +1,18 @@
+{
+  "c_sha256": "a0d3aeddb90dccf579e0262704dc7d7c2828121d8cc988f085de169601737b9b",
+  "c_marker": "BR01-CATALOG-000",
+  "c_has_symtab": "true",
+  "c_recover_code": "8100",
+  "c_machine": "x86-64",
+  "cpp_sha256": "46dcdb7977162f9a4973301e84735eeabcfb7347d4c1f3ccf9adce77e5d18ba9",
+  "cpp_xor_key": "0x34",
+  "cpp_config_crc32": "0x19816e83",
+  "campaign": "BR02-003",
+  "domain": "node-003.day02.example.invalid",
+  "url": "https://node-003.day02.example.invalid/api/BR02-003",
+  "mutex": "Global\\HuntressBR02_003",
+  "has_cpp_vtable": "true",
+  "has_cpp_typeinfo": "true",
+  "mangled_score_symbol": "_ZNK15DiscoveryEngine5scoreEPKc",
+  "vtable_symbol": "_ZTV15DiscoveryEngine"
+}

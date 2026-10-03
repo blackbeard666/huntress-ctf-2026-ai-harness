@@ -3,9 +3,9 @@
   "name": "\ud83d\udcdc Host With the Most",
   "lane": "script-analysis",
   "worker": null,
-  "updated": "2026-10-04T01:44:22",
+  "updated": "2026-10-04T02:22:47",
   "launches": 1,
   "help": "# HELP: Host With the Most: 81/87 confirmed, blocked by the local wrong-answer cap (3/3)\n\n## Status\n- 81 answers GM-confirmed (`confirmed.json`). All PowerShell (15), all JScript exact values, styles, and roles, plus\n  ATT&CK for benign (`none`), downloader (`T1105`), and impact (`T1486`).\n- Solver done: `solver/solve.py` + `solver/jsdecode.js`. `hctf solver-test` ok, `hctf solver-run` produces all 87 with no missing ids.\n\n## What blocks me\n`hctf submit` now refuses locally: \"3 incorrect submissions already in this attempt (cap 3)\". The 3 wrong submissions were:\n1. the first bulk submit (contained `jscript-relay-role=relay`, which is wrong),\n2. the 9-role batch (same `relay` value; the GM later accepted `staged_chain`),\n3. `jscript-launcher-attack=T1218.010` (regsvr32.exe adapter).\n\n## The 6 open answers (ATT&CK IDs, a GM vocabulary question; the bytes give only the role/adapter)\n| answer_id | role / adapter | solver's current guess | alternatives |\n|---|---|---|---|\n| jscript-stager-attack | stager (acquire_remote -> dispatch_memory), MSXML2.XMLHTTP.6.0 | T1105 | T1620, T1059.007 |\n| jscript-dropper-attack | dropper (decode_embedded -> write_file), ADODB.Stream | T1105 | T1140, T1027 |\n| jscript-launcher-attack | launcher (locate_local -> dispatch_process), regsvr32.exe | T1218 | T1059.007, T1106, T1204.002 (T1218.010 REJECTED) |\n| jscript-chain-attack | staged_chain -> next_stage resource-sample.ps1, Microsoft.XMLHTTP | T1105 | T1059.001, T1059.007 |\n| jscript-uploader-atta",
   "attempt": 6,
-  "time_trial_result": "expired"
+  "time_trial_result": "blocked"
 }

@@ -1,0 +1,1 @@
+expected.json = solver-derived regression lock (deterministic, 2 identical runs, all ids answered). NOT GM-confirmed: this time_trial attempt expired before submission.

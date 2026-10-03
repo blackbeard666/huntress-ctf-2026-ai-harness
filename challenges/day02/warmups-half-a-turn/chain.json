@@ -1,9 +1,11 @@
 {
-  "stage": "time_trial:blocked",
+  "stage": "done",
   "name": "\ud83d\udc76 Half a Turn",
   "lane": "warmups",
   "worker": null,
-  "updated": "2026-10-04T01:41:59",
-  "attempt": 6,
-  "time_trial_result": "expired"
+  "updated": "2026-10-04T02:03:43",
+  "attempt": 2,
+  "time_trial_result": "correct",
+  "launches": 1,
+  "mastery_result": "correct"
 }

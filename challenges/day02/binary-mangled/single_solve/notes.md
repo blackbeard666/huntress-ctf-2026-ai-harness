@@ -13,3 +13,7 @@ cpp_format = elf64-x86-64 | objdump -f "file format" | INCORRECT
 Status: 16/17 accepted; cpp_format open (see HELP.md). Solver omits it rather than guess.
 cpp_format = json | decoded config payload format | INCORRECT
 cpp_format = elf | lowercase container name | CORRECT -> 17/17. Solver emits lowercase kind; lib/knowledge.py BINARY_FORMAT
+PE variants (time_trial day02-cpp.exe, MinGW PE32+) | solver read only PE exports -> mangled_score_symbol/vtable_symbol "none" (wrong) | FIXED: parse COFF symtab (+string table) -> _ZNK15DiscoveryEngine5scoreEPKc / _ZTV15DiscoveryEngine; vtable now = _ZTV<class owning score> (BehaviorEngine also present)
+variant cases | all time_trial attempts expired, no GM confirmation -> expected.json empty (unverified) | solver-test ok only for single_solve; cpp_format "pe" still unconfirmed (analogy with "elf")
+start.json clobbered at 01:57 by an attempt-less start response (is_complete=False) | restored from git HEAD (attempt 04c6ac67, matches GM status CORRECT) | is_complete True
+variant expected.json | filled from INDEPENDENT derivation (7z+sha256+nm/c++filt+HCFG crc-checked decode; c_* copied since c_sha256 == GM-confirmed binary); PE cpp_format omitted (unconfirmed) | solver-test ok

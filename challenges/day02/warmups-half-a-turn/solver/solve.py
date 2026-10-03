@@ -51,6 +51,11 @@ def candidates(b):
             yield "zip", b"\n".join(z.read(n) for n in z.namelist())
         except Exception:
             pass
+    t0 = printable(b)
+    if t0 is not None and len(t0.splitlines()) > 1:
+        pl = per_line(t0)
+        if pl:
+            yield "per-line", pl.encode()
     if PREFIX.search(s):
         yield "strip-prefix", PREFIX.sub(b"", s)
     compact = re.sub(rb"\s+", b"", s)
@@ -97,6 +102,54 @@ def candidates(b):
                 (((c - 97 + n) % 26) + 97) if 97 <= c <= 122 else c for c in t.encode())
 
 
+COMMON = set("""a an and answer are be code decode decoding exact for from game good great here in is it job master
+nice of on send solve submit that the this to warmup well with work you your""".split())
+NUMBERED = re.compile(r"^[ \t]*(?:\d{1,3}|line ?\d{1,3})(?:\t|[:|>.)] ?)(.*)$", re.I)
+
+
+def english(t):
+    words = re.findall(r"[A-Za-z]+", t)
+    if not words:
+        return 0.0
+    hits = sum(w.lower() in COMMON for w in words)
+    alpha = sum(c.isalpha() or c in " ,.!?:'-" for c in t) / len(t)
+    return hits + alpha
+
+
+def best_line(frag, depth=3):
+    """Best English-looking decoding of one line fragment (each line may use its own encoding chain)."""
+    best, seen, frontier = (english(frag), frag), {frag}, [frag.encode()]
+    for _ in range(depth):
+        nxt = []
+        for cur in frontier:
+            for _name, d in candidates(cur):
+                t = printable(d)
+                if t is None or t in seen:
+                    continue
+                seen.add(t)
+                nxt.append(d)
+                sc = english(t)
+                if sc > best[0] + 0.5:
+                    best = (sc, t)
+        frontier = nxt[:400]
+    return best[1]
+
+
+def per_line(t):
+    """Numbered lines ("01<TAB>payload") whose payloads are each encoded differently and form ONE message
+    when decoded and concatenated verbatim (fragments split mid-word, leading spaces significant)."""
+    lines = [l for l in t.splitlines() if l.strip()]
+    if len(lines) < 2:
+        return None
+    ms = [NUMBERED.match(l) for l in lines]
+    frags = [m.group(1) for m in ms] if all(ms) else lines
+    dec = [best_line(f) for f in frags]
+    if dec == frags:
+        return None
+    joined = "".join(dec)
+    return joined if SLUG.search(joined) else "\n".join(dec)
+
+
 def accept(data):
     t = printable(data)
     if t is None:
@@ -133,22 +186,38 @@ def peel(data, max_nodes=50000):
     return None
 
 
+def zip_members(data, depth=0):
+    """Yield (basename, bytes) for every member of a zip (nested zips too), regardless of file extension."""
+    if depth > 3 or not data.startswith(b"PK\x03\x04"):
+        return
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+        for n in z.namelist():
+            if n.endswith("/"):
+                continue
+            m = z.read(n)
+            yield Path(n).name, m
+            yield from zip_members(m, depth + 1)
+    except Exception:
+        pass
+
+
 def find_artifact(root, name, sha=None):
-    p = root / name
-    if p.is_file():
-        return p.read_bytes()
-    for f in root.rglob("*"):
-        if f.is_file() and f.name == name:
+    files = [f for f in sorted(root.rglob("*")) if f.is_file()]
+    # GM may hand out a zip bundle under a member's name (e.g. "blob-01.txt" holding blob-01..08.txt):
+    # an exact inner member beats an outer same-named file that is really a container
+    for f in files:
+        for n, m in zip_members(f.read_bytes()):
+            if n == name:
+                return m
+    for f in files:
+        if f.name == name:
             return f.read_bytes()
-    for f in root.rglob("*.zip"):
-        with zipfile.ZipFile(f) as z:
-            for n in z.namelist():
-                if Path(n).name == name:
-                    return z.read(n)
     if sha:  # GM may serve every set under one generic filename; match the contract's sha256 instead
-        for f in root.rglob("*"):
-            if f.is_file() and hashlib.sha256(f.read_bytes()).hexdigest() == sha:
-                return f.read_bytes()
+        for f in files:
+            for b in [f.read_bytes()] + [m for _, m in zip_members(f.read_bytes())]:
+                if hashlib.sha256(b).hexdigest() == sha:
+                    return b
     raise FileNotFoundError(name)
 
 

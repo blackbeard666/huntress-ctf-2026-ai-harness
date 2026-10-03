@@ -2,9 +2,6 @@
 
 **Prompt:** The extensions claim one story; the first sixteen bytes tell another. Identify what each artifact actually is and isolate the deliberate disguise.
 
-**1 answer(s) expected.** Formats:
-- `evidence-note-magic-prefix-hex-16`: What are the first sixteen bytes as lowercase hexadecimal?  _(fmt: exact 32 hexadecimal characters representing the first 16 bytes; use no 0x prefi; norm: trim)_
-
 ## Artifacts
 
 - **metadata-day-02-evidence.zip** (287 bytes) sha256 `c356020d0dafda86…`

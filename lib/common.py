@@ -50,9 +50,55 @@ def read_member(zpath, member):
             raise
 
 
+def _zip_open(src):
+    """ZipFile over a path or bytes, or None if not a zip."""
+    try:
+        return zipfile.ZipFile(io.BytesIO(src) if isinstance(src, bytes) else src)
+    except Exception:
+        return None
+
+
+def _zip_read(z, name):
+    try:
+        return z.read(name)
+    except RuntimeError:
+        for pw in ZIP_PASSWORDS:
+            try:
+                return z.read(name, pwd=pw)
+            except Exception:
+                continue
+        raise
+
+
+def iter_entries(root, max_depth=4):
+    """Yield (name, bytes_loader, parent_name) for every file under root and, recursively, every zip member
+    (Mastery bundles ship one outer zip holding the per-set zips, possibly under a set's own name)."""
+    def walk(name, load, parent, depth):
+        yield name, load, parent
+        if depth >= max_depth:
+            return
+        try:
+            data = load()
+        except Exception:
+            return
+        if data[:2] != b"PK":
+            return
+        z = _zip_open(data)
+        if z is None:
+            return
+        for n in z.namelist():
+            if n.endswith("/"):
+                continue
+            yield from walk(Path(n).name, (lambda z=z, n=n: _zip_read(z, n)), name, depth + 1)
+
+    for p in iter_files(root):
+        yield from walk(p.name, p.read_bytes, None, 0)
+
+
 def find_artifact(root, artifact):
     """Locate the bytes for a contract artifact name.
-    Handles 'container.zip -> member', plain files, files nested inside a zip, and odd saved names."""
+    Handles 'container.zip -> member', plain files, files nested inside a zip (any depth), outer bundle zips that
+    wrap the named container (even under the same name), and odd saved names."""
     root = Path(root)
     container, _, member = artifact.partition("->")
     container, member = container.strip(), member.strip()
@@ -62,21 +108,24 @@ def find_artifact(root, artifact):
     # direct file match (exact, container, or the full odd 'zip -> member' saved name)
     for p in files:
         if p.name in (artifact, container, cbase):
-            data = p.read_bytes()
             if member and zipfile.is_zipfile(p):
-                return read_member(p, member)
-            return data
-    # member inside any zip
-    target = member or cbase
-    for p in files:
-        if zipfile.is_zipfile(p):
-            try:
-                with zipfile.ZipFile(p) as z:
-                    hit = next((n for n in z.namelist() if Path(n).name == target), None)
-                    if hit:
-                        return read_member(p, Path(hit).name)
-            except Exception:
-                continue
+                try:
+                    return read_member(p, member)
+                except KeyError:
+                    continue  # same-named outer bundle; look deeper
+            return p.read_bytes()
+    # recursive: prefer `member` whose parent container is `cbase`, then any `member`, then the container itself
+    target = Path(member).name if member else cbase
+    loose = None
+    for name, load, parent in iter_entries(root):
+        if name != target:
+            continue
+        if not member or parent == cbase:
+            return load()
+        if loose is None:
+            loose = load
+    if loose is not None:
+        return loose()
     raise FileNotFoundError(f"{artifact!r} not found under {root}")
 
 

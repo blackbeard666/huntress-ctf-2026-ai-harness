@@ -7,7 +7,7 @@ Answer ids are `<prefix>_<field>` (c_*, cpp_*) or bare config fields; Mastery ad
   c_sha256 / cpp_sha256   sha256 of the member
   c_marker                .huntress section string (up to NUL)
   c_has_symtab            .symtab present (PE: COFF symbol table non-empty)
-  c_recover_code          immediate returned by `recover_code` (mov eax, imm; ret)
+  c_recover_code          immediate returned by `recover_code` (mov eax, imm; ret); stripped -> leaf b8 imm32 c3 in .text
   c_machine               ELF e_machine in GM vocabulary (x86-64 confirmed)
   cpp_xor_key             HCFG blob: 'HCFG' u8 ver, u8 xor key, u16 len, u32 crc32(plaintext), xored JSON
   cpp_config_crc32        crc32 of the decoded config (== header crc)
@@ -15,7 +15,7 @@ Answer ids are `<prefix>_<field>` (c_*, cpp_*) or bare config fields; Mastery ad
   has_cpp_vtable          any vtable symbol (_ZTV / ??_7) or vtable RTTI
   has_cpp_typeinfo        any typeinfo (_ZTI/_ZTS) or MSVC type descriptor (.?AV)
   mangled_score_symbol    mangled symbol whose demangled name is <Class>::score(...)
-  vtable_symbol           mangled vtable symbol of the program's own class (not __cxxabiv1)
+  vtable_symbol           mangled vtable symbol of the program's own class (not __cxxabiv1); PE variants are MinGW: names come from the COFF symbol table
   cpp_format              container format, lowercase: "elf" (GM-confirmed; rejected ELF, ELF64, HCFG, elf64-x86-64, json); PE -> "pe" by analogy
 """
 import argparse, hashlib, io, json, os, re, struct, subprocess, sys, zipfile, zlib
@@ -112,7 +112,32 @@ def elf_info(data):
         "has_symtab": elf.get_section_by_name(".symtab") is not None,
         "marker": hs.data().split(b"\0", 1)[0].decode("utf-8", "replace") if hs else None,
         "syms": syms, "va2off": va2off,
+        "text": elf.get_section_by_name(".text").data() if elf.get_section_by_name(".text") else None,
     }
+
+
+def coff_symbols(pe, data):
+    """MinGW PEs keep a COFF symbol table (18-byte entries + string table) with Itanium-mangled names."""
+    fh = pe.FILE_HEADER
+    ptr, n = fh.PointerToSymbolTable, fh.NumberOfSymbols
+    if not ptr or not n or ptr + 18 * n > len(data):
+        return []
+    strtab = ptr + 18 * n
+    secs = pe.sections
+    out, i = [], 0
+    while i < n:
+        e = data[ptr + 18 * i:ptr + 18 * (i + 1)]
+        raw, value, secno, typ, _cls, naux = struct.unpack("<8sIhHBB", e)
+        if raw[:4] == b"\0\0\0\0":
+            o = strtab + struct.unpack_from("<I", raw, 4)[0]
+            name = data[o:data.find(b"\0", o)].decode(errors="replace")
+        else:
+            name = raw.split(b"\0", 1)[0].decode(errors="replace")
+        if name and 0 < secno <= len(secs):
+            va = pe.OPTIONAL_HEADER.ImageBase + secs[secno - 1].VirtualAddress + value
+            out.append((name, va, 0, "STT_FUNC" if typ & 0x20 else "STT_OBJECT", True))
+        i += 1 + naux
+    return out
 
 
 def pe_info(data):
@@ -123,6 +148,7 @@ def pe_info(data):
     for e in (exp.symbols if exp else []):
         if e.name:
             syms.append((e.name.decode(), pe.OPTIONAL_HEADER.ImageBase + e.address, 0, "STT_FUNC", True))
+    syms += coff_symbols(pe, data)
     marker = None
     for s in pe.sections:
         if s.Name.rstrip(b"\0").decode(errors="replace").startswith(".huntres"):
@@ -138,6 +164,7 @@ def pe_info(data):
         "machine": PE_MACHINE.get(pe.FILE_HEADER.Machine, hex(pe.FILE_HEADER.Machine)), "e_machine": pe.FILE_HEADER.Machine,
         "has_symtab": pe.FILE_HEADER.PointerToSymbolTable != 0 and pe.FILE_HEADER.NumberOfSymbols > 0,
         "marker": marker, "syms": syms, "va2off": va2off,
+        "text": next((x.get_data() for x in pe.sections if x.Name.rstrip(b"\0") == b".text"), None),
     }
 
 
@@ -153,7 +180,7 @@ def return_const(data, inf, name):
     from capstone import Cs, CS_ARCH_X86, CS_MODE_64, CS_MODE_32
     sym = next((s for s in inf["syms"] if s[0] == name and s[4]), None)
     if sym is None:
-        return None
+        return stripped_return_const(data, inf)
     off = inf["va2off"](sym[1])
     if off is None:
         return None
@@ -173,6 +200,24 @@ def return_const(data, inf, name):
                     return v - 2**32 if 2**31 <= v < 2**32 else v
             return None
     return None
+
+
+def stripped_return_const(data, inf):
+    """Stripped build: no recover_code symbol. Find the leaf `mov eax, imm32; ret` (b8 imm32 c3) in the code
+    section; main inlines the same immediate (`mov eax, imm; cmp ...`), which breaks ties between candidates."""
+    code = inf.get("text")
+    if not code:
+        return None
+    imms = [struct.unpack("<i", m.group(1))[0] for m in re.finditer(rb"\xb8(.{4})\xc3", code, re.S)]
+    imms = list(dict.fromkeys(imms))
+    if len(imms) > 1:
+        inlined = [v for v in imms if len(re.findall(re.escape(b"\xb8" + struct.pack("<i", v)), code)) > 1]
+        imms = inlined or imms
+    if len(imms) != 1:
+        log(f"[!] stripped recover_code: ambiguous candidates {imms}")
+        return None
+    log(f"[*] stripped binary: recover_code recovered from leaf mov eax,imm; ret -> {imms[0]}")
+    return imms[0]
 
 
 def hcfg(data):
@@ -214,6 +259,14 @@ def cpp_facts(data, inf):
     score = [n for n in names if re.search(r"::score\(", dm.get(n, "")) or re.match(r"\?score@", n)]
     has_vt = bool(vt) or b"??_7" in data or b"_ZTV" in data
     has_ti = bool(ti) or b".?AV" in data or b"_ZTI" in data
+    # prefer the vtable of the class that owns score(): _ZNK15DiscoveryEngine5score... -> _ZTV15DiscoveryEngine
+    for sc in score:
+        m = re.match(r"_ZN[KVR]*(\d+)", sc)
+        if m:
+            cls = sc[len(m.group(0)) - len(m.group(1)):][:len(m.group(1)) + int(m.group(1))]
+            vt.sort(key=lambda n: n != "_ZTV" + cls)
+            break
+    vt = list(dict.fromkeys(vt))
     return {"vtable": vt, "typeinfo": ti, "score": score, "has_vt": has_vt, "has_ti": has_ti}
 
 
