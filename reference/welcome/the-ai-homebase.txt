@@ -1,0 +1,104 @@
+
+🏠 The AI Homebase
+
+To help facilitate your use of AI, we provide for you a dedicated system as your AI Homebase with token credits included.
+
+The Homebase VM is available to you at any time from the Systems listing on the left-hand navigation of the CTF platform.
+
+AI Homebase
+
+Update available
+
+Stopped
+
+2 credits / hr
+
+10.1.50.243
+, copy to clipboard
+Power
+Connect
+
+IMPORTANT
+
+The Reset button on the AI Homebase System card performs a factory reset. If you press it, your Homebase will be reformatted to a fresh, clean slate and you will lose all chats and files stored on it.
+
+Enter the AI Homebase
+Hover your mouse cursor over the Power drop-down on the bottom-left of the System card.
+Click Start to turn on the VM.
+Watch the VM status in the top-right of the card transition from a yellow Starting text to a green Running text.
+Wait until the Connect button on the bottom-right is active.
+Click Connect to be presented with your own AI Homebase environment!
+
+NOTE
+
+The AI Homebase VM uses up your alloted credits for compute time and AI tokens while it is on and running. So to maximize your play time, turn off the VM when you aren't using it! If you don't want to worry about that and want to rig your own setup (the use of the Homebase VM is totally optional) then you should utilize the VPN connection!
+
+Connect with SSH
+
+SSH is available and encouraged if you prefer working in your own terminal. Connect to the CTF VPN as described in VPN Connectivity, then start your Homebase VM and use the IP address shown on its System card.
+
+ssh HuntressCTF@<your-homebase-ip>
+
+Your SSH username is HuntressCTF.
+
+This is the password for you to connect to the SSH account for the Homebase VM and the HuntressCTF user: <homebase-password>.
+
+Replace <your-homebase-ip> with your own VM's IP address. When SSH asks for the password, type it and press Enter; the characters will not appear as you type.
+
+You can run administrative commands with sudo. If sudo asks for a password, use the same Homebase password above. For example, sudo whoami should print root.
+
+Use the AI workspace
+
+The Homebase VM offers you readily available access to a coding agent and harness overtop of Claude Code and Codex.
+
+You are welcome to still utilize any AI environment that you would like (using your own tokens or AI subscriptions), but in order to utilize token credits that we provide for you, you must use the Homebase VM.
+
+This interface is prepared with an AGENTS.md file to instruct your AI agent to reach the Game Master service from within the CTF environment. You may download the AGENTS.md file for your own usage here:
+
+AGENTS.md
+
+10.9 kB
+
+The Homebase frontend is powered by T3 Code, an open-source interface for AI coding agents. Credit to the T3 team!
+
+AI Models Available
+
+Use the interface model picker to see the models enabled for your Homebase and choose the one you want to use.
+
+IMPORTANT
+
+To make the most of the allotted tokens we provide for you, we strongly recommend you use GPT-6 Luna within the Homebase VM. Your allotted token credits replenish daily with new challenge releases at 9:00 AM Eastern Time.
+
+Things to Know
+You can open a terminal within the AI Homebase VM and T3 Code interface! Makes command-line access easy once you click "Connect" on the system card.
+
+In the top right of the interface, click the Toggle Terminal Drawer (Ctrl+J) button to instantly open a terminal on the bottom of the display...
+
+... or click the Toggle right panel (Ctrl+Alt+B) to open a sidebar to open a new terminal, view fields, and more.
+
+We have observed cases of the AI Homebase VM first starting up with a "Codex provider status" error.
+
+This should resolve on its own after a few seconds. Please wait for the system to finish initializing, it should not prohibit you from playing the game.
+
+You may see the AI Homebase display an Update Available notification. This notification is specifically referring to the underlying harness, Codex or Claude Code, that the T3 Code interface drives. This update notice may frequently appear because these tools release changes often. It is NOT an update notification pertaining to game playability; an update may fail if you choose to run it, but you do not have to update and it should not prohibit you from playing the game.
+
+If you choose to update, it may fail with other scary looking red colored errors:
+
+Don't worry -- the game is still playable without needing to update. You can use the Homebase VM as it is provided, but if you'd like more control and tuning, you can connect to the VPN and rig up your own AI your own way!
+
+Pardon our appearance during construction -- we're still tryna get this whole concept and player experience just right, -- you should be able to disregard those errors and still get to play!
+
+We have observed cases of the AI Homebase starting up and immediately responding with "T3 Code could not load."
+
+If you see this occur, and it does not proceed to the T3 interface after refreshing the page, please Reset your VM. Again, please know that this process will remove your thread conversation history and files on the Homebase AI system.
+
+💡 New Changes for 2026
+Continue
+🏠 The AI Homebase
+AI Homebase
+Enter the AI Homebase
+Connect with SSH
+Use the AI workspace
+AGENTS.md
+AI Models Available
+Things to Know

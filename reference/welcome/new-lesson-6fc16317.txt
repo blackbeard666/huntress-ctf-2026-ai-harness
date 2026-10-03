@@ -1,0 +1,54 @@
+
+🚀 Getting Started
+
+The quickest way to begin is through the browser-based AI Homebase. CourseStack presents the game and records your points; Homebase gives you an AI reviewer and tools; the Game Master assigns challenge material and validates your answers.
+
+TIP
+
+You do not need to write API code before you can play. Start by speaking naturally to your AI reviewer in Homebase. You can automate the same workflow later.
+
+1. Start Homebase
+
+Open Systems from the left-hand navigation, find AI Homebase, select Start, wait for the status to become Running, and then select Connect.
+
+2. Ask what challenges are available
+
+Start a thread with your AI reviewer and ask:
+
+What challenges are available right now? Show me their names, challenge IDs, modes, and any active deadlines.
+
+Your AI reviewer will query the live Game Master rather than guessing from memory.
+
+3. Start one challenge
+
+Choose a challenge and ask your AI reviewer to start it and show you the complete prompt. For example:
+
+Start the Day 1 Warmups Single Solve. Show me every question, answer ID, artifact, and what completion requires, but do not solve it yet.
+
+Use Single Solve first when you want to learn a challenge without a timer.
+
+4. Solve the assigned material
+
+Work from the artifact or target assigned to your team or solo playthrough. Download the genuine bytes through the Game Master, inspect them with Homebase tools, and ask the AI reviewer for as much or as little help as you want.
+
+5. Submit through the Game Master
+
+When you are ready, give your answer to the AI reviewer and ask it to submit under the exact answer ID returned for that attempt. The Game Master will report whether the answer is incorrect, partially accepted, expired, or correct. If a lesson instead presents a native CourseStack question field or explicitly asks you to enter a returned flag in CourseStack, follow that lesson's instruction and submit it there.
+
+6. Verify points in CourseStack
+
+CourseStack is the official scoring ledger. Return to the lesson and verify that its question is complete and that the points appear for you or your team. If the Game Master reports that scoring is pending, wait for CourseStack to confirm the points before treating the challenge as fully scored.
+
+IMPORTANT
+
+Teammates share Game Master attempts, timed deadlines, and Mastery progress. Use only the artifact, target, answer IDs, and flags assigned to your current team or solo playthrough.
+
+🛜 VPN Connectivity
+Continue
+🚀 Getting Started
+1. Start Homebase
+2. Ask what challenges are available
+3. Start one challenge
+4. Solve the assigned material
+5. Submit through the Game Master
+6. Verify points in CourseStack

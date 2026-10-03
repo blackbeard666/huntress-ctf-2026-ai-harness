@@ -1,0 +1,62 @@
+
+🤖 Automating Your Solves
+
+Single Solve is a good place to learn how a challenge works. But Time Trial and Mastery are timed, and the fastest way through them is a script that talks directly to the Game Master.
+
+IMPORTANT
+
+There are two submission paths. If a lesson presents a native CourseStack question field or explicitly asks you to enter a returned flag there—such as Read the Rules or Welcome Robots—submit through that lesson page. Game Master challenge modes that return answer_ids are submitted through the proxy API below; the Game Master validates those answers and automatically completes the corresponding CourseStack question. CourseStack remains the official scoring ledger, so if the Game Master reports "status":"pending", verify the points in CourseStack before treating the challenge as fully scored.
+
+Endpoint
+http://10.0.0.219/huntress-ctf-proxy
+
+This address is only reachable from inside the CTF environment — your AI Homebase, or your own machine connected over the player VPN. It will not resolve from the public internet.
+
+Use the URL without a trailing slash. Append query parameters directly, for example http://10.0.0.219/huntress-ctf-proxy?op=list, and send JSON POST requests to the same base URL. In shell commands, quote the complete URL so & stays in the query.
+
+Operations
+Operation	Request
+List challenges	GET ?op=list
+Filter by day and lane	GET ?op=list&day=1&lane=warmups
+Start an attempt	POST {"challenge":"<id>"}
+Check status	GET ?op=status&challenge=<id>
+Download artifact	GET ?op=artifact&challenge=<id>
+Submit answers	POST {"challenge":"<id>","answers":{"<answer-id>":"<answer>"}}
+
+Send POST requests with Content-Type: application/json.
+
+The start response returns answer_ids. Use those exact values as the keys in answers.
+
+Submit returns "CORRECT", "incorrect", or "accepted" (partial progress — check remaining).
+
+Example
+
+This simplified example targets the Day 1 Warmups challenge A Little Based, whose downloaded text contains a Base64-encoded answer. Other challenges may return archives, applications, or live targets that require different analysis.
+
+import base64, requests
+
+GM = "http://10.0.0.219/huntress-ctf-proxy"
+
+challenges = requests.get(GM, params={
+    "op": "list", "day": 1, "lane": "warmups"
+}).json()["challenges"]
+
+cid = challenges[0]["id"]
+answer_id = requests.post(GM, json={"challenge": cid}).json()["answer_ids"][0]
+
+answer = base64.b64decode(
+    requests.get(GM, params={"op": "artifact", "challenge": cid}).content
+).decode().strip()
+
+result = requests.post(GM, json={
+    "challenge": cid,
+    "answers": {answer_id: answer},
+}).json()
+
+print(result["result"])  # CORRECT
+⏰ Time Trial and Mastery Mode
+Continue
+🤖 Automating Your Solves
+Endpoint
+Operations
+Example

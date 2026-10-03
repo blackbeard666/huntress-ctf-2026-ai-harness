@@ -1,0 +1,6 @@
+chals/
+secrets/
+state.sqlite
+__pycache__/
+*.pyc
+.venv/

@@ -1,0 +1,33 @@
+
+🎮 The Game Master
+
+The Huntress CTF 2026 event operates with a new mechanic: a Game Master acts as a broker for challenges, challenge artifacts, and convenient automatic answer submission when you have solved a challenge.
+
+IMPORTANT
+
+The Game Master is only accessible from within the CTF platform environment. Direct communication from the public Internet will not reach this authenticated service.
+
+You may only reach the Game Master from the AI Homebase virtual machine, or when you connect to the environment with the provided VPN connection.
+
+The VPN configuration file is available for download on the very bottom of the Systems tab on the left-hand navigation.
+
+The Game Master is reachable within the CTF environment at this IP address:
+
+http://10.0.0.219/huntress-ctf-proxy
+
+Connection to the Game Master is prepared automatically inside the provided AI Homebase VM. The supported proxy URL already uses its private IP address, so you do not need to add anything to your hosts file.
+
+If you connect through the player VPN and want a convenient shell variable, copy and paste:
+
+export HUNTRESS_GAME_MASTER_URL='http://10.0.0.219/huntress-ctf-proxy'
+curl -fsS "$HUNTRESS_GAME_MASTER_URL?op=list"
+
+Keep the URL exactly as shown. Do not add a trailing slash before ?op=list or any other query parameter.
+
+WARNING
+
+We have observed cases where GPT-6 Luna receives a 404 error while trying to reach the Game Master. If this happens, please confirm that the request uses the exact URL above without a trailing /. The proxy path is a little particular about that formatting, but correcting the URL should allow you to continue without restarting Homebase.
+
+🏠 The AI Homebase
+Continue
+🎮 The Game Master

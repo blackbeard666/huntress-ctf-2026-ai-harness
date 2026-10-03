@@ -1,0 +1,60 @@
+
+⏰ Time Trial and Mastery Mode
+
+Here is the whole idea: our compounding challenges grow with you.
+
+Single Solve is where you learn it. Time Trial is where you prove you can do it under pressure. Mastery Mode is where you show that you can do it repeatedly and reliably.
+
+Complete Single Solve first to unlock Time Trial. Complete Time Trial to unlock Mastery Mode for that same challenge and round.
+
+Time Trial
+
+Time Trial gives you one assigned challenge variant and puts it on a real, server-enforced clock. The timer does not begin while you are reading the lesson or waiting for the Game Master to prepare your material. It begins only when that material is ready and the timed attempt starts.
+
+The Game Master will include the exact UTC deadline in the start or status response:
+
+{"download":"<assigned-artifact>","deadline":"<UTC timestamp>"}
+
+Once that clock is moving, it is moving. Repeating the start request resumes the same attempt. Closing Homebase, reconnecting, refreshing CourseStack, or asking a reviewer to start the challenge does not give you a fresh timer.
+
+Mastery Mode
+
+Mastery Mode turns the same idea up a notch. You will receive multiple tasks or variants, all sharing one overall deadline.
+
+Submit each finding under the exact answer ID returned by the Game Master. You do not have to submit everything at once: correct partial progress is saved, and the response tells you how many answers are still outstanding:
+
+{"result":"accepted","remaining":2}
+
+You finish Mastery Mode only when every required answer has been accepted before the shared deadline. Repeating an answer that was already accepted will not advance your progress.
+
+Team behavior
+
+This really is shared team play. Verified teammates use one Game Master attempt, one deadline, and one combined set of Mastery progress. If a reviewer joins after the attempt has started, they join the clock that is already running; they do not receive a separate timer.
+
+Different teams and solo playthroughs still remain separate. Their attempts, progress, assigned material, and scoring do not mix with yours.
+
+Expiry, reconnect, and retry
+If you reconnect or repeat a normal start request, you return to the current attempt with its original deadline.
+You cannot reset a timer while it is still active.
+If time runs out before the solve is complete, the Game Master returns {"result":"expired"} and that attempt cannot award points.
+After an attempt expires, an explicit retry starts one new shared timer, clears any partial answers from the expired run, and advances to the next qualified variant.
+After CourseStack confirms a completed attempt, the next start also advances to the next qualified variant. If scoring is still pending, the current attempt stays in place until confirmation.
+A new attempt ID and artifact SHA-256 show that the variant advanced. The challenge ID, question IDs, answer formats, and scoring destination remain stable by design.
+Retry rotation is currently published for Days 1-8. Later-day timed challenges do not promise a new variant until their rotation is published; the live Game Master response is authoritative.
+If teammates retry at the same time, those requests converge on the same new team timer rather than creating separate attempts.
+
+Only use this explicit retry request after the Game Master tells you that the attempt has expired:
+
+{"op":"retry","challenge":"<challenge-id>"}
+
+IMPORTANT
+
+The deadline returned by the Game Master is the authoritative clock. A browser refresh, local stopwatch, reconnect, or repeated start request cannot tell you that the server-side timer changed.
+
+⚡ Recommended Gameplay
+Continue
+⏰ Time Trial and Mastery Mode
+Time Trial
+Mastery Mode
+Team behavior
+Expiry, reconnect, and retry

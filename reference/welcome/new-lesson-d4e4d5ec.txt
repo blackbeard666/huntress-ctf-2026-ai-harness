@@ -1,0 +1,38 @@
+
+💬 Join Us In Discord
+
+You can join our Discord server to chat with other CTF players and the event staff via the Help or Community buttons on the left-side navigation bar.
+
+The Huntress CTF uses Discord Roles to allow entry into Discord and enable messaging permissions.
+
+To chat within Discord, you must connect your CTF account with your Discord account using our platform integration.
+
+Go to https://ctf.huntress.com in your web browser's address bar.
+
+Click Sign In in the top-right of the page if you are not logged in.
+
+Click your account name in the top-right of the page once you are logged in.
+
+Click Settings from the drop-down menu.
+
+Click the Connect to Discord button in the Discord section.
+
+Click Authorize on the pop-up presented within Discord.
+
+Click Close on the pop-up presented within Discord.
+
+Observe the CTF platform now sees your Discord account connected!
+
+Within the Huntress CTF Discord server, your Discord account should now have the role 2026 CTF Participant.
+
+IMPORTANT
+
+The 2026 CTF Participant role is what permits you to chat within the channels and open support tickets.
+
+If you do not see the 2026 CTF Participant Discord role on your Discord account within the Huntress CTF Discord server, please click the Sync Roles button under the Discord section of your platform account settings page.
+
+We hope you join us within the Discord community for memes, GIFs, and CTF shenanigans!
+
+🚀 Getting Started
+Continue
+💬 Join Us In Discord
