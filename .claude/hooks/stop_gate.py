@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-MAX_BLOCKS = 25
+MAX_BLOCKS = int(os.environ.get("HCTF_MAX_BLOCKS", "10"))  # escalate to HELP sooner instead of grinding
 
 
 def allow():

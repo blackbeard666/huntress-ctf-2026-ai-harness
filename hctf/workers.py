@@ -32,6 +32,15 @@ def _logfile(chal_dir, stage, pool):
     return chal_dir / f"worker-{stage}-{pool}-{time.strftime('%Y%m%dT%H%M%S')}.log"
 
 
+# ilio-style bounds: cap each worker's turns so a stuck agent can't grind up cost. Wall-clock timeout
+# is passed in; turns are a second, independent ceiling. Override via HCTF_MAX_TURNS_<STAGE>.
+MAX_TURNS = {"single": 80, "generalize": 50, "fix": 30}
+
+
+def _max_turns(stage):
+    return int(os.environ.get(f"HCTF_MAX_TURNS_{stage.upper()}", MAX_TURNS.get(stage, 60)))
+
+
 def run_local(chal_dir, stage, prompt, env_extra, timeout):
     """Blocking. Returns (returncode, logfile)."""
     log = _logfile(chal_dir, stage, "local")
@@ -39,8 +48,10 @@ def run_local(chal_dir, stage, prompt, env_extra, timeout):
     env.update({k: str(v) for k, v in env_extra.items()})
     env["HCTF_WORKER_START"] = str(time.time())
     env["TMPDIR"] = str(TMP)  # keep every worker's scratch files inside the project
-    env["PATH"] = f"{ROOT / 'bin'}:{Path.home() / '.local/bin'}:{Path.home() / 'tools/node/bin'}:{env.get('PATH', '')}"
-    cmd = ["claude", "-p", prompt, "--dangerously-skip-permissions", "--output-format", "stream-json", "--verbose"]
+    env["PYTHONPATH"] = f"{ROOT}:{env.get('PYTHONPATH', '')}"  # so solvers/tools can `import lib.*`
+    env["PATH"] = f"{BIN}:{TOOLS / 'node' / 'bin'}:{ROOT / '.venv' / 'bin'}:{Path.home() / '.local/bin'}:{env.get('PATH', '')}"
+    cmd = ["claude", "-p", prompt, "--dangerously-skip-permissions", "--max-turns", str(_max_turns(stage)),
+           "--output-format", "stream-json", "--verbose"]
     with open(log, "w") as out:
         p = subprocess.Popen(cmd, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT, env=env, start_new_session=True)
         try:
@@ -76,7 +87,8 @@ def run_homebase(chal_root, log_dir, stage, prompt, env_extra, timeout):
     log = _logfile(log_dir, stage, "homebase")
     env_extra = {k: (str(Path(v).relative_to(ROOT)) if isinstance(v, Path) else v) for k, v in env_extra.items()}
     envs = " ".join(f"{k}={shlex.quote(str(v))}" for k, v in {**env_extra, "HCTF_ON_HOMEBASE": 1}.items())
-    cmd = (f"cd ~/{HB_WORK} && {envs} PATH=~/{HB_WORK}/bin:~/{HB_WORK}/tools/node/bin:$PATH "
+    cmd = (f"cd ~/{HB_WORK} && {envs} PYTHONPATH=~/{HB_WORK} "
+           f"PATH=~/{HB_WORK}/bin:~/{HB_WORK}/tools/node/bin:~/{HB_WORK}/.venv/bin:$PATH "
            f"timeout {int(timeout)} codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check "
            f"{shlex.quote(prompt)} </dev/null")
     try:

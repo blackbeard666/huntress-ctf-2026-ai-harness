@@ -20,8 +20,8 @@ from . import cli, paths, remote, solvers, timed, workers
 ROOT = Path(__file__).resolve().parent.parent
 CREDIT_SOFT = float(os.environ.get("HCTF_CREDIT_SOFT", "4"))   # below: no new Homebase (codex) workers
 CREDIT_HARD = float(os.environ.get("HCTF_CREDIT_HARD", "1.5"))  # below: no new timed starts; VM kept for GM
-SINGLE_TIMEOUT = int(os.environ.get("HCTF_SINGLE_TIMEOUT", str(90 * 60)))
-GENERALIZE_TIMEOUT = int(os.environ.get("HCTF_GENERALIZE_TIMEOUT", str(30 * 60)))
+SINGLE_TIMEOUT = int(os.environ.get("HCTF_SINGLE_TIMEOUT", str(25 * 60)))
+GENERALIZE_TIMEOUT = int(os.environ.get("HCTF_GENERALIZE_TIMEOUT", str(12 * 60)))
 MAX_SINGLE_LAUNCHES = 3
 MAX_TIMED_RETRIES = 5
 
@@ -196,6 +196,11 @@ class Chain:
             return True
         set_state(self.base, stage="single:fetch")
         body, err = timed.ensure_started(cid)
+        try:
+            from . import triage as triage_mod
+            triage_mod.triage(cid)  # deterministic grounding before the LLM worker starts
+        except Exception as e:  # noqa: BLE001 - triage is best-effort
+            say(f"[{cid}] triage note: {e}")
         if body is None:
             # e.g. read-the-rules: no artifact, but the contract still names the answer ids
             st = cli.call(cid, "status", cid)["body"] or {}

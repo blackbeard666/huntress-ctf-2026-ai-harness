@@ -12,6 +12,7 @@ Regression cases: .../solver/cases/<case>/{contract.json, artifacts/, expected.j
 """
 import difflib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -93,13 +94,15 @@ def run_solver(sdir, contract, artifacts, timeout=120):
     """Run one solver. Returns (answers dict, error string or None, seconds)."""
     if not (Path(sdir) / "solve.py").exists():
         return {}, f"no solver yet at {Path(sdir).relative_to(ROOT)}/solve.py", 0.0
-    tmp =TMP / f"contract-{sdir.parent.name}-{time.time_ns()}.json"
+    tmp = TMP / f"contract-{sdir.parent.name}-{time.time_ns()}.json"
     tmp.write_text(json.dumps(contract))
     py = str(VENV_PY) if VENV_PY.exists() else "python3"
+    env = dict(os.environ)
+    env["PYTHONPATH"] = f"{ROOT}:{env.get('PYTHONPATH', '')}"  # solvers can `import lib.*`
     t0 = time.time()
     try:
         r = subprocess.run([py, str(sdir / "solve.py"), "--contract", str(tmp), "--artifacts", str(artifacts)],
-                           capture_output=True, text=True, timeout=timeout, cwd=sdir)
+                           capture_output=True, text=True, timeout=timeout, cwd=sdir, env=env)
     except subprocess.TimeoutExpired:
         return {}, f"timeout after {timeout}s", time.time() - t0
     finally:

@@ -8,17 +8,21 @@ Only the Game Master's APK and the challenge backend it names are in scope. That
 the CTF network, so send its requests through `hctf hb exec -- curl ...` (runs on Homebase). Don't probe anything else.
 
 # Tools (source bin/env.sh)
-- `apktool d -f -o <work>/apktool app.apk` - decoded `AndroidManifest.xml`, `res/values/*.xml`, smali.
-- `jadx -d <work>/jadx app.apk` (`--deobf` for obfuscated names) - readable Java/Kotlin.
-- androguard in `.venv` for solvers:
-  `from androguard.core.apk import APK; a=APK("app.apk"); a.get_package(); a.get_activities()` (+ `get_element` for exported flags/filters).
-- `unzip -l`, `strings`, `exiftool` for embedded assets; native `.so` -> `binary-re` skill.
+- **`droidasc` (ASC) — use this first.** On-demand APK decompiler, fast and low-RAM (good for big APKs and Homebase):
+  - `droidasc getmanifest app.apk` - decoded AndroidManifest (exported flags, intent-filters, schemes).
+  - `droidasc findrefs app.apk string|type|method|field <needle>` - cross-refs across all DEX (e.g. a scheme, a URL, a const).
+  - `droidasc listclass app.apk --prefix com.foo` then `droidasc getclass app.apk <class> -o out.java` - decompile just the class you need.
+- `jadx -d <work>/jadx app.apk` (`--deobf`) - whole-app Java, fallback when you need the full picture.
+- `apktool d -f -o <work>/apktool app.apk` - smali + `res/values/*.xml` when you need resources/strings.
+- androguard in `.venv` for solvers: `from androguard.core.apk import APK; a=APK("app.apk"); a.get_package(); a.get_activities()`.
+- native `.so` -> `binary-re` skill.
 
 # Reading the challenge
-1. Manifest: which component is `android:exported="true"`, and its `<intent-filter>` (`VIEW`+`BROWSABLE`+`<data scheme/host/path>`).
-2. In jadx, follow that component: how it reads the incoming URI/extras, what request it builds (URL, headers, any id/credential
-   from `strings.xml`/`BuildConfig`/a constant), and how it reads the reply.
-3. The answer is the value the backend returns (e.g. `ANS-` + 16 hex). Build the same request the app would and run it on Homebase.
+1. `droidasc getmanifest`: which component is `android:exported="true"`, and its `<intent-filter>` (`VIEW`+`BROWSABLE`+`<data scheme/host/path>`).
+2. `droidasc findrefs` the scheme/host to locate the handler, then `getclass` it: how it reads the incoming URI/extras, what request it
+   builds (URL, headers, any id/credential from `strings.xml`/`BuildConfig`/a constant), and how it reads the reply.
+3. The answer is the value the backend returns (e.g. `ANS-` + 16 hex). Build the same request the app would and run it on Homebase
+   via `hctf hb exec -- curl ...` (the backend is only reachable inside the CTF network).
 
 # Solver tips
 Derive the package, component, URI and any embedded value from the APK with androguard rather than hard-coding them; variants

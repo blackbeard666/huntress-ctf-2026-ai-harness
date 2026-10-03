@@ -431,6 +431,28 @@ def c_dash(a):
     return 0
 
 
+def c_watch(a):
+    from . import watch
+    watch.watch(interval=a.interval)
+    return 0
+
+
+def c_tail(a):
+    from . import watch
+    watch.tail(a.id)
+    return 0
+
+
+def c_triage(a):
+    from . import triage as triage_mod
+    p = triage_mod.triage(a.id)
+    if not p:
+        print("no artifacts to triage (start + artifact first)", file=sys.stderr)
+        return EXIT["refused"]
+    sys.stdout.write(p.read_text(encoding="utf-8"))
+    return 0
+
+
 def c_openapi(a):
     env = call(None, "openapi")
     emit(env["body"])
@@ -462,6 +484,7 @@ def main(argv=None):
     ps.add_argument("answers")
     ps.add_argument("--force", action="store_true")
     sub.add_parser("openapi")
+    sub.add_parser("triage", help="deterministic no-LLM triage of a mode's artifacts").add_argument("id")
     sub.add_parser("solver-test", help="refresh + replay the solver's regression cases").add_argument("id")
     sub.add_parser("solver-run", help="run solvers on a mode's current contract (no submit)").add_argument("id")
     pt = sub.add_parser("timed", help="run one time_trial/mastery end to end")
@@ -474,10 +497,14 @@ def main(argv=None):
     pr2.add_argument("--homebase", type=int, default=0, help="concurrent Homebase codex workers")
     pr2.add_argument("--modes", nargs="*", choices=list(paths.MODES))
     sub.add_parser("dash", help="chain status table")
+    pw = sub.add_parser("watch", help="live board of every challenge + each agent's current action")
+    pw.add_argument("--interval", type=float, default=2.0)
+    sub.add_parser("tail", help="follow one agent's reasoning + tool calls live").add_argument("id")
     a = p.parse_args(argv)
     fn = {"hb": c_hb, "list": c_list, "status": c_status, "start": c_start, "retry": c_retry,
           "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test,
-          "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash}[a.cmd]
+          "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash,
+          "triage": c_triage, "watch": c_watch, "tail": c_tail}[a.cmd]
     try:
         return fn(a)
     except remote.Unreachable as e:

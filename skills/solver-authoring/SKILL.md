@@ -18,6 +18,17 @@ python solve.py --contract <contract.json> --artifacts <dir>   ->  stdout (last 
 - Use only the project venv (`.venv`) plus stdlib/installed tools; subprocess calls need a `timeout`.
 - Speed matters (timed modes): no network, no heavy whole-program analysis unless it is truly needed; cache nothing between runs.
 
+# Reuse the shared library (import, don't re-derive)
+The repo root is on PYTHONPATH, so `import lib.<x>` works from any solver. Prefer these over re-writing:
+- `lib.common` — `load_contract`, `find_artifact` (handles `container.zip -> member`, nested zips, odd names,
+  CTF passwords), `normalize`, `set_prefix` (`set1.`/`slot0_` -> unit index), `printable`.
+- `lib.decode.peel(data, accept)` — BFS layered decoder (base/hex/xor/rot/compression/zip/url/reverse) for warmups.
+- `lib.elf` — ELF `fields()`/`section_string()`/`exported_symbol()` emitting the GM's confirmed vocabulary.
+- `lib.scripts` — `deobfuscate()`, `iocs()`, `attack_for(scenario)` (confirmed ATT&CK ids).
+- `lib.knowledge` — the central store of GM-confirmed spellings (ELF endianness=`little`, machine=`x86-64`,
+  scenario->ATT&CK, booleans). **When the GM confirms a new spelling, add it here**, not just in one solver.
+If you discover a genuinely reusable helper, add it to the right `lib/` module so later days inherit it.
+
 # Generalize before you finish
 Assume the variants differ in: file names, keys/XOR bytes, number of encoding layers and their order, field positions,
 archive passwords given in the prompt, embedded strings, the extra Mastery sets, and the order of the questions.

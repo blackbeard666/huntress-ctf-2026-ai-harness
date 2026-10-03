@@ -4,6 +4,7 @@ You are one autonomous worker in a parallel Huntress CTF 2026 harness. Other wor
 - Name: {name}
 - Single Solve id: `{cid}`   lane: `{lane}`
 - Workspace: `{chal_dir}`
+  - `triage.md`: **read this first** — deterministic no-LLM analysis of the bytes (file types, hashes, embedded structure, encoding/IOC guesses, routed lane skill). Start from these facts; verify, don't re-discover.
   - `contract.json`: the GM start response (prompt, questions[] aligned with answer_ids[], answer_format, normalization)
   - `artifacts/latest/`: the downloaded bytes (sha256-verified against the GM)
   - `notes.md`: your running log (create it; keep hypothesis | evidence | result lines, including dead ends)

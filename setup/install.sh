@@ -27,7 +27,7 @@ case "$(readlink -f "$ROOT/.venv/bin/python" 2>/dev/null)" in "$T"/*) ;; *) rm -
 uv pip install -q --python "$ROOT/.venv/bin/python" \
   requests pefile lief capstone keystone-engine unicorn z3-solver pyelftools \
   androguard oletools python-evtx regipy LnkParse3 binary-refinery pycryptodome \
-  yara-python python-magic pyzipper olefile pillow xdis pyinstxtractor-ng dnfile \
+  yara-python python-magic pyzipper olefile pillow xdis pyinstxtractor-ng dnfile droidasc \
   && ok "python libs" || fail "python libs"
 uv pip install -q --python "$ROOT/.venv/bin/python" angr && ok angr || fail angr
 
