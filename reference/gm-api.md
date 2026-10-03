@@ -6,7 +6,11 @@
   on TCP/80 and ICMP, whether Homebase is stopped or running.
 - Homebase SSH (`HuntressCTF@10.1.50.243`) IS reachable over the VPN, but only while the VM is running.
 - From Homebase, plain `curl` with no extra headers works; identity is supplied by the network path.
-  Plan: reach the GM from local machines through an SSH tunnel via Homebase (to verify).
+- SSH tunnels DO NOT work: sshd answers `channel open failed: administratively prohibited` for -L and -D.
+  Treat this as a deliberate organizer control; do not try to get around it.
+- Works: run the GM client ON Homebase over SSH (key auth, WSL key ~/.ssh/huntress_homebase installed in Homebase
+  ~/.ssh/authorized_keys; a factory Reset wipes it). A fresh ssh exec takes ~3.4s; with ControlMaster multiplexing 0.6-2s;
+  8 parallel calls over one mux finish in 2.5s. rsync is present on both ends for moving artifacts.
 - Homebase: Ubuntu 24.04 on AWS, 2 vCPU, 3 GB RAM, 38 GB disk (29 GB free). Has codex-cli 0.159.3,
   Claude Code 2.1.286, docker, node, python3.
 - Codex: `~/.codex/config.toml`: provider amazon-bedrock-runtime, model global.openai.gpt-6-luna, effort medium.
