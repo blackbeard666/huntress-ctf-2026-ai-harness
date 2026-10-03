@@ -278,6 +278,24 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None):
     say("all chains finished")
 
 
+def chain_for(cid, pools, gov):
+    """Build a Chain for one challenge from the local index (no extra list call needed)."""
+    base = paths.base_id(cid)
+    info = paths.lookup(base) or {}
+    entries = [{"id": base if m == "single_solve" else f"{base}/{m}", "mode": m,
+                "lane": info.get("lane", "misc"), "name": info.get("name", base)} for m in paths.MODES]
+    if info.get("lane") == "welcome":
+        entries = entries[:1]
+    return Chain(base, entries, pools, gov)
+
+
+def run_one_timed(cid, local_slots=2):
+    gov = Governor()
+    chain = chain_for(cid, Pools(local_slots, 0, gov), gov)
+    ok = chain.timed_stage(paths.mode_of(cid))
+    return 0 if ok else 1
+
+
 def dashboard():
     rows = []
     for p in sorted(paths.CHALLENGES.glob("day*/*/chain.json")):

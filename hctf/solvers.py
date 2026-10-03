@@ -66,7 +66,9 @@ def sub_contract(contract, answer_ids):
 
 def run_solver(sdir, contract, artifacts, timeout=120):
     """Run one solver. Returns (answers dict, error string or None, seconds)."""
-    tmp = TMP / f"contract-{sdir.parent.name}-{time.time_ns()}.json"
+    if not (Path(sdir) / "solve.py").exists():
+        return {}, f"no solver yet at {Path(sdir).relative_to(ROOT)}/solve.py", 0.0
+    tmp =TMP / f"contract-{sdir.parent.name}-{time.time_ns()}.json"
     tmp.write_text(json.dumps(contract))
     py = str(VENV_PY) if VENV_PY.exists() else "python3"
     t0 = time.time()

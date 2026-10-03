@@ -105,6 +105,16 @@ def http_exit(env):
 # ---------------------------------------------------------------- commands
 
 def c_hb(a):
+    if a.action == "exec":
+        # Run a command ON Homebase (inside the CTF network), e.g. to reach a live challenge backend.
+        cmd = a.command[1:] if a.command[:1] == ["--"] else a.command
+        if not cmd:
+            print("usage: hctf hb exec [--timeout N] -- <command ...>", file=sys.stderr)
+            return EXIT["refused"]
+        r = remote.ssh(" ".join(cmd), timeout=a.timeout, check=False)
+        sys.stdout.write(r.stdout)
+        sys.stderr.write(r.stderr)
+        return r.returncode
     if a.action == "deploy":
         remote.deploy()
         emit({"deployed": True})
@@ -203,6 +213,12 @@ def _questions(start):
 
 
 def _format_problem(value, q):
+    af = q.get("answer_format") if isinstance(q.get("answer_format"), dict) else {}
+    if af.get("kind") == "enum" and af.get("accepted_values"):
+        allowed = [str(x) for x in af["accepted_values"]]
+        v = value.strip()
+        if v not in allowed and not (q.get("normalization") == "case_insensitive" and v.lower() in map(str.lower, allowed)):
+            return f"not one of the accepted values {allowed}"
     fmt = json.dumps(q.get("answer_format", "")).lower()
     pattern = q.get("pattern") or q.get("regex")
     if isinstance(pattern, str):
@@ -306,6 +322,47 @@ def is_complete(cid):
     return bool(ids) and set(ids) <= set(confirmed_answers(cid, att))
 
 
+def c_solver_test(a):
+    """Refresh the Single Solve regression case from confirmed answers, then replay every case."""
+    from . import orchestrate
+    base = paths.base_id(a.id)
+    ok, res = orchestrate.ensure_case_and_test(base, paths.solver_dir(base))
+    emit({"ok": ok, "solver": str(paths.solver_dir(base).relative_to(ROOT)), "results": res})
+    return 0 if ok else 1
+
+
+def c_solver_run(a):
+    """Run the solver library against this mode's current contract + artifacts (no submission)."""
+    from . import solvers, timed
+    contract = load(a.id, "start.json") or load(a.id, "contract.json")
+    art = timed.latest_artifacts(a.id)
+    if not contract or not art:
+        print("no contract/artifacts for this mode yet (it has not been started)", file=sys.stderr)
+        return EXIT["refused"]
+    answers, problems = solvers.solve_contract(contract, art, paths.solver_dir(a.id))
+    missing = [x for x in contract.get("answer_ids", []) if x not in answers]
+    emit({"answers": answers, "missing": missing, "problems": problems})
+    return 0 if not missing and not problems else 1
+
+
+def c_timed(a):
+    """Run one Time Trial / Mastery end to end with the solver library (+ a fix worker on failure)."""
+    from . import orchestrate
+    return orchestrate.run_one_timed(a.id, local_slots=a.local)
+
+
+def c_run(a):
+    from . import orchestrate
+    orchestrate.run(day=a.day, only=a.only, local_slots=a.local, hb_slots=a.homebase, modes=a.modes)
+    return 0
+
+
+def c_dash(a):
+    from . import orchestrate
+    orchestrate.dashboard()
+    return 0
+
+
 def c_openapi(a):
     env = call(None, "openapi")
     emit(env["body"])
@@ -315,8 +372,10 @@ def c_openapi(a):
 def main(argv=None):
     p = argparse.ArgumentParser(prog="hctf", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
-    ph = sub.add_parser("hb", help="Homebase VM: status|on|off|ensure|deploy")
-    ph.add_argument("action", choices=["status", "on", "off", "ensure", "deploy"])
+    ph = sub.add_parser("hb", help="Homebase VM: status|on|off|ensure|deploy|exec -- <cmd>")
+    ph.add_argument("action", choices=["status", "on", "off", "ensure", "deploy", "exec"])
+    ph.add_argument("command", nargs=argparse.REMAINDER)
+    ph.add_argument("--timeout", type=int, default=300)
     pl = sub.add_parser("list")
     pl.add_argument("--day")
     pl.add_argument("--lane")
@@ -335,9 +394,22 @@ def main(argv=None):
     ps.add_argument("answers")
     ps.add_argument("--force", action="store_true")
     sub.add_parser("openapi")
+    sub.add_parser("solver-test", help="refresh + replay the solver's regression cases").add_argument("id")
+    sub.add_parser("solver-run", help="run solvers on a mode's current contract (no submit)").add_argument("id")
+    pt = sub.add_parser("timed", help="run one time_trial/mastery end to end")
+    pt.add_argument("id")
+    pt.add_argument("--local", type=int, default=2)
+    pr2 = sub.add_parser("run", help="every challenge chain in parallel (single -> time_trial -> mastery)")
+    pr2.add_argument("--day")
+    pr2.add_argument("--only", nargs="*", help="substrings of challenge ids to include")
+    pr2.add_argument("--local", type=int, default=5, help="concurrent local claude -p workers")
+    pr2.add_argument("--homebase", type=int, default=0, help="concurrent Homebase codex workers")
+    pr2.add_argument("--modes", nargs="*", choices=list(paths.MODES))
+    sub.add_parser("dash", help="chain status table")
     a = p.parse_args(argv)
     fn = {"hb": c_hb, "list": c_list, "status": c_status, "start": c_start, "retry": c_retry,
-          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi}[a.cmd]
+          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test,
+          "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash}[a.cmd]
     try:
         return fn(a)
     except remote.Unreachable as e:
