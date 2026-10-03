@@ -44,19 +44,13 @@ def ensure_started(cid):
     cli.save(cid, "contract.json", body)
     art = latest_artifacts(cid)
     manifest = json.loads((art / "manifest.json").read_text()) if art and (art / "manifest.json").exists() else {}
-    same = body.get("sha256") and any(f["sha256"] == body["sha256"] for f in manifest.get("files", []))
-    if not same or not manifest.get("attempt") == cli.attempt_id(body):
+    if manifest.get("attempt") != cli.attempt_id(body):  # fetch this attempt's artifacts if we don't have them
         class A:  # argparse-like namespace for cli.c_artifact
             id, delivery = cid, None
         import contextlib
         import io
         with contextlib.redirect_stdout(io.StringIO()):
             cli.c_artifact(A)
-        art = latest_artifacts(cid)
-        mp = art / "manifest.json"
-        m = json.loads(mp.read_text())
-        m["attempt"] = cli.attempt_id(body)
-        mp.write_text(json.dumps(m, indent=2))
     return body, None
 
 

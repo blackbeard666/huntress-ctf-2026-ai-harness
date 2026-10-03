@@ -101,11 +101,12 @@ def cmd_artifact(cid, outdir, delivery=None):
     return _envelope(status, headers, raw, saved)
 
 
-def cmd_download(cap, outdir):
+def cmd_download(cap, outdir, name=None):
     status, headers, raw = _request("GET", {"op": "download", "capability": cap})
     if status != 200 or _is_json(headers, raw):
         return _envelope(status, headers, raw)
-    return _envelope(status, headers, raw, [_save_bytes(outdir, _filename(headers, cap[:16] + ".bin"), raw)])
+    fname = name or _filename(headers, cap[:16] + ".bin")
+    return _envelope(status, headers, raw, [_save_bytes(outdir, fname, raw)])
 
 
 def main(argv=None):
@@ -129,6 +130,7 @@ def main(argv=None):
     pd = sub.add_parser("download")
     pd.add_argument("capability")
     pd.add_argument("outdir")
+    pd.add_argument("--name")
     a = p.parse_args(argv)
 
     if a.cmd == "openapi":
@@ -154,7 +156,7 @@ def main(argv=None):
     elif a.cmd == "artifact":
         env = cmd_artifact(a.id, a.outdir, a.delivery)
     else:
-        env = cmd_download(a.capability, a.outdir)
+        env = cmd_download(a.capability, a.outdir, a.name)
     json.dump(env, sys.stdout, ensure_ascii=False)
     sys.stdout.write("\n")
     return 0 if env["http"] else 5

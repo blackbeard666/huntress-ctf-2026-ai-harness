@@ -21,8 +21,9 @@ ROOT = Path(__file__).resolve().parent.parent
 CREDIT_SOFT = float(os.environ.get("HCTF_CREDIT_SOFT", "4"))   # below: no new Homebase (codex) workers
 CREDIT_HARD = float(os.environ.get("HCTF_CREDIT_HARD", "1.5"))  # below: no new timed starts; VM kept for GM
 SINGLE_TIMEOUT = int(os.environ.get("HCTF_SINGLE_TIMEOUT", str(90 * 60)))
+GENERALIZE_TIMEOUT = int(os.environ.get("HCTF_GENERALIZE_TIMEOUT", str(30 * 60)))
 MAX_SINGLE_LAUNCHES = 3
-MAX_TIMED_RETRIES = 3
+MAX_TIMED_RETRIES = 5
 
 _print_lock = threading.Lock()
 
@@ -111,6 +112,24 @@ def record_timed_case(cid, sdir):
         solvers.add_case(sdir, name, contract, art, conf)
 
 
+def capture_variant(cid, sdir):
+    """Save the current (unsolved) variant as a regression case so the offline fix worker can work on
+    the real bytes. expected.json holds only answers the GM already confirmed (often empty here)."""
+    contract = cli.load(cid, "start.json")
+    art = timed.latest_artifacts(cid)
+    if contract and art:
+        name = f"variant-{solvers.mode_of(cid)}-{(cli.attempt_id(contract) or 'x')[:8]}"
+        solvers.add_case(sdir, name, contract, art, cli.confirmed_answers(cid))
+
+
+def wait_until_expired(cid, extra=3):
+    """Block until the live attempt's deadline has passed, so a retry will be accepted."""
+    contract = cli.load(cid, "start.json")
+    left = timed.seconds_left(contract)
+    if left and left > 0:
+        time.sleep(left + extra)
+
+
 # ---------------------------------------------------------------- chain
 
 class Chain:
@@ -151,6 +170,20 @@ class Chain:
                                 problems="\n".join(f"  - {p}" for p in problems) or "  - (none reported)")
         set_state(self.base, stage=f"{solvers.mode_of(cid)}:fixing")
         self.run_worker(cid, "fix", prompt, max(20, (left or 600) - 15), urgent=True)
+
+    def generalize(self, cid):
+        """Offline (no clock): improve the solver so it handles the captured variant and still passes old cases."""
+        mode = solvers.mode_of(cid)
+        probs = []
+        _, res = ensure_case_and_test(paths.base_id(cid), self.sdir)
+        for r in (res or []):
+            if not r.get("ok"):
+                probs.append(f"case {r['case']}: error={r.get('error')} diff={r.get('diff')} unverified={r.get('unverified')}")
+        prompt = workers.render("generalize", cid=cid, base=self.base, mode=mode,
+                                chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
+                                problems="\n".join(f"  - {p}" for p in probs) or "  - solver did not produce all answers")
+        set_state(self.base, stage=f"{mode}:generalizing")
+        self.run_worker(cid, "generalize", prompt, GENERALIZE_TIMEOUT)
 
     # -- stages
     def single(self):
@@ -228,6 +261,15 @@ class Chain:
                     with cli.chal_lock(cid):
                         env = cli.call(cid, "retry", cid)
                     say(f"[{cid}] retry -> {env['http']} {json.dumps(env['body'])[:160]}")
+                continue
+            if res == "blocked":
+                # The solver couldn't handle this variant and there was no time to fix on the clock.
+                # Capture the variant, improve the solver offline, let the live attempt expire, then retry.
+                capture_variant(cid, self.sdir)
+                self.generalize(cid)
+                wait_until_expired(cid)
+                with cli.chal_lock(cid):
+                    cli.call(cid, "retry", cid)
                 continue
             if res.startswith("error:prerequisite"):
                 time.sleep(20)  # CourseStack scoring may still be pending for the previous mode

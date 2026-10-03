@@ -57,6 +57,13 @@ if stage == "single":
     block("Not done: " + "; ".join(todo) + ". Re-read notes.md, pick the next most promising lead, and continue. "
           "If you have been stuck for a while, use the explore-alternatives skill.")
 
+if stage == "generalize":
+    ok, res = orchestrate.ensure_case_and_test(paths.base_id(cid), paths.solver_dir(cid))
+    if ok:
+        allow()
+    block(f"`hctf solver-test {paths.base_id(cid)}` does not pass for every case yet: {json.dumps(res)[:700]}. "
+          "Fix solve.py (and fill any empty expected.json you can derive), then re-run.")
+
 if stage == "fix":
     contract = cli.load(cid, "start.json") or {}
     left = timed.seconds_left(contract)

@@ -16,6 +16,7 @@ import argparse
 import fcntl
 import hashlib
 import json
+import os
 import re
 import sys
 import time
@@ -177,32 +178,77 @@ def c_retry(a):
     return c_start(a, op="retry")
 
 
+def _planned_downloads(body):
+    """From a start/status body, the artifacts to fetch as (logical_name, capability, sha256).
+    Mastery/Time Trial give an `artifacts` list (one per set/delivery); single gives `download`+`sha256`.
+    The logical name is questions[i].artifact, so the solver finds each set's file by its contract name."""
+    cap_re = re.compile(r"/download/([0-9a-f]{64})")
+    questions = body.get("questions") or []
+
+    def logical(i, fallback):
+        if i < len(questions) and questions[i].get("artifact"):
+            return os.path.basename(questions[i]["artifact"])
+        return fallback
+
+    out, seen = [], set()
+    arts = body.get("artifacts")
+    if isinstance(arts, list) and arts:
+        for i, art in enumerate(arts):
+            dl = art.get("download", "") if isinstance(art, dict) else str(art)
+            m = cap_re.search(dl)
+            if m:
+                name = logical(i, art.get("filename") if isinstance(art, dict) else None) or f"artifact-{i}.bin"
+                out.append((name, m.group(1), (art.get("sha256") if isinstance(art, dict) else None)))
+    elif body.get("download"):
+        m = cap_re.search(body["download"])
+        if m:
+            out.append((logical(0, os.path.basename(body["download"])) or "artifact.bin", m.group(1), body.get("sha256")))
+    # de-dup identical (name,cap) while keeping order
+    uniq = []
+    for item in out:
+        if (item[0], item[1]) not in seen:
+            seen.add((item[0], item[1]))
+            uniq.append(item)
+    return uniq
+
+
 def c_artifact(a):
-    """Download the assigned artifact(s) on Homebase, then rsync them into the mode dir artifacts/<ts>/."""
-    ts = now()
-    rdir = f"{remote.HB_DIR}/dl/{paths.slugify(a.id)}/{ts}"
-    args = ["artifact", a.id, rdir] + (["--delivery", a.delivery] if a.delivery is not None else [])
-    env = call(a.id, *args, timeout=600)
-    if not env["saved"]:
+    """Download every assigned artifact on Homebase and rsync them into the mode dir artifacts/<ts>/,
+    each named by its logical contract name (so Mastery's per-set blobs don't collide)."""
+    body = load(a.id, "start.json") or load(a.id, "contract.json") or {}
+    plan = _planned_downloads(body)
+    if not plan:
+        # No capability list (e.g. challenge with no artifact): fall back to the artifact op.
+        env = call(a.id, "artifact", a.id, f"{remote.HB_DIR}/dl/probe", timeout=120)
         emit(env["body"] if env["body"] is not None else env)
         return http_exit(env) or EXIT["error"]
+    ts = now()
+    rdir = f"{remote.HB_DIR}/dl/{paths.slugify(a.id)}/{ts}"
+    saved = []
+    for name, cap, sha in plan:
+        env = call(a.id, "download", cap, rdir, "--name", name, timeout=600)
+        if not env["saved"]:
+            emit(env["body"] if env["body"] is not None else env)
+            return http_exit(env) or EXIT["error"]
+        s = env["saved"][0]
+        if sha and s["sha256"] != sha:
+            raise RuntimeError(f"sha256 mismatch for {name}: GM said {sha}, got {s['sha256']}")
+        saved.append((name, s))
     local = cdir(a.id) / "artifacts" / ts
     remote.rsync_from(f"~/{rdir}", local)
     manifest = []
-    for s in env["saved"]:
-        p = local / Path(s["path"]).name
+    for name, s in saved:
+        p = local / name
         digest = hashlib.sha256(p.read_bytes()).hexdigest()
         if digest != s["sha256"]:
             raise RuntimeError(f"sha256 mismatch after rsync for {p}")
-        manifest.append({"file": str(p.relative_to(ROOT)), "bytes": s["bytes"], "sha256": digest})
-    expected = (load(a.id, "start.json") or {}).get("sha256")
-    if expected and len(manifest) == 1 and manifest[0]["sha256"] != expected:
-        raise RuntimeError(f"artifact sha256 {manifest[0]['sha256']} != start.json sha256 {expected}")
-    (local / "manifest.json").write_text(json.dumps({"challenge": a.id, "ts": ts, "files": manifest}, indent=2))
+        manifest.append({"file": str(p.relative_to(ROOT)), "name": name, "bytes": s["bytes"], "sha256": digest})
+    (local / "manifest.json").write_text(json.dumps(
+        {"challenge": a.id, "ts": ts, "attempt": attempt_id(body), "files": manifest}, indent=2))
     latest = cdir(a.id) / "artifacts" / "latest"
     latest.unlink(missing_ok=True)
     latest.symlink_to(ts)
-    emit({"dir": str(local.relative_to(ROOT)), "files": manifest, "meta": env["body"]})
+    emit({"dir": str(local.relative_to(ROOT)), "files": manifest})
     return 0
 
 
