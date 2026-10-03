@@ -1,0 +1,11 @@
+{
+  "marker": "BR01-SYMBOL-ORIENTATION",
+  "has_symtab": "true",
+  "recover_code": "1337",
+  "entry_point": "0x401030",
+  "exported_symbol": "recover_code",
+  "elf_type": "ET_EXEC",
+  "elf_class": "ELF64",
+  "endianness": "little",
+  "machine": "x86-64"
+}

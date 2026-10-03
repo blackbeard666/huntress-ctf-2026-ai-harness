@@ -26,7 +26,9 @@ from pathlib import Path
 from . import paths, remote
 from .paths import ROOT
 
-MAX_WRONG_PER_ATTEMPT = 3
+# Guard against flag brute-forcing. Structured non-flag fields (enum spellings, ATT&CK IDs) may need a
+# few more legitimate probes on untimed single-solves; raise via HCTF_MAX_WRONG for those, never for flags.
+MAX_WRONG_PER_ATTEMPT = int(os.environ.get("HCTF_MAX_WRONG", "3"))
 FLAG_RE = re.compile(r"^[0-9a-f]{32}$")
 EXIT = {"correct": 0, "incorrect": 1, "accepted": 2, "expired": 3, "refused": 4, "unreachable": 5, "error": 6}
 
@@ -179,37 +181,53 @@ def c_retry(a):
 
 
 def _planned_downloads(body):
-    """From a start/status body, the artifacts to fetch as (logical_name, capability, sha256).
-    Mastery/Time Trial give an `artifacts` list (one per set/delivery); single gives `download`+`sha256`.
-    The logical name is questions[i].artifact, so the solver finds each set's file by its contract name."""
+    """From a start/status body, the deliverable files to fetch as (filename, capability, sha256).
+
+    The GM delivers a handful of real files (one per set), but many questions may reference them, and
+    questions[i].artifact is often a 'container.zip -> member' path. So pair the UNIQUE capabilities
+    (from artifacts[]/downloads[]/download) with the UNIQUE container names from the questions, by order.
+    Each file is saved under its container name; the solver resolves the '-> member' part itself."""
     cap_re = re.compile(r"/download/([0-9a-f]{64})")
-    questions = body.get("questions") or []
 
-    def logical(i, fallback):
-        if i < len(questions) and questions[i].get("artifact"):
-            return os.path.basename(questions[i]["artifact"])
-        return fallback
+    def cap_of(x):
+        s = x.get("download", "") if isinstance(x, dict) else str(x)
+        m = cap_re.search(s)
+        return m.group(1) if m else None
 
-    out, seen = [], set()
+    # unique capabilities, in order, with any sha the body gives for them
+    caps, sha_of = [], {}
     arts = body.get("artifacts")
-    if isinstance(arts, list) and arts:
-        for i, art in enumerate(arts):
-            dl = art.get("download", "") if isinstance(art, dict) else str(art)
-            m = cap_re.search(dl)
-            if m:
-                name = logical(i, art.get("filename") if isinstance(art, dict) else None) or f"artifact-{i}.bin"
-                out.append((name, m.group(1), (art.get("sha256") if isinstance(art, dict) else None)))
-    elif body.get("download"):
-        m = cap_re.search(body["download"])
-        if m:
-            out.append((logical(0, os.path.basename(body["download"])) or "artifact.bin", m.group(1), body.get("sha256")))
-    # de-dup identical (name,cap) while keeping order
-    uniq = []
-    for item in out:
-        if (item[0], item[1]) not in seen:
-            seen.add((item[0], item[1]))
-            uniq.append(item)
-    return uniq
+    sources = arts if isinstance(arts, list) and arts else (body.get("downloads") or
+              ([body["download"]] if body.get("download") else []))
+    for x in sources:
+        c = cap_of(x)
+        if c and c not in caps:
+            caps.append(c)
+            if isinstance(x, dict) and x.get("sha256"):
+                sha_of[c] = x["sha256"]
+    if isinstance(arts, list):
+        for x in arts:
+            c = cap_of(x)
+            if c and isinstance(x, dict) and x.get("sha256"):
+                sha_of.setdefault(c, x["sha256"])
+    if not caps:
+        return []
+
+    # unique container names, in order of first appearance in the questions
+    containers = []
+    for q in body.get("questions") or []:
+        art = q.get("artifact")
+        if not art:
+            continue
+        name = os.path.basename(art.split("->")[0].strip())
+        if name and name not in containers:
+            containers.append(name)
+
+    out = []
+    for i, cap in enumerate(caps):
+        name = containers[i] if i < len(containers) else f"artifact-{i}.bin"
+        out.append((name, cap, sha_of.get(cap)))
+    return out
 
 
 def c_artifact(a):
@@ -315,8 +333,11 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT):
         for h in same_attempt:
             if h.get("kind") == "incorrect" and h["answers"].get(k) == v and len(h["answers"]) == 1:
                 problems.append(f"{k}: this exact value was already judged incorrect in this attempt")
-    if wrong >= max_wrong:
-        problems.append(f"{wrong} incorrect submissions already in this attempt (cap {max_wrong}); "
+    # Flag-format answers stay strictly capped (anti-brute-force) even if HCTF_MAX_WRONG is raised.
+    flag_like = any(FLAG_RE.fullmatch(str(v)) for v in answers.values())
+    cap = min(3, max_wrong) if flag_like else max_wrong
+    if wrong >= cap:
+        problems.append(f"{wrong} incorrect submissions already in this attempt (cap {cap}); "
                         "investigate instead of guessing")
     if problems and not force:
         return None, None, problems

@@ -1,0 +1,9 @@
+{
+  "stage": "single:help",
+  "name": "Read the Rules",
+  "lane": "welcome",
+  "worker": null,
+  "updated": "2026-10-03T23:24:37",
+  "launches": 1,
+  "help": "# HELP: read-the-rules is blocked on the GM side\n\n**Flag found:** `flag{bf61aced6e7f9335385a70f33b20d188}`. It sits in an HTML comment in the rendered DOM of\nhttps://ctf.huntress.com/rules (see work/rendered.html, produced by headless Chromium `--dump-dom`; the raw HTML is a\nclient-rendered Next.js shell with no flag in it).\n\n**What blocks submission:**\n- `hctf start read-the-rules` keeps returning HTTP 503 `{\"error\":\"artifact_unavailable\"}` (three times: 06:26Z,\n  15:22Z, and again in this run). So there's no contract and no answer_ids.\n- `hctf submit read-the-rules '{\"flag\": \"<flag>\"}'` returns 409 `start_required`. (`flag` is a guess taken from\n  Welcome Robots' contract; this challenge never gave its own answer_ids.)\n\n**Next steps for the orchestrator/human:**\n1. Retry `hctf start read-the-rules` later. Once it succeeds, submit the flag under the answer_id it returns.\n2. Or submit the flag by hand in the \"Read the Rules\" CourseStack lesson, which the prompt explicitly allows.\n\nNo solver was needed (orientation challenge, Single Solve only).\n"
+}

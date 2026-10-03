@@ -1,0 +1,16 @@
+# ELF Aware — single_solve notes (hypothesis | evidence | result)
+- artifact: evidence.zip -> symbol-orientation.elf (ELF64 LSB x86-64 EXEC, not stripped)
+- marker = BR01-SYMBOL-ORIENTATION | readelf -x .huntress (NUL-terminated, 24 bytes) | ACCEPTED
+- has_symtab = true | readelf -S shows [24] .symtab | ACCEPTED
+- recover_code = 1337 | objdump: recover_code: mov $0x539,%eax; ret | ACCEPTED
+- entry_point = 0x401030 | readelf -h Entry point / _start | ACCEPTED
+- exported_symbol = recover_code | only non-CRT GLOBAL FUNC in .symtab besides main | ACCEPTED
+- elf_type = EXEC (readelf token) | readelf -h | INCORRECT
+- elf_type = ET_EXEC (spec constant / pyelftools) | | ACCEPTED
+- elf_class = ELFCLASS64 (spec constant) | | INCORRECT
+- elf_class = ELF64 (readelf) | | ACCEPTED
+- machine = EM_X86_64 (spec constant) | | INCORRECT  -> local wrong-answer cap (3) reached
+- endianness: EI_DATA = ELFDATA2LSB (readelf "2's complement, little endian") | NOT SUBMITTED
+- machine: e_machine = 62 EM_X86_64 (readelf "Advanced Micro Devices X86-64") | vocabulary unknown, NOT SUBMITTED
+- [worker 2] re-checked: no artifact, contract or reference evidence for the endianness/machine spelling; cap of 3 wrong answers reached -> HELP.md written, probes proposed
+- [worker 2] hctf solver-test ok (7 confirmed fields); solver-run answers all 9 ids

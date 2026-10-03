@@ -1,0 +1,22 @@
+{
+  "ec66131a-03b1-40b5-afdb-343febc30e1b": {
+    "set1.elf_class": "ELF64",
+    "set1.endianness": "little",
+    "set1.machine": "x86-64",
+    "set1.elf_type": "ET_EXEC",
+    "set1.marker": "BR01-STRIPPED-PROFILE",
+    "set1.has_symtab": "false",
+    "set1.exported_symbol": "none",
+    "set1.recover_code": "none",
+    "set1.entry_point": "0x401030",
+    "set2.elf_class": "ELF64",
+    "set2.endianness": "little",
+    "set2.machine": "x86-64",
+    "set2.elf_type": "ET_EXEC",
+    "set2.marker": "BR01-IMMEDIATE-RECOVERY",
+    "set2.has_symtab": "true",
+    "set2.exported_symbol": "recover_code",
+    "set2.recover_code": "7331",
+    "set2.entry_point": "0x401030"
+  }
+}

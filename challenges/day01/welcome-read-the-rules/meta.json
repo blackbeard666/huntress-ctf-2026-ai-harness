@@ -1,0 +1,8 @@
+{
+  "base": "read-the-rules",
+  "lane": "welcome",
+  "name": "Read the Rules",
+  "ids": {
+    "single_solve": "read-the-rules"
+  }
+}

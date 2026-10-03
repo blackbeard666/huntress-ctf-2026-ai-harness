@@ -1,0 +1,17 @@
+{
+  "resource-scenario": "resource_hijacking",
+  "resource-attack": "T1496",
+  "resource-url": "https://cdn-03ce326948.example.invalid/3e59094b24e2.bin",
+  "resource-wallet": "wallet_d327bc1114a907589af81bba71226b77",
+  "resource-mutex": "Global\\HuntressLab_6460b4f6aa72",
+  "collection-scenario": "synthetic_collection",
+  "collection-url": "https://497b6b9b43.example.invalid/3f890532dd42.dat",
+  "collection-file": "update-497b6b9b43.dat",
+  "collection-user-agent": "Mozilla/5.0 HuntressLab/3.3",
+  "impact-scenario": "synthetic_impact",
+  "impact-attack": "T1486",
+  "impact-extension": ".locked-1d685",
+  "impact-note": "RECOVERY-1d6858b777.txt",
+  "impact-url": "https://1d6858b777.example.invalid/a0e20204ed17.dat",
+  "collection-attack": "T1555.003"
+}

@@ -35,13 +35,29 @@ def question_index():
     return idx
 
 
+def paired_questions(contract):
+    """[(answer_id, question)]: exact question id, else the question id the answer id ends with (bundles like
+    answer_ids slot0_marker..slot3_marker sharing one 'marker' question), else by position."""
+    ids, qs = contract.get("answer_ids", []), contract.get("questions", [])
+    out = []
+    for i, aid in enumerate(ids):
+        q = next((q for q in qs if q.get("id") == aid), None)
+        if q is None:
+            sufs = [q for q in qs if q.get("id") and re.search(rf"(^|[._-]){re.escape(q['id'])}$", aid)]
+            q = max(sufs, key=lambda q: len(q["id"]), default=None)
+        if q is None and i < len(qs):
+            q = qs[i]
+        out.append((aid, q or {}))
+    return out
+
+
 def dispatch(contract, default_solver=None):
     """Group the contract's answer_ids by the solver that should answer them.
     Returns ({solver_dir: [answer_id, ...]}, [unmatched answer_ids])."""
     idx = question_index()
     keys = list(idx)
     groups, unmatched = {}, []
-    for aid, q in zip(contract.get("answer_ids", []), contract.get("questions", [])):
+    for aid, q in paired_questions(contract):
         n = _norm(q.get("question"))
         sdir = idx.get(n)
         if sdir is None and keys:
@@ -57,10 +73,19 @@ def dispatch(contract, default_solver=None):
 
 def sub_contract(contract, answer_ids):
     """The contract restricted to some answer_ids (lets one bundle be split across several solvers)."""
-    keep = [i for i, a in enumerate(contract.get("answer_ids", [])) if a in answer_ids]
+    ids = contract.get("answer_ids", [])
+    qs = contract.get("questions", [])
+    if len(ids) == len(qs) and all(q.get("id") in (None, a) for a, q in zip(ids, qs)):
+        keep = [i for i, a in enumerate(ids) if a in answer_ids]
+        c = dict(contract)
+        c["answer_ids"] = [ids[i] for i in keep]
+        c["questions"] = [qs[i] for i in keep if i < len(qs)]
+        return c
+    # answer_ids and questions not 1:1 (shared questions) -> keep the ids plus the questions they reference
     c = dict(contract)
-    c["answer_ids"] = [contract["answer_ids"][i] for i in keep]
-    c["questions"] = [contract["questions"][i] for i in keep]
+    c["answer_ids"] = [a for a in ids if a in answer_ids]
+    used = [id(q) for a, q in paired_questions(contract) if a in answer_ids]
+    c["questions"] = [q for q in qs if id(q) in used]
     return c
 
 

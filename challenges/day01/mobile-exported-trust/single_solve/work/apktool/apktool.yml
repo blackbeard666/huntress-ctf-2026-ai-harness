@@ -1,0 +1,12 @@
+version: 3.0.3
+apkFileName: exported_trust.apk
+sdkInfo:
+  minSdkVersion: 23
+  targetSdkVersion: 23
+versionInfo:
+  versionCode: 1
+  versionName: 1.0
+resourcesInfo:
+  keepRawValues: true
+doNotCompress:
+- assets/huntress_puzzle.json

@@ -1,0 +1,11 @@
+{
+  "elf_class": "ELF64",
+  "endianness": "little",
+  "machine": "x86-64",
+  "elf_type": "ET_EXEC",
+  "marker": "BR01-SECTION-BEACON",
+  "has_symtab": "true",
+  "exported_symbol": "inspect_section",
+  "recover_code": "none",
+  "entry_point": "0x401030"
+}

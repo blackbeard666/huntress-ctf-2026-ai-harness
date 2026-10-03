@@ -1,0 +1,13 @@
+{
+  "stage": "done",
+  "name": "\u2699\ufe0f ELF Aware",
+  "lane": "binary-reverse-engineering",
+  "worker": null,
+  "updated": "2026-10-03T23:56:05",
+  "launches": 1,
+  "help": "# HELP: ELF Aware single_solve, 7/9 confirmed, 2 blocked by the local wrong-answer cap\n\n## Status\nConfirmed (GM accepted): elf_class=ELF64, elf_type=ET_EXEC, marker=BR01-SYMBOL-ORIENTATION, has_symtab=true,\nexported_symbol=recover_code, recover_code=1337, entry_point=0x401030. GM says `remaining: 2`.\n\nOpen: `endianness`, `machine`. The values are clear from the bytes. Only the GM's spelling of them is unknown.\n- endianness: e_ident[EI_DATA]=1 (ELFDATA2LSB). readelf prints \"2's complement, little endian\".\n- machine: e_machine=62 (EM_X86_64). readelf prints \"Advanced Micro Devices X86-64\".\n\n## Why I stopped\nThis attempt already has 3 incorrect submissions (EXEC, ELFCLASS64, EM_X86_64), so `hctf submit` refuses any more\n(cap 3). The game-master skill says \"fix the evidence, never the guard\", so I did not raise HCTF_MAX_WRONG.\nNothing in the artifact, the contract or reference/ fixes the vocabulary. The accepted answers mix two styles:\nreadelf-style `ELF64` and spec-constant-style `ET_EXEC`, while `EXEC`, `ELFCLASS64` and `EM_X86_64` were rejected.\nSo the GM probably keeps its own alias list, and the only way to learn it is to submit.\n\n## What would unblock it (orchestrator decision)\nAllow a few single-field probes on this untimed attempt (HCTF_MAX_WRONG=6), submitting one id per call:\n- endianness: `little endian` (the solver's current output), then `little`, then `LSB`\n- machine: `x86-64` (the solver's current output), then `x86_64`, then `Advanced Micro Devices X86-64`\nAfter a",
+  "attempt": 1,
+  "time_trial_result": "correct",
+  "error": "Traceback (most recent call last):\n  File \"/home/testpwn/huntress-2026/hctf/orchestrate.py\", line 288, in run\n    if mode in modes and not self.timed_stage(mode):\n                             ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/hctf/orchestrate.py\", line 251, in timed_stage\n    res = timed.run(cid, self.sdir, fix=self.fix, log=say)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/hctf/timed.py\", line 77, in run\n    answers, problems = solvers.solve_contract(solvers.sub_contract(contract, todo), art, default_solver,\n                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/hctf/solvers.py\", line 63, in sub_contract\n    c[\"questions\"] = [contract[\"questions\"][i] for i in keep]\n                      ~~~~~~~~~~~~~~~~~~~~~^^^\nIndexError: list index out of range\n",
+  "mastery_result": "correct"
+}

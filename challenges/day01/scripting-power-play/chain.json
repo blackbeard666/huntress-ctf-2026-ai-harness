@@ -1,0 +1,13 @@
+{
+  "stage": "done",
+  "name": "\ud83d\udcdc Power Play",
+  "lane": "script-analysis",
+  "worker": null,
+  "updated": "2026-10-03T23:43:04",
+  "launches": 1,
+  "help": "# HELP: Power Play (script-analysis-day-01-native-signals), single_solve\n\n**Status:** 14/15 answers confirmed. Only `collection-attack` is still open.\n\n**Blocker:** the local wrong-answer cap is reached for this attempt (3/3: T1005, T1560 and T1119 were all incorrect).\nI did not raise `HCTF_MAX_WRONG`, because any further submission would be a guess.\n\n**Evidence (collection-sample.ps1, decoded JSON descriptor):**\n- b: `https://497b6b9b43.example.invalid/3f890532dd42.dat`\n- c: `update-497b6b9b43.dat`, `Login Data`, `Cookies` (Chrome credential/cookie stores)\n- d: `stage-e536c782dd01.zip` (an explicitly named staging archive)\n- native types: `[IO.File]`, `[IO.Compression.ZipFile]`, `[Net.HttpWebRequest]`\n\n**Ranked candidates for the orchestrator/human:**\n1. `T1074` Data Staged (the descriptor literally names a `stage-*.zip`; it is a Collection-tactic base ID, like T1496 and T1486 for the sibling samples)\n2. `T1555.003` Credentials from Web Browsers (`Login Data`)\n3. `T1539` Steal Web Session Cookie (`Cookies`)\n4. `T1041` Exfiltration Over C2 Channel (HttpWebRequest upload)\n\n**Solver:** `solver/solve.py` answers every other id, leaves the collection ATT&CK id unanswered on purpose,\nand passes `hctf solver-test` (ok). Once the GM confirms an ID, add it to `SCENARIO_TECH[\"synthetic_collection\"]` in solve.py.\n",
+  "attempt": 1,
+  "time_trial_result": "correct",
+  "mastery_result": "correct",
+  "error": "Traceback (most recent call last):\n  File \"/home/testpwn/huntress-2026/hctf/orchestrate.py\", line 288, in run\n    if mode in modes and not self.timed_stage(mode):\n                             ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/hctf/orchestrate.py\", line 251, in timed_stage\n    res = timed.run(cid, self.sdir, fix=self.fix, log=say)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/hctf/timed.py\", line 60, in run\n    contract, err = ensure_started(cid)\n                    ^^^^^^^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/hctf/timed.py\", line 53, in ensure_started\n    cli.c_artifact(A)\n  File \"/home/testpwn/huntress-2026/hctf/cli.py\", line 246, in c_artifact\n    raise RuntimeError(f\"sha256 mismatch after rsync for {p}\")\nRuntimeError: sha256 mismatch after rsync for /home/testpwn/huntress-2026/challenges/day01/scripting-power-play/mastery/artifacts/20261003T154007Z/evidence-01.zip -> resource-sample.ps1\n"
+}

@@ -1,0 +1,8 @@
+{
+  "base": "welcome-robots",
+  "lane": "welcome",
+  "name": "Welcome Robots",
+  "ids": {
+    "single_solve": "welcome-robots"
+  }
+}

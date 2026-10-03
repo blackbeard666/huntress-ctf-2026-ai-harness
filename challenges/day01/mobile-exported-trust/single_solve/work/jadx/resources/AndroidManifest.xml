@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    android:versionCode="1"
+    android:versionName="1.0"
+    package="com.huntress.mobile.d01.v073e9a824e9e"
+    platformBuildVersionCode="23"
+    platformBuildVersionName="6.0.1">
+    <uses-sdk
+        android:minSdkVersion="23"
+        android:targetSdkVersion="23"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <application
+        android:theme="@android:style/Theme.Material.Light"
+        android:label="Day 01 — Exported Trust"
+        android:debuggable="false"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false">
+        <meta-data
+            android:name="huntress.day"
+            android:value="1"/>
+        <meta-data
+            android:name="huntress.mechanic"
+            android:value="exported Activity and caller trust"/>
+        <activity
+            android:name="com.huntress.mobile.d01.v073e9a824e9e.MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <activity
+            android:name="com.huntress.mobile.d01.v073e9a824e9e.ChallengeActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="huntress01"
+                    android:host="exported-trust"
+                    android:pathPrefix="/unlock"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
