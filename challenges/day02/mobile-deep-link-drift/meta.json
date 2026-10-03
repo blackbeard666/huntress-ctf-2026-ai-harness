@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-02-deep-link-drift",
+  "lane": "mobile-android",
+  "name": "📱 Deep Link Drift",
+  "ids": {
+    "single_solve": "mobile-android-day-02-deep-link-drift",
+    "time_trial": "mobile-android-day-02-deep-link-drift/time_trial",
+    "mastery": "mobile-android-day-02-deep-link-drift/mastery"
+  }
+}

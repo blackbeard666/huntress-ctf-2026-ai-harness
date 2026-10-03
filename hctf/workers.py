@@ -65,15 +65,32 @@ _sync_lock = threading.Lock()
 
 
 def sync_homebase_base():
-    """Push hctf + skills + bin to Homebase (shared by all homebase workers)."""
+    """Push hctf + lib + skills + bin to Homebase (shared by all homebase workers)."""
     with _sync_lock:
         remote.ssh(f"mkdir -p ~/{HB_WORK}/challenges ~/.codex/skills")
-        for d in ("hctf", "bin", "skills"):
-            remote.rsync_to(ROOT / d, f"~/{HB_WORK}/")
+        for d in ("hctf", "lib", "bin", "skills"):
+            if (ROOT / d).exists():
+                remote.rsync_to(ROOT / d, f"~/{HB_WORK}/")
         remote.ssh(f"rsync -a --delete ~/{HB_WORK}/skills/ ~/.codex/skills/ && cp ~/{HB_WORK}/hctf/gm.py ~/hctf/gm.py")
         for f in ("CLAUDE.md", "AGENTS.md"):
             if (ROOT / f).exists():
                 remote.rsync_to(ROOT / f, f"~/{HB_WORK}/{f}")
+
+
+def run_hb_timed(solver_dir, cid, op="start", timeout=60):
+    """Run the clock-critical timed attempt ON Homebase (adjacent to the GM). Returns hb_timed's JSON dict.
+    Syncs hctf+lib (base) and the solver so hb_timed can execute it next to the GM."""
+    sync_homebase_base()
+    rel = solver_dir.relative_to(ROOT)
+    remote.ssh(f"mkdir -p ~/{HB_WORK}/{rel}")
+    if solver_dir.exists():
+        remote.rsync_to(str(solver_dir) + "/", f"~/{HB_WORK}/{rel}/")
+    r = remote.ssh(f"cd ~/{HB_WORK} && python3 hctf/hb_timed.py {shlex.quote(cid)} {shlex.quote(str(rel))} --op {op}",
+                   timeout=timeout, check=False)
+    try:
+        return json.loads(r.stdout.strip().splitlines()[-1])
+    except (IndexError, ValueError):
+        return {"result": "exec_error", "detail": (r.stdout + r.stderr)[-500:]}
 
 
 def run_homebase(chal_root, log_dir, stage, prompt, env_extra, timeout):

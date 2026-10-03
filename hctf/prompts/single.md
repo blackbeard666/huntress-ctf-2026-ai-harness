@@ -22,7 +22,15 @@ You are one autonomous worker in a parallel Huntress CTF 2026 harness. Other wor
 3. **Prove it**: run `hctf solver-test {cid}` until it reports ok (it replays your confirmed answers as a regression case),
    and `hctf solver-run {cid}` to see the solver's raw output.
 
+## Resolve answers fully — you are autonomous, do not hand vocabulary back to a human
+If you have DERIVED a field's concept from the bytes but the GM rejects your exact wording (a non-flag field: an enum
+spelling, an ATT&CK id, a format/label string), **probe your ranked candidate spellings yourself**, one id per submit.
+The harness allows several wrong tries PER non-flag field (flags stay strictly capped — never brute-force a flag).
+When the GM accepts one, **record the confirmed spelling in `lib/knowledge.py`** and make `solve.py` emit it, so every
+future day inherits it. Exhaust your sensible candidates before considering yourself blocked.
+
+Only write `{chal_dir}/HELP.md` if the concept itself is genuinely unknown (not merely its spelling) AND
+`explore-alternatives` produced nothing. Prefer solving over escalating.
+
 Do NOT start or submit the time_trial or mastery modes. The orchestrator runs them with your solver the moment you finish.
-If you are truly blocked after splitting into alternatives (`explore-alternatives` skill), write `{chal_dir}/HELP.md`
-(what you tried, what blocks you) and stop.
 {extra}

@@ -96,3 +96,37 @@ def set_prefix(answer_id):
     """('set1.foo' | 'slot0_foo') -> the per-unit prefix label+index, or None."""
     m = re.match(r"(set|slot)[._-]?(\d+)[._-]", answer_id)
     return (m.group(1), int(m.group(2))) if m else None
+
+
+def _tokens(s):
+    return [t for t in re.split(r"[^a-z0-9]+", s.lower()) if t]
+
+
+def find_artifact_hinted(root, artifact, hint=""):
+    """find_artifact, but when the named member is absent (the contract's question text can be stale relative to
+    answer_ids and the real archive), fall back to the archive member that best matches `hint` (e.g. the answer-id
+    stem 'readme-executable' -> 'readme.exe'), or the archive's only member. Returns (bytes, resolved_name)."""
+    try:
+        return find_artifact(root, artifact), artifact
+    except (KeyError, FileNotFoundError):
+        pass
+    container = Path(artifact.partition("->")[0].strip()).name
+    zips = [p for p in iter_files(root) if zipfile.is_zipfile(p)]
+    zips.sort(key=lambda p: p.name != container)
+    htoks = _tokens(hint)
+    best = None
+    for p in zips:
+        with zipfile.ZipFile(p) as z:
+            names = [n for n in z.namelist() if not n.endswith("/")]
+        for n in names:
+            mtoks = _tokens(Path(n).name)
+            # a member token matches a hint token if either is a prefix of the other (exe ~ executable)
+            score = sum(any(h.startswith(m) or m.startswith(h) for h in htoks) for m in mtoks if len(m) >= 2)
+            if len(names) == 1:
+                score += 0.5
+            if score and (best is None or score > best[0]):
+                best = (score, p, n)
+    if best is None:
+        raise FileNotFoundError(f"{artifact!r} not found under {root} (hint {hint!r})")
+    _, p, n = best
+    return read_member(p, n), f"{p.name} -> {n}"

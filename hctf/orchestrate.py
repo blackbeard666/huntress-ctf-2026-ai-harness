@@ -297,33 +297,34 @@ class Chain:
                 set_state(self.base, stage=f"{mode}:waiting-credits")
                 time.sleep(300)
             set_state(self.base, stage=f"{mode}:running", attempt=attempt + 1)
-            res = timed.run(cid, self.sdir, fix=self.fix, log=say)
+            # Clock-critical path runs ON Homebase (adjacent to the GM; ~6s windows).
+            res = timed.run(cid, self.sdir, log=say)
             say(f"[{cid}] result: {res}")
             set_state(self.base, **{f"{mode}_result": res})
             if res == "correct":
                 record_timed_case(cid, self.sdir)
                 return True
-            if res == "expired":
-                record_timed_case(cid, self.sdir)  # keeps any confirmed partial answers as a variant case
-                st = cli.call(cid, "status", cid)["body"] or {}
-                if "expired" in json.dumps(st).lower():
-                    with cli.chal_lock(cid):
-                        env = cli.call(cid, "retry", cid)
-                    say(f"[{cid}] retry -> {env['http']} {json.dumps(env['body'])[:160]}")
-                continue
-            if res == "blocked":
-                # The solver couldn't handle this variant and there was no time to fix on the clock.
-                # Capture the variant, improve the solver offline, let the live attempt expire, then retry.
-                capture_variant(cid, self.sdir)
-                self.generalize(cid)
-                wait_until_expired(cid)
-                with cli.chal_lock(cid):
-                    cli.call(cid, "retry", cid)
-                continue
             if res.startswith("error:prerequisite"):
                 time.sleep(20)  # CourseStack scoring may still be pending for the previous mode
                 continue
-            break
+            if res not in ("expired", "blocked"):
+                break
+            # Self-heal offline: fetch THIS variant locally, and if the solver can't fully handle it, improve it.
+            # Next iteration's hb_timed resyncs the improved solver and gets a fresh clock on its own.
+            try:
+                timed.ensure_started(cid)  # local start+download of the current variant for offline work
+            except Exception as e:  # noqa: BLE001
+                say(f"[{cid}] local fetch for generalize failed: {e}")
+            capture_variant(cid, self.sdir)
+            contract = cli.load(cid, "start.json") or {}
+            art = timed.latest_artifacts(cid)
+            answers, probs = solvers.solve_contract(contract, art, self.sdir) if art else ({}, ["no artifacts"])
+            ids = contract.get("answer_ids", [])
+            if probs or not ids or any(a not in answers for a in ids):
+                say(f"[{cid}] {res}: solver incomplete for this variant -> generalize offline")
+                self.generalize(cid)
+            else:
+                say(f"[{cid}] {res}: solver handles it offline; retrying for a fresh clock")
         set_state(self.base, stage=f"{mode}:blocked")
         return False
 

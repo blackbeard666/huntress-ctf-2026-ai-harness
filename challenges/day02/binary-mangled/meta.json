@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-02-cpp-and-pe-orientation",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Mangled",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-02-cpp-and-pe-orientation",
+    "time_trial": "binary-reverse-engineering-day-02-cpp-and-pe-orientation/time_trial",
+    "mastery": "binary-reverse-engineering-day-02-cpp-and-pe-orientation/mastery"
+  }
+}

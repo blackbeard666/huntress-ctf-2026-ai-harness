@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-02-looks-can-be-deceiving",
+  "lane": "metadata-forensics",
+  "name": "🔎 Looks Can Be Deceiving",
+  "ids": {
+    "single_solve": "metadata-forensics-day-02-looks-can-be-deceiving",
+    "time_trial": "metadata-forensics-day-02-looks-can-be-deceiving/time_trial",
+    "mastery": "metadata-forensics-day-02-looks-can-be-deceiving/mastery"
+  }
+}

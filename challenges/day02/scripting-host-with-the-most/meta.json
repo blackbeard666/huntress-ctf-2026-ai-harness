@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-02-encoded-intent",
+  "lane": "script-analysis",
+  "name": "📜 Host With the Most",
+  "ids": {
+    "single_solve": "script-analysis-day-02-encoded-intent",
+    "time_trial": "script-analysis-day-02-encoded-intent/time_trial",
+    "mastery": "script-analysis-day-02-encoded-intent/mastery"
+  }
+}

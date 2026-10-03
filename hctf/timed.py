@@ -54,46 +54,24 @@ def ensure_started(cid):
     return body, None
 
 
-def run(cid, default_solver, fix=None, log=print):
-    """Run one timed challenge to completion. fix(cid, contract, artifacts, problems, seconds_left) is
-    called (blocking) when something is missing. Returns one of: correct, expired, blocked, error:<x>."""
-    contract, err = ensure_started(cid)
-    if contract is None:
-        return f"error:{(err or {}).get('error', 'start failed')}"
-    att = cli.attempt_id(contract)
-    art = latest_artifacts(cid)
-    log(f"[{cid}] attempt {att} started, {len(contract.get('answer_ids', []))} answers, "
-        f"{seconds_left(contract) or 0:.0f}s left")
-    rounds = 0
-    while True:
-        rounds += 1
-        left = seconds_left(contract)
-        if left is not None and left <= 0:
-            return "expired"
-        done = cli.confirmed_answers(cid, att)
-        todo = [a for a in contract.get("answer_ids", []) if a not in done]
-        if not todo:
-            return "correct"
-        answers, problems = solvers.solve_contract(solvers.sub_contract(contract, todo), art, default_solver,
-                                                   timeout=max(10, min(120, (left or 120) - SUBMIT_MARGIN)))
-        rejected = []
-        # Submit per set, so a wrong answer in one set doesn't hide which set was wrong.
-        by_set = {}
-        for aid in todo:
-            if aid in answers:
-                by_set.setdefault(_set_key(aid), {})[aid] = answers[aid]
-        for key, group in by_set.items():
-            kind, body, refused = cli.submit(cid, group, max_wrong=MAX_WRONG_TIMED)
-            log(f"[{cid}] submit {key} ({len(group)}): {kind or 'refused'} {json.dumps(body or refused)[:200]}")
-            if kind == "correct":
-                return "correct"
-            if kind == "expired":
-                return "expired"
-            if kind == "incorrect" or refused:
-                rejected.append(f"{key}: GM said {kind or 'refused'} for {group}: {body or refused}")
-        if cli.is_complete(cid):
-            return "correct"
-        left = seconds_left(contract)
-        if fix is None or (left is not None and left < 30) or rounds > 6:
-            return "expired" if left is not None and left <= 0 else "blocked"
-        fix(cid, contract, art, problems + rejected, left)
+def run(cid, solver_dir, fix=None, log=print, op="start"):
+    """Execute one timed attempt. The clock-critical start->download->solve->submit runs ON Homebase
+    (adjacent to the GM; windows are ~6s so SSH-per-op from WSL can't make it). The solver must already be
+    correct (built/generalised offline). Returns: correct | expired | blocked | error:<x>.
+      correct            -> GM accepted everything
+      blocked            -> solver incomplete/wrong for this variant (caller generalises offline, then retries)
+      expired            -> the attempt's clock ran out before we could submit a complete answer
+    """
+    from . import workers
+    res = workers.run_hb_timed(solver_dir, cid, op=op)
+    r = str(res.get("result", "")).lower()
+    log(f"[{cid}] hb_timed: {json.dumps({k: res.get(k) for k in ('result', 'remaining', 'elapsed', 'missing') if k in res})}")
+    if r in ("correct",) or cli.is_complete(cid):
+        return "correct"
+    if r in ("solver_incomplete", "solver_error", "incorrect", "accepted", "exec_error"):
+        return "blocked"       # the solver needs work; caller will generalise offline then retry
+    if r in ("expired", "start_required") or "expired" in json.dumps(res).lower():
+        return "expired"
+    if "prerequisite" in r:
+        return "error:prerequisite"
+    return "blocked"

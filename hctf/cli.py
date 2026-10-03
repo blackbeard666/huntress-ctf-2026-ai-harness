@@ -26,9 +26,11 @@ from pathlib import Path
 from . import paths, remote
 from .paths import ROOT
 
-# Guard against flag brute-forcing. Structured non-flag fields (enum spellings, ATT&CK IDs) may need a
-# few more legitimate probes on untimed single-solves; raise via HCTF_MAX_WRONG for those, never for flags.
-MAX_WRONG_PER_ATTEMPT = int(os.environ.get("HCTF_MAX_WRONG", "3"))
+# Wrong-answer budgets. Per-field probing lets the harness resolve the GM's exact wording for structured,
+# non-flag fields on its own; flags are brute-force-protected; a global ceiling stops runaway.
+MAX_WRONG_PER_ATTEMPT = int(os.environ.get("HCTF_MAX_WRONG", "6"))   # per non-flag answer_id
+FLAG_WRONG_CAP = int(os.environ.get("HCTF_FLAG_WRONG_CAP", "3"))     # wrong flag guesses per attempt
+GLOBAL_WRONG_CAP = int(os.environ.get("HCTF_GLOBAL_WRONG_CAP", "80"))  # total wrong per attempt (sanity)
 FLAG_RE = re.compile(r"^[0-9a-f]{32}$")
 EXIT = {"correct": 0, "incorrect": 1, "accepted": 2, "expired": 3, "refused": 4, "unreachable": 5, "error": 6}
 
@@ -331,8 +333,22 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT):
     subs_path = cdir(cid) / "submissions.jsonl"
     history = [json.loads(l) for l in subs_path.read_text().splitlines()] if subs_path.exists() else []
     same_attempt = [h for h in history if h.get("attempt") == att]
-    wrong = sum(1 for h in same_attempt if h.get("kind") == "incorrect")
     confirmed = confirmed_answers(cid, att)
+
+    # Wrong-answer accounting. Flags are brute-force-protected (hard cap across the attempt). Structured
+    # non-flag fields (enum spellings, ATT&CK ids, format strings) get a bounded PER-FIELD probe budget so
+    # the harness can resolve the GM's exact vocabulary autonomously. A global ceiling stops true runaway.
+    from collections import Counter
+    field_wrong = Counter()
+    flag_wrong = 0
+    for h in same_attempt:
+        if h.get("kind") != "incorrect":
+            continue
+        for k, v in h.get("answers", {}).items():
+            field_wrong[k] += 1
+            if FLAG_RE.fullmatch(str(v)):
+                flag_wrong += 1
+    total_wrong = sum(1 for h in same_attempt if h.get("kind") == "incorrect")
 
     problems = []
     if qmap:
@@ -344,14 +360,17 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT):
         if prob:
             problems.append(f"{k}: {prob}")
         for h in same_attempt:
-            if h.get("kind") == "incorrect" and h["answers"].get(k) == v and len(h["answers"]) == 1:
-                problems.append(f"{k}: this exact value was already judged incorrect in this attempt")
-    # Flag-format answers stay strictly capped (anti-brute-force) even if HCTF_MAX_WRONG is raised.
-    flag_like = any(FLAG_RE.fullmatch(str(v)) for v in answers.values())
-    cap = min(3, max_wrong) if flag_like else max_wrong
-    if wrong >= cap:
-        problems.append(f"{wrong} incorrect submissions already in this attempt (cap {cap}); "
-                        "investigate instead of guessing")
+            if h.get("kind") == "incorrect" and h["answers"].get(k) == v:
+                problems.append(f"{k}: value {v!r} already judged incorrect in this attempt")
+                break
+        if FLAG_RE.fullmatch(str(v)):
+            if flag_wrong >= FLAG_WRONG_CAP:
+                problems.append(f"{k}: {flag_wrong} wrong flag guesses already (cap {FLAG_WRONG_CAP}); do not brute-force flags")
+        elif field_wrong[k] >= max_wrong:
+            problems.append(f"{k}: {field_wrong[k]} wrong tries for this field (per-field cap {max_wrong}); "
+                            "you have exhausted sensible candidates for its exact wording")
+    if total_wrong >= GLOBAL_WRONG_CAP:
+        problems.append(f"{total_wrong} wrong submissions in this attempt (global cap {GLOBAL_WRONG_CAP})")
     if problems and not force:
         return None, None, problems
 

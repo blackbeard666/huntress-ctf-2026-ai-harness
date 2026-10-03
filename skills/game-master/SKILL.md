@@ -21,8 +21,10 @@ Ids: Single Solve `<base>`, timed modes `<base>/time_trial` and `<base>/mastery`
 - `CORRECT` (exit 0): done. `{"status":"pending"}` means CourseStack scoring is still settling, which is fine.
 - `accepted` + `remaining: N` (exit 2): those answers were right; N more are needed.
 - `incorrect` (exit 1): at least one answer is wrong. Submitting fewer answers per call narrows down which one.
-- refused locally (exit 4): wrong answer_id, a format mismatch, a value already judged incorrect, or the wrong-answer cap.
-  Read the reason and fix the evidence, never the guard.
+- refused locally (exit 4): wrong answer_id, a format mismatch, a value already judged incorrect, or a cap reached.
+  Read the reason. The caps: flags are hard-capped (never brute-force); each NON-flag field has a per-field probe
+  budget so you can resolve the GM's exact wording for an enum/ATT&CK/format field by trying your ranked candidate
+  spellings one per submit. When one is accepted, record it in `lib/knowledge.py`. Only a true dead end is HELP.
 - `expired`: the timed attempt is over. Only the orchestrator retries (`hctf retry` works only after expiry).
 - `artifact_unavailable`: the challenge has no file (e.g. read-the-rules: the flag is in the HTML of
   https://ctf.huntress.com/rules; fetch the page with `curl -s` and search it, including comments and hidden elements).
