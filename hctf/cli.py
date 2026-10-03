@@ -20,6 +20,7 @@ import re
 import sys
 import time
 from contextlib import contextmanager
+from pathlib import Path
 
 from . import paths, remote
 from .paths import ROOT

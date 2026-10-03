@@ -11,6 +11,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Mangled"
   },
+  "binary-reverse-engineering-day-03-managed-configuration": {
+    "day": 3,
+    "dir": "day03/binary-table-manners",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Table Manners"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -23,6 +29,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Looks Can Be Deceiving"
   },
+  "metadata-forensics-day-03-bom-voyage": {
+    "day": 3,
+    "dir": "day03/metadata-bom-voyage",
+    "lane": "metadata-forensics",
+    "name": "🔎 BOM Voyage"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -34,6 +46,12 @@
     "dir": "day02/mobile-deep-link-drift",
     "lane": "mobile-android",
     "name": "📱 Deep Link Drift"
+  },
+  "mobile-android-day-03-intent-injection": {
+    "day": 3,
+    "dir": "day03/mobile-intent-injection",
+    "lane": "mobile-android",
+    "name": "📱 Intent Injection"
   },
   "read-the-rules": {
     "day": 1,
@@ -53,6 +71,12 @@
     "lane": "script-analysis",
     "name": "📜 Host With the Most"
   },
+  "script-analysis-day-03-batch-expansion": {
+    "day": 3,
+    "dir": "day03/scripting-expansion-pack",
+    "lane": "script-analysis",
+    "name": "📜 Expansion Pack"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -64,6 +88,12 @@
     "dir": "day02/warmups-half-a-turn",
     "lane": "warmups",
     "name": "👶 Half a Turn"
+  },
+  "warmups-day-03": {
+    "day": 3,
+    "dir": "day03/warmups-hex-appeal",
+    "lane": "warmups",
+    "name": "👶 Hex Appeal"
   },
   "welcome-robots": {
     "day": 1,

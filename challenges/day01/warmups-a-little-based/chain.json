@@ -1,0 +1,9 @@
+{
+  "stage": "single:blocked",
+  "name": "\ud83d\udc76 A Little Based",
+  "lane": "warmups",
+  "worker": null,
+  "updated": "2026-10-03T21:39:55",
+  "error": "Traceback (most recent call last):\n  File \"/home/testpwn/huntress-2026/hctf/orchestrate.py\", line 243, in run\n    if \"single_solve\" in modes and not self.single():\n                                       ^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/hctf/orchestrate.py\", line 165, in single\n    body, err = timed.ensure_started(cid)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/hctf/timed.py\", line 54, in ensure_started\n    cli.c_artifact(A)\n  File \"/home/testpwn/huntress-2026/hctf/cli.py\", line 192, in c_artifact\n    p = local / Path(s[\"path\"]).name\n                ^^^^\nNameError: name 'Path' is not defined. Did you mean: 'paths'?\n",
+  "launches": 3
+}
