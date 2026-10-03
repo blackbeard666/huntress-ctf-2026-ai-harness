@@ -66,7 +66,12 @@ def run(cid, solver_dir, fix=None, log=print, op="start"):
     res = workers.run_hb_timed(solver_dir, cid, op=op)
     r = str(res.get("result", "")).lower()
     log(f"[{cid}] hb_timed: {json.dumps({k: res.get(k) for k in ('result', 'remaining', 'elapsed', 'missing') if k in res})}")
-    if r in ("correct",) or cli.is_complete(cid):
+    if r == "correct":
+        # Sync state back locally (hb_timed submitted on Homebase): record the confirmed answers + a
+        # correct submission, so cli.is_complete and the dashboard reflect reality.
+        cli.record_remote_result(cid, res.get("attempt_id"), res.get("submitted") or {}, "correct", res.get("detail"))
+        return "correct"
+    if cli.is_complete(cid):
         return "correct"
     if r in ("solver_incomplete", "solver_error", "incorrect", "accepted", "exec_error"):
         return "blocked"       # the solver needs work; caller will generalise offline then retry

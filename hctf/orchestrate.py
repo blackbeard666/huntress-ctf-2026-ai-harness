@@ -309,24 +309,17 @@ class Chain:
                 continue
             if res not in ("expired", "blocked"):
                 break
-            # Self-heal offline: fetch THIS variant locally, and if the solver can't fully handle it, improve it.
-            # Next iteration's hb_timed resyncs the improved solver and gets a fresh clock on its own.
+            # A failed timed attempt means the solver is wrong or incomplete for this variant (with Homebase
+            # execution the window is no longer the bottleneck). Always improve the solver offline, then retry.
+            # The generalize worker re-derives the variant's correct answers itself (ground truth), so it can
+            # fix WRONG answers too, not just missing ones. Fetch the variant locally for it to work on.
             try:
                 timed.ensure_started(cid)  # local start+download of the current variant for offline work
             except Exception as e:  # noqa: BLE001
                 say(f"[{cid}] local fetch for generalize failed: {e}")
             capture_variant(cid, self.sdir)
-            contract = cli.load(cid, "start.json") or {}
-            art = timed.latest_artifacts(cid)
-            ids = contract.get("answer_ids", [])
-            # Check with the SAME single solver hb_timed runs (self.sdir), not the dispatcher, so the two agree.
-            got, err, _ = solvers.run_solver(self.sdir, contract, art) if art else ({}, "no artifacts", 0)
-            missing = [a for a in ids if a not in got]
-            if err or not ids or missing:
-                say(f"[{cid}] {res}: this challenge's solver incomplete ({err or f'missing {missing[:4]}'}) -> generalize offline")
-                self.generalize(cid)
-            else:
-                say(f"[{cid}] {res}: solver handles it offline; retrying for a fresh clock")
+            say(f"[{cid}] {res}: improving the solver offline for this variant, then retrying")
+            self.generalize(cid)
         set_state(self.base, stage=f"{mode}:blocked")
         return False
 

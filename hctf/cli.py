@@ -111,6 +111,13 @@ def http_exit(env):
 # ---------------------------------------------------------------- commands
 
 def c_hb(a):
+    if a.action == "setup":
+        # Provision Homebase so solvers run next to the GM (hb_timed). Idempotent.
+        remote.rsync_to(ROOT / "setup" / "homebase_setup.sh", "~/homebase_setup.sh")
+        r = remote.ssh("bash ~/homebase_setup.sh", timeout=600, check=False)
+        sys.stdout.write(r.stdout)
+        sys.stderr.write(r.stderr)
+        return 0 if r.returncode == 0 else EXIT["error"]
     if a.action == "exec":
         # Run a command ON Homebase (inside the CTF network), e.g. to reach a live challenge backend.
         cmd = a.command[1:] if a.command[:1] == ["--"] else a.command
@@ -401,6 +408,19 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT):
     return kind, body, []
 
 
+def record_remote_result(cid, att, answers, kind, body=None):
+    """Record a submission made ON Homebase (by hb_timed) into local state, so is_complete/dash are accurate."""
+    att = att or attempt_id(load(cid, "start.json"))
+    with open(cdir(cid) / "submissions.jsonl", "a") as f:
+        f.write(json.dumps({"ts": now(), "attempt": att, "answers": answers, "http": 200,
+                            "kind": kind, "confirmed": sorted(answers) if kind in ("correct", "accepted") else [],
+                            "body": body, "via": "homebase"}, ensure_ascii=False) + "\n")
+    if kind in ("correct", "accepted") and answers:
+        allc = load(cid, "confirmed.json") or {}
+        allc.setdefault(att or "_", {}).update(answers)
+        save(cid, "confirmed.json", allc)
+
+
 def confirmed_answers(cid, att=None):
     """Answers the GM has confirmed for this challenge's attempt (default: the current start.json attempt)."""
     if att is None:
@@ -494,8 +514,8 @@ def c_openapi(a):
 def main(argv=None):
     p = argparse.ArgumentParser(prog="hctf", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
-    ph = sub.add_parser("hb", help="Homebase VM: status|on|off|ensure|deploy|exec -- <cmd>")
-    ph.add_argument("action", choices=["status", "on", "off", "ensure", "deploy", "exec"])
+    ph = sub.add_parser("hb", help="Homebase VM: status|on|off|ensure|deploy|setup|exec -- <cmd>")
+    ph.add_argument("action", choices=["status", "on", "off", "ensure", "deploy", "setup", "exec"])
     ph.add_argument("command", nargs=argparse.REMAINDER)
     ph.add_argument("--timeout", type=int, default=300)
     pl = sub.add_parser("list")

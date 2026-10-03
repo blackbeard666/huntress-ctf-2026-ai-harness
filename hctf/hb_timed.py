@@ -90,6 +90,7 @@ def main():
         body = _post({"op": "retry", "challenge": a.cid})
         left = _deadline_left(body)
     out["deadline"] = body.get("deadline")
+    out["attempt_id"] = body.get("attempt_id")
     ids = body.get("answer_ids") or []
     qmap = {aid: (body["questions"][i] if i < len(body.get("questions", [])) else {}) for i, aid in enumerate(ids)}
     if body.get("error") or not ids:
