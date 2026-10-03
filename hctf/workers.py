@@ -20,8 +20,8 @@ PROMPTS = ROOT / "hctf" / "prompts"
 HB_WORK = "hw"  # ~/hw on Homebase
 
 
-def render(name, **kw):
-    text = (PROMPTS / f"{name}.md").read_text()
+def render(_template, **kw):
+    text = (PROMPTS / f"{_template}.md").read_text()
     for k, v in kw.items():
         text = text.replace("{" + k + "}", str(v))
     return text
