@@ -5,7 +5,13 @@ import re
 import zipfile
 from pathlib import Path
 
-ZIP_PASSWORDS = [b"infected", b"flare", b"malware", b"virus"]  # common CTF archive passwords to try
+try:  # AES (method 99) members need pyzipper; stdlib zipfile only does ZipCrypto. Homebase has pyzipper but no 7z.
+    import pyzipper
+    _ZipFile = pyzipper.AESZipFile
+except ImportError:  # pragma: no cover
+    _ZipFile = zipfile.ZipFile
+
+ZIP_PASSWORDS = [b"infected", b"flare", b"malware", b"virus", b"huntress"]  # common CTF archive passwords to try
 
 
 def load_contract(path):
@@ -34,14 +40,14 @@ def iter_files(root):
 
 def read_member(zpath, member):
     """Read a member from a zip, trying common CTF passwords."""
-    with zipfile.ZipFile(zpath) as z:
+    with _ZipFile(zpath) as z:
         names = z.namelist()
         hit = next((n for n in names if Path(n).name == member or n == member), None)
         if hit is None:
             raise KeyError(f"{member} not in {zpath} ({names})")
         try:
             return z.read(hit)
-        except RuntimeError:
+        except (RuntimeError, NotImplementedError):
             for pw in ZIP_PASSWORDS:
                 try:
                     return z.read(hit, pwd=pw)
@@ -53,7 +59,7 @@ def read_member(zpath, member):
 def _zip_open(src):
     """ZipFile over a path or bytes, or None if not a zip."""
     try:
-        return zipfile.ZipFile(io.BytesIO(src) if isinstance(src, bytes) else src)
+        return _ZipFile(io.BytesIO(src) if isinstance(src, bytes) else src)
     except Exception:
         return None
 
@@ -61,7 +67,7 @@ def _zip_open(src):
 def _zip_read(z, name):
     try:
         return z.read(name)
-    except RuntimeError:
+    except (RuntimeError, NotImplementedError):
         for pw in ZIP_PASSWORDS:
             try:
                 return z.read(name, pwd=pw)

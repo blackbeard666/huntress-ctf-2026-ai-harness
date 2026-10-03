@@ -20,3 +20,18 @@ ATT&CK (all GM-confirmed, role-based): benign=none, downloader=T1105, stager=T11
 launcher=T1059.007, staged_chain/relay=T1059.007, uploader=T1041. Rejected: launcher T1218.010, stager T1059.007/T1620,
 dropper T1105/T1027.009.
 Synthetic check: renamed recover/inspect functions and swapped call/property styles still classify correctly.
+
+Time Trial (2026-10-03, 25 unverified variants): the clock is 5 s from `started_at`, and every failed attempt was
+`expired`/never submitted, not wrong. Every variant only re-rolls the same axes: file names, layer kind/order
+(reverse+XOR array, custom base64 + byte shift, ...), helper/variable casing, and the call/property/function styles. Step graphs
+and roles match the single solve exactly. All 25 were re-derived independently (native-eval node run of the
+inspect function + separate style regexes + the PS literals checked against the decoded bytes); expected.json is filled in from that.
+Speed axis: `jsdecode.js` now takes N paths and decodes every JScript member in ONE node process (each file in its own vm
+context); the solver went from ~0.31 s to ~0.13 s. The remaining latency is in the harness start/download round trip.
+
+Variant d6c34027 (2026-10-04 hardening pass): no new axis. It has the same evidence.zip (sha256 6b8e6166...) and the same
+contract as 4019a438. The attempt logged `start` + `download` and then nothing: it expired before submit (deadline =
+started_at + 5 s), it was not a wrong answer. All 87 answers were re-derived independently (base64 PS literals; native
+node `vm` run of each `inspect_*`; styles read by hand off the inspect bodies) and they equal the solver output, which is
+now stored in expected.json. The solver runs in ~0.12 s, so the gap is in the orchestrator's start→download→submit
+latency, not in solve.py.

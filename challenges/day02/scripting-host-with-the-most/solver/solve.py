@@ -9,12 +9,29 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
 sys.path.insert(0, str(ROOT))
-from lib.common import load_contract, normalize  # noqa: E402
+from lib.common import load_contract, normalize, read_member as _lib_read_member  # noqa: E402
 
-_spec = importlib.util.spec_from_file_location("powerplay", ROOT / "challenges/day01/scripting-power-play/solver/solve.py")
+# Vendored copy of the Day 1 solver: Homebase only gets this solver dir + lib, not challenges/day01/.
+_spec = importlib.util.spec_from_file_location("powerplay", HERE / "powerplay.py")
 PP = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(PP)
 log = PP.log
+_pp_read_member = PP.read_member
+
+
+def _read_member(zpath, member):
+    """The evidence zip is AES (method 99). Day 1's reader shells out to 7z for that, which Homebase lacks, so read it
+    in-process with lib.common (pyzipper) first and keep 7z only as a fallback."""
+    try:
+        return _lib_read_member(zpath, member)
+    except KeyError:
+        return None
+    except Exception as e:
+        log(f"lib read_member({member}) failed: {e!r}; falling back to 7z")
+        return _pp_read_member(zpath, member)
+
+
+PP.read_member = _read_member  # PP.find_member resolves read_member from its module globals
 
 # role -> primary ATT&CK, all GM-confirmed on the Day 2 single solve (role-based, independent of the adapter;
 # T1218.010 was rejected for a regsvr32.exe launcher). persistence_descriptor is unconfirmed.
@@ -100,14 +117,25 @@ def styles(text):
     return out
 
 
-def analyse_js(data, member):
+def decode_plans(blobs):
+    """{key: js bytes} -> {key: plan}, all files decoded by a single node process (startup dominates under the clock)."""
+    if not blobs:
+        return {}
+    with tempfile.TemporaryDirectory() as td:
+        paths = {}
+        for i, (key, data) in enumerate(blobs.items()):
+            paths[key] = str(Path(td) / ("%d.js" % i))
+            Path(paths[key]).write_bytes(data)
+        r = subprocess.run(["node", str(HERE / "jsdecode.js"), *paths.values()],
+                           capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
+        out = json.loads(r.stdout or "null")
+    if len(paths) == 1:
+        out = {next(iter(paths.values())): out}
+    return {key: (out or {}).get(p) or {} for key, p in paths.items()}
+
+
+def analyse_js(data, member, plan):
     text = data.decode("utf-8", "ignore").lstrip("﻿")
-    with tempfile.NamedTemporaryFile("wb", suffix=".js", delete=False) as f:
-        f.write(data)
-    r = subprocess.run(["node", str(HERE / "jsdecode.js"), f.name], capture_output=True, text=True, timeout=30,
-                       stdin=subprocess.DEVNULL)
-    Path(f.name).unlink()
-    plan = json.loads(r.stdout or "null") or {}
     log(member, json.dumps(plan))
     vals = plan.get("values") or {}
     role = role_of(plan)
@@ -153,6 +181,15 @@ def main():
     a = ap.parse_args()
     _, pairs = load_contract(a.contract)
     cache, answers = {}, {}
+    blobs = {}
+    for aid, q in pairs:  # decode every JScript member up front in one node run
+        art = q.get("artifact") or ""
+        if art not in blobs and art.split("->")[-1].strip().lower().endswith((".js", ".jse")) and js_field(aid, q):
+            try:
+                blobs[art] = PP.find_member(a.artifacts, art)
+            except Exception as e:
+                log("failed", art, repr(e))
+    plans = decode_plans(blobs)
     for aid, q in pairs:
         art = q.get("artifact") or ""
         member = art.split("->")[-1].strip()
@@ -163,8 +200,8 @@ def main():
             continue
         if art not in cache:
             try:
-                data = PP.find_member(a.artifacts, art)
-                cache[art] = analyse_js(data, member) if is_js else \
+                data = blobs.get(art) or PP.find_member(a.artifacts, art)
+                cache[art] = analyse_js(data, member, plans.get(art) or {}) if is_js else \
                     PP.analyse(data.decode("utf-8", "ignore").lstrip("﻿"), member)
             except Exception as e:
                 log("failed", art, repr(e))

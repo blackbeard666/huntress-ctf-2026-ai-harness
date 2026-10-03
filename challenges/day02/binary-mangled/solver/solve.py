@@ -27,7 +27,10 @@ PASSWORDS = [b"infected", b"flare", b"malware", b"virus"]
 MACHINE_NAMES = {"EM_X86_64": "x86-64", "EM_386": "x86", "EM_AARCH64": "AArch64", "EM_ARM": "ARM"}
 PE_MACHINE = {0x8664: "x86-64", 0x14c: "x86", 0xaa64: "AArch64", 0x1c0: "ARM"}
 # cpp_format: GM wants the lowercase container name ("elf" confirmed Day 02; "pe" follows the same scheme).
-FORMAT_NAMES = {"ELF": "elf", "PE": "pe", "MACHO": "macho"}
+try:
+    from lib.knowledge import BINARY_FORMAT as FORMAT_NAMES
+except ImportError:
+    FORMAT_NAMES = {"ELF": "elf", "PE": "pe", "MACHO": "macho"}
 
 
 def log(*a):
@@ -89,6 +92,20 @@ def demangle(names):
     except Exception:
         pass
     return {n: n for n in names}
+
+
+def itanium_nested(name):
+    """Components of an Itanium nested name without c++filt: _ZNK15DiscoveryEngine5scoreEPKc -> [DiscoveryEngine, score]."""
+    m = re.match(r"_ZN[KVRO]*", name)
+    if not m:
+        return []
+    i, parts = m.end(), []
+    while i < len(name) and name[i].isdigit():
+        n = re.match(r"\d+", name[i:]).group(0)
+        i += len(n)
+        parts.append(name[i:i + int(n)])
+        i += int(n)
+    return parts if name[i:i + 1] == "E" else []
 
 
 def elf_info(data):
@@ -256,7 +273,9 @@ def cpp_facts(data, inf):
     own = lambda n: "__cxxabiv1" not in n and "std::" not in dm.get(n, n)
     vt = [n for n in names if (n.startswith("_ZTV") or n.startswith("??_7")) and own(n)]
     ti = [n for n in names if n.startswith(("_ZTI", "_ZTS")) and own(n)]
-    score = [n for n in names if re.search(r"::score\(", dm.get(n, "")) or re.match(r"\?score@", n)]
+    score = [n for n in names if re.search(r"::score\(", dm.get(n, "")) or re.match(r"\?score@", n)
+             or itanium_nested(n)[-1:] == ["score"]]
+    score = list(dict.fromkeys(score))
     has_vt = bool(vt) or b"??_7" in data or b"_ZTV" in data
     has_ti = bool(ti) or b".?AV" in data or b"_ZTI" in data
     # prefer the vtable of the class that owns score(): _ZNK15DiscoveryEngine5score... -> _ZTV15DiscoveryEngine

@@ -1,8 +1,9 @@
 // Sandboxed descriptor recovery for inert WSH JScript fixtures: runs the file in an empty vm context (no require,
 // no WScript/ActiveXObject, no network), then calls each top-level function with eval swapped for a capture.
-// The plan is the first captured eval text (or string return value) that parses as an object with "steps".
+// Each file gets its own context. The plan is the first captured eval text (or string return value) that parses as an object with "steps".
 const vm = require('vm'), fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+function decode(path) {
+const src = fs.readFileSync(path, 'utf8');
 const captured = [];
 const ctx = vm.createContext({});
 try { vm.runInContext(src, ctx, {timeout: 3000}); } catch (e) {}
@@ -27,4 +28,11 @@ for (const k of fns) {
   }
   if (out) break;
 }
-process.stdout.write(JSON.stringify(out));
+return out;
+}
+// one path -> the plan; several paths -> {path: plan} (one node start for the whole archive)
+const paths = process.argv.slice(2);
+if (paths.length === 1) process.stdout.write(JSON.stringify(decode(paths[0])));
+else process.stdout.write(JSON.stringify(Object.fromEntries(paths.map(p => {
+  try { return [p, decode(p)]; } catch (e) { return [p, null]; }
+}))));
