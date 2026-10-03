@@ -9,6 +9,7 @@ Fix workers racing a deadline skip the slot queue.
 """
 import json
 import os
+import re
 import threading
 import time
 import traceback
@@ -26,6 +27,15 @@ MAX_SINGLE_LAUNCHES = 3
 MAX_TIMED_RETRIES = 5
 
 _print_lock = threading.Lock()
+
+
+def _by_set(answers):
+    """Group answers by their set/slot prefix so each unit submits separately (clearer accept/incorrect)."""
+    groups = {}
+    for aid, val in answers.items():
+        m = re.match(r"(set|slot)[._-]?\d+", aid)
+        groups.setdefault(m.group(0) if m else "_", {})[aid] = val
+    return groups
 
 
 def say(msg):
@@ -185,6 +195,36 @@ class Chain:
         set_state(self.base, stage=f"{mode}:generalizing")
         self.run_worker(cid, "generalize", prompt, GENERALIZE_TIMEOUT)
 
+    def try_existing_solvers(self, cid):
+        """Run the whole solver library (all days, matched by question text) against this challenge.
+        If it answers every question and the submissions are accepted, copy the winning solver into this
+        challenge's solver dir and return True. Returns False to fall through to an LLM worker."""
+        contract = cli.load(cid, "start.json") or cli.load(cid, "contract.json")
+        art = timed.latest_artifacts(cid)
+        if not contract or not art:
+            return False
+        answers, problems = solvers.solve_contract(contract, art)  # no default -> library only
+        ids = contract.get("answer_ids", [])
+        if problems or not ids or any(a not in answers for a in ids):
+            return False
+        set_state(self.base, stage="single:reuse")
+        for key, group in _by_set(answers).items():
+            kind, body, refused = cli.submit(cid, group)
+            if kind not in ("correct", "accepted"):
+                say(f"[{cid}] reuse submit {key}: {kind or 'refused'} {json.dumps(body or refused)[:150]}")
+                return cli.is_complete(cid)
+        if cli.is_complete(cid):
+            # adopt the matching solver so this challenge's timed modes reuse it directly
+            groups, _ = solvers.dispatch(contract)
+            src = next(iter(groups), None)
+            if src and src != self.sdir and not (self.sdir / "solve.py").exists():
+                import shutil
+                self.sdir.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src / "solve.py", self.sdir / "solve.py")
+            ensure_case_and_test(self.base, self.sdir)
+            return True
+        return False
+
     # -- stages
     def single(self):
         e = self.entries.get("single_solve")
@@ -201,6 +241,10 @@ class Chain:
             triage_mod.triage(cid)  # deterministic grounding before the LLM worker starts
         except Exception as e:  # noqa: BLE001 - triage is best-effort
             say(f"[{cid}] triage note: {e}")
+        # Reuse-first: a prior day's solver (matched by question text) may already solve this. No model time.
+        if not welcome and self.try_existing_solvers(cid):
+            say(f"[{cid}] solved by existing solver library (no worker needed)")
+            return True
         if body is None:
             # e.g. read-the-rules: no artifact, but the contract still names the answer ids
             st = cli.call(cid, "status", cid)["body"] or {}

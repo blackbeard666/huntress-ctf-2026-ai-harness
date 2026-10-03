@@ -277,6 +277,17 @@ def _questions(start):
     return {aid: (qs[i] if i < len(qs) and isinstance(qs[i], dict) else {}) for i, aid in enumerate(ids)}
 
 
+def _normalize(value, q):
+    """Apply the question's normalization. 'exact' is left untouched; everything else is at least trimmed."""
+    norm = (q or {}).get("normalization")
+    if norm == "exact":
+        return value
+    v = value.strip()
+    if norm == "case_insensitive":
+        v = v.lower()
+    return v
+
+
 def _format_problem(value, q):
     af = q.get("answer_format") if isinstance(q.get("answer_format"), dict) else {}
     if af.get("kind") == "enum" and af.get("accepted_values"):
@@ -315,6 +326,8 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT):
     start = load(cid, "start.json")
     att = attempt_id(start)
     qmap = _questions(start)
+    # Auto-apply the GM's stated normalization so a stray space/case never wastes a submission.
+    answers = {k: _normalize(str(v), qmap.get(k, {})) for k, v in answers.items()}
     subs_path = cdir(cid) / "submissions.jsonl"
     history = [json.loads(l) for l in subs_path.read_text().splitlines()] if subs_path.exists() else []
     same_attempt = [h for h in history if h.get("attempt") == att]
