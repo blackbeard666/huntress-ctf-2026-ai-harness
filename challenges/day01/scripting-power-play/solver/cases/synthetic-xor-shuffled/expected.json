@@ -1,0 +1,17 @@
+{
+ "resource-scenario": "resource_hijacking",
+ "resource-attack": "T1496",
+ "resource-url": "https://pool.example.invalid/x.bin",
+ "resource-wallet": "wallet_feedface00112233",
+ "resource-mutex": "Local\\Mx_abc123",
+ "collection-scenario": "synthetic_collection",
+ "collection-attack": "T1555.003",
+ "collection-url": "https://drop.example.invalid/c.dat",
+ "collection-file": "dump-1.dat",
+ "collection-user-agent": "Mozilla/5.0 Synth/1.0",
+ "impact-scenario": "synthetic_impact",
+ "impact-attack": "T1486",
+ "impact-extension": ".enc-77",
+ "impact-note": "HOW_TO_RESTORE.html",
+ "impact-url": "https://pay.example.invalid/i.dat"
+}

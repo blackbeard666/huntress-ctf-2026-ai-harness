@@ -1,13 +1,16 @@
-# Power Play (script-analysis-day-01-native-signals)
-Concept: evidence zip (AES-256 zip, password `infected`) with 3 inert PowerShell fixtures. Each holds a base64 JSON
-descriptor (`$reconstruct` is identity in single_solve) plus a `$nativeTypes` list of .NET types (the "native signals").
-- scenario: by native types and indicators. Process + wallet → resource_hijacking; Aes + `.ext` + RECOVERY note → synthetic_impact;
-  ZipFile + HttpWebRequest + stage .zip → synthetic_collection.
-- ATT&CK: resource T1496, impact T1486, collection T1555.003 (all GM-confirmed; T1005, T1560, T1119 were rejected for collection).
-- indicators: string leaves of the JSON in source order. URL = first http(s); wallet = wallet_*/crypto regex; mutex = Global\\*;
-  UA = Mozilla/*; extension = `^\.\w+`; note = filename with recovery/readme; file = first non-URL filename.
-Variant axes handled: archive name (evidence-NN.zip, the "x.zip -> member" saved name), password (none/prompt/infected),
-nested archives (Mastery bundle zip, saved as `evidence-01.zip -> resource-sample.ps1`, holding
-unencrypted inner `evidence-01.zip`, `evidence-02.zip`, each AES/`infected`; inner zips expanded to temp files up to depth 3,
-case variant-mastery-74d10ff2), reconstruct transform (identity, reversal, XOR with script byte-array/string keys, single-byte XOR), question order/subsets, Mastery sets.
-Tested on a synthetic set2 with a XOR-keyed reconstruct inside an AES zip named evidence-02.zip.
+# Power Play (script-analysis day 01) solver
+
+Concept: `evidence*.zip` (AES-256, password `infected`, read via `7z -so`) holds three inert PowerShell fixtures. Each has a
+base64 JSON descriptor (`$encodedMaterial`) with the IOCs, plus a `$nativeTypes` list that gives away the intent.
+
+- Descriptor: base64 literal -> JSON. Also handles a `$reconstruct` that reverses or XORs (byte-array or string keys,
+  single-byte brute force), and UTF-16.
+- Indicators come from the descriptor's string values, matched by shape, so key letters and order don't matter: URL, wallet
+  (`wallet_*` / BTC / ETH / XMR), mutex (`Global\`/`Local\`), user agent, extension (`.x`), note (filename with
+  recover/readme/restore/... words, else .txt/.html), file = first filename-shaped value in source order.
+- Scenario: weighted signals (wallet + Process/Registry -> resource_hijacking; note/extension + Aes/DirectoryInfo ->
+  synthetic_impact; .zip staging + ZipFile/HttpWebRequest -> synthetic_collection); the file name only breaks ties.
+- ATT&CK from `lib.knowledge.SCENARIO_ATTACK` (GM-confirmed: T1496, T1555.003, T1486).
+- Mastery: each `setN.` question names its own `evidence-0N.zip`; it's routed by artifact, results cached per artifact.
+- Case `synthetic-xor-shuffled`: renamed zip, XOR+reverse reconstruct, shuffled keys and questions, different
+  mutex/UA/note shapes.

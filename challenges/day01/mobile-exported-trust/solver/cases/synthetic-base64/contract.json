@@ -1,0 +1,17 @@
+{
+  "questions": [
+    {
+      "id": "answer",
+      "question": "For case MOB-01-SYNTHETIC in package com.huntress.mobile.d01.vsyn: Identify an exported deep-link Activity that attaches an embedded client credential, invoke it with the correct case reference, and return the backend evidence code. Submit only the exact backend answer code returned for this case.",
+      "artifact": "exported_trust_syn.apk",
+      "answer_format": {
+        "kind": "pattern",
+        "syntax": "ANS- followed by exactly 16 uppercase hexadecimal characters"
+      },
+      "normalization": "exact"
+    }
+  ],
+  "answer_ids": [
+    "answer"
+  ]
+}

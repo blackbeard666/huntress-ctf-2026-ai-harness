@@ -1,24 +1,27 @@
-# Exported Trust — solver notes
+# Solver: Day 01 mobile-android — Exported Trust
 
-Concept: exported deep-link Activity (ChallengeActivity) carries an embedded client
-credential and posts to a narrative backend. The actual evidence code is embedded in the
-APK asset `assets/huntress_puzzle.json` as {"codec": "...", "data": "<encoded ANS code>"}.
-Decode `data` per `codec` → ANS- + 16 uppercase hex.
+## Concept
+The APK exports a deep-link Activity (`.ChallengeActivity`, scheme
+`huntressNN://<host>/unlock`) that, when invoked with `answer` + `case_id`, attaches an
+embedded `client_secret` and the `answer` as `proof` to a backend
+`http://127.0.0.1:19090/mobile/attempt/<token>/evidence` call. The `proof` the app
+sends is the value stored in `assets/huntress_puzzle.json`, and the backend's returned
+evidence code equals that value (`ANS-` + 16 uppercase hex). The backend is the app's
+on-device loopback and is not reachable from Homebase, so the challenge is solved
+statically: the evidence code = the decoded puzzle `data`.
 
-The backend (http://127.0.0.1:19090/mobile/attempt/.../evidence) is NOT live/reachable
-(connection refused on Homebase; no GM proxy route). Answer is derived from the embedded bytes.
+## What the solver does
+1. For each question (routed by "evidence"/"exported" keywords), locate the APK via
+   `lib.common.find_artifact` (handles the Mastery `delivery N: ...apk` names and sets).
+2. Read `assets/huntress_puzzle.json` straight from the APK zip (no decompile — fast).
+3. Decode `data` per the declared `codec` (plain/base64/base32/hex/rot13/reverse),
+   extract the `ANS-<16hex>` pattern, uppercase, normalize.
 
-Variant axes handled:
-- APK file name (incl. Mastery "delivery N: <file>.apk" prefix). The downloader saves Mastery files
-  WITH the prefix on disk (`delivery 1: exported_trust_mastery_01.apk`), so the lookup tries the raw
-  name first, then the stripped name, then suffix/case-insensitive matches, then the single-APK fallback.
-  If several APKs remain, it picks the one whose manifest/dex holds the package named in the question
-  (UTF-16LE in AXML). Case variant-mastery-a6d9c031 (3 sets, codec plain) failed with {} before this fix.
-- Package suffix / case reference — irrelevant to the answer, not used.
-- Puzzle codec — table of plain/base64(/url)/base32/base85/ascii85/hex/rot13/reverse/gzip/zlib/bz2/lzma,
-  plus a brute fallback that tries every decoder and keeps whatever yields an ANS- match.
-- Last-resort scan of the whole APK for an ANS- literal.
-- Only answers questions whose text mentions evidence/exported/deep-link; skips others (Mastery mixing).
+## Variant axes handled
+- package suffix, case reference, APK filename — never read; derived or irrelevant.
+- Mastery multi-set (`set1.answer`..`setN.answer`), each with its own delivery APK.
+- puzzle `codec` other than plain (proven by `cases/synthetic-base64`).
 
-Verified: single_solve (GM-confirmed ANS-DACC86F43B0B1C1A), time_trial-f8d3ec43, variant-mastery-a6d9c031
-(expected derived from plain-codec puzzle assets; sha256 matched contract) + synthetic base64 variant.
+## Proof
+- `hctf solver-test` → single_solve + synthetic-base64 both ok.
+- `hctf solver-run .../time_trial` and `.../mastery` → all answers, no missing/problems.
