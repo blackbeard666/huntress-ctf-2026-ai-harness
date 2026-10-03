@@ -1,6 +1,12 @@
-chals/
+.run/
+.venv/
+tools/
 secrets/
-state.sqlite
+challenges/*/*/*/artifacts/
+challenges/*/*/*/worker-*.log
 __pycache__/
 *.pyc
-.venv/
+/bin/*
+!/bin/hctf
+!/bin/env.sh
+challenges/*/*/solver/cases/*/artifacts/

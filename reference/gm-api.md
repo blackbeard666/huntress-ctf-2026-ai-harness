@@ -8,7 +8,7 @@
 - From Homebase, plain `curl` with no extra headers works; identity is supplied by the network path.
 - SSH tunnels DO NOT work: sshd answers `channel open failed: administratively prohibited` for -L and -D.
   Treat this as a deliberate organizer control; do not try to get around it.
-- Works: run the GM client ON Homebase over SSH (key auth, WSL key ~/.ssh/huntress_homebase installed in Homebase
+- Works: run the GM client ON Homebase over SSH (key auth, project key secrets/huntress_homebase installed in Homebase
   ~/.ssh/authorized_keys; a factory Reset wipes it). A fresh ssh exec takes ~3.4s; with ControlMaster multiplexing 0.6-2s;
   8 parallel calls over one mux finish in 2.5s. rsync is present on both ends for moving artifacts.
 - Homebase: Ubuntu 24.04 on AWS, 2 vCPU, 3 GB RAM, 38 GB disk (29 GB free). Has codex-cli 0.159.3,

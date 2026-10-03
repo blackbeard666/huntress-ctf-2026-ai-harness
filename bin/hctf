@@ -1,0 +1,4 @@
+#!/bin/sh
+# Wrapper so `hctf` works from anywhere: bin/hctf -> python3 -m hctf.cli
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m hctf.cli "$@"

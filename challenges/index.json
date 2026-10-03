@@ -1,0 +1,74 @@
+{
+  "binary-reverse-engineering-day-01-c-elf-orientation": {
+    "day": 1,
+    "dir": "day01/binary-elf-aware",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ ELF Aware"
+  },
+  "binary-reverse-engineering-day-02-cpp-and-pe-orientation": {
+    "day": 2,
+    "dir": "day02/binary-mangled",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Mangled"
+  },
+  "metadata-forensics-day-01-hash-to-ride": {
+    "day": 1,
+    "dir": "day01/metadata-you-must-be-this-hash-to-ride",
+    "lane": "metadata-forensics",
+    "name": "🔎 You Must Be This Hash to Ride"
+  },
+  "metadata-forensics-day-02-looks-can-be-deceiving": {
+    "day": 2,
+    "dir": "day02/metadata-looks-can-be-deceiving",
+    "lane": "metadata-forensics",
+    "name": "🔎 Looks Can Be Deceiving"
+  },
+  "mobile-android-day-01-exported-trust": {
+    "day": 1,
+    "dir": "day01/mobile-exported-trust",
+    "lane": "mobile-android",
+    "name": "📱 Exported Trust"
+  },
+  "mobile-android-day-02-deep-link-drift": {
+    "day": 2,
+    "dir": "day02/mobile-deep-link-drift",
+    "lane": "mobile-android",
+    "name": "📱 Deep Link Drift"
+  },
+  "read-the-rules": {
+    "day": 1,
+    "dir": "day01/welcome-read-the-rules",
+    "lane": "welcome",
+    "name": "Read the Rules"
+  },
+  "script-analysis-day-01-native-signals": {
+    "day": 1,
+    "dir": "day01/scripting-power-play",
+    "lane": "script-analysis",
+    "name": "📜 Power Play"
+  },
+  "script-analysis-day-02-encoded-intent": {
+    "day": 2,
+    "dir": "day02/scripting-host-with-the-most",
+    "lane": "script-analysis",
+    "name": "📜 Host With the Most"
+  },
+  "warmups-day-01": {
+    "day": 1,
+    "dir": "day01/warmups-a-little-based",
+    "lane": "warmups",
+    "name": "👶 A Little Based"
+  },
+  "warmups-day-02": {
+    "day": 2,
+    "dir": "day02/warmups-half-a-turn",
+    "lane": "warmups",
+    "name": "👶 Half a Turn"
+  },
+  "welcome-robots": {
+    "day": 1,
+    "dir": "day01/welcome-welcome-robots",
+    "lane": "welcome",
+    "name": "Welcome Robots"
+  }
+}
