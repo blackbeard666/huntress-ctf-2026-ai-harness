@@ -1,0 +1,245 @@
+# Triage: script-analysis-day-04-shell-contrast
+
+**Prompt:** These VBScript specimens hide their material behind character codes, reversible transforms, and winding control flow. Unwind every representation on paper, classify each behavior, and find out which stage passes the baton to which.
+
+**231 answer(s) expected.** Formats:
+- `resource-scenario`: What scenario best describes resource-sample.ps1?  _(fmt: one of ['resource_hijacking', 'synthetic_collection', 'synthetic_impact']; norm: trim)_
+- `resource-attack`: What is its primary MITRE ATT&CK technique ID?  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `resource-url`: What exact URL is embedded in the resource sample?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `resource-wallet`: What exact wallet indicator is embedded in the resource sample?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `resource-mutex`: What exact mutex indicator is embedded in the resource sample?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `collection-scenario`: What scenario best describes collection-sample.ps1?  _(fmt: one of ['resource_hijacking', 'synthetic_collection', 'synthetic_impact']; norm: trim)_
+- `collection-attack`: What is its primary MITRE ATT&CK technique ID?  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `collection-url`: What exact URL is embedded in the collection sample?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `collection-file`: What is the first exact filename indicator in the collection sample?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `collection-user-agent`: What exact user-agent indicator is embedded in the collection sample?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `impact-scenario`: What scenario best describes impact-sample.ps1?  _(fmt: one of ['resource_hijacking', 'synthetic_collection', 'synthetic_impact']; norm: trim)_
+- `impact-attack`: What is its primary MITRE ATT&CK technique ID?  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `impact-extension`: What exact extension indicator is embedded in the impact sample?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `impact-note`: What exact recovery-note filename is embedded in the impact sample?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `impact-url`: What exact URL is embedded in the impact sample?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-benign-role`: Classify host-context.js as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `jscript-benign-attack`: What is its primary ATT&CK technique ID, or none?  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `jscript-benign-adapter`: What exact Windows adapter name does the reconstructed plan reference?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-benign-campaign`: What exact synthetic campaign identifier is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-benign-host`: What exact synthetic host identifier is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-stager-role`: Classify memory-stage.js by its ordered behavior graph.  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `jscript-stager-attack`: What is its primary MITRE ATT&CK technique ID?  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `jscript-stager-adapter`: What exact acquisition adapter is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-stager-campaign`: What exact synthetic campaign identifier is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-stager-url`: What exact reserved-domain URL is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-dropper-role`: Classify embedded-write.js by its ordered behavior graph.  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `jscript-dropper-attack`: What is its primary MITRE ATT&CK technique ID?  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `jscript-dropper-adapter`: What exact file adapter is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-dropper-campaign`: What exact synthetic campaign identifier is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-dropper-path`: What exact synthetic output path is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-downloader-role`: Classify remote-write.js by its ordered behavior graph.  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `jscript-downloader-attack`: What is its primary MITRE ATT&CK technique ID?  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `jscript-downloader-adapter`: What exact acquisition adapter is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-downloader-campaign`: What exact synthetic campaign identifier is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-downloader-url`: What exact reserved-domain URL is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-launcher-role`: Classify local-dispatch.js by its ordered behavior graph.  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `jscript-launcher-attack`: What is its primary MITRE ATT&CK technique ID?  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `jscript-launcher-adapter`: What exact process adapter is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-launcher-campaign`: What exact synthetic campaign identifier is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-launcher-path`: What exact local path is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-chain-role`: Classify staged-handoff.js by its complete ordered behavior graph.  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `jscript-chain-attack`: What is its primary MITRE ATT&CK technique ID?  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `jscript-chain-adapter`: What exact acquisition adapter is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-chain-campaign`: What exact synthetic campaign identifier is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-chain-next-stage`: What exact PowerShell next-stage filename is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-benign-function-style`: Is the inspect function emitted as declaration, anonymous_expression, or named_expression?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-benign-invocation-style`: Is descriptor recovery invoked with direct, call, or apply syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-benign-property-style`: Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-stager-function-style`: Is the inspect function emitted as declaration, anonymous_expression, or named_expression?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-stager-invocation-style`: Is descriptor recovery invoked with direct, call, or apply syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-stager-property-style`: Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-dropper-function-style`: Is the inspect function emitted as declaration, anonymous_expression, or named_expression?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-dropper-invocation-style`: Is descriptor recovery invoked with direct, call, or apply syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-dropper-property-style`: Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-downloader-function-style`: Is the inspect function emitted as declaration, anonymous_expression, or named_expression?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-downloader-invocation-style`: Is descriptor recovery invoked with direct, call, or apply syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-downloader-property-style`: Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-launcher-function-style`: Is the inspect function emitted as declaration, anonymous_expression, or named_expression?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-launcher-invocation-style`: Is descriptor recovery invoked with direct, call, or apply syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-launcher-property-style`: Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-chain-function-style`: Is the inspect function emitted as declaration, anonymous_expression, or named_expression?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-chain-invocation-style`: Is descriptor recovery invoked with direct, call, or apply syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-chain-property-style`: Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-uploader-role`: Classify outbound-transfer.js by its ordered behavior graph.  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `jscript-uploader-attack`: What is its primary MITRE ATT&CK technique ID?  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `jscript-uploader-adapter`: What exact outbound-transfer adapter or LOLBin is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-uploader-campaign`: What exact synthetic campaign identifier is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-uploader-url`: What exact reserved-domain upload destination is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-uploader-function-style`: Is the inspect function emitted as declaration, anonymous_expression, or named_expression?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-uploader-invocation-style`: Is descriptor recovery invoked with direct, call, or apply syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-uploader-property-style`: Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-impact-role`: Classify impact-plan.js by its ordered behavior graph.  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `jscript-impact-attack`: What is its primary MITRE ATT&CK technique ID?  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `jscript-impact-adapter`: What exact content-transformation adapter is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-impact-extension`: What exact synthetic transformed-file extension is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-impact-note`: What exact synthetic recovery-note name is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-impact-function-style`: Is the inspect function emitted as declaration, anonymous_expression, or named_expression?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-impact-invocation-style`: Is descriptor recovery invoked with direct, call, or apply syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-impact-property-style`: Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-relay-role`: Classify relay-handoff.js by its complete ordered behavior graph.  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `jscript-relay-attack`: What is its primary MITRE ATT&CK technique ID?  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `jscript-relay-adapter`: What exact acquisition adapter is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-relay-campaign`: What exact synthetic campaign identifier is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-relay-next-stage`: What exact JScript next-stage filename is reconstructed?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-relay-function-style`: Is the inspect function emitted as declaration, anonymous_expression, or named_expression?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-relay-invocation-style`: Is descriptor recovery invoked with direct, call, or apply syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `jscript-relay-property-style`: Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-benign-role`: Classify the Batch specimen as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or sta  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `batch-benign-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `batch-benign-adapter`: Recover the exact native adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-benign-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-benign-host-id`: Recover the exact host_id indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-benign-expansion`: Identify the percent, delayed, CALL-double, or FOR-indirect expansion form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-benign-control`: Identify the exact Batch control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-benign-graph`: Identify the exact stage-graph topology.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-stager-role`: Classify the Batch specimen as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or sta  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `batch-stager-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `batch-stager-adapter`: Recover the exact native adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-stager-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-stager-url`: Recover the exact url indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-stager-expansion`: Identify the percent, delayed, CALL-double, or FOR-indirect expansion form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-stager-control`: Identify the exact Batch control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-stager-graph`: Identify the exact stage-graph topology.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-dropper-role`: Classify the Batch specimen as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or sta  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `batch-dropper-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `batch-dropper-adapter`: Recover the exact native adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-dropper-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-dropper-file-path`: Recover the exact file_path indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-dropper-expansion`: Identify the percent, delayed, CALL-double, or FOR-indirect expansion form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-dropper-control`: Identify the exact Batch control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-dropper-graph`: Identify the exact stage-graph topology.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-downloader-role`: Classify the Batch specimen as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or sta  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `batch-downloader-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `batch-downloader-adapter`: Recover the exact native adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-downloader-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-downloader-url`: Recover the exact url indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-downloader-expansion`: Identify the percent, delayed, CALL-double, or FOR-indirect expansion form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-downloader-control`: Identify the exact Batch control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-downloader-graph`: Identify the exact stage-graph topology.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-uploader-role`: Classify the Batch specimen as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or sta  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `batch-uploader-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `batch-uploader-adapter`: Recover the exact native adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-uploader-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-uploader-upload-url`: Recover the exact upload_url indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-uploader-expansion`: Identify the percent, delayed, CALL-double, or FOR-indirect expansion form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-uploader-control`: Identify the exact Batch control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-uploader-graph`: Identify the exact stage-graph topology.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-launcher-role`: Classify the Batch specimen as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or sta  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `batch-launcher-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `batch-launcher-adapter`: Recover the exact native adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-launcher-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-launcher-file-path`: Recover the exact file_path indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-launcher-expansion`: Identify the percent, delayed, CALL-double, or FOR-indirect expansion form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-launcher-control`: Identify the exact Batch control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-launcher-graph`: Identify the exact stage-graph topology.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-impact-role`: Classify the Batch specimen as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or sta  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `batch-impact-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `batch-impact-adapter`: Recover the exact native adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-impact-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-impact-note-name`: Recover the exact note_name indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-impact-expansion`: Identify the percent, delayed, CALL-double, or FOR-indirect expansion form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-impact-control`: Identify the exact Batch control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-impact-graph`: Identify the exact stage-graph topology.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-chain-role`: Classify the Batch specimen as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or sta  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `batch-chain-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `batch-chain-adapter`: Recover the exact native adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-chain-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-chain-next-stage`: Recover the exact next_stage indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-chain-expansion`: Identify the percent, delayed, CALL-double, or FOR-indirect expansion form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-chain-control`: Identify the exact Batch control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-chain-graph`: Identify the exact stage-graph topology.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-relay-role`: Classify the Batch specimen as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or sta  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `batch-relay-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `batch-relay-adapter`: Recover the exact native adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-relay-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-relay-next-stage`: Recover the exact next_stage indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-relay-expansion`: Identify the percent, delayed, CALL-double, or FOR-indirect expansion form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-relay-control`: Identify the exact Batch control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `batch-relay-graph`: Identify the exact stage-graph topology.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-benign-role`: Classify host-context.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or stage  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `vbscript-benign-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `vbscript-benign-adapter`: Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-benign-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-benign-host-id`: Recover the exact host_id indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-benign-representation`: Identify the exact VBScript material representation.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-benign-transform`: Identify the exact reversible byte transform.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-benign-control`: Identify the exact VBScript control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-stager-role`: Classify memory-stage.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or stage  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `vbscript-stager-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `vbscript-stager-adapter`: Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-stager-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-stager-url`: Recover the exact url indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-stager-representation`: Identify the exact VBScript material representation.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-stager-transform`: Identify the exact reversible byte transform.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-stager-control`: Identify the exact VBScript control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-dropper-role`: Classify embedded-write.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or sta  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `vbscript-dropper-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `vbscript-dropper-adapter`: Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-dropper-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-dropper-file-path`: Recover the exact file_path indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-dropper-representation`: Identify the exact VBScript material representation.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-dropper-transform`: Identify the exact reversible byte transform.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-dropper-control`: Identify the exact VBScript control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-downloader-role`: Classify remote-write.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or stage  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `vbscript-downloader-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `vbscript-downloader-adapter`: Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-downloader-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-downloader-url`: Recover the exact url indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-downloader-representation`: Identify the exact VBScript material representation.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-downloader-transform`: Identify the exact reversible byte transform.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-downloader-control`: Identify the exact VBScript control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-uploader-role`: Classify outbound-transfer.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or   _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `vbscript-uploader-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `vbscript-uploader-adapter`: Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-uploader-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-uploader-upload-url`: Recover the exact upload_url indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-uploader-representation`: Identify the exact VBScript material representation.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-uploader-transform`: Identify the exact reversible byte transform.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-uploader-control`: Identify the exact VBScript control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-launcher-role`: Classify local-dispatch.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or sta  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `vbscript-launcher-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `vbscript-launcher-adapter`: Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-launcher-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-launcher-file-path`: Recover the exact file_path indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-launcher-representation`: Identify the exact VBScript material representation.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-launcher-transform`: Identify the exact reversible byte transform.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-launcher-control`: Identify the exact VBScript control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-impact-role`: Classify impact-plan.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `vbscript-impact-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `vbscript-impact-adapter`: Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-impact-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-impact-extension`: Recover the exact extension indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-impact-representation`: Identify the exact VBScript material representation.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-impact-transform`: Identify the exact reversible byte transform.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-impact-control`: Identify the exact VBScript control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-chain-role`: Classify staged-handoff.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or sta  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `vbscript-chain-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `vbscript-chain-adapter`: Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-chain-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-chain-next-stage`: Recover the exact next_stage indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-chain-representation`: Identify the exact VBScript material representation.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-chain-transform`: Identify the exact reversible byte transform.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-chain-control`: Identify the exact VBScript control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-relay-role`: Classify relay-handoff.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or stag  _(fmt: one of ['benign_utility', 'downloader', 'dropper', 'impact', 'launcher', 'persis; norm: trim)_
+- `vbscript-relay-attack`: Recover the primary MITRE ATT&CK technique ID, or none.  _(fmt: T#### or T####.###; use the literal none only when the question permits it; norm: trim)_
+- `vbscript-relay-adapter`: Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-relay-campaign`: Recover the exact synthetic campaign identifier.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-relay-next-stage`: Recover the exact next_stage indicator.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-relay-representation`: Identify the exact VBScript material representation.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-relay-transform`: Identify the exact reversible byte transform.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+- `vbscript-relay-control`: Identify the exact VBScript control-flow form.  _(fmt: exact artifact-derived value only, without quotes or explanatory text unless quo; norm: trim)_
+
+## Artifacts
+
+- **evidence.zip** (29767 bytes) sha256 `0d0dd7a9a5aeb504…`
+  - file: Zip archive data, made by v0.0 UNIX, extract using at least v5.1, last modified Jan 01 2026 00:00:00, uncompressed size 1034, method=AES Encrypted
+  - signature: ZIP/APK/JAR/OOXML container
+  - archive with 30 entries: ['resource-sample.ps1', 'collection-sample.ps1', 'impact-sample.ps1', 'host-context.js', 'memory-stage.js', 'embedded-write.js', 'remote-write.js', 'local-dispatch.js', 'staged-handoff.js', 'outbound-transfer.js', 'impact-plan.js', 'relay-handoff.js']
+
+_Deterministic triage (no LLM). Verify against the bytes; see the routed lane skill._

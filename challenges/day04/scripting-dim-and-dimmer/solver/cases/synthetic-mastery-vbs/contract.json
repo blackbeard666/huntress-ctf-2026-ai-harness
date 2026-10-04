@@ -1,0 +1,1819 @@
+{
+ "name": "\ud83d\udcdc Dim and Dimmer",
+ "prompt": "These VBScript specimens hide their material behind character codes, reversible transforms, and winding control flow. Unwind every representation on paper, classify each behavior, and find out which stage passes the baton to which.",
+ "mode": "mastery",
+ "answer_ids": [
+  "set1.vbscript-benign-role",
+  "set1.vbscript-benign-attack",
+  "set1.vbscript-benign-adapter",
+  "set1.vbscript-benign-campaign",
+  "set1.vbscript-benign-host-id",
+  "set1.vbscript-benign-representation",
+  "set1.vbscript-benign-transform",
+  "set1.vbscript-benign-control",
+  "set1.vbscript-stager-role",
+  "set1.vbscript-stager-attack",
+  "set1.vbscript-stager-adapter",
+  "set1.vbscript-stager-campaign",
+  "set1.vbscript-stager-url",
+  "set1.vbscript-stager-representation",
+  "set1.vbscript-stager-transform",
+  "set1.vbscript-stager-control",
+  "set1.vbscript-dropper-role",
+  "set1.vbscript-dropper-attack",
+  "set1.vbscript-dropper-adapter",
+  "set1.vbscript-dropper-campaign",
+  "set1.vbscript-dropper-file-path",
+  "set1.vbscript-dropper-representation",
+  "set1.vbscript-dropper-transform",
+  "set1.vbscript-dropper-control",
+  "set1.vbscript-downloader-role",
+  "set1.vbscript-downloader-attack",
+  "set1.vbscript-downloader-adapter",
+  "set1.vbscript-downloader-campaign",
+  "set1.vbscript-downloader-url",
+  "set1.vbscript-downloader-representation",
+  "set1.vbscript-downloader-transform",
+  "set1.vbscript-downloader-control",
+  "set1.vbscript-uploader-role",
+  "set1.vbscript-uploader-attack",
+  "set1.vbscript-uploader-adapter",
+  "set1.vbscript-uploader-campaign",
+  "set1.vbscript-uploader-upload-url",
+  "set1.vbscript-uploader-representation",
+  "set1.vbscript-uploader-transform",
+  "set1.vbscript-uploader-control",
+  "set1.vbscript-launcher-role",
+  "set1.vbscript-launcher-attack",
+  "set1.vbscript-launcher-adapter",
+  "set1.vbscript-launcher-campaign",
+  "set1.vbscript-launcher-file-path",
+  "set1.vbscript-launcher-representation",
+  "set1.vbscript-launcher-transform",
+  "set1.vbscript-launcher-control",
+  "set1.vbscript-impact-role",
+  "set1.vbscript-impact-attack",
+  "set1.vbscript-impact-adapter",
+  "set1.vbscript-impact-campaign",
+  "set1.vbscript-impact-extension",
+  "set1.vbscript-impact-representation",
+  "set1.vbscript-impact-transform",
+  "set1.vbscript-impact-control",
+  "set1.vbscript-chain-role",
+  "set1.vbscript-chain-attack",
+  "set1.vbscript-chain-adapter",
+  "set1.vbscript-chain-campaign",
+  "set1.vbscript-chain-next-stage",
+  "set1.vbscript-chain-representation",
+  "set1.vbscript-chain-transform",
+  "set1.vbscript-chain-control",
+  "set1.vbscript-relay-role",
+  "set1.vbscript-relay-attack",
+  "set1.vbscript-relay-adapter",
+  "set1.vbscript-relay-campaign",
+  "set1.vbscript-relay-next-stage",
+  "set1.vbscript-relay-representation",
+  "set1.vbscript-relay-transform",
+  "set1.vbscript-relay-control",
+  "set2.vbscript-benign-role",
+  "set2.vbscript-benign-attack",
+  "set2.vbscript-benign-adapter",
+  "set2.vbscript-benign-campaign",
+  "set2.vbscript-benign-host-id",
+  "set2.vbscript-benign-representation",
+  "set2.vbscript-benign-transform",
+  "set2.vbscript-benign-control",
+  "set2.vbscript-stager-role",
+  "set2.vbscript-stager-attack",
+  "set2.vbscript-stager-adapter",
+  "set2.vbscript-stager-campaign",
+  "set2.vbscript-stager-url",
+  "set2.vbscript-stager-representation",
+  "set2.vbscript-stager-transform",
+  "set2.vbscript-stager-control",
+  "set2.vbscript-dropper-role",
+  "set2.vbscript-dropper-attack",
+  "set2.vbscript-dropper-adapter",
+  "set2.vbscript-dropper-campaign",
+  "set2.vbscript-dropper-file-path",
+  "set2.vbscript-dropper-representation",
+  "set2.vbscript-dropper-transform",
+  "set2.vbscript-dropper-control",
+  "set2.vbscript-downloader-role",
+  "set2.vbscript-downloader-attack",
+  "set2.vbscript-downloader-adapter",
+  "set2.vbscript-downloader-campaign",
+  "set2.vbscript-downloader-url",
+  "set2.vbscript-downloader-representation",
+  "set2.vbscript-downloader-transform",
+  "set2.vbscript-downloader-control",
+  "set2.vbscript-uploader-role",
+  "set2.vbscript-uploader-attack",
+  "set2.vbscript-uploader-adapter",
+  "set2.vbscript-uploader-campaign",
+  "set2.vbscript-uploader-upload-url",
+  "set2.vbscript-uploader-representation",
+  "set2.vbscript-uploader-transform",
+  "set2.vbscript-uploader-control",
+  "set2.vbscript-launcher-role",
+  "set2.vbscript-launcher-attack",
+  "set2.vbscript-launcher-adapter",
+  "set2.vbscript-launcher-campaign",
+  "set2.vbscript-launcher-file-path",
+  "set2.vbscript-launcher-representation",
+  "set2.vbscript-launcher-transform",
+  "set2.vbscript-launcher-control",
+  "set2.vbscript-impact-role",
+  "set2.vbscript-impact-attack",
+  "set2.vbscript-impact-adapter",
+  "set2.vbscript-impact-campaign",
+  "set2.vbscript-impact-extension",
+  "set2.vbscript-impact-representation",
+  "set2.vbscript-impact-transform",
+  "set2.vbscript-impact-control",
+  "set2.vbscript-chain-role",
+  "set2.vbscript-chain-attack",
+  "set2.vbscript-chain-adapter",
+  "set2.vbscript-chain-campaign",
+  "set2.vbscript-chain-next-stage",
+  "set2.vbscript-chain-representation",
+  "set2.vbscript-chain-transform",
+  "set2.vbscript-chain-control",
+  "set2.vbscript-relay-role",
+  "set2.vbscript-relay-attack",
+  "set2.vbscript-relay-adapter",
+  "set2.vbscript-relay-campaign",
+  "set2.vbscript-relay-next-stage",
+  "set2.vbscript-relay-representation",
+  "set2.vbscript-relay-transform",
+  "set2.vbscript-relay-control"
+ ],
+ "questions": [
+  {
+   "id": "set1.vbscript-benign-role",
+   "question": "Classify host-context.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-01.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-benign-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-01.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-benign-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-01.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-benign-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-01.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-benign-host-id",
+   "question": "Recover the exact host_id indicator.",
+   "artifact": "evidence-01.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-benign-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-01.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-benign-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-01.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-benign-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-01.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-stager-role",
+   "question": "Classify memory-stage.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-01.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-stager-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-01.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-stager-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-01.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-stager-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-01.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-stager-url",
+   "question": "Recover the exact url indicator.",
+   "artifact": "evidence-01.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-stager-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-01.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-stager-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-01.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-stager-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-01.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-dropper-role",
+   "question": "Classify embedded-write.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-01.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-dropper-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-01.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-dropper-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-01.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-dropper-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-01.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-dropper-file-path",
+   "question": "Recover the exact file_path indicator.",
+   "artifact": "evidence-01.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-dropper-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-01.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-dropper-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-01.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-dropper-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-01.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-downloader-role",
+   "question": "Classify remote-write.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-01.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-downloader-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-01.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-downloader-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-01.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-downloader-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-01.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-downloader-url",
+   "question": "Recover the exact url indicator.",
+   "artifact": "evidence-01.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-downloader-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-01.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-downloader-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-01.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-downloader-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-01.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-uploader-role",
+   "question": "Classify outbound-transfer.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-01.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-uploader-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-01.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-uploader-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-01.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-uploader-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-01.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-uploader-upload-url",
+   "question": "Recover the exact upload_url indicator.",
+   "artifact": "evidence-01.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-uploader-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-01.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-uploader-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-01.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-uploader-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-01.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-launcher-role",
+   "question": "Classify local-dispatch.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-01.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-launcher-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-01.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-launcher-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-01.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-launcher-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-01.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-launcher-file-path",
+   "question": "Recover the exact file_path indicator.",
+   "artifact": "evidence-01.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-launcher-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-01.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-launcher-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-01.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-launcher-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-01.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-impact-role",
+   "question": "Classify impact-plan.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-01.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-impact-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-01.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-impact-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-01.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-impact-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-01.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-impact-extension",
+   "question": "Recover the exact extension indicator.",
+   "artifact": "evidence-01.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-impact-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-01.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-impact-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-01.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-impact-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-01.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-chain-role",
+   "question": "Classify staged-handoff.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-01.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-chain-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-01.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-chain-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-01.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-chain-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-01.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-chain-next-stage",
+   "question": "Recover the exact next_stage indicator.",
+   "artifact": "evidence-01.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-chain-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-01.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-chain-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-01.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-chain-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-01.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-relay-role",
+   "question": "Classify relay-handoff.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-01.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-relay-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-01.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-relay-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-01.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-relay-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-01.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-relay-next-stage",
+   "question": "Recover the exact next_stage indicator.",
+   "artifact": "evidence-01.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-relay-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-01.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-relay-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-01.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.vbscript-relay-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-01.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-benign-role",
+   "question": "Classify host-context.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-02.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-benign-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-02.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-benign-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-02.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-benign-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-02.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-benign-host-id",
+   "question": "Recover the exact host_id indicator.",
+   "artifact": "evidence-02.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-benign-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-02.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-benign-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-02.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-benign-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-02.zip -> host-context.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-stager-role",
+   "question": "Classify memory-stage.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-02.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-stager-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-02.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-stager-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-02.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-stager-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-02.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-stager-url",
+   "question": "Recover the exact url indicator.",
+   "artifact": "evidence-02.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-stager-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-02.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-stager-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-02.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-stager-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-02.zip -> memory-stage.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-dropper-role",
+   "question": "Classify embedded-write.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-02.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-dropper-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-02.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-dropper-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-02.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-dropper-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-02.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-dropper-file-path",
+   "question": "Recover the exact file_path indicator.",
+   "artifact": "evidence-02.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-dropper-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-02.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-dropper-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-02.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-dropper-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-02.zip -> embedded-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-downloader-role",
+   "question": "Classify remote-write.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-02.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-downloader-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-02.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-downloader-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-02.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-downloader-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-02.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-downloader-url",
+   "question": "Recover the exact url indicator.",
+   "artifact": "evidence-02.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-downloader-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-02.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-downloader-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-02.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-downloader-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-02.zip -> remote-write.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-uploader-role",
+   "question": "Classify outbound-transfer.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-02.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-uploader-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-02.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-uploader-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-02.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-uploader-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-02.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-uploader-upload-url",
+   "question": "Recover the exact upload_url indicator.",
+   "artifact": "evidence-02.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-uploader-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-02.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-uploader-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-02.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-uploader-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-02.zip -> outbound-transfer.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-launcher-role",
+   "question": "Classify local-dispatch.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-02.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-launcher-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-02.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-launcher-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-02.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-launcher-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-02.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-launcher-file-path",
+   "question": "Recover the exact file_path indicator.",
+   "artifact": "evidence-02.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-launcher-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-02.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-launcher-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-02.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-launcher-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-02.zip -> local-dispatch.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-impact-role",
+   "question": "Classify impact-plan.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-02.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-impact-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-02.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-impact-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-02.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-impact-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-02.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-impact-extension",
+   "question": "Recover the exact extension indicator.",
+   "artifact": "evidence-02.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-impact-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-02.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-impact-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-02.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-impact-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-02.zip -> impact-plan.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-chain-role",
+   "question": "Classify staged-handoff.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-02.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-chain-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-02.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-chain-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-02.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-chain-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-02.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-chain-next-stage",
+   "question": "Recover the exact next_stage indicator.",
+   "artifact": "evidence-02.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-chain-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-02.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-chain-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-02.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-chain-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-02.zip -> staged-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-relay-role",
+   "question": "Classify relay-handoff.vbs as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+   "artifact": "evidence-02.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-relay-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-02.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-relay-adapter",
+   "question": "Recover the exact WSH, COM, or LOLBin adapter named by the reconstructed plan.",
+   "artifact": "evidence-02.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-relay-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-02.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-relay-next-stage",
+   "question": "Recover the exact next_stage indicator.",
+   "artifact": "evidence-02.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-relay-representation",
+   "question": "Identify the exact VBScript material representation.",
+   "artifact": "evidence-02.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-relay-transform",
+   "question": "Identify the exact reversible byte transform.",
+   "artifact": "evidence-02.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.vbscript-relay-control",
+   "question": "Identify the exact VBScript control-flow form.",
+   "artifact": "evidence-02.zip -> relay-handoff.vbs",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  }
+ ],
+ "artifacts": [
+  {
+   "filename": "evidence-01.zip",
+   "sha256": "0d0dd7a9a5aeb504eb6c88dc3bb83e8864c4152ed5f3cf3ffd87e80f46bb2591"
+  },
+  {
+   "filename": "evidence-02.zip",
+   "sha256": "bd7c2d704dd41715b21f81b3b666ad69bb844cb1f9628050b5205cc954366145"
+  }
+ ]
+}

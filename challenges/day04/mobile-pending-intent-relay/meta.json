@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-04-pending-intent-relay",
+  "lane": "mobile-android",
+  "name": "📱 Pending Intent Relay",
+  "ids": {
+    "single_solve": "mobile-android-day-04-pending-intent-relay",
+    "time_trial": "mobile-android-day-04-pending-intent-relay/time_trial",
+    "mastery": "mobile-android-day-04-pending-intent-relay/mastery"
+  }
+}

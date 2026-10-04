@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-04-go-runtime-fingerprints",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Go Fish",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-04-go-runtime-fingerprints",
+    "time_trial": "binary-reverse-engineering-day-04-go-runtime-fingerprints/time_trial",
+    "mastery": "binary-reverse-engineering-day-04-go-runtime-fingerprints/mastery"
+  }
+}

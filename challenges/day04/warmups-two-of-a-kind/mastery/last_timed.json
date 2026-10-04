@@ -1,0 +1,14 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "809ef985-d82f-445d-91d7-a3b0ecda61ed",
+  "window": 7.0,
+  "elapsed": 2.32,
+  "phases": {
+    "start": 1.26,
+    "download": 0.51,
+    "solve": 0.08,
+    "submit": 0.47
+  },
+  "routed": "homebase (window 7s, expired locally before)"
+}

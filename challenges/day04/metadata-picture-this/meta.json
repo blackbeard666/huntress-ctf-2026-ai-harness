@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-04-picture-this",
+  "lane": "metadata-forensics",
+  "name": "🔎 Picture This",
+  "ids": {
+    "single_solve": "metadata-forensics-day-04-picture-this",
+    "time_trial": "metadata-forensics-day-04-picture-this/time_trial",
+    "mastery": "metadata-forensics-day-04-picture-this/mastery"
+  }
+}

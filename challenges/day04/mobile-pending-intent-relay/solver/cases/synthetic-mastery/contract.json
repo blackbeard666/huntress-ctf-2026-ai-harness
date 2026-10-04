@@ -1,0 +1,37 @@
+{
+  "mode": "mastery",
+  "answer_ids": [
+    "set1.answer",
+    "set2.answer",
+    "set3.answer"
+  ],
+  "questions": [
+    {
+      "id": "set1.answer",
+      "artifact": "pending_intent_relay_mastery_01.apk",
+      "answer_format": {
+        "kind": "pattern",
+        "syntax": "ANS- ..."
+      },
+      "normalization": "exact"
+    },
+    {
+      "id": "set2.answer",
+      "artifact": "delivery 2: pending_intent_relay_mastery_02.apk",
+      "answer_format": {
+        "kind": "pattern",
+        "syntax": "ANS- ..."
+      },
+      "normalization": "exact"
+    },
+    {
+      "id": "set3.answer",
+      "artifact": "delivery 3: pending_intent_relay_mastery_03.apk",
+      "answer_format": {
+        "kind": "pattern",
+        "syntax": "ANS- ..."
+      },
+      "normalization": "exact"
+    }
+  ]
+}

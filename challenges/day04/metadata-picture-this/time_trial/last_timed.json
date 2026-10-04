@@ -1,0 +1,13 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "a5736aa2-9642-4405-92c6-66a19b2edd82",
+  "window": 6.0,
+  "elapsed": 5.58,
+  "phases": {
+    "start": 2.06,
+    "download": 1.73,
+    "solve": 0.13,
+    "submit": 1.67
+  }
+}
