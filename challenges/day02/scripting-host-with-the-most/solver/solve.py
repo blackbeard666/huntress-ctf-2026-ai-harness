@@ -9,7 +9,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
 sys.path.insert(0, str(ROOT))
-from lib.common import load_contract, normalize, read_member as _lib_read_member  # noqa: E402
+from lib.common import container_by_sha, delivery_missing, find_artifact, load_contract, normalize, read_member as _lib_read_member  # noqa: E402
 
 # Vendored copy of the Day 1 solver: Homebase only gets this solver dir + lib, not challenges/day01/.
 _spec = importlib.util.spec_from_file_location("powerplay", HERE / "powerplay.py")
@@ -32,6 +32,29 @@ def _read_member(zpath, member):
 
 
 PP.read_member = _read_member  # PP.find_member resolves read_member from its module globals
+
+
+CONTRACT = {}
+
+
+def find_member(artdir, artifact):
+    """Day 1 lookup first (saved-name heuristics); Mastery ships one outer bundle zip holding evidence-01.zip,
+    evidence-02.zip, ... which only lib.common.find_artifact unwraps (it prefers the member under the named set zip).
+    Mastery can also ship one download per set, every one named 'evidence.zip': when no file carries the question's
+    container name, pick the set's file by the contract's artifacts[].sha256 so set N never reads set 1's member;
+    if that set's delivery is absent altogether, fail the set instead of borrowing another set's bytes."""
+    container, _, member = artifact.partition("->")
+    container, member = Path(container.strip()).name, member.strip()
+    if member and not any(p.name == container for p in Path(artdir).rglob("*")):
+        p = container_by_sha(artdir, CONTRACT, container)
+        if p is not None:
+            return find_artifact(p.parent, f"{p.name} -> {member}")
+        if delivery_missing(artdir, CONTRACT, container):  # never answer set N from another set's same-named member
+            raise FileNotFoundError(f"{container} (this set's delivery) is not under {artdir}")
+    try:
+        return PP.find_member(artdir, artifact)
+    except FileNotFoundError:
+        return find_artifact(artdir, artifact)
 
 # role -> primary ATT&CK, all GM-confirmed on the Day 2 single solve (role-based, independent of the adapter;
 # T1218.010 was rejected for a regsvr32.exe launcher). persistence_descriptor is unconfirmed.
@@ -179,14 +202,15 @@ def main():
     ap.add_argument("--contract", required=True)
     ap.add_argument("--artifacts", required=True)
     a = ap.parse_args()
-    _, pairs = load_contract(a.contract)
+    contract, pairs = load_contract(a.contract)
+    CONTRACT.update(contract)
     cache, answers = {}, {}
     blobs = {}
     for aid, q in pairs:  # decode every JScript member up front in one node run
         art = q.get("artifact") or ""
         if art not in blobs and art.split("->")[-1].strip().lower().endswith((".js", ".jse")) and js_field(aid, q):
             try:
-                blobs[art] = PP.find_member(a.artifacts, art)
+                blobs[art] = find_member(a.artifacts, art)
             except Exception as e:
                 log("failed", art, repr(e))
     plans = decode_plans(blobs)
@@ -200,7 +224,7 @@ def main():
             continue
         if art not in cache:
             try:
-                data = blobs.get(art) or PP.find_member(a.artifacts, art)
+                data = blobs.get(art) or find_member(a.artifacts, art)
                 cache[art] = analyse_js(data, member, plans.get(art) or {}) if is_js else \
                     PP.analyse(data.decode("utf-8", "ignore").lstrip("﻿"), member)
             except Exception as e:

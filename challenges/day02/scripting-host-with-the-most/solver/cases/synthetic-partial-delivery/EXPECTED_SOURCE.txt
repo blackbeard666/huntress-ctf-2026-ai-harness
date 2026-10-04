@@ -1,0 +1,4 @@
+Synthetic, built from variant-mastery-7a6c43ab: the 7a6c43ab contract with ONLY delivery 1, saved under the GM's own
+filename evidence.zip (what the live 6 s run actually had). Set-1 answers = the verified 7a6c43ab answers (resolved via
+artifacts[].sha256); set-2 ids are expected null = ABSENT, because the solver must not answer set 2 from set 1's
+same-named members (lib.common.delivery_missing).

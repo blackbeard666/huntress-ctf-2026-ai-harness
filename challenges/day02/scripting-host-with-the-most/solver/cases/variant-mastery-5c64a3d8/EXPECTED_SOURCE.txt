@@ -1,0 +1,6 @@
+Mastery attempt 5c64a3d8 (2026-10-04). Live attempt never fetched its per-set downloads (log: start -> artifact {} and no
+download ops before the deadline), so the solver never ran on these bytes. The case was first written with the STALE
+71804192 bundle; it now holds this attempt's real bytes (evidence-01.zip sha256 4ae798b1..., evidence-02.zip b1980239...,
+fetched by capability via `hctf artifact`, hashes equal the contract). All 174 answers re-derived independently: PS base64
+literals decoded; every JScript inspect_* run natively in a fresh node vm (54 value fields compared by script, 0 diffs);
+function/invocation/property styles read by hand off each inspect body. Equal to solver output.

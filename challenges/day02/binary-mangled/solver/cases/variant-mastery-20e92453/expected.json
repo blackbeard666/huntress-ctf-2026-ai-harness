@@ -13,8 +13,8 @@
   "set1.mutex": "Global\\HuntressBR02_001",
   "set1.has_cpp_vtable": "true",
   "set1.has_cpp_typeinfo": "true",
-  "set1.mangled_score_symbol": "_ZNK15DiscoveryEngine5scoreEPKc",
-  "set1.vtable_symbol": "_ZTV15DiscoveryEngine",
+  "set1.mangled_score_symbol": ".text$_ZNK15DiscoveryEngine5scoreEPKc",
+  "set1.vtable_symbol": ".rdata$_ZTV15DiscoveryEngine",
   "set2.c_sha256": "d5f7d56bf4c6f87adb8ec59a5900e4d6391e14afebce32e8502610c8497a53fe",
   "set2.c_marker": "BR01-CATALOG-010",
   "set2.c_has_symtab": "false",
@@ -29,6 +29,6 @@
   "set2.mutex": "Global\\HuntressBR02_000",
   "set2.has_cpp_vtable": "true",
   "set2.has_cpp_typeinfo": "true",
-  "set2.mangled_score_symbol": "_ZNK15DiscoveryEngine5scoreEPKc",
-  "set2.vtable_symbol": "_ZTV15DiscoveryEngine"
+  "set2.mangled_score_symbol": ".text$_ZNK15DiscoveryEngine5scoreEPKc",
+  "set2.vtable_symbol": ".rdata$_ZTV15DiscoveryEngine"
 }

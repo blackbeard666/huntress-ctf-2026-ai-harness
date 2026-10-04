@@ -1,0 +1,1 @@
+Synthetic: bd7c8549's two per-set downloads both saved as evidence.zip (set2 first); expected = bd7c8549's independently derived answers.

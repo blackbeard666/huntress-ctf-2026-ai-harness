@@ -14,9 +14,11 @@ Answer ids are `<prefix>_<field>` (c_*, cpp_*) or bare config fields; Mastery ad
   campaign/domain/url/... keys of the decoded JSON config (absent -> none)
   has_cpp_vtable          any vtable symbol (_ZTV / ??_7) or vtable RTTI
   has_cpp_typeinfo        any typeinfo (_ZTI/_ZTS) or MSVC type descriptor (.?AV)
-  mangled_score_symbol    mangled symbol whose demangled name is <Class>::score(...)
-  vtable_symbol           mangled vtable symbol of the program's own class (not __cxxabiv1); PE variants are MinGW: names come from the COFF symbol table
-  cpp_format              container format, lowercase: "elf" (GM-confirmed; rejected ELF, ELF64, HCFG, elf64-x86-64, json); PE -> "pe" by analogy
+  mangled_score_symbol    ELF: bare mangled symbol (<Class>::score). PE (MinGW): the COFF COMDAT section-name
+                          form '.text$<mangled>' (GM-confirmed per-field).
+  vtable_symbol           ELF: bare '_ZTV<Class>'. PE (MinGW): '.rdata$<mangled>' (GM-confirmed per-field).
+  cpp_format              GM-confirmed per-field: ELF -> "elf", PE -> "pe" (bare family name; ELF64/elf64-x86-64/
+                          HCFG/json and pe64/exe/pe32+/coff were all rejected).
 """
 import argparse, hashlib, io, json, os, re, struct, subprocess, sys, zipfile, zlib
 
@@ -26,11 +28,12 @@ from elftools.elf.sections import SymbolTableSection
 PASSWORDS = [b"infected", b"flare", b"malware", b"virus"]
 MACHINE_NAMES = {"EM_X86_64": "x86-64", "EM_386": "x86", "EM_AARCH64": "AArch64", "EM_ARM": "ARM"}
 PE_MACHINE = {0x8664: "x86-64", 0x14c: "x86", 0xaa64: "AArch64", 0x1c0: "ARM"}
-# cpp_format: GM wants the lowercase container name ("elf" confirmed Day 02; "pe" follows the same scheme).
+# cpp_format: lowercase object format, see lib.knowledge ("elf" confirmed; PE "pe"/"exe"/"pe32+"/"coff" rejected -> "mz").
 try:
-    from lib.knowledge import BINARY_FORMAT as FORMAT_NAMES
+    from lib.knowledge import binary_format
 except ImportError:
-    FORMAT_NAMES = {"ELF": "elf", "PE": "pe", "MACHO": "macho"}
+    def binary_format(kind, member_name="", pe_magic=None):
+        return "mz" if kind == "PE" else kind.lower()
 
 
 def log(*a):
@@ -38,33 +41,48 @@ def log(*a):
 
 
 def unzip(data):
-    """[(name, bytes)] of every member, recursing into nested zips; AES zips via pyzipper."""
+    """[(name, bytes)] of every member, recursing into nested zips. Variants may be plain, legacy-encrypted,
+    or AES zips, so try each reader and keep whichever reads every member (pyzipper reads AES; plain zipfile
+    reads plain/legacy ones that AESZipFile chokes on)."""
     if data[:2] != b"PK":
         return [("", data)]
+    readers = []
     try:
         import pyzipper
-        Z = pyzipper.AESZipFile
+        readers.append(pyzipper.AESZipFile)
     except ImportError:
-        Z = zipfile.ZipFile
-    out = []
-    with Z(io.BytesIO(data)) as z:
-        for i in z.infolist():
-            if i.is_dir():
-                continue
-            b = None
-            for pw in [None] + PASSWORDS:
-                try:
-                    if pw:
-                        z.setpassword(pw)
-                    b = z.read(i.filename)
-                    break
-                except Exception:
-                    continue
-            if b is None:
-                log(f"[!] cannot read {i.filename}")
-                continue
-            out += [(n or i.filename, x) for n, x in unzip(b)] if b[:2] == b"PK" else [(i.filename, b)]
-    return out
+        pass
+    readers.append(zipfile.ZipFile)   # plain + legacy ZipCrypto
+    best, last_err = [], None
+    for Z in readers:
+        try:
+            with Z(io.BytesIO(data)) as z:
+                members, complete = [], True
+                for i in z.infolist():
+                    if i.is_dir():
+                        continue
+                    b = None
+                    for pw in [None] + PASSWORDS:
+                        try:
+                            if pw:
+                                z.setpassword(pw)
+                            b = z.read(i.filename)
+                            break
+                        except Exception as e:  # noqa: BLE001
+                            last_err = e
+                    if b is None:
+                        complete = False
+                        continue
+                    members += [(n or i.filename, x) for n, x in unzip(b)] if b[:2] == b"PK" else [(i.filename, b)]
+                if complete and members:
+                    return members
+                if len(members) > len(best):
+                    best = members
+        except Exception as e:  # noqa: BLE001 - try the next reader
+            last_err = e
+    if not best:
+        log(f"[!] cannot read any member ({last_err})")
+    return best
 
 
 def find_artifact(adir, name):
@@ -177,7 +195,7 @@ def pe_info(data):
         except Exception:
             return None
     return {
-        "kind": "PE", "bits": 64 if pe.FILE_HEADER.Machine in (0x8664, 0xaa64) else 32,
+        "kind": "PE", "bits": 64 if pe.FILE_HEADER.Machine in (0x8664, 0xaa64) else 32, "pe_magic": pe.OPTIONAL_HEADER.Magic,
         "machine": PE_MACHINE.get(pe.FILE_HEADER.Machine, hex(pe.FILE_HEADER.Machine)), "e_machine": pe.FILE_HEADER.Machine,
         "has_symtab": pe.FILE_HEADER.PointerToSymbolTable != 0 and pe.FILE_HEADER.NumberOfSymbols > 0,
         "marker": marker, "syms": syms, "va2off": va2off,
@@ -325,7 +343,8 @@ def answer(field, prefix, members, q):
         v = return_const(data, inf, "recover_code")
         return str(v) if v is not None else ("none" if fmt.get("kind") != "integer" else None)
     if field == "format":
-        return FORMAT_NAMES.get(inf["kind"], inf["kind"].lower())
+        # GM-confirmed per-field (sequential single-field submits): ELF -> "elf", PE (MinGW) -> "pe".
+        return {"ELF": "elf", "PE": "pe"}.get(inf["kind"]) or binary_format(inf["kind"], os.path.basename(name), inf.get("pe_magic"))
     cfg = hcfg(data)
     if field in ("xor_key", "key"):
         return hex(cfg["key"]) if cfg else "none"
@@ -337,9 +356,15 @@ def answer(field, prefix, members, q):
     if field == "has_cpp_typeinfo":
         return "true" if cf["has_ti"] else "false"
     if field == "mangled_score_symbol":
-        return cf["score"][0] if cf["score"] else "none"
+        if not cf["score"]:
+            return "none"
+        # GM-confirmed: for a PE (MinGW) build the expected symbol is the COFF COMDAT section-name form
+        # '.text$<mangled>'; for ELF it is the bare mangled symbol.
+        return (".text$" + cf["score"][0]) if inf["kind"] == "PE" else cf["score"][0]
     if field == "vtable_symbol":
-        return cf["vtable"][0] if cf["vtable"] else "none"
+        if not cf["vtable"]:
+            return "none"
+        return (".rdata$" + cf["vtable"][0]) if inf["kind"] == "PE" else cf["vtable"][0]
     if cfg and cfg["config"] is not None:
         v = cfg["config"].get(field)
         if v is not None:

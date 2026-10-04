@@ -13,6 +13,6 @@
   "mutex": "Global\\HuntressBR02_004",
   "has_cpp_vtable": "true",
   "has_cpp_typeinfo": "true",
-  "mangled_score_symbol": "_ZNK15DiscoveryEngine5scoreEPKc",
-  "vtable_symbol": "_ZTV15DiscoveryEngine"
+  "mangled_score_symbol": ".text$_ZNK15DiscoveryEngine5scoreEPKc",
+  "vtable_symbol": ".rdata$_ZTV15DiscoveryEngine"
 }

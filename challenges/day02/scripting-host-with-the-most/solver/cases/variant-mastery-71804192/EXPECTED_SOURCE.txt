@@ -1,0 +1,3 @@
+Mastery attempt 71804192 (2026-10-04, failed: solver could not unwrap the outer bundle zip). All 174 answers re-derived
+independently: PS base64 literals decoded by hand; every JScript inspect_* run natively in a node vm (real eval);
+function/invocation/property styles read by hand off each inspect body. Solver output (after the bundle fix) equals that.

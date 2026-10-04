@@ -1,0 +1,6 @@
+Mastery attempt d27dddc9 (2026-10-04). The case bytes are this attempt's real deliveries (evidence-01.zip sha256 f888b8c2...,
+evidence-02.zip dde3311c...). Both hashes equal the contract `artifacts[]`, and the case is not stale. Live log: `start`, both `download` ops
+by +3 s (deadline = start+6 s), then no submit, so the attempt expired. No answer was rejected. All 174 answers re-derived independently:
+PS base64 literals decoded (reconstruct blocks are identity) and mapped by hand; every JScript inspect_* run natively in a fresh
+node vm (54 value fields compared by script, 0 diffs); 54 function/invocation/property styles read by hand off the inspect
+bodies (0 diffs); roles from step graphs; ATT&CK from the GM-confirmed role table. They equal the solver output.

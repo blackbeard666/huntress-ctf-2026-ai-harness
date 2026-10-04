@@ -1,0 +1,5 @@
+Mastery attempt bd7c8549 (2026-10-04, expired before submit: the probe fetched only the first of two downloads, at
+deadline+1 s). The case was first written with the STALE 71804192 bundle; it now holds this attempt's real bytes
+(evidence-01.zip sha256 c8bf42e3..., evidence-02.zip f3147a7c..., re-fetched by capability, hashes match the contract).
+All 174 answers re-derived independently: PS base64 literals decoded; every JScript inspect_* run natively in a node vm;
+styles read off each inspect body (four `var x = function x_body(` = named_expression checked by eye). Equal to solver output.

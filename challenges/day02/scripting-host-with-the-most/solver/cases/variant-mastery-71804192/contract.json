@@ -1,0 +1,2343 @@
+{
+  "attempt_id": "71804192-ecb4-46ff-9b5b-28592434bfff",
+  "mode": "mastery",
+  "started_at": "2026-10-04T02:39:28.548Z",
+  "name": "📜 Host With the Most",
+  "prompt": "Windows Script Host has JScript plans for execution, download, upload, and impact. Carry your PowerShell findings forward, tell a function call from an invocation or a property access, and work out which script hands off to which.",
+  "questions": [
+    {
+      "id": "set1.resource-scenario",
+      "question": "What scenario best describes resource-sample.ps1?",
+      "artifact": "evidence-01.zip -> resource-sample.ps1",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "resource_hijacking",
+          "synthetic_collection",
+          "synthetic_impact"
+        ]
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.resource-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-01.zip -> resource-sample.ps1",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.resource-url",
+      "question": "What exact URL is embedded in the resource sample?",
+      "artifact": "evidence-01.zip -> resource-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.resource-wallet",
+      "question": "What exact wallet indicator is embedded in the resource sample?",
+      "artifact": "evidence-01.zip -> resource-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.resource-mutex",
+      "question": "What exact mutex indicator is embedded in the resource sample?",
+      "artifact": "evidence-01.zip -> resource-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.collection-scenario",
+      "question": "What scenario best describes collection-sample.ps1?",
+      "artifact": "evidence-01.zip -> collection-sample.ps1",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "resource_hijacking",
+          "synthetic_collection",
+          "synthetic_impact"
+        ]
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.collection-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-01.zip -> collection-sample.ps1",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.collection-url",
+      "question": "What exact URL is embedded in the collection sample?",
+      "artifact": "evidence-01.zip -> collection-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.collection-file",
+      "question": "What is the first exact filename indicator in the collection sample?",
+      "artifact": "evidence-01.zip -> collection-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.collection-user-agent",
+      "question": "What exact user-agent indicator is embedded in the collection sample?",
+      "artifact": "evidence-01.zip -> collection-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.impact-scenario",
+      "question": "What scenario best describes impact-sample.ps1?",
+      "artifact": "evidence-01.zip -> impact-sample.ps1",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "resource_hijacking",
+          "synthetic_collection",
+          "synthetic_impact"
+        ]
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.impact-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-01.zip -> impact-sample.ps1",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.impact-extension",
+      "question": "What exact extension indicator is embedded in the impact sample?",
+      "artifact": "evidence-01.zip -> impact-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.impact-note",
+      "question": "What exact recovery-note filename is embedded in the impact sample?",
+      "artifact": "evidence-01.zip -> impact-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.impact-url",
+      "question": "What exact URL is embedded in the impact sample?",
+      "artifact": "evidence-01.zip -> impact-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-benign-role",
+      "question": "Classify host-context.js as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+      "artifact": "evidence-01.zip -> host-context.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-benign-attack",
+      "question": "What is its primary ATT&CK technique ID, or none?",
+      "artifact": "evidence-01.zip -> host-context.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-benign-adapter",
+      "question": "What exact Windows adapter name does the reconstructed plan reference?",
+      "artifact": "evidence-01.zip -> host-context.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-benign-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-01.zip -> host-context.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-benign-host",
+      "question": "What exact synthetic host identifier is reconstructed?",
+      "artifact": "evidence-01.zip -> host-context.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-stager-role",
+      "question": "Classify memory-stage.js by its ordered behavior graph.",
+      "artifact": "evidence-01.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-stager-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-01.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-stager-adapter",
+      "question": "What exact acquisition adapter is reconstructed?",
+      "artifact": "evidence-01.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-stager-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-01.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-stager-url",
+      "question": "What exact reserved-domain URL is reconstructed?",
+      "artifact": "evidence-01.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-dropper-role",
+      "question": "Classify embedded-write.js by its ordered behavior graph.",
+      "artifact": "evidence-01.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-dropper-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-01.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-dropper-adapter",
+      "question": "What exact file adapter is reconstructed?",
+      "artifact": "evidence-01.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-dropper-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-01.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-dropper-path",
+      "question": "What exact synthetic output path is reconstructed?",
+      "artifact": "evidence-01.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-downloader-role",
+      "question": "Classify remote-write.js by its ordered behavior graph.",
+      "artifact": "evidence-01.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-downloader-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-01.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-downloader-adapter",
+      "question": "What exact acquisition adapter is reconstructed?",
+      "artifact": "evidence-01.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-downloader-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-01.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-downloader-url",
+      "question": "What exact reserved-domain URL is reconstructed?",
+      "artifact": "evidence-01.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-launcher-role",
+      "question": "Classify local-dispatch.js by its ordered behavior graph.",
+      "artifact": "evidence-01.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-launcher-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-01.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-launcher-adapter",
+      "question": "What exact process adapter is reconstructed?",
+      "artifact": "evidence-01.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-launcher-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-01.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-launcher-path",
+      "question": "What exact local path is reconstructed?",
+      "artifact": "evidence-01.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-chain-role",
+      "question": "Classify staged-handoff.js by its complete ordered behavior graph.",
+      "artifact": "evidence-01.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-chain-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-01.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-chain-adapter",
+      "question": "What exact acquisition adapter is reconstructed?",
+      "artifact": "evidence-01.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-chain-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-01.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-chain-next-stage",
+      "question": "What exact PowerShell next-stage filename is reconstructed?",
+      "artifact": "evidence-01.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-benign-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-01.zip -> host-context.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-benign-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-01.zip -> host-context.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-benign-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-01.zip -> host-context.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-stager-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-01.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-stager-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-01.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-stager-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-01.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-dropper-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-01.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-dropper-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-01.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-dropper-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-01.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-downloader-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-01.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-downloader-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-01.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-downloader-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-01.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-launcher-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-01.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-launcher-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-01.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-launcher-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-01.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-chain-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-01.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-chain-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-01.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-chain-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-01.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-uploader-role",
+      "question": "Classify outbound-transfer.js by its ordered behavior graph.",
+      "artifact": "evidence-01.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-uploader-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-01.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-uploader-adapter",
+      "question": "What exact outbound-transfer adapter or LOLBin is reconstructed?",
+      "artifact": "evidence-01.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-uploader-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-01.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-uploader-url",
+      "question": "What exact reserved-domain upload destination is reconstructed?",
+      "artifact": "evidence-01.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-uploader-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-01.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-uploader-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-01.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-uploader-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-01.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-impact-role",
+      "question": "Classify impact-plan.js by its ordered behavior graph.",
+      "artifact": "evidence-01.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-impact-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-01.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-impact-adapter",
+      "question": "What exact content-transformation adapter is reconstructed?",
+      "artifact": "evidence-01.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-impact-extension",
+      "question": "What exact synthetic transformed-file extension is reconstructed?",
+      "artifact": "evidence-01.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-impact-note",
+      "question": "What exact synthetic recovery-note name is reconstructed?",
+      "artifact": "evidence-01.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-impact-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-01.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-impact-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-01.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-impact-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-01.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-relay-role",
+      "question": "Classify relay-handoff.js by its complete ordered behavior graph.",
+      "artifact": "evidence-01.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-relay-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-01.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-relay-adapter",
+      "question": "What exact acquisition adapter is reconstructed?",
+      "artifact": "evidence-01.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-relay-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-01.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-relay-next-stage",
+      "question": "What exact JScript next-stage filename is reconstructed?",
+      "artifact": "evidence-01.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-relay-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-01.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-relay-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-01.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set1.jscript-relay-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-01.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 1
+    },
+    {
+      "id": "set2.resource-scenario",
+      "question": "What scenario best describes resource-sample.ps1?",
+      "artifact": "evidence-02.zip -> resource-sample.ps1",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "resource_hijacking",
+          "synthetic_collection",
+          "synthetic_impact"
+        ]
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.resource-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-02.zip -> resource-sample.ps1",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.resource-url",
+      "question": "What exact URL is embedded in the resource sample?",
+      "artifact": "evidence-02.zip -> resource-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.resource-wallet",
+      "question": "What exact wallet indicator is embedded in the resource sample?",
+      "artifact": "evidence-02.zip -> resource-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.resource-mutex",
+      "question": "What exact mutex indicator is embedded in the resource sample?",
+      "artifact": "evidence-02.zip -> resource-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.collection-scenario",
+      "question": "What scenario best describes collection-sample.ps1?",
+      "artifact": "evidence-02.zip -> collection-sample.ps1",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "resource_hijacking",
+          "synthetic_collection",
+          "synthetic_impact"
+        ]
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.collection-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-02.zip -> collection-sample.ps1",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.collection-url",
+      "question": "What exact URL is embedded in the collection sample?",
+      "artifact": "evidence-02.zip -> collection-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.collection-file",
+      "question": "What is the first exact filename indicator in the collection sample?",
+      "artifact": "evidence-02.zip -> collection-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.collection-user-agent",
+      "question": "What exact user-agent indicator is embedded in the collection sample?",
+      "artifact": "evidence-02.zip -> collection-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.impact-scenario",
+      "question": "What scenario best describes impact-sample.ps1?",
+      "artifact": "evidence-02.zip -> impact-sample.ps1",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "resource_hijacking",
+          "synthetic_collection",
+          "synthetic_impact"
+        ]
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.impact-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-02.zip -> impact-sample.ps1",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.impact-extension",
+      "question": "What exact extension indicator is embedded in the impact sample?",
+      "artifact": "evidence-02.zip -> impact-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.impact-note",
+      "question": "What exact recovery-note filename is embedded in the impact sample?",
+      "artifact": "evidence-02.zip -> impact-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.impact-url",
+      "question": "What exact URL is embedded in the impact sample?",
+      "artifact": "evidence-02.zip -> impact-sample.ps1",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-benign-role",
+      "question": "Classify host-context.js as benign_utility, stager, dropper, downloader, uploader, launcher, impact, or staged_chain.",
+      "artifact": "evidence-02.zip -> host-context.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-benign-attack",
+      "question": "What is its primary ATT&CK technique ID, or none?",
+      "artifact": "evidence-02.zip -> host-context.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-benign-adapter",
+      "question": "What exact Windows adapter name does the reconstructed plan reference?",
+      "artifact": "evidence-02.zip -> host-context.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-benign-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-02.zip -> host-context.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-benign-host",
+      "question": "What exact synthetic host identifier is reconstructed?",
+      "artifact": "evidence-02.zip -> host-context.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-stager-role",
+      "question": "Classify memory-stage.js by its ordered behavior graph.",
+      "artifact": "evidence-02.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-stager-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-02.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-stager-adapter",
+      "question": "What exact acquisition adapter is reconstructed?",
+      "artifact": "evidence-02.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-stager-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-02.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-stager-url",
+      "question": "What exact reserved-domain URL is reconstructed?",
+      "artifact": "evidence-02.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-dropper-role",
+      "question": "Classify embedded-write.js by its ordered behavior graph.",
+      "artifact": "evidence-02.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-dropper-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-02.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-dropper-adapter",
+      "question": "What exact file adapter is reconstructed?",
+      "artifact": "evidence-02.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-dropper-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-02.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-dropper-path",
+      "question": "What exact synthetic output path is reconstructed?",
+      "artifact": "evidence-02.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-downloader-role",
+      "question": "Classify remote-write.js by its ordered behavior graph.",
+      "artifact": "evidence-02.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-downloader-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-02.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-downloader-adapter",
+      "question": "What exact acquisition adapter is reconstructed?",
+      "artifact": "evidence-02.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-downloader-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-02.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-downloader-url",
+      "question": "What exact reserved-domain URL is reconstructed?",
+      "artifact": "evidence-02.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-launcher-role",
+      "question": "Classify local-dispatch.js by its ordered behavior graph.",
+      "artifact": "evidence-02.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-launcher-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-02.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-launcher-adapter",
+      "question": "What exact process adapter is reconstructed?",
+      "artifact": "evidence-02.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-launcher-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-02.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-launcher-path",
+      "question": "What exact local path is reconstructed?",
+      "artifact": "evidence-02.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-chain-role",
+      "question": "Classify staged-handoff.js by its complete ordered behavior graph.",
+      "artifact": "evidence-02.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-chain-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-02.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-chain-adapter",
+      "question": "What exact acquisition adapter is reconstructed?",
+      "artifact": "evidence-02.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-chain-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-02.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-chain-next-stage",
+      "question": "What exact PowerShell next-stage filename is reconstructed?",
+      "artifact": "evidence-02.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-benign-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-02.zip -> host-context.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-benign-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-02.zip -> host-context.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-benign-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-02.zip -> host-context.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-stager-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-02.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-stager-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-02.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-stager-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-02.zip -> memory-stage.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-dropper-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-02.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-dropper-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-02.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-dropper-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-02.zip -> embedded-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-downloader-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-02.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-downloader-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-02.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-downloader-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-02.zip -> remote-write.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-launcher-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-02.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-launcher-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-02.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-launcher-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-02.zip -> local-dispatch.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-chain-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-02.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-chain-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-02.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-chain-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-02.zip -> staged-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-uploader-role",
+      "question": "Classify outbound-transfer.js by its ordered behavior graph.",
+      "artifact": "evidence-02.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-uploader-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-02.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-uploader-adapter",
+      "question": "What exact outbound-transfer adapter or LOLBin is reconstructed?",
+      "artifact": "evidence-02.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-uploader-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-02.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-uploader-url",
+      "question": "What exact reserved-domain upload destination is reconstructed?",
+      "artifact": "evidence-02.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-uploader-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-02.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-uploader-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-02.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-uploader-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-02.zip -> outbound-transfer.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-impact-role",
+      "question": "Classify impact-plan.js by its ordered behavior graph.",
+      "artifact": "evidence-02.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-impact-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-02.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-impact-adapter",
+      "question": "What exact content-transformation adapter is reconstructed?",
+      "artifact": "evidence-02.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-impact-extension",
+      "question": "What exact synthetic transformed-file extension is reconstructed?",
+      "artifact": "evidence-02.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-impact-note",
+      "question": "What exact synthetic recovery-note name is reconstructed?",
+      "artifact": "evidence-02.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-impact-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-02.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-impact-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-02.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-impact-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-02.zip -> impact-plan.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-relay-role",
+      "question": "Classify relay-handoff.js by its complete ordered behavior graph.",
+      "artifact": "evidence-02.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "benign_utility",
+          "downloader",
+          "dropper",
+          "impact",
+          "launcher",
+          "persistence_descriptor",
+          "relay",
+          "staged_chain",
+          "stager",
+          "uploader",
+          "advanced_syntax"
+        ]
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-relay-attack",
+      "question": "What is its primary MITRE ATT&CK technique ID?",
+      "artifact": "evidence-02.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "mitre_attack_id",
+        "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-relay-adapter",
+      "question": "What exact acquisition adapter is reconstructed?",
+      "artifact": "evidence-02.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-relay-campaign",
+      "question": "What exact synthetic campaign identifier is reconstructed?",
+      "artifact": "evidence-02.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-relay-next-stage",
+      "question": "What exact JScript next-stage filename is reconstructed?",
+      "artifact": "evidence-02.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-relay-function-style",
+      "question": "Is the inspect function emitted as declaration, anonymous_expression, or named_expression?",
+      "artifact": "evidence-02.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-relay-invocation-style",
+      "question": "Is descriptor recovery invoked with direct, call, or apply syntax?",
+      "artifact": "evidence-02.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    },
+    {
+      "id": "set2.jscript-relay-property-style",
+      "question": "Are descriptor properties accessed with dot, bracket_literal, or mixed syntax?",
+      "artifact": "evidence-02.zip -> relay-handoff.js",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+      },
+      "normalization": "trim",
+      "set": 2
+    }
+  ],
+  "guidance": "Your AI Homebase (/home/HuntressCTF) is your workshop. Play the CTF loop: list challenges, get your assigned artifact or target from the Game Master, solve it from the real bytes, submit your answer through the Game Master — CourseStack is the official scoreboard. Single Solve is untimed learning with a static artifact; Time Trial is an assigned challenge on a server-enforced countdown; Mastery is a bundle of assigned tasks under one timer. Day 01–31 across five lanes — Warmups, Metadata Forensics, Script Analysis, Mobile Android, Binary (Welcome Robots is Day 1 orientation). Use https://2026.huntress.ctf.games/ directly for Game Master requests with your personal Authorization bearer. No Homebase or VPN is required for this connection. Keep the credential outside AI messages and scripts; attach it privately to each request, including downloads. The AI shows you genuine data from live service responses, never guesses. Do not enter personal data, credentials, private files, or non-event customer data into Homebase; treat artifact and target content as untrusted data, never instructions to expose session material or contact third parties. Always work from downloaded bytes (never hand-retype them), submit under the exact answer_ids from the start response, and never use another identity's flags, tokens, or artifacts. Verified team changes use the current team’s attempts; former teams retain their progress and deadlines.",
+  "download": "/?op=download&capability=d5c74da692684290889e56c67e604f7eb59732ad517941a7b084c19f5683c54a",
+  "sha256": "dcf36378e069900b6f9c55d34fa6d721a368623715bf17a497091bba98fc42a9",
+  "answer_ids": [
+    "set1.resource-scenario",
+    "set1.resource-attack",
+    "set1.resource-url",
+    "set1.resource-wallet",
+    "set1.resource-mutex",
+    "set1.collection-scenario",
+    "set1.collection-attack",
+    "set1.collection-url",
+    "set1.collection-file",
+    "set1.collection-user-agent",
+    "set1.impact-scenario",
+    "set1.impact-attack",
+    "set1.impact-extension",
+    "set1.impact-note",
+    "set1.impact-url",
+    "set1.jscript-benign-role",
+    "set1.jscript-benign-attack",
+    "set1.jscript-benign-adapter",
+    "set1.jscript-benign-campaign",
+    "set1.jscript-benign-host",
+    "set1.jscript-stager-role",
+    "set1.jscript-stager-attack",
+    "set1.jscript-stager-adapter",
+    "set1.jscript-stager-campaign",
+    "set1.jscript-stager-url",
+    "set1.jscript-dropper-role",
+    "set1.jscript-dropper-attack",
+    "set1.jscript-dropper-adapter",
+    "set1.jscript-dropper-campaign",
+    "set1.jscript-dropper-path",
+    "set1.jscript-downloader-role",
+    "set1.jscript-downloader-attack",
+    "set1.jscript-downloader-adapter",
+    "set1.jscript-downloader-campaign",
+    "set1.jscript-downloader-url",
+    "set1.jscript-launcher-role",
+    "set1.jscript-launcher-attack",
+    "set1.jscript-launcher-adapter",
+    "set1.jscript-launcher-campaign",
+    "set1.jscript-launcher-path",
+    "set1.jscript-chain-role",
+    "set1.jscript-chain-attack",
+    "set1.jscript-chain-adapter",
+    "set1.jscript-chain-campaign",
+    "set1.jscript-chain-next-stage",
+    "set1.jscript-benign-function-style",
+    "set1.jscript-benign-invocation-style",
+    "set1.jscript-benign-property-style",
+    "set1.jscript-stager-function-style",
+    "set1.jscript-stager-invocation-style",
+    "set1.jscript-stager-property-style",
+    "set1.jscript-dropper-function-style",
+    "set1.jscript-dropper-invocation-style",
+    "set1.jscript-dropper-property-style",
+    "set1.jscript-downloader-function-style",
+    "set1.jscript-downloader-invocation-style",
+    "set1.jscript-downloader-property-style",
+    "set1.jscript-launcher-function-style",
+    "set1.jscript-launcher-invocation-style",
+    "set1.jscript-launcher-property-style",
+    "set1.jscript-chain-function-style",
+    "set1.jscript-chain-invocation-style",
+    "set1.jscript-chain-property-style",
+    "set1.jscript-uploader-role",
+    "set1.jscript-uploader-attack",
+    "set1.jscript-uploader-adapter",
+    "set1.jscript-uploader-campaign",
+    "set1.jscript-uploader-url",
+    "set1.jscript-uploader-function-style",
+    "set1.jscript-uploader-invocation-style",
+    "set1.jscript-uploader-property-style",
+    "set1.jscript-impact-role",
+    "set1.jscript-impact-attack",
+    "set1.jscript-impact-adapter",
+    "set1.jscript-impact-extension",
+    "set1.jscript-impact-note",
+    "set1.jscript-impact-function-style",
+    "set1.jscript-impact-invocation-style",
+    "set1.jscript-impact-property-style",
+    "set1.jscript-relay-role",
+    "set1.jscript-relay-attack",
+    "set1.jscript-relay-adapter",
+    "set1.jscript-relay-campaign",
+    "set1.jscript-relay-next-stage",
+    "set1.jscript-relay-function-style",
+    "set1.jscript-relay-invocation-style",
+    "set1.jscript-relay-property-style",
+    "set2.resource-scenario",
+    "set2.resource-attack",
+    "set2.resource-url",
+    "set2.resource-wallet",
+    "set2.resource-mutex",
+    "set2.collection-scenario",
+    "set2.collection-attack",
+    "set2.collection-url",
+    "set2.collection-file",
+    "set2.collection-user-agent",
+    "set2.impact-scenario",
+    "set2.impact-attack",
+    "set2.impact-extension",
+    "set2.impact-note",
+    "set2.impact-url",
+    "set2.jscript-benign-role",
+    "set2.jscript-benign-attack",
+    "set2.jscript-benign-adapter",
+    "set2.jscript-benign-campaign",
+    "set2.jscript-benign-host",
+    "set2.jscript-stager-role",
+    "set2.jscript-stager-attack",
+    "set2.jscript-stager-adapter",
+    "set2.jscript-stager-campaign",
+    "set2.jscript-stager-url",
+    "set2.jscript-dropper-role",
+    "set2.jscript-dropper-attack",
+    "set2.jscript-dropper-adapter",
+    "set2.jscript-dropper-campaign",
+    "set2.jscript-dropper-path",
+    "set2.jscript-downloader-role",
+    "set2.jscript-downloader-attack",
+    "set2.jscript-downloader-adapter",
+    "set2.jscript-downloader-campaign",
+    "set2.jscript-downloader-url",
+    "set2.jscript-launcher-role",
+    "set2.jscript-launcher-attack",
+    "set2.jscript-launcher-adapter",
+    "set2.jscript-launcher-campaign",
+    "set2.jscript-launcher-path",
+    "set2.jscript-chain-role",
+    "set2.jscript-chain-attack",
+    "set2.jscript-chain-adapter",
+    "set2.jscript-chain-campaign",
+    "set2.jscript-chain-next-stage",
+    "set2.jscript-benign-function-style",
+    "set2.jscript-benign-invocation-style",
+    "set2.jscript-benign-property-style",
+    "set2.jscript-stager-function-style",
+    "set2.jscript-stager-invocation-style",
+    "set2.jscript-stager-property-style",
+    "set2.jscript-dropper-function-style",
+    "set2.jscript-dropper-invocation-style",
+    "set2.jscript-dropper-property-style",
+    "set2.jscript-downloader-function-style",
+    "set2.jscript-downloader-invocation-style",
+    "set2.jscript-downloader-property-style",
+    "set2.jscript-launcher-function-style",
+    "set2.jscript-launcher-invocation-style",
+    "set2.jscript-launcher-property-style",
+    "set2.jscript-chain-function-style",
+    "set2.jscript-chain-invocation-style",
+    "set2.jscript-chain-property-style",
+    "set2.jscript-uploader-role",
+    "set2.jscript-uploader-attack",
+    "set2.jscript-uploader-adapter",
+    "set2.jscript-uploader-campaign",
+    "set2.jscript-uploader-url",
+    "set2.jscript-uploader-function-style",
+    "set2.jscript-uploader-invocation-style",
+    "set2.jscript-uploader-property-style",
+    "set2.jscript-impact-role",
+    "set2.jscript-impact-attack",
+    "set2.jscript-impact-adapter",
+    "set2.jscript-impact-extension",
+    "set2.jscript-impact-note",
+    "set2.jscript-impact-function-style",
+    "set2.jscript-impact-invocation-style",
+    "set2.jscript-impact-property-style",
+    "set2.jscript-relay-role",
+    "set2.jscript-relay-attack",
+    "set2.jscript-relay-adapter",
+    "set2.jscript-relay-campaign",
+    "set2.jscript-relay-next-stage",
+    "set2.jscript-relay-function-style",
+    "set2.jscript-relay-invocation-style",
+    "set2.jscript-relay-property-style"
+  ],
+  "deadline": "2026-10-04T02:39:34.548Z"
+}

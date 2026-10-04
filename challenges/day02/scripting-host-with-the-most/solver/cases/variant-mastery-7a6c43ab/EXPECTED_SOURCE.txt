@@ -1,0 +1,9 @@
+Mastery attempt 7a6c43ab (2026-10-04, 6 s clock). Live run fetched only delivery 1 (the timed path hit cli.c_artifact's
+single `op=artifact` fallback -> hctf/dl/probe/evidence.zip), so set 2 had no bytes. The case was first written with
+the STALE 5c64a3d8 bundle (4ae798b1/b1980239); it now holds this attempt's real bytes (evidence-01.zip sha256
+197f12d0..., evidence-02.zip c260b5d7..., delivery 2 re-fetched by capability; both hashes equal the contract).
+All 174 answers re-derived independently: 6 PS base64 literals decoded (note set1 impact extension really is
+".locked-d1e6a", shorter than the note's id); every JScript inspect_* run natively in a fresh node vm (54 value
+fields compared by script, 0 diffs); 54 function/invocation/property styles read by hand off each inspect body
+(x1 relay `var x = function x_body()` = named_expression). Role->ATT&CK per the GM-confirmed single solve. Equal to
+solver output.

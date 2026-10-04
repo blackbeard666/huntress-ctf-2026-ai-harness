@@ -121,6 +121,7 @@ def main():
         out["detail"] = body
         print(json.dumps(out))
         return
+    t_started = time.time()
 
     # download artifacts into a temp dir next to the GM
     adir = HW / ".run" / "tmp-timed" / re.sub(r"[^A-Za-z0-9]+", "_", a.cid)
@@ -139,6 +140,7 @@ def main():
         with ThreadPoolExecutor(max_workers=min(8, len(plan))) as ex:
             for _ in ex.map(_fetch, plan):  # propagate any download exception
                 pass
+    t_downloaded = time.time()
 
     # run the solver (already correct, offline-built); lib on PYTHONPATH
     contract = adir / "contract.json"
@@ -157,37 +159,47 @@ def main():
 
     missing = [i for i in ids if i not in answers]
     out["submitted"] = answers
+    t_solved = time.time()
+    out["phases"] = {"start": round(t_started - t0, 2), "download": round(t_downloaded - t_started, 2),
+                     "solve": round(t_solved - t_downloaded, 2)}
     if missing:
         out["result"] = "solver_incomplete"
         out["missing"] = missing
         print(json.dumps(out))
         return
 
-    # Submit per set (set1./slot0_/...), so Mastery banks each correct set within the attempt and we learn
-    # exactly which set failed. GM GM latency is sub-ms here, so several POSTs still fit the clock.
+    # FAST PATH: submit EVERY answer in one request. A public-GM submit round-trip is ~0.2-several s, so N
+    # sequential per-set POSTs can blow a ~6-10s Mastery window (set 1 banks, set 2 expires). One POST covering
+    # all sets fits even a tight window when the solver is complete+correct.
     def setkey(aid):
         m = re.match(r"(set|slot)[._-]?\d+", aid)
         return m.group(0) if m else "_"
+    full = _post({"op": "submit", "challenge": a.cid, "answers": answers})
+    out["phases"]["submit"] = round(time.time() - t_solved, 2)
+    fk = str(full.get("result", "")).lower()
+    out["full_result"] = fk
+    if fk in ("correct", "accepted") and not full.get("remaining"):
+        out["result"] = "correct"
+        out["elapsed"] = round(time.time() - t0, 2)
+        print(json.dumps(out))
+        return
+
+    # Not fully correct: break down per set to learn which set failed (clock permitting), so the offline
+    # generalize worker gets granular feedback on the next cycle.
     groups = {}
     for aid, v in answers.items():
         groups.setdefault(setkey(aid), {})[aid] = v
-    per_set, final = {}, "correct"
+    per_set, final = {}, fk or "incorrect"
     for key, grp in groups.items():
         res = _post({"op": "submit", "challenge": a.cid, "answers": grp})
         rk = str(res.get("result", "")).lower()
         per_set[key] = {"result": rk, "remaining": res.get("remaining")}
-        if rk == "correct":
-            final = "correct"
-        elif rk == "accepted":
-            final = "correct" if final == "correct" else final  # partial progress banked; keep scanning
-            if res.get("remaining"):
-                final = "accepted"
-        elif rk == "expired":
+        if rk == "expired":
             final = "expired"
             break
-        else:
+        if rk not in ("correct", "accepted"):
             final = "incorrect"
-    out["result"] = final
+    out["result"] = "correct" if all(v["result"] in ("correct", "accepted") for v in per_set.values()) and per_set else final
     out["per_set"] = per_set
     out["bad_sets"] = [k for k, v in per_set.items() if v["result"] not in ("correct", "accepted")]
     out["elapsed"] = round(time.time() - t0, 2)
