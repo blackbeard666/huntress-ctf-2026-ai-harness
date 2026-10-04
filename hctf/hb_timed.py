@@ -130,12 +130,34 @@ def main():
         print(json.dumps(out))
         return
 
-    # one submit with everything, to spend the least time on the clock
-    res = _post({"op": "submit", "challenge": a.cid, "answers": answers})
-    out["result"] = str(res.get("result", "")).lower() or "unknown"
-    out["remaining"] = res.get("remaining")
+    # Submit per set (set1./slot0_/...), so Mastery banks each correct set within the attempt and we learn
+    # exactly which set failed. GM GM latency is sub-ms here, so several POSTs still fit the clock.
+    def setkey(aid):
+        m = re.match(r"(set|slot)[._-]?\d+", aid)
+        return m.group(0) if m else "_"
+    groups = {}
+    for aid, v in answers.items():
+        groups.setdefault(setkey(aid), {})[aid] = v
+    per_set, final = {}, "correct"
+    for key, grp in groups.items():
+        res = _post({"op": "submit", "challenge": a.cid, "answers": grp})
+        rk = str(res.get("result", "")).lower()
+        per_set[key] = {"result": rk, "remaining": res.get("remaining")}
+        if rk == "correct":
+            final = "correct"
+        elif rk == "accepted":
+            final = "correct" if final == "correct" else final  # partial progress banked; keep scanning
+            if res.get("remaining"):
+                final = "accepted"
+        elif rk == "expired":
+            final = "expired"
+            break
+        else:
+            final = "incorrect"
+    out["result"] = final
+    out["per_set"] = per_set
+    out["bad_sets"] = [k for k, v in per_set.items() if v["result"] not in ("correct", "accepted")]
     out["elapsed"] = round(time.time() - t0, 2)
-    out["detail"] = {k: res.get(k) for k in ("result", "remaining", "status", "flag") if k in res}
     print(json.dumps(out))
 
 

@@ -341,6 +341,24 @@ class Chain:
 
 # ---------------------------------------------------------------- entry points
 
+_provisioned = False
+
+
+def ensure_homebase_provisioned():
+    """Provision Homebase's solver deps once per process (idempotent; cheap if already installed).
+    A factory reset wipes them, so this guarantees hb_timed can run any solver next to the GM."""
+    global _provisioned
+    if _provisioned:
+        return
+    try:
+        remote.rsync_to(ROOT / "setup" / "homebase_setup.sh", "~/homebase_setup.sh")
+        r = remote.ssh("bash ~/homebase_setup.sh 2>&1 | tail -2", timeout=600, check=False)
+        say(f"[homebase] provisioned: {r.stdout.strip()[-160:]}")
+        _provisioned = True
+    except Exception as e:  # noqa: BLE001 - provisioning best-effort; hb_timed will surface real gaps
+        say(f"[homebase] provisioning note: {e}")
+
+
 def released_challenges(day=None):
     args = ["list", "--all"] if day is None else ["list", "--day", str(day)]
     body = cli.call(None, *args)["body"] or {}
@@ -350,6 +368,7 @@ def released_challenges(day=None):
 def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None):
     remote.ensure_up()
     remote.deploy()
+    ensure_homebase_provisioned()  # solvers run on Homebase (hb_timed); make sure their deps are present
     gov = Governor()
     pools = Pools(local_slots, hb_slots, gov)
     groups = {}
