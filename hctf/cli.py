@@ -54,6 +54,14 @@ def load(cid, name):
     return json.loads(p.read_text()) if p.exists() else None
 
 
+def load_json(path):
+    """Best-effort JSON from an absolute path (for read-only diagnostics like `hctf why`)."""
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return None
+
+
 def save(cid, name, obj):
     (cdir(cid) / name).write_text(json.dumps(obj, indent=2, ensure_ascii=False))
 
@@ -333,7 +341,7 @@ def c_submit(a):
     return EXIT.get(kind, EXIT["error"])
 
 
-def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT):
+def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_cap=None):
     """Guarded submission shared by the CLI, the workers and the timed runner.
     Returns (kind, body, problems). kind is None when refused locally (problems explains why).
     Answers the GM confirms are merged into <mode dir>/confirmed.json (keyed by attempt)."""
@@ -381,8 +389,9 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT):
         elif field_wrong[k] >= max_wrong:
             problems.append(f"{k}: {field_wrong[k]} wrong tries for this field (per-field cap {max_wrong}); "
                             "you have exhausted sensible candidates for its exact wording")
-    if total_wrong >= GLOBAL_WRONG_CAP:
-        problems.append(f"{total_wrong} wrong submissions in this attempt (global cap {GLOBAL_WRONG_CAP})")
+    gcap = GLOBAL_WRONG_CAP if global_cap is None else global_cap
+    if total_wrong >= gcap:
+        problems.append(f"{total_wrong} wrong submissions in this attempt (global cap {gcap})")
     if problems and not force:
         return None, None, problems
 
@@ -433,6 +442,17 @@ def confirmed_answers(cid, att=None):
     return (load(cid, "confirmed.json") or {}).get(att or "_", {})
 
 
+def gm_solved(cid):
+    """Ask the GM itself whether this mode is already solved (its status shows result CORRECT). Local state can
+    lag (timed runs on Homebase, newer attempts started after a correct one), so reruns check this first and
+    never redo or burn attempts on a mode the scoreboard already has."""
+    try:
+        body = call(cid, "status", cid)["body"] or {}
+    except Exception:  # noqa: BLE001 - unknown means "not known solved"
+        return False
+    return str(body.get("result", "")).upper() == "CORRECT"
+
+
 def is_complete(cid):
     """All answer_ids of the current attempt confirmed, or a CORRECT result recorded for it."""
     start = load(cid, "start.json")
@@ -478,7 +498,193 @@ def c_timed(a):
 
 def c_run(a):
     from . import orchestrate
-    orchestrate.run(day=a.day, only=a.only, local_slots=a.local, hb_slots=a.homebase, modes=a.modes)
+    pre = None  # None -> run() applies the default-on heuristic (prewarm for timed runs)
+    if getattr(a, "prewarm_homebase", False):
+        pre = True
+    if getattr(a, "no_prewarm_homebase", False):
+        pre = False
+    orchestrate.run(day=a.day, only=a.only, local_slots=a.local, hb_slots=a.homebase, modes=a.modes,
+                    prewarm_homebase=pre, keep_homebase=getattr(a, "keep_homebase", False))
+    return 0
+
+
+def _last_worker_result(d):
+    """(logname, (subtype, text)) of the newest worker-*.log's final RESULT in a mode dir, or None."""
+    logs = sorted(d.glob("worker-*.log"), key=lambda p: p.stat().st_mtime)
+    if not logs:
+        return None
+    last = None
+    for line in logs[-1].read_text(errors="replace").splitlines():
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        if e.get("type") == "result":
+            last = (e.get("subtype"), str(e.get("result", "")).strip()[:280])
+    return (logs[-1].name, last)
+
+
+def c_why(a):
+    """Explain a chain's state at a glance: is each mode converging or actually stuck? Prints the block reason,
+    wrong fields, attempt/block counts, timing vs window, and the last worker RESULT -- the facts otherwise
+    assembled by hand from last_timed.json / window.json / diagnosis.json / the worker logs."""
+    base = paths.base_id(a.id)
+    chain = load_json(paths.challenge_root(base) / "chain.json") or {}
+    print(f"== {base}  [{chain.get('lane', '?')}]  {chain.get('name', '')}")
+    print(f"   stage={chain.get('stage', '?')}  worker={chain.get('worker') or '-'}  "
+          f"attempt={chain.get('attempt', '-')}  launches={chain.get('launches', '-')}  updated={chain.get('updated', '?')}")
+    for mode in paths.MODES:
+        cid = base if mode == "single_solve" else f"{base}/{mode}"
+        d = cdir(cid)
+        if not d.exists():
+            continue
+        done = False
+        try:
+            done = is_complete(cid)
+        except Exception:  # noqa: BLE001
+            pass
+        blocks = len(list(d.glob(".stop-blocks-*")))
+        line = f"  - {mode}: {'DONE' if done else (chain.get(mode + '_result') or 'pending')}"
+        if blocks:
+            line += f"  blocks={blocks}/10"
+        print(line)
+        lt = load_json(d / "last_timed.json")
+        if lt:
+            win = lt.get("window")
+            el = lt.get("elapsed")
+            inw = lt.get("in_window")  # excludes pre-clock start/retry overhead; this is what the deadline enforces
+            clock = inw if inw is not None else el
+            over = "  OVER-WINDOW" if (win and clock and clock > win) else ""
+            inw_s = f" (in-window {inw}s)" if inw is not None and inw != el else ""
+            print(f"      last attempt: {lt.get('result')}  elapsed={el}s{inw_s}/window={win}s{over}  routed={lt.get('routed') or 'local'}")
+            if lt.get("phases"):
+                print(f"      phases: {lt['phases']}")
+            if lt.get("wrong"):
+                print(f"      WRONG fields: {lt['wrong']}  (fixed in-window: {lt.get('fixed') or {}})")
+            if lt.get("localize_tried"):
+                print(f"      in-window tried: {lt['localize_tried']}")
+            if lt.get("missing"):
+                print(f"      MISSING (solver incomplete): {lt['missing'][:12]}")
+        dg = load_json(d / "diagnosis.json")
+        if dg and not done:
+            print(f"      probe: {dg.get('ok')} ok / {len(dg.get('wrong', []))} wrong of {dg.get('probed')}/{dg.get('total')} judged"
+                  + ("" if dg.get("complete") else "  (cut short by deadline)"))
+            if dg.get("unjudged"):
+                print(f"      unjudged (probe ran out of clock): {dg['unjudged'][:10]}")
+        wr = _last_worker_result(d)
+        if wr and wr[1]:
+            print(f"      last worker ({wr[0]}): {wr[1][0]} -- {wr[1][1][:180]}")
+    # verdict
+    stage = str(chain.get("stage", ""))
+    if stage == "done":
+        verdict = "DONE - all modes solved."
+    elif stage.endswith(("generalizing", "fixing", "solving", "running", "fetch", "reuse")):
+        verdict = "WORKING - a worker/attempt is in progress; compare `updated` to now. If it keeps cycling the SAME wrong field, it's converging on a label (watch vocab.json)."
+    elif stage.endswith(("blocked", "help")):
+        verdict = "BLOCKED - needs attention: see the WRONG/unjudged fields above."
+    else:
+        verdict = f"stage={stage}"
+    print(f"  => {verdict}")
+    return 0
+
+
+def c_reconcile(a):
+    """Reconcile local chain.json with GM truth. Local state can lag reality (fixes applied out-of-band, timed runs
+    that never rewrote the chain), so the dashboard under-reports — this asks the GM (status==CORRECT) for every mode
+    and rewrites each chain's result/stage to match the scoreboard. Optional --day filter. Read-the-GM, write-local."""
+    changed = 0
+    daytag = f"day{int(a.day):02d}" if getattr(a, "day", None) else None
+    for p in sorted(paths.CHALLENGES.glob("day*/*/chain.json")):
+        if daytag and daytag not in str(p.parent.parent.name) and daytag not in str(p.parent.parent):
+            # parent is the challenge dir; its parent is dayNN
+            if daytag != p.parent.parent.name:
+                continue
+        meta = load_json(p.parent / "meta.json") or {}
+        ids = meta.get("ids") or {}
+        chain = load_json(p) or {}
+        present = [m for m in paths.MODES if ids.get(m)]
+        if not present:
+            continue
+        solved, upd = {}, {}
+        for mode in present:
+            solved[mode] = gm_solved(ids[mode])
+            if mode in ("time_trial", "mastery") and solved[mode] and chain.get(f"{mode}_result") != "correct":
+                upd[f"{mode}_result"] = "correct"
+        if all(solved.get(m) for m in present) and chain.get("stage") != "done":
+            upd["stage"] = "done"
+        if upd:
+            chain.update(upd, updated=time.strftime("%Y-%m-%dT%H:%M:%S"))
+            p.write_text(json.dumps(chain, indent=2))
+            changed += 1
+            print(f"  reconciled {p.parent.parent.name}/{p.parent.name}: {upd}")
+    print(f"reconcile: updated {changed} chain(s) from the GM scoreboard")
+    return 0
+
+
+def _front_matter(text):
+    """Parse a leading `--- ... ---` YAML-ish block of `key: value` lines (values may be inline lists). Best effort."""
+    if not text.startswith("---"):
+        return {}
+    end = text.find("\n---", 3)
+    if end < 0:
+        return {}
+    fm = {}
+    for line in text[3:end].splitlines():
+        if ":" in line:
+            k, _, v = line.partition(":")
+            fm[k.strip()] = v.strip()
+    return fm
+
+
+def _first_concept(text):
+    """First meaningful line of a NOTES.md as a one-line concept: first `#`/`##` heading, else first prose line."""
+    for line in text.splitlines():
+        s = line.strip().lstrip("#").strip()
+        if s and not s.startswith("---"):
+            return s[:160]
+    return ""
+
+
+def c_solutions(a):
+    """Generate reference/SOLUTIONS.md: a single human-readable index of how every challenge was solved, assembled
+    from each solver/NOTES.md (+ chain.json for name/status). NOTES front-matter (challenge/lane/status/gm_vocab)
+    is used when present; otherwise the first heading/line becomes the concept. Regenerate anytime (and after runs)."""
+    by_day = {}
+    for notes in sorted(paths.CHALLENGES.glob("day*/*/solver/NOTES.md")):
+        chal = notes.parent.parent
+        day = chal.parent.name
+        chain = load_json(chal / "chain.json") or {}
+        meta = load_json(chal / "meta.json") or {}
+        text = notes.read_text(errors="replace")
+        fm = _front_matter(text)
+        by_day.setdefault(day, []).append({
+            "dir": chal.name,
+            "lane": fm.get("lane") or meta.get("lane", ""),
+            "name": chain.get("name", ""),
+            "status": fm.get("status") or chain.get("stage", "?"),
+            "concept": fm.get("concept") or _first_concept(text),
+            "vocab": fm.get("gm_vocab", ""),
+            "notes": str(notes.relative_to(ROOT)),
+        })
+    lines = ["# Huntress CTF 2026 — Solutions index", "",
+             f"_Auto-generated {time.strftime('%Y-%m-%d %H:%M')} by `hctf solutions` from each solver/NOTES.md._", ""]
+    total = 0
+    for day in sorted(by_day):
+        lines.append(f"## {day}")
+        lines.append("")
+        lines.append("| Challenge | Lane | Status | How it was solved | GM vocab |")
+        lines.append("|---|---|---|---|---|")
+        for r in sorted(by_day[day], key=lambda x: x["lane"]):
+            total += 1
+            concept = r["concept"].replace("|", "\\|")
+            vocab = (r["vocab"] or "").replace("|", "\\|")
+            name = r["name"] or r["dir"]
+            lines.append(f"| [{name}]({r['notes']}) | {r['lane']} | {r['status']} | {concept} | {vocab} |")
+        lines.append("")
+    out = ROOT / "reference" / "SOLUTIONS.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(lines))
+    print(f"wrote {out.relative_to(ROOT)} ({total} challenges across {len(by_day)} days)")
     return 0
 
 
@@ -514,6 +720,17 @@ def c_openapi(a):
     env = call(None, "openapi")
     emit(env["body"])
     return http_exit(env)
+
+
+def c_labels(a):
+    from . import labels
+    cands = labels.candidates(a.id, a.answer_id, terms=a.term, solver_value=a.solver_value)
+    if a.dry_run:
+        emit({"answer_id": a.answer_id, "candidates": cands[:max(a.budget, 40)]})
+        return 0
+    res = labels.probe(a.id, a.answer_id, cands, budget=a.budget, delay=a.delay)
+    emit(res)
+    return 0 if res.get("accepted") else EXIT["incorrect"]
 
 
 def main(argv=None):
@@ -552,16 +769,39 @@ def main(argv=None):
     pr2.add_argument("--only", nargs="*", help="substrings of challenge ids to include")
     pr2.add_argument("--local", type=int, default=5, help="concurrent local claude -p workers")
     pr2.add_argument("--homebase", type=int, default=0, help="concurrent Homebase codex workers")
+    pr2.add_argument("--keep-homebase", action="store_true",
+                     help="don't power Homebase off at end of run (keep it warm for the next burst); also HCTF_KEEP_HOMEBASE=1")
+    pr2.add_argument("--no-prewarm-homebase", action="store_true",
+                     help="disable the default background Homebase prewarm for timed runs (HCTF_PREWARM_HOMEBASE=0)")
+    pr2.add_argument("--prewarm-homebase", action="store_true",
+                     help="boot+provision Homebase at run start (in the background) so tight timed windows don't "
+                          "wait for a cold VM; powers off at run end. Also via HCTF_PREWARM_HOMEBASE=1")
     pr2.add_argument("--modes", nargs="*", choices=list(paths.MODES))
     sub.add_parser("dash", help="chain status table")
+    sub.add_parser("why", help="explain a chain's state: converging vs stuck, wrong fields, timing, last worker result"
+                   ).add_argument("id")
+    prc = sub.add_parser("reconcile", help="rewrite local chain.json from GM truth (fixes stale/under-reported dash)")
+    prc.add_argument("--day")
+    sub.add_parser("solutions", help="(re)generate reference/SOLUTIONS.md index from every solver/NOTES.md")
     pw = sub.add_parser("watch", help="live board of every challenge + each agent's current action")
     pw.add_argument("--interval", type=float, default=2.0)
     sub.add_parser("tail", help="follow one agent's reasoning + tool calls live").add_argument("id")
+    pl2 = sub.add_parser("labels", help="resolve a non-flag field's exact GM label: rank candidates from sibling "
+                                        "confirmed labels + artifact terms, then probe them one at a time")
+    pl2.add_argument("id")
+    pl2.add_argument("answer_id")
+    pl2.add_argument("--term", action="append", default=[],
+                     help="artifact-derived term (keyword, magic, spec name), e.g. --term if --term defined; repeatable")
+    pl2.add_argument("--solver-value", default=None, help="the value you derived (its tokens become terms too)")
+    pl2.add_argument("--budget", type=int, default=25, help="max candidates to submit (default 25)")
+    pl2.add_argument("--delay", type=float, default=1.0, help="seconds between submits (rate limit)")
+    pl2.add_argument("--dry-run", action="store_true", help="only print the ranked candidates")
     a = p.parse_args(argv)
     fn = {"hb": c_hb, "list": c_list, "status": c_status, "start": c_start, "retry": c_retry,
           "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test,
-          "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash,
-          "triage": c_triage, "watch": c_watch, "tail": c_tail}[a.cmd]
+          "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
+          "reconcile": c_reconcile, "solutions": c_solutions,
+          "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels}[a.cmd]
     try:
         return fn(a)
     except remote.Unreachable as e:

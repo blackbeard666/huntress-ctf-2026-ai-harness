@@ -78,8 +78,14 @@ def _zip_read(z, name):
 
 def iter_entries(root, max_depth=4):
     """Yield (name, bytes_loader, parent_name) for every file under root and, recursively, every zip member
-    (Mastery bundles ship one outer zip holding the per-set zips, possibly under a set's own name)."""
+    (Mastery bundles ship one outer zip holding the per-set zips, possibly under a set's own name).
+    Each loader is memoized: AES members cost a PBKDF2 per read, and walk() itself loads every entry to recurse."""
+    def once(load):
+        memo = []
+        return lambda: memo[0] if memo else (memo.append(load()) or memo[0])
+
     def walk(name, load, parent, depth):
+        load = once(load)
         yield name, load, parent
         if depth >= max_depth:
             return

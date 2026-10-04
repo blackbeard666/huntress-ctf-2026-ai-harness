@@ -58,9 +58,13 @@ def _slot():
 
 
 def ssh(cmd, timeout=180, check=True):
-    with _slot():
-        r = subprocess.run(["ssh", *SSH_OPTS, f"{HB_USER}@{HB_HOST}", cmd],
-                           capture_output=True, text=True, timeout=timeout)
+    for attempt in (1, 2):
+        with _slot():
+            r = subprocess.run(["ssh", *SSH_OPTS, f"{HB_USER}@{HB_HOST}", cmd],
+                               capture_output=True, text=True, timeout=timeout)
+        if r.returncode != 255 or attempt == 2:
+            break
+        clear_control_sockets()  # stale ControlMaster socket from a killed session: drop it and reconnect once
     if r.returncode == 255:
         raise Unreachable(r.stderr.strip() or "ssh failed")
     if check and r.returncode not in (0, 5):
@@ -119,17 +123,35 @@ def rsync_from(remote_path, local_dir):
         src = os.path.expanduser(remote_path).rstrip("/") + "/"
         subprocess.run(["rsync", "-a", src, str(local_dir).rstrip("/") + "/"], check=True, capture_output=True)
         return
-    e = "ssh " + " ".join(shlex.quote(o) for o in SSH_OPTS)
-    with _slot():
-        subprocess.run(["rsync", "-a", "-e", e, f"{HB_USER}@{HB_HOST}:{remote_path.rstrip('/')}/",
-                        str(local_dir).rstrip("/") + "/"], check=True, capture_output=True, timeout=600)
+    _rsync(["rsync", "-a", "-e", "SSH", f"{HB_USER}@{HB_HOST}:{remote_path.rstrip('/')}/",
+            str(local_dir).rstrip("/") + "/"])
 
 
 def rsync_to(local_path, remote_path):
-    e = "ssh " + " ".join(shlex.quote(o) for o in SSH_OPTS)
-    with _slot():
-        subprocess.run(["rsync", "-a", "--delete", "-e", e, str(local_path),
-                        f"{HB_USER}@{HB_HOST}:{remote_path}"], check=True, capture_output=True, timeout=600)
+    _rsync(["rsync", "-a", "--delete", "-e", "SSH", str(local_path), f"{HB_USER}@{HB_HOST}:{remote_path}"])
+
+
+def _rsync(argv):
+    """rsync over the shared ssh options; on ssh failure (exit 255, usually a stale ControlMaster socket left by a
+    killed session) clear the sockets and retry once instead of crashing the caller."""
+    argv = [("ssh " + " ".join(shlex.quote(o) for o in SSH_OPTS)) if a == "SSH" else a for a in argv]
+    for attempt in (1, 2):
+        with _slot():
+            r = subprocess.run(argv, capture_output=True, timeout=600)
+        if r.returncode == 0:
+            return r
+        if r.returncode == 255 and attempt == 1:
+            clear_control_sockets()
+            continue
+        raise subprocess.CalledProcessError(r.returncode, argv, r.stdout, r.stderr)
+
+
+def clear_control_sockets():
+    for s in RUN.glob("cm-*"):
+        try:
+            s.unlink()
+        except OSError:
+            pass
 
 
 def deploy():

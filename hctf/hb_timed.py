@@ -46,17 +46,40 @@ def _auth(headers=None):
     return headers
 
 
+def _open(req, timeout):
+    """urlopen with a SHORT 429/503 backoff (the clock is running): 0.5s then 1s, then give up."""
+    import urllib.error
+    for wait in (0.5, 1.0, None):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read()
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 503) and wait is not None:
+                time.sleep(wait)
+                continue
+            raise
+
+
 def _post(payload, timeout=20):
     req = urllib.request.Request(GM, data=json.dumps(payload).encode(),
                                  headers=_auth({"Content-Type": "application/json"}), method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read())
+    return json.loads(_open(req, timeout))
 
 
 def _get_bytes(cap, timeout=20):
     req = urllib.request.Request(f"{GM}?op=download&capability={cap}", headers=_auth())
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read()
+    return _open(req, timeout)
+
+
+def _window(body):
+    """Length of this attempt's clock in seconds (deadline - started_at), or None."""
+    import datetime as dt
+    try:
+        a = dt.datetime.fromisoformat(body["started_at"].replace("Z", "+00:00"))
+        d = dt.datetime.fromisoformat(body["deadline"].replace("Z", "+00:00"))
+        return round((d - a).total_seconds(), 2)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return None
 
 
 def _deadline_left(body):
@@ -97,12 +120,112 @@ def _normalize(v, q):
     return v.lower() if norm == "case_insensitive" else v
 
 
+def _vocab():
+    """Closed vocabularies by field suffix, from lib/vocab.json (grown by `hctf labels` whenever the GM confirms a
+    label), so a wrong label can be corrected inside the same attempt."""
+    try:
+        return {k: list(v) for k, v in json.loads((HW / "lib" / "vocab.json").read_text()).items()}
+    except (OSError, ValueError):
+        return {}
+
+
+def _suffix(aid):
+    m = re.search(r"([-_][A-Za-z0-9]+)$", aid.rsplit(".", 1)[-1])
+    return m.group(1) if m else None
+
+
+_LANE = None
+
+
+def _lane_from_solver_dir(sd):
+    """Lane for the per-lane playbook, from the challenge's meta.json next to the solver dir."""
+    try:
+        return json.loads(((HW / sd).parent / "meta.json").read_text()).get("lane")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def _playbook_alts(aid, cur):
+    """Playbook-ranked candidate labels for a wrong field (e.g. VBS On-Error control -> error_guard first), so a
+    BRAND-NEW construct the GM has never confirmed can still be corrected in-window on its first encounter. Best
+    effort: lib may be unavailable, and the resolver falls back to vocab.json either way."""
+    if not _LANE:
+        return []
+    try:
+        if str(HW) not in sys.path:
+            sys.path.insert(0, str(HW))
+        from lib import playbook
+        return [c for c in playbook.seed_candidates(_LANE, aid, solver_value=cur) if c and c != cur]
+    except Exception:  # noqa: BLE001 - never let the playbook break the clock path
+        return []
+
+
+def _localize(cid, answers, groups, per_set, body, out):
+    """Window permitting, binary-search the wrong answer_ids inside each failed set (subset submits on the SAME
+    attempt), then try the field's other known labels (lib/vocab.json). Reports what the GM verified so the
+    variant becomes a regression case: out["verified"] holds only answers the GM accepted on this attempt."""
+    def ok(res):
+        return str(res.get("result", "")).lower() in ("correct", "accepted")
+
+    wrong, fixed, ok_fields = [], {}, set()
+    complete = True
+
+    def narrow(group):
+        nonlocal complete
+        if not group:
+            return
+        left = _deadline_left(body)
+        if left is not None and left < 0.8:
+            complete = False
+            return
+        if ok(_post({"op": "submit", "challenge": cid, "answers": {k: answers[k] for k in group}})):
+            ok_fields.update(group)
+            return
+        if len(group) == 1:
+            wrong.append(group[0])
+            return
+        mid = len(group) // 2
+        narrow(group[:mid])
+        narrow(group[mid:])
+
+    try:
+        for key, v in per_set.items():
+            if v["result"] in ("correct", "accepted"):
+                ok_fields.update(groups.get(key, {}))
+            else:
+                narrow(list(groups.get(key, {}).keys()))
+        vocab = _vocab()
+        for aid in wrong:
+            cur = answers.get(aid)
+            alts = []
+            for alt in list(vocab.get(_suffix(aid) or "", [])) + _playbook_alts(aid, cur):
+                if alt != cur and alt not in alts:
+                    alts.append(alt)
+            for alt in alts:
+                left = _deadline_left(body)
+                if left is not None and left < 0.5:
+                    break
+                if ok(_post({"op": "submit", "challenge": cid, "answers": {aid: alt}})):
+                    fixed[aid] = alt
+                    break
+                out.setdefault("localize_tried", {}).setdefault(aid, []).append(alt)
+    except Exception as e:  # noqa: BLE001 - diagnostics only
+        out["localize_error"] = repr(e)
+        complete = False
+    out["wrong"] = [[a, answers.get(a)] for a in wrong]
+    out["fixed"] = fixed
+    out["localize_complete"] = complete
+    out["verified"] = {**{a: answers[a] for a in ok_fields if a in answers}, **fixed}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cid")
     ap.add_argument("solver_dir")           # relative to HW, e.g. challenges/day02/warmups-half-a-turn/solver
     ap.add_argument("--op", default="start", choices=["start", "retry"])
     a = ap.parse_args()
+    global _LANE
+    _LANE = _lane_from_solver_dir(a.solver_dir)
     t0 = time.time()
     out = {"cid": a.cid, "submitted": {}}
 
@@ -114,6 +237,7 @@ def main():
         left = _deadline_left(body)
     out["deadline"] = body.get("deadline")
     out["attempt_id"] = body.get("attempt_id")
+    out["window"] = _window(body)
     ids = body.get("answer_ids") or []
     qmap = {aid: (body["questions"][i] if i < len(body.get("questions", [])) else {}) for i, aid in enumerate(ids)}
     if body.get("error") or not ids:
@@ -154,7 +278,7 @@ def main():
     except Exception:
         out["result"] = "solver_error"
         out["detail"] = r.stderr[-800:]
-        print(json.dumps(out))
+        _emit(out, adir)
         return
 
     missing = [i for i in ids if i not in answers]
@@ -165,7 +289,7 @@ def main():
     if missing:
         out["result"] = "solver_incomplete"
         out["missing"] = missing
-        print(json.dumps(out))
+        _emit(out, adir)
         return
 
     # FAST PATH: submit EVERY answer in one request. A public-GM submit round-trip is ~0.2-several s, so N
@@ -180,8 +304,10 @@ def main():
     out["full_result"] = fk
     if fk in ("correct", "accepted") and not full.get("remaining"):
         out["result"] = "correct"
+        out["verified"] = dict(answers)
         out["elapsed"] = round(time.time() - t0, 2)
-        print(json.dumps(out))
+        out["in_window"] = round(time.time() - t_started, 2)  # time that actually counts against the clock
+        _emit(out, adir)
         return
 
     # Not fully correct: break down per set to learn which set failed (clock permitting), so the offline
@@ -201,8 +327,21 @@ def main():
             final = "incorrect"
     out["result"] = "correct" if all(v["result"] in ("correct", "accepted") for v in per_set.values()) and per_set else final
     out["per_set"] = per_set
+    if final == "incorrect":
+        _localize(a.cid, answers, groups, per_set, body, out)
     out["bad_sets"] = [k for k, v in per_set.items() if v["result"] not in ("correct", "accepted")]
     out["elapsed"] = round(time.time() - t0, 2)
+    out["in_window"] = round(time.time() - t_started, 2)  # excludes the pre-clock start/retry overhead
+    _emit(out, adir)
+
+
+def _emit(out, adir):
+    """Print the one-line result and keep a copy next to the attempt's bytes (contract.json + downloads), so the
+    caller can turn the variant into a regression case with the GM-verified answers."""
+    try:
+        (adir / "result.json").write_text(json.dumps(out))
+    except OSError:
+        pass
     print(json.dumps(out))
 
 

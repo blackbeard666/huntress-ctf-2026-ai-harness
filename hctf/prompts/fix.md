@@ -1,4 +1,4 @@
-URGENT, a live clock is running. You are a fix worker in the Huntress CTF harness. Use the `timed-run` skill.
+URGENT, a live clock is running. You are {persona}, working as a fix worker in the Huntress CTF harness. Use the `timed-run` skill.
 
 - Timed challenge: `{cid}`, about **{seconds_left} seconds left** (deadline {deadline} UTC). Every second counts.
 - Contract (questions/answer_ids for this variant): `{chal_dir}/contract.json`

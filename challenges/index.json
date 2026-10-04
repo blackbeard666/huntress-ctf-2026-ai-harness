@@ -17,6 +17,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Table Manners"
   },
+  "binary-reverse-engineering-day-04-go-runtime-fingerprints": {
+    "day": 4,
+    "dir": "day04/binary-go-fish",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Go Fish"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -35,6 +41,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 BOM Voyage"
   },
+  "metadata-forensics-day-04-picture-this": {
+    "day": 4,
+    "dir": "day04/metadata-picture-this",
+    "lane": "metadata-forensics",
+    "name": "🔎 Picture This"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -52,6 +64,12 @@
     "dir": "day03/mobile-intent-injection",
     "lane": "mobile-android",
     "name": "📱 Intent Injection"
+  },
+  "mobile-android-day-04-pending-intent-relay": {
+    "day": 4,
+    "dir": "day04/mobile-pending-intent-relay",
+    "lane": "mobile-android",
+    "name": "📱 Pending Intent Relay"
   },
   "read-the-rules": {
     "day": 1,
@@ -77,6 +95,12 @@
     "lane": "script-analysis",
     "name": "📜 Expansion Pack"
   },
+  "script-analysis-day-04-shell-contrast": {
+    "day": 4,
+    "dir": "day04/scripting-dim-and-dimmer",
+    "lane": "script-analysis",
+    "name": "📜 Dim and Dimmer"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -94,6 +118,12 @@
     "dir": "day03/warmups-hex-appeal",
     "lane": "warmups",
     "name": "👶 Hex Appeal"
+  },
+  "warmups-day-04": {
+    "day": 4,
+    "dir": "day04/warmups-two-of-a-kind",
+    "lane": "warmups",
+    "name": "👶 Two of a Kind"
   },
   "welcome-robots": {
     "day": 1,

@@ -135,7 +135,7 @@ def capture_variant(cid, sdir):
     art = timed.artifacts_for(cid, contract)
     if contract and art:
         name = f"variant-{solvers.mode_of(cid)}-{(cli.attempt_id(contract) or 'x')[:8]}"
-        solvers.add_case(sdir, name, contract, art, cli.confirmed_answers(cid))
+        solvers.add_case(sdir, name, contract, art, timed.present_only(contract, art, cli.confirmed_answers(cid)))
 
 
 def wait_until_expired(cid, extra=3):
@@ -182,31 +182,49 @@ class Chain:
     def fix(self, cid, contract, art, problems, left):
         prompt = workers.render("fix", cid=cid, base=self.base, seconds_left=int(left or 0),
                                 deadline=contract.get("deadline"), chal_dir=cli.cdir(cid).relative_to(ROOT),
-                                solver_dir=self.sdir.relative_to(ROOT),
+                                solver_dir=self.sdir.relative_to(ROOT), persona=workers.lane_persona(self.lane),
                                 problems="\n".join(f"  - {p}" for p in problems) or "  - (none reported)")
         set_state(self.base, stage=f"{solvers.mode_of(cid)}:fixing")
         self.run_worker(cid, "fix", prompt, max(20, (left or 600) - 15), urgent=True)
 
-    def generalize(self, cid, wrong=None):
+    def generalize(self, cid, wrong=None, fixed=None, diag=None):
         """Offline (no clock): improve the solver so it handles the captured variant and still passes old cases.
-        `wrong` is the per-field GM probe result (list of (answer_id, solver_value) the GM rejected): [] means
-        every probed field was accepted (a timing problem, not correctness), None means no probe ran."""
+        `wrong`: (answer_id, solver_value) pairs the GM rejected; `fixed`: {answer_id: value} the GM accepted as the
+        right label on that attempt; `diag`: facts about the attempt (window, elapsed, how much was judged), so the
+        worker is told the truth — "timing" only when every field was actually judged correct."""
         mode = solvers.mode_of(cid)
         probs = []
         _, res = ensure_case_and_test(paths.base_id(cid), self.sdir)
         for r in (res or []):
             if not r.get("ok"):
                 probs.append(f"case {r['case']}: error={r.get('error')} diff={r.get('diff')} unverified={r.get('unverified')}")
-        if wrong:
-            gm_wrong = "\n".join(f"  - `{a}`: solver produced {v!r}, the GM judged this INCORRECT — re-derive this "
-                                 "exact field from the bytes and make the solver reproduce the GM's value" for a, v in wrong)
+        lines = []
+        for a, v in (wrong or []):
+            if fixed and a in fixed:
+                lines.append(f"  - `{a}`: solver produced {v!r}; the GM REJECTED it and ACCEPTED {fixed[a]!r} on the same "
+                             "attempt. Find the byte-level feature that selects this label (compare with cases where the "
+                             "solver's label was right) and make solve.py emit it — never hard-code the variant.")
+            else:
+                lines.append(f"  - `{a}`: solver produced {v!r}, the GM judged this INCORRECT — re-derive this exact field "
+                             "from the bytes and make the solver reproduce the GM's value")
+        d = diag or {}
+        if lines:
+            gm_wrong = "\n".join(lines)
+        elif wrong == [] and d.get("complete") and d.get("probed") == d.get("total"):
+            gm_wrong = (f"  - every one of the {d.get('total')} fields was judged CORRECT individually, so this is a TIMING "
+                        f"failure: window {d.get('window')}s, attempt took {d.get('elapsed')}s, phases {d.get('phases')}. "
+                        "Do NOT change answers; reduce the solver's own time only if `solve` dominates the phases.")
         elif wrong == []:
-            gm_wrong = ("  - the per-field probe found EVERY field ACCEPTED: the answers are correct but the attempt did "
-                        "not finish in time. Do NOT change correct answers — make the solver faster / reduce its work.")
+            gm_wrong = (f"  - the probe was CUT SHORT: only {d.get('probed')}/{d.get('total')} fields were judged (all of those "
+                        f"correct). The wrong field(s) are among the unjudged ones: {d.get('unjudged', [])[:40]}. "
+                        "Re-derive those from the bytes. Do NOT treat this as a timing problem.")
         else:
-            gm_wrong = "  - (no per-field GM probe was available this cycle)"
+            gm_wrong = "  - (no per-field GM verdict was available this cycle)"
+        if d.get("window") or d.get("elapsed"):
+            gm_wrong += f"\n  - attempt facts: window {d.get('window')}s, elapsed {d.get('elapsed')}s, routed {d.get('routed') or 'local'}"
         prompt = workers.render("generalize", cid=cid, base=self.base, mode=mode,
                                 chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
+                                persona=workers.lane_persona(self.lane), playbook=workers.lane_playbook(self.lane),
                                 problems="\n".join(f"  - {p}" for p in probs) or "  - solver did not produce all answers",
                                 gm_wrong=gm_wrong)
         set_state(self.base, stage=f"{mode}:generalizing")
@@ -242,6 +260,32 @@ class Chain:
             return True
         return False
 
+    def auto_labels(self, cid, budget=12):
+        """No-model fallback after a Single Solve worker stops short: for each still-unconfirmed field whose ending
+        has a known label vocabulary (lib/vocab.json / sibling confirmed labels), run the label resolver with the
+        solver's own value as the term source. Returns cli.is_complete(cid)."""
+        from . import labels
+        contract = cli.load(cid, "start.json")
+        art = timed.latest_artifacts(cid)
+        if not contract or not art or not (self.sdir / "solve.py").exists():
+            return False
+        try:
+            answers, _ = solvers.solve_contract(contract, art, default_solver=self.sdir)
+        except Exception:  # noqa: BLE001
+            return False
+        conf = cli.confirmed_answers(cid)
+        vocab = labels.load_vocab()
+        for aid in contract.get("answer_ids") or []:
+            has_playbook = bool(labels.playbook and labels.playbook.entry_for(self.lane, aid))
+            if aid in conf or (labels.ending(aid) not in vocab and not labels.sibling_labels(aid) and not has_playbook):
+                continue
+            cands = labels.candidates(cid, aid, solver_value=answers.get(aid), lane=self.lane)
+            if answers.get(aid) and answers[aid] not in labels.judged_wrong(cid, aid):
+                cands = [answers[aid]] + cands
+            r = labels.probe(cid, aid, cands, budget=budget, log=say)
+            say(f"[{cid}] auto-labels {aid}: {r.get('accepted') or 'not resolved'} ({len(r.get('tried', []))} tried)")
+        return cli.is_complete(cid)
+
     # -- stages
     def single(self):
         e = self.entries.get("single_solve")
@@ -249,10 +293,25 @@ class Chain:
             return True
         cid = e["id"]
         welcome = self.lane == "welcome"
-        if cli.is_complete(cid) and (welcome or ensure_case_and_test(cid, self.sdir)[0]):
-            return True
+        if cli.is_complete(cid) or cli.gm_solved(cid):
+            # Solved: a solver that exists is good enough to proceed. Failing auto-* variant cases are the timed
+            # stages' business (they feed the generalize worker); they must not relaunch the Single Solve worker.
+            if welcome or (self.sdir / "solve.py").exists() or all(
+                    cli.gm_solved(self.entries[m]["id"]) for m in ("time_trial", "mastery") if m in self.entries):
+                if not welcome:
+                    ok, _ = ensure_case_and_test(cid, self.sdir)
+                    say(f"[{cid}] already solved (solver regression {'ok' if ok else 'has failing cases'})")
+                return True
         set_state(self.base, stage="single:fetch")
         body, err = timed.ensure_started(cid)
+        # The GM sometimes hands the flag back directly (issued_flag, e.g. orientation challenges). Use it instead of
+        # solving when there's a single answer_id to put it in — a free first-blood the harness used to discard.
+        fb = body or {}
+        if fb.get("issued_flag") and len(fb.get("answer_ids") or []) == 1 and not cli.is_complete(cid):
+            cli.submit(cid, {fb["answer_ids"][0]: fb["issued_flag"]})
+            if cli.is_complete(cid):
+                say(f"[{cid}] solved via GM issued_flag (no solver needed)")
+                return True
         # Reuse-first (no model time): a prior solver matched by question text may already solve this. Try it
         # BEFORE triage so a hit skips triage and the LLM worker entirely — the fastest path to first blood.
         if not welcome and self.try_existing_solvers(cid):
@@ -287,15 +346,25 @@ class Chain:
             if welcome:
                 extra += "\nThis is an orientation challenge: no solver is needed, only a correct submission."
             prompt = workers.render("single", name=self.name, cid=cid, lane=self.lane,
+                                    persona=workers.lane_persona(self.lane), playbook=workers.lane_playbook(self.lane),
                                     chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
                                     timed_contracts="\n".join(timed_info) or "  - (none: Single Solve only)", extra=extra)
             set_state(self.base, stage="single:solving", launches=n + 1)
             heavy = self.lane in ("binary-reverse-engineering", "binary")
             self.run_worker(cid, "single", prompt, SINGLE_TIMEOUT, prefer_homebase=heavy)
             done = cli.is_complete(cid)
+            if not done and not welcome:
+                done = self.auto_labels(cid)
             ok, res = (True, None) if welcome else ensure_case_and_test(cid, self.sdir)
             say(f"[{cid}] after worker: complete={done} solver_ok={ok}")
             if done and ok:
+                # Cache the Single Solve's confirmed closed-vocab labels into vocab.json NOW (untimed), so the timed
+                # modes enter with those spellings already confirmed and never carry an unconfirmed label onto a clock.
+                try:
+                    from . import labels
+                    labels.record_from_confirmed(cid, lane=self.lane, log=say)
+                except Exception as e:  # noqa: BLE001 - label caching is best-effort
+                    say(f"[{cid}] label cache note: {e}")
                 return True
             if (cli.cdir(cid) / "HELP.md").exists():
                 set_state(self.base, stage="single:help", help=(cli.cdir(cid) / "HELP.md").read_text()[:1500])
@@ -308,7 +377,7 @@ class Chain:
         if not e:
             return True
         cid = e["id"]
-        if cli.is_complete(cid):
+        if cli.is_complete(cid) or cli.gm_solved(cid):
             return True
         for attempt in range(MAX_TIMED_RETRIES + 1):
             while not self.gov.allow_timed():
@@ -331,17 +400,45 @@ class Chain:
             # execution the window is no longer the bottleneck). Always improve the solver offline, then retry.
             # The generalize worker re-derives the variant's correct answers itself (ground truth), so it can
             # fix WRONG answers too, not just missing ones. Fetch the variant locally for it to work on.
-            wrong = None
-            try:
-                timed.ensure_started(cid)  # fresh attempt + download of the current variant for offline work
-                # Per-field probe: submit each answer alone so the GM's per-SET verdict becomes per-FIELD.
-                # Banks the correct fields and tells the generalize worker EXACTLY which ones are wrong.
-                wrong = timed.probe_fields(cid, self.sdir, log=say)
-            except Exception as e:  # noqa: BLE001
-                say(f"[{cid}] local fetch/probe for generalize failed: {e}")
-            capture_variant(cid, self.sdir)  # expected.json now enriched by the probe-confirmed fields
+            wrong, fixed, diag = None, None, {}
+            last = timed.last_result(cid) or {}
+            diag = {k: last.get(k) for k in ("window", "elapsed", "phases", "routed")}
+            if last.get("wrong") is not None:
+                # The timed runner already localized this attempt in-window (same variant, saved as an auto-* case
+                # with the GM-verified answers): use that instead of burning a fresh attempt on a different variant.
+                wrong = [tuple(x) for x in last["wrong"]]
+                fixed = last.get("fixed") or {}
+                diag.update(complete=bool(last.get("localize_complete")), probed=None, total=None)
+                if not wrong and not last.get("localize_complete"):
+                    wrong = None  # cut short with nothing found: fall back to the probe below
+            if wrong is None:
+                try:
+                    timed.ensure_started(cid)  # fresh attempt + download of the current variant for offline work
+                    wrong = timed.probe_fields(cid, self.sdir, log=say)  # binary search, per-field verdicts
+                    pd = json.loads((cli.cdir(cid) / "diagnosis.json").read_text())
+                    diag.update({k: pd.get(k) for k in ("complete", "probed", "total", "unjudged")})
+                except Exception as e:  # noqa: BLE001
+                    say(f"[{cid}] local fetch/probe for generalize failed: {e}")
+                capture_variant(cid, self.sdir)  # expected.json now enriched by the probe-confirmed fields
+            # Online label resolution FIRST: for closed-vocab label fields, probe the GM (the only authority on the
+            # spelling) rather than letting the offline generalize worker GUESS and burn another attempt (the Q6 pain).
+            if wrong:
+                try:
+                    got = timed.resolve_labels_online(cid, self.sdir, [a for a, _ in wrong], self.lane, log=say)
+                except Exception as e:  # noqa: BLE001
+                    got = set()
+                    say(f"[{cid}] online label resolve note: {e}")
+                if got:
+                    if cli.is_complete(cid):
+                        set_state(self.base, **{f"{mode}_result": "correct"})
+                        record_timed_case(cid, self.sdir)
+                        return True
+                    wrong = [(a, v) for a, v in wrong if a not in got]
+                    if not wrong:
+                        say(f"[{cid}] resolved {len(got)} label(s) online (cached); retrying without generalize")
+                        continue
             say(f"[{cid}] {res}: improving the solver offline for this variant, then retrying")
-            self.generalize(cid, wrong=wrong)
+            self.generalize(cid, wrong=wrong, fixed=fixed, diag=diag)
         set_state(self.base, stage=f"{mode}:blocked")
         return False
 
@@ -387,11 +484,25 @@ def released_challenges(day=None):
     return body.get("challenges", [])
 
 
-def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None):
+def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_homebase=None, keep_homebase=None):
+    if keep_homebase is None:
+        keep_homebase = os.environ.get("HCTF_KEEP_HOMEBASE", "0") != "0"
+    timed_in_scope = (not modes) or any(m in ("time_trial", "mastery") for m in modes)
+    if prewarm_homebase is None:
+        # Default ON for timed runs: boot + provision Homebase in the BACKGROUND at run start, so a tight-window
+        # failover never waits on a cold VM (start it immediately, don't wait for an expiry — user request). Singles
+        # run locally while it boots, so the warm VM costs ~nothing extra. Disable with HCTF_PREWARM_HOMEBASE=0.
+        prewarm_homebase = (workers.AUTO_HOMEBASE and timed_in_scope and not hb_slots
+                            and os.environ.get("HCTF_PREWARM_HOMEBASE", "1") != "0")
     if hb_slots:  # Homebase is opt-in now (extra codex pool); GM + timed run locally via the pairing token
         remote.ensure_up()
         remote.deploy()
         ensure_homebase_provisioned()  # codex workers run on Homebase; make sure their deps are present
+    elif prewarm_homebase:
+        # Boot + provision Homebase in the background NOW, so it's already up when a tight timed window needs it
+        # (the on-demand path blocks on the same lock, so no cold-start stall mid-clock). Powered off at run end.
+        threading.Thread(target=workers._homebase_ready, args=(say,), daemon=True).start()
+        say("[homebase] pre-warming in the background for tight timed windows (powers off at end of run)")
     gov = Governor(hb_enabled=bool(hb_slots))
     pools = Pools(local_slots, hb_slots, gov)
     groups = {}
@@ -401,9 +512,15 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None):
         groups = {b: v for b, v in groups.items() if any(o in b for o in only)}
     say(f"{len(groups)} chains ({sum(map(len, groups.values()))} challenge modes), "
         f"slots local={local_slots} homebase={hb_slots}, credits={gov.credits()}")
-    with ThreadPoolExecutor(max_workers=max(1, len(groups))) as ex:
-        for base, entries in sorted(groups.items()):
-            ex.submit(Chain(base, entries, pools, gov, modes).run)
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, len(groups))) as ex:
+            for base, entries in sorted(groups.items()):
+                ex.submit(Chain(base, entries, pools, gov, modes).run)
+    finally:
+        if not hb_slots and not keep_homebase:  # Homebase switched on only for tight timed windows: switch it off again
+            workers.power_off_homebase_if_ours(say)
+        elif keep_homebase:
+            say("[homebase] left running (--keep-homebase); power it off with `hctf hb off` when done")
     say("all chains finished")
 
 
@@ -421,7 +538,11 @@ def chain_for(cid, pools, gov):
 def run_one_timed(cid, local_slots=2):
     gov = Governor()
     chain = chain_for(cid, Pools(local_slots, 0, gov), gov)
-    ok = chain.timed_stage(paths.mode_of(cid))
+    try:
+        ok = chain.timed_stage(paths.mode_of(cid))
+    finally:
+        if os.environ.get("HCTF_KEEP_HOMEBASE", "0") == "0":
+            workers.power_off_homebase_if_ours(say)
     return 0 if ok else 1
 
 

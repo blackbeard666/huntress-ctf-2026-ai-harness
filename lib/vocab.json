@@ -1,0 +1,92 @@
+{
+  "-control": [
+    "direct",
+    "errorlevel_guard",
+    "goto_dispatch",
+    "call_subroutine",
+    "if_guard",
+    "select_case",
+    "do_once",
+    "while_once",
+    "error_guard",
+    "for_once"
+  ],
+  "-expansion": [
+    "delayed",
+    "for_indirect",
+    "call_double",
+    "percent"
+  ],
+  "-representation": [
+    "decimal_pipe",
+    "hex_compact",
+    "decimal_dash",
+    "reversed_decimal",
+    "hex_colon",
+    "base64_literal",
+    "hex_dash",
+    "reversed_hex",
+    "decimal_comma",
+    "base64_chunks"
+  ],
+  "-transform": [
+    "subtract_modulo_256",
+    "repeating_key_xor",
+    "reverse_bytes",
+    "rolling_xor",
+    "single_byte_xor",
+    "reverse_then_xor",
+    "add_modulo_256",
+    "identity"
+  ],
+  "_format": [
+    "elf",
+    "pe",
+    "pe_cli"
+  ],
+  "control": [
+    "direct",
+    "errorlevel_guard",
+    "goto_dispatch",
+    "call_subroutine",
+    "if_guard",
+    "select_case",
+    "do_once",
+    "while_once",
+    "error_guard",
+    "for_once"
+  ],
+  "expansion": [
+    "delayed",
+    "for_indirect",
+    "call_double",
+    "percent"
+  ],
+  "format": [
+    "elf",
+    "pe",
+    "pe_cli"
+  ],
+  "representation": [
+    "decimal_pipe",
+    "hex_compact",
+    "decimal_dash",
+    "reversed_decimal",
+    "hex_colon",
+    "base64_literal",
+    "hex_dash",
+    "reversed_hex",
+    "decimal_comma",
+    "base64_chunks"
+  ],
+  "transform": [
+    "subtract_modulo_256",
+    "repeating_key_xor",
+    "reverse_bytes",
+    "rolling_xor",
+    "single_byte_xor",
+    "reverse_then_xor",
+    "add_modulo_256",
+    "identity"
+  ]
+}

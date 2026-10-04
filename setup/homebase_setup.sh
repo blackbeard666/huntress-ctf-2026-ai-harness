@@ -3,6 +3,20 @@
 # Light deps only (no angr/ghidra — Homebase has ~3GB RAM); heavy analysis stays on the local box.
 # Idempotent; re-run after a Homebase factory reset.
 set -uo pipefail
+
+# System packages the solvers shell out to (we have sudo on Homebase). binutils => c++filt/strings/nm/objdump/
+# readelf; p7zip-full => 7z (so investigation + unzip() use the real tool, not a pyzipper-only fallback).
+# Non-fatal if apt is offline / no sudo: pyzipper still covers AES zips and the pure-Python paths still work.
+if command -v apt-get >/dev/null 2>&1; then
+  sudo -n DEBIAN_FRONTEND=noninteractive apt-get update -qq 2>/dev/null || true
+  if sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+        p7zip-full unzip file binutils nodejs 2>/dev/null; then
+    echo "[hb-setup] apt tools installed (7z/unzip/file/binutils/node)"
+  else
+    echo "[hb-setup] apt install skipped/failed (offline or no passwordless sudo) — pyzipper covers AES zips"
+  fi
+fi
+
 PIP="python3 -m pip install --user --break-system-packages -q"
 $PIP pyelftools pefile capstone keystone-engine unicorn pycryptodome pyzipper \
      androguard oletools python-evtx regipy LnkParse3 binary-refinery \

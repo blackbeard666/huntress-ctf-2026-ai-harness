@@ -47,11 +47,12 @@ def _probe_rank(aid):
 
 
 def probe_fields(cid, sdir, log=print):
-    """Turn the GM's per-SET feedback into per-FIELD signal. On the current started attempt, submit each
-    answer INDIVIDUALLY (sequentially — concurrent submits race and give false negatives) so the GM judges
-    each field on its own. Correct fields bank into confirmed.json (enriching the regression case); wrong
-    ones are returned as (answer_id, solver_value) for the offline generalize worker to re-derive exactly.
-    Best-effort: stops at the deadline / per-field caps. Writes diagnosis.json for inspection."""
+    """Turn the GM's per-SET feedback into per-FIELD signal on the current started attempt by BINARY SEARCH:
+    submit a group; if the GM accepts it every field in it is right, otherwise split it and recurse. ~2*log2(n)
+    submits per wrong field instead of n, so even a 6s clock localizes most failures (the old one-by-one probe
+    reached 2 of 159 fields). Sequential on purpose: concurrent submits race and give false negatives.
+    Returns [(answer_id, solver_value)] the GM rejected. Writes diagnosis.json, including which fields were never
+    judged (probe cut short by the deadline), so nobody mistakes an incomplete probe for "all fields correct"."""
     if cli.is_complete(cid):   # never start/burn a fresh attempt on an already-solved challenge
         return []
     contract = cli.load(cid, "start.json")
@@ -64,28 +65,166 @@ def probe_fields(cid, sdir, log=print):
     except Exception as e:  # noqa: BLE001 - probing is best-effort diagnostics
         log(f"[{cid}] probe: solver error {e}")
         answers = {}
-    wrong, verdicts = [], {}
-    for aid in sorted(ids, key=_probe_rank):
+    wrong = [(a, None) for a in ids if a not in answers]
+    ok_fields, complete = set(), True
+
+    def narrow(group):
+        nonlocal complete
+        if not group:
+            return
         left = seconds_left(contract)
         if left is not None and left <= 1.0:
-            break
-        if aid not in answers:
-            verdicts[aid] = "missing"
-            wrong.append((aid, None))
-            continue
-        kind, body, _ref = cli.submit(cid, {aid: answers[aid]})
-        verdicts[aid] = kind or "refused"
-        if kind == "incorrect":
-            wrong.append((aid, answers[aid]))
-        if kind == "expired" or (isinstance(body, dict) and "expired" in json.dumps(body).lower()):
-            break
-    ok = sum(1 for k in verdicts.values() if k in ("correct", "accepted"))
-    diag = {"attempt": cli.attempt_id(contract), "probed": len(verdicts), "total": len(ids),
-            "ok": ok, "wrong": [{"id": a, "solver_value": v} for a, v in wrong], "verdicts": verdicts}
+            complete = False
+            return
+        kind, _body, _ = cli.submit(cid, {k: answers[k] for k in group}, force=True)
+        if kind in ("correct", "accepted"):
+            ok_fields.update(group)
+            return
+        if kind != "incorrect":          # expired / error: stop, the rest stays unjudged
+            complete = False
+            return
+        if len(group) == 1:
+            wrong.append((group[0], answers[group[0]]))
+            return
+        mid = len(group) // 2
+        narrow(group[:mid])
+        narrow(group[mid:])
+
+    groups = {}
+    for a in sorted((a for a in ids if a in answers), key=_probe_rank):
+        groups.setdefault(_set_key(a), []).append(a)
+    for g in groups.values():
+        narrow(g)
+    judged = ok_fields | {a for a, _ in wrong}
+    diag = {"attempt": cli.attempt_id(contract), "probed": len(judged), "total": len(ids), "complete": complete,
+            "ok": len(ok_fields), "wrong": [{"id": a, "solver_value": v} for a, v in wrong],
+            "unjudged": [a for a in ids if a not in judged]}
     (cli.cdir(cid) / "diagnosis.json").write_text(json.dumps(diag, indent=2, ensure_ascii=False))
-    log(f"[{cid}] probe: {ok} ok, {len(wrong)} wrong of {len(verdicts)}/{len(ids)} probed"
+    log(f"[{cid}] probe: {len(ok_fields)} ok, {len(wrong)} wrong of {len(judged)}/{len(ids)} judged"
+        + ("" if complete else " (cut short by the deadline)")
         + (f" -> {[a for a, _ in wrong][:8]}" if wrong else ""))
     return wrong
+
+
+def resolve_labels_online(cid, sdir, wrong_aids, lane=None, log=print, budget=8):
+    """Resolve unconfirmed CLOSED-VOCAB labels by probing the GM directly (the only authority on the spelling),
+    instead of letting an OFFLINE generalize worker GUESS a label and burn a whole timed attempt testing it (the
+    Q6 pain: Day-4 vbscript control took 3 generalize cycles to reach `error_guard`). Uses/starts a fresh attempt,
+    runs the solver to see which wrong fields carry an UNCONFIRMED label IN THIS VARIANT (solver value not yet in
+    vocab.json for its family — i.e. this variant really does use the new construct), and submits the playbook's
+    ranked candidates one at a time on that attempt until the GM accepts one (banked + recorded to vocab.json by
+    labels.probe). Returns the set of answer_ids resolved. Only touches playbook label families; never flags/free text.
+    Safe: bounded by `budget` and the live deadline; any failure returns what resolved so far."""
+    from . import labels
+    try:
+        from lib import playbook
+    except ImportError:
+        playbook = None
+    if not wrong_aids or playbook is None:
+        return set()
+    if lane is None:
+        lane = labels.lane_of(cid)
+    targets = [a for a in wrong_aids if lane and playbook.entry_for(lane, a)]
+    if not targets:
+        return set()
+    body, _ = ensure_started(cid)
+    contract = cli.load(cid, "start.json")
+    art = latest_artifacts(cid)
+    if not body or not contract or not art:
+        return set()
+    try:
+        answers, _ = solvers.solve_contract(contract, art, default_solver=sdir)
+    except Exception as e:  # noqa: BLE001
+        log(f"[{cid}] online-resolve solve error: {e}")
+        answers = {}
+    vocab = labels.load_vocab()
+    resolved = set()
+    for aid in targets:
+        sv = answers.get(aid)
+        if sv and sv in vocab.get(labels.ending(aid), []):
+            continue  # this variant uses an already-confirmed construct for this field; nothing to resolve
+        left = seconds_left(contract)
+        if left is not None and left < 2:
+            break
+        cands = [c for c in playbook.seed_candidates(lane, aid, solver_value=sv) if c not in labels.judged_wrong(cid, aid)]
+        if not cands:
+            continue
+        r = labels.probe(cid, aid, cands, budget=budget, delay=0.3, log=log)
+        if r.get("accepted"):
+            resolved.add(aid)
+            log(f"[{cid}] online-resolved label {aid} = {r['accepted']} (cached to vocab.json)")
+    return resolved
+
+
+MAX_AUTO_CASES = int(__import__("os").environ.get("HCTF_MAX_AUTO_CASES", "40"))
+
+
+def present_only(contract, art_dir, answers):
+    """Keep only answers whose question's container file is actually in art_dir. A Mastery case saved without
+    evidence-02.zip once made the solver 'answer' set 2 from set 1's bytes and froze worker guesses as expected."""
+    skip = {"manifest.json", "contract.json", "result.json"}
+    have = ({p.name for p in Path(art_dir).iterdir() if p.is_file() and p.name not in skip}
+            if art_dir and Path(art_dir).exists() else set())
+    ids = contract.get("answer_ids") or []
+    qs = contract.get("questions") or []
+    containers = {}
+    for i, aid in enumerate(ids):
+        art = (qs[i].get("artifact") if i < len(qs) and isinstance(qs[i], dict) else "") or ""
+        containers[aid] = art.split(" -> ", 1)[0].strip()
+    # one delivery for every question: the file may be saved under another name (artifacts/latest), keep all
+    single = len({c for c in containers.values() if c}) <= 1 and len(have) >= 1
+    return {aid: v for aid, v in answers.items()
+            if single or not containers.get(aid) or containers[aid] in have}
+
+
+def last_result(cid):
+    """The last timed attempt's result (from hb_timed), kept for the generalize worker's diagnosis."""
+    p = cli.cdir(cid) / "last_timed.json"
+    try:
+        return json.loads(p.read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def _remember(cid, res):
+    keep = {k: res.get(k) for k in ("result", "full_result", "attempt_id", "window", "elapsed", "in_window", "phases",
+                                     "per_set", "bad_sets", "wrong", "fixed", "localize_complete", "routed", "missing",
+                                     "localize_tried")
+            if k in res}
+    (cli.cdir(cid) / "last_timed.json").write_text(json.dumps(keep, indent=2, ensure_ascii=False))
+    if res.get("window"):
+        p = cli.cdir(cid) / "window.json"
+        try:
+            d = json.loads(p.read_text())   # keep the local_expired flag set by the dispatcher
+        except (OSError, ValueError):
+            d = {}
+        d["seconds"] = res["window"]
+        p.write_text(json.dumps(d))
+
+
+def capture_case(cid, solver_dir, res):
+    """Turn the attempt that just ran into a regression case `auto-<mode>-<attempt8>`: its exact bytes + contract,
+    expected = ONLY the answers the GM verified on that attempt (all of them when correct; accepted sets, fields
+    a localization subset proved right, and labels the GM accepted as corrections otherwise). Keeps the newest
+    HCTF_MAX_AUTO_CASES auto cases. Returns the case name or None."""
+    verified = res.get("verified") or (res.get("submitted") if str(res.get("result")).lower() == "correct" else None)
+    tdir = timed_dir(cid)
+    if not verified or not (tdir / "contract.json").exists():
+        return None
+    contract = json.loads((tdir / "contract.json").read_text())
+    att = cli.attempt_id(contract)
+    if not att or att != res.get("attempt_id"):   # never pair a contract with another attempt's bytes
+        return None
+    verified = present_only(contract, tdir, verified)
+    if not verified:
+        return None
+    name = f"auto-{solvers.mode_of(cid)}-{att[:8]}"
+    solvers.add_case(solver_dir, name, contract, tdir, verified)
+    autos = sorted((Path(solver_dir) / "cases").glob("auto-*"), key=lambda p: p.stat().st_mtime)
+    for old in autos[:-MAX_AUTO_CASES] if len(autos) > MAX_AUTO_CASES else []:
+        import shutil
+        shutil.rmtree(old, ignore_errors=True)
+    return name
 
 
 def timed_dir(cid):
@@ -159,13 +298,27 @@ def run(cid, solver_dir, fix=None, log=print, op="start"):
       expired            -> the attempt's clock ran out before we could submit a complete answer
     """
     from . import workers
-    res = workers.run_timed_auto(solver_dir, cid, op=op)
+    res = workers.run_timed_auto(solver_dir, cid, op=op, log=log)
     r = str(res.get("result", "")).lower()
-    log(f"[{cid}] timed: {json.dumps({k: res.get(k) for k in ('result', 'remaining', 'elapsed', 'missing', 'per_set', 'bad_sets', 'attempt_id') if k in res})}")
+    log(f"[{cid}] timed: {json.dumps({k: res.get(k) for k in ('result', 'remaining', 'elapsed', 'window', 'routed', 'missing', 'per_set', 'bad_sets', 'wrong', 'fixed', 'attempt_id') if k in res})}")
+    try:
+        _remember(cid, res)
+        case = capture_case(cid, Path(solver_dir), res)
+        if case:
+            log(f"[{cid}] saved this variant as regression case {case} ({len(res.get('verified') or res.get('submitted') or {})} GM-verified answers)")
+    except Exception as e:  # noqa: BLE001 - capture is best-effort
+        log(f"[{cid}] variant capture note: {e}")
     if r == "correct":
         # Record the confirmed answers + a correct submission locally (the timed runner submits to the GM
         # directly), so cli.is_complete and the dashboard reflect reality.
         cli.record_remote_result(cid, res.get("attempt_id"), res.get("submitted") or {}, "correct", res.get("detail"))
+        # Promote any newly-confirmed closed-vocab labels (e.g. a VBScript control form the single never saw)
+        # into vocab.json, so the in-window corrector fixes the same construct next time without generalizing.
+        try:
+            from . import labels
+            labels.record_from_confirmed(cid, log=log)
+        except Exception as e:  # noqa: BLE001 - label caching is best-effort
+            log(f"[{cid}] label cache note: {e}")
         return "correct"
     if cli.is_complete(cid):
         return "correct"

@@ -57,10 +57,16 @@ def dispatch(contract, default_solver=None):
     Returns ({solver_dir: [answer_id, ...]}, [unmatched answer_ids])."""
     idx = question_index()
     keys = list(idx)
+    # The challenge's own solver wins for questions its cases cover: identical wording is reused across days for a
+    # different artifact type (Day 4 VBScript "Recover the primary MITRE ATT&CK technique ID, or none." = Day 3 Batch).
+    own = set()
+    if default_solver is not None:
+        for c in Path(default_solver).glob("cases/*/contract.json"):
+            own.update(_norm(q.get("question")) for q in json.loads(c.read_text()).get("questions", []))
     groups, unmatched = {}, []
     for aid, q in paired_questions(contract):
         n = _norm(q.get("question"))
-        sdir = idx.get(n)
+        sdir = default_solver if n in own else idx.get(n)
         if sdir is None and keys:
             close = difflib.get_close_matches(n, keys, n=1, cutoff=0.85)
             sdir = idx[close[0]] if close else None
@@ -140,7 +146,7 @@ def add_case(sdir, name, contract, artifacts, expected):
         shutil.rmtree(case)
     (case / "artifacts").mkdir(parents=True)
     for f in Path(artifacts).iterdir():
-        if f.is_file() and f.name not in ("manifest.json", "contract.json"):
+        if f.is_file() and f.name not in ("manifest.json", "contract.json", "result.json"):
             shutil.copy2(f, case / "artifacts" / f.name)
     (case / "contract.json").write_text(json.dumps(contract, indent=2, ensure_ascii=False))
     (case / "expected.json").write_text(json.dumps(expected, indent=2, ensure_ascii=False))

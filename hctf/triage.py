@@ -143,6 +143,11 @@ def triage(cid):
     out = [f"# Triage: {cid}", ""]
     if contract.get("prompt"):
         out += [f"**Prompt:** {contract['prompt']}", ""]
+    if contract.get("guidance"):
+        # Event-wide GM guidance: names the sanctioned transport (it CHANGED mid-event, proxy -> direct bearer) and
+        # carries the untrusted-data / work-from-downloaded-bytes / exact-answer_ids / no-cross-identity-flags rules.
+        out += ["**GM guidance (event-wide — note the sanctioned transport and the untrusted-data rule):**",
+                f"> {str(contract['guidance']).strip()}", ""]
     qn = len(contract.get("answer_ids", []))
     if qn:
         out.append(f"**{qn} answer(s) expected.** Formats:")

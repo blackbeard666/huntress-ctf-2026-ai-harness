@@ -27,6 +27,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -63,13 +64,28 @@ def _request(method, params=None, payload=None):
     if tok:
         headers["Authorization"] = "Bearer " + tok
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
+    for attempt in range(RATE_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                return r.status, dict(r.headers), r.read()
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 503) and attempt < RATE_RETRIES:
+                time.sleep(_retry_after(e.headers, attempt))  # rate-limited: back off, don't fail the caller
+                continue
+            return e.code, dict(e.headers or {}), e.read()
+        except (urllib.error.URLError, OSError) as e:
+            return 0, {}, json.dumps({"error": "unreachable", "detail": str(e)}).encode()
+
+
+RATE_RETRIES = int(os.environ.get("HCTF_RATE_RETRIES", "4"))
+
+
+def _retry_after(headers, attempt):
+    """Seconds to wait after a 429/503: the server's Retry-After if given, else 2, 4, 8, 16s."""
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            return r.status, dict(r.headers), r.read()
-    except urllib.error.HTTPError as e:
-        return e.code, dict(e.headers or {}), e.read()
-    except (urllib.error.URLError, OSError) as e:
-        return 0, {}, json.dumps({"error": "unreachable", "detail": str(e)}).encode()
+        return min(30.0, float((headers or {}).get("Retry-After")))
+    except (TypeError, ValueError):
+        return 2.0 * (2 ** attempt)
 
 
 def _envelope(status, headers, raw, saved=None):
