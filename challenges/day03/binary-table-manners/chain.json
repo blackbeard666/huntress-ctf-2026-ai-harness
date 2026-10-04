@@ -1,0 +1,12 @@
+{
+  "stage": "done",
+  "name": "\u2699\ufe0f Table Manners",
+  "lane": "binary-reverse-engineering",
+  "worker": null,
+  "updated": "2026-10-04T16:57:20",
+  "launches": 1,
+  "help": "# HELP: Table Manners single solve, 22/24 accepted, 2 fields blocked on the GM's exact rendering\n\nEvery other field is GM-accepted (see notes.md). Both open concepts are understood from the bytes; what's unknown is\nthe generator's exact rendering, and the local per-field wrong cap (HCTF_MAX_WRONG=6) has been reached or almost reached.\n\n## d01_analysis_disassembly (cap EXHAUSTED, 6 wrong)\nBytes: recover_code @0x401126 = b8 a4 1f 00 00 c3 (mov eax, 0x1fa4 ; ret). Rejected (all capstone intel `\"{mn} {op}\"`):\nrecover_code [\"mov eax, 0x1fa4\",\"ret\"], same with \"ret \" (trailing space), main by st_size (7 insns), whole .text,\n_start from e_entry to hlt (12 insns).\nUntried ideas, ranked: objdump intel `[\"mov eax,0x1fa4\",\"ret\"]` (the solver emits this now); address-prefixed\n`[\"0x401126: mov eax, 0x1fa4\",\"0x40112b: ret\"]`; AT&T `[\"mov $0x1fa4,%eax\",\"ret\"]`; LLVM decimal `[\"mov eax, 8100\",\"ret\"]`.\n\n## d03_analysis_format (1 try left, 5 wrong)\n.NET 8 IL-only PE32 i386 assembly (machine \"i386\" accepted). Rejected: pe, dotnet, pe32, .net, cil.\nUntried, ranked: msil, managed, pe-dotnet, clr, pei-i386 (unlikely: objdump-style elf64-x86-64 was rejected on Day 2).\n\nDecision needed: raise HCTF_MAX_WRONG for these two non-flag fields, or accept 22/24.\n",
+  "attempt": 1,
+  "time_trial_result": "correct",
+  "mastery_result": "correct"
+}

@@ -1,0 +1,11 @@
+{
+  "attempt": "bc1174ec-68fc-42d9-ba04-d99de7591505",
+  "probed": 2,
+  "total": 159,
+  "ok": 2,
+  "wrong": [],
+  "verdicts": {
+    "batch-benign-adapter": "accepted",
+    "batch-benign-attack": "accepted"
+  }
+}

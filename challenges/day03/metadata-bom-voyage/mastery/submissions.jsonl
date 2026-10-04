@@ -1,0 +1,1 @@
+{"ts": "20261004T044602Z", "attempt": "edc65151-f3e2-4491-bb36-a63c4b60b7c8", "answers": {"set1.evidence-note-copy-text-utf8-bom-present": "false", "set2.d03-text-001-text-utf8-bom-present": "true"}, "http": 200, "kind": "correct", "confirmed": ["set1.evidence-note-copy-text-utf8-bom-present", "set2.d03-text-001-text-utf8-bom-present"], "body": null, "via": "homebase"}

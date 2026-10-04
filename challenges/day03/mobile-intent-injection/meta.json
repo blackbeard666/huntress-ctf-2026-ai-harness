@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-03-intent-injection",
+  "lane": "mobile-android",
+  "name": "📱 Intent Injection",
+  "ids": {
+    "single_solve": "mobile-android-day-03-intent-injection",
+    "time_trial": "mobile-android-day-03-intent-injection/time_trial",
+    "mastery": "mobile-android-day-03-intent-injection/mastery"
+  }
+}

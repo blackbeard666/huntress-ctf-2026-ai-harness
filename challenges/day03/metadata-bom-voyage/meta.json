@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-03-bom-voyage",
+  "lane": "metadata-forensics",
+  "name": "🔎 BOM Voyage",
+  "ids": {
+    "single_solve": "metadata-forensics-day-03-bom-voyage",
+    "time_trial": "metadata-forensics-day-03-bom-voyage/time_trial",
+    "mastery": "metadata-forensics-day-03-bom-voyage/mastery"
+  }
+}

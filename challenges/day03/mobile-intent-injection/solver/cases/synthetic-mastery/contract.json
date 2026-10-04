@@ -1,0 +1,30 @@
+{
+  "questions": [
+    {
+      "id": "set1.answer",
+      "question": "For case MOB-03-SYN1: Submit only the exact backend answer code returned for this case.",
+      "artifact": "delivery 1: intent_injection_mastery_01.apk",
+      "answer_format": {
+        "kind": "pattern",
+        "syntax": "ANS- followed by exactly 16 uppercase hexadecimal characters"
+      },
+      "normalization": "exact",
+      "set": 1
+    },
+    {
+      "id": "set2.answer",
+      "question": "For case MOB-03-SYN2: Submit only the exact backend answer code returned for this case.",
+      "artifact": "delivery 2: intent_injection_mastery_02.apk",
+      "answer_format": {
+        "kind": "pattern",
+        "syntax": "ANS- followed by exactly 16 uppercase hexadecimal characters"
+      },
+      "normalization": "exact",
+      "set": 2
+    }
+  ],
+  "answer_ids": [
+    "set1.answer",
+    "set2.answer"
+  ]
+}

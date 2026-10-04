@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-03-managed-configuration",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Table Manners",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-03-managed-configuration",
+    "time_trial": "binary-reverse-engineering-day-03-managed-configuration/time_trial",
+    "mastery": "binary-reverse-engineering-day-03-managed-configuration/mastery"
+  }
+}
