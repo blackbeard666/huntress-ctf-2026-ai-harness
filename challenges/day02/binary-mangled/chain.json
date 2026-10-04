@@ -1,12 +1,12 @@
 {
-  "stage": "mastery:running",
+  "stage": "done",
   "name": "\u2699\ufe0f Mangled",
   "lane": "binary-reverse-engineering",
   "worker": null,
-  "updated": "2026-10-04T02:51:30",
+  "updated": "2026-10-04T22:49:46",
   "launches": 1,
   "help": "# HELP: Mangled single solve: 16/17 accepted, `cpp_format` open\n\nAll fields except `cpp_format` are GM-accepted (see confirmed.json); the solver reproduces them (`hctf solver-test` ok).\n\n`cpp_format` (day02-cpp.elf, \"exact artifact-derived value\", \"none only when absent\") rejected so far:\n`ELF`, `ELF64`, `HCFG`, `elf64-x86-64`. Five incorrect submissions in this attempt (one was a batch with a mutex quoting bug),\nso the local cap is past; I stopped probing.\n\nFacts: the C++ build is an ELF64 x86-64 EXEC (not PE, despite the prompt), its config is the `.hcfg` blob\n(`HCFG` v1, xor 0x31, CRC32 header) holding JSON with keys campaign, domain, ipv4, url, mutex, windows_path,\nlinux_path, service, host_model (no \"format\" key). The binary prints a JSON trace\n(schema `huntress.binary.dynamic_trace.v1`) with no format field either.\n\nUntried candidates, roughly by likelihood: `json` (the config payload format), `ELF 64-bit LSB executable` (`file`),\n`elf` (lowercase), `PE32+`/`PE` (if the generator labels the \"Windows\" C++ build by its intended format).\nA human (or the Time Trial fixer, if a variant reveals the vocabulary) should decide; then add the mapping to\n`FORMAT_NAMES` in solver/solve.py (keyed by (kind, bits), e.g. (\"ELF\", 64)).\n",
-  "attempt": 4,
+  "attempt": 6,
   "time_trial_result": "correct",
-  "mastery_result": "blocked"
+  "mastery_result": "correct"
 }

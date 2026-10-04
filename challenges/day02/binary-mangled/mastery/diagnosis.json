@@ -1,0 +1,13 @@
+{
+  "attempt": "e55a4f51-a234-4f31-8081-e205bf4044a3",
+  "probed": 4,
+  "total": 34,
+  "ok": 4,
+  "wrong": [],
+  "verdicts": {
+    "set1.c_machine": "accepted",
+    "set1.c_marker": "accepted",
+    "set1.campaign": "accepted",
+    "set1.cpp_format": "accepted"
+  }
+}
