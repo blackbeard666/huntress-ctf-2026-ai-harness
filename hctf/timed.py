@@ -33,6 +33,61 @@ def latest_artifacts(cid):
     return p.resolve() if p.exists() else None
 
 
+# answer_id field-name fragments that tend to carry GM-specific vocabulary (the usual wrong answers),
+# as opposed to deterministic values (sha256/crc32/addresses). Probed first so a tight clock still
+# reaches the likely culprits.
+_PROBE_SUSPECT = ("format", "symbol", "vtable", "score", "attack", "technique", "scenario", "role",
+                  "style", "machine", "endian", "adapter", "kind", "type", "extension", "note", "mutex",
+                  "marker", "campaign", "family", "class")
+
+
+def _probe_rank(aid):
+    f = aid.rsplit(".", 1)[-1].lower()
+    return (0 if any(s in f for s in _PROBE_SUSPECT) else 1, aid)
+
+
+def probe_fields(cid, sdir, log=print):
+    """Turn the GM's per-SET feedback into per-FIELD signal. On the current started attempt, submit each
+    answer INDIVIDUALLY (sequentially — concurrent submits race and give false negatives) so the GM judges
+    each field on its own. Correct fields bank into confirmed.json (enriching the regression case); wrong
+    ones are returned as (answer_id, solver_value) for the offline generalize worker to re-derive exactly.
+    Best-effort: stops at the deadline / per-field caps. Writes diagnosis.json for inspection."""
+    if cli.is_complete(cid):   # never start/burn a fresh attempt on an already-solved challenge
+        return []
+    contract = cli.load(cid, "start.json")
+    art = latest_artifacts(cid)
+    if not contract or not art:
+        return []
+    ids = contract.get("answer_ids", []) or []
+    try:
+        answers, _ = solvers.solve_contract(contract, art, default_solver=sdir)
+    except Exception as e:  # noqa: BLE001 - probing is best-effort diagnostics
+        log(f"[{cid}] probe: solver error {e}")
+        answers = {}
+    wrong, verdicts = [], {}
+    for aid in sorted(ids, key=_probe_rank):
+        left = seconds_left(contract)
+        if left is not None and left <= 1.0:
+            break
+        if aid not in answers:
+            verdicts[aid] = "missing"
+            wrong.append((aid, None))
+            continue
+        kind, body, _ref = cli.submit(cid, {aid: answers[aid]})
+        verdicts[aid] = kind or "refused"
+        if kind == "incorrect":
+            wrong.append((aid, answers[aid]))
+        if kind == "expired" or (isinstance(body, dict) and "expired" in json.dumps(body).lower()):
+            break
+    ok = sum(1 for k in verdicts.values() if k in ("correct", "accepted"))
+    diag = {"attempt": cli.attempt_id(contract), "probed": len(verdicts), "total": len(ids),
+            "ok": ok, "wrong": [{"id": a, "solver_value": v} for a, v in wrong], "verdicts": verdicts}
+    (cli.cdir(cid) / "diagnosis.json").write_text(json.dumps(diag, indent=2, ensure_ascii=False))
+    log(f"[{cid}] probe: {ok} ok, {len(wrong)} wrong of {len(verdicts)}/{len(ids)} probed"
+        + (f" -> {[a for a, _ in wrong][:8]}" if wrong else ""))
+    return wrong
+
+
 def timed_dir(cid):
     """Where the one-shot timed runner (hb_timed) keeps the attempt's contract.json + downloads."""
     return cli.ROOT / ".run" / "tmp-timed" / re.sub(r"[^A-Za-z0-9]+", "_", cid)

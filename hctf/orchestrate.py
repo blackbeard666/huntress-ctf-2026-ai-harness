@@ -187,17 +187,28 @@ class Chain:
         set_state(self.base, stage=f"{solvers.mode_of(cid)}:fixing")
         self.run_worker(cid, "fix", prompt, max(20, (left or 600) - 15), urgent=True)
 
-    def generalize(self, cid):
-        """Offline (no clock): improve the solver so it handles the captured variant and still passes old cases."""
+    def generalize(self, cid, wrong=None):
+        """Offline (no clock): improve the solver so it handles the captured variant and still passes old cases.
+        `wrong` is the per-field GM probe result (list of (answer_id, solver_value) the GM rejected): [] means
+        every probed field was accepted (a timing problem, not correctness), None means no probe ran."""
         mode = solvers.mode_of(cid)
         probs = []
         _, res = ensure_case_and_test(paths.base_id(cid), self.sdir)
         for r in (res or []):
             if not r.get("ok"):
                 probs.append(f"case {r['case']}: error={r.get('error')} diff={r.get('diff')} unverified={r.get('unverified')}")
+        if wrong:
+            gm_wrong = "\n".join(f"  - `{a}`: solver produced {v!r}, the GM judged this INCORRECT — re-derive this "
+                                 "exact field from the bytes and make the solver reproduce the GM's value" for a, v in wrong)
+        elif wrong == []:
+            gm_wrong = ("  - the per-field probe found EVERY field ACCEPTED: the answers are correct but the attempt did "
+                        "not finish in time. Do NOT change correct answers — make the solver faster / reduce its work.")
+        else:
+            gm_wrong = "  - (no per-field GM probe was available this cycle)"
         prompt = workers.render("generalize", cid=cid, base=self.base, mode=mode,
                                 chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
-                                problems="\n".join(f"  - {p}" for p in probs) or "  - solver did not produce all answers")
+                                problems="\n".join(f"  - {p}" for p in probs) or "  - solver did not produce all answers",
+                                gm_wrong=gm_wrong)
         set_state(self.base, stage=f"{mode}:generalizing")
         self.run_worker(cid, "generalize", prompt, GENERALIZE_TIMEOUT)
 
@@ -242,15 +253,16 @@ class Chain:
             return True
         set_state(self.base, stage="single:fetch")
         body, err = timed.ensure_started(cid)
+        # Reuse-first (no model time): a prior solver matched by question text may already solve this. Try it
+        # BEFORE triage so a hit skips triage and the LLM worker entirely — the fastest path to first blood.
+        if not welcome and self.try_existing_solvers(cid):
+            say(f"[{cid}] solved by existing solver library (no worker needed)")
+            return True
         try:
             from . import triage as triage_mod
             triage_mod.triage(cid)  # deterministic grounding before the LLM worker starts
         except Exception as e:  # noqa: BLE001 - triage is best-effort
             say(f"[{cid}] triage note: {e}")
-        # Reuse-first: a prior day's solver (matched by question text) may already solve this. No model time.
-        if not welcome and self.try_existing_solvers(cid):
-            say(f"[{cid}] solved by existing solver library (no worker needed)")
-            return True
         if body is None:
             # e.g. read-the-rules: no artifact, but the contract still names the answer ids
             st = cli.call(cid, "status", cid)["body"] or {}
@@ -319,13 +331,17 @@ class Chain:
             # execution the window is no longer the bottleneck). Always improve the solver offline, then retry.
             # The generalize worker re-derives the variant's correct answers itself (ground truth), so it can
             # fix WRONG answers too, not just missing ones. Fetch the variant locally for it to work on.
+            wrong = None
             try:
-                timed.ensure_started(cid)  # local start+download of the current variant for offline work
+                timed.ensure_started(cid)  # fresh attempt + download of the current variant for offline work
+                # Per-field probe: submit each answer alone so the GM's per-SET verdict becomes per-FIELD.
+                # Banks the correct fields and tells the generalize worker EXACTLY which ones are wrong.
+                wrong = timed.probe_fields(cid, self.sdir, log=say)
             except Exception as e:  # noqa: BLE001
-                say(f"[{cid}] local fetch for generalize failed: {e}")
-            capture_variant(cid, self.sdir)
+                say(f"[{cid}] local fetch/probe for generalize failed: {e}")
+            capture_variant(cid, self.sdir)  # expected.json now enriched by the probe-confirmed fields
             say(f"[{cid}] {res}: improving the solver offline for this variant, then retrying")
-            self.generalize(cid)
+            self.generalize(cid, wrong=wrong)
         set_state(self.base, stage=f"{mode}:blocked")
         return False
 

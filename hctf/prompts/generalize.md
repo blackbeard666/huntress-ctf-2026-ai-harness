@@ -5,6 +5,10 @@ You are a solver-hardening worker in the Huntress CTF harness. No clock is runni
 - Current failures:
 {problems}
 
+GM PER-FIELD VERDICT (authoritative — the harness just probed each answer_id individually against the live Game Master; `{solver_dir}/../diagnosis.json` has the raw data). FIX EXACTLY THESE, and do not churn fields the GM already accepted:
+{gm_wrong}
+The accepted fields are CORRECT — changing them will regress a passing answer. Concentrate only on the rejected ones: re-derive each from the bytes and find the exact value/representation the GM expects (its wording, prefix, case, or encoding may differ from the obvious one).
+
 The timed variants use the SAME concept as the Single Solve but differ in the bytes: different file names, keys, encoding order/depth, an added per-line or per-file prefix/wrapper, archive wrappers, extra Mastery sets, or a question carried over from an earlier day. One variant just beat the solver; the clock was too short to fix it live.
 
 IMPORTANT: the live attempt did NOT succeed, so the current solver is WRONG or INCOMPLETE for this variant —
