@@ -173,7 +173,9 @@ def c_status(a):
 def c_start(a, op="start"):
     with chal_lock(a.id):
         env = call(a.id, op, a.id)
-    if env["body"] is not None and env["http"] == 200:
+    # An after-deadline start answers 200 {"result": "expired"} with no attempt_id/answer_ids; saving that would
+    # clobber the last real contract (lost the Mastery 6279ad62 case and broke solver-run).
+    if env["body"] is not None and env["http"] == 200 and attempt_id(env["body"]):
         save(a.id, "start.json", env["body"])
         save(a.id, "contract.json", env["body"])
     emit(env["body"] if env["body"] is not None else env)
@@ -196,7 +198,7 @@ def _planned_downloads(body):
     questions[i].artifact is often a 'container.zip -> member' path. So pair the UNIQUE capabilities
     (from artifacts[]/downloads[]/download) with the UNIQUE container names from the questions, by order.
     Each file is saved under its container name; the solver resolves the '-> member' part itself."""
-    cap_re = re.compile(r"/download/([0-9a-f]{64})")
+    cap_re = re.compile(r"(?:/download/|[?&]capability=)([0-9a-f]{64})")  # Homebase proxy or public GM
 
     def cap_of(x):
         s = x.get("download", "") if isinstance(x, dict) else str(x)
@@ -250,7 +252,10 @@ def c_artifact(a):
         emit(env["body"] if env["body"] is not None else env)
         return http_exit(env) or EXIT["error"]
     ts = now()
-    rdir = f"{remote.HB_DIR}/dl/{paths.slugify(a.id)}/{ts}"
+    local = cdir(a.id) / "artifacts" / ts
+    # Local transport: gm.py runs here, so save straight into the mode dir (no Homebase round trip).
+    on_here = remote.gm_transport() == "local"
+    rdir = str(local) if on_here else f"{remote.HB_DIR}/dl/{paths.slugify(a.id)}/{ts}"
     saved = []
     for name, cap, sha in plan:
         env = call(a.id, "download", cap, rdir, "--name", name, timeout=600)
@@ -261,8 +266,8 @@ def c_artifact(a):
         if sha and s["sha256"] != sha:
             raise RuntimeError(f"sha256 mismatch for {name}: GM said {sha}, got {s['sha256']}")
         saved.append((name, s))
-    local = cdir(a.id) / "artifacts" / ts
-    remote.rsync_from(f"~/{rdir}", local)
+    if not on_here:
+        remote.rsync_from(f"~/{rdir}", local)
     manifest = []
     for name, s in saved:
         p = local / name

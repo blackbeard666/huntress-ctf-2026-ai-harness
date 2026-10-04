@@ -1,18 +1,25 @@
 # Game Master and CourseStack API notes (measured 2026-10-03)
 
-## Reachability (important)
-- GM `http://10.0.0.219/huntress-ctf-proxy` is reachable ONLY from inside Homebase (10.1.50.243).
-  Over the player VPN (Windows OpenVPN, routes 10.0.0.0/16 + 10.1.0.0/16 via 10.200.0.1) the GM times out
-  on TCP/80 and ICMP, whether Homebase is stopped or running.
-- Homebase SSH (`HuntressCTF@10.1.50.243`) IS reachable over the VPN, but only while the VM is running.
-- From Homebase, plain `curl` with no extra headers works; identity is supplied by the network path.
+## Reachability (updated 2026-10-04: pairing token)
+- **DEFAULT (direct):** the GM is now reachable from anywhere at `https://2026.huntress.ctf.games` with a
+  per-identity **pairing token**: header `Authorization: Bearer <token>`. No VPN, no SSH, no Homebase, no credits.
+  Same `?op=...` / POST-JSON contract as the inside proxy (root path; `GET /?op=openapi`). Latency ~0.2s/call —
+  easily fast enough for the ~6s timed windows, so timed runs are LOCAL now too.
+  - Mint once from inside the CTF env (on Homebase): `curl -sS -X POST 'http://10.0.0.219/huntress-ctf-proxy?op=pair'`.
+    Shown once. Stored at `secrets/gm_pairing_token` (gitignored); identity note in `secrets/gm_pairing_token.id`.
+    Current token: minted 2026-10-04, **expires 2026-11-01T14:00:00Z** (re-pair before then).
+  - The `hctf` CLI uses this by default (`remote.gm_transport()` -> "local"; token via `HUNTRESS_GM_TOKEN` or the secret).
+- **INSIDE proxy (fallback / in-network backends):** `http://10.0.0.219/huntress-ctf-proxy` is reachable ONLY from
+  inside Homebase (10.1.50.243); identity comes from the network path (no token). Over the player VPN the GM itself
+  times out on TCP/80 + ICMP, but Homebase SSH (`HuntressCTF@10.1.50.243`) IS reachable while the VM runs.
+  Use this for `hctf hb exec -- <cmd>` against challenge backends that live inside the CTF network (e.g. web lane).
+  Force it for GM calls with `HCTF_GM_TRANSPORT=ssh` (expects the VM up).
 - SSH tunnels DO NOT work: sshd answers `channel open failed: administratively prohibited` for -L and -D.
   Treat this as a deliberate organizer control; do not try to get around it.
-- Works: run the GM client ON Homebase over SSH (key auth, project key secrets/huntress_homebase installed in Homebase
-  ~/.ssh/authorized_keys; a factory Reset wipes it). A fresh ssh exec takes ~3.4s; with ControlMaster multiplexing 0.6-2s;
-  8 parallel calls over one mux finish in 2.5s. rsync is present on both ends for moving artifacts.
+- GM client on Homebase over SSH (key auth, project key secrets/huntress_homebase in Homebase ~/.ssh/authorized_keys;
+  a factory Reset wipes it): fresh ssh exec ~3.4s; ControlMaster mux 0.6-2s; 8 parallel over one mux ~2.5s. rsync both ends.
 - Homebase: Ubuntu 24.04 on AWS, 2 vCPU, 3 GB RAM, 38 GB disk (29 GB free). Has codex-cli 0.159.3,
-  Claude Code 2.1.286, docker, node, python3.
+  Claude Code 2.1.286, docker, node, python3. Role now: one-time pairing + in-network `hctf hb exec` + optional codex pool.
 - Codex: `~/.codex/config.toml`: provider amazon-bedrock-runtime, model global.openai.gpt-6-luna, effort medium.
   `codex exec --skip-git-repo-check "<prompt>" </dev/null` works headless (stdin must be closed).
   A trivial prompt cost ~7.9k tokens (fixed overhead). Skills dir: `~/.codex/skills/` (empty).

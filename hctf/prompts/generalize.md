@@ -21,8 +21,12 @@ Do this:
    this variant's values. Reuse/extend `lib/*` (and record confirmed GM vocabulary in `lib/knowledge.py`).
 3. `hctf solver-test {base}` must pass for EVERY case, and `hctf solver-run {cid}` must output every answer_id,
    before you stop.
-4. Confirm the solver imports only libraries available on Homebase too (it will run there under the ~6s clock):
-   stdlib, `lib.*`, pyelftools, pefile, capstone, pycryptodome, pyzipper, androguard, droidasc, binary-refinery,
-   and shelling out to node/c++filt/unzip. Avoid anything heavier.
+4. The solver runs LOCALLY against the public Game Master under a short clock (~6-10s for the whole
+   download+solve+submit), so keep it FAST and dependency-light. Artifacts are already downloaded for you
+   (in parallel) before the solver runs — don't fetch anything yourself. For a compounded Mastery bundle the
+   GM ships ONE download per set, often all named the same; pair each set to its bytes by the contract's
+   `artifacts[].sha256`, not by file name (use `lib.common.container_by_sha` / `delivery_missing`), or you will
+   answer set 2 from set 1's bytes. Import only: stdlib, `lib.*`, pyelftools, pefile, capstone, pycryptodome,
+   pyzipper, androguard, droidasc, binary-refinery, and shelling out to node/c++filt/unzip. Avoid anything heavier.
 5. Do NOT submit and do NOT start/retry any mode — the orchestrator retries with a fresh variant once you exit.
    Update `{solver_dir}/NOTES.md` with the variant axis you added.

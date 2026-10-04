@@ -135,6 +135,54 @@ def find_artifact(root, artifact):
     raise FileNotFoundError(f"{artifact!r} not found under {root}")
 
 
+def container_by_sha(root, contract, container):
+    """Path of the downloaded file that IS `container` (a question's 'x.zip -> member' container name), matched by the
+    contract's artifacts[].sha256 instead of by file name. The GM can ship one download per set that are all named
+    'evidence.zip' while the questions say 'evidence-01.zip', 'evidence-02.zip', ...: pair the unique container names
+    (question order) with the artifacts[] entries (list order), then find the saved file with that hash. None if the
+    contract carries no hashes or no file matches."""
+    import hashlib
+    arts = [a for a in (contract or {}).get("artifacts") or [] if isinstance(a, dict) and a.get("sha256")]
+    names = []
+    for q in (contract or {}).get("questions") or []:
+        n = Path((q.get("artifact") or "").partition("->")[0].strip()).name
+        if n and n not in names:
+            names.append(n)
+    name = Path(container).name
+    if not arts or name not in names:
+        return None
+    i = names.index(name)
+    if i >= len(arts) or (len(arts) != len(names) and len(arts) > 1):
+        return None  # can't pair names to hashes unambiguously
+    want = arts[i]["sha256"].lower()
+    for p in iter_files(root):
+        if hashlib.sha256(p.read_bytes()).hexdigest() == want:
+            return p
+    return None
+
+
+def delivery_missing(root, contract, container):
+    """True when the contract pairs its containers 1:1 with hashed deliveries (one download per Mastery set) and no
+    file under `root` is named `container` or hashes to its delivery: that set's bytes were never fetched. A member
+    name like 'resource-sample.ps1' exists in EVERY set's zip, so falling back to a name match would answer set 2
+    from set 1's bytes (seen on variant-mastery-7a6c43ab, where the live run only got delivery 1)."""
+    import hashlib
+    arts = [a for a in (contract or {}).get("artifacts") or [] if isinstance(a, dict) and a.get("sha256")]
+    names = []
+    for q in (contract or {}).get("questions") or []:
+        n = Path((q.get("artifact") or "").partition("->")[0].strip()).name
+        if n and n not in names:
+            names.append(n)
+    name = Path(container).name
+    if len(arts) < 2 or len(arts) != len(names) or name not in names:
+        return False
+    files = iter_files(root)
+    if any(p.name == name for p in files):
+        return False
+    want = arts[names.index(name)]["sha256"].lower()
+    return not any(hashlib.sha256(p.read_bytes()).hexdigest() == want for p in files)
+
+
 def printable(data):
     """Decoded text if data is ~all printable, else None."""
     try:

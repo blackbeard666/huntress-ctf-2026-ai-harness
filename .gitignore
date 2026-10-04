@@ -4,6 +4,8 @@ tools/
 secrets/
 challenges/*/*/*/artifacts/
 challenges/*/*/*/worker-*.log
+challenges/*/*/*/.stop-blocks-*
+hctf/dl/
 __pycache__/
 *.pyc
 /bin/*

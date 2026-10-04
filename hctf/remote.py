@@ -8,6 +8,7 @@ import json
 import os
 import shlex
 import subprocess
+import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -68,21 +69,46 @@ def ssh(cmd, timeout=180, check=True):
 
 
 ON_HOMEBASE = bool(os.environ.get("HCTF_ON_HOMEBASE"))  # set for workers running on Homebase itself
+GM_LOCAL = ROOT / "hctf" / "gm.py"
+INSIDE_GM = "http://10.0.0.219/huntress-ctf-proxy"  # the GM's inside address (SSH/Homebase fallback)
+
+
+def _have_token():
+    return bool(os.environ.get("HUNTRESS_GM_TOKEN")) or (SECRETS / "gm_pairing_token").exists()
+
+
+def gm_transport():
+    """How to reach the GM. 'local' (default) runs gm.py here against the public GM with the pairing
+    token; 'ssh' SSH-execs it on Homebase against the inside proxy (fallback: forced, or no token)."""
+    t = os.environ.get("HCTF_GM_TRANSPORT")
+    if t:
+        return t
+    if ON_HOMEBASE:
+        return "homebase-local"
+    return "local" if _have_token() else "ssh"
 
 
 def gm(*args, timeout=180):
-    """Run gm.py on Homebase and return its JSON envelope."""
-    if ON_HOMEBASE:
+    """Return gm.py's JSON envelope. Default transport runs the client LOCALLY against the public GM
+    (pairing token). Falls back to SSH-exec on Homebase (inside proxy) when HCTF_GM_TRANSPORT=ssh or
+    no pairing token is configured."""
+    transport = gm_transport()
+    if transport == "ssh":
+        r = ssh(f"HUNTRESS_GAME_MASTER_URL={INSIDE_GM} python3 ~/{HB_DIR}/gm.py "
+                + " ".join(shlex.quote(str(a)) for a in args), timeout=timeout)
+    elif transport == "homebase-local":
         r = subprocess.run(["python3", str(Path.home() / HB_DIR / "gm.py"), *map(str, args)],
+                           capture_output=True, text=True, timeout=timeout,
+                           env=dict(os.environ, HUNTRESS_GAME_MASTER_URL=INSIDE_GM))
+    else:  # local (default): public GM via pairing token
+        r = subprocess.run([sys.executable, str(GM_LOCAL), *map(str, args)],
                            capture_output=True, text=True, timeout=timeout)
-    else:
-        r = ssh(f"python3 ~/{HB_DIR}/gm.py " + " ".join(shlex.quote(str(a)) for a in args), timeout=timeout)
     try:
         env = json.loads(r.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError):
         raise RuntimeError(f"bad gm.py output: {r.stdout[:300]!r} {r.stderr[:300]!r}")
     if env.get("http") == 0:
-        raise Unreachable(f"GM unreachable from Homebase: {env.get('body')}")
+        raise Unreachable(f"GM unreachable ({transport}): {env.get('body')}")
     return env
 
 

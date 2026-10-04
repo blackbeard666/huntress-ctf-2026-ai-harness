@@ -46,10 +46,16 @@ def say(msg):
 # ---------------------------------------------------------------- governor
 
 class Governor:
-    def __init__(self):
+    """Credits only gate the OPTIONAL Homebase codex pool now. GM access and timed runs go direct over
+    the pairing token, so they no longer depend on credits. When Homebase is unused, credits aren't read."""
+
+    def __init__(self, hb_enabled=False):
         self._t, self._v, self._lock = 0, None, threading.Lock()
+        self.hb_enabled = hb_enabled
 
     def credits(self):
+        if not self.hb_enabled:
+            return 99.0  # Homebase unused: credits gate nothing, and reading them spins up the browser session
         with self._lock:
             if time.time() - self._t > 300 or self._v is None:
                 try:
@@ -61,10 +67,10 @@ class Governor:
             return self._v
 
     def allow_homebase_workers(self):
-        return self.credits() > CREDIT_SOFT
+        return self.hb_enabled and self.credits() > CREDIT_SOFT
 
     def allow_timed(self):
-        return self.credits() > CREDIT_HARD
+        return True  # timed runs locally against the public GM; no credit gate
 
 
 # ---------------------------------------------------------------- pools
@@ -126,7 +132,7 @@ def capture_variant(cid, sdir):
     """Save the current (unsolved) variant as a regression case so the offline fix worker can work on
     the real bytes. expected.json holds only answers the GM already confirmed (often empty here)."""
     contract = cli.load(cid, "start.json")
-    art = timed.latest_artifacts(cid)
+    art = timed.artifacts_for(cid, contract)
     if contract and art:
         name = f"variant-{solvers.mode_of(cid)}-{(cli.attempt_id(contract) or 'x')[:8]}"
         solvers.add_case(sdir, name, contract, art, cli.confirmed_answers(cid))
@@ -297,7 +303,7 @@ class Chain:
                 set_state(self.base, stage=f"{mode}:waiting-credits")
                 time.sleep(300)
             set_state(self.base, stage=f"{mode}:running", attempt=attempt + 1)
-            # Clock-critical path runs ON Homebase (adjacent to the GM; ~6s windows).
+            # Clock-critical path runs locally against the public GM (pairing token; ~6s windows).
             res = timed.run(cid, self.sdir, log=say)
             say(f"[{cid}] result: {res}")
             set_state(self.base, **{f"{mode}_result": res})
@@ -366,10 +372,11 @@ def released_challenges(day=None):
 
 
 def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None):
-    remote.ensure_up()
-    remote.deploy()
-    ensure_homebase_provisioned()  # solvers run on Homebase (hb_timed); make sure their deps are present
-    gov = Governor()
+    if hb_slots:  # Homebase is opt-in now (extra codex pool); GM + timed run locally via the pairing token
+        remote.ensure_up()
+        remote.deploy()
+        ensure_homebase_provisioned()  # codex workers run on Homebase; make sure their deps are present
+    gov = Governor(hb_enabled=bool(hb_slots))
     pools = Pools(local_slots, hb_slots, gov)
     groups = {}
     for c in released_challenges(day):

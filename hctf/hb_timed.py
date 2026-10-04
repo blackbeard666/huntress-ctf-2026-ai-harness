@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Runs ON Homebase: one-shot timed attempt entirely adjacent to the Game Master.
+"""One-shot timed attempt: the whole start -> download -> solve -> submit path in one process.
 
-Day-2 Time Trial windows are ~6 seconds, so the whole start -> download -> solve -> submit path must run
-where GM latency is sub-millisecond (Homebase), not orchestrated over SSH from WSL. The solver must already
-be correct (built/generalised offline); this just executes the clock-critical path as fast as possible.
+Runs LOCALLY against the public GM (pairing token) by default — direct HTTPS is fast enough for the
+~6s Time Trial windows, so no VM/SSH is needed. Still runs unchanged ON Homebase against the inside
+proxy (set HUNTRESS_GAME_MASTER_URL) as a fallback. The solver must already be correct
+(built/generalised offline); this just executes the clock-critical path as fast as possible.
 
 Usage:  python3 hb_timed.py <challenge-id> <solver_dir_rel_to_HW> [--op start|retry]
 Prints one JSON line: {result, remaining, deadline, elapsed, submitted, detail}.
@@ -17,22 +18,44 @@ import subprocess
 import sys
 import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-GM = os.environ.get("HUNTRESS_GAME_MASTER_URL", "http://10.0.0.219/huntress-ctf-proxy")
-HW = Path(__file__).resolve().parent.parent          # ~/hw
-CAP_RE = re.compile(r"/download/([0-9a-f]{64})")
+GM = os.environ.get("HUNTRESS_GAME_MASTER_URL", "https://2026.huntress.ctf.games")
+HW = Path(__file__).resolve().parent.parent          # project root locally; ~/hw on Homebase
+CAP_RE = re.compile(r"(?:/download/|[?&]capability=)([0-9a-f]{64})")  # Homebase proxy or public GM
+
+
+def _token():
+    """Pairing token for the public GM: env first, then the project-local secret (None in-network)."""
+    tok = os.environ.get("HUNTRESS_GM_TOKEN")
+    if tok:
+        return tok.strip()
+    try:
+        with open(HW / "secrets" / "gm_pairing_token") as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+def _auth(headers=None):
+    headers = dict(headers or {})
+    tok = _token()
+    if tok:
+        headers["Authorization"] = "Bearer " + tok
+    return headers
 
 
 def _post(payload, timeout=20):
     req = urllib.request.Request(GM, data=json.dumps(payload).encode(),
-                                 headers={"Content-Type": "application/json"}, method="POST")
+                                 headers=_auth({"Content-Type": "application/json"}), method="POST")
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())
 
 
 def _get_bytes(cap, timeout=20):
-    with urllib.request.urlopen(f"{GM}?op=download&capability={cap}", timeout=timeout) as r:
+    req = urllib.request.Request(f"{GM}?op=download&capability={cap}", headers=_auth())
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
 
 
@@ -100,12 +123,22 @@ def main():
         return
 
     # download artifacts into a temp dir next to the GM
-    adir = HW / ".tmp-timed" / re.sub(r"[^A-Za-z0-9]+", "_", a.cid)
+    adir = HW / ".run" / "tmp-timed" / re.sub(r"[^A-Za-z0-9]+", "_", a.cid)
     adir.mkdir(parents=True, exist_ok=True)
     for f in adir.glob("*"):
         f.unlink()
-    for name, cap in _plan(body):
+    # Download every per-set delivery CONCURRENTLY: over the public GM each call is ~0.2s RTT, so a
+    # many-file Mastery bundle must fetch in parallel or the ~6-10s window expires before the solver runs.
+    plan = _plan(body)
+
+    def _fetch(item):
+        name, cap = item
         (adir / name).write_bytes(_get_bytes(cap))
+
+    if plan:
+        with ThreadPoolExecutor(max_workers=min(8, len(plan))) as ex:
+            for _ in ex.map(_fetch, plan):  # propagate any download exception
+                pass
 
     # run the solver (already correct, offline-built); lib on PYTHONPATH
     contract = adir / "contract.json"

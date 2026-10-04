@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
-"""Minimal Game Master client. Standard library only, so it runs unchanged on Homebase,
-the only place the GM is reachable (the VPN can't reach it, and sshd forbids tunnels).
+"""Minimal Game Master client. Standard library only, so it runs unchanged anywhere
+(locally via the pairing token, or on Homebase against the inside proxy).
+
+Default transport is the public GM at https://2026.huntress.ctf.games with a per-identity
+pairing token (Authorization: Bearer ...). Set HUNTRESS_GAME_MASTER_URL to the inside proxy
+(http://10.0.0.219/huntress-ctf-proxy) to talk to the GM from inside the CTF network instead;
+there, identity comes from the network path and no token is needed.
 
 Every command prints exactly one JSON envelope on stdout:
   {"http": <status or 0>, "body": <parsed JSON or null>, "text": <raw text if not JSON>,
@@ -26,18 +31,38 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-# Exact URL: the proxy 404s if a trailing slash is added before the query string.
-GM = os.environ.get("HUNTRESS_GAME_MASTER_URL", "http://10.0.0.219/huntress-ctf-proxy")
+# Public GM (pairing-token) by default; override with the inside proxy URL when running in-network.
+# Note: the inside proxy 404s if a trailing slash is added before the query string, so never append one.
+GM = os.environ.get("HUNTRESS_GAME_MASTER_URL", "https://2026.huntress.ctf.games")
 TIMEOUT = 60
+
+
+def _token():
+    """Pairing token for the public GM: env first, then the project-local secret.
+    Returns None inside the CTF network (the inside proxy authenticates by network path)."""
+    tok = os.environ.get("HUNTRESS_GM_TOKEN")
+    if tok:
+        return tok.strip()
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "secrets", "gm_pairing_token")
+    try:
+        with open(path) as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
 
 
 def _request(method, params=None, payload=None):
     url = GM + ("?" + urllib.parse.urlencode(params) if params else "")
-    data = headers = None
+    data = None
+    headers = {}
     if payload is not None:
         data = json.dumps(payload).encode()
-        headers = {"Content-Type": "application/json"}
-    req = urllib.request.Request(url, data=data, method=method, headers=headers or {})
+        headers["Content-Type"] = "application/json"
+    tok = _token()
+    if tok:
+        headers["Authorization"] = "Bearer " + tok
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             return r.status, dict(r.headers), r.read()

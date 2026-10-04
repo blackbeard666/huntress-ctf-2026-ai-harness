@@ -8,6 +8,7 @@ import json
 import os
 import shlex
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -75,6 +76,30 @@ def sync_homebase_base():
         for f in ("CLAUDE.md", "AGENTS.md"):
             if (ROOT / f).exists():
                 remote.rsync_to(ROOT / f, f"~/{HB_WORK}/{f}")
+
+
+def run_timed(solver_dir, cid, op="start", timeout=60):
+    """Run the clock-critical timed attempt LOCALLY against the public GM (pairing token).
+    No VM, no SSH — the whole start->download->solve->submit path runs here. Returns hb_timed's JSON dict."""
+    rel = solver_dir.relative_to(ROOT)
+    env = dict(os.environ, PYTHONPATH=f"{ROOT}:{os.environ.get('PYTHONPATH', '')}")
+    try:
+        r = subprocess.run([sys.executable, str(ROOT / "hctf" / "hb_timed.py"), cid, str(rel), "--op", op],
+                           cwd=ROOT, capture_output=True, text=True, timeout=timeout, env=env)
+    except subprocess.TimeoutExpired:
+        return {"result": "exec_error", "detail": "local hb_timed timed out"}
+    try:
+        return json.loads(r.stdout.strip().splitlines()[-1])
+    except (IndexError, ValueError):
+        return {"result": "exec_error", "detail": (r.stdout + r.stderr)[-500:]}
+
+
+def run_timed_auto(solver_dir, cid, op="start", timeout=60):
+    """Dispatch the timed attempt by GM transport: locally when using the pairing token (default),
+    else on Homebase over SSH (legacy, when HCTF_GM_TRANSPORT=ssh or no token)."""
+    if remote.gm_transport() == "local":
+        return run_timed(solver_dir, cid, op=op, timeout=timeout)
+    return run_hb_timed(solver_dir, cid, op=op, timeout=timeout)
 
 
 def run_hb_timed(solver_dir, cid, op="start", timeout=60):

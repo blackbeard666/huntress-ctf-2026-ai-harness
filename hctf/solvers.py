@@ -140,7 +140,7 @@ def add_case(sdir, name, contract, artifacts, expected):
         shutil.rmtree(case)
     (case / "artifacts").mkdir(parents=True)
     for f in Path(artifacts).iterdir():
-        if f.is_file() and f.name != "manifest.json":
+        if f.is_file() and f.name not in ("manifest.json", "contract.json"):
             shutil.copy2(f, case / "artifacts" / f.name)
     (case / "contract.json").write_text(json.dumps(contract, indent=2, ensure_ascii=False))
     (case / "expected.json").write_text(json.dumps(expected, indent=2, ensure_ascii=False))

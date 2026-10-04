@@ -4,7 +4,7 @@ description: Driving the Huntress Game Master through the hctf CLI - list, statu
 ---
 
 # hctf (run `source bin/env.sh` first if `hctf` is not on PATH)
-The GM is only reachable from Homebase; `hctf` reaches it over SSH for you. Never call the proxy URL yourself and never add identity headers.
+`hctf` reaches the GM directly for you (public endpoint + pairing token, handled by the CLI; SSH-to-Homebase only as a fallback). Never call the GM URL yourself and never add your own auth/identity headers — the CLI owns the token.
 
 | Need | Command |
 |---|---|
