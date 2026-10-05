@@ -12,6 +12,10 @@ description: Huntress metadata-forensics lane - identity inventories and label t
 - PDF: `exiftool`, `qpdf --qdf` if installed; `pdf-parser` style: grep `/Author /Creator /Producer /CreationDate`.
 - LNK: `python -m LnkParse3 file.lnk -j`. EVTX: `python-evtx` (`evtx_dump.py`). Registry: `regipy` (`regipy-dump`).
 - Images: EXIF GPS/DateTimeOriginal/Software; appended data after `IEND`/`FFD9`; `binwalk`.
+- **Hidden data -> `lib.stego`:** `lsb_variants(path)`/`lsb_extract` (LSB/bit-plane, then `printable_runs`),
+  `trailing_data(path)` (bytes after EOF), `png_chunks`/`png_text` (tEXt/zTXt/iTXt + non-standard chunk flag),
+  `carve(path)` (binwalk extract), `crack_zip(path)` (wordlist for encrypted zip/AES via pyzipper — no
+  john/zip2john needed). Reach here when the asked value isn't in the declared metadata (stego/forensics).
 
 # Reading the questions
 - "first evidence note": define "first" the way the challenge does. It may be the archive order, the filename sort order, or a
