@@ -3,21 +3,39 @@
 Repo: WSL `~/huntress-2026`. Always `source bin/env.sh` first (puts the project toolbox + venv on PATH).
 Flowchart of the whole workflow: https://claude.ai/artifact/BqcfWXz9pFBqmdZyHpktPo
 
-## Prerequisites each session
-1. **Browser (for VM power + credits):** launch the CourseStack browser with the Windows Python, from PowerShell
-   (not Git Bash, which mangles the `\\wsl` path):
-   `python.exe \\wsl.localhost\Ubuntu\home\testpwn\huntress-2026\browser\launch.py`
-   It reuses the logged-in profile (CDP on 127.0.0.1:9222). `hctf hb` talks to it.
-2. **VPN:** the OpenVPN GUI profile `huntress-ctf-2026` must be connected (reaches Homebase SSH).
-3. That's it — `hctf hb ensure` powers the VM on and provisioning happens automatically on `hctf run`.
+## Prerequisites each session (WSL-native — current setup)
+Claude Code now runs **natively inside WSL** (not from Windows via `wsl -d Ubuntu`). GM access is direct over the
+public GM with the pairing token — no Windows, no browser, no VPN needed just to solve. Homebase (optional
+low-latency compute for tight timed windows) needs the VPN + the VM powered on.
+
+1. **One command does the pre-flight checks:** `source bin/env.sh && preflight.sh`
+   It verifies token validity + **days-to-expiry**, GM reachability, the VPN tunnel, and Homebase SSH, and prints
+   PASS/WARN/FAIL. Exit 0 = go. Run it before every drop.
+2. **VPN:** auto-starts on boot via the systemd unit `hctf-vpn.service` (OpenVPN, `secrets/*.ovpn`, with
+   `--pull-filter ignore redirect-gateway` so worker API traffic stays off the tunnel). Manage with
+   `sudo systemctl {status,start,restart} hctf-vpn`. It only gates Homebase, not the GM.
+3. **Homebase VM power:** `remote.power()` drives the Windows CourseStack browser, which is NOT wired up in
+   native WSL. The VM must be powered on out-of-band — either start it from the CourseStack web console, or (legacy)
+   run `python.exe \\wsl.localhost\Ubuntu\home\testpwn\huntress-2026\browser\launch.py` from Windows PowerShell.
+   Once it's up and the VPN is connected, `power("status")` short-circuits to "running" over SSH (patched in
+   `hctf/remote.py`) so prewarm/timed routing work without the browser. Runs never power it OFF unless they
+   powered it on themselves. (TODO: a WSL-native power path would remove the only remaining Windows dependency.)
 
 ## Daily play (one command)
 ```
 source bin/env.sh
-hctf run --day N --local 5            # all of day N, 5 parallel local workers
-# or everything released:
-hctf run --local 5
+bash bin/day.sh                        # today's day (inferred); pre-flight -> warm Homebase -> background run
+bash bin/day.sh 6 --scout 3           # a specific day, with TT label-scouting on hard lanes
+# low-level (what day.sh wraps):
+hctf run --day N --local 5
 ```
+`day.sh` logs to `.run/dayNN.log`; watch with `tail -f`, `hctf dash | grep dayNN`, `hctf why <id>`.
+
+### Speed tuning (worker effort is the main wall-clock lever)
+A heavy day is bound by one slow `single_solve` LLM worker (deterministic reuse/triage runs first and is instant).
+Effort is per-lane: default `high` on the hard lanes, `medium` on warmups. Override per lane with
+`HCTF_WORKER_EFFORT_<LANE>` / `HCTF_WORKER_MODEL_<LANE>` (LANE = index lane upper-cased, `-`→`_`), e.g.
+`HCTF_WORKER_EFFORT_SCRIPT_ANALYSIS=medium`. See `hctf/workers.py` (LANE_EFFORT) and reference/SPEED.md.
 `hctf run` syncs challenges, then runs each as an independent parallel chain
 (Single Solve → solver → Time Trial → Mastery). It auto-powers Homebase, provisions its solver deps,
 and self-heals timed variants offline. Workers submit the instant they have an answer; nothing waits.

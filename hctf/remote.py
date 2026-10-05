@@ -161,7 +161,18 @@ def deploy():
 
 
 def power(action="status"):
-    """VM power/credits through the Windows-side browser session. Returns {"state","ip","credits"}."""
+    """VM power/credits through the Windows-side browser session. Returns {"state","ip","credits"}.
+
+    WSL-native fallback: when Claude Code runs natively in WSL the Windows browser session isn't wired
+    up, but the VM is reachable over the CTF VPN. For status/on, short-circuit to 'running' when SSH
+    answers (the VM is already up), skipping the browser entirely. Powering OFF still needs the browser
+    (and runs never call it unless they powered the VM on themselves)."""
+    if action in ("status", "on"):
+        try:
+            ssh("true", timeout=12)
+            return {"state": "running", "ip": HB_HOST, "credits": None}
+        except Exception:  # noqa: BLE001 - VM not reachable via SSH; fall back to the browser path
+            pass
     script = subprocess.run(["wslpath", "-w", str(ROOT / "hctf" / "hbpower.py")],
                             capture_output=True, text=True, check=True).stdout.strip()
     r = subprocess.run([WIN_PY, script, action], capture_output=True, text=True, timeout=420)

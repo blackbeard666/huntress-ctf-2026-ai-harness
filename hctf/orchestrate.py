@@ -683,13 +683,31 @@ def run_one_timed(cid, local_slots=2):
     return 0 if ok else 1
 
 
+def _mode_solved_local(cid):
+    """Local, network-free truth for whether a mode is solved: the gm_solved sticky marker or any recorded
+    CORRECT submission. The live chain.json `stage` lags (it tracks worker activity, not per-mode completion),
+    so a passed single_solve with timed stages still running used to display as `single:solving`."""
+    try:
+        return (cli.cdir(cid) / "solved_once").exists() or cli.ever_correct(cid)
+    except Exception:  # noqa: BLE001 - unknown means "not known solved"
+        return False
+
+
 def dashboard():
+    hdr = ("chain", "lane", "stage", "worker", "single", "tt", "mastery", "updated")
     rows = []
     for p in sorted(paths.CHALLENGES.glob("day*/*/chain.json")):
         s = json.loads(p.read_text())
-        rows.append((str(p.parent.relative_to(paths.CHALLENGES)), s.get("lane", ""), s.get("stage", ""), s.get("worker") or "",
-                     s.get("time_trial_result", ""), s.get("mastery_result", ""), s.get("updated", "")))
-    w = [max(len(str(r[i])) for r in rows + [("chain", "lane", "stage", "worker", "tt", "mastery", "updated")])
-         for i in range(7)]
-    for r in [("chain", "lane", "stage", "worker", "tt", "mastery", "updated")] + rows:
+        try:
+            ids = (json.loads((p.parent / "meta.json").read_text()) or {}).get("ids", {})
+        except (OSError, ValueError):
+            ids = {}
+        # Per-mode solved from local truth, falling back to the chain's recorded result (never the stale stage).
+        single = "correct" if ids.get("single_solve") and _mode_solved_local(ids["single_solve"]) else ""
+        tt = "correct" if (ids.get("time_trial") and _mode_solved_local(ids["time_trial"])) else s.get("time_trial_result", "")
+        mastery = "correct" if (ids.get("mastery") and _mode_solved_local(ids["mastery"])) else s.get("mastery_result", "")
+        rows.append((str(p.parent.relative_to(paths.CHALLENGES)), s.get("lane", ""), s.get("stage", ""),
+                     s.get("worker") or "", single, tt, mastery, s.get("updated", "")))
+    w = [max(len(str(r[i])) for r in rows + [hdr]) for i in range(len(hdr))]
+    for r in [hdr] + rows:
         print("  ".join(str(x).ljust(w[i]) for i, x in enumerate(r)))

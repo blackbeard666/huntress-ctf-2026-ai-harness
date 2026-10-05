@@ -49,6 +49,30 @@ def _max_turns(stage):
 WORKER_MODEL = os.environ.get("HCTF_WORKER_MODEL", "claude-opus-5-5")
 WORKER_EFFORT = os.environ.get("HCTF_WORKER_EFFORT", "high")
 
+# Per-lane effort/model overrides — the main wall-clock lever. On a heavy day the whole sweep is bound by
+# ONE slow single_solve LLM worker (Day 5 script-analysis: 357 fields, ~6.5 min at effort=high), while the
+# other four lanes finish their full chain in ~2 min. Deterministic reuse/triage runs BEFORE the model, so
+# a recognized family never reaches here; this only tunes the genuine LLM solves. Defaults keep the hard,
+# correctness-critical lanes at the global default and relax only genuinely-easy warmups. Override any lane
+# with HCTF_WORKER_EFFORT_<LANE> / HCTF_WORKER_MODEL_<LANE>, where <LANE> is the index lane upper-cased with
+# '-' -> '_' (e.g. HCTF_WORKER_EFFORT_SCRIPT_ANALYSIS=medium, HCTF_WORKER_EFFORT_METADATA_FORENSICS=medium).
+# To break the 4-min sweep on a heavy scripting day, lower script-analysis here AFTER validating correctness
+# over a few days — it is the only lane on the critical path.
+LANE_EFFORT = {"warmups": "medium"}
+LANE_MODEL = {}
+
+
+def _lane_key(lane):
+    return (lane or "").upper().replace("-", "_")
+
+
+def worker_effort(lane):
+    return os.environ.get(f"HCTF_WORKER_EFFORT_{_lane_key(lane)}") or LANE_EFFORT.get(lane, WORKER_EFFORT)
+
+
+def worker_model(lane):
+    return os.environ.get(f"HCTF_WORKER_MODEL_{_lane_key(lane)}") or LANE_MODEL.get(lane, WORKER_MODEL)
+
 # Each worker is told it is an expert CTF player in its lane's specialty. Keyed by the index.json lane.
 LANE_PERSONA = {
     "warmups": "an expert-level CTF player who specializes in warm-up and miscellaneous puzzle "
@@ -91,8 +115,9 @@ def run_local(chal_dir, stage, prompt, env_extra, timeout):
     env["TMPDIR"] = str(TMP)  # keep every worker's scratch files inside the project
     env["PYTHONPATH"] = f"{ROOT}:{env.get('PYTHONPATH', '')}"  # so solvers/tools can `import lib.*`
     env["PATH"] = f"{BIN}:{TOOLS / 'node' / 'bin'}:{ROOT / '.venv' / 'bin'}:{Path.home() / '.local/bin'}:{env.get('PATH', '')}"
+    lane = env_extra.get("HCTF_LANE") or env.get("HCTF_LANE")
     cmd = ["claude", "-p", prompt, "--dangerously-skip-permissions", "--max-turns", str(_max_turns(stage)),
-           "--model", WORKER_MODEL, "--effort", WORKER_EFFORT,
+           "--model", worker_model(lane), "--effort", worker_effort(lane),
            "--output-format", "stream-json", "--verbose"]
     with open(log, "w") as out:
         p = subprocess.Popen(cmd, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT, env=env, start_new_session=True)
