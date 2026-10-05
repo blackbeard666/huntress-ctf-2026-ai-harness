@@ -13,6 +13,10 @@ Read them statically first. To peel a layer dynamically, **replace the sink** an
 - VBScript: replace `Execute`/`ExecuteGlobal`/`Eval` with `WScript.Echo` and decode by reading; there is no cscript here, so
   re-implement the decoder in Python.
 - Batch: expand `set` variables and `%var:~x,y%` substrings in Python.
+- Compiled/frozen Python -> `lib.pyc`: `recover_python(path)` (PyInstaller extract via pyinstxtractor-ng, then
+  decompyle3; `dis` disassembly fallback that always works, so even modern bytecode's consts/strings surface).
+  `decompile_pyc(pyc)` for a bare .pyc. NOTE: real pyarmor bytecode-encryption needs dynamic unpack (residual
+  gap); .NET obfuscation (de4dot/ilspycmd) needs a mono/dotnet runtime (not installed) — see reference/HARDENING.md.
 
 # Indicator extraction (exact, from the bytes)
 - Regexes over the *deobfuscated* text: URLs `https?://[^\s'"<>]+`, wallets (BTC `bc1[a-z0-9]{25,60}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}`,
