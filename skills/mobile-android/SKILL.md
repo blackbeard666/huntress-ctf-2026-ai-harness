@@ -8,7 +8,12 @@ Only the Game Master's APK and the challenge backend it names are in scope. That
 the CTF network, so send its requests through `hctf hb exec -- curl ...` (runs on Homebase). Don't probe anything else.
 
 # Tools (source bin/env.sh)
-- **`droidasc` (ASC) — use this first.** On-demand APK decompiler, fast and low-RAM (good for big APKs and Homebase):
+- **`lib.android` — use this in solvers.** `extract_answer(apk)` recovers `ANS-<16 hex>` through a robust
+  fallback chain (puzzle-json decode -> raw zip-entry scan -> dex strings (multidex) -> apktool/jadx
+  decompiled scan), so it keeps working when the answer MOVES out of `assets/huntress_puzzle.json` into the
+  dex/resources/code. `manifest_facts(apk)` returns package/permissions/allowBackup/debuggable + per-component
+  exported/intent-filter/deep-link data. Never write a bare `huntress_puzzle.json`-only reader again.
+- **`droidasc` (ASC).** On-demand APK decompiler, fast and low-RAM (good for big APKs and Homebase):
   - `droidasc getmanifest app.apk` - decoded AndroidManifest (exported flags, intent-filters, schemes).
   - `droidasc findrefs app.apk string|type|method|field <needle>` - cross-refs across all DEX (e.g. a scheme, a URL, a const).
   - `droidasc listclass app.apk --prefix com.foo` then `droidasc getclass app.apk <class> -o out.java` - decompile just the class you need.
