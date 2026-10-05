@@ -123,9 +123,32 @@ def run_solver(sdir, contract, artifacts, timeout=120):
         return {}, f"stdout is not JSON: {r.stdout[-500:]!r} stderr: {r.stderr[-800:]}", dt
 
 
-def solve_contract(contract, artifacts, default_solver=None, timeout=120):
-    """Dispatch a whole contract across solvers. Returns (answers, problems list)."""
+def _day_key(sdir):
+    m = re.search(r"day(\d+)", str(sdir))
+    return int(m.group(1)) if m else -1
+
+
+def whole_contract_solver(contract, artifacts, candidates, timeout=120):
+    """The first candidate solver (NEWEST day first) that answers EVERY answer_id of the FULL contract, as
+    (solver_dir, answers), else (None, {}). Question-text dispatch splits a compound bundle across days because
+    question wording repeats (Day 4 'Dim and Dimmer' = Day 3 batch questions + VBScript): the Day 4 solver handles all
+    231 ids on the whole contract but only 20/46 on its slice, so reuse-first missed and an LLM worker re-solved it."""
+    ids = contract.get("answer_ids") or []
+    for sdir in sorted(set(candidates), key=_day_key, reverse=True):
+        got, err, _ = run_solver(sdir, contract, artifacts, timeout)
+        if not err and ids and all(got.get(a) not in (None, "") for a in ids):
+            return sdir, {a: got[a] for a in ids}
+    return None, {}
+
+
+def solve_contract(contract, artifacts, default_solver=None, timeout=120, try_whole=True):
+    """Dispatch a whole contract across solvers. Returns (answers, problems list).
+    When dispatch splits the bundle across several solvers, first try each of them on the FULL contract."""
     groups, unmatched = dispatch(contract, default_solver)
+    if try_whole and len(groups) > 1:
+        _, got = whole_contract_solver(contract, artifacts, list(groups), timeout)
+        if got:
+            return got, []
     answers, problems = {}, [f"{a}: no solver matches this question" for a in unmatched]
     for sdir, aids in groups.items():
         got, err, _ = run_solver(sdir, sub_contract(contract, aids), artifacts, timeout)

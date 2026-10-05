@@ -189,7 +189,7 @@ def last_result(cid):
 def _remember(cid, res):
     keep = {k: res.get(k) for k in ("result", "full_result", "attempt_id", "window", "elapsed", "in_window", "phases",
                                      "per_set", "bad_sets", "wrong", "fixed", "localize_complete", "routed", "missing",
-                                     "localize_tried")
+                                     "localize_tried", "novel_labels", "deadline")
             if k in res}
     (cli.cdir(cid) / "last_timed.json").write_text(json.dumps(keep, indent=2, ensure_ascii=False))
     if res.get("window"):
@@ -299,6 +299,13 @@ def run(cid, solver_dir, fix=None, log=print, op="start"):
     """
     from . import workers
     res = workers.run_timed_auto(solver_dir, cid, op=op, log=log)
+    return process_result(cid, solver_dir, res, log=log)
+
+
+def process_result(cid, solver_dir, res, log=print):
+    """Post-attempt bookkeeping shared by run() and the scout: persist last_timed.json, save the variant as a
+    regression case, cache GM-verified closed-vocab labels (from ANY attempt, not only correct ones), record a
+    correct result locally. Returns correct | expired | blocked | error:<x>."""
     r = str(res.get("result", "")).lower()
     log(f"[{cid}] timed: {json.dumps({k: res.get(k) for k in ('result', 'remaining', 'elapsed', 'window', 'routed', 'missing', 'per_set', 'bad_sets', 'wrong', 'fixed', 'attempt_id') if k in res})}")
     try:
@@ -308,6 +315,14 @@ def run(cid, solver_dir, fix=None, log=print, op="start"):
             log(f"[{cid}] saved this variant as regression case {case} ({len(res.get('verified') or res.get('submitted') or {})} GM-verified answers)")
     except Exception as e:  # noqa: BLE001 - capture is best-effort
         log(f"[{cid}] variant capture note: {e}")
+    if r != "correct" and res.get("verified"):
+        # A failed attempt still carries GM-verified labels (accepted sets, localized subsets, in-window fixes):
+        # cache them now so the next variant's in-window corrector already knows the spelling.
+        try:
+            from . import labels
+            labels.record_values(cid, res["verified"], log=log)
+        except Exception as e:  # noqa: BLE001
+            log(f"[{cid}] label cache note: {e}")
     if r == "correct":
         # Record the confirmed answers + a correct submission locally (the timed runner submits to the GM
         # directly), so cli.is_complete and the dashboard reflect reality.
@@ -322,10 +337,10 @@ def run(cid, solver_dir, fix=None, log=print, op="start"):
         return "correct"
     if cli.is_complete(cid):
         return "correct"
+    if "prerequisite" in r:   # GM 409 prerequisite_required: the previous mode's LATEST attempt isn't CORRECT
+        return "error:prerequisite"
     if r in ("solver_incomplete", "solver_error", "incorrect", "accepted", "exec_error"):
         return "blocked"       # the solver needs work; caller will generalise offline then retry
     if r in ("expired", "start_required") or "expired" in json.dumps(res).lower():
         return "expired"
-    if "prerequisite" in r:
-        return "error:prerequisite"
     return "blocked"

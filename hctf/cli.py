@@ -445,12 +445,46 @@ def confirmed_answers(cid, att=None):
 def gm_solved(cid):
     """Ask the GM itself whether this mode is already solved (its status shows result CORRECT). Local state can
     lag (timed runs on Homebase, newer attempts started after a correct one), so reruns check this first and
-    never redo or burn attempts on a mode the scoreboard already has."""
+    never redo or burn attempts on a mode the scoreboard already has.
+
+    STICKY: GM status reflects only the LATEST attempt, so a scout attempt started after a pass reports
+    live/expired even though the scoreboard (CourseStack) keeps the solve (verified 2026-10-05). Once seen solved
+    (GM CORRECT or a locally recorded correct submission) we drop a `solved_once` marker and trust it from then on."""
+    marker = cdir(cid) / "solved_once"
+    if marker.exists() or ever_correct(cid):
+        return True
     try:
         body = call(cid, "status", cid)["body"] or {}
     except Exception:  # noqa: BLE001 - unknown means "not known solved"
         return False
+    if str(body.get("result", "")).upper() == "CORRECT":
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(json.dumps({"attempt": attempt_id(body), "seen": time.strftime("%Y-%m-%dT%H:%M:%S")}))
+        return True
+    return False
+
+
+def gm_latest_correct(cid):
+    """Non-sticky: is the GM's LATEST attempt for this mode CORRECT? (Mastery may check its prerequisite this way.)"""
+    try:
+        body = call(cid, "status", cid)["body"] or {}
+    except Exception:  # noqa: BLE001
+        return False
     return str(body.get("result", "")).upper() == "CORRECT"
+
+
+def ever_correct(cid):
+    """Any attempt of this mode ever recorded CORRECT locally (submissions.jsonl), regardless of start.json drift."""
+    p = cdir(cid) / "submissions.jsonl"
+    if not p.exists():
+        return False
+    for line in p.read_text().splitlines():
+        try:
+            if json.loads(line).get("kind") == "correct":
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def is_complete(cid):
@@ -504,7 +538,24 @@ def c_run(a):
     if getattr(a, "no_prewarm_homebase", False):
         pre = False
     orchestrate.run(day=a.day, only=a.only, local_slots=a.local, hb_slots=a.homebase, modes=a.modes,
-                    prewarm_homebase=pre, keep_homebase=getattr(a, "keep_homebase", False))
+                    prewarm_homebase=pre, keep_homebase=getattr(a, "keep_homebase", False),
+                    scout_rounds=getattr(a, "scout", None))
+    return 0
+
+
+def c_scout(a):
+    """Standalone Time Trial scouting for one challenge (no generalize; prints the summary)."""
+    from . import orchestrate, scout
+    cid = a.id if a.id.endswith("/time_trial") else paths.base_id(a.id) + "/time_trial"
+    sdir = paths.solver_dir(paths.base_id(cid))
+    try:
+        s = scout.scout(cid, sdir, rounds=a.n, clean=a.clean, log=print)
+        print(json.dumps({k: s[k] for k in ("clean_streak", "last_correct", "new_labels", "fixed", "unresolved")}
+                         | ({"solver_failed": s["solver_failed"]} if s.get("solver_failed") else {}),
+                         indent=2, ensure_ascii=False))
+    finally:
+        if os.environ.get("HCTF_KEEP_HOMEBASE", "0") == "0":
+            orchestrate.workers.power_off_homebase_if_ours(print)
     return 0
 
 
@@ -777,6 +828,13 @@ def main(argv=None):
                      help="boot+provision Homebase at run start (in the background) so tight timed windows don't "
                           "wait for a cold VM; powers off at run end. Also via HCTF_PREWARM_HOMEBASE=1")
     pr2.add_argument("--modes", nargs="*", choices=list(paths.MODES))
+    pr2.add_argument("--scout", type=int, default=None, metavar="N",
+                     help="Time Trial scout rounds before Mastery (learn label spellings on the cheap clock); "
+                          "0 = off (default HCTF_SCOUT_ROUNDS)")
+    psc = sub.add_parser("scout", help="run N Time Trial attempts to harvest variants + learn GM labels (no generalize)")
+    psc.add_argument("id", help="challenge base id or its /time_trial id")
+    psc.add_argument("-n", type=int, default=3, help="max rounds (default 3)")
+    psc.add_argument("--clean", type=int, default=2, help="stop after this many clean rounds in a row (default 2)")
     sub.add_parser("dash", help="chain status table")
     sub.add_parser("why", help="explain a chain's state: converging vs stuck, wrong fields, timing, last worker result"
                    ).add_argument("id")
@@ -801,7 +859,7 @@ def main(argv=None):
           "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test,
           "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
           "reconcile": c_reconcile, "solutions": c_solutions,
-          "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels}[a.cmd]
+          "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout}[a.cmd]
     try:
         return fn(a)
     except remote.Unreachable as e:

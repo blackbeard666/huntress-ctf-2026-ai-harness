@@ -202,17 +202,22 @@ def power_off_homebase_if_ours(log=print):
 
 
 def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print):
-    """Dispatch a timed attempt. Default: locally over the pairing token. Clock windows <= HCTF_TIGHT_WINDOW
-    seconds can't fit the public GM's round-trips, so those go to Homebase next to the GM (powered on on demand,
-    off again at the end of the run). The window is learned from the first (local) attempt: if that one expires
-    on a tight clock, it is retried on Homebase straight away. HCTF_GM_TRANSPORT=ssh forces Homebase."""
+    """Dispatch a timed attempt. HOMEBASE-FIRST for strict clocks (user policy): a window <= HCTF_TIGHT_WINDOW
+    seconds, or one not yet known (a fresh mode; every Day 2-4 TT/Mastery window was 6-7s), runs next to the GM on
+    Homebase (prewarmed at run start). Local over the pairing token is the fallback (Homebase unavailable / below the
+    credit floor / remote exec failure) and the default for known-roomy windows. The old "local first, Homebase only
+    after a local expiry" rule burned one attempt per tight mode, and the rehearsal copy run showed local fits a 7s
+    462-field Mastery only by ~0.9s (GM origin ~1.3-1.5s/call from here). HCTF_GM_TRANSPORT=ssh forces Homebase."""
     if remote.gm_transport() != "local":
         return run_hb_timed(solver_dir, cid, op=op, timeout=timeout)
     win = known_window(cid)
-    if AUTO_HOMEBASE and win is not None and win <= TIGHT_WINDOW and _expired_locally(cid) and _homebase_ready(log):
+    tight = win is None or win <= TIGHT_WINDOW
+    if AUTO_HOMEBASE and tight and _homebase_ready(log):
         res = run_hb_timed(solver_dir, cid, op=op, timeout=timeout)
-        res["routed"] = f"homebase (window {win:g}s, expired locally before)"
-        return res
+        if str(res.get("result", "")).lower() != "exec_error":
+            res["routed"] = f"homebase ({'window unknown' if win is None else f'window {win:g}s'})"
+            return res
+        log(f"[{cid}] Homebase run failed ({str(res.get('detail'))[:120]}); falling back to local")
     res = run_timed(solver_dir, cid, op=op, timeout=timeout)
     w = res.get("window") or win
     if w is not None and w <= TIGHT_WINDOW and str(res.get("result", "")).lower() == "expired":

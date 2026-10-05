@@ -39,10 +39,26 @@
     "add_modulo_256",
     "identity"
   ],
+  "_class": [
+    "ELF64"
+  ],
+  "_endianness": [
+    "little"
+  ],
   "_format": [
     "elf",
     "pe",
     "pe_cli"
+  ],
+  "_machine": [
+    "x86-64",
+    "i386"
+  ],
+  "_type": [
+    "ET_EXEC"
+  ],
+  "class": [
+    "ELF64"
   ],
   "control": [
     "direct",
@@ -56,6 +72,9 @@
     "error_guard",
     "for_once"
   ],
+  "endianness": [
+    "little"
+  ],
   "expansion": [
     "delayed",
     "for_indirect",
@@ -66,6 +85,10 @@
     "elf",
     "pe",
     "pe_cli"
+  ],
+  "machine": [
+    "x86-64",
+    "i386"
   ],
   "representation": [
     "decimal_pipe",
@@ -88,5 +111,8 @@
     "reverse_then_xor",
     "add_modulo_256",
     "identity"
+  ],
+  "type": [
+    "ET_EXEC"
   ]
 }

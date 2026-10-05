@@ -148,6 +148,12 @@ def record_from_confirmed(cid, lane=None, log=None):
     for answers in all_conf.values():
         if isinstance(answers, dict):
             conf.update(answers)
+    return record_values(cid, conf, log=log)
+
+
+def record_values(cid, conf, log=None):
+    """Cache GM-VERIFIED {answer_id: value} pairs (from confirmed.json, or the `verified` set of ANY timed attempt,
+    correct or not) into vocab.json — closed-vocab families only. Returns the [(aid, value)] newly added."""
     if not conf:
         return []
     existing = {k: set(v) for k, v in load_vocab().items()}

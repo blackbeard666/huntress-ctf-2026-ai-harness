@@ -46,29 +46,87 @@ def _auth(headers=None):
     return headers
 
 
-def _open(req, timeout):
-    """urlopen with a SHORT 429/503 backoff (the clock is running): 0.5s then 1s, then give up."""
-    import urllib.error
-    for wait in (0.5, 1.0, None):
+class _Pool:
+    """Keep-alive connections to the GM, opened (TCP+TLS) BEFORE the clock starts and reused for every in-window
+    request. Measured from the rehearsal copy (no Homebase): each GM call costs ~1.5s of origin latency, and a fresh
+    connection adds ~0.6s, occasionally a multi-second TLS spike (6.9s once) — fatal inside a 6-7s window when every
+    download thread and the submit each opened their own urllib connection."""
+
+    def __init__(self, url, size=6):
+        import queue
+        from urllib.parse import urlsplit
+        u = urlsplit(url)
+        self.https = u.scheme == "https"
+        self.host, self.port = u.hostname, u.port
+        self.path = u.path or "/"         # inside proxy: /huntress-ctf-proxy (never add a trailing slash)
+        self.q = queue.LifoQueue()
+        with ThreadPoolExecutor(max_workers=size) as ex:
+            for c in ex.map(lambda _: self._new(), range(size)):
+                self.q.put(c)
+
+    def _new(self, connect=True):
+        import http.client
+        cls = http.client.HTTPSConnection if self.https else http.client.HTTPConnection
+        c = cls(self.host, self.port, timeout=20)
+        if connect:
+            try:
+                c.connect()
+            except OSError:
+                pass                      # will reconnect lazily on first use
+        return c
+
+    def request(self, method, query, body=None, headers=None):
+        """-> (status, bytes). Reconnects once if the kept-alive socket was dropped."""
+        import http.client
+        c = self.q.get() if not self.q.empty() else self._new(connect=False)
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                return r.read()
-        except urllib.error.HTTPError as e:
-            if e.code in (429, 503) and wait is not None:
-                time.sleep(wait)
-                continue
-            raise
+            for retry in (True, False):
+                try:
+                    c.request(method, self.path + query, body=body, headers=headers or {})
+                    r = c.getresponse()
+                    return r.status, r.read()
+                except (http.client.HTTPException, ConnectionError, OSError):
+                    c.close()
+                    c = self._new(connect=False)
+                    if not retry:
+                        raise
+        finally:
+            self.q.put(c)
+
+
+_POOL = None
+
+
+def _pool():
+    global _POOL
+    if _POOL is None:
+        _POOL = _Pool(GM)
+    return _POOL
+
+
+def _open(method, query, body=None, headers=None):
+    """Pooled request with a SHORT 429/503 backoff (the clock is running): 0.5s then 1s, then give up.
+    4xx with a JSON body is a GM VERDICT (409 {"error": "prerequisite_required"}, ...), not a crash: it is returned
+    so the caller classifies it (raising turned a prerequisite refusal into exec_error -> a pointless generalize)."""
+    for wait in (0.5, 1.0, None):
+        status, raw = _pool().request(method, query, body, headers)
+        if status in (429, 503) and wait is not None:
+            time.sleep(wait)
+            continue
+        if status >= 400:
+            try:
+                json.loads(raw)
+            except ValueError:
+                raise RuntimeError(f"GM HTTP {status}: {raw[:200]!r}") from None
+        return raw
 
 
 def _post(payload, timeout=20):
-    req = urllib.request.Request(GM, data=json.dumps(payload).encode(),
-                                 headers=_auth({"Content-Type": "application/json"}), method="POST")
-    return json.loads(_open(req, timeout))
+    return json.loads(_open("POST", "", json.dumps(payload).encode(), _auth({"Content-Type": "application/json"})))
 
 
 def _get_bytes(cap, timeout=20):
-    req = urllib.request.Request(f"{GM}?op=download&capability={cap}", headers=_auth())
-    return _open(req, timeout)
+    return _open("GET", f"?op=download&capability={cap}", headers=_auth())
 
 
 def _window(body):
@@ -160,6 +218,50 @@ def _playbook_alts(aid, cur):
         return []
 
 
+def _is_label(aid, vocab):
+    """A synthetic-label field (closed-vocab family in vocab.json, or a playbook family for this lane)."""
+    if (_suffix(aid) or "") in vocab:
+        return True
+    if not _LANE:
+        return False
+    try:
+        if str(HW) not in sys.path:
+            sys.path.insert(0, str(HW))
+        from lib import playbook
+        return playbook.entry_for(_LANE, aid) is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# Closed-vocab label families (mirror of hctf.labels.CACHEABLE_FAMILIES; kept here so this file stays standalone on
+# Homebase). Only these can be "uncertain"/"novel": ATT&CK ids, symbols, etc. are labels-ish but never cached.
+_CACHEABLE = {"control", "expansion", "format", "representation", "transform", "endianness", "machine", "class", "type"}
+
+
+def _family(aid):
+    return (_suffix(aid) or "").lstrip("-_").lower()
+
+
+def _uncertain(aid, val, vocab):
+    """A closed-vocab label whose value the GM has never confirmed for its family (a construct new to us)."""
+    return _family(aid) in _CACHEABLE and _is_label(aid, vocab) and str(val) not in vocab.get(_suffix(aid) or "", [])
+
+
+def _label_first(group, answers, vocab):
+    """Order a failed set for the search: UNCERTAIN labels (solver value never GM-confirmed for its family) first,
+    then other labels, then deterministic values. Returned as separate groups so a short window judges the likely
+    culprits before it spends submits on hashes/strings that are almost always right."""
+    unc, lab, rest = [], [], []
+    for aid in group:
+        if _uncertain(aid, answers.get(aid), vocab):
+            unc.append(aid)
+        elif _is_label(aid, vocab):
+            lab.append(aid)
+        else:
+            rest.append(aid)
+    return [g for g in (unc, lab, rest) if g]
+
+
 def _localize(cid, answers, groups, per_set, body, out):
     """Window permitting, binary-search the wrong answer_ids inside each failed set (subset submits on the SAME
     attempt), then try the field's other known labels (lib/vocab.json). Reports what the GM verified so the
@@ -188,13 +290,14 @@ def _localize(cid, answers, groups, per_set, body, out):
         narrow(group[:mid])
         narrow(group[mid:])
 
+    vocab = _vocab()
     try:
         for key, v in per_set.items():
             if v["result"] in ("correct", "accepted"):
                 ok_fields.update(groups.get(key, {}))
             else:
-                narrow(list(groups.get(key, {}).keys()))
-        vocab = _vocab()
+                for sub in _label_first(list(groups.get(key, {}).keys()), answers, vocab):
+                    narrow(sub)
         for aid in wrong:
             cur = answers.get(aid)
             alts = []
@@ -216,6 +319,12 @@ def _localize(cid, answers, groups, per_set, body, out):
     out["fixed"] = fixed
     out["localize_complete"] = complete
     out["verified"] = {**{a: answers[a] for a in ok_fields if a in answers}, **fixed}
+    out["novel_labels"] = _novel(out["verified"], vocab)
+
+
+def _novel(verified, vocab):
+    """GM-verified label values not yet in vocab.json: what this variant TAUGHT us (new construct spellings)."""
+    return {a: v for a, v in (verified or {}).items() if _uncertain(a, v, vocab)}
 
 
 def main():
@@ -226,8 +335,10 @@ def main():
     a = ap.parse_args()
     global _LANE
     _LANE = _lane_from_solver_dir(a.solver_dir)
+    tw = time.time()
+    _pool()                     # open + TLS-handshake the keep-alive connections BEFORE the clock starts
     t0 = time.time()
-    out = {"cid": a.cid, "submitted": {}}
+    out = {"cid": a.cid, "submitted": {}, "pool_warm": round(t0 - tw, 2)}
 
     body = _post({"op": a.op, "challenge": a.cid})
     # fresh clock if this attempt is already expired / past its deadline
@@ -305,6 +416,7 @@ def main():
     if fk in ("correct", "accepted") and not full.get("remaining"):
         out["result"] = "correct"
         out["verified"] = dict(answers)
+        out["novel_labels"] = _novel(answers, _vocab())
         out["elapsed"] = round(time.time() - t0, 2)
         out["in_window"] = round(time.time() - t_started, 2)  # time that actually counts against the clock
         _emit(out, adir)

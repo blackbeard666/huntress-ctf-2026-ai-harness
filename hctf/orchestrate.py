@@ -25,6 +25,11 @@ SINGLE_TIMEOUT = int(os.environ.get("HCTF_SINGLE_TIMEOUT", str(25 * 60)))
 GENERALIZE_TIMEOUT = int(os.environ.get("HCTF_GENERALIZE_TIMEOUT", str(12 * 60)))
 MAX_SINGLE_LAUNCHES = 3
 MAX_TIMED_RETRIES = 5
+# Time Trial scouting before Mastery (hctf/scout.py): extra TT attempts that harvest new variants and learn label
+# spellings on the cheap clock. 0 = off. `hctf run --scout N` overrides.
+SCOUT_ROUNDS = int(os.environ.get("HCTF_SCOUT_ROUNDS", "0"))
+SCOUT_CLEAN = int(os.environ.get("HCTF_SCOUT_CLEAN", "2"))          # stop after this many clean rounds in a row
+SCOUT_GENERALIZE = int(os.environ.get("HCTF_SCOUT_GENERALIZE", "2"))  # offline fix cycles between scout bursts
 
 _print_lock = threading.Lock()
 
@@ -238,7 +243,13 @@ class Chain:
         art = timed.latest_artifacts(cid)
         if not contract or not art:
             return False
-        answers, problems = solvers.solve_contract(contract, art)  # no default -> library only
+        groups, _ = solvers.dispatch(contract)
+        # A compound bundle is split across days by question text; one newer solver often covers ALL of it.
+        whole, answers = (solvers.whole_contract_solver(contract, art, list(groups)) if len(groups) > 1
+                          else (None, {}))
+        problems = []
+        if not whole:
+            answers, problems = solvers.solve_contract(contract, art, try_whole=False)  # library only, split
         ids = contract.get("answer_ids", [])
         if problems or not ids or any(a not in answers for a in ids):
             return False
@@ -250,8 +261,7 @@ class Chain:
                 return cli.is_complete(cid)
         if cli.is_complete(cid):
             # adopt the matching solver so this challenge's timed modes reuse it directly
-            groups, _ = solvers.dispatch(contract)
-            src = next(iter(groups), None)
+            src = whole or next(iter(groups), None)
             if src and src != self.sdir and not (self.sdir / "solve.py").exists():
                 import shutil
                 self.sdir.mkdir(parents=True, exist_ok=True)
@@ -392,10 +402,28 @@ class Chain:
                 record_timed_case(cid, self.sdir)
                 return True
             if res.startswith("error:prerequisite"):
-                time.sleep(20)  # CourseStack scoring may still be pending for the previous mode
+                # The GM's status shows only the LATEST attempt: if a scout/probe attempt after the Time Trial pass
+                # left it expired, re-pass the Time Trial so Mastery's prerequisite is satisfied again.
+                tt = self.entries.get("time_trial")
+                if mode == "mastery" and tt and not cli.gm_latest_correct(tt["id"]):
+                    say(f"[{cid}] prerequisite: latest Time Trial attempt is not CORRECT; re-passing it")
+                    self.ensure_latest_pass(tt["id"])
+                else:
+                    time.sleep(20)  # CourseStack scoring may still be pending for the previous mode
                 continue
             if res not in ("expired", "blocked"):
                 break
+            last = timed.last_result(cid) or {}
+            if (res == "expired" and (last.get("phases") or {}).get("solve") is not None and not last.get("missing")
+                    and attempt < MAX_TIMED_RETRIES):
+                # The solver answered everything and the CLOCK ran out: a transport/timing failure. Probing can't judge
+                # anything on an expired clock and a generalize worker can't speed up the network (rehearsal copy,
+                # Dim and Dimmer mastery: 0/462 judged, worker concluded "solver correct, timing"). Just retry.
+                say(f"[{cid}] expired on the CLOCK (in-window {last.get('in_window')}s / window {last.get('window')}s, "
+                    f"phases {last.get('phases')}): timing, not the solver -- retrying without probe/generalize")
+                set_state(self.base, stage=f"{mode}:timing")
+                time.sleep(8)
+                continue
             # A failed timed attempt means the solver is wrong or incomplete for this variant (with Homebase
             # execution the window is no longer the bottleneck). Always improve the solver offline, then retry.
             # The generalize worker re-derives the variant's correct answers itself (ground truth), so it can
@@ -442,6 +470,44 @@ class Chain:
         set_state(self.base, stage=f"{mode}:blocked")
         return False
 
+    def ensure_latest_pass(self, cid, tries=3):
+        """Make the GM's LATEST attempt for this timed mode CORRECT (after scouting), so a prerequisite check that
+        reads the latest status sees a pass. The solve itself is already banked on the scoreboard."""
+        from . import scout
+        for _ in range(tries):
+            if cli.gm_latest_correct(cid):
+                return True
+            scout._wait_expired((timed.last_result(cid) or {}).get("deadline"), say, cid)
+            time.sleep(scout.RATE_GAP)
+            timed.run(cid, self.sdir, log=say)
+        return cli.gm_latest_correct(cid)
+
+    def scout_stage(self):
+        """Between a passed Time Trial and Mastery: run Time Trial scout rounds (new variant each) so unseen
+        constructs get their GM label on the cheap clock; generalize offline on fields the in-window corrector
+        couldn't fix; finally leave the latest Time Trial attempt CORRECT. Advisory: Mastery runs regardless."""
+        tt, ms = self.entries.get("time_trial"), self.entries.get("mastery")
+        if not SCOUT_ROUNDS or not tt or not ms or cli.gm_solved(ms["id"]):
+            return
+        from . import scout
+        cid = tt["id"]
+        s = {}
+        for cycle in range(SCOUT_GENERALIZE + 1):
+            set_state(self.base, stage="time_trial:scouting", scout_cycle=cycle + 1)
+            s = scout.scout(cid, self.sdir, rounds=SCOUT_ROUNDS, clean=SCOUT_CLEAN, log=say)
+            set_state(self.base, scout={"cycle": cycle + 1, "clean_streak": s["clean_streak"],
+                                        "new_labels": s["new_labels"], "fixed": s["fixed"],
+                                        "unresolved": s["unresolved"][:20], "solver_failed": s.get("solver_failed")})
+            if (not s["unresolved"] and not s.get("solver_failed")) or cycle == SCOUT_GENERALIZE:
+                break
+            last = timed.last_result(cid) or {}
+            say(f"[{cid}] scout found {len(s['unresolved'])} unresolved field(s); generalizing before Mastery")
+            self.generalize(cid, wrong=s["unresolved"] or None, fixed=s["fixed"],
+                            diag={k: last.get(k) for k in ("window", "elapsed", "phases", "routed")})
+        ok = self.ensure_latest_pass(cid)
+        say(f"[{cid}] scouting done: clean_streak={s.get('clean_streak')} new_labels={len(s.get('new_labels') or {})} "
+            f"unresolved={len(s.get('unresolved') or [])}; latest Time Trial {'CORRECT' if ok else 'NOT correct'}")
+
     def run(self):
         try:
             set_state(self.base, stage="queued", name=self.name, lane=self.lane, worker=None)
@@ -449,6 +515,8 @@ class Chain:
             if "single_solve" in modes and not self.single():
                 return
             for mode in ("time_trial", "mastery"):
+                if mode == "mastery" and mode in modes:
+                    self.scout_stage()   # no-op unless SCOUT_ROUNDS > 0
                 if mode in modes and not self.timed_stage(mode):
                     return
             set_state(self.base, stage="done")
@@ -484,7 +552,11 @@ def released_challenges(day=None):
     return body.get("challenges", [])
 
 
-def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_homebase=None, keep_homebase=None):
+def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_homebase=None, keep_homebase=None,
+        scout_rounds=None):
+    global SCOUT_ROUNDS
+    if scout_rounds is not None:
+        SCOUT_ROUNDS = scout_rounds
     if keep_homebase is None:
         keep_homebase = os.environ.get("HCTF_KEEP_HOMEBASE", "0") != "0"
     timed_in_scope = (not modes) or any(m in ("time_trial", "mastery") for m in modes)

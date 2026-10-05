@@ -5,3 +5,4 @@ export PATH="$HCTF_ROOT/bin:$HCTF_ROOT/tools/node/bin:$HCTF_ROOT/tools/uv:$HCTF_
 export TMPDIR="$HCTF_ROOT/.run/tmp" UV_CACHE_DIR="$HCTF_ROOT/.run/cache/uv" \
        UV_PYTHON_INSTALL_DIR="$HCTF_ROOT/tools/python" npm_config_cache="$HCTF_ROOT/.run/cache/npm"
 mkdir -p "$TMPDIR"
+export PYTHONUNBUFFERED=1   # live logs/monitors (redirected python output is block-buffered otherwise)
