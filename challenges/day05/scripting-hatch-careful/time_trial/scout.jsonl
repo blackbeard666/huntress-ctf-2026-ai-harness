@@ -1,0 +1,2 @@
+{"round": 1, "attempt": "c866f6e2-13d0-4fdd-b090-3fb88100a27a", "result": "correct", "window": 7.0, "in_window": 4.38, "routed": null, "novel_labels": {}, "fixed": {}, "unresolved": [], "localize_complete": null, "clean": true, "ts": "2026-10-05T21:50:27"}
+{"round": 1, "attempt": "98518c6b-2d71-47b3-a109-200ac3937fc5", "result": "correct", "window": 7.0, "in_window": 1.4, "routed": "homebase (window 7s)", "novel_labels": {}, "fixed": {}, "unresolved": [], "localize_complete": null, "clean": true, "ts": "2026-10-05T21:54:04"}
