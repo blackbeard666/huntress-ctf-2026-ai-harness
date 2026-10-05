@@ -24,5 +24,10 @@ description: Huntress binary-reverse-engineering lane - ELF/PE/Mach-O structure 
   Crypto by constants (AES tables, `0x9E3779B9` TEA, `expand 32-byte k`): identify, then reimplement with pycryptodome.
 
 # Solver tips
+`lib.binary` has the hardening helpers (use them instead of fragile byte regexes): `packer_info(data)` +
+`unpack_upx(path)` (entropy/UPX gate — unpack BEFORE analysis), `go_pclntab_funcs(data)` + `go_buildinfo(data)`
+(recover STRIPPED-Go function names from .gopclntab — they survive stripping), `rustfilt(sym)`,
+`macho_facts(data)` (Mach-O via lief), `recover_return_constants(data)` (capstone, robust where `b8..c3`
+went ambiguous), and `ghidra_decompile(path)` (headless, JDK 21 wired; heavy — last resort).
 Parse structure with `pyelftools`/`lief`/`rizin -j` (JSON) and derive every value from the binary in the variant; never hard-code
 an address, symbol name or constant. Keep heavy analysis (angr/Ghidra) off the timed path unless it's genuinely required.
