@@ -131,9 +131,13 @@ def run_local(chal_dir, stage, prompt, env_extra, timeout):
 _sync_lock = threading.Lock()
 
 
-def sync_homebase_base():
-    """Push hctf + lib + skills + bin to Homebase (shared by all homebase workers)."""
+def sync_homebase_base(force=False):
+    """Push hctf + lib + skills + bin to Homebase (shared by all homebase workers). Done once per process
+    (rsync is incremental, but skipping the extra ssh round-trips trims per-attempt overhead off the clock
+    path); pass force=True to re-sync after a code change."""
     with _sync_lock:
+        if _hb.get("base_synced") and not force:
+            return
         remote.ssh(f"mkdir -p ~/{HB_WORK}/challenges ~/.codex/skills")
         for d in ("hctf", "lib", "bin", "skills"):
             if (ROOT / d).exists():
@@ -142,6 +146,7 @@ def sync_homebase_base():
         for f in ("CLAUDE.md", "AGENTS.md"):
             if (ROOT / f).exists():
                 remote.rsync_to(ROOT / f, f"~/{HB_WORK}/{f}")
+        _hb["base_synced"] = True
 
 
 def run_timed(solver_dir, cid, op="start", timeout=60):
@@ -190,27 +195,25 @@ def _homebase_ready(log=print):
     with _hb_lock:
         if _hb["failed"]:
             return False
+        # WSL-native: the VM is powered on out-of-band (CourseStack console), so readiness is pure SSH
+        # reachability — NOT the browser-based power() check, which isn't wired up in WSL and, on a cold
+        # ControlMaster reconnect (seen >25s), used to time out, fall through to the dead browser, raise, and
+        # latch _hb["failed"]=True for the whole run (so every tight window silently ran local). Tolerate a
+        # cold reconnect here; day.sh pre-warms the control socket so this is usually instant.
         try:
-            st = remote.power("status")
-            if st.get("state") != "running":
-                if float(st.get("credits") or 0) <= CREDIT_FLOOR:
-                    log(f"[homebase] not powering on: {st.get('credits')} credits (floor {CREDIT_FLOOR})")
-                    _hb["failed"] = True
-                    return False
-                log("[homebase] tight clock window: powering Homebase on")
-                remote.ensure_up()
-                _hb["powered_by_us"] = True
-            else:
-                remote.ensure_up()
+            remote.ssh("true", timeout=45)
+        except Exception as e:  # noqa: BLE001 - VM off / VPN down / SSH unreachable -> stay local
+            log(f"[homebase] not reachable over SSH, staying local: {e}")
+            _hb["failed"] = True
+            return False
+        try:
             if not _hb["provisioned"]:
                 remote.rsync_to(ROOT / "setup" / "homebase_setup.sh", "~/homebase_setup.sh")
                 remote.ssh("bash ~/homebase_setup.sh >/dev/null 2>&1", timeout=600, check=False)
                 _hb["provisioned"] = True
-            return True
-        except Exception as e:  # noqa: BLE001 - never fail a run because Homebase is unavailable
-            log(f"[homebase] unavailable, staying local: {e}")
-            _hb["failed"] = True
-            return False
+        except Exception as e:  # noqa: BLE001 - provisioning is best-effort; deps usually already present
+            log(f"[homebase] provisioning note (continuing, deps may already be present): {e}")
+        return True
 
 
 def power_off_homebase_if_ours(log=print):
@@ -234,7 +237,14 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print):
     after a local expiry" rule burned one attempt per tight mode, and the rehearsal copy run showed local fits a 7s
     462-field Mastery only by ~0.9s (GM origin ~1.3-1.5s/call from here). HCTF_GM_TRANSPORT=ssh forces Homebase."""
     if remote.gm_transport() != "local":
-        return run_hb_timed(solver_dir, cid, op=op, timeout=timeout)
+        res = run_hb_timed(solver_dir, cid, op=op, timeout=timeout)
+        if str(res.get("result", "")).lower() == "exec_error" and remote._have_token():
+            log(f"[{cid}] Homebase run failed ({str(res.get('detail'))[:120]}); falling back to local")
+            res = run_timed(solver_dir, cid, op=op, timeout=timeout)
+            res["routed"] = "local (forced-ssh homebase failed)"
+        else:
+            res.setdefault("routed", "homebase (forced transport)")
+        return res
     win = known_window(cid)
     tight = win is None or win <= TIGHT_WINDOW
     if AUTO_HOMEBASE and tight and _homebase_ready(log):
@@ -281,17 +291,27 @@ def _mark_expired_locally(cid, seconds):
 def run_hb_timed(solver_dir, cid, op="start", timeout=60):
     """Run the clock-critical timed attempt ON Homebase (adjacent to the GM). Returns hb_timed's JSON dict.
     Syncs hctf+lib (base) and the solver so hb_timed can execute it next to the GM."""
-    sync_homebase_base()
     rel = solver_dir.relative_to(ROOT)
-    remote.ssh(f"mkdir -p ~/{HB_WORK}/{rel}")
-    if solver_dir.exists():
-        remote.rsync_to(str(solver_dir) + "/", f"~/{HB_WORK}/{rel}/")
+    # Kickoff (sync + solver push) runs over the flaky local->Homebase VPN link; the retrying ssh/rsync ride
+    # through transient drops, but if it still fails, return exec_error so run_timed_auto falls back to local
+    # rather than crashing the whole attempt. (Once hb_timed is running, its in-window GM calls are HB->inside
+    # proxy, off the VPN, so they stay fast and stable.)
+    try:
+        sync_homebase_base()
+        remote.ssh(f"mkdir -p ~/{HB_WORK}/{rel}")
+        if solver_dir.exists():
+            remote.rsync_to(str(solver_dir) + "/", f"~/{HB_WORK}/{rel}/")
+    except (remote.Unreachable, subprocess.SubprocessError, OSError) as e:
+        return {"result": "exec_error", "detail": f"homebase kickoff failed: {e}"}
     # Use the GM's INSIDE proxy from Homebase (network-path identity = same test account as the pairing token,
     # sub-ms latency) so tight windows (e.g. the 6s scripting Time Trial) fit; the public GM's ~2.7s/call
     # round-trips blow those windows even warm.
-    r = remote.ssh(f"cd ~/{HB_WORK} && HUNTRESS_GAME_MASTER_URL={remote.INSIDE_GM} "
-                   f"python3 hctf/hb_timed.py {shlex.quote(cid)} {shlex.quote(str(rel))} --op {op}",
-                   timeout=timeout, check=False)
+    try:
+        r = remote.ssh(f"cd ~/{HB_WORK} && HUNTRESS_GAME_MASTER_URL={remote.INSIDE_GM} "
+                       f"python3 hctf/hb_timed.py {shlex.quote(cid)} {shlex.quote(str(rel))} --op {op}",
+                       timeout=timeout, check=False)
+    except (remote.Unreachable, subprocess.SubprocessError, OSError) as e:
+        return {"result": "exec_error", "detail": f"homebase exec failed: {e}"}
     try:
         res = json.loads(r.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError):

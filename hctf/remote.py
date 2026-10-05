@@ -57,14 +57,18 @@ def _slot():
         time.sleep(0.2)
 
 
+SSH_RETRIES = int(os.environ.get("HCTF_SSH_RETRIES", "3"))  # rides through transient UDP-VPN drops to Homebase
+
+
 def ssh(cmd, timeout=180, check=True):
-    for attempt in (1, 2):
+    for attempt in range(1, SSH_RETRIES + 1):
         with _slot():
             r = subprocess.run(["ssh", *SSH_OPTS, f"{HB_USER}@{HB_HOST}", cmd],
                                capture_output=True, text=True, timeout=timeout)
-        if r.returncode != 255 or attempt == 2:
+        if r.returncode != 255 or attempt == SSH_RETRIES:
             break
-        clear_control_sockets()  # stale ControlMaster socket from a killed session: drop it and reconnect once
+        clear_control_sockets()  # stale ControlMaster socket, or a transient VPN blip: drop it, back off, reconnect
+        time.sleep(1.0 * attempt)
     if r.returncode == 255:
         raise Unreachable(r.stderr.strip() or "ssh failed")
     if check and r.returncode not in (0, 5):
@@ -92,21 +96,8 @@ def gm_transport():
     return "local" if _have_token() else "ssh"
 
 
-def gm(*args, timeout=180):
-    """Return gm.py's JSON envelope. Default transport runs the client LOCALLY against the public GM
-    (pairing token). Falls back to SSH-exec on Homebase (inside proxy) when HCTF_GM_TRANSPORT=ssh or
-    no pairing token is configured."""
-    transport = gm_transport()
-    if transport == "ssh":
-        r = ssh(f"HUNTRESS_GAME_MASTER_URL={INSIDE_GM} python3 ~/{HB_DIR}/gm.py "
-                + " ".join(shlex.quote(str(a)) for a in args), timeout=timeout)
-    elif transport == "homebase-local":
-        r = subprocess.run(["python3", str(Path.home() / HB_DIR / "gm.py"), *map(str, args)],
-                           capture_output=True, text=True, timeout=timeout,
-                           env=dict(os.environ, HUNTRESS_GAME_MASTER_URL=INSIDE_GM))
-    else:  # local (default): public GM via pairing token
-        r = subprocess.run([sys.executable, str(GM_LOCAL), *map(str, args)],
-                           capture_output=True, text=True, timeout=timeout)
+def _gm_parse(r, transport):
+    """Parse gm.py's last stdout line into its JSON envelope; raise Unreachable if the GM didn't answer."""
     try:
         env = json.loads(r.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError):
@@ -114,6 +105,39 @@ def gm(*args, timeout=180):
     if env.get("http") == 0:
         raise Unreachable(f"GM unreachable ({transport}): {env.get('body')}")
     return env
+
+
+def _gm_local(args, timeout):
+    """Run gm.py HERE against the public GM with the pairing token."""
+    r = subprocess.run([sys.executable, str(GM_LOCAL), *map(str, args)],
+                       capture_output=True, text=True, timeout=timeout)
+    return _gm_parse(r, "local")
+
+
+def gm(*args, timeout=180):
+    """Return gm.py's JSON envelope. Default transport runs the client LOCALLY against the public GM
+    (pairing token). With HCTF_GM_TRANSPORT=ssh it SSH-execs on Homebase against the inside proxy (sub-second
+    vs the public GM's ~1.3-8s/call) and, on any SSH/Homebase failure, falls back to the local public GM when
+    a pairing token is present. 'homebase-local' runs on Homebase itself (for workers already on the VM)."""
+    transport = gm_transport()
+    if transport == "ssh":
+        try:
+            r = ssh(f"HUNTRESS_GAME_MASTER_URL={INSIDE_GM} python3 ~/{HB_DIR}/gm.py "
+                    + " ".join(shlex.quote(str(a)) for a in args), timeout=timeout)
+            return _gm_parse(r, "ssh")
+        except (Unreachable, subprocess.SubprocessError, RuntimeError, OSError) as e:
+            # Homebase hiccup mid-run (SSH drop, cold reconnect, inside proxy down): don't fail the call —
+            # fall back to the public GM via the pairing token (slower ~1.3-8s, but it lands). Only the
+            # clock-critical timed path (run_hb_timed) can't afford this; ordinary calls prefer correctness.
+            if _have_token():
+                return _gm_local(args, timeout)
+            raise Unreachable(f"Homebase GM unreachable and no pairing token for fallback: {e}")
+    if transport == "homebase-local":
+        r = subprocess.run(["python3", str(Path.home() / HB_DIR / "gm.py"), *map(str, args)],
+                           capture_output=True, text=True, timeout=timeout,
+                           env=dict(os.environ, HUNTRESS_GAME_MASTER_URL=INSIDE_GM))
+        return _gm_parse(r, "homebase-local")
+    return _gm_local(args, timeout)  # local (default): public GM via pairing token
 
 
 def rsync_from(remote_path, local_dir):
@@ -135,13 +159,14 @@ def _rsync(argv):
     """rsync over the shared ssh options; on ssh failure (exit 255, usually a stale ControlMaster socket left by a
     killed session) clear the sockets and retry once instead of crashing the caller."""
     argv = [("ssh " + " ".join(shlex.quote(o) for o in SSH_OPTS)) if a == "SSH" else a for a in argv]
-    for attempt in (1, 2):
+    for attempt in range(1, SSH_RETRIES + 1):
         with _slot():
             r = subprocess.run(argv, capture_output=True, timeout=600)
         if r.returncode == 0:
             return r
-        if r.returncode == 255 and attempt == 1:
-            clear_control_sockets()
+        if r.returncode == 255 and attempt < SSH_RETRIES:
+            clear_control_sockets()  # stale socket or transient VPN blip: reconnect after a short backoff
+            time.sleep(1.0 * attempt)
             continue
         raise subprocess.CalledProcessError(r.returncode, argv, r.stdout, r.stderr)
 

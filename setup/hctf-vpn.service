@@ -1,0 +1,17 @@
+[Unit]
+Description=Huntress CTF 2026 OpenVPN tunnel (reaches Homebase 10.1.50.243)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# --pull-filter ignore redirect-gateway keeps local worker traffic (Anthropic API) off the tunnel;
+# only the CTF subnet is routed via tun0.
+ExecStart=/usr/sbin/openvpn --config /home/testpwn/huntress-2026/secrets/huntress-ctf-2026-ai-arena.ovpn --pull-filter ignore redirect-gateway --ping 10 --ping-restart 60
+Restart=on-failure
+RestartSec=5
+# Give the tunnel a moment to establish before systemd considers it started.
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target

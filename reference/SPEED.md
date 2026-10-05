@@ -2,6 +2,39 @@
 
 Target: solve all 5 lanes × 3 modes (15 solves) in < 4 min, matching the top team. Day 5 took ~8 min.
 
+## Timed-submit latency — FIXED (the biggest per-attempt win)
+
+Symptom: our timed submits took >2s while top teams submit in ~1s. Cause: timed attempts ran **local**
+against the *public* GM (5–8s/call, highly variable) instead of on **Homebase** against the *inside* proxy.
+On Day 5 they fell back to local because `_homebase_ready()` went through the browser-based `power()` check,
+which on a cold ControlMaster reconnect timed out, hit the (WSL-dead) Windows browser, raised, and latched
+`_hb["failed"]=True` for the whole run.
+
+Fixes (2026-10-05):
+- `workers._homebase_ready()`: readiness is now pure **SSH reachability** (no browser), tolerates a cold
+  reconnect, and doesn't latch-fail on a provisioning hiccup.
+- `remote.ssh()` / `_rsync()`: retry up to `HCTF_SSH_RETRIES=3` with backoff to ride through transient
+  UDP-VPN drops; `run_hb_timed` returns `exec_error` (never raises) so a kickoff failure falls back to local.
+- `remote.gm()`: the `ssh` transport falls back to the public GM (token) on any Homebase failure.
+- VPN root cause: OpenVPN was hitting `--ping-restart` inactivity timeouts every ~4 min (a ~3s outage each).
+  The systemd unit (`setup/hctf-vpn.service`) now runs with `--ping 10 --ping-restart 60` so the tunnel never
+  idles out. The local→Homebase link is ~230ms RTT; the in-window GM calls are HB→inside-proxy (off the VPN),
+  so they stay fast and stable once an attempt is kicked off.
+
+Measured on the Day 5 script-analysis Time Trial (7s window):
+
+| phase | local (public GM) | Homebase (inside proxy) |
+|---|---|---|
+| submit | 2.76s | **0.55s** |
+| download | 1.78s | 0.24s |
+| in-window total | 4.98s | **1.4s** |
+| total elapsed | 7.79s | 3.38s |
+
+Timed attempts now auto-route to Homebase when it's reachable (prewarmed at run start; `bin/day.sh` warms the
+control socket first). `HCTF_GM_TRANSPORT=ssh` forces *all* GM calls (incl. untimed single_solve) through the
+inside proxy — a further win for the many submits on a big single_solve, but left opt-in for now since the
+untimed artifact path (download-on-HB then rsync-back) is less battle-tested than local.
+
 ## Where the time actually goes (measured, Day 5)
 
 Reconstructed from `challenges/day05/*/*/log.jsonl` + worker logs. Run start T0 = 21:03:00.
