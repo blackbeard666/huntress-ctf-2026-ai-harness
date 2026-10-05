@@ -389,6 +389,18 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
         elif field_wrong[k] >= max_wrong:
             problems.append(f"{k}: {field_wrong[k]} wrong tries for this field (per-field cap {max_wrong}); "
                             "you have exhausted sensible candidates for its exact wording")
+
+    # ATT&CK guard: an id-shaped value ATT&CK doesn't know (or an *-attack field holding a non-id, non-'none'
+    # value) is a hallucination/typo the GM will reject, wasting an attempt — refuse it locally. The role tables
+    # in lib/knowledge.py supply the correct id; this only catches malformed values. Disable with HCTF_ATTACK_GUARD=0.
+    if os.environ.get("HCTF_ATTACK_GUARD", "1") != "0":
+        try:
+            from lib.refs import attack as _attack
+            for aid, val, reason in _attack.validate_answers(answers):
+                problems.append(f"{aid}: {reason} ({val!r}) [ATT&CK guard]")
+        except Exception:  # noqa: BLE001 - the guard must never itself block a submission
+            pass
+
     gcap = GLOBAL_WRONG_CAP if global_cap is None else global_cap
     if total_wrong >= gcap:
         problems.append(f"{total_wrong} wrong submissions in this attempt (global cap {gcap})")

@@ -59,3 +59,33 @@ def _uniq(xs):
 def attack_for(scenario):
     """Confirmed ATT&CK technique id for a scenario label, or None."""
     return K.SCENARIO_ATTACK.get(scenario)
+
+
+# Unified role -> ATT&CK resolver across scripting languages (the per-language tables in lib/knowledge.py).
+# Execution-type roles differ by interpreter: cmd=.003, VBScript=.005, Python=.006, JavaScript=.007.
+_ROLE_TABLES = {
+    "jscript": K.JSCRIPT_ROLE_ATTACK_CONFIRMED, "javascript": K.JSCRIPT_ROLE_ATTACK_CONFIRMED,
+    "js": K.JSCRIPT_ROLE_ATTACK_CONFIRMED,
+    "batch": K.BATCH_ROLE_ATTACK_CONFIRMED, "cmd": K.BATCH_ROLE_ATTACK_CONFIRMED,
+    "bat": K.BATCH_ROLE_ATTACK_CONFIRMED,
+    "vbs": K.VBS_ROLE_ATTACK_CONFIRMED, "vbscript": K.VBS_ROLE_ATTACK_CONFIRMED,
+    "python": K.PY_ROLE_ATTACK_CONFIRMED, "py": K.PY_ROLE_ATTACK_CONFIRMED,
+}
+
+
+def role_attack(role, language):
+    """GM-confirmed ATT&CK id for a (role, language) scripting construct, e.g. ('stager','python') -> 'T1105',
+    ('launcher','batch') -> 'T1059.003'. Returns the id, 'none' (benign), or None when the role is unknown for
+    that language — in which case the caller falls back to the scenario mapping or attack_candidates()."""
+    return (_ROLE_TABLES.get(str(language).lower()) or {}).get(role)
+
+
+def attack_candidates(behavior, limit=5, tactic=None):
+    """Reference-backed candidate ATT&CK ids for a free-text behavior, for a NOVEL role/scenario with no
+    confirmed mapping (new day/lane). Candidates only — the GM validates on submit. Weak for non-literal
+    technique names; prefer the confirmed tables above. Returns [(id, name, score), ...]."""
+    try:
+        from lib.refs import attack
+        return attack.search(behavior, limit=limit, tactic=tactic)
+    except Exception:  # noqa: BLE001 - reference optional
+        return []

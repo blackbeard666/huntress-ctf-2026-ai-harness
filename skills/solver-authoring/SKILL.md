@@ -24,7 +24,13 @@ The repo root is on PYTHONPATH, so `import lib.<x>` works from any solver. Prefe
   CTF passwords), `normalize`, `set_prefix` (`set1.`/`slot0_` -> unit index), `printable`.
 - `lib.decode.peel(data, accept)` — BFS layered decoder (base/hex/xor/rot/compression/zip/url/reverse) for warmups.
 - `lib.elf` — ELF `fields()`/`section_string()`/`exported_symbol()` emitting the GM's confirmed vocabulary.
-- `lib.scripts` — `deobfuscate()`, `iocs()`, `attack_for(scenario)` (confirmed ATT&CK ids).
+- `lib.scripts` — `deobfuscate()`, `iocs()`, `attack_for(scenario)`, `role_attack(role, language)`
+  (confirmed role->ATT&CK, e.g. `('stager','python')`->`T1105`; cmd=.003/vbs=.005/py=.006/js=.007),
+  `attack_candidates(behavior)` (reference-backed candidates for a NOVEL role). Resolve every `*-attack`
+  field from these — never hand-type a T-code. The submit guard refuses an id ATT&CK doesn't know.
+- `lib.refs.attack` — authoritative MITRE ATT&CK reference: `is_valid(id)`, `name(id)`, `tactics(id)`,
+  `id_for_name(name)`, `search(behavior)`. Use it to VALIDATE any attack value and to generate candidates
+  for an unseen role/scenario; the GM still judges correctness on submit.
 - `lib.knowledge` — the central store of GM-confirmed spellings (ELF endianness=`little`, machine=`x86-64`,
   scenario->ATT&CK, booleans). **When the GM confirms a new spelling, add it here**, not just in one solver.
 If you discover a genuinely reusable helper, add it to the right `lib/` module so later days inherit it.
