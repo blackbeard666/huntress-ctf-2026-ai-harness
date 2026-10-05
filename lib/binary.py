@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-GHIDRA_SCRIPT = Path(__file__).resolve().parent / "ghidra_scripts" / "DecompileDump.py"
+GHIDRA_SCRIPT = Path(__file__).resolve().parent / "ghidra_scripts" / "DecompileDump.java"
 
 
 # --- packing -------------------------------------------------------------------------------------
@@ -178,12 +178,10 @@ def ghidra_decompile(path, timeout=300):
     headless = Path(__file__).resolve().parents[1] / "bin" / "analyzeHeadless"
     if not headless.exists() or not GHIDRA_SCRIPT.exists():
         return ""
-    with tempfile.TemporaryDirectory() as proj:
-        out = Path(proj) / "decomp.c"
-        r = subprocess.run(
+    with tempfile.TemporaryDirectory() as proj, tempfile.NamedTemporaryFile(suffix=".c") as outf:
+        # Output must live OUTSIDE the project dir: -deleteProject wipes the project tree on exit.
+        subprocess.run(
             [str(headless), proj, "P", "-import", str(path), "-scriptPath", str(GHIDRA_SCRIPT.parent),
-             "-postScript", GHIDRA_SCRIPT.name, str(out), "-deleteProject"],
+             "-postScript", GHIDRA_SCRIPT.name, outf.name, "-deleteProject"],
             capture_output=True, text=True, timeout=timeout)
-        if out.exists():
-            return out.read_text(errors="replace")
-        return ""  # noqa: - stderr in r is available for debugging if needed
+        return Path(outf.name).read_text(errors="replace")
