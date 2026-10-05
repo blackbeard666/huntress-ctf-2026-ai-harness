@@ -12,3 +12,5 @@ __pycache__/
 !/bin/hctf
 !/bin/env.sh
 challenges/*/*/solver/cases/*/artifacts/
+challenges/*/*/.generalize-snapshot/
+challenges/*/*/.generalize-rejected/

@@ -10,6 +10,7 @@ Fix workers racing a deadline skip the slot queue.
 import json
 import os
 import re
+import shutil
 import threading
 import time
 import traceback
@@ -233,7 +234,70 @@ class Chain:
                                 problems="\n".join(f"  - {p}" for p in probs) or "  - solver did not produce all answers",
                                 gm_wrong=gm_wrong)
         set_state(self.base, stage=f"{mode}:generalizing")
-        self.run_worker(cid, "generalize", prompt, GENERALIZE_TIMEOUT)
+        self._snapshot_solver()
+        try:
+            self.run_worker(cid, "generalize", prompt, GENERALIZE_TIMEOUT)
+        finally:
+            self._accept_or_restore(cid)
+
+    # -- transactional generalize: a worker that is killed / times out / breaks old cases must never leave a
+    #    half-edited solver behind (happened twice on the rehearsal copy: warmups solve.py, Dim and Dimmer vbsplan.py).
+    def _snap_dir(self):
+        return self.root / ".generalize-snapshot"
+
+    def _snapshot_solver(self):
+        snap = self._snap_dir()
+        if snap.exists():
+            shutil.rmtree(snap)
+        if self.sdir.exists():
+            shutil.copytree(self.sdir, snap, ignore=shutil.ignore_patterns("__pycache__"))
+        # Baseline: which cases pass BEFORE the worker. Unverified variant cases are legitimately red; the bar is
+        # "nothing that passed may break", not "everything green".
+        try:
+            res = solvers.test_solver(self.sdir) if (self.sdir / "solve.py").exists() else []
+            self._baseline = {r.get("case") for r in (res or []) if r.get("ok")}
+        except Exception:  # noqa: BLE001
+            self._baseline = set()
+
+    def _restore_snapshot(self, why):
+        snap = self._snap_dir()
+        if not snap.exists():
+            return
+        rejected = self.root / ".generalize-rejected"
+        if rejected.exists():
+            shutil.rmtree(rejected)
+        if self.sdir.exists():
+            shutil.move(str(self.sdir), str(rejected))   # kept for inspection; never imported by the dispatcher
+        shutil.move(str(snap), str(self.sdir))
+        say(f"[{self.base}] generalize REJECTED ({why}); solver restored to its pre-worker state "
+            f"(worker's version kept in {rejected.relative_to(ROOT)})")
+
+    def _accept_or_restore(self, cid):
+        """After the generalize worker exits for ANY reason: keep its edits only if every case that passed before
+        still passes (and the solver still runs at all)."""
+        snap = self._snap_dir()
+        if not snap.exists():
+            return
+        try:
+            res = solvers.test_solver(self.sdir) if (self.sdir / "solve.py").exists() else []
+        except Exception as e:  # noqa: BLE001
+            res = None
+            err = repr(e)
+        passed = {r.get("case") for r in (res or []) if r.get("ok")}
+        broken = sorted(getattr(self, "_baseline", set()) - passed)
+        if res and not broken:
+            shutil.rmtree(snap)
+            gained = sorted(passed - getattr(self, "_baseline", set()))
+            if gained:
+                say(f"[{self.base}] generalize accepted: now also passes {gained[:6]}")
+            return
+        self._restore_snapshot(f"broke previously-passing cases {broken[:6]}" if res else
+                               f"solver no longer runs ({err if res is None else 'no solve.py / no cases'})")
+
+    def recover_interrupted_generalize(self):
+        """A snapshot left on disk means the orchestrator died mid-generalize (killed run): restore it."""
+        if self._snap_dir().exists():
+            self._restore_snapshot("previous run was interrupted mid-generalize")
 
     def try_existing_solvers(self, cid):
         """Run the whole solver library (all days, matched by question text) against this challenge.
@@ -511,6 +575,7 @@ class Chain:
     def run(self):
         try:
             set_state(self.base, stage="queued", name=self.name, lane=self.lane, worker=None)
+            self.recover_interrupted_generalize()
             modes = self.only_modes or ["single_solve", "time_trial", "mastery"]
             if "single_solve" in modes and not self.single():
                 return
