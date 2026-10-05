@@ -9,6 +9,14 @@ description: Huntress warmups lane - decoding text blobs and layered encodings (
    title name the layer ("A Little Based" = base64, "Half a Turn" = rot13 / 180°).
 3. The question tells you *which line* to submit (e.g. "the final non-empty decoded line"). Apply `normalization`.
 
+# Tools
+- `lib.decode.peel(data, accept)` — BFS over *encodings* (base/hex/binary/compression/zip/url/rot/single-XOR).
+- `lib.ciphers` — *ciphers* peel doesn't do: `caesar_all`, `atbash`, `vigenere_decrypt`/`vigenere_crack`,
+  `repeating_key_xor`/`xor_crack` (keyless break via Hamming + column stats, returns ranked candidates),
+  `morse_decode`, `base58_decode`, `quoted_printable_decode`, `english_score`. If peel() fails, the blob is
+  probably a keyed/classical cipher — reach here. These are real now (base58/QP/repeating-XOR were advertised
+  but unimplemented before).
+
 # Generic layered decoder (start of a solver)
 ```python
 import base64, binascii, bz2, codecs, gzip, lzma, re, zlib
