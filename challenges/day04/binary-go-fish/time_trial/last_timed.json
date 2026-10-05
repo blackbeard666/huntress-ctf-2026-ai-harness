@@ -1,13 +1,16 @@
 {
   "result": "correct",
   "full_result": "correct",
-  "attempt_id": "9d35e3b4-0d9a-4375-9c66-f91fd4bb4c57",
+  "attempt_id": "4465fbab-4d4e-41c6-98af-dceecdebab58",
   "window": 7.0,
-  "elapsed": 7.76,
+  "elapsed": 7.66,
+  "in_window": 4.85,
   "phases": {
-    "start": 1.84,
-    "download": 3.54,
-    "solve": 0.34,
-    "submit": 2.04
-  }
+    "start": 2.81,
+    "download": 2.5,
+    "solve": 0.32,
+    "submit": 2.03
+  },
+  "novel_labels": {},
+  "deadline": "2026-10-04T23:56:04.320Z"
 }
