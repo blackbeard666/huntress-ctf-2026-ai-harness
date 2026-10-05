@@ -56,14 +56,17 @@ RUN_ARGS=(run --day "$DAY" --local "$LOCAL")
 [ "$SCOUT" -gt 0 ] && RUN_ARGS+=(--scout "$SCOUT") && echo "[scout] $SCOUT TT scouting round(s) enabled."
 
 echo "[run] hctf ${RUN_ARGS[*]}  ->  $LOG"
+# Post-run: ATT&CK generalization gate (coverage vs the confirmed role/scenario tables + reference).
+POST="python3 -m lib.refs.coverage $DAY 2>&1 | sed 's/^/[attack-coverage] /'"
 if [ "$FG" -eq 1 ]; then
   hctf "${RUN_ARGS[@]}" 2>&1 | tee "$LOG"
   rc=${PIPESTATUS[0]}
-  echo "[done] run exited rc=$rc"
+  echo "[done] run exited rc=$rc"; echo "=== ATT&CK coverage ($DAYTAG) ==="; eval "$POST" | tee -a "$LOG"
   exit "$rc"
 else
   # setsid detaches into its own session so it survives the launching shell cleanly (nohup+& was fragile).
-  setsid bash -c "cd '$ROOT' && source bin/env.sh && hctf ${RUN_ARGS[*]} > '$LOG' 2>&1" >/dev/null 2>&1 &
+  setsid bash -c "cd '$ROOT' && source bin/env.sh && hctf ${RUN_ARGS[*]} > '$LOG' 2>&1; { echo; echo '=== ATT&CK coverage ($DAYTAG) ==='; $POST; } >> '$LOG' 2>&1" >/dev/null 2>&1 &
   echo "[run] launched in background (pid $!)."
   echo "      watch:  tail -f $LOG     board:  hctf dash | grep $DAYTAG     health:  hctf why <id>"
+  echo "      the ATT&CK generalization report (python3 -m lib.refs.coverage $DAY) appends to $LOG when the run finishes."
 fi
