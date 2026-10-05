@@ -72,3 +72,38 @@ adding one layer**, which breaks some lanes with *zero* obfuscation.
 Rank order to harden: **mobile (2) and binary (2) first** — they break cheapest — then the metadata/script
 tool gaps, then warmups ciphers. The work is mostly *wiring in tools we already have* and *generalizing
 extractors into analyzers*, not inventing new capability.
+
+---
+
+## Implementation status (2026-10-05) — prep plan DONE
+
+All P0–P2 implemented and verified by `tests/test_hardening.py` (14/14 adversarial fixtures pass). Each lib
+module is wired into its lane skill.
+
+| Item | Status | Where |
+|---|---|---|
+| Mobile fallback chain (json→zip-scan→dex→apktool/jadx) + manifest facts | ✅ | `lib/android.py` |
+| Binary: Ghidra JDK 21 fix (launches now) + headless decompile helper | ✅ | `tools/ghidra/support/launch.properties`, `lib/binary.ghidra_decompile`, `lib/ghidra_scripts/DecompileDump.java` |
+| Binary: stripped-Go `.gopclntab` recovery, buildinfo, Mach-O, capstone constant recovery | ✅ | `lib/binary.py` |
+| Binary: packer gate + UPX unpack (`upx` installed) | ✅ | `lib/binary.packer_info`/`unpack_upx` |
+| Warmups: classical/keyed ciphers (caesar/atbash/vigenère+crack, repeating-XOR+crack, morse, base58, QP) | ✅ | `lib/ciphers.py` |
+| Metadata: LSB/bit-plane stego, trailing-data carve, PNG text chunks, binwalk carve, wordlist zip crack | ✅ | `lib/stego.py` |
+| Script: compiled-Python recovery (PyInstaller extract + decompyle3 + dis fallback) | ✅ | `lib/pyc.py` |
+| Tools installed | ✅ | JDK 21, upx, john, foremost (apt); decompyle3 (uv). `setup/harden-env.sh` reproduces it |
+| Adversarial regression harness | ✅ | `tests/test_hardening.py` |
+
+**Dynamic-analysis path (the "static is not a guarantee" gap):** binary emulation via `angr`+`unicorn` (in
+venv), JS sandbox via `box-js`. These cover computed-constant / runtime-string cases statically-ish.
+
+### Residual gaps (documented, lower likelihood / need heavy deps)
+- **.NET deobfuscation** (de4dot/ilspycmd) — needs a mono/dotnet runtime (not installed; heavy). Day-3 .NET
+  was header-level only. Install mono if a managed-logic challenge drops.
+- **pyarmor with real bytecode encryption** — needs dynamic unpacking, not static decompilation.
+- **Modern-Python (3.9+) full decompilation** — decompyle3 covers 3.7–3.8; `dis` fallback still surfaces
+  consts/strings. Build `pycdc` for full modern decompilation if needed.
+- **`zip2john`/`office2john` → hashcat** — distro `john` lacks the *2john tools; `lib.stego.crack_zip` does a
+  pyzipper wordlist instead (install john-jumbo for the full hashcat pipeline).
+- **Live-target / runtime-only challenges** — reachable only inside the CTF network (Homebase). No generic
+  interactive-target solver yet; `hctf hb exec` is the manual path.
+- **GoReSym/rustfilt** — `lib.binary.go_pclntab_funcs` covers stripped-Go names; GoReSym/rustfilt are nicer
+  but optional downloads (noted in `setup/harden-env.sh`).
