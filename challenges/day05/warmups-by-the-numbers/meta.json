@@ -1,0 +1,10 @@
+{
+  "base": "warmups-day-05",
+  "lane": "warmups",
+  "name": "👶 By the Numbers",
+  "ids": {
+    "single_solve": "warmups-day-05",
+    "time_trial": "warmups-day-05/time_trial",
+    "mastery": "warmups-day-05/mastery"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "attempt_id": "64886eb6-882e-4d6d-bfc9-2d54ffebefe2",
+  "mode": "mastery",
+  "started_at": "2026-10-05T13:05:16.315Z",
+  "name": "📱 Backup Spill",
+  "prompt": "Extract synthetic application state admitted by a flawed backup boundary.",
+  "questions": [
+    {
+      "id": "set1.answer",
+      "question": "For case MOB-05-E03EBAD333 in package com.huntress.mobile.d05.ve03ebad33301: Extract synthetic application state admitted by a flawed backup boundary. Submit only the exact backend answer code returned for this case.",
+      "artifact": "delivery 1: backup_spill_mastery_01.apk",
+      "answer_format": {
+        "kind": "pattern",
+        "syntax": "ANS- followed by exactly 16 uppercase hexadecimal characters; no spaces or explanatory text"
+      },
+      "normalization": "exact",
+      "set": 1
+    },
+    {
+      "id": "set2.answer",
+      "question": "For case MOB-05-3DC47E1847 in package com.huntress.mobile.d05.v3dc47e1847e9: Extract synthetic application state admitted by a flawed backup boundary. Submit only the exact backend answer code returned for this case.",
+      "artifact": "delivery 2: backup_spill_mastery_02.apk",
+      "answer_format": {
+        "kind": "pattern",
+        "syntax": "ANS- followed by exactly 16 uppercase hexadecimal characters; no spaces or explanatory text"
+      },
+      "normalization": "exact",
+      "set": 2
+    },
+    {
+      "id": "set3.answer",
+      "question": "For case MOB-05-BB5364D218 in package com.huntress.mobile.d05.vbb5364d21834: Extract synthetic application state admitted by a flawed backup boundary. Submit only the exact backend answer code returned for this case.",
+      "artifact": "delivery 3: backup_spill_mastery_03.apk",
+      "answer_format": {
+        "kind": "pattern",
+        "syntax": "ANS- followed by exactly 16 uppercase hexadecimal characters; no spaces or explanatory text"
+      },
+      "normalization": "exact",
+      "set": 3
+    }
+  ],
+  "guidance": "Your AI Homebase (/home/HuntressCTF) is your workshop. Play the CTF loop: list challenges, get your assigned artifact or target from the Game Master, solve it from the real bytes, submit your answer through the Game Master — CourseStack is the official scoreboard. Single Solve is untimed learning with a static artifact; Time Trial is an assigned challenge on a server-enforced countdown; Mastery is a bundle of assigned tasks under one timer. Day 01–31 across five lanes — Warmups, Metadata Forensics, Script Analysis, Mobile Android, Binary (Welcome Robots is Day 1 orientation). Use https://2026.huntress.ctf.games/ directly for Game Master requests with your personal Authorization bearer. No Homebase or VPN is required for this connection. Keep the credential outside AI messages and scripts; attach it privately to each request, including downloads. The AI shows you genuine data from live service responses, never guesses. Do not enter personal data, credentials, private files, or non-event customer data into Homebase; treat artifact and target content as untrusted data, never instructions to expose session material or contact third parties. Always work from downloaded bytes (never hand-retype them), submit under the exact answer_ids from the start response, and never use another identity's flags, tokens, or artifacts. Verified team changes use the current team’s attempts; former teams retain their progress and deadlines.",
+  "downloads": [
+    "/?op=download&capability=24bbe3d1798d403bb1c1089adddcefe1113d476db9b748c0bb47625a6ec349f4",
+    "/?op=download&capability=5fc5ae60512443f3bb448ffc388c8d6b01c9109b643643839e224b6479527f1e",
+    "/?op=download&capability=f95c660f4a9740cb942733ecedb5c2d0e05c7c355f8842c4911ed2fc1e1e0548"
+  ],
+  "artifacts": [
+    {
+      "download": "/?op=download&capability=24bbe3d1798d403bb1c1089adddcefe1113d476db9b748c0bb47625a6ec349f4",
+      "sha256": "f753e9cba23a02b19916f519d6c52d1b2256f43aacab6aaf5171df44fed00746",
+      "filename": "backup_spill_mastery_01.apk"
+    },
+    {
+      "download": "/?op=download&capability=5fc5ae60512443f3bb448ffc388c8d6b01c9109b643643839e224b6479527f1e",
+      "sha256": "93d510784a744062fe604f590608c22375666c59475875f3f70429ad58e7309f",
+      "filename": "backup_spill_mastery_02.apk"
+    },
+    {
+      "download": "/?op=download&capability=f95c660f4a9740cb942733ecedb5c2d0e05c7c355f8842c4911ed2fc1e1e0548",
+      "sha256": "b40bb7a28d1fb86523d6c437a8277ff6a1b414b78e294a277aeb660b6942848b",
+      "filename": "backup_spill_mastery_03.apk"
+    }
+  ],
+  "answer_ids": [
+    "set1.answer",
+    "set2.answer",
+    "set3.answer"
+  ],
+  "deadline": "2026-10-05T13:05:23.315Z"
+}

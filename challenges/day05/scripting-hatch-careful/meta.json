@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-05-python-carrier-lab",
+  "lane": "script-analysis",
+  "name": "📜 Hatch Careful",
+  "ids": {
+    "single_solve": "script-analysis-day-05-python-carrier-lab",
+    "time_trial": "script-analysis-day-05-python-carrier-lab/time_trial",
+    "mastery": "script-analysis-day-05-python-carrier-lab/mastery"
+  }
+}

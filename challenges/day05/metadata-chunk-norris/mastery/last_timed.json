@@ -1,0 +1,16 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "b5fc9aae-1fd6-416a-9680-6fffb498ba64",
+  "window": 6.0,
+  "elapsed": 6.43,
+  "in_window": 3.38,
+  "phases": {
+    "start": 3.05,
+    "download": 1.52,
+    "solve": 0.07,
+    "submit": 1.79
+  },
+  "novel_labels": {},
+  "deadline": "2026-10-05T13:05:25.976Z"
+}

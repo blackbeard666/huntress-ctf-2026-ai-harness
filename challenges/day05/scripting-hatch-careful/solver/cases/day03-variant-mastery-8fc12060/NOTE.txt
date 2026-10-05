@@ -1,0 +1,1 @@
+set2 dropped: evidence-02.zip was never captured and set2 values were worker-derived, not GM-verified.

@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-05-backup-spill",
+  "lane": "mobile-android",
+  "name": "📱 Backup Spill",
+  "ids": {
+    "single_solve": "mobile-android-day-05-backup-spill",
+    "time_trial": "mobile-android-day-05-backup-spill/time_trial",
+    "mastery": "mobile-android-day-05-backup-spill/mastery"
+  }
+}

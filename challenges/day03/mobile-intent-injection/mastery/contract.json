@@ -47,23 +47,28 @@
     "set2.answer",
     "set3.answer"
   ],
+  "accepted_ids": [
+    "set1.answer",
+    "set2.answer",
+    "set3.answer"
+  ],
   "artifacts": [
     {
-      "download": "/?op=download&capability=ffd7293a40194318923435432028eb143a7cf3f200b74420b31a6e32bc33ae43",
+      "download": "/?op=download&capability=3e9ce771a6ec4b5c93e125b05357d18d3970ccacffda43fa9a853c653a98a305",
       "filename": "intent_injection_mastery_01.apk",
       "sha256": "4128d46200d762e760a7a4a3f03d68bc24dd9d06b6e52d3cdf5092b55991f0ac",
       "size": 12704,
       "kind": "artifact"
     },
     {
-      "download": "/?op=download&capability=8bb084ecaead4977b13c6d5e36d76d86e5d117b8b1244effa87231b0946f14bf",
+      "download": "/?op=download&capability=fa2ded3fb98f48d88a67c7c5d9128ad12692c11d2d4746809c1bb8c66a3d4109",
       "filename": "intent_injection_mastery_02.apk",
       "sha256": "af27a309f396766b1dd95c0a7527eb6abc5b0f4277bbdbc4290d1e4fc63bfb14",
       "size": 12704,
       "kind": "artifact"
     },
     {
-      "download": "/?op=download&capability=e09383d170f94e86af3eccc69f73fae187e4458f7e234c2f817e0d31038e67b2",
+      "download": "/?op=download&capability=2aba01dea51b47d5a0da474a4917d77c5cde11938740477ab9daea01ddeb9bd7",
       "filename": "intent_injection_mastery_03.apk",
       "sha256": "f17dd968f471624c0ba23626cb4a16e3375943180cda51484b833b5c8c017e66",
       "size": 12704,

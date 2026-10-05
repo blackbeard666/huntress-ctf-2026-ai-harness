@@ -23,6 +23,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Go Fish"
   },
+  "binary-reverse-engineering-day-05-rust-runtime-shapes": {
+    "day": 5,
+    "dir": "day05/binary-rust-belt",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Rust Belt"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -47,6 +53,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Picture This"
   },
+  "metadata-forensics-day-05-chunk-norris": {
+    "day": 5,
+    "dir": "day05/metadata-chunk-norris",
+    "lane": "metadata-forensics",
+    "name": "🔎 Chunk Norris"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -70,6 +82,12 @@
     "dir": "day04/mobile-pending-intent-relay",
     "lane": "mobile-android",
     "name": "📱 Pending Intent Relay"
+  },
+  "mobile-android-day-05-backup-spill": {
+    "day": 5,
+    "dir": "day05/mobile-backup-spill",
+    "lane": "mobile-android",
+    "name": "📱 Backup Spill"
   },
   "read-the-rules": {
     "day": 1,
@@ -101,6 +119,12 @@
     "lane": "script-analysis",
     "name": "📜 Dim and Dimmer"
   },
+  "script-analysis-day-05-python-carrier-lab": {
+    "day": 5,
+    "dir": "day05/scripting-hatch-careful",
+    "lane": "script-analysis",
+    "name": "📜 Hatch Careful"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -124,6 +148,12 @@
     "dir": "day04/warmups-two-of-a-kind",
     "lane": "warmups",
     "name": "👶 Two of a Kind"
+  },
+  "warmups-day-05": {
+    "day": 5,
+    "dir": "day05/warmups-by-the-numbers",
+    "lane": "warmups",
+    "name": "👶 By the Numbers"
   },
   "welcome-robots": {
     "day": 1,

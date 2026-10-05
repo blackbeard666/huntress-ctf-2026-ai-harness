@@ -41,9 +41,13 @@
     "set1.evidence-note-copy-text-utf8-bom-present",
     "set2.d03-text-001-text-utf8-bom-present"
   ],
+  "accepted_ids": [
+    "set1.evidence-note-copy-text-utf8-bom-present",
+    "set2.d03-text-001-text-utf8-bom-present"
+  ],
   "artifacts": [
     {
-      "download": "/?op=download&capability=729db7debd754af68a639ac28d26c07d225e49ad678240babc9019e73574c6f8",
+      "download": "/?op=download&capability=3adc1a8f91f94da59f0514a41d66744a5c5f9b0ba16f4e1eb94b6368e0b86559",
       "filename": "metadata-forensics-day-03-bom-voyage-mastery.zip",
       "sha256": "ed058314fa5b627b19a14df5e1f7b9f44f6cd440569df4ede1466ccd8ef011bb",
       "size": 729,

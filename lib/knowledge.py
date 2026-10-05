@@ -53,6 +53,10 @@ DOTNET_FORMAT_REJECTED = [
 # header size as '<width>x<height>' (X then Y, lowercase 'x', no spaces), e.g. "257x146" — not EXIF/filename dims.
 JPEG_DIMENSIONS_FMT = "{width}x{height}"
 
+# Day 5 "Chunk Norris" (metadata-forensics), confirmed 2026-10-05: png.ihdr_dimensions_pixels is the IHDR width/height
+# as '<width>x<height>' (same form as the JPEG SOF field), e.g. "269x153".
+PNG_DIMENSIONS_FMT = "{width}x{height}"
+
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {
     "resource_hijacking": "T1496",     # crypto-mining / resource hijacking
@@ -147,3 +151,13 @@ VBS_TRANSFORM_SEEN = ("reverse_then_xor", "identity")
 
 # cmd percent expansion: only %N, %~<mods>N and %* are batch arguments. `%item0%` is a VARIABLE even though the name
 # ends in a digit. Time-trial variants name their fragments item0..itemN (Expansion Pack TT fde517bd).
+# Python "recovered" fixtures (Day 5 "Hatch Careful", GM-confirmed single solve 2026-10-05, 357/357, no wrong answer).
+# The decoded plan (k=v|...) carries adapter/campaign_id/syntax/obfuscation/carrier/windows_chain + indicators verbatim;
+# those plan strings are the GM labels. Roles from plan steps: `dispatch_next_stage` graph = **relay** (no handoff_script
+# step, unlike JS/Batch/VBS relay files which are staged_chain); profile_host,acquire_remote,decode_embedded,write_file,
+# dispatch_process = staged_chain; collect_local,encode_archive,transmit_remote = uploader.
+# Execution-type roles map to the Python interpreter, T1059.006.
+PY_ROLE_ATTACK_CONFIRMED = {
+    "benign_utility": "none", "stager": "T1105", "downloader": "T1105", "impact": "T1486", "dropper": "T1140",
+    "uploader": "T1041", "launcher": "T1059.006", "staged_chain": "T1059.006", "relay": "T1059.006",
+}

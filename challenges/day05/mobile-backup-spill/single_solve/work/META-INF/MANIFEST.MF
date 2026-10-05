@@ -1,0 +1,11 @@
+Manifest-Version: 1.0
+
+Name: AndroidManifest.xml
+SHA-256-Digest: W6FHEWkOHsuwKKXUFAa/2yVQnJvYuSSN8WGQRFm0vbE=
+
+Name: assets/huntress_puzzle.json
+SHA-256-Digest: s2gHdOYrQAiGvlaxxGGtrgIFwWNFbkWhZj9h5yqonxw=
+
+Name: classes.dex
+SHA-256-Digest: AKKEHKS6/RhFBclTWjaf8Q24z6o0nXJmT8tBz/S3IwE=
+

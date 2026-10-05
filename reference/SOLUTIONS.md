@@ -1,6 +1,6 @@
 # Huntress CTF 2026 — Solutions index
 
-_Auto-generated 2026-10-04 22:50 by `hctf solutions` from each solver/NOTES.md._
+_Auto-generated 2026-10-05 21:12 by `hctf solutions` from each solver/NOTES.md._
 
 ## day01
 
@@ -41,3 +41,11 @@ _Auto-generated 2026-10-04 22:50 by `hctf solutions` from each solver/NOTES.md._
 | [📱 Pending Intent Relay](challenges/day04/mobile-pending-intent-relay/solver/NOTES.md) | mobile-android | done | Pending Intent Relay — solver notes |  |
 | [📜 Dim and Dimmer](challenges/day04/scripting-dim-and-dimmer/solver/NOTES.md) | script-analysis | done | Dim and Dimmer solver notes |  |
 | [👶 Two of a Kind](challenges/day04/warmups-two-of-a-kind/solver/NOTES.md) | warmups | done | Two of a Kind (warmups day 04) solver notes |  |
+
+## day05
+
+| Challenge | Lane | Status | How it was solved | GM vocab |
+|---|---|---|---|---|
+| [🔎 Chunk Norris](challenges/day05/metadata-chunk-norris/solver/NOTES.md) | metadata-forensics | done | Chunk Norris (Day 5, metadata-forensics) — PNG chunk structure |  |
+| [📱 Backup Spill](challenges/day05/mobile-backup-spill/solver/NOTES.md) | mobile-android | done | Backup Spill — solver notes |  |
+| [📜 Hatch Careful](challenges/day05/scripting-hatch-careful/solver/NOTES.md) | script-analysis | done | Hatch Careful solver notes (Day 5) |  |

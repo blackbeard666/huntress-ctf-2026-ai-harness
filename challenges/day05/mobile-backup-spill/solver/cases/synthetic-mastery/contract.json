@@ -1,0 +1,5 @@
+{"mode":"mastery","answer_ids":["set1.answer","set2.answer","set3.answer"],
+ "questions":[
+  {"id":"set1.answer","artifact":"delivery 1: backup_spill_mastery_01.apk","answer_format":{"kind":"pattern","syntax":"ANS- ..."},"normalization":"exact","set":1},
+  {"id":"set2.answer","artifact":"delivery 2: backup_spill_mastery_02.apk","answer_format":{"kind":"pattern","syntax":"ANS- ..."},"normalization":"exact","set":2},
+  {"id":"set3.answer","artifact":"delivery 3: backup_spill_mastery_03.apk","answer_format":{"kind":"pattern","syntax":"ANS- ..."},"normalization":"exact","set":3}]}

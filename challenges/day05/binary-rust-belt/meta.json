@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-05-rust-runtime-shapes",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Rust Belt",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-05-rust-runtime-shapes",
+    "time_trial": "binary-reverse-engineering-day-05-rust-runtime-shapes/time_trial",
+    "mastery": "binary-reverse-engineering-day-05-rust-runtime-shapes/mastery"
+  }
+}
