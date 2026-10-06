@@ -13,6 +13,7 @@ __pycache__/
 !/bin/env.sh
 !/bin/preflight.sh
 !/bin/day.sh
+!/bin/shims/
 challenges/*/*/solver/cases/*/artifacts/
 challenges/*/*/.generalize-snapshot/
 challenges/*/*/.generalize-rejected/

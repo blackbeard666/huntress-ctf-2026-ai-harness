@@ -357,6 +357,12 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print):
     tight = win is None or win <= TIGHT_WINDOW
     if AUTO_HOMEBASE and tight and _homebase_ready(log):
         res = run_hb_timed(solver_dir, cid, op=op, timeout=timeout)
+        if (str(res.get("result", "")).lower() in ("solver_incomplete", "solver_error") and res.get("missing")
+                and not res.get("submitted")):
+            # The solver produced NOTHING on Homebase although it was verified locally: an environment difference
+            # (rehearsal rehearsal: solve.py shelled out to 7z, which the the VM lacks). Flag it for the generalize diagnosis.
+            res["hb_env_mismatch"] = True
+            log(f"[{cid}] solver produced no answers ON HOMEBASE (works locally) -- Homebase environment mismatch")
         if str(res.get("result", "")).lower() != "exec_error":
             res["routed"] = f"homebase ({'window unknown' if win is None else f'window {win:g}s'})"
             return res

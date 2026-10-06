@@ -381,6 +381,9 @@ def main():
     contract = adir / "contract.json"
     contract.write_text(json.dumps(body))
     env = dict(os.environ, PYTHONPATH=str(HW))
+    import shutil as _sh
+    if not _sh.which("7z"):  # e.g. the the Homebase VM (no p7zip, no sudo): pyzipper-backed bin/shims/7z
+        env["PATH"] = f"{HW / 'bin' / 'shims'}:{env.get('PATH', '')}"
     solve = HW / a.solver_dir / "solve.py"
     r = subprocess.run([sys.executable, str(solve), "--contract", str(contract), "--artifacts", str(adir)],
                        capture_output=True, text=True, timeout=max(2, (left or 30) - 1.5), env=env)

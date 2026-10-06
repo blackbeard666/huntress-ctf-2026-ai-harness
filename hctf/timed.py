@@ -187,7 +187,7 @@ def last_result(cid):
 
 
 def _remember(cid, res):
-    keep = {k: res.get(k) for k in ("result", "full_result", "attempt_id", "window", "elapsed", "in_window", "phases", "solver_too_slow",
+    keep = {k: res.get(k) for k in ("result", "full_result", "attempt_id", "window", "elapsed", "in_window", "phases", "solver_too_slow", "hb_env_mismatch",
                                      "per_set", "bad_sets", "wrong", "fixed", "localize_complete", "routed", "missing",
                                      "localize_tried", "novel_labels", "deadline", "detail")
             if k in res}
@@ -303,6 +303,9 @@ def process_result(cid, solver_dir, res, log=print):
     regression case, cache GM-verified closed-vocab labels (from ANY attempt, not only correct ones), record a
     correct result locally. Returns correct | expired | blocked | error:<x>."""
     r = str(res.get("result", "")).lower()
+    detail = str(res.get("detail", ""))
+    if r == "exec_error" and "solve.py" in detail and ("timed out" in detail or "TimeoutExpired" in detail):
+        res["solver_too_slow"] = True  # set BEFORE _remember: the timed stage reads it from last_timed.json
     log(f"[{cid}] timed: {json.dumps({k: res.get(k) for k in ('result', 'remaining', 'elapsed', 'window', 'routed', 'missing', 'per_set', 'bad_sets', 'wrong', 'fixed', 'attempt_id') if k in res})}")
     pull = res.pop("_pull", None)
 
@@ -349,11 +352,9 @@ def process_result(cid, solver_dir, res, log=print):
     if "prerequisite" in r:   # GM 409 prerequisite_required: the previous mode's LATEST attempt isn't CORRECT
         return "error:prerequisite"
     if r == "exec_error":
-        detail = str(res.get("detail", ""))
-        if "solve.py" in detail and ("timed out" in detail or "TimeoutExpired" in detail):
-            # The SOLVER blew the clock (rehearsal rehearsal: warmups solve.py >5.1s on 28 Mastery sets, on Homebase AND
-            # local). Retrying can't help -- it needs a faster solver: generalize with that diagnosis.
-            res["solver_too_slow"] = True
+        if res.get("solver_too_slow"):
+            # The SOLVER blew the clock (alt rehearsals: warmups solve.py >4.6s on 28 Mastery sets, on Homebase AND
+            # local, twice). Retrying can't help -- it needs a faster solver: generalize with that diagnosis.
             return "blocked"
         return "error:exec"    # the RUNNER failed (ssh/VPN gap/kickoff), not the solver: retry, never generalize
     if r in ("solver_incomplete", "solver_error", "incorrect", "accepted"):

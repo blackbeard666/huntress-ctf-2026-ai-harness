@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""Minimal `7z` for hosts without p7zip (the Homebase VM: no 7z, no passwordless sudo). pyzipper-backed; handles what
+solvers use: `7z x|e [-y] [-p<pw>] [-o<dir>] <archive> [members...]` and `7z l <archive>`. Exit 0 ok, 2 on error
+(wrong password / not a zip), like 7z. Put on PATH only where the real 7z is missing (hctf/hb_timed.py does this)."""
+import os
+import sys
+
+try:
+    import pyzipper
+    ZF = pyzipper.AESZipFile
+except ImportError:
+    import zipfile
+    ZF = zipfile.ZipFile
+
+
+def main(argv):
+    if not argv:
+        print("usage: 7z x|e|l [-y] [-p<pw>] [-o<dir>] archive [members...]", file=sys.stderr)
+        return 2
+    cmd, pw, out, rest = argv[0], None, ".", []
+    for a in argv[1:]:
+        if a.startswith("-p"):
+            pw = a[2:].encode()
+        elif a.startswith("-o"):
+            out = a[2:]
+        elif a.startswith("-"):
+            continue  # -y, -bso0, -aoa ...: no-ops here
+        else:
+            rest.append(a)
+    if not rest:
+        return 2
+    archive, members = rest[0], set(rest[1:])
+    try:
+        with ZF(archive) as z:
+            names = [n for n in z.namelist() if not members or n in members or os.path.basename(n) in members]
+            if cmd == "l":
+                for i in z.infolist():
+                    print(f"{i.file_size:>12} {i.filename}")
+                return 0
+            if cmd not in ("x", "e"):
+                return 2
+            if pw:
+                z.setpassword(pw)
+            for n in names:
+                if n.endswith("/"):
+                    continue
+                dst = os.path.join(out, n if cmd == "x" else os.path.basename(n))
+                os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
+                with open(dst, "wb") as f:
+                    f.write(z.read(n))
+        return 0
+    except Exception as e:  # noqa: BLE001 - wrong password, not a zip, ...
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

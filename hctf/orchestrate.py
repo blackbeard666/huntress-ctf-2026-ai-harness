@@ -257,6 +257,11 @@ class Chain:
             gm_wrong = "  - (no per-field GM verdict was available this cycle)"
         if d.get("window") or d.get("elapsed"):
             gm_wrong += f"\n  - attempt facts: window {d.get('window')}s, elapsed {d.get('elapsed')}s, routed {d.get('routed') or 'local'}"
+        if d.get("hb_env_mismatch"):
+            gm_wrong += ("\n  - THE SOLVER PRODUCED NO ANSWERS ON HOMEBASE although it works locally: it depends on something the "
+                         "Homebase VM lacks. Homebase has python3 + the pip deps (pyzipper, pyelftools, pefile, capstone, "
+                         "pycryptodome, androguard, ...) but NOT 7z/p7zip or other apt tools. Open zips with "
+                         "`lib.common.read_member` / pyzipper; no subprocess to 7z, jadx, or anything outside the import list.")
         if d.get("solver_too_slow"):
             gm_wrong += ("\n  - THE SOLVER IS TOO SLOW: solve.py hit the in-window timeout on this variant (answers may well be right). "
                          "Make it fast -- no per-set brute force over every decoder, no subprocess per set, decode once, "
@@ -682,7 +687,7 @@ class Chain:
             # fix WRONG answers too, not just missing ones. Fetch the variant locally for it to work on.
             wrong, fixed, diag = None, None, {}
             last = timed.last_result(cid) or {}
-            diag = {k: last.get(k) for k in ("window", "elapsed", "phases", "routed", "solver_too_slow")}
+            diag = {k: last.get(k) for k in ("window", "elapsed", "phases", "routed", "solver_too_slow", "hb_env_mismatch")}
             if last.get("wrong") is not None:
                 # The timed runner already localized this attempt in-window (same variant, saved as an auto-* case
                 # with the GM-verified answers): use that instead of burning a fresh attempt on a different variant.
@@ -722,6 +727,13 @@ class Chain:
                     if not wrong:
                         say(f"[{cid}] resolved {len(got)} label(s) online (cached); retrying without generalize")
                         continue
+            if wrong == [] and diag.get("complete") and attempt < MAX_TIMED_RETRIES:
+                # The probe judged EVERY field and found none wrong: the solver is right, the failure was the
+                # environment or the clock (rehearsal rehearsal: 399/399 ok after a Homebase-only failure, yet a 12-min
+                # generalize started). Retry instead; the Homebase 7z shim / local fallback handle the environment.
+                say(f"[{cid}] probe: every field correct -> environment/timing, retrying without generalize")
+                set_state(self.base, stage=f"{mode}:retrying")
+                continue
             say(f"[{cid}] {res}: improving the solver offline for this variant, then retrying")
             self.generalize(cid, wrong=wrong, fixed=fixed, diag=diag)
         set_state(self.base, stage=f"{mode}:blocked")
