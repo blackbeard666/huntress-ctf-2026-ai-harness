@@ -171,7 +171,8 @@ PY_ROLE_ATTACK_CONFIRMED = {
     "uploader": "T1041", "launcher": "T1059.006", "staged_chain": "T1059.006", "relay": "T1059.006",
 }
 
-# Bash "behavior graph" fixtures (Day 6 "Shell We Begin", GM-confirmed single solve 2026-10-06, 399/399 first submit).
+# Bash "behavior graph" fixtures (Day 6 "Shell We Begin", GM-confirmed single solve 2026-10-06, 399/399 first submit;
+# same role->ATT&CK table re-confirmed by Time Trial 9dbb8b8f/5b2a45dd and both sets of Mastery 368acf67).
 # `readonly Material_<id>` + `readonly Codec_<id>='rep|transform|key'` (key hex; add_modulo_256 decodes by SUBTRACTING)
 # decode to `v=1|steps=..|adapter=..|stage_count=..|campaign_id=..|<indicators>`; plan values verbatim are the answers,
 # `steps` joined with '>' is the ordered behavior graph, stage-count = plan stage_count (NOT len(steps)).
@@ -183,3 +184,9 @@ BASH_ROLE_ATTACK_CONFIRMED = {
     "benign_utility": "none", "stager": "T1105", "downloader": "T1105", "dropper": "T1140",
     "launcher": "T1059.004", "staged_chain": "T1059.004",
 }
+# Codec_ key field spellings seen in the generator's bytes (Bash, Day 6): contiguous hex for one-byte keys ('1b'), and
+# comma-separated hex bytes for multi-byte repeating_key_xor keys ('55,51,74,dd,3a'; Mastery 3bc5446b + GM-correct
+# 368acf67). Parsing the comma form as contiguous hex yields key [0] and silently breaks the decode. Use
+# lib.scripts.codec_key(), which accepts both (and ':'/space/';'/'-' separators, not yet seen in the bytes).
+CODEC_KEY_FORMS = {"hex_contiguous": "1b", "hex_comma": "55,51,74,dd,3a"}
+CODEC_KEY_COMMA_TRANSFORMS = ("repeating_key_xor",)

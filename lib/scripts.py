@@ -47,6 +47,18 @@ def iocs(text):
     }
 
 
+def codec_key(key):
+    """Codec key field: contiguous hex ('1b') or separated hex bytes ('55,51,74,dd,3a'). See K.CODEC_KEY_FORMS.
+    Unparseable -> [0]. (From the Day 6 "Shell We Begin" bash solver, fam_bash._key.)"""
+    key = (key or "").strip()
+    if re.fullmatch(r"(?:[0-9a-fA-F]{2})+", key):
+        return list(bytes.fromhex(key))
+    parts = [x for x in re.split(r"[\s,:;\-]+", key) if x]
+    if parts and all(re.fullmatch(r"[0-9a-fA-F]{1,2}", x) for x in parts):
+        return [int(x, 16) for x in parts]
+    return [0]
+
+
 def _uniq(xs):
     seen, out = set(), []
     for x in xs:

@@ -255,8 +255,8 @@ NAMING_LAWS = (
     "token (.NET PE = pe_cli, from PE + ECMA-335 CLI); msil/dotnet/managed/cil all rejected.\n"
     "- representation = `<numbase>_<separator-name>` (decimal_pipe, hex_colon) or `<base64|hex>_<variant>`; transform is "
     "named for the ENCODE direction (subtract_modulo_256 decodes by ADDING).\n"
-    "- ATT&CK execution role scales by host language: launcher/staged_chain -> T1059.{003 batch, 005 vbscript, "
-    "007 jscript, 001 powershell}; downloader/stager T1105, dropper T1140, uploader T1041, impact T1486.")
+    "- ATT&CK execution role scales by host language: launcher/staged_chain -> T1059.{003 batch, 004 bash, "
+    "005 vbscript, 006 python, 007 jscript, 001 powershell}; downloader/stager T1105, dropper T1140, uploader T1041, impact T1486.")
 
 
 def for_lane(lane):
