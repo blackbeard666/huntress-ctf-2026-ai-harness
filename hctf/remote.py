@@ -158,14 +158,16 @@ def gm(*args, timeout=180):
     return _gm_local(args, timeout)  # local (default): public GM via pairing token
 
 
-def rsync_from(remote_path, local_dir):
-    """Copy a remote directory's contents into local_dir."""
+def rsync_from(remote_path, local_dir, own_conn=False):
+    """Copy a remote directory's contents into local_dir. own_conn: use a separate SSH connection instead of the shared
+    ControlMaster, so a multi-MB background pull can't stall the next clock-critical attempt (replay run 3: a 3.9 MB
+    pull held mobile's Mastery retry for 24.6s)."""
     Path(local_dir).mkdir(parents=True, exist_ok=True)
     if ON_HOMEBASE:
         src = os.path.expanduser(remote_path).rstrip("/") + "/"
         subprocess.run(["rsync", "-a", src, str(local_dir).rstrip("/") + "/"], check=True, capture_output=True)
         return
-    _rsync(["rsync", "-a", "-e", "SSH", f"{HB_USER}@{HB_HOST}:{remote_path.rstrip('/')}/",
+    _rsync(["rsync", "-a", "-e", "SSH_OWN" if own_conn else "SSH", f"{HB_USER}@{HB_HOST}:{remote_path.rstrip('/')}/",
             str(local_dir).rstrip("/") + "/"])
 
 
@@ -180,7 +182,11 @@ def rsync_to(local_path, remote_path, exclude=(), mkdir=None):
 def _rsync(argv):
     """rsync over the shared ssh options; on ssh failure (exit 255, usually a stale ControlMaster socket left by a
     killed session) clear the sockets and retry once instead of crashing the caller."""
-    argv = [("ssh " + " ".join(shlex.quote(o) for o in SSH_OPTS)) if a == "SSH" else a for a in argv]
+    own = [o for o in SSH_OPTS if not o.startswith(("ControlMaster=", "ControlPath=", "ControlPersist="))]
+    own = [o for i, o in enumerate(own) if not (o == "-o" and (i + 1 >= len(own) or own[i + 1] == "-o"))]
+    argv = [("ssh " + " ".join(shlex.quote(o) for o in SSH_OPTS)) if a == "SSH" else
+            ("ssh " + " ".join(shlex.quote(o) for o in [*own, "-o", "ControlMaster=no", "-o", "ControlPath=none"]))
+            if a == "SSH_OWN" else a for a in argv]
     for attempt in range(1, SSH_RETRIES + 1):
         with _slot():
             r = subprocess.run(argv, capture_output=True, timeout=600)

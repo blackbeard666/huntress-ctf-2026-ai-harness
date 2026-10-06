@@ -143,8 +143,17 @@ def sandboxed(cmd):
     import shutil as _sh
     if not WORKER_SANDBOX or not _sh.which("bwrap"):
         return cmd
-    masks = [a for p in sandbox_hidden_paths() for a in ("--tmpfs", str(p))]
-    return ["bwrap", "--dev-bind", "/", "/", *masks, "--die-with-parent", "--", *cmd]
+    hidden = sandbox_hidden_paths()
+    masks = [a for p in hidden for a in ("--tmpfs", str(p))]
+    # The rehearsal copy's .venv / tools / bin/* are SYMLINKS into the main tree: masking it silently took away pyzipper,
+    # rizin, exiftool... (replay runs lost 25-30s per worker on that). Re-expose exactly those targets, read-only.
+    binds = []
+    for link in [*ROOT.glob(".venv"), *ROOT.glob("tools"), *(ROOT / "bin").glob("*")]:
+        if link.is_symlink():
+            tgt = link.resolve()
+            if tgt.exists() and any(str(tgt).startswith(str(h) + "/") for h in hidden):
+                binds += ["--ro-bind", str(tgt), str(tgt)]
+    return ["bwrap", "--dev-bind", "/", "/", *masks, *binds, "--die-with-parent", "--", *cmd]
 
 
 def run_local(chal_dir, stage, prompt, env_extra, timeout, stop=None):
@@ -454,16 +463,16 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
     import re as _re
     slug = _re.sub(r"[^A-Za-z0-9]+", "_", cid)
     local = ROOT / ".run" / "tmp-timed" / slug
-    def pull():
+    def pull(own_conn=False):
         if local.exists():
             for f in local.glob("*"):
                 if f.is_file():
                     f.unlink()
-        remote.rsync_from(f"~/{HB_WORK}/.run/tmp-timed/{slug}", str(local))
+        remote.rsync_from(f"~/{HB_WORK}/.run/tmp-timed/{slug}", str(local), own_conn=own_conn)
     if str(res.get("result", "")).lower() == "correct":
         # A pass: the next mode must not wait on up to ~4 MB of evidence coming back over the VPN. timed.process_result
         # runs the pull + regression-case capture in the background via this hook.
-        res["_pull"] = pull
+        res["_pull"] = lambda: pull(own_conn=True)
         return res
     try:
         pull()  # a failure needs the variant's bytes locally (generalize / probe) before anything else

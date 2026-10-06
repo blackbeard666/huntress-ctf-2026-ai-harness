@@ -284,8 +284,11 @@ def c_artifact(a):
     on_here = remote.gm_transport() == "local"
     rdir = str(local) if on_here else f"{remote.HB_DIR}/dl/{paths.slugify(a.id)}/{ts}"
     saved = []
-    for name, cap, sha in plan:
-        env = call(a.id, "download", cap, rdir, "--name", name, timeout=600)
+    # Parallel downloads (8 at a time): a 28-set warmups Mastery fetched sequentially took ~61s (replay run 2).
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        envs = list(ex.map(lambda item: call(a.id, "download", item[1], rdir, "--name", item[0], timeout=600), plan))
+    for (name, cap, sha), env in zip(plan, envs):
         if not env["saved"]:
             emit(env["body"] if env["body"] is not None else env)
             return http_exit(env) or EXIT["error"]
@@ -351,6 +354,47 @@ def _format_problem(value, q):
     return None
 
 
+def _mastery_dry_run(cid):
+    """Warn (stderr) if the solver can't even LOCATE/answer Mastery-shaped input: the Mastery contract's own artifact
+    names (e.g. 'delivery 2: x.apk', fetched via status before any attempt) with this Single Solve's bytes under each.
+    Values aren't checked -- only that every set gets answers. Mastery's real bytes may still differ in format."""
+    import shutil
+    import tempfile
+    from . import solvers, timed
+    base = paths.base_id(cid)
+    if base != cid:
+        return
+    mc = load(f"{base}/mastery", "contract.json") or {}
+    art = timed.latest_artifacts(cid)
+    files = [p for p in (art.iterdir() if art else []) if p.is_file() and p.name != "manifest.json"]
+    if not mc.get("questions") or len(files) != 1:
+        return
+    tmp = Path(tempfile.mkdtemp(prefix="mdry-", dir=str(paths.TMP)))
+    try:
+        for q in mc["questions"]:
+            name = (q.get("artifact") or "").partition("->")[0].strip()
+            if name and not (tmp / name).exists():
+                shutil.copy2(files[0], tmp / name)
+        ids = mc.get("answer_ids") or [q.get("id") for q in mc["questions"] if q.get("id")]
+        # names only (no artifacts[]: no sha pairing possible on copies); status-time contracts carry ids on questions
+        c = {**{k: v for k, v in mc.items() if k not in ("artifacts", "error")}, "answer_ids": ids}
+        got, err, dt = solvers.run_solver(paths.solver_dir(cid), c, tmp, timeout=20)
+        sets = {}
+        for i in ids:
+            sets.setdefault(i.split(".", 1)[0] if "." in i else "_", []).append(i)
+        empty = [k for k, v in sets.items() if not any(got.get(i) for i in v)]
+        if err or empty:
+            print(f"WARNING (Mastery dry run): with the Mastery contract's artifact names "
+                  f"({sorted({(q.get('artifact') or '') for q in mc['questions']})[:3]}) your solver answered nothing for "
+                  f"{len(empty)}/{len(sets)} set(s){': ' + err[:200] if err else ''}. Mastery runs every set through "
+                  "solve.py -- resolve each question's artifact (see the solve.py skeleton's artifact_bytes) before you stop.",
+                  file=sys.stderr)
+        else:
+            print(f"Mastery dry run: all {len(sets)} set(s) answered on Mastery-named copies in {dt:.2f}s", file=sys.stderr)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def c_submit(a):
     if a.from_solver:
         # Submit exactly what solve.py emits (minus already-confirmed answers): the solver IS the answer source, so the
@@ -375,6 +419,8 @@ def c_submit(a):
             return EXIT["refused"]
         answers = json.loads(a.answers)
     kind, body, problems = submit(a.id, answers, force=a.force)
+    if a.from_solver and not problems:
+        _mastery_dry_run(a.id)
     if problems:
         print("refused:\n  " + "\n  ".join(problems), file=sys.stderr)
         return EXIT["refused"]

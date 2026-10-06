@@ -24,7 +24,7 @@ def binary_format(kind, member_name="", pe_magic=None):
     return BINARY_FORMAT.get(kind, kind.lower())
 
 # Day 3 "Table Manners" (binary, managed-configuration), confirmed per-field 2026-10-04:
-PE_MACHINE = {0x14c: "i386"}            # PE FILE_HEADER.Machine; "x86" REJECTED for a PE32 i386 .NET assembly
+PE_MACHINE = {0x14c: "i386", 0x8664: "x86-64", 0xaa64: "AArch64", 0x1c0: "ARM"}  # PE FILE_HEADER.Machine; "x86" REJECTED for a PE32 i386 .NET assembly; x86-64 GM-confirmed on c_machine/slot*_machine (the lib copy lacked it -> from-scratch replay emitted "0x8664" and failed binary TT twice)
 # ELF `section_names`: pyelftools [s.name for s in iter_sections()] INCLUDING the "" NULL section (without it: rejected).
 # ELF `symbols`: [s.name for s in .symtab if s.name] in table order, dupes kept (with the "" entries: rejected).
 # .NET `metadata_version`: CLI metadata root (BSJB) version string, e.g. "v4.0.30319".

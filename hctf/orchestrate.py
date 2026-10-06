@@ -230,7 +230,12 @@ class Chain:
         worker is told the truth — "timing" only when every field was actually judged correct."""
         mode = solvers.mode_of(cid)
         probs = []
-        _, res = ensure_case_and_test(paths.base_id(cid), self.sdir)
+        # ONE fast parallel replay (8s/case) serves both the problem list and the transactional baseline (was a full
+        # 120s/case run here plus a second baseline run: 141s before the worker spawned, replay run 2).
+        ensure_case_and_test(paths.base_id(cid), self.sdir, full=False)
+        res = (solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT)
+               if (self.sdir / "solve.py").exists() else [])
+        self._pre_res = res
         for r in (res or []):
             if not r.get("ok"):
                 probs.append(f"case {r['case']}: error={r.get('error')} diff={r.get('diff')} unverified={r.get('unverified')}")
@@ -273,11 +278,43 @@ class Chain:
                                 problems="\n".join(f"  - {p}" for p in probs) or "  - solver did not produce all answers",
                                 gm_wrong=gm_wrong)
         set_state(self.base, stage=f"{mode}:generalizing")
+        targets = {r["case"] for r in (res or []) if not r.get("ok") and not r.get("unverified")}
         self._snapshot_solver()
+        green, done = threading.Event(), threading.Event()
+        watch = threading.Thread(target=self._watch_green, daemon=True,
+                                 args=(targets, set(self._baseline), bool(d.get("solver_too_slow")), green, done))
+        if targets and STOP_WHEN_READY:
+            watch.start()
         try:
-            self.run_worker(cid, "generalize", prompt, GENERALIZE_TIMEOUT)
+            self.run_worker(cid, "generalize", prompt, GENERALIZE_TIMEOUT, stop=green)
         finally:
+            done.set()
+            if watch.is_alive():
+                watch.join()
             self._accept_or_restore(cid)
+
+    def _watch_green(self, targets, baseline, need_fast, green, done):
+        """Beside a generalize worker: once solver code has been quiet 3s and the failing target case(s) pass with no
+        previously-passing case broken (and fast, for a speed fix), end the worker -- the replays' generalize workers
+        spent 22-46s after the fix on solver-test reruns, robustness checks and notes."""
+        start, checked = self._solver_mtimes(), None
+        while not done.wait(2.0):
+            m = self._solver_mtimes()
+            if not m or m == start or m == checked or time.time() - max(m.values()) < 3:
+                continue
+            checked = m
+            try:
+                res = solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT)
+            except Exception:  # noqa: BLE001
+                continue
+            if self._solver_mtimes() != m:
+                continue  # edited while testing
+            ok = {r["case"] for r in res if r.get("ok")}
+            fast = all(r.get("seconds", 99) < 2.0 for r in res if r["case"] in targets)
+            if targets <= ok and baseline <= ok and (fast or not need_fast):
+                say(f"[{self.base}] generalize green ({sorted(targets)[:3]} pass, no regressions) -> ending the worker")
+                green.set()
+                return
 
     # -- transactional generalize: a worker that is killed / times out / breaks old cases must never leave a
     #    half-edited solver behind (happened twice on the rehearsal copy: warmups solve.py, Dim and Dimmer vbsplan.py).
@@ -295,8 +332,11 @@ class Chain:
         try:
             # Short per-case timeout: a too-slow solver otherwise burns 120s PER CASE here before the generalize worker
             # can even start (rehearsal rehearsal: 4 min). A case that slow can't pass a 7s window anyway.
-            res = (solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT)
-                   if (self.sdir / "solve.py").exists() else [])
+            res = getattr(self, "_pre_res", None)
+            if res is None:
+                res = (solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT)
+                       if (self.sdir / "solve.py").exists() else [])
+            self._pre_res = None
             self._baseline = {r.get("case") for r in (res or []) if r.get("ok")}
         except Exception:  # noqa: BLE001
             self._baseline = set()
@@ -490,6 +530,12 @@ class Chain:
         if not welcome and self.try_existing_solvers(cid):
             say(f"[{cid}] solved by existing solver library (no worker needed)")
             return True
+        if not welcome and not (self.sdir / "solve.py").exists():
+            # Nothing reusable: start the worker from the harness skeleton (contract I/O, per-set loop, sha256-paired
+            # artifact lookup incl. Mastery's 'delivery N: x.apk' names) instead of hunting for a template (10-15s per
+            # lane in the replays; mobile's single never handled Mastery naming -> a 2.5-min generalize).
+            self.sdir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / "hctf" / "templates" / "solve_skeleton.py", self.sdir / "solve.py")
         try:
             from . import triage as triage_mod
             triage_mod.triage(cid)  # deterministic grounding before the LLM worker starts
@@ -503,11 +549,13 @@ class Chain:
                 if not cli.load(cid, "start.json"):
                     cli.save(cid, "start.json", st)
         timed_info = []
+        self._tstatus = {}
         tmodes = [m for m in ("time_trial", "mastery") if m in self.entries]
 
         def fetch(m):  # both timed contracts at once (no clock starts on a status call)
             tcid = self.entries[m]["id"]
             st = cli.call(tcid, "status", tcid)["body"] or {}
+            self._tstatus[m] = st.get("error") or st.get("result")
             if st.get("questions"):
                 cli.save(tcid, "contract.json", st)
             return f"  - {m}: `{tcid}` -> `{cli.cdir(tcid).relative_to(ROOT)}/contract.json`"
@@ -637,7 +685,10 @@ class Chain:
         if not e:
             return True
         cid = e["id"]
-        if cli.is_complete(cid) or cli.gm_solved(cid):
+        # This run saw the mode `start_required` minutes ago and nothing else attempts it: skip the GM status call
+        # (2-7s per mode on the critical path, replay run 3).
+        seen_fresh = getattr(self, "_tstatus", {}).get(mode) == "start_required"
+        if cli.is_complete(cid) or (not seen_fresh and cli.gm_solved(cid)):
             return True
         for attempt in range(MAX_TIMED_RETRIES + 1):
             while not self.gov.allow_timed():
@@ -701,17 +752,23 @@ class Chain:
                 try:
                     tdir = timed.timed_dir(cid)
                     tc = json.loads((tdir / "contract.json").read_text()) if (tdir / "contract.json").exists() else None
-                    if last.get("solver_too_slow") and tc and cli.attempt_id(tc) == last.get("attempt_id", cli.attempt_id(tc)):
-                        # The failed attempt's contract + bytes are already local (pulled after the failure): work on
-                        # THAT variant instead of starting a fresh attempt just to download one (~45s on Mastery).
+                    same = bool(tc and last.get("attempt_id") and cli.attempt_id(tc) == last["attempt_id"])
+                    if same and (last.get("solver_too_slow") or last.get("missing")):
+                        # Work on THE FAILED VARIANT itself (its contract + bytes were pulled after the failure). Probing
+                        # a fresh attempt judges a DIFFERENT variant: replay runs 2-3 read "all fields ok" off one and
+                        # blamed the environment for two real solver gaps (bash comma keys, PE 0x8664).
                         cli.save(cid, "start.json", tc)
                         cli.save(cid, "contract.json", tc)
+                        if last.get("missing") and not last.get("solver_too_slow"):
+                            wrong = [(a, None) for a in last["missing"]]
+                            say(f"[{cid}] solver left {len(wrong)} field(s) empty on this variant: generalizing on it")
                     else:
                         timed.ensure_started(cid)  # fresh attempt + download of the current variant for offline work
-                    if last.get("solver_too_slow"):
+                    if last.get("solver_too_slow") or wrong is not None:
                         # Probing runs the same too-slow solver: it learns nothing (rehearsal rehearsal: 3 min for "28/28
                         # wrong" from an empty output). The fix is speed -- straight to generalize with that diagnosis.
-                        say(f"[{cid}] solver too slow for the window: skipping the field probe, generalizing for speed")
+                        if last.get("solver_too_slow"):
+                            say(f"[{cid}] solver too slow for the window: skipping the field probe, generalizing for speed")
                     else:
                         wrong = timed.probe_fields(cid, self.sdir, log=say)  # binary search, per-field verdicts
                         dj = cli.cdir(cid) / "diagnosis.json"
@@ -720,12 +777,21 @@ class Chain:
                             diag.update({k: pd.get(k) for k in ("complete", "probed", "total", "unjudged")})
                 except Exception as e:  # noqa: BLE001
                     say(f"[{cid}] local fetch/probe for generalize failed: {e}")
+                if cli.is_complete(cid):
+                    # The probe's own submits passed this mode (replay run 3 binary TT: it went CORRECT, then the harness
+                    # retried anyway and failed again -- 33s wasted after the pass).
+                    say(f"[{cid}] the probe attempt itself passed the mode")
+                    set_state(self.base, **{f"{mode}_result": "correct"})
+                    record_timed_case(cid, self.sdir)
+                    return True
                 capture_variant(cid, self.sdir)  # expected.json now enriched by the probe-confirmed fields
             # Online label resolution FIRST: for closed-vocab label fields, probe the GM (the only authority on the
             # spelling) rather than letting the offline generalize worker GUESS and burn another attempt (the Q6 pain).
-            if wrong:
+            if wrong and any(v is not None for _, v in wrong):
                 try:
-                    got = timed.resolve_labels_online(cid, self.sdir, [a for a, _ in wrong], self.lane, log=say)
+                    # only fields the solver DID answer (wrongly): an empty field is a solver gap, not a label spelling
+                    got = timed.resolve_labels_online(cid, self.sdir, [a for a, v in wrong if v is not None], self.lane,
+                                                      log=say)
                 except Exception as e:  # noqa: BLE001
                     got = set()
                     say(f"[{cid}] online label resolve note: {e}")

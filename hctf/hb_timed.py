@@ -385,8 +385,17 @@ def main():
     if not _sh.which("7z"):  # e.g. the the Homebase VM (no p7zip, no sudo): pyzipper-backed bin/shims/7z
         env["PATH"] = f"{HW / 'bin' / 'shims'}:{env.get('PATH', '')}"
     solve = HW / a.solver_dir / "solve.py"
-    r = subprocess.run([sys.executable, str(solve), "--contract", str(contract), "--artifacts", str(adir)],
-                       capture_output=True, text=True, timeout=max(2, (left or 30) - 1.5), env=env)
+    try:
+        r = subprocess.run([sys.executable, str(solve), "--contract", str(contract), "--artifacts", str(adir)],
+                           capture_output=True, text=True, timeout=max(2, (left or 30) - 1.5), env=env)
+    except subprocess.TimeoutExpired as e:
+        # Emit a real result (attempt_id + saved contract/bytes) instead of crashing: the caller then pulls THIS
+        # variant for the speed generalize (a crash left a stale download dir that was mistaken for this attempt).
+        out["result"] = "exec_error"
+        out["solver_too_slow"] = True
+        out["detail"] = f"solve.py timed out after {e.timeout:.1f}s (in-window solver budget)"
+        _emit(out, adir)
+        return
     try:
         answers = {k: _normalize(str(v), qmap.get(k, {})) for k, v in json.loads(r.stdout.strip().splitlines()[-1]).items()}
     except Exception:

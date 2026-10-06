@@ -186,6 +186,26 @@ def last_result(cid):
         return None
 
 
+def _keep_failed_attempt(cid, res, log=print):
+    """Copy a FAILED attempt's contract + result + bytes to <mode dir>/attempts/<attempt8>/ before anything reuses the
+    timed download dir: the next probe/retry overwrites it, which destroyed the evidence for replay run 2's
+    Homebase-only script TT failure (7 fields missing, cause never determined). Keeps the newest 5."""
+    import shutil
+    tdir = timed_dir(cid)
+    att = (res.get("attempt_id") or "")[:8] or time.strftime("%H%M%S")
+    dst = cli.cdir(cid) / "attempts" / att
+    try:
+        if tdir.exists() and not dst.exists():
+            shutil.copytree(tdir, dst)
+            (dst / "last_timed.json").write_text(json.dumps({k: v for k, v in res.items() if not callable(v)},
+                                                            indent=2, default=str))
+        olds = sorted((cli.cdir(cid) / "attempts").glob("*/"), key=lambda p: p.stat().st_mtime)
+        for old in olds[:-5]:
+            shutil.rmtree(old, ignore_errors=True)
+    except Exception as e:  # noqa: BLE001 - forensics only
+        log(f"[{cid}] keep-failed-attempt note: {e}")
+
+
 def _remember(cid, res):
     keep = {k: res.get(k) for k in ("result", "full_result", "attempt_id", "window", "elapsed", "in_window", "phases", "solver_too_slow", "hb_env_mismatch",
                                      "per_set", "bad_sets", "wrong", "fixed", "localize_complete", "routed", "missing",
@@ -322,6 +342,8 @@ def process_result(cid, solver_dir, res, log=print):
         _remember(cid, res)
     except Exception as e:  # noqa: BLE001
         log(f"[{cid}] last_timed note: {e}")
+    if r != "correct":
+        _keep_failed_attempt(cid, res, log)
     if pull:
         import threading
         threading.Thread(target=capture, daemon=True).start()

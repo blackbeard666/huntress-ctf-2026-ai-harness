@@ -3,6 +3,7 @@
 tools/
 secrets/
 challenges/*/*/*/artifacts/
+challenges/*/*/*/attempts/
 challenges/*/*/*/worker-*.log
 challenges/*/*/*/.stop-blocks-*
 hctf/dl/

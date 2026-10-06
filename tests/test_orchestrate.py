@@ -184,6 +184,23 @@ def test_watch_ready(tmp):
           rc == orch.workers.STOPPED_RC and _t.time() - t0 < 4)
 
 
+def test_watch_green(tmp):
+    import time as _t
+    c = bare_chain(sdir=tmp, root=tmp)
+    # start; edit #1 (+ re-read after its test) -> target still failing; edit #2 (+ re-read) -> green
+    seq = iter([{"solve.py": 1.0}, {"solve.py": 2.0}, {"solve.py": 2.0}, {"solve.py": 3.0}, {"solve.py": 3.0}])
+    c._solver_mtimes = lambda: next(seq, {"solve.py": 3.0})
+    runs = [[{"case": "v1", "ok": False, "seconds": 0.1}, {"case": "old", "ok": True, "seconds": 0.1}],
+            [{"case": "v1", "ok": True, "seconds": 0.1}, {"case": "old", "ok": True, "seconds": 0.1}]]
+    green, done = threading.Event(), threading.Event()
+    with mock.patch.object(orch.solvers, "test_solver", lambda *a, **k: runs.pop(0) if runs else runs_last[0]), \
+            mock.patch.object(orch, "say", lambda m: None), mock.patch.object(orch.time, "time", lambda: 10 ** 6):
+        runs_last = [[{"case": "v1", "ok": True, "seconds": 0.1}, {"case": "old", "ok": True, "seconds": 0.1}]]
+        t = threading.Thread(target=orch.Chain._watch_green, args=(c, {"v1"}, {"old"}, False, green, done))
+        t.start(); green.wait(15); done.set(); t.join(5)
+    check("generalize watch: waits through a failing edit, green once the target passes w/o regression", green.is_set())
+
+
 def main():
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
@@ -192,6 +209,7 @@ def main():
         print("reuse");       test_reuse_submit()
         print("snapshot");    test_snapshot()
         print("watch");       test_watch_ready(tmp)
+        print("green");       test_watch_green(tmp)
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     return 1 if FAIL else 0
 

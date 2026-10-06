@@ -29,7 +29,7 @@ Do this:
    confirmed GM vocabulary under `## Proposed lib additions` in `{solver_dir}/NOTES.md`; the post-run ratchet merges them.
 3. `hctf solver-test {base}` must pass for EVERY case, and `hctf solver-run {cid}` must output every answer_id —
    then STOP immediately (the timed mode is waiting on you; no extra hardening, no synthetic cases).
-4. The solver runs LOCALLY against the public Game Master under a short clock (~6-10s for the whole
+4. The solver runs ON THE HOMEBASE VM next to the Game Master under a short clock (~6-7s for the whole
    download+solve+submit), so keep it FAST and dependency-light. Artifacts are already downloaded for you
    (in parallel) before the solver runs — don't fetch anything yourself. For a compounded Mastery bundle the
    GM ships ONE download per set, often all named the same; pair each set to its bytes by the contract's
@@ -37,4 +37,5 @@ Do this:
    answer set 2 from set 1's bytes. Import only: stdlib, `lib.*`, pyelftools, pefile, capstone, pycryptodome,
    pyzipper, androguard, droidasc, binary-refinery, and shelling out to node/c++filt/unzip. Avoid anything heavier.
 5. Do NOT submit and do NOT start/retry any mode — the orchestrator retries with a fresh variant once you exit.
-   Update `{solver_dir}/NOTES.md` with the variant axis you added.
+   Add ONE line to `{solver_dir}/NOTES.md` (the variant axis). The harness ends your session the moment the
+   failing case passes with no regressions — don't spend time on extra robustness checks after the fix.

@@ -26,7 +26,9 @@ spend is on the critical path. The harness ENDS your session automatically the m
 `solve.py` reproduces the confirmed answers — anything you planned to do after that will not happen, by design.
 1. **Start from what already exists.** If the REUSE PRE-PASS note below says answers are already accepted and the solver
    is seeded, run `hctf solver-run {cid}` and work ONLY on the answer_ids still missing — extend the seeded `solve.py`.
-2. **Derive the answers from the real bytes by writing them INTO `{solver_dir}/solve.py`** (following the
+2. **`{solver_dir}/solve.py` is pre-seeded** (a prior solver from the reuse pass, or the harness skeleton: contract I/O,
+   per-set loop, `artifact_bytes()` that already resolves Mastery's `delivery N: <name>` files by sha256 — fill in
+   `answer()`). **Derive the answers from the real bytes by writing them INTO that `solve.py`** (following the
    `solver-authoring` skill: contract + artifacts in, JSON out; every value derived from the bytes, nothing hard-coded).
    Prototype at the shell, but the answers you submit come out of the solver. Same concept on the timed modes: other
    bytes and names; Mastery has several sets (`set1.*`, `set2.*`, ...), each naming its own artifact (pair by sha256).
@@ -43,6 +45,12 @@ spend is on the critical path. The harness ENDS your session automatically the m
 4. **STOP when CORRECT.** Do not write synthetic or multi-day regression cases, do not run `hctf solver-test`, do not
    harden for hypothetical variants, do not write long notes. The harness replays the regression suite itself and
    runs a targeted generalize worker ONLY if a real Time Trial/Mastery variant fails.
+Read the Mastery `contract.json` named above NOW (it's on disk; no attempt needed): its `questions[].artifact` names
+(e.g. `delivery 2: x.apk`) and set count are exactly what your solver must handle; `hctf submit --from-solver` runs a
+Mastery dry run on those names and WARNS if any set comes back empty — fix that before you stop.
+If you split work across subagents, launch them ALL in ONE message with ONE shared brief file (write the brief once);
+never write long subagent prompts one after another (61 s lost that way in a replay).
+Don't read other challenges' worker logs (`worker-*.log`) or old notes for answers — prior solvers were already run.
 Budget: aim for CORRECT within 60 s on a familiar family and 3 min on a new one. Submit as soon as the solver emits a
 value for every answer_id; partial submits are fine (exit 2 pins the right fields).
 

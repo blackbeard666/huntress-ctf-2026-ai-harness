@@ -163,3 +163,20 @@ and the timed handoff serialized behind locks and waits. Changes:
 - Effort: all lanes back to high (xhigh made each turn ~50% slower for no wall-clock gain).
 - Fixed latent crash: duplicate `Chain._snapshot_solver` (any generalize would raise TypeError); guard test.
 Not done yet: one Homebase process chaining TT -> Mastery, pre-launching workers before the drop.
+
+## Replay-driven fixes (2026-10-06/07, from-scratch Day 6 replays on a rehearsal copy)
+
+`hctf/replay_gm.py` + alt `.run/replay_full.sh` re-run a solved day from scratch (local single judge, real GM timed).
+Fixes from runs 1-3 + a read-only analysis of their logs:
+- Timed failures are diagnosed on THE FAILED VARIANT (its pulled bytes; kept in `<mode>/attempts/<id>/`), never on a
+  fresh probe attempt: two "environment" verdicts were real solver gaps (bash comma keys; lib PE_MACHINE lacked 0x8664).
+  A probe attempt that itself passes the mode now ends the stage; label resolution skips fields the solver left empty.
+- hb_timed reports a solver timeout as JSON (attempt_id, solver_too_slow) so the variant is pulled; no local fallback
+  for a too-slow solver; the speed generalize works on that variant.
+- Generalize: one 8s parallel baseline (was a 120s/case run + a second baseline: 141s before the worker); a
+  stop-when-green watcher ends the worker once the failing cases pass with no regressions.
+- Solver skeleton (`hctf/templates/solve_skeleton.py`) seeded when reuse finds nothing: per-set loop + sha256-paired
+  `artifact_bytes()` incl. Mastery's `delivery N: x.apk`. `hctf submit --from-solver` runs a Mastery dry run on the
+  Mastery contract's artifact names and warns if a set comes back empty.
+- Parallel artifact downloads (8); background evidence pulls on their own SSH connection; skip the per-mode GM status
+  call when single() just saw the mode start_required; sandbox re-binds project symlink targets (alt .venv/tools).
