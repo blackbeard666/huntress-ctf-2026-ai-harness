@@ -69,6 +69,11 @@ hctf hb exec -- <cmd>                 # run a command on Homebase (inside the CT
 - `HCTF_MAX_WRONG` (6) — per-field wrong-answer probe budget for non-flag vocabulary. Flags hard-capped at 3.
 - `HCTF_SINGLE_TIMEOUT` (1500) / `HCTF_GENERALIZE_TIMEOUT` (720) — worker wall-clocks (seconds).
 - `HCTF_MAX_TURNS_SINGLE|GENERALIZE|FIX` — per-stage turn caps (ilio-style cost bound).
+- `HCTF_SPECULATIVE_TIMED` (1) — early handoff: once the Single Solve is CORRECT and a snapshot of the still-running
+  worker's solver (`.run/spec-dayNN/<chal>/solver`, files stable `HCTF_SPEC_STABLE`=20s) reproduces its answers, run ONE
+  Time Trial -> Mastery pass from it. Pre-pass failures are free; the normal timed stage takes over after the worker.
+- `HCTF_CHAIN_CRASH_RETRIES` (1) — a crashed chain is re-run (solved modes skip) before it is marked `crashed`.
+- Offline self-tests: `python3 tests/test_orchestrate.py` (orchestrator paths) and `python3 tests/test_hardening.py`.
 
 ## How it solves (short)
 - **Single Solve:** triage grounds the agent; it tries the existing solver library first (0 model time), else a

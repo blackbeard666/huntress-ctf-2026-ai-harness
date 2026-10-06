@@ -26,6 +26,13 @@ SINGLE_TIMEOUT = int(os.environ.get("HCTF_SINGLE_TIMEOUT", str(25 * 60)))
 GENERALIZE_TIMEOUT = int(os.environ.get("HCTF_GENERALIZE_TIMEOUT", str(12 * 60)))
 MAX_SINGLE_LAUNCHES = 3
 MAX_TIMED_RETRIES = 5
+CHAIN_CRASH_RETRIES = int(os.environ.get("HCTF_CHAIN_CRASH_RETRIES", "1"))  # re-run a crashed chain (done modes skip)
+# Early handoff: once the Single Solve is CORRECT and a snapshot of the still-running worker's solver reproduces
+# its confirmed answers, make ONE speculative Time Trial -> Mastery pass from that snapshot instead of idling until
+# the worker exits (rehearsal Day 5: answers CORRECT at T+3:10, worker hardened the solver until T+6:25).
+SPECULATIVE_TIMED = os.environ.get("HCTF_SPECULATIVE_TIMED", "1") != "0"
+SPEC_STABLE = float(os.environ.get("HCTF_SPEC_STABLE", "20"))  # solver files untouched this long before a snapshot
+SPEC_POLL = float(os.environ.get("HCTF_SPEC_POLL", "10"))
 # Time Trial scouting before Mastery (hctf/scout.py): extra TT attempts that harvest new variants and learn label
 # spellings on the cheap clock. 0 = off. `hctf run --scout N` overrides.
 SCOUT_ROUNDS = int(os.environ.get("HCTF_SCOUT_ROUNDS", "0"))
@@ -105,11 +112,20 @@ class Pools:
 
 # ---------------------------------------------------------------- chain state
 
+_state_lock = threading.Lock()
+
+
 def set_state(base, **kw):
     p = paths.challenge_root(base) / "chain.json"
-    st = json.loads(p.read_text()) if p.exists() else {}
-    st.update(kw, updated=time.strftime("%Y-%m-%dT%H:%M:%S"))
-    p.write_text(json.dumps(st, indent=2))
+    with _state_lock:
+        try:
+            st = json.loads(p.read_text()) if p.exists() else {}
+        except ValueError:
+            st = {}
+        st.update(kw, updated=time.strftime("%Y-%m-%dT%H:%M:%S"))
+        tmp = p.with_name(f".chain.json.{threading.get_ident()}")
+        tmp.write_text(json.dumps(st, indent=2))
+        os.replace(tmp, p)  # atomic: `hctf dash`/`why` never read a half-written file
 
 
 def ensure_case_and_test(cid, sdir):
@@ -318,11 +334,19 @@ class Chain:
         if problems or not ids or any(a not in answers for a in ids):
             return False
         set_state(self.base, stage="single:reuse")
-        for key, group in _by_set(answers).items():
-            kind, body, refused = cli.submit(cid, group)
-            if kind not in ("correct", "accepted"):
-                say(f"[{cid}] reuse submit {key}: {kind or 'refused'} {json.dumps(body or refused)[:150]}")
-                return cli.is_complete(cid)
+        # One request with every answer (one GM round-trip instead of one per set).
+        kind, body, refused = cli.submit(cid, answers)
+        if kind != "correct" and not cli.is_complete(cid):
+            say(f"[{cid}] reuse submit (all {len(answers)}): {kind or 'refused'} {json.dumps(body or refused)[:150]}")
+            if refused:
+                return False
+            # Localize per set so the LLM worker inherits the sets that ARE right. force: the full submit marked every
+            # value "judged incorrect" in this attempt, but re-sending the same values set-by-set is localization.
+            for key, group in _by_set(answers).items():
+                kind, body, refused = cli.submit(cid, group, force=True)
+                if kind not in ("correct", "accepted"):
+                    say(f"[{cid}] reuse submit {key}: {kind or 'refused'} {json.dumps(body or refused)[:150]}")
+            return cli.is_complete(cid)
         if cli.is_complete(cid):
             # adopt the matching solver so this challenge's timed modes reuse it directly
             src = whole or next(iter(groups), None)
@@ -425,12 +449,23 @@ class Chain:
                                     timed_contracts="\n".join(timed_info) or "  - (none: Single Solve only)", extra=extra)
             set_state(self.base, stage="single:solving", launches=n + 1)
             heavy = self.lane in ("binary-reverse-engineering", "binary")
-            self.run_worker(cid, "single", prompt, SINGLE_TIMEOUT, prefer_homebase=heavy)
+            stop, spec = threading.Event(), None
+            if SPECULATIVE_TIMED and not welcome and "time_trial" in self.entries and \
+                    "time_trial" in (self.only_modes or ["time_trial"]):
+                spec = threading.Thread(target=self._speculate, args=(cid, stop), daemon=True)
+                spec.start()
+            try:
+                self.run_worker(cid, "single", prompt, SINGLE_TIMEOUT, prefer_homebase=heavy)
+            finally:
+                stop.set()
+                if spec:
+                    spec.join()  # never let a speculative attempt overlap the normal timed stage
             done = cli.is_complete(cid)
             if not done and not welcome:
                 done = self.auto_labels(cid)
             ok, res = (True, None) if welcome else ensure_case_and_test(cid, self.sdir)
             say(f"[{cid}] after worker: complete={done} solver_ok={ok}")
+            self._adopt_spec_cases()
             if done and ok:
                 # Cache the Single Solve's confirmed closed-vocab labels into vocab.json NOW (untimed), so the timed
                 # modes enter with those spellings already confirmed and never carry an unconfirmed label onto a clock.
@@ -445,6 +480,88 @@ class Chain:
                 return False
         set_state(self.base, stage="single:blocked")
         return False
+
+    # -- early handoff (speculative timed attempts while the Single Solve worker is still running)
+    def _solver_mtimes(self):
+        if not self.sdir.exists():
+            return {}
+        return {p.name: p.stat().st_mtime for p in self.sdir.iterdir() if p.is_file()}
+
+    def _snapshot_solver(self, cid):
+        """Copy the worker's in-progress solver (minus cases) to `.run/spec-dayNN/<chal>/solver` -- the same depth as
+        challenges/dayNN/<chal>/solver, since solvers locate the project root via parents[N] -- if its files have been
+        stable for SPEC_STABLE s and it reproduces the GM-confirmed Single Solve answers. Returns the dir or None."""
+        m0 = self._solver_mtimes()
+        if "solve.py" not in m0 or time.time() - max(m0.values()) < SPEC_STABLE:
+            return None
+        if m0 == getattr(self, "_spec_rejected", None):
+            return None  # this exact solver already failed verification; wait for the worker to change it
+        contract, art, conf = cli.load(cid, "start.json"), timed.latest_artifacts(cid), cli.confirmed_answers(cid)
+        if not (contract and art and conf):
+            return None
+        rel = self.sdir.relative_to(paths.CHALLENGES).parts  # (dayNN, <chal>, solver)
+        if len(rel) != 3:
+            return None
+        snap = ROOT / ".run" / f"spec-{rel[0]}" / rel[1] / "solver"
+        if snap.exists():
+            shutil.rmtree(snap)
+        shutil.copytree(self.sdir, snap, ignore=shutil.ignore_patterns("cases", "__pycache__"))
+        if (self.root / "meta.json").exists():
+            shutil.copy2(self.root / "meta.json", snap.parent / "meta.json")  # hb_timed reads the lane from it
+        if self._solver_mtimes() != m0:
+            return None  # the worker edited mid-copy; next poll
+        got, err, _ = solvers.run_solver(snap, contract, art)
+        bad = sorted(k for k, v in conf.items() if got.get(k) != v)
+        if err or bad:
+            self._spec_rejected = m0
+            say(f"[{cid}] early handoff: snapshot not ready ({err or f'{len(bad)} field(s) differ, e.g. {bad[:3]}'})")
+            return None
+        return snap
+
+    def _adopt_spec_cases(self):
+        """Move regression cases captured by speculative attempts into the live solver dir (the timed stage's
+        generalize step works from them)."""
+        snap = getattr(self, "_spec_snap", None)
+        if not snap or not (snap / "cases").exists():
+            return
+        for case in (snap / "cases").iterdir():
+            dst = self.sdir / "cases" / case.name
+            if case.is_dir() and not dst.exists():
+                shutil.copytree(case, dst)
+        self._spec_snap = None
+
+    def _speculate(self, cid, stop):
+        """Runs beside the Single Solve worker. Once the single is CORRECT, try Time Trial -> Mastery ONCE from a
+        verified snapshot. A failure before a pass costs nothing on the scoreboard (the variant is still captured as
+        a regression case); whatever is unsolved is handled by the normal timed stages after the worker exits."""
+        try:
+            snap = None
+            while not snap:
+                if stop.wait(SPEC_POLL):
+                    return
+                if cli.is_complete(cid):
+                    snap = self._snapshot_solver(cid)
+            for mode in ("time_trial", "mastery"):
+                e = self.entries.get(mode)
+                if not e or mode not in (self.only_modes or [mode]):
+                    continue
+                tcid = e["id"]
+                if cli.is_complete(tcid) or cli.gm_solved(tcid):
+                    continue
+                if stop.is_set() or not self.gov.allow_timed():
+                    return
+                say(f"[{tcid}] early handoff: speculative attempt from the solver snapshot (single worker still running)")
+                self._spec_snap = snap
+                # Cases land in the SNAPSHOT: a failing auto-* case in the live solver dir would make the post-worker
+                # regression check fail and relaunch the Single Solve worker. Adopted after that check.
+                r = timed.process_result(tcid, snap, workers.run_timed_auto(snap, tcid, log=say), log=say)
+                set_state(self.base, **{f"{mode}_result": r})
+                if r != "correct":
+                    say(f"[{tcid}] early handoff: {r}; normal timed stage takes over after the worker exits")
+                    return
+                record_timed_case(tcid, snap)
+        except Exception as e:  # noqa: BLE001 - speculation must never hurt the chain
+            say(f"[{cid}] early handoff note: {e}")
 
     def timed_stage(self, mode):
         e = self.entries.get(mode)
@@ -573,22 +690,32 @@ class Chain:
             f"unresolved={len(s.get('unresolved') or [])}; latest Time Trial {'CORRECT' if ok else 'NOT correct'}")
 
     def run(self):
-        try:
-            set_state(self.base, stage="queued", name=self.name, lane=self.lane, worker=None)
-            self.recover_interrupted_generalize()
-            modes = self.only_modes or ["single_solve", "time_trial", "mastery"]
-            if "single_solve" in modes and not self.single():
+        for n in range(CHAIN_CRASH_RETRIES + 1):
+            try:
+                return self._run()
+            except Exception:  # noqa: BLE001 - one chain must never take down the others
+                tb = traceback.format_exc()
+                if n < CHAIN_CRASH_RETRIES:
+                    say(f"[{self.base}] CRASHED; retrying the chain in 10s (solved modes are skipped):\n{tb}")
+                    set_state(self.base, stage="crash-retry", error=tb[-2000:])
+                    time.sleep(10)
+                    continue
+                set_state(self.base, stage="crashed", error=tb[-2000:])
+                say(f"[{self.base}] CRASHED:\n{tb}")
+
+    def _run(self):
+        set_state(self.base, stage="queued", name=self.name, lane=self.lane, worker=None)
+        self.recover_interrupted_generalize()
+        modes = self.only_modes or ["single_solve", "time_trial", "mastery"]
+        if "single_solve" in modes and not self.single():
+            return
+        for mode in ("time_trial", "mastery"):
+            if mode == "mastery" and mode in modes:
+                self.scout_stage()   # no-op unless SCOUT_ROUNDS > 0
+            if mode in modes and not self.timed_stage(mode):
                 return
-            for mode in ("time_trial", "mastery"):
-                if mode == "mastery" and mode in modes:
-                    self.scout_stage()   # no-op unless SCOUT_ROUNDS > 0
-                if mode in modes and not self.timed_stage(mode):
-                    return
-            set_state(self.base, stage="done")
-            say(f"[{self.base}] chain complete")
-        except Exception:  # noqa: BLE001 - one chain must never take down the others
-            set_state(self.base, stage="crashed", error=traceback.format_exc()[-2000:])
-            say(f"[{self.base}] CRASHED:\n{traceback.format_exc()}")
+        set_state(self.base, stage="done")
+        say(f"[{self.base}] chain complete")
 
 
 # ---------------------------------------------------------------- entry points

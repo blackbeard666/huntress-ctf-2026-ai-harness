@@ -111,3 +111,11 @@ only after Levers 1–2.
 Day 5 was latency-bound on a single `--effort high` scripting solve (393s). To beat 4 minutes: measure, then
 lower script-analysis effort (Lever 1), while continuously growing deterministic reuse (Lever 2) so heavy
 scripting days stop reaching the model at all.
+
+## Early handoff + one-request reuse (2026-10-06)
+
+rehearsal copy Day 5 re-run (T+7:09 vs main's T+8:25): script-analysis had every answer CORRECT at **T+3:10**, but its
+worker kept hardening the solver until T+6:25 before Time Trial could start. `orchestrate.Chain._speculate` now runs
+ONE Time Trial -> Mastery pass from a verified snapshot as soon as the single is CORRECT (worker keeps going; a
+pre-pass failure costs nothing and its variant is adopted as a regression case after the worker). Expected ~2-3 min
+off the critical lane. The reuse path now submits all answers in one request (per-set, forced, only to localize).
