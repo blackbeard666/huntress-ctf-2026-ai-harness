@@ -279,11 +279,15 @@ class Chain:
                                 gm_wrong=gm_wrong)
         set_state(self.base, stage=f"{mode}:generalizing")
         targets = {r["case"] for r in (res or []) if not r.get("ok") and not r.get("unverified")}
+        # A failed variant has no GM-verified answers (unverified), so "passes" can't be judged -- but fields the solver
+        # left EMPTY can: green once it answers every field of such a case (full replay: the watcher never fired, all
+        # three generalize workers ran to their own end). Correctness is still checked by the accept step + GM retry.
+        fill = {r["case"] for r in (res or []) if r.get("unverified") and r.get("answered", 0) < r.get("total", 0)}
         self._snapshot_solver()
         green, done = threading.Event(), threading.Event()
         watch = threading.Thread(target=self._watch_green, daemon=True,
-                                 args=(targets, set(self._baseline), bool(d.get("solver_too_slow")), green, done))
-        if targets and STOP_WHEN_READY:
+                                 args=(targets, set(self._baseline), bool(d.get("solver_too_slow")), green, done, fill))
+        if (targets or fill) and STOP_WHEN_READY:
             watch.start()
         try:
             self.run_worker(cid, "generalize", prompt, GENERALIZE_TIMEOUT, stop=green)
@@ -293,7 +297,7 @@ class Chain:
                 watch.join()
             self._accept_or_restore(cid)
 
-    def _watch_green(self, targets, baseline, need_fast, green, done):
+    def _watch_green(self, targets, baseline, need_fast, green, done, fill=frozenset()):
         """Beside a generalize worker: once solver code has been quiet 3s and the failing target case(s) pass with no
         previously-passing case broken (and fast, for a speed fix), end the worker -- the replays' generalize workers
         spent 22-46s after the fix on solver-test reruns, robustness checks and notes."""
@@ -310,9 +314,11 @@ class Chain:
             if self._solver_mtimes() != m:
                 continue  # edited while testing
             ok = {r["case"] for r in res if r.get("ok")}
-            fast = all(r.get("seconds", 99) < 2.0 for r in res if r["case"] in targets)
-            if targets <= ok and baseline <= ok and (fast or not need_fast):
-                say(f"[{self.base}] generalize green ({sorted(targets)[:3]} pass, no regressions) -> ending the worker")
+            filled = {r["case"] for r in res if r.get("total") and r.get("answered") == r.get("total") and not r.get("error")}
+            fast = all(r.get("seconds", 99) < 2.0 for r in res if r["case"] in (targets | set(fill)))
+            if targets <= ok and set(fill) <= filled and baseline <= ok and (fast or not need_fast):
+                say(f"[{self.base}] generalize green ({sorted(targets | set(fill))[:3]} pass/complete, no regressions) "
+                    "-> ending the worker")
                 green.set()
                 return
 

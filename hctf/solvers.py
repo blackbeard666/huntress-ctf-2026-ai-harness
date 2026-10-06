@@ -186,8 +186,10 @@ def test_solver(sdir, timeout=120, parallel=4):
         expected = json.loads((case / "expected.json").read_text()) if (case / "expected.json").exists() else {}
         got, err, dt = run_solver(Path(sdir), contract, case / "artifacts", timeout)
         diff = {k: {"expected": v, "got": got.get(k)} for k, v in expected.items() if got.get(k) != v}
+        ids = contract.get("answer_ids") or [q.get("id") for q in contract.get("questions") or [] if q.get("id")]
         return {"case": case.name, "ok": not err and not diff and bool(expected), "seconds": round(dt, 2),
-                "error": err, "diff": diff, "unverified": not expected}
+                "error": err, "diff": diff, "unverified": not expected,
+                "answered": sum(1 for i in ids if got.get(i) not in (None, "")), "total": len(ids)}
     cases = sorted((Path(sdir) / "cases").glob("*/"))
     with ThreadPoolExecutor(max_workers=max(1, parallel)) as ex:
         return list(ex.map(one, cases))

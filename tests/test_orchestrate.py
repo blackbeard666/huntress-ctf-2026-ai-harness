@@ -199,6 +199,18 @@ def test_watch_green(tmp):
         t = threading.Thread(target=orch.Chain._watch_green, args=(c, {"v1"}, {"old"}, False, green, done))
         t.start(); green.wait(15); done.set(); t.join(5)
     check("generalize watch: waits through a failing edit, green once the target passes w/o regression", green.is_set())
+    # unverified failed variant: green once every field is answered
+    c2 = bare_chain(sdir=tmp, root=tmp)
+    seq2 = iter([{"solve.py": 1.0}, {"solve.py": 2.0}, {"solve.py": 2.0}])
+    c2._solver_mtimes = lambda: next(seq2, {"solve.py": 2.0})
+    full = [{"case": "var", "ok": False, "unverified": True, "answered": 28, "total": 28, "seconds": 0.1},
+            {"case": "old", "ok": True, "seconds": 0.1}]
+    green2, done2 = threading.Event(), threading.Event()
+    with mock.patch.object(orch.solvers, "test_solver", lambda *a, **k: full), \
+            mock.patch.object(orch, "say", lambda m: None), mock.patch.object(orch.time, "time", lambda: 10 ** 6):
+        t = threading.Thread(target=orch.Chain._watch_green, args=(c2, set(), {"old"}, False, green2, done2, {"var"}))
+        t.start(); green2.wait(10); done2.set(); t.join(5)
+    check("generalize watch: unverified variant -> green once every field is answered", green2.is_set())
 
 
 def main():
