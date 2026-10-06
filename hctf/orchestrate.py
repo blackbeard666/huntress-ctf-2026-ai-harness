@@ -31,7 +31,7 @@ CHAIN_CRASH_RETRIES = int(os.environ.get("HCTF_CHAIN_CRASH_RETRIES", "1"))  # re
 # Early handoff: once the Single Solve is CORRECT and a snapshot of the still-running worker's solver reproduces
 # its confirmed answers, make ONE speculative Time Trial -> Mastery pass from that snapshot instead of idling until
 # the worker exits (rehearsal Day 5: answers CORRECT at T+3:10, worker hardened the solver until T+6:25).
-BASELINE_CASE_TIMEOUT = float(os.environ.get("HCTF_BASELINE_CASE_TIMEOUT", "20"))  # pre-generalize regression baseline
+BASELINE_CASE_TIMEOUT = float(os.environ.get("HCTF_BASELINE_CASE_TIMEOUT", "8"))  # > any 6-7s window  # pre-generalize regression baseline
 REUSE_PROBE_BUDGET = int(os.environ.get("HCTF_REUSE_PROBE_BUDGET", "20"))  # merged-reuse submits before the worker
 STOP_WHEN_READY = os.environ.get("HCTF_STOP_WHEN_READY", "1") != "0"  # end the single worker at CORRECT + verified solver
 SPEC_STABLE = float(os.environ.get("HCTF_SPEC_STABLE", "2"))  # solver files untouched this long before a snapshot
@@ -699,15 +699,25 @@ class Chain:
                     wrong = None  # cut short with nothing found: fall back to the probe below
             if wrong is None:
                 try:
-                    timed.ensure_started(cid)  # fresh attempt + download of the current variant for offline work
+                    tdir = timed.timed_dir(cid)
+                    tc = json.loads((tdir / "contract.json").read_text()) if (tdir / "contract.json").exists() else None
+                    if last.get("solver_too_slow") and tc and cli.attempt_id(tc) == last.get("attempt_id", cli.attempt_id(tc)):
+                        # The failed attempt's contract + bytes are already local (pulled after the failure): work on
+                        # THAT variant instead of starting a fresh attempt just to download one (~45s on Mastery).
+                        cli.save(cid, "start.json", tc)
+                        cli.save(cid, "contract.json", tc)
+                    else:
+                        timed.ensure_started(cid)  # fresh attempt + download of the current variant for offline work
                     if last.get("solver_too_slow"):
                         # Probing runs the same too-slow solver: it learns nothing (rehearsal rehearsal: 3 min for "28/28
                         # wrong" from an empty output). The fix is speed -- straight to generalize with that diagnosis.
                         say(f"[{cid}] solver too slow for the window: skipping the field probe, generalizing for speed")
                     else:
                         wrong = timed.probe_fields(cid, self.sdir, log=say)  # binary search, per-field verdicts
-                        pd = json.loads((cli.cdir(cid) / "diagnosis.json").read_text())
-                        diag.update({k: pd.get(k) for k in ("complete", "probed", "total", "unjudged")})
+                        dj = cli.cdir(cid) / "diagnosis.json"
+                        if dj.exists():  # probe_fields returns early (no file) when there is nothing to probe
+                            pd = json.loads(dj.read_text())
+                            diag.update({k: pd.get(k) for k in ("complete", "probed", "total", "unjudged")})
                 except Exception as e:  # noqa: BLE001
                     say(f"[{cid}] local fetch/probe for generalize failed: {e}")
                 capture_variant(cid, self.sdir)  # expected.json now enriched by the probe-confirmed fields

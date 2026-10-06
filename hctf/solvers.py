@@ -176,17 +176,21 @@ def add_case(sdir, name, contract, artifacts, expected):
     return case
 
 
-def test_solver(sdir, timeout=120):
-    """Run the solver on every case. Returns list of {case, ok, seconds, diff/error}."""
-    results = []
-    for case in sorted((Path(sdir) / "cases").glob("*/")):
+def test_solver(sdir, timeout=120, parallel=4):
+    """Run the solver on every case (cases in parallel: they are independent; replay run 2 spent 141s replaying a
+    slow solver's cases one by one). Returns list of {case, ok, seconds, diff/error}, in case-name order."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(case):
         contract = json.loads((case / "contract.json").read_text())
         expected = json.loads((case / "expected.json").read_text()) if (case / "expected.json").exists() else {}
         got, err, dt = run_solver(Path(sdir), contract, case / "artifacts", timeout)
         diff = {k: {"expected": v, "got": got.get(k)} for k, v in expected.items() if got.get(k) != v}
-        results.append({"case": case.name, "ok": not err and not diff and bool(expected), "seconds": round(dt, 2),
-                        "error": err, "diff": diff, "unverified": not expected})
-    return results
+        return {"case": case.name, "ok": not err and not diff and bool(expected), "seconds": round(dt, 2),
+                "error": err, "diff": diff, "unverified": not expected}
+    cases = sorted((Path(sdir) / "cases").glob("*/"))
+    with ThreadPoolExecutor(max_workers=max(1, parallel)) as ex:
+        return list(ex.map(one, cases))
 
 
 # ---------------------------------------------------------------------------------------------- merged reuse

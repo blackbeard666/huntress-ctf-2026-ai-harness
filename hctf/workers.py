@@ -359,11 +359,26 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print):
         res = run_hb_timed(solver_dir, cid, op=op, timeout=timeout)
         if (str(res.get("result", "")).lower() in ("solver_incomplete", "solver_error") and res.get("missing")
                 and not res.get("submitted")):
-            # The solver produced NOTHING on Homebase although it was verified locally: an environment difference
-            # (rehearsal rehearsal: solve.py shelled out to 7z, which the the VM lacks). Flag it for the generalize diagnosis.
-            res["hb_env_mismatch"] = True
-            log(f"[{cid}] solver produced no answers ON HOMEBASE (works locally) -- Homebase environment mismatch")
-        if str(res.get("result", "")).lower() != "exec_error":
+            # The solver produced NOTHING on Homebase. Blame the environment only if the SAME variant (bytes pulled back
+            # after the failure) works locally (rehearsal rehearsal: solve.py shelled out to 7z, absent on the the VM).
+            # Otherwise it is a solver gap (run 3: mobile Mastery's `delivery N: x.apk` names) -> plain generalize.
+            try:
+                import re as _re
+                from . import solvers as _solvers
+                tdir = ROOT / ".run" / "tmp-timed" / _re.sub(r"[^A-Za-z0-9]+", "_", cid)
+                tc = json.loads((tdir / "contract.json").read_text())
+                got, err, _ = _solvers.run_solver(Path(solver_dir), tc, tdir, timeout=20)
+                if not err and any(got.get(a) for a in res["missing"]):
+                    res["hb_env_mismatch"] = True
+                    log(f"[{cid}] solver produced no answers ON HOMEBASE but does locally on the same variant -- "
+                        "Homebase environment mismatch")
+            except Exception as e:  # noqa: BLE001 - diagnosis only
+                log(f"[{cid}] env-mismatch check skipped: {e}")
+        detail = str(res.get("detail", ""))
+        if str(res.get("result", "")).lower() != "exec_error" or (
+                "solve.py" in detail and ("timed out" in detail or "TimeoutExpired" in detail)):
+            # (A SOLVER timeout on Homebase is returned as-is: running the same solver locally only burns another
+            # attempt -- replay run 2 lost ~19s that way. The caller routes it to a speed generalize.)
             res["routed"] = f"homebase ({'window unknown' if win is None else f'window {win:g}s'})"
             return res
         log(f"[{cid}] Homebase run failed ({str(res.get('detail'))[:120]}); falling back to local")
