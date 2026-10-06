@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import threading
 import time
 import traceback
@@ -898,8 +899,26 @@ def ratchet(day):
         return
     prompt = workers.render("ratchet", day=tag, day_num=int(day), proposals="\n\n".join(props))
     say(f"[ratchet] {tag}: merging {len(props)} proposal section(s) into lib/")
+    # Transactional: a killed/timed-out ratchet left lib/ half-edited on the rehearsal replay (an unvalidated helper that
+    # extracted 0 files). Snapshot lib/, and restore it unless the worker exits 0 AND the test suites still pass.
+    backup = ROOT / ".run" / f"ratchet-lib-{tag}"
+    shutil.rmtree(backup, ignore_errors=True)
+    shutil.copytree(ROOT / "lib", backup, ignore=shutil.ignore_patterns("__pycache__"))
     rc, log = workers.run_local(paths.CHALLENGES / tag, "ratchet", prompt, {"HCTF_STAGE": "ratchet"}, RATCHET_TIMEOUT)
-    say(f"[ratchet] {tag}: worker exit {rc} ({Path(log).name})")
+    ok = rc == 0
+    if ok:
+        import subprocess as _sp
+        for t in ("tests/test_orchestrate.py", "tests/test_day6_fixes.py"):
+            if (ROOT / t).exists() and _sp.run([sys.executable, t], cwd=ROOT, capture_output=True, timeout=600).returncode:
+                ok = False
+                say(f"[ratchet] {tag}: {t} fails after the merge")
+    if ok:
+        shutil.rmtree(backup, ignore_errors=True)
+        say(f"[ratchet] {tag}: merged ({Path(log).name})")
+    else:
+        shutil.rmtree(ROOT / "lib")
+        shutil.copytree(backup, ROOT / "lib")
+        say(f"[ratchet] {tag}: REVERTED lib/ (worker exit {rc}); proposals stay in solver/NOTES.md ({Path(log).name})")
 
 
 def chain_for(cid, pools, gov):
