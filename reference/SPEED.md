@@ -72,8 +72,8 @@ LLM single_solve.** Two levers:
 
 ## Lever 1 — Per-lane worker effort (immediate; IMPLEMENTED as a knob)
 
-`hctf/workers.py`: `worker_effort(lane)` / `worker_model(lane)`, `LANE_EFFORT`. Defaults: `high` on the hard
-lanes, `medium` on warmups (zero risk). Override per lane:
+`hctf/workers.py`: `worker_effort(lane)` / `worker_model(lane)`, `LANE_EFFORT`. Default: `high` on EVERY lane
+(owner's rule — warmups included). `bash bin/day.sh N --effort xhigh` raises all lanes (Day 6 experiment). Override per lane:
 
 ```
 HCTF_WORKER_EFFORT_SCRIPT_ANALYSIS=medium   bash bin/day.sh N

@@ -33,7 +33,7 @@ hctf run --day N --local 5
 
 ### Speed tuning (worker effort is the main wall-clock lever)
 A heavy day is bound by one slow `single_solve` LLM worker (deterministic reuse/triage runs first and is instant).
-Effort is per-lane: default `high` on the hard lanes, `medium` on warmups. Override per lane with
+Effort defaults to `high` on every lane (warmups included); `bash bin/day.sh N --effort xhigh` raises all lanes. Override per lane with
 `HCTF_WORKER_EFFORT_<LANE>` / `HCTF_WORKER_MODEL_<LANE>` (LANE = index lane upper-cased, `-`→`_`), e.g.
 `HCTF_WORKER_EFFORT_SCRIPT_ANALYSIS=medium`. See `hctf/workers.py` (LANE_EFFORT) and reference/SPEED.md.
 `hctf run` syncs challenges, then runs each as an independent parallel chain

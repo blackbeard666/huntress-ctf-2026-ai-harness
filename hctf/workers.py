@@ -58,7 +58,9 @@ WORKER_EFFORT = os.environ.get("HCTF_WORKER_EFFORT", "high")
 # '-' -> '_' (e.g. HCTF_WORKER_EFFORT_SCRIPT_ANALYSIS=medium, HCTF_WORKER_EFFORT_METADATA_FORENSICS=medium).
 # To break the 4-min sweep on a heavy scripting day, lower script-analysis here AFTER validating correctness
 # over a few days — it is the only lane on the critical path.
-LANE_EFFORT = {"warmups": "medium"}
+# Owner's rule: EVERY lane runs at the global effort (>= high), warmups included — no lane is relaxed by default.
+# Precedence: HCTF_WORKER_EFFORT_<LANE> > LANE_EFFORT[lane] > HCTF_WORKER_EFFORT (global) > "high".
+LANE_EFFORT = {}
 LANE_MODEL = {}
 
 
