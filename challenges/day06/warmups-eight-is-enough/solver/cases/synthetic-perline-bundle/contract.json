@@ -1,0 +1,30 @@
+{
+ "questions": [
+  {
+   "id": "set1.message",
+   "question": "Decode the assigned blob completely. What exact answer slug does its final non-empty decoded line instruct you to submit?",
+   "artifact": "blob-01.txt",
+   "normalization": "trim",
+   "set": 1
+  },
+  {
+   "id": "set2.message",
+   "question": "Decode the assigned blob completely. What exact answer slug does its final non-empty decoded line instruct you to submit?",
+   "artifact": "blob-02.txt",
+   "normalization": "trim",
+   "set": 2
+  },
+  {
+   "id": "set3.message",
+   "question": "Decode the assigned blob completely. What exact answer slug does its final non-empty decoded line instruct you to submit?",
+   "artifact": "blob-03.txt",
+   "normalization": "trim",
+   "set": 3
+  }
+ ],
+ "answer_ids": [
+  "set1.message",
+  "set2.message",
+  "set3.message"
+ ]
+}

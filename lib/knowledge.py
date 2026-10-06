@@ -40,6 +40,11 @@ DOTNET_FORMAT = "pe_cli"
 # vocabulary (ELF_MACHINE above), NOT the Go GOARCH token ("amd64" REJECTED). Go config was the same HCFG blob.
 ARCHITECTURE_USES_MACHINE_VOCAB = True
 ARCHITECTURE_REJECTED = ["amd64"]
+# Day 6 "Pool Party" (binary, java-bytecode-loader), confirmed 2026-10-06: a Java .jar's `format` is plain "jar"
+# (the archive/container name, like elf/pe). The container_runtime compound "jar_jvm" was REJECTED, so the pe_cli
+# law does NOT extend to Java. The HCFG config sat base64'd in a constant-pool String (static final CONFIG).
+JAR_FORMAT = "jar"
+JAR_FORMAT_REJECTED = ["jar_jvm"]
 DOTNET_FORMAT_REJECTED = [
     "pe", "pe32", "PE", "PE32", "PE32+", "pei-i386", "coff", "winpe", "portable executable",
     "dotnet", "DOTNET", ".net", ".NET", ".Net", "net", "cil", "CIL", "msil", "MSIL", "il", "IL",
@@ -56,6 +61,10 @@ JPEG_DIMENSIONS_FMT = "{width}x{height}"
 # Day 5 "Chunk Norris" (metadata-forensics), confirmed 2026-10-05: png.ihdr_dimensions_pixels is the IHDR width/height
 # as '<width>x<height>' (same form as the JPEG SOF field), e.g. "269x153".
 PNG_DIMENSIONS_FMT = "{width}x{height}"
+
+# Day 6 "Portable Deception" (metadata-forensics), confirmed 2026-10-06: pdf.header_version is the bare x.y of the leading
+# `%PDF-x.y` magic (e.g. "1.4"), not the catalog /Version override; an impostor (no header) -> literal "none".
+PDF_HEADER_VERSION_FMT = "{major}.{minor}"
 
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {
@@ -160,4 +169,17 @@ VBS_TRANSFORM_SEEN = ("reverse_then_xor", "identity")
 PY_ROLE_ATTACK_CONFIRMED = {
     "benign_utility": "none", "stager": "T1105", "downloader": "T1105", "impact": "T1486", "dropper": "T1140",
     "uploader": "T1041", "launcher": "T1059.006", "staged_chain": "T1059.006", "relay": "T1059.006",
+}
+
+# Bash "behavior graph" fixtures (Day 6 "Shell We Begin", GM-confirmed single solve 2026-10-06, 399/399 first submit).
+# `readonly Material_<id>` + `readonly Codec_<id>='rep|transform|key'` (key hex; add_modulo_256 decodes by SUBTRACTING)
+# decode to `v=1|steps=..|adapter=..|stage_count=..|campaign_id=..|<indicators>`; plan values verbatim are the answers,
+# `steps` joined with '>' is the ordered behavior graph, stage-count = plan stage_count (NOT len(steps)).
+# Roles: decode_configuration,return_configuration = benign_utility; acquire_remote,dispatch_pipe (wget -qO- | bash -s)
+# = stager; decode_embedded,write_file = dropper; acquire_remote,write_file = downloader; locate_local,dispatch_process
+# = launcher; profile_host,acquire_remote,write_file,change_mode,dispatch_process = staged_chain (cron_path/service_name
+# are indicators only, NOT a persistence role). Execution-type roles map to the Unix shell, T1059.004.
+BASH_ROLE_ATTACK_CONFIRMED = {
+    "benign_utility": "none", "stager": "T1105", "downloader": "T1105", "dropper": "T1140",
+    "launcher": "T1059.004", "staged_chain": "T1059.004",
 }

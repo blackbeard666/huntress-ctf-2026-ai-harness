@@ -29,6 +29,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Rust Belt"
   },
+  "binary-reverse-engineering-day-06-java-bytecode-loader": {
+    "day": 6,
+    "dir": "day06/binary-pool-party",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Pool Party"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -59,6 +65,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Chunk Norris"
   },
+  "metadata-forensics-day-06-portable-deception": {
+    "day": 6,
+    "dir": "day06/metadata-portable-deception",
+    "lane": "metadata-forensics",
+    "name": "🔎 Portable Deception"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -88,6 +100,12 @@
     "dir": "day05/mobile-backup-spill",
     "lane": "mobile-android",
     "name": "📱 Backup Spill"
+  },
+  "mobile-android-day-06-provider-paths": {
+    "day": 6,
+    "dir": "day06/mobile-provider-paths",
+    "lane": "mobile-android",
+    "name": "📱 Provider Paths"
   },
   "read-the-rules": {
     "day": 1,
@@ -125,6 +143,12 @@
     "lane": "script-analysis",
     "name": "📜 Hatch Careful"
   },
+  "script-analysis-day-06-bash-behavior-graphs": {
+    "day": 6,
+    "dir": "day06/scripting-shell-we-begin",
+    "lane": "script-analysis",
+    "name": "📜 Shell We Begin"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -154,6 +178,12 @@
     "dir": "day05/warmups-by-the-numbers",
     "lane": "warmups",
     "name": "👶 By the Numbers"
+  },
+  "warmups-day-06": {
+    "day": 6,
+    "dir": "day06/warmups-eight-is-enough",
+    "lane": "warmups",
+    "name": "👶 Eight Is Enough"
   },
   "welcome-robots": {
     "day": 1,

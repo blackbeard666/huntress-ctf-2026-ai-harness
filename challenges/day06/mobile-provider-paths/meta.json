@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-06-provider-paths",
+  "lane": "mobile-android",
+  "name": "📱 Provider Paths",
+  "ids": {
+    "single_solve": "mobile-android-day-06-provider-paths",
+    "time_trial": "mobile-android-day-06-provider-paths/time_trial",
+    "mastery": "mobile-android-day-06-provider-paths/mastery"
+  }
+}

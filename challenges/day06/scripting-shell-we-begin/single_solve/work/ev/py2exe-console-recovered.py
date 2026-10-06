@@ -1,0 +1,52 @@
+# configuration reconstruction
+#!/usr/bin/env python3
+# Huntress Script Triage -- inert static-analysis fixture (cpython3)
+import base64
+import io
+import os
+
+MATERIAL_f0324748 = b"\x5c\x85\x81\x85\x9a\x5e\xdd\xc3\x8a\xd4\x46\xd7\xd0\x98\x9d\x4f\xe7\xdf\x96\x8a\x4b\xd4\x9f\x9d\x80\x59\xc8\xd2\x8d\x8a\x42\xe7\xc3\x8b\x86\x49\xdd\xc0\x8a\x95\x4b\xdc\xd2\x89\x9d\x4f\xca\x8e\x89\x90\x5e\xd0\xdc\x97\x9e\x75\xd9\xc1\x9e\x9f\x56\xcb\xc7\x98\x8e\x4f\xe7\xd0\x96\x9c\x44\xcc\x8e\xc8\x95\x59\xc1\xdd\x8d\x88\x52\x85\xde\x98\x9d\x49\xd0\xec\x9a\x88\x59\xdd\xcf\x96\x8b\x4c\xcd\xc0\x9a\x88\x5e\xd1\xdc\x97\xd4\x49\xd4\xdc\x8a\x9c\x58\xdd\xec\x9a\x8c\x46\xd4\xc0\x85\x8a\x4b\xca\xc1\x90\x8c\x58\x85\xc3\x80\xdb\x4f\xc0\xd6\xa6\x8a\x45\xd6\xc0\x96\x85\x4f\xc4\xc4\x90\x87\x4e\xd7\xc4\x8a\xb6\x49\xd0\xd2\x90\x87\x17\xca\xd6\x9e\x9a\x5c\xca\x80\xcb\xb6\x5a\xca\xd6\x9d\x8c\x49\xdd\xc0\x8a\x86\x58\xc4\xd0\x98\x84\x5a\xd9\xda\x9e\x87\x75\xd1\xd7\xc4\x8a\x4b\xd5\xc3\x98\x80\x4d\xd6\x9e\xc8\xdf\x4b\xda\xd2\xcc\xd8\x4c\x80\x84\x85\x8f\x43\xd4\xd6\xa6\x99\x4b\xcc\xdb\xc4\xaa\x10\x97\xe3\x8b\x86\x4d\xca\xd2\x94\xad\x4b\xcc\xd2\xd6\xa1\x5f\xd6\xc7\x8b\x8c\x59\xcb\xff\x98\x8b\x05\x96\xc6\x89\x8d\x4b\xcc\xd6\xd4\xd8\x1c\xd9\xd1\x98\xdc\x1b\xde\x8b\xce\xc7\x5a\xc1"
+CODEC_f0324748 = "hex_escape|repeating_key_xor|2a,b8,b3,f9,e9"
+
+def load_f0324748():
+    return bytes(MATERIAL_f0324748)
+
+def decode_f0324748(v_a19c):
+    key_bytes = (42, 184, 179, 249, 233,)
+    return bytes(value ^ key_bytes[index % len(key_bytes)] for index, value in enumerate(v_a19c))
+
+def recover_f0324748():
+    v_d41a = ":".join(("north", "south"))
+    v_b27e = decode_f0324748(load_f0324748())
+    v_c304 = v_b27e.decode("ascii", "strict")
+    return v_c304
+
+def inspect_f0324748():
+    view = memoryview(recover_f0324748().encode("ascii"))
+    return bytes(view).decode("ascii")
+
+def surface_f0324748():
+    selected = "carrier"
+    match selected:
+        case "carrier":
+            return ("match_case", "closure_cells", "py2exe_console", "regsvr32_predecessor")
+        case _:
+            return ()
+
+def obfuscation_f0324748():
+    value = "closure_cells"
+    def recover():
+        return value
+    return recover()
+
+def plan_f0324748():
+    fields = dict(item.split("=", 1) for item in inspect_f0324748().split("|"))
+    analysis_surface = surface_f0324748()
+    obfuscation_surface = obfuscation_f0324748()
+    operation_plan = ("pythonw_argv", ("python3", fields["file_path"]))
+    return operation_plan + (analysis_surface, obfuscation_surface)
+
+if os.environ.get("HUNTRESS_INSPECT_ONLY") == "1":
+    print(inspect_f0324748())
+
+# reconstruction complete

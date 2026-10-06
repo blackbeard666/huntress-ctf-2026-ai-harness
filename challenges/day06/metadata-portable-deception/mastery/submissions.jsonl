@@ -1,0 +1,1 @@
+{"ts": "20261006T130631Z", "attempt": "bd97b666-8810-4689-91c8-e7ca13e545de", "answers": {"set1.d06-pdf-006-pdf-header-version": "1.4", "set2.d06-pdf-007-pdf-header-version": "1.5"}, "http": 200, "kind": "correct", "confirmed": ["set1.d06-pdf-006-pdf-header-version", "set2.d06-pdf-007-pdf-header-version"], "body": null, "via": "homebase"}

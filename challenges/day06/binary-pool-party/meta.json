@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-06-java-bytecode-loader",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Pool Party",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-06-java-bytecode-loader",
+    "time_trial": "binary-reverse-engineering-day-06-java-bytecode-loader/time_trial",
+    "mastery": "binary-reverse-engineering-day-06-java-bytecode-loader/mastery"
+  }
+}

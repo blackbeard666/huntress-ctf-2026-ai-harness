@@ -1,0 +1,1085 @@
+{
+ "mode": "mastery",
+ "name": "\ud83d\udcdc Shell We Begin",
+ "prompt": "Six Bash behavior graphs, none of which will ever run. Read them like a native: map the adapters, count the stages, tag the ATT&CK techniques, and pull the exact indicators hiding in the final bytes.",
+ "artifacts": [
+  {
+   "filename": "evidence-01.zip"
+  },
+  {
+   "filename": "evidence-02.zip"
+  }
+ ],
+ "questions": [
+  {
+   "id": "set1.bash-benign-role",
+   "question": "Classify host-context.sh as benign_utility, stager, dropper, downloader, launcher, or staged_chain.",
+   "artifact": "evidence-01.zip -> host-context.sh",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-benign-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-01.zip -> host-context.sh",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-benign-adapter",
+   "question": "Recover the exact native Bash adapter named by the command plan.",
+   "artifact": "evidence-01.zip -> host-context.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-benign-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-01.zip -> host-context.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-benign-host-id",
+   "question": "Recover the exact host_id indicator.",
+   "artifact": "evidence-01.zip -> host-context.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-benign-stage-count",
+   "question": "Recover the exact number of modeled stages.",
+   "artifact": "evidence-01.zip -> host-context.sh",
+   "answer_format": {
+    "kind": "integer",
+    "syntax": "base-10 integer with no explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-benign-steps",
+   "question": "Recover the ordered behavior graph using > separators.",
+   "artifact": "evidence-01.zip -> host-context.sh",
+   "answer_format": {
+    "kind": "ordered_tokens",
+    "syntax": "exact tokens joined by > with no surrounding spaces or explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-stager-role",
+   "question": "Classify memory-stage.sh as benign_utility, stager, dropper, downloader, launcher, or staged_chain.",
+   "artifact": "evidence-01.zip -> memory-stage.sh",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-stager-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-01.zip -> memory-stage.sh",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-stager-adapter",
+   "question": "Recover the exact native Bash adapter named by the command plan.",
+   "artifact": "evidence-01.zip -> memory-stage.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-stager-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-01.zip -> memory-stage.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-stager-url",
+   "question": "Recover the exact url indicator.",
+   "artifact": "evidence-01.zip -> memory-stage.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-stager-stage-count",
+   "question": "Recover the exact number of modeled stages.",
+   "artifact": "evidence-01.zip -> memory-stage.sh",
+   "answer_format": {
+    "kind": "integer",
+    "syntax": "base-10 integer with no explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-stager-steps",
+   "question": "Recover the ordered behavior graph using > separators.",
+   "artifact": "evidence-01.zip -> memory-stage.sh",
+   "answer_format": {
+    "kind": "ordered_tokens",
+    "syntax": "exact tokens joined by > with no surrounding spaces or explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-dropper-role",
+   "question": "Classify embedded-write.sh as benign_utility, stager, dropper, downloader, launcher, or staged_chain.",
+   "artifact": "evidence-01.zip -> embedded-write.sh",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-dropper-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-01.zip -> embedded-write.sh",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-dropper-adapter",
+   "question": "Recover the exact native Bash adapter named by the command plan.",
+   "artifact": "evidence-01.zip -> embedded-write.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-dropper-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-01.zip -> embedded-write.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-dropper-file-path",
+   "question": "Recover the exact file_path indicator.",
+   "artifact": "evidence-01.zip -> embedded-write.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-dropper-stage-count",
+   "question": "Recover the exact number of modeled stages.",
+   "artifact": "evidence-01.zip -> embedded-write.sh",
+   "answer_format": {
+    "kind": "integer",
+    "syntax": "base-10 integer with no explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-dropper-steps",
+   "question": "Recover the ordered behavior graph using > separators.",
+   "artifact": "evidence-01.zip -> embedded-write.sh",
+   "answer_format": {
+    "kind": "ordered_tokens",
+    "syntax": "exact tokens joined by > with no surrounding spaces or explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-downloader-role",
+   "question": "Classify remote-write.sh as benign_utility, stager, dropper, downloader, launcher, or staged_chain.",
+   "artifact": "evidence-01.zip -> remote-write.sh",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-downloader-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-01.zip -> remote-write.sh",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-downloader-adapter",
+   "question": "Recover the exact native Bash adapter named by the command plan.",
+   "artifact": "evidence-01.zip -> remote-write.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-downloader-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-01.zip -> remote-write.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-downloader-url",
+   "question": "Recover the exact url indicator.",
+   "artifact": "evidence-01.zip -> remote-write.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-downloader-stage-count",
+   "question": "Recover the exact number of modeled stages.",
+   "artifact": "evidence-01.zip -> remote-write.sh",
+   "answer_format": {
+    "kind": "integer",
+    "syntax": "base-10 integer with no explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-downloader-steps",
+   "question": "Recover the ordered behavior graph using > separators.",
+   "artifact": "evidence-01.zip -> remote-write.sh",
+   "answer_format": {
+    "kind": "ordered_tokens",
+    "syntax": "exact tokens joined by > with no surrounding spaces or explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-launcher-role",
+   "question": "Classify local-dispatch.sh as benign_utility, stager, dropper, downloader, launcher, or staged_chain.",
+   "artifact": "evidence-01.zip -> local-dispatch.sh",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-launcher-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-01.zip -> local-dispatch.sh",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-launcher-adapter",
+   "question": "Recover the exact native Bash adapter named by the command plan.",
+   "artifact": "evidence-01.zip -> local-dispatch.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-launcher-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-01.zip -> local-dispatch.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-launcher-file-path",
+   "question": "Recover the exact file_path indicator.",
+   "artifact": "evidence-01.zip -> local-dispatch.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-launcher-stage-count",
+   "question": "Recover the exact number of modeled stages.",
+   "artifact": "evidence-01.zip -> local-dispatch.sh",
+   "answer_format": {
+    "kind": "integer",
+    "syntax": "base-10 integer with no explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-launcher-steps",
+   "question": "Recover the ordered behavior graph using > separators.",
+   "artifact": "evidence-01.zip -> local-dispatch.sh",
+   "answer_format": {
+    "kind": "ordered_tokens",
+    "syntax": "exact tokens joined by > with no surrounding spaces or explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-chain-role",
+   "question": "Classify staged-chain.sh as benign_utility, stager, dropper, downloader, launcher, or staged_chain.",
+   "artifact": "evidence-01.zip -> staged-chain.sh",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-chain-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-01.zip -> staged-chain.sh",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-chain-adapter",
+   "question": "Recover the exact native Bash adapter named by the command plan.",
+   "artifact": "evidence-01.zip -> staged-chain.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-chain-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-01.zip -> staged-chain.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-chain-cron-path",
+   "question": "Recover the exact cron_path indicator.",
+   "artifact": "evidence-01.zip -> staged-chain.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-chain-stage-count",
+   "question": "Recover the exact number of modeled stages.",
+   "artifact": "evidence-01.zip -> staged-chain.sh",
+   "answer_format": {
+    "kind": "integer",
+    "syntax": "base-10 integer with no explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set1.bash-chain-steps",
+   "question": "Recover the ordered behavior graph using > separators.",
+   "artifact": "evidence-01.zip -> staged-chain.sh",
+   "answer_format": {
+    "kind": "ordered_tokens",
+    "syntax": "exact tokens joined by > with no surrounding spaces or explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-benign-role",
+   "question": "Classify host-context.sh as benign_utility, stager, dropper, downloader, launcher, or staged_chain.",
+   "artifact": "evidence-02.zip -> host-context.sh",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-benign-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-02.zip -> host-context.sh",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-benign-adapter",
+   "question": "Recover the exact native Bash adapter named by the command plan.",
+   "artifact": "evidence-02.zip -> host-context.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-benign-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-02.zip -> host-context.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-benign-host-id",
+   "question": "Recover the exact host_id indicator.",
+   "artifact": "evidence-02.zip -> host-context.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-benign-stage-count",
+   "question": "Recover the exact number of modeled stages.",
+   "artifact": "evidence-02.zip -> host-context.sh",
+   "answer_format": {
+    "kind": "integer",
+    "syntax": "base-10 integer with no explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-benign-steps",
+   "question": "Recover the ordered behavior graph using > separators.",
+   "artifact": "evidence-02.zip -> host-context.sh",
+   "answer_format": {
+    "kind": "ordered_tokens",
+    "syntax": "exact tokens joined by > with no surrounding spaces or explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-stager-role",
+   "question": "Classify memory-stage.sh as benign_utility, stager, dropper, downloader, launcher, or staged_chain.",
+   "artifact": "evidence-02.zip -> memory-stage.sh",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-stager-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-02.zip -> memory-stage.sh",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-stager-adapter",
+   "question": "Recover the exact native Bash adapter named by the command plan.",
+   "artifact": "evidence-02.zip -> memory-stage.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-stager-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-02.zip -> memory-stage.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-stager-url",
+   "question": "Recover the exact url indicator.",
+   "artifact": "evidence-02.zip -> memory-stage.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-stager-stage-count",
+   "question": "Recover the exact number of modeled stages.",
+   "artifact": "evidence-02.zip -> memory-stage.sh",
+   "answer_format": {
+    "kind": "integer",
+    "syntax": "base-10 integer with no explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-stager-steps",
+   "question": "Recover the ordered behavior graph using > separators.",
+   "artifact": "evidence-02.zip -> memory-stage.sh",
+   "answer_format": {
+    "kind": "ordered_tokens",
+    "syntax": "exact tokens joined by > with no surrounding spaces or explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-dropper-role",
+   "question": "Classify embedded-write.sh as benign_utility, stager, dropper, downloader, launcher, or staged_chain.",
+   "artifact": "evidence-02.zip -> embedded-write.sh",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-dropper-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-02.zip -> embedded-write.sh",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-dropper-adapter",
+   "question": "Recover the exact native Bash adapter named by the command plan.",
+   "artifact": "evidence-02.zip -> embedded-write.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-dropper-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-02.zip -> embedded-write.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-dropper-file-path",
+   "question": "Recover the exact file_path indicator.",
+   "artifact": "evidence-02.zip -> embedded-write.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-dropper-stage-count",
+   "question": "Recover the exact number of modeled stages.",
+   "artifact": "evidence-02.zip -> embedded-write.sh",
+   "answer_format": {
+    "kind": "integer",
+    "syntax": "base-10 integer with no explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-dropper-steps",
+   "question": "Recover the ordered behavior graph using > separators.",
+   "artifact": "evidence-02.zip -> embedded-write.sh",
+   "answer_format": {
+    "kind": "ordered_tokens",
+    "syntax": "exact tokens joined by > with no surrounding spaces or explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-downloader-role",
+   "question": "Classify remote-write.sh as benign_utility, stager, dropper, downloader, launcher, or staged_chain.",
+   "artifact": "evidence-02.zip -> remote-write.sh",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-downloader-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-02.zip -> remote-write.sh",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-downloader-adapter",
+   "question": "Recover the exact native Bash adapter named by the command plan.",
+   "artifact": "evidence-02.zip -> remote-write.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-downloader-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-02.zip -> remote-write.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-downloader-url",
+   "question": "Recover the exact url indicator.",
+   "artifact": "evidence-02.zip -> remote-write.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-downloader-stage-count",
+   "question": "Recover the exact number of modeled stages.",
+   "artifact": "evidence-02.zip -> remote-write.sh",
+   "answer_format": {
+    "kind": "integer",
+    "syntax": "base-10 integer with no explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-downloader-steps",
+   "question": "Recover the ordered behavior graph using > separators.",
+   "artifact": "evidence-02.zip -> remote-write.sh",
+   "answer_format": {
+    "kind": "ordered_tokens",
+    "syntax": "exact tokens joined by > with no surrounding spaces or explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-launcher-role",
+   "question": "Classify local-dispatch.sh as benign_utility, stager, dropper, downloader, launcher, or staged_chain.",
+   "artifact": "evidence-02.zip -> local-dispatch.sh",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-launcher-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-02.zip -> local-dispatch.sh",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-launcher-adapter",
+   "question": "Recover the exact native Bash adapter named by the command plan.",
+   "artifact": "evidence-02.zip -> local-dispatch.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-launcher-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-02.zip -> local-dispatch.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-launcher-file-path",
+   "question": "Recover the exact file_path indicator.",
+   "artifact": "evidence-02.zip -> local-dispatch.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-launcher-stage-count",
+   "question": "Recover the exact number of modeled stages.",
+   "artifact": "evidence-02.zip -> local-dispatch.sh",
+   "answer_format": {
+    "kind": "integer",
+    "syntax": "base-10 integer with no explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-launcher-steps",
+   "question": "Recover the ordered behavior graph using > separators.",
+   "artifact": "evidence-02.zip -> local-dispatch.sh",
+   "answer_format": {
+    "kind": "ordered_tokens",
+    "syntax": "exact tokens joined by > with no surrounding spaces or explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-chain-role",
+   "question": "Classify staged-chain.sh as benign_utility, stager, dropper, downloader, launcher, or staged_chain.",
+   "artifact": "evidence-02.zip -> staged-chain.sh",
+   "answer_format": {
+    "kind": "enum",
+    "accepted_values": [
+     "benign_utility",
+     "downloader",
+     "dropper",
+     "impact",
+     "launcher",
+     "persistence_descriptor",
+     "relay",
+     "staged_chain",
+     "stager",
+     "uploader",
+     "advanced_syntax"
+    ]
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-chain-attack",
+   "question": "Recover the primary MITRE ATT&CK technique ID, or none.",
+   "artifact": "evidence-02.zip -> staged-chain.sh",
+   "answer_format": {
+    "kind": "mitre_attack_id",
+    "syntax": "T#### or T####.###; use the literal none only when the question permits it"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-chain-adapter",
+   "question": "Recover the exact native Bash adapter named by the command plan.",
+   "artifact": "evidence-02.zip -> staged-chain.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-chain-campaign",
+   "question": "Recover the exact synthetic campaign identifier.",
+   "artifact": "evidence-02.zip -> staged-chain.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-chain-cron-path",
+   "question": "Recover the exact cron_path indicator.",
+   "artifact": "evidence-02.zip -> staged-chain.sh",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-chain-stage-count",
+   "question": "Recover the exact number of modeled stages.",
+   "artifact": "evidence-02.zip -> staged-chain.sh",
+   "answer_format": {
+    "kind": "integer",
+    "syntax": "base-10 integer with no explanatory text"
+   },
+   "normalization": "trim"
+  },
+  {
+   "id": "set2.bash-chain-steps",
+   "question": "Recover the ordered behavior graph using > separators.",
+   "artifact": "evidence-02.zip -> staged-chain.sh",
+   "answer_format": {
+    "kind": "ordered_tokens",
+    "syntax": "exact tokens joined by > with no surrounding spaces or explanatory text"
+   },
+   "normalization": "trim"
+  }
+ ],
+ "answer_ids": [
+  "set1.bash-benign-role",
+  "set1.bash-benign-attack",
+  "set1.bash-benign-adapter",
+  "set1.bash-benign-campaign",
+  "set1.bash-benign-host-id",
+  "set1.bash-benign-stage-count",
+  "set1.bash-benign-steps",
+  "set1.bash-stager-role",
+  "set1.bash-stager-attack",
+  "set1.bash-stager-adapter",
+  "set1.bash-stager-campaign",
+  "set1.bash-stager-url",
+  "set1.bash-stager-stage-count",
+  "set1.bash-stager-steps",
+  "set1.bash-dropper-role",
+  "set1.bash-dropper-attack",
+  "set1.bash-dropper-adapter",
+  "set1.bash-dropper-campaign",
+  "set1.bash-dropper-file-path",
+  "set1.bash-dropper-stage-count",
+  "set1.bash-dropper-steps",
+  "set1.bash-downloader-role",
+  "set1.bash-downloader-attack",
+  "set1.bash-downloader-adapter",
+  "set1.bash-downloader-campaign",
+  "set1.bash-downloader-url",
+  "set1.bash-downloader-stage-count",
+  "set1.bash-downloader-steps",
+  "set1.bash-launcher-role",
+  "set1.bash-launcher-attack",
+  "set1.bash-launcher-adapter",
+  "set1.bash-launcher-campaign",
+  "set1.bash-launcher-file-path",
+  "set1.bash-launcher-stage-count",
+  "set1.bash-launcher-steps",
+  "set1.bash-chain-role",
+  "set1.bash-chain-attack",
+  "set1.bash-chain-adapter",
+  "set1.bash-chain-campaign",
+  "set1.bash-chain-cron-path",
+  "set1.bash-chain-stage-count",
+  "set1.bash-chain-steps",
+  "set2.bash-benign-role",
+  "set2.bash-benign-attack",
+  "set2.bash-benign-adapter",
+  "set2.bash-benign-campaign",
+  "set2.bash-benign-host-id",
+  "set2.bash-benign-stage-count",
+  "set2.bash-benign-steps",
+  "set2.bash-stager-role",
+  "set2.bash-stager-attack",
+  "set2.bash-stager-adapter",
+  "set2.bash-stager-campaign",
+  "set2.bash-stager-url",
+  "set2.bash-stager-stage-count",
+  "set2.bash-stager-steps",
+  "set2.bash-dropper-role",
+  "set2.bash-dropper-attack",
+  "set2.bash-dropper-adapter",
+  "set2.bash-dropper-campaign",
+  "set2.bash-dropper-file-path",
+  "set2.bash-dropper-stage-count",
+  "set2.bash-dropper-steps",
+  "set2.bash-downloader-role",
+  "set2.bash-downloader-attack",
+  "set2.bash-downloader-adapter",
+  "set2.bash-downloader-campaign",
+  "set2.bash-downloader-url",
+  "set2.bash-downloader-stage-count",
+  "set2.bash-downloader-steps",
+  "set2.bash-launcher-role",
+  "set2.bash-launcher-attack",
+  "set2.bash-launcher-adapter",
+  "set2.bash-launcher-campaign",
+  "set2.bash-launcher-file-path",
+  "set2.bash-launcher-stage-count",
+  "set2.bash-launcher-steps",
+  "set2.bash-chain-role",
+  "set2.bash-chain-attack",
+  "set2.bash-chain-adapter",
+  "set2.bash-chain-campaign",
+  "set2.bash-chain-cron-path",
+  "set2.bash-chain-stage-count",
+  "set2.bash-chain-steps"
+ ]
+}

@@ -1,0 +1,13 @@
+{
+ "questions": [
+  {
+   "id": "message",
+   "question": "Decode the assigned blob completely. What exact answer slug does its final non-empty decoded line instruct you to submit?",
+   "artifact": "blob.txt",
+   "normalization": "trim"
+  }
+ ],
+ "answer_ids": [
+  "message"
+ ]
+}

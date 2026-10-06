@@ -1,0 +1,201 @@
+{
+ "mode": "mastery",
+ "name": "\u2699\ufe0f Pool Party",
+ "prompt": "Every Java class file carries its own phone book: the constant pool. Names, methods, invocations \u2014 it's all in there. Dive in and take attendance.",
+ "questions": [
+  {
+   "id": "set1.d06_artifact_sha256_1",
+   "question": "What is the exact artifact sha256 1 value for field d06_artifact_sha256_1 in the delivered evidence set?",
+   "artifact": "delivery 1: evidence.zip",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value; use the literal none only when the requested field is absent"
+   },
+   "normalization": "exact",
+   "set": 1
+  },
+  {
+   "id": "set1.d06_analysis_format",
+   "question": "What is the exact analysis format value for field d06_analysis_format in the delivered evidence set?",
+   "artifact": "delivery 1: evidence.zip",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value; use the literal none only when the requested field is absent"
+   },
+   "normalization": "exact",
+   "set": 1
+  },
+  {
+   "id": "set1.d06_analysis_config_campaign",
+   "question": "What is the exact analysis config campaign value for field d06_analysis_config_campaign in the delivered evidence set?",
+   "artifact": "delivery 1: evidence.zip",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value; use the literal none only when the requested field is absent"
+   },
+   "normalization": "exact",
+   "set": 1
+  },
+  {
+   "id": "set1.d06_analysis_config_domain",
+   "question": "What is the exact analysis config domain value for field d06_analysis_config_domain in the delivered evidence set?",
+   "artifact": "delivery 1: evidence.zip",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value; use the literal none only when the requested field is absent"
+   },
+   "normalization": "exact",
+   "set": 1
+  },
+  {
+   "id": "set1.d06_analysis_config_mutex",
+   "question": "What is the exact analysis config mutex value for field d06_analysis_config_mutex in the delivered evidence set?",
+   "artifact": "delivery 1: evidence.zip",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value; use the literal none only when the requested field is absent"
+   },
+   "normalization": "exact",
+   "set": 1
+  },
+  {
+   "id": "set1.d06_analysis_config_url",
+   "question": "What is the exact analysis config url value for field d06_analysis_config_url in the delivered evidence set?",
+   "artifact": "delivery 1: evidence.zip",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value; use the literal none only when the requested field is absent"
+   },
+   "normalization": "exact",
+   "set": 1
+  },
+  {
+   "id": "set1.d06_analysis_config_crc32_hex",
+   "question": "What is the exact analysis config crc32 hex value for field d06_analysis_config_crc32_hex in the delivered evidence set?",
+   "artifact": "delivery 1: evidence.zip",
+   "answer_format": {
+    "kind": "pattern",
+    "syntax": "lowercase hexadecimal with a 0x prefix and no explanatory text"
+   },
+   "normalization": "exact",
+   "set": 1
+  },
+  {
+   "id": "set1.d06_analysis_hcfg_version",
+   "question": "What is the exact analysis hcfg version value for field d06_analysis_hcfg_version in the delivered evidence set?",
+   "artifact": "delivery 1: evidence.zip",
+   "answer_format": {
+    "kind": "integer",
+    "syntax": "base-10 integer with no units, separators, or explanatory text"
+   },
+   "normalization": "exact",
+   "set": 1
+  },
+  {
+   "id": "set2.d06_artifact_sha256_1",
+   "question": "What is the exact artifact sha256 1 value for field d06_artifact_sha256_1 in the delivered evidence set?",
+   "artifact": "delivery 2: evidence.zip",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value; use the literal none only when the requested field is absent"
+   },
+   "normalization": "exact",
+   "set": 2
+  },
+  {
+   "id": "set2.d06_analysis_format",
+   "question": "What is the exact analysis format value for field d06_analysis_format in the delivered evidence set?",
+   "artifact": "delivery 2: evidence.zip",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value; use the literal none only when the requested field is absent"
+   },
+   "normalization": "exact",
+   "set": 2
+  },
+  {
+   "id": "set2.d06_analysis_config_campaign",
+   "question": "What is the exact analysis config campaign value for field d06_analysis_config_campaign in the delivered evidence set?",
+   "artifact": "delivery 2: evidence.zip",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value; use the literal none only when the requested field is absent"
+   },
+   "normalization": "exact",
+   "set": 2
+  },
+  {
+   "id": "set2.d06_analysis_config_domain",
+   "question": "What is the exact analysis config domain value for field d06_analysis_config_domain in the delivered evidence set?",
+   "artifact": "delivery 2: evidence.zip",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value; use the literal none only when the requested field is absent"
+   },
+   "normalization": "exact",
+   "set": 2
+  },
+  {
+   "id": "set2.d06_analysis_config_mutex",
+   "question": "What is the exact analysis config mutex value for field d06_analysis_config_mutex in the delivered evidence set?",
+   "artifact": "delivery 2: evidence.zip",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value; use the literal none only when the requested field is absent"
+   },
+   "normalization": "exact",
+   "set": 2
+  },
+  {
+   "id": "set2.d06_analysis_config_url",
+   "question": "What is the exact analysis config url value for field d06_analysis_config_url in the delivered evidence set?",
+   "artifact": "delivery 2: evidence.zip",
+   "answer_format": {
+    "kind": "exact_text",
+    "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value; use the literal none only when the requested field is absent"
+   },
+   "normalization": "exact",
+   "set": 2
+  },
+  {
+   "id": "set2.d06_analysis_config_crc32_hex",
+   "question": "What is the exact analysis config crc32 hex value for field d06_analysis_config_crc32_hex in the delivered evidence set?",
+   "artifact": "delivery 2: evidence.zip",
+   "answer_format": {
+    "kind": "pattern",
+    "syntax": "lowercase hexadecimal with a 0x prefix and no explanatory text"
+   },
+   "normalization": "exact",
+   "set": 2
+  },
+  {
+   "id": "set2.d06_analysis_hcfg_version",
+   "question": "What is the exact analysis hcfg version value for field d06_analysis_hcfg_version in the delivered evidence set?",
+   "artifact": "delivery 2: evidence.zip",
+   "answer_format": {
+    "kind": "integer",
+    "syntax": "base-10 integer with no units, separators, or explanatory text"
+   },
+   "normalization": "exact",
+   "set": 2
+  }
+ ],
+ "answer_ids": [
+  "set1.d06_artifact_sha256_1",
+  "set1.d06_analysis_format",
+  "set1.d06_analysis_config_campaign",
+  "set1.d06_analysis_config_domain",
+  "set1.d06_analysis_config_mutex",
+  "set1.d06_analysis_config_url",
+  "set1.d06_analysis_config_crc32_hex",
+  "set1.d06_analysis_hcfg_version",
+  "set2.d06_artifact_sha256_1",
+  "set2.d06_analysis_format",
+  "set2.d06_analysis_config_campaign",
+  "set2.d06_analysis_config_domain",
+  "set2.d06_analysis_config_mutex",
+  "set2.d06_analysis_config_url",
+  "set2.d06_analysis_config_crc32_hex",
+  "set2.d06_analysis_hcfg_version"
+ ]
+}

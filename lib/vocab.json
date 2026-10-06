@@ -48,7 +48,8 @@
   "_format": [
     "elf",
     "pe",
-    "pe_cli"
+    "pe_cli",
+    "jar"
   ],
   "_machine": [
     "x86-64",
@@ -84,7 +85,8 @@
   "format": [
     "elf",
     "pe",
-    "pe_cli"
+    "pe_cli",
+    "jar"
   ],
   "machine": [
     "x86-64",

@@ -1,0 +1,18 @@
+{
+ "set1.d06_artifact_sha256_1": "e0dcc9041f0d4d88b22f0b579ffbda549f3eb7cb916c485993889f14fc1c6874",
+ "set1.d06_analysis_format": "jar",
+ "set1.d06_analysis_config_campaign": "BR06-417",
+ "set1.d06_analysis_config_domain": "node-417.day06.example.invalid",
+ "set1.d06_analysis_config_mutex": "Global\\HuntressBR06_417",
+ "set1.d06_analysis_config_url": "https://node-417.day06.example.invalid/api/BR06-417",
+ "set1.d06_analysis_config_crc32_hex": "0x9aac37cf",
+ "set1.d06_analysis_hcfg_version": "3",
+ "set2.d06_artifact_sha256_1": "d13c3c87d0c687515fd69e650a957d18f776a12bd09ae18b24fc3da2357e0223",
+ "set2.d06_analysis_format": "jar",
+ "set2.d06_analysis_config_campaign": "BR06-902",
+ "set2.d06_analysis_config_domain": "node-902.day06.example.invalid",
+ "set2.d06_analysis_config_mutex": "Global\\HuntressBR06_902",
+ "set2.d06_analysis_config_url": "https://node-902.day06.example.invalid/api/BR06-902",
+ "set2.d06_analysis_config_crc32_hex": "0xb6babd7f",
+ "set2.d06_analysis_hcfg_version": "2"
+}

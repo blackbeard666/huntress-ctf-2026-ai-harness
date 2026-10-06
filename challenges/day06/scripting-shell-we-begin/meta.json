@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-06-bash-behavior-graphs",
+  "lane": "script-analysis",
+  "name": "📜 Shell We Begin",
+  "ids": {
+    "single_solve": "script-analysis-day-06-bash-behavior-graphs",
+    "time_trial": "script-analysis-day-06-bash-behavior-graphs/time_trial",
+    "mastery": "script-analysis-day-06-bash-behavior-graphs/mastery"
+  }
+}
