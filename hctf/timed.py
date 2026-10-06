@@ -187,7 +187,7 @@ def last_result(cid):
 
 
 def _remember(cid, res):
-    keep = {k: res.get(k) for k in ("result", "full_result", "attempt_id", "window", "elapsed", "in_window", "phases",
+    keep = {k: res.get(k) for k in ("result", "full_result", "attempt_id", "window", "elapsed", "in_window", "phases", "solver_too_slow",
                                      "per_set", "bad_sets", "wrong", "fixed", "localize_complete", "routed", "missing",
                                      "localize_tried", "novel_labels", "deadline", "detail")
             if k in res}
@@ -349,7 +349,13 @@ def process_result(cid, solver_dir, res, log=print):
     if "prerequisite" in r:   # GM 409 prerequisite_required: the previous mode's LATEST attempt isn't CORRECT
         return "error:prerequisite"
     if r == "exec_error":
-        return "error:exec"    # the RUNNER failed (ssh/VPN gap/timeout), not the solver: retry, never generalize
+        detail = str(res.get("detail", ""))
+        if "solve.py" in detail and ("timed out" in detail or "TimeoutExpired" in detail):
+            # The SOLVER blew the clock (rehearsal rehearsal: warmups solve.py >5.1s on 28 Mastery sets, on Homebase AND
+            # local). Retrying can't help -- it needs a faster solver: generalize with that diagnosis.
+            res["solver_too_slow"] = True
+            return "blocked"
+        return "error:exec"    # the RUNNER failed (ssh/VPN gap/kickoff), not the solver: retry, never generalize
     if r in ("solver_incomplete", "solver_error", "incorrect", "accepted"):
         return "blocked"       # the solver needs work; caller will generalise offline then retry
     if r in ("expired", "start_required") or "expired" in json.dumps(res).lower():

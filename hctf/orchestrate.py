@@ -30,6 +30,7 @@ CHAIN_CRASH_RETRIES = int(os.environ.get("HCTF_CHAIN_CRASH_RETRIES", "1"))  # re
 # Early handoff: once the Single Solve is CORRECT and a snapshot of the still-running worker's solver reproduces
 # its confirmed answers, make ONE speculative Time Trial -> Mastery pass from that snapshot instead of idling until
 # the worker exits (rehearsal Day 5: answers CORRECT at T+3:10, worker hardened the solver until T+6:25).
+BASELINE_CASE_TIMEOUT = float(os.environ.get("HCTF_BASELINE_CASE_TIMEOUT", "20"))  # pre-generalize regression baseline
 REUSE_PROBE_BUDGET = int(os.environ.get("HCTF_REUSE_PROBE_BUDGET", "20"))  # merged-reuse submits before the worker
 STOP_WHEN_READY = os.environ.get("HCTF_STOP_WHEN_READY", "1") != "0"  # end the single worker at CORRECT + verified solver
 SPEC_STABLE = float(os.environ.get("HCTF_SPEC_STABLE", "2"))  # solver files untouched this long before a snapshot
@@ -256,6 +257,10 @@ class Chain:
             gm_wrong = "  - (no per-field GM verdict was available this cycle)"
         if d.get("window") or d.get("elapsed"):
             gm_wrong += f"\n  - attempt facts: window {d.get('window')}s, elapsed {d.get('elapsed')}s, routed {d.get('routed') or 'local'}"
+        if d.get("solver_too_slow"):
+            gm_wrong += ("\n  - THE SOLVER IS TOO SLOW: solve.py hit the in-window timeout on this variant (answers may well be right). "
+                         "Make it fast -- no per-set brute force over every decoder, no subprocess per set, decode once, "
+                         "early-exit on the first candidate that matches the answer_format; time it with `time hctf solver-run`.")
         prompt = workers.render("generalize", cid=cid, base=self.base, mode=mode,
                                 chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
                                 persona=workers.lane_persona(self.lane), playbook=workers.lane_playbook(self.lane),
@@ -282,7 +287,10 @@ class Chain:
         # Baseline: which cases pass BEFORE the worker. Unverified variant cases are legitimately red; the bar is
         # "nothing that passed may break", not "everything green".
         try:
-            res = solvers.test_solver(self.sdir) if (self.sdir / "solve.py").exists() else []
+            # Short per-case timeout: a too-slow solver otherwise burns 120s PER CASE here before the generalize worker
+            # can even start (rehearsal rehearsal: 4 min). A case that slow can't pass a 7s window anyway.
+            res = (solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT)
+                   if (self.sdir / "solve.py").exists() else [])
             self._baseline = {r.get("case") for r in (res or []) if r.get("ok")}
         except Exception:  # noqa: BLE001
             self._baseline = set()
@@ -674,7 +682,7 @@ class Chain:
             # fix WRONG answers too, not just missing ones. Fetch the variant locally for it to work on.
             wrong, fixed, diag = None, None, {}
             last = timed.last_result(cid) or {}
-            diag = {k: last.get(k) for k in ("window", "elapsed", "phases", "routed")}
+            diag = {k: last.get(k) for k in ("window", "elapsed", "phases", "routed", "solver_too_slow")}
             if last.get("wrong") is not None:
                 # The timed runner already localized this attempt in-window (same variant, saved as an auto-* case
                 # with the GM-verified answers): use that instead of burning a fresh attempt on a different variant.
@@ -686,9 +694,14 @@ class Chain:
             if wrong is None:
                 try:
                     timed.ensure_started(cid)  # fresh attempt + download of the current variant for offline work
-                    wrong = timed.probe_fields(cid, self.sdir, log=say)  # binary search, per-field verdicts
-                    pd = json.loads((cli.cdir(cid) / "diagnosis.json").read_text())
-                    diag.update({k: pd.get(k) for k in ("complete", "probed", "total", "unjudged")})
+                    if last.get("solver_too_slow"):
+                        # Probing runs the same too-slow solver: it learns nothing (rehearsal rehearsal: 3 min for "28/28
+                        # wrong" from an empty output). The fix is speed -- straight to generalize with that diagnosis.
+                        say(f"[{cid}] solver too slow for the window: skipping the field probe, generalizing for speed")
+                    else:
+                        wrong = timed.probe_fields(cid, self.sdir, log=say)  # binary search, per-field verdicts
+                        pd = json.loads((cli.cdir(cid) / "diagnosis.json").read_text())
+                        diag.update({k: pd.get(k) for k in ("complete", "probed", "total", "unjudged")})
                 except Exception as e:  # noqa: BLE001
                     say(f"[{cid}] local fetch/probe for generalize failed: {e}")
                 capture_variant(cid, self.sdir)  # expected.json now enriched by the probe-confirmed fields

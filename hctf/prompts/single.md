@@ -44,6 +44,9 @@ Never edit `lib/`, `hctf/`, `skills/`, other challenges, or anything under `~/.c
 fact (a confirmed label spelling, a format law), append it to `{solver_dir}/NOTES.md` under a heading
 `## Proposed lib additions` (one line each: file, constant, value, evidence); the harness merges these after the run.
 `hctf labels` records confirmed labels in `lib/vocab.json` itself — that is the one sanctioned shared write.
+Never search the filesystem outside this project for answers or solvers (no `find /`, no other home directories,
+no other copy's' trees): workers run sandboxed and those paths are empty. Prior days' solvers under
+`challenges/` and `lib/` are the only reuse sources, and the harness already ran them for you.
 
 ## Field-label playbook for your lane (read before probing any label)
 {playbook}

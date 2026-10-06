@@ -121,6 +121,31 @@ def lane_playbook(lane):
 
 STOPPED_RC = -15  # run_local's return code when `stop` ended the worker (its job was already done)
 
+# Worker sandbox (bubblewrap): the rehearsal copy rehearsal (2026-10-06) caught a script-analysis worker running
+# `find / -name solve.py`, then COPYING the main account's Day 6 solver out of ~/huntress-2026 -- cross-copy
+# contamination that no prompt rule can be trusted to prevent. Every local worker now runs with these paths replaced
+# by empty, throwaway tmpfs dirs: every other ~/huntress-2026* tree (the other account), all Claude session
+# transcripts (~/.claude/projects: orchestrator sessions hold solutions), /mnt/c (Windows side), plus
+# HCTF_SANDBOX_HIDE (colon-separated). HCTF_WORKER_SANDBOX=0 disables it.
+WORKER_SANDBOX = os.environ.get("HCTF_WORKER_SANDBOX", "1") != "0"
+
+
+def sandbox_hidden_paths():
+    home = Path.home()
+    hide = [p for p in home.glob("huntress-2026*") if p.is_dir() and p.resolve() != ROOT.resolve()]
+    hide += [home / ".claude" / "projects", Path("/mnt/c")]
+    hide += [Path(x) for x in os.environ.get("HCTF_SANDBOX_HIDE", "").split(":") if x]
+    return [p for p in hide if p.exists()]
+
+
+def sandboxed(cmd):
+    """Wrap a worker command in bwrap with sandbox_hidden_paths() masked; unchanged if bwrap is unavailable."""
+    import shutil as _sh
+    if not WORKER_SANDBOX or not _sh.which("bwrap"):
+        return cmd
+    masks = [a for p in sandbox_hidden_paths() for a in ("--tmpfs", str(p))]
+    return ["bwrap", "--dev-bind", "/", "/", *masks, "--die-with-parent", "--", *cmd]
+
 
 def run_local(chal_dir, stage, prompt, env_extra, timeout, stop=None):
     """Blocking. Returns (returncode, logfile). `stop` (threading.Event): when set, the worker is terminated at once
@@ -142,7 +167,8 @@ def run_local(chal_dir, stage, prompt, env_extra, timeout, stop=None):
            # memory and re-read them every run). Durable knowledge goes through lib/ via the post-run ratchet only.
            "--strict-mcp-config", "--settings", json.dumps({"autoMemoryEnabled": False})]
     with open(log, "w") as out:
-        p = subprocess.Popen(cmd, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT, env=env, start_new_session=True)
+        p = subprocess.Popen(sandboxed(cmd), cwd=ROOT, stdout=out, stderr=subprocess.STDOUT, env=env,
+                             start_new_session=True)
         deadline = time.time() + timeout
         while True:
             try:
