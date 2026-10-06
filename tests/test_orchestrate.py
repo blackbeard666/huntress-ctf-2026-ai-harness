@@ -135,6 +135,23 @@ def test_reuse_submit():
     check("reuse: speculative values submitted when they complete it", ok and gm.conf == truth)
 
 
+def test_probe_enums():
+    truth = {"x-role": "stager", "x-url": "u"}
+    gm = FakeGM(truth)
+    gm.conf["x-url"] = "u"
+    contract = {"answer_ids": ["x-role", "x-url"], "questions": [
+        {"id": "x-role", "question": "Classify a.sh as benign_utility, stager, dropper, or launcher.",
+         "answer_format": {"kind": "enum", "accepted_values": ["benign_utility", "dropper", "launcher", "relay", "stager"]}},
+        {"id": "x-url", "question": "Recover the URL.", "answer_format": {"kind": "url"}}]}
+    with mock.patch.object(cli, "submit", gm.submit), \
+            mock.patch.object(cli, "confirmed_answers", lambda cid, att=None: dict(gm.conf)), \
+            mock.patch.object(orch, "say", lambda m: None):
+        orch.Chain._probe_enums(bare_chain(), "s", contract)
+    tried = [list(g.values())[0] for g, _ in gm.calls]
+    check("enum probe: question-named options in question order until accepted",
+          gm.conf.get("x-role") == "stager" and tried == ["benign_utility", "stager"] and all(p for _, p in gm.calls))
+
+
 def test_snapshot():
     cid = "script-analysis-day-05-python-carrier-lab"
     sdir, root = paths.solver_dir(cid), paths.challenge_root(cid)
@@ -219,6 +236,7 @@ def main():
         print("set_state");   test_set_state(tmp)
         print("crash retry"); test_crash_retry()
         print("reuse");       test_reuse_submit()
+        print("enums");       test_probe_enums()
         print("snapshot");    test_snapshot()
         print("watch");       test_watch_ready(tmp)
         print("green");       test_watch_green(tmp)

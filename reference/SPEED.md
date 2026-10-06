@@ -180,3 +180,20 @@ Fixes from runs 1-3 + a read-only analysis of their logs:
   Mastery contract's artifact names and warns if a set comes back empty.
 - Parallel artifact downloads (8); background evidence pulls on their own SSH connection; skip the per-mode GM status
   call when single() just saw the mode start_required; sandbox re-binds project symlink targets (alt .venv/tools).
+
+## Lane solvers: deterministic first (2026-10-07)
+
+Analysis of the full from-scratch replay (warmups 28/33/116, mobile 55/60/66, script 408/510/738 vs the top team's
+1-7s / 2-6s / 87-94s): the time was all LLM work on lanes whose fields are 100% mechanical. `lib/lanes/<lane>/solve.py`
+are day-independent, stdlib(+pyzipper) solvers run FIRST by merged reuse (`solvers.reuse_plan`), confident when every
+field is answered in its answer_format; a winning lane solver is seeded as a thin `solver/solve.py` wrapper so TT/Mastery
+run the same code. Validated offline on every saved case of days 1-6:
+- warmups (`lib/lanes/warmups`): 49/49 cases, 184/184 fields (layered/radix/cipher search guided by the answer regex +
+  the fixed warmup sentence, numbered mixed-encoding chunks); <= 0.16 s for a 28-set Mastery.
+- mobile-android (`lib/lanes/mobile`): 27/27 cases (huntress_puzzle.json, every codec tried, Mastery `delivery N:`).
+- script-analysis (`lib/lanes/script`): 12218/12218 fields on main's 80 cases (19134/19134 incl. alt), 0 wrong; one codec
+  engine (carriers x transforms x key forms incl. comma keys) + name-convention extraction (`Material_`/`Codec_`) + one
+  plan parser; with a language disabled it still answers ~90% of that language (new-language fallback).
+Through reuse_plan with ONLY the lane solvers: warmups/mobile days 2-6 and script days 2-6 all fields confident + right,
+~0.2-0.35 s. After reuse, enum fields still open are probed with the options their question names (role of a new graph).
+Note: a Day-6 replay can no longer measure these fairly (they were validated on Day 6); Day 7 is the real test.

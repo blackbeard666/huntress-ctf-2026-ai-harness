@@ -32,6 +32,7 @@ CHAIN_CRASH_RETRIES = int(os.environ.get("HCTF_CHAIN_CRASH_RETRIES", "1"))  # re
 # its confirmed answers, make ONE speculative Time Trial -> Mastery pass from that snapshot instead of idling until
 # the worker exits (rehearsal Day 5: answers CORRECT at T+3:10, worker hardened the solver until T+6:25).
 BASELINE_CASE_TIMEOUT = float(os.environ.get("HCTF_BASELINE_CASE_TIMEOUT", "8"))  # > any 6-7s window  # pre-generalize regression baseline
+ENUM_PROBE_BUDGET = int(os.environ.get("HCTF_ENUM_PROBE_BUDGET", "30"))  # enum options tried after reuse
 REUSE_PROBE_BUDGET = int(os.environ.get("HCTF_REUSE_PROBE_BUDGET", "20"))  # merged-reuse submits before the worker
 STOP_WHEN_READY = os.environ.get("HCTF_STOP_WHEN_READY", "1") != "0"  # end the single worker at CORRECT + verified solver
 SPEC_STABLE = float(os.environ.get("HCTF_SPEC_STABLE", "2"))  # solver files untouched this long before a snapshot
@@ -438,10 +439,17 @@ class Chain:
                 budget[0] -= 1
                 if cli.submit(cid, {a: v}, force=True, probe=True)[0] in ("correct", "accepted"):
                     break
+        self._probe_enums(cid, contract)
         # Seed this challenge's own solver from the best prior one (the worker extends it; timed modes run it).
         best = plan["best"]
         if best and not (self.sdir / "solve.py").exists():
-            shutil.copytree(best, self.sdir, dirs_exist_ok=True, ignore=shutil.ignore_patterns("cases", "__pycache__"))
+            if "/lib/lanes/" in str(best):
+                # the lane solver won: a thin wrapper, so the timed modes run the same generic code (synced to Homebase)
+                from lib import lanes as _lanes
+                self.sdir.mkdir(parents=True, exist_ok=True)
+                (self.sdir / "solve.py").write_text(_lanes.wrapper_source(self.lane))
+            else:
+                shutil.copytree(best, self.sdir, dirs_exist_ok=True, ignore=shutil.ignore_patterns("cases", "__pycache__"))
         conf = cli.confirmed_answers(cid)
         if cli.is_complete(cid):
             got, err, _ = solvers.run_solver(self.sdir, contract, art)
@@ -469,6 +477,31 @@ class Chain:
             + (f" Judged WRONG by the GM: {', '.join(sorted(wrong)[:20])}." if wrong else ""))
         say(f"[{cid}] reuse: {len(conf)}/{len(ids)} accepted; worker gets the {len(remaining)} remaining field(s)")
         return False
+
+    def _probe_enums(self, cid, contract, budget=None):
+        """Enum fields still open after reuse: try the options the QUESTION names (subset of answer_format.accepted_values,
+        in question order), one per submit. The untimed single judges each; on a new script language this resolves the
+        role of an unseen behavior graph without an LLM (the lane solver leaves exactly those for want of evidence)."""
+        budget = [ENUM_PROBE_BUDGET if budget is None else budget]
+        done = 0
+        for aid, q in solvers.paired_questions(contract):
+            if aid in cli.confirmed_answers(cid) or budget[0] <= 0:
+                continue
+            fmt = q.get("answer_format") or {}
+            allowed = fmt.get("accepted_values") or []
+            if fmt.get("kind") != "enum" or not allowed:
+                continue
+            text = q.get("question") or ""
+            named = sorted((v for v in allowed if re.search(rf"(?<![\w-]){re.escape(v)}(?![\w-])", text)), key=text.find)
+            for v in named or allowed:
+                if budget[0] <= 0:
+                    break
+                budget[0] -= 1
+                if cli.submit(cid, {aid: v}, force=True, probe=True)[0] in ("correct", "accepted"):
+                    done += 1
+                    break
+        if done:
+            say(f"[{cid}] enum probe: resolved {done} field(s) from the options their questions list")
 
     def auto_labels(self, cid, budget=12):
         """No-model fallback after a Single Solve worker stops short: for each still-unconfirmed field whose ending

@@ -427,6 +427,9 @@ def _mark_expired_locally(cid, seconds):
     p.write_text(json.dumps(d))
 
 
+_pushed = {}  # solver dir -> file signature last rsynced to Homebase (this process)
+
+
 def run_hb_timed(solver_dir, cid, op="start", timeout=60):
     """Run the clock-critical timed attempt ON Homebase (adjacent to the GM). Returns hb_timed's JSON dict.
     Syncs hctf+lib (base) and the solver so hb_timed can execute it next to the GM."""
@@ -438,10 +441,16 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
     try:
         sync_homebase_base()
         if solver_dir.exists():
-            # ONE round-trip: the remote rsync creates the dir itself; cases/ (6-8 MB of regression bytes on the hard
-            # lanes) is never needed to run the solver.
-            remote.rsync_to(str(solver_dir) + "/", f"~/{HB_WORK}/{rel}/", exclude=["cases/", "__pycache__/"],
-                            mkdir=f"~/{HB_WORK}/{rel}")
+            # Skip the push when the solver code is unchanged since the last push of this dir (TT -> Mastery: same
+            # solver, ~1 round-trip saved between modes). ONE round-trip otherwise: the remote rsync creates the dir
+            # itself; cases/ (6-8 MB of regression bytes on the hard lanes) is never needed to run the solver.
+            sig = tuple(sorted((str(f.relative_to(solver_dir)), f.stat().st_mtime_ns, f.stat().st_size)
+                               for f in solver_dir.rglob("*") if f.is_file()
+                               and "cases" not in f.relative_to(solver_dir).parts and "__pycache__" not in f.parts))
+            if _pushed.get(str(solver_dir)) != sig:
+                remote.rsync_to(str(solver_dir) + "/", f"~/{HB_WORK}/{rel}/", exclude=["cases/", "__pycache__/"],
+                                mkdir=f"~/{HB_WORK}/{rel}")
+                _pushed[str(solver_dir)] = sig
         else:
             remote.ssh(f"mkdir -p ~/{HB_WORK}/{rel}")
     except (RuntimeError, subprocess.SubprocessError, OSError) as e:  # incl. remote-command failures
