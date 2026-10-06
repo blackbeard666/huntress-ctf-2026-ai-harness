@@ -198,7 +198,11 @@ def power(action="status"):
             return {"state": "running", "ip": HB_HOST, "credits": None}
         except Exception:  # noqa: BLE001 - VM not reachable via SSH; fall back to the browser path
             pass
-    script = subprocess.run(["wslpath", "-w", str(ROOT / "hctf" / "hbpower.py")],
+    # The Windows browser session belongs to ONE CourseStack account; a copy wired to another account's VM
+    # (the rehearsal copy) sets this so a failed SSH check can never power/inspect the wrong account's VM.
+    if os.environ.get("HCTF_NO_BROWSER_POWER") == "1":
+        raise RuntimeError(f"Homebase {HB_HOST} unreachable over SSH and browser power is disabled")
+    script =subprocess.run(["wslpath", "-w", str(ROOT / "hctf" / "hbpower.py")],
                             capture_output=True, text=True, check=True).stdout.strip()
     r = subprocess.run([WIN_PY, script, action], capture_output=True, text=True, timeout=420)
     if r.returncode:

@@ -138,7 +138,7 @@ def sync_homebase_base(force=False):
     with _sync_lock:
         if _hb.get("base_synced") and not force:
             return
-        remote.ssh(f"mkdir -p ~/{HB_WORK}/challenges ~/.codex/skills")
+        remote.ssh(f"mkdir -p ~/{HB_WORK}/challenges ~/.codex/skills ~/hctf")  # ~/hctf: absent on a fresh VM
         for d in ("hctf", "lib", "bin", "skills"):
             if (ROOT / d).exists():
                 remote.rsync_to(ROOT / d, f"~/{HB_WORK}/")
@@ -301,7 +301,7 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
         remote.ssh(f"mkdir -p ~/{HB_WORK}/{rel}")
         if solver_dir.exists():
             remote.rsync_to(str(solver_dir) + "/", f"~/{HB_WORK}/{rel}/")
-    except (remote.Unreachable, subprocess.SubprocessError, OSError) as e:
+    except (RuntimeError, subprocess.SubprocessError, OSError) as e:  # incl. remote-command failures
         return {"result": "exec_error", "detail": f"homebase kickoff failed: {e}"}
     # Use the GM's INSIDE proxy from Homebase (network-path identity = same test account as the pairing token,
     # sub-ms latency) so tight windows (e.g. the 6s scripting Time Trial) fit; the public GM's ~2.7s/call

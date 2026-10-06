@@ -46,7 +46,7 @@ if ! bash bin/preflight.sh; then
 fi
 
 # 2) Warm the Homebase SSH ControlMaster so a tight timed window never pays a cold reconnect (~25s seen).
-if ip route get 10.1.50.243 2>/dev/null | grep -q tun0; then
+if ip route get "${HCTF_HB_HOST:-10.1.50.243}" 2>/dev/null | grep -q "${HCTF_VPN_DEV:-tun0}"; then
   timeout 30 hctf hb exec -- true >/dev/null 2>&1 && echo "[warm] Homebase SSH control channel established." \
     || echo "[warm] Homebase not reachable; run stays local-first (fine)."
 fi

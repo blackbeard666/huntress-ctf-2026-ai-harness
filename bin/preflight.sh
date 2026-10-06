@@ -11,7 +11,7 @@ set -uo pipefail
 TOKEN_EXPIRY="2026-11-01"   # UPDATE THIS after re-pairing (secrets/gm_pairing_token). See reference/RUNBOOK.md.
 CTF_DAY1="2026-10-03"       # day 01 release date; daily cadence -> day 31 = CTF_DAY1 + 30 days.
 CTF_LASTDAY=31
-HB_HOST="10.1.50.243"
+HB_HOST="${HCTF_HB_HOST:-10.1.50.243}"; VPN_DEV="${HCTF_VPN_DEV:-tun0}"
 # -------------------------------------------------------------------------------------------------
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
@@ -59,16 +59,16 @@ fi
 
 # 3) VPN tunnel -----------------------------------------------------------------------------------
 hdr "CTF VPN (for Homebase; GM does not need it)"
-if ip -brief addr show tun0 >/dev/null 2>&1; then
-  tun_ip="$(ip -brief addr show tun0 | awk '{print $3}')"
-  if ip route get "$HB_HOST" 2>/dev/null | grep -q tun0; then
-    ok "tun0 up ($tun_ip); route to $HB_HOST via tun0."
+if ip -brief addr show $VPN_DEV >/dev/null 2>&1; then
+  tun_ip="$(ip -brief addr show $VPN_DEV | awk '{print $3}')"
+  if ip route get "$HB_HOST" 2>/dev/null | grep -q $VPN_DEV; then
+    ok "$VPN_DEV up ($tun_ip); route to $HB_HOST via $VPN_DEV."
   else
-    warn "tun0 up ($tun_ip) but no route to $HB_HOST via it. Restart: sudo systemctl restart hctf-vpn"
+    warn "$VPN_DEV up ($tun_ip) but no route to $HB_HOST via it. Restart: sudo systemctl restart hctf-vpn"
   fi
 else
   svc="$(systemctl is-active hctf-vpn 2>/dev/null)"
-  warn "tun0 DOWN (hctf-vpn service: ${svc:-unknown}). Homebase unreachable until up: sudo systemctl start hctf-vpn"
+  warn "$VPN_DEV DOWN (hctf-vpn service: ${svc:-unknown}). Homebase unreachable until up: sudo systemctl start hctf-vpn"
 fi
 
 # 4) Homebase SSH + credits -----------------------------------------------------------------------
