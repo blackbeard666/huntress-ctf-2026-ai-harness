@@ -19,6 +19,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -107,7 +108,25 @@ def call(cid, op, *args, timeout=180):
     return env
 
 
+_tls = threading.local()
+
+
+@contextmanager
+def quiet():
+    """Silence emit() for the CALLING thread only. (contextlib.redirect_stdout swaps the process-global sys.stdout:
+    with 5 chains in parallel, two overlapping redirects restored out of order and left sys.stdout stuck on a
+    StringIO, so every later orchestrator line vanished from .run/dayNN.log -- Day 6.)"""
+    prev = getattr(_tls, "quiet", False)
+    _tls.quiet = True
+    try:
+        yield
+    finally:
+        _tls.quiet = prev
+
+
 def emit(obj):
+    if getattr(_tls, "quiet", False):
+        return
     json.dump(obj, sys.stdout, indent=2, ensure_ascii=False)
     sys.stdout.write("\n")
 
@@ -333,7 +352,29 @@ def _format_problem(value, q):
 
 
 def c_submit(a):
-    kind, body, problems = submit(a.id, json.loads(a.answers), force=a.force)
+    if a.from_solver:
+        # Submit exactly what solve.py emits (minus already-confirmed answers): the solver IS the answer source, so the
+        # moment this comes back CORRECT the harness can verify the solver and hand the timed modes off.
+        from . import solvers, timed
+        contract = load(a.id, "start.json") or load(a.id, "contract.json")
+        art = timed.latest_artifacts(a.id)
+        if not contract or not art:
+            print("refused:\n  no contract/artifacts for this mode yet", file=sys.stderr)
+            return EXIT["refused"]
+        got, problems = solvers.solve_contract(contract, art, paths.solver_dir(a.id))
+        conf = confirmed_answers(a.id)
+        answers = {k: v for k, v in got.items() if conf.get(k) != v}
+        if problems:
+            print("solver problems (submitting what it produced):\n  " + "\n  ".join(problems[:20]), file=sys.stderr)
+        if not answers:
+            print("refused:\n  the solver produced nothing new to submit", file=sys.stderr)
+            return EXIT["refused"]
+    else:
+        if not a.answers:
+            print("refused:\n  give answers JSON or --from-solver", file=sys.stderr)
+            return EXIT["refused"]
+        answers = json.loads(a.answers)
+    kind, body, problems = submit(a.id, answers, force=a.force)
     if problems:
         print("refused:\n  " + "\n  ".join(problems), file=sys.stderr)
         return EXIT["refused"]
@@ -341,7 +382,7 @@ def c_submit(a):
     return EXIT.get(kind, EXIT["error"])
 
 
-def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_cap=None):
+def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_cap=None, probe=False):
     """Guarded submission shared by the CLI, the workers and the timed runner.
     Returns (kind, body, problems). kind is None when refused locally (problems explains why).
     Answers the GM confirms are merged into <mode dir>/confirmed.json (keyed by attempt)."""
@@ -352,7 +393,9 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
     answers = {k: _normalize(str(v), qmap.get(k, {})) for k, v in answers.items()}
     subs_path = cdir(cid) / "submissions.jsonl"
     history = [json.loads(l) for l in subs_path.read_text().splitlines()] if subs_path.exists() else []
-    same_attempt = [h for h in history if h.get("attempt") == att]
+    # probe=True submissions (harness reuse/localization batches) prove nothing about any single value when the
+    # batch is incorrect, so they never feed the "already judged incorrect" / per-field wrong-count guards.
+    same_attempt = [h for h in history if h.get("attempt") == att and not h.get("probe")]
     confirmed = confirmed_answers(cid, att)
 
     # Wrong-answer accounting. Flags are brute-force-protected (hard cap across the attempt). Structured
@@ -418,7 +461,8 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
         newly = dict(answers)
     elif kind == "accepted":
         remaining = (env["body"] or {}).get("remaining")
-        before = [h for h in same_attempt if isinstance((h.get("body") or {}).get("remaining"), int)]
+        before = [h for h in history if h.get("attempt") == att  # incl. probe batches: they move `remaining` too
+                  and isinstance((h.get("body") or {}).get("remaining"), int)]
         prev = before[-1]["body"]["remaining"] if before else len(qmap) - len(confirmed) if qmap else None
         if len(answers) == 1 or (isinstance(remaining, int) and prev is not None and prev - remaining == len(answers)):
             newly = dict(answers)
@@ -429,8 +473,8 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
 
     with open(subs_path, "a") as f:
         f.write(json.dumps({"ts": now(), "attempt": att, "answers": answers, "http": env["http"],
-                            "kind": kind, "confirmed": sorted(newly), "body": env["body"]},
-                           ensure_ascii=False) + "\n")
+                            "kind": kind, "confirmed": sorted(newly), "body": env["body"],
+                            **({"probe": True} if probe else {})}, ensure_ascii=False) + "\n")
     return kind, body, []
 
 
@@ -818,8 +862,9 @@ def main(argv=None):
     pa.add_argument("--delivery")
     ps = sub.add_parser("submit", help="submit '{\"<answer_id>\": \"<value>\"}'")
     ps.add_argument("id")
-    ps.add_argument("answers")
+    ps.add_argument("answers", nargs="?")
     ps.add_argument("--force", action="store_true")
+    ps.add_argument("--from-solver", action="store_true", help="submit what the challenge's solve.py emits")
     sub.add_parser("openapi")
     sub.add_parser("triage", help="deterministic no-LLM triage of a mode's artifacts").add_argument("id")
     sub.add_parser("solver-test", help="refresh + replay the solver's regression cases").add_argument("id")

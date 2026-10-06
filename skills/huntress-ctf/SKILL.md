@@ -10,11 +10,15 @@ description: Huntress CTF 2026 "AI Arena" playbook for harness workers. Covers t
 2. **Look at the real bytes** in `<mode dir>/artifacts/latest/` (sha256-verified). Never retype bytes by hand.
    First moves: `file *`, `exiftool -j *`, `7z l x.zip`, `xxd | head`, `strings -n 6`. Unzip into a working dir *next to*
    the artifacts (`<mode dir>/work/`), never over them.
-3. **Answer each question from evidence**, then log it in `<mode dir>/notes.md` as `hypothesis | evidence | result`,
-   dead ends included.
-4. **Submit** with `hctf submit <id> '{"<answer_id>": "<value>"}'`. Exit codes: 0 correct, 1 incorrect, 2 accepted
-   (partial), 4 refused locally (format/duplicate/cap). An incorrect result means the evidence is wrong: re-derive, don't guess.
-5. **Generalize**: write `<challenge>/solver/solve.py` (skill `solver-authoring`), then `hctf solver-test <id>`.
+3. **Answer each question from evidence by writing it into `<challenge>/solver/solve.py`** (skill `solver-authoring`);
+   prototype at the shell first. Log one terse `hypothesis | evidence | result` line per step in `<mode dir>/notes.md`.
+4. **Submit from the solver**: `hctf submit <id> --from-solver` (or `hctf submit <id> '{"<answer_id>": "<value>"}'` for a
+   single probe). Exit codes: 0 correct, 1 incorrect, 2 accepted (partial), 4 refused locally (format/duplicate/cap).
+   An incorrect result means the evidence is wrong: re-derive, don't guess.
+5. **Stop at CORRECT.** The harness ends the session once the solver reproduces the confirmed answers and runs the
+   timed modes itself; regression suites and hardening happen in its generalize stage, only when a real variant fails.
+   Never edit `lib/`, `hctf/`, `skills/` or `~/.claude/` — propose durable facts under `## Proposed lib additions` in
+   `solver/NOTES.md`.
 
 ## Routing by lane / what the bytes are
 | Lane or signal | Skill |

@@ -27,7 +27,10 @@ LOCKDIR = LOCKS
 
 SSH_OPTS = [
     "-i", str(KEY), "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-o", "IdentitiesOnly=yes",
-    "-o", f"UserKnownHostsFile={KNOWN_HOSTS}", "-o", "StrictHostKeyChecking=accept-new", "-o", "ServerAliveInterval=15",
+    "-o", f"UserKnownHostsFile={KNOWN_HOSTS}", "-o", "StrictHostKeyChecking=accept-new",
+    # A dead tunnel is noticed in ~15s (was 45s with the default count of 3 at 15s), without killing a healthy
+    # session on one lost keepalive.
+    "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3",
     "-o", "ControlMaster=auto", "-o", f"ControlPath={CTL}", "-o", "ControlPersist=600",
 ]
 
@@ -74,6 +77,21 @@ def ssh(cmd, timeout=180, check=True):
     if check and r.returncode not in (0, 5):
         raise RuntimeError(f"remote command failed ({r.returncode}): {r.stderr.strip()[:500]}")
     return r
+
+
+def probe(timeout=8):
+    """ONE quick reachability check (no retries, 5s connect): True if Homebase answers. For the health thread --
+    ssh() with its 3 retries x 15s connect took ~48s to report a dead tunnel."""
+    opts = [o if o != "ConnectTimeout=15" else "ConnectTimeout=5" for o in SSH_OPTS]
+    try:
+        r = subprocess.run(["ssh", *opts, f"{HB_USER}@{HB_HOST}", "true"], capture_output=True, text=True,
+                           timeout=timeout)
+    except subprocess.TimeoutExpired:
+        clear_control_sockets()
+        return False
+    if r.returncode == 255:
+        clear_control_sockets()
+    return r.returncode == 0
 
 
 ON_HOMEBASE = bool(os.environ.get("HCTF_ON_HOMEBASE"))  # set for workers running on Homebase itself
@@ -151,8 +169,12 @@ def rsync_from(remote_path, local_dir):
             str(local_dir).rstrip("/") + "/"])
 
 
-def rsync_to(local_path, remote_path):
-    _rsync(["rsync", "-a", "--delete", "-e", "SSH", str(local_path), f"{HB_USER}@{HB_HOST}:{remote_path}"])
+def rsync_to(local_path, remote_path, exclude=(), mkdir=None):
+    """mkdir: create this remote dir in the same round-trip (via --rsync-path) instead of a separate ssh mkdir."""
+    argv = ["rsync", "-a", "--delete", "-e", "SSH", *[f"--exclude={x}" for x in exclude]]
+    if mkdir:
+        argv.append(f"--rsync-path=mkdir -p {mkdir} && rsync")
+    _rsync([*argv, str(local_path), f"{HB_USER}@{HB_HOST}:{remote_path}"])
 
 
 def _rsync(argv):

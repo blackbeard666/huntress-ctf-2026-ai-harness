@@ -187,3 +187,70 @@ def test_solver(sdir, timeout=120):
         results.append({"case": case.name, "ok": not err and not diff and bool(expected), "seconds": round(dt, 2),
                         "error": err, "diff": diff, "unverified": not expected})
     return results
+
+
+# ---------------------------------------------------------------------------------------------- merged reuse
+# Day 6 review: reuse matched solvers by QUESTION TEXT (one arbitrary solver per question, unsorted glob) and was
+# all-or-nothing, so it discarded prior solvers that already produced the right answers -- every prior mobile solver
+# answered Day 6 mobile; Day 5's script solver got 357/399 and prior binary solvers 40/48, all with 0 wrong. Now every
+# same-lane solver runs on the FULL contract and the answers merge per field; the GM (untimed single) is the oracle.
+
+def _lane_of(sdir):
+    try:
+        return json.loads((Path(sdir).parent / "meta.json").read_text()).get("lane")
+    except (OSError, ValueError):
+        return None
+
+
+def _known_ids(sdir):
+    """answer_ids this solver has GM-verified answers for in its own regression cases (confidence signal)."""
+    known = set()
+    for exp in Path(sdir).glob("cases/*/expected.json"):
+        try:
+            known.update(json.loads(exp.read_text()))
+        except (OSError, ValueError):
+            pass
+    return known
+
+
+def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6):
+    """Run every solver of `lane` (+ any question-text match) on the FULL contract, in parallel, and merge per field.
+    Returns {"high": {aid: v}, "spec": {aid: v}, "source": {aid: sdir}, "runs": {sdir: (n_answered, err, secs)},
+             "best": sdir|None}. high = some solver whose own GM-verified cases contain that answer_id produced it
+    (newest such solver wins); spec = produced only by solvers that never had that field verified."""
+    from concurrent.futures import ThreadPoolExecutor
+    ids = list(contract.get("answer_ids") or [])
+    excl = {Path(e).resolve() for e in exclude}
+    cands = {p for p in all_solver_dirs() if _lane_of(p) == lane}
+    try:
+        cands |= set(dispatch(contract)[0])
+    except Exception:  # noqa: BLE001 - question index is optional here
+        pass
+    cands = sorted((c for c in cands if Path(c).resolve() not in excl), key=_day_key, reverse=True)
+    if not cands or not ids:
+        return {"high": {}, "spec": {}, "source": {}, "runs": {}, "best": None, "alts": {}}
+    with ThreadPoolExecutor(max_workers=max_parallel) as ex:
+        outs = dict(zip(cands, ex.map(lambda s: run_solver(s, contract, artifacts, timeout), cands)))
+    high, spec, source, runs, alts = {}, {}, {}, {}, {}
+    for sdir in cands:                      # newest first: the first producer of a field wins
+        got, err, dt = outs[sdir]
+        runs[sdir] = (sum(1 for a in ids if got.get(a) not in (None, "")), err, round(dt, 2))
+        known = _known_ids(sdir)
+        for a in ids:
+            v = got.get(a)
+            if v in (None, ""):
+                continue
+            if v not in alts.setdefault(a, []):
+                alts[a].append(v)           # every distinct candidate, newest first (fallbacks for a judged-wrong field)
+            if a in known and a not in high:
+                high[a], source[a] = v, sdir
+                spec.pop(a, None)
+            elif a not in high and a not in spec:
+                spec[a], source[a] = v, sdir
+    merged = {**spec, **high}
+    # The seed for this challenge's own solver: the one reproducing the most merged values (ties -> newest).
+    def agree(sdir):
+        got = outs[sdir][0]
+        return sum(1 for a, v in merged.items() if got.get(a) == v), _day_key(sdir)
+    best = max(cands, key=agree) if merged else None
+    return {"high": high, "spec": spec, "source": source, "runs": runs, "best": best, "alts": alts}

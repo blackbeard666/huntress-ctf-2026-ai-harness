@@ -25,9 +25,10 @@ Do this:
    independently from the bytes (decode/parse/decrypt/compute). Do not assume the solver's current value is right.
 2. Write those derived answers into the case's `expected.json` (so it becomes a real regression test), then
    generalize `solve.py` to reproduce them AND still pass every other case — detect structure, never hard-code
-   this variant's values. Reuse/extend `lib/*` (and record confirmed GM vocabulary in `lib/knowledge.py`).
-3. `hctf solver-test {base}` must pass for EVERY case, and `hctf solver-run {cid}` must output every answer_id,
-   before you stop.
+   this variant's values. Reuse `lib/*` but do not edit it (other workers import it concurrently): list new helpers and
+   confirmed GM vocabulary under `## Proposed lib additions` in `{solver_dir}/NOTES.md`; the post-run ratchet merges them.
+3. `hctf solver-test {base}` must pass for EVERY case, and `hctf solver-run {cid}` must output every answer_id —
+   then STOP immediately (the timed mode is waiting on you; no extra hardening, no synthetic cases).
 4. The solver runs LOCALLY against the public Game Master under a short clock (~6-10s for the whole
    download+solve+submit), so keep it FAST and dependency-light. Artifacts are already downloaded for you
    (in parallel) before the solver runs — don't fetch anything yourself. For a compounded Mastery bundle the

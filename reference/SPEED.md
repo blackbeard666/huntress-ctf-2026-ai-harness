@@ -16,9 +16,10 @@ Fixes (2026-10-05):
 - `remote.ssh()` / `_rsync()`: retry up to `HCTF_SSH_RETRIES=3` with backoff to ride through transient
   UDP-VPN drops; `run_hb_timed` returns `exec_error` (never raises) so a kickoff failure falls back to local.
 - `remote.gm()`: the `ssh` transport falls back to the public GM (token) on any Homebase failure.
-- VPN root cause: OpenVPN was hitting `--ping-restart` inactivity timeouts every ~4 min (a ~3s outage each).
-  The systemd unit (`setup/hctf-vpn.service`) now runs with `--ping 10 --ping-restart 60` so the tunnel never
-  idles out. The local→Homebase link is ~230ms RTT; the in-window GM calls are HB→inside-proxy (off the VPN),
+- VPN root cause (CORRECTED Day 6): the ~4-min `--ping-restart` cycle was NOT idling. The Windows OpenVPN GUI was
+  connected with the SAME profile; CourseStack keeps one session per profile, so the two clients evicted each other
+  every ~4 min (~60s dead each). Fix: no Windows client at all -- our VPN is command-line only (`hctf-vpn` systemd unit in WSL); the GUI
+  was removed from Windows startup. `bin/preflight.sh` FAILs on any Windows openvpn.exe on our profile; `--fix` taskkills it. The unit's `--ping 10 --ping-restart 60` is still fine to keep. The local→Homebase link is ~230ms RTT; the in-window GM calls are HB→inside-proxy (off the VPN),
   so they stay fast and stable once an attempt is kicked off.
 
 Measured on the Day 5 script-analysis Time Trial (7s window):
@@ -119,3 +120,46 @@ worker kept hardening the solver until T+6:25 before Time Trial could start. `or
 ONE Time Trial -> Mastery pass from a verified snapshot as soon as the single is CORRECT (worker keeps going; a
 pre-pass failure costs nothing and its variant is adopted as a regression case after the worker). Expected ~2-3 min
 off the critical lane. The reuse path now submits all answers in one request (per-set, forced, only to localize).
+
+## Day 6 fixes: expired timed attempts (2026-10-06)
+
+Day 6 had 4 expired/failed timed attempts though every solver was correct. Causes and fixes:
+- **Homebase latched off for the whole run.** The prewarm SSH landed in a VPN gap, `_homebase_ready()` set
+  `failed=True`, and every timed attempt ran local (public GM start ~5s alone on a 7s window). Now a failure only
+  cools down `HCTF_HB_RETRY_S` (20s) and is re-probed; recovery is logged.
+- **Early handoff parked a clock expiry until the worker exited** (scripting TT idled ~6 min). `_speculate` now
+  retries a clock expiry (solver answered everything) immediately, up to `HCTF_SPEC_TIMING_RETRIES` (2).
+- **Drop-time launch re-ran pre-flight + a blocking 30s Homebase warm** (~75s lost at 21:00). `bin/day.sh N --wait`
+  now does all prep up front, skips a pre-flight that passed within 6h, warms Homebase in the background, then polls
+  every 3s and launches the instant the day is listed.
+- **Orchestrator log went silent**: `contextlib.redirect_stdout` is process-global; overlapping calls from parallel
+  chains stranded `sys.stdout` on a StringIO. Replaced with thread-local `cli.quiet()`.
+- `last_timed.json` now keeps `detail` (exec_error cause) and `routed` is set on local attempts too.
+
+## Day 6 adversarial review -> Day 7 changes (2026-10-06)
+
+4 read-only review agents (scratch in `.run/review/`). Root cause of 12m13s vs the top team's 1m45s: 60% of worker
+time came AFTER the first CORRECT (mandated hardening), reuse threw away prior solvers that already had the answers,
+and the timed handoff serialized behind locks and waits. Changes:
+- **Merged reuse** (`solvers.reuse_plan`, `Chain.try_existing_solvers`): every same-lane solver runs on the FULL
+  contract in parallel; per-field merge (confident = the solver's own GM-verified cases contain that answer_id).
+  Confident fields are submitted at once and bisected on a failure (probe-tagged submits, budget 20), with other
+  solvers' alternate values tried for a judged-wrong field; speculative fields only when they would finish the
+  challenge. The best solver seeds `solver/`; the worker gets ONLY the remaining answer_ids. Offline replay with only
+  prior solvers: confident fields 813/814 right across Days 4-6; Day 6 mobile solved, script 357/399, binary 40/48.
+- **Stop at CORRECT** (`Chain._watch_ready`, `workers.run_local(stop=)`): once the single is CORRECT and the solver
+  (stable 2s, *.py only, 1s poll) reproduces every confirmed answer, the worker is ended, the verified snapshot is
+  restored and the timed modes start. Prompts/skills now say: answers go INTO solve.py, `hctf submit <id>
+  --from-solver`, stop; no solver-test/synthetic cases/hardening in the single.
+- **Timed robustness:** `exec_error` -> `error:exec` = retry after waiting for Homebase health, never a generalize;
+  clock-expiry retry sleep 8s -> 2s; prerequisite wait 20s -> 3s.
+- **Homebase:** background health thread (`workers.start_homebase_health`, single 5s-connect probe every 5s);
+  `_homebase_ready()` is a non-blocking read; provisioning (2s import check, full setup only if missing) runs in that
+  thread, never under a lock; solver push is one round-trip without `cases/`; on a pass the evidence pull + regression
+  capture run in the background. SSH keepalive 5s x 3.
+- **Isolation:** workers run with `--strict-mcp-config` (23 claude.ai MCP servers were loading per worker) and
+  auto-memory off; they never edit `lib/` mid-run -- `## Proposed lib additions` in solver/NOTES.md are merged by ONE
+  post-run `ratchet` worker (`orchestrate.ratchet`, `HCTF_RATCHET=0` to skip).
+- Effort: all lanes back to high (xhigh made each turn ~50% slower for no wall-clock gain).
+- Fixed latent crash: duplicate `Chain._snapshot_solver` (any generalize would raise TypeError); guard test.
+Not done yet: one Homebase process chaining TT -> Mastery, pre-launching workers before the drop.

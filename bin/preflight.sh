@@ -5,7 +5,11 @@
 # Exit 0 = go (no FAILs), 1 = a FAIL that will block solving.
 #
 # Run: cd ~/huntress-2026 && source bin/env.sh && preflight.sh   (or: bash bin/preflight.sh)
+#   --fix   also kill (taskkill) any Windows openvpn.exe connected with our VPN profile (see check 3b).
+# A passing run writes .run/preflight.ok (epoch); bin/day.sh skips its own pre-flight while that is fresh, so the
+# drop-time launch never re-runs these checks.
 set -uo pipefail
+FIX=0; [ "${1:-}" = "--fix" ] && FIX=1
 
 # --- config you may need to update ---------------------------------------------------------------
 TOKEN_EXPIRY="2026-11-01"   # UPDATE THIS after re-pairing (secrets/gm_pairing_token). See reference/RUNBOOK.md.
@@ -71,6 +75,59 @@ else
   warn "$VPN_DEV DOWN (hctf-vpn service: ${svc:-unknown}). Homebase unreachable until up: sudo systemctl start hctf-vpn"
 fi
 
+# 3b) Duplicate VPN client ------------------------------------------------------------------------
+# The CourseStack server keeps ONE session per profile. If a Windows openvpn.exe (GUI-launched or command-line) is
+# connected with the same profile, it and our WSL tunnel evict each other every ~4 min (~60s dead each: "[server]
+# Inactivity timeout"), and timed attempts that land in a gap fall back to slow local and EXPIRE (Day 6). Blocking.
+# Our VPN is command-line only (the hctf-vpn systemd unit in WSL); a Windows client is never needed.
+OVPN="${HCTF_OVPN:-$(ls secrets/*.ovpn 2>/dev/null | head -1)}"   # this copy's profile (main: huntress-ctf-2026-ai-arena, alt: alt)
+WIN_TASKLIST=/mnt/c/Windows/System32/tasklist.exe
+WIN_TASKKILL=/mnt/c/Windows/System32/taskkill.exe
+WIN_PS=/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe
+if [ -x "$WIN_TASKLIST" ] && timeout 10 "$WIN_TASKLIST" 2>/dev/null | grep -qi '^openvpn\.exe'; then
+  ours="$(md5sum "$OVPN" 2>/dev/null | cut -d' ' -f1)"
+  # "<pid>|<commandline>" per Windows openvpn.exe
+  procs="$(timeout 20 "$WIN_PS" -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"name='openvpn.exe'\" | ForEach-Object { '' + \$_.ProcessId + '|' + \$_.CommandLine }" 2>/dev/null | tr -d '\r')"
+  dup_pids=""
+  while IFS='|' read -r pid cmd; do
+    [ -z "$pid" ] && continue
+    c="$(grep -oE -- '--config +"?[^"]+\.ovpn' <<<"$cmd" | sed -E 's/--config +"?//' | head -1)"
+    [ -z "$c" ] && continue
+    cands=()
+    if [[ "$c" =~ ^[A-Za-z]: ]]; then cands=("$(wslpath -u "$c" 2>/dev/null)")   # absolute Windows path
+    else for d in /mnt/c/Users/*/OpenVPN/config "/mnt/c/Program Files/OpenVPN/config"; do cands+=("$d/$c" "$d/${c%.ovpn}/$c"); done
+    fi
+    for f in "${cands[@]}"; do
+      [ -f "$f" ] && [ "$(md5sum "$f" | cut -d' ' -f1)" = "$ours" ] && { dup_pids="$dup_pids $pid"; break; }
+    done
+  done <<<"$procs"
+  dup_pids="${dup_pids# }"
+  if [ -n "$dup_pids" ]; then
+    if [ "$FIX" -eq 1 ]; then
+      for pid in $dup_pids; do timeout 10 "$WIN_TASKKILL" /PID "$pid" /T /F >/dev/null 2>&1; done
+      sleep 1
+      left=""
+      for pid in $dup_pids; do timeout 10 "$WIN_TASKLIST" /FI "PID eq $pid" 2>/dev/null | grep -qi openvpn && left="$left $pid"; done
+      if [ -n "$left" ]; then
+        fail "Windows openvpn.exe on OUR profile still running after --fix (PID$left). Kill it: taskkill.exe /PID <pid> /F"
+      else
+        ok "Windows openvpn.exe on our profile (PID $dup_pids) killed (--fix); WSL owns the session now."
+      fi
+    else
+      fail "Windows openvpn.exe (PID $dup_pids) is connected with OUR profile: it evicts $VPN_DEV every ~4 min. Fix: bash bin/preflight.sh --fix"
+    fi
+  else
+    ok "Windows openvpn.exe is running but not on our profile (no session fight)."
+  fi
+else
+  ok "no Windows openvpn.exe on our profile."
+fi
+# Flap detector (catches a duplicate on ANOTHER machine too): >=2 inactivity restarts in 15 min.
+flaps="$(journalctl -u "${HCTF_VPN_UNIT:-hctf-vpn}" --since '-15 min' --no-pager 2>/dev/null | grep -c 'Inactivity timeout' || true)"
+if [ "${flaps:-0}" -ge 2 ]; then
+  warn "${HCTF_VPN_UNIT:-hctf-vpn} restarted $flaps times in 15 min (session fight? another client on this profile, e.g. a 2nd machine)."
+fi
+
 # 4) Homebase SSH + credits -----------------------------------------------------------------------
 hdr "Homebase (optional low-latency compute for tight timed windows)"
 hb_out="$(timeout 35 hctf hb exec -- 'echo hb-ok' 2>&1)"
@@ -89,4 +146,5 @@ if [ "$fails" -gt 0 ]; then
 fi
 [ "$warns" -gt 0 ] && echo "READY (with warnings) — GM works; warnings above are non-blocking (Homebase/VPN are optional)."
 [ "$warns" -eq 0 ] && echo "ALL GREEN — go."
+mkdir -p .run && date +%s > .run/preflight.ok
 exit 0

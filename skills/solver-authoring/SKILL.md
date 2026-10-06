@@ -33,10 +33,13 @@ The repo root is on PYTHONPATH, so `import lib.<x>` works from any solver. Prefe
   for an unseen role/scenario; the GM still judges correctness on submit.
 - `lib.knowledge` — the central store of GM-confirmed spellings (ELF endianness=`little`, machine=`x86-64`,
   scenario->ATT&CK, booleans). **When the GM confirms a new spelling, add it here**, not just in one solver.
-If you discover a genuinely reusable helper, add it to the right `lib/` module so later days inherit it.
+If you discover a genuinely reusable helper, keep it in your `solver/` and list it under `## Proposed lib additions` in
+`solver/NOTES.md` (target module + function); the post-run ratchet moves it into `lib/` so later days inherit it.
+Never edit `lib/` during a run: other workers import it concurrently.
 
-# Generalize before you finish
-Assume the variants differ in: file names, keys/XOR bytes, number of encoding layers and their order, field positions,
+# Write it general the first time (no extra pass after CORRECT)
+Apply this checklist WHILE writing — a Single Solve worker is ended as soon as it is CORRECT and the solver reproduces
+the answers, so there is no "hardening pass" afterwards. Assume the variants differ in: file names, keys/XOR bytes, number of encoding layers and their order, field positions,
 archive passwords given in the prompt, embedded strings, the extra Mastery sets, and the order of the questions.
 Checklist:
 - [ ] every constant is *derived* from the artifact or the contract (no answer literals, no hard-coded keys or offsets)
@@ -46,9 +49,8 @@ Checklist:
 - [ ] works when the question order changes, and when only a subset of questions is passed in
 
 # Prove it
-- `hctf solver-test <single-solve-id>`: rebuilds case `single_solve` from the GM-confirmed answers and replays every case
-  in `solver/cases/` (Time Trial and Mastery variants are added automatically once they are confirmed).
-- `hctf solver-run <mode-id>`: runs the solver library on any mode's current contract and files, without submitting.
-- Optional: hand-make a mutated variant (change key/filename/layers) under `solver/cases/synthetic-*` with `expected.json`
-  to check that the solver really generalizes.
-- Keep `solver/NOTES.md`: what the concept is and which variant axes you handled.
+- Single Solve worker: `hctf solver-run <mode-id>` once (runs the solver on the current contract + files, no submit),
+  then `hctf submit <id> --from-solver`. That's all — no `solver-test`, no synthetic cases.
+- Generalize worker (a real variant failed): `hctf solver-test <single-solve-id>` replays every case in `solver/cases/`
+  (Time Trial / Mastery variants are added automatically); it must pass before you stop.
+- `solver/NOTES.md`: 3-6 lines — the concept, the variant axes handled, and `## Proposed lib additions`.

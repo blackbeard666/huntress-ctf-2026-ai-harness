@@ -30,9 +30,10 @@ CHAIN_CRASH_RETRIES = int(os.environ.get("HCTF_CHAIN_CRASH_RETRIES", "1"))  # re
 # Early handoff: once the Single Solve is CORRECT and a snapshot of the still-running worker's solver reproduces
 # its confirmed answers, make ONE speculative Time Trial -> Mastery pass from that snapshot instead of idling until
 # the worker exits (rehearsal Day 5: answers CORRECT at T+3:10, worker hardened the solver until T+6:25).
-SPECULATIVE_TIMED = os.environ.get("HCTF_SPECULATIVE_TIMED", "1") != "0"
-SPEC_STABLE = float(os.environ.get("HCTF_SPEC_STABLE", "20"))  # solver files untouched this long before a snapshot
-SPEC_POLL = float(os.environ.get("HCTF_SPEC_POLL", "10"))
+REUSE_PROBE_BUDGET = int(os.environ.get("HCTF_REUSE_PROBE_BUDGET", "20"))  # merged-reuse submits before the worker
+STOP_WHEN_READY = os.environ.get("HCTF_STOP_WHEN_READY", "1") != "0"  # end the single worker at CORRECT + verified solver
+SPEC_STABLE = float(os.environ.get("HCTF_SPEC_STABLE", "2"))  # solver files untouched this long before a snapshot
+SPEC_POLL = float(os.environ.get("HCTF_SPEC_POLL", "1"))
 # Time Trial scouting before Mastery (hctf/scout.py): extra TT attempts that harvest new variants and learn label
 # spellings on the cheap clock. 0 = off. `hctf run --scout N` overrides.
 SCOUT_ROUNDS = int(os.environ.get("HCTF_SCOUT_ROUNDS", "0"))
@@ -128,8 +129,17 @@ def set_state(base, **kw):
         os.replace(tmp, p)  # atomic: `hctf dash`/`why` never read a half-written file
 
 
-def ensure_case_and_test(cid, sdir):
-    """Turn the Single Solve's confirmed answers into regression case 'single_solve' and run all cases."""
+def _rel(p):
+    """Path for a worker prompt: project-relative when possible."""
+    try:
+        return Path(p).relative_to(ROOT)
+    except (ValueError, TypeError):
+        return p
+
+
+def ensure_case_and_test(cid, sdir, full=True):
+    """Turn the Single Solve's confirmed answers into regression case 'single_solve' and run all cases
+    (full=False: only record the case -- the caller already verified the solver on it)."""
     contract = cli.load(cid, "start.json")
     art = timed.latest_artifacts(cid)
     conf = cli.confirmed_answers(cid)
@@ -137,6 +147,8 @@ def ensure_case_and_test(cid, sdir):
         solvers.add_case(sdir, "single_solve", contract, art, conf)
     if not (sdir / "solve.py").exists():
         return False, "no solve.py"
+    if not full:
+        return True, None
     res = solvers.test_solver(sdir)
     return bool(res) and all(r["ok"] for r in res), res
 
@@ -183,7 +195,7 @@ class Chain:
                                      "ids": {m: e["id"] for m, e in self.entries.items()}}, indent=2, ensure_ascii=False))
 
     # -- workers
-    def run_worker(self, cid, stage, prompt, timeout, urgent=False, prefer_homebase=False):
+    def run_worker(self, cid, stage, prompt, timeout, urgent=False, prefer_homebase=False, stop=None):
         env = {"HCTF_CHAL": cid, "HCTF_BASE": self.base, "HCTF_STAGE": stage, "HCTF_SOLVER_DIR": self.sdir,
                "HCTF_CHAL_DIR": cli.cdir(cid), "HCTF_LANE": self.lane}
         pool = "local" if urgent else self.pools.acquire(prefer_homebase)
@@ -191,7 +203,7 @@ class Chain:
         say(f"[{cid}] {stage} worker -> {pool} (timeout {timeout:.0f}s)")
         try:
             if pool == "local":
-                rc, log = workers.run_local(cli.cdir(cid), stage, prompt, env, timeout)
+                rc, log = workers.run_local(cli.cdir(cid), stage, prompt, env, timeout, stop=stop)
             else:
                 rc, log = workers.run_homebase(self.root, cli.cdir(cid), stage, prompt, env, timeout)
         finally:
@@ -316,46 +328,86 @@ class Chain:
             self._restore_snapshot("previous run was interrupted mid-generalize")
 
     def try_existing_solvers(self, cid):
-        """Run the whole solver library (all days, matched by question text) against this challenge.
-        If it answers every question and the submissions are accepted, copy the winning solver into this
-        challenge's solver dir and return True. Returns False to fall through to an LLM worker."""
+        """Merged reuse (no model time): run EVERY same-lane solver (+ question-text matches) on the full contract,
+        merge per field, and submit what they agree on -- partial is fine, the untimed GM accepts it and pins each
+        field. Seeds this challenge's solver from the best one. Returns True if the single is complete; otherwise
+        self._reuse_note tells the worker exactly which fields are left (it starts from the seeded solver)."""
+        self._reuse_note = ""
         contract = cli.load(cid, "start.json") or cli.load(cid, "contract.json")
         art = timed.latest_artifacts(cid)
         if not contract or not art:
             return False
-        groups, _ = solvers.dispatch(contract)
-        # A compound bundle is split across days by question text; one newer solver often covers ALL of it.
-        whole, answers = (solvers.whole_contract_solver(contract, art, list(groups)) if len(groups) > 1
-                          else (None, {}))
-        problems = []
-        if not whole:
-            answers, problems = solvers.solve_contract(contract, art, try_whole=False)  # library only, split
-        ids = contract.get("answer_ids", [])
-        if problems or not ids or any(a not in answers for a in ids):
+        ids = list(contract.get("answer_ids") or [])
+        t0 = time.time()
+        plan = solvers.reuse_plan(contract, art, self.lane, exclude=[self.sdir])
+        high, spec, alts = plan["high"], plan["spec"], plan["alts"]
+        if not high and not spec:
+            say(f"[{cid}] reuse: no prior solver answers any of {len(ids)} field(s) ({len(plan['runs'])} tried)")
             return False
         set_state(self.base, stage="single:reuse")
-        # One request with every answer (one GM round-trip instead of one per set).
-        kind, body, refused = cli.submit(cid, answers)
-        if kind != "correct" and not cli.is_complete(cid):
-            say(f"[{cid}] reuse submit (all {len(answers)}): {kind or 'refused'} {json.dumps(body or refused)[:150]}")
-            if refused:
-                return False
-            # Localize per set so the LLM worker inherits the sets that ARE right. force: the full submit marked every
-            # value "judged incorrect" in this attempt, but re-sending the same values set-by-set is localization.
-            for key, group in _by_set(answers).items():
-                kind, body, refused = cli.submit(cid, group, force=True)
-                if kind not in ("correct", "accepted"):
-                    say(f"[{cid}] reuse submit {key}: {kind or 'refused'} {json.dumps(body or refused)[:150]}")
-            return cli.is_complete(cid)
+        say(f"[{cid}] reuse: {len(high)} confident + {len(spec)} speculative of {len(ids)} field(s) from "
+            f"{len(plan['runs'])} solver(s) in {time.time() - t0:.1f}s; seed {plan['best'] and plan['best'].parent.name}")
+        budget = [REUSE_PROBE_BUDGET]
+        wrong = set()
+
+        def narrow(group):
+            """Submit a group; on incorrect, bisect (probe-tagged) until the wrong fields are isolated."""
+            group = {a: v for a, v in group.items() if a not in cli.confirmed_answers(cid)}
+            if not group or budget[0] <= 0 or cli.is_complete(cid):
+                return
+            budget[0] -= 1
+            kind, _body, refused = cli.submit(cid, group, force=True, probe=True)
+            if kind in ("correct", "accepted") or refused:
+                return
+            if len(group) == 1:
+                wrong.update(group)
+                return
+            keys = list(group)
+            narrow({k: group[k] for k in keys[:len(keys) // 2]})
+            narrow({k: group[k] for k in keys[len(keys) // 2:]})
+
+        narrow(high)
+        rest = {a: v for a, v in spec.items() if a not in cli.confirmed_answers(cid)}
+        left = [a for a in ids if a not in cli.confirmed_answers(cid)]
+        if rest and set(left) <= set(rest):
+            narrow(rest)  # speculative values only when they could finish it (Day 6 binary: 8/8 were wrong)
+        for a in sorted(wrong):  # a field judged wrong: try the other solvers' distinct values (Day 4 mobile)
+            for v in [x for x in alts.get(a, []) if x != high.get(a, spec.get(a))][:3]:
+                if budget[0] <= 0 or a in cli.confirmed_answers(cid):
+                    break
+                budget[0] -= 1
+                if cli.submit(cid, {a: v}, force=True, probe=True)[0] in ("correct", "accepted"):
+                    break
+        # Seed this challenge's own solver from the best prior one (the worker extends it; timed modes run it).
+        best = plan["best"]
+        if best and not (self.sdir / "solve.py").exists():
+            shutil.copytree(best, self.sdir, dirs_exist_ok=True, ignore=shutil.ignore_patterns("cases", "__pycache__"))
+        conf = cli.confirmed_answers(cid)
         if cli.is_complete(cid):
-            # adopt the matching solver so this challenge's timed modes reuse it directly
-            src = whole or next(iter(groups), None)
-            if src and src != self.sdir and not (self.sdir / "solve.py").exists():
-                import shutil
-                self.sdir.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src / "solve.py", self.sdir / "solve.py")
-            ensure_case_and_test(self.base, self.sdir)
-            return True
+            got, err, _ = solvers.run_solver(self.sdir, contract, art)
+            missing = sorted(a for a, v in conf.items() if got.get(a) != v)
+            if not err and not missing:
+                ensure_case_and_test(cid, self.sdir, full=False)
+                say(f"[{cid}] solved by merged reuse in {time.time() - t0:.1f}s (seed reproduces every answer)")
+                return True
+            # Complete, but the answers came from several solvers: the worker only has to make the seed emit them.
+            self._reuse_note = (f"\nREUSE PRE-PASS: the Single Solve is already CORRECT (merged from several prior solvers). "
+                                f"Your only job: make `{_rel(self.sdir)}/solve.py` (seeded from "
+                                f"{best and _rel(best)}) also emit these confirmed answers, then STOP: "
+                                f"{json.dumps({a: conf[a] for a in missing[:40]})}")
+            return False
+        remaining = [a for a in ids if a not in conf]
+        hints = {a: spec[a] for a in remaining if a in spec}
+        self._reuse_note = (
+            f"\nREUSE PRE-PASS (already done by the harness, {time.time() - t0:.0f}s): {len(conf)}/{len(ids)} answers are "
+            f"ALREADY ACCEPTED by the GM (see confirmed.json) -- do not re-derive or re-submit them. "
+            f"`{_rel(self.sdir)}/solve.py` is seeded from `{best and _rel(best)}` and already emits "
+            f"most of them: run `hctf solver-run {cid}` first. Only these {len(remaining)} answer_id(s) are left: "
+            f"{', '.join(remaining[:80])}{' ...' if len(remaining) > 80 else ''}."
+            + (f" Unverified values older solvers produced for some of them (hints, may be wrong): "
+               f"{json.dumps(dict(list(hints.items())[:20]))}." if hints else "")
+            + (f" Judged WRONG by the GM: {', '.join(sorted(wrong)[:20])}." if wrong else ""))
+        say(f"[{cid}] reuse: {len(conf)}/{len(ids)} accepted; worker gets the {len(remaining)} remaining field(s)")
         return False
 
     def auto_labels(self, cid, budget=12):
@@ -383,6 +435,15 @@ class Chain:
             r = labels.probe(cid, aid, cands, budget=budget, log=say)
             say(f"[{cid}] auto-labels {aid}: {r.get('accepted') or 'not resolved'} ({len(r.get('tried', []))} tried)")
         return cli.is_complete(cid)
+
+    def _record_labels(self, cid):
+        # Cache the Single Solve's confirmed closed-vocab labels into vocab.json NOW (untimed), so the timed
+        # modes enter with those spellings already confirmed and never carry an unconfirmed label onto a clock.
+        try:
+            from . import labels
+            labels.record_from_confirmed(cid, lane=self.lane, log=say)
+        except Exception as e:  # noqa: BLE001 - label caching is best-effort
+            say(f"[{cid}] label cache note: {e}")
 
     # -- stages
     def single(self):
@@ -428,13 +489,16 @@ class Chain:
                 if not cli.load(cid, "start.json"):
                     cli.save(cid, "start.json", st)
         timed_info = []
-        for m in ("time_trial", "mastery"):
-            if m in self.entries:
-                tcid = self.entries[m]["id"]
-                st = cli.call(tcid, "status", tcid)["body"] or {}
-                if st.get("questions"):
-                    cli.save(tcid, "contract.json", st)
-                timed_info.append(f"  - {m}: `{tcid}` -> `{cli.cdir(tcid).relative_to(ROOT)}/contract.json`")
+        tmodes = [m for m in ("time_trial", "mastery") if m in self.entries]
+
+        def fetch(m):  # both timed contracts at once (no clock starts on a status call)
+            tcid = self.entries[m]["id"]
+            st = cli.call(tcid, "status", tcid)["body"] or {}
+            if st.get("questions"):
+                cli.save(tcid, "contract.json", st)
+            return f"  - {m}: `{tcid}` -> `{cli.cdir(tcid).relative_to(ROOT)}/contract.json`"
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            timed_info = list(ex.map(fetch, tmodes))
         for n in range(MAX_SINGLE_LAUNCHES):
             extra = ""
             notes = cli.cdir(cid) / "notes.md"
@@ -443,37 +507,40 @@ class Chain:
                          "first, do not repeat its dead ends, and pick the most promising unexplored lead.")
             if welcome:
                 extra += "\nThis is an orientation challenge: no solver is needed, only a correct submission."
+            extra += getattr(self, "_reuse_note", "")
             prompt = workers.render("single", name=self.name, cid=cid, lane=self.lane,
                                     persona=workers.lane_persona(self.lane), playbook=workers.lane_playbook(self.lane),
                                     chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
                                     timed_contracts="\n".join(timed_info) or "  - (none: Single Solve only)", extra=extra)
             set_state(self.base, stage="single:solving", launches=n + 1)
             heavy = self.lane in ("binary-reverse-engineering", "binary")
-            stop, spec = threading.Event(), None
-            if SPECULATIVE_TIMED and not welcome and "time_trial" in self.entries and \
-                    "time_trial" in (self.only_modes or ["time_trial"]):
-                spec = threading.Thread(target=self._speculate, args=(cid, stop), daemon=True)
-                spec.start()
+            ready, done_evt, watch = threading.Event(), threading.Event(), None
+            self._ready_snap = None
+            if STOP_WHEN_READY and not welcome:
+                watch = threading.Thread(target=self._watch_ready, args=(cid, ready, done_evt), daemon=True)
+                watch.start()
             try:
-                self.run_worker(cid, "single", prompt, SINGLE_TIMEOUT, prefer_homebase=heavy)
+                rc = self.run_worker(cid, "single", prompt, SINGLE_TIMEOUT, prefer_homebase=heavy, stop=ready)
             finally:
-                stop.set()
-                if spec:
-                    spec.join()  # never let a speculative attempt overlap the normal timed stage
+                done_evt.set()
+                if watch:
+                    watch.join()
+            if rc == workers.STOPPED_RC and self._ready_snap:
+                # Ended on purpose: CORRECT + verified solver. Restore the verified files, record the single as a
+                # regression case and go straight to the timed modes (the full-suite replay is not needed: the
+                # snapshot was just verified on this exact case).
+                self._restore_ready_snapshot(self._ready_snap)
+                ensure_case_and_test(cid, self.sdir, full=False)
+                say(f"[{cid}] after worker: stopped at CORRECT with a verified solver")
+                self._record_labels(cid)
+                return True
             done = cli.is_complete(cid)
             if not done and not welcome:
                 done = self.auto_labels(cid)
             ok, res = (True, None) if welcome else ensure_case_and_test(cid, self.sdir)
             say(f"[{cid}] after worker: complete={done} solver_ok={ok}")
-            self._adopt_spec_cases()
             if done and ok:
-                # Cache the Single Solve's confirmed closed-vocab labels into vocab.json NOW (untimed), so the timed
-                # modes enter with those spellings already confirmed and never carry an unconfirmed label onto a clock.
-                try:
-                    from . import labels
-                    labels.record_from_confirmed(cid, lane=self.lane, log=say)
-                except Exception as e:  # noqa: BLE001 - label caching is best-effort
-                    say(f"[{cid}] label cache note: {e}")
+                self._record_labels(cid)
                 return True
             if (cli.cdir(cid) / "HELP.md").exists():
                 set_state(self.base, stage="single:help", help=(cli.cdir(cid) / "HELP.md").read_text()[:1500])
@@ -485,9 +552,10 @@ class Chain:
     def _solver_mtimes(self):
         if not self.sdir.exists():
             return {}
-        return {p.name: p.stat().st_mtime for p in self.sdir.iterdir() if p.is_file()}
+        # Solver CODE only: a late NOTES.md / scratch write must not reset the stability clock (Day 6).
+        return {p.name: p.stat().st_mtime for p in self.sdir.iterdir() if p.is_file() and p.suffix == ".py"}
 
-    def _snapshot_solver(self, cid):
+    def _spec_snapshot(self, cid):
         """Copy the worker's in-progress solver (minus cases) to `.run/spec-dayNN/<chal>/solver` -- the same depth as
         challenges/dayNN/<chal>/solver, since solvers locate the project root via parents[N] -- if its files have been
         stable for SPEC_STABLE s and it reproduces the GM-confirmed Single Solve answers. Returns the dir or None."""
@@ -518,50 +586,37 @@ class Chain:
             return None
         return snap
 
-    def _adopt_spec_cases(self):
-        """Move regression cases captured by speculative attempts into the live solver dir (the timed stage's
-        generalize step works from them)."""
-        snap = getattr(self, "_spec_snap", None)
-        if not snap or not (snap / "cases").exists():
-            return
-        for case in (snap / "cases").iterdir():
-            dst = self.sdir / "cases" / case.name
-            if case.is_dir() and not dst.exists():
-                shutil.copytree(case, dst)
-        self._spec_snap = None
-
-    def _speculate(self, cid, stop):
-        """Runs beside the Single Solve worker. Once the single is CORRECT, try Time Trial -> Mastery ONCE from a
-        verified snapshot. A failure before a pass costs nothing on the scoreboard (the variant is still captured as
-        a regression case); whatever is unsolved is handled by the normal timed stages after the worker exits."""
+    def _watch_ready(self, cid, ready, done):
+        """Runs beside the Single Solve worker. The moment the single is CORRECT and the worker's solver (stable 2s)
+        reproduces every GM-confirmed answer, keep that verified snapshot and set `ready`: run_local then ends the
+        worker and the timed modes start from the snapshot at once. Day 6: 60% of worker time (1101/1850s) came after
+        the first CORRECT, and every first-correct snapshot already passed its real TT+Mastery variants offline."""
         try:
-            snap = None
-            while not snap:
-                if stop.wait(SPEC_POLL):
-                    return
+            while not done.wait(SPEC_POLL):
                 if cli.is_complete(cid):
-                    snap = self._snapshot_solver(cid)
-            for mode in ("time_trial", "mastery"):
-                e = self.entries.get(mode)
-                if not e or mode not in (self.only_modes or [mode]):
-                    continue
-                tcid = e["id"]
-                if cli.is_complete(tcid) or cli.gm_solved(tcid):
-                    continue
-                if stop.is_set() or not self.gov.allow_timed():
-                    return
-                say(f"[{tcid}] early handoff: speculative attempt from the solver snapshot (single worker still running)")
-                self._spec_snap = snap
-                # Cases land in the SNAPSHOT: a failing auto-* case in the live solver dir would make the post-worker
-                # regression check fail and relaunch the Single Solve worker. Adopted after that check.
-                r = timed.process_result(tcid, snap, workers.run_timed_auto(snap, tcid, log=say), log=say)
-                set_state(self.base, **{f"{mode}_result": r})
-                if r != "correct":
-                    say(f"[{tcid}] early handoff: {r}; normal timed stage takes over after the worker exits")
-                    return
-                record_timed_case(tcid, snap)
-        except Exception as e:  # noqa: BLE001 - speculation must never hurt the chain
-            say(f"[{cid}] early handoff note: {e}")
+                    snap = self._spec_snapshot(cid)
+                    if snap:
+                        self._ready_snap = snap
+                        say(f"[{cid}] single CORRECT + solver verified -> ending the worker, timed modes start now")
+                        ready.set()
+                        return
+        except Exception as e:  # noqa: BLE001 - the watcher must never hurt the chain
+            say(f"[{cid}] ready-watch note: {e}")
+
+    def _restore_ready_snapshot(self, snap):
+        """After a stopped worker: put the verified snapshot's files back over the live solver (the worker may have been
+        mid-edit when it was ended). cases/ in the live dir is kept."""
+        for src in snap.rglob("*"):
+            if src.is_file() and "__pycache__" not in src.parts:
+                dst = self.sdir / src.relative_to(snap)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+
+    @staticmethod
+    def _clock_expiry(cid):
+        """The last attempt expired although the solver answered everything: the clock, not the solver."""
+        last = timed.last_result(cid) or {}
+        return (last.get("phases") or {}).get("solve") is not None and not last.get("missing")
 
     def timed_stage(self, mode):
         e = self.entries.get(mode)
@@ -590,20 +645,28 @@ class Chain:
                     say(f"[{cid}] prerequisite: latest Time Trial attempt is not CORRECT; re-passing it")
                     self.ensure_latest_pass(tt["id"])
                 else:
-                    time.sleep(20)  # CourseStack scoring may still be pending for the previous mode
+                    time.sleep(3)  # CourseStack scoring may still be pending for the previous mode
                 continue
+            if res == "error:exec":
+                # Transport failure (Day 6 binary TT: exec_error -> 12-min generalize path). Wait briefly for Homebase
+                # health (local is the fallback anyway) and retry; it costs a TT attempt, never a worker.
+                if attempt < MAX_TIMED_RETRIES:
+                    say(f"[{cid}] timed runner failed ({(timed.last_result(cid) or {}).get('detail', '')!s:.120}); retrying")
+                    set_state(self.base, stage=f"{mode}:retrying")
+                    workers.wait_homebase(10)
+                    continue
+                break
             if res not in ("expired", "blocked"):
                 break
             last = timed.last_result(cid) or {}
-            if (res == "expired" and (last.get("phases") or {}).get("solve") is not None and not last.get("missing")
-                    and attempt < MAX_TIMED_RETRIES):
+            if res == "expired" and self._clock_expiry(cid) and attempt < MAX_TIMED_RETRIES:
                 # The solver answered everything and the CLOCK ran out: a transport/timing failure. Probing can't judge
                 # anything on an expired clock and a generalize worker can't speed up the network (rehearsal copy,
                 # Dim and Dimmer mastery: 0/462 judged, worker concluded "solver correct, timing"). Just retry.
                 say(f"[{cid}] expired on the CLOCK (in-window {last.get('in_window')}s / window {last.get('window')}s, "
                     f"phases {last.get('phases')}): timing, not the solver -- retrying without probe/generalize")
                 set_state(self.base, stage=f"{mode}:timing")
-                time.sleep(8)
+                time.sleep(2)
                 continue
             # A failed timed attempt means the solver is wrong or incomplete for this variant (with Homebase
             # execution the window is no longer the bottleneck). Always improve the solver offline, then retry.
@@ -786,6 +849,32 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
         elif keep_homebase:
             say("[homebase] left running (--keep-homebase); power it off with `hctf hb off` when done")
     say("all chains finished")
+    if RATCHET and day is not None:
+        ratchet(day)
+
+
+RATCHET = os.environ.get("HCTF_RATCHET", "1") != "0"
+RATCHET_TIMEOUT = float(os.environ.get("HCTF_RATCHET_TIMEOUT", str(15 * 60)))
+
+
+def ratchet(day):
+    """Post-run, single-writer knowledge merge: collect every `## Proposed lib additions` section the day's workers
+    wrote in solver/NOTES.md and let ONE worker fold the GM-confirmed ones into lib/ (workers no longer edit lib/
+    mid-run: Day 6's script worker rewrote lib/knowledge.py + lib/scripts.py while four other lanes imported them)."""
+    tag = f"day{int(day):02d}"
+    props = []
+    for notes in sorted((paths.CHALLENGES / tag).glob("*/solver/NOTES.md")):
+        text = notes.read_text(errors="replace")
+        m = re.search(r"^##\s*Proposed lib additions\s*$(.*?)(?=^##\s|\Z)", text, re.M | re.S)
+        if m and m.group(1).strip():
+            props.append(f"### {notes.relative_to(ROOT)}\n{m.group(1).strip()}")
+    if not props:
+        say(f"[ratchet] {tag}: no proposed lib additions")
+        return
+    prompt = workers.render("ratchet", day=tag, day_num=int(day), proposals="\n\n".join(props))
+    say(f"[ratchet] {tag}: merging {len(props)} proposal section(s) into lib/")
+    rc, log = workers.run_local(paths.CHALLENGES / tag, "ratchet", prompt, {"HCTF_STAGE": "ratchet"}, RATCHET_TIMEOUT)
+    say(f"[ratchet] {tag}: worker exit {rc} ({Path(log).name})")
 
 
 def chain_for(cid, pools, gov):

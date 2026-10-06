@@ -35,7 +35,7 @@ def _logfile(chal_dir, stage, pool):
 
 # ilio-style bounds: cap each worker's turns so a stuck agent can't grind up cost. Wall-clock timeout
 # is passed in; turns are a second, independent ceiling. Override via HCTF_MAX_TURNS_<STAGE>.
-MAX_TURNS = {"single": 80, "generalize": 50, "fix": 30}
+MAX_TURNS = {"single": 80, "generalize": 50, "fix": 30, "ratchet": 40}
 
 
 def _max_turns(stage):
@@ -59,8 +59,12 @@ WORKER_EFFORT = os.environ.get("HCTF_WORKER_EFFORT", "high")
 # To break the 4-min sweep on a heavy scripting day, lower script-analysis here AFTER validating correctness
 # over a few days — it is the only lane on the critical path.
 # Owner's rule: EVERY lane runs at the global effort (>= high), warmups included — no lane is relaxed by default.
-# Precedence: HCTF_WORKER_EFFORT_<LANE> > LANE_EFFORT[lane] > HCTF_WORKER_EFFORT (global) > "high".
-LANE_EFFORT = {}
+# LANE_EFFORT is a raise-only FLOOR: a lane runs at max(global, LANE_EFFORT[lane]), so it can never drop a lane below
+# the global effort. Day 6 xhigh experiment: script-analysis went from 9-14 submits (high, Days 4-5) to 1 (all 399
+# answers right first try); the easy lanes only got 1.5-3x slower at xhigh with no accuracy to gain (0 wrong at high).
+# Precedence: HCTF_WORKER_EFFORT_<LANE> (exact) > max(HCTF_WORKER_EFFORT global, LANE_EFFORT[lane]) > "high".
+EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+LANE_EFFORT = {}  # Day 6 xhigh floors for script/binary reverted 2026-10-06: ~50% slower turns, no wall-clock gain
 LANE_MODEL = {}
 
 
@@ -69,7 +73,14 @@ def _lane_key(lane):
 
 
 def worker_effort(lane):
-    return os.environ.get(f"HCTF_WORKER_EFFORT_{_lane_key(lane)}") or LANE_EFFORT.get(lane, WORKER_EFFORT)
+    exact = os.environ.get(f"HCTF_WORKER_EFFORT_{_lane_key(lane)}")
+    if exact:
+        return exact
+    floor = LANE_EFFORT.get(lane)
+    rank = {e: i for i, e in enumerate(EFFORT_LEVELS)}
+    if floor and rank.get(floor, -1) > rank.get(WORKER_EFFORT, -1):
+        return floor
+    return WORKER_EFFORT
 
 
 def worker_model(lane):
@@ -108,8 +119,13 @@ def lane_playbook(lane):
         return "(playbook unavailable; resolve non-flag labels with `hctf labels`.)"
 
 
-def run_local(chal_dir, stage, prompt, env_extra, timeout):
-    """Blocking. Returns (returncode, logfile)."""
+STOPPED_RC = -15  # run_local's return code when `stop` ended the worker (its job was already done)
+
+
+def run_local(chal_dir, stage, prompt, env_extra, timeout, stop=None):
+    """Blocking. Returns (returncode, logfile). `stop` (threading.Event): when set, the worker is terminated at once
+    and STOPPED_RC returned -- the orchestrator sets it once the Single Solve is CORRECT and the solver verifiably
+    reproduces it, so post-correct hardening never sits on the critical path (Day 6: 60% of worker time)."""
     log = _logfile(chal_dir, stage, "local")
     env = dict(os.environ)
     env.update({k: str(v) for k, v in env_extra.items()})
@@ -120,14 +136,40 @@ def run_local(chal_dir, stage, prompt, env_extra, timeout):
     lane = env_extra.get("HCTF_LANE") or env.get("HCTF_LANE")
     cmd = ["claude", "-p", prompt, "--dangerously-skip-permissions", "--max-turns", str(_max_turns(stage)),
            "--model", worker_model(lane), "--effort", worker_effort(lane),
-           "--output-format", "stream-json", "--verbose"]
+           "--output-format", "stream-json", "--verbose",
+           # Isolation: no claude.ai MCP connectors (23 connected at every worker start, none used) and no Claude
+           # auto-memory (Day 6 workers wrote unversioned GM facts to ~/.claude/projects/-home-testpwn-huntress-2026/
+           # memory and re-read them every run). Durable knowledge goes through lib/ via the post-run ratchet only.
+           "--strict-mcp-config", "--settings", json.dumps({"autoMemoryEnabled": False})]
     with open(log, "w") as out:
         p = subprocess.Popen(cmd, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT, env=env, start_new_session=True)
-        try:
-            return p.wait(timeout=timeout), log
-        except subprocess.TimeoutExpired:
-            os.killpg(p.pid, 9)
-            return -9, log
+        deadline = time.time() + timeout
+        while True:
+            try:
+                return p.wait(timeout=0.5), log
+            except subprocess.TimeoutExpired:
+                pass
+            if stop is not None and stop.is_set():
+                _kill_group(p, grace=2.0)
+                return STOPPED_RC, log
+            if time.time() >= deadline:
+                _kill_group(p, grace=0)
+                return -9, log
+
+
+def _kill_group(p, grace):
+    """SIGTERM the worker's process group, then SIGKILL after `grace` seconds."""
+    import signal
+    try:
+        os.killpg(p.pid, signal.SIGTERM if grace else signal.SIGKILL)
+        if grace:
+            try:
+                p.wait(timeout=grace)
+            except subprocess.TimeoutExpired:
+                os.killpg(p.pid, signal.SIGKILL)
+                p.wait(timeout=5)
+    except (ProcessLookupError, PermissionError):
+        pass
 
 
 _sync_lock = threading.Lock()
@@ -171,7 +213,10 @@ TIGHT_WINDOW = float(os.environ.get("HCTF_TIGHT_WINDOW", "8"))      # clocks thi
 AUTO_HOMEBASE = os.environ.get("HCTF_AUTO_HOMEBASE", "1") != "0"   # 0: never power Homebase on by itself
 CREDIT_FLOOR = float(os.environ.get("HCTF_CREDIT_HARD", "1.5"))      # never power on below this many credits
 _hb_lock = threading.Lock()
-_hb = {"powered_by_us": False, "provisioned": False, "failed": False}
+HB_HEALTH_S = float(os.environ.get("HCTF_HB_HEALTH_S", "5"))   # background Homebase reachability probe period
+HB_FRESH_S = 3 * HB_HEALTH_S                                     # a health verdict older than this is "unknown"
+_hb = {"powered_by_us": False, "provisioned": False, "ok": False, "checked": 0.0, "thread": None}
+HB_DEPS = ["elftools", "pefile", "capstone", "Crypto", "pyzipper", "androguard", "droidasc", "refinery"]
 
 
 def known_window(cid):
@@ -191,31 +236,66 @@ def known_window(cid):
         return None
 
 
-def _homebase_ready(log=print):
-    """Power Homebase on (once per process) and provision its solver deps, for clock windows too tight for the
-    public GM's ~2.7s round-trips. Returns False (caller stays local) if it can't be brought up."""
+def _provision(log):
+    """Make sure Homebase has the solver deps: a 2s import check, and the full setup only if something is missing.
+    Runs in the health thread -- never under a lock a timed attempt waits on (Day 6: the first-time apt/pip setup ran
+    under _hb_lock at the first timed attempt and queued three lanes' Time Trials behind it)."""
+    try:
+        mods = ",".join(repr(m) for m in HB_DEPS)
+        r = remote.ssh(f"python3 -c \"import importlib.util as u,sys; sys.exit(any(u.find_spec(m) is None for m in [{mods}]))\"",
+                       timeout=30, check=False)
+        if r.returncode != 0:
+            log("[homebase] solver deps missing -> provisioning in the background")
+            remote.rsync_to(ROOT / "setup" / "homebase_setup.sh", "~/homebase_setup.sh")
+            remote.ssh("bash ~/homebase_setup.sh >/dev/null 2>&1", timeout=600, check=False)
+        sync_homebase_base()
+        _hb["provisioned"] = True
+    except Exception as e:  # noqa: BLE001 - provisioning is best-effort; deps usually already present
+        log(f"[homebase] provisioning note (continuing): {e}")
+        _hb["provisioned"] = True
+
+
+def _health_loop(log):
+    was = None
+    while True:
+        ok = remote.probe()
+        _hb.update(ok=ok, checked=time.time())
+        if ok != was:
+            log(f"[homebase] {'reachable' if ok else 'NOT reachable'} (health probe every {HB_HEALTH_S:g}s)")
+            was = ok
+        if ok and not _hb["provisioned"]:
+            _provision(log)
+        time.sleep(HB_HEALTH_S)
+
+
+def start_homebase_health(log=print):
+    """Start the background Homebase health thread once per process (prewarm at run start)."""
     with _hb_lock:
-        if _hb["failed"]:
-            return False
-        # WSL-native: the VM is powered on out-of-band (CourseStack console), so readiness is pure SSH
-        # reachability — NOT the browser-based power() check, which isn't wired up in WSL and, on a cold
-        # ControlMaster reconnect (seen >25s), used to time out, fall through to the dead browser, raise, and
-        # latch _hb["failed"]=True for the whole run (so every tight window silently ran local). Tolerate a
-        # cold reconnect here; day.sh pre-warms the control socket so this is usually instant.
-        try:
-            remote.ssh("true", timeout=45)
-        except Exception as e:  # noqa: BLE001 - VM off / VPN down / SSH unreachable -> stay local
-            log(f"[homebase] not reachable over SSH, staying local: {e}")
-            _hb["failed"] = True
-            return False
-        try:
-            if not _hb["provisioned"]:
-                remote.rsync_to(ROOT / "setup" / "homebase_setup.sh", "~/homebase_setup.sh")
-                remote.ssh("bash ~/homebase_setup.sh >/dev/null 2>&1", timeout=600, check=False)
-                _hb["provisioned"] = True
-        except Exception as e:  # noqa: BLE001 - provisioning is best-effort; deps usually already present
-            log(f"[homebase] provisioning note (continuing, deps may already be present): {e}")
-        return True
+        if _hb["thread"] is None:
+            t = threading.Thread(target=_health_loop, args=(log,), daemon=True, name="hb-health")
+            _hb["thread"] = t
+            t.start()
+
+
+def _homebase_ready(log=print):
+    """Non-blocking readiness for a tight timed window: the health thread's latest verdict. Never holds a lock across
+    an SSH call and never latches a failure for the run (Day 6: one probe in a VPN gap sent every attempt local).
+    Without a fresh verdict (first call / CLI use), probe once synchronously."""
+    start_homebase_health(log)
+    if time.time() - _hb["checked"] > HB_FRESH_S:
+        _hb.update(ok=remote.probe(), checked=time.time())
+    return bool(_hb["ok"] and _hb["provisioned"])
+
+
+def wait_homebase(timeout, log=print):
+    """Wait up to `timeout` seconds for Homebase to be healthy (e.g. riding out a VPN gap before a retry)."""
+    start_homebase_health(log)
+    end = time.time() + timeout
+    while time.time() < end:
+        if _hb["ok"] and _hb["provisioned"]:
+            return True
+        time.sleep(0.5)
+    return bool(_hb["ok"])
 
 
 def power_off_homebase_if_ours(log=print):
@@ -256,6 +336,7 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print):
             return res
         log(f"[{cid}] Homebase run failed ({str(res.get('detail'))[:120]}); falling back to local")
     res = run_timed(solver_dir, cid, op=op, timeout=timeout)
+    res.setdefault("routed", "local" if not tight else "local (Homebase unavailable)")
     w = res.get("window") or win
     if w is not None and w <= TIGHT_WINDOW and str(res.get("result", "")).lower() == "expired":
         _mark_expired_locally(cid, w)
@@ -300,9 +381,13 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
     # proxy, off the VPN, so they stay fast and stable.)
     try:
         sync_homebase_base()
-        remote.ssh(f"mkdir -p ~/{HB_WORK}/{rel}")
         if solver_dir.exists():
-            remote.rsync_to(str(solver_dir) + "/", f"~/{HB_WORK}/{rel}/")
+            # ONE round-trip: the remote rsync creates the dir itself; cases/ (6-8 MB of regression bytes on the hard
+            # lanes) is never needed to run the solver.
+            remote.rsync_to(str(solver_dir) + "/", f"~/{HB_WORK}/{rel}/", exclude=["cases/", "__pycache__/"],
+                            mkdir=f"~/{HB_WORK}/{rel}")
+        else:
+            remote.ssh(f"mkdir -p ~/{HB_WORK}/{rel}")
     except (RuntimeError, subprocess.SubprocessError, OSError) as e:  # incl. remote-command failures
         return {"result": "exec_error", "detail": f"homebase kickoff failed: {e}"}
     # Use the GM's INSIDE proxy from Homebase (network-path identity = same test account as the pairing token,
@@ -322,12 +407,19 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
     import re as _re
     slug = _re.sub(r"[^A-Za-z0-9]+", "_", cid)
     local = ROOT / ".run" / "tmp-timed" / slug
-    try:
+    def pull():
         if local.exists():
             for f in local.glob("*"):
                 if f.is_file():
                     f.unlink()
         remote.rsync_from(f"~/{HB_WORK}/.run/tmp-timed/{slug}", str(local))
+    if str(res.get("result", "")).lower() == "correct":
+        # A pass: the next mode must not wait on up to ~4 MB of evidence coming back over the VPN. timed.process_result
+        # runs the pull + regression-case capture in the background via this hook.
+        res["_pull"] = pull
+        return res
+    try:
+        pull()  # a failure needs the variant's bytes locally (generalize / probe) before anything else
     except Exception as e:  # noqa: BLE001 - capture is best-effort
         res["capture_note"] = f"could not fetch the attempt's bytes from Homebase: {e}"
     return res

@@ -26,8 +26,9 @@ TID = re.compile(r"T\d{4}(\.\d{3})?")
 def _known_ids():
     from lib import knowledge as K
     ids = set()
-    for t in ("SCENARIO_ATTACK", "JSCRIPT_ROLE_ATTACK_CONFIRMED", "BATCH_ROLE_ATTACK_CONFIRMED",
-              "VBS_ROLE_ATTACK_CONFIRMED", "PY_ROLE_ATTACK_CONFIRMED"):
+    # Every *_ROLE_ATTACK_CONFIRMED table, discovered (a hard-coded list missed Day 6's new Bash table).
+    tables = ["SCENARIO_ATTACK"] + sorted(n for n in dir(K) if n.endswith("_ROLE_ATTACK_CONFIRMED"))
+    for t in tables:
         ids |= {v for v in getattr(K, t, {}).values() if v != "none"}
     return ids
 

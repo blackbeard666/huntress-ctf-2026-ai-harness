@@ -1,0 +1,3 @@
+- [Huntress evidence zip password](huntress-evidence-zip-password.md) — sample zips use 'infected'; collection ATT&CK id not T1005/T1560/T1119
+- [GM ELF answer vocabulary](gm-elf-answer-vocabulary.md) — ELF64/ET_EXEC/x86-64/little; format elf/pe/pe_cli/jar (jar_jvm rejected); PE i386; pyelftools-raw section/symbol lists; Go architecture x86-64 (not amd64)
+- [Warmups blob no trailing newline](warmups-blob-no-trailing-newline.md) — shell while-read drops last token; verify slug vs syntax before submit

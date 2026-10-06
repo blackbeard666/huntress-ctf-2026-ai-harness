@@ -13,23 +13,37 @@ answers the question, run it — do not recreate `strings`, `unzip`, or a parser
 - Name: {name}
 - Single Solve id: `{cid}`   lane: `{lane}`
 - Workspace: `{chal_dir}`
-  - `triage.md`: **read this first** — deterministic no-LLM analysis of the bytes (file types, hashes, embedded structure, encoding/IOC guesses, routed lane skill). Start from these facts; verify, don't re-discover.
+  - `triage.md`: deterministic no-LLM analysis of the bytes (file types, hashes, embedded structure, encoding/IOC guesses, routed lane skill). Read its first ~80 lines, then `grep` it for specifics — it can be 80 KB; never read it whole. Verify, don't re-discover.
   - `contract.json`: the GM start response (prompt, questions[] aligned with answer_ids[], answer_format, normalization)
   - `artifacts/latest/`: the downloaded bytes (sha256-verified against the GM)
-  - `notes.md`: your running log (create it; keep hypothesis | evidence | result lines, including dead ends)
+  - `notes.md`: your running log — one terse line per hypothesis | evidence | result (incl. dead ends); never let it delay a submit
 - Upcoming timed contracts, already fetched without starting a clock:
 {timed_contracts}
 
-## Goals, in order
-1. **Solve the Single Solve from the real bytes.** The title and prompt are hints. Answer every answer_id.
-   Submit with `hctf submit {cid} '{"<answer_id>": "<value>", ...}'` (exact answer_ids; submit several at once if you like).
-   Exit codes: 0 correct, 1 incorrect, 2 accepted (partial; more remain), 4 refused locally (read the reason).
-   Never guess: an incorrect answer means "investigate more". The harness caps wrong answers.
-2. **Write a solver that handles variants**: `{solver_dir}/solve.py`, following the `solver-authoring` skill.
-   It must answer the Time Trial and Mastery contracts above too: same concept, different artifact bytes and names,
-   Mastery has several sets (`set1.*`, `set2.*`, ...), each naming its own artifact. Derive every value from the bytes.
-3. **Prove it**: run `hctf solver-test {cid}` until it reports ok (it replays your confirmed answers as a regression case),
-   and `hctf solver-run {cid}` to see the solver's raw output.
+## Goals, in order — this is a RACE: the scoreboard ranks time from release to the last Mastery
+The Single Solve itself is untimed, but the Time Trial and Mastery cannot start until you are done, so every second you
+spend is on the critical path. The harness ENDS your session automatically the moment the Single Solve is CORRECT and
+`solve.py` reproduces the confirmed answers — anything you planned to do after that will not happen, by design.
+1. **Start from what already exists.** If the REUSE PRE-PASS note below says answers are already accepted and the solver
+   is seeded, run `hctf solver-run {cid}` and work ONLY on the answer_ids still missing — extend the seeded `solve.py`.
+2. **Derive the answers from the real bytes by writing them INTO `{solver_dir}/solve.py`** (following the
+   `solver-authoring` skill: contract + artifacts in, JSON out; every value derived from the bytes, nothing hard-coded).
+   Prototype at the shell, but the answers you submit come out of the solver. Same concept on the timed modes: other
+   bytes and names; Mastery has several sets (`set1.*`, `set2.*`, ...), each naming its own artifact (pair by sha256).
+3. **Submit from the solver:** `hctf submit {cid} --from-solver` (or `hctf submit {cid} '{"<answer_id>": "<value>"}'` for
+   a value you are still probing). Exit codes: 0 correct, 1 incorrect, 2 accepted (partial; more remain), 4 refused
+   locally (read the reason). Never guess: an incorrect answer means "investigate more". The harness caps wrong answers.
+4. **STOP when CORRECT.** Do not write synthetic or multi-day regression cases, do not run `hctf solver-test`, do not
+   harden for hypothetical variants, do not write long notes. The harness replays the regression suite itself and
+   runs a targeted generalize worker ONLY if a real Time Trial/Mastery variant fails.
+Budget: aim for CORRECT within 60 s on a familiar family and 3 min on a new one. Submit as soon as the solver emits a
+value for every answer_id; partial submits are fine (exit 2 pins the right fields).
+
+## Scope — write ONLY inside `{chal_dir}/..` (your challenge folder)
+Never edit `lib/`, `hctf/`, `skills/`, other challenges, or anything under `~/.claude/`. If you learn a durable GM
+fact (a confirmed label spelling, a format law), append it to `{solver_dir}/NOTES.md` under a heading
+`## Proposed lib additions` (one line each: file, constant, value, evidence); the harness merges these after the run.
+`hctf labels` records confirmed labels in `lib/vocab.json` itself — that is the one sanctioned shared write.
 
 ## Field-label playbook for your lane (read before probing any label)
 {playbook}
@@ -46,8 +60,8 @@ Use the resolver, which ranks candidates from labels the GM confirmed for siblin
 
 Good `--term`s are the literal tokens in the bytes/spec that define the concept: the construct's keyword (`if`,
 `goto`, `call`), the container/runtime/magic names (`pe`, `elf`, `cli`), the operator. It probes sequentially,
-rate-limited, records the confirmed label in `lib/vocab.json` automatically; then make `solve.py` emit it (and note it
-in `lib/knowledge.py`). If it fails, rerun with better terms before anything else. ATT&CK ids and other free values:
+rate-limited, records the confirmed label in `lib/vocab.json` automatically; then make `solve.py` emit it (and list it
+under `## Proposed lib additions` in NOTES.md). If it fails, rerun with better terms before anything else. ATT&CK ids and other free values:
 probe your own ranked list with `hctf submit`, one id per submit. Flags are never probed.
 
 Only write `{chal_dir}/HELP.md` if the concept itself is genuinely unknown (not merely its spelling), `hctf labels`

@@ -3,9 +3,9 @@
 
   - set_state is atomic + thread-safe (the speculative thread writes chain.json beside the chain thread)
   - a crashed chain is retried once, then marked crashed
-  - solver reuse submits every answer in ONE request; per-set (forced) only to localize a failure
-  - early handoff: the solver snapshot keeps the solver's directory depth and reproduces the Single Solve answers
-    (uses a real solved challenge on disk); the speculative thread runs TT -> Mastery once and stops on failure
+  - merged reuse: one submit when right, bisect + alternates when a field is wrong, partial -> worker gets the rest
+  - the solver snapshot keeps the solver's directory depth and reproduces the Single Solve answers (real challenge)
+  - stop-when-ready: CORRECT + verified snapshot sets `ready`, and run_local ends the worker on it
 
 Run:  source bin/env.sh && python3 tests/test_orchestrate.py      (exit 0 = all pass)
 """
@@ -80,33 +80,59 @@ def test_crash_retry():
         check("crash retry: persistent crash -> crashed after 2 tries", len(calls2) == 2 and states[-1] == "crashed")
 
 
-def test_reuse_submit():
-    answers = {"set1.a": "x", "set1.b": "y", "set2.a": "z"}
-    src = Path(tempfile.mkdtemp())
-    (src / "solve.py").write_text("# library solver stub\n")
-    for verdict, want_calls in (("correct", 1), ("incorrect", 3)):
-        sent = []
+class FakeGM:
+    """Single Solve judge: a batch with ANY wrong value is 'incorrect' (nothing pinned); all-right -> accepted/correct."""
+    def __init__(self, truth):
+        self.truth, self.conf, self.calls = dict(truth), {}, []
 
-        def fake_submit(cid, group, force=False, **kw):
-            sent.append((dict(group), force))
-            return (verdict if len(sent) == 1 else "accepted"), {}, []
-        with mock.patch.object(cli, "load", lambda cid, n: {"answer_ids": list(answers)}), \
-                mock.patch.object(orch.timed, "latest_artifacts", lambda cid: Path("/nonexistent")), \
-                mock.patch.object(orch.solvers, "dispatch", lambda c: ({src: ["q"]}, None)), \
-                mock.patch.object(orch.solvers, "solve_contract", lambda *a, **k: (dict(answers), [])), \
-                mock.patch.object(cli, "submit", fake_submit), \
-                mock.patch.object(cli, "is_complete", lambda cid: verdict == "correct" and len(sent) >= 1), \
-                mock.patch.object(orch, "set_state", lambda *a, **k: None), \
-                mock.patch.object(orch, "ensure_case_and_test", lambda *a: (True, [])), \
-                mock.patch.object(orch, "say", lambda m: None):
-            c = bare_chain(sdir=Path(tempfile.mkdtemp()))
-            orch.Chain.try_existing_solvers(c, "s")
-        first_all = sent and sent[0][0] == answers and not sent[0][1]
-        if verdict == "correct":
-            check("reuse: correct -> exactly ONE submit carrying every answer", first_all and len(sent) == want_calls)
-        else:
-            check("reuse: wrong -> one full submit, then forced per-set localization",
-                  first_all and len(sent) == want_calls and all(f for _, f in sent[1:]))
+    def submit(self, cid, group, force=False, probe=False, **kw):
+        self.calls.append((dict(group), probe))
+        if any(self.truth.get(a) != v for a, v in group.items()):
+            return "incorrect", {}, []
+        self.conf.update(group)
+        return ("correct" if len(self.conf) == len(self.truth) else "accepted"), {}, []
+
+
+def run_reuse(truth, plan, solver_out=None):
+    gm = FakeGM(truth)
+    sdir = Path(tempfile.mkdtemp()) / "solver"
+    seed = Path(tempfile.mkdtemp())
+    (seed / "solve.py").write_text("# seed\n")
+    plan = {"source": {}, "runs": {seed: (1, None, 0.1)}, "best": seed, "alts": {}, **plan}
+    with mock.patch.object(cli, "load", lambda cid, n: {"answer_ids": list(truth)}), \
+            mock.patch.object(orch.timed, "latest_artifacts", lambda cid: Path("/nonexistent")), \
+            mock.patch.object(orch.solvers, "reuse_plan", lambda *a, **k: plan), \
+            mock.patch.object(orch.solvers, "run_solver", lambda *a, **k: (dict(solver_out or truth), None, 0.1)), \
+            mock.patch.object(cli, "submit", gm.submit), \
+            mock.patch.object(cli, "confirmed_answers", lambda cid, att=None: dict(gm.conf)), \
+            mock.patch.object(cli, "is_complete", lambda cid: len(gm.conf) == len(truth)), \
+            mock.patch.object(orch, "set_state", lambda *a, **k: None), \
+            mock.patch.object(orch, "ensure_case_and_test", lambda *a, **k: (True, [])), \
+            mock.patch.object(orch, "say", lambda m: None):
+        c = bare_chain(sdir=sdir)
+        ok = orch.Chain.try_existing_solvers(c, "s")
+    return ok, gm, c, sdir
+
+
+def test_reuse_submit():
+    truth = {f"f{i}": str(i) for i in range(8)}
+    ok, gm, c, sdir = run_reuse(truth, {"high": dict(truth), "spec": {}})
+    check("reuse: all fields right -> ONE submit, solved, seed copied", ok and len(gm.calls) == 1 and (sdir / "solve.py").exists())
+
+    high = dict(truth); high["f3"] = "WRONG"
+    ok, gm, c, _ = run_reuse(truth, {"high": high, "spec": {}, "alts": {"f3": ["WRONG", "3"]}})
+    check("reuse: one wrong field -> bisected, then the alternate value finishes it", ok and gm.conf == truth
+          and all(p for _, p in gm.calls))
+
+    part = {k: v for k, v in truth.items() if k not in ("f6", "f7")}
+    ok, gm, c, _ = run_reuse(truth, {"high": part, "spec": {"f6": "bad"}})
+    check("reuse: partial -> accepted subset pinned, worker told the 2 remaining ids",
+          not ok and len(gm.conf) == 6 and "f6, f7" in c._reuse_note and "ALREADY ACCEPTED" in c._reuse_note)
+    check("reuse: speculative value NOT submitted when it cannot finish the challenge",
+          not any("f6" in g for g, _ in gm.calls))
+
+    ok, gm, c, _ = run_reuse(truth, {"high": part, "spec": {"f6": "6", "f7": "7"}})
+    check("reuse: speculative values submitted when they complete it", ok and gm.conf == truth)
 
 
 def test_snapshot():
@@ -117,7 +143,7 @@ def test_snapshot():
         return
     c = bare_chain(sdir=sdir, root=root, base=paths.base_id(cid))
     with mock.patch.object(orch, "say", lambda m: None):
-        snap = c._snapshot_solver(cid)
+        snap = c._spec_snapshot(cid)
     check("snapshot: verified against the GM-confirmed Single Solve answers", snap is not None)
     if snap:
         rel_live = sdir.relative_to(ROOT).parts
@@ -126,32 +152,36 @@ def test_snapshot():
         check("snapshot: cases/ excluded, meta.json beside it",
               not (snap / "cases").exists() and (snap.parent / "meta.json").exists())
     with mock.patch.object(orch, "SPEC_STABLE", 10 ** 9):
-        check("snapshot: refused while the worker is still editing (files too fresh)", c._snapshot_solver(cid) is None)
+        check("snapshot: refused while the worker is still editing (files too fresh)", c._spec_snapshot(cid) is None)
 
 
-def test_speculate(tmp):
-    for outcomes, want in ((["correct", "correct"], ["s/time_trial", "s/mastery"]), (["blocked"], ["s/time_trial"])):
-        ran = []
-        stop = threading.Event()
-        c = bare_chain(sdir=tmp, root=tmp)
-        it = iter(outcomes)
-        with mock.patch.object(orch, "SPEC_POLL", 0.01), mock.patch.object(orch, "say", lambda m: None), \
-                mock.patch.object(cli, "is_complete", lambda cid: cid == "s"), \
-                mock.patch.object(cli, "gm_solved", lambda cid: False), \
-                mock.patch.object(orch.workers, "run_timed_auto", lambda snap, cid, log=None: ran.append(cid) or {}), \
-                mock.patch.object(orch.timed, "process_result", lambda cid, sd, res, log=None: next(it)), \
-                mock.patch.object(orch, "record_timed_case", lambda *a: None), \
-                mock.patch.object(orch, "set_state", lambda *a, **k: None):
-            c._snapshot_solver = lambda cid: tmp
-            orch.Chain._speculate(c, "s", stop)
-        check(f"speculate: outcomes {outcomes} -> attempts {want}", ran == want)
-    stop = threading.Event()
-    stop.set()
+def test_watch_ready(tmp):
+    ready, done = threading.Event(), threading.Event()
+    c = bare_chain(sdir=tmp, root=tmp)
+    with mock.patch.object(orch, "SPEC_POLL", 0.01), mock.patch.object(orch, "say", lambda m: None), \
+            mock.patch.object(cli, "is_complete", lambda cid: True):
+        c._spec_snapshot = lambda cid: tmp
+        orch.Chain._watch_ready(c, "s", ready, done)
+    check("watch: CORRECT + verified snapshot -> ready set, snapshot kept", ready.is_set() and c._ready_snap == tmp)
+
+    ready, done = threading.Event(), threading.Event()
+    done.set()
+    c = bare_chain(sdir=tmp, root=tmp)
     with mock.patch.object(orch, "SPEC_POLL", 0.01):
-        c = bare_chain(sdir=tmp, root=tmp)
-        c._snapshot_solver = lambda cid: (_ for _ in ()).throw(AssertionError("must not snapshot"))
-        orch.Chain._speculate(c, "s", stop)
-    check("speculate: worker already exited -> no attempt", True)
+        c._spec_snapshot = lambda cid: (_ for _ in ()).throw(AssertionError("must not snapshot"))
+        orch.Chain._watch_ready(c, "s", ready, done)
+    check("watch: worker already exited -> nothing", not ready.is_set())
+
+    # run_local honours `stop`: a long-running worker process is ended promptly with STOPPED_RC.
+    import time as _t
+    stop = threading.Event()
+    with mock.patch.object(orch.workers, "worker_model", lambda lane: "x"), \
+            mock.patch.object(orch.workers.subprocess, "Popen", lambda cmd, _P=__import__("subprocess").Popen, **kw: _P(["sleep", "30"], **kw)):
+        threading.Timer(0.5, stop.set).start()
+        t0 = _t.time()
+        rc, _log = orch.workers.run_local(tmp, "single", "p", {}, 60, stop=stop)
+    check("run_local: stop event ends the worker within ~3s with STOPPED_RC",
+          rc == orch.workers.STOPPED_RC and _t.time() - t0 < 4)
 
 
 def main():
@@ -161,7 +191,7 @@ def main():
         print("crash retry"); test_crash_retry()
         print("reuse");       test_reuse_submit()
         print("snapshot");    test_snapshot()
-        print("speculate");   test_speculate(tmp)
+        print("watch");       test_watch_ready(tmp)
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     return 1 if FAIL else 0
 

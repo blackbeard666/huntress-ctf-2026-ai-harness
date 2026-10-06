@@ -189,7 +189,7 @@ def last_result(cid):
 def _remember(cid, res):
     keep = {k: res.get(k) for k in ("result", "full_result", "attempt_id", "window", "elapsed", "in_window", "phases",
                                      "per_set", "bad_sets", "wrong", "fixed", "localize_complete", "routed", "missing",
-                                     "localize_tried", "novel_labels", "deadline")
+                                     "localize_tried", "novel_labels", "deadline", "detail")
             if k in res}
     (cli.cdir(cid) / "last_timed.json").write_text(json.dumps(keep, indent=2, ensure_ascii=False))
     if res.get("window"):
@@ -246,10 +246,8 @@ def artifacts_for(cid, contract):
         return tdir
     class A:
         id, delivery = cid, None
-    import contextlib
-    import io
     try:
-        with contextlib.redirect_stdout(io.StringIO()):
+        with cli.quiet():
             cli.c_artifact(A)
     except Exception:
         return None
@@ -281,9 +279,7 @@ def ensure_started(cid):
     if manifest.get("attempt") != cli.attempt_id(body):  # fetch this attempt's artifacts if we don't have them
         class A:  # argparse-like namespace for cli.c_artifact
             id, delivery = cid, None
-        import contextlib
-        import io
-        with contextlib.redirect_stdout(io.StringIO()):
+        with cli.quiet():
             cli.c_artifact(A)
     return body, None
 
@@ -308,13 +304,26 @@ def process_result(cid, solver_dir, res, log=print):
     correct result locally. Returns correct | expired | blocked | error:<x>."""
     r = str(res.get("result", "")).lower()
     log(f"[{cid}] timed: {json.dumps({k: res.get(k) for k in ('result', 'remaining', 'elapsed', 'window', 'routed', 'missing', 'per_set', 'bad_sets', 'wrong', 'fixed', 'attempt_id') if k in res})}")
+    pull = res.pop("_pull", None)
+
+    def capture():
+        try:
+            if pull:
+                pull()  # Homebase pass: bring the attempt's bytes back first (off the critical path)
+            case = capture_case(cid, Path(solver_dir), res)
+            if case:
+                log(f"[{cid}] saved this variant as regression case {case} ({len(res.get('verified') or res.get('submitted') or {})} GM-verified answers)")
+        except Exception as e:  # noqa: BLE001 - capture is best-effort
+            log(f"[{cid}] variant capture note: {e}")
     try:
         _remember(cid, res)
-        case = capture_case(cid, Path(solver_dir), res)
-        if case:
-            log(f"[{cid}] saved this variant as regression case {case} ({len(res.get('verified') or res.get('submitted') or {})} GM-verified answers)")
-    except Exception as e:  # noqa: BLE001 - capture is best-effort
-        log(f"[{cid}] variant capture note: {e}")
+    except Exception as e:  # noqa: BLE001
+        log(f"[{cid}] last_timed note: {e}")
+    if pull:
+        import threading
+        threading.Thread(target=capture, daemon=True).start()
+    else:
+        capture()
     if r != "correct" and res.get("verified"):
         # A failed attempt still carries GM-verified labels (accepted sets, localized subsets, in-window fixes):
         # cache them now so the next variant's in-window corrector already knows the spelling.
@@ -339,7 +348,9 @@ def process_result(cid, solver_dir, res, log=print):
         return "correct"
     if "prerequisite" in r:   # GM 409 prerequisite_required: the previous mode's LATEST attempt isn't CORRECT
         return "error:prerequisite"
-    if r in ("solver_incomplete", "solver_error", "incorrect", "accepted", "exec_error"):
+    if r == "exec_error":
+        return "error:exec"    # the RUNNER failed (ssh/VPN gap/timeout), not the solver: retry, never generalize
+    if r in ("solver_incomplete", "solver_error", "incorrect", "accepted"):
         return "blocked"       # the solver needs work; caller will generalise offline then retry
     if r in ("expired", "start_required") or "expired" in json.dumps(res).lower():
         return "expired"
