@@ -3,6 +3,8 @@ name: warmups
 description: Huntress warmups lane - decoding text blobs and layered encodings (base64/base32/base85/base58, hex, rot13/rot-N/"half a turn", XOR with single or repeating keys, gzip/zlib/bz2/lzma, url/quoted-printable, reversed strings, binary/octal/decimal char codes). Use for warmups-day-NN challenges and any "decode the assigned blob" question.
 ---
 
+**Installed: base64/base32/basenc, xxd, openssl, 7z, zsteg/steghide (stego), exiftool; python for multi-step recipes.**
+
 # Approach
 1. `xxd blob | head`, `file blob`, `wc -c blob`, and check which character set it uses (base64 `A-Za-z0-9+/=`, base32 `A-Z2-7=`, hex `0-9a-f`).
 2. Decode **in a loop** until the output is printable text with an instruction line, recording each layer. Puns in the

@@ -140,6 +140,17 @@ r = subprocess.run(cmd, capture_output=True, text=True, timeout=25); print(r.std
 if grep -q sandbox-ok <<<"$sb_out"; then ok "workers' sandbox has the venv + solver deps (pyzipper, pyelftools, pefile, capstone)."
 else fail "worker sandbox can't import solver deps: $(tail -1 <<<"$sb_out")"; fi
 
+# 3d) Lane analysis tools (workers call these via their lane skills; missing ones push them into hand-rolled Python).
+hdr "Lane tools"
+miss=""
+for t in file xxd strings binwalk 7z readelf objdump nm c++filt rizin rabin2 analyzeHeadless upx ilspycmd GoReSym rustfilt \
+         javap jadx apktool aapt apksigner d2j-dex2jar exiftool pdfinfo qpdf mutool pdf-parser pdfid pngcheck zsteg steghide \
+         binwalk foremost mediainfo sqlite3 yara box-js js-beautify webcrack node pwsh; do
+  command -v "$t" >/dev/null 2>&1 || miss="$miss $t"
+done
+if [ -z "$miss" ]; then ok "all lane tools on PATH (binary, metadata, mobile, script, warmups)."
+else warn "missing lane tools:$miss  (install: setup/install_tools.sh + apt list at its top)"; fi
+
 # 4) Homebase SSH + credits -----------------------------------------------------------------------
 hdr "Homebase (optional low-latency compute for tight timed windows)"
 if [ "${HCTF_AUTO_HOMEBASE:-1}" = 0 ]; then

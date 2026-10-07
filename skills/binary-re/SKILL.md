@@ -3,6 +3,8 @@ name: binary-re
 description: Huntress binary-reverse-engineering lane - ELF/PE/Mach-O structure and reversing. Covers header/section/symbol inspection (readelf, rizin, Ghidra headless), custom sections, entry points, recovering constants and strings returned by functions, .NET/Go/Rust, packers, and z3/angr/unicorn for checks. Use for binary-reverse-engineering-day-NN challenges.
 ---
 
+**Installed: readelf/objdump/nm/c++filt, rizin + rabin2 (radare2), Ghidra `analyzeHeadless`, ilspycmd (.NET), GoReSym (Go), rustfilt (Rust), javap/jar, upx, capstone/pyelftools/pefile/lief/dnfile (venv), yara.**
+
 # Day-1-style structural questions (answer from the headers, exactly)
 - `readelf -h` : ELF class (`ELF32`/`ELF64`), data (endianness, e.g. `little endian` -> the exact token the question wants),
   machine (`Advanced Micro Devices X86-64` -> usually `x86-64`/`AArch64`; match the format's `syntax`), type

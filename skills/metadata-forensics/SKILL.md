@@ -3,6 +3,8 @@ name: metadata-forensics
 description: Huntress metadata-forensics lane - identity inventories and label trust (filename, exact size in bytes, MD5/SHA-1/SHA-256, magic bytes vs extension), archive/zip metadata, timestamps, EXIF/XMP, Office/OLE/OOXML properties, PDF info, LNK, EVTX, registry hives, "looks can be deceiving" disguised files. Use for metadata-forensics-day-NN challenges.
 ---
 
+**Installed: exiftool, file, binwalk, foremost, pdfinfo/pdftotext, qpdf, mutool, pdf-parser, pdfid, pngcheck, zsteg, steghide, identify/convert, mediainfo, sqlite3, olevba/oleid, 7z.**
+
 # First moves
 - `7z l -slt evidence.zip` (names, sizes, CRCs, mtimes, comments). Unzip into `<mode dir>/work/` with `7z x -o<dir>`.
 - `file -k *` and the magic bytes (`xxd -l 16`) to catch extension and content mismatches ("labels can't be trusted").

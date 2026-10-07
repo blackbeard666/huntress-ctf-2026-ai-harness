@@ -98,5 +98,5 @@ only one present in single; TT used `roster.csv`, Mastery a renamed `evidence-no
   (extraction to disk, exiftool) in-window; parse in memory.
 - Harness: re-running `hctf start` on an already-solved challenge overwrote `single_solve/start.json` and made the stop gate
   think it was incomplete (Day 2, ~2 min lost) — restore start.json from `log.jsonl`.
-- Tool availability: HARDENING.md (earlier) said exiftool/qpdf/olevba not installed locally; Day 6 triage ran exiftool
-  13.59 locally. Byte parsers in python are the reliable fallback either way.
+- Tools installed (2026-10-07): exiftool, pdfinfo/pdftotext (poppler), qpdf, mutool, pdf-parser, pdfid, pngcheck,
+  zsteg, steghide, binwalk, foremost, mediainfo, sqlite3, identify/convert (ImageMagick), olevba/oleid.

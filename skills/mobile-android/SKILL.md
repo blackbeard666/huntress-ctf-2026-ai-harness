@@ -3,6 +3,8 @@ name: mobile-android
 description: Huntress mobile-android lane - static analysis of the handed-out APK (AndroidManifest components and intent-filters/deep-link schemes, decompiled Java/Kotlin, resources and strings), then reproducing the app's own request to its challenge backend via hctf hb exec. Use for mobile-android-day-NN challenges.
 ---
 
+**Installed: jadx, apktool (also gives smali), aapt (`dump badging`/`xmltree`), apksigner, dex2jar (`d2j-dex2jar`), androguard/droidasc (venv), unzip/7z.**
+
 # Scope
 Only the Game Master's APK and the challenge backend it names are in scope. That backend is usually reachable only inside
 the CTF network, so send its requests through `hctf hb exec -- curl ...` (runs on Homebase). Don't probe anything else.

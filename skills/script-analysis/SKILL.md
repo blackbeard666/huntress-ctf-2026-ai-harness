@@ -3,6 +3,8 @@ name: script-analysis
 description: Huntress script-analysis lane - static and sandboxed analysis of PowerShell, JScript/JavaScript, VBScript, batch, HTA and Python specimens. Classify intent (enum scenarios such as resource_hijacking/collection/impact), map the primary MITRE ATT&CK technique (T####[.###]), and extract exact indicators (URLs, wallets, mutexes, file names, user agents, extensions, ransom-note names, registry keys). Covers deobfuscation (-EncodedCommand, FromBase64String, char-code arrays, string reversal, -f format, Invoke-Expression/IEX layers, eval). Use for script-analysis-day-NN challenges.
 ---
 
+**Installed: box-js, js-beautify, webcrack, node, pwsh, olevba, decompyle3 / uncompyle6 / xdis (venv), ilspycmd (.NET), base64/xxd/7z.**
+
 # Never run specimens as-is
 Read them statically first. To peel a layer dynamically, **replace the sink** and run with a timeout and no network:
 - PowerShell: replace `Invoke-Expression`/`IEX`/`iex`/`.Invoke()`/`& (` with `Write-Output`, then
@@ -16,7 +18,7 @@ Read them statically first. To peel a layer dynamically, **replace the sink** an
 - Compiled/frozen Python -> `lib.pyc`: `recover_python(path)` (PyInstaller extract via pyinstxtractor-ng, then
   decompyle3; `dis` disassembly fallback that always works, so even modern bytecode's consts/strings surface).
   `decompile_pyc(pyc)` for a bare .pyc. NOTE: real pyarmor bytecode-encryption needs dynamic unpack (residual
-  gap); .NET obfuscation (de4dot/ilspycmd) needs a mono/dotnet runtime (not installed) — see reference/HARDENING.md.
+  gap); .NET payloads: `ilspycmd` (installed, dotnet 10); de4dot is not installed — see reference/HARDENING.md.
 
 # Indicator extraction (exact, from the bytes)
 - Regexes over the *deobfuscated* text: URLs `https?://[^\s'"<>]+`, wallets (BTC `bc1[a-z0-9]{25,60}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}`,

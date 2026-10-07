@@ -20,9 +20,9 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
 | Stripped C build, no `.symtab` | find the leaf `b8 imm32 c3` (`mov eax, imm; ret`) in `.text` (`lib.binary.recover_return_constants`) and check it against what `main` inlines |
 | C++ / "mangled" / "vtable" / "RTTI" | `nm -C` / `c++filt`; look for `_ZTV<class>` (vtable), `_ZTI`/`_ZTS` (typeinfo), `_ZNK<cls>5scoreEPKc`; the PE COFF symtab: `objdump -t file.exe` |
 | `PE32+` MinGW `.exe` | `objdump -t` (COFF symbols + string table), `pefile` (Machine, OPTIONAL_HEADER.Magic, sections incl. `.hcfg`) |
-| "CLI metadata", `.dll` + `runtimeconfig.json`, `BSJB` in strings | Python `dnfile` (installed; ilspycmd/monodis/dotnet are NOT on PATH locally); config = `<PrivateImplementationDetails>` FieldRVA static array; `strings` shows `BSJB v4.0.30319` |
+| "CLI metadata", `.dll` + `runtimeconfig.json`, `BSJB` in strings | `ilspycmd file.dll` (decompile to C#; installed 2026-10-07) or Python `dnfile`; config = `<PrivateImplementationDetails>` FieldRVA static array; `strings` shows `BSJB v4.0.30319` |
 | Go ("build info, function names, file paths") | `go version -m file` (buildinfo: go1.x, GOARCH); `lib.binary.go_buildinfo` / `go_pclntab_funcs` (stripped names survive in `.gopclntab`) |
-| Rust ("mangled symbols with a distinct accent", panic strings) | `readelf -hS` + `HCFG` scan was enough on D5; demangle with `lib.binary.rustfilt` (no `rustfilt` binary) if symbols are asked |
+| Rust ("mangled symbols with a distinct accent", panic strings) | `readelf -hS` + `HCFG` scan was enough on D5; demangle with `rustfilt` (installed) or `lib.binary.rustfilt` (binary) if symbols are asked |
 | `.jar` / "constant pool" | unzip the jar, read `META-INF/MANIFEST.MF` Main-Class, `javap -v -p Main.class`; look for `ConstantValue: String` (`static final String CONFIG`) |
 | Packed / high entropy / `UPX!` | `lib.binary.packer_info` → `upx -d` on a COPY (not seen yet) |
 | Real code-reversing question (not seen yet) | `rizin -q -c "aaa; pdf @ sym.<fn>"`; Ghidra headless `lib.binary.ghidra_decompile` (heavy, last resort) |
@@ -112,8 +112,8 @@ Java broke the compound law (`jar`), so when a label is new, try the plain conta
 - **Recursive unzip** destroys nested containers (.jar/.apk) and their `dNN--` prefix; keep them whole.
 - **Stripped builds** in variants (D1 slot, D2 Mastery set2): no recover_code symbol. Use the leaf `mov eax, imm; ret` fallback, and has_symtab=false.
 - **Renamed designated function** (D1 TT section-beacon): the question still says recover_code. Answer `none` (when the format allows it), not the other function's constant.
-- **Tool parity**: ilspycmd/monodis/dotnet/rustfilt/GoReSym are NOT installed locally. Use dnfile (Python), javap, `go version -m`,
-  `lib.binary.*` helpers. Ghidra headless works through `lib.binary.ghidra_decompile` but is slow, so keep it off the timed path.
+- **Tool parity** (2026-10-07): ilspycmd, dotnet, rustfilt, GoReSym (`GoReSym -t -p file`), rabin2 are installed in
+  `bin/`; monodis/de4dot are not (dnfile covers .NET metadata).
 - **Timed windows are ~6-12 s**: D2 TT/Mastery attempts expired from download/orchestration latency, not solver speed (the solver ran in 0.3-0.5 s).
   After editing hctf/*.py, restart the orchestrator. D1/D2 runs used stale modules and kept sending only the slot0 ids.
 - **PE machine map must include 0x8664 → `x86-64`**: a from-scratch replay once emitted `0x8664` and failed TT twice.

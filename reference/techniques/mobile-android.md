@@ -21,7 +21,7 @@ How the lane has looked so far (observations, not guarantees):
 | `*.apk` artifact, answer_format `ANS- + 16 uppercase hex` | `unzip -l x.apk`, then `unzip -p x.apk assets/huntress_puzzle.json` (takes seconds; it held the answer all 6 days) |
 | puzzle JSON `{"codec":..,"data":..}` | decode per codec (table below). Check the result fullmatches `^ANS-[0-9A-F]{16}$` before you submit |
 | No puzzle JSON, or it decodes to no `ANS-` | `python -c 'from lib.android import extract_answer'` (zip scan, then dex strings incl. multidex, then apktool/jadx scan), then `strings -a classes*.dex \| grep ANS-` |
-| Need the theme, component, scheme or exported flags | `droidasc getmanifest x.apk` (fast). `aapt` is not installed. Also `lib.android.manifest_facts(apk)` |
+| Need the theme, component, scheme or exported flags | `droidasc getmanifest x.apk` (fast). `aapt dump badging x.apk` / `aapt dump xmltree x.apk AndroidManifest.xml` (installed). Also `lib.android.manifest_facts(apk)` |
 | Need handler logic (URL built, extras read, constants) | `droidasc findrefs x.apk string <scheme or URL>`, then `droidasc getclass x.apk <pkg>.ChallengeActivity`; whole app: `jadx -d work/jadx x.apk` |
 | Need resources or strings.xml / smali | `apktool d -f -o work/apktool x.apk` |
 | Loopback `127.0.0.1:19090` in the code | do NOT chase it. It is device-local (refused on Homebase, times out elsewhere). The answer is static |
