@@ -169,10 +169,11 @@ def _log_section(text, title, cap):
     return m.group(0).strip()[:cap] if m else ""
 
 
-# Parallel per-language subagents for the script lane: fair from-scratch D6 replays, same knowledge -- serial worker
-# (main6) single 225 s / lane 247 s; 4 per-language subagents (main7) single 158 s / lane 181 s, both 1 submit, 0 wrong.
-# ON by default; HCTF_SCRIPT_SUBAGENTS=0 restores the serial worker.
-SCRIPT_SUBAGENTS = os.environ.get("HCTF_SCRIPT_SUBAGENTS", "1") == "1"
+# Parallel per-language subagents for the script lane (fair from-scratch D6 replays, same knowledge): serial worker
+# (main6) single 225 s / lane 247 s; subagents main7 158 s / 181 s but main8 302 s / 407 s -- the lane waits on the
+# SLOWEST subagent (JScript/Batch took ~200 s in main8 while the main thread polled), and its per-language code failed
+# the first Time Trial (15 empty fields). High variance, not a reliable win: OFF by default; HCTF_SCRIPT_SUBAGENTS=1 on.
+SCRIPT_SUBAGENTS = os.environ.get("HCTF_SCRIPT_SUBAGENTS", "0") == "1"
 
 
 def subagent_policy(lane):
