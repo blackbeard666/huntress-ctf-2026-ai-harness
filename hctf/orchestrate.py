@@ -169,13 +169,15 @@ def _log_section(text, title, cap):
     return m.group(0).strip()[:cap] if m else ""
 
 
-# Owner: parallel per-language subagents are an EXPERIMENT (measured by replay) -- default is the serial worker.
-SCRIPT_SUBAGENTS = os.environ.get("HCTF_SCRIPT_SUBAGENTS", "0") == "1"
+# Parallel per-language subagents for the script lane: fair from-scratch D6 replays, same knowledge -- serial worker
+# (main6) single 225 s / lane 247 s; 4 per-language subagents (main7) single 158 s / lane 181 s, both 1 submit, 0 wrong.
+# ON by default; HCTF_SCRIPT_SUBAGENTS=0 restores the serial worker.
+SCRIPT_SUBAGENTS = os.environ.get("HCTF_SCRIPT_SUBAGENTS", "1") == "1"
 
 
 def subagent_policy(lane):
     if SCRIPT_SUBAGENTS and lane == "script-analysis":
-        return ("Subagents (EXPERIMENT, script lane): the contract covers several host languages and writing every "
+        return ("Subagents (script lane): the contract covers several host languages and writing every "
                 "per-language analyser serially is the slowest part of this lane (~300 chars/s of code). Once triage's "
                 "decoded plans and the Variant axes are read: write ONE brief file (contract answer-id grammar, the "
                 "per-language function signature `analyse(paths, contract) -> {answer_id: value}` in "
