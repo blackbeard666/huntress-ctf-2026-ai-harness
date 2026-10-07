@@ -392,6 +392,8 @@ def process_result(cid, solver_dir, res, log=print):
         return "error:prerequisite"
     if res.get("gm_rate_limited") or "rate_limited" in r:
         return "error:rate"    # GM 429 on start/download: transient -- back off and retry, never generalize
+    if "rotation_exhausted" in r:
+        return "error:exhausted"   # GM: no more variants for this mode today -- terminal; a generalize can't help
     if r == "no_answer_ids":
         return "error:exec"    # the GM gave no live task (nothing for a solver to fix): retry, never generalize
     if r == "exec_error":

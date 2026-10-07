@@ -992,6 +992,12 @@ class Chain:
                 else:
                     time.sleep(3)  # CourseStack scoring may still be pending for the previous mode
                 continue
+            if res == "error:exhausted":
+                # GM 'rotation_exhausted' (replay d7fix3: metadata TT after the real run + 3 replays): no new variant
+                # will be issued today. Terminal -- a generalize worker has nothing to fix (it burned 5 of them).
+                say(f"[{cid}] GM rotation exhausted for this mode: no new attempts today; stopping (no generalize)")
+                set_state(self.base, stage=f"{mode}:exhausted")
+                break
             if res == "error:rate" and rate_retries < RATE_RETRIES:
                 # GM 429 on start/download (Day 7 script TT: harvest + another lane's timed runs hammered the GM and a
                 # rate-limit body became evidence.zip). Nothing to fix: back off and retry on its own budget.

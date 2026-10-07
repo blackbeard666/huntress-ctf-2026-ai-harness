@@ -328,3 +328,25 @@ try:
 finally:
     timed._remember, timed._keep_failed_attempt, timed.capture_case = _orig[0], _orig[1], _occ
 print("ok  start on a passed mode -> op retry for a fresh clock; no_answer_ids -> error:exec (no generalize)")
+
+# 15) GM 'rotation_exhausted' is terminal: stop the stage, never generalize (replay d7fix3 burned 5 workers on it).
+timed._remember = timed._keep_failed_attempt = lambda *a, **k: None
+timed.capture_case = lambda *a, **k: None
+try:
+    assert timed.process_result("c/time_trial", d, {"result": "rotation_exhausted"}, log=lambda *a: None) == "error:exhausted"
+finally:
+    timed._remember, timed._keep_failed_attempt, timed.capture_case = _orig[0], _orig[1], _occ
+calls = []
+patches[(timed, "run")] = lambda cid, sdir, log=None: (calls.append(cid), "error:exhausted")[1]
+saved = {k: getattr(*k) for k in patches}
+_ogen = getattr(orchestrate.Chain, "generalize", None)
+orchestrate.Chain.generalize = lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not generalize"))
+try:
+    for (mod, name), fn in patches.items():
+        setattr(mod, name, fn)
+    assert not ch.timed_stage("mastery") and len(calls) == 1, calls
+finally:
+    for (mod, name), fn in saved.items():
+        setattr(mod, name, fn)
+    orchestrate.Chain.generalize = _ogen
+print("ok  rotation_exhausted: one attempt, stage stops, no generalize")
