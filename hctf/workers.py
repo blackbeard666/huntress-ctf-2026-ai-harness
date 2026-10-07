@@ -233,6 +233,10 @@ def run_timed(solver_dir, cid, op="start", timeout=60):
     No VM, no SSH — the whole start->download->solve->submit path runs here. Returns hb_timed's JSON dict."""
     rel = solver_dir.relative_to(ROOT)
     env = dict(os.environ, PYTHONPATH=f"{ROOT}:{os.environ.get('PYTHONPATH', '')}")
+    if os.environ.get("HCTF_TIMED_GM_URL"):
+        # Clock-critical calls straight to this GM (e.g. the real one while a replay proxy fronts everything else: the
+        # proxy opens a fresh TLS connection per call, ~0.5-1 s each inside a 6-7 s window).
+        env["HUNTRESS_GAME_MASTER_URL"] = os.environ["HCTF_TIMED_GM_URL"]
     try:
         r = subprocess.run([sys.executable, str(ROOT / "hctf" / "hb_timed.py"), cid, str(rel), "--op", op],
                            cwd=ROOT, capture_output=True, text=True, timeout=timeout, env=env)
