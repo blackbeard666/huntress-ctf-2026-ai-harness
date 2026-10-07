@@ -102,7 +102,8 @@ def _pool():
     if _POOL is None:
         # Pre-open enough connections (BEFORE the clock) for a many-file Mastery: from the public GM each download is
         # ~1.3-2 s, so 28 warmups deliveries over 6 sockets / 8 threads took 7.2 s -- the whole 7 s window (local replay).
-        _POOL = _Pool(GM, size=int(os.environ.get("HCTF_GM_POOL", "16")))
+        # Measured: 28 parallel calls = 4.4 s on 16 sockets vs 2.0 s on 32; pre-opening 32 costs ~0.1 s before the clock.
+        _POOL = _Pool(GM, size=int(os.environ.get("HCTF_GM_POOL", "32")))
     return _POOL
 
 
@@ -374,7 +375,7 @@ def main():
         (adir / name).write_bytes(_get_bytes(cap))
 
     if plan:
-        with ThreadPoolExecutor(max_workers=min(int(os.environ.get("HCTF_DL_PARALLEL", "24")), len(plan))) as ex:
+        with ThreadPoolExecutor(max_workers=min(int(os.environ.get("HCTF_DL_PARALLEL", "48")), len(plan))) as ex:
             for _ in ex.map(_fetch, plan):  # propagate any download exception
                 pass
     t_downloaded = time.time()
