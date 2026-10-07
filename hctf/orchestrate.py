@@ -54,7 +54,10 @@ SCOUT_GENERALIZE = int(os.environ.get("HCTF_SCOUT_GENERALIZE", "2"))  # offline 
 # script TT failed on 3 different unseen constructs in a row (JScript hex arrays, JScript relay, cx_Freeze carrier) +
 # one more on Mastery = 4 generalize/retry cycles (~3:20) where one multi-variant cycle would do.
 HARVEST_VARIANTS = int(os.environ.get("HCTF_HARVEST_VARIANTS", "3"))
-HARVEST_GAP = float(os.environ.get("HCTF_HARVEST_GAP", "3"))  # s after an attempt's deadline before the next start
+# s after an attempt's deadline before the next retry. A retry while the previous attempt is still live just RESUMES it
+# (verified on a rehearsal copy 2026-10-08: same attempt_id, unique_attempts_remaining unchanged), so an early one costs nothing and
+# _harvest polls once a second until the id changes (was deadline + 5 s: ~4 s lost per harvested variant).
+HARVEST_GAP = float(os.environ.get("HCTF_HARVEST_GAP", "0.5"))
 HARVEST_YIELD_MAX = float(os.environ.get("HCTF_HARVEST_YIELD_MAX", "30"))  # max s a harvest waits out other live clocks
 
 _print_lock = threading.Lock()
@@ -506,22 +509,30 @@ class Chain:
         the pre-worker solver snapshot on it and save every variant it leaves incomplete as a `variant-<mode>-<att8>`
         case + add it to the watcher's fill set. Never touches start.json / contract.json (the worker may read them)."""
         mode, snap = solvers.mode_of(cid), self._snap_dir()
-        prev = (timed.last_result(cid) or {}).get("deadline") or (cli.load(cid, "start.json") or {}).get("deadline")
+        last = timed.last_result(cid) or {}
+        prev = last.get("deadline") or (cli.load(cid, "start.json") or {}).get("deadline")
+        prev_att = last.get("attempt_id")
         got = 0
         for _ in range(n):
             if not self._harvest_sleep(prev, done):
                 break
             try:
-                with cli.chal_lock(cid), cli.quiet():
-                    env = cli.call(cid, "start", cid)
+                for _poll in range(8):
+                    with cli.chal_lock(cid), cli.quiet():
+                        env = cli.call(cid, "start", cid)
+                        body = env.get("body") or {}
+                        if env.get("http") == 200 and not body.get("error") and not cli.attempt_id(body):
+                            # `start` RESUMES the latest attempt: after the failed one's deadline that is
+                            # {"result": "expired"} (or a finished one) with no attempt_id -- re-roll a fresh variant like
+                            # hb_timed does (rehearsal Day 7: both script harvests stopped here with 0 variants).
+                            env = cli.call(cid, "retry", cid)
                     body = env.get("body") or {}
-                    if env.get("http") == 200 and not body.get("error") and not cli.attempt_id(body):
-                        # `start` RESUMES the latest attempt: after the failed one's deadline that is
-                        # {"result": "expired"} (or a finished one) with no attempt_id -- re-roll a fresh variant like
-                        # hb_timed does (rehearsal Day 7: both script harvests stopped here with 0 variants).
-                        env = cli.call(cid, "retry", cid)
-                body = env.get("body") or {}
+                    if not (prev_att and cli.attempt_id(body) == prev_att) or done.wait(1.0):
+                        break   # a NEW attempt (or an error / the generalize ended); same id = previous still live
                 att = cli.attempt_id(body)
+                if prev_att and att == prev_att:
+                    break       # the generalize ended while the previous attempt was still live
+                prev_att = att
                 if env.get("http") != 200 or body.get("error") or not att:
                     say(f"[{cid}] harvest: start refused ({str(body)[:120]}); stopping the harvest")
                     break
@@ -566,7 +577,7 @@ class Chain:
                 left = max(0.0, (end - datetime.datetime.now(datetime.timezone.utc)).total_seconds())
             except ValueError:
                 pass
-        if done.wait(left + 2 + HARVEST_GAP) or done.is_set():
+        if done.wait(left + HARVEST_GAP) or done.is_set():
             return False
         # ...and never start + download beside ANOTHER chain's live clock (GM 429s land on that attempt's download).
         end = time.time() + HARVEST_YIELD_MAX

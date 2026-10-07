@@ -523,3 +523,44 @@ for _n in (3, 13, 16, 22):
     assert _decode.decode_chunk(_decode._rot("Nice work decoding", _n)) == "Nice work decoding", _n
 assert _decode.decode_chunk(".... . .-.. .-.. ---") == "HELLO"
 print("ok  name-agnostic decode: renamed puzzle codecs (ANS oracle), unnamed line encodings, bigram rot-N scorer")
+
+# 22) harvest pacing: retry ~0.5 s after the deadline; a reply carrying the PREVIOUS attempt's id means it is still live
+#     (retry/start resume it for free -- verified on a rehearsal copy) -> poll once a second until a new id arrives.
+ops, said = [], []
+_replies = iter([{"http": 200, "body": {"attempt_id": "old1", "answer_ids": ["a"]}},
+                 {"http": 200, "body": {"attempt_id": "old1", "answer_ids": ["a"]}},
+                 {"http": 200, "body": dict(_STARTED)}])
+_waits = []
+
+
+class _Done:
+    def wait(self, t):
+        _waits.append(t)
+        return False
+
+    def is_set(self):
+        return False
+
+
+hp = {(orchestrate.cli, "call"): lambda cid, op, *a, **k: (ops.append(op), next(_replies))[1],
+      (orchestrate.cli, "chal_lock"): lambda cid: contextlib.nullcontext(),
+      (orchestrate.cli, "_planned_downloads"): lambda body: [],
+      (orchestrate.cli, "load"): lambda *a, **k: None,
+      (timed, "last_result"): lambda cid: {"attempt_id": "old1", "deadline": None},
+      (orchestrate.Chain, "_harvest_sleep"): staticmethod(lambda deadline, done: True),
+      (orchestrate, "ROOT"): d,
+      (orchestrate, "say"): lambda msg, *a, **k: said.append(msg)}
+hsaved = {k: getattr(*k) for k in hp}
+try:
+    for (mod, name), fn in hp.items():
+        setattr(mod, name, fn)
+    hc = object.__new__(orchestrate.Chain)
+    hc.root, hc.sdir = d, d
+    hc._harvest("c/time_trial", 1, set(), _Done())
+finally:
+    for (mod, name), fn in hsaved.items():
+        setattr(mod, name, fn)
+assert ops == ["start", "start", "start"] and _waits == [1.0, 1.0], (ops, _waits)
+assert not any("refused" in s for s in said), said
+assert orchestrate.HARVEST_GAP <= 1.0
+print("ok  harvest pacing: same attempt id = still live -> poll 1 s until a new variant; gap after deadline <= 1 s")
