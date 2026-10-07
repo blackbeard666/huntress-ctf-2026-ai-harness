@@ -210,21 +210,43 @@ def _kill_group(p, grace):
 _sync_lock = threading.Lock()
 
 
+def _base_sig():
+    """Fingerprint of the code Homebase needs (hctf, lib, bin, skills, CLAUDE.md, AGENTS.md): path+size+mtime."""
+    import hashlib
+    h = hashlib.sha1()
+    for d in ("hctf", "lib", "bin", "skills", "CLAUDE.md", "AGENTS.md"):
+        base = ROOT / d
+        files = [base] if base.is_file() else sorted(base.rglob("*")) if base.exists() else []
+        for f in files:
+            if "__pycache__" in f.parts or not (f.is_file() or f.is_symlink()):
+                continue
+            st = f.lstat()
+            h.update(f"{f.relative_to(ROOT)}|{st.st_size}|{st.st_mtime_ns}\n".encode())
+    return h.hexdigest()
+
+
 def sync_homebase_base(force=False):
-    """Push hctf + lib + skills + bin to Homebase (shared by all homebase workers). Done once per process
-    (rsync is incremental, but skipping the extra ssh round-trips trims per-attempt overhead off the clock
-    path); pass force=True to re-sync after a code change."""
+    """Push hctf + lib + skills + bin to Homebase (shared by all homebase workers). Done once per process. If the VM
+    already holds this exact code (fingerprint written after the last sync -- e.g. by day.sh's arm-time warm-up), it is
+    ONE `cat` round-trip; otherwise the rsyncs run in parallel (sequential over the ~255ms VPN cost ~12s, which kept the
+    first timed attempts of a run on the local fallback)."""
+    from concurrent.futures import ThreadPoolExecutor
     with _sync_lock:
         if _hb.get("base_synced") and not force:
             return
+        sig = _base_sig()
+        if not force:
+            r = remote.ssh(f"cat ~/{HB_WORK}/.base_sig 2>/dev/null", timeout=20, check=False)
+            if r.stdout.strip() == sig:
+                _hb["base_synced"] = True
+                return
         remote.ssh(f"mkdir -p ~/{HB_WORK}/challenges ~/.codex/skills ~/hctf")  # ~/hctf: absent on a fresh VM
-        for d in ("hctf", "lib", "bin", "skills"):
-            if (ROOT / d).exists():
-                remote.rsync_to(ROOT / d, f"~/{HB_WORK}/")
-        remote.ssh(f"rsync -a --delete ~/{HB_WORK}/skills/ ~/.codex/skills/ && cp ~/{HB_WORK}/hctf/gm.py ~/hctf/gm.py")
-        for f in ("CLAUDE.md", "AGENTS.md"):
-            if (ROOT / f).exists():
-                remote.rsync_to(ROOT / f, f"~/{HB_WORK}/{f}")
+        items = [(ROOT / d, f"~/{HB_WORK}/") for d in ("hctf", "lib", "bin", "skills") if (ROOT / d).exists()]
+        items += [(ROOT / f, f"~/{HB_WORK}/{f}") for f in ("CLAUDE.md", "AGENTS.md") if (ROOT / f).exists()]
+        with ThreadPoolExecutor(max_workers=len(items)) as ex:
+            list(ex.map(lambda it: remote.rsync_to(*it), items))
+        remote.ssh(f"rsync -a --delete ~/{HB_WORK}/skills/ ~/.codex/skills/ && cp ~/{HB_WORK}/hctf/gm.py ~/hctf/gm.py"
+                   f" && echo {sig} > ~/{HB_WORK}/.base_sig")
         _hb["base_synced"] = True
 
 

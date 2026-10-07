@@ -65,7 +65,11 @@ fi
 # 2) Warm the Homebase SSH ControlMaster in the BACKGROUND (never blocks the launch; the run re-probes Homebase
 #    itself before each tight window).
 if [ "${HCTF_AUTO_HOMEBASE:-1}" != 0 ] && ip route get "${HCTF_HB_HOST:-10.1.50.243}" 2>/dev/null | grep -q "${HCTF_VPN_DEV:-tun0}"; then
+  # Also provision + full code sync NOW (a freshly booted VM took ~25s of first sync inside the run, during which the
+  # first timed attempts fell back to local -- main replay 2026-10-07); the run's own sync is then incremental.
   ( timeout 30 hctf hb exec -- true >/dev/null 2>&1 && echo "[warm] Homebase SSH control channel established." \
+      && timeout 600 python3 -c "from hctf import workers; workers._provision(lambda m: print(m, flush=True))" \
+      && echo "[warm] Homebase provisioned + code synced (run starts warm)." \
       || echo "[warm] Homebase not reachable yet; the run's health thread re-probes it every ${HCTF_HB_HEALTH_S:-5}s." ) &
 fi
 
