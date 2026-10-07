@@ -123,7 +123,7 @@ PLAYBOOK = [
              "arch token. Go ELF: use ELF e_machine `x86-64`, NEVER the Go buildinfo GOARCH `amd64`.",
         confirmed=tuple(sorted(set(K.ELF_MACHINE.values()) | set(K.PE_MACHINE.values()))),
         rejected=tuple(K.ARCHITECTURE_REJECTED) + ("arm64", "386", "x86_64"),
-        examples=("Go ELF GOARCH=amd64 -> x86-64",),
+        examples=("Go ELF GOARCH=amd64 -> x86-64", "Go PE .exe Machine 0x8664 -> x86-64 (D4/D5/D7 Mastery set2)"),
     ),
     PlaybookEntry(
         lanes=(BINARY,), families=("names",),
@@ -206,11 +206,15 @@ PLAYBOOK = [
         lanes=(SCRIPT,), families=("attack",),
         rule="MITRE ATT&CK technique id from the step-graph ROLE. Execution roles map to the host language: batch "
              "launcher/staged_chain=T1059.003, JScript launcher/staged_chain=T1059.007, VBScript launcher/staged_chain="
-             "=T1059.005, bash=T1059.004, python=T1059.006, powershell=T1059.001. A graph ending in a "
-             "handoff is `staged_chain` even if next_stage is a .js file (not 'relay').",
+             "=T1059.005, bash=T1059.004, python=T1059.006, powershell=T1059.001, Node.js=T1059.007 (JavaScript, like "
+             "JScript). A graph ending in a handoff is `staged_chain` even if next_stage is a .js file (not 'relay'). "
+             "Non-execution roles map by ROLE, never by adapter: persistence_descriptor (build_schedule>"
+             "register_descriptor) = T1053.003 even with a systemd_descriptor/npm_lifecycle adapter; bash "
+             "advanced_syntax (recognize_syntax>reconstruct_intent) = T1059.004 (Day 7).",
         rejected=tuple(sum((list(v) for v in K.JSCRIPT_ATTACK_REJECTED.values()), [])) + ("T1005", "T1560", "T1119"),
         examples=("batch launcher->T1059.003", "jscript staged_chain->T1059.007", "vbscript launcher->T1059.005",
-                  "downloader/stager->T1105", "dropper->T1140", "uploader->T1041", "impact->T1486"),
+                  "downloader/stager->T1105", "dropper->T1140", "uploader->T1041", "impact->T1486",
+                  "nodejs launcher->T1059.007", "nodejs persistence_descriptor->T1053.003"),
     ),
 ]
 
@@ -274,7 +278,8 @@ NAMING_LAWS = (
     "- representation = `<numbase>_<separator-name>` (decimal_pipe, hex_colon) or `<base64|hex>_<variant>`; transform is "
     "named for the ENCODE direction (subtract_modulo_256 decodes by ADDING).\n"
     "- ATT&CK execution role scales by host language: launcher/staged_chain -> T1059.{003 batch, 004 bash, "
-    "005 vbscript, 006 python, 007 jscript, 001 powershell}; downloader/stager T1105, dropper T1140, uploader T1041, impact T1486.")
+    "005 vbscript, 006 python, 007 jscript/node.js, 001 powershell}; downloader/stager T1105, dropper T1140, uploader T1041, "
+    "impact T1486, persistence_descriptor T1053.003 (by role, not adapter).")
 
 
 def for_lane(lane):

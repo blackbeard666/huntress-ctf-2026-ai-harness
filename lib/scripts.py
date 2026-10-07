@@ -74,7 +74,8 @@ def attack_for(scenario):
 
 
 # Unified role -> ATT&CK resolver across scripting languages (the per-language tables in lib/knowledge.py).
-# Execution-type roles differ by interpreter: cmd=.003, Unix shell=.004, VBScript=.005, Python=.006, JavaScript=.007.
+# Execution-type roles differ by interpreter: cmd=.003, Unix shell=.004, VBScript=.005, Python=.006, JavaScript=.007
+# (WSH JScript and Node.js alike).
 _ROLE_TABLES = {
     "bash": K.BASH_ROLE_ATTACK_CONFIRMED, "sh": K.BASH_ROLE_ATTACK_CONFIRMED, "shell": K.BASH_ROLE_ATTACK_CONFIRMED,
     "jscript": K.JSCRIPT_ROLE_ATTACK_CONFIRMED, "javascript": K.JSCRIPT_ROLE_ATTACK_CONFIRMED,
@@ -83,6 +84,7 @@ _ROLE_TABLES = {
     "bat": K.BATCH_ROLE_ATTACK_CONFIRMED,
     "vbs": K.VBS_ROLE_ATTACK_CONFIRMED, "vbscript": K.VBS_ROLE_ATTACK_CONFIRMED,
     "python": K.PY_ROLE_ATTACK_CONFIRMED, "py": K.PY_ROLE_ATTACK_CONFIRMED,
+    "node": K.NODE_ROLE_ATTACK_CONFIRMED, "nodejs": K.NODE_ROLE_ATTACK_CONFIRMED,  # Day 7
 }
 
 

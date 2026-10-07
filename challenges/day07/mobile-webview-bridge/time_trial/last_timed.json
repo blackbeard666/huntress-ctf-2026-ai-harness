@@ -1,0 +1,17 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "5fdb86d8-5f04-4d4e-b193-fdcebcb64f4e",
+  "window": 9.0,
+  "elapsed": 3.46,
+  "in_window": 2.93,
+  "phases": {
+    "start": 0.53,
+    "download": 0.25,
+    "solve": 2.1,
+    "submit": 0.58
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": "2026-10-07T13:01:15.086Z"
+}

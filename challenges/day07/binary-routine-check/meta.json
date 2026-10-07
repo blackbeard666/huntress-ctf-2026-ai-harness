@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-07-kotlin-staging-logic",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Routine Check",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-07-kotlin-staging-logic",
+    "time_trial": "binary-reverse-engineering-day-07-kotlin-staging-logic/time_trial",
+    "mastery": "binary-reverse-engineering-day-07-kotlin-staging-logic/mastery"
+  }
+}

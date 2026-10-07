@@ -43,6 +43,9 @@ ARCHITECTURE_REJECTED = ["amd64"]
 # Day 6 "Pool Party" (binary, java-bytecode-loader), confirmed 2026-10-06: a Java .jar's `format` is plain "jar"
 # (the archive/container name, like elf/pe). The container_runtime compound "jar_jvm" was REJECTED, so the pe_cli
 # law does NOT extend to Java. The HCFG config sat base64'd in a constant-pool String (static final CONFIG).
+# Day 7 "Routine Check" re-confirmed "jar" for a Kotlin fat jar (single 22f8c079, TT, Mastery; 0 wrong): the JVM
+# source language does not change the container label. HCFG `hcfg_version` = the blob's version as plain decimal ("1",
+# D6+D7 confirmed).
 JAR_FORMAT = "jar"
 JAR_FORMAT_REJECTED = ["jar_jvm"]
 DOTNET_FORMAT_REJECTED = [
@@ -65,6 +68,12 @@ PNG_DIMENSIONS_FMT = "{width}x{height}"
 # Day 6 "Portable Deception" (metadata-forensics), confirmed 2026-10-06: pdf.header_version is the bare x.y of the leading
 # `%PDF-x.y` magic (e.g. "1.4"), not the catalog /Version override; an impostor (no header) -> literal "none".
 PDF_HEADER_VERSION_FMT = "{major}.{minor}"
+
+# Day 7 "Seven-Zip, No Relation" (metadata-forensics), confirmed 2026-10-07 (single "2", TT "3", Mastery "4"/"5", 0
+# wrong): zip.eocd_total_entries is the plain base-10 "total entries" u16 (+10) of the End-Of-Central-Directory record
+# (PK\x05\x06) of the zip NAMED after '->' (an inner zip, nested up to 3 deep) -- not the outer download's EOCD. Despite
+# the "Seven-Zip" title there was no 7z. Claimed vs walked counts always agreed, so which one wins on a mismatch is OPEN.
+ZIP_EOCD_TOTAL_ENTRIES_FMT = "{n}"
 
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {
@@ -185,6 +194,21 @@ PY_ROLE_ATTACK_CONFIRMED = {
 BASH_ROLE_ATTACK_CONFIRMED = {
     "benign_utility": "none", "stager": "T1105", "downloader": "T1105", "dropper": "T1140",
     "launcher": "T1059.004", "staged_chain": "T1059.004",
+    # Day 7 "Node by Node" (single 25ef1864 + TT 516aa6d1 + Mastery 2c52d50f, all first-submit CORRECT): the
+    # indirect-expansion.sh / token-fragmentation fixtures decode to steps=recognize_syntax>reconstruct_intent ->
+    # role advanced_syntax (feature indirect_expansion|token_fragmentation, primitive parameter_indirection|
+    # array_token_construction, plan values verbatim) = Unix shell execution.
+    "advanced_syntax": "T1059.004",
+}
+# Node.js "operation graph" fixtures (Day 7 "Node by Node", GM-confirmed single 25ef1864, TT 516aa6d1, Mastery
+# 2c52d50f; 0 wrong). Same step-graph roles as JScript (Node is JavaScript -> T1059.007 for execution roles) plus a
+# NEW role: steps build_schedule>register_descriptor = persistence_descriptor -> T1053.003 (Cron) for EVERY adapter
+# seen (systemd_descriptor, npm_lifecycle_descriptor; the schedule_path is /etc/cron.d/...) -- the GM maps the ROLE,
+# not the adapter, so don't switch to T1543.002/T1053.006 on a systemd adapter. read_file>transmit_remote = uploader.
+NODE_ROLE_ATTACK_CONFIRMED = {
+    "benign_utility": "none", "stager": "T1105", "downloader": "T1105", "dropper": "T1140",
+    "uploader": "T1041", "launcher": "T1059.007", "staged_chain": "T1059.007",
+    "persistence_descriptor": "T1053.003",
 }
 # Codec_ key field spellings seen in the generator's bytes (Bash, Day 6): contiguous hex for one-byte keys ('1b'), and
 # comma-separated hex bytes for multi-byte repeating_key_xor keys ('55,51,74,dd,3a'; Mastery 3bc5446b + GM-correct

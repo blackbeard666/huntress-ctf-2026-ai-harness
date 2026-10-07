@@ -1,0 +1,11 @@
+{
+  "stage": "done",
+  "name": "\u2699\ufe0f Routine Check",
+  "lane": "binary-reverse-engineering",
+  "worker": null,
+  "updated": "2026-10-07T21:03:29",
+  "launches": 1,
+  "attempt": 1,
+  "time_trial_result": "correct",
+  "mastery_result": "correct"
+}

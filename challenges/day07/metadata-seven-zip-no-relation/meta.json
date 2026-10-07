@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-07-seven-zip-no-relation",
+  "lane": "metadata-forensics",
+  "name": "🔎 Seven-Zip, No Relation",
+  "ids": {
+    "single_solve": "metadata-forensics-day-07-seven-zip-no-relation",
+    "time_trial": "metadata-forensics-day-07-seven-zip-no-relation/time_trial",
+    "mastery": "metadata-forensics-day-07-seven-zip-no-relation/mastery"
+  }
+}

@@ -35,6 +35,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Pool Party"
   },
+  "binary-reverse-engineering-day-07-kotlin-staging-logic": {
+    "day": 7,
+    "dir": "day07/binary-routine-check",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Routine Check"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -71,6 +77,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Portable Deception"
   },
+  "metadata-forensics-day-07-seven-zip-no-relation": {
+    "day": 7,
+    "dir": "day07/metadata-seven-zip-no-relation",
+    "lane": "metadata-forensics",
+    "name": "🔎 Seven-Zip, No Relation"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -106,6 +118,12 @@
     "dir": "day06/mobile-provider-paths",
     "lane": "mobile-android",
     "name": "📱 Provider Paths"
+  },
+  "mobile-android-day-07-webview-bridge": {
+    "day": 7,
+    "dir": "day07/mobile-webview-bridge",
+    "lane": "mobile-android",
+    "name": "📱 WebView Bridge"
   },
   "read-the-rules": {
     "day": 1,
@@ -149,6 +167,12 @@
     "lane": "script-analysis",
     "name": "📜 Shell We Begin"
   },
+  "script-analysis-day-07-node-operation-graphs": {
+    "day": 7,
+    "dir": "day07/scripting-node-by-node",
+    "lane": "script-analysis",
+    "name": "📜 Node by Node"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -184,6 +208,12 @@
     "dir": "day06/warmups-eight-is-enough",
     "lane": "warmups",
     "name": "👶 Eight Is Enough"
+  },
+  "warmups-day-07": {
+    "day": 7,
+    "dir": "day07/warmups-percent-chance",
+    "lane": "warmups",
+    "name": "👶 Percent Chance"
   },
   "welcome-robots": {
     "day": 1,

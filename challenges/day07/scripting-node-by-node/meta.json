@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-07-node-operation-graphs",
+  "lane": "script-analysis",
+  "name": "📜 Node by Node",
+  "ids": {
+    "single_solve": "script-analysis-day-07-node-operation-graphs",
+    "time_trial": "script-analysis-day-07-node-operation-graphs/time_trial",
+    "mastery": "script-analysis-day-07-node-operation-graphs/mastery"
+  }
+}

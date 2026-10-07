@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-07-webview-bridge",
+  "lane": "mobile-android",
+  "name": "📱 WebView Bridge",
+  "ids": {
+    "single_solve": "mobile-android-day-07-webview-bridge",
+    "time_trial": "mobile-android-day-07-webview-bridge/time_trial",
+    "mastery": "mobile-android-day-07-webview-bridge/mastery"
+  }
+}

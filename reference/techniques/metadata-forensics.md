@@ -1,20 +1,26 @@
-# metadata-forensics — technique log (days 1-6; updated after every day)
+# metadata-forensics — technique log (days 1-7; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - Every day = ONE evidence zip (`metadata-day-NN-evidence.zip`, plain Deflate, no password so far) holding a tiny member
-  (33 B - 3 KB). The question asks ONE structural fact about a named member, read from the raw bytes.
+  (33 B - 3 KB). The question asks ONE structural fact about a named member, read from the raw bytes. The member can
+  itself be a container (Day 7: the member was a ZIP and the field was that ZIP's own EOCD record).
 - A new `<fmt>.<field>` family each day: identity (name/size/hashes) -> magic prefix -> `text.utf8_bom_present` ->
-  `jpeg.sof_dimensions_pixels` -> `png.ihdr_dimensions_pixels` -> `pdf.header_version`. Since Day 3 the question literally
-  names the field (`Determine <fmt>.<field> for <member>`); answer ids read `dNN-<fmt>-NNN-<fmt>-<field>`.
+  `jpeg.sof_dimensions_pixels` -> `png.ihdr_dimensions_pixels` -> `pdf.header_version` -> `zip.eocd_total_entries`.
+  Since Day 3 the question literally names the field (`Determine <fmt>.<field> for <member>`); answer ids read
+  `dNN-<fmt>-NNN-<fmt>-<field>` (`.`/`_` -> `-`, e.g. `d07-zip-001-zip-eocd-total-entries`).
 - The prompt's flavor text describes decoys (impostors, renamed copies, "-with-bom" names, EXIF/presentation lies, chunk
   "passengers", catalog /Version overrides). The asked field so far was always the STRUCTURAL truth from the header bytes;
-  names/extensions/secondary metadata are the lie. All 6 single solves were first-submit CORRECT in ~30-40 s.
+  names/extensions/secondary metadata are the lie. All 7 single solves were first-submit CORRECT in ~30-60 s.
+- Titles are puns, not format hints: Day 7 "Seven-Zip, No Relation" was plain ZIP (PKWARE), no .7z anywhere.
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
 - **Delivery layout** -- see "Delivery layouts seen" below; resolve the named member through whatever wrapper arrives.
 - **Decoys** -- renamed copies, misleading extensions/names, secondary metadata (EXIF, catalog /Version) that disagree
   with the header: always answer from the structural header bytes of the member the question names.
-- **Member and values** -- names, sizes and dimensions re-roll per variant; nothing about the sample is constant.
+- **Member and values** -- names, sizes, dimensions and counts re-roll per variant; nothing about the sample is
+  constant (Day 7 entry count went 2/3/4/5 with drop number 001-004; member names `room-NN/item-K.txt`).
+- **Nesting depth** -- the asked file may sit 2-3 zips deep (Mastery D7: outer -> `...-evidence-0N.zip` ->
+  `evidence-drop-00N.zip`); resolve by the name after `->`, never answer from an enclosing zip.
 
 ## Recognition cues -> first move
 | You see | First move |
@@ -25,6 +31,7 @@ How this lane has looked so far (observations, not guarantees):
 | `text.*_bom_present` | `xxd -l 4`: UTF-8 BOM = `ef bb bf` (UTF-16LE `ff fe`, BE `fe ff`, UTF-32LE `ff fe 00 00`) -> `true`/`false` |
 | `jpeg.*dimensions*` / SOF | walk JPEG segments from `ffd8` by length to SOFn (`ffc0..ffcf` minus c4/c8/cc): P, Y=height, X=width. `exiftool -ImageSize` cross-check only |
 | `png.ihdr_*` / "walk their chunks" | `xxd -s 16 -l 8` = IHDR width,height (BE u32). Chunk walk = len/type/data/CRC loop (`lib.stego.png_chunks`) |
+| `zip.eocd_*` / "count what the archives claim" | of the NAMED inner zip (not the evidence zip): last `PK\x05\x06` whose comment len reaches EOF; u16 @+8 disk entries, @+10 total, u32 @+12 cd size, @+16 cd offset, u16 @+20 comment len. `0xFFFF` -> ZIP64 locator `PK\x06\x07` (EOCD-20) -> `PK\x06\x06` u64 @+32. Cross-check: count `PK\x01\x02` walking from cd offset, `PK\x03\x04` |
 | `pdf.header_version` / "declared versions" | `head -c 16 <f> | xxd` -> `%PDF-x.y` at offset 0; `grep -a -o '/Version[^/>]*'` only as a diagnostic |
 | "impostor", "renamed", "disguise" | trust magic bytes at offset 0; a matching string deeper in the file is a decoy |
 | answer_format syntax "use the literal none only when the requested field is absent" | field missing (e.g. no header) -> `none` |
@@ -75,6 +82,16 @@ only one present in single; TT used `roster.csv`, Mastery a renamed `evidence-no
 - Pre-fetched mastery contract.json listed document-003/004; the live attempt asked 006/007 -> read the live start.
 - CORRECT ~34 s; TT in_window 2.7 s (GM start call itself took 23 s that day — latency is outside the window).
 
+**Day 7 — Seven-Zip, No Relation** (ZIP EOCD census). `zip.eocd_total_entries` integer, id `d07-zip-001-zip-eocd-total-entries`.
+- Evidence zip held `evidence-drop-001.zip` (410 B, Stored, data-descriptor flag) with `room-01/item-1.txt`,
+  `room-02/item-1.txt` (identical 48 B text). EOCD total-entries u16 @+10 = 2 -> answer `2` (base-10, no units).
+- All variants were honest: EOCD disk/total == CD headers == LFHs, no comment/trailing bytes. The prompt's "empty space"
+  / "census that does not add up" (claim vs real walk, padding, dir entries) was flavor only — not exercised, so it is
+  still unknown whether the GM wants the claimed or the walked count when they differ. Answer the field = the CLAIM.
+- Worker: `xxd | tail` + `7z l -slt` on triage's pre-extracted inner zip, then stdlib `struct` EOCD parser in solve.py
+  (ZIP64 aware). CORRECT 57 s after start, first try. TT 3 entries (in_window 0.89 s / 7 s); Mastery set1 4, set2 5
+  (1.33 s / 7 s). Pre-fetched mastery contract (003/004) matched live this time.
+
 ## GM answer conventions learned
 - Filenames: exact base name incl. extension, no directory. Sizes: base-10 integer, no units. Hashes: hex, case ignored.
 - Byte prefixes: lowercase hex, contiguous, exactly 2N chars (`xxd -p -l N`).
@@ -82,15 +99,19 @@ only one present in single; TT used `roster.csv`, Mastery a renamed `evidence-no
 - Pixel dimensions (JPEG SOF, PNG IHDR): `<width>x<height>` — width first, lowercase `x`, no spaces (GM-confirmed both).
 - PDF header version: bare `x.y` from the leading `%PDF-x.y` (no `PDF-`/`%` prefix); absent header -> literal `none`
   (contract wording; `none` itself not yet GM-confirmed).
-- Rejected spellings: none recorded in this lane (no wrong submission in any mode, days 1-6).
+- Counts (`zip.eocd_total_entries`): plain base-10 integer string, e.g. `2` (GM-confirmed D7 single/TT/Mastery).
+- Rejected spellings: none recorded in this lane (no wrong submission in any mode, days 1-7).
 - `knowledge.py`: `JPEG_DIMENSIONS_FMT`, `PNG_DIMENSIONS_FMT`, `PDF_HEADER_VERSION_FMT`, `BOOL`.
 - Inference: the field id IS the spec name (`sof_dimensions_pixels` = SOF frame header, `ihdr_` = IHDR chunk,
-  `header_version` = file header) — read the field name literally to pick which structure to parse.
+  `header_version` = file header, `eocd_total_entries` = EOCD record's own claim) — read the field name literally to
+  pick which structure to parse; a claimed count is NOT a CD walk / `zipfile` len (they happened to agree on D7).
 
 ## Delivery layouts seen (resolve these before parsing)
 - Single / TT: one zip, one member, member named in `artifact` after `->`.
 - Mastery days 1,2,4,5: ONE download named `...-evidence-01.zip` that is an outer zip containing `...-01.zip` and
   `...-02.zip` (zip-of-zips); each inner zip holds its set's member.
+- Mastery day 7: zip-of-zips again, three levels (outer `-01.zip` holds `-01.zip` + `-02.zip`, each holding the asked
+  `evidence-drop-00N.zip`); artifact ref `metadata-day-07-evidence-0N.zip -> evidence-drop-00N.zip` (no `delivery N:`).
 - Mastery day 6: two downloads with identical filenames -> `delivery 1: <zip>` / `delivery 2: <zip>` in artifact refs.
 - Member numbering shifts between pre-fetched contract and live attempt (003/004 vs 006/007) — never hardcode names.
 
@@ -99,8 +120,10 @@ only one present in single; TT used `roster.csv`, Mastery a renamed `evidence-no
 - Contract question text can be stale vs `answer_ids` (Day 2 TT): answer under `answer_ids`, locate the member that exists.
 - Don't let the flavor text widen the question: prompts mention impostors/passengers/orientation, but only the named
   field is graded. Answer it; keep extra checks as diagnostics.
+- Container-of-containers: when the asked file is itself a zip, a naive `rfind(PK\x05\x06)` on the downloaded evidence
+  zip reads the OUTER EOCD (1 entry; Mastery outer says 2). Resolve the named member's bytes first, then parse.
 - Decoys by name: `*-with-bom.txt`, `.exe` that is text, `.bin` that is PDF, `.pdf` that is PNG — bytes win every time.
-- Timed windows are ~5-6 s and most of it is GM start/download/submit round-trips (solve ~0.1 s): never do anything slow
+- Timed windows are ~5-7 s and most of it is GM start/download/submit round-trips (solve ~0.1 s): never do anything slow
   (extraction to disk, exiftool) in-window; parse in memory.
 - Harness: re-running `hctf start` on an already-solved challenge overwrote `single_solve/start.json` and made the stop gate
   think it was incomplete (Day 2, ~2 min lost) — restore start.json from `log.jsonl`.

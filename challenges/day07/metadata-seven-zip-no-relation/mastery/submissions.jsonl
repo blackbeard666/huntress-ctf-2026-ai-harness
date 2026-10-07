@@ -1,0 +1,1 @@
+{"ts": "20261007T130114Z", "attempt": "1b3a8491-33fa-4bff-a1f2-054481f23688", "answers": {"set1.d07-zip-003-zip-eocd-total-entries": "4", "set2.d07-zip-004-zip-eocd-total-entries": "5"}, "http": 200, "kind": "correct", "confirmed": ["set1.d07-zip-003-zip-eocd-total-entries", "set2.d07-zip-004-zip-eocd-total-entries"], "body": null, "via": "homebase"}

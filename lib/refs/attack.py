@@ -105,6 +105,8 @@ def audit_knowledge():
         "BATCH_ROLE": getattr(K, "BATCH_ROLE_ATTACK_CONFIRMED", {}),
         "VBS_ROLE": getattr(K, "VBS_ROLE_ATTACK_CONFIRMED", {}),
         "PY_ROLE": getattr(K, "PY_ROLE_ATTACK_CONFIRMED", {}),
+        "BASH_ROLE": getattr(K, "BASH_ROLE_ATTACK_CONFIRMED", {}),
+        "NODE_ROLE": getattr(K, "NODE_ROLE_ATTACK_CONFIRMED", {}),
     }
     bad = []
     for tname, t in tables.items():
