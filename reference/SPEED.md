@@ -232,3 +232,30 @@ above are historical.
   `reference/techniques/<lane>.md` (patterns, recognition cues -> first tool, day-by-day techniques, GM conventions,
   pitfalls) is referenced in the worker prompt; the post-run ratchet updates it after every day from that day's notes,
   transcripts and confirmed answers. Accumulated GM-confirmed knowledge (lib/knowledge.py, vocab.json, playbook) stays.
+
+## Day 7 (2026-10-07): real run T+6:16 -> replays T+2:07, and single-worker trims
+Real Day 7: 15/15 by T+6:16. Critical path = script TT, two generalize cycles (4:10): new Node/bash codec names
+(TT #1) and a GM 429 body saved as evidence.zip (TT #2). Also: bundle-zip `find_artifact` bug (warmups Mastery set1),
+clock-expiry retry bug (blocked after 1 expiry), 116 s of `javap` over a fat Kotlin jar's stdlib in binary triage.
+Fixes (61e8ea3, 8abd11f, fe99c70, 252951e, fa62eac, 51eff69, b7611bb):
+- timed: GM 429/error body never becomes evidence (exec_error + backoff, no generalize); Homebase for EVERY timed
+  window when healthy (`HCTF_TIGHT_WINDOW` default inf); harvest yields to other chains' live clocks; `start` on a
+  passed mode re-rolls a fresh clock (op retry); `no_answer_ids` -> retry; `rotation_exhausted` -> terminal.
+- lib.codec name-agnostic fallback (336/336 real D7 codecs with renamed reps vs 203 names-only).
+- startup: no gm_solved status call on a fresh mode, timed contracts prefetched beside start/triage, recon in a
+  thread pool, JVM stdlib classes skipped in binary recon.
+- single workers: lane skill + triage + generated lane-helper index inlined in the prompt; import helpers, write +
+  `submit --from-solver` in one Bash call; binary/script told to copy the latest same-lane solver (cumulative
+  contracts; harness reuse stays OFF); submits via the Homebase inside proxy when the ControlMaster is up (0.98 s vs
+  1.72 s median warm; single-shot ssh with an exec marker -> never a double POST); gm.py logs 429 retries per call.
+
+Replays (main account, singles judged locally, lib already holds Day 7 knowledge -> optimistic for singles):
+| replay | metadata | mobile | warmups | binary | script | notes |
+|---|---|---|---|---|---|---|
+| d7fix1 (after timed fixes) | 0:35 | 0:40 | 0:58 | 1:01 | 2:07 | 15/15, all TT/Mastery first try on Homebase |
+| d7fix3 (after single-worker trims) | single 21 s (TT: GM rotation_exhausted) | 0:44 | **0:35** | 1:42 | 3:01 | warmups single 18 s; script 1 generalize |
+Single-worker turns (launch -> CORRECT) d7fix1 -> d7fix2: metadata 7 -> 4, mobile 6 -> 4, warmups 11 -> 4, script
+29 -> 18, no Skill calls. Wall time per clean lane barely moved in replays (they already skip the public-GM submit);
+the real-drop gain is the submit path + fewer turns. Measure at Day 8 via log.jsonl `elapsed`/`retries`.
+GOTCHA: each main-account replay burns real TT/Mastery variants; after the real run + 3 replays the GM answered
+`rotation_exhausted` for metadata TT. Max ~2 replays of a day on main; use alt for more.
