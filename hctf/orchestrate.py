@@ -992,7 +992,12 @@ class Chain:
                 time.sleep(300)
             set_state(self.base, stage=f"{mode}:running", attempt=attempt + 1)
             # Clock-critical path runs locally against the public GM (pairing token; ~6s windows).
-            res = timed.run(cid, self.sdir, log=say)
+            # The mode's previous attempt (failed / harvested) is over: ask for a fresh clock directly. `start` would
+            # resume it ({"result": "expired"}) and hb_timed then POSTs retry anyway -- 2.5-5 s of GM round trips
+            # (rehearsal Day 7 script Mastery re-attempt: start phase 5.1 s).
+            prev = timed.last_result(cid) or {}
+            left = timed.seconds_left(prev) if prev.get("attempt_id") else None
+            res = timed.run(cid, self.sdir, log=say, **({"op": "retry"} if left is not None and left <= 0 else {}))
             say(f"[{cid}] result: {res}")
             set_state(self.base, **{f"{mode}_result": res})
             if res == "correct":

@@ -359,6 +359,8 @@ def main():
     out = {"cid": a.cid, "submitted": {}, "pool_warm": round(t0 - tw, 2)}
 
     body = _post({"op": a.op, "challenge": a.cid})
+    if a.op == "retry" and body.get("error") and not any(x in str(body.get("error")) for x in ("rate_limited", "exhausted")):
+        body = _post({"op": "start", "challenge": a.cid})  # retry refused (no finished attempt to re-roll): plain start
     # fresh clock if this attempt is already expired / past its deadline
     left = _deadline_left(body)
     # ...and a fresh clock when `start` hands back a FINISHED attempt (result CORRECT/INCORRECT, no deadline, no

@@ -412,3 +412,42 @@ try:
 finally:
     orchestrate.solvers.test_solver, orchestrate.say = _ots, _osay
 print("ok  accept: reuses the watcher's green result on identical code + cases; reruns the suite otherwise")
+
+# 18) re-attempts go straight to op retry once the mode's previous attempt is over (rehearsal Day 7 script Mastery: start ->
+#     expired -> retry cost a 5.1 s start phase); a live/unknown previous attempt keeps op start; hb_timed falls back
+#     to start when the GM refuses a retry.
+import datetime as _dt  # noqa: E402
+
+past = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=30)).isoformat().replace("+00:00", "Z")
+future = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(seconds=30)).isoformat().replace("+00:00", "Z")
+for prev, want in (({"attempt_id": "x", "deadline": past}, "retry"), ({"attempt_id": "x", "deadline": future}, "start"),
+                   (None, "start"), ({"deadline": past}, "start")):
+    seen = []
+    p18 = dict(patches)
+    p18[(timed, "run")] = lambda cid, sdir, log=None, op="start": (seen.append(op), "correct")[1]
+    p18[(timed, "last_result")] = lambda cid, _p=prev: _p
+    s18 = {k: getattr(*k) for k in p18}
+    try:
+        for (mod, name), fn in p18.items():
+            setattr(mod, name, fn)
+        assert ch.timed_stage("mastery") and seen == [want], (prev, seen)
+    finally:
+        for (mod, name), fn in s18.items():
+            setattr(mod, name, fn)
+posts = []
+
+
+def _fake_post_retry(payload, timeout=20):
+    posts.append(payload["op"])
+    return {"error": "no_attempt"} if payload["op"] == "retry" and len(posts) == 1 else {"error": "stop_here"}
+
+
+hb_timed._post, hb_timed._pool = _fake_post_retry, (lambda: None)
+sys.argv, sys.stdout = ["hb_timed.py", "c/time_trial", "solver", "--op", "retry"], _io.StringIO()
+try:
+    hb_timed.main()
+finally:
+    sys.argv, sys.stdout = _oargv, _ostdout
+    hb_timed._post, hb_timed._pool = _op, _opool
+assert posts == ["retry", "start"], posts
+print("ok  re-attempt: op retry only when the previous attempt's deadline passed; hb_timed retry refused -> start")
