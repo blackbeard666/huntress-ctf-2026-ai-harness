@@ -48,5 +48,8 @@ printf '#!/usr/bin/env bash\nGEM_HOME="%s/tools/gems" exec "%s/tools/gems/bin/zs
 echo "== uncompyle6 (Python bytecode decompiler, venv)"
 uv pip install -q --python .venv/bin/python uncompyle6 2>&1 | tail -1
 
+echo "== chepy (CyberChef-style decoders, venv; triage decodes long literals with it)"
+uv pip install -q --python .venv/bin/python chepy 2>&1 | tail -1
+
 echo "== rabin2 alias check (radare2 from apt)"
 command -v rabin2 >/dev/null && echo "  rabin2 ok"

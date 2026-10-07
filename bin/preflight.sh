@@ -150,6 +150,8 @@ for t in file xxd strings binwalk 7z readelf objdump nm c++filt rizin rabin2 ana
 done
 if [ -z "$miss" ]; then ok "all lane tools on PATH (binary, metadata, mobile, script, warmups)."
 else warn "missing lane tools:$miss  (install: setup/install_tools.sh + apt list at its top)"; fi
+if python3 -c "import chepy, lib.codec" >/dev/null 2>&1; then ok "triage decoders: chepy + lib.codec importable."
+else warn "triage decoders missing (chepy or lib.codec): run setup/install_tools.sh -- script triage won't decode literals"; fi
 
 # 4) Homebase SSH + credits -----------------------------------------------------------------------
 hdr "Homebase (optional low-latency compute for tight timed windows)"

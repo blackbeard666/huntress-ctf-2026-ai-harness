@@ -110,6 +110,9 @@ def _describe(path, depth=0, maxdepth=2):
         try:
             with zipfile.ZipFile(path) as z:
                 names = z.namelist()
+                if any(i.flag_bits & 1 for i in z.infolist()):   # AES/ZipCrypto: zipfile can't read it; 7z below does
+                    lines.append(f"{ind}  - encrypted archive with {len(names)} entries (pre-extracted below with 7z)")
+                    return lines
                 lines.append(f"{ind}  - archive with {len(names)} entries: {names[:12]}")
                 is_apk = any(n == "AndroidManifest.xml" for n in names)
                 if is_apk:
@@ -141,10 +144,28 @@ def _family_table(contract, conf):
     format kinds -- instead of 399 one-line questions."""
     import re as _re
     fams = {}
+    # Script ids are <lang>-<fixture>-<field> but Python fixtures are multi-token (python-embedded-runtime-relay-...):
+    # group by the question's artifact member instead, and take the field as what follows the group's common prefix.
+    by_art = {}
+    for aid, q in zip(contract.get("answer_ids", []), contract.get("questions", [])):
+        art = str(q.get("artifact") or "")
+        if "-" in aid and "->" in art:
+            by_art.setdefault(art, []).append(aid)
+    pre = {}
+    for art, ids in by_art.items():
+        toks = [i.split("-") for i in ids]
+        n = 0
+        while all(len(t) > n + 1 for t in toks) and len({t[n] for t in toks}) == 1:
+            n += 1
+        for i in ids:
+            pre[i] = (n, art.split("->")[-1].strip())
     for aid, q in zip(contract.get("answer_ids", []), contract.get("questions", [])):
         m = _re.match(r"((?:set\d+\.)?d\d+_[a-z]+)_(.*)", aid)          # binary: d04_analysis_machine
         if m:
             fam, field = m.group(1), m.group(2)
+        elif aid in pre and pre[aid][0] > 0:
+            toks = aid.split("-")
+            fam, field = "-".join(toks[:pre[aid][0]]) + f" ({pre[aid][1]})", "-".join(toks[pre[aid][0]:])
         elif "-" in aid:
             # script: <language>-<fixture>-<field...> (bash-chain-stage-count) or Day-1 <scenario>-<field> (resource-url)
             toks = aid.split("-")
@@ -178,18 +199,12 @@ def _recon(cid, root):
     import shutil as _shutil
     if not root.exists():
         return []
-    files = sorted(p for p in root.rglob("*") if p.is_file())[:80]
+    files = sorted(p for p in root.rglob("*") if p.is_file())[:400]
     lines = []
     if cid.startswith("script-analysis"):
         lang = {".ps1": "PowerShell", ".js": "JScript", ".jse": "JScript", ".bat": "Batch", ".cmd": "Batch",
                 ".vbs": "VBScript", ".vbe": "VBScript", ".py": "Python", ".pyc": "Python bytecode", ".sh": "Bash"}
-        for f in files:
-            l = lang.get(f.suffix.lower())
-            if not l:
-                continue
-            hits = _sh(["grep", "-n", "-a", "-E", "-m", "4", "(Codec|CODEC|Material|MATERIAL)", str(f)])
-            hits = " ; ".join(h.strip()[:150] for h in hits.splitlines()[:4])
-            lines.append(f"- `{f.relative_to(root)}` [{l}, {f.stat().st_size} B] {hits}")
+        lines += _script_decoded([f for f in files if f.suffix.lower() in lang], root, lang)
     elif cid.startswith("binary-reverse-engineering"):
         for f in files:
             ft = _sh(["file", "-b", str(f)])[:110]
@@ -216,6 +231,122 @@ def _recon(cid, root):
     return (["", "## Recon (standard tools, pre-run for you -- facts, not answers)", ""] + lines) if lines else []
 
 
+# Code-shape FACTS per language (keyword counts, never labels): the worker maps them to GM labels via the playbook.
+_SHAPE = {
+    "Batch": [("goto", r"(?i)\bgoto\b"), ("call :label", r"(?i)\bcall\s+:"), ("call set", r"(?i)\bcall\s+set\b"),
+              ("if errorlevel", r"(?i)\bif\s+(not\s+)?errorlevel"), ("if defined", r"(?i)\bif\s+(not\s+)?defined"),
+              ("if ==", r"(?i)\bif\s+(/i\s+)?(not\s+)?\S+==") , ("for %%", r"(?i)\bfor\s+(/[lf]\s+)?%%"),
+              ("for /l", r"(?i)\bfor\s+/l"), ("for /f", r"(?i)\bfor\s+/f"), ("delayed !v!", r"![A-Za-z_][\w]*!"),
+              ("EnableDelayedExpansion", r"(?i)enabledelayedexpansion"), ("%%v%% double", r"%%[A-Za-z_]\w*%%")],
+    "VBScript": [("Select Case", r"(?i)\bselect\s+case"), ("Do..Loop", r"(?i)^\s*do\b"), ("While..Wend", r"(?i)^\s*while\b"),
+                 ("For..Next", r"(?i)^\s*for\s+(?!each)"), ("For Each", r"(?i)^\s*for\s+each"),
+                 ("On Error Resume Next", r"(?i)on\s+error\s+resume\s+next"), ("Exit Do/For", r"(?i)\bexit\s+(do|for)"),
+                 ("Execute/Eval", r"(?i)\b(execute|executeglobal|eval)\b"), ("GetRef", r"(?i)\bgetref\b"), ("If", r"(?i)^\s*if\b")],
+    "JScript": [(".call(", r"\.call\("), (".apply(", r"\.apply\("), ("eval(", r"\beval\("), ("new Function", r"\bnew\s+Function\b"),
+                ("function decl", r"^\s*function\s+\w+"), ("var f = function", r"=\s*function\b"), ("=>", r"=>"),
+                ('obj["prop"]', r"\w\[\s*[\"']\w+[\"']\s*\]"), ("switch", r"\bswitch\s*\("), ("try", r"\btry\s*\{")],
+    "PowerShell": [("FromBase64String", r"FromBase64String"), ("-bxor", r"(?i)-bxor"), ("Reverse", r"(?i)\[array\]::reverse"),
+                   ("Invoke-Expression", r"(?i)invoke-expression|\biex\b"), ("scriptblock &", r"&\s*\$\w+")],
+    "Python": [("exec(", r"\bexec\("), ("eval(", r"\beval\("), ("getattr(", r"\bgetattr\("), ("lambda", r"\blambda\b"),
+               ("marshal", r"\bmarshal\b"), ("zlib", r"\bzlib\b")],
+    "Bash": [("eval", r"\beval\b"), ("printf -v", r"printf\s+-v"), ("declare -p", r"declare\s+-p"), ("${!indirect}", r"\$\{!"),
+             ("source/.", r"^\s*(source|\.)\s"), ("base64 -d", r"base64\s+-d"), ("arrays", r"\w+=\(")],
+}
+
+
+def _shape(text, lang):
+    import re as _re
+    out = []
+    for name, rx in _SHAPE.get(lang, []):
+        n = len(_re.findall(rx, text, _re.M))
+        if n:
+            out.append(f"{name}x{n}")
+    return ", ".join(out)
+
+
+def _magic(text):
+    """Literals with no declared codec: standard decoders (chepy) over long literals; keep readable results."""
+    import re as _re
+    try:
+        from chepy import Chepy
+    except Exception:  # noqa: BLE001
+        return []
+    hits = []
+    for lit in _re.findall(r"[\"']([^\"'\n]{24,})[\"']", text)[:12]:
+        for op in ("from_base64", "from_hex", "from_url_encoding", "from_decimal", "from_octal", "from_charcode"):
+            try:
+                b = getattr(Chepy(lit), op)().o
+            except Exception:  # noqa: BLE001
+                continue
+            b = b if isinstance(b, (bytes, bytearray)) else str(b).encode()
+            if len(b) >= 8 and sum(32 <= c < 127 for c in b) / len(b) > 0.95 and b.strip() != lit.encode():
+                hits.append(f"{op}: {b.decode('latin-1')[:300]}")
+                break
+    return hits[:4]
+
+
+def _js_plan(path, budget_ms=600):
+    """Run a .js fixture in the generic node vm sandbox (hctf/js_sandbox.js); return captured strings worth showing."""
+    import json as _json
+    node = shutil.which("node")
+    if not node:
+        return []
+    out = _sh([node, str(Path(__file__).with_name("js_sandbox.js")), str(path), str(budget_ms)], timeout=3)
+    try:
+        caps = _json.loads(out).get("captures", [])
+    except Exception:  # noqa: BLE001
+        return []
+    seen, keep = set(), []
+    for c in caps:
+        v = c["value"]
+        if v in seen or not any(k in v for k in ("v=", "steps", "{", "http")):
+            continue
+        seen.add(v)
+        keep.append(f"{c['via']} {c['name']}: {v[:500]}")
+    return keep[:3]
+
+
+def _script_decoded(files, root, lang, budget=6.0):
+    """Script lane: per file -- language, declared codec(s) decoded with lib.codec to the plan plaintext, JScript run
+    in a node vm sandbox, other long literals through standard decoders (chepy), plus code-shape keyword facts.
+    Facts and decoded payloads only; mapping them to answer fields stays the worker's job."""
+    import sys as _sys
+    import time as _time
+    _sys.path.insert(0, str(paths.ROOT)) if str(paths.ROOT) not in _sys.path else None
+    try:
+        from lib import codec as _codec
+    except Exception:  # noqa: BLE001
+        _codec = None
+    t0, lines, n_dec = _time.time(), [], 0
+    for f in files:
+        l = lang.get(f.suffix.lower())
+        text = f.read_text(errors="replace")
+        lines.append(f"- `{f.relative_to(root)}` [{l}, {f.stat().st_size} B]  shape: {_shape(text, l) or '-'}")
+        if _time.time() - t0 > budget:
+            continue
+        got = False
+        for c in (_codec.find_codecs(text) if _codec else []):
+            spec = f"{c['rep']}|{c['transform']}|{c['key']}"
+            if c["plain"]:
+                lines.append(f"    codec `{spec}` -> `{c['plain'][:600]}`")
+                got = True
+            else:
+                lines.append(f"    codec `{spec}` -> NOT decoded by lib.codec (new rep/transform? decode it yourself)")
+        if not got and l == "JScript":
+            for h in _js_plan(f):
+                lines.append(f"    js-sandbox {h}")
+                got = True
+        if not got:
+            for h in _magic(text):
+                lines.append(f"    decoded literal {h}")
+                got = True
+        n_dec += got
+    head = [f"**Decoded payloads: {n_dec}/{len(files)} files** (lib.codec for declared `Codec_`/`HUNTRESS-CODEC` pairs, "
+            "node vm sandbox for JScript, chepy for other literals). These are the fixtures' plans -- verify against the "
+            "code, then map plan keys to answer fields. `shape:` = keyword counts (facts for the code-shape labels).", ""]
+    return head + lines
+
+
 def _extract_all(files, dest, depth=2):
     """Unpack every zip artifact (password-protected and nested too) into `dest` so the worker starts on the members
     instead of spending turns on unzip / 7z password prompts (seen in 3 workers). Returns markdown lines."""
@@ -239,7 +370,7 @@ def _extract_all(files, dest, depth=2):
         members = sorted(p for p in out.rglob("*") if p.is_file())
         pwtxt = f" (password `{used.decode()}`)" if used else ""
         lines.append(f"- `{z.name}`{pwtxt} -> `{out}`: {len(members)} file(s)")
-        for m in members[:40]:
+        for m in members[:200]:
             lines.append(f"    - `{m.relative_to(out)}` ({m.stat().st_size} B)")
         if lvl + 1 < depth:
             todo += [(m, m.parent / (m.stem + "_x"), lvl + 1) for m in members if zipfile.is_zipfile(m)]

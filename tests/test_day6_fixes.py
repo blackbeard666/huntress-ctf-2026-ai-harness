@@ -49,3 +49,26 @@ for cls in (n for n in tree.body if isinstance(n, ast.ClassDef)):
     dup = [k for k, v in collections.Counter(f.name for f in cls.body if isinstance(f, ast.FunctionDef)).items() if v > 1]
     assert not dup, f"{cls.name} defines {dup} more than once"
 print("ok  orchestrate.py: no duplicate method definitions")
+
+# 5) submit guard: a rejected MULTI-field batch doesn't block resubmitting its values; a single-field rejection does.
+import json as _json, tempfile as _tf
+from pathlib import Path as _P
+_d = _P(_tf.mkdtemp())
+_start = {"attempt_id": "att1", "answer_ids": ["a-x", "a-y"],
+          "questions": [{"id": "a-x", "answer_format": {"kind": "exact_text"}}, {"id": "a-y", "answer_format": {"kind": "exact_text"}}]}
+_orig = (cli.cdir, cli.load, cli.confirmed_answers, cli.call)
+cli.cdir = lambda cid: _d
+cli.load = lambda cid, name: _start if name == "start.json" else None
+cli.confirmed_answers = lambda cid, att=None: {}
+(_d / "submissions.jsonl").write_text(_json.dumps({"attempt": "att1", "kind": "incorrect", "answers": {"a-x": "1", "a-y": "2"}}) + "\n"
+                                      + _json.dumps({"attempt": "att1", "kind": "incorrect", "answers": {"a-y": "2"}, "probe": True}) + "\n")
+_sent = []
+cli.call = lambda *a, **k: (_sent.append(a), {"http": 200, "body": {"result": "correct"}, "saved": []})[1]
+try:
+    kind, _b, probs = cli.submit("c", {"a-x": "1", "a-y": "3"})
+    assert kind is not None and not probs, f"multi-field rejection must not block its values: {probs}"
+    kind2, _b2, probs2 = cli.submit("c", {"a-y": "2"})
+    assert kind2 is None and any("already judged incorrect" in p for p in probs2), probs2
+finally:
+    cli.cdir, cli.load, cli.confirmed_answers, cli.call = _orig
+print("ok  submit guard: multi-field rejections don't block resubmits; single-field (probe) rejections do")

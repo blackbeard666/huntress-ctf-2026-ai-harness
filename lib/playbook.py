@@ -152,7 +152,7 @@ PLAYBOOK = [
              ".. Wend); an outer `If True Then` block and single-line opaque `If (2 > 1) Then` junk are noise. "
              "VBS `On Error Resume Next` .. Decode_ .. `On Error GoTo 0` (NOT direct / on_error_resume, both GM-rejected) "
              "is `error_guard` — the VBS twin of Batch `errorlevel_guard`: it checks Err after the Decode call and bails "
-             "(GM-confirmed Day 4 TT+Mastery). VBS `For p = 0 To 0` -> `for_once` (named like do_once/while_once; still unconfirmed).",
+             "(GM-confirmed Day 4 TT+Mastery). VBS `For p = 0 To 0` -> `for_once` (GM-confirmed D5/D6).",
         confirmed=tuple(K.BATCH_CONTROL_VOCAB) + tuple(c for c in K.VBS_CONTROL_VOCAB if c != "direct")
                  + (K.VBS_CONTROL_ON_ERROR_CONFIRMED,),   # error_guard: GM-confirmed Day 4
         rejected=tuple(K.BATCH_DEFINED_GUARD_REJECTED) + ("linear", "straight_line", "sequential", "goto",
@@ -164,31 +164,49 @@ PLAYBOOK = [
     ),
     PlaybookEntry(
         lanes=(SCRIPT,), families=("representation",),
-        rule="VBScript material representation = field 1 of `Const Codec_<id> = \"rep|transform|key\"`: "
-             "<decimal|hex>_<separator name> (pipe/dash/colon) or hex_compact; reversed_decimal = comma list "
-             "loaded in reverse.",
-        confirmed=tuple(K.VBS_REPRESENTATION_VOCAB),
+        rule="material representation = field 1 of the declared codec (`Codec_<id>`/`CODEC_<id> = \"rep|transform|key\"`) "
+             "copied VERBATIM -- never re-describe it. Spelling grammar: <decimal|hex>_<separator name> "
+             "(pipe/dash/colon/comma/dot/space/csv), hex_compact/hex_pairs/hex_escape/hex_literal/percent_hex, "
+             "base64_literal/base64_chunks/urlsafe_base64, integer_list/integer_tuple, reversed_<x> = loaded in reverse. "
+             "`lib.codec.REPS` lists every name seen D3-D6.",
+        confirmed=tuple(K.VBS_REPRESENTATION_VOCAB) + tuple(K.VBS_REPRESENTATION_SEEN),
     ),
     PlaybookEntry(
         lanes=(SCRIPT,), families=("transform",),
-        rule="VBScript reversible byte transform = field 2 of the `Codec_<id>` const, named for the ENCODE side "
-             "(subtract_modulo_256 decodes by ADDING the key).",
-        confirmed=tuple(K.VBS_TRANSFORM_VOCAB),
+        rule="reversible byte transform = field 2 of the declared codec, copied VERBATIM, named for the ENCODE side "
+             "(subtract_modulo_256 decodes by ADDING the key). `lib.codec.TRANSFORMS` lists every name seen D3-D6.",
+        confirmed=tuple(K.VBS_TRANSFORM_VOCAB) + tuple(K.VBS_TRANSFORM_SEEN),
     ),
     PlaybookEntry(
         lanes=(SCRIPT,), families=("expansion",),
-        rule="CLOSED vocab by generator TEMPLATE, NOT the surface join. The `h`-fragment pool (cfg=%%h0%%.., or a "
-             "FOR over %%h..) = `call_double`; FOR-over-other-pools = `for_indirect`; everything else = `delayed`. "
-             "Plain `percent` exists but % / CALL joins measured as `delayed`.",
+        rule="CLOSED vocab, decided by the fragment POOL NAME + the JOIN form in :HUNTRESS_INSPECT (mined from every "
+             "GM-verified D3-D6 single/TT case, 0 conflicts in 545): fragments named `h<N>` AND joined with `call set` "
+             "(bare or inside `for %%G in (..) do call set`) = `call_double` (33/33); a `for %%G in (..) do call set` "
+             "join over any OTHER pool (v_a/item/fragment/FrAg..) = `for_indirect` (122/122); everything else = "
+             "`delayed` (390/390) -- including h-pools joined with `!h0!!h1!..` (why D6's h-pools were delayed).",
         confirmed=tuple(K.BATCH_EXPANSION_VOCAB),
         rejected=("percent_expansion", "immediate", "call-double", "double_call"),
-        closed=True, examples=("h-pool call set->call_double", "FOR over v_a pool->for_indirect"),
+        closed=True, examples=("h0..h3 + call set->call_double", "h0..h3 + !h0!!h1!->delayed",
+                                "for %%G .. call set over v_a/item->for_indirect"),
+    ),
+    PlaybookEntry(
+        lanes=(SCRIPT,), families=("style",),
+        rule="JScript code-style labels (closed sets in the question text; GM-confirmed D2-D6): "
+             "FUNCTION-style of the named function: `function f(` = declaration, `var f = function(` = "
+             "anonymous_expression, `var f = function f_body(` = named_expression. INVOCATION-style = how the "
+             "recover/inspect body invokes the next top-level function: plain `f(x)` = direct, `f.call(..)` (also via a "
+             "local `invoke` helper that does `block.call`) = call, `f.apply(..)` = apply. PROPERTY-style of the "
+             "descriptor reads: only `o.k` = dot, only `o[\"k\"]` = bracket_literal, both = mixed.",
+        confirmed=("declaration", "named_expression", "anonymous_expression", "direct", "call", "apply", "dot",
+                   "bracket_literal", "mixed"),
+        closed=True, examples=("var decode_x = function decode_x_body(s)->named_expression",
+                               "invoke.call(null, decode_x, s)->call", "o.steps + o[\"adapter\"]->mixed"),
     ),
     PlaybookEntry(
         lanes=(SCRIPT,), families=("attack",),
         rule="MITRE ATT&CK technique id from the step-graph ROLE. Execution roles map to the host language: batch "
              "launcher/staged_chain=T1059.003, JScript launcher/staged_chain=T1059.007, VBScript launcher/staged_chain="
-             "=T1059.005. A graph ending in a "
+             "=T1059.005, bash=T1059.004, python=T1059.006, powershell=T1059.001. A graph ending in a "
              "handoff is `staged_chain` even if next_stage is a .js file (not 'relay').",
         rejected=tuple(sum((list(v) for v in K.JSCRIPT_ATTACK_REJECTED.values()), [])) + ("T1005", "T1560", "T1119"),
         examples=("batch launcher->T1059.003", "jscript staged_chain->T1059.007", "vbscript launcher->T1059.005",

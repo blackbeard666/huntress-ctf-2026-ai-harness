@@ -5,6 +5,25 @@ description: Huntress script-analysis lane - static and sandboxed analysis of Po
 
 **Installed: box-js, js-beautify, webcrack, node, pwsh, olevba, decompyle3 / uncompyle6 / xdis (venv), ilspycmd (.NET), base64/xxd/7z.**
 
+# Fast path: the "Huntress Script Triage" fixtures (every day so far, D1-D6)
+Each fixture hides a self-describing PLAN (`v=N|steps=..|adapter=..|campaign_id=..|<indicators>`, or a JSON object)
+behind a declared codec. The work is: plan -> plan-verbatim fields; steps -> role -> ATT&CK; code shape -> style labels.
+1. **Read triage.md's "Decoded payloads" section first.** Triage already ran `lib.codec` on every
+   `Codec_`/`CODEC_`/`HUNTRESS-CODEC` pair, a node vm sandbox on every JScript file and standard decoders (chepy) on
+   other long literals: each file's plan plaintext and a `shape:` line (keyword counts) are there. Verify a couple
+   against the code; don't re-derive them by hand.
+2. **solve.py**: `from lib import codec` -> `codec.find_codecs(text)` gives `[{id, rep, transform, key, material,
+   plain}]` per file; `codec.plan_kv(plain)` -> dict. JScript (no codec const): run `hctf/js_sandbox.js <file>`
+   with `node` (one subprocess; prints the captured plan JSON) or parse the arrays with `codec.int_array(text, radix)`
+   -- READ THE RADIX from the code. Anything `lib.codec` returns None for is a NEW rep/transform: decode it yourself
+   and propose it under `## Proposed lib additions` in NOTES.md.
+3. **Map fields**: answer ids are `<lang>-<fixture>-<field>` (Python `python-<carrier...>-<role>-<field>`); each
+   question's `artifact` names the member. Plan-verbatim fields copy exactly; role from `steps`; ATT&CK from role +
+   host language; representation/transform = codec fields 1/2 VERBATIM; batch expansion/control, VBS control and
+   JScript styles follow the playbook rules (inlined in your prompt) -- the `shape:` line has the keyword facts.
+4. A new host language each day so far: its codec usually decodes already; spend your thinking on its CODE-SHAPE
+   fields (apply the naming laws: `<keyword>_guard`, `<keyword>_once`, `<keyword>_<action>`).
+
 # Never run specimens as-is
 Read them statically first. To peel a layer dynamically, **replace the sink** and run with a timeout and no network:
 - PowerShell: replace `Invoke-Expression`/`IEX`/`iex`/`.Invoke()`/`& (` with `Write-Output`, then
@@ -28,6 +47,7 @@ Read them statically first. To peel a layer dynamically, **replace the sink** an
 - Keep quotes out of the answer unless the format says otherwise; respect `trim`.
 
 # Scenario and ATT&CK mapping (pick from `accepted_values` only)
+For the fixture roles, the GM-confirmed role -> technique table in reference/techniques/script-analysis.md and the playbook WINS (e.g. launcher/staged_chain = T1059.<host language>, downloader/stager T1105, dropper T1140). The table below is only for a genuinely new behaviour no earlier day covered.
 | Behaviour | Typical technique |
 |---|---|
 | crypto-miner, xmrig, pool URL, wallet | T1496 Resource Hijacking |

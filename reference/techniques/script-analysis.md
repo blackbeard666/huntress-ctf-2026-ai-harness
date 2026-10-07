@@ -25,7 +25,7 @@ Each miss below cost one failed timed attempt + a ~45 s generalize cycle in the 
 ## Recognition cues -> first move
 | You see | First move |
 |---|---|
-| `evidence.zip`, "method=AES Encrypted" | `7z x -pinfected -o<dir> evidence.zip` (Python zipfile cannot read AES). Mastery may be a zip inside a zip; walk it once. |
+| `evidence.zip`, "method=AES Encrypted" | Already extracted by triage (`work/extracted/`, password `infected`) and every plan decoded in triage.md -- start from that. In solve.py open members with `lib.common.read_member` (Python zipfile cannot read AES). Mastery may be a zip inside a zip; walk it once. |
 | Prior-day languages in the contract | The contract is cumulative, but derive every family from TODAY's bytes with the shared codec method below (never copy/run an old solver). The prior-day families are mechanical once the codec table is applied; spend thinking on the new language. |
 | `.ps1` with `$encodedMaterial = [Convert]::FromBase64String('..')` + `$reconstruct` + `$nativeTypes` | Run `base64 -d` -> JSON descriptor (short keys a/b/c..), giving url/wallet/mutex/UA/file/ext/note. Match indicators by SHAPE, not key. `$nativeTypes` gives the scenario: Process/Registry+wallet=resource, ZipFile/HttpWebRequest=collection, Aes/DirectoryInfo=impact. `$reconstruct` was usually identity, sometimes reverse/XOR. |
 | `.js` WSH, `decode_*`/`recover_*`/`inspect_*`, XOR key arrays, `"52:90:.."` strings | Run each file in an empty `node` `vm` context (no require/ActiveXObject), with `eval` swapped for a capture. Call the top-level functions and keep the first object that has `steps`. Read the styles off the `inspect_*` body. |
@@ -36,19 +36,20 @@ Each miss below cost one failed timed attempt + a ~45 s generalize cycle in the 
 | Real `.pyc` / PyInstaller / pyarmor (not seen yet) | `lib.pyc.recover_python(path)` (pyinstxtractor-ng + decompyle3, `dis` fallback). See skills/script-analysis. |
 | Any `Codec_` key like `ba` / `0a` | This is a hex byte, not text. Transforms are named for the ENCODE side: `subtract_modulo_256` decodes by ADDING, `add_modulo_256` by SUBTRACTING. `rolling_xor` = c ^ previous CIPHER byte, seeded with the key. |
 
-## Codec table (`Codec_<id>='<rep>|<transform>|<key>'`; reps and transforms combine freely; seen D2-D6)
-Rep = how the Material is written -> decode it to bytes first:
-- `base64_literal` / `base64_chunks` (join chunks in order) -> `base64 -d`
-- `hex` / `hex_colon` / `hex_dash` -> strip separators, `xxd -r -p`
-- `integer_tuple` (decimal list) -> bytes of the integers
-- `plain_fragments` (batch `set fragN=`) -> join in index order, SKIP the join line (see pitfall below)
-Transform = then undo it, key is hex:
-- `identity` -> nothing; `reverse` -> reverse the bytes; `reverse_then_xor` -> reverse, then xor
-- `single_byte_xor` -> xor every byte with the key
-- `repeating_key_xor` -> cycle the key; a multi-byte key may be written as a COMMA list `55,51,74` (D6 bash)
-- `add_modulo_256` -> SUBTRACT the key mod 256
-- `rolling_xor` -> key changes per byte (try both variants; the right one makes the plaintext start `v=`)
-Check: the decoded plaintext starts `v=` (or `{` JSON). If not, the codec reading is wrong.
+## Codec table (`Codec_<id>='<rep>|<transform>|<key>'`, batch `rem HUNTRESS-CODEC:<rep>|<transform>`; seen D3-D6)
+**Already done for you:** triage.md's "Decoded payloads" section runs `lib.codec` on every declared codec (and a node
+vm sandbox on JScript), so every fixture's plan plaintext is there before you start. In solve.py call
+`lib.codec.find_codecs(text)` / `lib.codec.decode(material, rep, transform, key)` instead of re-writing decoders
+(pure Python, Homebase-safe, 1969/1969 D3-D6 codecs, unknown names -> None). Only a NEW rep/transform needs your code
+(then list it under `## Proposed lib additions` in NOTES.md).
+- Reps (how the bytes are WRITTEN): base64_literal/_chunks, urlsafe_base64; hex_pairs/_compact/_colon/_dash/_escape
+  (`\x`)/_literal (`0x`), percent_hex (`%xx`); decimal_bytes/_comma/_dash/_pipe/_dot/_colon/_space/_csv, integer_list/
+  _tuple, octal_space; reversed_text/_hex/_decimal/_integer_list (loaded in reverse); plain_fragments/split_fragments.
+- Transforms (named for the ENCODE side; key is hex, a multi-byte key may be a COMMA list): identity, reverse/
+  reverse_bytes, single_byte_xor, repeating_key_xor, reverse_then_xor, rolling_xor (2 flavours), add_modulo_256 (decode
+  SUBTRACTS), subtract_modulo_256 (decode ADDS); batch carries the parameter in the name: xor_5a, add_7 (decimal),
+  rotate_left (undo = rotate right), reverse_xor.
+- Check: the decoded plaintext starts `v=` (or `{` JSON). If not, the codec reading is wrong.
 
 ## Day by day
 **D1 Power Play (PowerShell, 15 ids)**: 3 PS fixtures (resource/collection/impact), each with a base64 JSON descriptor.
@@ -122,10 +123,11 @@ Check: the decoded plaintext starts `v=` (or `{` JSON). If not, the codec readin
   - launcher/staged_chain/relay follow the HOST LANGUAGE: T1059.003 batch, .004 bash, .005 VBS, .006 python, .007 JScript (.001 PS predicted, never asked).
   - PS scenarios: resource_hijacking T1496, synthetic_collection T1555.003, synthetic_impact T1486.
   - REJECTED: T1218.010, T1620, T1027.009, T1005, T1560, T1119, T1074(.001); stager T1059.007; dropper T1105.
-- **Batch expansion** (closed set: percent/delayed/call_double/for_indirect; the GM chooses by generator template):
-  - GM-confirmed counts: D3-D5 had exactly ONE `call_double` per day (the `h`-fragment pool fixture), D6 had NONE --
-    its h-pool fixtures were `delayed`. So "h-pool = call_double" is NOT reliable. Seen consistently: a FOR loop over a
-    fragment pool = for_indirect; plain `%` joins = delayed. Treat expansion as an uncertain label: submit it alone.
+- **Batch expansion** (closed set; mined from EVERY GM-verified D3-D6 single/TT case, 0 conflicts in 545):
+  - fragments named `h<N>` AND joined with `call set` (bare, or `for %%G in (..) do call set`) = `call_double` (33/33)
+  - `for %%G in (..) do call set "cfg=%%cfg%%%%<pool>%%G%%"` over any OTHER pool (v_a/item/fragment/FrAg) = `for_indirect` (122/122)
+  - everything else = `delayed` (390/390), INCLUDING h-pools joined with `!h0!!h1!..` (why D6's h-pools were delayed
+    and the old "h-pool = call_double" shortcut failed in 3/3 replays).
   - Fragment JOINER pitfall (D6): a line like `set "item9=%item0%%item1%..."` is the JOIN of the fragments, not
     fragment 9 -- skip `set` lines whose value references the other fragments, or the decoded value gets the
     `%item0%...` tail glued on (a wrong Mastery answer on D6).
@@ -136,10 +138,15 @@ Check: the decoded plaintext starts `v=` (or `{` JSON). If not, the codec readin
   - goto_dispatch; call_subroutine; if_guard (`if defined X`)
   - REJECTED: linear, straight_line, sequential, goto, goto_label, double_pipe, pipe, ampersand, call_label, dead_label, errorlevel, opaque_branch, + ~40 "if defined" synonyms.
 - **VBS control**: direct, select_case, do_once, while_once, error_guard, for_once. REJECTED: do_loop, do_exit, while_wend, while_loop, on_error_resume.
-- **Codec labels**: representation/transform = Codec const fields 1/2 verbatim. Accepted so far:
-  - representation: decimal_pipe/_dash/_comma, hex_compact/_colon/_dash, reversed_decimal/_hex, base64_chunks
-  - transform: subtract_modulo_256, repeating_key_xor, rolling_xor, single_byte_xor, reverse_bytes, reverse_then_xor, identity
-  - Spellings differ per language (Python showed `decimal_csv`, batch `decimal_bytes|reverse_xor`), so read the const, don't translate.
+- **Codec labels**: representation/transform = the codec const's fields 1/2 copied VERBATIM (every spelling in
+  `lib.codec.REPS`/`TRANSFORMS` came straight from a const; GM accepted every one asked so far). Spellings differ per
+  language (Python `decimal_csv`, batch `decimal_bytes|reverse_xor`): read the const, never translate.
+- **JScript styles** (closed sets in the question text; GM-confirmed D2-D6):
+  - function-style: `function f(` = declaration; `var f = function(` = anonymous_expression; `var f = function f_body(` = named_expression.
+  - invocation-style: how the recover/inspect body invokes the next top-level function: `f(x)` = direct, `f.call(..)`
+    (also through a local `invoke` helper doing `block.call`) = call, `f.apply(..)` = apply.
+  - property-style: descriptor reads only `o.k` = dot, only `o["k"]` = bracket_literal, both = mixed.
+  - triage's `shape:` line counts `.call(` / `.apply(` / `obj["prop"]` / function forms per file (facts, not labels).
 - **NAMING LAWS** (proven on if_guard, error_guard, do_once, pe_cli). When an exact_text label is unknown, compose it from the SHORT language keyword:
   - conditional/bail-out = `<keyword>_guard` (errorlevel_guard, if_guard, error_guard)
   - run-once loop = `<keyword>_once` (do_once, while_once, for_once)
@@ -148,9 +155,9 @@ Check: the decoded plaintext starts `v=` (or `{` JSON). If not, the codec readin
 
 ## Pitfalls that cost time
 - **Probing synonyms instead of deriving.** D3 lost ~1.5 h and two fields hit the 6-wrong cap on `if defined`. Apply the naming laws first; `hctf labels` seeds candidates from lib/playbook.py.
-- **Per-set POST is all-or-nothing.** One wrong field makes every value in that submit look rejected locally (d2: a multi-80 batch failed, so retry singly with `--force`). Bulk-submit the confident fields, then probe uncertain label fields ONE per submit. The wrong cap is per field, so spread probes across files of the same construct.
+- **Per-set POST is all-or-nothing.** One wrong field fails the whole batch; `--from-solver` bisects and prints the rejected id(s). A failed multi-field batch no longer blocks resubmitting its other values (no `--force` needed). Probe uncertain label fields ONE per submit. The wrong cap is per field, so spread probes across files of the same construct.
 - **Generic ATT&CK guesses** (d1 collection, d2 launcher/stager/dropper): use the role->ATT&CK table. LOLBin adapter names (regsvr32) do NOT change the technique.
-- **Naive surface reading of batch expansion** gave wrong answers. Trust the GM-measured template rule above.
+- **Batch expansion shortcuts** ("h-pool = call_double", "`%` join = percent") gave wrong answers. Use the mined pool+join rule above.
 - **cmd arg parsing**: `%item0%` is a variable, not `%0`+`item`. CRLF/LF mixes and `SeT` casing occur.
 - **Bash Codec key**: comma-separated multi-byte keys parsed as contiguous hex silently give key [0] and garbage. Use `lib.scripts.codec_key()`.
 - **stage_count != len(steps)** (d6). Read the plan field.

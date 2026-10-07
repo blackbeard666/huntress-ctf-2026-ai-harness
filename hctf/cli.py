@@ -480,6 +480,10 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
     # probe=True submissions (harness reuse/localization batches) prove nothing about any single value when the
     # batch is incorrect, so they never feed the "already judged incorrect" / per-field wrong-count guards.
     same_attempt = [h for h in history if h.get("attempt") == att and not h.get("probe")]
+    # Only a SINGLE-field rejection says anything about that one value (probe or not). A rejected multi-field batch
+    # only says "something in here is wrong": replays 3-5 had every worker resubmit its fixed 399-field batch, get
+    # refused locally ("already judged incorrect" x398), look up --help and resubmit with --force (6-16 s each).
+    judged = [h for h in history if h.get("attempt") == att and len(h.get("answers") or {}) == 1]
     confirmed = confirmed_answers(cid, att)
 
     # Wrong-answer accounting. Flags are brute-force-protected (hard cap across the attempt). Structured
@@ -488,7 +492,7 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
     from collections import Counter
     field_wrong = Counter()
     flag_wrong = 0
-    for h in same_attempt:
+    for h in judged:
         if h.get("kind") != "incorrect":
             continue
         for k, v in h.get("answers", {}).items():
@@ -506,7 +510,7 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
         prob = _format_problem(str(v), qmap.get(k, {}))
         if prob:
             problems.append(f"{k}: {prob}")
-        for h in same_attempt:
+        for h in judged:
             if h.get("kind") == "incorrect" and h["answers"].get(k) == v:
                 problems.append(f"{k}: value {v!r} already judged incorrect in this attempt")
                 break

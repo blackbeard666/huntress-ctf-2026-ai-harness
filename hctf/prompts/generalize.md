@@ -44,7 +44,8 @@ Do this:
    GM ships ONE download per set, often all named the same; pair each set to its bytes by the contract's
    `artifacts[].sha256`, not by file name (use `lib.common.container_by_sha` / `delivery_missing`), or you will
    answer set 2 from set 1's bytes. Import only: stdlib, `lib.*`, pyelftools, pefile, capstone, pycryptodome,
-   pyzipper, androguard, droidasc, binary-refinery, and shelling out to node/c++filt/unzip. Avoid anything heavier.
+   pyzipper, androguard, droidasc, binary-refinery (`lib.codec` decodes every declared script codec). The only
+   subprocess allowed is `node` (JScript vm sandbox, like `hctf/js_sandbox.js`) -- no 7z/jadx/apt tools.
 5. Do NOT submit and do NOT start/retry any mode — the orchestrator retries with a fresh variant once you exit.
    Add ONE line to `{solver_dir}/NOTES.md` starting `VARIANT AXIS:` (what differed in this variant vs the cases that passed, and the parse rule that covers it) -- the post-run ratchet collects these into the technique log. The harness ends your session the moment the
    failing case passes with no regressions — don't spend time on extra robustness checks after the fix.

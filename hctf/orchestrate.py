@@ -155,8 +155,37 @@ def technique_log(lane):
     head = text.split("\n## ", 1)[0].strip().splitlines()[1:]          # drop the title line
     summary = "\n".join(l for l in head if l.strip())[:2500]
     out = f"`{f.relative_to(ROOT)}` -- its summary (OBSERVATIONS from earlier days, not guarantees):\n{summary}"
+    # The sections workers otherwise re-read in a second call (replays: 13 s, or only after the evidence at 56 s).
+    for sec in ("Recognition cues", "Codec table"):
+        body = _log_section(text, sec, 4500)
+        if body:
+            out += f"\n\n{body}"
     axes = variant_axes(lane)
-    return out + (f"\n{axes}" if axes else "")
+    return out + (f"\n\n{axes}" if axes else "")
+
+
+def _log_section(text, title, cap):
+    m = re.search(r"^## " + re.escape(title) + r".*?(?=^## |\Z)", text, re.M | re.S)
+    return m.group(0).strip()[:cap] if m else ""
+
+
+# Owner: parallel per-language subagents are an EXPERIMENT (measured by replay) -- default is the serial worker.
+SCRIPT_SUBAGENTS = os.environ.get("HCTF_SCRIPT_SUBAGENTS", "0") == "1"
+
+
+def subagent_policy(lane):
+    if SCRIPT_SUBAGENTS and lane == "script-analysis":
+        return ("Subagents (EXPERIMENT, script lane): the contract covers several host languages and writing every "
+                "per-language analyser serially is the slowest part of this lane (~300 chars/s of code). Once triage's "
+                "decoded plans and the Variant axes are read: write ONE brief file (contract answer-id grammar, the "
+                "per-language function signature `analyse(paths, contract) -> {answer_id: value}` in "
+                "`solver/lang_<language>.py`, `lib.codec` for every declared codec, the playbook rules), then launch one "
+                "subagent per host language in ONE message (each owns only its `lang_<x>.py`) and, meanwhile, write the "
+                "`solve.py` dispatcher yourself; then ONE blocking wait -- never poll. Submit from solve.py as usual.")
+    return ("Subagents: none by default -- one worker writing one solver is fastest when triage already decoded the "
+            "payloads. Only if several genuinely independent NEW formats each need real reverse engineering: at most 2 "
+            "subagents, launched in ONE message with ONE shared brief file, then ONE blocking wait for both -- never "
+            "poll (a replay lost 61 s writing briefs one by one and 79 s busy-waiting on a subagent).")
 
 
 def variant_axes(lane):
@@ -740,7 +769,8 @@ class Chain:
             prompt = workers.render("single", name=self.name, cid=cid, lane=self.lane, techniques=technique_log(self.lane),
                                     persona=workers.lane_persona(self.lane), playbook=workers.lane_playbook(self.lane),
                                     chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
-                                    timed_contracts="\n".join(timed_info) or "  - (none: Single Solve only)", extra=extra)
+                                    timed_contracts="\n".join(timed_info) or "  - (none: Single Solve only)",
+                                    subagent_policy=subagent_policy(self.lane), extra=extra)
             set_state(self.base, stage="single:solving", launches=n + 1)
             heavy = self.lane in ("binary-reverse-engineering", "binary")
             ready, done_evt, watch = threading.Event(), threading.Event(), None

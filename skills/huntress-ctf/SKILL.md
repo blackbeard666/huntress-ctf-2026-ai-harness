@@ -8,8 +8,9 @@ description: Huntress CTF 2026 "AI Arena" playbook for harness workers. Covers t
    `answer_format` (`kind` + `syntax`) and `normalization`. `answer_ids[i]` belongs to `questions[i]`. The title and
    prompt are hints, often puns ("sixty-four is a good base").
 2. **Look at the real bytes** in `<mode dir>/artifacts/latest/` (sha256-verified). Never retype bytes by hand.
-   First moves: `file *`, `exiftool -j *`, `7z l x.zip`, `xxd | head`, `strings -n 6`. Unzip into a working dir *next to*
-   the artifacts (`<mode dir>/work/`), never over them.
+   `triage.md` already did the first moves (file types, archives extracted with passwords into `<mode dir>/work/extracted/`,
+   lane recon such as decoded script payloads / readelf / HCFG offsets): start from it, verify, don't re-run them. For
+   anything triage didn't cover: `file *`, `exiftool -j *`, `xxd | head`, `strings -n 6`; unzip into `<mode dir>/work/`.
 3. **Answer each question from evidence by writing it into `<challenge>/solver/solve.py`** (skill `solver-authoring`);
    prototype at the shell first. Log one terse `hypothesis | evidence | result` line per step in `<mode dir>/notes.md`.
 4. **Submit from the solver**: `hctf submit <id> --from-solver` (or `hctf submit <id> '{"<answer_id>": "<value>"}'` for a

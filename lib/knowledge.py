@@ -94,6 +94,8 @@ BATCH_ROLE_ATTACK_CONFIRMED = {
     "uploader": "T1041", "launcher": "T1059.003", "staged_chain": "T1059.003",  # relay (handoff to .js) = staged_chain
 }
 # Batch "expansion form" vocabulary (Day 3): GM accepted bare `delayed`, `for_indirect`, `call_double`.
+# RULE (mined 2026-10-07 from every GM-verified D3-D6 case, 0 conflicts): `h<N>` pool + `call set` join = call_double;
+# `for %%G .. do call set` over any other pool = for_indirect; everything else (incl. h-pool `!h0!!h1!` joins) = delayed.
 # Rejected spellings/values: percent, percent_expansion, immediate, call-double, double_call. The GM's per-file value is
 # NOT the naive join-line form (percent/CALL joins were `delayed`); see challenges/day03/scripting-expansion-pack notes.
 BATCH_EXPANSION_VOCAB = ("percent", "delayed", "call_double", "for_indirect")
@@ -128,7 +130,7 @@ VBS_ROLE_ATTACK_CONFIRMED = {
 # (While p < 1 .. p = p + 1 .. Wend). An outer `If True Then .. End If` wrapper and single-line opaque
 # `If (2 > 1) Then x = "left" Else ...` junk are NOISE (still select_case / do_once / direct).
 # Rejected: do_loop, do_exit (Do form); while_wend, while_loop (While form).
-VBS_CONTROL_VOCAB = ("direct", "select_case", "do_once", "while_once")
+VBS_CONTROL_VOCAB = ("direct", "select_case", "do_once", "while_once", "for_once")
 # The `On Error Resume Next` / Decode_ / `Err.Number` capture / `On Error GoTo 0` / `If e <> 0 Then Err.Raise ..`
 # error-trap wrapping the Decode call. CONFIRMED by the GM: **error_guard** (Day 4 Time Trial + Mastery, attempt
 # 03ab2787, 2026-10-04) -- the VBS twin of Batch `errorlevel_guard` (`if errorlevel 1 exit /b`): the construct
@@ -142,8 +144,8 @@ VBS_CONTROL_ON_ERROR_REJECTED = ("direct", "on_error_resume")
 VBS_CONTROL_ON_ERROR_CANDIDATES = ("error_guard", "on_error_guard", "err_guard", "on_error_resume_next", "on_error",
                                    "resume_next", "error_trap", "error_resume", "try_catch", "error_handler")
 VBS_CONTROL_ON_ERROR = VBS_CONTROL_ON_ERROR_CONFIRMED
-# `For pass = 0 To 0` around the Decode_ call (TT 0663ae04 memory-stage.vbs); not yet GM-judged. Named like the other
-# run-once loops (`<keyword>_once`).
+# `For pass = 0 To 0` around the Decode_ call = `for_once` -- GM-CONFIRMED (D5/D6 confirmed.json, 13+ fields). Named
+# like the other run-once loops (`<keyword>_once`).
 VBS_CONTROL_FOR_ONCE_CANDIDATES = ("for_once", "for_next", "for_loop")
 VBS_CONTROL_FOR_ONCE = VBS_CONTROL_FOR_ONCE_CANDIDATES[0]
 # "material representation" / "reversible byte transform" = the first two fields of `Const Codec_<id> = "rep|transform|key"`
@@ -152,11 +154,11 @@ VBS_CONTROL_FOR_ONCE = VBS_CONTROL_FOR_ONCE_CANDIDATES[0]
 # reverse_bytes.
 VBS_REPRESENTATION_VOCAB = ("decimal_pipe", "decimal_dash", "hex_compact", "hex_colon", "reversed_decimal")
 VBS_TRANSFORM_VOCAB = ("subtract_modulo_256", "repeating_key_xor", "rolling_xor", "single_byte_xor", "reverse_bytes")
-# Seen in Time Trial 3fd867ae's Codec_ consts (not yet GM-judged): base64_literal (Load_ = Base64_<id>(Material)),
-# base64_chunks (Load_ re-joins 4 Mid() slices, then Base64_), hex_dash; reverse_then_xor (result(UBound-i) = s(i) Xor k),
-# identity (result(i) = s(i)).
-VBS_REPRESENTATION_SEEN = ("base64_literal", "base64_chunks", "hex_dash")
-VBS_TRANSFORM_SEEN = ("reverse_then_xor", "identity")
+# GM-CONFIRMED since (D4-D6 vbscript-*-representation/-transform in confirmed.json): base64_literal, base64_chunks,
+# hex_dash, decimal_comma, reversed_hex; reverse_then_xor, identity, add_modulo_256. The answer is ALWAYS the codec
+# const's field verbatim; lib.codec.REPS/TRANSFORMS hold every name seen in the evidence (D3-D6).
+VBS_REPRESENTATION_SEEN = ("base64_literal", "base64_chunks", "hex_dash", "decimal_comma", "reversed_hex")
+VBS_TRANSFORM_SEEN = ("reverse_then_xor", "identity", "add_modulo_256")
 
 # cmd percent expansion: only %N, %~<mods>N and %* are batch arguments. `%item0%` is a VARIABLE even though the name
 # ends in a digit. Time-trial variants name their fragments item0..itemN (Expansion Pack TT fde517bd).

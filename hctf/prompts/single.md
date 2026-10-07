@@ -13,7 +13,7 @@ answers the question, run it — do not recreate `strings`, `unzip`, or a parser
 - Name: {name}
 - Single Solve id: `{cid}`   lane: `{lane}`
 - Workspace: `{chal_dir}`
-  - `triage.md`: deterministic no-LLM analysis. Its top `## STATUS` says how many answers reuse ALREADY got accepted and lists the REMAINING answer_ids (work only on those); its `## Extracted` section lists every archive member already unpacked (passwords applied) under `work/extracted/` -- read those, don't unzip again. Read its first ~80 lines, then `grep` it for specifics; never read it whole. Verify, don't re-discover.
+  - `triage.md`: deterministic no-LLM analysis. Its top `## STATUS` says how many answers the GM ALREADY accepted and lists the REMAINING answer_ids (work only on those); its `## Extracted` section lists every archive member already unpacked (passwords applied) under `work/extracted/` -- read those, don't unzip again. Read its first ~80 lines, then `grep` it for specifics; never read it whole. Verify, don't re-discover.
   - `contract.json`: the GM start response (prompt, questions[] aligned with answer_ids[], answer_format, normalization)
   - `artifacts/latest/`: the downloaded bytes (sha256-verified against the GM)
   - `notes.md`: your running log — one terse line per hypothesis | evidence | result (incl. dead ends); never let it delay a submit
@@ -46,8 +46,8 @@ spend is on the critical path. The harness ENDS your session automatically the m
    subprocesses, no brute force over every decoder/radix/key per set; stop at the first candidate that matches the
    answer_format. **It runs ON THE HOMEBASE VM** (python3 + pip deps only: stdlib, `lib.*`, pyzipper, pyelftools,
    pefile, capstone, pycryptodome, androguard; NO 7z/apt tools): open zips with `lib.common.read_member` (pyzipper,
-   CTF passwords), never `subprocess` 7z/jadx/etc. Check it on the Mastery contract you were given: `time hctf solver-run <mastery-id>` if its artifacts
-   exist, else time it on a synthetic copy of your artifact repeated N times.
+   CTF passwords), never `subprocess` 7z/jadx/etc. -- the one allowed subprocess is `node` for a JScript vm sandbox. Check it on the Mastery contract you were given: `time hctf solver-run <mastery-id>` if its artifacts
+   exist; otherwise don't build synthetic inputs -- the first timed variant measures it.
 3. **Submit from the solver:** `hctf submit {cid} --from-solver` (or `hctf submit {cid} '{"<answer_id>": "<value>"}'` for
    a value you are still probing). Exit codes: 0 correct, 1 incorrect, 2 accepted (partial; more remain), 4 refused
    locally (read the reason). Never guess: an incorrect answer means "investigate more". The harness caps wrong answers.
@@ -57,13 +57,13 @@ spend is on the critical path. The harness ENDS your session automatically the m
 Read the Mastery `contract.json` named above NOW (it's on disk; no attempt needed): its `questions[].artifact` names
 (e.g. `delivery 2: x.apk`) and set count are exactly what your solver must handle; `hctf submit --from-solver` runs a
 Mastery dry run on those names and WARNS if any set comes back empty — fix that before you stop.
-Subagents: NONE when only one new family/format is involved (that's the normal case -- prior days are already solved
-by reuse). If several genuinely independent new families need work, at most 2 subagents, launched in ONE message with
-ONE shared brief file, then ONE blocking wait for both -- never poll (a replay lost 61 s writing briefs one by one and
-79 s busy-waiting on a subagent).
+{subagent_policy}
 A decoded value that matches the field's `answer_format` IS the answer: put it in solve.py and submit. Don't try to
 reproduce or reach a backend/live service to "confirm" it (one worker lost 158 s that way after decoding at 26 s).
-Don't read other challenges' worker logs (`worker-*.log`) or old notes for answers — prior solvers were already run.
+Earlier days' solver code may be read to borrow a technique, but the distilled form is already in front of you (the
+inlined technique log, `lib/*` helpers such as `lib.codec`, triage's decoded sections) -- don't go looking for prior
+solvers (replays lost 13-24 s per run doing that), never run one on today's challenge, and don't read other
+challenges' worker logs.
 Budget: aim for CORRECT within 60 s on a familiar family and 3 min on a new one.
 Uncertain label: if exactly one value (a format/kind/role spelling) is uncertain, submit everything else, then that
 field ALONE with your own derived value -- in the same Bash call. Only after the GM rejects it, use `hctf labels`.

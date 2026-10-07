@@ -72,6 +72,18 @@ def _lane_key(lane):
     return (lane or "").upper().replace("-", "_")
 
 
+# Fast mode (Opus at faster output; ~97% of a worker's wall time is token generation) -- an opt-in EXPERIMENT:
+# HCTF_FAST_MODE=all or a comma list of lanes. Needs Claude Code >= 2.1.205 + usage credits; higher per-token price.
+FAST_MODE_LANES = {x.strip() for x in os.environ.get("HCTF_FAST_MODE", "").split(",") if x.strip()}
+
+
+def worker_settings(lane):
+    st = {"autoMemoryEnabled": False}
+    if FAST_MODE_LANES and ("all" in FAST_MODE_LANES or (lane or "") in FAST_MODE_LANES):
+        st["fastMode"] = True
+    return st
+
+
 def worker_effort(lane):
     exact = os.environ.get(f"HCTF_WORKER_EFFORT_{_lane_key(lane)}")
     if exact:
@@ -176,7 +188,7 @@ def run_local(chal_dir, stage, prompt, env_extra, timeout, stop=None):
            # Isolation: no claude.ai MCP connectors (23 connected at every worker start, none used) and no Claude
            # auto-memory (Day 6 workers wrote unversioned GM facts to ~/.claude/projects/-home-testpwn-huntress-2026/
            # memory and re-read them every run). Durable knowledge goes through lib/ via the post-run ratchet only.
-           "--strict-mcp-config", "--settings", json.dumps({"autoMemoryEnabled": False})]
+           "--strict-mcp-config", "--settings", json.dumps(worker_settings(lane))]
     with open(log, "w") as out:
         p = subprocess.Popen(sandboxed(cmd), cwd=ROOT, stdout=out, stderr=subprocess.STDOUT, env=env,
                              start_new_session=True)
