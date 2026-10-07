@@ -44,6 +44,10 @@ REUSE_PROBE_BUDGET = int(os.environ.get("HCTF_REUSE_PROBE_BUDGET", "20"))  # mer
 STOP_WHEN_READY = os.environ.get("HCTF_STOP_WHEN_READY", "1") != "0"  # end the single worker at CORRECT + verified solver
 SPEC_STABLE = float(os.environ.get("HCTF_SPEC_STABLE", "2"))  # solver files untouched this long before a snapshot
 SPEC_POLL = float(os.environ.get("HCTF_SPEC_POLL", "1"))
+# The single's solver on its OWN case must beat this (local s) or a speed generalize runs BEFORE the first timed attempt:
+# Homebase is ~1.5x slower and the 7-13 s window also pays GM start/download/submit (blind D7 replay: binary 5.9 s ->
+# Time Trial exec_error "too slow", one attempt + ~30 s burned before the speed fix even started). 0 disables.
+SINGLE_SPEED_BUDGET = float(os.environ.get("HCTF_SINGLE_SPEED_BUDGET", "2.5"))
 # Time Trial scouting before Mastery (hctf/scout.py): extra TT attempts that harvest new variants and learn label
 # spellings on the cheap clock. 0 = off. `hctf run --scout N` overrides.
 SCOUT_ROUNDS = int(os.environ.get("HCTF_SCOUT_ROUNDS", "0"))
@@ -449,6 +453,13 @@ def family_probe(sdir, exts, timeout=45):
     return "\n".join(lines)
 
 
+def speed_watch_sets(res, sdir, mode):
+    """For a speed-only generalize: (verified cases that are slow >= 2 s or error, {newest variant-<mode> case})."""
+    targets = {r["case"] for r in (res or []) if not r.get("unverified") and (r.get("seconds", 0) >= 2.0 or r.get("error"))}
+    var = sorted((Path(sdir) / "cases").glob(f"variant-{mode}-*/"), key=lambda p: p.stat().st_mtime)
+    return targets, ({var[-1].name} if var else set())
+
+
 def failing_artifacts(sdir, mode, ids):
     """(newest variant-<mode> case dir, [artifact names the failing ids ask about]) or (None, [])."""
     var = sorted((Path(sdir) / "cases").glob(f"variant-{mode}-*/"), key=lambda p: p.stat().st_mtime)
@@ -626,6 +637,11 @@ class Chain:
                          "Homebase VM lacks. Homebase has python3 + the pip deps (pyzipper, pyelftools, pefile, capstone, "
                          "pycryptodome, androguard, ...) but NOT 7z/p7zip or other apt tools. Open zips with "
                          "`lib.common.read_member` / pyzipper; no subprocess to 7z, jadx, or anything outside the import list.")
+        if d.get("single_seconds"):
+            gm_wrong += (f"\n  - NO TIMED ATTEMPT HAS RUN YET: solve.py takes {d['single_seconds']}s on the Single Solve case "
+                         f"itself (budget {SINGLE_SPEED_BUDGET:g}s locally; Homebase is ~1.5x slower and the 7-13 s window also "
+                         "pays GM start/download/submit). Its answers are right -- make it FAST, change no answer, and "
+                         "skip third-party libraries/runtime classes bundled into the artifact.")
         if d.get("solver_too_slow"):
             gm_wrong += ("\n  - THE SOLVER IS TOO SLOW: solve.py hit the in-window timeout on this variant (answers may well be right). "
                          "Make it fast -- no per-set brute force over every decoder, no subprocess per set, decode once, "
@@ -654,7 +670,9 @@ class Chain:
                                 chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
                                 persona=workers.lane_persona(self.lane), playbook=workers.lane_playbook(self.lane),
                                 variant_axes=variant_axes(self.lane) or "(none recorded yet for this lane)",
-                                problems="\n".join(f"  - {p}" for p in probs) or "  - solver did not produce all answers",
+                                problems="\n".join(f"  - {p}" for p in probs) or (
+                                    "  - every case passes -- the problem is SPEED" if d.get("solver_too_slow")
+                                    else "  - solver did not produce all answers"),
                                 gm_wrong=gm_wrong,
                                 evidence=evidence or "(not extracted -- open the newest variant-* case yourself)")
         set_state(self.base, stage=f"{mode}:generalizing")
@@ -663,6 +681,14 @@ class Chain:
         # left EMPTY can: green once it answers every field of such a case (full replay: the watcher never fired, all
         # three generalize workers ran to their own end). Correctness is still checked by the accept step + GM retry.
         fill = {r["case"] for r in (res or []) if r.get("unverified") and r.get("answered", 0) < r.get("total", 0)}
+        if d.get("solver_too_slow"):
+            # Speed-only generalize: every case may already PASS, just slowly -> targets/fill empty, the watcher never
+            # started and the worker ran to its own end (blind D7 replay: binary sped up 6 s -> 0.3 s by call 7, ~60 s
+            # in, then re-derived every answer by hand until 284 s). Watch the slow case(s) for SPEED instead: green
+            # once they come in under 2 s with nothing broken (_watch_green's need_fast check).
+            slow_t, slow_f = speed_watch_sets(res, self.sdir, mode)
+            targets |= slow_t
+            fill |= slow_f
         self._snapshot_solver()
         green, done, harvesting = threading.Event(), threading.Event(), threading.Event()
         if harvest:
@@ -1150,6 +1176,8 @@ class Chain:
                 done = self.auto_labels(cid)
             ok, res = (True, None) if welcome else ensure_case_and_test(cid, self.sdir)
             say(f"[{cid}] after worker: complete={done} solver_ok={ok}")
+            if ok and isinstance(res, list):
+                self._note_single_speed(cid, next((r.get("seconds") for r in res if r.get("case") == "single_solve"), None))
             if done and ok:
                 self._record_labels(cid)
                 return True
@@ -1192,13 +1220,21 @@ class Chain:
             shutil.copy2(self.root / "meta.json", snap.parent / "meta.json")  # hb_timed reads the lane from it
         if self._solver_mtimes() != m0:
             return None  # the worker edited mid-copy; next poll
-        got, err, _ = solvers.run_solver(snap, contract, art)
+        got, err, dt = solvers.run_solver(snap, contract, art)
         bad = sorted(k for k, v in conf.items() if got.get(k) != v)
         if err or bad:
             self._spec_rejected = m0
             say(f"[{cid}] early handoff: snapshot not ready ({err or f'{len(bad)} field(s) differ, e.g. {bad[:3]}'})")
             return None
+        self._note_single_speed(cid, dt)
         return snap
+
+    def _note_single_speed(self, cid, seconds):
+        self._single_slow = None
+        if SINGLE_SPEED_BUDGET and seconds and seconds > SINGLE_SPEED_BUDGET:
+            self._single_slow = round(seconds, 2)
+            say(f"[{cid}] single solver takes {seconds:.1f}s on its own case (budget {SINGLE_SPEED_BUDGET:g}s): "
+                "speed generalize before the first timed attempt")
 
     def _watch_ready(self, cid, ready, done):
         """Runs beside the Single Solve worker. The moment the single is CORRECT and the worker's solver (stable 2s)
@@ -1248,6 +1284,11 @@ class Chain:
         seen_fresh = getattr(self, "_tstatus", {}).get(mode) == "start_required"
         if cli.is_complete(cid) or (not seen_fresh and cli.gm_solved(cid)):
             return True
+        if getattr(self, "_single_slow", None) and not getattr(self, "_single_speed_done", False):
+            self._single_speed_done = True
+            say(f"[{cid}] solver too slow on the single ({self._single_slow}s): generalizing for speed BEFORE the first "
+                "timed attempt (no attempt spent)")
+            self.generalize(cid, wrong=None, fixed=None, diag={"solver_too_slow": True, "single_seconds": self._single_slow})
         clock_retries = 0
         rate_retries = 0
         attempt = -1

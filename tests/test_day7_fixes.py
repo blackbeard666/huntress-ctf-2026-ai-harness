@@ -595,3 +595,49 @@ assert "FAMILY_PROBE" in dir(orchestrate) and "family_text" in inspect.signature
 _gsrc = inspect.getsource(orchestrate.Chain.generalize)
 assert _gsrc.index("family_probe") < _gsrc.index("ensure_case_and_test"), "probe must start before the baseline replay"
 print("ok  codec family: encode() round-trips; probe starts beside the baseline replay, reported not gated")
+
+# 25) speed-only generalize gets an early stop (blind D7 replay: binary 6 s -> 0.3 s by call 7, worker ran to 284 s
+#     because every case already PASSED, so targets/fill were empty and the watcher never started).
+sd25 = Path(tempfile.mkdtemp()) / "solver"
+for n in ("single_solve", "variant-time_trial-aaaa1111", "auto-mastery-x"):
+    (sd25 / "cases" / n).mkdir(parents=True)
+    __import__("time").sleep(0.02)
+_res25 = [{"case": "single_solve", "ok": True, "seconds": 5.9, "unverified": False},
+          {"case": "auto-mastery-x", "ok": True, "seconds": 0.4, "unverified": False},
+          {"case": "variant-time_trial-aaaa1111", "ok": False, "seconds": 6.1, "unverified": True}]
+_t25, _f25 = orchestrate.speed_watch_sets(_res25, sd25, "time_trial")
+assert _t25 == {"single_solve"} and _f25 == {"variant-time_trial-aaaa1111"}, (_t25, _f25)
+assert orchestrate.speed_watch_sets(_res25, sd25, "mastery")[1] == set()
+_g25 = inspect.getsource(orchestrate.Chain.generalize)
+assert "speed_watch_sets" in _g25 and _g25.index("speed_watch_sets") < _g25.index("watch.start()")
+
+# 26) single-time speed gate: a verified-but-slow single solver -> one speed generalize BEFORE the first timed attempt
+#     (no attempt spent; blind D7 replay burned a TT attempt + ~30 s on it), at most once per chain.
+gen_calls, seen26 = [], []
+p26 = dict(patches)
+p26[(timed, "run")] = lambda cid, sdir, log=None, op="start": (seen26.append(op), "correct")[1]
+p26[(timed, "last_result")] = lambda cid: None
+s26 = {k: getattr(*k) for k in p26}
+_ogen26 = orchestrate.Chain.generalize
+orchestrate.Chain.generalize = lambda self, cid, wrong=None, fixed=None, diag=None: gen_calls.append((cid, diag))
+try:
+    for (mod, name), fn in p26.items():
+        setattr(mod, name, fn)
+    ch._single_slow, ch._single_speed_done = 5.9, False
+    assert ch.timed_stage("mastery") and ch.timed_stage("mastery")
+finally:
+    for (mod, name), fn in s26.items():
+        setattr(mod, name, fn)
+    orchestrate.Chain.generalize = _ogen26
+assert len(gen_calls) == 1 and gen_calls[0][1] == {"solver_too_slow": True, "single_seconds": 5.9}, gen_calls
+assert seen26 == ["start", "start"]
+_said26 = []
+_osay26, orchestrate.say = orchestrate.say, lambda m, *a, **k: _said26.append(m)
+try:
+    ch._note_single_speed("c", 1.2)
+    assert ch._single_slow is None
+    ch._note_single_speed("c", 5.9)
+    assert ch._single_slow == 5.9 and "speed generalize" in _said26[-1]
+finally:
+    orchestrate.say = _osay26
+print("ok  speed: speed-only generalize watched for speed; slow single -> one speed generalize before the first attempt")
