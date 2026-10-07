@@ -32,7 +32,7 @@ CHAIN_CRASH_RETRIES = int(os.environ.get("HCTF_CHAIN_CRASH_RETRIES", "1"))  # re
 # its confirmed answers, make ONE speculative Time Trial -> Mastery pass from that snapshot instead of idling until
 # the worker exits (rehearsal Day 5: answers CORRECT at T+3:10, worker hardened the solver until T+6:25).
 BASELINE_CASE_TIMEOUT = float(os.environ.get("HCTF_BASELINE_CASE_TIMEOUT", "8"))  # > any 6-7s window  # pre-generalize regression baseline
-ENUM_PROBE_BUDGET = int(os.environ.get("HCTF_ENUM_PROBE_BUDGET", "30"))  # enum options tried after reuse
+ENUM_PROBE_BUDGET = int(os.environ.get("HCTF_ENUM_PROBE_BUDGET", "0"))  # OFF: the worker identifies labels; set >0 to pre-probe question-listed enum options
 REUSE_PROBE_BUDGET = int(os.environ.get("HCTF_REUSE_PROBE_BUDGET", "20"))  # merged-reuse submits before the worker
 STOP_WHEN_READY = os.environ.get("HCTF_STOP_WHEN_READY", "1") != "0"  # end the single worker at CORRECT + verified solver
 SPEC_STABLE = float(os.environ.get("HCTF_SPEC_STABLE", "2"))  # solver files untouched this long before a snapshot
@@ -443,13 +443,7 @@ class Chain:
         # Seed this challenge's own solver from the best prior one (the worker extends it; timed modes run it).
         best = plan["best"]
         if best and not (self.sdir / "solve.py").exists():
-            if "/lib/lanes/" in str(best):
-                # the lane solver won: a thin wrapper, so the timed modes run the same generic code (synced to Homebase)
-                from lib import lanes as _lanes
-                self.sdir.mkdir(parents=True, exist_ok=True)
-                (self.sdir / "solve.py").write_text(_lanes.wrapper_source(self.lane))
-            else:
-                shutil.copytree(best, self.sdir, dirs_exist_ok=True, ignore=shutil.ignore_patterns("cases", "__pycache__"))
+            shutil.copytree(best, self.sdir, dirs_exist_ok=True, ignore=shutil.ignore_patterns("cases", "__pycache__"))
         conf = cli.confirmed_answers(cid)
         if cli.is_complete(cid):
             got, err, _ = solvers.run_solver(self.sdir, contract, art)

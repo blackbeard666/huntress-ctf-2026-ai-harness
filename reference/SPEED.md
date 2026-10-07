@@ -219,3 +219,12 @@ wall-clock is model generation between tool calls (~4-6 s per turn) -> fewer tur
   each day's registry entry disabled the generic tier still answers all 58; fuzzed future families 49/50 emitted correct,
   0 wrong (unconfirmed spellings are held back, not guessed).
 All five lanes now have lane solvers; through reuse_plan alone every lane's single of days 1-6 is fully confident + right.
+
+## REVERSED 2026-10-07: no hand-built lane solvers, no deterministic-solver-first
+The owner's direction: don't reinvent the wheel and don't bet on yesterday's shapes -- each day's challenges are
+unknown. The `lib/lanes/*` solvers (hand-written ELF/JAR/PE/metadata parsers etc.) and the lane-first reuse step were
+REMOVED; enum pre-probing is off by default (HCTF_ENUM_PROBE_BUDGET=0). The goal is an LLM that identifies the
+goal/target fast and solves it with the standard tools (readelf/rizin/Ghidra headless, jadx/apktool, exiftool, 7z,
+box-js...), loaded via its lane skill on the first call. Kept: harness latency work (triage STATUS + pre-extracted
+archives, skeleton, submit --from-solver, stop-at-correct, Homebase/window/sandbox fixes). The lane-solver numbers
+above are historical.

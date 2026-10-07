@@ -124,26 +124,8 @@ def run_solver(sdir, contract, artifacts, timeout=120):
 
 
 def _day_key(sdir):
-    if "/lib/lanes/" in str(sdir):
-        return 999  # the day-independent lane solver ranks first (it covers every day's variation seen so far)
     m = re.search(r"day(\d+)", str(sdir))
     return int(m.group(1)) if m else -1
-
-
-def _lane_confident(sdir, contract, got):
-    """A lane solver's output counts as confident only if it answers EVERY field and each value fits the field's
-    answer_format (the GM's stated syntax); otherwise its values are just speculative hints."""
-    if "/lib/lanes/" not in str(sdir):
-        return False
-    ids = contract.get("answer_ids") or []
-    if not ids or any(got.get(a) in (None, "") for a in ids):
-        return False
-    try:
-        from . import cli
-        qmap = dict(paired_questions(contract))
-        return not any(cli._format_problem(str(got[a]), qmap.get(a) or {}) for a in ids)
-    except Exception:  # noqa: BLE001
-        return False
 
 
 def whole_contract_solver(contract, artifacts, candidates, timeout=120):
@@ -247,12 +229,6 @@ def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6
     excl = {Path(e).resolve() for e in exclude}
     cands = {p for p in all_solver_dirs() if _lane_of(p) == lane}
     try:
-        from lib import lanes as _lanes
-        if _lanes.solver_dir(lane):
-            cands.add(_lanes.solver_dir(lane))
-    except Exception:  # noqa: BLE001 - lane solvers are optional
-        pass
-    try:
         cands |= set(dispatch(contract)[0])
     except Exception:  # noqa: BLE001 - question index is optional here
         pass
@@ -265,7 +241,7 @@ def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6
     for sdir in cands:                      # newest first: the first producer of a field wins
         got, err, dt = outs[sdir]
         runs[sdir] = (sum(1 for a in ids if got.get(a) not in (None, "")), err, round(dt, 2))
-        known = set(ids) if _lane_confident(sdir, contract, got) else _known_ids(sdir)
+        known = _known_ids(sdir)
         for a in ids:
             v = got.get(a)
             if v in (None, ""):

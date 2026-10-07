@@ -146,7 +146,7 @@ def test_probe_enums():
     with mock.patch.object(cli, "submit", gm.submit), \
             mock.patch.object(cli, "confirmed_answers", lambda cid, att=None: dict(gm.conf)), \
             mock.patch.object(orch, "say", lambda m: None):
-        orch.Chain._probe_enums(bare_chain(), "s", contract)
+        orch.Chain._probe_enums(bare_chain(), "s", contract, budget=30)  # opt-in (default OFF)
     tried = [list(g.values())[0] for g, _ in gm.calls]
     check("enum probe: question-named options in question order until accepted",
           gm.conf.get("x-role") == "stager" and tried == ["benign_utility", "stager"] and all(p for _, p in gm.calls))
