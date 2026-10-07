@@ -283,3 +283,22 @@ The second TT cycle was a codec the 4 first-cycle variants never drew (`xor_hex|
 sampling can't cover a ~10-member family. Main is covered regardless: main's lib.codec name-agnostic fallback (8abd11f,
 excluded from the fair pin) decodes all 128 codec declarations of these variants with Day<=6 names only, and main's
 Day 7 solver answers all 11 replay variants/auto cases with 0 empty / 0 wrong (0.4-0.8 s each).
+
+### Follow-up: why the replay still needed 2 TT generalizes, and what changed (2026-10-08)
+Root cause: the worker fixed exactly the codecs its cases showed (green only checks those) and stopped; the next
+variant drew another member of the same ~10-member codec family. Changes:
+- Name-agnostic decoders everywhere a name table used to fail silently (97cece0): lib.android.decode_payload ->
+  decode_any() BFS over the primitives with the ANS shape as oracle; lib.decode.decode_chunk -> reversed/escaped/HTML/
+  Morse/base58/QP/b85 line encodings; rot-N scoring by English bigrams (old unigram scorer picked the wrong shift on
+  ~27% of GM warmups answers; now 98%). 21/21 mobile + 45/45 warmups regression cases unchanged.
+- GM fact (alt test): retry/start on a LIVE attempt resume it (same id, no attempt spent) -> no parallel harvest;
+  harvest now retries 0.5 s after the deadline and polls on "same id" (f06fa2e, ~4 s per variant).
+- Generalize evidence (41bd075): codec census over the newest 24 cases (shapes the failing file used across them) +
+  handler pointer (densest solver function for the construct; bashplan.codec_decode first on the replay).
+- Codec-family probe (5ed8487): lib.codec.encode() + hctf/family.py re-encode the failing language's fixtures under
+  other known rep x transform (format copied from real materials, round-trip verified), run the solver, report misses
+  in the evidence. NOT a green gate: emulating solvers (vbsplan) legitimately disagree with recoded materials. Main D7
+  solver: bash 16/16, Node 16/16; the rehearsal copy's table-based D7 solver: bash 14/16 (2 real gaps). Starts beside the baseline
+  replay (off the critical path). `HCTF_FAMILY_PROBE=0` disables.
+A fair Day-7 replay can't measure the probe (pre-7 lib.codec lacks xor_hex and the fallback); Day 8 is the test --
+check `hctf timeline` for TT generalize count and the probe line in any generalize worker's prompt.
