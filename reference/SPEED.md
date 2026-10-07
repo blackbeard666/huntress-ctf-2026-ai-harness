@@ -197,3 +197,16 @@ run the same code. Validated offline on every saved case of days 1-6:
 Through reuse_plan with ONLY the lane solvers: warmups/mobile days 2-6 and script days 2-6 all fields confident + right,
 ~0.2-0.35 s. After reuse, enum fields still open are probed with the options their question names (role of a new graph).
 Note: a Day-6 replay can no longer measure these fairly (they were validated on Day 6); Day 7 is the real test.
+
+## Analysis -> action latency (2026-10-07, 46 worker transcripts, `.run/review4/`)
+
+Verdict: neither over- nor under-analysis. The answer is visible early (median 2 s metadata, ~7 s warmups/binary,
+27 s mobile); all 6 wrong submits in 34 singles were GM label SPELLINGS, never wrong decodes; rework <= 2%. 79-97% of
+wall-clock is model generation between tool calls (~4-6 s per turn) -> fewer turns is the lever. Fixes:
+- triage.md: `## STATUS` (answers already accepted by reuse + the exact REMAINING ids) and `## Extracted` (every
+  archive, incl. password-protected and nested, pre-unpacked into work/extracted/ in ~0.05 s).
+- single.md: no up-front skill loading, batch independent reads, subagents only for >1 new family (max 2, one message,
+  one blocking wait), "a decoded value matching answer_format IS the answer -- don't reproduce the backend".
+- `hctf labels`: the solver's own value is tried FIRST unless already rejected (cold binary submitted `jar_jvm` first).
+- gm.py: GET 15 s timeout + one retry, POST 30 s (a hung call stalled a worker 65.7 s).
+- preflight: worker-sandbox check (venv + solver deps importable inside bwrap).

@@ -199,9 +199,10 @@ def candidates(cid, aid, terms=(), solver_value=None, without=(), skip_judged=Tr
     av = accepted_values(cid, aid)
     if av:
         bad = judged_wrong(cid, aid) if skip_judged else set()
-        if solver_value:
-            bad.add(str(solver_value))
         picked = [v for v in av if v not in bad and v not in without]
+        sv = str(solver_value) if solver_value else None
+        if sv in picked:  # the solver's own value first, unless the GM already rejected it (then it's in `bad`)
+            picked = [sv] + [v for v in picked if v != sv]
         if picked:
             return picked
     if lane is None:
@@ -236,8 +237,11 @@ def candidates(cid, aid, terms=(), solver_value=None, without=(), skip_judged=Tr
     ranked += [f"{h}{sep}{t}" for h in heads for t in tset if h != t]   # 5 known beginning + term
     bad = judged_wrong(cid, aid) if skip_judged else set()
     bad |= pb_bad                                                       # never reprobe a playbook-rejected spelling
-    if solver_value:
-        bad.add(str(solver_value))
+    # The solver's own plain value goes FIRST unless the GM already rejected it in this attempt: cold binary replays
+    # derived `jar`, yet the ranking (which assumed the solver value was the rejected one) led with the playbook
+    # compound `jar_jvm` -> one wrong submit + 5-45 s.
+    if solver_value and str(solver_value) not in bad:
+        ranked = [str(solver_value)] + ranked
     out = []
     for c in ranked:
         if c and c not in out and c not in bad:

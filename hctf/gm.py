@@ -35,7 +35,8 @@ import urllib.request
 # Public GM (pairing-token) by default; override with the inside proxy URL when running in-network.
 # Note: the inside proxy 404s if a trailing slash is added before the query string, so never append one.
 GM = os.environ.get("HUNTRESS_GAME_MASTER_URL", "https://2026.huntress.ctf.games")
-TIMEOUT = 60
+TIMEOUT = int(os.environ.get("HCTF_GM_TIMEOUT", "30"))          # start/submit (POST)
+GET_TIMEOUT = int(os.environ.get("HCTF_GM_GET_TIMEOUT", "15"))  # status/list/artifact/download (idempotent, retried once)
 
 
 def _token():
@@ -64,9 +65,12 @@ def _request(method, params=None, payload=None):
     if tok:
         headers["Authorization"] = "Bearer " + tok
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
+    # Short read timeout + one retry for idempotent GETs: a hung call once stalled a worker 65.7 s (60 s timeout).
+    # POSTs (start/submit) get a longer timeout and no blind retry -- the GM may have processed them.
+    timeout, net_retries = (GET_TIMEOUT, 1) if method == "GET" else (TIMEOUT, 0)
     for attempt in range(RATE_RETRIES + 1):
         try:
-            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
                 return r.status, dict(r.headers), r.read()
         except urllib.error.HTTPError as e:
             if e.code in (429, 503) and attempt < RATE_RETRIES:
@@ -74,6 +78,9 @@ def _request(method, params=None, payload=None):
                 continue
             return e.code, dict(e.headers or {}), e.read()
         except (urllib.error.URLError, OSError) as e:
+            if net_retries > 0:
+                net_retries -= 1
+                continue
             return 0, {}, json.dumps({"error": "unreachable", "detail": str(e)}).encode()
 
 

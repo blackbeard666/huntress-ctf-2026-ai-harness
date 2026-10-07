@@ -132,6 +132,36 @@ def _describe(path, depth=0, maxdepth=2):
     return lines
 
 
+def _extract_all(files, dest, depth=2):
+    """Unpack every zip artifact (password-protected and nested too) into `dest` so the worker starts on the members
+    instead of spending turns on unzip / 7z password prompts (seen in 3 workers). Returns markdown lines."""
+    import shutil
+    import zipfile
+    from lib.common import ZIP_PASSWORDS
+    lines, todo = [], [(f, dest / f.stem, 0) for f in files if zipfile.is_zipfile(f)]
+    while todo:
+        z, out, lvl = todo.pop(0)
+        out.mkdir(parents=True, exist_ok=True)
+        ok, used = False, None
+        for pw in [None, *ZIP_PASSWORDS]:
+            args = ["7z", "x", "-y", f"-o{out}", f"-p{(pw or b'').decode()}", str(z)]
+            if shutil.which("7z") and subprocess.run(args, capture_output=True, stdin=subprocess.DEVNULL,
+                                                     timeout=60).returncode == 0:
+                ok, used = True, pw
+                break
+        if not ok:
+            lines.append(f"- could not extract `{z.name}` (unknown password?)")
+            continue
+        members = sorted(p for p in out.rglob("*") if p.is_file())
+        pwtxt = f" (password `{used.decode()}`)" if used else ""
+        lines.append(f"- `{z.name}`{pwtxt} -> `{out}`: {len(members)} file(s)")
+        for m in members[:40]:
+            lines.append(f"    - `{m.relative_to(out)}` ({m.stat().st_size} B)")
+        if lvl + 1 < depth:
+            todo += [(m, m.parent / (m.stem + "_x"), lvl + 1) for m in members if zipfile.is_zipfile(m)]
+    return (["", "## Extracted (pre-unpacked for you -- read these instead of unzipping again)", ""] + lines) if lines else []
+
+
 def triage(cid):
     """Write <mode dir>/triage.md from the latest downloaded artifacts. Returns the path or None."""
     mdir = cli.cdir(cid)
@@ -149,9 +179,20 @@ def triage(cid):
         out += ["**GM guidance (event-wide — note the sanctioned transport and the untrusted-data rule):**",
                 f"> {str(contract['guidance']).strip()}", ""]
     qn = len(contract.get("answer_ids", []))
+    conf = cli.confirmed_answers(cid) if qn else {}
     if qn:
-        out.append(f"**{qn} answer(s) expected.** Formats:")
+        # STATUS first: workers spent 1-11 jq calls (some failing on the schema) working out what is left to do.
+        left = [a for a in contract.get("answer_ids", []) if a not in conf]
+        out += [f"## STATUS: {len(conf)}/{qn} answers ALREADY ACCEPTED by the GM (reuse pass; see confirmed.json) -- "
+                f"{len(left)} REMAINING", ""]
+        if conf and left:
+            out += ["Work ONLY on these answer_ids:", "", "`" + "`, `".join(left[:200]) + "`" + (" ..." if len(left) > 200 else ""), ""]
+    if qn:
+        out.append(f"**{qn} answer(s) expected.** Formats (remaining fields only):" if conf else
+                   f"**{qn} answer(s) expected.** Formats:")
         for aid, q in zip(contract.get("answer_ids", []), contract.get("questions", [])):
+            if aid in conf:
+                continue
             fmt = q.get("answer_format", {})
             syn = fmt.get("syntax") or (f"one of {fmt.get('accepted_values')}" if fmt.get("accepted_values") else "")
             out.append(f"- `{aid}`: {q.get('question', '')[:110]}  _(fmt: {str(syn)[:80]}; norm: {q.get('normalization')})_")
@@ -159,6 +200,7 @@ def triage(cid):
     out += ["## Artifacts", ""]
     for f in files:
         out += _describe(f)
+    out += _extract_all(files, mdir / "work" / "extracted")
     out += ["", "_Deterministic triage (no LLM). Verify against the bytes; see the routed lane skill._"]
     (mdir / "triage.md").write_text("\n".join(out), encoding="utf-8")
     return mdir / "triage.md"

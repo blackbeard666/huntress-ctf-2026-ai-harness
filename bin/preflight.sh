@@ -128,6 +128,18 @@ if [ "${flaps:-0}" -ge 2 ]; then
   warn "${HCTF_VPN_UNIT:-hctf-vpn} restarted $flaps times in 15 min (session fight? another client on this profile, e.g. a 2nd machine)."
 fi
 
+# 3c) Worker sandbox: the venv + solver deps must be usable INSIDE the bwrap sandbox (rehearsal replays silently lost
+# pyzipper/rizin when .venv was a symlink into a masked tree -- 25-30 s per worker, and AES zips decoded to nothing).
+hdr "Worker sandbox"
+sb_out="$(timeout 30 python3 -c "
+import subprocess, sys; sys.path.insert(0, '.')
+from hctf import workers
+cmd = workers.sandboxed(['$ROOT/.venv/bin/python', '-c', 'import pyzipper, elftools, pefile, capstone; print(\"sandbox-ok\")'])
+r = subprocess.run(cmd, capture_output=True, text=True, timeout=25); print(r.stdout.strip() or r.stderr.strip()[-200:])
+" 2>&1)"
+if grep -q sandbox-ok <<<"$sb_out"; then ok "workers' sandbox has the venv + solver deps (pyzipper, pyelftools, pefile, capstone)."
+else fail "worker sandbox can't import solver deps: $(tail -1 <<<"$sb_out")"; fi
+
 # 4) Homebase SSH + credits -----------------------------------------------------------------------
 hdr "Homebase (optional low-latency compute for tight timed windows)"
 if [ "${HCTF_AUTO_HOMEBASE:-1}" = 0 ]; then
