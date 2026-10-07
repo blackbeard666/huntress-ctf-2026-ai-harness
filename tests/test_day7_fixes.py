@@ -350,3 +350,40 @@ finally:
         setattr(mod, name, fn)
     orchestrate.Chain.generalize = _ogen
 print("ok  rotation_exhausted: one attempt, stage stops, no generalize")
+
+# 16) harvest: `start` after the failed attempt's deadline RESUMES it ({"result": "expired"}, no attempt_id) -> re-roll
+#     with op retry (rehearsal Day 7 fair run: both script harvests stopped on 'start refused' with 0 variants). A real GM
+#     error (rotation_exhausted) still stops the harvest without a retry.
+import contextlib  # noqa: E402
+
+_STARTED = {"attempt_id": "abcdef1234", "deadline": None, "answer_ids": ["a"], "questions": [{"id": "a"}]}
+for first, want_ops, want_refused in (
+        ({"http": 200, "body": {"result": "expired", "name": "x"}}, ["start", "retry"], False),
+        ({"http": 200, "body": {"result": "CORRECT", "name": "x"}}, ["start", "retry"], False),
+        ({"http": 409, "body": {"error": "rotation_exhausted"}}, ["start"], True)):
+    ops, said = [], []
+
+    def _fake_call(cid, op, *a, _first=first, **k):
+        ops.append(op)
+        return _first if op == "start" else {"http": 200, "body": dict(_STARTED)}
+    hp = {(orchestrate.cli, "call"): _fake_call,
+          (orchestrate.cli, "chal_lock"): lambda cid: contextlib.nullcontext(),
+          (orchestrate.cli, "_planned_downloads"): lambda body: [],
+          (orchestrate.cli, "load"): lambda *a, **k: None,
+          (timed, "last_result"): lambda cid: None,
+          (orchestrate.Chain, "_harvest_sleep"): staticmethod(lambda deadline, done: True),
+          (orchestrate, "ROOT"): d,
+          (orchestrate, "say"): lambda msg, *a, **k: said.append(msg)}
+    hsaved = {k: getattr(*k) for k in hp}
+    try:
+        for (mod, name), fn in hp.items():
+            setattr(mod, name, fn)
+        hc = object.__new__(orchestrate.Chain)
+        hc.root, hc.sdir = d, d
+        hc._harvest("c/time_trial", 1, set(), __import__("threading").Event())
+    finally:
+        for (mod, name), fn in hsaved.items():
+            setattr(mod, name, fn)
+    assert ops == want_ops, (first, ops)
+    assert any("start refused" in s for s in said) is want_refused, said
+print("ok  harvest: expired/finished start -> retry for a fresh variant; rotation_exhausted -> stop, no retry")

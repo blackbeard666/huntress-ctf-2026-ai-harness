@@ -453,6 +453,12 @@ class Chain:
             try:
                 with cli.chal_lock(cid), cli.quiet():
                     env = cli.call(cid, "start", cid)
+                    body = env.get("body") or {}
+                    if env.get("http") == 200 and not body.get("error") and not cli.attempt_id(body):
+                        # `start` RESUMES the latest attempt: after the failed one's deadline that is
+                        # {"result": "expired"} (or a finished one) with no attempt_id -- re-roll a fresh variant like
+                        # hb_timed does (rehearsal Day 7: both script harvests stopped here with 0 variants).
+                        env = cli.call(cid, "retry", cid)
                 body = env.get("body") or {}
                 att = cli.attempt_id(body)
                 if env.get("http") != 200 or body.get("error") or not att:
