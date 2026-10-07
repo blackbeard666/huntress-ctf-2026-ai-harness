@@ -140,7 +140,15 @@ def looks_like_plan(b):
     except UnicodeDecodeError:
         return False
     t = t.lstrip("﻿ \r\n\t")
-    return t.startswith("v=") or (t.startswith("{") and t.rstrip().endswith("}")) or "|steps=" in t[:80]
+    if t.startswith("{") and t.rstrip().endswith("}"):
+        # a JSON plan must PARSE: a wrong rolling-xor/rotation guess can start with '{' and end with '}' by chance
+        # (Day 7 Node json_numbers under a renamed rep decoded to '{Jr^hYuAx...}' and was accepted)
+        import json
+        try:
+            return isinstance(json.loads(t), dict)
+        except ValueError:
+            return False
+    return t.startswith("v=") or "|steps=" in t[:80]
 
 
 def plan_kv(text):
@@ -255,16 +263,78 @@ def _spec(rep, transform, key):
 
 def decode(material, rep, transform, key=None):
     """Plaintext (str) of a declared codec, or None. Tries the rep's plausible readings x the transform's plausible
-    parameters and returns the first that looks like a plan (`v=` / JSON). Unknown names -> None."""
+    parameters and returns the first that looks like a plan (`v=` / JSON). Unknown names fall through to
+    `_fallback()` (a name-agnostic reading of the literal itself); None if that finds no plan either."""
     if not material or not rep:
         return None
     transform, key = _spec(rep, transform, key)
-    if not known(rep, transform):
+    if known(rep, transform):
+        for data in _rep_candidates(rep, material):
+            for out in _transform_candidates(transform, key, data):
+                if looks_like_plan(out):
+                    return out.decode("utf-8").lstrip("\ufeff")
+    return _fallback(material, rep, transform, key)
+
+
+FALLBACK = os.environ.get("HCTF_CODEC_FALLBACK", "1") != "0"   # 0: names only (strict replay of what day N knew)
+
+
+def _generic_readings(material, rep):
+    """Byte readings of a literal read from its own FORM, not the rep name: \\uXXXX/\\xXX escapes, an int array
+    (decimal, or hex when the rep says hex), compact hex, base64 -- each also from the reversed TEXT, and reversed
+    bytes. Day 7 TT renamed reps mid-day (`unicode_escapes`, `json_numbers`, `reversed_base64|`, `xor_hex|cd`): every
+    one was readable from the material itself, but cost a ~100s generalize because decode() keyed on the name."""
+    out = []
+    for m in (material, material[::-1]):
+        esc = re.findall(r"\\+u([0-9a-fA-F]{4})|\\+x([0-9a-fA-F]{2})", m)
+        if esc:
+            v = [int(a or b, 16) for a, b in esc]
+            if all(x < 256 for x in v):
+                out.append(bytes(v))
+        if re.fullmatch(r"\s*[\[(]?[\s0-9a-fA-FxX,;:|.-]+[\])]?\s*", m) and re.search(r"[\s,;:|.-]", m.strip()):
+            for radix in ((8, 10, 16) if "oct" in rep else (16, 10, 8) if "hex" in rep else (10, 16, 8)):
+                try:
+                    a = int_array(m, radix)
+                except ValueError:       # '3d' is not radix 10: that reading just doesn't apply
+                    continue
+                if a and all(0 <= x < 256 for x in a):
+                    out.append(bytes(a))
+        for f in (hex_bytes, b64):
+            try:
+                b = f(m)
+            except (ValueError, TypeError):
+                b = None
+            if b:
+                out.append(b)
+    seen, uniq = set(), []
+    for b in out + [b[::-1] for b in out]:
+        if b not in seen:
+            seen.add(b)
+            uniq.append(b)
+    return uniq
+
+
+def _fallback(material, rep, transform, key):
+    """Name-agnostic decode: generic readings x (the declared transform if known, then every known transform), with
+    the declared key or any hex-looking spec field as the key. Only a plan-shaped plaintext is accepted, so a wrong
+    guess returns None rather than garbage. Never raises."""
+    if not FALLBACK:
         return None
-    for data in _rep_candidates(rep, material):
-        for out in _transform_candidates(transform, key, data):
-            if looks_like_plan(out):
-                return out.decode("utf-8").lstrip("﻿")
+    try:
+        trs = [transform] if known(transform=transform) else []
+        trs += [t for t in TRANSFORMS if t not in trs and known(transform=t)]
+        keys = [k for k in dict.fromkeys([key, transform]) if k and re.fullmatch(r"[0-9a-fA-F]{1,8}|(?:[0-9a-fA-F]{2},)+[0-9a-fA-F]{2}", k)] or [key]
+        readings = (_rep_candidates(rep, material) if known(rep) else []) + _generic_readings(material, rep or "")
+        for data in readings:
+            if not data:
+                continue
+            for t in trs:
+                for k in keys:
+                    for out in _transform_candidates(t, k, data):
+                        if looks_like_plan(out):
+                            return out.decode("utf-8").lstrip("\ufeff")
+    except Exception:  # noqa: BLE001 - a tool for the solver: unknown -> None, never an exception
+        return None
     return None
 
 

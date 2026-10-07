@@ -27,9 +27,24 @@ for s in bad[:5]:
 
 os.environ["HCTF_CODEC_MAX_DAY"] = "5"
 d6 = [s for s in samples if codec.REPS.get(s["rep"]) == 6]
-check("pre-day view (HCTF_CODEC_MAX_DAY=5) hides day-6 reps",
+codec.FALLBACK = False
+check("pre-day NAMES view (HCTF_CODEC_MAX_DAY=5, HCTF_CODEC_FALLBACK=0) hides day-6 reps",
       d6 and all(codec.decode(s["material"], s["rep"], s["transform"], s["key"]) is None for s in d6))
+codec.FALLBACK = True
+undone = [s for s in d6 if not (codec.decode(s["material"], s["rep"], s["transform"], s["key"]) or "")
+          .startswith(s["plain_prefix"])]
+check(f"pre-day view + name-agnostic fallback still decodes the {len(d6)} day-6 samples", d6 and not undone)
 del os.environ["HCTF_CODEC_MAX_DAY"]
+
+# Day 7: the GM renamed reps mid-day (unicode_escapes, json_numbers, reversed_base64|, xor_hex|cd) -> one ~100 s
+# generalize per new name. The fallback reads the literal's own form: an UNSEEN rep name must not matter.
+renamed = [s for s in samples if not (codec.decode(s["material"], "zz_unseen_" + s["rep"][::-1], s["transform"], s["key"])
+                                      or "").startswith(s["plain_prefix"])]
+check(f"{len(samples)} samples decode with the rep renamed to an unseen name", not renamed)
+for s in renamed[:5]:
+    print("     ", s["file"], s["rep"], s["transform"])
+check("looks_like_plan: a '{..}' guess must parse as a JSON object",
+      codec.looks_like_plan(b'{"v": 1}') and not codec.looks_like_plan(b"{Jr^hYuAx~N|PaQ}"))
 
 check("unknown rep/transform -> None, never raises",
       codec.decode("abc", "brand_new_rep", "identity") is None and codec.decode("abc", "hex_pairs", "new_tx") is None)
