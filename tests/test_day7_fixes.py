@@ -497,3 +497,29 @@ assert {m: v - _t0 for m, v in _c["done"].items()} == {"single_solve": 22, "time
 assert _c["attempts"] == {"single_solve": 0, "time_trial": 2, "mastery": 1} and _c["harvest_refused"] == 1
 assert [(s, b - a) for _, s, a, b in _c["workers"]] == [("single", 21), ("generalize", 60)]
 print("ok  timeline: midnight wrap, per-mode T+, attempts, worker durations, harvest refusals")
+
+# 21) name-agnostic decode (rehearsal Day 7 review: a name table that silently returns nothing on an unknown name is what
+#     costs a generalize cycle). lib.android: renamed/unknown puzzle codecs decode via decode_any() with the ANS answer
+#     shape as the oracle; lib.decode: unnamed line encodings + a bigram English scorer for rot-N (unigram scoring
+#     chose rot16 'Dysu meha tusetydw' over 'Nice work decoding').
+import base64 as _b64  # noqa: E402
+import codecs as _codecs  # noqa: E402
+
+_ans = "ANS-8AFEA54099F3106E"
+_xk = lambda b, k: bytes(x ^ k[i % len(k)] for i, x in enumerate(b))  # noqa: E731
+for _name, _data, _key in (("shifted_chars", "".join(chr(ord(c) + 10) for c in _ans), 10),
+                           ("b64_reverse", _b64.b64encode(_ans.encode()).decode()[::-1], None),
+                           ("xor_b64_v2", _b64.b64encode(_xk(_ans.encode(), b"k3y")).decode(), "k3y"),
+                           ("hex_xor", _xk(_ans.encode(), b"\x5a").hex(), "90"),
+                           ("decimal_list", ",".join(str(b) for b in _ans.encode()), None)):
+    assert _ans in (_android.decode_payload(_name, _data, _key) or ""), _name
+assert _android.decode_payload("weird", "hello world") == "hello world"          # no answer anywhere: unchanged
+_w7 = "-island-petal-75"
+for _enc in (_b64.b64encode(_w7.encode()).decode()[::-1], _b64.b85encode(_w7.encode()).decode(),
+             "".join(f"\\u{ord(c):04x}" for c in _w7), "".join(f"&#{ord(c)};" for c in _w7),
+             "".join(f"={ord(c):02X}" for c in _w7), _codecs.encode(_w7, "rot13")):
+    assert _decode.decode_chunk(_enc) == _w7, (_enc, _decode.decode_chunk(_enc))
+for _n in (3, 13, 16, 22):
+    assert _decode.decode_chunk(_decode._rot("Nice work decoding", _n)) == "Nice work decoding", _n
+assert _decode.decode_chunk(".... . .-.. .-.. ---") == "HELLO"
+print("ok  name-agnostic decode: renamed puzzle codecs (ANS oracle), unnamed line encodings, bigram rot-N scorer")

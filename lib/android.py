@@ -39,9 +39,19 @@ def _key_bytes(key):
     return s.encode("utf-8") or b"\x00"
 
 
-def decode_payload(codec, data, key=None):
+def decode_payload(codec, data, key=None, accept=ANS_RE_T.search):
     """Decode a huntress_puzzle.json payload by its declared codec: plain/split, xor (base64 + repeating key), base64,
-    base32, hex, rot13, reverse, caesar (every char's code point shifted by key). Unknown codec -> data unchanged."""
+    base32, hex, rot13, reverse, caesar (every char's code point shifted by key). When the declared reading doesn't yield
+    an answer (`accept`, default: an `ANS-<16 hex>` code) -- an unknown or renamed codec -- `decode_any()` searches the
+    known primitives instead; if that finds nothing either, the declared reading (unknown codec: data unchanged) is
+    returned as before."""
+    out = _decode_declared(codec, data, key)
+    if accept is None or (out and accept(out)):
+        return out
+    return decode_any(data, key, accept) or out
+
+
+def _decode_declared(codec, data, key=None):
     codec = (codec or "plain").strip().lower()
     try:
         if codec in ("plain", "", "none", "raw", "identity", "split"):
@@ -68,6 +78,79 @@ def decode_payload(codec, data, key=None):
     except Exception:  # noqa: BLE001 - a wrong codec guess should just miss, not crash
         return ""
     return data
+
+
+def _b64ish(b, alt=False):
+    t = re.sub(rb"\s", b"", b)
+    if not t or not re.fullmatch(rb"[A-Za-z0-9_\-]+={0,2}" if alt else rb"[A-Za-z0-9+/]+={0,2}", t):
+        return None
+    t += b"=" * (-len(t) % 4)
+    return base64.urlsafe_b64decode(t) if alt else base64.b64decode(t)
+
+
+def _readings(b):
+    """Byte -> byte primitives a puzzle codec is built from (decode direction)."""
+    yield b[::-1]
+    for fn in (_b64ish, lambda x: _b64ish(x, True),
+               lambda x: base64.b32decode(re.sub(rb"\s", b"", x)) if re.fullmatch(rb"[A-Z2-7]+=*", re.sub(rb"\s", b"", x) or b"-") else None,
+               lambda x: binascii.unhexlify(re.sub(rb"[\s:,\-]", b"", x)) if re.fullmatch(rb"(?:[0-9a-fA-F]{2}[\s:,\-]*)+", x.strip() or b"-") else None,
+               lambda x: bytes(int(t) for t in re.split(rb"[\s,;]+", x.strip())) if re.fullmatch(rb"\d+(?:[\s,;]+\d+)+", x.strip()) and all(int(t) < 256 for t in re.split(rb"[\s,;]+", x.strip())) else None,
+               lambda x: base64.b85decode(x)):
+        try:
+            r = fn(b)
+        except Exception:  # noqa: BLE001 - not this encoding
+            r = None
+        if r:
+            yield r
+    t = b.decode("latin-1")
+    yield codecs.decode(t, "rot13").encode("latin-1")
+
+
+def _keyed(b, key):
+    """Keyed primitives (xor / add / sub mod 256 / code-point shift) for every reading of the key."""
+    keys = []
+    for k in (_key_bytes(key), str(key).encode() if key is not None else None):
+        if k and k not in keys:
+            keys.append(k)
+    for k in keys:
+        yield bytes(x ^ k[i % len(k)] for i, x in enumerate(b))
+        if len(k) == 1:
+            yield bytes((x - k[0]) % 256 for x in b)
+            yield bytes((x + k[0]) % 256 for x in b)
+    try:
+        n = int(str(key), 0)
+    except (TypeError, ValueError):
+        return
+    t = b.decode("utf-8", "replace")
+    for d in (-n, n):
+        try:
+            yield "".join(chr((ord(c) + d) % 0x110000) for c in t).encode("utf-8")
+        except (ValueError, UnicodeEncodeError):
+            pass
+
+
+def decode_any(data, key=None, accept=ANS_RE_T.search, depth=3, cap=4000):
+    """Name-agnostic decode: breadth-first over the primitives puzzle codecs are composed of (reverse, base64/urlsafe/
+    base32/hex/decimal/base85, rot13, xor/add/sub/code-point shift by `key`), up to `depth` steps, returning the first
+    reading that satisfies `accept` (default: contains an ANS-<16 hex> code). The answer shape is the oracle, so a new
+    or renamed codec name never matters (Day 7 `caesar` was such a name). None if nothing within the budget matches."""
+    start = data.encode("utf-8", "replace") if isinstance(data, str) else bytes(data or b"")
+    seen, frontier = {start}, [start]
+    for _ in range(depth):
+        nxt = []
+        for b in frontier:
+            for r in (*_readings(b), *(_keyed(b, key) if key is not None else ())):
+                if not r or r in seen:
+                    continue
+                seen.add(r)
+                t = r.decode("utf-8", "replace")
+                if accept(t):
+                    return t
+                nxt.append(r)
+                if len(seen) > cap:
+                    return None
+        frontier = nxt
+    return None
 
 
 def _split_assemblies(parts, order):
