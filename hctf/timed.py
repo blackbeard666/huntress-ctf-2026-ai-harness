@@ -314,8 +314,25 @@ def run(cid, solver_dir, fix=None, log=print, op="start"):
       expired            -> the attempt's clock ran out before we could submit a complete answer
     """
     from . import workers
-    res = workers.run_timed_auto(solver_dir, cid, op=op, log=log)
+    global _inflight
+    with _inflight_lock:
+        _inflight += 1
+    try:
+        res = workers.run_timed_auto(solver_dir, cid, op=op, log=log)
+    finally:
+        with _inflight_lock:
+            _inflight -= 1
     return process_result(cid, solver_dir, res, log=log)
+
+
+# Live timed attempts in this process (any chain): background GM traffic (variant harvest) yields to a running clock.
+# Day 7: 3 harvest start+downloads + another lane's timed runs -> GM 429 on the script TT's evidence download.
+_inflight = 0
+_inflight_lock = __import__("threading").Lock()
+
+
+def inflight():
+    return _inflight
 
 
 def process_result(cid, solver_dir, res, log=print):
@@ -373,6 +390,8 @@ def process_result(cid, solver_dir, res, log=print):
         return "correct"
     if "prerequisite" in r:   # GM 409 prerequisite_required: the previous mode's LATEST attempt isn't CORRECT
         return "error:prerequisite"
+    if res.get("gm_rate_limited") or "rate_limited" in r:
+        return "error:rate"    # GM 429 on start/download: transient -- back off and retry, never generalize
     if r == "exec_error":
         if res.get("solver_too_slow"):
             # The SOLVER blew the clock (alt rehearsals: warmups solve.py >4.6s on 28 Mastery sets, on Homebase AND

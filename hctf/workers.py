@@ -284,7 +284,9 @@ def run_timed(solver_dir, cid, op="start", timeout=60):
         return {"result": "exec_error", "detail": (r.stdout + r.stderr)[-500:]}
 
 
-TIGHT_WINDOW = float(os.environ.get("HCTF_TIGHT_WINDOW", "8"))      # clocks this short go to Homebase
+# Clocks this short go to Homebase. Default: EVERY clock (inf) -- Homebase bills VM uptime, not calls, and local over the
+# public GM spent 9.53 of an 11s window on Day 7's 469-field script TT (start 3.9s + download 3.1s + submit 6.0s).
+TIGHT_WINDOW = float(os.environ.get("HCTF_TIGHT_WINDOW", "inf"))
 AUTO_HOMEBASE = os.environ.get("HCTF_AUTO_HOMEBASE", "1") != "0"   # 0: never power Homebase on by itself
 CREDIT_FLOOR = float(os.environ.get("HCTF_CREDIT_HARD", "1.5"))      # never power on below this many credits
 _hb_lock = threading.Lock()
@@ -387,10 +389,10 @@ def power_off_homebase_if_ours(log=print):
 
 
 def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print):
-    """Dispatch a timed attempt. HOMEBASE-FIRST for strict clocks (user policy): a window <= HCTF_TIGHT_WINDOW
-    seconds, or one not yet known (a fresh mode; every Day 2-4 TT/Mastery window was 6-7s), runs next to the GM on
-    Homebase (prewarmed at run start). Local over the pairing token is the fallback (Homebase unavailable / below the
-    credit floor / remote exec failure) and the default for known-roomy windows. The old "local first, Homebase only
+    """Dispatch a timed attempt. HOMEBASE-FIRST (user policy): every window <= HCTF_TIGHT_WINDOW seconds (default: all),
+    or one not yet known, runs next to the GM on Homebase (prewarmed at run start). Local over the pairing token is the
+    fallback (Homebase unavailable / remote exec failure); set HCTF_TIGHT_WINDOW=8 to bring back local-first for
+    known-roomy windows (Day 7: that sent an 11s script TT local, 9.53s in-window vs ~2s on Homebase). The old "local first, Homebase only
     after a local expiry" rule burned one attempt per tight mode, and the rehearsal copy run showed local fits a 7s
     462-field Mastery only by ~0.9s (GM origin ~1.3-1.5s/call from here). HCTF_GM_TRANSPORT=ssh forces Homebase."""
     if remote.gm_transport() != "local":
@@ -424,10 +426,11 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print):
             except Exception as e:  # noqa: BLE001 - diagnosis only
                 log(f"[{cid}] env-mismatch check skipped: {e}")
         detail = str(res.get("detail", ""))
-        if str(res.get("result", "")).lower() != "exec_error" or (
+        if str(res.get("result", "")).lower() != "exec_error" or res.get("gm_rate_limited") or (
                 "solve.py" in detail and ("timed out" in detail or "TimeoutExpired" in detail)):
             # (A SOLVER timeout on Homebase is returned as-is: running the same solver locally only burns another
-            # attempt -- replay run 2 lost ~19s that way. The caller routes it to a speed generalize.)
+            # attempt -- replay run 2 lost ~19s that way. The caller routes it to a speed generalize. A GM 429 is
+            # returned as-is too: a local run hits the same rate limiter -- the caller backs off instead.)
             res["routed"] = f"homebase ({'window unknown' if win is None else f'window {win:g}s'})"
             return res
         log(f"[{cid}] Homebase run failed ({str(res.get('detail'))[:120]}); falling back to local")

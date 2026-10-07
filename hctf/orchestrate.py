@@ -29,6 +29,7 @@ GENERALIZE_TIMEOUT = int(os.environ.get("HCTF_GENERALIZE_TIMEOUT", str(12 * 60))
 MAX_SINGLE_LAUNCHES = 3
 MAX_TIMED_RETRIES = 5
 CLOCK_RETRIES = int(os.environ.get("HCTF_CLOCK_RETRIES", "12"))  # extra retries for pure clock expiries
+RATE_RETRIES = int(os.environ.get("HCTF_RATE_RETRIES", "6"))  # extra retries (with backoff) for GM 429s
 CHAIN_CRASH_RETRIES = int(os.environ.get("HCTF_CHAIN_CRASH_RETRIES", "1"))  # re-run a crashed chain (done modes skip)
 # Early handoff: once the Single Solve is CORRECT and a snapshot of the still-running worker's solver reproduces
 # its confirmed answers, make ONE speculative Time Trial -> Mastery pass from that snapshot instead of idling until
@@ -54,6 +55,7 @@ SCOUT_GENERALIZE = int(os.environ.get("HCTF_SCOUT_GENERALIZE", "2"))  # offline 
 # one more on Mastery = 4 generalize/retry cycles (~3:20) where one multi-variant cycle would do.
 HARVEST_VARIANTS = int(os.environ.get("HCTF_HARVEST_VARIANTS", "3"))
 HARVEST_GAP = float(os.environ.get("HCTF_HARVEST_GAP", "3"))  # s after an attempt's deadline before the next start
+HARVEST_YIELD_MAX = float(os.environ.get("HCTF_HARVEST_YIELD_MAX", "30"))  # max s a harvest waits out other live clocks
 
 _print_lock = threading.Lock()
 
@@ -457,7 +459,14 @@ class Chain:
                 left = max(0.0, (end - datetime.datetime.now(datetime.timezone.utc)).total_seconds())
             except ValueError:
                 pass
-        return not done.wait(left + 2 + HARVEST_GAP) and not done.is_set()
+        if done.wait(left + 2 + HARVEST_GAP) or done.is_set():
+            return False
+        # ...and never start + download beside ANOTHER chain's live clock (GM 429s land on that attempt's download).
+        end = time.time() + HARVEST_YIELD_MAX
+        while timed.inflight() and time.time() < end:
+            if done.wait(0.5):
+                return False
+        return not done.is_set()
 
     def _watch_green(self, targets, baseline, need_fast, green, done, fill=frozenset(), harvesting=None):
         """Beside a generalize worker: once solver code has been quiet 3s and the failing target case(s) pass with no
@@ -705,7 +714,10 @@ class Chain:
             return True
         cid = e["id"]
         welcome = self.lane == "welcome"
-        if cli.is_complete(cid) or cli.gm_solved(cid):
+        # A mode with no local trace at all (fresh drop: no start.json / submissions yet) can't be solved by us yet:
+        # skip gm_solved's status round trip (~2s on every lane at the drop) -- `start` below answers it anyway.
+        fresh = not any((cli.cdir(cid) / f).exists() for f in ("start.json", "submissions.jsonl", "solved_once"))
+        if cli.is_complete(cid) or (not fresh and cli.gm_solved(cid)):
             # Solved: a solver that exists is good enough to proceed. Failing auto-* variant cases are the timed
             # stages' business (they feed the generalize worker); they must not relaunch the Single Solve worker.
             if welcome or (self.sdir / "solve.py").exists() or all(
@@ -715,6 +727,20 @@ class Chain:
                     say(f"[{cid}] already solved (solver regression {'ok' if ok else 'has failing cases'})")
                 return True
         set_state(self.base, stage="single:fetch")
+        # Timed contracts (status only: no clock starts) are prefetched BESIDE start/download/triage, not after them.
+        self._tstatus = {}
+        tmodes = [m for m in ("time_trial", "mastery") if m in self.entries]
+
+        def fetch(m):  # both timed contracts at once (no clock starts on a status call)
+            tcid = self.entries[m]["id"]
+            st = cli.call(tcid, "status", tcid)["body"] or {}
+            self._tstatus[m] = st.get("error") or st.get("result")
+            if st.get("questions"):
+                cli.save(tcid, "contract.json", st)
+            return f"  - {m}: `{tcid}` -> `{cli.cdir(tcid).relative_to(ROOT)}/contract.json`"
+        tpool = ThreadPoolExecutor(max_workers=2)
+        tfuts = [tpool.submit(fetch, m) for m in tmodes]
+        tpool.shutdown(wait=False)
         body, err = timed.ensure_started(cid)
         # The GM sometimes hands the flag back directly (issued_flag, e.g. orientation challenges). Use it instead of
         # solving when there's a single answer_id to put it in — a free first-blood the harness used to discard.
@@ -748,18 +774,11 @@ class Chain:
                 if not cli.load(cid, "start.json"):
                     cli.save(cid, "start.json", st)
         timed_info = []
-        self._tstatus = {}
-        tmodes = [m for m in ("time_trial", "mastery") if m in self.entries]
-
-        def fetch(m):  # both timed contracts at once (no clock starts on a status call)
-            tcid = self.entries[m]["id"]
-            st = cli.call(tcid, "status", tcid)["body"] or {}
-            self._tstatus[m] = st.get("error") or st.get("result")
-            if st.get("questions"):
-                cli.save(tcid, "contract.json", st)
-            return f"  - {m}: `{tcid}` -> `{cli.cdir(tcid).relative_to(ROOT)}/contract.json`"
-        with ThreadPoolExecutor(max_workers=2) as ex:
-            timed_info = list(ex.map(fetch, tmodes))
+        for f in tfuts:
+            try:
+                timed_info.append(f.result())
+            except Exception as e:  # noqa: BLE001 - the prompt just lists fewer contracts
+                say(f"[{cid}] timed contract prefetch note: {e}")
         for n in range(MAX_SINGLE_LAUNCHES):
             extra = ""
             notes = cli.cdir(cid) / "notes.md"
@@ -897,6 +916,7 @@ class Chain:
         if cli.is_complete(cid) or (not seen_fresh and cli.gm_solved(cid)):
             return True
         clock_retries = 0
+        rate_retries = 0
         attempt = -1
         while attempt < MAX_TIMED_RETRIES:
             attempt += 1
@@ -921,7 +941,17 @@ class Chain:
                 else:
                     time.sleep(3)  # CourseStack scoring may still be pending for the previous mode
                 continue
-            if res == "error:exec":
+            if res == "error:rate" and rate_retries < RATE_RETRIES:
+                # GM 429 on start/download (Day 7 script TT: harvest + another lane's timed runs hammered the GM and a
+                # rate-limit body became evidence.zip). Nothing to fix: back off and retry on its own budget.
+                rate_retries += 1
+                attempt -= 1
+                wait = min(5 * rate_retries, 20)
+                say(f"[{cid}] GM rate-limited the attempt; backing off {wait}s (rate retry {rate_retries}/{RATE_RETRIES})")
+                set_state(self.base, stage=f"{mode}:rate-limited")
+                time.sleep(wait)
+                continue
+            if res in ("error:exec", "error:rate"):
                 # Transport failure (Day 6 binary TT: exec_error -> 12-min generalize path). Wait briefly for Homebase
                 # health (local is the fallback anyway) and retry; it costs a TT attempt, never a worker.
                 if attempt < MAX_TIMED_RETRIES:
@@ -1150,7 +1180,8 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
         # Boot + provision Homebase in the background NOW, so it's already up when a tight timed window needs it
         # (the on-demand path blocks on the same lock, so no cold-start stall mid-clock). Powered off at run end.
         threading.Thread(target=workers._homebase_ready, args=(say,), daemon=True).start()
-        say("[homebase] pre-warming in the background for tight timed windows (powers off at end of run)")
+        say("[homebase] pre-warming in the background for timed windows (powers off only if this run powered it on; "
+            "otherwise `hctf hb off` when done)")
     gov = Governor(hb_enabled=bool(hb_slots))
     pools = Pools(local_slots, hb_slots, gov)
     groups = {}

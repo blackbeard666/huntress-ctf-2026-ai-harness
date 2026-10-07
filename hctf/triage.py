@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from . import cli, paths
@@ -222,7 +223,7 @@ def _recon(cid, root):
                 pk[m.group(2)] = pk.get(m.group(2), 0) + 1
             lines.append(f"- (skipped {len(libs)} bundled library .class files: "
                          f"{', '.join(f'{k}/ x{n}' for k, n in sorted(pk.items(), key=lambda kv: -kv[1]))})")
-        for f in files:
+        def _row(f):
             ft = _sh(["file", "-b", str(f)])[:110]
             sha = _sh(["sha256sum", str(f)]).split(" ")[0]
             row = [f"- `{f.relative_to(root)}` {f.stat().st_size} B | {ft} | sha256 {sha}"]
@@ -243,7 +244,12 @@ def _recon(cid, root):
             for o in offs:
                 off = o.split(":")[0]
                 row.append(f"    HCFG @ {off}: " + _sh(["xxd", "-s", off, "-l", "16", str(f)])[:80])
-            lines += row
+            return row
+        # One file's tools are independent of the next's: run them side by side, keep the listing order
+        # (binary Day 7: 30 files x file/sha256sum/javap/grep took 3.6s serially).
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            for row in ex.map(_row, files):
+                lines += row
     return (["", "## Recon (standard tools, pre-run for you -- facts, not answers)", ""] + lines) if lines else []
 
 

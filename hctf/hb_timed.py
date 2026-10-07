@@ -107,16 +107,28 @@ def _pool():
     return _POOL
 
 
-def _open(method, query, body=None, headers=None):
+class GMError(RuntimeError):
+    """A GM HTTP error where a verdict is not acceptable (a download). `rate_limited` = transient: back off, retry."""
+
+    def __init__(self, status, raw):
+        super().__init__(f"GM HTTP {status}: {raw[:200]!r}")
+        self.rate_limited = status == 429 or b"rate_limited" in (raw or b"")
+
+
+def _open(method, query, body=None, headers=None, verdict_ok=True, waits=(0.5, 1.0)):
     """Pooled request with a SHORT 429/503 backoff (the clock is running): 0.5s then 1s, then give up.
     4xx with a JSON body is a GM VERDICT (409 {"error": "prerequisite_required"}, ...), not a crash: it is returned
-    so the caller classifies it (raising turned a prerequisite refusal into exec_error -> a pointless generalize)."""
-    for wait in (0.5, 1.0, None):
+    so the caller classifies it (raising turned a prerequisite refusal into exec_error -> a pointless generalize).
+    verdict_ok=False (downloads): ANY 4xx/5xx raises GMError -- Day 7 script TT saved the 24-byte
+    '{"error":"rate_limited"}' body as evidence.zip and burned a 2-min generalize on a solver that was fine."""
+    for wait in (*waits, None):
         status, raw = _pool().request(method, query, body, headers)
         if status in (429, 503) and wait is not None:
             time.sleep(wait)
             continue
         if status >= 400:
+            if not verdict_ok:
+                raise GMError(status, raw)
             try:
                 json.loads(raw)
             except ValueError:
@@ -129,7 +141,10 @@ def _post(payload, timeout=20):
 
 
 def _get_bytes(cap, timeout=20):
-    return _open("GET", f"?op=download&capability={cap}", headers=_auth())
+    raw = _open("GET", f"?op=download&capability={cap}", headers=_auth(), verdict_ok=False, waits=(0.5, 1.0, 2.0))
+    if len(raw) < 512 and raw.lstrip().startswith(b'{"error"'):   # an error body served with a 2xx: still not bytes
+        raise GMError(200, raw)
+    return raw
 
 
 def _window(body):
@@ -357,6 +372,8 @@ def main():
     if body.get("error") or not ids:
         out["result"] = body.get("error") or "no_answer_ids"
         out["detail"] = body
+        if "rate_limited" in str(body.get("error")):
+            out["gm_rate_limited"] = True
         print(json.dumps(out))
         return
     t_started = time.time()
@@ -375,9 +392,18 @@ def main():
         (adir / name).write_bytes(_get_bytes(cap))
 
     if plan:
-        with ThreadPoolExecutor(max_workers=min(int(os.environ.get("HCTF_DL_PARALLEL", "48")), len(plan))) as ex:
-            for _ in ex.map(_fetch, plan):  # propagate any download exception
-                pass
+        try:
+            with ThreadPoolExecutor(max_workers=min(int(os.environ.get("HCTF_DL_PARALLEL", "48")), len(plan))) as ex:
+                for _ in ex.map(_fetch, plan):  # propagate any download exception
+                    pass
+        except GMError as e:
+            # The RUNNER failed, not the solver: never hand the solver an error body as evidence. exec_error is
+            # retried by the orchestrator (no generalize); gm_rate_limited makes it back off first.
+            out["result"] = "exec_error"
+            out["gm_rate_limited"] = e.rate_limited
+            out["detail"] = f"download failed: {e}"
+            print(json.dumps(out))
+            return
     t_downloaded = time.time()
 
     # run the solver (already correct, offline-built); lib on PYTHONPATH
