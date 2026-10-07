@@ -578,3 +578,20 @@ _hp = ev[ev.index("Solver functions"):].splitlines()
 assert "bashplan.py" in _hp[1] and "codec_decode" in _hp[1] and "make_synthetic" not in ev, _hp
 assert orchestrate.construct_census(ed, "warmups") == ""
 print("ok  generalize evidence: codec family census + handler pointer (bashplan.codec_decode first)")
+
+# 24) codec-family probe (hctf/family.py): lib.codec.encode round-trips every encodable known rep x transform; the
+#     probe re-encodes only the failing language's fixtures, outside cases/ (never gates green), and reports misses.
+from lib import codec as _codec  # noqa: E402
+
+_plain = "v=1|role=staging|url=https://ex.example/x|campaign_id=X-1"
+for _rep, _tr, _key, _sample in (("hex_dash", "single_byte_xor", "5c", "76-3d-31"),
+                                 ("decimal_csv", "rolling_xor", "21", "118,61,49"),
+                                 ("reversed_base64", "identity", "", None), ("percent_hex", "add_modulo_256", "07", None),
+                                 ("hex_compact", "reverse_then_xor", "a1b2", "763d31"), ("xor_hex", "cd", None, "763d31")):
+    _m = _codec.encode(_plain, _rep, _tr, _key, _sample)
+    assert _m and _codec.decode(_m, _rep, _tr, _key) == _plain, (_rep, _tr, _m)
+assert _codec.encode(_plain, "no_such_rep", "identity") is None
+assert "FAMILY_PROBE" in dir(orchestrate) and "family_text" in inspect.signature(orchestrate.failing_evidence).parameters
+_gsrc = inspect.getsource(orchestrate.Chain.generalize)
+assert _gsrc.index("family_probe") < _gsrc.index("ensure_case_and_test"), "probe must start before the baseline replay"
+print("ok  codec family: encode() round-trips; probe starts beside the baseline replay, reported not gated")

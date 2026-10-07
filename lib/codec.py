@@ -395,3 +395,104 @@ def find_codecs(src):
         out.append({"id": "batch", "rep": rep, "transform": tr, "key": key, "material": mat,
                     "plain": decode(mat, rep, tr, key)})
     return out
+
+
+# ------------------------------------------------------------------------------------------------ encode (inverse)
+# For synthetic "family" regression cases (hctf/family.py): re-encode a fixture's plaintext under ANOTHER known
+# rep x transform, so a solver that decodes codecs by name/table instead of through decode() fails offline instead of
+# on the next timed variant (rehearsal Day 7 replay: a second TT generalize for one more member of the same codec family).
+# The written FORMAT of a rep is copied from a real material `sample` of that rep (separators, 0x prefix, case,
+# brackets); every result is verified by decode() and None is returned if it doesn't round-trip.
+
+def _encode_transform(p, transform, key):
+    t, inline = _base_transform(transform)
+    k = key_bytes(inline if inline is not None else key)
+    k1 = k[0] if k else None
+    if t == "identity":
+        return p
+    if t in ("reverse", "reverse_bytes"):
+        return p[::-1]
+    if t.startswith("xor_") or t in ("single_byte_xor", "repeating_key_xor"):
+        return _xor(p, k) if k else None
+    if t.startswith("add_"):
+        return bytes((x + k1) % 256 for x in p) if k1 is not None else None
+    if t.startswith(("sub_", "subtract_")):
+        return bytes((x - k1) % 256 for x in p) if k1 is not None else None
+    if t in ("reverse_then_xor", "reverse_xor"):
+        return _xor(p, k or b"\x5a")[::-1]
+    if t == "rolling_xor":
+        if k1 is None:
+            return None
+        out, prev = bytearray(), k1
+        for x in p:
+            c = x ^ prev
+            out.append(c)
+            prev = c
+        return bytes(out)
+    if t in ("rotate_left", "rol"):
+        n = int(inline, 16) % 8 if inline else (k1 % 8 if k1 else 0)
+        return bytes(((x << n) | (x >> (8 - n))) & 0xFF for x in p) if n else None
+    return None
+
+
+def _format_like(data, rep, sample):
+    """Write `data` the way `sample` (a real material of `rep`) is written."""
+    if "base64" in rep:
+        s = base64.b64encode(data).decode()
+        if "urlsafe" in rep or (sample and re.search(r"[-_]", sample) and not re.search(r"[+/]", sample)):
+            s = base64.urlsafe_b64encode(data).decode()
+        if sample and not sample.rstrip().endswith("=") and not rep.startswith("reversed"):
+            s = s.rstrip("=")
+        return s[::-1] if rep.startswith("reversed") else s
+    if rep == "percent_hex":
+        return "".join(f"%{b:02x}" for b in data)
+    if not sample:
+        return None
+    if rep.startswith("octal"):
+        tok, radix = re.compile(r"[0-7]+"), 8
+    elif "hex" in rep:
+        tok, radix = re.compile(r"(?:0[xX]|\\x|&[hH])?[0-9a-fA-F]{2}"), 16
+    elif rep.startswith(("decimal", "integer", "json_num", "reversed_decimal", "reversed_integer")):
+        tok, radix = re.compile(r"\d+"), 10
+    else:
+        return None
+    toks = list(tok.finditer(sample))
+    if len(toks) < 2:
+        return None
+    pre, sep, suf = sample[:toks[0].start()], sample[toks[0].end():toks[1].start()], sample[toks[-1].end():]
+    t0 = toks[0].group(0)
+    prefix = re.match(r"0[xX]|\\x|&[hH]", t0)
+    prefix = prefix.group(0) if prefix else ""
+    upper = any(c in "ABCDEF" for m in toks for c in m.group(0)[len(prefix):])
+    width = len(t0) - len(prefix) if (radix != 10 or t0.startswith("0")) else 0
+    vals = list(data[::-1] if rep.startswith(("reversed_decimal", "reversed_integer", "reversed_hex")) else data)
+    if radix == 16:
+        body = [f"{v:0{max(2, width)}{'X' if upper else 'x'}}" for v in vals]
+    elif radix == 8:
+        body = [f"{v:0{width}o}" for v in vals]
+    else:
+        body = [f"{v:0{width}d}" if width else str(v) for v in vals]
+    return pre + sep.join(prefix + b for b in body) + suf
+
+
+def encode(plain, rep, transform, key=None, sample=None):
+    """Material text that decode(material, rep, transform, key) turns back into `plain` (bytes or str), or None.
+    `sample` = a real material written in `rep` (its format is copied). Only known names; result verified."""
+    if isinstance(plain, str):
+        plain = plain.encode("utf-8")
+    if not known(rep, None):
+        return None
+    t, k = _spec(rep, transform, key)
+    if not known(None, t):
+        return None
+    data = _encode_transform(plain, t, k)
+    if data is None:
+        return None
+    mat = _format_like(data, rep, sample)
+    if not mat:
+        return None
+    try:
+        back = decode(mat, rep, transform, key)
+    except Exception:  # noqa: BLE001
+        back = None
+    return mat if back == plain.decode("utf-8", "replace").lstrip("﻿") else None

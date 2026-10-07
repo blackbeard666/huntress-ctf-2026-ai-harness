@@ -415,26 +415,69 @@ def handler_pointer(sdir, tokens, top=6, strong=(), lang=None):
         f"  {fn}:{ln}  {sig}  ({sc})" for sc, fn, ln, sig in hits[:top])
 
 
-def failing_evidence(sdir, mode, ids, max_files=3, lane=None):
+FAMILY_PROBE = os.environ.get("HCTF_FAMILY_PROBE", "1") != "0"
+
+
+def family_probe(sdir, exts, timeout=45):
+    """Script lane: re-encode the failing language's fixtures of the newest verified case under OTHER known codecs
+    (hctf/family.py, venv: AES zips) and report which ones the solver can't reproduce -- the rest of the codec family
+    the next variant may draw (rehearsal Day 7 replay: xor_hex arrived one cycle after reversed_base64 was fixed)."""
+    import subprocess
+    out = ROOT / ".run" / "family" / Path(sdir).resolve().parent.name
+    argv = [str(paths.VENV_PY), "-m", "hctf.family", "probe", str(sdir), "--out", str(out), "--n", "2"]
+    for e in sorted(exts):
+        argv += ["--ext", e]
+    try:
+        r = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+        d = json.loads(r.stdout.strip().splitlines()[-1])
+    except Exception as e:  # noqa: BLE001 - advisory
+        return f"(codec-family probe skipped: {str(e)[:80]})"
+    res = d.get("results") or []
+    if not res:
+        return ""
+    miss = [x for x in res if not x["ok"]]
+    head = (f"Codec-family probe (SYNTHETIC -- {len(res)} {'/'.join(sorted(exts))} fixture(s) of cases/{d.get('base')} "
+            f"re-encoded under other rep x transform names lib.codec knows; cases in {out.relative_to(ROOT)}/family-*): "
+            f"the solver reproduces {len(res) - len(miss)}/{len(res)}.")
+    if not miss:
+        return head + " The declared-codec path already composes the whole family."
+    lines = [head, "Misses (re-encoded file: new codec, wrong/total answers):"]
+    lines += [f"  {x['case']}/{x['member']}: {x['spec']}  ({x['wrong']}/{x['of']}, {x['empty']} empty)" for x in miss[:10]]
+    lines.append("Fix these in the same pass if the solver reads the declared Codec_ (route it through lib.codec.decode). "
+                 "If it instead EMULATES the fixture's own decode routine, a miss can be synthetic noise (the recoding "
+                 "leaves that routine unchanged) -- don't chase those.")
+    return "\n".join(lines)
+
+
+def failing_artifacts(sdir, mode, ids):
+    """(newest variant-<mode> case dir, [artifact names the failing ids ask about]) or (None, [])."""
+    var = sorted((Path(sdir) / "cases").glob(f"variant-{mode}-*/"), key=lambda p: p.stat().st_mtime)
+    if not var or not ids:
+        return None, []
+    try:
+        qs = {q.get("id"): q for q in json.loads((var[-1] / "contract.json").read_text()).get("questions") or []}
+    except (OSError, ValueError):
+        return var[-1], []
+    arts = []
+    for a in ids:
+        art = (qs.get(a) or {}).get("artifact")
+        if art and art not in arts:
+            arts.append(art)
+    return var[-1], arts
+
+
+def _exts(arts):
+    return {Path(a.split("->")[-1].strip()).suffix.lstrip(".").lower() for a in arts} - {""}
+
+
+def failing_evidence(sdir, mode, ids, max_files=3, lane=None, family_text=None):
     """Inline evidence for a generalize prompt: for the fields the solver got wrong/left empty on the newest
     `variant-<mode>-*` case, the artifact(s) they ask about, the head of each failing file and the same-named file from
     a PASSING case. Rehearsal Day 7: both script generalize workers spent their first 4-6 calls (ls cases, read contract,
     7z x, find the file) just reaching what this block shows."""
     from lib.common import find_artifact
     cases = Path(sdir) / "cases"
-    var = sorted(cases.glob(f"variant-{mode}-*/"), key=lambda p: p.stat().st_mtime)
-    if not var or not ids:
-        return ""
-    case = var[-1]
-    try:
-        qs = {q.get("id"): q for q in json.loads((case / "contract.json").read_text()).get("questions") or []}
-    except (OSError, ValueError):
-        return ""
-    arts = []
-    for a in ids:
-        art = (qs.get(a) or {}).get("artifact")
-        if art and art not in arts:
-            arts.append(art)
+    case, arts = failing_artifacts(sdir, mode, ids)
     if not arts:
         return ""
     passing = [c for c in sorted(cases.glob("*/")) if c.name in ("single_solve",) or c.name.startswith(("auto-", "time_trial-"))]
@@ -475,6 +518,10 @@ def failing_evidence(sdir, mode, ids, max_files=3, lane=None):
         hp = handler_pointer(sdir, toks, strong=strong, lang=next(iter(langs)) if len(langs) == 1 else None)
         if hp:
             extra.append(hp)
+        if family_text is None and lane == "script-analysis" and FAMILY_PROBE and _exts(arts):
+            family_text = family_probe(sdir, _exts(arts))
+        if family_text:
+            extra.append(family_text)
     except Exception as e:  # noqa: BLE001 - advisory
         extra.append(f"(census/handler note: {e})")
     return head + ("\n\n" + "\n\n".join(extra) if extra else "")
@@ -536,6 +583,11 @@ class Chain:
         worker is told the truth — "timing" only when every field was actually judged correct."""
         mode = solvers.mode_of(cid)
         probs = []
+        fam = None
+        if self.lane == "script-analysis" and FAMILY_PROBE and wrong:
+            exts = _exts(failing_artifacts(self.sdir, mode, [a for a, _ in wrong])[1])
+            if exts:   # runs beside the baseline replay below (~1.7 s of venv + 2 solver runs off the critical path)
+                fam = ThreadPoolExecutor(max_workers=1).submit(family_probe, self.sdir, exts)
         # ONE fast parallel replay (8s/case) serves both the problem list and the transactional baseline (was a full
         # 120s/case run here plus a second baseline run: 141s before the worker spawned, replay run 2).
         ensure_case_and_test(paths.base_id(cid), self.sdir, full=False)
@@ -587,7 +639,14 @@ class Chain:
                          "current solver can't fully answer as another `variant-*` case. Re-run `hctf solver-test` "
                          "before you finish -- every variant-* case must come out with every field filled.")
         try:
-            evidence = failing_evidence(self.sdir, mode, [a for a, _ in (wrong or [])], lane=self.lane)
+            ftxt = ""
+            if fam is not None:
+                try:
+                    ftxt = fam.result(timeout=60)
+                except Exception as e:  # noqa: BLE001
+                    ftxt = f"(codec-family probe note: {e})"
+            evidence = failing_evidence(self.sdir, mode, [a for a, _ in (wrong or [])], lane=self.lane,
+                                        family_text=ftxt if fam is not None else "")
         except Exception as e:  # noqa: BLE001 - advisory
             evidence = ""
             say(f"[{cid}] evidence block note: {e}")
