@@ -17,6 +17,14 @@ if command -v apt-get >/dev/null 2>&1; then
   fi
 fi
 
+# No root (the VM): `hctf hb setup` pushed the official static 7-Zip as ~/.local/bin/7zz -- expose it as 7z when the
+# system has none. hb_timed and Homebase workers put ~/.local/bin on PATH.
+mkdir -p ~/.local/bin
+if ! command -v 7z >/dev/null 2>&1 && [ -x ~/.local/bin/7zz ]; then
+  ln -sf ~/.local/bin/7zz ~/.local/bin/7z && echo "[hb-setup] 7z -> ~/.local/bin/7zz (static 7-Zip, no root)"
+fi
+export PATH="$HOME/.local/bin:$PATH"
+
 PIP="python3 -m pip install --user --break-system-packages -q"
 $PIP pyelftools pefile capstone keystone-engine unicorn pycryptodome pyzipper \
      androguard oletools python-evtx regipy LnkParse3 binary-refinery \

@@ -141,6 +141,11 @@ def c_hb(a):
     if a.action == "setup":
         # Provision Homebase so solvers run next to the GM (hb_timed). Idempotent.
         remote.rsync_to(ROOT / "setup" / "homebase_setup.sh", "~/homebase_setup.sh")
+        # user-level tools for VMs without passwordless sudo (rehearsal): setup/fetch_hb_tools.sh caches them locally
+        tools = ROOT / ".run" / "cache" / "hb-tools" / "7zz"
+        if tools.exists():
+            remote.ssh("mkdir -p ~/.local/bin", check=False)
+            remote.rsync_to(tools, "~/.local/bin/7zz")
         r = remote.ssh("bash ~/homebase_setup.sh", timeout=600, check=False)
         sys.stdout.write(r.stdout)
         sys.stderr.write(r.stderr)

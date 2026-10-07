@@ -416,8 +416,10 @@ def main():
     contract = adir / "contract.json"
     contract.write_text(json.dumps(body))
     env = dict(os.environ, PYTHONPATH=str(HW))
+    # user-level tools `hctf hb setup` installs without root (static 7-Zip as 7zz/7z on the the VM: no sudo there)
+    env["PATH"] = f"{Path.home() / '.local' / 'bin'}:{env.get('PATH', '')}"
     import shutil as _sh
-    if not _sh.which("7z"):  # e.g. the the Homebase VM (no p7zip, no sudo): pyzipper-backed bin/shims/7z
+    if not _sh.which("7z", path=env["PATH"]):  # still none: the pyzipper-backed bin/shims/7z
         env["PATH"] = f"{HW / 'bin' / 'shims'}:{env.get('PATH', '')}"
     solve = HW / a.solver_dir / "solve.py"
     try:

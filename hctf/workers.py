@@ -588,7 +588,7 @@ def run_homebase(chal_root, log_dir, stage, prompt, env_extra, timeout):
     env_extra = {k: (str(Path(v).relative_to(ROOT)) if isinstance(v, Path) else v) for k, v in env_extra.items()}
     envs = " ".join(f"{k}={shlex.quote(str(v))}" for k, v in {**env_extra, "HCTF_ON_HOMEBASE": 1}.items())
     cmd = (f"cd ~/{HB_WORK} && {envs} PYTHONPATH=~/{HB_WORK} "
-           f"PATH=~/{HB_WORK}/bin:~/{HB_WORK}/tools/node/bin:~/{HB_WORK}/.venv/bin:$PATH "
+           f"PATH=~/{HB_WORK}/bin:~/{HB_WORK}/tools/node/bin:~/{HB_WORK}/.venv/bin:~/.local/bin:$PATH "
            f"timeout {int(timeout)} codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check "
            f"{shlex.quote(prompt)} </dev/null")
     try:
