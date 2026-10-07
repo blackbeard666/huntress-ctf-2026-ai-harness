@@ -30,6 +30,7 @@ REPS = {
     "decimal_csv": 5, "decimal_dot": 5, "hex_escape": 5, "hex_literal": 5, "integer_list": 5, "integer_tuple": 5,
     "reversed_integer_list": 5, "urlsafe_base64": 5,
     "decimal_colon": 6, "decimal_space": 6, "octal_space": 6, "percent_hex": 6,
+    "json_numbers": 7, "unicode_escapes": 7, "reversed_base64": 7, "xor_hex": 7,
 }
 TRANSFORMS = {
     "identity": 3, "reverse": 3, "add_7": 3, "xor_5a": 3, "rotate_left": 3, "reverse_xor": 3,
@@ -166,6 +167,10 @@ def _rep_candidates(rep, material):
         c += [h[::-1] if h else None, hex_bytes(re.sub(r"[^0-9a-fA-F]", "", m)[::-1])]
     elif "hex" in rep:
         c.append(hex_bytes(m))
+    elif rep.endswith("escapes"):   # Node `unicode_escapes` (D7): '\\u0076\\u003d..' -- any backslash count
+        esc = re.findall(r"\\+u([0-9a-fA-F]{4})|\\+x([0-9a-fA-F]{2})", m)
+        v = [int(a or b, 16) for a, b in esc]
+        c.append(bytes(v) if v and all(x < 256 for x in v) else None)
     elif rep.startswith("octal"):
         a = int_array(m, 8)
         c.append(bytes(a) if a and all(0 <= x < 256 for x in a) else None)
@@ -173,7 +178,7 @@ def _rep_candidates(rep, material):
         a = int_array(m, 10)
         c.append(bytes(a[::-1]) if a and all(0 <= x < 256 for x in a) else None)
         c.append(bytes(a) if a and all(0 <= x < 256 for x in a) else None)
-    elif rep.startswith(("decimal", "integer")):
+    elif rep.startswith(("decimal", "integer", "json_num")):   # json_numbers (Node, D7) = '[118,61,49,..]'
         a = int_array(m, 10) or int_array(m)
         c.append(bytes(a) if a and all(0 <= x < 256 for x in a) else None)
     elif rep == "reversed_text":
@@ -236,11 +241,24 @@ def _transform_candidates(transform, key, data):
             yield bytes(((x >> n) | (x << (8 - n))) & 0xFF for x in data)   # undo a left rotation
 
 
+def _spec(rep, transform, key):
+    """Normalise short codec specs (D7 bash): `rep|` (empty transform) = identity; `xor_hex|cd` (the rep names the xor
+    and the 2nd field is the KEY, not a transform) = repeating_key_xor with that key."""
+    t = (transform or "").strip()
+    if not t:
+        return "identity", key
+    if "xor" in rep and t not in TRANSFORMS and _base_transform(t)[1] is None and \
+            re.fullmatch(r"[0-9a-fA-F]{1,2}(?:,?[0-9a-fA-F]{2})*", t):
+        return "repeating_key_xor", t
+    return t, key
+
+
 def decode(material, rep, transform, key=None):
     """Plaintext (str) of a declared codec, or None. Tries the rep's plausible readings x the transform's plausible
     parameters and returns the first that looks like a plan (`v=` / JSON). Unknown names -> None."""
-    if not material or not rep or not transform:
+    if not material or not rep:
         return None
+    transform, key = _spec(rep, transform, key)
     if not known(rep, transform):
         return None
     for data in _rep_candidates(rep, material):
