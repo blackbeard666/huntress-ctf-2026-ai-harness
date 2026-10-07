@@ -474,3 +474,26 @@ assert "{evidence}" in (Path(orchestrate.__file__).parent / "prompts" / "general
 gsrc = inspect.getsource(orchestrate.Chain.generalize)
 assert gsrc.index("MORE VARIANTS ARRIVE") < gsrc.index('workers.render("generalize"'), "harvest note must precede render"
 print("ok  generalize prompt: failing bytes + passing counterpart inlined; harvest note reaches the prompt")
+
+# 20) hctf timeline: per-chain T+ per mode, attempts, generalize cycles, harvest counts from a dayNN.log.
+from hctf import timeline  # noqa: E402
+
+_log = """[effort] global=high
+23:59:58 [homebase] pre-warming
+23:59:59 [s-day-07] single worker -> local (timeout 1500s)
+00:00:20 [s-day-07] single CORRECT + solver verified -> ending the worker, timed modes start now
+00:00:20 [s-day-07] single worker exit -15 (w.log)
+00:00:30 [s-day-07/time_trial] timed: {"result": "solver_incomplete"}
+00:00:31 [s-day-07/time_trial] generalize worker -> local (timeout 720s)
+00:00:40 [s-day-07/time_trial] harvest: start refused ({'result': 'expired'}); stopping the harvest
+00:01:31 [s-day-07/time_trial] generalize worker exit -15 (g.log)
+00:01:40 [s-day-07/time_trial] timed: {"result": "correct"}
+00:01:40 [s-day-07/time_trial] result: correct
+00:01:45 [s-day-07/mastery] timed: {"result": "correct"}
+00:01:45 [s-day-07/mastery] result: correct""".splitlines()
+_t0, _ch = timeline.parse(_log)
+_c = _ch["s-day-07"]
+assert {m: v - _t0 for m, v in _c["done"].items()} == {"single_solve": 22, "time_trial": 102, "mastery": 107}, _c["done"]
+assert _c["attempts"] == {"single_solve": 0, "time_trial": 2, "mastery": 1} and _c["harvest_refused"] == 1
+assert [(s, b - a) for _, s, a, b in _c["workers"]] == [("single", 21), ("generalize", 60)]
+print("ok  timeline: midnight wrap, per-mode T+, attempts, worker durations, harvest refusals")

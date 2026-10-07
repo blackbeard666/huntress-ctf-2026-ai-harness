@@ -884,6 +884,15 @@ def c_solutions(a):
     return 0
 
 
+def c_timeline(a):
+    from . import timeline
+    if not a.day and not a.log:
+        print("give --day N or --log PATH", file=sys.stderr)
+        return 2
+    print(timeline.report(day=a.day, log=a.log))
+    return 0
+
+
 def c_dash(a):
     from . import orchestrate
     orchestrate.dashboard()
@@ -986,6 +995,9 @@ def main(argv=None):
                    ).add_argument("id")
     prc = sub.add_parser("reconcile", help="rewrite local chain.json from GM truth (fixes stale/under-reported dash)")
     prc.add_argument("--day")
+    ptl = sub.add_parser("timeline", help="per-chain T+ per mode, attempts, generalize cycles, LLM vs overhead")
+    ptl.add_argument("--day", type=int)
+    ptl.add_argument("--log", help="a dayNN.log path (default .run/dayNN.log)")
     sub.add_parser("solutions", help="(re)generate reference/SOLUTIONS.md index from every solver/NOTES.md")
     pw = sub.add_parser("watch", help="live board of every challenge + each agent's current action")
     pw.add_argument("--interval", type=float, default=2.0)
@@ -1005,7 +1017,8 @@ def main(argv=None):
           "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test,
           "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
           "reconcile": c_reconcile, "solutions": c_solutions,
-          "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout}[a.cmd]
+          "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout,
+          "timeline": c_timeline}[a.cmd]
     try:
         return fn(a)
     except remote.Unreachable as e:
