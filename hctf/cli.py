@@ -457,12 +457,13 @@ def c_submit(a):
         print(f"bisect: {len(bad)} answer_id(s) REJECTED by the GM (everything else accepted): {sorted(bad)[:40]}",
               file=sys.stderr)
         kind = "correct" if is_complete(a.id) else ("accepted" if len(bad) < len(answers) else kind)
-    if a.from_solver and not problems:
-        _mastery_dry_run(a.id)
     if problems:
         print("refused:\n  " + "\n  ".join(problems), file=sys.stderr)
         return EXIT["refused"]
-    emit(body)
+    emit(body)                        # the verdict first: the stop-at-correct watcher may end the worker any moment
+    if a.from_solver:
+        sys.stdout.flush()
+        _mastery_dry_run(a.id)
     return EXIT.get(kind, EXIT["error"])
 
 

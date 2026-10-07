@@ -155,7 +155,64 @@ def gm(*args, timeout=180):
                            capture_output=True, text=True, timeout=timeout,
                            env=dict(os.environ, HUNTRESS_GAME_MASTER_URL=INSIDE_GM))
         return _gm_parse(r, "homebase-local")
+    if args and args[0] == "submit" and SUBMIT_VIA_HB and _public_gm() and _master_alive():
+        env = _gm_submit_hb(args, timeout)
+        if env is not None:
+            return env
     return _gm_local(args, timeout)  # local (default): public GM via pairing token
+
+
+# Single Solve submits via Homebase's inside proxy (0.55 s vs 2.8 s, and Day 7's public-GM submits took 9.5-18 s).
+# ONLY the submit: its payload is a few hundred bytes of answers; start/download stay public because the bytes are
+# needed HERE (a proxy hop would only add transfer). HCTF_SUBMIT_VIA_HB=0 disables.
+SUBMIT_VIA_HB = os.environ.get("HCTF_SUBMIT_VIA_HB", "1") != "0"
+_EXEC_MARK = "HCTF-EXEC"
+PUBLIC_GM = "https://2026.huntress.ctf.games"
+
+
+def _public_gm():
+    """Only when this process talks to the REAL public GM: a replay points HUNTRESS_GAME_MASTER_URL at its local
+    stand-in, and its singles must be judged there, never re-routed to the real GM through Homebase."""
+    return os.environ.get("HUNTRESS_GAME_MASTER_URL", PUBLIC_GM).rstrip("/") == PUBLIC_GM
+
+
+def _master_alive():
+    """True if the shared SSH ControlMaster to Homebase is up (a ~10 ms local socket check, never a cold connect:
+    a submit must not wait 15 s on a dead tunnel)."""
+    try:
+        r = subprocess.run(["ssh", *SSH_OPTS, "-O", "check", f"{HB_USER}@{HB_HOST}"],
+                           capture_output=True, text=True, timeout=3)
+        return r.returncode == 0
+    except (subprocess.SubprocessError, OSError):
+        return False
+
+
+def _gm_submit_hb(args, timeout):
+    """ONE ssh exec of gm.py submit on Homebase -- deliberately NOT ssh() (it retries exit 255, and 255 also means a
+    drop AFTER the command started: a retried submit is a second POST). The remote side prints a marker before gm.py
+    runs, so: no marker + ssh failure -> the POST never left -> None (caller uses the public GM). Marker present and
+    no envelope -> outcome unknown -> Unreachable (never a blind second POST; the worker re-checks and resubmits)."""
+    cmd = (f"echo {_EXEC_MARK} >&2; HUNTRESS_GAME_MASTER_URL={INSIDE_GM} python3 ~/{HB_DIR}/gm.py "
+           + " ".join(shlex.quote(str(a)) for a in args))
+    try:
+        with _slot():
+            r = subprocess.run(["ssh", *SSH_OPTS, f"{HB_USER}@{HB_HOST}", cmd],
+                               capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        if _EXEC_MARK in str(e.stderr or ""):
+            raise Unreachable("submit via Homebase timed out after it started: outcome unknown -- "
+                              "check `hctf status` before resubmitting") from None
+        return None
+    except OSError:
+        return None
+    if _EXEC_MARK not in (r.stderr or ""):
+        return None                                   # never reached gm.py: safe to send it the public way
+    try:
+        env = _gm_parse(r, "ssh-submit")
+    except RuntimeError as e:                         # includes Unreachable (http 0 from the inside proxy)
+        raise Unreachable(f"submit via Homebase failed after it started (outcome unknown): {e}") from None
+    env["transport"] = "homebase"
+    return env
 
 
 def rsync_from(remote_path, local_dir, own_conn=False):

@@ -74,7 +74,14 @@ def _request(method, params=None, payload=None):
                 return r.status, dict(r.headers), r.read()
         except urllib.error.HTTPError as e:
             if e.code in (429, 503) and attempt < RATE_RETRIES:
-                time.sleep(_retry_after(e.headers, attempt))  # rate-limited: back off, don't fail the caller
+                wait = _retry_after(e.headers, attempt)
+                # rate-limited: back off, don't fail the caller -- but SAY so (Day 7: 9.5-18 s single submits with no
+                # trace of why; the envelope's retries/slept + this line make 429 backoff visible in log.jsonl)
+                STATS["retries"] += 1
+                STATS["slept"] += wait
+                print(f"gm.py: HTTP {e.code} on {method} {(params or payload or {}).get('op', '')}; retry "
+                      f"{attempt + 1}/{RATE_RETRIES} in {wait:g}s", file=sys.stderr)
+                time.sleep(wait)
                 continue
             return e.code, dict(e.headers or {}), e.read()
         except (urllib.error.URLError, OSError) as e:
@@ -84,7 +91,8 @@ def _request(method, params=None, payload=None):
             return 0, {}, json.dumps({"error": "unreachable", "detail": str(e)}).encode()
 
 
-RATE_RETRIES = int(os.environ.get("HCTF_RATE_RETRIES", "4"))
+RATE_RETRIES = int(os.environ.get("HCTF_GM_RATE_RETRIES", os.environ.get("HCTF_RATE_RETRIES", "4")))
+STATS = {"retries": 0, "slept": 0.0}  # this process's 429/503 backoff, reported in every envelope
 
 
 def _retry_after(headers, attempt):
@@ -180,6 +188,7 @@ def main(argv=None):
     pd.add_argument("outdir")
     pd.add_argument("--name")
     a = p.parse_args(argv)
+    t0 = time.time()
 
     if a.cmd == "openapi":
         env = _envelope(*_request("GET", {"op": "openapi"}))
@@ -205,6 +214,8 @@ def main(argv=None):
         env = cmd_artifact(a.id, a.outdir, a.delivery)
     else:
         env = cmd_download(a.capability, a.outdir, a.name)
+    env["elapsed"] = round(time.time() - t0, 3)          # request time incl. any 429 backoff (not process startup)
+    env["retries"], env["slept"] = STATS["retries"], round(STATS["slept"], 2)
     json.dump(env, sys.stdout, ensure_ascii=False)
     sys.stdout.write("\n")
     return 0 if env["http"] else 5
