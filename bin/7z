@@ -1,0 +1,15 @@
+#!/bin/sh
+# 7z for workers (bin/ is first on their PATH): never wait on stdin. Blind D7 replay: a generalize worker's `7z x` sat
+# 120 s on an interactive prompt until the tool timed out; the same command with </dev/null finished at once.
+# Adds -y (assume yes), -pinfected (the CTF's archive password) when no -p is given, and closes stdin -- a prompt that
+# would hang now fails fast. Falls back to the pyzipper shim where p7zip is missing (the Homebase VM).
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+for d in /usr/bin /bin /usr/local/bin; do
+  [ -x "$d/7z" ] && REAL="$d/7z" && break
+done
+[ -n "$REAL" ] || REAL="$HERE/shims/7z"
+case " $* " in *" -p"*) PW="" ;; *) PW="-pinfected" ;; esac
+case "$1" in
+  x|e|t|l) exec "$REAL" "$@" -y $PW </dev/null ;;
+  *) exec "$REAL" "$@" -y </dev/null ;;
+esac
