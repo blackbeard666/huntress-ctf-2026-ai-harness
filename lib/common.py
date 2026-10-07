@@ -125,6 +125,13 @@ def find_artifact(root, artifact):
                     return read_member(p, member)
                 except KeyError:
                     continue  # same-named outer bundle; look deeper
+            if not member and not cbase.lower().endswith(".zip") and zipfile.is_zipfile(p):
+                # a non-zip name saved as a zip = a bundle saved under its first member's name (Day 7 warmups
+                # Mastery: blob-01..33.txt zipped, saved as 'blob-01.txt'): return that member, not the whole bundle
+                try:
+                    return read_member(p, cbase)
+                except KeyError:
+                    pass
             return p.read_bytes()
     # recursive: prefer `member` whose parent container is `cbase`, then any `member`, then the container itself
     target = Path(member).name if member else cbase

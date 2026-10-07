@@ -876,9 +876,15 @@ class Chain:
 
     @staticmethod
     def _clock_expiry(cid):
-        """The last attempt expired although the solver answered everything: the clock, not the solver."""
+        """The last attempt expired although the solver answered everything: the clock, not the solver. A GM-judged
+        WRONG answer is the solver even when the clock then ran out (Day 7 warmups Mastery: full submit 'incorrect' on
+        set1, the in-window per-set localize ate the rest of the 9s clock -> 'expired', and the lane was blocked as
+        "timing")."""
         last = timed.last_result(cid) or {}
-        return (last.get("phases") or {}).get("solve") is not None and not last.get("missing")
+        judged_wrong = last.get("full_result") == "incorrect" or any(
+            (v or {}).get("result") == "incorrect" for v in (last.get("per_set") or {}).values())
+        return ((last.get("phases") or {}).get("solve") is not None and not last.get("missing")
+                and not judged_wrong)
 
     def timed_stage(self, mode):
         e = self.entries.get(mode)
@@ -927,7 +933,7 @@ class Chain:
             if res not in ("expired", "blocked"):
                 break
             last = timed.last_result(cid) or {}
-            if res == "expired" and self._clock_expiry(cid):
+            if res == "expired" and self._clock_expiry(cid) and clock_retries >= CLOCK_RETRIES:
                 # Clock-only failures exhausted their own retry budget: a generalize worker can't speed up the network
                 # (main replay: one was launched anyway after "timing, not the solver"). Stop here.
                 say(f"[{cid}] clock expiries exhausted ({clock_retries}); the solver is fine -- not generalizing")

@@ -192,6 +192,9 @@ def _sh(args, timeout=8):
         return ""
 
 
+_JVM_LIB = re.compile(r"(^|/)(kotlinx?|java|javax|androidx?|scala|org/jetbrains|org/intellij|com/google|okhttp3|okio)/")
+
+
 def _recon(cid, root):
     """Standard-tool recon of the extracted members, per lane (recon, never answers): what each file is and where the
     interesting bytes sit, so the worker's first turn starts from tool output instead of orientation turns."""
@@ -206,6 +209,19 @@ def _recon(cid, root):
                 ".vbs": "VBScript", ".vbe": "VBScript", ".py": "Python", ".pyc": "Python bytecode", ".sh": "Bash"}
         lines += _script_decoded([f for f in files if f.suffix.lower() in lang], root, lang)
     elif cid.startswith("binary-reverse-engineering"):
+        # Bundled JVM runtime classes are not the challenge: one `javap` each (~0.6s) over a fat Kotlin jar's 3123
+        # stdlib classes held Day 7's binary worker ~4 min in fetch. Filter BEFORE the cap so app classes always fit.
+        allf = sorted(p for p in root.rglob("*") if p.is_file())
+        libs = [p for p in allf if p.suffix == ".class" and _JVM_LIB.search(p.relative_to(root).as_posix())]
+        skip = set(libs)
+        files = [p for p in allf if p not in skip][:400]
+        if libs:
+            pk = {}
+            for p in libs:
+                m = _JVM_LIB.search(p.relative_to(root).as_posix())
+                pk[m.group(2)] = pk.get(m.group(2), 0) + 1
+            lines.append(f"- (skipped {len(libs)} bundled library .class files: "
+                         f"{', '.join(f'{k}/ x{n}' for k, n in sorted(pk.items(), key=lambda kv: -kv[1]))})")
         for f in files:
             ft = _sh(["file", "-b", str(f)])[:110]
             sha = _sh(["sha256sum", str(f)]).split(" ")[0]
