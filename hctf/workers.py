@@ -144,14 +144,16 @@ def sandboxed(cmd):
     if not WORKER_SANDBOX or not _sh.which("bwrap"):
         return cmd
     hidden = sandbox_hidden_paths()
-    masks = [a for p in hidden for a in ("--tmpfs", str(p))]
+    # directories -> empty tmpfs; FILES -> /dev/null bound over them (bwrap can't mount a tmpfs on a file: a masked
+    # reference/SPEED.md made every worker exit 1 in the from-scratch main replay)
+    masks = [a for p in hidden for a in (("--tmpfs", str(p)) if Path(p).is_dir() else ("--ro-bind", "/dev/null", str(p)))]
     # The rehearsal copy's .venv / tools / bin/* are SYMLINKS into the main tree: masking it silently took away pyzipper,
     # rizin, exiftool... (replay runs lost 25-30s per worker on that). Re-expose exactly those targets, read-only.
     binds = []
     for link in [*ROOT.glob(".venv"), *ROOT.glob("tools"), *(ROOT / "bin").glob("*")]:
         if link.is_symlink():
             tgt = link.resolve()
-            if tgt.exists() and any(str(tgt).startswith(str(h) + "/") for h in hidden):
+            if tgt.exists() and any(str(tgt).startswith(str(h) + "/") for h in hidden if Path(h).is_dir()):
                 binds += ["--ro-bind", str(tgt), str(tgt)]
     return ["bwrap", "--dev-bind", "/", "/", *masks, *binds, "--die-with-parent", "--", *cmd]
 
