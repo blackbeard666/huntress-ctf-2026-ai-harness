@@ -32,6 +32,10 @@ CHAIN_CRASH_RETRIES = int(os.environ.get("HCTF_CHAIN_CRASH_RETRIES", "1"))  # re
 # its confirmed answers, make ONE speculative Time Trial -> Mastery pass from that snapshot instead of idling until
 # the worker exits (rehearsal Day 5: answers CORRECT at T+3:10, worker hardened the solver until T+6:25).
 BASELINE_CASE_TIMEOUT = float(os.environ.get("HCTF_BASELINE_CASE_TIMEOUT", "8"))  # > any 6-7s window  # pre-generalize regression baseline
+# Owner: earlier days are LEARNING NOTES (reference/techniques/<lane>.md), never "rerun yesterday's solver first" -- the
+# day's challenge may be unrelated (an old solver confidently submitted a wrong value; old warmups/metadata solvers
+# produced nothing). Opt back in with HCTF_REUSE_OLD_SOLVERS=1.
+REUSE_OLD_SOLVERS = os.environ.get("HCTF_REUSE_OLD_SOLVERS", "0") == "1"
 ENUM_PROBE_BUDGET = int(os.environ.get("HCTF_ENUM_PROBE_BUDGET", "0"))  # OFF: the worker identifies labels; set >0 to pre-probe question-listed enum options
 REUSE_PROBE_BUDGET = int(os.environ.get("HCTF_REUSE_PROBE_BUDGET", "20"))  # merged-reuse submits before the worker
 STOP_WHEN_READY = os.environ.get("HCTF_STOP_WHEN_READY", "1") != "0"  # end the single worker at CORRECT + verified solver
@@ -130,6 +134,13 @@ def set_state(base, **kw):
         tmp = p.with_name(f".chain.json.{threading.get_ident()}")
         tmp.write_text(json.dumps(st, indent=2))
         os.replace(tmp, p)  # atomic: `hctf dash`/`why` never read a half-written file
+
+
+def technique_log(lane):
+    """reference/techniques/<lane>.md -- the lane's learning log from earlier days (patterns, cues, tools, GM
+    conventions, pitfalls), or a note that none exists yet."""
+    f = ROOT / "reference" / "techniques" / f"{lane}.md"
+    return f"`{f.relative_to(ROOT)}`" if f.exists() else "(none yet for this lane)"
 
 
 def _rel(p):
@@ -560,7 +571,7 @@ class Chain:
                 return True
         # Reuse-first (no model time): a prior solver matched by question text may already solve this. Try it
         # BEFORE triage so a hit skips triage and the LLM worker entirely — the fastest path to first blood.
-        if not welcome and self.try_existing_solvers(cid):
+        if not welcome and REUSE_OLD_SOLVERS and self.try_existing_solvers(cid):
             say(f"[{cid}] solved by existing solver library (no worker needed)")
             return True
         if not welcome and not (self.sdir / "solve.py").exists():
@@ -603,7 +614,7 @@ class Chain:
             if welcome:
                 extra += "\nThis is an orientation challenge: no solver is needed, only a correct submission."
             extra += getattr(self, "_reuse_note", "")
-            prompt = workers.render("single", name=self.name, cid=cid, lane=self.lane,
+            prompt = workers.render("single", name=self.name, cid=cid, lane=self.lane, techniques=technique_log(self.lane),
                                     persona=workers.lane_persona(self.lane), playbook=workers.lane_playbook(self.lane),
                                     chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
                                     timed_contracts="\n".join(timed_info) or "  - (none: Single Solve only)", extra=extra)
@@ -1003,11 +1014,13 @@ def ratchet(day):
         m = re.search(r"^##\s*Proposed lib additions\s*$(.*?)(?=^##\s|\Z)", text, re.M | re.S)
         if m and m.group(1).strip():
             props.append(f"### {notes.relative_to(ROOT)}\n{m.group(1).strip()}")
-    if not props:
-        say(f"[ratchet] {tag}: no proposed lib additions")
+    chals = sorted(str(p.relative_to(ROOT)) for p in (paths.CHALLENGES / tag).glob("*/meta.json"))
+    if not chals:
+        say(f"[ratchet] {tag}: nothing to learn from")
         return
-    prompt = workers.render("ratchet", day=tag, day_num=int(day), proposals="\n\n".join(props))
-    say(f"[ratchet] {tag}: merging {len(props)} proposal section(s) into lib/")
+    prompt = workers.render("ratchet", day=tag, day_num=int(day), challenges="\n".join(f"- {c}" for c in chals),
+                            proposals="\n\n".join(props) or "(no `## Proposed lib additions` this day)")
+    say(f"[ratchet] {tag}: technique logs + {len(props)} lib proposal section(s)")
     # Transactional: a killed/timed-out ratchet left lib/ half-edited on the rehearsal replay (an unvalidated helper that
     # extracted 0 files). Snapshot lib/, and restore it unless the worker exits 0 AND the test suites still pass.
     backup = ROOT / ".run" / f"ratchet-lib-{tag}"

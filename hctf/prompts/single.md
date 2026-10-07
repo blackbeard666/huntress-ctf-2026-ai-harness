@@ -24,9 +24,13 @@ answers the question, run it — do not recreate `strings`, `unzip`, or a parser
 The Single Solve itself is untimed, but the Time Trial and Mastery cannot start until you are done, so every second you
 spend is on the critical path. The harness ENDS your session automatically the moment the Single Solve is CORRECT and
 `solve.py` reproduces the confirmed answers — anything you planned to do after that will not happen, by design.
-1. **Start from what already exists.** If the REUSE PRE-PASS note below says answers are already accepted and the solver
-   is seeded, run `hctf solver-run {cid}` and work ONLY on the answer_ids still missing — extend the seeded `solve.py`.
-2. **`{solver_dir}/solve.py` is pre-seeded** (a prior solver from the reuse pass, or the harness skeleton: contract I/O,
+1. **Identify the goal first, then learn from earlier days.** Read the contract (what is asked, the answer formats) and
+   the bytes. Your lane's technique log {techniques} records how earlier days' challenges looked, the recognition cues,
+   the tools that worked, the GM's spelling conventions and the pitfalls -- skim it to spot whether today matches a
+   known pattern. It is a REFERENCE, not a recipe: today's challenge may be entirely new, so derive every value from
+   today's bytes. You may read an earlier solver's code to borrow a technique, but never run an old solver against
+   today's challenge as the source of your answers.
+2. **`{solver_dir}/solve.py` is pre-seeded with the harness skeleton** (contract I/O,
    per-set loop, `artifact_bytes()` that already resolves Mastery's `delivery N: <name>` files by sha256 — fill in
    `answer()`). **Derive the answers from the real bytes by writing them INTO that `solve.py`** (following the
    `solver-authoring` skill: contract + artifacts in, JSON out; every value derived from the bytes, nothing hard-coded).
@@ -64,8 +68,8 @@ fact (a confirmed label spelling, a format law), append it to `{solver_dir}/NOTE
 `## Proposed lib additions` (one line each: file, constant, value, evidence); the harness merges these after the run.
 `hctf labels` records confirmed labels in `lib/vocab.json` itself — that is the one sanctioned shared write.
 Never search the filesystem outside this project for answers or solvers (no `find /`, no other home directories,
-no other copy's' trees): workers run sandboxed and those paths are empty. Prior days' solvers under
-`challenges/` and `lib/` are the only reuse sources, and the harness already ran them for you.
+no other copy's' trees): workers run sandboxed and those paths are empty. Earlier days of THIS account
+(`challenges/dayNN/`, `reference/techniques/`, `lib/`) are learning material, not answers.
 
 ## Field-label playbook for your lane (read before probing any label)
 {playbook}

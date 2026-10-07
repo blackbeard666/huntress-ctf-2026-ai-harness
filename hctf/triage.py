@@ -183,7 +183,7 @@ def triage(cid):
     if qn:
         # STATUS first: workers spent 1-11 jq calls (some failing on the schema) working out what is left to do.
         left = [a for a in contract.get("answer_ids", []) if a not in conf]
-        out += [f"## STATUS: {len(conf)}/{qn} answers ALREADY ACCEPTED by the GM (reuse pass; see confirmed.json) -- "
+        out += [f"## STATUS: {len(conf)}/{qn} answers already accepted by the GM (see confirmed.json) -- "
                 f"{len(left)} REMAINING", ""]
         if conf and left:
             out += ["Work ONLY on these answer_ids:", "", "`" + "`, `".join(left[:200]) + "`" + (" ..." if len(left) > 200 else ""), ""]

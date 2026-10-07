@@ -53,4 +53,5 @@ Checklist:
   then `hctf submit <id> --from-solver`. That's all — no `solver-test`, no synthetic cases.
 - Generalize worker (a real variant failed): `hctf solver-test <single-solve-id>` replays every case in `solver/cases/`
   (Time Trial / Mastery variants are added automatically); it must pass before you stop.
-- `solver/NOTES.md`: 3-6 lines — the concept, the variant axes handled, and `## Proposed lib additions`.
+- `solver/NOTES.md`: a few lines — the concept; `## Technique` (recognition cue, tools/commands that worked, dead
+  ends) for the lane's technique log; the variant axes handled; and `## Proposed lib additions`.

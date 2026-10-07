@@ -228,3 +228,7 @@ goal/target fast and solves it with the standard tools (readelf/rizin/Ghidra hea
 box-js...), loaded via its lane skill on the first call. Kept: harness latency work (triage STATUS + pre-extracted
 archives, skeleton, submit --from-solver, stop-at-correct, Homebase/window/sandbox fixes). The lane-solver numbers
 above are historical.
+- Earlier days = LEARNING NOTES (owner, 2026-10-07): merged reuse of old solvers is OFF (`HCTF_REUSE_OLD_SOLVERS=0`).
+  `reference/techniques/<lane>.md` (patterns, recognition cues -> first tool, day-by-day techniques, GM conventions,
+  pitfalls) is referenced in the worker prompt; the post-run ratchet updates it after every day from that day's notes,
+  transcripts and confirmed answers. Accumulated GM-confirmed knowledge (lib/knowledge.py, vocab.json, playbook) stays.
