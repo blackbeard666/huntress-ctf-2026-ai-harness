@@ -259,3 +259,27 @@ Single-worker turns (launch -> CORRECT) d7fix1 -> d7fix2: metadata 7 -> 4, mobil
 the real-drop gain is the submit path + fewer turns. Measure at Day 8 via log.jsonl `elapsed`/`retries`.
 GOTCHA: each main-account replay burns real TT/Mastery variants; after the real run + 3 replays the GM answered
 `rotation_exhausted` for metadata TT. Max ~2 replays of a day on main; use alt for more.
+
+## Rehearsal Day 7 fair run (2026-10-07 22:39) -> fixes -> script-lane replay
+Fair run = the rehearsal copy's FIRST Day 7 solve with main's harness at 0cd4aa6 but knowledge pinned to 97b3694 (pre-Day-7 lib,
+technique logs, skills, codec tests; Day 7 solvers/transcripts masked). 15/15 GM-verified by **T+5:01** (main real:
+6:16). `hctf timeline --log ~/huntress-2026-rehearsal/.run/day07.log`:
+| chain | single | TT | Mastery | generalizes | notes |
+|---|---|---|---|---|---|
+| metadata / mobile / warmups | 25 / 26 / 34 | 32 / 33 / 39 | 35 / 35 / 43 | 0 | 2-3 tool calls each; caesar + %XX written by the workers |
+| binary | 69 | 78 | 84 | 0 | copied the D6 solver (sanctioned) |
+| script | 87 | 197 | 301 | 2 (77 s + 68 s) | TT `xor_hex|cd`, Mastery `reversed_base64|`: one codec family, two cycles |
+Script critical path: LLM 224 s, harness 69 s (13+6+14+9+7+20 between steps). Found:
+- harvest never ran: `start` after the failed attempt's deadline resumes it (`{"result": "expired"}`) -> "start
+  refused" -> 0 variants (fixed 1b0024f: re-roll with op retry). GM guidance: only `retry` spends one of
+  `unique_attempts_remaining` (~32 per timed mode per day).
+- the harvest note was appended to gm_wrong AFTER render (never reached a worker); the generalize prompt now inlines
+  the failing bytes + a passing counterpart and always says "fix the construct family" (e9fe849).
+- accept re-ran the 36-case suite the watcher had just verified; suite parallel 4 -> min(8, nproc) (7236296).
+- re-attempts go straight to op retry (bce45a8); `hctf timeline` (7537579); `bin/fair_run.sh` (a33d45e).
+Replay fix1 (alt, script lane only, same fair pin, KEEP_PRIOR=1, Homebase): single 76, TT 252, **Mastery 258 first
+try** (2 TT generalizes 64 s + 68 s, harvest 3 + 2 variants, 1 green->accept in 1 s, blocked->worker 2-3 s vs 6-7 s).
+The second TT cycle was a codec the 4 first-cycle variants never drew (`xor_hex|e8`; harvest drew reversed_base64 x3):
+sampling can't cover a ~10-member family. Main is covered regardless: main's lib.codec name-agnostic fallback (8abd11f,
+excluded from the fair pin) decodes all 128 codec declarations of these variants with Day<=6 names only, and main's
+Day 7 solver answers all 11 replay variants/auto cases with 0 empty / 0 wrong (0.4-0.8 s each).
