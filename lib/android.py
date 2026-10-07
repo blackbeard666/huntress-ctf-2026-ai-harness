@@ -40,6 +40,8 @@ def _key_bytes(key):
 
 
 def decode_payload(codec, data, key=None):
+    """Decode a huntress_puzzle.json payload by its declared codec: plain/split, xor (base64 + repeating key), base64,
+    base32, hex, rot13, reverse, caesar (every char's code point shifted by key). Unknown codec -> data unchanged."""
     codec = (codec or "plain").strip().lower()
     try:
         if codec in ("plain", "", "none", "raw", "identity", "split"):
@@ -58,6 +60,11 @@ def decode_payload(codec, data, key=None):
             return codecs.decode(data, "rot13")
         if codec in ("reverse", "reversed"):
             return data[::-1]
+        if codec in ("caesar", "shift", "char_shift"):
+            # Day 7 (webview-bridge): EVERY character's code point shifted by `key` (']'->'S', '7'->'-'), not just
+            # letters -- lib.ciphers.caesar_all can't express it. Decode = subtract the key.
+            k = int(key)
+            return "".join(chr((ord(c) - k) % 0x110000) for c in str(data))
     except Exception:  # noqa: BLE001 - a wrong codec guess should just miss, not crash
         return ""
     return data

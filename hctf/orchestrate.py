@@ -146,6 +146,46 @@ def set_state(base, **kw):
         os.replace(tmp, p)  # atomic: `hctf dash`/`why` never read a half-written file
 
 
+TRIAGE_INLINE_CAP = int(os.environ.get("HCTF_TRIAGE_INLINE_CAP", "6000"))
+CUMULATIVE_LANES = ("binary-reverse-engineering", "script-analysis")
+
+
+def triage_summary(cid, cap=TRIAGE_INLINE_CAP):
+    """triage.md from its STATUS section on (answer formats / family table, artifacts, pre-extracted members incl. tiny
+    text members), inlined into the prompt: every Day 7 worker's second turn was `head triage.md; jq contract`."""
+    p = cli.cdir(cid) / "triage.md"
+    try:
+        t = p.read_text()
+    except OSError:
+        return "(no triage.md: read contract.json and artifacts/latest/ directly)"
+    i = t.find("## STATUS")
+    body = t[i:] if i >= 0 else t
+    if len(body) > cap:
+        body = body[:cap].rsplit("\n", 1)[0] + f"\n... (truncated here -- the rest is in `{p.relative_to(ROOT)}`)"
+    return body.strip()
+
+
+def prior_solver_dir(lane, sdir):
+    """Latest earlier day's solver dir of the same lane (binary/script only: their contracts are CUMULATIVE, so
+    yesterday's solver already answers every earlier family). The worker copies it as a starting point; the harness
+    never runs it as an answer source (harness-side reuse stays OFF)."""
+    if lane not in CUMULATIVE_LANES:
+        return None
+    day = sdir.parent.parent.name
+    best = None
+    for m in sorted(ROOT.glob("challenges/day*/*/meta.json")):
+        if m.parent.parent.name >= day:
+            continue
+        try:
+            if json.loads(m.read_text()).get("lane") != lane:
+                continue
+        except (OSError, ValueError):
+            continue
+        if (m.parent / "solver" / "solve.py").exists():
+            best = m.parent / "solver"
+    return best
+
+
 def technique_log(lane):
     """reference/techniques/<lane>.md -- the lane's learning log from earlier days (patterns, cues, tools, GM
     conventions, pitfalls) -- path PLUS its "how this lane has looked" summary inlined: a warmups worker never opened
@@ -788,7 +828,18 @@ class Chain:
             if welcome:
                 extra += "\nThis is an orientation challenge: no solver is needed, only a correct submission."
             extra += getattr(self, "_reuse_note", "")
-            prompt = workers.render("single", name=self.name, cid=cid, lane=self.lane, techniques=technique_log(self.lane),
+            prior = prior_solver_dir(self.lane, self.sdir)
+            if prior:
+                prior_note = (f"This lane's contract is CUMULATIVE: `{prior.relative_to(ROOT)}` is the latest earlier "
+                              f"solver of this lane and already answers every earlier family. FIRST copy it (all its "
+                              f"files) over `{self.sdir.relative_to(ROOT)}`, then add only today's new families. "
+                              "Never use an old solver's output as your answer without today's bytes behind it.")
+            else:
+                prior_note = ("Write the solver from the skeleton + the lane helpers below; don't go looking for earlier "
+                              "days' solvers (replays lost 13-24 s per run doing that).")
+            prompt = workers.render("single", skill=workers.lane_skill(self.lane), triage=triage_summary(cid),
+                                    lane_helpers=workers.lane_helpers(self.lane), prior_solver=prior_note,
+                                    name=self.name, cid=cid, lane=self.lane, techniques=technique_log(self.lane),
                                     persona=workers.lane_persona(self.lane), playbook=workers.lane_playbook(self.lane),
                                     chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
                                     timed_contracts="\n".join(timed_info) or "  - (none: Single Solve only)",

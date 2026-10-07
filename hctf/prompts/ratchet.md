@@ -25,8 +25,13 @@ solver/{solve.py,NOTES.md})
    `lib/playbook.py`, next to the existing entries in their style. Don't add solver code to lib/. Exception: a NEW
    script codec rep/transform the day's solver decoded goes into `lib/codec.py` (`REPS`/`TRANSFORMS` tagged with the
    day + its branch in `_rep_candidates`/`_transform_candidates`) with a sample appended to
-   `tests/data/codec_samples.json`.
-3. Run `python3 tests/test_orchestrate.py`, `python3 tests/test_day6_fixes.py`, `python3 tests/test_codec.py` and `python3 -m lib.refs.coverage {day_num}`; all
+   `tests/data/codec_samples.json`. Same for the other lane helpers: a NEW encoding/codec branch a day's solver typed on
+   top of an existing helper (e.g. a puzzle codec missing from `lib.android.decode_payload`, a line encoding missing
+   from `lib.decode.decode_chunk`) goes INTO that helper as one small branch, verified against the GM-confirmed answer,
+   so tomorrow's worker imports it instead of re-typing it (Day 7: mobile re-typed decode_payload to add caesar,
+   warmups re-typed decode_chunked to add url %XX -- ~12-25 s of generation each). Add a one-line check for it to
+   `tests/test_day7_fixes.py`.
+3. Run `python3 tests/test_orchestrate.py`, `python3 tests/test_day6_fixes.py`, `python3 tests/test_day7_fixes.py`, `python3 tests/test_codec.py` and `python3 -m lib.refs.coverage {day_num}`; all
    must pass. If a lib edit breaks a test, revert that edit.
 4. Do NOT submit, start or retry any GM mode. Do NOT touch `hctf/`, `skills/`, `bin/` or `~/.claude/`.
 5. Finish with a 5-line summary: what you added to the logs, what you merged into lib/, what you rejected and why.

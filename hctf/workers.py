@@ -121,6 +121,49 @@ def lane_persona(lane):
     return LANE_PERSONA.get(lane, "an expert-level CTF player")
 
 
+LANE_SKILL = {"warmups": "warmups", "metadata-forensics": "metadata-forensics", "script-analysis": "script-analysis",
+              "binary-reverse-engineering": "binary-re", "mobile-android": "mobile-android"}
+# Lane helper modules the solver should IMPORT (Day 7: mobile re-typed lib.android.decode_payload, warmups re-typed
+# lib.decode.decode_chunked -- ~12-25 s of generation each for code that already existed).
+LANE_HELPERS = {"warmups": ["lib.decode", "lib.ciphers"], "mobile-android": ["lib.android"],
+                "metadata-forensics": ["lib.stego"], "script-analysis": ["lib.codec", "lib.scripts", "lib.pyc"],
+                "binary-reverse-engineering": ["lib.elf", "lib.binary"]}
+
+
+def lane_skill(lane):
+    """The lane SKILL.md body (frontmatter stripped), inlined into the prompt: every Day 7 worker spent its first turn
+    on `Skill(<lane>)`."""
+    p = ROOT / "skills" / LANE_SKILL.get(lane, "huntress-ctf") / "SKILL.md"
+    try:
+        text = p.read_text()
+    except OSError:
+        return "(lane skill unavailable)"
+    if text.startswith("---"):
+        text = text.split("---", 2)[-1]
+    return text.strip()
+
+
+def lane_helpers(lane):
+    """Generated index of the lane's helper functions (name, args, first docstring line) -- read from the source with
+    ast at render time, so it never drifts from lib/."""
+    import ast
+    out = []
+    for mod in LANE_HELPERS.get(lane, []) + ["lib.common"]:
+        p = ROOT / (mod.replace(".", "/") + ".py")
+        try:
+            tree = ast.parse(p.read_text())
+        except (OSError, SyntaxError):
+            continue
+        fns = [n for n in tree.body if isinstance(n, ast.FunctionDef) and not n.name.startswith("_")]
+        if not fns:
+            continue
+        out.append(f"- `{mod}`:")
+        for n in fns:
+            doc = (ast.get_docstring(n) or "").strip().split("\n")[0][:100]
+            out.append(f"  - `{n.name}({', '.join(a.arg for a in n.args.args)})` {doc}".rstrip())
+    return "\n".join(out) or "(no lane helpers)"
+
+
 def lane_playbook(lane):
     """Per-lane field-label playbook (lib/playbook.py), injected as {playbook} so the worker starts from the
     GM's label grammar for this lane instead of guessing synonyms. Degrades to a short note if lib isn't importable."""

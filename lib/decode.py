@@ -13,6 +13,7 @@ import io
 import lzma
 import math
 import re
+import urllib.parse
 import zlib
 import zipfile
 from urllib.parse import unquote_to_bytes
@@ -168,6 +169,9 @@ def decode_chunk(p):
     """Decode one chunk payload by its own format; strict formats first, rot-N last."""
     t = p.strip()
     cands = []  # (decoded_text, priority)
+    if re.fullmatch(r"(?:%[0-9A-Fa-f]{2}|[^%\s])+", t) and len(re.findall(r"%[0-9A-Fa-f]{2}", t)) * 3 >= len(t) // 2:
+        # URL percent-encoding (warmups Day 7 "Percent Chance": line 7 = '%2d%69%73...'), mostly %XX by length
+        cands.append((_ascii(urllib.parse.unquote_to_bytes(t)), 0))
     if _BINS.match(t):
         bits = re.sub(r"[\s,]", "", t)
         cands.append((_ascii(int(bits, 2).to_bytes(len(bits) // 8, "big")), 0))
