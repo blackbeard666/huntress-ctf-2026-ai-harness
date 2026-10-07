@@ -139,9 +139,15 @@ def set_state(base, **kw):
 
 def technique_log(lane):
     """reference/techniques/<lane>.md -- the lane's learning log from earlier days (patterns, cues, tools, GM
-    conventions, pitfalls), or a note that none exists yet."""
+    conventions, pitfalls) -- path PLUS its "how this lane has looked" summary inlined: a warmups worker never opened
+    the log and built a solver the log's Mastery format would have told it was wrong (~150 s lost)."""
     f = ROOT / "reference" / "techniques" / f"{lane}.md"
-    return f"`{f.relative_to(ROOT)}`" if f.exists() else "(none yet for this lane)"
+    if not f.exists():
+        return "(none yet for this lane)"
+    text = f.read_text(errors="replace")
+    head = text.split("\n## ", 1)[0].strip().splitlines()[1:]          # drop the title line
+    summary = "\n".join(l for l in head if l.strip())[:2500]
+    return f"`{f.relative_to(ROOT)}` -- its summary (OBSERVATIONS from earlier days, not guarantees):\n{summary}"
 
 
 def _rel(p):
@@ -772,6 +778,11 @@ class Chain:
             if res not in ("expired", "blocked"):
                 break
             last = timed.last_result(cid) or {}
+            if res == "expired" and self._clock_expiry(cid):
+                # Clock-only failures exhausted their own retry budget: a generalize worker can't speed up the network
+                # (main replay: one was launched anyway after "timing, not the solver"). Stop here.
+                say(f"[{cid}] clock expiries exhausted ({clock_retries}); the solver is fine -- not generalizing")
+                break
             if res == "expired" and self._clock_expiry(cid) and clock_retries < CLOCK_RETRIES:
                 # The solver answered everything and the CLOCK ran out: a transport/timing failure. Probing can't judge
                 # anything on an expired clock and a generalize worker can't speed up the network (rehearsal copy,

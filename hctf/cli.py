@@ -354,6 +354,32 @@ def _format_problem(value, q):
     return None
 
 
+def _bisect_rejected(cid, answers, budget=40):
+    """Split an incorrect batch by answer-id family (prefix before the last '-'/'_' field word), then halves, submitting
+    each group (probe-tagged); accepted groups are banked. Returns the set of individually rejected answer_ids."""
+    def family(aid):
+        m = re.match(r"((?:set\d+\.)?[a-z0-9]+(?:[-_][a-z0-9]+)?)", aid)
+        return m.group(1) if m else aid
+    fams = {}
+    for k, v in answers.items():
+        fams.setdefault(family(k), {})[k] = v
+    todo, bad, n = list(fams.values()), set(), [0]
+    while todo and n[0] < budget:
+        g = {k: v for k, v in todo.pop(0).items() if k not in confirmed_answers(cid)}
+        if not g:
+            continue
+        n[0] += 1
+        kind, _b, _p = submit(cid, g, force=True, probe=True)
+        if kind in ("correct", "accepted"):
+            continue
+        if len(g) == 1:
+            bad.update(g)
+            continue
+        ks = list(g)
+        todo[:0] = [{k: g[k] for k in ks[:len(ks) // 2]}, {k: g[k] for k in ks[len(ks) // 2:]}]
+    return bad
+
+
 def _mastery_dry_run(cid):
     """Warn (stderr) if the solver can't even LOCATE/answer Mastery-shaped input: the Mastery contract's own artifact
     names (e.g. 'delivery 2: x.apk', fetched via status before any attempt) with this Single Solve's bytes under each.
@@ -405,11 +431,16 @@ def c_submit(a):
         if not contract or not art:
             print("refused:\n  no contract/artifacts for this mode yet", file=sys.stderr)
             return EXIT["refused"]
-        got, problems = solvers.solve_contract(contract, art, paths.solver_dir(a.id))
+        # THIS challenge's solver only -- never dispatch questions to earlier days' solvers (owner rule).
+        got, err, _ = solvers.run_solver(paths.solver_dir(a.id), contract, art)
+        if err:
+            print(f"refused:\n  your solve.py failed: {err[:600]}", file=sys.stderr)
+            return EXIT["refused"]
         conf = confirmed_answers(a.id)
         answers = {k: v for k, v in got.items() if conf.get(k) != v}
-        if problems:
-            print("solver problems (submitting what it produced):\n  " + "\n  ".join(problems[:20]), file=sys.stderr)
+        missing = [x for x in contract.get("answer_ids", []) if x not in got]
+        if missing:
+            print(f"note: solve.py left {len(missing)} answer_id(s) empty: {missing[:15]}", file=sys.stderr)
         if not answers:
             print("refused:\n  the solver produced nothing new to submit", file=sys.stderr)
             return EXIT["refused"]
@@ -419,6 +450,13 @@ def c_submit(a):
             return EXIT["refused"]
         answers = json.loads(a.answers)
     kind, body, problems = submit(a.id, answers, force=a.force)
+    if a.from_solver and not problems and kind == "incorrect" and len(answers) > 1:
+        # A bulk "incorrect" says nothing about WHICH field: bisect (probe-tagged, untimed single) and print the
+        # rejected answer_ids, so the worker fixes exactly those (a script worker spent 88 s bisecting by hand).
+        bad = _bisect_rejected(a.id, answers)
+        print(f"bisect: {len(bad)} answer_id(s) REJECTED by the GM (everything else accepted): {sorted(bad)[:40]}",
+              file=sys.stderr)
+        kind = "correct" if is_complete(a.id) else ("accepted" if len(bad) < len(answers) else kind)
     if a.from_solver and not problems:
         _mastery_dry_run(a.id)
     if problems:

@@ -152,6 +152,17 @@ def test_probe_enums():
           gm.conf.get("x-role") == "stager" and tried == ["benign_utility", "stager"] and all(p for _, p in gm.calls))
 
 
+def test_bisect_rejected():
+    truth = {f"bash-x{i}-role": "r" for i in range(6)} | {f"vbs-y{i}-url": "u" for i in range(6)}
+    sent = dict(truth); sent["bash-x2-role"] = "WRONG"; sent["vbs-y5-url"] = "WRONG"
+    gm = FakeGM(truth)
+    with mock.patch.object(cli, "submit", gm.submit), \
+            mock.patch.object(cli, "confirmed_answers", lambda cid, att=None: dict(gm.conf)):
+        bad = cli._bisect_rejected("s", sent)
+    check("submit bisect: exactly the 2 wrong ids reported, the other 10 accepted",
+          bad == {"bash-x2-role", "vbs-y5-url"} and len(gm.conf) == 10 and all(pr for _, pr in gm.calls))
+
+
 def test_snapshot():
     cid = "script-analysis-day-05-python-carrier-lab"
     sdir, root = paths.solver_dir(cid), paths.challenge_root(cid)
@@ -237,6 +248,7 @@ def main():
         print("crash retry"); test_crash_retry()
         print("reuse");       test_reuse_submit()
         print("enums");       test_probe_enums()
+        print("bisect");      test_bisect_rejected()
         print("snapshot");    test_snapshot()
         print("watch");       test_watch_ready(tmp)
         print("green");       test_watch_green(tmp)

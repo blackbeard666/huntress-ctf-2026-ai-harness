@@ -132,6 +132,90 @@ def _describe(path, depth=0, maxdepth=2):
     return lines
 
 
+_LANG_PREFIXES = {"python", "py", "jscript", "js", "javascript", "batch", "bat", "cmd", "vbscript", "vbs", "bash", "sh",
+                  "powershell", "ps", "ps1", "perl", "ruby", "php", "lua", "go", "applescript", "autoit", "hta", "wsf"}
+
+
+def _family_table(contract, conf):
+    """One row per answer-id family (e.g. `bash-chain`, `d04_analysis`): field suffixes, count, a sample question,
+    format kinds -- instead of 399 one-line questions."""
+    import re as _re
+    fams = {}
+    for aid, q in zip(contract.get("answer_ids", []), contract.get("questions", [])):
+        m = _re.match(r"((?:set\d+\.)?d\d+_[a-z]+)_(.*)", aid)          # binary: d04_analysis_machine
+        if m:
+            fam, field = m.group(1), m.group(2)
+        elif "-" in aid:
+            # script: <language>-<fixture>-<field...> (bash-chain-stage-count) or Day-1 <scenario>-<field> (resource-url)
+            toks = aid.split("-")
+            n = 2 if toks[0].split(".")[-1] in _LANG_PREFIXES and len(toks) > 2 else 1
+            fam, field = "-".join(toks[:n]), "-".join(toks[n:])
+        else:
+            fam, field = aid, ""
+        f = fams.setdefault(fam, {"fields": [], "kinds": set(), "q": q.get("question", ""), "left": 0})
+        f["fields"].append(field)
+        f["kinds"].add((q.get("answer_format") or {}).get("kind") or "?")
+        f["left"] += aid not in conf
+    rows = [f"**{len(contract.get('answer_ids', []))} answers in {len(fams)} families** (family | fields | open | kinds | sample question):", ""]
+    for fam, f in fams.items():
+        rows.append(f"- `{fam}` | {', '.join(dict.fromkeys(f['fields']))[:120]} | {f['left']} open | "
+                    f"{'/'.join(sorted(f['kinds']))} | {f['q'][:110]}")
+    return rows + ["", "_(full questions + answer_format per id: `jq '.questions[]' contract.json`)_", ""]
+
+
+def _sh(args, timeout=8):
+    try:
+        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        return (r.stdout or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _recon(cid, root):
+    """Standard-tool recon of the extracted members, per lane (recon, never answers): what each file is and where the
+    interesting bytes sit, so the worker's first turn starts from tool output instead of orientation turns."""
+    import re as _re
+    import shutil as _shutil
+    if not root.exists():
+        return []
+    files = sorted(p for p in root.rglob("*") if p.is_file())[:80]
+    lines = []
+    if cid.startswith("script-analysis"):
+        lang = {".ps1": "PowerShell", ".js": "JScript", ".jse": "JScript", ".bat": "Batch", ".cmd": "Batch",
+                ".vbs": "VBScript", ".vbe": "VBScript", ".py": "Python", ".pyc": "Python bytecode", ".sh": "Bash"}
+        for f in files:
+            l = lang.get(f.suffix.lower())
+            if not l:
+                continue
+            hits = _sh(["grep", "-n", "-a", "-E", "-m", "4", "(Codec|CODEC|Material|MATERIAL)", str(f)])
+            hits = " ; ".join(h.strip()[:150] for h in hits.splitlines()[:4])
+            lines.append(f"- `{f.relative_to(root)}` [{l}, {f.stat().st_size} B] {hits}")
+    elif cid.startswith("binary-reverse-engineering"):
+        for f in files:
+            ft = _sh(["file", "-b", str(f)])[:110]
+            sha = _sh(["sha256sum", str(f)]).split(" ")[0]
+            row = [f"- `{f.relative_to(root)}` {f.stat().st_size} B | {ft} | sha256 {sha}"]
+            if ft.startswith("ELF"):
+                hdr = _sh(["readelf", "-hW", str(f)])
+                keep = [l.split(":", 1)[1].strip() for l in hdr.splitlines() if l.strip().split(":")[0] in ("Class", "Data", "Type", "Machine")]
+                row.append(f"    readelf: {' | '.join(keep)}")
+                if "Go BuildID" in ft or _sh(["go", "version", "-m", str(f)]).count("path"):
+                    row.append("    go: " + " | ".join(_sh(["go", "version", "-m", str(f)]).splitlines()[:2])[:160])
+            elif ft.startswith("PE32") and _shutil.which("rabin2"):
+                info = _sh(["rabin2", "-I", str(f)])
+                row.append("    rabin2: " + " | ".join(l.strip() for l in info.splitlines() if l.split()[:1] and l.split()[0] in ("arch", "bits", "class", "lang", "machine"))[:200])
+            elif f.suffix == ".class" and _shutil.which("javap"):
+                cp = _sh(["javap", "-v", "-p", str(f)])
+                strs = [m.group(1) for m in _re.finditer(r"= Utf8\s+(\S{24,})", cp)][:4]
+                row.append(f"    javap: {len(cp.splitlines())} lines; long Utf8 constants: {[x[:60] for x in strs]}")
+            offs = _sh(["grep", "-boa", "HCFG", str(f)]).splitlines()[:3]
+            for o in offs:
+                off = o.split(":")[0]
+                row.append(f"    HCFG @ {off}: " + _sh(["xxd", "-s", off, "-l", "16", str(f)])[:80])
+            lines += row
+    return (["", "## Recon (standard tools, pre-run for you -- facts, not answers)", ""] + lines) if lines else []
+
+
 def _extract_all(files, dest, depth=2):
     """Unpack every zip artifact (password-protected and nested too) into `dest` so the worker starts on the members
     instead of spending turns on unzip / 7z password prompts (seen in 3 workers). Returns markdown lines."""
@@ -187,7 +271,9 @@ def triage(cid):
                 f"{len(left)} REMAINING", ""]
         if conf and left:
             out += ["Work ONLY on these answer_ids:", "", "`" + "`, `".join(left[:200]) + "`" + (" ..." if len(left) > 200 else ""), ""]
-    if qn:
+    if qn > 60:
+        out += _family_table(contract, conf)
+    elif qn:
         out.append(f"**{qn} answer(s) expected.** Formats (remaining fields only):" if conf else
                    f"**{qn} answer(s) expected.** Formats:")
         for aid, q in zip(contract.get("answer_ids", []), contract.get("questions", [])):
@@ -201,6 +287,10 @@ def triage(cid):
     for f in files:
         out += _describe(f)
     out += _extract_all(files, mdir / "work" / "extracted")
+    try:
+        out += _recon(cid, mdir / "work" / "extracted")
+    except Exception as e:  # noqa: BLE001 - recon is best-effort
+        out += ["", f"_recon skipped: {e}_"]
     out += ["", "_Deterministic triage (no LLM). Verify against the bytes; see the routed lane skill._"]
     (mdir / "triage.md").write_text("\n".join(out), encoding="utf-8")
     return mdir / "triage.md"

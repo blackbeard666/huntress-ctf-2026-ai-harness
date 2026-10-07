@@ -11,6 +11,13 @@ description: Huntress warmups lane - decoding text blobs and layered encodings (
    title name the layer ("A Little Based" = base64, "Half a Turn" = rot13 / 180°).
 3. The question tells you *which line* to submit (e.g. "the final non-empty decoded line"). Apply `normalization`.
 
+## Mastery first (read before writing solve.py)
+Mastery = 5N-2 sets on day N; each set blob is N numbered lines `NN<TAB>fragment`, line k in day k's encoding
+(see reference/techniques/warmups.md). solve.py must: strip the `NN\t` prefix, decode EACH line by its character
+class (strict base64 -> rot13 -> hex -> 8-bit binary -> decimal codes -> octal codes), join in NN order, then take the
+slug -- all 28 sets well under 1 s. `lib.decode.peel` is a BFS for EXPLORING an unknown blob at the shell; never call it
+per set inside solve.py (D6: the peel fallback made Mastery time out and cost ~150 s).
+
 # Tools
 - `lib.decode.peel(data, accept)` — BFS over *encodings* (base/hex/binary/compression/zip/url/rot/single-XOR).
 - `lib.ciphers` — *ciphers* peel doesn't do: `caesar_all`, `atbash`, `vigenere_decrypt`/`vigenere_crack`,

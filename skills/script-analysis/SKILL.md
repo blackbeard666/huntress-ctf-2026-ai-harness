@@ -31,7 +31,7 @@ Read them statically first. To peel a layer dynamically, **replace the sink** an
 | Behaviour | Typical technique |
 |---|---|
 | crypto-miner, xmrig, pool URL, wallet | T1496 Resource Hijacking |
-| gathers files/clipboard/screenshots, zips and stages | T1005 Data from Local System / T1119 Automated Collection / T1560 Archive Collected Data |
+| gathers files/clipboard/screenshots, zips and stages | GM-confirmed for the D1 `synthetic_collection` scenario: **T1555.003** (browser credentials). T1005/T1119/T1560/T1074 were REJECTED -- see reference/techniques/script-analysis.md |
 | exfil to web service / C2 over HTTP | T1041 / T1567 |
 | encrypts files, renames extension, drops ransom note | T1486 Data Encrypted for Impact |
 | deletes shadow copies / backups | T1490 Inhibit System Recovery |

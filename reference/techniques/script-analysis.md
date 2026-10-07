@@ -12,7 +12,7 @@ How this lane has looked so far (these are observations, not guarantees):
 | You see | First move |
 |---|---|
 | `evidence.zip`, "method=AES Encrypted" | `7z x -pinfected -o<dir> evidence.zip` (Python zipfile cannot read AES). Mastery may be a zip inside a zip; walk it once. |
-| Prior-day languages in the contract | Vendor the previous day's `solver/` unchanged and run it. Every day 3-6 worker got the old ids accepted in ONE bulk submit. Spend the effort only on the new language. |
+| Prior-day languages in the contract | The contract is cumulative, but derive every family from TODAY's bytes with the shared codec method below (never copy/run an old solver). The prior-day families are mechanical once the codec table is applied; spend thinking on the new language. |
 | `.ps1` with `$encodedMaterial = [Convert]::FromBase64String('..')` + `$reconstruct` + `$nativeTypes` | Run `base64 -d` -> JSON descriptor (short keys a/b/c..), giving url/wallet/mutex/UA/file/ext/note. Match indicators by SHAPE, not key. `$nativeTypes` gives the scenario: Process/Registry+wallet=resource, ZipFile/HttpWebRequest=collection, Aes/DirectoryInfo=impact. `$reconstruct` was usually identity, sometimes reverse/XOR. |
 | `.js` WSH, `decode_*`/`recover_*`/`inspect_*`, XOR key arrays, `"52:90:.."` strings | Run each file in an empty `node` `vm` context (no require/ActiveXObject), with `eval` swapped for a capture. Call the top-level functions and keep the first object that has `steps`. Read the styles off the `inspect_*` body. |
 | `.bat/.cmd` with `rem HUNTRESS-CODEC:` / `HUNTRESS-MATERIAL:`, `set "itemN=v=1|steps=..`, `:HUNTRESS_INSPECT` | The plan is in plain `set` fragments. Emulate cmd expansion in Python (`%v%`, `!v!`, `call set %%..%%`, `for %%G in (..)`). The MATERIAL line is a 2nd encoded copy you can cross-check. Never run cmd. |
@@ -21,6 +21,20 @@ How this lane has looked so far (these are observations, not guarantees):
 | `.sh` `readonly Material_<id>='..'` + `readonly Codec_<id>='rep|transform|key'` | Decode from the Codec const (key is hex; a multi-byte key is a COMMA list `55,51,..`). Re-join split/`+=`/adjacent-quoted Material chunks. Never run bash. |
 | Real `.pyc` / PyInstaller / pyarmor (not seen yet) | `lib.pyc.recover_python(path)` (pyinstxtractor-ng + decompyle3, `dis` fallback). See skills/script-analysis. |
 | Any `Codec_` key like `ba` / `0a` | This is a hex byte, not text. Transforms are named for the ENCODE side: `subtract_modulo_256` decodes by ADDING, `add_modulo_256` by SUBTRACTING. `rolling_xor` = c ^ previous CIPHER byte, seeded with the key. |
+
+## Codec table (`Codec_<id>='<rep>|<transform>|<key>'`; reps and transforms combine freely; seen D2-D6)
+Rep = how the Material is written -> decode it to bytes first:
+- `base64_literal` / `base64_chunks` (join chunks in order) -> `base64 -d`
+- `hex` / `hex_colon` / `hex_dash` -> strip separators, `xxd -r -p`
+- `integer_tuple` (decimal list) -> bytes of the integers
+- `plain_fragments` (batch `set fragN=`) -> join in index order, SKIP the join line (see pitfall below)
+Transform = then undo it, key is hex:
+- `identity` -> nothing; `reverse` -> reverse the bytes; `reverse_then_xor` -> reverse, then xor
+- `single_byte_xor` -> xor every byte with the key
+- `repeating_key_xor` -> cycle the key; a multi-byte key may be written as a COMMA list `55,51,74` (D6 bash)
+- `add_modulo_256` -> SUBTRACT the key mod 256
+- `rolling_xor` -> key changes per byte (try both variants; the right one makes the plaintext start `v=`)
+Check: the decoded plaintext starts `v=` (or `{` JSON). If not, the codec reading is wrong.
 
 ## Day by day
 **D1 Power Play (PowerShell, 15 ids)**: 3 PS fixtures (resource/collection/impact), each with a base64 JSON descriptor.
@@ -95,9 +109,12 @@ How this lane has looked so far (these are observations, not guarantees):
   - PS scenarios: resource_hijacking T1496, synthetic_collection T1555.003, synthetic_impact T1486.
   - REJECTED: T1218.010, T1620, T1027.009, T1005, T1560, T1119, T1074(.001); stager T1059.007; dropper T1105.
 - **Batch expansion** (closed set: percent/delayed/call_double/for_indirect; the GM chooses by generator template):
-  - the `h`-fragment pool (`%%h0%%`.., or a FOR over %%h..) = call_double
-  - FOR over other pools = for_indirect
-  - everything else = delayed. Plain `%` joins measured `delayed`.
+  - GM-confirmed counts: D3-D5 had exactly ONE `call_double` per day (the `h`-fragment pool fixture), D6 had NONE --
+    its h-pool fixtures were `delayed`. So "h-pool = call_double" is NOT reliable. Seen consistently: a FOR loop over a
+    fragment pool = for_indirect; plain `%` joins = delayed. Treat expansion as an uncertain label: submit it alone.
+  - Fragment JOINER pitfall (D6): a line like `set "item9=%item0%%item1%..."` is the JOIN of the fragments, not
+    fragment 9 -- skip `set` lines whose value references the other fragments, or the decoded value gets the
+    `%item0%...` tail glued on (a wrong Mastery answer on D6).
   - REJECTED: percent_expansion, immediate, call-double, double_call.
 - **Batch control**:
   - direct (no construct on the executed path; separator lines and `:HUNTRESS_UNUSED` dead labels are NOT control)

@@ -25,11 +25,12 @@ The Single Solve itself is untimed, but the Time Trial and Mastery cannot start 
 spend is on the critical path. The harness ENDS your session automatically the moment the Single Solve is CORRECT and
 `solve.py` reproduces the confirmed answers — anything you planned to do after that will not happen, by design.
 1. **Identify the goal first, then learn from earlier days.** Read the contract (what is asked, the answer formats) and
-   the bytes. Your lane's technique log {techniques} records how earlier days' challenges looked, the recognition cues,
-   the tools that worked, the GM's spelling conventions and the pitfalls -- skim it to spot whether today matches a
-   known pattern. It is a REFERENCE, not a recipe: today's challenge may be entirely new, so derive every value from
-   today's bytes. You may read an earlier solver's code to borrow a technique, but never run an old solver against
-   today's challenge as the source of your answers.
+   the bytes. Your lane's technique log is {techniques}
+   Read the log's "Recognition cues" and "Pitfalls" sections too. It is a REFERENCE, not a recipe: today's challenge may
+   be entirely new, so derive every value from today's bytes. You may read an earlier solver's code to borrow a
+   technique, but never run an old solver against today's challenge as the source of your answers.
+   **Size `solve.py` for the MASTERY contract, not just the single artifact** -- its set count and the per-set format
+   the log describes (e.g. numbered mixed-encoding lines) must run in well under 1 s total.
 2. **`{solver_dir}/solve.py` is pre-seeded with the harness skeleton** (contract I/O,
    per-set loop, `artifact_bytes()` that already resolves Mastery's `delivery N: <name>` files by sha256 — fill in
    `answer()`). **Derive the answers from the real bytes by writing them INTO that `solve.py`** (following the
@@ -59,7 +60,11 @@ ONE shared brief file, then ONE blocking wait for both -- never poll (a replay l
 A decoded value that matches the field's `answer_format` IS the answer: put it in solve.py and submit. Don't try to
 reproduce or reach a backend/live service to "confirm" it (one worker lost 158 s that way after decoding at 26 s).
 Don't read other challenges' worker logs (`worker-*.log`) or old notes for answers — prior solvers were already run.
-Budget: aim for CORRECT within 60 s on a familiar family and 3 min on a new one. Submit as soon as the solver emits a
+Budget: aim for CORRECT within 60 s on a familiar family and 3 min on a new one.
+Uncertain label: if exactly one value (a format/kind/role spelling) is uncertain, submit everything else, then that
+field ALONE with your own derived value -- in the same Bash call. Only after the GM rejects it, use `hctf labels`.
+A bulk submit that comes back "incorrect" is bisected for you by `hctf submit --from-solver`, which prints the rejected
+answer_ids -- fix exactly those. Submit as soon as the solver emits a
 value for every answer_id; partial submits are fine (exit 2 pins the right fields).
 
 ## Scope — write ONLY inside `{chal_dir}/..` (your challenge folder)

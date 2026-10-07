@@ -27,6 +27,10 @@ Do this:
    generalize `solve.py` to reproduce them AND still pass every other case — detect structure, never hard-code
    this variant's values. Reuse `lib/*` but do not edit it (other workers import it concurrently): list new helpers and
    confirmed GM vocabulary under `## Proposed lib additions` in `{solver_dir}/NOTES.md`; the post-run ratchet merges them.
+   ALWAYS time-box every solver run (`timeout 5 python3 solve.py ...` / `timeout 20 hctf solver-test`): a too-slow
+   solver ran unbounded for 78 s in one generalize. If the failure is SPEED: profile (`python3 -X importtime`,
+   `time`), remove brute-force/fallback search per set, decode once -- target < 1 s for all sets.
+   The case artifacts are AES zips (password `infected`): `7z x -pinfected` or `lib.common.read_member`.
 3. `hctf solver-test {base}` must pass for EVERY case, and `hctf solver-run {cid}` must output every answer_id —
    then STOP immediately (the timed mode is waiting on you; no extra hardening, no synthetic cases).
 4. The solver runs ON THE HOMEBASE VM next to the Game Master under a short clock (~6-7s for the whole
