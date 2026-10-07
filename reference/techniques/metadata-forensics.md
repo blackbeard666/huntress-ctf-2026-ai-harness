@@ -10,6 +10,12 @@ How this lane has looked so far (observations, not guarantees):
   "passengers", catalog /Version overrides). The asked field so far was always the STRUCTURAL truth from the header bytes;
   names/extensions/secondary metadata are the lie. All 6 single solves were first-submit CORRECT in ~30-40 s.
 
+## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
+- **Delivery layout** -- see "Delivery layouts seen" below; resolve the named member through whatever wrapper arrives.
+- **Decoys** -- renamed copies, misleading extensions/names, secondary metadata (EXIF, catalog /Version) that disagree
+  with the header: always answer from the structural header bytes of the member the question names.
+- **Member and values** -- names, sizes and dimensions re-roll per variant; nothing about the sample is constant.
+
 ## Recognition cues -> first move
 | You see | First move |
 |---|---|

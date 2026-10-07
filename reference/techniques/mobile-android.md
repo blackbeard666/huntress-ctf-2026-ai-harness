@@ -14,6 +14,13 @@ How the lane has looked so far (observations, not guarantees):
 - Expect escalation (inference, see reference/HARDENING.md): the answer may move into the dex, resources or a decrypt
   routine. `lib.android.extract_answer` has the fallback chain for that case.
 
+## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
+- **Puzzle codec** -- the same within one day, but the XOR key (and any split/offset parameters) re-roll per variant:
+  read them from `huntress_puzzle.json` every time.
+- **Mastery packaging** -- `delivery N: <name>.apk` per set, often identically named: pair by sha256.
+- **Answer location** -- so far always the puzzle JSON; if it decodes to nothing, fall back to dex/resources
+  (`lib.android.extract_answer` chain) rather than assuming the sample's location.
+
 ## Recognition cues -> first move
 
 | You see | First move |

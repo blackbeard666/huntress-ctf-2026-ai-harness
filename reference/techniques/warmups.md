@@ -6,6 +6,12 @@ How this lane has looked so far (observations, not guarantees):
 - Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, 18, 23, 28). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, in that order so far). The fragments join verbatim (split mid-word) into the same sentence.
 - Clocks: TT about 5-7 s from day 2 on (30 s on day 1), mastery about 5-7 s from day 2 on. Only a deterministic solver survives these windows. The single_solve is untimed.
 
+## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
+- **Encoding per line** -- Mastery line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, ...); detect
+  each line's encoding from its alphabet, not its position (position-based detection breaks if the order changes).
+- **Line wrapper** -- `NN<TAB>fragment` numbering; fragments split mid-word and join verbatim in number order.
+- **Set count** -- grows by 5 per day; the solver must loop over whatever the contract lists.
+
 ## Recognition cues -> first move
 | What you see | First move |
 |---|---|

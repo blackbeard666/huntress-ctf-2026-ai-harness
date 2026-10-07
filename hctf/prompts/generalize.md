@@ -17,6 +17,11 @@ solver reproduce that. A compounded Mastery/Time-Trial variant can ask about MOR
 (e.g. several binaries with `c_*`/`cpp_*` prefixes, a decrypted config's fields, vtables/typeinfo, demangled
 symbols, extra sets). Handle every answer_id in the contract.
 
+Variant axes recorded for this lane on earlier days (what changes between variants of the same task; the failing
+variant most likely differs along one of these -- fix the WHOLE axis, e.g. accept every radix the code can name, not just
+the one in this sample):
+{variant_axes}
+
 Field-label playbook for this lane (use the RULE to spell any rejected synthetic label; resolve with `hctf labels`):
 {playbook}
 
@@ -41,5 +46,5 @@ Do this:
    answer set 2 from set 1's bytes. Import only: stdlib, `lib.*`, pyelftools, pefile, capstone, pycryptodome,
    pyzipper, androguard, droidasc, binary-refinery, and shelling out to node/c++filt/unzip. Avoid anything heavier.
 5. Do NOT submit and do NOT start/retry any mode — the orchestrator retries with a fresh variant once you exit.
-   Add ONE line to `{solver_dir}/NOTES.md` (the variant axis). The harness ends your session the moment the
+   Add ONE line to `{solver_dir}/NOTES.md` starting `VARIANT AXIS:` (what differed in this variant vs the cases that passed, and the parse rule that covers it) -- the post-run ratchet collects these into the technique log. The harness ends your session the moment the
    failing case passes with no regressions — don't spend time on extra robustness checks after the fix.

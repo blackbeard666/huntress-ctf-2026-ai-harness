@@ -8,6 +8,20 @@ How this lane has looked so far (these are observations, not guarantees):
 - Files are named by behaviour (host-context, memory-stage, embedded-write, remote-write, local-dispatch, staged-handoff/-chain, outbound-transfer, impact-plan, relay-handoff). The answer-id is `<lang>-<role>-<field>`, and the artifact path picks the file. Don't trust the file name over the plan `steps`.
 - Time Trial windows are about 5-7 s (30 s on d1). Mastery is 2 sets: `setN.` ids, and the artifact is `evidence-0N.zip` or (d6) `delivery N: evidence.zip`. Both deliveries can have the same filename, so pair them by sha256.
 
+## Variant axes (what differs between the single, Time Trial and Mastery variants of the SAME day -- parse every value listed)
+Each miss below cost one failed timed attempt + a ~45 s generalize cycle in the D6 from-scratch replay (4 cycles, ~3:20).
+- **Numeric literal radix** -- the same array/constant may be decimal `23,7`, hex `0x17,0x07`, or a separator-joined
+  string decoded with `parseInt(x, R)` / `int(x, R)`: READ THE RADIX FROM THE CODE, never guess it from the digits
+  (D6: JScript material array in hex on a TT variant; JScript decoder constants `^ 0x56` hex on another; a Mastery set
+  packed dash-separated DECIMALS with `parseInt(..,10)` that a hex-assuming parser misread). Applies to keys too.
+- **Base64 alphabet** -- standard and urlsafe (`-` `_`) both occur; strip/whitelist accordingly and pad (D6 Python TT
+  variant: urlsafe material, solver dropped `-`/`_`).
+- **Carrier of the same language** -- plain source vs a frozen executable (D6: Python plan inside a cx_Freeze build on
+  a TT variant). Locate the material by its markers (`MATERIAL_`/`CODEC_`/`v=`), not by the file type of the sample.
+- **Codec per file** -- rep x transform x key re-rolls per variant (see the codec table); never bind a role to the
+  sample's codec.
+- **Material layout** -- one literal, split chunks, `+=` concatenation, adjacent quoted strings; join before decoding.
+
 ## Recognition cues -> first move
 | You see | First move |
 |---|---|

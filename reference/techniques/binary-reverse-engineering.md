@@ -11,6 +11,14 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   machine, disassembly, symbol). The question set grows each day (9 → 17 → 24 → 32 → 40 → 48 fields); old groups reuse the same bytes.
 - Time Trial ≈ 6-7 s, Mastery = `set1.`/`set2.` prefixed copies (≈ 7-12 s window); artifacts are named `delivery N: evidence.zip`.
 
+## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
+- **HCFG location** -- same blob, different storage per container (`.hcfg` section, .NET FieldRVA, Go/Rust rodata,
+  base64 inside a Java constant pool): scan the raw (and base64-decoded) bytes for `HCFG`, never a fixed offset.
+- **xor key / config values** -- re-roll per variant; derive from the header byte, never from the sample.
+- **Container per member** -- ELF vs MinGW PE32+ seen for the same C++ group; machine/format labels must come from the
+  header of THIS member.
+- **Mastery packaging** -- `setN.` prefixed ids, each set its own `delivery N: evidence.zip` (same filename): pair by sha256.
+
 ## Recognition cues -> first move
 | You see | First move |
 |---|---|

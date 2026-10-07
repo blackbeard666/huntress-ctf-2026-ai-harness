@@ -14,7 +14,11 @@ solver/{solve.py,NOTES.md})
    add a `## Day by day` entry for {day} (title, what the artifact actually was, the key insight, the exact tools/commands
    that worked, GM spelling conventions confirmed or rejected, pitfalls and time lost, time to CORRECT), and revise the
    lane's "how challenges have looked", "Recognition cues -> first move" and "Pitfalls" sections if today taught
-   something new. These logs are LEARNING NOTES for future, possibly unrelated challenges: record methods, cues and
+   something new. Maintain the lane's `## Variant axes` section: for every `variant-*` / `auto-*` regression case
+   and every `VARIANT AXIS:` line in `solver/NOTES.md` (also read the generalize worker logs under time_trial/ and
+   mastery/), record the AXIS (what differed between variants of the same day), the values seen, and the parse rule
+   that covers all of them -- merge into an existing axis when it is the same kind of difference. These are inlined
+   into tomorrow's single-solve prompt, so keep them short and concrete. These logs are LEARNING NOTES for future, possibly unrelated challenges: record methods, cues and
    conventions -- never "rerun this solver". Keep each log skimmable (~200 lines; compress older entries if needed).
 2. LIB: verify each proposal against its cited evidence (`confirmed.json`, `submissions.jsonl`, solver). Only GM-confirmed
    facts go into `lib/knowledge.py` (rejected spellings into the matching `*_REJECTED` list) and naming RULES into

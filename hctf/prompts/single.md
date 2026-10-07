@@ -29,6 +29,10 @@ spend is on the critical path. The harness ENDS your session automatically the m
    Read the log's "Recognition cues" and "Pitfalls" sections too. It is a REFERENCE, not a recipe: today's challenge may
    be entirely new, so derive every value from today's bytes. You may read an earlier solver's code to borrow a
    technique, but never run an old solver against today's challenge as the source of your answers.
+   **Write the parsing for every value of the log's "Variant axes"** (inlined above): those are not hypothetical --
+   they are what actually changed between the single, Time Trial and Mastery variants of one day (e.g. hex vs decimal
+   literals, base64 alphabet, carrier). Reading the radix/alphabet from the code costs seconds; missing one costs a
+   failed timed attempt + a ~45 s generalize cycle.
    **Size `solve.py` for the MASTERY contract, not just the single artifact** -- its set count and the per-set format
    the log describes (e.g. numbered mixed-encoding lines) must run in well under 1 s total.
 2. **`{solver_dir}/solve.py` is pre-seeded with the harness skeleton** (contract I/O,
@@ -48,7 +52,7 @@ spend is on the critical path. The harness ENDS your session automatically the m
    a value you are still probing). Exit codes: 0 correct, 1 incorrect, 2 accepted (partial; more remain), 4 refused
    locally (read the reason). Never guess: an incorrect answer means "investigate more". The harness caps wrong answers.
 4. **STOP when CORRECT.** Do not write synthetic or multi-day regression cases, do not run `hctf solver-test`, do not
-   harden for hypothetical variants, do not write long notes. The harness replays the regression suite itself and
+   harden for hypothetical variants (the logged Variant axes are not hypothetical -- cover those in step 1), do not write long notes. The harness replays the regression suite itself and
    runs a targeted generalize worker ONLY if a real Time Trial/Mastery variant fails.
 Read the Mastery `contract.json` named above NOW (it's on disk; no attempt needed): its `questions[].artifact` names
 (e.g. `delivery 2: x.apk`) and set count are exactly what your solver must handle; `hctf submit --from-solver` runs a

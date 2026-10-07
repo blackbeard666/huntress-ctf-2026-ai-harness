@@ -212,6 +212,55 @@ def test_watch_ready(tmp):
           rc == orch.workers.STOPPED_RC and _t.time() - t0 < 4)
 
 
+def test_harvest(tmp):
+    import json as _j
+    from pathlib import Path as _P
+    tmp = _P(tmp)
+    # watcher: never green while a harvest is still running; green right after it ends
+    c = bare_chain(sdir=tmp, root=tmp)
+    _seq = iter([{"solve.py": 1.0}])
+    c._solver_mtimes = lambda: next(_seq, {"solve.py": 2.0})
+    full = [{"case": "var", "ok": False, "unverified": True, "answered": 5, "total": 5, "seconds": 0.1}]
+    green, done, harvesting = threading.Event(), threading.Event(), threading.Event()
+    harvesting.set()
+    with mock.patch.object(orch.solvers, "test_solver", lambda *a, **k: full), \
+            mock.patch.object(orch, "say", lambda m: None), mock.patch.object(orch.time, "time", lambda: 10 ** 6):
+        t = threading.Thread(target=orch.Chain._watch_green,
+                             args=(c, set(), set(), False, green, done, {"var"}, harvesting))
+        t.start(); _held = not green.wait(4.5); harvesting.clear(); green.wait(10); done.set(); t.join(5)
+    check("harvest: watcher holds green while harvesting, greens after", _held and green.is_set())
+
+    # _harvest: an incomplete variant becomes a case + joins fill; a fully-answered one doesn't; start.json untouched
+    sdir = tmp / "hsolver"; (sdir / "cases").mkdir(parents=True)
+    c = bare_chain(sdir=sdir, root=tmp)
+    (tmp / ".generalize-snapshot").mkdir(exist_ok=True); (tmp / ".generalize-snapshot" / "solve.py").write_text("")
+    bodies = iter([{"attempt_id": "aaaaaaaa11", "answer_ids": ["x", "y"], "deadline": None},
+                   {"attempt_id": "bbbbbbbb22", "answer_ids": ["x", "y"], "deadline": None}])
+
+    def call(cid, op, *a, **k):
+        if op == "start":
+            return {"http": 200, "body": next(bodies)}
+        _P(a[1], a[3]).write_text("bytes")
+        return {"saved": [1]}
+    outs = iter([({"x": "1"}, None, 0.1), ({"x": "1", "y": "2"}, None, 0.1)])
+    fill, done = set(), threading.Event()
+    with mock.patch.object(orch.cli, "call", call), mock.patch.object(orch.cli, "attempt_id", lambda b: (b or {}).get("attempt_id")), \
+            mock.patch.object(orch.cli, "_planned_downloads", lambda b: [("blob.bin", "cap", None)]), \
+            mock.patch.object(orch.cli, "save", lambda *a: (_ for _ in ()).throw(AssertionError("start.json touched"))), \
+            mock.patch.object(orch.cli, "load", lambda *a: {}), mock.patch.object(orch.timed, "last_result", lambda cid: {}), \
+            mock.patch.object(orch.solvers, "mode_of", lambda cid: "time_trial"), \
+            mock.patch.object(orch.solvers, "run_solver", lambda *a, **k: next(outs)), \
+            mock.patch.object(orch, "HARVEST_GAP", 0), mock.patch.object(orch, "ROOT", tmp), mock.patch.object(orch, "say", lambda m: None):
+        orch.Chain._harvest(c, "s/time_trial", 2, fill, done)
+    case = sdir / "cases" / "variant-time_trial-aaaaaaaa"
+    check("technique_log inlines the lane's Variant axes section",
+          "## Variant axes" in orch.technique_log("script-analysis") and orch.variant_axes("no-such-lane") == "")
+    check("harvest: incomplete variant saved as unverified case + added to fill; complete one skipped",
+          fill == {"variant-time_trial-aaaaaaaa"} and (case / "artifacts" / "blob.bin").exists()
+          and _j.loads((case / "expected.json").read_text()) == {}
+          and not (sdir / "cases" / "variant-time_trial-bbbbbbbb").exists())
+
+
 def test_watch_green(tmp):
     import time as _t
     c = bare_chain(sdir=tmp, root=tmp)
@@ -252,6 +301,7 @@ def main():
         print("snapshot");    test_snapshot()
         print("watch");       test_watch_ready(tmp)
         print("green");       test_watch_green(tmp)
+        print("harvest");     test_harvest(tmp)
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     return 1 if FAIL else 0
 

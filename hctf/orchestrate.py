@@ -7,6 +7,7 @@ The GM enforces those prerequisites, so each chain is sequential while all chain
 Worker slots: local `claude -p` (HCTF_LOCAL_SLOTS) + Homebase `codex exec` (HCTF_HB_SLOTS, credit-gated).
 Fix workers racing a deadline skip the slot queue.
 """
+import datetime
 import json
 import os
 import re
@@ -18,7 +19,7 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from . import cli, paths, remote, solvers, timed, workers
+from . import cli, paths, remote, scout, solvers, timed, workers
 
 ROOT = Path(__file__).resolve().parent.parent
 CREDIT_SOFT = float(os.environ.get("HCTF_CREDIT_SOFT", "4"))   # below: no new Homebase (codex) workers
@@ -47,6 +48,12 @@ SPEC_POLL = float(os.environ.get("HCTF_SPEC_POLL", "1"))
 SCOUT_ROUNDS = int(os.environ.get("HCTF_SCOUT_ROUNDS", "0"))
 SCOUT_CLEAN = int(os.environ.get("HCTF_SCOUT_CLEAN", "2"))          # stop after this many clean rounds in a row
 SCOUT_GENERALIZE = int(os.environ.get("HCTF_SCOUT_GENERALIZE", "2"))  # offline fix cycles between scout bursts
+# Variant harvest beside a gap-fixing generalize: fresh attempts of the same mode (started, downloaded, never submitted)
+# whose bytes the pre-worker solver leaves incomplete become extra variant cases the SAME worker fixes. main4 replay:
+# script TT failed on 3 different unseen constructs in a row (JScript hex arrays, JScript relay, cx_Freeze carrier) +
+# one more on Mastery = 4 generalize/retry cycles (~3:20) where one multi-variant cycle would do.
+HARVEST_VARIANTS = int(os.environ.get("HCTF_HARVEST_VARIANTS", "3"))
+HARVEST_GAP = float(os.environ.get("HCTF_HARVEST_GAP", "3"))  # s after an attempt's deadline before the next start
 
 _print_lock = threading.Lock()
 
@@ -147,7 +154,20 @@ def technique_log(lane):
     text = f.read_text(errors="replace")
     head = text.split("\n## ", 1)[0].strip().splitlines()[1:]          # drop the title line
     summary = "\n".join(l for l in head if l.strip())[:2500]
-    return f"`{f.relative_to(ROOT)}` -- its summary (OBSERVATIONS from earlier days, not guarantees):\n{summary}"
+    out = f"`{f.relative_to(ROOT)}` -- its summary (OBSERVATIONS from earlier days, not guarantees):\n{summary}"
+    axes = variant_axes(lane)
+    return out + (f"\n{axes}" if axes else "")
+
+
+def variant_axes(lane):
+    """The log's "## Variant axes" section (what differed between single / Time Trial / Mastery variants of one day):
+    inlined so the solver is written for those axes up front -- the D6 from-scratch replay lost 4 generalize cycles
+    (~3:20) to one unseen axis value each (hex vs decimal literals, urlsafe base64, a cx_Freeze carrier)."""
+    f = ROOT / "reference" / "techniques" / f"{lane}.md"
+    if not f.exists():
+        return ""
+    m = re.search(r"^## Variant axes.*?(?=^## |\Z)", f.read_text(errors="replace"), re.M | re.S)
+    return m.group(0).strip()[:2500] if m else ""
 
 
 def _rel(p):
@@ -294,8 +314,17 @@ class Chain:
         prompt = workers.render("generalize", cid=cid, base=self.base, mode=mode,
                                 chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
                                 persona=workers.lane_persona(self.lane), playbook=workers.lane_playbook(self.lane),
+                                variant_axes=variant_axes(self.lane) or "(none recorded yet for this lane)",
                                 problems="\n".join(f"  - {p}" for p in probs) or "  - solver did not produce all answers",
                                 gm_wrong=gm_wrong)
+        harvest = bool(HARVEST_VARIANTS and wrong and all(v is None for _, v in wrong) and remote.gm_transport() == "local")
+        if harvest:
+            gm_wrong += ("\n  - MORE VARIANTS ARRIVE WHILE YOU WORK: the harness is fetching up to "
+                         f"{HARVEST_VARIANTS} fresh variants of this mode in the background and saves each one the "
+                         "current solver can't fully answer as another `variant-*` case. They are typically DIFFERENT "
+                         "constructs (another language/carrier/encoding of the same task): handle the construct "
+                         "family, not just this sample, and re-run `hctf solver-test` before you finish -- every "
+                         "variant-* case must come out with every field filled.")
         set_state(self.base, stage=f"{mode}:generalizing")
         targets = {r["case"] for r in (res or []) if not r.get("ok") and not r.get("unverified")}
         # A failed variant has no GM-verified answers (unverified), so "passes" can't be judged -- but fields the solver
@@ -303,29 +332,116 @@ class Chain:
         # three generalize workers ran to their own end). Correctness is still checked by the accept step + GM retry.
         fill = {r["case"] for r in (res or []) if r.get("unverified") and r.get("answered", 0) < r.get("total", 0)}
         self._snapshot_solver()
-        green, done = threading.Event(), threading.Event()
+        green, done, harvesting = threading.Event(), threading.Event(), threading.Event()
+        if harvest:
+            harvesting.set()
         watch = threading.Thread(target=self._watch_green, daemon=True,
-                                 args=(targets, set(self._baseline), bool(d.get("solver_too_slow")), green, done, fill))
+                                 args=(targets, set(self._baseline), bool(d.get("solver_too_slow")), green, done, fill,
+                                       harvesting))
         if (targets or fill) and STOP_WHEN_READY:
             watch.start()
+        reaper = None
+        if harvest:   # starts after the snapshot: the harvest judges new variants with the PRE-worker solver
+            reaper = threading.Thread(target=self._harvest_variants, daemon=True,
+                                      args=(cid, HARVEST_VARIANTS, fill, done, harvesting))
+            reaper.start()
         try:
             self.run_worker(cid, "generalize", prompt, GENERALIZE_TIMEOUT, stop=green)
         finally:
             done.set()
             if watch.is_alive():
                 watch.join()
+            if reaper:
+                reaper.join()
             self._accept_or_restore(cid)
+            if reaper:
+                # The last harvested attempt may still be live: a retry now would RESUME it (start is idempotent
+                # while the clock runs) with its clock half spent.
+                scout._wait_expired(getattr(self, "_harvest_deadline", None), say, cid)
 
-    def _watch_green(self, targets, baseline, need_fast, green, done, fill=frozenset()):
+    def _harvest_variants(self, cid, n, fill, done, harvesting):
+        try:
+            self._harvest(cid, n, fill, done)
+        finally:
+            harvesting.clear()
+
+    def _harvest(self, cid, n, fill, done):
+        """Beside a generalize worker fixing EMPTY fields: start up to `n` fresh attempts of this mode (never submitted;
+        a failed/expired timed attempt costs nothing on the scoreboard), download each variant into .run/harvest/, run
+        the pre-worker solver snapshot on it and save every variant it leaves incomplete as a `variant-<mode>-<att8>`
+        case + add it to the watcher's fill set. Never touches start.json / contract.json (the worker may read them)."""
+        mode, snap = solvers.mode_of(cid), self._snap_dir()
+        prev = (timed.last_result(cid) or {}).get("deadline") or (cli.load(cid, "start.json") or {}).get("deadline")
+        got = 0
+        for _ in range(n):
+            if not self._harvest_sleep(prev, done):
+                break
+            try:
+                with cli.chal_lock(cid), cli.quiet():
+                    env = cli.call(cid, "start", cid)
+                body = env.get("body") or {}
+                att = cli.attempt_id(body)
+                if env.get("http") != 200 or body.get("error") or not att:
+                    say(f"[{cid}] harvest: start refused ({str(body)[:120]}); stopping the harvest")
+                    break
+                prev = self._harvest_deadline = body.get("deadline")
+                dst = ROOT / ".run" / "harvest" / paths.slugify(cid) / att[:8]
+                dst.mkdir(parents=True, exist_ok=True)
+                plan = cli._planned_downloads(body)
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=8) as ex, cli.quiet():
+                    envs = list(ex.map(lambda it: cli.call(cid, "download", it[1], str(dst), "--name", it[0], timeout=60),
+                                       plan))
+                if not plan or not all(e.get("saved") for e in envs):
+                    say(f"[{cid}] harvest: download incomplete for {att[:8]}; skipping it")
+                    continue
+                if not (snap / "solve.py").exists():
+                    break
+                ans, err, secs = solvers.run_solver(snap, body, dst, timeout=BASELINE_CASE_TIMEOUT)
+                ids = body.get("answer_ids") or [q.get("id") for q in body.get("questions") or [] if q.get("id")]
+                empty = [i for i in ids if ans.get(i) in (None, "")]
+                if err or empty:
+                    name = f"variant-{mode}-{att[:8]}"
+                    solvers.add_case(self.sdir, name, body, dst, {})
+                    fill.add(name)
+                    got += 1
+                    say(f"[{cid}] harvest: {name} -- pre-worker solver left {len(empty)}/{len(ids)} empty"
+                        f"{' (' + str(err)[:60] + ')' if err else ''}; added for this generalize")
+                else:
+                    say(f"[{cid}] harvest: variant {att[:8]} fully answered by the pre-worker solver ({secs:.1f}s)")
+            except Exception as e:  # noqa: BLE001 - advisory: the generalize proceeds on the original variant
+                say(f"[{cid}] harvest note: {e}")
+                break
+        if got:
+            say(f"[{cid}] harvest: {got} extra failing variant(s) handed to the generalize worker")
+
+    @staticmethod
+    def _harvest_sleep(deadline, done):
+        """Wait out the previous attempt's clock + the GM rate gap; False if the generalize ended meanwhile."""
+        left = 0.0
+        if deadline:
+            try:
+                end = datetime.datetime.fromisoformat(str(deadline).replace("Z", "+00:00"))
+                left = max(0.0, (end - datetime.datetime.now(datetime.timezone.utc)).total_seconds())
+            except ValueError:
+                pass
+        return not done.wait(left + 2 + HARVEST_GAP) and not done.is_set()
+
+    def _watch_green(self, targets, baseline, need_fast, green, done, fill=frozenset(), harvesting=None):
         """Beside a generalize worker: once solver code has been quiet 3s and the failing target case(s) pass with no
         previously-passing case broken (and fast, for a speed fix), end the worker -- the replays' generalize workers
-        spent 22-46s after the fix on solver-test reruns, robustness checks and notes."""
+        spent 22-46s after the fix on solver-test reruns, robustness checks and notes. While a variant harvest is
+        still running (`harvesting` set) the worker is never ended: more failing variants may be on the way."""
         start, checked = self._solver_mtimes(), None
         while not done.wait(2.0):
             m = self._solver_mtimes()
-            if not m or m == start or m == checked or time.time() - max(m.values()) < 3:
+            if not m or m == start or time.time() - max(m.values()) < 3:
                 continue
-            checked = m
+            busy = bool(harvesting and harvesting.is_set())
+            key = (tuple(sorted(m.items())), len(fill), busy)
+            if key == checked or busy:
+                continue
+            checked = key
             try:
                 res = solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT)
             except Exception:  # noqa: BLE001
