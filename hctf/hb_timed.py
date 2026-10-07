@@ -424,6 +424,31 @@ def main():
     def setkey(aid):
         m = re.match(r"(set|slot)[._-]?\d+", aid)
         return m.group(0) if m else "_"
+    groups = {}
+    for aid, v in answers.items():
+        groups.setdefault(setkey(aid), {})[aid] = v
+    if len(groups) > 1 and os.environ.get("HCTF_PARALLEL_SET_SUBMIT", "0") == "1":  # measured: no faster (GM serial)
+        # One POST per set, CONCURRENTLY over the pre-opened pool: a 798-answer single POST took 2.3-4.7 s from WSL
+        # (no Homebase), the bulk of a 7 s Mastery window; per-set POSTs in parallel cost ~one smaller round-trip.
+        with ThreadPoolExecutor(max_workers=len(groups)) as ex:
+            ress = dict(zip(groups, ex.map(lambda k: _post({"op": "submit", "challenge": a.cid, "answers": groups[k]}),
+                                           list(groups))))
+        out["phases"]["submit"] = round(time.time() - t_solved, 2)
+        per_set = {k: {"result": str(r.get("result", "")).lower(), "remaining": r.get("remaining")} for k, r in ress.items()}
+        out["per_set"], out["submit_mode"] = per_set, "parallel_sets"
+        if all(v["result"] in ("correct", "accepted") for v in per_set.values()):
+            out["result"] = "correct"
+            out["verified"] = dict(answers)
+            out["novel_labels"] = _novel(answers, _vocab())
+        else:
+            out["result"] = "expired" if any(v["result"] == "expired" for v in per_set.values()) else "incorrect"
+            out["bad_sets"] = [k for k, v in per_set.items() if v["result"] not in ("correct", "accepted")]
+            if out["result"] == "incorrect":
+                _localize(a.cid, answers, groups, per_set, body, out)
+        out["elapsed"] = round(time.time() - t0, 2)
+        out["in_window"] = round(time.time() - t_started, 2)
+        _emit(out, adir)
+        return
     full = _post({"op": "submit", "challenge": a.cid, "answers": answers})
     out["phases"]["submit"] = round(time.time() - t_solved, 2)
     fk = str(full.get("result", "")).lower()
@@ -439,9 +464,6 @@ def main():
 
     # Not fully correct: break down per set to learn which set failed (clock permitting), so the offline
     # generalize worker gets granular feedback on the next cycle.
-    groups = {}
-    for aid, v in answers.items():
-        groups.setdefault(setkey(aid), {})[aid] = v
     per_set, final = {}, fk or "incorrect"
     for key, grp in groups.items():
         res = _post({"op": "submit", "challenge": a.cid, "answers": grp})

@@ -27,6 +27,7 @@ SINGLE_TIMEOUT = int(os.environ.get("HCTF_SINGLE_TIMEOUT", str(25 * 60)))
 GENERALIZE_TIMEOUT = int(os.environ.get("HCTF_GENERALIZE_TIMEOUT", str(12 * 60)))
 MAX_SINGLE_LAUNCHES = 3
 MAX_TIMED_RETRIES = 5
+CLOCK_RETRIES = int(os.environ.get("HCTF_CLOCK_RETRIES", "12"))  # extra retries for pure clock expiries
 CHAIN_CRASH_RETRIES = int(os.environ.get("HCTF_CHAIN_CRASH_RETRIES", "1"))  # re-run a crashed chain (done modes skip)
 # Early handoff: once the Single Solve is CORRECT and a snapshot of the still-running worker's solver reproduces
 # its confirmed answers, make ONE speculative Time Trial -> Mastery pass from that snapshot instead of idling until
@@ -734,7 +735,10 @@ class Chain:
         seen_fresh = getattr(self, "_tstatus", {}).get(mode) == "start_required"
         if cli.is_complete(cid) or (not seen_fresh and cli.gm_solved(cid)):
             return True
-        for attempt in range(MAX_TIMED_RETRIES + 1):
+        clock_retries = 0
+        attempt = -1
+        while attempt < MAX_TIMED_RETRIES:
+            attempt += 1
             while not self.gov.allow_timed():
                 set_state(self.base, stage=f"{mode}:waiting-credits")
                 time.sleep(300)
@@ -768,14 +772,19 @@ class Chain:
             if res not in ("expired", "blocked"):
                 break
             last = timed.last_result(cid) or {}
-            if res == "expired" and self._clock_expiry(cid) and attempt < MAX_TIMED_RETRIES:
+            if res == "expired" and self._clock_expiry(cid) and clock_retries < CLOCK_RETRIES:
                 # The solver answered everything and the CLOCK ran out: a transport/timing failure. Probing can't judge
                 # anything on an expired clock and a generalize worker can't speed up the network (rehearsal copy,
                 # Dim and Dimmer mastery: 0/462 judged, worker concluded "solver correct, timing"). Just retry.
                 say(f"[{cid}] expired on the CLOCK (in-window {last.get('in_window')}s / window {last.get('window')}s, "
                     f"phases {last.get('phases')}): timing, not the solver -- retrying without probe/generalize")
                 set_state(self.base, stage=f"{mode}:timing")
-                time.sleep(2)
+                # Clock expiries are FREE on the scoreboard and don't consume the solver-failure budget: from WSL
+                # (no Homebase) a 798-answer Mastery passed 6/6 one hour and expired 6/6 in a slow GM spell the
+                # hour before -- keep trying through the spell with a gentle backoff.
+                clock_retries += 1
+                attempt -= 1
+                time.sleep(min(2 * clock_retries, 10))
                 continue
             # A failed timed attempt means the solver is wrong or incomplete for this variant (with Homebase
             # execution the window is no longer the bottleneck). Always improve the solver offline, then retry.
