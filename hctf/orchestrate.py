@@ -301,7 +301,121 @@ def _text_head(data, lines=40, chars=1500):
     return "\n".join(text.splitlines()[:lines])[:chars]
 
 
-def failing_evidence(sdir, mode, ids, max_files=3):
+def _case_texts(case, want):
+    """(member name, text) for every text member of a case's artifacts (zips walked recursively) passing want(text)."""
+    from lib.common import iter_entries
+    for name, load, _parent in iter_entries(case / "artifacts"):
+        if name.lower().endswith((".zip", ".apk", ".jar", ".exe", ".dll", ".bin", ".so", ".dex")):
+            continue
+        try:
+            data = load()
+        except Exception:  # noqa: BLE001
+            continue
+        if data[:2] == b"PK" or b"\x00" in data[:2048]:
+            continue
+        text = data.decode("utf-8", "replace")
+        if want(text):
+            yield name, text
+
+
+def construct_census(sdir, lane, failing_members=(), max_cases=24):
+    """Every construct of the lane's codec family across ALL the solver's cases, so a generalize worker sees the family
+    instead of one sample (rehearsal Day 7 replay: 4 variants drew reversed_base64 x3 + decimal_csv, the worker fixed exactly
+    those, the next variant drew xor_hex -> another cycle). Script lane: declared codecs (lib.codec.find_codecs),
+    marking those on the failing files and whether lib.codec decodes them. Mobile: huntress_puzzle.json codecs and
+    whether lib.android.decode_payload reaches an ANS code. '' for lanes without a codec family."""
+    cases = sorted((Path(sdir) / "cases").glob("*/"), key=lambda p: p.stat().st_mtime, reverse=True)[:max_cases]
+    failing_members = {m.split("->")[-1].strip() for m in failing_members}
+    if lane == "script-analysis":
+        from lib import codec
+        seen, bad, on_fail = {}, set(), {}
+        for c in cases:
+            for name, text in _case_texts(c, lambda t: "odec_" in t or "ODEC_" in t or "HUNTRESS-CODEC" in t):
+                for d in codec.find_codecs(text):
+                    spec = "|".join(x for x in (d["rep"], d["transform"], d["key"]) if x) or "?"
+                    tr, _key = codec._spec(d["rep"], d["transform"], d["key"])   # 'xor_hex|21' -> repeating_key_xor
+                    shape = f"{d['rep']}|{tr}"
+                    seen[shape] = seen.get(shape, 0) + 1
+                    if not d.get("plain"):
+                        bad.add(spec)
+                    if name in failing_members:
+                        on_fail[shape] = on_fail.get(shape, True) and bool(d.get("plain"))
+        if not seen:
+            return ""
+        reps = sorted({k.split("|")[0] for k in seen})
+        trs = sorted({k.split("|")[1] for k in seen})
+        lines = [f"Codec census over the newest {len(cases)} case(s): {len(seen)} distinct rep|transform shapes; "
+                 f"reps {reps}; transforms {trs}."]
+        if on_fail:
+            lines.append("Shapes the FAILING file(s) have used across those cases (the family to cover, not just this "
+                         "sample): " + ", ".join(f"{k}{'' if v else ' (lib.codec: NO decode)'}" for k, v in sorted(on_fail.items())))
+        if bad:
+            lines.append(f"lib.codec can NOT decode {len(bad)} declared spec(s): {sorted(bad)[:12]}")
+        lines.append("Treat these as ONE family: route EVERY declared codec through `lib.codec.decode` / "
+                     "`find_codecs` (it already composes any known rep x transform and has a name-agnostic fallback) "
+                     "instead of a per-name table in the solver.")
+        return "\n".join(lines)
+    if lane == "mobile-android":
+        import zipfile as _zf
+        from lib.android import ANS_RE_T, decode_payload
+        seen = {}
+        for c in cases:
+            for apk in (c / "artifacts").rglob("*"):
+                try:
+                    with _zf.ZipFile(apk) as z:
+                        for n in z.namelist():
+                            if n.endswith("huntress_puzzle.json"):
+                                pz = json.loads(z.read(n))
+                                name = str(pz.get("codec"))
+                                ok = bool(ANS_RE_T.search(decode_payload(pz.get("codec"), pz.get("data", ""), pz.get("key")) or ""))
+                                seen[name] = seen.get(name, True) and ok
+                except Exception:  # noqa: BLE001 - not an apk / not readable
+                    continue
+        if not seen:
+            return ""
+        return (f"Puzzle-codec census over {len(cases)} case(s): " +
+                ", ".join(f"{k} ({'decodes' if v else 'NO ANS'})" for k, v in sorted(seen.items())) +
+                ". `lib.android.decode_payload` falls back to a name-agnostic search with the ANS shape as oracle.")
+    return ""
+
+
+_LANG_OF_EXT = {"sh": "bash", "bash": "bash", "js": "js", "mjs": "node", "cjs": "node", "vbs": "vbs", "bat": "batch",
+                "cmd": "batch", "ps1": "power", "py": "py", "pyc": "py"}
+
+
+def handler_pointer(sdir, tokens, top=6, strong=(), lang=None):
+    """Solver functions most likely to handle the failing construct: `def` blocks of the solver's .py files ranked by
+    how many of `tokens` (failing file-name parts, codec names) they mention. Saves the generalize worker's
+    `cat solve.py; cat bashplan.py` (thousands of lines) -- rehearsal Day 7 replay: both workers started that way."""
+    toks = {t.lower() for t in tokens if t and len(t) >= 3}
+    strong = {t.lower() for t in strong if t and len(t) >= 3}
+    if not toks and not strong:
+        return ""
+    hits = []
+    for f in sorted(Path(sdir).glob("*.py")):
+        if f.name.startswith(("make_", "test_", "gen_")):
+            continue   # case generators / tests, not what runs in the window
+        try:
+            lines = f.read_text(errors="replace").splitlines()
+        except OSError:
+            continue
+        starts = [i for i, ln in enumerate(lines) if re.match(r"\s*def \w+", ln)] + [len(lines)]
+        for a, b in zip(starts, starts[1:]):
+            body = "\n".join(lines[a:b]).lower()
+            score = sum(body.count(t) for t in toks) + 3 * sum(body.count(t) for t in strong)
+            if score and lang and lang in f.name.lower():
+                score += 3   # bashplan.py for a .sh fixture, not batchplan.py
+            if score:
+                hits.append((score / max(1, b - a) ** 0.5, score, f.name, a + 1, lines[a].strip()[:90]))
+    if not hits:
+        return ""
+    hits.sort(key=lambda h: -h[0])   # hit DENSITY: a focused codec_decode beats a 300-line analyse()
+    hits = [h[1:] for h in hits]
+    return "Solver functions mentioning the failing construct (file:line, hits):\n" + "\n".join(
+        f"  {fn}:{ln}  {sig}  ({sc})" for sc, fn, ln, sig in hits[:top])
+
+
+def failing_evidence(sdir, mode, ids, max_files=3, lane=None):
     """Inline evidence for a generalize prompt: for the fields the solver got wrong/left empty on the newest
     `variant-<mode>-*` case, the artifact(s) they ask about, the head of each failing file and the same-named file from
     a PASSING case. Rehearsal Day 7: both script generalize workers spent their first 4-6 calls (ls cases, read contract,
@@ -342,7 +456,28 @@ def failing_evidence(sdir, mode, ids, max_files=3):
             if ph:
                 out.append(f"--- PASSING counterpart `{cart}` ({c.name}) -- the solver handles this one:\n{ph}")
                 break
-    return "\n".join(out)[:6000]
+    head = "\n".join(out)[:6000]
+    extra = []
+    try:
+        cen = construct_census(sdir, lane, arts) if lane else ""
+        if cen:
+            extra.append(cen)
+        toks, langs = set(), set()
+        for art in arts:
+            stem = Path(art.split("->")[-1].strip())
+            toks.update(re.split(r"[-_.]", stem.stem))
+            langs.add(_LANG_OF_EXT.get(stem.suffix.lstrip(".").lower()))
+        strong = {"codec", "material", "decode"}
+        m = re.search(r"have used across those cases[^:]*: (.*)", cen or "")
+        if m:
+            strong.update(re.findall(r"([a-z0-9_]+)\|", m.group(1)))
+        langs.discard(None)
+        hp = handler_pointer(sdir, toks, strong=strong, lang=next(iter(langs)) if len(langs) == 1 else None)
+        if hp:
+            extra.append(hp)
+    except Exception as e:  # noqa: BLE001 - advisory
+        extra.append(f"(census/handler note: {e})")
+    return head + ("\n\n" + "\n\n".join(extra) if extra else "")
 
 
 def wait_until_expired(cid, extra=3):
@@ -452,7 +587,7 @@ class Chain:
                          "current solver can't fully answer as another `variant-*` case. Re-run `hctf solver-test` "
                          "before you finish -- every variant-* case must come out with every field filled.")
         try:
-            evidence = failing_evidence(self.sdir, mode, [a for a, _ in (wrong or [])])
+            evidence = failing_evidence(self.sdir, mode, [a for a, _ in (wrong or [])], lane=self.lane)
         except Exception as e:  # noqa: BLE001 - advisory
             evidence = ""
             say(f"[{cid}] evidence block note: {e}")

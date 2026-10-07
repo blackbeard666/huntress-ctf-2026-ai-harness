@@ -564,3 +564,17 @@ assert ops == ["start", "start", "start"] and _waits == [1.0, 1.0], (ops, _waits
 assert not any("refused" in s for s in said), said
 assert orchestrate.HARVEST_GAP <= 1.0
 print("ok  harvest pacing: same attempt id = still live -> poll 1 s until a new variant; gap after deadline <= 1 s")
+
+# 23) generalize evidence: construct census (the codec FAMILY the failing file has used across cases, normalized
+#     through lib.codec._spec) + handler pointer (densest solver function mentioning the construct, plan file for the
+#     fixture's language first, case generators skipped).
+(ed / "bashplan.py").write_text("def analyse(data):\n    return 1\n\n\ndef codec_decode(material, codec):\n"
+                                "    # xor_hex, base64_literal: material -> bytes via the declared codec\n    return material\n")
+(ed / "batchplan.py").write_text("def expansion_form(b):\n    return 'indirect expansion'\n")
+(ed / "make_synthetic.py").write_text("def build():\n    return 'codec material decode xor_hex xor_hex xor_hex'\n")
+ev = orchestrate.failing_evidence(ed, "time_trial", ["bash-indirect-role"], lane="script-analysis")
+assert "Codec census" in ev and "xor_hex|repeating_key_xor" in ev and "base64_literal|identity" in ev, ev
+_hp = ev[ev.index("Solver functions"):].splitlines()
+assert "bashplan.py" in _hp[1] and "codec_decode" in _hp[1] and "make_synthetic" not in ev, _hp
+assert orchestrate.construct_census(ed, "warmups") == ""
+print("ok  generalize evidence: codec family census + handler pointer (bashplan.codec_decode first)")
