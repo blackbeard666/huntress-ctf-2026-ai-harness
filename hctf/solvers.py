@@ -176,7 +176,7 @@ def add_case(sdir, name, contract, artifacts, expected):
     return case
 
 
-def test_solver(sdir, timeout=120, parallel=4):
+def test_solver(sdir, timeout=120, parallel=min(8, os.cpu_count() or 4)):
     """Run the solver on every case (cases in parallel: they are independent; replay run 2 spent 141s replaying a
     slow solver's cases one by one). Returns list of {case, ok, seconds, diff/error}, in case-name order."""
     from concurrent.futures import ThreadPoolExecutor

@@ -539,6 +539,7 @@ class Chain:
             filled = {r["case"] for r in res if r.get("total") and r.get("answered") == r.get("total") and not r.get("error")}
             fast = all(r.get("seconds", 99) < 2.0 for r in res if r["case"] in (targets | set(fill)))
             if targets <= ok and set(fill) <= filled and baseline <= ok and (fast or not need_fast):
+                self._green_res = (m, self._case_names(), res)  # _accept_or_restore reuses it (same code + cases)
                 say(f"[{self.base}] generalize green ({sorted(targets | set(fill))[:3]} pass/complete, no regressions) "
                     "-> ending the worker")
                 green.set()
@@ -588,8 +589,14 @@ class Chain:
         snap = self._snap_dir()
         if not snap.exists():
             return
+        cached, self._green_res = getattr(self, "_green_res", None), None
         try:
-            res = solvers.test_solver(self.sdir) if (self.sdir / "solve.py").exists() else []
+            if cached and cached[0] == self._solver_mtimes() and cached[1] == self._case_names():
+                # The watcher just ran the full suite on this exact code + case set and found no regression: a second
+                # run only adds 5-10 s between "green" and the retry (rehearsal Day 7: 14 s / 20 s gaps on the script lane).
+                res = cached[2]
+            else:
+                res = solvers.test_solver(self.sdir) if (self.sdir / "solve.py").exists() else []
         except Exception as e:  # noqa: BLE001
             res = None
             err = repr(e)
@@ -887,6 +894,9 @@ class Chain:
         return False
 
     # -- early handoff (speculative timed attempts while the Single Solve worker is still running)
+    def _case_names(self):
+        return sorted(p.name for p in (self.sdir / "cases").glob("*/"))
+
     def _solver_mtimes(self):
         if not self.sdir.exists():
             return {}

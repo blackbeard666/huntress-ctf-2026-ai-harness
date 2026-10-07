@@ -387,3 +387,28 @@ for first, want_ops, want_refused in (
     assert ops == want_ops, (first, ops)
     assert any("start refused" in s for s in said) is want_refused, said
 print("ok  harvest: expired/finished start -> retry for a fresh variant; rotation_exhausted -> stop, no retry")
+
+# 17) _accept_or_restore reuses the watcher's green suite result when the solver code + case set are unchanged (alt
+#     Day 7: a second full run added 5-10 s between "green" and the retry); any change -> a fresh run.
+gd = Path(tempfile.mkdtemp())
+(gd / "solver" / "cases" / "c1").mkdir(parents=True)
+(gd / "solver" / "solve.py").write_text("print('{}')\n")
+gc = object.__new__(orchestrate.Chain)
+gc.base, gc.root, gc.sdir, gc._baseline = "b", gd, gd / "solver", {"c1"}
+_ots, _osay = orchestrate.solvers.test_solver, orchestrate.say
+runs = []
+orchestrate.solvers.test_solver = lambda *a, **k: (runs.append(1), [{"case": "c1", "ok": True}])[1]
+orchestrate.say = lambda *a, **k: None
+try:
+    for touch, want_runs in ((False, 0), (True, 1)):
+        runs.clear()
+        (gd / ".generalize-snapshot").mkdir(exist_ok=True)
+        gc._green_res = (gc._solver_mtimes(), gc._case_names(), [{"case": "c1", "ok": True}])
+        if touch:
+            (gd / "solver" / "cases" / "c2").mkdir()  # harvest added a case after the watcher's run
+        gc._accept_or_restore("b/time_trial")
+        assert len(runs) == want_runs and not (gd / ".generalize-snapshot").exists(), (touch, runs)
+        assert gc._green_res is None
+finally:
+    orchestrate.solvers.test_solver, orchestrate.say = _ots, _osay
+print("ok  accept: reuses the watcher's green result on identical code + cases; reruns the suite otherwise")
