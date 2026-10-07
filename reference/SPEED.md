@@ -302,3 +302,17 @@ variant drew another member of the same ~10-member codec family. Changes:
   replay (off the critical path). `HCTF_FAMILY_PROBE=0` disables.
 A fair Day-7 replay can't measure the probe (pre-7 lib.codec lacks xor_hex and the fallback); Day 8 is the test --
 check `hctf timeline` for TT generalize count and the probe line in any generalize worker's prompt.
+
+### Blind Day 7 replay `blind1` (alt, 2026-10-08 00:38, all 5 lanes, workflow 5e72c22, Day-7 vocabulary stripped)
+Setup: `bin/fair_run.sh 7 97b3694 lib/common.py lib/android.py lib/decode.py lib/codec.py` + alt `.run/sanitize_d7.py`
+(caesar/percent branches, D7 REPS and D7 comments removed; generic fallbacks kept) + alt `.run/blind_d7.sh start|stop`
+(masks every .run entry except tmp/locks/known_hosts/ssh socket; stashes old worker scratch). 56 tool calls, 0 flagged.
+`hctf timeline`: metadata 23/45/48, warmups 34/46/49, mobile 32/47/51, **script 86/169/174 (1 generalize 53 s, Mastery
+first try; fair run 301, fix1 258)**, binary 61/389/394 -> 15/15 by T+394, binary the new critical path:
+- single solver 5.9 s on its own case (jar_hcfg over all ~18.7k classes of the Kotlin fat jars) -> TT exec_error
+  "too slow" (attempt + ~30 s); speed generalize fixed it to 0.3 s by call 7 (~60 s) but ran 284 s: no early stop for a
+  speed-only generalize (all cases passed slowly -> watcher never started), plus a `7z x` hung 120 s on stdin.
+Fixes: 6c9ba41 (speed_watch_sets early stop + single-time speed gate HCTF_SINGLE_SPEED_BUDGET=2.5 s -> one speed
+generalize before the first timed attempt), c500c83 (bin/7z: -y, default -pinfected, stdin closed), c8a9748
+(lib.binary.jar_app_classes / class_utf8: 3121 -> 5 classes in 12 ms; binary skill + helper index).
+Expected with these: binary ~T+100, day bound by script (~T+175).
