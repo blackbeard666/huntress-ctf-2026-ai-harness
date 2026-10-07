@@ -297,3 +297,34 @@ finally:
     del os.environ["HUNTRESS_GAME_MASTER_URL"]
 assert remote._public_gm() is True
 print("ok  submit via Homebase is skipped when the GM URL is not the public GM (replays)")
+
+# 14) `start` on an already-passed mode returns the FINISHED attempt (no answer_ids, no deadline): hb_timed must ask
+#     for a fresh clock (op retry), and 'no_answer_ids' is a runner problem -> retry, never a generalize.
+posts = []
+
+
+def _fake_post(payload, timeout=20):
+    posts.append(payload["op"])
+    if payload["op"] == "start":
+        return {"result": "CORRECT", "questions": [{"id": "answer"}]}
+    return {"error": "stop_here"}                      # end main() right after the retry
+
+
+_op, _opool = hb_timed._post, hb_timed._pool
+hb_timed._post, hb_timed._pool = _fake_post, (lambda: None)
+_oargv, _ostdout = sys.argv, sys.stdout
+sys.argv, sys.stdout = ["hb_timed.py", "c/time_trial", "solver"], _io.StringIO()
+try:
+    hb_timed.main()
+finally:
+    sys.argv, sys.stdout = _oargv, _ostdout
+    hb_timed._post, hb_timed._pool = _op, _opool
+assert posts == ["start", "retry"], posts
+timed._remember = timed._keep_failed_attempt = lambda *a, **k: None
+_occ = timed.capture_case
+timed.capture_case = lambda *a, **k: None
+try:
+    assert timed.process_result("c/time_trial", d, {"result": "no_answer_ids"}, log=lambda *a: None) == "error:exec"
+finally:
+    timed._remember, timed._keep_failed_attempt, timed.capture_case = _orig[0], _orig[1], _occ
+print("ok  start on a passed mode -> op retry for a fresh clock; no_answer_ids -> error:exec (no generalize)")

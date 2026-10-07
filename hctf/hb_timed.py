@@ -361,7 +361,11 @@ def main():
     body = _post({"op": a.op, "challenge": a.cid})
     # fresh clock if this attempt is already expired / past its deadline
     left = _deadline_left(body)
-    if body.get("result") == "expired" or (left is not None and left <= 0.5):
+    # ...and a fresh clock when `start` hands back a FINISHED attempt (result CORRECT/INCORRECT, no deadline, no
+    # answer_ids): the GM resumes the latest attempt, so re-attempting a passed mode (Mastery prerequisite re-pass,
+    # scout, replay) got 'no_answer_ids' forever -- replay d7fix2 burned ~20 generalize workers on it.
+    finished = not body.get("error") and not body.get("answer_ids")
+    if body.get("result") == "expired" or finished or (left is not None and left <= 0.5):
         body = _post({"op": "retry", "challenge": a.cid})
         left = _deadline_left(body)
     out["deadline"] = body.get("deadline")

@@ -392,6 +392,8 @@ def process_result(cid, solver_dir, res, log=print):
         return "error:prerequisite"
     if res.get("gm_rate_limited") or "rate_limited" in r:
         return "error:rate"    # GM 429 on start/download: transient -- back off and retry, never generalize
+    if r == "no_answer_ids":
+        return "error:exec"    # the GM gave no live task (nothing for a solver to fix): retry, never generalize
     if r == "exec_error":
         if res.get("solver_too_slow"):
             # The SOLVER blew the clock (alt rehearsals: warmups solve.py >4.6s on 28 Mastery sets, on Homebase AND

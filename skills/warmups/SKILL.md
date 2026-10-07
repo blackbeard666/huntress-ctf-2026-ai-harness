@@ -13,9 +13,12 @@ description: Huntress warmups lane - decoding text blobs and layered encodings (
 
 ## Mastery first (read before writing solve.py)
 Mastery = 5N-2 sets on day N; each set blob is N numbered lines `NN<TAB>fragment`, line k in day k's encoding
-(see reference/techniques/warmups.md). solve.py must: strip the `NN\t` prefix, decode EACH line by its character
-class (strict base64 -> rot13 -> hex -> 8-bit binary -> decimal codes -> octal codes), join in NN order, then take the
-slug -- all 28 sets well under 1 s. `lib.decode.peel` is a BFS for EXPLORING an unknown blob at the shell; never call it
+(see reference/techniques/warmups.md). **Call `lib.decode.decode_chunked(text)` -- it already does exactly this**
+(strips the `NN\t` prefix, decodes EACH line by its character class: url %XX, binary, decimal/octal codes, hex,
+base32, strict base64, then rot-N for free text; joins in NN order; GM-confirmed D6 28/28 sets, D7 33/33) -- then take
+the slug from its last non-empty line. A single-line blob: `lib.decode.decode_chunk(text)`. Don't re-type the decoder
+(Day 7's worker spent ~25 s doing that); if a NEW line encoding appears, handle that one case in solve.py around the
+helper. All sets well under 1 s. `lib.decode.peel` is a BFS for EXPLORING an unknown blob at the shell; never call it
 per set inside solve.py (D6: the peel fallback made Mastery time out and cost ~150 s).
 
 # Tools
