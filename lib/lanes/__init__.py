@@ -1,11 +1,12 @@
 """Day-independent LANE solvers: deterministic, no-LLM solvers for a whole lane (every day's generator variation seen so
 far), run FIRST by merged reuse (hctf/solvers.reuse_plan). Each lives in lib/lanes/<name>/solve.py with the standard solver
 CLI (--contract --artifacts -> JSON {answer_id: value}) and stdlib-only deps so it also runs on Homebase.
-Validated offline on every saved case of days 1-6 (warmups 49/49 cases, mobile 27/27, script-analysis 19134/19134 fields; .run/review3/ prototypes)."""
+Validated offline on every saved case of days 1-6 (warmups 49/49 cases, mobile 27/27, script-analysis 19134/19134 fields, binary 2494/2494, metadata 58/58 (generic tier alone too); .run/review3/ prototypes)."""
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-LANES = {"warmups": "warmups", "mobile-android": "mobile", "script-analysis": "script"}
+LANES = {"warmups": "warmups", "mobile-android": "mobile", "script-analysis": "script",
+         "binary-reverse-engineering": "binary", "metadata-forensics": "metadata"}
 
 
 def solver_dir(lane):

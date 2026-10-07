@@ -210,3 +210,12 @@ wall-clock is model generation between tool calls (~4-6 s per turn) -> fewer tur
 - `hctf labels`: the solver's own value is tried FIRST unless already rejected (cold binary submitted `jar_jvm` first).
 - gm.py: GET 15 s timeout + one retry, POST 30 s (a hung call stalled a worker 65.7 s).
 - preflight: worker-sandbox check (venv + solver deps importable inside bwrap).
+- binary-reverse-engineering (`lib/lanes/binary`, 2026-10-07): 2494/2494 GM-confirmed values on every saved case of
+  days 1-6, 0 wrong, <= 0.27 s; per-container analyzers (pyelftools/pefile/capstone, pure-Python JAR constant pool) +
+  a CRC-validated HCFG hunter across raw/zip/gzip/base64/hex/UTF-16/constant-pool. New-day test: Day 6 with JAR code off
+  544/550 (all real GM cases correct), Day 5 without Rust/Go 160/160; arbitrary labels (Day 3 `pe_cli`) stay residual.
+- metadata-forensics (`lib/lanes/metadata`, 2026-10-07): 58/58 (26 cases), 0 wrong, ~0.1 s; registry of confirmed
+  families + a GENERIC tier (pure-Python parsers for ~20 formats, confirmed formatting rules, impostor -> none). With
+  each day's registry entry disabled the generic tier still answers all 58; fuzzed future families 49/50 emitted correct,
+  0 wrong (unconfirmed spellings are held back, not guessed).
+All five lanes now have lane solvers; through reuse_plan alone every lane's single of days 1-6 is fully confident + right.
