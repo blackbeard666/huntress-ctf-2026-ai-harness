@@ -16,6 +16,53 @@ from pathlib import Path
 GHIDRA_SCRIPT = Path(__file__).resolve().parent / "ghidra_scripts" / "DecompileDump.java"
 
 
+# --- JVM jars ------------------------------------------------------------------------------------
+# Bundled runtime/library packages in a fat jar. Kotlin builds ship the whole kotlin stdlib (~18k classes on Day 7):
+# a solver that scans every class constant spent 5.9 s per run there (blind D7 replay: Time Trial "too slow").
+JVM_LIBRARY = re.compile(r"(^|/)(kotlinx?|java|javax|androidx?|scala|org/jetbrains|org/intellij|com/google|okhttp3|okio)/")
+
+
+def jar_app_classes(jar, include_nested=True):
+    """[(entry name, class bytes)] for the APPLICATION classes of a jar (bytes or path): bundled library packages
+    (JVM_LIBRARY: kotlin, java, androidx, ...) and META-INF are skipped; nested jars are searched too."""
+    import zipfile
+    data = jar if isinstance(jar, (bytes, bytearray)) else Path(jar).read_bytes()
+    out = []
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        return out
+    for n in z.namelist():
+        if n.endswith(".class") and not n.startswith("META-INF/") and not JVM_LIBRARY.search(n):
+            out.append((n, z.read(n)))
+        elif include_nested and n.endswith(".jar") and not JVM_LIBRARY.search(n):
+            out += [(f"{n}!{m}", b) for m, b in jar_app_classes(z.read(n), include_nested=False)]
+    return out
+
+
+def class_utf8(cls):
+    """Every CONSTANT_Utf8 string of a .class file (names, descriptors, string literals) in constant-pool order --
+    a direct parse, ~50x faster than javap. [] if it isn't a class file."""
+    b = bytes(cls)
+    if b[:4] != b"\xca\xfe\xba\xbe" or len(b) < 10:
+        return []
+    count, i, k, out = int.from_bytes(b[8:10], "big"), 10, 1, []
+    sizes = {3: 4, 4: 4, 5: 8, 6: 8, 7: 2, 8: 2, 9: 4, 10: 4, 11: 4, 12: 4, 15: 3, 16: 2, 17: 4, 18: 4, 19: 2, 20: 2}
+    while k < count and i < len(b):
+        tag = b[i]
+        if tag == 1:
+            ln = int.from_bytes(b[i + 1:i + 3], "big")
+            out.append(b[i + 3:i + 3 + ln].decode("utf-8", "replace"))
+            i += 3 + ln
+        elif tag in sizes:
+            i += 1 + sizes[tag]
+            k += 1 if tag in (5, 6) else 0   # long/double take two pool slots
+        else:
+            break   # unknown tag: stop rather than misparse
+        k += 1
+    return out
+
+
 # --- packing -------------------------------------------------------------------------------------
 def entropy(data):
     """Shannon entropy (bits/byte, 0-8). Packed/encrypted payloads sit ~7.8+; normal code ~5-6.5."""

@@ -641,3 +641,33 @@ try:
 finally:
     orchestrate.say = _osay26
 print("ok  speed: speed-only generalize watched for speed; slow single -> one speed generalize before the first attempt")
+
+# 27) lib.binary jar helpers (blind D7 replay: a binary solver scanned all ~18k classes of a Kotlin fat jar, 5.9 s):
+#     jar_app_classes skips bundled library packages (one list with triage), class_utf8 parses the constant pool.
+import io as _io27  # noqa: E402
+import struct as _st27  # noqa: E402
+from lib import binary as _bin27  # noqa: E402
+
+
+def _cls27(*strings):
+    pool = b"".join(b"\x01" + _st27.pack(">H", len(x)) + x.encode() for x in strings)
+    return b"\xca\xfe\xba\xbe\x00\x00\x00\x34" + _st27.pack(">H", len(strings) + 1) + pool + b"\x00" * 8
+
+
+_buf27 = _io27.BytesIO()
+with zipfile.ZipFile(_buf27, "w") as _z:
+    _z.writestr("Day07Variant000.class", _cls27("HCFG", "staged"))
+    _z.writestr("kotlin/collections/ArraysKt.class", _cls27("x"))
+    _z.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n")
+    _inner = _io27.BytesIO()
+    with zipfile.ZipFile(_inner, "w") as _zi:
+        _zi.writestr("app/Inner.class", _cls27("inner"))
+        _zi.writestr("java/lang/Fake.class", _cls27("y"))
+    _z.writestr("lib/app-core.jar", _inner.getvalue())
+_apps27 = _bin27.jar_app_classes(_buf27.getvalue())
+assert [n for n, _ in _apps27] == ["Day07Variant000.class", "lib/app-core.jar!app/Inner.class"], _apps27
+assert _bin27.class_utf8(_apps27[0][1]) == ["HCFG", "staged"] and _bin27.class_utf8(b"not a class") == []
+assert triage._JVM_LIB is _bin27.JVM_LIBRARY
+from hctf import workers as _w27  # noqa: E402
+assert "jar_app_classes(" in _w27.lane_helpers("binary-reverse-engineering")
+print("ok  lib.binary: jar_app_classes skips bundled libraries (nested jars too), class_utf8 parses the pool")

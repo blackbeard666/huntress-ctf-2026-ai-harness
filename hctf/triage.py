@@ -193,7 +193,7 @@ def _sh(args, timeout=8):
         return ""
 
 
-_JVM_LIB = re.compile(r"(^|/)(kotlinx?|java|javax|androidx?|scala|org/jetbrains|org/intellij|com/google|okhttp3|okio)/")
+from lib.binary import JVM_LIBRARY as _JVM_LIB  # noqa: E402  (one list: triage recon + solvers' jar_app_classes)
 
 
 def _recon(cid, root):

@@ -5,6 +5,11 @@ description: Huntress binary-reverse-engineering lane - ELF/PE/Mach-O structure 
 
 **Installed: readelf/objdump/nm/c++filt, rizin + rabin2 (radare2), Ghidra `analyzeHeadless`, ilspycmd (.NET), GoReSym (Go), rustfilt (Rust), javap/jar, upx, capstone/pyelftools/pefile/lief/dnfile (venv), yara.**
 
+**JVM jars in solve.py:** iterate `lib.binary.jar_app_classes(jar_bytes)` (application classes only -- bundled kotlin/
+java/androidx/... library packages skipped; a Kotlin fat jar is ~3k classes, 5 of them the app's) and read constants with
+`lib.binary.class_utf8(class_bytes)`. Never scan every class of the jar: a solver that did spent 5.9 s per run and failed
+its Time Trial on speed. Keep the whole solve under ~2 s on the single case -- the harness times it before any timed attempt.
+
 # Day-1-style structural questions (answer from the headers, exactly)
 - `readelf -h` : ELF class (`ELF32`/`ELF64`), data (endianness, e.g. `little endian` -> the exact token the question wants),
   machine (`Advanced Micro Devices X86-64` -> usually `x86-64`/`AArch64`; match the format's `syntax`), type
