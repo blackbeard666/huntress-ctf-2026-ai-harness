@@ -64,7 +64,7 @@ fi
 
 # 2) Warm the Homebase SSH ControlMaster in the BACKGROUND (never blocks the launch; the run re-probes Homebase
 #    itself before each tight window).
-if ip route get "${HCTF_HB_HOST:-10.1.50.243}" 2>/dev/null | grep -q "${HCTF_VPN_DEV:-tun0}"; then
+if [ "${HCTF_AUTO_HOMEBASE:-1}" != 0 ] && ip route get "${HCTF_HB_HOST:-10.1.50.243}" 2>/dev/null | grep -q "${HCTF_VPN_DEV:-tun0}"; then
   ( timeout 30 hctf hb exec -- true >/dev/null 2>&1 && echo "[warm] Homebase SSH control channel established." \
       || echo "[warm] Homebase not reachable yet; the run's health thread re-probes it every ${HCTF_HB_HEALTH_S:-5}s." ) &
 fi

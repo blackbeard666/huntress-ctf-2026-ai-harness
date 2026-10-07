@@ -130,8 +130,14 @@ fi
 
 # 4) Homebase SSH + credits -----------------------------------------------------------------------
 hdr "Homebase (optional low-latency compute for tight timed windows)"
-hb_out="$(timeout 35 hctf hb exec -- 'echo hb-ok' 2>&1)"
-if grep -q hb-ok <<<"$hb_out"; then
+if [ "${HCTF_AUTO_HOMEBASE:-1}" = 0 ]; then
+  ok "Homebase disabled (HCTF_AUTO_HOMEBASE=0): timed attempts run locally; skipping the SSH check."
+  hb_out=skip
+else
+  hb_out="$(timeout 35 hctf hb exec -- 'echo hb-ok' 2>&1)"
+fi
+if [ "$hb_out" = skip ]; then :
+elif grep -q hb-ok <<<"$hb_out"; then
   st="$(timeout 20 hctf hb status 2>&1 | tr -d ' \n')"
   ok "Homebase SSH works. status: ${st:0:120}"
 else

@@ -100,7 +100,9 @@ _POOL = None
 def _pool():
     global _POOL
     if _POOL is None:
-        _POOL = _Pool(GM)
+        # Pre-open enough connections (BEFORE the clock) for a many-file Mastery: from the public GM each download is
+        # ~1.3-2 s, so 28 warmups deliveries over 6 sockets / 8 threads took 7.2 s -- the whole 7 s window (local replay).
+        _POOL = _Pool(GM, size=int(os.environ.get("HCTF_GM_POOL", "16")))
     return _POOL
 
 
@@ -372,7 +374,7 @@ def main():
         (adir / name).write_bytes(_get_bytes(cap))
 
     if plan:
-        with ThreadPoolExecutor(max_workers=min(8, len(plan))) as ex:
+        with ThreadPoolExecutor(max_workers=min(int(os.environ.get("HCTF_DL_PARALLEL", "24")), len(plan))) as ex:
             for _ in ex.map(_fetch, plan):  # propagate any download exception
                 pass
     t_downloaded = time.time()
