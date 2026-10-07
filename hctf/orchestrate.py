@@ -287,6 +287,61 @@ def capture_variant(cid, sdir):
         solvers.add_case(sdir, name, contract, art, timed.present_only(contract, art, cli.confirmed_answers(cid)))
 
 
+def _text_head(data, lines=40, chars=1500):
+    """First lines of an artifact if it reads as text, else None (binaries go to the worker's own tools)."""
+    if not data:
+        return None
+    sample = data[:4096]
+    if sum(32 <= b < 127 or b in (9, 10, 13) for b in sample) < 0.9 * len(sample):
+        return None
+    text = sample.decode("utf-8", "replace")
+    return "\n".join(text.splitlines()[:lines])[:chars]
+
+
+def failing_evidence(sdir, mode, ids, max_files=3):
+    """Inline evidence for a generalize prompt: for the fields the solver got wrong/left empty on the newest
+    `variant-<mode>-*` case, the artifact(s) they ask about, the head of each failing file and the same-named file from
+    a PASSING case. Rehearsal Day 7: both script generalize workers spent their first 4-6 calls (ls cases, read contract,
+    7z x, find the file) just reaching what this block shows."""
+    from lib.common import find_artifact
+    cases = Path(sdir) / "cases"
+    var = sorted(cases.glob(f"variant-{mode}-*/"), key=lambda p: p.stat().st_mtime)
+    if not var or not ids:
+        return ""
+    case = var[-1]
+    try:
+        qs = {q.get("id"): q for q in json.loads((case / "contract.json").read_text()).get("questions") or []}
+    except (OSError, ValueError):
+        return ""
+    arts = []
+    for a in ids:
+        art = (qs.get(a) or {}).get("artifact")
+        if art and art not in arts:
+            arts.append(art)
+    if not arts:
+        return ""
+    passing = [c for c in sorted(cases.glob("*/")) if c.name in ("single_solve",) or c.name.startswith(("auto-", "time_trial-"))]
+    out = [f"Failing case `cases/{case.name}` -- {len(ids)} field(s) about {len(arts)} artifact(s): {', '.join(arts[:6])}"]
+    for art in arts[:max_files]:
+        member = art.split("->")[-1].strip()
+        try:
+            head = _text_head(find_artifact(case / "artifacts", art))
+        except Exception:  # noqa: BLE001 - evidence is best-effort; the worker can always open the case itself
+            head = None
+        out.append(f"--- FAILING `{art}` ({case.name}):\n{head}" if head else f"--- FAILING `{art}`: binary/unreadable here")
+        for c in passing:
+            try:
+                cq = json.loads((c / "contract.json").read_text()).get("questions") or []
+                cart = next((q["artifact"] for q in cq if str(q.get("artifact", "")).split("->")[-1].strip() == member), None)
+                ph = _text_head(find_artifact(c / "artifacts", cart)) if cart else None
+            except Exception:  # noqa: BLE001
+                ph = None
+            if ph:
+                out.append(f"--- PASSING counterpart `{cart}` ({c.name}) -- the solver handles this one:\n{ph}")
+                break
+    return "\n".join(out)[:6000]
+
+
 def wait_until_expired(cid, extra=3):
     """Block until the live attempt's deadline has passed, so a retry will be accepted."""
     contract = cli.load(cid, "start.json")
@@ -385,20 +440,26 @@ class Chain:
             gm_wrong += ("\n  - THE SOLVER IS TOO SLOW: solve.py hit the in-window timeout on this variant (answers may well be right). "
                          "Make it fast -- no per-set brute force over every decoder, no subprocess per set, decode once, "
                          "early-exit on the first candidate that matches the answer_format; time it with `time hctf solver-run`.")
+        harvest = bool(HARVEST_VARIANTS and wrong and all(v is None for _, v in wrong) and remote.gm_transport() == "local")
+        if harvest:
+            # (built BEFORE render -- until the rehearsal Day 7 review this note was appended after the prompt was rendered,
+            # so no worker ever saw it)
+            gm_wrong += ("\n  - MORE VARIANTS ARRIVE WHILE YOU WORK: the harness is fetching up to "
+                         f"{HARVEST_VARIANTS} fresh variants of this mode in the background and saves each one the "
+                         "current solver can't fully answer as another `variant-*` case. Re-run `hctf solver-test` "
+                         "before you finish -- every variant-* case must come out with every field filled.")
+        try:
+            evidence = failing_evidence(self.sdir, mode, [a for a, _ in (wrong or [])])
+        except Exception as e:  # noqa: BLE001 - advisory
+            evidence = ""
+            say(f"[{cid}] evidence block note: {e}")
         prompt = workers.render("generalize", cid=cid, base=self.base, mode=mode,
                                 chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
                                 persona=workers.lane_persona(self.lane), playbook=workers.lane_playbook(self.lane),
                                 variant_axes=variant_axes(self.lane) or "(none recorded yet for this lane)",
                                 problems="\n".join(f"  - {p}" for p in probs) or "  - solver did not produce all answers",
-                                gm_wrong=gm_wrong)
-        harvest = bool(HARVEST_VARIANTS and wrong and all(v is None for _, v in wrong) and remote.gm_transport() == "local")
-        if harvest:
-            gm_wrong += ("\n  - MORE VARIANTS ARRIVE WHILE YOU WORK: the harness is fetching up to "
-                         f"{HARVEST_VARIANTS} fresh variants of this mode in the background and saves each one the "
-                         "current solver can't fully answer as another `variant-*` case. They are typically DIFFERENT "
-                         "constructs (another language/carrier/encoding of the same task): handle the construct "
-                         "family, not just this sample, and re-run `hctf solver-test` before you finish -- every "
-                         "variant-* case must come out with every field filled.")
+                                gm_wrong=gm_wrong,
+                                evidence=evidence or "(not extracted -- open the newest variant-* case yourself)")
         set_state(self.base, stage=f"{mode}:generalizing")
         targets = {r["case"] for r in (res or []) if not r.get("ok") and not r.get("unverified")}
         # A failed variant has no GM-verified answers (unverified), so "passes" can't be judged -- but fields the solver

@@ -451,3 +451,26 @@ finally:
     hb_timed._post, hb_timed._pool = _op, _opool
 assert posts == ["retry", "start"], posts
 print("ok  re-attempt: op retry only when the previous attempt's deadline passed; hb_timed retry refused -> start")
+
+# 19) generalize prompt: the failing file's head + a passing same-named counterpart are inlined (rehearsal Day 7: the script
+#     generalize workers spent 4-6 calls reaching them), and the harvest note is built BEFORE render (it used to be
+#     appended after the prompt was rendered, so no worker ever saw it).
+import inspect  # noqa: E402
+
+ed = Path(tempfile.mkdtemp()) / "solver"
+for name, codec in (("single_solve", "base64_literal|"), ("variant-time_trial-abcd1234", "xor_hex|cd")):
+    (ed / "cases" / name / "artifacts").mkdir(parents=True)
+    with zipfile.ZipFile(ed / "cases" / name / "artifacts" / "evidence.zip", "w") as z:
+        z.writestr("indirect-expansion.sh", f"readonly Codec_1='{codec}'\nDecode() {{ :; }}\n")
+        z.writestr("other.sh", "echo hi\n")
+    (ed / "cases" / name / "contract.json").write_text(__import__("json").dumps({"questions": [
+        {"id": "bash-indirect-role", "artifact": "evidence.zip -> indirect-expansion.sh"},
+        {"id": "other-role", "artifact": "evidence.zip -> other.sh"}]}))
+ev = orchestrate.failing_evidence(ed, "time_trial", ["bash-indirect-role"])
+assert "FAILING `evidence.zip -> indirect-expansion.sh`" in ev and "xor_hex|cd" in ev, ev
+assert "PASSING counterpart" in ev and "base64_literal|" in ev and "other.sh" not in ev.split("\n", 1)[1], ev
+assert orchestrate.failing_evidence(ed, "mastery", ["bash-indirect-role"]) == ""   # no variant case of that mode
+assert "{evidence}" in (Path(orchestrate.__file__).parent / "prompts" / "generalize.md").read_text()
+gsrc = inspect.getsource(orchestrate.Chain.generalize)
+assert gsrc.index("MORE VARIANTS ARRIVE") < gsrc.index('workers.render("generalize"'), "harvest note must precede render"
+print("ok  generalize prompt: failing bytes + passing counterpart inlined; harvest note reaches the prompt")

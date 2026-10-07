@@ -9,6 +9,16 @@ GM VERDICT for the failed attempt (authoritative — the harness localized it by
 {gm_wrong}
 The accepted fields are CORRECT — changing them will regress a passing answer. Concentrate only on the rejected ones: re-derive each from the bytes and find the exact value/representation the GM expects (its wording, prefix, case, or encoding may differ from the obvious one). For a rejected HASH field where the raw bytes are definitely right, reconsider WHAT was hashed — the GM may hash a canonical/normalized form (a specific section, decompressed content, or a header with a volatile field zeroed) rather than the whole file; don't just recompute the same hash. For a rejected synthetic LABEL (format/control/symbol/role), apply the generator naming LAWS in the playbook block above — compose the spelling from real spec/keyword tokens in the bytes, never an analyst synonym — rather than guessing one more synonym.
 
+THE FAILING BYTES (extracted by the harness from the case artifacts -- start from here, no need to list cases or
+unzip to find them):
+{evidence}
+
+FIX THE CONSTRUCT FAMILY, NOT THIS SAMPLE: the variant differs from the passing counterpart along one axis (a codec /
+transform / carrier / wrapper name or order). Other variants and Mastery sets draw OTHER members of that same family
+-- fixing only the one value in this sample has cost a second full generalize cycle. Parse the axis generically (a
+compound name: split it into its parts and accept every combination the solver or `lib.*` already knows), check the
+same-family artifacts of EVERY case, then stop.
+
 The timed variants use the SAME concept as the Single Solve but differ in the bytes: different file names, keys, encoding order/depth, an added per-line or per-file prefix/wrapper, archive wrappers, extra Mastery sets, or a question carried over from an earlier day. One variant just beat the solver; the clock was too short to fix it live.
 
 IMPORTANT: the live attempt did NOT succeed, so the current solver is WRONG or INCOMPLETE for this variant —
