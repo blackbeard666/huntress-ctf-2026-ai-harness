@@ -103,16 +103,21 @@ def _request(method, params=None, payload=None):
             return 0, {}, json.dumps({"error": "unreachable", "detail": str(e)}).encode()
 
 
-RATE_RETRIES = int(os.environ.get("HCTF_GM_RATE_RETRIES", os.environ.get("HCTF_RATE_RETRIES", "4")))
+RATE_RETRIES = int(os.environ.get("HCTF_GM_RATE_RETRIES", os.environ.get("HCTF_RATE_RETRIES", "8")))
 STATS = {"retries": 0, "slept": 0.0}  # this process's 429/503 backoff, reported in every envelope
 
 
+# Without Retry-After the backoff is 2, 4, 4, 4 ... s (cap HCTF_GM_BACKOFF_CAP): Day 8 singles slept 2/4/8/16 s and the
+# limit had cleared mid-wait (warmups: cleared between 15 and 32 s, slept 30). More, shorter retries keep ~30 s total.
+BACKOFF_CAP = float(os.environ.get("HCTF_GM_BACKOFF_CAP", "4"))
+
+
 def _retry_after(headers, attempt):
-    """Seconds to wait after a 429/503: the server's Retry-After if given, else 2, 4, 8, 16s."""
+    """Seconds to wait after a 429/503: the server's Retry-After if given, else 2, 4, 4, ... s (capped)."""
     try:
         return min(30.0, float((headers or {}).get("Retry-After")))
     except (TypeError, ValueError):
-        return 2.0 * (2 ** attempt)
+        return min(BACKOFF_CAP, 2.0 * (2 ** attempt))
 
 
 def _envelope(status, headers, raw, saved=None):

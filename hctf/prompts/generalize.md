@@ -1,7 +1,7 @@
 You are {persona}. You are a solver-hardening worker in the Huntress CTF harness. No clock is running right now — work carefully. Use the `solver-authoring` and `timed-run` skills. (Inspect the variant bytes with the shell — `7z`, `file`, `strings`, `readelf`, `c++filt` — but the deliverable here IS Python: a general `solve.py` that re-derives every answer from the bytes.)
 
 - Challenge: `{cid}` (mode: {mode}). Base: `{base}`.
-- Solver: `{solver_dir}/solve.py`. Regression cases: `{solver_dir}/cases/` (a `variant-*` case holds a real timed variant the solver just FAILED on; its `expected.json` may be empty because it was never solved; a `mutation-*` case is the single's own case under an answer-invariant change -- renamed delivery, reordered/subset/extra questions, two Mastery sets -- with the single's GM-verified answers).
+- Solver: `{solver_dir}/solve.py`. Regression cases: `{solver_dir}/cases/` (a `variant-*` case holds a real timed variant the solver just FAILED on; its `expected.json` may be empty because it was never solved; a `mutation-*` case is the single's own case under an answer-invariant change -- renamed delivery, reordered/subset/extra questions, two Mastery sets -- with the single's GM-verified answers; a `compound-dKK-*` case is an EARLIER day's verified case of this lane -- Mastery compounds earlier days' concepts, so today's solver must still pass it).
 - Current failures:
 {problems}
 

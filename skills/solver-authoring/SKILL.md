@@ -46,6 +46,10 @@ archive passwords given in the prompt, embedded strings, the extra Mastery sets,
 The organizers say Time Trial / Mastery hand out "new, dynamic variations/mutations" and reward solvers that work
 against "new unseen effects": also expect a different codec/container than the single's, a delivery wrapped in one
 more zip, and ESCALATED field sets that add earlier days' questions (`dNN-...` ids; D7 metadata TT went 1 -> 11 fields).
+**Mastery is meant to COMPOUND** (organizers, Day 8): today's concept plus at least one concept from days past --
+earlier artifact kinds/encodings mixed into the sets, possibly mutated (D8 binary Mastery shipped a STRIPPED d01 ELF;
+the question's "if absent, submit []" was the answer). Keep earlier days' branches; dispatch on artifact type and
+question text; the harness replays earlier days' verified cases (`compound-dKK-*` cases when one breaks).
 Checklist:
 - [ ] every constant is *derived* from the artifact or the contract (no answer literals, no hard-coded keys or offsets)
 - [ ] layered decoding loops until a stop condition instead of assuming N layers

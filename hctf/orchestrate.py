@@ -240,6 +240,46 @@ def carry_over_note(lane, sdir, ids):
             + ". Adapt (import or port) that parsing into today's solver -- answers still come from today's bytes.")
 
 
+SET_RE = re.compile(r"^(?:set|slot)[._-]?\d+[._-]")
+
+
+def _contract_shape(contract):
+    """(answer-id families with the set prefix stripped, artifact member extensions) of a contract."""
+    ids = list((contract or {}).get("answer_ids") or []) + [q.get("id") or "" for q in (contract or {}).get("questions") or []]
+    fams = {SET_RE.sub("", a) for a in ids if a}
+    exts = set()
+    for q in (contract or {}).get("questions") or []:
+        art = (q.get("artifact") or "").split("->")[-1].strip()
+        m = re.search(r"\.([A-Za-z0-9]{1,8})$", art)
+        if m:
+            exts.add(m.group(1).lower())
+    return fams, exts
+
+
+def mastery_delta(single_contract, timed_contracts):
+    """What the Time Trial / Mastery contracts ask that today's Single does NOT (compounding Mastery: earlier days'
+    concepts mixed in). -> short text for the single prompt, '' when the timed contracts add nothing."""
+    sfam, sext = _contract_shape(single_contract)
+    if not sfam:
+        return ""
+    extra_f, extra_e = set(), set()
+    for tc in timed_contracts:
+        fam, ext = _contract_shape(tc)
+        extra_f |= fam - sfam
+        extra_e |= ext - sext
+    if not extra_f and not extra_e:
+        return ""
+    parts = []
+    if extra_f:
+        parts.append(f"{len(extra_f)} question id(s) the Single never asks, e.g. "
+                     + ", ".join(f"`{x}`" for x in sorted(extra_f)[:12]))
+    if extra_e:
+        parts.append("artifact kinds the Single doesn't ship: " + ", ".join(f"`.{e}`" for e in sorted(extra_e)))
+    return ("MASTERY COMPOUNDS: the Time Trial / Mastery contracts (status-time, under this challenge's time_trial/ and "
+            "mastery/ dirs) ask " + "; ".join(parts) + ". solve.py must answer those too from the timed bytes -- "
+            "dispatch on question text / artifact type; reuse earlier days' parsing for earlier days' concepts.")
+
+
 def prior_solver_dir(lane, sdir):
     """Latest earlier day's solver dir of the same lane (binary/script only: their contracts are CUMULATIVE, so
     yesterday's solver already answers every earlier family). The worker copies it as a starting point; the harness
@@ -359,7 +399,8 @@ def capture_variant(cid, sdir):
     art = timed.artifacts_for(cid, contract)
     if contract and art:
         name = f"variant-{solvers.mode_of(cid)}-{(cli.attempt_id(contract) or 'x')[:8]}"
-        solvers.add_case(sdir, name, contract, art, timed.present_only(contract, art, cli.confirmed_answers(cid)))
+        solvers.add_case(sdir, name, timed.trim_to_present(contract, art),
+                         art, timed.present_only(contract, art, cli.confirmed_answers(cid)))
 
 
 def _text_head(data, lines=40, chars=1500):
@@ -493,6 +534,16 @@ FAMILY_PROBE = os.environ.get("HCTF_FAMILY_PROBE", "1") != "0"
 # extra question, Mastery-shaped sets. A HARD miss is adopted as a mutation-* case and generalized BEFORE the first
 # timed attempt (organizer, Day 8: TT/Mastery hand out "new, dynamic variations/mutations ... new unseen effects").
 MUTATION_PROBE = os.environ.get("HCTF_MUTATION_PROBE", "1") != "0"
+# Compounding probe (hctf/compound.py): replay the single's solver on EARLIER days' GM-verified cases of the lane. The
+# organizers (Day 8): Mastery should compound -- today's concept plus concepts from days past -- so a solver that lost an
+# earlier concept fails Mastery. Hard misses -> compound-dKK-* cases + one generalize before Mastery.
+COMPOUND_PROBE = os.environ.get("HCTF_COMPOUND_PROBE", "1") != "0"
+# Warm Single workers: launched at chain start beside GM start/download/triage (workers.WarmWorker). 0 = cold launch.
+WARM_WORKERS = os.environ.get("HCTF_WARM_WORKERS", "1") != "0"
+COMPOUND_PROBE_SECONDS = float(os.environ.get("HCTF_COMPOUND_PROBE_SECONDS", "45"))
+# Mastery speed gate: estimated Mastery solve (mutation probe's 2-set mastery-shape run) vs the known TT window. Mastery
+# windows were 1-2.7x the TT window on D3-D8, so only an estimate over MASTERY_GATE_RATIO x TT window acts.
+MASTERY_GATE_RATIO = float(os.environ.get("HCTF_MASTERY_GATE_RATIO", "2.0"))
 
 
 def mutation_probe(sdir, mastery_contract=None, timeout=90):
@@ -508,6 +559,30 @@ def mutation_probe(sdir, mastery_contract=None, timeout=90):
     except Exception as e:  # noqa: BLE001 - advisory
         return f"(mutation probe skipped: {str(e)[:120]})", [], {}
     return d.get("text") or "", d.get("hard_failed") or [], d
+
+
+def compound_probe(sdir, seconds=None):
+    """-> (text, [hard-miss result dicts], [all results]) for the single's solver on earlier days' verified cases."""
+    from . import compound
+    try:
+        res = compound.check(sdir, deadline=time.time() + (seconds or COMPOUND_PROBE_SECONDS))
+    except Exception as e:  # noqa: BLE001 - advisory
+        return f"(compound probe skipped: {str(e)[:120]})", [], []
+    return compound.summary(res), compound.hard_misses(res), res
+
+
+def mastery_estimate(mut_summary, mastery_contract):
+    """Estimated Mastery solve seconds = (2-set mastery-shape run / 2) x Mastery set count x 1.5, or None."""
+    shape = next((r for r in (mut_summary or {}).get("results") or [] if r.get("mutation") == "mastery-shape"
+                  and r.get("ok")), None)
+    try:
+        ids = json.loads(Path(mastery_contract).read_text()).get("answer_ids") or []
+    except (OSError, ValueError, TypeError):
+        ids = []
+    sets = {a.split(".", 1)[0] for a in ids if re.match(r"(set|slot)\d+\.", a)}
+    if not shape or not sets:
+        return None
+    return round(shape["seconds"] / 2 * len(sets) * 1.5, 2)
 
 
 def _family_cli(action, sdir, out, extra=(), timeout=60):
@@ -660,19 +735,57 @@ class Chain:
                                      "ids": {m: e["id"] for m, e in self.entries.items()}}, indent=2, ensure_ascii=False))
 
     # -- workers
-    def run_worker(self, cid, stage, prompt, timeout, urgent=False, prefer_homebase=False, stop=None):
-        env = {"HCTF_CHAL": cid, "HCTF_BASE": self.base, "HCTF_STAGE": stage, "HCTF_SOLVER_DIR": self.sdir,
-               "HCTF_CHAL_DIR": cli.cdir(cid), "HCTF_LANE": self.lane}
-        pool = "local" if urgent else self.pools.acquire(prefer_homebase)
+    def _worker_env(self, cid, stage):
+        return {"HCTF_CHAL": cid, "HCTF_BASE": self.base, "HCTF_STAGE": stage, "HCTF_SOLVER_DIR": self.sdir,
+                "HCTF_CHAL_DIR": cli.cdir(cid), "HCTF_LANE": self.lane}
+
+    def _launch_warm(self, cid):
+        """Start the Single worker NOW (chain start) with the static prompt; the triage follows (WarmWorker)."""
+        prior = prior_solver_dir(self.lane, self.sdir)
+        if prior:
+            prior_note = (f"This lane's contract is CUMULATIVE: `{prior.relative_to(ROOT)}` is the latest earlier "
+                          f"solver of this lane and already answers every earlier family. FIRST copy it (all its "
+                          f"files) over `{self.sdir.relative_to(ROOT)}`, then add only today's new families. "
+                          "Never use an old solver's output as your answer without today's bytes behind it.")
+        else:
+            prior_note = "(final prior-solver note arrives in your next message)"
+        pending = "(arrives in your next message, with the go signal)"
+        text = workers.render("single", skill=workers.lane_skill(self.lane), triage=pending,
+                              lane_helpers=workers.lane_helpers(self.lane), prior_solver=prior_note,
+                              name=self.name, cid=cid, lane=self.lane, techniques=technique_log(self.lane),
+                              persona=workers.lane_persona(self.lane), playbook=workers.lane_playbook(self.lane),
+                              chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
+                              timed_contracts=pending, subagent_policy=subagent_policy(self.lane), extra="")
+        text += ("\n\n---\nWARM START: the harness is still starting this challenge and downloading/triaging its "
+                 "artifacts. Do NOT run any tool and do not start yet: read the above, then reply with exactly READY. "
+                 "Your next message carries the triage and the go signal.")
+        cli.cdir(cid).mkdir(parents=True, exist_ok=True)
+        say(f"[{cid}] single worker warming up beside start/download/triage")
+        return workers.WarmWorker(cli.cdir(cid), "single", text, self._worker_env(cid, "single"))
+
+    def _cancel_warm(self):
+        w, self._warm = getattr(self, "_warm", None), None
+        if w is not None:
+            w.cancel()
+
+    def run_worker(self, cid, stage, prompt, timeout, urgent=False, prefer_homebase=False, stop=None, warm=None,
+                   warm_task=None):
+        env = self._worker_env(cid, stage)
+        # A warm worker is already running locally: it takes no pool slot (and so must not release one).
+        acquired = not urgent and not (warm is not None and warm.alive())
+        pool = self.pools.acquire(prefer_homebase) if acquired else "local"
         set_state(self.base, worker=f"{stage}@{pool}")
-        say(f"[{cid}] {stage} worker -> {pool} (timeout {timeout:.0f}s)")
+        say(f"[{cid}] {stage} worker -> {pool}{' (warm)' if warm is not None else ''} (timeout {timeout:.0f}s)")
         try:
             if pool == "local":
-                rc, log = workers.run_local(cli.cdir(cid), stage, prompt, env, timeout, stop=stop)
+                rc, log = workers.run_local(cli.cdir(cid), stage, prompt, env, timeout, stop=stop, warm=warm,
+                                            warm_task=warm_task)
             else:
+                if warm is not None:
+                    warm.cancel()
                 rc, log = workers.run_homebase(self.root, cli.cdir(cid), stage, prompt, env, timeout)
         finally:
-            if not urgent:
+            if acquired:
                 self.pools.release(pool)
             set_state(self.base, worker=None)
         say(f"[{cid}] {stage} worker exit {rc} ({Path(log).name})")
@@ -755,6 +868,14 @@ class Chain:
                          "Time Trial / Mastery variants draw these: make every family-* case pass by routing declared "
                          "codecs through lib.codec.decode (generic), not by adding names to a table.\n"
                          + "\n".join("    " + ln for ln in d["family_pre"].splitlines()))
+        if d.get("compound_pre"):
+            gm_wrong += ("\n  - COMPOUNDING: the solver no longer answers EARLIER days' verified cases of this lane (the "
+                         "`compound-dKK-*` cases: an earlier day's own bytes, contract and GM-verified answers). Mastery is "
+                         "meant to compound today's concept with concepts from days past, so today's solver must still "
+                         "handle every earlier day's artifact kinds and questions. Make every compound-* case pass by "
+                         "dispatching on artifact type / question text (port or import the earlier day's parsing -- see "
+                         "that day's solver/NOTES.md), without breaking today's cases.\n"
+                         + "\n".join("    " + ln for ln in d["compound_pre"].splitlines()))
         if d.get("mutation_pre"):
             gm_wrong += ("\n  - NO TIMED ATTEMPT HAS RUN YET: the single is CORRECT, but the solver breaks on ANSWER-INVARIANT "
                          "mutations of its own case (the `mutation-*` cases: same member bytes and names, same expected "
@@ -1211,6 +1332,12 @@ class Chain:
                     say(f"[{cid}] already solved (solver regression {'ok' if ok else 'has failing cases'})")
                 return True
         set_state(self.base, stage="single:fetch")
+        self._warm = None
+        if WARM_WORKERS and not welcome:
+            try:
+                self._warm = self._launch_warm(cid)
+            except Exception as e:  # noqa: BLE001 - warm start is an optimization; cold launch below
+                say(f"[{cid}] warm worker note: {e}")
         # Timed contracts (status only: no clock starts) are prefetched BESIDE start/download/triage, not after them.
         self._tstatus = {}
         tmodes = [m for m in ("time_trial", "mastery") if m in self.entries]
@@ -1233,11 +1360,13 @@ class Chain:
             cli.submit(cid, {fb["answer_ids"][0]: fb["issued_flag"]})
             if cli.is_complete(cid):
                 say(f"[{cid}] solved via GM issued_flag (no solver needed)")
+                self._cancel_warm()
                 return True
         # Reuse-first (no model time): a prior solver matched by question text may already solve this. Try it
         # BEFORE triage so a hit skips triage and the LLM worker entirely — the fastest path to first blood.
         if not welcome and REUSE_OLD_SOLVERS and self.try_existing_solvers(cid):
             say(f"[{cid}] solved by existing solver library (no worker needed)")
+            self._cancel_warm()
             return True
         if not welcome and not (self.sdir / "solve.py").exists():
             # Nothing reusable: start the worker from the harness skeleton (contract I/O, per-set loop, sha256-paired
@@ -1288,6 +1417,11 @@ class Chain:
                 carry = carry_over_note(self.lane, self.sdir, tids)
                 if carry:
                     prior_note += " EXCEPT: the timed contracts already carry earlier days' questions. " + carry
+            delta = mastery_delta(cli.load(cid, "start.json") or cli.load(cid, "contract.json"),
+                                  [cli.load(f"{self.base}/{m}", "contract.json") or {} for m in ("time_trial", "mastery")])
+            if delta:
+                prior_note += " " + delta
+                say(f"[{cid}] {delta[:200]}")
             prompt = workers.render("single", skill=workers.lane_skill(self.lane), triage=triage_summary(cid),
                                     lane_helpers=workers.lane_helpers(self.lane), prior_solver=prior_note,
                                     name=self.name, cid=cid, lane=self.lane, techniques=technique_log(self.lane),
@@ -1302,8 +1436,17 @@ class Chain:
             if STOP_WHEN_READY and not welcome:
                 watch = threading.Thread(target=self._watch_ready, args=(cid, ready, done_evt), daemon=True)
                 watch.start()
+            warm, self._warm = (self._warm, None) if n == 0 else (None, None)
+            warm_task = None
+            if warm is not None:
+                warm_task = ("GO. The artifacts are downloaded and triaged; everything in your first message stands. "
+                             "Here are the parts that were pending -- start now.\n\n## Triage (deterministic, already "
+                             f"computed)\n{triage_summary(cid)}\n\n## Time Trial / Mastery contracts (status-time)\n"
+                             + ("\n".join(timed_info) or "  - (none: Single Solve only)")
+                             + f"\n\n## Prior-solver note (final version)\n{prior_note}\n{extra}")
             try:
-                rc = self.run_worker(cid, "single", prompt, SINGLE_TIMEOUT, prefer_homebase=heavy, stop=ready)
+                rc = self.run_worker(cid, "single", prompt, SINGLE_TIMEOUT, prefer_homebase=heavy, stop=ready,
+                                     warm=warm, warm_task=warm_task)
             finally:
                 done_evt.set()
                 if watch:
@@ -1318,6 +1461,7 @@ class Chain:
                 self._record_labels(cid)
                 self._start_family_pre(cid)
                 self._start_mutation_pre(cid)
+                self._start_compound_pre(cid)
                 return True
             done = cli.is_complete(cid)
             if not done and not welcome:
@@ -1330,6 +1474,7 @@ class Chain:
                 self._record_labels(cid)
                 self._start_family_pre(cid)
                 self._start_mutation_pre(cid)
+                self._start_compound_pre(cid)
                 return True
             if (cli.cdir(cid) / "HELP.md").exists():
                 set_state(self.base, stage="single:help", help=(cli.cdir(cid) / "HELP.md").read_text()[:1500])
@@ -1423,11 +1568,62 @@ class Chain:
         if fut is None or (not wait and not fut.done()):
             return "", []
         try:
-            txt, cases, _ = fut.result(timeout=100)
+            txt, cases, summ = fut.result(timeout=100)
+            self._mut_summary = summ   # its mastery-shape timing feeds the Mastery speed gate
             return txt, cases
         except Exception as e:  # noqa: BLE001
             say(f"[{self.base}] mutation pre-probe note: {e}")
             return "", []
+
+    def _start_compound_pre(self, cid):
+        """Background, once the single's solver is final: the compounding probe (earlier days' verified cases)."""
+        self._cmp_pre_fut = None
+        if not COMPOUND_PROBE or not (self.sdir / "solve.py").exists():
+            return
+        self._cmp_pre_fut = ThreadPoolExecutor(max_workers=1).submit(compound_probe, self.sdir)
+
+    def _compound_pre_result(self, wait=True):
+        if getattr(self, "_cmp_pre_fut", None) is None:
+            if not wait:
+                return "", []
+            self._start_compound_pre(self.base)
+        fut = getattr(self, "_cmp_pre_fut", None)
+        if fut is None or (not wait and not fut.done()):
+            return "", []
+        try:
+            txt, hard, _ = fut.result(timeout=COMPOUND_PROBE_SECONDS + 60)
+            return txt, hard
+        except Exception as e:  # noqa: BLE001
+            say(f"[{self.base}] compound pre-probe note: {e}")
+            return "", []
+
+    def _late_probes(self, cid, wait=True):
+        """Probes that run beside the first Time Trial (mutation + compounding): adopt hard misses as regression cases.
+        Returns the diag dict for a generalize ({} when clean). Each result is consumed once."""
+        pre = {}
+        if not getattr(self, "_mut_late_done", False):
+            mtxt, mcases = self._mutation_pre_result(wait=wait)
+            if mcases or mtxt or wait:
+                self._mut_late_done = True
+            if mcases:
+                n = self._adopt_mutation_cases(mcases)
+                say(f"[{cid}] mutation probe: the single's solver breaks on {len(mcases)} answer-invariant mutation(s) "
+                    f"({n} adopted as mutation-* regression cases)")
+                pre["mutation_pre"] = mtxt
+            elif mtxt:
+                say(f"[{cid}] mutation probe (soft only, no action): {mtxt.splitlines()[0]}")
+                self._mutation_soft = mtxt
+        if not getattr(self, "_cmp_late_done", False):
+            ctxt, hard = self._compound_pre_result(wait=wait)
+            if hard or ctxt or wait:
+                self._cmp_late_done = True
+            if hard:
+                from . import compound
+                n = compound.adopt(self.sdir, hard)
+                say(f"[{cid}] compounding probe: the solver lost {len(hard)} earlier-day case(s) of this lane "
+                    f"({n} adopted as compound-dKK-* regression cases)")
+                pre["compound_pre"] = ctxt
+        return pre
 
     def _adopt_mutation_cases(self, case_dirs):
         """Copy failing HARD mutation cases into cases/ as verified regression cases (answers = the single's
@@ -1481,6 +1677,28 @@ class Chain:
             shutil.copytree(src, dst, ignore=shutil.ignore_patterns("recoded.json"))
             n += 1
         return n
+
+    def _mastery_speed_gate(self, cid):
+        """Before the first Mastery attempt: estimate the Mastery solve from the mutation probe's 2-set mastery-shape
+        run and compare it with the Time Trial's known window (Mastery windows were 1-2.7x TT on D3-D8). Way over ->
+        one speed generalize first (no attempt spent). Advisory: no estimate or no TT window -> nothing."""
+        if getattr(self, "_mastery_gate_done", False):
+            return
+        self._mastery_gate_done = True
+        tt = self.entries.get("time_trial")
+        try:
+            tt_win = float(json.loads((cli.cdir(tt["id"]) / "window.json").read_text()).get("seconds")) if tt else None
+        except (OSError, ValueError, TypeError):
+            tt_win = None
+        est = mastery_estimate(getattr(self, "_mut_summary", None), cli.cdir(cid) / "contract.json")
+        if not est or not tt_win:
+            return
+        limit = MASTERY_GATE_RATIO * tt_win
+        say(f"[{cid}] Mastery speed estimate {est:g}s (TT window {tt_win:g}s, gate {limit:g}s)")
+        if est > limit:
+            say(f"[{cid}] estimated Mastery solve {est:g}s > {limit:g}s: generalizing for speed BEFORE Mastery")
+            self.generalize(cid, wrong=None, fixed=None, diag={"solver_too_slow": True, "mastery_estimate": est,
+                                                                 "single_seconds": est})
 
     def _note_single_speed(self, cid, seconds):
         self._single_slow = None
@@ -1550,17 +1768,19 @@ class Chain:
                 say(f"[{cid}] codec-family probe: the single's solver misses {len(fcases)} re-encoded case(s) "
                     f"({n} adopted as family-* regression cases): generalizing BEFORE the first timed attempt")
                 pre["family_pre"] = ftxt
-            mtxt, mcases = self._mutation_pre_result(wait=not pre.get("solver_too_slow"))
-            if mcases:
-                n = self._adopt_mutation_cases(mcases)
-                say(f"[{cid}] mutation probe: the single's solver breaks on {len(mcases)} answer-invariant mutation(s) "
-                    f"({n} adopted as mutation-* regression cases): generalizing BEFORE the first timed attempt")
-                pre["mutation_pre"] = mtxt
-            elif mtxt:
-                say(f"[{cid}] mutation probe (soft only, no action): {mtxt.splitlines()[0]}")
-                self._mutation_soft = mtxt
+            # Mutation + compounding probes run BESIDE the first Time Trial (mutation probe: 0 hits in mainblind3-7 + D8;
+            # it held binary ~5 s): take them now only if already done; Mastery (or a TT-failure generalize) awaits them.
+            # A later mode with no TT before it (TT already passed) waits for them here.
+            pre.update(self._late_probes(cid, wait=mode != "time_trial" or bool(pre)))
             if pre:
                 self.generalize(cid, wrong=None, fixed=None, diag=pre)
+        elif mode != "time_trial":
+            late = self._late_probes(cid, wait=True)
+            if late:
+                say(f"[{cid}] probes that ran beside the Time Trial found misses: generalizing BEFORE Mastery")
+                self.generalize(cid, wrong=None, fixed=None, diag=late)
+        if mode == "mastery":
+            self._mastery_speed_gate(cid)
         clock_retries = 0
         rate_retries = 0
         start_retries = 0
@@ -1678,6 +1898,19 @@ class Chain:
                 wrong = [tuple(x) for x in last["wrong"]]
                 fixed = last.get("fixed") or {}
                 diag.update(complete=bool(last.get("localize_complete")), probed=None, total=None)
+                try:
+                    # Also keep the failed variant itself as a `variant-*` case (its bytes were pulled back, scoped to
+                    # the failing sets): the worker gets the failing evidence and the green watcher a target -- the
+                    # auto-* case alone holds only verified answers, so it already passes (D8 check: worker would run
+                    # to the 12-min timeout).
+                    tdir = timed.timed_dir(cid)
+                    tc = json.loads((tdir / "contract.json").read_text()) if (tdir / "contract.json").exists() else None
+                    if tc and last.get("attempt_id") and cli.attempt_id(tc) == last["attempt_id"]:
+                        cli.save(cid, "start.json", tc)
+                        cli.save(cid, "contract.json", tc)
+                        capture_variant(cid, self.sdir)
+                except Exception as e:  # noqa: BLE001 - evidence is best-effort
+                    say(f"[{cid}] variant capture note: {e}")
                 if not wrong and not last.get("localize_complete"):
                     wrong = None  # cut short with nothing found: fall back to the probe below
             if wrong is None:
@@ -1750,6 +1983,7 @@ class Chain:
                 set_state(self.base, stage=f"{mode}:retrying")
                 continue
             say(f"[{cid}] {res}: improving the solver offline for this variant, then retrying")
+            diag.update(self._late_probes(cid, wait=True))   # one worker fixes the variant AND any probe misses
             self.generalize(cid, wrong=wrong, fixed=fixed, diag=diag)
         set_state(self.base, stage=f"{mode}:blocked")
         return False

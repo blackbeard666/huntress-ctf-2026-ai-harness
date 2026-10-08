@@ -179,6 +179,27 @@ def present_only(contract, art_dir, answers):
             if single or not containers.get(aid) or containers[aid] in have}
 
 
+def trim_to_present(contract, art_dir):
+    """The contract restricted to the questions whose container is in art_dir (+ artifacts[] to the deliveries present,
+    matched by sha256 when the contract lists one). A failed Homebase variant is now pulled back SCOPED (only the
+    deliveries of the failing sets): the case's contract must match, or the fill check can never pass and a solver's
+    "N-th zip" fallback pairs delivery 3's question with delivery 2's bytes. Unchanged when everything is present."""
+    ids = contract.get("answer_ids") or []
+    keep = set(present_only(contract, art_dir, {a: "" for a in ids}))
+    if len(keep) == len(ids):
+        return contract
+    from . import solvers
+    c = solvers.sub_contract(contract, keep)
+    arts = contract.get("artifacts")
+    if isinstance(arts, list) and arts and all(isinstance(x, dict) and x.get("sha256") for x in arts):
+        import hashlib
+        skip = {"manifest.json", "contract.json", "result.json"}
+        shas = {hashlib.sha256(p.read_bytes()).hexdigest() for p in Path(art_dir).iterdir()
+                if p.is_file() and p.name not in skip}
+        c["artifacts"] = [x for x in arts if x["sha256"] in shas]
+    return c
+
+
 def _bundled(art_dir, names):
     """Per-set containers delivered INSIDE a bundle zip (D7 metadata Mastery: one ...-mastery.zip = {evidence-01.zip,
     evidence-02.zip}, saved as evidence-01.zip): set 2's container is present even though no file carries its name --
@@ -272,7 +293,7 @@ def capture_case(cid, solver_dir, res):
     if not verified:
         return None
     name = f"auto-{solvers.mode_of(cid)}-{att[:8]}"
-    solvers.add_case(solver_dir, name, contract, tdir, verified)
+    solvers.add_case(solver_dir, name, trim_to_present(contract, tdir), tdir, verified)
     autos = sorted((Path(solver_dir) / "cases").glob("auto-*"), key=lambda p: p.stat().st_mtime)
     for old in autos[:-MAX_AUTO_CASES] if len(autos) > MAX_AUTO_CASES else []:
         import shutil
@@ -368,6 +389,7 @@ def inflight():
     return _inflight
 
 
+CAPTURE_GRACE = float(__import__("os").environ.get("HCTF_CAPTURE_GRACE", "6"))
 CAPTURE_YIELD_MAX = float(__import__("os").environ.get("HCTF_CAPTURE_YIELD_MAX", "180"))
 
 
@@ -396,6 +418,10 @@ def process_result(cid, solver_dir, res, log=print):
     def capture():
         try:
             if pull:
+                # The NEXT mode's attempt starts ~1-4 s after this one returns (TT pass -> Mastery): a capture that
+                # checked right away saw an idle VPN and then competed with that kickoff (D8 binary: 31 MB TT pull
+                # beside Mastery). Give it the grace to start, then wait until no attempt is in flight.
+                time.sleep(CAPTURE_GRACE)
                 wait_idle()   # don't share the ~130 KB/s VPN with another attempt's solver push / downloads
                 pull()  # Homebase pass: bring the attempt's bytes back first (off the critical path)
             case = capture_case(cid, Path(solver_dir), res)

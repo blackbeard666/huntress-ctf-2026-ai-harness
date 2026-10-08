@@ -698,6 +698,13 @@ def c_solver_test(a):
     return 0 if ok else 1
 
 
+def c_compound_check(a):
+    """Compounding readiness: today's solver vs every earlier day's GM-verified cases of its lane (hctf/compound.py)."""
+    from . import compound
+    argv = ([a.id] if a.id else []) + (["--day", str(a.day)] if a.day else []) + ["--per-day", str(a.per_day)]
+    return compound.main(argv)
+
+
 def c_solver_run(a):
     """Run the solver library against this mode's current contract + artifacts (no submission)."""
     from . import solvers, timed
@@ -1013,6 +1020,10 @@ def main(argv=None):
     sub.add_parser("openapi")
     sub.add_parser("triage", help="deterministic no-LLM triage of a mode's artifacts").add_argument("id")
     sub.add_parser("solver-test", help="refresh + replay the solver's regression cases").add_argument("id")
+    pcc = sub.add_parser("compound-check", help="replay earlier days' verified cases of the lane through today's solver")
+    pcc.add_argument("id", nargs="?")
+    pcc.add_argument("--day", type=int)
+    pcc.add_argument("--per-day", type=int, default=3)
     sub.add_parser("solver-run", help="run solvers on a mode's current contract (no submit)").add_argument("id")
     pt = sub.add_parser("timed", help="run one time_trial/mastery end to end")
     pt.add_argument("id")
@@ -1061,7 +1072,7 @@ def main(argv=None):
     pl2.add_argument("--dry-run", action="store_true", help="only print the ranked candidates")
     a = p.parse_args(argv)
     fn = {"hb": c_hb, "list": c_list, "status": c_status, "start": c_start, "retry": c_retry,
-          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test,
+          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test, "compound-check": c_compound_check,
           "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
           "reconcile": c_reconcile, "solutions": c_solutions,
           "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout,

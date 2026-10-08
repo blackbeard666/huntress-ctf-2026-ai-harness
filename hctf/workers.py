@@ -5,6 +5,7 @@ homebase: `codex exec` on Homebase over SSH (Homebase token credits). The repo s
           ~/hw, skills to ~/.codex/skills, and results are rsynced back when the worker exits.
 """
 import json
+import re
 import os
 import shlex
 import subprocess
@@ -213,11 +214,7 @@ def sandboxed(cmd):
     return ["bwrap", "--dev-bind", "/", "/", *masks, *binds, "--die-with-parent", "--", *cmd]
 
 
-def run_local(chal_dir, stage, prompt, env_extra, timeout, stop=None):
-    """Blocking. Returns (returncode, logfile). `stop` (threading.Event): when set, the worker is terminated at once
-    and STOPPED_RC returned -- the orchestrator sets it once the Single Solve is CORRECT and the solver verifiably
-    reproduces it, so post-correct hardening never sits on the critical path (Day 6: 60% of worker time)."""
-    log = _logfile(chal_dir, stage, "local")
+def _worker_env(env_extra):
     env = dict(os.environ)
     env.update({k: str(v) for k, v in env_extra.items()})
     env["HCTF_WORKER_START"] = str(time.time())
@@ -227,18 +224,99 @@ def run_local(chal_dir, stage, prompt, env_extra, timeout, stop=None):
     # Cap a Bash call that hangs (Day 8 binary single: the Day 7 solver's brute force over a 67 MB Swift ELF sat the
     # full 120 s default). The worker can still pass an explicit timeout for known-long tools (Ghidra, jadx).
     env.setdefault("BASH_DEFAULT_TIMEOUT_MS", os.environ.get("HCTF_WORKER_BASH_TIMEOUT_MS", "60000"))
-    lane = env_extra.get("HCTF_LANE") or env.get("HCTF_LANE")
-    cmd = ["claude", "-p", prompt, "--dangerously-skip-permissions", "--max-turns", str(_max_turns(stage)),
+    return env
+
+
+# The tools workers actually use (Day 7-8 logs: Bash 183, Skill 10, Read/Write/Edit 1 each; Task for the subagent
+# policy). The default init listed 26 (Cron*, Workflow, WebSearch, ...). HCTF_WORKER_TOOLS="" keeps the default set.
+WORKER_TOOLS = os.environ.get("HCTF_WORKER_TOOLS", "Bash,Read,Write,Edit,Skill,Task")
+CLAUDE_BIN = os.environ.get("HCTF_CLAUDE_BIN", "claude")   # tests point this at a stub
+
+
+def _worker_cmd(stage, lane, prompt=None):
+    """claude argv. prompt=None -> stream-json input (a warm worker gets its messages on stdin)."""
+    cmd = [CLAUDE_BIN, "-p"] + ([prompt] if prompt is not None else []) + [
+           "--dangerously-skip-permissions", "--max-turns", str(_max_turns(stage)),
            "--model", worker_model(lane), "--effort", worker_effort(lane),
            "--output-format", "stream-json", "--verbose",
            # Isolation: no claude.ai MCP connectors (23 connected at every worker start, none used) and no Claude
            # auto-memory (Day 6 workers wrote unversioned GM facts to ~/.claude/projects/-home-testpwn-huntress-2026/
            # memory and re-read them every run). Durable knowledge goes through lib/ via the post-run ratchet only.
            "--strict-mcp-config", "--settings", json.dumps(worker_settings(lane))]
+    if WORKER_TOOLS:
+        cmd += ["--tools", WORKER_TOOLS]
+    if prompt is None:
+        cmd += ["--input-format", "stream-json"]
+    return cmd
+
+
+class WarmWorker:
+    """A Single Solve worker launched at CHAIN START (beside GM start + download + triage), on stream-json input:
+    message 1 = the static prompt + "reply READY, wait"; message 2 (send_task) = triage + go. Day 8: workers launched at
+    T+7-10 s and first called a tool at T+13-16 s; claude startup and the ~25k-token static prompt now overlap the GM
+    I/O. The Stop hook lets the warm-up turn end while the flag file exists (.claude/hooks/stop_gate.py)."""
+
+    def __init__(self, chal_dir, stage, warm_text, env_extra):
+        self.log = _logfile(chal_dir, stage, "local")
+        self.flag = Path(chal_dir) / f".warm-{os.getpid()}-{time.time_ns()}"
+        self.flag.write_text("warm")
+        env = _worker_env({**env_extra, "HCTF_WARM_FLAG": self.flag})
+        lane = env_extra.get("HCTF_LANE") or env.get("HCTF_LANE")
+        self.out = open(self.log, "w")
+        self.out.write(json.dumps({"type": "hctf", "event": "warm_launch", "t": time.time()}) + "\n")
+        self.out.flush()
+        self.p = subprocess.Popen(sandboxed(_worker_cmd(stage, lane)), cwd=ROOT, stdin=subprocess.PIPE,
+                                  stdout=self.out, stderr=subprocess.STDOUT, env=env, start_new_session=True, text=True)
+        self._send(warm_text)
+
+    def _send(self, text):
+        self.p.stdin.write(json.dumps({"type": "user", "message": {"role": "user", "content": text}}) + "\n")
+        self.p.stdin.flush()
+
+    def alive(self):
+        return self.p.poll() is None
+
+    def send_task(self, text):
+        """Deliver the real task and close stdin (the worker exits after its last turn, like `claude -p`)."""
+        self.flag.unlink(missing_ok=True)
+        self._send(text)
+        self.p.stdin.close()
+
+    def cancel(self):
+        self.flag.unlink(missing_ok=True)
+        if self.alive():
+            _kill_group(self.p, grace=0)
+        try:
+            self.out.close()
+        except OSError:
+            pass
+
+
+def run_local(chal_dir, stage, prompt, env_extra, timeout, stop=None, warm=None, warm_task=None):
+    """Blocking. Returns (returncode, logfile). `stop` (threading.Event): when set, the worker is terminated at once
+    and STOPPED_RC returned -- the orchestrator sets it once the Single Solve is CORRECT and the solver verifiably
+    reproduces it, so post-correct hardening never sits on the critical path (Day 6: 60% of worker time).
+    `warm` (WarmWorker, still alive): hand it `warm_task` instead of launching a new process."""
+    if warm is not None and warm.alive():
+        try:
+            warm.send_task(warm_task)
+            return _wait_worker(warm.p, warm.log, timeout, stop, out=warm.out)
+        except OSError:
+            warm.cancel()                 # broken pipe: the warm process died -> cold launch below
+    elif warm is not None:
+        warm.cancel()
+    log = _logfile(chal_dir, stage, "local")
+    env = _worker_env(env_extra)
+    lane = env_extra.get("HCTF_LANE") or env.get("HCTF_LANE")
     with open(log, "w") as out:
-        p = subprocess.Popen(sandboxed(cmd), cwd=ROOT, stdout=out, stderr=subprocess.STDOUT, env=env,
-                             start_new_session=True)
-        deadline = time.time() + timeout
+        p = subprocess.Popen(sandboxed(_worker_cmd(stage, lane, prompt)), cwd=ROOT, stdout=out,
+                             stderr=subprocess.STDOUT, env=env, start_new_session=True)
+        return _wait_worker(p, log, timeout, stop)
+
+
+def _wait_worker(p, log, timeout, stop, out=None):
+    deadline = time.time() + timeout
+    try:
         while True:
             try:
                 return p.wait(timeout=0.5), log
@@ -250,6 +328,9 @@ def run_local(chal_dir, stage, prompt, env_extra, timeout, stop=None):
             if time.time() >= deadline:
                 _kill_group(p, grace=0)
                 return -9, log
+    finally:
+        if out is not None:
+            out.close()
 
 
 def _kill_group(p, grace):
@@ -614,10 +695,94 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
         res["capture_note"] = "clock/transport failure: variant pull skipped (retry needs no bytes)"
         return res
     try:
-        pull()  # a failure needs the variant's bytes locally (generalize / probe) before anything else
+        # A failure needs the variant's bytes locally (generalize on it) before anything else -- but only the deliveries
+        # of the failing sets, fetched as parallel byte ranges (D8 binary Mastery: 5 x 31 MB = 157 MB took 10-20 min).
+        t0 = time.time()
+        got = scoped_pull(res, slug, local)
+        res["capture_note"] = f"scoped pull: {', '.join(got)} in {time.time() - t0:.1f}s"
     except Exception as e:  # noqa: BLE001 - capture is best-effort
-        res["capture_note"] = f"could not fetch the attempt's bytes from Homebase: {e}"
+        res["capture_note"] = f"scoped pull failed ({str(e)[:160]}); full pull"
+        try:
+            pull()
+        except Exception as e2:  # noqa: BLE001
+            res["capture_note"] += f"; could not fetch the attempt's bytes from Homebase: {e2}"
     return res
+
+
+SET_KEY = re.compile(r"^((?:set|slot)[._-]?\d+)[._-](.+)$")
+
+
+def deliveries_for(res, contract):
+    """Container names to pull for a failed attempt: the fewest sets covering every failing field family (wrong /
+    missing / partial-wrong ids with the `setN.` prefix stripped); one representative set when nothing is localized
+    (solver crash / too slow / unlocalized incorrect). Every container when the contract has a single delivery."""
+    ids = contract.get("answer_ids") or []
+    qs = contract.get("questions") or []
+    by_set, all_c = {}, []
+    for i, aid in enumerate(ids):
+        art = (qs[i].get("artifact") if i < len(qs) and isinstance(qs[i], dict) else "") or ""
+        c = art.split("->", 1)[0].strip()
+        if not c:
+            continue
+        if c not in all_c:
+            all_c.append(c)
+        m = SET_KEY.match(aid)
+        if m:
+            by_set.setdefault(m.group(1), set()).add(c)
+    if len(all_c) <= 1 or not by_set:
+        return all_c
+    failing = [x[0] if isinstance(x, (list, tuple)) else x for x in (res.get("wrong") or [])]
+    failing += list(res.get("missing") or [])
+    failing += [x[0] if isinstance(x, (list, tuple)) else x for x in (res.get("partial_wrong") or [])]
+    fams = {}
+    for aid in failing:
+        m = SET_KEY.match(str(aid))
+        if m:
+            fams.setdefault(m.group(2), set()).add(m.group(1))
+    chosen = []
+    for fam in sorted(fams):
+        if not any(sk in chosen for sk in fams[fam]):
+            chosen.append(sorted(fams[fam], key=lambda k: int(re.sub(r"\D", "", k) or 0))[0])
+    if not chosen:
+        bad = [b for b in (res.get("bad_sets") or []) if b in by_set]
+        chosen = [bad[0] if bad else sorted(by_set, key=lambda k: int(re.sub(r"\D", "", k) or 0))[0]]
+    out = []
+    for sk in chosen:
+        for c in sorted(by_set.get(sk, ())):
+            if c not in out:
+                out.append(c)
+    return out
+
+
+def scoped_pull(res, slug, local):
+    """Fetch contract.json + result.json, then only deliveries_for(...) of a failed Homebase attempt into `local`
+    (parallel byte ranges, sha256-checked against the contract). Returns the fetched container names."""
+    import hashlib
+    rdir = f"{HB_WORK}/.run/tmp-timed/{slug}"
+    if local.exists():
+        for f in local.glob("*"):
+            if f.is_file():
+                f.unlink()
+    local.mkdir(parents=True, exist_ok=True)
+    listing = remote.ssh(f"cd ~/{rdir} && find . -maxdepth 1 -type f -printf '%s\\t%P\\n'", timeout=30, check=False)
+    sizes = {}
+    for ln in listing.stdout.splitlines():
+        sz, _, name = ln.partition("\t")
+        if name:
+            sizes[name] = int(sz)
+    for small in ("contract.json", "result.json"):
+        if small in sizes:
+            remote.fetch_file(f"{rdir}/{small}", local / small, sizes[small], streams=1)
+    contract = json.loads((local / "contract.json").read_text())
+    names = [n for n in deliveries_for(res, contract) if n in sizes]
+    if not names:
+        raise RuntimeError(f"no failing-set delivery found on Homebase (have {sorted(sizes)[:6]})")
+    shas = {a.get("sha256") for a in contract.get("artifacts") or [] if isinstance(a, dict) and a.get("sha256")}
+    for n in names:
+        remote.fetch_file(f"{rdir}/{n}", local / n, sizes[n])
+        if shas and hashlib.sha256((local / n).read_bytes()).hexdigest() not in shas:
+            raise RuntimeError(f"{n}: sha256 not in the contract's artifacts")
+    return names
 
 
 def needs_bytes(res):

@@ -28,6 +28,10 @@ def block(reason):
 stage, cid = os.environ.get("HCTF_STAGE"), os.environ.get("HCTF_CHAL")
 if not stage or not cid:
     allow()
+# A warm worker (hctf/workers.py WarmWorker) ends its warm-up turn ("READY") while the GM download + triage are still
+# running; the harness deletes the flag right before it sends the real task.
+if os.environ.get("HCTF_WARM_FLAG") and Path(os.environ["HCTF_WARM_FLAG"]).exists():
+    allow()
 
 from hctf import cli, orchestrate, paths, solvers, timed  # noqa: E402
 

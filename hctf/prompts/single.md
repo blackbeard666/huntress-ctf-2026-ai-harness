@@ -45,6 +45,11 @@ spend is on the critical path. The harness ENDS your session automatically the m
    failed timed attempt + a ~45 s generalize cycle.
    **Size `solve.py` for the MASTERY contract, not just the single artifact** -- its set count and the per-set format
    the log describes (e.g. numbered mixed-encoding lines) must run in well under 1 s total.
+   **Mastery COMPOUNDS** (organizers): each set may combine today's concept with concepts from EARLIER days of this lane
+   (earlier artifact kinds / encodings / questions, possibly mutated, possibly absent-by-design -> answer exactly what
+   the question says for "absent", e.g. `[]` / `none`). Never assume Mastery == N x today's Single: keep solve.py
+   dispatching on artifact type and question text, route earlier concepts through the lane helpers below. Before Mastery
+   the harness replays your solver on every earlier day's verified cases of this lane and sends any loss back.
 2. **`{solver_dir}/solve.py` is pre-seeded with the harness skeleton** (contract I/O,
    per-set loop, `artifact_bytes()` that already resolves Mastery's `delivery N: <name>` files by sha256 — fill in
    `answer()`). **Derive the answers from the real bytes by writing them INTO that `solve.py`** (following the

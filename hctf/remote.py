@@ -232,12 +232,63 @@ def rsync_from(remote_path, local_dir, own_conn=False):
             str(local_dir).rstrip("/") + "/"])
 
 
+def own_ssh_opts():
+    """SSH_OPTS for a SEPARATE connection (no ControlMaster): parallel flows each get their own TCP window."""
+    own = [o for o in SSH_OPTS if not o.startswith(("ControlMaster=", "ControlPath=", "ControlPersist="))]
+    own = [o for i, o in enumerate(own) if not (o == "-o" and (i + 1 >= len(own) or own[i + 1] == "-o"))]
+    return [*own, "-o", "ControlMaster=no", "-o", "ControlPath=none"]
+
+
+# 10 parallel SSH connections: 12 measured 42 s for 31 MB, 6 took 61 s; 16 tripped sshd's MaxStartups (connection reset).
+FETCH_STREAMS = int(os.environ.get("HCTF_FETCH_STREAMS", "10"))
+
+
+def fetch_file(rel_path, local_path, size, streams=None, min_rate=40_000):
+    """Copy ONE remote file (path relative to the remote home) as `streams` parallel byte ranges, each over its own SSH
+    connection, then concatenate. The CTF VPN limits each TCP flow (~0.1-0.5 MB/s), not the link: 8 flows measured
+    1.0-1.5 MB/s total (2026-10-08), so a 31 MB delivery takes ~25-35 s instead of 1-4 min. Raises on any failure."""
+    from concurrent.futures import ThreadPoolExecutor
+    streams = max(1, min(streams or FETCH_STREAMS, max(1, size // (1 << 20))))
+    step = -(-size // streams)
+    parts = [(i, i * step, min(step, size - i * step)) for i in range(streams) if i * step < size]
+    local_path = Path(local_path)
+    q = shlex.quote(rel_path)
+
+    def one(part):
+        i, off, n = part
+        dst = local_path.with_name(f".{local_path.name}.part{i}")
+        cmd = f"tail -c +{off + 1} {q} | head -c {n}"
+        for attempt in range(3):   # sshd MaxStartups resets a burst of new connections: back off and retry the range
+            if attempt:
+                time.sleep(0.5 * attempt + 0.1 * i)
+            with open(dst, "wb") as f:
+                r = subprocess.run(["ssh", *own_ssh_opts(), f"{HB_USER}@{HB_HOST}", cmd], stdout=f,
+                                   stderr=subprocess.PIPE, timeout=max(60, n / min_rate))
+            if not r.returncode and dst.stat().st_size == n:
+                return dst
+        raise RuntimeError(f"range {i} ({off}+{n}) failed: rc {r.returncode} got {dst.stat().st_size} "
+                           f"{r.stderr.decode(errors='replace')[-200:]}")
+    try:
+        with ThreadPoolExecutor(max_workers=len(parts)) as ex:
+            chunks = list(ex.map(one, parts))
+        with open(local_path, "wb") as out:
+            for c in chunks:
+                out.write(c.read_bytes())
+    finally:
+        for i, _, _ in parts:
+            local_path.with_name(f".{local_path.name}.part{i}").unlink(missing_ok=True)
+    return local_path
+
+
 def rsync_to(local_path, remote_path, exclude=(), mkdir=None):
     """mkdir: create this remote dir in the same round-trip (via --rsync-path) instead of a separate ssh mkdir."""
     argv = ["rsync", "-a", "--delete", "-e", "SSH", *[f"--exclude={x}" for x in exclude]]
     if mkdir:
         argv.append(f"--rsync-path=mkdir -p {mkdir} && rsync")
     _rsync([*argv, str(local_path), f"{HB_USER}@{HB_HOST}:{remote_path}"])
+
+
+RSYNC_TIMEOUT = int(os.environ.get("HCTF_RSYNC_TIMEOUT", "600"))
 
 
 def _rsync(argv):
@@ -250,7 +301,7 @@ def _rsync(argv):
             if a == "SSH_OWN" else a for a in argv]
     for attempt in range(1, SSH_RETRIES + 1):
         with _slot():
-            r = subprocess.run(argv, capture_output=True, timeout=600)
+            r = subprocess.run(argv, capture_output=True, timeout=RSYNC_TIMEOUT)
         if r.returncode == 0:
             return r
         if r.returncode == 255 and attempt < SSH_RETRIES:
