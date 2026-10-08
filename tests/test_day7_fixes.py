@@ -148,8 +148,10 @@ print("ok  rate limit: classified error:rate; timed_stage backs off 5s, 10s and 
 
 # 7) routing: Homebase is used for a KNOWN roomy window too (Day 7 script TT: 11s window ran local, 9.53s in-window).
 from hctf import workers, remote  # noqa: E402
-_o = (remote.gm_transport, workers.known_window, workers._homebase_ready, workers.run_hb_timed, workers.run_timed)
+_o = (remote.gm_transport, workers.known_window, workers._homebase_ready, workers.run_hb_timed, workers.run_timed,
+      workers.AUTO_HOMEBASE)
 used = []
+workers.AUTO_HOMEBASE = True   # the routing rule under test, whatever this copy's bin/env.sh says (alt: Homebase off)
 remote.gm_transport = lambda: "local"
 workers.known_window = lambda cid: 11.0
 workers._homebase_ready = lambda log=print: True
@@ -163,7 +165,8 @@ try:
     workers.run_timed_auto("sdir", "c/time_trial", log=lambda *a: None)
     assert used == ["local"], used
 finally:
-    remote.gm_transport, workers.known_window, workers._homebase_ready, workers.run_hb_timed, workers.run_timed = _o
+    (remote.gm_transport, workers.known_window, workers._homebase_ready, workers.run_hb_timed, workers.run_timed,
+     workers.AUTO_HOMEBASE) = _o
 print("ok  routing: known 11s window -> Homebase when healthy; local only as the fallback")
 
 # 8) harvest yields to another chain's live clock (process-wide in-flight count), but never forever.
