@@ -441,3 +441,15 @@ Fixes (7e7984b): prior-solver dry-run diagnostics (no values), Bash cap 25 s + S
 speed generalizes, speed-only generalize doesn't wait for probes, submit stamp skips the watcher re-run, post-run
 `speed_harden`, encoded config-magic recon, .mjs/.php/.wsf/.hta triage decode, safe-patching prompt rule.
 The rehearsal copy's ratchet knowledge merged into main (032b8d0) -- main's own D8 ratchet had reverted.
+
+### Blind Day 8 replay on ALT `a8blind1` (2026-10-09 07:48, harness b3fa120, knowledge pinned 672753b)
+**15/15 at T+191 s** (alt real D8 on 3abfd7a: T+354; main replays T+256/T+631; main real T+1222). Single/TT/Mastery:
+mobile 35/43/47, warmups 37/43/47, metadata 44/49/52, script 84/93/105, binary 136/175/191.
+- Prior-solver dry run: script 2.4 s, 481/615 answered (worker told the 134 empty ids) -> single 84 s (was 138);
+  binary: interrupted at 15 s with the hang frame -> single 136 s (was 235), no speed generalize needed.
+- Codec-family probe beside the TT: script single->TT 9 s (was 14 s).
+- Binary TT: one attempt "expired" because the SUBMIT took 4.4 s (GM slow) -- the GM may have judged it late; the next
+  start/retry returned a finished CORRECT body (no_answer_ids -> error:exec) before a fresh attempt passed. ~20 s + 1
+  ranked attempt. Open: treat a finished CORRECT body for this mode as a pass.
+- Parallel Mastery sets: adopted by the skeleton lanes (warmups/mobile/metadata); binary/script copy yesterday's solver
+  and stayed sequential (binary Mastery solve 8.3 s). Open: get copied solvers onto group_by_set.
