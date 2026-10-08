@@ -165,14 +165,14 @@ try:
         setattr(mod, name, fn)
     ch._single_slow, ch._pre_attempt_done = None, False
     ch._family_pre_result = lambda: ("", [])
-    ch._mutation_pre_result = lambda: (ftxt, fhard)
+    ch._mutation_pre_result = lambda wait=True: (ftxt, fhard)
     assert ch.timed_stage("mastery")
     assert len(gen) == 1 and gen[0].get("mutation_pre") == ftxt, gen
     adopted = sorted(p.name for p in (fragile / "cases").glob("mutation-*"))
     assert adopted and "mutation-renamed" in adopted and not list((fragile / "cases").glob("*/mutation.json")), adopted
     gen.clear()
     ch._pre_attempt_done = False
-    ch._mutation_pre_result = lambda: ("", [])
+    ch._mutation_pre_result = lambda wait=True: ("", [])
     assert ch.timed_stage("mastery") and gen == []
 finally:
     for (mod, name), fn in saved.items():
@@ -211,4 +211,14 @@ try:
 finally:
     hb_timed._post = _orig_post
 print(f"ok  hb_timed._post_start: {hb_timed.START_TIMEOUT:g} s per call, resent up to 3x, then raises")
+
+# 9) speed gate first: a slow single never waits on the mutation probe (it probes the solver about to be rewritten)
+import concurrent.futures as _cf  # noqa: E402
+ch2 = object.__new__(orchestrate.Chain)
+ch2.base, ch2.sdir = "b", fragile
+ch2._mut_pre_fut = _cf.Future()          # still running
+assert ch2._mutation_pre_result(wait=False) == ("", [])
+ch2._mut_pre_fut.set_result(("txt", ["c"], {}))
+assert ch2._mutation_pre_result(wait=False) == ("txt", ["c"])
+print("ok  mutation pre-probe: never blocks the speed gate; a finished result is still used")
 print("ALL PASS")

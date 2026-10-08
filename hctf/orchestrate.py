@@ -1400,11 +1400,15 @@ class Chain:
         mc = cli.cdir(f"{self.base}/mastery") / "contract.json"
         self._mut_pre_fut = ThreadPoolExecutor(max_workers=1).submit(mutation_probe, self.sdir, mc)
 
-    def _mutation_pre_result(self):
+    def _mutation_pre_result(self, wait=True):
+        """wait=False (the single is too slow, a speed generalize is coming anyway): take the result only if the probe
+        already finished -- mainblind4: waiting on a 6.5 s solver's probe held binary's critical path ~13 s."""
         if getattr(self, "_mut_pre_fut", None) is None:
+            if not wait:
+                return "", []
             self._start_mutation_pre(self.base)   # single solved by an earlier run: probe now (a few seconds)
         fut = getattr(self, "_mut_pre_fut", None)
-        if fut is None:
+        if fut is None or (not wait and not fut.done()):
             return "", []
         try:
             txt, cases, _ = fut.result(timeout=100)
@@ -1534,7 +1538,7 @@ class Chain:
                 say(f"[{cid}] codec-family probe: the single's solver misses {len(fcases)} re-encoded case(s) "
                     f"({n} adopted as family-* regression cases): generalizing BEFORE the first timed attempt")
                 pre["family_pre"] = ftxt
-            mtxt, mcases = self._mutation_pre_result()
+            mtxt, mcases = self._mutation_pre_result(wait=not pre.get("solver_too_slow"))
             if mcases:
                 n = self._adopt_mutation_cases(mcases)
                 say(f"[{cid}] mutation probe: the single's solver breaks on {len(mcases)} answer-invariant mutation(s) "
