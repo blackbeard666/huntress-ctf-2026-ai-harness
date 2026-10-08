@@ -328,7 +328,8 @@ def construct_census(sdir, lane, failing_members=(), max_cases=24):
     those, the next variant drew xor_hex -> another cycle). Script lane: declared codecs (lib.codec.find_codecs),
     marking those on the failing files and whether lib.codec decodes them. Mobile: huntress_puzzle.json codecs and
     whether lib.android.decode_payload reaches an ANS code. '' for lanes without a codec family."""
-    cases = sorted((Path(sdir) / "cases").glob("*/"), key=lambda p: p.stat().st_mtime, reverse=True)[:max_cases]
+    cases = sorted((c for c in (Path(sdir) / "cases").glob("*/") if not c.name.startswith("family-")),
+                   key=lambda p: p.stat().st_mtime, reverse=True)[:max_cases]
     failing_members = {m.split("->")[-1].strip() for m in failing_members}
     if lane == "script-analysis":
         from lib import codec
@@ -422,35 +423,46 @@ def handler_pointer(sdir, tokens, top=6, strong=(), lang=None):
 FAMILY_PROBE = os.environ.get("HCTF_FAMILY_PROBE", "1") != "0"
 
 
-def family_probe(sdir, exts, timeout=45):
-    """Script lane: re-encode the failing language's fixtures of the newest verified case under OTHER known codecs
-    (hctf/family.py, venv: AES zips) and report which ones the solver can't reproduce -- the rest of the codec family
-    the next variant may draw (rehearsal Day 7 replay: xor_hex arrived one cycle after reversed_base64 was fixed)."""
+def _family_cli(action, sdir, out, extra=(), timeout=60):
+    """Run hctf/family.py under the venv (AES zips need pyzipper) -> parsed JSON, or {"error": ...}."""
     import subprocess
-    out = ROOT / ".run" / "family" / Path(sdir).resolve().parent.name
-    argv = [str(paths.VENV_PY), "-m", "hctf.family", "probe", str(sdir), "--out", str(out), "--n", "2"]
-    for e in sorted(exts):
-        argv += ["--ext", e]
+    argv = [str(paths.VENV_PY), "-m", "hctf.family", action, str(sdir), "--out", str(out), *extra]
     try:
         r = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
-        d = json.loads(r.stdout.strip().splitlines()[-1])
+        return json.loads(r.stdout.strip().splitlines()[-1])
     except Exception as e:  # noqa: BLE001 - advisory
-        return f"(codec-family probe skipped: {str(e)[:80]})"
+        return {"error": str(e)[:120]}
+
+
+def family_probe(sdir, exts, timeout=60, noise=(), exclude=()):
+    """Script lane: re-encode the failing language's fixtures of the newest verified case under OTHER known codecs
+    (hctf/family.py, one language per case) and report which ones the solver can't reproduce -- the rest of the codec
+    family the next variant may draw (rehearsal Day 7 replay: xor_hex arrived one cycle after reversed_base64 was fixed).
+    Returns (text, [missed family case dirs])."""
+    out = ROOT / ".run" / "family" / Path(sdir).resolve().parent.name
+    extra = (["--n", "2"] + [a for e in sorted(exts or ()) for a in ("--ext", e)]
+             + [a for e in sorted(exclude) for a in ("--exclude-ext", e)])
+    d = _family_cli("probe-each", sdir, out, extra, timeout)
+    if d.get("error"):
+        return f"(codec-family probe skipped: {d['error']})", []
     res = d.get("results") or []
     if not res:
-        return ""
+        return "", []
     miss = [x for x in res if not x["ok"]]
-    head = (f"Codec-family probe (SYNTHETIC -- {len(res)} {'/'.join(sorted(exts))} fixture(s) of cases/{d.get('base')} "
-            f"re-encoded under other rep x transform names lib.codec knows; cases in {out.relative_to(ROOT)}/family-*): "
-            f"the solver reproduces {len(res) - len(miss)}/{len(res)}.")
+    langs = sorted(exts) if exts else sorted({x["ext"] for x in res})
+    head = (f"Codec-family probe (SYNTHETIC -- {len(res)} {'/'.join(langs)} fixture(s) of cases/{d.get('base')} "
+            f"re-encoded under other rep x transform names lib.codec knows, one language per case; cases in "
+            f"{out.relative_to(ROOT)}/<ext>/family-*): the solver reproduces {len(res) - len(miss)}/{len(res)}.")
     if not miss:
-        return head + " The declared-codec path already composes the whole family."
+        return head + " The declared-codec path already composes the whole family.", []
     lines = [head, "Misses (re-encoded file: new codec, wrong/total answers):"]
-    lines += [f"  {x['case']}/{x['member']}: {x['spec']}  ({x['wrong']}/{x['of']}, {x['empty']} empty)" for x in miss[:10]]
-    lines.append("Fix these in the same pass if the solver reads the declared Codec_ (route it through lib.codec.decode). "
-                 "If it instead EMULATES the fixture's own decode routine, a miss can be synthetic noise (the recoding "
-                 "leaves that routine unchanged) -- don't chase those.")
-    return "\n".join(lines)
+    lines += [f"  {x['ext']}/{x['case']}/{x['member']}: {x['spec']}  ({x['wrong']}/{x['of']}, {x['empty']} empty)"
+              for x in miss[:10]]
+    noisy = sorted({x["ext"] for x in miss} & set(noise))
+    lines.append("Fix these in the same pass: route the declared Codec_ through lib.codec.decode instead of a per-name "
+                 "table." + (f" Language(s) {noisy} are calibrated as NOISE for this lane (the solver emulates their "
+                             "decode routine, which the recoding leaves unchanged) -- don't chase those." if noisy else ""))
+    return "\n".join(lines), sorted({x["case_dir"] for x in miss if x["ext"] not in set(noise)})
 
 
 def speed_watch_sets(res, sdir, mode):
@@ -530,7 +542,7 @@ def failing_evidence(sdir, mode, ids, max_files=3, lane=None, family_text=None):
         if hp:
             extra.append(hp)
         if family_text is None and lane == "script-analysis" and FAMILY_PROBE and _exts(arts):
-            family_text = family_probe(sdir, _exts(arts))
+            family_text = family_probe(sdir, _exts(arts))[0]
         if family_text:
             extra.append(family_text)
     except Exception as e:  # noqa: BLE001 - advisory
@@ -598,7 +610,8 @@ class Chain:
         if self.lane == "script-analysis" and FAMILY_PROBE and wrong:
             exts = _exts(failing_artifacts(self.sdir, mode, [a for a, _ in wrong])[1])
             if exts:   # runs beside the baseline replay below (~1.7 s of venv + 2 solver runs off the critical path)
-                fam = ThreadPoolExecutor(max_workers=1).submit(family_probe, self.sdir, exts)
+                fam = ThreadPoolExecutor(max_workers=1).submit(
+                    lambda: family_probe(self.sdir, exts, noise=self._family_noise())[0])
         # ONE fast parallel replay (8s/case) serves both the problem list and the transactional baseline (was a full
         # 120s/case run here plus a second baseline run: 141s before the worker spawned, replay run 2).
         ensure_case_and_test(paths.base_id(cid), self.sdir, full=False)
@@ -637,6 +650,13 @@ class Chain:
                          "Homebase VM lacks. Homebase has python3 + the pip deps (pyzipper, pyelftools, pefile, capstone, "
                          "pycryptodome, androguard, ...) but NOT 7z/p7zip or other apt tools. Open zips with "
                          "`lib.common.read_member` / pyzipper; no subprocess to 7z, jadx, or anything outside the import list.")
+        if d.get("family_pre"):
+            gm_wrong += ("\n  - NO TIMED ATTEMPT HAS RUN YET: the single is CORRECT, but the solver can't decode other members "
+                         "of this day's codec family. The `family-*` cases are the single's own fixtures re-encoded under "
+                         "other rep x transform names lib.codec knows (answers unchanged except representation/transform). "
+                         "Time Trial / Mastery variants draw these: make every family-* case pass by routing declared "
+                         "codecs through lib.codec.decode (generic), not by adding names to a table.\n"
+                         + "\n".join("    " + ln for ln in d["family_pre"].splitlines()))
         if d.get("single_seconds"):
             gm_wrong += (f"\n  - NO TIMED ATTEMPT HAS RUN YET: solve.py takes {d['single_seconds']}s on the Single Solve case "
                          f"itself (budget {SINGLE_SPEED_BUDGET:g}s locally; Homebase is ~1.5x slower and the 7-13 s window also "
@@ -1058,6 +1078,7 @@ class Chain:
         if not e:
             return True
         cid = e["id"]
+        self._start_family_calibration()   # background; consumed after the single (pre-attempt family probe)
         welcome = self.lane == "welcome"
         # A mode with no local trace at all (fresh drop: no start.json / submissions yet) can't be solved by us yet:
         # skip gm_solved's status round trip (~2s on every lane at the drop) -- `start` below answers it anyway.
@@ -1170,6 +1191,7 @@ class Chain:
                 ensure_case_and_test(cid, self.sdir, full=False)
                 say(f"[{cid}] after worker: stopped at CORRECT with a verified solver")
                 self._record_labels(cid)
+                self._start_family_pre(cid)
                 return True
             done = cli.is_complete(cid)
             if not done and not welcome:
@@ -1180,6 +1202,7 @@ class Chain:
                 self._note_single_speed(cid, next((r.get("seconds") for r in res if r.get("case") == "single_solve"), None))
             if done and ok:
                 self._record_labels(cid)
+                self._start_family_pre(cid)
                 return True
             if (cli.cdir(cid) / "HELP.md").exists():
                 set_state(self.base, stage="single:help", help=(cli.cdir(cid) / "HELP.md").read_text()[:1500])
@@ -1228,6 +1251,69 @@ class Chain:
             return None
         self._note_single_speed(cid, dt)
         return snap
+
+    # -- codec-family probe BEFORE the first timed attempt (script lane). blind2/blind3: the Time Trial passed clean, then
+    #    Mastery met the next member of the bash codec family (bash-advanced-tokens) -- a failed attempt, an escalated
+    #    next variant and a generalize every run. The probe only ran inside a generalize, i.e. too late.
+    def _start_family_calibration(self):
+        """Background, at single start: which fixture languages the probe can judge for this lane (calibrated on the
+        previous day's final solver; VBScript is noise -- its solver emulates the decode routine)."""
+        self._fam_noise_fut = None
+        if self.lane != "script-analysis" or not FAMILY_PROBE:
+            return
+        prior = prior_solver_dir(self.lane, self.sdir)
+        if prior:
+            out = ROOT / ".run" / "family" / f"calib-{prior.parent.name}"
+            self._fam_noise_fut = ThreadPoolExecutor(max_workers=1).submit(_family_cli, "calibrate", prior, out, (), 120)
+
+    def _family_noise(self):
+        """Calibrated noise languages, or None if no calibration is available (then never act pre-emptively)."""
+        fut = getattr(self, "_fam_noise_fut", None)
+        if fut is None:
+            return None
+        try:
+            d = fut.result(timeout=60)
+        except Exception:  # noqa: BLE001
+            return None
+        return None if d.get("error") else set(d.get("noise") or [])
+
+    def _start_family_pre(self, cid):
+        """Background, once the single's solver is final: probe it on every judgeable language."""
+        self._fam_pre_fut = None
+        if self.lane != "script-analysis" or not FAMILY_PROBE or getattr(self, "_fam_noise_fut", None) is None:
+            return
+
+        def run():
+            noise = self._family_noise()
+            if noise is None:
+                return "", []
+            return family_probe(self.sdir, None, noise=noise, exclude=noise)
+        self._fam_pre_fut = ThreadPoolExecutor(max_workers=1).submit(run)
+
+    def _family_pre_result(self):
+        fut = getattr(self, "_fam_pre_fut", None)
+        if fut is None:
+            return "", []
+        try:
+            return fut.result(timeout=90)
+        except Exception as e:  # noqa: BLE001
+            say(f"[{self.base}] family pre-probe note: {e}")
+            return "", []
+
+    def _adopt_family_cases(self, case_dirs):
+        """Copy missed family cases into cases/ as verified regression cases (judgeable languages only: their expected
+        answers are the GM-verified base answers with representation/transform rewritten)."""
+        n = 0
+        for cd in case_dirs:
+            src = Path(cd)
+            if not (src / "expected.json").exists():
+                continue
+            dst = self.sdir / "cases" / f"family-{src.parent.name}-{src.name.split('-')[-1]}"
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst, ignore=shutil.ignore_patterns("recoded.json"))
+            n += 1
+        return n
 
     def _note_single_speed(self, cid, seconds):
         self._single_slow = None
@@ -1284,11 +1370,21 @@ class Chain:
         seen_fresh = getattr(self, "_tstatus", {}).get(mode) == "start_required"
         if cli.is_complete(cid) or (not seen_fresh and cli.gm_solved(cid)):
             return True
-        if getattr(self, "_single_slow", None) and not getattr(self, "_single_speed_done", False):
-            self._single_speed_done = True
-            say(f"[{cid}] solver too slow on the single ({self._single_slow}s): generalizing for speed BEFORE the first "
-                "timed attempt (no attempt spent)")
-            self.generalize(cid, wrong=None, fixed=None, diag={"solver_too_slow": True, "single_seconds": self._single_slow})
+        if not getattr(self, "_pre_attempt_done", False):
+            self._pre_attempt_done = True
+            pre = {}
+            if getattr(self, "_single_slow", None):
+                say(f"[{cid}] solver too slow on the single ({self._single_slow}s): generalizing for speed BEFORE the "
+                    "first timed attempt (no attempt spent)")
+                pre.update(solver_too_slow=True, single_seconds=self._single_slow)
+            ftxt, fcases = self._family_pre_result()
+            if fcases:
+                n = self._adopt_family_cases(fcases)
+                say(f"[{cid}] codec-family probe: the single's solver misses {len(fcases)} re-encoded case(s) "
+                    f"({n} adopted as family-* regression cases): generalizing BEFORE the first timed attempt")
+                pre["family_pre"] = ftxt
+            if pre:
+                self.generalize(cid, wrong=None, fixed=None, diag=pre)
         clock_retries = 0
         rate_retries = 0
         attempt = -1

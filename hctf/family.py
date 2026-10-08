@@ -159,11 +159,31 @@ def _key_for(rep, tr, rng):
     return ""
 
 
-def make(sdir, out_dir, n=2, seed=None, exts=None):
+def _recode(sl, rep, tr, key, samples):
+    """(new fixture text, spec) re-encoding slot `sl`'s plaintext under rep/tr/key in the slot's own spec style, or
+    None if it can't be written safely inside the fixture's quotes or doesn't round-trip through lib.codec."""
+    if sl["fields"] == 2:   # `rep|` = identity; `xor_hex|cd` = the 2nd field IS the key
+        key = key if rep == "xor_hex" else ""
+        mat = codec.encode(sl["codec"]["plain"], rep, key, None, samples.get(rep))
+    else:
+        mat = codec.encode(sl["codec"]["plain"], rep, tr, key, samples.get(rep))
+    if not mat or sl["quote"] in mat or "\\" in mat or "\n" in mat:
+        return None
+    spec = f"{rep}|{key}" if sl["fields"] == 2 else f"{rep}|{tr}|{key}"
+    a, b = sl["span"]
+    text = sl["text"][:a] + spec + sl["text"][b:]
+    text = text.replace(sl["codec"]["material"], mat, 1)
+    check = codec.find_codecs(text)
+    if len(check) != 1 or check[0].get("plain") != sl["codec"]["plain"]:
+        return None
+    return text, spec
+
+
+def make(sdir, out_dir, n=2, seed=None, exts=None, exclude=None, plan=None):
     """Write up to `n` family cases of `sdir`'s newest flat verified case into `out_dir` (replaced). `exts`: recode only
     fixtures with these extensions (the failing fixture's language). Returns a summary with, per case, the recoded
     members and the answer_ids that belong to each."""
-    sdir, out_dir = Path(sdir), Path(out_dir)
+    sdir, out_dir = Path(sdir).resolve(), Path(out_dir).resolve()   # relative solver dirs can't be launched
     shutil.rmtree(out_dir, ignore_errors=True)
     cases = sorted((Path(sdir) / "cases").glob("*/"), key=lambda p: p.stat().st_mtime, reverse=True)
     base = _base_case(cases)
@@ -177,6 +197,9 @@ def make(sdir, out_dir, n=2, seed=None, exts=None):
     if exts:
         exts = {e.lower().lstrip(".") for e in exts}
         slots = [x for x in slots if Path(x["member"]).suffix.lower().lstrip(".") in exts]
+    if exclude:
+        exclude = {e.lower().lstrip(".") for e in exclude}
+        slots = [x for x in slots if Path(x["member"]).suffix.lower().lstrip(".") not in exclude]
     if not slots:
         return {"made": [], "note": f"no recodable fixtures in {case.name}" + (f" with {sorted(exts)}" if exts else "")}
     samples = rep_samples(cases[:24])
@@ -187,28 +210,20 @@ def make(sdir, out_dir, n=2, seed=None, exts=None):
     for k in range(1, n + 1):
         exp = dict(expected)
         members, recoded = {nm: z.read(nm) for nm in z.namelist()}, []
-        for sl in slots:
-            q = queues[sl["fields"]]
-            for _ in range(len(q)):
-                rep, tr = q.pop(0)
-                q.append((rep, tr))    # rotate: next slot / next case gets the next combo
-                if (rep, tr) == (sl["codec"]["rep"], sl["codec"]["transform"] or "identity"):
+        for si, sl in enumerate(slots):
+            if plan is not None:   # explicit (rep, tr, key) candidates per slot (control cases)
+                cands = list(plan.get(sl["member"], []))
+            else:
+                q = queues[sl["fields"]]
+                cands = [(rep, tr, None) for rep, tr in q
+                         if (rep, tr) != (sl["codec"]["rep"], sl["codec"]["transform"] or "identity")]
+                q.append(q.pop(0))   # rotate ONE step per slot: the next slot / case starts from the next combo
+            for rep, tr, key in cands:
+                key = _key_for(rep, tr, rng) if key is None else key
+                got = _recode(sl, rep, tr, key, samples)
+                if not got:
                     continue
-                key = _key_for(rep, tr, rng)
-                if sl["fields"] == 2:   # `rep|` = identity; `xor_hex|cd` = the 2nd field IS the key
-                    key = key if rep == "xor_hex" else ""
-                    mat = codec.encode(sl["codec"]["plain"], rep, key, None, samples.get(rep))
-                else:
-                    mat = codec.encode(sl["codec"]["plain"], rep, tr, key, samples.get(rep))
-                if not mat or sl["quote"] in mat or "\\" in mat or "\n" in mat:
-                    continue
-                spec = f"{rep}|{key}" if sl["fields"] == 2 else f"{rep}|{tr}|{key}"
-                a, b = sl["span"]
-                text = sl["text"][:a] + spec + sl["text"][b:]
-                text = text.replace(sl["codec"]["material"], mat, 1)
-                check = codec.find_codecs(text)
-                if len(check) != 1 or check[0].get("plain") != sl["codec"]["plain"]:
-                    continue
+                text, spec = got
                 members[sl["member"]] = text.encode("utf-8")
                 for aid in sl["ids"]:
                     if _suffix(aid) == "representation" and aid in exp:
@@ -233,11 +248,12 @@ def make(sdir, out_dir, n=2, seed=None, exts=None):
             "reps": sorted({r for r, _ in used}), "transforms": sorted({t for _, t in used})}
 
 
-def probe(sdir, out_dir, n=2, seed=None, exts=None, timeout=20):
+def probe(sdir, out_dir, n=2, seed=None, exts=None, timeout=20, exclude=None):
     """make() + run the solver on each family case; per recoded fixture: did the solver reproduce its answers?"""
     sys.path.insert(0, str(ROOT))
     from hctf import solvers
-    summary = make(sdir, out_dir, n, seed, exts)
+    sdir = Path(sdir).resolve()
+    summary = make(sdir, out_dir, n, seed, exts, exclude)
     results = []
     for m in summary.get("made", []):
         case = Path(m["case"])
@@ -253,18 +269,65 @@ def probe(sdir, out_dir, n=2, seed=None, exts=None, timeout=20):
     return summary
 
 
+def calibrate(sdir, out_dir, threshold=0.5, n=3):
+    """Which fixture languages the family probe can JUDGE for this lane: probe a solver that already passed the GM's real
+    variants (the previous day's final solver); a language it reproduces < threshold is synthetic noise -- the solver
+    emulates that fixture's own decode routine, which the recoding leaves unchanged (VBScript ~0.3 on every day's final
+    solver; bash ~0.8, Node 1.0). n=3 cases: with n=1 the D6 bash ratio swung to 0.4. Returns {"noise", "ratio"}.
+    (A same-case 'borrowed codec' control does NOT separate them: vbsplan's Codec_ fallback knows borrowed codecs.)"""
+    per, base = {}, None
+    for e in fixture_exts(sdir):   # ONE language per case: D6+ fixtures form cross-language graphs, so recoding the
+        summary = probe(sdir, Path(out_dir) / e, n=n, exts=[e])   # VBS step breaks the bash fixture's answers too
+        base = summary.get("base") or base
+        for r in summary.get("results", []):
+            ok, tot = per.get(e, (0, 0))
+            per[e] = (ok + bool(r["ok"]), tot + 1)
+    ratio = {e: round(ok / tot, 2) for e, (ok, tot) in per.items() if tot}
+    return {"noise": sorted(e for e, r in ratio.items() if r < threshold), "ratio": ratio, "base": base}
+
+
+def fixture_exts(sdir):
+    """Extensions of the recodable fixtures in sdir's newest flat verified case."""
+    cases = sorted((Path(sdir).resolve() / "cases").glob("*/"), key=lambda p: p.stat().st_mtime, reverse=True)
+    base = _base_case(cases)
+    if not base:
+        return []
+    case, art, expected = base
+    slots = _slots(_open_zip(art.read_bytes()), json.loads((case / "contract.json").read_text()), expected)
+    return sorted({Path(x["member"]).suffix.lower().lstrip(".") for x in slots} - {""})
+
+
+def probe_each(sdir, out_dir, exts, n=2):
+    """probe() one language at a time (see calibrate); merged results."""
+    merged = {"made": [], "results": [], "base": None}
+    for e in sorted(exts):
+        s = probe(sdir, Path(out_dir) / e, n=n, exts=[e])
+        merged["base"] = s.get("base") or merged["base"]
+        merged["made"] += s.get("made", [])
+        merged["results"] += [dict(r, ext=e, case_dir=str(Path(out_dir) / e / r["case"])) for r in s.get("results", [])]
+    return merged
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("action", choices=["make", "probe"])
+    ap.add_argument("action", choices=["make", "probe", "calibrate", "probe-each"])
     ap.add_argument("solver_dir")
     ap.add_argument("--out", help="where the family cases go (default .run/family/<challenge>)")
     ap.add_argument("--n", type=int, default=2)
     ap.add_argument("--seed", type=int)
     ap.add_argument("--ext", action="append", help="recode only fixtures with this extension (repeatable)")
+    ap.add_argument("--exclude-ext", action="append", help="never recode fixtures with this extension (repeatable)")
     a = ap.parse_args()
     out = a.out or str(ROOT / ".run" / "family" / Path(a.solver_dir).resolve().parent.name)
+    if a.action == "calibrate":
+        print(json.dumps(calibrate(a.solver_dir, out)))
+        return
+    if a.action == "probe-each":
+        exts = a.ext or [e for e in fixture_exts(a.solver_dir) if e not in set(a.exclude_ext or [])]
+        print(json.dumps(probe_each(a.solver_dir, out, exts, a.n)))
+        return
     fn = probe if a.action == "probe" else make
-    print(json.dumps(fn(a.solver_dir, out, a.n, a.seed, a.ext)))
+    print(json.dumps(fn(a.solver_dir, out, a.n, a.seed, a.ext, exclude=a.exclude_ext)))
 
 
 if __name__ == "__main__":

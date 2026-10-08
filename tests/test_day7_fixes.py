@@ -623,7 +623,7 @@ orchestrate.Chain.generalize = lambda self, cid, wrong=None, fixed=None, diag=No
 try:
     for (mod, name), fn in p26.items():
         setattr(mod, name, fn)
-    ch._single_slow, ch._single_speed_done = 5.9, False
+    ch._single_slow, ch._pre_attempt_done = 5.9, False
     assert ch.timed_stage("mastery") and ch.timed_stage("mastery")
 finally:
     for (mod, name), fn in s26.items():
@@ -740,3 +740,44 @@ _gone = (_dt_29.datetime.now(_dt_29.timezone.utc) - _dt_29.timedelta(seconds=30)
 assert 4.0 <= hb_timed._submit_timeout({"deadline": _soon}) <= 4.6
 assert hb_timed._submit_timeout({"deadline": _gone}) == 2.0 and hb_timed._submit_timeout({}) == 20.0
 print("ok  hb_timed submit: bounded by the clock + 1.5 s, one POST only, raises -> 'expired' (clock retry)")
+
+# 30) codec-family probe BEFORE the first timed attempt (blind2/blind3: TT passed clean, then Mastery met the next bash
+#     codec every run). Misses on judgeable languages -> family-* cases adopted + one pre-attempt generalize (merged with
+#     the speed gate); no calibration -> nothing pre-emptive; noise languages (VBScript) never trigger it.
+gen30 = []
+p30 = dict(patches)
+p30[(timed, "run")] = lambda cid, sdir, log=None, op="start": "correct"
+p30[(timed, "last_result")] = lambda cid: None
+s30 = {k: getattr(*k) for k in p30}
+_og30 = orchestrate.Chain.generalize
+orchestrate.Chain.generalize = lambda self, cid, wrong=None, fixed=None, diag=None: gen30.append(diag)
+fam30 = Path(tempfile.mkdtemp()) / "sh" / "family-1"
+fam30.mkdir(parents=True)
+(fam30 / "expected.json").write_text("{}")
+(fam30 / "contract.json").write_text("{}")
+ch.sdir = Path(tempfile.mkdtemp()) / "solver"
+(ch.sdir / "cases").mkdir(parents=True)
+try:
+    for (mod, name), fn in p30.items():
+        setattr(mod, name, fn)
+    ch._single_slow, ch._pre_attempt_done = 4.0, False
+    ch._family_pre_result = lambda: ("probe: 3/5 reproduced", [str(fam30)])
+    assert ch.timed_stage("mastery")
+    assert gen30 == [{"solver_too_slow": True, "single_seconds": 4.0, "family_pre": "probe: 3/5 reproduced"}], gen30
+    assert (ch.sdir / "cases" / "family-sh-1" / "expected.json").exists()
+    gen30.clear()
+    ch._single_slow, ch._pre_attempt_done = None, False
+    ch._family_pre_result = lambda: ("", [])
+    assert ch.timed_stage("mastery") and gen30 == []
+finally:
+    for (mod, name), fn in s30.items():
+        setattr(mod, name, fn)
+    orchestrate.Chain.generalize = _og30
+    del ch._family_pre_result
+ch._fam_noise_fut = None
+assert ch._family_noise() is None                       # no calibration -> never pre-emptive
+_fut30 = __import__("concurrent.futures").futures.Future()
+_fut30.set_result({"noise": ["vbs"], "ratio": {"vbs": 0.3, "sh": 1.0}})
+ch._fam_noise_fut = _fut30
+assert ch._family_noise() == {"vbs"}
+print("ok  family pre-probe: misses -> family-* adopted + ONE pre-attempt generalize (merged with speed); none -> none")
