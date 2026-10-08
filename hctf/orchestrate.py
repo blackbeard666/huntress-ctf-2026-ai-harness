@@ -540,6 +540,9 @@ MUTATION_PROBE = os.environ.get("HCTF_MUTATION_PROBE", "1") != "0"
 COMPOUND_PROBE = os.environ.get("HCTF_COMPOUND_PROBE", "1") != "0"
 # Warm Single workers: launched at chain start beside GM start/download/triage (workers.WarmWorker). 0 = cold launch.
 WARM_WORKERS = os.environ.get("HCTF_WARM_WORKERS", "1") != "0"
+# Prior-solver dry run (cumulative lanes): diagnostics of yesterday's solver on today's bytes, never its values.
+PRIOR_DRY_RUN = os.environ.get("HCTF_PRIOR_DRY_RUN", "1") != "0"
+PRIOR_DRY_RUN_SECONDS = float(os.environ.get("HCTF_PRIOR_DRY_RUN_SECONDS", "15"))
 COMPOUND_PROBE_SECONDS = float(os.environ.get("HCTF_COMPOUND_PROBE_SECONDS", "45"))
 # Mastery speed gate: estimated Mastery solve (mutation probe's 2-set mastery-shape run) vs the known TT window. Mastery
 # windows were 1-2.7x the TT window on D3-D8, so only an estimate over MASTERY_GATE_RATIO x TT window acts.
@@ -576,7 +579,9 @@ def mastery_estimate(mut_summary, mastery_contract):
     shape = next((r for r in (mut_summary or {}).get("results") or [] if r.get("mutation") == "mastery-shape"
                   and r.get("ok")), None)
     try:
-        ids = json.loads(Path(mastery_contract).read_text()).get("answer_ids") or []
+        mc = json.loads(Path(mastery_contract).read_text())
+        # The real GM's status-time contract carries ids only on questions[] (no answer_ids): rehearsal D8 printed no estimate.
+        ids = mc.get("answer_ids") or [q.get("id") for q in mc.get("questions") or [] if q.get("id")]
     except (OSError, ValueError, TypeError):
         ids = []
     sets = {a.split(".", 1)[0] for a in ids if re.match(r"(set|slot)\d+\.", a)}
@@ -769,6 +774,31 @@ class Chain:
         say(f"[{cid}] single worker warming up beside start/download/triage")
         return workers.WarmWorker(cli.cdir(cid), "single", text, self._worker_env(cid, "single"))
 
+    def _start_prior_dry_run(self, cid):
+        """Cumulative lanes: run yesterday's solver once on today's bytes in the background (diagnostics only: speed,
+        where it hangs, which ids it leaves empty -- never its values). Joined before the worker's task is sent."""
+        self._dry_fut = None
+        prior = prior_solver_dir(self.lane, self.sdir)
+        contract = cli.load(cid, "start.json") or cli.load(cid, "contract.json")
+        art = timed.latest_artifacts(cid)
+        if not (PRIOR_DRY_RUN and prior and contract and art):
+            return
+        self._dry_fut = ThreadPoolExecutor(max_workers=1).submit(solvers.dry_run_diagnostics, prior, contract, art,
+                                                                  PRIOR_DRY_RUN_SECONDS)
+
+    def _prior_dry_run_text(self):
+        fut = getattr(self, "_dry_fut", None)
+        if fut is None:
+            return ""
+        try:
+            d = fut.result(timeout=PRIOR_DRY_RUN_SECONDS + 10)
+        except Exception as e:  # noqa: BLE001 - diagnostics are best-effort
+            say(f"[{self.base}] prior dry run note: {e}")
+            return ""
+        say(f"[{self.base}] prior solver dry run: {d['seconds']}s, timed_out={d['timed_out']}, "
+            f"answered {d['answered']}/{d['total']}")
+        return solvers.render_dry_run(d)
+
     def _tool_prefetch(self, cid, source):
         """Install the preferred tools of toolchains the challenge's own text names (hctf/toolchain.py): from the name at
         chain start, then from the prompt/questions right after `start` -- before the download and the byte scan."""
@@ -914,6 +944,14 @@ class Chain:
             gm_wrong += ("\n  - THE SOLVER IS TOO SLOW: solve.py hit the in-window timeout on this variant (answers may well be right). "
                          "Make it fast -- no per-set brute force over every decoder, no subprocess per set, decode once, "
                          "early-exit on the first candidate that matches the answer_format; time it with `time hctf solver-run`.")
+        if d.get("solver_too_slow") or d.get("single_seconds"):
+            # The harness profiles the slow case itself (newest variant-* for an in-window timeout, else the single).
+            cases = self.sdir / "cases"
+            var = sorted(cases.glob("variant-*/"), key=lambda p: p.stat().st_mtime)
+            prof = solvers.profile_solver(self.sdir, var[-1] if var and not d.get("single_seconds") else cases / "single_solve")
+            if prof:
+                gm_wrong += ("\n  - HOT PATH (harness-run profile, sorted by cumulative time -- start here, no need to re-profile):\n"
+                             + "\n".join("    " + ln for ln in prof.splitlines()))
         left_att = (timed.last_result(cid) or {}).get("attempts_remaining")
         low_budget = left_att is not None and left_att < HARVEST_MIN_ATTEMPTS
         if low_budget and HARVEST_VARIANTS:
@@ -1374,6 +1412,7 @@ class Chain:
         tpool.shutdown(wait=False)
         body, err = timed.ensure_started(cid)
         self._tool_prefetch(cid, (body or {}))   # the prompt + questions arrive with `start`: before any download
+        self._start_prior_dry_run(cid)
         # The GM sometimes hands the flag back directly (issued_flag, e.g. orientation challenges). Use it instead of
         # solving when there's a single answer_id to put it in — a free first-blood the harness used to discard.
         fb = body or {}
@@ -1428,6 +1467,9 @@ class Chain:
                               f"solver of this lane and already answers every earlier family. FIRST copy it (all its "
                               f"files) over `{self.sdir.relative_to(ROOT)}`, then add only today's new families. "
                               "Never use an old solver's output as your answer without today's bytes behind it.")
+                dry = self._prior_dry_run_text() if n == 0 else ""
+                if dry:
+                    prior_note += "\n" + dry
             else:
                 prior_note = ("Write the solver from the skeleton + the lane helpers below; don't go looking for earlier "
                               "days' solvers (replays lost 13-24 s per run doing that).")
@@ -1513,12 +1555,21 @@ class Chain:
         # Solver CODE only: a late NOTES.md / scratch write must not reset the stability clock (Day 6).
         return {p.name: p.stat().st_mtime for p in self.sdir.iterdir() if p.is_file() and p.suffix == ".py"}
 
+    def _submit_stamp(self, cid, mtimes):
+        """The stamp `hctf submit --from-solver` wrote, if it was made by exactly this solver code (else None)."""
+        try:
+            st = json.loads((cli.cdir(cid) / ".solver_stamp.json").read_text())
+        except (OSError, ValueError):
+            return None
+        return st if st.get("mtimes") == mtimes and isinstance(st.get("answers"), dict) else None
+
     def _spec_snapshot(self, cid):
         """Copy the worker's in-progress solver (minus cases) to `.run/spec-dayNN/<chal>/solver` -- the same depth as
         challenges/dayNN/<chal>/solver, since solvers locate the project root via parents[N] -- if its files have been
         stable for SPEC_STABLE s and it reproduces the GM-confirmed Single Solve answers. Returns the dir or None."""
         m0 = self._solver_mtimes()
-        if "solve.py" not in m0 or time.time() - max(m0.values()) < SPEC_STABLE:
+        stamp = self._submit_stamp(cid, m0)
+        if "solve.py" not in m0 or (not stamp and time.time() - max(m0.values()) < SPEC_STABLE):
             return None
         if m0 == getattr(self, "_spec_rejected", None):
             return None  # this exact solver already failed verification; wait for the worker to change it
@@ -1536,6 +1587,10 @@ class Chain:
             shutil.copy2(self.root / "meta.json", snap.parent / "meta.json")  # hb_timed reads the lane from it
         if self._solver_mtimes() != m0:
             return None  # the worker edited mid-copy; next poll
+        if stamp and all(stamp["answers"].get(k) == v for k, v in conf.items()):
+            # `hctf submit --from-solver` just ran this exact code and it produced every confirmed answer: no re-run.
+            self._note_single_speed(cid, stamp.get("seconds"))
+            return snap
         got, err, dt = solvers.run_solver(snap, contract, art)
         bad = sorted(k for k, v in conf.items() if got.get(k) != v)
         if err or bad:
@@ -1792,7 +1847,10 @@ class Chain:
             # Mutation + compounding probes run BESIDE the first Time Trial (mutation probe: 0 hits in mainblind3-7 + D8;
             # it held binary ~5 s): take them now only if already done; Mastery (or a TT-failure generalize) awaits them.
             # A later mode with no TT before it (TT already passed) waits for them here.
-            pre.update(self._late_probes(cid, wait=mode != "time_trial" or bool(pre)))
+            # A speed-only generalize doesn't wait for them either (rehearsal D8 binary: ~10 s idle before the worker launched);
+            # Mastery still awaits them below.
+            speed_only = mode == "time_trial" and bool(pre) and set(pre) <= {"solver_too_slow", "single_seconds"}
+            pre.update(self._late_probes(cid, wait=(mode != "time_trial" or bool(pre)) and not speed_only))
             if pre:
                 self.generalize(cid, wrong=None, fixed=None, diag=pre)
         elif mode != "time_trial":
@@ -2195,6 +2253,54 @@ def ratchet(day):
         shutil.rmtree(ROOT / "lib")
         shutil.copytree(backup, ROOT / "lib")
         say(f"[ratchet] {tag}: REVERTED lib/ (worker exit {rc}); proposals stay in solver/NOTES.md ({Path(log).name})")
+    if SPEED_HARDEN:
+        try:
+            speed_harden(day=day)
+        except Exception as e:  # noqa: BLE001 - post-run best-effort
+            say(f"[speed-harden] {tag}: skipped ({e})")
+
+
+SPEED_HARDEN = os.environ.get("HCTF_SPEED_HARDEN", "1") != "0"
+
+
+def speed_harden(day=None, cid=None, log=None):
+    """Off the clock, after the run: every lane solver whose slowest GM-verified regression case exceeds
+    SINGLE_SPEED_BUDGET gets ONE speed generalize (transactional: kept only if every case still passes). Tomorrow's
+    worker copies this solver -- rehearsal D8: Day 7's slow Kotlin-jar path cost an 84 s pre-attempt speed generalize on
+    the critical path. Returns {base: (slowest_before, slowest_after or None)}."""
+    log = log or say
+    if cid:
+        bases = [paths.base_id(cid)]
+    else:
+        bases = []
+        for m in sorted((paths.CHALLENGES / f"day{int(day):02d}").glob("*/meta.json")):
+            try:
+                bases.append(json.loads(m.read_text())["base"])
+            except (OSError, ValueError, KeyError):
+                pass
+    gov = Governor()
+    pools = Pools(1, 0, gov)
+    out = {}
+    for base in bases:
+        sdir = paths.solver_dir(base)
+        if not (sdir / "solve.py").exists():
+            continue
+        res = solvers.test_solver(sdir)
+        timed_ok = [r for r in res if not r.get("unverified") and not r.get("error")]
+        slow = max((r["seconds"] for r in timed_ok), default=0.0)
+        worst = max(timed_ok, key=lambda r: r["seconds"], default=None)
+        if slow <= SINGLE_SPEED_BUDGET:
+            log(f"[speed-harden] {base}: slowest case {slow:.1f}s <= {SINGLE_SPEED_BUDGET:g}s, nothing to do")
+            out[base] = (slow, None)
+            continue
+        log(f"[speed-harden] {base}: slowest case {worst['case']} {slow:.1f}s > {SINGLE_SPEED_BUDGET:g}s -> speed generalize")
+        chain = chain_for(base, pools, gov)
+        chain.generalize(base, wrong=None, fixed=None, diag={"solver_too_slow": True, "single_seconds": round(slow, 2)})
+        after = max((r["seconds"] for r in solvers.test_solver(sdir) if not r.get("unverified") and not r.get("error")),
+                    default=0.0)
+        log(f"[speed-harden] {base}: slowest case {slow:.1f}s -> {after:.1f}s")
+        out[base] = (slow, after)
+    return out
 
 
 def chain_for(cid, pools, gov):

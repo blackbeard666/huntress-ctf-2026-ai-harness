@@ -223,7 +223,8 @@ def _worker_env(env_extra):
     env["PATH"] = f"{BIN}:{TOOLS / 'node' / 'bin'}:{ROOT / '.venv' / 'bin'}:{Path.home() / '.local/bin'}:{env.get('PATH', '')}"
     # Cap a Bash call that hangs (Day 8 binary single: the Day 7 solver's brute force over a 67 MB Swift ELF sat the
     # full 120 s default). The worker can still pass an explicit timeout for known-long tools (Ghidra, jadx).
-    env.setdefault("BASH_DEFAULT_TIMEOUT_MS", os.environ.get("HCTF_WORKER_BASH_TIMEOUT_MS", "60000"))
+    # 25 s (rehearsal D8: a copied Day 7 solver hung twice to the old 60 s cap on a 67 MB ELF, ~120 s of the binary single).
+    env.setdefault("BASH_DEFAULT_TIMEOUT_MS", os.environ.get("HCTF_WORKER_BASH_TIMEOUT_MS", "25000"))
     return env
 
 

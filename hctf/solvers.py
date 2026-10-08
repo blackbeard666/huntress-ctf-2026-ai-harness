@@ -123,6 +123,105 @@ def run_solver(sdir, contract, artifacts, timeout=120):
         return {}, f"stdout is not JSON: {r.stdout[-500:]!r} stderr: {r.stderr[-800:]}", dt
 
 
+def dry_run_diagnostics(sdir, contract, artifacts, timeout=15):
+    """Run an EARLIER day's solver once on TODAY's contract + bytes and return DIAGNOSTICS ONLY -- never its values
+    (user rule: old solvers are not an answer source). On a timeout it gets SIGINT first, so the traceback names the
+    loop that hangs. Rehearsal D8: the copied Day 7 binary solver hung twice to the worker's 60 s cap on a 67 MB Swift ELF
+    (~140 s of the single) before the worker found the slow path. Returns a dict (see render_dry_run)."""
+    import signal
+    tmp = TMP / f"dryrun-{Path(sdir).parent.name}-{time.time_ns()}.json"
+    tmp.write_text(json.dumps(contract))
+    py = str(VENV_PY) if VENV_PY.exists() else "python3"
+    env = dict(os.environ, PYTHONPATH=f"{ROOT}:{os.environ.get('PYTHONPATH', '')}")
+    t0 = time.time()
+    p = subprocess.Popen([py, str(Path(sdir) / "solve.py"), "--contract", str(tmp), "--artifacts", str(artifacts)],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=sdir, env=env,
+                         start_new_session=True)
+    timed_out = False
+    try:
+        out, err = p.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        p.send_signal(signal.SIGINT)              # KeyboardInterrupt -> a traceback at the hot loop
+        try:
+            out, err = p.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            out, err = p.communicate()
+    finally:
+        tmp.unlink(missing_ok=True)
+    dt = time.time() - t0
+    ids = contract.get("answer_ids") or [q.get("id") for q in contract.get("questions") or [] if q.get("id")]
+    got = {}
+    try:
+        got = json.loads((out or "").strip().splitlines()[-1])
+    except (IndexError, ValueError):
+        pass
+    lines = (err or "").splitlines()
+    allf = [ln.strip() for ln in lines if ln.strip().startswith("File ")]
+    # The solver's OWN innermost frames say which function hangs; library frames (pyelftools...) only say where.
+    own = [f for f in allf if str(Path(sdir).resolve()) in f or f"{ROOT}/lib/" in f]
+    frames = [re.sub(r'"[^"]*/', '"', f) for f in own[-3:] + ([allf[-1]] if allf and allf[-1] not in own else [])]
+    warn = []
+    for ln in lines:
+        if ("[!]" in ln or "unknown" in ln.lower() or "warning" in ln.lower()) and ln.strip() not in warn:
+            warn.append(ln.strip()[:160])
+    last = next((ln.strip() for ln in reversed(lines) if ln.strip()), "")
+    empty = [i for i in ids if got.get(i) in (None, "")] if isinstance(got, dict) else list(ids)
+    return {"solver": str(Path(sdir).relative_to(ROOT)), "seconds": round(dt, 1), "timed_out": timed_out,
+            "rc": p.returncode, "frames": frames, "error": last[:200] if (p.returncode and not timed_out) else "",
+            "warnings": warn[:8], "answered": len(ids) - len(empty), "total": len(ids), "empty": empty[:15]}
+
+
+def profile_solver(sdir, case_dir, timeout=45, top=25):
+    """cProfile of solve.py on one regression case -> the top `top` rows by cumulative time (text), or ''. Handed to a
+    speed generalize so the worker starts at the hot path (rehearsal D8 + d8tc1: both speed workers lost a turn to a profile
+    piped to /dev/null)."""
+    case_dir = Path(case_dir)
+    if not (case_dir / "contract.json").exists():
+        return ""
+    py = str(VENV_PY) if VENV_PY.exists() else "python3"
+    env = dict(os.environ, PYTHONPATH=f"{ROOT}:{os.environ.get('PYTHONPATH', '')}")
+    try:
+        r = subprocess.run([py, "-m", "cProfile", "-s", "cumtime", str(Path(sdir) / "solve.py"), "--contract",
+                            str(case_dir / "contract.json"), "--artifacts", str(case_dir / "artifacts")],
+                           capture_output=True, text=True, timeout=timeout, cwd=sdir, env=env)
+    except subprocess.TimeoutExpired:
+        return f"(profile of {case_dir.name} did not finish in {timeout}s)"
+    out = r.stdout.splitlines()
+    i = next((k for k, ln in enumerate(out) if ln.strip().startswith("ncalls")), None)
+    if i is None:
+        return ""
+    head = next((ln.strip() for ln in out if "function calls" in ln), "")
+    rows = [re.sub(r"/[^\s]*/(site-packages|huntress-2026[^/]*)/", r"\1/", ln.rstrip()) for ln in out[i:i + top + 1]]
+    return f"cProfile of `cases/{case_dir.name}` ({head}):\n" + "\n".join(rows)
+
+
+def render_dry_run(d):
+    """Markdown for the worker: how yesterday's solver behaved on today's bytes. Field NAMES only, never values."""
+    if not d:
+        return ""
+    head = (f"PRIOR SOLVER DRY RUN (harness ran `{d['solver']}/solve.py` on TODAY's contract + bytes; diagnostics only, "
+            f"its values are withheld): ")
+    if d["timed_out"]:
+        head += f"did NOT finish in {d['seconds']:g} s (interrupted)."
+    elif d["error"]:
+        head += f"crashed after {d['seconds']:g} s: {d['error']}"
+    else:
+        head += f"finished in {d['seconds']:g} s, answered {d['answered']}/{d['total']} ids."
+    parts = [head]
+    if d["frames"]:
+        parts.append("Where it was (innermost last): " + " | ".join(d["frames"][-4:]))
+    if d["empty"] and not d["timed_out"]:
+        parts.append(f"Left empty ({d['total'] - d['answered']}): " + ", ".join(f"`{x}`" for x in d["empty"][:15]))
+    if d["warnings"]:
+        parts.append("Its own warnings: " + " / ".join(d["warnings"][:6]))
+    if d["timed_out"] or d["seconds"] > 2.5:
+        parts.append("Fix that slow path FIRST (Mastery runs it once per set inside the clock); don't re-run the whole "
+                     "copied solver blind.")
+    return "\n".join(parts)
+
+
 def _day_key(sdir):
     m = re.search(r"day(\d+)", str(sdir))
     return int(m.group(1)) if m else -1

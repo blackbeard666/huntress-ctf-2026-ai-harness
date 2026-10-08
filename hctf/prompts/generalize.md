@@ -60,3 +60,7 @@ Do this:
 5. Do NOT submit and do NOT start/retry any mode — the orchestrator retries with a fresh variant once you exit.
    Add ONE line to `{solver_dir}/NOTES.md` starting `VARIANT AXIS:` (what differed in this variant vs the cases that passed, and the parse rule that covers it) -- the post-run ratchet collects these into the technique log. The harness ends your session the moment the
    failing case passes with no regressions — don't spend time on extra robustness checks after the fix.
+
+Patch safely: use the Edit tool (non-unique matches are refused) or `assert s.count(old) == 1` before `s.replace(old, new)`;
+a non-unique replace silently patches a sibling function. Profiling: `python3 -m cProfile -s cumtime solve.py ... 2>&1 | head -40`
+(redirect stderr INTO the pipe -- `2>&1 >/dev/null` sends the profile to /dev/null).

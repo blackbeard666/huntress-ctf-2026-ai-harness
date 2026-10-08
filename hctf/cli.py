@@ -475,7 +475,17 @@ def c_submit(a):
             print("refused:\n  no contract/artifacts for this mode yet", file=sys.stderr)
             return EXIT["refused"]
         # THIS challenge's solver only -- never dispatch questions to earlier days' solvers (owner rule).
-        got, err, _ = solvers.run_solver(paths.solver_dir(a.id), contract, art)
+        sd = paths.solver_dir(a.id)
+        got, err, dt = solvers.run_solver(sd, contract, art)
+        if not err:
+            # Stamp for the stop-at-correct watcher: this exact solver code just produced these answers in dt seconds,
+            # so a CORRECT verdict needs no second run of it (binary: ~3.6 s + the stability wait on the critical path).
+            try:
+                (cdir(a.id) / ".solver_stamp.json").write_text(json.dumps({
+                    "mtimes": {p.name: p.stat().st_mtime for p in sd.iterdir() if p.is_file() and p.suffix == ".py"},
+                    "seconds": round(dt, 2), "answers": got}))
+            except OSError:
+                pass
         if err:
             print(f"refused:\n  your solve.py failed: {err[:600]}", file=sys.stderr)
             return EXIT["refused"]
@@ -696,6 +706,16 @@ def c_solver_test(a):
     ok, res = orchestrate.ensure_case_and_test(base, paths.solver_dir(base))
     emit({"ok": ok, "solver": str(paths.solver_dir(base).relative_to(ROOT)), "results": res})
     return 0 if ok else 1
+
+
+def c_speed_harden(a):
+    from . import orchestrate
+    if not (a.id or a.day):
+        print("give a challenge id or --day N", file=sys.stderr)
+        return EXIT["refused"]
+    res = orchestrate.speed_harden(day=a.day, cid=a.id, log=print)
+    emit({b: {"before": v[0], "after": v[1]} for b, v in res.items()})
+    return 0
 
 
 def c_tool_wait(a):
@@ -1030,6 +1050,9 @@ def main(argv=None):
     sub.add_parser("openapi")
     sub.add_parser("triage", help="deterministic no-LLM triage of a mode's artifacts").add_argument("id")
     sub.add_parser("solver-test", help="refresh + replay the solver's regression cases").add_argument("id")
+    psh = sub.add_parser("speed-harden", help="off-clock speed generalize for solvers whose slowest case is over budget")
+    psh.add_argument("id", nargs="?")
+    psh.add_argument("--day", type=int)
     ptw = sub.add_parser("tool-wait", help="block until a toolchain tool triage started installing is ready")
     ptw.add_argument("tool")
     ptw.add_argument("--timeout", type=int, default=600)
@@ -1087,7 +1110,7 @@ def main(argv=None):
     pl2.add_argument("--dry-run", action="store_true", help="only print the ranked candidates")
     a = p.parse_args(argv)
     fn = {"hb": c_hb, "list": c_list, "status": c_status, "start": c_start, "retry": c_retry,
-          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test, "compound-check": c_compound_check, "tool-wait": c_tool_wait, "tool-gaps": c_tool_gaps,
+          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test, "compound-check": c_compound_check, "tool-wait": c_tool_wait, "speed-harden": c_speed_harden, "tool-gaps": c_tool_gaps,
           "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
           "reconcile": c_reconcile, "solutions": c_solutions,
           "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout,

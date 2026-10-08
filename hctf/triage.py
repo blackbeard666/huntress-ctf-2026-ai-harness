@@ -6,6 +6,7 @@ routes to the right lane skill, so the agent doesn't burn turns rediscovering wh
 import hashlib
 import json
 import re
+import shlex
 import shutil
 import subprocess
 import zipfile
@@ -207,7 +208,9 @@ def _recon(cid, root):
     lines = []
     if cid.startswith("script-analysis"):
         lang = {".ps1": "PowerShell", ".js": "JScript", ".jse": "JScript", ".bat": "Batch", ".cmd": "Batch",
-                ".vbs": "VBScript", ".vbe": "VBScript", ".py": "Python", ".pyc": "Python bytecode", ".sh": "Bash"}
+                ".vbs": "VBScript", ".vbe": "VBScript", ".py": "Python", ".pyc": "Python bytecode", ".sh": "Bash",
+                # D7 Node `.mjs` and D8 `.php` / `.wsf` / `.hta` hosts were never decoded by triage (0/8 on D8 .php)
+                ".mjs": "Node.js", ".cjs": "Node.js", ".php": "PHP", ".wsf": "WSF", ".hta": "HTA"}
         lines += _script_decoded([f for f in files if f.suffix.lower() in lang], root, lang)
     elif cid.startswith("binary-reverse-engineering"):
         # Bundled JVM runtime classes are not the challenge: one `javap` each (~0.6s) over a fat Kotlin jar's 3123
@@ -243,7 +246,13 @@ def _recon(cid, root):
             offs = _sh(["grep", "-boa", "HCFG", str(f)]).splitlines()[:3]
             for o in offs:
                 off = o.split(":")[0]
-                row.append(f"    HCFG @ {off}: " + _sh(["xxd", "-s", off, "-l", "16", str(f)])[:80])
+                row.append(f"    HCFG @ {off} (raw hit -- verify its crc32, it can be a false hit inside code): "
+                           + _sh(["xxd", "-s", off, "-l", "16", str(f)])[:80])
+            # Encoded config magic (D8 Swift: the only real blob was the base64 literal `SENGR...`; raw `HCFG` was code).
+            for label, rx in (("base64 HCFG", r"SENGR[A-Za-z0-9+/_-]{12,}=*"), ("hex HCFG", r"48434647[0-9a-fA-F]{16,}")):
+                hits = _sh(["bash", "-c", f"strings -n 16 {shlex.quote(str(f))} | grep -m2 -oE '{rx}'"], timeout=15)
+                for h in hits.splitlines()[:2]:
+                    row.append(f"    {label} literal: `{h[:72]}{'...' if len(h) > 72 else ''}` ({len(h)} chars)")
             return row
         # One file's tools are independent of the next's: run them side by side, keep the listing order
         # (binary Day 7: 30 files x file/sha256sum/javap/grep took 3.6s serially).
