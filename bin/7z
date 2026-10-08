@@ -9,7 +9,10 @@ for c in /usr/bin/7z /bin/7z /usr/local/bin/7z "$HOME/.local/bin/7zz"; do   # 7z
 done
 [ -n "$REAL" ] || REAL="$HERE/shims/7z"
 case " $* " in *" -p"*) PW="" ;; *) PW="-pinfected" ;; esac
+# Only add -y when the caller didn't: 7z rejects a repeated switch ("Multiple instances for switch: -y"). Day 8: every
+# triage pre-extraction (`7z x -y ...`) and every worker following the technique log failed that way.
+case " $* " in *" -y "*) Y="" ;; *) Y="-y" ;; esac
 case "$1" in
-  x|e|t|l) exec "$REAL" "$@" -y $PW </dev/null ;;
-  *) exec "$REAL" "$@" -y </dev/null ;;
+  x|e|t|l) exec "$REAL" "$@" $Y $PW </dev/null ;;
+  *) exec "$REAL" "$@" $Y </dev/null ;;
 esac
