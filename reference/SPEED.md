@@ -316,3 +316,18 @@ Fixes: 6c9ba41 (speed_watch_sets early stop + single-time speed gate HCTF_SINGLE
 generalize before the first timed attempt), c500c83 (bin/7z: -y, default -pinfected, stdin closed), c8a9748
 (lib.binary.jar_app_classes / class_utf8: 3121 -> 5 classes in 12 ms; binary skill + helper index).
 Expected with these: binary ~T+100, day bound by script (~T+175).
+
+### Blind Day 7 replay `blind2` (alt, 2026-10-08 07:59, workflow 0b7ac72 + the Homebase with static 7-Zip)
+`hctf timeline`: mobile 30/37/42, warmups 41/47/51, metadata 31/117/169 (2 generalizes: ESCALATED variants -- TT 11
+fields / Mastery 22 with d04-d06 carry-overs + an evidence-note file, vs 1/2 fields in every earlier run: the GM rotates
+later attempts into harder variants), script 106/**116 (TT first try -- first time ever)**/252 (1 Mastery generalize
+50 s, then 68 s to the retry), binary 67/**170**/- (Mastery `rotation_exhausted`: the rehearsal copy's binary Mastery pool for Day 7
+is used up). 75 calls, 0 worker flags (ratchet tried masked test_day7_fixes.py after the run).
+Verified live: speed gate (binary single solver 12.7 s -> speed generalize BEFORE any attempt), speed early stop (green
+in 85 s vs 284 s), TT passed first try after it. The slow solver was the copied Day-6 base (fair pin); main's Day-7
+binary solver already skips kotlin/ (1.8 s single, 3.2 s Mastery), which is what Day 8 copies.
+Found: (1) a non-pass result with no new variant (rotation_exhausted) still did the synchronous Homebase pull of the
+mode's tmp-timed dir -- 13 MB of stale Mastery evidence at ~130 KB/s over the VPN, ~100 s; (2) background capture pulls
+(6.6 MB binary TT pass) share that link with the next attempt's solver push (script Mastery: 68 s green -> result).
+Homebase tools: the VM now has 7z (static 7-Zip in ~/.local/bin via `hctf hb setup`); still absent by design: java/jadx/
+apktool/exiftool/binwalk/upx/rizin/zip (in-window solvers are pure Python; analysis runs locally).
