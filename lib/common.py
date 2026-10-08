@@ -107,6 +107,18 @@ def iter_entries(root, max_depth=4):
         yield from walk(p.name, p.read_bytes, None, 0)
 
 
+def _bundle_under_own_name(p, cbase):
+    """p (saved as cbase) is a zip with >= 2 members, one named cbase, and EVERY member an archive: a GM bundle of
+    per-set containers saved under the first one's name -- not a container that merely holds a same-named file."""
+    try:
+        with zipfile.ZipFile(p) as z:
+            names = [Path(i.filename).name for i in z.infolist() if not i.is_dir()]
+    except (zipfile.BadZipFile, OSError):
+        return False
+    arch = (".zip", ".7z", ".apk", ".jar", ".tar", ".gz", ".tgz")
+    return len(names) >= 2 and cbase in names and all(n.lower().endswith(arch) for n in names)
+
+
 def find_artifact(root, artifact):
     """Locate the bytes for a contract artifact name.
     Handles 'container.zip -> member', plain files, files nested inside a zip (any depth), outer bundle zips that
@@ -125,6 +137,10 @@ def find_artifact(root, artifact):
                     return read_member(p, member)
                 except KeyError:
                     continue  # same-named outer bundle; look deeper
+            if not member and cbase.lower().endswith(".zip") and _bundle_under_own_name(p, cbase):
+                # a bundle of archives saved under its first member's name (D7 metadata Mastery: evidence-01.zip =
+                # {evidence-01.zip, evidence-02.zip}): the question means the member, not the bundle
+                return read_member(p, cbase)
             if not member and not cbase.lower().endswith(".zip") and zipfile.is_zipfile(p):
                 # a non-zip name saved as a zip = a bundle saved under its first member's name (Day 7 warmups
                 # Mastery: blob-01..33.txt zipped, saved as 'blob-01.txt'): return that member, not the whole bundle
@@ -163,6 +179,11 @@ def container_by_sha(root, contract, container):
             names.append(n)
     name = Path(container).name
     if not arts or name not in names:
+        return None
+    if (len(arts) == 1 and len(names) > 1) or any(a.get("kind") == "bundle" for a in arts):
+        # ONE download for several containers = a bundle (D7 metadata Mastery: `...-mastery.zip` holding evidence-01.zip
+        # + evidence-02.zip, saved as 'evidence-01.zip'): its hash is no container's -- pairing it to the first name
+        # answered set 1 from the whole bundle (2/2 blind replays). find_artifact resolves the member instead.
         return None
     i = names.index(name)
     if i >= len(arts) or (len(arts) != len(names) and len(arts) > 1):

@@ -5,6 +5,7 @@ Run:  source bin/env.sh && .venv/bin/python tests/test_variants.py      (exit 0 
 """
 import datetime as dt
 import hashlib
+import io
 import json
 import sys
 import tempfile
@@ -221,4 +222,32 @@ assert ch2._mutation_pre_result(wait=False) == ("", [])
 ch2._mut_pre_fut.set_result(("txt", ["c"], {}))
 assert ch2._mutation_pre_result(wait=False) == ("txt", ["c"])
 print("ok  mutation pre-probe: never blocks the speed gate; a finished result is still used")
+
+# 10) a Mastery BUNDLE saved under set 1's container name: set 1 resolves to the inner container, not the bundle
+#     (D7 metadata Mastery failed set1.evidence-note-filename this way in 2/2 blind replays)
+from lib.common import container_by_sha, find_artifact  # noqa: E402
+bd = Path(tempfile.mkdtemp())
+inner = {}
+for k in (1, 2):
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z:
+        z.writestr("evidence-note.txt", f"note {k}")
+    inner[f"evidence-0{k}.zip"] = b.getvalue()
+with zipfile.ZipFile(bd / "evidence-01.zip", "w") as z:     # how hb_timed saves the one bundle download
+    for n, data in inner.items():
+        z.writestr(n, data)
+bc = {"artifacts": [{"filename": "x-mastery.zip", "kind": "bundle",
+                     "sha256": hashlib.sha256((bd / "evidence-01.zip").read_bytes()).hexdigest()}],
+      "questions": [{"artifact": "evidence-01.zip"}, {"artifact": "evidence-02.zip -> evidence-note.txt"}]}
+assert container_by_sha(bd, bc, "evidence-01.zip") is None
+assert find_artifact(bd, "evidence-01.zip") == inner["evidence-01.zip"]
+assert find_artifact(bd, "evidence-02.zip") == inner["evidence-02.zip"]
+assert find_artifact(bd, "evidence-01.zip -> evidence-note.txt") == b"note 1"
+assert find_artifact(bd, "evidence-02.zip -> evidence-note.txt") == b"note 2"
+cd = Path(tempfile.mkdtemp())                                 # a container holding a same-named FILE stays itself
+with zipfile.ZipFile(cd / "evidence.zip", "w") as z:
+    z.writestr("evidence.zip", b"inner")
+    z.writestr("readme.txt", b"x")
+assert find_artifact(cd, "evidence.zip")[:2] == b"PK"
+print("ok  bundle saved under set 1's name: each set's container resolves to its own inner zip")
 print("ALL PASS")
