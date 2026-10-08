@@ -385,3 +385,18 @@ binary 518/534/1222. Without the incidents the run was ~T+9 (binary single T+8:3
   for workers, robust bisect (retry a hung probe, infer the clean-sibling half / last family), kind-aware label law.
 - **Single submits never went via Homebase** (ssh refused ssh_config inside bwrap): warmups waited 30 s of 429 backoff.
   Fix: `SSH_OPTS` starts with `-F /dev/null`.
+
+### Day 9 prep (2026-10-08 22:3x): failed-variant pull, warm workers, probe overlap, compounding probe
+- **Failed-variant pull, scoped:** only the deliveries covering the failing field families (`workers.deliveries_for`),
+  fetched as 10 parallel byte ranges over separate SSH connections (`remote.fetch_file`; the VPN caps each TCP flow),
+  sha256-checked. Binary D8 Mastery d7c5e016: 157 MB full pull 10-20 min -> delivery 1 only, **37.9 s** (6 streams
+  61 s, 12 streams 42 s, 16 streams trip sshd MaxStartups). Subset cases get a trimmed contract
+  (`timed.trim_to_present`); a localized `incorrect` now also builds the `variant-*` case (green watcher target).
+- **Warm Single workers:** launched at chain start on stream-json input (`workers.WarmWorker`): static prompt +
+  "reply READY", triage + go on handoff; stop gate allows the warm-up turn (flag file). Live: READY in 3.0 s, no tools.
+  Expected ~5 s/lane off the first tool call (D8: T+13-16 s). `HCTF_WARM_WORKERS=0` = cold.
+- **Probe overlap:** mutation + compounding probes run beside the first TT and are awaited before Mastery (or merged
+  into a TT-failure generalize); the codec-family probe stays blocking (script).
+- **Worker tools:** `--tools Bash,Read,Write,Edit,Skill,Task` (26 at init before). **GM backoff:** 2,4,4,... s cap,
+  8 retries (~30 s). **Mastery speed gate:** mutation probe's 2-set run -> estimate vs 2x the TT window.
+- **Pass captures** wait `HCTF_CAPTURE_GRACE` (6 s) so the next mode's kickoff starts first, then `wait_idle()`.
