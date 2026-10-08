@@ -174,8 +174,28 @@ def present_only(contract, art_dir, answers):
         containers[aid] = art.split(" -> ", 1)[0].strip()
     # one delivery for every question: the file may be saved under another name (artifacts/latest), keep all
     single = len({c for c in containers.values() if c}) <= 1 and len(have) >= 1
+    have |= _bundled(art_dir, have)
     return {aid: v for aid, v in answers.items()
             if single or not containers.get(aid) or containers[aid] in have}
+
+
+def _bundled(art_dir, names):
+    """Per-set containers delivered INSIDE a bundle zip (D7 metadata Mastery: one ...-mastery.zip = {evidence-01.zip,
+    evidence-02.zip}, saved as evidence-01.zip): set 2's container is present even though no file carries its name --
+    dropping it left every bundled auto-mastery case verifying set 1 only. Only a real bundle counts (>= 2 members,
+    all archives); first level only (member names, nothing decompressed)."""
+    import zipfile
+    arch = (".zip", ".7z", ".apk", ".jar", ".tar", ".gz", ".tgz")
+    out = set()
+    for n in names:
+        try:
+            with zipfile.ZipFile(Path(art_dir) / n) as z:
+                inner = [Path(i.filename).name for i in z.infolist() if not i.is_dir()]
+        except (zipfile.BadZipFile, OSError, ValueError):
+            continue
+        if len(inner) >= 2 and all(x.lower().endswith(arch) for x in inner):
+            out.update(inner)
+    return out
 
 
 def last_result(cid):

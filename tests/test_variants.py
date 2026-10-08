@@ -250,4 +250,15 @@ with zipfile.ZipFile(cd / "evidence.zip", "w") as z:
     z.writestr("readme.txt", b"x")
 assert find_artifact(cd, "evidence.zip")[:2] == b"PK"
 print("ok  bundle saved under set 1's name: each set's container resolves to its own inner zip")
+
+# 11) present_only keeps set 2 of a bundled Mastery (its container is a member of the bundle), still drops a set whose
+#     delivery is really missing
+from hctf import timed as _timed  # noqa: E402
+pc = {"answer_ids": ["set1.a", "set2.a"],
+      "questions": [{"artifact": "evidence-01.zip -> n.txt"}, {"artifact": "evidence-02.zip -> n.txt"}]}
+assert _timed.present_only(pc, bd, {"set1.a": "1", "set2.a": "2"}) == {"set1.a": "1", "set2.a": "2"}
+md = Path(tempfile.mkdtemp())
+(md / "evidence-01.zip").write_bytes(inner["evidence-01.zip"])     # set 2's delivery never fetched
+assert _timed.present_only(pc, md, {"set1.a": "1", "set2.a": "2"}) == {"set1.a": "1"}
+print("ok  present_only: bundled set 2 kept, a genuinely missing delivery still dropped")
 print("ALL PASS")
