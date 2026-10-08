@@ -303,4 +303,20 @@ print("ok  Homebase hot files: changed vocab/hb_timed pushed mid-run")
 #     the Single submit-via-Homebase path never fired on Day 7/8).
 assert workers.remote.SSH_OPTS[:2] == ["-F", "/dev/null"]
 print("ok  SSH_OPTS skip ssh_config (sandbox-safe)")
+# 14) Day 8 lane knowledge merged from the rehearsal copy's ratchet: HTML entities (warmups), v=3 analysis plans incl. hex_base64
+#     (script), integer ELF class/machine spellings (binary).
+from lib import decode as _decode, codec as _codec, elf as _elf  # noqa: E402
+assert _decode.decode_chunk("&#109;&#109;&#105;&#116;&#45;&#112;&#101;&#98;&#98;&#108;&#101;&#45;&#52;&#50;") \
+    == "mmit-pebble-42"                                                     # D8 mastery set1 line 8, GM-confirmed
+_v3 = ("<?php\n// HUNTRESS_ANALYSIS_V1:HB64-646a307a66484a7662475539633352685a325679664746306447466a617a31554d5445774e513d3d\n"
+       "$descriptor_ab12 = \"..\";\n")
+assert _codec.find_codecs(_v3)[-1]["plain"] == "v=3|role=stager|attack=T1105"                 # D8 hex_base64 marker
+assert _codec.decode("763d337c726f.6c653d78", "hex_compact", "identity") == "v=3|role=x"         # D8 FRAG dot-split hex
+_hb = _codec._format_like(b"v=3|role=x", "hex_base64", "646a")                                    # family re-encode
+assert _codec.decode(_hb, "hex_base64", "identity") == "v=3|role=x", _hb
+import platform  # noqa: E402
+if platform.machine() == "x86_64" and sys.platform.startswith("linux"):
+    _hdr = _elf.fields(open(os.path.realpath(sys.executable), "rb").read())[1]
+    assert (_hdr["elf_class"], _hdr["elf_class_int"], _hdr["machine"], _hdr["machine_int"]) == ("ELF64", "64", "x86-64", "62")
+print("ok  D8 lane knowledge: HTML entities, v=3 plans (hex_base64 round-trip), integer ELF class/machine")
 print("ALL PASS")

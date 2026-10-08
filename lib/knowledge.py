@@ -8,6 +8,9 @@ exact wording the GM wants instead of re-hitting the wrong-answer cap. Each entr
 ELF_ENDIANNESS = {"ELFDATA2LSB": "little", "ELFDATA2MSB": "big"}        # GM rejected "little endian"
 ELF_MACHINE = {"EM_X86_64": "x86-64", "EM_386": "x86", "EM_AARCH64": "AArch64", "EM_ARM": "ARM"}  # not "EM_X86_64"
 ELF_CLASS = {"ELFCLASS32": "ELF32", "ELFCLASS64": "ELF64"}             # readelf style, not "ELFCLASS64"
+# Day 8 "Swift Justice": answer_format.kind "integer" on the SAME field names -> elf_class = bit width "64" (not EI_CLASS
+# byte 2), machine = decimal e_machine "62" (single + TT + Mastery, 0 wrong; d01 text ELF64/x86-64 accepted alongside).
+ELF_CLASS_BITS = {"ELFCLASS32": "32", "ELFCLASS64": "64"}
 ELF_TYPE_AS_IS = True   # e_type submitted as the constant, e.g. "ET_EXEC" (not "EXEC")
 # Binary container "format" field (Day 2 "Mangled" cpp_format): bare lowercase family name.
 # CONFIRMED PER-FIELD (single-field submits, 2026-10-04): ELF -> "elf", PE -> "pe".
@@ -74,6 +77,12 @@ PDF_HEADER_VERSION_FMT = "{major}.{minor}"
 # (PK\x05\x06) of the zip NAMED after '->' (an inner zip, nested up to 3 deep) -- not the outer download's EOCD. Despite
 # the "Seven-Zip" title there was no 7z. Claimed vs walked counts always agreed, so which one wins on a mismatch is OPEN.
 ZIP_EOCD_TOTAL_ENTRIES_FMT = "{n}"
+
+# Day 8 "What's in the Box?" (metadata-forensics), confirmed 2026-10-08 (single, TT 6379d17c, Mastery 5 sets; 0 wrong):
+# zip.central_directory_member_names (answer_format.kind "json") is the compact JSON array of the FULL stored paths in
+# central-directory order -- no basename, dedupe or sort, e.g. ["room-01/item-1.txt","room-02/item-1.txt"] (basenames
+# collide, so the directory part is load-bearing). Eocd total entries re-confirmed "2" on the same zip.
+ZIP_CD_MEMBER_NAMES_FMT = {"separators": (",", ":")}   # json.dumps(names, **FMT); non-ASCII names not seen yet
 
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {
@@ -209,6 +218,15 @@ NODE_ROLE_ATTACK_CONFIRMED = {
     "benign_utility": "none", "stager": "T1105", "downloader": "T1105", "dropper": "T1140",
     "uploader": "T1041", "launcher": "T1059.007", "staged_chain": "T1059.007",
     "persistence_descriptor": "T1053.003",
+}
+# Day 8 "Lost in Translation" cross-language v=3 fixtures (polyglot-php-*, host-{php-webshell,wsf-jscript,wsf-mixed,
+# hta-jscript}-*; GM-confirmed single + TT 129bf46a + Mastery 07d5051a, 0 wrong). The plan (`HUNTRESS_ANALYSIS_V1:` /
+# `descriptor_<id>`, lib.codec.find_codecs) STATES role= and attack= -- submit both verbatim. The GM wants the PARENT
+# ids here: execution roles T1059 (even WSF-JScript / WSF-VBScript hosts, NOT .007/.005) and persistence T1053 (NOT
+# Node's .003). Steps don't predict the role on v=3 (php webshell decode>return_configuration = staged_chain).
+V3_ROLE_ATTACK_CONFIRMED = {
+    "benign_utility": "none", "stager": "T1105", "downloader": "T1105", "dropper": "T1140", "uploader": "T1041",
+    "launcher": "T1059", "staged_chain": "T1059", "persistence_descriptor": "T1053",
 }
 # Codec_ key field spellings seen in the generator's bytes (Bash, Day 6): contiguous hex for one-byte keys ('1b'), and
 # comma-separated hex bytes for multi-byte repeating_key_xor keys ('55,51,74,dd,3a'; Mastery 3bc5446b + GM-correct

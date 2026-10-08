@@ -209,6 +209,10 @@ def decode_chunk(p, _nested=False):
     if re.fullmatch(r"(?:%[0-9A-Fa-f]{2}|[^%\s])+", t) and len(re.findall(r"%[0-9A-Fa-f]{2}", t)) * 3 >= len(t) // 2:
         # URL percent-encoding (warmups Day 7 "Percent Chance": line 7 = '%2d%69%73...'), mostly %XX by length
         cands.append((_ascii(urllib.parse.unquote_to_bytes(t)), 0))
+    if re.fullmatch(r"(?:&(?:#\d+|#[xX][0-9a-fA-F]+|[A-Za-z]+\d*);)+", t):
+        # HTML character entities (warmups Day 8 "Entity Relations": line 8 = '&#109;&#109;&#105;...'), whole fragment
+        import html
+        cands.append((html.unescape(t), 0))
     if _BINS.match(t):
         bits = re.sub(r"[\s,]", "", t)
         cands.append((_ascii(int(bits, 2).to_bytes(len(bits) // 8, "big")), 0))

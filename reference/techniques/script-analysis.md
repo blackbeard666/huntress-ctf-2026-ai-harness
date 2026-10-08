@@ -1,26 +1,36 @@
-# script-analysis — technique log (days 1-7; updated after every day)
+# script-analysis — technique log (days 1-8; updated after every day)
 
 How this lane has looked so far (these are observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
   guarantee for Time Trial / Mastery -- solvers derive structure and degrade per field.
-- There is one AES zip, `evidence.zip` (password `infected`), of inert "Huntress Script Triage" fixtures. **The contract is CUMULATIVE.** Each day keeps every earlier language's files and questions and adds ONE new host language. The bytes and values re-roll every day:
+- There is one AES zip, `evidence.zip` (password `infected`), of inert "Huntress Script Triage" fixtures. **The contract is CUMULATIVE.** Each day keeps every earlier language's files and questions and adds ONE new host language or host format. The bytes and values re-roll every day:
   PS (d1, 15 ids) -> +JScript (d2, 87) -> +Batch (d3, 159) -> +VBScript (d4, 231) -> +Python (d5, 357) -> +Bash (d6, 399)
-  -> +Node.js `.mjs` and 2 Bash advanced-syntax fixtures (d7, 469). The title names the new language; the prompt names its NEW roles.
+  -> +Node.js `.mjs` and 2 Bash advanced-syntax fixtures (d7, 469) -> +8 PHP "polyglot" files, 4 WSF/HTA/PHP-webshell "host"
+  files and 2 more Bash advanced fixtures (d8, 615). The title names the new language; the prompt names its NEW roles.
 - From day 2 on, every fixture hides a **self-describing plan**: `v=N|steps=a,b|adapter=..|stage_count=..|campaign_id=..|<indicators>`. It sits behind a codec, usually named in a `Codec_<id>` / `CODEC_<id>` / `rem HUNTRESS-CODEC:` const of the form `rep|transform|key`. Most exact_text answers are plan values copied verbatim.
+  From D8 there is also a **`v=3` plan**: it carries `role=` and `attack=` itself, and sits behind a `HUNTRESS_ANALYSIS_V1:<TAG>-` comment.
 - The hard part is **naming CODE SHAPE**: control-flow, expansion, and function/invocation/property styles. These are GM synthetic labels that are not in the plan. Role and scenario are enums, so read `accepted_values`.
 - Files are named by behaviour (host-context, memory-stage, embedded-write, remote-write, local-dispatch, staged-handoff/-chain, outbound-transfer, impact-plan, relay-handoff, schedule-descriptor). The answer-id is `<lang>-<role>-<field>`, and the artifact path picks the file. Don't trust the file name over the plan `steps`.
-- Time Trial windows are about 5-13 s (30 s on d1). Mastery is 2 sets: `setN.` ids, and the artifact is `evidence-0N.zip` or (d6) `delivery N: evidence.zip`, or (d7) ONE download holding both `evidence-01.zip` + `evidence-02.zip`. Same-named deliveries: pair them by sha256.
+- Time Trial windows are about 5-13 s (30 s on d1). Mastery has `setN.` ids: 2 sets on d2-d7, **5 sets / 3075 ids / 22 s on d8**.
+  The artifact was `evidence-0N.zip`, or (d6) `delivery N: evidence.zip`, or (d7-d8) ONE download `evidence-01.zip` that holds
+  every `evidence-0N.zip`. Same-named deliveries: pair them by sha256.
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants of the SAME day -- parse every value listed)
-Each miss below cost one failed timed attempt + a ~45-90 s generalize cycle (D6 replay: 4 cycles; D7: 1 cycle).
+Each miss below cost one failed timed attempt + a ~45-90 s generalize cycle (D6 replay: 4 cycles; D7: 1 cycle; D8: 0).
 - **Codec per file** -- rep x transform x key re-rolls per variant; never bind a role to the sample's codec. **NEW rep
   NAMES appear only on variants** (D7 TT: `unicode_escapes` `\u00XX..`, `json_numbers` `[232,241,..]`,
   `reversed_base64`, Bash `xor_hex|cd`). Decode by the material's SHAPE (escapes / int array / hex / base64, each also
   reversed) x the named transform, and accept only output starting `v=`; the name only orders the tries.
 - **Codec spec arity** -- 3 fields `rep|transform|key`, 2 fields `rep|` (empty transform = identity; D7 bash advanced
-  fixtures), or the transform folded into the rep with the key second (`xor_hex|cd`). Split on `|`, never index blindly.
-  lib.codec (`_spec`) now normalises both short forms and decodes every D7 rep (json_numbers, unicode_escapes,
-  reversed_base64, xor_hex): 336/336 D7 codecs.
+  fixtures), or the transform folded into the rep with the key second (`xor_hex|cd`, D8 `xor_hex|11`, `xor_hex|d8`).
+  Split on `|`, never index blindly. lib.codec (`_spec`) normalises both short forms; every D7/D8 codec rep decodes in lib.codec.
+- **Plan carrier tag (v=3, D8)** -- `HUNTRESS_ANALYSIS_V1:<TAG>-<data>`, plus the same data in `descriptor_<id> = ".."`.
+  Values: `B64` (base64), `HEX` (plain hex), `HB64` (hex of base64 text = 2 layers), `FRAG` (hex split by `.` every 24 chars).
+  Across single + TT + 5 Mastery sets the tag stayed fixed per file; only the values re-rolled. Parse rule: ignore the tag
+  name. Peel by shape and recurse (max 3 layers): if the text is only hex digits plus `.:,-_ |\x%` separators, strip the
+  separators and unhex; otherwise base64 (also reversed). Accept only a result starting `v=`. The tag = `obfuscation_profile`.
+  LIB (ratchet D8): `lib.codec.find_codecs(src)` now returns the v=3 plan (tag -> rep: B64 base64_literal, HEX/FRAG
+  hex_compact, HB64 new rep `hex_base64`), 84/84 D8 fixtures; ATT&CK = plan's `attack=` (`knowledge.V3_ROLE_ATTACK_CONFIRMED`).
 - **Numeric literal radix** -- the same array/constant may be decimal `23,7`, hex `0x17,0x07`, or a separator-joined
   string decoded with `parseInt(x, R)` / `int(x, R)`: READ THE RADIX FROM THE CODE, never guess it from the digits
   (D6: JScript material array hex on TT; decoder constants `^ 0x56`; Mastery dash-joined DECIMALS with
@@ -29,15 +39,18 @@ Each miss below cost one failed timed attempt + a ~45-90 s generalize cycle (D6 
 - **Reversal level** -- `reversed_hex/_decimal/_integer_list` reverse the loaded LIST; `reversed_base64` reverses the
   TEXT before decoding (`==Adu..`). Try both orders.
 - **Carrier of the same language** -- plain source vs a frozen executable (D6: Python plan inside a cx_Freeze build on
-  a TT variant). Locate the material by its markers (`MATERIAL_`/`CODEC_`/`v=`), not by the file type of the sample.
-- **Material layout** -- one literal, split chunks, `+=` concatenation, adjacent quoted strings; join before decoding.
+  a TT variant). Locate the material by its markers (`MATERIAL_`/`CODEC_`/`v=`/`HUNTRESS_ANALYSIS_`), not by file type.
+- **Material layout** -- one literal, split chunks, `+=` concatenation, adjacent quoted strings, `.`-separated FRAG
+  fragments; join before decoding.
 - **Adapter values** re-roll within a role (Node stager http_then_module/https_then_vm/fetch_then_function; launcher
   execfile_node/fork_module/spawn_file; persistence systemd_descriptor/npm_lifecycle_descriptor) -- always plan-verbatim.
+- **D8 cases** auto-time_trial-129bf46a, auto-mastery-07d5051a (5 sets): no new axis. Values re-rolled; structure, tags,
+  role/attack/steps/profiles were identical to the single solve. Both were CORRECT on the first try.
 
 ## Recognition cues -> first move
 | You see | First move |
 |---|---|
-| `evidence.zip`, "method=AES Encrypted" | Already extracted by triage (`work/extracted/`, password `infected`) and every plan decoded in triage.md -- start from that, BUT diff the extracted member list against the contract's `artifact` names: triage silently skipped D7's new `.mjs` extension (no decode lines at all). In solve.py open members with `lib.common.read_member` (Python zipfile cannot read AES). Mastery may be a zip inside a zip; walk it once. |
+| `evidence.zip`, "method=AES Encrypted" | Already extracted by triage (`work/extracted/`, password `infected`) and every plan decoded in triage.md -- start from that, BUT diff the extracted member list against the contract's `artifact` names. Triage silently skipped new extensions: D7 `.mjs` (no decode lines) and D8 `.php` (0 of 8 decoded; HB64 peeled only 1 layer). In solve.py open members with `lib.common.read_member` (Python zipfile cannot read AES). Mastery may be a zip inside a zip; walk it once. |
 | Prior-day languages in the contract | Cumulative: derive every family from TODAY's bytes with the shared codec method below (never copy/run an old solver). Spend thinking on the new language. |
 | `.ps1` with `$encodedMaterial = [Convert]::FromBase64String('..')` + `$reconstruct` + `$nativeTypes` | `base64 -d` -> JSON descriptor (short keys a/b/c..): url/wallet/mutex/UA/file/ext/note. Match indicators by SHAPE, not key. `$nativeTypes` gives the scenario: Process/Registry+wallet=resource, ZipFile/HttpWebRequest=collection, Aes/DirectoryInfo=impact. |
 | `.js` WSH, `decode_*`/`recover_*`/`inspect_*`, XOR key arrays, `"52:90:.."` strings | Run each file in an empty `node` `vm` context (no require/ActiveXObject), `eval` swapped for a capture. Call the top-level functions and keep the first object that has `steps`. Read the styles off the `inspect_*` body. |
@@ -45,12 +58,13 @@ Each miss below cost one failed timed attempt + a ~45-90 s generalize cycle (D6 
 | `.vbs` with `Const Material_<id>`, `Const Codec_<id> = "rep|transform|key"`, `Load_/Decode_/Recover_<id>` | Decode in Python from the Codec const, cross-check against the Load/Decode code (no cscript). rep/transform answers = Codec fields 1/2 verbatim. Control = the construct wrapping the `Decode_` call inside `Recover_`. |
 | `.py` `*-recovered.py` with `MATERIAL_<id>`, `CODEC_<id>`, `load_/decode_/surface_/plan_<id>` | Already-recovered source (no decompile on d5). Decode from CODEC or run `decode_(load_(MATERIAL))` under an AST whitelist. Plan v=2 carries syntax/obfuscation/carrier/windows_chain verbatim. |
 | `.sh` `readonly Material_<id>='..'` + `readonly Codec_<id>='rep|transform|key'` | Decode from the Codec const (key hex; multi-byte key = COMMA list). Re-join split/`+=`/adjacent-quoted chunks. Never run bash. |
-| `.sh` with `Feature_<id>()` (`${!pointer}`, `local -a parts=('cu' 'rl')`), plan `v=1|feature=..|primitive=..` | Role `advanced_syntax` (closed enum value). feature/primitive/campaign/stage_count/steps are plan-verbatim; attack = T1059.004. |
+| `.sh` with `Feature_<id>()` (`${!pointer}`, `local -a parts=('cu' 'rl')`, `local -A`, `${arr[@]:1:2}`), plan `v=1|feature=..|primitive=..` | Role `advanced_syntax` (closed enum value). feature/primitive/campaign/stage_count/steps are plan-verbatim; attack = T1059.004. |
 | `.mjs` ESM: `const Material_<id> = ".."; const Codec_<id> = "rep|transform|key"`, async `load_/decode_/recover_/inspect_/plan_<id>`, `process.env.HUNTRESS_INSPECT_ONLY` | Static decode with `lib.codec.find_codecs` + shape fallback (reps hex_buffer, hex_array, escaped_octets `\\xNN`, decimal_array, unicode_escapes, json_numbers). Don't run it (top-level await, Buffer/vm). Plan fields verbatim; role from `steps`. |
+| `// HUNTRESS_ANALYSIS_V1:<B64|HEX|HB64|FRAG>-..` + `descriptor_<id> = ".."` (`.php` `declare(strict_types=1)`; `.js` that is really HTA `<html><hta:application>` or a WSF `<job><script language="JScript">`; `.vbs` that is a WSF job mixing VBScript+JScript) | **Route by the marker, before the extension** (the extension lies). Peel the descriptor by shape to `v=3|language=..|role=..|attack=..|adapter=..|host_profile=..|obfuscation_profile=..|stage_profile=..|next_language=..|stage_count=..|steps=..|campaign_id=..|url=..|file_path=..`. EVERY answer, including role and attack, is plan-verbatim. Python `-I` + base64/bytes.fromhex is enough. |
 | Real `.pyc` / PyInstaller / pyarmor (not seen yet) | `lib.pyc.recover_python(path)` (pyinstxtractor-ng + decompyle3, `dis` fallback). See skills/script-analysis. |
 | Any `Codec_` key like `ba` / `0a` | A hex byte, not text. Transforms are named for the ENCODE side: `subtract_modulo_256` decodes by ADDING, `add_modulo_256` by SUBTRACTING. `rolling_xor` = c ^ previous CIPHER byte, seeded with the key. |
 
-## Codec table (`Codec_<id>='<rep>|<transform>|<key>'`, batch `rem HUNTRESS-CODEC:<rep>|<transform>`; seen D3-D7)
+## Codec table (`Codec_<id>='<rep>|<transform>|<key>'`, batch `rem HUNTRESS-CODEC:<rep>|<transform>`; seen D3-D8)
 **Already done for you:** triage.md's "Decoded payloads" runs `lib.codec` on every declared codec (and a node vm
 sandbox on JScript). In solve.py call `lib.codec.find_codecs(text)` / `lib.codec.decode(material, rep, transform, key)`
 (pure Python, Homebase-safe, unknown names -> None). A line `NOT decoded by lib.codec` = new rep/transform/arity: decode
@@ -105,10 +119,46 @@ that will never execute. Spot the indirect expansions and token fragmentation, t
 - NOTES.md's "VARIANT AXIS: none" came from the 2nd generalize worker, which looked only at the rate-limited attempt.
   The real axis was the new reps found by the 1st worker. **Diagnose EVERY failed attempt, not only the latest.**
 
+**D8 Lost in Translation (+8 PHP polyglot, +4 host-format, +2 Bash advanced; 615 ids)**: prompt: "The same indicators show
+up in every language the campaign speaks, each with its own quoting, escaping, and encoding accent. Normalize them ...
+find the one that doesn't match its siblings". No question asked for an outlier; the prompt is flavour.
+- Artifact: AES `evidence.zip` with 75 members, the D7 set plus:
+  - `polyglot-php-<role>.php` (8 roles);
+  - `host-wsf-jscript-jscript.js`, `host-wsf-mixed-vbscript.vbs` (WSF job markup), `host-hta-jscript-javascript.js`
+    (HTA HTML), `host-php-webshell-php.php`;
+  - `associative-arrays.sh`, `array-slicing.sh` (`local -A`, `${values[@]:1:2}`; feature associative_arrays|array_slicing,
+    primitive declare_associative|indexed_array_slice).
+- Key insight: the new files carry a `v=3` plan behind `HUNTRESS_ANALYSIS_V1:<TAG>-` + `descriptor_<id>`. The comment and
+  the descriptor were byte-identical in every file of all 7 deliveries. The plan states role/attack/adapter/profiles itself,
+  so **copy it, do not derive it**. v=3 steps do NOT predict role (an uploader had `decode_configuration,return_configuration`;
+  a launcher had `acquire_remote,dispatch_process`).
+- New fields (all plan-verbatim):
+  - host-profile: standalone | wsf_jscript | wsf_mixed | hta_jscript | php_webshell
+  - obfuscation (= `obfuscation_profile`): base64 | plain_hex | hex_base64 | fragmented_hex
+  - stage-profile: single_descriptor | two_stage_download_execute | three_stage_decode_write_launch | cross_language_handoff
+  - next-language: powershell/jscript/javascript/vbscript/batch/python/bash/php
+  - The adapters were abstract: local_parser, runtime_loader, file_writer, http_client, process_builder, schedule_builder,
+    operation_graph.
+- Method: copy D7 solver, add a v=3 branch that runs BEFORE extension routing (marker regex; recursive shape peel; plan_kv;
+  `steps` comma->`>`). The worker hand-decoded all 12 descriptors with a 10-line `python3 -I` (B64/HEX/HB64/FRAG) first.
+- Time: start 15:43:58 -> submit 609/615 accepted 15:45:26 -> CORRECT 15:46:07 (**~2 min 10 s, 2 submits, 0 wrong**).
+  The 6 misses were the new Bash families: ids like `bash-advanced-associative-arrays-feature` have hyphenated family
+  names, so the prefix-strip regex left `arrays-feature`. Fix: match the field as the longest known `-<field>` SUFFIX.
+- TT (9 s window) CORRECT 1st try, 2.1 s in-window (start 0.58, download 0.27, solve 1.04, submit 0.8). Mastery (22 s,
+  5 sets, 3075 ids, one bundle with evidence-01..05.zip) CORRECT 1st try, 5.6 s in-window (solve 4.1 s).
+
 ## GM answer conventions learned
 - **Check `answer_format.kind` first.** `enum` gives the list (scenario, role). `mitre_attack_id` takes `T####[.###]` or literal `none` (benign_utility). `integer`/`ordered_tokens` (d6+). `exact_text` = plan value or synthetic label.
-- **Plan-verbatim fields** (copy exactly): adapter (COM ProgIDs `MSXML2.ServerXMLHTTP.6.0`, LOLBins `CertReq.exe`, batch `call`/`set`/`for`, Node `console_report`/`typed_array_to_file`/`stream_pipeline`), campaign_id, host_id, url, file_path, upload_url, next_stage, extension, note_name, handoff_id, cron_path, schedule_path, service_name, batch `graph`, Python syntax/obfuscation/carrier/windows_chain, Bash feature/primitive. Indicator questions read "exact X indicator", where X is the plan key.
-- **Role from `steps`**:
+- **Plan-verbatim fields** (copy exactly):
+  - adapter: COM ProgIDs `MSXML2.ServerXMLHTTP.6.0`, LOLBins `CertReq.exe`, batch `call`/`set`/`for`, Node
+    `console_report`/`typed_array_to_file`/`stream_pipeline`, D8 `http_client`/`operation_graph`.
+  - indicators: campaign_id, host_id, url, file_path, upload_url, next_stage, extension, note_name, handoff_id, cron_path,
+    schedule_path, service_name. Indicator questions read "exact X indicator", where X is the plan key.
+  - per-language labels: batch `graph`, Python syntax/obfuscation/carrier/windows_chain, Bash feature/primitive,
+    D8 v=3 host_profile/obfuscation_profile/stage_profile/next_language.
+  - **v=3 role and attack too.** GM accepted the plan's PARENT technique ids: `T1059` (launcher, staged_chain) and `T1053`
+    (persistence_descriptor), NOT the host-language sub-technique. The role->ATT&CK table below is for v=1/v=2 plans only.
+- **Role from `steps`** (v=1/v=2 plans; v=3 states `role=`):
 
   | steps | role |
   |---|---|
@@ -120,7 +170,7 @@ that will never execute. Spot the indirect expansions and token fragmentation, t
   | read_file/upload,transmit_remote | uploader |
   | transform + recovery_note | impact |
   | build_schedule,register_descriptor (Node d7) | persistence_descriptor |
-  | recognize_syntax,reconstruct_intent + plan `feature=` (Bash d7) | advanced_syntax |
+  | recognize_syntax,reconstruct_intent + plan `feature=` (Bash d7-d8) | advanced_syntax |
   | ends in handoff_script (JS/Batch/VBS) or profile_host..dispatch_process | staged_chain |
   | dispatch_next_stage (Python) | relay |
 
@@ -147,7 +197,7 @@ that will never execute. Spot the indirect expansions and token fragmentation, t
   for_once. REJECTED: do_loop, do_exit, while_wend, while_loop, on_error_resume.
 - **Codec labels**: representation/transform = the codec const's fields 1/2 copied VERBATIM; spellings differ per
   language (Python `decimal_csv`, batch `decimal_bytes|reverse_xor`): read the const, never translate.
-- **JScript styles** (closed sets in the question text; GM-confirmed D2-D7):
+- **JScript styles** (closed sets in the question text; GM-confirmed D2-D8):
   - function-style: `function f(` = declaration; `var f = function(` = anonymous_expression; `var f = function f_body(` = named_expression.
   - invocation-style: how recover/inspect invokes the next top-level function: `f(x)` = direct, `f.call(..)` (also via
     a local `invoke` helper doing `block.call`) = call, `f.apply(..)` = apply.
@@ -160,6 +210,12 @@ that will never execute. Spot the indirect expansions and token fragmentation, t
 - **Probing synonyms instead of deriving.** D3 lost ~1.5 h and two fields hit the 6-wrong cap on `if defined`. Apply the naming laws first; `hctf labels` seeds candidates from lib/playbook.py.
 - **Per-set POST is all-or-nothing.** One wrong field fails the whole batch; `--from-solver` bisects and prints the rejected id(s). Probe uncertain label fields ONE per submit; the wrong cap is per field.
 - **Generic ATT&CK guesses** (d1 collection, d2 launcher/stager/dropper): use the role->ATT&CK table. Adapter names (regsvr32, systemd_descriptor) do NOT change the technique.
+  Exception: a plan that states `attack=` (v=3) is authoritative even when it is a parent id (T1059, T1053).
+- **Routing by file extension** (D8): `.js` held HTA/WSF markup and `.vbs` held a WSF job with VBScript+JScript. The
+  extension-based JS/VBS paths would mis-parse them. Check for the plan marker first; use the extension only as a fallback.
+- **Answer-id field parsing** (D8, 6 ids lost on the 1st submit): new family names contain hyphens
+  (`bash-advanced-associative-arrays-feature`, `polyglot-php-persistence-descriptor-stage-profile`). Resolve the field
+  as the longest known `-<field>` suffix (`stage-count`/`stage-profile` before `stage`), not by a prefix-strip regex.
 - **GM error body saved as the artifact** (D7 TT 26b7da83): `{"error":"rate_limited"}` (24 B) landed as `evidence.zip`,
   so every field came out None/default. Before solving/diagnosing, check artifact size + sha256 against the contract
   `sha256`; a tiny JSON `{"error":..}` = transport failure (retry), NOT a variant. Solvers should exit non-zero on it.
@@ -170,7 +226,8 @@ that will never execute. Spot the indirect expansions and token fragmentation, t
 - **Bash Codec key**: comma-separated multi-byte keys parsed as contiguous hex silently give key [0]. Use `lib.scripts.codec_key()`.
 - **stage_count != len(steps)** (d6). Read the plan field.
 - **Timed modes are a transport race.** D2 Mastery expired (downloads ate 4-5 s of 6 s; sets submitted serially). D7 TT
-  spent 13.5 s for 0.4 s of solving (start 3.9, download 3.1, submit 6.0). Solver ~0.2-1.5 s; submit all sets in one call.
+  spent 13.5 s for 0.4 s of solving (start 3.9, download 3.1, submit 6.0); D8 transport was fast (start 0.6-1.5 s).
+  Solver ~0.2-4 s (D8 Mastery: 5 sets in 4.1 s); submit all sets in one call.
 - **Same-name deliveries.** Pair Mastery files by sha256; if delivery 2 is missing, leave set 2 unanswered rather than
   reuse set 1's members (confidently wrong 42-174 times in regression cases).
 - **Re-walking nested AES zips per question** cost ~1.3 s (903 PBKDF2 runs). Index the tree once.

@@ -31,6 +31,7 @@ REPS = {
     "reversed_integer_list": 5, "urlsafe_base64": 5,
     "decimal_colon": 6, "decimal_space": 6, "octal_space": 6, "percent_hex": 6,
     "json_numbers": 7, "unicode_escapes": 7, "reversed_base64": 7, "xor_hex": 7,
+    "hex_base64": 8,
 }
 TRANSFORMS = {
     "identity": 3, "reverse": 3, "add_7": 3, "xor_5a": 3, "rotate_left": 3, "reverse_xor": 3,
@@ -167,7 +168,10 @@ def _rep_candidates(rep, material):
     """All plausible byte readings of the written material for this rep (most likely first)."""
     m = material or ""
     c = []
-    if "base64" in rep:
+    if rep.startswith(("hex_base64", "hex_b64")):   # D8 v=3 `HB64`: hex digits of a base64 text (GM label hex_base64)
+        h = hex_bytes(m)
+        c += [b64(h.decode("latin-1")) if h else None, h]
+    elif "base64" in rep:
         c.append(b64(m))
         c.append(b64(m[::-1]))
     elif rep.startswith("reversed_hex"):
@@ -343,6 +347,10 @@ def _fallback(material, rep, transform, key):
 _CODEC_RE = re.compile(r"""(?:Codec|CODEC)_(?P<id>[0-9A-Za-z]+)\s*=\s*["'](?P<spec>[^"']*)["']""")
 _BATCH_CODEC_RE = re.compile(r"HUNTRESS-CODEC:\s*(?P<spec>\S+)")
 _BATCH_MAT_RE = re.compile(r"HUNTRESS-MATERIAL:\s*(?P<mat>\S+)")
+# D8 cross-language v=3 fixtures (.php, .wsf/.hta markup inside .js/.vbs): `HUNTRESS_ANALYSIS_V1:<TAG>-<data>` comment +
+# the same data in a `descriptor_<id>` literal; identity transform. FRAG = dot-separated hex fragments.
+_ANALYSIS_RE = re.compile(r"""HUNTRESS_ANALYSIS_V\d+:(?P<tag>[A-Za-z0-9_]+)-(?P<mat>[^\s"'<]+)""")
+_ANALYSIS_TAG_REP = {"B64": "base64_literal", "HEX": "hex_compact", "HB64": "hex_base64", "FRAG": "hex_compact"}
 
 
 def material_text(src, ident):
@@ -394,6 +402,12 @@ def find_codecs(src):
         mat = bm.group("mat") if bm else None
         out.append({"id": "batch", "rep": rep, "transform": tr, "key": key, "material": mat,
                     "plain": decode(mat, rep, tr, key)})
+    am = _ANALYSIS_RE.search(src or "")
+    if am:
+        rep = _ANALYSIS_TAG_REP.get(am.group("tag").upper(), am.group("tag").lower())
+        dm = re.search(r"descriptor_(\w+)", src)
+        out.append({"id": dm.group(1) if dm else "analysis", "rep": rep, "transform": "identity", "key": "",
+                    "material": am.group("mat"), "plain": decode(am.group("mat"), rep, "identity")})
     return out
 
 
@@ -437,6 +451,9 @@ def _encode_transform(p, transform, key):
 
 def _format_like(data, rep, sample):
     """Write `data` the way `sample` (a real material of `rep`) is written."""
+    if rep.startswith(("hex_base64", "hex_b64")):   # hex digits of the base64 text (D8 v=3 HB64), case like the sample
+        s = base64.b64encode(data).hex()
+        return s.upper() if sample and re.search(r"[A-F]", sample) and not re.search(r"[a-f]", sample) else s
     if "base64" in rep:
         s = base64.b64encode(data).decode()
         if "urlsafe" in rep or (sample and re.search(r"[-_]", sample) and not re.search(r"[+/]", sample)):

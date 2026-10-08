@@ -1,21 +1,24 @@
-# warmups — technique log (days 1-7; updated after every day)
+# warmups — technique log (days 1-8; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
   guarantee for Time Trial / Mastery -- solvers derive structure and degrade per field.
 - Each day: one `blob.txt`. Decode it until a plain English sentence appears; its final non-empty line ends "...submit this exact answer to the Game Master: <slug>". The slug is `word-word-word-NN` (`answer_format.kind=pattern`, `normalization=trim`). Same single question id `message` every day.
-- The ENCODING changes daily and the title/prompt is a pun naming it: 64 -> base64, "thirteen steps"/half a turn -> ROT13, sixteen fingers -> hex, "two sides" -> 8-bit binary, "reduced to numbers" -> decimal char codes, "eight fingers" -> octal, "address bar"/"Percent" -> URL percent-encoding. Every single_solve so far was ONE layer.
-- Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, 18, 23, 28, 33). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, in that order so far). The last line has no trailing newline. The fragments join verbatim (split mid-word) into the same sentence.
-- Clocks: TT about 5-7 s from day 2 on (30 s on day 1), mastery about 5-7 s from day 2 on, 9 s on day 7 (grows slowly with the set count). Only a deterministic solver survives these windows. The single_solve is untimed.
+- The ENCODING changes daily and the title/prompt is a pun naming it: 64 -> base64, "thirteen steps"/half a turn -> ROT13, sixteen fingers -> hex, "two sides" -> 8-bit binary, "reduced to numbers" -> decimal char codes, "eight fingers" -> octal, "address bar"/"Percent" -> URL percent-encoding, "the browser understands"/"Entity" -> HTML character entities. Every single_solve so far was ONE layer.
+- Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, ..., 33, 38). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, html-entity, in that order so far). The last line has no trailing newline. The fragments join verbatim (split mid-word) into the same sentence.
+- Clocks: TT about 5-8 s from day 2 on (30 s on day 1), mastery about 5-9 s (9 s on day 7, 8 s on day 8 with MORE sets: the window does not reliably grow with the set count). Only a deterministic solver survives these windows. The single_solve is untimed.
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
-- **Encoding per line** -- Mastery line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, ...); detect
-  each line's encoding from its alphabet, not its position (position-based detection breaks if the order changes).
+- **Encoding per line** -- Mastery line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, `&#NNN;`
+  entities, ...); detect each line's encoding from its alphabet, not its position (position-based detection breaks if the order
+  changes). Rule for "escape-token" encodings (url `%xx`, entities): accept when the WHOLE fragment is tokens of that kind
+  (`re.sub(token,'',frag).strip()==''`), then use the stdlib decoder (`unquote`, `html.unescape`) so the unseen forms
+  (`%XX` upper, `&#x6d;` hex, `&amp;` named) are covered too. Day 8 GM bytes used only decimal `&#NNN;` in all 40 blobs.
 - **Line wrapper** -- `NN<TAB>fragment` numbering; fragments split mid-word and join verbatim in number order.
-- **Set count** -- grows by 5 per day (33 on day 7); the solver must loop over whatever the contract lists.
+- **Set count** -- grows by 5 per day (33 on day 7, 38 on day 8); the solver must loop over whatever the contract lists.
 - **Delivery shape** -- mastery bytes arrive as ONE zip saved under the first member's name (`blob-01.txt`; the contract has NO
-  `artifacts[]`, only a top-level `sha256` = the zip). Set 1's question names that same file: read the MEMBER, never decode the whole bundle.
-- **Payload only** -- TT/single differ only in the slug and length (318 vs 333 bytes); same sentence and encoding.
+  `artifacts[]`, only a top-level `sha256` = the zip; same on days 7 and 8). Set 1's question names that same file: read the MEMBER, never decode the whole bundle.
+- **Payload only** -- TT/single differ only in the slug and length (day 7: 318 vs 333 bytes; day 8: 620 vs 621); same sentence and encoding.
 
 ## Recognition cues -> first move
 | What you see | First move |
@@ -27,6 +30,7 @@ How this lane has looked so far (observations, not guarantees):
 | Space-separated 2-3 digit tokens, max <=127, unpadded (`32`, `78`) | decimal char codes: `python3 -c "print(''.join(chr(int(t)) for t in open('blob.txt').read().split()))"` |
 | 3-digit tokens, digits 0-7 only, zero-padded (`040`, `116`) | octal: same, with `int(t,8)` |
 | `%4e%69%63...` (every char incl. letters/spaces as lowercase `%xx`, no line end) | URL decode: `python3 -c "import sys,urllib.parse;print(urllib.parse.unquote(open(sys.argv[1]).read()))" blob.txt`. Test `%[0-9a-f]{2}` BEFORE hex/b64 |
+| `&#78;&#105;&#99;...` (only `&...;` tokens, no line end) | HTML entities: `python3 -c "import html,sys;print(html.unescape(open(sys.argv[1]).read()))" blob.txt` (covers `&#x..;` and named too) |
 | `A-Z2-7=` | `base32 -d` |
 | Magic `PK\x03\x04` even if named `.txt` (mastery `blob-01.txt`) | `unzip -l`. It is a bundle of all sets `blob-01..NN.txt` |
 | Lines `01<TAB>...`, `02<TAB>...` | Strip the `NN\t` prefix. Decode EACH line with its own encoding and concatenate without separators. Keep leading/trailing spaces |
@@ -72,9 +76,21 @@ The generic path is `lib.decode.peel(data, accept)` (BFS over encodings) plus th
 - TT window 7 s, CORRECT at 2.4 s. Mastery 33 sets x 7 lines (+ url line), window 9 s.
 - Mastery attempt 1 failed: set1 resolved to the WHOLE zip (bundle saved as `blob-01.txt`, a name match returned the outer file), so unquote over all 33 members gave another set's slug fragment (`py-storm-dune-80` from set 27's `zippy-...`) -> incorrect; set26 then `expired`. After `lib.common.find_artifact` was patched to return the same-named member, attempt 2 was CORRECT (7.1 s of 9 s; the start call alone took 2.9 s).
 
+**Day 8: Entity Relations** ("The browser understands. Do you?" -- HTML character entities, what a browser renders).
+- LIB (ratchet D8): `lib.decode.decode_chunk` now has a strict whole-fragment HTML-entity branch (decimal/hex/named);
+  `decode_chunked` alone reproduces all 38 D8 mastery slugs -- import it, don't re-type the entity regex.
+- 620-byte blob of decimal HTML entities only (`&#78;&#105;&#99;...`, no line end), ONE layer -> `html.unescape` -> slug.
+  Triage's deterministic preview already said "riddle -> HTML character entities".
+- A pre-warmed worker made 2 tool calls: `html.unescape` plus a `lib.decode.decode_chunk` cross-check (it also handles entities,
+  via its generic fallback), then patched the solver and submitted. Start (15:43:54Z) -> CORRECT (15:44:12Z) about 18 s, first submit.
+- Solver: if a fragment is all `&...;` tokens -> `html.unescape`, else `decode_chunk`. TT window 8 s, CORRECT at 2.6 s.
+  Mastery 38 sets x 8 lines (+ entity line), zip bundle, window 8 s, CORRECT at 1.6 s (solve 0.2 s). Both on attempt 1.
+- Near-miss: the worker's in-place `str.replace` patch for `fallback()` silently matched nothing (the docstring wrapping
+  differed), so the fallback stayed `return None`. It didn't matter here, but check that each patch actually applied.
+
 ## GM answer conventions learned
 - Submit the slug ONLY, exactly as decoded (lowercase, hyphens, 2-digit number). Not the whole sentence and not "Game Master: ...". `trim` normalization only.
-- No correctly decoded warmups answer has been rejected. The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
+- No correctly decoded warmups answer has been rejected (days 1-8; day 8's 40 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
 - Mastery ids are per set (`setN.message` style). Each question names `blob-0N.txt`, but the bytes may arrive as a zip member, as same-named `blob.txt` downloads, or de-duplicated (`blob_2.txt`). Map set -> file by sha256 from `contract["artifacts"]` when present. When it is absent (day 7), open the zip and read member `blob-0N.txt`.
 - No GM-side label grammar in this lane: the answer is a derived VALUE, never a synthetic label.
 
@@ -86,5 +102,7 @@ The generic path is `lib.decode.peel(data, accept)` (BFS over encodings) plus th
 - Fragments are split mid-word. Join with "" and keep payload whitespace. Joining with spaces corrupts the sentence and the slug.
 - No trailing newline: shell `read` loops lose the last token. Use python or `tr ' ' '\n'` plus an explicit newline. Always regex-check the slug against the answer syntax.
 - Timed windows (5-9 s, with GM start/submit eating 3-5 s of it) leave no room for an LLM or a slow BFS. Keep every per-question decode under about 1 s with a hard BFS cap.
+- Solver patches made with `str.replace`/sed silently no-op when the anchor text doesn't match exactly (day 8 fallback). Assert
+  the anchor count or re-grep the file after patching.
 - Don't over-read the prompt: "Again" (day 6) was flavour, not a second layer. Decode what the bytes show.
 - Don't contact anything beyond the GM. The decoded sentence states the answer outright.

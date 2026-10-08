@@ -21,6 +21,9 @@ def fields(data):
         "elf_type": h["e_type"],                       # e.g. ET_EXEC (as-is)
         "entry_point": hex(h["e_entry"]),              # lowercase 0x
         "has_symtab": K.BOOL[elf.get_section_by_name(".symtab") is not None],
+        # answer_format.kind "integer" spellings of the same fields (Day 8, GM-confirmed "64" / "62")
+        "elf_class_int": K.ELF_CLASS_BITS.get(h["e_ident"]["EI_CLASS"], ""),
+        "machine_int": str(int.from_bytes(data[18:20], "little" if data[5] == 1 else "big")),
     }
     return elf, out
 
