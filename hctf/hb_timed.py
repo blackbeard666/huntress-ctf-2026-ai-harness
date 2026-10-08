@@ -150,6 +150,23 @@ def _post(payload, timeout=None):
                             timeout=timeout))
 
 
+START_TIMEOUT = float(os.environ.get("HCTF_START_TIMEOUT", "10"))   # local GM starts take ~5 s, Homebase ~1 s
+
+
+def _post_start(payload, tries=3):
+    """start / retry, before the clock: each call is cut at START_TIMEOUT and RESENT on a hang. Safe because both are
+    idempotent while an attempt is live (start reconnects to it; a retry on a live attempt resumes it without spending
+    an attempt -- verified on a rehearsal copy 2026-10-08). Was the pool's 20 s socket timeout + one resend: a hung start cost 35 s
+    before script Mastery's clock even began (mainblind3)."""
+    import http.client
+    for i in range(tries):
+        try:
+            return _post(payload, timeout=START_TIMEOUT)
+        except (OSError, http.client.HTTPException):
+            if i == tries - 1:
+                raise
+
+
 def _submit_timeout(body):
     """Seconds a submit may take: the clock's remainder + 1.5 s grace (min 2 s). Blind D7 replay: a GM submit hung, the
     pool's 20 s socket timeout + one RESEND made it 40.7 s for an 11 s window (and could POST the answers twice)."""
@@ -375,9 +392,9 @@ def main():
     t0 = time.time()
     out = {"cid": a.cid, "submitted": {}, "pool_warm": round(t0 - tw, 2)}
 
-    body = _post({"op": a.op, "challenge": a.cid})
+    body = _post_start({"op": a.op, "challenge": a.cid})
     if a.op == "retry" and body.get("error") and not any(x in str(body.get("error")) for x in ("rate_limited", "exhausted")):
-        body = _post({"op": "start", "challenge": a.cid})  # retry refused (no finished attempt to re-roll): plain start
+        body = _post_start({"op": "start", "challenge": a.cid})  # retry refused (no finished attempt to re-roll): plain start
     # fresh clock if this attempt is already expired / past its deadline
     left = _deadline_left(body)
     # ...and a fresh clock when `start` hands back a FINISHED attempt (result CORRECT/INCORRECT, no deadline, no
@@ -385,7 +402,7 @@ def main():
     # scout, replay) got 'no_answer_ids' forever -- replay d7fix2 burned ~20 generalize workers on it.
     finished = not body.get("error") and not body.get("answer_ids")
     if body.get("result") == "expired" or finished or (left is not None and left <= 0.5):
-        body = _post({"op": "retry", "challenge": a.cid})
+        body = _post_start({"op": "retry", "challenge": a.cid})
         left = _deadline_left(body)
     out["deadline"] = body.get("deadline")
     out["attempt_id"] = body.get("attempt_id")

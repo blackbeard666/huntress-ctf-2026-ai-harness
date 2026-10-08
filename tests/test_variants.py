@@ -186,4 +186,29 @@ soon = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=6)).isoformat().
 assert 4.0 <= hb_timed._solve_budget({"deadline": soon}, 30) <= 4.6
 assert hb_timed._solve_budget({}, None) == 28.5 and hb_timed._solve_budget({"deadline": deadline[:0]}, 1) == 2
 print("ok  hb_timed: questions paired by id; solve budget from the clock left after downloading")
+# 8) start/retry: a hung GM call is cut at START_TIMEOUT and resent (idempotent before the clock), never left at 20 s
+seen = []
+
+
+def flaky(payload, timeout=None):
+    seen.append(timeout)
+    if len(seen) < 3:
+        raise TimeoutError("hung")
+    return {"attempt_id": "x"}
+
+
+try:
+    hb_timed._post = flaky
+    assert hb_timed._post_start({"op": "start", "challenge": "c"}) == {"attempt_id": "x"}
+    assert seen == [hb_timed.START_TIMEOUT] * 3, seen
+    seen.clear()
+    hb_timed._post = lambda payload, timeout=None: (seen.append(timeout), (_ for _ in ()).throw(TimeoutError()))[1]
+    try:
+        hb_timed._post_start({"op": "start", "challenge": "c"})
+        raise AssertionError("must raise after the last try")
+    except TimeoutError:
+        assert len(seen) == 3
+finally:
+    hb_timed._post = _orig_post
+print(f"ok  hb_timed._post_start: {hb_timed.START_TIMEOUT:g} s per call, resent up to 3x, then raises")
 print("ALL PASS")
