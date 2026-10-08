@@ -216,7 +216,15 @@ def _keep_failed_attempt(cid, res, log=print):
     att = (res.get("attempt_id") or "")[:8] or time.strftime("%H%M%S")
     dst = cli.cdir(cid) / "attempts" / att
     try:
-        if tdir.exists() and not dst.exists():
+        try:   # only archive bytes that belong to THIS attempt (a skipped/background pull leaves an older attempt's)
+            same = cli.attempt_id(json.loads((tdir / "contract.json").read_text())) == res.get("attempt_id")
+        except (OSError, ValueError):
+            same = False
+        if not same:
+            dst.mkdir(parents=True, exist_ok=True)
+            (dst / "last_timed.json").write_text(json.dumps({k: v for k, v in res.items() if not callable(v)},
+                                                            indent=2, default=str))
+        elif tdir.exists() and not dst.exists():
             shutil.copytree(tdir, dst)
             (dst / "last_timed.json").write_text(json.dumps({k: v for k, v in res.items() if not callable(v)},
                                                             indent=2, default=str))
@@ -231,7 +239,10 @@ def _remember(cid, res):
     keep = {k: res.get(k) for k in ("result", "full_result", "attempt_id", "window", "elapsed", "in_window", "phases", "solver_too_slow", "hb_env_mismatch",
                                      "per_set", "bad_sets", "wrong", "fixed", "localize_complete", "routed", "missing",
                                      "localize_tried", "novel_labels", "deadline", "detail", "verified",
-                                     "partial_submit", "partial_wrong", "partial_fixed", "attempts_remaining")
+                                     "partial_submit", "partial_wrong", "partial_fixed", "attempts_remaining",
+                                     "run_for_time", "hall_of_fame_eligible", "ranked_attempts_remaining",
+                                     "variant_fresh", "clock_short", "submit_transport_error", "submit_resent",
+                                     "start_refused", "rerolled_short", "capture_note")
             if k in res}
     (cli.cdir(cid) / "last_timed.json").write_text(json.dumps(keep, indent=2, ensure_ascii=False))
     if res.get("window"):
@@ -376,7 +387,8 @@ def process_result(cid, solver_dir, res, log=print):
     correct result locally. Returns correct | expired | blocked | error:<x>."""
     r = str(res.get("result", "")).lower()
     detail = str(res.get("detail", ""))
-    if r == "exec_error" and "solve.py" in detail and ("timed out" in detail or "TimeoutExpired" in detail):
+    if (r == "exec_error" and "solve.py" in detail and ("timed out" in detail or "TimeoutExpired" in detail)
+            and not res.get("clock_short")):
         res["solver_too_slow"] = True  # set BEFORE _remember: the timed stage reads it from last_timed.json
     log(f"[{cid}] timed: {json.dumps({k: res.get(k) for k in ('result', 'remaining', 'elapsed', 'window', 'routed', 'missing', 'partial_submit', 'per_set', 'bad_sets', 'wrong', 'fixed', 'attempt_id') if k in res})}")
     pull = res.pop("_pull", None)
@@ -440,6 +452,10 @@ def process_result(cid, solver_dir, res, log=print):
         return "error:exec"    # the RUNNER failed (ssh/VPN gap/kickoff), not the solver: retry, never generalize
     if r in ("solver_incomplete", "solver_error", "incorrect", "accepted"):
         return "blocked"       # the solver needs work; caller will generalise offline then retry
-    if r in ("expired", "start_required") or "expired" in json.dumps(res).lower():
+    if r in ("expired", "start_required") or "expired" in r:
         return "expired"
+    if res.get("start_refused") or (not res.get("attempt_id") and not res.get("phases")):
+        # The GM refused to hand out an attempt (Day 8: 503 training_rotation_invalid on the regular pool) or the
+        # solver never ran: nothing for a generalize worker to fix (6 useless workers on Day 8). Back off and retry.
+        return "error:start"
     return "blocked"

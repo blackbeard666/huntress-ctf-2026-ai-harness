@@ -68,6 +68,7 @@ class _Pool:
         import http.client
         cls = http.client.HTTPSConnection if self.https else http.client.HTTPConnection
         c = cls(self.host, self.port, timeout=20)
+        c._hctf_used = time.time()
         if connect:
             try:
                 c.connect()
@@ -75,11 +76,19 @@ class _Pool:
                 pass                      # will reconnect lazily on first use
         return c
 
+    IDLE_MAX = float(os.environ.get("HCTF_POOL_IDLE_MAX", "3"))   # s idle before reuse (D8: 3.5 s ok, 5.7 s dropped)
+
     def request(self, method, query, body=None, headers=None, timeout=None):
         """-> (status, bytes). Reconnects once if the kept-alive socket was dropped. `timeout` (s): a hard per-call
         bound with NO resend -- used for the submit, which must not outlive the clock nor be POSTed twice."""
         import http.client
         c = self.q.get() if not self.q.empty() else self._new(connect=False)
+        if timeout is not None or time.time() - getattr(c, "_hctf_used", time.time()) > self.IDLE_MAX:
+            # Never reuse a kept-alive socket that sat idle (e.g. through the solve): the GM proxy closes it. Day 8
+            # binary + script Mastery (8 s / 5.4 s solves): the no-resend submit got RemoteDisconnected, no verdict,
+            # attempt lost three times. A no-resend call always gets a fresh connection (sub-ms on the inside proxy).
+            c.close()
+            c = self._new(connect=False)
         if timeout is not None:
             c.timeout = timeout
             if c.sock is not None:
@@ -100,6 +109,7 @@ class _Pool:
                 c.timeout = 20
                 if c.sock is not None:
                     c.sock.settimeout(20)
+            c._hctf_used = time.time()
             self.q.put(c)
 
 
@@ -124,6 +134,17 @@ class GMError(RuntimeError):
         self.rate_limited = status == 429 or b"rate_limited" in (raw or b"")
 
 
+def _refusal(status, raw):
+    """A 429/503 that is a deterministic GM verdict, not load: a JSON body whose error isn't rate_limited (Day 8:
+    503 training_rotation_invalid). Backing off on it only burns time before the caller can react."""
+    if status not in (429, 503) or b"rate_limited" in (raw or b""):
+        return False
+    try:
+        return bool(json.loads(raw).get("error"))
+    except (ValueError, AttributeError):
+        return False
+
+
 def _open(method, query, body=None, headers=None, verdict_ok=True, waits=(0.5, 1.0), timeout=None):
     """Pooled request with a SHORT 429/503 backoff (the clock is running): 0.5s then 1s, then give up.
     4xx with a JSON body is a GM VERDICT (409 {"error": "prerequisite_required"}, ...), not a crash: it is returned
@@ -132,7 +153,7 @@ def _open(method, query, body=None, headers=None, verdict_ok=True, waits=(0.5, 1
     '{"error":"rate_limited"}' body as evidence.zip and burned a 2-min generalize on a solver that was fine."""
     for wait in (*waits, None):
         status, raw = _pool().request(method, query, body, headers, **({"timeout": timeout} if timeout else {}))
-        if status in (429, 503) and wait is not None:
+        if status in (429, 503) and wait is not None and not _refusal(status, raw):
             time.sleep(wait)
             continue
         if status >= 400:
@@ -153,7 +174,7 @@ def _post(payload, timeout=None):
 START_TIMEOUT = float(os.environ.get("HCTF_START_TIMEOUT", "10"))   # local GM starts take ~5 s, Homebase ~1 s
 
 
-def _post_start(payload, tries=3):
+def _post_once(payload, tries=3):
     """start / retry, before the clock: each call is cut at START_TIMEOUT and RESENT on a hang. Safe because both are
     idempotent while an attempt is live (start reconnects to it; a retry on a live attempt resumes it without spending
     an attempt -- verified on a rehearsal copy 2026-10-08). Was the pool's 20 s socket timeout + one resend: a hung start cost 35 s
@@ -165,6 +186,40 @@ def _post_start(payload, tries=3):
         except (OSError, http.client.HTTPException):
             if i == tries - 1:
                 raise
+
+
+# Day 8: Time Trial / Mastery became DUAL-POOL routes. A plain start/retry = the regular (untimed, not Hall of Fame)
+# pool; run_for_time:true = a fresh timed Hall of Fame attempt. The regular pool refused every lane but warmups (503
+# training_rotation_invalid). Policy (user, 2026-10-08): always ask for the HoF pool on TT/Mastery. Legacy routes (binary
+# D8) and Single Solve reject the property with 409 timed_intent_not_available -> resend without it.
+# HCTF_RUN_FOR_TIME=0 (scout / probes that must not spend ranked attempts): never ask for the HoF pool.
+def _hof_wanted(cid):
+    return os.environ.get("HCTF_RUN_FOR_TIME", "1") == "1" and cid.rsplit("/", 1)[-1] in ("time_trial", "mastery")
+
+
+def _post_start(payload, tries=3):
+    """_post_once with the pool policy: HoF first on TT/Mastery; the route's only pool when it has no HoF pool; the HoF
+    pool when the regular one refuses (backstop if HCTF_RUN_FOR_TIME=1 but the payload came in plain)."""
+    if _hof_wanted(payload.get("challenge", "")) and "run_for_time" not in payload:
+        payload = {**payload, "run_for_time": True}
+    body = _post_once(payload, tries)
+    err = str(body.get("error")) if isinstance(body, dict) else ""
+    if payload.get("run_for_time") and "timed_intent_not_available" in err:
+        body = _post_once({k: v for k, v in payload.items() if k != "run_for_time"}, tries)
+    elif (not payload.get("run_for_time") and "training_rotation_invalid" in err
+          and os.environ.get("HCTF_RUN_FOR_TIME", "1") == "1"):
+        body = _post_once({**payload, "run_for_time": True}, tries)
+    return body
+
+
+def _age(body):
+    """Seconds since this attempt's clock started (None if unknown)."""
+    import datetime as dt
+    try:
+        a = dt.datetime.fromisoformat(body["started_at"].replace("Z", "+00:00"))
+        return (dt.datetime.now(dt.timezone.utc) - a).total_seconds()
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return None
 
 
 def _submit_timeout(body):
@@ -384,6 +439,8 @@ def main():
     ap.add_argument("cid")
     ap.add_argument("solver_dir")           # relative to HW, e.g. challenges/day02/warmups-half-a-turn/solver
     ap.add_argument("--op", default="start", choices=["start", "retry"])
+    ap.add_argument("--min-left", type=float, default=None,
+                    help="re-roll a RESUMED attempt with less clock than this (s); default max(3, window/2)")
     a = ap.parse_args()
     global _LANE
     _LANE = _lane_from_solver_dir(a.solver_dir)
@@ -404,6 +461,18 @@ def main():
     if body.get("result") == "expired" or finished or (left is not None and left <= 0.5):
         body = _post_start({"op": "retry", "challenge": a.cid})
         left = _deadline_left(body)
+    # ...and never run on a RESUMED attempt that is nearly out of clock (Day 8 script Mastery: `start` resumed an
+    # attempt with ~3.5 s left -> 2 s solver budget -> misread as "solver too slow" -> 143 s generalize). Wait it out
+    # (still before OUR clock) and re-roll. A fresh attempt (age ~0) has left == window and never trips this.
+    for _ in range(2):
+        win, age = _window(body), _age(body)
+        need = a.min_left if a.min_left is not None else max(3.0, (win or 0) / 2)
+        if body.get("error") or left is None or left >= need or (age is not None and age < 2.0):
+            break
+        out["rerolled_short"] = round(left, 2)
+        time.sleep(max(0.0, left) + 0.6)
+        body = _post_start({"op": "retry", "challenge": a.cid})
+        left = _deadline_left(body)
     out["deadline"] = body.get("deadline")
     out["attempt_id"] = body.get("attempt_id")
     out["window"] = _window(body)
@@ -411,9 +480,14 @@ def main():
     qmap = _paired(ids, body.get("questions") or [])
     if body.get("unique_attempts_remaining") is not None:
         out["attempts_remaining"] = body.get("unique_attempts_remaining")
+    for k in ("run_for_time", "hall_of_fame_eligible", "ranked_attempts_remaining", "variant_fresh"):
+        if body.get(k) is not None:
+            out[k] = body.get(k)          # which pool this attempt came from (Day 8 dual-pool routes)
     if body.get("error") or not ids:
         out["result"] = body.get("error") or "no_answer_ids"
         out["detail"] = body
+        # The GM refused to hand out an attempt: nothing ran, the solver is not implicated (never generalize on it).
+        out["start_refused"] = True
         if "rate_limited" in str(body.get("error")):
             out["gm_rate_limited"] = True
         print(json.dumps(out))
@@ -458,15 +532,27 @@ def main():
     if not _sh.which("7z", path=env["PATH"]):  # still none: the pyzipper-backed bin/shims/7z
         env["PATH"] = f"{HW / 'bin' / 'shims'}:{env.get('PATH', '')}"
     solve = HW / a.solver_dir / "solve.py"
+    budget = _solve_budget(body, left)
     try:
         r = subprocess.run([sys.executable, str(solve), "--contract", str(contract), "--artifacts", str(adir)],
-                           capture_output=True, text=True, timeout=_solve_budget(body, left), env=env)
+                           capture_output=True, text=True, timeout=budget, env=env)
     except subprocess.TimeoutExpired as e:
         # Emit a real result (attempt_id + saved contract/bytes) instead of crashing: the caller then pulls THIS
         # variant for the speed generalize (a crash left a stale download dir that was mistaken for this attempt).
-        out["result"] = "exec_error"
-        out["solver_too_slow"] = True
-        out["detail"] = f"solve.py timed out after {e.timeout:.1f}s (in-window solver budget)"
+        win = out.get("window")
+        fair = win is None or budget >= 0.8 * (win - (t_downloaded - t_started) - 1.5)
+        out["phases"] = {"start": round(t_started - t0, 2), "download": round(t_downloaded - t_started, 2),
+                         "solve": round(budget, 2)}
+        if fair:
+            out["result"] = "exec_error"
+            out["solver_too_slow"] = True
+            out["detail"] = f"solve.py timed out after {e.timeout:.1f}s (in-window solver budget)"
+        else:
+            # The solver never had the window (the clock was mostly gone before it ran): a timing loss, not a slow
+            # solver -- the orchestrator retries on a fresh clock instead of generalizing for speed.
+            out["result"] = "expired"
+            out["clock_short"] = True
+            out["detail"] = f"solver budget only {budget:.1f}s of a {win}s window (clock spent before the solve)"
         _emit(out, adir)
         return
     try:
@@ -525,16 +611,30 @@ def main():
         out["in_window"] = round(time.time() - t_started, 2)
         _emit(out, adir)
         return
-    try:
-        full = _post({"op": "submit", "challenge": a.cid, "answers": answers}, timeout=_submit_timeout(body))
-    except OSError as e:   # socket.timeout included: the GM didn't answer before the clock (+grace) ran out
-        out["phases"]["submit"] = round(time.time() - t_solved, 2)
-        out["result"] = "expired"
-        out["detail"] = f"submit got no GM answer within the window ({e!r}); not resent"
-        out["elapsed"] = round(time.time() - t0, 2)
-        out["in_window"] = round(time.time() - t_started, 2)
-        _emit(out, adir)
-        return
+    full = None
+    for send in range(2):
+        try:
+            full = _post({"op": "submit", "challenge": a.cid, "answers": answers}, timeout=_submit_timeout(body))
+            break
+        except OSError as e:   # socket.timeout included: the GM didn't answer before the clock (+grace) ran out
+            left_now = _deadline_left(body)
+            # A connection the server dropped WITHOUT answering (RemoteDisconnected / reset / broken pipe -- all
+            # ConnectionError) never got judged: resend ONCE on a fresh socket while the clock allows. A timeout is
+            # never resent (the GM may still be processing it -- no double POST).
+            transport = isinstance(e, ConnectionError)
+            if send == 0 and transport and (left_now is None or left_now > 1.0):
+                out["submit_resent"] = repr(e)
+                continue
+            out["phases"]["submit"] = round(time.time() - t_solved, 2)
+            out["result"] = "expired"
+            if transport:
+                out["submit_transport_error"] = True
+            out["detail"] = (f"submit got no GM answer within the window ({e!r}); "
+                             f"{'resent once' if out.get('submit_resent') else 'not resent'}")
+            out["elapsed"] = round(time.time() - t0, 2)
+            out["in_window"] = round(time.time() - t_started, 2)
+            _emit(out, adir)
+            return
     out["phases"]["submit"] = round(time.time() - t_solved, 2)
     fk = str(full.get("result", "")).lower()
     out["full_result"] = fk

@@ -103,14 +103,16 @@ PLAYBOOK = [
     PlaybookEntry(
         lanes=(BINARY,), families=("machine",),
         rule="ELF e_machine -> x86-64 / x86 / AArch64 / ARM (not the EM_* constant). PE FILE_HEADER.Machine 0x14c "
-             "-> 'i386' (NOT 'x86' for a PE).",
-        confirmed=tuple(sorted(set(K.ELF_MACHINE.values()) | set(K.PE_MACHINE.values()))),
+             "-> 'i386' (NOT 'x86' for a PE). answer_format.kind integer (D8): the decimal e_machine, e.g. 62.",
+        confirmed=tuple(sorted(set(K.ELF_MACHINE.values()) | set(K.PE_MACHINE.values()) | {"62"})),
         rejected=("EM_X86_64", "x86_64", "amd64"), examples=("PE32 i386 .NET -> i386",),
     ),
     PlaybookEntry(
         lanes=(BINARY,), families=("class",),
-        rule="readelf style: 'ELF32' / 'ELF64' (not the ELFCLASS* constant).",
-        confirmed=tuple(sorted(set(K.ELF_CLASS.values()))), closed=True,
+        rule="readelf style: 'ELF32' / 'ELF64' (not the ELFCLASS* constant). answer_format.kind integer (D8): the bit "
+             "width '32' / '64' -- NOT the raw EI_CLASS byte 1 / 2.",
+        confirmed=tuple(sorted(set(K.ELF_CLASS.values()) | {"32", "64"})), rejected=("ELFCLASS64", "ELFCLASS32", "1", "2"),
+        closed=True,
     ),
     PlaybookEntry(
         lanes=(BINARY,), families=("type",),

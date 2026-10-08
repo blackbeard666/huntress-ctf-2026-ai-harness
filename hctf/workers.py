@@ -224,6 +224,9 @@ def run_local(chal_dir, stage, prompt, env_extra, timeout, stop=None):
     env["TMPDIR"] = str(TMP)  # keep every worker's scratch files inside the project
     env["PYTHONPATH"] = f"{ROOT}:{env.get('PYTHONPATH', '')}"  # so solvers/tools can `import lib.*`
     env["PATH"] = f"{BIN}:{TOOLS / 'node' / 'bin'}:{ROOT / '.venv' / 'bin'}:{Path.home() / '.local/bin'}:{env.get('PATH', '')}"
+    # Cap a Bash call that hangs (Day 8 binary single: the Day 7 solver's brute force over a 67 MB Swift ELF sat the
+    # full 120 s default). The worker can still pass an explicit timeout for known-long tools (Ghidra, jadx).
+    env.setdefault("BASH_DEFAULT_TIMEOUT_MS", os.environ.get("HCTF_WORKER_BASH_TIMEOUT_MS", "60000"))
     lane = env_extra.get("HCTF_LANE") or env.get("HCTF_LANE")
     cmd = ["claude", "-p", prompt, "--dangerously-skip-permissions", "--max-turns", str(_max_turns(stage)),
            "--model", worker_model(lane), "--effort", worker_effort(lane),
@@ -305,6 +308,32 @@ def sync_homebase_base(force=False):
         remote.ssh(f"rsync -a --delete ~/{HB_WORK}/skills/ ~/.codex/skills/ && cp ~/{HB_WORK}/hctf/gm.py ~/hctf/gm.py"
                    f" && echo {sig} > ~/{HB_WORK}/.base_sig")
         _hb["base_synced"] = True
+
+
+# Small files that change DURING a run and that hb_timed reads on Homebase: labels learned mid-run (vocab.json) and
+# hot-fixes to the timed runner. sync_homebase_base pushes the tree once per process, so on Day 8 both live hb_timed
+# fixes and every mid-run vocab label had to be pushed by hand.
+HOT_FILES = ("hctf/hb_timed.py", "lib/vocab.json", "lib/playbook.py")
+_hot_pushed = {}
+
+
+def push_hot_files():
+    """rsync any HOT_FILES whose size/mtime changed since the last push (local stat only when nothing changed)."""
+    changed = []
+    for f in HOT_FILES:
+        p = ROOT / f
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        sig = (st.st_size, st.st_mtime_ns)
+        if f not in _hot_pushed:
+            _hot_pushed[f] = sig      # the base sync just pushed this version
+        elif _hot_pushed[f] != sig:
+            changed.append((f, sig))
+    for f, sig in changed:
+        remote.rsync_to(ROOT / f, f"~/{HB_WORK}/{f}")
+        _hot_pushed[f] = sig
 
 
 def run_timed(solver_dir, cid, op="start", timeout=60):
@@ -526,6 +555,7 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
     # proxy, off the VPN, so they stay fast and stable.)
     try:
         sync_homebase_base()
+        push_hot_files()
         if solver_dir.exists():
             # Skip the push when the solver code is unchanged since the last push of this dir (TT -> Mastery: same
             # solver, ~1 round-trip saved between modes). ONE round-trip otherwise: the remote rsync creates the dir
@@ -545,8 +575,10 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
     # sub-ms latency) so tight windows (e.g. the 6s scripting Time Trial) fit; the public GM's ~2.7s/call
     # round-trips blow those windows even warm.
     try:
+        rft = os.environ.get("HCTF_RUN_FOR_TIME")   # pool policy (hb_timed._hof_wanted); default there: HoF
         r = remote.ssh(f"cd ~/{HB_WORK} && HUNTRESS_GAME_MASTER_URL={remote.INSIDE_GM} "
-                       f"python3 hctf/hb_timed.py {shlex.quote(cid)} {shlex.quote(str(rel))} --op {op}",
+                       + (f"HCTF_RUN_FOR_TIME={shlex.quote(rft)} " if rft is not None else "")
+                       + f"python3 hctf/hb_timed.py {shlex.quote(cid)} {shlex.quote(str(rel))} --op {op}",
                        timeout=timeout, check=False)
     except (remote.Unreachable, subprocess.SubprocessError, OSError) as e:
         return {"result": "exec_error", "detail": f"homebase exec failed: {e}"}
@@ -575,11 +607,26 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
         # at ~130 KB/s over the VPN -- ~100 s on the critical path for nothing.
         res["capture_note"] = "no new variant on Homebase (no attempt_id): pull skipped"
         return res
+    if not needs_bytes(res):
+        # A clock / transport failure (expired, submit dropped, solver starved of clock): the solver is fine and the
+        # orchestrator just retries -- nothing needs this variant's bytes. Day 8 binary Mastery: a synchronous pull of
+        # 5 x 31 MB over the ~140 KB/s VPN held the retry for 442 s, then 186 s.
+        res["capture_note"] = "clock/transport failure: variant pull skipped (retry needs no bytes)"
+        return res
     try:
         pull()  # a failure needs the variant's bytes locally (generalize / probe) before anything else
     except Exception as e:  # noqa: BLE001 - capture is best-effort
         res["capture_note"] = f"could not fetch the attempt's bytes from Homebase: {e}"
     return res
+
+
+def needs_bytes(res):
+    """A failed attempt whose variant the next step WORKS ON (generalize/probe on the failed variant): wrong or missing
+    answers, a solver crash, or a genuinely too-slow solver. Clock/transport failures retry on a fresh variant."""
+    r = str(res.get("result", "")).lower()
+    if r in ("solver_incomplete", "solver_error", "incorrect", "accepted"):
+        return True
+    return r == "exec_error" and bool(res.get("solver_too_slow")) and not res.get("clock_short")
 
 
 def needs_variant_pull(res):

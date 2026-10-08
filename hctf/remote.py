@@ -26,6 +26,10 @@ MAX_PARALLEL = int(os.environ.get("HCTF_MAX_PARALLEL", "6"))  # sshd MaxSessions
 LOCKDIR = LOCKS
 
 SSH_OPTS = [
+    # Self-contained: skip ssh_config. Inside the worker sandbox (bwrap) /etc/ssh/ssh_config.d/* shows a foreign owner,
+    # ssh refuses it ("Bad owner or permissions") and exits 255 -- so the Single Solve submit-via-Homebase path
+    # (_master_alive) never fired on Day 7/8 and singles waited out public-GM 429s (warmups D8: 30 s).
+    "-F", "/dev/null",
     "-i", str(KEY), "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-o", "IdentitiesOnly=yes",
     "-o", f"UserKnownHostsFile={KNOWN_HOSTS}", "-o", "StrictHostKeyChecking=accept-new",
     # A dead tunnel is noticed in ~15s (was 45s with the default count of 3 at 15s), without killing a healthy

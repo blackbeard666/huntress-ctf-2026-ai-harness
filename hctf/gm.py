@@ -54,6 +54,17 @@ def _token():
         return None
 
 
+def _refusal(raw):
+    """A 429/503 whose JSON body names a non-rate-limit error is a deterministic GM verdict (Day 8: 503
+    training_rotation_invalid), not load: backing off 2/4/8/16 s on it only delays the caller (~40 s per local start)."""
+    if b"rate_limited" in (raw or b""):
+        return False
+    try:
+        return bool(json.loads(raw).get("error"))
+    except (ValueError, AttributeError):
+        return False
+
+
 def _request(method, params=None, payload=None):
     url = GM + ("?" + urllib.parse.urlencode(params) if params else "")
     data = None
@@ -73,7 +84,8 @@ def _request(method, params=None, payload=None):
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 return r.status, dict(r.headers), r.read()
         except urllib.error.HTTPError as e:
-            if e.code in (429, 503) and attempt < RATE_RETRIES:
+            raw = e.read()
+            if e.code in (429, 503) and attempt < RATE_RETRIES and not _refusal(raw):
                 wait = _retry_after(e.headers, attempt)
                 # rate-limited: back off, don't fail the caller -- but SAY so (Day 7: 9.5-18 s single submits with no
                 # trace of why; the envelope's retries/slept + this line make 429 backoff visible in log.jsonl)
@@ -83,7 +95,7 @@ def _request(method, params=None, payload=None):
                       f"{attempt + 1}/{RATE_RETRIES} in {wait:g}s", file=sys.stderr)
                 time.sleep(wait)
                 continue
-            return e.code, dict(e.headers or {}), e.read()
+            return e.code, dict(e.headers or {}), raw
         except (urllib.error.URLError, OSError) as e:
             if net_retries > 0:
                 net_retries -= 1

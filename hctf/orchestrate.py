@@ -30,6 +30,18 @@ MAX_SINGLE_LAUNCHES = 3
 MAX_TIMED_RETRIES = 5
 CLOCK_RETRIES = int(os.environ.get("HCTF_CLOCK_RETRIES", "12"))  # extra retries for pure clock expiries
 RATE_RETRIES = int(os.environ.get("HCTF_RATE_RETRIES", "6"))  # extra retries (with backoff) for GM 429s
+# Retries (5/10/20 s backoff, then 20 s) when the GM refuses to start an attempt at all: ~10 min of patience, no worker.
+START_RETRIES = int(os.environ.get("HCTF_START_RETRIES", "30"))
+
+
+def _resume_need(prev):
+    """Seconds of clock a resumed attempt must still have to be worth running: the last run's in-window phases
+    (download + solve + submit) + 1.5 s, at least 3 s (half the window when no phases are known)."""
+    ph = prev.get("phases") or {}
+    used = sum(float(ph.get(k) or 0) for k in ("download", "solve", "submit"))
+    if used:
+        return max(3.0, used + 1.5)
+    return max(3.0, float(prev.get("window") or 0) / 2)
 CHAIN_CRASH_RETRIES = int(os.environ.get("HCTF_CHAIN_CRASH_RETRIES", "1"))  # re-run a crashed chain (done modes skip)
 # Early handoff: once the Single Solve is CORRECT and a snapshot of the still-running worker's solver reproduces
 # its confirmed answers, make ONE speculative Time Trial -> Mastery pass from that snapshot instead of idling until
@@ -1551,6 +1563,7 @@ class Chain:
                 self.generalize(cid, wrong=None, fixed=None, diag=pre)
         clock_retries = 0
         rate_retries = 0
+        start_retries = 0
         attempt = -1
         while attempt < MAX_TIMED_RETRIES:
             attempt += 1
@@ -1564,6 +1577,13 @@ class Chain:
             # (rehearsal Day 7 script Mastery re-attempt: start phase 5.1 s).
             prev = timed.last_result(cid) or {}
             left = timed.seconds_left(prev) if prev.get("attempt_id") else None
+            need = _resume_need(prev)
+            if left is not None and 0 < left < need:
+                # Day 8 script Mastery: the previous attempt still had ~4 s, so `start` RESUMED it -> 2 s solver budget
+                # -> "solver too slow" -> a 143 s generalize. Let it run out (pre-clock for us), then re-roll.
+                say(f"[{cid}] previous attempt has only {left:.1f}s left (< {need:.1f}s needed): waiting it out, then retry")
+                time.sleep(left + 0.6)
+                left = 0
             res = timed.run(cid, self.sdir, log=say, **({"op": "retry"} if left is not None and left <= 0 else {}))
             say(f"[{cid}] result: {res}")
             set_state(self.base, **{f"{mode}_result": res})
@@ -1596,6 +1616,22 @@ class Chain:
                 set_state(self.base, stage=f"{mode}:rate-limited")
                 time.sleep(wait)
                 continue
+            if res == "error:start":
+                # The GM refused to hand out an attempt (Day 8 dual-pool routes: 503 training_rotation_invalid). The
+                # solver never ran -- a generalize worker has nothing to fix (6 useless ones on Day 8). Back off, retry.
+                if start_retries < START_RETRIES:
+                    start_retries += 1
+                    attempt -= 1
+                    wait = (5, 10, 20)[min(start_retries - 1, 2)]
+                    err = str((timed.last_result(cid) or {}).get("result") or "")
+                    say(f"[{cid}] GM refused the start ({err}); backing off {wait}s "
+                        f"(start retry {start_retries}/{START_RETRIES}, no generalize)")
+                    set_state(self.base, stage=f"{mode}:start-refused")
+                    time.sleep(wait)
+                    continue
+                say(f"[{cid}] GM kept refusing the start ({START_RETRIES} retries); stopping this mode (no generalize)")
+                set_state(self.base, stage=f"{mode}:start-refused")
+                break
             if res in ("error:exec", "error:rate"):
                 # Transport failure (Day 6 binary TT: exec_error -> 12-min generalize path). Wait briefly for Homebase
                 # health (local is the fallback anyway) and retry; it costs a TT attempt, never a worker.

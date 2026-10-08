@@ -68,7 +68,10 @@ spend is on the critical path. The harness ENDS your session automatically the m
    answer_format. **It runs ON THE HOMEBASE VM** (python3 + pip deps only: stdlib, `lib.*`, pyzipper, pyelftools,
    pefile, capstone, pycryptodome, androguard; NO 7z/apt tools): open zips with `lib.common.read_member` (pyzipper,
    CTF passwords), never `subprocess` 7z/jadx/etc. -- the one allowed subprocess is `node` for a JScript vm sandbox. Check it on the Mastery contract you were given: `time hctf solver-run <mastery-id>` if its artifacts
-   exist; otherwise don't build synthetic inputs -- the first timed variant measures it.
+   exist; otherwise don't build synthetic inputs -- the first timed variant measures it. Bash calls default to a 60 s
+   cap: run a copied earlier solver as `timeout 20 python3 solve.py ...` first (Day 8: a Day 7 brute-force path sat 120 s
+   on a 67 MB ELF), pass an explicit `timeout` only for known-long tools (Ghidra, jadx), and when the solver is slow fix
+   the obvious eager step (e.g. parsing every symbol) instead of profiling at length.
 3. **Submit from the solver, in the SAME Bash call that writes it:** `cat > {solver_dir}/solve.py <<'EOF' ... EOF
    && hctf submit {cid} --from-solver` -- it runs the solver, prints every value and the GM verdict, and bisects a
    rejected bulk for you, so a separate "run it first" or self-test turn only costs ~5 s. Keep it lean -- the structural

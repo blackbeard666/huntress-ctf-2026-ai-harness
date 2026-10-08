@@ -368,20 +368,58 @@ def _bisect_rejected(cid, answers, budget=40):
     fams = {}
     for k, v in answers.items():
         fams.setdefault(family(k), {})[k] = v
-    todo, bad, n = list(fams.values()), set(), [0]
-    while todo and n[0] < budget:
-        g = {k: v for k, v in todo.pop(0).items() if k not in confirmed_answers(cid)}
-        if not g:
-            continue
-        n[0] += 1
-        kind, _b, _p = submit(cid, g, force=True, probe=True)
-        if kind in ("correct", "accepted"):
-            continue
+    bad, n = set(), [0]
+
+    def probe(g):
+        """'ok' | 'bad' | None (GM unreachable twice: leave the group unjudged, keep everything already banked --
+        Day 8 binary: one hung POST killed the whole bisect and the worker re-ran it from scratch, ~60 s)."""
+        for _ in range(2):
+            n[0] += 1
+            try:
+                kind, _b, _p = submit(cid, g, force=True, probe=True)
+            except (remote.Unreachable, OSError, RuntimeError) as e:
+                print(f"bisect: probe of {len(g)} field(s) failed ({str(e)[:80]}); retrying once", file=sys.stderr)
+                continue
+            return "ok" if kind in ("correct", "accepted") else "bad"
+        return None
+
+    def split(g):
+        """g holds >= 1 rejected field. Halve; when the first half passes, the second must hold it -- no probe."""
+        g = {k: v for k, v in g.items() if k not in confirmed_answers(cid)}
+        if not g or n[0] >= budget:
+            return
         if len(g) == 1:
             bad.update(g)
-            continue
+            return
         ks = list(g)
-        todo[:0] = [{k: g[k] for k in ks[:len(ks) // 2]}, {k: g[k] for k in ks[len(ks) // 2:]}]
+        h1, h2 = {k: g[k] for k in ks[:len(ks) // 2]}, {k: g[k] for k in ks[len(ks) // 2:]}
+        r1 = probe(h1)
+        if r1 == "ok":
+            split(h2)                     # inferred: g was rejected and h1 is clean
+            return
+        if r1 == "bad":
+            split(h1)
+        r2 = probe(h2)
+        if r2 == "bad":
+            split(h2)
+        elif r2 == "ok" and r1 is None:
+            split(h1)                     # h1 unjudged, h2 clean: h1 holds it
+
+    groups = list(fams.values())
+    unsure = False
+    for i, g in enumerate(groups):
+        if n[0] >= budget:
+            break
+        g = {k: v for k, v in g.items() if k not in confirmed_answers(cid)}
+        if not g:
+            continue
+        if i == len(groups) - 1 and not bad and not unsure:
+            split(g)                      # every other family passed: the rejection is in this one (no probe)
+            continue
+        r = probe(g)
+        unsure = unsure or r is None
+        if r == "bad":
+            split(g)
     return bad
 
 
@@ -1031,7 +1069,10 @@ def main(argv=None):
     try:
         return fn(a)
     except remote.Unreachable as e:
-        print(f"unreachable: {e}\n(hint: `hctf hb ensure`, and check the VPN)", file=sys.stderr)
+        # (Not `hctf hb ensure`: workers run sandboxed without /mnt/c, where the VM power helper lives -- Day 8 binary
+        # worker crashed on it. Homebase health is the orchestrator's job.)
+        print(f"unreachable: {e}\n(hint: the GM/Homebase hiccuped -- `hctf status <id>` to see what landed, then "
+              "resubmit; the orchestrator handles Homebase power)", file=sys.stderr)
         return EXIT["unreachable"]
 
 

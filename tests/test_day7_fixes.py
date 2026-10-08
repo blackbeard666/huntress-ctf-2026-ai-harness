@@ -735,7 +735,7 @@ except OSError:
 _dt29 = __import__("time").time() - _t0
 assert _dt29 < 1.5, _dt29
 __import__("time").sleep(0.2)
-assert len(_hits29) == 1, _hits29                    # exactly one POST: no resend after the timeout
+assert [h for h in _hits29 if h] == [b"POST"], _hits29   # exactly one POST (b"" = an idle pooled socket closed)
 _srv29.close()
 import datetime as _dt_29  # noqa: E402
 _soon = (_dt_29.datetime.now(_dt_29.timezone.utc) + _dt_29.timedelta(seconds=3)).isoformat().replace("+00:00", "Z")
