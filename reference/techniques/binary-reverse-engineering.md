@@ -1,6 +1,8 @@
 # binary-reverse-engineering — technique log (days 1-7; updated after every day)
 
 How this lane has looked so far (OBSERVATIONS, not guarantees):
+- **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
+  guarantee for Time Trial / Mastery -- solvers derive structure and degrade per field.
 - One `evidence.zip` (AES, password `infected`). From Day 3 on it is CUMULATIVE: members `dNN--variant-XXX.<ext>`, one group per
   past day, plus ONE new container/language per day: D1 C ELF, D2 C++ (ELF or MinGW PE32+), D3 .NET dll (+runtimeconfig.json),
   D4 static stripped Go ELF, D5 static Rust ELF (debug_info), D6 Java .jar, D7 Kotlin fat .jar (5 MB, ~3300 entries). Answer ids `dNN_artifact_sha256_K` / `dNN_analysis_<field>`.

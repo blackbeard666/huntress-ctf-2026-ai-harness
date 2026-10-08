@@ -45,6 +45,13 @@ def answer(answer_id, question, data, contract):
     return None  # TODO
 
 
+def fallback(answer_id, question, data, contract):
+    """Called ONLY when answer() found nothing (None or an exception): a cheap generic second try for a variant shape
+    the direct parse doesn't know (Time Trial / Mastery mutate the task) -- e.g. the lane lib's name-agnostic decoder
+    over `data`, then a match against question["answer_format"]. None = give up on this field only."""
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--contract", required=True)
@@ -59,6 +66,11 @@ def main():
         except Exception as e:  # noqa: BLE001 - one bad field must not sink the other answers
             print(f"{aid}: {e!r}", file=sys.stderr)
             v = None
+        if v is None:
+            try:
+                v = fallback(aid, q, data, contract)
+            except Exception as e:  # noqa: BLE001
+                print(f"{aid}: fallback {e!r}", file=sys.stderr)
         if v is not None:
             out[aid] = normalize(v, q)
     print(json.dumps(out))

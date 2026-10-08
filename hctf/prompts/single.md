@@ -51,6 +51,17 @@ spend is on the critical path. The harness ENDS your session automatically the m
    `solver-authoring` skill: contract + artifacts in, JSON out; every value derived from the bytes, nothing hard-coded).
    Prototype at the shell, but the answers you submit come out of the solver. Same concept on the timed modes: other
    bytes and names; Mastery has several sets (`set1.*`, `set2.*`, ...), each naming its own artifact (pair by sha256).
+   **Time Trial / Mastery are NEW, dynamic mutations of this task** (organizer's words: build a solver that works
+   against "new unseen effects"; seen so far: re-rolled values/keys/names, a codec drawn per file, ELF<->PE, a zipped
+   delivery, and ESCALATED field sets that add earlier days' questions -- D7 metadata TT went 1 -> 11 fields). So:
+   find structure (magic bytes, regexes, the question's container/member name), never offsets or today's names;
+   route each answer_id by its family suffix / question text, never its position; answer every field independently
+   (an unknown question or a failed parse = `None` for THAT field only, never an exception for the whole run); and
+   where a lane lib has a name-agnostic path (`lib.codec.decode` + its fallback, `lib.android.extract_answer` /
+   `decode_any`, `lib.decode.decode_chunk`, `lib.common.find_artifact`) call it as the FALLBACK when your direct parse
+   finds nothing -- it costs nothing on the happy path. Before the first timed attempt the harness replays your
+   solver on answer-invariant mutations of this case (renamed delivery, reordered/subset/extra questions, two
+   Mastery sets) and sends any break back for a generalize.
    **Speed budget: Mastery runs EVERY set (warmups: 28) through `solve.py` inside one ~7 s window that also covers the
    download and submit, so the whole solver must finish all sets in < 1 s.** Decode each artifact once; no per-set
    subprocesses, no brute force over every decoder/radix/key per set; stop at the first candidate that matches the
@@ -60,12 +71,12 @@ spend is on the critical path. The harness ENDS your session automatically the m
    exist; otherwise don't build synthetic inputs -- the first timed variant measures it.
 3. **Submit from the solver, in the SAME Bash call that writes it:** `cat > {solver_dir}/solve.py <<'EOF' ... EOF
    && hctf submit {cid} --from-solver` -- it runs the solver, prints every value and the GM verdict, and bisects a
-   rejected bulk for you, so a separate "run it first" or self-test turn only costs ~5 s. Write only the parsing that
-   today's bytes and the logged Variant axes need (no zip64 / EOF-scan / "just in case" branches). (Or
+   rejected bulk for you, so a separate "run it first" or self-test turn only costs ~5 s. Keep it lean -- the structural
+   rules above, plus the logged Variant axes; no speculative brute force. (Or
    `hctf submit {cid} '{"<answer_id>": "<value>"}'` for a value you are still probing.) Exit codes: 0 correct, 1 incorrect, 2 accepted (partial; more remain), 4 refused
    locally (read the reason). Never guess: an incorrect answer means "investigate more". The harness caps wrong answers.
 4. **STOP when CORRECT.** Do not write synthetic or multi-day regression cases, do not run `hctf solver-test`, do not
-   harden for hypothetical variants (the logged Variant axes are not hypothetical -- cover those in step 1), do not write long notes. The harness replays the regression suite itself and
+   build extra test inputs (the harness mutation-probes the solver itself), do not write long notes. The harness replays the regression suite itself and
    runs a targeted generalize worker ONLY if a real Time Trial/Mastery variant fails.
 Read the Mastery `contract.json` named above NOW (it's on disk; no attempt needed): its `questions[].artifact` names
 (e.g. `delivery 2: x.apk`) and set count are exactly what your solver must handle; `hctf submit --from-solver` runs a

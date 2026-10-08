@@ -1,0 +1,13 @@
+{
+  "evidence-note-filename": "evidence-note.txt",
+  "evidence-note-size-bytes": "33",
+  "evidence-note-md5": "d1d539468d514daf8fa73a249fcbefc5",
+  "evidence-note-sha1": "f1f3e093e5cb1f744692b532cef6f5cb9d65f8e3",
+  "evidence-note-sha256": "27e05632ce84e91a3b8967401314da9af9e4fc7a885894359e5741d78ea525d9",
+  "evidence-note-magic-prefix-hex-16": "43617365203738303834353446463434",
+  "evidence-note-text-utf8-bom-present": "false",
+  "d04-jpeg-001-jpeg-sof-dimensions-pixels": "257x146",
+  "d05-png-001-png-ihdr-dimensions-pixels": "269x153",
+  "d06-pdf-001-pdf-header-version": "1.4",
+  "d07-zip-001-zip-eocd-total-entries": "2"
+}

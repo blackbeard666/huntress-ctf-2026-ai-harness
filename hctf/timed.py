@@ -1,7 +1,8 @@
-"""Scripted Time Trial / Mastery runs: start -> download -> dispatch solvers -> submit per set.
+"""Scripted Time Trial / Mastery runs: start -> download -> run solve.py -> submit (hctf/hb_timed.py does the window).
 
-Clock-aware: if solvers fail or some answers are rejected, a fix worker (an LLM process) gets the
-remaining time to patch the solver; we re-run and submit again until done or the deadline passes.
+No LLM runs inside the clock: the window only runs the offline-built solver, submits (the answered subset too when the
+solver is incomplete -- the GM keeps correct partial progress) and localizes wrong fields. A failed attempt is turned
+into a regression case and fixed OFFLINE by a generalize worker (hctf/orchestrate.py) before the next attempt.
 """
 import datetime as dt
 import json
@@ -209,7 +210,8 @@ def _keep_failed_attempt(cid, res, log=print):
 def _remember(cid, res):
     keep = {k: res.get(k) for k in ("result", "full_result", "attempt_id", "window", "elapsed", "in_window", "phases", "solver_too_slow", "hb_env_mismatch",
                                      "per_set", "bad_sets", "wrong", "fixed", "localize_complete", "routed", "missing",
-                                     "localize_tried", "novel_labels", "deadline", "detail")
+                                     "localize_tried", "novel_labels", "deadline", "detail", "verified",
+                                     "partial_submit", "partial_wrong", "partial_fixed", "attempts_remaining")
             if k in res}
     (cli.cdir(cid) / "last_timed.json").write_text(json.dumps(keep, indent=2, ensure_ascii=False))
     if res.get("window"):
@@ -356,7 +358,7 @@ def process_result(cid, solver_dir, res, log=print):
     detail = str(res.get("detail", ""))
     if r == "exec_error" and "solve.py" in detail and ("timed out" in detail or "TimeoutExpired" in detail):
         res["solver_too_slow"] = True  # set BEFORE _remember: the timed stage reads it from last_timed.json
-    log(f"[{cid}] timed: {json.dumps({k: res.get(k) for k in ('result', 'remaining', 'elapsed', 'window', 'routed', 'missing', 'per_set', 'bad_sets', 'wrong', 'fixed', 'attempt_id') if k in res})}")
+    log(f"[{cid}] timed: {json.dumps({k: res.get(k) for k in ('result', 'remaining', 'elapsed', 'window', 'routed', 'missing', 'partial_submit', 'per_set', 'bad_sets', 'wrong', 'fixed', 'attempt_id') if k in res})}")
     pull = res.pop("_pull", None)
 
     def capture():

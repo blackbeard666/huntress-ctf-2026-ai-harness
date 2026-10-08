@@ -391,7 +391,9 @@ def main():
     out["attempt_id"] = body.get("attempt_id")
     out["window"] = _window(body)
     ids = body.get("answer_ids") or []
-    qmap = {aid: (body["questions"][i] if i < len(body.get("questions", [])) else {}) for i, aid in enumerate(ids)}
+    qmap = _paired(ids, body.get("questions") or [])
+    if body.get("unique_attempts_remaining") is not None:
+        out["attempts_remaining"] = body.get("unique_attempts_remaining")
     if body.get("error") or not ids:
         out["result"] = body.get("error") or "no_answer_ids"
         out["detail"] = body
@@ -441,7 +443,7 @@ def main():
     solve = HW / a.solver_dir / "solve.py"
     try:
         r = subprocess.run([sys.executable, str(solve), "--contract", str(contract), "--artifacts", str(adir)],
-                           capture_output=True, text=True, timeout=max(2, (left or 30) - 1.5), env=env)
+                           capture_output=True, text=True, timeout=_solve_budget(body, left), env=env)
     except subprocess.TimeoutExpired as e:
         # Emit a real result (attempt_id + saved contract/bytes) instead of crashing: the caller then pulls THIS
         # variant for the speed generalize (a crash left a stale download dir that was mistaken for this attempt).
@@ -466,18 +468,24 @@ def main():
     if missing:
         out["result"] = "solver_incomplete"
         out["missing"] = missing
+        part = {k: answers[k] for k in ids if k in answers and answers[k] != ""}
+        if part and os.environ.get("HCTF_PARTIAL_SUBMIT", "1") == "1":
+            # Submit what the solver DID answer: the GM saves correct partial progress (banks whole Mastery sets) and
+            # its verdict tells the generalize worker which answered fields to leave alone. An escalated variant (D7
+            # metadata TT 1 -> 11 fields) used to burn the whole window with nothing submitted.
+            _partial_submit(a.cid, part, body, out, setkey=_setkey)
+            out["phases"]["submit"] = round(time.time() - t_solved, 2)
+            out["elapsed"] = round(time.time() - t0, 2)
+            out["in_window"] = round(time.time() - t_started, 2)
         _emit(out, adir)
         return
 
     # FAST PATH: submit EVERY answer in one request. A public-GM submit round-trip is ~0.2-several s, so N
     # sequential per-set POSTs can blow a ~6-10s Mastery window (set 1 banks, set 2 expires). One POST covering
     # all sets fits even a tight window when the solver is complete+correct.
-    def setkey(aid):
-        m = re.match(r"(set|slot)[._-]?\d+", aid)
-        return m.group(0) if m else "_"
     groups = {}
     for aid, v in answers.items():
-        groups.setdefault(setkey(aid), {})[aid] = v
+        groups.setdefault(_setkey(aid), {})[aid] = v
     if len(groups) > 1 and os.environ.get("HCTF_PARALLEL_SET_SUBMIT", "0") == "1":  # measured: no faster (GM serial)
         # One POST per set, CONCURRENTLY over the pre-opened pool: a 798-answer single POST took 2.3-4.7 s from WSL
         # (no Homebase), the bulk of a 7 s Mastery window; per-set POSTs in parallel cost ~one smaller round-trip.
@@ -542,6 +550,61 @@ def main():
     out["elapsed"] = round(time.time() - t0, 2)
     out["in_window"] = round(time.time() - t_started, 2)  # excludes the pre-clock start/retry overhead
     _emit(out, adir)
+
+
+def _paired(ids, qs):
+    """{answer_id: question}: exact question id, else the longest question id the answer id ends with, else by position
+    (stdlib mirror of hctf.solvers.paired_questions -- this file runs standalone on Homebase)."""
+    out = {}
+    for i, aid in enumerate(ids):
+        q = next((q for q in qs if q.get("id") == aid), None)
+        if q is None:
+            sufs = [q for q in qs if q.get("id") and re.search(rf"(^|[._-]){re.escape(q['id'])}$", aid)]
+            q = max(sufs, key=lambda q: len(q["id"]), default=None)
+        if q is None and i < len(qs):
+            q = qs[i]
+        out[aid] = q or {}
+    return out
+
+
+def _solve_budget(body, left_at_start):
+    """Seconds solve.py may run: the clock's remainder NOW (after the downloads) - 1.5 s for the submit, min 2 s.
+    Measured at start it let the solver run past the deadline by the whole download time."""
+    left = _deadline_left(body)
+    if left is None:
+        left = left_at_start if left_at_start is not None else 30
+    return max(2, left - 1.5)
+
+
+def _setkey(aid):
+    m = re.match(r"(set|slot)[._-]?\d+", aid)
+    return m.group(0) if m else "_"
+
+
+def _partial_submit(cid, part, body, out, setkey=_setkey):
+    """One bounded submit of the answered subset of an incomplete solve (never resent). Accepted -> those fields are
+    GM-verified. Rejected -> localize the wrong ones (window permitting). Results go under partial_* keys so the
+    orchestrator still treats the attempt as solver_incomplete and generalizes on this exact variant."""
+    try:
+        res = _post({"op": "submit", "challenge": cid, "answers": part}, timeout=_submit_timeout(body))
+    except OSError as e:
+        out["partial_submit"] = {"result": "no_answer", "detail": repr(e)}
+        return
+    rk = str(res.get("result", "")).lower()
+    out["partial_submit"] = {"result": rk, "remaining": res.get("remaining"), "n": len(part)}
+    if rk in ("correct", "accepted"):
+        out["verified"] = dict(part)
+        out["novel_labels"] = _novel(part, _vocab())
+        return
+    if rk != "incorrect":
+        return
+    groups = {}
+    for aid, v in part.items():
+        groups.setdefault(setkey(aid), {})[aid] = v
+    _localize(cid, part, groups, {k: {"result": "incorrect"} for k in groups}, body, out)
+    out["partial_wrong"] = out.pop("wrong", [])
+    out["partial_fixed"] = out.pop("fixed", {})
+    out["partial_localize_complete"] = out.pop("localize_complete", False)
 
 
 def _emit(out, adir):

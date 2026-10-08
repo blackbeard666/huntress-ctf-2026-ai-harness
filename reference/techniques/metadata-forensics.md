@@ -1,6 +1,8 @@
 # metadata-forensics — technique log (days 1-7; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
+- **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
+  guarantee for Time Trial / Mastery -- solvers derive structure and degrade per field.
 - Every day = ONE evidence zip (`metadata-day-NN-evidence.zip`, plain Deflate, no password so far) holding a tiny member
   (33 B - 3 KB). The question asks ONE structural fact about a named member, read from the raw bytes. The member can
   itself be a container (Day 7: the member was a ZIP and the field was that ZIP's own EOCD record).
@@ -19,6 +21,11 @@ How this lane has looked so far (observations, not guarantees):
   with the header: always answer from the structural header bytes of the member the question names.
 - **Member and values** -- names, sizes, dimensions and counts re-roll per variant; nothing about the sample is
   constant (Day 7 entry count went 2/3/4/5 with drop number 001-004; member names `room-NN/item-K.txt`).
+- **ESCALATED field set** -- later TT/Mastery attempts grew the contract from 1 field to 11 (Mastery 22): the day's
+  field + `evidence-note-{filename,size-bytes,md5,sha1,sha256,magic-prefix-hex-16,text-utf8-bom-present}` + carry-overs
+  `d04-jpeg-*-sof-dimensions-pixels`, `d05-png-*-ihdr-dimensions-pixels`, `d06-pdf-*-header-version`, `d07-zip-*-eocd-
+  total-entries`. Dispatch on the answer-id family suffix and keep EVERY earlier day's family answerable (reference:
+  `challenges/day07/metadata-seven-zip-no-relation/solver/solve.py` answers all of them).
 - **Nesting depth** -- the asked file may sit 2-3 zips deep (Mastery D7: outer -> `...-evidence-0N.zip` ->
   `evidence-drop-00N.zip`); resolve by the name after `->`, never answer from an enclosing zip.
 

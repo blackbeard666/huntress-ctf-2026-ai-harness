@@ -1,6 +1,8 @@
 # warmups — technique log (days 1-7; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
+- **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
+  guarantee for Time Trial / Mastery -- solvers derive structure and degrade per field.
 - Each day: one `blob.txt`. Decode it until a plain English sentence appears; its final non-empty line ends "...submit this exact answer to the Game Master: <slug>". The slug is `word-word-word-NN` (`answer_format.kind=pattern`, `normalization=trim`). Same single question id `message` every day.
 - The ENCODING changes daily and the title/prompt is a pun naming it: 64 -> base64, "thirteen steps"/half a turn -> ROT13, sixteen fingers -> hex, "two sides" -> 8-bit binary, "reduced to numbers" -> decimal char codes, "eight fingers" -> octal, "address bar"/"Percent" -> URL percent-encoding. Every single_solve so far was ONE layer.
 - Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, 18, 23, 28, 33). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, in that order so far). The last line has no trailing newline. The fragments join verbatim (split mid-word) into the same sentence.

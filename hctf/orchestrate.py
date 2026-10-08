@@ -58,6 +58,7 @@ SCOUT_GENERALIZE = int(os.environ.get("HCTF_SCOUT_GENERALIZE", "2"))  # offline 
 # script TT failed on 3 different unseen constructs in a row (JScript hex arrays, JScript relay, cx_Freeze carrier) +
 # one more on Mastery = 4 generalize/retry cycles (~3:20) where one multi-variant cycle would do.
 HARVEST_VARIANTS = int(os.environ.get("HCTF_HARVEST_VARIANTS", "3"))
+HARVEST_MIN_ATTEMPTS = int(os.environ.get("HCTF_HARVEST_MIN_ATTEMPTS", "8"))   # GM unique_attempts_remaining floor for a harvest
 # s after an attempt's deadline before the next retry. A retry while the previous attempt is still live just RESUMES it
 # (verified on a rehearsal copy 2026-10-08: same attempt_id, unique_attempts_remaining unchanged), so an early one costs nothing and
 # _harvest polls once a second until the id changes (was deadline + 5 s: ~4 s lost per harvested variant).
@@ -185,6 +186,46 @@ def triage_summary(cid, cap=TRIAGE_INLINE_CAP):
     if len(body) > cap:
         body = body[:cap].rsplit("\n", 1)[0] + f"\n... (truncated here -- the rest is in `{p.relative_to(ROOT)}`)"
     return body.strip()
+
+
+CARRY_RE = re.compile(r"(?:^|\.)d(\d{2})[-_]")
+
+
+def prior_solver_dirs(lane, sdir):
+    """{day number: solver dir} for every EARLIER day of this lane that has a solve.py (all lanes)."""
+    day = sdir.parent.parent.name
+    out = {}
+    for m in sorted(ROOT.glob("challenges/day*/*/meta.json")):
+        if m.parent.parent.name >= day or not (m.parent / "solver" / "solve.py").exists():
+            continue
+        try:
+            if json.loads(m.read_text()).get("lane") != lane:
+                continue
+        except (OSError, ValueError):
+            continue
+        dm = re.match(r"day(\d+)", m.parent.parent.name)
+        if dm:
+            out[int(dm.group(1))] = m.parent / "solver"
+    return out
+
+
+def carry_over_note(lane, sdir, ids):
+    """Escalated variants re-ask EARLIER days' questions (D7 metadata TT: 1 -> 11 fields incl. d04/d05/d06 carry-overs).
+    For answer_ids naming an earlier day (`dNN-...`, `set1.dNN_...`), point at that day's solver of this lane as a
+    REFERENCE to adapt -- the harness never runs it. Returns '' when there is none."""
+    m = re.match(r"day(\d+)", sdir.parent.parent.name)
+    if not m:
+        return ""
+    today = int(m.group(1))
+    days = sorted({int(x.group(1)) for a in ids for x in [CARRY_RE.search(a)] if x and int(x.group(1)) < today})
+    dirs = prior_solver_dirs(lane, sdir)
+    hits = [(d, dirs[d]) for d in days if d in dirs]
+    if not hits:
+        return ""
+    return ("CARRY-OVER questions from earlier days of this lane (escalated variant): "
+            + "; ".join(f"`d{d:02d}-*` = Day {d}'s family, see `{p.relative_to(ROOT)}/NOTES.md` + `solve.py`"
+                        for d, p in hits)
+            + ". Adapt (import or port) that parsing into today's solver -- answers still come from today's bytes.")
 
 
 def prior_solver_dir(lane, sdir):
@@ -436,6 +477,25 @@ def handler_pointer(sdir, tokens, top=6, strong=(), lang=None):
 
 
 FAMILY_PROBE = os.environ.get("HCTF_FAMILY_PROBE", "1") != "0"
+# Answer-invariant mutation probe (hctf/mutate.py, every lane): renamed delivery, reordered/subset questions, an unknown
+# extra question, Mastery-shaped sets. A HARD miss is adopted as a mutation-* case and generalized BEFORE the first
+# timed attempt (organizer, Day 8: TT/Mastery hand out "new, dynamic variations/mutations ... new unseen effects").
+MUTATION_PROBE = os.environ.get("HCTF_MUTATION_PROBE", "1") != "0"
+
+
+def mutation_probe(sdir, mastery_contract=None, timeout=90):
+    """Run hctf/mutate.py under the venv -> (text, [failing HARD mutation case dirs], summary)."""
+    import subprocess
+    out = ROOT / ".run" / "mutation" / Path(sdir).resolve().parent.name
+    argv = [str(paths.VENV_PY), "-m", "hctf.mutate", "probe", str(sdir), "--out", str(out)]
+    if mastery_contract and Path(mastery_contract).exists():
+        argv += ["--mastery-contract", str(mastery_contract)]
+    try:
+        r = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+        d = json.loads(r.stdout.strip().splitlines()[-1])
+    except Exception as e:  # noqa: BLE001 - advisory
+        return f"(mutation probe skipped: {str(e)[:120]})", [], {}
+    return d.get("text") or "", d.get("hard_failed") or [], d
 
 
 def _family_cli(action, sdir, out, extra=(), timeout=60):
@@ -658,6 +718,17 @@ class Chain:
                         "Re-derive those from the bytes. Do NOT treat this as a timing problem.")
         else:
             gm_wrong = "  - (no per-field GM verdict was available this cycle)"
+        if d.get("crash"):
+            gm_wrong += ("\n  - solve.py CRASHED on this variant inside the window (no JSON line -> nothing submitted). "
+                         "Make every field fail independently; its stderr tail:\n"
+                         + "\n".join("    " + ln for ln in d["crash"].splitlines()[-12:]))
+        carry = carry_over_note(self.lane, self.sdir, [a for a, _ in (wrong or [])])
+        if carry:
+            gm_wrong += "\n  - " + carry
+        if d.get("accepted"):
+            acc = d["accepted"]
+            gm_wrong += (f"\n  - the GM ACCEPTED these {len(acc)} answered field(s) on this attempt -- keep producing them: "
+                         + ", ".join(f"`{a}`" for a in acc[:30]) + (" ..." if len(acc) > 30 else ""))
         if d.get("window") or d.get("elapsed"):
             gm_wrong += f"\n  - attempt facts: window {d.get('window')}s, elapsed {d.get('elapsed')}s, routed {d.get('routed') or 'local'}"
         if d.get("hb_env_mismatch"):
@@ -672,6 +743,17 @@ class Chain:
                          "Time Trial / Mastery variants draw these: make every family-* case pass by routing declared "
                          "codecs through lib.codec.decode (generic), not by adding names to a table.\n"
                          + "\n".join("    " + ln for ln in d["family_pre"].splitlines()))
+        if d.get("mutation_pre"):
+            gm_wrong += ("\n  - NO TIMED ATTEMPT HAS RUN YET: the single is CORRECT, but the solver breaks on ANSWER-INVARIANT "
+                         "mutations of its own case (the `mutation-*` cases: same member bytes and names, same expected "
+                         "answers). Time Trial / Mastery hand out new variants with exactly these kinds of changes. Make "
+                         "every mutation-* case pass by deriving the structure (resolve each question's artifact by its "
+                         "container/member name or sha, route by question text / answer_id suffix, answer each field "
+                         "independently, None only for a question you can't handle) -- never by special-casing the "
+                         "mutation.\n" + "\n".join("    " + ln for ln in d["mutation_pre"].splitlines()))
+        elif getattr(self, "_mutation_soft", None):
+            gm_wrong += ("\n  - (FYI, not the target) the mutation probe also saw these softer misses -- cover them only "
+                         "if it is the same small change:\n" + "\n".join("    " + ln for ln in self._mutation_soft.splitlines()))
         if d.get("single_seconds"):
             gm_wrong += (f"\n  - NO TIMED ATTEMPT HAS RUN YET: solve.py takes {d['single_seconds']}s on the Single Solve case "
                          f"itself (budget {SINGLE_SPEED_BUDGET:g}s locally; Homebase is ~1.5x slower and the 7-13 s window also "
@@ -681,7 +763,12 @@ class Chain:
             gm_wrong += ("\n  - THE SOLVER IS TOO SLOW: solve.py hit the in-window timeout on this variant (answers may well be right). "
                          "Make it fast -- no per-set brute force over every decoder, no subprocess per set, decode once, "
                          "early-exit on the first candidate that matches the answer_format; time it with `time hctf solver-run`.")
-        harvest = bool(HARVEST_VARIANTS and wrong and all(v is None for _, v in wrong) and remote.gm_transport() == "local")
+        left_att = (timed.last_result(cid) or {}).get("attempts_remaining")
+        low_budget = left_att is not None and left_att < HARVEST_MIN_ATTEMPTS
+        if low_budget and HARVEST_VARIANTS:
+            say(f"[{cid}] only {left_att} unique attempt(s) left for this mode today: no variant harvest")
+        harvest = bool(HARVEST_VARIANTS and wrong and all(v is None for _, v in wrong) and remote.gm_transport() == "local"
+                       and not low_budget)
         if harvest:
             # (built BEFORE render -- until the rehearsal Day 7 review this note was appended after the prompt was rendered,
             # so no worker ever saw it)
@@ -1182,6 +1269,13 @@ class Chain:
             else:
                 prior_note = ("Write the solver from the skeleton + the lane helpers below; don't go looking for earlier "
                               "days' solvers (replays lost 13-24 s per run doing that).")
+                tids = []
+                for m in ("time_trial", "mastery"):
+                    tc = cli.load(f"{self.base}/{m}", "contract.json") or {}
+                    tids += list(tc.get("answer_ids") or []) + [q.get("id") or "" for q in tc.get("questions") or []]
+                carry = carry_over_note(self.lane, self.sdir, tids)
+                if carry:
+                    prior_note += " EXCEPT: the timed contracts already carry earlier days' questions. " + carry
             prompt = workers.render("single", skill=workers.lane_skill(self.lane), triage=triage_summary(cid),
                                     lane_helpers=workers.lane_helpers(self.lane), prior_solver=prior_note,
                                     name=self.name, cid=cid, lane=self.lane, techniques=technique_log(self.lane),
@@ -1211,6 +1305,7 @@ class Chain:
                 say(f"[{cid}] after worker: stopped at CORRECT with a verified solver")
                 self._record_labels(cid)
                 self._start_family_pre(cid)
+                self._start_mutation_pre(cid)
                 return True
             done = cli.is_complete(cid)
             if not done and not welcome:
@@ -1222,6 +1317,7 @@ class Chain:
             if done and ok:
                 self._record_labels(cid)
                 self._start_family_pre(cid)
+                self._start_mutation_pre(cid)
                 return True
             if (cli.cdir(cid) / "HELP.md").exists():
                 set_state(self.base, stage="single:help", help=(cli.cdir(cid) / "HELP.md").read_text()[:1500])
@@ -1295,6 +1391,42 @@ class Chain:
         except Exception:  # noqa: BLE001
             return None
         return None if d.get("error") else set(d.get("noise") or [])
+
+    def _start_mutation_pre(self, cid):
+        """Background, once the single's solver is final: the answer-invariant mutation probe (every lane)."""
+        self._mut_pre_fut = None
+        if not MUTATION_PROBE or not (self.sdir / "solve.py").exists():
+            return
+        mc = cli.cdir(f"{self.base}/mastery") / "contract.json"
+        self._mut_pre_fut = ThreadPoolExecutor(max_workers=1).submit(mutation_probe, self.sdir, mc)
+
+    def _mutation_pre_result(self):
+        if getattr(self, "_mut_pre_fut", None) is None:
+            self._start_mutation_pre(self.base)   # single solved by an earlier run: probe now (a few seconds)
+        fut = getattr(self, "_mut_pre_fut", None)
+        if fut is None:
+            return "", []
+        try:
+            txt, cases, _ = fut.result(timeout=100)
+            return txt, cases
+        except Exception as e:  # noqa: BLE001
+            say(f"[{self.base}] mutation pre-probe note: {e}")
+            return "", []
+
+    def _adopt_mutation_cases(self, case_dirs):
+        """Copy failing HARD mutation cases into cases/ as verified regression cases (answers = the single's
+        GM-verified answers: every mutation is answer-invariant)."""
+        n = 0
+        for cd in case_dirs:
+            src = Path(cd)
+            if not (src / "expected.json").exists():
+                continue
+            dst = self.sdir / "cases" / src.name
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst, ignore=shutil.ignore_patterns("mutation.json"))
+            n += 1
+        return n
 
     def _start_family_pre(self, cid):
         """Background, once the single's solver is final: probe it on every judgeable language."""
@@ -1402,6 +1534,15 @@ class Chain:
                 say(f"[{cid}] codec-family probe: the single's solver misses {len(fcases)} re-encoded case(s) "
                     f"({n} adopted as family-* regression cases): generalizing BEFORE the first timed attempt")
                 pre["family_pre"] = ftxt
+            mtxt, mcases = self._mutation_pre_result()
+            if mcases:
+                n = self._adopt_mutation_cases(mcases)
+                say(f"[{cid}] mutation probe: the single's solver breaks on {len(mcases)} answer-invariant mutation(s) "
+                    f"({n} adopted as mutation-* regression cases): generalizing BEFORE the first timed attempt")
+                pre["mutation_pre"] = mtxt
+            elif mtxt:
+                say(f"[{cid}] mutation probe (soft only, no action): {mtxt.splitlines()[0]}")
+                self._mutation_soft = mtxt
             if pre:
                 self.generalize(cid, wrong=None, fixed=None, diag=pre)
         clock_retries = 0
@@ -1489,6 +1630,8 @@ class Chain:
             wrong, fixed, diag = None, None, {}
             last = timed.last_result(cid) or {}
             diag = {k: last.get(k) for k in ("window", "elapsed", "phases", "routed", "solver_too_slow", "hb_env_mismatch")}
+            if last.get("result") == "solver_error":
+                diag["crash"] = str(last.get("detail") or "")[-800:]
             if last.get("wrong") is not None:
                 # The timed runner already localized this attempt in-window (same variant, saved as an auto-* case
                 # with the GM-verified answers): use that instead of burning a fresh attempt on a different variant.
@@ -1510,7 +1653,13 @@ class Chain:
                         cli.save(cid, "contract.json", tc)
                         if last.get("missing") and not last.get("solver_too_slow"):
                             wrong = [(a, None) for a in last["missing"]]
-                            say(f"[{cid}] solver left {len(wrong)} field(s) empty on this variant: generalizing on it")
+                            # the in-window partial submit judged the answered subset (hb_timed._partial_submit)
+                            bad = [tuple(x) for x in last.get("partial_wrong") or []]
+                            wrong += bad
+                            fixed = last.get("partial_fixed") or {}
+                            diag["accepted"] = sorted((last.get("verified") or {}).keys())
+                            say(f"[{cid}] solver left {len(last['missing'])} field(s) empty on this variant "
+                                f"({len(bad)} answered wrong, GM accepted {len(diag['accepted'])}): generalizing on it")
                     else:
                         timed.ensure_started(cid)  # fresh attempt + download of the current variant for offline work
                     if last.get("solver_too_slow") or wrong is not None:

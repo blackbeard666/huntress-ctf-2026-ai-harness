@@ -766,6 +766,10 @@ def c_why(a):
                 print(f"      in-window tried: {lt['localize_tried']}")
             if lt.get("missing"):
                 print(f"      MISSING (solver incomplete): {lt['missing'][:12]}")
+            if lt.get("partial_submit"):
+                print(f"      partial submit: {lt['partial_submit']}  (wrong: {lt.get('partial_wrong') or []})")
+            if lt.get("attempts_remaining") is not None:
+                print(f"      GM unique attempts left for this mode: {lt['attempts_remaining']}")
         dg = load_json(d / "diagnosis.json")
         if dg and not done:
             print(f"      probe: {dg.get('ok')} ok / {len(dg.get('wrong', []))} wrong of {dg.get('probed')}/{dg.get('total')} judged"

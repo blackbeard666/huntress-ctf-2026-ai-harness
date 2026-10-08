@@ -16,6 +16,7 @@ the latest Time Trial attempt, so callers re-pass Time Trial if the final scout 
 """
 import datetime as dt
 import json
+import os
 import time
 
 from . import cli, timed, workers
@@ -36,6 +37,9 @@ def _wait_expired(deadline, log, cid):
         time.sleep(left + 2)
 
 
+SCOUT_MIN_ATTEMPTS = int(os.environ.get("HCTF_SCOUT_MIN_ATTEMPTS", "8"))   # keep fresh variants for the real run
+
+
 def scout(cid, solver_dir, rounds=3, clean=2, log=print):
     """Run up to `rounds` Time Trial attempts. Returns a summary dict:
       rounds: per-round records, clean_streak, last_correct (bool), unresolved: [(aid, solver_value)] still wrong,
@@ -48,6 +52,10 @@ def scout(cid, solver_dir, rounds=3, clean=2, log=print):
         _wait_expired(deadline, log, cid)
         if i:
             time.sleep(RATE_GAP)
+        left = (timed.last_result(cid) or {}).get("attempts_remaining")
+        if i and left is not None and left < SCOUT_MIN_ATTEMPTS:
+            log(f"[{cid}] scout: only {left} unique attempt(s) left for this mode today -- stopping")
+            break
         res = workers.run_timed_auto(solver_dir, cid, log=log)
         timed.process_result(cid, solver_dir, res, log=log)   # case capture + label caching + local record
         r = str(res.get("result", "")).lower()

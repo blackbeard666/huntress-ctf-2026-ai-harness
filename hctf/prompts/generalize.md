@@ -1,7 +1,7 @@
 You are {persona}. You are a solver-hardening worker in the Huntress CTF harness. No clock is running right now — work carefully. Use the `solver-authoring` and `timed-run` skills. (Inspect the variant bytes with the shell — `7z`, `file`, `strings`, `readelf`, `c++filt` — but the deliverable here IS Python: a general `solve.py` that re-derives every answer from the bytes.)
 
 - Challenge: `{cid}` (mode: {mode}). Base: `{base}`.
-- Solver: `{solver_dir}/solve.py`. Regression cases: `{solver_dir}/cases/` (a `variant-*` case holds a real timed variant the solver just FAILED on; its `expected.json` may be empty because it was never solved).
+- Solver: `{solver_dir}/solve.py`. Regression cases: `{solver_dir}/cases/` (a `variant-*` case holds a real timed variant the solver just FAILED on; its `expected.json` may be empty because it was never solved; a `mutation-*` case is the single's own case under an answer-invariant change -- renamed delivery, reordered/subset/extra questions, two Mastery sets -- with the single's GM-verified answers).
 - Current failures:
 {problems}
 
@@ -19,7 +19,7 @@ transform / carrier / wrapper name or order). Other variants and Mastery sets dr
 compound name: split it into its parts and accept every combination the solver or `lib.*` already knows), check the
 same-family artifacts of EVERY case, then stop.
 
-The timed variants use the SAME concept as the Single Solve but differ in the bytes: different file names, keys, encoding order/depth, an added per-line or per-file prefix/wrapper, archive wrappers, extra Mastery sets, or a question carried over from an earlier day. One variant just beat the solver; the clock was too short to fix it live.
+The timed variants use the SAME concept as the Single Solve but differ in the bytes: different file names, keys, encoding order/depth, an added per-line or per-file prefix/wrapper, archive wrappers, extra Mastery sets, or a question carried over from an earlier day. The organizers state Time Trial / Mastery hand out "new, dynamic variations/mutations" and reward solvers that handle "new unseen effects": an ESCALATED variant can add whole field families (D7 metadata TT: 1 -> 11 fields, incl. `d04-`/`d05-`/`d06-` carry-overs -- the verdict above names the earlier day's solver to adapt when that happens). One variant just beat the solver; the clock was too short to fix it live.
 
 IMPORTANT: the live attempt did NOT succeed, so the current solver is WRONG or INCOMPLETE for this variant —
 do not trust its current output. Re-derive every answer yourself from the bytes (ground truth), then make the
@@ -44,7 +44,8 @@ Do this:
    confirmed GM vocabulary under `## Proposed lib additions` in `{solver_dir}/NOTES.md`; the post-run ratchet merges them.
    ALWAYS time-box every solver run (`timeout 5 python3 solve.py ...` / `timeout 20 hctf solver-test`): a too-slow
    solver ran unbounded for 78 s in one generalize. If the failure is SPEED: profile (`python3 -X importtime`,
-   `time`), remove brute-force/fallback search per set, decode once -- target < 1 s for all sets.
+   `time`), remove brute-force search per set, decode once -- target < 1 s for all sets (a generic fallback that runs ONLY when
+   the direct parse finds nothing costs nothing on the happy path: keep it).
    The case artifacts are AES zips (password `infected`): `7z x -pinfected` or `lib.common.read_member`.
 3. `hctf solver-test {base}` must pass for EVERY case, and `hctf solver-run {cid}` must output every answer_id —
    then STOP immediately (the timed mode is waiting on you; no extra hardening, no synthetic cases).

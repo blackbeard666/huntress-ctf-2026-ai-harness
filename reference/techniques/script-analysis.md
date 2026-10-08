@@ -1,6 +1,8 @@
 # script-analysis — technique log (days 1-7; updated after every day)
 
 How this lane has looked so far (these are observations, not guarantees):
+- **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
+  guarantee for Time Trial / Mastery -- solvers derive structure and degrade per field.
 - There is one AES zip, `evidence.zip` (password `infected`), of inert "Huntress Script Triage" fixtures. **The contract is CUMULATIVE.** Each day keeps every earlier language's files and questions and adds ONE new host language. The bytes and values re-roll every day:
   PS (d1, 15 ids) -> +JScript (d2, 87) -> +Batch (d3, 159) -> +VBScript (d4, 231) -> +Python (d5, 357) -> +Bash (d6, 399)
   -> +Node.js `.mjs` and 2 Bash advanced-syntax fixtures (d7, 469). The title names the new language; the prompt names its NEW roles.

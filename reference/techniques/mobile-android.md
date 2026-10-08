@@ -1,6 +1,8 @@
 # mobile-android — technique log (days 1-7; updated after every day)
 
 How the lane has looked so far (observations, not guarantees):
+- **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
+  guarantee for Time Trial / Mastery -- solvers derive structure and degrade per field.
 - Every APK so far was the same ~12.7 KB fixture with 6 zip entries: `AndroidManifest.xml`, `assets/huntress_puzzle.json`,
   `classes.dex`, `META-INF/FIXTURE-.{SF,RSA}`, `MANIFEST.MF`. One question, `answer` = `ANS-` + 16 uppercase hex.
 - Each day has a new Android IPC/security THEME, written in the manifest `<meta-data android:name="huntress.mechanic">`
