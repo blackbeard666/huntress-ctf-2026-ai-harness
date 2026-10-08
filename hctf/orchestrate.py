@@ -1775,7 +1775,7 @@ class Chain:
         for mode in ("time_trial", "mastery"):
             if mode == "mastery" and mode in modes:
                 self.scout_stage()   # no-op unless SCOUT_ROUNDS > 0
-            if mode in modes and not self.timed_stage(mode):
+            if mode in modes and mode in self.entries and not self.timed_stage(mode):
                 return
         set_state(self.base, stage="done")
         say(f"[{self.base}] chain complete")
@@ -1838,6 +1838,10 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
         groups.setdefault(solvers.base_id(c["id"]), []).append(c)
     if only:
         groups = {b: v for b, v in groups.items() if any(o in b for o in only)}
+    skip = {x.strip() for x in os.environ.get("HCTF_SKIP_IDS", "").split(",") if x.strip()}
+    if skip:   # e.g. a replay sparing a mode whose variant pool is nearly used up
+        groups = {b: [c for c in v if c["id"] not in skip] for b, v in groups.items()}
+        say(f"skipping (HCTF_SKIP_IDS): {sorted(skip)}")
     say(f"{len(groups)} chains ({sum(map(len, groups.values()))} challenge modes), "
         f"slots local={local_slots} homebase={hb_slots}, credits={gov.credits()}")
     try:
