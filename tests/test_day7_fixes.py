@@ -671,3 +671,31 @@ assert triage._JVM_LIB is _bin27.JVM_LIBRARY
 from hctf import workers as _w27  # noqa: E402
 assert "jar_app_classes(" in _w27.lane_helpers("binary-reverse-engineering")
 print("ok  lib.binary: jar_app_classes skips bundled libraries (nested jars too), class_utf8 parses the pool")
+
+# 28) Homebase transfers (blind2 replay, ~130 KB/s VPN): (a) a non-pass result with no new attempt (rotation_exhausted,
+#     rate limit, start errors) never pulls the remote tmp-timed dir (13 MB of stale Mastery evidence took ~100 s);
+#     (b) a passed attempt's background capture pull waits until no timed attempt / solver push is in flight.
+from hctf import workers as _w28  # noqa: E402
+
+assert _w28.needs_variant_pull({"result": "solver_incomplete", "attempt_id": "a1"})
+assert _w28.needs_variant_pull({"result": "incorrect", "attempt_id": "a1"})
+for _r in ({"result": "rotation_exhausted", "attempt_id": None}, {"result": "exec_error"},
+           {"result": "exec_error", "attempt_id": "a1", "gm_rate_limited": True},
+           {"result": "no_answer_ids", "attempt_id": "a1"}):
+    assert not _w28.needs_variant_pull(_r), _r
+_t28 = __import__("time")
+_ws = _t28.time()
+timed._inflight = 1
+_th = __import__("threading").Timer(0.6, lambda: setattr(timed, "_inflight", 0))
+_th.start()
+timed.wait_idle(max_wait=5, poll=0.05)
+_waited = _t28.time() - _ws
+assert 0.5 <= _waited < 2, _waited
+timed._inflight = 1
+_ws = _t28.time()
+timed.wait_idle(max_wait=0.3, poll=0.05)            # capped: a capture is delayed, never lost
+assert _t28.time() - _ws < 1
+timed._inflight = 0
+_src = inspect.getsource(timed.process_result)
+assert _src.index("wait_idle()") < _src.index("pull()")
+print("ok  Homebase transfers: no pull without a new attempt; background captures wait for an idle VPN (capped)")

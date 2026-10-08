@@ -569,11 +569,24 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
         # runs the pull + regression-case capture in the background via this hook.
         res["_pull"] = lambda: pull(own_conn=True)
         return res
+    if not needs_variant_pull(res):
+        # No new variant to capture (rotation_exhausted, rate limit, prerequisite, start error): the remote dir only
+        # holds an OLD attempt's bytes. Blind D7 replay: a rotation_exhausted Mastery pulled 13 MB of stale evidence
+        # at ~130 KB/s over the VPN -- ~100 s on the critical path for nothing.
+        res["capture_note"] = "no new variant on Homebase (no attempt_id): pull skipped"
+        return res
     try:
         pull()  # a failure needs the variant's bytes locally (generalize / probe) before anything else
     except Exception as e:  # noqa: BLE001 - capture is best-effort
         res["capture_note"] = f"could not fetch the attempt's bytes from Homebase: {e}"
     return res
+
+
+def needs_variant_pull(res):
+    """A non-pass timed result has a variant worth pulling back only if the GM actually started an attempt."""
+    r = str(res.get("result", "")).lower()
+    return bool(res.get("attempt_id")) and not res.get("gm_rate_limited") and r not in (
+        "rotation_exhausted", "no_answer_ids", "prerequisite_required", "start_required")
 
 
 def run_homebase(chal_root, log_dir, stage, prompt, env_extra, timeout):

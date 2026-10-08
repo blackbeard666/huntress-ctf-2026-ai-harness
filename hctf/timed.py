@@ -335,6 +335,19 @@ def inflight():
     return _inflight
 
 
+CAPTURE_YIELD_MAX = float(__import__("os").environ.get("HCTF_CAPTURE_YIELD_MAX", "180"))
+
+
+def wait_idle(max_wait=None, poll=0.5):
+    """Block while any timed attempt (incl. its Homebase solver push) is in flight, up to max_wait s. Background
+    pulls of a passed attempt's evidence (several MB) otherwise share the slow VPN with the next clock-critical
+    push: blind D7 replay, binary's 6.6 MB TT capture ran beside script's Mastery retry (68 s green -> result)."""
+    import time as _t
+    end = _t.time() + (CAPTURE_YIELD_MAX if max_wait is None else max_wait)
+    while _inflight and _t.time() < end:
+        _t.sleep(poll)
+
+
 def process_result(cid, solver_dir, res, log=print):
     """Post-attempt bookkeeping shared by run() and the scout: persist last_timed.json, save the variant as a
     regression case, cache GM-verified closed-vocab labels (from ANY attempt, not only correct ones), record a
@@ -349,6 +362,7 @@ def process_result(cid, solver_dir, res, log=print):
     def capture():
         try:
             if pull:
+                wait_idle()   # don't share the ~130 KB/s VPN with another attempt's solver push / downloads
                 pull()  # Homebase pass: bring the attempt's bytes back first (off the critical path)
             case = capture_case(cid, Path(solver_dir), res)
             if case:
