@@ -429,3 +429,15 @@ extracts -- the 7z fix -- so the worker had readelf/Go/Rust/.NET/JVM recon from 
   Day 7 base -- the real D8 solver solves in ~8 s). Speed gate estimate was accurate (13.96 s) but compares solve only
   with 2x the TT window (20 s); it ignores download. Not changed: counting download would have flagged a pass.
 - 8 new GM-verified cases adopted (binary pass captures were still copying when the run exited).
+
+### Alt REAL Day 8 on the latest harness (2026-10-08 23:43, 3abfd7a, the Homebase, no Day-8 solutions visible)
+**15/15 at T+354 s, every TT/Mastery first try** (main's real Day 8: T+1222). single/TT/Mastery: warmups 25/30/33,
+mobile 28/32/35, metadata 34/38/41, script 138/155/172, binary 235/333/354. Single submits went via Homebase (no 429s).
+Critical path = binary: ~140 s of the single was the copied D7 solver hanging to the 60 s Bash cap twice on the 67 MB
+Swift ELF; then an 84 s pre-attempt speed generalize (D7's Kotlin-jar code re-read ~23k zip members; harness profile
+now shows `jar_classes`/`jar_hcfg` at the top). Script lost ~37 s to a non-unique `replace(old, new, 1)` that patched
+the wrong function. The Mastery speed gate was silently off (questions-only status contracts) -- fixed.
+Fixes (7e7984b): prior-solver dry-run diagnostics (no values), Bash cap 25 s + SIGINT tracebacks, harness cProfile in
+speed generalizes, speed-only generalize doesn't wait for probes, submit stamp skips the watcher re-run, post-run
+`speed_harden`, encoded config-magic recon, .mjs/.php/.wsf/.hta triage decode, safe-patching prompt rule.
+The rehearsal copy's ratchet knowledge merged into main (032b8d0) -- main's own D8 ratchet had reverted.

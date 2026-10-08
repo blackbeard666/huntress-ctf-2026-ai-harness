@@ -31,6 +31,7 @@ decodeConfig(): checks 'HCFG', key = b[5], len = b[6]|b[7]<<8, plain[i] = b[12+i
   analysis_format          jar -> JAR_FORMAT (see knowledge.py)
 """
 import argparse, hashlib, io, json, os, re, struct, sys, zipfile, zlib
+from contextlib import nullcontext
 
 from elftools.elf.elffile import ELFFile
 
@@ -135,14 +136,26 @@ def is_binary(b):
             or b[:2] == b"MZ" or is_jar(b))
 
 
+_ISJAR, _ZIPS = {}, {}
+
+
+def _zip(b):
+    """One parsed ZipFile per member (a fat jar's ~3000-entry central directory was re-parsed per question)."""
+    if id(b) not in _ZIPS:
+        _ZIPS[id(b)] = zipfile.ZipFile(io.BytesIO(b))
+    return _ZIPS[id(b)]
+
+
 def is_jar(b):
     if b[:2] != b"PK":
         return False
-    try:
-        with zipfile.ZipFile(io.BytesIO(b)) as z:
-            return any(n.endswith(".class") or n == "META-INF/MANIFEST.MF" for n in z.namelist())
-    except Exception:  # noqa: BLE001
-        return False
+    if id(b) not in _ISJAR:   # cached: answer() asks per field and a fat jar's central directory is ~3000 entries
+        try:
+            with nullcontext(_zip(b)) as z:
+                _ISJAR[id(b)] = any(n.endswith(".class") or n == "META-INF/MANIFEST.MF" for n in z.namelist())
+        except Exception:  # noqa: BLE001
+            _ISJAR[id(b)] = False
+    return _ISJAR[id(b)]
 
 
 # ---------- config ----------
@@ -274,7 +287,7 @@ def jar_classes(data):
         return [("", data)]
     out = []
     try:
-        with zipfile.ZipFile(io.BytesIO(data)) as z:
+        with nullcontext(_zip(data)) as z:
             for n in z.namelist():
                 b = z.read(n)
                 if n.endswith(".class") or b[:4] == b"\xca\xfe\xba\xbe":
@@ -288,7 +301,7 @@ def jar_classes(data):
 
 def jar_main_class(data):
     try:
-        with zipfile.ZipFile(io.BytesIO(data)) as z:
+        with nullcontext(_zip(data)) as z:
             mf = z.read("META-INF/MANIFEST.MF").decode("utf-8", "replace")
         m = re.search(r"^Main-Class:\s*(\S+)", mf, re.M)
         return m.group(1) if m else None
@@ -296,30 +309,46 @@ def jar_main_class(data):
         return None
 
 
+def class_hcfg(cls, blobs):
+    """HCFG from one class file: constant-pool strings (base64/hex/raw), bytecode-built arrays, the raw class."""
+    cb = []
+    utf8 = [v for t, v in class_constants(cls) if t == 1]
+    for s in utf8:
+        cb += decodings(s)
+    b64 = [s for s in utf8 if re.fullmatch(rb"[A-Za-z0-9+/=_-]{8,}", s)]
+    if len(b64) > 1:   # a blob split across several constants
+        cb += decodings(b"".join(b64))
+    cb += clinit_byte_arrays(cls)
+    cb.append(cls)
+    for b in cb:
+        h = hcfg(b, fallback=False)
+        if h and h["config"] is not None:
+            return h
+    blobs += cb
+    return None
+
+
 def jar_hcfg(data):
-    """HCFG config hidden in a jar: constant-pool strings (base64/hex/raw), then bytecode-built arrays, then raw.
-    Main class first, bundled runtimes (kotlin/, org/jetbrains/, ...) last; returns at the first decoded config
-    (a Kotlin fat jar carries ~3000 runtime classes)."""
-    classes = jar_classes(data)
+    """HCFG config hidden in a jar. Fast path: decompress ONLY the Main-Class entry (a Kotlin fat jar carries ~3000
+    runtime classes = ~0.3 s to inflate). Fallback (no config there): every class, app classes before bundled runtimes
+    (kotlin/, org/jetbrains/, ...), then the headerless brute force over all blobs."""
     main = (jar_main_class(data) or "").replace(".", "/") + ".class"
+    if data[:2] == b"PK" and main != ".class":
+        try:
+            with nullcontext(_zip(data)) as z:
+                h = class_hcfg(z.read(main), [])
+            if h:
+                return h
+        except Exception:  # noqa: BLE001
+            pass
+    classes = jar_classes(data)
     lib_rx = re.compile(r"^(META-INF/|kotlin/|kotlinx/|org/jetbrains/|org/intellij/|java/|javax/)")
     classes.sort(key=lambda nb: (nb[0] != main, bool(lib_rx.match(nb[0]))))
     blobs = []
     for _, cls in classes:
-        cb = []
-        utf8 = [v for t, v in class_constants(cls) if t == 1]
-        for s in utf8:
-            cb += decodings(s)
-        b64 = [s for s in utf8 if re.fullmatch(rb"[A-Za-z0-9+/=_-]{8,}", s)]
-        if len(b64) > 1:   # a blob split across several constants
-            cb += decodings(b"".join(b64))
-        cb += clinit_byte_arrays(cls)
-        cb.append(cls)
-        for b in cb:
-            h = hcfg(b, fallback=False)
-            if h and h["config"] is not None:
-                return h
-        blobs += cb
+        h = class_hcfg(cls, blobs)
+        if h:
+            return h
     blobs.append(data)
     for b in blobs:
         h = hcfg(b)
@@ -329,13 +358,17 @@ def jar_hcfg(data):
 
 
 def jar_facts(data):
-    classes = [(n, b) for n, b in jar_classes(data) if not n.startswith(("kotlin/", "META-INF/"))]
-    majors = [struct.unpack_from(">H", c, 6)[0] for _, c in classes if len(c) >= 8]
+    def classes():   # lazy: only class_names / class_major_version need the inflated classes
+        return [(n, b) for n, b in jar_classes(data) if not n.startswith(("kotlin/", "META-INF/"))]
+
+    def major():
+        majors = [struct.unpack_from(">H", c, 6)[0] for _, c in classes() if len(c) >= 8]
+        return max(majors) if majors else None
     return {
         "format": JAR_FORMAT,
         "main_class": jar_main_class(data),
-        "class_names": [n for n, _ in classes],
-        "class_major_version": max(majors) if majors else None,
+        "class_names": lambda: [n for n, _ in classes()],
+        "class_major_version": major,
     }
 
 
@@ -482,7 +515,7 @@ def answer(field, group, q):
         z = next((b for _, b in group if b[:2] == b"PK"), None)
         if z is None:
             return "none"
-        with zipfile.ZipFile(io.BytesIO(z)) as zf:
+        with nullcontext(_zip(z)) as zf:
             return fmt(sorted({i.compress_type for i in zf.infolist()}))
     if f in ("has_cpp_typeinfo", "has_cpp_vtable"):   # mangled RTTI/vtable names (ELF symtab, PE COFF strtab)
         rx = rb"_ZT[IS]N?\d" if f == "has_cpp_typeinfo" else rb"_ZTV(?!N10__cxxabiv1)N?\d"
@@ -497,7 +530,7 @@ def answer(field, group, q):
     if (q.get("answer_format") or {}).get("kind") == "integer" and f in fx.get("_int", {}):
         return str(fx["_int"][f])   # Day 8: elf_class/machine asked as raw header integers
     if f in fx:
-        return fmt(fx[f])
+        return fmt(fx[f]() if callable(fx[f]) else fx[f])
     log(f"[!] unknown field {field}")
     return None
 
