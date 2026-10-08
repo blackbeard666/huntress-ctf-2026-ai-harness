@@ -41,6 +41,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Routine Check"
   },
+  "binary-reverse-engineering-day-08-swift-network-configuration": {
+    "day": 8,
+    "dir": "day08/binary-swift-justice",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Swift Justice"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -83,6 +89,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Seven-Zip, No Relation"
   },
+  "metadata-forensics-day-08-whats-in-the-box": {
+    "day": 8,
+    "dir": "day08/metadata-whats-in-the-box",
+    "lane": "metadata-forensics",
+    "name": "🔎 What’s in the Box?"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -124,6 +136,12 @@
     "dir": "day07/mobile-webview-bridge",
     "lane": "mobile-android",
     "name": "📱 WebView Bridge"
+  },
+  "mobile-android-day-08-cleartext-session": {
+    "day": 8,
+    "dir": "day08/mobile-cleartext-session",
+    "lane": "mobile-android",
+    "name": "📱 Cleartext Session"
   },
   "read-the-rules": {
     "day": 1,
@@ -173,6 +191,12 @@
     "lane": "script-analysis",
     "name": "📜 Node by Node"
   },
+  "script-analysis-day-08-cross-language-iocs": {
+    "day": 8,
+    "dir": "day08/scripting-lost-in-translation",
+    "lane": "script-analysis",
+    "name": "📜 Lost in Translation"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -214,6 +238,12 @@
     "dir": "day07/warmups-percent-chance",
     "lane": "warmups",
     "name": "👶 Percent Chance"
+  },
+  "warmups-day-08": {
+    "day": 8,
+    "dir": "day08/warmups-entity-relations",
+    "lane": "warmups",
+    "name": "👶 Entity Relations"
   },
   "welcome-robots": {
     "day": 1,

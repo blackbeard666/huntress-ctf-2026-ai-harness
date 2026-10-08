@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-08-cleartext-session",
+  "lane": "mobile-android",
+  "name": "📱 Cleartext Session",
+  "ids": {
+    "single_solve": "mobile-android-day-08-cleartext-session",
+    "time_trial": "mobile-android-day-08-cleartext-session/time_trial",
+    "mastery": "mobile-android-day-08-cleartext-session/mastery"
+  }
+}

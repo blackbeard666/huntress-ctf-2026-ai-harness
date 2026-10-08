@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-08-swift-network-configuration",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Swift Justice",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-08-swift-network-configuration",
+    "time_trial": "binary-reverse-engineering-day-08-swift-network-configuration/time_trial",
+    "mastery": "binary-reverse-engineering-day-08-swift-network-configuration/mastery"
+  }
+}

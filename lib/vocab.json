@@ -40,7 +40,8 @@
     "identity"
   ],
   "_class": [
-    "ELF64"
+    "ELF64",
+    "64"
   ],
   "_endianness": [
     "little"
@@ -53,13 +54,15 @@
   ],
   "_machine": [
     "x86-64",
-    "i386"
+    "i386",
+    "62"
   ],
   "_type": [
     "ET_EXEC"
   ],
   "class": [
-    "ELF64"
+    "ELF64",
+    "64"
   ],
   "control": [
     "direct",
@@ -90,7 +93,8 @@
   ],
   "machine": [
     "x86-64",
-    "i386"
+    "i386",
+    "62"
   ],
   "representation": [
     "decimal_pipe",

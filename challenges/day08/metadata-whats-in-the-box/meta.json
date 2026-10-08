@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-08-whats-in-the-box",
+  "lane": "metadata-forensics",
+  "name": "🔎 What’s in the Box?",
+  "ids": {
+    "single_solve": "metadata-forensics-day-08-whats-in-the-box",
+    "time_trial": "metadata-forensics-day-08-whats-in-the-box/time_trial",
+    "mastery": "metadata-forensics-day-08-whats-in-the-box/mastery"
+  }
+}

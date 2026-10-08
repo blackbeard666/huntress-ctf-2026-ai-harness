@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-08-cross-language-iocs",
+  "lane": "script-analysis",
+  "name": "📜 Lost in Translation",
+  "ids": {
+    "single_solve": "script-analysis-day-08-cross-language-iocs",
+    "time_trial": "script-analysis-day-08-cross-language-iocs/time_trial",
+    "mastery": "script-analysis-day-08-cross-language-iocs/mastery"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "d248acae-0ffb-494f-8e7b-a746e118a1e5",
+  "window": null,
+  "elapsed": 3.39,
+  "in_window": 2.91,
+  "phases": {
+    "start": 0.48,
+    "download": 0.19,
+    "solve": 1.64,
+    "submit": 1.07
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "bright-blanket-ivy-12"
+  },
+  "attempts_remaining": 128
+}

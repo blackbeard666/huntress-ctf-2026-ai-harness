@@ -1,0 +1,21 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "b5307a64-5520-488d-8e20-7dedc8ee63c8",
+  "window": 8.0,
+  "elapsed": 3.98,
+  "in_window": 1.1,
+  "phases": {
+    "start": 2.88,
+    "download": 0.19,
+    "solve": 0.13,
+    "submit": 0.78
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": "2026-10-08T13:05:53.969Z",
+  "verified": {
+    "answer": "ANS-8CC39DFF2A9E0892"
+  },
+  "attempts_remaining": 31
+}
