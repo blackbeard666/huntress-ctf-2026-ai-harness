@@ -341,3 +341,14 @@ submit -> clock expiry -> retried, passed, no generalize; Mastery: 1 generalize 
 Remaining: (1) hb_timed waits on a hung GM submit long after the window closed (40 s); (2) the codec-family probe only
 runs inside a generalize -- when the TT passes clean, Mastery still meets the next codec (bash-advanced-tokens, every
 run); (3) a harvest GM call that hangs holds the generalize's accept ~15 s after the worker exits.
+
+### Blind Day 7 replay on MAIN `mainblind1` (2026-10-08 08:31, workflow 52b6016; alt had no Homebase credits)
+`.run/blind_main.sh start|stop` (main-side twin of the rehearsal copy tooling: lanes aside, lib/skills/techniques pinned to 97b3694
++ scrubbed generic overlays, worker scratch stashed, 195 paths masked; restore = git + stash, main left git-clean).
+`hctf timeline`: mobile 24/30/33, warmups 35/40/43, metadata 17/151/153 (escalated 11-field TT, 1 generalize 121 s,
+Mastery first try), binary 66/153/- (speed gate 12.7 s -> pre-attempt speed generalize 69 s, TT first try; Mastery pool
+exhausted on main too), **script 91/163/168: pre-attempt codec-family probe (calibration: vbs = noise) found 2 bash misses
+9 s after the single -> family-* adopted, one 51 s generalize -> Time Trial AND Mastery first try** (no failed attempt,
+no escalated variant). 14/15 by T+168 (fair rehearsal run 301, blind1 394, blind2 252, blind3 224). 63 calls, 0 flagged.
+Main Homebase now has static 7-Zip too (`hctf hb setup`; main VM has no passwordless sudo either).
+Next bottleneck: metadata on escalated variants (TT generalize 121 s); the hung-harvest-call fix is still open.
