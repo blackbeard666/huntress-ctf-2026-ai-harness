@@ -357,6 +357,9 @@ Next bottleneck: metadata on escalated variants (TT generalize 121 s); the hung-
 `hctf timeline`: mobile 27/32/35, warmups 41/45/48, metadata 42/47/50 (escalated 11/22-field variants, first try -- the
 single worker happened to write a generic solver; the new metadata skill guidance was pinned out of this run), binary
 83/91/- (fast solver, no speed gate; Mastery exhausted), **script 76/134/139 (pre-attempt family probe: 2 bash misses,
-38 s generalize, TT + Mastery first try)**. All 9 timed modes that could run passed FIRST TRY; 14/15 by **T+139**
-(mainblind1 168, blind3 224, blind2 252, blind1 394, fair rehearsal run 301). 38 calls, 0 flagged. The harvest re-roll fix
-(81f61b7) wasn't exercised: no timed attempt failed.
+38 s generalize, TT + Mastery first try)**. All 9 timed modes that could run passed FIRST TRY. 38 calls, 0 flagged.
+INCOMPLETE: 14/15 -- binary Mastery never ran (pool exhausted on both copies), so T+139 is NOT comparable with the
+15/15 runs (fair rehearsal run T+301, blind1 T+394); blind2/blind3/mainblind1/mainblind2 are all 14/15 for the same reason.
+Compare per mode instead. Offline only (not GM-judged): this run's binary solver, with the run's own pre-Day-7 lib,
+reproduces 112/112 and 96/96 GM-verified answers of the two saved Day 7 binary Mastery variants (1.5 s / 0.5 s).
+The harvest re-roll fix (81f61b7) wasn't exercised: no timed attempt failed.
