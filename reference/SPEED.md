@@ -363,3 +363,25 @@ INCOMPLETE: 14/15 -- binary Mastery never ran (pool exhausted on both copies), s
 Compare per mode instead. Offline only (not GM-judged): this run's binary solver, with the run's own pre-Day-7 lib,
 reproduces 112/112 and 96/96 GM-verified answers of the two saved Day 7 binary Mastery variants (1.5 s / 0.5 s).
 The harvest re-roll fix (81f61b7) wasn't exercised: no timed attempt failed.
+
+## Day 8 (2026-10-08): real run 15/15 at T+20:22 -- three timed-path failures, one triage regression
+Per lane T+ single / TT / Mastery (s): warmups 69/76/79, metadata 65/297/303, mobile 60/343/348, script 123/289/493,
+binary 518/534/1222. Without the incidents the run was ~T+9 (binary single T+8:38 was the next bottleneck).
+- **Binary Mastery (~650 s, the critical path):** submit reused a keep-alive socket the GM proxy closed during the 8 s
+  solve -> `RemoteDisconnected` (no verdict) twice; each failure then pulled 5 x 31 MB of evidence over the ~140 KB/s VPN
+  *synchronously* before the retry (442 s + 186 s). Fix: fresh socket for no-resend calls + idle > 3 s never reused;
+  transport drop with clock left -> one resend; failed-attempt pull only when the next step needs the bytes
+  (`workers.needs_bytes`).
+- **Script Mastery (~176 s):** same socket bug, then `start` resumed the dying attempt (4 s left) -> 2 s solver budget
+  -> misread as "solver too slow" -> 143 s generalize. Fix: wait a nearly-spent attempt out and `retry`
+  (`orchestrate._resume_need`, hb_timed `--min-left` backstop); a starved solve is `expired`/`clock_short`.
+- **GM dual-pool change (~640 s lane time, 6 useless generalize workers):** regular pool refused TT starts
+  (`training_rotation_invalid`). Fix: always request the Hall of Fame pool (`run_for_time`), start refusals ->
+  `error:start` (back off, never generalize), no 503 backoff on deterministic refusals.
+- **bin/7z regression (c500c83):** wrapper appended a second `-y` -> every triage pre-extraction failed (script decoded
+  payloads 0/0, no binary recon). Fixed.
+- **Binary single 510 s:** 120 s Bash hang (D7 solver brute force on a 67 MB Swift ELF), 66 s profile, bisect killed by
+  one hung GM POST, `hb ensure` crash in the sandbox, elf_class `kind: integer` = `64`. Fixes: 60 s default Bash cap
+  for workers, robust bisect (retry a hung probe, infer the clean-sibling half / last family), kind-aware label law.
+- **Single submits never went via Homebase** (ssh refused ssh_config inside bwrap): warmups waited 30 s of 429 backoff.
+  Fix: `SSH_OPTS` starts with `-F /dev/null`.

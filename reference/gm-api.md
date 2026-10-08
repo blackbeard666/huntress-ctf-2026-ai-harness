@@ -31,6 +31,20 @@
 - POST `{"op":"start"|"submit"|"retry","challenge":<id>,"answers":{<answer_id>:<str>}}`
   (the docs omit "op" for start/submit; the openapi spec makes "op" required, so always send it)
 - 409 = attempt-state conflict (prerequisite_required, start_required); the questions contract is still returned.
+- **Dual-pool routes (new at the Day 8 drop, 2026-10-08; gm-openapi.json refreshed then).** Time Trial / Mastery:
+  plain `start`/`retry` = the REGULAR pool (untimed play, `hall_of_fame_eligible: false`, warmups D8 had no deadline);
+  `"run_for_time": true` = a fresh timed **Hall of Fame** attempt (`hall_of_fame_eligible: true`). Status/start bodies
+  now carry `run_for_time`, `hall_of_fame_eligible`, `ranked_attempts_remaining` (~32/mode), `regular_variants_remaining`,
+  `training_variants_remaining`, `variant_fresh`. Observed refusals:
+  - `503 {"error":"training_rotation_invalid"}` -- regular pool broken for every lane but warmups at the D8 drop
+    (deterministic, NOT load: never back off on it).
+  - `409 {"error":"timed_intent_not_available"}` -- the route has no timed pool (Single Solve; "legacy" routes such as
+    binary D8, which has no `ranked_*` fields but is HoF-eligible anyway): resend without `run_for_time`.
+  - A `run_for_time` start on a LIVE attempt resumes it (no new ranked attempt). The clock starts at that start POST.
+  Harness policy (user, 2026-10-08): **always HoF on TT/Mastery** (`hb_timed._post_start`; `HCTF_RUN_FOR_TIME=0` opts
+  out for scouting/probes). The prerequisite check reads the latest TT attempt -- keep TT and Mastery in the same pool.
+- The GM proxy drops idle keep-alive sockets after ~4-5 s (D8: 3.5 s idle reused fine, 5.4-8 s idle ->
+  `RemoteDisconnected` on the submit). hb_timed never reuses a socket idle > 3 s and opens a fresh one for no-resend calls.
 - Each challenge returns `questions[]` aligned 1:1 with `answer_ids`; each question names its artifact, objective,
   normalization and answer_format.
 - Challenge IDs: `<lane>-day-NN[-slug]`, with timed variants `<id>/time_trial` and `<id>/mastery` as separate IDs.

@@ -101,10 +101,20 @@ trait objects) was never asked; there is still no Rust-aware path (see reference
   `loopback_stage_transfer`}. If branch/event questions appear: read them statically from `javap -c`, never run the jar.
 - TT 5.8 s of an 11 s window, Mastery 6.4 s of 12 s, both first-try CORRECT (set2 had d02/d04 as PE `.exe`).
 
+## Day 8 — Swift Justice (Swift ELF, 67 MB)
+- **Read `answer_format.kind` first:** the same field family changes form by kind (D8 elf_class went exact_text → integer;
+  the answer became the bit width `64`, not EI_CLASS `2`).
+- Huge Swift ELF (~290k symbols): eager `pyelftools` `iter_symbols()` and the D7 headerless-XOR brute force each take
+  60 s+ (the worker lost 120 s + a 66 s profile). Use `readelf`/`nm`/`strings` for recon; in solve.py only look up the
+  symbols you need (lazy). The config is a base64 HCFG blob in the binary (`strings -n 40 | grep -m3 '^SENHR'`).
+- Mastery: 5 deliveries x ~31 MB; download ~4.6-10 s + solve ~8 s on Homebase inside a 27 s window.
+
 ## GM answer conventions learned
 | Field family | Accepted form | Rejected (never resubmit) |
 |---|---|---|
-| elf_class | `ELF64` / `ELF32` (readelf style) | ELFCLASS64 |
+| elf_class (`answer_format.kind` exact_text) | `ELF64` / `ELF32` (readelf style) | ELFCLASS64 |
+| elf_class (`kind: integer`, D8 `d08_analysis_elf_class`) | the bit width `64` / `32` | `2` / `1` (raw EI_CLASS byte) |
+| machine (`kind: integer`, D8 `d08_analysis_machine`) | decimal e_machine (`62` = x86-64) | — |
 | endianness | `little` / `big` | little endian, lsb, msb |
 | machine (ELF) | `x86-64`, `x86`, `AArch64`, `ARM` | EM_X86_64, x86_64, amd64 |
 | machine (PE FILE_HEADER) | 0x14c → `i386`; 0x8664 → `x86-64` | x86 (for PE i386); raw `0x8664` |
