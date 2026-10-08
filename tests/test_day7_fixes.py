@@ -699,3 +699,44 @@ timed._inflight = 0
 _src = inspect.getsource(timed.process_result)
 assert _src.index("wait_idle()") < _src.index("pull()")
 print("ok  Homebase transfers: no pull without a new attempt; background captures wait for an idle VPN (capped)")
+
+# 29) hb_timed submit: bounded by the clock (+1.5 s grace), never resent (blind3: a hung GM submit took 40.7 s = the
+#     pool's 20 s socket timeout + one resend, for an 11 s window, and could have POSTed the answers twice).
+import socket as _sock29  # noqa: E402
+import threading as _thr29  # noqa: E402
+
+_hits29 = []
+_srv29 = _sock29.socket()
+_srv29.bind(("127.0.0.1", 0))
+_srv29.listen(5)
+
+
+def _hang29():
+    while True:
+        try:
+            conn, _ = _srv29.accept()
+        except OSError:
+            return
+        _hits29.append(conn.recv(65536)[:4])   # read the request, never answer
+        _thr29.Timer(5, conn.close).start()
+
+
+_thr29.Thread(target=_hang29, daemon=True).start()
+_p29 = hb_timed._Pool(f"http://127.0.0.1:{_srv29.getsockname()[1]}", size=1)
+_t0 = time.time() if "time" in dir() else __import__("time").time()
+try:
+    _p29.request("POST", "", b"{}", {}, timeout=0.6)
+    raise AssertionError("a hung submit must raise")
+except OSError:
+    pass
+_dt29 = __import__("time").time() - _t0
+assert _dt29 < 1.5, _dt29
+__import__("time").sleep(0.2)
+assert len(_hits29) == 1, _hits29                    # exactly one POST: no resend after the timeout
+_srv29.close()
+import datetime as _dt_29  # noqa: E402
+_soon = (_dt_29.datetime.now(_dt_29.timezone.utc) + _dt_29.timedelta(seconds=3)).isoformat().replace("+00:00", "Z")
+_gone = (_dt_29.datetime.now(_dt_29.timezone.utc) - _dt_29.timedelta(seconds=30)).isoformat().replace("+00:00", "Z")
+assert 4.0 <= hb_timed._submit_timeout({"deadline": _soon}) <= 4.6
+assert hb_timed._submit_timeout({"deadline": _gone}) == 2.0 and hb_timed._submit_timeout({}) == 20.0
+print("ok  hb_timed submit: bounded by the clock + 1.5 s, one POST only, raises -> 'expired' (clock retry)")

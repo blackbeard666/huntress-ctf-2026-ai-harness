@@ -75,12 +75,17 @@ class _Pool:
                 pass                      # will reconnect lazily on first use
         return c
 
-    def request(self, method, query, body=None, headers=None):
-        """-> (status, bytes). Reconnects once if the kept-alive socket was dropped."""
+    def request(self, method, query, body=None, headers=None, timeout=None):
+        """-> (status, bytes). Reconnects once if the kept-alive socket was dropped. `timeout` (s): a hard per-call
+        bound with NO resend -- used for the submit, which must not outlive the clock nor be POSTed twice."""
         import http.client
         c = self.q.get() if not self.q.empty() else self._new(connect=False)
+        if timeout is not None:
+            c.timeout = timeout
+            if c.sock is not None:
+                c.sock.settimeout(timeout)
         try:
-            for retry in (True, False):
+            for retry in ((False,) if timeout is not None else (True, False)):
                 try:
                     c.request(method, self.path + query, body=body, headers=headers or {})
                     r = c.getresponse()
@@ -91,6 +96,10 @@ class _Pool:
                     if not retry:
                         raise
         finally:
+            if timeout is not None:
+                c.timeout = 20
+                if c.sock is not None:
+                    c.sock.settimeout(20)
             self.q.put(c)
 
 
@@ -115,14 +124,14 @@ class GMError(RuntimeError):
         self.rate_limited = status == 429 or b"rate_limited" in (raw or b"")
 
 
-def _open(method, query, body=None, headers=None, verdict_ok=True, waits=(0.5, 1.0)):
+def _open(method, query, body=None, headers=None, verdict_ok=True, waits=(0.5, 1.0), timeout=None):
     """Pooled request with a SHORT 429/503 backoff (the clock is running): 0.5s then 1s, then give up.
     4xx with a JSON body is a GM VERDICT (409 {"error": "prerequisite_required"}, ...), not a crash: it is returned
     so the caller classifies it (raising turned a prerequisite refusal into exec_error -> a pointless generalize).
     verdict_ok=False (downloads): ANY 4xx/5xx raises GMError -- Day 7 script TT saved the 24-byte
     '{"error":"rate_limited"}' body as evidence.zip and burned a 2-min generalize on a solver that was fine."""
     for wait in (*waits, None):
-        status, raw = _pool().request(method, query, body, headers)
+        status, raw = _pool().request(method, query, body, headers, **({"timeout": timeout} if timeout else {}))
         if status in (429, 503) and wait is not None:
             time.sleep(wait)
             continue
@@ -136,8 +145,16 @@ def _open(method, query, body=None, headers=None, verdict_ok=True, waits=(0.5, 1
         return raw
 
 
-def _post(payload, timeout=20):
-    return json.loads(_open("POST", "", json.dumps(payload).encode(), _auth({"Content-Type": "application/json"})))
+def _post(payload, timeout=None):
+    return json.loads(_open("POST", "", json.dumps(payload).encode(), _auth({"Content-Type": "application/json"}),
+                            timeout=timeout))
+
+
+def _submit_timeout(body):
+    """Seconds a submit may take: the clock's remainder + 1.5 s grace (min 2 s). Blind D7 replay: a GM submit hung, the
+    pool's 20 s socket timeout + one RESEND made it 40.7 s for an 11 s window (and could POST the answers twice)."""
+    left = _deadline_left(body)
+    return 20.0 if left is None else max(2.0, left + 1.5)
 
 
 def _get_bytes(cap, timeout=20):
@@ -483,7 +500,16 @@ def main():
         out["in_window"] = round(time.time() - t_started, 2)
         _emit(out, adir)
         return
-    full = _post({"op": "submit", "challenge": a.cid, "answers": answers})
+    try:
+        full = _post({"op": "submit", "challenge": a.cid, "answers": answers}, timeout=_submit_timeout(body))
+    except OSError as e:   # socket.timeout included: the GM didn't answer before the clock (+grace) ran out
+        out["phases"]["submit"] = round(time.time() - t_solved, 2)
+        out["result"] = "expired"
+        out["detail"] = f"submit got no GM answer within the window ({e!r}); not resent"
+        out["elapsed"] = round(time.time() - t0, 2)
+        out["in_window"] = round(time.time() - t_started, 2)
+        _emit(out, adir)
+        return
     out["phases"]["submit"] = round(time.time() - t_solved, 2)
     fk = str(full.get("result", "")).lower()
     out["full_result"] = fk
