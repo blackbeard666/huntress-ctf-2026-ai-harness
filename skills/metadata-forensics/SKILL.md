@@ -25,6 +25,15 @@ description: Huntress metadata-forensics lane - identity inventories and label t
 - Normalization `case_insensitive` applies to hex digests; filenames are usually exact (base name, with the extension).
 - Timestamps: state the timezone (archive mtimes are local, EXIF has no timezone, NTFS/EVTX are UTC).
 
+# Compound timed variants (write solve.py for them from the start)
+A Time Trial / Mastery variant can ask MORE than the single did: questions carried over from earlier days' file
+families (`dNN-<type>-NNN-<field>`, e.g. a JPEG SOF size, PNG IHDR size, PDF header version next to today's ZIP field) and
+an extra evidence file with identity fields (`<name>-filename`, `-size-bytes`, `-md5`/`-sha1`/`-sha256`,
+`-magic-prefix-hex-N`, `-text-utf8-bom-present`). The single shows none of them, and a solver keyed to the single's exact
+field list fails the timed attempt (and the next variant handed out after a failure tends to be harder). So in solve.py:
+dispatch on the answer-id SUFFIX, read the member the question's `artifact` names (`lib.common.find_artifact`, which also
+unwraps a bundle zip named like its inner `...-01.zip`), and compute identity fields for ANY member generically.
+
 # Solver tips
 Locate each target by *content or role* (which file is the note, the image, the disguised one) rather than by name; variants
 rename files. Recompute every hash or size from the bytes in the variant's archive.

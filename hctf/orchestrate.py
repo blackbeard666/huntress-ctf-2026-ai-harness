@@ -62,7 +62,22 @@ HARVEST_VARIANTS = int(os.environ.get("HCTF_HARVEST_VARIANTS", "3"))
 # (verified on a rehearsal copy 2026-10-08: same attempt_id, unique_attempts_remaining unchanged), so an early one costs nothing and
 # _harvest polls once a second until the id changes (was deadline + 5 s: ~4 s lost per harvested variant).
 HARVEST_GAP = float(os.environ.get("HCTF_HARVEST_GAP", "0.5"))
-HARVEST_YIELD_MAX = float(os.environ.get("HCTF_HARVEST_YIELD_MAX", "30"))  # max s a harvest waits out other live clocks
+HARVEST_YIELD_MAX = float(os.environ.get("HCTF_HARVEST_YIELD_MAX", "30"))
+HARVEST_CALL_TIMEOUT = float(os.environ.get("HCTF_HARVEST_CALL_TIMEOUT", "20"))   # per GM call (default cli.call: 180 s)
+HARVEST_JOIN_MAX = float(os.environ.get("HCTF_HARVEST_JOIN_MAX", "10"))           # wait for the harvest after the worker
+
+
+def attempt_over(body):
+    """A start/status body for an attempt that is no longer live (expired / finished / past its deadline / no task):
+    a `retry` is needed for a fresh variant. Mirrors hb_timed's re-roll rule."""
+    if body.get("error"):
+        return False
+    if str(body.get("result", "")).lower() in ("expired", "correct", "incorrect", "finished"):
+        return True
+    if not body.get("answer_ids") or not cli.attempt_id(body):
+        return True
+    left = timed.seconds_left(body)
+    return left is not None and left <= 0.5  # max s a harvest waits out other live clocks
 
 _print_lock = threading.Lock()
 
@@ -730,7 +745,11 @@ class Chain:
             if watch.is_alive():
                 watch.join()
             if reaper:
-                reaper.join()
+                # Bounded: a GM call stuck inside the harvest must not hold the accept + retry (blind3: ~15 s after the
+                # worker had already exited). A late variant just lands as one more case for the next cycle.
+                reaper.join(timeout=HARVEST_JOIN_MAX)
+                if reaper.is_alive():
+                    say(f"[{cid}] harvest still busy {HARVEST_JOIN_MAX:g}s after the worker ended: not waiting for it")
             self._accept_or_restore(cid)
             if reaper:
                 # The last harvested attempt may still be live: a retry now would RESUME it (start is idempotent
@@ -759,13 +778,13 @@ class Chain:
             try:
                 for _poll in range(8):
                     with cli.chal_lock(cid), cli.quiet():
-                        env = cli.call(cid, "start", cid)
+                        env = cli.call(cid, "start", cid, timeout=HARVEST_CALL_TIMEOUT)
                         body = env.get("body") or {}
-                        if env.get("http") == 200 and not body.get("error") and not cli.attempt_id(body):
-                            # `start` RESUMES the latest attempt: after the failed one's deadline that is
-                            # {"result": "expired"} (or a finished one) with no attempt_id -- re-roll a fresh variant like
-                            # hb_timed does (rehearsal Day 7: both script harvests stopped here with 0 variants).
-                            env = cli.call(cid, "retry", cid)
+                        if env.get("http") == 200 and not body.get("error") and attempt_over(body):
+                            # `start` RESUMES the latest attempt: after the failed one's deadline that is an expired or
+                            # finished attempt -- with OR without its attempt_id (main's GM keeps the id: the harvest
+                            # polled 8x and gave up, mainblind1 metadata) -- so re-roll a fresh variant like hb_timed.
+                            env = cli.call(cid, "retry", cid, timeout=HARVEST_CALL_TIMEOUT)
                     body = env.get("body") or {}
                     if not (prev_att and cli.attempt_id(body) == prev_att) or done.wait(1.0):
                         break   # a NEW attempt (or an error / the generalize ended); same id = previous still live
@@ -782,8 +801,8 @@ class Chain:
                 plan = cli._planned_downloads(body)
                 from concurrent.futures import ThreadPoolExecutor
                 with ThreadPoolExecutor(max_workers=8) as ex, cli.quiet():
-                    envs = list(ex.map(lambda it: cli.call(cid, "download", it[1], str(dst), "--name", it[0], timeout=60),
-                                       plan))
+                    envs = list(ex.map(lambda it: cli.call(cid, "download", it[1], str(dst), "--name", it[0],
+                                                           timeout=HARVEST_CALL_TIMEOUT * 2), plan))
                 if not plan or not all(e.get("saved") for e in envs):
                     say(f"[{cid}] harvest: download incomplete for {att[:8]}; skipping it")
                     continue

@@ -781,3 +781,38 @@ _fut30.set_result({"noise": ["vbs"], "ratio": {"vbs": 0.3, "sh": 1.0}})
 ch._fam_noise_fut = _fut30
 assert ch._family_noise() == {"vbs"}
 print("ok  family pre-probe: misses -> family-* adopted + ONE pre-attempt generalize (merged with speed); none -> none")
+
+# 31) harvest re-roll rule = hb_timed's: an expired/finished attempt needs `retry` even WITH its attempt_id (main's GM
+#     keeps the id -> the harvest polled `start` 8x and gave up, mainblind1); live attempts are left alone. GM calls in
+#     the harvest are bounded and the accept waits at most HARVEST_JOIN_MAX for it.
+_past = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=5)).isoformat().replace("+00:00", "Z")
+_live = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(seconds=8)).isoformat().replace("+00:00", "Z")
+assert orchestrate.attempt_over({"result": "expired", "attempt_id": "x1", "answer_ids": ["a"]})
+assert orchestrate.attempt_over({"attempt_id": "x1", "answer_ids": ["a"], "deadline": _past})
+assert orchestrate.attempt_over({"result": "CORRECT", "name": "n"}) and orchestrate.attempt_over({"name": "n"})
+assert not orchestrate.attempt_over({"attempt_id": "x1", "answer_ids": ["a"], "deadline": _live})
+assert not orchestrate.attempt_over({"error": "rotation_exhausted"})
+ops = []
+hp = {(orchestrate.cli, "call"): lambda cid, op, *a, **k: (ops.append((op, k.get("timeout"))), {
+          "http": 200, "body": {"result": "expired", "attempt_id": "old1", "answer_ids": ["a"]} if op == "start"
+          else dict(_STARTED)})[1],
+      (orchestrate.cli, "chal_lock"): lambda cid: contextlib.nullcontext(),
+      (orchestrate.cli, "_planned_downloads"): lambda body: [],
+      (orchestrate.cli, "load"): lambda *a, **k: None,
+      (timed, "last_result"): lambda cid: {"attempt_id": "old1", "deadline": None},
+      (orchestrate.Chain, "_harvest_sleep"): staticmethod(lambda deadline, done: True),
+      (orchestrate, "ROOT"): d, (orchestrate, "say"): lambda *a, **k: None}
+hsaved = {k: getattr(*k) for k in hp}
+try:
+    for (mod, name), fn in hp.items():
+        setattr(mod, name, fn)
+    hc = object.__new__(orchestrate.Chain)
+    hc.root, hc.sdir = d, d
+    hc._harvest("c/time_trial", 1, set(), __import__("threading").Event())
+finally:
+    for (mod, name), fn in hsaved.items():
+        setattr(mod, name, fn)
+assert [o for o, _ in ops] == ["start", "retry"], ops
+assert all(t == orchestrate.HARVEST_CALL_TIMEOUT for _, t in ops), ops
+assert "reaper.join(timeout=HARVEST_JOIN_MAX)" in inspect.getsource(orchestrate.Chain.generalize)
+print("ok  harvest: expired-with-id -> retry (no 8x poll); bounded GM calls; accept waits <= HARVEST_JOIN_MAX")
