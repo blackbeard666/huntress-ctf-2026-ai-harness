@@ -352,3 +352,11 @@ exhausted on main too), **script 91/163/168: pre-attempt codec-family probe (cal
 no escalated variant). 14/15 by T+168 (fair rehearsal run 301, blind1 394, blind2 252, blind3 224). 63 calls, 0 flagged.
 Main Homebase now has static 7-Zip too (`hctf hb setup`; main VM has no passwordless sudo either).
 Next bottleneck: metadata on escalated variants (TT generalize 121 s); the hung-harvest-call fix is still open.
+
+### Blind Day 7 replay on MAIN `mainblind2` (2026-10-08 08:41, workflow 81f61b7)
+`hctf timeline`: mobile 27/32/35, warmups 41/45/48, metadata 42/47/50 (escalated 11/22-field variants, first try -- the
+single worker happened to write a generic solver; the new metadata skill guidance was pinned out of this run), binary
+83/91/- (fast solver, no speed gate; Mastery exhausted), **script 76/134/139 (pre-attempt family probe: 2 bash misses,
+38 s generalize, TT + Mastery first try)**. All 9 timed modes that could run passed FIRST TRY; 14/15 by **T+139**
+(mainblind1 168, blind3 224, blind2 252, blind1 394, fair rehearsal run 301). 38 calls, 0 flagged. The harvest re-roll fix
+(81f61b7) wasn't exercised: no timed attempt failed.
