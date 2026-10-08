@@ -465,6 +465,17 @@ def triage(cid):
         out += _describe(f)
     out += _extract_all(files, mdir / "work" / "extracted")
     try:
+        # Which toolchain built each member and is its preferred standard tool installed? Missing ones with a recipe
+        # start installing NOW in the background (user policy: install the right tool rather than settle for a weaker
+        # fallback); the worker is told, and `hctf tool-wait <tool>` blocks until it lands. Before recon so an
+        # install overlaps it.
+        from . import toolchain
+        ex = mdir / "work" / "extracted"
+        members = (sorted(p for p in ex.rglob("*") if p.is_file()) if ex.exists() else [])[:400]
+        out += toolchain.check(files + members, cid=cid)
+    except Exception as e:  # noqa: BLE001 - best-effort
+        out += ["", f"_toolchain check skipped: {e}_"]
+    try:
         out += _recon(cid, mdir / "work" / "extracted")
     except Exception as e:  # noqa: BLE001 - recon is best-effort
         out += ["", f"_recon skipped: {e}_"]

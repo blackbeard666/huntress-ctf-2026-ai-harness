@@ -698,6 +698,16 @@ def c_solver_test(a):
     return 0 if ok else 1
 
 
+def c_tool_wait(a):
+    from . import toolchain
+    return toolchain.main(["wait", a.tool, "--timeout", str(a.timeout)])
+
+
+def c_tool_gaps(a):
+    from . import toolchain
+    return toolchain.main(["report"] + (["--day", str(a.day)] if a.day else []))
+
+
 def c_compound_check(a):
     """Compounding readiness: today's solver vs every earlier day's GM-verified cases of its lane (hctf/compound.py)."""
     from . import compound
@@ -1020,6 +1030,11 @@ def main(argv=None):
     sub.add_parser("openapi")
     sub.add_parser("triage", help="deterministic no-LLM triage of a mode's artifacts").add_argument("id")
     sub.add_parser("solver-test", help="refresh + replay the solver's regression cases").add_argument("id")
+    ptw = sub.add_parser("tool-wait", help="block until a toolchain tool triage started installing is ready")
+    ptw.add_argument("tool")
+    ptw.add_argument("--timeout", type=int, default=600)
+    ptg = sub.add_parser("tool-gaps", help="post-run review: toolchain tools that were missing (installed / no recipe)")
+    ptg.add_argument("--day", type=int)
     pcc = sub.add_parser("compound-check", help="replay earlier days' verified cases of the lane through today's solver")
     pcc.add_argument("id", nargs="?")
     pcc.add_argument("--day", type=int)
@@ -1072,7 +1087,7 @@ def main(argv=None):
     pl2.add_argument("--dry-run", action="store_true", help="only print the ranked candidates")
     a = p.parse_args(argv)
     fn = {"hb": c_hb, "list": c_list, "status": c_status, "start": c_start, "retry": c_retry,
-          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test, "compound-check": c_compound_check,
+          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test, "compound-check": c_compound_check, "tool-wait": c_tool_wait, "tool-gaps": c_tool_gaps,
           "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
           "reconcile": c_reconcile, "solutions": c_solutions,
           "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout,

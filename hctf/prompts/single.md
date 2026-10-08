@@ -5,6 +5,11 @@ Do NOT write throwaway Python scripts for static inspection. The box has the sta
 - unpack: `7z x` / `7z l` (also lists), `unzip` (`7z x -p<pw>` for a password); don't script pyzipper/zipfile to peek inside.
 - identify & inspect: `file`, `xxd`/`hexdump -C`, `strings -n <len>` (with `-e l`/`-e b` for wide chars), `binwalk`.
 - binaries: `readelf -a`, `objdump -d`, `nm`, `c++filt` (demangle), `jq` for JSON.
+- **toolchain-specific tools first:** the triage's "Toolchain check" names what built each file (Swift, Rust, Go, .NET,
+  PyInstaller, Hermes, ...) and its preferred tool (`swift-demangle`, `rustfilt`, `GoReSym`, `ilspycmd`, `pycdc`, ...).
+  Use that tool rather than a generic fallback. One marked INSTALLING is being installed for you right now: do other
+  recon first, then `hctf tool-wait <tool>` before you use it. If the right tool for what you see is missing and not
+  listed, say so in notes.md (the harness reviews tool gaps after every run).
 Python (`solve.py`) is for exactly two things: (1) the generalizable **solver** that re-derives answers from variant bytes
 for Time Trial / Mastery, and (2) automating an exploit or re-gathering data under the clock. If a one-liner at the shell
 answers the question, run it — do not recreate `strings`, `unzip`, or a parser in Python just to look at one file.

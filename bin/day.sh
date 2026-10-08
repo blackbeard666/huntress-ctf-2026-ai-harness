@@ -95,7 +95,8 @@ echo "[run] hctf ${RUN_ARGS[*]}  ->  $LOG"
 EFFORT_LINE="[effort] global=$HCTF_WORKER_EFFORT; per lane: $(python3 -c 'import hctf.workers as w; print(" ".join(f"{l}={w.worker_effort(l)}" for l in ("warmups","metadata-forensics","script-analysis","binary-reverse-engineering","mobile-android")))' 2>/dev/null)"
 echo "$EFFORT_LINE"
 # Post-run: ATT&CK generalization gate (coverage vs the confirmed role/scenario tables + reference).
-POST="python3 -m lib.refs.coverage $DAY 2>&1 | sed 's/^/[attack-coverage] /'"
+# + toolchain gap review: every preferred tool triage found missing (installed at runtime / no recipe -> add one).
+POST="python3 -m lib.refs.coverage $DAY 2>&1 | sed 's/^/[attack-coverage] /'; python3 -m hctf.toolchain report --day $DAY 2>&1 | sed 's/^/[tool-gaps] /'"
 if [ "$FG" -eq 1 ]; then
   echo "$EFFORT_LINE" > "$LOG"
   hctf "${RUN_ARGS[@]}" 2>&1 | tee -a "$LOG"

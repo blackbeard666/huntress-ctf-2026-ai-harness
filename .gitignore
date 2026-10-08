@@ -1,6 +1,6 @@
 .run/
 .venv/
-tools/
+/tools/
 secrets/
 challenges/*/*/*/artifacts/
 challenges/*/*/*/attempts/

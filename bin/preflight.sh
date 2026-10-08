@@ -150,6 +150,14 @@ for t in file xxd strings binwalk 7z readelf objdump nm c++filt rizin rabin2 ana
 done
 if [ -z "$miss" ]; then ok "all lane tools on PATH (binary, metadata, mobile, script, warmups)."
 else warn "missing lane tools:$miss  (install: setup/install_tools.sh + apt list at its top)"; fi
+# Toolchain tools (setup/tools/<tool>.sh recipes; triage installs a missing one at runtime) + unresolved gaps from
+# earlier runs (`hctf tool-gaps`): a gap with no recipe means a weaker fallback on the next drop -- add the recipe.
+tc_miss=""
+for r in setup/tools/*.sh; do t=$(basename "$r" .sh); [ "$t" = _lib ] && continue; PATH="$ROOT/bin:$ROOT/.venv/bin:$PATH" command -v "$t" >/dev/null || tc_miss="$tc_miss $t"; done
+if [ -z "$tc_miss" ]; then ok "toolchain tools from setup/tools/ recipes all installed."
+else warn "toolchain tools not installed yet:$tc_miss (triage installs them at runtime; or now: bash setup/tools/<tool>.sh)"; fi
+gaps=$(python3 -m hctf.toolchain report 2>/dev/null | grep -c -- '-> ' || true)
+if [ "${gaps:-0}" -gt 0 ]; then warn "$gaps unresolved toolchain gap(s) from earlier runs: hctf tool-gaps"; else ok "no unresolved toolchain gaps (hctf tool-gaps)."; fi
 if python3 -c "import chepy, lib.codec" >/dev/null 2>&1; then ok "triage decoders: chepy + lib.codec importable."
 else warn "triage decoders missing (chepy or lib.codec): run setup/install_tools.sh -- script triage won't decode literals"; fi
 
