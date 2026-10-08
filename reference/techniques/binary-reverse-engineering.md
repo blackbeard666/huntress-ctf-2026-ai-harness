@@ -108,6 +108,10 @@ trait objects) was never asked; there is still no Rust-aware path (see reference
   60 s+ (the worker lost 120 s + a 66 s profile). Use `readelf`/`nm`/`strings` for recon; in solve.py only look up the
   symbols you need (lazy). The config is a base64 HCFG blob in the binary (`strings -n 40 | grep -m3 '^SENHR'`).
 - Mastery: 5 deliveries x ~31 MB; download ~4.6-10 s + solve ~8 s on Homebase inside a 27 s window.
+- **Mastery mutates the carry-over ELFs:** variant d7c5e016 shipped a STRIPPED d01 ELF (no .symtab). The question says
+  "If that symbol is absent, submit []" -- the solvers' old "last `mov eax, imm32; ret` leaf" fallback answered
+  `["mov eax, 8102","ret"]` in every set and failed all 5 sets. Absent symbol -> `[]`, has_symtab `false`, symbols `[]`.
+  Never substitute a heuristic for an absence the question defines.
 
 ## GM answer conventions learned
 | Field family | Accepted form | Rejected (never resubmit) |

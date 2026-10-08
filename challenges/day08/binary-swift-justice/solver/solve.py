@@ -367,11 +367,10 @@ def disassembly(elf, data):
         s = st.get_symbol_by_name("recover_code")
         if s:
             start, size = s[0]["st_value"], s[0]["st_size"]
-    if start is None:   # stripped: last leaf `mov eax, imm32; ret`
-        hits = [m.start() for m in re.finditer(rb"\xb8.{4}\xc3", tdata, re.S)]
-        if not hits:
-            return []
-        start, size = taddr + hits[-1], 6
+    if start is None:
+        # No recover_code FUNC symbol (stripped): the question says "If that symbol is absent, submit []". Day 8 Mastery
+        # mutation (variant d7c5e016): a stripped d01 ELF; the old "last mov eax,imm32; ret leaf" guess was rejected.
+        return []
     off = start - taddr
     out = []
     for i in md.disasm(tdata[off:off + (size or 64)], start):
