@@ -331,3 +331,13 @@ mode's tmp-timed dir -- 13 MB of stale Mastery evidence at ~130 KB/s over the VP
 (6.6 MB binary TT pass) share that link with the next attempt's solver push (script Mastery: 68 s green -> result).
 Homebase tools: the VM now has 7z (static 7-Zip in ~/.local/bin via `hctf hb setup`); still absent by design: java/jadx/
 apktool/exiftool/binwalk/upx/rizin/zip (in-window solvers are pure Python; analysis runs locally).
+
+### Blind Day 7 replay `blind3` (alt, 2026-10-08 08:09, workflow f9dc82e)
+`hctf timeline`: mobile 23/29/33, warmups 36/41/44, metadata 47/127/133 (1 generalize, escalated 11-field TT),
+binary 111/133/- (no speed gate needed; Mastery pool exhausted -> rotation_exhausted 2 s after the TT pass, no pull --
+was ~100 s), script 81/141/224 (TT: first attempt answered everything in 0.9 s but the GM took 40.7 s to answer the
+submit -> clock expiry -> retried, passed, no generalize; Mastery: 1 generalize 49 s, green -> result 11 s, was 68 s).
+14/15 by T+224 (binary Mastery unavailable). 56 calls, 0 flags. Background captures all landed after the attempts.
+Remaining: (1) hb_timed waits on a hung GM submit long after the window closed (40 s); (2) the codec-family probe only
+runs inside a generalize -- when the TT passes clean, Mastery still meets the next codec (bash-advanced-tokens, every
+run); (3) a harvest GM call that hangs holds the generalize's accept ~15 s after the worker exits.
