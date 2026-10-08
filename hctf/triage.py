@@ -472,7 +472,7 @@ def triage(cid):
         from . import toolchain
         ex = mdir / "work" / "extracted"
         members = toolchain.scan_order(ex)
-        out += toolchain.check(files + members, cid=cid)
+        out += toolchain.check(files + members, cid=cid, text=toolchain.challenge_text(contract))
     except Exception as e:  # noqa: BLE001 - best-effort
         out += ["", f"_toolchain check skipped: {e}_"]
     try:

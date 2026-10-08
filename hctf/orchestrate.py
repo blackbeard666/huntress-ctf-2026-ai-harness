@@ -769,6 +769,18 @@ class Chain:
         say(f"[{cid}] single worker warming up beside start/download/triage")
         return workers.WarmWorker(cli.cdir(cid), "single", text, self._worker_env(cid, "single"))
 
+    def _tool_prefetch(self, cid, source):
+        """Install the preferred tools of toolchains the challenge's own text names (hctf/toolchain.py): from the name at
+        chain start, then from the prompt/questions right after `start` -- before the download and the byte scan."""
+        if self.lane == "welcome":
+            return
+        try:
+            from . import toolchain
+            text = source if isinstance(source, str) else toolchain.challenge_text(source, self.name)
+            toolchain.prefetch(text, cid, log=say)
+        except Exception as e:  # noqa: BLE001 - best-effort
+            say(f"[{cid}] tool prefetch note: {e}")
+
     def _cancel_warm(self):
         w, self._warm = getattr(self, "_warm", None), None
         if w is not None:
@@ -1344,6 +1356,8 @@ class Chain:
                 self._warm = self._launch_warm(cid)
             except Exception as e:  # noqa: BLE001 - warm start is an optimization; cold launch below
                 say(f"[{cid}] warm worker note: {e}")
+        # Tools for a toolchain the challenge NAME already names (e.g. "Swift Justice") start installing now.
+        self._tool_prefetch(cid, self.name)
         # Timed contracts (status only: no clock starts) are prefetched BESIDE start/download/triage, not after them.
         self._tstatus = {}
         tmodes = [m for m in ("time_trial", "mastery") if m in self.entries]
@@ -1359,6 +1373,7 @@ class Chain:
         tfuts = [tpool.submit(fetch, m) for m in tmodes]
         tpool.shutdown(wait=False)
         body, err = timed.ensure_started(cid)
+        self._tool_prefetch(cid, (body or {}))   # the prompt + questions arrive with `start`: before any download
         # The GM sometimes hands the flag back directly (issued_flag, e.g. orientation challenges). Use it instead of
         # solving when there's a single answer_id to put it in — a free first-blood the harness used to discard.
         fb = body or {}

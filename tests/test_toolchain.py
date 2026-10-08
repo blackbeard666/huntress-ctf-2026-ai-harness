@@ -77,6 +77,39 @@ finally:
     tc.RECIPES, tc.STATE, tc.GAPS, tc._path = saved
 print("ok  missing preferred tool: installed in the background, worker told to tool-wait; no-recipe gap flagged + reviewed")
 
+# description hints: toolchains named in the text, lane-scoped cues, no "intent" -> Android noise in script prompts
+tt = tc.text_toolchains
+assert "swift" in tt("Swift binaries speak in protocols") and "msvc_cpp" in tt("C++ on Windows. RTTI is your Rosetta Stone")
+assert "go" in tt("Go binaries are chatty") and "go" not in tt("go fish them out and go home")
+assert "android" not in tt("Classify each script's intent") and "android" in tt("an exported deep-link Activity")
+assert "pyinstaller" in tt("bytecode, wheels, zipapps, frozen executables")
+cs = tc.cues
+assert any("base64" in i for i in cs("I hear sixty-four is a good base.", "warmups-day-01"))
+assert not any("riddle" in i for i in cs("Six Bash behavior graphs ... eight", "script-analysis-day-06-x"))
+assert any("network IOCs" in i for i in cs("see where this one phones home", "binary-x"))
+assert any("static analysis only" in i for i in cs("none of which will ever run", "script-analysis-x"))
+assert any("EARLIER days" in i for i in cs("Carry your PowerShell findings forward", "script-analysis-x"))
+# cross-check: description + bytes agree / description only (packed?) / cues section; prefetch installs from text alone
+tmp2 = Path(tempfile.mkdtemp())
+(tmp2 / "recipes").mkdir()
+(tmp2 / "bin").mkdir()
+(tmp2 / "recipes" / "swift-demangle.sh").write_text(f"#!/usr/bin/env bash\nprintf '#!/bin/sh\\n' > {tmp2}/bin/swift-demangle\n"
+                                                    f"chmod +x {tmp2}/bin/swift-demangle\n")
+saved = (tc.RECIPES, tc.STATE, tc.GAPS, tc._path)
+tc.RECIPES, tc.STATE, tc.GAPS = tmp2 / "recipes", tmp2 / "state", tmp2 / "gaps.jsonl"
+tc._path = lambda: f"{tmp2}/bin:/usr/bin:/bin"
+try:
+    got = tc.prefetch("Swift Justice", cid="binary-reverse-engineering-day-09-z", log=lambda *a: None)
+    assert got["swift"][0][1] in ("installing", "installed") and tc.wait("swift-demangle", 30) == "installed"
+    text = "\n".join(tc.check([d / "app.elf"], cid="binary-x", text="Swift binaries; see where it phones home",
+                               log=lambda *a: None))
+    assert "description (swift) + bytes confirm" in text and "network IOCs" in text, text
+    text = "\n".join(tc.check([d / "plain.txt"], cid="binary-x", text="Rust leaves fingerprints", log=lambda *a: None))
+    assert "NO byte markers" in text and "Rust" in text, text
+finally:
+    tc.RECIPES, tc.STATE, tc.GAPS, tc._path = saved
+print("ok  description hints: toolchains + lane-scoped cues; prefetch installs from the name alone; bytes cross-check")
+
 # every shipped recipe is named after a tool some toolchain prefers (so triage can actually trigger it)
 wanted = {t for _i, _l, _d, tools, _h in tc.TOOLCHAINS for t in tools}
 for r in (ROOT / "setup" / "tools").glob("*.sh"):

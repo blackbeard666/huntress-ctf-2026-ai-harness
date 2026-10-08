@@ -83,6 +83,11 @@ TOOLCHAINS = [
      ["asar"], "`asar extract app.asar out/`"),
     ("autoit", "Compiled AutoIt", _bytes(b"AU3!EA06", b"AU3!EA05"), ["autoit-ripper"], "`autoit-ripper X out/`"),
     ("upx", "UPX-packed", _bytes(b"UPX!"), ["upx"], "unpack first: `upx -d -o unpacked X`"),
+    ("msvc_cpp", "C++ (MSVC, Windows)", lambda n, d, z: d[:2] == b"MZ" and (b".?AV" in d or b"??_7" in d),
+     ["rz-bin"], "demangle MSVC names (`?x@C@@...`): `rz-bin -D msvc '<sym>'` (c++filt only does Itanium); RTTI "
+     "`.?AV` type descriptors name the classes"),
+    ("itanium_cpp", "C++ (Itanium ABI, ELF)", lambda n, d, z: d[:4] == b"\x7fELF" and (b"_ZTV" in d or b"GLIBCXX" in d),
+     ["c++filt"], "`nm -C X` / `nm X | c++filt`; vtables `_ZTV`, typeinfo `_ZTI`"),
     ("nim", "Nim", _bytes(b"NimMain", b"nimFrame", b"@m..@s"), ["nim-demangle"], "Nim mangling: `name__<module>_<n>`"),
     ("delphi", "Delphi/Borland", _bytes(b"Embarcadero Delphi", b"Borland Delphi", b"FastMM Borland"),
      ["idr"], "Delphi RTTI/forms: IDR / DelphiHelper"),
@@ -91,6 +96,116 @@ TOOLCHAINS = [
     ("pdf", "PDF", lambda n, d, z: d[:5] == b"%PDF-", ["pdf-parser", "pdfid", "qpdf"],
      "`pdfid X`; objects/streams: `pdf-parser -a X`, `qpdf --qdf X out.pdf`"),
 ]
+
+
+# Toolchains named in the challenge's own text (name + prompt + questions). Available at `start`, BEFORE any download:
+# a missing tool can start installing at chain start, and the byte scan is cross-checked against it.
+TEXT_HINTS = {
+    "swift": r"\bswift\b",
+    "rust": r"\brust\b|\brustc\b|\bcargo\b",
+    "go": r"\bgolang\b|\bgo (?:binar(?:y|ies)|build|program|runtime|module)s?\b|\bgoroutine",
+    "dotnet": r"\.net\b|\bc#|\bcsharp\b|\bdotnet\b|\bcli metadata\b|\bclr\b",
+    "jvm": r"\bjava\b|\bjvm\b|\bkotlin\b|\bconstant pool\b|\bclass files?\b|\.jar\b",
+    "android": r"\bandroid\b|\bapk\b|\bdeep[- ]link|\bwebview\b|\bcontent ?provider\b|\bpendingintent\b",
+    "pyinstaller": r"\bpyinstaller\b|\bfrozen (?:python|executables?)\b",
+    "pyc": r"\bpython\b.*\bbytecode\b|\bbytecode\b.*\bpython\b|\.pyc\b",
+    "hermes": r"\breact native\b|\bhermes\b",
+    "flutter": r"\bflutter\b|\bdart\b",
+    "il2cpp": r"\bunity\b|\bil2cpp\b",
+    "electron": r"\belectron\b|\.asar\b",
+    "autoit": r"\bautoit\b",
+    "upx": r"\bupx\b|\bpacked\b",
+    "nim": r"\bnim\b",
+    "delphi": r"\bdelphi\b|\bborland\b",
+    "msvc_cpp": r"c\+\+ on windows|\bmsvc\b|\brtti\b",
+    "itanium_cpp": r"\bc\+\+\b(?! on windows)",
+    "ole": r"\bmacros?\b|\bvba\b|\bole\b",
+    "pdf": r"\bpdfs?\b",
+}
+
+
+def text_toolchains(text):
+    """{toolchain id: [matched words]} named in a challenge's text."""
+    low = (text or "").lower()
+    out = {}
+    for tid, pat in TEXT_HINTS.items():
+        hits = sorted({m.group(0) for m in re.finditer(pat, low)})
+        if hits:
+            out[tid] = hits[:3]
+    return out
+
+
+# What the description suggests the task IS (ideas for the worker, never answers). (pattern, idea, lanes or None).
+CUES = [
+    (r"phones? home|beacon|\bc2\b|callback|exfil|url configuration|\bendpoint", "network IOCs: expect URLs / hosts / "
+     "domains in a config blob or strings -- answers are exact strings", None),
+    (r"backend|replay it against|\bserver\b|\bapi\b", "a live service is mentioned: check whether the answer comes from "
+     "the artifact itself or needs a request (in-network targets are reachable from Homebase: `hctf hb exec -- ...`)", None),
+    (r"impostor|deliberate disguise|disguised as|does not match|doesn.t match|unexpected|impossible|odd one|siblings|anomal|deceiv",
+     "outlier hunt: compare every item and name the one that differs (the question says which property)", None),
+    (r"inventory|census|\bcount\b|take attendance|enumerate|list every|every stored", "exhaustive listing: exact counts, "
+     "order and formatting matter -- enumerate from the structure, not from a sample", None),
+    (r"symbols?|mangl|rtti|vtable|protocols?\b", "symbol-table work: demangle with the toolchain's own demangler", None),
+    (r"constant pool|cli metadata|metadata tables?|build info|panic strings|trait objects", "structured metadata "
+     "(constant pool / CLI tables / Go buildinfo / Rust panics) holds the answers: read it with the format's tool", None),
+    (r"encod|escap|quoting|obfusc|character codes|reversible|transform|armou?r", "layered encodings: decode step by "
+     "step and keep each exact form", None),
+    (r"normaliz|exact form|canonical", "canonicalize the indicators exactly as asked (quoting / escaping / case)", None),
+    (r"att&ck|technique|classify|role|tag the", "classification fields: closed vocabulary from answer_format / ATT&CK "
+     "ids", None),
+    (r"\bhash|identity inventory|sha-?\d|md5", "hashes over the exact bytes delivered", None),
+    (r"first sixteen bytes|first 16 bytes|magic|extensions claim", "identify by magic bytes, not by extension", None),
+    (r"\bbom\b|encoding landmines?|look identical", "byte-level text encoding: BOMs / UTF variants", None),
+    (r"dimension|geometry|chunks?\b|resized", "image structure: header/chunk fields, not the rendered picture", None),
+    (r"state machine|coroutine|suspend", "reconstruct a compiled state machine from bytecode/metadata", None),
+    (r"never (?:run|execute)|will never|none of which will", "static analysis only: never execute the specimens", None),
+    (r"carry .{0,40}forward|day \d+ taught|earlier|prior .{0,20}evidence|preserving every earlier",
+     "explicitly builds on EARLIER days of this lane: reuse those concepts (compounding)", None),
+    (r"exported|deep.link|intent|provider|webview|pendingintent|backup", "Android component analysis: manifest "
+     "(`aapt dump xmltree X.apk AndroidManifest.xml` / `apktool d`), then the code path that handles it", ("mobile",)),
+    (r"sixty-four|\bbase\b", "riddle -> base64 (64)", ("warmups",)),
+    (r"thirteen", "riddle -> ROT13", ("warmups",)),
+    (r"sixteen", "riddle -> hex (base 16)", ("warmups",)),
+    (r"two sides|\btwo of a kind", "riddle -> binary (base 2)", ("warmups",)),
+    (r"\beight\b", "riddle -> octal (base 8)", ("warmups",)),
+    (r"reduced to numbers|\bnumbers\b", "riddle -> decimal character codes", ("warmups",)),
+    (r"address bar|percent", "riddle -> URL percent-encoding", ("warmups",)),
+    (r"browser", "riddle -> HTML character entities", ("warmups",)),
+]
+
+
+def cues(text, cid=""):
+    """Ideas the challenge text suggests (deduplicated, in CUES order)."""
+    low = (text or "").lower()
+    out = []
+    for pat, idea, lanes in CUES:
+        if lanes and not any((cid or "").startswith(l) for l in lanes):
+            continue
+        if re.search(pat, low) and idea not in out:
+            out.append(idea)
+    return out
+
+
+def challenge_text(contract, name=""):
+    """name + prompt + question texts of a GM contract (what the challenge says about itself)."""
+    c = contract or {}
+    qs = " ".join(str(q.get("question") or "") for q in (c.get("questions") or [])[:60])
+    return " ".join(x for x in (name, c.get("name") or "", c.get("prompt") or "", qs) if x)
+
+
+def prefetch(text, cid="", log=print):
+    """Chain start / right after `start`: install the preferred tools of every toolchain the challenge's TEXT names,
+    before anything is downloaded. Returns {toolchain: [(tool, state)]}."""
+    out = {}
+    for tid in text_toolchains(text):
+        tools = next((t for i, _l, _d, t, _h in TOOLCHAINS if i == tid), [])
+        for tool in tools:
+            st = "present" if have(tool) else install(tool, log=log)
+            if st != "present":
+                _gap(cid, tid, tool, st, ["(named in the challenge description)"])
+                log(f"[toolchain] {cid}: description names {tid} -> {tool}: {st}")
+            out.setdefault(tid, []).append((tool, st))
+    return out
 
 
 def _scan(path):
@@ -227,16 +342,31 @@ def _gap(cid, tid, tool, state, files):
                             "toolchain": tid, "tool": tool, "state": state, "files": files[:5]}) + "\n")
 
 
-def check(files, cid="", install_missing=True, log=print):
-    """Triage entry point: detect toolchains, make sure their preferred tools are there (start installs for missing
-    ones), log every finding. Returns markdown lines for the triage summary ([] when nothing notable)."""
+def check(files, cid="", install_missing=True, log=print, text=""):
+    """Triage entry point: detect toolchains from the bytes AND the challenge text, cross-check the two, make sure the
+    preferred tools are there (start installs for missing ones), log every finding, and list what the description
+    suggests the task is. Returns markdown lines for the triage summary ([] when nothing notable)."""
     found = detect(files)
-    if not found:
-        return []
-    lines = ["", "## Toolchain check (what built these files -> the preferred standard tool)", ""]
+    said = text_toolchains(text)
+    ideas = cues(text, cid)
+    lines = []
+    if ideas:
+        lines += ["", "## What the description suggests (from the challenge's own name/prompt/questions -- ideas, "
+                  "not answers)", ""] + [f"- {i}" for i in ideas]
+    if not found and not said:
+        return lines
+    lines += ["", "## Toolchain check (what built these files -> the preferred standard tool)", ""]
     for tid, label, _det, tools, hint in TOOLCHAINS:
-        if tid not in found:
+        if tid not in found and tid not in said:
             continue
+        if tid in found and tid in said:
+            src = f"description ({', '.join(said[tid])}) + bytes confirm"
+        elif tid in found:
+            src = "bytes"
+        else:
+            src = (f"description says {', '.join(said[tid])} but NO byte markers found in the scanned files -- packed, "
+                   "obfuscated, or inside a member not extracted yet; check before trusting either")
+        found.setdefault(tid, [])
         states = []
         for tool in tools:
             st = "present" if have(tool) else (install(tool, log=log) if install_missing else
@@ -248,7 +378,8 @@ def check(files, cid="", install_missing=True, log=print):
                                       " (INSTALLING now -- run `hctf tool-wait " + t + "` before using it)" if s == "installing"
                                       else " (NOT available: no install recipe -- flagged for the post-run review)"
                                       if s == "no_recipe" else f" ({s})") for t, s in states)
-        lines.append(f"- **{label}** in {', '.join(f'`{x}`' for x in found[tid][:4])}: use {shown} -- {hint}")
+        where = f" in {', '.join(f'`{x}`' for x in found[tid][:4])}" if found[tid] else ""
+        lines.append(f"- **{label}**{where} [{src}]: use {shown} -- {hint}")
     lines.append("- Prefer the toolchain's own tool over a generic fallback; if one is installing, do other recon first "
                  "and `hctf tool-wait <tool>` when you need it (it returns as soon as the install lands).")
     return lines

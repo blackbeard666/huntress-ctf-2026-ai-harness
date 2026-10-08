@@ -10,6 +10,10 @@ Do NOT write throwaway Python scripts for static inspection. The box has the sta
   Use that tool rather than a generic fallback. One marked INSTALLING is being installed for you right now: do other
   recon first, then `hctf tool-wait <tool>` before you use it. If the right tool for what you see is missing and not
   listed, say so in notes.md (the harness reviews tool gaps after every run).
+- **read the description first:** the triage's "What the description suggests" lists what the challenge's own
+  name/prompt/questions point at (e.g. network IOCs, an outlier hunt, static-only, a riddle naming the encoding,
+  builds on earlier days). Use it to orient your first command; the bytes still decide every answer. When the
+  Toolchain check says the description and the bytes DISAGREE, find out why before trusting either.
 Python (`solve.py`) is for exactly two things: (1) the generalizable **solver** that re-derives answers from variant bytes
 for Time Trial / Mastery, and (2) automating an exploit or re-gathering data under the clock. If a one-liner at the shell
 answers the question, run it — do not recreate `strings`, `unzip`, or a parser in Python just to look at one file.
