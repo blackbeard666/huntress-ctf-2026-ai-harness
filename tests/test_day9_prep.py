@@ -91,7 +91,12 @@ print("ok  capture: grace for the next mode's kickoff, then wait_idle, then pull
 mc = Path(tempfile.mkdtemp()) / "contract.json"
 mc.write_text(json.dumps({"answer_ids": [f"set{i}.x" for i in range(1, 6)]}))
 summ = {"results": [{"mutation": "mastery-shape", "ok": True, "seconds": 3.4}]}
-assert orchestrate.mastery_estimate(summ, mc) == 12.75
+assert orchestrate.mastery_estimate(summ, mc) == 12.75                      # no base timing: shape / 2 per set
+summ["base_seconds"] = 1.75                                                # binary-like: 1.65 s per set, 0.1 s startup
+assert orchestrate.mastery_estimate(summ, mc) == 12.47, orchestrate.mastery_estimate(summ, mc)
+mc.write_text(json.dumps({"answer_ids": [f"set{i}.message" for i in range(1, 39)]}))
+light = {"base_seconds": 0.15, "results": [{"mutation": "mastery-shape", "ok": True, "seconds": 0.2}]}
+assert orchestrate.mastery_estimate(light, mc) < 3.2, orchestrate.mastery_estimate(light, mc)   # was 5.7 (warmups)
 assert orchestrate.mastery_estimate({"results": []}, mc) is None
 print("ok  Mastery speed estimate from the mutation probe's mastery-shape run")
 

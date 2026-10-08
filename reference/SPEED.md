@@ -400,3 +400,20 @@ binary 518/534/1222. Without the incidents the run was ~T+9 (binary single T+8:3
 - **Worker tools:** `--tools Bash,Read,Write,Edit,Skill,Task` (26 at init before). **GM backoff:** 2,4,4,... s cap,
   8 retries (~30 s). **Mastery speed gate:** mutation probe's 2-set run -> estimate vs 2x the TT window.
 - **Pass captures** wait `HCTF_CAPTURE_GRACE` (6 s) so the next mode's kickoff starts first, then `wait_idle()`.
+
+### Blind Day 8 replay on MAIN `d8warm1` (2026-10-08 22:40, workflow 6b29f3b + estimate fix, knowledge pinned 672753b)
+**15/15 at T+631 s** (real Day 8: T+1222). Per lane single/TT/Mastery: mobile 32/37/41, metadata 36/41/44,
+warmups 38/43/45, script 117/132/145 (TT+Mastery first try), binary 368/468/631 (TT: 2 empty `d02_*_has_cpp_*` fields
+on a mutated Day 2 binary -> generalize green in 41 s; Mastery: the stripped-d01 trap again -- the pre-Day-8 Day 7
+solver still guesses -- -> generalize green in 60 s).
+- Scoped failed-variant pulls live: TT 31 MB in 31.2 s, Mastery delivery 1 in 38.2 s (Day 8: 442 + 186 s blocking).
+  The localized-incorrect path built `variant-mastery-9c4e39de` (trimmed to set 1), the green watcher ended the worker.
+- Warm workers: all 5 READY with no tools, handoff T+7-8 s, first tool done T+13.1-17.0 s -- **no gain vs Day 8**
+  (T+13-16): the warm-up finishes about when triage does, and the ~5 s after handoff is the model reading the triage
+  (first Bash has no cold-start: measured 1.1 s with or without a Bash pre-warm). Only a pre-drop launch could help.
+- Caveat: replay Singles are judged by the local replay GM (no public-GM 429s), so the faster singles (32-38 s vs
+  60-65 s) are NOT evidence for the submit-via-Homebase fix.
+- Speed-gate estimate double-counted python startup per set (warmups 5.7 s for a ~0.2 s solve) -> now marginal
+  per-set cost (2-set run - base run) + one startup.
+- Main's real Day 8 binary solver (e6f556c) passes every new replay variant (TT d02 cpp, stripped-d01 Mastery);
+  13 new GM-verified replay cases adopted into the Day 8 solvers.

@@ -582,7 +582,13 @@ def mastery_estimate(mut_summary, mastery_contract):
     sets = {a.split(".", 1)[0] for a in ids if re.match(r"(set|slot)\d+\.", a)}
     if not shape or not sets:
         return None
-    return round(shape["seconds"] / 2 * len(sets) * 1.5, 2)
+    # Marginal cost per set = 2-set run - 1-set base run; the rest is process startup, paid once. (Plain shape/2 x sets
+    # counted python startup per set: replay d8warm1 estimated warmups 38 sets at 5.7 s, real solve ~0.2 s.)
+    base = (mut_summary or {}).get("base_seconds")
+    two = float(shape["seconds"])
+    per = max(0.005, two - float(base)) if base is not None else two / 2
+    startup = max(0.0, two - 2 * per)
+    return round(startup + per * len(sets) * 1.5, 2)
 
 
 def _family_cli(action, sdir, out, extra=(), timeout=60):
