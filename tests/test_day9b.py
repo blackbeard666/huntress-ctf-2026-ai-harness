@@ -165,4 +165,40 @@ assert outs["1"] == outs["0"] == {i: i.upper() for i in ids}, outs
 if (os.cpu_count() or 1) >= 2:
     assert secs["1"] < secs["0"] * 0.75, secs
 print(f"ok  skeleton parallel sets: same answers, {secs['1']:.2f}s vs {secs['0']:.2f}s sequential")
+# 9) a finished CORRECT body after our submit timed out = the GM judged it late -> a pass (no re-roll loop)
+from hctf import timed as _timed, cli as _cli  # noqa: E402
+recorded = []
+_o = (_timed._remember, _timed._keep_failed_attempt, _timed.capture_case, _cli.gm_latest_correct, _cli.record_remote_result)
+_timed._remember = _timed._keep_failed_attempt = lambda *a, **k: None
+_timed.capture_case = lambda *a, **k: None
+_cli.record_remote_result = lambda cid, att, ans, kind, body=None: recorded.append((cid, att, kind))
+try:
+    late = {"result": "no_answer_ids", "attempt_id": None, "start_refused": True,
+            "detail": {"result": "CORRECT", "status": "pending", "attempt_id": "abc"}}
+    _cli.gm_latest_correct = lambda cid: True
+    assert _timed.process_result("x/time_trial", TMPD, dict(late), log=lambda *a: None) == "correct"
+    assert recorded == [("x/time_trial", "abc", "correct")]
+    _cli.gm_latest_correct = lambda cid: False                       # GM disagrees -> plain runner error, retry
+    assert _timed.process_result("x/time_trial", TMPD, dict(late), log=lambda *a: None) == "error:exec"
+    assert _timed.process_result("x/time_trial", TMPD, {"result": "no_answer_ids", "detail": {}},
+                                 log=lambda *a: None) == "error:exec"
+finally:
+    (_timed._remember, _timed._keep_failed_attempt, _timed.capture_case, _cli.gm_latest_correct,
+     _cli.record_remote_result) = _o
+print("ok  late-judged CORRECT (finished body + GM latest CORRECT) counts as the pass; otherwise retry")
+
+# 10) parallel-sets need: a sequential solver whose multi-set case costs >= 0.3 s/set is flagged; a parallel one isn't
+ps = TMPD / "psolver"
+(ps / "cases" / "auto-mastery-x").mkdir(parents=True)
+(ps / "cases" / "auto-mastery-x" / "contract.json").write_text(json.dumps({"answer_ids": [f"set{i}.f" for i in range(1, 6)]}))
+(ps / "cases" / "single_solve").mkdir()
+(ps / "cases" / "single_solve" / "contract.json").write_text(json.dumps({"answer_ids": ["f"]}))
+(ps / "solve.py").write_text("for aid, q in pairs: pass\n")
+res = [{"case": "auto-mastery-x", "seconds": 2.0}, {"case": "single_solve", "seconds": 0.9}]
+need = orchestrate._parallel_sets_need(ps, res)
+assert need == {"case": "auto-mastery-x", "sets": 5, "seconds": 2.0, "per_set": 0.4}, need
+assert orchestrate._parallel_sets_need(ps, [{"case": "auto-mastery-x", "seconds": 1.0}]) is None      # 0.2 s/set
+(ps / "solve.py").write_text("from lib.common import group_by_set\n")
+assert orchestrate._parallel_sets_need(ps, res) is None                                             # already parallel
+print("ok  parallel-sets need: sequential multi-set solver flagged; fast or already-parallel solvers left alone")
 print("ALL PASS")

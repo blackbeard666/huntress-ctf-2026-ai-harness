@@ -469,6 +469,14 @@ def process_result(cid, solver_dir, res, log=print):
     if "rotation_exhausted" in r:
         return "error:exhausted"   # GM: no more variants for this mode today -- terminal; a generalize can't help
     if r == "no_answer_ids":
+        det = res.get("detail") if isinstance(res.get("detail"), dict) else {}
+        if str(det.get("result", "")).upper() == "CORRECT" and cli.gm_latest_correct(cid):
+            # start/retry handed back a FINISHED attempt the GM judged CORRECT: a submit that timed out on our side was
+            # judged late (rehearsal blind D8: binary TT submit took 4.4 s -> "expired", then this; ~20 s + 1 ranked attempt
+            # spent re-rolling). The GM's latest attempt is the pass: record it.
+            log(f"[{cid}] the GM judged the previous attempt CORRECT after our submit timed out: counting the pass")
+            cli.record_remote_result(cid, det.get("attempt_id"), {}, "correct", det)
+            return "correct"
         return "error:exec"    # the GM gave no live task (nothing for a solver to fix): retry, never generalize
     if r == "exec_error":
         if res.get("solver_too_slow"):

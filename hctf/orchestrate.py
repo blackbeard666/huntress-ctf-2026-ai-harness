@@ -944,6 +944,15 @@ class Chain:
             gm_wrong += ("\n  - THE SOLVER IS TOO SLOW: solve.py hit the in-window timeout on this variant (answers may well be right). "
                          "Make it fast -- no per-set brute force over every decoder, no subprocess per set, decode once, "
                          "early-exit on the first candidate that matches the answer_format; time it with `time hctf solver-run`.")
+        if d.get("parallel_sets"):
+            ps = d["parallel_sets"]
+            gm_wrong += (f"\n  - SOLVE MASTERY SETS IN PARALLEL: `cases/{ps['case']}` has {ps['sets']} sets and takes {ps['seconds']}s "
+                         f"({ps['per_set']}s per set) solved one after another; a Mastery attempt runs every set inside ONE clock "
+                         "on a 2-vCPU VM. Restructure main(): group the (answer_id, question) pairs with "
+                         "`lib.common.group_by_set(pairs)` and solve each group in a fork `ProcessPoolExecutor` "
+                         "(max_workers=min(len(groups), os.cpu_count())), merging the dicts; single-set contracts stay "
+                         "sequential; any pool error falls back to the sequential loop. Copy the pattern from "
+                         "`hctf/templates/solve_skeleton.py` main(). Change NO answer: every case must still pass.")
         if d.get("solver_too_slow") or d.get("single_seconds"):
             # The harness profiles the slow case itself (newest variant-* for an in-window timeout, else the single).
             cases = self.sdir / "cases"
@@ -2272,6 +2281,31 @@ def ratchet(day):
 
 
 SPEED_HARDEN = os.environ.get("HCTF_SPEED_HARDEN", "1") != "0"
+PARALLEL_PER_SET = float(os.environ.get("HCTF_PARALLEL_PER_SET", "0.3"))   # s/set above which sets must run in parallel
+_PARALLEL_MARKERS = ("group_by_set", "ProcessPoolExecutor", "multiprocessing")
+
+
+def _parallel_sets_need(sdir, results):
+    """A multi-set (Mastery-shaped) regression case whose per-set time is >= PARALLEL_PER_SET while the solver solves
+    sets sequentially -> {case, sets, seconds, per_set}; else None. Copied cumulative solvers (binary/script) never
+    picked up the skeleton's parallel main() (rehearsal blind D8: binary Mastery solve 8.3 s for 5 sets, sequential)."""
+    src = "".join(p.read_text(errors="replace") for p in Path(sdir).glob("*.py"))
+    if any(m in src for m in _PARALLEL_MARKERS):
+        return None
+    from lib.common import group_by_set
+    best = None
+    for r in results:
+        try:
+            c = json.loads((Path(sdir) / "cases" / r["case"] / "contract.json").read_text())
+        except (OSError, ValueError):
+            continue
+        ids = c.get("answer_ids") or [q.get("id") for q in c.get("questions") or [] if q.get("id")]
+        sets = len([k for k in group_by_set([(a, {}) for a in ids]) if k != "_"])
+        if sets >= 2 and r["seconds"] / sets >= PARALLEL_PER_SET:
+            cand = {"case": r["case"], "sets": sets, "seconds": r["seconds"], "per_set": round(r["seconds"] / sets, 2)}
+            if not best or cand["seconds"] > best["seconds"]:
+                best = cand
+    return best
 
 
 def speed_harden(day=None, cid=None, log=None):
@@ -2300,13 +2334,21 @@ def speed_harden(day=None, cid=None, log=None):
         timed_ok = [r for r in res if not r.get("unverified") and not r.get("error")]
         slow = max((r["seconds"] for r in timed_ok), default=0.0)
         worst = max(timed_ok, key=lambda r: r["seconds"], default=None)
-        if slow <= SINGLE_SPEED_BUDGET:
+        par = _parallel_sets_need(sdir, timed_ok)
+        if slow <= SINGLE_SPEED_BUDGET and not par:
             log(f"[speed-harden] {base}: slowest case {slow:.1f}s <= {SINGLE_SPEED_BUDGET:g}s, nothing to do")
             out[base] = (slow, None)
             continue
-        log(f"[speed-harden] {base}: slowest case {worst['case']} {slow:.1f}s > {SINGLE_SPEED_BUDGET:g}s -> speed generalize")
+        diag = {}
+        if slow > SINGLE_SPEED_BUDGET:
+            log(f"[speed-harden] {base}: slowest case {worst['case']} {slow:.1f}s > {SINGLE_SPEED_BUDGET:g}s -> speed generalize")
+            diag.update(solver_too_slow=True, single_seconds=round(slow, 2))
+        if par:
+            log(f"[speed-harden] {base}: Mastery case {par['case']} solves {par['sets']} sets sequentially "
+                f"({par['per_set']:.2f}s/set) -> parallel-sets generalize")
+            diag["parallel_sets"] = par
         chain = chain_for(base, pools, gov)
-        chain.generalize(base, wrong=None, fixed=None, diag={"solver_too_slow": True, "single_seconds": round(slow, 2)})
+        chain.generalize(base, wrong=None, fixed=None, diag=diag)
         after = max((r["seconds"] for r in solvers.test_solver(sdir) if not r.get("unverified") and not r.get("error")),
                     default=0.0)
         log(f"[speed-harden] {base}: slowest case {slow:.1f}s -> {after:.1f}s")
