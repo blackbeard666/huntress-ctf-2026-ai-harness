@@ -1674,9 +1674,15 @@ class Chain:
             return "", []
 
     def _late_probes(self, cid, wait=True):
-        """Probes that run beside the first Time Trial (mutation + compounding): adopt hard misses as regression cases.
-        Returns the diag dict for a generalize ({} when clean). Each result is consumed once."""
+        """Probes that run beside the first Time Trial (codec family + mutation + compounding): adopt hard misses as
+        regression cases. Returns the diag dict for a generalize ({} when clean). Each result is consumed once."""
         pre = {}
+        ftxt, fcases = self._family_pre_result(wait=wait)
+        if fcases:
+            n = self._adopt_family_cases(fcases)
+            say(f"[{cid}] codec-family probe: the single's solver misses {len(fcases)} re-encoded case(s) "
+                f"({n} adopted as family-* regression cases)")
+            pre["family_pre"] = ftxt
         if not getattr(self, "_mut_late_done", False):
             mtxt, mcases = self._mutation_pre_result(wait=wait)
             if mcases or mtxt or wait:
@@ -1729,10 +1735,13 @@ class Chain:
             return family_probe(self.sdir, None, noise=noise, exclude=noise)
         self._fam_pre_fut = ThreadPoolExecutor(max_workers=1).submit(run)
 
-    def _family_pre_result(self):
+    def _family_pre_result(self, wait=True):
+        """(text, missed family case dirs). Each result is consumed ONCE (pre-attempt block or _late_probes).
+        wait=False: only if the probe already finished (it runs beside the first Time Trial)."""
         fut = getattr(self, "_fam_pre_fut", None)
-        if fut is None:
+        if fut is None or getattr(self, "_fam_late_done", False) or (not wait and not fut.done()):
             return "", []
+        self._fam_late_done = True
         try:
             return fut.result(timeout=90)
         except Exception as e:  # noqa: BLE001
@@ -1838,11 +1847,13 @@ class Chain:
                 say(f"[{cid}] solver too slow on the single ({self._single_slow}s): generalizing for speed BEFORE the "
                     "first timed attempt (no attempt spent)")
                 pre.update(solver_too_slow=True, single_seconds=self._single_slow)
-            ftxt, fcases = self._family_pre_result()
+            # Codec-family probe (script): beside the first Time Trial too (rehearsal D8: it held the TT kickoff ~12 s); taken
+            # here only if already done, otherwise _late_probes collects it before Mastery / a TT-failure generalize.
+            ftxt, fcases = self._family_pre_result(wait=mode != "time_trial")
             if fcases:
                 n = self._adopt_family_cases(fcases)
                 say(f"[{cid}] codec-family probe: the single's solver misses {len(fcases)} re-encoded case(s) "
-                    f"({n} adopted as family-* regression cases): generalizing BEFORE the first timed attempt")
+                    f"({n} adopted as family-* regression cases): generalizing BEFORE the timed attempt")
                 pre["family_pre"] = ftxt
             # Mutation + compounding probes run BESIDE the first Time Trial (mutation probe: 0 hits in mainblind3-7 + D8;
             # it held binary ~5 s): take them now only if already done; Mastery (or a TT-failure generalize) awaits them.

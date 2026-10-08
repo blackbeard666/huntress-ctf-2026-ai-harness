@@ -165,7 +165,7 @@ try:
     for (mod, name), fn in patches.items():
         setattr(mod, name, fn)
     ch._single_slow, ch._pre_attempt_done = None, False
-    ch._family_pre_result = lambda: ("", [])
+    ch._family_pre_result = lambda **k: ("", [])
     ch._mutation_pre_result = lambda wait=True: (ftxt, fhard)
     assert ch.timed_stage("mastery")
     assert len(gen) == 1 and gen[0].get("mutation_pre") == ftxt, gen

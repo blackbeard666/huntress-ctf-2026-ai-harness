@@ -97,4 +97,72 @@ finally:
     (orchestrate.solvers.test_solver, orchestrate.Chain.generalize, orchestrate.chain_for,
      orchestrate.paths.solver_dir) = _o
 print("ok  speed_harden: only over-budget solvers get one speed generalize")
+# 7) codec-family probe beside the first TT: an unfinished probe doesn't hold the TT; Mastery consumes it once
+class _Fut:
+    def __init__(self, val, done):
+        self.val, self._done = val, done
+
+    def done(self):
+        return self._done
+
+    def result(self, timeout=None):
+        self._done = True
+        return self.val
+
+
+famdir = TMPD / "fam" / "sh" / "family-1"
+famdir.mkdir(parents=True)
+(famdir / "expected.json").write_text("{}")
+ch = object.__new__(orchestrate.Chain)
+ch.base, ch.sdir, ch.lane = "b", TMPD / "famsolver", "script-analysis"
+(ch.sdir / "cases").mkdir(parents=True)
+ch.entries = {"time_trial": {"id": "b/time_trial"}, "mastery": {"id": "b/mastery"}}
+ch.gov = type("G", (), {"allow_timed": lambda self: True})()
+ch._fam_pre_fut = _Fut(("family: 1 miss", [str(famdir)]), done=False)
+ch._mut_pre_fut = _Fut(("", [], {}), done=True)
+ch._cmp_pre_fut = _Fut(("", []), done=True)
+gens, runs = [], []
+patches = {
+    (orchestrate, "set_state"): lambda *a, **k: None,
+    (orchestrate, "record_timed_case"): lambda *a, **k: None,
+    (orchestrate, "say"): lambda *a, **k: None,
+    (orchestrate.cli, "is_complete"): lambda cid: False,
+    (orchestrate.cli, "gm_solved"): lambda cid: False,
+    (orchestrate.timed, "run"): lambda cid, sdir, log=None, **k: (runs.append(cid), "correct")[1],
+    (orchestrate.timed, "last_result"): lambda cid: None,
+    (orchestrate.Chain, "generalize"): lambda self, cid, wrong=None, fixed=None, diag=None: gens.append(diag),
+    (orchestrate.Chain, "_mastery_speed_gate"): lambda self, cid: None,
+}
+saved = {k: getattr(*k) for k in patches}
+try:
+    for (mod, name), fn in patches.items():
+        setattr(mod, name, fn)
+    assert ch.timed_stage("time_trial") is True and runs == ["b/time_trial"] and not gens, (runs, gens)
+    assert ch.timed_stage("mastery") is True and len(gens) == 1 and "family_pre" in gens[0], gens
+    assert (ch.sdir / "cases" / "family-sh-1").exists()
+    assert ch._family_pre_result() == ("", [])                 # consumed once
+finally:
+    for (mod, name), fn in saved.items():
+        setattr(mod, name, fn)
+print("ok  codec-family probe beside the TT: TT not held; Mastery adopts + generalizes once")
+
+# 8) solver skeleton: Mastery sets solved in parallel processes, same answers as sequential
+import os  # noqa: E402
+import subprocess  # noqa: E402
+sk = TMPD / "skel"                     # .run/tmp/<X>/skel/solve.py: parents[4] is the project root
+sk.mkdir(parents=True)
+src = (ROOT / "hctf" / "templates" / "solve_skeleton.py").read_text()
+(sk / "solve.py").write_text(src.replace("    return None  # TODO", "    import time; time.sleep(0.3); return answer_id.upper()"))
+ids = [f"set{i}.f" for i in range(1, 5)]
+(sk / "c.json").write_text(json.dumps({"answer_ids": ids, "questions": [{"id": x} for x in ids]}))
+outs, secs = {}, {}
+for par in ("1", "0"):
+    t = time.time()
+    r = subprocess.run([sys.executable, str(sk / "solve.py"), "--contract", str(sk / "c.json"), "--artifacts", str(sk)],
+                       capture_output=True, text=True, timeout=60, env=dict(os.environ, HCTF_SOLVER_PARALLEL=par))
+    secs[par], outs[par] = time.time() - t, json.loads(r.stdout.strip().splitlines()[-1])
+assert outs["1"] == outs["0"] == {i: i.upper() for i in ids}, outs
+if (os.cpu_count() or 1) >= 2:
+    assert secs["1"] < secs["0"] * 0.75, secs
+print(f"ok  skeleton parallel sets: same answers, {secs['1']:.2f}s vs {secs['0']:.2f}s sequential")
 print("ALL PASS")

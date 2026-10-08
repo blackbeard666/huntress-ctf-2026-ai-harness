@@ -764,13 +764,13 @@ try:
     for (mod, name), fn in p30.items():
         setattr(mod, name, fn)
     ch._single_slow, ch._pre_attempt_done = 4.0, False
-    ch._family_pre_result = lambda: ("probe: 3/5 reproduced", [str(fam30)])
+    ch._family_pre_result = lambda **k: ("probe: 3/5 reproduced", [str(fam30)])
     assert ch.timed_stage("mastery")
     assert gen30 == [{"solver_too_slow": True, "single_seconds": 4.0, "family_pre": "probe: 3/5 reproduced"}], gen30
     assert (ch.sdir / "cases" / "family-sh-1" / "expected.json").exists()
     gen30.clear()
     ch._single_slow, ch._pre_attempt_done = None, False
-    ch._family_pre_result = lambda: ("", [])
+    ch._family_pre_result = lambda **k: ("", [])
     assert ch.timed_stage("mastery") and gen30 == []
 finally:
     for (mod, name), fn in s30.items():

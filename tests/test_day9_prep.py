@@ -180,7 +180,7 @@ patches = {
     (timed, "run"): lambda cid, sdir, log=None, **k: (runs.append(cid), "correct")[1],
     (timed, "last_result"): lambda cid: None,
     (orchestrate.Chain, "generalize"): lambda self, cid, wrong=None, fixed=None, diag=None: gens.append(diag),
-    (orchestrate.Chain, "_family_pre_result"): lambda self: ("", []),
+    (orchestrate.Chain, "_family_pre_result"): lambda self, **k: ("", []),
     (orchestrate.Chain, "_mastery_speed_gate"): lambda self, cid: None,
     (compound, "adopt"): lambda sdir, hard, limit=6: len(hard),
 }

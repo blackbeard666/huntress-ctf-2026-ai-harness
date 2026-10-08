@@ -9,12 +9,14 @@ their files like 'delivery 2: sample_02.apk' or 'evidence.zip -> member': `artif
 pairing first, so same-named per-set deliveries never get mixed up)."""
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT))
-from lib.common import container_by_sha, delivery_missing, find_artifact, load_contract, normalize  # noqa: E402
+from lib.common import (container_by_sha, delivery_missing, find_artifact, group_by_set, load_contract,  # noqa: E402
+                        normalize)
 
 _cache = {}
 
@@ -52,15 +54,12 @@ def fallback(answer_id, question, data, contract):
     return None
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--contract", required=True)
-    ap.add_argument("--artifacts", required=True)
-    a = ap.parse_args()
-    contract, pairs = load_contract(a.contract)
+def _solve_pairs(job):
+    """Answer one group of (answer_id, question) pairs -- a whole Mastery set, or the whole contract."""
+    root, contract, pairs = job
     out = {}
     for aid, q in pairs:
-        data = artifact_bytes(a.artifacts, contract, q.get("artifact") or "")
+        data = artifact_bytes(root, contract, q.get("artifact") or "")
         try:
             v = answer(aid, q, data, contract)
         except Exception as e:  # noqa: BLE001 - one bad field must not sink the other answers
@@ -73,6 +72,32 @@ def main():
                 print(f"{aid}: fallback {e!r}", file=sys.stderr)
         if v is not None:
             out[aid] = normalize(v, q)
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--contract", required=True)
+    ap.add_argument("--artifacts", required=True)
+    a = ap.parse_args()
+    contract, pairs = load_contract(a.contract)
+    groups = group_by_set(pairs)
+    out = {}
+    if len(groups) >= 2 and os.environ.get("HCTF_SOLVER_PARALLEL", "1") != "0":
+        # Mastery: every set runs inside ONE clock -- one forked process per set (the Homebase VM has 2 vCPUs; heavy
+        # per-set work such as unzipping 31 MB deliveries halves). Same results as the sequential loop.
+        import multiprocessing as mp
+        from concurrent.futures import ProcessPoolExecutor
+        try:
+            with ProcessPoolExecutor(max_workers=min(len(groups), os.cpu_count() or 2),
+                                     mp_context=mp.get_context("fork")) as ex:
+                for part in ex.map(_solve_pairs, [(a.artifacts, contract, g) for g in groups.values()]):
+                    out.update(part)
+        except Exception as e:  # noqa: BLE001 - never lose a solve to the pool: fall back to sequential
+            print(f"parallel sets failed ({e!r}); sequential", file=sys.stderr)
+            out = _solve_pairs((a.artifacts, contract, pairs))
+    else:
+        out = _solve_pairs((a.artifacts, contract, pairs))
     print(json.dumps(out))
 
 

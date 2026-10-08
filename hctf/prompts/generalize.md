@@ -64,3 +64,5 @@ Do this:
 Patch safely: use the Edit tool (non-unique matches are refused) or `assert s.count(old) == 1` before `s.replace(old, new)`;
 a non-unique replace silently patches a sibling function. Profiling: `python3 -m cProfile -s cumtime solve.py ... 2>&1 | head -40`
 (redirect stderr INTO the pipe -- `2>&1 >/dev/null` sends the profile to /dev/null).
+Speed: a Mastery attempt runs every set inside one clock -- if per-set work is heavy, solve the sets in parallel
+processes (`lib.common.group_by_set` + fork `ProcessPoolExecutor`, see the skeleton's `main()` in hctf/templates/solve_skeleton.py).

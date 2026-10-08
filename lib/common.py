@@ -23,6 +23,20 @@ def load_contract(path):
     return c, pairs
 
 
+_SET_KEY = re.compile(r"^((?:set|slot)[._-]?\d+)[._-]")
+
+
+def group_by_set(pairs):
+    """{set key ('set1', 'set2', ... or '_' for unprefixed ids): [(answer_id, question), ...]} in contract order. A
+    Mastery contract runs EVERY set inside one clock: solve the groups in parallel processes when per-set work is
+    heavy (binary D8: 5 x 31 MB sets, 6.3 s solve sequentially on the 2-vCPU Homebase VM) -- see the solver skeleton."""
+    out = {}
+    for aid, q in pairs:
+        m = _SET_KEY.match(aid or "")
+        out.setdefault(m.group(1) if m else "_", []).append((aid, q))
+    return out
+
+
 def normalize(value, question):
     """Apply the GM's stated normalization to a value before submitting."""
     v = str(value)

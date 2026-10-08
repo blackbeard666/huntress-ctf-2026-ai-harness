@@ -88,6 +88,9 @@ spend is on the critical path. The harness ENDS your session automatically the m
    (Day 8: a Day 7 brute-force path sat 120 s on a 67 MB ELF). Pass an explicit `timeout` only for known-long tools
    (Ghidra, jadx). When the solver is slow, fix the obvious eager step (e.g. parsing every symbol, re-opening a zip per
    field) instead of profiling at length; if you profile: `python3 -m cProfile -s cumtime solve.py ... 2>&1 | head -40`.
+   **Mastery sets in parallel:** every set runs inside ONE clock. When per-set work is heavy (big archives, large
+   binaries: > ~0.3 s per set), solve the sets in parallel processes -- `lib.common.group_by_set(pairs)` + a
+   fork `ProcessPoolExecutor`, exactly as the solver skeleton's `main()` does (2 vCPUs on Homebase: ~2x).
    **Patch solver code safely:** use the Edit tool (it refuses a non-unique match), or in a script
    `assert s.count(old) == 1` before `s.replace(old, new)` -- a `replace(old, new, 1)` on a block that also exists in a
    sibling function silently patched the wrong one (rehearsal D8 script: ~37 s lost).
