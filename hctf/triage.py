@@ -471,7 +471,7 @@ def triage(cid):
         # install overlaps it.
         from . import toolchain
         ex = mdir / "work" / "extracted"
-        members = (sorted(p for p in ex.rglob("*") if p.is_file()) if ex.exists() else [])[:400]
+        members = toolchain.scan_order(ex)
         out += toolchain.check(files + members, cid=cid)
     except Exception as e:  # noqa: BLE001 - best-effort
         out += ["", f"_toolchain check skipped: {e}_"]

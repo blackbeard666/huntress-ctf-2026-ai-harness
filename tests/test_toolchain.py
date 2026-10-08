@@ -34,6 +34,17 @@ assert "flutter.apk" in found.get("flutter", []) and "flutter.apk" in found.get(
 assert not any("plain.txt" in v for v in found.values())
 print("ok  detect: Swift / Rust / PyInstaller / Hermes / Flutter+Android, nothing on plain text")
 
+# scan order: a binary at the top level is scanned even when an extracted jar holds thousands of classes
+ex = Path(tempfile.mkdtemp()) / "extracted"
+(ex / "evidence" / "d07--variant-000.jar.extracted" / "kotlin").mkdir(parents=True)
+for i in range(600):
+    (ex / "evidence" / "d07--variant-000.jar.extracted" / "kotlin" / f"C{i:04d}.class").write_bytes(b"\xca\xfe\xba\xbe")
+(ex / "evidence" / "d08--variant-000.elf").write_bytes((d / "app.elf").read_bytes())
+order = tc.scan_order(ex)
+assert len(order) == 400 and order[0].name == "d08--variant-000.elf", order[:2]
+assert "swift" in tc.detect(order)
+print("ok  scan_order: shallow binaries before thousands of extracted .class files (D8 Swift ELF was #3146)")
+
 # runtime install of a missing preferred tool via a stub recipe (temp recipe dir, temp bin on the search path)
 tmp = Path(tempfile.mkdtemp())
 rec, binp = tmp / "recipes", tmp / "bin"

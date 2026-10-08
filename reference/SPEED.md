@@ -417,3 +417,15 @@ solver still guesses -- -> generalize green in 60 s).
   per-set cost (2-set run - base run) + one startup.
 - Main's real Day 8 binary solver (e6f556c) passes every new replay variant (TT d02 cpp, stripped-d01 Mastery);
   13 new GM-verified replay cases adopted into the Day 8 solvers.
+
+### Blind Day 8 replay on MAIN `d8tc1` (2026-10-08 23:11, workflow 3bf828b, knowledge pinned 672753b)
+**15/15 at T+256 s, every timed mode first try** (d8warm1 T+631, real Day 8 T+1222). Single/TT/Mastery: warmups
+33/39/41, metadata 35/40/43, mobile 38/43/47, script 104/117/133, binary 210/225/256 (single 368 -> 210: triage now
+extracts -- the 7z fix -- so the worker had readelf/Go/Rust/.NET/JVM recon from the start).
+- **Toolchain check missed Swift:** the scan took the first 400 extracted paths and the Day 7 Kotlin jar's 3k+ .class
+  files sorted ahead of `d08--variant-000.elf` (#3146). Fixed (`toolchain.scan_order`: shallow first, classes last;
+  regression test). swift-demangle had been removed for the test; installed by hand mid-run (26 s).
+- **Near-miss:** binary Mastery in-window 25.87 s of 27 (download 10.1 + solve 15.1; this replay's solver came from the
+  Day 7 base -- the real D8 solver solves in ~8 s). Speed gate estimate was accurate (13.96 s) but compares solve only
+  with 2x the TT window (20 s); it ignores download. Not changed: counting download would have flagged a pass.
+- 8 new GM-verified cases adopted (binary pass captures were still copying when the run exited).

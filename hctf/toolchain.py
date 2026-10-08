@@ -109,6 +109,17 @@ def _scan(path):
     return data, names
 
 
+def scan_order(root, cap=400):
+    """Files under root worth scanning, shallow first and bytecode classes last, capped. A fat jar unpacks into
+    thousands of .class files that sorted ahead of `d08--variant-000.elf`: replay d8tc1 scanned the first 400 paths
+    and never saw the Swift binary."""
+    root = Path(root)
+    if not root.exists():
+        return []
+    return sorted((p for p in root.rglob("*") if p.is_file()),
+                  key=lambda p: (p.suffix == ".class", len(p.relative_to(root).parts), str(p)))[:cap]
+
+
 def detect(files):
     """{toolchain id: [file names]} for the given extracted members."""
     found = {}
