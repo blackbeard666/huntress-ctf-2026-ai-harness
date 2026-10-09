@@ -20,6 +20,9 @@ from .paths import BIN, TMP, TOOLS
 ROOT = Path(__file__).resolve().parent.parent
 PROMPTS = ROOT / "hctf" / "prompts"
 HB_WORK = "hw"  # ~/hw on Homebase
+# Engine of the optional Homebase worker pool (`--homebase N`): "claude" = Claude Code on Bedrock through the VM's
+# instance role (Opus 4.7, billed to the daily Homebase credits); "codex" = the VM's codex CLI (GPT-6 luna on Bedrock).
+HB_ENGINE = os.environ.get("HCTF_HB_ENGINE", "claude")
 
 
 def render(_template, **kw):
@@ -176,6 +179,7 @@ def lane_playbook(lane):
 
 
 STOPPED_RC = -15  # run_local's return code when `stop` ended the worker (its job was already done)
+AUTH_RC = -77     # run_local's return code when Claude auth failed (relaunching can't help: re-login on the host)
 
 # Worker sandbox (bubblewrap): the rehearsal copy rehearsal (2026-10-06) caught a script-analysis worker running
 # `find / -name solve.py`, then COPYING the main account's Day 6 solver out of ~/huntress-2026 -- cross-copy
@@ -258,6 +262,7 @@ class WarmWorker:
     I/O. The Stop hook lets the warm-up turn end while the flag file exists (.claude/hooks/stop_gate.py)."""
 
     def __init__(self, chal_dir, stage, warm_text, env_extra):
+        self.started = time.time()   # metrics: a warm worker's wall time counts from its launch
         self.log = _logfile(chal_dir, stage, "local")
         self.flag = Path(chal_dir) / f".warm-{os.getpid()}-{time.time_ns()}"
         self.flag.write_text("warm")
@@ -297,7 +302,34 @@ def run_local(chal_dir, stage, prompt, env_extra, timeout, stop=None, warm=None,
     """Blocking. Returns (returncode, logfile). `stop` (threading.Event): when set, the worker is terminated at once
     and STOPPED_RC returned -- the orchestrator sets it once the Single Solve is CORRECT and the solver verifiably
     reproduces it, so post-correct hardening never sits on the critical path (Day 6: 60% of worker time).
-    `warm` (WarmWorker, still alive): hand it `warm_task` instead of launching a new process."""
+    `warm` (WarmWorker, still alive): hand it `warm_task` instead of launching a new process.
+    Every process gets a metrics row; an API-error exit is classified (worker_outcome): auth -> AUTH_RC at once,
+    usage limit / overload -> back off and relaunch inside the same timeout (API_RELAUNCHES)."""
+    deadline = time.time() + timeout
+    t0 = warm.started if warm is not None and warm.alive() else time.time()
+    rc, log = _run_local_once(chal_dir, stage, prompt, env_extra, timeout, stop, warm, warm_task)
+    for n in range(API_RELAUNCHES + 1):
+        out = record_metrics(log, stage, env_extra, rc, time.time() - t0)
+        if rc in (STOPPED_RC, -9) or out["outcome"] not in ("auth", "limit", "transient"):
+            return rc, log
+        if out["outcome"] == "auth":
+            print(f"!!! [{env_extra.get('HCTF_CHAL', '?')}] CLAUDE AUTH FAILED ({out['detail'][:160]}) -- run "
+                  "`claude auth login` on the host; no more workers can start until then", file=sys.stderr, flush=True)
+            return AUTH_RC, log
+        wait = API_BACKOFF[min(n, len(API_BACKOFF) - 1)]
+        if n == API_RELAUNCHES or deadline - time.time() - wait < API_MIN_LEFT:
+            return rc, log
+        print(f"[{env_extra.get('HCTF_CHAL', '?')}] {stage} worker ended on an API error ({out['outcome']}: "
+              f"{out['detail'][:120]}); relaunch {n + 1}/{API_RELAUNCHES} in {wait:.0f}s", file=sys.stderr, flush=True)
+        if (stop.wait(wait) if stop is not None else time.sleep(wait)):
+            return STOPPED_RC, log
+        t0 = time.time()
+        rc, log = _run_local_once(chal_dir, stage, prompt + RELAUNCH_NOTE.format(detail=out["detail"][:200]),
+                                  env_extra, deadline - time.time(), stop, None, None)
+    return rc, log
+
+
+def _run_local_once(chal_dir, stage, prompt, env_extra, timeout, stop, warm, warm_task):
     if warm is not None and warm.alive():
         try:
             warm.send_task(warm_task)
@@ -349,6 +381,201 @@ def _kill_group(p, grace):
         pass
 
 
+# LLM-side failures (ilio-style). Claude Code already retries API errors itself (`api_retry`, 10x) and falls back to
+# claude-opus-4-8 on a cyber refusal (`model_refusal_fallback`: Day 1/4/6 mobile singles, all recovered). What it can't
+# fix ends the process with an `api_error` result: OAuth expiry (Day 1: six single workers died within 50 s with
+# "OAuth session expired and could not be refreshed", nothing flagged it), a usage limit, overload past its retries.
+# A relaunch is a FRESH session (the sandbox masks ~/.claude/projects, so --resume can't find the transcript) with the
+# same prompt + RELAUNCH_NOTE; the worker's files on disk carry the progress.
+API_RELAUNCHES = int(os.environ.get("HCTF_API_RELAUNCHES", "3"))
+API_BACKOFF = [float(x) for x in os.environ.get("HCTF_API_BACKOFF", "20,60,180").split(",")]
+API_MIN_LEFT = float(os.environ.get("HCTF_API_MIN_LEFT", "90"))   # don't relaunch with less stage time than this
+RELAUNCH_NOTE = ("\n\n---\nHARNESS: an earlier session on this exact task ended on an API error ({detail}) before it "
+                 "finished. Its files are still on disk (solver/, notes, work/): read them first and continue from "
+                 "where it stopped instead of starting over.")
+_AUTH_RE = re.compile(r"authenticat|oauth|\b401\b|\b403\b|log ?in again|invalid api key|credential", re.I)
+_LIMIT_RE = re.compile(r"usage limit|hit your limit|limit reached|rate.?limit|\b429\b", re.I)
+_TRANSIENT_RE = re.compile(r"overload|\b5\d\d\b|api error|connection|timed? ?out|network|econn|socket", re.I)
+METRICS = ROOT / ".run" / "metrics.tsv"
+METRIC_COLS = ("ts", "base", "cid", "stage", "lane", "rc", "outcome", "wall_s", "ttft_s", "turns", "cost_usd", "cost_src",
+               "in_tok", "cache_read_tok", "cache_write_tok", "out_tok", "refusal_fallbacks", "models", "log")
+_metrics_lock = threading.Lock()
+
+
+# Effective $/Mtok used to ESTIMATE cost when a worker has no session-final `result` event -- the common case: the
+# harness kills the Single worker at CORRECT (STOPPED_RC), and a warm worker's only result is its warm-up turn. Fitted
+# 2026-10-09 (least squares) on the stream-derived features below against 123 complete logs' exact total_cost_usd:
+# median error 2.4%, summed total within 1.4%. NOT list prices: the streamed output count is a first-token snapshot, so
+# output is approximated (thinking deltas + emitted chars / 4) and the fitted `out` rate absorbs the undercount.
+# Refit (model/pricing change): least squares of exact total_cost_usd on (input+cache_write, cache_read, out) over logs.
+EST_RATES = {"write": 7.64, "read": 0.15, "out": 36.47}
+
+
+def worker_outcome(log):
+    """Parse a worker's stream-json log. outcome: ok | max_turns | auth | limit | transient | error | no_result.
+    Tokens/calls are summed over every assistant message (usage per API call, de-duplicated by message id), so a
+    killed worker is still counted. cost_src: `exact` = the last result event covers the whole session, else `est`."""
+    res, refusals, msgs, after, thinking, chars = None, 0, {}, 0, 0, 0
+    try:
+        lines = Path(log).read_text(errors="replace").splitlines()
+    except OSError:
+        lines = []
+    for line in lines:
+        if '"model_refusal_fallback"' in line:
+            refusals += 1
+        if '"result"' not in line and '"assistant"' not in line and '"thinking_tokens"' not in line:
+            continue
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(ev, dict):
+            continue
+        if ev.get("type") == "result":
+            res, after = ev, 0
+        elif ev.get("type") == "system" and ev.get("subtype") == "thinking_tokens":
+            thinking += int(ev.get("estimated_tokens_delta") or 0)
+        elif ev.get("type") == "assistant" and isinstance(ev.get("message"), dict):
+            m = ev["message"]
+            u, cur = m.get("usage") or {}, msgs.setdefault(m.get("id") or len(msgs), {"model": m.get("model", "")})
+            if cur.get("seen") is None:
+                after += 1
+                cur["seen"] = True
+            for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens"):
+                cur[k] = max(cur.get(k, 0), int(u.get(k) or 0))
+            for c in m.get("content") or []:   # one block per event; the streamed usage's output count is a first-token
+                if isinstance(c, dict):         # snapshot, so output = thinking estimate + emitted chars / 4
+                    chars += len(c.get("text") or "") + (len(json.dumps(c["input"])) if "input" in c else 0)
+    tok = lambda k: sum(m.get(k, 0) for m in msgs.values())  # noqa: E731
+    out_stream = max(tok("output_tokens"), thinking + chars // 4)
+    models = sorted({m["model"] for m in msgs.values() if m.get("model")})
+    est = (EST_RATES["write"] * (tok("input_tokens") + tok("cache_creation_input_tokens"))
+           + EST_RATES["read"] * tok("cache_read_input_tokens") + EST_RATES["out"] * out_stream) / 1e6
+    exact = res is not None and after == 0 and res.get("total_cost_usd") is not None
+    out = {"detail": "", "refusal_fallbacks": refusals, "session": (res or {}).get("session_id", ""),
+           "turns": (res or {}).get("num_turns", "") if exact else len(msgs),
+           "cost_usd": round(float(res["total_cost_usd"]) if exact else est, 4), "cost_src": "exact" if exact else "est",
+           "ttft_s": round(((res or {}).get("ttft_ms") or 0) / 1000, 1), "in_tok": tok("input_tokens"),
+           "cache_read_tok": tok("cache_read_input_tokens"), "cache_write_tok": tok("cache_creation_input_tokens"),
+           "out_tok": out_stream, "models": "+".join(models)}
+    if exact:   # the result's modelUsage is authoritative when it covers the session
+        mu = res.get("modelUsage") or {}
+        for col, k in (("in_tok", "inputTokens"), ("cache_read_tok", "cacheReadInputTokens"),
+                       ("cache_write_tok", "cacheCreationInputTokens"), ("out_tok", "outputTokens")):
+            out[col] = max(out[col], sum(int(m.get(k) or 0) for m in mu.values()))
+        out["models"] = "+".join(mu) or out["models"]
+    if res is None:
+        out["outcome"] = "no_result"
+        return out
+    if not res.get("is_error"):
+        out["outcome"] = "ok"
+        return out
+    detail = " ".join(str(x) for x in (res.get("result"), res.get("errors"), res.get("api_error_status"),
+                                       res.get("terminal_reason")) if x)
+    out["detail"] = detail
+    if res.get("subtype") == "error_max_turns" or res.get("terminal_reason") == "max_turns":
+        out["outcome"] = "max_turns"
+    elif _AUTH_RE.search(detail):
+        out["outcome"] = "auth"
+    elif _LIMIT_RE.search(detail):
+        out["outcome"] = "limit"
+    elif res.get("terminal_reason") == "api_error" or _TRANSIENT_RE.search(detail):
+        out["outcome"] = "transient"
+    else:
+        out["outcome"] = "error"
+    return out
+
+
+def record_metrics(log, stage, env_extra, rc, wall_s):
+    """Append one row per worker process to .run/metrics.tsv (`hctf cost` / `hctf dash` read it). Never raises.
+    Only harness launches (HCTF_STAGE in env_extra) are recorded: unit tests' bare run_local calls stay out."""
+    out = worker_outcome(log)
+    if not env_extra.get("HCTF_STAGE"):
+        return out
+    if rc == STOPPED_RC:      # the harness ended it on purpose (CORRECT + verified solver): not a failure
+        out = {**out, "outcome": "stopped"}
+    elif rc == -9 and out["outcome"] == "no_result":
+        out = {**out, "outcome": "timeout"}
+    row = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "base": env_extra.get("HCTF_BASE", ""),
+           "cid": env_extra.get("HCTF_CHAL", ""), "stage": stage, "lane": env_extra.get("HCTF_LANE", ""), "rc": rc,
+           "wall_s": round(wall_s, 1), "log": _rel_log(log), **out}
+    try:
+        with _metrics_lock:
+            METRICS.parent.mkdir(parents=True, exist_ok=True)
+            if METRICS.exists() and METRICS.read_text().split("\n", 1)[0] != "\t".join(METRIC_COLS):
+                METRICS.rename(METRICS.with_name(f"metrics.tsv.old-{time.strftime('%Y%m%dT%H%M%S')}"))  # columns changed
+            new = not METRICS.exists()
+            with open(METRICS, "a") as f:
+                if new:
+                    f.write("\t".join(METRIC_COLS) + "\n")
+                f.write("\t".join(str(row.get(c, "")).replace("\t", " ") for c in METRIC_COLS) + "\n")
+    except OSError:
+        pass
+    return out
+
+
+def _rel_log(log):
+    try:
+        return str(Path(log).resolve().relative_to(ROOT))
+    except ValueError:
+        return str(log)
+
+
+def read_metrics():
+    """metrics.tsv rows as dicts (numeric fields as float where possible)."""
+    if not METRICS.exists():
+        return []
+    rows = []
+    lines = METRICS.read_text().splitlines()
+    cols = lines[0].split("\t") if lines else list(METRIC_COLS)
+    for line in lines[1:]:
+        r = dict(zip(cols, line.split("\t")))
+        for k in ("wall_s", "ttft_s", "turns", "cost_usd", "in_tok", "cache_read_tok", "cache_write_tok", "out_tok"):
+            try:
+                r[k] = float(r.get(k) or 0)
+            except ValueError:
+                r[k] = 0.0
+        rows.append(r)
+    return rows
+
+
+def metrics_report(day=None):
+    """`hctf cost`: per chain x stage worker cost/turns/tokens, day totals, and every non-ok worker outcome."""
+    rows = [r for r in read_metrics() if not day or f"challenges/day{int(day):02d}/" in r.get("log", "")]
+    if not rows:
+        return f"no worker metrics yet ({METRICS.relative_to(ROOT)})"
+    agg = {}
+    for r in rows:
+        a = agg.setdefault((r["base"], r["stage"]), {"n": 0, "wall_s": 0.0, "turns": 0.0, "cost_usd": 0.0, "out_tok": 0.0})
+        a["n"] += 1
+        for k in ("wall_s", "turns", "cost_usd", "out_tok"):
+            a[k] += r[k]
+    hdr = ("chain", "stage", "procs", "wall_s", "turns", "cost_usd", "out_tok")
+    table = [hdr] + [(b, s, a["n"], f"{a['wall_s']:.0f}", f"{a['turns']:.0f}", f"{a['cost_usd']:.2f}", f"{a['out_tok']:.0f}")
+                     for (b, s), a in sorted(agg.items())]
+    w = [max(len(str(t[i])) for t in table) for i in range(len(hdr))]
+    lines = ["  ".join(str(x).ljust(w[i]) for i, x in enumerate(t)) for t in table]
+    tot = lambda k: sum(r[k] for r in rows)  # noqa: E731
+    cached = tot("cache_read_tok") / max(1.0, tot("cache_read_tok") + tot("in_tok") + tot("cache_write_tok"))
+    n_est = sum(1 for r in rows if r.get("cost_src") == "est")
+    lines.append(f"\nTOTAL {len(rows)} worker processes: ${tot('cost_usd'):.2f} ({n_est} estimated from tokens), {tot('turns'):.0f} turns, "
+                 f"{tot('wall_s') / 60:.1f} worker-min, {tot('out_tok') / 1e3:.0f}k output tokens, {cached:.0%} of input "
+                 f"from cache, {sum(int(r.get('refusal_fallbacks') or 0) for r in rows)} refusal fallbacks")
+    bad = [r for r in rows if r.get("outcome") not in ("ok", "stopped", "")]
+    if bad:
+        lines.append("\nnon-ok worker exits:")
+        lines += [f"  {r['ts']}  {r['base']} {r['stage']}: {r['outcome']} (rc {r['rc']})  {r['log']}" for r in bad]
+    return "\n".join(lines)
+
+
+def chain_cost():
+    """{base: total worker cost_usd} for `hctf dash`."""
+    out = {}
+    for r in read_metrics():
+        out[r["base"]] = out.get(r["base"], 0.0) + r["cost_usd"]
+    return out
+
+
 _sync_lock = threading.Lock()
 
 
@@ -383,7 +610,7 @@ def sync_homebase_base(force=False):
                 _hb["base_synced"] = True
                 return
         remote.ssh(f"mkdir -p ~/{HB_WORK}/challenges ~/.codex/skills ~/hctf")  # ~/hctf: absent on a fresh VM
-        items = [(ROOT / d, f"~/{HB_WORK}/") for d in ("hctf", "lib", "bin", "skills") if (ROOT / d).exists()]
+        items = [(ROOT / d, f"~/{HB_WORK}/") for d in ("hctf", "lib", "bin", "skills", ".claude") if (ROOT / d).exists()]
         items += [(ROOT / f, f"~/{HB_WORK}/{f}") for f in ("CLAUDE.md", "AGENTS.md") if (ROOT / f).exists()]
         with ThreadPoolExecutor(max_workers=len(items)) as ex:
             list(ex.map(lambda it: remote.rsync_to(*it), items))
@@ -486,11 +713,29 @@ def _provision(log):
         _hb["provisioned"] = True
 
 
+VM_METER_S = float(os.environ.get("HCTF_HB_METER_S", "60"))   # how often a reachable VM's uptime is booked
+
+
+def meter_vm():
+    """Book the VM's current uptime span in the credit ledger (hbbudget): its boot time + now. One cheap ssh."""
+    from . import hbbudget
+    try:
+        r = remote.ssh("awk '/^btime/{print $2}' /proc/stat", timeout=20, check=False)
+        hbbudget.record_vm(int(r.stdout.strip()))
+        return True
+    except Exception:  # noqa: BLE001 - metering is best-effort
+        return False
+
+
 def _health_loop(log):
     was = None
+    metered = 0.0
     while True:
         ok = remote.probe()
         _hb.update(ok=ok, checked=time.time())
+        if ok and time.time() - metered >= VM_METER_S:
+            metered = time.time()
+            threading.Thread(target=meter_vm, daemon=True).start()
         if ok != was:
             log(f"[homebase] {'reachable' if ok else 'NOT reachable'} (health probe every {HB_HEALTH_S:g}s)")
             was = ok
@@ -813,16 +1058,43 @@ def run_homebase(chal_root, log_dir, stage, prompt, env_extra, timeout):
     log = _logfile(log_dir, stage, "homebase")
     env_extra = {k: (str(Path(v).relative_to(ROOT)) if isinstance(v, Path) else v) for k, v in env_extra.items()}
     envs = " ".join(f"{k}={shlex.quote(str(v))}" for k, v in {**env_extra, "HCTF_ON_HOMEBASE": 1}.items())
-    cmd = (f"cd ~/{HB_WORK} && {envs} PYTHONPATH=~/{HB_WORK} "
-           f"PATH=~/{HB_WORK}/bin:~/{HB_WORK}/tools/node/bin:~/{HB_WORK}/.venv/bin:~/.local/bin:$PATH "
-           f"timeout {int(timeout)} codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check "
-           f"{shlex.quote(prompt)} </dev/null")
+    path = f"PATH=~/{HB_WORK}/bin:~/hbtools/bin:~/{HB_WORK}/tools/node/bin:~/{HB_WORK}/.venv/bin:~/.local/bin:$PATH "
+    if HB_ENGINE == "codex":
+        cmd = (f"cd ~/{HB_WORK} && {envs} PYTHONPATH=~/{HB_WORK} {path}"
+               f"timeout {int(timeout)} codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check "
+               f"{shlex.quote(prompt)} </dev/null")
+    else:   # Claude Code on Bedrock (the VM's instance role), same flags as a local worker; prompt via stdin
+        from . import hbbudget, hbshadow
+        pf = TMP / f"hbworker-{int(time.time() * 1000)}.prompt"
+        pf.write_text(prompt)
+        remote.rsync_to(pf, f"~/{HB_WORK}/.run/{pf.name}", mkdir=f"~/{HB_WORK}/.run")
+        bed = " ".join(f"{k}={shlex.quote(v)}" for k, v in hbshadow.BEDROCK_ENV.items())
+        lane = env_extra.get("HCTF_LANE")
+        flags = ["--dangerously-skip-permissions", "--max-turns", str(_max_turns(stage)), "--model", hbshadow.MODEL,
+                 "--effort", worker_effort(lane), "--output-format", "stream-json", "--verbose", "--strict-mcp-config",
+                 "--settings", json.dumps(worker_settings(lane)),
+                 "--max-budget-usd", str(hbbudget.ai_cap_usd(hbshadow.SHADOW_USD))]
+        if WORKER_TOOLS:
+            flags += ["--tools", WORKER_TOOLS]
+        cmd = (f"cd ~/{HB_WORK} && {envs} {bed} JAVA_HOME=~/hbtools/jdk PYTHONPATH=~/{HB_WORK} {path}"
+               f"nice -n 10 timeout {int(timeout)} claude -p {' '.join(shlex.quote(f) for f in flags)} "
+               f"< ~/{HB_WORK}/.run/{pf.name}")
     try:
         r = remote.ssh(cmd, timeout=timeout + 60, check=False)
         rc, text = r.returncode, r.stdout + r.stderr
     except subprocess.TimeoutExpired:
         rc, text = -9, "timeout"
     log.write_text(text)
+    if HB_ENGINE != "codex":
+        from . import hbbudget, hbshadow  # noqa: F401
+        try:
+            import importlib.util as _u
+            spec = _u.spec_from_file_location("hbcost", ROOT / "hctf" / "hbcost.py")
+            mod = _u.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            hbbudget.record_ai(mod.cost(str(log))["usd"], f"homebase {stage} {env_extra.get('HCTF_CHAL')}")
+        except Exception:  # noqa: BLE001 - accounting is best-effort
+            pass
     # Pull results back: solver, notes, submissions, confirmed answers, new artifacts.
     remote.rsync_from(f"~/{HB_WORK}/{rel}", chal_root)
     return rc, log

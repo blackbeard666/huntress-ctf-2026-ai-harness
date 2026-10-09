@@ -527,7 +527,9 @@ def main():
     contract.write_text(json.dumps(body))
     env = dict(os.environ, PYTHONPATH=str(HW))
     # user-level tools `hctf hb setup` installs without root (static 7-Zip as 7zz/7z on the the VM: no sudo there)
-    env["PATH"] = f"{Path.home() / '.local' / 'bin'}:{env.get('PATH', '')}"
+    env["PATH"] = f"{Path.home() / '.local' / 'bin'}:{Path.home() / 'hbtools' / 'bin'}:{env.get('PATH', '')}"
+    if (Path.home() / "hbtools" / "jdk").is_dir():
+        env.setdefault("JAVA_HOME", str(Path.home() / "hbtools" / "jdk"))   # setup/homebase_tools.sh (jadx/apktool)
     import shutil as _sh
     if not _sh.which("7z", path=env["PATH"]):  # still none: the pyzipper-backed bin/shims/7z
         env["PATH"] = f"{HW / 'bin' / 'shims'}:{env.get('PATH', '')}"

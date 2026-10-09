@@ -837,6 +837,9 @@ class Chain:
                 self.pools.release(pool)
             set_state(self.base, worker=None)
         say(f"[{cid}] {stage} worker exit {rc} ({Path(log).name})")
+        if rc == workers.AUTH_RC:
+            say(f"!!! [{cid}] Claude auth failed: run `claude auth login` on the host, then re-run this chain")
+            set_state(self.base, help="Claude auth failed (OAuth expired?): `claude auth login`, then re-run the chain")
         return rc
 
     def fix(self, cid, contract, art, problems, left):
@@ -1397,6 +1400,28 @@ class Chain:
 
     # -- stages
     def single(self):
+        try:
+            return self._single()
+        finally:
+            ev = getattr(self, "_shadow_done", None)
+            if ev is not None:
+                ev.set()   # ends the Homebase shadow (its thread kills the remote worker and books the cost)
+
+    def _maybe_start_shadow(self, cid, prompt):
+        """Second, independent Single Solve worker on Homebase (Bedrock, daily-credit budgeted) for the slow lanes."""
+        from . import hbshadow
+        ok, why = hbshadow.eligible(self.lane, self.base, log=say)
+        if not ok:
+            if self.lane in hbshadow.LANES:
+                say(f"[{cid}] no Homebase shadow: {why}")
+            return
+        self._shadow_done = threading.Event()
+        self._ready_lock = threading.Lock()
+        threading.Thread(target=hbshadow.run_beside, name=f"shadow-{self.base}", daemon=True,
+                         args=(self, cid, prompt, lambda: (getattr(self, "_cur_ready", None), self._ready_lock),
+                               self._shadow_done, say)).start()
+
+    def _single(self):
         e = self.entries.get("single_solve")
         if not e:
             return True
@@ -1527,6 +1552,9 @@ class Chain:
             if STOP_WHEN_READY and not welcome:
                 watch = threading.Thread(target=self._watch_ready, args=(cid, ready, done_evt), daemon=True)
                 watch.start()
+            self._cur_ready = ready
+            if n == 0 and not welcome and getattr(self, "_shadow_done", None) is None:
+                self._maybe_start_shadow(cid, prompt)
             warm, self._warm = (self._warm, None) if n == 0 else (None, None)
             warm_task = None
             if warm is not None:
@@ -1558,6 +1586,12 @@ class Chain:
             if not done and not welcome:
                 done = self.auto_labels(cid)
             ok, res = (True, None) if welcome else ensure_case_and_test(cid, self.sdir)
+            shadow = getattr(self, "_shadow", None)
+            if done and not ok and shadow is not None and shadow.snap is not None:
+                # The local worker ended without a passing solver, but the Homebase shadow verified one: take it.
+                say(f"[{cid}] local solver fails its case -> adopting the Homebase shadow's verified solver")
+                self._restore_ready_snapshot(shadow.snap)
+                ok, res = ensure_case_and_test(cid, self.sdir)
             say(f"[{cid}] after worker: complete={done} solver_ok={ok}")
             if ok and isinstance(res, list):
                 self._note_single_speed(cid, next((r.get("seconds") for r in res if r.get("case") == "single_solve"), None))
@@ -1828,11 +1862,16 @@ class Chain:
         try:
             while not done.wait(SPEC_POLL):
                 if cli.is_complete(cid):
+                    if ready.is_set():
+                        return   # the Homebase shadow handed over first
                     snap = self._spec_snapshot(cid)
                     if snap:
-                        self._ready_snap = snap
-                        say(f"[{cid}] single CORRECT + solver verified -> ending the worker, timed modes start now")
-                        ready.set()
+                        with getattr(self, "_ready_lock", None) or threading.Lock():
+                            if ready.is_set():
+                                return
+                            self._ready_snap = snap
+                            say(f"[{cid}] single CORRECT + solver verified -> ending the worker, timed modes start now")
+                            ready.set()
                         return
         except Exception as e:  # noqa: BLE001 - the watcher must never hurt the chain
             say(f"[{cid}] ready-watch note: {e}")
@@ -2408,20 +2447,23 @@ def _mode_solved_local(cid):
 
 
 def dashboard():
-    hdr = ("chain", "lane", "stage", "worker", "single", "tt", "mastery", "updated")
+    hdr = ("chain", "lane", "stage", "worker", "single", "tt", "mastery", "cost", "updated")
     rows = []
+    cost = workers.chain_cost()
     for p in sorted(paths.CHALLENGES.glob("day*/*/chain.json")):
         s = json.loads(p.read_text())
         try:
-            ids = (json.loads((p.parent / "meta.json").read_text()) or {}).get("ids", {})
+            meta = json.loads((p.parent / "meta.json").read_text()) or {}
         except (OSError, ValueError):
-            ids = {}
+            meta = {}
+        ids = meta.get("ids", {})
+        usd = cost.get(meta.get("base", ""))
         # Per-mode solved from local truth, falling back to the chain's recorded result (never the stale stage).
         single = "correct" if ids.get("single_solve") and _mode_solved_local(ids["single_solve"]) else ""
         tt = "correct" if (ids.get("time_trial") and _mode_solved_local(ids["time_trial"])) else s.get("time_trial_result", "")
         mastery = "correct" if (ids.get("mastery") and _mode_solved_local(ids["mastery"])) else s.get("mastery_result", "")
         rows.append((str(p.parent.relative_to(paths.CHALLENGES)), s.get("lane", ""), s.get("stage", ""),
-                     s.get("worker") or "", single, tt, mastery, s.get("updated", "")))
+                     s.get("worker") or "", single, tt, mastery, f"${usd:.2f}" if usd else "", s.get("updated", "")))
     w = [max(len(str(r[i])) for r in rows + [hdr]) for i in range(len(hdr))]
     for r in [hdr] + rows:
         print("  ".join(str(x).ljust(w[i]) for i, x in enumerate(r)))

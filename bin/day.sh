@@ -73,6 +73,24 @@ if [ "${HCTF_AUTO_HOMEBASE:-1}" != 0 ] && ip route get "${HCTF_HB_HOST:-10.1.50.
       || echo "[warm] Homebase not reachable yet; the run's health thread re-probes it every ${HCTF_HB_HEALTH_S:-5}s." ) &
 fi
 
+# 2a) Homebase while armed: the heavy toolchain for the Bedrock shadow workers (idempotent, seconds once installed) and
+#     a once-a-minute keepalive that books the VM's uptime in the credit ledger and keeps the VM active until the run's
+#     own health probe takes over (an idle VM was stopping ~15 min after the warm-up power-on).
+KEEPALIVE_PID=""
+if [ "${HCTF_AUTO_HOMEBASE:-1}" != 0 ] && ip route get "${HCTF_HB_HOST:-10.1.50.243}" 2>/dev/null | grep -q "${HCTF_VPN_DEV:-tun0}"; then
+  # Only when shadows are on: a cold install (JDK/Ghidra) loads the 2-vCPU VM for minutes -- during the run's first
+  # Homebase-routed timed windows -- and nothing but the shadow workers uses ~/hbtools.
+  if [ "${HCTF_HB_SHADOW:-0}" = 1 ]; then
+    ( timeout 1800 hctf hb tools >/dev/null 2>&1 && echo "[warm] Homebase toolchain (~/hbtools) ready." \
+        || echo "[warm] Homebase toolchain incomplete (shadow workers fall back to python libs): hctf hb tools" ) &
+  fi
+  if [ "$WAIT" -eq 1 ]; then
+    hctf hb keepalive --timeout "${HCTF_KEEPALIVE_S:-14400}" > .run/keepalive.log 2>&1 &
+    KEEPALIVE_PID=$!
+  fi
+  echo "[credits] $(timeout 30 hctf hb budget 2>/dev/null | tail -1)"
+fi
+
 # 2b) --wait: everything above is done; now just poll for the drop and fire the instant it is listed.
 if [ "$WAIT" -eq 1 ]; then
   echo "[wait] polling the GM every ${HCTF_WAIT_POLL:-1}s for day $DAY ..."
@@ -81,6 +99,7 @@ if [ "$WAIT" -eq 1 ]; then
     sleep "${HCTF_WAIT_POLL:-1}"
   done
   echo "[wait] day $DAY released at $(date '+%H:%M:%S') -- launching"
+  [ -n "$KEEPALIVE_PID" ] && kill "$KEEPALIVE_PID" 2>/dev/null   # the run's health probe keeps it active + metered now
 fi
 if pgrep -f "hctf.cli run --day $DAY( |$)|hctf run --day $DAY( |$)" >/dev/null; then
   echo "[run] a day $DAY run is already in progress -- not launching a second one." >&2

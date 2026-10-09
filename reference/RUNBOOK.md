@@ -45,6 +45,7 @@ and self-heals timed variants offline. Workers submit the instant they have an a
 hctf watch                 # board: every challenge x mode, stage, each agent's current action
 hctf tail <challenge-id>   # follow one agent's reasoning + tool calls as they stream
 hctf dash                  # one-shot status table
+hctf cost --day N          # worker LLM cost/turns per chain x stage + non-ok worker exits
 ```
 
 ## Manual / debugging commands
@@ -69,6 +70,12 @@ hctf hb exec -- <cmd>                 # run a command on Homebase (inside the CT
 - `HCTF_MAX_WRONG` (6) — per-field wrong-answer probe budget for non-flag vocabulary. Flags hard-capped at 3.
 - `HCTF_SINGLE_TIMEOUT` (1500) / `HCTF_GENERALIZE_TIMEOUT` (720) — worker wall-clocks (seconds).
 - `HCTF_MAX_TURNS_SINGLE|GENERALIZE|FIX` — per-stage turn caps (ilio-style cost bound).
+- `HCTF_API_RELAUNCHES` (3) / `HCTF_API_BACKOFF` (20,60,180) / `HCTF_API_MIN_LEFT` (90) — a local worker that ends on
+  a usage limit or overload (`api_error` result, after Claude Code's own retries) is relaunched as a fresh session
+  (same prompt + resume note) inside its stage timeout. Auth failure -> no relaunch, rc AUTH_RC (-77), loud alert,
+  chain `help` set: `claude auth login`. Cyber refusals are handled by Claude Code itself (fallback model).
+- `.run/metrics.tsv` — one row per worker process (outcome, wall, ttft, turns, cost, tokens, refusal fallbacks).
+  `hctf cost [--day N]` = per chain x stage totals + every non-ok exit; `hctf dash` has a cost column.
 - `HCTF_SPECULATIVE_TIMED` (1) — early handoff: once the Single Solve is CORRECT and a snapshot of the still-running
   worker's solver (`.run/spec-dayNN/<chal>/solver`, files stable `HCTF_SPEC_STABLE`=20s) reproduces its answers, run ONE
   Time Trial -> Mastery pass from it. Pre-pass failures are free; the normal timed stage takes over after the worker.

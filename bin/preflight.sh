@@ -140,6 +140,43 @@ r = subprocess.run(cmd, capture_output=True, text=True, timeout=25); print(r.std
 if grep -q sandbox-ok <<<"$sb_out"; then ok "workers' sandbox has the venv + solver deps (pyzipper, pyelftools, pefile, capstone)."
 else fail "worker sandbox can't import solver deps: $(tail -1 <<<"$sb_out")"; fi
 
+# 3c2) Claude auth for workers: Day 1, six single workers died within 50 s on "OAuth session expired and could not be
+# refreshed" and nothing flagged it. Check the refresh token's expiry against the CTF's last day, then one live turn
+# (haiku, ~1 s, fractions of a cent) proves the refresh works. HCTF_PREFLIGHT_NO_LLM=1 skips the live turn.
+hdr "Claude worker auth"
+ca_out="$(python3 - "$CTF_DAY1" "$CTF_LASTDAY" <<'PY' 2>&1
+import datetime, json, sys, time
+from pathlib import Path
+day1, last = sys.argv[1], int(sys.argv[2])
+end = datetime.datetime.fromisoformat(day1) + datetime.timedelta(days=last)
+try:
+    o = json.load(open(Path.home() / ".claude/.credentials.json"))["claudeAiOauth"]
+except Exception as e:
+    print(f"WARN no OAuth credentials file ({e.__class__.__name__}); workers may use an API key"); sys.exit()
+r = (o.get("refreshTokenExpiresAt") or 0) / 1000
+if not r:
+    print("WARN credentials have no refreshTokenExpiresAt; expiry unknown"); sys.exit()
+left = (r - time.time()) / 86400
+when = datetime.datetime.fromtimestamp(r).strftime("%Y-%m-%d %H:%M")
+if left <= 0:
+    print(f"FAIL Claude login EXPIRED ({when}): run `claude auth login`")
+elif r < end.timestamp():
+    print(f"WARN Claude login expires {when} ({left:.1f} d) -- BEFORE the CTF's last day; `claude auth login` again before then")
+else:
+    print(f"OK Claude login valid until {when} ({left:.0f} d)")
+PY
+)"
+case "$ca_out" in OK*) ok "${ca_out#OK }";; WARN*) warn "${ca_out#WARN }";; *) fail "${ca_out#FAIL }";; esac
+if [ "${HCTF_PREFLIGHT_NO_LLM:-0}" != 1 ]; then
+  smoke="$(timeout 90 claude -p "Reply with exactly: OK" --max-turns 1 --model claude-haiku-5-5 --strict-mcp-config \
+           --output-format json 2>&1)"
+  if python3 -c 'import json,sys; d=json.loads(sys.argv[1]); sys.exit(0 if not d.get("is_error") else 1)' "$smoke" 2>/dev/null; then
+    ok "live worker-auth turn succeeded (claude -p)."
+  else
+    fail "claude -p failed -- workers can't start: $(tail -c 220 <<<"$smoke" | tr '\n' ' ')  (fix: claude auth login)"
+  fi
+fi
+
 # 3d) Lane analysis tools (workers call these via their lane skills; missing ones push them into hand-rolled Python).
 hdr "Lane tools"
 miss=""
@@ -173,6 +210,21 @@ if [ "$hb_out" = skip ]; then :
 elif grep -q hb-ok <<<"$hb_out"; then
   st="$(timeout 20 hctf hb status 2>&1 | tr -d ' \n')"
   ok "Homebase SSH works. status: ${st:0:120}"
+  # Bedrock shadow workers (hctf/hbshadow.py): the VM's instance role (free STS call, no model tokens) + the
+  # heavy toolchain in ~/hbtools (setup/homebase_tools.sh) + today's credit ledger.
+  hbx="$(timeout 40 hctf hb exec -- 'timeout 20 aws sts get-caller-identity --query Arn --output text 2>&1 | grep -o "assumed-role/[A-Za-z0-9]*"; command -v claude >/dev/null && echo claude-ok; for t in java jadx apktool analyzeHeadless rizin ilspycmd exiftool; do [ -x ~/hbtools/bin/$t ] || echo "nohbtool:$t"; done' 2>&1)"
+  if grep -q 'assumed-role/EC2BedrockInvoke' <<<"$hbx" && grep -q claude-ok <<<"$hbx"; then
+    ok "Homebase Bedrock role + Claude Code present (shadow workers: lanes ${HCTF_HB_SHADOW_LANES:-script-analysis,binary-reverse-engineering}; HCTF_HB_SHADOW=${HCTF_HB_SHADOW:-0} (opt-in))"
+  else
+    warn "Homebase Bedrock role/Claude Code not confirmed (shadow workers will fail to launch; local workers unaffected): $(head -2 <<<"$hbx" | tr '\n' ' ')"
+  fi
+  hbmiss="$(grep -o 'nohbtool:[A-Za-z]*' <<<"$hbx" | cut -d: -f2 | tr '\n' ' ')"
+  if [ -z "$hbmiss" ]; then ok "Homebase toolchain (~/hbtools) complete."
+  else warn "Homebase toolchain missing: $hbmiss -> hctf hb tools   (shadow workers fall back to python libs)"; fi
+  bud="$(timeout 30 hctf hb budget 2>&1 | tail -1)"
+  left="$(grep -o '[0-9.]* left' <<<"$bud" | cut -d' ' -f1)"
+  if [ -n "$left" ] && awk "BEGIN{exit !($left < 15)}"; then warn "$bud (shadows stop when the day's budget runs low)"
+  else ok "${bud:-credit ledger unreadable}"; fi
 else
   warn "Homebase SSH not answering (VM off, cold boot, or VPN down). Runs still work local-first; timed lanes lose the latency edge. Detail: $(head -1 <<<"$hb_out")"
 fi

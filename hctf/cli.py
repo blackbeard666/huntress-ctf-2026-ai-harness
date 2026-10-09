@@ -138,6 +138,31 @@ def http_exit(env):
 # ---------------------------------------------------------------- commands
 
 def c_hb(a):
+    if a.action == "budget":
+        from . import hbbudget, workers
+        if remote.probe():
+            workers.meter_vm()
+        print(hbbudget.summary_line())
+        return 0
+    if a.action == "keepalive":
+        # Keep the VM metered + active for a window (warm-up -> run -> ratchet): one cheap ssh a minute books its uptime
+        # in the credit ledger; stops on its own after --timeout seconds (default 300 -> use e.g. --timeout 7200).
+        from . import hbbudget, workers
+        end = time.time() + a.timeout
+        while time.time() < end:
+            up = remote.probe()
+            if up:
+                workers.meter_vm()
+            print(time.strftime("%H:%M:%S"), "up" if up else "DOWN", "|", hbbudget.summary_line(), flush=True)
+            time.sleep(60)
+        return 0
+    if a.action == "tools":
+        # Heavy toolchain on the VM itself (JDK/jadx/apktool/Ghidra/rizin/ilspycmd/...; no root, ~/hbtools).
+        remote.rsync_to(ROOT / "setup" / "homebase_tools.sh", "~/homebase_tools.sh")
+        r = remote.ssh("nice -n 10 bash ~/homebase_tools.sh 2>&1 | grep -E '^\\[(ok|MISSING|hb-tools)'", timeout=1800,
+                       check=False)
+        sys.stdout.write(r.stdout)
+        return 0 if "[MISSING]" not in r.stdout else 1
     if a.action == "setup":
         # Provision Homebase so solvers run next to the GM (hb_timed). Idempotent.
         remote.rsync_to(ROOT / "setup" / "homebase_setup.sh", "~/homebase_setup.sh")
@@ -983,6 +1008,12 @@ def c_dash(a):
     return 0
 
 
+def c_cost(a):
+    from . import workers
+    print(workers.metrics_report(day=a.day))
+    return 0
+
+
 def c_watch(a):
     from . import watch
     watch.watch(interval=a.interval)
@@ -1025,8 +1056,9 @@ def c_labels(a):
 def main(argv=None):
     p = argparse.ArgumentParser(prog="hctf", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
-    ph = sub.add_parser("hb", help="Homebase VM: status|on|off|ensure|deploy|setup|exec -- <cmd>")
-    ph.add_argument("action", choices=["status", "on", "off", "ensure", "deploy", "setup", "exec"])
+    ph = sub.add_parser("hb", help="Homebase VM: status|on|off|ensure|deploy|setup|tools|budget|keepalive|exec -- <cmd>")
+    ph.add_argument("action", choices=["status", "on", "off", "ensure", "deploy", "setup", "tools", "budget",
+                                       "keepalive", "exec"])
     ph.add_argument("command", nargs=argparse.REMAINDER)
     ph.add_argument("--timeout", type=int, default=300)
     pl = sub.add_parser("list")
@@ -1087,6 +1119,8 @@ def main(argv=None):
     psc.add_argument("-n", type=int, default=3, help="max rounds (default 3)")
     psc.add_argument("--clean", type=int, default=2, help="stop after this many clean rounds in a row (default 2)")
     sub.add_parser("dash", help="chain status table")
+    pco = sub.add_parser("cost", help="worker LLM cost/turns/tokens per chain x stage + non-ok exits (.run/metrics.tsv)")
+    pco.add_argument("--day", type=int)
     sub.add_parser("why", help="explain a chain's state: converging vs stuck, wrong fields, timing, last worker result"
                    ).add_argument("id")
     prc = sub.add_parser("reconcile", help="rewrite local chain.json from GM truth (fixes stale/under-reported dash)")
@@ -1114,7 +1148,7 @@ def main(argv=None):
           "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
           "reconcile": c_reconcile, "solutions": c_solutions,
           "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout,
-          "timeline": c_timeline}[a.cmd]
+          "timeline": c_timeline, "cost": c_cost}[a.cmd]
     try:
         return fn(a)
     except remote.Unreachable as e:
