@@ -49,6 +49,10 @@ ARCHITECTURE_REJECTED = ["amd64"]
 # Day 7 "Routine Check" re-confirmed "jar" for a Kotlin fat jar (single 22f8c079, TT, Mastery; 0 wrong): the JVM
 # source language does not change the container label. HCFG `hcfg_version` = the blob's version as plain decimal ("1",
 # D6+D7 confirmed).
+# Day 9 "Nimble" (Nim ELF; single + TT + Mastery 5 sets, 0 wrong): NEW field `hcfg_offset` = plain decimal FILE offset of
+# the stored blob's first byte -- for a base64 Nim string literal, where the base64 TEXT starts ("30696" = 0x77e8: after
+# the 8-byte cap/flag word at 0x77e0, NOT that header and NOT the VA 0x4077e8). Raw/hex-blob offsets still unconfirmed.
+HCFG_OFFSET_FMT = "{n}"
 JAR_FORMAT = "jar"
 JAR_FORMAT_REJECTED = ["jar_jvm"]
 DOTNET_FORMAT_REJECTED = [
@@ -83,6 +87,12 @@ ZIP_EOCD_TOTAL_ENTRIES_FMT = "{n}"
 # central-directory order -- no basename, dedupe or sort, e.g. ["room-01/item-1.txt","room-02/item-1.txt"] (basenames
 # collide, so the directory part is load-bearing). Eocd total entries re-confirmed "2" on the same zip.
 ZIP_CD_MEMBER_NAMES_FMT = {"separators": (",", ":")}   # json.dumps(names, **FMT); non-ASCII names not seen yet
+
+# Day 9 "Built Different" (metadata-forensics), confirmed 2026-10-09 (single, TT, Mastery 5 sets; 0 wrong):
+# pe.coff_machine_u16_hex is IMAGE_FILE_HEADER.Machine (u16 LE at e_lfanew+4, after 'PE\0\0') as "0x" + 4 zero-padded
+# LOWERCASE hex digits: Go 386 PE32 -> "0x014c". NOT the binary lane's word ("i386", PE_MACHINE) -- a `_u16_hex` suffix
+# asks for the raw constant. Unpadded "0x14c" never tried; only i386 seen (every "several architectures" decoy was i386).
+PE_COFF_MACHINE_U16_HEX_FMT = "0x{:04x}"
 
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {
@@ -206,7 +216,8 @@ BASH_ROLE_ATTACK_CONFIRMED = {
     # Day 7 "Node by Node" (single 25ef1864 + TT 516aa6d1 + Mastery 2c52d50f, all first-submit CORRECT): the
     # indirect-expansion.sh / token-fragmentation fixtures decode to steps=recognize_syntax>reconstruct_intent ->
     # role advanced_syntax (feature indirect_expansion|token_fragmentation, primitive parameter_indirection|
-    # array_token_construction, plan values verbatim) = Unix shell execution.
+    # array_token_construction, plan values verbatim) = Unix shell execution. Day 9 re-confirmed it for
+    # trap-handler.sh (trap_handler|function_local_trap) and recursive-walk.sh (recursive_walk|bounded_recursive_function).
     "advanced_syntax": "T1059.004",
 }
 # Node.js "operation graph" fixtures (Day 7 "Node by Node", GM-confirmed single 25ef1864, TT 516aa6d1, Mastery
@@ -224,6 +235,10 @@ NODE_ROLE_ATTACK_CONFIRMED = {
 # `descriptor_<id>`, lib.codec.find_codecs) STATES role= and attack= -- submit both verbatim. The GM wants the PARENT
 # ids here: execution roles T1059 (even WSF-JScript / WSF-VBScript hosts, NOT .007/.005) and persistence T1053 (NOT
 # Node's .003). Steps don't predict the role on v=3 (php webshell decode>return_configuration = staged_chain).
+# Day 9 "All the World's a Stager" (single + TT dfcfb51e + Mastery 1dfd4cf6, 0 wrong) extended the same table to Lua
+# (polyglot-lua-*, host_profile "standalone") and hosts host_profile "sct_scriptlet" (SCT saved as .js) / "lua_openresty":
+# launcher+staged_chain = T1059 again. Lua benign_utility had steps acquire_remote>dispatch_process and Lua staged_chain
+# decode_configuration>return_configuration -- take role/attack from the plan, never from the steps.
 V3_ROLE_ATTACK_CONFIRMED = {
     "benign_utility": "none", "stager": "T1105", "downloader": "T1105", "dropper": "T1140", "uploader": "T1041",
     "launcher": "T1059", "staged_chain": "T1059", "persistence_descriptor": "T1053",

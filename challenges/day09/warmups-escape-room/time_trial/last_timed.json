@@ -1,0 +1,25 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "7957ac40-8af4-4d81-a79d-f7e49a2cd894",
+  "window": 7.0,
+  "elapsed": 1.59,
+  "in_window": 1.2,
+  "phases": {
+    "start": 0.39,
+    "download": 0.23,
+    "solve": 0.19,
+    "submit": 0.78
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": "2026-10-09T13:00:47.193Z",
+  "verified": {
+    "message": "quick-piano-butter-96"
+  },
+  "attempts_remaining": 127,
+  "run_for_time": true,
+  "hall_of_fame_eligible": true,
+  "ranked_attempts_remaining": 127,
+  "variant_fresh": true
+}

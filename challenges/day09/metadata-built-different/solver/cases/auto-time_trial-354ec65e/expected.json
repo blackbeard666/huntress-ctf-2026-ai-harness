@@ -1,0 +1,15 @@
+{
+  "evidence-note-filename": "evidence-note.txt",
+  "evidence-note-size-bytes": "33",
+  "evidence-note-md5": "194f0c9baef56ea24fa880aea4205343",
+  "evidence-note-sha1": "bc6f4d965ff4df71b02376353b52d712218789cd",
+  "evidence-note-sha256": "8ff91e736f1b971eb2eef30415ec1b964821456bca418d0b4327300b6a036940",
+  "evidence-note-magic-prefix-hex-16": "43617365204339423135443735413535",
+  "evidence-note-text-utf8-bom-present": "false",
+  "d04-jpeg-001-jpeg-sof-dimensions-pixels": "257x146",
+  "d05-png-001-png-ihdr-dimensions-pixels": "269x153",
+  "d06-pdf-001-pdf-header-version": "1.4",
+  "d07-zip-001-zip-eocd-total-entries": "2",
+  "d07-zip-001-zip-central-directory-member-names": "[\"room-01/item-1.txt\",\"room-02/item-1.txt\"]",
+  "d09-pe-001-pe-coff-machine-u16-hex": "0x014c"
+}

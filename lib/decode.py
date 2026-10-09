@@ -10,6 +10,7 @@ import bz2
 import codecs
 import gzip
 import io
+import json
 import lzma
 import math
 import re
@@ -213,6 +214,13 @@ def decode_chunk(p, _nested=False):
         # HTML character entities (warmups Day 8 "Entity Relations": line 8 = '&#109;&#109;&#105;...'), whole fragment
         import html
         cands.append((html.unescape(t), 0))
+    if re.fullmatch(r'"?(?:\\(?:u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|[nrtbf"\\/]))+"?', t):
+        # JSON/C string escapes (warmups Day 9 "Escape Room": line 9 = '"\u0065\u0072\u002d..."'), whole fragment
+        q = t[1:-1] if len(t) >= 2 and t[0] == t[-1] == '"' else t
+        try:
+            cands.append((q.encode().decode("unicode_escape") if "\\x" in q else json.loads('"' + q + '"'), 0))
+        except (ValueError, UnicodeDecodeError):
+            pass
     if _BINS.match(t):
         bits = re.sub(r"[\s,]", "", t)
         cands.append((_ascii(int(bits, 2).to_bytes(len(bits) // 8, "big")), 0))

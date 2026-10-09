@@ -47,6 +47,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Swift Justice"
   },
+  "binary-reverse-engineering-day-09-nim-generated-runtime": {
+    "day": 9,
+    "dir": "day09/binary-nimble",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Nimble"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -95,6 +101,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 What’s in the Box?"
   },
+  "metadata-forensics-day-09-built-different": {
+    "day": 9,
+    "dir": "day09/metadata-built-different",
+    "lane": "metadata-forensics",
+    "name": "🔎 Built Different"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -142,6 +154,12 @@
     "dir": "day08/mobile-cleartext-session",
     "lane": "mobile-android",
     "name": "📱 Cleartext Session"
+  },
+  "mobile-android-day-09-trust-everyone": {
+    "day": 9,
+    "dir": "day09/mobile-trust-everyone",
+    "lane": "mobile-android",
+    "name": "📱 Trust Everyone"
   },
   "read-the-rules": {
     "day": 1,
@@ -197,6 +215,12 @@
     "lane": "script-analysis",
     "name": "📜 Lost in Translation"
   },
+  "script-analysis-day-09-stager-relationships": {
+    "day": 9,
+    "dir": "day09/scripting-all-the-world-s-a-stager",
+    "lane": "script-analysis",
+    "name": "📜 All the World's a Stager"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -244,6 +268,12 @@
     "dir": "day08/warmups-entity-relations",
     "lane": "warmups",
     "name": "👶 Entity Relations"
+  },
+  "warmups-day-09": {
+    "day": 9,
+    "dir": "day09/warmups-escape-room",
+    "lane": "warmups",
+    "name": "👶 Escape Room"
   },
   "welcome-robots": {
     "day": 1,

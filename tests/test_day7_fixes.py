@@ -819,3 +819,23 @@ assert [o for o, _ in ops] == ["start", "retry"], ops
 assert all(t == orchestrate.HARVEST_CALL_TIMEOUT for _, t in ops), ops
 assert "reaper.join(timeout=HARVEST_JOIN_MAX)" in inspect.getsource(orchestrate.Chain.generalize)
 print("ok  harvest: expired-with-id -> retry (no 8x poll); bounded GM calls; accept waits <= HARVEST_JOIN_MAX")
+
+# Day 9 ratchet: iter_entries(leaf_ext=SCRIPT_LEAF_EXT) never loads a script/text leaf to sniff for a nested zip
+# (Day 9 script Mastery bundle: same 421 entries, 0.81 s -> 0.05 s); the default still recurses into anything PK.
+import io as _io, tempfile as _tf, zipfile as _zf
+from lib.common import iter_entries as _ie, SCRIPT_LEAF_EXT as _SLE
+_inner = _io.BytesIO(); _zf.ZipFile(_inner, "w").writestr("deep.js", "x")
+with _tf.TemporaryDirectory() as _d:
+    with _zf.ZipFile(Path(_d) / "evidence.zip", "w") as _z:
+        _z.writestr("stage.ps1", _inner.getvalue())      # PK bytes behind a script name
+    assert "deep.js" in [n for n, _, _ in _ie(_d)] and "deep.js" not in [n for n, _, _ in _ie(_d, leaf_ext=_SLE)]
+print("ok  iter_entries: leaf_ext leaves script names lazy (no PBKDF2 sniff); default recursion unchanged")
+
+# Day 9 ratchet: decode_chunk's strict JSON/C escape branch (warmups "Escape Room" line 9 = '"er..."'),
+# incl. non-ASCII that the old ASCII-only generic fallback lost to rot-N
+from lib.decode import decode_chunk as _dc
+_bs = chr(92)
+assert _dc('"' + "".join(f"{_bs}u{ord(c):04x}" for c in "er-ripple-76") + '"') == "er-ripple-76"
+assert _dc('"' + "".join(f"{_bs}u{ord(c):04x}" for c in "café words here") + '"') == "café words here"
+assert _dc("".join(f"{_bs}x{ord(c):02x}" for c in "plain text words")) == "plain text words"
+print("ok  decode_chunk: \\uXXXX / \\xXX escape fragments (quoted or bare) decode strictly")

@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-09-trust-everyone",
+  "lane": "mobile-android",
+  "name": "📱 Trust Everyone",
+  "ids": {
+    "single_solve": "mobile-android-day-09-trust-everyone",
+    "time_trial": "mobile-android-day-09-trust-everyone/time_trial",
+    "mastery": "mobile-android-day-09-trust-everyone/mastery"
+  }
+}

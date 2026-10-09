@@ -1,0 +1,10 @@
+{
+  "base": "warmups-day-09",
+  "lane": "warmups",
+  "name": "👶 Escape Room",
+  "ids": {
+    "single_solve": "warmups-day-09",
+    "time_trial": "warmups-day-09/time_trial",
+    "mastery": "warmups-day-09/mastery"
+  }
+}

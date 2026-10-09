@@ -453,3 +453,24 @@ mobile 35/43/47, warmups 37/43/47, metadata 44/49/52, script 84/93/105, binary 1
   ranked attempt. Open: treat a finished CORRECT body for this mode as a pass.
 - Parallel Mastery sets: adopted by the skeleton lanes (warmups/mobile/metadata); binary/script copy yesterday's solver
   and stayed sequential (binary Mastery solve 8.3 s). Open: get copied solvers onto group_by_set.
+
+## Day 9 (2026-10-09): real run 15/15 at T+119 s -- every mode first try (best real run)
+Drop detected 21:00:03, `hctf run` same second. $1.74 worker cost, 23 turns, 0 generalizes. Critical path = binary
+(Nim "Nimble"): the Day 8 solver answered 89/90 ids on Nim bytes; one new field (`d09_analysis_hcfg_offset`).
+Waterfall (s after drop; `.run/waterfall9.py`, phases from each mode's last_timed.json):
+
+| lane | GM start | dl | 1st tool | single OK | TT start (+el / win) | M start (+el / win) |
+|---|---|---|---|---|---|---|
+| warmups | 3.1 | 6 | 10.7 | 32.9 | 37.2 (+1.6/7) | 39.5 (+1.7/9) |
+| script | 4.6 | 8 | 14.3 | 25.8 | 32.4 (+5.0/11) | 42.8 (+5.6/30) |
+| mobile | 4.2 | 7 | 10.7 | 29.6 | 33.5 (+3.2/8) | 37.5 (+1.7/11) |
+| metadata | 4.1 | 8 | 13.2 | 51.5 | 55.6 (+3.4/6) | 59.9 (+2.9/7) |
+| binary | 4.8 | 8 | 25.0 | 90.8 | 96.2 (+7.3/10) | 105.4 (+14.3/20) |
+
+Losses on the binary critical path (~119 s): drop->GM start 4.8; triage 8->~19 (11 s, worker idle); first command
+15.6 s (cp of the 230 MB Day 8 solver incl. cases, under 5-worker load); ~2 turns (~15 s) locating the one empty id
+the dry run had already named; single OK -> TT start 5.4 s (all lanes 3.9-6.6 s); binary downloads 3.45 s (TT, 31 MB)
++ 6.62 s (Mastery, 5x31 MB) before solving. TT solve slower than Mastery on 3 lanes (mobile 1.99 vs 0.17, script
+2.98 vs 1.76) = first-run cold start on Homebase. Script TT end -> Mastery start 5.4 s (family-probe collect).
+Thinnest margins: binary TT 7.3/10, binary Mastery 14.3/20, metadata TT 3.4/6 (submit 2.31 s).
+Ops: `hctf hb keepalive` (day.sh child) died silently ~20:41 while armed (no OOM, no traceback) -- restarted by hand.

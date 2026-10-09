@@ -90,10 +90,17 @@ def _zip_read(z, name):
         raise
 
 
-def iter_entries(root, max_depth=4):
+# Script/text names never hold a nested zip: iter_entries(leaf_ext=SCRIPT_LEAF_EXT) skips loading them to sniff for PK
+# (Day 8/9 script Mastery: 375 AES members = 375 PBKDF2s up front, many times ~0.2 s on Homebase, repeated per forked set).
+SCRIPT_LEAF_EXT = (".js", ".jse", ".mjs", ".cjs", ".ps1", ".psm1", ".py", ".pyw", ".sh", ".bash", ".vbs", ".vbe", ".bat",
+                   ".cmd", ".php", ".hta", ".wsf", ".sct", ".wsc", ".lua", ".txt", ".json")
+
+
+def iter_entries(root, max_depth=4, leaf_ext=()):
     """Yield (name, bytes_loader, parent_name) for every file under root and, recursively, every zip member
     (Mastery bundles ship one outer zip holding the per-set zips, possibly under a set's own name).
-    Each loader is memoized: AES members cost a PBKDF2 per read, and walk() itself loads every entry to recurse."""
+    Each loader is memoized: AES members cost a PBKDF2 per read, and walk() itself loads every entry to recurse --
+    except names ending in leaf_ext (e.g. SCRIPT_LEAF_EXT), which stay lazy until the caller loads them."""
     def once(load):
         memo = []
         return lambda: memo[0] if memo else (memo.append(load()) or memo[0])
@@ -101,7 +108,7 @@ def iter_entries(root, max_depth=4):
     def walk(name, load, parent, depth):
         load = once(load)
         yield name, load, parent
-        if depth >= max_depth:
+        if depth >= max_depth or (leaf_ext and name.lower().endswith(leaf_ext)):
             return
         try:
             data = load()

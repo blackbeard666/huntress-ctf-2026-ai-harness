@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-09-built-different",
+  "lane": "metadata-forensics",
+  "name": "🔎 Built Different",
+  "ids": {
+    "single_solve": "metadata-forensics-day-09-built-different",
+    "time_trial": "metadata-forensics-day-09-built-different/time_trial",
+    "mastery": "metadata-forensics-day-09-built-different/mastery"
+  }
+}

@@ -212,7 +212,8 @@ PLAYBOOK = [
              "JScript). A graph ending in a handoff is `staged_chain` even if next_stage is a .js file (not 'relay'). "
              "Non-execution roles map by ROLE, never by adapter: persistence_descriptor (build_schedule>"
              "register_descriptor) = T1053.003 even with a systemd_descriptor/npm_lifecycle adapter; bash "
-             "advanced_syntax (recognize_syntax>reconstruct_intent) = T1059.004 (Day 7).",
+             "advanced_syntax (recognize_syntax>reconstruct_intent) = T1059.004 (Day 7-9). v=3 cross-language plans "
+             "(PHP/WSF/HTA D8, Lua/SCT/OpenResty D9) STATE attack=: the PARENT ids T1059/T1053, verbatim.",
         rejected=tuple(sum((list(v) for v in K.JSCRIPT_ATTACK_REJECTED.values()), [])) + ("T1005", "T1560", "T1119"),
         examples=("batch launcher->T1059.003", "jscript staged_chain->T1059.007", "vbscript launcher->T1059.005",
                   "downloader/stager->T1105", "dropper->T1140", "uploader->T1041", "impact->T1486",

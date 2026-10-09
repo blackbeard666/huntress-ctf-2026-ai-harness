@@ -1,24 +1,29 @@
-# warmups — technique log (days 1-8; updated after every day)
+# warmups — technique log (days 1-9; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
   guarantee for Time Trial / Mastery -- solvers derive structure and degrade per field.
 - Each day: one `blob.txt`. Decode it until a plain English sentence appears; its final non-empty line ends "...submit this exact answer to the Game Master: <slug>". The slug is `word-word-word-NN` (`answer_format.kind=pattern`, `normalization=trim`). Same single question id `message` every day.
-- The ENCODING changes daily and the title/prompt is a pun naming it: 64 -> base64, "thirteen steps"/half a turn -> ROT13, sixteen fingers -> hex, "two sides" -> 8-bit binary, "reduced to numbers" -> decimal char codes, "eight fingers" -> octal, "address bar"/"Percent" -> URL percent-encoding, "the browser understands"/"Entity" -> HTML character entities. Every single_solve so far was ONE layer.
-- Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, ..., 33, 38). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, html-entity, in that order so far). The last line has no trailing newline. The fragments join verbatim (split mid-word) into the same sentence.
-- Clocks: TT about 5-8 s from day 2 on (30 s on day 1), mastery about 5-9 s (9 s on day 7, 8 s on day 8 with MORE sets: the window does not reliably grow with the set count). Only a deterministic solver survives these windows. The single_solve is untimed.
+- The ENCODING changes daily and the title/prompt is a pun naming it: 64 -> base64, "thirteen steps"/half a turn -> ROT13, sixteen fingers -> hex, "two sides" -> 8-bit binary, "reduced to numbers" -> decimal char codes, "eight fingers" -> octal, "address bar"/"Percent" -> URL percent-encoding, "the browser understands"/"Entity" -> HTML character entities, "characters would like to escape"/"Escape Room" -> JSON/JS `\uXXXX` string escapes. Every single_solve so far was ONE layer.
+- Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, ..., 38, 43). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, html-entity, `"\uXXXX"`, in that order so far). The last line has no trailing newline. The fragments join verbatim (split mid-word) into the same sentence.
+- Clocks: TT about 5-8 s from day 2 on (30 s on day 1), mastery about 5-9 s (9 s on days 7 and 9, 8 s on day 8: the window does not reliably grow with the set count). Only a deterministic solver survives these windows. The single_solve is untimed.
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
 - **Encoding per line** -- Mastery line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, `&#NNN;`
-  entities, ...); detect each line's encoding from its alphabet, not its position (position-based detection breaks if the order
+  entities, `"\uXXXX"` JSON escapes, ...); detect each line's encoding from its alphabet, not its position (position-based detection breaks if the order
   changes). Rule for "escape-token" encodings (url `%xx`, entities): accept when the WHOLE fragment is tokens of that kind
   (`re.sub(token,'',frag).strip()==''`), then use the stdlib decoder (`unquote`, `html.unescape`) so the unseen forms
   (`%XX` upper, `&#x6d;` hex, `&amp;` named) are covered too. Day 8 GM bytes used only decimal `&#NNN;` in all 40 blobs.
+  Day 9 backslash escapes: every char as lowercase `\u00XX`, the fragment WRAPPED IN DOUBLE QUOTES (a JSON string
+  literal) in all 45 blobs (single, TT, 43 mastery lines); no `\x`, `\n`, `\"`, uppercase hex or non-ASCII seen. Rule: if
+  the fragment matches `^"?(?:\\(?:u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|[nrt"\\/]))+"?$`, decode with `json.loads` (add the quotes if missing) -- that also covers
+  `\n`, `\"`, surrogate pairs and non-ASCII; fall back to `codecs.decode(t,'unicode_escape')` for `\xNN`. Drop the quotes.
 - **Line wrapper** -- `NN<TAB>fragment` numbering; fragments split mid-word and join verbatim in number order.
-- **Set count** -- grows by 5 per day (33 on day 7, 38 on day 8); the solver must loop over whatever the contract lists.
+- **Set count** -- grows by 5 per day (33 on day 7, 38 on day 8, 43 on day 9); the solver must loop over whatever the contract lists.
 - **Delivery shape** -- mastery bytes arrive as ONE zip saved under the first member's name (`blob-01.txt`; the contract has NO
-  `artifacts[]`, only a top-level `sha256` = the zip; same on days 7 and 8). Set 1's question names that same file: read the MEMBER, never decode the whole bundle.
-- **Payload only** -- TT/single differ only in the slug and length (day 7: 318 vs 333 bytes; day 8: 620 vs 621); same sentence and encoding.
+  `artifacts[]`, only a top-level `sha256` = the zip; same on days 7-9). Set 1's question names that same file: read the MEMBER, never decode the whole bundle.
+- **Payload only** -- TT/single differ only in the slug and length (day 7: 318 vs 333 bytes; day 8: 620 vs 621; day 9: 644 vs 650); same sentence and encoding.
+- **Fragment whitespace** -- payload spaces sit at fragment edges (day 9: 34/43 rot13 line-2 fragments end in a space, `pbqvat guvf `). Never `.strip()` the decoded text of a fragment before joining.
 
 ## Recognition cues -> first move
 | What you see | First move |
@@ -31,6 +36,7 @@ How this lane has looked so far (observations, not guarantees):
 | 3-digit tokens, digits 0-7 only, zero-padded (`040`, `116`) | octal: same, with `int(t,8)` |
 | `%4e%69%63...` (every char incl. letters/spaces as lowercase `%xx`, no line end) | URL decode: `python3 -c "import sys,urllib.parse;print(urllib.parse.unquote(open(sys.argv[1]).read()))" blob.txt`. Test `%[0-9a-f]{2}` BEFORE hex/b64 |
 | `&#78;&#105;&#99;...` (only `&...;` tokens, no line end) | HTML entities: `python3 -c "import html,sys;print(html.unescape(open(sys.argv[1]).read()))" blob.txt` (covers `&#x..;` and named too) |
+| `"\u004e\u0069..."` (quoted, only `\uXXXX`; prompt says "escape") | JSON string escapes: `python3 -c "import json,sys;print(json.loads(open(sys.argv[1]).read()))" blob.txt`. `lib.decode.decode_chunk` also gets it (generic fallback, ASCII only) |
 | `A-Z2-7=` | `base32 -d` |
 | Magic `PK\x03\x04` even if named `.txt` (mastery `blob-01.txt`) | `unzip -l`. It is a bundle of all sets `blob-01..NN.txt` |
 | Lines `01<TAB>...`, `02<TAB>...` | Strip the `NN\t` prefix. Decode EACH line with its own encoding and concatenate without separators. Keep leading/trailing spaces |
@@ -88,9 +94,22 @@ The generic path is `lib.decode.peel(data, accept)` (BFS over encodings) plus th
 - Near-miss: the worker's in-place `str.replace` patch for `fallback()` silently matched nothing (the docstring wrapping
   differed), so the fallback stayed `return None`. It didn't matter here, but check that each patch actually applied.
 
+**Day 9: Escape Room** ("These characters would very much like to escape." -- backslash/unicode escape sequences).
+- 644-byte blob: ONE JSON string literal, `"` + 107 x `\u00XX` (lowercase hex, every char incl. spaces) + `"`, no line end.
+  One layer -> `json.loads` -> sentence -> slug. `lib.decode.decode_chunk(text.strip())` already returned the plain sentence
+  (its generic `\u/\x` escape fallback keeps only the escapes, so the quotes vanish).
+- Pre-warmed worker: 3 tool calls (read triage/contract/skeleton; `decode_chunk` + `json.loads` cross-check; patch `answer()`
+  and `hctf submit --from-solver` in one command). Start 13:00:06Z -> CORRECT 13:00:36Z, about 30 s, first submit.
+- Solver: `decode_chunked` for `NN<TAB>` blobs else `decode_chunk`, then the last-line slug regex. Its `json.loads`
+  post-step never fired (lib had already unescaped).
+- TT window 7 s, CORRECT at 0.8 s after start (whole run 1.6 s). Mastery 43 sets x 9 lines (+ quoted `\u` line), zip
+  bundle as `blob-01.txt`, window 9 s, CORRECT at 0.9 s (solve 0.3 s). Both on attempt 1, 43/43 slugs accepted as decoded.
+- Gap: lib's `\u` path is ASCII-only (`_ascii`); a non-ASCII escape (`\u00e9`) makes the whole fragment fall through
+  to rot-N garbage, and `\n`/`\"`/surrogate pairs are dropped. Not in the GM bytes yet.
+
 ## GM answer conventions learned
 - Submit the slug ONLY, exactly as decoded (lowercase, hyphens, 2-digit number). Not the whole sentence and not "Game Master: ...". `trim` normalization only.
-- No correctly decoded warmups answer has been rejected (days 1-8; day 8's 40 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
+- No correctly decoded warmups answer has been rejected (days 1-9; day 8's 40 and day 9's 45 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
 - Mastery ids are per set (`setN.message` style). Each question names `blob-0N.txt`, but the bytes may arrive as a zip member, as same-named `blob.txt` downloads, or de-duplicated (`blob_2.txt`). Map set -> file by sha256 from `contract["artifacts"]` when present. When it is absent (day 7), open the zip and read member `blob-0N.txt`.
 - No GM-side label grammar in this lane: the answer is a derived VALUE, never a synthetic label.
 
@@ -104,5 +123,8 @@ The generic path is `lib.decode.peel(data, accept)` (BFS over encodings) plus th
 - Timed windows (5-9 s, with GM start/submit eating 3-5 s of it) leave no room for an LLM or a slow BFS. Keep every per-question decode under about 1 s with a hard BFS cap.
 - Solver patches made with `str.replace`/sed silently no-op when the anchor text doesn't match exactly (day 8 fallback). Assert
   the anchor count or re-grep the file after patching.
+- Hand-testing escape decoders: in a ratchet session, a literal backslash-u sequence typed into a Bash/heredoc command
+  reached python ALREADY decoded (the tool layer unescaped it), so a test "passed" on plain text. Test on the artifact file
+  or build escapes with `chr(92)+'u%04x'`.
 - Don't over-read the prompt: "Again" (day 6) was flavour, not a second layer. Decode what the bytes show.
 - Don't contact anything beyond the GM. The decoded sentence states the answer outright.
