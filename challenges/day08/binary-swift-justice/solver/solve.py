@@ -535,18 +535,11 @@ def answer(field, group, q):
     return None
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--contract", required=True)
-    ap.add_argument("--artifacts", required=True)
-    a = ap.parse_args()
-    c = json.load(open(a.contract))
-    qs = c.get("questions", [])
-    ids = c.get("answer_ids") or [q["id"] for q in qs]
-    qmap = {q.get("id"): q for q in qs}
+def _solve_pairs(job):
+    """Answer [(answer_id, question), ...] from the artifacts under `root` (one Mastery set, or the whole contract)."""
+    root, c, pairs = job
     cache, out = {}, {}
-    for i, aid in enumerate(ids):
-        q = qmap.get(aid) or (qs[i] if i < len(qs) else {})
+    for aid, q in pairs:
         prefix, _, base = aid.rpartition(".")
         m = re.match(r"(d\d+)_(.+)$", base)
         if not m:
@@ -558,10 +551,10 @@ def main():
             p = None
             try:   # pair same-named per-set deliveries by the contract's sha256 first
                 from lib.common import container_by_sha
-                p = container_by_sha(a.artifacts, c, art)
+                p = container_by_sha(root, c, art)
             except Exception:  # noqa: BLE001
                 p = None
-            p = str(p) if p else find_artifact(a.artifacts, art)
+            p = str(p) if p else find_artifact(root, art)
             if not p:
                 log(f"[!] artifact {art} not found")
                 continue
@@ -578,7 +571,40 @@ def main():
             continue
         if v is not None:
             out[aid] = v.strip() if q.get("normalization") == "trim" else v
-    print(json.dumps(out))
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--contract", required=True)
+    ap.add_argument("--artifacts", required=True)
+    a = ap.parse_args()
+    c = json.load(open(a.contract))
+    qs = c.get("questions", [])
+    ids = c.get("answer_ids") or [q["id"] for q in qs]
+    qmap = {q.get("id"): q for q in qs}
+    pairs = [(aid, qmap.get(aid) or (qs[i] if i < len(qs) else {})) for i, aid in enumerate(ids)]
+    try:
+        from lib.common import group_by_set
+        groups = group_by_set(pairs)
+    except Exception:  # noqa: BLE001
+        groups = {"_": pairs}
+    out = {}
+    if len(groups) >= 2 and os.environ.get("HCTF_SOLVER_PARALLEL", "1") != "0":
+        # Mastery: every set runs inside ONE clock -- one forked process per set (2 vCPUs on the Homebase VM).
+        import multiprocessing as mp
+        from concurrent.futures import ProcessPoolExecutor
+        try:
+            with ProcessPoolExecutor(max_workers=min(len(groups), os.cpu_count() or 2),
+                                     mp_context=mp.get_context("fork")) as ex:
+                for part in ex.map(_solve_pairs, [(a.artifacts, c, g) for g in groups.values()]):
+                    out.update(part)
+        except Exception as e:  # noqa: BLE001 - never lose a solve to the pool: fall back to sequential
+            log(f"[!] parallel sets failed ({e!r}); sequential")
+            out = _solve_pairs((a.artifacts, c, pairs))
+    else:
+        out = _solve_pairs((a.artifacts, c, pairs))
+    print(json.dumps({aid: out[aid] for aid, _ in pairs if aid in out}))
 
 
 if __name__ == "__main__":

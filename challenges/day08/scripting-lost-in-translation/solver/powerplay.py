@@ -66,7 +66,9 @@ def find_member(artdir, artifact):
 
 
 def xor(b, k):
-    return bytes(c ^ k[i % len(k)] for i, c in enumerate(b))
+    """Repeating-key XOR as one big-int op (same bytes as the per-byte loop; decode_record tries ~260 keys per file)."""
+    ks = (k * (len(b) // len(k) + 1))[:len(b)]
+    return (int.from_bytes(b, "big") ^ int.from_bytes(ks, "big")).to_bytes(len(b), "big")
 
 
 def decode_record(text):

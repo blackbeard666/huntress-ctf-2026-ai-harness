@@ -201,4 +201,22 @@ assert orchestrate._parallel_sets_need(ps, [{"case": "auto-mastery-x", "seconds"
 (ps / "solve.py").write_text("from lib.common import group_by_set\n")
 assert orchestrate._parallel_sets_need(ps, res) is None                                             # already parallel
 print("ok  parallel-sets need: sequential multi-set solver flagged; fast or already-parallel solvers left alone")
+# 11) a generalize worker can't author expected answers: pre-existing expected.json edits are restored
+gch = object.__new__(orchestrate.Chain)
+gch.sdir = TMPD / "gsolver"
+(gch.sdir / "cases" / "variant-mastery-x").mkdir(parents=True)
+(gch.sdir / "cases" / "variant-mastery-x" / "expected.json").write_text("{}")
+snap = gch._expected_snapshot()
+(gch.sdir / "cases" / "variant-mastery-x" / "expected.json").write_text('{"set1.a": "worker-made"}')
+(gch.sdir / "cases" / "new-case").mkdir()
+(gch.sdir / "cases" / "new-case" / "expected.json").write_text('{"x": "1"}')       # new cases are not touched
+_say = orchestrate.say
+orchestrate.say = lambda *a, **k: None
+try:
+    gch._restore_expected("c", snap)
+finally:
+    orchestrate.say = _say
+assert (gch.sdir / "cases" / "variant-mastery-x" / "expected.json").read_text() == "{}"
+assert (gch.sdir / "cases" / "new-case" / "expected.json").read_text() == '{"x": "1"}'
+print("ok  expected.json guard: worker edits to existing cases restored, new cases left alone")
 print("ALL PASS")

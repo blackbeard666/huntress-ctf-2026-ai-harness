@@ -1023,9 +1023,11 @@ class Chain:
             reaper = threading.Thread(target=self._harvest_variants, daemon=True,
                                       args=(cid, HARVEST_VARIANTS, fill, done, harvesting))
             reaper.start()
+        expected_before = self._expected_snapshot()
         try:
             self.run_worker(cid, "generalize", prompt, GENERALIZE_TIMEOUT, stop=green)
         finally:
+            self._restore_expected(cid, expected_before)
             done.set()
             if watch.is_alive():
                 watch.join()
@@ -1198,6 +1200,23 @@ class Chain:
         shutil.move(str(snap), str(self.sdir))
         say(f"[{self.base}] generalize REJECTED ({why}); solver restored to its pre-worker state "
             f"(worker's version kept in {rejected.relative_to(ROOT)})")
+
+    def _expected_snapshot(self):
+        """{case: expected.json bytes} -- expected answers are GM-verified only; workers must not author them."""
+        return {p.parent.name: p.read_bytes() for p in (self.sdir / "cases").glob("*/expected.json")}
+
+    def _restore_expected(self, cid, before):
+        """Undo any worker edit to a pre-existing case's expected.json (speed-harden d08 script: the worker wrote its own
+        solver output into an unverified variant's empty expected.json, freezing 3075 unjudged values as 'GM truth')."""
+        for name, data in before.items():
+            p = self.sdir / "cases" / name / "expected.json"
+            try:
+                if not p.exists() or p.read_bytes() != data:
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    p.write_bytes(data)
+                    say(f"[{cid}] restored cases/{name}/expected.json (expected answers come from the GM only)")
+            except OSError as e:
+                say(f"[{cid}] expected.json restore note: {e}")
 
     def _accept_or_restore(self, cid):
         """After the generalize worker exits for ANY reason: keep its edits only if every case that passed before

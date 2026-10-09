@@ -10,14 +10,15 @@ Host With the Most:
 JScript fixtures. Each JScript file hides a JSON plan {steps, adapter, values, stageCount} behind base64/XOR/reverse
 layers, and an inspect function evals it. We recover the plan in a sandboxed node vm (jsdecode.js), classify the role
 from the ordered steps, and read the function/invocation/property style off the inspect function's syntax."""
-import argparse, importlib.util, json, re, subprocess, sys, tempfile
+import argparse, importlib.util, json, os, re, subprocess, sys, tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
 sys.path.insert(0, str(ROOT))
 from lib import codec  # noqa: E402
-from lib.common import container_by_sha, delivery_missing, find_artifact, iter_entries, load_contract, normalize, read_member as _lib_read_member  # noqa: E402
+from lib.common import container_by_sha, delivery_missing, find_artifact, group_by_set, iter_files, load_contract, normalize, read_member as _lib_read_member  # noqa: E402
+from lib.common import _zip_open, _zip_read  # noqa: E402
 
 # Vendored copy of the Day 1 solver: Homebase only gets this solver dir + lib, not challenges/day01/.
 _spec = importlib.util.spec_from_file_location("powerplay", HERE / "powerplay.py")
@@ -83,6 +84,37 @@ PP.read_member = _read_member  # PP.find_member resolves read_member from its mo
 
 CONTRACT = {}
 _INDEX = {}
+# Script members are leaves: lib.common.iter_entries loads (= one AES PBKDF2 each) every member only to sniff for a
+# nested zip, so a 5-set bundle's index decrypted all ~375 members up front. Skip that sniff for these.
+_LEAF_EXT = (".js", ".jse", ".mjs", ".cjs", ".ps1", ".psm1", ".py", ".pyw", ".sh", ".bash", ".vbs", ".vbe", ".bat",
+             ".cmd", ".php", ".hta", ".wsf", ".txt", ".json")
+
+
+def _iter_entries(root, max_depth=4):
+    """lib.common.iter_entries with lazy leaves: (name, memoized bytes loader, parent name) for every file and nested
+    zip member; only non-script entries are loaded to recurse into."""
+    def once(load):
+        memo = []
+        return lambda: memo[0] if memo else (memo.append(load()) or memo[0])
+
+    def walk(name, load, parent, depth):
+        load = once(load)
+        yield name, load, parent
+        if depth >= max_depth or name.lower().endswith(_LEAF_EXT):
+            return
+        try:
+            data = load()
+        except Exception:
+            return
+        z = _zip_open(data) if data[:2] == b"PK" else None
+        if z is None:
+            return
+        for n in z.namelist():
+            if not n.endswith("/"):
+                yield from walk(Path(n).name, (lambda z=z, n=n: _zip_read(z, n)), name, depth + 1)
+
+    for p in iter_files(root):
+        yield from walk(p.name, p.read_bytes, None, 0)
 
 
 def _indexed(artdir, container, member):
@@ -92,7 +124,7 @@ def _indexed(artdir, container, member):
     key = str(artdir)
     if key not in _INDEX:
         idx = _INDEX[key] = {}
-        for name, load, parent in iter_entries(artdir):
+        for name, load, parent in _iter_entries(artdir):
             idx.setdefault((parent, name), []).append(load)
     hits = _INDEX[key].get((container, Path(member).name), [])
     return hits[0]() if len(hits) == 1 else None
@@ -625,6 +657,36 @@ def main():
     bodies = [p.read_bytes() for p in files if p.stat().st_size < 512]
     if files and len(bodies) == len(files) and all(re.match(rb'\s*\{\s*"error"\s*:', b) for b in bodies):
         sys.exit(f"artifact delivery is a GM error body, not evidence: {bodies[0][:80]!r}")
+    groups = group_by_set(pairs)
+    answers = {}
+    if len(groups) >= 2 and os.environ.get("HCTF_SOLVER_PARALLEL", "1") != "0":
+        # Mastery: every set runs inside ONE clock on a 2-vCPU VM -- one forked process per set (same results as the
+        # sequential loop; any pool error falls back to it).
+        import multiprocessing as mp
+        from concurrent.futures import ProcessPoolExecutor
+        try:  # walking the bundle decrypts EVERY member (375 PBKDF2s): do it once here, the forked sets inherit it
+            _indexed(a.artifacts, None, "")
+        except Exception as e:  # noqa: BLE001
+            log("index warm-up failed", repr(e))
+        try:
+            with ProcessPoolExecutor(max_workers=min(len(groups), os.cpu_count() or 2),
+                                     mp_context=mp.get_context("fork")) as ex:
+                for part in ex.map(_solve_pairs, [(a.artifacts, g) for g in groups.values()]):
+                    answers.update(part)
+        except Exception as e:  # noqa: BLE001
+            log(f"parallel sets failed ({e!r}); sequential")
+            answers = _solve_pairs((a.artifacts, pairs))
+    else:
+        answers = _solve_pairs((a.artifacts, pairs))
+    if not answers:
+        sys.exit("no answers produced")
+    print(json.dumps(answers))
+
+
+def _solve_pairs(args):
+    """{answer_id: value} for one group of (answer_id, question) pairs (a Mastery set, or the whole contract)."""
+    artdir, pairs = args
+    a = argparse.Namespace(artifacts=artdir)
     cache, answers = {}, {}
     blobs = {}
     for aid, q in pairs:  # decode every JScript member up front in one node run
@@ -676,9 +738,7 @@ def main():
             log("no value", aid, field)
             continue
         answers[aid] = normalize(val, q)
-    if not answers:
-        sys.exit("no answers produced")
-    print(json.dumps(answers))
+    return answers
 
 
 if __name__ == "__main__":

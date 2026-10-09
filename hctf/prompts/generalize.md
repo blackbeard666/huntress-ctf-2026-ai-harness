@@ -66,3 +66,5 @@ a non-unique replace silently patches a sibling function. Profiling: `python3 -m
 (redirect stderr INTO the pipe -- `2>&1 >/dev/null` sends the profile to /dev/null).
 Speed: a Mastery attempt runs every set inside one clock -- if per-set work is heavy, solve the sets in parallel
 processes (`lib.common.group_by_set` + fork `ProcessPoolExecutor`, see the skeleton's `main()` in hctf/templates/solve_skeleton.py).
+Never edit any `cases/*/expected.json`: expected answers are GM-verified only (the harness restores any change). A
+`variant-*` case with an empty or partial expected.json is judged by FILLING every field, not by matching values.
