@@ -434,6 +434,118 @@ def _novel(verified, vocab):
     return {a: v for a, v in (verified or {}).items() if _uncertain(a, v, vocab)}
 
 
+def _solver_env():
+    env = dict(os.environ, PYTHONPATH=str(HW))
+    # user-level tools `hctf hb setup` installs without root (static 7-Zip as 7zz/7z on the the VM: no sudo there)
+    env["PATH"] = f"{Path.home() / '.local' / 'bin'}:{Path.home() / 'hbtools' / 'bin'}:{env.get('PATH', '')}"
+    if (Path.home() / "hbtools" / "jdk").is_dir():
+        env.setdefault("JAVA_HOME", str(Path.home() / "hbtools" / "jdk"))   # setup/homebase_tools.sh (jadx/apktool)
+    import shutil as _sh
+    if not _sh.which("7z", path=env["PATH"]):  # still none: the pyzipper-backed bin/shims/7z
+        env["PATH"] = f"{HW / 'bin' / 'shims'}:{env.get('PATH', '')}"
+    return env
+
+
+PIPELINE = os.environ.get("HCTF_PIPELINE_SETS", "1") == "1"
+PIPELINE_MIN_BYTES = float(os.environ.get("HCTF_PIPELINE_MIN_MB", "20")) * 1e6
+PIPELINE_DL = int(os.environ.get("HCTF_PIPELINE_DL", "3"))
+
+
+def _total_bytes(body):
+    return sum(int(x.get("size") or 0) for x in body.get("artifacts") or [] if isinstance(x, dict))
+
+
+def _set_plan(body, plan, ids):
+    """{set key: [delivery file names]} when every set (`setN.` ids) reads only its OWN deliveries, else None (a single
+    set, a shared delivery, a question naming no known delivery: the plain download-all-then-solve path)."""
+    names = {n for n, _ in plan}
+    keys = {_setkey(i) for i in ids}
+    if len(keys) < 2 or "_" in keys:
+        return None
+    files = {}
+    for q in body.get("questions") or []:
+        aid, art = q.get("id") or "", q.get("artifact") or ""
+        n = os.path.basename(art.split("->")[0].strip()) if art else ""
+        if n:
+            if n not in names:
+                return None
+            files.setdefault(_setkey(aid), set()).add(n)
+    owner = {}
+    for k, ns in files.items():
+        for n in ns:
+            if owner.setdefault(n, k) != k:
+                return None
+    if set(files) != keys or set(owner) != names:
+        return None
+    return {k: sorted(files[k]) for k in sorted(files, key=lambda s: int(re.sub(r"\D", "", s) or 0))}
+
+
+def _pipelined(sets, plan, body, ids, adir, solve, env, fetch, left, out, t_started):
+    """Download PIPELINE_DL deliveries at a time in set order; each set whose deliveries are all in runs solve.py on its
+    own sub-contract (that set's ids/questions, a dir holding only its deliveries) while the next sets download.
+    -> a CompletedProcess-like object with the merged answers, or None when any set run failed (the caller then runs
+    the whole solver once on everything, as before). Download errors propagate (GMError)."""
+    import shutil as _sh
+    import threading
+    from types import SimpleNamespace
+    caps = dict(plan)
+    order = [n for k in sets for n in sets[k]]
+    pending = {k: set(v) for k, v in sets.items()}
+    lock = threading.Lock()
+    results, t_first = {}, []
+    budget_end = time.time() + _solve_budget(body, left) + 1.5   # the clock's end minus the submit allowance
+    solver_pool = ThreadPoolExecutor(max_workers=max(1, os.cpu_count() or 2))
+    futs = {}
+
+    def run_set(k):
+        d = adir / f".set-{k}"
+        d.mkdir(exist_ok=True)
+        for n in sets[k]:
+            os.link(adir / n, d / n)
+        sub = dict(body, answer_ids=[i for i in ids if _setkey(i) == k],
+                   questions=[q for q in body.get("questions") or [] if _setkey(q.get("id") or "") == k])
+        (d / "contract.json").write_text(json.dumps(sub))
+        t_first.append(time.time())
+        r = subprocess.run([sys.executable, str(solve), "--contract", str(d / "contract.json"), "--artifacts", str(d)],
+                           capture_output=True, text=True, timeout=max(1.0, budget_end - time.time()), env=env)
+        got = json.loads(r.stdout.strip().splitlines()[-1])
+        return {i: got[i] for i in sub["answer_ids"] if i in got}
+
+    def fetch_one(n):
+        fetch((n, caps[n]))
+        with lock:
+            for k, need in pending.items():
+                if n in need:
+                    need.discard(n)
+                    if not need:
+                        futs[k] = solver_pool.submit(run_set, k)
+
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, PIPELINE_DL)) as ex:
+            for _ in ex.map(fetch_one, order):
+                pass
+        out["_t_downloaded"] = time.time()
+        for k, f in futs.items():
+            try:
+                results[k] = f.result()
+            except Exception as e:  # noqa: BLE001 - any set failure -> whole-solver fallback
+                out["pipeline_fallback"] = f"{k}: {str(e)[:160]}"
+                return None
+    finally:
+        solver_pool.shutdown(wait=False)
+        for k in sets:
+            _sh.rmtree(adir / f".set-{k}", ignore_errors=True)   # hardlinks: never pulled back twice
+    answers = {}
+    for k in sets:
+        answers.update(results.get(k) or {})
+    if any(i not in answers for i in ids):
+        out["pipeline_fallback"] = f"{sum(i not in answers for i in ids)} id(s) unanswered by the per-set runs"
+        return None
+    out["pipelined"] = {"sets": len(sets), "dl_parallel": PIPELINE_DL,
+                        "first_set_solve_at": round(min(t_first) - t_started, 2) if t_first else None}
+    return SimpleNamespace(stdout=json.dumps(answers), stderr="", returncode=0)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cid")
@@ -502,42 +614,44 @@ def main():
     # Download every per-set delivery CONCURRENTLY: over the public GM each call is ~0.2s RTT, so a
     # many-file Mastery bundle must fetch in parallel or the ~6-10s window expires before the solver runs.
     plan = _plan(body)
+    contract = adir / "contract.json"
+    contract.write_text(json.dumps(body))
+    env = _solver_env()
+    solve = HW / a.solver_dir / "solve.py"
 
     def _fetch(item):
         name, cap = item
         (adir / name).write_bytes(_get_bytes(cap))
 
-    if plan:
-        try:
+    # Large multi-set Mastery bundle (D9 binary: 5 x 31 MB = 6.6 s of download, then a 5.4 s solve): fetch the sets a
+    # few at a time and solve each one the moment its delivery lands, so most of the solve hides behind the downloads.
+    sets = _set_plan(body, plan, ids) if PIPELINE and plan and _total_bytes(body) >= PIPELINE_MIN_BYTES else None
+    piped = None
+    try:
+        if sets:
+            piped = _pipelined(sets, plan, body, ids, adir, solve, env, _fetch, left, out, t_started)
+        elif plan:
             with ThreadPoolExecutor(max_workers=min(int(os.environ.get("HCTF_DL_PARALLEL", "48")), len(plan))) as ex:
                 for _ in ex.map(_fetch, plan):  # propagate any download exception
                     pass
-        except GMError as e:
-            # The RUNNER failed, not the solver: never hand the solver an error body as evidence. exec_error is
-            # retried by the orchestrator (no generalize); gm_rate_limited makes it back off first.
-            out["result"] = "exec_error"
-            out["gm_rate_limited"] = e.rate_limited
-            out["detail"] = f"download failed: {e}"
-            print(json.dumps(out))
-            return
-    t_downloaded = time.time()
+    except GMError as e:
+        # The RUNNER failed, not the solver: never hand the solver an error body as evidence. exec_error is
+        # retried by the orchestrator (no generalize); gm_rate_limited makes it back off first.
+        out["result"] = "exec_error"
+        out["gm_rate_limited"] = e.rate_limited
+        out["detail"] = f"download failed: {e}"
+        print(json.dumps(out))
+        return
+    t_downloaded = out.pop("_t_downloaded", None) or time.time()
 
     # run the solver (already correct, offline-built); lib on PYTHONPATH
-    contract = adir / "contract.json"
-    contract.write_text(json.dumps(body))
-    env = dict(os.environ, PYTHONPATH=str(HW))
-    # user-level tools `hctf hb setup` installs without root (static 7-Zip as 7zz/7z on the the VM: no sudo there)
-    env["PATH"] = f"{Path.home() / '.local' / 'bin'}:{Path.home() / 'hbtools' / 'bin'}:{env.get('PATH', '')}"
-    if (Path.home() / "hbtools" / "jdk").is_dir():
-        env.setdefault("JAVA_HOME", str(Path.home() / "hbtools" / "jdk"))   # setup/homebase_tools.sh (jadx/apktool)
-    import shutil as _sh
-    if not _sh.which("7z", path=env["PATH"]):  # still none: the pyzipper-backed bin/shims/7z
-        env["PATH"] = f"{HW / 'bin' / 'shims'}:{env.get('PATH', '')}"
-    solve = HW / a.solver_dir / "solve.py"
     budget = _solve_budget(body, left)
     try:
-        r = subprocess.run([sys.executable, str(solve), "--contract", str(contract), "--artifacts", str(adir)],
-                           capture_output=True, text=True, timeout=budget, env=env)
+        if piped is not None:
+            r = piped                       # every set answered by its own early run
+        else:
+            r = subprocess.run([sys.executable, str(solve), "--contract", str(contract), "--artifacts", str(adir)],
+                               capture_output=True, text=True, timeout=budget, env=env)
     except subprocess.TimeoutExpired as e:
         # Emit a real result (attempt_id + saved contract/bytes) instead of crashing: the caller then pulls THIS
         # variant for the speed generalize (a crash left a stale download dir that was mistaken for this attempt).

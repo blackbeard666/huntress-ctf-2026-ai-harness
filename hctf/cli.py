@@ -789,7 +789,7 @@ def c_run(a):
         pre = False
     orchestrate.run(day=a.day, only=a.only, local_slots=a.local, hb_slots=a.homebase, modes=a.modes,
                     prewarm_homebase=pre, keep_homebase=getattr(a, "keep_homebase", False),
-                    scout_rounds=getattr(a, "scout", None))
+                    scout_rounds=getattr(a, "scout", None), wait_release=getattr(a, "wait_release", False))
     return 0
 
 
@@ -1105,6 +1105,9 @@ def main(argv=None):
     pr2.add_argument("--homebase", type=int, default=0, help="concurrent Homebase codex workers")
     pr2.add_argument("--keep-homebase", action="store_true",
                      help="don't power Homebase off at end of run (keep it warm for the next burst); also HCTF_KEEP_HOMEBASE=1")
+    pr2.add_argument("--wait-release", action="store_true",
+                     help="start now, poll the GM in-process until --day is released, then launch at once "
+                          "(bin/day.sh --wait uses this; HCTF_RELEASE_POLL s between polls)")
     pr2.add_argument("--no-prewarm-homebase", action="store_true",
                      help="disable the default background Homebase prewarm for timed runs (HCTF_PREWARM_HOMEBASE=0)")
     pr2.add_argument("--prewarm-homebase", action="store_true",

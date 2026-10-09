@@ -8,6 +8,7 @@ import json
 import os
 import shlex
 import subprocess
+import threading
 import sys
 import time
 from contextlib import contextmanager
@@ -129,8 +130,35 @@ def _gm_parse(r, transport):
     return env
 
 
+# gm.py IN-PROCESS (default): no interpreter start per call and kept-alive connections (gm.POOL) -- every orchestrator GM
+# call used to be a fresh `python3 gm.py` + TLS handshake. HCTF_GM_INPROC=0 restores the subprocess per call.
+GM_INPROC = os.environ.get("HCTF_GM_INPROC", "1") != "0"
+_gm_client = None
+_gm_client_lock = threading.Lock()
+
+
+def gm_client():
+    """hctf/gm.py loaded as a module (its own copy: the CLI script stays standalone/stdlib-only)."""
+    global _gm_client
+    with _gm_client_lock:
+        if _gm_client is None:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("hctf_gm_client", GM_LOCAL)
+            m = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(m)
+            m.POOL = os.environ.get("HCTF_GM_KEEPALIVE", "1") != "0"
+            _gm_client = m
+    return _gm_client
+
+
 def _gm_local(args, timeout):
     """Run gm.py HERE against the public GM with the pairing token."""
+    if GM_INPROC:
+        env = gm_client().run(args)
+        env["transport"] = "inproc"
+        if env.get("http") == 0:
+            raise Unreachable(f"GM unreachable (local): {env.get('body')}")
+        return env
     r = subprocess.run([sys.executable, str(GM_LOCAL), *map(str, args)],
                        capture_output=True, text=True, timeout=timeout)
     return _gm_parse(r, "local")
@@ -280,15 +308,36 @@ def fetch_file(rel_path, local_path, size, streams=None, min_rate=40_000):
     return local_path
 
 
-def rsync_to(local_path, remote_path, exclude=(), mkdir=None):
-    """mkdir: create this remote dir in the same round-trip (via --rsync-path) instead of a separate ssh mkdir."""
-    argv = ["rsync", "-a", "--delete", "-e", "SSH", *[f"--exclude={x}" for x in exclude]]
+def rsync_to(local_path, remote_path, exclude=(), mkdir=None, compress=False):
+    """mkdir: create this remote dir in the same round-trip (via --rsync-path) instead of a separate ssh mkdir.
+    compress: -z (JSON contracts shrink ~15x; the VPN moves ~140 KB/s)."""
+    argv = ["rsync", "-a", *(["-z"] if compress else []), "--delete", "-e", "SSH", *[f"--exclude={x}" for x in exclude]]
     if mkdir:
         argv.append(f"--rsync-path=mkdir -p {mkdir} && rsync")
     _rsync([*argv, str(local_path), f"{HB_USER}@{HB_HOST}:{remote_path}"])
 
 
 RSYNC_TIMEOUT = int(os.environ.get("HCTF_RSYNC_TIMEOUT", "600"))
+
+
+def tar_push(local_dir, remote_dir, exclude=("cases", "__pycache__")):
+    """Replace remote_dir (relative to the remote home) with local_dir's contents in ONE ssh round trip: tar | ssh tar
+    into a sibling, then swap. A no-change rsync of a solver dir took 1.84 s over the VPN (several protocol round
+    trips); this ~0.75 s. For small trees only (the solver minus cases/); the caller falls back to rsync on failure."""
+    tar = subprocess.Popen(["tar", "czf", "-", *[f"--exclude={x}" for x in exclude], "-C", str(local_dir), "."],
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    d = f"~/{remote_dir.lstrip('~/')}" if not remote_dir.startswith("~") else remote_dir
+    cmd = (f"d={d}; rm -rf \"$d.new\" && mkdir -p \"$d.new\" && tar xzf - -C \"$d.new\" && rm -rf \"$d\" "
+           f"&& mv \"$d.new\" \"$d\" && echo TAR-OK")
+    try:
+        with _slot():
+            r = subprocess.run(["ssh", *SSH_OPTS, f"{HB_USER}@{HB_HOST}", cmd], stdin=tar.stdout,
+                               capture_output=True, text=True, timeout=60)
+    finally:
+        tar.stdout.close()
+        tar.wait()
+    if "TAR-OK" not in r.stdout:
+        raise RuntimeError(f"tar push failed: {(r.stderr or r.stdout)[-200:]}")
 
 
 def _rsync(argv):

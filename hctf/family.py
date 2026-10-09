@@ -20,6 +20,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 import random
 import re
 import shutil
@@ -56,7 +57,21 @@ def _write_zip(members):
     return buf.getvalue()
 
 
+_REP_LOCK = __import__("threading").Lock()
+_REP_CACHE = {}
+
+
 def rep_samples(cases):
+    """Memoized per process (probe_each runs one make() per language in parallel threads; each recomputed this over
+    up to 24 AES zips -- 1.6 s x 3 languages on D9 script)."""
+    key = tuple((str(c), c.stat().st_mtime_ns) for c in cases)
+    with _REP_LOCK:
+        if key not in _REP_CACHE:
+            _REP_CACHE[key] = _rep_samples(cases)
+        return _REP_CACHE[key]
+
+
+def _rep_samples(cases):
     """rep -> one real material written in it (the format template for encode())."""
     out = {}
     for case in cases:
@@ -207,9 +222,10 @@ def make(sdir, out_dir, n=2, seed=None, exts=None, exclude=None, plan=None):
     queues = {f: _combos(f, samples, rng) for f in {x["fields"] for x in slots}}
     old_sha = hashlib.sha256(art.read_bytes()).hexdigest()
     made, used = [], []
+    original = {nm: z.read(nm) for nm in z.namelist()}   # decrypt once (AES members), not once per case
     for k in range(1, n + 1):
         exp = dict(expected)
-        members, recoded = {nm: z.read(nm) for nm in z.namelist()}, []
+        members, recoded = dict(original), []
         for si, sl in enumerate(slots):
             if plan is not None:   # explicit (rep, tr, key) candidates per slot (control cases)
                 cands = list(plan.get(sl["member"], []))
@@ -255,11 +271,18 @@ def probe(sdir, out_dir, n=2, seed=None, exts=None, timeout=20, exclude=None):
     sdir = Path(sdir).resolve()
     summary = make(sdir, out_dir, n, seed, exts, exclude)
     results = []
-    for m in summary.get("made", []):
+    made = summary.get("made", [])
+
+    def run(m):   # solver runs are independent subprocesses: all cases at once (D9 script: 9.5 s sequential)
         case = Path(m["case"])
         contract = json.loads((case / "contract.json").read_text())
+        return solvers.run_solver(Path(sdir), contract, case / "artifacts", timeout)
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=max(1, min(len(made), os.cpu_count() or 4))) as ex:
+        runs = list(ex.map(run, made))
+    for m, (got, err, _dt) in zip(made, runs):
+        case = Path(m["case"])
         exp = json.loads((case / "expected.json").read_text())
-        got, err, _dt = solvers.run_solver(Path(sdir), contract, case / "artifacts", timeout)
         for r in m["recoded"]:
             bad = [a for a in r["ids"] if a in exp and got.get(a) != exp[a]]
             results.append({"case": case.name, "member": r["member"], "was": r["was"], "spec": r["spec"],
@@ -300,8 +323,11 @@ def fixture_exts(sdir):
 def probe_each(sdir, out_dir, exts, n=2):
     """probe() one language at a time (see calibrate); merged results."""
     merged = {"made": [], "results": [], "base": None}
-    for e in sorted(exts):
-        s = probe(sdir, Path(out_dir) / e, n=n, exts=[e])
+    from concurrent.futures import ThreadPoolExecutor
+    exts = sorted(exts)
+    with ThreadPoolExecutor(max_workers=max(1, len(exts))) as ex:   # one language per case dir: independent
+        summaries = list(ex.map(lambda e: probe(sdir, Path(out_dir) / e, n=n, exts=[e]), exts))
+    for e, s in zip(exts, summaries):
         merged["base"] = s.get("base") or merged["base"]
         merged["made"] += s.get("made", [])
         merged["results"] += [dict(r, ext=e, case_dir=str(Path(out_dir) / e / r["case"])) for r in s.get("results", [])]

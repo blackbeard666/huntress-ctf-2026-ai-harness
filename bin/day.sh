@@ -5,8 +5,8 @@
 # Usage:
 #   bash bin/day.sh [DAY] [--wait] [--preflight] [--scout N] [--local N] [--effort LEVEL] [--fg]
 #     DAY        day number (default: inferred from today's date vs CTF day-1).
-#     --wait     arm-and-fire: do all prep NOW (pre-flight if stale, Homebase warm), then poll the GM every
-#                ${HCTF_WAIT_POLL:-1}s and launch the INSTANT the day is listed -- nothing else runs at drop time.
+#     --wait     arm-and-fire: do all prep NOW (pre-flight if stale, Homebase warm), then start the run, which polls
+#                the GM in-process (`hctf run --wait-release`) and launches the INSTANT the day is listed.
 #     --preflight force the pre-flight even if a passing one is fresh (default: skip when .run/preflight.ok is
 #                younger than HCTF_PREFLIGHT_MAX_AGE s, default 6h -- never re-check at drop time).
 #     --scout N  TT scouting rounds (label-spelling insurance for hard lanes; default 0 / off).
@@ -73,10 +73,7 @@ if [ "${HCTF_AUTO_HOMEBASE:-1}" != 0 ] && ip route get "${HCTF_HB_HOST:-10.1.50.
       || echo "[warm] Homebase not reachable yet; the run's health thread re-probes it every ${HCTF_HB_HEALTH_S:-5}s." ) &
 fi
 
-# 2a) Homebase while armed: the heavy toolchain for the Bedrock shadow workers (idempotent, seconds once installed) and
-#     a once-a-minute keepalive that books the VM's uptime in the credit ledger and keeps the VM active until the run's
-#     own health probe takes over (an idle VM was stopping ~15 min after the warm-up power-on).
-KEEPALIVE_PID=""
+# 2a) Homebase while armed: the heavy toolchain for the Bedrock shadow workers (only when they are on) + the credit line.
 if [ "${HCTF_AUTO_HOMEBASE:-1}" != 0 ] && ip route get "${HCTF_HB_HOST:-10.1.50.243}" 2>/dev/null | grep -q "${HCTF_VPN_DEV:-tun0}"; then
   # Only when shadows are on: a cold install (JDK/Ghidra) loads the 2-vCPU VM for minutes -- during the run's first
   # Homebase-routed timed windows -- and nothing but the shadow workers uses ~/hbtools.
@@ -84,22 +81,15 @@ if [ "${HCTF_AUTO_HOMEBASE:-1}" != 0 ] && ip route get "${HCTF_HB_HOST:-10.1.50.
     ( timeout 1800 hctf hb tools >/dev/null 2>&1 && echo "[warm] Homebase toolchain (~/hbtools) ready." \
         || echo "[warm] Homebase toolchain incomplete (shadow workers fall back to python libs): hctf hb tools" ) &
   fi
-  if [ "$WAIT" -eq 1 ]; then
-    hctf hb keepalive --timeout "${HCTF_KEEPALIVE_S:-14400}" > .run/keepalive.log 2>&1 &
-    KEEPALIVE_PID=$!
-  fi
   echo "[credits] $(timeout 30 hctf hb budget 2>/dev/null | tail -1)"
 fi
 
-# 2b) --wait: everything above is done; now just poll for the drop and fire the instant it is listed.
+# 2b) --wait: the run starts NOW and waits for the drop itself (`hctf run --wait-release`: in-process GM polling over
+#     warm connections, the poll's list feeds the launch). Its Homebase health probe (every ${HCTF_HB_HEALTH_S:-5}s)
+#     keeps the VM active + metered while armed -- the separate `hctf hb keepalive` died silently while armed on D9.
+#     D9 with the shell loop: drop seen 21:00:03, first GM start stamped 3-5 s later (python start + a second list).
 if [ "$WAIT" -eq 1 ]; then
-  echo "[wait] polling the GM every ${HCTF_WAIT_POLL:-1}s for day $DAY ..."
-  until out="$(timeout 20 hctf list --day "$DAY" 2>&1)" && [ -n "$out" ] && ! grep -q "No released challenges" <<<"$out" \
-        && grep -qE '^D[0-9]' <<<"$out"; do
-    sleep "${HCTF_WAIT_POLL:-1}"
-  done
-  echo "[wait] day $DAY released at $(date '+%H:%M:%S') -- launching"
-  [ -n "$KEEPALIVE_PID" ] && kill "$KEEPALIVE_PID" 2>/dev/null   # the run's health probe keeps it active + metered now
+  echo "[wait] armed: the run polls the GM in-process for day $DAY (every ${HCTF_RELEASE_POLL:-0.3}s + call time)"
 fi
 if pgrep -f "hctf.cli run --day $DAY( |$)|hctf run --day $DAY( |$)" >/dev/null; then
   echo "[run] a day $DAY run is already in progress -- not launching a second one." >&2
@@ -108,6 +98,7 @@ fi
 
 # 3) Launch the sweep.
 RUN_ARGS=(run --day "$DAY" --local "$LOCAL")
+[ "$WAIT" -eq 1 ] && RUN_ARGS+=(--wait-release)
 [ "$SCOUT" -gt 0 ] && RUN_ARGS+=(--scout "$SCOUT") && echo "[scout] $SCOUT TT scouting round(s) enabled."
 
 echo "[run] hctf ${RUN_ARGS[*]}  ->  $LOG"

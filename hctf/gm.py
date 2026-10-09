@@ -65,7 +65,80 @@ def _refusal(raw):
         return False
 
 
+# Keep-alive HTTP(S) connections, used when gm.py runs IN-PROCESS (hctf: remote._gm_local -> run()): no interpreter
+# start + no TLS handshake per call (D9: every orchestrator GM call was a fresh `python3 gm.py` + TLS to the public GM).
+# A one-shot CLI process keeps urllib. GETs that hit a dropped kept-alive socket are resent once on a fresh one; a POST
+# only ever goes out on a socket used within POOL_IDLE_MAX s or a fresh one, and is never resent.
+POOL = os.environ.get("HCTF_GM_KEEPALIVE", "0") == "1"
+POOL_IDLE_MAX = float(os.environ.get("HCTF_GM_POOL_IDLE_MAX", "3"))
+_POOL_Q = __import__("queue").LifoQueue()
+
+
+def _conn(fresh=False):
+    import http.client
+    import queue
+    u = urllib.parse.urlsplit(GM)
+    while not fresh and not _POOL_Q.empty():
+        try:
+            c = _POOL_Q.get_nowait()
+        except queue.Empty:
+            break
+        if time.time() - c._hctf_used <= POOL_IDLE_MAX:
+            return c, True
+        c.close()
+    cls = http.client.HTTPSConnection if u.scheme == "https" else http.client.HTTPConnection
+    c = cls(u.hostname, u.port, timeout=TIMEOUT)
+    c._hctf_used = time.time()
+    return c, False
+
+
+def _pooled(method, params, data, headers, timeout):
+    """-> (status, headers dict, body) over a kept-alive connection; raises OSError/HTTPException on transport failure."""
+    import http.client
+    path = (urllib.parse.urlsplit(GM).path or "/") + ("?" + urllib.parse.urlencode(params) if params else "")
+    for attempt in range(2 if method == "GET" else 1):
+        c, reused = _conn(fresh=attempt > 0)
+        c.timeout = timeout
+        if c.sock is not None:
+            c.sock.settimeout(timeout)
+        try:
+            c.request(method, path, body=data, headers=headers)
+            r = c.getresponse()
+            raw = r.read()
+        except (http.client.HTTPException, OSError):
+            c.close()
+            if method == "GET" and reused and attempt == 0:
+                continue          # stale kept-alive socket: one resend of an idempotent GET on a fresh socket
+            raise
+        c._hctf_used = time.time()
+        if r.getheader("Connection", "").lower() != "close":
+            _POOL_Q.put(c)
+        else:
+            c.close()
+        return r.status, dict(r.getheaders()), raw
+
+
+def warm_pool(n=4):
+    """Open + TLS-handshake n kept-alive connections now (before a clock / a drop)."""
+    if not POOL:
+        return 0
+    from concurrent.futures import ThreadPoolExecutor
+    def one(_):
+        c, _r = _conn(fresh=True)
+        try:
+            c.connect()
+            c._hctf_used = time.time()
+            _POOL_Q.put(c)
+            return 1
+        except OSError:
+            return 0
+    with ThreadPoolExecutor(max_workers=n) as ex:
+        return sum(ex.map(one, range(n)))
+
+
 def _request(method, params=None, payload=None):
+    if POOL:
+        return _request_pooled(method, params, payload)
     url = GM + ("?" + urllib.parse.urlencode(params) if params else "")
     data = None
     headers = {}
@@ -103,8 +176,63 @@ def _request(method, params=None, payload=None):
             return 0, {}, json.dumps({"error": "unreachable", "detail": str(e)}).encode()
 
 
+def _request_pooled(method, params=None, payload=None):
+    """_request over the keep-alive pool, with the same 429/503 backoff and network-retry rules."""
+    data, headers = None, {}
+    if payload is not None:
+        data = json.dumps(payload).encode()
+        headers["Content-Type"] = "application/json"
+    tok = _token()
+    if tok:
+        headers["Authorization"] = "Bearer " + tok
+    timeout, net_retries = (GET_TIMEOUT, 1) if method == "GET" else (TIMEOUT, 0)
+    for attempt in range(RATE_RETRIES + 1):
+        try:
+            status, hdrs, raw = _pooled(method, params, data, headers, timeout)
+        except OSError as e:
+            if net_retries > 0:
+                net_retries -= 1
+                continue
+            return 0, {}, json.dumps({"error": "unreachable", "detail": str(e)}).encode()
+        except Exception as e:  # noqa: BLE001 - http.client.HTTPException etc.
+            if net_retries > 0:
+                net_retries -= 1
+                continue
+            return 0, {}, json.dumps({"error": "unreachable", "detail": repr(e)}).encode()
+        if status in (429, 503) and attempt < RATE_RETRIES and not _refusal(raw):
+            wait = _retry_after(hdrs, attempt)
+            STATS["retries"] += 1
+            STATS["slept"] += wait
+            print(f"gm.py: HTTP {status} on {method} {(params or payload or {}).get('op', '')}; retry "
+                  f"{attempt + 1}/{RATE_RETRIES} in {wait:g}s", file=sys.stderr)
+            time.sleep(wait)
+            continue
+        return status, hdrs, raw
+
+
 RATE_RETRIES = int(os.environ.get("HCTF_GM_RATE_RETRIES", os.environ.get("HCTF_RATE_RETRIES", "8")))
-STATS = {"retries": 0, "slept": 0.0}  # this process's 429/503 backoff, reported in every envelope
+
+
+class _Stats(__import__("threading").local):
+    """This call's 429/503 backoff, reported in its envelope (per thread: run() is called in-process by many chains)."""
+    def __init__(self):
+        super().__init__()
+        self.d = {"retries": 0, "slept": 0.0}
+
+    def __getitem__(self, k):
+        return self.d[k]
+
+    def __setitem__(self, k, v):
+        self.d[k] = v
+
+    def update(self, *a, **kw):
+        self.d.update(*a, **kw)
+
+    def get(self, k, default=None):
+        return self.d.get(k, default)
+
+
+STATS = _Stats()
 
 
 # Without Retry-After the backoff is 2, 4, 4, 4 ... s (cap HCTF_GM_BACKOFF_CAP): Day 8 singles slept 2/4/8/16 s and the
@@ -183,6 +311,15 @@ def cmd_download(cap, outdir, name=None):
 
 
 def main(argv=None):
+    p = _parser()
+    a = p.parse_args(argv)
+    env = _dispatch(a)
+    json.dump(env, sys.stdout, ensure_ascii=False)
+    sys.stdout.write("\n")
+    return 0 if env["http"] else 5
+
+
+def _parser():
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("openapi")
@@ -204,7 +341,16 @@ def main(argv=None):
     pd.add_argument("capability")
     pd.add_argument("outdir")
     pd.add_argument("--name")
-    a = p.parse_args(argv)
+    return p
+
+
+def run(argv):
+    """In-process entry (hctf remote._gm_local): the same envelope main() prints, returned instead."""
+    return _dispatch(_parser().parse_args([str(x) for x in argv]))
+
+
+def _dispatch(a):
+    STATS["retries"], STATS["slept"] = 0, 0.0
     t0 = time.time()
 
     if a.cmd == "openapi":
@@ -233,9 +379,7 @@ def main(argv=None):
         env = cmd_download(a.capability, a.outdir, a.name)
     env["elapsed"] = round(time.time() - t0, 3)          # request time incl. any 429 backoff (not process startup)
     env["retries"], env["slept"] = STATS["retries"], round(STATS["slept"], 2)
-    json.dump(env, sys.stdout, ensure_ascii=False)
-    sys.stdout.write("\n")
-    return 0 if env["http"] else 5
+    return env
 
 
 if __name__ == "__main__":

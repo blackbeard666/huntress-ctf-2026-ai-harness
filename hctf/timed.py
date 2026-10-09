@@ -412,7 +412,7 @@ def process_result(cid, solver_dir, res, log=print):
     if (r == "exec_error" and "solve.py" in detail and ("timed out" in detail or "TimeoutExpired" in detail)
             and not res.get("clock_short")):
         res["solver_too_slow"] = True  # set BEFORE _remember: the timed stage reads it from last_timed.json
-    log(f"[{cid}] timed: {json.dumps({k: res.get(k) for k in ('result', 'remaining', 'elapsed', 'window', 'routed', 'missing', 'partial_submit', 'per_set', 'bad_sets', 'wrong', 'fixed', 'attempt_id') if k in res})}")
+    log(f"[{cid}] timed: {json.dumps({k: res.get(k) for k in ('result', 'remaining', 'elapsed', 'window', 'routed', 'missing', 'partial_submit', 'per_set', 'bad_sets', 'wrong', 'fixed', 'attempt_id', 'phases', 'kickoff', 'pipelined', 'pipeline_fallback') if k in res})}")
     pull = res.pop("_pull", None)
 
     def capture():

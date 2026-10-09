@@ -55,7 +55,7 @@ ENUM_PROBE_BUDGET = int(os.environ.get("HCTF_ENUM_PROBE_BUDGET", "0"))  # OFF: t
 REUSE_PROBE_BUDGET = int(os.environ.get("HCTF_REUSE_PROBE_BUDGET", "20"))  # merged-reuse submits before the worker
 STOP_WHEN_READY = os.environ.get("HCTF_STOP_WHEN_READY", "1") != "0"  # end the single worker at CORRECT + verified solver
 SPEC_STABLE = float(os.environ.get("HCTF_SPEC_STABLE", "2"))  # solver files untouched this long before a snapshot
-SPEC_POLL = float(os.environ.get("HCTF_SPEC_POLL", "1"))
+SPEC_POLL = float(os.environ.get("HCTF_SPEC_POLL", "0.25"))  # D9: single CORRECT -> ready took up to 1 s of poll
 # The single's solver on its OWN case must beat this (local s) or a speed generalize runs BEFORE the first timed attempt:
 # Homebase is ~1.5x slower and the 7-13 s window also pays GM start/download/submit (blind D7 replay: binary 5.9 s ->
 # Time Trial exec_error "too slow", one attempt + ~30 s burned before the speed fix even started). 0 disables.
@@ -278,6 +278,16 @@ def mastery_delta(single_contract, timed_contracts):
     return ("MASTERY COMPOUNDS: the Time Trial / Mastery contracts (status-time, under this challenge's time_trial/ and "
             "mastery/ dirs) ask " + "; ".join(parts) + ". solve.py must answer those too from the timed bytes -- "
             "dispatch on question text / artifact type; reuse earlier days' parsing for earlier days' concepts.")
+
+
+def stage_prior_solver(prior, sdir):
+    """Copy an earlier day's solver dir (cases/ included, __pycache__ and generalize scratch excluded) into `sdir`,
+    keeping anything already there. Returns `sdir`."""
+    sdir = Path(sdir)
+    sdir.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(prior, sdir, dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns("__pycache__", ".generalize-*", "*.pyc"))
+    return sdir
 
 
 def prior_solver_dir(lane, sdir):
@@ -542,6 +552,14 @@ COMPOUND_PROBE = os.environ.get("HCTF_COMPOUND_PROBE", "1") != "0"
 WARM_WORKERS = os.environ.get("HCTF_WARM_WORKERS", "1") != "0"
 # Prior-solver dry run (cumulative lanes): diagnostics of yesterday's solver on today's bytes, never its values.
 PRIOR_DRY_RUN = os.environ.get("HCTF_PRIOR_DRY_RUN", "1") != "0"
+# Hand the Single worker its go signal before triage's recon section (filled in afterwards) when the prior solver's dry
+# run answers this share of today's ids.
+DEFER_RECON = os.environ.get("HCTF_DEFER_RECON", "1") != "0"
+DEFER_RECON_RATIO = float(os.environ.get("HCTF_DEFER_RECON_RATIO", "0.8"))
+# Copy the latest earlier solver of a cumulative lane into today's solver dir beside triage (else the worker does it).
+PRESTAGE_PRIOR = os.environ.get("HCTF_PRESTAGE_PRIOR", "1") != "0"
+# Pre-push + warm the verified Single solver on Homebase at "ready" (workers.prepush_solver). 0 = push at kickoff.
+PREPUSH = os.environ.get("HCTF_PREPUSH", "1") != "0"
 PRIOR_DRY_RUN_SECONDS = float(os.environ.get("HCTF_PRIOR_DRY_RUN_SECONDS", "15"))
 COMPOUND_PROBE_SECONDS = float(os.environ.get("HCTF_COMPOUND_PROBE_SECONDS", "45"))
 # Mastery speed gate: estimated Mastery solve (mutation probe's 2-set mastery-shape run) vs the known TT window. Mastery
@@ -574,6 +592,9 @@ def compound_probe(sdir, seconds=None):
     return compound.summary(res), compound.hard_misses(res), res
 
 
+ESTIMATE_MIN_MARGINAL = float(os.environ.get("HCTF_ESTIMATE_MIN_MARGINAL", "0.15"))
+
+
 def mastery_estimate(mut_summary, mastery_contract):
     """Estimated Mastery solve seconds = (2-set mastery-shape run / 2) x Mastery set count x 1.5, or None."""
     shape = next((r for r in (mut_summary or {}).get("results") or [] if r.get("mutation") == "mastery-shape"
@@ -592,6 +613,10 @@ def mastery_estimate(mut_summary, mastery_contract):
     base = (mut_summary or {}).get("base_seconds")
     two = float(shape["seconds"])
     per = max(0.005, two - float(base)) if base is not None else two / 2
+    if base is not None and two - float(base) < ESTIMATE_MIN_MARGINAL:
+        # A 1-vs-2-set difference this small is process-start jitter, not per-set work: D9 warmups extrapolated ~0.1 s
+        # of jitter x 43 sets to a 7.44 s estimate (gate 14 s) for a 0.3 s real solve.
+        per = 0.005
     startup = max(0.0, two - 2 * per)
     return round(startup + per * len(sets) * 1.5, 2)
 
@@ -753,7 +778,13 @@ class Chain:
     def _launch_warm(self, cid):
         """Start the Single worker NOW (chain start) with the static prompt; the triage follows (WarmWorker)."""
         prior = prior_solver_dir(self.lane, self.sdir)
-        if prior:
+        if prior and PRESTAGE_PRIOR and not (self.sdir / "solve.py").exists():
+            prior_note = (f"This lane's contract is CUMULATIVE: `{prior.relative_to(ROOT)}` is the latest earlier "
+                          f"solver of this lane and already answers every earlier family. The harness is copying it "
+                          f"(all files) into `{self.sdir.relative_to(ROOT)}` right now -- it is in place before your go "
+                          "signal; do NOT copy it yourself. Add only today's new families. "
+                          "Never use an old solver's output as your answer without today's bytes behind it.")
+        elif prior:
             prior_note = (f"This lane's contract is CUMULATIVE: `{prior.relative_to(ROOT)}` is the latest earlier "
                           f"solver of this lane and already answers every earlier family. FIRST copy it (all its "
                           f"files) over `{self.sdir.relative_to(ROOT)}`, then add only today's new families. "
@@ -785,6 +816,18 @@ class Chain:
             return
         self._dry_fut = ThreadPoolExecutor(max_workers=1).submit(solvers.dry_run_diagnostics, prior, contract, art,
                                                                   PRIOR_DRY_RUN_SECONDS)
+
+    def _recon_deferrable(self):
+        """Triage may hand off before its recon section when yesterday's solver (dry run, already finished) answers
+        >= DEFER_RECON_RATIO of today's ids: the worker's job is the delta, found from the dry run's empty fields."""
+        fut = getattr(self, "_dry_fut", None)
+        if not (DEFER_RECON and fut is not None and fut.done()):
+            return False
+        try:
+            d = fut.result()
+        except Exception:  # noqa: BLE001
+            return False
+        return bool(d.get("total")) and not d.get("timed_out") and d["answered"] / d["total"] >= DEFER_RECON_RATIO
 
     def _prior_dry_run_text(self):
         fut = getattr(self, "_dry_fut", None)
@@ -1441,6 +1484,11 @@ class Chain:
                     say(f"[{cid}] already solved (solver regression {'ok' if ok else 'has failing cases'})")
                 return True
         set_state(self.base, stage="single:fetch")
+        # The GM start (+ download) goes out FIRST, before the warm worker's node start and the status prefetches
+        # compete for the box (D9: chains began at T+1, GM starts were stamped T+3.1..4.8).
+        start_pool = ThreadPoolExecutor(max_workers=1)
+        start_fut = start_pool.submit(timed.ensure_started, cid)
+        start_pool.shutdown(wait=False)
         self._warm = None
         if WARM_WORKERS and not welcome:
             try:
@@ -1463,7 +1511,7 @@ class Chain:
         tpool = ThreadPoolExecutor(max_workers=2)
         tfuts = [tpool.submit(fetch, m) for m in tmodes]
         tpool.shutdown(wait=False)
-        body, err = timed.ensure_started(cid)
+        body, err = start_fut.result()
         self._tool_prefetch(cid, (body or {}))   # the prompt + questions arrive with `start`: before any download
         self._start_prior_dry_run(cid)
         # The GM sometimes hands the flag back directly (issued_flag, e.g. orientation challenges). Use it instead of
@@ -1481,15 +1529,22 @@ class Chain:
             say(f"[{cid}] solved by existing solver library (no worker needed)")
             self._cancel_warm()
             return True
+        staged = None
         if not welcome and not (self.sdir / "solve.py").exists():
-            # Nothing reusable: start the worker from the harness skeleton (contract I/O, per-set loop, sha256-paired
-            # artifact lookup incl. Mastery's 'delivery N: x.apk' names) instead of hunting for a template (10-15s per
-            # lane in the replays; mobile's single never handled Mastery naming -> a 2.5-min generalize).
-            self.sdir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(ROOT / "hctf" / "templates" / "solve_skeleton.py", self.sdir / "solve.py")
+            prior = prior_solver_dir(self.lane, self.sdir) if PRESTAGE_PRIOR else None
+            if prior:
+                # Cumulative lane: copy yesterday's solver (all files, cases/ too) into place NOW, beside triage. Every
+                # D9 worker's first command was that copy: 6.5 s (script) / 15.6 s (binary, 230 MB under 5-lane load).
+                staged = ThreadPoolExecutor(max_workers=1).submit(stage_prior_solver, prior, self.sdir)
+            else:
+                # Nothing reusable: start the worker from the harness skeleton (contract I/O, per-set loop, sha256-paired
+                # artifact lookup incl. Mastery's 'delivery N: x.apk' names) instead of hunting for a template (10-15s
+                # per lane in the replays; mobile's single never handled Mastery naming -> a 2.5-min generalize).
+                self.sdir.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / "hctf" / "templates" / "solve_skeleton.py", self.sdir / "solve.py")
         try:
             from . import triage as triage_mod
-            triage_mod.triage(cid)  # deterministic grounding before the LLM worker starts
+            triage_mod.triage(cid, defer_recon=self._recon_deferrable, log=say)  # grounding before the LLM worker
         except Exception as e:  # noqa: BLE001 - triage is best-effort
             say(f"[{cid}] triage note: {e}")
         if body is None:
@@ -1515,7 +1570,22 @@ class Chain:
                 extra += "\nThis is an orientation challenge: no solver is needed, only a correct submission."
             extra += getattr(self, "_reuse_note", "")
             prior = prior_solver_dir(self.lane, self.sdir)
-            if prior:
+            if staged is not None:
+                try:
+                    staged.result(timeout=120)
+                except Exception as e:  # noqa: BLE001 - the worker copies it itself (prompt below)
+                    say(f"[{cid}] prior-solver staging note: {e}")
+                    staged = False
+            if prior and staged:
+                prior_note = (f"This lane's contract is CUMULATIVE: `{prior.relative_to(ROOT)}` is the latest earlier "
+                              f"solver of this lane and already answers every earlier family. The harness ALREADY "
+                              f"copied it (all its files, cases/ included) into `{self.sdir.relative_to(ROOT)}` -- do NOT "
+                              "copy it again; add only today's new families there. "
+                              "Never use an old solver's output as your answer without today's bytes behind it.")
+                dry = self._prior_dry_run_text() if n == 0 else ""
+                if dry:
+                    prior_note += "\n" + dry
+            elif prior:
                 prior_note = (f"This lane's contract is CUMULATIVE: `{prior.relative_to(ROOT)}` is the latest earlier "
                               f"solver of this lane and already answers every earlier family. FIRST copy it (all its "
                               f"files) over `{self.sdir.relative_to(ROOT)}`, then add only today's new families. "
@@ -1872,9 +1942,22 @@ class Chain:
                             self._ready_snap = snap
                             say(f"[{cid}] single CORRECT + solver verified -> ending the worker, timed modes start now")
                             ready.set()
+                        self._prepush_verified(cid, snap)
                         return
         except Exception as e:  # noqa: BLE001 - the watcher must never hurt the chain
             say(f"[{cid}] ready-watch note: {e}")
+
+    def _prepush_verified(self, cid, snap):
+        """Push the verified snapshot to Homebase while the worker is ended and the single recorded (D9: single
+        CORRECT -> TT start 3.9-6.6 s per lane; the kickoff's VPN rsync sat inside it)."""
+        if not PREPUSH or "time_trial" not in self.entries and "mastery" not in self.entries:
+            return
+        try:
+            if remote.gm_transport() == "local" and not (workers.AUTO_HOMEBASE and workers._hb.get("ok")):
+                return     # timed attempts will run locally: nothing to push
+            workers.prepush_solver(snap, self.sdir, log=say)
+        except Exception as e:  # noqa: BLE001 - optimization only
+            say(f"[{cid}] pre-push note: {e}")
 
     def _restore_ready_snapshot(self, snap):
         """After a stopped worker: put the verified snapshot's files back over the live solver (the worker may have been
@@ -2238,8 +2321,37 @@ def released_challenges(day=None):
     return body.get("challenges", [])
 
 
+def wait_for_release(day, poll=None, log=None):
+    """Block until the GM lists `day`, polling IN this process (warm GM connections, no interpreter start) -> the
+    listed challenges. Replaces bin/day.sh's shell loop of `hctf list` + a second list inside `hctf run`: D9 the first
+    GM start landed 3-5 s after the drop was seen."""
+    poll = RELEASE_POLL if poll is None else poll
+    try:
+        remote.gm_client().warm_pool(4)
+    except Exception:  # noqa: BLE001 - connections open on first use instead
+        pass
+    n = 0
+    while True:
+        try:
+            got = released_challenges(day)
+        except Exception as e:  # noqa: BLE001 - a GM hiccup while waiting: keep polling
+            got = []
+            if n % 60 == 0:
+                say(f"[wait] list note: {str(e)[:160]}")
+        if got:
+            say(f"[wait] day {day} released ({len(got)} challenge modes) -- launching")
+            return got
+        n += 1
+        if n == 1 or n % 300 == 0:
+            say(f"[wait] polling the GM for day {day} (every {poll:g}s + call time)")
+        time.sleep(poll)
+
+
+RELEASE_POLL = float(os.environ.get("HCTF_RELEASE_POLL", "0.3"))
+
+
 def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_homebase=None, keep_homebase=None,
-        scout_rounds=None):
+        scout_rounds=None, wait_release=False):
     global SCOUT_ROUNDS
     if scout_rounds is not None:
         SCOUT_ROUNDS = scout_rounds
@@ -2265,7 +2377,7 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
     gov = Governor(hb_enabled=bool(hb_slots))
     pools = Pools(local_slots, hb_slots, gov)
     groups = {}
-    for c in released_challenges(day):
+    for c in (wait_for_release(day) if wait_release and day is not None else released_challenges(day)):
         groups.setdefault(solvers.base_id(c["id"]), []).append(c)
     if only:
         groups = {b: v for b, v in groups.items() if any(o in b for o in only)}

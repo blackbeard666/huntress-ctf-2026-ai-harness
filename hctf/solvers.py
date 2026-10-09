@@ -168,9 +168,23 @@ def dry_run_diagnostics(sdir, contract, artifacts, timeout=15):
             warn.append(ln.strip()[:160])
     last = next((ln.strip() for ln in reversed(lines) if ln.strip()), "")
     empty = [i for i in ids if got.get(i) in (None, "")] if isinstance(got, dict) else list(ids)
+    # The questions behind the empty ids (TODAY's contract text -- no solver values): D9 binary's worker spent 2 turns
+    # (~15 s) jq-hunting the one new field the dry run had named.
+    qs = {q.get("id"): q for q in contract.get("questions") or [] if q.get("id")}
+    empty_q = {}
+    for i in empty[:EMPTY_Q_MAX]:
+        q = qs.get(i) or {}
+        fmt = q.get("answer_format") or {}
+        empty_q[i] = {"question": str(q.get("question", ""))[:240], "artifact": q.get("artifact"),
+                      "format": {k: fmt[k] for k in ("kind", "syntax", "accepted_values") if fmt.get(k)} or None,
+                      "normalization": q.get("normalization")}
     return {"solver": str(Path(sdir).relative_to(ROOT)), "seconds": round(dt, 1), "timed_out": timed_out,
             "rc": p.returncode, "frames": frames, "error": last[:200] if (p.returncode and not timed_out) else "",
-            "warnings": warn[:8], "answered": len(ids) - len(empty), "total": len(ids), "empty": empty[:15]}
+            "warnings": warn[:8], "answered": len(ids) - len(empty), "total": len(ids), "empty": empty[:15],
+            "empty_q": empty_q}
+
+
+EMPTY_Q_MAX = 6   # dry-run render: full question text for this many empty ids (a 1-5 field delta is the usual day)
 
 
 def profile_solver(sdir, case_dir, timeout=45, top=25):
@@ -214,6 +228,15 @@ def render_dry_run(d):
         parts.append("Where it was (innermost last): " + " | ".join(d["frames"][-4:]))
     if d["empty"] and not d["timed_out"]:
         parts.append(f"Left empty ({d['total'] - d['answered']}): " + ", ".join(f"`{x}`" for x in d["empty"][:15]))
+        eq = d.get("empty_q") or {}
+        if eq and d["total"] - d["answered"] <= EMPTY_Q_MAX:
+            parts.append("The empty fields' questions (today's contract; the ids it DID answer still need checking against today's bytes):")
+            for i, q in eq.items():
+                bits = [f"artifact {q['artifact']!r}" if q.get("artifact") else "",
+                        f"format {json.dumps(q['format'], ensure_ascii=False)[:200]}" if q.get("format") else "",
+                        f"normalization {q['normalization']}" if q.get("normalization") else ""]
+                parts.append(f"  - `{i}`: {q.get('question') or '(no question text)'}"
+                             + (f" [{'; '.join(b for b in bits if b)}]" if any(bits) else ""))
     if d["warnings"]:
         parts.append("Its own warnings: " + " / ".join(d["warnings"][:6]))
     if d["timed_out"] or d["seconds"] > 2.5:

@@ -351,13 +351,21 @@ def _wait_worker(p, log, timeout, stop, out=None):
     deadline = time.time() + timeout
     try:
         while True:
-            try:
-                return p.wait(timeout=0.5), log
-            except subprocess.TimeoutExpired:
-                pass
-            if stop is not None and stop.is_set():
-                _kill_group(p, grace=2.0)
-                return STOPPED_RC, log
+            if stop is not None:
+                # Block on the stop event itself: the Single worker ends the instant its solver is verified (polling
+                # the process every 0.5 s left up to 0.5 s between "ready" and the kill on the critical path).
+                stopped = stop.wait(0.5)
+                rc = p.poll()
+                if rc is not None:
+                    return rc, log
+                if stopped:
+                    _kill_group(p, grace=2.0)
+                    return STOPPED_RC, log
+            else:
+                try:
+                    return p.wait(timeout=0.5), log
+                except subprocess.TimeoutExpired:
+                    pass
             if time.time() >= deadline:
                 _kill_group(p, grace=0)
                 return -9, log
@@ -708,6 +716,7 @@ def _provision(log):
             remote.ssh("bash ~/homebase_setup.sh >/dev/null 2>&1", timeout=600, check=False)
         sync_homebase_base()
         _hb["provisioned"] = True
+        warm_homebase_imports()
     except Exception as e:  # noqa: BLE001 - provisioning is best-effort; deps usually already present
         log(f"[homebase] provisioning note (continuing): {e}")
         _hb["provisioned"] = True
@@ -870,12 +879,82 @@ def _mark_expired_locally(cid, seconds):
 
 
 _pushed = {}  # solver dir -> file signature last rsynced to Homebase (this process)
+_prepush = {}  # solver dir -> threading.Event, set once prepush_solver() finished (pushed + warmed, or gave up)
+PREPUSH_WAIT = float(os.environ.get("HCTF_PREPUSH_WAIT", "6"))      # max s a timed kickoff waits for a pre-push
+
+
+def _solver_sig(solver_dir):
+    """(path, mtime_ns, size) of the files a timed run needs (cases/ and __pycache__ excluded)."""
+    solver_dir = Path(solver_dir)
+    return tuple(sorted((str(f.relative_to(solver_dir)), f.stat().st_mtime_ns, f.stat().st_size)
+                        for f in solver_dir.rglob("*") if f.is_file()
+                        and "cases" not in f.relative_to(solver_dir).parts and "__pycache__" not in f.parts))
+
+
+def push_solver(src, rel):
+    """Solver dir (minus cases/) -> Homebase ~/hw/<rel>: one tar-over-ssh round trip (~0.75 s) for a small tree, rsync
+    otherwise or if that fails."""
+    size = sum(f.stat().st_size for f in Path(src).rglob("*")
+               if f.is_file() and "cases" not in f.relative_to(src).parts and "__pycache__" not in f.parts)
+    if size <= TAR_PUSH_MAX:
+        try:
+            remote.tar_push(src, f"{HB_WORK}/{rel}")
+            return "tar"
+        except (RuntimeError, OSError, subprocess.SubprocessError):
+            pass
+    remote.rsync_to(str(src) + "/", f"~/{HB_WORK}/{rel}/", exclude=["cases/", "__pycache__/"], mkdir=f"~/{HB_WORK}/{rel}")
+    return "rsync"
+
+
+TAR_PUSH_MAX = int(os.environ.get("HCTF_TAR_PUSH_MB", "5")) * 1024 * 1024
+
+
+def prepush_solver(src, dst, log=print):
+    """Background, the moment the Single Solve is CORRECT + verified: push the verified snapshot `src` to Homebase at
+    `dst`'s path while the worker is ended and the single recorded, so the first timed kickoff finds it in place (D9:
+    single CORRECT -> TT start 3.9-6.6 s on every lane; the kickoff's no-op rsync alone was 1.84 s over the VPN).
+    copy2 keeps mtime/size, so once `src` is restored over `dst` the signature matches and run_hb_timed skips the push.
+    (A per-solver warm-up run here was measured at ~4.9 s -- longer than the cold penalty it saves; the heavy imports'
+    page cache is warmed once at provisioning instead: warm_homebase_imports.)"""
+    import threading
+    key, ev = str(dst), threading.Event()
+    _prepush[key] = ev
+
+    def go():
+        t0 = time.time()
+        try:
+            rel = Path(dst).relative_to(ROOT)
+            sync_homebase_base()
+            push_hot_files()
+            sig = _solver_sig(src)
+            how = push_solver(src, rel)
+            _pushed[key] = sig
+            log(f"[homebase] pre-pushed {rel} ({how}) in {time.time() - t0:.1f}s")
+        except Exception as e:  # noqa: BLE001 - an optimization: the kickoff pushes as before
+            log(f"[homebase] pre-push note: {str(e)[:200]}")
+        finally:
+            ev.set()
+    threading.Thread(target=go, name=f"prepush-{Path(dst).parent.name}", daemon=True).start()
+    return ev
+
+
+def warm_homebase_imports():
+    """Fire-and-forget on the VM: import every lib/ module + the heavy solver deps and start node/7z once, so the first
+    Time Trial's solver doesn't pay cold EBS reads (D9: TT solves 1.2-1.8 s slower than the next Mastery's on the same
+    VM -- mobile 1.99 s vs 0.17 s). Returns at once; runs well before any clock."""
+    mods = " ".join(["lib." + p.stem for p in sorted((ROOT / "lib").glob("*.py")) if p.stem != "__init__"] + HB_DEPS
+                    + ["androguard.core.apk", "androguard.core.dex"])
+    py = ("import importlib,sys\nfor m in sys.argv[1:]:\n    try: importlib.import_module(m)\n    except Exception: pass")
+    job = (f"cd ~/{HB_WORK} && PYTHONPATH=~/{HB_WORK} timeout 120 python3 -c {shlex.quote(py)} {mods}; "
+           "node -e 0; 7z i")
+    remote.ssh(f"setsid nohup sh -c {shlex.quote(job)} </dev/null >/dev/null 2>&1 &", timeout=20, check=False)
 
 
 def run_hb_timed(solver_dir, cid, op="start", timeout=60):
     """Run the clock-critical timed attempt ON Homebase (adjacent to the GM). Returns hb_timed's JSON dict.
     Syncs hctf+lib (base) and the solver so hb_timed can execute it next to the GM."""
     rel = solver_dir.relative_to(ROOT)
+    t_kick = time.time()
     # Kickoff (sync + solver push) runs over the flaky local->Homebase VPN link; the retrying ssh/rsync ride
     # through transient drops, but if it still fails, return exec_error so run_timed_auto falls back to local
     # rather than crashing the whole attempt. (Once hb_timed is running, its in-window GM calls are HB->inside
@@ -887,12 +966,12 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
             # Skip the push when the solver code is unchanged since the last push of this dir (TT -> Mastery: same
             # solver, ~1 round-trip saved between modes). ONE round-trip otherwise: the remote rsync creates the dir
             # itself; cases/ (6-8 MB of regression bytes on the hard lanes) is never needed to run the solver.
-            sig = tuple(sorted((str(f.relative_to(solver_dir)), f.stat().st_mtime_ns, f.stat().st_size)
-                               for f in solver_dir.rglob("*") if f.is_file()
-                               and "cases" not in f.relative_to(solver_dir).parts and "__pycache__" not in f.parts))
+            ev = _prepush.get(str(solver_dir))
+            if ev is not None:
+                ev.wait(PREPUSH_WAIT)   # a pre-push of this verified solver is in flight: never rsync beside it
+            sig = _solver_sig(solver_dir)
             if _pushed.get(str(solver_dir)) != sig:
-                remote.rsync_to(str(solver_dir) + "/", f"~/{HB_WORK}/{rel}/", exclude=["cases/", "__pycache__/"],
-                                mkdir=f"~/{HB_WORK}/{rel}")
+                push_solver(solver_dir, rel)
                 _pushed[str(solver_dir)] = sig
         else:
             remote.ssh(f"mkdir -p ~/{HB_WORK}/{rel}")
@@ -901,6 +980,7 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
     # Use the GM's INSIDE proxy from Homebase (network-path identity = same test account as the pairing token,
     # sub-ms latency) so tight windows (e.g. the 6s scripting Time Trial) fit; the public GM's ~2.7s/call
     # round-trips blow those windows even warm.
+    t_exec = time.time()
     try:
         rft = os.environ.get("HCTF_RUN_FOR_TIME")   # pool policy (hb_timed._hof_wanted); default there: HoF
         r = remote.ssh(f"cd ~/{HB_WORK} && HUNTRESS_GAME_MASTER_URL={remote.INSIDE_GM} "
@@ -913,6 +993,8 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
         res = json.loads(r.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError):
         return {"result": "exec_error", "detail": (r.stdout + r.stderr)[-500:]}
+    # kickoff = local sync/push before the ssh exec; exec_total = the whole remote round trip (start..result)
+    res["kickoff"] = {"push": round(t_exec - t_kick, 2), "exec_total": round(time.time() - t_exec, 2)}
     # Bring the attempt's bytes + result.json back, so the variant can become a local regression case.
     import re as _re
     slug = _re.sub(r"[^A-Za-z0-9]+", "_", cid)

@@ -432,8 +432,12 @@ def _extract_all(files, dest, depth=2):
     return (["", "## Extracted (pre-unpacked for you -- read these instead of unzipping again)", ""] + lines) if lines else []
 
 
-def triage(cid):
-    """Write <mode dir>/triage.md from the latest downloaded artifacts. Returns the path or None."""
+def triage(cid, defer_recon=None, log=None):
+    """Write <mode dir>/triage.md from the latest downloaded artifacts. Returns the path or None.
+    The toolchain check and recon run in parallel (D9 binary: 2.3 s + 3.6 s, serial before). defer_recon: a callable;
+    if it returns True once the toolchain section is ready, triage.md is written WITHOUT recon right away (the worker
+    starts now) and rewritten with it when recon finishes -- for cumulative lanes whose prior solver already answers
+    most of today's ids (D9 binary: 89/90; the worker's recon reads came after the delta was found)."""
     mdir = cli.cdir(cid)
     latest = mdir / "artifacts" / "latest"
     if not latest.exists():
@@ -473,21 +477,50 @@ def triage(cid):
     for f in files:
         out += _describe(f)
     out += _extract_all(files, mdir / "work" / "extracted")
+    from concurrent.futures import ThreadPoolExecutor
+    pool = ThreadPoolExecutor(max_workers=1)
+    recon_fut = pool.submit(_recon, cid, mdir / "work" / "extracted")   # beside the toolchain check
+    pool.shutdown(wait=False)
     try:
         # Which toolchain built each member and is its preferred standard tool installed? Missing ones with a recipe
         # start installing NOW in the background (user policy: install the right tool rather than settle for a weaker
-        # fallback); the worker is told, and `hctf tool-wait <tool>` blocks until it lands. Before recon so an
-        # install overlaps it.
+        # fallback); the worker is told, and `hctf tool-wait <tool>` blocks until it lands.
         from . import toolchain
         ex = mdir / "work" / "extracted"
         members = toolchain.scan_order(ex)
         out += toolchain.check(files + members, cid=cid, text=toolchain.challenge_text(contract))
     except Exception as e:  # noqa: BLE001 - best-effort
         out += ["", f"_toolchain check skipped: {e}_"]
-    try:
-        out += _recon(cid, mdir / "work" / "extracted")
-    except Exception as e:  # noqa: BLE001 - recon is best-effort
-        out += ["", f"_recon skipped: {e}_"]
-    out += ["", "_Deterministic triage (no LLM). Verify against the bytes; see the routed lane skill._"]
-    (mdir / "triage.md").write_text("\n".join(out), encoding="utf-8")
-    return mdir / "triage.md"
+    tail = ["", "_Deterministic triage (no LLM). Verify against the bytes; see the routed lane skill._"]
+    path = mdir / "triage.md"
+
+    def recon_lines():
+        try:
+            return recon_fut.result(timeout=120)
+        except Exception as e:  # noqa: BLE001 - recon is best-effort
+            return ["", f"_recon skipped: {e}_"]
+    deferred = False
+    if defer_recon is not None and not recon_fut.done():
+        try:
+            deferred = bool(defer_recon())
+        except Exception:  # noqa: BLE001
+            deferred = False
+    if not deferred:
+        path.write_text("\n".join(out + recon_lines() + tail), encoding="utf-8")
+        return path
+    path.write_text("\n".join(out + ["", "## Recon (standard tools, pre-run for you -- facts, not answers)", "",
+                                      f"_Still running in the background: it replaces this note in `{path}` within "
+                                      "seconds. Re-read this section there only if you need it._"] + tail),
+                    encoding="utf-8")
+
+    def finish():
+        lines = recon_lines()
+        try:
+            path.write_text("\n".join(out + lines + tail), encoding="utf-8")
+            if log:
+                log(f"[{cid}] triage recon landed (deferred) in {path.name}")
+        except OSError:
+            pass
+    import threading
+    threading.Thread(target=finish, name=f"recon-{cid[:24]}", daemon=True).start()
+    return path
