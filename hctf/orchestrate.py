@@ -250,6 +250,19 @@ def field_shape(aid):
     return VARIANT_RE.sub(r"\1N", SET_RE.sub("", aid or ""))
 
 
+def prior_case_shapes(prior):
+    """Field shapes every regression case of an earlier solver asks (read from ITS cases/, not today's staged copy).
+    Lets the dry run name today's NEW ids even when the prior solver fills all of them (D11 script: 811/811 answered,
+    the worker spent ~4 turns finding the 58 new TypeScript ids). None when there is no corpus to compare against."""
+    shapes = set()
+    for f in (Path(prior) / "cases").glob("*/contract.json"):
+        try:
+            shapes |= {field_shape(a) for a in _contract_ids(json.loads(f.read_text()))}
+        except (OSError, ValueError):
+            continue
+    return shapes or None
+
+
 def _contract_ids(contract):
     return [a for a in list((contract or {}).get("answer_ids") or [])
             + [q.get("id") or "" for q in (contract or {}).get("questions") or []] if a]
@@ -301,22 +314,38 @@ def _is_skeleton(sdir):
         return False
 
 
+def _link_or_copy(src, dst):
+    """copytree copy_function: a case's artifacts/ bytes (write-once GM downloads, ~99% of a corpus) are HARDLINKED,
+    everything else (contract/expected JSON, code) copied so an in-place edit never reaches the earlier day. D9-D11:
+    copying binary's 411-654 MB cases/ stalled EVERY worker's tool calls 6-17 s (probe: trivial jq 0.05 -> 2.2 s
+    during the copy, 0.05 s during a 0.04 s hardlink pass). add_case rmtree()s before re-saving: links stay safe."""
+    if "artifacts" in Path(src).parts:
+        try:
+            os.link(src, dst)
+            return dst
+        except OSError:  # cross-device / existing dst / no link support: plain copy
+            pass
+    return shutil.copy2(src, dst)
+
+
 def stage_prior_solver(prior, sdir, cases=True):
     """Copy an earlier day's solver dir (__pycache__ and generalize scratch excluded; cases/ only when `cases`) into
     `sdir`, keeping anything already there. Returns `sdir`."""
     sdir = Path(sdir)
     sdir.mkdir(parents=True, exist_ok=True)
     skip = ("__pycache__", ".generalize-*", "*.pyc") + (() if cases else ("cases",))
-    shutil.copytree(prior, sdir, dirs_exist_ok=True, ignore=shutil.ignore_patterns(*skip))
+    shutil.copytree(prior, sdir, dirs_exist_ok=True, ignore=shutil.ignore_patterns(*skip), copy_function=_link_or_copy)
     return sdir
 
 
 def stage_prior_cases(prior, sdir):
     """The prior solver's cases/ (regression + variant corpus), copied AFTER the worker's go: D10 binary's go waited
-    11.6 s on Day 9's 411 MB cases/ while the code it needs was 1 file. Joined before anything reads cases/."""
+    11.6 s on Day 9's 411 MB cases/ while the code it needs was 1 file. Joined before anything reads cases/.
+    Artifacts are hardlinked (_link_or_copy): the copy itself stalled every other worker."""
     src = Path(prior) / "cases"
     if src.is_dir():
-        shutil.copytree(src, Path(sdir) / "cases", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copytree(src, Path(sdir) / "cases", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"),
+                        copy_function=_link_or_copy)
 
 
 def prior_solver_dir(lane, sdir):
@@ -895,8 +924,9 @@ class Chain:
         art = timed.latest_artifacts(cid)
         if not (PRIOR_DRY_RUN and prior and contract and art):
             return
-        self._dry_fut = ThreadPoolExecutor(max_workers=1).submit(solvers.dry_run_diagnostics, prior, contract, art,
-                                                                  PRIOR_DRY_RUN_SECONDS)
+        self._dry_fut = ThreadPoolExecutor(max_workers=1).submit(
+            lambda: solvers.dry_run_diagnostics(prior, contract, art, PRIOR_DRY_RUN_SECONDS,
+                                                known=prior_case_shapes(prior), shape=field_shape))
 
     def _recon_deferrable(self):
         """Triage may hand off before its recon section when yesterday's solver (dry run, already finished) answers
@@ -2615,6 +2645,47 @@ def ratchet_gate(tag):
     return True
 
 
+_PROPOSALS_RE = re.compile(r"^##\s*Proposed lib additions\s*$(.*?)(?=^##\s|\Z)", re.M | re.S)
+
+
+def _proposal_blocks(notes):
+    """The `## Proposed lib additions` bullets of a NOTES.md (a bullet = a `- ` line + its indented continuation)."""
+    try:
+        m = _PROPOSALS_RE.search(Path(notes).read_text(errors="replace"))
+    except OSError:
+        return []
+    blocks = []
+    for ln in (m.group(1).strip().splitlines() if m else []):
+        if ln.startswith(("- ", "* ")) or not blocks:
+            blocks.append(ln.rstrip())
+        else:
+            blocks[-1] += "\n" + ln.rstrip()
+    return [b for b in blocks if b.strip()]
+
+
+def _new_proposals(notes, day):
+    """This day's proposal bullets minus any an EARLIER day's NOTES.md of the same lane already carried: the solver dir
+    (NOTES.md included) is copied forward daily, so D11's ratchet re-reviewed D10's two sections verbatim -- one of them
+    (`rate_limited` download retry) shipped back in D7 (hctf/hb_timed.py)."""
+    norm = lambda b: " ".join(b.split())
+    try:
+        lane = json.loads((Path(notes).parents[1] / "meta.json").read_text()).get("lane")
+    except (OSError, ValueError):
+        lane = None
+    seen = set()
+    for old in paths.CHALLENGES.glob("day*/*/solver/NOTES.md"):
+        m = re.match(r"day(\d+)$", old.parents[2].name)
+        if not m or int(m.group(1)) >= day:
+            continue
+        try:
+            if lane and json.loads((old.parents[1] / "meta.json").read_text()).get("lane") != lane:
+                continue
+        except (OSError, ValueError):
+            pass
+        seen |= {norm(b) for b in _proposal_blocks(old)}
+    return [b for b in _proposal_blocks(notes) if norm(b) not in seen]
+
+
 def ratchet(day):
     """Post-run, single-writer knowledge merge: collect every `## Proposed lib additions` section the day's workers
     wrote in solver/NOTES.md and let ONE worker fold the GM-confirmed ones into lib/ (workers no longer edit lib/
@@ -2622,10 +2693,9 @@ def ratchet(day):
     tag = f"day{int(day):02d}"
     props = []
     for notes in sorted((paths.CHALLENGES / tag).glob("*/solver/NOTES.md")):
-        text = notes.read_text(errors="replace")
-        m = re.search(r"^##\s*Proposed lib additions\s*$(.*?)(?=^##\s|\Z)", text, re.M | re.S)
-        if m and m.group(1).strip():
-            props.append(f"### {notes.relative_to(ROOT)}\n{m.group(1).strip()}")
+        fresh = _new_proposals(notes, int(day))
+        if fresh:
+            props.append(f"### {notes.relative_to(ROOT)}\n" + "\n".join(fresh))
     chals = sorted(str(p.relative_to(ROOT)) for p in (paths.CHALLENGES / tag).glob("*/meta.json"))
     if not chals:
         say(f"[ratchet] {tag}: nothing to learn from")

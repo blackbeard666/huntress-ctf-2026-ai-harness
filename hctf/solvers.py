@@ -123,7 +123,7 @@ def run_solver(sdir, contract, artifacts, timeout=120):
         return {}, f"stdout is not JSON: {r.stdout[-500:]!r} stderr: {r.stderr[-800:]}", dt
 
 
-def dry_run_diagnostics(sdir, contract, artifacts, timeout=15):
+def dry_run_diagnostics(sdir, contract, artifacts, timeout=15, known=None, shape=None):
     """Run an EARLIER day's solver once on TODAY's contract + bytes and return DIAGNOSTICS ONLY -- never its values
     (user rule: old solvers are not an answer source). On a timeout it gets SIGINT first, so the traceback names the
     loop that hangs. Rehearsal D8: the copied Day 7 binary solver hung twice to the worker's 60 s cap on a 67 MB Swift ELF
@@ -178,13 +178,22 @@ def dry_run_diagnostics(sdir, contract, artifacts, timeout=15):
         empty_q[i] = {"question": str(q.get("question", ""))[:240], "artifact": q.get("artifact"),
                       "format": {k: fmt[k] for k in ("kind", "syntax", "accepted_values") if fmt.get(k)} or None,
                       "normalization": q.get("normalization")}
+    # NEW today = ids whose shape (set prefix + variant counter stripped) no prior case asks; grouped by the artifact
+    # member they point at, so the worker reads exactly those files. Names + today's contract only, never values.
+    new, new_by_art = [], {}
+    if known:
+        shape = shape or (lambda a: a)
+        new = [i for i in dict.fromkeys(ids) if shape(i) not in known]
+        for i in new:
+            new_by_art.setdefault(str((qs.get(i) or {}).get("artifact") or "?"), []).append(i)
     return {"solver": str(Path(sdir).relative_to(ROOT)), "seconds": round(dt, 1), "timed_out": timed_out,
             "rc": p.returncode, "frames": frames, "error": last[:200] if (p.returncode and not timed_out) else "",
             "warnings": warn[:8], "answered": len(ids) - len(empty), "total": len(ids), "empty": empty[:15],
-            "empty_q": empty_q}
+            "empty_q": empty_q, "new": len(new), "new_by_art": new_by_art}
 
 
 EMPTY_Q_MAX = 6   # dry-run render: full question text for this many empty ids (a 1-5 field delta is the usual day)
+NEW_GROUPS_MAX = 10  # dry-run render: artifact groups of NEW-today ids listed
 
 
 def profile_solver(sdir, case_dir, timeout=45, top=25):
@@ -237,6 +246,16 @@ def render_dry_run(d):
                         f"normalization {q['normalization']}" if q.get("normalization") else ""]
                 parts.append(f"  - `{i}`: {q.get('question') or '(no question text)'}"
                              + (f" [{'; '.join(b for b in bits if b)}]" if any(bits) else ""))
+    groups = d.get("new_by_art") or {}
+    if groups:
+        parts.append(f"NEW today ({d['new']} ids no earlier regression case asks -- what today's bytes must back; "
+                     f"the rest are earlier families), by artifact:")
+        k = 15 if d["new"] <= 15 else 4  # a small delta (D11 binary: 10 ids, one zip) is listed whole
+        for art, ids_ in list(groups.items())[:NEW_GROUPS_MAX]:
+            shown = ", ".join(f"`{x}`" for x in ids_[:k]) + (f", ... (+{len(ids_) - k})" if len(ids_) > k else "")
+            parts.append(f"  - `{art}` ({len(ids_)}): {shown}")
+        if len(groups) > NEW_GROUPS_MAX:
+            parts.append(f"  - ... {len(groups) - NEW_GROUPS_MAX} more artifact(s)")
     if d["warnings"]:
         parts.append("Its own warnings: " + " / ".join(d["warnings"][:6]))
     if d["timed_out"] or d["seconds"] > 2.5:

@@ -10,7 +10,7 @@ import re
 import time
 from pathlib import Path
 
-from . import cli, solvers
+from . import cli, remote, solvers
 
 SUBMIT_MARGIN = 8          # seconds kept in reserve for the final submit round-trip (~1-3s over ssh)
 MAX_WRONG_TIMED = 6        # incorrect submissions allowed per timed attempt (several sets per bundle)
@@ -354,7 +354,22 @@ def ensure_started(cid):
         class A:  # argparse-like namespace for cli.c_artifact
             id, delivery = cid, None
         with cli.quiet():
-            cli.c_artifact(A)
+            try:
+                rc = cli.c_artifact(A)
+            except Exception:  # noqa: BLE001 - e.g. sha mismatch; retried below when the start came via Homebase
+                rc = "raised"
+        if rc and env.get("transport") == "homebase":
+            # The start went via Homebase's inside proxy (remote.START_VIA_HB) and the PUBLIC download of its
+            # capability failed: re-start publicly (start RESUMES this attempt -> a public capability) and refetch.
+            with cli.chal_lock(cid):
+                env2 = remote._gm_local(("start", cid), 180)
+                cli.log(cid, "start", env2)
+            b2 = env2.get("body") or {}
+            if env2.get("http") == 200 and cli.attempt_id(b2) == cli.attempt_id(body):
+                cli.save(cid, "start.json", b2)
+                cli.save(cid, "contract.json", b2)
+                with cli.quiet():
+                    cli.c_artifact(A)
     return body, None
 
 

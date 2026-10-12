@@ -191,6 +191,13 @@ def gm(*args, timeout=180):
         env = _gm_submit_hb(args, timeout)
         if env is not None:
             return env
+    if args and args[0] == "start" and START_VIA_HB and _public_gm() and _master_alive():
+        try:
+            env = _gm_submit_hb(args, timeout, op="start")
+        except Unreachable:  # outcome unknown -- but start RESUMES a running attempt: the public one is safe
+            env = None
+        if env is not None:
+            return env
     return _gm_local(args, timeout)  # local (default): public GM via pairing token
 
 
@@ -198,6 +205,10 @@ def gm(*args, timeout=180):
 # ONLY the submit: its payload is a few hundred bytes of answers; start/download stay public because the bytes are
 # needed HERE (a proxy hop would only add transfer). HCTF_SUBMIT_VIA_HB=0 disables.
 SUBMIT_VIA_HB = os.environ.get("HCTF_SUBMIT_VIA_HB", "1") != "0"
+# `start` too: its reply is the JSON contract, not the artifact bytes. D9-D11 single starts on the public GM took
+# 1.6-4.3 s (3-4 s on D11) vs 0.5-0.9 s for the same call from Homebase -- all of it before the worker's go.
+# Downloads stay public (binary evidence is ~31 MB). HCTF_START_VIA_HB=0 disables.
+START_VIA_HB = os.environ.get("HCTF_START_VIA_HB", "1") != "0"
 _EXEC_MARK = "HCTF-EXEC"
 PUBLIC_GM = "https://2026.huntress.ctf.games"
 
@@ -219,7 +230,7 @@ def _master_alive():
         return False
 
 
-def _gm_submit_hb(args, timeout):
+def _gm_submit_hb(args, timeout, op="submit"):
     """ONE ssh exec of gm.py submit on Homebase -- deliberately NOT ssh() (it retries exit 255, and 255 also means a
     drop AFTER the command started: a retried submit is a second POST). The remote side prints a marker before gm.py
     runs, so: no marker + ssh failure -> the POST never left -> None (caller uses the public GM). Marker present and
@@ -232,7 +243,7 @@ def _gm_submit_hb(args, timeout):
                                capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired as e:
         if _EXEC_MARK in str(e.stderr or ""):
-            raise Unreachable("submit via Homebase timed out after it started: outcome unknown -- "
+            raise Unreachable(f"{op} via Homebase timed out after it started: outcome unknown -- "
                               "check `hctf status` before resubmitting") from None
         return None
     except OSError:
@@ -240,9 +251,9 @@ def _gm_submit_hb(args, timeout):
     if _EXEC_MARK not in (r.stderr or ""):
         return None                                   # never reached gm.py: safe to send it the public way
     try:
-        env = _gm_parse(r, "ssh-submit")
+        env = _gm_parse(r, f"ssh-{op}")
     except RuntimeError as e:                         # includes Unreachable (http 0 from the inside proxy)
-        raise Unreachable(f"submit via Homebase failed after it started (outcome unknown): {e}") from None
+        raise Unreachable(f"{op} via Homebase failed after it started (outcome unknown): {e}") from None
     env["transport"] = "homebase"
     return env
 
