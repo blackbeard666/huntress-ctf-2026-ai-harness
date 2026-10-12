@@ -1,0 +1,10 @@
+# binary-swift-justice solver notes
+
+VARIANT AXIS: Mastery set count (2 on auto-mastery-d1a6613c, up to 5 x 31 MB on D8) -- main() now groups (answer_id, question) pairs with lib.common.group_by_set and solves each set in a fork ProcessPoolExecutor (sequential fallback on pool error, HCTF_SOLVER_PARALLEL=0 disables); each set's delivery is still paired by contract sha256 via container_by_sha. Output identical to the sequential loop on all 9 cases.
+
+VARIANT AXIS: speed only (no answer change) -- the evidence.zip is all WinZip AE-2 (method 99, AES-256, deflate) and its 67 MB d08 Swift ELF was inflated serially through pyzipper (pure-Python HMAC-SHA1 + AES); unzip() now reads AES members directly (PBKDF2 + AES-CTR LE counter, pw-verifier check, no HMAC) in a thread pool, largest first, decrypt||inflate||sha256 pipelined for members > 8 MB, and returns Futures that group_members() resolves only for the group asked (falls back to the pyzipper reader on any miss). single 1.2 s -> 0.8 s local.
+
+VARIANT AXIS: speed only (no answer change; the 9.74 s was the harness's contention-measured Mastery estimate, real single = 0.5-0.6 s, 5-set Mastery 1.7-1.9 s pinned to 2 CPUs) -- per-set CPU trimmed: AE-2 members (CRC 0) skip the 67 MB crc32 pass, multi-set runs inflate the big member in one shot instead of the 3-thread pipeline (+20% CPU, ~0 wall), and the lazy deps (capstone/pefile/Cryptodome/lib.common) import once in the parent before forking. Floor: stock zlib inflate of the 67 MB d08 Swift ELF = 0.2 s/set.
+
+## Proposed lib additions
+- `lib.common.fast_aes_unzip(data, passwords)` -> [(name, Future[bytes])] + sha256 cache: the `_aes_member` / `_fast_unzip` pair in day09 binary-nimble solve.py (WinZip AE-x without pyzipper's pure-Python HMAC pass; zlib/pycryptodome/hashlib release the GIL so members inflate in parallel). Every lane whose evidence.zip carries a large member benefits.

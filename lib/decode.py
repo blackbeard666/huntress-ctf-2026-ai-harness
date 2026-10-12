@@ -139,6 +139,7 @@ _BINS = re.compile(r"^[01]{8}(?:[\s,]*[01]{8})*$")
 _HEXS = re.compile(r"^(?:[0-9a-fA-F]{2})+$")
 _B64S = re.compile(r"^[A-Za-z0-9+/]+={0,2}$")
 _B32S = re.compile(r"^[A-Z2-7]+=*$")
+_B64U = re.compile(r"^[A-Za-z0-9_-]+={0,2}$")
 # English letter frequencies (%), for picking a rot-N shift on short chunks
 _FREQ = dict(zip("abcdefghijklmnopqrstuvwxyz",
                  (8.2, 1.5, 2.8, 4.3, 12.7, 2.2, 2.0, 6.1, 7.0, 0.15, 0.77, 4.0, 2.4, 6.7, 7.5, 1.9, 0.095,
@@ -241,6 +242,13 @@ def decode_chunk(p, _nested=False):
     if _B64S.match(t) and len(t) % 4 == 0:
         try:
             cands.append((_ascii(base64.b64decode(t, validate=True)), 6))
+        except Exception:
+            pass
+    if _B64U.match(t) and len(t.rstrip("=")) % 4 != 1 and ("-" in t or "_" in t or len(t) % 4):
+        # URL-safe base64, '=' padding dropped (warmups Day 11 "Safe Travels": whole 147-char blob, len % 4 == 3)
+        try:
+            u = t.rstrip("=")
+            cands.append((_ascii(base64.urlsafe_b64decode(u + "=" * (-len(u) % 4))), 6))
         except Exception:
             pass
     good = [(s, pr) for s, pr in cands if s is not None and _wordy(s) >= 0.85]

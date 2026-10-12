@@ -52,6 +52,9 @@ ARCHITECTURE_REJECTED = ["amd64"]
 # Day 9 "Nimble" (Nim ELF; single + TT + Mastery 5 sets, 0 wrong): NEW field `hcfg_offset` = plain decimal FILE offset of
 # the stored blob's first byte -- for a base64 Nim string literal, where the base64 TEXT starts ("30696" = 0x77e8: after
 # the 8-byte cap/flag word at 0x77e0, NOT that header and NOT the VA 0x4077e8). Raw/hex-blob offsets still unconfirmed.
+# Day 11 "D-Day" (D-language static ELF x86-64; single + TT + Mastery 3 sets, 0 wrong) re-confirmed the same law: the
+# base64 'SENGRw...' text sits NUL-terminated in .rodata right after a ".debug_line\0" string; hcfg_offset = "368272"
+# (0x59e90) = first byte of the base64 TEXT, same in all 3 D builds (sha differed, offset did not).
 HCFG_OFFSET_FMT = "{n}"
 # Day 10 "Zig Zag" (Zig cross-compiled ELF + PE; alt single + TT 46625ef1 + Mastery 0c0733e6 3 sets, 0 wrong): NEW enum field
 # `has_hcfg_section` = "true" when a section NAMED `.hcfg` exists (ELF section header table / PE section table; the
@@ -106,6 +109,13 @@ PE_COFF_MACHINE_U16_HEX_FMT = "0x{:04x}"
 # FIELD's (u32), not the PE32/PE32+ flavour, while answer_format only says "lowercase hexadecimal with a 0x prefix".
 PE_ENTRY_POINT_RVA_HEX_FMT = "0x{:08x}"
 PE_ENTRY_POINT_RVA_HEX_REJECTED = ["0x65bd0"]
+
+# Day 11 "What's My Name Again?" (metadata-forensics), confirmed 2026-10-12 (single, TT, Mastery 2 sets; 0 wrong): id
+# d09-pe-NNN-pe-version-<field> = the VS_VERSIONINFO StringFileInfo entry whose key matches <field> case- and
+# separator-insensitively ("original-filename" -> "OriginalFilename"), value VERBATIM (trim): "pe-base-386.exe",
+# "pe-base-amd64.exe", "pe-base-arm64.exe". The randomized member name (telemetry-agent-NNN.exe) is the decoy.
+# pefile: PE(data, fast_load) + parse_data_directories(RESOURCE) -> FileInfo[..].StringTable[..].entries.
+PE_VERSION_STRING_KEY = {"original-filename": "OriginalFilename"}
 
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {
@@ -233,6 +243,8 @@ BASH_ROLE_ATTACK_CONFIRMED = {
     # trap-handler.sh (trap_handler|function_local_trap) and recursive-walk.sh (recursive_walk|bounded_recursive_function).
     # Day 10 (alt single 30eaee77 + TT + Mastery, 0 wrong): here-string.sh (here_string|here_string_read) and
     # heredoc-reconstruction.sh (heredoc_reconstruction|quoted_heredoc), stage_count 1.
+    # Day 11 (single + TT f99ea9ec + Mastery 2d722b36, 0 wrong): nameref-dispatch.sh (nameref_dispatch|declare_nameref)
+    # and dynamic-file-descriptor.sh (dynamic_file_descriptor|allocated_file_descriptor); plan = Material_ decimal_csv.
     "advanced_syntax": "T1059.004",
 }
 # Node.js "operation graph" fixtures (Day 7 "Node by Node", GM-confirmed single 25ef1864, TT 516aa6d1, Mastery
@@ -257,6 +269,9 @@ NODE_ROLE_ATTACK_CONFIRMED = {
 # Day 10 "Bind Over Matter" (alt single 30eaee77 + TT + Mastery, 0 wrong) added WMI MOF hosts (polyglot-wmi_mof-*.mof,
 # plan in a `// HUNTRESS_ANALYSIS_V1:FRAG-..` comment, language=wmi_mof, host_profile "standalone"): launcher+staged_chain =
 # T1059 again; MOF benign_utility had steps decode_embedded>write_file>dispatch_process (plan wins again).
+# Day 11 "By Any Other Name" (single + TT f99ea9ec + Mastery 2d722b36, 0 wrong) added TypeScript (polyglot-typescript-*.ts,
+# `// HUNTRESS_ANALYSIS_V1:{FRAG,HEX,B64,HB64}-` comment, host_profile "standalone"): launcher+staged_chain = T1059,
+# downloader T1105, benign none -- same table; adapters local_parser/http_client/process_builder/operation_graph.
 V3_ROLE_ATTACK_CONFIRMED = {
     "benign_utility": "none", "stager": "T1105", "downloader": "T1105", "dropper": "T1140", "uploader": "T1041",
     "launcher": "T1059", "staged_chain": "T1059", "persistence_descriptor": "T1053",

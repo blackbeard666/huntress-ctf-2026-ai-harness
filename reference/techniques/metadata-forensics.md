@@ -1,4 +1,4 @@
-# metadata-forensics — technique log (days 1-10; updated after every day)
+# metadata-forensics — technique log (days 1-11; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -11,12 +11,15 @@ How this lane has looked so far (observations, not guarantees):
 - Day 9 crossed into EXECUTABLE headers (`pe.coff_machine_u16_hex`): the metadata lane now parses binaries too, but only
   the raw header field -- answer the u16 as hex, not the binary lane's machine word (`i386`). Day 10 stayed on the SAME
   PE (`pe.address_of_entry_point_rva_hex`) and DE-escalated: zip = the exe only, contract = 1 field (TT 1, Mastery 2x1).
+  Day 11 kept that shape and moved INTO the PE's resources (`pe.version_original_filename`, VS_VERSIONINFO string).
 - A new `<fmt>.<field>` family each day: identity (name/size/hashes) -> magic prefix -> `text.utf8_bom_present` ->
   `jpeg.sof_dimensions_pixels` -> `png.ihdr_dimensions_pixels` -> `pdf.header_version` -> `zip.eocd_total_entries` ->
-  `zip.central_directory_member_names` -> `pe.coff_machine_u16_hex` -> `pe.address_of_entry_point_rva_hex`. Since Day 3 the question literally names the field
+  `zip.central_directory_member_names` -> `pe.coff_machine_u16_hex` -> `pe.address_of_entry_point_rva_hex` ->
+  `pe.version_original_filename`. Since Day 3 the question literally names the field
   (`Determine <fmt>.<field> for <member>`); answer ids read `dNN-<fmt>-NNN-<fmt>-<field>` (`.`/`_` -> `-`). NOTE the
   `dNN` is the drop/member family, not the day the field appeared: Day 8's new field came as `d07-zip-001-zip-central-
-  directory-member-names`; Day 9's as `d09-pe-001-pe-coff-machine-u16-hex` (new member family -> new `dNN`); Day 10's as `d09-pe-001-pe-address-of-entry-point-rva-hex` (same exe family).
+  directory-member-names`; Day 9's as `d09-pe-001-pe-coff-machine-u16-hex` (new member family -> new `dNN`); Day 10's as `d09-pe-001-pe-address-of-entry-point-rva-hex` (same exe family), Day 11's as
+  `d09-pe-001-pe-version-original-filename`.
 - The prompt's flavor text describes decoys (impostors, renamed copies, "-with-bom" names, EXIF/presentation lies, chunk
   "passengers", catalog /Version overrides, "impossible provenance" names). The asked field so far was always the
   STRUCTURAL truth from the header/record bytes; names/extensions/secondary metadata are the lie. Singles D1-D9 were
@@ -35,7 +38,9 @@ How this lane has looked so far (observations, not guarantees):
   ONLY the note's case id (`Case <hex> evidence note.`, 33 B) -> md5/sha1/sha256/magic differ per set; jpg 257x146, png
   269x153, pdf 1.4, eocd 2, CD names identical across single/TT/5 Mastery sets. D9 same, plus the PE: Machine 0x014c in
   all 7 copies but the exe's sha256 differs per set (re-built per variant). D10: the entry RVA re-rolled per variant
-  (single 0x00065bd0, TT 0x00063a80, Mastery 0x00063510 / 0x00065bd0). Never cache a value across sets.
+  (single 0x00065bd0, TT 0x00063a80, Mastery 0x00063510 / 0x00065bd0). D11: the PE's ARCHITECTURE re-rolled per variant
+  (single 386 0x014c, TT amd64 0x8664, Mastery arm64 0xaa64 + 386) and OriginalFilename follows it (`pe-base-<goarch>.exe`).
+  Never cache a value across sets.
 - **Field-set size** -- grows AND shrinks: D7 TT/Mastery went 1 -> 11 fields (Mastery 22); D8 12 in every mode (Mastery
   5 x 12); D9 13 (Mastery 5 x 13); D10 back to ONE field everywhere (Mastery 2 sets x 1, zip = the lone exe). Families: the day's field +
   `evidence-note-{filename,size-bytes,md5,sha1,sha256,magic-prefix-hex-16,text-utf8-bom-present}` + carry-overs
@@ -68,6 +73,7 @@ How this lane has looked so far (observations, not guarantees):
 | `pe.coff_*` / "executables for several architectures", `.exe`/`.dll`/`.sys` | `MZ`@0 -> e_lfanew u32 LE @0x3C -> require `PE\0\0` there -> COFF FileHeader: Machine u16 @+4, NumberOfSections @+6, TimeDateStamp @+8, SizeOfOptionalHeader @+20, Characteristics @+22; OptionalHeader magic @+24 (`0x10b` PE32 / `0x20b` PE32+). `xxd -s $((0x3c)) -l 4` then `xxd -s <lfanew> -l 8`. `file`/`pefile` cross-check only |
 | `pe.address_of_entry_point_*` / `pe.image_base*` / "start addresses" | opt = e_lfanew+24: AddressOfEntryPoint u32 @opt+16 (an RVA); ImageBase u32 @opt+28 (PE32) / u64 @opt+24 (PE32+). `od -An -tx4 -j$((lfanew+40)) -N4 f`. objdump's "start address" = ImageBase+RVA (a VA, NOT the RVA) |
 | `elf.*` / `macho.*` siblings (promised "several architectures", not yet asked) | ELF: `\x7fELF`, EI_DATA @5 picks endianness, e_machine u16 @18. Mach-O: `feedface`/`feedfacf` (either byte order) cputype u32 @4; fat `cafebabe` = BE nfat_arch @4 + 20-B entries (Java .class shares `cafebabe`; small nfat_arch = fat). Emit hex in the same `0x%0Nx` width as the field's `uNN` |
+| `pe.version_*` / "version resources remember what the binaries called themselves" | VS_VERSIONINFO StringFileInfo: `pefile.PE(data=b, fast_load=True)`; `pe.parse_data_directories(directories=[DIRECTORY_ENTRY['IMAGE_DIRECTORY_ENTRY_RESOURCE']])`; walk `pe.FileInfo[..][..].StringTable[..].entries` (bytes keys). Match the id tail to the key ignoring case/`-_` (`original-filename` -> `OriginalFilename`). Shell: `strings -e l f.exe | grep -A1 OriginalFilename` |
 | exe-extension decoy (`.exe` that is text/zip/PNG, `MZ` with no/garbled `PE\0\0` at e_lfanew) | header absent -> literal `none` if the syntax offers it; never fall back to a later `PE\0\0` hit or the extension |
 | "impostor", "renamed", "disguise" | trust magic bytes at offset 0; a matching string deeper in the file is a decoy |
 | answer_format syntax "use the literal none only when the requested field is absent" | field missing (e.g. no header) -> `none` |
@@ -95,40 +101,17 @@ form by analogy, accepted). IDAT/CRC/after-IEND "passenger" checks were diagnost
 GM-judged: header must be at offset 0 (deeper `%PDF-` -> `none`); catalog `/Version` never changes it. Mastery: two
 same-named downloads (`delivery N:` refs); pre-fetched contract listed 003/004, live asked 006/007.
 
-**Day 7 — Seven-Zip, No Relation** (ZIP EOCD census). `zip.eocd_total_entries` integer, id `d07-zip-001-zip-eocd-total-entries`.
-- Evidence zip held `evidence-drop-001.zip` (410 B, Stored, data-descriptor flag) with `room-01/item-1.txt`,
-  `room-02/item-1.txt` (identical 48 B text). EOCD total-entries u16 @+10 = 2 -> answer `2` (base-10, no units).
-- All variants were honest: EOCD disk/total == CD headers == LFHs, no comment/trailing bytes. The prompt's "empty space"
-  / "census that does not add up" (claim vs real walk, padding, dir entries) was flavor only — not exercised, so it is
-  still unknown whether the GM wants the claimed or the walked count when they differ. Answer the field = the CLAIM.
-- Worker: `xxd | tail` + `7z l -slt`, then a stdlib `struct` EOCD parser (ZIP64 aware). CORRECT 57 s, first try.
-  TT 3 entries, Mastery 4 / 5.
+**Day 7 — Seven-Zip, No Relation** (`zip.eocd_total_entries` integer of the INNER `evidence-drop-001.zip`): EOCD u16
+@+10 = `2` (the claim; all variants honest, claim-vs-walk disagreement never exercised). Stdlib `struct` EOCD parser,
+57 s first try; TT 3 entries, Mastery 4 / 5.
 
-**Day 8 — What's in the Box?** (`zip.central_directory_member_names`, kind `json`, id
-`d07-zip-001-zip-central-directory-member-names`). Prompt: "The count was only the beginning. Inventory every stored
-path, preserve directory context, and identify the archive whose names reveal an impossible provenance claim."
-- Artifact: 3308 B evidence zip with 5 members (`evidence-note.txt` 33 B, `camera-001.jpg`, `panel-001.png`,
-  `document-001.pdf`, and the SAME 410 B `evidence-drop-001.zip` as Day 7). Single contract = 12 fields at once.
-- Key insight: the field = the inner zip's central-directory filename fields, verbatim and in CD order:
-  `["room-01/item-1.txt","room-02/item-1.txt"]` -- the two basenames collide, so "preserve directory context" means keep
-  the full stored path (never basename/dedupe/sort). No `../`, absolute, backslash or UTF-8/cp437 oddities appeared in
-  any variant (UT extra, 2026-10-01 09:00, unix attrs); the "impossible provenance" decoy was NOT exercised -- still answer
-  the raw CD names (the field says central_directory, not LFH, not sanitized).
-- Worker: copied the Day 7 solve.py + a CD walker + compact `json.dumps` (~27 s, first try). TT/Mastery (5 x 12)
-  CORRECT; only the note's case id differed. `knowledge.ZIP_CD_MEMBER_NAMES_FMT`.
+**Day 8 — What's in the Box?** (`zip.central_directory_member_names`, kind `json`): 5-member kit (note/jpg/png/pdf/D7
+inner zip), single = 12 fields. Inner zip's CD names verbatim in CD order, full paths (basenames collide):
+`["room-01/item-1.txt","room-02/item-1.txt"]`, compact JSON. "Impossible provenance" decoy unexercised. ~27 s first try.
 
-**Day 9 — Built Different** (`pe.coff_machine_u16_hex`, kind `pattern`, syntax "lowercase hexadecimal with a 0x prefix",
-norm `trim`, id `d09-pe-001-pe-coff-machine-u16-hex`). Prompt: "A software drop contains executables for several
-architectures, plus decoys wearing executable extensions. Determine what can actually run where."
-- Artifact: 598 KB evidence zip = the D8 kit (byte-identical apart from the case id) + `telemetry-agent-001.exe`
-  (1,257,984 B, Deflate). It was an honest Go 1.22.2 PE32 console exe (buildinfo `GOOS=windows GOARCH=386`, path
-  `huntress.generated/windows-pe`): e_lfanew 0x80, `PE\0\0`, Machine `0x014c`, 7 sections incl. `.symtab`, opt magic
-  0x10b, TimeDateStamp 0. No ELF/Mach-O, no decoy exe in single, TT or any Mastery set -- the flavor was unexercised.
-- Key insight: the field name is the spec -- COFF FileHeader.Machine read as a u16 and printed `0x%04x` (zero-padded to 4
-  digits: `0x014c`, not `0x14c`, not `i386`). The binary lane's `machine` word (`knowledge.PE_MACHINE` -> `i386`) is a
-  DIFFERENT field; don't reuse it here.
-- Worker: `xxd -l 64` + 3-line `struct` (0x3C -> PE sig -> u16), `cp` the D8 solve.py + a suffix branch (~47 s, first
-  try). TT 6 s window in_window 2.88 s; Mastery 5 x 13, 7 s window, 2.49 s. Machine 0x014c everywhere.
+**Day 9 — Built Different** (`pe.coff_machine_u16_hex`, `pattern` lowercase `0x`): kit + `telemetry-agent-001.exe`, an
+honest Go 1.22 386 PE32 (e_lfanew 0x80, 7 sections, opt magic 0x10b). COFF Machine u16 -> `0x014c` (padded; not `i386`,
+the binary lane's word). "Several architectures + decoys" flavor unexercised. ~47 s first try; TT/Mastery 5 x 13 in-window.
 
 **Day 10 — Where Do We Begin?** (`pe.address_of_entry_point_rva_hex`, kind `pattern`, syntax "lowercase hexadecimal with
 a 0x prefix", norm `trim`, id `d09-pe-001-pe-address-of-entry-point-rva-hex`). Prompt: "Architecture tells you whether a
@@ -147,6 +130,19 @@ lying."
   widths are the same rule by analogy, NOT GM-confirmed.
 - TT 8 s window, in_window 0.79 s (solve 0.03 s); Mastery 11 s, 0.77 s. Both CORRECT; RVA differed per variant.
 
+**Day 11 — What's My Name Again?** (`pe.version_original_filename`, kind `exact_text`, norm `trim`, id
+`d09-pe-001-pe-version-original-filename`). Prompt: "Filenames have been randomized, but Windows version resources
+remember what the binaries called themselves. Recover the original identities and expose the impersonator."
+- Artifact: 595 KB zip holding only `telemetry-agent-001.exe` (the D9/D10 Go 386 PE32). Its version resource:
+  CompanyName "Huntress Labs", FileVersion 1.0.0.0, OriginalFilename `pe-base-386.exe`, ProductName "Huntress Metadata
+  Forensics", ProductVersion 2026.10.1.0 (no InternalName/FileDescription). The "impersonator" = the randomized member
+  name; nothing else to expose.
+- Key insight: the answer is the OriginalFilename string VERBATIM (with `.exe`), not the member name.
+- Worker: replaced the skeleton's `answer()` with a pefile version-string reader + identity/magic/COFF branches and
+  submitted in ONE command. Launch 01:55:40Z -> CORRECT 01:56:04.6Z (~25 s, first try).
+- TT 7 s window, in_window 0.86 s (`pe-base-amd64.exe`); Mastery 7 s, 0.99 s, 2 sets (`pe-base-arm64.exe`,
+  `pe-base-386.exe`). Both CORRECT first try.
+
 ## GM answer conventions learned
 - Filenames: exact base name incl. extension, no directory. Sizes: base-10 integer, no units. Hashes: hex, case ignored.
 - Byte prefixes: lowercase hex, contiguous, exactly 2N chars (`xxd -p -l N`).
@@ -163,7 +159,9 @@ lying."
   `0x014c` (D9), u32 AddressOfEntryPoint -> `0x00065bd0` (D10, all modes). The width comes from the STRUCT, not the id
   (D10's id has no `u32`). Contrast: magic-prefix hex has NO `0x`; binary-lane `machine` wants the word (`i386`), and the
   binary lane's `entry_point` was accepted UNPADDED (`0x401040`) -- different lane, different generator.
-- Rejected spellings: `0x65bd0` for pe.address_of_entry_point_rva_hex (D10 single; unpadded) -- the only one, days 1-10.
+- Version-resource strings (`pe.version_<field>`): the StringFileInfo value verbatim, incl. extension (`pe-base-386.exe`,
+  D11 all modes). `knowledge.PE_VERSION_STRING_KEY` maps id tail -> resource key.
+- Rejected spellings: `0x65bd0` for pe.address_of_entry_point_rva_hex (D10 single; unpadded) -- the only one, days 1-11.
 - `knowledge.py`: `JPEG_DIMENSIONS_FMT`, `PNG_DIMENSIONS_FMT`, `PDF_HEADER_VERSION_FMT`, `ZIP_EOCD_TOTAL_ENTRIES_FMT`,
   `ZIP_CD_MEMBER_NAMES_FMT`, `PE_COFF_MACHINE_U16_HEX_FMT`, `PE_ENTRY_POINT_RVA_HEX_FMT` (+`_REJECTED`), `BOOL`;
   `playbook` metadata `hex` entry carries the padding rule.
@@ -186,6 +184,7 @@ lying."
   (`metadata-forensics-day-09-built-different-mastery.zip`, 2.99 MB, Stored) while refs say `metadata-day-09-evidence-0N.zip
   -> <member>` -- resolve the bundle by sha256 (`lib.common.container_by_sha`), not by its filename.
 - Mastery day 10: TWO sets only, refs `metadata-day-10-evidence-0N.zip -> telemetry-agent-00N.exe` (003/004).
+  Day 11 identical shape (`metadata-day-11-evidence-0N.zip`, one download nesting both set zips).
 - Mastery day 6: two downloads with identical filenames -> `delivery 1: <zip>` / `delivery 2: <zip>` in artifact refs.
 - Member numbering shifts between pre-fetched contract and live attempt (003/004 vs 006/007) — never hardcode names.
 

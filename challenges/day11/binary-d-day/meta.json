@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-11-d-collection-planner",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ D-Day",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-11-d-collection-planner",
+    "time_trial": "binary-reverse-engineering-day-11-d-collection-planner/time_trial",
+    "mastery": "binary-reverse-engineering-day-11-d-collection-planner/mastery"
+  }
+}

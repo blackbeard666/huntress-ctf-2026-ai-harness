@@ -1,0 +1,22 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "61624732-a00c-4ba9-bee3-dc5b2a973512",
+  "window": 10.0,
+  "elapsed": 1.47,
+  "in_window": 0.83,
+  "phases": {
+    "start": 0.65,
+    "download": 0.16,
+    "solve": 0.04,
+    "submit": 0.63
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": "2026-10-12T01:56:34.084Z",
+  "verified": {
+    "message": "quick-puzzle-tiger-30"
+  },
+  "attempts_remaining": 255,
+  "hall_of_fame_eligible": true
+}

@@ -1,0 +1,10 @@
+{
+  "base": "warmups-day-11",
+  "lane": "warmups",
+  "name": "👶 Safe Travels",
+  "ids": {
+    "single_solve": "warmups-day-11",
+    "time_trial": "warmups-day-11/time_trial",
+    "mastery": "warmups-day-11/mastery"
+  }
+}

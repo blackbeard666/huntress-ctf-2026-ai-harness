@@ -59,6 +59,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Zig Zag"
   },
+  "binary-reverse-engineering-day-11-d-collection-planner": {
+    "day": 11,
+    "dir": "day11/binary-d-day",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ D-Day"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -119,6 +125,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Where Do We Begin?"
   },
+  "metadata-forensics-day-11-whats-my-name-again": {
+    "day": 11,
+    "dir": "day11/metadata-whats-my-name-again",
+    "lane": "metadata-forensics",
+    "name": "🔎 What’s My Name Again?"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -178,6 +190,12 @@
     "dir": "day10/mobile-network-config-split",
     "lane": "mobile-android",
     "name": "📱 Network Config Split"
+  },
+  "mobile-android-day-11-local-secrets": {
+    "day": 11,
+    "dir": "day11/mobile-local-secrets",
+    "lane": "mobile-android",
+    "name": "📱 Local Secrets"
   },
   "read-the-rules": {
     "day": 1,
@@ -245,6 +263,12 @@
     "lane": "script-analysis",
     "name": "📜 Bind Over Matter"
   },
+  "script-analysis-day-11-native-api-semantics": {
+    "day": 11,
+    "dir": "day11/scripting-by-any-other-name",
+    "lane": "script-analysis",
+    "name": "📜 By Any Other Name"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -304,6 +328,12 @@
     "dir": "day10/warmups-thirty-two-below",
     "lane": "warmups",
     "name": "👶 Thirty-Two Below"
+  },
+  "warmups-day-11": {
+    "day": 11,
+    "dir": "day11/warmups-safe-travels",
+    "lane": "warmups",
+    "name": "👶 Safe Travels"
   },
   "welcome-robots": {
     "day": 1,

@@ -1,4 +1,4 @@
-# script-analysis — technique log (days 1-9; updated after every day)
+# script-analysis — technique log (days 1-11; updated after every day)
 
 How this lane has looked so far (these are observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -7,20 +7,22 @@ How this lane has looked so far (these are observations, not guarantees):
   PS (d1, 15 ids) -> +JScript (d2, 87) -> +Batch (d3, 159) -> +VBScript (d4, 231) -> +Python (d5, 357) -> +Bash (d6, 399)
   -> +Node.js `.mjs` and 2 Bash advanced-syntax fixtures (d7, 469) -> +8 PHP "polyglot" files, 4 WSF/HTA/PHP-webshell "host"
   files and 2 more Bash advanced fixtures (d8, 615) -> +4 Lua polyglot, 2 host files (SCT scriptlet, Lua OpenResty), 2 more
-  Bash advanced (d9, 695). The title names the new language; the prompt names its NEW roles.
+  Bash advanced (d9, 695) -> +4 WMI MOF polyglot + 2 Bash advanced (d10, 753) -> +4 TypeScript `.ts` polyglot + 2 Bash
+  advanced (d11, 811). The title names the new language; the prompt names its NEW roles.
 - From day 2 on, every fixture hides a **self-describing plan**: `v=N|steps=a,b|adapter=..|stage_count=..|campaign_id=..|<indicators>`. It sits behind a codec, usually named in a `Codec_<id>` / `CODEC_<id>` / `rem HUNTRESS-CODEC:` const of the form `rep|transform|key`. Most exact_text answers are plan values copied verbatim.
   From D8 there is also a **`v=3` plan**: it carries `role=` and `attack=` itself, and sits behind a `HUNTRESS_ANALYSIS_V1:<TAG>-` comment.
 - The hard part is **naming CODE SHAPE**: control-flow, expansion, and function/invocation/property styles. These are GM synthetic labels that are not in the plan. Role and scenario are enums, so read `accepted_values`.
 - Files are named by behaviour (host-context, memory-stage, embedded-write, remote-write, local-dispatch, staged-handoff/-chain, outbound-transfer, impact-plan, relay-handoff, schedule-descriptor). The answer-id is `<lang>-<role>-<field>`, and the artifact path picks the file. Don't trust the file name over the plan `steps`.
-- The D8/D9 prompts are narrative ("find the one that doesn't match its siblings", "expose the stage whose claimed family
-  tree is impossible"). No question asked for that outlier/impossible stage. Answer the contract ids only.
+- The D8-D11 prompts are narrative ("find the one that doesn't match its siblings", "expose the stage whose claimed family
+  tree is impossible", D10 "name the subscription that would really survive a reboot", D11 "flag the call whose claimed
+  purpose the evidence doesn't support"). No question asked for that outlier/impossible stage. Answer the contract ids only.
 - Time Trial windows are about 5-13 s (30 s on d1). Mastery has `setN.` ids: 2 sets on d2-d7, **5 sets on d8 (3075 ids, 22 s)
-  and d9 (3475 ids, 30 s)**. The artifact was `evidence-0N.zip`, or (d6) `delivery N: evidence.zip`, or (d7-d9) ONE download
+  and d9 (3475 ids, 30 s)**, 2 sets again on d10 (1506 ids, 32 s) and d11 (1622 ids, 11 s). The artifact was `evidence-0N.zip`, or (d6) `delivery N: evidence.zip`, or (d7-d9) ONE download
   `evidence-01.zip` that holds every `evidence-0N.zip`. Same-named deliveries: pair them by sha256. Timed question texts
   carry `[assigned-artifact-sha256:<hex>]` per member -- usable to verify the bytes you got.
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants of the SAME day -- parse every value listed)
-Each miss below cost one failed timed attempt + a ~45-90 s generalize cycle (D6 replay: 4 cycles; D7: 1 cycle; D8-D9: 0).
+Each miss below cost one failed timed attempt + a ~45-90 s generalize cycle (D6 replay: 4 cycles; D7: 1 cycle; D8-D11: 0).
 - **Codec per file** -- rep x transform x key re-rolls per variant; never bind a role to the sample's codec. **NEW rep
   NAMES appear only on variants** (D7 TT: `unicode_escapes` `\u00XX..`, `json_numbers` `[232,241,..]`,
   `reversed_base64`, Bash `xor_hex|cd`). Decode by the material's SHAPE (escapes / int array / hex / base64, each also
@@ -50,7 +52,8 @@ Each miss below cost one failed timed attempt + a ~45-90 s generalize cycle (D6 
   fragments; join before decoding.
 - **Adapter values** re-roll within a role (Node stager http_then_module/https_then_vm/fetch_then_function; launcher
   execfile_node/fork_module/spawn_file; persistence systemd_descriptor/npm_lifecycle_descriptor) -- always plan-verbatim.
-- **No-new-axis days**: D8 (TT 129bf46a, Mastery 07d5051a) and D9 (TT dfcfb51e, Mastery 1dfd4cf6): structure, tags,
+- **No-new-axis days**: D8 (TT 129bf46a, Mastery 07d5051a), D9 (TT dfcfb51e, Mastery 1dfd4cf6), D10 and D11 (TT f99ea9ec,
+  Mastery 2d722b36; the 4 TS files kept FRAG/HEX/B64/HB64 + adapters + next_language in every delivery): structure, tags,
   role/attack/steps/profiles identical to the single; only values re-rolled. All CORRECT first try.
 
 ## Recognition cues -> first move
@@ -105,27 +108,30 @@ missed 15 ids (new reps unicode_escapes/json_numbers/`xor_hex|cd`); 26b7da83 sav
 derive**. New fields host-profile, obfuscation, stage-profile, next-language. ~2 min 10 s, 2 submits, 0 wrong (6 ids lost
 to hyphenated family names -> longest-known-suffix field parse). TT 2.1 s / Mastery 5.6 s in-window, both 1st try.
 
-**D9 All the World's a Stager (+4 Lua polyglot, +2 host formats, +2 Bash advanced; 695 ids)**: prompt "Every stager
-claims to know who came before it and who comes next. Build the relationship graph from final-byte evidence alone, and
-expose the stage whose claimed family tree is impossible." Flavour only: no question about an impossible stage, and the
-plans have no parent/previous key.
-- Artifact: AES `evidence.zip`, 83 members, the D8 set plus:
-  - `polyglot-lua-{benign-utility,downloader,launcher,staged-chain}.lua`: `-- HUNTRESS_ANALYSIS_V1:<TAG>-..`,
-    `local descriptor_<id> = ".."`, `build_plan_<id>()`. language=lua, host_profile standalone.
-  - `host-sct-scriptlet-jscript.js`: an XML `<scriptlet>` (COM scriptlet, progid `Huntress.Analysis.<id>`) with a JScript
-    CDATA body. The extension lies again. host_profile `sct_scriptlet`.
-  - `host-lua-openresty-lua.lua`: an OpenResty-style `inert_handler_<id>` + the same v=3 marker. host_profile `lua_openresty`.
-  - `trap-handler.sh` (feature trap_handler, primitive function_local_trap, `trap 'return 0' RETURN`), `recursive-walk.sh`
-    (recursive_walk, bounded_recursive_function). Same v=1 `Material_/Codec_` pattern as D7-D8 advanced fixtures.
-- Key insight: **nothing new to decode.** Same 4 v=3 tags (B64/HEX/HB64/FRAG) and the D3-D8 codec vocabulary. The D8 solver
-  routes by the v=3 marker regex before extension and resolves fields by known suffix, so it answered all 695 unchanged.
-  Again the steps do not predict the role (lua benign_utility = `acquire_remote,dispatch_process`; lua staged_chain =
-  `decode_configuration,return_configuration`).
-- Method: the worker copied the D8 solver into `solver/` and ran `hctf submit <id> --from-solver` (solve 0.55 s). 2 tool calls.
-- Time: GM start 13:00:07.6 -> CORRECT 13:00:28.8 (**21 s, 1 submit, 0 wrong**, warm-launched worker).
-- TT dfcfb51e (11 s window) CORRECT 1st try, 4.1 s in-window (start 0.95, download 0.33, solve 2.98, submit 0.79).
-  Mastery 1dfd4cf6 (30 s, 5 sets, 3475 ids, one bundle with evidence-01..05.zip) CORRECT 1st try, 4.4 s in-window
-  (start 1.23, download 1.24, solve 1.76, submit 1.35).
+**D9 All the World's a Stager (+4 Lua polyglot, +2 host formats, +2 Bash advanced; 695)**: "impossible family tree" flavour
+unasked. New: `polyglot-lua-*.lua` (`-- HUNTRESS_ANALYSIS_V1:`, `local descriptor_<id>`), `host-sct-scriptlet-jscript.js`
+(XML `<scriptlet>` CDATA; host_profile sct_scriptlet), `host-lua-openresty-lua.lua` (lua_openresty), trap-handler.sh /
+recursive-walk.sh. Nothing new to decode: the D8 solver (marker regex before extension + known-suffix field parse) answered
+695/695 unchanged; 2 tool calls, 21 s, 0 wrong. TT 4.1 s / Mastery (5 sets, 3475 ids) 4.4 s in-window, both 1st try.
+
+**D10 Bind Over Matter (+4 WMI MOF polyglot, +2 Bash advanced; 753 ids)**: `polyglot-wmi_mof-*.mof` with the v=3 plan in a
+`// HUNTRESS_ANALYSIS_V1:FRAG-..` comment (language wmi_mof, host_profile standalone); here-string.sh / heredoc-reconstruction.sh.
+Prompt's "subscription that survives a reboot" unasked. Carried-over solver; all 3 modes CORRECT first try (TT 13 s window
+1.9 s in-window; Mastery 2 sets 32 s, 3.5 s).
+
+**D11 By Any Other Name (+4 TypeScript polyglot, +2 Bash advanced; 811 ids, 95 members)**: prompt "These scripts reach for
+native APIs by name, but a name isn't a behavior. Map each reference to the receipt-backed action it models, and flag the call
+whose claimed purpose the evidence doesn't support." Flavour only: no flag/mismatch question; the PS samples' `$nativeTypes`
+scenario mapping is unchanged.
+- New: `polyglot-typescript-{benign-utility,downloader,launcher,staged-chain}.ts` -- `// HUNTRESS_ANALYSIS_V1:` FRAG / HEX / B64 /
+  HB64 (obfuscation fragmented_hex / plain_hex / base64 / hex_base64), host_profile standalone, adapters local_parser /
+  http_client / process_builder / operation_graph, next_language powershell / jscript / batch / vbscript; attack none / T1105 /
+  T1059 / T1059 (V3 table). Steps again don't predict role (TS downloader = `decode_configuration>return_configuration`).
+- New Bash advanced: `nameref-dispatch.sh` (feature nameref_dispatch, primitive declare_nameref, `local -n`) and
+  `dynamic-file-descriptor.sh` (dynamic_file_descriptor, allocated_file_descriptor); `Material_` decimal CSV, `Codec_='decimal_csv|'`.
+- Method: the carried-over solver (marker-routed v=3 + suffix field parse) answered 811/811 unchanged; the worker cat'ed the
+  new files, ran the solver, grepped the new ids, submitted. 5 tool calls, launch 01:55:40Z -> CORRECT 01:56:35Z (~55 s, 0 wrong).
+- TT f99ea9ec (9 s window) 1.41 s in-window; Mastery 2d722b36 (11 s, 2 sets) 1.69 s (solve 0.81 s). Both CORRECT first try.
 
 ## GM answer conventions learned
 - **Check `answer_format.kind` first.** `enum` gives the list (scenario, role). `mitre_attack_id` takes `T####[.###]` or literal `none` (benign_utility). `integer`/`ordered_tokens` (d6+). `exact_text` = plan value or synthetic label.

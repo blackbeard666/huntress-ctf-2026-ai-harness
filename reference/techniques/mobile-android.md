@@ -1,18 +1,20 @@
-# mobile-android — technique log (days 1-9; updated after every day)
+# mobile-android — technique log (days 1-11; updated after every day)
 
 How the lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
   guarantee for Time Trial / Mastery -- solvers derive structure and degrade per field.
-- Every APK so far was the same ~12.7 KB fixture with 6 zip entries: `AndroidManifest.xml`, `assets/huntress_puzzle.json`,
+- Every APK so far was the same ~12.7 KB fixture with 6 zip entries (d10 added `res/xml/network_security_config.xml` +
+  `resources.arsc` = 8 entries, 12845 B; d11 back to 6): `AndroidManifest.xml`, `assets/huntress_puzzle.json`,
   `classes.dex`, `META-INF/FIXTURE-.{SF,RSA}`, `MANIFEST.MF`. One question, `answer` = `ANS-` + 16 uppercase hex.
 - Each day has a new Android IPC/security THEME, written in the manifest `<meta-data android:name="huntress.mechanic">`
   (exported Activity, permissive deep link, nested Intent, mutable PendingIntent, allowBackup, exported ContentProvider,
-  JavaScript-interface origin trust, cleartext session transport, permissive X509 trust manager). The theme was
+  JavaScript-interface origin trust, cleartext session transport, permissive X509 trust manager, Network Security Config
+  exception, locally stored credential in SharedPreferences). The theme was
   flavour only: no day required exploiting it, even when the dex carried a matching stub class (d7 `WebViewBridge`,
   d8 `CleartextSession`, d9 `TrustEveryone`) or the prompt demanded a live action ("replay it against the backend"
   d8, "exploit a challenge CA" d9 -- no CA/cert/network_security_config/TrustManager code was shipped).
 - What actually varied day to day was the `codec` of `huntress_puzzle.json` (plain, reverse, base64, xor+key, split,
-  hex, caesar+key, reverse again on d8, base64 again on d9 -- codecs CAN repeat). Within one day every variant (single, TT, all Mastery
+  hex, caesar+key, reverse again on d8, base64 again on d9, split again on d10, xor+key again on d11 -- codecs CAN repeat). Within one day every variant (single, TT, all Mastery
   sets) used the same codec. Keys re-roll per variant. A new codec name is possible any day: decode it from the first
   4 chars, which must become `ANS-`. The dex also holds the codec name as a `CODEC` string constant (d8, d9) and a
   `DAY-NN:<theme_id>:<mechanic>` string.
@@ -23,14 +25,14 @@ How the lane has looked so far (observations, not guarantees):
   routine. `lib.android.extract_answer` has the fallback chain for that case.
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
-- **Puzzle codec** -- the same within one day, but `key` (xor byte d4, caesar shift d7: 10/18/9/3/4) and any
+- **Puzzle codec** -- the same within one day, but `key` (xor byte d4, d11: 81 single/109 TT/205,29,44 Mastery; caesar shift d7: 10/18/9/3/4) and any
   split/offset parameters re-roll per variant: read them from `huntress_puzzle.json` every time. Keyless codecs
   (d8 `reverse`, d9 `base64`, 7 variants each) differed only in `data`. Rule: decode by declared codec, regex-check, else `decode_any`.
 - **Per-variant identity** -- case ref, package suffix `v<12 hex>`, `client_secret` and the loopback attempt slug
   change per variant (all Mastery sets shared one slug on d7-d9, e.g. `d09-92be5cd6e8a5594f`; single and TT each
   had their own). APK size stays 12704 B, 6 entries. None of these feed the answer.
 - **Mastery packaging** -- `delivery N: <name>.apk` per set, often identically named: pair by sha256. Set count
-  varies: 3 sets (d1-d7), 5 sets on d8 and d9 (`set1..set5.answer`). Loop over the contract's answer_ids, never assume 3.
+  varies: 3 sets (d1-d7, d10-d11), 5 sets on d8 and d9 (`set1..set5.answer`). Loop over the contract's answer_ids, never assume 3.
 - **Answer location** -- so far always the puzzle JSON; if it decodes to nothing, fall back to dex/resources
   (`lib.android.extract_answer` chain) rather than assuming the sample's location.
 
@@ -131,12 +133,28 @@ permissive trust implementation. Submit only the exact backend answer code retur
 - Start 13:00:07Z -> CORRECT 13:00:32.6Z = 25s, first try. TT (8s window) correct in 3.16s (solve phase 1.99s --
   cold imports; keep top-level imports light). Mastery (11s window, 5 sets) correct in 1.7s. Zero wrong submissions.
 
+**Day 10 — Network Config Split** (mechanic "Network Security Config exception"): first fixture with extra entries --
+`res/xml/network_security_config.xml` (cleartextTrafficPermitted=true for domain 127.0.0.1) + `resources.arsc`. Still
+static: codec `split` (repeat of d5), `parts ["56C4B5B0D","ANS-4","9D8953"]`, `order [2,0,1]` = output slot of each part.
+All 3 modes CORRECT first try (TT 13 s / Mastery 10 s windows, 3 sets).
+
+**Day 11 — Local Secrets** (mechanic `DAY-11:shared_preferences:locally stored synthetic credential`; prompt "Separate
+active credentials from decoys across generated local stores.")
+- Same 6-entry fixture (12704 B). No SharedPreferences XML, sqlite or other "local store" file shipped; the only
+  credential-looking string besides the asset is the dex's loopback `client_secret=SECRET-<22 hex>` (a decoy, never
+  the answer). Codec `xor` (repeat of d4): `{"data":"EB8CfGkXY2NkZmVmYBUXZWkVYGU=","key":81}` -> b64-decode, XOR 81 ->
+  `ANS-8F2257471DF48D14`.
+- Worker (warm launch): one command decoded the triage-extracted JSON by hand (`base64 -d | xor 81`), a second filled
+  `answer()` with `lib.android.puzzle_candidates` + `ANS-` regex (fallback `raw_entry_scan`/`dex_strings`) and
+  submitted. Launch 01:55:40Z -> CORRECT 01:56:08Z = ~28 s, first try. TT (7 s window) 0.93 s in-window; Mastery (8 s, 3
+  sets) 0.82 s. Zero wrong submissions.
+
 ## GM answer conventions learned
 - One field, `answer`. Single solve and TT use id `answer`; Mastery uses `setN.answer` (3 sets d1-d7, 5 on d8-d9), one
   APK per set.
 - Format is `ANS-` + exactly 16 UPPERCASE hex, normalization `exact`. Uppercase the hex after decoding and add no
   whitespace.
-- No mobile answer has ever been rejected (zero wrong submissions on days 1-9). `ANS-<16 uppercase hex>` confirmed
+- No mobile answer has ever been rejected (zero wrong submissions on days 1-11). `ANS-<16 uppercase hex>` confirmed
   again on d8 and d9 (7/7 variants each). The GM accepts the decoded
   `huntress_puzzle.json` value as the "backend evidence code" even though the prompt says "invoke ... return the backend
   evidence code".
@@ -158,10 +176,10 @@ permissive trust implementation. Submit only the exact backend answer code retur
 - **Mastery filenames** carry a literal `delivery N: ` prefix. A naive path lookup fails.
 - **6-11s timed windows** (day 2+; d7 TT 9s/Mastery 10s, d8 both 8s, d9 TT 8s/Mastery 11s) are dominated by start + download + submit. Solve time is about 0.1s, so do no
   decompiling in-window: read the zip entry directly. Day 2 Mastery expired 8 times before Homebase routing.
-- **Don't decompile when you don't need to.** Every solve so far (d1-d9) needed only the asset; the manifest was context only.
+- **Don't decompile when you don't need to.** Every solve so far (d1-d11) needed only the asset; the manifest was context only.
   Keep jadx/apktool for the day the asset is missing or lacks `ANS-`.
 - **Prompt wording escalates, the artifact did not** (d7 "cross a bridge", d8 "replay the session against the backend",
-  d9 "exploit a challenge CA"): judge by what the APK contains (pcap/HAR, token file, cert, network_security_config,
+  d9 "exploit a challenge CA", d11 "separate active credentials from decoys"): judge by what the APK contains (pcap/HAR, token file, cert, network_security_config,
   native lib), not by the verb.
 - **Hand-typed codec tables:** each day's solver re-pasted the decode table; it worked, but `lib.android` already
   covers it -- use `puzzle_candidates`/`decode_payload` so a missed branch can't cost a timed run.

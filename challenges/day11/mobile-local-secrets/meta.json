@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-11-local-secrets",
+  "lane": "mobile-android",
+  "name": "📱 Local Secrets",
+  "ids": {
+    "single_solve": "mobile-android-day-11-local-secrets",
+    "time_trial": "mobile-android-day-11-local-secrets/time_trial",
+    "mastery": "mobile-android-day-11-local-secrets/mastery"
+  }
+}

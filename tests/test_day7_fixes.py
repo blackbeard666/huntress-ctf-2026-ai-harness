@@ -839,3 +839,12 @@ assert _dc('"' + "".join(f"{_bs}u{ord(c):04x}" for c in "er-ripple-76") + '"') =
 assert _dc('"' + "".join(f"{_bs}u{ord(c):04x}" for c in "café words here") + '"') == "café words here"
 assert _dc("".join(f"{_bs}x{ord(c):02x}" for c in "plain text words")) == "plain text words"
 print("ok  decode_chunk: \\uXXXX / \\xXX escape fragments (quoted or bare) decode strictly")
+
+# Day 11 ratchet: decode_chunk's URL-safe base64 branch, '=' dropped (warmups "Safe Travels": 147-char blob,
+# len % 4 == 3, so the strict b64 class never fired and the line fell through to rot-N)
+import base64 as _b64
+_u = _b64.urlsafe_b64encode(b"Nice work? yes>> crisp-starfish-petal-89").decode().rstrip("=")
+assert ("-" in _u or "_" in _u) and _dc(_u) == "Nice work? yes>> crisp-starfish-petal-89", _dc(_u)
+assert _dc(_b64.b64encode(b"Nice work decoding this warmup!").decode().rstrip("=")) == "Nice work decoding this warmup!"
+assert _dc("74686973207761726d75") == "this warmu" and _dc("qrpbqvat") == "decoding"   # hex / rot13 unchanged
+print("ok  decode_chunk: unpadded URL-safe base64 (- _ alphabet, no '=') decodes strictly")
