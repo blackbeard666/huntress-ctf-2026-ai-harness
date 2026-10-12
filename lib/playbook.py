@@ -166,6 +166,14 @@ PLAYBOOK = [
         examples=("COFF Machine u16 0x14c -> 0x014c (D9)", "AddressOfEntryPoint u32 0x65bd0 -> 0x00065bd0 (D10)"),
         derive=_hex_width_derive,
     ),
+    PlaybookEntry(
+        lanes=(METADATA,), families=("filename",),
+        rule="A `..-filename` id is the member's OWN name (basename after '->') ONLY when no `version` token precedes it; "
+             "`<fmt>.version_<field>` (`d09-pe-NNN-pe-version-original-filename`) = the PE VS_VERSIONINFO StringFileInfo "
+             "string verbatim (OriginalFilename), never the randomized member name. The id holds `-pe-` twice: take the "
+             "field after the LAST one.",
+        examples=("telemetry-agent-001.exe OriginalFilename -> pe-base-386.exe (D11)",),
+    ),
     # ---- script-analysis -------------------------------------------------------------------------
     PlaybookEntry(
         lanes=(SCRIPT,), families=("control",),
