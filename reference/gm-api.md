@@ -61,3 +61,23 @@
 - GET  /api/student/courses/<playthrough>/systems?courseSystemIds=["<sys>"] -> state stopped|starting|running|stopping, ip
 - POST /api/student/courses/<playthrough>/systems/<sys>/power {"power":"on"|"off"} (Reset is a separate action; never call it)
 - GET  /api/student/courses/<playthrough>/vpn -> .ovpn profile
+
+## Hall of Fame + timed/regular pools (course lessons as of 2026-10-12; reference/welcome/*.md)
+- **Hall of Fame = public speed scoreboard**, separate from CourseStack points ("CourseStack ranks total points
+  separately"): `GET https://2026.huntress.ctf.games/api/speed-scoreboard?mode=time_trial|mastery&view=rankings|leaders
+  &limit<=1000&offset=N&sort=elapsed_ms&direction=asc[&challenge=<id>]` (no auth) -> rows {team_name, challenge_id,
+  rank, elapsed_ms (GM-measured, shorter than our hb_timed elapsed), par_ms, under_par_ms, answer_count, set_count}.
+  Every fresh, `hall_of_fame_eligible` timed attempt can improve the team's fastest time; untimed runs never rank;
+  pre-eligibility attempts are not added retroactively (our rows start at Day 7). Main = `sec1-huntress-harness`,
+  alt = `[redacted]`. Snapshot 2026-10-12 (Day 9): leaders 0.26-1.5 s, we rank #16-#33 (reference/hof/).
+- `op=list` timed entries carry `run_for_time_supported: true`. There a PLAIN start is an UNTIMED regular attempt that
+  still earns the flag + CourseStack points; `"run_for_time": true` on start/retry = timed + HoF. Regular and timed
+  attempts draw from separate artifacts; timed never repeats an artifact; `ranked_attempts_remaining` and
+  `regular_variants_remaining` are separate; regular pool exhausted -> retry still serves the last regular artifact
+  (`variant_fresh: false`) for the flag.
+- Older routes without `run_for_time_supported`: timed by default; after the last fresh variant `retry` ->
+  `rotation_exhausted`; `{"op":"practice","challenge":id}` continues on that artifact untimed (no HoF, `practice: true`)
+  and a correct submit still completes the mode and unlocks the next one. (Harness: not used yet.)
+- `start` always reconnects to the current attempt (never changes mode/spends a variant); while CourseStack scoring is
+  pending the attempt stays in place. Teammates share one attempt, one deadline, one Mastery progress.
+- Unexplained by the lessons: `503 attempt_context_invalid` (r9b, script D9 Mastery: start/retry/plain start/status).
