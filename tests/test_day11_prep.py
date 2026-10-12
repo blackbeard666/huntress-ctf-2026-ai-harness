@@ -109,7 +109,14 @@ with tempfile.TemporaryDirectory() as d:
     assert (sdir / "solve.py").exists() and not (sdir / "cases").exists()
     orchestrate.stage_prior_cases(prior, sdir)
     assert (sdir / "cases" / "auto-1" / "expected.json").exists()
-print("ok  stage_prior_solver(cases=False) + stage_prior_cases: code first, the cases/ corpus after the go")
+with tempfile.TemporaryDirectory() as d:
+    sk = Path(d)
+    (sk / "solve.py").write_bytes((ROOT / "hctf" / "templates" / "solve_skeleton.py").read_bytes())
+    assert orchestrate._is_skeleton(sk)
+    (sk / "solve.py").write_text("print(1)\n")
+    assert not orchestrate._is_skeleton(sk) and not orchestrate._is_skeleton(sk / "missing")
+print("ok  stage_prior_solver(cases=False) + stage_prior_cases: code first, the cases/ corpus after the go; "
+      "an untouched skeleton is never speculatively pushed")
 
 # 6) early pre-push: a speculative push ships files only; the verified push of the same code just warms the zygote;
 #    concurrent pushes of identical code push once; changed code re-pushes

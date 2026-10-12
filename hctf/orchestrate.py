@@ -292,6 +292,15 @@ def mastery_delta(single_contract, timed_contracts):
             "dispatch on question text / artifact type; reuse earlier days' parsing for earlier days' concepts.")
 
 
+def _is_skeleton(sdir):
+    """solve.py is still the untouched harness skeleton (rehearsal D10: 3 lanes speculatively pushed it at chain start, 5 s
+    each under contention, for code no attempt would ever run)."""
+    try:
+        return (Path(sdir) / "solve.py").read_bytes() == (ROOT / "hctf" / "templates" / "solve_skeleton.py").read_bytes()
+    except OSError:
+        return False
+
+
 def stage_prior_solver(prior, sdir, cases=True):
     """Copy an earlier day's solver dir (__pycache__ and generalize scratch excluded; cases/ only when `cases`) into
     `sdir`, keeping anything already there. Returns `sdir`."""
@@ -2086,7 +2095,8 @@ class Chain:
                     m = self._solver_mtimes()
                     if m and "solve.py" in m and m != early:
                         stamped = bool(self._submit_stamp(cid, m))
-                        if stamped or (spec_n < PREPUSH_SPEC_MAX and time.time() - max(m.values()) >= PREPUSH_STABLE):
+                        if stamped or (spec_n < PREPUSH_SPEC_MAX and time.time() - max(m.values()) >= PREPUSH_STABLE
+                                       and not _is_skeleton(self.sdir)):
                             early, spec_n = m, spec_n + (not stamped)
                             self._prepush_verified(cid, self.sdir, warm=stamped)
                 if cli.is_complete(cid):

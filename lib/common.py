@@ -93,7 +93,7 @@ def _zip_read(z, name):
 # Script/text names never hold a nested zip: iter_entries(leaf_ext=SCRIPT_LEAF_EXT) skips loading them to sniff for PK
 # (Day 8/9 script Mastery: 375 AES members = 375 PBKDF2s up front, many times ~0.2 s on Homebase, repeated per forked set).
 SCRIPT_LEAF_EXT = (".js", ".jse", ".mjs", ".cjs", ".ps1", ".psm1", ".py", ".pyw", ".sh", ".bash", ".vbs", ".vbe", ".bat",
-                   ".cmd", ".php", ".hta", ".wsf", ".sct", ".wsc", ".lua", ".txt", ".json")
+                   ".cmd", ".php", ".hta", ".wsf", ".sct", ".wsc", ".lua", ".mof", ".txt", ".json")   # .mof: D10 WMI fixtures
 
 
 def iter_entries(root, max_depth=4, leaf_ext=()):

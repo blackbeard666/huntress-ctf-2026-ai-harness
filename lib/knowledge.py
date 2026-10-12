@@ -53,6 +53,10 @@ ARCHITECTURE_REJECTED = ["amd64"]
 # the stored blob's first byte -- for a base64 Nim string literal, where the base64 TEXT starts ("30696" = 0x77e8: after
 # the 8-byte cap/flag word at 0x77e0, NOT that header and NOT the VA 0x4077e8). Raw/hex-blob offsets still unconfirmed.
 HCFG_OFFSET_FMT = "{n}"
+# Day 10 "Zig Zag" (Zig cross-compiled ELF + PE; alt single + TT 46625ef1 + Mastery 0c0733e6 3 sets, 0 wrong): NEW enum field
+# `has_hcfg_section` = "true" when a section NAMED `.hcfg` exists (ELF section header table / PE section table; the
+# Zig PE set had .hcfg between .pdata and .tls). Zig PE x86-64 -> format "pe", machine/architecture "x86-64" (same
+# vocab as every native build). crc32_hex "0x%08x" re-confirmed. "false" not yet seen.
 JAR_FORMAT = "jar"
 JAR_FORMAT_REJECTED = ["jar_jvm"]
 DOTNET_FORMAT_REJECTED = [
@@ -98,6 +102,8 @@ PE_COFF_MACHINE_U16_HEX_FMT = "0x{:04x}"
 # d09-pe-NNN-pe-address-of-entry-point-rva-hex = OptionalHeader.AddressOfEntryPoint (u32 LE at e_lfanew+24+16, the raw
 # RVA -- not ImageBase+RVA) as "0x" + 8 zero-padded lowercase hex digits, e.g. "0x00065bd0". The id names no width:
 # pad to the STRUCT field's size (u32 -> 8), same law as the D9 u16. Unpadded "0x65bd0" REJECTED (D10 single).
+# Rehearsal D10 (TT d5b62c7e, Mastery 1f84320c): PE32+ x86-64/AArch64 too ("0x00063a80", "0x00063510") -- the width is the
+# FIELD's (u32), not the PE32/PE32+ flavour, while answer_format only says "lowercase hexadecimal with a 0x prefix".
 PE_ENTRY_POINT_RVA_HEX_FMT = "0x{:08x}"
 PE_ENTRY_POINT_RVA_HEX_REJECTED = ["0x65bd0"]
 
@@ -225,6 +231,8 @@ BASH_ROLE_ATTACK_CONFIRMED = {
     # role advanced_syntax (feature indirect_expansion|token_fragmentation, primitive parameter_indirection|
     # array_token_construction, plan values verbatim) = Unix shell execution. Day 9 re-confirmed it for
     # trap-handler.sh (trap_handler|function_local_trap) and recursive-walk.sh (recursive_walk|bounded_recursive_function).
+    # Day 10 (alt single 30eaee77 + TT + Mastery, 0 wrong): here-string.sh (here_string|here_string_read) and
+    # heredoc-reconstruction.sh (heredoc_reconstruction|quoted_heredoc), stage_count 1.
     "advanced_syntax": "T1059.004",
 }
 # Node.js "operation graph" fixtures (Day 7 "Node by Node", GM-confirmed single 25ef1864, TT 516aa6d1, Mastery
@@ -246,6 +254,9 @@ NODE_ROLE_ATTACK_CONFIRMED = {
 # (polyglot-lua-*, host_profile "standalone") and hosts host_profile "sct_scriptlet" (SCT saved as .js) / "lua_openresty":
 # launcher+staged_chain = T1059 again. Lua benign_utility had steps acquire_remote>dispatch_process and Lua staged_chain
 # decode_configuration>return_configuration -- take role/attack from the plan, never from the steps.
+# Day 10 "Bind Over Matter" (alt single 30eaee77 + TT + Mastery, 0 wrong) added WMI MOF hosts (polyglot-wmi_mof-*.mof,
+# plan in a `// HUNTRESS_ANALYSIS_V1:FRAG-..` comment, language=wmi_mof, host_profile "standalone"): launcher+staged_chain =
+# T1059 again; MOF benign_utility had steps decode_embedded>write_file>dispatch_process (plan wins again).
 V3_ROLE_ATTACK_CONFIRMED = {
     "benign_utility": "none", "stager": "T1105", "downloader": "T1105", "dropper": "T1140", "uploader": "T1041",
     "launcher": "T1059", "staged_chain": "T1059", "persistence_descriptor": "T1053",

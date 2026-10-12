@@ -159,8 +159,9 @@ PLAYBOOK = [
     PlaybookEntry(
         lanes=(METADATA,), families=("hex",),
         rule="Header integer `<fmt>.<field>_hex` = `0x` + LOWERCASE hex ZERO-PADDED to the struct field's width (u16 -> 4, "
-             "u32 -> 8, u64 -> 16 digits), even when the id names no width. Read the raw field (an `_rva` is the RVA, "
-             "not ImageBase+RVA). Byte-prefix fields (`magic_prefix_hex_N`) have NO `0x`.",
+             "u32 -> 8, u64 -> 16 digits), even when the id names no width and answer_format only says 'lowercase "
+             "hexadecimal with a 0x prefix'; on PE32+ too (the width is the field's, not the PE flavour). Read the raw "
+             "field (an `_rva` is the RVA, not ImageBase+RVA). Byte-prefix fields (`magic_prefix_hex_N`) have NO `0x`.",
         rejected=tuple(K.PE_ENTRY_POINT_RVA_HEX_REJECTED),
         examples=("COFF Machine u16 0x14c -> 0x014c (D9)", "AddressOfEntryPoint u32 0x65bd0 -> 0x00065bd0 (D10)"),
         derive=_hex_width_derive,
