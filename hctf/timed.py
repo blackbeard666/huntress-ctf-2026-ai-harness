@@ -174,7 +174,7 @@ def present_only(contract, art_dir, answers):
         containers[aid] = art.split(" -> ", 1)[0].strip()
     # one delivery for every question: the file may be saved under another name (artifacts/latest), keep all
     single = len({c for c in containers.values() if c}) <= 1 and len(have) >= 1
-    have |= _bundled(art_dir, have)
+    have |= _bundled(art_dir, have, {c for c in containers.values() if c})
     return {aid: v for aid, v in answers.items()
             if single or not containers.get(aid) or containers[aid] in have}
 
@@ -200,11 +200,13 @@ def trim_to_present(contract, art_dir):
     return c
 
 
-def _bundled(art_dir, names):
+def _bundled(art_dir, names, wanted=()):
     """Per-set containers delivered INSIDE a bundle zip (D7 metadata Mastery: one ...-mastery.zip = {evidence-01.zip,
     evidence-02.zip}, saved as evidence-01.zip): set 2's container is present even though no file carries its name --
     dropping it left every bundled auto-mastery case verifying set 1 only. Only a real bundle counts (>= 2 members,
-    all archives); first level only (member names, nothing decompressed)."""
+    all archives, or >= 2 members the contract names as containers: D12 warmups bundled 58 blob-NN.txt, the case kept
+    set 1 of 58 and the generalize gate passed a fix that got 11 sets wrong); first level only (member names, nothing
+    decompressed)."""
     import zipfile
     arch = (".zip", ".7z", ".apk", ".jar", ".tar", ".gz", ".tgz")
     out = set()
@@ -214,7 +216,7 @@ def _bundled(art_dir, names):
                 inner = [Path(i.filename).name for i in z.infolist() if not i.is_dir()]
         except (zipfile.BadZipFile, OSError, ValueError):
             continue
-        if len(inner) >= 2 and all(x.lower().endswith(arch) for x in inner):
+        if len(inner) >= 2 and (all(x.lower().endswith(arch) for x in inner) or len(set(inner) & set(wanted)) >= 2):
             out.update(inner)
     return out
 

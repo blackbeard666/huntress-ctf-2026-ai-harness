@@ -138,8 +138,41 @@ print("ok  hb_timed._partial_submit: accepted subset verified; wrong ones locali
 
 # 5) the skeleton calls fallback() only when answer() found nothing
 sk = (ROOT / "hctf" / "templates" / "solve_skeleton.py").read_text()
-assert "def fallback(" in sk and "if v is None:" in sk
+assert "def fallback(" in sk and "if v is None and not _past_deadline():" in sk
 print("ok  solve_skeleton: per-field fallback hook")
+# 5b) in-window deadline (D12 warmups Mastery: peel fallback x 58 sets hit the 28 s kill with 0 answers): peel and the
+#     skeleton's fallback stop at HCTF_SOLVE_DEADLINE; hb_timed._run_solver exports it a margin before the kill
+import os as _os  # noqa: E402
+import time as _time  # noqa: E402
+from lib import decode as _dec  # noqa: E402
+_old = _os.environ.get("HCTF_SOLVE_DEADLINE")
+try:
+    _os.environ["HCTF_SOLVE_DEADLINE"] = str(_time.time() - 1)
+    _t = _time.time()
+    assert _dec.peel(b"no slug in here at all " * 40, lambda t: False) == (None, [])
+    assert _time.time() - _t < 0.2
+    _sk = {"__file__": str(ROOT / "challenges" / "d00" / "x" / "solver" / "solve.py")}   # skeleton: ROOT = parents[4]
+    exec(compile(sk.split("\ndef main(")[0], "sk", "exec"), _sk)
+    assert _sk["_past_deadline"]() is True
+    del _os.environ["HCTF_SOLVE_DEADLINE"]
+    assert _sk["_past_deadline"]() is False
+    assert _dec.peel("SGVsbG8gd29ybGQ=", lambda t: "Hello" in t)[0] == "Hello world"   # no deadline: unchanged
+finally:
+    if _old is None:
+        _os.environ.pop("HCTF_SOLVE_DEADLINE", None)
+    else:
+        _os.environ["HCTF_SOLVE_DEADLINE"] = _old
+_seen = {}
+_orig_run = hb_timed.subprocess.run
+_orig_solver = hb_timed.SOLVER
+try:
+    hb_timed.SOLVER = None
+    hb_timed.subprocess.run = lambda cmd, **kw: _seen.update(kw["env"]) or None
+    hb_timed._run_solver("solve.py", "c.json", "a", 10.0, {"X": "1"})
+finally:
+    hb_timed.subprocess.run, hb_timed.SOLVER = _orig_run, _orig_solver
+assert _seen["X"] == "1" and 8.5 < float(_seen["HCTF_SOLVE_DEADLINE"]) - _time.time() < 9.1, _seen
+print("ok  in-window deadline: peel + skeleton fallback stop at HCTF_SOLVE_DEADLINE (runner sets it 1 s before the kill)")
 # 6) pre-attempt gate: HARD mutation misses -> mutation-* cases adopted + ONE generalize with mutation_pre, before any
 #    timed attempt; no misses -> no generalize
 from hctf import timed  # noqa: E402
@@ -261,4 +294,22 @@ md = Path(tempfile.mkdtemp())
 (md / "evidence-01.zip").write_bytes(inner["evidence-01.zip"])     # set 2's delivery never fetched
 assert _timed.present_only(pc, md, {"set1.a": "1", "set2.a": "2"}) == {"set1.a": "1"}
 print("ok  present_only: bundled set 2 kept, a genuinely missing delivery still dropped")
+
+# 12) a bundle of plain-text per-set members (D12 warmups Mastery: 58 blob-NN.txt in one zip saved as blob-01.txt)
+#     keeps every set; a zip whose text members the contract does not name stays one container
+td = Path(tempfile.mkdtemp())
+with zipfile.ZipFile(td / "blob-01.txt", "w") as z:
+    for i in (1, 2, 3):
+        z.writestr(f"blob-0{i}.txt", f"01\tline {i}")
+tc = {"answer_ids": [f"set{i}.message" for i in (1, 2, 3)],
+      "questions": [{"artifact": f"blob-0{i}.txt"} for i in (1, 2, 3)]}
+allv = {f"set{i}.message": str(i) for i in (1, 2, 3)}
+assert _timed.present_only(tc, td, allv) == allv
+assert len(_timed.trim_to_present(tc, td)["answer_ids"]) == 3
+od = Path(tempfile.mkdtemp())
+with zipfile.ZipFile(od / "blob-01.txt", "w") as z:
+    z.writestr("readme.txt", b"x")
+    z.writestr("notes.txt", b"y")
+assert _timed.present_only(tc, od, allv) == {"set1.message": "1"}
+print("ok  present_only: text-member bundle keeps all sets; unrelated text members don't count as a bundle")
 print("ALL PASS")

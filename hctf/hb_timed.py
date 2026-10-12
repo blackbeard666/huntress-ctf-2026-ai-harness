@@ -46,8 +46,13 @@ def _opt(key, default=None):
 
 
 def _run_solver(solve, contract, artifacts, timeout, env):
-    """solve.py on (contract, artifacts): a warm zygote fork under hb_daemon, else a fresh interpreter."""
+    """solve.py on (contract, artifacts): a warm zygote fork under hb_daemon, else a fresh interpreter. Exports
+    HCTF_SOLVE_DEADLINE (epoch, a margin before the kill) so lib.decode.peel / the skeleton's fallback stop searching
+    and print what they have: D12 warmups Mastery, a 60k-node peel fallback x 58 sets ran into the 28 s kill with 0
+    answers out."""
     args = ["--contract", str(contract), "--artifacts", str(artifacts)]
+    env = dict(os.environ if env is None else env)
+    env["HCTF_SOLVE_DEADLINE"] = f"{time.time() + timeout - min(1.0, 0.25 * timeout):.3f}"
     if SOLVER is not None:
         return SOLVER(str(solve), args, env, timeout)
     return subprocess.run([sys.executable, str(solve), *args], capture_output=True, text=True, timeout=timeout, env=env)

@@ -13,7 +13,9 @@ import io
 import json
 import lzma
 import math
+import os
 import re
+import time
 import urllib.parse
 import zlib
 import zipfile
@@ -110,14 +112,27 @@ def _expand(data):
                 yield f"xor{k:#x}", x
 
 
-def peel(data, accept, max_nodes=60000):
-    """BFS; return (accepted_text, [steps]) for the shortest chain whose output `accept(text)` is truthy."""
+def solve_deadline():
+    """Epoch by which an in-window solver must stop searching (HCTF_SOLVE_DEADLINE, set by the timed runner), or None."""
+    try:
+        return float(os.environ["HCTF_SOLVE_DEADLINE"])
+    except (KeyError, ValueError):
+        return None
+
+
+def peel(data, accept, max_nodes=60000, deadline=None):
+    """BFS; return (accepted_text, [steps]) for the shortest chain whose output `accept(text)` is truthy. Gives up
+    (None, []) at `deadline` / HCTF_SOLVE_DEADLINE, whichever is first: one 60k-node search is ~6 s (D12 warmups)."""
     if isinstance(data, str):
         data = data.encode()
+    ends = [d for d in (deadline, solve_deadline()) if d]
+    end = min(ends) if ends else None
     seen, frontier, n = {data}, [(data, ())], 0
     while frontier:
         nxt = []
         for cur, path in frontier:
+            if end is not None and time.time() > end:
+                return None, []
             t = _printable(cur)
             if t is not None and accept(t):
                 return t, list(path)
@@ -265,6 +280,12 @@ def decode_chunk(p, _nested=False):
         g = max(gen, key=_bigram)
         if best_rot is None or (re.search(r"[A-Za-z]", g) and _bigram(g) > _bigram(best_rot)):
             return g
+    # plain REVERSED text (warmups Day 12 "Back at You": line 12 = '69-enud-m' -> 'm-dune-96', whole blob
+    # '56-ztrauq-... :retsaM emaG'): a leading 'NN-word' is a reversed slug tail, else keep the reversal only if it
+    # reads more like English than every rot-N (rot-N of '69-enud-m' gives 'fove'; 0 hits on Days 3-11 fragments)
+    if best_rot is not None and (re.fullmatch(r"\d{2,}-[A-Za-z][A-Za-z-]*", t)
+                                 or _bigram(t[::-1]) > _bigram(best_rot)):
+        return t[::-1]
     # free text: plain or rot-N (pick the shift that reads most like English); keep spacing exactly
     return best_rot if best_rot is not None else p
 

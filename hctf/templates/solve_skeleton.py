@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -54,6 +55,14 @@ def fallback(answer_id, question, data, contract):
     return None
 
 
+def _past_deadline():
+    """The timed runner's HCTF_SOLVE_DEADLINE (epoch) has passed: print the answers found so far instead."""
+    try:
+        return time.time() > float(os.environ["HCTF_SOLVE_DEADLINE"])
+    except (KeyError, ValueError):
+        return False
+
+
 def _solve_pairs(job):
     """Answer one group of (answer_id, question) pairs -- a whole Mastery set, or the whole contract."""
     root, contract, pairs = job
@@ -65,7 +74,7 @@ def _solve_pairs(job):
         except Exception as e:  # noqa: BLE001 - one bad field must not sink the other answers
             print(f"{aid}: {e!r}", file=sys.stderr)
             v = None
-        if v is None:
+        if v is None and not _past_deadline():   # in-window: never let a fallback search eat the kill margin
             try:
                 v = fallback(aid, q, data, contract)
             except Exception as e:  # noqa: BLE001

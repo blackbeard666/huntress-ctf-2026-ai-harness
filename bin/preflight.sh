@@ -53,10 +53,17 @@ fi
 
 # 2) GM reachability ------------------------------------------------------------------------------
 hdr "Game Master (public GM via token)"
-gm_out="$(timeout 40 hctf list 2>&1)"; gm_rc=$?
-if [ "$gm_rc" -eq 0 ] && ! grep -qiE "traceback|unreachable|error" <<<"$gm_out"; then
-  n="$(grep -cE '^D[0-9]' <<<"$gm_out" || true)"
-  ok "GM reachable (hctf list rc=0; $n released challenge-modes listed)."
+# Probe ONE day, like the run does (`list --day N`): the all-days list grew to 30-52 s server-side by Day 12 and
+# outlived the 15 s GET timeout + retry, a false FAIL that made bin/day.sh abort while per-day lists answered in 1-6 s.
+gm_t0=$(date +%s.%N)
+gm_out="$(timeout 40 hctf list --day 1 2>&1)"; gm_rc=$?
+gm_s="$(awk -v a="$gm_t0" -v b="$(date +%s.%N)" 'BEGIN{printf "%.1f", b-a}')"
+if [ "$gm_rc" -eq 0 ] && grep -qE '^D01' <<<"$gm_out" && ! grep -qiE "traceback|unreachable|error" <<<"$gm_out"; then
+  if awk -v s="$gm_s" 'BEGIN{exit !(s > 10)}'; then
+    warn "GM reachable but slow: hctf list --day 1 took ${gm_s}s (normal 1-6 s) -- GM under load; GETs time out at ${HCTF_GM_GET_TIMEOUT:-15}s."
+  else
+    ok "GM reachable (hctf list --day 1 in ${gm_s}s)."
+  fi
 else
   fail "GM not reachable (rc=$gm_rc). First lines: $(head -2 <<<"$gm_out" | tr '\n' ' ')"
 fi
