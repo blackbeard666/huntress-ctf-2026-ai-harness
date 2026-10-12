@@ -373,4 +373,37 @@ finally:
 assert hb_timed._total_bytes(live) == 0
 print("ok  timed_env: HCTF_EXPECT_BYTES from the saved contract gates the pipeline on a size-less live body")
 
+# 16) Mastery speed gate re-measures alone before acting: a contended-probe estimate over the gate that re-times under
+#     it -> no speed generalize; one that stays over -> generalize with the re-measured number
+with tempfile.TemporaryDirectory() as d:
+    cdir = Path(d)
+    (cdir / "window.json").write_text(json.dumps({"seconds": 7}))
+    (cdir / "contract.json").write_text(json.dumps({"answer_ids": [f"set{i}.x" for i in range(1, 44)]}))
+    ch = orchestrate.Chain.__new__(orchestrate.Chain)
+    ch.base, ch.sdir = "w", Path(d) / "solver"
+    ch.entries = {"time_trial": {"id": "w/time_trial"}, "mastery": {"id": "w/mastery"}}
+    ch._mut_summary = {"base": "single_solve", "base_seconds": 0.12,
+                       "results": [{"mutation": "mastery-shape", "ok": True, "seconds": 0.34, "case": d}]}
+    gens = []
+    patches = {(orchestrate, "say"): lambda *a, **k: None, (orchestrate.cli, "cdir"): lambda cid: cdir,
+               (orchestrate.Chain, "generalize"): lambda self, cid, wrong=None, fixed=None, diag=None: gens.append(diag)}
+    saved = {k: getattr(*k) for k in patches}
+    real_rm = orchestrate.remeasure_estimate
+    try:
+        for (mod, name), fn in patches.items():
+            setattr(mod, name, fn)
+        assert orchestrate.mastery_estimate(ch._mut_summary, cdir / "contract.json") > 14   # the contended number
+        orchestrate.remeasure_estimate = lambda sdir, summ, mc, reps=2: 0.41
+        orchestrate.Chain._mastery_speed_gate(ch, "w/mastery")
+        assert not gens, gens
+        ch._mastery_gate_done = False
+        orchestrate.remeasure_estimate = lambda sdir, summ, mc, reps=2: 30.0
+        orchestrate.Chain._mastery_speed_gate(ch, "w/mastery")
+        assert len(gens) == 1 and gens[0]["mastery_estimate"] == 30.0, gens
+    finally:
+        orchestrate.remeasure_estimate = real_rm
+        for (mod, name), fn in saved.items():
+            setattr(mod, name, fn)
+print("ok  Mastery speed gate: acts only on an estimate that is still over the gate when re-timed alone")
+
 print("\nALL DAY-10 PREP CHECKS PASSED")

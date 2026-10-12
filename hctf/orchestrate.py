@@ -592,6 +592,32 @@ def compound_probe(sdir, seconds=None):
     return compound.summary(res), compound.hard_misses(res), res
 
 
+def remeasure_estimate(sdir, mut_summary, mastery_contract, reps=2):
+    """mastery_estimate from the base + mastery-shape mutation cases re-timed SEQUENTIALLY (best of `reps`), or None."""
+    shape = next((r for r in (mut_summary or {}).get("results") or [] if r.get("mutation") == "mastery-shape"
+                  and r.get("ok") and r.get("case")), None)
+    if not shape or not (mut_summary or {}).get("base"):
+        return None
+
+    def best(case):
+        case = Path(case)
+        try:
+            contract = json.loads((case / "contract.json").read_text())
+        except (OSError, ValueError):
+            return None
+        ts = []
+        for _ in range(reps):
+            _got, err, dt = solvers.run_solver(Path(sdir), contract, case / "artifacts", 30)
+            if err:
+                return None
+            ts.append(dt)
+        return min(ts)
+    b, two = best(Path(sdir) / "cases" / mut_summary["base"]), best(shape["case"])
+    if b is None or two is None:
+        return None
+    return mastery_estimate(dict(mut_summary, base_seconds=b, results=[dict(shape, seconds=two)]), mastery_contract)
+
+
 LATE_PROBE_WAIT = float(os.environ.get("HCTF_LATE_PROBE_WAIT", "2"))
 ESTIMATE_MIN_MARGINAL = float(os.environ.get("HCTF_ESTIMATE_MIN_MARGINAL", "0.15"))
 
@@ -1925,6 +1951,14 @@ class Chain:
         limit = MASTERY_GATE_RATIO * tt_win
         say(f"[{cid}] Mastery speed estimate {est:g}s (TT window {tt_win:g}s, gate {limit:g}s)")
         if est > limit:
+            # The probe timed its 1- and 2-set runs side by side with every other mutation (and 5 lanes' load), and the
+            # difference x N sets is the estimate: r9b warmups 14.24 s vs a real 0.32 s Mastery solve -> an 82 s
+            # useless speed generalize (the only time this gate ever fired). Re-time the two runs alone first.
+            est2 = remeasure_estimate(self.sdir, getattr(self, "_mut_summary", None), cli.cdir(cid) / "contract.json")
+            if est2 is not None:
+                say(f"[{cid}] Mastery speed estimate re-measured alone: {est2:g}s")
+                est = est2
+        if est > limit:
             say(f"[{cid}] estimated Mastery solve {est:g}s > {limit:g}s: generalizing for speed BEFORE Mastery")
             self.generalize(cid, wrong=None, fixed=None, diag={"solver_too_slow": True, "mastery_estimate": est,
                                                                  "single_seconds": est})
@@ -2103,6 +2137,11 @@ class Chain:
                     attempt -= 1
                     wait = (5, 10, 20)[min(start_retries - 1, 2)]
                     err = str((timed.last_result(cid) or {}).get("result") or "")
+                    if "attempt_context_invalid" in err and start_retries == 1:
+                        # r9b (2026-10-12): script Mastery answered 503 attempt_context_invalid to start, retry, plain-pool
+                        # start AND status -- GM-side state for this one mode; only the organizers can clear it.
+                        say(f"!!! [{cid}] GM: attempt_context_invalid (GM-side state for this mode; start/retry/status "
+                            "all refuse) -- report to the organizers; backing off and retrying")
                     say(f"[{cid}] GM refused the start ({err}); backing off {wait}s "
                         f"(start retry {start_retries}/{START_RETRIES}, no generalize)")
                     set_state(self.base, stage=f"{mode}:start-refused")

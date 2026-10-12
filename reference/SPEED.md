@@ -485,3 +485,15 @@ deferred recon landed T+14 on binary after its hand-off. Still open from r9a: sc
 probe (now a bounded 2 s wait); the per-set pipeline never engaged -- live start bodies list no sizes (now
 HCTF_EXPECT_BYTES from the status-time contract; pipeline env forwarded over ssh). GM start phase 0.95-2.5 s this run
 (D9 real 0.32-1.23 s) = GM load, not the harness.
+
+### Blind Day 9 replay `r9b` on MAIN (2026-10-12 08:03, harness 15a3dc0, knowledge pinned d6173ea, Homebase up)
+14/15 (script Mastery refused by the GM: `503 attempt_context_invalid` on start, retry, plain-pool start AND status --
+GM-side state for that mode, not ours). T+ from release (08:03:41) single / TT done / Mastery done: script 20/26/--,
+mobile 25/29/34, warmups 26/30/116, metadata 34/37/41, **binary 38/46/60** (real D9: 91/104/119).
+- Handoffs: single CORRECT -> TT start ~1-1.5 s, TT -> Mastery start ~1 s (pre-push tar 0.7-1.4 s).
+- Binary Mastery PIPELINED on Homebase: 12.89 s / 20 s (real D9 14.27 s); download 8.87 s at 3-wide (6.62 s 5-wide on
+  D9), first set solving at 3.24 s, tail after the last download 1.65 s. Helps a slow solver, ~neutral for a fast one.
+- Warmups lost 82 s to a FALSE speed gate: probe estimate 14.24 s (1-vs-2-set runs timed side by side with the other
+  mutations under 5-lane load) vs a 0.32 s real Mastery solve; the gate's only firing ever. Fixed: the gate re-times the
+  two runs alone (best of 2) before acting (idle re-measure 0.41 s).
+- Without those two, every lane would have finished by ~T+60.
