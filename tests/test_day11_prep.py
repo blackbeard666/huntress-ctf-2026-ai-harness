@@ -111,7 +111,8 @@ with tempfile.TemporaryDirectory() as d:
     assert (sdir / "cases" / "auto-1" / "expected.json").exists()
 print("ok  stage_prior_solver(cases=False) + stage_prior_cases: code first, the cases/ corpus after the go")
 
-# 6) stamp-time pre-push: the verified pre-push of the same code is a no-op (one push, one zygote warm)
+# 6) early pre-push: a speculative push ships files only; the verified push of the same code just warms the zygote;
+#    concurrent pushes of identical code push once; changed code re-pushes
 calls = {"push": 0, "warm": 0}
 saved = (workers.sync_homebase_base, workers.push_hot_files, workers.push_solver, workers.hb_daemon)
 
@@ -130,23 +131,25 @@ def fake_push(src, rel):
 
 workers.sync_homebase_base, workers.push_hot_files = (lambda: None), (lambda: None)
 workers.push_solver, workers.hb_daemon = fake_push, (lambda log=None: FakeDaemon())
+sdir = ROOT / "challenges" / "day99" / "fake-prepush" / "solver"
+quiet = {"log": lambda *a: None}
 try:
-    sdir = ROOT / "challenges" / "day99" / "fake-prepush" / "solver"
     with tempfile.TemporaryDirectory() as d:
         src = Path(d) / "solver"
         src.mkdir()
         (src / "solve.py").write_text("print(1)\n")
-        e1 = workers.prepush_solver(src, sdir, log=lambda *a: None)
-        e2 = workers.prepush_solver(src, sdir, log=lambda *a: None)   # verdict-time push while the first is in flight
-        assert e2.wait(5) and e1.is_set()
-        assert calls == {"push": 1, "warm": 1}, calls
-        (src / "solve.py").write_text("print(2)\n")                    # code changed after the stamp -> re-push
-        assert workers.prepush_solver(src, sdir, log=lambda *a: None).wait(5) and calls["push"] == 2
+        assert workers.prepush_solver(src, sdir, warm=False, **quiet).wait(5)       # speculative: settled edit
+        assert calls == {"push": 1, "warm": 0}, calls
+        e1 = workers.prepush_solver(src, sdir, **quiet)                              # stamp-time
+        e2 = workers.prepush_solver(src, sdir, **quiet)                              # verdict-time, while e1 runs
+        assert e2.wait(5) and e1.is_set() and calls == {"push": 1, "warm": 1}, calls
+        (src / "solve.py").write_text("print(2)\n")                                # code changed after the stamp
+        assert workers.prepush_solver(src, sdir, **quiet).wait(5) and calls == {"push": 2, "warm": 2}, calls
 finally:
     workers.sync_homebase_base, workers.push_hot_files, workers.push_solver, workers.hb_daemon = saved
-    workers._prepush.pop(str(sdir), None)
-    workers._pushed.pop(str(sdir), None)
-print("ok  prepush_solver: a second pre-push of identical code waits for the first and skips; changed code re-pushes")
+    for reg in (workers._prepush, workers._pushed, workers._warmed):
+        reg.pop(str(sdir), None)
+print("ok  prepush_solver: speculative = files only; verified same code = warm only; one push per signature")
 
 # 7) Mastery estimate capped by the passing Time Trial's in-window solve phase (one set, same executor)
 with tempfile.TemporaryDirectory() as d:
@@ -160,5 +163,42 @@ with tempfile.TemporaryDirectory() as d:
     tt.write_text(json.dumps({"result": "expired", "phases": {"solve": 0.02}}))
     assert orchestrate.tt_solve_cap(tt, mc) is None
 print("ok  tt_solve_cap: a correct TT's solve phase bounds the Mastery estimate; no cap without a passing TT")
+
+# 8) compounding misses before Mastery: held back (no blocking generalize) only for a never-attempted Mastery whose
+#    status-time contract asks none of the missed fields; a Mastery-failure generalize still gets them
+from hctf import compound  # noqa: E402
+
+with tempfile.TemporaryDirectory() as d:
+    old_case = Path(d) / "challenges" / "day07" / "metadata-x" / "solver" / "cases" / "auto-mastery-1"
+    old_case.mkdir(parents=True)
+    (old_case / "contract.json").write_text(json.dumps({"questions": [{"id": "set1.d07-zip-001-zip-eocd-total-entries"}]}))
+    hard = [{"day": 7, "case": "auto-mastery-1", "path": str(old_case.relative_to(d)), "answered": 1}]
+    fresh = {"error": "start_required", "questions": [{"id": "set1.d09-pe-003-pe-address-of-entry-point-rva-hex"}]}
+    contracts = {"m": fresh}
+    adopted = []
+    saved = (orchestrate.ROOT, orchestrate.cli.load, compound.adopt)
+    orchestrate.ROOT = Path(d)
+    orchestrate.cli.load = lambda cid, name: contracts.get(cid) if name == "contract.json" else None
+    compound.adopt = lambda sdir, h: adopted.extend(h) or len(h)
+    try:
+        ch = orchestrate.Chain.__new__(orchestrate.Chain)
+        ch.sdir = Path(d) / "solver"
+        ch._family_pre_result = lambda wait=True: ("", [])
+        ch._mut_late_done = True
+        ch._cmp_late_done = False
+        ch._compound_pre_result = lambda wait=True: ("compound text", hard)
+        assert ch._compound_relevant("m", hard) is False
+        assert ch._late_probes("m", defer_compound=True) == {} and adopted == []          # Mastery starts at once
+        late = ch._late_probes("m", wait=True)                                              # Mastery failed
+        assert late == {"compound_pre": "compound text"} and adopted == hard
+        contracts["m"] = dict(fresh, attempt_id="a1", started_at="2026-10-12T00:42:57Z")   # re-attempt: may escalate
+        assert ch._compound_relevant("m", hard) is True
+        contracts["m"] = {"questions": [{"id": "set2.d07-zip-009-zip-eocd-total-entries"}]}  # Mastery asks that field
+        assert ch._compound_relevant("m", hard) is True
+        contracts["m"] = {}                                                                   # unknown contract
+        assert ch._compound_relevant("m", hard) is True
+    finally:
+        orchestrate.ROOT, orchestrate.cli.load, compound.adopt = saved
+print("ok  compound pre-Mastery: unasked earlier-day misses held back on a first attempt; re-attempt/asked/unknown block")
 
 print("\nALL DAY-11 PREP CHECKS PASSED")

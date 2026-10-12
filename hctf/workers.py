@@ -928,6 +928,7 @@ def _mark_expired_locally(cid, seconds):
 
 _pushed = {}  # solver dir -> file signature last rsynced to Homebase (this process)
 _prepush = {}  # solver dir -> threading.Event, set once prepush_solver() finished (pushed + warmed, or gave up)
+_warmed = {}  # solver dir -> signature whose Homebase zygote prepush_solver() warmed
 PREPUSH_WAIT = float(os.environ.get("HCTF_PREPUSH_WAIT", "6"))      # max s a timed kickoff waits for a pre-push
 
 
@@ -957,7 +958,7 @@ def push_solver(src, rel):
 TAR_PUSH_MAX = int(os.environ.get("HCTF_TAR_PUSH_MB", "5")) * 1024 * 1024
 
 
-def prepush_solver(src, dst, log=print):
+def prepush_solver(src, dst, log=print, warm=True):
     """Background, the moment the Single Solve is CORRECT + verified: push the verified snapshot `src` to Homebase at
     `dst`'s path while the worker is ended and the single recorded, so the first timed kickoff finds it in place (D9:
     single CORRECT -> TT start 3.9-6.6 s on every lane; the kickoff's no-op rsync alone was 1.84 s over the VPN).
@@ -975,16 +976,18 @@ def prepush_solver(src, dst, log=print):
                 prev.wait(PREPUSH_WAIT)   # an earlier (stamp-time) pre-push of this dir is in flight: never rsync beside it
             rel = Path(dst).relative_to(ROOT)
             sig = _solver_sig(src)
-            if _pushed.get(key) == sig:
-                return     # the stamp-time pre-push already shipped exactly this code (+ warmed its zygote)
-            sync_homebase_base()
-            push_hot_files()
-            how = push_solver(src, rel)
-            _pushed[key] = sig
-            log(f"[homebase] pre-pushed {rel} ({how}) in {time.time() - t0:.1f}s")
-            d = hb_daemon(log)
-            if d is not None:      # warm zygote for this solver before the first clock (prepush already pushed it)
+            if _pushed.get(key) != sig:   # an earlier (speculative / stamp-time) pre-push may have shipped this code
+                sync_homebase_base()
+                push_hot_files()
+                how = push_solver(src, rel)
+                _pushed[key] = sig
+                log(f"[homebase] pre-pushed {rel} ({how}) in {time.time() - t0:.1f}s{'' if warm else ' (speculative)'}")
+            # warm zygote for this solver before the first clock -- verified pushes only: a speculative push must not
+            # load the 2-vCPU VM while other lanes may be inside a timed window
+            d = hb_daemon(log) if warm and _warmed.get(key) != sig else None
+            if d is not None:
                 w = d.call("warm", timeout=30, solver=str(rel))
+                _warmed[key] = sig
                 log(f"[homebase] solver zygote warm ({w.get('warm_ms')} ms load)")
         except Exception as e:  # noqa: BLE001 - an optimization: the kickoff pushes as before
             log(f"[homebase] pre-push note: {str(e)[:200]}")

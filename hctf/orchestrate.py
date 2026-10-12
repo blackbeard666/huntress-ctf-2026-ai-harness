@@ -581,6 +581,12 @@ PRESTAGE_PRIOR = os.environ.get("HCTF_PRESTAGE_PRIOR", "1") != "0"
 # Pre-push + warm the verified Single solver on Homebase at "ready" (workers.prepush_solver). 0 = push at kickoff.
 PREPUSH = os.environ.get("HCTF_PREPUSH", "1") != "0"
 PREPUSH_AT_STAMP = os.environ.get("HCTF_PREPUSH_AT_STAMP", "1") != "0"   # start the pre-push at the solver stamp
+# ... and speculatively (files only, no zygote warm) once solve.py code has been unchanged PREPUSH_STABLE s, at most
+# PREPUSH_SPEC_MAX times per Single (LLM turns pause >1 s after most edits, so each settled edit ships). r10a: stamps
+# land 0.2-0.6 s before the verdict (mobile/warmups/metadata), so the stamp alone saved ~0; a staged prior solver
+# (script) is final ~T+8 and binary's last edit came 2.6 s before its stamp.
+PREPUSH_STABLE = float(os.environ.get("HCTF_PREPUSH_STABLE", "1.0"))
+PREPUSH_SPEC_MAX = int(os.environ.get("HCTF_PREPUSH_SPEC_MAX", "12"))   # 12-140 KB tars, no warm: a bound, not a budget
 PRIOR_DRY_RUN_SECONDS = float(os.environ.get("HCTF_PRIOR_DRY_RUN_SECONDS", "15"))
 COMPOUND_PROBE_SECONDS = float(os.environ.get("HCTF_COMPOUND_PROBE_SECONDS", "45"))
 # Mastery speed gate: estimated Mastery solve (mutation probe's 2-set mastery-shape run) vs the known TT window. Mastery
@@ -1897,10 +1903,40 @@ class Chain:
             time.sleep(0.05)
         return True
 
-    def _late_probes(self, cid, wait=True):
+    def _compound_relevant(self, cid, hard):
+        """Do these compounding-probe misses matter for THIS Mastery attempt? False only when the status-time Mastery
+        contract is trustworthy -- this account never attempted the mode (no attempt_id: every first real-day Mastery
+        D1-D10 asked exactly its status-time fields; only D7 metadata RE-attempts escalated, 3/149) -- and no missed
+        earlier-day case shares a field with it. Unknown -> True (block, as before)."""
+        mc = cli.load(cid, "contract.json") or {}
+        if mc.get("attempt_id") or mc.get("started_at"):
+            return True
+        asked = {field_shape(a) for a in _contract_ids(mc)}
+        if not asked:
+            return True
+        for r in hard:
+            try:
+                c = json.loads((ROOT / r["path"] / "contract.json").read_text())
+            except (OSError, ValueError, KeyError, TypeError):
+                return True
+            if asked & {field_shape(a) for a in _contract_ids(c)}:
+                return True
+        return False
+
+    def _late_probes(self, cid, wait=True, defer_compound=False):
         """Probes that run beside the first Time Trial (codec family + mutation + compounding): adopt hard misses as
-        regression cases. Returns the diag dict for a generalize ({} when clean). Each result is consumed once."""
+        regression cases. Returns the diag dict for a generalize ({} when clean). Each result is consumed once.
+        `defer_compound` (pre-Mastery): compounding misses the Mastery contract can't ask are held back instead of
+        blocking Mastery on a generalize (r10a metadata: 21 s for d01-d08 families a d09-pe-only Mastery never asked);
+        a Mastery-failure generalize (defer_compound=False) still gets them."""
         pre = {}
+        held = getattr(self, "_compound_held", None)
+        if held and not defer_compound:
+            from . import compound
+            self._compound_held = None
+            n = compound.adopt(self.sdir, held[1])
+            say(f"[{cid}] compounding probe (held back before Mastery): {n} earlier-day case(s) adopted now")
+            pre["compound_pre"] = held[0]
         ftxt, fcases = self._family_pre_result(wait=wait)
         if fcases:
             n = self._adopt_family_cases(fcases)
@@ -1923,7 +1959,11 @@ class Chain:
             ctxt, hard = self._compound_pre_result(wait=wait)
             if hard or ctxt or wait:
                 self._cmp_late_done = True
-            if hard:
+            if hard and defer_compound and not self._compound_relevant(cid, hard):
+                self._compound_held = (ctxt, hard)
+                say(f"[{cid}] compounding probe: the solver lost {len(hard)} earlier-day case(s), none of whose fields "
+                    "this first-attempt Mastery contract asks -> Mastery now (a failure generalize gets them)")
+            elif hard:
                 from . import compound
                 n = compound.adopt(self.sdir, hard)
                 say(f"[{cid}] compounding probe: the solver lost {len(hard)} earlier-day case(s) of this lane "
@@ -2035,17 +2075,20 @@ class Chain:
         reproduces every GM-confirmed answer, keep that verified snapshot and set `ready`: run_local then ends the
         worker and the timed modes start from the snapshot at once. Day 6: 60% of worker time (1101/1850s) came after
         the first CORRECT, and every first-correct snapshot already passed its real TT+Mastery variants offline."""
-        early = None
+        early, spec_n = None, 0
         try:
             while not done.wait(SPEC_POLL):
                 if PREPUSH_AT_STAMP:
-                    # `hctf submit --from-solver` stamped this exact code: push it to Homebase NOW, 1-3 s before the
-                    # verdict + verification (D10: TT kickoffs waited 1.1-1.4 s on a push started at the verdict).
-                    # The verified push below re-pushes only if the code changed since (signature check).
+                    # Push this code to Homebase BEFORE the verdict (D10: TT kickoffs waited 1.1-1.4 s on a push started
+                    # at the verdict): at the `hctf submit --from-solver` stamp, or speculatively once the code has been
+                    # stable PREPUSH_STABLE s. The verified push below re-pushes only if the code changed since, and
+                    # warms the zygote (signature checks).
                     m = self._solver_mtimes()
-                    if m and m != early and self._submit_stamp(cid, m):
-                        early = m
-                        self._prepush_verified(cid, self.sdir)
+                    if m and "solve.py" in m and m != early:
+                        stamped = bool(self._submit_stamp(cid, m))
+                        if stamped or (spec_n < PREPUSH_SPEC_MAX and time.time() - max(m.values()) >= PREPUSH_STABLE):
+                            early, spec_n = m, spec_n + (not stamped)
+                            self._prepush_verified(cid, self.sdir, warm=stamped)
                 if cli.is_complete(cid):
                     if ready.is_set():
                         return   # the Homebase shadow handed over first
@@ -2062,7 +2105,7 @@ class Chain:
         except Exception as e:  # noqa: BLE001 - the watcher must never hurt the chain
             say(f"[{cid}] ready-watch note: {e}")
 
-    def _prepush_verified(self, cid, snap):
+    def _prepush_verified(self, cid, snap, warm=True):
         """Push the verified snapshot to Homebase while the worker is ended and the single recorded (D9: single
         CORRECT -> TT start 3.9-6.6 s per lane; the kickoff's VPN rsync sat inside it)."""
         if not PREPUSH or "time_trial" not in self.entries and "mastery" not in self.entries:
@@ -2070,7 +2113,7 @@ class Chain:
         try:
             if remote.gm_transport() == "local" and not (workers.AUTO_HOMEBASE and workers._hb.get("ok")):
                 return     # timed attempts will run locally: nothing to push
-            workers.prepush_solver(snap, self.sdir, log=say)
+            workers.prepush_solver(snap, self.sdir, log=say, warm=warm)
         except Exception as e:  # noqa: BLE001 - optimization only
             say(f"[{cid}] pre-push note: {e}")
 
@@ -2126,7 +2169,8 @@ class Chain:
             # A speed-only generalize doesn't wait for them either (rehearsal D8 binary: ~10 s idle before the worker launched);
             # Mastery still awaits them below.
             speed_only = mode == "time_trial" and bool(pre) and set(pre) <= {"solver_too_slow", "single_seconds"}
-            pre.update(self._late_probes(cid, wait=(mode != "time_trial" or bool(pre)) and not speed_only))
+            pre.update(self._late_probes(cid, wait=(mode != "time_trial" or bool(pre)) and not speed_only,
+                                         defer_compound=mode == "mastery"))
             if pre:
                 self.generalize(cid, wrong=None, fixed=None, diag=pre)
         elif mode != "time_trial":
@@ -2134,7 +2178,7 @@ class Chain:
             # Mastery-failure generalize instead (timed_stage awaits all probes there). D9 + rehearsal: script's Mastery
             # sat 5.2-5.4 s on the codec-family probe (~10 s under 5-lane load); its only hits ever were D7 replays.
             done = self._await_probes(LATE_PROBE_WAIT)
-            late = self._late_probes(cid, wait=done)
+            late = self._late_probes(cid, wait=done, defer_compound=mode == "mastery")
             if not done:
                 say(f"[{cid}] probes still running after {LATE_PROBE_WAIT:g}s: Mastery starts now (a failure "
                     "generalize takes their results)")
