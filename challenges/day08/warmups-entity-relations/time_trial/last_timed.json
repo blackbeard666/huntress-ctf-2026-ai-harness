@@ -1,21 +1,25 @@
 {
   "result": "correct",
   "full_result": "correct",
-  "attempt_id": "d248acae-0ffb-494f-8e7b-a746e118a1e5",
-  "window": null,
-  "elapsed": 3.39,
-  "in_window": 2.91,
+  "attempt_id": "889384b3-31b6-43ba-bd87-c4944cff4711",
+  "window": 8.0,
+  "elapsed": 1.86,
+  "in_window": 0.85,
   "phases": {
-    "start": 0.48,
-    "download": 0.19,
-    "solve": 1.64,
-    "submit": 1.07
+    "start": 1.0,
+    "download": 0.15,
+    "solve": 0.02,
+    "submit": 0.69
   },
   "routed": "homebase (window unknown)",
   "novel_labels": {},
-  "deadline": null,
+  "deadline": "2026-10-12T00:36:18.683Z",
   "verified": {
-    "message": "bright-blanket-ivy-12"
+    "message": "dashing-beacon-marble-33"
   },
-  "attempts_remaining": 128
+  "attempts_remaining": 124,
+  "run_for_time": true,
+  "hall_of_fame_eligible": true,
+  "ranked_attempts_remaining": 124,
+  "variant_fresh": true
 }

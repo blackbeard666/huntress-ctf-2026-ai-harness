@@ -12,5 +12,19 @@
     "d06-pdf-001-pdf-header-version": "1.4",
     "d07-zip-001-zip-eocd-total-entries": "2",
     "d07-zip-001-zip-central-directory-member-names": "[\"room-01/item-1.txt\",\"room-02/item-1.txt\"]"
+  },
+  "4fe36ddf-105e-4e63-8107-33a070acb27a": {
+    "evidence-note-filename": "evidence-note.txt",
+    "evidence-note-size-bytes": "33",
+    "evidence-note-md5": "1061dd440cd79f6ebed36f48b003607b",
+    "evidence-note-sha1": "401afe3fc306da155ea579564eb592cabfaad407",
+    "evidence-note-sha256": "9c4c76fbb8af3a3b06022914d3b12e87f7404f5d3540b03c3612f75f9d3c0b8c",
+    "evidence-note-magic-prefix-hex-16": "43617365203138384445313030454137",
+    "evidence-note-text-utf8-bom-present": "false",
+    "d04-jpeg-001-jpeg-sof-dimensions-pixels": "257x146",
+    "d05-png-001-png-ihdr-dimensions-pixels": "269x153",
+    "d06-pdf-001-pdf-header-version": "1.4",
+    "d07-zip-001-zip-eocd-total-entries": "2",
+    "d07-zip-001-zip-central-directory-member-names": "[\"room-01/item-1.txt\",\"room-02/item-1.txt\"]"
   }
 }

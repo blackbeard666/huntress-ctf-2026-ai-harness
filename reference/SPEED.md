@@ -497,3 +497,10 @@ mobile 25/29/34, warmups 26/30/116, metadata 34/37/41, **binary 38/46/60** (real
   mutations under 5-lane load) vs a 0.32 s real Mastery solve; the gate's only firing ever. Fixed: the gate re-times the
   two runs alone (best of 2) before acting (idle re-measure 0.41 s).
 - Without those two, every lane would have finished by ~T+60.
+
+### Warm daemon live check (2026-10-12, bcf3509, Day 8 TT + Mastery x warmups/mobile/metadata through timed.run)
+6/6 correct. Solve phase 0.02 s (was 0.13-0.18 s: interpreter start). In-window 0.73-0.91 s on the TTs; the rest is
+GM: start 1.0-1.36 s (pre-clock, GM-side attempt creation), download ~0.15-0.3 s/request, submit ~0.55 s (one Mastery
+submit 3.9 s = GM load). HoF (GM-measured) improved where the new attempt beat the old best: warmups TT 627 -> 411 ms
+(#12), metadata TT 752 -> 409 ms (#7), warmups M 685 -> 557 ms (#20); leaders 222-289 ms. Remaining gap = GM round
+trips (download + submit), not our code.

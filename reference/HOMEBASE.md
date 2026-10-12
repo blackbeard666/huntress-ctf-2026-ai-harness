@@ -76,3 +76,13 @@ would leave 12 for AI); it idle-stops after the run, as before.
 - Shadow for **all lanes on a relaunch** (n>=1: the local worker already failed once; diversity is cheap insurance).
 - Measure `HCTF_HB_CREDITS_PER_USD` (one UI read before/after); if credits are cheap per $, raise SHADOW_MAX/lanes.
 - Post-run ratchet / speed-harden on Bedrock to keep local Claude limits for drop time.
+
+## Warm timed-attempt daemon (2026-10-12, bcf3509)
+Timed attempts on Homebase run in `hctf/hb_daemon.py` (one process per run, started at provisioning over one
+persistent ssh stdio channel) instead of an ssh exec of `hb_timed.py` per attempt. Each solver dir gets a zygote
+(`hctf/hb_zygote.py`) that ran the solver's top level once; every solve is a fork of it (12-51 ms vs 150-230 ms).
+GM traffic from the daemon goes to the PUBLIC GM with this copy's bearer (sent over the ssh channel, kept in memory
+only; 170 ms/call vs 232 ms via the inside proxy). The prepush warms the zygote before the first clock; hot-pushed
+daemon code restarts it. Off switches: `HCTF_HB_DAEMON=0` (per-attempt ssh exec, as before), `HCTF_HB_PUBLIC_GM=0`
+(inside proxy). Logs: `~/hw/.run/hb_daemon.log` (+ `.err`). Live 2026-10-12 on Day 8 (6/6 correct): solve phase 0.02 s
+(was 0.13-0.18), HoF warmups TT 627 -> 411 ms (#26 -> #12), metadata TT 752 -> 409 ms (#41 -> #7), warmups M 685 -> 557 ms.

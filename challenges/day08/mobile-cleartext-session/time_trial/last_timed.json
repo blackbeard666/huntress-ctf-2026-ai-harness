@@ -1,21 +1,25 @@
 {
   "result": "correct",
   "full_result": "correct",
-  "attempt_id": "b5307a64-5520-488d-8e20-7dedc8ee63c8",
+  "attempt_id": "48d9bfba-8397-460b-ad27-131d79217cf5",
   "window": 8.0,
-  "elapsed": 3.98,
-  "in_window": 1.1,
+  "elapsed": 2.02,
+  "in_window": 0.9,
   "phases": {
-    "start": 2.88,
-    "download": 0.19,
-    "solve": 0.13,
-    "submit": 0.78
+    "start": 1.12,
+    "download": 0.32,
+    "solve": 0.02,
+    "submit": 0.56
   },
-  "routed": "homebase (window unknown)",
+  "routed": "homebase (window 8s)",
   "novel_labels": {},
-  "deadline": "2026-10-08T13:05:53.969Z",
+  "deadline": "2026-10-12T00:36:24.895Z",
   "verified": {
-    "answer": "ANS-8CC39DFF2A9E0892"
+    "answer": "ANS-7EF7BDFA643E3445"
   },
-  "attempts_remaining": 31
+  "attempts_remaining": 28,
+  "run_for_time": true,
+  "hall_of_fame_eligible": true,
+  "ranked_attempts_remaining": 28,
+  "variant_fresh": true
 }
