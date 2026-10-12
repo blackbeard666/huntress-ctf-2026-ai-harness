@@ -40,7 +40,7 @@ def _logfile(chal_dir, stage, pool):
 
 # ilio-style bounds: cap each worker's turns so a stuck agent can't grind up cost. Wall-clock timeout
 # is passed in; turns are a second, independent ceiling. Override via HCTF_MAX_TURNS_<STAGE>.
-MAX_TURNS = {"single": 80, "generalize": 50, "fix": 30, "ratchet": 40}
+MAX_TURNS = {"single": 80, "generalize": 50, "fix": 30, "ratchet": 80}  # ratchet: a serial pass needs ~50-60 (D8/D10 cut at 40)
 
 
 def _max_turns(stage):
@@ -256,6 +256,9 @@ def _worker_cmd(stage, lane, prompt=None):
     return cmd
 
 
+WARM_TURN_WAIT = float(os.environ.get("HCTF_WARM_TURN_WAIT", "15"))   # s send_task waits for the READY turn to end
+
+
 class WarmWorker:
     """A Single Solve worker launched at CHAIN START (beside GM start + download + triage), on stream-json input:
     message 1 = the static prompt + "reply READY, wait"; message 2 (send_task) = triage + go. Day 8: workers launched at
@@ -283,8 +286,29 @@ class WarmWorker:
     def alive(self):
         return self.p.poll() is None
 
+    def warm_turn_done(self):
+        """The warm-up turn ("READY") has ended: its stream-json `result` line is in the log."""
+        try:
+            with open(self.log, errors="replace") as f:
+                for ln in f:
+                    if '"result"' in ln:   # cheap pre-filter; key order in the CLI's JSON is not fixed
+                        try:
+                            if json.loads(ln).get("type") == "result":
+                                return True
+                        except ValueError:
+                            pass
+        except OSError:
+            pass
+        return False
+
     def send_task(self, text):
-        """Deliver the real task and close stdin (the worker exits after its last turn, like `claude -p`)."""
+        """Deliver the real task and close stdin (the worker exits after its last turn, like `claude -p`).
+        Waits (bounded) for the warm turn to END first: unlinking the flag while it still runs made the Stop hook block
+        "READY" with "Not done", and the worker set off without its task text (D10 metadata/mobile/warmups: "the go
+        message never arrived")."""
+        deadline = time.time() + WARM_TURN_WAIT
+        while self.alive() and not self.warm_turn_done() and time.time() < deadline:
+            time.sleep(0.05)
         self.flag.unlink(missing_ok=True)
         self._send(text)
         self.p.stdin.close()
@@ -942,15 +966,19 @@ def prepush_solver(src, dst, log=print):
     page cache is warmed once at provisioning instead: warm_homebase_imports.)"""
     import threading
     key, ev = str(dst), threading.Event()
-    _prepush[key] = ev
+    prev, _prepush[key] = _prepush.get(key), ev
 
     def go():
         t0 = time.time()
         try:
+            if prev is not None:
+                prev.wait(PREPUSH_WAIT)   # an earlier (stamp-time) pre-push of this dir is in flight: never rsync beside it
             rel = Path(dst).relative_to(ROOT)
+            sig = _solver_sig(src)
+            if _pushed.get(key) == sig:
+                return     # the stamp-time pre-push already shipped exactly this code (+ warmed its zygote)
             sync_homebase_base()
             push_hot_files()
-            sig = _solver_sig(src)
             how = push_solver(src, rel)
             _pushed[key] = sig
             log(f"[homebase] pre-pushed {rel} ({how}) in {time.time() - t0:.1f}s")
@@ -1107,7 +1135,7 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
     """Run the clock-critical timed attempt ON Homebase (adjacent to the GM). Returns hb_timed's JSON dict.
     Syncs hctf+lib (base) and the solver so hb_timed can execute it next to the GM."""
     rel = solver_dir.relative_to(ROOT)
-    t_kick = time.time()
+    t_kick, prepush_wait = time.time(), 0.0
     # Kickoff (sync + solver push) runs over the flaky local->Homebase VPN link; the retrying ssh/rsync ride
     # through transient drops, but if it still fails, return exec_error so run_timed_auto falls back to local
     # rather than crashing the whole attempt. (Once hb_timed is running, its in-window GM calls are HB->inside
@@ -1121,7 +1149,9 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
             # itself; cases/ (6-8 MB of regression bytes on the hard lanes) is never needed to run the solver.
             ev = _prepush.get(str(solver_dir))
             if ev is not None:
+                t_w = time.time()
                 ev.wait(PREPUSH_WAIT)   # a pre-push of this verified solver is in flight: never rsync beside it
+                prepush_wait = time.time() - t_w
             sig = _solver_sig(solver_dir)
             if _pushed.get(str(solver_dir)) != sig:
                 push_solver(solver_dir, rel)
@@ -1162,7 +1192,8 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
         except (IndexError, ValueError):
             return {"result": "exec_error", "detail": (r.stdout + r.stderr)[-500:]}
     # kickoff = local sync/push before the ssh exec; exec_total = the whole remote round trip (start..result)
-    res["kickoff"] = {"push": round(t_exec - t_kick, 2), "exec_total": round(time.time() - t_exec, 2)}
+    res["kickoff"] = {"push": round(t_exec - t_kick, 2), "prepush_wait": round(prepush_wait, 2),
+                      "exec_total": round(time.time() - t_exec, 2)}
     # Bring the attempt's bytes + result.json back, so the variant can become a local regression case.
     import re as _re
     slug = _re.sub(r"[^A-Za-z0-9]+", "_", cid)

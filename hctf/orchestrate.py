@@ -241,12 +241,23 @@ def carry_over_note(lane, sdir, ids):
 
 
 SET_RE = re.compile(r"^(?:set|slot)[._-]?\d+[._-]")
+VARIANT_RE = re.compile(r"^(d\d{2}[-_][a-z0-9]+[-_])\d{3}(?=[-_])")
+
+
+def field_shape(aid):
+    """An answer id minus its set prefix and per-variant counter: `set1.d09-pe-003-pe-x-hex` -> `d09-pe-N-pe-x-hex`.
+    D10 metadata: TT/Mastery asked `d09-pe-00{2,3,4}-...` = the Single's own `d09-pe-001-...` field re-rolled."""
+    return VARIANT_RE.sub(r"\1N", SET_RE.sub("", aid or ""))
+
+
+def _contract_ids(contract):
+    return [a for a in list((contract or {}).get("answer_ids") or [])
+            + [q.get("id") or "" for q in (contract or {}).get("questions") or []] if a]
 
 
 def _contract_shape(contract):
-    """(answer-id families with the set prefix stripped, artifact member extensions) of a contract."""
-    ids = list((contract or {}).get("answer_ids") or []) + [q.get("id") or "" for q in (contract or {}).get("questions") or []]
-    fams = {SET_RE.sub("", a) for a in ids if a}
+    """(answer-id families with the set prefix + variant counter stripped, artifact member extensions) of a contract."""
+    fams = {field_shape(a) for a in _contract_ids(contract)}
     exts = set()
     for q in (contract or {}).get("questions") or []:
         art = (q.get("artifact") or "").split("->")[-1].strip()
@@ -265,14 +276,15 @@ def mastery_delta(single_contract, timed_contracts):
     extra_f, extra_e = set(), set()
     for tc in timed_contracts:
         fam, ext = _contract_shape(tc)
-        extra_f |= fam - sfam
+        # compared on field_shape, SHOWN as a real id (set prefix stripped) the worker can grep in the timed contracts
+        extra_f |= {SET_RE.sub("", a) for a in _contract_ids(tc) if field_shape(a) in fam - sfam}
         extra_e |= ext - sext
     if not extra_f and not extra_e:
         return ""
     parts = []
     if extra_f:
-        parts.append(f"{len(extra_f)} question id(s) the Single never asks, e.g. "
-                     + ", ".join(f"`{x}`" for x in sorted(extra_f)[:12]))
+        ex = sorted({field_shape(x): x for x in sorted(extra_f, reverse=True)}.values())   # one example per field
+        parts.append(f"{len(ex)} question id(s) the Single never asks, e.g. " + ", ".join(f"`{x}`" for x in ex[:12]))
     if extra_e:
         parts.append("artifact kinds the Single doesn't ship: " + ", ".join(f"`.{e}`" for e in sorted(extra_e)))
     return ("MASTERY COMPOUNDS: the Time Trial / Mastery contracts (status-time, under this challenge's time_trial/ and "
@@ -280,14 +292,22 @@ def mastery_delta(single_contract, timed_contracts):
             "dispatch on question text / artifact type; reuse earlier days' parsing for earlier days' concepts.")
 
 
-def stage_prior_solver(prior, sdir):
-    """Copy an earlier day's solver dir (cases/ included, __pycache__ and generalize scratch excluded) into `sdir`,
-    keeping anything already there. Returns `sdir`."""
+def stage_prior_solver(prior, sdir, cases=True):
+    """Copy an earlier day's solver dir (__pycache__ and generalize scratch excluded; cases/ only when `cases`) into
+    `sdir`, keeping anything already there. Returns `sdir`."""
     sdir = Path(sdir)
     sdir.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(prior, sdir, dirs_exist_ok=True,
-                    ignore=shutil.ignore_patterns("__pycache__", ".generalize-*", "*.pyc"))
+    skip = ("__pycache__", ".generalize-*", "*.pyc") + (() if cases else ("cases",))
+    shutil.copytree(prior, sdir, dirs_exist_ok=True, ignore=shutil.ignore_patterns(*skip))
     return sdir
+
+
+def stage_prior_cases(prior, sdir):
+    """The prior solver's cases/ (regression + variant corpus), copied AFTER the worker's go: D10 binary's go waited
+    11.6 s on Day 9's 411 MB cases/ while the code it needs was 1 file. Joined before anything reads cases/."""
+    src = Path(prior) / "cases"
+    if src.is_dir():
+        shutil.copytree(src, Path(sdir) / "cases", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
 
 
 def prior_solver_dir(lane, sdir):
@@ -560,6 +580,7 @@ DEFER_RECON_RATIO = float(os.environ.get("HCTF_DEFER_RECON_RATIO", "0.8"))
 PRESTAGE_PRIOR = os.environ.get("HCTF_PRESTAGE_PRIOR", "1") != "0"
 # Pre-push + warm the verified Single solver on Homebase at "ready" (workers.prepush_solver). 0 = push at kickoff.
 PREPUSH = os.environ.get("HCTF_PREPUSH", "1") != "0"
+PREPUSH_AT_STAMP = os.environ.get("HCTF_PREPUSH_AT_STAMP", "1") != "0"   # start the pre-push at the solver stamp
 PRIOR_DRY_RUN_SECONDS = float(os.environ.get("HCTF_PRIOR_DRY_RUN_SECONDS", "15"))
 COMPOUND_PROBE_SECONDS = float(os.environ.get("HCTF_COMPOUND_PROBE_SECONDS", "45"))
 # Mastery speed gate: estimated Mastery solve (mutation probe's 2-set mastery-shape run) vs the known TT window. Mastery
@@ -620,6 +641,24 @@ def remeasure_estimate(sdir, mut_summary, mastery_contract, reps=2):
 
 LATE_PROBE_WAIT = float(os.environ.get("HCTF_LATE_PROBE_WAIT", "2"))
 ESTIMATE_MIN_MARGINAL = float(os.environ.get("HCTF_ESTIMATE_MIN_MARGINAL", "0.15"))
+
+
+def tt_solve_cap(tt_last, mastery_contract):
+    """Upper bound on the Mastery solve from the passing Time Trial's measured in-window `solve` phase (one set, same
+    executor): solve x Mastery sets x 1.5 (floor 0.05 s/set). None without a correct TT with phases or a set count."""
+    try:
+        last = json.loads(Path(tt_last).read_text())
+        solve = float((last.get("phases") or {})["solve"])
+        mc = json.loads(Path(mastery_contract).read_text())
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+    if last.get("result") != "correct":
+        return None
+    ids = mc.get("answer_ids") or [q.get("id") for q in mc.get("questions") or [] if q.get("id")]
+    sets = {a.split(".", 1)[0] for a in ids if re.match(r"(set|slot)\d+\.", a or "")}
+    if not sets:
+        return None
+    return round(max(solve, 0.05) * len(sets) * 1.5, 2)
 
 
 def mastery_estimate(mut_summary, mastery_contract):
@@ -1562,7 +1601,7 @@ class Chain:
             if prior:
                 # Cumulative lane: copy yesterday's solver (all files, cases/ too) into place NOW, beside triage. Every
                 # D9 worker's first command was that copy: 6.5 s (script) / 15.6 s (binary, 230 MB under 5-lane load).
-                staged = ThreadPoolExecutor(max_workers=1).submit(stage_prior_solver, prior, self.sdir)
+                staged = ThreadPoolExecutor(max_workers=1).submit(stage_prior_solver, prior, self.sdir, False)
             else:
                 # Nothing reusable: start the worker from the harness skeleton (contract I/O, per-set loop, sha256-paired
                 # artifact lookup incl. Mastery's 'delivery N: x.apk' names) instead of hunting for a template (10-15s
@@ -1600,14 +1639,16 @@ class Chain:
             if staged is not None:
                 try:
                     staged.result(timeout=120)
+                    if prior and getattr(self, "_cases_fut", None) is None:
+                        self._cases_fut = ThreadPoolExecutor(max_workers=1).submit(stage_prior_cases, prior, self.sdir)
                 except Exception as e:  # noqa: BLE001 - the worker copies it itself (prompt below)
                     say(f"[{cid}] prior-solver staging note: {e}")
                     staged = False
             if prior and staged:
                 prior_note = (f"This lane's contract is CUMULATIVE: `{prior.relative_to(ROOT)}` is the latest earlier "
                               f"solver of this lane and already answers every earlier family. The harness ALREADY "
-                              f"copied it (all its files, cases/ included) into `{self.sdir.relative_to(ROOT)}` -- do NOT "
-                              "copy it again; add only today's new families there. "
+                              f"copied its code into `{self.sdir.relative_to(ROOT)}` (its cases/ corpus follows in the background) "
+                              "-- do NOT copy anything again; add only today's new families there. "
                               "Never use an old solver's output as your answer without today's bytes behind it.")
                 dry = self._prior_dry_run_text() if n == 0 else ""
                 if dry:
@@ -1627,7 +1668,10 @@ class Chain:
                 for m in ("time_trial", "mastery"):
                     tc = cli.load(f"{self.base}/{m}", "contract.json") or {}
                     tids += list(tc.get("answer_ids") or []) + [q.get("id") or "" for q in tc.get("questions") or []]
-                carry = carry_over_note(self.lane, self.sdir, tids)
+                # only ids today's Single does NOT ask: a re-rolled variant of today's own field is not a carry-over
+                # (D10 metadata: `d09-pe-00N-...` pointed the worker at Day 9's solver, which had no handler: ~20 s)
+                own = {field_shape(a) for a in _contract_ids(cli.load(cid, "start.json") or cli.load(cid, "contract.json"))}
+                carry = carry_over_note(self.lane, self.sdir, [a for a in tids if field_shape(a) not in own])
                 if carry:
                     prior_note += " EXCEPT: the timed contracts already carry earlier days' questions. " + carry
             delta = mastery_delta(cli.load(cid, "start.json") or cli.load(cid, "contract.json"),
@@ -1667,6 +1711,7 @@ class Chain:
                 done_evt.set()
                 if watch:
                     watch.join()
+                self._join_prior_cases(cid)
             if rc == workers.STOPPED_RC and self._ready_snap:
                 # Ended on purpose: CORRECT + verified solver. Restore the verified files, record the single as a
                 # regression case and go straight to the timed modes (the full-suite replay is not needed: the
@@ -1703,6 +1748,15 @@ class Chain:
                 return False
         set_state(self.base, stage="single:blocked")
         return False
+
+    def _join_prior_cases(self, cid):
+        """Wait for the background prior cases/ copy (stage_prior_cases) before anything reads cases/."""
+        fut = getattr(self, "_cases_fut", None)
+        if fut is not None:
+            try:
+                fut.result(timeout=300)
+            except Exception as e:  # noqa: BLE001 - the regression corpus is just smaller
+                say(f"[{cid}] prior cases/ copy note: {e}")
 
     # -- early handoff (speculative timed attempts while the Single Solve worker is still running)
     def _case_names(self):
@@ -1949,6 +2003,12 @@ class Chain:
         if not est or not tt_win:
             return
         limit = MASTERY_GATE_RATIO * tt_win
+        cap = tt_solve_cap(cli.cdir(tt["id"]) / "last_timed.json", cli.cdir(cid) / "contract.json") if tt else None
+        if cap is not None and cap < est:
+            # The Time Trial's in-window solve = ONE set on the executor Mastery will use, under real load: per-set cost
+            # can't exceed it. D10 warmups: probe-contention estimate 17.51 s (gate 24) vs TT solve 0.02 s x 48 sets.
+            say(f"[{cid}] Mastery speed estimate {est:g}s capped by the Time Trial's solve phase -> {cap:g}s")
+            est = cap
         say(f"[{cid}] Mastery speed estimate {est:g}s (TT window {tt_win:g}s, gate {limit:g}s)")
         if est > limit:
             # The probe timed its 1- and 2-set runs side by side with every other mutation (and 5 lanes' load), and the
@@ -1975,8 +2035,17 @@ class Chain:
         reproduces every GM-confirmed answer, keep that verified snapshot and set `ready`: run_local then ends the
         worker and the timed modes start from the snapshot at once. Day 6: 60% of worker time (1101/1850s) came after
         the first CORRECT, and every first-correct snapshot already passed its real TT+Mastery variants offline."""
+        early = None
         try:
             while not done.wait(SPEC_POLL):
+                if PREPUSH_AT_STAMP:
+                    # `hctf submit --from-solver` stamped this exact code: push it to Homebase NOW, 1-3 s before the
+                    # verdict + verification (D10: TT kickoffs waited 1.1-1.4 s on a push started at the verdict).
+                    # The verified push below re-pushes only if the code changed since (signature check).
+                    m = self._solver_mtimes()
+                    if m and m != early and self._submit_stamp(cid, m):
+                        early = m
+                        self._prepush_verified(cid, self.sdir)
                 if cli.is_complete(cid):
                     if ready.is_set():
                         return   # the Homebase shadow handed over first
@@ -2463,6 +2532,35 @@ RATCHET = os.environ.get("HCTF_RATCHET", "1") != "0"
 RATCHET_TIMEOUT = float(os.environ.get("HCTF_RATCHET_TIMEOUT", str(15 * 60)))
 
 
+RATCHET_GATE = ("tests/test_orchestrate.py", "tests/test_day6_fixes.py", "tests/test_day7_fixes.py", "tests/test_codec.py")
+
+
+def _lib_changed(backup):
+    """True when lib/ differs from the pre-ratchet snapshot (any file added, removed or edited; __pycache__ ignored)."""
+    import filecmp
+
+    def walk(c):
+        return (c.left_only or c.right_only or c.diff_files or c.funny_files
+                or any(walk(sub) for name, sub in c.subdirs.items() if name != "__pycache__"))
+    return bool(walk(filecmp.dircmp(ROOT / "lib", backup, ignore=["__pycache__"])))
+
+
+def ratchet_gate(tag):
+    """The lib/ merge gate: the suites the ratchet prompt names + the ATT&CK coverage check all pass."""
+    import subprocess as _sp
+    cmds = [[sys.executable, t] for t in RATCHET_GATE if (ROOT / t).exists()]
+    cmds.append([sys.executable, "-m", "lib.refs.coverage", str(int(tag[3:]))])
+    for cmd in cmds:
+        try:
+            bad = _sp.run(cmd, cwd=ROOT, capture_output=True, timeout=600).returncode
+        except _sp.TimeoutExpired:
+            bad = "timeout"
+        if bad:
+            say(f"[ratchet] {tag}: `{' '.join(cmd[1:])}` fails after the merge ({bad})")
+            return False
+    return True
+
+
 def ratchet(day):
     """Post-run, single-writer knowledge merge: collect every `## Proposed lib additions` section the day's workers
     wrote in solver/NOTES.md and let ONE worker fold the GM-confirmed ones into lib/ (workers no longer edit lib/
@@ -2482,25 +2580,24 @@ def ratchet(day):
                             proposals="\n\n".join(props) or "(no `## Proposed lib additions` this day)")
     say(f"[ratchet] {tag}: technique logs + {len(props)} lib proposal section(s)")
     # Transactional: a killed/timed-out ratchet left lib/ half-edited on the rehearsal replay (an unvalidated helper that
-    # extracted 0 files). Snapshot lib/, and restore it unless the worker exits 0 AND the test suites still pass.
+    # extracted 0 files). Snapshot lib/, and restore it unless the test suites still pass. The TESTS are the gate, not
+    # the exit code: D8 + D10 hit max_turns mid technique-log and threw away GM-confirmed lib edits (D10: the u32
+    # hex-width law, re-applied by hand afterwards).
     backup = ROOT / ".run" / f"ratchet-lib-{tag}"
     shutil.rmtree(backup, ignore_errors=True)
     shutil.copytree(ROOT / "lib", backup, ignore=shutil.ignore_patterns("__pycache__"))
     rc, log = workers.run_local(paths.CHALLENGES / tag, "ratchet", prompt, {"HCTF_STAGE": "ratchet"}, RATCHET_TIMEOUT)
-    ok = rc == 0
-    if ok:
-        import subprocess as _sp
-        for t in ("tests/test_orchestrate.py", "tests/test_day6_fixes.py"):
-            if (ROOT / t).exists() and _sp.run([sys.executable, t], cwd=ROOT, capture_output=True, timeout=600).returncode:
-                ok = False
-                say(f"[ratchet] {tag}: {t} fails after the merge")
-    if ok:
-        shutil.rmtree(backup, ignore_errors=True)
-        say(f"[ratchet] {tag}: merged ({Path(log).name})")
+    changed = _lib_changed(backup)
+    ok = not changed or ratchet_gate(tag)
+    if not changed:
+        say(f"[ratchet] {tag}: lib/ unchanged (worker exit {rc}; {Path(log).name})")
+    elif ok:
+        say(f"[ratchet] {tag}: merged{'' if rc == 0 else f' (worker exit {rc}, tests green: edits kept)'} ({Path(log).name})")
     else:
         shutil.rmtree(ROOT / "lib")
         shutil.copytree(backup, ROOT / "lib")
-        say(f"[ratchet] {tag}: REVERTED lib/ (worker exit {rc}); proposals stay in solver/NOTES.md ({Path(log).name})")
+        say(f"[ratchet] {tag}: REVERTED lib/ (worker exit {rc}, tests fail); proposals stay in solver/NOTES.md ({Path(log).name})")
+    shutil.rmtree(backup, ignore_errors=True)
     if SPEED_HARDEN:
         try:
             speed_harden(day=day)
