@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from pathlib import Path
 
 from . import remote
@@ -630,7 +631,8 @@ def sync_homebase_base(force=False):
 # Small files that change DURING a run and that hb_timed reads on Homebase: labels learned mid-run (vocab.json) and
 # hot-fixes to the timed runner. sync_homebase_base pushes the tree once per process, so on Day 8 both live hb_timed
 # fixes and every mid-run vocab label had to be pushed by hand.
-HOT_FILES = ("hctf/hb_timed.py", "lib/vocab.json", "lib/playbook.py")
+HOT_FILES = ("hctf/hb_timed.py", "hctf/hb_daemon.py", "hctf/hb_zygote.py", "lib/vocab.json", "lib/playbook.py")
+DAEMON_CODE = ("hctf/hb_timed.py", "hctf/hb_daemon.py", "hctf/hb_zygote.py")
 _hot_pushed = {}
 
 
@@ -651,6 +653,8 @@ def push_hot_files():
     for f, sig in changed:
         remote.rsync_to(ROOT / f, f"~/{HB_WORK}/{f}")
         _hot_pushed[f] = sig
+    if any(f in DAEMON_CODE for f, _ in changed):
+        restart_hb_daemon()       # the running daemon holds the old code; the next attempt starts a fresh one
 
 
 TIMED_FWD = ("HCTF_PIPELINE_SETS", "HCTF_PIPELINE_MIN_MB", "HCTF_PIPELINE_DL", "HCTF_SOLVER_PARALLEL")
@@ -736,6 +740,7 @@ def _provision(log):
         sync_homebase_base()
         _hb["provisioned"] = True
         warm_homebase_imports()
+        hb_daemon(log)            # up before the first clock (its own TLS handshakes + interpreter start)
     except Exception as e:  # noqa: BLE001 - provisioning is best-effort; deps usually already present
         log(f"[homebase] provisioning note (continuing): {e}")
         _hb["provisioned"] = True
@@ -949,6 +954,10 @@ def prepush_solver(src, dst, log=print):
             how = push_solver(src, rel)
             _pushed[key] = sig
             log(f"[homebase] pre-pushed {rel} ({how}) in {time.time() - t0:.1f}s")
+            d = hb_daemon(log)
+            if d is not None:      # warm zygote for this solver before the first clock (prepush already pushed it)
+                w = d.call("warm", timeout=30, solver=str(rel))
+                log(f"[homebase] solver zygote warm ({w.get('warm_ms')} ms load)")
         except Exception as e:  # noqa: BLE001 - an optimization: the kickoff pushes as before
             log(f"[homebase] pre-push note: {str(e)[:200]}")
         finally:
@@ -967,6 +976,131 @@ def warm_homebase_imports():
     job = (f"cd ~/{HB_WORK} && PYTHONPATH=~/{HB_WORK} timeout 120 python3 -c {shlex.quote(py)} {mods}; "
            "node -e 0; 7z i")
     remote.ssh(f"setsid nohup sh -c {shlex.quote(job)} </dev/null >/dev/null 2>&1 &", timeout=20, check=False)
+
+
+# Warm timed-attempt daemon on Homebase (hctf/hb_daemon.py): one persistent ssh stdio channel per run; attempts run in
+# it with warm solver zygotes and kept-alive GM connections. HCTF_HB_DAEMON=0 -> ssh exec of hb_timed.py per attempt.
+HB_DAEMON = os.environ.get("HCTF_HB_DAEMON", "1") != "0"
+# Timed GM traffic from Homebase to the PUBLIC GM with this copy's bearer (170 ms/call vs 232 ms via the inside proxy;
+# identity = the token, not the VM). 0 -> inside proxy, no token sent.
+HB_PUBLIC_GM = os.environ.get("HCTF_HB_PUBLIC_GM", "1") != "0"
+DAEMON_RETRY_S = 60
+
+
+class DaemonError(RuntimeError):
+    pass
+
+
+class HbDaemon:
+    """Client for hb_daemon.py over `ssh ... python3 hctf/hb_daemon.py --stdio` (requests answered concurrently)."""
+
+    def __init__(self, log=print, argv=None, gm_url=None, token=None):
+        """argv/gm_url/token: tests run the daemon locally against a stand-in GM."""
+        self.log, self.lock, self.pending, self.p = log, threading.Lock(), {}, None
+        cmd = f"cd ~/{HB_WORK} && exec python3 hctf/hb_daemon.py --stdio 2>>.run/hb_daemon.err"
+        self.p = subprocess.Popen(argv or ["ssh", *remote.SSH_OPTS, f"{remote.HB_USER}@{remote.HB_HOST}", cmd],
+                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        threading.Thread(target=self._read, name="hb-daemon-read", daemon=True).start()
+        if gm_url:
+            gm, tok = gm_url, token
+        else:
+            gm, tok = (remote.PUBLIC_GM, _gm_token()) if HB_PUBLIC_GM else (remote.INSIDE_GM, None)
+        ev, res = threading.Event(), {}
+        self.pending["hello"] = (ev, res)
+        self._write({"hello": 1, "gm": gm, "token": tok})   # the bearer goes over the ssh channel only
+        if not ev.wait(40) or not res.get("ok"):
+            self.close()
+            raise DaemonError(f"daemon did not come up: {res or 'timeout'}")
+        self.gm = res.get("gm")
+
+    def _write(self, obj):
+        with self.lock:
+            self.p.stdin.write(json.dumps(obj) + "\n")
+            self.p.stdin.flush()
+
+    def _read(self):
+        for line in self.p.stdout:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            slot = self.pending.pop(r.get("id"), None)
+            if slot:
+                slot[1].update(r)
+                slot[0].set()
+        for ev, res in list(self.pending.values()):
+            res.update(ok=False, error="daemon channel closed")
+            ev.set()
+
+    def alive(self):
+        return self.p is not None and self.p.poll() is None
+
+    def call(self, op, timeout=60, **kw):
+        if not self.alive():
+            raise DaemonError("daemon not running")
+        rid, ev, res = uuid.uuid4().hex, threading.Event(), {}
+        self.pending[rid] = (ev, res)
+        try:
+            self._write({"id": rid, "op": op, **kw})
+        except (OSError, ValueError) as e:
+            raise DaemonError(f"daemon write failed: {e}") from None
+        if not ev.wait(timeout):
+            self.pending.pop(rid, None)
+            raise DaemonError(f"daemon {op} timed out after {timeout}s")
+        if not res.get("ok"):
+            raise DaemonError(str(res.get("error"))[:300])
+        return res
+
+    def close(self):
+        try:
+            if self.alive():
+                self._write({"id": "bye", "op": "shutdown"})
+                self.p.stdin.close()
+                self.p.wait(timeout=5)
+        except Exception:  # noqa: BLE001
+            pass
+        if self.p is not None and self.p.poll() is None:
+            self.p.kill()
+
+
+_daemon = {"d": None, "failed_at": 0.0}
+_daemon_lock = threading.Lock()
+
+
+def _gm_token():
+    try:
+        return (ROOT / "secrets" / "gm_pairing_token").read_text().strip() or None
+    except OSError:
+        return os.environ.get("HUNTRESS_GM_TOKEN")
+
+
+def hb_daemon(log=print):
+    """The run's daemon, started on first use; None when disabled or (recently) unavailable."""
+    if not HB_DAEMON:
+        return None
+    with _daemon_lock:
+        d = _daemon["d"]
+        if d is not None and d.alive():
+            return d
+        if time.time() - _daemon["failed_at"] < DAEMON_RETRY_S:
+            return None
+        try:
+            t0 = time.time()
+            _daemon["d"] = HbDaemon(log)
+            log(f"[homebase] timed daemon up in {time.time() - t0:.1f}s (gm {_daemon['d'].gm})")
+            return _daemon["d"]
+        except Exception as e:  # noqa: BLE001 - the ssh-exec path still works
+            _daemon.update(d=None, failed_at=time.time())
+            log(f"[homebase] timed daemon unavailable ({str(e)[:160]}); per-attempt ssh exec")
+            return None
+
+
+def restart_hb_daemon(log=print):
+    with _daemon_lock:
+        d, _daemon["d"], _daemon["failed_at"] = _daemon["d"], None, 0.0
+    if d is not None:
+        d.close()
+        log("[homebase] timed daemon restarted (code changed)")
 
 
 def run_hb_timed(solver_dir, cid, op="start", timeout=60):
@@ -1000,19 +1134,33 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
     # sub-ms latency) so tight windows (e.g. the 6s scripting Time Trial) fit; the public GM's ~2.7s/call
     # round-trips blow those windows even warm.
     t_exec = time.time()
-    try:
-        rft = os.environ.get("HCTF_RUN_FOR_TIME")   # pool policy (hb_timed._hof_wanted); default there: HoF
-        fwd = "".join(f"{k}={shlex.quote(v)} " for k, v in timed_env(cid).items())
-        r = remote.ssh(f"cd ~/{HB_WORK} && HUNTRESS_GAME_MASTER_URL={remote.INSIDE_GM} "
-                       + (f"HCTF_RUN_FOR_TIME={shlex.quote(rft)} " if rft is not None else "") + fwd
-                       + f"python3 hctf/hb_timed.py {shlex.quote(cid)} {shlex.quote(str(rel))} --op {op}",
-                       timeout=timeout, check=False)
-    except (remote.Unreachable, subprocess.SubprocessError, OSError) as e:
-        return {"result": "exec_error", "detail": f"homebase exec failed: {e}"}
-    try:
-        res = json.loads(r.stdout.strip().splitlines()[-1])
-    except (IndexError, ValueError):
-        return {"result": "exec_error", "detail": (r.stdout + r.stderr)[-500:]}
+    res = None
+    d = hb_daemon()
+    if d is not None:
+        opts = timed_env(cid)
+        if os.environ.get("HCTF_RUN_FOR_TIME") is not None:
+            opts["HCTF_RUN_FOR_TIME"] = os.environ["HCTF_RUN_FOR_TIME"]
+        try:
+            res = d.call("attempt", timeout=timeout, cid=cid, solver=str(rel), op_mode=op, opts=opts)["result"]
+            res["via"] = "daemon"
+        except DaemonError as e:
+            # Mid-attempt loss: the ssh path's `start` reconnects to the same attempt (start is idempotent).
+            res = None
+            print(f"[homebase] daemon attempt failed ({e}); ssh exec of hb_timed.py", flush=True)
+    if res is None:
+        try:
+            rft = os.environ.get("HCTF_RUN_FOR_TIME")   # pool policy (hb_timed._hof_wanted); default there: HoF
+            fwd = "".join(f"{k}={shlex.quote(v)} " for k, v in timed_env(cid).items())
+            r = remote.ssh(f"cd ~/{HB_WORK} && HUNTRESS_GAME_MASTER_URL={remote.INSIDE_GM} "
+                           + (f"HCTF_RUN_FOR_TIME={shlex.quote(rft)} " if rft is not None else "") + fwd
+                           + f"python3 hctf/hb_timed.py {shlex.quote(cid)} {shlex.quote(str(rel))} --op {op}",
+                           timeout=timeout, check=False)
+        except (remote.Unreachable, subprocess.SubprocessError, OSError) as e:
+            return {"result": "exec_error", "detail": f"homebase exec failed: {e}"}
+        try:
+            res = json.loads(r.stdout.strip().splitlines()[-1])
+        except (IndexError, ValueError):
+            return {"result": "exec_error", "detail": (r.stdout + r.stderr)[-500:]}
     # kickoff = local sync/push before the ssh exec; exec_total = the whole remote round trip (start..result)
     res["kickoff"] = {"push": round(t_exec - t_kick, 2), "exec_total": round(time.time() - t_exec, 2)}
     # Bring the attempt's bytes + result.json back, so the variant can become a local regression case.

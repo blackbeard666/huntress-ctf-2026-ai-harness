@@ -26,8 +26,37 @@ HW = Path(__file__).resolve().parent.parent          # project root locally; ~/h
 CAP_RE = re.compile(r"(?:/download/|[?&]capability=)([0-9a-f]{64})")  # Homebase proxy or public GM
 
 
+class _Ctx(__import__("threading").local):
+    """Per-attempt state. hb_daemon runs several attempts at once in one process (one thread each)."""
+    lane = None
+    opts = None
+
+
+_CTX = _Ctx()
+_TOKEN = None    # set in-process by hb_daemon: the bearer lives in its memory only (never env / argv / disk)
+SOLVER = None    # hb_daemon: callable(solve_path, args, env, timeout) -> obj with stdout/stderr/returncode (zygote fork)
+
+
+def _opt(key, default=None):
+    """A per-attempt knob: the attempt's opts (hb_daemon) first, then this process's environment."""
+    o = _CTX.opts
+    if o and key in o:
+        return o[key]
+    return os.environ.get(key, default)
+
+
+def _run_solver(solve, contract, artifacts, timeout, env):
+    """solve.py on (contract, artifacts): a warm zygote fork under hb_daemon, else a fresh interpreter."""
+    args = ["--contract", str(contract), "--artifacts", str(artifacts)]
+    if SOLVER is not None:
+        return SOLVER(str(solve), args, env, timeout)
+    return subprocess.run([sys.executable, str(solve), *args], capture_output=True, text=True, timeout=timeout, env=env)
+
+
 def _token():
     """Pairing token for the public GM: env first, then the project-local secret (None in-network)."""
+    if _TOKEN:
+        return _TOKEN
     tok = os.environ.get("HUNTRESS_GM_TOKEN")
     if tok:
         return tok.strip()
@@ -76,6 +105,28 @@ class _Pool:
                 pass                      # will reconnect lazily on first use
         return c
 
+    def fresh(self, want=8):
+        """Before a clock: drop sockets idle past IDLE_MAX and pre-open fresh ones (TCP+TLS) up to `want`, in parallel.
+        A one-shot process's pool was just built (no-op); hb_daemon's pool idles between attempts."""
+        import queue
+        keep = []
+        while True:
+            try:
+                c = self.q.get_nowait()
+            except queue.Empty:
+                break
+            if time.time() - getattr(c, "_hctf_used", 0) <= self.IDLE_MAX and c.sock is not None:
+                keep.append(c)
+            else:
+                c.close()
+        need = max(0, want - len(keep))
+        if need:
+            with ThreadPoolExecutor(max_workers=need) as ex:
+                keep += list(ex.map(lambda _: self._new(), range(need)))
+        for c in keep:
+            self.q.put(c)
+        return self
+
     IDLE_MAX = float(os.environ.get("HCTF_POOL_IDLE_MAX", "3"))   # s idle before reuse (D8: 3.5 s ok, 5.7 s dropped)
 
     def request(self, method, query, body=None, headers=None, timeout=None):
@@ -116,7 +167,16 @@ class _Pool:
 _POOL = None
 
 
+_POOL_LOCK = __import__("threading").Lock()
+
+
 def _pool():
+    global _POOL
+    with _POOL_LOCK:
+        return _pool_locked()
+
+
+def _pool_locked():
     global _POOL
     if _POOL is None:
         # Pre-open enough connections (BEFORE the clock) for a many-file Mastery: from the public GM each download is
@@ -194,7 +254,7 @@ def _post_once(payload, tries=3):
 # D8) and Single Solve reject the property with 409 timed_intent_not_available -> resend without it.
 # HCTF_RUN_FOR_TIME=0 (scout / probes that must not spend ranked attempts): never ask for the HoF pool.
 def _hof_wanted(cid):
-    return os.environ.get("HCTF_RUN_FOR_TIME", "1") == "1" and cid.rsplit("/", 1)[-1] in ("time_trial", "mastery")
+    return _opt("HCTF_RUN_FOR_TIME", "1") == "1" and cid.rsplit("/", 1)[-1] in ("time_trial", "mastery")
 
 
 def _post_start(payload, tries=3):
@@ -207,7 +267,7 @@ def _post_start(payload, tries=3):
     if payload.get("run_for_time") and "timed_intent_not_available" in err:
         body = _post_once({k: v for k, v in payload.items() if k != "run_for_time"}, tries)
     elif (not payload.get("run_for_time") and "training_rotation_invalid" in err
-          and os.environ.get("HCTF_RUN_FOR_TIME", "1") == "1"):
+          and _opt("HCTF_RUN_FOR_TIME", "1") == "1"):
         body = _post_once({**payload, "run_for_time": True}, tries)
     return body
 
@@ -299,9 +359,6 @@ def _suffix(aid):
     return m.group(1) if m else None
 
 
-_LANE = None
-
-
 def _lane_from_solver_dir(sd):
     """Lane for the per-lane playbook, from the challenge's meta.json next to the solver dir."""
     try:
@@ -314,13 +371,13 @@ def _playbook_alts(aid, cur):
     """Playbook-ranked candidate labels for a wrong field (e.g. VBS On-Error control -> error_guard first), so a
     BRAND-NEW construct the GM has never confirmed can still be corrected in-window on its first encounter. Best
     effort: lib may be unavailable, and the resolver falls back to vocab.json either way."""
-    if not _LANE:
+    if not _CTX.lane:
         return []
     try:
         if str(HW) not in sys.path:
             sys.path.insert(0, str(HW))
         from lib import playbook
-        return [c for c in playbook.seed_candidates(_LANE, aid, solver_value=cur) if c and c != cur]
+        return [c for c in playbook.seed_candidates(_CTX.lane, aid, solver_value=cur) if c and c != cur]
     except Exception:  # noqa: BLE001 - never let the playbook break the clock path
         return []
 
@@ -329,13 +386,13 @@ def _is_label(aid, vocab):
     """A synthetic-label field (closed-vocab family in vocab.json, or a playbook family for this lane)."""
     if (_suffix(aid) or "") in vocab:
         return True
-    if not _LANE:
+    if not _CTX.lane:
         return False
     try:
         if str(HW) not in sys.path:
             sys.path.insert(0, str(HW))
         from lib import playbook
-        return playbook.entry_for(_LANE, aid) is not None
+        return playbook.entry_for(_CTX.lane, aid) is not None
     except Exception:  # noqa: BLE001
         return False
 
@@ -455,7 +512,7 @@ def _total_bytes(body):
     """Delivery bytes: the body's artifact sizes, else the caller's HCTF_EXPECT_BYTES (from the status-time contract --
     a live start body lists no sizes)."""
     n = sum(int(x.get("size") or 0) for x in body.get("artifacts") or [] if isinstance(x, dict))
-    return n or int(os.environ.get("HCTF_EXPECT_BYTES") or 0)
+    return n or int(_opt("HCTF_EXPECT_BYTES") or 0)
 
 
 def _set_plan(body, plan, ids):
@@ -509,8 +566,7 @@ def _pipelined(sets, plan, body, ids, adir, solve, env, fetch, left, out, t_star
                    questions=[q for q in body.get("questions") or [] if _setkey(q.get("id") or "") == k])
         (d / "contract.json").write_text(json.dumps(sub))
         t_first.append(time.time())
-        r = subprocess.run([sys.executable, str(solve), "--contract", str(d / "contract.json"), "--artifacts", str(d)],
-                           capture_output=True, text=True, timeout=max(1.0, budget_end - time.time()), env=env)
+        r = _run_solver(solve, d / "contract.json", d, max(1.0, budget_end - time.time()), env)
         got = json.loads(r.stdout.strip().splitlines()[-1])
         return {i: got[i] for i in sub["answer_ids"] if i in got}
 
@@ -524,7 +580,7 @@ def _pipelined(sets, plan, body, ids, adir, solve, env, fetch, left, out, t_star
                         futs[k] = solver_pool.submit(run_set, k)
 
     try:
-        with ThreadPoolExecutor(max_workers=max(1, PIPELINE_DL)) as ex:
+        with ThreadPoolExecutor(max_workers=max(1, int(_opt("HCTF_PIPELINE_DL", "3")))) as ex:
             for _ in ex.map(fetch_one, order):
                 pass
         out["_t_downloaded"] = time.time()
@@ -544,7 +600,7 @@ def _pipelined(sets, plan, body, ids, adir, solve, env, fetch, left, out, t_star
     if any(i not in answers for i in ids):
         out["pipeline_fallback"] = f"{sum(i not in answers for i in ids)} id(s) unanswered by the per-set runs"
         return None
-    out["pipelined"] = {"sets": len(sets), "dl_parallel": PIPELINE_DL,
+    out["pipelined"] = {"sets": len(sets), "dl_parallel": int(_opt("HCTF_PIPELINE_DL", "3")),
                         "first_set_solve_at": round(min(t_first) - t_started, 2) if t_first else None}
     return SimpleNamespace(stdout=json.dumps(answers), stderr="", returncode=0)
 
@@ -557,10 +613,26 @@ def main():
     ap.add_argument("--min-left", type=float, default=None,
                     help="re-roll a RESUMED attempt with less clock than this (s); default max(3, window/2)")
     a = ap.parse_args()
-    global _LANE
-    _LANE = _lane_from_solver_dir(a.solver_dir)
+    print(json.dumps(run_attempt(a.cid, a.solver_dir, op=a.op, min_left=a.min_left)))
+
+
+def run_attempt(cid, solver_dir, op="start", min_left=None, opts=None):
+    """One timed attempt (start -> download -> solve -> submit) -> the result dict main() prints. In-process entry
+    for hb_daemon: `opts` are this attempt's knobs (HCTF_EXPECT_BYTES, HCTF_RUN_FOR_TIME, ...), the solver runs via
+    SOLVER when set. Thread-safe: per-attempt state lives in _CTX."""
+    from types import SimpleNamespace
+    _CTX.lane, _CTX.opts = _lane_from_solver_dir(solver_dir), dict(opts or {})
+    try:
+        return _attempt(SimpleNamespace(cid=cid, solver_dir=solver_dir, op=op, min_left=min_left))
+    finally:
+        _CTX.lane = _CTX.opts = None
+
+
+def _attempt(a):
     tw = time.time()
-    _pool()                     # open + TLS-handshake the keep-alive connections BEFORE the clock starts
+    pool = _pool()              # open + TLS-handshake the keep-alive connections BEFORE the clock starts
+    if hasattr(pool, "fresh"):
+        pool.fresh()            # (hb_daemon: the pool idled since the last attempt -> replace stale sockets)
     t0 = time.time()
     out = {"cid": a.cid, "submitted": {}, "pool_warm": round(t0 - tw, 2)}
 
@@ -605,8 +677,7 @@ def main():
         out["start_refused"] = True
         if "rate_limited" in str(body.get("error")):
             out["gm_rate_limited"] = True
-        print(json.dumps(out))
-        return
+        return out
     t_started = time.time()
 
     # download artifacts into a temp dir next to the GM
@@ -628,13 +699,14 @@ def main():
 
     # Large multi-set Mastery bundle (D9 binary: 5 x 31 MB = 6.6 s of download, then a 5.4 s solve): fetch the sets a
     # few at a time and solve each one the moment its delivery lands, so most of the solve hides behind the downloads.
-    sets = _set_plan(body, plan, ids) if PIPELINE and plan and _total_bytes(body) >= PIPELINE_MIN_BYTES else None
+    sets = (_set_plan(body, plan, ids) if _opt("HCTF_PIPELINE_SETS", "1") == "1" and plan
+            and _total_bytes(body) >= float(_opt("HCTF_PIPELINE_MIN_MB", "20")) * 1e6 else None)
     piped = None
     try:
         if sets:
             piped = _pipelined(sets, plan, body, ids, adir, solve, env, _fetch, left, out, t_started)
         elif plan:
-            with ThreadPoolExecutor(max_workers=min(int(os.environ.get("HCTF_DL_PARALLEL", "48")), len(plan))) as ex:
+            with ThreadPoolExecutor(max_workers=min(int(_opt("HCTF_DL_PARALLEL", "48")), len(plan))) as ex:
                 for _ in ex.map(_fetch, plan):  # propagate any download exception
                     pass
     except GMError as e:
@@ -643,8 +715,7 @@ def main():
         out["result"] = "exec_error"
         out["gm_rate_limited"] = e.rate_limited
         out["detail"] = f"download failed: {e}"
-        print(json.dumps(out))
-        return
+        return out
     t_downloaded = out.pop("_t_downloaded", None) or time.time()
 
     # run the solver (already correct, offline-built); lib on PYTHONPATH
@@ -653,8 +724,7 @@ def main():
         if piped is not None:
             r = piped                       # every set answered by its own early run
         else:
-            r = subprocess.run([sys.executable, str(solve), "--contract", str(contract), "--artifacts", str(adir)],
-                               capture_output=True, text=True, timeout=budget, env=env)
+            r = _run_solver(solve, contract, adir, budget, env)
     except subprocess.TimeoutExpired as e:
         # Emit a real result (attempt_id + saved contract/bytes) instead of crashing: the caller then pulls THIS
         # variant for the speed generalize (a crash left a stale download dir that was mistaken for this attempt).
@@ -672,15 +742,13 @@ def main():
             out["result"] = "expired"
             out["clock_short"] = True
             out["detail"] = f"solver budget only {budget:.1f}s of a {win}s window (clock spent before the solve)"
-        _emit(out, adir)
-        return
+        return _emit(out, adir)
     try:
         answers = {k: _normalize(str(v), qmap.get(k, {})) for k, v in json.loads(r.stdout.strip().splitlines()[-1]).items()}
     except Exception:
         out["result"] = "solver_error"
         out["detail"] = r.stderr[-800:]
-        _emit(out, adir)
-        return
+        return _emit(out, adir)
 
     missing = [i for i in ids if i not in answers]
     out["submitted"] = answers
@@ -691,7 +759,7 @@ def main():
         out["result"] = "solver_incomplete"
         out["missing"] = missing
         part = {k: answers[k] for k in ids if k in answers and answers[k] != ""}
-        if part and os.environ.get("HCTF_PARTIAL_SUBMIT", "1") == "1":
+        if part and _opt("HCTF_PARTIAL_SUBMIT", "1") == "1":
             # Submit what the solver DID answer: the GM saves correct partial progress (banks whole Mastery sets) and
             # its verdict tells the generalize worker which answered fields to leave alone. An escalated variant (D7
             # metadata TT 1 -> 11 fields) used to burn the whole window with nothing submitted.
@@ -699,8 +767,7 @@ def main():
             out["phases"]["submit"] = round(time.time() - t_solved, 2)
             out["elapsed"] = round(time.time() - t0, 2)
             out["in_window"] = round(time.time() - t_started, 2)
-        _emit(out, adir)
-        return
+        return _emit(out, adir)
 
     # FAST PATH: submit EVERY answer in one request. A public-GM submit round-trip is ~0.2-several s, so N
     # sequential per-set POSTs can blow a ~6-10s Mastery window (set 1 banks, set 2 expires). One POST covering
@@ -708,7 +775,7 @@ def main():
     groups = {}
     for aid, v in answers.items():
         groups.setdefault(_setkey(aid), {})[aid] = v
-    if len(groups) > 1 and os.environ.get("HCTF_PARALLEL_SET_SUBMIT", "0") == "1":  # measured: no faster (GM serial)
+    if len(groups) > 1 and _opt("HCTF_PARALLEL_SET_SUBMIT", "0") == "1":  # measured: no faster (GM serial)
         # One POST per set, CONCURRENTLY over the pre-opened pool: a 798-answer single POST took 2.3-4.7 s from WSL
         # (no Homebase), the bulk of a 7 s Mastery window; per-set POSTs in parallel cost ~one smaller round-trip.
         with ThreadPoolExecutor(max_workers=len(groups)) as ex:
@@ -728,8 +795,7 @@ def main():
                 _localize(a.cid, answers, groups, per_set, body, out)
         out["elapsed"] = round(time.time() - t0, 2)
         out["in_window"] = round(time.time() - t_started, 2)
-        _emit(out, adir)
-        return
+        return _emit(out, adir)
     full = None
     for send in range(2):
         try:
@@ -752,8 +818,7 @@ def main():
                              f"{'resent once' if out.get('submit_resent') else 'not resent'}")
             out["elapsed"] = round(time.time() - t0, 2)
             out["in_window"] = round(time.time() - t_started, 2)
-            _emit(out, adir)
-            return
+            return _emit(out, adir)
     out["phases"]["submit"] = round(time.time() - t_solved, 2)
     fk = str(full.get("result", "")).lower()
     out["full_result"] = fk
@@ -763,8 +828,7 @@ def main():
         out["novel_labels"] = _novel(answers, _vocab())
         out["elapsed"] = round(time.time() - t0, 2)
         out["in_window"] = round(time.time() - t_started, 2)  # time that actually counts against the clock
-        _emit(out, adir)
-        return
+        return _emit(out, adir)
 
     # Not fully correct: break down per set to learn which set failed (clock permitting), so the offline
     # generalize worker gets granular feedback on the next cycle.
@@ -785,7 +849,7 @@ def main():
     out["bad_sets"] = [k for k, v in per_set.items() if v["result"] not in ("correct", "accepted")]
     out["elapsed"] = round(time.time() - t0, 2)
     out["in_window"] = round(time.time() - t_started, 2)  # excludes the pre-clock start/retry overhead
-    _emit(out, adir)
+    return _emit(out, adir)
 
 
 def _paired(ids, qs):
@@ -850,7 +914,7 @@ def _emit(out, adir):
         (adir / "result.json").write_text(json.dumps(out))
     except OSError:
         pass
-    print(json.dumps(out))
+    return out
 
 
 if __name__ == "__main__":
