@@ -1,0 +1,23 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "986225a4-aff3-4d8f-a8ed-2a65b54ea348",
+  "window": 11.0,
+  "elapsed": 1.35,
+  "in_window": 0.77,
+  "phases": {
+    "start": 0.58,
+    "download": 0.16,
+    "solve": 0.09,
+    "submit": 0.52
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": "2026-10-12T00:43:08.762Z",
+  "verified": {
+    "set1.d09-pe-003-pe-address-of-entry-point-rva-hex": "0x00063510",
+    "set2.d09-pe-004-pe-address-of-entry-point-rva-hex": "0x00065bd0"
+  },
+  "attempts_remaining": 1,
+  "hall_of_fame_eligible": true
+}

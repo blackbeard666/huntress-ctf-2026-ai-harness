@@ -53,6 +53,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Nimble"
   },
+  "binary-reverse-engineering-day-10-zig-cross-platform-services": {
+    "day": 10,
+    "dir": "day10/binary-zig-zag",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Zig Zag"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -107,6 +113,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Built Different"
   },
+  "metadata-forensics-day-10-where-do-we-begin": {
+    "day": 10,
+    "dir": "day10/metadata-where-do-we-begin",
+    "lane": "metadata-forensics",
+    "name": "🔎 Where Do We Begin?"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -160,6 +172,12 @@
     "dir": "day09/mobile-trust-everyone",
     "lane": "mobile-android",
     "name": "📱 Trust Everyone"
+  },
+  "mobile-android-day-10-network-config-split": {
+    "day": 10,
+    "dir": "day10/mobile-network-config-split",
+    "lane": "mobile-android",
+    "name": "📱 Network Config Split"
   },
   "read-the-rules": {
     "day": 1,
@@ -221,6 +239,12 @@
     "lane": "script-analysis",
     "name": "📜 All the World's a Stager"
   },
+  "script-analysis-day-10-wmi-persistence-reconstruction": {
+    "day": 10,
+    "dir": "day10/scripting-bind-over-matter",
+    "lane": "script-analysis",
+    "name": "📜 Bind Over Matter"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -274,6 +298,12 @@
     "dir": "day09/warmups-escape-room",
     "lane": "warmups",
     "name": "👶 Escape Room"
+  },
+  "warmups-day-10": {
+    "day": 10,
+    "dir": "day10/warmups-thirty-two-below",
+    "lane": "warmups",
+    "name": "👶 Thirty-Two Below"
   },
   "welcome-robots": {
     "day": 1,

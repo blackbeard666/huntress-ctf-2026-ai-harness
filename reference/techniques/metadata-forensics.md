@@ -1,4 +1,4 @@
-# metadata-forensics — technique log (days 1-9; updated after every day)
+# metadata-forensics — technique log (days 1-10; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -9,17 +9,18 @@ How this lane has looked so far (observations, not guarantees):
   earlier day's field + the new one). The member can itself be a container (D7/8: an inner ZIP whose own EOCD / CD is
   the asked field). Each day adds ONE member + ONE field; the previous kit members are byte-identical except the case id.
 - Day 9 crossed into EXECUTABLE headers (`pe.coff_machine_u16_hex`): the metadata lane now parses binaries too, but only
-  the raw header field -- answer the u16 as hex, not the binary lane's machine word (`i386`).
+  the raw header field -- answer the u16 as hex, not the binary lane's machine word (`i386`). Day 10 stayed on the SAME
+  PE (`pe.address_of_entry_point_rva_hex`) and DE-escalated: zip = the exe only, contract = 1 field (TT 1, Mastery 2x1).
 - A new `<fmt>.<field>` family each day: identity (name/size/hashes) -> magic prefix -> `text.utf8_bom_present` ->
   `jpeg.sof_dimensions_pixels` -> `png.ihdr_dimensions_pixels` -> `pdf.header_version` -> `zip.eocd_total_entries` ->
-  `zip.central_directory_member_names` -> `pe.coff_machine_u16_hex`. Since Day 3 the question literally names the field
+  `zip.central_directory_member_names` -> `pe.coff_machine_u16_hex` -> `pe.address_of_entry_point_rva_hex`. Since Day 3 the question literally names the field
   (`Determine <fmt>.<field> for <member>`); answer ids read `dNN-<fmt>-NNN-<fmt>-<field>` (`.`/`_` -> `-`). NOTE the
   `dNN` is the drop/member family, not the day the field appeared: Day 8's new field came as `d07-zip-001-zip-central-
-  directory-member-names`; Day 9's as `d09-pe-001-pe-coff-machine-u16-hex` (new member family -> new `dNN`).
+  directory-member-names`; Day 9's as `d09-pe-001-pe-coff-machine-u16-hex` (new member family -> new `dNN`); Day 10's as `d09-pe-001-pe-address-of-entry-point-rva-hex` (same exe family).
 - The prompt's flavor text describes decoys (impostors, renamed copies, "-with-bom" names, EXIF/presentation lies, chunk
   "passengers", catalog /Version overrides, "impossible provenance" names). The asked field so far was always the
-  STRUCTURAL truth from the header/record bytes; names/extensions/secondary metadata are the lie. All 9 single solves were
-  first-submit CORRECT in ~27-60 s; every TT/Mastery since Homebase (D4+) CORRECT first try.
+  STRUCTURAL truth from the header/record bytes; names/extensions/secondary metadata are the lie. Singles D1-D9 were
+  first-submit CORRECT in ~27-60 s; D10 took one wrong spelling (unpadded hex). Every TT/Mastery since D4 CORRECT first try.
 - The flavor promises MORE than the sample delivers (D9: "executables for several architectures, plus decoys wearing
   executable extensions" -> one honest i386 PE, no ELF/Mach-O/decoy in any mode). Expect the promised cases to arrive
   later as mutations; pre-arm the sibling parsers (ELF/Mach-O/decoy -> `none`) without guessing their spellings.
@@ -33,14 +34,16 @@ How this lane has looked so far (observations, not guarantees):
   constant (Day 7 entry count went 2/3/4/5 with drop number 001-004; member names `room-NN/item-K.txt`). Day 8 re-rolled
   ONLY the note's case id (`Case <hex> evidence note.`, 33 B) -> md5/sha1/sha256/magic differ per set; jpg 257x146, png
   269x153, pdf 1.4, eocd 2, CD names identical across single/TT/5 Mastery sets. D9 same, plus the PE: Machine 0x014c in
-  all 7 copies but the exe's sha256 differs per set (re-built per variant). Never cache a value across sets anyway.
-- **ESCALATED field set** -- the contract grows over time: D7 TT/Mastery went 1 -> 11 fields (Mastery 22); D8 started at
-  12 already in single (TT 12, Mastery 5 sets x 12 = 60); D9 13 (TT 13, Mastery 5 x 13 = 65). Families: the day's field +
+  all 7 copies but the exe's sha256 differs per set (re-built per variant). D10: the entry RVA re-rolled per variant
+  (single 0x00065bd0, TT 0x00063a80, Mastery 0x00063510 / 0x00065bd0). Never cache a value across sets.
+- **Field-set size** -- grows AND shrinks: D7 TT/Mastery went 1 -> 11 fields (Mastery 22); D8 12 in every mode (Mastery
+  5 x 12); D9 13 (Mastery 5 x 13); D10 back to ONE field everywhere (Mastery 2 sets x 1, zip = the lone exe). Families: the day's field +
   `evidence-note-{filename,size-bytes,md5,sha1,sha256,magic-prefix-hex-16,text-utf8-bom-present}` + carry-overs
   `d04-jpeg-*-sof-dimensions-pixels`, `d05-png-*-ihdr-dimensions-pixels`, `d06-pdf-*-header-version`, `d07-zip-*-eocd-
   total-entries`, `d07-zip-*-central-directory-member-names`, `d09-pe-*-pe-coff-machine-u16-hex`. Dispatch on the
   answer-id SUFFIX and keep EVERY earlier family answerable (reference: `challenges/day09/metadata-built-different/
-  solver/solve.py` answers all 13 + a pre-armed `elf-e-machine-u16-hex` branch).
+  solver/solve.py` answers all 13; `day10/metadata-where-do-we-begin/solver/solve.py` = those + entry/image-base/opt-magic
+  /ELF e_entry branches).
 - **Answer kinds** -- `exact_text`, `integer`, `pattern` (hashes, case-insensitive; D9 also `0x`-hex with `trim` only,
   so case MATTERS -> lowercase), `enum` (`accepted_values`), and since D8 `json` ("compact valid JSON array with exact
   values and order"). Emit per `answer_format.kind`; read `syntax` for prefix/case (`0x` yes for u16_hex, no for magic).
@@ -63,6 +66,7 @@ How this lane has looked so far (observations, not guarantees):
 | `zip.central_directory_*` / "inventory every stored path, preserve directory context" | walk `PK\x01\x02` from EOCD cd-offset (fallback `EOCD - cd_size` if data prepended): name len u16 @+28, extra @+30, comment @+32, name at +46; next = +46+n+e+c. Raw stored path, CD order, no basename/dedupe/sort; decode UTF-8 (flag bit 11 `0x800`, else try UTF-8 then cp437). `7z l -slt` / `zipinfo -1` as cross-check |
 | `pdf.header_version` / "declared versions" | `head -c 16 <f> | xxd` -> `%PDF-x.y` at offset 0; `grep -a -o '/Version[^/>]*'` only as a diagnostic |
 | `pe.coff_*` / "executables for several architectures", `.exe`/`.dll`/`.sys` | `MZ`@0 -> e_lfanew u32 LE @0x3C -> require `PE\0\0` there -> COFF FileHeader: Machine u16 @+4, NumberOfSections @+6, TimeDateStamp @+8, SizeOfOptionalHeader @+20, Characteristics @+22; OptionalHeader magic @+24 (`0x10b` PE32 / `0x20b` PE32+). `xxd -s $((0x3c)) -l 4` then `xxd -s <lfanew> -l 8`. `file`/`pefile` cross-check only |
+| `pe.address_of_entry_point_*` / `pe.image_base*` / "start addresses" | opt = e_lfanew+24: AddressOfEntryPoint u32 @opt+16 (an RVA); ImageBase u32 @opt+28 (PE32) / u64 @opt+24 (PE32+). `od -An -tx4 -j$((lfanew+40)) -N4 f`. objdump's "start address" = ImageBase+RVA (a VA, NOT the RVA) |
 | `elf.*` / `macho.*` siblings (promised "several architectures", not yet asked) | ELF: `\x7fELF`, EI_DATA @5 picks endianness, e_machine u16 @18. Mach-O: `feedface`/`feedfacf` (either byte order) cputype u32 @4; fat `cafebabe` = BE nfat_arch @4 + 20-B entries (Java .class shares `cafebabe`; small nfat_arch = fat). Emit hex in the same `0x%0Nx` width as the field's `uNN` |
 | exe-extension decoy (`.exe` that is text/zip/PNG, `MZ` with no/garbled `PE\0\0` at e_lfanew) | header absent -> literal `none` if the syntax offers it; never fall back to a later `PE\0\0` hit or the extension |
 | "impostor", "renamed", "disguise" | trust magic bytes at offset 0; a matching string deeper in the file is a decoy |
@@ -71,15 +75,12 @@ How this lane has looked so far (observations, not guarantees):
 | Mastery `set1.`..`setN.` ids, artifact `delivery N: <zip> -> <member>` or `<zip>-0N.zip -> <member>` | resolve each set's member separately; see delivery layouts below |
 
 ## Day by day
-**Day 1 — You Must Be This Hash to Ride** (identity inventory). One text member (TT `roster.csv`, Mastery a renamed
-`evidence-note-copy.txt` + original). filename / size-bytes / md5 / sha1 / sha256 via `zipfile` + `hashlib`; CORRECT
-~36 s first try. Mastery zip-of-zips first seen.
+**Day 1 — You Must Be This Hash to Ride** (identity: filename / size-bytes / md5 / sha1 / sha256 via `zipfile` +
+`hashlib`; CORRECT ~36 s). Mastery zip-of-zips first seen.
 
-**Day 2 — Looks Can Be Deceiving** (`<member>-magic-prefix-hex-16`): first 16 bytes, lowercase hex, no `0x`. CORRECT ~34 s.
-- Variants: TT `readme.exe` that was UTF-8 text; Mastery set2 `disguised-report.bin` that was a PDF.
-- TT question text named `roster.csv` while `answer_ids` said `readme-executable-...` and the zip held only `readme.exe`
-  -> `lib.common.find_artifact_hinted` (member ~ answer-id stem). TT `expired` = pre-Homebase latency, not analysis.
-- Mastery zip-of-zips broke name lookup (returned the inner zip's `PK..`) -> `find_artifact` recurses nested zips.
+**Day 2 — Looks Can Be Deceiving** (`magic-prefix-hex-16`: first 16 bytes, lowercase hex, no `0x`; ~34 s). TT `readme.exe`
+was text, Mastery `.bin` was a PDF. TT question text named a member that didn't exist -> `lib.common.find_artifact_hinted`;
+zip-of-zips broke name lookup -> `find_artifact` recurses nested zips.
 
 **Day 3 — BOM Voyage** (`text.utf8_bom_present` enum `true`/`false`). First 3 bytes == `EF BB BF`; CORRECT ~28 s.
 Mastery `export-001-with-bom.txt` really had a BOM -- decide from bytes, never the name. utf16/32 variants unconfirmed.
@@ -90,12 +91,9 @@ Mastery `export-001-with-bom.txt` really had a BOM -- decide from bytes, never t
 **Day 5 — Chunk Norris** (`png.ihdr_dimensions_pixels`). IHDR @0x10 BE u32 width,height -> `<width>x<height>` (Day 4
 form by analogy, accepted). IDAT/CRC/after-IEND "passenger" checks were diagnostics only. CORRECT ~33 s, first try.
 
-**Day 6 — Portable Deception** (PDF). `pdf.header_version` exact_text.
-- `xxd -l 16` -> `%PDF-1.4` -> answer bare `x.y`. Only one `%PDF-` marker; no catalog `/Version`; exiftool PDFVersion agreed.
-- Rules adopted (synthetic, NOT GM-judged): header must be at file start; `%PDF-` deeper (impostor) -> `none`; catalog
-  `/Version` (incl. incremental updates) never changes header_version.
-- Mastery: two same-named downloads addressed `delivery N: metadata-day-06-evidence.zip -> document-00N.pdf`; pre-fetched
-  contract listed 003/004, live asked 006/007 -> read the live start. CORRECT ~34 s; TT in_window 2.7 s.
+**Day 6 — Portable Deception** (`pdf.header_version`): `xxd -l 16` -> `%PDF-1.4` -> bare `x.y` (~34 s). Adopted, not
+GM-judged: header must be at offset 0 (deeper `%PDF-` -> `none`); catalog `/Version` never changes it. Mastery: two
+same-named downloads (`delivery N:` refs); pre-fetched contract listed 003/004, live asked 006/007.
 
 **Day 7 — Seven-Zip, No Relation** (ZIP EOCD census). `zip.eocd_total_entries` integer, id `d07-zip-001-zip-eocd-total-entries`.
 - Evidence zip held `evidence-drop-001.zip` (410 B, Stored, data-descriptor flag) with `room-01/item-1.txt`,
@@ -103,9 +101,8 @@ form by analogy, accepted). IDAT/CRC/after-IEND "passenger" checks were diagnost
 - All variants were honest: EOCD disk/total == CD headers == LFHs, no comment/trailing bytes. The prompt's "empty space"
   / "census that does not add up" (claim vs real walk, padding, dir entries) was flavor only — not exercised, so it is
   still unknown whether the GM wants the claimed or the walked count when they differ. Answer the field = the CLAIM.
-- Worker: `xxd | tail` + `7z l -slt` on triage's pre-extracted inner zip, then stdlib `struct` EOCD parser in solve.py
-  (ZIP64 aware). CORRECT 57 s after start, first try. TT 3 entries (in_window 0.89 s / 7 s); Mastery set1 4, set2 5
-  (1.33 s / 7 s). Pre-fetched mastery contract (003/004) matched live this time.
+- Worker: `xxd | tail` + `7z l -slt`, then a stdlib `struct` EOCD parser (ZIP64 aware). CORRECT 57 s, first try.
+  TT 3 entries, Mastery 4 / 5.
 
 **Day 8 — What's in the Box?** (`zip.central_directory_member_names`, kind `json`, id
 `d07-zip-001-zip-central-directory-member-names`). Prompt: "The count was only the beginning. Inventory every stored
@@ -117,12 +114,8 @@ path, preserve directory context, and identify the archive whose names reveal an
   the full stored path (never basename/dedupe/sort). No `../`, absolute, backslash or UTF-8/cp437 oddities appeared in
   any variant (UT extra, 2026-10-01 09:00, unix attrs); the "impossible provenance" decoy was NOT exercised -- still answer
   the raw CD names (the field says central_directory, not LFH, not sanitized).
-- Worker: 3 tool calls -- read contract + Day 7 solver, `7z l -slt` + `xxd | tail` on the pre-extracted inner zip, then
-  copied the Day 7 solve.py and added a CD walker + `json.dumps(names, separators=(",",":"), ensure_ascii=False)`.
-  Start 15:43:55Z -> CORRECT 15:44:22Z (~27 s), first try, all 12 confirmed.
-- TT: 8 s window, in_window 1.15 s (solve 0.13 s), CORRECT. Mastery: 5 sets / 60 answers, 10 s window, in_window 1.34 s,
-  CORRECT. Only the note's case id differed between variants.
-- LIB (ratchet D8): spelling recorded as `knowledge.ZIP_CD_MEMBER_NAMES_FMT` -> `json.dumps(names, separators=(",",":"))`.
+- Worker: copied the Day 7 solve.py + a CD walker + compact `json.dumps` (~27 s, first try). TT/Mastery (5 x 12)
+  CORRECT; only the note's case id differed. `knowledge.ZIP_CD_MEMBER_NAMES_FMT`.
 
 **Day 9 — Built Different** (`pe.coff_machine_u16_hex`, kind `pattern`, syntax "lowercase hexadecimal with a 0x prefix",
 norm `trim`, id `d09-pe-001-pe-coff-machine-u16-hex`). Prompt: "A software drop contains executables for several
@@ -134,13 +127,25 @@ architectures, plus decoys wearing executable extensions. Determine what can act
 - Key insight: the field name is the spec -- COFF FileHeader.Machine read as a u16 and printed `0x%04x` (zero-padded to 4
   digits: `0x014c`, not `0x14c`, not `i386`). The binary lane's `machine` word (`knowledge.PE_MACHINE` -> `i386`) is a
   DIFFERENT field; don't reuse it here.
-- Worker: 4 tool calls -- grep D8 solver's handlers + `jq` the pre-fetched TT/Mastery contracts (both errored: pre-start
-  contracts have no `answer_ids`, harmless), `file` + `xxd -l 64` + 3-line python `struct` (0x3C -> PE sig -> u16), then
-  `cp` the D8 solve.py and append a `pe-coff-machine-u16-hex` suffix branch (+ pre-armed ELF `e_machine` branch, `none`
-  for MZ-without-PE decoys). Start 13:00:07.1Z -> CORRECT 13:00:54.5Z (~47 s), first try, all 13 confirmed.
-- TT: 6 s window, in_window 2.88 s (submit round-trip 2.31 s, solve 0.14 s), CORRECT. Mastery: 5 sets / 65 answers, 7 s
-  window, in_window 2.49 s (solve 0.86 s -- 3 MB of nested Stored zips with 1.2 MB exes), CORRECT. Only the case id (note
-  hashes/magic) and exe bytes varied; Machine 0x014c everywhere.
+- Worker: `xxd -l 64` + 3-line `struct` (0x3C -> PE sig -> u16), `cp` the D8 solve.py + a suffix branch (~47 s, first
+  try). TT 6 s window in_window 2.88 s; Mastery 5 x 13, 7 s window, 2.49 s. Machine 0x014c everywhere.
+
+**Day 10 — Where Do We Begin?** (`pe.address_of_entry_point_rva_hex`, kind `pattern`, syntax "lowercase hexadecimal with
+a 0x prefix", norm `trim`, id `d09-pe-001-pe-address-of-entry-point-rva-hex`). Prompt: "Architecture tells you whether a
+binary can run; its entry point tells you where execution begins. Map the start addresses and catch the report that is
+lying."
+- Artifact: 595 KB zip holding ONLY `telemetry-agent-001.exe` (the D9 Go 1.22 386 PE32, 1,257,984 B, ImageBase 0x400000).
+  The D8 kit and every carry-over field were gone: 1 field in single, 1 in TT, 2 sets x 1 in Mastery. No "report" or
+  second binary anywhere -- the "lying report" flavor was unexercised.
+- Key insight: OptionalHeader.AddressOfEntryPoint (u32 @ e_lfanew+24+16) = 0x65bd0, printed `0x%08x` -> `0x00065bd0`.
+  Unpadded `0x65bd0` was REJECTED (first wrong submit in this lane): a `_hex` header field is zero-padded to its struct
+  width even when the id has no `uNN` (D9 u16 -> 4 digits, D10 u32 -> 8). objdump's `start address 0x00465bd0` is the
+  VA (ImageBase + RVA) -- not the asked RVA.
+- Worker: the harness skeleton (not the D9 solver) was in solver/, so it spliced D9's handlers in by `sed` (~30 s), then
+  `od -tx4 -j$((lfanew+40))`. Start 00:41:26Z -> incorrect 00:42:24 -> CORRECT 00:42:41 (~75 s, 1 wrong). Solver also
+  pre-arms image_base (PE32 `0x%08x`, PE32+ `0x%016x`), opt magic `0x%04x`, ELF e_entry (`0x%08x`/`0x%016x`) -- those
+  widths are the same rule by analogy, NOT GM-confirmed.
+- TT 8 s window, in_window 0.79 s (solve 0.03 s); Mastery 11 s, 0.77 s. Both CORRECT; RVA differed per variant.
 
 ## GM answer conventions learned
 - Filenames: exact base name incl. extension, no directory. Sizes: base-10 integer, no units. Hashes: hex, case ignored.
@@ -154,12 +159,14 @@ architectures, plus decoys wearing executable extensions. Determine what can act
 - JSON lists (`zip.central_directory_member_names`): compact array, no spaces after `,`, double quotes, full stored path
   with `/` dirs, CD order -- `["room-01/item-1.txt","room-02/item-1.txt"]` (GM-confirmed D8 single/TT/Mastery x5).
   Whether the GM's `trim` normalization also tolerates `", "` spacing is untested -- always emit compact.
-- Header integers as hex (`pe.coff_machine_u16_hex`): `0x` + lowercase hex zero-padded to the field width named in the
-  id (`u16` -> 4 digits): `0x014c` (GM-confirmed D9 single/TT/Mastery x5). Unpadded `0x14c` untested -- don't emit it.
-  Contrast: magic-prefix hex has NO `0x`; binary-lane `machine` wants the word (`i386`/`x86-64`).
-- Rejected spellings: none recorded in this lane (no wrong submission in any mode, days 1-9).
+- Header integers as hex (`*_hex`): `0x` + lowercase hex ZERO-PADDED to the struct field's width: u16 Machine ->
+  `0x014c` (D9), u32 AddressOfEntryPoint -> `0x00065bd0` (D10, all modes). The width comes from the STRUCT, not the id
+  (D10's id has no `u32`). Contrast: magic-prefix hex has NO `0x`; binary-lane `machine` wants the word (`i386`), and the
+  binary lane's `entry_point` was accepted UNPADDED (`0x401040`) -- different lane, different generator.
+- Rejected spellings: `0x65bd0` for pe.address_of_entry_point_rva_hex (D10 single; unpadded) -- the only one, days 1-10.
 - `knowledge.py`: `JPEG_DIMENSIONS_FMT`, `PNG_DIMENSIONS_FMT`, `PDF_HEADER_VERSION_FMT`, `ZIP_EOCD_TOTAL_ENTRIES_FMT`,
-  `ZIP_CD_MEMBER_NAMES_FMT`, `BOOL` (PE u16-hex form not there yet -- proposed D9).
+  `ZIP_CD_MEMBER_NAMES_FMT`, `PE_COFF_MACHINE_U16_HEX_FMT`, `PE_ENTRY_POINT_RVA_HEX_FMT` (+`_REJECTED`), `BOOL`;
+  `playbook` metadata `hex` entry carries the padding rule.
 - Inference: the field id IS the spec name (`sof_dimensions_pixels` = SOF frame header, `ihdr_` = IHDR chunk,
   `header_version` = file header, `eocd_total_entries` = EOCD record's own claim, `central_directory_member_names` = CD
   file-name fields, `coff_machine_u16_hex` = COFF FileHeader.Machine as u16 hex) — read the field name literally to
@@ -178,6 +185,7 @@ architectures, plus decoys wearing executable extensions. Determine what can act
 - Mastery day 9: same five-set shape, but the GM download is named `<challenge-id>-mastery.zip`
   (`metadata-forensics-day-09-built-different-mastery.zip`, 2.99 MB, Stored) while refs say `metadata-day-09-evidence-0N.zip
   -> <member>` -- resolve the bundle by sha256 (`lib.common.container_by_sha`), not by its filename.
+- Mastery day 10: TWO sets only, refs `metadata-day-10-evidence-0N.zip -> telemetry-agent-00N.exe` (003/004).
 - Mastery day 6: two downloads with identical filenames -> `delivery 1: <zip>` / `delivery 2: <zip>` in artifact refs.
 - Member numbering shifts between pre-fetched contract and live attempt (003/004 vs 006/007) — never hardcode names.
 
@@ -199,9 +207,11 @@ architectures, plus decoys wearing executable extensions. Determine what can act
   -- decompress each member once and cache by (set zip, member).
 - Executable fields: don't take `file`'s "Intel i386" / `pefile` machine names / the Go GOARCH token as the answer; the
   metadata field is the raw u16. And require `PE\0\0` exactly at e_lfanew -- an `MZ` stub alone is not a PE (decoy).
+- Hex width (D10, cost a wrong submit + 17 s): `"0x%x"` drops leading zeros; print `0x%0{2*size}x` for the field's
+  struct size. RVA vs VA: `_rva` = the raw field, never ImageBase + it.
 - Fastest path for a new carry-over day: copy the previous day's solver (which already answers every earlier family) and
   add only the new suffix handler -- D8 27 s, D9 47 s that way. The harness skeleton in `solver/solve.py` is NOT the
-  previous day's solver; copy from `challenges/day<NN-1>/metadata-*/solver/solve.py`.
+  previous day's solver; `cp challenges/day<NN-1>/metadata-*/solver/solve.py` over it (D10 spliced by sed instead).
 - Pre-fetched TT/Mastery `contract.json` is the HTTP 409 `start_required` body: `questions` (with ids, no sha tag) but
   NO `answer_ids` -- `jq '.answer_ids|map(..)'` errors; read `questions[].id` to preview the field set.
 - Harness: re-running `hctf start` on an already-solved challenge overwrote `single_solve/start.json` and made the stop gate

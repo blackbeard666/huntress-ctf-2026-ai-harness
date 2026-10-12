@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-10-zig-cross-platform-services",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Zig Zag",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-10-zig-cross-platform-services",
+    "time_trial": "binary-reverse-engineering-day-10-zig-cross-platform-services/time_trial",
+    "mastery": "binary-reverse-engineering-day-10-zig-cross-platform-services/mastery"
+  }
+}

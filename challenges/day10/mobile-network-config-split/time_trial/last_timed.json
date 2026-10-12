@@ -1,0 +1,22 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "691b2a2a-d0bf-45a8-9f12-2f7f8088af03",
+  "window": 13.0,
+  "elapsed": 1.62,
+  "in_window": 0.82,
+  "phases": {
+    "start": 0.8,
+    "download": 0.17,
+    "solve": 0.02,
+    "submit": 0.62
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": "2026-10-12T00:42:15.125Z",
+  "verified": {
+    "answer": "ANS-67B16EA61D3B7431"
+  },
+  "attempts_remaining": 15,
+  "hall_of_fame_eligible": true
+}

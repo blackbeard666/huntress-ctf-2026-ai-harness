@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-10-network-config-split",
+  "lane": "mobile-android",
+  "name": "📱 Network Config Split",
+  "ids": {
+    "single_solve": "mobile-android-day-10-network-config-split",
+    "time_trial": "mobile-android-day-10-network-config-split/time_trial",
+    "mastery": "mobile-android-day-10-network-config-split/mastery"
+  }
+}

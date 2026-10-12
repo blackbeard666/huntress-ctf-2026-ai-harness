@@ -1,4 +1,4 @@
-# binary-reverse-engineering — technique log (days 1-9; updated after every day)
+# binary-reverse-engineering — technique log (days 1-10; updated after every day)
 
 How this lane has looked so far (OBSERVATIONS, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -6,7 +6,8 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
 - One `evidence.zip` (AES, password `infected`). From Day 3 on it is CUMULATIVE: members `dNN--variant-XXX.<ext>`, one group per
   past day, plus ONE new container/language per day: D1 C ELF, D2 C++ (ELF or MinGW PE32+), D3 .NET dll (+runtimeconfig.json),
   D4 static stripped Go ELF, D5 static Rust ELF (debug_info), D6 Java .jar, D7 Kotlin fat .jar (5 MB, ~3300 entries), D8 Swift ELF
-  (67 MB, static stdlib+Foundation+ICU, not stripped), D9 Nim ELF (60 KB, dynamic glibc, not stripped).
+  (67 MB, static stdlib+Foundation+ICU, not stripped), D9 Nim ELF (60 KB, dynamic glibc, not stripped), D10 Zig ELF (134 KB,
+  dynamic glibc, stripped, clang/LLD 19 zig-bootstrap in `.comment`) -- a Zig PE `.exe` in Mastery set2.
   Answer ids `dNN_artifact_sha256_K` / `dNN_analysis_<field>`.
 - From Day 2 on, every new-day member carries the same embedded **HCFG** config blob: `'HCFG' | u8 ver | u8 xor_key | u16 len (LE) |
   u32 crc32 | xor'd JSON` (JSON at offset 12; crc32 is over the decoded plaintext). Only its storage location changes
@@ -14,14 +15,19 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   `.rodata` on D8, base64 Nim string literal in `.rodata` on D9). Scan raw bytes for `HCFG` AND for its base64 form `SENGR...` (raw `HCFG` can also be a false hit inside code: check crc).
   The JSON also carries never-asked keys (ipv4, windows_path, linux_path, service, host_model on D7): parse the whole dict so a new `config_<key>` id is free.
 - The analysis is easy (headers, symbols, one config blob). The hard part is the GM's exact label for a few `exact_text` fields (format,
-  machine, disassembly, symbol). The question set grows each day (9 → 17 → 24 → 32 → 40 → 48 → 56 → 80 → 90 fields); old groups reuse the same bytes,
+  machine, disassembly, symbol). The question set grows each day (9 → 17 → 24 → 32 → 40 → 48 → 56 → 80 → 90 → 100 fields); old groups reuse the same bytes,
   but D8 BACKFILLED old groups to 10 ids each (new: has_symtab, has_cpp_typeinfo/vtable, xor_key_hex, hcfg_version, compression_methods).
 - The prompt's theme (Rust panics, D7 "coroutine state machine", D8 Swift "protocols", D9 Nim "runtime fingerprints") has NOT
   been asked since D4: the new group gets sha256, format, config_campaign/domain/mutex/url/crc32_hex + 1-3 extra ids
-  (architecture D4-D5/D8-D9, hcfg_version D6-D7, elf_class/machine as INTEGERS D8-D9, `hcfg_offset` D9). Usually exactly ONE
+  (architecture D4-D5/D8-D10, hcfg_version D6-D7, elf_class/machine as INTEGERS D8-D9, `hcfg_offset` D9, `has_hcfg_section`
+  D10). Usually exactly ONE
   never-seen field per day: grep the new group's ids against the solver's field table before anything else.
-- Time Trial ≈ 6-11 s; Mastery = `setN.` prefixed copies, 2 sets (7-12 s) through D7, 5 sets / 400-450 ids / 20-27 s on D8-D9;
-  artifacts are named `delivery N: evidence.zip`.
+- Time Trial ≈ 6-16 s; Mastery = `setN.` prefixed copies, 2 sets (7-12 s) through D7, 5 sets / 400-450 ids / 20-27 s on D8-D9,
+  3 sets / 300 ids / 28 s on D10; artifacts are named `delivery N: evidence.zip`.
+- **D10 RELAXED the label fields**: 36 ids are now `kind: pattern` whose syntax ACCEPTS equivalents (format: "ELF or PE; case,
+  ELF32/ELF64/PE32/PE32+ accepted"; machine/architecture: "standard tool or symbolic label, or decimal/hex code"; e_type and
+  endianness: symbolic constant / readelf label / numeric code; .NET format: any container_runtime token with CLI/CLR/.NET). D8-D9's
+  integer machine became pattern. Keep emitting the GM-confirmed spellings; the old REJECTED lists may be stale for pattern ids.
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
 - **HCFG location / encoding** -- same blob, different storage per container (`.hcfg` section, .NET FieldRVA, Go/Rust rodata,
@@ -32,19 +38,21 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   (D9: the `S` of the base64 text). 30696 in all 6 D9 variants (single, TT, Mastery x5) but compute it: record `m.start()` of
   whichever scan hit (raw or base64) validated. For a raw-blob member it would presumably be the `HCFG` offset (unconfirmed).
 - **xor key / config values** -- re-roll per variant; derive from the header byte, never from the sample.
-- **Container per member** -- ELF vs PE32+ `.exe` re-rolls per member: Mastery set2 had d02 C++ as `.exe` (D3-D5, D7) and d04 Go as
-  `.exe` (D4, D5, D7); D6 set2 had both as ELF. Labels come from the header of THIS member (Go PE: format `pe`, architecture `x86-64` from Machine).
+- **Container per member** -- ELF vs PE32+ `.exe` re-rolls per member: Mastery set2 had d02 C++ as `.exe` (D3-D5, D7, D10) and d04
+  Go as `.exe` (D4, D5, D7, D10); D6 set2 had both as ELF; D10 set2 had the NEW d10 Zig member as a PE too (format `pe`). Labels come from the header of THIS member (Go PE: format `pe`, architecture `x86-64` from Machine).
 - **Variant index per group** -- `dNN--variant-XXX` re-rolls per group and mode (D7 TT: d03-001, d04-006, d07-005 ...); sizes
   and config values change, names/layout don't. TT == Mastery set1 bytes on D7; D8 TT re-used the D7 TT old-group indices
   (d08 = variant-000); D9 TT == set1 for d02-d09 (d09 BR09-003) but d01 differed (TT variant-000 `8100`, all 5 Mastery sets one
   other d01 with `mov eax, 8104`, symtab present). Mastery d09 = BR09-003/006/001/004/007; d08 stayed variant-000..004.
 - **Mastery packaging** -- `setN.` prefixed ids, each set its own `delivery N: evidence.zip` (same filename): pair by sha256.
-  Set count re-rolls: 2 (D2-D7), 5 on D8-D9 (set2/set4 had d02/d04 as PE both days): loop over every `setN.`. From D9 (all
+  Set count re-rolls: 2 (D2-D7), 5 on D8-D9 (set2/set4 had d02/d04 as PE both days), 3 on D10: loop over every `setN.`. From D9 (all
   lanes) the first question of each set ends `Evidence case: d09-m-<16hex>. [assigned-artifact-sha256:<zip sha256>]`
   (TT: `d09-tt-...`): an explicit set -> delivery map; it is question TEXT, never part of an answer.
 - **answer_format.kind for the same field name** -- D8: `d01_analysis_elf_class`/`machine` exact_text (`ELF64`/`x86-64`) and
   `d08_analysis_elf_class`/`machine` integer (`64`/`62`) in ONE contract; D9 `d09_analysis_machine` integer again. Rule:
   dispatch on `kind`, not on the field name.
+- **Feature-presence fields** -- `has_<thing>_section` (D10 `has_hcfg_section`, enum true/false) for ELF AND PE: answer from the
+  member's section-name table (`.hcfg` literally; PE names are 8-byte NUL-padded), generic over `<thing>` (regex `has_(\w+?)_section`).
 - **Field set per old group** -- old groups gain ids over days (D8 padded every group to 10). Answer by field name from the
   parsed facts dict of THAT member; an unknown field must log and fall through, never crash. Keep the older 56/112-id cases passing.
   D9 kept D8's 10 ids for d01-d08 (d08: sha, architecture, elf_class, format, machine, 5 config) and added d09 with `hcfg_offset`.
@@ -69,20 +77,15 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
 | Real code-reversing question (not seen yet) | `rizin -q -c "aaa; pdf @ sym.<fn>"`; Ghidra headless `lib.binary.ghidra_decompile` (heavy, last resort) |
 
 ## Day by day
-**D1 "ELF Aware"** (9 Qs; ~14 min, 4 wrong). Plain C ELF64 x86-64 EXEC: class, endianness, machine, e_type, `.huntress` marker,
-has_symtab, designated symbol, recover_code constant, entry point. readelf -h/-S/-x, objdump; pyelftools + capstone in the solver.
-- Spellings were learned by rejection (see conventions table); the 3-wrong local cap hit on machine/endianness.
-- TT: 4-member "slot" bundle (`slot-0..3.elf`, ids `slotN_<qid>`); profiles stripped (has_symtab=false) and "section-beacon"
-  (designated fn renamed `inspect_section`; the renamed fn's constant was WRONG → `none`, unconfirmed).
+**D1 "ELF Aware"** (9 Qs; ~14 min, 4 wrong). C ELF64: class, endianness, machine, e_type, `.huntress` marker, has_symtab,
+recover_code constant, entry point (readelf/objdump; pyelftools + capstone). Spellings learned by rejection. TT "slot" bundle
+(`slotN_<qid>`): stripped profile and a renamed designated fn (→ `none`, unconfirmed).
 
-**D2 "Mangled"** (17 Qs; ~22 min, 5 wrong). + C++ build (ELF, or MinGW PE32+ `.exe` in variants). First HCFG sighting (`.hcfg`
-section). `mangled_score_symbol` = mangled `<Class>::score`, `vtable_symbol` = `_ZTV<class owning score>` (an unused base has only
-_ZTI/_ZTS). PE sets failed for hours because a set POST is all-or-nothing: `pe` was right all along, the PE SYMBOL fields wanted the
-COMDAT form `.text$<mangled>` / `.rdata$<mangled>`. A doubled backslash in the mutex (shell quoting) failed the first batch.
+**D2 "Mangled"** (17 Qs; ~22 min, 5 wrong). + C++ (ELF or MinGW PE32+). First HCFG (`.hcfg` section). vtable = `_ZTV<class owning
+score>`; PE symbol fields want COMDAT `.text$<mangled>` / `.rdata$<mangled>` (all-or-nothing set POSTs hid this for hours).
 
-**D3 "Table Manners"** (24 Qs; ~1 h 48 min, ~60 wrong, costliest day). + .NET 8 PE32 i386 dll. `dnfile` → BSJB `metadata_version`
-(v4.0.30319) and the FieldRVA HCFG blob; machine `i386`. New d01 JSON fields section_names / symbols / disassembly (forms in the
-table). `d03_analysis_format` = `pe_cli` after ~50 rejected synonyms (73 turns + operator probing): compose labels from spec tokens.
+**D3 "Table Manners"** (24 Qs; ~1 h 48 min, ~60 wrong). + .NET 8 PE32 i386 dll: `dnfile` → BSJB `v4.0.30319`, FieldRVA HCFG.
+`d03_analysis_format` = `pe_cli` after ~50 rejected synonyms: compose labels from spec tokens.
 
 **D4 "Go Fish"** (32 Qs; ~1.5 min, 1 wrong). New d04 = static, stripped Go ELF (go1.25 buildinfo). Reused the D3 solver unchanged for d01-d03.
 - `go version -m` → GOARCH; HCFG blob sat in Go rodata (magic scan). `d04_analysis_architecture`: `amd64` (GOARCH) REJECTED → `x86-64`
@@ -105,10 +108,8 @@ trait objects) was never asked; there is still no Rust-aware path (see reference
 - `javap -v -p Day07Variant000.class` → `private static final String CONFIG` ConstantValue base64 → HCFG (ver 1, key 0x31, len 368,
   crc32 checked). Answers: format `jar` (again), config values verbatim, hcfg_version `1`. Copied the D6 solver; only change: jar
   scan visits the Main-Class first and runtime packages last, returning at the first valid HCFG (D6 code scanned every class).
-- Unasked "state machine": `staged$1 extends ContinuationImpl {int label; Object L$0}`; `main` reads env `HUNTRESS_HOST_MODEL`
-  (default `workstation`) → `evaluate()` lookupswitch: workstation→`success`/13 events, analysis→`decoy`/7, sandbox→`failure`/3,
-  else `failure`/1; prints trace JSON `huntress.binary.dynamic_trace.v1` {branch, event_count, campaign, family
-  `loopback_stage_transfer`}. If branch/event questions appear: read them statically from `javap -c`, never run the jar.
+- Unasked "state machine": `main` reads env `HUNTRESS_HOST_MODEL` → `evaluate()` lookupswitch (workstation→`success`/13 events,
+  analysis→`decoy`/7, sandbox→`failure`/3); trace JSON `huntress.binary.dynamic_trace.v1`. If asked: read `javap -c`, never run it.
 - TT 5.8 s of an 11 s window, Mastery 6.4 s of 12 s, both first-try CORRECT (set2 had d02/d04 as PE `.exe`).
 
 **D8 "Swift Justice"** (80 Qs). New d08 = 67 MB static Swift ELF (~290k symbols, not stripped); old groups backfilled to 10 ids.
@@ -134,6 +135,18 @@ x86-64 EXEC (dynamic glibc, `.symtab` kept, 333 symbols, no `.comment`). d01-d08
 - Lost time: one jq call selected `.answer_id` (null); contract questions use `.id`.
 - TT 10 s window: 6.95 s in-window (download 3.45, solve 2.92), CORRECT first try. Mastery 20 s window, 5 sets / 450 ids:
   12.87 s in-window (download 6.62, solve 5.38), CORRECT first try.
+
+**D10 "Zig Zag"** (100 Qs; ~33 s start→CORRECT, 1 POST, 0 wrong). Prompt: "Zig promises one binary for every platform. Compare the
+ELF and PE service descriptors side by side". New d10 = `d10--variant-000.elf`, 134 KB Zig-built ELF64 x86-64 (dynamic glibc,
+stripped; `.comment` = clang/LLD 19.1.7 zig-bootstrap). The copied D9 solver answered everything else unchanged (d01-d09 + d10 sha/format/arch/machine/config).
+- HCFG sits RAW in a writable `.hcfg` section (`objdump -s -j .hcfg`: `HCFG 01 61 7001 ad03dace` = ver 1, key 0x61, len 368,
+  crc 0xceda03ad) -- the generic magic scan found it. Config `BR10-000` / `node-000.day10.example.invalid`.
+- The ONE new field: `d10_analysis_has_hcfg_section` (enum) = `true`. Worker: `readelf -SW | grep hcfg`, grep the solver's field
+  dispatch, add a generic `has_(\w+?)_section` branch over the parsed section names (ELF and PE). 3 tool calls.
+- The prompt's "ELF and PE side by side" only materialised in Mastery set2 (d10 as a Zig PE: format `pe`, machine `x86-64`,
+  has_hcfg_section `true`). No cross-container comparison field was asked.
+- TT 16 s window: in_window 2.85 s (download 0.92, solve 1.31). Mastery 3 sets / 300 ids, 28 s window: in_window 5.59 s (download
+  1.37, solve 3.62). Both CORRECT first try (BR10-007 / -001 / -004).
 
 ## GM answer conventions learned
 | Field family | Accepted form | Rejected (never resubmit) |
@@ -162,6 +175,7 @@ x86-64 EXEC (dynamic glibc, `.symtab` kept, 333 symbols, no `.comment`). d01-d08
 | metadata_version | BSJB root string `v4.0.30319` | net8.0 / TFM / assembly version |
 | config_* | values verbatim from the decoded HCFG JSON (mutex keeps ONE backslash) | JSON-escaped `\\` |
 | hcfg_version | header byte 4 as a decimal integer | — |
+| has_hcfg_section (D10, enum) | `true` when a section is literally named `.hcfg` (ELF Zig + PE Zig both `true`) | — |
 | hcfg_offset (`kind: integer`, D9) | decimal FILE offset of the stored blob's first byte (base64 text start: `30696`), single+TT+Mastery x5 | — (not tried: VA 0x4077e8, struct 0x77e0, `strings -t d` 30695) |
 | xor_key_hex | HCFG header byte 5 as `0x%02x` (D8: 0x51/0x61/0x71/0x31 for d04-d07) | — |
 | compression_methods (jar, `kind: json`) | sorted distinct ZIP `compress_type` ids, compact: `[0,8]` | — |

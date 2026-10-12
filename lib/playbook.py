@@ -23,6 +23,7 @@ from . import knowledge as K
 
 BINARY = "binary-reverse-engineering"
 SCRIPT = "script-analysis"
+METADATA = "metadata-forensics"
 
 
 def field_family(aid):
@@ -68,6 +69,17 @@ def _vbs_control_derive(terms, solver_value):
     if v in K.VBS_CONTROL_FOR_ONCE_CANDIDATES or "for" in ts:
         out += list(K.VBS_CONTROL_FOR_ONCE_CANDIDATES)
     return out
+
+
+def _hex_width_derive(terms, solver_value):
+    """Metadata `*_hex` header fields are zero-padded to the struct field's width (D9 u16 '0x014c', D10 u32
+    '0x00065bd0'; unpadded '0x65bd0' GM-rejected). For an unpadded solver value offer the padded widths it fits."""
+    v = (solver_value or "").strip().lower()
+    m = re.fullmatch(r"0x([0-9a-f]+)", v)
+    if not m:
+        return []
+    n = int(m.group(1), 16)
+    return [f"0x{n:0{w}x}" for w in (4, 8, 16) if n < 16 ** w and f"0x{n:0{w}x}" != v]
 
 
 PLAYBOOK = [
@@ -142,6 +154,16 @@ PLAYBOOK = [
         rule=".NET metadata_version = the CLI metadata root (BSJB) version string, e.g. `v4.0.30319` — NOT net8.0 / the "
              "target-framework moniker / the assembly version.",
         examples=("BSJB root -> v4.0.30319",),
+    ),
+    # ---- metadata-forensics ----------------------------------------------------------------------
+    PlaybookEntry(
+        lanes=(METADATA,), families=("hex",),
+        rule="Header integer `<fmt>.<field>_hex` = `0x` + LOWERCASE hex ZERO-PADDED to the struct field's width (u16 -> 4, "
+             "u32 -> 8, u64 -> 16 digits), even when the id names no width. Read the raw field (an `_rva` is the RVA, "
+             "not ImageBase+RVA). Byte-prefix fields (`magic_prefix_hex_N`) have NO `0x`.",
+        rejected=tuple(K.PE_ENTRY_POINT_RVA_HEX_REJECTED),
+        examples=("COFF Machine u16 0x14c -> 0x014c (D9)", "AddressOfEntryPoint u32 0x65bd0 -> 0x00065bd0 (D10)"),
+        derive=_hex_width_derive,
     ),
     # ---- script-analysis -------------------------------------------------------------------------
     PlaybookEntry(

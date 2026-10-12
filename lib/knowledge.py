@@ -94,6 +94,13 @@ ZIP_CD_MEMBER_NAMES_FMT = {"separators": (",", ":")}   # json.dumps(names, **FMT
 # asks for the raw constant. Unpadded "0x14c" never tried; only i386 seen (every "several architectures" decoy was i386).
 PE_COFF_MACHINE_U16_HEX_FMT = "0x{:04x}"
 
+# Day 10 "Where Do We Begin?" (metadata-forensics), confirmed 2026-10-12 (single, TT, Mastery 2 sets): id
+# d09-pe-NNN-pe-address-of-entry-point-rva-hex = OptionalHeader.AddressOfEntryPoint (u32 LE at e_lfanew+24+16, the raw
+# RVA -- not ImageBase+RVA) as "0x" + 8 zero-padded lowercase hex digits, e.g. "0x00065bd0". The id names no width:
+# pad to the STRUCT field's size (u32 -> 8), same law as the D9 u16. Unpadded "0x65bd0" REJECTED (D10 single).
+PE_ENTRY_POINT_RVA_HEX_FMT = "0x{:08x}"
+PE_ENTRY_POINT_RVA_HEX_REJECTED = ["0x65bd0"]
+
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {
     "resource_hijacking": "T1496",     # crypto-mining / resource hijacking

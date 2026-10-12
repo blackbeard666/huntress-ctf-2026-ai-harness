@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-10-wmi-persistence-reconstruction",
+  "lane": "script-analysis",
+  "name": "📜 Bind Over Matter",
+  "ids": {
+    "single_solve": "script-analysis-day-10-wmi-persistence-reconstruction",
+    "time_trial": "script-analysis-day-10-wmi-persistence-reconstruction/time_trial",
+    "mastery": "script-analysis-day-10-wmi-persistence-reconstruction/mastery"
+  }
+}
