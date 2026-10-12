@@ -77,7 +77,22 @@
   (`variant_fresh: false`) for the flag.
 - Older routes without `run_for_time_supported`: timed by default; after the last fresh variant `retry` ->
   `rotation_exhausted`; `{"op":"practice","challenge":id}` continues on that artifact untimed (no HoF, `practice: true`)
-  and a correct submit still completes the mode and unlocks the next one. (Harness: not used yet.)
+  and a correct submit still completes the mode and unlocks the next one.
+- **Exhausted pool -> untimed fallback (harness since 2026-10-12)**: the live exhaustion verdict is
+  `retry_variants_unavailable` (r11a binary D11 TT), not only `rotation_exhausted`. Both -> `error:exhausted` ->
+  `timed_stage` switches to `op=untimed` (`hb_timed._post_untimed`: plain `retry` = regular pool on a
+  run_for_time_supported route; a legacy route refuses it -> `practice`), runs local with no clock
+  (`HCTF_UNTIMED_BUDGET` 60 s solver budget), generalizes between rounds (`HCTF_UNTIMED_ROUNDS` 3; 0 = old stop).
+  `ranked_attempts_remaining == 0` in last_timed.json -> the next start goes plain (no doomed run_for_time request).
+- Day 10/11 routes are LEGACY (no `run_for_time_supported`; timed by default). Day 11 first-attempt pools (main):
+  binary `unique_attempts_remaining` 0 + `hall_of_fame_eligible: false` (nobody ranks binary D11), metadata 1, mobile
+  15 TT / 7 Mastery, script 31, warmups 255. One failed attempt on a 0-1 pool = the untimed fallback or a lost mode.
+- Vantage (2026-10-12, `.run/gm_rtt_bench.py`, keep-alive GETs): light request (op=openapi) p50 52 ms from Homebase
+  public / 92 ms Homebase inside proxy / 315 ms WSL; op=status 0.22 s Homebase vs 1.8 s WSL (bandwidth). HTTP/2 = no
+  gain (309 vs 322 ms). Homebase public is already next to the origin (Cloudflare front): no probe VM needed.
+- `hctf hof [--day N] [--save]`: the public board per challenge vs #1 + day sums. Post-run `hof_race` (orchestrate):
+  up to `HCTF_HOF_RACE`=3 extra eligible retries per passed TT/Mastery (Mastery first) while >= `HCTF_HOF_RACE_MIN`=8
+  remain, reserve `HCTF_HOF_RESERVE`=5; stops on the first failure; skipped on a replay proxy.
 - `start` always reconnects to the current attempt (never changes mode/spends a variant); while CourseStack scoring is
   pending the attempt stays in place. Teammates share one attempt, one deadline, one Mastery progress.
 - Unexplained by the lessons: `503 attempt_context_invalid` (r9b, script D9 Mastery: start/retry/plain start/status).

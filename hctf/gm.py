@@ -328,7 +328,7 @@ def _parser():
     pl.add_argument("--lane")
     pl.add_argument("--all", action="store_true")
     pl.add_argument("--search")
-    for name in ("status", "start", "retry"):
+    for name in ("status", "start", "retry", "practice"):
         sub.add_parser(name).add_argument("id")
     ps = sub.add_parser("submit")
     ps.add_argument("id")
@@ -368,7 +368,7 @@ def _dispatch(a):
         env = _envelope(*_request("GET", params))
     elif a.cmd == "status":
         env = _envelope(*_request("GET", {"op": "status", "challenge": a.id}))
-    elif a.cmd in ("start", "retry"):
+    elif a.cmd in ("start", "retry", "practice"):   # practice: legacy-route untimed continuation after exhaustion
         env = _envelope(*_request("POST", payload={"op": a.cmd, "challenge": a.id}))
     elif a.cmd == "submit":
         answers = json.loads(a.answers)

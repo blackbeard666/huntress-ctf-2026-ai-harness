@@ -683,7 +683,9 @@ def push_hot_files():
         restart_hb_daemon()       # the running daemon holds the old code; the next attempt starts a fresh one
 
 
-TIMED_FWD = ("HCTF_PIPELINE_SETS", "HCTF_PIPELINE_MIN_MB", "HCTF_PIPELINE_DL", "HCTF_SOLVER_PARALLEL")
+TIMED_FWD = ("HCTF_PIPELINE_SETS", "HCTF_PIPELINE_MIN_MB", "HCTF_PIPELINE_DL", "HCTF_SOLVER_PARALLEL",
+             "HCTF_UNTIMED_BUDGET")
+UNTIMED_BUDGET = float(os.environ.get("HCTF_UNTIMED_BUDGET", "60"))   # solver seconds on an untimed (no-clock) attempt
 
 
 def timed_env(cid):
@@ -692,6 +694,12 @@ def timed_env(cid):
     5 x 31 MB, skipped the per-set pipeline on a 0-byte total)."""
     from . import cli
     env = {k: os.environ[k] for k in TIMED_FWD if k in os.environ}
+    if "HCTF_RUN_FOR_TIME" not in os.environ:
+        try:   # the GM said no ranked attempt is left: a run_for_time request can only be refused -> plain (regular pool)
+            if json.loads((cli.cdir(cid) / "last_timed.json").read_text()).get("ranked_attempts_remaining") == 0:
+                env["HCTF_RUN_FOR_TIME"] = "0"
+        except (OSError, ValueError, AttributeError):
+            pass
     try:
         c = json.loads((cli.cdir(cid) / "contract.json").read_text())
         n = sum(int(a.get("size") or 0) for a in c.get("artifacts") or [] if isinstance(a, dict))
@@ -854,6 +862,12 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print):
     known-roomy windows (Day 7: that sent an 11s script TT local, 9.53s in-window vs ~2s on Homebase). The old "local first, Homebase only
     after a local expiry" rule burned one attempt per tight mode, and the rehearsal copy run showed local fits a 7s
     462-field Mastery only by ~0.9s (GM origin ~1.3-1.5s/call from here). HCTF_GM_TRANSPORT=ssh forces Homebase."""
+    if op == "untimed":
+        # No clock (regular pool / practice continuation after the timed pool ran out): run here, never on Homebase --
+        # nothing to race, and the bytes stay local for a generalize worker.
+        res = run_timed(solver_dir, cid, op=op, timeout=max(timeout, UNTIMED_BUDGET + 60))
+        res.setdefault("routed", "local (untimed)")
+        return res
     if remote.gm_transport() != "local":
         res = run_hb_timed(solver_dir, cid, op=op, timeout=timeout)
         if str(res.get("result", "")).lower() == "exec_error" and remote._have_token():

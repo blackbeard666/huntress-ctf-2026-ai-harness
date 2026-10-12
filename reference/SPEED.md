@@ -220,6 +220,27 @@ wall-clock is model generation between tool calls (~4-6 s per turn) -> fewer tur
   0 wrong (unconfirmed spellings are held back, not guessed).
 All five lanes now have lane solvers; through reuse_plan alone every lane's single of days 1-6 is fully confident + right.
 
+## 2026-10-12: single-solve REUSE RACE (user decision; partly supersedes the 10-07 reversal below)
+Top player: all of Day 11 "in 10 seconds". Our long pole is the LLM single (25-50 s); the timed modes are ~1 s each.
+The prior-solver dry run already answered 811/811 (script) and 110/110 (binary) at T+10 on Day 11 but its values were
+discarded. Now `Chain._reuse_race` (HCTF_REUSE_RACE=1) runs the newest 3 same-lane solvers on the single's bytes
+BESIDE triage + the worker and submits only a COMPLETE merged set (<= HCTF_REUSE_RACE_PROBES=3 submits); a CORRECT
+single is adopted by the STOP_WHEN_READY watcher (staged prior verified -> worker ended -> timed modes start).
+Backtest (`.run/backtest_reuse.sh`, every same-lane solver of days < N vs GM-confirmed answers, Days 2-11):
+
+| lane | confident precision | recall | race would win (all solvers) | newest-3, D9-D11 |
+|---|---|---|---|---|
+| script-analysis | 3780/3780 = 1.000 | 0.826 | 3/10 (D9, D10, D11) | 3/3 |
+| binary-RE | 414/414 = 1.000 | 0.693 | 3/10 | 1/3 (D11) |
+| mobile-android | 7/8 = 0.875 | 0.700 | 7/10 | 3/3 |
+| warmups | 8/8 = 1.000 | 0.800 | 8/10 | 3/3 |
+| metadata-forensics | 23/23 = 1.000 | 0.697 | 0/10 (never complete: no submit) | 0/3 |
+
+Caveat: prior solver dirs + shared lib/ are in their CURRENT state (lib.decode/lib.codec grew after those days), so
+the win counts are optimistic; precision of what gets submitted is the safety property (complete sets only).
+Script in-window solve profile (D11 TT, local): ~0.4 s = AES-zip PBKDF2 per member (94 calls, 85 ms) + one node
+spawn (~70 ms) + regex/compile; Homebase ~0.46 s. Solver-internal (LLM-owned) -> a candidate for a HoF speed pass.
+
 ## REVERSED 2026-10-07: no hand-built lane solvers, no deterministic-solver-first
 The owner's direction: don't reinvent the wheel and don't bet on yesterday's shapes -- each day's challenges are
 unknown. The `lib/lanes/*` solvers (hand-written ELF/JAR/PE/metadata parsers etc.) and the lane-first reuse step were

@@ -1005,6 +1005,15 @@ def c_timeline(a):
     return 0
 
 
+def c_hof(a):
+    from . import hof
+    tt, ms = hof.fetch("time_trial"), hof.fetch("mastery")
+    print(hof.report(day=a.day, rows=tt + ms))
+    if a.save:
+        print(f"snapshot -> {hof.snapshot(tt, ms)}")
+    return 0
+
+
 def c_dash(a):
     from . import orchestrate
     orchestrate.dashboard()
@@ -1134,6 +1143,9 @@ def main(argv=None):
     ptl = sub.add_parser("timeline", help="per-chain T+ per mode, attempts, generalize cycles, LLM vs overhead")
     ptl.add_argument("--day", type=int)
     ptl.add_argument("--log", help="a dayNN.log path (default .run/dayNN.log)")
+    phf = sub.add_parser("hof", help="Hall of Fame speed board: our rank/ms vs #1 per challenge + day sums (public)")
+    phf.add_argument("--day", type=int)
+    phf.add_argument("--save", action="store_true", help="also snapshot the board to reference/hof/")
     sub.add_parser("solutions", help="(re)generate reference/SOLUTIONS.md index from every solver/NOTES.md")
     pw = sub.add_parser("watch", help="live board of every challenge + each agent's current action")
     pw.add_argument("--interval", type=float, default=2.0)
@@ -1154,7 +1166,7 @@ def main(argv=None):
           "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
           "reconcile": c_reconcile, "solutions": c_solutions,
           "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout,
-          "timeline": c_timeline, "cost": c_cost}[a.cmd]
+          "timeline": c_timeline, "cost": c_cost, "hof": c_hof}[a.cmd]
     try:
         return fn(a)
     except remote.Unreachable as e:

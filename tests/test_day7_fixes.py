@@ -344,6 +344,8 @@ patches[(timed, "run")] = lambda cid, sdir, log=None: (calls.append(cid), "error
 saved = {k: getattr(*k) for k in patches}
 _ogen = getattr(orchestrate.Chain, "generalize", None)
 orchestrate.Chain.generalize = lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not generalize"))
+_our = orchestrate.UNTIMED_ROUNDS
+orchestrate.UNTIMED_ROUNDS = 0   # opt-out path (HCTF_UNTIMED_ROUNDS=0); the untimed fallback: tests/test_untimed_fallback.py
 try:
     for (mod, name), fn in patches.items():
         setattr(mod, name, fn)
@@ -352,7 +354,8 @@ finally:
     for (mod, name), fn in saved.items():
         setattr(mod, name, fn)
     orchestrate.Chain.generalize = _ogen
-print("ok  rotation_exhausted: one attempt, stage stops, no generalize")
+    orchestrate.UNTIMED_ROUNDS = _our
+print("ok  rotation_exhausted (HCTF_UNTIMED_ROUNDS=0): one attempt, stage stops, no generalize")
 
 # 16) harvest: `start` after the failed attempt's deadline RESUMES it ({"result": "expired"}, no attempt_id) -> re-roll
 #     with op retry (rehearsal Day 7 fair run: both script harvests stopped on 'start refused' with 0 variants). A real GM

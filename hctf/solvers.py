@@ -360,7 +360,7 @@ def _known_ids(sdir):
     return known
 
 
-def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6):
+def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6, limit=None):
     """Run every solver of `lane` (+ any question-text match) on the FULL contract, in parallel, and merge per field.
     Returns {"high": {aid: v}, "spec": {aid: v}, "source": {aid: sdir}, "runs": {sdir: (n_answered, err, secs)},
              "best": sdir|None}. high = some solver whose own GM-verified cases contain that answer_id produced it
@@ -374,6 +374,8 @@ def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6
     except Exception:  # noqa: BLE001 - question index is optional here
         pass
     cands = sorted((c for c in cands if Path(c).resolve() not in excl), key=_day_key, reverse=True)
+    if limit:
+        cands = cands[:limit]   # newest first: a cumulative lane's latest solver already covers the earlier families
     if not cands or not ids:
         return {"high": {}, "spec": {}, "source": {}, "runs": {}, "best": None, "alts": {}}
     with ThreadPoolExecutor(max_workers=max_parallel) as ex:

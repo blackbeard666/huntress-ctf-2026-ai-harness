@@ -263,7 +263,8 @@ def _remember(cid, res):
                                      "partial_submit", "partial_wrong", "partial_fixed", "attempts_remaining",
                                      "run_for_time", "hall_of_fame_eligible", "ranked_attempts_remaining",
                                      "variant_fresh", "clock_short", "submit_transport_error", "submit_resent",
-                                     "start_refused", "rerolled_short", "capture_note")
+                                     "start_refused", "rerolled_short", "capture_note", "untimed", "practice",
+                                     "exhausted")
             if k in res}
     (cli.cdir(cid) / "last_timed.json").write_text(json.dumps(keep, indent=2, ensure_ascii=False))
     if res.get("window"):
@@ -481,8 +482,10 @@ def process_result(cid, solver_dir, res, log=print):
         return "error:prerequisite"
     if res.get("gm_rate_limited") or "rate_limited" in r:
         return "error:rate"    # GM 429 on start/download: transient -- back off and retry, never generalize
-    if "rotation_exhausted" in r:
-        return "error:exhausted"   # GM: no more variants for this mode today -- terminal; a generalize can't help
+    if res.get("exhausted") or "rotation_exhausted" in r or "retry_variants_unavailable" in r:
+        # GM: no fresh variant left for this mode. Not terminal: the caller switches to an UNTIMED attempt (regular
+        # pool / practice continuation -- still the flag + points); a generalize can't conjure a variant.
+        return "error:exhausted"
     if r == "no_answer_ids":
         det = res.get("detail") if isinstance(res.get("detail"), dict) else {}
         if str(det.get("result", "")).upper() == "CORRECT" and cli.gm_latest_correct(cid):

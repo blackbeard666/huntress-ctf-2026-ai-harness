@@ -257,6 +257,34 @@ def _hof_wanted(cid):
     return _opt("HCTF_RUN_FOR_TIME", "1") == "1" and cid.rsplit("/", 1)[-1] in ("time_trial", "mastery")
 
 
+# The GM's "no fresh variant left" verdicts: `rotation_exhausted` (lessons) and `retry_variants_unavailable` (seen live:
+# r11a binary D11 TT -- it fell into the start-refused backoff, 30 retries / ~11 min, and the mode was lost).
+EXHAUSTED = ("rotation_exhausted", "retry_variants_unavailable")
+
+
+def _exhausted(err):
+    return any(x in str(err or "") for x in EXHAUSTED)
+
+
+def _post_untimed(cid):
+    """An UNTIMED attempt once the fresh timed pool is spent (top-team rule: out of unique attempts -> stop going for the
+    Hall of Fame, still take the flag). Plain `retry` (no run_for_time) = the regular pool on a run_for_time_supported
+    route (variant_fresh may be false: the last regular artifact, still full points); a legacy timed-by-default route
+    answers that retry with an exhausted verdict -> `practice` continues the last artifact with no timer and a correct
+    submit still completes the mode + unlocks the next (`"practice": true`)."""
+    body = _post_once({"op": "retry", "challenge": cid})
+    err = body.get("error") if isinstance(body, dict) else None
+    if err or body.get("deadline") or not body.get("answer_ids"):
+        # still timed (legacy route with fresh variants left -- callers only come here after an exhausted verdict) or
+        # refused: the practice continuation is the untimed path on these routes
+        prac = _post_once({"op": "practice", "challenge": cid})
+        if isinstance(prac, dict) and prac.get("answer_ids") and not prac.get("error"):
+            return prac
+        if err:
+            return body if not (isinstance(prac, dict) and prac.get("error")) else prac
+    return body
+
+
 def _post_start(payload, tries=3):
     """_post_once with the pool policy: HoF first on TT/Mastery; the route's only pool when it has no HoF pool; the HoF
     pool when the regular one refuses (backstop if HCTF_RUN_FOR_TIME=1 but the payload came in plain)."""
@@ -609,7 +637,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cid")
     ap.add_argument("solver_dir")           # relative to HW, e.g. challenges/day02/warmups-half-a-turn/solver
-    ap.add_argument("--op", default="start", choices=["start", "retry"])
+    ap.add_argument("--op", default="start", choices=["start", "retry", "untimed"])
     ap.add_argument("--min-left", type=float, default=None,
                     help="re-roll a RESUMED attempt with less clock than this (s); default max(3, window/2)")
     a = ap.parse_args()
@@ -636,8 +664,10 @@ def _attempt(a):
     t0 = time.time()
     out = {"cid": a.cid, "submitted": {}, "pool_warm": round(t0 - tw, 2)}
 
-    body = _post_start({"op": a.op, "challenge": a.cid})
-    if a.op == "retry" and body.get("error") and not any(x in str(body.get("error")) for x in ("rate_limited", "exhausted")):
+    untimed = a.op == "untimed"
+    body = _post_untimed(a.cid) if untimed else _post_start({"op": a.op, "challenge": a.cid})
+    if (a.op == "retry" and body.get("error")
+            and not any(x in str(body.get("error")) for x in ("rate_limited", "exhausted", *EXHAUSTED))):
         body = _post_start({"op": "start", "challenge": a.cid})  # retry refused (no finished attempt to re-roll): plain start
     # fresh clock if this attempt is already expired / past its deadline
     left = _deadline_left(body)
@@ -645,7 +675,7 @@ def _attempt(a):
     # answer_ids): the GM resumes the latest attempt, so re-attempting a passed mode (Mastery prerequisite re-pass,
     # scout, replay) got 'no_answer_ids' forever -- replay d7fix2 burned ~20 generalize workers on it.
     finished = not body.get("error") and not body.get("answer_ids")
-    if body.get("result") == "expired" or finished or (left is not None and left <= 0.5):
+    if not untimed and (body.get("result") == "expired" or finished or (left is not None and left <= 0.5)):
         body = _post_start({"op": "retry", "challenge": a.cid})
         left = _deadline_left(body)
     # ...and never run on a RESUMED attempt that is nearly out of clock (Day 8 script Mastery: `start` resumed an
@@ -667,12 +697,16 @@ def _attempt(a):
     qmap = _paired(ids, body.get("questions") or [])
     if body.get("unique_attempts_remaining") is not None:
         out["attempts_remaining"] = body.get("unique_attempts_remaining")
-    for k in ("run_for_time", "hall_of_fame_eligible", "ranked_attempts_remaining", "variant_fresh"):
+    for k in ("run_for_time", "hall_of_fame_eligible", "ranked_attempts_remaining", "variant_fresh", "practice"):
         if body.get(k) is not None:
             out[k] = body.get(k)          # which pool this attempt came from (Day 8 dual-pool routes)
+    if untimed:
+        out["untimed"] = True
     if body.get("error") or not ids:
         out["result"] = body.get("error") or "no_answer_ids"
         out["detail"] = body
+        if _exhausted(body.get("error")):
+            out["exhausted"] = True       # no fresh variant left: the caller switches to an untimed attempt
         # The GM refused to hand out an attempt: nothing ran, the solver is not implicated (never generalize on it).
         out["start_refused"] = True
         if "rate_limited" in str(body.get("error")):
@@ -872,6 +906,8 @@ def _solve_budget(body, left_at_start):
     Measured at start it let the solver run past the deadline by the whole download time."""
     left = _deadline_left(body)
     if left is None:
+        if body.get("deadline") is None and (body.get("practice") or body.get("run_for_time") is False):
+            return float(_opt("HCTF_UNTIMED_BUDGET", "60"))   # an untimed regular / practice attempt: no clock at all
         left = left_at_start if left_at_start is not None else 30
     return max(2, left - 1.5)
 

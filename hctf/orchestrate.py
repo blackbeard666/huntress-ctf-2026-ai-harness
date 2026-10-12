@@ -32,6 +32,9 @@ CLOCK_RETRIES = int(os.environ.get("HCTF_CLOCK_RETRIES", "12"))  # extra retries
 RATE_RETRIES = int(os.environ.get("HCTF_RATE_RETRIES", "6"))  # extra retries (with backoff) for GM 429s
 # Retries (5/10/20 s backoff, then 20 s) when the GM refuses to start an attempt at all: ~10 min of patience, no worker.
 START_RETRIES = int(os.environ.get("HCTF_START_RETRIES", "30"))
+# Fresh timed pool spent (rotation_exhausted / retry_variants_unavailable): solver rounds on an UNTIMED attempt (regular
+# pool or practice continuation) -- the flag + points without a clock. 0 = old behaviour (stop the mode).
+UNTIMED_ROUNDS = int(os.environ.get("HCTF_UNTIMED_ROUNDS", "3"))
 
 
 def _resume_need(prev):
@@ -53,6 +56,17 @@ BASELINE_CASE_TIMEOUT = float(os.environ.get("HCTF_BASELINE_CASE_TIMEOUT", "8"))
 REUSE_OLD_SOLVERS = os.environ.get("HCTF_REUSE_OLD_SOLVERS", "0") == "1"
 ENUM_PROBE_BUDGET = int(os.environ.get("HCTF_ENUM_PROBE_BUDGET", "0"))  # OFF: the worker identifies labels; set >0 to pre-probe question-listed enum options
 REUSE_PROBE_BUDGET = int(os.environ.get("HCTF_REUSE_PROBE_BUDGET", "20"))  # merged-reuse submits before the worker
+# Reuse RACE (user, 2026-10-12; supersedes "harness auto-reuse OFF" for the lanes below): the moment the single's bytes
+# land, run the newest same-lane solvers on them and submit their answers BESIDE the LLM worker. A CORRECT single is then
+# picked up by the STOP_WHEN_READY watcher (staged prior solver verified -> worker ended -> timed modes start). Lanes
+# come from the backtest (.run/backtest_reuse.sh: confident-value precision per lane); at most RACE_PROBES submits.
+REUSE_RACE = os.environ.get("HCTF_REUSE_RACE", "1") != "0"
+REUSE_RACE_LANES = {x.strip() for x in os.environ.get(
+    "HCTF_REUSE_RACE_LANES", "script-analysis,binary-reverse-engineering,mobile-android,metadata-forensics,warmups"
+).split(",") if x.strip()}
+REUSE_RACE_PROBES = int(os.environ.get("HCTF_REUSE_RACE_PROBES", "3"))
+REUSE_RACE_SOLVERS = int(os.environ.get("HCTF_REUSE_RACE_SOLVERS", "3"))   # newest N same-lane solvers
+REUSE_RACE_TIMEOUT = float(os.environ.get("HCTF_REUSE_RACE_TIMEOUT", "20"))
 STOP_WHEN_READY = os.environ.get("HCTF_STOP_WHEN_READY", "1") != "0"  # end the single worker at CORRECT + verified solver
 SPEC_STABLE = float(os.environ.get("HCTF_SPEC_STABLE", "2"))  # solver files untouched this long before a snapshot
 SPEC_POLL = float(os.environ.get("HCTF_SPEC_POLL", "0.25"))  # D9: single CORRECT -> ready took up to 1 s of poll
@@ -1408,6 +1422,51 @@ class Chain:
         if self._snap_dir().exists():
             self._restore_snapshot("previous run was interrupted mid-generalize")
 
+    def _reuse_race(self, cid):
+        """Background, beside triage + the LLM worker: today's single bytes through the newest same-lane solvers;
+        submit when their merged answers cover EVERY field (confident = the field is GM-verified in that solver's own
+        cases; speculative only to complete the set). Bisects a rejected set within REUSE_RACE_PROBES submits -- never a
+        brute force. Touches no solver files: a win is adopted by _watch_ready (staged prior verified -> worker ended)."""
+        t0 = time.time()
+        try:
+            contract = cli.load(cid, "start.json") or cli.load(cid, "contract.json")
+            art = timed.latest_artifacts(cid)
+            ids = list((contract or {}).get("answer_ids") or [])
+            if not ids or not art or cli.is_complete(cid):
+                return
+            plan = solvers.reuse_plan(contract, art, self.lane, exclude=[self.sdir], timeout=REUSE_RACE_TIMEOUT,
+                                      limit=REUSE_RACE_SOLVERS)
+            high, spec = plan["high"], plan["spec"]
+            merged = {a: high.get(a, spec.get(a)) for a in ids if a in high or a in spec}
+            say(f"[{cid}] reuse race: {len(high)} confident + {len(spec)} speculative of {len(ids)} field(s) from "
+                f"{len(plan['runs'])} solver(s) in {time.time() - t0:.1f}s")
+            if len(merged) < len(ids):
+                return      # can't finish the single: leave it to the worker (its dry-run note covers the gaps)
+            budget = [REUSE_RACE_PROBES]
+
+            def narrow(group):
+                group = {a: v for a, v in group.items() if a not in cli.confirmed_answers(cid)}
+                if not group or budget[0] <= 0 or cli.is_complete(cid):
+                    return
+                budget[0] -= 1
+                kind, _b, refused = cli.submit(cid, group, force=True, probe=True)
+                if kind in ("correct", "accepted") or refused or len(group) == 1:
+                    return
+                keys = list(group)
+                narrow({k: group[k] for k in keys[:len(keys) // 2]})
+                narrow({k: group[k] for k in keys[len(keys) // 2:]})
+
+            narrow(merged)
+            if cli.is_complete(cid):
+                set_state(self.base, stage="single:reuse-won")
+                say(f"[{cid}] reuse race WON: single CORRECT at +{time.time() - t0:.1f}s from prior solver output "
+                    f"(seed {plan['best'] and Path(plan['best']).parent.name}); the ready-watcher verifies the solver")
+            else:
+                say(f"[{cid}] reuse race: not complete after {REUSE_RACE_PROBES - budget[0]} submit(s) "
+                    f"({len(cli.confirmed_answers(cid))}/{len(ids)} confirmed); the worker continues")
+        except Exception as e:  # noqa: BLE001 - the race is an optimization; the worker path is unaffected
+            say(f"[{cid}] reuse race note: {e}")
+
     def try_existing_solvers(self, cid):
         """Merged reuse (no model time): run EVERY same-lane solver (+ question-text matches) on the full contract,
         merge per field, and submit what they agree on -- partial is fine, the untimed GM accepts it and pins each
@@ -1625,6 +1684,8 @@ class Chain:
         body, err = start_fut.result()
         self._tool_prefetch(cid, (body or {}))   # the prompt + questions arrive with `start`: before any download
         self._start_prior_dry_run(cid)
+        if not welcome and REUSE_RACE and not REUSE_OLD_SOLVERS and self.lane in REUSE_RACE_LANES:
+            threading.Thread(target=self._reuse_race, args=(cid,), daemon=True, name=f"reuse-race-{self.base}").start()
         # The GM sometimes hands the flag back directly (issued_flag, e.g. orientation challenges). Use it instead of
         # solving when there's a single answer_id to put it in — a free first-blood the harness used to discard.
         fb = body or {}
@@ -2230,6 +2291,7 @@ class Chain:
         clock_retries = 0
         rate_retries = 0
         start_retries = 0
+        untimed = False     # True once the fresh timed pool is spent: every further attempt is untimed (no clock)
         attempt = -1
         while attempt < MAX_TIMED_RETRIES:
             attempt += 1
@@ -2250,10 +2312,17 @@ class Chain:
                 say(f"[{cid}] previous attempt has only {left:.1f}s left (< {need:.1f}s needed): waiting it out, then retry")
                 time.sleep(left + 0.6)
                 left = 0
-            res = timed.run(cid, self.sdir, log=say, **({"op": "retry"} if left is not None and left <= 0 else {}))
-            say(f"[{cid}] result: {res}")
+            if untimed:
+                op = {"op": "untimed"}
+            else:
+                op = {"op": "retry"} if left is not None and left <= 0 else {}
+            res = timed.run(cid, self.sdir, log=say, **op)
+            say(f"[{cid}] result: {res}{' (untimed)' if untimed else ''}")
             set_state(self.base, **{f"{mode}_result": res})
             if res == "correct":
+                if untimed:
+                    say(f"[{cid}] passed on an UNTIMED attempt (fresh timed pool spent): flag + points, no Hall of Fame")
+                    set_state(self.base, stage=f"{mode}:untimed-pass")
                 record_timed_case(cid, self.sdir)
                 return True
             if res.startswith("error:prerequisite"):
@@ -2267,9 +2336,20 @@ class Chain:
                     time.sleep(3)  # CourseStack scoring may still be pending for the previous mode
                 continue
             if res == "error:exhausted":
-                # GM 'rotation_exhausted' (replay d7fix3: metadata TT after the real run + 3 replays): no new variant
-                # will be issued today. Terminal -- a generalize worker has nothing to fix (it burned 5 of them).
-                say(f"[{cid}] GM rotation exhausted for this mode: no new attempts today; stopping (no generalize)")
+                # GM 'rotation_exhausted' / 'retry_variants_unavailable': no fresh timed variant left today (replay
+                # d7fix3 metadata TT; r11a binary D11 TT -- 30 start retries, ~11 min, mode lost; D11's real pools were
+                # binary 0 / metadata 1). Top-team rule: out of unique attempts -> stop going for the Hall of Fame and
+                # take the flag on an UNTIMED attempt (regular pool / practice continuation: completes the mode and
+                # unlocks the next). A generalize can't conjure a variant, so none runs on the verdict itself.
+                if not untimed and UNTIMED_ROUNDS > 0:
+                    say(f"[{cid}] GM: fresh timed pool exhausted for this mode; switching to an UNTIMED attempt "
+                        f"(regular pool / practice; up to {UNTIMED_ROUNDS} round(s))")
+                    set_state(self.base, stage=f"{mode}:untimed")
+                    untimed = True
+                    attempt = MAX_TIMED_RETRIES - UNTIMED_ROUNDS   # the untimed rounds get their own budget
+                    continue
+                say(f"[{cid}] GM rotation exhausted for this mode{' (untimed attempt refused too)' if untimed else ''}: "
+                    "no new attempts today; stopping (no generalize)")
                 set_state(self.base, stage=f"{mode}:exhausted")
                 break
             if res == "error:rate" and rate_retries < RATE_RETRIES:
@@ -2602,6 +2682,11 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
         with ThreadPoolExecutor(max_workers=max(1, len(groups))) as ex:
             for base, entries in sorted(groups.items()):
                 ex.submit(Chain(base, entries, pools, gov, modes).run)
+        if HOF_RACE and timed_in_scope:
+            try:
+                hof_race(groups)   # off the critical path: every chain is done; Homebase still warm
+            except Exception as e:  # noqa: BLE001 - best-effort
+                say(f"[hof] race skipped ({e})")
     finally:
         if not hb_slots and not keep_homebase:  # Homebase switched on only for tight timed windows: switch it off again
             workers.power_off_homebase_if_ours(say)
@@ -2613,6 +2698,79 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
 
 
 RATCHET = os.environ.get("HCTF_RATCHET", "1") != "0"
+# Hall of Fame keeps each team's FASTEST eligible timed attempt: after the run, spend a few extra ranked attempts per
+# passed timed mode where the fresh pool is plentiful (user, 2026-10-12: up to 3, only at >= 8 left, keep 5 in reserve).
+HOF_RACE = int(os.environ.get("HCTF_HOF_RACE", "3"))
+HOF_RACE_MIN = int(os.environ.get("HCTF_HOF_RACE_MIN", "8"))
+HOF_RESERVE = int(os.environ.get("HCTF_HOF_RESERVE", "5"))
+
+
+def _gm_ms(cid):
+    """GM-measured time of this mode's latest attempt (status solved_by.at - started_at) in ms, or None."""
+    import datetime as dt
+    try:
+        b = cli.call(cid, "status", cid)["body"] or {}
+        t = lambda x: dt.datetime.fromisoformat(x.replace("Z", "+00:00"))  # noqa: E731
+        return round((t(b["solved_by"]["at"]) - t(b["started_at"])).total_seconds() * 1000)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _race_left(last):
+    """Fresh ranked attempts after the current one (dual-pool routes report ranked_*, legacy routes unique_*)."""
+    v = last.get("ranked_attempts_remaining")
+    return last.get("attempts_remaining") if v is None else v
+
+
+def hof_race(groups):
+    """Best-of-N for the Hall of Fame: per chain, Mastery first (a failed Time Trial race can't then block Mastery's
+    prerequisite), up to HOF_RACE fresh eligible retries while >= HOF_RACE_MIN remain and never below HOF_RESERVE.
+    Stops a mode on its first non-correct race (the variant is still saved as a regression case; no generalize).
+    Scoring is safe: the CourseStack solve is sticky, only the GM's latest-attempt status changes."""
+    gm_url = os.environ.get("HUNTRESS_GAME_MASTER_URL", "")
+    if "127.0.0.1" in gm_url or "localhost" in gm_url:
+        say("[hof] replay GM proxy in use: no Hall of Fame race (it would spend the real ranked pool)")
+        return
+
+    def one(base, entries):
+        ids = {e["mode"]: e["id"] for e in entries}
+        sdir = paths.solver_dir(base)
+        if "mastery" in ids and not cli.gm_solved(ids["mastery"]):
+            return
+        for mode in ("mastery", "time_trial"):
+            cid = ids.get(mode)
+            if not cid or not cli.gm_solved(cid):
+                continue
+            best = _gm_ms(cid)
+            for i in range(HOF_RACE):
+                last = timed.last_result(cid) or {}
+                left = _race_left(last)
+                if last.get("untimed") or last.get("hall_of_fame_eligible") is False:
+                    say(f"[hof] {cid}: not Hall of Fame eligible (untimed / ineligible attempt): no race")
+                    break
+                if left is None or left < max(HOF_RACE_MIN, HOF_RESERVE + 1):
+                    say(f"[hof] {cid}: {left} fresh attempt(s) left (< {max(HOF_RACE_MIN, HOF_RESERVE + 1)}): no race")
+                    break
+                set_state(base, stage=f"{mode}:hof-race")
+                res = timed.run(cid, sdir, log=say, op="retry")
+                ms = _gm_ms(cid) if res == "correct" else None
+                say(f"[hof] {cid} race {i + 1}/{HOF_RACE}: {res}"
+                    + (f", GM {ms} ms (best so far {min(x for x in (best, ms) if x is not None)} ms)" if ms else ""))
+                if res != "correct":
+                    break
+                best = ms if best is None or (ms is not None and ms < best) else best
+        set_state(base, stage="done")
+
+    say(f"[hof] racing passed timed modes for the Hall of Fame (up to {HOF_RACE} each, >= {HOF_RACE_MIN} left, "
+        f"reserve {HOF_RESERVE})")
+    with ThreadPoolExecutor(max_workers=max(1, len(groups))) as ex:
+        for f in [ex.submit(one, b, e) for b, e in sorted(groups.items())]:
+            try:
+                f.result()
+            except Exception as e:  # noqa: BLE001 - one chain's race never stops the others
+                say(f"[hof] race note: {e}")
+
+
 RATCHET_TIMEOUT = float(os.environ.get("HCTF_RATCHET_TIMEOUT", str(15 * 60)))
 
 
