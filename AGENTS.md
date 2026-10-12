@@ -5,7 +5,7 @@ event to be solved by automation; see `reference/AGENTS.md` and `reference/welco
 
 ## Start here
 **Load the `huntress-ctf` skill first** (unless your task prompt names a different skill to load first, or inlines your lane skill -- the task prompt wins). It has the solve loop, the lane routing table, and the hard rules. It routes you
-to a lane skill (`warmups`, `metadata-forensics`, `script-analysis`, `mobile-android`, `binary-re`) and to
+to a lane skill (`warmups`, `metadata-forensics`, `script-analysis`, `mobile-android`, `binary-re`, `web`) and to
 `solver-authoring`, `game-master`, `timed-run`, `explore-alternatives`.
 
 ## The environment in one paragraph

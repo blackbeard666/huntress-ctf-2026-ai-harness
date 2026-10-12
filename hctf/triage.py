@@ -44,6 +44,9 @@ def _sig(data):
         (b"\xd0\xcf\x11\xe0", "OLE/Office doc -> $metadata-forensics"),
         (b"Rar!", "RAR archive"),
         (b"7z\xbc\xaf", "7z archive"),
+        (b"\xd4\xc3\xb2\xa1", "pcap capture -> $web (tshark)"),
+        (b"\xa1\xb2\xc3\xd4", "pcap capture -> $web (tshark)"),
+        (b"\x0a\x0d\x0d\x0a", "pcapng capture -> $web (tshark)"),
     ]
     for magic, label in checks:
         if head.startswith(magic):
@@ -64,6 +67,10 @@ def _text_signals(text):
         "javascript -> $script-analysis": ("function(", "eval(", "=>", "require(", "document."),
         "vbscript/wsh -> $script-analysis": ("createobject", "wscript.", "execute "),
         "batch -> $script-analysis": ("@echo off", "%comspec%", "setlocal"),
+        "HAR capture -> $web": ('"log"', '"entries"', '"request"', '"response"', '"har'),
+        "web shell / server-side page -> $web": ("<?php", "<%@", "$_get[", "$_post[", "$_request[", "request.form",
+                                                 "gzinflate(", "base64_decode(", "shell_exec(", "passthru("),
+        "raw HTTP traffic -> $web": ("http/1.1", "\nhost:", "user-agent:", "\ncookie:", "content-type:"),
     }
     for label, needles in marks.items():
         if sum(n in low for n in needles) >= 2:
@@ -77,6 +84,10 @@ def _text_signals(text):
             out.append("looks base32 -> $warmups")
         elif re.fullmatch(r"(?:[0-9a-fA-F]{2})+", compact) and len(compact) > 16:
             out.append("looks hex -> $warmups")
+    if len(re.findall(r'^\S+ \S+ \S+ \[[^\]]+\] "[A-Z]+ \S+ HTTP/[\d.]+" \d{3} ', text[:20000], re.M)) >= 3:
+        out.append("web server access log (combined format) -> $web")
+    if re.search(r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*", text):
+        out.append("JWT token(s) -> $web (decode header/claims unverified)")
     for ioc, rx in (("URLs", r"https?://[^\s'\"<>]+"), ("IPs", r"\b\d{1,3}(?:\.\d{1,3}){3}\b"),
                     ("ATT&CK IDs", r"\bT\d{4}(?:\.\d{3})?\b"), ("flags", r"flag\{[0-9a-f]{32}\}")):
         hits = re.findall(rx, text)

@@ -104,6 +104,9 @@ def call(cid, op, *args, timeout=180):
     env = remote.gm(op, *args, timeout=timeout)
     log(cid, op, env)
     if op == "list" and isinstance(env.get("body"), dict):
+        for c in env["body"].get("challenges") or []:
+            if isinstance(c, dict) and c.get("lane") and paths.canonical_lane(c["lane"]) != c["lane"]:
+                c["gm_lane"], c["lane"] = c["lane"], paths.canonical_lane(c["lane"])
         paths.register(env["body"].get("challenges", []))
     return env
 

@@ -29,6 +29,7 @@ description: Huntress CTF 2026 "AI Arena" playbook for harness workers. Covers t
 | .ps1 .js .vbs .bat .hta .py scripts, obfuscation, IOC extraction, ATT&CK mapping | `script-analysis` |
 | .apk/.dex/AndroidManifest, intents, deep links, exported components | `mobile-android` |
 | ELF/PE/Mach-O, .NET, Go/Rust, C++ mangled names, packers | `binary-re` |
+| web apps/traffic: source bundles, HAR/pcap, access logs, web shells, minified JS, HTML smuggling, JWT/cookies, a URL target | `web` |
 | Stuck for about 10 min, a wrong answer, or looping on one idea | `explore-alternatives` |
 | Timed fix job (live deadline) | `timed-run` |
 

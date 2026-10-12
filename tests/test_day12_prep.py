@@ -150,4 +150,44 @@ with tempfile.TemporaryDirectory() as d:
         orchestrate.paths.CHALLENGES = saved
 print("ok  ratchet proposals: earlier same-lane carry-overs dropped (other lanes' don't count), new bullets kept")
 
+# 5) web lane (not released yet): GM lane names normalized at `list` intake; persona/skill/helpers/technique log/triage
+#    hints/cues all resolve for it, without changing any existing lane
+from hctf import paths, toolchain, triage, workers  # noqa: E402
+for raw, want in (("web", "web"), ("web-exploitation", "web"), ("Web-Application", "web"), ("mobile-android", "mobile-android"),
+                  ("metadata-forensics", "metadata-forensics"), ("warmups", "warmups"), ("welcome", "welcome"), ("misc", "misc")):
+    assert paths.canonical_lane(raw) == want, (raw, paths.canonical_lane(raw))
+_og, _oreg = remote.gm, paths.register
+seen = []
+try:
+    remote.gm = lambda *a, **k: {"http": 200, "body": {"challenges": [
+        {"id": "web-day-12-x", "lane": "web-exploitation", "day": 12, "name": "X"},
+        {"id": "warmups-day-12", "lane": "warmups", "day": 12, "name": "W"}]}}
+    paths.register = lambda ch: seen.extend(ch)
+    _olog = cli.log
+    cli.log = lambda *a, **k: None
+    body = cli.call(None, "list", "--day", "12")["body"]
+    cli.log = _olog
+finally:
+    remote.gm, paths.register = _og, _oreg
+assert body["challenges"][0]["lane"] == "web" and body["challenges"][0]["gm_lane"] == "web-exploitation"
+assert body["challenges"][1]["lane"] == "warmups" and "gm_lane" not in body["challenges"][1]
+assert seen[0]["lane"] == "web"
+assert "web application" in workers.lane_persona("web")
+sk = workers.lane_skill("web")
+assert "# Scope" in sk and "hctf hb exec" in sk and "tshark" in sk and not sk.startswith("---"), sk[:200]
+assert "lib.codec" in workers.lane_helpers("web")
+assert "Recognition cues" in orchestrate.technique_log("web")
+assert "pcap" in " ".join(triage._sig(b"\xd4\xc3\xb2\xa1" + b"\0" * 40))
+assert "pcapng" in " ".join(triage._sig(b"\x0a\x0d\x0d\x0a" + b"\0" * 40))
+har = '{"log": {"version": "1.2", "entries": [{"request": {"method": "GET"}, "response": {"status": 200}}]}}'
+assert any("HAR" in x for x in triage._text_signals(har))
+log = "\n".join(f'10.0.0.{i} - - [12/Oct/2026:10:00:0{i} +0000] "GET /a?id={i} HTTP/1.1" 200 12 "-" "curl/8"' for i in range(4))
+assert any("access log" in x for x in triage._text_signals(log))
+assert any("web shell" in x for x in triage._text_signals("<?php eval(gzinflate(base64_decode($_POST['x']))); ?>"))
+assert any("JWT" in x for x in triage._text_signals("Cookie: t=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiJ9.sig"))
+assert any("tshark" in x for x in toolchain.cues("Which packets in the capture...", cid="web-day-12-x"))
+assert not any("tshark" in x for x in toolchain.cues("Which packets in the capture...", cid="mobile-android-day-12-x"))
+print("ok  web lane: lane normalized at list intake (raw kept as gm_lane); persona/skill/lib.codec/technique log; "
+      "pcap/HAR/access-log/web-shell/JWT triage hints; web cues only on web ids")
+
 print("\nALL DAY-12 PREP CHECKS PASSED")

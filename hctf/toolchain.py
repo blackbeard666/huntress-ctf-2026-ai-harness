@@ -163,6 +163,18 @@ CUES = [
      "explicitly builds on EARLIER days of this lane: reuse those concepts (compounding)", None),
     (r"exported|deep.link|intent|provider|webview|pendingintent|backup", "Android component analysis: manifest "
      "(`aapt dump xmltree X.apk AndroidManifest.xml` / `apktool d`), then the code path that handles it", ("mobile",)),
+    (r"\bhar\b|capture|pcap|traffic|packets?\b", "web traffic evidence: HAR -> `jq .log.entries[]`, pcap -> `tshark "
+     "-Y http.request` / `--export-objects http`; answers are exact request fields (method, path, header, parameter)", ("web",)),
+    (r"access log|server log|requests? (?:from|by)|user.agent|status code", "server-log forensics: split the combined "
+     "log fields, then `uniq -c` by IP / path / UA / status to find the odd sequence", ("web",)),
+    (r"web ?shell|backdoor|upload|dropper page|smuggl", "server-side or smuggling payload: decode layer by layer "
+     "(`lib.codec`), never execute it; rebuild any smuggled blob and route it by its bytes", ("web",)),
+    (r"\bjwt\b|token|cookie|session", "tokens/cookies: decode JWT header+claims unverified; signed session cookies are "
+     "base64(json)+signature", ("web",)),
+    (r"route|endpoint|\bapi\b|parameter|query string|header", "map the app's routes/endpoints from source or JS, then "
+     "answer about the exact route/parameter the question names", ("web",)),
+    (r"inject|sqli|xss|traversal|ssrf|deserializ|template", "vulnerability reasoning: find the sink and the input that "
+     "reaches it in the evidence (source/log/capture); only touch a live target if the contract names it", ("web",)),
     (r"sixty-four|\bbase\b", "riddle -> base64 (64)", ("warmups",)),
     (r"thirteen", "riddle -> ROT13", ("warmups",)),
     (r"sixteen", "riddle -> hex (base 16)", ("warmups",)),

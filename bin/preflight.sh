@@ -182,10 +182,10 @@ hdr "Lane tools"
 miss=""
 for t in file xxd strings binwalk 7z readelf objdump nm c++filt rizin rabin2 analyzeHeadless upx ilspycmd GoReSym rustfilt \
          javap jadx apktool aapt apksigner d2j-dex2jar exiftool pdfinfo qpdf mutool pdf-parser pdfid pngcheck zsteg steghide \
-         binwalk foremost mediainfo sqlite3 yara box-js js-beautify webcrack node pwsh; do
+         binwalk foremost mediainfo sqlite3 yara box-js js-beautify webcrack node pwsh curl jq tshark; do
   command -v "$t" >/dev/null 2>&1 || miss="$miss $t"
 done
-if [ -z "$miss" ]; then ok "all lane tools on PATH (binary, metadata, mobile, script, warmups)."
+if [ -z "$miss" ]; then ok "all lane tools on PATH (binary, metadata, mobile, script, warmups, web)."
 else warn "missing lane tools:$miss  (install: setup/install_tools.sh + apt list at its top)"; fi
 # Toolchain tools (setup/tools/<tool>.sh recipes; triage installs a missing one at runtime) + unresolved gaps from
 # earlier runs (`hctf tool-gaps`): a gap with no recipe means a weaker fallback on the next drop -- add the recipe.

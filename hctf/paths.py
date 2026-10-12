@@ -34,6 +34,20 @@ LANE_SHORT = {
     "binary-reverse-engineering": "binary", "binary": "binary", "web": "web",
 }
 
+
+
+def canonical_lane(lane):
+    """The harness lane key for a GM `lane` field. Known lanes pass through unchanged (the GM sends long names:
+    `mobile-android`, not the API enum's `mobile`); a not-yet-seen web lane (`web`, `web-exploitation`, ...) maps to
+    `web`, the key of its skill/persona/technique log. Applied to every `list` reply (cli.call)."""
+    lane = (lane or "").strip()
+    if lane in LANE_SHORT:
+        return lane
+    if lane.lower().startswith("web"):
+        return "web"
+    return lane
+
+
 for _d in (CHALLENGES, LOCKS, TMP, LOGS):
     _d.mkdir(parents=True, exist_ok=True)
 

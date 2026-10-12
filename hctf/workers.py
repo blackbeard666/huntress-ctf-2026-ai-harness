@@ -117,6 +117,8 @@ LANE_PERSONA = {
                                   "static analysis of compiled executables)",
     "mobile-android": "an expert-level CTF player who specializes in Android mobile application reverse "
                       "engineering (APK/manifest analysis, smali/dex, intents, and deep links)",
+    "web": "an expert-level CTF player who specializes in web application security and web-traffic analysis "
+           "(app source review, HTTP/HAR/pcap captures, server logs, web shells, client-side JS, tokens/cookies)",
     "welcome": "an expert-level CTF player working the event's onboarding challenges",
 }
 
@@ -127,12 +129,12 @@ def lane_persona(lane):
 
 
 LANE_SKILL = {"warmups": "warmups", "metadata-forensics": "metadata-forensics", "script-analysis": "script-analysis",
-              "binary-reverse-engineering": "binary-re", "mobile-android": "mobile-android"}
+              "binary-reverse-engineering": "binary-re", "mobile-android": "mobile-android", "web": "web"}
 # Lane helper modules the solver should IMPORT (Day 7: mobile re-typed lib.android.decode_payload, warmups re-typed
 # lib.decode.decode_chunked -- ~12-25 s of generation each for code that already existed).
 LANE_HELPERS = {"warmups": ["lib.decode", "lib.ciphers"], "mobile-android": ["lib.android"],
                 "metadata-forensics": ["lib.stego"], "script-analysis": ["lib.codec", "lib.scripts", "lib.pyc"],
-                "binary-reverse-engineering": ["lib.elf", "lib.binary"]}
+                "binary-reverse-engineering": ["lib.elf", "lib.binary"], "web": ["lib.codec"]}
 
 
 def lane_skill(lane):
@@ -729,7 +731,8 @@ _hb_lock = threading.Lock()
 HB_HEALTH_S = float(os.environ.get("HCTF_HB_HEALTH_S", "5"))   # background Homebase reachability probe period
 HB_FRESH_S = 3 * HB_HEALTH_S                                     # a health verdict older than this is "unknown"
 _hb = {"powered_by_us": False, "provisioned": False, "ok": False, "checked": 0.0, "thread": None}
-HB_DEPS = ["elftools", "pefile", "capstone", "Crypto", "pyzipper", "androguard", "droidasc", "refinery"]
+HB_DEPS = ["elftools", "pefile", "capstone", "Crypto", "pyzipper", "androguard", "droidasc", "refinery",
+           "bs4", "jwt", "dpkt"]   # last line: web lane (homebase_setup.sh installs them)
 
 
 def known_window(cid):

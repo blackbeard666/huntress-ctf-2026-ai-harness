@@ -2,7 +2,7 @@
 # Install the non-apt analysis tools workers' lane skills call for, under the project (tools/) with wrappers/symlinks in
 # bin/ (on every worker's PATH and visible inside the worker sandbox). Idempotent. apt packages: see setup/README or run
 #   sudo apt-get install -y radare2 qpdf poppler-utils mupdf-tools pngcheck steghide sqlite3 mediainfo yara aapt \
-#        apksigner dotnet-sdk-10.0 cargo rustc foremost ruby
+#        apksigner dotnet-sdk-10.0 cargo rustc foremost ruby tshark   (tshark: web lane; preseed wireshark-common/install-setuid=false)
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 cd "$ROOT" || exit 1
@@ -50,6 +50,9 @@ uv pip install -q --python .venv/bin/python uncompyle6 2>&1 | tail -1
 
 echo "== chepy (CyberChef-style decoders, venv; triage decodes long literals with it)"
 uv pip install -q --python .venv/bin/python chepy 2>&1 | tail -1
+
+echo "== web lane: BeautifulSoup + PyJWT + dpkt (HTML parsing, unverified JWT decode, pcap in solvers)"
+uv pip install -q --python .venv/bin/python beautifulsoup4 PyJWT dpkt 2>&1 | tail -1
 
 echo "== rabin2 alias check (radare2 from apt)"
 command -v rabin2 >/dev/null && echo "  rabin2 ok"

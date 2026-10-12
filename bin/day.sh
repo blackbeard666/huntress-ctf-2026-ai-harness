@@ -102,7 +102,7 @@ RUN_ARGS=(run --day "$DAY" --local "$LOCAL")
 [ "$SCOUT" -gt 0 ] && RUN_ARGS+=(--scout "$SCOUT") && echo "[scout] $SCOUT TT scouting round(s) enabled."
 
 echo "[run] hctf ${RUN_ARGS[*]}  ->  $LOG"
-EFFORT_LINE="[effort] global=$HCTF_WORKER_EFFORT; per lane: $(python3 -c 'import hctf.workers as w; print(" ".join(f"{l}={w.worker_effort(l)}" for l in ("warmups","metadata-forensics","script-analysis","binary-reverse-engineering","mobile-android")))' 2>/dev/null)"
+EFFORT_LINE="[effort] global=$HCTF_WORKER_EFFORT; per lane: $(python3 -c 'import hctf.workers as w; print(" ".join(f"{l}={w.worker_effort(l)}" for l in ("warmups","metadata-forensics","script-analysis","binary-reverse-engineering","mobile-android","web")))' 2>/dev/null)"
 echo "$EFFORT_LINE"
 # Post-run: ATT&CK generalization gate (coverage vs the confirmed role/scenario tables + reference).
 # + toolchain gap review: every preferred tool triage found missing (installed at runtime / no recipe -> add one).
