@@ -1434,8 +1434,9 @@ class Chain:
             ids = list((contract or {}).get("answer_ids") or [])
             if not ids or not art or cli.is_complete(cid):
                 return
+            # same-lane newest N only (no question-text index: r11b spent 18-24 s building it under drop load)
             plan = solvers.reuse_plan(contract, art, self.lane, exclude=[self.sdir], timeout=REUSE_RACE_TIMEOUT,
-                                      limit=REUSE_RACE_SOLVERS)
+                                      limit=REUSE_RACE_SOLVERS, by_question=False)
             high, spec = plan["high"], plan["spec"]
             merged = {a: high.get(a, spec.get(a)) for a in ids if a in high or a in spec}
             say(f"[{cid}] reuse race: {len(high)} confident + {len(spec)} speculative of {len(ids)} field(s) from "
@@ -1459,13 +1460,38 @@ class Chain:
             narrow(merged)
             if cli.is_complete(cid):
                 set_state(self.base, stage="single:reuse-won")
+                snap = self._race_snapshot(cid, plan["best"], contract, art)
                 say(f"[{cid}] reuse race WON: single CORRECT at +{time.time() - t0:.1f}s from prior solver output "
-                    f"(seed {plan['best'] and Path(plan['best']).parent.name}); the ready-watcher verifies the solver")
+                    f"(seed {plan['best'] and Path(plan['best']).parent.name}; "
+                    + ("seed verified -> the ready-watcher hands it to the timed modes)" if snap else
+                       "seed does not reproduce every answer -> waiting for the worker's solver)"))
             else:
                 say(f"[{cid}] reuse race: not complete after {REUSE_RACE_PROBES - budget[0]} submit(s) "
                     f"({len(cli.confirmed_answers(cid))}/{len(ids)} confirmed); the worker continues")
         except Exception as e:  # noqa: BLE001 - the race is an optimization; the worker path is unaffected
             say(f"[{cid}] reuse race note: {e}")
+
+    def _race_snapshot(self, cid, seed, contract, art):
+        """The race's seed solver as a ready snapshot (`.run/spec-dayNN/<chal>-race/solver`: same depth as the real solver
+        dir) if it alone reproduces every GM-confirmed answer; _watch_ready adopts it when the worker's own solver isn't
+        verified yet (r11b: the staged newest solver differed from the winning seed -> 7-12 s until the worker caught up)."""
+        if not seed:
+            return None
+        rel = self.sdir.relative_to(paths.CHALLENGES).parts
+        if len(rel) != 3:
+            return None
+        snap = ROOT / ".run" / f"spec-{rel[0]}" / f"{rel[1]}-race" / "solver"
+        if snap.exists():
+            shutil.rmtree(snap)
+        shutil.copytree(seed, snap, ignore=shutil.ignore_patterns("cases", "__pycache__"))
+        if (self.root / "meta.json").exists():
+            shutil.copy2(self.root / "meta.json", snap.parent / "meta.json")
+        conf = cli.confirmed_answers(cid)
+        got, err, _dt = solvers.run_solver(snap, contract, art)
+        if err or not conf or any(got.get(k) != v for k, v in conf.items()):
+            return None
+        self._race_snap = snap
+        return snap
 
     def try_existing_solvers(self, cid):
         """Merged reuse (no model time): run EVERY same-lane solver (+ question-text matches) on the full contract,
@@ -2193,7 +2219,7 @@ class Chain:
                 if cli.is_complete(cid):
                     if ready.is_set():
                         return   # the Homebase shadow handed over first
-                    snap = self._spec_snapshot(cid)
+                    snap = self._spec_snapshot(cid) or getattr(self, "_race_snap", None)
                     if snap:
                         with getattr(self, "_ready_lock", None) or threading.Lock():
                             if ready.is_set():
@@ -2221,6 +2247,10 @@ class Chain:
     def _restore_ready_snapshot(self, snap):
         """After a stopped worker: put the verified snapshot's files back over the live solver (the worker may have been
         mid-edit when it was ended). cases/ in the live dir is kept."""
+        if snap.parent.name.endswith("-race"):
+            # a different day's solver: drop the staged/worker code first so no newer helper module shadows the seed's
+            for f in self.sdir.glob("*.py"):
+                f.unlink()
         for src in snap.rglob("*"):
             if src.is_file() and "__pycache__" not in src.parts:
                 dst = self.sdir / src.relative_to(snap)

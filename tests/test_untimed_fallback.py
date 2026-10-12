@@ -283,3 +283,37 @@ race({"a": "1", "b": "X", "c": "3"}, {"e": "5"}, cap=3)          # one wrong: fu
 assert len(subs) == 3 and not len(confirmed) == 4 and any("not complete" in m for m in msgs), (subs, msgs)
 assert not ch2.sdir.exists()
 print("ok  reuse race: submit only a complete set, bisect within the cap, no solver files touched")
+
+# 11) race seed snapshot: verified seed -> .run/spec-dayNN/<chal>-race/solver (same depth) + _race_snap; a seed that
+#     misses a confirmed answer -> None; restoring a race snapshot drops the staged code first (no shadowing helper).
+from hctf import paths  # noqa: E402
+tmp = Path(tempfile.mkdtemp())
+seed = tmp / "challenges" / "day10" / "old" / "solver"
+seed.mkdir(parents=True)
+(seed / "solve.py").write_text("print(1)\n")
+ch3 = object.__new__(orchestrate.Chain)
+ch3.sdir, ch3.root = tmp / "challenges" / "day11" / "new" / "solver", tmp / "challenges" / "day11" / "new"
+ch3.sdir.mkdir(parents=True)
+(ch3.sdir / "solve.py").write_text("print(2)\n")
+(ch3.sdir / "helper_new.py").write_text("x = 1\n")
+rp = {(orchestrate, "ROOT"): tmp, (paths, "CHALLENGES"): tmp / "challenges",
+      (orchestrate.cli, "confirmed_answers"): lambda cid, att=None: {"a": "1"}}
+sv = {k: getattr(*k) for k in rp}
+try:
+    for (mod, name), fn in rp.items():
+        setattr(mod, name, fn)
+    _orun = solvers.run_solver
+    solvers.run_solver = lambda s, c, a, timeout=60: ({"a": "1"}, None, 0.1)
+    snap = ch3._race_snapshot("c", seed, {}, tmp)
+    assert snap == tmp / ".run" / "spec-day11" / "new-race" / "solver" and ch3._race_snap == snap, snap
+    assert len(snap.relative_to(tmp).parts) == len(ch3.sdir.relative_to(tmp).parts)
+    ch3._restore_ready_snapshot(snap)
+    assert (ch3.sdir / "solve.py").read_text() == "print(1)\n" and not (ch3.sdir / "helper_new.py").exists()
+    solvers.run_solver = lambda s, c, a, timeout=60: ({"a": "X"}, None, 0.1)
+    ch3._race_snap = None
+    assert ch3._race_snapshot("c", seed, {}, tmp) is None and ch3._race_snap is None
+finally:
+    solvers.run_solver = _orun
+    for (mod, name), fn in sv.items():
+        setattr(mod, name, fn)
+print("ok  race seed snapshot: verified seed adopted (same depth), unverified -> None, restore drops staged code")

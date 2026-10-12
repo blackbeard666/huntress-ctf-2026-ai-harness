@@ -241,6 +241,15 @@ the win counts are optimistic; precision of what gets submitted is the safety pr
 Script in-window solve profile (D11 TT, local): ~0.4 s = AES-zip PBKDF2 per member (94 calls, 85 ms) + one node
 spawn (~70 ms) + regex/compile; Homebase ~0.46 s. Solver-internal (LLM-owned) -> a candidate for a HoF speed pass.
 
+Blind replay r11b (main, 4221860, knowledge pinned 76c059d, Day 11 lanes moved aside): **13/15** -- binary TT +
+Mastery unrunnable (the GM refuses retry AND practice on that route: `409 retry_variants_unavailable`, no published
+continuation; the real-day solve stands). Singles: race WON warmups + mobile (T+27) and binary (T+38); script by the
+LLM at T+34 (race plan landed the same second); metadata LLM T+41. Metadata TT + Mastery: pool 0 -> untimed practice
+-> CORRECT (first live use). Chains done: mobile T+41, warmups T+46, script T+56, metadata T+99 (31 s compound-probe
+generalize = the known replay artifact). Fixes after r11b: race plan skips the question-text index (`by_question=False`;
+it took 18-24 s under drop load, now 0.2-1.4 s per lane), and a verified race seed becomes a ready snapshot
+(`.run/spec-dayNN/<chal>-race/solver`) so the timed modes don't wait 7-12 s for the worker's solver to catch up.
+
 ## REVERSED 2026-10-07: no hand-built lane solvers, no deterministic-solver-first
 The owner's direction: don't reinvent the wheel and don't bet on yesterday's shapes -- each day's challenges are
 unknown. The `lib/lanes/*` solvers (hand-written ELF/JAR/PE/metadata parsers etc.) and the lane-first reuse step were
