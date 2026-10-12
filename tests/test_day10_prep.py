@@ -317,4 +317,60 @@ assert e1 < 1.0, e1
 assert e2 > 40, e2
 print(f"ok  mastery_estimate: jitter-only {e1}s (was ~7 s for D9 warmups), real per-set cost {e2}s")
 
+# 14) pre-Mastery probe wait is bounded: a probe still running after LATE_PROBE_WAIT -> Mastery starts, no generalize
+from hctf import timed  # noqa: E402
+
+
+class _SlowFut:
+    def done(self):
+        return False
+
+    def result(self, timeout=None):
+        raise AssertionError("must not block on a running probe before Mastery")
+
+
+ch = orchestrate.Chain.__new__(orchestrate.Chain)
+ch.base, ch.lane, ch.name = "b", "script-analysis", "x"
+ch.entries = {"time_trial": {"id": "b/time_trial"}, "mastery": {"id": "b/mastery"}}
+ch.sdir = Path(tempfile.mkdtemp()) / "solver"
+ch.gov = type("G", (), {"allow_timed": lambda self: True})()
+ch._pre_attempt_done = True
+ch._fam_pre_fut, ch._mut_pre_fut, ch._cmp_pre_fut = _SlowFut(), None, None
+gens, runs = [], []
+patches = {
+    (orchestrate, "set_state"): lambda *a, **k: None,
+    (orchestrate, "record_timed_case"): lambda *a, **k: None,
+    (orchestrate, "say"): lambda *a, **k: None,
+    (orchestrate, "LATE_PROBE_WAIT"): 0.1,
+    (orchestrate.cli, "is_complete"): lambda cid: False,
+    (orchestrate.cli, "gm_solved"): lambda cid: False,
+    (timed, "run"): lambda cid, sdir, log=None, **k: (runs.append(cid), "correct")[1],
+    (timed, "last_result"): lambda cid: None,
+    (orchestrate.Chain, "generalize"): lambda self, cid, wrong=None, fixed=None, diag=None: gens.append(diag),
+    (orchestrate.Chain, "_mastery_speed_gate"): lambda self, cid: None,
+}
+saved = {k: getattr(*k) for k in patches}
+try:
+    for (mod, name), fn in patches.items():
+        setattr(mod, name, fn)
+    t0 = time.time()
+    assert ch.timed_stage("mastery") is True and runs == ["b/mastery"] and not gens, (runs, gens)
+    assert time.time() - t0 < 2, time.time() - t0
+finally:
+    for (mod, name), fn in saved.items():
+        setattr(mod, name, fn)
+print("ok  pre-Mastery probes: a still-running probe no longer holds Mastery (bounded wait, no generalize)")
+
+# 15) timed_env: the status-time contract's delivery bytes reach hb_timed (live start bodies carry no sizes)
+env15 = workers.timed_env("binary-reverse-engineering-day-09-nim-generated-runtime/mastery")
+assert int(env15.get("HCTF_EXPECT_BYTES", 0)) > 150e6, env15
+os.environ["HCTF_EXPECT_BYTES"] = env15["HCTF_EXPECT_BYTES"]
+try:
+    live = dict(mc, artifacts=[{k: v for k, v in a.items() if k != "size"} for a in mc["artifacts"]])
+    assert hb_timed._total_bytes(live) > 150e6
+finally:
+    del os.environ["HCTF_EXPECT_BYTES"]
+assert hb_timed._total_bytes(live) == 0
+print("ok  timed_env: HCTF_EXPECT_BYTES from the saved contract gates the pipeline on a size-less live body")
+
 print("\nALL DAY-10 PREP CHECKS PASSED")

@@ -653,11 +653,30 @@ def push_hot_files():
         _hot_pushed[f] = sig
 
 
+TIMED_FWD = ("HCTF_PIPELINE_SETS", "HCTF_PIPELINE_MIN_MB", "HCTF_PIPELINE_DL", "HCTF_SOLVER_PARALLEL")
+
+
+def timed_env(cid):
+    """Env for hb_timed (local or over ssh): pipeline knobs from this process + HCTF_EXPECT_BYTES = the delivery bytes
+    the saved status-time contract lists (the live start body carries no sizes: the rehearsal's binary Mastery,
+    5 x 31 MB, skipped the per-set pipeline on a 0-byte total)."""
+    from . import cli
+    env = {k: os.environ[k] for k in TIMED_FWD if k in os.environ}
+    try:
+        c = json.loads((cli.cdir(cid) / "contract.json").read_text())
+        n = sum(int(a.get("size") or 0) for a in c.get("artifacts") or [] if isinstance(a, dict))
+        if n:
+            env["HCTF_EXPECT_BYTES"] = str(n)
+    except (OSError, ValueError, TypeError):
+        pass
+    return env
+
+
 def run_timed(solver_dir, cid, op="start", timeout=60):
     """Run the clock-critical timed attempt LOCALLY against the public GM (pairing token).
     No VM, no SSH — the whole start->download->solve->submit path runs here. Returns hb_timed's JSON dict."""
     rel = solver_dir.relative_to(ROOT)
-    env = dict(os.environ, PYTHONPATH=f"{ROOT}:{os.environ.get('PYTHONPATH', '')}")
+    env = dict(os.environ, PYTHONPATH=f"{ROOT}:{os.environ.get('PYTHONPATH', '')}", **timed_env(cid))
     if os.environ.get("HCTF_TIMED_GM_URL"):
         # Clock-critical calls straight to this GM (e.g. the real one while a replay proxy fronts everything else: the
         # proxy opens a fresh TLS connection per call, ~0.5-1 s each inside a 6-7 s window).
@@ -983,8 +1002,9 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
     t_exec = time.time()
     try:
         rft = os.environ.get("HCTF_RUN_FOR_TIME")   # pool policy (hb_timed._hof_wanted); default there: HoF
+        fwd = "".join(f"{k}={shlex.quote(v)} " for k, v in timed_env(cid).items())
         r = remote.ssh(f"cd ~/{HB_WORK} && HUNTRESS_GAME_MASTER_URL={remote.INSIDE_GM} "
-                       + (f"HCTF_RUN_FOR_TIME={shlex.quote(rft)} " if rft is not None else "")
+                       + (f"HCTF_RUN_FOR_TIME={shlex.quote(rft)} " if rft is not None else "") + fwd
                        + f"python3 hctf/hb_timed.py {shlex.quote(cid)} {shlex.quote(str(rel))} --op {op}",
                        timeout=timeout, check=False)
     except (remote.Unreachable, subprocess.SubprocessError, OSError) as e:

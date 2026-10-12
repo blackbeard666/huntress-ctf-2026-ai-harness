@@ -452,7 +452,10 @@ PIPELINE_DL = int(os.environ.get("HCTF_PIPELINE_DL", "3"))
 
 
 def _total_bytes(body):
-    return sum(int(x.get("size") or 0) for x in body.get("artifacts") or [] if isinstance(x, dict))
+    """Delivery bytes: the body's artifact sizes, else the caller's HCTF_EXPECT_BYTES (from the status-time contract --
+    a live start body lists no sizes)."""
+    n = sum(int(x.get("size") or 0) for x in body.get("artifacts") or [] if isinstance(x, dict))
+    return n or int(os.environ.get("HCTF_EXPECT_BYTES") or 0)
 
 
 def _set_plan(body, plan, ids):

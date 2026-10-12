@@ -138,6 +138,8 @@ try:
     for (mod, name), fn in patches.items():
         setattr(mod, name, fn)
     assert ch.timed_stage("time_trial") is True and runs == ["b/time_trial"] and not gens, (runs, gens)
+    for _f in (ch._fam_pre_fut, ch._mut_pre_fut, ch._cmp_pre_fut):
+        _f._done = True     # the probes finished beside the Time Trial (a still-running one: test_day10_prep)
     assert ch.timed_stage("mastery") is True and len(gens) == 1 and "family_pre" in gens[0], gens
     assert (ch.sdir / "cases" / "family-sh-1").exists()
     assert ch._family_pre_result() == ("", [])                 # consumed once

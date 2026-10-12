@@ -474,3 +474,14 @@ the dry run had already named; single OK -> TT start 5.4 s (all lanes 3.9-6.6 s)
 2.98 vs 1.76) = first-run cold start on Homebase. Script TT end -> Mastery start 5.4 s (family-probe collect).
 Thinnest margins: binary TT 7.3/10, binary Mastery 14.3/20, metadata TT 3.4/6 (submit 2.31 s).
 Ops: `hctf hb keepalive` (day.sh child) died silently ~20:41 while armed (no OOM, no traceback) -- restarted by hand.
+
+### Blind Day 9 replay `r9a` on MAIN (2026-10-09 21:41, harness 648c97a, knowledge pinned d6173ea)
+15/15. T+ from release (21:41:22) single / TT done / Mastery done: mobile 27/31/34, metadata 32/35/58 (one 18 s
+pre-Mastery generalize: the mutation probe caught a real answer-invariant break), script 35/40/51, warmups 41/45/48.
+Binary's single was cut by a ~58 h host suspend (resumed 10-12 07:50 with Homebase down -> local timed, late-judged).
+What the Day-10 prep changed, measured: single CORRECT -> TT done 3-5 s (real D9: 5.9-11.6 s); pre-push (tar) 0.7-1.0 s
+and the kickoff then skips the push; first TT solve no longer cold (mobile 0.12 s vs 1.99 s, script 0.66 vs 2.98);
+deferred recon landed T+14 on binary after its hand-off. Still open from r9a: script TT -> Mastery 5.2 s on the family
+probe (now a bounded 2 s wait); the per-set pipeline never engaged -- live start bodies list no sizes (now
+HCTF_EXPECT_BYTES from the status-time contract; pipeline env forwarded over ssh). GM start phase 0.95-2.5 s this run
+(D9 real 0.32-1.23 s) = GM load, not the harness.

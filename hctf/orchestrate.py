@@ -592,6 +592,7 @@ def compound_probe(sdir, seconds=None):
     return compound.summary(res), compound.hard_misses(res), res
 
 
+LATE_PROBE_WAIT = float(os.environ.get("HCTF_LATE_PROBE_WAIT", "2"))
 ESTIMATE_MIN_MARGINAL = float(os.environ.get("HCTF_ESTIMATE_MIN_MARGINAL", "0.15"))
 
 
@@ -1805,6 +1806,17 @@ class Chain:
             say(f"[{self.base}] compound pre-probe note: {e}")
             return "", []
 
+    def _await_probes(self, timeout):
+        """Wait up to `timeout` s for the beside-the-TT probes -> True when every started one has finished."""
+        futs = [f for f in (getattr(self, a, None) for a in ("_fam_pre_fut", "_mut_pre_fut", "_cmp_pre_fut"))
+                if f is not None]
+        end = time.time() + timeout
+        while not all(f.done() for f in futs):
+            if time.time() >= end:
+                return False
+            time.sleep(0.05)
+        return True
+
     def _late_probes(self, cid, wait=True):
         """Probes that run beside the first Time Trial (codec family + mutation + compounding): adopt hard misses as
         regression cases. Returns the diag dict for a generalize ({} when clean). Each result is consumed once."""
@@ -2015,7 +2027,14 @@ class Chain:
             if pre:
                 self.generalize(cid, wrong=None, fixed=None, diag=pre)
         elif mode != "time_trial":
-            late = self._late_probes(cid, wait=True)
+            # Bounded: what finished within LATE_PROBE_WAIT s is acted on now; a probe still running is consumed by a
+            # Mastery-failure generalize instead (timed_stage awaits all probes there). D9 + rehearsal: script's Mastery
+            # sat 5.2-5.4 s on the codec-family probe (~10 s under 5-lane load); its only hits ever were D7 replays.
+            done = self._await_probes(LATE_PROBE_WAIT)
+            late = self._late_probes(cid, wait=done)
+            if not done:
+                say(f"[{cid}] probes still running after {LATE_PROBE_WAIT:g}s: Mastery starts now (a failure "
+                    "generalize takes their results)")
             if late:
                 say(f"[{cid}] probes that ran beside the Time Trial found misses: generalizing BEFORE Mastery")
                 self.generalize(cid, wrong=None, fixed=None, diag=late)
