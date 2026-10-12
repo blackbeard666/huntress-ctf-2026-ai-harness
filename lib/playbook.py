@@ -155,7 +155,20 @@ PLAYBOOK = [
              "target-framework moniker / the assembly version.",
         examples=("BSJB root -> v4.0.30319",),
     ),
+    PlaybookEntry(
+        lanes=(BINARY,), families=("offset",),
+        rule="`hcfg_offset` = plain decimal FILE offset (not VA) of the stored config's first byte: base64-stored blob -> "
+             "the first base64 char (after any length/cap header); RAW blob -> the 'H' of the b'HCFG' magic. Never "
+             "'none' when a config was decoded.",
+        examples=("Nim b64 text at 0x77e8 -> 30696 (D9)", "D b64 text -> 368272 (D11)", "FPC raw HCFG at 0x143f0 -> 82928 (D12)"),
+    ),
     # ---- metadata-forensics ----------------------------------------------------------------------
+    PlaybookEntry(
+        lanes=(METADATA,), families=("guid",),
+        rule="`dotnet-mvid-guid` = Module table Mvid -> #GUID heap (1-based, 16 B) as .NET Guid.ToString(): first three "
+             "groups little-endian, lowercase 8-4-4-4-12, no braces (uuid.UUID(bytes_le=...)).",
+        examples=("#GUID f3 10 e4 21 77 c9 5c 46 .. -> 21e410f3-c977-465c-.. (D12)",),
+    ),
     PlaybookEntry(
         lanes=(METADATA,), families=("hex",),
         rule="Header integer `<fmt>.<field>_hex` = `0x` + LOWERCASE hex ZERO-PADDED to the struct field's width (u16 -> 4, "

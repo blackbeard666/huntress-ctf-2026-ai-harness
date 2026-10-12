@@ -1,0 +1,23 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "ed186ae8-1c1c-47ee-8bfd-7c03b6dfee0f",
+  "window": 30.0,
+  "elapsed": 2.01,
+  "in_window": 1.5,
+  "phases": {
+    "start": 0.51,
+    "download": 0.14,
+    "solve": 0.04,
+    "submit": 1.31
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": "2026-10-12T23:12:18.217Z",
+  "verified": {
+    "set1.d12-dotnet-003-dotnet-mvid-guid": "2658bcc7-f07c-48b1-8cb9-2bb645f8680e",
+    "set2.d12-dotnet-004-dotnet-mvid-guid": "ecc37f87-9668-43c5-b9f4-011ee0d07c7c"
+  },
+  "attempts_remaining": 0,
+  "hall_of_fame_eligible": false
+}

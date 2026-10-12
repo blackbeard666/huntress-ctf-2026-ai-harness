@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-12-managed-expectations",
+  "lane": "metadata-forensics",
+  "name": "🔎 Managed Expectations",
+  "ids": {
+    "single_solve": "metadata-forensics-day-12-managed-expectations",
+    "time_trial": "metadata-forensics-day-12-managed-expectations/time_trial",
+    "mastery": "metadata-forensics-day-12-managed-expectations/mastery"
+  }
+}

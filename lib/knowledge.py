@@ -55,7 +55,11 @@ ARCHITECTURE_REJECTED = ["amd64"]
 # Day 11 "D-Day" (D-language static ELF x86-64; single + TT + Mastery 3 sets, 0 wrong) re-confirmed the same law: the
 # base64 'SENGRw...' text sits NUL-terminated in .rodata right after a ".debug_line\0" string; hcfg_offset = "368272"
 # (0x59e90) = first byte of the base64 TEXT, same in all 3 D builds (sha differed, offset did not).
+# Day 12 "Pascal's Wager" (Free Pascal static ELF x86-64 inside a d01..d12 archive; single + TT + Mastery 3 sets) CONFIRMED
+# the RAW form: the blob sits un-encoded ('HCFG' magic + version/crc header + XOR'd body) and hcfg_offset = file offset of
+# the 'H' of the magic ("82928" = 0x143f0, all sets). The solver's raw-scan path returned "none" -> 1 lost submit.
 HCFG_OFFSET_FMT = "{n}"
+HCFG_OFFSET_RAW = "offset of the b'HCFG' magic"     # base64 form: offset of the first base64 char (D9/D11)
 # Day 10 "Zig Zag" (Zig cross-compiled ELF + PE; alt single + TT 46625ef1 + Mastery 0c0733e6 3 sets, 0 wrong): NEW enum field
 # `has_hcfg_section` = "true" when a section NAMED `.hcfg` exists (ELF section header table / PE section table; the
 # Zig PE set had .hcfg between .pdata and .tls). Zig PE x86-64 -> format "pe", machine/architecture "x86-64" (same
@@ -116,6 +120,13 @@ PE_ENTRY_POINT_RVA_HEX_REJECTED = ["0x65bd0"]
 # "pe-base-amd64.exe", "pe-base-arm64.exe". The randomized member name (telemetry-agent-NNN.exe) is the decoy.
 # pefile: PE(data, fast_load) + parse_data_directories(RESOURCE) -> FileInfo[..].StringTable[..].entries.
 PE_VERSION_STRING_KEY = {"original-filename": "OriginalFilename"}
+
+# Day 12 "Managed Expectations" (metadata-forensics), confirmed 2026-10-13 (single, TT, Mastery 2 sets; 0 wrong): id
+# d12-dotnet-NNN-dotnet-mvid-guid = the Module table (row 1) Mvid -> #GUID heap entry (1-based index, 16 B) rendered as
+# .NET Guid.ToString(): mixed-endian (first 3 groups LE) lowercase 8-4-4-4-12, no braces, e.g.
+# "21e410f3-c977-465c-80eb-6890ddd3085c". Python: str(uuid.UUID(bytes_le=heap[(i-1)*16:i*16])). Same-named/same-version
+# assemblies differ ONLY here ("rebuilds vs renames"); raw big-endian hex / braces never tried.
+DOTNET_MVID_GUID = "str(uuid.UUID(bytes_le=...))"
 
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {
@@ -272,6 +283,9 @@ NODE_ROLE_ATTACK_CONFIRMED = {
 # Day 11 "By Any Other Name" (single + TT f99ea9ec + Mastery 2d722b36, 0 wrong) added TypeScript (polyglot-typescript-*.ts,
 # `// HUNTRESS_ANALYSIS_V1:{FRAG,HEX,B64,HB64}-` comment, host_profile "standalone"): launcher+staged_chain = T1059,
 # downloader T1105, benign none -- same table; adapters local_parser/http_client/process_builder/operation_graph.
+# Day 12 "AutoIt Takes Two" (single + TT d629142e + Mastery 635241de, 0 wrong) added AutoIt (polyglot-autoit-*.au3, plan in a
+# `; HUNTRESS_ANALYSIS_V1:HB64-` comment + `Global Const $descriptor_<id> = "<hex>"`): launcher+staged_chain = T1059,
+# downloader T1105, benign none -- same table again; obfuscation labels plain_hex/base64/hex_base64 read from the plan.
 V3_ROLE_ATTACK_CONFIRMED = {
     "benign_utility": "none", "stager": "T1105", "downloader": "T1105", "dropper": "T1140", "uploader": "T1041",
     "launcher": "T1059", "staged_chain": "T1059", "persistence_descriptor": "T1053",

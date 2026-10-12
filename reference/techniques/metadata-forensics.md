@@ -1,4 +1,4 @@
-# metadata-forensics — technique log (days 1-11; updated after every day)
+# metadata-forensics — technique log (days 1-12; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -12,14 +12,16 @@ How this lane has looked so far (observations, not guarantees):
   the raw header field -- answer the u16 as hex, not the binary lane's machine word (`i386`). Day 10 stayed on the SAME
   PE (`pe.address_of_entry_point_rva_hex`) and DE-escalated: zip = the exe only, contract = 1 field (TT 1, Mastery 2x1).
   Day 11 kept that shape and moved INTO the PE's resources (`pe.version_original_filename`, VS_VERSIONINFO string).
+  Day 12 switched to a NEW member family -- a 5 KB .NET dll (`d12-dotnet-NNN-dotnet-mvid-guid`) -- and went into the CLI
+  METADATA tables (Module.Mvid via the #GUID heap); same 1-field / TT 1 / Mastery 2x1 shape.
 - A new `<fmt>.<field>` family each day: identity (name/size/hashes) -> magic prefix -> `text.utf8_bom_present` ->
   `jpeg.sof_dimensions_pixels` -> `png.ihdr_dimensions_pixels` -> `pdf.header_version` -> `zip.eocd_total_entries` ->
   `zip.central_directory_member_names` -> `pe.coff_machine_u16_hex` -> `pe.address_of_entry_point_rva_hex` ->
-  `pe.version_original_filename`. Since Day 3 the question literally names the field
+  `pe.version_original_filename` -> `dotnet.mvid_guid`. Since Day 3 the question literally names the field
   (`Determine <fmt>.<field> for <member>`); answer ids read `dNN-<fmt>-NNN-<fmt>-<field>` (`.`/`_` -> `-`). NOTE the
   `dNN` is the drop/member family, not the day the field appeared: Day 8's new field came as `d07-zip-001-zip-central-
   directory-member-names`; Day 9's as `d09-pe-001-pe-coff-machine-u16-hex` (new member family -> new `dNN`); Day 10's as `d09-pe-001-pe-address-of-entry-point-rva-hex` (same exe family), Day 11's as
-  `d09-pe-001-pe-version-original-filename`.
+  `d09-pe-001-pe-version-original-filename`, Day 12's as `d12-dotnet-001-dotnet-mvid-guid` (new family -> new `dNN`).
 - The prompt's flavor text describes decoys (impostors, renamed copies, "-with-bom" names, EXIF/presentation lies, chunk
   "passengers", catalog /Version overrides, "impossible provenance" names). The asked field so far was always the
   STRUCTURAL truth from the header/record bytes; names/extensions/secondary metadata are the lie. Singles D1-D9 were
@@ -40,6 +42,8 @@ How this lane has looked so far (observations, not guarantees):
   all 7 copies but the exe's sha256 differs per set (re-built per variant). D10: the entry RVA re-rolled per variant
   (single 0x00065bd0, TT 0x00063a80, Mastery 0x00063510 / 0x00065bd0). D11: the PE's ARCHITECTURE re-rolled per variant
   (single 386 0x014c, TT amd64 0x8664, Mastery arm64 0xaa64 + 386) and OriginalFilename follows it (`pe-base-<goarch>.exe`).
+  D12: every dll is 5,120 B with the same layout; the MVID, the sha256 and the `Huntress.Managed.<12HEX>` type name re-roll
+  per variant (managed-001..004).
   Never cache a value across sets.
 - **Field-set size** -- grows AND shrinks: D7 TT/Mastery went 1 -> 11 fields (Mastery 22); D8 12 in every mode (Mastery
   5 x 12); D9 13 (Mastery 5 x 13); D10 back to ONE field everywhere (Mastery 2 sets x 1, zip = the lone exe). Families: the day's field +
@@ -73,6 +77,7 @@ How this lane has looked so far (observations, not guarantees):
 | `pe.coff_*` / "executables for several architectures", `.exe`/`.dll`/`.sys` | `MZ`@0 -> e_lfanew u32 LE @0x3C -> require `PE\0\0` there -> COFF FileHeader: Machine u16 @+4, NumberOfSections @+6, TimeDateStamp @+8, SizeOfOptionalHeader @+20, Characteristics @+22; OptionalHeader magic @+24 (`0x10b` PE32 / `0x20b` PE32+). `xxd -s $((0x3c)) -l 4` then `xxd -s <lfanew> -l 8`. `file`/`pefile` cross-check only |
 | `pe.address_of_entry_point_*` / `pe.image_base*` / "start addresses" | opt = e_lfanew+24: AddressOfEntryPoint u32 @opt+16 (an RVA); ImageBase u32 @opt+28 (PE32) / u64 @opt+24 (PE32+). `od -An -tx4 -j$((lfanew+40)) -N4 f`. objdump's "start address" = ImageBase+RVA (a VA, NOT the RVA) |
 | `elf.*` / `macho.*` siblings (promised "several architectures", not yet asked) | ELF: `\x7fELF`, EI_DATA @5 picks endianness, e_machine u16 @18. Mach-O: `feedface`/`feedfacf` (either byte order) cputype u32 @4; fat `cafebabe` = BE nfat_arch @4 + 20-B entries (Java .class shares `cafebabe`; small nfat_arch = fat). Emit hex in the same `0x%0Nx` width as the field's `uNN` |
+| `dotnet.*` / `.dll` "Mono/.Net assembly" / "module identities", "rebuilds vs renames" | CLI metadata, stdlib only (no dnfile in-window): PE data dir 14 (CLI header) -> MetaData RVA -> `BSJB` root -> stream headers (`#~`, `#Strings`, `#GUID`, `#Blob`). `#~`: HeapSizes byte @+6 (bit1 = 4-byte GUID index), Valid u64 @+8, row counts @+24; Module row 0 = Generation u16, Name (str idx), **Mvid (guid idx, 1-based)** -> 16 B at #GUID+(i-1)*16 -> `str(uuid.UUID(bytes_le=..))`. Cross-check: `monodis`/`ilspycmd -il` print `.module` + `// MVID: {..}` |
 | `pe.version_*` / "version resources remember what the binaries called themselves" | VS_VERSIONINFO StringFileInfo: `pefile.PE(data=b, fast_load=True)`; `pe.parse_data_directories(directories=[DIRECTORY_ENTRY['IMAGE_DIRECTORY_ENTRY_RESOURCE']])`; walk `pe.FileInfo[..][..].StringTable[..].entries` (bytes keys). Match the id tail to the key ignoring case/`-_` (`original-filename` -> `OriginalFilename`). Shell: `strings -e l f.exe | grep -A1 OriginalFilename` |
 | exe-extension decoy (`.exe` that is text/zip/PNG, `MZ` with no/garbled `PE\0\0` at e_lfanew) | header absent -> literal `none` if the syntax offers it; never fall back to a later `PE\0\0` hit or the extension |
 | "impostor", "renamed", "disguise" | trust magic bytes at offset 0; a matching string deeper in the file is a decoy |
@@ -113,35 +118,28 @@ inner zip), single = 12 fields. Inner zip's CD names verbatim in CD order, full 
 honest Go 1.22 386 PE32 (e_lfanew 0x80, 7 sections, opt magic 0x10b). COFF Machine u16 -> `0x014c` (padded; not `i386`,
 the binary lane's word). "Several architectures + decoys" flavor unexercised. ~47 s first try; TT/Mastery 5 x 13 in-window.
 
-**Day 10 — Where Do We Begin?** (`pe.address_of_entry_point_rva_hex`, kind `pattern`, syntax "lowercase hexadecimal with
-a 0x prefix", norm `trim`, id `d09-pe-001-pe-address-of-entry-point-rva-hex`). Prompt: "Architecture tells you whether a
-binary can run; its entry point tells you where execution begins. Map the start addresses and catch the report that is
-lying."
-- Artifact: 595 KB zip holding ONLY `telemetry-agent-001.exe` (the D9 Go 1.22 386 PE32, 1,257,984 B, ImageBase 0x400000).
-  The D8 kit and every carry-over field were gone: 1 field in single, 1 in TT, 2 sets x 1 in Mastery. No "report" or
-  second binary anywhere -- the "lying report" flavor was unexercised.
-- Key insight: OptionalHeader.AddressOfEntryPoint (u32 @ e_lfanew+24+16) = 0x65bd0, printed `0x%08x` -> `0x00065bd0`.
-  Unpadded `0x65bd0` was REJECTED (first wrong submit in this lane): a `_hex` header field is zero-padded to its struct
-  width even when the id has no `uNN` (D9 u16 -> 4 digits, D10 u32 -> 8). objdump's `start address 0x00465bd0` is the
-  VA (ImageBase + RVA) -- not the asked RVA.
-- Worker: the harness skeleton (not the D9 solver) was in solver/, so it spliced D9's handlers in by `sed` (~30 s), then
-  `od -tx4 -j$((lfanew+40))`. Start 00:41:26Z -> incorrect 00:42:24 -> CORRECT 00:42:41 (~75 s, 1 wrong). Solver also
-  pre-arms image_base (PE32 `0x%08x`, PE32+ `0x%016x`), opt magic `0x%04x`, ELF e_entry (`0x%08x`/`0x%016x`) -- those
-  widths are the same rule by analogy, NOT GM-confirmed.
-- TT 8 s window, in_window 0.79 s (solve 0.03 s); Mastery 11 s, 0.77 s. Both CORRECT; RVA differed per variant.
+**Day 10 — Where Do We Begin?** (`pe.address_of_entry_point_rva_hex`, id `d09-pe-001-...`): zip = the D9 Go 386 PE
+alone, 1 field everywhere. OptionalHeader.AddressOfEntryPoint (u32 @ e_lfanew+40) `0x%08x` -> `0x00065bd0`; unpadded
+`0x65bd0` REJECTED (lane's first wrong submit). objdump's start address is the VA, not the RVA. ~75 s, 1 wrong; TT/Mastery
+first try (RVA re-rolled per variant). "Lying report" flavour unexercised.
 
-**Day 11 — What's My Name Again?** (`pe.version_original_filename`, kind `exact_text`, norm `trim`, id
-`d09-pe-001-pe-version-original-filename`). Prompt: "Filenames have been randomized, but Windows version resources
-remember what the binaries called themselves. Recover the original identities and expose the impersonator."
-- Artifact: 595 KB zip holding only `telemetry-agent-001.exe` (the D9/D10 Go 386 PE32). Its version resource:
-  CompanyName "Huntress Labs", FileVersion 1.0.0.0, OriginalFilename `pe-base-386.exe`, ProductName "Huntress Metadata
-  Forensics", ProductVersion 2026.10.1.0 (no InternalName/FileDescription). The "impersonator" = the randomized member
-  name; nothing else to expose.
-- Key insight: the answer is the OriginalFilename string VERBATIM (with `.exe`), not the member name.
-- Worker: replaced the skeleton's `answer()` with a pefile version-string reader + identity/magic/COFF branches and
-  submitted in ONE command. Launch 01:55:40Z -> CORRECT 01:56:04.6Z (~25 s, first try).
-- TT 7 s window, in_window 0.86 s (`pe-base-amd64.exe`); Mastery 7 s, 0.99 s, 2 sets (`pe-base-arm64.exe`,
-  `pe-base-386.exe`). Both CORRECT first try.
+**Day 11 — What's My Name Again?** (`pe.version_original_filename`, id `d09-pe-001-pe-version-original-filename`): same
+lone Go PE; VS_VERSIONINFO OriginalFilename VERBATIM (`pe-base-386.exe`), not the randomized member name
+(`telemetry-agent-001.exe` = the "impersonator"). pefile resource walk, ONE command, ~25 s first try; TT amd64 / Mastery
+arm64 + 386 variants, both first try.
+
+**Day 12 — Managed Expectations** (`dotnet.mvid_guid`, kind `pattern`, syntax "canonical GUID text in 8-4-4-4-12
+hexadecimal form, including hyphens", norm `trim`, id `d12-dotnet-001-dotnet-mvid-guid`). Prompt: "The .NET assemblies
+share names, versions, and source ancestry -- but their module identities remain distinct. Separate rebuilds from renames."
+- Artifact: 2 KB zip -> `managed-001.dll`, 5,120 B PE32 i386 .NET (BSJB `v4.0.30319`; `<Module>`, a
+  `Huntress.Managed.<12HEX>` type and a `get_ModuleVersionId` memberref -- the hint). One dll per delivery; the "renames vs
+  rebuilds" comparison was never asked, only the MVID.
+- Key insight: MVID = Module table row 0, 3rd column (guid-heap index, 1-based) -> 16 bytes in `#GUID` rendered as .NET
+  `Guid.ToString()` = mixed-endian (`uuid.UUID(bytes_le=...)`), lowercase, no braces: `21e410f3-c977-465c-80eb-6890ddd3085c`.
+- Worker: the solver was the bare skeleton; it typed a ~90-line stdlib PE -> CLI header -> BSJB streams -> `#~` -> `#GUID`
+  parser + the old identity/PE branches and submitted in ONE command (2 tool calls; most of the ~55 s launch->CORRECT was
+  generation). First try. Reference parser: `challenges/day12/metadata-managed-expectations/solver/solve.py` `dotnet_mvid`.
+- TT window 30 s, in_window 0.95 s (managed-002); Mastery 2 sets (003/004), in_window 1.5 s. Both CORRECT first try.
 
 ## GM answer conventions learned
 - Filenames: exact base name incl. extension, no directory. Sizes: base-10 integer, no units. Hashes: hex, case ignored.
@@ -159,9 +157,11 @@ remember what the binaries called themselves. Recover the original identities an
   `0x014c` (D9), u32 AddressOfEntryPoint -> `0x00065bd0` (D10, all modes). The width comes from the STRUCT, not the id
   (D10's id has no `u32`). Contrast: magic-prefix hex has NO `0x`; binary-lane `machine` wants the word (`i386`), and the
   binary lane's `entry_point` was accepted UNPADDED (`0x401040`) -- different lane, different generator.
+- GUIDs (`dotnet.mvid_guid`): .NET `Guid.ToString()` form -- first 3 groups byte-swapped from the heap bytes (bytes_le),
+  lowercase, hyphenated, no braces (D12 all modes; `knowledge.DOTNET_MVID_GUID`, playbook metadata `guid` entry).
 - Version-resource strings (`pe.version_<field>`): the StringFileInfo value verbatim, incl. extension (`pe-base-386.exe`,
   D11 all modes). `knowledge.PE_VERSION_STRING_KEY` maps id tail -> resource key.
-- Rejected spellings: `0x65bd0` for pe.address_of_entry_point_rva_hex (D10 single; unpadded) -- the only one, days 1-11.
+- Rejected spellings: `0x65bd0` for pe.address_of_entry_point_rva_hex (D10 single; unpadded) -- the only one, days 1-12.
 - `knowledge.py`: `JPEG_DIMENSIONS_FMT`, `PNG_DIMENSIONS_FMT`, `PDF_HEADER_VERSION_FMT`, `ZIP_EOCD_TOTAL_ENTRIES_FMT`,
   `ZIP_CD_MEMBER_NAMES_FMT`, `PE_COFF_MACHINE_U16_HEX_FMT`, `PE_ENTRY_POINT_RVA_HEX_FMT` (+`_REJECTED`), `BOOL`;
   `playbook` metadata `hex` entry carries the padding rule.
@@ -204,6 +204,8 @@ remember what the binaries called themselves. Recover the original identities an
   submit round-trips (D9 TT submit alone 2.3 s): never do anything slow (extraction to disk, exiftool, `pefile` full
   parse, subprocess) in-window; parse fixed offsets in memory. Big members (1.2 MB exe x5) pushed Mastery solve to 0.86 s
   -- decompress each member once and cache by (set zip, member).
+- Fresh member family = skeleton solver (D10, D12): copy the previous day's solver first, then add the new family's
+  handler -- D12's worker re-typed the identity/PE branches next to the .NET parser (~50 s of generation).
 - Executable fields: don't take `file`'s "Intel i386" / `pefile` machine names / the Go GOARCH token as the answer; the
   metadata field is the raw u16. And require `PE\0\0` exactly at e_lfanew -- an `MZ` stub alone is not a PE (decoy).
 - Hex width (D10, cost a wrong submit + 17 s): `"0x%x"` drops leading zeros; print `0x%0{2*size}x` for the field's

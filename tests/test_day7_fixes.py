@@ -851,3 +851,11 @@ assert ("-" in _u or "_" in _u) and _dc(_u) == "Nice work? yes>> crisp-starfish-
 assert _dc(_b64.b64encode(b"Nice work decoding this warmup!").decode().rstrip("=")) == "Nice work decoding this warmup!"
 assert _dc("74686973207761726d75") == "this warmu" and _dc("qrpbqvat") == "decoding"   # hex / rot13 unchanged
 print("ok  decode_chunk: unpadded URL-safe base64 (- _ alphabet, no '=') decodes strictly")
+
+# Day 12 ratchet: decode_chunk's plain-REVERSED branch (warmups "Back at You": line 12 = '69-enud-m', whole blob
+# '...:retsaM emaG'); rot-N used to win ('69-fove-n'). Forward plain / rot13 fragments unchanged.
+assert _dc("69-enud-m") == "m-dune-96" and _dc("21-teggun") == "nugget-12" and _dc("36-yvi-ma") == "am-ivy-63"
+assert _dc("56-ztrauq-tesnus-ytsez :retsaM emaG eht ot rewsna tcaxe siht timbus") \
+    == "submit this exact answer to the Game Master: zesty-sunset-quartz-65"
+assert _dc("x qrpbqvat") == "k decoding" and _dc("-vfynaq-crgny-75") == "-island-petal-75"
+print("ok  decode_chunk: plain reversed fragments ('NN-word' slug tail / reversed sentence) read back-to-front")

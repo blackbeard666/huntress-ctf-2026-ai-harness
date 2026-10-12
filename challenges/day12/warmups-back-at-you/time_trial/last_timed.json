@@ -1,0 +1,22 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "dfee9000-8c85-4c74-ad46-8683e8be3756",
+  "window": 30.0,
+  "elapsed": 1.88,
+  "in_window": 1.21,
+  "phases": {
+    "start": 0.68,
+    "download": 0.12,
+    "solve": 0.04,
+    "submit": 1.05
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": "2026-10-12T23:11:29.696Z",
+  "verified": {
+    "message": "jaunty-banner-dune-97"
+  },
+  "attempts_remaining": 0,
+  "hall_of_fame_eligible": false
+}

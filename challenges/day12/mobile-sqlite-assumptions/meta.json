@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-12-sqlite-assumptions",
+  "lane": "mobile-android",
+  "name": "📱 SQLite Assumptions",
+  "ids": {
+    "single_solve": "mobile-android-day-12-sqlite-assumptions",
+    "time_trial": "mobile-android-day-12-sqlite-assumptions/time_trial",
+    "mastery": "mobile-android-day-12-sqlite-assumptions/mastery"
+  }
+}

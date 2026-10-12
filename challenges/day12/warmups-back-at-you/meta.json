@@ -1,0 +1,10 @@
+{
+  "base": "warmups-day-12",
+  "lane": "warmups",
+  "name": "👶 Back at You",
+  "ids": {
+    "single_solve": "warmups-day-12",
+    "time_trial": "warmups-day-12/time_trial",
+    "mastery": "warmups-day-12/mastery"
+  }
+}

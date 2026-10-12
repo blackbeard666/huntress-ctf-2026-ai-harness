@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-12-autoit-workflow-pair",
+  "lane": "script-analysis",
+  "name": "📜 AutoIt Takes Two",
+  "ids": {
+    "single_solve": "script-analysis-day-12-autoit-workflow-pair",
+    "time_trial": "script-analysis-day-12-autoit-workflow-pair/time_trial",
+    "mastery": "script-analysis-day-12-autoit-workflow-pair/mastery"
+  }
+}

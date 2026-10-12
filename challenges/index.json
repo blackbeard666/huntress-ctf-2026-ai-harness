@@ -65,6 +65,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ D-Day"
   },
+  "binary-reverse-engineering-day-12-pascal-archive-stager": {
+    "day": 12,
+    "dir": "day12/binary-pascal-s-wager",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Pascal's Wager"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -131,6 +137,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 What’s My Name Again?"
   },
+  "metadata-forensics-day-12-managed-expectations": {
+    "day": 12,
+    "dir": "day12/metadata-managed-expectations",
+    "lane": "metadata-forensics",
+    "name": "🔎 Managed Expectations"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -196,6 +208,12 @@
     "dir": "day11/mobile-local-secrets",
     "lane": "mobile-android",
     "name": "📱 Local Secrets"
+  },
+  "mobile-android-day-12-sqlite-assumptions": {
+    "day": 12,
+    "dir": "day12/mobile-sqlite-assumptions",
+    "lane": "mobile-android",
+    "name": "📱 SQLite Assumptions"
   },
   "read-the-rules": {
     "day": 1,
@@ -269,6 +287,12 @@
     "lane": "script-analysis",
     "name": "📜 By Any Other Name"
   },
+  "script-analysis-day-12-autoit-workflow-pair": {
+    "day": 12,
+    "dir": "day12/scripting-autoit-takes-two",
+    "lane": "script-analysis",
+    "name": "📜 AutoIt Takes Two"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -334,6 +358,12 @@
     "dir": "day11/warmups-safe-travels",
     "lane": "warmups",
     "name": "👶 Safe Travels"
+  },
+  "warmups-day-12": {
+    "day": 12,
+    "dir": "day12/warmups-back-at-you",
+    "lane": "warmups",
+    "name": "👶 Back at You"
   },
   "welcome-robots": {
     "day": 1,
