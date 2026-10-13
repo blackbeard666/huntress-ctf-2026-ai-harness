@@ -1,0 +1,61 @@
+{
+ "_doc": "Ranked prebuild targets for `hctf prebuild --lane warmups`: classical codec families NOT yet in lib/warmups_codecs.CANDIDATES (D1-D13 walked base64, rot13, hex, binary, decimal, octal, %XX, html entities, \\\\u escapes, base32, base64url, reverse, Atbash -- the prompt is always a pun on the codec). Each worker adds a speculative encoder+decoder + fixtures from an independent implementation; DAYS entries are GM-confirmed and never edited.",
+ "targets": [
+  {
+   "id": "bacon",
+   "goal": "Baconian cipher (A/B 5-bit groups, also as case/font-style or 0/1 groups); prompt puns: 'bacon','Francis'"
+  },
+  {
+   "id": "polybius",
+   "goal": "Polybius square digit pairs (5x5, I/J merged), plus tap code (dots/knocks); prompts: 'square','knock','prison'"
+  },
+  {
+   "id": "base91",
+   "goal": "basE91 text"
+  },
+  {
+   "id": "base62",
+   "goal": "base62 big-integer text"
+  },
+  {
+   "id": "uuencode",
+   "goal": "uuencode / xxencode bodies (begin 644 lines or bare)"
+  },
+  {
+   "id": "punycode",
+   "goal": "punycode / IDNA xn-- labels"
+  },
+  {
+   "id": "braille",
+   "goal": "Unicode Braille patterns U+2800 (Grade 1 letters, digits via number sign)"
+  },
+  {
+   "id": "t9-multitap",
+   "goal": "phone keypad: multi-tap digit runs (44 33 555) and T9 digit words; prompts 'phone','dial','keypad'"
+  },
+  {
+   "id": "leetspeak",
+   "goal": "1337 substitution (4->a 3->e 1->l/i 0->o 5->s 7->t) as a keyless free-text transform"
+  },
+  {
+   "id": "columnar",
+   "goal": "columnar / scytale transposition with small keys (2-8 columns, key = title word)"
+  },
+  {
+   "id": "fullwidth-unicode",
+   "goal": "fullwidth / mathematical-alphanumeric / small-caps Unicode letter variants mapped back to ASCII"
+  },
+  {
+   "id": "zero-width",
+   "goal": "zero-width characters (U+200B/C/D, U+FEFF) carrying bits between visible text"
+  },
+  {
+   "id": "vigenere-autokey",
+   "goal": "Vigenere / Beaufort / autokey where the key is a word from the challenge title/prompt (pun) -- extend key extraction"
+  },
+  {
+   "id": "pig-latin",
+   "goal": "Pig Latin and word-level games (reverse each word, swap halves) as keyless free-text transforms"
+  }
+ ]
+}

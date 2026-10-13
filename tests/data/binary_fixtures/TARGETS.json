@@ -1,0 +1,41 @@
+{
+ "_doc": "Ranked prebuild targets for `hctf prebuild --lane binary`: HCFG storage encodings NOT yet in lib.binary.hcfg_scan (it already covers raw, base64/url, separated hex, base32/85/a85, UTF-16LE/BE, reversed, single-byte xor, zlib/gzip/deflate). Offsets of new encodings are speculative (first byte of the stored form).",
+ "targets": [
+  {
+   "id": "multibyte-xor",
+   "goal": "HCFG body or whole blob XOR'd with a repeating 2-16 byte key (key stored next to it or in the header); known-plaintext 'HCFG' recovers it"
+  },
+  {
+   "id": "custom-base64-alphabet",
+   "goal": "base64 with a shuffled/custom alphabet stored as a 64-char string in the binary"
+  },
+  {
+   "id": "rot13-base64",
+   "goal": "base64 text further ROT13'd / case-swapped / reversed per line"
+  },
+  {
+   "id": "split-literals",
+   "goal": "blob split across several adjacent string literals or a table of short chunks (concatenate in file order / by index)"
+  },
+  {
+   "id": "int-array",
+   "goal": "blob stored as an int/uint32/uint16 array in .data/.rodata (little/big endian) or as a decimal/char-code list '72,67,70,71'"
+  },
+  {
+   "id": "rc4",
+   "goal": "RC4-encrypted HCFG with the key as a nearby printable string (try short printable strings within 4 KB as keys)"
+  },
+  {
+   "id": "base64-of-compressed",
+   "goal": "base64 (or hex) of zlib/gzip/lzma/bz2 of the blob; also lzma/bz2/xz streams raw in the file"
+  },
+  {
+   "id": "nibble-swap-bitnot",
+   "goal": "byte transforms: nibble swap, bitwise NOT, add/sub constant, rotate-left bits, before or after base64"
+  },
+  {
+   "id": "strided",
+   "goal": "interleaved/strided bytes (every 2nd/4th byte, two halves interleaved) and wide-char variants beyond UTF-16"
+  }
+ ]
+}

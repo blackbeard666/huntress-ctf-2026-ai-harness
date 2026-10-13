@@ -1040,7 +1040,8 @@ def warm_homebase_imports():
     """Fire-and-forget on the VM: import every lib/ module + the heavy solver deps and start node/7z once, so the first
     Time Trial's solver doesn't pay cold EBS reads (D9: TT solves 1.2-1.8 s slower than the next Mastery's on the same
     VM -- mobile 1.99 s vs 0.17 s). Returns at once; runs well before any clock."""
-    mods = " ".join(["lib." + p.stem for p in sorted((ROOT / "lib").glob("*.py")) if p.stem != "__init__"] + HB_DEPS
+    mods = " ".join(["lib." + p.stem for p in sorted((ROOT / "lib").glob("*.py")) if p.stem != "__init__"]
+                    + ["lib.meta", "lib.meta.spell", "lib.meta.pe", "lib.meta.cfb", "lib.meta.msi"] + HB_DEPS
                     + ["androguard.core.apk", "androguard.core.dex"])
     py = ("import importlib,sys\nfor m in sys.argv[1:]:\n    try: importlib.import_module(m)\n    except Exception: pass")
     job = (f"cd ~/{HB_WORK} && PYTHONPATH=~/{HB_WORK} timeout 120 python3 -c {shlex.quote(py)} {mods}; "
@@ -1376,7 +1377,7 @@ def deliveries_for(res, contract):
 BUNDLE_FALLBACK = os.environ.get("HCTF_BUNDLE_FALLBACK", "1") != "0"
 # A failed daemon attempt's files (<= this many bytes in total) come back INLINE in the result (hb_daemon
 # _inline_bytes): no post-failure ssh listing + fetch. 0 = off; an old daemon ignores the field (pull as before).
-INLINE_PULL_MAX = int(os.environ.get("HCTF_INLINE_PULL_MAX", "2000000"))
+INLINE_PULL_MAX = int(os.environ.get("HCTF_INLINE_PULL_MAX", "262144"))
 
 
 def write_inline(inline, local):
