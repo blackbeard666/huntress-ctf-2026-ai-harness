@@ -1,0 +1,7 @@
+{
+ "field": "pe.fixed_product_version",
+ "expected": "10.0.12.0",
+ "generator_cmd": "cp tools/pwsh/System.Diagnostics.Tools.dll tests/data/meta_fixtures/pe/vsver_ref_product_version.bin  (Microsoft-built .NET 10 reference assembly from the PowerShell 7 distribution, unmodified)",
+ "oracle_cmd": "exiftool -j -n -FileVersionNumber -ProductVersionNumber -FileFlags -FileOS -FileVersion -ProductVersion tests/data/meta_fixtures/pe/vsver_ref_product_version.bin -> ProductVersionNumber=10.0.12.0 (string ProductVersion '10.0.12+f3c422da...' is the decoy)",
+ "decoy": false
+}

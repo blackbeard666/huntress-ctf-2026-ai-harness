@@ -1,0 +1,7 @@
+{
+ "field": "pe.section_names",
+ "expected": "[\".text\",\".rdata\",\".data\",\".rsrc\",\".reloc\"]",
+ "generator_cmd": "cp .venv/lib/python3.12/site-packages/setuptools/cli-32.exe tests/data/meta_fixtures/pe/cli32_sections.bin  (MSVC-built setuptools launcher, unmodified)",
+ "oracle_cmd": "objdump -h tests/data/meta_fixtures/pe/cli32_sections.bin  (section order 0..4) ; python3 -c \"import pefile,sys;p=pefile.PE(sys.argv[1]);print([s.Name.rstrip(b'\\\\0').decode() for s in p.sections])\" tests/data/meta_fixtures/pe/cli32_sections.bin",
+ "decoy": false
+}

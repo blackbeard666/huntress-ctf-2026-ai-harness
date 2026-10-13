@@ -1,0 +1,7 @@
+{
+ "field": "pe.checksum_u32_hex",
+ "expected": "none",
+ "generator_cmd": "head -c 64 setuptools/cli-32.exe > tests/data/meta_fixtures/pe/decoy_mz_stub.bin  (DOS header only, e_lfanew past EOF)",
+ "oracle_cmd": "objdump -p tests/data/meta_fixtures/pe/decoy_mz_stub.bin -> file format not recognized; pefile -> PEFormatError (no PE header)",
+ "decoy": true
+}

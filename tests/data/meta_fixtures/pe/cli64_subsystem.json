@@ -1,0 +1,7 @@
+{
+ "field": "pe.subsystem_u16_hex",
+ "expected": "0x0003",
+ "generator_cmd": "cp .venv/lib/python3.12/site-packages/setuptools/cli-64.exe tests/data/meta_fixtures/pe/cli64_subsystem.bin  (MSVC-built setuptools launcher, unmodified)",
+ "oracle_cmd": "objdump -x tests/data/meta_fixtures/pe/cli64_subsystem.bin | grep ^Subsystem  -> 00000003 (Windows CUI)",
+ "decoy": false
+}

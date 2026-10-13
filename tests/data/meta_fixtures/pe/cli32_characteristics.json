@@ -1,0 +1,7 @@
+{
+ "field": "pe.characteristics_u16_hex",
+ "expected": "0x0102",
+ "generator_cmd": "cp .venv/lib/python3.12/site-packages/setuptools/cli-32.exe tests/data/meta_fixtures/pe/cli32_characteristics.bin  (MSVC-built setuptools launcher, unmodified)",
+ "oracle_cmd": "objdump -x tests/data/meta_fixtures/pe/cli32_characteristics.bin | grep ^Characteristics  -> 0x102",
+ "decoy": false
+}

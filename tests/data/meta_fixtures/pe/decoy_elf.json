@@ -1,0 +1,7 @@
+{
+ "field": "pe.section_names",
+ "expected": "none",
+ "generator_cmd": "head -c 2048 /bin/true > tests/data/meta_fixtures/pe/decoy_elf.bin  (ELF renamed impostor)",
+ "oracle_cmd": "file tests/data/meta_fixtures/pe/decoy_elf.bin -> ELF 64-bit LSB (not a PE)",
+ "decoy": true
+}

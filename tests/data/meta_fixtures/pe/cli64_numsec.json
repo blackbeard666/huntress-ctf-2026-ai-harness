@@ -1,0 +1,7 @@
+{
+ "field": "pe.number_of_sections",
+ "expected": "6",
+ "generator_cmd": "cp .venv/lib/python3.12/site-packages/setuptools/cli-64.exe tests/data/meta_fixtures/pe/cli64_numsec.bin  (MSVC-built setuptools launcher, unmodified)",
+ "oracle_cmd": "python3 -c \"import pefile,sys;p=pefile.PE(sys.argv[1]);print(p.FILE_HEADER.NumberOfSections)\" tests/data/meta_fixtures/pe/cli64_numsec.bin",
+ "decoy": false
+}

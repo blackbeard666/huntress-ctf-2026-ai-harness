@@ -1,0 +1,7 @@
+{
+ "field": "pe.fixed_file_version",
+ "expected": "none",
+ "generator_cmd": "cp .venv/lib/python3.12/site-packages/setuptools/cli-32.exe tests/data/meta_fixtures/pe/vsver_decoy_noresource.bin  (real PE, no VS_VERSIONINFO)",
+ "oracle_cmd": "exiftool -j -n -FileVersionNumber -ProductVersionNumber -FileFlags -FileOS -FileVersion -ProductVersion tests/data/meta_fixtures/pe/vsver_decoy_noresource.bin -> no version tags; grep -caP 'V\\x00S\\x00_\\x00V' -> 0",
+ "decoy": true
+}

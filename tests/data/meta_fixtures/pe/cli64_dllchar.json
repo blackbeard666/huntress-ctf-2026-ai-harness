@@ -1,0 +1,7 @@
+{
+ "field": "pe.dll_characteristics_u16_hex",
+ "expected": "0x8160",
+ "generator_cmd": "cp .venv/lib/python3.12/site-packages/setuptools/cli-64.exe tests/data/meta_fixtures/pe/cli64_dllchar.bin  (MSVC-built setuptools launcher, unmodified)",
+ "oracle_cmd": "objdump -x tests/data/meta_fixtures/pe/cli64_dllchar.bin | grep ^DllCharacteristics  -> 00008160",
+ "decoy": false
+}

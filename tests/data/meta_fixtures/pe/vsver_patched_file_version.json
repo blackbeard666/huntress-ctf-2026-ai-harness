@@ -1,0 +1,7 @@
+{
+ "field": "pe.fixed_file_version",
+ "expected": "2.3.4.5",
+ "generator_cmd": "python3 -c \"import pefile,sys;p=pefile.PE(sys.argv[1]);f=p.VS_FIXEDFILEINFO[0];f.FileVersionMS=0x00020003;f.FileVersionLS=0x00040005;f.ProductVersionMS=0x00070000;f.ProductVersionLS=0x00010009;f.FileFlags=0x22;f.FileOS=0x00040004;p.write(sys.argv[2])\" tools/pwsh/System.Resources.Reader.dll tests/data/meta_fixtures/pe/vsver_patched_file_version.bin  (pefile writer patches VS_FIXEDFILEINFO only; StringFileInfo FileVersion stays '10.0.1226.41902' = decoy)",
+ "oracle_cmd": "exiftool -j -n -FileVersionNumber -ProductVersionNumber -FileFlags -FileOS -FileVersion -ProductVersion tests/data/meta_fixtures/pe/vsver_patched_file_version.bin -> FileVersionNumber=2.3.4.5 while FileVersion string=10.0.1226.41902",
+ "decoy": false
+}

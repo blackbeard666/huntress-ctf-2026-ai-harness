@@ -1,0 +1,7 @@
+{
+ "field": "pe.checksum_u32_hex",
+ "expected": "0x00005147",
+ "generator_cmd": "python3 -c \"import pefile,sys;p=pefile.PE(sys.argv[1]);p.FILE_HEADER.TimeDateStamp=0x5f5e1234;p.OPTIONAL_HEADER.CheckSum=p.generate_checksum();p.write(sys.argv[2])\" setuptools/gui-32.exe tests/data/meta_fixtures/pe/gui32_cksum.bin",
+ "oracle_cmd": "objdump -x tests/data/meta_fixtures/pe/gui32_cksum.bin | grep ^CheckSum  -> 00005147",
+ "decoy": false
+}

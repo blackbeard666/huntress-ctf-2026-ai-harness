@@ -1,0 +1,7 @@
+{
+ "field": "pe.time_date_stamp_utc",
+ "expected": "2020-09-13T12:36:04Z",
+ "generator_cmd": "python3 -c \"import pefile,sys;p=pefile.PE(sys.argv[1]);p.FILE_HEADER.TimeDateStamp=0x5f5e1234;p.OPTIONAL_HEADER.CheckSum=p.generate_checksum();p.write(sys.argv[2])\" setuptools/gui-32.exe tests/data/meta_fixtures/pe/gui32_tds_utc.bin",
+ "oracle_cmd": "TZ=UTC objdump -x tests/data/meta_fixtures/pe/gui32_tds_utc.bin | grep Time/Date  -> Sun Sep 13 12:36:04 2020",
+ "decoy": false
+}

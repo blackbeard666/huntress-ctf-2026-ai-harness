@@ -1,0 +1,7 @@
+{
+ "field": "pe.size_of_image_u32_hex",
+ "expected": "0x00009000",
+ "generator_cmd": "cp .venv/lib/python3.12/site-packages/setuptools/cli-64.exe tests/data/meta_fixtures/pe/cli64_soi.bin  (MSVC-built setuptools launcher, unmodified)",
+ "oracle_cmd": "objdump -x tests/data/meta_fixtures/pe/cli64_soi.bin | grep ^SizeOfImage  -> 00009000",
+ "decoy": false
+}

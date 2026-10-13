@@ -1,0 +1,7 @@
+{
+ "field": "pe.fixed_file_version",
+ "expected": "10.0.1226.41902",
+ "generator_cmd": "cp tools/pwsh/System.Diagnostics.Tools.dll tests/data/meta_fixtures/pe/vsver_ref_file_version.bin  (Microsoft-built .NET 10 reference assembly from the PowerShell 7 distribution, unmodified)",
+ "oracle_cmd": "exiftool -j -n -FileVersionNumber -ProductVersionNumber -FileFlags -FileOS -FileVersion -ProductVersion tests/data/meta_fixtures/pe/vsver_ref_file_version.bin -> FileVersionNumber=10.0.1226.41902",
+ "decoy": false
+}
