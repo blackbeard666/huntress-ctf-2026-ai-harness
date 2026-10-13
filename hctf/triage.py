@@ -215,7 +215,10 @@ def _recon(cid, root):
     import shutil as _shutil
     if not root.exists():
         return []
-    files = sorted(p for p in root.rglob("*") if p.is_file())[:400]
+    from .toolchain import walk_files
+    walked = walk_files(root)
+    rel = {p: r for p, r in walked}
+    files = [p for p, _ in walked][:400]
     lines = []
     if cid.startswith("script-analysis"):
         lang = {".ps1": "PowerShell", ".js": "JScript", ".jse": "JScript", ".bat": "Batch", ".cmd": "Batch",
@@ -226,21 +229,21 @@ def _recon(cid, root):
     elif cid.startswith("binary-reverse-engineering"):
         # Bundled JVM runtime classes are not the challenge: one `javap` each (~0.6s) over a fat Kotlin jar's 3123
         # stdlib classes held Day 7's binary worker ~4 min in fetch. Filter BEFORE the cap so app classes always fit.
-        allf = sorted(p for p in root.rglob("*") if p.is_file())
-        libs = [p for p in allf if p.suffix == ".class" and _JVM_LIB.search(p.relative_to(root).as_posix())]
+        allf = [p for p, _ in walked]
+        libs = [p for p, r in walked if r.endswith(".class") and _JVM_LIB.search(r)]
         skip = set(libs)
         files = [p for p in allf if p not in skip][:400]
         if libs:
             pk = {}
             for p in libs:
-                m = _JVM_LIB.search(p.relative_to(root).as_posix())
+                m = _JVM_LIB.search(rel[p])
                 pk[m.group(2)] = pk.get(m.group(2), 0) + 1
             lines.append(f"- (skipped {len(libs)} bundled library .class files: "
                          f"{', '.join(f'{k}/ x{n}' for k, n in sorted(pk.items(), key=lambda kv: -kv[1]))})")
         def _row(f):
             ft = _sh(["file", "-b", str(f)])[:110]
             sha = _sh(["sha256sum", str(f)]).split(" ")[0]
-            row = [f"- `{f.relative_to(root)}` {f.stat().st_size} B | {ft} | sha256 {sha}"]
+            row = [f"- `{rel[f]}` {f.stat().st_size} B | {ft} | sha256 {sha}"]
             if ft.startswith("ELF"):
                 hdr = _sh(["readelf", "-hW", str(f)])
                 keep = [l.split(":", 1)[1].strip() for l in hdr.splitlines() if l.strip().split(":")[0] in ("Class", "Data", "Type", "Machine")]
@@ -427,11 +430,14 @@ def _extract_all(files, dest, depth=2):
         if not ok:
             lines.append(f"- could not extract `{z.name}` (unknown password?)")
             continue
-        members = sorted(p for p in out.rglob("*") if p.is_file())
+        from .toolchain import walk_files
+        walked = walk_files(out)
+        members = [p for p, _ in walked]
+        mrel = dict(walked)
         pwtxt = f" (password `{used.decode()}`)" if used else ""
         lines.append(f"- `{z.name}`{pwtxt} -> `{out}`: {len(members)} file(s)")
         for m in members[:200]:
-            lines.append(f"    - `{m.relative_to(out)}` ({m.stat().st_size} B)")
+            lines.append(f"    - `{mrel[m]}` ({m.stat().st_size} B)")
             txt = _small_text(m)
             if txt is not None and shown < SMALL_INLINE_MAX:
                 # Tiny text members inline (Day 7 mobile: a whole ~3 s turn just to cat a 107-byte puzzle JSON).

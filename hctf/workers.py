@@ -83,7 +83,7 @@ FAST_MODE_LANES = {x.strip() for x in os.environ.get("HCTF_FAST_MODE", "").split
 
 
 def worker_settings(lane):
-    st = {"autoMemoryEnabled": False}
+    st = {"autoMemoryEnabled": False, "bashEditDiffEnabled": False}   # see _worker_env: 10-25 s first-Bash snapshot
     if FAST_MODE_LANES and ("all" in FAST_MODE_LANES or (lane or "") in FAST_MODE_LANES):
         st["fastMode"] = True
     return st
@@ -232,6 +232,10 @@ def _worker_env(env_extra):
     # full 120 s default). The worker can still pass an explicit timeout for known-long tools (Ghidra, jadx).
     # 25 s (rehearsal D8: a copied Day 7 solver hung twice to the old 60 s cap on a 67 MB ELF, ~120 s of the binary single).
     env.setdefault("BASH_DEFAULT_TIMEOUT_MS", os.environ.get("HCTF_WORKER_BASH_TIMEOUT_MS", "25000"))
+    # Claude Code's Bash edit-diff (default ON under bypassPermissions) snapshots the 3 GB / 394k-file project around
+    # any Bash call that may write: D11/D12 workers' first Bash 10-25 s (D12 metadata single 24.6 s for cat+jq; idle
+    # A/B 10 s vs 0.3 s). Our hooks don't read the changed-file list.
+    env.setdefault("CLAUDE_CODE_BASH_EDIT_DIFF", "0")
     return env
 
 

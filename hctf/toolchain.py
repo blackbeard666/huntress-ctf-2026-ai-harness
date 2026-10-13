@@ -236,32 +236,100 @@ def _scan(path):
     return data, names
 
 
+def walk_files(root):
+    """[(Path, relative posix str)] for every file under root, in sorted(Path) order (by path parts). os.walk + string
+    slicing: rglob + is_file + Path.relative_to over a fat jar's 3150 unpacked classes was ~4 s of D12 binary triage
+    idle (~15 s under drop load, the worker's go signal waited on it). Symlinked dirs are not followed (as rglob)."""
+    root = str(root).rstrip("/") or "/"
+    if not os.path.isdir(root):
+        return []
+    n = len(root) + (0 if root == "/" else 1)
+    out = []
+    for d, _dirs, fs in os.walk(root):
+        for f in fs:
+            full = os.path.join(d, f)
+            if os.path.isfile(full):
+                out.append((full[n:].split("/"), full))
+    out.sort(key=lambda x: x[0])
+    return [(Path(full), "/".join(parts)) for parts, full in out]
+
+
 def scan_order(root, cap=400):
     """Files under root worth scanning, shallow first and bytecode classes last, capped. A fat jar unpacks into
     thousands of .class files that sorted ahead of `d08--variant-000.elf`: replay d8tc1 scanned the first 400 paths
     and never saw the Swift binary."""
-    root = Path(root)
-    if not root.exists():
-        return []
-    return sorted((p for p in root.rglob("*") if p.is_file()),
-                  key=lambda p: (p.suffix == ".class", len(p.relative_to(root).parts), str(p)))[:cap]
+    return [p for p, rel in sorted(walk_files(root),
+                                   key=lambda x: (x[1].endswith(".class"), x[1].count("/") + 1, str(x[0])))][:cap]
+
+
+DETECT_CACHE = ROOT / ".run" / "cache" / "toolchain-detect.json"
+_detect_lock = threading.Lock()
+_DETECT_VER = None
+
+
+def _detect_ver():
+    """Detector version = this file's bytes: any detector / SCAN_BYTES edit invalidates every cached result."""
+    global _DETECT_VER
+    if _DETECT_VER is None:
+        import hashlib
+        _DETECT_VER = hashlib.sha1(Path(__file__).read_bytes()).hexdigest()[:12]
+    return _DETECT_VER
+
+
+def _detect_one(p):
+    data, names = _scan(p)
+    hits = []
+    for tid, _label, det, _tools, _hint in TOOLCHAINS:
+        try:
+            hit = det(p.name.lower(), data, names)
+        except Exception:  # noqa: BLE001 - a detector must never break triage
+            hit = False
+        if hit:
+            hits.append(tid)
+    return hits
 
 
 def detect(files):
-    """{toolchain id: [file names]} for the given extracted members."""
-    found = {}
+    """{toolchain id: [file names]} for the given extracted members. Results are cached by content (sha1 + name +
+    detector version): cumulative lanes re-deliver every earlier day's specimen byte-identical (D10-D12 binary: d01-d09
+    same sha1), and the marker scans over them (a 67 MB Swift ELF alone ~1 s) were ~2.6 s of D12 binary triage on the
+    path to the worker's go signal."""
+    import hashlib
+    with _detect_lock:
+        try:
+            cache = json.loads(DETECT_CACHE.read_text())
+        except (OSError, ValueError):
+            cache = {}
+    ver, fresh, found = _detect_ver(), {}, {}
     for p in files:
         p = Path(p)
         if not p.is_file() or p.stat().st_size < 16:
             continue
-        data, names = _scan(p)
-        for tid, _label, det, _tools, _hint in TOOLCHAINS:
+        h = hashlib.sha1()
+        try:
+            with open(p, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    h.update(chunk)
+        except OSError:
+            continue
+        key = f"{ver}:{h.hexdigest()}:{p.name.lower()}"
+        hits = cache.get(key)
+        if hits is None:
+            hits = fresh[key] = _detect_one(p)
+        for tid in hits:
+            found.setdefault(tid, []).append(p.name)
+    if fresh:
+        with _detect_lock:
             try:
-                hit = det(p.name.lower(), data, names)
-            except Exception:  # noqa: BLE001 - a detector must never break triage
-                hit = False
-            if hit:
-                found.setdefault(tid, []).append(p.name)
+                cur = json.loads(DETECT_CACHE.read_text())
+            except (OSError, ValueError):
+                cur = {}
+            cur = {k: v for k, v in cur.items() if k.startswith(ver + ":")}   # drop results of older detectors
+            cur.update(fresh)
+            DETECT_CACHE.parent.mkdir(parents=True, exist_ok=True)
+            tmp = DETECT_CACHE.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
+            tmp.write_text(json.dumps(cur))
+            os.replace(tmp, DETECT_CACHE)
     return found
 
 

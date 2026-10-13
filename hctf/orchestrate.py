@@ -1446,7 +1446,10 @@ class Chain:
             budget = [REUSE_RACE_PROBES]
 
             def narrow(group):
-                group = {a: v for a, v in group.items() if a not in cli.confirmed_answers(cid)}
+                # ONE confirmed lookup per call: inside the comprehension it re-parsed start.json per field (D12 script
+                # 855 x 572 KB: 4.2 s idle, ~18 s under drop load before the race's first submit)
+                done = cli.confirmed_answers(cid)
+                group = {a: v for a, v in group.items() if a not in done}
                 if not group or budget[0] <= 0 or cli.is_complete(cid):
                     return
                 budget[0] -= 1
@@ -1518,7 +1521,8 @@ class Chain:
 
         def narrow(group):
             """Submit a group; on incorrect, bisect (probe-tagged) until the wrong fields are isolated."""
-            group = {a: v for a, v in group.items() if a not in cli.confirmed_answers(cid)}
+            done = cli.confirmed_answers(cid)   # once per call, not per field (each re-parses start.json)
+            group = {a: v for a, v in group.items() if a not in done}
             if not group or budget[0] <= 0 or cli.is_complete(cid):
                 return
             budget[0] -= 1
@@ -1533,8 +1537,9 @@ class Chain:
             narrow({k: group[k] for k in keys[len(keys) // 2:]})
 
         narrow(high)
-        rest = {a: v for a, v in spec.items() if a not in cli.confirmed_answers(cid)}
-        left = [a for a in ids if a not in cli.confirmed_answers(cid)]
+        conf = cli.confirmed_answers(cid)
+        rest = {a: v for a, v in spec.items() if a not in conf}
+        left = [a for a in ids if a not in conf]
         if rest and set(left) <= set(rest):
             narrow(rest)  # speculative values only when they could finish it (Day 6 binary: 8/8 were wrong)
         for a in sorted(wrong):  # a field judged wrong: try the other solvers' distinct values (Day 4 mobile)
@@ -1583,8 +1588,9 @@ class Chain:
         role of an unseen behavior graph without an LLM (the lane solver leaves exactly those for want of evidence)."""
         budget = [ENUM_PROBE_BUDGET if budget is None else budget]
         done = 0
+        conf = cli.confirmed_answers(cid)   # a probe below only ever confirms its own aid, checked once
         for aid, q in solvers.paired_questions(contract):
-            if aid in cli.confirmed_answers(cid) or budget[0] <= 0:
+            if aid in conf or budget[0] <= 0:
                 continue
             fmt = q.get("answer_format") or {}
             allowed = fmt.get("accepted_values") or []
