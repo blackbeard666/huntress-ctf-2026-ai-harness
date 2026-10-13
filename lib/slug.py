@@ -1,8 +1,8 @@
 """Answer-slug plausibility (warmups `word-word-word-NN`): is a decoded slug made of real words?
 
 The GM's slug generator draws from a CLOSED vocabulary (154 words over D1-D13; no new word since D8), so a slug whose
-words are neither generator words nor English is a mis-decode -- e.g. D13's reuse race submitted the rot-N reading
-'ovisx-tviskr-fbvecw-31' of Atbash text (true: 'handy-candle-quartz-31') and burned a GM submission on it.
+words are neither generator words nor English is a mis-decode -- e.g. D13's reuse race submitted a rot-N reading of
+Atbash text (three non-words + NN) and burned a GM submission on it.
 
   VOCAB    lib/refs/slug_words.txt (shipped, built from GM-confirmed slugs) + every slug word found at runtime in
            challenges/*/warmups*/**/{confirmed,expected}.json (cached once per process)

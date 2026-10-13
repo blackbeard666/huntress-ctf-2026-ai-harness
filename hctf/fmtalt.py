@@ -2,7 +2,7 @@
 
 The metadata worker had the right value by T+16-20 on D10 and D13 and still lost ~20 s each to its spelling: D10 an
 entry-point RVA not zero-padded to the 8-digit struct width (`0x65bd0` -> `0x00065bd0`), D13 an MSI ProductCode
-stripped of its braces (`DD1A80D5-...` -> `{DD1A80D5-...}`). The value's SHAPE + the field id say which renderings
+stripped of its braces (`XXXXXXXX-...` -> `{XXXXXXXX-...}`). The value's SHAPE + the field id say which renderings
 exist; probing <= 3 of them costs ~1 s each inside the worker's own submit call, instead of an LLM retry turn.
 
   alternates(aid, value, q, exclude=())  ->  [(alt_value, transform_name), ...]  best first
