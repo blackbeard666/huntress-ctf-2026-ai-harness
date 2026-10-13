@@ -177,6 +177,11 @@ def _rot(s, n):
                    chr((ord(c) - 65 + n) % 26 + 65) if "A" <= c <= "Z" else c for c in s)
 
 
+def _atbash(s):
+    """a<->z mirror (warmups Day 13 "Opposite Day"); digits/punctuation kept. Its own inverse, and no rot-N equals it."""
+    return "".join(chr(219 - ord(c)) if "a" <= c <= "z" else chr(155 - ord(c)) if "A" <= c <= "Z" else c for c in s)
+
+
 def _eng(s):
     letters = [c for c in s.lower() if "a" <= c <= "z"]
     return sum(math.log(_FREQ[c]) for c in letters) / max(len(letters), 1)
@@ -283,9 +288,17 @@ def decode_chunk(p, _nested=False):
     # plain REVERSED text (warmups Day 12 "Back at You": line 12 = '69-enud-m' -> 'm-dune-96', whole blob
     # '56-ztrauq-... :retsaM emaG'): a leading 'NN-word' is a reversed slug tail, else keep the reversal only if it
     # reads more like English than every rot-N (rot-N of '69-enud-m' gives 'fove'; 0 hits on Days 3-11 fragments)
-    if best_rot is not None and (re.fullmatch(r"\d{2,}-[A-Za-z][A-Za-z-]*", t)
-                                 or _bigram(t[::-1]) > _bigram(best_rot)):
+    if best_rot is not None and re.fullmatch(r"\d{2,}-[A-Za-z][A-Za-z-]*", t):
         return t[::-1]
+    # ATBASH (warmups Day 13 "Opposite Day", "A met Z": whole blob 'Mrxv dlip wvxlwrmt ... gsv Tznv Nzhgvi: <slug>'):
+    # best rot-N of Atbash text is gibberish (rot22 'Intr zhel ...' was submitted and rejected), so the mirror competes
+    # with rot-N and the reversal on bigram score and must beat both.
+    if best_rot is not None:
+        atb = _atbash(p)
+        if _bigram(atb) > max(_bigram(best_rot), _bigram(t[::-1])):
+            return atb
+        if _bigram(t[::-1]) > _bigram(best_rot):
+            return t[::-1]
     # free text: plain or rot-N (pick the shift that reads most like English); keep spacing exactly
     return best_rot if best_rot is not None else p
 
@@ -319,6 +332,57 @@ def _generic_chunk(t):
     return [x for x in out if x]
 
 
+# Warmups Mastery: line k is encoded with day k's codec. The FREE-TEXT codecs (no alphabet signature) are told apart only
+# by how English the result reads, which per-line guessing gets wrong on short fragments (D13: Atbash put on '-tliuq-d').
+# Each is used ONCE per blob -> (name, day introduced); a blob of k lines can only contain codecs of days <= k.
+FREE_CODECS = (("rot", 2), ("rev", 12), ("atb", 13))
+_SLUG_END = re.compile(r"[a-z]+(?:-[a-z]+)+-\d{2,}\s*$")
+
+
+def _free_line(p):
+    """A letter-bearing fragment no strict codec claims: decode_chunk fell through to rot-N / reversal / Atbash."""
+    t = p.strip()
+    if not re.search(r"[A-Za-z]", t):
+        return False
+    d = decode_chunk(p)
+    return d is not None and (d.strip() == t[::-1] or d == _atbash(p) or any(d == _rot(p, n) for n in range(26)))
+
+
+def _free_cands(name, p):
+    if name == "rev":
+        return [p.strip()[::-1] if p.strip() == p else p[::-1]]
+    if name == "atb":
+        return [_atbash(p)]
+    best = _best_rot(p)
+    return [best] + ([_rot(p, 13)] if _rot(p, 13) != best else [])
+
+
+def _joint_free(rows):
+    """Assign the free-text codecs to the free lines jointly (each codec once, only days <= the blob's last line) and
+    keep the assignment whose text ends in a slug, then reads most like English. None = no consistent assignment."""
+    import itertools
+    kmax = max(k for k, _ in rows)
+    free = [i for i, (_, p) in enumerate(rows) if _free_line(p)]
+    names = [n for n, day in FREE_CODECS if kmax >= day]
+    if not free or len(free) > len(names):
+        return None
+    fixed = [None if i in free else decode_chunk(p) for i, (_, p) in enumerate(rows)]
+    if any(x is None for i, x in enumerate(fixed) if i not in free):
+        return None
+    best = None
+    for combo in itertools.permutations(names, len(free)):
+        for picks in itertools.product(*(_free_cands(n, rows[i][1]) for n, i in zip(combo, free))):
+            parts = list(fixed)
+            for i, v in zip(free, picks):
+                parts[i] = v
+            text = "".join(parts)
+            last = [ln for ln in text.splitlines() if ln.strip()]
+            sc = (bool(last) and _SLUG_END.search(last[-1]) is not None, _bigram(text))
+            if best is None or sc > best[0]:
+                best = (sc, text)
+    return best[1] if best and best[0][0] else None
+
+
 def decode_chunked(text):
     rows = []
     for ln in text.splitlines():
@@ -330,4 +394,4 @@ def decode_chunked(text):
     if len(rows) < 2:
         return None
     rows.sort(key=lambda r: r[0])
-    return "".join(decode_chunk(p) for _, p in rows)
+    return _joint_free(rows) or "".join(decode_chunk(p) for _, p in rows)

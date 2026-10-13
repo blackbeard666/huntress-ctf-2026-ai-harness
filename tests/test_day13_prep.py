@@ -178,4 +178,16 @@ finally:
 assert seen_cmd and seen_cmd[0][-1].startswith(f"mkdir -p ~/{workers.HB_WORK}/.run && "), seen_cmd
 print("ok  fresh VM: missing gm.py -> public fallback (never sent); daemon launch creates ~/hw/.run before its redirect")
 
+# Day 13 review: warmups Mastery line k = day k's codec; the free-text codecs (rot-N D2, reversal D12, Atbash D13) are
+# assigned JOINTLY, each once per blob (per-line guessing: 27/63 sets of the D13 Mastery; joint: 63/63)
+from lib import decode as _decode  # noqa: E402
+_blob = ("01\tTmljZSB3b3I=\n02\tx qrpbqv\n03\t6e67207468697320\n04\t01110111 01100001 01110010 01101101 01110101 "
+         "01110000 00100001 00100000\n05\t84 111 32 115 111 108 118 101\n06\t054 040 163 165 142 155 151 164\n"
+         "07\t%20%74%68%69%73%20%65%78\n08\t&#97;&#99;&#116;&#32;&#97;&#110;&#115;&#119;\n"
+         '09\t"\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\\u0068"\n10\tMUQEOYLNMUQE2===\n11\tYXN0ZXI6IHQ\n'
+         "12\tnaip-ydi\n13\tl-reb-35")
+assert _decode.decode_chunked(_blob).rstrip().endswith("tidy-piano-ivy-35"), _decode.decode_chunked(_blob)
+assert "".join(_decode.decode_chunk(p) for p in ("naip-ydi", "l-reb-35")) != "idy-piano-ivy-35"   # per-line misses
+print("ok  decode_chunked: free-text codecs (rot / reversal / Atbash) assigned jointly, once each per blob")
+
 print("\nALL DAY-13 PREP CHECKS PASSED")
