@@ -1049,7 +1049,9 @@ class HbDaemon:
     def __init__(self, log=print, argv=None, gm_url=None, token=None):
         """argv/gm_url/token: tests run the daemon locally against a stand-in GM."""
         self.log, self.lock, self.pending, self.p = log, threading.Lock(), {}, None
-        cmd = f"cd ~/{HB_WORK} && exec python3 hctf/hb_daemon.py --stdio 2>>.run/hb_daemon.err"
+        # mkdir: on a freshly reset VM ~/hw/.run doesn't exist yet when the daemon starts, the stderr redirect fails and
+        # the daemon is "unavailable" for the run's first minutes (rehearsal fair D12: up 2 s before the base sync made .run)
+        cmd = f"mkdir -p ~/{HB_WORK}/.run && cd ~/{HB_WORK} && exec python3 hctf/hb_daemon.py --stdio 2>>.run/hb_daemon.err"
         self.p = subprocess.Popen(argv or ["ssh", *remote.SSH_OPTS, f"{remote.HB_USER}@{remote.HB_HOST}", cmd],
                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
         threading.Thread(target=self._read, name="hb-daemon-read", daemon=True).start()

@@ -144,4 +144,38 @@ finally:
     remote.START_VIA_HB, remote.SUBMIT_VIA_HB = saved_via
 print("ok  remote.gm: start/submit via the warm daemon; unsent -> fallback, sent-without-verdict submit -> Unreachable")
 
+# 6) fresh-VM provisioning races (rehearsal fair D12): ssh submit whose gm.py does not exist yet = never sent (fallback, not
+#    "outcome unknown"); a half-started gm.py (marker, no envelope) stays outcome-unknown; daemon launch makes ~/hw/.run
+import subprocess as _sp  # noqa: E402
+saved_run, saved_slot = remote.subprocess.run, remote._slot
+try:
+    from contextlib import nullcontext
+    remote._slot = lambda: nullcontext()
+    remote.subprocess.run = lambda *a, **k: _sp.CompletedProcess(a, 2, "", "HCTF-EXEC\npython3: can't open file "
+                                                                     "'/home/HuntressCTF/hctf/gm.py': [Errno 2] No such file")
+    assert remote._gm_submit_hb(["submit", "cid", "{}"], 30) is None
+    remote.subprocess.run = lambda *a, **k: _sp.CompletedProcess(a, 1, "", "HCTF-EXEC\nTraceback: ConnectionResetError")
+    try:
+        remote._gm_submit_hb(["submit", "cid", "{}"], 30)
+        raise AssertionError("gm.py started and died: outcome unknown, never a silent fallback")
+    except remote.Unreachable:
+        pass
+finally:
+    remote.subprocess.run, remote._slot = saved_run, saved_slot
+seen_cmd = []
+saved_popen = workers.subprocess.Popen
+try:
+    def _popen(argv, **kw):
+        seen_cmd.append(argv)
+        raise OSError("stop here")
+    workers.subprocess.Popen = _popen
+    try:
+        workers.HbDaemon(log=lambda m: None)
+    except OSError:
+        pass
+finally:
+    workers.subprocess.Popen = saved_popen
+assert seen_cmd and seen_cmd[0][-1].startswith(f"mkdir -p ~/{workers.HB_WORK}/.run && "), seen_cmd
+print("ok  fresh VM: missing gm.py -> public fallback (never sent); daemon launch creates ~/hw/.run before its redirect")
+
 print("\nALL DAY-13 PREP CHECKS PASSED")

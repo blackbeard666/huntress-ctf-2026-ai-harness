@@ -285,6 +285,10 @@ def _gm_submit_hb(args, timeout, op="submit"):
         return None
     if _EXEC_MARK not in (r.stderr or ""):
         return None                                   # never reached gm.py: safe to send it the public way
+    if r.returncode == 2 and not (r.stdout or "").strip() and "can't open file" in (r.stderr or ""):
+        # python3 could not even open ~/hctf/gm.py (fresh VM, before the base sync): nothing was POSTed. Rehearsal fair D12:
+        # the warmups race's submit landed here 3 s before the sync and was misread as "outcome unknown".
+        return None
     try:
         env = _gm_parse(r, f"ssh-{op}")
     except RuntimeError as e:                         # includes Unreachable (http 0 from the inside proxy)
