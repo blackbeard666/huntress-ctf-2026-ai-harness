@@ -19,7 +19,8 @@ import subprocess
 import time
 from pathlib import Path
 
-from .paths import ROOT, TMP, VENV_PY, all_solver_dirs, base_id, mode_of, solver_dir  # noqa: F401 (re-exported)
+from .paths import (ROOT, TMP, VENV_PY, all_solver_dirs, base_id, lane_solver_dirs, mode_of,  # noqa: F401 (re-exported)
+                    solver_dir)
 
 
 def _norm(text):
@@ -265,8 +266,13 @@ def render_dry_run(d):
 
 
 def _day_key(sdir):
+    if "_lane" in Path(sdir).parts:
+        return LANE_DAY_KEY       # challenges/_lane/<lane>/solver: cumulative over every day -> newest of all
     m = re.search(r"day(\d+)", str(sdir))
     return int(m.group(1)) if m else -1
+
+
+LANE_DAY_KEY = 999
 
 
 def whole_contract_solver(contract, artifacts, candidates, timeout=120):
@@ -349,14 +355,68 @@ def _lane_of(sdir):
         return None
 
 
+# Hand-made cases (synthetic-*) were never judged by the GM: their expected.json is OUR belief, not a verification
+# (hctf/compound.py VERIFIED_PREFIXES excludes them too). HCTF_KNOWN_NO_SYNTHETIC=0 = the old behaviour (counted).
+KNOWN_NO_SYNTHETIC = os.environ.get("HCTF_KNOWN_NO_SYNTHETIC", "1") != "0"
+# GM-captured case prefixes; D1 metadata used the pre-`auto-` names `mastery-<att>` / `time_trial-<att>`.
+LANE_VERIFIED_PREFIXES = ("single_solve", "auto-mastery-", "auto-time_trial-", "variant-mastery-", "variant-time_trial-",
+                          "mastery-", "time_trial-")
+
+
 def _known_ids(sdir):
-    """answer_ids this solver has GM-verified answers for in its own regression cases (confidence signal)."""
+    """answer_ids this solver has GM-verified answers for in its own regression cases (confidence signal).
+    For a LANE solver (challenges/_lane/<lane>/solver): the (fmt, field) keys of every GM-verified case of that lane
+    on every day (see _lane_known_fields) -- its own dir has no cases."""
+    if _day_key(sdir) == LANE_DAY_KEY:
+        return _lane_known_fields(_lane_of(sdir))
     known = set()
     for exp in Path(sdir).glob("cases/*/expected.json"):
+        if KNOWN_NO_SYNTHETIC and exp.parent.name.startswith("synthetic-"):
+            continue
         try:
             known.update(json.loads(exp.read_text()))
         except (OSError, ValueError):
             pass
+    return known
+
+
+def _field_key(aid, q):
+    """Day-independent key of one answer id: lib.meta's (fmt, field) -- `d09-pe-003-...` on D10 and D11 = the same
+    field as Day 9's `d09-pe-001-...`. None for a lane without a field grammar."""
+    try:
+        from lib import meta
+    except ImportError:
+        return None
+    f = meta.parse_field(aid, q)
+    return (f.fmt, f.field) if f else None
+
+
+def _lane_known_fields(lane):
+    """{(fmt, field)} with a GM-verified answer in any regression case of `lane` (GM-captured case names only:
+    LANE_VERIFIED_PREFIXES; days >= HCTF_META_MAX_DAY are skipped for fair runs)."""
+    if lane != "metadata-forensics":
+        return set()
+    try:
+        cap = int(os.environ.get("HCTF_META_MAX_DAY", "0"))
+    except ValueError:
+        cap = 0
+    known = set()
+    for sdir in all_solver_dirs():
+        if _lane_of(sdir) != lane or (cap and _day_key(sdir) >= cap):
+            continue
+        for exp in sdir.glob("cases/*/expected.json"):
+            if not exp.parent.name.startswith(LANE_VERIFIED_PREFIXES):
+                continue
+            try:
+                expected = json.loads(exp.read_text())
+                contract = json.loads((exp.parent / "contract.json").read_text())
+            except (OSError, ValueError):
+                continue
+            qs = dict(paired_questions(contract))
+            for aid in expected:
+                k = _field_key(aid, qs.get(aid) or {})
+                if k:
+                    known.add(k)
     return known
 
 
@@ -368,6 +428,7 @@ def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6
     from concurrent.futures import ThreadPoolExecutor
     ids = list(contract.get("answer_ids") or [])
     excl = {Path(e).resolve() for e in exclude}
+    lane_dirs = [d for d in lane_solver_dirs(lane) if Path(d).resolve() not in excl]
     cands = {p for p in all_solver_dirs() if _lane_of(p) == lane}
     if by_question:   # the question-text index is pure-Python over every solver's cases: ~2 s idle, 18-24 s at a drop
         try:
@@ -377,22 +438,25 @@ def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6
     cands = sorted((c for c in cands if Path(c).resolve() not in excl), key=_day_key, reverse=True)
     if limit:
         cands = cands[:limit]   # newest first: a cumulative lane's latest solver already covers the earlier families
+    cands = lane_dirs + [c for c in cands if c not in lane_dirs]   # the lane solver first, never sliced away
     if not cands or not ids:
         return {"high": {}, "spec": {}, "source": {}, "runs": {}, "best": None, "alts": {}}
     with ThreadPoolExecutor(max_workers=max_parallel) as ex:
         outs = dict(zip(cands, ex.map(lambda s: run_solver(s, contract, artifacts, timeout), cands)))
     high, spec, source, runs, alts = {}, {}, {}, {}, {}
+    qs = dict(paired_questions(contract)) if lane_dirs else {}
     for sdir in cands:                      # newest first: the first producer of a field wins
         got, err, dt = outs[sdir]
         runs[sdir] = (sum(1 for a in ids if got.get(a) not in (None, "")), err, round(dt, 2))
         known = _known_ids(sdir)
+        is_lane = sdir in lane_dirs
         for a in ids:
             v = got.get(a)
             if v in (None, ""):
                 continue
             if v not in alts.setdefault(a, []):
                 alts[a].append(v)           # every distinct candidate, newest first (fallbacks for a judged-wrong field)
-            if a in known and a not in high:
+            if (_field_key(a, qs.get(a) or {}) in known if is_lane else a in known) and a not in high:
                 high[a], source[a] = v, sdir
                 spec.pop(a, None)
             elif a not in high and a not in spec:

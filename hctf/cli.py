@@ -823,6 +823,35 @@ def c_speed_harden(a):
     return 0
 
 
+def c_prebuild(a):
+    """Off-peak LLM breadth for a lane (hctf/prebuild.py). --stop / --recover / --list are offline + instant."""
+    from . import prebuild as pb
+    if a.stop:
+        pb.stop(log=print)
+        return 0
+    if a.recover:
+        pb.recover(log=print)
+        return 0
+    lane = pb.lane_key(a.lane)
+    if a.list:
+        cfg = pb.LANES.get(lane) or {}
+        state = pb._load_json(pb.STATE, {})
+        nxt = {t.get("id") for t in pb.pending(lane, cfg, 0)} if cfg and pb._requires_met(cfg) else set()
+        for t in pb.targets(cfg) if cfg else []:
+            st = state.get(f"{lane}:{t.get('id')}", {})
+            print(f"{'next' if t.get('id') in nxt else 'done' if st.get('ok') else 'skip':5} {t.get('id'):22} "
+                  f"attempts={st.get('attempts', 0)} {'; '.join(st.get('reasons') or [])[:100]}")
+        print(f"enabled lanes: {', '.join(pb.enabled_lanes())}; budget for n={a.n or pb.DEFAULT_N}: "
+              f"${pb.budget_for(a.n or pb.DEFAULT_N)}; default deadline {pb.default_deadline():%Y-%m-%d %H:%M}")
+        return 0
+    from . import orchestrate
+    only = [x.strip() for x in (a.targets or "").split(",") if x.strip()] or None
+    res = orchestrate.prebuild(lane, n=a.n, targets=only, budget_usd=a.budget_usd,
+                               deadline=pb.parse_deadline(a.deadline) if a.deadline else None, log=print)
+    emit(res)
+    return 0 if all(r.get("ok") for r in res) else 1
+
+
 def c_tool_wait(a):
     from . import toolchain
     return toolchain.main(["wait", a.tool, "--timeout", str(a.timeout)])
@@ -1174,6 +1203,15 @@ def main(argv=None):
     psh = sub.add_parser("speed-harden", help="off-clock speed generalize for solvers whose slowest case is over budget")
     psh.add_argument("id", nargs="?")
     psh.add_argument("--day", type=int)
+    ppb = sub.add_parser("prebuild", help="off-peak LLM breadth for a lane (speculative extractors + fixtures, gated)")
+    ppb.add_argument("--lane", default="metadata-forensics", help="metadata-forensics | warmups | binary-reverse-engineering")
+    ppb.add_argument("--n", type=int, default=None, help="max targets (workers) this batch (HCTF_PREBUILD_N)")
+    ppb.add_argument("--targets", help="comma list of target ids (default: the ranked TARGETS.json order)")
+    ppb.add_argument("--budget-usd", type=float, default=None, help="stop before a worker would exceed this")
+    ppb.add_argument("--deadline", help="HH:MM host time: start no worker that can't finish by then")
+    ppb.add_argument("--stop", action="store_true", help="stop a running batch + restore its snapshot (bin/day.sh)")
+    ppb.add_argument("--recover", action="store_true", help="restore a snapshot a killed batch left behind")
+    ppb.add_argument("--list", action="store_true", help="targets + their state, budget, deadline")
     ptw = sub.add_parser("tool-wait", help="block until a toolchain tool triage started installing is ready")
     ptw.add_argument("tool")
     ptw.add_argument("--timeout", type=int, default=600)
@@ -1239,7 +1277,7 @@ def main(argv=None):
     pl2.add_argument("--dry-run", action="store_true", help="only print the ranked candidates")
     a = p.parse_args(argv)
     fn = {"hb": c_hb, "list": c_list, "status": c_status, "start": c_start, "retry": c_retry,
-          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test, "compound-check": c_compound_check, "tool-wait": c_tool_wait, "speed-harden": c_speed_harden, "tool-gaps": c_tool_gaps,
+          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test, "compound-check": c_compound_check, "tool-wait": c_tool_wait, "speed-harden": c_speed_harden, "prebuild": c_prebuild, "tool-gaps": c_tool_gaps,
           "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
           "reconcile": c_reconcile, "solutions": c_solutions,
           "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout,

@@ -21,7 +21,21 @@ solver/{solve.py,NOTES.md})
    so tomorrow's worker imports it instead of re-typing it (Day 7: mobile re-typed decode_payload to add caesar,
    warmups re-typed decode_chunked to add url %XX -- ~12-25 s of generation each). Add a one-line check for it to
    `tests/test_day7_fixes.py`.
-2. Then run `python3 tests/test_orchestrate.py`, `python3 tests/test_day6_fixes.py`, `python3 tests/test_day7_fixes.py`, `python3 tests/test_codec.py` and `python3 -m lib.refs.coverage {day_num}`; all
+   LANE REGISTRIES (cumulative deterministic solvers that RACE the next day's worker):
+   - Metadata (`lib/meta/`, see its docstring): fold the day's NEW GM-confirmed metadata field into lib/meta -- copy
+     the extractor from `challenges/{day}/metadata-*/solver/solve.py` (its `local_answer()`, or `answer()` for a solver
+     written from scratch) into the matching `lib/meta/<fmt>.py` (new module for a new format) returning a TYPED raw
+     value (`lib/meta/spell.py`: Hex/Guid/Dims/bool/int/list), and add a `_BUILTIN` entry in `lib/meta/__init__.py`
+     with tier verified and days=({day_num},). If the field already exists in `lib/meta/prebuilt/<fmt>.py`
+     (speculative, LLM-prebuilt) and the GM confirmed its value, PROMOTE it: add the verified `_BUILTIN` entry pointing
+     at that function (`lib.meta.prebuilt.<fmt>:<func>`) and delete its key from that module's `FIELDS` (a key may live
+     in one place only). If a prebuilt/speculative extractor produced a value the GM REJECTED, fix it to the confirmed
+     spelling (and add the rejected spelling to a `*_REJECTED` list in lib/knowledge.py). Then
+     `python3 tests/test_meta_lane.py` must pass: every metadata case D1-{day_num} matches exactly through the lane
+     solver (an unregistered field is only a coverage gap; a registered field with a wrong value fails).
+   - Warmups: if `lib/warmups_codecs.py` exists and the day's warmups codec is not in its `DAYS` yet, append it (exact
+     encoder + decoder, tagged with day {day_num}) as verified by the day's confirmed answers.
+2. Then run `python3 tests/test_orchestrate.py`, `python3 tests/test_day6_fixes.py`, `python3 tests/test_day7_fixes.py`, `python3 tests/test_codec.py`, `python3 tests/test_meta_lane.py` and `python3 -m lib.refs.coverage {day_num}`; all
    must pass. If a lib edit breaks a test, revert that edit. Only then:
 3. TECHNIQUE LOGS (always, after lib + tests): for each challenge, update `reference/techniques/<lane>.md` (lane from its meta.json) --
    add a `## Day by day` entry for {day} (title, what the artifact actually was, the key insight, the exact tools/commands
