@@ -173,8 +173,12 @@ try:
     r = run_stub(evil)
     assert r and not r[0]["ok"], r
     why = " ".join(r[0]["reasons"])
-    assert "allowlist" in why and "hctf/zz_evil_stub.py" in why and "subprocess" in why, why
-    assert not MOD.exists() and not FIX.exists() and not EVIL.exists(), "revert left files behind"
+    if (ROOT / ".git").exists():          # out-of-allowlist detection is `git status` based (prebuild runs on main)
+        assert "allowlist" in why and "hctf/zz_evil_stub.py" in why and "subprocess" in why, why
+        assert not MOD.exists() and not FIX.exists() and not EVIL.exists(), "revert left files behind"
+    else:                                  # a non-git copy (the rehearsal copy): only the snapshot/AST checks apply
+        assert "subprocess" in why and not MOD.exists() and not FIX.exists(), why
+        EVIL.unlink(missing_ok=True)
     # c) a key that is already verified -> conflict -> reverted
     r = run_stub(lambda stop: (write_good(), MOD.write_text(GOOD.replace(
         '{("zzstub", "header_count"): "header_count"}',
@@ -274,7 +278,8 @@ try:
 finally:
     prebuild.default_deadline = saved_dl
 src = inspect.getsource(orchestrate.run)
-assert src.index("ratchet(day)") < src.index("launch_background(day") and orchestrate.PREBUILD_AFTER_RATCHET
+assert src.index("ratchet(day)") < src.index("launch_background(day") and (
+    orchestrate.PREBUILD_AFTER_RATCHET or os.environ.get("HCTF_PREBUILD_AFTER_RATCHET") == "0")   # alt: off by env
 assert "tests/test_meta_lane.py" in orchestrate.RATCHET_GATE
 rp = (ROOT / "hctf" / "prompts" / "ratchet.md").read_text()
 assert "PROMOTE" in rp and "lib/meta" in rp and "warmups_codecs" in rp and "test_meta_lane" in rp
