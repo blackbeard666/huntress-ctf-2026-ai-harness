@@ -52,6 +52,13 @@ mkdir -p .run
 
 echo "=== hctf $DAYTAG launcher ($(date '+%F %H:%M:%S %Z')) ==="
 
+# 0) An off-peak `hctf prebuild` batch (launched after the last run's ratchet; deadline 30 min before the drop) must
+#    never share the box with a run: stop it and restore its lib/ snapshot. Offline + instant when none is running.
+if [ "${HCTF_PREBUILD_STOP:-1}" != 0 ] && { [ -e .run/prebuild.lock ] || [ -d .run/prebuild-snapshot ] \
+     || pgrep -f "hctf.cli prebuild|hctf prebuild" >/dev/null; }; then
+  timeout 60 python3 -m hctf.cli prebuild --stop 2>&1 | sed 's/^/[prebuild] /'
+fi
+
 # 1) Pre-flight: abort only on a hard FAIL. SKIPPED when a passing pre-flight is fresh -- the checks belong at
 #    warm-up time, never between the drop and the launch (Day 6 lost ~75s re-running them at 21:00).
 pf_age=$(( $(date +%s) - $(cat .run/preflight.ok 2>/dev/null || echo 0) ))

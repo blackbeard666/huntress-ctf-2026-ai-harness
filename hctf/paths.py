@@ -111,5 +111,22 @@ def all_solver_dirs():
     return [p.parent for p in CHALLENGES.glob("day*/*/solver/solve.py")]
 
 
+LANE_SOLVERS = CHALLENGES / "_lane"   # challenges/_lane/<lane>/solver: cumulative, day-less lane solvers (race-only)
+
+
+def lane_solver_dirs(lane):
+    """The lane solver dirs the reuse race runs FIRST for `lane` (never counted against its newest-N slice).
+    HCTF_LANE_SOLVERS = comma list of lanes that have one (default metadata-forensics); HCTF_META_LANE_SOLVER=0 drops
+    the metadata one. Off = [] = today's behaviour (dated solvers only)."""
+    import os
+    lanes = {x.strip() for x in os.environ.get("HCTF_LANE_SOLVERS", "metadata-forensics").split(",") if x.strip()}
+    if os.environ.get("HCTF_META_LANE_SOLVER", "1") == "0":
+        lanes.discard("metadata-forensics")
+    if lane not in lanes:
+        return []
+    d = LANE_SOLVERS / lane / "solver"
+    return [d] if (d / "solve.py").exists() else []
+
+
 def lookup(cid):
     return _load_index().get(base_id(cid))

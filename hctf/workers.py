@@ -40,7 +40,8 @@ def _logfile(chal_dir, stage, pool):
 
 # ilio-style bounds: cap each worker's turns so a stuck agent can't grind up cost. Wall-clock timeout
 # is passed in; turns are a second, independent ceiling. Override via HCTF_MAX_TURNS_<STAGE>.
-MAX_TURNS = {"single": 80, "generalize": 50, "fix": 30, "ratchet": 80}  # ratchet: a serial pass needs ~50-60 (D8/D10 cut at 40)
+MAX_TURNS = {"single": 80, "generalize": 50, "fix": 30, "ratchet": 80,  # ratchet: a serial pass needs ~50-60 (D8/D10 cut at 40)
+             "prebuild": 40}   # off-peak breadth worker (hctf/prebuild.py): one module + fixtures
 
 
 def _max_turns(stage):
@@ -193,20 +194,28 @@ AUTH_RC = -77     # run_local's return code when Claude auth failed (relaunching
 WORKER_SANDBOX = os.environ.get("HCTF_WORKER_SANDBOX", "1") != "0"
 
 
-def sandbox_hidden_paths():
+# Stages that never talk to the GM (off-peak breadth workers): no pairing token in their env and secrets/ masked.
+NO_GM_STAGES = {x.strip() for x in os.environ.get("HCTF_NO_GM_STAGES", "prebuild").split(",") if x.strip()}
+
+
+def sandbox_hidden_paths(stage=None):
     home = Path.home()
     hide = [p for p in home.glob("huntress-2026*") if p.is_dir() and p.resolve() != ROOT.resolve()]
     hide += [home / ".claude" / "projects", Path("/mnt/c")]
     hide += [Path(x) for x in os.environ.get("HCTF_SANDBOX_HIDE", "").split(":") if x]
+    if stage in NO_GM_STAGES:
+        sec = (ROOT / "secrets").resolve()   # a symlinked secrets/ (worktree -> main): mask the target, unless an
+        if not any(sec == h.resolve() or h.resolve() in sec.parents for h in hide if h.exists()):   # already-masked dir holds it
+            hide.append(sec)
     return [p for p in hide if p.exists()]
 
 
-def sandboxed(cmd):
+def sandboxed(cmd, stage=None):
     """Wrap a worker command in bwrap with sandbox_hidden_paths() masked; unchanged if bwrap is unavailable."""
     import shutil as _sh
     if not WORKER_SANDBOX or not _sh.which("bwrap"):
         return cmd
-    hidden = sandbox_hidden_paths()
+    hidden = sandbox_hidden_paths(stage)
     # directories -> empty tmpfs; FILES -> /dev/null bound over them (bwrap can't mount a tmpfs on a file: a masked
     # reference/SPEED.md made every worker exit 1 in the from-scratch main replay)
     masks = [a for p in hidden for a in (("--tmpfs", str(p)) if Path(p).is_dir() else ("--ro-bind", "/dev/null", str(p)))]
@@ -224,6 +233,8 @@ def sandboxed(cmd):
 def _worker_env(env_extra):
     env = dict(os.environ)
     env.update({k: str(v) for k, v in env_extra.items()})
+    if env.get("HCTF_STAGE") in NO_GM_STAGES:
+        env.pop("HUNTRESS_GM_TOKEN", None)
     env["HCTF_WORKER_START"] = str(time.time())
     env["TMPDIR"] = str(TMP)  # keep every worker's scratch files inside the project
     env["PYTHONPATH"] = f"{ROOT}:{env.get('PYTHONPATH', '')}"  # so solvers/tools can `import lib.*`
@@ -373,7 +384,7 @@ def _run_local_once(chal_dir, stage, prompt, env_extra, timeout, stop, warm, war
     env = _worker_env(env_extra)
     lane = env_extra.get("HCTF_LANE") or env.get("HCTF_LANE")
     with open(log, "w") as out:
-        p = subprocess.Popen(sandboxed(_worker_cmd(stage, lane, prompt)), cwd=ROOT, stdout=out,
+        p = subprocess.Popen(sandboxed(_worker_cmd(stage, lane, prompt), stage), cwd=ROOT, stdout=out,
                              stderr=subprocess.STDOUT, env=env, start_new_session=True)
         return _wait_worker(p, log, timeout, stop)
 

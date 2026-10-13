@@ -352,6 +352,31 @@ def stage_prior_solver(prior, sdir, cases=True):
     return sdir
 
 
+# Lanes whose single starts from the LANE solver (challenges/_lane/<lane>/solver, a cumulative registry front-end)
+# instead of the bare skeleton. Off ("") = the skeleton, as before.
+LANE_SEED_LANES = {x.strip() for x in os.environ.get("HCTF_LANE_SEED_LANES", "metadata-forensics").split(",") if x.strip()}
+
+
+def lane_seed_dir(lane):
+    """The lane solver dir to seed a new day's solver from, or None (lane not seeded / no lane solver)."""
+    if lane not in LANE_SEED_LANES:
+        return None
+    dirs = paths.lane_solver_dirs(lane)
+    return dirs[0] if dirs else None
+
+
+def lane_seed_note(seed, sdir):
+    return (f"The harness SEEDED `{Path(sdir).relative_to(ROOT)}/solve.py` from this lane's cumulative solver "
+            f"(`{Path(seed).relative_to(ROOT)}`): through `lib.meta` it already answers every GM-verified field family "
+            "of earlier days (identity/hashes/magic, text BOM, JPEG/PNG dims, PDF header, ZIP EOCD/CD names, PE "
+            "machine/entry/version strings, .NET MVID, MSI ProductCode; `python3 -c 'import lib.meta as m; "
+            "print(m.known_fields())'` lists them with their tier). Do NOT rewrite it and don't look for earlier days' "
+            "solvers: add ONLY today's new field(s) in its `local_answer()` (derive from the bytes; return None for "
+            "anything else), and check the speculative values lib.meta gives for today's ids against the bytes -- "
+            "a speculative extractor is a guess, not a verified answer. Note any new field in `## Proposed lib "
+            "additions` of solver/NOTES.md; the post-run ratchet folds it into lib/meta.")
+
+
 def stage_prior_cases(prior, sdir):
     """The prior solver's cases/ (regression + variant corpus), copied AFTER the worker's go: D10 binary's go waited
     11.6 s on Day 9's 411 MB cases/ while the code it needs was 1 file. Joined before anything reads cases/.
@@ -1736,10 +1761,16 @@ class Chain:
         staged = None
         if not welcome and not (self.sdir / "solve.py").exists():
             prior = prior_solver_dir(self.lane, self.sdir) if PRESTAGE_PRIOR else None
+            seed = lane_seed_dir(self.lane) if not prior else None
             if prior:
                 # Cumulative lane: copy yesterday's solver (all files, cases/ too) into place NOW, beside triage. Every
                 # D9 worker's first command was that copy: 6.5 s (script) / 15.6 s (binary, 230 MB under 5-lane load).
                 staged = ThreadPoolExecutor(max_workers=1).submit(stage_prior_solver, prior, self.sdir, False)
+            elif seed:
+                # Lane solver seed (metadata): every verified family is already in lib/meta -> the worker adds only today's
+                # field in local_answer(), and the ratchet folds it in tonight.
+                stage_prior_solver(seed, self.sdir, cases=False)
+                self._lane_seed_note = lane_seed_note(seed, self.sdir)
             else:
                 # Nothing reusable: start the worker from the harness skeleton (contract I/O, per-set loop, sha256-paired
                 # artifact lookup incl. Mastery's 'delivery N: x.apk' names) instead of hunting for a template (10-15s
@@ -1799,6 +1830,8 @@ class Chain:
                 dry = self._prior_dry_run_text() if n == 0 else ""
                 if dry:
                     prior_note += "\n" + dry
+            elif getattr(self, "_lane_seed_note", ""):
+                prior_note = self._lane_seed_note
             else:
                 prior_note = ("Write the solver from the skeleton + the lane helpers below; don't go looking for earlier "
                               "days' solvers (replays lost 13-24 s per run doing that).")
@@ -2731,9 +2764,17 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
     say("all chains finished")
     if RATCHET and day is not None:
         ratchet(day)
+        if PREBUILD_AFTER_RATCHET:
+            try:   # off-peak breadth (hctf/prebuild.py): detached, budget-capped, ends 30 min before the next drop
+                from . import prebuild as _prebuild
+                _prebuild.launch_background(day, log=say)
+            except Exception as e:  # noqa: BLE001 - post-run best-effort
+                say(f"[prebuild] not launched ({e})")
 
 
 RATCHET = os.environ.get("HCTF_RATCHET", "1") != "0"
+# After ratchet + speed_harden: LLM-authored lane breadth in the background (`hctf prebuild`; bin/day.sh stops it).
+PREBUILD_AFTER_RATCHET = os.environ.get("HCTF_PREBUILD_AFTER_RATCHET", "1") != "0"
 # Hall of Fame keeps each team's FASTEST eligible timed attempt: after the run, spend a few extra ranked attempts per
 # passed timed mode where the fresh pool is plentiful (user, 2026-10-12: up to 3, only at >= 8 left, keep 5 in reserve).
 HOF_RACE = int(os.environ.get("HCTF_HOF_RACE", "3"))
@@ -2810,7 +2851,8 @@ def hof_race(groups):
 RATCHET_TIMEOUT = float(os.environ.get("HCTF_RATCHET_TIMEOUT", str(15 * 60)))
 
 
-RATCHET_GATE = ("tests/test_orchestrate.py", "tests/test_day6_fixes.py", "tests/test_day7_fixes.py", "tests/test_codec.py")
+RATCHET_GATE = ("tests/test_orchestrate.py", "tests/test_day6_fixes.py", "tests/test_day7_fixes.py", "tests/test_codec.py",
+                "tests/test_meta_lane.py")   # lib/meta: every metadata case D1..today + prebuilt fixtures
 
 
 def _lib_changed(backup):
@@ -2921,6 +2963,16 @@ def ratchet(day):
             speed_harden(day=day)
         except Exception as e:  # noqa: BLE001 - post-run best-effort
             say(f"[speed-harden] {tag}: skipped ({e})")
+
+
+def prebuild(lane="metadata-forensics", n=None, targets=None, budget_usd=None, deadline=None, log=None, runner=None):
+    """Off-peak, single-writer LLM breadth for a lane (modelled on ratchet()): one `prebuild`-stage worker per ranked
+    target writes a SPECULATIVE extractor module + independently generated fixtures; hctf/prebuild.py snapshots lib/ +
+    tests/data/, gates the edit (path allowlist, AST import allowlist, fixtures, test_meta_lane + RATCHET_GATE) and
+    restores the snapshot on any failure. Never at drop time: bin/day.sh stops a running batch before a run."""
+    from . import prebuild as _prebuild
+    return _prebuild.run(lane, n=n, only=targets, budget_usd=budget_usd, deadline=deadline, log=log or say,
+                         runner=runner)
 
 
 SPEED_HARDEN = os.environ.get("HCTF_SPEED_HARDEN", "1") != "0"

@@ -1,0 +1,4 @@
+{
+  "lane": "metadata-forensics",
+  "name": "metadata-forensics lane solver (lib.meta registry; race-only)"
+}
