@@ -11,7 +11,10 @@ Protocol: JSON lines on stdin/stdout.
               env/argv/disk/log -- the solvers' environment never sees it)
   requests    {"id", "op": "ping" | "warm" | "attempt" | "shutdown", ...}
               warm    {"solver": "<dir rel to ~/hw>"}
-              attempt {"cid", "solver", "op": "start"|"retry", "min_left", "opts": {HCTF_* knobs}}
+              attempt {"cid", "solver", "op": "start"|"retry", "min_left", "opts": {HCTF_* knobs},
+                       "inline_max": bytes (optional: a failed attempt's files <= this come back as result._inline),
+                       "events": true (optional, HCTF_EARLY_GENERALIZE: {"id", "event": "solved", "data", "_inline"}
+                       lines before the final response)}
   responses   {"id", "ok": true, ...} / {"id", "ok": false, "error"}; one thread per request (5 chains at once).
 Usage (Homebase, cwd ~/hw): python3 hctf/hb_daemon.py --stdio
 """
@@ -137,6 +140,29 @@ class Zygotes:
             z.close()
 
 
+def _inline_bytes(cid, out, cap):
+    """{file name: base64} of a FAILED attempt's download dir (contract.json + deliveries + result.json) when the
+    whole dir is <= cap bytes and holds THIS attempt: the client then skips its post-failure pull (an ssh listing +
+    byte-range fetches, or a full rsync: D13 warmups Mastery's 31 KB zip went the rsync way). None otherwise."""
+    import base64
+    import re
+    r = str(out.get("result", "")).lower()
+    failed = r in ("solver_incomplete", "solver_error", "incorrect", "accepted") or (
+        r == "exec_error" and out.get("solver_too_slow") and not out.get("clock_short"))
+    if not cap or not failed or not out.get("attempt_id"):
+        return None
+    adir = HW / ".run" / "tmp-timed" / re.sub(r"[^A-Za-z0-9]+", "_", cid)
+    try:
+        files = [f for f in adir.iterdir() if f.is_file()]
+        if sum(f.stat().st_size for f in files) > cap:
+            return None
+        if json.loads((adir / "contract.json").read_text()).get("attempt_id") != out.get("attempt_id"):
+            return None
+        return {f.name: base64.b64encode(f.read_bytes()).decode() for f in files}
+    except (OSError, ValueError):
+        return None
+
+
 GM_OPS = ("start", "submit", "status")
 
 
@@ -203,10 +229,26 @@ def main():
                 send({"id": rid, "ok": True, **_gm_call(hb_timed, req)})
             elif op == "attempt":
                 t = time.time()
+                on_event = None
+                if req.get("events"):
+                    # HCTF_EARLY_GENERALIZE: mid-attempt events on the same id ({"id", "event", ...}, no "ok") with the
+                    # attempt's bytes inline, so the client can hand the variant to a generalize worker before the
+                    # in-window localization ends (old clients never ask; old daemons never send)
+                    cap = int(req.get("inline_max") or 0)
+
+                    def on_event(ev, rid=rid, cid=req["cid"], cap=cap):
+                        msg = {"id": rid, "event": ev.get("event"), "data": ev}
+                        inline = _inline_bytes(cid, dict(ev, result="solver_incomplete"), cap)
+                        if inline:
+                            msg["_inline"] = inline
+                        send(msg)
                 out = hb_timed.run_attempt(req["cid"], req["solver"], op=req.get("op_mode") or "start",
-                                           min_left=req.get("min_left"), opts=req.get("opts"))
+                                           min_left=req.get("min_left"), opts=req.get("opts"), on_event=on_event)
                 out["daemon_s"] = round(time.time() - t, 2)
                 log(f"attempt {req['cid']}: {out.get('result')} elapsed={out.get('elapsed')}")
+                inline = _inline_bytes(req["cid"], out, int(req.get("inline_max") or 0))   # absent (old client) -> none
+                if inline:
+                    out["_inline"] = inline
                 send({"id": rid, "ok": True, "result": out})
             else:
                 send({"id": rid, "ok": False, "error": f"unknown op {op!r}"})

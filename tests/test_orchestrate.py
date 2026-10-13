@@ -223,7 +223,7 @@ def test_harvest(tmp):
     full = [{"case": "var", "ok": False, "unverified": True, "answered": 5, "total": 5, "seconds": 0.1}]
     green, done, harvesting = threading.Event(), threading.Event(), threading.Event()
     harvesting.set()
-    with mock.patch.object(orch.solvers, "test_solver", lambda *a, **k: full), \
+    with mock.patch.object(orch.solvers, "test_solver", lambda *a, **k: full), mock.patch.object(orch, "VERIFIED_GREEN", False), \
             mock.patch.object(orch, "say", lambda m: None), mock.patch.object(orch.time, "time", lambda: 10 ** 6):
         t = threading.Thread(target=orch.Chain._watch_green,
                              args=(c, set(), set(), False, green, done, {"var"}, harvesting))
@@ -283,7 +283,8 @@ def test_watch_green(tmp):
     full = [{"case": "var", "ok": False, "unverified": True, "answered": 28, "total": 28, "seconds": 0.1},
             {"case": "old", "ok": True, "seconds": 0.1}]
     green2, done2 = threading.Event(), threading.Event()
-    with mock.patch.object(orch.solvers, "test_solver", lambda *a, **k: full), \
+    # (pre-VERIFIED_GREEN rule; with it on, fill-only evidence never ends the worker -- tests/test_day14_s2.py)
+    with mock.patch.object(orch.solvers, "test_solver", lambda *a, **k: full), mock.patch.object(orch, "VERIFIED_GREEN", False), \
             mock.patch.object(orch, "say", lambda m: None), mock.patch.object(orch.time, "time", lambda: 10 ** 6):
         t = threading.Thread(target=orch.Chain._watch_green, args=(c2, set(), {"old"}, False, green2, done2, {"var"}))
         t.start(); green2.wait(10); done2.set(); t.join(5)

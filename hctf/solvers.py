@@ -196,28 +196,45 @@ EMPTY_Q_MAX = 6   # dry-run render: full question text for this many empty ids (
 NEW_GROUPS_MAX = 10  # dry-run render: artifact groups of NEW-today ids listed
 
 
-def profile_solver(sdir, case_dir, timeout=45, top=25):
+def profile_solver(sdir, case_dir, timeout=45, top=25, interrupt=False):
     """cProfile of solve.py on one regression case -> the top `top` rows by cumulative time (text), or ''. Handed to a
     speed generalize so the worker starts at the hot path (rehearsal D8 + d8tc1: both speed workers lost a turn to a profile
-    piped to /dev/null)."""
+    piped to /dev/null). interrupt=True: SIGINT at `timeout` instead of giving up -- cProfile still prints the stats of
+    the run so far (a solver too slow to finish is exactly the one worth profiling)."""
+    import signal
     case_dir = Path(case_dir)
     if not (case_dir / "contract.json").exists():
         return ""
     py = str(VENV_PY) if VENV_PY.exists() else "python3"
     env = dict(os.environ, PYTHONPATH=f"{ROOT}:{os.environ.get('PYTHONPATH', '')}")
-    try:
-        r = subprocess.run([py, "-m", "cProfile", "-s", "cumtime", str(Path(sdir) / "solve.py"), "--contract",
-                            str(case_dir / "contract.json"), "--artifacts", str(case_dir / "artifacts")],
-                           capture_output=True, text=True, timeout=timeout, cwd=sdir, env=env)
-    except subprocess.TimeoutExpired:
-        return f"(profile of {case_dir.name} did not finish in {timeout}s)"
-    out = r.stdout.splitlines()
+    argv = [py, "-m", "cProfile", "-s", "cumtime", str(Path(sdir).resolve() / "solve.py"), "--contract",
+            str(case_dir.resolve() / "contract.json"), "--artifacts", str(case_dir.resolve() / "artifacts")]
+    cut = ""
+    if interrupt:
+        p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=sdir, env=env,
+                             start_new_session=True)
+        try:
+            stdout, _ = p.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            p.send_signal(signal.SIGINT)
+            cut = f", INTERRUPTED at {timeout:g}s"
+            try:
+                stdout, _ = p.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                stdout, _ = p.communicate()
+    else:
+        try:
+            stdout = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, cwd=sdir, env=env).stdout
+        except subprocess.TimeoutExpired:
+            return f"(profile of {case_dir.name} did not finish in {timeout}s)"
+    out = (stdout or "").splitlines()
     i = next((k for k, ln in enumerate(out) if ln.strip().startswith("ncalls")), None)
     if i is None:
-        return ""
+        return f"(profile of {case_dir.name} did not finish in {timeout:g}s)" if cut else ""
     head = next((ln.strip() for ln in out if "function calls" in ln), "")
     rows = [re.sub(r"/[^\s]*/(site-packages|huntress-2026[^/]*)/", r"\1/", ln.rstrip()) for ln in out[i:i + top + 1]]
-    return f"cProfile of `cases/{case_dir.name}` ({head}):\n" + "\n".join(rows)
+    return f"cProfile of `cases/{case_dir.name}` ({head}{cut}):\n" + "\n".join(rows)
 
 
 def render_dry_run(d):
@@ -317,9 +334,17 @@ def add_case(sdir, name, contract, artifacts, expected):
     return case
 
 
+# A variant case's gm_feedback.json (orchestrate.capture_variant) = the GM's verdicts on that attempt beyond the accepted
+# answers in expected.json: values it REJECTED per field + require_complete. With it a case passes only if no rejected
+# value comes back and (require_complete) every field is answered -- not just "the verified subset still matches".
+VERIFIED_GREEN = os.environ.get("HCTF_VERIFIED_GREEN", "1") != "0"
+
+
 def test_solver(sdir, timeout=120, parallel=min(8, os.cpu_count() or 4)):
     """Run the solver on every case (cases in parallel: they are independent; replay run 2 spent 141s replaying a
-    slow solver's cases one by one). Returns list of {case, ok, seconds, diff/error}, in case-name order."""
+    slow solver's cases one by one). Returns list of {case, ok, seconds, diff/error}, in case-name order.
+    Also verified_n (GM-verified fields), rejected_hits (GM-rejected values produced again, gm_feedback.json) and
+    fully_verified (every asked field has a verified answer)."""
     from concurrent.futures import ThreadPoolExecutor
 
     def one(case):
@@ -328,9 +353,23 @@ def test_solver(sdir, timeout=120, parallel=min(8, os.cpu_count() or 4)):
         got, err, dt = run_solver(Path(sdir), contract, case / "artifacts", timeout)
         diff = {k: {"expected": v, "got": got.get(k)} for k, v in expected.items() if got.get(k) != v}
         ids = contract.get("answer_ids") or [q.get("id") for q in contract.get("questions") or [] if q.get("id")]
-        return {"case": case.name, "ok": not err and not diff and bool(expected), "seconds": round(dt, 2),
+        answered = sum(1 for i in ids if got.get(i) not in (None, ""))
+        ok = not err and not diff and bool(expected)
+        fb = {}
+        if VERIFIED_GREEN and (case / "gm_feedback.json").exists():
+            try:
+                fb = json.loads((case / "gm_feedback.json").read_text())
+            except (OSError, ValueError):
+                fb = {}
+        rejected = fb.get("rejected") or {}
+        hits = {a: got.get(a) for a, vals in rejected.items() if got.get(a) not in (None, "") and got.get(a) in vals}
+        if fb:
+            ok = ok and not hits and (answered == len(ids) or not fb.get("require_complete"))
+        return {"case": case.name, "ok": ok, "seconds": round(dt, 2),
                 "error": err, "diff": diff, "unverified": not expected,
-                "answered": sum(1 for i in ids if got.get(i) not in (None, "")), "total": len(ids)}
+                "answered": answered, "total": len(ids),
+                "verified_n": len(expected), "rejected_hits": len(hits), "rejected_got": hits,
+                "fully_verified": bool(ids) and set(ids) <= set(expected)}
     cases = sorted((Path(sdir) / "cases").glob("*/"))
     with ThreadPoolExecutor(max_workers=max(1, parallel)) as ex:
         return list(ex.map(one, cases))
