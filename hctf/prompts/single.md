@@ -44,6 +44,9 @@ call it and add the one missing case (e.g. a new cipher) instead of re-implement
 The Single Solve itself is untimed, but the Time Trial and Mastery cannot start until you are done, so every second you
 spend is on the critical path. The harness ENDS your session automatically the moment the Single Solve is CORRECT and
 `solve.py` reproduces the confirmed answers — anything you planned to do after that will not happen, by design.
+Lines starting `HARNESS UPDATE (GM facts, authoritative)` may appear after any tool call: they report what the harness
+learned in parallel (fields the GM already confirmed, values it rejected, a late prior-solver dry run). Act on them at once.
+If `hctf submit` prints `ACCEPTED alternate spelling`, make `solve.py` emit exactly that spelling.
 1. **Identify the goal first, then learn from earlier days.** Read the contract (what is asked, the answer formats) and
    the bytes. Your lane's technique log is {techniques}
    Read the log's "Recognition cues" and "Pitfalls" sections too. It is a REFERENCE, not a recipe: today's challenge may

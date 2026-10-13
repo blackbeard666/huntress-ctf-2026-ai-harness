@@ -67,8 +67,25 @@ REUSE_RACE_LANES = {x.strip() for x in os.environ.get(
 REUSE_RACE_PROBES = int(os.environ.get("HCTF_REUSE_RACE_PROBES", "3"))
 REUSE_RACE_SOLVERS = int(os.environ.get("HCTF_REUSE_RACE_SOLVERS", "3"))   # newest N same-lane solvers
 REUSE_RACE_TIMEOUT = float(os.environ.get("HCTF_REUSE_RACE_TIMEOUT", "20"))
+# Partial banking (D12 binary: merged 120 rejected over ONE speculative field, 60 banked, budget out -> worker +58 s):
+# after a rejected/incomplete merged set, bank the CONFIDENT subset as one batch, then the speculative remainder, then
+# other solvers' values / spelling alternates for each isolated wrong field -- stopping the moment the worker submits.
+RACE_PARTIAL = os.environ.get("HCTF_RACE_PARTIAL", "1") != "0"
+RACE_TOTAL_PROBES = int(os.environ.get("HCTF_RACE_TOTAL_PROBES", "7"))
+RACE_SPEC_PROBES = int(os.environ.get("HCTF_RACE_SPEC_PROBES", "4"))
+# Drop race values that fail the local format checks or the slug plausibility gate (lib/slug.py) BEFORE submitting:
+# the race submits with force=True, which skips them (D13 warmups: a rot-N gibberish slug cost a GM submission).
+RACE_FORMAT_GATE = os.environ.get("HCTF_RACE_FORMAT_GATE", "1") != "0"
+# What the race learned (banked count, remaining ids, hint + judged-wrong values) reaches the worker: in the go text if
+# the race finished first, else via the inbox (hctf/inbox.py -> .claude/hooks/nudge.py on its next tool call).
+INBOX = os.environ.get("HCTF_INBOX", "1") != "0"
+# The go no longer waits for the prior-solver dry run (binary go came at T+16-22 behind it); the dry-run note follows
+# through the inbox when it finishes. The staged-solver copy is still awaited (the prompt promises it is in place).
+GO_EARLY = os.environ.get("HCTF_GO_EARLY", "1") != "0"
 STOP_WHEN_READY = os.environ.get("HCTF_STOP_WHEN_READY", "1") != "0"  # end the single worker at CORRECT + verified solver
-SPEC_STABLE = float(os.environ.get("HCTF_SPEC_STABLE", "2"))  # solver files untouched this long before a snapshot
+SPEC_STABLE = float(os.environ.get("HCTF_SPEC_STABLE", "0.75"))  # solver files untouched this long before a snapshot
+# (was 2 s: _spec_snapshot re-checks the mtimes after its copy, so a mid-edit copy is caught anyway; D13 metadata
+# spent 8 s between CORRECT and the handoff)
 SPEC_POLL = float(os.environ.get("HCTF_SPEC_POLL", "0.25"))  # D9: single CORRECT -> ready took up to 1 s of poll
 # The single's solver on its OWN case must beat this (local s) or a speed generalize runs BEFORE the first timed attempt:
 # Homebase is ~1.5x slower and the 7-13 s window also pays GM start/download/submit (blind D7 replay: binary 5.9 s ->
@@ -954,9 +971,23 @@ class Chain:
             return False
         return bool(d.get("total")) and not d.get("timed_out") and d["answered"] / d["total"] >= DEFER_RECON_RATIO
 
-    def _prior_dry_run_text(self):
+    def _prior_dry_run_text(self, cid=None):
         fut = getattr(self, "_dry_fut", None)
         if fut is None:
+            return ""
+        if GO_EARLY and cid is not None and not fut.done():
+            # don't hold the go for it (binary go came at T+16-22 behind the dry run): its note follows via the inbox
+            def late(f, cid=cid):
+                try:
+                    d = f.result()
+                except Exception:  # noqa: BLE001
+                    return
+                say(f"[{self.base}] prior solver dry run (late): {d['seconds']}s, timed_out={d['timed_out']}, "
+                    f"answered {d['answered']}/{d['total']}")
+                self._deliver_note(cid, "PRIOR-SOLVER DRY RUN (finished after your start): " + solvers.render_dry_run(d),
+                                   key="dry-run")
+            fut.add_done_callback(late)
+            say(f"[{self.base}] go sent without the prior-solver dry run (still running; note follows via inbox)")
             return ""
         try:
             d = fut.result(timeout=PRIOR_DRY_RUN_SECONDS + 10)
@@ -1423,10 +1454,12 @@ class Chain:
             self._restore_snapshot("previous run was interrupted mid-generalize")
 
     def _reuse_race(self, cid):
-        """Background, beside triage + the LLM worker: today's single bytes through the newest same-lane solvers;
-        submit when their merged answers cover EVERY field (confident = the field is GM-verified in that solver's own
-        cases; speculative only to complete the set). Bisects a rejected set within REUSE_RACE_PROBES submits -- never a
-        brute force. Touches no solver files: a win is adopted by _watch_ready (staged prior verified -> worker ended)."""
+        """Background, beside triage + the LLM worker: today's single bytes through the newest same-lane solvers.
+        A merged set covering EVERY field (confident = the field is GM-verified in that solver's own cases; speculative
+        completes it) goes first, as one submit. With RACE_PARTIAL, a rejected or incomplete set is then BANKED in parts
+        (confident subset, speculative remainder, alternates for isolated wrong fields) within RACE_TOTAL_PROBES submits,
+        yielding as soon as the worker submits; what was learned goes to the worker (go text or inbox). Never a brute
+        force. Touches no solver files: a win is adopted by _watch_ready (staged prior verified -> worker ended)."""
         t0 = time.time()
         try:
             contract = cli.load(cid, "start.json") or cli.load(cid, "contract.json")
@@ -1437,30 +1470,18 @@ class Chain:
             # same-lane newest N only (no question-text index: r11b spent 18-24 s building it under drop load)
             plan = solvers.reuse_plan(contract, art, self.lane, exclude=[self.sdir], timeout=REUSE_RACE_TIMEOUT,
                                       limit=REUSE_RACE_SOLVERS, by_question=False)
-            high, spec = plan["high"], plan["spec"]
+            high, spec = dict(plan["high"]), dict(plan["spec"])
+            dropped = self._race_gate(contract, high, spec) if RACE_FORMAT_GATE else []
             merged = {a: high.get(a, spec.get(a)) for a in ids if a in high or a in spec}
             say(f"[{cid}] reuse race: {len(high)} confident + {len(spec)} speculative of {len(ids)} field(s) from "
-                f"{len(plan['runs'])} solver(s) in {time.time() - t0:.1f}s")
-            if len(merged) < len(ids):
-                return      # can't finish the single: leave it to the worker (its dry-run note covers the gaps)
-            budget = [REUSE_RACE_PROBES]
-
-            def narrow(group):
-                # ONE confirmed lookup per call: inside the comprehension it re-parsed start.json per field (D12 script
-                # 855 x 572 KB: 4.2 s idle, ~18 s under drop load before the race's first submit)
-                done = cli.confirmed_answers(cid)
-                group = {a: v for a, v in group.items() if a not in done}
-                if not group or budget[0] <= 0 or cli.is_complete(cid):
-                    return
-                budget[0] -= 1
-                kind, _b, refused = cli.submit(cid, group, force=True, probe=True)
-                if kind in ("correct", "accepted") or refused or len(group) == 1:
-                    return
-                keys = list(group)
-                narrow({k: group[k] for k in keys[:len(keys) // 2]})
-                narrow({k: group[k] for k in keys[len(keys) // 2:]})
-
-            narrow(merged)
+                f"{len(plan['runs'])} solver(s) in {time.time() - t0:.1f}s"
+                + (f"; dropped {len(dropped)} implausible value(s) {dropped[:4]}" if dropped else ""))
+            if not RACE_PARTIAL:
+                if len(merged) < len(ids):
+                    return  # can't finish the single: leave it to the worker (its dry-run note covers the gaps)
+                used = self._race_narrow(cid, merged, REUSE_RACE_PROBES)
+            else:
+                used = self._race_bank(cid, ids, high, spec, merged, plan)
             if cli.is_complete(cid):
                 set_state(self.base, stage="single:reuse-won")
                 snap = self._race_snapshot(cid, plan["best"], contract, art)
@@ -1469,10 +1490,160 @@ class Chain:
                     + ("seed verified -> the ready-watcher hands it to the timed modes)" if snap else
                        "seed does not reproduce every answer -> waiting for the worker's solver)"))
             else:
-                say(f"[{cid}] reuse race: not complete after {REUSE_RACE_PROBES - budget[0]} submit(s) "
+                say(f"[{cid}] reuse race: not complete after {used} submit(s) "
                     f"({len(cli.confirmed_answers(cid))}/{len(ids)} confirmed); the worker continues")
+                if RACE_PARTIAL:
+                    self._deliver_note(cid, self._race_note(cid, ids, merged, plan), key="race")
         except Exception as e:  # noqa: BLE001 - the race is an optimization; the worker path is unaffected
             say(f"[{cid}] reuse race note: {e}")
+
+    def _race_gate(self, contract, high, spec):
+        """Drop (in place) race values the local format checks or the slug gate refuse -> [dropped ids]."""
+        qmap = cli._questions(contract)
+        out = []
+        for d in (high, spec):
+            for a in list(d):
+                v = str(d[a])
+                q = qmap.get(a, {})
+                if cli._format_problem(v, q) or cli._slug_problem(v, q):
+                    del d[a]
+                    out.append(a)
+        return out
+
+    def _race_narrow(self, cid, group, budget):
+        """The original race bisect (kill-switch path): submit, halve on rejection, <= budget submits -> used."""
+        left = [budget]
+
+        def narrow(g):
+            # ONE confirmed lookup per call: inside the comprehension it re-parsed start.json per field (D12 script
+            # 855 x 572 KB: 4.2 s idle, ~18 s under drop load before the race's first submit)
+            done = cli.confirmed_answers(cid)
+            g = {a: v for a, v in g.items() if a not in done}
+            if not g or left[0] <= 0 or cli.is_complete(cid):
+                return
+            left[0] -= 1
+            kind, _b, refused = cli.submit(cid, g, force=True, probe=True, harness="race")
+            if kind in ("correct", "accepted") or refused or len(g) == 1:
+                return
+            keys = list(g)
+            narrow({k: g[k] for k in keys[:len(keys) // 2]})
+            narrow({k: g[k] for k in keys[len(keys) // 2:]})
+
+        narrow(group)
+        return budget - left[0]
+
+    def _race_used(self, cid):
+        """(race submits so far this attempt, has the worker submitted anything) from submissions.jsonl."""
+        att = cli.attempt_id(cli.load(cid, "start.json"))
+        p = cli.cdir(cid) / "submissions.jsonl"
+        used, worker = 0, False
+        for line in (p.read_text().splitlines() if p.exists() else []):
+            try:
+                h = json.loads(line)
+            except ValueError:
+                continue
+            if h.get("attempt") != att:
+                continue
+            if h.get("harness") == "race":
+                used += 1
+            elif not h.get("harness"):
+                worker = True
+        return used, worker
+
+    def _race_bank(self, cid, ids, high, spec, merged, plan):
+        """RACE_PARTIAL: merged (when complete) -> confident subset -> speculative remainder -> alternates for isolated
+        wrong fields, all harness="race" probes within RACE_TOTAL_PROBES; stop when the worker submits -> used."""
+        def left():
+            used, worker = self._race_used(cid)
+            return 0 if worker or cli.is_complete(cid) else RACE_TOTAL_PROBES - used
+
+        def todo(d):
+            done = cli.confirmed_answers(cid)
+            return {a: v for a, v in d.items() if a not in done}
+
+        def batch(d, bisect_budget):
+            d = todo(d)
+            if not d or left() <= 0:
+                return set()
+            kind, _b, refused = cli.submit(cid, d, force=True, probe=True, harness="race")
+            if kind in ("correct", "accepted") or refused:
+                return set()
+            if len(d) == 1:
+                return set(d)
+            return cli._bisect_rejected(cid, d, budget=min(bisect_budget, max(left(), 0)), harness="race",
+                                        families=False)
+
+        wrong = set()
+        if len(merged) == len(ids):
+            wrong |= batch(merged, 0)              # complete set: one submit (a script/binary/mobile win needs no more)
+        if not cli.is_complete(cid):
+            wrong |= batch({a: v for a, v in high.items() if a in merged}, 2)
+            wrong |= batch({a: v for a, v in spec.items() if a in merged and a not in high}, RACE_SPEC_PROBES)
+        self._race_wrong = {a: merged[a] for a in wrong if a in merged}
+        try:
+            from . import fmtalt
+        except Exception:  # noqa: BLE001
+            fmtalt = None
+        qmap = cli._questions(cli.load(cid, "start.json") or {})
+        for a in sorted(self._race_wrong):
+            if a in cli.confirmed_answers(cid):
+                continue
+            tried = {self._race_wrong[a]}
+            alts = [v for v in plan.get("alts", {}).get(a, []) if v not in tried]
+            if fmtalt is not None:
+                alts += [v for v, _t in fmtalt.alternates(a, self._race_wrong[a], qmap.get(a, {}), max_n=2)]
+            for v in alts:
+                if left() <= 0 or v in tried:
+                    break
+                tried.add(v)
+                kind, _b, refused = cli.submit(cid, {a: v}, harness="race")
+                if kind in ("correct", "accepted"):
+                    break
+        used, _w = self._race_used(cid)
+        return used
+
+    def _race_note(self, cid, ids, merged, plan):
+        """What the race proved, for the worker: banked count, the ids still open (+ prior solvers' values as hints, never
+        as answers) and every value the GM rejected on its own."""
+        conf = cli.confirmed_answers(cid)
+        rest = [a for a in ids if a not in conf]
+        if not conf or not rest:
+            return ""
+        judged = {}
+        p = cli.cdir(cid) / "submissions.jsonl"
+        att = cli.attempt_id(cli.load(cid, "start.json"))
+        for line in (p.read_text().splitlines() if p.exists() else []):
+            try:
+                h = json.loads(line)
+            except ValueError:
+                continue
+            if h.get("attempt") == att and h.get("kind") == "incorrect" and len(h.get("answers") or {}) == 1:
+                for a, v in h["answers"].items():
+                    judged.setdefault(a, []).append(v)
+        hints = {a: merged[a] for a in rest if a in merged and merged[a] not in judged.get(a, [])}
+        note = (f"REUSE RACE (prior solvers on today's bytes): the GM already CONFIRMED {len(conf)}/{len(ids)} field(s) -- "
+                f"do not recompute or resubmit them; only these {len(rest)} remain: {rest[:80]}"
+                + (" (+more)" if len(rest) > 80 else "") + ".")
+        if hints:
+            note += (" Prior solvers' values for them (UNVERIFIED hints, check against today's bytes): "
+                     + json.dumps(dict(list(hints.items())[:20]), ensure_ascii=False))
+        if judged:
+            note += " GM-REJECTED values (never resubmit): " + json.dumps(
+                {a: v for a, v in list(judged.items())[:20]}, ensure_ascii=False)
+        return note
+
+    def _deliver_note(self, cid, note, key):
+        """A late fact for the single worker: into the go text if it hasn't been sent yet, else the inbox."""
+        if not note:
+            return
+        with self._go_lock:
+            if not self._go_sent:
+                self._go_pending.append(note)
+                return
+        if INBOX:
+            from . import inbox
+            inbox.post(cli.cdir(cid), note, key=key)
+            say(f"[{cid}] {key} note -> worker inbox ({len(note)} chars)")
 
     def _race_snapshot(self, cid, seed, contract, art):
         """The race's seed solver as a ready snapshot (`.run/spec-dayNN/<chal>-race/solver`: same depth as the real solver
@@ -1686,6 +1857,7 @@ class Chain:
                     say(f"[{cid}] already solved (solver regression {'ok' if ok else 'has failing cases'})")
                 return True
         set_state(self.base, stage="single:fetch")
+        self._chain_t0 = time.time()
         # The GM start (+ download) goes out FIRST, before the warm worker's node start and the status prefetches
         # compete for the box (D9: chains began at T+1, GM starts were stamped T+3.1..4.8).
         start_pool = ThreadPoolExecutor(max_workers=1)
@@ -1713,6 +1885,7 @@ class Chain:
         tpool = ThreadPoolExecutor(max_workers=2)
         tfuts = [tpool.submit(fetch, m) for m in tmodes]
         tpool.shutdown(wait=False)
+        self._go_lock, self._go_sent, self._go_pending = threading.Lock(), False, []
         body, err = start_fut.result()
         self._tool_prefetch(cid, (body or {}))   # the prompt + questions arrive with `start`: before any download
         self._start_prior_dry_run(cid)
@@ -1788,7 +1961,7 @@ class Chain:
                               f"copied its code into `{self.sdir.relative_to(ROOT)}` (its cases/ corpus follows in the background) "
                               "-- do NOT copy anything again; add only today's new families there. "
                               "Never use an old solver's output as your answer without today's bytes behind it.")
-                dry = self._prior_dry_run_text() if n == 0 else ""
+                dry = self._prior_dry_run_text(cid) if n == 0 else ""
                 if dry:
                     prior_note += "\n" + dry
             elif prior:
@@ -1796,7 +1969,7 @@ class Chain:
                               f"solver of this lane and already answers every earlier family. FIRST copy it (all its "
                               f"files) over `{self.sdir.relative_to(ROOT)}`, then add only today's new families. "
                               "Never use an old solver's output as your answer without today's bytes behind it.")
-                dry = self._prior_dry_run_text() if n == 0 else ""
+                dry = self._prior_dry_run_text(cid) if n == 0 else ""
                 if dry:
                     prior_note += "\n" + dry
             else:
@@ -1817,6 +1990,18 @@ class Chain:
             if delta:
                 prior_note += " " + delta
                 say(f"[{cid}] {delta[:200]}")
+            if INBOX:
+                from . import inbox
+                carried = inbox.texts(cli.cdir(cid))   # a relaunch inherits what the previous worker was told late
+                inbox.reset(cli.cdir(cid))
+                if n and carried:
+                    extra += "\n" + "\n".join(carried)
+            with self._go_lock:
+                if self._go_pending:
+                    extra += "\n" + "\n".join(self._go_pending)
+                self._go_pending, self._go_sent = [], True
+            say(f"[{cid}] go text ready at +{time.time() - self._chain_t0:.1f}s (launch {n + 1})"
+                if getattr(self, "_chain_t0", None) else f"[{cid}] go text ready (launch {n + 1})")
             prompt = workers.render("single", skill=workers.lane_skill(self.lane), triage=triage_summary(cid),
                                     lane_helpers=workers.lane_helpers(self.lane), prior_solver=prior_note,
                                     name=self.name, cid=cid, lane=self.lane, techniques=technique_log(self.lane),

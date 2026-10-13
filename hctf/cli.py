@@ -32,6 +32,19 @@ from .paths import ROOT
 MAX_WRONG_PER_ATTEMPT = int(os.environ.get("HCTF_MAX_WRONG", "6"))   # per non-flag answer_id
 FLAG_WRONG_CAP = int(os.environ.get("HCTF_FLAG_WRONG_CAP", "3"))     # wrong flag guesses per attempt
 GLOBAL_WRONG_CAP = int(os.environ.get("HCTF_GLOBAL_WRONG_CAP", "80"))  # total wrong per attempt (sanity)
+# Confirm exactly the GM's `accepted_ids` on a partial accept (real GM and replay_gm both send it); off = infer from
+# the drop in `remaining`, which a concurrent submit (race bisect beside the worker) can mis-attribute.
+ACCEPTED_IDS = os.environ.get("HCTF_ACCEPTED_IDS", "1") != "0"
+# Harness-made submissions (reuse race, spelling alternates) never consume the WORKER's per-field wrong budget; the
+# exact rejected value stays refused ("already judged incorrect") either way.
+HARNESS_WRONG_FREE = os.environ.get("HCTF_HARNESS_WRONG_FREE", "1") != "0"
+# Untimed modes: refuse a warmups-style slug made of non-words (lib/slug.py) before it costs a GM submission (D13 race:
+# rot-N gibberish of Atbash text). --force overrides; timed windows never run this check.
+SLUG_GATE = os.environ.get("HCTF_SLUG_GATE", "1") != "0"
+# After a single-field rejection on the untimed Single, probe <= N same-value SPELLING alternates (hctf/fmtalt.py) before
+# the worker spends an LLM turn on it (D10 hex width, D13 GUID braces: ~20 s each).
+FORMAT_ALTS = os.environ.get("HCTF_FORMAT_ALTS", "1") != "0"
+FORMAT_ALTS_MAX = int(os.environ.get("HCTF_FORMAT_ALTS_MAX", "3"))
 FLAG_RE = re.compile(r"^[0-9a-f]{32}$")
 EXIT = {"correct": 0, "incorrect": 1, "accepted": 2, "expired": 3, "refused": 4, "unreachable": 5, "error": 6}
 
@@ -387,9 +400,20 @@ def _format_problem(value, q):
     return None
 
 
-def _bisect_rejected(cid, answers, budget=40):
+def _slug_problem(value, q):
+    """Warmups slug plausibility (lib/slug.py): a slug of non-words is a mis-decode, not a GM spelling question."""
+    try:
+        from lib import slug
+        return slug.slug_problem(value, q)
+    except Exception:  # noqa: BLE001 - the gate must never itself block a submission
+        return None
+
+
+def _bisect_rejected(cid, answers, budget=40, harness=None, families=True):
     """Split an incorrect batch by answer-id family (prefix before the last '-'/'_' field word), then halves, submitting
-    each group (probe-tagged); accepted groups are banked. Returns the set of individually rejected answer_ids."""
+    each group (probe-tagged); accepted groups are banked. Returns the set of individually rejected answer_ids.
+    families=False: pure halving of the (known-rejected) batch -- ~log2(n) probes for one bad field whatever the ids
+    look like (the reuse race's speculative remainder spans many families)."""
     def family(aid):
         m = re.match(r"((?:set\d+\.)?[a-z0-9]+(?:[-_][a-z0-9]+)?)", aid)
         return m.group(1) if m else aid
@@ -404,7 +428,7 @@ def _bisect_rejected(cid, answers, budget=40):
         for _ in range(2):
             n[0] += 1
             try:
-                kind, _b, _p = submit(cid, g, force=True, probe=True)
+                kind, _b, _p = submit(cid, g, force=True, probe=True, **({"harness": harness} if harness else {}))
             except (remote.Unreachable, OSError, RuntimeError) as e:
                 print(f"bisect: probe of {len(g)} field(s) failed ({str(e)[:80]}); retrying once", file=sys.stderr)
                 continue
@@ -433,6 +457,9 @@ def _bisect_rejected(cid, answers, budget=40):
         elif r2 == "ok" and r1 is None:
             split(h1)                     # h1 unjudged, h2 clean: h1 holds it
 
+    if not families:
+        split(dict(answers))
+        return bad
     groups = list(fams.values())
     unsure = False
     for i, g in enumerate(groups):
@@ -531,6 +558,7 @@ def c_submit(a):
             return EXIT["refused"]
         answers = json.loads(a.answers)
     kind, body, problems = submit(a.id, answers, force=a.force)
+    bad = set()
     if a.from_solver and not problems and kind == "incorrect" and len(answers) > 1:
         # A bulk "incorrect" says nothing about WHICH field: bisect (probe-tagged, untimed single) and print the
         # rejected answer_ids, so the worker fixes exactly those (a script worker spent 88 s bisecting by hand).
@@ -541,6 +569,11 @@ def c_submit(a):
     if problems:
         print("refused:\n  " + "\n  ".join(problems), file=sys.stderr)
         return EXIT["refused"]
+    if kind in ("incorrect", "accepted") and not is_complete(a.id):
+        rejected = list(answers) if kind == "incorrect" and len(answers) == 1 else sorted(bad)
+        k2, b2 = _try_format_alts(a.id, {k: answers[k] for k in rejected if k in answers})
+        if k2:
+            kind, body = k2, b2
     emit(body)                        # the verdict first: the stop-at-correct watcher may end the worker any moment
     if a.from_solver:
         sys.stdout.flush()
@@ -548,10 +581,43 @@ def c_submit(a):
     return EXIT.get(kind, EXIT["error"])
 
 
-def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_cap=None, probe=False):
+def _try_format_alts(cid, rejected):
+    """Untimed Single only: for each field the GM just rejected on its own (<= 3 fields), probe <= FORMAT_ALTS_MAX
+    spelling alternates of the SAME value (hctf/fmtalt.py: hex width/0x/case, GUID braces/case/bytes_le, trim/quotes)
+    as harness-tagged single-field submits -- they don't eat the worker's per-field budget. An accepted spelling is
+    printed with the instruction to make solve.py emit it, and remembered per field ending. -> (kind, body) of the
+    last accepting submit, or (None, None)."""
+    if not FORMAT_ALTS or not rejected:
+        return None, None
+    start = load(cid, "start.json") or {}
+    if start.get("deadline") or paths.base_id(cid) != cid:
+        return None, None
+    from . import fmtalt
+    qmap = _questions(start)
+    kind = body = None
+    for aid, val in list(rejected.items())[:3]:
+        if aid in confirmed_answers(cid):
+            continue
+        for alt, how in fmtalt.alternates(aid, val, qmap.get(aid, {}), max_n=FORMAT_ALTS_MAX):
+            k, b, refused = submit(cid, {aid: alt}, harness="alt")
+            if refused:
+                continue
+            if k in ("correct", "accepted"):
+                fmtalt.record(aid, how)
+                print(f"ACCEPTED alternate spelling for {aid}: {alt!r} (transform {how}; you sent {val!r}). Make "
+                      f"solve.py emit exactly this, then run `hctf submit {cid} --from-solver`.", file=sys.stderr)
+                kind, body = k, b
+                break
+            print(f"format alternate {alt!r} ({how}) for {aid}: {k}", file=sys.stderr)
+    return kind, body
+
+
+def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_cap=None, probe=False, harness=None):
     """Guarded submission shared by the CLI, the workers and the timed runner.
     Returns (kind, body, problems). kind is None when refused locally (problems explains why).
-    Answers the GM confirms are merged into <mode dir>/confirmed.json (keyed by attempt)."""
+    Answers the GM confirms are merged into <mode dir>/confirmed.json (keyed by attempt).
+    `harness` ("race" / "alt"): a submission the HARNESS made (reuse race, spelling alternates), recorded as such: its
+    single-field rejections still refuse that exact value later, but never count against the worker's per-field cap."""
     start = load(cid, "start.json")
     att = attempt_id(start)
     qmap = _questions(start)
@@ -575,7 +641,7 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
     field_wrong = Counter()
     flag_wrong = 0
     for h in judged:
-        if h.get("kind") != "incorrect":
+        if h.get("kind") != "incorrect" or (HARNESS_WRONG_FREE and h.get("harness")):
             continue
         for k, v in h.get("answers", {}).items():
             field_wrong[k] += 1
@@ -588,8 +654,10 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
         for k in answers:
             if k not in qmap:
                 problems.append(f"{k}: not an answer_id of the current attempt {sorted(qmap)}")
+    untimed = not (start or {}).get("deadline")
     for k, v in answers.items():
-        prob = _format_problem(str(v), qmap.get(k, {}))
+        prob = _format_problem(str(v), qmap.get(k, {})) or (
+            _slug_problem(str(v), qmap.get(k, {})) if SLUG_GATE and untimed else None)
         if prob:
             problems.append(f"{k}: {prob}")
         for h in judged:
@@ -631,11 +699,19 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
         newly = dict(answers)
     elif kind == "accepted":
         remaining = (env["body"] or {}).get("remaining")
-        before = [h for h in history if h.get("attempt") == att  # incl. probe batches: they move `remaining` too
-                  and isinstance((h.get("body") or {}).get("remaining"), int)]
-        prev = before[-1]["body"]["remaining"] if before else len(qmap) - len(confirmed) if qmap else None
-        if len(answers) == 1 or (isinstance(remaining, int) and prev is not None and prev - remaining == len(answers)):
-            newly = dict(answers)
+        acc_ids = (env["body"] or {}).get("accepted_ids")
+        if ACCEPTED_IDS and isinstance(acc_ids, list):
+            # the GM names exactly what it accepted: no inference from `remaining` (which a concurrent race/worker
+            # submit moves too -- the race bisects while the worker submits from the same challenge dir)
+            newly = {k: v for k, v in answers.items() if k in set(acc_ids)}
+        else:
+            if subs_path.exists():        # re-read: another submitter may have moved `remaining` since the guards ran
+                history = [json.loads(l) for l in subs_path.read_text().splitlines()]
+            before = [h for h in history if h.get("attempt") == att  # incl. probe batches: they move `remaining` too
+                      and isinstance((h.get("body") or {}).get("remaining"), int)]
+            prev = before[-1]["body"]["remaining"] if before else len(qmap) - len(confirmed) if qmap else None
+            if len(answers) == 1 or (isinstance(remaining, int) and prev is not None and prev - remaining == len(answers)):
+                newly = dict(answers)
     if newly:
         allc = load(cid, "confirmed.json") or {}
         allc.setdefault(att or "_", {}).update(newly)
@@ -644,7 +720,8 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
     with open(subs_path, "a") as f:
         f.write(json.dumps({"ts": now(), "attempt": att, "answers": answers, "http": env["http"],
                             "kind": kind, "confirmed": sorted(newly), "body": env["body"],
-                            **({"probe": True} if probe else {})}, ensure_ascii=False) + "\n")
+                            **({"probe": True} if probe else {}), **({"harness": harness} if harness else {})},
+                           ensure_ascii=False) + "\n")
     return kind, body, []
 
 

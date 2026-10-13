@@ -244,7 +244,7 @@ subs, confirmed, msgs = [], {}, []
 truth = {"a": "1", "b": "2", "c": "3", "e": "5"}
 
 
-def fake_submit(cid, group, force=False, probe=False):
+def fake_submit(cid, group, force=False, probe=False, **kw):
     subs.append(dict(group))
     if all(truth.get(k) == v for k, v in group.items()):
         confirmed.update(group)
@@ -264,6 +264,7 @@ def race(high, spec, cap=3):
         (orchestrate, "say"): lambda m, *a, **k: msgs.append(m),
         (orchestrate, "set_state"): lambda *a, **k: None,
         (orchestrate, "REUSE_RACE_PROBES"): cap,
+        (orchestrate, "RACE_PARTIAL"): False,     # the original race contract (partial banking: test_day14_s1.py)
     }
     sv = {k: getattr(*k) for k in rp}
     try:
