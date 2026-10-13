@@ -24,6 +24,7 @@ import html
 import itertools
 import json
 import quopri
+import os
 import re
 import string
 import urllib.parse
@@ -81,6 +82,12 @@ DAYS = [
     (12, "reverse", lambda s: s[::-1], lambda t: t[::-1], True),
     (13, "atbash", atbash, atbash, True),
 ]
+
+try:   # fair runs (HCTF_CODEC_MAX_DAY=<N-1>, as lib/codec.py): only codecs GM-confirmed before day N
+    _MAXD = int(os.environ.get("HCTF_CODEC_MAX_DAY", "0")) or 99
+except ValueError:
+    _MAXD = 99
+DAYS = [d for d in DAYS if d[0] <= _MAXD]
 
 
 def day_codec(day):

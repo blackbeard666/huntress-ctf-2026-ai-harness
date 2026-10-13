@@ -307,8 +307,8 @@ def decode_chunk(p, _nested=False):
     # best rot-N of Atbash text is gibberish (rot22 'Intr zhel ...' was submitted and rejected), so the mirror competes
     # with rot-N and the reversal on bigram score and must beat both.
     if best_rot is not None:
-        atb = _atbash(p)
-        if _bigram(atb) > max(_bigram(best_rot), _bigram(t[::-1])):
+        atb = _atbash(p) if _max_day() >= 13 else None
+        if atb is not None and _bigram(atb) > max(_bigram(best_rot), _bigram(t[::-1])):
             return atb
         if _bigram(t[::-1]) > _bigram(best_rot):
             return t[::-1]
@@ -377,7 +377,15 @@ def _rot_cands(p):
     return [best] + ([_rot(p, 13)] if _rot(p, 13) != best else [])
 
 
-for _n, _d in FREE_CODECS:
+def _max_day():
+    """HCTF_CODEC_MAX_DAY=<N-1> (fair runs, as in lib/codec.py): hide codecs first GM-confirmed on a later day."""
+    try:
+        return int(os.environ.get("HCTF_CODEC_MAX_DAY", "0")) or 99
+    except ValueError:
+        return 99
+
+
+for _n, _d in [(n, d) for n, d in FREE_CODECS if d <= _max_day()]:
     register_free(_n, _d, {"rot": _rot_cands, "atb": lambda p: [_atbash(p)],
                            "rev": lambda p: [p.strip()[::-1] if p.strip() == p else p[::-1]]}[_n])
 
