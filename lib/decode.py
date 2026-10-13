@@ -271,6 +271,19 @@ def decode_chunk(p, _nested=False):
             cands.append((_ascii(base64.urlsafe_b64decode(u + "=" * (-len(u) % 4))), 6))
         except Exception:
             pass
+    if STRICT_EXTRA and re.fullmatch(r"[.\-]+(?:(?: {1,3}| ?/ ?)[.\-]+)+", t) and "." in t and "-" in t:
+        # MORSE (no warmups day yet; lib.warmups_codecs.CANDIDATES): only dots/dashes, symbols split by spaces, words by
+        # ' / ' or 3 spaces, every symbol a valid code. Case is lost -> UPPERCASE (as lib.ciphers.morse_decode, which the
+        # generic fallback below used before). 0 historic fragments match.
+        from lib import warmups_codecs as _wc
+        syms = re.split(r"\s*/\s*|\s+", t)
+        if all(x in _wc._UNMORSE for x in syms if x):
+            cands.append((_wc.morse_dec(t).upper(), 0))
+    if STRICT_EXTRA and re.fullmatch(r"\d{1,2}(?:-\d{1,2})+(?: +\d{1,2}(?:-\d{1,2})*)*", t) \
+            and all(1 <= int(x) <= 26 for x in re.findall(r"\d+", t)):
+        # A1Z26 letter numbers (no warmups day yet): dash-joined 1..26 inside a word, words split by spaces. Decimal char
+        # codes never qualify (spaces only, values >= 32). 0 historic fragments match.
+        cands.append((" ".join("".join(chr(96 + int(x)) for x in w.split("-")) for w in t.split()), 0))
     good = [(s, pr) for s, pr in cands if s is not None and _wordy(s) >= 0.85]
     if good:
         return min(good, key=lambda x: (-round(_wordy(x[0]), 2), x[1]))[0]
@@ -337,6 +350,36 @@ def _generic_chunk(t):
 # Each is used ONCE per blob -> (name, day introduced); a blob of k lines can only contain codecs of days <= k.
 FREE_CODECS = (("rot", 2), ("rev", 12), ("atb", 13))
 _SLUG_END = re.compile(r"[a-z]+(?:-[a-z]+)+-\d{2,}\s*$")
+# Free-text codec registry [(name, day, cands_fn(fragment) -> [decoded candidates])], FREE_CODECS first. A new day's
+# keyless free-text codec is one register_free(name, day, fn) call (the ratchet / a generalize worker adds it). day=None
+# = SPECULATIVE (lib.warmups_codecs.SPECULATIVE_FREE: rot47, swapcase, per-word reversal, ...): tried only for a blob
+# with more lines than the newest confirmed day and ONE free line the confirmed codecs can't cover (a new day's codec
+# nobody registered yet) -- never on D1-D13 bytes.
+_FREE = []
+# lib.decode strict branches beyond D1-D13 (morse, a1z26): 0 historic warmups fragments match (tests/test_day14_s2.py).
+STRICT_EXTRA = os.environ.get("HCTF_DECODE_STRICT_EXTRA", "1") != "0"
+SPECULATIVE_FREE = os.environ.get("HCTF_SPECULATIVE_FREE", "1") != "0"
+
+
+def register_free(name, day, cands_fn):
+    """Register (or replace, by name) a free-text line codec for decode_chunked's joint assignment. `cands_fn(p)` gets
+    the raw fragment (spacing intact) and returns its candidate decodings, best first; `day` = the day it was introduced
+    (used once per blob, only in blobs of >= day lines), None = speculative."""
+    for i, (n, _d, _f) in enumerate(_FREE):
+        if n == name:
+            _FREE[i] = (name, day, cands_fn)
+            return
+    _FREE.append((name, day, cands_fn))
+
+
+def _rot_cands(p):
+    best = _best_rot(p)
+    return [best] + ([_rot(p, 13)] if _rot(p, 13) != best else [])
+
+
+for _n, _d in FREE_CODECS:
+    register_free(_n, _d, {"rot": _rot_cands, "atb": lambda p: [_atbash(p)],
+                           "rev": lambda p: [p.strip()[::-1] if p.strip() == p else p[::-1]]}[_n])
 
 
 def _free_line(p):
@@ -348,13 +391,21 @@ def _free_line(p):
     return d is not None and (d.strip() == t[::-1] or d == _atbash(p) or any(d == _rot(p, n) for n in range(26)))
 
 
+_SPEC = "\0spec"   # placeholder slot: any speculative codec
+
+
 def _free_cands(name, p):
-    if name == "rev":
-        return [p.strip()[::-1] if p.strip() == p else p[::-1]]
-    if name == "atb":
-        return [_atbash(p)]
-    best = _best_rot(p)
-    return [best] + ([_rot(p, 13)] if _rot(p, 13) != best else [])
+    if name == _SPEC:
+        out = []
+        for _n, day, fn in _FREE:
+            if day is None:
+                try:
+                    out += [x for x in fn(p) if x and x not in out]
+                except Exception:  # noqa: BLE001 - a speculative decoder that doesn't apply
+                    pass
+        return out
+    fn = next((f for n, _d, f in _FREE if n == name), None)
+    return fn(p) if fn else []
 
 
 def _joint_free(rows):
@@ -363,9 +414,17 @@ def _joint_free(rows):
     import itertools
     kmax = max(k for k, _ in rows)
     free = [i for i, (_, p) in enumerate(rows) if _free_line(p)]
-    names = [n for n, day in FREE_CODECS if kmax >= day]
-    if not free or len(free) > len(names):
+    confirmed = [(n, day) for n, day, _f in _FREE if day is not None]
+    names = [n for n, day in confirmed if kmax >= day]
+    if not free:
         return None
+    if len(free) > len(names):
+        # One free line more than the confirmed codecs cover, in a blob longer than the newest confirmed day: today's
+        # unregistered codec -> every confirmed one (each day's codec appears once) + one speculative slot.
+        if not (SPECULATIVE_FREE and len(free) == len(names) + 1 and confirmed and kmax > max(d for _n, d in confirmed)
+                and any(day is None for _n, day, _f in _FREE)):
+            return None
+        names = names + [_SPEC]
     fixed = [None if i in free else decode_chunk(p) for i, (_, p) in enumerate(rows)]
     if any(x is None for i, x in enumerate(fixed) if i not in free):
         return None
@@ -395,3 +454,10 @@ def decode_chunked(text):
         return None
     rows.sort(key=lambda r: r[0])
     return _joint_free(rows) or "".join(decode_chunk(p) for _, p in rows)
+
+
+try:   # speculative keyless free-text decoders (day=None) for a day whose codec nobody registered yet
+    from lib import warmups_codecs as _warmups_codecs
+    _warmups_codecs.register_speculative()
+except Exception:  # noqa: BLE001 - optional breadth; decode works without it
+    pass

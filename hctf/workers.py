@@ -877,7 +877,7 @@ def power_off_homebase_if_ours(log=print):
             log(f"[homebase] power-off failed, switch it off manually (`hctf hb off`): {e}")
 
 
-def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print):
+def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=None):
     """Dispatch a timed attempt. HOMEBASE-FIRST (user policy): every window <= HCTF_TIGHT_WINDOW seconds (default: all),
     or one not yet known, runs next to the GM on Homebase (prewarmed at run start). Local over the pairing token is the
     fallback (Homebase unavailable / remote exec failure); set HCTF_TIGHT_WINDOW=8 to bring back local-first for
@@ -891,7 +891,7 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print):
         res.setdefault("routed", "local (untimed)")
         return res
     if remote.gm_transport() != "local":
-        res = run_hb_timed(solver_dir, cid, op=op, timeout=timeout)
+        res = run_hb_timed(solver_dir, cid, op=op, timeout=timeout, on_event=on_event)
         if str(res.get("result", "")).lower() == "exec_error" and remote._have_token():
             log(f"[{cid}] Homebase run failed ({str(res.get('detail'))[:120]}); falling back to local")
             res = run_timed(solver_dir, cid, op=op, timeout=timeout)
@@ -902,7 +902,7 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print):
     win = known_window(cid)
     tight = win is None or win <= TIGHT_WINDOW
     if AUTO_HOMEBASE and tight and _homebase_ready(log):
-        res = run_hb_timed(solver_dir, cid, op=op, timeout=timeout)
+        res = run_hb_timed(solver_dir, cid, op=op, timeout=timeout, on_event=on_event)
         if (str(res.get("result", "")).lower() in ("solver_incomplete", "solver_error") and res.get("missing")
                 and not res.get("submitted")):
             # The solver produced NOTHING on Homebase. Blame the environment only if the SAME variant (bytes pulled back
@@ -1067,6 +1067,7 @@ class HbDaemon:
     def __init__(self, log=print, argv=None, gm_url=None, token=None):
         """argv/gm_url/token: tests run the daemon locally against a stand-in GM."""
         self.log, self.lock, self.pending, self.p = log, threading.Lock(), {}, None
+        self.events = {}   # request id -> callback(msg) for mid-attempt events (HCTF_EARLY_GENERALIZE)
         # mkdir: on a freshly reset VM ~/hw/.run doesn't exist yet when the daemon starts, the stderr redirect fails and
         # the daemon is "unavailable" for the run's first minutes (rehearsal fair D12: up 2 s before the base sync made .run)
         cmd = f"mkdir -p ~/{HB_WORK}/.run && cd ~/{HB_WORK} && exec python3 hctf/hb_daemon.py --stdio 2>>.run/hb_daemon.err"
@@ -1096,7 +1097,13 @@ class HbDaemon:
                 r = json.loads(line)
             except ValueError:
                 continue
+            if r.get("event") is not None:
+                cb = self.events.get(r.get("id"))
+                if cb is not None:   # never on the reader thread: a slow callback would stall every chain's channel
+                    threading.Thread(target=cb, args=(r,), daemon=True).start()
+                continue
             slot = self.pending.pop(r.get("id"), None)
+            self.events.pop(r.get("id"), None)
             if slot:
                 slot[1].update(r)
                 slot[0].set()
@@ -1107,17 +1114,21 @@ class HbDaemon:
     def alive(self):
         return self.p is not None and self.p.poll() is None
 
-    def call(self, op, timeout=60, **kw):
+    def call(self, op, timeout=60, on_event=None, **kw):
         if not self.alive():
             raise DaemonError("daemon not running")
         rid, ev, res = uuid.uuid4().hex, threading.Event(), {}
         self.pending[rid] = (ev, res)
+        if on_event is not None:
+            self.events[rid] = on_event
+            kw["events"] = True
         try:
             self._write({"id": rid, "op": op, **kw})
         except (OSError, ValueError) as e:
             raise DaemonError(f"daemon write failed: {e}") from None
         if not ev.wait(timeout):
             self.pending.pop(rid, None)
+            self.events.pop(rid, None)
             raise DaemonError(f"daemon {op} timed out after {timeout}s")
         if not res.get("ok"):
             raise DaemonError(str(res.get("error"))[:300])
@@ -1175,9 +1186,34 @@ def restart_hb_daemon(log=print):
         log("[homebase] timed daemon restarted (code changed)")
 
 
-def run_hb_timed(solver_dir, cid, op="start", timeout=60):
+# Early generalize (default OFF): the daemon reports "solved" (answers + missing + the attempt's bytes inline) BEFORE
+# hb_timed's in-window partial submit / localization, so the orchestrator can start the generalize worker ~15 s sooner
+# (D13 warmups Mastery: submit phase 15.5 s); the verdicts land in the variant case's gm_feedback.json afterwards.
+EARLY_GENERALIZE = os.environ.get("HCTF_EARLY_GENERALIZE", "0") == "1"
+
+
+def _early_handler(cid, on_event):
+    """Daemon event -> write the inline bytes to .run/tmp-timed/<slug> (the timed dir capture_variant reads), then
+    on_event(data). Errors stay here: an event must never cost the attempt."""
+    import re as _re
+    local = ROOT / ".run" / "tmp-timed" / _re.sub(r"[^A-Za-z0-9]+", "_", cid)
+
+    def handle(msg):
+        try:
+            data = dict(msg.get("data") or {})
+            if msg.get("_inline"):
+                write_inline(msg["_inline"], local)
+                data["local"] = str(local)
+            on_event(data)
+        except Exception as e:  # noqa: BLE001
+            print(f"[{cid}] early event note: {e}", flush=True)
+    return handle
+
+
+def run_hb_timed(solver_dir, cid, op="start", timeout=60, on_event=None):
     """Run the clock-critical timed attempt ON Homebase (adjacent to the GM). Returns hb_timed's JSON dict.
-    Syncs hctf+lib (base) and the solver so hb_timed can execute it next to the GM."""
+    Syncs hctf+lib (base) and the solver so hb_timed can execute it next to the GM. `on_event` (EARLY_GENERALIZE,
+    daemon only): called with the "solved" event's data (+ "local" = the bytes' dir) mid-attempt."""
     rel = solver_dir.relative_to(ROOT)
     t_kick, prepush_wait = time.time(), 0.0
     # Kickoff (sync + solver push) runs over the flaky local->Homebase VPN link; the retrying ssh/rsync ride
@@ -1215,7 +1251,11 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
         if os.environ.get("HCTF_RUN_FOR_TIME") is not None:
             opts["HCTF_RUN_FOR_TIME"] = os.environ["HCTF_RUN_FOR_TIME"]
         try:
-            res = d.call("attempt", timeout=timeout, cid=cid, solver=str(rel), op_mode=op, opts=opts)["result"]
+            extra = {"inline_max": INLINE_PULL_MAX} if INLINE_PULL_MAX > 0 else {}
+            if EARLY_GENERALIZE and on_event is not None:
+                extra["on_event"] = _early_handler(cid, on_event)
+                opts["HCTF_EARLY_GENERALIZE"] = "1"
+            res = d.call("attempt", timeout=timeout, cid=cid, solver=str(rel), op_mode=op, opts=opts, **extra)["result"]
             res["via"] = "daemon"
         except DaemonError as e:
             # Mid-attempt loss: the ssh path's `start` reconnects to the same attempt (start is idempotent).
@@ -1235,6 +1275,7 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
             res = json.loads(r.stdout.strip().splitlines()[-1])
         except (IndexError, ValueError):
             return {"result": "exec_error", "detail": (r.stdout + r.stderr)[-500:]}
+    inline = res.pop("_inline", None) if isinstance(res, dict) else None
     # kickoff = local sync/push before the ssh exec; exec_total = the whole remote round trip (start..result)
     res["kickoff"] = {"push": round(t_exec - t_kick, 2), "prepush_wait": round(prepush_wait, 2),
                       "exec_total": round(time.time() - t_exec, 2)}
@@ -1265,6 +1306,13 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60):
         # 5 x 31 MB over the ~140 KB/s VPN held the retry for 442 s, then 186 s.
         res["capture_note"] = "clock/transport failure: variant pull skipped (retry needs no bytes)"
         return res
+    if inline:
+        try:
+            got = write_inline(inline, local)
+            res["capture_note"] = f"inline from the daemon: {', '.join(got)} ({sum(len(v) for v in inline.values()) * 3 // 4} B)"
+            return res
+        except Exception as e:  # noqa: BLE001 - fall through to the pull
+            res["capture_note"] = f"inline bytes unusable ({str(e)[:120]}); "
     try:
         # A failure needs the variant's bytes locally (generalize on it) before anything else -- but only the deliveries
         # of the failing sets, fetched as parallel byte ranges (D8 binary Mastery: 5 x 31 MB = 157 MB took 10-20 min).
@@ -1325,6 +1373,28 @@ def deliveries_for(res, contract):
     return out
 
 
+BUNDLE_FALLBACK = os.environ.get("HCTF_BUNDLE_FALLBACK", "1") != "0"
+# A failed daemon attempt's files (<= this many bytes in total) come back INLINE in the result (hb_daemon
+# _inline_bytes): no post-failure ssh listing + fetch. 0 = off; an old daemon ignores the field (pull as before).
+INLINE_PULL_MAX = int(os.environ.get("HCTF_INLINE_PULL_MAX", "2000000"))
+
+
+def write_inline(inline, local):
+    """Write hb_daemon's {name: base64} attempt files into `local` (cleared first) -> [delivery names]."""
+    import base64
+    local = Path(local)
+    if local.exists():
+        for f in local.glob("*"):
+            if f.is_file():
+                f.unlink()
+    local.mkdir(parents=True, exist_ok=True)
+    for name, b64 in inline.items():
+        if "/" in name or name.startswith("."):
+            raise ValueError(f"bad inline name {name!r}")
+        (local / name).write_bytes(base64.b64decode(b64))
+    return sorted(n for n in inline if not n.endswith(".json"))
+
+
 def scoped_pull(res, slug, local):
     """Fetch contract.json + result.json, then only deliveries_for(...) of a failed Homebase attempt into `local`
     (parallel byte ranges, sha256-checked against the contract). Returns the fetched container names."""
@@ -1346,9 +1416,18 @@ def scoped_pull(res, slug, local):
             remote.fetch_file(f"{rdir}/{small}", local / small, sizes[small], streams=1)
     contract = json.loads((local / "contract.json").read_text())
     names = [n for n in deliveries_for(res, contract) if n in sizes]
+    shas = {a.get("sha256") for a in contract.get("artifacts") or [] if isinstance(a, dict) and a.get("sha256")}
+    if not names and BUNDLE_FALLBACK:
+        # Warmups Mastery (D2-D13): ONE zip of every set's blob-NN.txt saved as blob-01.txt, no artifacts[], only a
+        # top-level sha256 -> no per-set name matches. The lone non-JSON file IS the delivery: fetch it (D13: the
+        # "full pull" fallback took the rsync path instead).
+        files = [n for n in sizes if not n.endswith(".json")]
+        if len(files) == 1:
+            names = files
+            if contract.get("sha256"):
+                shas = shas | {contract["sha256"]}
     if not names:
         raise RuntimeError(f"no failing-set delivery found on Homebase (have {sorted(sizes)[:6]})")
-    shas = {a.get("sha256") for a in contract.get("artifacts") or [] if isinstance(a, dict) and a.get("sha256")}
     for n in names:
         remote.fetch_file(f"{rdir}/{n}", local / n, sizes[n])
         if shas and hashlib.sha256((local / n).read_bytes()).hexdigest() not in shas:

@@ -518,13 +518,33 @@ def record_timed_case(cid, sdir):
 
 def capture_variant(cid, sdir):
     """Save the current (unsolved) variant as a regression case so the offline fix worker can work on
-    the real bytes. expected.json holds only answers the GM already confirmed (often empty here)."""
+    the real bytes. expected.json holds only answers the GM already confirmed (often empty here). VERIFIED_GREEN: also
+    the answers the GM accepted on THIS attempt in-window (last_timed `verified` / `fixed` / `partial_fixed`) and a
+    gm_feedback.json {attempt, rejected: {aid: [values the GM judged wrong]}, require_complete} that test_solver
+    enforces -- so "green" on this case means GM-verified fields right, no rejected value repeated, every field filled."""
     contract = cli.load(cid, "start.json")
     art = timed.artifacts_for(cid, contract)
     if contract and art:
         name = f"variant-{solvers.mode_of(cid)}-{(cli.attempt_id(contract) or 'x')[:8]}"
-        solvers.add_case(sdir, name, timed.trim_to_present(contract, art),
-                         art, timed.present_only(contract, art, cli.confirmed_answers(cid)))
+        expected = timed.present_only(contract, art, cli.confirmed_answers(cid))
+        feedback = None
+        last = (timed.last_result(cid) or {}) if VERIFIED_GREEN else {}
+        att = cli.attempt_id(contract)
+        if last and att and last.get("attempt_id") == att:
+            ver = {**(last.get("verified") or {}), **(last.get("partial_fixed") or {}), **(last.get("fixed") or {})}
+            expected = {**timed.present_only(contract, art, ver), **expected}
+            rejected = {}
+            for pair in (last.get("partial_wrong") or []) + (last.get("wrong") or []):
+                if isinstance(pair, (list, tuple)) and len(pair) == 2 and pair[1] not in (None, ""):
+                    a, v = pair
+                    if expected.get(a) != v and v not in rejected.setdefault(a, []):
+                        rejected[a].append(v)
+            feedback = {"attempt": att, "rejected": {a: v for a, v in rejected.items() if v},
+                        "require_complete": True, "verified": len(expected)}
+        case = solvers.add_case(sdir, name, timed.trim_to_present(contract, art), art, expected)
+        if feedback is not None:
+            (case / "gm_feedback.json").write_text(json.dumps(feedback, indent=1, ensure_ascii=False))
+        return case
 
 
 def _text_head(data, lines=40, chars=1500):
@@ -662,6 +682,28 @@ MUTATION_PROBE = os.environ.get("HCTF_MUTATION_PROBE", "1") != "0"
 # organizers (Day 8): Mastery should compound -- today's concept plus concepts from days past -- so a solver that lost an
 # earlier concept fails Mastery. Hard misses -> compound-dKK-* cases + one generalize before Mastery.
 COMPOUND_PROBE = os.environ.get("HCTF_COMPOUND_PROBE", "1") != "0"
+# Today-probe (hctf/today_probe.py, warmups): yesterday's verified Mastery sets re-split with TODAY's codec (inferred from
+# the Single) on a new last line -- D12/D13's first Mastery attempts failed on exactly that mix (reversal / Atbash vs
+# rot-N on 11/58 and 24/63 sets, then ~45-400 s of evidence pull + generalize). Starts beside the compound probe at the
+# Single's CORRECT, consumed only before Mastery (bounded wait) or by a Mastery-failure generalize; misses ->
+# compound-today-* cases + one generalize BEFORE the Mastery attempt.
+TODAY_PROBE = os.environ.get("HCTF_TODAY_PROBE", "1") != "0"
+TODAY_PROBE_LANES = {x.strip() for x in os.environ.get("HCTF_TODAY_PROBE_LANES", "warmups").split(",") if x.strip()}
+TODAY_PROBE_WAIT = float(os.environ.get("HCTF_TODAY_PROBE_WAIT", "5"))
+# Lane-agnostic variant (today_probe.merge_probe): today's Single appended as set N+1 of yesterday's verified Mastery
+# contract; a miss counts only when the solver passes both halves alone. Same slot / consumption as the today-probe.
+TODAY_MERGE_PROBE = os.environ.get("HCTF_TODAY_MERGE_PROBE", "1") != "0"
+TODAY_MERGE_LANES = {x.strip() for x in os.environ.get(
+    "HCTF_TODAY_MERGE_LANES", "metadata-forensics,binary-reverse-engineering,script-analysis").split(",") if x.strip()}
+# Verified-green (D12: generalize #1 went "green" on a variant case whose answers nobody had verified -- every field
+# filled -- and the untimed retry came back 11/58 wrong): capture_variant folds the GM's in-window verdicts into the
+# variant case (accepted answers -> expected.json, rejected values -> gm_feedback.json, which solvers.test_solver
+# enforces), and the green watcher never ends a worker on fill-only evidence unless a GM-verified target passes too.
+VERIFIED_GREEN = os.environ.get("HCTF_VERIFIED_GREEN", "1") != "0"
+# Run the hot-path profile for a speed generalize in a thread beside the baseline replay (SIGINT at
+# HCTF_PROFILE_SECONDS -> <mode dir>/profile.txt the worker reads) instead of up to 45 s before the worker launch.
+PROFILE_ASYNC = os.environ.get("HCTF_PROFILE_ASYNC", "1") != "0"
+PROFILE_SECONDS = float(os.environ.get("HCTF_PROFILE_SECONDS", "10"))
 # Warm Single workers: launched at chain start beside GM start/download/triage (workers.WarmWorker). 0 = cold launch.
 WARM_WORKERS = os.environ.get("HCTF_WARM_WORKERS", "1") != "0"
 # Prior-solver dry run (cumulative lanes): diagnostics of yesterday's solver on today's bytes, never its values.
@@ -711,6 +753,18 @@ def compound_probe(sdir, seconds=None):
     except Exception as e:  # noqa: BLE001 - advisory
         return f"(compound probe skipped: {str(e)[:120]})", [], []
     return compound.summary(res), compound.hard_misses(res), res
+
+
+def today_probe(sdir, seconds=30, kind="codec"):
+    """-> hctf.today_probe.probe() (kind codec: warmups) / merge_probe() (kind merge) result dict for the single's solver
+    (status clean|miss|unidentified|...)."""
+    from . import today_probe as tp
+    try:
+        res = (tp.merge_probe if kind == "merge" else tp.probe)(sdir, deadline=time.time() + seconds)
+    except Exception as e:  # noqa: BLE001 - advisory
+        res = {"status": "error", "error": str(e)[:200], "results": [], "hard": []}
+    res["kind"] = kind
+    return res
 
 
 def remeasure_estimate(sdir, mut_summary, mastery_contract, reps=2):
@@ -1087,6 +1141,12 @@ class Chain:
             if exts:   # runs beside the baseline replay below (~1.7 s of venv + 2 solver runs off the critical path)
                 fam = ThreadPoolExecutor(max_workers=1).submit(
                     lambda: family_probe(self.sdir, exts, noise=self._family_noise())[0])
+        d0 = diag or {}
+        prof_async = None
+        if PROFILE_ASYNC and (d0.get("solver_too_slow") or d0.get("single_seconds")):
+            # beside the baseline replay, SIGINT-bounded; the worker reads <mode dir>/profile.txt (8-30 s saved per speed
+            # generalize: the synchronous profile ran to its 45 s cap on a solver that couldn't finish)
+            prof_async = self._start_profile(cid, bool(d0.get("single_seconds")))
         # ONE fast parallel replay (8s/case) serves both the problem list and the transactional baseline (was a full
         # 120s/case run here plus a second baseline run: 141s before the worker spawned, replay run 2).
         ensure_case_and_test(paths.base_id(cid), self.sdir, full=False)
@@ -1095,7 +1155,9 @@ class Chain:
         self._pre_res = res
         for r in (res or []):
             if not r.get("ok"):
-                probs.append(f"case {r['case']}: error={r.get('error')} diff={r.get('diff')} unverified={r.get('unverified')}")
+                probs.append(f"case {r['case']}: error={r.get('error')} diff={r.get('diff')} unverified={r.get('unverified')}"
+                             + (f" answered={r.get('answered')}/{r.get('total')} GM-REJECTED values produced again="
+                                f"{r.get('rejected_got')}" if r.get("rejected_hits") else ""))
         lines = []
         for a, v in (wrong or []):
             if fixed and a in fixed:
@@ -1131,6 +1193,10 @@ class Chain:
                          + ", ".join(f"`{a}`" for a in acc[:30]) + (" ..." if len(acc) > 30 else ""))
         if d.get("window") or d.get("elapsed"):
             gm_wrong += f"\n  - attempt facts: window {d.get('window')}s, elapsed {d.get('elapsed')}s, routed {d.get('routed') or 'local'}"
+        if d.get("early"):
+            gm_wrong += ("\n  - EARLY START: the attempt is still being judged in-window while you work. The GM's verdicts on the "
+                         f"answered fields land in `cases/{d.get('variant_case')}/` (expected.json = accepted, "
+                         "gm_feedback.json = rejected values) within ~20 s: re-run `hctf solver-test` before you finish.")
         if d.get("hb_env_mismatch"):
             gm_wrong += ("\n  - THE SOLVER PRODUCED NO ANSWERS ON HOMEBASE although it works locally: it depends on something the "
                          "Homebase VM lacks. Homebase has python3 + the pip deps (pyzipper, pyelftools, pefile, capstone, "
@@ -1151,6 +1217,25 @@ class Chain:
                          "dispatching on artifact type / question text (port or import the earlier day's parsing -- see "
                          "that day's solver/NOTES.md), without breaking today's cases.\n"
                          + "\n".join("    " + ln for ln in d["compound_pre"].splitlines()))
+        if d.get("compound_today"):
+            gm_wrong += ("\n  - NO MASTERY ATTEMPT HAS RUN YET -- TODAY'S CODEC IN A MASTERY MIX: the harness rebuilt yesterday's "
+                         "GM-verified Mastery sets with one more line, today's codec (identified from the Single's bytes), "
+                         "cuts mid-word like the GM's (the `compound-today-*` cases: same contract + verified slugs, "
+                         "`truth.json` = every line's codec, plain piece and encoded bytes). D12/D13's first Mastery "
+                         "attempts failed on exactly this. Make every compound-today-* case pass WITHOUT breaking any "
+                         "other case, generically, in LIB: a free-text codec (no alphabet signature) -> "
+                         "`lib.decode.register_free(name, day, cands_fn)` so `decode_chunked`'s joint assignment uses "
+                         "it once per blob; an alphabet-signature codec -> a strict branch in `lib.decode.decode_chunk`; "
+                         "then make solve.py decode numbered blobs with `lib.decode.decode_chunked`.\n"
+                         + "\n".join("    " + ln for ln in d["compound_today"].splitlines()))
+        if d.get("compound_merge"):
+            gm_wrong += ("\n  - NO MASTERY ATTEMPT HAS RUN YET -- MERGED-SHAPE REHEARSAL: Mastery compounds today's concept with "
+                         "earlier days'. The `compound-merge-*` case is yesterday's GM-verified Mastery contract with "
+                         "today's Single appended as the last set (its delivery renamed in yesterday's convention; "
+                         "every expected answer GM-verified). The solver answers both halves alone but not merged: "
+                         "make it route each set by its own artifact / question text (no one-family-per-contract "
+                         "assumption, no hard-coded set count or delivery name), without breaking any case.\n"
+                         + "\n".join("    " + ln for ln in d["compound_merge"].splitlines()))
         if d.get("mutation_pre"):
             gm_wrong += ("\n  - NO TIMED ATTEMPT HAS RUN YET: the single is CORRECT, but the solver breaks on ANSWER-INVARIANT "
                          "mutations of its own case (the `mutation-*` cases: same member bytes and names, same expected "
@@ -1180,7 +1265,12 @@ class Chain:
                          "(max_workers=min(len(groups), os.cpu_count())), merging the dicts; single-set contracts stay "
                          "sequential; any pool error falls back to the sequential loop. Copy the pattern from "
                          "`hctf/templates/solve_skeleton.py` main(). Change NO answer: every case must still pass.")
-        if d.get("solver_too_slow") or d.get("single_seconds"):
+        if prof_async is not None:
+            gm_wrong += (f"\n  - HOT PATH: the harness is profiling `cases/{prof_async[0]}` right now (cProfile, sorted by "
+                         f"cumulative time, interrupted at {PROFILE_SECONDS:g}s if it runs that long) -> "
+                         f"`{_rel(prof_async[1])}` appears within ~{PROFILE_SECONDS + 3:g}s of your start: read it "
+                         "first instead of re-profiling (profile yourself only if it never shows up).")
+        elif d.get("solver_too_slow") or d.get("single_seconds"):
             # The harness profiles the slow case itself (newest variant-* for an in-window timeout, else the single).
             cases = self.sdir / "cases"
             var = sorted(cases.glob("variant-*/"), key=lambda p: p.stat().st_mtime)
@@ -1193,7 +1283,7 @@ class Chain:
         if low_budget and HARVEST_VARIANTS:
             say(f"[{cid}] only {left_att} unique attempt(s) left for this mode today: no variant harvest")
         harvest = bool(HARVEST_VARIANTS and wrong and all(v is None for _, v in wrong) and remote.gm_transport() == "local"
-                       and not low_budget)
+                       and not low_budget and not d.get("early"))   # early: this attempt's clock is still live
         if harvest:
             # (built BEFORE render -- until the rehearsal Day 7 review this note was appended after the prompt was rendered,
             # so no worker ever saw it)
@@ -1250,7 +1340,7 @@ class Chain:
             reaper = threading.Thread(target=self._harvest_variants, daemon=True,
                                       args=(cid, HARVEST_VARIANTS, fill, done, harvesting))
             reaper.start()
-        expected_before = self._expected_snapshot()
+        expected_before = self._exp_before = self._expected_snapshot()   # (_early_join folds late GM verdicts in)
         try:
             self.run_worker(cid, "generalize", prompt, GENERALIZE_TIMEOUT, stop=green)
         finally:
@@ -1269,6 +1359,94 @@ class Chain:
                 # The last harvested attempt may still be live: a retry now would RESUME it (start is idempotent
                 # while the clock runs) with its clock half spent.
                 scout._wait_expired(getattr(self, "_harvest_deadline", None), say, cid)
+
+    # -- early generalize (workers.EARLY_GENERALIZE, default OFF): the daemon's mid-attempt "solved" event starts the
+    #    generalize worker on the failed variant while hb_timed still localizes in-window (~15 s on D13 warmups Mastery).
+    def _early_kw(self, cid, untimed=False):
+        self._early = None
+        if not workers.EARLY_GENERALIZE or untimed:
+            return {}
+        return {"on_event": lambda data: self._early_event(cid, data)}
+
+    def _early_event(self, cid, data):
+        if data.get("event") != "solved" or not data.get("local") or getattr(self, "_early", None) is not None:
+            return
+        tc = json.loads((Path(data["local"]) / "contract.json").read_text())
+        if not data.get("attempt_id") or cli.attempt_id(tc) != data["attempt_id"]:
+            return
+        cli.save(cid, "start.json", tc)
+        cli.save(cid, "contract.json", tc)
+        case = capture_variant(cid, self.sdir)
+        if case is None:
+            return
+        missing = list(data.get("missing") or [])
+        diag = {"early": True, "variant_case": case.name, "window": data.get("window"), "phases": data.get("phases")}
+        say(f"[{cid}] early generalize: solver {data.get('result')} ({len(missing)} empty) -- starting the worker on "
+            f"{case.name} while the attempt is still judged")
+        t = threading.Thread(target=self.generalize, daemon=True,
+                             args=(cid, [(a, None) for a in missing] or None, {}, diag))
+        self._early = {"thread": t, "case": case, "attempt": data["attempt_id"]}
+        t.start()
+
+    def _early_join(self, cid):
+        """After the attempt's final result: fold its GM verdicts into the early variant case (and into the running
+        generalize's expected snapshot, so its restore keeps them), then wait for that worker. True if one ran."""
+        e, self._early = getattr(self, "_early", None), None
+        if not e:
+            return False
+        try:
+            last = timed.last_result(cid) or {}
+            if last.get("attempt_id") == e["attempt"]:
+                case = e["case"]
+                exp = json.loads((case / "expected.json").read_text()) if (case / "expected.json").exists() else {}
+                c = json.loads((case / "contract.json").read_text())
+                ids = set(c.get("answer_ids") or [])
+                ver = {**(last.get("verified") or {}), **(last.get("partial_fixed") or {}), **(last.get("fixed") or {})}
+                exp.update({a: v for a, v in ver.items() if a in ids})
+                rej = {}
+                for pair in (last.get("partial_wrong") or []) + (last.get("wrong") or []):
+                    if isinstance(pair, (list, tuple)) and len(pair) == 2 and pair[0] in ids and pair[1] not in (None, ""):
+                        if exp.get(pair[0]) != pair[1] and pair[1] not in rej.setdefault(pair[0], []):
+                            rej[pair[0]].append(pair[1])
+                fb = {"attempt": e["attempt"], "rejected": {a: v for a, v in rej.items() if v}, "require_complete": True,
+                      "verified": len(exp)}
+                eb, fbb = json.dumps(exp, indent=2, ensure_ascii=False).encode(), json.dumps(fb, indent=1).encode()
+                (case / "expected.json").write_bytes(eb)
+                (case / "gm_feedback.json").write_bytes(fbb)
+                snap = getattr(self, "_exp_before", None)
+                if isinstance(snap, dict):
+                    snap[case.name], snap[(case.name, "gm_feedback.json")] = eb, fbb
+                say(f"[{cid}] early generalize: GM verdicts folded into {case.name} ({len(exp)} accepted, "
+                    f"{len(fb['rejected'])} field(s) with rejected values)")
+        except Exception as ex:  # noqa: BLE001 - the worker still has the bytes
+            say(f"[{cid}] early verdict merge note: {ex}")
+        e["thread"].join()
+        return True
+
+    def _start_profile(self, cid, single):
+        """Background cProfile of the slow case (newest variant-* for an in-window timeout, else the single), SIGINT at
+        PROFILE_SECONDS, written atomically to <mode dir>/profile.txt -> (case name, path) or None."""
+        cases = self.sdir / "cases"
+        var = sorted(cases.glob("variant-*/"), key=lambda p: p.stat().st_mtime)
+        case = var[-1] if var and not single else cases / "single_solve"
+        if not (case / "contract.json").exists():
+            return None
+        out = cli.cdir(cid) / "profile.txt"
+        try:
+            out.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+        def go():
+            try:
+                prof = solvers.profile_solver(self.sdir, case, timeout=PROFILE_SECONDS, interrupt=True)
+                tmp = out.with_suffix(".tmp")
+                tmp.write_text(prof or f"(no profile output for cases/{case.name})")
+                tmp.replace(out)
+            except Exception as e:  # noqa: BLE001 - advisory
+                say(f"[{cid}] async profile note: {e}")
+        threading.Thread(target=go, daemon=True).start()
+        return case.name, out
 
     def _harvest_variants(self, cid, n, fill, done, harvesting):
         try:
@@ -1365,6 +1543,7 @@ class Chain:
         spent 22-46s after the fix on solver-test reruns, robustness checks and notes. While a variant harvest is
         still running (`harvesting` set) the worker is never ended: more failing variants may be on the way."""
         start, checked = self._solver_mtimes(), None
+        self._fill_only_said = False
         while not done.wait(2.0):
             m = self._solver_mtimes()
             if not m or m == start or time.time() - max(m.values()) < 3:
@@ -1382,8 +1561,22 @@ class Chain:
                 continue  # edited while testing
             ok = {r["case"] for r in res if r.get("ok")}
             filled = {r["case"] for r in res if r.get("total") and r.get("answered") == r.get("total") and not r.get("error")}
-            fast = all(r.get("seconds", 99) < 2.0 for r in res if r["case"] in (targets | set(fill)))
-            if targets <= ok and set(fill) <= filled and baseline <= ok and (fast or not need_fast):
+            tg, fl = targets, set(fill)
+            if workers.EARLY_GENERALIZE:
+                # early generalize: the variant's GM verdicts arrive mid-worker -> a fill case that became verified is a
+                # target from then on (gm_feedback.json re-read by every test_solver run)
+                now = {r["case"] for r in res if not r.get("unverified")}
+                tg, fl = targets | (fl & now), fl - now
+            fast = all(r.get("seconds", 99) < 2.0 for r in res if r["case"] in (tg | fl))
+            if tg <= ok and fl <= filled and baseline <= ok and (fast or not need_fast):
+                if VERIFIED_GREEN and fl and not (tg & ok):
+                    # Fill-only evidence (every field answered, nothing GM-verified among the targets -- D12: "green"
+                    # on an unverified variant, then 11/58 wrong): never end the worker early on that alone.
+                    if not getattr(self, "_fill_only_said", False):
+                        self._fill_only_said = True
+                        say(f"[{self.base}] generalize: unverified variant(s) {sorted(fill)[:3]} complete, but no "
+                            "GM-verified target to confirm them -> letting the worker finish")
+                    continue
                 self._green_res = (m, self._case_names(), res)  # _accept_or_restore reuses it (same code + cases)
                 say(f"[{self.base}] generalize green ({sorted(targets | set(fill))[:3]} pass/complete, no regressions) "
                     "-> ending the worker")
@@ -1429,21 +1622,33 @@ class Chain:
             f"(worker's version kept in {rejected.relative_to(ROOT)})")
 
     def _expected_snapshot(self):
-        """{case: expected.json bytes} -- expected answers are GM-verified only; workers must not author them."""
-        return {p.parent.name: p.read_bytes() for p in (self.sdir / "cases").glob("*/expected.json")}
+        """{case: expected.json bytes} -- expected answers are GM-verified only; workers must not author them.
+        VERIFIED_GREEN: also {(case, "gm_feedback.json"): bytes or None} -- the GM's rejected values are GM truth too."""
+        snap = {p.parent.name: p.read_bytes() for p in (self.sdir / "cases").glob("*/expected.json")}
+        if VERIFIED_GREEN:
+            for name in list(snap):
+                fb = self.sdir / "cases" / name / "gm_feedback.json"
+                snap[(name, "gm_feedback.json")] = fb.read_bytes() if fb.exists() else None
+        return snap
 
     def _restore_expected(self, cid, before):
         """Undo any worker edit to a pre-existing case's expected.json (speed-harden d08 script: the worker wrote its own
-        solver output into an unverified variant's empty expected.json, freezing 3075 unjudged values as 'GM truth')."""
+        solver output into an unverified variant's empty expected.json, freezing 3075 unjudged values as 'GM truth')
+        and gm_feedback.json (restored, or removed when the worker created one)."""
         for name, data in before.items():
-            p = self.sdir / "cases" / name / "expected.json"
+            case, fname = name if isinstance(name, tuple) else (name, "expected.json")
+            p = self.sdir / "cases" / case / fname
             try:
-                if not p.exists() or p.read_bytes() != data:
+                if data is None:
+                    if p.exists() and p.parent.exists():
+                        p.unlink()
+                        say(f"[{cid}] removed worker-made cases/{case}/{fname} (GM feedback comes from the GM only)")
+                elif not p.exists() or p.read_bytes() != data:
                     p.parent.mkdir(parents=True, exist_ok=True)
                     p.write_bytes(data)
-                    say(f"[{cid}] restored cases/{name}/expected.json (expected answers come from the GM only)")
+                    say(f"[{cid}] restored cases/{case}/{fname} (expected answers come from the GM only)")
             except OSError as e:
-                say(f"[{cid}] expected.json restore note: {e}")
+                say(f"[{cid}] {fname} restore note: {e}")
 
     def _accept_or_restore(self, cid):
         """After the generalize worker exits for ANY reason: keep its edits only if every case that passed before
@@ -2079,6 +2284,7 @@ class Chain:
                 self._start_family_pre(cid)
                 self._start_mutation_pre(cid)
                 self._start_compound_pre(cid)
+                self._start_today_pre(cid)
                 return True
             done = cli.is_complete(cid)
             if not done and not welcome:
@@ -2098,6 +2304,7 @@ class Chain:
                 self._start_family_pre(cid)
                 self._start_mutation_pre(cid)
                 self._start_compound_pre(cid)
+                self._start_today_pre(cid)
                 return True
             if (cli.cdir(cid) / "HELP.md").exists():
                 set_state(self.base, stage="single:help", help=(cli.cdir(cid) / "HELP.md").read_text()[:1500])
@@ -2242,6 +2449,64 @@ class Chain:
             say(f"[{self.base}] compound pre-probe note: {e}")
             return "", []
 
+    def _start_today_pre(self, cid):
+        """Background, once the single's solver is final: the today-probe (warmups: yesterday's Mastery + today's codec)."""
+        self._today_fut = None
+        kind = self._today_kind()
+        if kind is None or not (self.sdir / "solve.py").exists():
+            return
+        self._today_fut = ThreadPoolExecutor(max_workers=1).submit(today_probe, self.sdir, 60 if kind == "merge" else 30,
+                                                                   kind)
+
+    def _today_kind(self):
+        lane = getattr(self, "lane", None)
+        if TODAY_PROBE and lane in TODAY_PROBE_LANES:
+            return "codec"
+        if TODAY_MERGE_PROBE and lane in TODAY_MERGE_LANES:
+            return "merge"
+        return None
+
+    def _today_pre_result(self, cid):
+        """-> diag {"compound_today": text} when the solver misses the rehearsal (cases adopted), else {}. Waits at most
+        TODAY_PROBE_WAIT s; a probe still running stays pending for the next consumer (a Mastery-failure generalize).
+        Consumed once; never held back by _compound_relevant (the rehearsal IS this Mastery's shape)."""
+        if self._today_kind() is None or getattr(self, "_today_done", False):
+            return {}
+        if getattr(self, "_today_fut", None) is None:
+            self._start_today_pre(self.base)      # single solved by an earlier run: probe now (~1 s)
+        fut = getattr(self, "_today_fut", None)
+        if fut is None:
+            self._today_done = True
+            return {}
+        try:
+            res = fut.result(timeout=TODAY_PROBE_WAIT)
+        except TimeoutError:   # concurrent.futures.TimeoutError is the builtin since 3.11
+            say(f"[{cid}] today-probe still running after {TODAY_PROBE_WAIT:g}s: not waiting for it")
+            return {}
+        except Exception as e:  # noqa: BLE001
+            self._today_done = True
+            say(f"[{cid}] today-probe note: {e}")
+            return {}
+        self._today_done = True
+        from . import today_probe as tp
+        st = res.get("status")
+        if st == "miss" and res.get("kind") == "merge":
+            n = tp.adopt(self.sdir, res)
+            say(f"[{cid}] today-merge probe: the solver misses yesterday's Mastery + today's Single merged into one "
+                f"contract ({n} compound-merge case adopted): generalizing BEFORE the Mastery attempt")
+            return {"compound_merge": tp.merge_summary(res)}
+        if st == "miss":
+            n = tp.adopt(self.sdir, res)
+            say(f"[{cid}] today-probe: the solver misses a Mastery rehearsal with today's codec `{res.get('codec')}` on "
+                f"the last line ({n} compound-today-* case(s) adopted): generalizing BEFORE the Mastery attempt")
+            return {"compound_today": tp.summary(res)}
+        if st == "unidentified":
+            say(f"[{cid}] today-probe: today's codec unidentified from the Single -- no rehearsal")
+        else:
+            say(f"[{cid}] today-probe: {st} (codec {res.get('codec')}, {res.get('seconds')}s)"
+                + (f" {res.get('error')}" if res.get("error") else ""))
+        return {}
+
     def _await_probes(self, timeout):
         """Wait up to `timeout` s for the beside-the-TT probes -> True when every started one has finished."""
         futs = [f for f in (getattr(self, a, None) for a in ("_fam_pre_fut", "_mut_pre_fut", "_cmp_pre_fut"))
@@ -2305,6 +2570,9 @@ class Chain:
             elif mtxt:
                 say(f"[{cid}] mutation probe (soft only, no action): {mtxt.splitlines()[0]}")
                 self._mutation_soft = mtxt
+        if solvers.mode_of(cid) == "mastery":
+            # today-probe: before Mastery (bounded wait of its own, whatever `wait` says) or a Mastery-failure generalize
+            pre.update(self._today_pre_result(cid))
         if not getattr(self, "_cmp_late_done", False):
             ctxt, hard = self._compound_pre_result(wait=wait)
             if hard or ctxt or wait:
@@ -2570,9 +2838,11 @@ class Chain:
                 op = {"op": "untimed"}
             else:
                 op = {"op": "retry"} if left is not None and left <= 0 else {}
-            res = timed.run(cid, self.sdir, log=say, **op)
+            res = timed.run(cid, self.sdir, log=say, **op, **self._early_kw(cid, untimed))
             say(f"[{cid}] result: {res}{' (untimed)' if untimed else ''}")
             set_state(self.base, **{f"{mode}_result": res})
+            if self._early_join(cid) and res in ("expired", "blocked"):
+                continue   # an early generalize already worked on this variant (verdicts merged): retry
             if res == "correct":
                 if untimed:
                     say(f"[{cid}] passed on an UNTIMED attempt (fresh timed pool spent): flag + points, no Hall of Fame")

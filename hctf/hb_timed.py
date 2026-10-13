@@ -30,9 +30,23 @@ class _Ctx(__import__("threading").local):
     """Per-attempt state. hb_daemon runs several attempts at once in one process (one thread each)."""
     lane = None
     opts = None
+    on_event = None   # hb_daemon (HCTF_EARLY_GENERALIZE): callable(dict) for mid-attempt events
 
 
 _CTX = _Ctx()
+
+
+def _event(kind, out, **extra):
+    """Mid-attempt event to the daemon client (HCTF_EARLY_GENERALIZE=1 only): {"event": kind, attempt facts}. The
+    orchestrator can start the offline generalize on the variant while this attempt still localizes in-window."""
+    cb = _CTX.on_event
+    if cb is None or _opt("HCTF_EARLY_GENERALIZE", "0") != "1":
+        return
+    try:
+        cb(dict({k: out.get(k) for k in ("cid", "attempt_id", "window", "deadline", "phases", "missing", "submitted")},
+                event=kind, **extra))
+    except Exception:  # noqa: BLE001 - an event must never cost the attempt
+        pass
 _TOKEN = None    # set in-process by hb_daemon: the bearer lives in its memory only (never env / argv / disk)
 SOLVER = None    # hb_daemon: callable(solve_path, args, env, timeout) -> obj with stdout/stderr/returncode (zygote fork)
 
@@ -649,16 +663,16 @@ def main():
     print(json.dumps(run_attempt(a.cid, a.solver_dir, op=a.op, min_left=a.min_left)))
 
 
-def run_attempt(cid, solver_dir, op="start", min_left=None, opts=None):
+def run_attempt(cid, solver_dir, op="start", min_left=None, opts=None, on_event=None):
     """One timed attempt (start -> download -> solve -> submit) -> the result dict main() prints. In-process entry
     for hb_daemon: `opts` are this attempt's knobs (HCTF_EXPECT_BYTES, HCTF_RUN_FOR_TIME, ...), the solver runs via
-    SOLVER when set. Thread-safe: per-attempt state lives in _CTX."""
+    SOLVER when set. Thread-safe: per-attempt state lives in _CTX. `on_event`: see _event."""
     from types import SimpleNamespace
-    _CTX.lane, _CTX.opts = _lane_from_solver_dir(solver_dir), dict(opts or {})
+    _CTX.lane, _CTX.opts, _CTX.on_event = _lane_from_solver_dir(solver_dir), dict(opts or {}), on_event
     try:
         return _attempt(SimpleNamespace(cid=cid, solver_dir=solver_dir, op=op, min_left=min_left))
     finally:
-        _CTX.lane = _CTX.opts = None
+        _CTX.lane = _CTX.opts = _CTX.on_event = None
 
 
 def _attempt(a):
@@ -798,6 +812,7 @@ def _attempt(a):
         out["result"] = "solver_incomplete"
         out["missing"] = missing
         part = {k: answers[k] for k in ids if k in answers and answers[k] != ""}
+        _event("solved", out, result="solver_incomplete")   # before the partial submit + localization
         if part and _opt("HCTF_PARTIAL_SUBMIT", "1") == "1":
             # Submit what the solver DID answer: the GM saves correct partial progress (banks whole Mastery sets) and
             # its verdict tells the generalize worker which answered fields to leave alone. An escalated variant (D7
@@ -871,6 +886,8 @@ def _attempt(a):
 
     # Not fully correct: break down per set to learn which set failed (clock permitting), so the offline
     # generalize worker gets granular feedback on the next cycle.
+    if fk == "incorrect":
+        _event("solved", out, result="incorrect")           # before the per-set breakdown + localization
     per_set, final = {}, fk or "incorrect"
     for key, grp in groups.items():
         res = _post({"op": "submit", "challenge": a.cid, "answers": grp})
