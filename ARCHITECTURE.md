@@ -37,13 +37,14 @@ flowchart LR
 
   subgraph SINGLE["Single-solve machinery"]
     TRI["hctf/triage.py + hctf/toolchain.py<br/>(no LLM)"]
-    REUSE["_reuse_race<br/>(prior solvers, max 3 probes)"]
+    REUSE["_reuse_race<br/>(lane solver + newest 3 prior solvers;<br/>partial banking, max 7 probes)"]
+    INBOX["hctf/inbox.py<br/>(PostToolUse hook: HARNESS UPDATE)"]
     WW["WarmWorker: claude -p<br/>inside bwrap sandbox"]
     READY["_watch_ready<br/>early handoff + snapshot"]
   end
 
   subgraph ROB["Robustness"]
-    PROBES["mutation / compound / family probes"]
+    PROBES["mutation / compound / family probes<br/>+ today-probe (warmups) + merge probe"]
     CASES["solver/cases<br/>(regression cases)"]
     GEN["transactional generalize<br/>(_accept_or_restore)"]
   end
@@ -59,7 +60,9 @@ flowchart LR
     KN["lib/knowledge.py"]
     VOC["lib/vocab.json"]
     ATT["lib/refs/attack.py"]
-    COD["lib/codec.py + lib/decode.py"]
+    COD["lib/codec.py + lib/decode.py<br/>+ lib/warmups_codecs.py"]
+    META["lib/meta (+ prebuilt, speculative)"]
+    BIN["lib/binary.hcfg_scan"]
     TECH["reference/techniques/"]
   end
 
@@ -68,6 +71,7 @@ flowchart LR
     RAT["ratchet (LLM, test-gated)"]
     SH["speed_harden"]
     COV["lib.refs.coverage + toolchain report"]
+    PBLD["hctf prebuild<br/>(off-peak LLM breadth, gated)"]
   end
 
   GM[("Game Master API")]
@@ -75,6 +79,7 @@ flowchart LR
   PRE --> DAY --> RUN --> CHAIN
   CLI -. reads .-> CHAIN
   CHAIN --> TRI --> REUSE --> WW --> READY
+  REUSE -- "race note" --> INBOX -. "next tool call" .-> WW
   READY --> CASES
   READY --> PROBES --> CASES
   CHAIN --> AUTO
@@ -88,6 +93,7 @@ flowchart LR
   KNOW -. "vocab push" .-> HBD
   CHAIN --> HOF --> RAT --> SH
   RAT -- "merges NOTES proposals" --> KNOW
+  SH --> PBLD -- "speculative extractors / codecs / HCFG encodings" --> KNOW
   DAY --> COV
 ```
 
@@ -211,6 +217,20 @@ but each GM call is slower.
 - **Reuse race on singles.** `_reuse_race` runs `solvers.reuse_plan` over the newest 3 same-lane prior solvers. It
   submits only if the merged answers cover every field, then bisects with at most `REUSE_RACE_PROBES` (3) submits. A win
   goes straight to `single:reuse-won`, with a verified `_race_snapshot`.
+- **Bank everything the race knows (Day 14 prep).** The race now always includes the cumulative metadata lane solver
+  (`challenges/_lane/metadata-forensics`, backed by `lib/meta`). A complete merged set is submitted first; if it is
+  rejected or incomplete, the confident subset is banked, then the speculative remainder (pure-halving bisect), then
+  other solvers' values / spelling alternates for isolated wrong fields (`HCTF_RACE_PARTIAL`, <= 7 submits, yields when
+  the worker submits). Implausible values (non-word slugs via `lib/slug.py`, local format failures) are dropped first.
+  What the race proved reaches the worker in its go text or, if later, through `hctf/inbox.py` + the PostToolUse hook.
+- **Spelling alternates.** `hctf/fmtalt.py`: after a single-field rejection on the untimed single, <= 3 same-value
+  renderings (hex width/`0x`/case, GUID braces/case/bytes_le) are probed before the LLM spends a turn on it.
+- **Warmups today-probe.** `hctf/today_probe.py` infers today's codec from the single (`lib/warmups_codecs.infer`, ~1000
+  candidate encoders) and rehearses Mastery with it spliced into yesterday's verified Mastery case; misses trigger a
+  generalize BEFORE the Mastery attempt. Only GM-verified cases can make a generalize green (`HCTF_VERIFIED_GREEN`).
+- **LLM-authored breadth, ahead of time.** `hctf prebuild` runs off-peak workers (after the ratchet) that pre-write
+  speculative metadata extractors, warmups codecs and HCFG storage encodings for likely-next concepts, each gated by
+  independent-oracle fixtures + the full lane regression. Prebuilt answers only ever RACE beside the LLM worker.
 - **The warm worker starts at chain start.** `WarmWorker` launches `claude -p` immediately and replies READY. It gets
   "GO" plus the triage once `timed.ensure_started` (GM start + artifacts), `_tool_prefetch` and the status prefetch have
   finished.
@@ -286,15 +306,24 @@ pip libraries, because it runs on Homebase. `solver/NOTES.md` holds `## Techniqu
 | D12 | 15/15 | 7:12 | The warmups Mastery decoder stalled; the untimed fallback rescued it. |
 | D13 | 15/15 | 3:38 | 14/15 by 1:34. Warmups Mastery compounding was auto-fixed. |
 
+**Day 14 prep validation (rehearsal copy, fair Day 13 with pre-D13 knowledge, all timed attempts local):** 15/15, every
+mode first try, T+1:31 (main's real D13 was 3:38). The race dropped the gibberish slug, the today-probe identified the
+new codec and generalized before Mastery (45 s), and Mastery passed first try. (Caveat: the rehearsal copy received the same
+variants as main, so the metadata/warmups singles were not fully blind.)
+
 Worker LLM cost per day has fallen from about $18-43 (D1-2) to about $2.5 (D13). The fastest public teams finish a whole
 day in about 1:45. We report N/15 first, and an incomplete run never counts as "best".
 
 ## 8. Open problems: where we want help
 
-1. **Layered compounding.** The probes replay earlier days' concepts one at a time. They can't yet synthesize several
-   earlier concepts layered inside one artifact.
-2. **LLM think time on singles.** About 20-28 s per single remains at effort `high`. Launching workers before the drop
-   is untested.
+1. **Layered compounding.** The warmups today-probe now rehearses today's codec inside yesterday's Mastery, and a merge
+   probe covers metadata/binary/script, but several earlier concepts layered inside ONE artifact are still not
+   synthesized; a new KEYED cipher (unknown key) defeats both the candidate library and the probe.
+   - **Breadth hit-rate.** A brand-new metadata format is only fast if `hctf prebuild` guessed it (est. 30-40% of
+     days); otherwise it is still an LLM single (~50-80 s).
+2. **LLM think time on singles.** About 20-28 s per single remains at effort `high`. Fast mode measured 27-35% faster
+   singles but bills usage credits, so it is OFF (to revisit near the CTF's end). Launching workers before the drop is
+   untested.
 3. **Copied solvers and Mastery.** Prior solvers reused by the race don't adopt parallel Mastery-set handling.
 4. **Hangs and spikes.** `_harvest_variants` calls can hang. One rehearsal account showed an unexplained 17-20 s GM
    submit spike.
