@@ -311,7 +311,8 @@ def hcfg(data, fallback=True):
                 cfg = None
             if cfg is None and zlib.crc32(plain) != crc:
                 continue   # decoy raw HCFG (D9 Nim): keep scanning
-            return {"key": key, "crc": zlib.crc32(plain), "config": cfg, "version": ver, "offset": o}
+            return {"key": key, "crc": zlib.crc32(plain), "config": cfg, "version": ver, "offset": o,
+                    "crc_ok": zlib.crc32(plain) == crc}
     if not fallback:
         return None
     for k in range(1, 256):   # fallback: xor'd JSON without a header
@@ -328,6 +329,13 @@ def hcfg(data, fallback=True):
 
 
 def native_hcfg(data):
+    """HCFG in a native binary (see _native_hcfg). Day 14: a parseable blob whose crc32 does NOT match is a decoy when
+    lib.binary.hcfg_scan finds a crc-valid blob in any storage (raw/base64/zlib/...); else it stays the answer."""
+    h = _native_hcfg(data)
+    return (hcfg_ext(data) or h) if h and h.get("crc_ok") is False else h
+
+
+def _native_hcfg(data):
     """HCFG in a native binary: raw blob, else base64 (Day 8 Swift rodata: 'SENGRw...') / hex text of it.
     The headerless xor brute force only runs on small files (a 67 MB Swift ELF made it take minutes)."""
     h = hcfg(data, fallback=False)
@@ -349,7 +357,20 @@ def native_hcfg(data):
         if h and h["config"] is not None:
             h["offset"] = m.start()
             return h
-    return hcfg(data, fallback=len(data) < (4 << 20))
+    return hcfg_ext(data) or hcfg(data, fallback=len(data) < (4 << 20))
+
+
+def hcfg_ext(*blobs):
+    """Day 14: lib.binary.hcfg_scan -- the crc-valid HCFG in any other storage (zlib/gzip/deflate, xor'd base64/raw,
+    UTF-16LE/BE, reversed, base32/85, base64url, separated hex); offset = first byte of the stored form (speculative).
+    HCTF_HCFG_SCAN_EXT=0 -> None (the D13 behaviour exactly)."""
+    if os.environ.get("HCTF_HCFG_SCAN_EXT", "1") == "0":
+        return None
+    try:
+        from lib.binary import hcfg_find
+    except Exception:  # noqa: BLE001 - a lib that can't import on this host must never break the D13 path
+        return None
+    return next((h.as_solver() for h in map(hcfg_find, blobs) if h), None)
 
 
 # ---------- java ----------
@@ -490,6 +511,9 @@ def jar_hcfg(data):
         h = class_hcfg(cls, blobs)
         if h:
             return h
+    h = hcfg_ext(*[cls for _, cls in classes[:50]])   # Day 14: other storage encodings inside the app classes
+    if h:
+        return h
     blobs.append(data)
     for b in blobs:
         h = hcfg(b)

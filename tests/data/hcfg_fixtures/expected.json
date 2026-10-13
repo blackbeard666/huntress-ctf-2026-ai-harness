@@ -1,0 +1,596 @@
+[
+ {
+  "file": "raw.bin",
+  "valid": true,
+  "encoding": "raw",
+  "offset": 951,
+  "key": 200,
+  "version": 1,
+  "crc": 1409668846,
+  "config": {
+   "campaign": "BR14-000",
+   "domain": "node-000.day14.example.invalid",
+   "ipv4": "198.51.100.10",
+   "url": "https://node-000.day14.example.invalid/api/BR14-000",
+   "mutex": "Global\\HuntressBR14_000",
+   "service": "HuntressLab-Day14-000"
+  }
+ },
+ {
+  "file": "base64.bin",
+  "valid": true,
+  "encoding": "base64",
+  "offset": 572,
+  "key": 204,
+  "version": 1,
+  "crc": 3972111644,
+  "config": {
+   "campaign": "BR14-001",
+   "domain": "node-001.day14.example.invalid",
+   "ipv4": "198.51.100.11",
+   "url": "https://node-001.day14.example.invalid/api/BR14-001",
+   "mutex": "Global\\HuntressBR14_001",
+   "service": "HuntressLab-Day14-001"
+  }
+ },
+ {
+  "file": "base64_mime.bin",
+  "valid": true,
+  "encoding": "base64",
+  "offset": 943,
+  "key": 134,
+  "version": 1,
+  "crc": 4277946187,
+  "config": {
+   "campaign": "BR14-002",
+   "domain": "node-002.day14.example.invalid",
+   "ipv4": "198.51.100.12",
+   "url": "https://node-002.day14.example.invalid/api/BR14-002",
+   "mutex": "Global\\HuntressBR14_002",
+   "service": "HuntressLab-Day14-002"
+  }
+ },
+ {
+  "file": "base64url.bin",
+  "valid": true,
+  "encoding": "base64url",
+  "offset": 880,
+  "key": 128,
+  "version": 1,
+  "crc": 1178078393,
+  "config": {
+   "campaign": "BR14-003",
+   "domain": "node-003.day14.example.invalid",
+   "ipv4": "198.51.100.13",
+   "url": "https://node-003.day14.example.invalid/api/BR14-003",
+   "mutex": "Global\\HuntressBR14_003",
+   "service": "HuntressLab-Day14-003"
+  }
+ },
+ {
+  "file": "hex_lower.bin",
+  "valid": true,
+  "encoding": "hex",
+  "offset": 620,
+  "key": 108,
+  "version": 1,
+  "crc": 3666342885,
+  "config": {
+   "campaign": "BR14-004",
+   "domain": "node-004.day14.example.invalid",
+   "ipv4": "198.51.100.14",
+   "url": "https://node-004.day14.example.invalid/api/BR14-004",
+   "mutex": "Global\\HuntressBR14_004",
+   "service": "HuntressLab-Day14-004"
+  }
+ },
+ {
+  "file": "hex_upper.bin",
+  "valid": true,
+  "encoding": "hex",
+  "offset": 920,
+  "key": 124,
+  "version": 1,
+  "crc": 1648605207,
+  "config": {
+   "campaign": "BR14-005",
+   "domain": "node-005.day14.example.invalid",
+   "ipv4": "198.51.100.15",
+   "url": "https://node-005.day14.example.invalid/api/BR14-005",
+   "mutex": "Global\\HuntressBR14_005",
+   "service": "HuntressLab-Day14-005"
+  }
+ },
+ {
+  "file": "hex_space.bin",
+  "valid": true,
+  "encoding": "hex-sep",
+  "offset": 569,
+  "key": 89,
+  "version": 1,
+  "crc": 1887330880,
+  "config": {
+   "campaign": "BR14-006",
+   "domain": "node-006.day14.example.invalid",
+   "ipv4": "198.51.100.16",
+   "url": "https://node-006.day14.example.invalid/api/BR14-006",
+   "mutex": "Global\\HuntressBR14_006",
+   "service": "HuntressLab-Day14-006"
+  }
+ },
+ {
+  "file": "hex_colon.bin",
+  "valid": true,
+  "encoding": "hex-sep",
+  "offset": 544,
+  "key": 220,
+  "version": 1,
+  "crc": 3367643570,
+  "config": {
+   "campaign": "BR14-007",
+   "domain": "node-007.day14.example.invalid",
+   "ipv4": "198.51.100.17",
+   "url": "https://node-007.day14.example.invalid/api/BR14-007",
+   "mutex": "Global\\HuntressBR14_007",
+   "service": "HuntressLab-Day14-007"
+  }
+ },
+ {
+  "file": "hex_escape.bin",
+  "valid": true,
+  "encoding": "hex-sep",
+  "offset": 967,
+  "key": 134,
+  "version": 1,
+  "crc": 2456853177,
+  "config": {
+   "campaign": "BR14-008",
+   "domain": "node-008.day14.example.invalid",
+   "ipv4": "198.51.100.18",
+   "url": "https://node-008.day14.example.invalid/api/BR14-008",
+   "mutex": "Global\\HuntressBR14_008",
+   "service": "HuntressLab-Day14-008"
+  }
+ },
+ {
+  "file": "hex_carray.bin",
+  "valid": true,
+  "encoding": "hex-sep",
+  "offset": 524,
+  "key": 47,
+  "version": 1,
+  "crc": 716493131,
+  "config": {
+   "campaign": "BR14-009",
+   "domain": "node-009.day14.example.invalid",
+   "ipv4": "198.51.100.19",
+   "url": "https://node-009.day14.example.invalid/api/BR14-009",
+   "mutex": "Global\\HuntressBR14_009",
+   "service": "HuntressLab-Day14-009"
+  }
+ },
+ {
+  "file": "base32.bin",
+  "valid": true,
+  "encoding": "base32",
+  "offset": 764,
+  "key": 172,
+  "version": 1,
+  "crc": 1016753065,
+  "config": {
+   "campaign": "BR14-010",
+   "domain": "node-010.day14.example.invalid",
+   "ipv4": "198.51.100.20",
+   "url": "https://node-010.day14.example.invalid/api/BR14-010",
+   "mutex": "Global\\HuntressBR14_010",
+   "service": "HuntressLab-Day14-010"
+  }
+ },
+ {
+  "file": "base32_lower.bin",
+  "valid": true,
+  "encoding": "base32",
+  "offset": 771,
+  "key": 94,
+  "version": 1,
+  "crc": 2220761179,
+  "config": {
+   "campaign": "BR14-011",
+   "domain": "node-011.day14.example.invalid",
+   "ipv4": "198.51.100.21",
+   "url": "https://node-011.day14.example.invalid/api/BR14-011",
+   "mutex": "Global\\HuntressBR14_011",
+   "service": "HuntressLab-Day14-011"
+  }
+ },
+ {
+  "file": "base85.bin",
+  "valid": true,
+  "encoding": "base85",
+  "offset": 674,
+  "key": 87,
+  "version": 1,
+  "crc": 2523134476,
+  "config": {
+   "campaign": "BR14-012",
+   "domain": "node-012.day14.example.invalid",
+   "ipv4": "198.51.100.22",
+   "url": "https://node-012.day14.example.invalid/api/BR14-012",
+   "mutex": "Global\\HuntressBR14_012",
+   "service": "HuntressLab-Day14-012"
+  }
+ },
+ {
+  "file": "ascii85.bin",
+  "valid": true,
+  "encoding": "ascii85",
+  "offset": 1015,
+  "key": 232,
+  "version": 1,
+  "crc": 782742014,
+  "config": {
+   "campaign": "BR14-013",
+   "domain": "node-013.day14.example.invalid",
+   "ipv4": "198.51.100.23",
+   "url": "https://node-013.day14.example.invalid/api/BR14-013",
+   "mutex": "Global\\HuntressBR14_013",
+   "service": "HuntressLab-Day14-013"
+  }
+ },
+ {
+  "file": "ascii85_adobe.bin",
+  "valid": true,
+  "encoding": "ascii85",
+  "offset": 517,
+  "key": 132,
+  "version": 1,
+  "crc": 2987937442,
+  "config": {
+   "campaign": "BR14-014",
+   "domain": "node-014.day14.example.invalid",
+   "ipv4": "198.51.100.24",
+   "url": "https://node-014.day14.example.invalid/api/BR14-014",
+   "mutex": "Global\\HuntressBR14_014",
+   "service": "HuntressLab-Day14-014"
+  }
+ },
+ {
+  "file": "utf16le_raw.bin",
+  "valid": true,
+  "encoding": "utf16le-raw",
+  "offset": 820,
+  "key": 27,
+  "version": 1,
+  "crc": 182191440,
+  "config": {
+   "campaign": "BR14-015",
+   "domain": "node-015.day14.example.invalid",
+   "ipv4": "198.51.100.25",
+   "url": "https://node-015.day14.example.invalid/api/BR14-015",
+   "mutex": "Global\\HuntressBR14_015",
+   "service": "HuntressLab-Day14-015"
+  }
+ },
+ {
+  "file": "utf16be_raw.bin",
+  "valid": true,
+  "encoding": "utf16be-raw",
+  "offset": 910,
+  "key": 94,
+  "version": 1,
+  "crc": 417455879,
+  "config": {
+   "campaign": "BR14-016",
+   "domain": "node-016.day14.example.invalid",
+   "ipv4": "198.51.100.26",
+   "url": "https://node-016.day14.example.invalid/api/BR14-016",
+   "mutex": "Global\\HuntressBR14_016",
+   "service": "HuntressLab-Day14-016"
+  }
+ },
+ {
+  "file": "utf16le_base64.bin",
+  "valid": true,
+  "encoding": "utf16le-base64",
+  "offset": 948,
+  "key": 124,
+  "version": 1,
+  "crc": 2686817525,
+  "config": {
+   "campaign": "BR14-017",
+   "domain": "node-017.day14.example.invalid",
+   "ipv4": "198.51.100.27",
+   "url": "https://node-017.day14.example.invalid/api/BR14-017",
+   "mutex": "Global\\HuntressBR14_017",
+   "service": "HuntressLab-Day14-017"
+  }
+ },
+ {
+  "file": "utf16be_base64.bin",
+  "valid": true,
+  "encoding": "utf16be-base64",
+  "offset": 916,
+  "key": 101,
+  "version": 1,
+  "crc": 4209977342,
+  "config": {
+   "campaign": "BR14-018",
+   "domain": "node-018.day14.example.invalid",
+   "ipv4": "198.51.100.28",
+   "url": "https://node-018.day14.example.invalid/api/BR14-018",
+   "mutex": "Global\\HuntressBR14_018",
+   "service": "HuntressLab-Day14-018"
+  }
+ },
+ {
+  "file": "utf16le_hex.bin",
+  "valid": true,
+  "encoding": "utf16le-hex",
+  "offset": 852,
+  "key": 9,
+  "version": 1,
+  "crc": 1110141964,
+  "config": {
+   "campaign": "BR14-019",
+   "domain": "node-019.day14.example.invalid",
+   "ipv4": "198.51.100.29",
+   "url": "https://node-019.day14.example.invalid/api/BR14-019",
+   "mutex": "Global\\HuntressBR14_019",
+   "service": "HuntressLab-Day14-019"
+  }
+ },
+ {
+  "file": "utf16le_base32.bin",
+  "valid": true,
+  "encoding": "utf16le-base32",
+  "offset": 536,
+  "key": 29,
+  "version": 1,
+  "crc": 4061362200,
+  "config": {
+   "campaign": "BR14-020",
+   "domain": "node-020.day14.example.invalid",
+   "ipv4": "198.51.100.30",
+   "url": "https://node-020.day14.example.invalid/api/BR14-020",
+   "mutex": "Global\\HuntressBR14_020",
+   "service": "HuntressLab-Day14-020"
+  }
+ },
+ {
+  "file": "reversed_raw.bin",
+  "valid": true,
+  "encoding": "reversed-raw",
+  "offset": 694,
+  "key": 136,
+  "version": 1,
+  "crc": 1255617514,
+  "config": {
+   "campaign": "BR14-021",
+   "domain": "node-021.day14.example.invalid",
+   "ipv4": "198.51.100.31",
+   "url": "https://node-021.day14.example.invalid/api/BR14-021",
+   "mutex": "Global\\HuntressBR14_021",
+   "service": "HuntressLab-Day14-021"
+  }
+ },
+ {
+  "file": "reversed_base64.bin",
+  "valid": true,
+  "encoding": "reversed-base64",
+  "offset": 934,
+  "key": 34,
+  "version": 1,
+  "crc": 1491790269,
+  "config": {
+   "campaign": "BR14-022",
+   "domain": "node-022.day14.example.invalid",
+   "ipv4": "198.51.100.32",
+   "url": "https://node-022.day14.example.invalid/api/BR14-022",
+   "mutex": "Global\\HuntressBR14_022",
+   "service": "HuntressLab-Day14-022"
+  }
+ },
+ {
+  "file": "xor_base64.bin",
+  "valid": true,
+  "encoding": "xor-base64",
+  "offset": 974,
+  "key": 126,
+  "version": 1,
+  "crc": 3761152591,
+  "config": {
+   "campaign": "BR14-023",
+   "domain": "node-023.day14.example.invalid",
+   "ipv4": "198.51.100.33",
+   "url": "https://node-023.day14.example.invalid/api/BR14-023",
+   "mutex": "Global\\HuntressBR14_023",
+   "service": "HuntressLab-Day14-023"
+  }
+ },
+ {
+  "file": "xor_raw.bin",
+  "valid": true,
+  "encoding": "xor-raw",
+  "offset": 531,
+  "key": 205,
+  "version": 1,
+  "crc": 2089901331,
+  "config": {
+   "campaign": "BR14-024",
+   "domain": "node-024.day14.example.invalid",
+   "ipv4": "198.51.100.34",
+   "url": "https://node-024.day14.example.invalid/api/BR14-024",
+   "mutex": "Global\\HuntressBR14_024",
+   "service": "HuntressLab-Day14-024"
+  }
+ },
+ {
+  "file": "zlib6.bin",
+  "valid": true,
+  "encoding": "zlib",
+  "offset": 570,
+  "key": 54,
+  "version": 1,
+  "crc": 3293910753,
+  "config": {
+   "campaign": "BR14-025",
+   "domain": "node-025.day14.example.invalid",
+   "ipv4": "198.51.100.35",
+   "url": "https://node-025.day14.example.invalid/api/BR14-025",
+   "mutex": "Global\\HuntressBR14_025",
+   "service": "HuntressLab-Day14-025"
+  }
+ },
+ {
+  "file": "zlib9.bin",
+  "valid": true,
+  "encoding": "zlib",
+  "offset": 997,
+  "key": 7,
+  "version": 1,
+  "crc": 3597192374,
+  "config": {
+   "campaign": "BR14-026",
+   "domain": "node-026.day14.example.invalid",
+   "ipv4": "198.51.100.36",
+   "url": "https://node-026.day14.example.invalid/api/BR14-026",
+   "mutex": "Global\\HuntressBR14_026",
+   "service": "HuntressLab-Day14-026"
+  }
+ },
+ {
+  "file": "zlib1.bin",
+  "valid": true,
+  "encoding": "zlib",
+  "offset": 631,
+  "key": 6,
+  "version": 1,
+  "crc": 1856800580,
+  "config": {
+   "campaign": "BR14-027",
+   "domain": "node-027.day14.example.invalid",
+   "ipv4": "198.51.100.37",
+   "url": "https://node-027.day14.example.invalid/api/BR14-027",
+   "mutex": "Global\\HuntressBR14_027",
+   "service": "HuntressLab-Day14-027"
+  }
+ },
+ {
+  "file": "gzip.bin",
+  "valid": true,
+  "encoding": "gzip",
+  "offset": 915,
+  "key": 119,
+  "version": 1,
+  "crc": 879113295,
+  "config": {
+   "campaign": "BR14-028",
+   "domain": "node-028.day14.example.invalid",
+   "ipv4": "198.51.100.38",
+   "url": "https://node-028.day14.example.invalid/api/BR14-028",
+   "mutex": "Global\\HuntressBR14_028",
+   "service": "HuntressLab-Day14-028"
+  }
+ },
+ {
+  "file": "zlib_inside.bin",
+  "valid": true,
+  "encoding": "zlib",
+  "offset": 827,
+  "key": 155,
+  "version": 1,
+  "crc": 2359459773,
+  "config": {
+   "campaign": "BR14-029",
+   "domain": "node-029.day14.example.invalid",
+   "ipv4": "198.51.100.39",
+   "url": "https://node-029.day14.example.invalid/api/BR14-029",
+   "mutex": "Global\\HuntressBR14_029",
+   "service": "HuntressLab-Day14-029"
+  }
+ },
+ {
+  "file": "deflate_raw.bin",
+  "valid": true,
+  "encoding": "deflate",
+  "offset": 568,
+  "key": 246,
+  "version": 1,
+  "crc": 3987018023,
+  "config": {
+   "campaign": "BR14-030",
+   "domain": "node-030.day14.example.invalid",
+   "ipv4": "198.51.100.40",
+   "url": "https://node-030.day14.example.invalid/api/BR14-030",
+   "mutex": "Global\\HuntressBR14_030",
+   "service": "HuntressLab-Day14-030"
+  }
+ },
+ {
+  "file": "deflate_fixed.bin",
+  "valid": true,
+  "encoding": "deflate",
+  "offset": 552,
+  "key": 180,
+  "version": 1,
+  "crc": 1432443605,
+  "config": {
+   "campaign": "BR14-031",
+   "domain": "node-031.day14.example.invalid",
+   "ipv4": "198.51.100.41",
+   "url": "https://node-031.day14.example.invalid/api/BR14-031",
+   "mutex": "Global\\HuntressBR14_031",
+   "service": "HuntressLab-Day14-031"
+  }
+ },
+ {
+  "file": "decoy_badcrc_then_base64.bin",
+  "valid": true,
+  "encoding": "base64",
+  "offset": 1400,
+  "key": 129,
+  "version": 1,
+  "crc": 1197244546,
+  "config": {
+   "campaign": "BR14-032",
+   "domain": "node-032.day14.example.invalid",
+   "ipv4": "198.51.100.42",
+   "url": "https://node-032.day14.example.invalid/api/BR14-032",
+   "mutex": "Global\\HuntressBR14_032",
+   "service": "HuntressLab-Day14-032"
+  },
+  "decoys": [
+   {
+    "offset": 600,
+    "encoding": "raw"
+   }
+  ]
+ },
+ {
+  "file": "decoy_none.bin",
+  "valid": false
+ },
+ {
+  "file": "decoy_zlib_then_hexsep.bin",
+  "valid": true,
+  "encoding": "hex-sep",
+  "offset": 1100,
+  "key": 129,
+  "version": 1,
+  "crc": 1197244546,
+  "config": {
+   "campaign": "BR14-032",
+   "domain": "node-032.day14.example.invalid",
+   "ipv4": "198.51.100.42",
+   "url": "https://node-032.day14.example.invalid/api/BR14-032",
+   "mutex": "Global\\HuntressBR14_032",
+   "service": "HuntressLab-Day14-032"
+  },
+  "decoys": [
+   {
+    "offset": 520,
+    "encoding": "zlib"
+   }
+  ]
+ }
+]

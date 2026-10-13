@@ -41,6 +41,31 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   the member: base64 form -> the `S` of `SENGR...` (D9 Nim 30696, D11 D 368272, D13 Crystal 560188 -- the text, not the String header 12 B before it); RAW form -> the `H` of `HCFG` (D12 FPC 82928 =
   0x143f0 in `.data`, GM-confirmed single+TT+Mastery x3). Constant across a day's variants although shas differ -- still
   compute it: record `m.start()` of whichever scan hit (raw OR base64) validated, on BOTH paths (D12's raw path returned `none`).
+- **Any other storage encoding -> `lib.binary.hcfg_scan(data, deadline=None)`** (Day 14 prep; pure stdlib, Homebase-safe,
+  ~15 ms / 2 MB, ~30 ms / 4 MB real ELF, ~0.6 s / 67 MB). Returns every `HcfgHit` (offset, encoding, version, key, length, crc,
+  crc_ok, config, plain, speculative, detail) best first; take `lib.binary.hcfg_find(data)` (first crc-valid + JSON-parsing hit).
+  Covers raw, base64 (std / url / newline-wrapped), hex (plain, `48 43`, `48:43`, `\x48`, `0x48, `), base32 (upper/lower),
+  base85, ascii85 (`<~` optional), UTF-16LE/BE of raw/base64/hex/base32/base85, reversed raw, reversed base64, single-byte
+  xor'd base64 / xor'd raw (key-independent xor-diff search), zlib, gzip, raw deflate (fixed-Huffman anchor anywhere; headerless
+  dynamic brute force only while nothing valid was found and the file is <= 1 MiB, `HCTF_HCFG_DEFLATE_MAX`). Decoys (bad crc,
+  truncated, bare `"HCFG"` strings, wrong magic) come back with `valid=False`. Offset convention per encoding (`hcfg_offset`):
+
+  | encoding | offset = | status |
+  |---|---|---|
+  | raw | the `H` of the magic | GM-confirmed (D12) |
+  | base64 | first base64 char (`S` of `SENGR`) | GM-confirmed (D9/D11/D13) |
+  | base64url, base32, base85, hex, hex-sep | first char of the stored text (`\` of `\x48`, `0` of `0x48`) | speculative |
+  | ascii85 | the `<` of `<~` if present, else first char | speculative |
+  | utf16le-* / utf16be-* | first byte of the first code unit (BE: its `00`); LE/BE tie -> the 2-aligned reading, else LE | speculative |
+  | reversed-raw / reversed-base64 | lowest file offset of the reversed region (where the blob's LAST byte / the `=` pad sits) | speculative |
+  | xor-base64 / xor-raw | first stored byte (`detail` = `xor=0x..`) | speculative |
+  | zlib / gzip / deflate | first byte of the compressed stream (`78`, `1f 8b`, the deflate block header) | speculative |
+
+  Wired into the newest binary solver (D13 `native_hcfg` + `jar_hcfg`): runs only when the D13 scan finds nothing, or when its
+  hit parses but fails crc32 (then a crc-valid blob elsewhere wins). Kill switch `HCTF_HCFG_SCAN_EXT=0` = the D13 behaviour
+  exactly. A speculative offset is a first guess: if the GM rejects it, try the offset of the container header in front of
+  the stored form (String header, length prefix, `<~` / quote) next. Fixtures: `tests/data/hcfg_fixtures/` (`make.py`); checks in
+  `tests/test_day14_s4.py`.
 - **xor key / config values** -- re-roll per variant; derive from the header byte, never from the sample.
 - **Container per member** -- ELF vs PE32+ `.exe` re-rolls per member: Mastery set2 had d02 C++ as `.exe` (D3-D5, D7, D10) and d04
   Go as `.exe` (D4, D5, D7, D10); D6 set2 had both as ELF; D10 set2 had the NEW d10 Zig member as a PE too (format `pe`). Labels come from the header of THIS member (Go PE: format `pe`, architecture `x86-64` from Machine).
