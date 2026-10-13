@@ -15,6 +15,7 @@ Every confirmed label is appended to lib/vocab.json under its field ending, so t
 runner's in-attempt correction) starts from it. Flags are never probed.
 """
 import json
+import os
 import re
 import time
 from collections import Counter
@@ -230,6 +231,12 @@ def candidates(cid, aid, terms=(), solver_value=None, without=(), skip_judged=Tr
             tset.append(t)
     ranked = []
     ranked += pb_seed                                                   # 0 playbook rule (closed vocab / compounds)
+    if solver_value and os.environ.get("HCTF_FORMAT_ALTS", "1") != "0":
+        try:                                                            # 0b same value, other SPELLING (hex width, GUID braces)
+            from . import fmtalt
+            ranked += [a for a, _t in fmtalt.alternates(aid, solver_value, _question(cid, aid), max_n=4)]
+        except Exception:  # noqa: BLE001 - ranking aid only
+            pass
     ranked += sib                                                       # 1 known labels
     ranked += [f"{t}{sep}{x}" for t in tset for x in tails if t != x]   # 2 term + known ending
     ranked += tset                                                      # 3 terms alone

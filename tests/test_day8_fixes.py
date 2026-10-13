@@ -258,7 +258,7 @@ truth = {"d01_a": "1", "d01_b": "2", "d02_a": "3", "d08_x": "64", "d08_y": "62",
 fail_once = {"d02_a"}
 
 
-def fake_submit(cid, g, force=False, probe=False):
+def fake_submit(cid, g, force=False, probe=False, **kw):
     subs.append(sorted(g))
     if set(g) & fail_once:
         fail_once.clear()

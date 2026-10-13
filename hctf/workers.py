@@ -182,6 +182,7 @@ def lane_playbook(lane):
 
 
 STOPPED_RC = -15  # run_local's return code when `stop` ended the worker (its job was already done)
+ASYNC_STOP = os.environ.get("HCTF_ASYNC_STOP", "1") != "0"   # kill the stopped worker in the background (no 2 s grace wait)
 AUTH_RC = -77     # run_local's return code when Claude auth failed (relaunching can't help: re-login on the host)
 
 # Worker sandbox (bubblewrap): the rehearsal copy rehearsal (2026-10-06) caught a script-analysis worker running
@@ -390,7 +391,13 @@ def _wait_worker(p, log, timeout, stop, out=None):
                 if rc is not None:
                     return rc, log
                 if stopped:
-                    _kill_group(p, grace=2.0)
+                    if ASYNC_STOP:
+                        # the worker's job is done: SIGTERM it in the background instead of holding the timed modes
+                        # for its up-to-2 s grace (it usually exits within 1 s)
+                        threading.Thread(target=_kill_group, args=(p, 2.0), daemon=True,
+                                         name=f"stop-{p.pid}").start()
+                    else:
+                        _kill_group(p, grace=2.0)
                     return STOPPED_RC, log
             else:
                 try:
