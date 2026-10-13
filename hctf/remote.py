@@ -187,6 +187,10 @@ def gm(*args, timeout=180):
                            capture_output=True, text=True, timeout=timeout,
                            env=dict(os.environ, HUNTRESS_GAME_MASTER_URL=INSIDE_GM))
         return _gm_parse(r, "homebase-local")
+    if args and args[0] in ("start", "submit") and GM_VIA_DAEMON and _public_gm():
+        env = _gm_via_daemon(args, timeout)      # the run's warm Homebase daemon, when this process has one
+        if env is not None:
+            return env
     if args and args[0] == "submit" and SUBMIT_VIA_HB and _public_gm() and _master_alive():
         env = _gm_submit_hb(args, timeout)
         if env is not None:
@@ -210,6 +214,10 @@ SUBMIT_VIA_HB = os.environ.get("HCTF_SUBMIT_VIA_HB", "1") != "0"
 # Downloads stay public (binary evidence is ~31 MB). HCTF_START_VIA_HB=0 disables.
 START_VIA_HB = os.environ.get("HCTF_START_VIA_HB", "1") != "0"
 _EXEC_MARK = "HCTF-EXEC"
+# Single Solve start / submit over the run's long-lived Homebase daemon (warm GM pool, one stdio channel) instead of an
+# ssh exec + `python3 gm.py` per call: D12's five drop-time starts went out 2-6 s late on the busy 2-vCPU VM. Only in the
+# orchestrator process (workers' `hctf submit` has no daemon -> the ssh path below). HCTF_GM_VIA_DAEMON=0 disables.
+GM_VIA_DAEMON = os.environ.get("HCTF_GM_VIA_DAEMON", "1") != "0"
 PUBLIC_GM = "https://2026.huntress.ctf.games"
 
 
@@ -228,6 +236,33 @@ def _master_alive():
         return r.returncode == 0
     except (subprocess.SubprocessError, OSError):
         return False
+
+
+def _gm_via_daemon(args, timeout):
+    """start / submit through workers' running Homebase daemon; None = no daemon / it never took the request (the
+    caller falls back). A submit the daemon may have sent without a verdict raises Unreachable (never a second POST)."""
+    from . import workers   # lazy: workers imports remote
+    d = workers._daemon.get("d")
+    if d is None or not d.alive() or len(args) < 2:
+        return None
+    kind, kw = str(args[0]), {"kind": str(args[0]), "cid": str(args[1])}
+    if kind == "submit":
+        try:
+            kw["answers"] = json.loads(args[2])
+        except (IndexError, ValueError):
+            return None
+    try:
+        res = d.call("gm", timeout=min(float(timeout), 60.0), **kw)
+    except workers.DaemonError as e:
+        msg = str(e)
+        if kind == "submit" and not msg.startswith(("daemon not running", "daemon write failed")):
+            raise Unreachable(f"submit via the Homebase daemon: outcome unknown ({msg[:200]}) -- check `hctf status` "
+                              "before resubmitting") from None
+        return None      # start is idempotent (it resumes the live attempt): the other transports are safe
+    env = {k: res.get(k) for k in ("http", "body", "text", "saved", "content_type", "elapsed", "retries", "slept")}
+    env["saved"] = env["saved"] or []
+    env["transport"] = "hb-daemon"
+    return env
 
 
 def _gm_submit_hb(args, timeout, op="submit"):

@@ -137,6 +137,42 @@ class Zygotes:
             z.close()
 
 
+GM_OPS = ("start", "submit", "status")
+
+
+def _gm_call(hb_timed, req):
+    """A gm.py-shaped envelope ({http, body, text, elapsed, ...}) for op start|submit|status on hb_timed's pool.
+    429/503 load gets the same short backoff as an attempt; a JSON 4xx is a verdict and is returned as such."""
+    kind, cid = req.get("kind"), req.get("cid")
+    if kind not in GM_OPS or not cid:
+        raise ValueError(f"gm op {kind!r} / cid {cid!r} not allowed")
+    t0 = time.time()
+    if kind == "status":
+        from urllib.parse import urlencode
+        method, query, body, headers = "GET", "?" + urlencode({"op": "status", "challenge": cid}), None, hb_timed._auth()
+    else:
+        payload = {"op": kind, "challenge": cid, **({"answers": req.get("answers") or {}} if kind == "submit" else {})}
+        method, query, body = "POST", "", json.dumps(payload).encode()
+        headers = hb_timed._auth({"Content-Type": "application/json"})
+    slept = 0.0
+    for wait in (0.5, 1.0, None):
+        # submit: fresh socket + hard timeout, NEVER resent (a second POST is a second submission); start/status are
+        # idempotent: a kept-alive pooled socket, one resend on a dropped connection
+        status, raw = hb_timed._pool().request(method, query, body, headers,
+                                               timeout=(req.get("timeout") or 30) if kind == "submit" else None)
+        if status in (429, 503) and wait is not None and not hb_timed._refusal(status, raw):
+            time.sleep(wait)
+            slept += wait
+            continue
+        break
+    try:
+        parsed, text = json.loads(raw), None
+    except ValueError:
+        parsed, text = None, (raw or b"")[:2000].decode("utf-8", "replace")
+    return {"http": status, "body": parsed, "text": text, "saved": [], "content_type": "application/json",
+            "elapsed": round(time.time() - t0, 3), "retries": int(slept > 0), "slept": slept}
+
+
 def main():
     hello = json.loads(sys.stdin.readline() or "{}")
     if hello.get("gm"):
@@ -161,6 +197,10 @@ def main():
             elif op == "warm":
                 z = zyg.get(HW / req["solver"])
                 send({"id": rid, "ok": True, "warm_ms": z.warm_ms, "error": z.warm_error})
+            elif op == "gm":
+                # One GM call on the warm pool (no ssh exec, no interpreter start): the run's Single Solve start /
+                # submit. D12: per-call ssh + `python3 gm.py` on the busy VM put a single start out 2-6 s late.
+                send({"id": rid, "ok": True, **_gm_call(hb_timed, req)})
             elif op == "attempt":
                 t = time.time()
                 out = hb_timed.run_attempt(req["cid"], req["solver"], op=req.get("op_mode") or "start",

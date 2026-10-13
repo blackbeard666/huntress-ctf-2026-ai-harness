@@ -168,6 +168,19 @@ try:
     assert r["result"] in ("exec_error", "expired") and ("solver_too_slow" in r or r.get("clock_short")), r
     assert d.call("ping", timeout=10)["ok"]
     print(f"ok  daemon: a hung solver is cut at the solve budget ({r['result']}), daemon keeps serving")
+    # gm op: a Single Solve start / submit on the warm pool (bearer on each call), gm.py-shaped envelope
+    st = d.call("gm", timeout=20, kind="start", cid="warmups-day-99-single")
+    assert st["http"] == 200 and st["body"]["answer_ids"] == ["x"] and st["elapsed"] >= 0, st
+    good = f"payload-{state['attempts']['warmups-day-99-single'][:8]}"
+    sb = d.call("gm", timeout=20, kind="submit", cid="warmups-day-99-single", answers={"x": good})
+    assert sb["http"] == 200 and sb["body"]["result"] == "CORRECT", sb
+    try:
+        d.call("gm", timeout=20, kind="download", cid="warmups-day-99-single")
+        raise AssertionError("only start / submit / status may go through the gm op")
+    except workers.DaemonError:
+        pass
+    assert state["auth_bad"] == 0 and d.call("ping", timeout=10)["ok"]
+    print("ok  daemon gm op: Single Solve start + submit on the warm pool (bearer sent, other ops refused)")
 finally:
     d.close()
     srv.shutdown()

@@ -96,4 +96,52 @@ finally:
 assert state["done"] and len(lookups) <= 3, len(lookups)
 print(f"ok  reuse race: {len(lookups)} confirmed lookup(s) for a 400-field set (was one per field)")
 
+# 5) remote.gm: start / submit go through the run's warm Homebase daemon first; a submit the daemon may have sent
+#    without a verdict is "outcome unknown" (never re-POSTed by another transport); a start falls back
+from hctf import remote  # noqa: E402
+
+
+class FakeDaemon:
+    def __init__(self, err=None):
+        self.err, self.calls = err, []
+
+    def alive(self):
+        return True
+
+    def call(self, op, timeout=60, **kw):
+        self.calls.append((op, kw))
+        if self.err:
+            raise workers.DaemonError(self.err)
+        return {"ok": True, "http": 200, "body": {"result": "CORRECT"}, "elapsed": 0.2, "retries": 0, "slept": 0}
+
+
+saved_d, saved_pub, saved_local = workers._daemon.get("d"), remote._public_gm, remote._gm_local
+saved_via = (remote.START_VIA_HB, remote.SUBMIT_VIA_HB)
+fallbacks = []
+try:
+    remote._public_gm = lambda: True
+    remote._gm_local = lambda args, timeout: fallbacks.append(args[0]) or {"http": 200, "body": {}, "transport": "inproc"}
+    remote.START_VIA_HB = remote.SUBMIT_VIA_HB = False          # isolate: daemon or the local fallback only
+    fd = workers._daemon["d"] = FakeDaemon()
+    env = remote.gm("submit", "cid-1", json.dumps({"a": "1"}))
+    assert env["transport"] == "hb-daemon" and env["body"]["result"] == "CORRECT" and env["saved"] == []
+    assert fd.calls[-1] == ("gm", {"kind": "submit", "cid": "cid-1", "answers": {"a": "1"}})
+    assert remote.gm("start", "cid-1")["transport"] == "hb-daemon" and not fallbacks
+    workers._daemon["d"] = FakeDaemon("daemon gm timed out after 60s")
+    try:
+        remote.gm("submit", "cid-1", json.dumps({"a": "1"}))
+        raise AssertionError("a submit with no verdict must be outcome-unknown, not resent")
+    except remote.Unreachable:
+        pass
+    assert remote.gm("start", "cid-1")["transport"] == "inproc" and fallbacks == ["start"]   # start: safe fallback
+    workers._daemon["d"] = FakeDaemon("daemon not running")
+    assert remote.gm("submit", "cid-1", "{}")["transport"] == "inproc"                      # never sent: fallback
+    workers._daemon["d"] = None
+    assert remote.gm("status", "cid-1")["transport"] == "inproc"
+finally:
+    workers._daemon["d"] = saved_d
+    remote._public_gm, remote._gm_local = saved_pub, saved_local
+    remote.START_VIA_HB, remote.SUBMIT_VIA_HB = saved_via
+print("ok  remote.gm: start/submit via the warm daemon; unsent -> fallback, sent-without-verdict submit -> Unreachable")
+
 print("\nALL DAY-13 PREP CHECKS PASSED")
