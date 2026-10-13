@@ -1,0 +1,10 @@
+{
+ "codec": "base91",
+ "plain": null,
+ "encoded": "Nice work - decoding this \\ 'warmup'",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written prose decoy containing '-', '\\\\' and \"'\" (outside the basE91 alphabet)",
+ "oracle_cmd": "python3 -c 'print(set(sys.argv[1]) - set(base91.base91_alphabet))'  # PyPI base91 alphabet: non-empty -> not basE91",
+ "oracle_plain": null
+}

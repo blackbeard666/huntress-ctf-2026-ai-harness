@@ -1,0 +1,10 @@
+{
+ "codec": "bacon*",
+ "plain": null,
+ "encoded": "A bad cab ABBA babble: abba, baba, aab bba!",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written decoy line (not Bacon output)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=tools/npm-cyberchef/node_modules/cyberchef node tests/data/warmups_fixtures/bacon_cyberchef.mjs dec 'Complete' 'A/B' '0' '0'  # CyberChef decodes the stray a/b letters into junk: not the sentence",
+ "oracle_plain": "JNNVD"
+}

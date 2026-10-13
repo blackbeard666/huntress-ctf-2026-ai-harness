@@ -1,0 +1,8 @@
+{
+ "field": "evtx.file_header_chunk_count",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/evtx/GENERATOR_evtx_struct.py.txt <outdir>  (stdlib struct/zlib EVTX writer -> decoy_evt_legacy.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -I -c \"from Evtx.Evtx import Evtx; e=Evtx('tests/data/meta_fixtures/evtx/decoy_evt_legacy__file_header_chunk_count.bin').__enter__(); h=e.get_file_header(); c=h.first_chunk(); print(h.check_magic(), h.chunk_count(), h.next_record_number(), h.major_version(), h.minor_version(), c.log_first_record_number(), c.first_record().record_num())\"  (python-evtx 0.8.1) -> check_magic False; file -b -> 'data'",
+ "decoy": true,
+ "member": "decoy_evt_legacy.evtx"
+}

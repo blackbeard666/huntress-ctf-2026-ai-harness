@@ -79,7 +79,9 @@ def _lane_key(lane):
 
 
 # Fast mode (Opus at faster output; ~97% of a worker's wall time is token generation) -- an opt-in EXPERIMENT:
-# HCTF_FAST_MODE=all or a comma list of lanes. Needs Claude Code >= 2.1.205 + usage credits; higher per-token price.
+# HCTF_FAST_MODE=all or a comma list of lanes. OFF by user decision (2026-10-14; revisit near the CTF end): fast mode is
+# never in plan limits -- it bills the org's USAGE CREDITS at a premium ($8/$40 per MTok on Opus 5.5) and refuses to turn
+# on without credits. Rehearsal D13 A/B: singles 27-35% faster, same correctness. Never enable without the user's OK.
 FAST_MODE_LANES = {x.strip() for x in os.environ.get("HCTF_FAST_MODE", "").split(",") if x.strip()}
 
 

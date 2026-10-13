@@ -1,0 +1,7 @@
+{
+ "field": "dotnet.assembly_name",
+ "expected": "none",
+ "generator_cmd": "printf 'MZ this is not a .NET assembly, just text renamed to .dll\\n'",
+ "oracle_cmd": "file -> ASCII text; AssemblyName.GetAssemblyName -> BadImageFormatException",
+ "decoy": true
+}

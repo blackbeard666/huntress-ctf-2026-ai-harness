@@ -1,0 +1,10 @@
+{
+ "codec": "uuencode",
+ "plain": null,
+ "encoded": "Nice work - decoding this WARMUP!",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written prose decoy (lowercase letters lie outside the uu alphabet ' '..'`')",
+ "oracle_cmd": "ruby -e 'p (ARGV[0].unpack1(\"u\") rescue \"none\")' \"$encoded\"  # ruby/perl unpack are lenient: judged by alphabet + length char",
+ "oracle_plain": null
+}

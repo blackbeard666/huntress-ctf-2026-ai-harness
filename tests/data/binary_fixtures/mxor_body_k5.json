@@ -1,0 +1,13 @@
+{
+ "encoding": "multixor-body",
+ "expected_offset": 5000,
+ "expected_config": {
+  "c2": "10.13.37.5:8443",
+  "beacon": "mxor-quail",
+  "sleep": 45,
+  "flag": "flag{d1d_y0u_kn0w_x0r_r3p34ts}"
+ },
+ "generator_cmd": "python3 -c 'import zlib,struct,itertools,random;random.seed(1);p=b'{\"c2\":\"10.13.37.5:8443\",\"beacon\":\"mxor-quail\",\"sleep\":45,\"flag\":\"flag{d1d_y0u_kn0w_x0r_r3p34ts}\"}';k1=0x5a;K=b\"K3y!x\";body=bytes(a^k1^b for a,b in zip(p,itertools.cycle(K)));f=bytes(random.randrange(256) for _ in range(5000));open(\"mxor_body_k5.bin\",\"wb\").write(f+b\"HCFG\"+struct.pack(\"<BBHI\",1,k1,len(p),zlib.crc32(p))+body+f[:777])'",
+ "oracle_cmd": "perl -0777 -ne '$o=index($_,\"HCFG\");($n)=unpack(\"v\",substr($_,$o+6,2));$b=substr($_,$o+12,$n);@k=map{ord}split//,\"K3y!x\";$i=0;$b=join\"\",map{chr(ord($_)^0x5a^$k[$i++%5])}split//,$b;print \"$o $b\\n\"' mxor_body_k5.bin",
+ "oracle_output": "5000 {\"c2\":\"10.13.37.5:8443\",\"beacon\":\"mxor-quail\",\"sleep\":45,\"flag\":\"flag{d1d_y0u_kn0w_x0r_r3p34ts}\"}"
+}

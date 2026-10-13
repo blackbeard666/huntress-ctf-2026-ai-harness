@@ -1,0 +1,8 @@
+{
+ "field": "cab.cfheader_set_id_u16_hex",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import zipfile;z=zipfile.ZipFile('tests/data/meta_fixtures/cab/decoy_zip_renamed.bin','w');z.writestr('a.txt','MSCF not really');z.close()\"  (zip renamed impostor .cab)",
+ "oracle_cmd": "file -b tests/data/meta_fixtures/cab/decoy_zip_renamed__cfheader_set_id_u16_hex.bin -> Zip archive data; LD_LIBRARY_PATH=tools/msitools/usr/lib/x86_64-linux-gnu tools/msitools/usr/bin/gcab -t -> 'The input is not of cabinet format'",
+ "decoy": true,
+ "member": "evidence-003.cab"
+}

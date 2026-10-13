@@ -1,0 +1,9 @@
+{
+ "encoding": "base64-custom",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "decoy": true,
+ "generator_cmd": "bash b64c_gen.sh b64c_decoy.bin 'zyxwvutsrqponmlkjihgfedcbaZYXWVUTSRQPONMLKJIHGFEDCBA/+9876543210' 'QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm9876543210_-' '{\"c2\":\"198.51.100.23:4444\",\"campaign\":\"shuffle-deck\",\"sleep\":30,\"flag\":\"flag{cust0m_alph4b3t_b64}\"}' ''   # blob: printf header + crc32 from gzip trailer; text: coreutils base64 -w0 | tr STD->custom",
+ "oracle_cmd": "enc=$(strings -n 120 b64c_decoy.bin | tail -1); echo $(grep -boa -F -- \"$enc\" b64c_decoy.bin | head -1 | cut -d: -f1) $(printf %s \"$enc\" | tr 'zyxwvutsrqponmlkjihgfedcbaZYXWVUTSRQPONMLKJIHGFEDCBA/+9876543210' 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/' | base64 -di | perl -0777 -ne '($m,$v,$k,$l,$c)=unpack(\"a4CCvV\",$_);print \"$m $l $c \",substr($_,12,$l)')",
+ "oracle_output": "3613 <garbage: no HCFG magic -- text encoded under a different alphabet than the stored 64-char literal>"
+}

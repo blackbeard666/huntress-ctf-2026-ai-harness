@@ -1,0 +1,9 @@
+{
+ "codec": "bacon24-AB-keep-cc",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jovial-quiver-10",
+ "encoded": "ABBAAABAAAAAABAAABAA BABAAABBABBAAAAABAAB AAABBAABAAAAABAABBABAAABBABAAAABBAAAABBA BAABAAABBBABAAABAAAB BABAAAAAAABAAAAABABBBAABBABBBA! BAABAABBAB BAAABABBABABABABAABBAABAA, BAAABBAABBAAAABABABBABAAABAABA BAABAAABBBABAAABAAAB AABAABABABAAAAAAAABABAABA AAAAAABBAABAAABBABAAAABAABAAAA BAABAABBAB BAABAAABBBAABAA AABBAAAAAAABABBAABAA ABABBAAAAABAAABBAABAAABAABAAAA: ABAAAABBABBAABBABAAAAAAAAABABA-ABBBBBAABBABAAABAABBAABAABAAAA-BA",
+ "generator_cmd": "printf %s \"$plain\" | CC=tools/npm-cyberchef/node_modules/cyberchef node tests/data/warmups_fixtures/bacon_cyberchef.mjs enc 'Standard (I=J and U=V)' 'A/B' '1' '0'  # CyberChef 'Bacon Cipher Encode' (npm cyberchef)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=tools/npm-cyberchef/node_modules/cyberchef node tests/data/warmups_fixtures/bacon_cyberchef.mjs dec 'Standard (I=J and U=V)' 'A/B' '0' '0'  # CyberChef 'Bacon Cipher Decode'",
+ "oracle_plain": "NICEWORKDECODINGTHISWARMUPTOSOLUESUBMITTHISEXACTANSWERTOTHEGAMEMASTERIOUIALQUIUER",
+ "expected": "match"
+}

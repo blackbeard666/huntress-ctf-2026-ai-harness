@@ -1,0 +1,8 @@
+{
+ "field": "cab.folder_count",
+ "expected": "1",
+ "generator_cmd": ".venv/bin/python -I -c \"import cabarchive; a=cabarchive.CabArchive(); a.set_id=0x4d2f; a['Setup\\\\agent.dll']=cabarchive.CabFile(b'MZ'+bytes(300)); a['README.TXT']=cabarchive.CabFile(b'read me\\r\\n'); open('tests/data/meta_fixtures/cab/cabarchive_setid.bin','wb').write(a.save(compress=False))\"  (cabarchive 0.2.5 writer)",
+ "oracle_cmd": "7z l -slt tests/data/meta_fixtures/cab/cabarchive_setid__folder_count.bin | grep '^Blocks ='  (CFHEADER cFolders = 7-Zip 'Blocks')",
+ "decoy": false,
+ "member": "cabarchive_setid.cab"
+}

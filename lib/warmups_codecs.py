@@ -278,6 +278,57 @@ def b58_dec(t):
     return _t(n.to_bytes((n.bit_length() + 7) // 8, "big"))
 
 
+# basE91 (Joachim Henke): 13/14-bit groups -> 2 chars of a 91-char alphabet (printable ASCII minus space - \ ').
+# Strict decoder: whitespace is dropped, any other non-alphabet character rejects the line.
+_B91 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,./:;<=>?@[]^_`{|}~\""
+_UNB91 = {c: i for i, c in enumerate(_B91)}
+
+
+def b91_enc(s):
+    b = n = 0
+    out = []
+    for byte in _u(s):
+        b |= byte << n
+        n += 8
+        if n > 13:
+            v = b & 8191
+            if v > 88:
+                b >>= 13
+                n -= 13
+            else:
+                v = b & 16383
+                b >>= 14
+                n -= 14
+            out += [_B91[v % 91], _B91[v // 91]]
+    if n:
+        out.append(_B91[b % 91])
+        if n > 7 or b > 90:
+            out.append(_B91[b // 91])
+    return "".join(out)
+
+
+def b91_dec(t):
+    b = n = 0
+    v = -1
+    out = bytearray()
+    for c in re.sub(r"\s+", "", t):
+        d = _UNB91[c]
+        if v < 0:
+            v = d
+            continue
+        v += d * 91
+        b |= v << n
+        n += 13 if (v & 8191) > 88 else 14
+        while n > 7:
+            out.append(b & 255)
+            b >>= 8
+            n -= 8
+        v = -1
+    if v >= 0:
+        out.append((b | v << n) & 255)
+    return _t(bytes(out))
+
+
 def b36_enc(s):
     n, out = int.from_bytes(_u(s), "big"), ""
     while n:
@@ -289,6 +340,152 @@ def b36_enc(s):
 def b36_dec(t):
     n = int(t.strip(), 36)
     return _t(n.to_bytes((n.bit_length() + 7) // 8, "big"))
+
+
+# base62 big-integer text (CyberChef "To Base62" / GMP / pybase62): bytes as one big-endian integer in radix 62, no
+# padding, leading zero bytes dropped. Alphabet 0-9A-Za-z, or the "inverted" 0-9a-zA-Z. Strict: any non-alphabet
+# character (space, punctuation, '=') rejects the line.
+_B62 = string.digits + string.ascii_uppercase + string.ascii_lowercase
+_B62_INV = string.digits + string.ascii_lowercase + string.ascii_uppercase
+
+
+def b62_enc(s, alpha=_B62):
+    n, out = int.from_bytes(_u(s), "big"), ""
+    while n:
+        n, r = divmod(n, 62)
+        out = alpha[r] + out
+    return out
+
+
+def b62_dec(t, alpha=_B62):
+    t = t.strip()
+    if not t or len(t) > 4096:
+        raise ValueError("not base62")
+    n = 0
+    for c in t:
+        n = n * 62 + alpha.index(c)
+    return _t(n.to_bytes((n.bit_length() + 7) // 8, "big"))
+
+
+# Baconian cipher (CyberChef "Bacon Cipher Encode" semantics): letter -> 5-bit group, "24" = Bacon's own alphabet
+# (I=J, U=V), "26" = one code per letter. groups = letters only, groups space-joined; keep = groups run together, every
+# other character kept in place (cc: CyberChef also turns a kept 0/1 digit into A/B). Lossy (case, I/J, U/V): the
+# decoder returns lowercase letters.
+_BACON24 = "abcdefghiklmnopqrstuwxyz"
+_BACON_TR = {"AB": "AB", "ab": "ab", "BA": "BA", "01": "01", "10": "10"}
+
+
+def bacon_enc(s, alpha=26, tr="AB", keep=False, cc=False):
+    sym = _BACON_TR[tr]
+    out = []
+    for c in s:
+        lc = c.lower()
+        if "a" <= lc <= "z":
+            n = ord(lc) - 97 if alpha == 26 else _BACON24.index({"j": "i", "v": "u"}.get(lc, lc))
+            out.append("".join(sym[int(b)] for b in f"{n:05b}"))
+        elif keep:
+            out.append(sym[int(c)] if cc and c in "01" else c)
+    return "".join(out) if keep else " ".join(out)
+
+
+def bacon_dec(t, alpha=26, tr="AB", keep=False):
+    """Inverse of bacon_enc; None for anything that isn't cleanly that layout (decoy text, wrong symbols, stray bits)."""
+    sym = _BACON_TR[tr]
+    t = t.strip()
+    top = 26 if alpha == 26 else 24
+
+    def run(bits):
+        if len(bits) % 5:
+            return None
+        out = ""
+        for i in range(0, len(bits), 5):
+            n = int("".join(str(sym.index(b)) for b in bits[i:i + 5]), 2)
+            if n >= top:
+                return None
+            out += chr(97 + n) if alpha == 26 else _BACON24[n]
+        return out
+
+    if not keep:
+        if not re.fullmatch(f"[{sym}]{{5}}(?:[ \\t]*[{sym}]{{5}})*", t):
+            return None
+        return run(re.sub(r"\s+", "", t))
+    nbits = sum(c in sym for c in t)
+    if nbits < 10 or nbits < 0.6 * len(re.sub(r"\s", "", t)) or any(c.isalpha() and c not in sym for c in t):
+        return None
+    out = []
+    for m in re.finditer(f"[{sym}]+|[^{sym}]+", t):
+        g = m.group(0)
+        if g[0] not in sym:
+            out.append(g)
+        elif len(g) < 5:   # a slug digit run ("-10") kept verbatim, or turned into A/B by CyberChef
+            out.append("".join(str(sym.index(b)) for b in g) if sym.isalpha() else g)
+        else:
+            d = run(g)
+            if d is None:
+                return None
+            out.append(d)
+    return "".join(out)
+
+
+# uuencode / xxencode: lines of <length char><4 chars per 3 bytes>, 45 bytes a line, optional `begin NNN name` ... `end`
+# frame. uu = chr(32 + v) (0 as space or backtick), xx = the 64-char alphabet below. The decoder takes framed or bare
+# bodies and rejects a line whose characters or length don't fit its length char.
+_UU = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
+_XX = "+-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+_UNUU = {**{c: i for i, c in enumerate(_UU)}, "`": 0}
+_UNXX = {c: i for i, c in enumerate(_XX)}
+
+
+def uu_enc(s, alpha=_UU, zero="`", frame=None, end="`"):
+    """Body lines (alpha[0] -> `zero`); frame="644 name" wraps it in begin/end with an `end` length-0 line."""
+    a = alpha.replace(alpha[0], zero, 1) if zero else alpha
+    b = _u(s)
+    lines = []
+    for i in range(0, len(b), 45):
+        chunk = b[i:i + 45]
+        n = int.from_bytes(chunk + b"\0" * (-len(chunk) % 3), "big")
+        k = (len(chunk) + 2) // 3 * 4
+        lines.append(a[len(chunk)] + "".join(a[(n >> (6 * (k - 1 - j))) & 63] for j in range(k)))
+    if frame:
+        lines = [f"begin {frame}"] + lines + [a[0] if end is None else end, "end"]
+    return "\n".join(lines)
+
+
+def uu_dec(t, table=_UNUU):
+    out = bytearray()
+    lines = [ln.strip("\r\n") for ln in t.strip().splitlines()]
+    if lines and re.fullmatch(r"begin(-base64)? [0-7]{3,4} .*", lines[0].strip()):
+        lines = lines[1:]
+    for ln in lines:
+        if ln.strip() == "end":
+            break
+        if not ln.strip():
+            continue
+        if table is not _UNUU:
+            ln = ln.strip()
+        n = table.get(ln[0])
+        if n is None:
+            return None
+        if n == 0:
+            break
+        body = ln[1:]
+        k = (n + 2) // 3 * 4
+        if table is _UNUU:
+            body = body.ljust(k)                    # space-zero encoders lose trailing spaces to strip()
+        if not k <= len(body) <= k + 1:             # +1: some encoders append a checksum char
+            return None
+        try:
+            v = 0
+            for c in body[:k]:
+                v = v << 6 | table[c]
+        except KeyError:
+            return None
+        out += v.to_bytes(k // 4 * 3, "big")[:n]
+    return _t(bytes(out)) if out else None
+
+
+def xx_dec(t):
+    return uu_dec(t, _UNXX)
 
 
 def wordrev(s):
@@ -346,12 +543,20 @@ def _cands():
         ("ascii85", lambda s: base64.a85encode(_u(s)).decode(), lambda t: _t(base64.a85decode(t.strip()))),
         ("ascii85-adobe", lambda s: base64.a85encode(_u(s), adobe=True).decode(),
          lambda t: _t(base64.a85decode(t.strip(), adobe=True))),
+        ("base91", b91_enc, b91_dec),
         ("base58", b58_enc, b58_dec),
         ("base36", b36_enc, b36_dec),
+        ("base62", b62_enc, b62_dec),
+        ("base62-inv", lambda s: b62_enc(s, _B62_INV), lambda t: b62_dec(t, _B62_INV)),
         ("quoted-printable", lambda s: quopri.encodestring(_u(s)).decode(), lambda t: _t(quopri.decodestring(_u(t)))),
         ("quoted-printable-all", lambda s: "".join(f"={b:02X}" for b in _u(s)),
          lambda t: _t(quopri.decodestring(_u(t)))),
-        ("uu", lambda s: codecs.encode(_u(s), "uu").decode(), lambda t: _t(codecs.decode(_u(t), "uu"))),
+        ("uu", lambda s: codecs.encode(_u(s), "uu").decode(), uu_dec),
+        ("uu-bare", uu_enc, uu_dec),
+        ("uu-bare-space", lambda s: uu_enc(s, zero=" "), uu_dec),
+        ("uu-begin644", lambda s: uu_enc(s, frame="644 data"), uu_dec),
+        ("xx-bare", lambda s: uu_enc(s, _XX, zero=None), xx_dec),
+        ("xx-begin644", lambda s: uu_enc(s, _XX, zero=None, frame="644 data", end=None), xx_dec),
         ("rot47", rot47, rot47),
         ("swapcase", lambda s: s.swapcase(), lambda t: t.swapcase()),
         ("upper", lambda s: s.upper(), None),
@@ -365,6 +570,11 @@ def _cands():
         ("a1z26", a1z26_enc, a1z26_dec),
         ("a1z26-comma", lambda s: a1z26_enc(s, sep=","), lambda t: a1z26_dec(t, sep=",")),
     ]
+    out += [(f"bacon{a}-{tr}{('-keep', '-keep-cc')[cc] if k else ''}",
+             (lambda a, tr, k, cc: lambda s: bacon_enc(s, a, tr, k, cc))(a, tr, k, cc),
+             (lambda a, tr, k: lambda t: bacon_dec(t, a, tr, k))(a, tr, k))
+            for a in (26, 24) for tr in _BACON_TR for k in (False, True) for cc in (False, True)
+            if not (cc and (not k or tr[0] in "01"))]
     out += [(f"caesar{n}", (lambda n: lambda s: rot(s, n))(n), (lambda n: lambda t: rot(t, -n))(n))
             for n in range(1, 26) if n != 13]
     out += [(f"rail{n}", (lambda n: lambda s: rail_enc(s, n))(n), (lambda n: lambda t: rail_dec(t, n))(n))

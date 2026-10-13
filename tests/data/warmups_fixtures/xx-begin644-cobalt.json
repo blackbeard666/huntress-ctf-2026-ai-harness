@@ -1,0 +1,9 @@
+{
+ "codec": "xxencode",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "encoded": "begin 644 flag.txt\nhHaZXNG-rPr7f64FZMqxYOKtb65FcOLAURq3mPLJk6G-IPm-nPqlqNGkUQrJW\nhPKZo65FcOLAUNLVVMrEUMKtnRqJm65Fj65FcNG-5MKpZ62pVQrFZQXcUMqxW\nAMKlo9KVZQaxi9HQr\n+\nend\n",
+ "generator_cmd": "{ echo 'begin 644 flag.txt'; perl -e 'print pack(\"u\", $ARGV[0])' \"$plain\" | tr '`!-_' '+\\-0-9A-Za-z'; printf '+\\nend\\n'; }",
+ "oracle_cmd": "ruby -e 'print ARGV[0].lines.reject{|l| l =~ /^(begin |end)/}.join.tr(\"+\\\\-0-9A-Za-z\", \"`!-_\").unpack1(\"u\")' \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "expected": "match"
+}

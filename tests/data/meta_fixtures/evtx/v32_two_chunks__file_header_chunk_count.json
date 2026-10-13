@@ -1,0 +1,8 @@
+{
+ "field": "evtx.file_header_chunk_count",
+ "expected": "2",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/evtx/GENERATOR_evtx_struct.py.txt <outdir>  (stdlib struct/zlib EVTX writer -> v32_two_chunks.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -I -c \"from Evtx.Evtx import Evtx; e=Evtx('tests/data/meta_fixtures/evtx/v32_two_chunks__file_header_chunk_count.bin').__enter__(); h=e.get_file_header(); c=h.first_chunk(); print(h.check_magic(), h.chunk_count(), h.next_record_number(), h.major_version(), h.minor_version(), c.log_first_record_number(), c.first_record().record_num())\"  (python-evtx 0.8.1); file -b -> '2 chunks (no. 1 in use)'",
+ "decoy": false,
+ "member": "v32_two_chunks.evtx"
+}

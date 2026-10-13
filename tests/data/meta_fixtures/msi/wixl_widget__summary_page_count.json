@@ -1,0 +1,8 @@
+{
+ "field": "msi.summary_page_count",
+ "expected": "200",
+ "generator_cmd": "LD_LIBRARY_PATH=tools/msitools/usr/lib/x86_64-linux-gnu tools/msitools/usr/bin/wixl -o a.msi a.wxs (Product Version=2.4.1 Manufacturer='Contoso Ltd', Package Description='Widget Installer Package' Comments='Built for fixtures' Keywords='Installer,Widget') ; cp a.msi tests/data/meta_fixtures/msi/wixl_widget.bin",
+ "oracle_cmd": "LD_LIBRARY_PATH=tools/msitools/usr/lib/x86_64-linux-gnu tools/msitools/usr/bin/msiinfo suminfo tests/data/meta_fixtures/msi/wixl_widget__summary_page_count.bin -> Version: 200 (PID 14 PageCount)",
+ "decoy": false,
+ "member": "installer-001.msi"
+}

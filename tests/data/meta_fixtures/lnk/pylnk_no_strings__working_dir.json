@@ -1,0 +1,8 @@
+{
+ "field": "lnk.working_dir",
+ "expected": "none",
+ "generator_cmd": "cp tests/data/meta_fixtures/lnk/GENERATOR_pylnk3.py.txt gen.py; /usr/bin/python3 -I gen.py a.lnk b.lnk  (pylnk3 0.4.3 writer, tools/pylib: for_file + specify_local_location + LinkInfo; tracker = ExtraData_Unparsed sig 0xA0000003 MachineID; naive times are local +08:00 -> stored FILETIME UTC)",
+ "oracle_cmd": "bin/exiftool -j tests/data/meta_fixtures/lnk/pylnk_no_strings__working_dir.bin (LocalBasePath, WorkingDirectory, CommandLineArguments, MachineID, TargetFileSize, CreateDate +08:00 -> UTC) ; /usr/bin/python3 -I -c \"import sys;sys.path.insert(0,'tools/pylib');import LnkParse3;d=LnkParse3.lnk_file(open('tests/data/meta_fixtures/lnk/pylnk_no_strings__working_dir.bin','rb')).get_json();print(d['header']['r_link_flags'],d['header']['r_file_flags'],d['header']['creation_time'],d['link_info'],d['data'],d['extra'])\"  -> tag/StringData/TrackerDataBlock absent (LinkFlags lacks HasWorkingDir/HasArguments; no 0xA0000003 block)",
+ "decoy": true,
+ "member": "invoice.lnk"
+}

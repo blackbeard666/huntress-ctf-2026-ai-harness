@@ -1,0 +1,9 @@
+{
+ "encoding": "linerev-rot13-base64",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "generator_cmd": "bash rotb64_gen.sh rotb64_decoy.bin 64 'A-Za-z' 'N-ZA-Mn-za-m' 1 '{\"c2\":\"203.0.113.77:8080\",\"campaign\":\"half-turn\",\"sleep\":20,\"flag\":\"flag{r0t13_0n_t0p_0f_b64}\"}' 1   # blob: printf header + crc32 from gzip trailer; text: coreutils base64 -w N | tr | util-linux rev (per line)",
+ "oracle_cmd": "txt=$(tr -c 'A-Za-z0-9+/=\\n' '\\n' < rotb64_decoy.bin | grep -aE '^.{6,}$'); echo $(grep -boa -F -- \"$(printf '%s\\n' \"$txt\" | head -1)\" rotb64_decoy.bin | head -1 | cut -d: -f1) $(printf '%s\\n' \"$txt\" | /usr/bin/rev | tr 'N-ZA-Mn-za-m' 'A-Za-z' | base64 -d | perl -0777 -ne '($m,$v,$k,$l,$c)=unpack(\"a4CCvV\",$_);print \"$m $l $c \",substr($_,12,$l)') $(printf '%s\\n' \"$txt\" | /usr/bin/rev | tr 'N-ZA-Mn-za-m' 'A-Za-z' | base64 -d | tail -c +13 | gzip -c | tail -c8 | head -c4 | od -An -tu4)",
+ "oracle_output": "2516 HCFG 95 4282739806 {\"c2\":\"203.0.113.77:8080\",\"campaign\":\"half-turn\",\"sleep\":20,\"flag\":\"flag{r0t13_0n_t0p_0f_b64}\"} 4282739807   <header crc != gzip crc32 of body: corrupted blob>",
+ "decoy": true
+}

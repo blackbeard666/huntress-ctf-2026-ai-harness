@@ -1,0 +1,10 @@
+{
+ "codec": "base91",
+ "plain": null,
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwIQ==",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup!' | base64  # base64 impostor, not basE91",
+ "oracle_cmd": "printf %s \"$encoded\" | PYTHONPATH=tools/pybase91 python3 -I -c 'import sys,base91;print(bytes(base91.decode(sys.stdin.read())).decode())'  # PyPI base91 decoder  # basE91 decodes it to non-UTF-8 junk bytes",
+ "oracle_plain": "95cd92fd19c7893aa59e8ac0694a33a1b11f0b572892dc11625b4f733922a192885b58"
+}

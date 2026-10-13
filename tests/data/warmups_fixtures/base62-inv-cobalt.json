@@ -1,0 +1,9 @@
+{
+ "codec": "base62-inv",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-77",
+ "encoded": "mYKAU0M82cZPLkPYHzwE6Uc5J8hsHptuQbeeZlMNTyLzwiFb6xgHVwUEKdleN96fczAioBedjIxQeZCF4Jk80OzHlFVpyT9PGSlLnt59zuiNYQtbEipOsNiGQoJHCeqK67wWh2ya3",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/base62_cyberchef.mjs enc '0-9a-zA-Z'  # CyberChef 'To Base62' (npm cyberchef, bignumber.js)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;sys.path.insert(0,'tools/pybase62');import base62;cs=base62.CHARSET_DEFAULT if sys.argv[1].startswith('0-9A') else base62.CHARSET_INVERTED;print(base62.decodebytes(sys.stdin.read().strip(),charset=cs).decode())\" '0-9a-zA-Z'  # PyPI pybase62==1.0.0 decodebytes",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-77",
+ "expected": "match"
+}

@@ -1,0 +1,52 @@
+# stdlib-only EVTX writer for the evtx fixtures (run: python3 -I GENERATOR_evtx_struct.py <outdir>).
+# Layout per libevtx "Windows XML Event Log (EVTX)" spec: 4096-byte ElfFile header (CRC32 of bytes 0..119 at 124),
+# then 64 KiB ElfChnk chunks (512-byte header, CRC32 of 0..119 + 128..511 at 124), event records at chunk+0x200
+# ("**\0\0", size, EventRecordID u64, FILETIME, <payload>, size copy). Payload is a stub (not real BinXML): the
+# fixtures only exercise header fields, which the oracle (python-evtx 0.8.1) reads from the headers too.
+import struct
+import sys
+import zlib
+
+
+def chunk(first_id, nrec):
+    recs = b""
+    for i in range(nrec):
+        body = b"\x0f\x01\x01\x00" + b"\x00" * 20            # BinXML fragment header stub
+        size = 24 + len(body) + 4
+        recs += struct.pack("<IIQQ", 0x2A2A, size, first_id + i, 0x01D9C0A0B0C0D0E0 + i) + body + struct.pack("<I", size)
+    last_off = 0x200 + (len(recs) - (len(recs) // nrec))
+    hdr = bytearray(512)
+    struct.pack_into("<8sQQQQIIII", hdr, 0, b"ElfChnk\x00", first_id, first_id + nrec - 1, first_id, first_id + nrec - 1,
+                     128, last_off, 0x200 + len(recs), zlib.crc32(recs))
+    struct.pack_into("<I", hdr, 120, 0)
+    struct.pack_into("<I", hdr, 124, zlib.crc32(bytes(hdr[:120]) + bytes(hdr[128:512])))
+    c = bytes(hdr) + recs
+    return c + b"\x00" * (0x10000 - len(c))
+
+
+def evtx(minor, chunks, flags=0):
+    ids = chunks            # list of (first_id, nrec)
+    next_id = ids[-1][0] + ids[-1][1]
+    h = bytearray(4096)
+    struct.pack_into("<8sQQQIHHHH", h, 0, b"ElfFile\x00", 0, len(ids) - 1, next_id, 128, minor, 3, 4096, len(ids))
+    struct.pack_into("<I", h, 120, flags)
+    struct.pack_into("<I", h, 124, zlib.crc32(bytes(h[:120])))
+    return bytes(h) + b"".join(chunk(f, n) for f, n in ids)
+
+
+def evt_legacy():
+    # Windows NT/XP .evt ELF_LOGFILE_HEADER (0x30 bytes, "LfLe") -- a classic-event-log impostor renamed .evtx.
+    h = struct.pack("<I4sIIIIIIIIII", 0x30, b"LfLe", 1, 1, 0x30, 0x30, 1, 1, 0x80000, 0, 0x80000, 0x30)
+    return h + b"\x00" * 0x200
+
+
+if __name__ == "__main__":
+    out = sys.argv[1]
+    files = {
+        "v31_one_chunk.bin": evtx(1, [(1, 5)]),
+        "v32_two_chunks.bin": evtx(2, [(101, 7), (108, 97)], flags=1),   # flags=1 dirty
+        "decoy_evt_legacy.bin": evt_legacy(),
+    }
+    for name, b in files.items():
+        with open(out + "/" + name, "wb") as f:
+            f.write(b)

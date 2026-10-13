@@ -250,7 +250,13 @@ def ghidra_decompile(path, timeout=300):
 # of JSON ^ xor_key; crc32 is over the PLAIN JSON. Storage seen so far: raw (.hcfg section, .NET FieldRVA, rodata, FPC
 # .data) and base64 text (jar constant pool, Swift/Nim/D/Crystal string literals). hcfg_scan() also covers the next
 # plausible mutations: hex (plain / with separators / \x / 0x), base64url, base32, base85, ascii85, UTF-16LE/BE text of
-# raw/base64/hex/base32/base85, reversed raw / reversed base64, single-byte-xor'd base64 / raw, zlib/gzip/raw-deflate.
+# raw/base64/hex/base32/base85, reversed raw / reversed base64, single-byte-xor'd base64 / raw, zlib/gzip/raw-deflate,
+# multi-byte xor: multixor-body (plain header, body ^ repeating 1-16 B key) / multixor-raw (whole blob ^ 2-16 B key
+# stored right before it; offset = first xor'd byte, detail key@<key offset>), base64-custom (base64 under a shuffled
+# 64-char alphabet stored as a literal in the binary; offset = first char of the text, detail alphabet@<its offset>).
+# rot13-/swapcase-/rot13-swapcase-base64 (letters transformed), linerev-[<x>-]base64 / reversed-<x>-base64 (each line of
+# the wrapped text reversed; offset = first stored char). split-base64/-base64url/-base32/-hex: the text cut into several
+# string literals in FILE order (NUL/padding/short separators between; offset = first char of the first chunk).
 #
 # OFFSET LAW (Hit.offset, decimal FILE offset -- what `hcfg_offset` asks for):
 #   raw              the 'H' of the magic                          GM-confirmed (D12 FPC 82928)
@@ -265,6 +271,8 @@ def ghidra_decompile(path, timeout=300):
 HCFG_MAGIC = b"HCFG"
 HCFG_SCAN_EXT = os.environ.get("HCTF_HCFG_SCAN_EXT", "1") != "0"   # 0: only the D13 encodings (_LEGACY)
 HCFG_DEFLATE_BRUTE_MAX = int(os.environ.get("HCTF_HCFG_DEFLATE_MAX", str(1 << 20)))   # headerless deflate brute cap
+HCFG_B64ALPHA_MAX = int(os.environ.get("HCTF_HCFG_B64ALPHA_MAX", str(32 << 20)))   # alphabet-run chars examined
+HCFG_MXOR_MAX = int(os.environ.get("HCTF_HCFG_MXOR_MAX", str(8 << 20)))   # whole-blob multi-byte xor cap (~65 ms/MiB)
 _CONFIRMED = ("raw", "base64")
 _LEGACY = ("raw", "base64", "base64url", "hex")   # what the D13 solver's native scan already decodes
 
@@ -434,6 +442,85 @@ def _trie(words):
     return b"|".join(parts)
 
 
+_UP, _LO = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ", b"abcdefghijklmnopqrstuvwxyz"
+_ROT13 = bytes.maketrans(_UP + _LO, _UP[13:] + _UP[:13] + _LO[13:] + _LO[:13])
+_SWAPC = bytes.maketrans(_UP + _LO, _LO + _UP)
+# letter-only transforms of base64 text (involutions: the same table decodes); anchor -> (name, table, line-reversed)
+_ROTB64 = {b"RGNES": ("", None, True)}   # plain base64 reversed per line: shares the rev-b64 anchor
+for _n, _t in (("rot13", _ROT13), ("swapcase", _SWAPC), ("rot13-swapcase", _ROT13.translate(_SWAPC))):
+    _ROTB64[b"SENGR".translate(_t)] = (_n, _t, False)
+    _ROTB64[b"SENGR".translate(_t)[::-1]] = (_n, _t, True)
+_B64LINES = re.compile(rb"[A-Za-z0-9+/_\-=\r\n]+")
+
+
+def _rotb64_at(data, i, a, emit):
+    """ROT13 / case-swapped base64 (any line wrapping) whose transformed 'SENGR' sits at data[i]; or the same text --
+    plain base64 too -- with EVERY LINE reversed (anchor = the reversed 'SENGR' ending the first stored line). Offset =
+    first stored char (the first line's first char); one-line reversal is 'reversed-<x>', multi-line 'linerev-<x>'
+    (plain one-line = the existing 'reversed-base64', not re-emitted)."""
+    name, tbl, rev = _ROTB64[a]
+    if not rev:
+        m = _B64.rx.match(data, i, i + 90000)
+        r = _decode_text(_B64, re.sub(rb"[\r\n]", b"", m.group(0)).translate(tbl)) if m else None
+        if r:
+            emit(i, name + "-base64", r[0], "")
+        return
+    e = i + 5
+    mm = _B64REV.match(data[max(0, e - 90000):e][::-1])   # back to the start of the first stored line
+    s = e - len(mm.group(0)) if mm else e
+    m = _B64LINES.match(data, s, s + 90000)
+    lines = re.findall(rb"[^\r\n]+", m.group(0)) if m else []
+    if not lines or s + len(lines[0]) != e:
+        return
+    text = b"".join(ln[::-1] for ln in lines)
+    r = _decode_text(_B64, text.translate(tbl) if tbl else text)
+    if r and (r[1] > len(lines[0].strip(b"=")) or name):
+        multi = r[1] > len(lines[0].strip(b"="))
+        emit(s, ("linerev-" if multi else "reversed-") + (name + "-" if name else "") + "base64", r[0], "")
+
+
+_HEXT = _Text("hex", rb"[0-9A-Fa-f]+", lambda n: 2 * n, binascii.unhexlify)
+# split literals: anchor -> codec; chunks = maximal alphabet runs joined across gaps of <= _SPLIT_GAP non-alphabet bytes
+_SPLIT = ((b"SENGR", _B64), (b"JBBUMR", _B32), (b"jbbumr", _B32), (b"48434647", _HEXT))
+_SPLIT_GAP = 32
+
+
+def _split_at(data, i, codec, emit):
+    """Encoded text cut into several string literals laid out in FILE ORDER (C `const char *parts[]` / char[][N]
+    tables: NUL terminators + alignment padding, or any short non-alphabet separator between chunks) whose first chunk
+    holds the magic anchor at data[i]. Joins up to 512 chunks until the header's length is covered; only multi-chunk
+    texts are emitted ('split-<codec>', offset = first char of the first chunk, detail chunks=N)."""
+    parts, need, p = [], None, i
+    while len(parts) < 512:
+        m = codec.rx.match(data, p, p + 90000)
+        if not m:
+            break
+        parts.append(re.sub(rb"[\r\n]", b"", m.group(0)))
+        text = b"".join(parts)
+        if need is None and len(text) >= codec.chars(12):
+            try:
+                head = codec.dec(text[:codec.chars(12)])
+            except (binascii.Error, ValueError):
+                return
+            if head[:4] != HCFG_MAGIC:
+                return
+            need = codec.chars(_need(head))
+        if need is not None and len(text) >= need:
+            break
+        nxt = codec.rx.search(data, m.end(), m.end() + _SPLIT_GAP + 1)
+        if not nxt:
+            break
+        p = nxt.start()
+    if len(parts) < 2 or need is None or len(b"".join(parts[:-1])) >= need:
+        return
+    r = _decode_text(codec, b"".join(parts))
+    if r:
+        name = codec.name
+        if codec is _B64 and re.search(rb"[-_]", b"".join(parts)[:r[1]]):
+            name = "base64url"
+        emit(i, "split-" + name, r[0], f"chunks={len(parts)}")
+
+
 def _anchor_table():
     lit = {HCFG_MAGIC: ("raw", None), b"GFCH": ("rev-raw", None), b"RGNES": ("rev-b64", None)}
     for a, codec in _TEXT_ANCHORS:
@@ -483,6 +570,113 @@ def _inflate(mv, p, wbits, budget=None):
             return None
         out = out[at:at + 70000]
     return out, at
+
+
+_PRINTABLE = frozenset(range(0x20, 0x7f)) | {9, 10, 13}
+_PMASK = [sum(1 << k for k in range(256) if b ^ k in _PRINTABLE) for b in range(256)]   # keys keeping b printable
+_JSONW = {**{c: 2 for c in b"bcfgkmpquvwxyz0123456789:,._-/ "}, **{c: 4 for c in b'etaoinsrhld"'},
+          **{c: 1 for c in b"ABCDEFGHIJKLMNOPQRSTUVWXYZ{}[]\\\n"}}   # JSON config byte weights (key ranking)
+
+
+def _xor_rep(buf, key):
+    """buf ^ key repeated from buf[0]."""
+    k = (key * (len(buf) // len(key) + 1))[:len(buf)]
+    return (int.from_bytes(buf, "little") ^ int.from_bytes(k, "little")).to_bytes(len(buf), "little")
+
+
+def _mxor_body(data, i):
+    """(blob, key) for a plain HCFG header at data[i] whose body is JSON ^ a repeating 1-16 byte key (any header xor
+    byte folded in), body at +12 or after the key stored at +12; crc-confirmed. Key per column: the bytes that keep the
+    whole column printable, best JSON-looking first (top pick, then one-column swaps). None if nothing checks out."""
+    head = data[i:i + 12]
+    if len(head) < 12 or not head[6:8].strip(b"\0"):
+        return None
+    n, crc, k1 = int.from_bytes(head[6:8], "little"), int.from_bytes(head[8:12], "little"), head[5]
+
+    def ok(body, key):
+        if len(key) != kl:
+            return None
+        x = _xor_rep(body, key)   # body = JSON ^ key, or JSON ^ header xor byte ^ key (stored key, k1 not folded in)
+        for plain in (x, x.translate(bytes(c ^ k1 for c in range(256)))):
+            if len(plain) == n and zlib.crc32(plain) == crc:
+                return head + bytes(p ^ k1 for p in plain), key
+        return None
+
+    for kl in range(1, 17):
+        for kat, bat in ((i + 12, i + 12 + kl), (i - kl, i + 12), (i + 12 + n, i + 12)):   # key stored next to it:
+            r = ok(data[bat:bat + n], data[max(0, kat):kat + kl])   # between header and body / before magic / after
+            if r:
+                return r
+        body, cols = data[i + 12:i + 12 + n], []
+        if len(body) < max(n, 2 * kl):
+            continue
+        for j in range(kl):
+            col, m = body[j::kl], -1
+            for b in set(col):
+                m &= _PMASK[b]
+            # known plaintext of a JSON object: '{' first, '}' last, '"' second (compact) -- pinned / preferred
+            pin = [x for x, at in ((body[0] ^ 0x7B, 0), (body[-1] ^ 0x7D, (n - 1) % kl)) if at == j]
+            if pin:
+                m &= 1 << pin[0] if all(x == pin[0] for x in pin) else 0
+            if not m:
+                break
+            cand = sorted((k for k in range(256) if m >> k & 1),
+                          key=lambda k, col=col: -sum(_JSONW.get(b ^ k, 0) for b in col))[:4]
+            q = body[1] ^ 0x22
+            if j == 1 % kl and q in cand[1:]:
+                cand.remove(q)
+                cand.insert(0, q)
+            cols.append(cand)
+        else:
+            best = bytes(c[0] for c in cols)
+            alts = [(j, alt) for j, c in enumerate(cols) for alt in c[1:]]
+            tries = [best] + [best[:j] + bytes([alt]) + best[j + 1:] for j, alt in alts]
+            tries += [bytes(alt if j == a else alt2 if j == a2 else c for j, c in enumerate(best))
+                      for x, (a, alt) in enumerate(alts) for a2, alt2 in alts[x + 1:] if a2 != a][:400]
+            for key in tries:
+                r = ok(body, key)
+                if r:
+                    return r
+    return None
+
+
+_B64STD = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+_B64ALPHA_CLS = bytes(int(c in b"+/-_.!~*$@#%&?:;," or chr(c).isalnum() and c < 0x80) for c in range(256))
+
+
+def _b64_alphabets(data, budget, late):
+    """64-char windows of 64 DISTINCT characters (custom base64 alphabets) in `data`: [(offset, alphabet)], at most 4 per
+    run and 32 overall, skipping standard / url-safe ones (and their rotations); examines at most `budget` run characters. Runs of
+    alphabet-class bytes via translate + find (a {64,} regex was 1.2 s / 67 MB); every 64-window contains a whole
+    aligned 32-block, so only blocks of 32 distinct chars get the per-char sliding check."""
+    out, seen = [], {_B64STD, _B64STD[:62] + b"-_"}
+    t, ones = data.translate(_B64ALPHA_CLS), b"\x01" * 64
+    p = t.find(ones)
+    while p >= 0 and len(out) < 32:
+        e = t.find(b"\0", p)
+        e = len(data) if e < 0 else e
+        run, wins = data[p:e], []
+        budget -= len(run)
+        if budget < 0 or late():
+            break
+        for k in range(0, len(run) - 31, 32):
+            if len(set(run[k:k + 32])) < 32:
+                continue
+            base, last, lo = max(0, k - 32), {}, 0   # sliding window without repeats over [k-32, k+64)
+            for j, c in enumerate(run[base:k + 64]):
+                lo = max(lo, last.get(c, -1) + 1)
+                last[c] = j
+                if j - lo >= 63 and base + j - 63 not in wins:
+                    wins.append(base + j - 63)
+            if len(wins) >= 4:
+                break
+        for w in wins[:4]:
+            a = run[w:w + 64]
+            if a not in seen and a not in _B64STD * 2 and a not in (_B64STD[:62] + b"-_") * 2:   # std rotations
+                seen.add(a)
+                out.append((p + w, a))
+        p = t.find(ones, e)
+    return out[:32]
 
 
 def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False):
@@ -541,6 +735,7 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False):
             if r:   # stored text starts with the '=' padding that ends the (un-reversed) base64
                 tail = run[r[1]:r[1] + 2]
                 emit(e - r[1] - (len(tail) - len(tail.lstrip(b"="))), "reversed-base64", r[0])
+            _rotb64_at(data, i, a, emit)   # the same text reversed per LINE (multi-line only)
         elif kind == "u16raw":    # 'H\0C\0F\0G' (LE at i, BE at i-1): latin-1 widened raw blob
             for be, st in ((False, i), (True, i - 1)):
                 if st < 0 or (be and data[st] != 0) or (not be and data[i + 7:i + 8] != b"\0"):
@@ -576,6 +771,23 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False):
         return _rank(hits)
     # expensive passes, only while nothing valid was found
     if not valid() and not late():
+        # ROT13 / case-swapped base64, optionally reversed per line: one bytes.find per transformed 'SENGR' (kept out
+        # of the anchor regex -- first bytes e/r/s/f made that pass ~33% slower)
+        for a in [a for a in _ROTB64 if a != b"RGNES"]:
+            i = data.find(a)
+            while i >= 0 and not late():
+                _rotb64_at(data, i, a, emit)
+                i = data.find(a, i + 1)
+    if not valid() and not late():
+        # base64/base32/hex text split across several adjacent literals (NUL / padding / short separators between)
+        for a, codec in _SPLIT:
+            i, n = data.find(a), 0
+            while i >= 0 and n < 256 and not late():   # cap: anchor floods (decoy tables) stay bounded
+                _split_at(data, i, codec, emit)
+                i, n = data.find(a, i + 1), n + 1
+            if valid():
+                break
+    if not valid() and not late():
         # single-byte xor of the stored form: x[i]^x[i+1] is key-independent -> find the xor-diff of 'SENGR' / 'HCFG'
         x = int.from_bytes(data, "little")
         diff = (x ^ (x >> 8)).to_bytes(len(data), "little")
@@ -595,6 +807,45 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False):
                         if r:
                             emit(i, name, r[0], f"xor={k:#04x}")
                 i = diff.find(pat, i + 1)
+    if not valid() and not late():
+        # repeating 1-16 byte xor of the BODY under a plain header (a raw hit whose crc failed): key from known plaintext
+        for h in [h for h in hits if h.encoding == "raw" and not h.crc_ok][:64]:
+            r = _mxor_body(data, h.offset)
+            if r:
+                emit(h.offset, "multixor-body", r[0], f"key={r[1].hex()}")
+            if valid() or late():
+                break
+    if not valid() and not late() and len(data) <= HCFG_MXOR_MAX:
+        # whole blob ^ repeating 2-16 byte key stored right BEFORE it: data[t]^data[t+L] is key-free over [key][blob^key]
+        x = int.from_bytes(data, "little")
+        for kl in (4, 8, 16, 2, 3, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15):
+            if late():
+                break
+            pat = bytes(HCFG_MAGIC[j] ^ (HCFG_MAGIC[j - kl] if j >= kl else 0) for j in range(4))
+            diff = (x ^ (x >> 8 * kl)).to_bytes(len(data), "little")
+            t = diff.find(pat)
+            while 0 <= t and not late():
+                key, s = data[t:t + kl], t + kl
+                blob = _xor_rep(data[s:s + _need(_xor_rep(data[s:s + 12], key))], key)
+                if any(key) and (_parse_blob(blob) or (0,) * 6)[5]:   # crc-valid only: zero runs match trivially
+                    emit(s, "multixor-raw", blob, f"key={key.hex()} key@{t}")
+                t = diff.find(pat, t + 1)
+            if valid():
+                break
+    if not valid() and not late():
+        # base64 under a custom alphabet stored as a 64-char literal: map 'SENGR' through it, decode back to standard
+        for aoff, alpha in _b64_alphabets(data, HCFG_B64ALPHA_MAX, late):
+            anchor, back = b"SENGR".translate(bytes.maketrans(_B64STD, alpha)), bytes.maketrans(alpha, _B64STD)
+            rx = re.compile(b"[" + b"".join(re.escape(bytes([c])) for c in alpha) + rb"\r\n]+")
+            i = data.find(anchor)
+            while i >= 0 and not late():
+                m = rx.match(data, i, i + 90000)
+                r = _decode_text(_B64, re.sub(rb"[\r\n]", b"", m.group(0)).translate(back))
+                if r:
+                    emit(i, "base64-custom", r[0], f"alphabet@{aoff}")
+                i = data.find(anchor, i + 1)
+            if valid() or late():
+                break
     if not valid() and not late() and len(data) <= HCFG_DEFLATE_BRUTE_MAX:
         # headerless dynamic-Huffman deflate (what zlib emits for a ~400 B blob): try every plausible block start
         for m in _DEFLATE_DYN.finditer(data):

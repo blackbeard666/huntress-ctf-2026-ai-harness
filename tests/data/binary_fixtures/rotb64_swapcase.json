@@ -1,0 +1,13 @@
+{
+ "encoding": "swapcase-base64",
+ "expected_offset": 2516,
+ "expected_config": {
+  "c2": "192.0.2.44:9001",
+  "campaign": "flip-flop",
+  "sleep": 60,
+  "flag": "flag{sW4pC4s3_b64}"
+ },
+ "generator_cmd": "bash rotb64_gen.sh rotb64_swapcase.bin 40 'A-Za-z' 'a-zA-Z' 0 '{\"c2\":\"192.0.2.44:9001\",\"campaign\":\"flip-flop\",\"sleep\":60,\"flag\":\"flag{sW4pC4s3_b64}\"}'   # blob: printf header + crc32 from gzip trailer; text: coreutils base64 -w N | tr",
+ "oracle_cmd": "txt=$(tr -c 'A-Za-z0-9+/=\\n' '\\n' < rotb64_swapcase.bin | grep -aE '^.{6,}$'); echo $(grep -boa -F -- \"$(printf '%s\\n' \"$txt\" | head -1)\" rotb64_swapcase.bin | head -1 | cut -d: -f1) $(printf '%s\\n' \"$txt\" | tr 'a-zA-Z' 'A-Za-z' | base64 -d | perl -0777 -ne '($m,$v,$k,$l,$c)=unpack(\"a4CCvV\",$_);print \"$m $l $c \",substr($_,12,$l)') $(printf '%s\\n' \"$txt\" | tr 'a-zA-Z' 'A-Za-z' | base64 -d | tail -c +13 | gzip -c | tail -c8 | head -c4 | od -An -tu4)",
+ "oracle_output": "2516 HCFG 86 2972980395 {\"c2\":\"192.0.2.44:9001\",\"campaign\":\"flip-flop\",\"sleep\":60,\"flag\":\"flag{sW4pC4s3_b64}\"} 2972980395"
+}

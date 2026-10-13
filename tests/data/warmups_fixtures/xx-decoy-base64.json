@@ -1,0 +1,10 @@
+{
+ "codec": "xxencode",
+ "plain": null,
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwIQ==",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup!' | base64  # '=' is outside the xx alphabet",
+ "oracle_cmd": "ruby -e 'p (ARGV[0].unpack1(\"u\") rescue \"none\")' \"$encoded\"  # ruby/perl unpack are lenient: judged by alphabet + length char",
+ "oracle_plain": null
+}

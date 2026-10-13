@@ -1,0 +1,14 @@
+{
+ "encoding": "base64-custom",
+ "expected_offset": 3633,
+ "expected_config": {
+  "c2": "198.51.100.23:4444",
+  "campaign": "shuffle-deck",
+  "sleep": 30,
+  "flag": "flag{cust0m_alph4b3t_b64}"
+ },
+ "generator_cmd": "bash b64c_gen.sh b64c_symbols.bin '0123456789!@#$%&*?abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRST' '0123456789!@#$%&*?abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRST' '{\"c2\":\"198.51.100.23:4444\",\"campaign\":\"shuffle-deck\",\"sleep\":30,\"flag\":\"flag{cust0m_alph4b3t_b64}\"}' 'type..eq.runtime.go:'   # blob: printf header + crc32 from gzip trailer; text: coreutils base64 -w0 | tr STD->custom",
+ "oracle_cmd": "enc=$(strings -n 120 b64c_symbols.bin | tail -1); echo $(grep -boa -F -- \"$enc\" b64c_symbols.bin | head -1 | cut -d: -f1) $(printf %s \"$enc\" | tr '0123456789!@#$%&*?abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRST' 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/' | base64 -di | perl -0777 -ne '($m,$v,$k,$l,$c)=unpack(\"a4CCvV\",$_);print \"$m $l $c \",substr($_,12,$l)')",
+ "oracle_output": "3633 HCFG 99 226461434 {\"c2\":\"198.51.100.23:4444\",\"campaign\":\"shuffle-deck\",\"sleep\":30,\"flag\":\"flag{cust0m_alph4b3t_b64}\"}",
+ "detail": "alphabet@2068 glued to a preceding Go-style string (no separator), non-alnum symbols"
+}

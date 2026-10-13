@@ -1,0 +1,7 @@
+{
+ "field": "dotnet.assembly_name",
+ "expected": "Contoso.Telemetry.Agent",
+ "generator_cmd": "dotnet build -c Release (SDK 10.0.112) of a net10.0 Library csproj: AssemblyName=Contoso.Telemetry.Agent, Version=3.14.159.26, A.cs = [assembly: System.Reflection.AssemblyCulture(\"de-DE\")] + classes Alpha, Beta, Gamma{Nested}; out/Contoso.Telemetry.Agent.dll copied verbatim",
+ "oracle_cmd": "tools/pwsh/pwsh -NoProfile -File dn-oracle.ps1 <bin>  (System.Reflection.Metadata PEReader/MetadataReader: MetadataVersion, GetModuleDefinition().Name, TypeDefinitions.Count, GetAssemblyDefinition() Name/Version/Culture; System.Reflection.AssemblyName.GetAssemblyName(p).GetPublicKeyToken() as x2 hex, FullName) -> assembly_name",
+ "decoy": false
+}

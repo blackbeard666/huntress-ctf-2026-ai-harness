@@ -1,0 +1,7 @@
+{
+ "field": "dotnet.public_key_token_hex",
+ "expected": "cc7b13ffcd2ddd51",
+ "generator_cmd": "cp /usr/lib/dotnet/shared/Microsoft.NETCore.App/10.0.12/System.Buffers.dll (Microsoft-built, strong-named runtime facade, unmodified)",
+ "oracle_cmd": "tools/pwsh/pwsh -NoProfile -File dn-oracle.ps1 <bin>  (System.Reflection.Metadata PEReader/MetadataReader: MetadataVersion, GetModuleDefinition().Name, TypeDefinitions.Count, GetAssemblyDefinition() Name/Version/Culture; System.Reflection.AssemblyName.GetAssemblyName(p).GetPublicKeyToken() as x2 hex, FullName) -> public_key_token_hex",
+ "decoy": false
+}

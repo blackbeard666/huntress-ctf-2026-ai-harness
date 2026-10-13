@@ -1,0 +1,7 @@
+{
+ "field": "dotnet.metadata_version",
+ "expected": "none",
+ "generator_cmd": "cp .venv/lib/python3.12/site-packages/setuptools/cli-32.exe (native MSVC PE, no CLI header)",
+ "oracle_cmd": "tools/pwsh/pwsh -NoProfile -File dn-oracle.ps1 <bin>  (System.Reflection.Metadata PEReader/MetadataReader: MetadataVersion, GetModuleDefinition().Name, TypeDefinitions.Count, GetAssemblyDefinition() Name/Version/Culture; System.Reflection.AssemblyName.GetAssemblyName(p).GetPublicKeyToken() as x2 hex, FullName) -> MetadataReader throws 'PE image does not have metadata'; objdump -p shows CLR Runtime Header 0 0",
+ "decoy": true
+}

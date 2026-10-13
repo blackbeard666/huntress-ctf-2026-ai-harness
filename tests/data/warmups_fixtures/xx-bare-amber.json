@@ -1,0 +1,9 @@
+{
+ "codec": "xxencode",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "hHaZXNG-rPr7f64FZMqxYOKtb65FcOLAURq3mPLJk6G-IPm-nPqlqNGkUQrJW\nhPKZo65FcOLAUNLVVMrEUMKtnRqJm65Fj65FcNG-5MKpZ62pVQrFZQXcUMKpW\nANL6hNa3gMqxi9HEm\n",
+ "generator_cmd": "perl -e 'print pack(\"u\", $ARGV[0])' \"$plain\" | tr '`!-_' '+\\-0-9A-Za-z'  # xx = uu with the '+-0-9A-Za-z' alphabet",
+ "oracle_cmd": "ruby -e 'print ARGV[0].tr(\"+\\\\-0-9A-Za-z\", \"`!-_\").unpack1(\"u\")' \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

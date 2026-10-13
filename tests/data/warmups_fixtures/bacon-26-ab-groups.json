@@ -1,0 +1,9 @@
+{
+ "codec": "bacon26-AB",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "ABBAB ABAAA AAABA AABAA BABBA ABBBA BAAAB ABABA AAABB AABAA AAABA ABBBA AAABB ABAAA ABBAB AABBA BAABB AABBB ABAAA BAABA BABBA AAAAA BAAAB ABBAA BABAA ABBBB BAABB ABBBA BAABA ABBBA ABABB BABAB AABAA BAABA BABAA AAAAB ABBAA ABAAA BAABB BAABB AABBB ABAAA BAABA AABAA BABBB AAAAA AAABA BAABB AAAAA ABBAB BAABA BABBA AABAA BAAAB BAABB ABBBA BAABB AABBB AABAA AABBA AAAAA ABBAA AABAA ABBAA AAAAA BAABA BAABB AABAA BAAAB AAAAA ABBAA AAAAB AABAA BAAAB AABAB AAAAA ABABB AAABA ABBBA ABBAB",
+ "generator_cmd": "printf %s \"$plain\" | CC=tools/npm-cyberchef/node_modules/cyberchef node tests/data/warmups_fixtures/bacon_cyberchef.mjs enc 'Complete' 'A/B' '0' '0'  # CyberChef 'Bacon Cipher Encode' (npm cyberchef)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=tools/npm-cyberchef/node_modules/cyberchef node tests/data/warmups_fixtures/bacon_cyberchef.mjs dec 'Complete' 'A/B' '0' '0'  # CyberChef 'Bacon Cipher Decode'",
+ "oracle_plain": "NICEWORKDECODINGTHISWARMUPTOSOLVESUBMITTHISEXACTANSWERTOTHEGAMEMASTERAMBERFALCON",
+ "expected": "match"
+}

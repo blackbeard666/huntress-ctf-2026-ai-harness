@@ -1,0 +1,8 @@
+{
+ "field": "msi.package_code_guid",
+ "expected": "none",
+ "generator_cmd": "head -c 3072 /bin/true > tests/data/meta_fixtures/msi/decoy_elf_renamed.bin  (ELF renamed impostor .msi)",
+ "oracle_cmd": "file tests/data/meta_fixtures/msi/decoy_elf_renamed.bin -> ELF 64-bit LSB (not a CFB/MSI); msiinfo suminfo fails to open it",
+ "decoy": true,
+ "member": "installer-002.msi"
+}

@@ -1,0 +1,30 @@
+import sys, struct, datetime
+sys.path.insert(0, "tools/pylib")
+import pylnk3
+from io import BytesIO
+
+def tracker(machine):
+    d = struct.pack("<II", 0x58, 0) + machine.encode().ljust(16, b"\0") + bytes(range(64))
+    return pylnk3.ExtraData_Unparsed(signature=0xA0000003, data=d)
+
+def mk(out, path, args, wd, machine, ct, size, attrs_flags):
+    l = pylnk3.for_file(path, arguments=args, work_dir=wd)
+    l.link_flags.HasLinkInfo = True
+    l._link_info = pylnk3.LinkInfo()
+    l.link_flags.ForceNoLinkInfo = False
+    l.specify_local_location(path, drive_type=pylnk3.DRIVE_FIXED, drive_serial=0x1234ABCD, volume_label="OS")
+    for a in attrs_flags:
+        l.file_flags[a] = True
+    l.creation_time = ct
+    l.access_time = ct + datetime.timedelta(days=1, seconds=7)
+    l.modification_time = ct + datetime.timedelta(hours=3)
+    l.file_size = size
+    if machine:
+        l.extra_data = pylnk3.ExtraData(blocks=[tracker(machine)])
+    buf = BytesIO(); l.write(buf); open(out, "wb").write(buf.getvalue())
+
+mk(sys.argv[1], r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+   "-NoP -W Hidden -Enc SQBFAFgA", r"C:\Users\Public", "desktop-7f3k2q",
+   datetime.datetime(2026, 9, 21, 14, 3, 55), 450560, ["archive"])
+mk(sys.argv[2], r"D:\Tools\invoice_viewer.exe", None, None, None,
+   datetime.datetime(2025, 1, 2, 3, 4, 5), 123, ["read_only", "hidden"])

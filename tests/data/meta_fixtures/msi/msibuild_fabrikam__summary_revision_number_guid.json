@@ -1,0 +1,8 @@
+{
+ "field": "msi.summary_revision_number_guid",
+ "expected": "{9E8D7C6B-5A49-4382-B1A0-FEDCBA987654}",
+ "generator_cmd": "LD_LIBRARY_PATH=tools/msitools/usr/lib/x86_64-linux-gnu tools/msitools/usr/bin/msibuild b.msi -s 'Fabrikam Agent Setup' 'Fabrikam Inc.' 'x64;1031' '{9E8D7C6B-5A49-4382-B1A0-FEDCBA987654}' ; cp b.msi tests/data/meta_fixtures/msi/msibuild_fabrikam.bin",
+ "oracle_cmd": "LD_LIBRARY_PATH=tools/msitools/usr/lib/x86_64-linux-gnu tools/msitools/usr/bin/msiinfo suminfo tests/data/meta_fixtures/msi/msibuild_fabrikam__summary_revision_number_guid.bin -> Revision number (UUID)",
+ "decoy": false,
+ "member": "installer-001.msi"
+}

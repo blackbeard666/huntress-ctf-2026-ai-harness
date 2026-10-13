@@ -1,0 +1,10 @@
+{
+ "codec": "uuencode",
+ "plain": null,
+ "encoded": "M3FEC92!W;W)K(&1E8V]D:6YG",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "a real perl pack('u') first line truncated to 25 chars: length char 'M' promises 45 bytes = 60 chars",
+ "oracle_cmd": "ruby -e 'p (ARGV[0].unpack1(\"u\") rescue \"none\")' \"$encoded\"  # ruby/perl unpack are lenient: judged by alphabet + length char",
+ "oracle_plain": null
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "base62",
+ "plain": null,
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwISs/Pw==",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -c 'import base64;print(base64.b64encode(b\"Nice work decoding this warmup!+??\").decode())'  # base64 with '/' and '=' padding",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;sys.path.insert(0,'tools/pybase62');import base62;cs=base62.CHARSET_DEFAULT if sys.argv[1].startswith('0-9A') else base62.CHARSET_INVERTED;print(base62.decodebytes(sys.stdin.read().strip(),charset=cs).decode())\" '0-9A-Za-z'  # pybase62 raises ValueError (invalid character) -> not base62",
+ "oracle_plain": null
+}

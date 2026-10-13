@@ -1,0 +1,9 @@
+{
+ "codec": "bacon26-01-keep",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: velvet-quokka-73",
+ "encoded": "01101010000001000100 10110011101000101010 0001100100000100111000011010000110100110 10011001110100010010 101100000010001011001010001111! 1001101110 1001001110010111010100100, 100101010000001011000100010011 10011001110100010010 0010010111000000001010011 000000110110010101100010010001 1001101110 100110011100100 00110000000110000100 011000000010010100110010010001: 101010010001011101010010010011-100001010001110010100101000000-73",
+ "generator_cmd": "printf %s \"$plain\" | CC=tools/npm-cyberchef/node_modules/cyberchef node tests/data/warmups_fixtures/bacon_cyberchef.mjs enc 'Complete' '0/1' '1' '0'  # CyberChef 'Bacon Cipher Encode' (npm cyberchef)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=tools/npm-cyberchef/node_modules/cyberchef node tests/data/warmups_fixtures/bacon_cyberchef.mjs dec 'Complete' '0/1' '0' '0'  # CyberChef 'Bacon Cipher Decode'",
+ "oracle_plain": "NICEWORKDECODINGTHISWARMUPTOSOLVESUBMITTHISEXACTANSWERTOTHEGAMEMASTERVELVETQUOKKA",
+ "expected": "match"
+}

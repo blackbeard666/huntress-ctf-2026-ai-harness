@@ -1,0 +1,8 @@
+{
+ "field": "cab.version",
+ "expected": "1.3",
+ "generator_cmd": ".venv/bin/python -I -c \"import cabarchive; a=cabarchive.CabArchive(); a.set_id=0x4d2f; a['Setup\\\\agent.dll']=cabarchive.CabFile(b'MZ'+bytes(300)); a['README.TXT']=cabarchive.CabFile(b'read me\\r\\n'); open('tests/data/meta_fixtures/cab/cabarchive_setid.bin','wb').write(a.save(compress=False))\"  (cabarchive 0.2.5 writer)",
+ "oracle_cmd": "od -An -tu1 -j24 -N2 tests/data/meta_fixtures/cab/cabarchive_setid__version.bin  -> versionMinor versionMajor",
+ "decoy": false,
+ "member": "cabarchive_setid.cab"
+}

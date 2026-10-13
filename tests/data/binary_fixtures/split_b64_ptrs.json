@@ -1,0 +1,13 @@
+{
+ "encoding": "split-base64",
+ "expected_offset": 8216,
+ "expected_config": {
+  "c2": "198.51.100.23:4443",
+  "campaign": "jigsaw",
+  "sleep": 45,
+  "flag": "flag{p13c3s_0f_th3_str1ng}"
+ },
+ "generator_cmd": "bash split_gen.sh split_b64_ptrs.bin base64 16 ptrs '{\"c2\":\"198.51.100.23:4443\",\"campaign\":\"jigsaw\",\"sleep\":45,\"flag\":\"flag{p13c3s_0f_th3_str1ng}\"}'   # blob: printf header + crc32 from gzip trailer; text: coreutils base64/base32 / xxd -p | fold -w N; gcc -O2 C program with one literal per chunk",
+ "oracle_cmd": "s=$(strings -n 4 -t d split_b64_ptrs.bin | awk '/ SENGR/{p=1} p&&$2!~/^[A-Za-z0-9+/=]+$/{exit} p'); echo $(printf '%s\\n' \"$s\" | head -1 | awk '{print $1}') $(printf '%s\\n' \"$s\" | awk '{printf \"%s\", $2}' | base64 -d | perl -0777 -ne '($m,$v,$k,$l,$c)=unpack(\"a4CCvV\",$_);print \"$m $l $c \",substr($_,12,$l)') $(printf '%s\\n' \"$s\" | awk '{printf \"%s\", $2}' | base64 -d | tail -c +13 | gzip -c | tail -c8 | head -c4 | od -An -tu4)",
+ "oracle_output": "8216 HCFG 94 1610663578 {\"c2\":\"198.51.100.23:4443\",\"campaign\":\"jigsaw\",\"sleep\":45,\"flag\":\"flag{p13c3s_0f_th3_str1ng}\"} 1610663578"
+}

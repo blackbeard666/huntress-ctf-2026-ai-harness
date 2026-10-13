@@ -1,0 +1,9 @@
+{
+ "codec": "uuencode",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "encoded": "begin 644 flag.txt\nM3FEC92!W;W)K(&1E8V]D:6YG('1H:7,@=V%R;75P(2!4;R!S;VQV92P@<W5B\nM;6ET('1H:7,@97AA8W0@86YS=V5R('1O('1H92!'86UE($UA<W1E<CH@8V]B\n,86QT+6AE<F]N+3<W\n`\nend\n",
+ "generator_cmd": "perl -e 'print \"begin 644 flag.txt\\n\", pack(\"u\", $ARGV[0]), \"`\\nend\\n\"' \"$plain\"",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys,codecs;print(codecs.decode(sys.stdin.buffer.read(),\"uu\").decode(),end=\"\")'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "expected": "match"
+}

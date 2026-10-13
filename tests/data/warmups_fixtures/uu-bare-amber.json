@@ -1,0 +1,9 @@
+{
+ "codec": "uuencode",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "M3FEC92!W;W)K(&1E8V]D:6YG('1H:7,@=V%R;75P(2!4;R!S;VQV92P@<W5B\nM;6ET('1H:7,@97AA8W0@86YS=V5R('1O('1H92!'86UE($UA<W1E<CH@86UB\n,97(M9F%L8V]N+30R\n",
+ "generator_cmd": "perl -e 'print pack(\"u\", $ARGV[0])' \"$plain\"",
+ "oracle_cmd": "ruby -e 'print ARGV[0].unpack1(\"u\")' \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

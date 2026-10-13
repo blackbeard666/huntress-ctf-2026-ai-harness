@@ -1,0 +1,8 @@
+{
+ "field": "cab.cfheader_set_id_u16_hex",
+ "expected": "0x0000",
+ "generator_cmd": "printf 'hello world\\n' > readme.txt; head -c 5000 /bin/true > payload.bin; mkdir sub; echo cfg > sub/config.ini; LD_LIBRARY_PATH=tools/msitools/usr/lib/x86_64-linux-gnu tools/msitools/usr/bin/gcab -c -z t1.cab readme.txt payload.bin sub/config.ini; cp t1.cab tests/data/meta_fixtures/cab/gcab_three.bin",
+ "oracle_cmd": "7z l -slt tests/data/meta_fixtures/cab/gcab_three__cfheader_set_id_u16_hex.bin | grep '^ID ='  (decimal setID -> hex u16)",
+ "decoy": false,
+ "member": "gcab_three.cab"
+}

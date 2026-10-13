@@ -1,0 +1,13 @@
+{
+ "encoding": "multixor-raw",
+ "expected_offset": 9009,
+ "expected_config": {
+  "c2": "10.13.37.5:8443",
+  "beacon": "mxor-quail",
+  "sleep": 45,
+  "flag": "flag{d1d_y0u_kn0w_x0r_r3p34ts}"
+ },
+ "generator_cmd": "python3 -c 'import zlib,struct,itertools,random;random.seed(2);p=b'{\"c2\":\"10.13.37.5:8443\",\"beacon\":\"mxor-quail\",\"sleep\":45,\"flag\":\"flag{d1d_y0u_kn0w_x0r_r3p34ts}\"}';k1=0x21;K=bytes.fromhex(\"a1b2c3d4e5f60718\");blob=b\"HCFG\"+struct.pack(\"<BBHI\",2,k1,len(p),zlib.crc32(p))+bytes(a^k1 for a in p);f=bytes(random.randrange(256) for _ in range(9001));open(\"mxor_raw_k8.bin\",\"wb\").write(f+K+bytes(a^b for a,b in zip(blob,itertools.cycle(K)))+f[:300])'",
+ "oracle_cmd": "perl -0777 -ne '@k=(0xa1,0xb2,0xc3,0xd4,0xe5,0xf6,0x07,0x18);$o=index($_,pack(\"C*\",@k))+8;$i=0;$x=join\"\",map{chr(ord($_)^$k[$i++%8])}split//,substr($_,$o,600);($k1,$n)=unpack(\"x5Cv\",$x);print \"$o \".join(\"\",map{chr(ord($_)^$k1)}split//,substr($x,12,$n)).\"\\n\"' mxor_raw_k8.bin",
+ "oracle_output": "9009 {\"c2\":\"10.13.37.5:8443\",\"beacon\":\"mxor-quail\",\"sleep\":45,\"flag\":\"flag{d1d_y0u_kn0w_x0r_r3p34ts}\"}"
+}

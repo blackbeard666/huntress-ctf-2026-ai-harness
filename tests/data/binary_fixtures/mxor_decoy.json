@@ -1,0 +1,9 @@
+{
+ "encoding": "multixor-body",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "generator_cmd": "python3 -c 'import zlib,struct,itertools,random;random.seed(4);p=b'{\"c2\":\"10.13.37.5:8443\",\"beacon\":\"mxor-quail\",\"sleep\":45,\"flag\":\"flag{d1d_y0u_kn0w_x0r_r3p34ts}\"}';K=b\"K3y!x\";body=bytes(random.randrange(256) for _ in p);blob=b\"HCFG\"+struct.pack(\"<BBHI\",1,0x5a,len(p),zlib.crc32(p)^1)+bytes(a^0x5a for a in p);f=bytes(random.randrange(256) for _ in range(3000));open(\"mxor_decoy.bin\",\"wb\").write(f+b\"HCFG\"+struct.pack(\"<BBHI\",1,0x5a,len(p),zlib.crc32(p))+body+f[:100]+K+bytes(a^b for a,b in zip(blob,itertools.cycle(K))))'",
+ "oracle_cmd": "python3 -c 'import sys,zlib,struct,json;d=open(sys.argv[1],\"rb\").read();o=d.find(b\"HCFG\");v,k,n,c=struct.unpack_from(\"<BBHI\",d,o+4);print(o,\"crc-of-any-printable-body-impossible:\",all(32<=b<127 for b in d[o+12:o+12+n]))' mxor_decoy.bin",
+ "oracle_output": "3000 crc-of-any-printable-body-impossible: False",
+ "decoy": true
+}
