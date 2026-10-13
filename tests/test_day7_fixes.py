@@ -859,3 +859,9 @@ assert _dc("56-ztrauq-tesnus-ytsez :retsaM emaG eht ot rewsna tcaxe siht timbus"
     == "submit this exact answer to the Game Master: zesty-sunset-quartz-65"
 assert _dc("x qrpbqvat") == "k decoding" and _dc("-vfynaq-crgny-75") == "-island-petal-75"
 print("ok  decode_chunk: plain reversed fragments ('NN-word' slug tail / reversed sentence) read back-to-front")
+
+# Day 13 "Opposite Day": a whole-blob ATBASH line (a<->z mirror) beats every rot-N and the reversal; the best rot-N
+# ('ovisx-tviskr-fbvecw-31', rot22) was submitted and REJECTED before the branch existed.
+assert _dc("Mrxv dlip wvxlwrmt gsrh dzinfk! Gl hloev, hfynrg gsrh vczxg zmhdvi gl gsv Tznv Nzhgvi: szmwb-xzmwov-jfziga-31") \
+    == "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: handy-candle-quartz-31"
+print("ok  decode_chunk: Atbash (a<->z mirror) free text competes with rot-N / reversal")

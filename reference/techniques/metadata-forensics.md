@@ -1,4 +1,4 @@
-# metadata-forensics — technique log (days 1-12; updated after every day)
+# metadata-forensics — technique log (days 1-13; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -13,11 +13,12 @@ How this lane has looked so far (observations, not guarantees):
   PE (`pe.address_of_entry_point_rva_hex`) and DE-escalated: zip = the exe only, contract = 1 field (TT 1, Mastery 2x1).
   Day 11 kept that shape and moved INTO the PE's resources (`pe.version_original_filename`, VS_VERSIONINFO string).
   Day 12 switched to a NEW member family -- a 5 KB .NET dll (`d12-dotnet-NNN-dotnet-mvid-guid`) -- and went into the CLI
-  METADATA tables (Module.Mvid via the #GUID heap); same 1-field / TT 1 / Mastery 2x1 shape.
+  METADATA tables (Module.Mvid via the #GUID heap); same 1-field / TT 1 / Mastery 2x1 shape. Day 13 another NEW
+  family -- a 9.7 KB MSI (OLE/CFB, `d13-msi-NNN-msi-product-code-guid`) -> the Property table; same 1-field shape.
 - A new `<fmt>.<field>` family each day: identity (name/size/hashes) -> magic prefix -> `text.utf8_bom_present` ->
   `jpeg.sof_dimensions_pixels` -> `png.ihdr_dimensions_pixels` -> `pdf.header_version` -> `zip.eocd_total_entries` ->
   `zip.central_directory_member_names` -> `pe.coff_machine_u16_hex` -> `pe.address_of_entry_point_rva_hex` ->
-  `pe.version_original_filename` -> `dotnet.mvid_guid`. Since Day 3 the question literally names the field
+  `pe.version_original_filename` -> `dotnet.mvid_guid` -> `msi.product_code_guid`. Since Day 3 the question literally names the field
   (`Determine <fmt>.<field> for <member>`); answer ids read `dNN-<fmt>-NNN-<fmt>-<field>` (`.`/`_` -> `-`). NOTE the
   `dNN` is the drop/member family, not the day the field appeared: Day 8's new field came as `d07-zip-001-zip-central-
   directory-member-names`; Day 9's as `d09-pe-001-pe-coff-machine-u16-hex` (new member family -> new `dNN`); Day 10's as `d09-pe-001-pe-address-of-entry-point-rva-hex` (same exe family), Day 11's as
@@ -43,7 +44,8 @@ How this lane has looked so far (observations, not guarantees):
   (single 0x00065bd0, TT 0x00063a80, Mastery 0x00063510 / 0x00065bd0). D11: the PE's ARCHITECTURE re-rolled per variant
   (single 386 0x014c, TT amd64 0x8664, Mastery arm64 0xaa64 + 386) and OriginalFilename follows it (`pe-base-<goarch>.exe`).
   D12: every dll is 5,120 B with the same layout; the MVID, the sha256 and the `Huntress.Managed.<12HEX>` type name re-roll
-  per variant (managed-001..004).
+  per variant (managed-001..004). D13: four installer-00N.msi with DIFFERENT bytes/sha256 (same 9,728 B) but the SAME
+  ProductCode in every mode -- the "collision" is the point; the answer can legitimately repeat across sets.
   Never cache a value across sets.
 - **Field-set size** -- grows AND shrinks: D7 TT/Mastery went 1 -> 11 fields (Mastery 22); D8 12 in every mode (Mastery
   5 x 12); D9 13 (Mastery 5 x 13); D10 back to ONE field everywhere (Mastery 2 sets x 1, zip = the lone exe). Families: the day's field +
@@ -79,6 +81,8 @@ How this lane has looked so far (observations, not guarantees):
 | `elf.*` / `macho.*` siblings (promised "several architectures", not yet asked) | ELF: `\x7fELF`, EI_DATA @5 picks endianness, e_machine u16 @18. Mach-O: `feedface`/`feedfacf` (either byte order) cputype u32 @4; fat `cafebabe` = BE nfat_arch @4 + 20-B entries (Java .class shares `cafebabe`; small nfat_arch = fat). Emit hex in the same `0x%0Nx` width as the field's `uNN` |
 | `dotnet.*` / `.dll` "Mono/.Net assembly" / "module identities", "rebuilds vs renames" | CLI metadata, stdlib only (no dnfile in-window): PE data dir 14 (CLI header) -> MetaData RVA -> `BSJB` root -> stream headers (`#~`, `#Strings`, `#GUID`, `#Blob`). `#~`: HeapSizes byte @+6 (bit1 = 4-byte GUID index), Valid u64 @+8, row counts @+24; Module row 0 = Generation u16, Name (str idx), **Mvid (guid idx, 1-based)** -> 16 B at #GUID+(i-1)*16 -> `str(uuid.UUID(bytes_le=..))`. Cross-check: `monodis`/`ilspycmd -il` print `.module` + `// MVID: {..}` |
 | `pe.version_*` / "version resources remember what the binaries called themselves" | VS_VERSIONINFO StringFileInfo: `pefile.PE(data=b, fast_load=True)`; `pe.parse_data_directories(directories=[DIRECTORY_ENTRY['IMAGE_DIRECTORY_ENTRY_RESOURCE']])`; walk `pe.FileInfo[..][..].StringTable[..].entries` (bytes keys). Match the id tail to the key ignoring case/`-_` (`original-filename` -> `OriginalFilename`). Shell: `strings -e l f.exe | grep -A1 OriginalFilename` |
+| `msi.*` / `.msi` / "installers copied, renamed, repackaged", "stable product identities" | OLE CFB (`d0 cf 11 e0`). Fast path: `strings -n 6 x.msi \| grep -aoE 'ProductCode\{[0-9A-F-]{36}\}'`. Exact: CFB streams -> demangle names (0x3800-0x4840 base-64 packing) -> `!_StringPool`/`!_StringData` (refs 3 B wide if pool header bit 0x80000000) -> `!Property` column-major (all keys, then all values). `msiinfo`/`msidump` NOT installed; `olefile` is in the venv. Reference: `challenges/day13/metadata-product-placement/solver/solve.py` `msi_property` |
+| GUID field (`*-guid`) | spelling follows the SOURCE: a stored STRING (MSI ProductCode) verbatim, braces + uppercase; a binary GUID (.NET #GUID) -> `uuid.UUID(bytes_le=..)` lowercase, no braces. answer_format ("8-4-4-4-12 including hyphens") does not settle braces |
 | exe-extension decoy (`.exe` that is text/zip/PNG, `MZ` with no/garbled `PE\0\0` at e_lfanew) | header absent -> literal `none` if the syntax offers it; never fall back to a later `PE\0\0` hit or the extension |
 | "impostor", "renamed", "disguise" | trust magic bytes at offset 0; a matching string deeper in the file is a decoy |
 | answer_format syntax "use the literal none only when the requested field is absent" | field missing (e.g. no header) -> `none` |
@@ -86,33 +90,12 @@ How this lane has looked so far (observations, not guarantees):
 | Mastery `set1.`..`setN.` ids, artifact `delivery N: <zip> -> <member>` or `<zip>-0N.zip -> <member>` | resolve each set's member separately; see delivery layouts below |
 
 ## Day by day
-**Day 1 — You Must Be This Hash to Ride** (identity: filename / size-bytes / md5 / sha1 / sha256 via `zipfile` +
-`hashlib`; CORRECT ~36 s). Mastery zip-of-zips first seen.
-
-**Day 2 — Looks Can Be Deceiving** (`magic-prefix-hex-16`: first 16 bytes, lowercase hex, no `0x`; ~34 s). TT `readme.exe`
-was text, Mastery `.bin` was a PDF. TT question text named a member that didn't exist -> `lib.common.find_artifact_hinted`;
-zip-of-zips broke name lookup -> `find_artifact` recurses nested zips.
-
-**Day 3 — BOM Voyage** (`text.utf8_bom_present` enum `true`/`false`). First 3 bytes == `EF BB BF`; CORRECT ~28 s.
-Mastery `export-001-with-bom.txt` really had a BOM -- decide from bytes, never the name. utf16/32 variants unconfirmed.
-
-**Day 4 — Picture This** (`jpeg.sof_dimensions_pixels`). Walk segments by declared length to SOFn (one SOF0 @0x88) ->
-`<width>x<height>` (GM-confirmed; not EXIF/filename dims). Rotation flavor not asked. CORRECT ~38 s; TT/Mastery in-window.
-
-**Day 5 — Chunk Norris** (`png.ihdr_dimensions_pixels`). IHDR @0x10 BE u32 width,height -> `<width>x<height>` (Day 4
-form by analogy, accepted). IDAT/CRC/after-IEND "passenger" checks were diagnostics only. CORRECT ~33 s, first try.
-
-**Day 6 — Portable Deception** (`pdf.header_version`): `xxd -l 16` -> `%PDF-1.4` -> bare `x.y` (~34 s). Adopted, not
-GM-judged: header must be at offset 0 (deeper `%PDF-` -> `none`); catalog `/Version` never changes it. Mastery: two
-same-named downloads (`delivery N:` refs); pre-fetched contract listed 003/004, live asked 006/007.
-
-**Day 7 — Seven-Zip, No Relation** (`zip.eocd_total_entries` integer of the INNER `evidence-drop-001.zip`): EOCD u16
-@+10 = `2` (the claim; all variants honest, claim-vs-walk disagreement never exercised). Stdlib `struct` EOCD parser,
-57 s first try; TT 3 entries, Mastery 4 / 5.
-
-**Day 8 — What's in the Box?** (`zip.central_directory_member_names`, kind `json`): 5-member kit (note/jpg/png/pdf/D7
-inner zip), single = 12 fields. Inner zip's CD names verbatim in CD order, full paths (basenames collide):
-`["room-01/item-1.txt","room-02/item-1.txt"]`, compact JSON. "Impossible provenance" decoy unexercised. ~27 s first try.
+**Days 1-8** (one field each, all first-try ~27-57 s unless noted): D1 identity (filename/size/md5/sha1/sha256; Mastery
+zip-of-zips first seen) -> D2 `magic-prefix-hex-16` (TT `readme.exe` was text, Mastery `.bin` a PDF; stale question member ->
+`find_artifact_hinted`) -> D3 `text.utf8_bom_present` (`*-with-bom.txt` really had one -- bytes, not name) -> D4 JPEG SOFn
+`<w>x<h>` -> D5 PNG IHDR `<w>x<h>` -> D6 `pdf.header_version` bare `x.y` (Mastery two same-named `delivery N:` downloads) -> D7
+`zip.eocd_total_entries` of the INNER zip (stdlib EOCD parse; TT 3, Mastery 4/5) -> D8 `zip.central_directory_member_names`
+compact JSON of full CD paths in CD order (5-member kit, 12 fields).
 
 **Day 9 — Built Different** (`pe.coff_machine_u16_hex`, `pattern` lowercase `0x`): kit + `telemetry-agent-001.exe`, an
 honest Go 1.22 386 PE32 (e_lfanew 0x80, 7 sections, opt magic 0x10b). COFF Machine u16 -> `0x014c` (padded; not `i386`,
@@ -141,6 +124,17 @@ share names, versions, and source ancestry -- but their module identities remain
   generation). First try. Reference parser: `challenges/day12/metadata-managed-expectations/solver/solve.py` `dotnet_mvid`.
 - TT window 30 s, in_window 0.95 s (managed-002); Mastery 2 sets (003/004), in_window 1.5 s. Both CORRECT first try.
 
+**Day 13 — Product Placement** (`msi.product_code_guid`, kind `pattern` "canonical GUID text in 8-4-4-4-12 hexadecimal
+form, including hyphens", norm `trim`, id `d13-msi-001-msi-product-code-guid`). Prompt: "Installers were copied, renamed,
+and repackaged. Recover stable product identities, distinguish revisions from different products, and find the collision."
+- Artifact: 3.3 KB zip -> `installer-001.msi` (9,728 B, msitools 0.103 OLE/CFB with an embedded `artifact.cab`).
+- Key insight: answer = Property table `ProductCode` row VERBATIM `{DD1A80D5-0250-4F4D-B289-13096D633C61}`. Decoys in the
+  same file: UpgradeCode, Component.ComponentId, SummaryInformation RevisionNumber (= PackageCode).
+- Worker: stdlib CFB + MSI string-pool reader (regex `ProductCode(\{...\})` fallback). First submit stripped the braces
+  (answer_format never mentions them) -> REJECTED; braced -> CORRECT. Start -> CORRECT ~76 s, 1 wrong (~19 s lost).
+- TT (50 s window, in_window 0.96 s) and Mastery 2 sets (80 s, 2.55 s) CORRECT first try; every variant had the same
+  ProductCode. "Revisions vs products" / "collision" were never asked -- only the ProductCode.
+
 ## GM answer conventions learned
 - Filenames: exact base name incl. extension, no directory. Sizes: base-10 integer, no units. Hashes: hex, case ignored.
 - Byte prefixes: lowercase hex, contiguous, exactly 2N chars (`xxd -p -l N`).
@@ -159,9 +153,12 @@ share names, versions, and source ancestry -- but their module identities remain
   binary lane's `entry_point` was accepted UNPADDED (`0x401040`) -- different lane, different generator.
 - GUIDs (`dotnet.mvid_guid`): .NET `Guid.ToString()` form -- first 3 groups byte-swapped from the heap bytes (bytes_le),
   lowercase, hyphenated, no braces (D12 all modes; `knowledge.DOTNET_MVID_GUID`, playbook metadata `guid` entry).
+- MSI GUIDs (`msi.product_code_guid`): the Property string VERBATIM -- uppercase WITH braces `{DD1A80D5-...}` (D13 all
+  modes; `knowledge.MSI_PRODUCT_CODE_GUID`). Bare form REJECTED. GUID spelling follows the source, not answer_format.
 - Version-resource strings (`pe.version_<field>`): the StringFileInfo value verbatim, incl. extension (`pe-base-386.exe`,
   D11 all modes). `knowledge.PE_VERSION_STRING_KEY` maps id tail -> resource key.
-- Rejected spellings: `0x65bd0` for pe.address_of_entry_point_rva_hex (D10 single; unpadded) -- the only one, days 1-12.
+- Rejected spellings: `0x65bd0` for pe.address_of_entry_point_rva_hex (D10 single; unpadded); brace-less
+  `DD1A80D5-0250-4F4D-B289-13096D633C61` for msi.product_code_guid (D13 single).
 - `knowledge.py`: `JPEG_DIMENSIONS_FMT`, `PNG_DIMENSIONS_FMT`, `PDF_HEADER_VERSION_FMT`, `ZIP_EOCD_TOTAL_ENTRIES_FMT`,
   `ZIP_CD_MEMBER_NAMES_FMT`, `PE_COFF_MACHINE_U16_HEX_FMT`, `PE_ENTRY_POINT_RVA_HEX_FMT` (+`_REJECTED`), `BOOL`;
   `playbook` metadata `hex` entry carries the padding rule.
@@ -208,6 +205,9 @@ share names, versions, and source ancestry -- but their module identities remain
   handler -- D12's worker re-typed the identity/PE branches next to the .NET parser (~50 s of generation).
 - Executable fields: don't take `file`'s "Intel i386" / `pefile` machine names / the Go GOARCH token as the answer; the
   metadata field is the raw u16. And require `PE\0\0` exactly at e_lfanew -- an `MZ` stub alone is not a PE (decoy).
+- Normalizing a stored value (D13, cost a wrong submit + 19 s): the solver's `_guid()` stripped MSI braces because
+  answer_format said "8-4-4-4-12". When the field is a stored string, emit it verbatim; reshape only what the format
+  explicitly forbids.
 - Hex width (D10, cost a wrong submit + 17 s): `"0x%x"` drops leading zeros; print `0x%0{2*size}x` for the field's
   struct size. RVA vs VA: `_rva` = the raw field, never ImageBase + it.
 - Fastest path for a new carry-over day: copy the previous day's solver (which already answers every earlier family) and

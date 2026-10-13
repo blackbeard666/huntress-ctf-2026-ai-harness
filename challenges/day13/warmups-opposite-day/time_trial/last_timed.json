@@ -1,0 +1,25 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "73243202-3675-41ce-a7d5-f8fa8e90eab5",
+  "window": 30.0,
+  "elapsed": 1.89,
+  "in_window": 1.24,
+  "phases": {
+    "start": 0.65,
+    "download": 0.48,
+    "solve": 0.02,
+    "submit": 0.74
+  },
+  "routed": "homebase (window 30s)",
+  "novel_labels": {},
+  "deadline": "2026-10-13T13:04:49.225Z",
+  "verified": {
+    "message": "perky-cloud-birch-14"
+  },
+  "attempts_remaining": 252,
+  "run_for_time": true,
+  "hall_of_fame_eligible": true,
+  "ranked_attempts_remaining": 252,
+  "variant_fresh": true
+}

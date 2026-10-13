@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-13-crystal-dns-configuration",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Crystal Clear",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-13-crystal-dns-configuration",
+    "time_trial": "binary-reverse-engineering-day-13-crystal-dns-configuration/time_trial",
+    "mastery": "binary-reverse-engineering-day-13-crystal-dns-configuration/mastery"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "base": "warmups-day-13",
+  "lane": "warmups",
+  "name": "👶 Opposite Day",
+  "ids": {
+    "single_solve": "warmups-day-13",
+    "time_trial": "warmups-day-13/time_trial",
+    "mastery": "warmups-day-13/mastery"
+  }
+}

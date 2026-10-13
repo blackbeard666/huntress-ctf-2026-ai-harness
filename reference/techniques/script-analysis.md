@@ -1,4 +1,4 @@
-# script-analysis — technique log (days 1-12; updated after every day)
+# script-analysis — technique log (days 1-13; updated after every day)
 
 How this lane has looked so far (these are observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -8,7 +8,8 @@ How this lane has looked so far (these are observations, not guarantees):
   -> +Node.js `.mjs` and 2 Bash advanced-syntax fixtures (d7, 469) -> +8 PHP "polyglot" files, 4 WSF/HTA/PHP-webshell "host"
   files and 2 more Bash advanced fixtures (d8, 615) -> +4 Lua polyglot, 2 host files (SCT scriptlet, Lua OpenResty), 2 more
   Bash advanced (d9, 695) -> +4 WMI MOF polyglot + 2 Bash advanced (d10, 753) -> +4 TypeScript `.ts` polyglot + 2 Bash
-  advanced (d11, 811) -> +4 AutoIt `.au3` polyglot (d12, 855; no new Bash fixture). The title names the new language; the prompt names its NEW roles.
+  advanced (d11, 811) -> +4 AutoIt `.au3` polyglot (d12, 855; no new Bash fixture) -> +4 AppleScript `.applescript` polyglot + 2 Bash
+  advanced (d13, 913; 105 members). The title names the new language; the prompt names its NEW roles.
 - From day 2 on, every fixture hides a **self-describing plan**: `v=N|steps=a,b|adapter=..|stage_count=..|campaign_id=..|<indicators>`. It sits behind a codec, usually named in a `Codec_<id>` / `CODEC_<id>` / `rem HUNTRESS-CODEC:` const of the form `rep|transform|key`. Most exact_text answers are plan values copied verbatim.
   From D8 there is also a **`v=3` plan**: it carries `role=` and `attack=` itself, and sits behind a `HUNTRESS_ANALYSIS_V1:<TAG>-` comment.
 - The hard part is **naming CODE SHAPE**: control-flow, expansion, and function/invocation/property styles. These are GM synthetic labels that are not in the plan. Role and scenario are enums, so read `accepted_values`.
@@ -17,7 +18,7 @@ How this lane has looked so far (these are observations, not guarantees):
   tree is impossible", D10 "name the subscription that would really survive a reboot", D11 "flag the call whose claimed
   purpose the evidence doesn't support"). No question asked for that outlier/impossible stage. Answer the contract ids only.
 - Time Trial windows are about 5-13 s (30 s on d1). Mastery has `setN.` ids: 2 sets on d2-d7, **5 sets on d8 (3075 ids, 22 s)
-  and d9 (3475 ids, 30 s)**, 2 sets again on d10 (1506 ids, 32 s), d11 (1622 ids, 11 s) and d12 (1710 ids, 30 s). The artifact was `evidence-0N.zip`, or (d6) `delivery N: evidence.zip`, or (d7-d9) ONE download
+  and d9 (3475 ids, 30 s)**, 2 sets again on d10 (1506 ids, 32 s), d11 (1622 ids, 11 s), d12 (1710 ids, 30 s) and d13 (1826 ids, 80 s). The artifact was `evidence-0N.zip`, or (d6) `delivery N: evidence.zip`, or (d7-d9) ONE download
   `evidence-01.zip` that holds every `evidence-0N.zip`. Same-named deliveries: pair them by sha256. Timed question texts
   carry `[assigned-artifact-sha256:<hex>]` per member -- usable to verify the bytes you got.
 
@@ -38,8 +39,8 @@ Each miss below cost one failed timed attempt + a ~45-90 s generalize cycle (D6 
   separators and unhex; otherwise base64 (also reversed). Accept only a result starting `v=`. The tag = `obfuscation_profile`.
   `lib.codec.find_codecs(src)` returns the v=3 plan (tag -> rep: B64 base64_literal, HEX/FRAG hex_compact, HB64 hex_base64).
 - **Plan carrier host syntax (v=3)** -- the marker sits in whatever comment the host uses: `//` (PHP, JS, HTA, WSF, SCT CDATA,
-  MOF, TS), `--` (Lua, D9), `;` (AutoIt, D12), and the descriptor as `$descriptor_<id>`, `var descriptor_<id>`, `local
-  descriptor_<id>`, `Global Const $descriptor_<id> = ".."` (AutoIt). Parse rule: regex
+  MOF, TS), `--` (Lua D9, AppleScript D13), `;` (AutoIt, D12), and the descriptor as `$descriptor_<id>`, `var descriptor_<id>`, `local
+  descriptor_<id>`, `Global Const $descriptor_<id> = ".."` (AutoIt), `property descriptor_<id> : ".."` (AppleScript). Parse rule: regex
   `HUNTRESS_ANALYSIS_V\d+\s*:\s*(\w*)-?\s*([^\s"'<>\]]+)` over the raw bytes, independent of comment syntax and extension.
 - **Numeric literal radix** -- the same array/constant may be decimal `23,7`, hex `0x17,0x07`, or a separator-joined
   string decoded with `parseInt(x, R)` / `int(x, R)`: READ THE RADIX FROM THE CODE, never guess it from the digits
@@ -55,7 +56,7 @@ Each miss below cost one failed timed attempt + a ~45-90 s generalize cycle (D6 
   execfile_node/fork_module/spawn_file; persistence systemd_descriptor/npm_lifecycle_descriptor) -- always plan-verbatim.
 - **No-new-axis days**: D8 (TT 129bf46a, Mastery 07d5051a), D9 (TT dfcfb51e, Mastery 1dfd4cf6), D10, D11 (TT f99ea9ec,
   Mastery 2d722b36; the 4 TS files kept FRAG/HEX/B64/HB64 + adapters + next_language in every delivery) and D12 (TT d629142e,
-  Mastery 635241de; the 4 `.au3` files the same): structure, tags,
+  Mastery 635241de; the 4 `.au3` files the same), D13 (TT c739141b, Mastery 78b00cf3; 4 `.applescript` + 2 Bash): structure, tags,
   role/attack/steps/profiles identical to the single; only values re-rolled. All CORRECT first try.
 
 ## Recognition cues -> first move
@@ -110,35 +111,26 @@ missed 15 ids (new reps unicode_escapes/json_numbers/`xor_hex|cd`); 26b7da83 sav
 derive**. New fields host-profile, obfuscation, stage-profile, next-language. ~2 min 10 s, 2 submits, 0 wrong (6 ids lost
 to hyphenated family names -> longest-known-suffix field parse). TT 2.1 s / Mastery 5.6 s in-window, both 1st try.
 
-**D9 All the World's a Stager (+4 Lua polyglot, +2 hosts SCT/OpenResty, +2 Bash advanced; 695)** and **D10 Bind Over Matter
-(+4 WMI MOF polyglot, +2 Bash advanced; 753)**: v=3 marker in `--` / `//` comments; flavour ("impossible family tree",
-"subscription that survives a reboot") unasked. The marker-routed solver answered both unchanged, 0 wrong, all modes 1st try.
+**D9-D12 (+Lua/SCT/OpenResty, +WMI MOF, +TypeScript, +AutoIt polyglots; +2 Bash advanced most days; 695 -> 855 ids)**: every
+new file is an ordinary v=3 fixture (`HUNTRESS_ANALYSIS_V1:<TAG>-` in `--`/`//`/`;` comments + `descriptor_<id>`); the
+narrative prompts ("impossible family tree", "subscription that survives a reboot", "flag the call whose claimed purpose ...",
+"decide which pairing is genuine") were never asked. Polyglot set per language: role benign_utility/downloader/launcher/
+staged_chain, attack none/T1105/T1059/T1059, adapter local_parser/http_client/process_builder/operation_graph, obfuscation
+plain_hex/base64/hex_base64/fragmented_hex, next_language powershell/jscript/batch/vbscript, campaign `<LANG>-<8hex>`. Bash
+advanced: nameref_dispatch/declare_nameref, dynamic_file_descriptor/allocated_file_descriptor (D11; `decimal_csv|`). The
+marker-routed carried-over solver answered every day unchanged, 0 wrong, all modes first try (D12 TT 7.19 s in-window, 5.33 s
+of it GM submit latency on 855 ids).
 
-**D11 By Any Other Name (+4 TypeScript polyglot, +2 Bash advanced; 811 ids, 95 members)**: prompt "These scripts reach for
-native APIs by name, but a name isn't a behavior. Map each reference to the receipt-backed action it models, and flag the call
-whose claimed purpose the evidence doesn't support." Flavour only: no flag/mismatch question; the PS samples' `$nativeTypes`
-scenario mapping is unchanged.
-- New: `polyglot-typescript-{benign-utility,downloader,launcher,staged-chain}.ts` -- `// HUNTRESS_ANALYSIS_V1:` FRAG / HEX / B64 /
-  HB64 (obfuscation fragmented_hex / plain_hex / base64 / hex_base64), host_profile standalone, adapters local_parser /
-  http_client / process_builder / operation_graph, next_language powershell / jscript / batch / vbscript; attack none / T1105 /
-  T1059 / T1059 (V3 table). Steps again don't predict role (TS downloader = `decode_configuration>return_configuration`).
-- New Bash advanced: `nameref-dispatch.sh` (feature nameref_dispatch, primitive declare_nameref, `local -n`) and
-  `dynamic-file-descriptor.sh` (dynamic_file_descriptor, allocated_file_descriptor); `Material_` decimal CSV, `Codec_='decimal_csv|'`.
-- Method: the carried-over solver (marker-routed v=3 + suffix field parse) answered 811/811 unchanged; the worker cat'ed the
-  new files, ran the solver, grepped the new ids, submitted. 5 tool calls, launch 01:55:40Z -> CORRECT 01:56:35Z (~55 s, 0 wrong).
-- TT f99ea9ec (9 s window) 1.41 s in-window; Mastery 2d722b36 (11 s, 2 sets) 1.69 s (solve 0.81 s). Both CORRECT first try.
-
-**D12 AutoIt Takes Two (+4 AutoIt polyglot; 855 ids, 99 members)**: prompt "Two inert AutoIt workflows arrived as a matched
-set, and each one carries half the story. Correlate them ... decide which pairing is genuine". Flavour only: no pairing /
-genuine-vs-decoy question; the 4 new files are ordinary v=3 fixtures.
-- New: `polyglot-autoit-{benign-utility,downloader,launcher,staged-chain}.au3` -- `; HUNTRESS_ANALYSIS_V1:<TAG>-..` comment +
-  `Global Const $descriptor_<id> = "<hex>"`; campaign `AUTOIT-<8hex>`, file_path `/tmp/huntress-autoit/.<16hex>.stage`, url
-  `https://autoit-<10hex>.example.invalid/stage`. Role/attack per the V3 table (none / T1105 / T1059 / T1059); obfuscation
-  plain_hex / base64 / hex_base64 / fragmented_hex, next_language powershell / jscript / batch / vbscript, host_profile
-  standalone -- the exact D11 TypeScript set in a new host syntax.
-- Method: the carried-over solver's marker regex (comment-syntax agnostic) covered `;` comments: 855/855, no code change.
-  Launch -> CORRECT ~25 s (worker only cat'ed one `.au3`), 0 wrong. TT 30 s window, in_window 7.19 s (SUBMIT 5.33 s of it --
-  GM latency on 855 ids, not solve); Mastery 2 sets / 1710 ids, 4.04 s. Both CORRECT first try.
+**D13 Zip Code (+4 AppleScript polyglot, +2 Bash advanced; 913 ids, 105 members)**: prompt about an "archive delivery
+chain" (title pun on zip) -- flavour only, no archive-chain question; evidence.zip was the usual flat AES zip.
+- New: `polyglot-applescript-{benign-utility,downloader,launcher,staged-chain}.applescript` -- `-- HUNTRESS_ANALYSIS_V1:<TAG>-..`
+  + `property descriptor_<id> : ".."`; campaign `APPLESCRIPT-<8hex>`, file_path `/tmp/huntress-applescript/.<16hex>.stage`, url
+  `https://applescript-<10hex>.example.invalid/stage`; the same D11/D12 role/attack/adapter/obfuscation/next_language set.
+- New Bash advanced: `subshell-pipeline.sh` (feature subshell_pipeline, primitive command_substitution_pipeline) and
+  `process-substitution.sh` (process_substitution, process_substitution_reader); `Codec_='hex_compact|'`, campaign `BASHX-<8HEX>`.
+- Method: carried-over solver, NO code change and no worker tool call: harness probe 913/913 at ~T+7 s. TT 50 s window, 4.03 s
+  elapsed; Mastery 2 sets / 1826 ids, 3.49 s. 0 wrong. Minor speed gap: the solver's `_LEAF_EXT` lacks `.applescript/.lua/
+  .mof/.ts`, so those AES members are decrypted just to sniff for a nested zip -- add new script extensions to it.
 
 ## GM answer conventions learned
 - **Check `answer_format.kind` first.** `enum` gives the list (scenario, role). `mitre_attack_id` takes `T####[.###]` or literal `none` (benign_utility). `integer`/`ordered_tokens` (d6+). `exact_text` = plan value or synthetic label.

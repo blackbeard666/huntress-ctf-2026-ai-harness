@@ -58,8 +58,11 @@ ARCHITECTURE_REJECTED = ["amd64"]
 # Day 12 "Pascal's Wager" (Free Pascal static ELF x86-64 inside a d01..d12 archive; single + TT + Mastery 3 sets) CONFIRMED
 # the RAW form: the blob sits un-encoded ('HCFG' magic + version/crc header + XOR'd body) and hcfg_offset = file offset of
 # the 'H' of the magic ("82928" = 0x143f0, all sets). The solver's raw-scan path returned "none" -> 1 lost submit.
+# Day 13 "Crystal Clear" (Crystal ELF x86-64, libgc, `Crystal:H` strings; single + TT + Mastery 3 sets, 0 wrong) re-confirmed
+# the base64 law: the 'SENGR...' text is a Crystal String literal in .rodata after its 12-byte header (type_id=1,
+# bytesize, length); hcfg_offset = "560188" (0x88c3c) = first base64 char, NOT the String header 12 bytes earlier.
 HCFG_OFFSET_FMT = "{n}"
-HCFG_OFFSET_RAW = "offset of the b'HCFG' magic"     # base64 form: offset of the first base64 char (D9/D11)
+HCFG_OFFSET_RAW = "offset of the b'HCFG' magic"     # base64 form: offset of the first base64 char (D9/D11/D13)
 # Day 10 "Zig Zag" (Zig cross-compiled ELF + PE; alt single + TT 46625ef1 + Mastery 0c0733e6 3 sets, 0 wrong): NEW enum field
 # `has_hcfg_section` = "true" when a section NAMED `.hcfg` exists (ELF section header table / PE section table; the
 # Zig PE set had .hcfg between .pdata and .tls). Zig PE x86-64 -> format "pe", machine/architecture "x86-64" (same
@@ -127,6 +130,15 @@ PE_VERSION_STRING_KEY = {"original-filename": "OriginalFilename"}
 # "21e410f3-c977-465c-80eb-6890ddd3085c". Python: str(uuid.UUID(bytes_le=heap[(i-1)*16:i*16])). Same-named/same-version
 # assemblies differ ONLY here ("rebuilds vs renames"); raw big-endian hex / braces never tried.
 DOTNET_MVID_GUID = "str(uuid.UUID(bytes_le=...))"
+
+# Day 13 "Product Placement" (metadata-forensics), confirmed 2026-10-13 (single, TT, Mastery 2 sets): id
+# d13-msi-NNN-msi-product-code-guid = the MSI Property table's ProductCode value VERBATIM (uppercase, WITH the braces),
+# e.g. "{DD1A80D5-0250-4F4D-B289-13096D633C61}", although answer_format only says "8-4-4-4-12 ... including hyphens".
+# Bare (brace-stripped) form REJECTED (D13 single). Decoys in the same MSI: UpgradeCode, Component.ComponentId and the
+# SummaryInformation RevisionNumber (PackageCode). Contrast D12: the .NET MVID is rendered lowercase with no braces --
+# the GUID's spelling follows its SOURCE (stored string vs binary GUID), not the answer_format text.
+MSI_PRODUCT_CODE_GUID = "Property['ProductCode'] verbatim"
+MSI_PRODUCT_CODE_GUID_REJECTED = ["DD1A80D5-0250-4F4D-B289-13096D633C61"]
 
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {

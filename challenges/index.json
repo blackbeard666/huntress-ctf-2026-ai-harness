@@ -71,6 +71,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Pascal's Wager"
   },
+  "binary-reverse-engineering-day-13-crystal-dns-configuration": {
+    "day": 13,
+    "dir": "day13/binary-crystal-clear",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Crystal Clear"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -143,6 +149,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Managed Expectations"
   },
+  "metadata-forensics-day-13-product-placement": {
+    "day": 13,
+    "dir": "day13/metadata-product-placement",
+    "lane": "metadata-forensics",
+    "name": "🔎 Product Placement"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -214,6 +226,12 @@
     "dir": "day12/mobile-sqlite-assumptions",
     "lane": "mobile-android",
     "name": "📱 SQLite Assumptions"
+  },
+  "mobile-android-day-13-keystore-misuse": {
+    "day": 13,
+    "dir": "day13/mobile-keystore-misuse",
+    "lane": "mobile-android",
+    "name": "📱 Keystore Misuse"
   },
   "read-the-rules": {
     "day": 1,
@@ -293,6 +311,12 @@
     "lane": "script-analysis",
     "name": "📜 AutoIt Takes Two"
   },
+  "script-analysis-day-13-archive-delivery-chain": {
+    "day": 13,
+    "dir": "day13/scripting-zip-code",
+    "lane": "script-analysis",
+    "name": "📜 Zip Code"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -364,6 +388,12 @@
     "dir": "day12/warmups-back-at-you",
     "lane": "warmups",
     "name": "👶 Back at You"
+  },
+  "warmups-day-13": {
+    "day": 13,
+    "dir": "day13/warmups-opposite-day",
+    "lane": "warmups",
+    "name": "👶 Opposite Day"
   },
   "welcome-robots": {
     "day": 1,

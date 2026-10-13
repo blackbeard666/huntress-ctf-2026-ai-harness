@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-13-keystore-misuse",
+  "lane": "mobile-android",
+  "name": "📱 Keystore Misuse",
+  "ids": {
+    "single_solve": "mobile-android-day-13-keystore-misuse",
+    "time_trial": "mobile-android-day-13-keystore-misuse/time_trial",
+    "mastery": "mobile-android-day-13-keystore-misuse/mastery"
+  }
+}
