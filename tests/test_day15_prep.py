@@ -157,4 +157,29 @@ with mock.patch.object(H, "_post", fake_post):
                     vcase / "artifacts", {}, out)
 assert out["result"] == "solver_incomplete" and not posts                  # not a slug question: never guessed
 print("ok  W5 hb_timed in-window fill: D14 set22 completed in 1 submit; no submit under 1.5 s left or for non-slugs")
+
+# ---------------------------------------------------------------------------------------------------------------- M1
+import os  # noqa: E402
+from lib import meta  # noqa: E402
+from lib.common import find_artifact  # noqa: E402
+mcase = ROOT / "challenges/day14/metadata-the-shortcut-home/solver/cases/single_solve"
+mc, mexp = json.loads((mcase / "contract.json").read_text()), json.loads((mcase / "expected.json").read_text())
+mq = mc["questions"][0]
+mdata = find_artifact(mcase / "artifacts", mq["artifact"])
+os.environ["HCTF_META_MAX_DAY"] = "14"      # the morning-of-D14 view: no verified lnk entry yet
+try:
+    assert meta.lookup("lnk", "target_path_windows") == (None, None)
+    ext, _p, used = meta.resolve("lnk", "target_path_windows")
+    assert used == "target_path" and ext.tier == meta.SPECULATIVE, (ext, used)
+    assert meta.answer(mq["id"], mq, mdata) == (mexp[mq["id"]], meta.SPECULATIVE), meta.answer(mq["id"], mq, mdata)
+    meta.ALIASES = False
+    assert meta.answer(mq["id"], mq, mdata) == (None, None)
+finally:
+    meta.ALIASES = True
+    del os.environ["HCTF_META_MAX_DAY"]
+assert meta.answer(mq["id"], mq, mdata) == (mexp[mq["id"]], meta.VERIFIED)     # today: the verified D14 extractor
+assert meta.resolve("lnk", "no_such_field")[0] is None and meta.resolve("pe", "image_base_hex_text")[2] == "image_base_hex"
+assert meta.resolve("pe", "coff_machine_u16_hex")[0].tier == meta.VERIFIED       # exact keys keep their tier
+print("ok  M1 lib.meta.resolve: D14 lnk.target_path_windows -> prebuilt target_path (speculative) = the GM answer "
+      "with the D14 verified entry hidden; HCTF_META_ALIASES=0 -> no answer")
 print("ALL PASS")

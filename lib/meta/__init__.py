@@ -153,6 +153,33 @@ def lookup(fmt, field):
     return None, None
 
 
+# Rendering suffixes the GM appends to a field we may already extract under the bare name (D14: it asked
+# lnk.target_path_windows; the prebuilt lnk.target_path held the right value and the race lost on the name alone --
+# +43 s by the LLM worker instead of ~+3 s).
+_RENDER_SUFFIXES = ("_windows", "_posix", "_utc", "_iso8601", "_unix", "_text", "_string", "_str", "_value", "_bytes")
+ALIASES = os.environ.get("HCTF_META_ALIASES", "1") != "0"
+
+
+def resolve(fmt, field):
+    """(Extractor, param, field the extractor computes): lookup(), else a NEAR-MISS name, always SPECULATIVE (race-only;
+    banking probes absorb a wrong guess): a rendering suffix stripped (`target_path_windows` -> `target_path`), else
+    the longest registered same-format field the requested one extends (`<field>_...`). (None, None, None)."""
+    ext, param = lookup(fmt, field)
+    if ext is not None:
+        return ext, param, field
+    if not ALIASES:
+        return None, None, None
+    reg = active()
+    cands = [field[:-len(s)] for s in _RENDER_SUFFIXES if field.endswith(s) and len(field) > len(s)]
+    cands += sorted((fld for f, fld in reg if f == fmt and not fld.endswith("_*") and field.startswith(fld + "_")),
+                    key=len, reverse=True)
+    for c in cands:
+        e = reg.get((fmt, c))
+        if e is not None:
+            return Extractor(e.fn, SPECULATIVE, e.days), None, c
+    return None, None, None
+
+
 _TAG = re.compile(r"\s*\[assigned-artifact-sha256:[^\]]*\]")
 _Q = re.compile(r"\bDetermine\s+`?([a-z][a-z0-9]*)\.([a-z0-9_]+)`?\s+(?:for|of|in)\b", re.I)
 _ID = re.compile(r"^d\d{2}[-_]([a-z0-9]+)[-_]\d+[-_]\1[-_]([a-z0-9-]+)$")
@@ -217,13 +244,13 @@ def answer(aid, q=None, data=None, member=None):
     f = parse_field(aid, q)
     if f is None:
         return None, None
-    ext, param = lookup(f.fmt, f.field)
+    ext, param, used = resolve(f.fmt, f.field)
     if ext is None:
         return None, None
     if member is None:
         member = str(q.get("artifact") or "").partition("->")[2].strip()
-    ctx = {"aid": aid, "question": q, "fmt": f.fmt, "field": f.field, "param": param, "member": member,
-           "artifact": q.get("artifact") or ""}
+    ctx = {"aid": aid, "question": q, "fmt": f.fmt, "field": used, "param": param, "member": member,
+           "artifact": q.get("artifact") or "", "asked": f.field}
     raw = _load(ext.fn)(data, ctx)
     if raw is None:
         return None, None

@@ -86,6 +86,8 @@ def spell(fmt, field, raw, q=None):
         return bytes(raw).hex()
     if isinstance(raw, int):
         return str(raw)
+    if field.endswith("_windows") and isinstance(raw, str):
+        return _enum(raw.replace("/", "\\"), q)   # a Windows path: backslashes, otherwise verbatim (D14 lnk)
     return _enum(str(raw), q)
 
 

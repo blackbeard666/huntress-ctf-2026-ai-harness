@@ -24,7 +24,11 @@ Already registered (do NOT re-register any of these -- a duplicate key is a conf
    Field names: GM style is the spec's structure name in snake_case + a type suffix (`coff_machine_u16_hex`,
    `address_of_entry_point_rva_hex`, `eocd_total_entries`, `ihdr_dimensions_pixels`, `product_code_guid`). Register
    the obvious aliases a question could use for the same value (e.g. `folder_count` and `cfheader_folder_count`) --
-   each as its own FIELDS key pointing at the same function.
+   each as its own FIELDS key pointing at the same function. The GM also appends a RENDERING suffix to a value's name
+   (D14 asked `lnk.target_path_windows` for the path we had as `lnk.target_path`): `lib.meta.resolve` already maps
+   `<field>_windows/_posix/_utc/_iso8601/_unix/_text/_string/_value/_bytes` and `<field>_<more>` onto `<field>` as
+   speculative, so register the bare structure name; add an explicit suffixed key only when its rendering differs
+   (e.g. a `_utc` ISO-8601 text vs a raw FILETIME int).
 2. `tests/data/meta_fixtures/<fmt>/<case>.bin` + `<case>.json` per fixture:
        {"field": "<fmt>.<field>", "expected": "<GM-spelled string>", "generator_cmd": "...", "oracle_cmd": "...",
         "decoy": false}

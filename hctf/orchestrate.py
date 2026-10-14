@@ -390,8 +390,13 @@ def lane_seed_note(seed, sdir):
             "print(m.known_fields())'` lists them with their tier). Do NOT rewrite it and don't look for earlier days' "
             "solvers: add ONLY today's new field(s) in its `local_answer()` (derive from the bytes; return None for "
             "anything else), and check the speculative values lib.meta gives for today's ids against the bytes -- "
-            "a speculative extractor is a guess, not a verified answer. Note any new field in `## Proposed lib "
-            "additions` of solver/NOTES.md; the post-run ratchet folds it into lib/meta.")
+            "a speculative extractor is a guess, not a verified answer. If today's field is a near-name of a "
+            "registered one (lib.meta.resolve already maps `<field>_windows`/`_utc`/... and `<field>_<more>` onto "
+            "it), DELEGATE in `local_answer()` to that extractor (e.g. lib.meta.prebuilt.<fmt> `parse()`/`*_value`) "
+            "instead of writing a new parser -- D14's LNK parser was already in lib/meta/prebuilt/lnk.py. Run Python "
+            "with `.venv/bin/python` (LnkParse3, regipy, python-evtx, pefile, oletools live there, not in the system "
+            "python3). Note any new field in `## Proposed lib additions` of solver/NOTES.md; the post-run ratchet "
+            "folds it into lib/meta.")
 
 
 def stage_prior_cases(prior, sdir):
