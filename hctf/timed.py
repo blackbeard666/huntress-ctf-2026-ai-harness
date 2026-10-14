@@ -408,6 +408,19 @@ def inflight():
 
 
 CAPTURE_GRACE = float(__import__("os").environ.get("HCTF_CAPTURE_GRACE", "6"))
+_captures = []   # background pass-capture threads (pull + regression case), joined by join_captures()
+
+
+def join_captures(timeout=900):
+    """Wait for the background pass captures -> how many are still running. They are daemon threads: without this a
+    run whose post-run finishes first exits mid-pull and loses the regression case (D14: binary Mastery's 93 MB pull
+    took 9.5 min at ~170 KB/s -- the old single ratchet just happened to outlast it), and speed-harden would time an
+    incomplete case set."""
+    import time as _t
+    end = _t.time() + timeout
+    for t in list(_captures):
+        t.join(max(0.0, end - _t.time()))
+    return sum(t.is_alive() for t in _captures)
 CAPTURE_YIELD_MAX = float(__import__("os").environ.get("HCTF_CAPTURE_YIELD_MAX", "180"))
 
 
@@ -455,7 +468,9 @@ def process_result(cid, solver_dir, res, log=print):
         _keep_failed_attempt(cid, res, log)
     if pull:
         import threading
-        threading.Thread(target=capture, daemon=True).start()
+        t = threading.Thread(target=capture, name=f"capture-{cid}", daemon=True)
+        _captures.append(t)
+        t.start()
     else:
         capture()
     if r != "correct" and res.get("verified"):

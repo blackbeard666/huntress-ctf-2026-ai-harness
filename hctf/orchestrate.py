@@ -3276,6 +3276,20 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
                 _prebuild.launch_background(day, log=say)
             except Exception as e:  # noqa: BLE001 - post-run best-effort
                 say(f"[prebuild] not launched ({e})")
+    _join_captures(f"day{int(day):02d}" if day is not None else "run")   # never exit mid-pull (daemon threads)
+
+
+CAPTURE_JOIN_TIMEOUT = float(os.environ.get("HCTF_CAPTURE_JOIN_TIMEOUT", "900"))
+
+
+def _join_captures(tag):
+    t0 = time.time()
+    if not any(t.is_alive() for t in timed._captures):
+        return
+    say(f"[capture] {tag}: waiting for {sum(t.is_alive() for t in timed._captures)} background pass capture(s)")
+    left = timed.join_captures(CAPTURE_JOIN_TIMEOUT)
+    say(f"[capture] {tag}: " + (f"{left} still running after {CAPTURE_JOIN_TIMEOUT:g}s (cases may be missing)" if left
+                                else f"all captured ({time.time() - t0:.0f}s)"))
 
 
 RATCHET = os.environ.get("HCTF_RATCHET", "1") != "0"
@@ -3605,6 +3619,7 @@ def ratchet(day):
     shutil.rmtree(tsnap, ignore_errors=True)
     for t in log_threads:   # reference/ must be quiet before the prebuild starts (its allowlist flags outside edits)
         t.join(timeout=max(1.0, RATCHET_LOG_TIMEOUT))
+    _join_captures(tag)     # speed-harden times every case: today's pass captures must be on disk first
     if SPEED_HARDEN:
         try:
             speed_harden(day=day)

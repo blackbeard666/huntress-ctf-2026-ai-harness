@@ -281,4 +281,22 @@ finally:
     orch.SKIP_DOOMED_RETRY = True
 print("ok  T1 timed_stage: previous start reported 0 attempts left -> untimed at once (no refused retry); "
       "HCTF_SKIP_DOOMED_RETRY=0 -> old path")
+
+# ---------------------------------------------------------------------------------------------------------------- C1
+import threading  # noqa: E402
+import time  # noqa: E402
+ev = threading.Event()
+t = threading.Thread(target=ev.wait, daemon=True)
+timed._captures.append(t)
+t.start()
+assert timed.join_captures(0.2) == 1
+said.clear()
+threading.Timer(0.3, ev.set).start()
+with mock.patch.object(orch, "say", said.append):
+    orch._join_captures("day99")
+assert timed.join_captures(0) == 0 and any("all captured" in s for s in said), said
+timed._captures.remove(t)
+src = __import__("inspect").getsource(orch.run)
+assert "_join_captures(" in src and "_join_captures(tag)" in __import__("inspect").getsource(orch.ratchet)
+print("ok  C1 background pass captures tracked + joined before speed-harden and before the run exits")
 print("ALL PASS")
