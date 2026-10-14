@@ -1,0 +1,9 @@
+{
+ "encoding": "u32le-array",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "generator_cmd": "bash int_gen.sh int_decoy_u32.bin u32arr '{\"c2\":\"203.0.113.77:8443\",\"campaign\":\"abacus\",\"sleep\":30,\"flag\":\"flag{1nt3g3r_4rr4y_0f_byt3s}\"}' 1   # blob: printf header + crc32 from gzip trailer; elements: od -tu1 / xxd -p -c W; gcc -O2 C program with the const array / decimal string literal",
+ "oracle_cmd": "bash int_oracle.sh int_decoy_u32.bin u32arr   # GNU grep -obUaP locates the stored magic; od -tu4/-tu8/-tx4/-tx2 reads elements; xxd -r -p / perl pack rebuild bytes; perl unpack header; gzip trailer = crc32(body)",
+ "oracle_output": "8224 HCFG 95 3845868207 {\"c2\":\"203.0.113.77:8443\",\"campaign\":\"abacus\",\"sleep\":30,\"flag\":\"flag{1nt3g3r_4rr4y_0f_byt3s}\"} 3845868206   <header crc != gzip crc32 of body: corrupted blob>",
+ "decoy": true
+}

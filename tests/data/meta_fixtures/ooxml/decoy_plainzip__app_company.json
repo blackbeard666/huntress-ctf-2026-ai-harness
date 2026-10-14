@@ -1,0 +1,8 @@
+{
+ "field": "ooxml.app_company",
+ "expected": "none",
+ "generator_cmd": ".venv/bin/python -I -c \"import zipfile; z=zipfile.ZipFile(out,'w'); z.writestr('docProps/core.xml','<cp:coreProperties ...><dc:creator>Not Opc</dc:creator></cp:coreProperties>'); z.writestr('notes.txt','hi')\"  (plain zip renamed .docx: no [Content_Types].xml => not an OPC package)",
+ "oracle_cmd": "file -b tests/data/meta_fixtures/ooxml/decoy_plainzip__app_company.bin -> not 'Microsoft Word/Excel 2007+'; 7z x -so tests/data/meta_fixtures/ooxml/decoy_plainzip__app_company.bin '[Content_Types].xml' -> empty (not an OPC package) => none",
+ "decoy": true,
+ "member": "decoy_plainzip.docx"
+}

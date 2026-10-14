@@ -1,0 +1,14 @@
+{
+ "encoding": "base64-gzip",
+ "expected_offset": 3012,
+ "expected_config": {
+  "c2": "203.0.113.7:8443",
+  "campaign": "squeeze-play",
+  "sleep": 45,
+  "flag": "flag{b64_0f_gz1p}"
+ },
+ "decoy": false,
+ "generator_cmd": "bash zpack_gen.sh zpack_b64_gzip.bin b64-gzip \"$J1\"   # J1..J6 = expected_config JSON (compact); blob: printf header + crc32 from gzip trailer; stream: gzip/bzip2/xz/zlib-flate + coreutils base64 / xxd -p",
+ "oracle_cmd": "bash zpack_oracle.sh zpack_b64_gzip.bin b64-gzip   # strings/grep -bo + base64 -d / xxd -r -p + gzip/bzip2/xz/zlib-flate; prints off at+N magic len hdrcrc crc32(body) body",
+ "oracle_output": "3012 at+0 HCFG 89 520995637 520995637 {\"c2\":\"203.0.113.7:8443\",\"campaign\":\"squeeze-play\",\"sleep\":45,\"flag\":\"flag{b64_0f_gz1p}\"}"
+}

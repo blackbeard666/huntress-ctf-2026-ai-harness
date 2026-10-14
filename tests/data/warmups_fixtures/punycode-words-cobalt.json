@@ -1,0 +1,9 @@
+{
+ "codec": "punycode-words",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "encoded": "Nice- work- decoding- this- warmup!- To- solve,- submit- this- exact- answer- to- the- Game- Master:- cobalt-heron-77-",
+ "generator_cmd": "printf %s \"$plain\" | NODE_NO_WARNINGS=1 tools/node/bin/node -e 'const p=require(\"punycode\");process.stdout.write(require(\"fs\").readFileSync(0,\"utf8\").split(\" \").map(w=>p.encode(w)).join(\" \"))'  # punycode.js encode per space-separated word",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys,codecs;print(\" \".join(codecs.decode(w.encode(),\"punycode\") for w in sys.stdin.read().split(\" \")))'  # CPython encodings.punycode per word",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "expected": "match"
+}

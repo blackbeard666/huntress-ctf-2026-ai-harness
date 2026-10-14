@@ -1,0 +1,14 @@
+{
+ "encoding": "hex-gzip",
+ "expected_offset": 3012,
+ "expected_config": {
+  "c2": "198.51.100.2:80",
+  "campaign": "nested-gzip-hex",
+  "flag": "flag{gz_h3x_upp3r_at_n}"
+ },
+ "decoy": false,
+ "generator_cmd": "bash zpack_gen.sh zpack_hexU_gzip_inner.bin hex-gzipU \"$J6\"   # J1..J6 = expected_config JSON (compact); blob: printf header + crc32 from gzip trailer; stream: gzip/bzip2/xz/zlib-flate + coreutils base64 / xxd -p",
+ "oracle_cmd": "bash zpack_oracle.sh zpack_hexU_gzip_inner.bin hex-gzipU   # strings/grep -bo + base64 -d / xxd -r -p + gzip/bzip2/xz/zlib-flate; prints off at+N magic len hdrcrc crc32(body) body",
+ "oracle_output": "3012 at+12 HCFG 86 353766212 353766212 {\"c2\":\"198.51.100.2:80\",\"campaign\":\"nested-gzip-hex\",\"flag\":\"flag{gz_h3x_upp3r_at_n}\"}",
+ "detail": "uppercase hex; blob 12 bytes into the gzip output -> detail at+12"
+}

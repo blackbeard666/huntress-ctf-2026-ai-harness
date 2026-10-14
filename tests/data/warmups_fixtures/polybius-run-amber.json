@@ -1,0 +1,9 @@
+{
+ "codec": "polybius",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "3324131552344225141513341424332244232443521142324535443443343151154345123224444423244315531113441133435215424434442315221132153211434415421132121542211131133433",
+ "generator_cmd": "python3 -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from pycipher import PolybiusSquare as P;print(P(sys.argv[2],5,\"12345\").encipher(sys.argv[1].replace(\"j\",\"i\").replace(\"J\",\"I\") if \"j\" not in sys.argv[2] else sys.argv[1].replace(\"k\",\"c\").replace(\"K\",\"C\")))' \"$plain\" abcdefghiklmnopqrstuvwxyz  # pycipher 0.5.2 PolybiusSquare(5x5 I/J, chars 12345)",
+ "oracle_cmd": "python3 -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from secretpy import Polybius;print(Polybius().decrypt(\"\".join(c for c in sys.argv[1] if c in \"12345\"),alphabet=sys.argv[2]))' \"$encoded\" abcdefghiklmnopqrstuvwxyz  # secretpy 0.12.0 Polybius.decrypt (ENGLISH_SQUARE_IJ order)",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemasteramberfalcon",
+ "expected": "match"
+}

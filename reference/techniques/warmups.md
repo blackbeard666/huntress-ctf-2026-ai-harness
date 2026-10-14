@@ -1,12 +1,12 @@
-# warmups — technique log (days 1-13; updated after every day)
+# warmups — technique log (days 1-14; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
   guarantee for Time Trial / Mastery -- solvers derive structure and degrade per field.
 - Each day: one `blob.txt`. Decode it until a plain English sentence appears; its final non-empty line ends "...submit this exact answer to the Game Master: <slug>". The slug is `word-word-word-NN` (`answer_format.kind=pattern`, `normalization=trim`). Same single question id `message` every day.
 - The ENCODING changes daily and the title/prompt is a pun naming it: 64 -> base64, "thirteen steps"/half a turn -> ROT13, sixteen fingers -> hex, "two sides" -> 8-bit binary, "reduced to numbers" -> decimal char codes, "eight fingers" -> octal, "address bar"/"Percent" -> URL percent-encoding, "the browser understands"/"Entity" -> HTML character entities, "characters would like to escape"/"Escape Room" -> JSON/JS `\uXXXX` string escapes, "Thirty-Two Below" -> base32, "URL-friendly vacation"/"Safe Travels" -> URL-safe base64 with the `=` padding DROPPED, "Maybe we started at the wrong end"/"Back at You" -> the plain sentence REVERSED
-  (character order, no other encoding), "A met Z. They really hit it off."/"Opposite Day" -> ATBASH (a<->z mirror). Every single_solve so far was ONE layer.
-- Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, ..., 58, 63). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, html-entity, `"\uXXXX"`, base32, unpadded base64url, plain reversed text, Atbash, in that order so far). The last line has no trailing newline. The fragments join verbatim (split mid-word) into the same sentence.
+  (character order, no other encoding), "A met Z. They really hit it off."/"Opposite Day" -> ATBASH (a<->z mirror), "Caesar took a week off."/"Seven Steps" -> Caesar +7 (decode rot-7). Every single_solve so far was ONE layer.
+- Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, ..., 58, 63). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, html-entity, `"\uXXXX"`, base32, unpadded base64url, plain reversed text, Atbash, Caesar+7, in that order so far). The last line has no trailing newline. The fragments join verbatim (split mid-word) into the same sentence.
 - Clocks: TT about 5-8 s from day 2 on (30 s on day 1 and again on day 12), mastery about 5-9 s (30 s on day 12; the window does not reliably grow with the set count). Only a deterministic solver survives these windows. The single_solve is untimed.
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
@@ -33,8 +33,11 @@ How this lane has looked so far (observations, not guarantees):
   per-line bigram guessing confused rev/Atbash on 20/63 sets. Parse rule (D13 solver `_joint`): decode the strict lines,
   then try every assignment of {rot-N, reversal, Atbash} to the free lines, EACH TRANSFORM USED ONCE per blob, keep the
   one whose joined text ends in a slug, best bigram. Whole-blob Atbash (single/TT) is in `lib.decode.decode_chunk`.
+  D14 added a FOURTH free codec, a second shift: Caesar +7 on line 14 (`u-pcf-67` -> `n-ivy-67`) beside rot13 on line 2.
+  Same rule, `lib.decode.FREE_CODECS` = rot(2) / rev(12) / atb(13) / caesar7(14); and rank a 3-word `adj-noun-noun-NN`
+  slug end above a 2-word one (set22 swapped rev/Atbash on lines 12/13 and still "ended in a slug": `g-voaafk|urtle-60`).
 - **Line wrapper** -- `NN<TAB>fragment` numbering; fragments split mid-word and join verbatim in number order.
-- **Set count** -- grows by 5 per day (33 on day 7, 38 on day 8, 43 on day 9, 53 on day 11, 58 on day 12, 63 on day 13); the solver must loop over whatever the contract lists.
+- **Set count** -- grows by 5 per day (33 on day 7, 38 on day 8, 43 on day 9, 53 on day 11, 58 on day 12, 63 on day 13, 68 on day 14); the solver must loop over whatever the contract lists.
 - **Delivery shape** -- mastery bytes arrive as ONE zip saved under the first member's name (`blob-01.txt`; the contract has NO
   `artifacts[]`, only a top-level `sha256` = the zip; same on days 7-9). Set 1's question names that same file: read the MEMBER, never decode the whole bundle.
 - **Payload only** -- TT/single differ only in the slug and length (day 7: 318 vs 333 bytes; day 8: 620 vs 621; day 9: 644 vs 650); same sentence and encoding.
@@ -54,6 +57,7 @@ How this lane has looked so far (observations, not guarantees):
 | `"\u004e\u0069..."` (quoted, only `\uXXXX`; prompt says "escape") | JSON string escapes: `python3 -c "import json,sys;print(json.loads(open(sys.argv[1]).read()))" blob.txt`. `lib.decode.decode_chunk` also gets it (generic fallback, ASCII only) |
 | `A-Z2-7=` | `base32 -d` |
 | Readable letters backwards, a slug at the START (`56-ztrauq-...`), `retsaM emaG` (prompt: "wrong end") | `rev blob.txt` (or `[::-1]`); a line `NN-word-x` in a numbered blob is a reversed slug tail. `decode_chunk` does it since D12 |
+| English-shaped shifted letters, `Nhtl Thzaly:` = "Game Master:" +7 (prompt "Caesar", "week", "seven") | rot-7 (`tr 'A-Za-z' 'T-ZA-St-za-s'`); `decode_chunk`'s best rot-N finds it. In a Mastery blob it is a SECOND rot line -> `decode_chunked` (caesar7 in `FREE_CODECS` since D14) |
 | English-shaped words that no rot-N fixes, `Gsv Tznv Nzhgvi:` (prompt "A met Z", "Opposite") | Atbash: `tr 'A-Za-z' 'ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba'`; `lib.decode.decode_chunk` picks it since D13 (bigram vs rot-N and reversal); `lib.ciphers.atbash` |
 | `[A-Za-z0-9_-]`, NO trailing `=`, length %4 != 0 (prompt: "URL-friendly") | unpadded base64url: `python3 -c "import base64,sys;t=open(sys.argv[1]).read().strip();print(base64.urlsafe_b64decode(t+'='*(-len(t)%4)).decode())" blob.txt` (`base64 -d` errors on it); `lib.decode.decode_chunk` handles it |
 | Magic `PK\x03\x04` even if named `.txt` (mastery `blob-01.txt`) | `unzip -l`. It is a bundle of all sets `blob-01..NN.txt` |
@@ -144,9 +148,23 @@ newline), octal vs decimal = zero padding + lowercase share. Mastery from D2 on 
   D1-D13 warmups cases unchanged. A NEW free-text codec on a later day (no alphabet signature, told apart only by
   English-ness) = add it to `FREE_CODECS` + a `_free_cands` branch, not a per-line bigram tweak.
 
+**Day 14: Seven Steps** ("Caesar took a week off." -- Caesar shift +7).
+- 111-byte blob, ONE layer: `Upjl dvyr kljvkpun aopz dhytbw! ... aol Nhtl Thzaly: khwwly-zwyvba-ivbskly-71` -> rot-7 ->
+  `dapper-sprout-boulder-71`. The carried-over D13 solver (best rot-N in `decode_chunk`) answered in the race, no worker
+  tool call: start 13:00:03Z -> CORRECT 13:00:07Z (~4.5 s, first submit). TT (30 s) CORRECT, solve 0.04 s.
+- Mastery 68 sets x 14 lines (line 14 = Caesar+7 fragment). A pre-Mastery generalize worker registered `caesar7` (day 14)
+  as a 4th free codec in the solver's joint assignment; the `compound-today-d14-*` synthetic cases (D13 Mastery + a
+  today-codec line 14) passed. Real attempt 18c3893f: 67/68, set22 MISSING -> `solver_incomplete`, retries 0. Cause:
+  lib `decode_chunked` returned a rev/Atbash-swapped text ending in a 2-word `g-voaafkurtle-60`, the solver's 3-word slug
+  check refused it, and its own `_joint` fallback didn't count an Atbash line as free. Second generalize worker added
+  Atbash to `_is_free`; the untimed practice run went 68/68 CORRECT 13:02:21Z (no Hall of Fame time).
+- LIB (ratchet D14): `caesar7` in `lib.decode.FREE_CODECS` + `lib.warmups_codecs.DAYS` (14, exact encoder `rot(s, 7)`),
+  and `_joint_free` ranks a 3-word slug end above a 2-word one: `decode_chunked` alone now answers every D14 case
+  (68/68 on both Mastery cases; the pre-ratchet lib alone got 2-3 of 68); D1-D13 cases unchanged.
+
 ## GM answer conventions learned
 - Submit the slug ONLY, exactly as decoded (lowercase, hyphens, 2-digit number). Not the whole sentence and not "Game Master: ...". `trim` normalization only.
-- No correctly decoded warmups answer has been rejected (days 1-13; day 8's 40 and day 9's 45 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
+- No correctly decoded warmups answer has been rejected (days 1-14; day 8's 40 and day 9's 45 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
 - Mastery ids are per set (`setN.message` style). Each question names `blob-0N.txt`, but the bytes may arrive as a zip member, as same-named `blob.txt` downloads, or de-duplicated (`blob_2.txt`). Map set -> file by sha256 from `contract["artifacts"]` when present. When it is absent (day 7), open the zip and read member `blob-0N.txt`.
 - No GM-side label grammar in this lane: the answer is a derived VALUE, never a synthetic label.
 
@@ -172,6 +190,9 @@ newline), octal vs decimal = zero padding + lowercase share. Mastery from D2 on 
   transform, not a GM mismatch -- don't submit a slug whose words aren't English.
 - Several free-text transforms in one blob (D13: rot13 / reversal / Atbash): decide them JOINTLY with each used once, not
   per fragment -- short edge-split fragments score ambiguously and cost 24/63 Mastery sets.
+- A synthetic "today's codec on line N" check (compound-today cases) passing does NOT prove the joint assignment: D14's
+  real set22 still broke on edge-split rev/Atbash lines. Any fallback path must classify free lines exactly as
+  `lib.decode._free_line` does (rot / reversal / Atbash / new codec), and a slug check should demand the full 3-word shape.
 - A slow fallback (generic `peel` BFS per set) x 58 sets blows even a 30 s window: gate fallbacks on a hard per-set cap.
 - Don't over-read the prompt: "Again" (day 6) was flavour, not a second layer. Decode what the bytes show.
 - Don't contact anything beyond the GM. The decoded sentence states the answer outright.

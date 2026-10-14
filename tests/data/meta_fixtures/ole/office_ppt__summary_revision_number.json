@@ -1,0 +1,8 @@
+{
+ "field": "ole.summary_revision_number",
+ "expected": "1",
+ "generator_cmd": "Microsoft PowerPoint (exiftool test corpus t/images/FlashPix.ppt), copied verbatim: cp tools/exiftool/t/images/FlashPix.ppt",
+ "oracle_cmd": ".venv/bin/python -I -c \"import olefile,sys; o=olefile.OleFileIO(sys.argv[1]); m=o.get_metadata(); print(m.revision_number)\" tests/data/meta_fixtures/ole/office_ppt__summary_revision_number.bin   (olefile 0.47 reader; exiftool -j -FlashPix:RevisionNumber agrees)",
+ "decoy": false,
+ "member": "office_ppt.ppt"
+}

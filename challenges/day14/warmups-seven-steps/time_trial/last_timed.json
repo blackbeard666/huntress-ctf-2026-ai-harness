@@ -1,0 +1,22 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "23b18d6e-deec-4e2f-8094-9a2f13e3c314",
+  "window": 30.0,
+  "elapsed": 2.29,
+  "in_window": 1.5,
+  "phases": {
+    "start": 0.79,
+    "download": 0.15,
+    "solve": 0.04,
+    "submit": 1.31
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": "2026-10-14T13:00:46.818Z",
+  "verified": {
+    "message": "clever-daisy-laurel-27"
+  },
+  "attempts_remaining": 0,
+  "hall_of_fame_eligible": false
+}

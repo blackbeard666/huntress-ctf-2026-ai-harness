@@ -88,7 +88,7 @@ assert r and r[0] == "subst", r
 print("ok  D1 candidates: rot47/morse/a1z26/rail/affine/base58/qwerty/chained/vigenere(title)/learned substitution inferred")
 
 # ---------------------------------------------------------------------------------------------------------------- D2
-seen, blobs = set(), []
+seen, blobs, blob_day = set(), [], []
 for d in sorted(CH.glob("day*/warmups-*")):
     roots = [c / "artifacts" for c in (d / "solver" / "cases").glob("*/")]
     for r in roots:
@@ -103,11 +103,14 @@ for d in sorted(CH.glob("day*/warmups-*")):
             if h not in seen:
                 seen.add(h)
                 blobs.append(b.decode("utf-8", "replace"))
+                blob_day.append(int(d.parent.name[3:]))
 
 
-def decode_all():
+def decode_all(max_day=99):
     out = []
-    for text in blobs:
+    for text, day in zip(blobs, blob_day):
+        if day > max_day:
+            continue
         out.append(decode.decode_chunked(text))
         out.append(decode.decode_chunk(text.strip()))
         out += [decode.decode_chunk(m.group(2)) for m in map(decode._CHUNK.match, text.splitlines()) if m]
@@ -146,15 +149,19 @@ def toy_right():
                for q in contract["questions"])
 
 
-before = toy_right()
-decode.register_free("toy", 14, lambda p: [W.rot(p, 13).swapcase()])
+# the toy stands in for day 14, so D14's real confirmed free codec (caesar7) is off while it is scored
+decode._FREE[:] = [e for e in saved_free if e[1] is None or e[1] < 14]
 try:
+    before = toy_right()
+    decode.register_free("toy", 14, lambda p: [W.rot(p, 13).swapcase()])
     after = toy_right()
-    reg_out = decode_all()
+    decode._FREE[:] = saved_free
+    decode.register_free("toy", 14, lambda p: [W.rot(p, 13).swapcase()])
+    reg_out = decode_all(13)     # D14 blobs are 14 lines: the toy day-14 codec competes there by design
 finally:
     decode._FREE[:] = saved_free
 assert after == 63 and before < 63, (before, after)
-assert reg_out == new_out
+assert reg_out == decode_all(13)
 print(f"ok  D2 register_free: toy day-14 codec -> 14-line blobs {before}/63 -> {after}/63, every historic blob unchanged")
 
 # ---------------------------------------------------------------------------------------------------------------- D3

@@ -1,0 +1,8 @@
+{
+ "field": "ole.summary_author",
+ "expected": "jordan tunstill",
+ "generator_cmd": "Microsoft Office Word (trufflehog pkg/handlers/testdata/test.doc), copied verbatim: cp /home/testpwn/go/pkg/mod/github.com/trufflesecurity/trufflehog/v3@v3.96.0/pkg/handlers/testdata/test.doc",
+ "oracle_cmd": ".venv/bin/python -I -c \"import olefile,sys; o=olefile.OleFileIO(sys.argv[1]); m=o.get_metadata(); print(m.author)\" tests/data/meta_fixtures/ole/word_doc__summary_author.bin   (olefile 0.47 reader; exiftool -j -FlashPix:Author agrees)",
+ "decoy": false,
+ "member": "word_doc.doc"
+}

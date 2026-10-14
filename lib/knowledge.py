@@ -61,6 +61,9 @@ ARCHITECTURE_REJECTED = ["amd64"]
 # Day 13 "Crystal Clear" (Crystal ELF x86-64, libgc, `Crystal:H` strings; single + TT + Mastery 3 sets, 0 wrong) re-confirmed
 # the base64 law: the 'SENGR...' text is a Crystal String literal in .rodata after its 12-byte header (type_id=1,
 # bytesize, length); hcfg_offset = "560188" (0x88c3c) = first base64 char, NOT the String header 12 bytes earlier.
+# Day 14 "Selective Memory" (GNUstep Objective-C ELF x86-64, libobjc.so.4.6, __objc_* sections; single + TT + Mastery,
+# 0 wrong) re-confirmed the RAW form in a section NAMED `.hcfg` (has_hcfg_section "true", crc32_hex "0x%08x"); the
+# "persistence descriptor" prompt and the ObjC class/selector strings were flavour -- the asked fields were the usual HCFG set.
 HCFG_OFFSET_FMT = "{n}"
 HCFG_OFFSET_RAW = "offset of the b'HCFG' magic"     # base64 form: offset of the first base64 char (D9/D11/D13)
 # Day 10 "Zig Zag" (Zig cross-compiled ELF + PE; alt single + TT 46625ef1 + Mastery 0c0733e6 3 sets, 0 wrong): NEW enum field
@@ -139,6 +142,13 @@ DOTNET_MVID_GUID = "str(uuid.UUID(bytes_le=...))"
 # the GUID's spelling follows its SOURCE (stored string vs binary GUID), not the answer_format text.
 MSI_PRODUCT_CODE_GUID = "Property['ProductCode'] verbatim"
 MSI_PRODUCT_CODE_GUID_REJECTED = ["DD1A80D5-0250-4F4D-B289-13096D633C61"]
+
+# Day 14 "The Shortcut Home" (metadata-forensics), confirmed 2026-10-14 (single, TT, Mastery 2 sets, 0 wrong): id
+# d14-lnk-NNN-lnk-target-path-windows ("Determine lnk.target_path_windows for shortcut-NNN.lnk.") = the MS-SHLLINK
+# LinkInfo LocalBasePath (+ CommonPathSuffix) VERBATIM, Windows backslashes and original case (`C:\Windows\...\x.exe`);
+# the LinkTargetIDList path (volume item + file-entry long names) spelled the same in every variant. NOT the working
+# dir, not the .lnk's own member name.
+LNK_TARGET_PATH_WINDOWS = "LinkInfo LocalBasePath (+CommonPathSuffix) verbatim, else the IDList path"
 
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {

@@ -1,0 +1,10 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": "none",
+ "decoy": true,
+ "generator_cmd": "printf '{\"c2\":\"10.0.0.1:1\",...}' | gzip -n | base64 -w0 ; printf HCFX | xz -c  (see zpack_decoy_nomagic in this json's note)",
+ "oracle_cmd": "bash zpack_oracle.sh zpack_decoy_nomagic.bin b64-gzip   # strings/grep -bo + base64 -d / xxd -r -p + gzip/bzip2/xz/zlib-flate; prints off at+N magic len hdrcrc crc32(body) body",
+ "oracle_output": "2004 none",
+ "detail": "H4sI base64 gzip of plain JSON (no HCFG) + raw xz of 'HCFX': no hit"
+}

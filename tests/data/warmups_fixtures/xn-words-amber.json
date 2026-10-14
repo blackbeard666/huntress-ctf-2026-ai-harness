@@ -1,0 +1,9 @@
+{
+ "codec": "xn--words",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "xn--Nice- xn--work- xn--decoding- xn--this- xn--warmup!- xn--To- xn--solve,- xn--submit- xn--this- xn--exact- xn--answer- xn--to- xn--the- xn--Game- xn--Master:- xn--amber-falcon-42-",
+ "generator_cmd": "printf %s \"$plain\" | NODE_NO_WARNINGS=1 tools/node/bin/node -e 'const p=require(\"punycode\");process.stdout.write(require(\"fs\").readFileSync(0,\"utf8\").split(\" \").map(w=>\"xn--\"+p.encode(w)).join(\" \"))'  # forced xn-- + punycode.js encode per word",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys,codecs;print(\" \".join(codecs.decode(w[4:].encode(),\"punycode\") for w in sys.stdin.read().split(\" \")))'  # strip xn--, CPython encodings.punycode per word",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

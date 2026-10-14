@@ -77,6 +77,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Crystal Clear"
   },
+  "binary-reverse-engineering-day-14-objective-c-persistence-descriptor": {
+    "day": 14,
+    "dir": "day14/binary-selective-memory",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Selective Memory"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -155,6 +161,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Product Placement"
   },
+  "metadata-forensics-day-14-shortcut-home": {
+    "day": 14,
+    "dir": "day14/metadata-the-shortcut-home",
+    "lane": "metadata-forensics",
+    "name": "🔎 The Shortcut Home"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -232,6 +244,12 @@
     "dir": "day13/mobile-keystore-misuse",
     "lane": "mobile-android",
     "name": "📱 Keystore Misuse"
+  },
+  "mobile-android-day-14-predictable-crypto": {
+    "day": 14,
+    "dir": "day14/mobile-predictable-crypto",
+    "lane": "mobile-android",
+    "name": "📱 Predictable Crypto"
   },
   "read-the-rules": {
     "day": 1,
@@ -317,6 +335,12 @@
     "lane": "script-analysis",
     "name": "📜 Zip Code"
   },
+  "script-analysis-day-14-msbuild-trusted-project-abuse": {
+    "day": 14,
+    "dir": "day14/scripting-trust-the-process",
+    "lane": "script-analysis",
+    "name": "📜 Trust the Process"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -394,6 +418,12 @@
     "dir": "day13/warmups-opposite-day",
     "lane": "warmups",
     "name": "👶 Opposite Day"
+  },
+  "warmups-day-14": {
+    "day": 14,
+    "dir": "day14/warmups-seven-steps",
+    "lane": "warmups",
+    "name": "👶 Seven Steps"
   },
   "welcome-robots": {
     "day": 1,

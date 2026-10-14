@@ -1,0 +1,9 @@
+{
+ "encoding": "rc4",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "generator_cmd": "sh rc4_gen.sh  # python cryptography ARC4 (rc4_whole_keybefore/rc4_body_keyafter/rc4_decoy) + openssl enc -rc4 (rc4_whole_openssl)",
+ "oracle_cmd": "perl rc4_oracle.pl rc4_decoy.bin 2113 missingk3y | python3 -c \"import sys,zlib,json;o,m,c,p=sys.stdin.read().rstrip(\\\"\\n\\\").split(\\\" \\\",3);assert m==\\\"HCFG\\\" and zlib.crc32(p.encode())==int(c);print(json.dumps({\\\"offset\\\":int(o),\\\"config\\\":json.loads(p)}))\"; perl -ne 'print grep /missingk3y/, $_' rc4_decoy.bin | wc -c; perl rc4_oracle.pl rc4_decoy.bin 2797 decoyk3y | python3 -c \"import sys,zlib,json;o,m,c,p=sys.stdin.read().rstrip(\\\"\\n\\\").split(\\\" \\\",3);assert m==\\\"HCFG\\\" and zlib.crc32(p.encode())==int(c);print(json.dumps({\\\"offset\\\":int(o),\\\"config\\\":json.loads(p)}))\"",
+ "oracle_output": "{\"offset\": 2113, \"config\": {\"c2\": \"198.51.100.23:4443\", \"beacon\": \"rc4-heron\", \"sleep\": 60, \"flag\": \"flag{rc4_k3y_w4s_r1ght_th3r3}\"}}\n0 | AssertionError",
+ "decoy": true
+}

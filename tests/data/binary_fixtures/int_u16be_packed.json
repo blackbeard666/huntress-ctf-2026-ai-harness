@@ -1,0 +1,13 @@
+{
+ "encoding": "u16be-packed",
+ "expected_offset": 8224,
+ "expected_config": {
+  "c2": "203.0.113.5:53",
+  "campaign": "halfword",
+  "sleep": 5,
+  "flag": "flag{sh0rt_sw4p}"
+ },
+ "generator_cmd": "bash int_gen.sh int_u16be_packed.bin u16words '{\"c2\":\"203.0.113.5:53\",\"campaign\":\"halfword\",\"sleep\":5,\"flag\":\"flag{sh0rt_sw4p}\"}'   # blob: printf header + crc32 from gzip trailer; elements: od -tu1 / xxd -p -c W; gcc -O2 C program with the const array / decimal string literal",
+ "oracle_cmd": "bash int_oracle.sh int_u16be_packed.bin u16words   # GNU grep -obUaP locates the stored magic; od -tu4/-tu8/-tx4/-tx2 reads elements; xxd -r -p / perl pack rebuild bytes; perl unpack header; gzip trailer = crc32(body)",
+ "oracle_output": "8224 HCFG 81 2327020476 {\"c2\":\"203.0.113.5:53\",\"campaign\":\"halfword\",\"sleep\":5,\"flag\":\"flag{sh0rt_sw4p}\"} 2327020476"
+}

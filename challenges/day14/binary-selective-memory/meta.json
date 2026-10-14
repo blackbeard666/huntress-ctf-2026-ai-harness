@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-14-objective-c-persistence-descriptor",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Selective Memory",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-14-objective-c-persistence-descriptor",
+    "time_trial": "binary-reverse-engineering-day-14-objective-c-persistence-descriptor/time_trial",
+    "mastery": "binary-reverse-engineering-day-14-objective-c-persistence-descriptor/mastery"
+  }
+}

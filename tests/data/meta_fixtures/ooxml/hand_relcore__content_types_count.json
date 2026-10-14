@@ -1,0 +1,8 @@
+{
+ "field": "ooxml.content_types_count",
+ "expected": "5",
+ "generator_cmd": ".venv/bin/python -I mk_hand.py out  (stdlib zipfile writer: hand-built OPC package whose core part is /meta/core-props.xml, located only via the _rels/.rels core-properties relationship; app.xml with Company/AppVersion)",
+ "oracle_cmd": "7z x -so tests/data/meta_fixtures/ooxml/hand_relcore__content_types_count.bin '[Content_Types].xml' | grep -oE '<(Default|Override)\\s' | wc -l  (all Default+Override mappings)",
+ "decoy": false,
+ "member": "hand_relcore.docx"
+}

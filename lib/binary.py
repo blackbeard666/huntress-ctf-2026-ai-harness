@@ -8,6 +8,7 @@ capstone disassembly (replacing the fragile `b8..c3` byte regex), and a Ghidra h
 hcfg_scan() (Day 14 prep) finds the lane's HCFG config blob in ANY of the storage encodings below and crc-gates it;
 it is pure stdlib (no subprocess) so in-window solvers can call it on the Homebase VM.
 """
+import array
 import base64
 import binascii
 import io
@@ -257,6 +258,10 @@ def ghidra_decompile(path, timeout=300):
 # rot13-/swapcase-/rot13-swapcase-base64 (letters transformed), linerev-[<x>-]base64 / reversed-<x>-base64 (each line of
 # the wrapped text reversed; offset = first stored char). split-base64/-base64url/-base32/-hex: the text cut into several
 # string literals in FILE order (NUL/padding/short separators between; offset = first char of the first chunk).
+# int arrays: u32le-/u32be-/u64le-/u64be-array (one blob byte per 32/64-bit element; offset = first byte of the first
+# element, BE: its leading 0x00), u16be-/u32be-/u64be-packed (blob packed big-endian into 16/32/64-bit words that a LE
+# compiler stored byte-swapped, e.g. uint32_t a[] = {0x48434647, ...}; offset = first stored byte), decimal-list
+# ('72,67,70,71,...' / '72 67 70 71' char codes, signed bytes -128..-1 allowed; offset = the '7' of '72').
 #
 # OFFSET LAW (Hit.offset, decimal FILE offset -- what `hcfg_offset` asks for):
 #   raw              the 'H' of the magic                          GM-confirmed (D12 FPC 82928)
@@ -265,7 +270,7 @@ def ghidra_decompile(path, timeout=300):
 #                    hex -> first char of the text (the '\' of '\x48' / the '0' of '0x48'); base32/base85/base64url ->
 #                    first char; ascii85 -> the '<' of a '<~' prefix if present; UTF-16 -> first byte of the first code
 #                    unit (BE: its 0x00 byte); reversed -> lowest byte of the reversed region (= where the blob's LAST
-#                    byte sits); xor'd -> first stored byte; zlib/gzip/deflate -> first byte of the compressed stream
+#                    byte sits); xor'd/RC4 -> first stored byte; zlib/gzip/deflate -> first byte of the compressed stream
 #                    (0x78 CMF / 0x1f gzip magic; a zlib/gzip stream that holds the blob further in: still the
 #                    stream start, detail "at+N"). These are SPECULATIVE (Hit.speculative=True): not GM-verified yet.
 HCFG_MAGIC = b"HCFG"
@@ -273,6 +278,7 @@ HCFG_SCAN_EXT = os.environ.get("HCTF_HCFG_SCAN_EXT", "1") != "0"   # 0: only the
 HCFG_DEFLATE_BRUTE_MAX = int(os.environ.get("HCTF_HCFG_DEFLATE_MAX", str(1 << 20)))   # headerless deflate brute cap
 HCFG_B64ALPHA_MAX = int(os.environ.get("HCTF_HCFG_B64ALPHA_MAX", str(32 << 20)))   # alphabet-run chars examined
 HCFG_MXOR_MAX = int(os.environ.get("HCTF_HCFG_MXOR_MAX", str(8 << 20)))   # whole-blob multi-byte xor cap (~65 ms/MiB)
+HCFG_RC4_KEYS = int(os.environ.get("HCTF_HCFG_RC4_KEYS", "100000"))   # C-string RC4 keys tried (~6 us each)
 _CONFIRMED = ("raw", "base64")
 _LEGACY = ("raw", "base64", "base64url", "hex")   # what the D13 solver's native scan already decodes
 
@@ -521,6 +527,66 @@ def _split_at(data, i, codec, emit):
         emit(i, "split-" + name, r[0], f"chunks={len(parts)}")
 
 
+def _wide_at(data, i, w, emit, budget):
+    """One blob byte per w-byte array element ('H' + (w-1) NULs + 'C'... at i): LE starts at i, BE at i-(w-1). A run
+    of such elements reads both ways with the same bytes -- keep the w-aligned start (compilers align int arrays),
+    LE when both/neither are."""
+    cands = [(False, i), (True, i - w + 1)]
+    cands.sort(key=lambda c: (c[1] % w != 0, c[0]))
+    for be, st in cands:
+        off = w - 1 if be else 0
+        if st < 0 or budget[0] <= 0:
+            continue
+        budget[0] -= 1
+        n = _need(data[st + off:st + off + 8 * w:w])
+        span = data[st:st + n * w]
+        lo = span[off::w]
+        if len(lo) == n and span.count(0) == len(span) - n + lo.count(0):   # every non-value byte is 0x00
+            emit(st, f"u{8 * w}{'be' if be else 'le'}-array", lo)
+            return
+
+
+_SWAP_TC = {2: "H", 4: "I", 8: "Q"}
+
+
+def _swapped_at(data, st, w, emit, budget):
+    """Blob packed big-endian into w-byte words stored little-endian (each word's bytes reversed) starting at st.
+    budget: [candidates left] -- 'GFCH'/'CHGF' floods (decoy tables) stay bounded."""
+    tc = _SWAP_TC[w]
+    if st < 0 or budget[0] <= 0 or array.array(tc).itemsize != w:
+        return
+    def unswap(buf):
+        a = array.array(tc, buf[:len(buf) // w * w])
+        a.byteswap()
+        return a.tobytes()
+    head = unswap(data[st:st + 16])
+    if head[:4] != HCFG_MAGIC:
+        return
+    n = _need(head)
+    budget[0] -= 1
+    emit(st, f"u{8 * w}be-packed", unswap(data[st:st + -(-n // w) * w])[:n])
+
+
+_DEC_SEP = rb"(?:[ \t\r\n]*[,;][ \t\r\n]*|[ \t\r\n]+)"
+_DEC_ANCHOR = re.compile(rb"72" + _DEC_SEP + rb"67" + _DEC_SEP + rb"70" + _DEC_SEP + rb"71(?![0-9])")
+_DEC_RUN = re.compile(rb"-?[0-9]{1,3}(?:" + _DEC_SEP + rb"-?[0-9]{1,3})*")
+_DEC_NUM = re.compile(rb"-?[0-9]+")
+
+
+def _decimal_at(data, s, emit):
+    """Decode the decimal char-code list whose '72' sits at data[s] (not preceded by a digit / '-')."""
+    if s and data[s - 1] in b"0123456789-":
+        return
+    nums = _DEC_NUM.findall(_DEC_RUN.match(data, s, s + 256).group(0))
+    if len(nums) < 12:
+        return
+    n = _need(bytes(int(x) & 0xFF for x in nums[:8]))
+    nums = _DEC_NUM.findall(_DEC_RUN.match(data, s, s + 16 * n + 64).group(0))[:n]
+    vals = [int(x) for x in nums]
+    if len(vals) == n and all(-128 <= v <= 255 for v in vals):
+        emit(s, "decimal-list", bytes(v & 0xFF for v in vals))
+
+
 def _anchor_table():
     lit = {HCFG_MAGIC: ("raw", None), b"GFCH": ("rev-raw", None), b"RGNES": ("rev-b64", None)}
     for a, codec in _TEXT_ANCHORS:
@@ -528,6 +594,9 @@ def _anchor_table():
         lit[_widen(a)[:-1]] = ("u16text", None)   # 'S\0E\0N\0G\0R': LE at i, BE at i-1
     lit[_widen(b"48")[:-1]] = ("u16text", None)
     lit[_widen(HCFG_MAGIC)[:-1]] = ("u16raw", None)
+    for w in (4, 8):
+        lit[(b"\0" * (w - 1)).join(bytes([c]) for c in HCFG_MAGIC)] = ("wide", None)   # 'H\0\0\0C\0\0\0F\0\0\0G'
+    lit[b"CHGF"] = ("swap16", None)
     z = {b"\x78\x01": (15, "zlib"), b"\x78\x5e": (15, "zlib"), b"\x78\x9c": (15, "zlib"), b"\x78\xda": (15, "zlib"),
          b"\x1f\x8b\x08": (31, "gzip"), _DEFLATE_FIXED[0]: (-15, "deflate"), _DEFLATE_FIXED[1]: (-15, "deflate")}
     for a in z:
@@ -572,6 +641,89 @@ def _inflate(mv, p, wbits, budget=None):
     return out, at
 
 
+# compressed stream (zlib/gzip/xz/bz2/lzma-alone) stored as base64 / plain hex text, or xz/bz2/lzma raw in the file
+# (zlib/gzip/deflate raw are anchors above). One bytes.find per needle (~0.5 ms/MiB each; a regex alternation was 20 ms/
+# MiB): base64 of the stream header 78 9c -> eJ[w-z], 78 da -> eN[o-r], 1f 8b 08 -> H4sI, xz -> /Td6WFoA, 'BZh' ->
+# Qlpo, 5d 00 00 -> XQAA; lowercase+uppercase hex of zlib/gzip; raw xz magic, bz2 block magic (4 bytes past 'BZh9'),
+# lzma-alone props 5d 00 00 (header-checked before inflating). (needle, bytes before the stream start, form)
+_ZPACK = ((b"eJ", 0, "b64"), (b"eN", 0, "b64"), (b"H4sI", 0, "b64"), (b"/Td6WFoA", 0, "b64"), (b"Qlpo", 0, "b64"),
+          (b"XQAA", 0, "b64"), (b"789c", 0, "hex"), (b"78da", 0, "hex"), (b"1f8b08", 0, "hex"), (b"789C", 0, "hex"),
+          (b"1F8B08", 0, "hex"), (b"\xfd7zXZ\x00", 0, "raw"), (b"1AY&SY", 4, "raw"), (b"]\x00\x00", 0, "raw"))
+_ZPACK_B64 = re.compile(rb"[A-Za-z0-9+/_\-\r\n]+")
+_ZPACK_HEX = re.compile(rb"[0-9A-Fa-f]+")
+
+
+def _zpack_kind(head):
+    """Container name for decoded stream bytes, or None."""
+    if head[:2] in (b"\x78\x9c", b"\x78\xda", b"\x78\x01", b"\x78\x5e"):
+        return "zlib"
+    if head[:3] == b"\x1f\x8b\x08":
+        return "gzip"
+    if head[:6] == b"\xfd7zXZ\x00":
+        return "xz"
+    if re.match(rb"BZh[1-9]1AY&SY", head):
+        return "bz2"
+    if head[:3] == b"\x5d\x00\x00" and len(head) >= 13:   # lzma-alone: props, dict size, u64 size (-1 or sane)
+        dic, size = int.from_bytes(head[1:5], "little"), int.from_bytes(head[5:13], "little")
+        if dic >= 1 << 16 and (dic & (dic - 1) == 0 or dic & (dic - 1) & (dic - 2) == 0) and (
+                size == (1 << 64) - 1 or 12 <= size < 64 << 20):
+            return "lzma"
+    return None
+
+
+def _zpack_open(kind, buf, budget):
+    """(output from the 'HCFG' on, its position) for the `kind` stream at buf[0], or None; output charged to budget."""
+    import bz2
+    import lzma
+    if kind in ("zlib", "gzip"):
+        d = zlib.decompressobj(15 if kind == "zlib" else 31)
+    elif kind == "bz2":
+        d = bz2.BZ2Decompressor()
+    else:
+        d = lzma.LZMADecompressor(lzma.FORMAT_XZ if kind == "xz" else lzma.FORMAT_ALONE)
+    try:
+        out = d.decompress(bytes(buf), 1 << 20)
+    except (zlib.error, OSError, EOFError, ValueError, lzma.LZMAError):
+        return None
+    budget[0] -= len(out)
+    at = out.find(HCFG_MAGIC)
+    return (out[at:at + 70000], at) if at >= 0 else None
+
+
+def _zpack_at(data, i, form, emit, budget):
+    """Decode the compressed stream stored at data[i] as `form` (b64 / hex text, or raw) and emit its blob."""
+    if form == "raw":
+        stream, pre = data[i:i + 16], ""
+    else:
+        m = (_ZPACK_HEX if form == "hex" else _ZPACK_B64).match(data, i, i + 32)
+        if not m or len(m.group(0)) < 32:   # a 12-byte blob compresses to >= 20 bytes (>= 27 b64 chars)
+            return
+        head = m.group(0).replace(b"\r", b"").replace(b"\n", b"")
+        try:
+            stream = bytes.fromhex(head[:24].decode()) if form == "hex" else _b64dec(head[:24])
+        except (binascii.Error, ValueError):
+            return
+        pre = "hex-" if form == "hex" else "base64-"
+    kind = _zpack_kind(stream)
+    if not kind or budget[0] <= 0:
+        return
+    if form == "raw":
+        stream = data[i:i + (2 << 20)]
+    else:
+        run = (_ZPACK_HEX if form == "hex" else _ZPACK_B64).match(data, i, i + (3 << 20)).group(0)
+        try:
+            if form == "hex":
+                stream = bytes.fromhex(run[:len(run) & ~1].decode())
+            else:
+                run = run.replace(b"\r", b"").replace(b"\n", b"")
+                stream = _b64dec(run[:len(run) & ~3] if len(run) % 4 == 1 else run)
+        except (binascii.Error, ValueError):
+            return
+    r = _zpack_open(kind, stream, budget)
+    if r:
+        emit(i, pre + kind, r[0], f"at+{r[1]}" if r[1] else "")
+
+
 _PRINTABLE = frozenset(range(0x20, 0x7f)) | {9, 10, 13}
 _PMASK = [sum(1 << k for k in range(256) if b ^ k in _PRINTABLE) for b in range(256)]   # keys keeping b printable
 _JSONW = {**{c: 2 for c in b"bcfgkmpquvwxyz0123456789:,._-/ "}, **{c: 4 for c in b'etaoinsrhld"'},
@@ -582,6 +734,28 @@ def _xor_rep(buf, key):
     """buf ^ key repeated from buf[0]."""
     k = (key * (len(buf) // len(key) + 1))[:len(buf)]
     return (int.from_bytes(buf, "little") ^ int.from_bytes(k, "little")).to_bytes(len(buf), "little")
+
+
+def _rc4(key, buf):
+    """RC4(key) applied to buf (pycryptodome when present, else pure Python)."""
+    try:
+        from Crypto.Cipher import ARC4
+        return ARC4.new(key).encrypt(bytes(buf))
+    except Exception:  # noqa: BLE001 - missing module / unsupported key length: pure-Python fallback
+        S, j, kl = list(range(256)), 0, len(key)
+        for i in range(256):
+            j = (j + S[i] + key[i % kl]) & 255
+            S[i], S[j] = S[j], S[i]
+        out, i, j = bytearray(buf), 0, 0
+        for n in range(len(out)):
+            i = (i + 1) & 255
+            j = (j + S[i]) & 255
+            S[i], S[j] = S[j], S[i]
+            out[n] ^= S[(S[i] + S[j]) & 255]
+        return bytes(out)
+
+
+_RC4_KEY = re.compile(rb"\0([\x21-\x7e][\x20-\x7e]{3,63})(?=\0)")   # NUL-delimited 4-64 char C string (~0.1 s / 48 MiB)
 
 
 def _mxor_body(data, i):
@@ -711,6 +885,7 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False):
     # ONE regex pass over the file finds every anchor (one bytes.find per anchor was ~2 ms / 4 MB each, ~38 ms total)
     mv = memoryview(data)
     u16_runs, zbudget = set(), [16 << 20]   # zbudget: total inflate output for streams that merely CONTAIN the blob
+    ibudget = [256]   # int-array / word-swap candidates decoded
     for m in _ANCHORS.finditer(data):
         i, a = m.start(), m.group(0)
         kind = _ANCHOR_KIND.get(a, "hex")
@@ -727,6 +902,12 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False):
             if e >= 12:
                 st = max(0, e - _need(data[e - 12:e][::-1]))
                 emit(st, "reversed-raw", data[st:e][::-1])
+            _swapped_at(data, i, 4, emit, ibudget)       # uint32 words 0x48434647 stored LE
+            _swapped_at(data, i - 4, 8, emit, ibudget)   # uint64 words 0x48434647vvkkllll stored LE
+        elif kind == "wide":      # uint32/uint64 element per blob byte
+            _wide_at(data, i, (len(a) - 1) // 3, emit, ibudget)
+        elif kind == "swap16":    # uint16 words 0x4843 0x4647 stored LE
+            _swapped_at(data, i, 2, emit, ibudget)
         elif kind == "rev-b64":   # 'RGNES' = the last 5 chars of the reversed base64 text
             e = i + 5
             mm = _B64REV.match(data[max(0, e - 90000):e][::-1])   # reversed window: a linear forward match
@@ -771,6 +952,17 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False):
         return _rank(hits)
     # expensive passes, only while nothing valid was found
     if not valid() and not late():
+        # base64/hex text of a zlib/gzip/xz/bz2/lzma stream, or an xz/bz2/lzma stream raw in the file (offset = first
+        # stored byte of the text / stream; detail at+N when the blob sits further into the output)
+        for needle, back, form in _ZPACK:
+            i, n = data.find(needle), 0
+            while i >= 0 and n < 4096 and zbudget[0] > 0 and not late():
+                if i >= back:
+                    _zpack_at(data, i - back, form, emit, zbudget)
+                i, n = data.find(needle, i + 1), n + 1
+            if valid() or late():
+                break
+    if not valid() and not late():
         # ROT13 / case-swapped base64, optionally reversed per line: one bytes.find per transformed 'SENGR' (kept out
         # of the anchor regex -- first bytes e/r/s/f made that pass ~33% slower)
         for a in [a for a in _ROTB64 if a != b"RGNES"]:
@@ -778,6 +970,12 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False):
             while i >= 0 and not late():
                 _rotb64_at(data, i, a, emit)
                 i = data.find(a, i + 1)
+    if not valid() and not late():
+        # decimal char-code list '72,67,70,71,...' (C/JS/Python source, String.fromCharCode, config text)
+        for n, m in enumerate(_DEC_ANCHOR.finditer(data)):
+            if late() or n >= 256:
+                break
+            _decimal_at(data, m.start(), emit)
     if not valid() and not late():
         # base64/base32/hex text split across several adjacent literals (NUL / padding / short separators between)
         for a, codec in _SPLIT:
@@ -845,6 +1043,36 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False):
                     emit(i, "base64-custom", r[0], f"alphabet@{aoff}")
                 i = data.find(anchor, i + 1)
             if valid() or late():
+                break
+    if not valid() and not late():
+        # RC4 under a C-string key stored within 4 KB: the key's keystream gives the stored form of 'HCFG' (whole blob
+        # encrypted) -> one bytes.find in the window; or a plain header (raw hit, crc failed) over an RC4'd body
+        bodies = [h for h in hits if h.encoding == "raw" and not h.crc_ok][:64]
+        ks_of = {}
+        for n, m in enumerate(_RC4_KEY.finditer(data)):
+            if n >= HCFG_RC4_KEYS or late():
+                break
+            key, lo, hi = m.group(1), max(0, m.start(1) - 4096), m.end() + 4096
+            ks = ks_of.get(key) or _rc4(key, bytes(8))
+            if len(ks_of) < 1 << 16:
+                ks_of[key] = ks
+            pat = bytes(a ^ b for a, b in zip(HCFG_MAGIC, ks))
+            t = data.find(pat, lo, hi)
+            while t >= 0:
+                blob = _rc4(key, data[t:t + _need(bytes(a ^ b for a, b in zip(data[t:t + 8], ks)))])
+                if (_parse_blob(blob) or (0,) * 6)[5]:   # crc-valid only
+                    emit(t, "rc4", blob, f"key={key.decode('latin-1')!r} key@{m.start(1)}")
+                t = data.find(pat, t + 1, hi)
+            for h in bodies:
+                if lo <= h.offset < hi:
+                    head = data[h.offset:h.offset + 12]
+                    dec = _rc4(key, data[h.offset + 12:h.offset + 12 + h.length])
+                    for plain in (dec, bytes(b ^ h.key for b in dec)):   # header xor byte applied before / not at all
+                        if len(plain) == h.length and zlib.crc32(plain) == h.crc:
+                            emit(h.offset, "rc4-body", head + bytes(b ^ h.key for b in plain),
+                                 f"key={key.decode('latin-1')!r} key@{m.start(1)}")
+                            break
+            if valid():
                 break
     if not valid() and not late() and len(data) <= HCFG_DEFLATE_BRUTE_MAX:
         # headerless dynamic-Huffman deflate (what zlib emits for a ~400 B blob): try every plausible block start

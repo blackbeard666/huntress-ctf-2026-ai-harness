@@ -155,7 +155,7 @@ assert meta.lookup("file", "magic_prefix_hex_32") == (meta.REGISTRY[("file", "ma
 assert meta.lookup("pe", "version_file_version")[1] == "file_version"
 assert P("totally-unknown", {}) is None and meta.answer("totally-unknown", {}, b"x") == (None, None)
 print(f"ok  2) registry: {len(meta.REGISTRY)} entries ({sum(e.tier == meta.VERIFIED for e in meta.REGISTRY.values())} "
-      f"verified D1-D13), no conflicts, prebuilt can't shadow verified, MAX_DAY filter, parse_field grammar")
+      f"verified D1-D14), no conflicts, prebuilt can't shadow verified, MAX_DAY filter, parse_field grammar")
 
 # 3) spell + alternates
 H, G, D = spell.Hex, spell.Guid, spell.Dims
@@ -201,7 +201,8 @@ try:
     plan = solvers.reuse_plan(contract13, case13 / "artifacts", "metadata-forensics", exclude=excl, limit=1,
                               by_question=False, max_parallel=1)
     assert calls[0] == LANE and len(calls) == 2, calls          # lane + the newest dated one (limit=1)
-    assert solvers._day_key(calls[1]) == 12, calls
+    newest = max(solvers._day_key(c.parent.parent / "solver") for c in CASES if solvers._day_key(c) != 13)
+    assert solvers._day_key(calls[1]) == newest, calls        # the newest dated metadata solver other than D13's
     exp13 = json.loads((case13 / "expected.json").read_text())
     assert plan["high"] == exp13 and plan["source"][next(iter(exp13))] == LANE, plan   # D13 field verified (D13 cases)
     assert plan["best"] == LANE

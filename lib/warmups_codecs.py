@@ -1,7 +1,7 @@
 """Warmups lane codec library: every day's line codec as an exact ENCODER + decoder, plus a broad try-list of classical
 encoders for identifying an unknown day's codec from its Single Solve.
 
-Warmups (D1-D13): each Single is one sentence -- "Nice work decoding this warmup! To solve, submit this exact answer to
+Warmups (D1-D14): each Single is one sentence -- "Nice work decoding this warmup! To solve, submit this exact answer to
 the Game Master: <slug>" -- under ONE codec that changes daily; Mastery day N = 5N-2 sets of N numbered lines, line k
 under day k's codec, the sentence cut mid-word (reference/techniques/warmups.md). The encoders below reproduce the GM's
 bytes exactly (all 819 lines of D13 auto-mastery-d1a77831: lowercase hex/%xx, space-separated 8-bit binary, decimal,
@@ -81,6 +81,7 @@ DAYS = [
      lambda t: _t(base64.urlsafe_b64decode(_b64pad(t.strip().rstrip("=")))), False),
     (12, "reverse", lambda s: s[::-1], lambda t: t[::-1], True),
     (13, "atbash", atbash, atbash, True),
+    (14, "caesar+7", lambda s: rot(s, 7), lambda t: rot(t, -7), True),
 ]
 
 try:   # fair runs (HCTF_CODEC_MAX_DAY=<N-1>, as lib/codec.py): only codecs GM-confirmed before day N
@@ -367,6 +368,66 @@ def b62_dec(t, alpha=_B62):
     return _t(n.to_bytes((n.bit_length() + 7) // 8, "big"))
 
 
+# Punycode (RFC 3492, punycode.js / Python "punycode" codec): basic code points kept in order, then '-' and the
+# lowercase base-36 deltas of the rest -- an ASCII line comes out as itself + '-'. IDNA (RFC 5891 ToASCII): each
+# non-ASCII label becomes "xn--" + punycode, ASCII labels stay. Variants: whole line, per space-separated word, forced
+# "xn--" per word, IDNA per word. Strict: a label must re-encode to itself and decode to printable text.
+_PUNY_EXT = re.compile(r"[A-Za-z0-9]*")
+
+
+def puny_enc(s):
+    return s.encode("punycode").decode("ascii")
+
+
+def _puny1(lbl):
+    if not lbl or not lbl.isascii() or len(lbl) > 4096:
+        raise ValueError("not punycode")
+    basic, _sep, ext = lbl.rpartition("-")
+    if not _PUNY_EXT.fullmatch(ext):
+        raise ValueError("not punycode")
+    out = lbl.encode("ascii").decode("punycode")
+    if not out.isprintable() or puny_enc(out) != basic + _sep + ext.lower():
+        raise ValueError("not punycode")
+    return out
+
+
+def puny_dec(t):
+    return _puny1(t.strip())
+
+
+def puny_words_dec(t):
+    toks = t.strip().split(" ")
+    if not all("-" in w for w in toks):
+        raise ValueError("not punycode words")
+    return " ".join(_puny1(w) for w in toks)
+
+
+def idna_enc(s, force=False):
+    if force:
+        return " ".join("xn--" + puny_enc(w) for w in s.split(" "))
+    return " ".join(".".join(lb if lb.isascii() else "xn--" + puny_enc(lb) for lb in w.split(".")) for w in s.split(" "))
+
+
+def idna_dec(t, force=False):
+    """xn-- labels (space-separated words, each optionally dot-separated labels) decoded; force = every word xn--."""
+    toks, out, hit = t.strip().split(" "), [], False
+    for w in toks:
+        if force and not w.lower().startswith("xn--"):
+            raise ValueError("not xn-- words")
+        labels = w.split(".") if not force else [w]
+        dec = []
+        for lbl in labels:
+            if lbl[:4].lower() == "xn--":
+                dec.append(_puny1(lbl[4:]))
+                hit = True
+            else:
+                dec.append(lbl)
+        out.append(".".join(dec))
+    if not hit:
+        raise ValueError("no xn-- label")
+    return " ".join(out)
+
+
 # Baconian cipher (CyberChef "Bacon Cipher Encode" semantics): letter -> 5-bit group, "24" = Bacon's own alphabet
 # (I=J, U=V), "26" = one code per letter. groups = letters only, groups space-joined; keep = groups run together, every
 # other character kept in place (cc: CyberChef also turns a kept 0/1 digit into A/B). Lossy (case, I/J, U/V): the
@@ -488,6 +549,161 @@ def xx_dec(t):
     return uu_dec(t, _UNXX)
 
 
+# Polybius square (5x5, I/J merged, row then column, 1-based) and tap code (the same idea on the "prison" grid that
+# merges C/K instead, each coordinate knocked as a run of dots). Letters only: the decoder returns lowercase letters,
+# words split where the input had "/" or "|" (or each space-separated token is a whole word), never past a stray symbol.
+_POLY = "abcdefghiklmnopqrstuvwxyz"
+_TAP = "abcdefghijlmnopqrstuvwxyz"
+
+
+def _sq_pos(c, grid):
+    c = c.lower()
+    c = {"j": "i"}.get(c, c) if grid is _POLY else {"k": "c"}.get(c, c)
+    i = grid.find(c)
+    return None if i < 0 or not c.isalpha() else divmod(i, 5)
+
+
+def polybius_enc(s, sep=" ", word=None, grid=_POLY):
+    words = [[f"{r + 1}{c + 1}" for r, c in filter(None, (_sq_pos(ch, grid) for ch in w))] for w in s.split()]
+    words = [w for w in words if w]
+    if word is None:
+        return sep.join(x for w in words for x in w)
+    return word.join(sep.join(w) for w in words)
+
+
+def _sq_word(digits, grid):
+    if not digits or len(digits) % 2:
+        return None
+    return "".join(grid[(int(digits[i]) - 1) * 5 + int(digits[i + 1]) - 1] for i in range(0, len(digits), 2))
+
+
+def polybius_dec(t, grid=_POLY):
+    t = t.strip()
+    if len(t) > 20000 or not re.fullmatch(r"[1-5][1-5\s/|,.-]*", t) or sum(c.isdigit() for c in t) < 4:
+        return None
+    if re.search(r"[/|]", t):
+        words = re.split(r"[/|]", t)
+    elif re.search(r"\S\s{2,}\S", t):
+        words = re.split(r"\s{2,}", t)
+    else:
+        toks = re.split(r"[\s,.-]+", t)
+        words = [t] if all(len(x) == 2 for x in toks) else toks
+    out = [_sq_word(re.sub(r"[\s,.-]", "", w), grid) for w in words if w.strip()]
+    return None if not out or None in out else " ".join(out)
+
+
+def tap_enc(s, tap=".", gap=" ", letter="  ", word=" / "):
+    return word.join(letter.join(f"{tap * (r + 1)}{gap}{tap * (c + 1)}" for r, c in filter(None, (_sq_pos(ch, _TAP)
+                                                                                                    for ch in w)))
+                     for w in s.split() if any(_sq_pos(ch, _TAP) for ch in w))
+
+
+def tap_dec(t):
+    t = t.strip()
+    if len(t) > 50000 or not re.fullmatch(r"[.*•·xX][.*•·xX\s/|]*", t) or len(set(re.sub(r"[\s/|]", "", t))) != 1:
+        return None
+    out = []
+    for w in re.split(r"[/|]", t):
+        runs = [len(r) for r in re.findall(r"[.*•·xX]+", w)]
+        if not runs:
+            continue
+        if len(runs) % 2 or max(runs) > 5:
+            return None
+        out.append("".join(_TAP[(runs[i] - 1) * 5 + runs[i + 1] - 1] for i in range(0, len(runs), 2)))
+    return " ".join(out) or None
+
+
+_BR_LET = dict(zip(string.ascii_lowercase, "⠁⠃⠉⠙⠑⠋⠛⠓⠊⠚⠅⠇⠍⠝⠕⠏⠟⠗⠎⠞⠥⠧⠺⠭⠽⠵"))
+_BR_PUN = {",": "⠂", ";": "⠆", ":": "⠒", ".": "⠲", "!": "⠖", "?": "⠦", "'": "⠄", "-": "⠤", "/": "⠌", "(": "⠶",
+           ")": "⠶", '"': "⠴"}
+_UNBR_LET = {v: k for k, v in _BR_LET.items()}
+_UNBR_PUN = {v: k for k, v in _BR_PUN.items() if k not in ')"'} | {"⠴": '"'}
+_BR_DIG = dict(zip("1234567890", "⠁⠃⠉⠙⠑⠋⠛⠓⠊⠚"))
+_BR_ASCII = " A1B'K2L@CIF/MSP\"E3H9O6R^DJG>NTQ,*5<-U8V.%[$+X!&;:4\\0Z7(_?W]#Y)="  # North American Braille ASCII
+
+
+def braille_enc(s, space=" "):
+    """Grade 1 (uncontracted) Unicode Braille: ⠠ capital per letter, ⠼ number sign before a digit run, ⠰ letter sign
+    when a-j follows digits."""
+    out, num = [], False
+    for c in s:
+        if c.isdigit() and c in _BR_DIG:
+            out.append(("" if num else "⠼") + _BR_DIG[c])
+            num = True
+            continue
+        if num and c.lower() in "abcdefghij":
+            out.append("⠰")
+        num = num and c in ".,"
+        if c.lower() in _BR_LET:
+            out.append(("⠠" if c.isupper() else "") + _BR_LET[c.lower()])
+        elif c == " ":
+            out.append(space)
+        else:
+            out.append(_BR_PUN.get(c, c))
+    return "".join(out)
+
+
+def braille_dec(t):
+    """Grade 1 Unicode Braille (U+2800 block, 6-dot cells) -> text; ⠀ or ASCII whitespace = space. None when the text
+    isn't Braille or holds a cell outside the uncontracted letter/digit/punctuation set (contractions, 8-dot cells)."""
+    t = t.strip()
+    if not t or len(t) > 50000 or not all("\u2800" <= c <= "\u283f" or c in " \t\r\n" for c in t):
+        return None
+    out, num, cap, caps, letter, paren = [], False, False, False, False, False
+    i = 0
+    while i < len(t):
+        c = t[i]
+        i += 1
+        if c in " \t\r\n\u2800":
+            out.append(" " if c == "\u2800" else c)
+            num = caps = False
+            continue
+        if c == "⠠":
+            if i < len(t) and t[i] == "⠠":
+                caps, i = True, i + 1
+            else:
+                cap = True
+            continue
+        if c == "⠼":
+            num = True
+            continue
+        if c == "⠰":
+            num, letter = False, True
+            continue
+        if num and c in _BR_DIG.values() and not letter:
+            out.append("1234567890"["⠁⠃⠉⠙⠑⠋⠛⠓⠊⠚".index(c)])
+            continue
+        if num and c in "⠲⠂":
+            out.append("." if c == "⠲" else ",")
+            continue
+        num = letter = False
+        if c in _UNBR_LET:
+            ch = _UNBR_LET[c]
+            out.append(ch.upper() if cap or caps else ch)
+            cap = False
+        elif c == "⠶":
+            out.append(")" if paren else "(")
+            paren = not paren
+        elif c in _UNBR_PUN:
+            out.append(_UNBR_PUN[c])
+            caps = caps and c == "⠤"
+        else:
+            return None
+    return "".join(out) or None
+
+
+def braille_ascii_enc(s):
+    """CyberChef "To Braille": each char through the North American Braille ASCII table (digits = lower cells)."""
+    return "".join(chr(0x2800 + _BR_ASCII.index(c.upper())) if c.upper() in _BR_ASCII else c for c in s)
+
+
+def braille_ascii_dec(t):
+    t = t.strip()
+    if not t or len(t) > 50000 or not all("\u2800" <= c <= "\u283f" or c in " \t\r\n" for c in t):
+        return None
+    return "".join(_BR_ASCII[ord(c) - 0x2800] if "\u2800" <= c <= "\u283f" else c for c in t).lower()
+
+
 def wordrev(s):
     return " ".join(w[::-1] for w in s.split(" "))
 
@@ -548,6 +764,10 @@ def _cands():
         ("base36", b36_enc, b36_dec),
         ("base62", b62_enc, b62_dec),
         ("base62-inv", lambda s: b62_enc(s, _B62_INV), lambda t: b62_dec(t, _B62_INV)),
+        ("punycode-words", lambda s: " ".join(puny_enc(w) for w in s.split(" ")), puny_words_dec),
+        ("punycode", puny_enc, puny_dec),
+        ("xn--words", lambda s: idna_enc(s, force=True), lambda t: idna_dec(t, force=True)),
+        ("idna-words", idna_enc, idna_dec),
         ("quoted-printable", lambda s: quopri.encodestring(_u(s)).decode(), lambda t: _t(quopri.decodestring(_u(t)))),
         ("quoted-printable-all", lambda s: "".join(f"={b:02X}" for b in _u(s)),
          lambda t: _t(quopri.decodestring(_u(t)))),
@@ -569,6 +789,18 @@ def _cands():
         ("nato", nato_enc, nato_dec),
         ("a1z26", a1z26_enc, a1z26_dec),
         ("a1z26-comma", lambda s: a1z26_enc(s, sep=","), lambda t: a1z26_dec(t, sep=",")),
+        ("polybius", lambda s: polybius_enc(s, sep=""), polybius_dec),
+        ("polybius-spaced", polybius_enc, polybius_dec),
+        ("polybius-words", lambda s: polybius_enc(s, word=" / "), polybius_dec),
+        ("polybius-wordruns", lambda s: polybius_enc(s, sep="", word=" "), polybius_dec),
+        ("polybius-comma", lambda s: polybius_enc(s, sep=","), polybius_dec),
+        ("tapcode-digits", lambda s: polybius_enc(s, grid=_TAP), lambda t: polybius_dec(t, _TAP)),
+        ("tapcode", tap_enc, tap_dec),
+        ("tapcode-nowords", lambda s: tap_enc(s, word="  "), tap_dec),
+        ("tapcode-knock", lambda s: tap_enc(s, tap="x"), tap_dec),
+        ("braille", braille_enc, braille_dec),
+        ("braille-blank", lambda s: braille_enc(s, space="\u2800"), braille_dec),
+        ("braille-ascii", braille_ascii_enc, braille_ascii_dec),
     ]
     out += [(f"bacon{a}-{tr}{('-keep', '-keep-cc')[cc] if k else ''}",
              (lambda a, tr, k, cc: lambda s: bacon_enc(s, a, tr, k, cc))(a, tr, k, cc),
@@ -750,6 +982,8 @@ SPECULATIVE_FREE = (
     ("qwerty", lambda p: _top(p, [qwerty_shift(p, 1), qwerty_shift(p, -1)], 2)),
     ("rail", lambda p: _top(p, [rail_dec(p, n) for n in range(2, 7)])),
     ("affine", lambda p: _top(p, [affine_inv(p, a, b) for a in _AFFINE_A for b in range(26)])),
+    ("punycode", lambda p: [p[:len(p) - len(p.lstrip())] + puny_dec(p)]),
+    ("braille", lambda p: [b for b in (braille_dec(p),) if b]),
 )
 
 

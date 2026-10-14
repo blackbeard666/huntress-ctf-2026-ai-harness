@@ -1,0 +1,9 @@
+{
+ "codec": "polybius-spaced",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-kestrel-17",
+ "encoded": "33 24 13 15 52 34 42 25 14 15 13 34 14 24 33 22 44 23 24 43 52 11 42 32 45 35 44 34 43 34 31 51 15 43 45 12 32 24 44 44 23 24 43 15 53 11 13 44 11 33 43 52 15 42 44 34 44 23 15 22 11 32 15 32 11 43 44 15 42 13 34 12 11 31 44 25 15 43 44 42 15 31",
+ "generator_cmd": "python3 -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from pycipher import PolybiusSquare as P;print(P(sys.argv[2],5,\"12345\").encipher(sys.argv[1].replace(\"j\",\"i\").replace(\"J\",\"I\") if \"j\" not in sys.argv[2] else sys.argv[1].replace(\"k\",\"c\").replace(\"K\",\"C\")))' \"$plain\" abcdefghiklmnopqrstuvwxyz | sed 's/../& /g;s/ $//'  # pycipher PolybiusSquare, pairs space-split by sed",
+ "oracle_cmd": "python3 -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from secretpy import Polybius;print(Polybius().decrypt(\"\".join(c for c in sys.argv[1] if c in \"12345\"),alphabet=sys.argv[2]))' \"$encoded\" abcdefghiklmnopqrstuvwxyz  # secretpy Polybius.decrypt",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemastercobaltkestrel",
+ "expected": "match"
+}

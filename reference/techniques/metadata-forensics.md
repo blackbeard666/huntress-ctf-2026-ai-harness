@@ -1,4 +1,4 @@
-# metadata-forensics — technique log (days 1-13; updated after every day)
+# metadata-forensics — technique log (days 1-14; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -15,10 +15,11 @@ How this lane has looked so far (observations, not guarantees):
   Day 12 switched to a NEW member family -- a 5 KB .NET dll (`d12-dotnet-NNN-dotnet-mvid-guid`) -- and went into the CLI
   METADATA tables (Module.Mvid via the #GUID heap); same 1-field / TT 1 / Mastery 2x1 shape. Day 13 another NEW
   family -- a 9.7 KB MSI (OLE/CFB, `d13-msi-NNN-msi-product-code-guid`) -> the Property table; same 1-field shape.
+  Day 14 another NEW family -- a 547 B Windows shortcut (`d14-lnk-NNN-lnk-target-path-windows`) -> LinkInfo; same shape.
 - A new `<fmt>.<field>` family each day: identity (name/size/hashes) -> magic prefix -> `text.utf8_bom_present` ->
   `jpeg.sof_dimensions_pixels` -> `png.ihdr_dimensions_pixels` -> `pdf.header_version` -> `zip.eocd_total_entries` ->
   `zip.central_directory_member_names` -> `pe.coff_machine_u16_hex` -> `pe.address_of_entry_point_rva_hex` ->
-  `pe.version_original_filename` -> `dotnet.mvid_guid` -> `msi.product_code_guid`. Since Day 3 the question literally names the field
+  `pe.version_original_filename` -> `dotnet.mvid_guid` -> `msi.product_code_guid` -> `lnk.target_path_windows`. Since Day 3 the question literally names the field
   (`Determine <fmt>.<field> for <member>`); answer ids read `dNN-<fmt>-NNN-<fmt>-<field>` (`.`/`_` -> `-`). NOTE the
   `dNN` is the drop/member family, not the day the field appeared: Day 8's new field came as `d07-zip-001-zip-central-
   directory-member-names`; Day 9's as `d09-pe-001-pe-coff-machine-u16-hex` (new member family -> new `dNN`); Day 10's as `d09-pe-001-pe-address-of-entry-point-rva-hex` (same exe family), Day 11's as
@@ -45,7 +46,8 @@ How this lane has looked so far (observations, not guarantees):
   (single 386 0x014c, TT amd64 0x8664, Mastery arm64 0xaa64 + 386) and OriginalFilename follows it (`pe-base-<goarch>.exe`).
   D12: every dll is 5,120 B with the same layout; the MVID, the sha256 and the `Huntress.Managed.<12HEX>` type name re-roll
   per variant (managed-001..004). D13: four installer-00N.msi with DIFFERENT bytes/sha256 (same 9,728 B) but the SAME
-  ProductCode in every mode -- the "collision" is the point; the answer can legitimately repeat across sets.
+  ProductCode in every mode -- the "collision" is the point; the answer can legitimately repeat across sets. D14: four
+  shortcut-00N.lnk, all -> `C:\Windows\System32\cmd.exe` (LinkInfo and IDList agreed; "impossible destination" unasked).
   Never cache a value across sets.
 - **Field-set size** -- grows AND shrinks: D7 TT/Mastery went 1 -> 11 fields (Mastery 22); D8 12 in every mode (Mastery
   5 x 12); D9 13 (Mastery 5 x 13); D10 back to ONE field everywhere (Mastery 2 sets x 1, zip = the lone exe). Families: the day's field +
@@ -82,6 +84,7 @@ How this lane has looked so far (observations, not guarantees):
 | `dotnet.*` / `.dll` "Mono/.Net assembly" / "module identities", "rebuilds vs renames" | CLI metadata, stdlib only (no dnfile in-window): PE data dir 14 (CLI header) -> MetaData RVA -> `BSJB` root -> stream headers (`#~`, `#Strings`, `#GUID`, `#Blob`). `#~`: HeapSizes byte @+6 (bit1 = 4-byte GUID index), Valid u64 @+8, row counts @+24; Module row 0 = Generation u16, Name (str idx), **Mvid (guid idx, 1-based)** -> 16 B at #GUID+(i-1)*16 -> `str(uuid.UUID(bytes_le=..))`. Cross-check: `monodis`/`ilspycmd -il` print `.module` + `// MVID: {..}` |
 | `pe.version_*` / "version resources remember what the binaries called themselves" | VS_VERSIONINFO StringFileInfo: `pefile.PE(data=b, fast_load=True)`; `pe.parse_data_directories(directories=[DIRECTORY_ENTRY['IMAGE_DIRECTORY_ENTRY_RESOURCE']])`; walk `pe.FileInfo[..][..].StringTable[..].entries` (bytes keys). Match the id tail to the key ignoring case/`-_` (`original-filename` -> `OriginalFilename`). Shell: `strings -e l f.exe | grep -A1 OriginalFilename` |
 | `msi.*` / `.msi` / "installers copied, renamed, repackaged", "stable product identities" | OLE CFB (`d0 cf 11 e0`). Fast path: `strings -n 6 x.msi \| grep -aoE 'ProductCode\{[0-9A-F-]{36}\}'`. Exact: CFB streams -> demangle names (0x3800-0x4840 base-64 packing) -> `!_StringPool`/`!_StringData` (refs 3 B wide if pool header bit 0x80000000) -> `!Property` column-major (all keys, then all values). `msiinfo`/`msidump` NOT installed; `olefile` is in the venv. Reference: `challenges/day13/metadata-product-placement/solver/solve.py` `msi_property` |
+| `lnk.*` / `.lnk` / "where each link points instead of where it sits" | MS-SHLLINK: `4c 00 00 00` + CLSID `01140200-0000-0000-c000-000000000046`; LinkFlags u32 @0x14 (0x1 IDList, 0x2 LinkInfo, 0x80 Unicode). Target = LinkInfo LocalBasePath (+CommonPathSuffix; Unicode offsets if LinkInfoHeaderSize >= 0x24) verbatim, else the IDList path. `lib.meta.lnk:target_path` (verified D14); other lnk.* fields speculative in `lib/meta/prebuilt/lnk.py`. `LnkParse3` not needed |
 | GUID field (`*-guid`) | spelling follows the SOURCE: a stored STRING (MSI ProductCode) verbatim, braces + uppercase; a binary GUID (.NET #GUID) -> `uuid.UUID(bytes_le=..)` lowercase, no braces. answer_format ("8-4-4-4-12 including hyphens") does not settle braces |
 | exe-extension decoy (`.exe` that is text/zip/PNG, `MZ` with no/garbled `PE\0\0` at e_lfanew) | header absent -> literal `none` if the syntax offers it; never fall back to a later `PE\0\0` hit or the extension |
 | "impostor", "renamed", "disguise" | trust magic bytes at offset 0; a matching string deeper in the file is a decoy |
@@ -97,32 +100,17 @@ zip-of-zips first seen) -> D2 `magic-prefix-hex-16` (TT `readme.exe` was text, M
 `zip.eocd_total_entries` of the INNER zip (stdlib EOCD parse; TT 3, Mastery 4/5) -> D8 `zip.central_directory_member_names`
 compact JSON of full CD paths in CD order (5-member kit, 12 fields).
 
-**Day 9 — Built Different** (`pe.coff_machine_u16_hex`, `pattern` lowercase `0x`): kit + `telemetry-agent-001.exe`, an
-honest Go 1.22 386 PE32 (e_lfanew 0x80, 7 sections, opt magic 0x10b). COFF Machine u16 -> `0x014c` (padded; not `i386`,
-the binary lane's word). "Several architectures + decoys" flavor unexercised. ~47 s first try; TT/Mastery 5 x 13 in-window.
+**Days 9-11** (one Go 1.22 PE, `d09-pe-NNN-...`): D9 `pe.coff_machine_u16_hex` -> `0x014c` (padded u16; not the binary
+lane's `i386`), ~47 s. D10 `pe.address_of_entry_point_rva_hex` (u32 @ e_lfanew+40) `0x%08x` -> `0x00065bd0`; unpadded
+`0x65bd0` REJECTED (objdump's start address is the VA), ~75 s, 1 wrong. D11 `pe.version_original_filename` =
+VS_VERSIONINFO OriginalFilename verbatim (`pe-base-386.exe`, not the randomized member name), pefile walk, ~25 s. All
+TT/Mastery first try (RVA / GOARCH re-rolled per variant).
 
-**Day 10 — Where Do We Begin?** (`pe.address_of_entry_point_rva_hex`, id `d09-pe-001-...`): zip = the D9 Go 386 PE
-alone, 1 field everywhere. OptionalHeader.AddressOfEntryPoint (u32 @ e_lfanew+40) `0x%08x` -> `0x00065bd0`; unpadded
-`0x65bd0` REJECTED (lane's first wrong submit). objdump's start address is the VA, not the RVA. ~75 s, 1 wrong; TT/Mastery
-first try (RVA re-rolled per variant). "Lying report" flavour unexercised.
-
-**Day 11 — What's My Name Again?** (`pe.version_original_filename`, id `d09-pe-001-pe-version-original-filename`): same
-lone Go PE; VS_VERSIONINFO OriginalFilename VERBATIM (`pe-base-386.exe`), not the randomized member name
-(`telemetry-agent-001.exe` = the "impersonator"). pefile resource walk, ONE command, ~25 s first try; TT amd64 / Mastery
-arm64 + 386 variants, both first try.
-
-**Day 12 — Managed Expectations** (`dotnet.mvid_guid`, kind `pattern`, syntax "canonical GUID text in 8-4-4-4-12
-hexadecimal form, including hyphens", norm `trim`, id `d12-dotnet-001-dotnet-mvid-guid`). Prompt: "The .NET assemblies
-share names, versions, and source ancestry -- but their module identities remain distinct. Separate rebuilds from renames."
-- Artifact: 2 KB zip -> `managed-001.dll`, 5,120 B PE32 i386 .NET (BSJB `v4.0.30319`; `<Module>`, a
-  `Huntress.Managed.<12HEX>` type and a `get_ModuleVersionId` memberref -- the hint). One dll per delivery; the "renames vs
-  rebuilds" comparison was never asked, only the MVID.
-- Key insight: MVID = Module table row 0, 3rd column (guid-heap index, 1-based) -> 16 bytes in `#GUID` rendered as .NET
-  `Guid.ToString()` = mixed-endian (`uuid.UUID(bytes_le=...)`), lowercase, no braces: `21e410f3-c977-465c-80eb-6890ddd3085c`.
-- Worker: the solver was the bare skeleton; it typed a ~90-line stdlib PE -> CLI header -> BSJB streams -> `#~` -> `#GUID`
-  parser + the old identity/PE branches and submitted in ONE command (2 tool calls; most of the ~55 s launch->CORRECT was
-  generation). First try. Reference parser: `challenges/day12/metadata-managed-expectations/solver/solve.py` `dotnet_mvid`.
-- TT window 30 s, in_window 0.95 s (managed-002); Mastery 2 sets (003/004), in_window 1.5 s. Both CORRECT first try.
+**Day 12 — Managed Expectations** (`dotnet.mvid_guid`, `pattern` "canonical GUID text in 8-4-4-4-12 ... including
+hyphens", id `d12-dotnet-001-dotnet-mvid-guid`): 5,120 B PE32 .NET `managed-001.dll`. MVID = Module row 0 Mvid (1-based
+#GUID index) -> `uuid.UUID(bytes_le=..)` lowercase, no braces (`21e410f3-c977-465c-...`). The worker typed a ~90-line
+stdlib PE -> CLI header -> BSJB -> `#~` -> `#GUID` parser (~55 s, first try). TT/Mastery 2 sets first try. Parser now
+`lib/meta/dotnet.py`. "Renames vs rebuilds" was never asked.
 
 **Day 13 — Product Placement** (`msi.product_code_guid`, kind `pattern` "canonical GUID text in 8-4-4-4-12 hexadecimal
 form, including hyphens", norm `trim`, id `d13-msi-001-msi-product-code-guid`). Prompt: "Installers were copied, renamed,
@@ -134,6 +122,19 @@ and repackaged. Recover stable product identities, distinguish revisions from di
   (answer_format never mentions them) -> REJECTED; braced -> CORRECT. Start -> CORRECT ~76 s, 1 wrong (~19 s lost).
 - TT (50 s window, in_window 0.96 s) and Mastery 2 sets (80 s, 2.55 s) CORRECT first try; every variant had the same
   ProductCode. "Revisions vs products" / "collision" were never asked -- only the ProductCode.
+
+**Day 14 — The Shortcut Home** (`lnk.target_path_windows`, kind `exact_text`, "use the literal none only when the
+requested field is absent", norm `trim`, id `d14-lnk-001-lnk-target-path-windows`). Prompt: "A shortcut collection is a
+map of intent -- if you read where each link points instead of where it sits. Reconstruct the targets and identify the
+impossible destination."
+- Artifact: 475 B zip -> `shortcut-001.lnk` (547 B; LinkFlags 0x97: IDList + LinkInfo + Name + WorkingDir + Unicode).
+- Key insight: answer = LinkInfo LocalBasePath VERBATIM (`C:\Windows\System32\cmd.exe`); the IDList (volume item +
+  file-entry items, long names from the 0xBEEF0004 extension) spelled the same. Not the WorkingDir (`C:\Windows\System32`).
+- Worker: the lane solver (`lib.meta`) answered `(None, None)` -- prebuilt `lib/meta/prebuilt/lnk.py` registered
+  `lnk.target_path` but NOT the asked `target_path_windows`, so the exact-key lookup missed. The worker typed a ~70-line
+  LinkInfo/IDList reader into `local_answer()` and submitted; start -> CORRECT ~40 s, first try (3 tool calls).
+- TT (shortcut-002) and Mastery 2 sets (003/004, nested `-01.zip` holding `-01/-02.zip`) CORRECT first try, solve <0.1 s.
+- LIB (ratchet D14): `lib/meta/lnk.py:target_path` registered verified as (`lnk`, `target_path_windows`), days=(14,).
 
 ## GM answer conventions learned
 - Filenames: exact base name incl. extension, no directory. Sizes: base-10 integer, no units. Hashes: hex, case ignored.
@@ -155,6 +156,8 @@ and repackaged. Recover stable product identities, distinguish revisions from di
   lowercase, hyphenated, no braces (D12 all modes; `knowledge.DOTNET_MVID_GUID`, playbook metadata `guid` entry).
 - MSI GUIDs (`msi.product_code_guid`): the Property string VERBATIM -- uppercase WITH braces `{DD1A80D5-...}` (D13 all
   modes; `knowledge.MSI_PRODUCT_CODE_GUID`). Bare form REJECTED. GUID spelling follows the source, not answer_format.
+- Windows paths (`lnk.target_path_windows`): the stored LinkInfo path verbatim -- backslashes, original case, drive
+  letter, no quotes (D14 all modes; `knowledge.LNK_TARGET_PATH_WINDOWS`, playbook metadata `windows`/`path` entry).
 - Version-resource strings (`pe.version_<field>`): the StringFileInfo value verbatim, incl. extension (`pe-base-386.exe`,
   D11 all modes). `knowledge.PE_VERSION_STRING_KEY` maps id tail -> resource key.
 - Rejected spellings: `0x65bd0` for pe.address_of_entry_point_rva_hex (D10 single; unpadded); brace-less
@@ -182,6 +185,8 @@ and repackaged. Recover stable product identities, distinguish revisions from di
   -> <member>` -- resolve the bundle by sha256 (`lib.common.container_by_sha`), not by its filename.
 - Mastery day 10: TWO sets only, refs `metadata-day-10-evidence-0N.zip -> telemetry-agent-00N.exe` (003/004).
   Day 11 identical shape (`metadata-day-11-evidence-0N.zip`, one download nesting both set zips).
+- Mastery day 14: two sets, one download `metadata-day-14-evidence-01.zip` nesting `-01.zip`/`-02.zip`, refs
+  `metadata-day-14-evidence-0N.zip -> shortcut-00N.lnk` (003/004).
 - Mastery day 6: two downloads with identical filenames -> `delivery 1: <zip>` / `delivery 2: <zip>` in artifact refs.
 - Member numbering shifts between pre-fetched contract and live attempt (003/004 vs 006/007) — never hardcode names.
 
@@ -201,6 +206,9 @@ and repackaged. Recover stable product identities, distinguish revisions from di
   submit round-trips (D9 TT submit alone 2.3 s): never do anything slow (extraction to disk, exiftool, `pefile` full
   parse, subprocess) in-window; parse fixed offsets in memory. Big members (1.2 MB exe x5) pushed Mastery solve to 0.86 s
   -- decompress each member once and cache by (set zip, member).
+- A prebuilt registry key that is one suffix short is a miss (D14: prebuilt `lnk.target_path`, GM asked
+  `target_path_windows` -> the worker re-typed the parser; most of D14's ~40 s). When a format is prebuilt, `python3 -c "import lib.meta as
+  m; print([k for k in m.known_fields() if k[0]=='<fmt>'])"` and call the nearest extractor directly before writing one.
 - Fresh member family = skeleton solver (D10, D12): copy the previous day's solver first, then add the new family's
   handler -- D12's worker re-typed the identity/PE branches next to the .NET parser (~50 s of generation).
 - Executable fields: don't take `file`'s "Intel i386" / `pefile` machine names / the Go GOARCH token as the answer; the

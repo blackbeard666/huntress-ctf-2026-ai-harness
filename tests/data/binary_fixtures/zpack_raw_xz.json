@@ -1,0 +1,16 @@
+{
+ "encoding": "xz",
+ "expected_offset": 3012,
+ "expected_config": {
+  "c2": "http://192.0.2.99/beacon",
+  "campaign": "xz-raw",
+  "sleep": 60,
+  "flag": "flag{r4w_xz_c0nt41n3r}",
+  "note": "beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-"
+ },
+ "decoy": false,
+ "generator_cmd": "bash zpack_gen.sh zpack_raw_xz.bin raw-xz \"$J3\"   # J3 includes note = 12x \"beacon-\"   # J1..J6 = expected_config JSON (compact); blob: printf header + crc32 from gzip trailer; stream: gzip/bzip2/xz/zlib-flate + coreutils base64 / xxd -p",
+ "oracle_cmd": "bash zpack_oracle.sh zpack_raw_xz.bin raw-xz   # strings/grep -bo + base64 -d / xxd -r -p + gzip/bzip2/xz/zlib-flate; prints off at+N magic len hdrcrc crc32(body) body",
+ "oracle_output": "3012 at+0 HCFG 274 514209058 514209058 {\"c2\":\"http://192.0.2.99/beacon\",\"campaign\":\"xz-raw\",\"sleep\":60,\"flag\":\"flag{r4w_xz_c0nt41n3r}\",\"note\":\"beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-beacon-\"}",
+ "detail": "xz -6 of a compressible blob (a tiny blob makes xz store an uncompressed LZMA2 chunk = plain raw HCFG)"
+}

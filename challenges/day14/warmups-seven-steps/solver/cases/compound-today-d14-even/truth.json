@@ -1,0 +1,6564 @@
+{
+ "what": "Day 14 Mastery rehearsal: base `challenges/day13/warmups-opposite-day/solver/cases/auto-mastery-d1a77831` (even cuts) with today's codec `caesar7` on the new last line; slugs unchanged",
+ "today": {
+  "day": 14,
+  "codec": "caesar7"
+ },
+ "base": "/home/testpwn/huntress-2026/challenges/day13/warmups-opposite-day/solver/cases/auto-mastery-d1a77831",
+ "variant": "even",
+ "skipped": [],
+ "sets": {
+  "set1.message": {
+   "slug": "peppy-island-quill-33",
+   "member": "blob-01.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": peppy-",
+     "encoded": "-yppep :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "island-",
+     "encoded": "rhozmw-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "quill-33",
+     "encoded": "xbpss-33"
+    }
+   ]
+  },
+  "set2.message": {
+   "slug": "happy-cactus-pebble-75",
+   "member": "blob-02.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " happy-",
+     "encoded": "-yppah "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "cactus-p",
+     "encoded": "xzxgfh-k"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "ebble-75",
+     "encoded": "liisl-75"
+    }
+   ]
+  },
+  "set3.message": {
+   "slug": "snappy-castle-pepper-37",
+   "member": "blob-03.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup!",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this e",
+     "encoded": "%74%20%74%68%69%73%20%65"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "xact ans",
+     "encoded": "&#120;&#97;&#99;&#116;&#32;&#97;&#110;&#115;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "wer to t",
+     "encoded": "\"\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "he Game ",
+     "encoded": "NBSSAR3BNVSSA==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "Master:",
+     "encoded": "TWFzdGVyOg"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " snappy-",
+     "encoded": "-yppans "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "castle-p",
+     "encoded": "xzhgov-k"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "epper-37",
+     "encoded": "lwwly-37"
+    }
+   ]
+  },
+  "set4.message": {
+   "slug": "jolly-cactus-trail-64",
+   "member": "blob-04.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": jolly-",
+     "encoded": "-ylloj :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "cactus-",
+     "encoded": "xzxgfh-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "trail-64",
+     "encoded": "ayhps-64"
+    }
+   ]
+  },
+  "set5.message": {
+   "slug": "lucky-storm-tiger-91",
+   "member": "blob-05.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To sol",
+     "encoded": "32 84 111 32 115 111 108"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "ve, subm",
+     "encoded": "166 145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact a",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "nswer to",
+     "encoded": "\"\\u006e\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Ga",
+     "encoded": "EB2GQZJAI5QQ===="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "me Maste",
+     "encoded": "bWUgTWFzdGU"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": "r: lucky",
+     "encoded": "ykcul :r"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-storm-",
+     "encoded": "-hglin-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "tiger-91",
+     "encoded": "apnly-91"
+    }
+   ]
+  },
+  "set6.message": {
+   "slug": "merry-coral-juniper-78",
+   "member": "blob-06.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " merry-",
+     "encoded": "-yrrem "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "coral-ju",
+     "encoded": "xlizo-qf"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "niper-78",
+     "encoded": "upwly-78"
+    }
+   ]
+  },
+  "set7.message": {
+   "slug": "perky-island-onyx-67",
+   "member": "blob-07.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To sol",
+     "encoded": "32 84 111 32 115 111 108"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "ve, subm",
+     "encoded": "166 145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact a",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "nswer to",
+     "encoded": "\"\\u006e\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Ga",
+     "encoded": "EB2GQZJAI5QQ===="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "me Maste",
+     "encoded": "bWUgTWFzdGU"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": "r: perky",
+     "encoded": "ykrep :r"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-island",
+     "encoded": "-rhozmw"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "-onyx-67",
+     "encoded": "-vufe-67"
+    }
+   ]
+  },
+  "set8.message": {
+   "slug": "jazzy-prairie-copper-30",
+   "member": "blob-08.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup!",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this e",
+     "encoded": "%74%20%74%68%69%73%20%65"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "xact ans",
+     "encoded": "&#120;&#97;&#99;&#116;&#32;&#97;&#110;&#115;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "wer to t",
+     "encoded": "\"\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "he Game ",
+     "encoded": "NBSSAR3BNVSSA==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "Master:",
+     "encoded": "TWFzdGVyOg"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " jazzy-p",
+     "encoded": "p-yzzaj "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "rairie-c",
+     "encoded": "izrirv-x"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "opper-30",
+     "encoded": "vwwly-30"
+    }
+   ]
+  },
+  "set9.message": {
+   "slug": "merry-pillow-onyx-88",
+   "member": "blob-09.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To sol",
+     "encoded": "32 84 111 32 115 111 108"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "ve, subm",
+     "encoded": "166 145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact a",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "nswer to",
+     "encoded": "\"\\u006e\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Ga",
+     "encoded": "EB2GQZJAI5QQ===="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "me Maste",
+     "encoded": "bWUgTWFzdGU"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": "r: merry",
+     "encoded": "yrrem :r"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-pillow",
+     "encoded": "-kroold"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "-onyx-88",
+     "encoded": "-vufe-88"
+    }
+   ]
+  },
+  "set10.message": {
+   "slug": "dandy-storm-lagoon-98",
+   "member": "blob-10.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": dandy-",
+     "encoded": "-ydnad :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "storm-l",
+     "encoded": "hglin-o"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "agoon-98",
+     "encoded": "hnvvu-98"
+    }
+   ]
+  },
+  "set11.message": {
+   "slug": "perky-stream-ember-72",
+   "member": "blob-11.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": perky-",
+     "encoded": "-ykrep :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "stream-",
+     "encoded": "hgivzn-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "ember-72",
+     "encoded": "ltily-72"
+    }
+   ]
+  },
+  "set12.message": {
+   "slug": "tidy-canyon-harbor-70",
+   "member": "blob-12.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": tidy-c",
+     "encoded": "c-ydit :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "anyon-h",
+     "encoded": "zmblm-s"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "arbor-70",
+     "encoded": "hyivy-70"
+    }
+   ]
+  },
+  "set13.message": {
+   "slug": "merry-basket-pepper-34",
+   "member": "blob-13.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " merry-",
+     "encoded": "-yrrem "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "basket-p",
+     "encoded": "yzhpvg-k"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "epper-34",
+     "encoded": "lwwly-34"
+    }
+   ]
+  },
+  "set14.message": {
+   "slug": "dandy-castle-juniper-93",
+   "member": "blob-14.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup!",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this e",
+     "encoded": "%74%20%74%68%69%73%20%65"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "xact ans",
+     "encoded": "&#120;&#97;&#99;&#116;&#32;&#97;&#110;&#115;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "wer to t",
+     "encoded": "\"\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "he Game ",
+     "encoded": "NBSSAR3BNVSSA==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "Master:",
+     "encoded": "TWFzdGVyOg"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " dandy-c",
+     "encoded": "c-ydnad "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "astle-ju",
+     "encoded": "zhgov-qf"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "niper-93",
+     "encoded": "upwly-93"
+    }
+   ]
+  },
+  "set15.message": {
+   "slug": "jolly-summit-harbor-80",
+   "member": "blob-15.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " jolly-",
+     "encoded": "-ylloj "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "summit-h",
+     "encoded": "hfnnrg-s"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "arbor-80",
+     "encoded": "hyivy-80"
+    }
+   ]
+  },
+  "set16.message": {
+   "slug": "jovial-summit-hazel-95",
+   "member": "blob-16.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " jovial",
+     "encoded": "laivoj "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-summit-",
+     "encoded": "-hfnnrg-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "hazel-95",
+     "encoded": "ohgls-95"
+    }
+   ]
+  },
+  "set17.message": {
+   "slug": "spry-cabin-juniper-47",
+   "member": "blob-17.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": spry-c",
+     "encoded": "c-yrps :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "abin-ju",
+     "encoded": "zyrm-qf"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "niper-47",
+     "encoded": "upwly-47"
+    }
+   ]
+  },
+  "set18.message": {
+   "slug": "merry-basket-willow-20",
+   "member": "blob-18.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " merry-",
+     "encoded": "-yrrem "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "basket-w",
+     "encoded": "yzhpvg-d"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "illow-20",
+     "encoded": "pssvd-20"
+    }
+   ]
+  },
+  "set19.message": {
+   "slug": "quick-canyon-fern-35",
+   "member": "blob-19.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To sol",
+     "encoded": "32 84 111 32 115 111 108"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "ve, subm",
+     "encoded": "166 145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact a",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "nswer to",
+     "encoded": "\"\\u006e\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Ga",
+     "encoded": "EB2GQZJAI5QQ===="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "me Maste",
+     "encoded": "bWUgTWFzdGU"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": "r: quick",
+     "encoded": "kciuq :r"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-canyon",
+     "encoded": "-xzmblm"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "-fern-35",
+     "encoded": "-mlyu-35"
+    }
+   ]
+  },
+  "set20.message": {
+   "slug": "sturdy-storm-maple-34",
+   "member": "blob-20.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": sturdy",
+     "encoded": "ydruts :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-storm-",
+     "encoded": "-hglin-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "maple-34",
+     "encoded": "thwsl-34"
+    }
+   ]
+  },
+  "set21.message": {
+   "slug": "daring-daisy-harbor-90",
+   "member": "blob-21.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " daring",
+     "encoded": "gnirad "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-daisy-h",
+     "encoded": "-wzrhb-s"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "arbor-90",
+     "encoded": "hyivy-90"
+    }
+   ]
+  },
+  "set22.message": {
+   "slug": "sunny-cabin-dune-78",
+   "member": "blob-22.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": "! To sol",
+     "encoded": "33 32 84 111 32 115 111 108"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "ve, sub",
+     "encoded": "166 145 054 040 163 165 142"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "mit this",
+     "encoded": "%6d%69%74%20%74%68%69%73"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": " exact a",
+     "encoded": "&#32;&#101;&#120;&#97;&#99;&#116;&#32;&#97;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "nswer t",
+     "encoded": "\"\\u006e\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "o the Ga",
+     "encoded": "N4QHI2DFEBDWC==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "me Mast",
+     "encoded": "bWUgTWFzdA"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": "er: sunn",
+     "encoded": "nnus :re"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "y-cabin",
+     "encoded": "b-xzyrm"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "-dune-78",
+     "encoded": "-kbul-78"
+    }
+   ]
+  },
+  "set23.message": {
+   "slug": "jovial-rainbow-turtle-29",
+   "member": "blob-23.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup! ",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001 00100000"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": "To solve",
+     "encoded": "84 111 32 115 111 108 118 101"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": ", submit",
+     "encoded": "054 040 163 165 142 155 151 164"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": " this ex",
+     "encoded": "%20%74%68%69%73%20%65%78"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "act ans",
+     "encoded": "&#97;&#99;&#116;&#32;&#97;&#110;&#115;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "wer to t",
+     "encoded": "\"\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "he Game ",
+     "encoded": "NBSSAR3BNVSSA==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "Master: ",
+     "encoded": "TWFzdGVyOiA"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": "jovial-r",
+     "encoded": "r-laivoj"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "ainbow-t",
+     "encoded": "zrmyld-g"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "urtle-29",
+     "encoded": "byasl-29"
+    }
+   ]
+  },
+  "set24.message": {
+   "slug": "sturdy-beacon-brook-27",
+   "member": "blob-24.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " sturdy",
+     "encoded": "ydruts "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-beacon-",
+     "encoded": "-yvzxlm-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "brook-27",
+     "encoded": "iyvvr-27"
+    }
+   ]
+  },
+  "set25.message": {
+   "slug": "snappy-daisy-tulip-76",
+   "member": "blob-25.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": snappy",
+     "encoded": "yppans :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-daisy-",
+     "encoded": "-wzrhb-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "tulip-76",
+     "encoded": "abspw-76"
+    }
+   ]
+  },
+  "set26.message": {
+   "slug": "plucky-harbor-cider-89",
+   "member": "blob-26.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " plucky",
+     "encoded": "ykculp "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-harbor-",
+     "encoded": "-sziyli-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "cider-89",
+     "encoded": "jpkly-89"
+    }
+   ]
+  },
+  "set27.message": {
+   "slug": "brisk-piano-birch-62",
+   "member": "blob-27.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To sol",
+     "encoded": "32 84 111 32 115 111 108"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "ve, subm",
+     "encoded": "166 145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact a",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "nswer to",
+     "encoded": "\"\\u006e\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Ga",
+     "encoded": "EB2GQZJAI5QQ===="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "me Maste",
+     "encoded": "bWUgTWFzdGU"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": "r: brisk",
+     "encoded": "ksirb :r"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-piano-",
+     "encoded": "-krzml-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "birch-62",
+     "encoded": "ipyjo-62"
+    }
+   ]
+  },
+  "set28.message": {
+   "slug": "snappy-squirrel-turtle-23",
+   "member": "blob-28.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup! ",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001 00100000"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": "To solve",
+     "encoded": "84 111 32 115 111 108 118 101"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": ", submit",
+     "encoded": "054 040 163 165 142 155 151 164"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": " this ex",
+     "encoded": "%20%74%68%69%73%20%65%78"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "act answ",
+     "encoded": "&#97;&#99;&#116;&#32;&#97;&#110;&#115;&#119;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "er to th",
+     "encoded": "\"\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\\u0068\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "e Game M",
+     "encoded": "MUQEOYLNMUQE2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "aster: s",
+     "encoded": "YXN0ZXI6IHM"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": "nappy-sq",
+     "encoded": "qs-yppan"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "uirrel-t",
+     "encoded": "friivo-g"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "urtle-23",
+     "encoded": "byasl-23"
+    }
+   ]
+  },
+  "set29.message": {
+   "slug": "silly-sunset-ember-79",
+   "member": "blob-29.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": silly-",
+     "encoded": "-yllis :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "sunset-",
+     "encoded": "hfmhvg-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "ember-79",
+     "encoded": "ltily-79"
+    }
+   ]
+  },
+  "set30.message": {
+   "slug": "tidy-piano-ivy-35",
+   "member": "blob-30.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wo",
+     "encoded": "TmljZSB3bw=="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "rk decod",
+     "encoded": "ex qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing thi",
+     "encoded": "696e6720746869"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "s warmup",
+     "encoded": "01110011 00100000 01110111 01100001 01110010 01101101 01110101 01110000"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": "! To so",
+     "encoded": "33 32 84 111 32 115 111"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "lve, sub",
+     "encoded": "154 166 145 054 040 163 165 142"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "mit thi",
+     "encoded": "%6d%69%74%20%74%68%69"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "s exact",
+     "encoded": "&#115;&#32;&#101;&#120;&#97;&#99;&#116;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": " answer ",
+     "encoded": "\"\\u0020\\u0061\\u006e\\u0073\\u0077\\u0065\\u0072\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "to the ",
+     "encoded": "ORXSA5DIMUQA===="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "Game Mas",
+     "encoded": "R2FtZSBNYXM"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": "ter: ti",
+     "encoded": "it :ret"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "dy-piano",
+     "encoded": "wb-krzml"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "-ivy-35",
+     "encoded": "-pcf-35"
+    }
+   ]
+  },
+  "set31.message": {
+   "slug": "happy-button-brook-44",
+   "member": "blob-31.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": happy-",
+     "encoded": "-yppah :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "button-",
+     "encoded": "yfgglm-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "brook-44",
+     "encoded": "iyvvr-44"
+    }
+   ]
+  },
+  "set32.message": {
+   "slug": "nimble-daisy-cocoa-68",
+   "member": "blob-32.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": nimble",
+     "encoded": "elbmin :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-daisy-",
+     "encoded": "-wzrhb-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "cocoa-68",
+     "encoded": "jvjvh-68"
+    }
+   ]
+  },
+  "set33.message": {
+   "slug": "bright-quilt-cider-24",
+   "member": "blob-33.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": bright",
+     "encoded": "thgirb :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-quilt-",
+     "encoded": "-jfrog-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "cider-24",
+     "encoded": "jpkly-24"
+    }
+   ]
+  },
+  "set34.message": {
+   "slug": "proud-puzzle-boulder-73",
+   "member": "blob-34.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup!",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this e",
+     "encoded": "%74%20%74%68%69%73%20%65"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "xact ans",
+     "encoded": "&#120;&#97;&#99;&#116;&#32;&#97;&#110;&#115;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "wer to t",
+     "encoded": "\"\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "he Game ",
+     "encoded": "NBSSAR3BNVSSA==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "Master:",
+     "encoded": "TWFzdGVyOg"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " proud-p",
+     "encoded": "p-duorp "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "uzzle-bo",
+     "encoded": "faaov-yl"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "ulder-73",
+     "encoded": "bskly-73"
+    }
+   ]
+  },
+  "set35.message": {
+   "slug": "dapper-rainbow-marble-64",
+   "member": "blob-35.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup! ",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001 00100000"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": "To solve",
+     "encoded": "84 111 32 115 111 108 118 101"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": ", submit",
+     "encoded": "054 040 163 165 142 155 151 164"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": " this ex",
+     "encoded": "%20%74%68%69%73%20%65%78"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "act ans",
+     "encoded": "&#97;&#99;&#116;&#32;&#97;&#110;&#115;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "wer to t",
+     "encoded": "\"\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "he Game ",
+     "encoded": "NBSSAR3BNVSSA==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "Master: ",
+     "encoded": "TWFzdGVyOiA"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": "dapper-r",
+     "encoded": "r-reppad"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "ainbow-m",
+     "encoded": "zrmyld-n"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "arble-64",
+     "encoded": "hyisl-64"
+    }
+   ]
+  },
+  "set36.message": {
+   "slug": "sunny-signal-flint-62",
+   "member": "blob-36.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": sunny-",
+     "encoded": "-ynnus :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "signal-",
+     "encoded": "hrtmzo-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "flint-62",
+     "encoded": "mspua-62"
+    }
+   ]
+  },
+  "set37.message": {
+   "slug": "merry-clock-boulder-57",
+   "member": "blob-37.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " merry-",
+     "encoded": "-yrrem "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "clock-bo",
+     "encoded": "xolxp-yl"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "ulder-57",
+     "encoded": "bskly-57"
+    }
+   ]
+  },
+  "set38.message": {
+   "slug": "clever-garden-bison-10",
+   "member": "blob-38.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " clever",
+     "encoded": "revelc "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-garden-",
+     "encoded": "-tziwvm-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "bison-10",
+     "encoded": "ipzvu-10"
+    }
+   ]
+  },
+  "set39.message": {
+   "slug": "deft-starfish-pepper-77",
+   "member": "blob-39.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup!",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this e",
+     "encoded": "%74%20%74%68%69%73%20%65"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "xact ans",
+     "encoded": "&#120;&#97;&#99;&#116;&#32;&#97;&#110;&#115;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "wer to t",
+     "encoded": "\"\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "he Game ",
+     "encoded": "NBSSAR3BNVSSA==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "Master:",
+     "encoded": "TWFzdGVyOg"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " deft-st",
+     "encoded": "ts-tfed "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "arfish-p",
+     "encoded": "ziurhs-k"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "epper-77",
+     "encoded": "lwwly-77"
+    }
+   ]
+  },
+  "set40.message": {
+   "slug": "lively-castle-flint-42",
+   "member": "blob-40.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " lively",
+     "encoded": "ylevil "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-castle-",
+     "encoded": "-xzhgov-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "flint-42",
+     "encoded": "mspua-42"
+    }
+   ]
+  },
+  "set41.message": {
+   "slug": "dashing-rocket-fern-33",
+   "member": "blob-41.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " dashin",
+     "encoded": "nihsad "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "g-rocket",
+     "encoded": "t-ilxpvg"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "-fern-33",
+     "encoded": "-mlyu-33"
+    }
+   ]
+  },
+  "set42.message": {
+   "slug": "lively-scooter-bison-56",
+   "member": "blob-42.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup!",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this e",
+     "encoded": "%74%20%74%68%69%73%20%65"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "xact ans",
+     "encoded": "&#120;&#97;&#99;&#116;&#32;&#97;&#110;&#115;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "wer to t",
+     "encoded": "\"\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "he Game ",
+     "encoded": "NBSSAR3BNVSSA==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "Master:",
+     "encoded": "TWFzdGVyOg"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " lively-",
+     "encoded": "-ylevil "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "scooter-",
+     "encoded": "hxllgvi-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "bison-56",
+     "encoded": "ipzvu-56"
+    }
+   ]
+  },
+  "set43.message": {
+   "slug": "sunny-island-grove-77",
+   "member": "blob-43.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": sunny-",
+     "encoded": "-ynnus :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "island-",
+     "encoded": "rhozmw-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "grove-77",
+     "encoded": "nyvcl-77"
+    }
+   ]
+  },
+  "set44.message": {
+   "slug": "witty-quilt-pebble-53",
+   "member": "blob-44.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": witty-",
+     "encoded": "-yttiw :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "quilt-p",
+     "encoded": "jfrog-k"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "ebble-53",
+     "encoded": "liisl-53"
+    }
+   ]
+  },
+  "set45.message": {
+   "slug": "sunny-rainbow-trail-39",
+   "member": "blob-45.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " sunny-",
+     "encoded": "-ynnus "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "rainbow-",
+     "encoded": "izrmyld-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "trail-39",
+     "encoded": "ayhps-39"
+    }
+   ]
+  },
+  "set46.message": {
+   "slug": "quick-prairie-laurel-47",
+   "member": "blob-46.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup!",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this e",
+     "encoded": "%74%20%74%68%69%73%20%65"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "xact ans",
+     "encoded": "&#120;&#97;&#99;&#116;&#32;&#97;&#110;&#115;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "wer to t",
+     "encoded": "\"\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "he Game ",
+     "encoded": "NBSSAR3BNVSSA==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "Master:",
+     "encoded": "TWFzdGVyOg"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " quick-p",
+     "encoded": "p-kciuq "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "rairie-l",
+     "encoded": "izrirv-o"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "aurel-47",
+     "encoded": "hbyls-47"
+    }
+   ]
+  },
+  "set47.message": {
+   "slug": "kind-meadow-turtle-21",
+   "member": "blob-47.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": kind-m",
+     "encoded": "m-dnik :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "eadow-t",
+     "encoded": "vzwld-g"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "urtle-21",
+     "encoded": "byasl-21"
+    }
+   ]
+  },
+  "set48.message": {
+   "slug": "dandy-anchor-cocoa-74",
+   "member": "blob-48.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": dandy-",
+     "encoded": "-ydnad :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "anchor-",
+     "encoded": "zmxsli-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "cocoa-74",
+     "encoded": "jvjvh-74"
+    }
+   ]
+  },
+  "set49.message": {
+   "slug": "spry-signal-clover-48",
+   "member": "blob-49.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": spry-s",
+     "encoded": "s-yrps :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "ignal-c",
+     "encoded": "rtmzo-x"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "lover-48",
+     "encoded": "svcly-48"
+    }
+   ]
+  },
+  "set50.message": {
+   "slug": "crisp-sailor-turtle-30",
+   "member": "blob-50.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " crisp-",
+     "encoded": "-psirc "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "sailor-t",
+     "encoded": "hzroli-g"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "urtle-30",
+     "encoded": "byasl-30"
+    }
+   ]
+  },
+  "set51.message": {
+   "slug": "zesty-basket-quartz-78",
+   "member": "blob-51.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " zesty-",
+     "encoded": "-ytsez "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "basket-q",
+     "encoded": "yzhpvg-j"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "uartz-78",
+     "encoded": "bhyag-78"
+    }
+   ]
+  },
+  "set52.message": {
+   "slug": "bright-banner-ripple-70",
+   "member": "blob-52.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup!",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this e",
+     "encoded": "%74%20%74%68%69%73%20%65"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "xact ans",
+     "encoded": "&#120;&#97;&#99;&#116;&#32;&#97;&#110;&#115;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "wer to t",
+     "encoded": "\"\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "he Game ",
+     "encoded": "NBSSAR3BNVSSA==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "Master:",
+     "encoded": "TWFzdGVyOg"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " bright-",
+     "encoded": "-thgirb "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "banner-r",
+     "encoded": "yzmmvi-i"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "ipple-70",
+     "encoded": "pwwsl-70"
+    }
+   ]
+  },
+  "set53.message": {
+   "slug": "sunny-basket-boulder-22",
+   "member": "blob-53.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup!",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this e",
+     "encoded": "%74%20%74%68%69%73%20%65"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "xact ans",
+     "encoded": "&#120;&#97;&#99;&#116;&#32;&#97;&#110;&#115;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "wer to t",
+     "encoded": "\"\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "he Game ",
+     "encoded": "NBSSAR3BNVSSA==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "Master:",
+     "encoded": "TWFzdGVyOg"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " sunny-b",
+     "encoded": "b-ynnus "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "asket-bo",
+     "encoded": "zhpvg-yl"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "ulder-22",
+     "encoded": "bskly-22"
+    }
+   ]
+  },
+  "set54.message": {
+   "slug": "dapper-scooter-butter-69",
+   "member": "blob-54.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup! ",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001 00100000"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": "To solve",
+     "encoded": "84 111 32 115 111 108 118 101"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": ", submit",
+     "encoded": "054 040 163 165 142 155 151 164"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": " this ex",
+     "encoded": "%20%74%68%69%73%20%65%78"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "act ans",
+     "encoded": "&#97;&#99;&#116;&#32;&#97;&#110;&#115;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "wer to t",
+     "encoded": "\"\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "he Game ",
+     "encoded": "NBSSAR3BNVSSA==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "Master: ",
+     "encoded": "TWFzdGVyOiA"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": "dapper-s",
+     "encoded": "s-reppad"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "cooter-b",
+     "encoded": "xllgvi-y"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "utter-69",
+     "encoded": "baaly-69"
+    }
+   ]
+  },
+  "set55.message": {
+   "slug": "dashing-valley-cocoa-36",
+   "member": "blob-55.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup!",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this e",
+     "encoded": "%74%20%74%68%69%73%20%65"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "xact ans",
+     "encoded": "&#120;&#97;&#99;&#116;&#32;&#97;&#110;&#115;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "wer to t",
+     "encoded": "\"\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "he Game ",
+     "encoded": "NBSSAR3BNVSSA==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "Master:",
+     "encoded": "TWFzdGVyOg"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " dashing",
+     "encoded": "gnihsad "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-valley-",
+     "encoded": "-ezoovb-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "cocoa-36",
+     "encoded": "jvjvh-36"
+    }
+   ]
+  },
+  "set56.message": {
+   "slug": "funky-valley-ivy-31",
+   "member": "blob-56.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": "! To sol",
+     "encoded": "33 32 84 111 32 115 111 108"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "ve, sub",
+     "encoded": "166 145 054 040 163 165 142"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "mit this",
+     "encoded": "%6d%69%74%20%74%68%69%73"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": " exact a",
+     "encoded": "&#32;&#101;&#120;&#97;&#99;&#116;&#32;&#97;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "nswer t",
+     "encoded": "\"\\u006e\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "o the Ga",
+     "encoded": "N4QHI2DFEBDWC==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "me Mast",
+     "encoded": "bWUgTWFzdA"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": "er: funk",
+     "encoded": "knuf :re"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "y-valle",
+     "encoded": "b-ezoov"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "y-ivy-31",
+     "encoded": "f-pcf-31"
+    }
+   ]
+  },
+  "set57.message": {
+   "slug": "jovial-pillow-cider-49",
+   "member": "blob-57.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " jovial",
+     "encoded": "laivoj "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-pillow-",
+     "encoded": "-kroold-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "cider-49",
+     "encoded": "jpkly-49"
+    }
+   ]
+  },
+  "set58.message": {
+   "slug": "jaunty-storm-waterfall-54",
+   "member": "blob-58.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup! ",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001 00100000"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": "To solve",
+     "encoded": "84 111 32 115 111 108 118 101"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": ", submit",
+     "encoded": "054 040 163 165 142 155 151 164"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": " this ex",
+     "encoded": "%20%74%68%69%73%20%65%78"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "act answ",
+     "encoded": "&#97;&#99;&#116;&#32;&#97;&#110;&#115;&#119;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "er to th",
+     "encoded": "\"\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\\u0068\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "e Game M",
+     "encoded": "MUQEOYLNMUQE2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "aster: j",
+     "encoded": "YXN0ZXI6IGo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": "aunty-st",
+     "encoded": "ts-ytnua"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "orm-wate",
+     "encoded": "lin-dzgv"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "rfall-54",
+     "encoded": "ymhss-54"
+    }
+   ]
+  },
+  "set59.message": {
+   "slug": "brave-daisy-pebble-82",
+   "member": "blob-59.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": brave-",
+     "encoded": "-evarb :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "daisy-p",
+     "encoded": "wzrhb-k"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "ebble-82",
+     "encoded": "liisl-82"
+    }
+   ]
+  },
+  "set60.message": {
+   "slug": "plucky-prairie-quill-76",
+   "member": "blob-60.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup!",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this e",
+     "encoded": "%74%20%74%68%69%73%20%65"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "xact ans",
+     "encoded": "&#120;&#97;&#99;&#116;&#32;&#97;&#110;&#115;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "wer to t",
+     "encoded": "\"\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "he Game ",
+     "encoded": "NBSSAR3BNVSSA==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "Master:",
+     "encoded": "TWFzdGVyOg"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " plucky-",
+     "encoded": "-ykculp "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "prairie-",
+     "encoded": "kizrirv-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "quill-76",
+     "encoded": "xbpss-76"
+    }
+   ]
+  },
+  "set61.message": {
+   "slug": "snappy-beacon-cocoa-60",
+   "member": "blob-61.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this",
+     "encoded": "6e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, submi",
+     "encoded": "145 054 040 163 165 142 155 151"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "t this ",
+     "encoded": "%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to ",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "the Game",
+     "encoded": "ORUGKICHMFWWK==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": " Master:",
+     "encoded": "IE1hc3Rlcjo"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": " snappy",
+     "encoded": "yppans "
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-beacon-",
+     "encoded": "-yvzxlm-"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "cocoa-60",
+     "encoded": "jvjvh-60"
+    }
+   ]
+  },
+  "set62.message": {
+   "slug": "hearty-rocket-opal-65",
+   "member": "blob-62.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decod",
+     "encoded": "x qrpbq"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ing this",
+     "encoded": "696e672074686973"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": " warmup!",
+     "encoded": "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": " To solv",
+     "encoded": "32 84 111 32 115 111 108 118"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": "e, subm",
+     "encoded": "145 054 040 163 165 142 155"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": "it this ",
+     "encoded": "%69%74%20%74%68%69%73%20"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "exact an",
+     "encoded": "&#101;&#120;&#97;&#99;&#116;&#32;&#97;&#110;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "swer to",
+     "encoded": "\"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": " the Gam",
+     "encoded": "EB2GQZJAI5QW2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "e Master",
+     "encoded": "ZSBNYXN0ZXI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": ": hearty",
+     "encoded": "ytraeh :"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "-rocket",
+     "encoded": "-ilxpvg"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "-opal-65",
+     "encoded": "-vwhs-65"
+    }
+   ]
+  },
+  "set63.message": {
+   "slug": "brave-castle-waterfall-42",
+   "member": "blob-63.txt",
+   "lines": [
+    {
+     "line": 1,
+     "codec": "base64",
+     "today": false,
+     "plain": "Nice wor",
+     "encoded": "TmljZSB3b3I="
+    },
+    {
+     "line": 2,
+     "codec": "rot13",
+     "today": false,
+     "plain": "k decodi",
+     "encoded": "x qrpbqv"
+    },
+    {
+     "line": 3,
+     "codec": "hex",
+     "today": false,
+     "plain": "ng this ",
+     "encoded": "6e67207468697320"
+    },
+    {
+     "line": 4,
+     "codec": "binary8",
+     "today": false,
+     "plain": "warmup! ",
+     "encoded": "01110111 01100001 01110010 01101101 01110101 01110000 00100001 00100000"
+    },
+    {
+     "line": 5,
+     "codec": "decimal",
+     "today": false,
+     "plain": "To solve",
+     "encoded": "84 111 32 115 111 108 118 101"
+    },
+    {
+     "line": 6,
+     "codec": "octal3",
+     "today": false,
+     "plain": ", submit",
+     "encoded": "054 040 163 165 142 155 151 164"
+    },
+    {
+     "line": 7,
+     "codec": "url%xx",
+     "today": false,
+     "plain": " this ex",
+     "encoded": "%20%74%68%69%73%20%65%78"
+    },
+    {
+     "line": 8,
+     "codec": "html&#n;",
+     "today": false,
+     "plain": "act answ",
+     "encoded": "&#97;&#99;&#116;&#32;&#97;&#110;&#115;&#119;"
+    },
+    {
+     "line": 9,
+     "codec": "json\\u",
+     "today": false,
+     "plain": "er to th",
+     "encoded": "\"\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020\\u0074\\u0068\""
+    },
+    {
+     "line": 10,
+     "codec": "base32",
+     "today": false,
+     "plain": "e Game M",
+     "encoded": "MUQEOYLNMUQE2==="
+    },
+    {
+     "line": 11,
+     "codec": "base64url-nopad",
+     "today": false,
+     "plain": "aster: b",
+     "encoded": "YXN0ZXI6IGI"
+    },
+    {
+     "line": 12,
+     "codec": "reverse",
+     "today": false,
+     "plain": "rave-cas",
+     "encoded": "sac-evar"
+    },
+    {
+     "line": 13,
+     "codec": "atbash",
+     "today": false,
+     "plain": "tle-wate",
+     "encoded": "gov-dzgv"
+    },
+    {
+     "line": 14,
+     "codec": "caesar7",
+     "today": true,
+     "plain": "rfall-42",
+     "encoded": "ymhss-42"
+    }
+   ]
+  }
+ }
+}

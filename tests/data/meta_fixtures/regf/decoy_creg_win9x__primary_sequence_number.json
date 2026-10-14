@@ -1,0 +1,8 @@
+{
+ "field": "regf.primary_sequence_number",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/regf/GENERATOR_regf_struct.py.txt <outdir>  (stdlib struct regf writer -> decoy_creg_win9x.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -I -c \"from Registry import Registry; r=Registry.Registry('tests/data/meta_fixtures/regf/decoy_creg_win9x__primary_sequence_number.bin'); h=r._regf; print(h.hive_sequence1(), h.hive_sequence2(), h.modification_timestamp(), h.major_version(), h.minor_version(), h.hive_name(), r.root().name())\"  (python-registry 1.3.1; base block cross-checked with regipy 6.5.0 RegistryHive(p).header) -> ParseException 'Invalid REGF ID'; file -b -> 'MS Windows 95/98/ME registry file' (CREG)",
+ "decoy": true,
+ "member": "decoy_creg_win9x.dat"
+}

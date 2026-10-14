@@ -1,0 +1,10 @@
+{
+ "codec": "punycode",
+ "plain": null,
+ "encoded": "Nice work, submit amber-falcon-42",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written prose: plain text ending in a hyphenated slug (no trailing '-' delimiter)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys,codecs;print(codecs.decode(sys.stdin.read().encode(),\"punycode\"))'  # CPython encodings.punycode raises UnicodeError: incomplete punicode string -> not punycode",
+ "oracle_plain": null
+}

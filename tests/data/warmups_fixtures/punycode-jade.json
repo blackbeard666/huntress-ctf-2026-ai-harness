@@ -1,0 +1,9 @@
+{
+ "codec": "punycode",
+ "plain": "Nice work décodage this café warmup! To solve, submit münchen.日本 to the Game Master: jade-otter-19",
+ "encoded": "Nice work dcodage this caf warmup! To solve, submit mnchen. to the Game Master: jade-otter-19-lcip56pr0622cvf0a",
+ "generator_cmd": "printf %s \"$plain\" | NODE_NO_WARNINGS=1 tools/node/bin/node -e 'process.stdout.write(require(\"punycode\").encode(require(\"fs\").readFileSync(0,\"utf8\")))'  # punycode.js 2.1.0 (Node built-in) encode, whole line (non-ASCII plain -> real delta tail)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys,codecs;print(codecs.decode(sys.stdin.read().encode(),\"punycode\"))'  # CPython encodings.punycode",
+ "oracle_plain": "Nice work décodage this café warmup! To solve, submit münchen.日本 to the Game Master: jade-otter-19",
+ "expected": "match"
+}

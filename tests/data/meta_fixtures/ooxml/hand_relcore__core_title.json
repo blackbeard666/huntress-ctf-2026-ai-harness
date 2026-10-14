@@ -1,0 +1,8 @@
+{
+ "field": "ooxml.core_title",
+ "expected": "Wire Instructions – Final",
+ "generator_cmd": ".venv/bin/python -I mk_hand.py out  (stdlib zipfile writer: hand-built OPC package whose core part is /meta/core-props.xml, located only via the _rels/.rels core-properties relationship; app.xml with Company/AppVersion)",
+ "oracle_cmd": "7z x -so tests/data/meta_fixtures/ooxml/hand_relcore__core_title.bin meta/core-props.xml > part.xml && (prepend an XML declaration if the part has no XML declaration, so exiftool parses it as XML) exiftool -j part.xml | CorePropertiesTitle  (empty/absent -> none; exiftool date 'YYYY:MM:DD HH:MM:SSZ' re-spelled as the stored W3CDTF 'YYYY-MM-DDTHH:MM:SSZ')",
+ "decoy": false,
+ "member": "hand_relcore.docx"
+}

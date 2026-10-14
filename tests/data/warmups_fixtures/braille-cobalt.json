@@ -1,0 +1,9 @@
+{
+ "codec": "braille-blank",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-kestrel-17",
+ "encoded": "⠠⠝⠊⠉⠑⠀⠺⠕⠗⠅⠀⠙⠑⠉⠕⠙⠊⠝⠛⠀⠞⠓⠊⠎⠀⠺⠁⠗⠍⠥⠏⠖⠀⠠⠞⠕⠀⠎⠕⠇⠧⠑⠂⠀⠎⠥⠃⠍⠊⠞⠀⠞⠓⠊⠎⠀⠑⠭⠁⠉⠞⠀⠁⠝⠎⠺⠑⠗⠀⠞⠕⠀⠞⠓⠑⠀⠠⠛⠁⠍⠑⠀⠠⠍⠁⠎⠞⠑⠗⠒⠀⠉⠕⠃⠁⠇⠞⠤⠅⠑⠎⠞⠗⠑⠇⠤⠼⠁⠛",
+ "generator_cmd": "python3 -c 'import sys;sys.path.insert(0,\"tools/pybraille\");from pybraille import convertText;print(convertText(sys.argv[1]))' \"$plain\" | sed 's/ /⠀/g'  # pybraille 1.0.0 (PyPI) convertText: Grade 1, ⠠ per capital, ⠼ before digits, spaces -> U+2800 by sed",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/braille_cyberchef.mjs dec  # CyberChef From Braille (Braille ASCII table: ⠼=#, ⠠=,)",
+ "oracle_plain": ",NICE WORK DECODING THIS WARMUP6 ,TO SOLVE1 SUBMIT THIS EXACT ANSWER TO THE ,GAME ,MASTER3 COBALT-KESTREL-#AG",
+ "expected": "match"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "punycode",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42-",
+ "generator_cmd": "printf %s \"$plain\" | NODE_NO_WARNINGS=1 tools/node/bin/node -e 'process.stdout.write(require(\"punycode\").encode(require(\"fs\").readFileSync(0,\"utf8\")))'  # punycode.js 2.1.0 (Node built-in) encode, whole line",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys,codecs;print(codecs.decode(sys.stdin.read().encode(),\"punycode\"))'  # CPython encodings.punycode",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

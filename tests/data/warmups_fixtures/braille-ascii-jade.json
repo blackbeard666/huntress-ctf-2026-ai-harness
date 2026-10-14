@@ -1,0 +1,9 @@
+{
+ "codec": "braille-ascii",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-93",
+ "encoded": "⠝⠊⠉⠑⠀⠺⠕⠗⠅⠀⠙⠑⠉⠕⠙⠊⠝⠛⠀⠞⠓⠊⠎⠀⠺⠁⠗⠍⠥⠏⠮⠀⠞⠕⠀⠎⠕⠇⠧⠑⠠⠀⠎⠥⠃⠍⠊⠞⠀⠞⠓⠊⠎⠀⠑⠭⠁⠉⠞⠀⠁⠝⠎⠺⠑⠗⠀⠞⠕⠀⠞⠓⠑⠀⠛⠁⠍⠑⠀⠍⠁⠎⠞⠑⠗⠱⠀⠚⠁⠙⠑⠤⠕⠞⠞⠑⠗⠤⠔⠒",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/braille_cyberchef.mjs enc  # CyberChef To Braille",
+ "oracle_cmd": "python3 -c 'import sys,unicodedata as u;print(\" \".join(u.name(c).split(\"-\")[-1] if c>\"\\u2800\" else \"/\" for c in sys.argv[1]))' \"$encoded\" | python3 -c 'import sys;T=dict(zip(\"\"\"1 12 14 145 15 124 1245 125 24 245 13 123 134 1345 135 1234 12345 1235 234 2345 136 1236 2456 1346 13456 1356\"\"\".split(),\"abcdefghijklmnopqrstuvwxyz\"));T.update({\"2\":\"1\",\"23\":\"2\",\"25\":\"3\",\"256\":\"4\",\"26\":\"5\",\"235\":\"6\",\"2356\":\"7\",\"236\":\"8\",\"35\":\"9\",\"356\":\"0\",\"36\":\"-\",\"/\":\" \"});print(\"\".join(T.get(x,\"?\") for x in sys.stdin.read().split()))'  # unicodedata dot-number names -> NA Braille ASCII letters/digits table typed from the BANA spec; ? = punctuation not in the hand table",
+ "oracle_plain": "nice work decoding this warmup? to solve? submit this exact answer to the game master? jade-otter-93",
+ "expected": "match_lower"
+}

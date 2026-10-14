@@ -1,0 +1,15 @@
+{
+ "encoding": "lzma",
+ "expected_offset": 3012,
+ "expected_config": {
+  "c2": "203.0.113.250:9001",
+  "campaign": "lzma-alone",
+  "sleep": 5,
+  "flag": "flag{lzm4_4l0n3}"
+ },
+ "decoy": false,
+ "generator_cmd": "bash zpack_gen.sh zpack_raw_lzma.bin raw-lzma \"$J5\"   # J1..J6 = expected_config JSON (compact); blob: printf header + crc32 from gzip trailer; stream: gzip/bzip2/xz/zlib-flate + coreutils base64 / xxd -p",
+ "oracle_cmd": "bash zpack_oracle.sh zpack_raw_lzma.bin raw-lzma   # strings/grep -bo + base64 -d / xxd -r -p + gzip/bzip2/xz/zlib-flate; prints off at+N magic len hdrcrc crc32(body) body",
+ "oracle_output": "3012 at+0 HCFG 87 3007834268 3007834268 {\"c2\":\"203.0.113.250:9001\",\"campaign\":\"lzma-alone\",\"sleep\":5,\"flag\":\"flag{lzm4_4l0n3}\"}",
+ "detail": "xz --format=lzma (lzma-alone, size -1 + end marker)"
+}

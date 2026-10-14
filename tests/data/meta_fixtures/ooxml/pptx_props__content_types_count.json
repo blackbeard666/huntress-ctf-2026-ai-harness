@@ -1,0 +1,8 @@
+{
+ "field": "ooxml.content_types_count",
+ "expected": "24",
+ "generator_cmd": ".venv/bin/python -I -c \"import pptx,datetime; pr=pptx.Presentation(); pr.slides.add_slide(pr.slide_layouts[0]); c=pr.core_properties; c.author='Lena Voss'; c.last_modified_by='Lena Voss'; c.title='Board Update'; c.created=datetime.datetime(2026,3,3,10,30,0); c.modified=datetime.datetime(2026,3,4,11,45,30); pr.save(out)\"  (python-pptx writer)",
+ "oracle_cmd": "7z x -so tests/data/meta_fixtures/ooxml/pptx_props__content_types_count.bin '[Content_Types].xml' | grep -oE '<(Default|Override)\\s' | wc -l  (all Default+Override mappings)",
+ "decoy": false,
+ "member": "pptx_props.pptx"
+}

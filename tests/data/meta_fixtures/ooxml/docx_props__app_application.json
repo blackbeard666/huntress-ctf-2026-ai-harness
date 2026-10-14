@@ -1,0 +1,8 @@
+{
+ "field": "ooxml.app_application",
+ "expected": "Microsoft Macintosh Word",
+ "generator_cmd": ".venv/bin/python -I -c \"import docx,datetime; d=docx.Document(); d.add_paragraph('Q3 payroll export'); p=d.core_properties; p.author='Mara Quill'; p.last_modified_by='svc-backup'; p.title='Payroll Reconciliation Q3'; p.created=datetime.datetime(2026,9,30,8,15,42); p.modified=datetime.datetime(2026,10,2,17,4,9); d.save(out)\"  (python-docx 1.x writer)",
+ "oracle_cmd": "7z x -so tests/data/meta_fixtures/ooxml/docx_props__app_application.bin docProps/app.xml > part.xml && (prepend an XML declaration if the part has no XML declaration, so exiftool parses it as XML) exiftool -j part.xml | PropertiesApplication  (empty/absent -> none)",
+ "decoy": false,
+ "member": "docx_props.docx"
+}

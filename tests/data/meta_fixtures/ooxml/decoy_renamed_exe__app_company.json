@@ -1,0 +1,8 @@
+{
+ "field": "ooxml.app_company",
+ "expected": "none",
+ "generator_cmd": "printf 'MZ\\x90\\x00 this is not an office document\\r\\n' > out  (MZ stub renamed .xlsx)",
+ "oracle_cmd": "file -b tests/data/meta_fixtures/ooxml/decoy_renamed_exe__app_company.bin -> not 'Microsoft Word/Excel 2007+'; 7z x -so tests/data/meta_fixtures/ooxml/decoy_renamed_exe__app_company.bin '[Content_Types].xml' -> empty (not an OPC package) => none",
+ "decoy": true,
+ "member": "decoy_renamed_exe.xlsx"
+}

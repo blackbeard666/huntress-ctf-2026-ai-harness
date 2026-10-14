@@ -1,0 +1,13 @@
+{
+ "encoding": "rc4",
+ "expected_offset": 6000,
+ "expected_config": {
+  "c2": "203.0.113.9:8080",
+  "beacon": "rc4-openssl",
+  "sleep": 15,
+  "flag": "flag{0p3nssl_rc4_str34m}"
+ },
+ "generator_cmd": "sh rc4_gen.sh  # python cryptography ARC4 (rc4_whole_keybefore/rc4_body_keyafter/rc4_decoy) + openssl enc -rc4 (rc4_whole_openssl)",
+ "oracle_cmd": "perl rc4_oracle.pl rc4_whole_openssl.bin 6000 'K9#mPq2!vX7@zL4w' | python3 -c \"import sys,zlib,json;o,m,c,p=sys.stdin.read().rstrip(\\\"\\n\\\").split(\\\" \\\",3);assert m==\\\"HCFG\\\" and zlib.crc32(p.encode())==int(c);print(json.dumps({\\\"offset\\\":int(o),\\\"config\\\":json.loads(p)}))\"",
+ "oracle_output": "{\"offset\": 6000, \"config\": {\"c2\": \"203.0.113.9:8080\", \"beacon\": \"rc4-openssl\", \"sleep\": 15, \"flag\": \"flag{0p3nssl_rc4_str34m}\"}}"
+}

@@ -1,0 +1,13 @@
+{
+ "encoding": "decimal-list",
+ "expected_offset": 8224,
+ "expected_config": {
+  "c2": "192.0.2.44:8080",
+  "campaign": "charcode",
+  "sleep": 60,
+  "flag": "flag{72_67_70_71_d3c1m4l}"
+ },
+ "generator_cmd": "bash int_gen.sh int_decimal_list.bin decimal '{\"c2\":\"192.0.2.44:8080\",\"campaign\":\"charcode\",\"sleep\":60,\"flag\":\"flag{72_67_70_71_d3c1m4l}\"}'   # blob: printf header + crc32 from gzip trailer; elements: od -tu1 / xxd -p -c W; gcc -O2 C program with the const array / decimal string literal",
+ "oracle_cmd": "bash int_oracle.sh int_decimal_list.bin decimal   # GNU grep -obUaP locates the stored magic; od -tu4/-tu8/-tx4/-tx2 reads elements; xxd -r -p / perl pack rebuild bytes; perl unpack header; gzip trailer = crc32(body)",
+ "oracle_output": "8224 HCFG 92 2755117242 {\"c2\":\"192.0.2.44:8080\",\"campaign\":\"charcode\",\"sleep\":60,\"flag\":\"flag{72_67_70_71_d3c1m4l}\"} 2755117242"
+}

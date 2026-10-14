@@ -1,0 +1,14 @@
+{
+ "encoding": "hex-zlib",
+ "expected_offset": 3012,
+ "expected_config": {
+  "c2": "198.51.100.40:53",
+  "campaign": "hex-deflate",
+  "jitter": 7,
+  "flag": "flag{h3x_z1ib_str3am}"
+ },
+ "decoy": false,
+ "generator_cmd": "bash zpack_gen.sh zpack_hex_zlib.bin hex-zlib \"$J2\"   # J1..J6 = expected_config JSON (compact); blob: printf header + crc32 from gzip trailer; stream: gzip/bzip2/xz/zlib-flate + coreutils base64 / xxd -p",
+ "oracle_cmd": "bash zpack_oracle.sh zpack_hex_zlib.bin hex-zlib   # strings/grep -bo + base64 -d / xxd -r -p + gzip/bzip2/xz/zlib-flate; prints off at+N magic len hdrcrc crc32(body) body",
+ "oracle_output": "3012 at+0 HCFG 92 2086485072 2086485072 {\"c2\":\"198.51.100.40:53\",\"campaign\":\"hex-deflate\",\"jitter\":7,\"flag\":\"flag{h3x_z1ib_str3am}\"}"
+}

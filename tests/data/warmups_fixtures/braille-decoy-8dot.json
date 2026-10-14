@@ -1,0 +1,10 @@
+{
+ "codec": "braille",
+ "plain": null,
+ "encoded": "⡠⠝⠊⠉⠑ ⣺⠕⠗⠅",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written: 'Nice work' Grade 1 cells with dots 7/8 set on two cells (U+2860, U+28FA) -- 8-dot computer Braille, not 6-dot Grade 1",
+ "oracle_cmd": "python3 -c 'import sys,unicodedata as u;print([u.name(c) for c in sys.argv[1] if ord(c)>0x283f])' \"$encoded\"  # names contain DOTS-..7/8 -> outside the 6-dot block",
+ "oracle_plain": null
+}

@@ -1,0 +1,23 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "b1c8ba21-ef1a-43b8-a82f-d80ce68d8b16",
+  "window": 30.0,
+  "elapsed": 1.78,
+  "in_window": 1.12,
+  "phases": {
+    "start": 0.66,
+    "download": 0.14,
+    "solve": 0.06,
+    "submit": 0.92
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": "2026-10-14T13:01:19.511Z",
+  "verified": {
+    "set1.d14-lnk-003-lnk-target-path-windows": "C:\\Windows\\System32\\cmd.exe",
+    "set2.d14-lnk-004-lnk-target-path-windows": "C:\\Windows\\System32\\cmd.exe"
+  },
+  "attempts_remaining": 0,
+  "hall_of_fame_eligible": false
+}

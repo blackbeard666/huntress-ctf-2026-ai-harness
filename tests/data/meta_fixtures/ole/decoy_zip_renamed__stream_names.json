@@ -1,0 +1,8 @@
+{
+ "field": "ole.stream_names",
+ "expected": "none",
+ "generator_cmd": ".venv/bin/python -I -c \"import zipfile; z=zipfile.ZipFile(out,'w'); z.writestr('[Content_Types].xml','<Types/>'); z.writestr('docProps/core.xml', ...)\"  (stdlib zipfile writer, renamed .doc)",
+ "oracle_cmd": "file -b tests/data/meta_fixtures/ole/decoy_zip_renamed__stream_names.bin -> 'Zip archive data' (not 'Composite Document File V2'); olefile.isOleFile -> False",
+ "decoy": true,
+ "member": "report.doc"
+}

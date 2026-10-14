@@ -348,8 +348,11 @@ def _generic_chunk(t):
 # Warmups Mastery: line k is encoded with day k's codec. The FREE-TEXT codecs (no alphabet signature) are told apart only
 # by how English the result reads, which per-line guessing gets wrong on short fragments (D13: Atbash put on '-tliuq-d').
 # Each is used ONCE per blob -> (name, day introduced); a blob of k lines can only contain codecs of days <= k.
-FREE_CODECS = (("rot", 2), ("rev", 12), ("atb", 13))
+FREE_CODECS = (("rot", 2), ("rev", 12), ("atb", 13), ("caesar7", 14))   # D14: fixed Caesar +7 (decode rot-7)
 _SLUG_END = re.compile(r"[a-z]+(?:-[a-z]+)+-\d{2,}\s*$")
+# The GM's slug is adj-noun-noun-NN: a 3-word slug end outranks a 2-word one (D14 Mastery set22: rev/atb swapped on
+# lines 12/13 still ended in a 2-word 'x-yyyy...-NN' tail and out-scored the true slug on bigrams).
+_SLUG3_END = re.compile(r"[a-z]+(?:-[a-z]+){2,}-\d{2,}\s*$")
 # Free-text codec registry [(name, day, cands_fn(fragment) -> [decoded candidates])], FREE_CODECS first. A new day's
 # keyless free-text codec is one register_free(name, day, fn) call (the ratchet / a generalize worker adds it). day=None
 # = SPECULATIVE (lib.warmups_codecs.SPECULATIVE_FREE: rot47, swapcase, per-word reversal, ...): tried only for a blob
@@ -387,7 +390,8 @@ def _max_day():
 
 for _n, _d in [(n, d) for n, d in FREE_CODECS if d <= _max_day()]:
     register_free(_n, _d, {"rot": _rot_cands, "atb": lambda p: [_atbash(p)],
-                           "rev": lambda p: [p.strip()[::-1] if p.strip() == p else p[::-1]]}[_n])
+                           "rev": lambda p: [p.strip()[::-1] if p.strip() == p else p[::-1]],
+                           "caesar7": lambda p: [_rot(p, -7)]}[_n])
 
 
 def _free_line(p):
@@ -444,7 +448,8 @@ def _joint_free(rows):
                 parts[i] = v
             text = "".join(parts)
             last = [ln for ln in text.splitlines() if ln.strip()]
-            sc = (bool(last) and _SLUG_END.search(last[-1]) is not None, _bigram(text))
+            sc = (bool(last) and _SLUG_END.search(last[-1]) is not None,
+                  bool(last) and _SLUG3_END.search(last[-1]) is not None, _bigram(text))
             if best is None or sc > best[0]:
                 best = (sc, text)
     return best[1] if best and best[0][0] else None

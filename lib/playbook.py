@@ -192,6 +192,13 @@ PLAYBOOK = [
              "field after the LAST one.",
         examples=("telemetry-agent-001.exe OriginalFilename -> pe-base-386.exe (D11)",),
     ),
+    PlaybookEntry(
+        lanes=(METADATA,), families=("windows", "path"),
+        rule="`lnk.target_path_windows` = the shortcut's LinkInfo LocalBasePath (+ CommonPathSuffix; Unicode offsets "
+             "when LinkInfoHeaderSize >= 0x24) VERBATIM with backslashes, else the LinkTargetIDList path (drive item + "
+             "file-entry long names). Never the WorkingDir / RelativePath / the .lnk member name.",
+        examples=("shortcut-001.lnk LinkInfo -> C:\\Windows\\System32\\cmd.exe (D14; IDList agreed)",),
+    ),
     # ---- script-analysis -------------------------------------------------------------------------
     PlaybookEntry(
         lanes=(SCRIPT,), families=("control",),

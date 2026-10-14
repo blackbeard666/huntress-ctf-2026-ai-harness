@@ -1,0 +1,10 @@
+{
+ "codec": "polybius",
+ "plain": null,
+ "encoded": "78 105 99 101 32 119 111 114 107",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -c 'print(\" \".join(str(b) for b in b\"Nice work\"))'  # decimal char codes (digits 0,6-9 outside the square)",
+ "oracle_cmd": "python3 -c 'import sys,re;print(bool(re.fullmatch(r\"[1-5\\s]+\",sys.argv[1])))' \"$encoded\"  # False -> not Polybius coordinates",
+ "oracle_plain": null
+}

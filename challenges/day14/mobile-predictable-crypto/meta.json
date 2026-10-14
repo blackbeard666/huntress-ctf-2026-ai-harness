@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-14-predictable-crypto",
+  "lane": "mobile-android",
+  "name": "📱 Predictable Crypto",
+  "ids": {
+    "single_solve": "mobile-android-day-14-predictable-crypto",
+    "time_trial": "mobile-android-day-14-predictable-crypto/time_trial",
+    "mastery": "mobile-android-day-14-predictable-crypto/mastery"
+  }
+}

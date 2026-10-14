@@ -1,0 +1,16 @@
+{
+ "encoding": "base64-bz2",
+ "expected_offset": 3012,
+ "expected_config": {
+  "c2": "192.0.2.14:4444",
+  "campaign": "bzip-wrap",
+  "sleep": 15,
+  "flag": "flag{bz2_b64_w1d3_l1n3s}",
+  "pad": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+ },
+ "decoy": false,
+ "generator_cmd": "bash zpack_gen.sh zpack_b64_bz2_wrapped.bin b64-bz2 \"$J4\"   # J1..J6 = expected_config JSON (compact); blob: printf header + crc32 from gzip trailer; stream: gzip/bzip2/xz/zlib-flate + coreutils base64 / xxd -p",
+ "oracle_cmd": "bash zpack_oracle.sh zpack_b64_bz2_wrapped.bin b64-bz2   # strings/grep -bo + base64 -d / xxd -r -p + gzip/bzip2/xz/zlib-flate; prints off at+N magic len hdrcrc crc32(body) body",
+ "oracle_output": "3012 at+0 HCFG 221 3391361440 3391361440 {\"c2\":\"192.0.2.14:4444\",\"campaign\":\"bzip-wrap\",\"sleep\":15,\"flag\":\"flag{bz2_b64_w1d3_l1n3s}\",\"pad\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}",
+ "detail": "base64 -w76 (multi-line)"
+}

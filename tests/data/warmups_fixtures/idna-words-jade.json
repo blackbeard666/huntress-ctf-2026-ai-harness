@@ -1,0 +1,9 @@
+{
+ "codec": "idna-words",
+ "plain": "Nice work décodage this café warmup! To solve, submit münchen.日本 to the Game Master: jade-otter-19",
+ "encoded": "Nice work xn--dcodage-bya this xn--caf-dma warmup! To solve, submit xn--mnchen-3ya.xn--wgv71a to the Game Master: jade-otter-19",
+ "generator_cmd": "printf %s \"$plain\" | NODE_NO_WARNINGS=1 tools/node/bin/node -e 'const p=require(\"punycode\");process.stdout.write(require(\"fs\").readFileSync(0,\"utf8\").split(\" \").map(w=>p.toASCII(w)).join(\" \"))'  # punycode.js toASCII (IDNA xn-- for non-ASCII labels) per word",
+ "oracle_cmd": "printf %s \"$encoded\" | .venv/bin/python -I -c 'import sys,idna;print(\" \".join(\".\".join(idna.decode(l) if l.startswith(\"xn--\") else l for l in w.split(\".\")) for w in sys.stdin.read().split(\" \")))'  # PyPI idna 3.20 decode of each xn-- label",
+ "oracle_plain": "Nice work décodage this café warmup! To solve, submit münchen.日本 to the Game Master: jade-otter-19",
+ "expected": "match"
+}

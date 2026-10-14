@@ -865,3 +865,25 @@ print("ok  decode_chunk: plain reversed fragments ('NN-word' slug tail / reverse
 assert _dc("Mrxv dlip wvxlwrmt gsrh dzinfk! Gl hloev, hfynrg gsrh vczxg zmhdvi gl gsv Tznv Nzhgvi: szmwb-xzmwov-jfziga-31") \
     == "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: handy-candle-quartz-31"
 print("ok  decode_chunk: Atbash (a<->z mirror) free text competes with rot-N / reversal")
+
+# Day 14 "Seven Steps": a fixed Caesar +7 (decode rot-7) -- line 14 of a Mastery blob is a FOURTH free-text codec beside
+# rot13 (2), reversal (12), Atbash (13); registered in lib.decode.FREE_CODECS + lib.warmups_codecs.DAYS. The joint
+# assignment also ranks a 3-word adj-noun-noun-NN slug end above a 2-word one (set22 swapped rev/atb on lines 12/13).
+from lib.decode import decode_chunked as _dch
+from lib import warmups_codecs as _wc
+assert _dc("Upjl dvyr kljvkpun aopz dhytbw! Av zvscl, zbitpa aopz lehja huzdly av aol Nhtl Thzaly: khwwly-zwyvba-ivbskly-71") \
+    .endswith("Game Master: dapper-sprout-boulder-71")
+_b22 = ["TmljZSB3bw==", "ex qrpbq", "696e672074686973",
+        "00100000 01110111 01100001 01110010 01101101 01110101 01110000 00100001", "32 84 111 32 115 111 108 118",
+        "145 054 040 163 165 142 155 151", "%74%20%74%68%69%73%20%65", "&#120;&#97;&#99;&#116;&#32;&#97;&#110;",
+        '"\\u0073\\u0077\\u0065\\u0072\\u0020\\u0074\\u006f\\u0020"', "ORUGKICHMFWWK===", "IE1hc3Rlcjo", "-yvoorg ",
+        "kfaaov-g", "byasl-60"]
+assert _dch("".join(f"{k:02d}\t{p}\n" for k, p in enumerate(_b22, 1))).endswith("Game Master: groovy-puzzle-turtle-60")
+assert _wc.day_codec(14)[1]("Hi ab-cd-ef-12") == "Op hi-jk-lm-12"
+print("ok  decode_chunked: Caesar+7 (D14) as a 4th free-text codec; 3-word slug end wins the joint assignment")
+
+# Day 14 "The Shortcut Home": lnk.target_path_windows verified (LinkInfo LocalBasePath, else the IDList path)
+from lib import meta as _meta14
+assert _meta14.lookup("lnk", "target_path_windows")[0].tier == _meta14.VERIFIED
+assert _meta14.parse_field("d14-lnk-001-lnk-target-path-windows", {})[:2] == ("lnk", "target_path_windows")
+print("ok  lib.meta: lnk.target_path_windows registered (verified D14)")

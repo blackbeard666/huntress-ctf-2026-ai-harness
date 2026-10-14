@@ -1,0 +1,9 @@
+{
+ "encoding": "decimal-list",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "generator_cmd": "bash int_gen.sh int_decoy_decimal.bin decimal '{\"c2\":\"192.0.2.44:8080\",\"campaign\":\"charcode\",\"sleep\":60,\"flag\":\"flag{72_67_70_71_d3c1m4l}\"}' 4   # blob: printf header + crc32 from gzip trailer; elements: od -tu1 / xxd -p -c W; gcc -O2 C program with the const array / decimal string literal",
+ "oracle_cmd": "bash int_oracle.sh int_decoy_decimal.bin decimal   # GNU grep -obUaP locates the stored magic; od -tu4/-tu8/-tx4/-tx2 reads elements; xxd -r -p / perl pack rebuild bytes; perl unpack header; gzip trailer = crc32(body)",
+ "oracle_output": "8224 HCFG 92 2755117246 {\"c2\":\"192.0.2.44:8080\",\"campaign\":\"charcode\",\"sleep\":60,\"flag\":\"flag{72_67_70_71_d3c1m4l}\"} 2755117242   <header crc != gzip crc32 of body: corrupted blob>",
+ "decoy": true
+}

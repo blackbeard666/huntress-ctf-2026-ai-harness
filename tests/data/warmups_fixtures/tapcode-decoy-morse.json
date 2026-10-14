@@ -1,0 +1,10 @@
+{
+ "codec": "tapcode",
+ "plain": null,
+ "encoded": "-. .. -.-. . / .-- --- .-. -.-",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written ITU Morse for 'NICE WORK' (N=-. I=.. C=-.-. E=. W=.-- O=--- R=.-. K=-.-), '/' word gap",
+ "oracle_cmd": "python3 -c 'import sys;print(\"-\" in sys.argv[1])' \"$encoded\"  # True: dashes -> Morse, not tap code (dots only)",
+ "oracle_plain": null
+}

@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-14-shortcut-home",
+  "lane": "metadata-forensics",
+  "name": "🔎 The Shortcut Home",
+  "ids": {
+    "single_solve": "metadata-forensics-day-14-shortcut-home",
+    "time_trial": "metadata-forensics-day-14-shortcut-home/time_trial",
+    "mastery": "metadata-forensics-day-14-shortcut-home/mastery"
+  }
+}

@@ -1,0 +1,13 @@
+{
+ "encoding": "u32be-packed",
+ "expected_offset": 8224,
+ "expected_config": {
+  "c2": "198.51.100.9:9001",
+  "campaign": "wordsmith",
+  "sleep": 12,
+  "flag": "flag{p4ck3d_b1g_3nd14n}"
+ },
+ "generator_cmd": "bash int_gen.sh int_u32be_packed.bin u32words '{\"c2\":\"198.51.100.9:9001\",\"campaign\":\"wordsmith\",\"sleep\":12,\"flag\":\"flag{p4ck3d_b1g_3nd14n}\"}'   # blob: printf header + crc32 from gzip trailer; elements: od -tu1 / xxd -p -c W; gcc -O2 C program with the const array / decimal string literal",
+ "oracle_cmd": "bash int_oracle.sh int_u32be_packed.bin u32words   # GNU grep -obUaP locates the stored magic; od -tu4/-tu8/-tx4/-tx2 reads elements; xxd -r -p / perl pack rebuild bytes; perl unpack header; gzip trailer = crc32(body)",
+ "oracle_output": "8224 HCFG 93 2779450552 {\"c2\":\"198.51.100.9:9001\",\"campaign\":\"wordsmith\",\"sleep\":12,\"flag\":\"flag{p4ck3d_b1g_3nd14n}\"} 2779450552"
+}

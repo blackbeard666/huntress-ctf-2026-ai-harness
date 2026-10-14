@@ -1,0 +1,8 @@
+{
+ "field": "ooxml.core_last_modified_by",
+ "expected": "Lena Voss",
+ "generator_cmd": ".venv/bin/python -I -c \"import pptx,datetime; pr=pptx.Presentation(); pr.slides.add_slide(pr.slide_layouts[0]); c=pr.core_properties; c.author='Lena Voss'; c.last_modified_by='Lena Voss'; c.title='Board Update'; c.created=datetime.datetime(2026,3,3,10,30,0); c.modified=datetime.datetime(2026,3,4,11,45,30); pr.save(out)\"  (python-pptx writer)",
+ "oracle_cmd": "7z x -so tests/data/meta_fixtures/ooxml/pptx_props__core_last_modified_by.bin docProps/core.xml > part.xml && (prepend an XML declaration if the part has no XML declaration, so exiftool parses it as XML) exiftool -j part.xml | CorePropertiesLastModifiedBy  (empty/absent -> none; exiftool date 'YYYY:MM:DD HH:MM:SSZ' re-spelled as the stored W3CDTF 'YYYY-MM-DDTHH:MM:SSZ')",
+ "decoy": false,
+ "member": "pptx_props.pptx"
+}

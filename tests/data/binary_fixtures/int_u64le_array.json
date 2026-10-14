@@ -1,0 +1,13 @@
+{
+ "encoding": "u64le-array",
+ "expected_offset": 8224,
+ "expected_config": {
+  "c2": "192.0.2.150:443",
+  "campaign": "ledger",
+  "jitter": 7,
+  "flag": "flag{w1d3_qw0rd_t4bl3}"
+ },
+ "generator_cmd": "bash int_gen.sh int_u64le_array.bin u64arr '{\"c2\":\"192.0.2.150:443\",\"campaign\":\"ledger\",\"jitter\":7,\"flag\":\"flag{w1d3_qw0rd_t4bl3}\"}'   # blob: printf header + crc32 from gzip trailer; elements: od -tu1 / xxd -p -c W; gcc -O2 C program with the const array / decimal string literal",
+ "oracle_cmd": "bash int_oracle.sh int_u64le_array.bin u64arr   # GNU grep -obUaP locates the stored magic; od -tu4/-tu8/-tx4/-tx2 reads elements; xxd -r -p / perl pack rebuild bytes; perl unpack header; gzip trailer = crc32(body)",
+ "oracle_output": "8224 HCFG 87 3873389611 {\"c2\":\"192.0.2.150:443\",\"campaign\":\"ledger\",\"jitter\":7,\"flag\":\"flag{w1d3_qw0rd_t4bl3}\"} 3873389611"
+}

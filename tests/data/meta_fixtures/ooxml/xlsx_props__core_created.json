@@ -1,0 +1,8 @@
+{
+ "field": "ooxml.core_created",
+ "expected": "2025-12-01T09:00:00Z",
+ "generator_cmd": ".venv/bin/python -I -c \"import openpyxl,datetime; wb=openpyxl.Workbook(); wb.active['A1']='acct'; P=wb.properties; P.creator='Ivo Brandt'; P.lastModifiedBy='j.okafor'; P.title='Vendor Ledger'; P.created=datetime.datetime(2025,12,1,9,0,0); P.modified=datetime.datetime(2026,1,15,23,59,1); wb.save(out)\"  (openpyxl 3.1.5 writer)",
+ "oracle_cmd": "7z x -so tests/data/meta_fixtures/ooxml/xlsx_props__core_created.bin docProps/core.xml > part.xml && (prepend an XML declaration if the part has no XML declaration, so exiftool parses it as XML) exiftool -j part.xml | CorePropertiesCreated  (empty/absent -> none; exiftool date 'YYYY:MM:DD HH:MM:SSZ' re-spelled as the stored W3CDTF 'YYYY-MM-DDTHH:MM:SSZ')",
+ "decoy": false,
+ "member": "xlsx_props.xlsx"
+}
