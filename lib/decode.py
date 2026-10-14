@@ -352,7 +352,7 @@ FREE_CODECS = (("rot", 2), ("rev", 12), ("atb", 13), ("caesar7", 14))   # D14: f
 _SLUG_END = re.compile(r"[a-z]+(?:-[a-z]+)+-\d{2,}\s*$")
 # The GM's slug is adj-noun-noun-NN: a 3-word slug end outranks a 2-word one (D14 Mastery set22: rev/atb swapped on
 # lines 12/13 still ended in a 2-word 'x-yyyy...-NN' tail and out-scored the true slug on bigrams).
-_SLUG3_END = re.compile(r"[a-z]+(?:-[a-z]+){2,}-\d{2,}\s*$")
+_SLUG3_END = re.compile(r"(?<![A-Za-z0-9])[a-z]+(?:-[a-z]+){2,}-\d{2,}\s*$")
 # Free-text codec registry [(name, day, cands_fn(fragment) -> [decoded candidates])], FREE_CODECS first. A new day's
 # keyless free-text codec is one register_free(name, day, fn) call (the ratchet / a generalize worker adds it). day=None
 # = SPECULATIVE (lib.warmups_codecs.SPECULATIVE_FREE: rot47, swapcase, per-word reversal, ...): tried only for a blob
@@ -420,42 +420,165 @@ def _free_cands(name, p):
     return fn(p) if fn else []
 
 
-def _joint_free(rows):
-    """Assign the free-text codecs to the free lines jointly (each codec once, only days <= the blob's last line) and
-    keep the assignment whose text ends in a slug, then reads most like English. None = no consistent assignment."""
+_SLUG_WORDS = re.compile(r"(?<![A-Za-z0-9])([a-z]+)-([a-z]+)-([a-z]+)-\d{2,}\s*$")
+_known_sets = None
+
+
+def _slug_known(last, generator_only=False):
+    """How many of the slug's words are GM generator words or English (lib.slug), 0-3; 0 when no slug ends the line.
+    generator_only: count only the GM generator's closed vocabulary."""
+    global _known_sets
+    m = _SLUG_WORDS.search(last or "")
+    if not m:
+        return 0
+    if _known_sets is None:
+        try:
+            from lib import slug as _slug
+            _known_sets = (_slug.vocab(), _slug.english())
+        except Exception:  # noqa: BLE001 - no reference lists: the rank falls through to bigrams
+            _known_sets = (set(), set())
+    v, e = _known_sets
+    return sum(w in v or (not generator_only and w in e) for w in m.groups())
+
+
+def _joint_ranked(rows):
+    """Every joint assignment of the free-text codecs to the free lines (each codec once, only days <= the blob's last
+    line) -> [(score, text)] best first, distinct texts. Score = (ends in a slug, 3-word slug, slug words known,
+    bigram English-likeness): D14 set22 swapped rev/Atbash on lines 12/13 into a 2-word gibberish tail that won on
+    bigrams alone."""
     import itertools
     kmax = max(k for k, _ in rows)
     free = [i for i, (_, p) in enumerate(rows) if _free_line(p)]
     confirmed = [(n, day) for n, day, _f in _FREE if day is not None]
     names = [n for n, day in confirmed if kmax >= day]
     if not free:
-        return None
+        return []
     if len(free) > len(names):
         # One free line more than the confirmed codecs cover, in a blob longer than the newest confirmed day: today's
         # unregistered codec -> every confirmed one (each day's codec appears once) + one speculative slot.
         if not (SPECULATIVE_FREE and len(free) == len(names) + 1 and confirmed and kmax > max(d for _n, d in confirmed)
                 and any(day is None for _n, day, _f in _FREE)):
-            return None
+            return []
         names = names + [_SPEC]
     fixed = [None if i in free else decode_chunk(p) for i, (_, p) in enumerate(rows)]
     if any(x is None for i, x in enumerate(fixed) if i not in free):
-        return None
-    best = None
+        return []
+    scored = {}
     for combo in itertools.permutations(names, len(free)):
         for picks in itertools.product(*(_free_cands(n, rows[i][1]) for n, i in zip(combo, free))):
             parts = list(fixed)
             for i, v in zip(free, picks):
                 parts[i] = v
             text = "".join(parts)
+            if text in scored:
+                continue
             last = [ln for ln in text.splitlines() if ln.strip()]
-            sc = (bool(last) and _SLUG_END.search(last[-1]) is not None,
-                  bool(last) and _SLUG3_END.search(last[-1]) is not None, _bigram(text))
-            if best is None or sc > best[0]:
-                best = (sc, text)
-    return best[1] if best and best[0][0] else None
+            last = last[-1] if last else ""
+            slug_end = _SLUG_END.search(last) is not None
+            scored[text] = (slug_end, slug_end and _SLUG3_END.search(last) is not None,
+                            _slug_known(last) if slug_end else 0, _bigram(text))
+    return sorted(((sc, t) for t, sc in scored.items()), key=lambda x: x[0], reverse=True)
 
 
-def decode_chunked(text):
+def _joint_free(rows):
+    """The best joint assignment's text, or None when no assignment ends in a slug."""
+    ranked = _joint_ranked(rows)
+    return ranked[0][1] if ranked and ranked[0][0][0] else None
+
+
+# Every warmups Single/Mastery sentence D1-D14 (556 GM-verified sets) is this template + the slug.
+TEMPLATE = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: "
+_TEMPLATE_RE = re.compile(re.escape(TEMPLATE) + r"[a-z]+(?:-[a-z]+){2,}-\d{2,}\s*")
+POSITIONAL = os.environ.get("HCTF_DECODE_POSITIONAL", "1") != "0"
+
+
+def _unknown_line_cands(frag):
+    """Every decoding of a line whose day has no known codec (today's, before anyone registered it): speculative free
+    codecs, all rot-N, Atbash, reversal, the strict chunk decoders and every lib.warmups_codecs.CANDIDATES decoder that
+    re-encodes to the exact bytes. The template + known-slug check in _positional_ok picks among them."""
+    out = []
+
+    def add(x):
+        if isinstance(x, str) and x and x not in out:
+            out.append(x)
+    for x in _free_cands(_SPEC, frag):
+        add(x)
+    for n in range(26):
+        add(_rot(frag, n))
+    add(_atbash(frag))
+    add(frag[::-1])
+    add(decode_chunk(frag))
+    try:
+        from lib import warmups_codecs as W
+        for _name, enc, dec in W.CANDIDATES:
+            if dec is None:
+                continue
+            p = W.safe(dec, frag)
+            if p is not None and p not in out:
+                try:
+                    if enc(p) == frag:
+                        out.append(p)
+                except Exception:  # noqa: BLE001 - an encoder that doesn't apply to this text
+                    pass
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _positional(rows):
+    """Warmups Mastery puts line k under day k's codec. Decode each line with ITS day's codec (lib.warmups_codecs.DAYS,
+    else a free codec registered for that day, else a strict self-identifying chunk) and require every line to
+    re-encode to its exact bytes. Free codecs re-encode anything, so the caller also requires the template + a slug of
+    known words. Right on 295/295 verified Mastery sets D1-D14 where the joint guess misses ~0.6% of random sets.
+    -> [candidate texts]: one, or one per decoding of the single LAST line whose day has no codec yet (today's).
+    [] = numbering isn't 1..N, a line fails its codec, or more than the last line is unknown (-> the joint path)."""
+    if not POSITIONAL or [k for k, _ in rows] != list(range(1, len(rows) + 1)):
+        return []
+    try:
+        from lib import warmups_codecs as W
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    for k, frag in rows:
+        c = W.day_codec(k)
+        if c:
+            p = W.safe(c[2], frag)
+            if p is None or c[1](p) != frag:
+                return []
+            out.append([p])
+            continue
+        fn = next((f for _n, d, f in _FREE if d == k), None)
+        if fn:
+            cands = fn(frag)
+            p = cands[0] if cands else None
+        elif k == len(rows):
+            p = None
+            out.append(_unknown_line_cands(frag))
+            continue
+        elif not _free_line(frag):
+            p = decode_chunk(frag)
+        if p is None:
+            return []
+        out.append([p])
+    head = "".join(x[0] for x in out[:-1])
+    return [head + last for last in out[-1]]
+
+
+def _positional_ok(rows):
+    """The positional reading that is the template + a slug whose three words are all known, else None. With several
+    (an unknown last-line codec): the most GM generator words in the slug, then bigram English-likeness."""
+    best = None
+    for pos in _positional(rows):
+        slug_txt = pos.rstrip().rsplit(" ", 1)[-1]
+        if not _TEMPLATE_RE.fullmatch(pos) or _slug_known(slug_txt) != 3:
+            continue
+        sc = (_slug_known(slug_txt, generator_only=True), _bigram(pos))
+        if best is None or sc > best[0]:
+            best = (sc, pos)
+    return best[1] if best else None
+
+
+def _rows(text):
     rows = []
     for ln in text.splitlines():
         m = _CHUNK.match(ln.rstrip("\r\n"))
@@ -465,8 +588,29 @@ def decode_chunked(text):
             return None
     if len(rows) < 2:
         return None
-    rows.sort(key=lambda r: r[0])
-    return _joint_free(rows) or "".join(decode_chunk(p) for _, p in rows)
+    return sorted(rows, key=lambda r: r[0])
+
+
+def decode_chunked(text):
+    rows = _rows(text)
+    if rows is None:
+        return None
+    return _positional_ok(rows) or _joint_free(rows) or "".join(decode_chunk(p) for _, p in rows)
+
+
+def decode_candidates(text, limit=5):
+    """Ranked distinct decodings of a numbered warmups blob, best first: the positional reading (when it passes), then
+    the joint assignments that end in a slug. For filling a field the solver left empty inside a timed window."""
+    rows = _rows(text)
+    if rows is None:
+        return []
+    out = [p for p in (_positional_ok(rows),) if p]
+    for sc, t in _joint_ranked(rows):
+        if len(out) >= limit:
+            break
+        if sc[0] and t not in out:
+            out.append(t)
+    return out
 
 
 try:   # speculative keyless free-text decoders (day=None) for a day whose codec nobody registered yet

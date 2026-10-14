@@ -690,6 +690,8 @@ COMPOUND_PROBE = os.environ.get("HCTF_COMPOUND_PROBE", "1") != "0"
 TODAY_PROBE = os.environ.get("HCTF_TODAY_PROBE", "1") != "0"
 TODAY_PROBE_LANES = {x.strip() for x in os.environ.get("HCTF_TODAY_PROBE_LANES", "warmups").split(",") if x.strip()}
 TODAY_PROBE_WAIT = float(os.environ.get("HCTF_TODAY_PROBE_WAIT", "5"))
+# re-probes on fresh random draws after a today-probe-triggered generalize, before the (one) Mastery attempt
+TODAY_RECHECKS = int(os.environ.get("HCTF_TODAY_RECHECKS", "2"))
 # Lane-agnostic variant (today_probe.merge_probe): today's Single appended as set N+1 of yesterday's verified Mastery
 # contract; a miss counts only when the solver passes both halves alone. Same slot / consumption as the today-probe.
 TODAY_MERGE_PROBE = os.environ.get("HCTF_TODAY_MERGE_PROBE", "1") != "0"
@@ -755,12 +757,13 @@ def compound_probe(sdir, seconds=None):
     return compound.summary(res), compound.hard_misses(res), res
 
 
-def today_probe(sdir, seconds=30, kind="codec"):
+def today_probe(sdir, seconds=30, kind="codec", salt=0):
     """-> hctf.today_probe.probe() (kind codec: warmups) / merge_probe() (kind merge) result dict for the single's solver
-    (status clean|miss|unidentified|...)."""
+    (status clean|miss|unidentified|...). salt > 0 (codec): a fresh random draw for a re-probe."""
     from . import today_probe as tp
     try:
-        res = (tp.merge_probe if kind == "merge" else tp.probe)(sdir, deadline=time.time() + seconds)
+        res = (tp.merge_probe(sdir, deadline=time.time() + seconds) if kind == "merge"
+               else tp.probe(sdir, deadline=time.time() + seconds, salt=salt))
     except Exception as e:  # noqa: BLE001 - advisory
         res = {"status": "error", "error": str(e)[:200], "results": [], "hard": []}
     res["kind"] = kind
@@ -1223,10 +1226,12 @@ class Chain:
                          "cuts mid-word like the GM's (the `compound-today-*` cases: same contract + verified slugs, "
                          "`truth.json` = every line's codec, plain piece and encoded bytes). D12/D13's first Mastery "
                          "attempts failed on exactly this. Make every compound-today-* case pass WITHOUT breaking any "
-                         "other case, generically, in LIB: a free-text codec (no alphabet signature) -> "
-                         "`lib.decode.register_free(name, day, cands_fn)` so `decode_chunked`'s joint assignment uses "
-                         "it once per blob; an alphabet-signature codec -> a strict branch in `lib.decode.decode_chunk`; "
-                         "then make solve.py decode numbered blobs with `lib.decode.decode_chunked`.\n"
+                         "other case, generically, in LIB: add today's codec to `lib.warmups_codecs.DAYS` as "
+                         "(day, name, exact encoder, decoder, free) -- `lib.decode.decode_chunked` decodes line k with "
+                         "day k's codec and checks the exact re-encode (right on every verified set D1-D14); a "
+                         "free-text codec also goes in `lib.decode.FREE_CODECS` / `register_free` for the joint "
+                         "fallback. Make solve.py decode numbered blobs with `lib.decode.decode_chunked` ONLY -- no "
+                         "private per-line or joint decoder (D14: a solver-local `_joint` left set22 empty).\n"
                          + "\n".join("    " + ln for ln in d["compound_today"].splitlines()))
         if d.get("compound_merge"):
             gm_wrong += ("\n  - NO MASTERY ATTEMPT HAS RUN YET -- MERGED-SHAPE REHEARSAL: Mastery compounds today's concept with "
@@ -2505,7 +2510,33 @@ class Chain:
         else:
             say(f"[{cid}] today-probe: {st} (codec {res.get('codec')}, {res.get('seconds')}s)"
                 + (f" {res.get('error')}" if res.get("error") else ""))
+            self._note_lib_misses(cid, res)
         return {}
+
+    def _note_lib_misses(self, cid, res):
+        lm = res.get("lib_misses") or {}
+        if lm:
+            say(f"[{cid}] today-probe: the solver passes but plain lib.decode.decode_chunked misses "
+                f"{sum(len(v) for v in lm.values())} rehearsal set(s) ({', '.join(lm)}): lib gap for the ratchet "
+                "(tomorrow's seed)")
+
+    def _today_recheck(self, cid):
+        """After a today-probe-triggered generalize, re-probe on FRESH random draws before the Mastery attempt: D14's
+        fixed solver passed the 2 adopted cases, then left set22 empty on the real variant, and the GM had no second
+        timed attempt (attempts_remaining 0 on every D14 mode). Still missing -> generalize again (bounded)."""
+        from . import today_probe as tp
+        for salt in range(1, TODAY_RECHECKS + 1):
+            res = today_probe(self.sdir, 30, "codec", salt=salt)
+            if res.get("status") != "miss":
+                say(f"[{cid}] today-probe recheck (fresh draw {salt}): {res.get('status')} ({res.get('seconds')}s)")
+                self._note_lib_misses(cid, res)
+                return
+            n = tp.adopt(self.sdir, res)
+            say(f"[{cid}] today-probe recheck (fresh draw {salt}): the generalized solver still misses "
+                f"{sum(len(r['wrong']) for r in res.get('results') or [])} set(s) ({n} case(s) adopted): generalizing "
+                "again BEFORE the Mastery attempt")
+            self.generalize(cid, wrong=None, fixed=None, diag={"compound_today": tp.summary(res)})
+        say(f"[{cid}] today-probe recheck: still missing after {TODAY_RECHECKS} fresh draw(s); Mastery starts now")
 
     def _await_probes(self, timeout):
         """Wait up to `timeout` s for the beside-the-TT probes -> True when every started one has finished."""
@@ -2796,6 +2827,8 @@ class Chain:
                                          defer_compound=mode == "mastery"))
             if pre:
                 self.generalize(cid, wrong=None, fixed=None, diag=pre)
+                if "compound_today" in pre:
+                    self._today_recheck(cid)
         elif mode != "time_trial":
             # Bounded: what finished within LATE_PROBE_WAIT s is acted on now; a probe still running is consumed by a
             # Mastery-failure generalize instead (timed_stage awaits all probes there). D9 + rehearsal: script's Mastery
@@ -2808,6 +2841,8 @@ class Chain:
             if late:
                 say(f"[{cid}] probes that ran beside the Time Trial found misses: generalizing BEFORE Mastery")
                 self.generalize(cid, wrong=None, fixed=None, diag=late)
+                if "compound_today" in late:
+                    self._today_recheck(cid)
         if mode == "mastery":
             self._mastery_speed_gate(cid)
         clock_retries = 0

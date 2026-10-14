@@ -818,6 +818,9 @@ def _attempt(a):
             # its verdict tells the generalize worker which answered fields to leave alone. An escalated variant (D7
             # metadata TT 1 -> 11 fields) used to burn the whole window with nothing submitted.
             _partial_submit(a.cid, part, body, out, setkey=_setkey)
+            if ((out.get("partial_submit") or {}).get("result") in ("correct", "accepted")
+                    and _opt("HCTF_INWINDOW_FILL", "1") == "1"):
+                _fill_missing(a.cid, [k for k in ids if k not in part], qmap, adir, body, out)
             out["phases"]["submit"] = round(time.time() - t_solved, 2)
             out["elapsed"] = round(time.time() - t0, 2)
             out["in_window"] = round(time.time() - t_started, 2)
@@ -937,6 +940,62 @@ def _solve_budget(body, left_at_start):
 def _setkey(aid):
     m = re.match(r"(set|slot)[._-]?\d+", aid)
     return m.group(0) if m else "_"
+
+
+_SLUG_TAIL = re.compile(r"(?<![A-Za-z0-9])([a-z]+-[a-z]+-[a-z]+-\d{2})\s*$")
+
+
+def _fill_guesses(q, adir):
+    """Ranked slug guesses for a warmups field the solver left empty: lib.decode.decode_candidates on the field's own
+    numbered blob (positional reading first, then the joint free-codec assignments). [] for anything else."""
+    try:
+        if str(HW) not in sys.path:
+            sys.path.insert(0, str(HW))
+        from lib import decode, slug
+        from lib.common import find_artifact
+        if not slug.is_slug_question(q) or not q.get("artifact"):
+            return []
+        text = find_artifact(adir, str(q["artifact"])).decode("utf-8", "replace")
+        out = []
+        for cand in decode.decode_candidates(text, limit=3):
+            m = _SLUG_TAIL.search(cand)
+            if m and m.group(1) not in out:
+                out.append(m.group(1))
+        return out
+    except Exception:  # noqa: BLE001 - best effort; never break the clock path
+        return []
+
+
+def _fill_missing(cid, empty, qmap, adir, body, out, tries=2):
+    """In-window completion after an ACCEPTED partial submit: submit a guess for every field the solver left empty, at
+    most `tries` rounds, while the clock allows. D14 warmups Mastery: 67/68 accepted with ~26 s left and set22 empty;
+    lib's ranked decodings held the GM slug. Correct when the GM then reports nothing remaining; otherwise the attempt
+    stays solver_incomplete (the generalize runs on this variant as before)."""
+    guesses = {aid: _fill_guesses(qmap.get(aid, {}), adir) for aid in empty}
+    if not empty or not all(guesses.values()):
+        return
+    tried = []
+    for i in range(tries):
+        left = _deadline_left(body)
+        if (left is not None and left < 1.5) or (i and all(len(g) <= i for g in guesses.values())):
+            break
+        batch = {aid: g[min(i, len(g) - 1)] for aid, g in guesses.items()}
+        try:
+            res = _post({"op": "submit", "challenge": cid, "answers": batch}, timeout=_submit_timeout(body))
+        except OSError as e:
+            tried.append({"answers": batch, "result": "no_answer", "detail": repr(e)})
+            break
+        rk = str(res.get("result", "")).lower()
+        tried.append({"answers": batch, "result": rk, "remaining": res.get("remaining")})
+        if rk in ("correct", "accepted") and not res.get("remaining"):
+            out["result"] = "correct"
+            out["verified"] = dict(out.get("verified") or {}, **batch)
+            out["submitted"] = dict(out.get("submitted") or {}, **batch)
+            out.pop("missing", None)
+            break
+        if rk != "incorrect":
+            break
+    out["inwindow_fill"] = tried
 
 
 def _partial_submit(cid, part, body, out, setkey=_setkey):

@@ -166,8 +166,10 @@ print(f"ok  D2 register_free: toy day-14 codec -> 14-line blobs {before}/63 -> {
 
 # ---------------------------------------------------------------------------------------------------------------- D3
 t0 = time.time()
-cases = TP.synth(S13, W.atbash, "atbash", base=D12M, out_dir=TMPD / "d13")
+cases = TP.synth(S13, W.atbash, "atbash", base=D12M, out_dir=TMPD / "d13", variants=("even", "edge"))
 assert {c.name for c in cases} == {"compound-today-d13-even", "compound-today-d13-edge"}, cases
+# default variants also add the random-slug GM-cut cases (D15 prep: D14 set22 needed a slug the base never had)
+assert len(TP.synth(S13, W.atbash, "atbash", base=D12M, out_dir=TMPD / "d13r")) == 2 + TP.RANDOM_CASES
 for c in cases:
     mem = members(c)
     contract = json.loads((c / "contract.json").read_text())
@@ -195,11 +197,12 @@ res = TP.probe(S13, deadline=time.time() + 30, out_dir=TMPD / "probe13")
 dt = time.time() - t0
 assert dt < 5 and res["codec"] == "atbash" and res["base_ok"], (dt, res["status"])
 # finding: the final D13 solver's own `_joint` misses one edge-cut set that lib.decode.decode_chunked gets
-assert res["status"] == "miss" and [Path(p).name for p in res["hard"]] == ["compound-today-d13-edge"], res["hard"]
+assert res["status"] == "miss" and "compound-today-d13-edge" in [Path(p).name for p in res["hard"]], res["hard"]
+assert "compound-today-d13-even" not in [Path(p).name for p in res["hard"]], res["hard"]
 txt = TP.summary(res)
 assert "atbash" in txt and "line 13" in txt and "register_free" in txt, txt
 adopt_dir = fake_chal(13, name="adopt")
-assert TP.adopt(adopt_dir, res) == 1
+assert TP.adopt(adopt_dir, res) == len(res["hard"])
 ad = adopt_dir / "cases" / "compound-today-d13-edge"
 assert (ad / "expected.json").exists() and (ad / "truth.json").exists() and (ad / "contract.json").exists()
 print(f"ok  D3 probe: {dt:.2f}s, D13 solver passes even cuts but misses 1 edge-cut set (adopted with expected + truth)")

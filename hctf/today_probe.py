@@ -22,6 +22,7 @@ CLI: python -m hctf.today_probe <solver_dir> [--out DIR]
 """
 import io
 import json
+import os
 import random
 import re
 import shutil
@@ -101,9 +102,21 @@ def _members(case):
     return None, {f.name: f.read_bytes() for f in files}
 
 
+RANDOM_CASES = int(os.environ.get("HCTF_TODAY_PROBE_RANDOM", "6"))   # x ~70 sets each: ~400 random-slug sets
+VARIANTS = ("even", "edge") + tuple(f"random{i}" for i in range(RANDOM_CASES))
+
+
 def _cuts(n_chars, n, variant, rng):
-    """n-1 interior cut positions: evenly spaced, or (edge) each shifted +-2 chars; every piece non-empty."""
-    cuts = [round(i * n_chars / n) for i in range(1, n)]
+    """n-1 interior cut positions: evenly spaced, (edge) each shifted +-2 chars, or (random*) the GM's own shape --
+    pieces of floor/ceil(n_chars/n) chars in shuffled order (D14: 7/8-char lines; only 1 of 68 real sets matched the
+    even cuts); every piece non-empty."""
+    if variant.startswith("random"):
+        size, extra = divmod(n_chars, n)
+        sizes = [size + 1] * extra + [size] * (n - extra)
+        rng.shuffle(sizes)
+        cuts = [sum(sizes[:i]) for i in range(1, n)]
+    else:
+        cuts = [round(i * n_chars / n) for i in range(1, n)]
     if variant == "edge":
         cuts = [c + rng.choice((-2, 2)) for c in cuts]
     out, prev = [], 0
@@ -114,9 +127,12 @@ def _cuts(n_chars, n, variant, rng):
     return out
 
 
-def synth(sdir, today_enc, today_name, base=None, variants=("even", "edge"), out_dir=None, seed=None):
-    """Write the synthetic cases -> [case dirs]. Needs lib.warmups_codecs.DAYS for every line below the new one."""
-    from lib import decode, warmups_codecs as W
+def synth(sdir, today_enc, today_name, base=None, variants=VARIANTS, out_dir=None, seed=None, salt=0):
+    """Write the synthetic cases -> [case dirs]. Needs lib.warmups_codecs.DAYS for every line below the new one.
+    `random*` variants also give every set a random slug from the GM generator's vocabulary (lib.slug), truth by
+    construction: D14's set22 miss needed a slug yesterday's 63 never had. salt: a fresh draw (re-probe after a fix)."""
+    from lib import decode, slug as S, warmups_codecs as W
+    vocab = sorted(S.vocab())
     base = Path(base or base_case(sdir) or "")
     if not base.name:
         return []
@@ -130,8 +146,12 @@ def synth(sdir, today_enc, today_name, base=None, variants=("even", "edge"), out
     out_dir = Path(out_dir or ROOT / ".run" / "today_probe" / Path(sdir).parent.name)
     made = []
     for variant in variants:
-        rng = random.Random(seed if seed is not None else (today * 1000 + len(variant)))
-        new_members, truth, skipped = dict(members), {}, []
+        rand = variant.startswith("random")
+        if rand and len(vocab) < 20:
+            continue
+        rng = (random.Random(f"{today}-{salt}-{variant}-{seed}") if rand
+               else random.Random(seed if seed is not None else (today * 1000 + len(variant))))
+        new_members, truth, skipped, case_exp = dict(members), {}, [], dict(expected)
         for art, aids in by_art.items():
             raw = members.get(Path(art).name)
             if raw is None:
@@ -159,6 +179,15 @@ def synth(sdir, today_enc, today_name, base=None, variants=("even", "edge"), out
                 skipped += aids
                 continue
             n_new = today if today > n_base and all(W.day_codec(k) for k in range(n_base + 1, today)) else n_base + 1
+            set_slug = expected.get(aids[0])
+            if rand:
+                old = next(s for s in slugs if s and last[-1].rstrip().endswith(s))
+                tail = sentence[len(sentence.rstrip()):]
+                set_slug = "-".join(rng.choice(vocab) for _ in range(3)) + f"-{rng.randint(10, 99)}"
+                sentence = sentence.rstrip()[:-len(old)] + set_slug + tail
+                for a in aids:
+                    if expected.get(a) == old:
+                        case_exp[a] = set_slug
             cuts = _cuts(len(sentence), n_new, variant, rng)
             parts = [sentence[a:b] for a, b in zip([0] + cuts, cuts + [len(sentence)])]
             lines, info = [], []
@@ -169,10 +198,10 @@ def synth(sdir, today_enc, today_name, base=None, variants=("even", "edge"), out
                 info.append({"line": k, "codec": name, "today": k == n_new, "plain": piece, "encoded": frag})
             new_members[Path(art).name] = "\n".join(lines).encode()
             for a in aids:
-                truth[a] = {"slug": expected.get(a), "member": Path(art).name, "lines": info}
+                truth[a] = {"slug": case_exp.get(a), "member": Path(art).name, "lines": info}
         if not truth:
             continue
-        case = out_dir / f"{PREFIX}d{today:02d}-{variant}"
+        case = out_dir / f"{PREFIX}d{today:02d}-{variant}{f's{salt}' if rand and salt else ''}"
         if case.exists():
             shutil.rmtree(case)
         (case / "artifacts").mkdir(parents=True)
@@ -186,10 +215,11 @@ def synth(sdir, today_enc, today_name, base=None, variants=("even", "edge"), out
             for name, data in new_members.items():
                 (case / "artifacts" / name).write_bytes(data)
         (case / "contract.json").write_text(json.dumps(contract, indent=2, ensure_ascii=False))
-        (case / "expected.json").write_text(json.dumps(expected, indent=2, ensure_ascii=False))
+        (case / "expected.json").write_text(json.dumps(case_exp, indent=2, ensure_ascii=False))
         (case / "truth.json").write_text(json.dumps({
             "what": f"Day {today} Mastery rehearsal: base `{base.relative_to(ROOT) if base.is_relative_to(ROOT) else base}`"
-                    f" ({variant} cuts) with today's codec `{today_name}` on the new last line; slugs unchanged",
+                    f" ({variant} cuts) with today's codec `{today_name}` on the new last line; "
+                    + ("random GM-vocabulary slugs (truth by construction)" if rand else "slugs unchanged"),
             "today": {"day": today, "codec": today_name}, "base": str(base), "variant": variant,
             "skipped": skipped, "sets": truth}, indent=1, ensure_ascii=False))
         made.append(case)
@@ -206,8 +236,30 @@ def _run(sdir, case, timeout):
             "wrong": wrong, "error": err, "seconds": round(dt, 2)}
 
 
-def probe(sdir, deadline=None, out_dir=None):
-    """-> {"status": clean|miss|unidentified|no-base|base-fails|no-cases, "codec", "base", "results", "hard"}."""
+def lib_misses(case):
+    """{answer id: decoded tail} for the sets of a synthetic case that plain lib.decode.decode_chunked gets wrong (no
+    solver involved): a solver-local fix can pass the rehearsal while the shared lib -- tomorrow's seed -- still misses."""
+    from lib import decode
+    try:
+        truth = json.loads((Path(case) / "truth.json").read_text())["sets"]
+    except (OSError, ValueError, KeyError):
+        return {}
+    out, seen = {}, {}
+    for aid, t in truth.items():
+        blob = "\n".join(f"{x['line']:02d}\t{x['encoded']}" for x in t.get("lines") or [])
+        if blob not in seen:
+            seen[blob] = decode.decode_chunked(blob) or ""
+        if not seen[blob].rstrip().endswith(t.get("slug") or "\0"):
+            out[aid] = seen[blob][-40:]
+    return out
+
+
+PROBE_WORKERS = int(os.environ.get("HCTF_TODAY_PROBE_WORKERS", "4"))
+
+
+def probe(sdir, deadline=None, out_dir=None, salt=0):
+    """-> {"status": clean|miss|unidentified|no-base|base-fails|no-cases, "codec", "base", "results", "hard",
+    "lib_misses"}. salt > 0: fresh random slugs/cuts (a re-probe after a generalize must not grade on the same draw)."""
     t0 = time.time()
     sdir = Path(sdir).resolve()
     res = {"status": "unidentified", "codec": None, "base": None, "results": [], "hard": []}
@@ -219,12 +271,14 @@ def probe(sdir, deadline=None, out_dir=None):
     if base is None:
         return dict(res, status="no-base", seconds=round(time.time() - t0, 2))
     res["base"] = str(base)
-    cases = synth(sdir, codec[1], codec[0], base=base, out_dir=out_dir)
+    cases = synth(sdir, codec[1], codec[0], base=base, out_dir=out_dir, salt=salt)
     if not cases:
         return dict(res, status="no-cases", seconds=round(time.time() - t0, 2))
     timeout = max(5.0, (deadline - time.time()) if deadline else 30.0)
-    with ThreadPoolExecutor(max_workers=1 + len(cases)) as ex:
+    with ThreadPoolExecutor(max_workers=max(1, min(PROBE_WORKERS, 1 + len(cases)))) as ex:
+        lib_fut = ex.submit(lambda: {Path(c).name: m for c in cases for m in (lib_misses(c),) if m})
         runs = list(ex.map(lambda c: _run(sdir, c, timeout), [base] + cases))
+        res["lib_misses"] = lib_fut.result()
     base_run, synth_runs = runs[0], runs[1:]
     res["results"] = synth_runs
     res["base_ok"] = not base_run["error"] and not base_run["wrong"]
@@ -264,9 +318,10 @@ def summary(res, limit=6):
             out.append(f"      {aid}: expected {w['expected']!r} got {w['got']!r}"
                        + (f"; line {today['line']} ({today['codec']}): {today['encoded']!r} = {today['plain']!r}"
                           if today else ""))
-    out.append("  Every line's codec + plain piece: `truth.json` in each case. Fix it in LIB, generically: register "
-               "today's free-text codec with `lib.decode.register_free(name, day, cands_fn)` (or a strict branch in "
-               "`lib.decode.decode_chunk` for an alphabet-signature codec) so `decode_chunked` handles the mix.")
+    out.append("  Every line's codec + plain piece: `truth.json` in each case. Fix it in LIB, generically: add today's "
+               "codec to `lib.warmups_codecs.DAYS` (exact encoder + decoder; `decode_chunked` decodes line k with day "
+               "k's codec -- `register_free(name, day, cands_fn)` too for a free-text one), and have solve.py call "
+               "`lib.decode.decode_chunked` instead of any private decoder.")
     return "\n".join(out)
 
 
