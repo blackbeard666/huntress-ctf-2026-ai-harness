@@ -239,4 +239,46 @@ assert any("REVERTED lib/ + tests/" in s for s in said), said
 shutil.rmtree(tmp, ignore_errors=True)
 print("ok  R1 ratchet split: 5 per-lane technique-log workers beside one lib worker (digest, no log step); a rewritten "
       "gate assertion -> originals tried first, kept only flagged '!!!', revert restores lib/ + tests/")
+
+# ---------------------------------------------------------------------------------------------------------------- T1
+from hctf import timed  # noqa: E402
+ch = object.__new__(orch.Chain)
+ch.base, ch.entries, ch.sdir = "b", {"mastery": {"id": "b/mastery"}}, ROOT / ".run"
+ch.gov = type("G", (), {"allow_timed": lambda self: True})()
+ch._pre_attempt_done = True
+calls, said = [], []
+
+
+def stage_run(results, prev):
+    it = iter(results)
+    with mock.patch.object(orch, "set_state", lambda *a, **k: None), \
+            mock.patch.object(orch, "record_timed_case", lambda *a, **k: None), \
+            mock.patch.object(orch, "say", said.append), \
+            mock.patch.object(orch.cli, "is_complete", lambda cid: False), \
+            mock.patch.object(orch.cli, "gm_solved", lambda cid: False), \
+            mock.patch.object(timed, "last_result", lambda cid: prev), \
+            mock.patch.object(timed, "seconds_left", lambda p: 0), \
+            mock.patch.object(orch.time, "sleep", lambda s: None), \
+            mock.patch.object(orch.Chain, "_mastery_speed_gate", lambda self, cid: None), \
+            mock.patch.object(orch.Chain, "generalize", lambda self, *a, **k: None), \
+            mock.patch.object(timed, "run", lambda cid, sdir, log=None, **k: (calls.append(k.get("op", "start")),
+                                                                               next(it))[1]):
+        return ch.timed_stage("mastery")
+
+
+# D14 warmups: the previous start said attempts_remaining 0 -> the first call is already untimed (no refused retry)
+assert stage_run(["correct"], {"attempt_id": "a", "attempts_remaining": 0, "result": "solver_incomplete"}) is True
+assert calls == ["untimed"] and any("0 fresh attempts left" in s for s in said), (calls, said)
+calls.clear()
+assert stage_run(["correct"], {"attempt_id": "a", "attempts_remaining": 7, "result": "solver_incomplete"}) is True
+assert calls == ["retry"], calls                    # attempts left: a normal timed retry
+calls.clear()
+orch.SKIP_DOOMED_RETRY = False
+try:
+    assert stage_run(["error:exhausted", "correct"], {"attempt_id": "a", "attempts_remaining": 0}) is True
+    assert calls == ["retry", "untimed"], calls     # flag off: the old refused-retry path
+finally:
+    orch.SKIP_DOOMED_RETRY = True
+print("ok  T1 timed_stage: previous start reported 0 attempts left -> untimed at once (no refused retry); "
+      "HCTF_SKIP_DOOMED_RETRY=0 -> old path")
 print("ALL PASS")

@@ -972,6 +972,7 @@ _pushed = {}  # solver dir -> file signature last rsynced to Homebase (this proc
 _prepush = {}  # solver dir -> threading.Event, set once prepush_solver() finished (pushed + warmed, or gave up)
 _warmed = {}  # solver dir -> signature whose Homebase zygote prepush_solver() warmed
 PREPUSH_WAIT = float(os.environ.get("HCTF_PREPUSH_WAIT", "6"))      # max s a timed kickoff waits for a pre-push
+PREPUSH_SIGNAL_EARLY = os.environ.get("HCTF_PREPUSH_SIGNAL_EARLY", "1") != "0"   # release the kickoff after the push
 
 
 def _solver_sig(solver_dir):
@@ -1024,6 +1025,10 @@ def prepush_solver(src, dst, log=print, warm=True):
                 how = push_solver(src, rel)
                 _pushed[key] = sig
                 log(f"[homebase] pre-pushed {rel} ({how}) in {time.time() - t0:.1f}s{'' if warm else ' (speculative)'}")
+            if PREPUSH_SIGNAL_EARLY:
+                # the kickoff only waits so it never rsyncs beside this push: release it now, not after the warm (D14
+                # mobile: push done 21:00:12, warm call returned 21:00:14 for an 89 ms load -> 2 s more prepush_wait)
+                ev.set()
             # warm zygote for this solver before the first clock -- verified pushes only: a speculative push must not
             # load the 2-vCPU VM while other lanes may be inside a timed window
             d = hb_daemon(log) if warm and _warmed.get(key) != sig else None

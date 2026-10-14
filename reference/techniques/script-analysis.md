@@ -1,4 +1,4 @@
-# script-analysis — technique log (days 1-13; updated after every day)
+# script-analysis — technique log (days 1-14; updated after every day)
 
 How this lane has looked so far (these are observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -9,7 +9,8 @@ How this lane has looked so far (these are observations, not guarantees):
   files and 2 more Bash advanced fixtures (d8, 615) -> +4 Lua polyglot, 2 host files (SCT scriptlet, Lua OpenResty), 2 more
   Bash advanced (d9, 695) -> +4 WMI MOF polyglot + 2 Bash advanced (d10, 753) -> +4 TypeScript `.ts` polyglot + 2 Bash
   advanced (d11, 811) -> +4 AutoIt `.au3` polyglot (d12, 855; no new Bash fixture) -> +4 AppleScript `.applescript` polyglot + 2 Bash
-  advanced (d13, 913; 105 members). The title names the new language; the prompt names its NEW roles.
+  advanced (d13, 913; 105 members) -> +4 MSBuild `.proj` polyglot + 2 Bash advanced (d14, 971; 111 members). The title
+  names the new language; the prompt names its NEW roles.
 - From day 2 on, every fixture hides a **self-describing plan**: `v=N|steps=a,b|adapter=..|stage_count=..|campaign_id=..|<indicators>`. It sits behind a codec, usually named in a `Codec_<id>` / `CODEC_<id>` / `rem HUNTRESS-CODEC:` const of the form `rep|transform|key`. Most exact_text answers are plan values copied verbatim.
   From D8 there is also a **`v=3` plan**: it carries `role=` and `attack=` itself, and sits behind a `HUNTRESS_ANALYSIS_V1:<TAG>-` comment.
 - The hard part is **naming CODE SHAPE**: control-flow, expansion, and function/invocation/property styles. These are GM synthetic labels that are not in the plan. Role and scenario are enums, so read `accepted_values`.
@@ -18,7 +19,7 @@ How this lane has looked so far (these are observations, not guarantees):
   tree is impossible", D10 "name the subscription that would really survive a reboot", D11 "flag the call whose claimed
   purpose the evidence doesn't support"). No question asked for that outlier/impossible stage. Answer the contract ids only.
 - Time Trial windows are about 5-13 s (30 s on d1). Mastery has `setN.` ids: 2 sets on d2-d7, **5 sets on d8 (3075 ids, 22 s)
-  and d9 (3475 ids, 30 s)**, 2 sets again on d10 (1506 ids, 32 s), d11 (1622 ids, 11 s), d12 (1710 ids, 30 s) and d13 (1826 ids, 80 s). The artifact was `evidence-0N.zip`, or (d6) `delivery N: evidence.zip`, or (d7-d9) ONE download
+  and d9 (3475 ids, 30 s)**, 2 sets again on d10 (1506 ids, 32 s), d11 (1622 ids, 11 s), d12 (1710 ids, 30 s), d13 (1826 ids, 80 s) and d14 (1942 ids, 30 s). The artifact was `evidence-0N.zip`, or (d6) `delivery N: evidence.zip`, or (d7-d9) ONE download
   `evidence-01.zip` that holds every `evidence-0N.zip`. Same-named deliveries: pair them by sha256. Timed question texts
   carry `[assigned-artifact-sha256:<hex>]` per member -- usable to verify the bytes you got.
 
@@ -39,8 +40,9 @@ Each miss below cost one failed timed attempt + a ~45-90 s generalize cycle (D6 
   separators and unhex; otherwise base64 (also reversed). Accept only a result starting `v=`. The tag = `obfuscation_profile`.
   `lib.codec.find_codecs(src)` returns the v=3 plan (tag -> rep: B64 base64_literal, HEX/FRAG hex_compact, HB64 hex_base64).
 - **Plan carrier host syntax (v=3)** -- the marker sits in whatever comment the host uses: `//` (PHP, JS, HTA, WSF, SCT CDATA,
-  MOF, TS), `--` (Lua D9, AppleScript D13), `;` (AutoIt, D12), and the descriptor as `$descriptor_<id>`, `var descriptor_<id>`, `local
-  descriptor_<id>`, `Global Const $descriptor_<id> = ".."` (AutoIt), `property descriptor_<id> : ".."` (AppleScript). Parse rule: regex
+  MOF, TS), `--` (Lua D9, AppleScript D13), `;` (AutoIt, D12), `<!-- -->` (MSBuild XML, D14), and the descriptor as `$descriptor_<id>`, `var descriptor_<id>`, `local
+  descriptor_<id>`, `Global Const $descriptor_<id> = ".."` (AutoIt), `property descriptor_<id> : ".."` (AppleScript), an XML property element `<PropertyGroup><HuntressDescriptor>..</HuntressDescriptor>`
+  (MSBuild, D14 -- no `descriptor_` name at all). Parse rule: regex
   `HUNTRESS_ANALYSIS_V\d+\s*:\s*(\w*)-?\s*([^\s"'<>\]]+)` over the raw bytes, independent of comment syntax and extension.
 - **Numeric literal radix** -- the same array/constant may be decimal `23,7`, hex `0x17,0x07`, or a separator-joined
   string decoded with `parseInt(x, R)` / `int(x, R)`: READ THE RADIX FROM THE CODE, never guess it from the digits
@@ -56,7 +58,8 @@ Each miss below cost one failed timed attempt + a ~45-90 s generalize cycle (D6 
   execfile_node/fork_module/spawn_file; persistence systemd_descriptor/npm_lifecycle_descriptor) -- always plan-verbatim.
 - **No-new-axis days**: D8 (TT 129bf46a, Mastery 07d5051a), D9 (TT dfcfb51e, Mastery 1dfd4cf6), D10, D11 (TT f99ea9ec,
   Mastery 2d722b36; the 4 TS files kept FRAG/HEX/B64/HB64 + adapters + next_language in every delivery) and D12 (TT d629142e,
-  Mastery 635241de; the 4 `.au3` files the same), D13 (TT c739141b, Mastery 78b00cf3; 4 `.applescript` + 2 Bash): structure, tags,
+  Mastery 635241de; the 4 `.au3` files the same), D13 (TT c739141b, Mastery 78b00cf3; 4 `.applescript` + 2 Bash), D14 (TT
+  b7cd2e36, Mastery 8a650537; 4 `.proj` kept HB64/FRAG/HEX/B64 + steps + next_language in all 4 deliveries): structure, tags,
   role/attack/steps/profiles identical to the single; only values re-rolled. All CORRECT first try.
 
 ## Recognition cues -> first move
@@ -72,7 +75,7 @@ Each miss below cost one failed timed attempt + a ~45-90 s generalize cycle (D6 
 | `.sh` `readonly Material_<id>='..'` + `readonly Codec_<id>='rep|transform|key'` | Decode from the Codec const (key hex; multi-byte key = COMMA list). Re-join split/`+=`/adjacent-quoted chunks. Never run bash. |
 | `.sh` with `Feature_<id>()` (`${!pointer}`, `local -a parts=('cu' 'rl')`, `local -A`, `${arr[@]:1:2}`, `trap 'return 0' RETURN`, a self-calling `walk_fixture`), plan `v=1|feature=..|primitive=..` | Role `advanced_syntax` (closed enum value). feature/primitive/campaign/stage_count/steps are plan-verbatim; attack = T1059.004. The `Feature_` body is the feature; never name it from the code, copy the plan. |
 | `.mjs` ESM: `const Material_<id> = ".."; const Codec_<id> = "rep|transform|key"`, async `load_/decode_/recover_/inspect_/plan_<id>`, `process.env.HUNTRESS_INSPECT_ONLY` | Static decode with `lib.codec.find_codecs` + shape fallback (reps hex_buffer, hex_array, escaped_octets `\\xNN`, decimal_array, unicode_escapes, json_numbers). Don't run it (top-level await, Buffer/vm). Plan fields verbatim; role from `steps`. |
-| `// HUNTRESS_ANALYSIS_V1:<B64|HEX|HB64|FRAG>-..` or `-- HUNTRESS_ANALYSIS_V1:..` + `descriptor_<id> = ".."` (`.php`; `.lua` `local descriptor_..` + `build_plan_<id>`, OpenResty `inert_handler_<id>` returning `{status=200,..}`; `.js` that is really HTA `<hta:application>`, WSF `<job><script language="JScript">` or SCT `<?xml?><scriptlet><registration progid=..>` CDATA; `.vbs` that is a WSF job; `.au3` AutoIt `; HUNTRESS_ANALYSIS_V1:` + `Global Const $descriptor_..`) | **Route by the marker, before the extension** (the extension lies). Peel the descriptor by shape to `v=3|language=..|role=..|verdict=..|attack=..|adapter=..|host_profile=..|obfuscation_profile=..|stage_profile=..|next_language=..|stage_count=..|steps=..|campaign_id=..|url=..|file_path=..`. EVERY answer, including role and attack, is plan-verbatim. Python `-I` + base64/bytes.fromhex is enough. |
+| `// HUNTRESS_ANALYSIS_V1:<B64|HEX|HB64|FRAG>-..` or `-- HUNTRESS_ANALYSIS_V1:..` + `descriptor_<id> = ".."` (`.php`; `.lua` `local descriptor_..` + `build_plan_<id>`, OpenResty `inert_handler_<id>` returning `{status=200,..}`; `.js` that is really HTA `<hta:application>`, WSF `<job><script language="JScript">` or SCT `<?xml?><scriptlet><registration progid=..>` CDATA; `.vbs` that is a WSF job; `.au3` AutoIt `; HUNTRESS_ANALYSIS_V1:` + `Global Const $descriptor_..`; `.proj` MSBuild `<!-- HUNTRESS_ANALYSIS_V1:..-->` + `<HuntressDescriptor>`) | **Route by the marker, before the extension** (the extension lies). Peel the descriptor by shape to `v=3|language=..|role=..|verdict=..|attack=..|adapter=..|host_profile=..|obfuscation_profile=..|stage_profile=..|next_language=..|stage_count=..|steps=..|campaign_id=..|url=..|file_path=..`. EVERY answer, including role and attack, is plan-verbatim. Python `-I` + base64/bytes.fromhex is enough. |
 | Real `.pyc` / PyInstaller / pyarmor (not seen yet) | `lib.pyc.recover_python(path)` (pyinstxtractor-ng + decompyle3, `dis` fallback). See skills/script-analysis. |
 | Any `Codec_` key like `ba` / `0a` | A hex byte, not text. Transforms are named for the ENCODE side: `subtract_modulo_256` decodes by ADDING, `add_modulo_256` by SUBTRACTING. `rolling_xor` = c ^ previous CIPHER byte, seeded with the key. |
 
@@ -111,26 +114,25 @@ missed 15 ids (new reps unicode_escapes/json_numbers/`xor_hex|cd`); 26b7da83 sav
 derive**. New fields host-profile, obfuscation, stage-profile, next-language. ~2 min 10 s, 2 submits, 0 wrong (6 ids lost
 to hyphenated family names -> longest-known-suffix field parse). TT 2.1 s / Mastery 5.6 s in-window, both 1st try.
 
-**D9-D12 (+Lua/SCT/OpenResty, +WMI MOF, +TypeScript, +AutoIt polyglots; +2 Bash advanced most days; 695 -> 855 ids)**: every
-new file is an ordinary v=3 fixture (`HUNTRESS_ANALYSIS_V1:<TAG>-` in `--`/`//`/`;` comments + `descriptor_<id>`); the
-narrative prompts ("impossible family tree", "subscription that survives a reboot", "flag the call whose claimed purpose ...",
-"decide which pairing is genuine") were never asked. Polyglot set per language: role benign_utility/downloader/launcher/
-staged_chain, attack none/T1105/T1059/T1059, adapter local_parser/http_client/process_builder/operation_graph, obfuscation
-plain_hex/base64/hex_base64/fragmented_hex, next_language powershell/jscript/batch/vbscript, campaign `<LANG>-<8hex>`. Bash
-advanced: nameref_dispatch/declare_nameref, dynamic_file_descriptor/allocated_file_descriptor (D11; `decimal_csv|`). The
-marker-routed carried-over solver answered every day unchanged, 0 wrong, all modes first try (D12 TT 7.19 s in-window, 5.33 s
-of it GM submit latency on 855 ids).
-
-**D13 Zip Code (+4 AppleScript polyglot, +2 Bash advanced; 913 ids, 105 members)**: prompt about an "archive delivery
-chain" (title pun on zip) -- flavour only, no archive-chain question; evidence.zip was the usual flat AES zip.
-- New: `polyglot-applescript-{benign-utility,downloader,launcher,staged-chain}.applescript` -- `-- HUNTRESS_ANALYSIS_V1:<TAG>-..`
-  + `property descriptor_<id> : ".."`; campaign `APPLESCRIPT-<8hex>`, file_path `/tmp/huntress-applescript/.<16hex>.stage`, url
-  `https://applescript-<10hex>.example.invalid/stage`; the same D11/D12 role/attack/adapter/obfuscation/next_language set.
-- New Bash advanced: `subshell-pipeline.sh` (feature subshell_pipeline, primitive command_substitution_pipeline) and
-  `process-substitution.sh` (process_substitution, process_substitution_reader); `Codec_='hex_compact|'`, campaign `BASHX-<8HEX>`.
-- Method: carried-over solver, NO code change and no worker tool call: harness probe 913/913 at ~T+7 s. TT 50 s window, 4.03 s
-  elapsed; Mastery 2 sets / 1826 ids, 3.49 s. 0 wrong. Minor speed gap: the solver's `_LEAF_EXT` lacks `.applescript/.lua/
-  .mof/.ts`, so those AES members are decrypted just to sniff for a nested zip -- add new script extensions to it.
+**D9-D13 (+Lua/SCT/OpenResty, +WMI MOF, +TypeScript, +AutoIt, +AppleScript polyglots; +2 Bash advanced most days; 695 ->
+913 ids)**: every new file is an ordinary v=3 fixture (`HUNTRESS_ANALYSIS_V1:<TAG>-` in `--`/`//`/`;` comments + `descriptor_<id>`);
+the narrative prompts ("impossible family tree", "subscription that survives a reboot", D13 "archive delivery chain") were
+never asked. Polyglot set per language: role benign_utility/downloader/launcher/staged_chain, attack none/T1105/T1059/T1059,
+adapter local_parser/http_client/process_builder/operation_graph, obfuscation plain_hex/base64/hex_base64/fragmented_hex,
+next_language powershell/jscript/batch/vbscript, campaign `<LANG>-<8hex>`, url `https://<lang>-<10hex>.example.invalid/stage`,
+file_path `/tmp/huntress-<lang>/.<16hex>.stage`. Bash advanced campaign `BASHX-<8HEX>`, codec `hex_compact|` / `decimal_csv|`.
+The marker-routed carried-over solver answered every day unchanged, 0 wrong, all modes first try (TT 4-7 s elapsed, most of it
+GM start/submit latency on ~900 ids).
+**D14 Trust the Process (+4 MSBuild `.proj` polyglot, +2 Bash advanced; 971 ids, 111 members)**: prompt "follow the MSBuild
+properties into its targets ... where a trusted toolchain does untrusted work" -- flavour only; nothing asked about Targets/Tasks
+or MSBuild ATT&CK (T1127.001 was NOT the answer; the plan said `attack=T1059`).
+- New: `polyglot-msbuild_xml-{benign-utility,downloader,launcher,staged-chain}.proj` = `<?xml?>` + `<!-- HUNTRESS_ANALYSIS_V1:<TAG>-.. -->`
+  + `<Project xmlns=".../msbuild/2003"><PropertyGroup><HuntressDescriptor>` holding the same data. Family name has an UNDERSCORE
+  (`polyglot-msbuild_xml-...`), campaign `MSBUILD_XML-<8hex>`, host `msbuild_xml-<10hex>.example.invalid`.
+- New Bash advanced: `getopts-state.sh` (getopts_state|option_parser_state), `brace-expansion.sh` (brace_expansion|
+  cartesian_brace_expansion).
+- Method: carried-over solver, no code change; harness probe 971/971 CORRECT at T+11 s (single submit). TT 30 s window, 3.09 s
+  elapsed (solve 1.0 s); Mastery 2 sets / 1942 ids, 4.17 s. 0 wrong in every mode.
 
 ## GM answer conventions learned
 - **Check `answer_format.kind` first.** `enum` gives the list (scenario, role). `mitre_attack_id` takes `T####[.###]` or literal `none` (benign_utility). `integer`/`ordered_tokens` (d6+). `exact_text` = plan value or synthetic label.
@@ -146,12 +148,14 @@ chain" (title pun on zip) -- flavour only, no archive-chain question; evidence.z
   - v=3 host_profile seen: standalone, wsf_jscript, wsf_mixed, hta_jscript, php_webshell (D8), sct_scriptlet, lua_openresty
     (D9). obfuscation: base64/plain_hex/hex_base64/fragmented_hex. stage_profile: single_descriptor/
     two_stage_download_execute/three_stage_decode_write_launch/cross_language_handoff.
-  - Bash advanced feature|primitive seen: indirect_expansion|parameter_indirection, token_fragmentation|
-    array_token_construction (D7), associative_arrays|declare_associative, array_slicing|indexed_array_slice (D8),
-    trap_handler|function_local_trap, recursive_walk|bounded_recursive_function (D9).
+  - Bash advanced feature|primitive (always plan-verbatim; 14 seen D7-D14), e.g. indirect_expansion|parameter_indirection,
+    associative_arrays|declare_associative, heredoc_reconstruction|quoted_heredoc, getopts_state|option_parser_state (D14),
+    brace_expansion|cartesian_brace_expansion (D14). Family = `bash-advanced-<file-stem>` (D7 short forms: `indirect`, `tokens`).
   - **v=3 role and attack too.** GM accepted the plan's PARENT technique ids: `T1059` (launcher, staged_chain -- PHP, WSF,
     HTA, SCT, Lua alike) and `T1053` (persistence_descriptor), NOT the host-language sub-technique. The role->ATT&CK table
-    below is for v=1/v=2 plans only.
+    below is for v=1/v=2 plans only. **v=3 role does NOT follow `steps`** (D14 MSBuild: benign_utility had steps
+    `decode_embedded>write_file>dispatch_process`, launcher `decode_configuration>return_configuration`) -- copy role= and steps=
+    independently; never "fix" one from the other.
 - **Role from `steps`** (v=1/v=2 plans; v=3 states `role=`):
 
   | steps | role |
@@ -216,21 +220,20 @@ chain" (title pun on zip) -- flavour only, no archive-chain question; evidence.z
   check artifact size + sha256 against the start response (`artifacts[].sha256`, or the `[assigned-artifact-sha256:..]`
   tag in timed question texts). A tiny JSON `{"error":..}` = transport failure (retry the download), NOT a variant.
   Solvers should exit non-zero on it (the D7-D9 solver does). Don't harvest it as a regression case.
-- **Stale notes travel with copied solvers.** D8/D9 `solver/NOTES.md` was the D7 copy, still saying "VARIANT AXIS: none"
-  for D7 attempts. Date every VARIANT AXIS line by day + attempt id; the D7 "none" came from a worker that looked only at
-  the rate-limited attempt while the real axis (new reps) was in the earlier failed one.
+- **Stale notes travel with copied solvers** (D8-D14 `solver/NOTES.md` is still the D7 copy). Date every VARIANT AXIS line
+  by day + attempt id, and diagnose EVERY failed attempt (D7's "none" looked only at the rate-limited one).
 - **Unknown codec rep name -> silent no-plan** (D7 TT: 15 ids unanswered). Fall back to material-shape readings x the
   named transform; never let an unknown NAME stop the decode.
-- **Batch expansion shortcuts** ("h-pool = call_double", "`%` join = percent") were wrong. Use the mined rule above.
 - **cmd arg parsing**: `%item0%` is a variable, not `%0`+`item`. CRLF/LF mixes and `SeT` casing occur.
-- **Bash Codec key**: comma-separated multi-byte keys parsed as contiguous hex silently give key [0]. Use `lib.scripts.codec_key()`.
-- **stage_count != len(steps)** (d6). Read the plan field.
+- **Bash Codec key**: comma-separated multi-byte keys parsed as contiguous hex give key [0] (`lib.scripts.codec_key()`).
+  **stage_count != len(steps)** (d6): read the plan field.
 - **Timed modes are a transport race.** D2 Mastery expired (downloads ate 4-5 s of 6 s; sets submitted serially). D7 TT
   spent 13.5 s for 0.4 s of solving (start 3.9, download 3.1, submit 6.0); D8-D9 transport was fast (start 0.6-1.5 s,
   download 0.3-1.3 s). Solver ~0.2-4 s (D9 Mastery: 5 sets in 1.8 s, forked per set); submit all sets in one call.
 - **Same-name deliveries.** Pair Mastery files by sha256; if delivery 2 is missing, leave set 2 unanswered rather than
   reuse set 1's members (confidently wrong 42-174 times in regression cases).
 - **Re-walking nested AES zips per question** cost ~1.3 s (903 PBKDF2 runs). Index the tree once, and don't decrypt
-  script leaves to sniff for a nested zip (keep the leaf-extension list current: `.lua` was missing on D9).
+  script leaves to sniff for a nested zip (keep the leaf-extension list current: `.lua` missing D9; still missing on D14:
+  `.lua .mof .ts .au3 .applescript .proj` -- speed only, solve stayed ~1 s).
 - **Never execute fixtures.** Every decode so far worked from the Codec const plus a restricted interpreter of the
   Load/Decode bodies. Cross-check two decoders; accept a plan only if it parses as `k=v|..` with `steps` (or `feature`).

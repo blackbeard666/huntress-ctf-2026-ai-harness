@@ -35,6 +35,8 @@ START_RETRIES = int(os.environ.get("HCTF_START_RETRIES", "30"))
 # Fresh timed pool spent (rotation_exhausted / retry_variants_unavailable): solver rounds on an UNTIMED attempt (regular
 # pool or practice continuation) -- the flag + points without a clock. 0 = old behaviour (stop the mode).
 UNTIMED_ROUNDS = int(os.environ.get("HCTF_UNTIMED_ROUNDS", "3"))
+# previous start reported 0 fresh attempts -> skip the refused timed retry, go untimed at once (D14)
+SKIP_DOOMED_RETRY = os.environ.get("HCTF_SKIP_DOOMED_RETRY", "1") != "0"
 
 
 def _resume_need(prev):
@@ -2874,6 +2876,15 @@ class Chain:
                 say(f"[{cid}] previous attempt has only {left:.1f}s left (< {need:.1f}s needed): waiting it out, then retry")
                 time.sleep(left + 0.6)
                 left = 0
+            if (not untimed and UNTIMED_ROUNDS > 0 and SKIP_DOOMED_RETRY and left is not None and left <= 0
+                    and _race_left(prev) == 0):
+                # The previous attempt's start already said 0 fresh attempts remain: a retry is refused
+                # (retry_variants_unavailable) -- D14 warmups Mastery spent ~5 s + a push learning that. Go untimed now.
+                say(f"[{cid}] GM reported 0 fresh attempts left at the previous start: UNTIMED attempt now "
+                    f"(regular pool / practice; up to {UNTIMED_ROUNDS} round(s))")
+                set_state(self.base, stage=f"{mode}:untimed")
+                untimed = True
+                attempt = max(attempt, MAX_TIMED_RETRIES - UNTIMED_ROUNDS + 1)
             if untimed:
                 op = {"op": "untimed"}
             else:
@@ -3313,16 +3324,18 @@ def hof_race(groups):
             cid = ids.get(mode)
             if not cid or not cli.gm_solved(cid):
                 continue
-            best = _gm_ms(cid)
+            best = None
             for i in range(HOF_RACE):
                 last = timed.last_result(cid) or {}
                 left = _race_left(last)
                 if last.get("untimed") or last.get("hall_of_fame_eligible") is False:
-                    say(f"[hof] {cid}: not Hall of Fame eligible (untimed / ineligible attempt): no race")
+                    say(f"[hof] {cid}: not Hall of Fame eligible (GM: hall_of_fame_eligible false / untimed): no race")
                     break
                 if left is None or left < max(HOF_RACE_MIN, HOF_RESERVE + 1):
                     say(f"[hof] {cid}: {left} fresh attempt(s) left (< {max(HOF_RACE_MIN, HOF_RESERVE + 1)}): no race")
                     break
+                if i == 0:
+                    best = _gm_ms(cid)   # GM status round trip only when a race actually runs (D14: ~5 s for nothing)
                 set_state(base, stage=f"{mode}:hof-race")
                 res = timed.run(cid, sdir, log=say, op="retry")
                 ms = _gm_ms(cid) if res == "correct" else None

@@ -59,8 +59,8 @@ def now():
 
 def log(cid, op, env):
     target = cdir(cid) / "log.jsonl" if cid else paths.LOGS / "gm.jsonl"
-    with open(target, "a") as f:
-        f.write(json.dumps({"ts": now(), "op": op, **env}, ensure_ascii=False) + "\n")
+    with open(target, "a") as f:   # t: sub-second wall clock (drop-time latency forensics; ts is 1 s resolution)
+        f.write(json.dumps({"ts": now(), "t": round(time.time(), 3), "op": op, **env}, ensure_ascii=False) + "\n")
 
 
 def load(cid, name):

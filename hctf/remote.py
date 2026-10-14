@@ -251,6 +251,7 @@ def _gm_via_daemon(args, timeout):
             kw["answers"] = json.loads(args[2])
         except (IndexError, ValueError):
             return None
+    t0 = time.time()
     try:
         res = d.call("gm", timeout=min(float(timeout), 60.0), **kw)
     except workers.DaemonError as e:
@@ -262,6 +263,9 @@ def _gm_via_daemon(args, timeout):
     env = {k: res.get(k) for k in ("http", "body", "text", "saved", "content_type", "elapsed", "retries", "slept")}
     env["saved"] = env["saved"] or []
     env["transport"] = "hb-daemon"
+    # client wall time vs the VM-measured `elapsed`: the gap is the ssh channel (D14 race submits sat ~3-4 s between
+    # the local solve and the GM call while pre-pushes shared the ControlMaster -- unproven without this number)
+    env["client_elapsed"] = round(time.time() - t0, 3)
     return env
 
 
