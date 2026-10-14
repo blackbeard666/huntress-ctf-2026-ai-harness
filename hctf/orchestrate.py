@@ -3417,10 +3417,112 @@ def _new_proposals(notes, day):
     return [b for b in _proposal_blocks(notes) if norm(b) not in seen]
 
 
+def ratchet_digest(tag, until=None):
+    """{chal dir name: one-line digest} of a finished day (lane, per-mode result, timed attempts, generalize workers,
+    untimed fallback), lanes that had trouble first -- pre-injected so the ratchet workers don't spend turns dumping
+    files (D14: 6 orientation turns of an 80-turn budget)."""
+    rows = []
+    for meta in sorted((paths.CHALLENGES / tag).glob("*/meta.json")):
+        cd = meta.parent
+        try:
+            lane = json.loads(meta.read_text()).get("lane") or "?"
+        except (OSError, ValueError):
+            lane = "?"
+        try:
+            chain = json.loads((cd / "chain.json").read_text())
+        except (OSError, ValueError):
+            chain = {}
+        parts, trouble = [], 0
+        done_at = until or time.strftime("%Y%m%dT%H%M%S")   # YYYYMMDDTHHMMSS, as in worker log names
+        for mode in ("single_solve", "time_trial", "mastery"):
+            md = cd / mode
+            if not md.is_dir():
+                continue
+            # generalize workers before `until` only (the post-run speed-harden's logs land in the same dirs)
+            gens = len([p for p in md.glob("worker-generalize-*.log") if p.stem.rsplit("-", 1)[-1] <= done_at])
+            atts = len([p for p in (md / "attempts").glob("*") if p.is_dir()]) if (md / "attempts").is_dir() else 0
+            try:
+                last = json.loads((md / "last_timed.json").read_text())
+            except (OSError, ValueError):
+                last = {}
+            res = chain.get(f"{mode}_result") or ("correct" if mode == "single_solve" and (md / "confirmed.json").exists()
+                                                  else last.get("result") or "?")
+            extra = [f"{atts} timed attempt(s)" if atts > 1 else "", f"{gens} generalize" if gens else "",
+                     "UNTIMED fallback" if last.get("untimed") else ""]
+            trouble += gens + max(atts - 1, 0) + bool(last.get("untimed"))
+            parts.append(f"{mode}={res}" + (f" ({', '.join(x for x in extra if x)})" if any(extra) else ""))
+        rows.append((-trouble, cd.name, lane, f"- {cd.name} [{lane}]: " + "; ".join(parts)
+                     + (" <- had trouble" if trouble else " (all first try)")))
+    rows.sort()
+    return {name: (lane, line) for _t, name, lane, line in rows}
+
+
+def _tests_snapshot(dst):
+    shutil.rmtree(dst, ignore_errors=True)
+    if (ROOT / "tests").is_dir():
+        shutil.copytree(ROOT / "tests", dst, ignore=shutil.ignore_patterns("__pycache__"))
+    else:
+        Path(dst).mkdir(parents=True)
+
+
+def _edited_tests(snap):
+    """Existing tests/*.py whose original lines are no longer all present, in order (an assertion modified or deleted
+    rather than only added to). D14: the ratchet re-baselined 2 assertions in the suites that gate it."""
+    out = []
+    for old in sorted(Path(snap).glob("*.py")):
+        new = ROOT / "tests" / old.name
+        a = old.read_text(errors="replace")
+        b = new.read_text(errors="replace") if new.exists() else ""
+        if a == b:
+            continue
+        it = iter(b.splitlines())
+        if not all(line in it for line in a.splitlines()):
+            out.append(old.name)
+    return out
+
+
+def _restore_tests(snap):
+    if not any(Path(snap).iterdir()) and not (ROOT / "tests").exists():
+        return
+    shutil.rmtree(ROOT / "tests", ignore_errors=True)
+    shutil.copytree(snap, ROOT / "tests")
+
+
+RATCHET_LOGS = os.environ.get("HCTF_RATCHET_LOGS", "1") != "0"   # per-lane technique-log workers beside the lib ratchet
+RATCHET_LOG_TIMEOUT = float(os.environ.get("HCTF_RATCHET_LOG_TIMEOUT", str(10 * 60)))
+
+
+def _ratchet_logs(tag, digest):
+    """One `ratchet_log` worker per lane, in parallel; each writes only reference/techniques/<lane>.md (D14: the single
+    ratchet ran out of turns before the script/binary/mobile logs). -> [thread]."""
+    by_lane = {}
+    for name, (lane, line) in digest.items():
+        if lane != "?":
+            by_lane.setdefault(lane, []).append((name, line))
+    threads = []
+    for lane, items in sorted(by_lane.items()):
+        prompt = workers.render("ratchet_log", day=tag, lane=lane,
+                                challenges="\n".join(f"- challenges/{tag}/{n}" for n, _l in items),
+                                digest="\n".join(line for _n, line in items))
+
+        def go(lane=lane, prompt=prompt, cd=paths.CHALLENGES / tag / items[0][0]):
+            try:
+                rc, log = workers.run_local(cd, "ratchet_log", prompt, {"HCTF_STAGE": "ratchet_log", "HCTF_LANE": lane},
+                                            RATCHET_LOG_TIMEOUT)
+                say(f"[ratchet-log] {tag} {lane}: worker exit {rc} ({Path(log).name})")
+            except Exception as e:  # noqa: BLE001 - post-run best-effort
+                say(f"[ratchet-log] {tag} {lane}: skipped ({e})")
+        t = threading.Thread(target=go, daemon=True)
+        t.start()
+        threads.append(t)
+    return threads
+
+
 def ratchet(day):
     """Post-run, single-writer knowledge merge: collect every `## Proposed lib additions` section the day's workers
     wrote in solver/NOTES.md and let ONE worker fold the GM-confirmed ones into lib/ (workers no longer edit lib/
-    mid-run: Day 6's script worker rewrote lib/knowledge.py + lib/scripts.py while four other lanes imported them)."""
+    mid-run: Day 6's script worker rewrote lib/knowledge.py + lib/scripts.py while four other lanes imported them).
+    The technique logs are written by per-lane `ratchet_log` workers in parallel (they only touch reference/)."""
     tag = f"day{int(day):02d}"
     props = []
     for notes in sorted((paths.CHALLENGES / tag).glob("*/solver/NOTES.md")):
@@ -3431,19 +3533,51 @@ def ratchet(day):
     if not chals:
         say(f"[ratchet] {tag}: nothing to learn from")
         return
+    digest = ratchet_digest(tag)
     prompt = workers.render("ratchet", day=tag, day_num=int(day), challenges="\n".join(f"- {c}" for c in chals),
+                            digest="\n".join(line for _lane, line in digest.values()),
                             proposals="\n\n".join(props) or "(no `## Proposed lib additions` this day)")
-    say(f"[ratchet] {tag}: technique logs + {len(props)} lib proposal section(s)")
+    log_threads = _ratchet_logs(tag, digest) if RATCHET_LOGS else []
+    say(f"[ratchet] {tag}: lib ratchet ({len(props)} proposal section(s)) + {len(log_threads)} technique-log worker(s)")
     # Transactional: a killed/timed-out ratchet left lib/ half-edited on the rehearsal replay (an unvalidated helper that
-    # extracted 0 files). Snapshot lib/, and restore it unless the test suites still pass. The TESTS are the gate, not
-    # the exit code: D8 + D10 hit max_turns mid technique-log and threw away GM-confirmed lib edits (D10: the u32
+    # extracted 0 files). Snapshot lib/ + tests/, and restore both unless the test suites still pass. The TESTS are
+    # the gate, not the exit code: D8 + D10 hit max_turns and threw away GM-confirmed lib edits (D10: the u32
     # hex-width law, re-applied by hand afterwards).
     backup = ROOT / ".run" / f"ratchet-lib-{tag}"
+    tsnap = ROOT / ".run" / f"ratchet-tests-{tag}"
     shutil.rmtree(backup, ignore_errors=True)
     shutil.copytree(ROOT / "lib", backup, ignore=shutil.ignore_patterns("__pycache__"))
+    _tests_snapshot(tsnap)
     rc, log = workers.run_local(paths.CHALLENGES / tag, "ratchet", prompt, {"HCTF_STAGE": "ratchet"}, RATCHET_TIMEOUT)
     changed = _lib_changed(backup)
-    ok = not changed or ratchet_gate(tag)
+    edited = _edited_tests(tsnap)
+    if edited:
+        # The gate must not be weakened by the worker it gates: try the ORIGINAL assertions first.
+        import difflib
+        patch = ROOT / ".run" / f"ratchet-tests-{tag}.patch"
+        patch.write_text("".join(
+            "".join(difflib.unified_diff((tsnap / n).read_text(errors="replace").splitlines(True),
+                                         (ROOT / "tests" / n).read_text(errors="replace").splitlines(True)
+                                         if (ROOT / "tests" / n).exists() else [],
+                                         f"a/tests/{n}", f"b/tests/{n}")) for n in edited))
+        mine = {n: (ROOT / "tests" / n).read_text(errors="replace") if (ROOT / "tests" / n).exists() else None
+                for n in edited}
+        for n in edited:
+            shutil.copy2(tsnap / n, ROOT / "tests" / n)
+        if not changed or ratchet_gate(tag):
+            say(f"[ratchet] {tag}: the worker modified existing assertions in {edited}; the gate passes with the "
+                f"ORIGINAL tests, so those stay (worker's diff: {patch.relative_to(ROOT)})")
+            ok = True
+        else:
+            for n, txt in mine.items():
+                if txt is not None:
+                    (ROOT / "tests" / n).write_text(txt)
+            ok = ratchet_gate(tag)
+            if ok:
+                say(f"!!! [ratchet] {tag}: the lib edits only pass with MODIFIED existing assertions in {edited}: kept "
+                    f"-- REVIEW {patch.relative_to(ROOT)} before the next drop")
+    else:
+        ok = not changed or ratchet_gate(tag)
     if not changed:
         say(f"[ratchet] {tag}: lib/ unchanged (worker exit {rc}; {Path(log).name})")
     elif ok:
@@ -3451,8 +3585,13 @@ def ratchet(day):
     else:
         shutil.rmtree(ROOT / "lib")
         shutil.copytree(backup, ROOT / "lib")
-        say(f"[ratchet] {tag}: REVERTED lib/ (worker exit {rc}, tests fail); proposals stay in solver/NOTES.md ({Path(log).name})")
+        _restore_tests(tsnap)
+        say(f"[ratchet] {tag}: REVERTED lib/ + tests/ (worker exit {rc}, tests fail); proposals stay in solver/NOTES.md "
+            f"({Path(log).name})")
     shutil.rmtree(backup, ignore_errors=True)
+    shutil.rmtree(tsnap, ignore_errors=True)
+    for t in log_threads:   # reference/ must be quiet before the prebuild starts (its allowlist flags outside edits)
+        t.join(timeout=max(1.0, RATCHET_LOG_TIMEOUT))
     if SPEED_HARDEN:
         try:
             speed_harden(day=day)

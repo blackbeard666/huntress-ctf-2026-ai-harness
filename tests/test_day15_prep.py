@@ -182,4 +182,61 @@ assert meta.resolve("lnk", "no_such_field")[0] is None and meta.resolve("pe", "i
 assert meta.resolve("pe", "coff_machine_u16_hex")[0].tier == meta.VERIFIED       # exact keys keep their tier
 print("ok  M1 lib.meta.resolve: D14 lnk.target_path_windows -> prebuilt target_path (speculative) = the GM answer "
       "with the D14 verified entry hidden; HCTF_META_ALIASES=0 -> no answer")
+
+# ---------------------------------------------------------------------------------------------------------------- R1
+import shutil  # noqa: E402
+import tempfile  # noqa: E402
+from hctf import orchestrate as orch, workers  # noqa: E402
+tmp = Path(tempfile.mkdtemp(prefix="t15r-", dir=ROOT / ".run"))
+GATE_T = "test_day7_fixes.py"
+
+
+def ratchet_case(gate_rule):
+    """Run orchestrate.ratchet(14) in a scratch ROOT (copies of lib/ + tests/): the mocked lib worker adds a lib line and
+    REWRITES the first assert of tests/test_day7_fixes.py; the mocked gate decides by `gate_rule(tests text, lib text)`."""
+    root = tmp / f"r{len(list(tmp.iterdir()))}"
+    (root / ".run").mkdir(parents=True)
+    shutil.copytree(ROOT / "lib", root / "lib", ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(ROOT / "tests", root / "tests", ignore=shutil.ignore_patterns("__pycache__", "data"))
+    (root / "challenges").symlink_to(ROOT / "challenges")      # read-only use: digest + proposals (workers mocked)
+    orig = (root / "tests" / GATE_T).read_text()
+    calls, said = [], []
+
+    def fake_run(cd, stage, prompt, env, timeout, **kw):
+        calls.append((stage, env.get("HCTF_LANE")))
+        if stage == "ratchet":
+            with open(root / "lib" / "decode.py", "a") as f:
+                f.write("\n# ratchet edit\n")
+            t = (root / "tests" / GATE_T).read_text()
+            i = t.index("assert ")
+            (root / "tests" / GATE_T).write_text(t[:i] + "assert True  # weakened\n" + t[i:].split("\n", 1)[1])
+            assert "Digest" in prompt and "warmups-seven-steps [warmups]" in prompt and "TECHNIQUE LOGS" not in prompt
+        else:
+            assert stage == "ratchet_log" and "reference/techniques/" in prompt
+        return 0, str(cd / f"worker-{stage}.log")
+    gate = lambda tag: gate_rule((root / "tests" / GATE_T).read_text(), (root / "lib" / "decode.py").read_text())  # noqa: E731
+    with mock.patch.object(orch, "ROOT", root), mock.patch.object(orch.paths, "CHALLENGES", root / "challenges"), \
+            mock.patch.object(workers, "run_local", fake_run), \
+            mock.patch.object(orch, "ratchet_gate", gate), mock.patch.object(orch, "SPEED_HARDEN", False), \
+            mock.patch.object(orch, "say", said.append):
+        orch.ratchet(14)
+    return root, orig, calls, said
+
+
+# A) gate green with the ORIGINAL assertion -> originals restored, lib edit kept
+root, orig, calls, said = ratchet_case(lambda t, lib: True)
+assert (root / "tests" / GATE_T).read_text() == orig and "# ratchet edit" in (root / "lib" / "decode.py").read_text()
+assert any("ORIGINAL tests" in s for s in said) and (root / ".run" / "ratchet-tests-day14.patch").exists(), said
+assert sorted(l for s, l in calls if s == "ratchet_log") == ["binary-reverse-engineering", "metadata-forensics",
+                                                              "mobile-android", "script-analysis", "warmups"], calls
+# B) the lib edit needs the modified assertion -> kept, flagged !!! for review
+root, orig, calls, said = ratchet_case(lambda t, lib: "# weakened" in t)
+assert "# weakened" in (root / "tests" / GATE_T).read_text() and any(s.startswith("!!! [ratchet]") for s in said), said
+# C) gate red either way -> lib/ AND tests/ reverted
+root, orig, calls, said = ratchet_case(lambda t, lib: False)
+assert (root / "tests" / GATE_T).read_text() == orig and "# ratchet edit" not in (root / "lib" / "decode.py").read_text()
+assert any("REVERTED lib/ + tests/" in s for s in said), said
+shutil.rmtree(tmp, ignore_errors=True)
+print("ok  R1 ratchet split: 5 per-lane technique-log workers beside one lib worker (digest, no log step); a rewritten "
+      "gate assertion -> originals tried first, kept only flagged '!!!', revert restores lib/ + tests/")
 print("ALL PASS")
