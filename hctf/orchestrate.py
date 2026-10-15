@@ -122,6 +122,9 @@ def label_table(sdir, res, wrong, cap=60):
     return "\n".join(out)
 
 
+LIVE_ANSWER = os.environ.get("HCTF_LIVE_ANSWER", "1") == "1"
+LIVE_MAX_FIELDS = int(os.environ.get("HCTF_LIVE_MAX_FIELDS", "40"))
+LIVE_TIMEOUT = float(os.environ.get("HCTF_LIVE_TIMEOUT", "900"))
 RESUME_CONTINUES = int(os.environ.get("HCTF_RESUME_CONTINUES", "2"))
 TT_FIX_GATE = os.environ.get("HCTF_TT_FIX_GATE", "1") == "1"
 
@@ -139,6 +142,111 @@ def _cut_short(last):
         return True
     wrong = [w[0] for w in last.get("wrong") or []]
     return bool(wrong) and all(a in (last.get("fixed") or {}) for a in wrong)
+
+
+def _live_fields(last, wrong, fixed):
+    """Answer ids still unresolved on a failed UNTIMED attempt (wrong and not fixed in-window, or missing), else []."""
+    if last.get("deadline") is not None or not (last.get("untimed") or last.get("run_for_time") is False):
+        return []
+    if not last.get("attempt_id"):
+        return []
+    ids = [a for a, _ in (wrong or []) if a not in (fixed or {})] + list(last.get("missing") or [])
+    return list(dict.fromkeys(ids))
+
+
+class LiveAnswer:
+    """Dynamic fallback beside a generalize (C1, 2026-10-15): a single-style worker answers ONLY the unresolved fields of
+    the still-open untimed attempt from its bytes and submits them to that attempt. The generalize keeps the solver
+    general for tomorrow; this one just passes today's mode. `passed` = the GM said CORRECT; `all_accepted` = every
+    listed field accepted (a resume then completes the attempt with workers.live_overlay)."""
+
+    def __init__(self, chain, cid, last, fields, wrong, fixed):
+        self.chain, self.cid, self.fields = chain, cid, fields
+        self.attempt = last.get("attempt_id")
+        self.stop_evt, self.done = threading.Event(), threading.Event()
+        self.passed = self.all_accepted = False
+        self._links = []
+        tdir = timed.timed_dir(cid)
+        try:
+            contract = json.loads((tdir / "contract.json").read_text())
+        except (OSError, ValueError):
+            contract = cli.load(cid, "start.json") or {}
+        qmap = {q.get("id"): q for q in contract.get("questions") or [] if isinstance(q, dict)}
+        sub = dict(wrong or [])
+        rejected = {}
+        for a, v in (last.get("wrong") or []) + (last.get("partial_wrong") or []):
+            if v not in (None, ""):
+                rejected.setdefault(a, set()).add(str(v))
+        for a, vs in (last.get("localize_tried") or {}).items():
+            rejected.setdefault(a, set()).update(str(v) for v in vs)
+        lines = []
+        for a in fields:
+            q = qmap.get(a) or {}
+            fmt = q.get("answer_format") or {}
+            lines.append(f"  - `{a}`: {str(q.get('question') or '?')[:220]} | artifact `{q.get('artifact') or '?'}` | "
+                         f"format {json.dumps(fmt)[:160]} | solver gave {sub.get(a)!r}"
+                         + (f" | REJECTED: {sorted(rejected[a])[:6]}" if rejected.get(a) else ""))
+        art = tdir if (tdir / "contract.json").exists() else (timed.latest_artifacts(cid) or tdir)
+        self.prompt = workers.render(
+            "live", persona=workers.lane_persona(chain.lane), cid=cid, attempt=str(self.attempt)[:8],
+            accepted=len(last.get("verified") or {}), n=len(fields), fields="\n".join(lines),
+            contract=(tdir / "contract.json").relative_to(ROOT) if (tdir / "contract.json").exists() else
+            cli.cdir(cid).relative_to(ROOT) / "start.json", art_dir=Path(art).relative_to(ROOT),
+            solver_dir=chain.sdir.relative_to(ROOT), lane=chain.lane, chal_dir=cli.cdir(cid).relative_to(ROOT))
+        self.thread = threading.Thread(target=self._run, daemon=True, name=f"live-{cid}")
+        self.watch = threading.Thread(target=self._watch, daemon=True, name=f"live-watch-{cid}")
+
+    def start(self):
+        say(f"[{self.cid}] live-answer worker on attempt {str(self.attempt)[:8]} for {len(self.fields)} field(s), "
+            "racing the generalize")
+        self.thread.start()
+        self.watch.start()
+        return self
+
+    def link(self, evt):
+        """Also set `evt` (the generalize's stop event) when the live worker passes the mode."""
+        self._links.append(evt)
+        if self.passed or self.all_accepted:
+            evt.set()
+
+    def _run(self):
+        try:
+            self.chain.run_worker(self.cid, "live", self.prompt, LIVE_TIMEOUT, urgent=True, stop=self.stop_evt)
+        finally:
+            self.done.set()
+
+    def _state(self):
+        ov = workers.live_overlay(self.cid, self.attempt) or {}
+        acc = set((ov.get("answers") or {}))
+        correct = False
+        try:
+            for ln in open(cli.cdir(self.cid) / "submissions.jsonl"):
+                r = json.loads(ln)
+                if r.get("attempt") == self.attempt and r.get("kind") == "correct":
+                    correct = True
+        except (OSError, ValueError):
+            pass
+        return correct, set(self.fields) <= acc
+
+    def _watch(self):
+        while not self.done.is_set() and not self.stop_evt.is_set():
+            self.passed, self.all_accepted = self._state()
+            if self.passed or self.all_accepted:
+                say(f"[{self.cid}] live-answer: {'mode CORRECT' if self.passed else 'every listed field accepted'} "
+                    "-> ending the generalize")
+                for e in self._links:
+                    e.set()
+                self.stop_evt.set()
+                break
+            self.done.wait(2.0)
+        self.passed, self.all_accepted = self._state()
+
+    def finish(self, wait=5.0):
+        self.stop_evt.set()
+        self.thread.join(timeout=wait)
+        self.watch.join(timeout=wait)
+        self.passed, self.all_accepted = self._state()
+        return self
 
 
 def _resume_need(prev):
@@ -1334,7 +1442,7 @@ class Chain:
         set_state(self.base, stage=f"{solvers.mode_of(cid)}:fixing")
         self.run_worker(cid, "fix", prompt, max(20, (left or 600) - 15), urgent=True)
 
-    def generalize(self, cid, wrong=None, fixed=None, diag=None):
+    def generalize(self, cid, wrong=None, fixed=None, diag=None, live=None):
         """Offline (no clock): improve the solver so it handles the captured variant and still passes old cases.
         `wrong`: (answer_id, solver_value) pairs the GM rejected; `fixed`: {answer_id: value} the GM accepted as the
         right label on that attempt; `diag`: facts about the attempt (window, elapsed, how much was judged), so the
@@ -1552,6 +1660,8 @@ class Chain:
             fill |= slow_f
         self._snapshot_solver()
         green, done, harvesting = threading.Event(), threading.Event(), threading.Event()
+        if live is not None:
+            live.link(green)   # a live-answer pass ends this worker (its edits are still judged by _accept_or_restore)
         if harvest:
             harvesting.set()
         watch = threading.Thread(target=self._watch_green, daemon=True,
@@ -3483,7 +3593,24 @@ class Chain:
             # one worker fixes the variant AND any probe misses that are ready NOW; a probe still running stays
             # pending for the next consumer (rehearsal D13 replay: waiting cost ~7 s per blocked attempt)
             diag.update(self._late_probes(cid, wait=False))
-            self.generalize(cid, wrong=wrong, fixed=fixed, diag=diag)
+            live = None
+            fields = _live_fields(last, wrong, fixed) if LIVE_ANSWER else []
+            if fields and len(fields) <= LIVE_MAX_FIELDS:
+                try:
+                    live = LiveAnswer(self, cid, last, fields, wrong, fixed).start()
+                except Exception as e:  # noqa: BLE001 - the generalize path stands on its own
+                    say(f"[{cid}] live-answer not started: {e}")
+            self.generalize(cid, wrong=wrong, fixed=fixed, diag=diag, live=live)
+            if live is not None:
+                live.finish()
+                if live.passed or cli.is_complete(cid):
+                    say(f"[{cid}] passed by the live-answer worker (attempt {str(live.attempt)[:8]})")
+                    set_state(self.base, **{f"{mode}_result": "correct"})
+                    record_timed_case(cid, self.sdir)
+                    return True
+                if live.all_accepted:
+                    say(f"[{cid}] live-answer: every listed field accepted -> reconnecting to complete the attempt")
+                    attempt -= 1
         set_state(self.base, stage=f"{mode}:blocked")
         return False
 

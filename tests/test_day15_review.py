@@ -173,7 +173,7 @@ patches = {
     (timed, "last_result"): lambda cid: last.get(cid, {}),
     (timed, "join_capture"): lambda cid, t=120: 0,
     (orchestrate.time, "sleep"): lambda s: None,
-    (orchestrate.Chain, "generalize"): lambda self, cid, wrong=None, fixed=None, diag=None: gen.append((cid, diag)),
+    (orchestrate.Chain, "generalize"): lambda self, cid, wrong=None, fixed=None, diag=None, live=None: gen.append((cid, diag)),
     (orchestrate.Chain, "_await_probes"): lambda self, w: True,
     (orchestrate.Chain, "_late_probes"): lambda self, cid, wait=False, defer_compound=False: {},
     (orchestrate.Chain, "_mastery_speed_gate"): lambda self, cid: None,

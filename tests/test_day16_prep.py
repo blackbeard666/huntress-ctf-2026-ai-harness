@@ -156,5 +156,108 @@ assert {"mobile-android", "warmups", "binary-reverse-engineering", "script-analy
 assert "metadata-forensics" not in orchestrate.CUMULATIVE_LANES
 print("ok  B2 cumulative lanes: binary, script, mobile, warmups (metadata = lane solver seed)")
 
+# C1) live-answer race on a failed UNTIMED attempt: pass -> mode done (no retry); all accepted -> free reconnect;
+#     clocked / too many fields -> no live worker; accepted values flow into the resumed attempt (timed_env)
+from hctf import cli, timed  # noqa: E402
+untimed_last = {"result": "incorrect", "attempt_id": "M1", "deadline": None, "run_for_time": False,
+                "verified": {"x": "1"}, "localize_complete": True, "wrong": [["set1.a-field", "bad"]], "fixed": {}}
+assert orchestrate._live_fields(untimed_last, [("set1.a-field", "bad")], {}) == ["set1.a-field"]
+assert orchestrate._live_fields({**untimed_last, "deadline": "2026-10-16T13:00:00Z"}, [("set1.a-field", "bad")], {}) == []
+assert orchestrate._live_fields(untimed_last, [("set1.a-field", "bad")], {"set1.a-field": "ok"}) == []
+assert orchestrate._live_fields({**untimed_last, "missing": ["set2.b"]}, [], {}) == ["set2.b"]
+
+ch = object.__new__(orchestrate.Chain)
+ch.base, ch.sdir, ch.lane = "b", TMP, "warmups"
+ch.entries = {"mastery": {"id": "b/mastery"}}
+ch.gov = type("G", (), {"allow_timed": lambda self: True})()
+runs, gens, lives = [], [], []
+
+
+class FakeLive:
+    mode = "pass"
+
+    def __init__(self, chain, cid, last, fields, wrong, fixed):
+        self.fields, self.attempt = fields, last.get("attempt_id")
+        self.passed = self.all_accepted = False
+        lives.append(fields)
+
+    def start(self):
+        self.passed, self.all_accepted = FakeLive.mode == "pass", FakeLive.mode == "accepted"
+        return self
+
+    def link(self, evt):
+        evt.set()
+
+    def finish(self, wait=5.0):
+        return self
+
+
+def stage(results, last):
+    it = iter(results)
+    patches = {
+        (orchestrate, "set_state"): lambda *a, **k: None, (orchestrate, "record_timed_case"): lambda *a, **k: None,
+        (orchestrate, "say"): lambda *a, **k: None, (orchestrate.cli, "is_complete"): lambda cid: False,
+        (orchestrate.cli, "gm_solved"): lambda cid: False, (timed, "last_result"): lambda cid: last,
+        (orchestrate.time, "sleep"): lambda s: None, (orchestrate, "LiveAnswer"): FakeLive,
+        (orchestrate.Chain, "generalize"): lambda self, cid, wrong=None, fixed=None, diag=None, live=None:
+            gens.append(live is not None),
+        (orchestrate.Chain, "_await_probes"): lambda self, w: True,
+        (orchestrate.Chain, "_late_probes"): lambda self, cid, wait=False, defer_compound=False: {},
+        (orchestrate.Chain, "_mastery_speed_gate"): lambda self, cid: None,
+        (orchestrate.Chain, "_tt_fix_gate"): lambda self, cid: None,
+        (orchestrate.Chain, "_early_kw"): lambda self, cid, untimed=False: {},
+        (orchestrate.Chain, "_early_join"): lambda self, cid: False,
+        (orchestrate, "capture_variant"): lambda *a, **k: None,
+        (timed, "resolve_labels_online"): lambda *a, **k: set(),
+        (timed, "run"): lambda cid, sdir, log=None, **k: (runs.append(k.get("op", "start")), next(it))[1],
+    }
+    saved = {k: getattr(*k) for k in patches}
+    ch._pre_attempt_done = True
+    try:
+        for (mod, name), fn in patches.items():
+            setattr(mod, name, fn)
+        return ch.timed_stage("mastery")
+    finally:
+        for (mod, name), fn in saved.items():
+            setattr(mod, name, fn)
+
+
+FakeLive.mode = "pass"
+runs.clear(), gens.clear(), lives.clear()
+assert stage(["blocked"], untimed_last) is True and len(runs) == 1 and gens == [True] and lives == [["set1.a-field"]], (runs, gens, lives)
+FakeLive.mode = "accepted"
+runs.clear(), gens.clear(), lives.clear()
+assert stage(["blocked", "correct"], untimed_last) is True and runs == ["resume", "resume"], runs   # live banked attempt: reconnect, never re-roll
+FakeLive.mode = "pass"
+runs.clear(), gens.clear(), lives.clear()
+clocked = {**untimed_last, "deadline": "2026-10-16T13:00:00Z", "run_for_time": True}
+assert stage(["blocked", "correct"], clocked) is True and not lives and gens == [False], (lives, gens)
+many = {**untimed_last, "wrong": [[f"set1.f{i}", "x"] for i in range(orchestrate.LIVE_MAX_FIELDS + 1)]}
+runs.clear(), gens.clear(), lives.clear()
+assert stage(["blocked", "correct"], many) is True and not lives, lives
+print("ok  C1 live-answer: pass ends the mode (no retry); all-accepted -> free reconnect; clocked / >max fields -> none")
+
+LV = TMP / "live"
+saved_cdir = cli.cdir
+try:
+    cli.cdir = lambda cid: LV
+    LV.mkdir(parents=True, exist_ok=True)
+    (LV / "last_timed.json").write_text(json.dumps({"attempt_id": "M1"}))
+    (LV / "submissions.jsonl").write_text("\n".join(json.dumps(x) for x in (
+        {"attempt": "M1", "answers": {"set1.a-field": "good"}, "kind": "accepted"},
+        {"attempt": "M1", "answers": {"set1.b": "nope"}, "kind": "incorrect"},
+        {"attempt": "OLD", "answers": {"set1.c": "x"}, "kind": "accepted"})) + "\n")
+    ov = workers.live_overlay("b/mastery")
+    assert ov == {"attempt": "M1", "answers": {"set1.a-field": "good"}}, ov
+    env = workers.timed_env("b/mastery")
+    assert json.loads(env["HCTF_LIVE_OVERLAY"])["answers"] == {"set1.a-field": "good"}
+    saved_ctx = ht._CTX.opts
+    ht._CTX.opts = {"HCTF_LIVE_OVERLAY": env["HCTF_LIVE_OVERLAY"]}
+    assert ht._bank_load("b/mastery", "M1") == {"set1.a-field": "good"} and ht._bank_load("b/mastery", "M2") == {}
+    ht._CTX.opts = saved_ctx
+finally:
+    cli.cdir = saved_cdir
+print("ok  C1 overlay: GM-accepted live answers of THIS attempt -> timed_env -> hb_timed bank (other attempts ignored)")
+
 shutil.rmtree(TMP, ignore_errors=True)
 print("ALL PASS")

@@ -1338,8 +1338,15 @@ def _bank_load(cid, attempt_id):
     try:
         b = json.loads(_bank_path(cid).read_text())
     except (OSError, ValueError):
-        return {}
-    return b.get("verified") or {} if b.get("attempt_id") == attempt_id else {}
+        b = {}
+    out = dict(b.get("verified") or {}) if b.get("attempt_id") == attempt_id else {}
+    try:   # values accepted through outside submits (the live-answer worker), forwarded by the orchestrator
+        ov = json.loads(_opt("HCTF_LIVE_OVERLAY", "") or "{}")
+        if ov.get("attempt") == attempt_id:
+            out.update(ov.get("answers") or {})
+    except (ValueError, AttributeError):
+        pass
+    return out
 
 
 def _bank_save(out):

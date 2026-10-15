@@ -782,7 +782,35 @@ def timed_env(cid):
             env["HCTF_EXPECT_BYTES"] = str(n)
     except (OSError, ValueError, TypeError):
         pass
+    ov = live_overlay(cid)
+    if ov:
+        env["HCTF_LIVE_OVERLAY"] = json.dumps(ov, separators=(",", ":"))
     return env
+
+
+def live_overlay(cid, attempt=None):
+    """{"attempt", "answers"}: values the GM ACCEPTED on the mode's current attempt through submits outside hb_timed
+    (the live-answer worker's `hctf submit`), from <mode dir>/submissions.jsonl. hb_timed overlays them on a resumed
+    attempt next to its own bank, so a reconnect completes it. None when there are none."""
+    from . import cli
+    try:
+        attempt = attempt or json.loads((cli.cdir(cid) / "last_timed.json").read_text()).get("attempt_id")
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not attempt:
+        return None
+    got = {}
+    try:
+        for ln in open(cli.cdir(cid) / "submissions.jsonl"):
+            try:
+                r = json.loads(ln)
+            except ValueError:
+                continue
+            if r.get("attempt") == attempt and str(r.get("kind", "")).lower() in ("accepted", "correct"):
+                got.update({k: v for k, v in (r.get("answers") or {}).items() if v not in (None, "")})
+    except OSError:
+        return None
+    return {"attempt": attempt, "answers": got} if got else None
 
 
 def run_timed(solver_dir, cid, op="start", timeout=60):
