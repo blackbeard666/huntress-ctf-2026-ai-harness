@@ -33,6 +33,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 UPSTREAM = "https://2026.huntress.ctf.games"
 CAP_RE = re.compile(r"(?:/download/|[?&]capability=)([0-9a-f]{64})")
 STATE = {"single": {}, "solved": set(), "replayed": set(), "events": None, "lock": threading.Lock()}
+# --fault-429 RATE: answer this fraction of submits with the GM's 429 {"error":"rate_limited"} WITHOUT judging (or
+# forwarding) them -- rehearses the harness's unjudged-submit handling (a 429 must never count as incorrect).
+FAULT = {"rate": 0.0, "rng": None}
 
 
 def load_single(base, src):
@@ -140,6 +143,9 @@ class H(BaseHTTPRequestHandler):
         except ValueError:
             body = {}
         op, cid = body.get("op"), body.get("challenge")
+        if op == "submit" and FAULT["rate"] and FAULT["rng"].random() < FAULT["rate"]:
+            event(challenge=cid, op="submit", result="fault_429", n=len(body.get("answers") or {}))
+            return self._send(429, {"error": "rate_limited"}, extra={"Retry-After": "1"})
         if cid in STATE["single"]:
             if op in ("start", "retry"):
                 event(challenge=cid, op="start")
@@ -166,7 +172,11 @@ def main():
     ap.add_argument("--events", required=True)
     ap.add_argument("--upstream", default=UPSTREAM)
     ap.add_argument("--replay", action="append", default=[], help="<single_solve id>=<saved single_solve dir>")
+    ap.add_argument("--fault-429", type=float, default=0.0, help="fraction of submits answered 429 rate_limited, unjudged")
+    ap.add_argument("--seed", type=int, default=15)
     a = ap.parse_args()
+    import random
+    FAULT["rate"], FAULT["rng"] = a.fault_429, random.Random(a.seed)
     UPSTREAM = a.upstream
     STATE["events"] = a.events
     os.makedirs(os.path.dirname(os.path.abspath(a.events)), exist_ok=True)

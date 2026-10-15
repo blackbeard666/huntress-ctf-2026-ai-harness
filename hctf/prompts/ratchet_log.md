@@ -18,7 +18,8 @@ Update `reference/techniques/{lane}.md`:
   taught something new;
 - maintain `## Variant axes`: for every `variant-*` / `auto-*` regression case and every `VARIANT AXIS:` line in
   solver/NOTES.md (and the generalize worker logs under time_trial/ and mastery/), record the AXIS (what differed between
-  variants of the same day), the values seen, and the parse rule that covers all of them -- merge into an existing axis
+  variants of the same day), the values seen (shapes, encodings, GM label spellings -- never per-artifact answers:
+  artifacts are re-dealt on every attempt), and the parse rule that covers all of them -- merge into an existing axis
   when it is the same kind of difference.
 These logs are inlined into tomorrow's single-solve prompt and are LEARNING NOTES for future, possibly unrelated
 challenges: record methods, cues and conventions -- never "rerun this solver". Keep the file skimmable (~200 lines;

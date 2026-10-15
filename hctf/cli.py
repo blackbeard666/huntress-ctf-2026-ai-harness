@@ -432,7 +432,13 @@ def _bisect_rejected(cid, answers, budget=40, harness=None, families=True):
             except (remote.Unreachable, OSError, RuntimeError) as e:
                 print(f"bisect: probe of {len(g)} field(s) failed ({str(e)[:80]}); retrying once", file=sys.stderr)
                 continue
-            return "ok" if kind in ("correct", "accepted") else "bad"
+            if kind in ("correct", "accepted"):
+                return "ok"
+            if kind == "incorrect":
+                return "bad"
+            # rate_limited / empty / non-JSON / expired: UNJUDGED, never a rejection (a 'bad' here recorded fields the
+            # GM never judged as wrong) -- resend once, then leave the group unjudged
+            print(f"bisect: probe of {len(g)} field(s) unjudged ({kind}); resending once", file=sys.stderr)
         return None
 
     def split(g):
@@ -1129,6 +1135,10 @@ def c_dash(a):
 def c_cost(a):
     from . import workers
     print(workers.metrics_report(day=a.day))
+    if a.day is not None:
+        from . import gmload
+        print()
+        print(gmload.report(a.day))
     return 0
 
 

@@ -39,6 +39,24 @@ UNTIMED_ROUNDS = int(os.environ.get("HCTF_UNTIMED_ROUNDS", "3"))
 SKIP_DOOMED_RETRY = os.environ.get("HCTF_SKIP_DOOMED_RETRY", "1") != "0"
 
 
+# Never re-roll (retry / wait-it-out) an attempt that still holds banked ids: reconnect with op=resume (start) instead.
+KEEP_BANKED = os.environ.get("HCTF_KEEP_BANKED", "1") == "1"
+
+
+def _prev_banked(prev):
+    """The previous attempt (last_timed.json) banked ids a retry would DISCARD: anything the GM accepted on it (partial
+    submit, a per-set / localized subset, an in-window fill) while the mode is not yet CORRECT."""
+    if not prev.get("attempt_id") or str(prev.get("result", "")).lower() == "correct":
+        return False
+    if prev.get("verified") or str(prev.get("full_result", "")).lower() == "accepted":
+        return True
+    if str((prev.get("partial_submit") or {}).get("result", "")).lower() in ("correct", "accepted"):
+        return True
+    if any(str((v or {}).get("result", "")).lower() in ("correct", "accepted") for v in (prev.get("per_set") or {}).values()):
+        return True
+    return any(str(t.get("result", "")).lower() in ("correct", "accepted") for t in prev.get("inwindow_fill") or [])
+
+
 def _resume_need(prev):
     """Seconds of clock a resumed attempt must still have to be worth running: the last run's in-window phases
     (download + solve + submit) + 1.5 s, at least 3 s (half the window when no phases are known)."""
@@ -1769,7 +1787,7 @@ class Chain:
                 return
             left[0] -= 1
             kind, _b, refused = cli.submit(cid, g, force=True, probe=True, harness="race")
-            if kind in ("correct", "accepted") or refused or len(g) == 1:
+            if kind != "incorrect" or refused or len(g) == 1:   # only a GM rejection is bisected (429 = unjudged)
                 return
             keys = list(g)
             narrow({k: g[k] for k in keys[:len(keys) // 2]})
@@ -1812,7 +1830,7 @@ class Chain:
             if not d or left() <= 0:
                 return set()
             kind, _b, refused = cli.submit(cid, d, force=True, probe=True, harness="race")
-            if kind in ("correct", "accepted") or refused:
+            if kind != "incorrect" or refused:   # accepted, or UNJUDGED (rate_limited / error): nothing to bisect
                 return set()
             if len(d) == 1:
                 return set(d)
@@ -1944,7 +1962,7 @@ class Chain:
                 return
             budget[0] -= 1
             kind, _body, refused = cli.submit(cid, group, force=True, probe=True)
-            if kind in ("correct", "accepted") or refused:
+            if kind != "incorrect" or refused:   # accepted, or UNJUDGED (rate_limited / error): never "wrong"
                 return
             if len(group) == 1:
                 wrong.update(group)
@@ -2890,7 +2908,13 @@ class Chain:
             prev = timed.last_result(cid) or {}
             left = timed.seconds_left(prev) if prev.get("attempt_id") else None
             need = _resume_need(prev)
-            if left is not None and 0 < left < need:
+            live_banked = KEEP_BANKED and _prev_banked(prev) and (
+                (left is not None and left > 0) or (left is None and prev.get("deadline") is None
+                                                    and (prev.get("untimed") or prev.get("run_for_time") is False)))
+            if live_banked:
+                say(f"[{cid}] retry_skipped_banked: attempt {str(prev.get('attempt_id'))[:8]} holds GM-accepted ids "
+                    f"({'untimed' if left is None else f'{left:.1f}s left'}) -- reconnecting with start, never retry")
+            if left is not None and 0 < left < need and not live_banked:
                 # Day 8 script Mastery: the previous attempt still had ~4 s, so `start` RESUMED it -> 2 s solver budget
                 # -> "solver too slow" -> a 143 s generalize. Let it run out (pre-clock for us), then re-roll.
                 say(f"[{cid}] previous attempt has only {left:.1f}s left (< {need:.1f}s needed): waiting it out, then retry")
@@ -2905,7 +2929,9 @@ class Chain:
                 set_state(self.base, stage=f"{mode}:untimed")
                 untimed = True
                 attempt = max(attempt, MAX_TIMED_RETRIES - UNTIMED_ROUNDS + 1)
-            if untimed:
+            if live_banked:
+                op = {"op": "resume"}
+            elif untimed:
                 op = {"op": "untimed"}
             else:
                 op = {"op": "retry"} if left is not None and left <= 0 else {}
@@ -3207,11 +3233,41 @@ def released_challenges(day=None):
     return body.get("challenges", [])
 
 
-def wait_for_release(day, poll=None, log=None):
+def _drop_instant(now=None):
+    """Today's drop (HCTF_DROP_LOCAL, host local time) as an epoch -- or tomorrow's once today's is > 30 min past."""
+    from .prebuild import DROP_LOCAL
+    now = now or datetime.datetime.now()
+    hh, mm = (int(x) for x in DROP_LOCAL.split(":"))
+    d = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    if now - d > datetime.timedelta(minutes=30):
+        d += datetime.timedelta(days=1)
+    return d.timestamp()
+
+
+def release_interval(now, drop, poll=None):
+    """Seconds until the next `list` while waiting for the drop at epoch `drop`. The GM rate limit is SHARED by every
+    call on our token (reviewer: a contended bucket banked 128/1506 ids vs 1506/1506 alone), and D14's flat 0.3 s poll
+    sent ~3,600 lists in the 18 min before the drop: a RELEASE_HEARTBEAT list until T-RELEASE_LEAD (also catches an
+    early drop; the lead covers host clock skew, which preflight checks against the GM's Date header), the normal poll
+    from there, RELEASE_POLL_HOT across T-1 s..T+30 s, then the normal poll again (a late drop)."""
+    poll = RELEASE_POLL if poll is None else poll
+    dt = drop - now
+    if dt > RELEASE_LEAD:
+        return min(RELEASE_HEARTBEAT, dt - RELEASE_LEAD)
+    if -30 <= dt <= 1:
+        return min(poll, RELEASE_POLL_HOT)
+    return poll
+
+
+def wait_for_release(day, poll=None, log=None, drop=None):
     """Block until the GM lists `day`, polling IN this process (warm GM connections, no interpreter start) -> the
     listed challenges. Replaces bin/day.sh's shell loop of `hctf list` + a second list inside `hctf run`: D9 the first
-    GM start landed 3-5 s after the drop was seen."""
+    GM start landed 3-5 s after the drop was seen. Clock-aware (release_interval) against the real GM only: a replay's
+    stand-in releases whenever it is started, so it keeps the flat poll (as does HCTF_RELEASE_CLOCK=0)."""
     poll = RELEASE_POLL if poll is None else poll
+    clock = RELEASE_CLOCK and (drop is not None or remote._public_gm())
+    if clock and drop is None:
+        drop = _drop_instant()
     try:
         remote.gm_client().warm_pool(4)
     except Exception:  # noqa: BLE001 - connections open on first use instead
@@ -3228,12 +3284,19 @@ def wait_for_release(day, poll=None, log=None):
             say(f"[wait] day {day} released ({len(got)} challenge modes) -- launching")
             return got
         n += 1
+        wait = release_interval(time.time(), drop, poll) if clock else poll
         if n == 1 or n % 300 == 0:
-            say(f"[wait] polling the GM for day {day} (every {poll:g}s + call time)")
-        time.sleep(poll)
+            say(f"[wait] polling the GM for day {day} (every {poll:g}s + call time"
+                + (f"; heartbeat {RELEASE_HEARTBEAT:g}s until {RELEASE_LEAD:g}s before the "
+                   f"{datetime.datetime.fromtimestamp(drop):%H:%M} drop)" if clock else ")"))
+        time.sleep(wait)
 
 
 RELEASE_POLL = float(os.environ.get("HCTF_RELEASE_POLL", "0.3"))
+RELEASE_POLL_HOT = float(os.environ.get("HCTF_RELEASE_POLL_HOT", "0.2"))     # T-1 s .. T+30 s
+RELEASE_HEARTBEAT = float(os.environ.get("HCTF_RELEASE_HEARTBEAT", "5"))     # one list per this long before T-lead
+RELEASE_LEAD = float(os.environ.get("HCTF_RELEASE_LEAD", "20"))       # > any host clock skew preflight allows (3 s)
+RELEASE_CLOCK = os.environ.get("HCTF_RELEASE_CLOCK", "1") != "0"
 
 
 def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_homebase=None, keep_homebase=None,

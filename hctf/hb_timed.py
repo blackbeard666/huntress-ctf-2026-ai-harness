@@ -246,8 +246,76 @@ def _open(method, query, body=None, headers=None, verdict_ok=True, waits=(0.5, 1
 
 
 def _post(payload, timeout=None):
-    return json.loads(_open("POST", "", json.dumps(payload).encode(), _auth({"Content-Type": "application/json"}),
-                            timeout=timeout))
+    """POST -> the parsed body. An empty / non-JSON reply (2xx or an HTML 5xx) comes back as {"error": "unjudged_*"}
+    instead of raising: it judged nothing, and the ValueError used to crash the whole attempt mid-window."""
+    try:
+        raw = _open("POST", "", json.dumps(payload).encode(), _auth({"Content-Type": "application/json"}),
+                    timeout=timeout)
+    except RuntimeError as e:   # _open: a 4xx/5xx without a JSON body
+        return {"error": "unjudged_http", "detail": str(e)[:200]}
+    try:
+        res = json.loads(raw)
+    except ValueError:
+        return {"error": "unjudged_nonjson", "detail": (raw or b"")[:200].decode("utf-8", "replace")}
+    return res if isinstance(res, dict) else {"error": "unjudged_nonjson", "detail": str(res)[:200]}
+
+
+# A submit reply is a VERDICT only when it carries one of these results. rate_limited, an empty or non-JSON body, or an
+# error with no result judged NOTHING: it is resent, and never counted as incorrect (reviewer rule; ours turned a
+# surviving 429 into "incorrect" -> _localize marked never-judged fields wrong -> gm_feedback "rejected" -> a generalize
+# away from right values).
+VERDICTS = ("correct", "accepted", "incorrect", "expired")
+UNJUDGED_RESENDS = tuple(float(x) for x in os.environ.get("HCTF_UNJUDGED_RESENDS", "0.3,0.8").split(",") if x)
+
+
+def _unjudged(res):
+    return not isinstance(res, dict) or str(res.get("result", "")).lower() not in VERDICTS
+
+
+def _transient(res):
+    """An unjudged reply worth resending (load / transport), not a deterministic refusal (unknown answer id, ...)."""
+    if not isinstance(res, dict) or not res:
+        return True
+    err = str(res.get("error") or "")
+    return not err or "rate_limited" in err or err.startswith("unjudged_")
+
+
+def _submit(cid, answers, body, out=None, timeout=None):
+    """One submit that is JUDGED when the GM can judge it: an unjudged transient reply is resent (UNJUDGED_RESENDS
+    backoffs) while the clock allows. OSError still propagates (a timeout is never resent: no double POST)."""
+    res = None
+    for wait in (*UNJUDGED_RESENDS, None):
+        res = _post({"op": "submit", "challenge": cid, "answers": answers},
+                    timeout=timeout if timeout is not None else _submit_timeout(body))
+        if not _unjudged(res) or not _transient(res) or wait is None:
+            break
+        left = _deadline_left(body)
+        if left is not None and left < wait + 1.0:
+            break
+        if out is not None:
+            out["unjudged_resends"] = out.get("unjudged_resends", 0) + 1
+        time.sleep(wait)
+    if out is not None:
+        if _unjudged(res):
+            out.setdefault("unjudged", []).append(str((res or {}).get("error") or "empty")[:80])
+        elif _progress(res, out.get("gm_remaining")) == "reconfirm":
+            out["reconfirms"] = out.get("reconfirms", 0) + 1   # `remaining` didn't move: nothing new banked
+        if isinstance(res.get("remaining"), int):
+            out["gm_remaining"] = res["remaining"]
+    return res
+
+
+def _progress(res, before=None):
+    """What an accepted submit banked: 'progress' when `remaining` shrank (or the GM names accepted_ids), 'reconfirm'
+    when it did not move (already-banked ids judged again -- not progress, not wrong), 'unknown' without a baseline."""
+    if str((res or {}).get("result", "")).lower() != "accepted":
+        return None
+    rem = res.get("remaining")
+    if isinstance(rem, int) and isinstance(before, int):
+        return "progress" if rem < before else "reconfirm"
+    if isinstance(res.get("accepted_ids"), list):
+        return "progress" if res["accepted_ids"] else "reconfirm"
+    return "unknown"
 
 
 START_TIMEOUT = float(os.environ.get("HCTF_START_TIMEOUT", "10"))   # local GM starts take ~5 s, Homebase ~1 s
@@ -489,6 +557,7 @@ def _localize(cid, answers, groups, per_set, body, out):
 
     wrong, fixed, ok_fields = [], {}, set()
     complete = True
+    unjudged = []
 
     def narrow(group):
         nonlocal complete
@@ -498,8 +567,14 @@ def _localize(cid, answers, groups, per_set, body, out):
         if left is not None and left < 0.8:
             complete = False
             return
-        if ok(_post({"op": "submit", "challenge": cid, "answers": {k: answers[k] for k in group}})):
+        res = _submit(cid, {k: answers[k] for k in group}, body, out)
+        if ok(res):
             ok_fields.update(group)
+            return
+        if _unjudged(res):
+            # the GM judged nothing (rate_limited / non-JSON / refusal): never record these fields as wrong
+            unjudged.extend(group)
+            complete = False
             return
         if len(group) == 1:
             wrong.append(group[0])
@@ -526,8 +601,11 @@ def _localize(cid, answers, groups, per_set, body, out):
                 left = _deadline_left(body)
                 if left is not None and left < 0.5:
                     break
-                if ok(_post({"op": "submit", "challenge": cid, "answers": {aid: alt}})):
+                res = _submit(cid, {aid: alt}, body, out)
+                if ok(res):
                     fixed[aid] = alt
+                    break
+                if _unjudged(res):
                     break
                 out.setdefault("localize_tried", {}).setdefault(aid, []).append(alt)
     except Exception as e:  # noqa: BLE001 - diagnostics only
@@ -536,6 +614,8 @@ def _localize(cid, answers, groups, per_set, body, out):
     out["wrong"] = [[a, answers.get(a)] for a in wrong]
     out["fixed"] = fixed
     out["localize_complete"] = complete
+    if unjudged:
+        out["localize_unjudged"] = unjudged
     out["verified"] = {**{a: answers[a] for a in ok_fields if a in answers}, **fixed}
     out["novel_labels"] = _novel(out["verified"], vocab)
 
@@ -663,7 +743,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cid")
     ap.add_argument("solver_dir")           # relative to HW, e.g. challenges/day02/warmups-half-a-turn/solver
-    ap.add_argument("--op", default="start", choices=["start", "retry", "untimed"])
+    ap.add_argument("--op", default="start", choices=["start", "retry", "untimed", "resume"])
     ap.add_argument("--min-left", type=float, default=None,
                     help="re-roll a RESUMED attempt with less clock than this (s); default max(3, window/2)")
     a = ap.parse_args()
@@ -691,7 +771,14 @@ def _attempt(a):
     out = {"cid": a.cid, "submitted": {}, "pool_warm": round(t0 - tw, 2)}
 
     untimed = a.op == "untimed"
-    body = _post_untimed(a.cid) if untimed else _post_start({"op": a.op, "challenge": a.cid})
+    # resume = reconnect (`start`) to the LIVE attempt the caller knows holds banked ids: never re-roll it short-clock
+    # (a retry advances to a fresh variant and DISCARDS every banked id -- reviewer rule; GM guidance: "start reconnects
+    # to the same attempt; only retry spends one of the unique_attempts_remaining"). Expired/finished still re-roll.
+    resume = a.op == "resume"
+    if resume:
+        out["resumed_banked"] = True
+    body = (_post_untimed(a.cid) if untimed else
+            _post_start({"op": "start" if resume else a.op, "challenge": a.cid}))
     if (a.op == "retry" and body.get("error")
             and not any(x in str(body.get("error")) for x in ("rate_limited", "exhausted", *EXHAUSTED))):
         body = _post_start({"op": "start", "challenge": a.cid})  # retry refused (no finished attempt to re-roll): plain start
@@ -710,7 +797,7 @@ def _attempt(a):
     for _ in range(2):
         win, age = _window(body), _age(body)
         need = a.min_left if a.min_left is not None else max(3.0, (win or 0) / 2)
-        if body.get("error") or left is None or left >= need or (age is not None and age < 2.0):
+        if resume or body.get("error") or left is None or left >= need or (age is not None and age < 2.0):
             break
         out["rerolled_short"] = round(left, 2)
         time.sleep(max(0.0, left) + 0.6)
@@ -739,6 +826,7 @@ def _attempt(a):
             out["gm_rate_limited"] = True
         return out
     t_started = time.time()
+    out["gm_remaining"] = body["remaining"] if isinstance(body.get("remaining"), int) else len(ids)
 
     # download artifacts into a temp dir next to the GM
     adir = HW / ".run" / "tmp-timed" / re.sub(r"[^A-Za-z0-9]+", "_", a.cid)
@@ -843,7 +931,7 @@ def _attempt(a):
         # One POST per set, CONCURRENTLY over the pre-opened pool: a 798-answer single POST took 2.3-4.7 s from WSL
         # (no Homebase), the bulk of a 7 s Mastery window; per-set POSTs in parallel cost ~one smaller round-trip.
         with ThreadPoolExecutor(max_workers=len(groups)) as ex:
-            ress = dict(zip(groups, ex.map(lambda k: _post({"op": "submit", "challenge": a.cid, "answers": groups[k]}),
+            ress = dict(zip(groups, ex.map(lambda k: _submit(a.cid, groups[k], body),
                                            list(groups))))
         out["phases"]["submit"] = round(time.time() - t_solved, 2)
         per_set = {k: {"result": str(r.get("result", "")).lower(), "remaining": r.get("remaining")} for k, r in ress.items()}
@@ -853,8 +941,9 @@ def _attempt(a):
             out["verified"] = dict(answers)
             out["novel_labels"] = _novel(answers, _vocab())
         else:
-            out["result"] = "expired" if any(v["result"] == "expired" for v in per_set.values()) else "incorrect"
-            out["bad_sets"] = [k for k, v in per_set.items() if v["result"] not in ("correct", "accepted")]
+            out["result"] = ("expired" if any(v["result"] == "expired" for v in per_set.values()) else
+                             "incorrect" if any(v["result"] == "incorrect" for v in per_set.values()) else "unjudged")
+            out["bad_sets"] = [k for k, v in per_set.items() if v["result"] == "incorrect"]
             if out["result"] == "incorrect":
                 _localize(a.cid, answers, groups, per_set, body, out)
         out["elapsed"] = round(time.time() - t0, 2)
@@ -863,7 +952,7 @@ def _attempt(a):
     full = None
     for send in range(2):
         try:
-            full = _post({"op": "submit", "challenge": a.cid, "answers": answers}, timeout=_submit_timeout(body))
+            full = _submit(a.cid, answers, body, out)
             break
         except OSError as e:   # socket.timeout included: the GM didn't answer before the clock (+grace) ran out
             left_now = _deadline_left(body)
@@ -898,21 +987,28 @@ def _attempt(a):
     # generalize worker gets granular feedback on the next cycle.
     if fk == "incorrect":
         _event("solved", out, result="incorrect")           # before the per-set breakdown + localization
-    per_set, final = {}, fk or "incorrect"
+    # An UNJUDGED full submit (still rate_limited / non-JSON after the resends) never becomes "incorrect": the per-set
+    # breakdown below judges what it can; sets the GM never judged stay unjudged (no localize, no wrong fields).
+    per_set, final = {}, fk if fk in VERDICTS else "unjudged"
     for key, grp in groups.items():
-        res = _post({"op": "submit", "challenge": a.cid, "answers": grp})
-        rk = str(res.get("result", "")).lower()
+        try:
+            res = _submit(a.cid, grp, body, out)
+        except OSError as e:    # no answer before the clock (+grace): never judged -- not a wrong set
+            res = {"error": f"unjudged_timeout {e!r}"[:120]}
+        rk = str(res.get("result", "")).lower() if not _unjudged(res) else "unjudged"
         per_set[key] = {"result": rk, "remaining": res.get("remaining")}
         if rk == "expired":
             final = "expired"
             break
-        if rk not in ("correct", "accepted"):
+        if rk == "incorrect":
             final = "incorrect"
+        elif rk == "unjudged" and final != "incorrect":
+            final = "unjudged"
     out["result"] = "correct" if all(v["result"] in ("correct", "accepted") for v in per_set.values()) and per_set else final
     out["per_set"] = per_set
     if final == "incorrect":
-        _localize(a.cid, answers, groups, per_set, body, out)
-    out["bad_sets"] = [k for k, v in per_set.items() if v["result"] not in ("correct", "accepted")]
+        _localize(a.cid, answers, groups, {k: v for k, v in per_set.items() if v["result"] != "unjudged"}, body, out)
+    out["bad_sets"] = [k for k, v in per_set.items() if v["result"] == "incorrect"]
     out["elapsed"] = round(time.time() - t0, 2)
     out["in_window"] = round(time.time() - t_started, 2)  # excludes the pre-clock start/retry overhead
     return _emit(out, adir)
@@ -988,7 +1084,7 @@ def _fill_missing(cid, empty, qmap, adir, body, out, tries=2):
             break
         batch = {aid: g[min(i, len(g) - 1)] for aid, g in guesses.items()}
         try:
-            res = _post({"op": "submit", "challenge": cid, "answers": batch}, timeout=_submit_timeout(body))
+            res = _submit(cid, batch, body, out)
         except OSError as e:
             tried.append({"answers": batch, "result": "no_answer", "detail": repr(e)})
             break
@@ -1010,11 +1106,11 @@ def _partial_submit(cid, part, body, out, setkey=_setkey):
     GM-verified. Rejected -> localize the wrong ones (window permitting). Results go under partial_* keys so the
     orchestrator still treats the attempt as solver_incomplete and generalizes on this exact variant."""
     try:
-        res = _post({"op": "submit", "challenge": cid, "answers": part}, timeout=_submit_timeout(body))
+        res = _submit(cid, part, body, out)
     except OSError as e:
         out["partial_submit"] = {"result": "no_answer", "detail": repr(e)}
         return
-    rk = str(res.get("result", "")).lower()
+    rk = str(res.get("result", "")).lower() if not _unjudged(res) else "unjudged"
     out["partial_submit"] = {"result": rk, "remaining": res.get("remaining"), "n": len(part)}
     if rk in ("correct", "accepted"):
         out["verified"] = dict(part)

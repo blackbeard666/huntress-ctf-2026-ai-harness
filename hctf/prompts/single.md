@@ -89,7 +89,8 @@ If `hctf submit` prints `ACCEPTED alternate spelling`, make `solve.py` emit exac
    cap: run a copied earlier solver as `timeout -s INT 20 python3 solve.py ...` (SIGINT prints a traceback naming the
    loop that hangs) -- the triage's "Prior solver dry run" already says how yesterday's solver behaves on today's bytes
    (Day 8: a Day 7 brute-force path sat 120 s on a 67 MB ELF). Pass an explicit `timeout` only for known-long tools
-   (Ghidra, jadx). When the solver is slow, fix the obvious eager step (e.g. parsing every symbol, re-opening a zip per
+   (Ghidra, jadx). Nobody is at the keyboard: every command must return on its own -- no pager/`tail -f`/REPL/
+   listener/long `sleep`, `curl --max-time`, and `</dev/null` on tools that may prompt (7z/unzip passwords). When the solver is slow, fix the obvious eager step (e.g. parsing every symbol, re-opening a zip per
    field) instead of profiling at length; if you profile: `python3 -m cProfile -s cumtime solve.py ... 2>&1 | head -40`.
    **Mastery sets in parallel:** every set runs inside ONE clock. When per-set work is heavy (big archives, large
    binaries: > ~0.3 s per set), solve the sets in parallel processes -- `lib.common.group_by_set(pairs)` + a

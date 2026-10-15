@@ -131,7 +131,9 @@ Day 6 had 4 expired/failed timed attempts though every solver was correct. Cause
   retries a clock expiry (solver answered everything) immediately, up to `HCTF_SPEC_TIMING_RETRIES` (2).
 - **Drop-time launch re-ran pre-flight + a blocking 30s Homebase warm** (~75s lost at 21:00). `bin/day.sh N --wait`
   now does all prep up front, skips a pre-flight that passed within 6h, warms Homebase in the background, then polls
-  every 3s and launches the instant the day is listed.
+  and launches the instant the day is listed. (Now in-process `orchestrate.wait_for_release`: 0.3 s poll, and since
+  2026-10-15 clock-aware against the real GM -- a 5 s heartbeat until T-20 s, 0.2 s across T-1..T+30 s -- so ~3,600
+  pre-drop lists no longer drain the shared per-token rate limit; preflight FAILs on host clock skew > 3 s.)
 - **Orchestrator log went silent**: `contextlib.redirect_stdout` is process-global; overlapping calls from parallel
   chains stranded `sys.stdout` on a StringIO. Replaced with thread-local `cli.quiet()`.
 - `last_timed.json` now keeps `detail` (exec_error cause) and `routed` is set on local attempts too.

@@ -887,7 +887,8 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=
     known-roomy windows (Day 7: that sent an 11s script TT local, 9.53s in-window vs ~2s on Homebase). The old "local first, Homebase only
     after a local expiry" rule burned one attempt per tight mode, and the rehearsal copy run showed local fits a 7s
     462-field Mastery only by ~0.9s (GM origin ~1.3-1.5s/call from here). HCTF_GM_TRANSPORT=ssh forces Homebase."""
-    if op == "untimed":
+    if op in ("untimed", "resume"):
+        # resume = reconnecting to a live attempt that holds banked ids (mostly an untimed one): same local route.
         # No clock (regular pool / practice continuation after the timed pool ran out): run here, never on Homebase --
         # nothing to race, and the bytes stay local for a generalize worker.
         res = run_timed(solver_dir, cid, op=op, timeout=max(timeout, UNTIMED_BUDGET + 60))

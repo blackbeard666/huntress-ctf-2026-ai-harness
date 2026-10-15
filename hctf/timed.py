@@ -497,7 +497,8 @@ def process_result(cid, solver_dir, res, log=print):
         return "correct"
     if "prerequisite" in r:   # GM 409 prerequisite_required: the previous mode's LATEST attempt isn't CORRECT
         return "error:prerequisite"
-    if res.get("gm_rate_limited") or "rate_limited" in r:
+    if res.get("gm_rate_limited") or "rate_limited" in r or r == "unjudged" or r.startswith("unjudged_"):
+        # unjudged = a submit the GM never judged (rate_limited / non-JSON after the resends): never a generalize
         return "error:rate"    # GM 429 on start/download: transient -- back off and retry, never generalize
     if res.get("exhausted") or "rotation_exhausted" in r or "retry_variants_unavailable" in r:
         # GM: no fresh variant left for this mode. Not terminal: the caller switches to an UNTIMED attempt (regular

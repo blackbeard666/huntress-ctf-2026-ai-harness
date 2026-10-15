@@ -68,6 +68,28 @@ else
   fail "GM not reachable (rc=$gm_rc). First lines: $(head -2 <<<"$gm_out" | tr '\n' ' ')"
 fi
 
+# Host clock vs the GM's Date header: the drop wait (orchestrate.release_interval) only heartbeats until 20 s before
+# the drop by the HOST clock, so a WSL clock that drifted (host suspend) would delay the launch.
+skew="$(python3 - <<'PY' 2>/dev/null
+import email.utils, time, urllib.error, urllib.request
+t0 = time.time()
+try:
+    hdrs = urllib.request.urlopen(urllib.request.Request("https://2026.huntress.ctf.games/", method="HEAD"),
+                                  timeout=10).headers
+except urllib.error.HTTPError as e:   # unauthenticated HEAD = 401, still carries Date
+    hdrs = e.headers
+gm = email.utils.parsedate_to_datetime(hdrs["Date"]).timestamp()
+print(f"{(t0 + time.time()) / 2 - gm:+.1f}")
+PY
+)"
+if [ -z "$skew" ]; then
+  warn "host clock skew vs GM unknown (no Date header)."
+elif awk -v s="$skew" 'BEGIN{exit !(s > 3 || s < -3)}'; then
+  fail "host clock is ${skew}s off the GM's (>3 s): fix with \`sudo hwclock -s\` (WSL) -- the drop wait is clock-aware."
+else
+  ok "host clock within ${skew}s of the GM's."
+fi
+
 # 3) VPN tunnel -----------------------------------------------------------------------------------
 hdr "CTF VPN (for Homebase; GM does not need it)"
 if ip -brief addr show $VPN_DEV >/dev/null 2>&1; then
