@@ -66,7 +66,7 @@ if stage == "generalize":
     if ok:
         allow()
     block(f"`hctf solver-test {paths.base_id(cid)}` does not pass for every case yet: {json.dumps(res)[:700]}. "
-          "Fix solve.py (and fill any empty expected.json you can derive), then re-run.")
+          "Fix solve.py (never edit cases/*/expected.json -- it is GM-verified only), then re-run.")
 
 if stage == "fix":
     contract = cli.load(cid, "start.json") or {}

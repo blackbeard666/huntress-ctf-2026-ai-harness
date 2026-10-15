@@ -260,11 +260,12 @@ WORKER_TOOLS = os.environ.get("HCTF_WORKER_TOOLS", "Bash,Read,Write,Edit,Skill,T
 CLAUDE_BIN = os.environ.get("HCTF_CLAUDE_BIN", "claude")   # tests point this at a stub
 
 
-def _worker_cmd(stage, lane, prompt=None):
-    """claude argv. prompt=None -> stream-json input (a warm worker gets its messages on stdin)."""
+def _worker_cmd(stage, lane, prompt=None, model=None, effort=None):
+    """claude argv. prompt=None -> stream-json input (a warm worker gets its messages on stdin).
+    model/effort: per-launch overrides (the duel worker runs a deliberately different configuration)."""
     cmd = [CLAUDE_BIN, "-p"] + ([prompt] if prompt is not None else []) + [
            "--dangerously-skip-permissions", "--max-turns", str(_max_turns(stage)),
-           "--model", worker_model(lane), "--effort", worker_effort(lane),
+           "--model", model or worker_model(lane), "--effort", effort or worker_effort(lane),
            "--output-format", "stream-json", "--verbose",
            # Isolation: no claude.ai MCP connectors (23 connected at every worker start, none used) and no Claude
            # auto-memory (Day 6 workers wrote unversioned GM facts to ~/.claude/projects/-home-testpwn-huntress-2026/
@@ -375,22 +376,60 @@ def run_local(chal_dir, stage, prompt, env_extra, timeout, stop=None, warm=None,
     return rc, log
 
 
+_live = {}
+_live_lock = threading.Lock()
+
+
+def _live_add(log, env_extra):
+    """Register a running harness worker (the coordinator, hctf/coordinator.py, reads live_workers())."""
+    key = str(log)
+    with _live_lock:
+        _live[key] = {"log": Path(log), "start": time.time(), "cid": env_extra.get("HCTF_CHAL", ""),
+                      "stage": env_extra.get("HCTF_STAGE", ""), "lane": env_extra.get("HCTF_LANE", ""),
+                      "base": env_extra.get("HCTF_BASE", ""), "chal_dir": Path(str(env_extra.get("HCTF_CHAL_DIR") or ".")),
+                      "solver_dir": Path(str(env_extra.get("HCTF_SOLVER_DIR") or ".")),
+                      "duel": bool(env_extra.get("HCTF_DUEL"))}
+    return key
+
+
+def _live_drop(key):
+    with _live_lock:
+        _live.pop(key, None)
+
+
+def live_workers():
+    """Snapshot of the harness workers running right now (local `claude -p` processes)."""
+    with _live_lock:
+        return [dict(v) for v in _live.values()]
+
+
 def _run_local_once(chal_dir, stage, prompt, env_extra, timeout, stop, warm, warm_task):
     if warm is not None and warm.alive():
         try:
             warm.send_task(warm_task)
-            return _wait_worker(warm.p, warm.log, timeout, stop, out=warm.out)
+            key = _live_add(warm.log, env_extra)
+            try:
+                return _wait_worker(warm.p, warm.log, timeout, stop, out=warm.out)
+            finally:
+                _live_drop(key)
         except OSError:
             warm.cancel()                 # broken pipe: the warm process died -> cold launch below
     elif warm is not None:
         warm.cancel()
-    log = _logfile(chal_dir, stage, "local")
+    # HCTF_LOG_POOL: a second worker on the same challenge (duel) logs under its own name -- the main worker's log is
+    # stamped to the second and both start in the same second.
+    log = _logfile(chal_dir, stage, str(env_extra.get("HCTF_LOG_POOL") or "local"))
     env = _worker_env(env_extra)
     lane = env_extra.get("HCTF_LANE") or env.get("HCTF_LANE")
+    cmd = _worker_cmd(stage, lane, prompt, model=env_extra.get("HCTF_X_MODEL"), effort=env_extra.get("HCTF_X_EFFORT"))
     with open(log, "w") as out:
-        p = subprocess.Popen(sandboxed(_worker_cmd(stage, lane, prompt), stage), cwd=ROOT, stdout=out,
+        p = subprocess.Popen(sandboxed(cmd, stage), cwd=ROOT, stdout=out,
                              stderr=subprocess.STDOUT, env=env, start_new_session=True)
-        return _wait_worker(p, log, timeout, stop)
+        key = _live_add(log, env_extra)
+        try:
+            return _wait_worker(p, log, timeout, stop)
+        finally:
+            _live_drop(key)
 
 
 def _wait_worker(p, log, timeout, stop, out=None):
@@ -557,7 +596,7 @@ def record_metrics(log, stage, env_extra, rc, wall_s):
     elif rc == -9 and out["outcome"] == "no_result":
         out = {**out, "outcome": "timeout"}
     row = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "base": env_extra.get("HCTF_BASE", ""),
-           "cid": env_extra.get("HCTF_CHAL", ""), "stage": stage, "lane": env_extra.get("HCTF_LANE", ""), "rc": rc,
+           "cid": env_extra.get("HCTF_CHAL", ""), "stage": stage + ("-duel" if env_extra.get("HCTF_DUEL") else ""), "lane": env_extra.get("HCTF_LANE", ""), "rc": rc,
            "wall_s": round(wall_s, 1), "log": _rel_log(log), **out}
     try:
         with _metrics_lock:
@@ -659,7 +698,6 @@ def sync_homebase_base(force=False):
     already holds this exact code (fingerprint written after the last sync -- e.g. by day.sh's arm-time warm-up), it is
     ONE `cat` round-trip; otherwise the rsyncs run in parallel (sequential over the ~255ms VPN cost ~12s, which kept the
     first timed attempts of a run on the local fallback)."""
-    from concurrent.futures import ThreadPoolExecutor
     with _sync_lock:
         if _hb.get("base_synced") and not force:
             return
@@ -669,14 +707,25 @@ def sync_homebase_base(force=False):
             if r.stdout.strip() == sig:
                 _hb["base_synced"] = True
                 return
-        remote.ssh(f"mkdir -p ~/{HB_WORK}/challenges ~/.codex/skills ~/hctf")  # ~/hctf: absent on a fresh VM
-        items = [(ROOT / d, f"~/{HB_WORK}/") for d in ("hctf", "lib", "bin", "skills", ".claude") if (ROOT / d).exists()]
-        items += [(ROOT / f, f"~/{HB_WORK}/{f}") for f in ("CLAUDE.md", "AGENTS.md") if (ROOT / f).exists()]
-        with ThreadPoolExecutor(max_workers=len(items)) as ex:
-            list(ex.map(lambda it: remote.rsync_to(*it), items))
-        remote.ssh(f"rsync -a --delete ~/{HB_WORK}/skills/ ~/.codex/skills/ && cp ~/{HB_WORK}/hctf/gm.py ~/hctf/gm.py"
-                   f" && echo {sig} > ~/{HB_WORK}/.base_sig")
-        _hb["base_synced"] = True
+        _push_base(sig)
+    # The run's prewarm may have started the timed daemon BEFORE this push: it holds the previous hb_timed / hb_daemon
+    # in memory and never reloads (rehearsal D13 replay a13sota4: the new same-attempt resubmit never ran). Restart it so the
+    # next attempt runs the code just pushed. Outside _sync_lock: HbDaemon startup may itself sync (lock order).
+    if _daemon.get("d") is not None:
+        restart_hb_daemon()
+
+
+def _push_base(sig):
+    """The actual push (caller holds _sync_lock): parallel rsyncs, then the fingerprint."""
+    from concurrent.futures import ThreadPoolExecutor
+    remote.ssh(f"mkdir -p ~/{HB_WORK}/challenges ~/.codex/skills ~/hctf")  # ~/hctf: absent on a fresh VM
+    items = [(ROOT / d, f"~/{HB_WORK}/") for d in ("hctf", "lib", "bin", "skills", ".claude") if (ROOT / d).exists()]
+    items += [(ROOT / f, f"~/{HB_WORK}/{f}") for f in ("CLAUDE.md", "AGENTS.md") if (ROOT / f).exists()]
+    with ThreadPoolExecutor(max_workers=len(items)) as ex:
+        list(ex.map(lambda it: remote.rsync_to(*it), items))
+    remote.ssh(f"rsync -a --delete ~/{HB_WORK}/skills/ ~/.codex/skills/ && cp ~/{HB_WORK}/hctf/gm.py ~/hctf/gm.py"
+               f" && echo {sig} > ~/{HB_WORK}/.base_sig")
+    _hb["base_synced"] = True
 
 
 # Small files that change DURING a run and that hb_timed reads on Homebase: labels learned mid-run (vocab.json) and
@@ -711,6 +760,7 @@ def push_hot_files():
 TIMED_FWD = ("HCTF_PIPELINE_SETS", "HCTF_PIPELINE_MIN_MB", "HCTF_PIPELINE_DL", "HCTF_SOLVER_PARALLEL",
              "HCTF_UNTIMED_BUDGET")
 UNTIMED_BUDGET = float(os.environ.get("HCTF_UNTIMED_BUDGET", "60"))   # solver seconds on an untimed (no-clock) attempt
+UNTIMED_ON_HOMEBASE = os.environ.get("HCTF_UNTIMED_ON_HOMEBASE", "1") != "0"   # untimed/resume attempts next to the GM
 
 
 def timed_env(cid):
@@ -888,10 +938,18 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=
     after a local expiry" rule burned one attempt per tight mode, and the rehearsal copy run showed local fits a 7s
     462-field Mastery only by ~0.9s (GM origin ~1.3-1.5s/call from here). HCTF_GM_TRANSPORT=ssh forces Homebase."""
     if op in ("untimed", "resume"):
-        # resume = reconnecting to a live attempt that holds banked ids (mostly an untimed one): same local route.
-        # No clock (regular pool / practice continuation after the timed pool ran out): run here, never on Homebase --
-        # nothing to race, and the bytes stay local for a generalize worker.
-        res = run_timed(solver_dir, cid, op=op, timeout=max(timeout, UNTIMED_BUDGET + 60))
+        # resume = reconnecting to a live attempt that holds banked ids (mostly an untimed one). No clock, but the
+        # attempt's GM calls still dominate: rehearsal D13 replay, a script retry took 115 s locally (~25 localize submits at
+        # ~3.3 s over the public GM) vs ~0.5 s/submit next to the GM. Homebase when it is up (the failure path pulls
+        # the variant bytes back for the generalize worker either way); local is the fallback.
+        ut = max(timeout, UNTIMED_BUDGET + 60)
+        if UNTIMED_ON_HOMEBASE and AUTO_HOMEBASE and remote.gm_transport() == "local" and _homebase_ready(log):
+            res = run_hb_timed(solver_dir, cid, op=op, timeout=ut)
+            if str(res.get("result", "")).lower() != "exec_error" or res.get("gm_rate_limited"):
+                res.setdefault("routed", "homebase (untimed)")
+                return res
+            log(f"[{cid}] Homebase untimed run failed ({str(res.get('detail'))[:120]}); falling back to local")
+        res = run_timed(solver_dir, cid, op=op, timeout=ut)
         res.setdefault("routed", "local (untimed)")
         return res
     if remote.gm_transport() != "local":
@@ -905,6 +963,10 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=
         return res
     win = known_window(cid)
     tight = win is None or win <= TIGHT_WINDOW
+    if win is None:
+        # no known clock (HCTF_RUN_FOR_TIME=auto -> the untimed regular pool): the attempt may localize for up to
+        # HCTF_LOCALIZE_UNTIMED_S; a 60 s call timeout cut it off and re-ran it over ssh + locally (a13sota6: 12 min)
+        timeout = max(timeout, UNTIMED_BUDGET + 60)
     if AUTO_HOMEBASE and tight and _homebase_ready(log):
         res = run_hb_timed(solver_dir, cid, op=op, timeout=timeout, on_event=on_event)
         if (str(res.get("result", "")).lower() in ("solver_incomplete", "solver_error") and res.get("missing")
@@ -1261,7 +1323,7 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60, on_event=None):
         if os.environ.get("HCTF_RUN_FOR_TIME") is not None:
             opts["HCTF_RUN_FOR_TIME"] = os.environ["HCTF_RUN_FOR_TIME"]
         try:
-            extra = {"inline_max": INLINE_PULL_MAX} if INLINE_PULL_MAX > 0 else {}
+            extra = {"inline_max": INLINE_PULL_MAX, "inline_z": True} if INLINE_PULL_MAX > 0 else {}
             if EARLY_GENERALIZE and on_event is not None:
                 extra["on_event"] = _early_handler(cid, on_event)
                 opts["HCTF_EARLY_GENERALIZE"] = "1"
@@ -1401,7 +1463,12 @@ def write_inline(inline, local):
     for name, b64 in inline.items():
         if "/" in name or name.startswith("."):
             raise ValueError(f"bad inline name {name!r}")
-        (local / name).write_bytes(base64.b64decode(b64))
+        if b64.startswith("z:"):   # zlib-packed by a daemon that got inline_z (hb_daemon._inline_bytes)
+            import zlib
+            data = zlib.decompress(base64.b64decode(b64[2:]))
+        else:
+            data = base64.b64decode(b64)
+        (local / name).write_bytes(data)
     return sorted(n for n in inline if not n.endswith(".json"))
 
 

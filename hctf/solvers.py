@@ -346,11 +346,28 @@ def add_case(sdir, name, contract, artifacts, expected):
 VERIFIED_GREEN = os.environ.get("HCTF_VERIFIED_GREEN", "1") != "0"
 
 
-def test_solver(sdir, timeout=120, parallel=min(8, os.cpu_count() or 4)):
+def targets_pass(sdir, targets, fill=(), timeout=8):
+    """Cheap pre-check for the generalize green watchers: do the TARGET cases pass and the FILL cases come out complete?
+    Only then is the whole corpus worth replaying (rehearsal D13 replay: up to 4 full suites at once on every edit, most of
+    them on code that still failed its target). True when there is nothing to pre-check."""
+    names = set(targets) | set(fill)
+    if not names:
+        return True
+    res = test_solver(sdir, timeout=timeout, cases=sorted(names))
+    by = {r["case"]: r for r in res}
+    if any(not (by.get(t) or {}).get("ok") for t in targets):
+        return False
+    return all((by.get(f) or {}).get("total") and by[f].get("answered") == by[f].get("total") and not by[f].get("error")
+               for f in fill)
+
+
+def test_solver(sdir, timeout=120, parallel=min(8, os.cpu_count() or 4), cases=None):
     """Run the solver on every case (cases in parallel: they are independent; replay run 2 spent 141s replaying a
     slow solver's cases one by one). Returns list of {case, ok, seconds, diff/error}, in case-name order.
     Also verified_n (GM-verified fields), rejected_hits (GM-rejected values produced again, gm_feedback.json) and
-    fully_verified (every asked field has a verified answer)."""
+    fully_verified (every asked field has a verified answer).
+    `cases`: only case names matching any of these names / fnmatch globs (None = all) -- the generalize watchers and
+    `hctf solver-test --case` test the target cases first instead of the whole corpus on every edit."""
     from concurrent.futures import ThreadPoolExecutor
 
     def one(case):
@@ -376,7 +393,11 @@ def test_solver(sdir, timeout=120, parallel=min(8, os.cpu_count() or 4)):
                 "answered": answered, "total": len(ids),
                 "verified_n": len(expected), "rejected_hits": len(hits), "rejected_got": hits,
                 "fully_verified": bool(ids) and set(ids) <= set(expected)}
+    pats = list(cases) if cases is not None else None
     cases = sorted((Path(sdir) / "cases").glob("*/"))
+    if pats is not None:
+        import fnmatch
+        cases = [c for c in cases if any(fnmatch.fnmatchcase(c.name, p) for p in pats)]
     with ThreadPoolExecutor(max_workers=max(1, parallel)) as ex:
         return list(ex.map(one, cases))
 
@@ -459,7 +480,8 @@ def _lane_known_fields(lane):
     return known
 
 
-def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6, limit=None, by_question=True):
+def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6, limit=None, by_question=True,
+               rank=None):
     """Run every solver of `lane` (+ any question-text match) on the FULL contract, in parallel, and merge per field.
     Returns {"high": {aid: v}, "spec": {aid: v}, "source": {aid: sdir}, "runs": {sdir: (n_answered, err, secs)},
              "best": sdir|None}. high = some solver whose own GM-verified cases contain that answer_id produced it
@@ -475,7 +497,13 @@ def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6
         except Exception:  # noqa: BLE001 - question index is optional here
             pass
     cands = sorted((c for c in cands if Path(c).resolve() not in excl), key=_day_key, reverse=True)
-    if limit:
+    if limit and rank and len(cands) > limit:
+        # rank = {solver dir: similarity} (hctf/retrieval.py): the newest solver always runs (a cumulative lane's
+        # latest already covers the earlier families); the other slots go to the most similar past challenges.
+        # Merge precedence below stays newest-first.
+        rest = sorted(cands[1:], key=lambda c: (rank.get(Path(c).resolve(), 0.0), _day_key(c)), reverse=True)
+        cands = sorted([cands[0]] + rest[:limit - 1], key=_day_key, reverse=True)
+    elif limit:
         cands = cands[:limit]   # newest first: a cumulative lane's latest solver already covers the earlier families
     cands = lane_dirs + [c for c in cands if c not in lane_dirs]   # the lane solver first, never sliced away
     if not cands or not ids:

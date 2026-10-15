@@ -19,6 +19,20 @@ transform / carrier / wrapper name or order). Other variants and Mastery sets dr
 compound name: split it into its parts and accept every combination the solver or `lib.*` already knows), check the
 same-family artifacts of EVERY case, then stop.
 
+LABEL-ONLY REJECTIONS (every wrong field is a closed-vocab label -- control / expansion / format / ... -- and the GM's
+accepted value may even CONTRADICT an older GM-verified case on bytes that look identical): do NOT investigate why the
+grader's choice changed (question-text diffs, contract fields, archive metadata, dates -- a replay worker spent 6 of 8.5
+minutes on that and found nothing). The GM-verified labels in every case's expected.json ARE the truth. Fit ONE rule on
+byte-observable features (the construct's syntax, its guard/wrapper, the fragment pool, the join) that reproduces EVERY
+verified label across ALL cases at once -- start from the harness's LABEL TABLE above (GM label vs solver output for
+every case: do not re-tabulate it), add only the byte features it lacks, then pick the smallest feature set that
+separates them. Never gate on dates, `started_at`, attempt ids or case names. Make your first solver edit within ~10
+tool calls.
+
+ITERATE FAST: while fixing, test only the failing cases -- `hctf solver-test {base} --case 'variant-*' --timeout 20`
+(repeatable `--case NAME_OR_GLOB`; a few seconds instead of the whole corpus) -- and run the full `hctf solver-test
+{base}` once at the end. The harness ends you the moment the target cases pass with nothing else broken.
+
 The timed variants use the SAME concept as the Single Solve but differ in the bytes: different file names, keys, encoding order/depth, an added per-line or per-file prefix/wrapper, archive wrappers, extra Mastery sets, or a question carried over from an earlier day. The organizers state Time Trial / Mastery hand out "new, dynamic variations/mutations" and reward solvers that handle "new unseen effects": an ESCALATED variant can add whole field families (D7 metadata TT: 1 -> 11 fields, incl. `d04-`/`d05-`/`d06-` carry-overs -- the verdict above names the earlier day's solver to adapt when that happens). One variant just beat the solver; the clock was too short to fix it live.
 
 IMPORTANT: the live attempt did NOT succeed, so the current solver is WRONG or INCOMPLETE for this variant —
@@ -38,8 +52,8 @@ Field-label playbook for this lane (use the RULE to spell any rejected synthetic
 Do this:
 1. Read the failing `variant-*` case's artifacts and contract. For EACH answer_id, derive the correct value
    independently from the bytes (decode/parse/decrypt/compute). Do not assume the solver's current value is right.
-2. Write those derived answers into the case's `expected.json` (so it becomes a real regression test), then
-   generalize `solve.py` to reproduce them AND still pass every other case — detect structure, never hard-code
+2. Record those derived answers in `{solver_dir}/NOTES.md` (NOT in `expected.json` -- it is GM-verified only and the
+   harness restores any edit), then generalize `solve.py` to reproduce them AND still pass every other case — detect structure, never hard-code
    this variant's values. Reuse `lib/*` but do not edit it (other workers import it concurrently): list new helpers and
    confirmed GM vocabulary under `## Proposed lib additions` in `{solver_dir}/NOTES.md`; the post-run ratchet merges them.
    ALWAYS time-box every solver run (`timeout 5 python3 solve.py ...` / `timeout 20 hctf solver-test`): a too-slow

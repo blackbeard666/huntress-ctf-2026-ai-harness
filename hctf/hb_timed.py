@@ -551,73 +551,168 @@ def _label_first(group, answers, vocab):
 def _localize(cid, answers, groups, per_set, body, out):
     """Window permitting, binary-search the wrong answer_ids inside each failed set (subset submits on the SAME
     attempt), then try the field's other known labels (lib/vocab.json). Reports what the GM verified so the
-    variant becomes a regression case: out["verified"] holds only answers the GM accepted on this attempt."""
+    variant becomes a regression case: out["verified"] holds only answers the GM accepted on this attempt.
+    Failed sets are localized in PARALLEL (HCTF_LOCALIZE_PARALLEL threads; sets are independent and the per-set submit
+    already runs concurrently over the same keep-alive pool) -- a13sota7: a 5-set script Mastery spent its whole budget
+    on sets 1-2 one after another and fixed nothing in-window."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    lock = threading.Lock()
+    state = {"complete": True}
+    unjudged, ok_fields, fixed = [], set(), {}
+    t_loc = time.time()
+
     def ok(res):
-        return str(res.get("result", "")).lower() in ("correct", "accepted")
+        r = str(res.get("result", "")).lower()
+        if r == "correct" or r == "already_solved" or (r == "accepted" and res.get("remaining") == 0):
+            out["localize_completed_attempt"] = True   # a fix submit completed the attempt (the GM said so)
+        return r in ("correct", "accepted", "already_solved")
 
-    wrong, fixed, ok_fields = [], {}, set()
-    complete = True
-    unjudged = []
+    def budget_left():
+        # no deadline (untimed regular pool / practice): a time budget instead of none -- rehearsal D13 a13sota6: an untimed
+        # script Mastery localized 5 sets x 913 fields past the 60 s orchestrator call timeout, 4 times (12 min lost)
+        left = _deadline_left(body)
+        if left is None:
+            return float(_opt("HCTF_LOCALIZE_UNTIMED_S", "75")) - (time.time() - t_loc)
+        return left
 
-    def narrow(group):
-        nonlocal complete
+    def incomplete():
+        with lock:
+            state["complete"] = False
+
+    def narrow(group, wrong):
         if not group:
             return
-        left = _deadline_left(body)
-        if left is not None and left < 0.8:
-            complete = False
+        if budget_left() < 0.8:
+            incomplete()
             return
         res = _submit(cid, {k: answers[k] for k in group}, body, out)
         if ok(res):
-            ok_fields.update(group)
+            with lock:
+                ok_fields.update(group)
             return
         if _unjudged(res):
             # the GM judged nothing (rate_limited / non-JSON / refusal): never record these fields as wrong
-            unjudged.extend(group)
-            complete = False
+            with lock:
+                unjudged.extend(group)
+            incomplete()
             return
         if len(group) == 1:
             wrong.append(group[0])
             return
         mid = len(group) // 2
-        narrow(group[:mid])
-        narrow(group[mid:])
+        narrow(group[:mid], wrong)
+        narrow(group[mid:], wrong)
+
+    def alternatives(aid, vocab):
+        cur = answers.get(aid)
+        alts = []
+        for alt in list(vocab.get(_suffix(aid) or "", [])) + _playbook_alts(aid, cur):
+            if alt != cur and alt not in alts:
+                alts.append(alt)
+        with lock:   # the value this attempt has accepted most often so far goes first (a13sota8: 20 of 21 fixes
+            seen = {}  # were one label, tried third every time)
+            for v in fixed.values():
+                seen[v] = seen.get(v, 0) + 1
+        alts.sort(key=lambda v: -seen.get(v, 0))
+        for alt in alts:
+            if budget_left() < 0.5:
+                incomplete()
+                return
+            res = _submit(cid, {aid: alt}, body, out)
+            if ok(res):
+                with lock:
+                    fixed[aid] = alt
+                return
+            if _unjudged(res):
+                return
+            with lock:
+                out.setdefault("localize_tried", {}).setdefault(aid, []).append(alt)
+
+    def one_set(key, v, vocab):
+        """-> this set's wrong ids, in field order; fixes land in `fixed`."""
+        wrong = []
+        if v["result"] in ("correct", "accepted"):
+            with lock:
+                ok_fields.update(groups.get(key, {}))
+            return wrong
+        if v["result"] == "incorrect" and not v.get("assumed") and len(groups.get(key, {})) == 1:
+            # a one-field set judged incorrect IS that field's verdict: re-submitting it alone only repeats it
+            # (rehearsal D13 replay, warmups Mastery: 41 such submits, ~20 s of a failed attempt)
+            wrong.append(next(iter(groups[key])))
+        else:
+            for sub in _label_first(list(groups.get(key, {}).keys()), answers, vocab):
+                narrow(sub, wrong)
+        for aid in wrong:
+            alternatives(aid, vocab)
+        return wrong
 
     vocab = _vocab()
+    by_set = {}
     try:
-        for key, v in per_set.items():
-            if v["result"] in ("correct", "accepted"):
-                ok_fields.update(groups.get(key, {}))
-            else:
-                for sub in _label_first(list(groups.get(key, {}).keys()), answers, vocab):
-                    narrow(sub)
-        for aid in wrong:
-            cur = answers.get(aid)
-            alts = []
-            for alt in list(vocab.get(_suffix(aid) or "", [])) + _playbook_alts(aid, cur):
-                if alt != cur and alt not in alts:
-                    alts.append(alt)
-            for alt in alts:
-                left = _deadline_left(body)
-                if left is not None and left < 0.5:
-                    break
-                res = _submit(cid, {aid: alt}, body, out)
-                if ok(res):
-                    fixed[aid] = alt
-                    break
-                if _unjudged(res):
-                    break
-                out.setdefault("localize_tried", {}).setdefault(aid, []).append(alt)
+        keys = list(per_set)
+        par = max(1, min(int(_opt("HCTF_LOCALIZE_PARALLEL", "5")), len(keys)))
+        with ThreadPoolExecutor(max_workers=par) as ex:
+            futs = {k: ex.submit(one_set, k, per_set[k], vocab) for k in keys}
+            for k in keys:
+                by_set[k] = futs[k].result()
     except Exception as e:  # noqa: BLE001 - diagnostics only
         out["localize_error"] = repr(e)
-        complete = False
+        state["complete"] = False
+    wrong = [a for k in per_set for a in by_set.get(k, [])]
     out["wrong"] = [[a, answers.get(a)] for a in wrong]
     out["fixed"] = fixed
-    out["localize_complete"] = complete
+    out["localize_complete"] = state["complete"]
     if unjudged:
         out["localize_unjudged"] = unjudged
     out["verified"] = {**{a: answers[a] for a in ok_fields if a in answers}, **fixed}
     out["novel_labels"] = _novel(out["verified"], vocab)
+
+
+RESUBMIT_FIXED = os.environ.get("HCTF_RESUBMIT_FIXED", "1") != "0"
+
+
+def _resubmit_fixed(cid, answers, body, out):
+    """After _localize corrected EVERY wrong field on this attempt (GM-accepted alternatives in out["fixed"]): resubmit
+    the whole corrected answer set on the SAME attempt -- the GM keeps it open after an incorrect full submit and passes
+    it (verified on a rehearsal copy 2026-10-15: full submit incorrect -> single-field fix accepted (remaining 912) -> full resubmit
+    CORRECT). rehearsal D13 replays: every failed script Time Trial had all wrong labels fixed in-window and still cost a
+    generalize + retry (3-11 min each). Clock permitting; True when the attempt is now CORRECT."""
+    if not RESUBMIT_FIXED or str(out.get("result", "")).lower() != "incorrect":
+        return False
+    fixed = out.get("fixed") or {}
+    if out.get("localize_completed_attempt"):
+        # the GM itself said a localization submit completed this attempt: it is passed, nothing to resubmit
+        out.update(result="correct", resubmit_fixed="completed_by_localize", bad_sets=[],
+                   verified={**{a: v for a, v in answers.items() if v not in (None, "")}, **fixed})
+        return True
+    if not out.get("localize_complete"):
+        return False
+    wrong = [w[0] for w in out.get("wrong") or []]
+    ids = list(body.get("answer_ids") or [])
+    final = {**{a: v for a, v in answers.items() if v not in (None, "")}, **fixed}
+    if not wrong or any(a not in fixed for a in wrong) or (ids and any(a not in final for a in ids)):
+        return False
+    left = _deadline_left(body)
+    if left is not None and left < 0.6:
+        out["resubmit_fixed"] = "no clock left"
+        return False
+    try:
+        res = _submit(cid, final, body, out)
+    except OSError as e:
+        out["resubmit_fixed"] = f"no answer: {e!r}"[:160]
+        return False
+    rk = str(res.get("result", "")).lower()
+    out["resubmit_fixed"] = rk
+    # already_solved = THIS attempt was completed before the resubmit (the GM answers it only after the attempt went
+    # CORRECT -- alt 2026-10-15 probe): localization's last accepted fix finished it (a13sota5: 3 "incorrect" Time
+    # Trials were in fact passed, and each cost a generalize)
+    if rk == "already_solved" or (rk in ("correct", "accepted") and not res.get("remaining")):
+        out["result"] = "correct"
+        out["verified"] = dict(final)
+        out["bad_sets"] = []
+        return True
+    return False
 
 
 def _novel(verified, vocab):
@@ -640,6 +735,18 @@ def _solver_env():
 PIPELINE = os.environ.get("HCTF_PIPELINE_SETS", "1") == "1"
 PIPELINE_MIN_BYTES = float(os.environ.get("HCTF_PIPELINE_MIN_MB", "20")) * 1e6
 PIPELINE_DL = int(os.environ.get("HCTF_PIPELINE_DL", "3"))
+# A solver that solves Mastery sets one after another (no group_by_set / process pool anywhere in its dir -- copied
+# prior-day solvers on binary/script, SPEED.md: binary Mastery solve 8.3 s) gets the per-set runner from this size on.
+PIPELINE_SEQ_MIN_MB = float(os.environ.get("HCTF_PIPELINE_SEQ_MIN_MB", "5"))
+
+
+def _sequential_solver(solve):
+    """True when nothing in the solver's dir solves sets in parallel itself."""
+    try:
+        src = "\n".join(p.read_text(errors="replace") for p in Path(solve).parent.glob("*.py"))
+    except OSError:
+        return False
+    return not any(s in src for s in ("group_by_set", "ProcessPoolExecutor", "multiprocessing", "os.fork"))
 
 
 def _total_bytes(body):
@@ -847,8 +954,11 @@ def _attempt(a):
 
     # Large multi-set Mastery bundle (D9 binary: 5 x 31 MB = 6.6 s of download, then a 5.4 s solve): fetch the sets a
     # few at a time and solve each one the moment its delivery lands, so most of the solve hides behind the downloads.
+    min_mb = float(_opt("HCTF_PIPELINE_MIN_MB", "20"))
+    if plan and _sequential_solver(solve):
+        min_mb = min(min_mb, float(_opt("HCTF_PIPELINE_SEQ_MIN_MB", str(PIPELINE_SEQ_MIN_MB))))
     sets = (_set_plan(body, plan, ids) if _opt("HCTF_PIPELINE_SETS", "1") == "1" and plan
-            and _total_bytes(body) >= float(_opt("HCTF_PIPELINE_MIN_MB", "20")) * 1e6 else None)
+            and _total_bytes(body) >= min_mb * 1e6 else None)
     piped = None
     try:
         if sets:
@@ -946,6 +1056,7 @@ def _attempt(a):
             out["bad_sets"] = [k for k, v in per_set.items() if v["result"] == "incorrect"]
             if out["result"] == "incorrect":
                 _localize(a.cid, answers, groups, per_set, body, out)
+                _resubmit_fixed(a.cid, answers, body, out)
         out["elapsed"] = round(time.time() - t0, 2)
         out["in_window"] = round(time.time() - t_started, 2)
         return _emit(out, adir)
@@ -1006,9 +1117,10 @@ def _attempt(a):
             final = "unjudged"
     out["result"] = "correct" if all(v["result"] in ("correct", "accepted") for v in per_set.values()) and per_set else final
     out["per_set"] = per_set
+    out["bad_sets"] = [k for k, v in per_set.items() if v["result"] == "incorrect"]
     if final == "incorrect":
         _localize(a.cid, answers, groups, {k: v for k, v in per_set.items() if v["result"] != "unjudged"}, body, out)
-    out["bad_sets"] = [k for k, v in per_set.items() if v["result"] == "incorrect"]
+        _resubmit_fixed(a.cid, answers, body, out)
     out["elapsed"] = round(time.time() - t0, 2)
     out["in_window"] = round(time.time() - t_started, 2)  # excludes the pre-clock start/retry overhead
     return _emit(out, adir)
@@ -1121,7 +1233,8 @@ def _partial_submit(cid, part, body, out, setkey=_setkey):
     groups = {}
     for aid, v in part.items():
         groups.setdefault(setkey(aid), {})[aid] = v
-    _localize(cid, part, groups, {k: {"result": "incorrect"} for k in groups}, body, out)
+    # "assumed": only the WHOLE partial submit was judged incorrect, not each set (no one-field-set shortcut)
+    _localize(cid, part, groups, {k: {"result": "incorrect", "assumed": True} for k in groups}, body, out)
     out["partial_wrong"] = out.pop("wrong", [])
     out["partial_fixed"] = out.pop("fixed", {})
     out["partial_localize_complete"] = out.pop("localize_complete", False)

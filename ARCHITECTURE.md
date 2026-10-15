@@ -325,6 +325,15 @@ day in about 1:45. We report N/15 first, and an incomplete run never counts as "
    singles but bills usage credits, so it is OFF (to revisit near the CTF's end). Launching workers before the drop is
    untested.
 3. **Copied solvers and Mastery.** Prior solvers reused by the race don't adopt parallel Mastery-set handling.
+   - *2026-10-15:* `hb_timed` now runs a sequential solver (nothing in its dir uses `group_by_set` or a process pool)
+     through the per-set pipeline from 5 MB (`HCTF_PIPELINE_SEQ_MIN_MB`) instead of 20 MB. Below that,
+     per-set process startup on the 2-vCPU VM costs more than it saves.
+   - *2026-10-15, added from SOTA systems:* three new pieces, each on by default and each with an env kill switch:
+     - `hctf/duel.py` (`HCTF_DUEL`): best-of-2 local worker on brand-new singles and on the 2nd+ generalize.
+     - `hctf/coordinator.py` (`HCTF_COORDINATOR`): a tool-less Sonnet reviewer sends one targeted inbox hint to a
+       stalled worker.
+     - `hctf/retrieval.py` (`HCTF_RETRIEVAL`): past solves retrieved by artifact/question fingerprint, used in the
+       prompts and in reuse-race solver selection.
 4. **Hangs and spikes.** `_harvest_variants` calls can hang. One rehearsal account showed an unexplained 17-20 s GM
    submit spike.
 5. **The speed floor is GM round-trips.** The gap to the Hall-of-Fame leaders is now download + submit latency, not our

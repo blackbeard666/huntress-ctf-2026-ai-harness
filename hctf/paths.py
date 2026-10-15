@@ -104,6 +104,12 @@ def mode_dir(cid):
 
 
 def solver_dir(cid):
+    # A duel worker (hctf/duel.py) races the chain's own worker from a COPY of the solver: inside its process tree
+    # (hctf submit --from-solver, solver-test, the stop gate) this challenge's solver is that copy.
+    import os
+    o = os.environ.get("HCTF_SOLVER_DIR_OVERRIDE")
+    if o and os.environ.get("HCTF_BASE") == base_id(cid):
+        return Path(o)
     return challenge_root(cid) / "solver"
 
 

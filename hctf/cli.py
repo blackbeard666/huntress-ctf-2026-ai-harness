@@ -812,10 +812,18 @@ def is_complete(cid):
 
 def c_solver_test(a):
     """Refresh the Single Solve regression case from confirmed answers, then replay every case."""
-    from . import orchestrate
+    from . import orchestrate, solvers
     base = paths.base_id(a.id)
-    ok, res = orchestrate.ensure_case_and_test(base, paths.solver_dir(base))
-    emit({"ok": ok, "solver": str(paths.solver_dir(base).relative_to(ROOT)), "results": res})
+    sdir = paths.solver_dir(base)
+    pats = getattr(a, "case", None)
+    if pats or getattr(a, "timeout", None):
+        # targeted iteration (generalize workers): only the named / globbed cases, optional per-case timeout
+        orchestrate.ensure_case_and_test(base, sdir, full=False)
+        res = solvers.test_solver(sdir, timeout=a.timeout or 120, cases=pats or None)
+        ok = bool(res) and all(r["ok"] for r in res)
+    else:
+        ok, res = orchestrate.ensure_case_and_test(base, sdir)
+    emit({"ok": ok, "solver": str(sdir.relative_to(ROOT)), "results": res})
     return 0 if ok else 1
 
 
@@ -1105,7 +1113,18 @@ def c_solutions(a):
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines))
     print(f"wrote {out.relative_to(ROOT)} ({total} challenges across {len(by_day)} days)")
+    from . import retrieval   # the machine-readable twin the workers' prompts are retrieved from
+    rows = retrieval.build_index()
+    print(f"wrote {retrieval.INDEX.relative_to(ROOT)} ({len(rows)} challenges with a solver)")
     return 0
+
+
+def c_feed(a):
+    from . import feed
+    if not a.day and not a.log:
+        print("give --day N or --log PATH", file=sys.stderr)
+        return 2
+    return feed.main(day=a.day, log=a.log, from_start=a.from_start, follow_=not a.no_follow, heartbeat=a.heartbeat)
 
 
 def c_timeline(a):
@@ -1209,7 +1228,10 @@ def main(argv=None):
     ps.add_argument("--from-solver", action="store_true", help="submit what the challenge's solve.py emits")
     sub.add_parser("openapi")
     sub.add_parser("triage", help="deterministic no-LLM triage of a mode's artifacts").add_argument("id")
-    sub.add_parser("solver-test", help="refresh + replay the solver's regression cases").add_argument("id")
+    pst = sub.add_parser("solver-test", help="refresh + replay the solver's regression cases")
+    pst.add_argument("id")
+    pst.add_argument("--case", action="append", help="only cases matching this name/glob (repeatable), e.g. 'variant-*'")
+    pst.add_argument("--timeout", type=float, help="per-case timeout in seconds (default 120)")
     psh = sub.add_parser("speed-harden", help="off-clock speed generalize for solvers whose slowest case is over budget")
     psh.add_argument("id", nargs="?")
     psh.add_argument("--day", type=int)
@@ -1268,6 +1290,12 @@ def main(argv=None):
     ptl = sub.add_parser("timeline", help="per-chain T+ per mode, attempts, generalize cycles, LLM vs overhead")
     ptl.add_argument("--day", type=int)
     ptl.add_argument("--log", help="a dayNN.log path (default .run/dayNN.log)")
+    pfd = sub.add_parser("feed", help="live milestone feed of a run (solved k/N, blocked, generalize, duel, hints)")
+    pfd.add_argument("--day", type=int)
+    pfd.add_argument("--log", help="a run log path (default .run/dayNN.log)")
+    pfd.add_argument("--from-start", action="store_true", help="also print the milestones already in the log")
+    pfd.add_argument("--no-follow", action="store_true", help="print what is there and exit")
+    pfd.add_argument("--heartbeat", type=float, default=60.0, help="status line every N seconds while running")
     phf = sub.add_parser("hof", help="Hall of Fame speed board: our rank/ms vs #1 per challenge + day sums (public)")
     phf.add_argument("--day", type=int)
     phf.add_argument("--save", action="store_true", help="also snapshot the board to reference/hof/")
@@ -1291,7 +1319,7 @@ def main(argv=None):
           "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
           "reconcile": c_reconcile, "solutions": c_solutions,
           "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout,
-          "timeline": c_timeline, "cost": c_cost, "hof": c_hof}[a.cmd]
+          "timeline": c_timeline, "cost": c_cost, "hof": c_hof, "feed": c_feed}[a.cmd]
     try:
         return fn(a)
     except remote.Unreachable as e:

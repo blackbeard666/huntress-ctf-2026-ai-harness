@@ -11,7 +11,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-if os.environ.get("HCTF_STAGE") != "single" or not os.environ.get("HCTF_CHAL"):
+STAGE = os.environ.get("HCTF_STAGE")
+# generalize workers get inbox messages too (coordinator hints, hctf/coordinator.py); the timed nudges stay single-only
+if STAGE not in ("single", "generalize") or not os.environ.get("HCTF_CHAL"):
     sys.exit(0)
 
 msgs = []
@@ -25,7 +27,7 @@ if os.environ.get("HCTF_INBOX", "1") != "0" and os.environ.get("HCTF_CHAL_DIR"):
 
 start = float(os.environ.get("HCTF_WORKER_START", time.time()))
 minutes = (time.time() - start) / 60
-if minutes >= 10:                 # the cli import (~0.2 s) only once a nudge can actually fire
+if STAGE == "single" and minutes >= 10:   # the cli import (~0.2 s) only once a nudge can actually fire
     from hctf import cli, paths  # noqa: E402
     cid = os.environ["HCTF_CHAL"]
     mdir = paths.mode_dir(cid)

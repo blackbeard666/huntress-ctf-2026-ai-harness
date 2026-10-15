@@ -140,12 +140,33 @@ class Zygotes:
             z.close()
 
 
-def _inline_bytes(cid, out, cap):
+def _inline_bytes(cid, out, cap, z=False):
     """{file name: base64} of a FAILED attempt's download dir (contract.json + deliveries + result.json) when the
     whole dir is <= cap bytes and holds THIS attempt: the client then skips its post-failure pull (an ssh listing +
-    byte-range fetches, or a full rsync: D13 warmups Mastery's 31 KB zip went the rsync way). None otherwise."""
+    byte-range fetches, or a full rsync: D13 warmups Mastery's 31 KB zip went the rsync way). None otherwise.
+    z (client sent inline_z): each value is "z:" + base64(zlib(bytes)) and the cap applies to the COMPRESSED size --
+    rehearsal D13 replay: a 607 KB contract.json (+97 KB zip) missed the 256 KB cap and every failed script attempt paid a
+    12-13 s scoped pull over the VPN; the contract JSON compresses ~10x."""
     import base64
     import re
+    if z:
+        import zlib
+        r = str(out.get("result", "")).lower()
+        failed = r in ("solver_incomplete", "solver_error", "incorrect", "accepted") or (
+            r == "exec_error" and out.get("solver_too_slow") and not out.get("clock_short"))
+        if not cap or not failed or not out.get("attempt_id"):
+            return None
+        adir = HW / ".run" / "tmp-timed" / re.sub(r"[^A-Za-z0-9]+", "_", cid)
+        try:
+            files = [f for f in adir.iterdir() if f.is_file()]
+            if json.loads((adir / "contract.json").read_text()).get("attempt_id") != out.get("attempt_id"):
+                return None
+            packed = {f.name: zlib.compress(f.read_bytes(), 6) for f in files}
+            if sum(len(v) for v in packed.values()) > cap:
+                return None
+            return {k: "z:" + base64.b64encode(v).decode() for k, v in packed.items()}
+        except (OSError, ValueError):
+            return None
     r = str(out.get("result", "")).lower()
     failed = r in ("solver_incomplete", "solver_error", "incorrect", "accepted") or (
         r == "exec_error" and out.get("solver_too_slow") and not out.get("clock_short"))
@@ -238,7 +259,7 @@ def main():
 
                     def on_event(ev, rid=rid, cid=req["cid"], cap=cap):
                         msg = {"id": rid, "event": ev.get("event"), "data": ev}
-                        inline = _inline_bytes(cid, dict(ev, result="solver_incomplete"), cap)
+                        inline = _inline_bytes(cid, dict(ev, result="solver_incomplete"), cap, z=bool(req.get("inline_z")))
                         if inline:
                             msg["_inline"] = inline
                         send(msg)
@@ -246,7 +267,7 @@ def main():
                                            min_left=req.get("min_left"), opts=req.get("opts"), on_event=on_event)
                 out["daemon_s"] = round(time.time() - t, 2)
                 log(f"attempt {req['cid']}: {out.get('result')} elapsed={out.get('elapsed')}")
-                inline = _inline_bytes(req["cid"], out, int(req.get("inline_max") or 0))   # absent (old client) -> none
+                inline = _inline_bytes(req["cid"], out, int(req.get("inline_max") or 0), z=bool(req.get("inline_z")))   # absent (old client) -> none
                 if inline:
                     out["_inline"] = inline
                 send({"id": rid, "ok": True, "result": out})

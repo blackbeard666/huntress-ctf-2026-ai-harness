@@ -57,6 +57,71 @@ def _prev_banked(prev):
     return any(str(t.get("result", "")).lower() in ("correct", "accepted") for t in prev.get("inwindow_fill") or [])
 
 
+def label_only_failure(wrong):
+    """True when every GM-rejected field is a closed-vocab LABEL family (control / expansion / format / ...): the case
+    where a generalize worker tends to hunt for why the grader changed instead of fitting a rule (rehearsal D13 replay: 8.5 min,
+    then an overfit date-gated rule). Gets the LABEL-ONLY prompt cue and a duel from the first generalize."""
+    ids = [a for a, _ in (wrong or [])]
+    if not ids:
+        return False
+    try:
+        from lib.playbook import field_family
+        from .labels import CACHEABLE_FAMILIES
+    except Exception:  # noqa: BLE001
+        return False
+    return all(field_family(a) in CACHEABLE_FAMILIES for a in ids)
+
+
+def label_table(sdir, res, wrong, cap=60):
+    """The table a label-only generalize worker otherwise spends 2-3 minutes scripting (rehearsal D13 replays: 140-190 s of
+    tabulation before the first edit). From the baseline test_solver results (`res`) + every case's expected.json:
+    per failing label family, the GM-verified label distribution over ALL cases, then every disagreement grouped by
+    (GM label, solver output) with the cases/fields it covers. "" when nothing applies."""
+    try:
+        from lib.playbook import field_family
+    except Exception:  # noqa: BLE001
+        return ""
+    fams = {field_family(a) for a, _ in (wrong or [])}
+    if not fams:
+        return ""
+    dist = {}
+    for exp in sorted(Path(sdir).glob("cases/*/expected.json")):
+        try:
+            e = json.loads(exp.read_text())
+        except (OSError, ValueError):
+            continue
+        for a, v in e.items():
+            f = field_family(a)
+            if f in fams:
+                dist.setdefault(f, {}).setdefault(str(v), 0)
+                dist[f][str(v)] += 1
+    groups = {}
+    for r in res or []:
+        for a, d in (r.get("diff") or {}).items():
+            f = field_family(a)
+            if f in fams:
+                groups.setdefault((f, str(d.get("expected")), str(d.get("got"))), []).append(f"{r['case']}:{a}")
+    if not dist and not groups:
+        return ""
+    out = ["LABEL TABLE (harness-computed from every case's GM-verified expected.json and the CURRENT solver's output; "
+           "do not re-tabulate):"]
+    for f, d in sorted(dist.items()):
+        out.append(f"    `{f}` GM labels over all cases: " + ", ".join(f"{k} x{n}" for k, n in sorted(d.items(),
+                                                                                                    key=lambda x: -x[1])))
+    if groups:
+        out.append("    disagreements (GM-verified label <- solver output: case:answer_id ...):")
+        for (f, want, got), items in sorted(groups.items(), key=lambda x: -len(x[1])):
+            out.append(f"      [{f}] GM {want!s} <- solver {got!s}  ({len(items)}): " + ", ".join(items[:6])
+                       + (" ..." if len(items) > 6 else ""))
+            if len(out) >= cap:
+                out.append("      ... (truncated)")
+                break
+    else:
+        out.append("    (the current solver already matches every verified label in the corpus: the miss is only in "
+                   "the new variant's bytes)")
+    return "\n".join(out)
+
+
 def _resume_need(prev):
     """Seconds of clock a resumed attempt must still have to be worth running: the last run's in-window phases
     (download + solve + submit) + 1.5 s, at least 3 s (half the window when no phases are known)."""
@@ -99,6 +164,15 @@ RACE_FORMAT_GATE = os.environ.get("HCTF_RACE_FORMAT_GATE", "1") != "0"
 # What the race learned (banked count, remaining ids, hint + judged-wrong values) reaches the worker: in the go text if
 # the race finished first, else via the inbox (hctf/inbox.py -> .claude/hooks/nudge.py on its next tool call).
 INBOX = os.environ.get("HCTF_INBOX", "1") != "0"
+# Past-solve retrieval by challenge fingerprint (hctf/retrieval.py): a "Similar past solves" block in the single and
+# generalize prompts + similarity-ranked reuse-race solver selection. Index rebuilt in the background at run start.
+RETRIEVAL = os.environ.get("HCTF_RETRIEVAL", "1") != "0"
+RETRIEVAL_K = int(os.environ.get("HCTF_RETRIEVAL_K", "3"))
+# Label scouting (Chain._label_scout): extra Time Trial variants before the generalize of a label-only failure. 0 = off.
+LABEL_SCOUT_ROUNDS = int(os.environ.get("HCTF_LABEL_SCOUT_ROUNDS", "0"))   # OFF: a13sota3 -- contradictory labels across variants -> rejected generalizes
+FAMILY_EVIDENCE_WAIT = float(os.environ.get("HCTF_FAMILY_EVIDENCE_WAIT", "10"))   # generalize prompt: family-probe wait
+# LLM coordinator (hctf/coordinator.py): reads stuck workers' traces and posts one targeted hint to their inbox.
+COORDINATOR = os.environ.get("HCTF_COORDINATOR", "1") != "0"
 # The go no longer waits for the prior-solver dry run (binary go came at T+16-22 behind it); the dry-run note follows
 # through the inbox when it finishes. The staged-solver copy is still awaited (the prompt promises it is in place).
 GO_EARLY = os.environ.get("HCTF_GO_EARLY", "1") != "0"
@@ -1019,8 +1093,15 @@ class Chain:
         self.sdir = paths.solver_dir(base)
         self.root = paths.challenge_root(base)
         self.only_modes = only_modes
+        self._genx()
         (self.root / "meta.json").write_text(json.dumps({"base": base, "lane": self.lane, "name": self.name,
                                      "ids": {m: e["id"] for m, e in self.entries.items()}}, indent=2, ensure_ascii=False))
+
+    def _genx(self):
+        """(lock, {cid: generalize count}), created lazily (tests build Chain without __init__). The lock picks ONE
+        generalize winner: the chain's own worker or the duel (hctf/duel.py, which reads the same `_gen_lock`)."""
+        d = self.__dict__
+        return d.setdefault("_gen_lock", threading.Lock()), d.setdefault("_gen_count", {})
 
     # -- workers
     def _worker_env(self, cid, stage):
@@ -1182,8 +1263,7 @@ class Chain:
         # ONE fast parallel replay (8s/case) serves both the problem list and the transactional baseline (was a full
         # 120s/case run here plus a second baseline run: 141s before the worker spawned, replay run 2).
         ensure_case_and_test(paths.base_id(cid), self.sdir, full=False)
-        res = (solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT)
-               if (self.sdir / "solve.py").exists() else [])
+        res = self._baseline_results()
         self._pre_res = res
         for r in (res or []):
             if not r.get("ok"):
@@ -1219,6 +1299,15 @@ class Chain:
         carry = carry_over_note(self.lane, self.sdir, [a for a, _ in (wrong or [])])
         if carry:
             gm_wrong += "\n  - " + carry
+        if label_only_failure(wrong):
+            gm_wrong += ("\n  - LABEL-ONLY: every wrong field is a closed-vocab label -- follow LABEL-ONLY REJECTIONS below "
+                         "(fit one byte-observable rule to every case's verified labels; no root-cause hunt, no date gates)")
+            try:
+                lt = label_table(self.sdir, res, wrong)
+                if lt:
+                    gm_wrong += "\n  - " + lt
+            except Exception as e:  # noqa: BLE001 - advisory
+                say(f"[{cid}] label table note: {e}")
         if d.get("accepted"):
             acc = d["accepted"]
             gm_wrong += (f"\n  - the GM ACCEPTED these {len(acc)} answered field(s) on this attempt -- keep producing them: "
@@ -1312,6 +1401,14 @@ class Chain:
             if prof:
                 gm_wrong += ("\n  - HOT PATH (harness-run profile, sorted by cumulative time -- start here, no need to re-profile):\n"
                              + "\n".join("    " + ln for ln in prof.splitlines()))
+        if RETRIEVAL:
+            try:
+                from . import retrieval
+                rnote = retrieval.note_for(cli.cdir(paths.base_id(cid)), self.lane, self.root.name, k=2)
+                if rnote:
+                    gm_wrong += "\n  - (FYI) " + rnote.strip().replace("\n", "\n    ")
+            except Exception as e:  # noqa: BLE001 - advisory
+                say(f"[{cid}] retrieval note: {e}")
         left_att = (timed.last_result(cid) or {}).get("attempts_remaining")
         low_budget = left_att is not None and left_att < HARVEST_MIN_ATTEMPTS
         if low_budget and HARVEST_VARIANTS:
@@ -1329,7 +1426,7 @@ class Chain:
             ftxt = ""
             if fam is not None:
                 try:
-                    ftxt = fam.result(timeout=60)
+                    ftxt = fam.result(timeout=FAMILY_EVIDENCE_WAIT)   # ~2 s typical; never hold the launch for long
                 except Exception as e:  # noqa: BLE001
                     ftxt = f"(codec-family probe note: {e})"
             evidence = failing_evidence(self.sdir, mode, [a for a, _ in (wrong or [])], lane=self.lane,
@@ -1375,13 +1472,30 @@ class Chain:
                                       args=(cid, HARVEST_VARIANTS, fill, done, harvesting))
             reaper.start()
         expected_before = self._exp_before = self._expected_snapshot()   # (_early_join folds late GM verdicts in)
+        gcount = self._genx()[1]
+        gcount[cid] = gcount.get(cid, 0) + 1
+        gen_duel = None
+        if not harvest and (targets or fill) and STOP_WHEN_READY:
+            lab = label_only_failure(wrong)
+            gen_duel = self._maybe_start_gen_duel(cid, prompt, targets, fill, bool(d.get("solver_too_slow")), green,
+                                                  first=lab or bool(d.get("solver_too_slow")), quick=lab)
         try:
             self.run_worker(cid, "generalize", prompt, GENERALIZE_TIMEOUT, stop=green)
         finally:
             self._restore_expected(cid, expected_before)
             done.set()
+            if gen_duel is not None:
+                gen_duel.stop()
             if watch.is_alive():
                 watch.join()
+            if gen_duel is not None and gen_duel.won:
+                try:
+                    gen_duel.adopt_into(self.sdir, log=say)
+                    # the duel's watcher ran the full suite on exactly this code (copy2 keeps mtimes): the accept step
+                    # reuses it when the case set matches too, else re-runs (rehearsal D13 replay: 3-6 s per duel win)
+                    self._green_res = getattr(gen_duel, "green_res", None)
+                except Exception as e:  # noqa: BLE001 - the accept step below still judges whatever is there
+                    say(f"[{cid}] duel adopt note: {e}")
             if reaper:
                 # Bounded: a GM call stuck inside the harvest must not hold the accept + retry (blind3: ~15 s after the
                 # worker had already exited). A late variant just lands as one more case for the next cycle.
@@ -1588,6 +1702,9 @@ class Chain:
                 continue
             checked = key
             try:
+                # targets / fill first: the whole corpus only once they pass (most edits still fail their target)
+                if not solvers.targets_pass(self.sdir, targets, fill, timeout=BASELINE_CASE_TIMEOUT):
+                    continue
                 res = solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT)
             except Exception:  # noqa: BLE001
                 continue
@@ -1611,10 +1728,13 @@ class Chain:
                         say(f"[{self.base}] generalize: unverified variant(s) {sorted(fill)[:3]} complete, but no "
                             "GM-verified target to confirm them -> letting the worker finish")
                     continue
-                self._green_res = (m, self._case_names(), res)  # _accept_or_restore reuses it (same code + cases)
-                say(f"[{self.base}] generalize green ({sorted(targets | set(fill))[:3]} pass/complete, no regressions) "
-                    "-> ending the worker")
-                green.set()
+                with self._genx()[0]:
+                    if green.is_set():
+                        return   # the duel went green first
+                    self._green_res = (m, self._case_names(), res)  # _accept_or_restore reuses it (same code + cases)
+                    say(f"[{self.base}] generalize green ({sorted(targets | set(fill))[:3]} pass/complete, no "
+                        "regressions) -> ending the worker")
+                    green.set()
                 return
 
     # -- transactional generalize: a worker that is killed / times out / breaks old cases must never leave a
@@ -1622,12 +1742,30 @@ class Chain:
     def _snap_dir(self):
         return self.root / ".generalize-snapshot"
 
+    def _baseline_results(self):
+        """Pre-generalize baseline (every case, BASELINE_CASE_TIMEOUT). When the last accepted generalize ran the suite
+        on THIS exact solver code, reuse those results and run only the cases added since (the failed attempt's
+        auto-* / variant-*): rehearsal D13 replay, the full baseline sat 3-6 s on the path to every worker launch."""
+        if not (self.sdir / "solve.py").exists():
+            return []
+        acc = getattr(self, "_accepted_res", None)
+        if acc and acc[0] == self._solver_mtimes():
+            old = {r.get("case"): r for r in acc[2]}
+            names = self._case_names()
+            new = [n for n in names if n not in old]
+            fresh = {r["case"]: r for r in (solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT, cases=new)
+                                            if new else [])}
+            return [fresh.get(n) or old[n] for n in names if n in fresh or n in old]
+        return solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT)
+
     def _snapshot_solver(self):
         snap = self._snap_dir()
         if snap.exists():
             shutil.rmtree(snap)
         if self.sdir.exists():
-            shutil.copytree(self.sdir, snap, ignore=shutil.ignore_patterns("__pycache__"))
+            # case artifacts hard-linked (write-once GM bytes; the script corpus is ~30 MB): the snapshot sits on the
+            # critical path between "blocked" and the generalize worker's launch
+            shutil.copytree(self.sdir, snap, ignore=shutil.ignore_patterns("__pycache__"), copy_function=_link_or_copy)
         # Baseline: which cases pass BEFORE the worker. Unverified variant cases are legitimately red; the bar is
         # "nothing that passed may break", not "everything green".
         try:
@@ -1704,6 +1842,7 @@ class Chain:
         passed = {r.get("case") for r in (res or []) if r.get("ok")}
         broken = sorted(getattr(self, "_baseline", set()) - passed)
         if res and not broken:
+            self._accepted_res = (self._solver_mtimes(), self._case_names(), res)   # next baseline reuses it
             shutil.rmtree(snap)
             gained = sorted(passed - getattr(self, "_baseline", set()))
             if gained:
@@ -1732,8 +1871,12 @@ class Chain:
             if not ids or not art or cli.is_complete(cid):
                 return
             # same-lane newest N only (no question-text index: r11b spent 18-24 s building it under drop load)
+            rank = None
+            if RETRIEVAL:
+                from . import retrieval
+                rank = retrieval.solver_rank(cli.cdir(cid), self.lane, contract) or None
             plan = solvers.reuse_plan(contract, art, self.lane, exclude=[self.sdir], timeout=REUSE_RACE_TIMEOUT,
-                                      limit=REUSE_RACE_SOLVERS, by_question=False)
+                                      limit=REUSE_RACE_SOLVERS, by_question=False, rank=rank)
             high, spec = dict(plan["high"]), dict(plan["spec"])
             dropped = self._race_gate(contract, high, spec) if RACE_FORMAT_GATE else []
             merged = {a: high.get(a, spec.get(a)) for a in ids if a in high or a in spec}
@@ -2086,6 +2229,47 @@ class Chain:
             ev = getattr(self, "_shadow_done", None)
             if ev is not None:
                 ev.set()   # ends the Homebase shadow (its thread kills the remote worker and books the cost)
+            d = getattr(self, "_duel", None)
+            if d is not None:
+                d.stop()   # ends the local duel worker (hctf/duel.py)
+
+    def _maybe_start_duel(self, cid, prompt):
+        """Second, differently-configured local Single Solve worker on a copy of the solver (hctf/duel.py). Launched
+        after duel.DELAY s -- skipped if the reuse race (or anything else) completed the single by then."""
+        from . import duel
+        ok, why = duel.eligible(self.lane)
+        if not ok:
+            say(f"[{cid}] no duel: {why}")
+            return
+        if not hasattr(self, "_ready_lock"):
+            self._ready_lock = threading.Lock()
+        d = duel.Duel(self, cid, "single", prompt, SINGLE_TIMEOUT, cases=False)
+        self._duel = d
+        d.start(delay=duel.DELAY, skip=lambda: cli.is_complete(cid), log=say, wake=getattr(self, "_race_done", None))
+        threading.Thread(target=d.watch_single, name=f"duel-watch-{self.base}", daemon=True,
+                         args=(lambda: (getattr(self, "_cur_ready", None), self._ready_lock), say)).start()
+
+    def _maybe_start_gen_duel(self, cid, prompt, targets, fill, need_fast, green, first=False, quick=False):
+        """From the (duel.GEN_AFTER+1)-th generalize of this mode on -- or the FIRST one when `first` (label-only or
+        speed-only failures: the high-variance cases, rehearsal D13 replay) -- a second generalize worker on a copy of the
+        solver + cases; the first to go green wins (D12-D14 warmups Mastery: 2 serial generalizes per day)."""
+        from . import duel
+        if duel.GEN_AFTER < 0 or (self._genx()[1].get(cid, 0) <= duel.GEN_AFTER and not (first and duel.GEN_FIRST)):
+            return None
+        ok, why = duel.eligible(self.lane)
+        if not ok:
+            say(f"[{cid}] no generalize duel: {why}")
+            return None
+        try:
+            d = duel.Duel(self, cid, "generalize", prompt, GENERALIZE_TIMEOUT, cases=True,
+                          note_extra=duel.QUICK_FIX_NOTE if quick else "")
+            d.start(log=say)
+            threading.Thread(target=d.watch_green, name=f"duel-green-{self.base}", daemon=True,
+                             args=(set(targets), set(self._baseline), need_fast, fill, green, say)).start()
+            return d
+        except Exception as e:  # noqa: BLE001 - the duel is optional
+            say(f"[{cid}] generalize duel note: {e}")
+            return None
 
     def _maybe_start_shadow(self, cid, prompt):
         """Second, independent Single Solve worker on Homebase (Bedrock, daily-credit budgeted) for the slow lanes."""
@@ -2153,8 +2337,16 @@ class Chain:
         body, err = start_fut.result()
         self._tool_prefetch(cid, (body or {}))   # the prompt + questions arrive with `start`: before any download
         self._start_prior_dry_run(cid)
+        self._race_done = threading.Event()   # wakes the duel (hctf/duel.py) the moment the race has its answer
         if not welcome and REUSE_RACE and not REUSE_OLD_SOLVERS and self.lane in REUSE_RACE_LANES:
-            threading.Thread(target=self._reuse_race, args=(cid,), daemon=True, name=f"reuse-race-{self.base}").start()
+            def race():
+                try:
+                    self._reuse_race(cid)
+                finally:
+                    self._race_done.set()
+            threading.Thread(target=race, daemon=True, name=f"reuse-race-{self.base}").start()
+        else:
+            self._race_done.set()
         # The GM sometimes hands the flag back directly (issued_flag, e.g. orientation challenges). Use it instead of
         # solving when there's a single answer_id to put it in — a free first-blood the harness used to discard.
         fb = body or {}
@@ -2201,6 +2393,12 @@ class Chain:
                 cli.save(cid, "contract.json", st)
                 if not cli.load(cid, "start.json"):
                     cli.save(cid, "start.json", st)
+        retrieved = ""
+        if RETRIEVAL and not welcome:
+            from . import retrieval
+            retrieved = retrieval.note_for(cli.cdir(cid), self.lane, self.root.name, k=RETRIEVAL_K)
+            if retrieved:
+                say(f"[{cid}] retrieval: {retrieved.count(chr(10) + '- **')} similar past solve(s) in the prompt")
         timed_info = []
         for f in tfuts:
             try:
@@ -2216,6 +2414,7 @@ class Chain:
             if welcome:
                 extra += "\nThis is an orientation challenge: no solver is needed, only a correct submission."
             extra += getattr(self, "_reuse_note", "")
+            extra += retrieved
             prior = prior_solver_dir(self.lane, self.sdir)
             if staged is not None:
                 try:
@@ -2291,6 +2490,11 @@ class Chain:
             self._cur_ready = ready
             if n == 0 and not welcome and getattr(self, "_shadow_done", None) is None:
                 self._maybe_start_shadow(cid, prompt)
+            if n == 0 and not welcome and getattr(self, "_duel", None) is None:
+                try:
+                    self._maybe_start_duel(cid, prompt)
+                except Exception as e:  # noqa: BLE001 - the duel is optional
+                    say(f"[{cid}] duel launch note: {e}")
             warm, self._warm = (self._warm, None) if n == 0 else (None, None)
             warm_task = None
             if warm is not None:
@@ -2307,6 +2511,19 @@ class Chain:
                 if watch:
                     watch.join()
                 self._join_prior_cases(cid)
+            duel_w = getattr(self, "_duel", None)
+            if (rc != workers.STOPPED_RC and duel_w is not None and duel_w.alive() and not cli.is_complete(cid)
+                    and not (cli.cdir(cid) / "HELP.md").exists()):
+                # The chain's worker gave up / timed out while the duel is still going: let the duel finish (bounded)
+                # instead of relaunching a fresh worker beside it.
+                from . import duel as duel_mod
+                say(f"[{cid}] single worker ended without a CORRECT single; the duel is still running -> waiting "
+                    f"up to {duel_mod.WAIT:.0f}s for it")
+                end = time.time() + duel_mod.WAIT
+                while duel_w.alive() and not ready.is_set() and time.time() < end:
+                    ready.wait(1.0)
+                if ready.is_set() and self._ready_snap:
+                    rc = workers.STOPPED_RC
             if rc == workers.STOPPED_RC and self._ready_snap:
                 # Ended on purpose: CORRECT + verified solver. Restore the verified files, record the single as a
                 # regression case and go straight to the timed modes (the full-suite replay is not needed: the
@@ -2330,6 +2547,14 @@ class Chain:
                 say(f"[{cid}] local solver fails its case -> adopting the Homebase shadow's verified solver")
                 self._restore_ready_snapshot(shadow.snap)
                 ok, res = ensure_case_and_test(cid, self.sdir)
+            duel_w = getattr(self, "_duel", None)
+            if done and not ok and duel_w is not None and (duel_w.snap is not None or duel_w.alive()):
+                from . import duel as duel_mod
+                snap = duel_w.wait_snap(duel_mod.WAIT, log=say)
+                if snap is not None:
+                    say(f"[{cid}] local solver fails its case -> adopting the duel's verified solver")
+                    self._restore_ready_snapshot(snap)
+                    ok, res = ensure_case_and_test(cid, self.sdir)
             say(f"[{cid}] after worker: complete={done} solver_ok={ok}")
             if ok and isinstance(res, list):
                 self._note_single_speed(cid, next((r.get("seconds") for r in res if r.get("case") == "single_solve"), None))
@@ -2520,7 +2745,7 @@ class Chain:
             return {}
         except Exception as e:  # noqa: BLE001
             self._today_done = True
-            say(f"[{cid}] today-probe note: {e}")
+            say(f"!!! [{cid}] today-probe FAILED ({e}) -- the Mastery attempt runs WITHOUT its rehearsal")
             return {}
         self._today_done = True
         from . import today_probe as tp
@@ -2537,9 +2762,13 @@ class Chain:
             return {"compound_today": tp.summary(res)}
         if st == "unidentified":
             say(f"[{cid}] today-probe: today's codec unidentified from the Single -- no rehearsal")
+        elif st == "error" or res.get("error"):
+            # rehearsal D13 replay: `cannot import name 'warmups_codecs'` was logged as a plain status line and the Mastery
+            # attempt went out unprotected (41/63 sets wrong, then a 117 s generalize)
+            say(f"!!! [{cid}] today-probe FAILED ({str(res.get('error'))[:200]}) -- the Mastery attempt runs WITHOUT "
+                "its rehearsal")
         else:
-            say(f"[{cid}] today-probe: {st} (codec {res.get('codec')}, {res.get('seconds')}s)"
-                + (f" {res.get('error')}" if res.get("error") else ""))
+            say(f"[{cid}] today-probe: {st} (codec {res.get('codec')}, {res.get('seconds')}s)")
             self._note_lib_misses(cid, res)
         return {}
 
@@ -3110,11 +3339,13 @@ class Chain:
                 capture_variant(cid, self.sdir)  # expected.json now enriched by the probe-confirmed fields
             # Online label resolution FIRST: for closed-vocab label fields, probe the GM (the only authority on the
             # spelling) rather than letting the offline generalize worker GUESS and burn another attempt (the Q6 pain).
-            if wrong and any(v is not None for _, v in wrong):
+            # only fields the solver DID answer (wrongly) and the GM has NOT already corrected in-window: an empty field
+            # is a solver gap, and a `fixed` label is confirmed + cached already (rehearsal D13 replay: a GM start of 4-6 s
+            # per blocked cycle for nothing)
+            unresolved = [a for a, v in (wrong or []) if v is not None and a not in (fixed or {})]
+            if unresolved:
                 try:
-                    # only fields the solver DID answer (wrongly): an empty field is a solver gap, not a label spelling
-                    got = timed.resolve_labels_online(cid, self.sdir, [a for a, v in wrong if v is not None], self.lane,
-                                                      log=say)
+                    got = timed.resolve_labels_online(cid, self.sdir, unresolved, self.lane, log=say)
                 except Exception as e:  # noqa: BLE001
                     got = set()
                     say(f"[{cid}] online label resolve note: {e}")
@@ -3134,10 +3365,55 @@ class Chain:
                 say(f"[{cid}] probe: every field correct -> environment/timing, retrying without generalize")
                 set_state(self.base, stage=f"{mode}:retrying")
                 continue
+            if label_only_failure(wrong):
+                fixed = dict(fixed or {})
+                if self._label_scout(cid, mode, wrong, fixed):
+                    return True
             say(f"[{cid}] {res}: improving the solver offline for this variant, then retrying")
-            diag.update(self._late_probes(cid, wait=True))   # one worker fixes the variant AND any probe misses
+            # one worker fixes the variant AND any probe misses that are ready NOW; a probe still running stays
+            # pending for the next consumer (rehearsal D13 replay: waiting cost ~7 s per blocked attempt)
+            diag.update(self._late_probes(cid, wait=False))
             self.generalize(cid, wrong=wrong, fixed=fixed, diag=diag)
         set_state(self.base, stage=f"{mode}:blocked")
+        return False
+
+    def _label_scout(self, cid, mode, wrong, fixed):
+        """LABEL SCOUTING, before the generalize of a label-only Time Trial failure: up to LABEL_SCOUT_ROUNDS more
+        attempts with the CURRENT solver (each a fresh variant; on Homebase ~13 s incl. in-window localization), so the
+        worker fits its label rule on several GM-verified variants at once (each round -> an auto-time_trial-* case via
+        timed.process_result) instead of one (rehearsal D13 replay: 3 generalize cycles, ~9 min, each fixing the expansion
+        rule on ONE variant and missing the next). Once per mode per run; Time Trial only (Mastery attempts are
+        team-shared); never below SCOUT_MIN_ATTEMPTS fresh attempts. Merges what the rounds learned into `wrong` /
+        `fixed` in place. Returns True if a scout round itself passed the mode."""
+        done = self.__dict__.setdefault("_label_scouted", set())
+        if (not LABEL_SCOUT_ROUNDS or mode != "time_trial" or cid in done or not label_only_failure(wrong)):
+            return False
+        done.add(cid)
+        from . import scout
+        left = (timed.last_result(cid) or {}).get("attempts_remaining")
+        if left is not None and left < scout.SCOUT_MIN_ATTEMPTS:
+            say(f"[{cid}] label scouting skipped: only {left} attempt(s) left today")
+            return False
+        set_state(self.base, stage=f"{mode}:label-scouting")
+        say(f"[{cid}] label-only failure: scouting up to {LABEL_SCOUT_ROUNDS} more variant(s) for GM-verified labels "
+            "before ONE generalize")
+        t0 = time.time()
+        try:
+            s = scout.scout(cid, self.sdir, rounds=LABEL_SCOUT_ROUNDS, clean=1, log=say)
+        except Exception as e:  # noqa: BLE001 - scouting is advisory: the generalize below still runs
+            say(f"[{cid}] label scouting note: {e}")
+            return False
+        n = len(s.get("rounds") or [])
+        if s.get("last_correct") or cli.is_complete(cid):
+            say(f"[{cid}] label scouting: a scout round passed the mode ({n} round(s), {time.time() - t0:.0f}s)")
+            set_state(self.base, **{f"{mode}_result": "correct"})
+            record_timed_case(cid, self.sdir)
+            return True
+        fixed.update(s.get("fixed") or {})
+        have = {a for a, _ in wrong}
+        wrong.extend(w for w in (s.get("unresolved") or []) if w[0] not in have)
+        say(f"[{cid}] label scouting: {n} round(s) in {time.time() - t0:.0f}s, {len(s.get('fixed') or {})} label(s) "
+            f"GM-corrected, {len(wrong)} field(s) for the generalize")
         return False
 
     def ensure_latest_pass(self, cid, tries=3):
@@ -3323,6 +3599,9 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
         threading.Thread(target=workers._homebase_ready, args=(say,), daemon=True).start()
         say("[homebase] pre-warming in the background for timed windows (powers off only if this run powered it on; "
             "otherwise `hctf hb off` when done)")
+    if RETRIEVAL:   # before the release wait: ready long before the drop (a missing index = no retrieval block)
+        from . import retrieval
+        retrieval.build_async(log=say)
     gov = Governor(hb_enabled=bool(hb_slots))
     pools = Pools(local_slots, hb_slots, gov)
     groups = {}
@@ -3336,6 +3615,13 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
         say(f"skipping (HCTF_SKIP_IDS): {sorted(skip)}")
     say(f"{len(groups)} chains ({sum(map(len, groups.values()))} challenge modes), "
         f"slots local={local_slots} homebase={hb_slots}, credits={gov.credits()}")
+    coord_stop = threading.Event()
+    if COORDINATOR:
+        try:
+            from . import coordinator
+            coordinator.start(coord_stop, log=say)
+        except Exception as e:  # noqa: BLE001 - advisory component
+            say(f"[coord] not started ({e})")
     try:
         with ThreadPoolExecutor(max_workers=max(1, len(groups))) as ex:
             for base, entries in sorted(groups.items()):
@@ -3346,6 +3632,7 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
             except Exception as e:  # noqa: BLE001 - best-effort
                 say(f"[hof] race skipped ({e})")
     finally:
+        coord_stop.set()
         if not hb_slots and not keep_homebase:  # Homebase switched on only for tight timed windows: switch it off again
             workers.power_off_homebase_if_ours(say)
         elif keep_homebase:
