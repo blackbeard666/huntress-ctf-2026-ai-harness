@@ -425,9 +425,52 @@ def _contract_shape(contract):
     return fams, exts
 
 
-def mastery_delta(single_contract, timed_contracts):
+def lane_known_shapes(lane, day):
+    """Field shapes this lane asked on any EARLIER day (single / time_trial / mastery contracts as saved). Cached per
+    file (size + mtime) in .run/shape-cache.json: script's Mastery contracts are ~3 MB each."""
+    cache_p = ROOT / ".run" / "shape-cache.json"
+    try:
+        cache = json.loads(cache_p.read_text())
+    except (OSError, ValueError):
+        cache = {}
+    known, dirty = set(), False
+    for m in sorted(ROOT.glob("challenges/day*/*/meta.json")):
+        dm = re.match(r"day(\d+)$", m.parent.parent.name)
+        if not dm or int(dm.group(1)) >= day:
+            continue
+        try:
+            if json.loads(m.read_text()).get("lane") != lane:
+                continue
+        except (OSError, ValueError):
+            continue
+        for f in m.parent.glob("*/contract.json"):
+            try:
+                st = f.stat()
+                key, sig = str(f.relative_to(ROOT)), f"{st.st_size}:{int(st.st_mtime)}"
+                if (cache.get(key) or {}).get("sig") != sig:
+                    cache[key] = {"sig": sig, "shapes": sorted({field_shape(a) for a in
+                                                                _contract_ids(json.loads(f.read_text()))})}
+                    dirty = True
+                known |= set(cache[key]["shapes"])
+            except (OSError, ValueError):
+                continue
+    if dirty:
+        try:
+            cache_p.write_text(json.dumps(cache))
+        except OSError:
+            pass
+    return known
+
+
+DELTA_NOVEL_CHARS = int(os.environ.get("HCTF_DELTA_NOVEL_CHARS", "1500"))
+
+
+def mastery_delta(single_contract, timed_contracts, known=None):
     """What the Time Trial / Mastery contracts ask that today's Single does NOT (compounding Mastery: earlier days'
-    concepts mixed in). -> short text for the single prompt, '' when the timed contracts add nothing."""
+    concepts mixed in). -> short text for the single prompt, '' when the timed contracts add nothing.
+    `known`: callable -> field shapes this lane asked on earlier days (lane_known_shapes), called only when there IS a
+    delta. Ids NEW to the lane come first and are all listed (D15 metadata: the one new id,
+    `metadata-day-15-synthesis-sha256-order`, sat at #20 of 23 alphabetically, past a 12-id cut -> TT missed it)."""
     sfam, sext = _contract_shape(single_contract)
     if not sfam:
         return ""
@@ -442,7 +485,26 @@ def mastery_delta(single_contract, timed_contracts):
     parts = []
     if extra_f:
         ex = sorted({field_shape(x): x for x in sorted(extra_f, reverse=True)}.values())   # one example per field
-        parts.append(f"{len(ex)} question id(s) the Single never asks, e.g. " + ", ".join(f"`{x}`" for x in ex[:12]))
+        try:
+            seen = known() if callable(known) else (known or set())
+        except Exception:  # noqa: BLE001 - the hint must never cost the single
+            seen = set()
+        novel = [x for x in ex if field_shape(x) not in seen] if seen else []
+        carried = [x for x in ex if x not in novel]
+        if novel:
+            shown, size = [], 0
+            for x in novel:
+                if size + len(x) > DELTA_NOVEL_CHARS:
+                    break
+                shown.append(x)
+                size += len(x) + 4
+            more = f" (+{len(novel) - len(shown)} more in the timed contracts)" if len(shown) < len(novel) else ""
+            parts.append(f"{len(novel)} question id(s) NEW to this lane (no earlier day asked them, no earlier solver "
+                         "answers them -- read their question text in the timed contracts): "
+                         + ", ".join(f"`{x}`" for x in shown) + more)
+        if carried:
+            parts.append(f"{len(carried)} id(s) carried over from earlier days, e.g. "
+                         + ", ".join(f"`{x}`" for x in carried[:8]))
     if extra_e:
         parts.append("artifact kinds the Single doesn't ship: " + ", ".join(f"`.{e}`" for e in sorted(extra_e)))
     return ("MASTERY COMPOUNDS: the Time Trial / Mastery contracts (status-time, under this challenge's time_trial/ and "
@@ -2475,8 +2537,10 @@ class Chain:
                 carry = carry_over_note(self.lane, self.sdir, [a for a in tids if field_shape(a) not in own])
                 if carry:
                     prior_note += " EXCEPT: the timed contracts already carry earlier days' questions. " + carry
+            _dm = re.match(r"day(\d+)", self.sdir.parent.parent.name)
             delta = mastery_delta(cli.load(cid, "start.json") or cli.load(cid, "contract.json"),
-                                  [cli.load(f"{self.base}/{m}", "contract.json") or {} for m in ("time_trial", "mastery")])
+                                  [cli.load(f"{self.base}/{m}", "contract.json") or {} for m in ("time_trial", "mastery")],
+                                  known=(lambda: lane_known_shapes(self.lane, int(_dm.group(1)))) if _dm else None)
             if delta:
                 prior_note += " " + delta
                 say(f"[{cid}] {delta[:200]}")

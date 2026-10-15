@@ -50,12 +50,32 @@ def eligible(lane, key=None):
     replay: duels still waiting out their delay (singles already won by the reuse race) blocked script's duel."""
     if not ENABLED:
         return False, "HCTF_DUEL=0"
-    if lane not in LANES:
+    if lane not in LANES and not _binary_ok(lane):
         return False, f"lane {lane} not in HCTF_DUEL_LANES"
     with _live_lock:
         if len(_live) >= MAX_CONCURRENT:
             return False, f"{len(_live)} duels already running"
     return True, ""
+
+
+# binary duel only with this much MemAvailable (GB) at the decision; 0 = never (default until measured on a rehearsal copy: two
+# Ghidra JVMs on the 7 GB box). D15: binary single +89 s by the lone worker, no duel.
+BINARY_MIN_AVAIL_GB = float(os.environ.get("HCTF_DUEL_BINARY_MIN_AVAIL_GB", "0"))
+
+
+def _mem_avail_gb():
+    try:
+        for ln in open("/proc/meminfo"):
+            if ln.startswith("MemAvailable:"):
+                return int(ln.split()[1]) / 1048576
+    except (OSError, ValueError, IndexError):
+        pass
+    return 0.0
+
+
+def _binary_ok(lane):
+    return (lane == "binary-reverse-engineering" and BINARY_MIN_AVAIL_GB > 0
+            and _mem_avail_gb() >= BINARY_MIN_AVAIL_GB)
 
 
 def _reserve(key):

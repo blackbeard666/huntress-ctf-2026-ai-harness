@@ -1385,14 +1385,23 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60, on_event=None):
             return res
         except Exception as e:  # noqa: BLE001 - fall through to the pull
             res["capture_note"] = f"inline bytes unusable ({str(e)[:120]}); "
+    if PUBLIC_FAIL_PULL and res.get("deadline") is None and (res.get("untimed") or res.get("run_for_time") is False):
+        try:
+            t0 = time.time()
+            got = public_pull(res, slug, local, cid)
+            res["capture_note"] = (res.get("capture_note") or "") + \
+                f"public refetch: {', '.join(got)} in {time.time() - t0:.1f}s"
+            return res
+        except Exception as e:  # noqa: BLE001 - fall back to the Homebase pull
+            res["capture_note"] = (res.get("capture_note") or "") + f"public refetch failed ({str(e)[:120]}); "
     try:
         # A failure needs the variant's bytes locally (generalize on it) before anything else -- but only the deliveries
         # of the failing sets, fetched as parallel byte ranges (D8 binary Mastery: 5 x 31 MB = 157 MB took 10-20 min).
         t0 = time.time()
         got = scoped_pull(res, slug, local)
-        res["capture_note"] = f"scoped pull: {', '.join(got)} in {time.time() - t0:.1f}s"
+        res["capture_note"] = (res.get("capture_note") or "") + f"scoped pull: {', '.join(got)} in {time.time() - t0:.1f}s"
     except Exception as e:  # noqa: BLE001 - capture is best-effort
-        res["capture_note"] = f"scoped pull failed ({str(e)[:160]}); full pull"
+        res["capture_note"] = (res.get("capture_note") or "") + f"scoped pull failed ({str(e)[:160]}); full pull"
         try:
             pull()
         except Exception as e2:  # noqa: BLE001
@@ -1401,6 +1410,46 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60, on_event=None):
 
 
 SET_KEY = re.compile(r"^((?:set|slot)[._-]?\d+)[._-](.+)$")
+# A failed attempt that is still live and untimed: fetch its bytes from the PUBLIC GM (MB/s from here) rather than
+# pulling them back from Homebase over the VPN (~130 KB/s: D15 script Mastery 26.8 s, metadata TT 15.3 s).
+PUBLIC_FAIL_PULL = os.environ.get("HCTF_PUBLIC_FAIL_PULL", "1") == "1"
+
+
+def public_pull(res, slug, local, cid):
+    """Reconnect publicly (`start` resumes the live attempt; it never re-rolls), save its contract + result into
+    `local` and download the failing sets' deliveries (deliveries_for) from the public GM, sha256-checked. The same
+    files scoped_pull writes. Returns the container names; raises -> the caller falls back to scoped_pull."""
+    import hashlib
+    from concurrent.futures import ThreadPoolExecutor as _TPE
+    from . import hb_timed as ht
+    body = ht._post_start({"op": "start", "challenge": cid})
+    if not isinstance(body, dict) or body.get("attempt_id") != res.get("attempt_id") or not body.get("answer_ids"):
+        raise RuntimeError(f"public start did not resume attempt {str(res.get('attempt_id'))[:8]}: "
+                           f"{str((body or {}).get('error') or (body or {}).get('result') or 'other attempt')[:80]}")
+    if local.exists():
+        for f in local.glob("*"):
+            if f.is_file():
+                f.unlink()
+    local.mkdir(parents=True, exist_ok=True)
+    (local / "contract.json").write_text(json.dumps(body))
+    (local / "result.json").write_text(json.dumps({k: v for k, v in res.items() if not callable(v)}, default=str))
+    plan = dict(ht._plan(body))
+    names = [n for n in deliveries_for(res, body) if n in plan]
+    shas = {a.get("sha256") for a in body.get("artifacts") or [] if isinstance(a, dict) and a.get("sha256")}
+    if not names and BUNDLE_FALLBACK and len(plan) == 1:
+        names = list(plan)          # one bundle (warmups Mastery): the lone delivery is the variant
+        if body.get("sha256"):
+            shas = shas | {body["sha256"]}
+    if not names:
+        raise RuntimeError(f"no failing-set delivery in the public contract (have {sorted(plan)[:6]})")
+
+    def fetch(n):
+        (local / n).write_bytes(ht._get_bytes(plan[n]))
+        if shas and hashlib.sha256((local / n).read_bytes()).hexdigest() not in shas:
+            raise RuntimeError(f"{n}: sha256 not in the contract's artifacts")
+    with _TPE(max_workers=min(8, len(names))) as ex:
+        list(ex.map(fetch, names))
+    return names
 
 
 def deliveries_for(res, contract):

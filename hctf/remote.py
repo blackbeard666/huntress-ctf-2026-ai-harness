@@ -6,6 +6,7 @@ is `ssh hb python3 ~/hctf/gm.py ...` over a single multiplexed connection (Contr
 import fcntl
 import json
 import os
+import re
 import shlex
 import subprocess
 import threading
@@ -187,6 +188,11 @@ def gm(*args, timeout=180):
                            capture_output=True, text=True, timeout=timeout,
                            env=dict(os.environ, HUNTRESS_GAME_MASTER_URL=INSIDE_GM))
         return _gm_parse(r, "homebase-local")
+    if args and args[0] == "start" and len(args) > 1 and _public_gm() and _big_start(str(args[1])):
+        # A large start reply (script: ~650 KB contract) crosses the VPN at ~130 KB/s on the daemon's ONE stdio
+        # channel and holds up every reply queued behind it: D15 script 8.9 s + binary (80 KB) 9.4 s client time for
+        # GM calls of 2.4-2.6 s; the three small lanes 2.6-2.9 s. The public GM returns it directly.
+        return _gm_local(args, timeout)
     if args and args[0] in ("start", "submit") and GM_VIA_DAEMON and _public_gm():
         env = _gm_via_daemon(args, timeout)      # the run's warm Homebase daemon, when this process has one
         if env is not None:
@@ -213,6 +219,35 @@ SUBMIT_VIA_HB = os.environ.get("HCTF_SUBMIT_VIA_HB", "1") != "0"
 # 1.6-4.3 s (3-4 s on D11) vs 0.5-0.9 s for the same call from Homebase -- all of it before the worker's go.
 # Downloads stay public (binary evidence is ~31 MB). HCTF_START_VIA_HB=0 disables.
 START_VIA_HB = os.environ.get("HCTF_START_VIA_HB", "1") != "0"
+# ...except a Single whose lane's previous start reply exceeded this many KB (0 = never public by size).
+START_VIA_HB_MAX_KB = float(os.environ.get("HCTF_START_VIA_HB_MAX_KB", "200"))
+_BIG_START = {}
+
+
+def _big_start(cid):
+    """True when `cid` is a Single Solve whose lane's newest earlier `single_solve/start.json` > START_VIA_HB_MAX_KB."""
+    if START_VIA_HB_MAX_KB <= 0 or "/" in cid:
+        return False
+    m = re.match(r"(.+?)-day-(\d+)", cid)
+    if not m:
+        return False
+    lane, day = m.group(1), int(m.group(2))
+    if (lane, day) not in _BIG_START:
+        size = 0
+        for meta in sorted(ROOT.glob("challenges/day*/*/meta.json"), reverse=True):
+            dm = re.match(r"day(\d+)$", meta.parent.parent.name)
+            st = meta.parent / "single_solve" / "start.json"
+            if not dm or int(dm.group(1)) >= day or not st.exists():
+                continue
+            try:
+                if json.loads(meta.read_text()).get("lane") != lane:
+                    continue
+            except (OSError, ValueError):
+                continue
+            size = st.stat().st_size
+            break
+        _BIG_START[(lane, day)] = size > START_VIA_HB_MAX_KB * 1024
+    return _BIG_START[(lane, day)]
 _EXEC_MARK = "HCTF-EXEC"
 # Single Solve start / submit over the run's long-lived Homebase daemon (warm GM pool, one stdio channel) instead of an
 # ssh exec + `python3 gm.py` per call: D12's five drop-time starts went out 2-6 s late on the busy 2-vCPU VM. Only in the
