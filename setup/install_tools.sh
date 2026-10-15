@@ -56,5 +56,10 @@ uv pip install -q --python .venv/bin/python beautifulsoup4 PyJWT dpkt 2>&1 | tai
 # coverage-atlas DFIR/format parsers (prebuild allowlist; must match setup/homebase_setup.sh, 2026-10-15)
 uv pip install -q --python .venv/bin/python mutagen exifread pypdf macholib py7zr zstandard brotli base58 lz4 2>&1 | tail -1
 
+echo "== coverage-atlas readiness tools (reference/coverage/*.md 'tool' gaps, 2026-10-15)"
+#   apt (sudo): qemu-user wabt php-cli lua5.4 xsltproc cabextract tcl yq   -- cross-arch run, WASM, script hosts, XSLT, CAB
+uv pip install -q --python .venv/bin/python flare-floss apkid dissect.util extract-msg rarfile pycdlib base45 2>&1 | tail -1
+uv pip install -q --python .venv/bin/python "git+https://github.com/jakev/pyxamstore" 2>&1 | tail -1   # Xamarin assemblies.blob
+
 echo "== rabin2 alias check (radare2 from apt)"
 command -v rabin2 >/dev/null && echo "  rabin2 ok"
