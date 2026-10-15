@@ -54,7 +54,7 @@ def blobs():
             yield case, aid, text, val
 
 
-HAVE_D14 = (ROOT / "challenges/day14/warmups-seven-steps/solver/cases").is_dir()   # main only (alt never played D14)
+HAVE_D14 = (ROOT / "challenges/day14/warmups-seven-steps/solver/cases/variant-mastery-18c3893f").is_dir()   # main's D14 variants
 
 # ---------------------------------------------------------------------------------------------------------------- W1
 n = bad = 0
