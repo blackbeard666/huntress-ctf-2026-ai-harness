@@ -255,6 +255,7 @@ def lib_misses(case):
 
 
 PROBE_WORKERS = int(os.environ.get("HCTF_TODAY_PROBE_WORKERS", "4"))
+LIB_CHECK = os.environ.get("HCTF_TODAY_PROBE_LIB", "0") != "0"
 
 
 def probe(sdir, deadline=None, out_dir=None, salt=0):
@@ -271,14 +272,29 @@ def probe(sdir, deadline=None, out_dir=None, salt=0):
     if base is None:
         return dict(res, status="no-base", seconds=round(time.time() - t0, 2))
     res["base"] = str(base)
-    cases = synth(sdir, codec[1], codec[0], base=base, out_dir=out_dir, salt=salt)
+    timeout = max(5.0, (deadline - time.time()) if deadline else 30.0)
+    # Stage 1: the 2 cheap cases (even/edge cuts, yesterday's slugs) -- they catch a solver that doesn't know today's
+    # codec at all (rehearsal fair D14: 8/8 cases missed) in ~1 s. Stage 2 (random GM-vocabulary slugs, ~400 sets, ~20 CPU-s)
+    # only when stage 1 is clean: at the drop it competed with every lane's solver timing (rehearsal fair D14: two false
+    # "solver too slow" speed generalizes while the full probe ran).
+    stages = [tuple(v for v in VARIANTS if not v.startswith("random")),
+              tuple(v for v in VARIANTS if v.startswith("random"))]
+    runs, cases = [], []
+    for i, variants in enumerate(stages):
+        if not variants:
+            continue
+        made = synth(sdir, codec[1], codec[0], base=base, variants=variants, out_dir=out_dir, salt=salt)
+        if not made:
+            continue
+        with ThreadPoolExecutor(max_workers=max(1, min(PROBE_WORKERS, 1 + len(made)))) as ex:
+            runs += list(ex.map(lambda c: _run(sdir, c, timeout), ([] if runs else [base]) + made))
+        cases += made
+        if not runs or runs[0]["error"] or runs[0]["wrong"] or any(r["error"] or r["wrong"] for r in runs[1:]):
+            break   # base broken, or stage 1 already missed: generalize now, the random draw can wait
     if not cases:
         return dict(res, status="no-cases", seconds=round(time.time() - t0, 2))
-    timeout = max(5.0, (deadline - time.time()) if deadline else 30.0)
-    with ThreadPoolExecutor(max_workers=max(1, min(PROBE_WORKERS, 1 + len(cases)))) as ex:
-        lib_fut = ex.submit(lambda: {Path(c).name: m for c in cases for m in (lib_misses(c),) if m})
-        runs = list(ex.map(lambda c: _run(sdir, c, timeout), [base] + cases))
-        res["lib_misses"] = lib_fut.result()
+    if LIB_CHECK:   # in-process decode of every synthetic set (~1.5 s of the orchestrator's GIL): opt-in / offline
+        res["lib_misses"] = {Path(c).name: m for c in cases for m in (lib_misses(c),) if m}
     base_run, synth_runs = runs[0], runs[1:]
     res["results"] = synth_runs
     res["base_ok"] = not base_run["error"] and not base_run["wrong"]

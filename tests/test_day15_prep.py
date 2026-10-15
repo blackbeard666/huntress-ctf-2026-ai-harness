@@ -316,4 +316,48 @@ timed._captures.remove(t)
 src = __import__("inspect").getsource(orch.run)
 assert "_join_captures(" in src and "_join_captures(tag)" in __import__("inspect").getsource(orch.ratchet)
 print("ok  C1 background pass captures tracked + joined before speed-harden and before the run exits")
+
+# ---------------------------------------------------------------------------------------------------------------- G1
+# rehearsal fair D14 findings: the single-speed gate re-times once alone; the today-probe stops after a stage-1 miss (no
+# ~20 CPU-s random draw at the drop); warmups Mastery waits up to TODAY_PROBE_WAIT for the codec probe.
+said.clear()
+g = object.__new__(orch.Chain)
+g.sdir = ROOT / ".run"
+with mock.patch.object(orch, "say", said.append), \
+        mock.patch.object(orch.solvers, "run_solver", lambda *a, **k: ({}, None, 0.4)):
+    g._note_single_speed("x", 6.7, rerun=("d", {}, "a"))
+assert g._single_slow is None and any("re-timed alone 0.4s" in s for s in said), said
+with mock.patch.object(orch, "say", said.append), \
+        mock.patch.object(orch.solvers, "run_solver", lambda *a, **k: ({}, None, 5.9)):
+    g._note_single_speed("x", 6.7, rerun=("d", {}, "a"))
+assert g._single_slow == 5.9, g._single_slow                        # still slow alone -> flagged (best timing)
+ran = []
+
+
+def fake_tp_run(sdir, case, timeout):
+    ran.append(Path(case).name)
+    bad = Path(case).name.endswith("-edge")
+    return {"case": Path(case).name, "path": str(case), "expected": 1, "correct": 0 if bad else 1,
+            "wrong": {"a": {}} if bad else {}, "error": None, "seconds": 0.1}
+
+
+fake_base = tmp_b = Path(tempfile.mkdtemp(prefix="t15g-", dir=ROOT / ".run"))
+made_variants = []
+
+
+def fake_synth(sdir, enc, name, base=None, variants=(), out_dir=None, seed=None, salt=0):
+    made_variants.extend(variants)
+    return [tmp_b / f"compound-today-d99-{v}" for v in variants]
+
+
+with mock.patch.object(TP, "today_codec", lambda sdir: ("toy", str.upper)), \
+        mock.patch.object(TP, "base_case", lambda sdir: tmp_b / "base"), \
+        mock.patch.object(TP, "synth", fake_synth), mock.patch.object(TP, "_run", fake_tp_run):
+    r = TP.probe(tmp_b)
+assert r["status"] == "miss" and not any(v.startswith("random") for v in made_variants), made_variants
+assert ran[0] == "base" and set(ran[1:]) == {"compound-today-d99-even", "compound-today-d99-edge"}, ran
+shutil.rmtree(tmp_b, ignore_errors=True)
+assert orch.TODAY_PROBE_WAIT >= 20 and orch.TODAY_MERGE_WAIT <= 10
+print("ok  G1 speed gate re-times alone (6.7 -> 0.4 s: no speed generalize); probe stage 1 miss -> no random draw; "
+      f"codec probe wait {orch.TODAY_PROBE_WAIT:g}s, merge {orch.TODAY_MERGE_WAIT:g}s")
 print("ALL PASS")

@@ -93,6 +93,7 @@ SPEC_POLL = float(os.environ.get("HCTF_SPEC_POLL", "0.25"))  # D9: single CORREC
 # Homebase is ~1.5x slower and the 7-13 s window also pays GM start/download/submit (blind D7 replay: binary 5.9 s ->
 # Time Trial exec_error "too slow", one attempt + ~30 s burned before the speed fix even started). 0 disables.
 SINGLE_SPEED_BUDGET = float(os.environ.get("HCTF_SINGLE_SPEED_BUDGET", "2.5"))
+SINGLE_SPEED_RETIME = os.environ.get("HCTF_SINGLE_SPEED_RETIME", "1") != "0"   # re-time once alone before flagging
 # Time Trial scouting before Mastery (hctf/scout.py): extra TT attempts that harvest new variants and learn label
 # spellings on the cheap clock. 0 = off. `hctf run --scout N` overrides.
 SCOUT_ROUNDS = int(os.environ.get("HCTF_SCOUT_ROUNDS", "0"))
@@ -696,9 +697,12 @@ COMPOUND_PROBE = os.environ.get("HCTF_COMPOUND_PROBE", "1") != "0"
 # compound-today-* cases + one generalize BEFORE the Mastery attempt.
 TODAY_PROBE = os.environ.get("HCTF_TODAY_PROBE", "1") != "0"
 TODAY_PROBE_LANES = {x.strip() for x in os.environ.get("HCTF_TODAY_PROBE_LANES", "warmups").split(",") if x.strip()}
-TODAY_PROBE_WAIT = float(os.environ.get("HCTF_TODAY_PROBE_WAIT", "5"))
+# Up to this long before the (one-shot) Mastery attempt: rehearsal fair D14 -- the probe flagged the miss 22 s after a 5 s wait
+# had given up; the attempt failed and cost a generalize + the untimed fallback. Pre-clock time, bounded by the probe.
+TODAY_PROBE_WAIT = float(os.environ.get("HCTF_TODAY_PROBE_WAIT", "30"))
 # re-probes on fresh random draws after a today-probe-triggered generalize, before the (one) Mastery attempt
 TODAY_RECHECKS = int(os.environ.get("HCTF_TODAY_RECHECKS", "2"))
+TODAY_MERGE_WAIT = float(os.environ.get("HCTF_TODAY_MERGE_WAIT", "5"))   # the lane-agnostic merge probe (advisory)
 # Lane-agnostic variant (today_probe.merge_probe): today's Single appended as set N+1 of yesterday's verified Mastery
 # contract; a miss counts only when the solver passes both halves alone. Same slot / consumption as the today-probe.
 TODAY_MERGE_PROBE = os.environ.get("HCTF_TODAY_MERGE_PROBE", "1") != "0"
@@ -2385,7 +2389,7 @@ class Chain:
             self._spec_rejected = m0
             say(f"[{cid}] early handoff: snapshot not ready ({err or f'{len(bad)} field(s) differ, e.g. {bad[:3]}'})")
             return None
-        self._note_single_speed(cid, dt)
+        self._note_single_speed(cid, dt, rerun=(snap, contract, art))
         return snap
 
     # -- codec-family probe BEFORE the first timed attempt (script lane). blind2/blind3: the Time Trial passed clean, then
@@ -2490,10 +2494,11 @@ class Chain:
         if fut is None:
             self._today_done = True
             return {}
+        wait = TODAY_PROBE_WAIT if self._today_kind() == "codec" else TODAY_MERGE_WAIT
         try:
-            res = fut.result(timeout=TODAY_PROBE_WAIT)
+            res = fut.result(timeout=wait)
         except TimeoutError:   # concurrent.futures.TimeoutError is the builtin since 3.11
-            say(f"[{cid}] today-probe still running after {TODAY_PROBE_WAIT:g}s: not waiting for it")
+            say(f"[{cid}] today-probe still running after {wait:g}s: not waiting for it")
             return {}
         except Exception as e:  # noqa: BLE001
             self._today_done = True
@@ -2719,8 +2724,23 @@ class Chain:
             self.generalize(cid, wrong=None, fixed=None, diag={"solver_too_slow": True, "mastery_estimate": est,
                                                                  "single_seconds": est})
 
-    def _note_single_speed(self, cid, seconds):
+    def _note_single_speed(self, cid, seconds, rerun=None):
+        """Flag a single solver over SINGLE_SPEED_BUDGET for a speed generalize before the first timed attempt -- after
+        re-timing it ONCE alone: the first timing is taken at the drop beside 5 lanes' races/probes (rehearsal fair D14:
+        binary 6.7 s and script 3.2 s vs 0.18 s / 1.4 s idle -> two 3-4 min speed generalizes for nothing).
+        rerun = (solver dir, contract, artifacts dir); default the solver dir on its single_solve case."""
         self._single_slow = None
+        if SINGLE_SPEED_BUDGET and seconds and seconds > SINGLE_SPEED_BUDGET and SINGLE_SPEED_RETIME:
+            try:
+                if rerun is None:
+                    case = self.sdir / "cases" / "single_solve"
+                    rerun = (self.sdir, json.loads((case / "contract.json").read_text()), case / "artifacts")
+                _got, err, dt2 = solvers.run_solver(rerun[0], rerun[1], rerun[2], max(10.0, 3 * seconds))
+                if not err and dt2 < seconds:
+                    say(f"[{cid}] single solver timed {seconds:.1f}s under drop load; re-timed alone {dt2:.1f}s")
+                    seconds = dt2
+            except Exception as e:  # noqa: BLE001 - keep the first timing
+                say(f"[{cid}] single solver re-time note: {e}")
         if SINGLE_SPEED_BUDGET and seconds and seconds > SINGLE_SPEED_BUDGET:
             self._single_slow = round(seconds, 2)
             say(f"[{cid}] single solver takes {seconds:.1f}s on its own case (budget {SINGLE_SPEED_BUDGET:g}s): "
