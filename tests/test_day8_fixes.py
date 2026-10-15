@@ -111,6 +111,13 @@ def fake_post(payload, timeout=None):
 _orig_post = hb_timed._post
 hb_timed._post = fake_post
 try:
+    # default (2026-10-15): "auto" = the untimed regular pool first, no run_for_time on the request
+    os.environ.pop("HCTF_RUN_FOR_TIME", None)
+    script = {False: {"attempt_id": "reg"}, True: {"attempt_id": "h", "run_for_time": True}}
+    assert hb_timed._post_start({"op": "start", "challenge": "x/mastery"})["attempt_id"] == "reg"
+    assert sent == [{"op": "start", "challenge": "x/mastery"}], sent
+    sent.clear()
+    os.environ["HCTF_RUN_FOR_TIME"] = "1"          # opt back into the Hall of Fame pool
     script = {True: {"attempt_id": "h", "run_for_time": True}}
     assert hb_timed._post_start({"op": "start", "challenge": "x/mastery"})["attempt_id"] == "h"
     assert sent == [{"op": "start", "challenge": "x/mastery", "run_for_time": True}], sent
@@ -121,6 +128,11 @@ try:
     sent.clear()
     assert hb_timed._post_start({"op": "start", "challenge": "bin"})["attempt_id"] == "legacy"   # single: plain
     assert sent == [{"op": "start", "challenge": "bin"}], sent
+    sent.clear()
+    del os.environ["HCTF_RUN_FOR_TIME"]
+    script = {False: {"error": "training_rotation_invalid"}, True: {"attempt_id": "h2"}}
+    assert hb_timed._post_start({"op": "start", "challenge": "x/time_trial"})["attempt_id"] == "h2"   # auto: backstop
+    assert [p.get("run_for_time") for p in sent] == [None, True], sent
     sent.clear()
     os.environ["HCTF_RUN_FOR_TIME"] = "0"
     script = {False: {"error": "training_rotation_invalid"}}

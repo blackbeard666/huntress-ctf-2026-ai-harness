@@ -269,11 +269,19 @@ def _post_once(payload, tries=3):
 
 # Day 8: Time Trial / Mastery became DUAL-POOL routes. A plain start/retry = the regular (untimed, not Hall of Fame)
 # pool; run_for_time:true = a fresh timed Hall of Fame attempt. The regular pool refused every lane but warmups (503
-# training_rotation_invalid). Policy (user, 2026-10-08): always ask for the HoF pool on TT/Mastery. Legacy routes (binary
-# D8) and Single Solve reject the property with 409 timed_intent_not_available -> resend without it.
-# HCTF_RUN_FOR_TIME=0 (scout / probes that must not spend ranked attempts): never ask for the HoF pool.
+# training_rotation_invalid). Legacy routes (binary D8) and Single Solve reject the property with 409
+# timed_intent_not_available -> resend without it.
+# HCTF_RUN_FOR_TIME: "auto" (default since 2026-10-15) = the UNTIMED regular pool first -- flag + full CourseStack points,
+# retryable without a clock, only the Hall of Fame entry is forgone (user: HoF doesn't matter) -- and the timed pool
+# only when the regular one refuses (training_rotation_invalid). "1" = HoF pool first (the 2026-10-08 policy).
+# "0" = never ask for it (scout / probes that must not spend ranked attempts). Timed-by-default routes (no
+# run_for_time_supported: D12, D14) start timed whatever we send.
+def _rft():
+    return _opt("HCTF_RUN_FOR_TIME", "auto")
+
+
 def _hof_wanted(cid):
-    return _opt("HCTF_RUN_FOR_TIME", "1") == "1" and cid.rsplit("/", 1)[-1] in ("time_trial", "mastery")
+    return _rft() == "1" and cid.rsplit("/", 1)[-1] in ("time_trial", "mastery")
 
 
 # The GM's "no fresh variant left" verdicts: `rotation_exhausted` (lessons) and `retry_variants_unavailable` (seen live:
@@ -305,16 +313,15 @@ def _post_untimed(cid):
 
 
 def _post_start(payload, tries=3):
-    """_post_once with the pool policy: HoF first on TT/Mastery; the route's only pool when it has no HoF pool; the HoF
-    pool when the regular one refuses (backstop if HCTF_RUN_FOR_TIME=1 but the payload came in plain)."""
+    """_post_once with the pool policy (_rft): the regular pool by default, HoF first only on HCTF_RUN_FOR_TIME=1; the
+    route's only pool when it has no HoF pool; the HoF pool when the regular one refuses (unless HCTF_RUN_FOR_TIME=0)."""
     if _hof_wanted(payload.get("challenge", "")) and "run_for_time" not in payload:
         payload = {**payload, "run_for_time": True}
     body = _post_once(payload, tries)
     err = str(body.get("error")) if isinstance(body, dict) else ""
     if payload.get("run_for_time") and "timed_intent_not_available" in err:
         body = _post_once({k: v for k, v in payload.items() if k != "run_for_time"}, tries)
-    elif (not payload.get("run_for_time") and "training_rotation_invalid" in err
-          and _opt("HCTF_RUN_FOR_TIME", "1") == "1"):
+    elif not payload.get("run_for_time") and "training_rotation_invalid" in err and _rft() != "0":
         body = _post_once({**payload, "run_for_time": True}, tries)
     return body
 

@@ -1272,7 +1272,7 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60, on_event=None):
             print(f"[homebase] daemon attempt failed ({e}); ssh exec of hb_timed.py", flush=True)
     if res is None:
         try:
-            rft = os.environ.get("HCTF_RUN_FOR_TIME")   # pool policy (hb_timed._hof_wanted); default there: HoF
+            rft = os.environ.get("HCTF_RUN_FOR_TIME")   # pool policy (hb_timed._rft); default there: auto (regular first)
             fwd = "".join(f"{k}={shlex.quote(v)} " for k, v in timed_env(cid).items())
             r = remote.ssh(f"cd ~/{HB_WORK} && HUNTRESS_GAME_MASTER_URL={remote.INSIDE_GM} "
                            + (f"HCTF_RUN_FOR_TIME={shlex.quote(rft)} " if rft is not None else "") + fwd
