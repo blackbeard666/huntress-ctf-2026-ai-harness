@@ -876,6 +876,14 @@ def c_tool_gaps(a):
     return toolchain.main(["report"] + (["--day", str(a.day)] if a.day else []))
 
 
+def c_train(a):
+    """Offline training of a day's lane solvers on every earlier day (hctf/train.py)."""
+    from . import train
+    argv = ["--day", str(a.day), "--rounds", str(a.rounds)] + sum((["--lane", x] for x in a.lane or []), []) \
+        + (["--no-mutation"] if a.no_mutation else []) + (["--dry-run"] if a.dry_run else [])
+    return train.main(argv)
+
+
 def c_compound_check(a):
     """Compounding readiness: today's solver vs every earlier day's GM-verified cases of its lane (hctf/compound.py)."""
     from . import compound
@@ -1249,6 +1257,12 @@ def main(argv=None):
     ptw.add_argument("--timeout", type=int, default=600)
     ptg = sub.add_parser("tool-gaps", help="post-run review: toolchain tools that were missing (installed / no recipe)")
     ptg.add_argument("--day", type=int)
+    ptr = sub.add_parser("train", help="offline training: a day's solvers vs every earlier day's verified cases")
+    ptr.add_argument("--day", type=int, required=True)
+    ptr.add_argument("--lane", action="append")
+    ptr.add_argument("--rounds", type=int, default=2)
+    ptr.add_argument("--no-mutation", action="store_true")
+    ptr.add_argument("--dry-run", action="store_true")
     pcc = sub.add_parser("compound-check", help="replay earlier days' verified cases of the lane through today's solver")
     pcc.add_argument("id", nargs="?")
     pcc.add_argument("--day", type=int)
@@ -1315,7 +1329,7 @@ def main(argv=None):
     pl2.add_argument("--dry-run", action="store_true", help="only print the ranked candidates")
     a = p.parse_args(argv)
     fn = {"hb": c_hb, "list": c_list, "status": c_status, "start": c_start, "retry": c_retry,
-          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test, "compound-check": c_compound_check, "tool-wait": c_tool_wait, "speed-harden": c_speed_harden, "prebuild": c_prebuild, "tool-gaps": c_tool_gaps,
+          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test, "compound-check": c_compound_check, "train": c_train, "tool-wait": c_tool_wait, "speed-harden": c_speed_harden, "prebuild": c_prebuild, "tool-gaps": c_tool_gaps,
           "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
           "reconcile": c_reconcile, "solutions": c_solutions,
           "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout,

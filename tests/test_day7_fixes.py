@@ -205,7 +205,7 @@ assert _w.lane_skill("binary-reverse-engineering").startswith("**Installed") and
 _t = (Path(__file__).resolve().parents[1] / "hctf" / "prompts" / "single.md").read_text()
 assert all(k in _t for k in ("{skill}", "{triage}", "{lane_helpers}", "{prior_solver}")) and "FIRST call: load" not in _t
 _root = Path(__file__).resolve().parents[1]
-assert orchestrate.prior_solver_dir("warmups", _root / "challenges/day07/warmups-percent-chance/solver") is None
+assert orchestrate.prior_solver_dir("metadata-forensics", _root / "challenges/day07/metadata-seven-zip-no-relation/solver") is None   # lane-seeded, not cumulative (warmups/mobile joined binary/script 2026-10-15)
 _ps = orchestrate.prior_solver_dir("script-analysis", _root / "challenges/day07/scripting-node-by-node/solver")
 assert _ps is None or (_ps / "solve.py").exists() and _ps.parent.parent.name < "day07"
 print("ok  single prompt: skill/triage/helpers inlined; prior same-lane solver only for binary/script")

@@ -36,7 +36,7 @@ def _day(chal_dir):
 
 def earlier_cases(sdir, per_day=3):
     """[(day, case_dir)] of every EARLIER day of this solver's lane: the Single case + the newest GM-verified Time
-    Trial and Mastery cases (per_day caps the count per day)."""
+    Trial and Mastery cases (per_day caps the count per day). per_day=None: EVERY GM-verified case (hctf.train)."""
     chal = Path(sdir).parent
     lane, today = _lane(chal), _day(chal)
     out = []
@@ -49,6 +49,9 @@ def earlier_cases(sdir, per_day=3):
         single = [c for c in cases if c.name == "single_solve"]
         rest = sorted((c for c in cases if c.name != "single_solve"), key=lambda c: c.stat().st_mtime, reverse=True)
         picked, kinds = list(single), set()
+        if per_day is None:
+            out += [(_day(od), c) for c in single + rest]
+            continue
         for c in rest:
             kind = "mastery" if "mastery" in c.name else "time_trial"
             if kind not in kinds:

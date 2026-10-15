@@ -327,7 +327,10 @@ def set_state(base, **kw):
 
 
 TRIAGE_INLINE_CAP = int(os.environ.get("HCTF_TRIAGE_INLINE_CAP", "6000"))
-CUMULATIVE_LANES = ("binary-reverse-engineering", "script-analysis")
+# Lanes whose day N+1 single starts from day N's solver (+ its cases). Mobile + warmups joined 2026-10-15 (user OK):
+# warmups Mastery = every earlier day's encoding; D15 mobile Mastery mixed earlier days' APKs.
+CUMULATIVE_LANES = tuple(x.strip() for x in os.environ.get(
+    "HCTF_CUMULATIVE_LANES", "binary-reverse-engineering,script-analysis,mobile-android,warmups").split(",") if x.strip())
 
 
 def triage_summary(cid, cap=TRIAGE_INLINE_CAP):
@@ -491,6 +494,15 @@ def mastery_delta(single_contract, timed_contracts, known=None):
             seen = set()
         novel = [x for x in ex if field_shape(x) not in seen] if seen else []
         carried = [x for x in ex if x not in novel]
+        if not seen:
+            # no lane history to compare against (first day / lookup failed): every extra id, character-capped
+            shown = []
+            for x in ex:
+                if sum(len(y) + 4 for y in shown) + len(x) > DELTA_NOVEL_CHARS:
+                    break
+                shown.append(x)
+            parts.append(f"{len(ex)} question id(s) the Single never asks, e.g. " + ", ".join(f"`{x}`" for x in shown))
+            carried = []
         if novel:
             shown, size = [], 0
             for x in novel:
@@ -4118,6 +4130,14 @@ def ratchet(day):
             speed_harden(day=day)
         except Exception as e:  # noqa: BLE001 - post-run best-effort
             say(f"[speed-harden] {tag}: skipped ({e})")
+    if TRAIN:
+        # Offline training on every earlier day (hctf/train.py): tomorrow's seed solvers vs ALL earlier GM-verified
+        # cases + answer-invariant mutations; misses -> adopted cases + a transactional generalize. Before the prebuild.
+        try:
+            from . import train as _train
+            _train.run(day, log=say)
+        except Exception as e:  # noqa: BLE001 - post-run best-effort
+            say(f"[train] {tag}: skipped ({e})")
 
 
 def prebuild(lane="metadata-forensics", n=None, targets=None, budget_usd=None, deadline=None, log=None, runner=None):
@@ -4131,6 +4151,7 @@ def prebuild(lane="metadata-forensics", n=None, targets=None, budget_usd=None, d
 
 
 SPEED_HARDEN = os.environ.get("HCTF_SPEED_HARDEN", "1") != "0"
+TRAIN = os.environ.get("HCTF_TRAIN", "1") != "0"
 PARALLEL_PER_SET = float(os.environ.get("HCTF_PARALLEL_PER_SET", "0.3"))   # s/set above which sets must run in parallel
 _PARALLEL_MARKERS = ("group_by_set", "ProcessPoolExecutor", "multiprocessing")
 

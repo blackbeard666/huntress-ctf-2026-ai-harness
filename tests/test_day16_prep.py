@@ -12,6 +12,7 @@ import json
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -99,6 +100,61 @@ try:
 finally:
     duel.BINARY_MIN_AVAIL_GB, duel._mem_avail_gb = saved
 print("ok  A4 binary duel: off by default; on only with the knob set and enough MemAvailable")
+
+# B1) train: today's solver lost an earlier day's concept -> case adopted + ONE generalize; dry run edits nothing
+from hctf import compound, paths, train  # noqa: E402
+TR = TMP / "train"
+SOLVE = """import argparse, json, pathlib
+ap = argparse.ArgumentParser(); ap.add_argument('--contract'); ap.add_argument('--artifacts'); a = ap.parse_args()
+c = json.load(open(a.contract))
+print(json.dumps({i: pathlib.Path(a.artifacts, 'blob.txt').read_text().strip()[::-1] if %s else None
+                  for i in c['answer_ids']}))
+"""
+
+
+def chal(day, name, solve_ok_for_reverse):
+    d = TR / "challenges" / f"day{day:02d}" / name
+    (d / "solver" / "cases" / "single_solve" / "artifacts").mkdir(parents=True)
+    (d / "meta.json").write_text(json.dumps({"lane": "warmups", "base": f"warmups-day-{day:02d}"}))
+    (d / "solver" / "solve.py").write_text(SOLVE % solve_ok_for_reverse)
+    case = d / "solver" / "cases" / "single_solve"
+    (case / "contract.json").write_text(json.dumps({"answer_ids": ["message"], "questions": [{"id": "message"}]}))
+    (case / "expected.json").write_text(json.dumps({"message": "abc"}))
+    (case / "artifacts" / "blob.txt").write_text("cba")
+    return d
+
+
+saved = (paths.CHALLENGES, compound.ROOT, paths.ROOT)
+calls = []
+try:
+    paths.CHALLENGES, compound.ROOT, paths.ROOT = TR / "challenges", TR, TR
+    chal(14, "warmups-old", "True")
+    today = chal(15, "warmups-new", "False")            # day 15's solver no longer decodes day 14's concept
+    import hctf.orchestrate as _o
+    saved_o = (_o.chain_for, _o.mutation_probe)
+    _o.mutation_probe = lambda sdir, mc=None, timeout=90: ("", [], {})
+
+    class StubChain:
+        def generalize(self, base, wrong=None, fixed=None, diag=None):
+            calls.append((base, sorted(diag)))
+            (today / "solver" / "solve.py").write_text(SOLVE % "True")      # the "worker" fixes it
+    _o.chain_for = lambda base, pools, gov: StubChain()
+    rep = train.run(15, log=lambda m: None, dry_run=True, deadline=time.time() + 600)
+    assert not calls and not list((today / "solver" / "cases").glob("compound-*")), calls
+    assert "1 hard miss(es)" in rep["warmups-day-15"]["before"], rep
+    rep = train.run(15, log=lambda m: None, deadline=time.time() + 600)
+    assert calls == [("warmups-day-15", ["compound_pre"])], calls
+    assert (today / "solver" / "cases" / "compound-d14-single_solve" / "expected.json").exists()
+    assert rep["warmups-day-15"]["generalized"] == 1 and "0 hard miss(es)" in rep["warmups-day-15"]["after"], rep
+finally:
+    paths.CHALLENGES, compound.ROOT, paths.ROOT = saved
+    _o.chain_for, _o.mutation_probe = saved_o
+print("ok  B1 train: earlier-day miss -> compound-d14 case adopted + one generalize, re-checked clean; dry run edits nothing")
+
+# B2) cumulative lanes: mobile + warmups seed from yesterday's solver; metadata keeps its lane seed
+assert {"mobile-android", "warmups", "binary-reverse-engineering", "script-analysis"} <= set(orchestrate.CUMULATIVE_LANES)
+assert "metadata-forensics" not in orchestrate.CUMULATIVE_LANES
+print("ok  B2 cumulative lanes: binary, script, mobile, warmups (metadata = lane solver seed)")
 
 shutil.rmtree(TMP, ignore_errors=True)
 print("ALL PASS")
