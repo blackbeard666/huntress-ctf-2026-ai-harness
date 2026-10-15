@@ -29,7 +29,8 @@ PIP="python3 -m pip install --user --break-system-packages -q"
 $PIP pyelftools pefile capstone keystone-engine unicorn pycryptodome pyzipper \
      androguard oletools python-evtx regipy LnkParse3 binary-refinery \
      yara-python python-magic olefile pillow xdis dnfile droidasc requests \
-     beautifulsoup4 PyJWT dpkt 2>&1 | tail -2   # last line: web lane (HTML, unverified JWT, pcap without tshark)
+     beautifulsoup4 PyJWT dpkt \
+     mutagen exifread pypdf macholib py7zr zstandard brotli base58 lz4 2>&1 | tail -2   # web lane + coverage-atlas parsers (prebuild allowlist)
 echo "[hb-setup] python deps installed"
 # tools that solvers shell out to
 for t in node c++filt unzip 7z strings file; do

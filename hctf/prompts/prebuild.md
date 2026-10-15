@@ -13,7 +13,10 @@ alone: the GM judges every value, and the day's worker still solves from scratch
   reverted and fails the gate):
 {writable}
 - In-window code: it runs on a small VM inside a 6-7 s Mastery clock. stdlib + `lib.*` + pefile/pyelftools/capstone/
-  pycryptodome/androguard/pyzipper only. NO subprocess, socket, ctypes, os, importlib, eval/exec/open. Bytes in,
+  pycryptodome/androguard/pyzipper + (on both hosts) python-evtx `Evtx`, olefile, oletools, dnfile, LnkParse3, lief,
+  cryptography, asn1crypto, dpkt, PIL, sqlite3 (`connect(':memory:').deserialize(data)`), wave, ordlookup, regipy,
+  msoffcrypto, unicorn, mutagen, exifread, pypdf, macholib, zstandard, brotli, base58, lz4 only (bytes in via
+  `io.BytesIO`). NO subprocess, socket, ctypes, os, importlib, eval/exec/open. Bytes in,
   value out, well under 1 s per call. Parse defensively: a decoy / truncated / wrong-format input returns the literal
   "none" (field absent) or None (cannot answer) -- never raises past your function.
 - Fixtures are your evidence. Generate each fixture with an INDEPENDENT standard tool or a stdlib/pip WRITER (e.g.
@@ -29,7 +32,7 @@ alone: the GM judges every value, and the day's worker still solves from scratch
 
 ## The gate (run it yourself before you stop; the harness re-runs it)
 {gate}
-plus the harness's ratchet gate suites. Every existing metadata/warmups/binary regression case must stay green.
+plus the harness's ratchet gate suites. Every existing regression case of the lane (all days) must stay green.
 
 {brief}
 

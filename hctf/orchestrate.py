@@ -726,6 +726,10 @@ def prior_solver_dir(lane, sdir):
     return best
 
 
+COVERAGE_CUES = os.environ.get("HCTF_COVERAGE_CUES", "1") == "1"
+COVERAGE_CUES_CHARS = int(os.environ.get("HCTF_COVERAGE_CUES_CHARS", "4500"))
+
+
 def technique_log(lane):
     """reference/techniques/<lane>.md -- the lane's learning log from earlier days (patterns, cues, tools, GM
     conventions, pitfalls) -- path PLUS its "how this lane has looked" summary inlined: a warmups worker never opened
@@ -742,6 +746,13 @@ def technique_log(lane):
         body = _log_section(text, sec, 4500)
         if body:
             out += f"\n\n{body}"
+    cov = ROOT / "reference" / "coverage" / f"{lane}.md"
+    if COVERAGE_CUES and cov.exists():
+        # Concepts this lane has NOT met yet (coverage atlas, 2026-10-15): fingerprints -> standard tool, so an unseen
+        # format/codec/language is identified in a turn or two instead of explored from scratch.
+        body = _log_section(cov.read_text(errors="replace"), "Recognition cues", COVERAGE_CUES_CHARS)
+        if body:
+            out += (f"\n\nNOT-YET-SEEN concepts of this lane (`{cov.relative_to(ROOT)}`, full table there):\n" + body)
     axes = variant_axes(lane)
     return out + (f"\n\n{axes}" if axes else "")
 

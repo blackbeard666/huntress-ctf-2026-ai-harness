@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from hctf import duel, orchestrate, remote, workers  # noqa: E402
+from hctf import duel, orchestrate, prebuild, remote, workers  # noqa: E402  (prebuild before any ROOT patch)
 from hctf import hb_timed as ht  # noqa: E402
 
 TMP = Path(tempfile.mkdtemp(prefix="hctf-d16p-"))
@@ -258,6 +258,37 @@ try:
 finally:
     cli.cdir = saved_cdir
 print("ok  C1 overlay: GM-accepted live answers of THIS attempt -> timed_env -> hb_timed bank (other attempts ignored)")
+
+# B3) prebuild: 5 lanes; targets ranked atlas p1 -> TARGETS.json -> atlas p2/p3; DFIR libs allowed; D1 cues inline
+from hctf import prebuild  # noqa: E402
+assert {"mobile-android", "script-analysis"} <= set(prebuild.enabled_lanes()) and len(prebuild.AUTO_LANES) == 5
+cfg = {"targets": "tests/data/x/TARGETS.json", "atlas": "reference/coverage/x.md"}
+AT = TMP / "atlas"
+(AT / "tests/data/x").mkdir(parents=True)
+(AT / "reference/coverage").mkdir(parents=True)
+(AT / "tests/data/x/TARGETS.json").write_text(json.dumps({"targets": [{"id": "hand-a", "goal": "a"},
+                                                                       {"id": "both", "goal": "own fields"}]}))
+(AT / "reference/coverage/x.md").write_text("# x\n## Readiness gaps\n```json\n" + json.dumps([
+    {"id": "p2-gap", "concept": "c2", "priority": 2, "action": "prebuild", "detail": "d"},
+    {"id": "both", "concept": "cb", "priority": 1, "action": "prebuild", "detail": "d"},
+    {"id": "tool-x", "concept": "t", "priority": 1, "action": "tool", "detail": "d"},
+    {"id": "p1-gap", "concept": "c1", "priority": 1, "action": "prebuild", "detail": "d"}]) + "\n```\n")
+saved_root = prebuild.ROOT
+try:
+    prebuild.ROOT = AT
+    order = [t["id"] for t in prebuild.targets(cfg)]
+    assert order == ["both", "p1-gap", "hand-a", "p2-gap"], order          # tool gaps never become prebuild targets
+    assert prebuild.targets(cfg)[0]["goal"] == "own fields"                # a TARGETS entry keeps its own fields
+finally:
+    prebuild.ROOT = saved_root
+assert {"Evtx", "olefile", "dnfile", "sqlite3", "ordlookup", "mutagen"} <= prebuild.ALLOWED_IMPORTS
+assert "open" in prebuild.BANNED_CALLS
+for lane in ("warmups", "mobile-android", "binary-reverse-engineering", "script-analysis", "metadata-forensics"):
+    if (ROOT / f"reference/coverage/{lane}.md").exists():
+        assert "NOT-YET-SEEN concepts of this lane" in orchestrate.technique_log(lane), lane
+assert "reference/coverage/{lane}.md" in (ROOT / "hctf/prompts/ratchet_log.md").read_text()
+print("ok  B3/D1 prebuild: 5 lanes, atlas-ranked targets (tools excluded), DFIR libs allowed (open() still banned); "
+      "atlas cues inlined; ratchet_log refreshes the atlas")
 
 shutil.rmtree(TMP, ignore_errors=True)
 print("ALL PASS")

@@ -210,7 +210,7 @@ try:
     tgt = tmp / "targets.json"
     tgt.write_text(json.dumps({"targets": [{"id": "zz-target", "fmt": "zzstub", "fields": ["header_count"]},
                                            {"id": "zz-2", "fmt": "msi", "fields": ["product_code_guid"]}]}))
-    cfg_t = dict(cfg, targets=str(tgt.relative_to(ROOT)))
+    cfg_t = dict(cfg, targets=str(tgt.relative_to(ROOT)), atlas=None)   # TARGETS.json only (no coverage-atlas gaps)
     assert [t["id"] for t in prebuild.pending("metadata-forensics", cfg_t, 5)] == [], "failed + done targets skipped"
     assert [t["id"] for t in prebuild.pending("metadata-forensics", cfg_t, 5, only=["zz-target"])] == ["zz-target"]
     # i) lock: a live holder blocks a second batch

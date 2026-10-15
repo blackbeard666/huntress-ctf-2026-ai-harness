@@ -39,8 +39,8 @@ LOGDIR = RUN / "prebuild"
 
 TIMEOUT = float(os.environ.get("HCTF_PREBUILD_TIMEOUT", str(15 * 60)))
 MAX_ATTEMPTS = int(os.environ.get("HCTF_PREBUILD_MAX_ATTEMPTS", "2"))     # per target, across nights
-DEFAULT_N = int(os.environ.get("HCTF_PREBUILD_N", "3"))
-BUDGET_CAP = float(os.environ.get("HCTF_PREBUILD_BUDGET_USD", "20"))     # hard ceiling per batch
+DEFAULT_N = int(os.environ.get("HCTF_PREBUILD_N", "5"))
+BUDGET_CAP = float(os.environ.get("HCTF_PREBUILD_BUDGET_USD", "60"))     # hard ceiling per batch (subscription)
 DEFAULT_COST = float(os.environ.get("HCTF_PREBUILD_DEFAULT_COST", "4"))  # $/worker before any history
 DROP_LOCAL = os.environ.get("HCTF_DROP_LOCAL", "21:00")                   # daily drop, HOST local time (Asia/Manila)
 DEADLINE_MARGIN_MIN = float(os.environ.get("HCTF_PREBUILD_MARGIN_MIN", "30"))
@@ -75,8 +75,29 @@ LANES = {
         "regress_lane": "binary-reverse-engineering",
         "requires": ("lib/binary.py:hcfg_scan",),
     },
+    "mobile-android": {
+        "brief": "prebuild_mobile",
+        "writable": ("lib/android.py", "tests/data/android_fixtures/"),
+        "snapshot": ("lib", "tests/data"),
+        "targets": "tests/data/android_fixtures/TARGETS.json",
+        "gate": ("tests/test_lane_fixtures.py",),
+        "regress_lane": "mobile-android",
+        "requires": ("lib/android.py:extract_answer",),
+    },
+    "script-analysis": {
+        "brief": "prebuild_script",
+        "writable": ("lib/codec.py", "tests/data/script_fixtures/"),
+        "snapshot": ("lib", "tests/data"),
+        "targets": "tests/data/script_fixtures/TARGETS.json",
+        "gate": ("tests/test_lane_fixtures.py", "tests/test_codec.py"),
+        "regress_lane": "script-analysis",
+        "requires": ("lib/codec.py:decode",),
+    },
 }
-LANE_ALIASES = {"metadata": "metadata-forensics", "binary": "binary-reverse-engineering"}
+for _k, _c in LANES.items():
+    _c.setdefault("atlas", f"reference/coverage/{_k}.md")   # coverage atlas: ranked readiness gaps (D1, 2026-10-15)
+LANE_ALIASES = {"metadata": "metadata-forensics", "binary": "binary-reverse-engineering", "mobile": "mobile-android",
+                "script": "script-analysis"}
 CODE_DIRS = ("hctf", "lib", "tests", "bin", "skills", "reference", "setup", ".claude")   # outside writable -> revert
 
 ALLOWED_IMPORTS = {
@@ -84,7 +105,12 @@ ALLOWED_IMPORTS = {
     "dataclasses", "datetime", "decimal", "email", "enum", "fractions", "functools", "gzip", "hashlib", "heapq", "html",
     "io", "ipaddress", "itertools", "json", "lzma", "math", "operator", "plistlib", "quopri", "re", "string", "struct",
     "tarfile", "textwrap", "typing", "unicodedata", "uuid", "xml", "zipfile", "zlib", "urllib.parse",
-    "lib", "pefile", "elftools", "capstone", "Crypto", "androguard", "pyzipper"}
+    "lib", "pefile", "elftools", "capstone", "Crypto", "androguard", "pyzipper",
+    # installed on BOTH this host's .venv and the Homebase VM's python3 (checked 2026-10-15; setup/install_tools.sh +
+    # setup/homebase_setup.sh): DFIR / format parsers the coverage atlas needs (bytes in via io.BytesIO; open() stays banned)
+    "Evtx", "olefile", "oletools", "dnfile", "LnkParse3", "lief", "cryptography", "asn1crypto", "dpkt", "PIL", "sqlite3",
+    "wave", "ordlookup", "regipy", "msoffcrypto", "unicorn", "mutagen", "exifread", "pypdf", "macholib", "zstandard",
+    "brotli", "base58", "lz4"}
 BANNED_CALLS = {"eval", "exec", "compile", "__import__", "open", "input", "breakpoint", "globals", "locals", "vars"}
 
 
@@ -116,9 +142,45 @@ def _load_json(p, default):
         return default
 
 
+def atlas_gaps(cfg):
+    """`action: prebuild` readiness gaps of the lane's coverage atlas (reference/coverage/<lane>.md, ```json block under
+    "## Readiness gaps"), as targets {id, goal, priority, source}. [] when the atlas is missing / unparsable."""
+    p = ROOT / cfg["atlas"] if cfg.get("atlas") else None
+    if not p or not p.exists():
+        return []
+    m = re.search(r"## Readiness gaps.*?```json\s*(.*?)```", p.read_text(errors="replace"), re.S)
+    try:
+        gaps = json.loads(m.group(1)) if m else []
+    except ValueError:
+        return []
+    return [{"id": g["id"], "goal": f"{g.get('concept', g['id'])}: {g.get('detail', '')}".strip(": "),
+             "priority": int(g.get("priority") or 3), "source": f"coverage atlas {cfg['atlas']}"}
+            for g in gaps if isinstance(g, dict) and g.get("id") and g.get("action") == "prebuild"]
+
+
 def targets(cfg):
+    """Ranked: atlas priority-1 gaps, then the lane's TARGETS.json (hand-ranked), then atlas priority 2, 3. A TARGETS
+    entry the atlas also names keeps its own fields but takes the atlas rank."""
     t = _load_json(ROOT / cfg["targets"], {}) if cfg.get("targets") else {}
-    return list(t.get("targets", t) if isinstance(t, dict) else t)
+    base = list(t.get("targets", t) if isinstance(t, dict) else t)
+    gaps = atlas_gaps(cfg)
+    prio = {g["id"]: g["priority"] for g in gaps}
+    by_id = {x.get("id"): x for x in base}
+    out, seen = [], set()
+
+    def add(x):
+        if x.get("id") and x["id"] not in seen:
+            seen.add(x["id"])
+            out.append(by_id.get(x["id"], x))
+    for g in gaps:
+        if g["priority"] <= 1:
+            add(g)
+    for x in base:
+        if prio.get(x.get("id"), 2) >= 2:
+            add(x)
+    for g in sorted(gaps, key=lambda g: g["priority"]):
+        add(g)
+    return out
 
 
 def registered_fields():
@@ -635,7 +697,8 @@ def run(lane, n=None, only=None, budget_usd=None, deadline=None, log=print, runn
 # ------------------------------------------------------------------------------------------------ post-run hook
 AFTER_RATCHET = os.environ.get("HCTF_PREBUILD_AFTER_RATCHET", "1") != "0"
 AUTO_LANES = [x.strip() for x in os.environ.get("HCTF_PREBUILD_LANES", "metadata-forensics,warmups,"
-                                                 "binary-reverse-engineering").split(",") if x.strip()]
+                                                 "binary-reverse-engineering,mobile-android,script-analysis").split(",")
+              if x.strip()]
 
 
 def launch_background(day=None, log=print, popen=subprocess.Popen):
