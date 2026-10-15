@@ -122,6 +122,25 @@ def label_table(sdir, res, wrong, cap=60):
     return "\n".join(out)
 
 
+RESUME_CONTINUES = int(os.environ.get("HCTF_RESUME_CONTINUES", "2"))
+TT_FIX_GATE = os.environ.get("HCTF_TT_FIX_GATE", "1") == "1"
+
+
+def _cut_short(last):
+    """A failed UNTIMED attempt whose in-attempt localization did not finish its job -- stopped early (a transport
+    error, its time budget) or fixed every wrong field without completing the attempt -- while holding GM-accepted
+    ids: reconnecting finishes it (hb_timed overlays the banked values and localizes the rest). D15 script Mastery:
+    one cut-off reply ended localization with 16 `delayed` -> `percent` fixes found; a 3-min generalize followed."""
+    if str(last.get("result", "")).lower() != "incorrect" or not _prev_banked(last):
+        return False
+    if last.get("deadline") is not None or not (last.get("untimed") or last.get("run_for_time") is False):
+        return False   # a clocked attempt is gone by now
+    if not last.get("localize_complete"):
+        return True
+    wrong = [w[0] for w in last.get("wrong") or []]
+    return bool(wrong) and all(a in (last.get("fixed") or {}) for a in wrong)
+
+
 def _resume_need(prev):
     """Seconds of clock a resumed attempt must still have to be worth running: the last run's in-window phases
     (download + solve + submit) + 1.5 s, at least 3 s (half the window when no phases are known)."""
@@ -3118,8 +3137,11 @@ class Chain:
                 if "compound_today" in late:
                     self._today_recheck(cid)
         if mode == "mastery":
+            if TT_FIX_GATE:
+                self._tt_fix_gate(cid)
             self._mastery_speed_gate(cid)
         clock_retries = 0
+        resume_continues = 0
         rate_retries = 0
         start_retries = 0
         untimed = False     # True once the fresh timed pool is spent: every further attempt is untimed (no clock)
@@ -3245,6 +3267,18 @@ class Chain:
             if res not in ("expired", "blocked"):
                 break
             last = timed.last_result(cid) or {}
+            if res == "blocked" and resume_continues < RESUME_CONTINUES and _cut_short(last):
+                # Nothing says the solver can't pass this attempt: its localization just didn't finish. Reconnect (the
+                # loop picks op=resume for a live banked attempt) instead of a generalize; speed_harden teaches the
+                # solver the in-attempt fixes after the run (its failing GM-verified cases).
+                resume_continues += 1
+                attempt -= 1
+                say(f"[{cid}] in-attempt localization cut short ({str(last.get('localize_error') or 'budget/resubmit')[:80]}; "
+                    f"{len(last.get('fixed') or {})} fix(es), {len(last.get('wrong') or [])} wrong found): reconnecting "
+                    f"to attempt {str(last.get('attempt_id'))[:8]} to finish it, no generalize "
+                    f"(continue {resume_continues}/{RESUME_CONTINUES})")
+                set_state(self.base, stage=f"{mode}:continuing")
+                continue
             if res == "expired" and self._clock_expiry(cid) and clock_retries >= CLOCK_RETRIES:
                 # Clock-only failures exhausted their own retry budget: a generalize worker can't speed up the network
                 # (main replay: one was launched anyway after "timing, not the solver"). Stop here.
@@ -3376,6 +3410,31 @@ class Chain:
             self.generalize(cid, wrong=wrong, fixed=fixed, diag=diag)
         set_state(self.base, stage=f"{mode}:blocked")
         return False
+
+    def _tt_fix_gate(self, cid):
+        """The Time Trial passed only through in-window fixes (wrong -> GM-accepted values): the solver still produces
+        those wrong values, and Mastery asks the same families again (D15 script: TT 8 x expansion delayed -> percent
+        fixed in-window, then Mastery 20 x the same). An UNTIMED Mastery corrects them in-attempt (label_hints.json
+        ranks TT's accepted value first): start it now. A CLOCKED Mastery may be the day's one shot: teach the solver
+        on the Time Trial's variant first (its auto-time_trial-* case holds the GM-verified answers)."""
+        tt = self.entries.get("time_trial")
+        if not tt or getattr(self, "_tt_gate_done", False):
+            return
+        self._tt_gate_done = True
+        last = timed.last_result(tt["id"]) or {}
+        wrong = [tuple(x) for x in last.get("wrong") or []]
+        if str(last.get("result", "")).lower() != "correct" or not wrong:
+            return
+        fixed = last.get("fixed") or {}
+        clocked = last.get("deadline") is not None or last.get("run_for_time") is True
+        if not clocked:
+            say(f"[{cid}] Time Trial needed {len(wrong)} in-window fix(es) ({len(fixed)} GM-accepted); its pool was "
+                "untimed, so Mastery starts now and corrects them in-attempt (TT's values ranked first)")
+            return
+        n = timed.join_capture(tt["id"], 120)
+        say(f"[{cid}] Time Trial needed {len(wrong)} in-window fix(es) on a CLOCKED pool: teaching the solver on that "
+            f"variant BEFORE Mastery{' (its regression case is still being captured)' if n else ''}")
+        self.generalize(cid, wrong=wrong, fixed=fixed, diag={"tt_inwindow_fixes": len(wrong)})
 
     def _label_scout(self, cid, mode, wrong, fixed):
         """LABEL SCOUTING, before the generalize of a label-only Time Trial failure: up to LABEL_SCOUT_ROUNDS more
@@ -4058,6 +4117,13 @@ def speed_harden(day=None, cid=None, log=None):
         if not (sdir / "solve.py").exists():
             continue
         res = solvers.test_solver(sdir)
+        bad = [r["case"] for r in res if not r.get("ok") and not r.get("unverified")]
+        if bad:
+            # GM-verified cases the solver fails: modes passed by in-attempt fixes (localize + resubmit / reconnect)
+            # that no generalize ever taught it. Tomorrow's reuse race copies this solver: fix it now, off the clock.
+            log(f"[speed-harden] {base}: {len(bad)} GM-verified case(s) fail ({', '.join(bad[:3])}) -> correctness generalize")
+            chain_for(base, pools, gov).generalize(base, wrong=None, fixed=None, diag={})
+            res = solvers.test_solver(sdir)
         timed_ok = [r for r in res if not r.get("unverified") and not r.get("error")]
         slow = max((r["seconds"] for r in timed_ok), default=0.0)
         worst = max(timed_ok, key=lambda r: r["seconds"], default=None)

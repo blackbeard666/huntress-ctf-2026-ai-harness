@@ -421,6 +421,16 @@ def join_captures(timeout=900):
     for t in list(_captures):
         t.join(max(0.0, end - _t.time()))
     return sum(t.is_alive() for t in _captures)
+
+
+def join_capture(cid, timeout=120):
+    """Wait for ONE mode's background pass capture (its regression case) -> 1 if still running, else 0."""
+    import time as _t
+    end = _t.time() + timeout
+    mine = [t for t in list(_captures) if t.name == f"capture-{cid}"]
+    for t in mine:
+        t.join(max(0.0, end - _t.time()))
+    return int(any(t.is_alive() for t in mine))
 CAPTURE_YIELD_MAX = float(__import__("os").environ.get("HCTF_CAPTURE_YIELD_MAX", "180"))
 
 

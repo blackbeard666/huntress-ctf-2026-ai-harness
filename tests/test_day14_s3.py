@@ -233,11 +233,14 @@ print("ok  prebuild gate (stub workers): good module kept; outside-allowlist / s
 
 # 6) stop(): SIGTERM the lock holder, SIGKILL HCTF_PREBUILD=1 processes, recover the snapshot
 tmp = Path(tempfile.mkdtemp(prefix="s3stop-", dir=paths.TMP))
-saved = {k: getattr(prebuild, k) for k in ("LOCK", "SNAP")}
+saved = {k: getattr(prebuild, k) for k in ("LOCK", "SNAP", "_worker_pids")}
 prebuild.LOCK, prebuild.SNAP = tmp / "lock", tmp / "snap"
 try:
     batch = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
     worker = subprocess.Popen(["sleep", "60"], env=dict(os.environ, HCTF_PREBUILD="1"))
+    # the real scan, limited to THIS test's worker: unscoped, stop() SIGKILLed a real post-run prebuild's workers
+    # (2026-10-15: 5 of 8 D15 targets died rc -9 while the suite ran)
+    prebuild._worker_pids = lambda real=saved["_worker_pids"]: [p for p in real() if p == worker.pid]
     prebuild.LOCK.write_text(json.dumps({"pid": batch.pid}))
     assert prebuild.lock_holder() == batch.pid and worker.pid in prebuild._worker_pids()
     t0 = time.time()

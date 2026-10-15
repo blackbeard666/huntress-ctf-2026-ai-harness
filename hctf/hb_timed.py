@@ -11,6 +11,7 @@ Prints one JSON line: {result, remaining, deadline, elapsed, submitted, detail}.
 """
 import argparse
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -31,6 +32,7 @@ class _Ctx(__import__("threading").local):
     lane = None
     opts = None
     on_event = None   # hb_daemon (HCTF_EARLY_GENERALIZE): callable(dict) for mid-attempt events
+    solver_dir = None  # rel. to HW: the challenge dir next to it holds label_hints.json (shared by its modes)
 
 
 _CTX = _Ctx()
@@ -253,6 +255,15 @@ def _post(payload, timeout=None):
                     timeout=timeout)
     except RuntimeError as e:   # _open: a 4xx/5xx without a JSON body
         return {"error": "unjudged_http", "detail": str(e)[:200]}
+    except http.client.HTTPException as e:
+        # IncompleteRead: the reply body was cut off mid-read (D15 script Mastery: 69 KB of a 2.7 MB localize reply).
+        # The GM judged the request but we never saw the verdict: unjudged -> _submit resends it (a submit is
+        # idempotent: banked ids just reconfirm). It is not an OSError, so it used to escape every handler and abort
+        # the whole in-window localization (5 sets, 16 fixable fields -> a 3-min generalize). OSErrors (timeouts,
+        # RemoteDisconnected) still propagate: their callers own the no-double-POST rule.
+        if isinstance(e, OSError):
+            raise
+        return {"error": "unjudged_transport", "detail": repr(e)[:200]}
     try:
         res = json.loads(raw)
     except ValueError:
@@ -580,13 +591,23 @@ def _localize(cid, answers, groups, per_set, body, out):
         with lock:
             state["complete"] = False
 
+    def sub(ans):
+        # A timeout / dropped socket on ONE localization submit judged nothing: that subset stays unjudged and every
+        # other subset and set carries on (D15 script Mastery: one cut-off reply ended all 5 sets' localization).
+        try:
+            return _submit(cid, ans, body, out)
+        except Exception as e:  # noqa: BLE001
+            with lock:
+                out.setdefault("localize_errors", []).append(repr(e)[:160])
+            return {"error": f"unjudged_exc {e!r}"[:160]}
+
     def narrow(group, wrong):
         if not group:
             return
         if budget_left() < 0.8:
             incomplete()
             return
-        res = _submit(cid, {k: answers[k] for k in group}, body, out)
+        res = sub({k: answers[k] for k in group})
         if ok(res):
             with lock:
                 ok_fields.update(group)
@@ -606,20 +627,22 @@ def _localize(cid, answers, groups, per_set, body, out):
 
     def alternatives(aid, vocab):
         cur = answers.get(aid)
+        # what an EARLIER attempt of this challenge (D15: the Time Trial) learned for this family + this rejected value
+        hint = hints.get(_suffix(aid) or "", {}).get(str(cur), {})
         alts = []
-        for alt in list(vocab.get(_suffix(aid) or "", [])) + _playbook_alts(aid, cur):
+        for alt in list(hint) + list(vocab.get(_suffix(aid) or "", [])) + _playbook_alts(aid, cur):
             if alt != cur and alt not in alts:
                 alts.append(alt)
         with lock:   # the value this attempt has accepted most often so far goes first (a13sota8: 20 of 21 fixes
             seen = {}  # were one label, tried third every time)
             for v in fixed.values():
                 seen[v] = seen.get(v, 0) + 1
-        alts.sort(key=lambda v: -seen.get(v, 0))
+        alts.sort(key=lambda v: (-hint.get(v, 0), -seen.get(v, 0)))
         for alt in alts:
             if budget_left() < 0.5:
                 incomplete()
                 return
-            res = _submit(cid, {aid: alt}, body, out)
+            res = sub({aid: alt})
             if ok(res):
                 with lock:
                     fixed[aid] = alt
@@ -630,24 +653,30 @@ def _localize(cid, answers, groups, per_set, body, out):
                 out.setdefault("localize_tried", {}).setdefault(aid, []).append(alt)
 
     def one_set(key, v, vocab):
-        """-> this set's wrong ids, in field order; fixes land in `fixed`."""
+        """-> this set's wrong ids, in field order; fixes land in `fixed`. Never raises: a failure stays in this set."""
         wrong = []
-        if v["result"] in ("correct", "accepted"):
+        try:
+            if v["result"] in ("correct", "accepted"):
+                with lock:
+                    ok_fields.update(groups.get(key, {}))
+                return wrong
+            if v["result"] == "incorrect" and not v.get("assumed") and len(groups.get(key, {})) == 1:
+                # a one-field set judged incorrect IS that field's verdict: re-submitting it alone only repeats it
+                # (rehearsal D13 replay, warmups Mastery: 41 such submits, ~20 s of a failed attempt)
+                wrong.append(next(iter(groups[key])))
+            else:
+                for grp in _label_first(list(groups.get(key, {}).keys()), answers, vocab):
+                    narrow(grp, wrong)
+            for aid in wrong:
+                alternatives(aid, vocab)
+        except Exception as e:  # noqa: BLE001
             with lock:
-                ok_fields.update(groups.get(key, {}))
-            return wrong
-        if v["result"] == "incorrect" and not v.get("assumed") and len(groups.get(key, {})) == 1:
-            # a one-field set judged incorrect IS that field's verdict: re-submitting it alone only repeats it
-            # (rehearsal D13 replay, warmups Mastery: 41 such submits, ~20 s of a failed attempt)
-            wrong.append(next(iter(groups[key])))
-        else:
-            for sub in _label_first(list(groups.get(key, {}).keys()), answers, vocab):
-                narrow(sub, wrong)
-        for aid in wrong:
-            alternatives(aid, vocab)
+                out.setdefault("localize_errors", []).append(f"{key}: {e!r}"[:160])
+            incomplete()
         return wrong
 
     vocab = _vocab()
+    hints = _hints()
     by_set = {}
     try:
         keys = list(per_set)
@@ -667,6 +696,44 @@ def _localize(cid, answers, groups, per_set, body, out):
         out["localize_unjudged"] = unjudged
     out["verified"] = {**{a: answers[a] for a in ok_fields if a in answers}, **fixed}
     out["novel_labels"] = _novel(out["verified"], vocab)
+    if out.get("localize_errors"):
+        out["localize_error"] = out["localize_errors"][0]   # the key the orchestrator / dashboards already read
+    _record_hints(answers, fixed)
+
+
+def _hints_path():
+    sd = _CTX.solver_dir
+    return (HW / sd).parent / "label_hints.json" if sd else None
+
+
+def _hints():
+    """{family suffix: {rejected value: {GM-accepted value: n}}} learned by in-window fixes on earlier attempts of THIS
+    challenge (any mode). A ranking hint for the next attempt's corrector, never an answer rewrite: on D15 script the
+    Time Trial's 8 x expansion delayed -> percent held for 20 of Mastery's 30 `delayed` answers, not the other 10."""
+    p = _hints_path()
+    try:
+        return json.loads(p.read_text()) if p else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _record_hints(answers, fixed):
+    p = _hints_path()
+    if not p or not fixed:
+        return
+    h = _hints()
+    for aid, val in fixed.items():
+        suf, cur = _suffix(aid), answers.get(aid)
+        if not suf or cur in (None, ""):
+            continue
+        d = h.setdefault(suf, {}).setdefault(str(cur), {})
+        d[val] = d.get(val, 0) + 1
+    try:
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps(h, indent=1, sort_keys=True))
+        tmp.replace(p)
+    except OSError:
+        pass
 
 
 RESUBMIT_FIXED = os.environ.get("HCTF_RESUBMIT_FIXED", "1") != "0"
@@ -863,10 +930,11 @@ def run_attempt(cid, solver_dir, op="start", min_left=None, opts=None, on_event=
     SOLVER when set. Thread-safe: per-attempt state lives in _CTX. `on_event`: see _event."""
     from types import SimpleNamespace
     _CTX.lane, _CTX.opts, _CTX.on_event = _lane_from_solver_dir(solver_dir), dict(opts or {}), on_event
+    _CTX.solver_dir = solver_dir
     try:
         return _attempt(SimpleNamespace(cid=cid, solver_dir=solver_dir, op=op, min_left=min_left))
     finally:
-        _CTX.lane = _CTX.opts = _CTX.on_event = None
+        _CTX.lane = _CTX.opts = _CTX.on_event = _CTX.solver_dir = None
 
 
 def _attempt(a):
@@ -1008,6 +1076,14 @@ def _attempt(a):
         out["detail"] = r.stderr[-800:]
         return _emit(out, adir)
 
+    bank = _bank_load(a.cid, out.get("attempt_id"))
+    if bank:
+        # Reconnected to an attempt that already banked GM-accepted values (localization / fixes cut short): reuse them
+        # verbatim for these exact answer ids instead of re-deriving -- the solver still answers wrong where the GM had
+        # already accepted a correction (D15 script Mastery: 4108 accepted + 16 fixes, then a 3-min generalize).
+        over = {k: bank[k] for k in ids if k in bank and answers.get(k) != bank[k]}
+        answers.update(over)
+        out["bank_overlay"] = len(over)
     missing = [i for i in ids if i not in answers]
     out["submitted"] = answers
     t_solved = time.time()
@@ -1247,7 +1323,45 @@ def _emit(out, adir):
         (adir / "result.json").write_text(json.dumps(out))
     except OSError:
         pass
+    _bank_save(out)
     return out
+
+
+def _bank_path(cid):
+    return HW / ".run" / "timed-bank" / (re.sub(r"[^A-Za-z0-9]+", "_", cid) + ".json")
+
+
+def _bank_load(cid, attempt_id):
+    """-> {answer_id: GM-accepted value} banked on THIS attempt by an earlier run that reconnected to it, else {}."""
+    if not attempt_id or _opt("HCTF_BANK_OVERLAY", "1") != "1":
+        return {}
+    try:
+        b = json.loads(_bank_path(cid).read_text())
+    except (OSError, ValueError):
+        return {}
+    return b.get("verified") or {} if b.get("attempt_id") == attempt_id else {}
+
+
+def _bank_save(out):
+    """Keep what the GM accepted on a still-unpassed attempt (merged across reconnects); drop it once passed."""
+    cid, aid = out.get("cid"), out.get("attempt_id")
+    if not cid or not aid:
+        return
+    p = _bank_path(cid)
+    try:
+        if str(out.get("result", "")).lower() == "correct":
+            p.unlink(missing_ok=True)
+            return
+        ver = {**(out.get("partial_fixed") or {}), **(out.get("verified") or {})}
+        if not ver:
+            return
+        p.parent.mkdir(parents=True, exist_ok=True)
+        old = _bank_load(cid, aid)
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"attempt_id": aid, "verified": {**old, **ver}}))
+        tmp.replace(p)
+    except OSError:
+        pass
 
 
 if __name__ == "__main__":
