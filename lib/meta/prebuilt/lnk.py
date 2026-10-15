@@ -66,9 +66,60 @@ FIELDS = {
     ("lnk", "tracker_data_machine_id"): "lnk_value",
     ("lnk", "tracker_data_block_machine_id"): "lnk_value",
     ("lnk", "netbios_name"): "lnk_value",
+    # LinkInfo VolumeID / CommonNetworkRelativeLink, the LinkTargetIDList path on its own, EnvironmentVariableDataBlock
+    ("lnk", "link_info_volume_label"): "lnk_value",
+    ("lnk", "linkinfo_volume_label"): "lnk_value",
+    ("lnk", "volume_id_volume_label"): "lnk_value",
+    ("lnk", "volume_label"): "lnk_value",
+    ("lnk", "link_info_drive_serial_u32_hex"): "lnk_value",
+    ("lnk", "link_info_drive_serial_number_u32_hex"): "lnk_value",
+    ("lnk", "linkinfo_drive_serial_u32_hex"): "lnk_value",
+    ("lnk", "linkinfo_drive_serial_number_u32_hex"): "lnk_value",
+    ("lnk", "volume_id_drive_serial_number_u32_hex"): "lnk_value",
+    ("lnk", "drive_serial_u32_hex"): "lnk_value",
+    ("lnk", "drive_serial_number_u32_hex"): "lnk_value",
+    ("lnk", "volume_serial_number_u32_hex"): "lnk_value",
+    ("lnk", "link_info_drive_serial_number"): "lnk_value",
+    ("lnk", "drive_serial_number"): "lnk_value",
+    ("lnk", "volume_serial_number"): "lnk_value",
+    ("lnk", "link_info_drive_type"): "lnk_value",
+    ("lnk", "linkinfo_drive_type"): "lnk_value",
+    ("lnk", "volume_id_drive_type"): "lnk_value",
+    ("lnk", "drive_type"): "lnk_value",
+    ("lnk", "link_info_drive_type_u32_hex"): "lnk_value",
+    ("lnk", "drive_type_u32_hex"): "lnk_value",
+    ("lnk", "link_info_common_network_path"): "lnk_value",
+    ("lnk", "linkinfo_common_network_path"): "lnk_value",
+    ("lnk", "common_network_path"): "lnk_value",
+    ("lnk", "network_path"): "lnk_value",
+    ("lnk", "link_info_net_name"): "lnk_value",
+    ("lnk", "linkinfo_net_name"): "lnk_value",
+    ("lnk", "common_network_relative_link_net_name"): "lnk_value",
+    ("lnk", "net_name"): "lnk_value",
+    ("lnk", "network_share_name"): "lnk_value",
+    ("lnk", "link_info_common_path_suffix"): "lnk_value",
+    ("lnk", "common_path_suffix"): "lnk_value",
+    ("lnk", "idlist_path"): "lnk_value",
+    ("lnk", "id_list_path"): "lnk_value",
+    ("lnk", "link_target_idlist_path"): "lnk_value",
+    ("lnk", "link_target_id_list_path"): "lnk_value",
+    ("lnk", "target_idlist_path"): "lnk_value",
+    ("lnk", "env_target_path"): "lnk_value",
+    ("lnk", "env_target"): "lnk_value",
+    ("lnk", "environment_target"): "lnk_value",
+    ("lnk", "environment_target_path"): "lnk_value",
+    ("lnk", "environment_variable_target"): "lnk_value",
+    ("lnk", "environment_variable_target_path"): "lnk_value",
+    ("lnk", "environment_variable_data_block_target"): "lnk_value",
+    ("lnk", "env_var_target_path"): "lnk_value",
+    ("lnk", "string_data_relative_path"): "lnk_value",
+    ("lnk", "string_data_icon_location"): "lnk_value",
+    ("lnk", "icon_file_name"): "lnk_value",
 }
 
 _CLSID = bytes.fromhex("0114020000000000c000000000000046")
+_DRIVES = {0: "DRIVE_UNKNOWN", 1: "DRIVE_NO_ROOT_DIR", 2: "DRIVE_REMOVABLE", 3: "DRIVE_FIXED", 4: "DRIVE_REMOTE",
+           5: "DRIVE_CDROM", 6: "DRIVE_RAMDISK"}
 _STRS = ("name", "relative_path", "working_dir", "arguments", "icon_location")   # flag bits 0x4 .. 0x40
 
 
@@ -123,6 +174,30 @@ def _idlist_path(idl):
     return "\\".join(parts) if len(parts) > 1 else (parts[0] + "\\" if parts[0].endswith(":") else parts[0])
 
 
+def _volume_net(li, lflags, r):
+    """LinkInfo VolumeID (drive type / serial / label) and CommonNetworkRelativeLink (NetName) into r."""
+    vo, no = struct.unpack_from("<I", li, 12)[0], struct.unpack_from("<I", li, 20)[0]
+    if lflags & 1 and vo and vo + 16 <= len(li):
+        vsz, dt, ser, lo = struct.unpack_from("<4I", li, vo)
+        vol = li[vo:vo + vsz] if vsz >= 16 else li[vo:]
+        r["drive_type"], r["drive_serial"] = dt, ser
+        if lo == 0x14 and len(vol) >= 20:
+            label = _cstr(vol, struct.unpack_from("<I", vol, 16)[0], True)
+        else:
+            label = _cstr(vol, lo, False)
+        r["volume_label"] = label or ""
+    if lflags & 2 and no and no + 20 <= len(li):
+        csz, _, nno = struct.unpack_from("<3I", li, no)
+        net = li[no:no + csz] if csz >= 20 else li[no:]
+        name = None
+        if nno > 0x14 and len(net) >= 24:
+            name = _cstr(net, struct.unpack_from("<I", net, 20)[0], True)
+        if not name:
+            name = _cstr(net, nno, False)
+        if name:
+            r["net_name"] = name
+
+
 def parse(b):
     """The shell link's fields as a dict, or None (not an MS-SHLLINK file / truncated header)."""
     if not b or len(b) < 0x4C or b[:4] != b"\x4c\0\0\0" or b[4:20] != _CLSID:
@@ -151,6 +226,8 @@ def parse(b):
             suffix = _cstr(li, cps, False)
         if base is not None:
             r["local_base_path"] = base + (suffix or "")
+        r["common_path_suffix"] = suffix or ""
+        _volume_net(li, lflags, r)
         off += lsz
     wide = bool(flags & 0x80)
     for i, key in enumerate(_STRS):
@@ -177,6 +254,29 @@ def parse(b):
 
 
 def _pick(r, f):
+    if "drive_type" in f:
+        if "drive_type" not in r:
+            return "none"
+        return Hex(r["drive_type"], 8) if f.endswith("_hex") else _DRIVES.get(r["drive_type"], str(r["drive_type"]))
+    if "serial" in f:
+        return Hex(r["drive_serial"], 8) if "drive_serial" in r else "none"
+    if "volume_label" in f:
+        return r.get("volume_label") or "none"
+    if "net_name" in f or f == "network_share_name":
+        return r.get("net_name") or "none"
+    if "network_path" in f:
+        if not r.get("net_name"):
+            return "none"
+        n, suf = r["net_name"], r.get("common_path_suffix") or ""
+        return n + ("\\" if suf and not n.endswith("\\") else "") + suf
+    if "common_path_suffix" in f:
+        return r.get("common_path_suffix") or "none"
+    if "idlist_path" in f or "id_list_path" in f:
+        return r.get("idlist_path") or "none"
+    if f.startswith("env") and "target" in f:
+        return r.get("env_target") or "none"
+    if f in ("string_data_relative_path", "string_data_icon_location", "icon_file_name"):
+        return r.get("relative_path" if "relative" in f else "icon_location", "none")
     if f.endswith("_u32_hex") or f.endswith("_u16_hex"):
         w = 4 if f.endswith("_u16_hex") else 8
         for k in ("link_flags", "file_attributes", "show_command", "hot_key"):

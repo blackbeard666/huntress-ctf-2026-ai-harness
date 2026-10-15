@@ -81,6 +81,14 @@ DOTNET_FORMAT_REJECTED = [
     ".NET Framework", ".NET Core", "framework", "core", "none",
 ]
 
+# Day 15 "Stripped" (binary-reverse-engineering), confirmed 2026-10-15 (single, TT, Mastery 5 sets; 0 wrong): an id
+# `dNN_analysis_<qualifier>_<field>` whose first token after `analysis_` is NOT a field word names ONE member of the
+# group by its file-name tag (`d15--variant-000-stripped.elf` -> analysis_stripped_*; `..-symbolized.elf` ->
+# analysis_symbolized_*): answer <field> (format/architecture/machine/config_campaign/config_domain) for THAT member
+# only. Renamed members: stripped = the ELF without `.symtab`, symbolized/unstripped = with it. Values as usual
+# (elf / x86-64 / decimal e_machine "62"; the stripped twin still carries the same HCFG config).
+BINARY_MEMBER_QUALIFIERS = {"stripped": False, "symbolized": True, "unstripped": True}   # -> has .symtab
+
 # Day 4 "Picture This" (metadata-forensics), confirmed 2026-10-04: jpeg.sof_dimensions_pixels is the SOFn frame
 # header size as '<width>x<height>' (X then Y, lowercase 'x', no spaces), e.g. "257x146" — not EXIF/filename dims.
 JPEG_DIMENSIONS_FMT = "{width}x{height}"
@@ -150,6 +158,19 @@ MSI_PRODUCT_CODE_GUID_REJECTED = ["DD1A80D5-0250-4F4D-B289-13096D633C61"]
 # dir, not the .lnk's own member name.
 LNK_TARGET_PATH_WINDOWS = "LinkInfo LocalBasePath (+CommonPathSuffix) verbatim, else the IDList path"
 
+# Day 15 "A Word to the Wise" (metadata-forensics), confirmed 2026-10-15 (single, TT, Mastery 5 sets): id
+# d15-ooxml-NNN-ooxml-external-relationship-targets ("Determine ooxml.external_relationship_targets for
+# document-15-NNN.docx.") = the Target of every TargetMode="External" Relationship across all *.rels parts, compact JSON
+# list SORTED by target string ("exact values and order"). The rels order (rId9 evidence/<hex>, rId10 control) was
+# REJECTED on the single. Every variant carried the same two targets/rIds, so "sorted by rId string" is not ruled out.
+# lib.meta.ooxml.external_relationship_targets.
+OOXML_EXTERNAL_RELATIONSHIP_TARGETS = "sorted(Target for TargetMode=External in every *.rels)"
+OOXML_EXTERNAL_RELATIONSHIP_TARGETS_REJECTED = ['["https://example.test/evidence/d87ca62c5bb7","https://example.test/control"]']
+# Same day, NEW cross-file id metadata-day-15-synthesis-sha256-order (TT + Mastery 5 sets confirmed): the question's
+# `Files: [...]` (members of the artifact's own container; the list varies per set) ordered by full-file SHA-256 hex
+# digest ascending -> compact JSON list of the names. lib.meta.synthesis.digest_order(question, read).
+METADATA_SYNTHESIS_DIGEST_ORDER = "sorted(Files, key=hexdigest(member bytes)) ascending"
+
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {
     "resource_hijacking": "T1496",     # crypto-mining / resource hijacking
@@ -183,6 +204,16 @@ BATCH_ROLE_ATTACK_CONFIRMED = {
 # Rejected spellings/values: percent, percent_expansion, immediate, call-double, double_call. The GM's per-file value is
 # NOT the naive join-line form (percent/CALL joins were `delayed`); see challenges/day03/scripting-expansion-pack notes.
 BATCH_EXPANSION_VOCAB = ("percent", "delayed", "call_double", "for_indirect")
+# Day 15 "Crumb Trail" REGIME SPLIT (54/54 GM-verified fields of the run_for_time:false attempts TT 0df5072d + Mastery
+# 7fbfc526, 0 conflicts; the rule above still holds 0-conflict on every run_for_time true/absent case incl. D15's):
+# when the contract says run_for_time:false (the regular untimed pool; question "Classify only the expansion form used
+# by the descriptor reconstruction statement ..."), the label is the JOIN STATEMENT alone, echo(!x!) ignored:
+# FOR .. do call set = for_indirect over ANY pool (h-pool FOR = for_indirect: `call_double` REJECTED, Mastery set5);
+# `call set` over the h pool = call_double; `call set` over any other pool = percent; !x! join = delayed; %x% = percent.
+# The wording alone is NOT the switch (D15 single/older TTs carry it with run_for_time absent and keep the old law).
+BATCH_EXPANSION_STATEMENT_RULE = {"for": "for_indirect", "call_set_h": "call_double", "call_set": "percent",
+                                  "bang": "delayed", "percent": "percent"}
+BATCH_EXPANSION_STATEMENT_REJECTED = {"for_h": ["call_double"], "percent": ["delayed"]}
 # Batch "control-flow form" vocabulary (Day 3 "Expansion Pack", GM-confirmed): `direct` (no control construct on the
 # executed path), `errorlevel_guard` (`ver >nul` + `if errorlevel 1 exit /b 1`), `goto_dispatch` (`goto :LABEL` +
 # `:LABEL`), `call_subroutine` (`call :LABEL` ... `exit /b 0`). Rejected for `direct`: linear, straight_line,

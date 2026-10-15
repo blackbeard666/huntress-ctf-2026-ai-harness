@@ -1,0 +1,13 @@
+{
+ "encoding": "stride3-base64",
+ "expected_offset": 8224,
+ "expected_config": {
+  "c2": "198.51.100.23:4444",
+  "campaign": "zipper",
+  "sleep": 45,
+  "flag": "flag{3v3ry_0th3r_byt3}"
+ },
+ "generator_cmd": "bash stride_gen.sh stride_s3_base64.bin s3b64 '{\"c2\":\"198.51.100.23:4444\",\"campaign\":\"zipper\",\"sleep\":45,\"flag\":\"flag{3v3ry_0th3r_byt3}\"}'   # blob: printf header + crc32 from gzip trailer; layout by perl (LCG 0x80+ filler / zipped halves / evens-then-odds), base64 -w0; xxd -i const array, gcc -O2",
+ "oracle_cmd": "bash stride_oracle.sh stride_s3_base64.bin s3b64   # GNU grep -obUaP locates the stored pattern; perl substr/unpack undoes the layout; base64 -d; gzip trailer = crc32(body)",
+ "oracle_output": "8224 HCFG 90 2571653720 {\"c2\":\"198.51.100.23:4444\",\"campaign\":\"zipper\",\"sleep\":45,\"flag\":\"flag{3v3ry_0th3r_byt3}\"} 2571653720"
+}

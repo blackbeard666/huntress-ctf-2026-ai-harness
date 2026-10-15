@@ -1,0 +1,8 @@
+{
+ "field": "zip.member_extra_field_ids",
+ "expected": "[\"0x5455\",\"0x7875\"]",
+ "generator_cmd": "cd src; touch -d '2024-03-05 14:22:36' a.txt; touch -d '2023-11-30 08:01:10' notes/b.txt; TZ=UTC zip -X -9 ../infozip_comment.zip a.txt notes/b.txt -0; TZ=UTC zip -0 ../infozip_comment.zip a.txt; echo 'Case 17: chain of custody' | zip -z ../infozip_comment.zip  (Info-ZIP 3.0; a.txt=15 B 'hello evidence\\n', notes/b.txt=3000 x 'A')",
+ "oracle_cmd": "zipinfo -v -> entry #1 a.txt central-directory extra subfields ID 0x5455 (universal time), 0x7875 (Unix UID/GID)",
+ "decoy": false,
+ "member": "a.txt"
+}

@@ -1,0 +1,7 @@
+{
+ "field": "zip.member_crc32_hex",
+ "expected": "0x93aaf669",
+ "generator_cmd": "cd src; TZ=UTC zip -P s3cret -9 ../infozip_encrypted.zip notes/b.txt  (Info-ZIP 3.0, ZipCrypto + deflate)",
+ "oracle_cmd": "7z l -slt -> CRC = 93AAF669",
+ "decoy": false
+}

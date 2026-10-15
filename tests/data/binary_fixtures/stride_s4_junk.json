@@ -1,0 +1,14 @@
+{
+ "encoding": "stride4-raw",
+ "expected_offset": 8224,
+ "expected_config": {
+  "c2": "203.0.113.9:8080",
+  "campaign": "comb",
+  "sleep": 12,
+  "jitter": 3,
+  "flag": "flag{1nt3rl34v3d_h4lv3s}"
+ },
+ "generator_cmd": "bash stride_gen.sh stride_s4_junk.bin s4raw '{\"c2\":\"203.0.113.9:8080\",\"campaign\":\"comb\",\"sleep\":12,\"jitter\":3,\"flag\":\"flag{1nt3rl34v3d_h4lv3s}\"}'   # blob: printf header + crc32 from gzip trailer; layout by perl (LCG 0x80+ filler / zipped halves / evens-then-odds), base64 -w0; xxd -i const array, gcc -O2",
+ "oracle_cmd": "bash stride_oracle.sh stride_s4_junk.bin s4raw   # GNU grep -obUaP locates the stored pattern; perl substr/unpack undoes the layout; base64 -d; gzip trailer = crc32(body)",
+ "oracle_output": "8224 HCFG 99 2399891844 {\"c2\":\"203.0.113.9:8080\",\"campaign\":\"comb\",\"sleep\":12,\"jitter\":3,\"flag\":\"flag{1nt3rl34v3d_h4lv3s}\"} 2399891844"
+}

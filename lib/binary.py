@@ -11,6 +11,7 @@ it is pure stdlib (no subprocess) so in-window solvers can call it on the Homeba
 import array
 import base64
 import binascii
+import bisect
 import io
 import json
 import math
@@ -262,6 +263,8 @@ def ghidra_decompile(path, timeout=300):
 # element, BE: its leading 0x00), u16be-/u32be-/u64be-packed (blob packed big-endian into 16/32/64-bit words that a LE
 # compiler stored byte-swapped, e.g. uint32_t a[] = {0x48434647, ...}; offset = first stored byte), decimal-list
 # ('72,67,70,71,...' / '72 67 70 71' char codes, signed bytes -128..-1 allowed; offset = the '7' of '72').
+# byte maps: nibswap-/rolN-/add-raw, nibswap-/rolN-/add-base64 (base64 text then mapped), base64-nibswap/-rolN/-not/
+# -add (base64 of the mapped blob); add detail add=0xNN (a sub k is add 256-k); offset = first stored byte/char.
 #
 # OFFSET LAW (Hit.offset, decimal FILE offset -- what `hcfg_offset` asks for):
 #   raw              the 'H' of the magic                          GM-confirmed (D12 FPC 82928)
@@ -853,6 +856,98 @@ def _b64_alphabets(data, budget, late):
     return out[:32]
 
 
+# byte-map transforms of the stored form: stored = t(x) for x = the raw blob ('<t>-raw'), its base64 text
+# ('<t>-base64', transform AFTER base64) or base64 of t(blob) ('base64-<t>', transform BEFORE base64). t = nibswap,
+# rol1-3/5-7 (rotate each byte left; rorN = rol(8-N), nibswap = rol4), not (raw/after-base64 NOT is xor 0xff: the
+# single-byte xor pass reports those), add (stored = x + k mod 256, a 'sub k' = add 256-k; detail add=0xNN).
+# Offset = first stored byte / char.
+def _rolb(b, r):
+    return ((b << r) | (b >> (8 - r))) & 0xFF
+
+
+_BYTEID = bytes(range(256))
+_BYTEMAPS = {"nibswap": bytes(_rolb(b, 4) for b in range(256)), "not": bytes(b ^ 0xFF for b in range(256))}
+_BYTEMAPS.update((f"rol{r}", bytes(_rolb(b, r) for b in range(256))) for r in (1, 2, 3, 5, 6, 7))
+_BYTEMAP_ANCHORS = {}   # stored anchor -> (name, inverse table, form)
+for _n, _t in _BYTEMAPS.items():
+    _inv = bytes.maketrans(_t, _BYTEID)
+    if _n != "not":
+        _BYTEMAP_ANCHORS[HCFG_MAGIC.translate(_t)] = (_n, _inv, "raw")
+        _BYTEMAP_ANCHORS[b"SENGR".translate(_t)] = (_n, _inv, "after")
+    _BYTEMAP_ANCHORS[base64.b64encode(HCFG_MAGIC.translate(_t))[:5]] = (_n, _inv, "before")
+_BYTEMAP_RX = re.compile(_trie(list(_BYTEMAP_ANCHORS)))
+HCFG_ADDK_MAX = int(os.environ.get("HCTF_HCFG_ADDK_MAX", str(96 << 20)))   # add-constant passes (~1 s / 67 MB)
+_B64RUN = re.compile(rb"[A-Za-z0-9+/]{32,}")   # a header (16 chars) + any JSON body
+
+
+def _subdiff(buf):
+    """D with D[i] = (buf[i] - buf[i+1]) % 256 (key-free under a per-byte add): SWAR big-int lane subtraction."""
+    n = len(buf)
+    x, h = int.from_bytes(buf, "little"), int.from_bytes(b"\x80" * n, "little")
+    y = x >> 8
+    return ((((x | h) - (y & ~h)) ^ ((x ^ ~y) & h)) & ((1 << 8 * n) - 1)).to_bytes(n, "little")
+
+
+def _diffpat(plain):
+    return bytes((a - b) % 256 for a, b in zip(plain, plain[1:]))
+
+
+def _bytemap_at(data, i, form, inv, name, emit, detail=""):
+    """Undo the byte map `inv` on the stored form at data[i] (form raw / after / before base64) and emit the blob."""
+    if form == "raw":
+        emit(i, name + "-raw", data[i:i + _need(data[i:i + 8].translate(inv))].translate(inv), detail)
+    elif form == "after":
+        m = _B64.rx.match(data[i:i + 90000].translate(inv))
+        r = _decode_text(_B64, re.sub(rb"[\r\n]", b"", m.group(0))) if m else None
+        if r:
+            emit(i, name + "-base64", r[0], detail)
+    else:
+        m = _B64.rx.match(data, i, i + 90000)
+        run = re.sub(rb"[\r\n]", b"", m.group(0)) if m else b""
+        try:
+            head = _b64dec(run[:16]).translate(inv)
+            blob = _b64dec(run[:_B64.chars(_need(head))]).translate(inv)
+        except (binascii.Error, ValueError):
+            return
+        emit(i, "base64-" + name, blob, detail)
+
+
+def _addk_scan(data, emit, late):
+    """add/sub-constant stored forms: raw + after-base64 via the key-free byte difference of the file, before-base64 via
+    the difference of every base64 run decoded at each of its 4 phases (runs joined per phase: one decode)."""
+    diff = _subdiff(data)
+    for plain, form in ((HCFG_MAGIC, "raw"), (b"SENGR", "after")):
+        pat, i, n = _diffpat(plain), 0, 0
+        i = diff.find(pat)
+        while i >= 0 and n < 4096 and not late():
+            k = (data[i] - plain[0]) % 256
+            if k:
+                _bytemap_at(data, i, form, bytes((b - k) % 256 for b in range(256)), "add", emit, f"add={k:#04x}")
+            i, n = diff.find(pat, i + 1), n + 1
+    runs = [m.span() for m in _B64RUN.finditer(data)]
+    pat = _diffpat(HCFG_MAGIC)
+    for ph in range(4):
+        if late():
+            return
+        starts, segs, at = [], [], 0
+        for a, b in runs:
+            seg = (b - a - ph) // 4 * 4
+            if seg >= 16:
+                starts.append((at, a + ph))
+                segs.append(data[a + ph:a + ph + seg])
+                at += seg // 4 * 3
+        dec = binascii.a2b_base64(b"".join(segs))
+        diff = _subdiff(dec)
+        j, n = diff.find(pat), 0
+        while j >= 0 and n < 4096 and not late():
+            if j % 3 == 0 and dec[j] != HCFG_MAGIC[0]:
+                at, a = starts[bisect.bisect_right(starts, (j, float("inf"))) - 1]
+                k = (dec[j] - HCFG_MAGIC[0]) % 256
+                _bytemap_at(data, a + (j - at) // 3 * 4, "before", bytes((b - k) % 256 for b in range(256)), "add",
+                            emit, f"add={k:#04x}")
+            j, n = diff.find(pat, j + 1), n + 1
+
+
 def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False):
     """Every HCFG blob in `data` (any storage encoding), best first: crc-valid + parsed JSON, then GM-confirmed
     encodings (raw, base64), then file order. Decoys (bad crc, truncated, unparsable JSON) are returned too with
@@ -985,6 +1080,9 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False):
                 i, n = data.find(a, i + 1), n + 1
             if valid():
                 break
+    if not valid() and not late() and len(data) <= HCFG_STRIDE_MAX:
+        # every k-th byte (junk filler) / zipped halves / even-then-odd bytes of the blob or its base64
+        _stride_scan(data, emit, late)
     if not valid() and not late():
         # single-byte xor of the stored form: x[i]^x[i+1] is key-independent -> find the xor-diff of 'SENGR' / 'HCFG'
         x = int.from_bytes(data, "little")
@@ -1005,6 +1103,13 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False):
                         if r:
                             emit(i, name, r[0], f"xor={k:#04x}")
                 i = diff.find(pat, i + 1)
+    if not valid() and not late():
+        # nibble swap / rotate-left / NOT of the raw blob, of its base64 text, or before base64: one anchor regex pass
+        for n, m in enumerate(_BYTEMAP_RX.finditer(data)):
+            if n >= 4096 or late():
+                break
+            name, inv, form = _BYTEMAP_ANCHORS[m.group(0)]
+            _bytemap_at(data, m.start(), form, inv, name, emit)
     if not valid() and not late():
         # repeating 1-16 byte xor of the BODY under a plain header (a raw hit whose crc failed): key from known plaintext
         for h in [h for h in hits if h.encoding == "raw" and not h.crc_ok][:64]:
@@ -1074,6 +1179,9 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False):
                             break
             if valid():
                 break
+    if not valid() and not late() and len(data) <= HCFG_ADDK_MAX:
+        # add/sub a constant per byte (raw, after or before base64): key-free byte differences
+        _addk_scan(data, emit, late)
     if not valid() and not late() and len(data) <= HCFG_DEFLATE_BRUTE_MAX:
         # headerless dynamic-Huffman deflate (what zlib emits for a ~400 B blob): try every plausible block start
         for m in _DEFLATE_DYN.finditer(data):
@@ -1085,6 +1193,62 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False):
                 if valid():
                     break
     return _rank(hits)
+
+
+HCFG_STRIDE_MAX = int(os.environ.get("HCTF_HCFG_STRIDE_MAX", str(96 << 20)))   # strided passes (~0.2 s / 70 MB)
+# blob byte (or base64 char) every k-th byte, ANY filler between ('H?C?F?G'): zero-filled strides are already the
+# u32/u64-array and UTF-16/32 anchors; this is the junk-filled / odd-stride / interleaved-halves form
+_STRIDES = (2, 4, 3, 8)
+_STRIDE_RX = [(k, form, re.compile(b"".join(re.escape(bytes([c])) + (b"." * (k - 1) if j < len(a) - 1 else b"")
+                                            for j, c in enumerate(a)), re.S))
+              for k in _STRIDES for a, form in ((HCFG_MAGIC, "raw"), (b"SENGR", "base64"))]
+
+
+def _deinterleave(s, h):
+    """Undo zip-interleaving of blob[:h] and blob[h:] (A0 B0 A1 B1 ..., the longer half's tail appended)."""
+    m = min(h, len(s) - h)
+    a, b = s[0:2 * m:2], s[1:2 * m:2]
+    return a + (s[2 * m:] if h > m else b"") + b + (s[2 * m:] if len(s) - h > m else b"")
+
+
+def _stride_scan(data, emit, late):
+    """Strided storage, crc-valid hits only (any filler matches trivially): every k-th byte of the raw blob or of its
+    base64 text (k = 2/3/4/8, offset = first stored byte); stride-2 'H?C?F?G' read as the two blob halves zipped
+    together; 'HF' = the blob's even bytes followed by its odd bytes."""
+    def ok(blob):
+        return (_parse_blob(blob) or (0,) * 6)[5]
+    for k, form, rx in _STRIDE_RX:
+        for n, m in enumerate(rx.finditer(data)):
+            if n >= 4096 or late():
+                return
+            i = m.start()
+            if form == "base64":
+                mm = _B64.rx.match(data[i:i + 90000 * k:k])
+                r = _decode_text(_B64, re.sub(rb"[\r\n]", b"", mm.group(0))) if mm else None
+                if r and ok(r[0]):
+                    emit(i, f"stride{k}-base64", r[0], f"stride={k}")
+                continue
+            t = _need(data[i:i + 8 * k:k])
+            blob = data[i:i + t * k:k]
+            if ok(blob):
+                emit(i, f"stride{k}-raw", blob, f"stride={k}")
+            elif k == 2:
+                for h in sorted({t // 2, (t + 1) // 2}, reverse=True):
+                    blob = _deinterleave(data[i:i + t], h)
+                    if ok(blob):
+                        emit(i, "interleaved-halves", blob, f"half={h}")
+                        break
+    i, n = data.find(b"HF"), 0
+    while i >= 0 and n < 1 << 16 and not late():
+        for hi in range(4):   # body < 1 KiB: the length's high byte sits in the odd half
+            t = 12 + data[i + 3] + 256 * hi if i + 3 < len(data) else 0
+            e = (t + 1) // 2
+            if t and data[i + e:i + e + 2] == b"CG" and data[i + e + 3:i + e + 4] == bytes([hi]):
+                blob = bytearray(t)
+                blob[0::2], blob[1::2] = data[i:i + e], data[i + e:i + t]
+                if ok(bytes(blob)):
+                    emit(i, "even-odd-split", bytes(blob), f"half={e}")
+        i, n = data.find(b"HF", i + 1), n + 1
 
 
 def _rank(hits):

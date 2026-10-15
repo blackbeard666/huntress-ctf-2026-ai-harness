@@ -1,0 +1,33 @@
+import sys, struct, datetime
+sys.path.insert(0, "tools/pylib")
+import pylnk3
+from io import BytesIO
+
+def env(target):
+    b = pylnk3.ExtraData_EnvironmentVariableDataBlock()
+    b.target_ansi, b.target_unicode = target, target
+    return b
+
+def save(l, out):
+    buf = BytesIO(); l.write(buf); open(out, "wb").write(buf.getvalue())
+
+# 1) "impossible destination": IDList spells C:\Windows\System32\calc.exe, LinkInfo says D:\Payloads\stage2.exe
+l = pylnk3.for_file(r"C:\Windows\System32\calc.exe", icon_file=r"%SystemRoot%\System32\shell32.dll", icon_index=3)
+l.link_flags.HasLinkInfo = True
+l._link_info = pylnk3.LinkInfo()
+l.link_flags.ForceNoLinkInfo = False
+l.specify_local_location(r"D:\Payloads\stage2.exe", drive_type=pylnk3.DRIVE_REMOVABLE,
+                         drive_serial=0x0BADF00D, volume_label="USBKEY")
+l.relative_path = r"..\..\Payloads\stage2.exe"
+l.extra_data = pylnk3.ExtraData(blocks=[env(r"%USERPROFILE%\AppData\Roaming\stage2.exe")])
+l.creation_time = l.access_time = l.modification_time = datetime.datetime(2026, 3, 4, 5, 6, 7)
+save(l, sys.argv[1])
+
+# 2) network target: LinkInfo CommonNetworkRelativeLink only (no VolumeID / icon / env block / relative path)
+l = pylnk3.for_file(r"C:\Windows\notepad.exe")
+l.link_flags.HasLinkInfo = True
+l._link_info = pylnk3.LinkInfo()
+l.link_flags.ForceNoLinkInfo = False
+l.specify_remote_location(r"\\FILESRV01\PUBLIC", "")
+l.creation_time = l.access_time = l.modification_time = datetime.datetime(2026, 3, 4, 5, 6, 7)
+save(l, sys.argv[2])

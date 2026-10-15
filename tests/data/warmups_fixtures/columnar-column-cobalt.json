@@ -1,0 +1,10 @@
+{
+ "codec": "columnar:column",
+ "key": "column",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-harbor-17",
+ "encoded": "Noc w!os ea e rar7ckdhrTvbhasoGa to dnsu ,istetmtoh-weg ps t  rheeba1irota lutxnt M:lbe iimoemicw asc-r",
+ "generator_cmd": "python3 -I -c 'import sys;sys.path.insert(0,sys.argv[3]);from pycipher import ColTrans as C;c=C(sys.argv[2]);c.remove_punctuation=lambda t,**k:t;print(c.encipher(sys.argv[1]))' \"$plain\" column tools/pyciphers  # pycipher 0.5.2 ColTrans(key).encipher with remove_punctuation patched to identity (keeps spaces/punctuation)",
+ "oracle_cmd": "python3 -I -c 'import sys;sys.path.insert(0,sys.argv[3]);from secretpy import ColumnarTransposition as C;print(C().decrypt(sys.argv[1],sys.argv[2]))' \"$encoded\" column tools/pyciphers  # secretpy 0.12.0 ColumnarTransposition.decrypt(text, key)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-harbor-17",
+ "expected": "match"
+}

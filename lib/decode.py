@@ -182,6 +182,11 @@ def _atbash(s):
     return "".join(chr(219 - ord(c)) if "a" <= c <= "z" else chr(155 - ord(c)) if "A" <= c <= "Z" else c for c in s)
 
 
+def _rot47(s):
+    """ROT47 over printable ASCII 33..126 (warmups Day 15 "Room Forty-Seven"); spaces kept, its own inverse."""
+    return "".join(chr(33 + (ord(c) - 33 + 47) % 94) if 33 <= ord(c) <= 126 else c for c in s)
+
+
 def _eng(s):
     letters = [c for c in s.lower() if "a" <= c <= "z"]
     return sum(math.log(_FREQ[c]) for c in letters) / max(len(letters), 1)
@@ -289,6 +294,10 @@ def decode_chunk(p, _nested=False):
         return min(good, key=lambda x: (-round(_wordy(x[0]), 2), x[1]))[0]
     if _nested:
         return None
+    # ROT47 (warmups Day 15 "Room Forty-Seven": whole blob '}:46 H@C< ... |2DE6Ci DF??J\42DE=6\@A2=\he'): letters turn
+    # into digits/punctuation, so no rot-N reads it; kept only when the whole decoded line ends in a 3-word slug.
+    if _max_day() >= 15 and _SLUG3_END.search(_rot47(t)) and _wordy(_rot47(t)) >= 0.85:
+        return _rot47(t)
     # An encoding none of the classes above names (a new line encoding on a new day): try the other text encodings
     # lib knows -- reversed text of a strict class, \\u/\\x escapes, HTML entities, Morse, base58, quoted-printable,
     # base85 -- and keep one only if it reads more like English than the best rot-N of the raw line.
@@ -348,7 +357,8 @@ def _generic_chunk(t):
 # Warmups Mastery: line k is encoded with day k's codec. The FREE-TEXT codecs (no alphabet signature) are told apart only
 # by how English the result reads, which per-line guessing gets wrong on short fragments (D13: Atbash put on '-tliuq-d').
 # Each is used ONCE per blob -> (name, day introduced); a blob of k lines can only contain codecs of days <= k.
-FREE_CODECS = (("rot", 2), ("rev", 12), ("atb", 13), ("caesar7", 14))   # D14: fixed Caesar +7 (decode rot-7)
+FREE_CODECS = (("rot", 2), ("rev", 12), ("atb", 13), ("caesar7", 14),   # D14: fixed Caesar +7 (decode rot-7)
+               ("rot47", 15))   # D15: ROT47 over printable ASCII 33-126 (self-inverse)
 _SLUG_END = re.compile(r"[a-z]+(?:-[a-z]+)+-\d{2,}\s*$")
 # The GM's slug is adj-noun-noun-NN: a 3-word slug end outranks a 2-word one (D14 Mastery set22: rev/atb swapped on
 # lines 12/13 still ended in a 2-word 'x-yyyy...-NN' tail and out-scored the true slug on bigrams).
@@ -391,7 +401,7 @@ def _max_day():
 for _n, _d in [(n, d) for n, d in FREE_CODECS if d <= _max_day()]:
     register_free(_n, _d, {"rot": _rot_cands, "atb": lambda p: [_atbash(p)],
                            "rev": lambda p: [p.strip()[::-1] if p.strip() == p else p[::-1]],
-                           "caesar7": lambda p: [_rot(p, -7)]}[_n])
+                           "caesar7": lambda p: [_rot(p, -7)], "rot47": lambda p: [_rot47(p)]}[_n])
 
 
 def _free_line(p):

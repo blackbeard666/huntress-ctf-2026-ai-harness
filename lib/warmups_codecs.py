@@ -1,7 +1,7 @@
 """Warmups lane codec library: every day's line codec as an exact ENCODER + decoder, plus a broad try-list of classical
 encoders for identifying an unknown day's codec from its Single Solve.
 
-Warmups (D1-D14): each Single is one sentence -- "Nice work decoding this warmup! To solve, submit this exact answer to
+Warmups (D1-D15): each Single is one sentence -- "Nice work decoding this warmup! To solve, submit this exact answer to
 the Game Master: <slug>" -- under ONE codec that changes daily; Mastery day N = 5N-2 sets of N numbered lines, line k
 under day k's codec, the sentence cut mid-word (reference/techniques/warmups.md). The encoders below reproduce the GM's
 bytes exactly (all 819 lines of D13 auto-mastery-d1a77831: lowercase hex/%xx, space-separated 8-bit binary, decimal,
@@ -82,6 +82,7 @@ DAYS = [
     (12, "reverse", lambda s: s[::-1], lambda t: t[::-1], True),
     (13, "atbash", atbash, atbash, True),
     (14, "caesar+7", lambda s: rot(s, 7), lambda t: rot(t, -7), True),
+    (15, "rot47", lambda s: rot47(s), lambda t: rot47(t), True),   # D15 "Room Forty-Seven": punctuation spins too
 ]
 
 try:   # fair runs (HCTF_CODEC_MAX_DAY=<N-1>, as lib/codec.py): only codecs GM-confirmed before day N
@@ -704,12 +705,254 @@ def braille_ascii_dec(t):
     return "".join(_BR_ASCII[ord(c) - 0x2800] if "\u2800" <= c <= "\u283f" else c for c in t).lower()
 
 
+def col_order(key):
+    """Column read order for a columnar key: a word (stable alphabetical rank, ties left to right -- pycipher ColTrans /
+    secretpy ColumnarTransposition), an int n (identity order = scytale with n columns) or an explicit index tuple."""
+    if isinstance(key, int):
+        return list(range(key))
+    if isinstance(key, str):
+        k = key.lower()
+        return sorted(range(len(k)), key=lambda i: (k[i], i))
+    return list(key)
+
+
+def col_enc(s, key, pad=None):
+    """Columnar transposition: write row-wise under len(key) columns, read whole columns in key order. Every character
+    is kept (spaces, punctuation); pad fills the last row (online tools' 'X')."""
+    order = col_order(key)
+    m = len(order)
+    if pad and len(s) % m:
+        s += pad * (m - len(s) % m)
+    return "".join(s[c::m] for c in order)
+
+
+def col_dec(t, key, pad=None):
+    """Inverse of col_enc (ragged last row: the leftmost len % m columns are one longer). pad strips its fill."""
+    order = col_order(key)
+    m, n = len(order), len(t)
+    if not m:
+        return t
+    rows, extra = divmod(n, m)
+    out, pos = [""] * n, 0
+    for c in order:
+        ln = rows + (c < extra)
+        out[c::m] = t[pos:pos + ln]
+        pos += ln
+    s = "".join(out)
+    if pad and n % m == 0:
+        k = len(s) - len(s.rstrip(pad))
+        s = s[:n - k] if k < m else s
+    return s
+
+
+def col_letters_enc(s, key):
+    """pycipher ColTrans form: non-letters dropped, upper-cased, then columnar."""
+    return col_enc(re.sub(r"[^A-Z]", "", s.upper()), key)
+
+
+_COL_PERM_MAX = 5   # every column order up to 5 columns (152 orders); 6-8 columns: identity + reversed + hint words
+
+
+def col_keys(hints=()):
+    """[(tier, order)] keys for keyless solving, most plausible first: hint words <= 8 letters (tier 0), identity =
+    scytale 2-8 (1), reversed 6-8 and every other permutation of 2-5 columns (2)."""
+    keys = {}
+    for h in hints or ():
+        for w in re.findall(r"[A-Za-z]{2,}", str(h)):
+            if len(w) <= 8:
+                keys.setdefault(tuple(col_order(w)), 0)
+    for m in range(2, 9):
+        keys.setdefault(tuple(range(m)), 1)
+        keys.setdefault(tuple(range(m))[::-1], 2)
+    for m in range(2, _COL_PERM_MAX + 1):
+        for p in itertools.permutations(range(m)):
+            keys.setdefault(p, 2)
+    return [(tier, k) for k, tier in keys.items()]
+
+
+def col_solve(t, hints=()):
+    """Best columnar / scytale reading of t (either direction: column-read and its inverse row-read), or None when no
+    order reads clearly more English than t itself (decoys: prose, base64, hex, other ciphers). A wrong order of the
+    same width often yields a near-tie ROTATION of the answer ('ce work ... iN'), so among readings within 0.3 of the
+    best bigram score the most plausible key wins (hint word, then scytale, column-read before row-read). Never
+    raises."""
+    try:
+        from lib.decode import _bigram
+        if not isinstance(t, str):
+            t = _t(t)
+        t = t.strip("\r\n")   # spaces are ciphertext: a column may start or end with one
+        if len(t) < 6 or not re.search(r"[A-Za-z]{2}", t) or "\n" in t:
+            return None
+        seen, scored = {t}, []
+        for tier, k in col_keys(hints):
+            if len(k) >= len(t):
+                continue
+            for d, cand in enumerate((col_dec(t, k), col_enc(t, k))):
+                if cand not in seen:
+                    seen.add(cand)
+                    scored.append((_bigram(cand), 2 * tier + d, cand))
+        if not scored:
+            return None
+        top = max(sc for sc, _r, _c in scored)
+        if top < -6.3 or top < _bigram(t) + 0.6:
+            return None
+        return min((r, -sc, c) for sc, r, c in scored if sc >= top - (1.0 if r < 2 else 0.3))[2]
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def wordrev(s):
     return " ".join(w[::-1] for w in s.split(" "))
 
 
 def wordorder(s):
     return " ".join(reversed(s.split(" ")))
+
+
+_LEET = {"a": "4", "e": "3", "i": "1", "o": "0", "s": "5", "t": "7"}
+_UNLEET = {"4": "a", "3": "e", "0": "o", "5": "s", "7": "t"}
+_SENT_WORDS = set(re.findall(r"[a-z]+", SENTENCE.lower())) - {"slug"}
+
+
+def leet_enc(s, il=False):
+    """CyberChef "To Leet Speak": a e i o s t -> 4 3 1 0 5 7 (il=True also l -> 1); digits are left as they are."""
+    m = dict(_LEET, l="1") if il else _LEET
+    return "".join(m.get(c.lower(), c) for c in s)
+
+
+def _unleet_word(w):
+    w = "".join(_UNLEET.get(c, c) for c in w)
+    n = w.count("1")
+    if not n:
+        return w
+    if n > 4:
+        return w.replace("1", "i")
+    from lib.decode import _bigram
+    parts = w.split("1")
+    outs = ["".join(p + c for p, c in zip(parts, ch + ("",))) for ch in itertools.product("il", repeat=n)]
+    # 1 = i or l: a word of the GM sentence, else the more English reading (no 'lll' / 'ii' runs), ties -> i
+    return max(outs, key=lambda o: (o.lower() in _SENT_WORDS, _bigram(o) - len(re.findall(r"(.)\1\1|ii", o)),
+                                    o.count("i")))
+
+
+def leet_dec(t):
+    """Undo 1337 substitution (4 3 1 0 5 7 -> a e i/l o s t, 1 picked per word by bigram score). A slug's trailing
+    -NN number is kept. None unless the text reads as leet: >= 1 letter+digit word, no 2/6/8/9 inside one (hex,
+    base64), and more leet digits than surviving a/e/i/o/s/t letters."""
+    if not isinstance(t, str) or not t.strip() or len(t) > 50000:
+        return None
+    toks = list(re.finditer(r"[A-Za-z0-9]+", t))
+    keep = {m.start() for m in toks if m.group().isdigit() and m.start() and t[m.start() - 1] == "-"
+            and not t[m.end():m.end() + 1].isalnum() and t[m.end():m.end() + 1] != "-"}
+    mixed = [m.group() for m in toks if re.search(r"[A-Za-z]", m.group()) and re.search(r"\d", m.group())]
+    if not mixed or any(re.search(r"[2689]", w) for w in mixed):
+        return None
+    digits = sum(len(re.findall(r"[013457]", m.group())) for m in toks if m.start() not in keep)
+    if digits <= len(re.findall(r"[aeiostAEIOST]", t)):
+        return None
+    out, last = [], 0
+    for m in toks:
+        out += [t[last:m.start()], m.group() if m.start() in keep else _unleet_word(m.group())]
+        last = m.end()
+    return "".join(out) + t[last:]
+
+
+_KEYPAD = ("2abc", "3def", "4ghi", "5jkl", "6mno", "7pqrs", "8tuv", "9wxyz")
+_KEY_OF = {c: k[0] for k in _KEYPAD for c in k[1:]}
+_KEY_LET = {k[0]: k[1:] for k in _KEYPAD}
+_T9_WORDS = {}
+
+
+def multitap_enc(s, sep=" ", word=" 0 "):
+    """Phone multi-tap: each letter = its key pressed N times (h=44 e=33 l=555), a digit one press past its letters
+    (2222 -> 2, 00 -> 0); other chars pass through as tokens."""
+    def tap(c):
+        if c in _KEY_OF:
+            return _KEY_OF[c] * (_KEY_LET[_KEY_OF[c]].index(c) + 1)
+        return c * (len(_KEY_LET[c]) + 1) if c in _KEY_LET else "00" if c == "0" else c
+    return word.join(sep.join(tap(c) for c in w.lower()) for w in s.split())
+
+
+def multitap_dec(t):
+    """Undo multi-tap (lowercase out). Word gaps: a lone 0, / or |, else 2+ spaces. A run one longer than the key's
+    letters is the key's digit (2222 -> 2); punctuation and digit tokens with 0/1 or mixed keys stay literal. None
+    unless >= 3 letter runs make up >= 60% of the tokens and no ASCII letter appears."""
+    if not isinstance(t, str) or not t.strip() or len(t) > 50000 or re.search(r"[A-Za-z]", t):
+        return None
+    t = t.strip()
+    words = (re.split(r"\s*(?:(?<!\S)0(?!\S)|[/|])\s*", t) if re.search(r"(?<!\S)0(?!\S)|[/|]", t)
+             else re.split(r"\s{2,}", t))
+    out, runs, toks = [], 0, 0
+    for w in words:
+        cur = []
+        for tok in w.split():
+            toks += 1
+            m = re.fullmatch(r"([^\d\s]*)(([2-9])\3*)([^\d\s]*)", tok)
+            if not m:
+                cur.append("0" if tok == "00" else tok)
+                continue
+            n, let = len(m.group(2)), _KEY_LET[m.group(3)]
+            if n > len(let) + 1:
+                return None
+            cur.append(m.group(1) + (let[n - 1] if n <= len(let) else m.group(3)) + m.group(4))
+            runs += 1
+        if cur:
+            out.append("".join(cur))
+    return " ".join(out) if runs >= 3 and runs >= 0.6 * toks else None
+
+
+def t9_enc(s, space=" "):
+    """T9 / one-press-per-letter keypad digits (hello -> 43556); spaces -> `space`, other chars pass through."""
+    return "".join(_KEY_OF.get(c, space if c == " " else c) for c in s.lower())
+
+
+def _t9_index():
+    if not _T9_WORDS:
+        from lib import slug
+        from lib.decode import _bigram
+        idx = {}
+        for w in slug.english():
+            idx.setdefault("".join(_KEY_OF.get(c, "?") for c in w), []).append(w)
+        idx = {k: v[0] if len(v) == 1 else max(sorted(v), key=_bigram) for k, v in idx.items()}
+        for w in SENTENCE.lower().split() + sorted(slug.vocab()):   # template + GM slug words win a tie
+            w = re.sub(r"[^a-z]", "", w)
+            if w:
+                idx["".join(_KEY_OF[c] for c in w)] = w
+        _T9_WORDS.update(idx)
+    return _T9_WORDS
+
+
+def t9_dec(t):
+    """Undo T9 digits with the shipped English list (+ slug vocab and the warmups sentence words on ties). Word gaps
+    are whitespace, or 0 when there is none; a slug's trailing -NN and groups holding 0/1 stay literal. None unless
+    >= 3 multi-digit groups averaging >= 2.5 digits (not Polybius pairs), >= 80% of them resolve to words, <= 15% hold
+    0/1 (decimal/octal codes), and they aren't all single-key runs (multi-tap)."""
+    if not isinstance(t, str) or not t.strip() or len(t) > 50000 or re.search(r"[A-Za-z]", t):
+        return None
+    t = t.strip()
+    if not re.search(r"\s", t):
+        t = re.sub(r"0", " ", t)
+    idx = _t9_index()
+    keep = {m.start(1) for m in re.finditer(r"(?:[2-9]+-)+(\d{2,})(?![\d-])", t)}
+    out, groups, hits, lits = [], 0, 0, 0
+    for m in re.finditer(r"\d+|\D+", t):
+        g = m.group()
+        if not g.isdigit() or m.start() in keep:
+            out.append(g)
+            continue
+        if re.search(r"[01]", g):
+            lits += 1
+            out.append(g)
+            continue
+        groups += 1
+        w = idx.get(g)
+        hits += bool(w)
+        out.append(w or g)
+    multi = [g for g in re.findall(r"[2-9]+", t) if len(g) > 1]
+    if len(multi) < 3 or hits < 0.8 * groups or lits > 0.15 * (groups + lits) \
+            or sum(map(len, multi)) < 2.5 * len(multi) or all(len(set(g)) == 1 for g in multi):
+        return None
+    return "".join(out)
 
 
 def _xor(s, k):
@@ -801,12 +1044,24 @@ def _cands():
         ("braille", braille_enc, braille_dec),
         ("braille-blank", lambda s: braille_enc(s, space="\u2800"), braille_dec),
         ("braille-ascii", braille_ascii_enc, braille_ascii_dec),
+        ("leet", leet_enc, leet_dec),
+        ("leet-il", lambda s: leet_enc(s, il=True), leet_dec),
+        ("multitap", multitap_enc, multitap_dec),
+        ("multitap-slash", lambda s: multitap_enc(s, word=" / "), multitap_dec),
+        ("multitap-2space", lambda s: multitap_enc(s, word="  "), multitap_dec),
+        ("t9", t9_enc, t9_dec),
+        ("t9-0", lambda s: t9_enc(s, space="0"), t9_dec),
     ]
     out += [(f"bacon{a}-{tr}{('-keep', '-keep-cc')[cc] if k else ''}",
              (lambda a, tr, k, cc: lambda s: bacon_enc(s, a, tr, k, cc))(a, tr, k, cc),
              (lambda a, tr, k: lambda t: bacon_dec(t, a, tr, k))(a, tr, k))
             for a in (26, 24) for tr in _BACON_TR for k in (False, True) for cc in (False, True)
             if not (cc and (not k or tr[0] in "01"))]
+    # columnar / scytale transposition, keyless: identity order = scytale with n columns (col-read and row-read)
+    out += [(f"scytale{n}", (lambda n: lambda s: col_enc(s, n))(n), (lambda n: lambda t: col_dec(t, n))(n))
+            for n in range(2, 9)]
+    out += [(f"scytale-rows{n}", (lambda n: lambda s: col_dec(s, n))(n), (lambda n: lambda t: col_enc(t, n))(n))
+            for n in range(2, 9)]
     out += [(f"caesar{n}", (lambda n: lambda s: rot(s, n))(n), (lambda n: lambda t: rot(t, -n))(n))
             for n in range(1, 26) if n != 13]
     out += [(f"rail{n}", (lambda n: lambda s: rail_enc(s, n))(n), (lambda n: lambda t: rail_dec(t, n))(n))
@@ -845,6 +1100,11 @@ def _hint_cands(hints):
     for k in _hint_keys(hints):
         out.append((f"vigenere:{k}", (lambda k: lambda s: vigenere(s, k))(k), (lambda k: lambda t: vigenere(t, k, -1))(k)))
         out.append((f"beaufort:{k}", (lambda k: lambda s: vigenere(atbash(s), k))(k), None))
+        if len(k) <= 8:   # columnar transposition keyed by a title/prompt word
+            out.append((f"columnar:{k}", (lambda k: lambda s: col_enc(s, k))(k), (lambda k: lambda t: col_dec(t, k))(k)))
+            out.append((f"columnar-x:{k}", (lambda k: lambda s: col_enc(s, k, "x"))(k),
+                        (lambda k: lambda t: col_dec(t, k, "x"))(k)))
+            out.append((f"columnar-letters:{k}", (lambda k: lambda s: col_letters_enc(s, k))(k), None))
     return out
 
 
@@ -982,8 +1242,12 @@ SPECULATIVE_FREE = (
     ("qwerty", lambda p: _top(p, [qwerty_shift(p, 1), qwerty_shift(p, -1)], 2)),
     ("rail", lambda p: _top(p, [rail_dec(p, n) for n in range(2, 7)])),
     ("affine", lambda p: _top(p, [affine_inv(p, a, b) for a in _AFFINE_A for b in range(26)])),
+    ("columnar", lambda p: [b for b in (col_solve(p),) if b]),
     ("punycode", lambda p: [p[:len(p) - len(p.lstrip())] + puny_dec(p)]),
     ("braille", lambda p: [b for b in (braille_dec(p),) if b]),
+    ("leet", lambda p: [b for b in (leet_dec(p),) if b]),
+    ("multitap", lambda p: [b for b in (multitap_dec(p),) if b]),
+    ("t9", lambda p: [b for b in (t9_dec(p),) if b]),
 )
 
 
@@ -992,8 +1256,10 @@ def register_speculative():
     entries: only for a blob that has more lines than any confirmed codec day and a free line the confirmed codecs
     can't cover. Idempotent."""
     from lib import decode
+    confirmed = {n for n, d, _f in decode._FREE if d is not None}
     for name, fn in SPECULATIVE_FREE:
-        decode.register_free(name, None, fn)
+        if name not in confirmed:   # rot47 = GM-confirmed D15: keep its day so it isn't demoted to speculative
+            decode.register_free(name, None, fn)
 
 
 if __name__ == "__main__":

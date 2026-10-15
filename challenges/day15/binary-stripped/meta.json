@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-15-assembly-and-symbol-loss",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Stripped",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-15-assembly-and-symbol-loss",
+    "time_trial": "binary-reverse-engineering-day-15-assembly-and-symbol-loss/time_trial",
+    "mastery": "binary-reverse-engineering-day-15-assembly-and-symbol-loss/mastery"
+  }
+}

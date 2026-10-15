@@ -887,3 +887,45 @@ from lib import meta as _meta14
 assert _meta14.lookup("lnk", "target_path_windows")[0].tier == _meta14.VERIFIED
 assert _meta14.parse_field("d14-lnk-001-lnk-target-path-windows", {})[:2] == ("lnk", "target_path_windows")
 print("ok  lib.meta: lnk.target_path_windows registered (verified D14)")
+
+# Day 15 "Room Forty-Seven": ROT47 over printable ASCII 33..126 (punctuation spins too) -- a 5th free-text codec
+# (lib.decode.FREE_CODECS + lib.warmups_codecs.DAYS day 15), whole-blob branch in decode_chunk (3-word slug end), and the
+# speculative 'rot47' registration must not demote the confirmed day-15 entry.
+from lib import decode as _dec15
+assert _dc("}:46 H@C< 564@5:?8 E9:D H2C>FAP %@ D@=G6[ DF3>:E E9:D 6I24E 2?DH6C E@ E96 v2>6 |2DE6Ci DF??J\\42DE=6\\@A2=\\he") \
+    == "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: sunny-castle-opal-96"
+assert _wc.day_codec(15)[1]("Master: ab-cd-ef-12") == "|2DE6Ci 23\\45\\67\\`a" and _wc.day_codec(15)[3] is True
+assert ("rot47", 15) in [(n, d) for n, d, _f in _dec15._FREE]
+_b15 = ["TmljZSB3bw==", "ex qrpb", "64696e67207468", "01101001 01110011 00100000 01110111 01100001 01110010 01101101",
+        "117 112 33 32 84 111 32 115", "157 154 166 145 054 040 163", "%75%62%6d%69%74%20%74",
+        "&#104;&#105;&#115;&#32;&#101;&#120;&#97;", '"\\u0063\\u0074\\u0020\\u0061\\u006e\\u0073\\u0077"',
+        "MVZCA5DPEB2GQ===", "ZSBHYW1lIA", ":retsaM", " grwb-y", "hzrla-j", "@AA6C\\eg"]
+_t15 = _dch("".join(f"{k:02d}\t{p}\n" for k, p in enumerate(_b15, 1)))
+assert _t15 == "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: " \
+    "tidy-basket-copper-68", _t15   # D15 Mastery 81f42697 set1, GM-confirmed
+print("ok  decode: ROT47 (D15) as a 5th free-text codec + whole-blob decode_chunk branch")
+
+# Day 15 "A Word to the Wise": ooxml.external_relationship_targets verified (TargetMode=External across all .rels,
+# sorted); lib.meta.synthesis.digest_order for the cross-file `metadata-day-NN-synthesis-<algo>-order` id.
+import hashlib as _hl15
+import io as _io15
+import json as _js15
+from lib.meta import synthesis as _syn15
+assert _meta14.lookup("ooxml", "external_relationship_targets")[0].tier == _meta14.VERIFIED
+_buf = _io15.BytesIO()
+with zipfile.ZipFile(_buf, "w") as _z:
+    _z.writestr("_rels/.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" Type="t/officeDocument" Target="word/document.xml"/></Relationships>')
+    _z.writestr("word/_rels/document.xml.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/'
+                'relationships"><Relationship Id="rId9" Type="t/hyperlink" Target="https://example.test/evidence/d8" '
+                'TargetMode="External"/><Relationship Id="rId10" Type="t/hyperlink" Target="https://example.test/control"'
+                ' TargetMode="External"/></Relationships>')
+assert _meta14.answer("d15-ooxml-001-ooxml-external-relationship-targets", {}, _buf.getvalue())[0] \
+    == '["https://example.test/control","https://example.test/evidence/d8"]'
+_files15 = {"a.txt": b"a", "b.txt": b"b", "c.txt": b"c"}
+_q15 = {"question": "Compute the full-file SHA-256 digest of each named file, then submit a compact JSON array of their "
+                    'filenames in ascending digest order. Files: ["a.txt","b.txt","c.txt"]'}
+assert _syn15.digest_order(_q15, _files15.get) == _js15.dumps(
+    sorted(_files15, key=lambda n: _hl15.sha256(_files15[n]).hexdigest()), separators=(",", ":"))
+assert _syn15.ID.search("set1.metadata-day-15-synthesis-sha256-order")
+print("ok  lib.meta: ooxml.external_relationship_targets (verified D15) + synthesis.digest_order")

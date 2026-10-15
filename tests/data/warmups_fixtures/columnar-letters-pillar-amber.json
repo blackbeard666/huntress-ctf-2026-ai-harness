@@ -1,0 +1,10 @@
+{
+ "codec": "columnar-letters:pillar",
+ "key": "pillar",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "WCTRSUHCEEAMLIKISPVIENOMERNCDNWTETXSTERFEEGAOSTAWHMAANRDIULMSATATEOOOHMOBITRGSBC",
+ "generator_cmd": "python3 -I -c 'import sys;sys.path.insert(0,sys.argv[3]);from pycipher import ColTrans as C;print(C(sys.argv[2]).encipher(sys.argv[1]))' \"$plain\" pillar tools/pyciphers  # pycipher 0.5.2 ColTrans(key).encipher (stock: letters only, upper-cased)",
+ "oracle_cmd": "python3 -I -c 'import sys;sys.path.insert(0,sys.argv[3]);from secretpy import ColumnarTransposition as C;print(C().decrypt(sys.argv[1],sys.argv[2]))' \"$encoded\" pillar tools/pyciphers  # secretpy 0.12.0 ColumnarTransposition.decrypt(text, key)",
+ "oracle_plain": "NICEWORKDECODINGTHISWARMUPTOSOLVESUBMITTHISEXACTANSWERTOTHEGAMEMASTERAMBERFALCON",
+ "expected": "match"
+}

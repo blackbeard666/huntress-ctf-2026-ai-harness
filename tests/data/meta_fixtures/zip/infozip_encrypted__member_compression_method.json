@@ -1,0 +1,7 @@
+{
+ "field": "zip.member_compression_method",
+ "expected": "8",
+ "generator_cmd": "cd src; TZ=UTC zip -P s3cret -9 ../infozip_encrypted.zip notes/b.txt  (Info-ZIP 3.0, ZipCrypto + deflate)",
+ "oracle_cmd": "python3 -I -c \"import zipfile;z=zipfile.ZipFile('infozip_encrypted.zip');print(z.comment,[(i.filename,i.compress_type,i.flag_bits&1,hex(i.CRC),i.file_size,i.date_time) for i in z.infolist()])\" -> compress_type 8; zipinfo -v 'compression method: deflated'",
+ "decoy": false
+}

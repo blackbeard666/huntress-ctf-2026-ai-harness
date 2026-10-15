@@ -1,0 +1,27 @@
+cProfile of `cases/single_solve` (497228 function calls (490064 primitive calls) in 3.726 seconds):
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    211/1    0.008    0.000    3.388    3.388 {built-in method builtins.exec}
+      2/1    0.000    0.000    3.388    3.388 solve.py:1(<module>)
+      2/1    0.004    0.002    3.388    3.388 solve.py:777(main)
+      2/1    0.002    0.001    3.384    3.384 solve.py:737(_solve_pairs)
+    56/24    0.040    0.001    3.199    0.133 threading.py:323(wait)
+      150    0.003    0.000    3.015    0.020 solve.py:256(group_members)
+      150    0.001    0.000    2.963    0.020 solve.py:167(resolve)
+      170    0.001    0.000    2.961    0.017 _base.py:428(result)
+     17/1    0.011    0.001    2.900    2.900 thread.py:54(run)
+     1204    0.438    0.000    2.887    0.002 {method 'join' of 'bytes' objects}
+     17/1    0.002    0.000    2.886    2.886 solve.py:74(_aes_member)
+      150    0.003    0.000    2.428    0.016 solve.py:674(answer)
+    51/26    0.009    0.000    1.345    0.052 queue.py:154(get)
+    50/41    0.001    0.000    1.213    0.030 {built-in method builtins.__import__}
+   229/17    0.004    0.000    1.139    0.067 <frozen importlib._bootstrap>:1349(_find_and_load)
+   228/17    0.003    0.000    1.137    0.067 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+   216/19    0.002    0.000    1.130    0.059 <frozen importlib._bootstrap>:911(_load_unlocked)
+   191/19    0.002    0.000    1.128    0.059 <frozen importlib._bootstrap_external>:993(exec_module)
+   490/34    0.027    0.000    1.125    0.033 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+       28    0.001    0.000    0.937    0.033 __init__.py:1(<module>)
+        1    0.000    0.000    0.804    0.804 solve.py:596(<lambda>)
+        1    0.000    0.000    0.804    0.804 solve.py:552(disassembly)
+   134/76    0.011    0.000    0.733    0.010 <frozen importlib._bootstrap>:1390(_handle_fromlist)
+    30/24    0.647    0.022    0.723    0.030 {method 'decompress' of 'zlib.Decompress' objects}
+       49    0.000    0.000    0.672    0.014 solve.py:624(facts)

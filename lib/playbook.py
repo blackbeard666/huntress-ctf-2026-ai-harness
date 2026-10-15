@@ -199,6 +199,22 @@ PLAYBOOK = [
              "file-entry long names). Never the WorkingDir / RelativePath / the .lnk member name.",
         examples=("shortcut-001.lnk LinkInfo -> C:\\Windows\\System32\\cmd.exe (D14; IDList agreed)",),
     ),
+    PlaybookEntry(
+        lanes=(METADATA,), families=("targets",),
+        rule="`ooxml.external_relationship_targets` = every TargetMode=\"External\" Relationship Target across ALL "
+             "*.rels parts of the package, compact JSON list SORTED by target string -- never the rels (rId) order. "
+             "Internal relationships (no TargetMode) are the decoys.",
+        rejected=('["https://example.test/evidence/d87ca62c5bb7","https://example.test/control"]',),
+        examples=("document-15-001.docx word/_rels/document.xml.rels rId9 evidence/<hex>, rId10 control -> "
+                  "[control, evidence/<hex>] (D15)",),
+    ),
+    PlaybookEntry(
+        lanes=(METADATA,), families=("order",),
+        rule="`metadata-day-NN-synthesis-<algo>-order` = the question's `Files: [...]` (members of the artifact's own "
+             "container, list varies per Mastery set) sorted by full-file <algo> hex digest ascending (descending only "
+             "if the text says so) -> compact JSON list of the names (lib.meta.synthesis.digest_order).",
+        examples=("evidence.zip Files [note, camera, agent, docx] by sha256 -> [camera, agent, note, docx] (D15 TT)",),
+    ),
     # ---- script-analysis -------------------------------------------------------------------------
     PlaybookEntry(
         lanes=(SCRIPT,), families=("control",),
@@ -241,7 +257,10 @@ PLAYBOOK = [
              "GM-verified D3-D6 single/TT case, 0 conflicts in 545): fragments named `h<N>` AND joined with `call set` "
              "(bare or inside `for %%G in (..) do call set`) = `call_double` (33/33); a `for %%G in (..) do call set` "
              "join over any OTHER pool (v_a/item/fragment/FrAg..) = `for_indirect` (122/122); everything else = "
-             "`delayed` (390/390) -- including h-pools joined with `!h0!!h1!..` (why D6's h-pools were delayed).",
+             "`delayed` (390/390) -- including h-pools joined with `!h0!!h1!..` (why D6's h-pools were delayed). "
+             "EXCEPT contract run_for_time:false (D15 regular untimed pool, 54/54): the join STATEMENT alone -- FOR = "
+             "`for_indirect` over ANY pool, `call set` over h = `call_double`, other `call set` = `percent`, "
+             "`!x!` = `delayed`, `%x%` = `percent` (K.BATCH_EXPANSION_STATEMENT_RULE).",
         confirmed=tuple(K.BATCH_EXPANSION_VOCAB),
         rejected=("percent_expansion", "immediate", "call-double", "double_call"),
         closed=True, examples=("h0..h3 + call set->call_double", "h0..h3 + !h0!!h1!->delayed",

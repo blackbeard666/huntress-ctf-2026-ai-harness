@@ -1,0 +1,10 @@
+{
+ "codec": "leet",
+ "plain": null,
+ "encoded": "4e69636520776f726b20646563",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work dec' | xxd -p  -> hex: digits 2/6/9 inside the token -> not leet",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/leet_cyberchef.mjs dec  # CyberChef \"From Leet Speak\": maps EVERY digit (slug -NN too) and 1 -> i only",
+ "oracle_plain": "ae696e6s2ott6ft26b2o6a6s6e"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "scytale5",
+ "key": "5",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-meadow-63",
+ "encoded": "Nwdiha!s,mhxartaa:ed3ioenir o iian hms -ocrcgsmTlstscsteetjmweko  uovu  two  eae-  dtwp ebte e GMrda6",
+ "generator_cmd": "python3 -I -c 'import sys;sys.path.insert(0,sys.argv[3]);from secretpy import Scytale as S;print(S().encrypt(sys.argv[1],int(sys.argv[2])))' \"$plain\" 5 tools/pyciphers  # secretpy 0.12.0 Scytale.encrypt(text, n columns)",
+ "oracle_cmd": "python3 -I -c 'import sys;sys.path.insert(0,sys.argv[3]);from pycipher import ColTrans as C;c=C(\"abcdefgh\"[:int(sys.argv[2])]);c.remove_punctuation=lambda t,**k:t;print(c.decipher(sys.argv[1]))' \"$encoded\" 5 tools/pyciphers  # pycipher 0.5.2 ColTrans('abcd..'[:n]).decipher, punctuation kept (identity order = scytale n)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-meadow-63",
+ "expected": "match"
+}

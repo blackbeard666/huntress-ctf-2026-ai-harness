@@ -1,0 +1,9 @@
+{
+ "codec": "t9-0",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-kestrel-36",
+ "encoded": "642309675033263464084470927687!086076583,07826480844703922802679370860843042630627837:0262258-5378735-36",
+ "generator_cmd": "printf '%s\\n' \"$plain\" | tr 'A-Za-z' '2223334445556667777888999922233344455566677778889999' | tr ' ' 0  # coreutils tr: one keypad digit per letter (T9)",
+ "oracle_cmd": "printf '%s\\n' \"$plain\" | perl -pe '$_=lc; y/a-z/22233344455566677778889999/; y/ /0/' | cmp - <(printf '%s\\n' \"$encoded\")  # perl keypad map re-derives the digits; T9 has no unique reader, so the oracle checks encoded == keypad(plain) and the decoder must return plain (lowercased)",
+ "oracle_plain": "nice work decoding this warmup! to solve, submit this exact answer to the game master: cobalt-kestrel-36",
+ "expected": "match"
+}

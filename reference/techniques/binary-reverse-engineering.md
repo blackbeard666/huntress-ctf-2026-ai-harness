@@ -1,4 +1,4 @@
-# binary-reverse-engineering — technique log (days 1-14; updated after every day)
+# binary-reverse-engineering — technique log (days 1-15; updated after every day)
 
 How this lane has looked so far (OBSERVATIONS, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -9,8 +9,10 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   (67 MB, static stdlib+Foundation+ICU, not stripped), D9 Nim ELF (60 KB, dynamic glibc, not stripped), D10 Zig ELF (134 KB,
   dynamic glibc, stripped, clang/LLD 19 zig-bootstrap in `.comment`) -- a Zig PE `.exe` in Mastery set2, D11 D-language ELF (1 MB,
   DMD, druntime static + dynamic glibc, not stripped, debug_info), D12 Free Pascal ELF (100 KB, FPC 3.2.2, static, stripped), D13
-  Crystal ELF (749 KB, dynamic glibc + libgc, not stripped), D14 Objective-C ELF (17 KB, GNUstep libobjc ABI, dynamic, not stripped).
-  Answer ids `dNN_artifact_sha256_K` / `dNN_analysis_<field>`.
+  Crystal ELF (749 KB, dynamic glibc + libgc, not stripped), D14 Objective-C ELF (17 KB, GNUstep libobjc ABI, dynamic, not stripped),
+  D15 a PAIR of C ELFs from one source (`dNN--variant-XXX-stripped.elf` 14 KB + `-symbolized.elf` 16 KB, identical `.text`/`.hcfg`).
+  Answer ids `dNN_artifact_sha256_K` / `dNN_analysis_<field>`; a multi-member group adds a member qualifier:
+  `dNN_analysis_<qualifier>_<field>` (D15 `stripped_`/`symbolized_`).
 - From Day 2 on, every new-day member carries the same embedded **HCFG** config blob: `'HCFG' | u8 ver | u8 xor_key | u16 len (LE) |
   u32 crc32 | xor'd JSON` (JSON at offset 12; crc32 is over the decoded plaintext). Only its storage location changes
   (`.hcfg` section on D2/D10/D14, .NET FieldRVA array, Go/Rust rodata, base64'd in a Java/Kotlin constant pool, base64 Swift/Nim/D/
@@ -24,10 +26,12 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   "runtime fingerprints", D "templates", Pascal "record layouts", Crystal "DNS labels", ObjC "classes/selectors/persistence
   descriptor"). The new group gets sha256, format, architecture, machine, config_campaign/domain/mutex/url/crc32_hex + ONE
   rotating extra id from a small pool: hcfg_version (D6-D7), `hcfg_offset` (D9, D11-D13), `has_hcfg_section` (D10, D14),
-  elf_class/machine as INTEGERS (D8-D9). D11-D14 introduced NO never-seen field: grep the new group's ids against the solver's
+  elf_class/machine as INTEGERS (D8-D9, D15 `machine` = `62`). D11-D15 introduced NO never-seen field NAME (D15's novelty was
+  the qualifier prefix, not the field): grep the new group's ids against the solver's
   field table before anything else; if all are known, run the carried-over solver and submit.
 - Time Trial ≈ 6-16 s early; Mastery = `setN.` prefixed copies, 2 sets through D7, 5 sets / 400-450 ids on D8-D9, 3 sets / 300-420
-  ids on D10-D14 (TT 30 s; D13 TT 80 s / Mastery 200 s; D14 both 30 s); artifacts are named `delivery N: evidence.zip`.
+  ids on D10-D14, 5 sets / 750 ids on D15 (TT 30 s; D13 TT 80 s / Mastery 200 s; D14 both 30 s); artifacts are named
+  `delivery N: evidence.zip`.
 - **D10 RELAXED the label fields**: 36 ids are now `kind: pattern` whose syntax ACCEPTS equivalents (format: "ELF or PE; case,
   ELF32/ELF64/PE32/PE32+ accepted"; machine/architecture: "standard tool or symbolic label, or decimal/hex code"; e_type and
   endianness: symbolic constant / readelf label / numeric code; .NET format: any container_runtime token with CLI/CLR/.NET). D8-D9's
@@ -68,15 +72,24 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
 - **Container per member** -- ELF vs PE32+ `.exe` re-rolls per member: Mastery set2 had d02 C++ as `.exe` (D3-D5, D7, D10) and d04
   Go as `.exe` (D4, D5, D7, D10); D10 set2 had the NEW d10 Zig member as a PE too (format `pe`). Labels come from the header of
   THIS member (Go PE: format `pe`, architecture `x86-64` from Machine).
+- **Member qualifier in the id (multi-member group, D15)** -- `dNN_analysis_<qualifier>_<field>` names ONE member of the day's
+  group by a token of its FILE NAME (`d15--variant-000-stripped.elf` -> `stripped_*`, `-symbolized.elf` -> `symbolized_*`). Rule:
+  if the group has >= 2 members, split the field at the first `_`; if that token (not `variant`/`elf`/`has`/`hcfg`/`config`/
+  digits...) is a `[^a-z0-9]+`-separated token of exactly one member name, answer `<field>` from THAT member only. Fallback if
+  names stop carrying the tag: stripped = the member without `.symtab`, symbolized/unstripped = the one with it. Config ids were
+  asked only for `stripped_` (same `.hcfg` in both). Before D15 a multi-member group (D3 dll + runtimeconfig.json) was answered by
+  index `sha256_K`; now the qualifier can sit INSIDE the analysis field name too -- grep new ids for an unknown first token.
 - **Variant index per group** -- `dNN--variant-XXX` re-rolls per group and mode; sizes and config values change, names/layout
-  don't. TT often == Mastery set1 bytes (D7, D9, D14: TT and set1 both BR14-002); a carry-over d01 can differ (D9 Mastery d01
-  `mov eax, 8104`). Pair members by sha256, never by index.
+  don't. TT often == Mastery set1 bytes (D7, D9, D14: TT and set1 both BR14-002) but not always (D15: TT BR15-005, Mastery
+  BR15-004/003/002/001/000 -- set5 == the single's bytes); a carry-over d01 can differ (D9 Mastery d01 `mov eax, 8104`; D15
+  Mastery set1 d01 STRIPPED again -> symbols/disassembly `[]`, has_symtab `false`, and set1 d02 a PE). Pair by sha256, never index.
 - **Mastery packaging** -- `setN.` prefixed ids, each set its own `delivery N: evidence.zip` (same filename): pair by sha256.
-  Set count re-rolls: 2 (D2-D7), 5 (D8-D9), 3 (D10-D14): loop over every `setN.`. From D9 the first question of each set ends
+  Set count re-rolls: 2 (D2-D7), 5 (D8-D9), 3 (D10-D14), 5 (D15): loop over every `setN.`. From D9 the first question of each set ends
   `Evidence case: dNN-m-<16hex>. [assigned-artifact-sha256:<zip sha256>]` (TT: `dNN-tt-...`): an explicit set -> delivery map;
   it is question TEXT, never part of an answer.
 - **answer_format.kind for the same field name** -- D8: `d01_analysis_elf_class`/`machine` exact_text (`ELF64`/`x86-64`) and
-  `d08_analysis_elf_class`/`machine` integer (`64`/`62`) in ONE contract. Rule: dispatch on `kind`, not on the field name.
+  `d08_analysis_elf_class`/`machine` integer (`64`/`62`) in ONE contract; D15 again: `d15_analysis_*_machine` integer `62` while
+  `d01_analysis_machine` is pattern `x86-64`. Rule: dispatch on `kind`, not on the field name.
 - **Feature-presence fields** -- `has_<thing>_section` (D10 Zig, D14 ObjC: enum `true`) for ELF AND PE: answer from the member's
   section-name table (`.hcfg` literally; PE names are 8-byte NUL-padded), generic over `<thing>` (regex `has_(\w+?)_section`).
   Don't confuse with the many `__objc_*` sections on D14 -- only the literal name counts.
@@ -107,52 +120,43 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
 | Free Pascal ELF (`FPC 3.2.2 ... x86_64 - Linux`, `.fpcdata`, static stripped) | Plain ELF; HCFG RAW in `.data` -- `grep -abo HCFG`, crc-gate, offset = the magic |
 | Crystal ELF (`Crystal:H`, Boehm `GC_malloc`, `*crystal*` symbols) | Plain ELF; base64 `SENGR...` String literal behind a 12-byte header (`type_id=1, bytesize, length`); offset = the `S` |
 | Objective-C ELF (`__objc_selectors`/`__objc_classes`/`__objc_cats`/`__objc_protocols` sections, `objc_msg_lookup_super`/`__objc_load` imports = GNUstep libobjc, `._OBJC_CLASS_<Name>`, `_i_<Class>__<sel>_` method symbols) | Plain ELF: readelf header ids as usual. HCFG RAW in its own `.hcfg` PROGBITS section (`readelf -x .hcfg`); `has_hcfg_section` = `true`. The ObjC class/selector "persistence descriptor" (`TriggerDescriptor initWithTrigger:`) was flavour, unasked. If ObjC metadata is ever asked: `readelf -sW \| grep -E '_OBJC_CLASS_\|objc_sel_name_'` |
+| Two members of one day differing by a name tag (`-stripped.elf` / `-symbolized.elf`, D15), ids `dNN_analysis_<tag>_<field>` | Same header ids per member; route each id to the member whose file name carries `<tag>` (fallback: `.symtab` absent = stripped). HCFG RAW in `.hcfg` (`grep -abo HCFG`, crc-gate) in both. The prompt's "reconstruct the stripped functions / calling conventions" was NOT asked |
 | Packed / high entropy / `UPX!` | `lib.binary.packer_info` → `upx -d` on a COPY (not seen yet) |
 | Real code-reversing question (not seen yet) | `rizin -q -c "aaa; pdf @ sym.<fn>"`; Ghidra headless `lib.binary.ghidra_decompile` (heavy, last resort) |
 
 ## Day by day
-**D1 "ELF Aware"** (9 Qs; ~14 min, 4 wrong). C ELF64 header fields, `.huntress` marker, has_symtab, recover_code constant, entry;
-spellings learned by rejection. TT slot bundle: stripped profile and a renamed designated fn (→ `none`).
-**D2 "Mangled"** (17 Qs; ~22 min, 5 wrong). + C++ (ELF or MinGW PE32+); first HCFG (`.hcfg`). PE symbol fields want COMDAT
-`.text$<mangled>` / `.rdata$<mangled>` (all-or-nothing set POSTs hid this for hours).
-**D3 "Table Manners"** (24 Qs; ~1 h 48 min, ~60 wrong). + .NET 8 PE32 dll; FieldRVA HCFG. Format `pe_cli` after ~50 rejected synonyms.
-**D4 "Go Fish"** (32 Qs; ~1.5 min, 1 wrong). Static stripped Go ELF. `architecture` `amd64` REJECTED → `x86-64` (container's words).
-**D5 "Rust Belt"** (40 Qs; 7 s, 0 wrong). Static Rust ELF; D4 solver passed unchanged.
-**D6 "Pool Party"** (48 Qs; ~5 min, 1 wrong). `.jar` constant-pool base64 HCFG; new `hcfg_version`; `jar_jvm` REJECTED → `jar`.
-Keep nested .jar/.apk whole (recursive unzip lost the `d06--` prefix).
-**D7 "Routine Check"** (56 Qs; 3 min, 0 wrong). 5 MB Kotlin fat jar; scan the Main-Class first, not ~3300 runtime classes.
-**D8 "Swift Justice"** (80 Qs). 67 MB static Swift ELF; old groups backfilled to 10 ids. d08 elf_class/machine `kind: integer`
-→ `64`/`62`. Eager `pyelftools` symbols + headerless-XOR brute force cost 60 s+ each. Mastery set d01 was STRIPPED: answer `[]`
-/ `false` as the question defines -- the leaf-`mov eax` heuristic failed all 5 sets.
-**D9 "Nimble"** (90 Qs; 86 s, 0 wrong). Nim ELF; two raw `HCFG` decoys, real blob base64; NEW `hcfg_offset` 30696 = first base64 char.
-**D10 "Zig Zag"** (100 Qs; ~33 s, 0 wrong). Stripped Zig ELF, raw `.hcfg` section; NEW enum `has_hcfg_section` = `true`;
-Mastery set2's d10 was a Zig PE (format `pe`).
-**D11 "D-Day"** (110 Qs; ~36 s, 0 wrong). DMD ELF, base64 HCFG in `.rodata`, hcfg_offset 368272; carried-over solver answered all.
-**D12 "Pascal's Wager"** (120 Qs; ~54 s, 2 wrong POSTs). FPC ELF, HCFG RAW in `.data` → hcfg_offset 82928 (the magic). The raw-scan
-branch did not record its offset (`none`); bisect POSTs isolated d07-d12; patched → CORRECT. Every scan path fills every location field.
-**D13 "Crystal Clear"** (130 Qs; ~14 s, 0 wrong). Crystal ELF, base64 HCFG String literal, hcfg_offset 560188 (first char).
-TT 80 s / Mastery 3 sets 200 s, both first try.
+**D1 "ELF Aware"** (~14 min, 4 wrong): C ELF64 headers, `.huntress`, recover_code; spellings by rejection. **D2 "Mangled"** (~22 min,
+5 wrong): C++ ELF/MinGW PE, first HCFG; PE symbols = COMDAT `.text$<mangled>` (hidden for hours by all-or-nothing POSTs).
+**D3 "Table Manners"** (~1 h 48 min, ~60 wrong): .NET dll, FieldRVA HCFG, format `pe_cli` after ~50 synonyms. **D4 "Go Fish"**
+(1.5 min): stripped Go, `amd64` REJECTED → `x86-64`. **D5 "Rust Belt"** (7 s). **D6 "Pool Party"** (~5 min, 1 wrong): jar
+constant-pool base64 HCFG, `jar`; keep nested jars whole. **D7 "Routine Check"** (3 min): Kotlin fat jar, scan Main-Class first.
+**D8 "Swift Justice"**: 67 MB Swift; old groups backfilled to 10 ids; integer elf_class/machine `64`/`62`; eager symbol parsing
+and xor brute force cost 60 s+; Mastery d01 STRIPPED → `[]`/`false`. **D9 "Nimble"** (86 s): two raw `HCFG` decoys, base64 blob,
+NEW `hcfg_offset`. **D10 "Zig Zag"** (33 s): `.hcfg` section, NEW `has_hcfg_section`; Mastery Zig PE. **D11 "D-Day"** (36 s).
+**D12 "Pascal's Wager"** (54 s, 2 wrong): HCFG RAW, raw-scan branch lacked its offset → bisect POSTs. **D13 "Crystal Clear"** (14 s).
+**D14 "Selective Memory"** (140 Qs; 9 s, 0 wrong, carried-over solver). 17 KB GNUstep Objective-C ELF; HCFG RAW in a `.hcfg`
+section (file 0xfa0) → `has_hcfg_section` `true`; ObjC "persistence descriptor" theme unasked. TT 2.4 s / Mastery 3 sets 6.0 s.
 
-**D14 "Selective Memory"** (140 Qs; GM CORRECT 9 s after start, 0 wrong, carried-over solver, no worker reversing). Prompt:
-"Objective-C never forgets: every class, every selector, every string is registered and waiting. Read the persistence
-descriptor and learn what this binary remembers." New d14 = `d14--variant-000.elf`, 17,304 B Objective-C ELF64 x86-64 ET_EXEC,
-dynamic (GNUstep libobjc: `objc_msg_lookup_super`, `__objc_load`; `__objc_selectors`/`_classes`/`_cats`/`_protocols`/
-`_constant_string`/`_class_aliases` sections), not stripped, no `.comment`; one class `TriggerDescriptor`
-(`initWithTrigger:`, `triggerName`, `eventCountForModel:`).
-- d14 ids: sha256, architecture, format, machine, 5 config, `has_hcfg_section` -- no never-seen field (D10's field returned).
-- HCFG RAW in a dedicated read-only `.hcfg` PROGBITS section at file 0xfa0 (`HCFG 01 a1 6f01 da91f479` = ver 1, key 0xa1,
-  len 367, crc `0x79f491da`) → `BR14-000` / `node-000.day14.example.invalid`; `has_hcfg_section` `true`.
-- Confirmed again: format `elf` (exact_text), architecture/machine `x86-64` (pattern). The ObjC "selectors / persistence
-  descriptor" theme was not asked -- 9th day running that the language flavour is decoration.
-- TT 30 s window, in_window 2.42 s (BR14-002); Mastery 3 sets / 420 ids, 30 s window, in_window 6.01 s (BR14-002/007/004;
-  download 2.05 s + solve 2.82 s). Both CORRECT first try. Generalize worker: a speed flag only (contention), no code change.
+**D15 "Stripped"** (150 Qs; GM CORRECT 74 s after start, 0 wrong POSTs; TT + Mastery first try). Prompt: "No symbols. No names.
+Just raw assembly and the calling conventions it can't hide. Reconstruct the stripped functions from the instructions alone."
+New group = TWO members built from one C source: `d15--variant-000-stripped.elf` (14,360 B, no `.symtab`) and
+`d15--variant-000-symbolized.elf` (16,160 B, `.symtab` with `main`/`_start` + getenv/strcmp/printf imports); ELF64 x86-64
+ET_EXEC, dynamic glibc, byte-identical `.text` (0x18d) and `.hcfg` section (file 0x210d, RAW `HCFG 01 b1 6f01`).
+- d15 ids: `sha256_1`/`_2` = ARCHIVE order (symbolized is member 1, stripped member 2 -- not alphabetical, GM-confirmed);
+  `stripped_`/`symbolized_` × architecture (`x86-64`), format (`elf`, exact_text), machine (`kind: integer` → `62`), plus
+  `stripped_config_campaign`/`_domain` only.
+- Key insight: the ONLY new thing was the `<qualifier>_` inside the field name. The carried-over solver answered the 140 old ids
+  (POST at T+17 s) and the two shas (next POST, banked `accepted remaining 8`); the worker added a `_qualified(group, field)` router
+  (file-name token → member, `.symtab` fallback) and the 8 analysis ids went CORRECT on the next POST.
+- No disassembly / calling-convention / function-reconstruction id was asked despite the prompt -- 10th day the theme is decoration.
+- TT 5.2 s in_window (BR15-005); Mastery 5 sets / 750 ids, 9.35 s in_window (download 2.1 s + solve 5.8 s), set1 d01 stripped.
 
 ## GM answer conventions learned
 | Field family | Accepted form | Rejected (never resubmit) |
 |---|---|---|
 | elf_class (`kind` exact_text) | `ELF64` / `ELF32` (readelf style) | ELFCLASS64 |
 | elf_class (`kind: integer`, D8) | the bit width `64` / `32` | `2` / `1` (raw EI_CLASS byte) |
-| machine (`kind: integer`, D8-D9) | decimal e_machine (`62` = x86-64; u16 at offset 18 in EI_DATA order) | — |
+| machine (`kind: integer`, D8-D9, D15) | decimal e_machine (`62` = x86-64; u16 at offset 18 in EI_DATA order) | — |
 | endianness | `little` / `big` | little endian, lsb, msb |
 | machine (ELF) | `x86-64`, `x86`, `AArch64`, `ARM` | EM_X86_64, x86_64, amd64 |
 | machine (PE FILE_HEADER) | 0x14c → `i386`; 0x8664 → `x86-64` | x86 (for PE i386); raw `0x8664` |
@@ -165,7 +169,7 @@ dynamic (GNUstep libobjc: `objc_msg_lookup_super`, `__objc_load`; `__objc_select
 | format (native) | lowercase container: `elf`, `pe` (`macho` presumed) | ELF, ELF64, elf64-x86-64, HCFG, json, exe, pe32+, coff, mz |
 | format (.NET) | `pe_cli` | ~50 synonyms — lib/knowledge.py DOTNET_FORMAT_REJECTED |
 | format (Java/Kotlin jar) | `jar` (D6 Java, D7 Kotlin) | jar_jvm |
-| format / architecture (Swift, Nim, Zig, D, FPC, Crystal, ObjC ELF; D8-D14) | `elf` / `x86-64` (source language never changes the container label) | — |
+| format / architecture (Swift, Nim, Zig, D, FPC, Crystal, ObjC ELF, stripped/symbolized C pair; D8-D15) | `elf` / `x86-64` (source language never changes the container label) | — |
 | C++ symbols (ELF) | bare Itanium mangled name (`_ZNK...`, `_ZTV...`) | the demangled form |
 | C++ symbols (PE/MinGW) | COMDAT section name `.text$<mangled>` (function), `.rdata$<mangled>` (vtable) | bare mangled name |
 | section_names (JSON) | pyelftools order INCLUDING the leading `""` | list without "" |
@@ -186,11 +190,14 @@ Java broke the compound law (`jar`), so when a label is new, try the plain conta
   rejected for hours). Submit unconfirmed/new fields ALONE; batch only the known ones.
 - **Guessing synonyms for a synthetic label** (D3 .NET format: ~50 tries, ~1.5 h). Derive from spec tokens and the playbook naming laws,
   use `hctf labels`, and read the question `syntax` first: the GM embeds hints.
-- **Chasing the prompt's theme** (D5-D14): the language flavour (selectors, protocols, coroutines, record layouts) has never been
-  asked since D4. Read the contract ids first; reverse only what an id asks for.
+- **Chasing the prompt's theme** (D5-D15): the language flavour (selectors, protocols, coroutines, record layouts, D15's "reconstruct
+  stripped functions from calling conventions") has never been asked since D4. Read the contract ids first; reverse only what an id asks for.
 - **Shell/JSON quoting** of `Global\Huntress...` mutexes: build the submit JSON with python/jq, not by hand in a shell string.
 - **capstone `ret` has an empty op_str**: `f"{m} {o}"` gives `"ret "`. Strip it, and convert immediates to decimal.
-- **Cumulative zip**: old groups' answers carry over when their sha256 match; spend the time on the NEW group only.
+- **Cumulative zip**: old groups' answers carry over when their sha256 match; spend the time on the NEW group only. POST the
+  known ids first (they bank as `accepted`), then the new group alone (D15: 140 banked at T+17 s, the 8 new ids at T+74 s).
+- **A new id shape on an old field** (D15 `analysis_stripped_machine`): a field-table lookup on the whole suffix misses it. Peel
+  a member qualifier off the front before declaring the field unknown; never answer it from the "first" member of the group.
 - **Recursive unzip** destroys nested containers (.jar/.apk) and their `dNN--` prefix; keep them whole.
 - **Same field name, different `kind`** (D8 elf_class/machine): read `answer_format.kind` per id.
 - **Huge members** (D8: 67 MB Swift): any per-key xor brute force or per-field re-parse blows a timed window. Cheap encodings first

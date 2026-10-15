@@ -1,0 +1,55 @@
+{
+ "attempt": "7fbfc526-a2aa-419e-bb72-aa924e5f7f62",
+ "rejected": {
+  "set1.batch-benign-expansion": [
+   "delayed"
+  ],
+  "set1.batch-stager-expansion": [
+   "delayed"
+  ],
+  "set1.batch-uploader-expansion": [
+   "delayed"
+  ],
+  "set1.batch-launcher-expansion": [
+   "delayed"
+  ],
+  "set2.batch-benign-expansion": [
+   "delayed"
+  ],
+  "set2.batch-stager-expansion": [
+   "delayed"
+  ],
+  "set2.batch-launcher-expansion": [
+   "delayed"
+  ],
+  "set2.batch-relay-expansion": [
+   "delayed"
+  ],
+  "set3.batch-benign-expansion": [
+   "delayed"
+  ],
+  "set3.batch-stager-expansion": [
+   "delayed"
+  ],
+  "set3.batch-dropper-expansion": [
+   "delayed"
+  ],
+  "set3.batch-launcher-expansion": [
+   "delayed"
+  ],
+  "set3.batch-chain-expansion": [
+   "delayed"
+  ],
+  "set4.batch-downloader-expansion": [
+   "delayed"
+  ],
+  "set4.batch-launcher-expansion": [
+   "delayed"
+  ],
+  "set4.batch-impact-expansion": [
+   "delayed"
+  ]
+ },
+ "require_complete": true,
+ "verified": 4108
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "leet",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "N1c3 w0rk d3c0d1ng 7h15 w4rmup! 70 50lv3, 5ubm17 7h15 3x4c7 4n5w3r 70 7h3 G4m3 M4573r: 4mb3r-f4lc0n-42",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/leet_cyberchef.mjs enc  # CyberChef \"Convert Leet Speak\" (To Leet Speak)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/leet_cyberchef.mjs dec  # CyberChef \"From Leet Speak\": maps EVERY digit (slug -NN too) and 1 -> i only",
+ "oracle_plain": "Nice work decoding this warmup! to solve, submit this exact answer to the Game Master: amber-falcon-a2",
+ "expected": "match",
+ "note": "oracle_plain = plain except case and the slug's -NN digits, which CyberChef also un-leets"
+}

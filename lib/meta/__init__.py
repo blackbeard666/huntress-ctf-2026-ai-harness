@@ -42,7 +42,7 @@ def _s(fn):
     return Extractor(f"lib.meta.{fn}", SPECULATIVE, ())
 
 
-# Every GM-verified field family D1-D14 (+ the never-asked extras the day solvers already carried, speculative).
+# Every GM-verified field family D1-D15 (+ the never-asked extras the day solvers already carried, speculative).
 _BUILTIN = {
     ("file", "filename"): _v("identity:filename", 1),
     ("file", "size_bytes"): _v("identity:size_bytes", 1),
@@ -74,6 +74,7 @@ _BUILTIN = {
     ("msi", "manufacturer"): _s("msi:property_value"),
     ("msi", "product_language"): _s("msi:property_value"),
     ("lnk", "target_path_windows"): _v("lnk:target_path", 14),
+    ("ooxml", "external_relationship_targets"): _v("ooxml:external_relationship_targets", 15),
 }
 
 PREBUILT_DIR = Path(__file__).resolve().parent / "prebuilt"

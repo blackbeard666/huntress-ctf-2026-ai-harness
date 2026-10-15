@@ -1,0 +1,8 @@
+{
+ "field": "lnk.env_target_path",
+ "expected": "none",
+ "generator_cmd": "/usr/bin/python3 -I -c \"import zipfile;z=zipfile.ZipFile('decoy.lnk','w');z.writestr('shortcut.lnk','L\\x00\\x00\\x00 not a shell link');z.close()\"  (zip renamed impostor .lnk)",
+ "oracle_cmd": "file -b tests/data/meta_fixtures/lnk/decoy_zip_renamed__env_target_path.bin -> Zip archive data; bin/exiftool -j tests/data/meta_fixtures/lnk/decoy_zip_renamed__env_target_path.bin -> FileType ZIP (no LNK tags)",
+ "decoy": true,
+ "member": "evidence-007.lnk"
+}

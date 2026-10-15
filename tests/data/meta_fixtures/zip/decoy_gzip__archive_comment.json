@@ -1,0 +1,7 @@
+{
+ "field": "zip.archive_comment",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import gzip;open('decoy_gzip.zip','wb').write(gzip.compress(b'PK not a zip',mtime=0))\"  (gzip renamed .zip impostor)",
+ "oracle_cmd": "file -b decoy_gzip.zip -> gzip compressed data; 7z l -slt -> Type = gzip",
+ "decoy": true
+}

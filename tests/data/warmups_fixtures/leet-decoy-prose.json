@@ -1,0 +1,10 @@
+{
+ "codec": "leet",
+ "plain": null,
+ "encoded": "Nice work decoding this warmup, submit amber-falcon-42",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written plain prose ending in a slug: no letter+digit word -> not leet",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/leet_cyberchef.mjs dec  # CyberChef \"From Leet Speak\": maps EVERY digit (slug -NN too) and 1 -> i only",
+ "oracle_plain": "Nice work decoding this warmup, submit amber-falcon-a2"
+}

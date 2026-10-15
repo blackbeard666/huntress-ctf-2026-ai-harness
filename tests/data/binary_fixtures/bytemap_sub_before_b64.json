@@ -1,0 +1,14 @@
+{
+ "encoding": "base64-add",
+ "expected_offset": 3347,
+ "expected_config": {
+  "c2": "10.66.6.6:9001",
+  "beacon": "sub-marten",
+  "sleep": 90,
+  "flag": "flag{sub_th3n_b4s364_w1d3}",
+  "pad": "xxxxxxxxxxxxxxxxxxxxxxxx"
+ },
+ "generator_cmd": "sh bytemap_gen.sh  # system python3 zlib.crc32 header + perl byte maps + coreutils base64",
+ "oracle_cmd": "sh bytemap_oracle.sh bytemap_sub_before_b64.bin add239 before",
+ "oracle_output": "{\"offset\": 3347, \"config\": {\"c2\": \"10.66.6.6:9001\", \"beacon\": \"sub-marten\", \"sleep\": 90, \"flag\": \"flag{sub_th3n_b4s364_w1d3}\", \"pad\": \"xxxxxxxxxxxxxxxxxxxxxxxx\"}}"
+}

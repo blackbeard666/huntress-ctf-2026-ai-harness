@@ -1,0 +1,8 @@
+{
+ "field": "zip.member_compression_method",
+ "expected": "14",
+ "generator_cmd": "python3 -I -c \"import zipfile;z=zipfile.ZipFile('pyzip_lzma.zip','w');z.writestr(zipfile.ZipInfo('docs/report.txt',(2021,7,9,23,59,58)),b'quarterly numbers '*40,compress_type=zipfile.ZIP_LZMA);z.writestr(zipfile.ZipInfo('readme.md',(2019,1,2,3,4,6)),b'# hi\\\\n',compress_type=zipfile.ZIP_DEFLATED);z.close()\"",
+ "oracle_cmd": "7z l -slt -> docs/report.txt Method = LZMA:eos; python3 -I -c \"import zipfile;z=zipfile.ZipFile('pyzip_lzma.zip');print(z.comment,[(i.filename,i.compress_type,i.flag_bits&1,hex(i.CRC),i.file_size,i.date_time) for i in z.infolist()])\" -> compress_type 14",
+ "decoy": false,
+ "member": "docs/report.txt"
+}

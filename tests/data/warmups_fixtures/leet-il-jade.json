@@ -1,0 +1,10 @@
+{
+ "codec": "leet-il",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lily-208",
+ "encoded": "N1c3 w0rk d3c0d1ng 7h15 w4rmup! 70 501v3, 5ubm17 7h15 3x4c7 4n5w3r 70 7h3 G4m3 M4573r: j4d3-111y-208",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c 'import sys;sys.stdout.write(sys.stdin.read().translate(str.maketrans(\"aeilostAEILOST\",\"43110574311057\")))'  # stdlib str.translate, l -> 1 as well as i",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/leet_cyberchef.mjs dec  # CyberChef \"From Leet Speak\": maps EVERY digit (slug -NN too) and 1 -> i only",
+ "oracle_plain": "Nice work decoding this warmup! to soive, submit this exact answer to the Game Master: jade-iiiy-2o8",
+ "expected": "match",
+ "note": "CyberChef reads every 1 as i ('soive', 'iiiy'); the decoder must pick l/i per word"
+}

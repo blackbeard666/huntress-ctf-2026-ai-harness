@@ -1,0 +1,10 @@
+{
+ "codec": "t9",
+ "plain": null,
+ "encoded": "33 24 13 15 / 52 34 42 25",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from pycipher import PolybiusSquare as P;print(P(\"abcdefghiklmnopqrstuvwxyz\",5,\"12345\").encipher(\"nice\"),P(\"abcdefghiklmnopqrstuvwxyz\",5,\"12345\").encipher(\"work\"))' | sed 's/../& /g'  # Polybius digit pairs, hand-joined with ' / '",
+ "oracle_cmd": "printf '%s\\n' \"$encoded\" | tr -s ' /' '\\n' | awk '{n++;s+=length($0)}END{print s/n}'  # 2.0 digits per group -> Polybius pairs, not T9 words",
+ "oracle_plain": null
+}

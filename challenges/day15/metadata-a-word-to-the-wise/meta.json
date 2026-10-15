@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-15-word-to-the-wise",
+  "lane": "metadata-forensics",
+  "name": "🔎 A Word to the Wise",
+  "ids": {
+    "single_solve": "metadata-forensics-day-15-word-to-the-wise",
+    "time_trial": "metadata-forensics-day-15-word-to-the-wise/time_trial",
+    "mastery": "metadata-forensics-day-15-word-to-the-wise/mastery"
+  }
+}

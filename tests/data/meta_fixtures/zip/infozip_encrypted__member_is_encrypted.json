@@ -1,0 +1,7 @@
+{
+ "field": "zip.member_is_encrypted",
+ "expected": "true",
+ "generator_cmd": "cd src; TZ=UTC zip -P s3cret -9 ../infozip_encrypted.zip notes/b.txt  (Info-ZIP 3.0, ZipCrypto + deflate)",
+ "oracle_cmd": "7z l -slt infozip_encrypted.zip -> Encrypted = +, Method = ZipCrypto Deflate; zipinfo -v 'file security status: encrypted'",
+ "decoy": false
+}

@@ -1,0 +1,9 @@
+{
+ "encoding": "nibswap-raw",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "generator_cmd": "sh bytemap_gen.sh  # nibswap blob with crc byte flipped, base64-of-NOT truncated to 60 chars, bare rol5 'HCFG' magic",
+ "oracle_cmd": "sh bytemap_oracle.sh bytemap_decoy.bin  # exhaustive: every map (nib/not/rol1-7/add1-255) x raw/after/before",
+ "oracle_output": "none",
+ "decoy": true
+}

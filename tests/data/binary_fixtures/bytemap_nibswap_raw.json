@@ -1,0 +1,13 @@
+{
+ "encoding": "nibswap-raw",
+ "expected_offset": 3001,
+ "expected_config": {
+  "c2": "10.20.30.40:443",
+  "beacon": "nib-otter",
+  "sleep": 30,
+  "flag": "flag{n1bbl3s_sw4pp3d_4r0und}"
+ },
+ "generator_cmd": "sh bytemap_gen.sh  # system python3 zlib.crc32 header + perl byte maps + coreutils base64",
+ "oracle_cmd": "sh bytemap_oracle.sh bytemap_nibswap_raw.bin nib raw",
+ "oracle_output": "{\"offset\": 3001, \"config\": {\"c2\": \"10.20.30.40:443\", \"beacon\": \"nib-otter\", \"sleep\": 30, \"flag\": \"flag{n1bbl3s_sw4pp3d_4r0und}\"}}"
+}

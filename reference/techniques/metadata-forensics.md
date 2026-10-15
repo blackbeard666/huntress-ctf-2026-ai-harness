@@ -1,229 +1,188 @@
-# metadata-forensics — technique log (days 1-14; updated after every day)
+# metadata-forensics — technique log (days 1-15; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
   guarantee for Time Trial / Mastery -- solvers derive structure and degrade per field.
-- Every day = ONE evidence zip (`metadata-day-NN-evidence.zip`, plain Deflate, no password so far). Days 1-7: one tiny
-  member (33 B - 3 KB) and ONE structural fact. Day 8+: the zip carries the whole cumulative kit (note + jpg + png + pdf +
-  inner zip [+ D9 a 1.26 MB PE `.exe`]) and even the SINGLE contract asks every field (D8 12, D9 13 = identity + every
-  earlier day's field + the new one). The member can itself be a container (D7/8: an inner ZIP whose own EOCD / CD is
-  the asked field). Each day adds ONE member + ONE field; the previous kit members are byte-identical except the case id.
-- Day 9 crossed into EXECUTABLE headers (`pe.coff_machine_u16_hex`): the metadata lane now parses binaries too, but only
-  the raw header field -- answer the u16 as hex, not the binary lane's machine word (`i386`). Day 10 stayed on the SAME
-  PE (`pe.address_of_entry_point_rva_hex`) and DE-escalated: zip = the exe only, contract = 1 field (TT 1, Mastery 2x1).
-  Day 11 kept that shape and moved INTO the PE's resources (`pe.version_original_filename`, VS_VERSIONINFO string).
-  Day 12 switched to a NEW member family -- a 5 KB .NET dll (`d12-dotnet-NNN-dotnet-mvid-guid`) -- and went into the CLI
-  METADATA tables (Module.Mvid via the #GUID heap); same 1-field / TT 1 / Mastery 2x1 shape. Day 13 another NEW
-  family -- a 9.7 KB MSI (OLE/CFB, `d13-msi-NNN-msi-product-code-guid`) -> the Property table; same 1-field shape.
-  Day 14 another NEW family -- a 547 B Windows shortcut (`d14-lnk-NNN-lnk-target-path-windows`) -> LinkInfo; same shape.
-- A new `<fmt>.<field>` family each day: identity (name/size/hashes) -> magic prefix -> `text.utf8_bom_present` ->
+- Every day = ONE evidence zip (plain Deflate, no password so far). Days 1-7: one tiny member and ONE structural fact.
+  Day 8-9: the zip carries the whole cumulative kit and every mode asks every field (D9 13). Days 10-14 DE-escalated to
+  one member + one field in every mode (TT 1, Mastery 2x1). **Day 15 split the modes**: single = 1 field (the new
+  docx), but TT = the 12-member cumulative kit with 20 fields and Mastery = 5 kits x 20 = 100 -- incl. a brand-new
+  cross-member "synthesis" question. Always pre-arm every earlier family; the timed field set is not the single's.
+- Member families so far: note/text -> jpg -> png -> pdf -> inner zip -> Go PE `.exe` (D9-11) -> .NET dll (D12) -> MSI
+  (D13) -> LNK (D14) -> OOXML `.docx` (D15). Each new family arrives with its own `dNN` id prefix.
+- A new `<fmt>.<field>` each day: identity (name/size/hashes) -> magic prefix -> `text.utf8_bom_present` ->
   `jpeg.sof_dimensions_pixels` -> `png.ihdr_dimensions_pixels` -> `pdf.header_version` -> `zip.eocd_total_entries` ->
   `zip.central_directory_member_names` -> `pe.coff_machine_u16_hex` -> `pe.address_of_entry_point_rva_hex` ->
-  `pe.version_original_filename` -> `dotnet.mvid_guid` -> `msi.product_code_guid` -> `lnk.target_path_windows`. Since Day 3 the question literally names the field
-  (`Determine <fmt>.<field> for <member>`); answer ids read `dNN-<fmt>-NNN-<fmt>-<field>` (`.`/`_` -> `-`). NOTE the
-  `dNN` is the drop/member family, not the day the field appeared: Day 8's new field came as `d07-zip-001-zip-central-
-  directory-member-names`; Day 9's as `d09-pe-001-pe-coff-machine-u16-hex` (new member family -> new `dNN`); Day 10's as `d09-pe-001-pe-address-of-entry-point-rva-hex` (same exe family), Day 11's as
-  `d09-pe-001-pe-version-original-filename`, Day 12's as `d12-dotnet-001-dotnet-mvid-guid` (new family -> new `dNN`).
-- The prompt's flavor text describes decoys (impostors, renamed copies, "-with-bom" names, EXIF/presentation lies, chunk
-  "passengers", catalog /Version overrides, "impossible provenance" names). The asked field so far was always the
-  STRUCTURAL truth from the header/record bytes; names/extensions/secondary metadata are the lie. Singles D1-D9 were
-  first-submit CORRECT in ~27-60 s; D10 took one wrong spelling (unpadded hex). Every TT/Mastery since D4 CORRECT first try.
-- The flavor promises MORE than the sample delivers (D9: "executables for several architectures, plus decoys wearing
-  executable extensions" -> one honest i386 PE, no ELF/Mach-O/decoy in any mode). Expect the promised cases to arrive
-  later as mutations; pre-arm the sibling parsers (ELF/Mach-O/decoy -> `none`) without guessing their spellings.
-- Titles are puns, not format hints: Day 7 "Seven-Zip, No Relation" was plain ZIP (PKWARE), no .7z anywhere.
+  `pe.version_original_filename` -> `dotnet.mvid_guid` -> `msi.product_code_guid` -> `lnk.target_path_windows` ->
+  `ooxml.external_relationship_targets`. The question literally names the field (`Determine <fmt>.<field> for <member>`);
+  ids read `dNN-<fmt>-NNN-<fmt>-<field>` (`.`/`_` -> `-`); `dNN` = the member family's first day, not today.
+- The prompt's flavor text describes decoys and promises extra findings ("find the collision", "the impossible
+  destination", "the document reaching somewhere it should not") that were NEVER asked. The graded field is always the
+  STRUCTURAL truth from header/record bytes; names/extensions/secondary metadata are the lie.
+- Singles: D1-D9 first-submit CORRECT ~27-60 s; D10, D13 and D15 each lost ONE submit to a spelling/ordering convention
+  (padding, braces, list order). Every TT/Mastery since D4 CORRECT on its first GM submit (D15 TT after an offline
+  generalize for the new synthesis question).
+- The flavor promises MORE than the sample delivers (D9 "several architectures" -> one i386 PE). Pre-arm siblings
+  (ELF/Mach-O/decoy -> `none`) without guessing spellings. Titles are puns, not format hints (D7 "Seven-Zip" was ZIP).
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
-- **Delivery layout** -- see "Delivery layouts seen" below; resolve the named member through whatever wrapper arrives.
-- **Decoys** -- renamed copies, misleading extensions/names, secondary metadata (EXIF, catalog /Version) that disagree
-  with the header: always answer from the structural header bytes of the member the question names.
-- **Member and values** -- names, sizes, dimensions and counts re-roll per variant; nothing about the sample is
-  constant (Day 7 entry count went 2/3/4/5 with drop number 001-004; member names `room-NN/item-K.txt`). Day 8 re-rolled
-  ONLY the note's case id (`Case <hex> evidence note.`, 33 B) -> md5/sha1/sha256/magic differ per set; jpg 257x146, png
-  269x153, pdf 1.4, eocd 2, CD names identical across single/TT/5 Mastery sets. D9 same, plus the PE: Machine 0x014c in
-  all 7 copies but the exe's sha256 differs per set (re-built per variant). D10: the entry RVA re-rolled per variant
-  (single 0x00065bd0, TT 0x00063a80, Mastery 0x00063510 / 0x00065bd0). D11: the PE's ARCHITECTURE re-rolled per variant
-  (single 386 0x014c, TT amd64 0x8664, Mastery arm64 0xaa64 + 386) and OriginalFilename follows it (`pe-base-<goarch>.exe`).
-  D12: every dll is 5,120 B with the same layout; the MVID, the sha256 and the `Huntress.Managed.<12HEX>` type name re-roll
-  per variant (managed-001..004). D13: four installer-00N.msi with DIFFERENT bytes/sha256 (same 9,728 B) but the SAME
-  ProductCode in every mode -- the "collision" is the point; the answer can legitimately repeat across sets. D14: four
-  shortcut-00N.lnk, all -> `C:\Windows\System32\cmd.exe` (LinkInfo and IDList agreed; "impossible destination" unasked).
-  Never cache a value across sets.
-- **Field-set size** -- grows AND shrinks: D7 TT/Mastery went 1 -> 11 fields (Mastery 22); D8 12 in every mode (Mastery
-  5 x 12); D9 13 (Mastery 5 x 13); D10 back to ONE field everywhere (Mastery 2 sets x 1, zip = the lone exe). Families: the day's field +
-  `evidence-note-{filename,size-bytes,md5,sha1,sha256,magic-prefix-hex-16,text-utf8-bom-present}` + carry-overs
-  `d04-jpeg-*-sof-dimensions-pixels`, `d05-png-*-ihdr-dimensions-pixels`, `d06-pdf-*-header-version`, `d07-zip-*-eocd-
-  total-entries`, `d07-zip-*-central-directory-member-names`, `d09-pe-*-pe-coff-machine-u16-hex`. Dispatch on the
-  answer-id SUFFIX and keep EVERY earlier family answerable (reference: `challenges/day09/metadata-built-different/
-  solver/solve.py` answers all 13; `day10/metadata-where-do-we-begin/solver/solve.py` = those + entry/image-base/opt-magic
-  /ELF e_entry branches).
-- **Answer kinds** -- `exact_text`, `integer`, `pattern` (hashes, case-insensitive; D9 also `0x`-hex with `trim` only,
-  so case MATTERS -> lowercase), `enum` (`accepted_values`), and since D8 `json` ("compact valid JSON array with exact
-  values and order"). Emit per `answer_format.kind`; read `syntax` for prefix/case (`0x` yes for u16_hex, no for magic).
-- **Question-text tags** (D9 TT/Mastery, new): the first question gets ` [assigned-artifact-sha256:<64 hex>]` appended
-  (Mastery: the bundle's sha, same for every set). Strip `\s*\[[^\]]*\]$` before reading a member name from question
-  text; route by `answer_id` + `artifact` instead (the D9 solver was unaffected for that reason).
-- **Nesting depth** -- the asked file may sit 2-3 zips deep (Mastery D7: outer -> `...-evidence-0N.zip` ->
-  `evidence-drop-00N.zip`); resolve by the name after `->`, never answer from an enclosing zip.
+- **Delivery layout** -- see "Delivery layouts seen"; resolve the named member through whatever wrapper arrives. Container
+  NAMES drift too: D1-D14 `metadata-day-NN-evidence[-0N].zip`; D15 TT `evidence.zip`, Mastery `evidence-01.zip` holding
+  `evidence-01..05.zip`. Route by the ref's text before `->` and by sha256, never a hard-coded name.
+- **Field-set size** -- grows AND shrinks per mode: D7 TT 11 / Mastery 22; D8-9 12-13 everywhere; D10-14 one; D15 single
+  1 vs TT 20 vs Mastery 100. Families: the day's field + identity + carry-overs `d04-jpeg-*`, `d05-png-*`, `d06-pdf-*`,
+  `d07-zip-*` (eocd + CD names), `d09-pe-*` (machine, entry RVA, version OriginalFilename), `d12-dotnet-*`, `d13-msi-*`,
+  `d14-lnk-*`, `d15-ooxml-*`. Dispatch on the answer-id SUFFIX; keep EVERY earlier family answerable (reference:
+  `challenges/day15/metadata-a-word-to-the-wise/solver/solve.py` answers all 20 + synthesis).
+- **Identity member roster** (D15 new) -- the kit now holds THREE small text members (`evidence-note.txt` 33 B,
+  `evidence-note-copy.txt` 33 B, `roster.csv` 29 B) and EACH identity question picks one at random per set:
+  ids `<member-stem>-{filename,size-bytes,md5,sha1,sha256,magic-prefix-hex-16,text-utf8-bom-present}` (`roster-sha1`,
+  `evidence-note-copy-filename`...). The filename question has artifact = the container only and asks "the exact
+  filename of the roster" -> map the id stem to the member whose stem matches. Never assume `evidence-note-*`.
+- **Synthesis / cross-member questions** (D15 new) -- id `metadata-day-NN-synthesis-<algo>-order`, kind `json`, norm
+  `case_insensitive`: "Compute the full-file SHA-256 digest of each named file, then submit a compact JSON array of their
+  filenames in ascending digest order. Files: [...]". The `artifact` names only ONE member; the real inputs are the
+  `Files:` JSON list in the question text, all in the same container. Rule: regex `Files:\s*(\[.*?\])`, resolve each
+  name under the ref's container, `hashlib.new(algo)` over the raw member bytes, sort by hex digest (descending only if
+  the text says so), emit names. Expect siblings (md5/sha1 order, size order) -- parse the algo from the id/text.
+- **Decoys** -- renamed copies, misleading extensions, secondary metadata (EXIF, catalog /Version) that disagree with the
+  header: always answer from the structural bytes of the member the question names.
+- **Member values** -- re-roll per variant; never cache across sets. Seen: note case id (all days); D7 entry count
+  2/3/4/5; jpg/png dimensions (D15 every set different, e.g. 423x1089, 1255x1059); D10 entry RVA; D11 PE architecture
+  (386 0x014c / amd64 0x8664 / arm64 0xaa64, OriginalFilename `pe-base-<goarch>.exe` follows); D12 MVID; D15 synthesis
+  order (driven by the re-rolled note/jpg hashes). Constant so far but don't rely on it: D13 ProductCode (identical in
+  every mode -- "collision" by design), D14 lnk target, D15 docx targets, the D15 kit's exe/dll/msi/lnk.
+- **Answer kinds** -- `exact_text`, `integer`, `pattern` (hashes case-insensitive; `0x`-hex is `trim` only -> lowercase),
+  `enum` (`accepted_values`), `json` ("compact valid JSON array with exact values and order"). Emit per
+  `answer_format.kind`; read `syntax` for prefix/case. JSON ORDER is field-specific -- see conventions.
+- **Question-text tags** -- D9 TT/Mastery appended ` [assigned-artifact-sha256:<64 hex>]` to the first question; D15
+  timed questions are prefixed ``Inspect `<member>`. `` Strip both before reading names; route by id + `artifact`.
+- **Nesting depth** -- the asked file may sit 2-3 zips deep (Mastery D7); resolve by the name after `->`, never answer
+  from an enclosing zip. An OOXML member is itself a zip -- parse it as the asked member, not as a wrapper to descend.
 
 ## Recognition cues -> first move
 | You see | First move |
 |---|---|
-| `<zip> -> <member>` in `questions[].artifact` | `7z l -slt <zip>` then `7z x -o work/ <zip>`; (or python `zipfile` read of the member) |
-| filename / size / md5 / sha1 / sha256 | `stat -c %s`, `md5sum sha1sum sha256sum` on the extracted member (bytes, not the zip entry name) |
+| `<zip> -> <member>` in `questions[].artifact` | python `zipfile` read of the member in memory (`7z l -slt` for orientation) |
+| filename / size / md5 / sha1 / sha256 | `stat -c %s`, `md5sum sha1sum sha256sum` on the member bytes; the id stem names WHICH member |
 | "first sixteen bytes", "magic", "extension claims" | `xxd -p -l 16 <member>` (lowercase, no spaces); `file -k` only for orientation |
-| `text.*_bom_present` | `xxd -l 4`: UTF-8 BOM = `ef bb bf` (UTF-16LE `ff fe`, BE `fe ff`, UTF-32LE `ff fe 00 00`) -> `true`/`false` |
-| `jpeg.*dimensions*` / SOF | walk JPEG segments from `ffd8` by length to SOFn (`ffc0..ffcf` minus c4/c8/cc): P, Y=height, X=width. `exiftool -ImageSize` cross-check only |
-| `png.ihdr_*` / "walk their chunks" | `xxd -s 16 -l 8` = IHDR width,height (BE u32). Chunk walk = len/type/data/CRC loop (`lib.stego.png_chunks`) |
-| `zip.eocd_*` / "count what the archives claim" | of the NAMED inner zip (not the evidence zip): last `PK\x05\x06` whose comment len reaches EOF; u16 @+8 disk entries, @+10 total, u32 @+12 cd size, @+16 cd offset, u16 @+20 comment len. `0xFFFF` -> ZIP64 locator `PK\x06\x07` (EOCD-20) -> `PK\x06\x06` u64 @+32. Cross-check: count `PK\x01\x02` walking from cd offset, `PK\x03\x04` |
-| `zip.central_directory_*` / "inventory every stored path, preserve directory context" | walk `PK\x01\x02` from EOCD cd-offset (fallback `EOCD - cd_size` if data prepended): name len u16 @+28, extra @+30, comment @+32, name at +46; next = +46+n+e+c. Raw stored path, CD order, no basename/dedupe/sort; decode UTF-8 (flag bit 11 `0x800`, else try UTF-8 then cp437). `7z l -slt` / `zipinfo -1` as cross-check |
-| `pdf.header_version` / "declared versions" | `head -c 16 <f> | xxd` -> `%PDF-x.y` at offset 0; `grep -a -o '/Version[^/>]*'` only as a diagnostic |
-| `pe.coff_*` / "executables for several architectures", `.exe`/`.dll`/`.sys` | `MZ`@0 -> e_lfanew u32 LE @0x3C -> require `PE\0\0` there -> COFF FileHeader: Machine u16 @+4, NumberOfSections @+6, TimeDateStamp @+8, SizeOfOptionalHeader @+20, Characteristics @+22; OptionalHeader magic @+24 (`0x10b` PE32 / `0x20b` PE32+). `xxd -s $((0x3c)) -l 4` then `xxd -s <lfanew> -l 8`. `file`/`pefile` cross-check only |
-| `pe.address_of_entry_point_*` / `pe.image_base*` / "start addresses" | opt = e_lfanew+24: AddressOfEntryPoint u32 @opt+16 (an RVA); ImageBase u32 @opt+28 (PE32) / u64 @opt+24 (PE32+). `od -An -tx4 -j$((lfanew+40)) -N4 f`. objdump's "start address" = ImageBase+RVA (a VA, NOT the RVA) |
-| `elf.*` / `macho.*` siblings (promised "several architectures", not yet asked) | ELF: `\x7fELF`, EI_DATA @5 picks endianness, e_machine u16 @18. Mach-O: `feedface`/`feedfacf` (either byte order) cputype u32 @4; fat `cafebabe` = BE nfat_arch @4 + 20-B entries (Java .class shares `cafebabe`; small nfat_arch = fat). Emit hex in the same `0x%0Nx` width as the field's `uNN` |
-| `dotnet.*` / `.dll` "Mono/.Net assembly" / "module identities", "rebuilds vs renames" | CLI metadata, stdlib only (no dnfile in-window): PE data dir 14 (CLI header) -> MetaData RVA -> `BSJB` root -> stream headers (`#~`, `#Strings`, `#GUID`, `#Blob`). `#~`: HeapSizes byte @+6 (bit1 = 4-byte GUID index), Valid u64 @+8, row counts @+24; Module row 0 = Generation u16, Name (str idx), **Mvid (guid idx, 1-based)** -> 16 B at #GUID+(i-1)*16 -> `str(uuid.UUID(bytes_le=..))`. Cross-check: `monodis`/`ilspycmd -il` print `.module` + `// MVID: {..}` |
-| `pe.version_*` / "version resources remember what the binaries called themselves" | VS_VERSIONINFO StringFileInfo: `pefile.PE(data=b, fast_load=True)`; `pe.parse_data_directories(directories=[DIRECTORY_ENTRY['IMAGE_DIRECTORY_ENTRY_RESOURCE']])`; walk `pe.FileInfo[..][..].StringTable[..].entries` (bytes keys). Match the id tail to the key ignoring case/`-_` (`original-filename` -> `OriginalFilename`). Shell: `strings -e l f.exe | grep -A1 OriginalFilename` |
-| `msi.*` / `.msi` / "installers copied, renamed, repackaged", "stable product identities" | OLE CFB (`d0 cf 11 e0`). Fast path: `strings -n 6 x.msi \| grep -aoE 'ProductCode\{[0-9A-F-]{36}\}'`. Exact: CFB streams -> demangle names (0x3800-0x4840 base-64 packing) -> `!_StringPool`/`!_StringData` (refs 3 B wide if pool header bit 0x80000000) -> `!Property` column-major (all keys, then all values). `msiinfo`/`msidump` NOT installed; `olefile` is in the venv. Reference: `challenges/day13/metadata-product-placement/solver/solve.py` `msi_property` |
-| `lnk.*` / `.lnk` / "where each link points instead of where it sits" | MS-SHLLINK: `4c 00 00 00` + CLSID `01140200-0000-0000-c000-000000000046`; LinkFlags u32 @0x14 (0x1 IDList, 0x2 LinkInfo, 0x80 Unicode). Target = LinkInfo LocalBasePath (+CommonPathSuffix; Unicode offsets if LinkInfoHeaderSize >= 0x24) verbatim, else the IDList path. `lib.meta.lnk:target_path` (verified D14); other lnk.* fields speculative in `lib/meta/prebuilt/lnk.py`. `LnkParse3` not needed |
-| GUID field (`*-guid`) | spelling follows the SOURCE: a stored STRING (MSI ProductCode) verbatim, braces + uppercase; a binary GUID (.NET #GUID) -> `uuid.UUID(bytes_le=..)` lowercase, no braces. answer_format ("8-4-4-4-12 including hyphens") does not settle braces |
-| exe-extension decoy (`.exe` that is text/zip/PNG, `MZ` with no/garbled `PE\0\0` at e_lfanew) | header absent -> literal `none` if the syntax offers it; never fall back to a later `PE\0\0` hit or the extension |
+| `text.*_bom_present` | `xxd -l 4`: UTF-8 BOM `ef bb bf` (UTF-16LE `ff fe`, BE `fe ff`) -> `true`/`false` |
+| `jpeg.*dimensions*` / SOF | walk segments from `ffd8` by length to SOFn (`ffc0..ffcf` minus c4/c8/cc): P, Y=height, X=width |
+| `png.ihdr_*` | `xxd -s 16 -l 8` = width,height (BE u32). Chunk walk = len/type/data/CRC (`lib.stego.png_chunks`) |
+| `zip.eocd_*` | of the NAMED zip: last `PK\x05\x06` whose comment len reaches EOF; u16 @+10 total entries, u32 @+12 cd size, @+16 cd offset. `0xFFFF` -> ZIP64 (`PK\x06\x07` -> `PK\x06\x06` u64 @+32) |
+| `zip.central_directory_*` | walk `PK\x01\x02` from cd offset: name len @+28, extra @+30, comment @+32, name @+46. Raw stored path, CD order, no dedupe/sort; UTF-8 if flag 0x800 else UTF-8-then-cp437 |
+| `pdf.header_version` | `head -c 16 f | xxd` -> `%PDF-x.y` at offset 0; catalog `/Version` is a diagnostic only |
+| `pe.coff_*` | `MZ` -> e_lfanew u32 @0x3C -> require `PE\0\0` -> Machine u16 @+4; OptionalHeader magic @+24 (`0x10b`/`0x20b`) |
+| `pe.address_of_entry_point_*` / `pe.image_base*` | opt = e_lfanew+24: AddressOfEntryPoint u32 @opt+16 (RVA); ImageBase @opt+28 (PE32) / u64 @opt+24 (PE32+). objdump "start address" is the VA |
+| `pe.version_*` | `pefile` resource dir only -> `FileInfo..StringTable..entries`; id tail -> key ignoring case/`-_`. Shell: `strings -e l f.exe \| grep -A1 OriginalFilename` |
+| `elf.*` / `macho.*` (promised, not yet asked) | ELF `\x7fELF`, EI_DATA @5, e_machine u16 @18. Mach-O `feedface`/`feedfacf` cputype @4; fat `cafebabe` BE nfat_arch @4 |
+| `dotnet.*` / Mono assembly | data dir 14 -> CLI header -> `BSJB` -> `#~` (HeapSizes @+6, Valid @+8, rows @+24) -> Module row 0 Mvid (1-based #GUID idx) -> `uuid.UUID(bytes_le=..)`. `lib/meta/dotnet.py` |
+| `msi.*` / `.msi` (OLE `d0 cf 11 e0`) | fast: `strings -n 6 x.msi \| grep -aoE 'ProductCode\{[0-9A-F-]{36}\}'`; exact: CFB streams -> `!_StringPool`/`!_StringData` -> `!Property` (column-major). `olefile` in venv; `day13/.../solve.py msi_property` |
+| `lnk.*` / `.lnk` (`4c 00 00 00` + CLSID 00021401) | LinkFlags @0x14 (0x1 IDList, 0x2 LinkInfo, 0x80 Unicode); target = LinkInfo LocalBasePath (+CommonPathSuffix) verbatim, else IDList. `lib.meta.lnk:target_path` |
+| `ooxml.*` / `.docx/.xlsx/.pptx` (`PK` + `[Content_Types].xml`) | it's a zip of XML parts. Relationships live in EVERY `*.rels` part (`_rels/.rels`, `word/_rels/document.xml.rels`, header/footer/settings rels). External = `TargetMode="External"` (case-insensitive; absent = Internal). `unzip -p f.docx '*.rels' \| grep -o 'Target="[^"]*" TargetMode="External"'`; solver: `zipfile` + ElementTree over every `.rels`, local-name `Relationship`. Core props (`docProps/core.xml`) prebuilt in `lib/meta/prebuilt/ooxml.py`; external rels NOT prebuilt as of D15 |
+| `*-synthesis-<algo>-order` / "Files: [...]" in the question | parse the list from the question text, hash each member of the same container, sort by digest, compact JSON of names |
+| GUID field (`*-guid`) | spelling follows the SOURCE: stored string (MSI) verbatim braces+uppercase; binary (.NET) -> lowercase, no braces |
+| exe-extension decoy (`MZ` without `PE\0\0` at e_lfanew) | literal `none` if the syntax offers it; never fall back to a later `PE\0\0` hit |
 | "impostor", "renamed", "disguise" | trust magic bytes at offset 0; a matching string deeper in the file is a decoy |
-| answer_format syntax "use the literal none only when the requested field is absent" | field missing (e.g. no header) -> `none` |
-| answer_format kind `json` | `json.dumps(v, separators=(",",":"), ensure_ascii=False)` -- compact, no spaces, no Markdown |
-| Mastery `set1.`..`setN.` ids, artifact `delivery N: <zip> -> <member>` or `<zip>-0N.zip -> <member>` | resolve each set's member separately; see delivery layouts below |
+| answer_format kind `json` | `json.dumps(v, separators=(",",":"), ensure_ascii=False)`; decide ORDER per field (conventions) |
+| Mastery `set1.`..`setN.` ids | resolve each set's container separately; see delivery layouts |
 
 ## Day by day
-**Days 1-8** (one field each, all first-try ~27-57 s unless noted): D1 identity (filename/size/md5/sha1/sha256; Mastery
-zip-of-zips first seen) -> D2 `magic-prefix-hex-16` (TT `readme.exe` was text, Mastery `.bin` a PDF; stale question member ->
-`find_artifact_hinted`) -> D3 `text.utf8_bom_present` (`*-with-bom.txt` really had one -- bytes, not name) -> D4 JPEG SOFn
-`<w>x<h>` -> D5 PNG IHDR `<w>x<h>` -> D6 `pdf.header_version` bare `x.y` (Mastery two same-named `delivery N:` downloads) -> D7
-`zip.eocd_total_entries` of the INNER zip (stdlib EOCD parse; TT 3, Mastery 4/5) -> D8 `zip.central_directory_member_names`
-compact JSON of full CD paths in CD order (5-member kit, 12 fields).
+**Days 1-8** (one field each, first try ~27-57 s): D1 identity (Mastery zip-of-zips first seen) -> D2 `magic-prefix-hex-16`
+(TT `readme.exe` was text) -> D3 `text.utf8_bom_present` -> D4 JPEG SOFn `<w>x<h>` -> D5 PNG IHDR -> D6
+`pdf.header_version` bare `x.y` -> D7 `zip.eocd_total_entries` of the INNER zip -> D8 `zip.central_directory_member_names`
+compact JSON in CD order (5-member kit, 12 fields).
 
-**Days 9-11** (one Go 1.22 PE, `d09-pe-NNN-...`): D9 `pe.coff_machine_u16_hex` -> `0x014c` (padded u16; not the binary
-lane's `i386`), ~47 s. D10 `pe.address_of_entry_point_rva_hex` (u32 @ e_lfanew+40) `0x%08x` -> `0x00065bd0`; unpadded
-`0x65bd0` REJECTED (objdump's start address is the VA), ~75 s, 1 wrong. D11 `pe.version_original_filename` =
-VS_VERSIONINFO OriginalFilename verbatim (`pe-base-386.exe`, not the randomized member name), pefile walk, ~25 s. All
-TT/Mastery first try (RVA / GOARCH re-rolled per variant).
+**Days 9-11** (one Go PE, `d09-pe-NNN-...`): D9 `pe.coff_machine_u16_hex` `0x014c` (~47 s). D10
+`pe.address_of_entry_point_rva_hex` `0x%08x` (unpadded REJECTED, ~75 s). D11 `pe.version_original_filename` verbatim
+(`pe-base-386.exe`, ~25 s). All TT/Mastery first try.
 
-**Day 12 — Managed Expectations** (`dotnet.mvid_guid`, `pattern` "canonical GUID text in 8-4-4-4-12 ... including
-hyphens", id `d12-dotnet-001-dotnet-mvid-guid`): 5,120 B PE32 .NET `managed-001.dll`. MVID = Module row 0 Mvid (1-based
-#GUID index) -> `uuid.UUID(bytes_le=..)` lowercase, no braces (`21e410f3-c977-465c-...`). The worker typed a ~90-line
-stdlib PE -> CLI header -> BSJB -> `#~` -> `#GUID` parser (~55 s, first try). TT/Mastery 2 sets first try. Parser now
-`lib/meta/dotnet.py`. "Renames vs rebuilds" was never asked.
+**Days 12-14** (one new member family each, 1 field everywhere, TT 1 / Mastery 2x1, all timed first try):
+D12 `dotnet.mvid_guid` -- 5 KB .NET dll, #GUID heap -> `uuid.UUID(bytes_le)` lowercase no braces, ~55 s. D13
+`msi.product_code_guid` -- 9.7 KB MSI, Property table ProductCode VERBATIM with braces (brace-less REJECTED), ~76 s. D14
+`lnk.target_path_windows` -- 547 B LNK, LinkInfo LocalBasePath `C:\Windows\System32\cmd.exe`, ~40 s (prebuilt key was
+`target_path`, one suffix short -> worker re-typed the parser).
 
-**Day 13 — Product Placement** (`msi.product_code_guid`, kind `pattern` "canonical GUID text in 8-4-4-4-12 hexadecimal
-form, including hyphens", norm `trim`, id `d13-msi-001-msi-product-code-guid`). Prompt: "Installers were copied, renamed,
-and repackaged. Recover stable product identities, distinguish revisions from different products, and find the collision."
-- Artifact: 3.3 KB zip -> `installer-001.msi` (9,728 B, msitools 0.103 OLE/CFB with an embedded `artifact.cab`).
-- Key insight: answer = Property table `ProductCode` row VERBATIM `{DD1A80D5-0250-4F4D-B289-13096D633C61}`. Decoys in the
-  same file: UpgradeCode, Component.ComponentId, SummaryInformation RevisionNumber (= PackageCode).
-- Worker: stdlib CFB + MSI string-pool reader (regex `ProductCode(\{...\})` fallback). First submit stripped the braces
-  (answer_format never mentions them) -> REJECTED; braced -> CORRECT. Start -> CORRECT ~76 s, 1 wrong (~19 s lost).
-- TT (50 s window, in_window 0.96 s) and Mastery 2 sets (80 s, 2.55 s) CORRECT first try; every variant had the same
-  ProductCode. "Revisions vs products" / "collision" were never asked -- only the ProductCode.
-
-**Day 14 — The Shortcut Home** (`lnk.target_path_windows`, kind `exact_text`, "use the literal none only when the
-requested field is absent", norm `trim`, id `d14-lnk-001-lnk-target-path-windows`). Prompt: "A shortcut collection is a
-map of intent -- if you read where each link points instead of where it sits. Reconstruct the targets and identify the
-impossible destination."
-- Artifact: 475 B zip -> `shortcut-001.lnk` (547 B; LinkFlags 0x97: IDList + LinkInfo + Name + WorkingDir + Unicode).
-- Key insight: answer = LinkInfo LocalBasePath VERBATIM (`C:\Windows\System32\cmd.exe`); the IDList (volume item +
-  file-entry items, long names from the 0xBEEF0004 extension) spelled the same. Not the WorkingDir (`C:\Windows\System32`).
-- Worker: the lane solver (`lib.meta`) answered `(None, None)` -- prebuilt `lib/meta/prebuilt/lnk.py` registered
-  `lnk.target_path` but NOT the asked `target_path_windows`, so the exact-key lookup missed. The worker typed a ~70-line
-  LinkInfo/IDList reader into `local_answer()` and submitted; start -> CORRECT ~40 s, first try (3 tool calls).
-- TT (shortcut-002) and Mastery 2 sets (003/004, nested `-01.zip` holding `-01/-02.zip`) CORRECT first try, solve <0.1 s.
-- LIB (ratchet D14): `lib/meta/lnk.py:target_path` registered verified as (`lnk`, `target_path_windows`), days=(14,).
+**Day 15 — A Word to the Wise** (`ooxml.external_relationship_targets`, kind `json` "compact valid JSON array with exact
+values and order", norm `trim`, id `d15-ooxml-001-ooxml-external-relationship-targets`). Prompt: "Office documents
+contain relationships that point beyond the page. Separate internal references from external dependencies and find
+the document reaching somewhere it should not."
+- Artifact: 1,316 B zip -> `document-15-001.docx` (3,803 B; 5 parts: `[Content_Types].xml`, `_rels/.rels`,
+  `docProps/core.xml`, `word/document.xml`, `word/_rels/document.xml.rels`). The package rels are Internal
+  (officeDocument, core-properties); `document.xml.rels` holds two `hyperlink` rels `rId9` -> `https://example.test/
+  evidence/<token>` and `rId10` -> `https://example.test/control`, both `TargetMode="External"`, referenced from
+  `<w:hyperlink r:id=..>` in body order rId9, rId10.
+- Key insight: answer = the Target strings of every External relationship, as a compact JSON array SORTED ASCENDING
+  (`["https://example.test/control","https://example.test/evidence/<token>"]`). The rels-file / body order (rId9 first)
+  was REJECTED. Caveat: sorted-by-Target and sorted-by-Id-as-string (`rId10` < `rId9`) coincide here -- sort by Target.
+- Single: start -> wrong submit at +24 s (file order) -> CORRECT at +50 s. 1 wrong, ~26 s lost.
+- TT: the 12-member kit (note, `evidence-note-copy.txt`, `roster.csv`, jpg, png, pdf, evidence-drop zip, exe, dll, msi,
+  lnk, docx) with 20 fields incl. the new identity-member roster and `metadata-day-15-synthesis-sha256-order`. The
+  shipped solver didn't answer the synthesis id; offline generalize added `_digest_order` (above). TT CORRECT 20/20,
+  in-window 1.72 s (solve 0.27 s). Mastery 5 sets x 20 = 100 CORRECT first submit, in-window 1.83 s (solve 0.44 s).
 
 ## GM answer conventions learned
 - Filenames: exact base name incl. extension, no directory. Sizes: base-10 integer, no units. Hashes: hex, case ignored.
-- Byte prefixes: lowercase hex, contiguous, exactly 2N chars (`xxd -p -l N`).
-- Booleans: enum `true` / `false` (lowercase) — the contract hands the vocabulary; pick, don't probe.
-- Pixel dimensions (JPEG SOF, PNG IHDR): `<width>x<height>` — width first, lowercase `x`, no spaces (GM-confirmed both,
-  re-confirmed D8 `257x146` / `269x153`).
-- PDF header version: bare `x.y` from the leading `%PDF-x.y` (no `PDF-`/`%` prefix); absent header -> literal `none`
-  (contract wording; `none` itself not yet GM-confirmed).
-- Counts (`zip.eocd_total_entries`): plain base-10 integer string, e.g. `2` (GM-confirmed D7 + D8 all modes).
-- JSON lists (`zip.central_directory_member_names`): compact array, no spaces after `,`, double quotes, full stored path
-  with `/` dirs, CD order -- `["room-01/item-1.txt","room-02/item-1.txt"]` (GM-confirmed D8 single/TT/Mastery x5).
-  Whether the GM's `trim` normalization also tolerates `", "` spacing is untested -- always emit compact.
-- Header integers as hex (`*_hex`): `0x` + lowercase hex ZERO-PADDED to the struct field's width: u16 Machine ->
-  `0x014c` (D9), u32 AddressOfEntryPoint -> `0x00065bd0` (D10, all modes). The width comes from the STRUCT, not the id
-  (D10's id has no `u32`). Contrast: magic-prefix hex has NO `0x`; binary-lane `machine` wants the word (`i386`), and the
-  binary lane's `entry_point` was accepted UNPADDED (`0x401040`) -- different lane, different generator.
-- GUIDs (`dotnet.mvid_guid`): .NET `Guid.ToString()` form -- first 3 groups byte-swapped from the heap bytes (bytes_le),
-  lowercase, hyphenated, no braces (D12 all modes; `knowledge.DOTNET_MVID_GUID`, playbook metadata `guid` entry).
-- MSI GUIDs (`msi.product_code_guid`): the Property string VERBATIM -- uppercase WITH braces `{DD1A80D5-...}` (D13 all
-  modes; `knowledge.MSI_PRODUCT_CODE_GUID`). Bare form REJECTED. GUID spelling follows the source, not answer_format.
-- Windows paths (`lnk.target_path_windows`): the stored LinkInfo path verbatim -- backslashes, original case, drive
-  letter, no quotes (D14 all modes; `knowledge.LNK_TARGET_PATH_WINDOWS`, playbook metadata `windows`/`path` entry).
-- Version-resource strings (`pe.version_<field>`): the StringFileInfo value verbatim, incl. extension (`pe-base-386.exe`,
-  D11 all modes). `knowledge.PE_VERSION_STRING_KEY` maps id tail -> resource key.
-- Rejected spellings: `0x65bd0` for pe.address_of_entry_point_rva_hex (D10 single; unpadded); brace-less
-  `DD1A80D5-0250-4F4D-B289-13096D633C61` for msi.product_code_guid (D13 single).
-- `knowledge.py`: `JPEG_DIMENSIONS_FMT`, `PNG_DIMENSIONS_FMT`, `PDF_HEADER_VERSION_FMT`, `ZIP_EOCD_TOTAL_ENTRIES_FMT`,
-  `ZIP_CD_MEMBER_NAMES_FMT`, `PE_COFF_MACHINE_U16_HEX_FMT`, `PE_ENTRY_POINT_RVA_HEX_FMT` (+`_REJECTED`), `BOOL`;
-  `playbook` metadata `hex` entry carries the padding rule.
-- Inference: the field id IS the spec name (`sof_dimensions_pixels` = SOF frame header, `ihdr_` = IHDR chunk,
-  `header_version` = file header, `eocd_total_entries` = EOCD record's own claim, `central_directory_member_names` = CD
-  file-name fields, `coff_machine_u16_hex` = COFF FileHeader.Machine as u16 hex) — read the field name literally to
-  pick which structure to parse; a claimed count is NOT a CD walk / `zipfile` len, and CD names are NOT local-header
-  names (they happened to agree on D7/D8). A `_uNN_hex` suffix fixes both the read width and the printed width.
+- Byte prefixes: lowercase hex, contiguous, exactly 2N chars (`xxd -p -l N`). Booleans: enum `true` / `false`.
+- Pixel dimensions (JPEG SOF, PNG IHDR): `<width>x<height>`, lowercase `x`, no spaces.
+- PDF header version: bare `x.y`; absent -> literal `none` (wording; `none` not yet GM-confirmed). Counts: plain integer.
+- JSON lists -- compact, double quotes, no spaces; ORDER depends on the field:
+  - `zip.central_directory_member_names`: full stored paths in CD order (`["room-01/item-1.txt","room-02/item-1.txt"]`).
+  - `ooxml.external_relationship_targets`: Target strings SORTED ascending (D15 all modes); rels-file order REJECTED.
+  - `*-synthesis-<algo>-order`: member names ordered by hex digest ascending (D15 TT/Mastery; norm `case_insensitive`).
+  Heuristic: a list read off one on-disk structure that the field name calls "names in the directory" keeps disk
+  order; a set gathered across parts ("targets", "dependencies") is sorted. If an order is rejected, try the other.
+- Header integers as hex (`*_hex`): `0x` + lowercase hex ZERO-PADDED to the struct field's width: u16 Machine
+  `0x014c`, u32 AddressOfEntryPoint `0x00065bd0`. Width from the STRUCT, not the id. (Magic-prefix hex has NO `0x`;
+  the binary lane's machine wants `i386` and accepted unpadded entry points -- different generator.)
+- GUIDs: .NET MVID `Guid.ToString()` lowercase no braces (D12); MSI ProductCode the stored string uppercase WITH braces
+  (D13). Spelling follows the source, not answer_format.
+- Windows paths (`lnk.target_path_windows`): stored LinkInfo path verbatim (backslashes, case, drive letter, no quotes).
+- Version-resource strings (`pe.version_<field>`): StringFileInfo value verbatim incl. extension.
+- URLs (`ooxml` Targets): the attribute value verbatim -- scheme, host, path as stored; no trailing-slash or case fixups.
+- Rejected spellings: `0x65bd0` (D10, unpadded); brace-less MSI GUID (D13); rels-file-order target list (D15).
+- `knowledge.py` holds the format constants (`JPEG_DIMENSIONS_FMT` ... `PE_ENTRY_POINT_RVA_HEX_FMT`, `DOTNET_MVID_GUID`,
+  `MSI_PRODUCT_CODE_GUID`, `LNK_TARGET_PATH_WINDOWS`, `BOOL`); `playbook` metadata entries carry hex/guid/path rules.
+- Inference: the field id IS the spec name (`sof_` = SOF header, `eocd_total_entries` = the EOCD's own claim,
+  `external_relationship_targets` = rels `Target` where `TargetMode=External`) -- read it literally to pick the
+  structure. A claimed count is NOT a CD walk; CD names are NOT local-header names; `_uNN_hex` fixes read+print width.
 
 ## Delivery layouts seen (resolve these before parsing)
-- Single / TT: one zip; members named in `artifact` after `->` (D8: 5 members, filename question's artifact = zip only).
-- Mastery days 1,2,4,5: ONE download named `...-evidence-01.zip` that is an outer zip containing `...-01.zip` and
-  `...-02.zip` (zip-of-zips); each inner zip holds its set's member.
-- Mastery day 7: zip-of-zips again, three levels (outer `-01.zip` holds `-01.zip` + `-02.zip`, each holding the asked
-  `evidence-drop-00N.zip`); artifact ref `metadata-day-07-evidence-0N.zip -> evidence-drop-00N.zip` (no `delivery N:`).
-- Mastery day 8: same shape, FIVE sets: one 17 KB download `metadata-day-08-evidence-01.zip` (Stored, UTF-8 flag) holding
-  `-01.zip`..`-05.zip`, each a full 5-member kit (incl. its own `evidence-drop-001.zip`). Refs `...-evidence-0N.zip ->
-  <member>`; every set reuses the same member names, so resolve by (set zip, member), never member name alone.
-- Mastery day 9: same five-set shape, but the GM download is named `<challenge-id>-mastery.zip`
-  (`metadata-forensics-day-09-built-different-mastery.zip`, 2.99 MB, Stored) while refs say `metadata-day-09-evidence-0N.zip
-  -> <member>` -- resolve the bundle by sha256 (`lib.common.container_by_sha`), not by its filename.
-- Mastery day 10: TWO sets only, refs `metadata-day-10-evidence-0N.zip -> telemetry-agent-00N.exe` (003/004).
-  Day 11 identical shape (`metadata-day-11-evidence-0N.zip`, one download nesting both set zips).
-- Mastery day 14: two sets, one download `metadata-day-14-evidence-01.zip` nesting `-01.zip`/`-02.zip`, refs
-  `metadata-day-14-evidence-0N.zip -> shortcut-00N.lnk` (003/004).
-- Mastery day 6: two downloads with identical filenames -> `delivery 1: <zip>` / `delivery 2: <zip>` in artifact refs.
-- Member numbering shifts between pre-fetched contract and live attempt (003/004 vs 006/007) — never hardcode names.
+- Single / TT: one zip; members named in `artifact` after `->` (filename questions: artifact = the zip only).
+- Mastery zip-of-zips (days 1,2,4,5,7,8,10,11,14,15): ONE download (`...-evidence-01.zip`; D15 `evidence-01.zip`)
+  holding `-01.zip`..`-0N.zip`, each holding its set's member(s) (D7 three levels; D8/D15 five full kits, D15 ~606 KB
+  each). Refs `<set zip> -> <member>`; every set reuses member names -> resolve by (set zip, member).
+- Mastery day 9: download named `<challenge-id>-mastery.zip` while refs say `metadata-day-09-evidence-0N.zip` ->
+  resolve the bundle by sha256 (`lib.common.container_by_sha`), not its filename.
+- Mastery day 6: two downloads with identical filenames -> `delivery 1: <zip>` / `delivery 2: <zip>` refs.
+- Member numbering shifts between pre-fetched contract and live attempt (003/004 vs 006/007) -- never hardcode names.
 
 ## Pitfalls that cost time
-- Name lookup by zip filename alone breaks on zip-of-zips (returned `PK` bytes as the "magic") — recurse into nested zips.
-- Contract question text can be stale vs `answer_ids` (Day 2 TT): answer under `answer_ids`, locate the member that exists.
-- Don't let the flavor text widen the question: prompts mention impostors/passengers/orientation/provenance, but only the
-  named field is graded. Answer it; keep extra checks as diagnostics.
-- Container-of-containers: when the asked file is itself a zip, a naive `rfind(PK\x05\x06)` on the downloaded evidence
-  zip reads the OUTER EOCD / CD (D8 outer CD = the 5 kit members, Mastery outer = 5 set zips). Resolve the named member's
-  bytes first, then parse.
-- Name-list fields: `zipfile.namelist()` is CD order but decodes non-UTF-8-flagged names as cp437 and is fine for honest
-  zips; for hostile names (`../`, `/abs`, `C:\`, `\` separators, LFH != CD name, duplicates) emit the CD bytes as-is --
-  don't let an extractor's sanitizing (7z/unzip strip `../` and leading `/`) rewrite the answer.
-- Decoys by name: `*-with-bom.txt`, `.exe` that is text, `.bin` that is PDF, `.pdf` that is PNG — bytes win every time.
-- Timed windows are ~5-10 s (D8: TT 8 s / Mastery 10 s; D9 shrank to 6 s / 7 s) and most of it is GM start/download/
-  submit round-trips (D9 TT submit alone 2.3 s): never do anything slow (extraction to disk, exiftool, `pefile` full
-  parse, subprocess) in-window; parse fixed offsets in memory. Big members (1.2 MB exe x5) pushed Mastery solve to 0.86 s
-  -- decompress each member once and cache by (set zip, member).
-- A prebuilt registry key that is one suffix short is a miss (D14: prebuilt `lnk.target_path`, GM asked
-  `target_path_windows` -> the worker re-typed the parser; most of D14's ~40 s). When a format is prebuilt, `python3 -c "import lib.meta as
-  m; print([k for k in m.known_fields() if k[0]=='<fmt>'])"` and call the nearest extractor directly before writing one.
-- Fresh member family = skeleton solver (D10, D12): copy the previous day's solver first, then add the new family's
-  handler -- D12's worker re-typed the identity/PE branches next to the .NET parser (~50 s of generation).
-- Executable fields: don't take `file`'s "Intel i386" / `pefile` machine names / the Go GOARCH token as the answer; the
-  metadata field is the raw u16. And require `PE\0\0` exactly at e_lfanew -- an `MZ` stub alone is not a PE (decoy).
-- Normalizing a stored value (D13, cost a wrong submit + 19 s): the solver's `_guid()` stripped MSI braces because
-  answer_format said "8-4-4-4-12". When the field is a stored string, emit it verbatim; reshape only what the format
-  explicitly forbids.
-- Hex width (D10, cost a wrong submit + 17 s): `"0x%x"` drops leading zeros; print `0x%0{2*size}x` for the field's
-  struct size. RVA vs VA: `_rva` = the raw field, never ImageBase + it.
-- Fastest path for a new carry-over day: copy the previous day's solver (which already answers every earlier family) and
-  add only the new suffix handler -- D8 27 s, D9 47 s that way. The harness skeleton in `solver/solve.py` is NOT the
-  previous day's solver; `cp challenges/day<NN-1>/metadata-*/solver/solve.py` over it (D10 spliced by sed instead).
-- Pre-fetched TT/Mastery `contract.json` is the HTTP 409 `start_required` body: `questions` (with ids, no sha tag) but
-  NO `answer_ids` -- `jq '.answer_ids|map(..)'` errors; read `questions[].id` to preview the field set.
-- Harness: re-running `hctf start` on an already-solved challenge overwrote `single_solve/start.json` and made the stop gate
-  think it was incomplete (Day 2, ~2 min lost) — restore start.json from `log.jsonl`.
-- Tools installed (2026-10-07): exiftool, pdfinfo/pdftotext (poppler), qpdf, mutool, pdf-parser, pdfid, pngcheck,
-  zsteg, steghide, binwalk, foremost, mediainfo, sqlite3, identify/convert (ImageMagick), olevba/oleid.
+- JSON list ORDER (D15, 1 wrong + ~26 s): "exact values and order" does not say WHICH order. File order was rejected
+  for rels targets; sorted won. Decide per field (conventions above) before the first submit.
+- Timed field set != single field set (D15): single asked 1 field, TT 20 incl. an unseen synthesis question and
+  re-rolled identity members -> the shipped solver missed one id. Keep the cumulative solver (identity for ANY member
+  stem, every carry-over family) in place before the timed run, and treat any `synthesis`/"Files: [...]" question as
+  a computed cross-member answer, not a lookup.
+- Name lookup by zip filename alone breaks on zip-of-zips (returned `PK` bytes as the "magic") -- recurse.
+- Contract question text can be stale vs `answer_ids` (D2 TT): answer under `answer_ids`, locate the member that exists.
+- Don't let the flavor text widen the question: only the named field is graded; extra checks are diagnostics.
+- Container-of-containers: a naive `rfind(PK\x05\x06)` on the downloaded zip reads the OUTER EOCD. Resolve the named
+  member's bytes first, then parse (same for OOXML: open the docx member, not the evidence zip).
+- Name-list fields: emit CD bytes as-is for hostile names (`../`, `/abs`, `\`, duplicates) -- extractors sanitize.
+- Decoys by name: `*-with-bom.txt`, `.exe` that is text, `.bin` that is PDF -- bytes win every time.
+- Timed windows are seconds; most of it is GM round-trips (D15 start 1.0 s + submit 1.1 s). Parse in memory, never
+  shell out/extract to disk in-window; decompress each member once and cache by (set zip, member) (1.2 MB exe x5).
+- A prebuilt registry key one suffix short is a miss (D14 `lnk.target_path` vs `target_path_windows`). Check
+  `python3 -c "import lib.meta as m; print([k for k in m.known_fields() if k[0]=='<fmt>'])"` and call the nearest
+  extractor directly before writing one.
+- Fresh member family = copy the previous day's solver first (it answers every earlier family), then add only the new
+  handler -- D8 27 s / D9 47 s that way; re-typing older branches cost D12 ~50 s.
+- Normalizing a stored value (D13): don't strip braces/reshape a stored string because answer_format sounds generic.
+- Hex width (D10): `"0x%x"` drops leading zeros; print `0x%0{2*size}x`. `_rva` = raw field, never ImageBase + it.
+- Executable fields: the metadata field is the raw u16, not `file`/`pefile`/GOARCH names; require `PE\0\0` at e_lfanew.
+- Pre-fetched TT/Mastery `contract.json` is the HTTP 409 `start_required` body: `questions` but NO `answer_ids`.
+- Harness: re-running `hctf start` on a solved challenge overwrote `single_solve/start.json` (D2, ~2 min lost) --
+  restore from `log.jsonl`.
+- Tools installed: exiftool, poppler, qpdf, mutool, pdf-parser, pdfid, pngcheck, zsteg, steghide, binwalk, foremost,
+  mediainfo, sqlite3, ImageMagick, olevba/oleid, olefile, pefile. Not installed: msitools, LnkParse3, dnfile.

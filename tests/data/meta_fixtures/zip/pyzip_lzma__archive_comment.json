@@ -1,0 +1,7 @@
+{
+ "field": "zip.archive_comment",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import zipfile;z=zipfile.ZipFile('pyzip_lzma.zip','w');z.writestr(zipfile.ZipInfo('docs/report.txt',(2021,7,9,23,59,58)),b'quarterly numbers '*40,compress_type=zipfile.ZIP_LZMA);z.writestr(zipfile.ZipInfo('readme.md',(2019,1,2,3,4,6)),b'# hi\\\\n',compress_type=zipfile.ZIP_DEFLATED);z.close()\"",
+ "oracle_cmd": "7z l -slt pyzip_lzma.zip -> Comment = (empty); zipfile .comment == b''",
+ "decoy": false
+}

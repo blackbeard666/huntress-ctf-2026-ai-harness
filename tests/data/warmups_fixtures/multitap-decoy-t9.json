@@ -1,0 +1,10 @@
+{
+ "codec": "multitap",
+ "plain": null,
+ "encoded": "43556 96753 4663 3463 66 2273",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf 'hello world good find on base\\n' | tr a-z 22233344455566677778889999 | tr -s ' '  # T9 digits (one press per letter), not multi-tap runs",
+ "oracle_cmd": "printf '%s\\n' \"$encoded\" | perl -ne 'my@t=split;print scalar(grep{!/^(\\d)\\1*$/}@t),\"/\",scalar(@t),\"\\n\"'  # 5/6 groups mix keys -> T9 words, not multi-tap runs",
+ "oracle_plain": null
+}

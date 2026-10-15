@@ -1,0 +1,10 @@
+{
+ "codec": "columnar",
+ "plain": null,
+ "encoded": "N kcnhwuTo,b saaeoemarm-c4iewr eoigti amp osle umtti xc nwrt h aeMse:abrflo-2codd sr! vsihets tG t ean",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -I -c 'import sys;sys.path.insert(0,sys.argv[3]);from pycipher import Railfence as R;print(R(int(sys.argv[2])).encipher(sys.argv[1],keep_punct=True))' \"$plain\" 3 tools/pyciphers  # pycipher 0.5.2 Railfence(3).encipher(keep_punct=True): a zigzag, not a column order",
+ "oracle_cmd": "python3 -I -c 'import sys;sys.path.insert(0,sys.argv[3]);from pycipher import Railfence as R;print(R(int(sys.argv[2])).decipher(sys.argv[1],keep_punct=True))' \"$encoded\" 3 tools/pyciphers  # pycipher Railfence.decipher reads it; no columnar/scytale order does",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42"
+}

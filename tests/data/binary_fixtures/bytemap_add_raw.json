@@ -1,0 +1,13 @@
+{
+ "encoding": "add-raw",
+ "expected_offset": 5555,
+ "expected_config": {
+  "c2": "203.0.113.50:8443",
+  "beacon": "add-falcon",
+  "sleep": 60,
+  "flag": "flag{4dd_c0nst4nt_2d}"
+ },
+ "generator_cmd": "sh bytemap_gen.sh  # system python3 zlib.crc32 header + perl byte maps + coreutils base64",
+ "oracle_cmd": "sh bytemap_oracle.sh bytemap_add_raw.bin add45 raw",
+ "oracle_output": "{\"offset\": 5555, \"config\": {\"c2\": \"203.0.113.50:8443\", \"beacon\": \"add-falcon\", \"sleep\": 60, \"flag\": \"flag{4dd_c0nst4nt_2d}\"}}"
+}

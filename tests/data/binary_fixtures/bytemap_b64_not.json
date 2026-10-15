@@ -1,0 +1,13 @@
+{
+ "encoding": "base64-not",
+ "expected_offset": 4097,
+ "expected_config": {
+  "c2": "198.51.100.9:53",
+  "beacon": "not-heron",
+  "sleep": 5,
+  "flag": "flag{b1tw1s3_n0t_b4s364}"
+ },
+ "generator_cmd": "sh bytemap_gen.sh  # system python3 zlib.crc32 header + perl byte maps + coreutils base64",
+ "oracle_cmd": "sh bytemap_oracle.sh bytemap_b64_not.bin not before",
+ "oracle_output": "{\"offset\": 4097, \"config\": {\"c2\": \"198.51.100.9:53\", \"beacon\": \"not-heron\", \"sleep\": 5, \"flag\": \"flag{b1tw1s3_n0t_b4s364}\"}}"
+}

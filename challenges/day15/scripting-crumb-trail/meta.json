@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-15-credential-store-clues",
+  "lane": "script-analysis",
+  "name": "📜 Crumb Trail",
+  "ids": {
+    "single_solve": "script-analysis-day-15-credential-store-clues",
+    "time_trial": "script-analysis-day-15-credential-store-clues/time_trial",
+    "mastery": "script-analysis-day-15-credential-store-clues/mastery"
+  }
+}

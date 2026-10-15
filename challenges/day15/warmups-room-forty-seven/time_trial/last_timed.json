@@ -1,0 +1,25 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "8790e0e1-287c-4c84-9f51-a7627c3616f6",
+  "window": null,
+  "elapsed": 2.22,
+  "in_window": 1.55,
+  "phases": {
+    "start": 0.67,
+    "download": 0.38,
+    "solve": 0.02,
+    "submit": 1.14
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "dapper-beacon-laurel-79"
+  },
+  "attempts_remaining": 256,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 256,
+  "variant_fresh": true
+}

@@ -83,6 +83,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Selective Memory"
   },
+  "binary-reverse-engineering-day-15-assembly-and-symbol-loss": {
+    "day": 15,
+    "dir": "day15/binary-stripped",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Stripped"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -167,6 +173,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 The Shortcut Home"
   },
+  "metadata-forensics-day-15-word-to-the-wise": {
+    "day": 15,
+    "dir": "day15/metadata-a-word-to-the-wise",
+    "lane": "metadata-forensics",
+    "name": "🔎 A Word to the Wise"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -250,6 +262,12 @@
     "dir": "day14/mobile-predictable-crypto",
     "lane": "mobile-android",
     "name": "📱 Predictable Crypto"
+  },
+  "mobile-android-day-15-native-library-secrets": {
+    "day": 15,
+    "dir": "day15/mobile-native-library-secrets",
+    "lane": "mobile-android",
+    "name": "📱 Native Library Secrets"
   },
   "read-the-rules": {
     "day": 1,
@@ -341,6 +359,12 @@
     "lane": "script-analysis",
     "name": "📜 Trust the Process"
   },
+  "script-analysis-day-15-credential-store-clues": {
+    "day": 15,
+    "dir": "day15/scripting-crumb-trail",
+    "lane": "script-analysis",
+    "name": "📜 Crumb Trail"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -424,6 +448,12 @@
     "dir": "day14/warmups-seven-steps",
     "lane": "warmups",
     "name": "👶 Seven Steps"
+  },
+  "warmups-day-15": {
+    "day": 15,
+    "dir": "day15/warmups-room-forty-seven",
+    "lane": "warmups",
+    "name": "👶 Room Forty-Seven"
   },
   "welcome-robots": {
     "day": 1,

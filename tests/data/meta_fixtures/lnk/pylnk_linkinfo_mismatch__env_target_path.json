@@ -1,0 +1,8 @@
+{
+ "field": "lnk.env_target_path",
+ "expected": "%USERPROFILE%\\AppData\\Roaming\\stage2.exe",
+ "generator_cmd": "cp tests/data/meta_fixtures/lnk/GENERATOR_pylnk3_linkinfo.py.txt gen.py; /usr/bin/python3 -I gen.py a.lnk b.lnk  (pylnk3 0.4.3 writer, tools/pylib: a = for_file(C:\\Windows\\System32\\calc.exe) IDList + specify_local_location(D:\\Payloads\\stage2.exe, DRIVE_REMOVABLE, 0x0BADF00D, 'USBKEY') LinkInfo + RelativePath + IconLocation + ExtraData_EnvironmentVariableDataBlock; b = for_file(C:\\Windows\\notepad.exe) IDList + specify_remote_location(\\\\FILESRV01\\PUBLIC) LinkInfo, no icon/relative/env)",
+ "oracle_cmd": "bin/exiftool -j tests/data/meta_fixtures/lnk/pylnk_linkinfo_mismatch__env_target_path.bin (DriveType, DriveSerialNumber, VolumeLabel, NetName, RelativePath, IconFileName, EnvironmentTargetUnicode, VolumeName+TargetFileName) ; /usr/bin/python3 -I -c \"import sys,json;sys.path.insert(0,'tools/pylib');import LnkParse3;d=LnkParse3.lnk_file(open('tests/data/meta_fixtures/lnk/pylnk_linkinfo_mismatch__env_target_path.bin','rb')).get_json();print(json.dumps([d['link_info'],d['data'],d['extra'],d['target']],default=str))\"  (location_info.drive_type/drive_serial_number/volume_label/net_name, data.relative_path/icon_location, ENVIRONMENTAL_VARIABLES_LOCATION_BLOCK.target_unicode, target.items volume_name + primary_name joined)",
+ "decoy": false,
+ "member": "stage2.lnk"
+}

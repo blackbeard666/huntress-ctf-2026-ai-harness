@@ -1,0 +1,10 @@
+{
+  "base": "warmups-day-15",
+  "lane": "warmups",
+  "name": "👶 Room Forty-Seven",
+  "ids": {
+    "single_solve": "warmups-day-15",
+    "time_trial": "warmups-day-15/time_trial",
+    "mastery": "warmups-day-15/mastery"
+  }
+}
