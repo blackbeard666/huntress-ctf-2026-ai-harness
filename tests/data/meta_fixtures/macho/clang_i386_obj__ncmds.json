@@ -1,0 +1,8 @@
+{
+ "field": "macho.ncmds",
+ "expected": "4",
+ "generator_cmd": "clang-18 --target=i386-apple-macosx10.6 -c m.c -o i386.o  (run in $TMPDIR/mfx)",
+ "oracle_cmd": "llvm-otool-18 -h clang_i386_obj__ncmds.bin (decimal cputype/filetype -> 0x%08x)",
+ "decoy": false,
+ "member": "i386.o"
+}

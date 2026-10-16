@@ -1,0 +1,8 @@
+{
+ "field": "vba.vba_stream_names",
+ "expected": "[\"VBA/ThisWorkbook\",\"VBA/Sheet1\",\"VBA/Module1\",\"VBA/__SRP_2\",\"VBA/__SRP_3\",\"VBA/ThisWorkbook1\",\"VBA/Sheet2\",\"VBA/_VBA_PROJECT\",\"VBA/dir\",\"VBA/__SRP_0\",\"VBA/__SRP_1\"]",
+ "generator_cmd": "Microsoft Excel (XlsxWriter 3.2.9 sdist examples/vbaProject.bin), copied verbatim: cp xlsxwriter-3.2.9/examples/vbaProject.bin",
+ "oracle_cmd": ".venv/bin/python -I -c \"import olefile; o=olefile.OleFileIO(f); par={}; w=lambda e,pre: [par.__setitem__(k.sid,pre+k.name) or w(k,pre+k.name+'/') for k in e.kids]; w(o.root,''); print([par[i] for i,e in enumerate(o.direntries) if e and e.entry_type==2 and par.get(i,'').startswith('VBA/')])\" excel_vbaproject__vba_stream_names.bin  (olefile 0.47 tree, stored direntry order)",
+ "decoy": false,
+ "member": "vbaProject.bin"
+}

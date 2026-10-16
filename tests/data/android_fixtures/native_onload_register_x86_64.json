@@ -1,0 +1,7 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-93ad5e0f71c8b264",
+ "generator_cmd": "tests/data/android_fixtures/gen_native_so.sh tests/data/android_fixtures  # perl-encoded blob -> gcc -shared -fPIC -O2 -s native_src/onload_reg.c (stripped; only JNI_OnLoad exported; RegisterNatives{ping, reveal}; reveal: malloc + blob[i]^(0x21+3i) -> NewStringUTF); zip -qX -r <name>.apk assets lib",
+ "oracle_cmd": "unzip native_onload_register_x86_64.apk lib/x86_64/libreg.so && gcc -o h native_src/harness.c -ldl && ./h lib/x86_64/libreg.so JNI_OnLoad  # fake JavaVM/JNIEnv, calls each registered native: 'NewStringUTF ANS-93ad5e0f71c8b264'",
+ "decoy": false
+}

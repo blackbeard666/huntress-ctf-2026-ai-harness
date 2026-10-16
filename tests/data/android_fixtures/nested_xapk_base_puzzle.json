@@ -1,0 +1,6 @@
+{
+ "entry": "extract_answer",
+ "expected": "ANS-3f9d02c6a1b47e85",
+ "generator_cmd": "printf '{\"codec\":\"base64\",\"data\":\"%s\"}' \"$(printf ANS-3f9d02c6a1b47e85 | base64)\" > assets/huntress_puzzle.json; zip -9 -X base.apk classes.dex assets/huntress_puzzle.json; zip -9 -X nested_xapk_base_puzzle.zip manifest.json icon.png base.apk  # XAPK: answer only in base.apk's puzzle json; apktool d -r exported_trust.apk -o proj; replace smali/ with one class `const-string v0, \"<s>\"`; apktool b -o x.apk proj; unzip -p x.apk classes.dex > <name>.dex",
+ "oracle_cmd": "unzip -p nested_xapk_base_puzzle.zip base.apk > b.apk && unzip -p b.apk assets/huntress_puzzle.json | python3 -c 'import sys,json,base64;print(base64.b64decode(json.load(sys.stdin)[\"data\"]).decode())'"
+}

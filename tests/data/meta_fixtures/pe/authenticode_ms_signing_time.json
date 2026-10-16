@@ -1,0 +1,7 @@
+{
+ "field": "pe.signing_time_utc",
+ "expected": "2026-08-18T10:02:15Z",
+ "generator_cmd": "cp tools/pwsh/System.Buffers.dll tests/data/meta_fixtures/pe/authenticode_ms_buffers.bin  (unmodified, Microsoft-signed, RFC3161-timestamped)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib python3 sig.py tests/data/meta_fixtures/pe/authenticode_ms_signing_time.bin  (signify AuthenticodeFile.iter_embedded_signatures: signer_info issuer+serial -> cert; subject.dn/issuer.dn/'%x'%serial/sha1|sha256(cert.to_der)/countersigner.signing_time); cross-check: pefile DATA_DIRECTORY[4].Size -> signer_info.signing_time None, countersigner.signing_time 2026-08-18 10:02:15.491000+00:00 (fraction dropped)",
+ "decoy": false
+}

@@ -1,0 +1,11 @@
+{
+ "codec": "unistyle",
+ "plain": null,
+ "encoded": "𝛼 + 𝛽 = 𝛾",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "perl -CS -Mcharnames=:full -e 'print \"\\N{MATHEMATICAL ITALIC SMALL ALPHA} + \\N{MATHEMATICAL ITALIC SMALL BETA} = \\N{MATHEMATICAL ITALIC SMALL GAMMA}\"'  # Perl charnames: math-italic Greek (not a Latin letter style)",
+ "oracle_cmd": "python3 -I -c 'import sys,unicodedata as u;print([u.name(c,\"?\") for c in sys.argv[1] if not c.isascii()])' \"$encoded\"  # names: CJK/HIRAGANA/IPA/GREEK -- no Latin letter-style character",
+ "oracle_plain": null,
+ "oracle_names": "['MATHEMATICAL ITALIC SMALL ALPHA', 'MATHEMATICAL ITALIC SMALL BETA', 'MATHEMATICAL ITALIC SMALL GAMMA']"
+}

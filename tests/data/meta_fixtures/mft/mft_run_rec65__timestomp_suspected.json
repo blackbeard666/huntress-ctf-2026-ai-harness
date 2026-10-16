@@ -1,0 +1,8 @@
+{
+ "field": "mft.timestomp_suspected",
+ "expected": "false",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/mft/GENERATOR_mft_struct.py.txt <outdir>  (stdlib struct FILE-record writer, update-sequence fixups applied -> mft_run_dir.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib-dissect .venv/bin/python -P tests/data/meta_fixtures/mft/ORACLE_mft_dissect.py.txt /home/testpwn/huntress-2026/.run/tmp/mftgen/mft_run_dir.bin 2  (dissect.ntfs 3.16 MftRecord.from_bytes; record_number = od -An -tu4 -j2092 -N4; cross-checked with the Rust `mft` 0.7.0 parser: PYTHONPATH=tools/pylib-mft python -P -c 'import mft; [print(e) for e in mft.PyMftParser(p).entries_json()]')",
+ "decoy": false,
+ "member": "mft_record_65.bin"
+}

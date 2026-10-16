@@ -1,0 +1,6 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-0F1E2D3C4B5A6978",
+ "generator_cmd": "apktool d -r -o base native_library_secrets.apk (D15); rm base/assets/huntress_puzzle.json base/lib/x86_64/libarena.so; add smali/.../SplitConfig.smali: answer() = StringBuilder.append(const-string \"ANS-\").append(native k1()).append(native k2()), noise() = const-string \"1234\"; gcc -shared -fPIC -O0 -o base/lib/x86_64/libsplit.so c2.c  # exported const char k_part2[]=\"4B5A6978\", k_magic[]=\"DEADBEEF\", k_part1[]=\"0F1E2D3C\" (address order part2, magic, part1); k1()/k2() return k_part1/k_part2; apktool b -o split_so_exports.apk base",
+ "oracle_cmd": "unzip split_so_exports.apk lib/x86_64/libsplit.so; for s in k_part1 k_part2; do a=$(readelf -Ws lib/x86_64/libsplit.so | awk -v s=$s '$8==s{print $2; exit}'); objdump -s -j .rodata --start-address=0x$a --stop-address=$(printf '0x%x' $((0x$a+8))) lib/x86_64/libsplit.so | tail -1 | awk '{print $NF}'; done | tr -d '\\n' | sed 's/^/ANS-/'  # + apktool d -r: answer() = \"ANS-\" + k1() + k2()"
+}

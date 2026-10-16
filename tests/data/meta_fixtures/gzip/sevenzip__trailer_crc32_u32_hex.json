@@ -1,0 +1,8 @@
+{
+ "field": "gzip.trailer_crc32_u32_hex",
+ "expected": "0xaf083b2d",
+ "generator_cmd": "printf 'hello world\\n' > 'Report Final.txt'; touch -d '2019-12-31 23:59:59 UTC' 'Report Final.txt'; 7za a -tgzip -mx=9 sevenzip.gz 'Report Final.txt'",
+ "oracle_cmd": "7za l -slt sevenzip.gz -> CRC = AF083B2D",
+ "decoy": false,
+ "member": "sevenzip.gz"
+}

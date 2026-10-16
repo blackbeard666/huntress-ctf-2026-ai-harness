@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ps_layer_gen.py tests/data/script_fixtures (stdlib base64/zlib raw-deflate/gzip(mtime=0)/str.encode('utf-16-le'); script text below in the fixture's generator note) -- DECOY: '{1}{0}' -f reordered b64 of a raw deflate stream TRUNCATED to 40 bytes",
+ "oracle_cmd": "pwsh -NoProfile -c '. ./tests/data/script_fixtures/ps_decoy_trunc_deflate.ps1; $descriptor_deadbeef'  -> 'v=3|l' only (raw deflate cut at 40 bytes: no end-of-stream, no complete plan)"
+}

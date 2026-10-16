@@ -1,0 +1,6 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-5d1c8e3fa07b2946",
+ "generator_cmd": "tests/data/android_fixtures/gen_il2cpp.sh -- stdlib struct writer of Il2CppGlobalMetadataHeader (magic 0xFAB11BAF) + Il2CppStringLiteral table + stringLiteralData, zip -qX <name>.apk AndroidManifest.xml lib/arm64-v8a/libil2cpp.so assets/bin/Data/Managed/Metadata/global-metadata.dat; v29, literals: 'Score: ', URL, $(printf ANS-5d1c8e3fa07b2946 | base64 -w0), 'Player' (stored without NULs as Unity does)",
+ "oracle_cmd": "python3 -I -c \"import sys,struct,zipfile; b=zipfile.ZipFile(sys.argv[1]).read('assets/bin/Data/Managed/Metadata/global-metadata.dat'); v=struct.unpack_from('<I',b,4)[0]; lo,ls=struct.unpack_from('<ii',b,8); do=struct.unpack_from('<i',b,20 if v>=38 else 16)[0]; [print(b[do+i:do+i+n].decode()) for n,i in struct.iter_unpack('<Ii',b[lo:lo+ls])]\" il2cpp_v29_b64.apk | grep -E '^[A-Za-z0-9+/]{20,}=*$' | base64 -d ; also: unzip -p il2cpp_v29_b64.apk assets/bin/Data/Managed/Metadata/global-metadata.dat | strings | grep -oE 'QU5T[A-Za-z0-9+/]*=*' | base64 -d"
+}

@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=powershell|role=launcher|verdict=suspicious|attack=T1059.001|adapter=gzip_stream|stage_count=2|steps=reverse_literal,gunzip_stage|campaign_id=PS-9a7c3e11|url=https://ps-9a7c3e11.example.invalid/run",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ps_layer_gen.py tests/data/script_fixtures (stdlib base64/zlib raw-deflate/gzip(mtime=0)/str.encode('utf-16-le'); script text below in the fixture's generator note) -- iex GzipStream(FromBase64String(('<reversed base64(gzip(stage2))>'[-1..-N] -join ''))); stage2 = $descriptor_9a7c3e11 = -join [char[]](<plan char codes>)",
+ "oracle_cmd": "pwsh -NoProfile -c '$t = (Get-Content -Raw tests/data/script_fixtures/ps_gzip_reverse_chars.ps1) -replace \"^iex \",\"\"; $st2 = Invoke-Expression $t; Invoke-Expression $st2; $descriptor_9a7c3e11'"
+}

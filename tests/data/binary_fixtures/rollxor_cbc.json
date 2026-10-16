@@ -1,0 +1,13 @@
+{
+ "encoding": "xorcbc-raw",
+ "expected_offset": 3000,
+ "expected_config": {
+  "c2": "192.0.2.200:53",
+  "beacon": "cbc-gannet",
+  "sleep": 11,
+  "flag": "flag{x0r_w1th_pr3v_c1ph3r}"
+ },
+ "generator_cmd": "sh rollxor_gen.sh  # system python3 zlib.crc32 header + perl rolling/index/feedback xor",
+ "oracle_cmd": "sh rollxor_oracle.sh rollxor_cbc.bin",
+ "oracle_output": "{\"offset\": 3000, \"mode\": \"cbc\", \"config\": {\"c2\": \"192.0.2.200:53\", \"beacon\": \"cbc-gannet\", \"sleep\": 11, \"flag\": \"flag{x0r_w1th_pr3v_c1ph3r}\"}}"
+}

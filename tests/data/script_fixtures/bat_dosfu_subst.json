@@ -1,0 +1,10 @@
+{
+ "_doc": "DOSfuscation: junk-interleaved plan cleaned by %VAR:#Qz=% substitution, %VAR:~5% and !VAR:~0,-3! trims, delayed !VAR:@@=|! restoring the pipes, caret-split keywords",
+ "lane": "script",
+ "target": "batch-substring-emulation",
+ "expected_plain": "v=1|steps=persist_registry,execute_payload|adapter=reg.exe|campaign_id=campaign-0c7e19ab42|registry_key=HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\HuntressLab|file_path=C:\\ProgramData\\HuntressLab\\agent-0c7e19ab42.cmd",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/bat_dosfu_gen.py subst 'v=1|steps=persist_registry,execute_payload|adapter=reg.exe|campaign_id=campaign-0c7e19ab42|registry_key=HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\HuntressLab|file_path=C:\\ProgramData\\HuntressLab\\agent-0c7e19ab42.cmd' > tests/data/script_fixtures/bat_dosfu_subst.bat",
+ "oracle_cmd": ".venv/bin/bat -D -Q < tests/data/script_fixtures/bat_dosfu_subst.bat | grep '^echo ' | cut -c6-   # binref refinery batch emulator",
+ "oracle_output": "v=1|steps=persist_registry,execute_payload|adapter=reg.exe|campaign_id=campaign-0c7e19ab42|registry_key=HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\HuntressLab|file_path=C:\\ProgramData\\HuntressLab\\agent-0c7e19ab42.cmd"
+}

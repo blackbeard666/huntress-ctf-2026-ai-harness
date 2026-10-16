@@ -1,0 +1,9 @@
+{
+ "codec": "rail7-off3",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-harbor-17",
+ "encoded": " iomc s-kdhsT biatotatthret  sutx thMelaNoc w!os ea e rar7iwogapl t nr e:bb1c dnruv,hsseGm oo-eimeiwacr",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs enc 7 3  # CyberChef Rail Fence Cipher Encode(key 7, offset 3)",
+ "oracle_cmd": "python3 -I -c 'import sys;sys.path.insert(0,sys.argv[4]);from secretpy import Zigzag;e,n,o=sys.argv[1],int(sys.argv[2]),int(sys.argv[3]);tag=Zigzag().encrypt(\"\".join(chr(0xE000+i) for i in range(o+len(e))),n);pos=[ord(c)-0xE000-o for c in tag if ord(c)-0xE000>=o];p=[None]*len(e);[p.__setitem__(i,c) for i,c in zip(pos,e)];print(\"\".join(p))' \"$encoded\" 7 3 tools/pyciphers  # secretpy 0.12.0 Zigzag has no offset: fence over o+len position tags, first o dropped = the phase shift",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-harbor-17",
+ "expected": "match"
+}

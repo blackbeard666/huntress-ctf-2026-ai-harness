@@ -1,0 +1,24 @@
+{
+ "encoding": "raw",
+ "expected_offset": 4104,
+ "expected_config": {
+  "c2": "192.0.2.15:443",
+  "campaign": "pe-overlay",
+  "sleep": 60,
+  "flag": "flag{p4st_th3_l4st_s3ct10n}"
+ },
+ "expected_locate": {
+  "container": "overlay",
+  "slot_offset": 4096,
+  "delta": 8,
+  "size": 115
+ },
+ "expected_overlay": {
+  "has_overlay": true,
+  "overlay_offset": 4096
+ },
+ "oracle_cmd": "PY=.venv/bin/python bash tests/data/binary_fixtures/rsrc_oracle.sh tests/data/binary_fixtures   # pefile get_overlay_data_start_offset(); grep -abo HCFG; perl unpack + gzip-trailer crc32 of the body",
+ "oracle_output": "overlay 4096 | 4104:HCFG | HCFG v=1 key=0 len=95 crc=645063180 | crc(gzip)=645063180",
+ "convention": "raw at the magic (4104); overlay_offset = first appended byte (4096, the 'OVL1' marker)",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/rsrc_gen.sh tests/data/binary_fixtures   # dotnet 10 (Roslyn) + llvm-rc-18 / gcc -O2 -s / javac+jar; blob = printf header + crc32 from gzip trailer"
+}

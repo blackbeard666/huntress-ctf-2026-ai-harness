@@ -1,0 +1,8 @@
+{
+ "field": "elf.e_type_u16_hex",
+ "expected": "0x0003",
+ "generator_cmd": "gcc -O0 -Wl,--build-id=sha1 -o x64_dyn m.c   (m.c: int main(void){return 0;}; gcc 13 x86-64)  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW gcc_x64_dyn__e_type_u16_hex.bin | grep Type: (REL/EXEC/DYN -> 1/2/3, u16 hex)",
+ "decoy": false,
+ "member": "x64_dyn"
+}

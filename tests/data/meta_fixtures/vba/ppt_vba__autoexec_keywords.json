@@ -1,0 +1,8 @@
+{
+ "field": "vba.autoexec_keywords",
+ "expected": "[\"Action_Click\"]",
+ "generator_cmd": "Microsoft Office PowerPoint (oletools 0.60.2 sdist tests/test-data/olevba/sample_with_vba.ppt), copied verbatim",
+ "oracle_cmd": ".venv/bin/python -I -c \"from oletools.olevba import VBA_Parser; print([k for t,k,d in VBA_Parser(f).analyze_macros() if t=='AutoExec'])\" ppt_vba__autoexec_keywords.bin",
+ "decoy": false,
+ "member": "sample_with_vba.ppt"
+}

@@ -1,0 +1,18 @@
+{
+ "encoding": "raw",
+ "expected_format": "wasm",
+ "expected_machine": "wasm32",
+ "expected_offset": 109,
+ "expected_mem_offset": 4103,
+ "expected_segment_mem_offset": 4096,
+ "expected_config": {
+  "c2": "192.0.2.77:8080",
+  "campaign": "tidepool",
+  "sleep": 20,
+  "flag": "flag{w4t_4ct1v3_d4t4}"
+ },
+ "generator_cmd": "bash wasm_gen.sh wasm_wat_segment.bin wat '{\"c2\":\"192.0.2.77:8080\",\"campaign\":\"tidepool\",\"sleep\":20,\"flag\":\"flag{w4t_4ct1v3_d4t4}\"}' 0x5a",
+ "oracle_cmd": "bash wasm_oracle.sh wasm_wat_segment.bin   # file -b, wasm-validate --enable-memory64, wasm-objdump -x (Memory i64 flag, Data segment init + memory-addressed hexdump), grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "WebAssembly (wasm) binary module version 0x1 (MVP) | valid | i32 | 4103 | 109 | HCFG 1 90 88 3291581687 3291581687 | {\"c2\":\"192.0.2.77:8080\",\"campaign\":\"tidepool\",\"sleep\":20,\"flag\":\"flag{w4t_4ct1v3_d4t4}\"}",
+ "note": "format label 'wasm' / machine 'wasm32' (wasm64 = memory64) are SPECULATIVE (GM vocabulary not seen); expected_offset = FILE offset of the 'H' (OFFSET LAW raw, = hcfg_scan); expected_mem_offset = segment init offset + position in the segment (linear-memory address) -- record both, the GM decides which hcfg_offset means; blob 7 bytes into segment[1] (i32.const 4096); a passive segment follows"
+}

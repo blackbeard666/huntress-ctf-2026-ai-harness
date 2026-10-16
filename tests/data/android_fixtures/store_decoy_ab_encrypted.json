@@ -1,0 +1,7 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": null,
+ "generator_cmd": "tests/data/android_fixtures/gen_local_store.sh <outdir> -- assets/backup.ab = printf 'ANDROID BACKUP\\n5\\n1\\nAES-256\\n' + 4 KB /dev/urandom (encrypted, no password); shared_prefs/auth.xml token = base64('ANS-9a3e1c7b5d0f24g6' non-hex near miss); zip -qX",
+ "oracle_cmd": "unzip -p store_decoy_ab_encrypted.apk assets/backup.ab | head -4  # AES-256: unreadable; unzip -p ... auth.xml | perl -ne 'print $1 if /<string name=\"token\">([^<]+)/' | base64 -d  # near miss",
+ "decoy": true
+}

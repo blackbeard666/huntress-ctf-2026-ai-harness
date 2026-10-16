@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=php|role=webshell|verdict=malicious|attack=T1505.003|steps=read_cmd,run_cmd|campaign_id=PH-3c9e17a2|url=https://php-3c9e17a2.example.invalid/gate",
+ "decoy": false,
+ "generator_cmd": "php -r 'echo str_rot13(base64_encode(gzdeflate($argv[1],9)));' '<plan>'  -> literal of `$plan = gzinflate(base64_decode(str_rot13('..')))` in php_chain_rot13_gzinflate.php",
+ "oracle_cmd": "php -r 'include $argv[1]; echo $plan;' tests/data/script_fixtures/php_chain_rot13_gzinflate.php"
+}

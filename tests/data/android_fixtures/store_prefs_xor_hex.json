@@ -1,0 +1,6 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-d40a7c3e91f26b58",
+ "generator_cmd": "tests/data/android_fixtures/gen_local_store.sh <outdir> -- printf shared_prefs <map> {codec: obf, data: perl xor-with-'huntress' then %02x hex, key: huntress} at assets/shared_prefs/config.xml; zip -qX",
+ "oracle_cmd": "unzip -p store_prefs_xor_hex.apk assets/shared_prefs/config.xml | python3 -I -c 'import sys,xml.dom.minidom as m; d={e.getAttribute(\"name\"):e.firstChild.data for e in m.parseString(sys.stdin.buffer.read()).getElementsByTagName(\"string\")}; print(bytes(b^ord(d[\"key\"][i%len(d[\"key\"])]) for i,b in enumerate(bytes.fromhex(d[\"data\"]))).decode())'"
+}

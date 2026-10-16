@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.url_count",
+ "expected": "3",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_cli.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> places.sqlite)",
+ "oracle_cmd": "sqlite3 -readonly places.sqlite \"select count(url) from moz_places\"  (SQLite 3.46.1 CLI) -> 3",
+ "decoy": false,
+ "member": "places.sqlite"
+}

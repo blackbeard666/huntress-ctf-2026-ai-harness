@@ -1,0 +1,8 @@
+{
+ "field": "jpeg.exif_model",
+ "expected": "Canon EOS R5",
+ "generator_cmd": "python3 -c 'from PIL import Image; im=Image.new(\"RGB\",(64,48),(200,30,40)); ex=Image.Exif(); ex[0x010F]=\"Canon\"; ex[0x0110]=\"Canon EOS R5\"; ex[0x0112]=6; ex[0x0131]=\"PilTest 1.0\"; ex.get_ifd(0x8769)[0x9003]=\"2023:07:14 09:21:33\"; g=ex.get_ifd(0x8825); g[1]=\"S\"; g[2]=(33.0,51.0,54.36); g[3]=\"E\"; g[4]=(151.0,12.0,36.72); im.save(\"pil_mm.jpg\",\"JPEG\",exif=ex.tobytes(),quality=80)'  (Pillow 12.3, writes MM)  (run in $TMPDIR/jpegfx)",
+ "oracle_cmd": "exiftool -j -n -Make -Model -Orientation -DateTimeOriginal -Composite:GPSLatitude pil_mm.jpg  (cross-checked: exifread.process_file)",
+ "decoy": false,
+ "member": "pil_mm.jpg"
+}

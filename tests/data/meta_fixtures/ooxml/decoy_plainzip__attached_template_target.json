@@ -1,0 +1,8 @@
+{
+ "field": "ooxml.attached_template_target",
+ "expected": "none",
+ "generator_cmd": "copy of decoy_plainzip__core_creator.bin: .venv/bin/python -I -c \"import zipfile; z=zipfile.ZipFile(out,'w'); z.writestr('docProps/core.xml','...'); z.writestr('notes.txt','hi')\"  (plain zip renamed .docx: no [Content_Types].xml => not an OPC package)",
+ "oracle_cmd": "7z l -slt + 7z x -so <part> | lxml.etree (independent of zipfile/ElementTree): .venv/bin/python -I tests/data/meta_fixtures/ooxml/_siblings_oracle.py.txt decoy_plainzip__attached_template_target.bin attached_template_target where _siblings_oracle.py.txt = no [Content_Types].xml -> none; rels = every *.rels part's Relationship elements; custom_properties = docProps/custom.xml {property@name: first child text} sorted by name, compact JSON; attached_template_target = Target of Type ending /attachedTemplate; internal_relationship_targets = sorted Targets without TargetMode=External; relationship_types = sorted distinct Type; hyperlink_count = Types ending /hyperlink; embedded_object_names = sorted 7z paths under */embeddings/; main_part_content_type = [Content_Types] Override for the _rels/.rels officeDocument target (else Default by extension)",
+ "decoy": true,
+ "member": "decoy_plainzip.docx"
+}

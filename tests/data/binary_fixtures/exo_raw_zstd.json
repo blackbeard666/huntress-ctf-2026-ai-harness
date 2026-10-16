@@ -1,0 +1,16 @@
+{
+ "encoding": "zstd",
+ "expected_offset": 3012,
+ "expected_config": {
+  "c2": "https://198.51.100.7/zs",
+  "campaign": "zstd-raw",
+  "sleep": 45,
+  "flag": "flag{z5td_fr4m3_r4w}",
+  "note": "padpadpadpadpadpadpadpadpadpadpadpadpadpadpadpad"
+ },
+ "decoy": false,
+ "generator_cmd": "bash exo_gen.sh exo_raw_zstd.bin raw-zstd \"$J1\"   # J1..J5 = compact JSON configs (see exo_gen notes in detail); blob: printf header + crc32 from gzip trailer; stream: node zlib.zstdCompressSync (libzstd) / python-lz4 lz4.frame.compress + coreutils base64 -w0 / xxd -p",
+ "oracle_cmd": "bash exo_oracle.sh exo_raw_zstd.bin raw-zstd   # perl offset after GetConfig\\0\\0\\0 + base64 -d / xxd -r -p + refinery zstd (pyzstd) / system liblz4 LZ4F_decompress (exo_lz4dec.py); prints off at+N magic len hdrcrc crc32(body) body",
+ "oracle_output": "3012 at+0 HCFG 153 2571673886 2571673886 {\"c2\":\"https://198.51.100.7/zs\",\"campaign\":\"zstd-raw\",\"sleep\":45,\"flag\":\"flag{z5td_fr4m3_r4w}\",\"note\":\"padpadpadpadpadpadpadpadpadpadpadpadpadpadpadpad\"}",
+ "detail": "zstd frame (28 b5 2f fd) raw in the file after a GetConfig marker"
+}

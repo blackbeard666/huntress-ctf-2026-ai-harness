@@ -1,0 +1,10 @@
+{
+ "material": "H4sIAAAAAAACAz2MQQ7CIBAAP1RLMTFNTPbsBzx5abawInEFAgtRw+OtHrxOZqaB7ozBVXQEbS0m+yQ9RybgiJZyRxE0dzjraT/3IpQKWDLR0pLw9XUGH66MQkuRbTLkGrrBR0LvwuItnC67A+nZTJZ6zQw3kVSOSrn3n4/03AKm0YeG7K36nT5cXcHymwAAAA==",
+ "rep": "gzip_base64",
+ "transform": "identity",
+ "key": "",
+ "expected": "v=1|language=vbscript|role=loader|attack=T1027|steps=decode_payload,inflate_stage,run|campaign_id=GZ-5e17c0de|url=https://gz-5e17c0de.example.invalid/stage",
+ "generator_cmd": "printf %s '<plan>' | gzip -9n | base64 -w0",
+ "oracle_cmd": "printf %s '<material>' | base64 -d | gunzip",
+ "decoy": false
+}

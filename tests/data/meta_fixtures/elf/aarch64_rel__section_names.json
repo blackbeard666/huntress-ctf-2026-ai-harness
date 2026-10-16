@@ -1,0 +1,8 @@
+{
+ "field": "elf.section_names",
+ "expected": "[\".text\",\".data\",\".bss\",\".comment\",\".note.GNU-stack\",\".eh_frame\",\".rela.eh_frame\",\".symtab\",\".strtab\",\".shstrtab\"]",
+ "generator_cmd": "aarch64-linux-gnu-gcc -c -o a64_rel.o m.c  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW aarch64_rel__section_names.bin | Section Headers [Nr] Name column in table order, [0] NULL dropped",
+ "decoy": false,
+ "member": "a64_rel.o"
+}

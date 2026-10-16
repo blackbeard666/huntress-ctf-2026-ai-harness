@@ -1,0 +1,8 @@
+{
+ "field": "eml.first_received_ip",
+ "expected": "203.0.113.77",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/eml/GENERATOR_stdlib_emailmessage.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP) -> phish.eml",
+ "oracle_cmd": "python3 -I oracle.py tools/pylib-eml <file>  (eml_parser 4.2.1 EmlParser.decode_email_bytes, pip --target tools/pylib-eml) -> header.received[-1].from = ['dsl-203-0-113-77.isp.example','192.168.56.101','203.0.113.77']; the TCP-info (rdns [ip]) peer per RFC 5321 4.4, not the HELO literal [192.168.56.101]",
+ "decoy": false,
+ "member": "evidence-01/phish.eml"
+}

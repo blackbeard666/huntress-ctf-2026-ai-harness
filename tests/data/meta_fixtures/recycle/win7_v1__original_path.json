@@ -1,0 +1,8 @@
+{
+ "field": "recycle.original_path",
+ "expected": "D:\\Projects\\backup-2019.zip",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/recycle/GENERATOR_recycle.py.txt <outdir>  (stdlib struct writer) -> <case>.raw",
+ "oracle_cmd": ".venv/bin/python tests/data/meta_fixtures/recycle/ORACLE_dissect_recyclebin.py.txt <case>.bin  (dissect.target 3.25.1 plugins/os/windows/recyclebin c_recyclebin.header_v1/v2 + dissect.util.ts.wintimestamp)",
+ "decoy": false,
+ "member": "$I7Q2ZK9.zip"
+}

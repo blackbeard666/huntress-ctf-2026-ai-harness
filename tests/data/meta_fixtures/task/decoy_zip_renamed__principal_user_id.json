@@ -1,0 +1,8 @@
+{
+ "field": "task.principal_user_id",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import zipfile,sys;z=zipfile.ZipFile(sys.argv[1],'w');z.writestr('Task.xml','<Task><Exec><Command>calc.exe</Command></Exec></Task>');z.close()\" OUT.bin  (zip renamed impostor task file)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/task/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/task/decoy_zip_renamed__principal_user_id.bin principal_user_id -> none; file -b tests/data/meta_fixtures/task/decoy_zip_renamed__principal_user_id.bin -> Zip archive data",
+ "decoy": true,
+ "member": "Task.xml"
+}

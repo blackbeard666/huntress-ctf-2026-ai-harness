@@ -1,0 +1,9 @@
+{
+ "encoding": "stack-built",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "generator_cmd": "bash stack_gen.sh stack_decoy_badcrc.bin gcc 2 '{\"c2\":\"198.51.100.23:4444\",\"campaign\":\"stackhouse\",\"sleep\":45,\"flag\":\"flag{st4ck_str1ng_by_h4nd}\"}' 1   # blob: printf header + crc32 from gzip trailer, od -tu1 byte values; C program storing b[i]=<imm> into a volatile stack buffer, one statement per byte",
+ "oracle_cmd": "bash stack_oracle.sh stack_decoy_badcrc.bin   # the program RUNS (native / qemu-aarch64) and dumps the buffer it built; perl unpack header; gzip trailer = crc32(body); objdump -d first movb $0x48 / mov wN,#0x48 in main + readelf -SW .text -> file offset",
+ "oracle_output": "4385 HCFG 98 2240005254 {\"c2\":\"198.51.100.23:4444\",\"campaign\":\"stackhouse\",\"sleep\":45,\"flag\":\"flag{st4ck_str1ng_by_h4nd}\"} 2240005255   <header crc != gzip crc32 of body: corrupted blob>",
+ "decoy": true
+}

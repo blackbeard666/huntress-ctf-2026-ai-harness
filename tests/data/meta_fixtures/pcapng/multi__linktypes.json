@@ -1,0 +1,8 @@
+{
+ "field": "pcapng.linktypes",
+ "expected": "[1,105]",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcapng/GENERATOR_pcapng.sh.txt  (Wireshark 4.6.4 text2pcap/editcap/mergecap; be_ns.pcap via stdlib struct) -> multi.pcapng",
+ "oracle_cmd": "text2pcap -l 105 input; capinfos -I '#0 Ethernet', '#1 IEEE 802.11 Wireless LAN'",
+ "decoy": false,
+ "member": "multi.pcapng"
+}

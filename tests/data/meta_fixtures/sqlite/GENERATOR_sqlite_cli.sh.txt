@@ -1,0 +1,26 @@
+#!/bin/sh
+# Fixture generator for lib/meta/prebuilt/sqlite.py -- the sqlite3 CLI (SQLite 3.x, /usr/bin/sqlite3) is the WRITER.
+# usage: sh GENERATOR_sqlite_cli.sh.txt <outdir>
+set -e
+cd "$1"
+rm -f app.db utf16.db History places.sqlite decoy_sqlite2.db
+# 1) app.db: 4096-byte pages, UTF-8, user_version 7, application_id 0x0f055112, AUTOINCREMENT (sqlite_sequence),
+#    80 tables with long CREATE sql -> sqlite_master spans an interior page 1 + overflow chains.
+{
+  echo "PRAGMA page_size=4096; PRAGMA user_version=7; PRAGMA application_id=252006674;"
+  echo "CREATE TABLE accounts(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT);"
+  echo "INSERT INTO accounts(name) VALUES('alice'),('bob');"
+  echo "CREATE INDEX idx_accounts_name ON accounts(name);"
+  i=0; while [ $i -lt 80 ]; do
+    echo "CREATE TABLE evidence_$i(id INTEGER PRIMARY KEY, c_$(printf 'x%.0s' $(seq 1 300)) TEXT, note TEXT DEFAULT '$(printf 'n%.0s' $(seq 1 $((i*60))))');"
+    i=$((i+1)); done
+  echo "CREATE VIEW v_accounts AS SELECT name FROM accounts;"
+} | sqlite3 app.db
+# 2) utf16.db: 1024-byte pages, UTF-16le, user_version -3, no application id, 3 tables
+sqlite3 utf16.db "PRAGMA page_size=1024; PRAGMA encoding='UTF-16le'; PRAGMA user_version=-3; CREATE TABLE notes(t TEXT); INSERT INTO notes VALUES('héllo'); CREATE TABLE tags(k,v); CREATE TABLE \"Weird Name\"(a);"
+# 3) History: Chrome-shaped urls table, WAL journal mode (header read/write version 2)
+sqlite3 History "PRAGMA journal_mode=WAL; CREATE TABLE meta(key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY, value LONGVARCHAR); CREATE TABLE urls(id INTEGER PRIMARY KEY AUTOINCREMENT,url LONGVARCHAR,title LONGVARCHAR,visit_count INTEGER DEFAULT 0 NOT NULL,typed_count INTEGER DEFAULT 0 NOT NULL,last_visit_time INTEGER NOT NULL,hidden INTEGER DEFAULT 0 NOT NULL); INSERT INTO urls(url,title,visit_count,typed_count,last_visit_time) VALUES('https://example.com/','Example',3,1,13370000000000000),('http://evil.test/payload.ps1','',9,0,13371234567000000),('https://huntress.com/','Huntress',1,1,13360000000000000); CREATE TABLE visits(id INTEGER PRIMARY KEY,url INTEGER NOT NULL,visit_time INTEGER NOT NULL);"
+# 4) places.sqlite: Firefox-shaped moz_places (PRTime microseconds since 1970)
+sqlite3 places.sqlite "PRAGMA page_size=32768; PRAGMA user_version=74; CREATE TABLE moz_places (id INTEGER PRIMARY KEY, url LONGVARCHAR, title LONGVARCHAR, rev_host LONGVARCHAR, visit_count INTEGER DEFAULT 0, hidden INTEGER DEFAULT 0 NOT NULL, typed INTEGER DEFAULT 0 NOT NULL, frecency INTEGER DEFAULT -1 NOT NULL, last_visit_date INTEGER , guid TEXT); INSERT INTO moz_places(url,title,visit_count,last_visit_date,guid) VALUES('https://www.mozilla.org/','Mozilla',2,1700000000000000,'aaaaaaaaaaaa'),('https://exfil.example/drop?id=7','drop',5,1700000500123456,'bbbbbbbbbbbb'),('about:blank',NULL,0,NULL,'cccccccccccc'); CREATE TABLE moz_historyvisits (id INTEGER PRIMARY KEY, place_id INTEGER, visit_date INTEGER);"
+# 5) decoy: an SQLite 2.x file header (not "SQLite format 3\0") -- a renamed impostor
+python3 -I -c "import sys; open('decoy_sqlite2.db','wb').write(b'** This file contains an SQLite 2.1 database **\x00'+b'\xda\xe3\x75\x28'+bytes(1024-52))"

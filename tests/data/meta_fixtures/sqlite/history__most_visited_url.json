@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.most_visited_url",
+ "expected": "http://evil.test/payload.ps1",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_cli.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> History)",
+ "oracle_cmd": "sqlite3 -readonly History \"select url from urls order by visit_count desc limit 1\"  (SQLite 3.46.1 CLI) -> http://evil.test/payload.ps1",
+ "decoy": false,
+ "member": "History"
+}

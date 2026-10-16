@@ -1,0 +1,8 @@
+{
+ "field": "pcap.version",
+ "expected": "2.4",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcap/GENERATOR_pcap.sh.txt  (Wireshark 4.6.4 text2pcap/editcap/mergecap; be_ns.pcap via stdlib struct) -> eth_us.pcap",
+ "oracle_cmd": "file -b eth_us.pcap -> 'version 2.4'",
+ "decoy": false,
+ "member": "eth_us.pcap"
+}

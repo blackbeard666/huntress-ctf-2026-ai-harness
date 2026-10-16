@@ -1,0 +1,18 @@
+{
+ "encoding": "raw",
+ "expected_format": "wasm",
+ "expected_machine": "wasm32",
+ "expected_offset": 197,
+ "expected_mem_offset": 20,
+ "expected_segment_mem_offset": 20,
+ "expected_config": {
+  "c2": "198.51.100.23:443",
+  "campaign": "lattice",
+  "sleep": 45,
+  "flag": "flag{w4sm_d4t4_s3g}"
+ },
+ "generator_cmd": "bash wasm_gen.sh wasm_c_obj.bin c '{\"c2\":\"198.51.100.23:443\",\"campaign\":\"lattice\",\"sleep\":45,\"flag\":\"flag{w4sm_d4t4_s3g}\"}' 0",
+ "oracle_cmd": "bash wasm_oracle.sh wasm_c_obj.bin   # file -b, wasm-validate --enable-memory64, wasm-objdump -x (Memory i64 flag, Data segment init + memory-addressed hexdump), grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "WebAssembly (wasm) binary module version 0x1 (MVP) | valid | i32 | 20 | 197 | HCFG 1 0 87 947601980 947601980 | {\"c2\":\"198.51.100.23:443\",\"campaign\":\"lattice\",\"sleep\":45,\"flag\":\"flag{w4sm_d4t4_s3g}\"}",
+ "note": "format label 'wasm' / machine 'wasm32' (wasm64 = memory64) are SPECULATIVE (GM vocabulary not seen); expected_offset = FILE offset of the 'H' (OFFSET LAW raw, = hcfg_scan); expected_mem_offset = segment init offset + position in the segment (linear-memory address) -- record both, the GM decides which hcfg_offset means; clang-18 relocatable .o: memory offset 20 is the object-local layout (wasm-ld would rebase it)"
+}

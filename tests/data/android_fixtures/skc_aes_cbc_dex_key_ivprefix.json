@@ -1,0 +1,6 @@
+{
+ "entry": "static_key_cipher_scan",
+ "expected": "ANS-5e8a1c3f9b27d406",
+ "generator_cmd": "apktool d -r -o proj exported_trust.apk (D01); rm proj/assets/huntress_puzzle.json; add smali/com/huntress/mobile/d01/v073e9a824e9e/CryptoConfig.smali: key() = const-string \"Hx7#qLm2!vR9pZ4w\", transformation() = const-string \"AES/CBC/PKCS5Padding\"; IV=0f1e2d3c4b5a69788796a5b4c3d2e1f0; { echo $IV | xxd -r -p; printf 'flag=ANS-5e8a1c3f9b27d406' | openssl enc -aes-128-cbc -K $(printf 'Hx7#qLm2!vR9pZ4w' | xxd -p) -iv $IV; } | base64 -w0 > proj/assets/config.dat; apktool b -o skc_aes_cbc_dex_key_ivprefix.apk proj",
+ "oracle_cmd": "apktool d -r -o o skc_aes_cbc_dex_key_ivprefix.apk; grep const-string o/smali/com/huntress/mobile/d01/*/CryptoConfig.smali  # Hx7#qLm2!vR9pZ4w; unzip -p skc_aes_cbc_dex_key_ivprefix.apk assets/config.dat | base64 -d > a.bin; tail -c +17 a.bin | openssl enc -d -aes-128-cbc -K $(printf 'Hx7#qLm2!vR9pZ4w' | xxd -p) -iv $(head -c16 a.bin | xxd -p)  # -> flag=ANS-5e8a1c3f9b27d406"
+}

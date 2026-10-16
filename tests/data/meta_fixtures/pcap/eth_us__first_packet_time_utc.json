@@ -1,0 +1,8 @@
+{
+ "field": "pcap.first_packet_time_utc",
+ "expected": "2026-03-14T09:26:53.589793Z",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcap/GENERATOR_pcap.sh.txt  (Wireshark 4.6.4 text2pcap/editcap/mergecap; be_ns.pcap via stdlib struct) -> eth_us.pcap",
+ "oracle_cmd": "TZ=UTC capinfos -t -E -l -c -a -e -S -I eth_us.pcap -> 'Earliest packet time: 2026-03-14 09:26:53.589793' (epoch 1773480413.589793)",
+ "decoy": false,
+ "member": "eth_us.pcap"
+}

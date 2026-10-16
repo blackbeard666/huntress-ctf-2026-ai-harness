@@ -1,0 +1,8 @@
+{
+ "field": "bmp.pixel_data_offset",
+ "expected": "54",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import Image; Image.new('RGB',(33,17),(1,2,3)).save('rgb24.bmp'); Image.new('L',(120,7),9).save('gray8.bmp')\"  (Pillow 12.3.0 writer)",
+ "oracle_cmd": "file -b rgb24.bmp -> 'bits offset 54'",
+ "decoy": false,
+ "member": "rgb24.bmp"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "evtx.first_event_id",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/evtx/GENERATOR_evtx_binxml.py.txt <outdir>  (stdlib struct/zlib EVTX writer with real BinXML template records -> binxml_empty_log.bin)",
+ "oracle_cmd": ".venv/bin/python -I -c \"import sys,json; sys.path.insert(0,'tools/pyevtxrs'); import evtx; R=[json.loads(r['data'])['Event']['System'] for r in evtx.PyEvtxParser(sys.argv[1]).records_json()]; E=lambda s: s['EventID']['#text'] if isinstance(s['EventID'],dict) else s['EventID']; P=[]; [P.append(s['Provider']['#attributes']['Name']) for s in R if s['Provider']['#attributes']['Name'] not in P]; print(len(R), E(R[0]) if R else 'none', R[0]['TimeCreated']['#attributes']['SystemTime'][:19]+'Z' if R else 'none', json.dumps(P,separators=(',',':')) if P else 'none', R[0]['Channel'] if R else 'none', R[0]['Computer'] if R else 'none', sep='|')\" tests/data/meta_fixtures/evtx/binxml_empty_log__first_event_id.bin  (pyevtx-rs 0.13.1 = Rust evtx crate; fields record_count|first_event_id|first_time_created_utc|provider_names|channel|computer_name); ElfFile + one ElfChnk with no records (free-space offset 0x200): python-evtx/dissect yield 0 records",
+ "decoy": true,
+ "member": "binxml_empty_log.evtx"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "polyalpha",
+ "plain": null,
+ "encoded": "Sids vd e pwsqidsae wqbgpros gsef wf ysf hup amfzft xwap ef oyw, wxit lqnse-qexqby-42",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "plain=\"$plain\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import sys,os,pycipher as P;p=os.environ['plain'];c=iter(P.Vigenere('LEMON').encipher(p) if 'e'=='e' else P.Vigenere('LEMON').decipher(p));print(''.join((lambda x:x if ch.isupper() else x.lower())(next(c)) if ch.isalpha() else ch for ch in p))\"  # Vigenere of a sentence that is NOT the warmup crib",
+ "oracle_cmd": "printf '%s\\n' \"$encoded\" | PYTHONPATH=pycipher-0.5.2 python3 -c \"import sys,pycipher as P;print(P.Vigenere('LEMON').decipher(sys.stdin.read()).lower()[:30])\"  # hereisadifferentsentence...: crib 'Nice work decoding' absent",
+ "oracle_plain": null
+}

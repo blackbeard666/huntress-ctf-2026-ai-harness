@@ -1,0 +1,13 @@
+{
+ "encoding": "aes-cbc",
+ "expected_offset": 4567,
+ "expected_config": {
+  "c2": "198.51.100.77:8443",
+  "beacon": "aes-cbc-wren",
+  "sleep": 30,
+  "flag": "flag{a3s_cbc_k3y_n3xt_d00r}"
+ },
+ "generator_cmd": "sh blk_gen.sh  # openssl enc (AES ECB/CBC/CTR), python cryptography ChaCha20, perl blk_xtea.pl (XTEA-CBC)",
+ "oracle_cmd": "sh blk_oracle.sh blk_aes_cbc_strkey.bin 4567 aes-128-cbc '53757033725333637233744b33792121' '496e6974566563746f72313233343536'",
+ "oracle_output": "{\"offset\": 4567, \"config\": {\"c2\": \"198.51.100.77:8443\", \"beacon\": \"aes-cbc-wren\", \"sleep\": 30, \"flag\": \"flag{a3s_cbc_k3y_n3xt_d00r}\"}}"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "eml.message_id",
+ "expected": "<20261014171158.4471.ap@invoice-portal.example>",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/eml/GENERATOR_stdlib_emailmessage.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP) -> phish.eml",
+ "oracle_cmd": "python3 -I oracle.py tools/pylib-eml <file>  (eml_parser 4.2.1 EmlParser.decode_email_bytes, pip --target tools/pylib-eml) -> header.header['message-id'][0]",
+ "decoy": false,
+ "member": "evidence-01/phish.eml"
+}

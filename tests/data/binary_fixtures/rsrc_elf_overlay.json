@@ -1,0 +1,24 @@
+{
+ "encoding": "raw",
+ "expected_offset": 14344,
+ "expected_config": {
+  "c2": "198.51.100.9:53",
+  "campaign": "elf-overlay",
+  "sleep": 15,
+  "flag": "flag{4pp3nd3d_bl0b}"
+ },
+ "expected_locate": {
+  "container": "overlay",
+  "slot_offset": 14328,
+  "delta": 16,
+  "size": 117
+ },
+ "expected_overlay": {
+  "has_overlay": true,
+  "overlay_offset": 14328
+ },
+ "oracle_cmd": "PY=.venv/bin/python bash tests/data/binary_fixtures/rsrc_oracle.sh tests/data/binary_fixtures   # lief Binary.has_overlay / size-len(overlay); readelf -hW (e_shoff 12600 + 27*64 = 14328); perl unpack + gzip crc32",
+ "oracle_output": "lief has_overlay True overlay_offset 14328 | Start of section headers 12600, 27 x 64 | size 14445 | HCFG v=1 key=0 len=89 crc=1881926139 | crc(gzip)=1881926139",
+ "convention": "raw at the magic (14344); overlay starts right after the section header table (14328)",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/rsrc_gen.sh tests/data/binary_fixtures   # dotnet 10 (Roslyn) + llvm-rc-18 / gcc -O2 -s / javac+jar; blob = printf header + crc32 from gzip trailer"
+}

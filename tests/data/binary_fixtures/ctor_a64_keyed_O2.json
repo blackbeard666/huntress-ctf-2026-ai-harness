@@ -1,0 +1,14 @@
+{
+ "encoding": "init-decoded",
+ "expected_offset": 2752,
+ "expected_config": {
+  "c2": "203.0.113.77:8443",
+  "campaign": "init-array",
+  "mutex": "Global\\ctor_k3y",
+  "sleep": 30,
+  "flag": "flag{l04d3r_d3c0d3s_1t}"
+ },
+ "generator_cmd": "bash ctor_gen.sh ctor_a64_keyed_O2.bin aarch64-linux-gnu-gcc 2 keyed '{\"c2\":\"203.0.113.77:8443\",\"campaign\":\"init-array\",\"mutex\":\"Global\\\\ctor_k3y\",\"sleep\":30,\"flag\":\"flag{l04d3r_d3c0d3s_1t}\"}'   # blob: printf header + crc32 from gzip trailer; perl encodes it ((b+7i)^key[i%10], key 'k3y-s3cr3t') into a static const array; a constructor(101) mallocs, memcpys, strlen(key) and decodes it in place at load time",
+ "oracle_cmd": "bash ctor_oracle.sh ctor_a64_keyed_O2.bin   # the program RUNS (native / qemu-aarch64) so the loader runs .init_array, then dumps the decoded buffer; perl unpack header; gzip trailer = crc32(body); nm address of the stored array enc + readelf -SW section -> file offset",
+ "oracle_output": "2752 HCFG 121 1729617634 {\"c2\":\"203.0.113.77:8443\",\"campaign\":\"init-array\",\"mutex\":\"Global\\\\ctor_k3y\",\"sleep\":30,\"flag\":\"flag{l04d3r_d3c0d3s_1t}\"} 1729617634"
+}

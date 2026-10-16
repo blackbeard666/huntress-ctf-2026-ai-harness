@@ -1,0 +1,7 @@
+{
+ "entry": "dex_array_scan",
+ "expected": "ANS-a41e7d0c9b35f268",
+ "_why": "<clinit> new-array char[20] + const/16/aput-char sequence, repeating xor with const-string key \"k3Y!\" from key()",
+ "generator_cmd": "apktool d -r -o base skc_decoy_cbc_wrong_key.apk; rm base/assets/config.dat; python3 tests/data/android_fixtures/gen_dex_arrays.py base aput_strkey  # writes smali StrEnc.smali; apktool b -o dexarr_aput_strkey.apk base",
+ "oracle_cmd": "apktool d -r -o o dexarr_aput_strkey.apk; python3 -c \"import re,glob; s=open(glob.glob('o/smali/**/StrEnc.smali',recursive=True)[0]).read(); a=[int(v,16) for v in re.findall(r'const/16 v2, (0x[0-9a-f]+)',s)]; k=re.search(r'const-string v0, \\\"(.*?)\\\"',s).group(1).encode(); print(bytes(x^k[i%len(k)] for i,x in enumerate(a)))\"  # -> b'ANS-a41e7d0c9b35f268'"
+}

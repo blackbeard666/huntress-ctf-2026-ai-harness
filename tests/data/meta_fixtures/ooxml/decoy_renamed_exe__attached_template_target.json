@@ -1,0 +1,8 @@
+{
+ "field": "ooxml.attached_template_target",
+ "expected": "none",
+ "generator_cmd": "copy of decoy_renamed_exe__core_creator.bin (a PE renamed .docx: no PK magic => not an OPC package)",
+ "oracle_cmd": "file -b decoy_renamed_exe__attached_template_target.bin -> 'MS-DOS executable, MZ for MS-DOS' (no PK magic, not an OPC package) => none",
+ "decoy": true,
+ "member": "decoy_renamed_exe.docx"
+}

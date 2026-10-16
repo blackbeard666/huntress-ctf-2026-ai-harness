@@ -1,0 +1,8 @@
+{
+ "field": "ooxml.attached_template_target",
+ "expected": "https://templates.c2-staging.example/office/Normal.dotm",
+ "generator_cmd": "hand-written OPC parts via shell heredoc ([Content_Types].xml with /word/document.xml Override macroEnabledTemplate.main+xml; _rels/.rels officeDocument + custom-properties; word/_rels/document.xml.rels settings + hyperlink '#_Toc1' (internal) + hyperlink http://decoy.example.com/readme (External); word/_rels/settings.xml.rels rId1337 attachedTemplate -> https://templates.c2-staging.example/office/Normal.dotm External; docProps/custom.xml zOperator=ghost-kitten, Build=7.4.1) then `zip -X -r remote_template.docx '[Content_Types].xml' _rels docProps word` (Info-ZIP 3.0)",
+ "oracle_cmd": "7z l -slt + 7z x -so <part> | lxml.etree (independent of zipfile/ElementTree): .venv/bin/python -I tests/data/meta_fixtures/ooxml/_siblings_oracle.py.txt zip_remote_template__attached_template_target.bin attached_template_target where _siblings_oracle.py.txt = no [Content_Types].xml -> none; rels = every *.rels part's Relationship elements; custom_properties = docProps/custom.xml {property@name: first child text} sorted by name, compact JSON; attached_template_target = Target of Type ending /attachedTemplate; internal_relationship_targets = sorted Targets without TargetMode=External; relationship_types = sorted distinct Type; hyperlink_count = Types ending /hyperlink; embedded_object_names = sorted 7z paths under */embeddings/; main_part_content_type = [Content_Types] Override for the _rels/.rels officeDocument target (else Default by extension)",
+ "decoy": false,
+ "member": "remote_template.docx"
+}

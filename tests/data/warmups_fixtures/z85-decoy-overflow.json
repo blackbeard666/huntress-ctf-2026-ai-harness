@@ -1,0 +1,10 @@
+{
+ "codec": "z85",
+ "plain": null,
+ "encoded": "%%%%%",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "5-char group '%%%%%' = 82*(85^4+..+1) > 0xFFFFFFFF (ZeroMQ RFC 32: every frame must fit 32 bits)",
+ "oracle_cmd": "printf %s \"$encoded\" | basenc --z85 -d  # coreutils basenc  -> rc=1 'basenc: error: invalid input'",
+ "oracle_plain": null
+}

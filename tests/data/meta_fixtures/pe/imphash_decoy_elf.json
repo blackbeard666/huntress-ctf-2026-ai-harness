@@ -1,0 +1,7 @@
+{
+ "field": "pe.imphash",
+ "expected": "none",
+ "generator_cmd": "cp tests/data/meta_fixtures/pe/decoy_elf.bin (an ELF, not a PE) tests/data/meta_fixtures/pe/imphash_decoy_elf.bin  (unmodified)",
+ "oracle_cmd": ".venv/bin/python -c \"import pefile,sys\ntry: pefile.PE(sys.argv[1]); print('PE?')\nexcept pefile.PEFormatError: print('none')\" tests/data/meta_fixtures/pe/imphash_decoy_elf.bin",
+ "decoy": true
+}

@@ -1,0 +1,8 @@
+{
+ "field": "rtf.template_target",
+ "expected": "none",
+ "generator_cmd": "Apple TextEdit (exiftool test corpus t/images/RTF.rtf), copied verbatim",
+ "oracle_cmd": "grep -c 'template' RTF.rtf -> 0 (no {\\\\*\\\\template} destination)",
+ "decoy": false,
+ "member": "RTF.rtf"
+}

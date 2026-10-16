@@ -1,0 +1,13 @@
+{
+ "codec": "playfair-groups5-upper:wheatstone",
+ "key": "wheatstone",
+ "hints": [
+  "Wheatstone's Gift"
+ ],
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-quarry-58",
+ "encoded": "BGNTH SZRGW SNFKG PWEDB HTLPX LHCON MUWNY SQFEZ WEDBN ETBWT BOHAZ CCHEA IEPHQ HCWTP QBGWL YTQQZ",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitxthisexactanswertothegamemasteriadequarry",
+ "generator_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import secretpy as S; S.Playfair().encrypt(LETTERS, KEY)\".upper() then 5-letter groups joined by spaces",
+ "oracle_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import pycipher as P; print(P.Playfair(SQUARE(KEY)).decipher(encoded).lower())\"  # SQUARE = keyword letters (J->I) deduped + rest of A-Z sans J; raw output keeps the X fillers",
+ "expected": "match"
+}

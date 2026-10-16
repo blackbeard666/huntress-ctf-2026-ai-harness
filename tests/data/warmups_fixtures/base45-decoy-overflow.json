@@ -1,0 +1,10 @@
+{
+ "codec": "base45",
+ "plain": null,
+ "encoded": "GGW",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "RFC 9285 section 4.2 invalid example 'GGW' (16+16*45+32*2025 = 65536 > 65535)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;sys.path.insert(0,'tools/pychepy');from chepy import Chepy;print(Chepy(sys.stdin.read()).from_base45().o.decode())\"  # PyPI chepy==7.6.0 from_base45  -> chepy raises 'Invalid base45 string' (triple 65536 > 65535)",
+ "oracle_plain": null
+}

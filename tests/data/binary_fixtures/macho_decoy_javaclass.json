@@ -1,0 +1,18 @@
+{
+ "encoding": "none",
+ "expected_format": "none",
+ "expected_machine": "none",
+ "expected_machine_num": "none",
+ "expected_machines": [],
+ "expected_fat": false,
+ "expected_section_names": [],
+ "expected_has_hcfg_section": "none",
+ "expected_hcfg_section_offsets": [],
+ "expected_offset": null,
+ "expected_config": null,
+ "decoy": true,
+ "generator_cmd": "printf 'class Hcfg { static final String S = \"HCFG\"; }\\n' > Hcfg.java; javac --release 8 Hcfg.java; cp Hcfg.class macho_decoy_javaclass.bin   # Java class: same 0xcafebabe magic as FAT_MAGIC",
+ "oracle_cmd": "file macho_decoy_javaclass.bin; llvm-lipo-18 -info macho_decoy_javaclass.bin; cp macho_decoy_javaclass.bin Hcfg.class && javap -v Hcfg.class | grep major",
+ "oracle_output": "compiled Java class data, version 52.0 (Java 1.8) | llvm-lipo: error: ... The file was not recognized as a valid object file | major version: 52 (u32 at +4 = 0x34 = 52, not a slice count)",
+ "note": "fat-vs-Java disambiguation: a .class must NOT parse as a universal Mach-O"
+}

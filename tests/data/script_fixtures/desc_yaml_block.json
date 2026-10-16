@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=yaml|role=loader|verdict=malicious|attack=T1105|adapter=http_get|stage_count=2|steps=fetch_stage,run_stage|campaign_id=YA-0d0e0f10|url=https://yaml-0d0e0f10.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | gzip -n9 | base64 -w 36  -> literal written into desc_yaml_block.yaml",
+ "oracle_cmd": "yq -r .pipeline.stage.descriptor_0d0e0f10 tests/data/script_fixtures/desc_yaml_block.yaml | base64 -d | gunzip"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "z85",
+ "plain": null,
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwIQ==",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup!' | base64 -w0  # coreutils base64 impostor",
+ "oracle_cmd": "printf %s \"$encoded\" | basenc --z85 -d  # coreutils basenc  -> rc=1 'basenc: error: invalid input'",
+ "oracle_plain": null
+}

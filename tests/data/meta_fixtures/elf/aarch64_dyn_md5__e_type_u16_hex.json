@@ -1,0 +1,8 @@
+{
+ "field": "elf.e_type_u16_hex",
+ "expected": "0x0003",
+ "generator_cmd": "aarch64-linux-gnu-gcc -Wl,--build-id=md5 -Wl,-z,max-page-size=4096 -o a64_dyn m.c  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW aarch64_dyn_md5__e_type_u16_hex.bin | grep Type: (REL/EXEC/DYN -> 1/2/3, u16 hex)",
+ "decoy": false,
+ "member": "a64_dyn"
+}

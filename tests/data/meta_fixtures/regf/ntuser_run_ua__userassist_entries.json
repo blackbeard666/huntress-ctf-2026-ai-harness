@@ -1,0 +1,8 @@
+{
+ "field": "regf.userassist_entries",
+ "expected": "[\"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\\\cmd.exe\",\"C:\\\\Users\\\\ana\\\\Downloads\\\\invoice_2026.exe\",\"{0139D44E-6AFE-49F2-8690-3DAFCAE6FFB8}\\\\Accessories\\\\Notepad.lnk\"]",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/regf/GENERATOR_regf_keys.py.txt <outdir>  (stdlib struct regf writer: nk/lh/lf/ri+li/vk cells -> ntuser_run_ua.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -c \"import json,codecs; from Registry import Registry; r=Registry.Registry('tests/data/meta_fixtures/regf/ntuser_run_ua__userassist_entries.bin'); ua=r.open(r'Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Explorer\\\\UserAssist'); print([codecs.decode(v.name(),'rot13') for g in ua.subkeys() for v in g.subkey('Count').values()])  # minus UEME_CTLSESSION\"  (python-registry 1.3.1, independent reader)",
+ "decoy": false,
+ "member": "NTUSER.DAT"
+}

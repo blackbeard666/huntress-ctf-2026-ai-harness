@@ -1,0 +1,10 @@
+{
+ "codec": "rail",
+ "plain": null,
+ "encoded": "24-noclaf-rebma :retsaM emaG eht ot rewsna tcaxe siht timbus ,evlos oT !pumraw siht gnidoced krow eciN",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$plain\" | rev  # util-linux rev: same letter multiset as the sentence, but no zig-zag order",
+ "oracle_cmd": "printf %s \"$encoded\" | rev  # util-linux rev reads it back",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42"
+}

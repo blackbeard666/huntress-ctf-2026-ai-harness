@@ -1,0 +1,9 @@
+{
+ "codec": "variant:key",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-305",
+ "encoded": "Deeu sqhg fuyqtepw pjyo yqnokl! Ve oqbrg, iqdcev jdki azqyv qjumat jk vxa Iqig Cwujat: zwfu-kvjat-305",
+ "generator_cmd": "plain=\"$plain\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import sys,os,pycipher as P;p=os.environ['plain'];c=iter(P.Vigenere('KEY').encipher(p) if 'd'=='e' else P.Vigenere('KEY').decipher(p));print(''.join((lambda x:x if ch.isupper() else x.lower())(next(c)) if ch.isalpha() else ch for ch in p))\"  # variant Beaufort c=p-k = pycipher Vigenere.decipher",
+ "oracle_cmd": "encoded=\"$encoded\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import os,pycipher as P;e=os.environ['encoded'];print(P.Vigenere('KEY').encipher(e).lower())\"  # pycipher reader, letters only",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemasterjadeotter",
+ "expected": "match"
+}

@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-3a6f0e9d2c81b74e",
+ "generator_cmd": "tests/data/android_fixtures/gen_row36.sh <outdir> -- assets/huntress_puzzle.json via jq -cn '{codec,data[,key]}' then (cd d && zip -qX -r <name>.apk assets); payload: \"vig\"        \"$(printf 'flag ANS-3a6f0e9d2c81b74e' | perl -ne '@k=map{ord($_)-65}split//,\"HUNTRESS\";$j=0;for(split//){if(/[A-Za-z]/){$b=/[a-z]/?97:65;print chr((ord($_)-$b+$k[$j++%@k])%26+$b)}else{print}}')\" \"HUNTRESS\"",
+ "oracle_cmd": "unzip -p chain_vigenere.apk assets/huntress_puzzle.json | jq -r .data | python3 -I -c 'import sys,itertools; k=itertools.cycle(\"HUNTRESS\"); print(\"\".join(chr((ord(c)-(97 if c.islower() else 65)-(ord(next(k))-65))%26+(97 if c.islower() else 65)) if c.isalpha() else c for c in sys.stdin.read().strip()))'"
+}

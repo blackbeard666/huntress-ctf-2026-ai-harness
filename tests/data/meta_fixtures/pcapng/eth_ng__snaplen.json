@@ -1,0 +1,8 @@
+{
+ "field": "pcapng.snaplen",
+ "expected": "262144",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcapng/GENERATOR_pcapng.sh.txt  (Wireshark 4.6.4 text2pcap/editcap/mergecap; be_ns.pcap via stdlib struct) -> eth_ng.pcapng",
+ "oracle_cmd": ".venv/bin/python -I -c \"import dpkt; r=dpkt.pcapng.Reader(open('eth_ng.pcapng','rb')); print(r.datalink(), r.snaplen)\" (dpkt 1.9.8) -> 262144; capinfos -I 'Capture length = 262144'",
+ "decoy": false,
+ "member": "eth_ng.pcapng"
+}

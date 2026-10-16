@@ -1,0 +1,8 @@
+{
+ "field": "elf.e_shnum",
+ "expected": "5",
+ "generator_cmd": "printf hello > blob; objcopy -I binary -O elf32-big blob be.o  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW objcopy_elf32_big__e_shnum.bin | grep 'Number of section headers'",
+ "decoy": false,
+ "member": "be.o"
+}

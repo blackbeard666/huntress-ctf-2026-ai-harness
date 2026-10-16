@@ -1,0 +1,8 @@
+{
+ "field": "vba.has_macros",
+ "expected": "true",
+ "generator_cmd": "Microsoft Excel (XlsxWriter 3.2.9 sdist examples/vbaProject.bin), copied verbatim: cp xlsxwriter-3.2.9/examples/vbaProject.bin",
+ "oracle_cmd": ".venv/bin/python -I -c \"from oletools.olevba import VBA_Parser; print(VBA_Parser(f).detect_vba_macros())\" excel_vbaproject__has_macros.bin",
+ "decoy": false,
+ "member": "vbaProject.bin"
+}

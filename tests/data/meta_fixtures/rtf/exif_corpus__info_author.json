@@ -1,0 +1,8 @@
+{
+ "field": "rtf.info_author",
+ "expected": "an author {with braces}",
+ "generator_cmd": "Apple TextEdit (Cocoa RTF writer, exiftool test corpus t/images/RTF.rtf), copied verbatim",
+ "oracle_cmd": "exiftool -j -Author RTF.rtf -> 'an author {with braces}'",
+ "decoy": false,
+ "member": "RTF.rtf"
+}

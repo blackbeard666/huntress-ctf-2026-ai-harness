@@ -1,0 +1,8 @@
+{
+ "field": "x509.not_before_utc",
+ "expected": "1999-12-31T23:00:00Z",
+ "generator_cmd": "openssl req -x509 -newkey rsa:2048 -nodes -keyout ss.key -out selfsigned.pem -subj \"/O=Acme/OU=Ops/CN=Acme Internal Signing\" -set_serial 7 -not_before 19991231230000Z -not_after 20510630235959Z -addext \"subjectAltName=DNS:sign.acme.local\"  (OpenSSL 3.5.5; notBefore UTCTime, notAfter GeneralizedTime)",
+ "oracle_cmd": "openssl x509 -inform PEM -in selfsigned.pem -noout -startdate -dateopt iso_8601 -> notBefore=1999-12-31 23:00:00Z",
+ "decoy": false,
+ "member": "selfsigned.pem"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "ooxml.hyperlink_count",
+ "expected": "0",
+ "generator_cmd": ".venv/bin/python -I -c \"import pptx,io; from pptx.util import Inches; p=pptx.Presentation(); s=p.slides.add_slide(p.slide_layouts[6]); s.shapes.add_ole_object(io.BytesIO(b'PK..'), pptx.enum.shapes.PROG_ID.XLSX, Inches(1),Inches(1)); s.shapes.add_ole_object(io.BytesIO(b'..'), pptx.enum.shapes.PROG_ID.DOCX, Inches(3),Inches(1)); p.save(out)\"  (python-pptx 1.0.2 writer)",
+ "oracle_cmd": "7z l -slt + 7z x -so <part> | lxml.etree (independent of zipfile/ElementTree): .venv/bin/python -I tests/data/meta_fixtures/ooxml/_siblings_oracle.py.txt pptx_ole__hyperlink_count.bin hyperlink_count where _siblings_oracle.py.txt = no [Content_Types].xml -> none; rels = every *.rels part's Relationship elements; custom_properties = docProps/custom.xml {property@name: first child text} sorted by name, compact JSON; attached_template_target = Target of Type ending /attachedTemplate; internal_relationship_targets = sorted Targets without TargetMode=External; relationship_types = sorted distinct Type; hyperlink_count = Types ending /hyperlink; embedded_object_names = sorted 7z paths under */embeddings/; main_part_content_type = [Content_Types] Override for the _rels/.rels officeDocument target (else Default by extension)",
+ "decoy": false,
+ "member": "ole.pptx"
+}

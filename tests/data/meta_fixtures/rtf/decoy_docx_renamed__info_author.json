@@ -1,0 +1,8 @@
+{
+ "field": "rtf.info_author",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import zipfile; z=zipfile.ZipFile('decoy.rtf','w'); z.writestr('[Content_Types].xml','<Types/>'); z.writestr('word/document.xml','<w:document/>')\" (stdlib zipfile, renamed .rtf)",
+ "oracle_cmd": "file -b decoy.rtf -> 'Zip archive data' (not 'Rich Text Format data')",
+ "decoy": true,
+ "member": "invoice.rtf"
+}

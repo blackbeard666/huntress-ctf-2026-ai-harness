@@ -1,0 +1,28 @@
+{
+ "encoding": "raw",
+ "expected_facts": {
+  "format": "elf",
+  "elf_type": "ET_REL",
+  "entry_point": "0x0",
+  "soname": "none",
+  "has_interp": "false",
+  "is_dll": "false",
+  "dll_name": "none",
+  "exports": [
+   "hcfg_campaign",
+   "hcfg_get_c2",
+   "hcfg_get_sleep"
+  ]
+ },
+ "expected_offset": 152,
+ "expected_config": {
+  "c2": "198.51.100.7:443",
+  "campaign": "tower",
+  "sleep": 9,
+  "flag": "flag{sh4red_0bj}"
+ },
+ "generator_cmd": "bash solib_gen.sh solib_o_x64.bin o '{\"c2\":\"198.51.100.7:443\",\"campaign\":\"tower\",\"sleep\":9,\"flag\":\"flag{sh4red_0bj}\"}' 0x5a",
+ "oracle_cmd": "bash solib_oracle.sh solib_o_x64.bin   # GNU readelf -h/-dW/-lW + nm -D|-g --defined-only (ELF) / objdump -p (PE), objdump -h + objcopy --only-section=.hcfg, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "ET_REL | 0x0 | none | 0 | hcfg_campaign,hcfg_get_c2,hcfg_get_sleep | 152 | HCFG 1 90 80 621244191 621244191 | {\"c2\":\"198.51.100.7:443\",\"campaign\":\"tower\",\"sleep\":9,\"flag\":\"flag{sh4red_0bj}\"}",
+ "note": "elf_type = readelf Type as ET_* constant (lib.knowledge ELF_TYPE_AS_IS); exports = LC_ALL=C sorted names; PE entry_point = AddressOfEntryPoint RVA in lib.knowledge PE_ENTRY_POINT_RVA_HEX_FMT 0x%08x (objdump prints it 16-wide)"
+}

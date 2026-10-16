@@ -1,0 +1,9 @@
+{
+ "codec": "z85",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-31",
+ "encoded": "phaiHaA}:AyANe0v@C)(zF78lxLzJgCvtJeB-nGDrbS[2z!%PdefG1RvR]?3aARphB0b4svpKy4vqZdgwPw]nzY<dnwGTGKzdK?:vrlK4AYLsTvpS}3xK#j5zy)U0",
+ "generator_cmd": "printf %s \"$plain\" | basenc -w0 --z85  # GNU coreutils basenc 9.x (ZeroMQ Z85, len%4==0)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/z85_cyberchef.mjs dec  # CyberChef \"From Base85\", alphabet \"Z85 (ZeroMQ)\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-31",
+ "expected": "match"
+}

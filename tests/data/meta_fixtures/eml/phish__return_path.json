@@ -1,0 +1,8 @@
+{
+ "field": "eml.return_path",
+ "expected": "bounce-7731@mailer.invoice-portal.example",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/eml/GENERATOR_stdlib_emailmessage.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP) -> phish.eml",
+ "oracle_cmd": "python3 -I oracle.py tools/pylib-eml <file>  (eml_parser 4.2.1 EmlParser.decode_email_bytes, pip --target tools/pylib-eml) -> header.header['return-path'][0] = '<bounce-7731@mailer.invoice-portal.example>' (addr-spec, <> stripped)",
+ "decoy": false,
+ "member": "evidence-01/phish.eml"
+}

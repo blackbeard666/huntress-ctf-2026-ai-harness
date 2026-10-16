@@ -1,0 +1,8 @@
+{
+ "field": "elf.section_names",
+ "expected": "[\".note.gnu.build-id\",\".interp\",\".gnu.hash\",\".dynsym\",\".dynstr\",\".gnu.version\",\".gnu.version_r\",\".rela.dyn\",\".init\",\".plt\",\".plt.got\",\".text\",\".fini\",\".rodata\",\".eh_frame_hdr\",\".eh_frame\",\".note.gnu.property\",\".note.ABI-tag\",\".init_array\",\".fini_array\",\".dynamic\",\".got\",\".data\",\".bss\",\".comment\",\".symtab\",\".strtab\",\".shstrtab\"]",
+ "generator_cmd": "gcc -O0 -Wl,--build-id=sha1 -o x64_dyn m.c   (m.c: int main(void){return 0;}; gcc 13 x86-64)  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW gcc_x64_dyn__section_names.bin | Section Headers [Nr] Name column in table order, [0] NULL dropped",
+ "decoy": false,
+ "member": "x64_dyn"
+}

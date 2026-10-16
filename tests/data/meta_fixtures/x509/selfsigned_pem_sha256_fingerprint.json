@@ -1,0 +1,8 @@
+{
+ "field": "x509.sha256_fingerprint",
+ "expected": "2d4b398656a31c70c858f37508013aa5c947d395ed0cebd7c3d496a8a476fbbc",
+ "generator_cmd": "openssl req -x509 -newkey rsa:2048 -nodes -keyout ss.key -out selfsigned.pem -subj \"/O=Acme/OU=Ops/CN=Acme Internal Signing\" -set_serial 7 -not_before 19991231230000Z -not_after 20510630235959Z -addext \"subjectAltName=DNS:sign.acme.local\"  (OpenSSL 3.5.5; notBefore UTCTime, notAfter GeneralizedTime)",
+ "oracle_cmd": "openssl x509 -inform PEM -in selfsigned.pem -noout -fingerprint -sha256 (colons removed, lowercased; digest of the DER, not the PEM text)",
+ "decoy": false,
+ "member": "selfsigned.pem"
+}

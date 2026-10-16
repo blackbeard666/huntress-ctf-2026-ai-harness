@@ -1,0 +1,8 @@
+{
+ "field": "pcap.snaplen",
+ "expected": "96",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcap/GENERATOR_pcap.sh.txt  (Wireshark 4.6.4 text2pcap/editcap/mergecap; be_ns.pcap via stdlib struct) -> raw_cut.pcap",
+ "oracle_cmd": "TZ=UTC capinfos -t -E -l -c -a -e -S -I raw_cut.pcap -> 'file hdr: 96 bytes'",
+ "decoy": false,
+ "member": "raw_cut.pcap"
+}

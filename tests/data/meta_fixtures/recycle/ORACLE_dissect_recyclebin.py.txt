@@ -1,0 +1,10 @@
+import sys
+sys.path.insert(0, "tools/pylib-dissect")
+from dissect.target.plugins.os.windows.recyclebin import c_recyclebin
+from dissect.util.ts import wintimestamp
+d = open(sys.argv[1], "rb").read()
+v = c_recyclebin.uint64(d[:8])
+if v not in (1, 2):
+    print("version", v, "-> not a $I"); sys.exit()
+e = (c_recyclebin.header_v2 if v == 2 else c_recyclebin.header_v1)(d)
+print(repr(e.version), repr(e.file_size), wintimestamp(e.timestamp).strftime("%Y-%m-%dT%H:%M:%SZ"), repr(e.filename.rstrip("\x00")))

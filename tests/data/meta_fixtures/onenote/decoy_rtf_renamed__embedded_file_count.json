@@ -1,0 +1,8 @@
+{
+ "field": "onenote.embedded_file_count",
+ "expected": "none",
+ "generator_cmd": "cp two_objects.rtf decoy.one (the rtf fixture's stdlib writer output, renamed .one)",
+ "oracle_cmd": "file -b decoy.one -> 'Rich Text Format data' (not 'Microsoft OneNote'); pyOneNote Header guidFileType != {7B5C52E4-...}",
+ "decoy": true,
+ "member": "Invoice.one"
+}

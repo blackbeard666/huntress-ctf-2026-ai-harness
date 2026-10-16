@@ -1,0 +1,8 @@
+{
+ "field": "task.registration_author",
+ "expected": "WKSTN-0042\\svc_update",
+ "generator_cmd": "sh tests/data/meta_fixtures/task/GENERATOR_iconv_schtasks.sh.txt OUTDIR  (printf BOM + iconv -f UTF-8 -t UTF-16LE of a schtasks /query /xml-layout task, CRLF)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/task/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/task/schtasks_logon_hidden__registration_author.bin registration_author -> WKSTN-0042\\svc_update",
+ "decoy": false,
+ "member": "OneDrive Sync Helper"
+}

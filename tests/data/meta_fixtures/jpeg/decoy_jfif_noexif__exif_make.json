@@ -1,0 +1,8 @@
+{
+ "field": "jpeg.exif_make",
+ "expected": "none",
+ "generator_cmd": "python3 -c 'from PIL import Image; Image.new(\"L\",(32,32),128).save(\"base.jpg\",\"JPEG\")'  (run in $TMPDIR/jpegfx)",
+ "oracle_cmd": "exiftool -j -n -Make -Model -Orientation -DateTimeOriginal -Composite:GPSLatitude plain_jfif.jpg  (cross-checked: exifread.process_file)  (no EXIF tags)",
+ "decoy": true,
+ "member": "plain_jfif.jpg"
+}

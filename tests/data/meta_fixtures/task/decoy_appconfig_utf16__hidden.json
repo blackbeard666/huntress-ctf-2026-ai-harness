@@ -1,0 +1,8 @@
+{
+ "field": "task.hidden",
+ "expected": "none",
+ "generator_cmd": "sh tests/data/meta_fixtures/task/GENERATOR_iconv_schtasks.sh.txt OUTDIR  (decoy: UTF-16LE <configuration> app.config holding Command/Author/URI/Hidden elements, not a <Task>)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/task/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/task/decoy_appconfig_utf16__hidden.bin hidden -> none",
+ "decoy": true,
+ "member": "Updater.exe.config"
+}

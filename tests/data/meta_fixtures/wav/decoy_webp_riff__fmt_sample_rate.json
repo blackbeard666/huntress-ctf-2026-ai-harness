@@ -1,0 +1,8 @@
+{
+ "field": "wav.fmt_sample_rate",
+ "expected": "none",
+ "generator_cmd": "Pillow writer: Image.new('RGB',(9,9)).save('decoy.webp') (RIFF/WEBP, not WAVE)",
+ "oracle_cmd": "file -b decoy.webp -> 'RIFF (little-endian) data, Web/P image'",
+ "decoy": true,
+ "member": "decoy.webp"
+}

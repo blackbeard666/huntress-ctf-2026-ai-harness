@@ -1,0 +1,10 @@
+{
+ "codec": "rot8000",
+ "plain": null,
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwIQ==",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -c 'import base64; print(base64.b64encode(b\"Nice work decoding this warmup!\").decode())'  # ASCII base64: ROT8000 would turn it INTO CJK -> not rot8000",
+ "oracle_cmd": "printf %s \\\"$encoded\\\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/rot8000_cyberchef.mjs  # CyberChef \\\"ROT8000\\\" (involution)",
+ "oracle_plain": "籝籶籵米籣籜籋簼籫簼籓类籒籐籛籵籢簻籂籴籪籠簾籷籒籑籛籸籪籡籖籰籭簻籏粂籫籡籟粀籒籚籆籆"
+}

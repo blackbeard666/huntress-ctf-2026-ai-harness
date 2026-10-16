@@ -1,0 +1,34 @@
+import json, subprocess, sys
+from lxml import etree
+SZ = "/home/testpwn/huntress-2026/bin/7z"
+def part(f, n):
+    r = subprocess.run([SZ, "x", "-so", f, n], capture_output=True).stdout
+    return etree.fromstring(r) if r.strip() else None
+def names(f):
+    out = subprocess.run([SZ, "l", "-slt", f], capture_output=True, text=True).stdout
+    return [l[7:] for l in out.splitlines() if l.startswith("Path = ")][1:]
+f, field = sys.argv[1], sys.argv[2]
+ns = names(f)
+if "[Content_Types].xml" not in ns:
+    print("none"); sys.exit()
+R = "{http://schemas.openxmlformats.org/package/2006/relationships}Relationship"
+rels = [el for n in ns if n.endswith(".rels") for el in part(f, n).iter(R)]
+if field == "custom_properties":
+    root = part(f, "docProps/custom.xml") if "docProps/custom.xml" in ns else None
+    print("none" if root is None else json.dumps({p.get("name"): p[0].text for p in sorted(root, key=lambda p: p.get("name"))}, separators=(",", ":")))
+elif field == "attached_template_target":
+    t = [el.get("Target") for el in rels if el.get("Type").endswith("/attachedTemplate")]
+    print(t[0] if t else "none")
+elif field == "internal_relationship_targets":
+    print(json.dumps(sorted(el.get("Target") for el in rels if el.get("TargetMode") != "External"), separators=(",", ":")))
+elif field == "relationship_types":
+    print(json.dumps(sorted({el.get("Type") for el in rels}), separators=(",", ":")))
+elif field == "hyperlink_count":
+    print(sum(el.get("Type").endswith("/hyperlink") for el in rels))
+elif field == "embedded_object_names":
+    print(json.dumps(sorted(n for n in ns if "/embeddings/" in "/" + n), separators=(",", ":")))
+elif field == "main_part_content_type":
+    tgt = "/" + [el.get("Target") for el in part(f, "_rels/.rels").iter(R) if el.get("Type").endswith("/officeDocument")][0].lstrip("/")
+    ct = part(f, "[Content_Types].xml")
+    o = [e.get("ContentType") for e in ct if e.get("PartName") == tgt]
+    print(o[0] if o else [e.get("ContentType") for e in ct if e.get("Extension") == tgt.rsplit(".", 1)[1]][0])

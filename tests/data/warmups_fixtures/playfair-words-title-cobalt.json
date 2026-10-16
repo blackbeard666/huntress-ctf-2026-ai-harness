@@ -1,0 +1,13 @@
+{
+ "codec": "playfair-words:embassy",
+ "key": "embassy",
+ "hints": [
+  "Fair Play at the Embassy"
+ ],
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-74",
+ "encoded": "hkym uqql ybypcktn onnm xbpavo! op etixau, ezabnp onnm aumfrz slbzao op onau fsbm bsgzao: ypasnr-oytplz-74",
+ "oracle_plain": "nice work decoding this warmup! to solvex, submit this exactx answer to thex game master: cobalt-heronx-74",
+ "generator_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import re,secretpy as S; re.sub('[A-Za-z]+', lambda m: S.Playfair().encrypt(m[0].lower(), KEY), plain)\"  # each letter run alone; punctuation, spaces, hyphens, digits kept",
+ "oracle_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import pycipher as P; print(P.Playfair(SQUARE(KEY)).decipher(run).lower())\"  # SQUARE = keyword letters (J->I) deduped + rest of A-Z sans J; raw output keeps the X fillers per letter run",
+ "expected": "match"
+}

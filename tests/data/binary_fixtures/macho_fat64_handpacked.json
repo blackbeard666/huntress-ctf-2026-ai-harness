@@ -1,0 +1,33 @@
+{
+ "encoding": "raw",
+ "expected_format": "mach-o",
+ "expected_machine": "AArch64",
+ "expected_machine_num": "16777228",
+ "expected_machines": [
+  "AArch64",
+  "x86-64"
+ ],
+ "expected_fat": true,
+ "expected_section_names": [
+  "__TEXT,__text",
+  "__DATA,__hcfg",
+  "__LD,__compact_unwind",
+  "__TEXT,__eh_frame"
+ ],
+ "expected_has_hcfg_section": "true",
+ "expected_hcfg_section_offsets": [
+  16884,
+  33272
+ ],
+ "expected_offset": 16884,
+ "expected_config": {
+  "c2": "198.18.0.44:9001",
+  "campaign": "bigfat",
+  "sleep": 7,
+  "flag": "flag{f4t64_h4nd_p4ck}"
+ },
+ "generator_cmd": "J='{\"c2\":\"198.18.0.44:9001\",\"campaign\":\"bigfat\",\"sleep\":7,\"flag\":\"flag{f4t64_h4nd_p4ck}\"}'; bash macho_gen.sh a.o arm64-apple-macos \"$J\" 0x13; bash macho_gen.sh x.o x86_64-apple-macos \"$J\" 0x13; python3 macho_fat64_pack.py macho_fat64_handpacked.bin a.o x.o   # FAT_MAGIC_64 hand-packed, arm64 slice first",
+ "oracle_cmd": "bash macho_oracle.sh macho_fat64_handpacked.bin   # llvm-lipo-18 -archs, llvm-objdump-18 --macho --universal-headers, llvm-readobj-18 --file-headers --sections, llvm-objcopy-18 --dump-section __DATA,__hcfg, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "arm64 | Arm64 (0x100000C) | 16384 | __TEXT,__text __DATA,__hcfg __LD,__compact_unwind | 16884 | HCFG 1 19 86 265888204 265888204 | {\"c2\":\"198.18.0.44:9001\",\"campaign\":\"bigfat\",\"sleep\":7,\"flag\":\"flag{f4t64_h4nd_p4ck}\"}\nx86_64 | X86-64 (0x1000007) | 32768 | __TEXT,__text __DATA,__hcfg __TEXT,__eh_frame | 33272 | HCFG 1 19 86 265888204 265888204 | {\"c2\":\"198.18.0.44:9001\",\"campaign\":\"bigfat\",\"sleep\":7,\"flag\":\"flag{f4t64_h4nd_p4ck}\"}",
+ "note": "format label 'mach-o' = lib.binary.machine_facts' existing spelling (GM vocabulary for Mach-O NOT yet confirmed; 'macho' presumed by the atlas). machine = MACHO_CPU_LABEL (x86-64 / AArch64); fat -> first slice, expected_offset = lowest __hcfg file offset (first slice in file order); has_hcfg_section = a sectname __hcfg in any segment/slice"
+}

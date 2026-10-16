@@ -1,0 +1,70 @@
+#!/bin/sh
+# schtasks /query /xml layout (CRLF, 2-space indent) -> UTF-16LE with BOM via iconv. Usage: sh this.txt OUTDIR
+O="$1"
+printf '\377\376' > "$O/schtasks_logon_hidden.bin"
+cat <<'X' | sed 's/$/\r/' | iconv -f UTF-8 -t UTF-16LE >> "$O/schtasks_logon_hidden.bin"
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Date>2026-09-14T03:12:45</Date>
+    <Author>WKSTN-0042\svc_update</Author>
+    <Description>Keeps "C:\Windows\System32\notepad.exe" up to date (not the real action)</Description>
+    <URI>\Microsoft\Windows\UpdateOrchestrator\OneDrive Sync Helper</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+    <TimeTrigger>
+      <Repetition>
+        <Interval>PT15M</Interval>
+        <StopAtDurationEnd>false</StopAtDurationEnd>
+      </Repetition>
+      <StartBoundary>2026-09-14T03:15:00</StartBoundary>
+      <Enabled>true</Enabled>
+    </TimeTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-18</UserId>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>true</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>true</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe</Command>
+      <Arguments>-NoP -W Hidden -Enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAKQA= &amp; exit</Arguments>
+      <WorkingDirectory>C:\ProgramData\OneDriveSync</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
+X
+# decoy: a UTF-16LE .NET app.config that also has <Command>/<Author> elements -- not a <Task> document
+printf '\377\376' > "$O/decoy_appconfig_utf16.bin"
+cat <<'X' | sed 's/$/\r/' | iconv -f UTF-8 -t UTF-16LE >> "$O/decoy_appconfig_utf16.bin"
+<?xml version="1.0" encoding="UTF-16"?>
+<configuration>
+  <RegistrationInfo><Author>contoso\builder</Author><URI>\Contoso\Updater</URI></RegistrationInfo>
+  <Actions><Exec><Command>C:\Tools\updater.exe</Command><Arguments>/silent</Arguments></Exec></Actions>
+  <Settings><Hidden>true</Hidden></Settings>
+</configuration>
+X

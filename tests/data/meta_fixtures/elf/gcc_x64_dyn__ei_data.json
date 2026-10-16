@@ -1,0 +1,8 @@
+{
+ "field": "elf.ei_data",
+ "expected": "ELFDATA2LSB",
+ "generator_cmd": "gcc -O0 -Wl,--build-id=sha1 -o x64_dyn m.c   (m.c: int main(void){return 0;}; gcc 13 x86-64)  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW gcc_x64_dyn__ei_data.bin | grep Data: (little endian -> ELFDATA2LSB)",
+ "decoy": false,
+ "member": "x64_dyn"
+}

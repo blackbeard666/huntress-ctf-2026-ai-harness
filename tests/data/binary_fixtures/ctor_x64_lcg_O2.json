@@ -1,0 +1,14 @@
+{
+ "encoding": "init-decoded",
+ "expected_offset": 8224,
+ "expected_config": {
+  "c2": "https://update.example.net/api/v3/poll",
+  "campaign": "early-bird",
+  "jitter": 7,
+  "sleep": 120,
+  "flag": "flag{c0nstruct0r_runs_f1rst}"
+ },
+ "generator_cmd": "bash ctor_gen.sh ctor_x64_lcg_O2.bin gcc 2 lcg '{\"c2\":\"https://update.example.net/api/v3/poll\",\"campaign\":\"early-bird\",\"jitter\":7,\"sleep\":120,\"flag\":\"flag{c0nstruct0r_runs_f1rst}\"}'   # blob: printf header + crc32 from gzip trailer; perl encodes it (LCG keystream k0=0xa7, k=k*0x6b+0x3d) into a static const array; an __attribute__((constructor)) decodes it into global g_buf at load time",
+ "oracle_cmd": "bash ctor_oracle.sh ctor_x64_lcg_O2.bin   # the program RUNS (native / qemu-aarch64) so the loader runs .init_array, then dumps the decoded buffer; perl unpack header; gzip trailer = crc32(body); nm address of the stored array enc + readelf -SW section -> file offset",
+ "oracle_output": "8224 HCFG 132 1385278231 {\"c2\":\"https://update.example.net/api/v3/poll\",\"campaign\":\"early-bird\",\"jitter\":7,\"sleep\":120,\"flag\":\"flag{c0nstruct0r_runs_f1rst}\"} 1385278231"
+}

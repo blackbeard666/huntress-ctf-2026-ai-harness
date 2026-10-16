@@ -1,0 +1,9 @@
+{
+ "codec": "fullwidth",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "Ｎｉｃｅ　ｗｏｒｋ　ｄｅｃｏｄｉｎｇ　ｔｈｉｓ　ｗａｒｍｕｐ！　Ｔｏ　ｓｏｌｖｅ，　ｓｕｂｍｉｔ　ｔｈｉｓ　ｅｘａｃｔ　ａｎｓｗｅｒ　ｔｏ　ｔｈｅ　Ｇａｍｅ　Ｍａｓｔｅｒ：　ａｍｂｅｒ－ｆａｌｃｏｎ－４２",
+ "generator_cmd": "printf %s \"$plain\" | uconv -x 'Halfwidth-Fullwidth'  # ICU transliterator (space -> U+3000)",
+ "oracle_cmd": "python3 -I -c 'import sys,unicodedata as u;print(u.normalize(\"NFKC\",sys.argv[1]))' \"$encoded\"  # stdlib NFKC compatibility fold",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

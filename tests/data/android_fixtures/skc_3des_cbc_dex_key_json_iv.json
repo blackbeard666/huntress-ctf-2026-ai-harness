@@ -1,0 +1,6 @@
+{
+ "entry": "extract_answer",
+ "expected": "ANS-71b3d09fe2c4a5c8",
+ "generator_cmd": "apktool d -r -o proj exported_trust.apk (D01); rm proj/assets/huntress_puzzle.json; add smali/com/huntress/mobile/d01/v073e9a824e9e/CryptoConfig.smali: key() = const-string \"TripleDES-K3y!0123456789\", transformation() = const-string \"DESede/CBC/PKCS5Padding\"; CT=$(printf 'ANS-71b3d09fe2c4a5c8' | openssl enc -des-ede3-cbc -K $(printf 'TripleDES-K3y!0123456789' | xxd -p) -iv 1122334455667788 | xxd -p | tr -d '\\n'); printf '{\"schema\":\"huntress.mobile.puzzle.v1\",\"day\":16,\"codec\":\"desede\",\"data\":\"%s\",\"iv\":\"1122334455667788\"}' \"$CT\" > proj/assets/huntress_puzzle.json; apktool b -o skc_3des_cbc_dex_key_json_iv.apk proj",
+ "oracle_cmd": "apktool d -r -o o skc_3des_cbc_dex_key_json_iv.apk; grep const-string o/smali/com/huntress/mobile/d01/*/CryptoConfig.smali  # TripleDES-K3y!0123456789; unzip -p skc_3des_cbc_dex_key_json_iv.apk assets/huntress_puzzle.json | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"data\"])' | xxd -r -p | openssl enc -d -des-ede3-cbc -K $(printf 'TripleDES-K3y!0123456789' | xxd -p) -iv 1122334455667788"
+}

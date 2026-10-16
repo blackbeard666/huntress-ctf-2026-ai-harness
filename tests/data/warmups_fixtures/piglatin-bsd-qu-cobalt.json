@@ -1,0 +1,9 @@
+{
+ "codec": "piglatin",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: quick-onyx-squirrel-73",
+ "encoded": "Icenay orkway ecodingday isthay armupway! Otay olvesay, ubmitsay isthay exactway answerway otay ethay Amegay Astermay: ickquay-onyxway-irrelsquay-73",
+ "expected": "match",
+ "generator_cmd": "printf \"%s\\n\" \"$plain\" | tools/bsdgames/usr/games/pig | tr -d \"\\n\"  # bsdgames 2.17-35 `pig` (Ubuntu deb, dpkg -x into tools/bsdgames); the newline flushes the last word (pig drops a word still buffered at EOF)",
+ "oracle_cmd": "[ \"$(printf \"%s\\n\" \"$plain\" | tools/bsdgames/usr/games/pig | tr -d \"\\n\")\" = \"$encoded\" ]  # bsdgames pig re-encodes plain to the exact bytes (no standard Pig Latin DEcoder exists; the oracle is the reference encoder)",
+ "note": "bsd rules: qu moves as one unit (quick -> ickquay, squirrel -> irrelsquay), onyx -> onyxway"
+}

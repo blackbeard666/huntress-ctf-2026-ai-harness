@@ -1,0 +1,8 @@
+{
+ "field": "gzip.header_mtime_unix",
+ "expected": "1710491445",
+ "generator_cmd": "printf 'quarterly numbers\\n'x300 > payroll_q3.csv; touch -d '2024-03-15 08:30:45 UTC' payroll_q3.csv; gzip -9 -k -N payroll_q3.csv  (GNU gzip 1.x, renamed gnu_named.gz)",
+ "oracle_cmd": "xxd -s 4 -l 4 -e gnu_named.gz -> 65f40735 = 1710491445",
+ "decoy": false,
+ "member": "gnu_named.gz"
+}

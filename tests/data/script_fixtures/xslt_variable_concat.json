@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=xslt|role=launcher|verdict=malicious|attack=T1220|adapter=msxsl_script|host_profile=xslt_msxsl|stage_count=2|steps=fetch_stage,run_stage|campaign_id=XSLT-52d9aa07|url=https://xslt-52d9aa07.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/xslt_gen.py  (plan | base64, split into an XPath concat() select attribute written by xml.etree)",
+ "oracle_cmd": "python3 -I -c 'import sys,lxml.etree as E; d=E.parse(sys.argv[1]); v=d.find(\".//{http://www.w3.org/1999/XSL/Transform}variable\"); print(E.XPath(v.get(\"select\"))(d))' tests/data/script_fixtures/xslt_variable_concat.xsl | base64 -d"
+}

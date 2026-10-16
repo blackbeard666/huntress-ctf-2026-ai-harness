@@ -1,0 +1,6 @@
+{
+ "entry": "il2cpp_literal_scan",
+ "expected": "ANS-a4e07c19d36b582f",
+ "generator_cmd": "tests/data/android_fixtures/gen_il2cpp.sh -- stdlib struct writer of Il2CppGlobalMetadataHeader (magic 0xFAB11BAF) + Il2CppStringLiteral table + stringLiteralData, zip -qX <name>.apk AndroidManifest.xml lib/arm64-v8a/libil2cpp.so assets/bin/Data/Managed/Metadata/global-metadata.dat; v29, literals: 'Loading...', 'unitykey', base64(repeating-xor('flag=ANS-a4e07c19d36b582f', 'unitykey')), 'GameOver'",
+ "oracle_cmd": "python3 -I -c \"import sys,struct,zipfile; b=zipfile.ZipFile(sys.argv[1]).read('assets/bin/Data/Managed/Metadata/global-metadata.dat'); v=struct.unpack_from('<I',b,4)[0]; lo,ls=struct.unpack_from('<ii',b,8); do=struct.unpack_from('<i',b,20 if v>=38 else 16)[0]; [print(b[do+i:do+i+n].decode()) for n,i in struct.iter_unpack('<Ii',b[lo:lo+ls])]\" il2cpp_v29_xor_neighbor_key.apk | sed -n 3p | python3 -I -c \"import sys,base64; c=base64.b64decode(sys.stdin.read()); k=b'unitykey'; print(bytes(x^k[i%8] for i,x in enumerate(c)).decode())\""
+}

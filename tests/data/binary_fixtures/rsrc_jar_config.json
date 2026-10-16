@@ -1,0 +1,17 @@
+{
+ "encoding": "deflate",
+ "expected_offset": 548,
+ "expected_config": {
+  "c2": "203.0.113.88:7443",
+  "campaign": "jar-entry",
+  "sleep": 30,
+  "flag": "flag{n0n_cl4ss_3ntry}",
+  "pad": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ "expected_locate": null,
+ "expected_overlay": null,
+ "oracle_cmd": "PY=.venv/bin/python bash tests/data/binary_fixtures/rsrc_oracle.sh tests/data/binary_fixtures   # zipinfo (config.bin defN); struct read of the local header (508 + 30 + name + extra = data@548); unzip -p config.bin | perl unpack + gzip crc32",
+ "oracle_output": "config.bin local header 508 data@ 548 | HCFG v=1 key=0 len=156 crc=3308632520 | crc(gzip)=3308632520",
+ "convention": "deflated jar entry: 'deflate' at the entry's compressed-data start (= the existing fixed-Huffman anchor's report; the new zip pass reports the same for dynamic-Huffman / big jars)",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/rsrc_gen.sh tests/data/binary_fixtures   # dotnet 10 (Roslyn) + llvm-rc-18 / gcc -O2 -s / javac+jar; blob = printf header + crc32 from gzip trailer"
+}

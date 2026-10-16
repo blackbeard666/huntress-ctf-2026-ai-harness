@@ -1,0 +1,8 @@
+{
+ "field": "task.com_handler_class_id",
+ "expected": "{0358B920-0AC7-461F-98F4-58E32CD89148}",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/task/GENERATOR_etree_prefixed.py.txt OUT.bin  (stdlib xml.etree writer, t: prefixed namespace, ComHandler-only action, GroupId principal)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/task/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/task/etree_prefixed_comhandler__com_handler_class_id.bin com_handler_class_id -> {0358B920-0AC7-461F-98F4-58E32CD89148}",
+ "decoy": false,
+ "member": "CacheTask"
+}

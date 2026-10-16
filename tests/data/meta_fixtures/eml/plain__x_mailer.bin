@@ -1,0 +1,12 @@
+Received: from client.lan ([172.16.5.9]) by mail.lan with SMTP; Mon, 13 Oct
+ 2026 22:01:00 -0500
+From: alice@lan.example
+To: bob@lan.example
+Subject: lunch?
+Date: Tue, 13 Oct 2026 22:00:59 -0500
+Message-ID: <plain-1@lan.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+12:30?

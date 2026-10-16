@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.journal_mode",
+ "expected": "wal",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_cli.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> History)",
+ "oracle_cmd": "sqlite3 -readonly History \"PRAGMA journal_mode\"  (SQLite 3.46.1 CLI) -> wal",
+ "decoy": false,
+ "member": "History"
+}

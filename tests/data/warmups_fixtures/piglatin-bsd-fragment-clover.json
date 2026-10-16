@@ -1,0 +1,9 @@
+{
+ "codec": "piglatin",
+ "plain": "Nice work deco",
+ "encoded": "Icenay orkway ecoday",
+ "expected": "match",
+ "generator_cmd": "printf \"%s\\n\" \"$plain\" | tools/bsdgames/usr/games/pig | tr -d \"\\n\"  # bsdgames 2.17-35 `pig` (Ubuntu deb, dpkg -x into tools/bsdgames); the newline flushes the last word (pig drops a word still buffered at EOF)",
+ "oracle_cmd": "[ \"$(printf \"%s\\n\" \"$plain\" | tools/bsdgames/usr/games/pig | tr -d \"\\n\")\" = \"$encoded\" ]  # bsdgames pig re-encodes plain to the exact bytes (no standard Pig Latin DEcoder exists; the oracle is the reference encoder)",
+ "note": "Mastery-style fragment cut mid-word (deco -> ecoday); also lib.decode speculative free line (pig_free)"
+}

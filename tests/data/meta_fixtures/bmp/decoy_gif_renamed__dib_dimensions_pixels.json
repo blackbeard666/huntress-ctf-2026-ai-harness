@@ -1,0 +1,8 @@
+{
+ "field": "bmp.dib_dimensions_pixels",
+ "expected": "none",
+ "generator_cmd": "cp still87.gif renamed_gif.bmp (GIF from the gif fixture's Pillow writer)",
+ "oracle_cmd": "file -b renamed_gif.bmp -> 'GIF image data' (not BMP)",
+ "decoy": true,
+ "member": "renamed_gif.bmp"
+}

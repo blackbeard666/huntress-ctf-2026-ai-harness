@@ -1,0 +1,14 @@
+{
+ "encoding": "none",
+ "expected_machine": "MIPS R3000",
+ "readelf_machine": "MIPS R3000",
+ "expected_machine_num": "8",
+ "endian": "big",
+ "expected_offset": null,
+ "expected_config": null,
+ "generator_cmd": "cp march_mips_be.bin march_decoy_badcrc.bin; printf '\\xde\\xad\\xbe\\xef' | dd of=march_decoy_badcrc.bin bs=1 seek=228 conv=notrunc   # BE header crc field clobbered",
+ "oracle_cmd": "bash march_oracle.sh march_decoy_badcrc.bin   # GNU readelf -h/-SW, llvm-objcopy-18 --only-section=.hcfg, perl unpack (header in ELF byte order) + xor, gzip trailer crc32",
+ "oracle_output": "MIPS R3000 | 8 | big | 220 | HCFG 1 90 80 3735928559 2640537683 | {\"c2\":\"198.51.100.7:443\",\"campaign\":\"tower\",\"sleep\":9,\"flag\":\"flag{mult1_4rch}\"}",
+ "decoy": true,
+ "note": "machine label = readelf spelling except EM_386 -> 'x86' (lib.knowledge vocabulary); expected_machine_num = decimal e_machine for kind:integer"
+}

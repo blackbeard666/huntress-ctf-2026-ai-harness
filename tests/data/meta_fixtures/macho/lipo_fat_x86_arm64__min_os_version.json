@@ -1,0 +1,8 @@
+{
+ "field": "macho.min_os_version",
+ "expected": "10.13",
+ "generator_cmd": "llvm-lipo-18 -create prog_x86 prog_arm64 -output fat_prog  (run in $TMPDIR/mfx)",
+ "oracle_cmd": "llvm-otool-18 -arch x86_64 -l lipo_fat_x86_arm64__min_os_version.bin | grep -A5 -E 'LC_UUID|LC_BUILD_VERSION|LC_VERSION_MIN' | grep -E 'uuid|minos|  version' (uuid lowercased; min_os verbatim otool text)  [fat: first slice per `llvm-otool-18 -f` = x86_64]",
+ "decoy": false,
+ "member": "fat_prog"
+}

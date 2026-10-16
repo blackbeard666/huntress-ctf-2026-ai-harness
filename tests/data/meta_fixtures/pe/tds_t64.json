@@ -1,0 +1,7 @@
+{
+ "field": "pe.timestamp_u32_hex",
+ "expected": "0x62ee0d01",
+ "generator_cmd": "cp .venv/lib/python3.12/site-packages/pip/_vendor/distlib/t64.exe (MSVC x64 launcher, Rich + RSDS) tests/data/meta_fixtures/pe/tds_t64.bin  (unmodified)",
+ "oracle_cmd": ".venv/bin/python -c \"import pefile,sys,json;p=pefile.PE(sys.argv[1]);print('0x%08x'%p.FILE_HEADER.TimeDateStamp)\" tests/data/meta_fixtures/pe/tds_t64.bin",
+ "decoy": false
+}

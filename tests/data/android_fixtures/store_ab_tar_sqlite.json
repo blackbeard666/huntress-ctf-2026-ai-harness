@@ -1,0 +1,6 @@
+{
+ "entry": "local_store_scan",
+ "expected": "ANS-2f8c5a0e7d13b946",
+ "generator_cmd": "tests/data/android_fixtures/gen_local_store.sh <outdir> -- { printf 'ANDROID BACKUP\\n5\\n1\\nnone\\n'; tar -C t -cf - apps | zlib-flate -compress; } > assets/backup.ab with apps/com.huntress.vault/db/vault.db (sqlite3 CLI, notes.body plain) + sp/prefs.xml; zip -qX",
+ "oracle_cmd": "unzip -p store_ab_tar_sqlite.apk assets/backup.ab | dd bs=24 skip=1 status=none | zlib-flate -uncompress | tar -xO -f - apps/com.huntress.vault/db/vault.db > v.db && sqlite3 v.db 'select body from notes'"
+}

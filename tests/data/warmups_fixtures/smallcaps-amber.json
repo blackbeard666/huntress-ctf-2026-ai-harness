@@ -1,0 +1,9 @@
+{
+ "codec": "smallcaps",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-quail-64",
+ "encoded": "Nɪᴄᴇ ᴡᴏʀᴋ ᴅᴇᴄᴏᴅɪɴɢ ᴛʜɪꜱ ᴡᴀʀᴍᴜᴘ! Tᴏ ꜱᴏʟᴠᴇ, ꜱᴜʙᴍɪᴛ ᴛʜɪꜱ ᴇxᴀᴄᴛ ᴀɴꜱᴡᴇʀ ᴛᴏ ᴛʜᴇ Gᴀᴍᴇ Mᴀꜱᴛᴇʀ: ᴀᴍʙᴇʀ-ꞯᴜᴀɪʟ-64",
+ "generator_cmd": "perl -CSA tests/data/warmups_fixtures/unistyle_perl.pl smallcaps \"$plain\"  # Perl charnames: LATIN LETTER SMALL CAPITAL x for a-z (no small capital X: x stays)",
+ "oracle_cmd": "python3 -I -c 'import sys,unicodedata as u;print(\"\".join(u.name(c)[-1].lower() if u.name(c,\"\").startswith(\"LATIN LETTER SMALL CAPITAL \") else c for c in sys.argv[1]))' \"$encoded\"  # Unicode character names",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-quail-64",
+ "expected": "match"
+}

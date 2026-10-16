@@ -1,0 +1,9 @@
+{
+ "codec": "morse-10",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-93",
+ "encoded": "01 11 0101 1\n100 000 101 010\n011 1 0101 000 011 11 01 001\n0 1111 11 111\n100 10 101 00 110 1001 010100\n0 000\n111 000 1011 1110 1 001100\n111 110 0111 00 11 0\n0 1111 11 111\n1 0110 10 0101 0\n10 01 111 100 1 101\n0 000\n0 1111 1\n001 10 00 1\n00 10 111 0 1 101 000111\n1000 10 011 1 011110 000 0 0 1 101 011110 00001 11100",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs enc '_/.' 'Space' 'Line feed' | tr '._' '10'  # CyberChef 'To Morse Code' _/. then tr dot->1 dash->0",
+ "oracle_cmd": "printf %s \"$encoded\" | tr '10' '.-' | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs dec 'Space' 'Line feed'  # tr 1->. 0->- then CyberChef 'From Morse Code'",
+ "oracle_plain": "NICE WORK DECODING THIS WARMUP! TO SOLVE, SUBMIT THIS EXACT ANSWER TO THE GAME MASTER: JADE-OTTER-93",
+ "expected": "match"
+}

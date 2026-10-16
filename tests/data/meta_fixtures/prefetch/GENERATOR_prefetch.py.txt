@@ -1,0 +1,216 @@
+"""Stdlib writer for Windows Prefetch (.pf) fixtures: SCCA v17 (XP), v23 (Vista/7), v26 (8.1), v30 (Win10, both
+file-information variants), a Win10 MAM\\x04 (LZXpress Huffman, MS-XCA 2.2) compressed v30 spanning 2 chunks, and
+decoys. Layout per libscca's "Windows Prefetch File (PF) format". Values are oracled with libyal pyscca, NOT with
+lib.meta. Usage: python3 -I GENERATOR_prefetch.py.txt <outdir>"""
+import datetime
+import heapq
+import os
+import struct
+import sys
+
+def FT(y, mo, d, h, mi, s):
+    """FILETIME (100 ns ticks since 1601-01-01 UTC) of a UTC wall time."""
+    return int((datetime.datetime(y, mo, d, h, mi, s) - datetime.datetime(1601, 1, 1)).total_seconds()) * 10_000_000
+
+
+FI_SIZE = {17: 68, 23: 156, 26: 220, 30: 220}   # metrics array @0x98/0xF0/0x130/0x130 (0x128 = v30 variant 2)
+VOL_SIZE = {17: 40, 23: 104, 26: 104, 30: 96}
+
+
+def u16(s):
+    return s.encode("utf-16-le")
+
+
+def scca(version, exe, pf_hash, run_count, last_runs, volumes, files, fi_size=None, pad_files=0):
+    fi_size = fi_size or FI_SIZE[version]
+    me_size = 20 if version == 17 else 32
+    files = list(files) + ["\\VOLUME{01d0a1b2c3d4e5f6-12345678}\\WINDOWS\\SYSTEM32\\PAD%05d.DLL" % i
+                           for i in range(pad_files)]
+    # filename strings
+    fstr, offs = b"", []
+    for f in files:
+        offs.append((len(fstr), len(f)))
+        fstr += u16(f) + b"\0\0"
+    metrics_off = 84 + fi_size
+    metrics = b""
+    for i, (o, n) in enumerate(offs):
+        if version == 17:
+            metrics += struct.pack("<5I", i, 1, o, n, 0x200)
+        else:
+            metrics += struct.pack("<6IQ", i, 1, 1, o, n, 0x200, 0)
+    trace_off = metrics_off + len(metrics)
+    trace = struct.pack("<II", 0xFFFFFFFF, 1) if version == 30 else struct.pack("<III", 0xFFFFFFFF, 1, 0)
+    fstr_off = trace_off + len(trace)
+    vol_off = fstr_off + len(fstr)
+    vol_off += (-vol_off) % 8
+    # volumes block: entries, then per volume device path, file refs, dir strings
+    vsz = VOL_SIZE[version]
+    ents, tail = [], b""
+    base = vsz * len(volumes)
+    for dev, serial, ctime, dirs in volumes:
+        dp_off = base + len(tail)
+        tail += u16(dev) + b"\0\0"
+        tail += b"\0" * ((-len(tail)) % 8)
+        fr_off = base + len(tail)
+        fr = struct.pack("<II", 3 if version >= 23 else 1, 1) + (b"\0" * 8 if version >= 23 else b"") + \
+            struct.pack("<Q", 0x0001000000000005)
+        tail += fr
+        ds_off = base + len(tail)
+        for d in dirs:
+            tail += struct.pack("<H", len(d)) + u16(d) + b"\0\0"
+        tail += b"\0" * ((-len(tail)) % 8)
+        e = struct.pack("<IIQIIIII", dp_off, len(dev), ctime, serial, fr_off, len(fr), ds_off, len(dirs))
+        ents.append(e + b"\0" * (vsz - len(e)))
+    vols = b"".join(ents) + tail
+    # file information
+    fi = bytearray(fi_size)
+    struct.pack_into("<9I", fi, 0, metrics_off, len(files), trace_off, 1, fstr_off, len(fstr), vol_off,
+                     len(volumes), len(vols))
+    if version == 17:
+        struct.pack_into("<Q", fi, 36, last_runs[0])
+        struct.pack_into("<I", fi, 60, run_count)
+    elif version == 23:
+        struct.pack_into("<Q", fi, 44, last_runs[0])
+        struct.pack_into("<I", fi, 68, run_count)
+    else:
+        lr = (list(last_runs) + [0] * 8)[:8]
+        struct.pack_into("<8Q", fi, 44, *lr)
+        struct.pack_into("<I", fi, 116 if fi_size == 212 else 124, run_count)
+    body = bytes(fi) + metrics + trace + fstr
+    body += b"\0" * (vol_off - 84 - len(body))
+    body += vols
+    total = 84 + len(body)
+    name = u16(exe)[:58]
+    hdr = struct.pack("<I4sII", version, b"SCCA", 0x0F if version == 17 else 0x11, total) + \
+        name + b"\0" * (60 - len(name)) + struct.pack("<II", pf_hash, 0)
+    return hdr + body
+
+
+# ---- MS-XCA 2.2 LZXpress Huffman compressor (literal + short-match LZ77; matches never cross a 64 KiB chunk) ----
+def _huff_lengths(freq, limit=15):
+    while True:
+        heap = [(f, i, (i,)) for i, f in enumerate(freq) if f]
+        if len(heap) == 1:
+            heap.append((1, 0 if heap[0][1] else 1, (0 if heap[0][1] else 1,)))
+        lens = [0] * len(freq)
+        heapq.heapify(heap)
+        cnt = len(freq)
+        while len(heap) > 1:
+            a, b = heapq.heappop(heap), heapq.heappop(heap)
+            for s in a[2] + b[2]:
+                lens[s] += 1
+            heapq.heappush(heap, (a[0] + b[0], cnt, a[2] + b[2]))
+            cnt += 1
+        if max(lens) <= limit:
+            return lens
+        freq = [(f + 1) // 2 if f else 0 for f in freq]
+
+
+def _canon(lens):
+    codes, code = [0] * len(lens), 0
+    for ln in range(1, 16):
+        for s in range(len(lens)):
+            if lens[s] == ln:
+                codes[s] = code
+                code += 1
+        code <<= 1
+    return codes
+
+
+def _tokens(data, start, end):
+    toks, i, last = [], start, {}
+    while i < end:
+        best_len, best_off = 0, 0
+        if i + 3 <= end:
+            key = data[i:i + 3]
+            j = last.get(key)
+            if j is not None and 0 < i - j < 65536:
+                ln = 0
+                while ln < 17 and i + ln < end and data[j + ln] == data[i + ln]:
+                    ln += 1
+                if ln >= 3:
+                    best_len, best_off = ln, i - j
+        if best_len:
+            for k in range(i, i + best_len):
+                last[data[k:k + 3]] = k
+            toks.append((best_len, best_off))
+            i += best_len
+        else:
+            last[data[i:i + 3]] = i
+            toks.append((data[i],))
+            i += 1
+    return toks
+
+
+def xpress_huffman(data):
+    out = b""
+    starts = list(range(0, len(data), 65536)) or [0]
+    for ci, st in enumerate(starts):
+        toks = _tokens(data, st, min(st + 65536, len(data)))
+        syms = []
+        for t in toks:
+            if len(t) == 1:
+                syms.append((t[0], 0, 0))
+            else:
+                ln, off = t
+                lb = off.bit_length() - 1
+                syms.append((256 + (lb << 4) + (ln - 3), lb, off - (1 << lb)))
+        if ci == len(starts) - 1:
+            syms.append((256, 0, 0))   # EOF symbol
+        freq = [0] * 512
+        for s, _, _ in syms:
+            freq[s] += 1
+        lens = _huff_lengths(freq)
+        codes = _canon(lens)
+        table = bytes(lens[2 * i] | (lens[2 * i + 1] << 4) for i in range(256))
+        bits = []
+        for s, lb, extra in syms:
+            bits.append(format(codes[s], "0%db" % lens[s]))
+            if lb:
+                bits.append(format(extra, "0%db" % lb))
+        bs = "".join(bits)
+        c = len(bs)
+        words = 2 + max(0, -(-(c - 16) // 16))
+        bs = bs.ljust(words * 16, "0")
+        out += table + b"".join(struct.pack("<H", int(bs[k:k + 16], 2)) for k in range(0, len(bs), 16))
+    return out
+
+
+def mam(raw):
+    return b"MAM\x04" + struct.pack("<I", len(raw)) + xpress_huffman(raw)
+
+
+def main(outdir):
+    os.makedirs(outdir, exist_ok=True)
+    W = lambda n, b: open(os.path.join(outdir, n), "wb").write(b)  # noqa: E731
+    W("xp_v17.bin", scca(17, "NOTEPAD.EXE", 0x336F32E4, 7, [FT(2008, 3, 14, 9, 26, 53)],
+                         [("\\DEVICE\\HARDDISKVOLUME1", 0x6C5B3A10, FT(2007, 11, 2, 8, 0, 0), ["\\WINDOWS"])],
+                         ["\\DEVICE\\HARDDISKVOLUME1\\WINDOWS\\SYSTEM32\\NTDLL.DLL",
+                          "\\DEVICE\\HARDDISKVOLUME1\\WINDOWS\\SYSTEM32\\NOTEPAD.EXE"]))
+    W("win7_v23.bin", scca(23, "CMD.EXE", 0x4A81B6B7, 42, [FT(2015, 6, 30, 23, 59, 58)],
+                           [("\\DEVICE\\HARDDISKVOLUME2", 0x0A1B2C3D, FT(2014, 1, 5, 12, 0, 0), ["\\WINDOWS"])],
+                           ["\\DEVICE\\HARDDISKVOLUME2\\WINDOWS\\SYSTEM32\\CMD.EXE"]))
+    W("win81_v26.bin", scca(26, "POWERSHELL.EXE", 0x022FA8C1, 13,
+                            [FT(2019, 2, 3, 4, 5, 6), FT(2019, 2, 1, 10, 0, 0), FT(2019, 1, 20, 8, 30, 0)],
+                            [("\\VOLUME{01d4a1b2c3d4e5f6-5ab4c1d2}", 0x5AB4C1D2, FT(2018, 12, 1, 0, 0, 0),
+                              ["\\WINDOWS", "\\WINDOWS\\SYSTEM32"]),
+                             ("\\VOLUME{01d4a1b2c3d4e5f7-00c0ffee}", 0x00C0FFEE, FT(2018, 12, 2, 0, 0, 0), ["\\DATA"])],
+                            ["\\VOLUME{01d4a1b2c3d4e5f6-5ab4c1d2}\\WINDOWS\\SYSTEM32\\WINDOWSPOWERSHELL\\V1.0\\"
+                             "POWERSHELL.EXE"]))
+    raw30 = scca(30, "RUNDLL32.EXE", 0xEE1A4B7F, 3, [FT(2024, 10, 1, 17, 45, 12), FT(2024, 9, 30, 8, 0, 1)],
+                 [("\\VOLUME{01da12345678abcd-9e8d7c6b}", 0x9E8D7C6B, FT(2023, 5, 6, 7, 8, 9), ["\\WINDOWS"])],
+                 ["\\VOLUME{01da12345678abcd-9e8d7c6b}\\WINDOWS\\SYSTEM32\\RUNDLL32.EXE",
+                  "\\VOLUME{01da12345678abcd-9e8d7c6b}\\USERS\\PUBLIC\\LOADER.DLL"])
+    W("win10_v30_raw.bin", raw30)
+    big = scca(30, "SVCH0ST.EXE", 0x0000BEEF, 214, [FT(2025, 12, 24, 23, 0, 59)],
+               [("\\VOLUME{01dbffffffffffff-00000001}", 0x00000001, FT(2025, 1, 1, 0, 0, 0), ["\\PROGRAMDATA"])],
+               ["\\VOLUME{01dbffffffffffff-00000001}\\PROGRAMDATA\\SVCH0ST.EXE"], fi_size=212, pad_files=800)
+    W("win10_v30_mam_2chunk.bin", mam(big))
+    W("win10_v30_mam.bin", mam(raw30))
+    # decoys: a MAM\x02 (LZNT1-flagged) header around garbage, and an SCCA-less "prefetch" (a renamed LNK header)
+    W("decoy_lnk_renamed.bin", b"L\0\0\0\x01\x14\x02\0\0\0\0\0\xc0\0\0\0\0\0\0F" + b"\0" * 56)
+    W("decoy_bad_sig.bin", raw30[:4] + b"SCCB" + raw30[8:])
+
+
+if __name__ == "__main__":
+    main(sys.argv[1])

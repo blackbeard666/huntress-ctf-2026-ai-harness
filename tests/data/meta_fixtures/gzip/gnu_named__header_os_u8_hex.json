@@ -1,0 +1,8 @@
+{
+ "field": "gzip.header_os_u8_hex",
+ "expected": "0x03",
+ "generator_cmd": "printf 'quarterly numbers\\n'x300 > payroll_q3.csv; touch -d '2024-03-15 08:30:45 UTC' payroll_q3.csv; gzip -9 -k -N payroll_q3.csv  (GNU gzip 1.x, renamed gnu_named.gz)",
+ "oracle_cmd": "xxd -s 9 -l 1 -p gnu_named.gz  (OS byte) ; TZ=UTC file -b gnu_named.gz -> 03, from Unix",
+ "decoy": false,
+ "member": "gnu_named.gz"
+}

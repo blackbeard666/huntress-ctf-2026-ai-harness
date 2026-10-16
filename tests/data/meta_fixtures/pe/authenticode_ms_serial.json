@@ -1,0 +1,7 @@
+{
+ "field": "pe.signer_serial_hex",
+ "expected": "33000001c79aa1eedc27e2f8b70000000001c7",
+ "generator_cmd": "cp tools/pwsh/System.Buffers.dll tests/data/meta_fixtures/pe/authenticode_ms_buffers.bin  (unmodified, Microsoft-signed, RFC3161-timestamped)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib python3 sig.py tests/data/meta_fixtures/pe/authenticode_ms_serial.bin  (signify AuthenticodeFile.iter_embedded_signatures: signer_info issuer+serial -> cert; subject.dn/issuer.dn/'%x'%serial/sha1|sha256(cert.to_der)/countersigner.signing_time); cross-check: pefile DATA_DIRECTORY[4].Size",
+ "decoy": false
+}

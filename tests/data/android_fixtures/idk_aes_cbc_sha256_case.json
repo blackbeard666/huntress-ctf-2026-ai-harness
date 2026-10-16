@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-1F9D04C7A2B86E53",
+ "generator_cmd": "sh tests/data/android_fixtures/gen_identity_keys.sh challenges/day11/mobile-local-secrets/single_solve/artifacts/latest/local_secrets.apk tests/data/android_fixtures  # apktool d/b + printf 'answer=ANS-1F9D04C7A2B86E53' | openssl enc -aes-256-cbc -K $(printf MOB-11-4049003462 | sha256sum | cut -c1-64) -iv 0*32 | base64, codec aes",
+ "oracle_cmd": "unzip -p idk_aes_cbc_sha256_case.apk classes.dex | strings | grep -o 'MOB-[0-9]*-[0-9a-f]*'  # MOB-11-4049003462; unzip -p idk_aes_cbc_sha256_case.apk assets/huntress_puzzle.json | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"data\"])' | base64 -d | openssl enc -d -aes-256-cbc -K $(printf MOB-11-4049003462 | sha256sum | cut -c1-64) -iv 00000000000000000000000000000000"
+}

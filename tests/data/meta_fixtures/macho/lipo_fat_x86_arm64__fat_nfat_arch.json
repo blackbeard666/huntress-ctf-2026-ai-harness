@@ -1,0 +1,8 @@
+{
+ "field": "macho.fat_nfat_arch",
+ "expected": "2",
+ "generator_cmd": "llvm-lipo-18 -create prog_x86 prog_arm64 -output fat_prog",
+ "oracle_cmd": "llvm-otool-18 -f lipo_fat_x86_arm64__fat_nfat_arch.bin | grep nfat_arch",
+ "decoy": false,
+ "member": "fat_prog"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "pcapng.shb_os",
+ "expected": "none",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcapng/GENERATOR_pcapng.sh.txt  (Wireshark 4.6.4 text2pcap/editcap/mergecap; be_ns.pcap via stdlib struct) -> conv.pcapng",
+ "oracle_cmd": "capinfos conv.pcapng -> no 'Capture oper-sys' line (editcap writes no shb_os)",
+ "decoy": true,
+ "member": "conv.pcapng"
+}

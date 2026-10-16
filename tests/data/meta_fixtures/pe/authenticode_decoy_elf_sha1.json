@@ -1,0 +1,7 @@
+{
+ "field": "pe.signer_cert_sha1",
+ "expected": "none",
+ "generator_cmd": "existing decoy_elf.bin (ELF, not a PE)",
+ "oracle_cmd": "file decoy_elf.bin -> ELF",
+ "decoy": true
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "rail9-off4(fragment)",
+ "plain": "decoding this warmup! To solve,",
+ "encoded": "svi lehwo,tasd r egmocnuToip d!",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs enc 9 4  # CyberChef Rail Fence Cipher Encode(key 9, offset 4)",
+ "oracle_cmd": "python3 -I -c 'import sys;sys.path.insert(0,sys.argv[4]);from secretpy import Zigzag;e,n,o=sys.argv[1],int(sys.argv[2]),int(sys.argv[3]);tag=Zigzag().encrypt(\"\".join(chr(0xE000+i) for i in range(o+len(e))),n);pos=[ord(c)-0xE000-o for c in tag if ord(c)-0xE000>=o];p=[None]*len(e);[p.__setitem__(i,c) for i,c in zip(pos,e)];print(\"\".join(p))' \"$encoded\" 9 4 tools/pyciphers  # secretpy 0.12.0 Zigzag has no offset: fence over o+len position tags, first o dropped = the phase shift",
+ "oracle_plain": "decoding this warmup! To solve,",
+ "expected": "match"
+}

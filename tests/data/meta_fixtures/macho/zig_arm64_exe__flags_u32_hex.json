@@ -1,0 +1,8 @@
+{
+ "field": "macho.flags_u32_hex",
+ "expected": "0x00300085",
+ "generator_cmd": "zig cc (pip ziglang 0.17.0: python -m ziglang cc) -target aarch64-macos.13.2.1 -o prog_arm64 p.c  (run in $TMPDIR/mfx)",
+ "oracle_cmd": "llvm-otool-18 -h zig_arm64_exe__flags_u32_hex.bin (decimal cputype/filetype -> 0x%08x)",
+ "decoy": false,
+ "member": "prog_arm64"
+}

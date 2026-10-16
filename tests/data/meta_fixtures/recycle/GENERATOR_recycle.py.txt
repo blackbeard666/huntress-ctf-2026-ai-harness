@@ -1,0 +1,23 @@
+# stdlib struct WRITER for Recycle Bin $I fixtures (layout per libyal/dissect: v1 = u64 1, u64 size, FILETIME,
+# 260 WCHAR path; v2 = u64 2, u64 size, FILETIME, u32 nchars incl. NUL, path). Usage: python3 -I this.py <outdir>
+import datetime, struct, sys, zlib
+out = sys.argv[1]
+def ft(s):
+    d = datetime.datetime.fromisoformat(s)
+    return (d - datetime.datetime(1601, 1, 1)) // datetime.timedelta(microseconds=1) * 10
+def v1(path, size, t):
+    return struct.pack("<QQQ", 1, size, ft(t)) + (path + "\0").encode("utf-16-le").ljust(520, b"\0")
+def v2(path, size, t):
+    p = (path + "\0").encode("utf-16-le")
+    return struct.pack("<QQQI", 2, size, ft(t), len(p) // 2) + p
+cases = {
+    "win10_v2": v2(r"C:\Users\alice\Documents\Q3 payroll.xlsx", 48213, "2026-09-14 08:31:07.123456"),
+    "win7_v1": v1(r"D:\Projects\backup-2019.zip", 1048576, "2019-03-02 23:59:58.999999"),
+    # XP-era INFO2 header (version 5, record size 0x320) -- not a $I file
+    "decoy_info2_xp": struct.pack("<IIII", 5, 0, 0, 0x320) + b"C:\\boot.ini".ljust(260, b"\0") + bytes(540),
+    # a $R twin (PNG bytes) renamed $I
+    "decoy_rfile_png": b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0)
+                       + struct.pack(">I", zlib.crc32(b"IHDR" + struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0))),
+}
+for k, v in cases.items():
+    open(f"{out}/{k}.raw", "wb").write(v)

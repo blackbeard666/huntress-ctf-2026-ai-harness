@@ -1,0 +1,9 @@
+{
+ "codec": "vigenere:lemon",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "Ymos jzvw rrnspwar xtwf hedaha! Xa gbwzq, ghmquh gsme sklgf oadaqf gz xts Tlqq Andxqf: nxfqf-slpoca-42",
+ "generator_cmd": "plain=\"$plain\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import sys,os,pycipher as P;p=os.environ['plain'];c=iter(P.Vigenere('LEMON').encipher(p) if 'e'=='e' else P.Vigenere('LEMON').decipher(p));print(''.join((lambda x:x if ch.isupper() else x.lower())(next(c)) if ch.isalpha() else ch for ch in p))\"  # pycipher Vigenere, letters-only key advance",
+ "oracle_cmd": "encoded=\"$encoded\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import os,pycipher as P;e=os.environ['encoded'];print(P.Vigenere('LEMON').decipher(e).lower())\"  # pycipher reader, letters only",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemasteramberfalcon",
+ "expected": "match"
+}

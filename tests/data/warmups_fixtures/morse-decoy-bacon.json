@@ -1,0 +1,10 @@
+{
+ "codec": "morse-alt",
+ "plain": null,
+ "encoded": "ABBAB ABAAA AAABA AABAA BABBA ABBBA BAAAB ABABA AAABB AABAA AAABA ABBBA AAABB ABAAA ABBAB AABBA",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'NICE WORK DECODING' | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/bacon_cyberchef.mjs enc 'Complete' 'A/B' '0' '0'  # CyberChef 'Bacon Cipher Encode': A/B groups of 5",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/bacon_cyberchef.mjs dec 'Complete' 'A/B' '0'  # CyberChef 'Bacon Cipher Decode' reads it -> Bacon, not Morse",
+ "oracle_plain": "NICEWORKDECODING"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "kbd:qwerty>azerty",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "Nice zork decoding this zqr,up1 To solve; sub,it this exqct qnszer to the Gq,e ?qsterM q,ber)fqlcon)'é",
+ "generator_cmd": "printf %s \"$plain\" | perl tests/data/warmups_fixtures/kbd_ckbcomp.pl 'us' 'fr'  # Debian console-setup ckbcomp (XKB data): qwerty typist on a azerty machine",
+ "oracle_cmd": "printf %s \"$encoded\" | sh tests/data/warmups_fixtures/kbd_oracle.sh 'us' 'fr'  # gawk over ckbcomp: azerty chars read back as the qwerty keys pressed",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

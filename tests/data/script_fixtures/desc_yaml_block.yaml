@@ -1,0 +1,13 @@
+pipeline:
+  name: nightly
+  stage:
+    runner: sh
+    descriptor_0d0e0f10: |
+      H4sIAAAAAAACAz2OwQrCMBBEf0htWvEi7MF/
+      8OIpLMk2DaZJSDZFYT/eWMHbDMM83gZnCRhd
+      Q0fwxjVISYEgJLRUZKNivWFYMXjjU6uCzGie
+      cB9HdRG0mJkKLMxZO2Kp3DHapBYZpt4oV5iJ
+      zaL35VBa/CUxuGb0Lmpv4XE7KqtIzaOSVsKO
+      q9dh+Or8lxO9+iXQycet29ihTh8ehXXbvAAA
+      AA==
+    retries: 2

@@ -1,0 +1,13 @@
+{
+ "encoding": "aes-ecb",
+ "expected_offset": 6840,
+ "expected_config": {
+  "c2": "nightjar.example.net:443",
+  "beacon": "aes-ecb-sha",
+  "sleep": 120,
+  "flag": "flag{sha256_d3r1v3d_k3y}"
+ },
+ "generator_cmd": "sh blk_gen.sh  # openssl enc (AES ECB/CBC/CTR), python cryptography ChaCha20, perl blk_xtea.pl (XTEA-CBC)",
+ "oracle_cmd": "sh blk_oracle.sh blk_aes_ecb_sha256.bin 6840 aes-256-ecb 'd8b2fcf730364d2a01dba1a118b16700d14f7b37d50df570aa16619777f960e6' '-'",
+ "oracle_output": "{\"offset\": 6840, \"config\": {\"c2\": \"nightjar.example.net:443\", \"beacon\": \"aes-ecb-sha\", \"sleep\": 120, \"flag\": \"flag{sha256_d3r1v3d_k3y}\"}}"
+}

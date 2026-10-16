@@ -1,0 +1,18 @@
+{
+ "encoding": "raw",
+ "expected_machine": "x86",
+ "readelf_machine": "Intel 80386",
+ "expected_machine_num": "3",
+ "endian": "little",
+ "expected_offset": 164,
+ "expected_config": {
+  "c2": "198.51.100.7:443",
+  "campaign": "tower",
+  "sleep": 9,
+  "flag": "flag{mult1_4rch}"
+ },
+ "generator_cmd": "bash march_gen.sh march_x86.bin i386-linux-gnu '{\"c2\":\"198.51.100.7:443\",\"campaign\":\"tower\",\"sleep\":9,\"flag\":\"flag{mult1_4rch}\"}' 0",
+ "oracle_cmd": "bash march_oracle.sh march_x86.bin   # GNU readelf -h/-SW, llvm-objcopy-18 --only-section=.hcfg, perl unpack (header in ELF byte order) + xor, gzip trailer crc32",
+ "oracle_output": "Intel 80386 | 3 | little | 164 | HCFG 1 0 80 2640537683 2640537683 | {\"c2\":\"198.51.100.7:443\",\"campaign\":\"tower\",\"sleep\":9,\"flag\":\"flag{mult1_4rch}\"}",
+ "note": "machine label = readelf spelling except EM_386 -> 'x86' (lib.knowledge vocabulary); expected_machine_num = decimal e_machine for kind:integer"
+}

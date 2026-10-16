@@ -1,0 +1,11 @@
+{
+ "encoding": "none",
+ "expected_facts": null,
+ "expected_offset": null,
+ "expected_config": null,
+ "decoy": true,
+ "generator_cmd": "printf '/* GNU ld script ... */\\nOUTPUT_FORMAT(elf64-x86-64)\\nGROUP ( /lib/x86_64-linux-gnu/libhcfg.so.1 ... )\\n' > solib_decoy_ldscript.bin   # glibc-style libc.so linker-script impostor named like a .so",
+ "oracle_cmd": "file solib_decoy_ldscript.bin; readelf -h solib_decoy_ldscript.bin",
+ "oracle_output": "ASCII text | readelf: Error: Not an ELF file - it has the wrong magic bytes at the start",
+ "note": "not an ELF/PE -> object_facts None (every field \"none\"), no HCFG"
+}

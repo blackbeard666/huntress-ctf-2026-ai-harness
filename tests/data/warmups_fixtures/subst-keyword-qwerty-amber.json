@@ -1,0 +1,9 @@
+{
+ "codec": "keyword:qwertyuiopasdfghjklzxcvbnm",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: spiffy-wizard-onyx-03",
+ "encoded": "Foet vgka rtegrofu ziol vqkdxh! Zg lgsct, lxwdoz ziol tbqez qflvtk zg zit Uqdt Dqlztk: lhoyyn-vomqkr-gfnb-03",
+ "generator_cmd": "kalpha=$(printf '%s' 'qwertyuiopasdfghjklzxcvbnmabcdefghijklmnopqrstuvwxyz' | awk '{s=\"\";for(i=1;i<=length($0);i++){c=substr($0,i,1);if(index(s,c)==0)s=s c}print s}'); printf '%s' \"$plain\" | tr 'a-zA-Z' \"$kalpha${kalpha^^}\"",
+ "oracle_cmd": "encoded=\"$encoded\" PYTHONPATH=tools/pyciphers python3 -c \"import os,pycipher as P;print(P.SimpleSubstitution('QWERTYUIOPASDFGHJKLZXCVBNM').decipher(os.environ['encoded']).lower())\"  # pycipher reader, letters only",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemasterspiffywizardonyx",
+ "expected": "match"
+}

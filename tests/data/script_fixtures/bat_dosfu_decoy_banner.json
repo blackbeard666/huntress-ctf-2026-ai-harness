@@ -1,0 +1,10 @@
+{
+ "_doc": "DECOY: the same substring machinery spelling a benign banner -- must not decode to a plan",
+ "lane": "script",
+ "target": "batch-substring-emulation",
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/bat_dosfu_gen.py decoy 'Windows Update Assistant - checking for updates, please wait (C:\\ProgramData\\Updater\\cache.log)' > tests/data/script_fixtures/bat_dosfu_decoy_banner.bat",
+ "oracle_cmd": ".venv/bin/bat -D -Q < tests/data/script_fixtures/bat_dosfu_decoy_banner.bat | grep '^echo ' | cut -c6-   # binref refinery batch emulator",
+ "oracle_output": "Windows Update Assistant - checking for updates, please wait (C:\\ProgramData\\Updater\\cache.log)"
+}

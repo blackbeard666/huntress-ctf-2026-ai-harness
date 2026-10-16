@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=r|role=loader|verdict=malicious|attack=T1105|adapter=http_get|stage_count=2|steps=fetch_stage,run_stage|campaign_id=R-c41d9e07|url=https://r-c41d9e07.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | bzip2 -9 | xxd -p -c0  -> literal written into desc_r_arrow_hex.R",
+ "oracle_cmd": "grep -oP 'descriptor_c41d9e07 <- \"\\K[0-9a-f]+' tests/data/script_fixtures/desc_r_arrow_hex.R | xxd -r -p | bunzip2"
+}

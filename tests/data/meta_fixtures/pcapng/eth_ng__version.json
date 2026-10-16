@@ -1,0 +1,8 @@
+{
+ "field": "pcapng.version",
+ "expected": "1.0",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcapng/GENERATOR_pcapng.sh.txt  (Wireshark 4.6.4 text2pcap/editcap/mergecap; be_ns.pcap via stdlib struct) -> eth_ng.pcapng",
+ "oracle_cmd": "file -b eth_ng.pcapng -> 'pcapng capture file - version 1.0'",
+ "decoy": false,
+ "member": "eth_ng.pcapng"
+}

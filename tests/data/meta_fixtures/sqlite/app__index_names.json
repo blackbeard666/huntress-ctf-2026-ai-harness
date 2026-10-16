@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.index_names",
+ "expected": "[\"idx_accounts_name\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_cli.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> app.db)",
+ "oracle_cmd": "sqlite3 -readonly app.db \"select json_group_array(name) from (select name from sqlite_master where type='index')\"  (SQLite 3.46.1 CLI) -> [\"idx_accounts_name\"]",
+ "decoy": false,
+ "member": "app.db"
+}

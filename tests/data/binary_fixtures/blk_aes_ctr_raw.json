@@ -1,0 +1,13 @@
+{
+ "encoding": "aes-ctr",
+ "expected_offset": 6192,
+ "expected_config": {
+  "c2": "203.0.113.40:9001",
+  "beacon": "aes-ctr-raw",
+  "sleep": 45,
+  "flag": "flag{r4w_k3y_1v_ctr}"
+ },
+ "generator_cmd": "sh blk_gen.sh  # openssl enc (AES ECB/CBC/CTR), python cryptography ChaCha20, perl blk_xtea.pl (XTEA-CBC)",
+ "oracle_cmd": "sh blk_oracle.sh blk_aes_ctr_raw.bin 6192 aes-256-ctr '06f039c94816473976474b101f4576e5d3682f3c0aceae6569a9c8ba7e6b6fd5' '276d4a9b79fe0c1333a6a91df0bd0040'",
+ "oracle_output": "{\"offset\": 6192, \"config\": {\"c2\": \"203.0.113.40:9001\", \"beacon\": \"aes-ctr-raw\", \"sleep\": 45, \"flag\": \"flag{r4w_k3y_1v_ctr}\"}}"
+}

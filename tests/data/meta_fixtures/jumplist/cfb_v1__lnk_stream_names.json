@@ -1,0 +1,8 @@
+{
+ "field": "jumplist.lnk_stream_names",
+ "expected": "[\"3\",\"4\"]",
+ "generator_cmd": "cd $TMPDIR/jl/gen; cp tests/data/meta_fixtures/jumplist/GENERATOR_jumplist_payloads.py.txt gen_payloads.py; cp .../GENERATOR_jumplist_mkcfb.js.txt mkcfb.js; /usr/bin/python3 -I gen_payloads.py stage  (pylnk3 0.4.3 LNK writer + DestList packed per libyal Jump lists format); node mkcfb.js stage/v1 v1.bin  (SheetJS cfb 1.2.2 npm CFB writer; it adds its own \\x01Sh33tJ5 stream)",
+ "oracle_cmd": "JL=$TMPDIR/jl .venv/bin/python -I ORACLE_jumplist_plaso_dtfabric.py.txt tests/data/meta_fixtures/jumplist/cfb_v1__lnk_stream_names.bin 1b4dd67f29cb1962.automaticDestinations-ms  (olefile listdir + plaso-20260720 automatic_destinations.yaml read by dtfabric-20260506 for DestList + LnkParse3 1.6.0 link_info local_base_path for each hex stream) -> key lnk_stream_names",
+ "decoy": false,
+ "member": "1b4dd67f29cb1962.automaticDestinations-ms"
+}

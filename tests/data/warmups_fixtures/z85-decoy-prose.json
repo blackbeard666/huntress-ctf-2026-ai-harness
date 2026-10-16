@@ -1,0 +1,10 @@
+{
+ "codec": "z85",
+ "plain": null,
+ "encoded": "Nice work decoding this warmup!",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup!'  # plain prose (space is outside the Z85 alphabet)",
+ "oracle_cmd": "printf %s \"$encoded\" | basenc --z85 -d  # coreutils basenc  -> rc=1 'basenc: error: invalid input'",
+ "oracle_plain": null
+}

@@ -1,0 +1,8 @@
+{
+ "field": "ico.image_count",
+ "expected": "3",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import Image; Image.new('RGBA',(64,64),(1,2,3,4)).save('three.ico',sizes=[(16,16),(32,32),(48,48)]); Image.new('RGBA',(48,48)).save('one.ico',sizes=[(48,48)])\"  (Pillow 12.3.0 writer)",
+ "oracle_cmd": "file -b three.ico -> 'MS Windows icon resource - 3 icons'",
+ "decoy": false,
+ "member": "three.ico"
+}

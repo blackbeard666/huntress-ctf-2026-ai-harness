@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "php -r: base64_encode(substr(gzdeflate('<plan>',9),0,40)) under `@eval(gzinflate(base64_decode('..')))` (truncated raw deflate)",
+ "oracle_cmd": "php -r 'var_dump(@gzinflate(base64_decode($argv[1])));' <literal>  -> bool(false)"
+}

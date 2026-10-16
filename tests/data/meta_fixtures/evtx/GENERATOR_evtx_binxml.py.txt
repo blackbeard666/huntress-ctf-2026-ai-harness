@@ -1,0 +1,291 @@
+# stdlib-only EVTX writer WITH real BinXML records (run: python3 -I GENERATOR_evtx_binxml.py.txt <outdir>).
+# Layout per libevtx "Windows XML Event Log (EVTX)": 4096-byte ElfFile header, 64 KiB ElfChnk chunks (512-byte header:
+# string table @0x80 (64 u32), template table @0x180 (32 u32), CRCs), records "**\0\0" size u64-id FILETIME BinXML size.
+# Each record = fragment header 0F 01 01 00 + TemplateInstance 0C (template defined inline on first use in a chunk,
+# referenced by chunk offset afterwards, as Windows writes it) + the substitution array. Names are inline NameStrings
+# on first use per chunk, offset references afterwards. The template is the usual <Event><System>...</System>
+# <EventData>... shape (Provider Name/Guid, EventID [Qualifiers], ..., TimeCreated SystemTime, EventRecordID,
+# Execution, Channel, Computer, Security UserID).
+import struct
+import sys
+import zlib
+
+u8 = lambda v: struct.pack("<B", v)    # noqa: E731
+u16 = lambda v: struct.pack("<H", v)   # noqa: E731
+u32 = lambda v: struct.pack("<I", v)   # noqa: E731
+u64 = lambda v: struct.pack("<Q", v)   # noqa: E731
+EPOCH_DIFF = 11644473600
+
+
+def filetime(iso, frac_100ns=0):
+    import calendar
+    import time
+    secs = calendar.timegm(time.strptime(iso, "%Y-%m-%dT%H:%M:%SZ"))
+    return (secs + EPOCH_DIFF) * 10000000 + frac_100ns
+
+
+def name_hash(s):
+    h = 0
+    for ch in s.encode("utf-16-le")[::2]:
+        h = (h * 65599 + ch) & 0xFFFFFFFF
+    return h
+
+
+def guid_le(s):
+    s = s.strip("{}").replace("-", "")
+    b = bytes.fromhex(s)
+    return b[:4][::-1] + b[4:6][::-1] + b[6:8][::-1] + b[8:]
+
+
+# ---- template description: nested tuples ----
+# ("E", name, [(attr, value)], [children])   value/child: ("T", text) | ("S", idx, type, optional)
+S = lambda i, t, opt=False: ("S", i, t, opt)   # noqa: E731
+T = lambda s: ("T", s)                           # noqa: E731
+NS = "http://schemas.microsoft.com/win/2004/08/events/event"
+
+
+def event_template(data_names):
+    system = ("E", "System", [], [
+        ("E", "Provider", [("Name", S(0, 0x01)), ("Guid", S(1, 0x0F, True))], []),
+        ("E", "EventID", [("Qualifiers", S(2, 0x06, True))], [S(3, 0x06)]),
+        ("E", "Version", [], [S(4, 0x04, True)]),
+        ("E", "Level", [], [S(5, 0x04, True)]),
+        ("E", "Task", [], [S(6, 0x06, True)]),
+        ("E", "Opcode", [], [S(7, 0x04, True)]),
+        ("E", "Keywords", [], [S(8, 0x15, True)]),
+        ("E", "TimeCreated", [("SystemTime", S(9, 0x11, True))], []),
+        ("E", "EventRecordID", [], [S(10, 0x0A, True)]),
+        ("E", "Correlation", [], []),
+        ("E", "Execution", [("ProcessID", S(11, 0x08, True)), ("ThreadID", S(12, 0x08, True))], []),
+        ("E", "Channel", [], [S(13, 0x01, True)]),
+        ("E", "Computer", [], [S(14, 0x01, True)]),
+        ("E", "Security", [("UserID", S(15, 0x13, True))], []),
+    ])
+    data = ("E", "EventData", [], [("E", "Data", [("Name", T(n))], [S(16 + i, 0x01, True)])
+                                   for i, n in enumerate(data_names)])
+    return ("E", "Event", [("xmlns", T(NS))], [system, data])
+
+
+class ChunkWriter:
+    def __init__(self):
+        self.buf = bytearray(512)
+        self.names = {}        # name -> chunk offset
+        self.templates = {}    # template id -> chunk offset
+        self.string_table = [0] * 64
+        self.template_table = [0] * 32
+
+    def pos(self):
+        return len(self.buf)
+
+    def name_ref(self, name):
+        if name in self.names:
+            self.buf += u32(self.names[name])
+            return
+        off = self.pos() + 4
+        self.buf += u32(off)
+        h = name_hash(name)
+        bucket = h % 64
+        # chain: new string's next_offset = previous head of the bucket
+        self.buf += u32(self.string_table[bucket]) + u16(h & 0xFFFF) + u16(len(name)) + name.encode("utf-16-le") + u16(0)
+        self.string_table[bucket] = off
+        self.names[name] = off
+
+    def value(self, v):
+        if v[0] == "T":
+            self.buf += b"\x05\x01" + u16(len(v[1])) + v[1].encode("utf-16-le")
+        else:
+            _, idx, typ, opt = v
+            self.buf += u8(0x0E if opt else 0x0D) + u16(idx) + u8(typ)
+
+    def element(self, e):
+        _, name, attrs, children = e
+        self.buf += u8(0x41 if attrs else 0x01) + u16(0xFFFF)
+        size_at = self.pos()
+        self.buf += u32(0)
+        self.name_ref(name)
+        if attrs:
+            al_at = self.pos()
+            self.buf += u32(0)
+            for i, (an, av) in enumerate(attrs):
+                self.buf += u8(0x46 if i < len(attrs) - 1 else 0x06)
+                self.name_ref(an)
+                self.value(av)
+            struct.pack_into("<I", self.buf, al_at, self.pos() - al_at - 4)
+        if children:
+            self.buf += b"\x02"
+            for c in children:
+                if c[0] == "E":
+                    self.element(c)
+                else:
+                    self.value(c)
+            self.buf += b"\x04"
+        else:
+            self.buf += b"\x03"
+        struct.pack_into("<I", self.buf, size_at, self.pos() - size_at - 4)
+
+    def template_instance(self, tid, guid, tmpl):
+        self.buf += b"\x0c\x01" + u32(tid)
+        if tid in self.templates:
+            self.buf += u32(self.templates[tid])
+            return
+        off = self.pos() + 4
+        self.buf += u32(off)
+        bucket = tid % 32
+        self.buf += u32(self.template_table[bucket]) + guid_le(guid)
+        size_at = self.pos()
+        self.buf += u32(0)
+        start = self.pos()
+        self.buf += b"\x0f\x01\x01\x00"
+        self.element(tmpl)
+        self.buf += b"\x00"
+        struct.pack_into("<I", self.buf, size_at, self.pos() - start)
+        self.template_table[bucket] = off
+        self.templates[tid] = off
+
+    def record(self, rid, written, tid, guid, tmpl, subs):
+        start = self.pos()
+        self.buf += u32(0x2A2A) + u32(0) + u64(rid) + u64(written)
+        self.buf += b"\x0f\x01\x01\x00"
+        self.template_instance(tid, guid, tmpl)
+        self.buf += u32(len(subs))
+        vals = b""
+        for typ, raw in subs:
+            self.buf += u16(len(raw)) + u8(typ) + b"\x00"
+            vals += raw
+        self.buf += vals + b"\x00"                          # end-of-stream after the values
+        self.buf += b"\x00" * (-(self.pos() + 4 - start) % 8)   # records are 8-byte aligned
+        size = self.pos() - start + 4
+        self.buf += u32(size)
+        struct.pack_into("<I", self.buf, start + 4, size)
+        return start
+
+    def finish(self, first_id, last_id, last_off):
+        free = self.pos()
+        hdr = bytearray(512)
+        struct.pack_into("<8sQQQQIIII", hdr, 0, b"ElfChnk\x00", first_id, last_id, first_id, last_id, 128, last_off,
+                         free, zlib.crc32(bytes(self.buf[512:free])))
+        for i, o in enumerate(self.string_table):
+            struct.pack_into("<I", hdr, 0x80 + 4 * i, o)
+        for i, o in enumerate(self.template_table):
+            struct.pack_into("<I", hdr, 0x180 + 4 * i, o)
+        struct.pack_into("<I", hdr, 124, zlib.crc32(bytes(hdr[:120]) + bytes(hdr[128:512])))
+        c = bytes(hdr) + bytes(self.buf[512:])
+        assert len(c) <= 0x10000
+        return c + b"\x00" * (0x10000 - len(c))
+
+
+def sid(s):
+    parts = s.split("-")
+    rev, auth, subs = int(parts[1]), int(parts[2]), [int(x) for x in parts[3:]]
+    return u8(rev) + u8(len(subs)) + auth.to_bytes(6, "big") + b"".join(u32(x) for x in subs)
+
+
+def subs_for(ev, rid):
+    """(type, raw) substitution list for one event dict."""
+    s = lambda t: (0x01, t.encode("utf-16-le"))   # noqa: E731
+    null = (0x00, b"")
+    out = [s(ev["provider"]),
+           (0x0F, guid_le(ev["guid"])) if ev.get("guid") else null,
+           (0x06, u16(ev["qualifiers"])) if ev.get("qualifiers") is not None else null,
+           (0x06, u16(ev["event_id"])),
+           (0x04, u8(0)), (0x04, u8(ev.get("level", 4))), (0x06, u16(ev.get("task", 0))), (0x04, u8(0)),
+           (0x15, u64(ev.get("keywords", 0x8020000000000000))),
+           (0x11, u64(filetime(ev["time"], ev.get("frac", 0)))),
+           (0x0A, u64(rid)),
+           (0x08, u32(ev.get("pid", 4))), (0x08, u32(ev.get("tid", 88))),
+           s(ev["channel"]), s(ev["computer"]),
+           (0x13, sid(ev["sid"])) if ev.get("sid") else null]
+    out += [s(v) for v in ev.get("data", [])]
+    return out
+
+
+def build_chunk(first_rid, events):
+    cw = ChunkWriter()
+    last_off = 0
+    for i, ev in enumerate(events):
+        rid = first_rid + i
+        tmpl = event_template(ev["data_names"])
+        last_off = cw.record(rid, filetime(ev["time"], ev.get("frac", 0)) + 1234, ev["tid_tmpl"], ev["tmpl_guid"],
+                             tmpl, subs_for(ev, rid))
+    return cw.finish(first_rid, first_rid + len(events) - 1, last_off)
+
+
+def evtx(minor, chunk_events, first_rid=1, flags=0):
+    chunks, rid = [], first_rid
+    for evs in chunk_events:
+        chunks.append(build_chunk(rid, evs))
+        rid += len(evs)
+    h = bytearray(4096)
+    struct.pack_into("<8sQQQIHHHH", h, 0, b"ElfFile\x00", 0, len(chunks) - 1, rid, 128, minor, 3, 4096, len(chunks))
+    struct.pack_into("<I", h, 120, flags)
+    struct.pack_into("<I", h, 124, zlib.crc32(bytes(h[:120])))
+    return bytes(h) + b"".join(chunks)
+
+
+SEC = {"provider": "Microsoft-Windows-Security-Auditing", "guid": "{54849625-5478-4994-A5BA-3E3B0328C30D}",
+       "channel": "Security", "computer": "WS-ACCT-07.corp.example.local", "tid_tmpl": 0x3A1F0C11,
+       "tmpl_guid": "{7FB1D2E1-63C9-1F5B-0B9F-9A4C2D3E4F50}", "data_names": ["SubjectUserName", "TargetUserName",
+                                                                              "LogonType"]}
+EVL = {"provider": "Microsoft-Windows-Eventlog", "guid": "{FC65DDD8-D6EF-4962-83D5-6E5CFE9CE148}",
+       "channel": "Security", "computer": "WS-ACCT-07.corp.example.local", "tid_tmpl": 0x2B40AA02,
+       "tmpl_guid": "{1A2B3C4D-0001-0002-0003-000000001102}", "data_names": ["SubjectUserName"]}
+SCM = {"provider": "Service Control Manager", "guid": "{555908D1-A6D7-4695-8E1E-26931D2012F4}", "qualifiers": 16384,
+       "channel": "System", "computer": "DC01.ad.contoso.test", "tid_tmpl": 0x10001B7C,
+       "tmpl_guid": "{0E6C3B49-5A6D-4F7E-8A9B-0C1D2E3F4A5B}", "data_names": ["param1", "param2"]}
+KRN = {"provider": "Microsoft-Windows-Kernel-General", "guid": "{A68CA8B7-004F-D7B6-A698-07E2DE0F1F5D}",
+       "channel": "System", "computer": "DC01.ad.contoso.test", "tid_tmpl": 0x10001C01,
+       "tmpl_guid": "{0E6C3B49-5A6D-4F7E-8A9B-0C1D2E3F4C01}", "data_names": ["OldTime", "NewTime"]}
+
+
+def ev(base, **kw):
+    d = dict(base)
+    d.update(kw)
+    return d
+
+
+def security_log():
+    return evtx(1, [[
+        ev(SEC, event_id=4624, time="2024-03-11T08:15:42Z", frac=1234567, sid="S-1-5-18",
+           data=["WS-ACCT-07$", "j.alvarez", "2"]),
+        ev(SEC, event_id=4672, time="2024-03-11T08:15:42Z", frac=2000000, data=["SYSTEM", "j.alvarez", "2"]),
+        ev(EVL, event_id=1102, time="2024-03-11T09:01:07Z", data=["j.alvarez"], level=4),
+        ev(SEC, event_id=4625, time="2024-03-11T09:03:55Z", data=["-", "administrator", "3"]),
+    ]], first_rid=48211)
+
+
+def system_log():
+    first = [ev(SCM, event_id=7036, time="2023-11-02T23:59:58Z", frac=5000000, data=["Windows Update", "running"]),
+             ev(KRN, event_id=1, time="2023-11-03T00:00:01Z", qualifiers=None, data=["a", "b"], level=4),
+             ev(SCM, event_id=7040, time="2023-11-03T00:00:05Z", data=["BITS", "auto start"])]
+    second = [ev(SCM, event_id=7036, time="2023-11-03T01:12:00Z", data=["BITS", "stopped"]),
+              ev(KRN, event_id=12, time="2023-11-03T01:13:00Z", qualifiers=None, data=["x", "y"]),
+              ev(SCM, event_id=7045, time="2023-11-03T01:14:31Z", data=["PSEXESVC", "demand start"])]
+    return evtx(2, [first, second], first_rid=9001, flags=1)
+
+
+def empty_log():
+    # a valid ElfFile with one chunk that holds no records (cleared log): record_count 0, record fields absent.
+    cw = ChunkWriter()
+    c = bytearray(cw.finish(0, 0, 0))
+    struct.pack_into("<Q", c, 8, 1)
+    struct.pack_into("<Q", c, 24, 1)
+    struct.pack_into("<I", c, 124, zlib.crc32(bytes(c[:120]) + bytes(c[128:512])))
+    h = bytearray(4096)
+    struct.pack_into("<8sQQQIHHHH", h, 0, b"ElfFile\x00", 0, 0, 1, 128, 1, 3, 4096, 1)
+    struct.pack_into("<I", h, 124, zlib.crc32(bytes(h[:120])))
+    return bytes(h) + bytes(c)
+
+
+def evt_legacy():
+    # Windows NT/XP .evt ELF_LOGFILE_HEADER (0x30 bytes, "LfLe") renamed .evtx -- not ElfFile.
+    h = struct.pack("<I4sIIIIIIIIII", 0x30, b"LfLe", 1, 1, 0x30, 0x30, 1, 1, 0x80000, 0, 0x80000, 0x30)
+    return h + b"\x00" * 0x200
+
+
+if __name__ == "__main__":
+    out = sys.argv[1]
+    files = {"binxml_security.bin": security_log(), "binxml_system_two_chunks.bin": system_log(),
+             "binxml_empty_log.bin": empty_log(), "decoy_evt_legacy_records.bin": evt_legacy()}
+    for name, b in files.items():
+        with open(out + "/" + name, "wb") as f:
+            f.write(b)

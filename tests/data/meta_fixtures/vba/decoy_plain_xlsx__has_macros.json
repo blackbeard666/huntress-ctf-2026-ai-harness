@@ -1,0 +1,8 @@
+{
+ "field": "vba.has_macros",
+ "expected": "false",
+ "generator_cmd": ".venv/bin/python -I -c \"import xlsxwriter; wb=xlsxwriter.Workbook('plain.xlsx'); wb.add_worksheet().write('A1','no macros'); wb.close()\"  (XlsxWriter 3.2.9 writer, renamed .xlsm)",
+ "oracle_cmd": ".venv/bin/python -I -c \"from oletools.olevba import VBA_Parser; print(VBA_Parser(f).detect_vba_macros())\" decoy_plain_xlsx__has_macros.bin  (-> False)",
+ "decoy": true,
+ "member": "invoice.xlsm"
+}

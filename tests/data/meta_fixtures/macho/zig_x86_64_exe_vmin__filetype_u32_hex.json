@@ -1,0 +1,8 @@
+{
+ "field": "macho.filetype_u32_hex",
+ "expected": "0x00000002",
+ "generator_cmd": "zig cc (pip ziglang 0.17.0: python -m ziglang cc) -target x86_64-macos.10.13 -o prog_x86 p.c  (run in $TMPDIR/mfx)",
+ "oracle_cmd": "llvm-otool-18 -h zig_x86_64_exe_vmin__filetype_u32_hex.bin (decimal cputype/filetype -> 0x%08x)",
+ "decoy": false,
+ "member": "prog_x86"
+}

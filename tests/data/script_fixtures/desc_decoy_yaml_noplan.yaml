@@ -1,0 +1,7 @@
+pipeline:
+  stage:
+    descriptor_decafbad: |
+      H4sIAAAAAAACAwXBgQ0AIAgDsFd2gFcZp5Ag
+      EMX/bYVmgXlio4ToT20gNWnqbPAoUV+owCUh
+      PPy2T2R6MgAAAA==
+    retries: 2

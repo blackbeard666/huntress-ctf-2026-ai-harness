@@ -1,0 +1,8 @@
+{
+ "field": "cert.sha256_fingerprint",
+ "expected": "1f977e46de803afd50767b2fd6c348ac2fd25553ff7b1efeac583ebed12c7c7a",
+ "generator_cmd": "openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.pem -subj \"/C=US/O=Huntress Labs/CN=Arena Root CA 2026\" -days 3650 -set_serial 0x1001 && openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -keyout leaf.key -out leaf.csr -subj \"/C=US/O=Evil Corp/CN=update.evil-cdn.example\" && printf 'subjectAltName=DNS:update.evil-cdn.example,DNS:*.evil-cdn.example,IP:10.0.0.5,DNS:cdn2.example.net\\nextendedKeyUsage=serverAuth\\n' > ext.cnf && openssl x509 -req -in leaf.csr -CA ca.pem -CAkey ca.key -set_serial 0x00c0ffee15deadbeef01 -not_before 20250314093000Z -not_after 20270101120000Z -extfile ext.cnf -outform DER -out leaf.der  (OpenSSL 3.5.5)",
+ "oracle_cmd": "openssl x509 -inform DER -in leaf.der -noout -fingerprint -sha256 (colons removed, lowercased)",
+ "decoy": false,
+ "member": "leaf.der"
+}

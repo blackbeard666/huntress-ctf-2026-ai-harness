@@ -1,0 +1,8 @@
+{
+ "field": "onenote.embedded_file_sha256s",
+ "expected": "[\"ef385c8c25bb8e5a0dd88ec2ea60c58a24d12a6f05417a7fa258d60f611a0ca4\",\"ccb7796e5695431b2d14a9acc7fa4bd0e4d9de2d86c38aa668d45eddbfc2ff29\"]",
+ "generator_cmd": "python3 -I gen.py two_files.one empty.one  (stdlib MS-ONESTORE writer: 1024-byte Header with guidFileType {7B5C52E4-...} -> root FileNodeList [FileDataStoreListReferenceFND 0x090] -> FileNodeList [FileDataStoreObjectReferenceFND 0x094 per file] -> FileDataStoreObject {BDE316E7-...} cbLength/FileData/pad8/{71FBA722-...}; payloads = a .bat dropper line and a PNG-magic blob)",
+ "oracle_cmd": ".venv/bin/python -I -c \"import sys,hashlib,json; from pyOneNote.OneDocument import OneDocment; d=OneDocment(open(sys.argv[1],'rb')); print(len(d.get_files()), json.dumps([hashlib.sha256(f['content']).hexdigest() for f in d.get_files().values()]))\" FILE  (pyOneNote 0.0.2 FileNodeList walk; file -b -> 'Microsoft OneNote') -> [\"ef385c8c25bb8e5a0dd88ec2ea60c58a24d12a6f05417a7fa258d60f611a0ca4\", \"ccb7796e5695431b2d14a9acc7fa4bd0e4d9de2d86c38aa668d45eddbfc2ff29\"]",
+ "decoy": false,
+ "member": "Meeting Notes.one"
+}

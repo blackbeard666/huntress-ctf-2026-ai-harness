@@ -1,0 +1,10 @@
+{
+ "codec": "upsidedown",
+ "plain": null,
+ "encoded": "!qumɿɒw ꙅiʜɈ pniboɔɘb ʞɿow ɘɔiN",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written mirror-writing (left-right flip, D13-style pun) of 'Nice work decoding this warmup!': ɘ ɿ ꙅ ʜ Ɉ mirror glyphs + ASCII i w m -- not a 180° flip",
+ "oracle_cmd": "PYTHONPATH=tools/pychepy python3 -c 'import sys;from chepy import Chepy;print(Chepy(sys.argv[1]).from_upside_down(reverse=True).o.decode())' \"$encoded\"  # chepy 7.2.0 from_upside_down -> still unreadable (mirror glyphs unmapped)",
+ "oracle_plain": "Nicɘ woɿk qɘcoqiud Ɉʜiꙅ wɒɿmnb!"
+}

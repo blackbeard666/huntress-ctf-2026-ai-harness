@@ -1,0 +1,8 @@
+{
+ "field": "prefetch.volume_serial_u32_hex",
+ "expected": "0x6c5b3a10",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/prefetch/GENERATOR_prefetch.py.txt <outdir>  (stdlib struct SCCA writer + MS-XCA LZXpress-Huffman compressor -> xp_v17.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib-scca .venv/bin/python -I -c \"import sys; sys.path.insert(0,'tools/pylib-scca'); import pyscca; f=pyscca.open('tests/data/meta_fixtures/prefetch/xp_v17__volume_serial_u32_hex.bin'); v=f.get_volume_information(0); print(f.format_version, f.executable_filename, '%08x' % f.prefetch_hash, f.run_count, [f.get_last_run_time(i) for i in range(8 if f.format_version>=26 else 1) if f.get_last_run_time_as_integer(i)], f.number_of_volumes, v.device_path, '%08x' % v.serial_number, v.creation_time, f.number_of_filenames, [f.get_filename(i) for i in range(f.number_of_filenames)])\"  (libyal libscca-python 20260527, pip install --target tools/pylib-scca; MAM\\\\x04 decompressed by libfwnt)",
+ "decoy": false,
+ "member": "NOTEPAD.EXE-336F32E4.pf"
+}

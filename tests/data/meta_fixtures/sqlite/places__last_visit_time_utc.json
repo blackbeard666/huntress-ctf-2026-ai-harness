@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.last_visit_time_utc",
+ "expected": "2023-11-14T22:21:40Z",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_cli.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> places.sqlite)",
+ "oracle_cmd": "sqlite3 -readonly places.sqlite \"select strftime('%Y-%m-%dT%H:%M:%SZ', max(last_visit_date)/1000000, 'unixepoch') from moz_places\"  (SQLite 3.46.1 CLI) -> 2023-11-14T22:21:40Z",
+ "decoy": false,
+ "member": "places.sqlite"
+}

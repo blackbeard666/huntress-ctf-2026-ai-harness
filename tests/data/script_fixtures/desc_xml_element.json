@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=xml|role=loader|verdict=malicious|attack=T1105|adapter=http_get|stage_count=2|steps=fetch_stage,run_stage|campaign_id=XM-44ab90cd|url=https://xml-44ab90cd.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | xxd -p -c 32  -> literal written into desc_xml_element.xml",
+ "oracle_cmd": "python3 -I -c 'import sys,xml.etree.ElementTree as E; print(E.parse(sys.argv[1]).find(\".//descriptor_44ab90cd\").text)' tests/data/script_fixtures/desc_xml_element.xml | xxd -r -p"
+}

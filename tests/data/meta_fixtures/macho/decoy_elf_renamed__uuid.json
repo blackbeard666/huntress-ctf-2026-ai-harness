@@ -1,0 +1,8 @@
+{
+ "field": "macho.uuid",
+ "expected": "none",
+ "generator_cmd": "cp /bin/true elf_true",
+ "oracle_cmd": "file decoy_elf_renamed__uuid.bin (file: ELF 64-bit LSB pie executable; llvm-otool-18 -h: not an object file) -> not Mach-O -> none",
+ "decoy": true,
+ "member": "elf_true"
+}

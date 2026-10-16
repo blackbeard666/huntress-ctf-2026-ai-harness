@@ -1,0 +1,45 @@
+Return-Path: <bounce-7731@mailer.invoice-portal.example>
+Received: from mx-relay.corp.example (mx-relay.corp.example [10.20.30.40]) by
+ mail.corp.example (Postfix) with ESMTPS id 4XyZ1; Tue, 14 Oct 2026 09:12:07
+ +0000 (UTC)
+Received: from smtp-out.invoice-portal.example (unknown [198.51.100.23]) by
+ mx-relay.corp.example with ESMTP id k2Ab; Tue, 14 Oct 2026 09:12:05 +0000
+Received: from [192.168.56.101] (dsl-203-0-113-77.isp.example [203.0.113.77])
+ by smtp-out.invoice-portal.example (Postfix) with ESMTPSA id 9QwE; Tue, 14
+ Oct 2026 17:12:01 +0800
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+ d=invoice-portal.example; s=sel2026; t=1792000321; h=from:to:subject:date;
+ bh=47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=; b=AAAA
+From: "Accounts Payable" <ap@invoice-portal.example>
+To: Finance Team <finance@corp.example>
+Subject: =?utf-8?q?=C3=9Cberf=C3=A4llige_Rechnung_=234471_=E2=80=93?= action
+ required
+Date: Wed, 14 Oct 2026 17:11:58 +0800
+Message-ID: <20261014171158.4471.ap@invoice-portal.example>
+X-Mailer: Microsoft Outlook 16.0
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="===============8453690624095983149=="
+
+--===============8453690624095983149==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Please see the attached invoice.
+
+--===============8453690624095983149==
+Content-Type: application/pdf
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="Invoice_4471.pdf"
+MIME-Version: 1.0
+
+JVBERi0xLjQKJWZha2UK
+
+--===============8453690624095983149==
+Content-Type: application/zip
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="remittance details.zip"
+MIME-Version: 1.0
+
+UEsDBGZha2U=
+
+--===============8453690624095983149==--

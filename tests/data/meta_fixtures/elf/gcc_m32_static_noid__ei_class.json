@@ -1,0 +1,8 @@
+{
+ "field": "elf.ei_class",
+ "expected": "ELFCLASS32",
+ "generator_cmd": "gcc -m32 -static -nostdlib -ffreestanding -Wl,--build-id=none -o x86_static_noid s.c   (s.c: void _start(void){for(;;);})  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW gcc_m32_static_noid__ei_class.bin | grep Class: (ELF64 -> gABI ELFCLASS64)",
+ "decoy": false,
+ "member": "x86_static_noid"
+}

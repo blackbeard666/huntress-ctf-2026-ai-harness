@@ -1,0 +1,9 @@
+{
+ "codec": "math-double-struck",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-quartz-58",
+ "encoded": "ℕ𝕚𝕔𝕖 𝕨𝕠𝕣𝕜 𝕕𝕖𝕔𝕠𝕕𝕚𝕟𝕘 𝕥𝕙𝕚𝕤 𝕨𝕒𝕣𝕞𝕦𝕡! 𝕋𝕠 𝕤𝕠𝕝𝕧𝕖, 𝕤𝕦𝕓𝕞𝕚𝕥 𝕥𝕙𝕚𝕤 𝕖𝕩𝕒𝕔𝕥 𝕒𝕟𝕤𝕨𝕖𝕣 𝕥𝕠 𝕥𝕙𝕖 𝔾𝕒𝕞𝕖 𝕄𝕒𝕤𝕥𝕖𝕣: 𝕛𝕒𝕕𝕖-𝕢𝕦𝕒𝕣𝕥𝕫-𝟝𝟠",
+ "generator_cmd": "perl -CSA tests/data/warmups_fixtures/unistyle_perl.pl DOUBLE-STRUCK \"$plain\"  # Perl charnames; reserved C/H/N/P/Q/R/Z -> DOUBLE-STRUCK CAPITAL x (U+21xx)",
+ "oracle_cmd": "printf %s \"$encoded\" | uconv -x '::NFKC;'  # ICU NFKC compatibility fold",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-quartz-58",
+ "expected": "match"
+}

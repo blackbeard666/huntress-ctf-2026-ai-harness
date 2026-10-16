@@ -1,0 +1,13 @@
+{
+ "codec": "playfair-stream-upper:monarchy",
+ "key": "monarchy",
+ "hints": [
+  "Long Live the Monarchy"
+ ],
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-31",
+ "encoded": "AGELVNDTCKHMBKYQPDSXXNMOVLPRPAPUILXCAESZPDSXIUMBSRAQUGDZRPCFINCLORTLKMROCIOKMSHMAW",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitxthisexactanswertothegamemasteramberfalconx",
+ "generator_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import secretpy as S; S.Playfair().encrypt(LETTERS, KEY)\".upper()  # letters of the sentence, lowercased, J->I",
+ "oracle_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import pycipher as P; print(P.Playfair(SQUARE(KEY)).decipher(encoded).lower())\"  # SQUARE = keyword letters (J->I) deduped + rest of A-Z sans J; raw output keeps the X fillers",
+ "expected": "match"
+}

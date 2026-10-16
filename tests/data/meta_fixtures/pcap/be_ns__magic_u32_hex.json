@@ -1,0 +1,8 @@
+{
+ "field": "pcap.magic_u32_hex",
+ "expected": "0xa1b23c4d",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcap/GENERATOR_pcap.sh.txt  (Wireshark 4.6.4 text2pcap/editcap/mergecap; be_ns.pcap via stdlib struct) -> be_ns.pcap",
+ "oracle_cmd": ".venv/bin/python -I -c \"import dpkt; r=dpkt.pcap.Reader(open('be_ns.pcap','rb')); print(r.datalink(), r.snaplen, hex(r._Reader__fh.magic))\" (dpkt 1.9.8); file -b be_ns.pcap -> 'nanosecond ts (big-endian)'",
+ "decoy": false,
+ "member": "be_ns.pcap"
+}

@@ -1,0 +1,19 @@
+{
+ "encoding": "upx-raw",
+ "expected_offset": 14336,
+ "expected_config": {
+  "c2": "172.16.9.9:8080",
+  "beacon": "upx-pe",
+  "sleep": 60,
+  "flag": "flag{upx_p3_unp4ck3d}"
+ },
+ "decoy": false,
+ "packed_sha256": "e439f08d80454ed5bf75d8db885ba40fc85de94b1dee52d30fdbe32b36385b3c",
+ "answered_from": {
+  "sha256/md5/size": "packed artifact bytes (as handed out)",
+  "format/has_hcfg_section/section names/hcfg offset+config": "UNPACKED image (upx -d layout) via lib.binary.upx_unpack"
+ },
+ "generator_cmd": "PY=.venv/bin/python sh tests/data/binary_fixtures/upx_gen.sh tests/data/binary_fixtures  (gcc -O2 + lief add_section on setuptools cli-64.exe, then upx -9 4.2.4; scrub = UPX! zeroed, UPX0/1 -> .pk0/.pk1)",
+ "oracle_cmd": "sh tests/data/binary_fixtures/upx_oracle.sh upx_pe_scrub.bin upx_pe.bin   (restore magic from twin, real `upx -d` on a copy, readelf -SW / pefile .hcfg PointerToRawData, python zlib.crc32+json at that offset)",
+ "oracle_output": "14336 {\"c2\": \"172.16.9.9:8080\", \"beacon\": \"upx-pe\", \"sleep\": 60, \"flag\": \"flag{upx_p3_unp4ck3d}\"}"
+}

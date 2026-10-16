@@ -1,0 +1,9 @@
+{
+ "codec": "rot18",
+ "plain": null,
+ "encoded": "4e69636520776f726b20646563",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work dec' | xxd -p  -> hex: digits inside letter tokens -> not rot5 prose",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p  -> 'Nice work dec' (a hex line, not ROT18)"
+}

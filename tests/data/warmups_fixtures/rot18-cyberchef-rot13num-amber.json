@@ -1,0 +1,9 @@
+{
+ "codec": "rot13-num",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "Avpr jbex qrpbqvat guvf jnezhc! Gb fbyir, fhozvg guvf rknpg nafjre gb gur Tnzr Znfgre: nzore-snypba-75",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/rot13_cyberchef.mjs 13 1 1 1  # CyberChef \"ROT13\" amount 13, Rotate numbers on (digits +13%10 = +3)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/rot13_cyberchef.mjs -13 1 1 1  # CyberChef \"ROT13\" amount -13, Rotate numbers on",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

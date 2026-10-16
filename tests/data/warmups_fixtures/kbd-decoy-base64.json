@@ -1,0 +1,17 @@
+{
+ "codec": "kbd",
+ "plain": null,
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwIQ==",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup!' | base64 -w0  # base64, not a layout swap",
+ "oracle_cmd": "for p in 'us|us dvorak' 'us dvorak|us' 'us|us colemak' 'us colemak|us' 'us|fr' 'fr|us'; do printf %s \"$encoded\" | sh tests/data/warmups_fixtures/kbd_oracle.sh \"${p%|*}\" \"${p#*|}\"; done  # every reading back is non-English -> no layout swap",
+ "oracle_plain": {
+  "qwerty>dvorak": "Kmpc?:N3n3CoGUOpT29va<5lGJOsaBMuh2YtnB>,GX]]",
+  "qwerty>colemak": "FmuyZDB3b3YsLTSuO29naW5jLHS;aXMtg2EobXVwLQ==",
+  "qwerty>azerty": "T;ljWSB#b#JrIGRlY@(kqZ%nIHRoqX:gd@FybXVzIA==",
+  "dvorak>qwerty": "Ymnh:OX3x3HpCIPnF29ta<5bCDPraQMie2UfxQK,C\"]]",
+  "colemak>qwerty": "GminZRB3b3NpUDPiJ29eaW5kUHPyaXMds2TjbXVwUQ==",
+  "azerty>qwerty": "T,ljWSB\"b\"JrIGRlYéçkqZ(nIHRoqX?gdéFybXVzIA=="
+ }
+}

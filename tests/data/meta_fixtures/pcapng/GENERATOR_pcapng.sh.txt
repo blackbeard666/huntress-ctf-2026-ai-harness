@@ -1,0 +1,12 @@
+# Fixture generation (offline, Wireshark 4.6.4 tools + a stdlib struct writer for the big-endian file).
+# pk.txt = 3 Ethernet ARP frames as a text2pcap hex dump, each preceded by "2026-03-14 09:26:53.589793" style stamps
+TZ=UTC text2pcap -q -F pcap   -t "%Y-%m-%d %H:%M:%S.%f" -m 1514 pk.txt eth_us.pcap
+TZ=UTC text2pcap -q -F pcapng -t "%Y-%m-%d %H:%M:%S.%f" -N huntress0 pk.txt eth_ng.pcapng
+TZ=UTC text2pcap -q -F pcapng -t "%Y-%m-%d %H:%M:%S.%f" -N wlan_mon -l 105 pk.txt ifb.pcapng
+editcap -F nsecpcap eth_us.pcap eth_ns.pcap
+editcap -T rawip4 -C 14 -F pcap -s 96 eth_us.pcap raw_cut.pcap
+editcap -F pcapng eth_us.pcap conv.pcapng
+editcap -F snoop eth_us.pcap decoy_snoop.pcap          # Sun snoop impostor named .pcap
+mergecap -F pcapng -w multi.pcapng eth_ng.pcapng ifb.pcapng
+head -c 150 eth_us.pcap > trunc.pcap                   # cut inside the 3rd record
+python3 -I -c "import struct; recs=[(1700000000,123456789,b'\x45'+b'\x00'*19),(1700000005,0,b'\x45'+b'\x00'*27)]; out=struct.pack('>IHHiIII',0xa1b23c4d,2,4,0,0,65535,101); out+=b''.join(struct.pack('>IIII',s,f,len(d),len(d))+d for s,f,d in recs); open('be_ns.pcap','wb').write(out)"

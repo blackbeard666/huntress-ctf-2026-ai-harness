@@ -1,0 +1,10 @@
+{
+ "material": "NBSWY3DPEB3W64TMMQWCA3TPORUGS3THEB2G6IDTMVSSA2LOEB2GQ2LTEBUGC4TNNRSXG4ZAON2HE2LOM4QG62Y=",
+ "rep": "base32_text",
+ "transform": "identity",
+ "key": "",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "printf %s 'hello world, nothing to see in this harmless string ok' | base32 -w0",
+ "oracle_cmd": "printf %s '<material>' | base32 -d  # -> harmless text, not a v= plan"
+}

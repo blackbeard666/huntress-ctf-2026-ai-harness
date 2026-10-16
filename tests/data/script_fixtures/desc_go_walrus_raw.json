@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=go|role=loader|verdict=malicious|attack=T1105|adapter=http_get|stage_count=2|steps=fetch_stage,run_stage|campaign_id=GO-9b2e44aa|url=https://go-9b2e44aa.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | xz -9 | base32 -w 56  -> literal written into desc_go_walrus_raw.go",
+ "oracle_cmd": "go run tests/data/script_fixtures/desc_go_walrus_raw.go | base32 -d | unxz"
+}

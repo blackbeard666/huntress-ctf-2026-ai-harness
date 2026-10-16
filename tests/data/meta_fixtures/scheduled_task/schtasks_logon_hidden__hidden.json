@@ -1,0 +1,8 @@
+{
+ "field": "scheduled_task.hidden",
+ "expected": "true",
+ "generator_cmd": "sh tests/data/meta_fixtures/task/GENERATOR_iconv_schtasks.sh.txt OUTDIR  (printf BOM + iconv -f UTF-8 -t UTF-16LE of a schtasks /query /xml-layout task, CRLF)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/task/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/scheduled_task/schtasks_logon_hidden__hidden.bin hidden -> true",
+ "decoy": false,
+ "member": "OneDrive Sync Helper"
+}

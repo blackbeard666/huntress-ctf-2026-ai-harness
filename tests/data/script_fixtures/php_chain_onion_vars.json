@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=php|role=loader|verdict=malicious|attack=T1027|stage_count=3|steps=peel,peel,run|campaign_id=PH-77d0be41|url=https://php-77d0be41.example.invalid/s3",
+ "decoy": false,
+ "generator_cmd": "php -r: c3=\"$plan = '<plan>';\"; c2=\"eval(convert_uudecode(urldecode('\".urlencode(convert_uuencode(c3)).\"')));\"; c2b=\"eval(strrev(hex2bin(\\\"\".bin2hex(strrev(c2)).\"\\\")));\"; b=strrev(base64_encode(gzcompress(c2b,9))) split into $k1/$k2; outer `@eval(gzuncompress(base64_decode(strrev($k1 . $k2))));`",
+ "oracle_cmd": "php -r 'include $argv[1]; echo $plan;' tests/data/script_fixtures/php_chain_onion_vars.php"
+}

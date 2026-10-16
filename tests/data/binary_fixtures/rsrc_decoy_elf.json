@@ -1,0 +1,15 @@
+{
+ "encoding": null,
+ "expected_offset": "none",
+ "expected_config": "none",
+ "decoy": true,
+ "expected_overlay": {
+  "has_overlay": false,
+  "overlay_offset": null
+ },
+ "expected_locate": null,
+ "oracle_cmd": "PY=.venv/bin/python bash tests/data/binary_fixtures/rsrc_oracle.sh tests/data/binary_fixtures   # lief has_overlay; readelf -hW e_shoff+shnum*shentsize == file size; grep -c HCFG",
+ "oracle_output": "lief has_overlay False | 12600 + 27*64 = 14328 = size | HCFG hits: 0",
+ "note": "the overlay fixture's gcc ELF with nothing appended",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/rsrc_gen.sh tests/data/binary_fixtures   # dotnet 10 (Roslyn) + llvm-rc-18 / gcc -O2 -s / javac+jar; blob = printf header + crc32 from gzip trailer"
+}

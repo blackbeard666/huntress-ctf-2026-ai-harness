@@ -1,0 +1,8 @@
+{
+ "field": "gzip.header_mtime",
+ "expected": "2019-12-31T23:59:59Z",
+ "generator_cmd": "printf 'hello world\\n' > 'Report Final.txt'; touch -d '2019-12-31 23:59:59 UTC' 'Report Final.txt'; 7za a -tgzip -mx=9 sevenzip.gz 'Report Final.txt'",
+ "oracle_cmd": "TZ=UTC file -b sevenzip.gz -> last modified: Tue Dec 31 23:59:59 2019",
+ "decoy": false,
+ "member": "sevenzip.gz"
+}

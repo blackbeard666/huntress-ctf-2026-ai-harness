@@ -1,0 +1,8 @@
+{
+ "field": "x509.subject_cn",
+ "expected": "Acme Internal Signing",
+ "generator_cmd": "openssl req -x509 -newkey rsa:2048 -nodes -keyout ss.key -out selfsigned.pem -subj \"/O=Acme/OU=Ops/CN=Acme Internal Signing\" -set_serial 7 -not_before 19991231230000Z -not_after 20510630235959Z -addext \"subjectAltName=DNS:sign.acme.local\"  (OpenSSL 3.5.5; notBefore UTCTime, notAfter GeneralizedTime)",
+ "oracle_cmd": "openssl x509 -inform PEM -in selfsigned.pem -noout -subject -nameopt RFC2253 -> CN=Acme Internal Signing,OU=Ops,O=Acme",
+ "decoy": false,
+ "member": "selfsigned.pem"
+}

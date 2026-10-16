@@ -1,0 +1,135 @@
+"""Stdlib struct writer for Windows registry hives WITH a key tree and values (nk/lh/lf/ri/vk/value-list cells).
+Usage: python3 -I GENERATOR_regf_keys.py.txt <outdir>
+Writes ntuser_run_ua.bin (Software\\...\\Run + RunOnce decoy + UserAssist ROT13 Count keys, ri index, UTF-16 key
+name), software_run.bin (SOFTWARE-hive layout: Microsoft\\Windows\\CurrentVersion\\Run at the root, root value) and
+system_norun.bin (regf with neither Run nor UserAssist -> "none")."""
+import codecs
+import struct
+import sys
+
+out = sys.argv[1]
+
+
+class Hive:
+    def __init__(self):
+        self.cells = bytearray()
+
+    def alloc(self, payload):
+        off = 0x20 + len(self.cells)
+        size = (len(payload) + 4 + 7) & ~7
+        self.cells += struct.pack("<i", -size) + payload + b"\0" * (size - 4 - len(payload))
+        return off
+
+    def patch(self, off, at, fmt, *vals):
+        struct.pack_into(fmt, self.cells, off - 0x20 + 4 + at, *vals)
+
+
+def utf16(s):
+    return s.encode("utf-16-le")
+
+
+def build(seq, base_ts, root):
+    """root = (name, ts, [values], [children], index_kind); value = (name, type, data bytes)."""
+    h = Hive()
+    sd = struct.pack("<BBHIIII", 1, 0, 0x8004, 0, 0, 0, 0)
+    sk = h.alloc(b"sk\0\0" + struct.pack("<IIII", 0, 0, 1, len(sd)) + sd)
+    h.patch(sk, 4, "<II", sk, sk)
+
+    def key(node, parent):
+        name, ts, values, children, kind = node
+        comp = all(ord(c) < 128 for c in name) and not name.startswith("~")
+        nm = name.encode("latin-1") if comp else utf16(name.lstrip("~"))
+        flags = (0x20 if comp else 0) | (0x2C if parent is None else 0)
+        nk = h.alloc(b"nk" + struct.pack("<HQIIIIIIIIIIIIIIIHH", flags, ts, 0, parent or 0, 0, 0, 0xFFFFFFFF,
+                                         0xFFFFFFFF, 0, 0xFFFFFFFF, sk, 0xFFFFFFFF, 0, 0, 0, 0, 0, len(nm), 0) + nm)
+        offs = [key(c, nk) for c in children]
+        if offs:
+            names = [c[0].lstrip("~") for c in children]
+            if kind == "ri":
+                half = (len(offs) + 1) // 2
+                lists = [h.alloc(b"li" + struct.pack("<H", len(part)) + b"".join(struct.pack("<I", o) for o in part))
+                         for part in (offs[:half], offs[half:]) if part]
+                lst = h.alloc(b"ri" + struct.pack("<H", len(lists)) + b"".join(struct.pack("<I", o) for o in lists))
+            elif kind == "lf":
+                lst = h.alloc(b"lf" + struct.pack("<H", len(offs)) + b"".join(
+                    struct.pack("<I", o) + n.encode("latin-1", "replace")[:4].ljust(4, b"\0") for o, n in zip(offs, names)))
+            else:
+                def lhash(n):
+                    v = 0
+                    for c in n.upper():
+                        v = (v * 37 + ord(c)) & 0xFFFFFFFF
+                    return v
+                lst = h.alloc(b"lh" + struct.pack("<H", len(offs)) + b"".join(
+                    struct.pack("<II", o, lhash(n)) for o, n in zip(offs, names)))
+            h.patch(nk, 0x14, "<I", len(offs))
+            h.patch(nk, 0x1C, "<I", lst)
+        if values:
+            vks = []
+            for vn, vt, vd in values:
+                vnb = vn.encode("latin-1")
+                if len(vd) <= 4:
+                    size, doff = 0x80000000 | len(vd), struct.unpack("<I", vd.ljust(4, b"\0"))[0]
+                else:
+                    size, doff = len(vd), h.alloc(vd)
+                vks.append(h.alloc(b"vk" + struct.pack("<HIIIHH", len(vnb), size, doff, vt, 1, 0) + vnb))
+            vl = h.alloc(b"".join(struct.pack("<I", o) for o in vks))
+            h.patch(nk, 0x24, "<II", len(vks), vl)
+        return nk
+
+    root_off = key(root, None)
+    body = bytes(h.cells)
+    hbin_size = (0x20 + len(body) + 8 + 0xFFF) & ~0xFFF
+    free = hbin_size - 0x20 - len(body)
+    hbin = b"hbin" + struct.pack("<IIQQI", 0, hbin_size, 0, base_ts, 0) + body + struct.pack("<i", free) + b"\0" * (free - 4)
+    fn = utf16("\\??\\C:\\Users\\ana\\ntuser.dat")[:64].ljust(64, b"\0")
+    base = b"regf" + struct.pack("<IIQIIIIIII", seq, seq, base_ts, 1, 5, 0, 1, root_off, hbin_size, 1) + fn
+    base = base.ljust(508, b"\0")
+    ck = 0
+    for i in range(0, 508, 4):
+        ck ^= struct.unpack_from("<I", base, i)[0]
+    base += struct.pack("<I", ck)
+    return base.ljust(0x1000, b"\0") + hbin
+
+
+def sz(s):
+    return utf16(s + "\0")
+
+
+def ft(unix):
+    return (unix + 11644473600) * 10000000
+
+
+T = ft(1789970635)                        # 2026-09-21T06:03:55Z (base block)
+ua_blob = b"\0" * 72
+r13 = lambda s: codecs.encode(s, "rot13")  # noqa: E731
+run = ("Run", T - 50, [("OneDrive", 1, sz('"C:\\Users\\ana\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe" /background')),
+                       ("SecurityHealth", 2, sz("%windir%\\system32\\SecurityHealthSystray.exe")),
+                       ("Updater", 1, sz("C:\\ProgramData\\upd\\svchost.exe -k netsvcs"))], [], "lh")
+runonce = ("RunOnce", T - 40, [("Decoy", 1, sz("C:\\decoy.exe"))], [], "lh")
+ua1 = ("{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}", T - 30, [], [
+    ("Count", T - 30, [(r13("UEME_CTLSESSION"), 3, b"\x01" * 1612),
+                       (r13("{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\cmd.exe"), 3, ua_blob),
+                       (r13("C:\\Users\\ana\\Downloads\\invoice_2026.exe"), 3, ua_blob)], [], "lh")], "lh")
+ua2 = ("{F4E57C4B-2036-45F0-A9AB-443BCFE33D9F}", T - 20, [], [
+    ("Count", T - 20, [(r13("{0139D44E-6AFE-49F2-8690-3DAFCAE6FFB8}\\Accessories\\Notepad.lnk"), 3, ua_blob)], [], "lh")], "lh")
+explorer = ("Explorer", T - 60, [], [("UserAssist", T - 60, [], [ua1, ua2], "lf")], "lh")
+cv = ("CurrentVersion", T - 70, [], [explorer, run, runonce], "lh")
+software = ("Software", T - 80, [], [("Microsoft", T - 90, [], [("Windows", T - 95, [], [cv], "lh")], "lh"),
+                                     ("~Políticas", T - 99, [], [], "lh")], "ri")
+ntuser = ("CsiTool-CreateHive-{00000000-0000-0000-0000-000000000000}", ft(1789970000),
+          [], [("Console", T - 200, [("FaceName", 1, sz("Consolas"))], [], "lh"),
+               ("Environment", T - 300, [("TEMP", 2, sz("%USERPROFILE%\\AppData\\Local\\Temp"))], [], "lh"), software], "lh")
+open(out + "/ntuser_run_ua.bin", "wb").write(build(77, T, ntuser))
+
+T2 = ft(1700000000)                       # 2023-11-14T22:13:20Z
+srun = ("Run", T2 - 10, [("VMware User Process", 1, sz('"C:\\Program Files\\VMware\\VMware Tools\\vmtoolsd.exe" -n vmusr')),
+                         ("Flag", 4, struct.pack("<I", 1))], [], "lh")
+soft = ("CMI-CreateHive{199DAFC2-6F16-4946-BF90-5A3FC3A60902}", T2 - 3600,
+        [("LastBoot", 4, struct.pack("<I", 7))],
+        [("Classes", T2 - 7000, [], [], "lh"),
+         ("Microsoft", T2 - 500, [], [("Windows", T2 - 400, [], [("CurrentVersion", T2 - 300, [], [srun], "lh")], "lh")], "lh")], "lh")
+open(out + "/software_run.bin", "wb").write(build(9, T2, soft))
+
+sysh = ("ROOT", T2 + 5, [], [("ControlSet001", T2 + 4, [], [("Control", T2 + 3, [("SystemStartOptions", 1, sz(" NOEXECUTE=OPTIN"))], [], "lh")], "lh"),
+                             ("Select", T2 + 2, [("Current", 4, struct.pack("<I", 1))], [], "lh")], "lh")
+open(out + "/system_norun.bin", "wb").write(build(3, T2 + 9, sysh))

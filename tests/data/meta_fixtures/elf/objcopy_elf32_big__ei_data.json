@@ -1,0 +1,8 @@
+{
+ "field": "elf.ei_data",
+ "expected": "ELFDATA2MSB",
+ "generator_cmd": "printf hello > blob; objcopy -I binary -O elf32-big blob be.o  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW objcopy_elf32_big__ei_data.bin | grep Data: (little endian -> ELFDATA2LSB)",
+ "decoy": false,
+ "member": "be.o"
+}

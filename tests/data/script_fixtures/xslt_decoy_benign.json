@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/xslt_gen.py  (benign text | base64 in an escaped VBS msxsl:script)",
+ "oracle_cmd": "python3 -I -c 'import sys,re,lxml.etree as E; t=E.parse(sys.argv[1]).find(\".//{urn:schemas-microsoft-com:xslt}script\").text; print(\"\".join(re.findall(r\"\\\"([A-Za-z0-9+/=]{8,})\\\"\", t)))' tests/data/script_fixtures/xslt_decoy_benign.xsl | base64 -d  # -> benign sentence, no v=3 plan"
+}

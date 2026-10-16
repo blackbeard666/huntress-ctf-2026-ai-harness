@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=tcl|role=loader|verdict=malicious|attack=T1105|adapter=http_get|stage_count=2|steps=fetch_stage,run_stage|campaign_id=TC-7f3a01c2|url=https://tcl-7f3a01c2.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | gzip -n9 | base64 -w 40  -> literal written into desc_tcl_set_braces.tcl",
+ "oracle_cmd": "tclsh <(cat tests/data/script_fixtures/desc_tcl_set_braces.tcl; echo 'puts -nonewline [string map {\"\\n\" \"\"} $descriptor_7f3a01c2]') | base64 -d | gunzip"
+}

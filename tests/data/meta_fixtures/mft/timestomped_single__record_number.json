@@ -1,0 +1,8 @@
+{
+ "field": "mft.record_number",
+ "expected": 1337,
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/mft/GENERATOR_mft_struct.py.txt <outdir>  (stdlib struct FILE-record writer, update-sequence fixups applied -> timestomped_single.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib-dissect .venv/bin/python -P tests/data/meta_fixtures/mft/ORACLE_mft_dissect.py.txt /home/testpwn/huntress-2026/.run/tmp/mftgen/timestomped_single.bin 0  (dissect.ntfs 3.16 MftRecord.from_bytes; record_number = od -An -tu4 -j44 -N4; cross-checked with the Rust `mft` 0.7.0 parser: PYTHONPATH=tools/pylib-mft python -P -c 'import mft; [print(e) for e in mft.PyMftParser(p).entries_json()]')",
+ "decoy": false,
+ "member": "invoice_record.bin"
+}

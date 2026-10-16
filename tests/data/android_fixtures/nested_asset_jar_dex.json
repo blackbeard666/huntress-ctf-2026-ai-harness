@@ -1,0 +1,6 @@
+{
+ "entry": "nested_scan",
+ "expected": "ANS-e20f9a7731cb4d08",
+ "generator_cmd": "zip -9 -X assets/plugin.jar classes.dex(s=ANS-e20f9a7731cb4d08); zip -9 -X nested_asset_jar_dex.apk classes.dex(near.dex) assets/plugin.jar  # apktool d -r exported_trust.apk -o proj; replace smali/ with one class `const-string v0, \"<s>\"`; apktool b -o x.apk proj; unzip -p x.apk classes.dex > <name>.dex",
+ "oracle_cmd": "unzip -p nested_asset_jar_dex.apk assets/plugin.jar > p.jar && unzip -p p.jar classes.dex | strings | grep -oE 'ANS-[0-9a-f]{16}'"
+}

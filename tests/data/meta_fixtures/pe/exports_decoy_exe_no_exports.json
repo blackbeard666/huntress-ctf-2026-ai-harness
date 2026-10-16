@@ -1,0 +1,7 @@
+{
+ "field": "pe.export_names",
+ "expected": "none",
+ "generator_cmd": "cp tools/ghidra/docs/GhidraClass/ExerciseFiles/VersionTracking/WallaceSrc.exe (MSVC 2010 Debug build, Rich + RSDS) tests/data/meta_fixtures/pe/exports_decoy_exe_no_exports.bin  (unmodified)",
+ "oracle_cmd": ".venv/bin/python -c \"import pefile,sys,json;p=pefile.PE(sys.argv[1]);print(json.dumps([s.name.decode() for s in p.DIRECTORY_ENTRY_EXPORT.symbols]) if hasattr(p,'DIRECTORY_ENTRY_EXPORT') else 'none')\" tests/data/meta_fixtures/pe/exports_decoy_exe_no_exports.bin  ; cross-check: objdump -p ([Ordinal/Name Pointer] Table, same order)",
+ "decoy": true
+}

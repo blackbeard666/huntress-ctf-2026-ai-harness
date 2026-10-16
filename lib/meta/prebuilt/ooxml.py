@@ -12,7 +12,23 @@ An OOXML file is an OPC zip package (ECMA-376 Part 2). Parts read here:
 Values are the element text exactly as stored (trimmed). Timestamps: dcterms:created/modified are W3CDTF TEXT in the
 part (Office writes "YYYY-MM-DDTHH:MM:SSZ", already ISO-8601 UTC) -> returned verbatim, no epoch conversion (exiftool
 reformats them as "YYYY:MM:DD HH:MM:SSZ"; the stored form is the natural ISO spelling). app.xml numbers stay as stored.
-Not a zip / no [Content_Types].xml (not an OPC package) -> "none"; element absent or empty -> "none"."""
+Not a zip / no [Content_Types].xml (not an OPC package) -> "none"; element absent or empty -> "none".
+
+Package-structure siblings of the GM-verified D15 ooxml.external_relationship_targets (same walk: EVERY *.rels part):
+  custom_properties   docProps/custom.xml (custom-properties rel, else the conventional name): {name: value} as
+                      compact JSON, keys SORTED (D15 law for gathered sets); the value is the vt:* child's stored
+                      TEXT ("42", "true", "2026-10-01T00:00:00Z" -- no retyping). custom_property_names = sorted
+                      names, custom_property_count = int, custom_property_<name> = one value (name matched
+                      case-insensitively, non-alphanumerics folded to "_").
+  attached_template_target   Target of the .../relationships/attachedTemplate relationship (word/_rels/
+                      settings.xml.rels; remote-template injection points it at an http(s)/UNC URL), verbatim.
+  internal_relationship_targets   every Relationship WITHOUT TargetMode="External", sorted (duplicates kept).
+  relationship_types  distinct Type URIs across all rels parts, sorted.
+  hyperlink_count     relationships whose Type ends "/hyperlink" (internal or external), int.
+  embedded_object_names   zip members under an "embeddings/" folder (full part names, sorted).
+  main_part_content_type  content type of the package officeDocument relationship target from [Content_Types].xml
+                      (Override by PartName, else Default by extension), verbatim.
+Absent part / relationship -> "none"; empty gathered set -> "[]" (a count -> 0)."""
 import io
 import re
 import zipfile
@@ -79,10 +95,40 @@ FIELDS = {
     ("ooxml", "content_types_entry_count"): "content_types",
     ("ooxml", "content_types_default_count"): "content_types",
     ("ooxml", "content_types_override_count"): "content_types",
+    ("ooxml", "custom_properties"): "custom_properties",
+    ("ooxml", "custom_props"): "custom_properties",
+    ("ooxml", "custom_document_properties"): "custom_properties",
+    ("ooxml", "custom_property_names"): "custom_properties",
+    ("ooxml", "custom_property_count"): "custom_properties",
+    ("ooxml", "custom_properties_count"): "custom_properties",
+    ("ooxml", "custom_property_*"): "custom_properties",
+    ("ooxml", "attached_template_target"): "attached_template_target",
+    ("ooxml", "attached_template"): "attached_template_target",
+    ("ooxml", "attached_template_url"): "attached_template_target",
+    ("ooxml", "remote_template_target"): "attached_template_target",
+    ("ooxml", "template_target"): "attached_template_target",
+    ("ooxml", "internal_relationship_targets"): "relationships",
+    ("ooxml", "internal_relationship_count"): "relationships",
+    ("ooxml", "external_relationship_count"): "relationships",
+    ("ooxml", "relationship_count"): "relationships",
+    ("ooxml", "relationship_types"): "relationships",
+    ("ooxml", "hyperlink_count"): "relationships",
+    ("ooxml", "hyperlink_relationship_count"): "relationships",
+    ("ooxml", "embedded_object_names"): "embedded_objects",
+    ("ooxml", "embedding_names"): "embedded_objects",
+    ("ooxml", "embedded_part_names"): "embedded_objects",
+    ("ooxml", "embedded_object_count"): "embedded_objects",
+    ("ooxml", "embedding_count"): "embedded_objects",
+    ("ooxml", "main_part_content_type"): "main_part_content_type",
+    ("ooxml", "main_document_content_type"): "main_part_content_type",
+    ("ooxml", "office_document_content_type"): "main_part_content_type",
+    ("ooxml", "main_part_name"): "main_part_content_type",
 }
 
 _REL_CORE = re.compile(r"/metadata/core-properties$")
 _REL_APP = re.compile(r"/officeDocument/2006/relationships/extended-properties$")
+_REL_CUSTOM = re.compile(r"/officeDocument/2006/relationships/custom-properties$")
+_REL_MAIN = re.compile(r"/relationships/officeDocument$")
 _MAX_PART = 4 << 20
 
 
@@ -198,5 +244,140 @@ def content_types(data, ctx):
         if field.endswith("_override_count"):
             return tags.count("Override")
         return tags.count("Default") + tags.count("Override")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _rels(pkg):
+    """[(rels part name, Relationship element)] over every *.rels part, zip order."""
+    z, _names = pkg
+    out = []
+    for n in z.namelist():
+        if n.lower().endswith(".rels"):
+            root = _xml(pkg, n)
+            if root is not None:
+                out += [(n, el) for el in root.iter() if _local(el.tag) == "Relationship"]
+    return out
+
+
+def _fold(s):
+    return re.sub(r"[^0-9a-z]+", "_", (s or "").lower()).strip("_")
+
+
+def custom_properties(data, ctx):
+    if data is None:
+        return None
+    try:
+        pkg = _package(data)
+        if pkg is None:
+            return "none"
+        field = ctx.get("field") or ""
+        root = _xml(pkg, _part_by_rel(pkg, _REL_CUSTOM, "docProps/custom.xml"))
+        props = {}
+        if root is not None:
+            for el in root:
+                if _local(el.tag) == "property" and el.get("name") is not None:
+                    v = next(iter(el), None)
+                    props.setdefault(el.get("name"), "".join(v.itertext()).strip() if v is not None else "")
+        if field.endswith("_count"):
+            return len(props) if root is not None else "none"
+        if field == "custom_property_names":
+            return sorted(props) if root is not None else "none"
+        if ctx.get("param") is not None:
+            want = _fold(ctx.get("param"))
+            hit = [v for k, v in props.items() if _fold(k) == want]
+            return (hit[0] or "none") if hit else "none"
+        if root is None:
+            return "none"
+        return {k: props[k] for k in sorted(props)}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def attached_template_target(data, ctx):
+    if data is None:
+        return None
+    try:
+        pkg = _package(data)
+        if pkg is None:
+            return "none"
+        for _n, el in _rels(pkg):
+            if (el.get("Type") or "").endswith("/attachedTemplate") and el.get("Target"):
+                return el.get("Target").strip()
+        return "none"
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def relationships(data, ctx):
+    if data is None:
+        return None
+    try:
+        pkg = _package(data)
+        if pkg is None:
+            return "none"
+        rels = [el for _n, el in _rels(pkg)]
+        ext = [el for el in rels if (el.get("TargetMode") or "").lower() == "external"]
+        internal = [el for el in rels if (el.get("TargetMode") or "").lower() != "external"]
+        field = ctx.get("field") or ""
+        if field == "internal_relationship_targets":
+            return sorted(el.get("Target") or "" for el in internal)
+        if field == "internal_relationship_count":
+            return len(internal)
+        if field == "external_relationship_count":
+            return len(ext)
+        if field == "relationship_count":
+            return len(rels)
+        if field == "relationship_types":
+            return sorted({el.get("Type") or "" for el in rels} - {""})
+        if field.startswith("hyperlink"):
+            return sum(1 for el in rels if (el.get("Type") or "").endswith("/hyperlink"))
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def embedded_objects(data, ctx):
+    if data is None:
+        return None
+    try:
+        pkg = _package(data)
+        if pkg is None:
+            return "none"
+        names = sorted(n for n in pkg[0].namelist() if n.lower().split("/")[-2:-1] == ["embeddings"])
+        return len(names) if (ctx.get("field") or "").endswith("_count") else names
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def main_part_content_type(data, ctx):
+    if data is None:
+        return None
+    try:
+        pkg = _package(data)
+        if pkg is None:
+            return "none"
+        part = None
+        rels = _xml(pkg, "_rels/.rels")
+        if rels is not None:
+            for r in rels.iter():
+                if _local(r.tag) == "Relationship" and _REL_MAIN.search(r.get("Type") or "") and r.get("Target"):
+                    part = "/" + r.get("Target").strip().lstrip("/")
+                    break
+        if part is None:
+            return "none"
+        if (ctx.get("field") or "") == "main_part_name":
+            return part
+        ct = _xml(pkg, "[Content_Types].xml")
+        if ct is None:
+            return None
+        default = None
+        ext = part.rsplit(".", 1)[-1].lower() if "." in part.rsplit("/", 1)[-1] else None
+        for el in ct:
+            if _local(el.tag) == "Override" and (el.get("PartName") or "").lower() == part.lower():
+                return el.get("ContentType") or "none"
+            if _local(el.tag) == "Default" and ext and (el.get("Extension") or "").lower() == ext:
+                default = el.get("ContentType")
+        return default or "none"
     except Exception:  # noqa: BLE001
         return None

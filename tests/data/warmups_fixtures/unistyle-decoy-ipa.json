@@ -1,0 +1,11 @@
+{
+ "codec": "unistyle",
+ "plain": null,
+ "encoded": "ðə ˈkwɪk ˈbraʊn fɑks ˈʤʌmpt",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written IPA transcription: ɪ/ʊ look like small capitals but ð ə ˈ ɑ ʤ ʌ are IPA, not a letter style",
+ "oracle_cmd": "python3 -I -c 'import sys,unicodedata as u;print([u.name(c,\"?\") for c in sys.argv[1] if not c.isascii()])' \"$encoded\"  # names: CJK/HIRAGANA/IPA/GREEK -- no Latin letter-style character",
+ "oracle_plain": null,
+ "oracle_names": "['LATIN SMALL LETTER ETH', 'LATIN SMALL LETTER SCHWA', 'MODIFIER LETTER VERTICAL LINE', 'LATIN LETTER SMALL CAPITAL I', 'MODIFIER LETTER VERTICAL LINE', 'LATIN SMALL LETTER UPSILON', 'LATIN SMALL LETTER ALPHA', 'MODIFIER LETTER VERTICAL LINE', 'LATIN SMALL LETTER DEZH DIGRAPH', 'LATIN SMALL LETTER TURNED V']"
+}

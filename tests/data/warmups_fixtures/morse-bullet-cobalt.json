@@ -1,0 +1,9 @@
+{
+ "codec": "morse-bullet",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-kestrel-17",
+ "encoded": "—• •• —•—• •/•—— ——— •—• —•—/—•• • —•—• ——— —•• •• —• ——•/— •••• •• •••/•—— •— •—• —— ••— •——• —•—•——/— ———/••• ——— •—•• •••— • ——••——/••• ••— —••• —— •• —/— •••• •• •••/• —••— •— —•—• —/•— —• ••• •—— • •—•/— ———/— •••• •/——• •— —— •/—— •— ••• — • •—• ———•••/—•—• ——— —••• •— •—•• — —••••— —•— • ••• — •—• • •—•• —••••— •———— ——•••",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs enc '-/.' 'Space' 'Forward slash' | sed 's/\\./•/g;s/-/—/g'  # CyberChef 'To Morse Code' then sed glyph swap . -> bullet, - -> em dash",
+ "oracle_cmd": "printf %s \"$encoded\" | sed 's/•/./g' | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs dec 'Space' 'Forward slash'  # sed bullet -> . then CyberChef 'From Morse Code' (reads em dash)",
+ "oracle_plain": "NICE WORK DECODING THIS WARMUP! TO SOLVE, SUBMIT THIS EXACT ANSWER TO THE GAME MASTER: COBALT-KESTREL-17",
+ "expected": "match"
+}

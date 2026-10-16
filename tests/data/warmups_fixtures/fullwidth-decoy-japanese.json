@@ -1,0 +1,11 @@
+{
+ "codec": "unistyle",
+ "plain": null,
+ "encoded": "東京駅まで２０分です！ＪＲ線をご利用ください。",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written genuine Japanese prose with fullwidth digits/letters/punctuation (U+FF10.., U+FF01): CJK + kana around them -> not fullwidth-styled ASCII",
+ "oracle_cmd": "python3 -I -c 'import sys,unicodedata as u;print([u.name(c,\"?\") for c in sys.argv[1] if not c.isascii()])' \"$encoded\"  # names: CJK/HIRAGANA/IPA/GREEK -- no Latin letter-style character",
+ "oracle_plain": null,
+ "oracle_names": "['CJK UNIFIED IDEOGRAPH-6771', 'CJK UNIFIED IDEOGRAPH-4EAC', 'CJK UNIFIED IDEOGRAPH-99C5', 'HIRAGANA LETTER MA', 'HIRAGANA LETTER DE', 'FULLWIDTH DIGIT TWO', 'FULLWIDTH DIGIT ZERO', 'CJK UNIFIED IDEOGRAPH-5206', 'HIRAGANA LETTER DE', 'HIRAGANA LETTER SU', 'FULLWIDTH EXCLAMATION MARK', 'FULLWIDTH LATIN CAPITAL LETTER J', 'FULLWIDTH LATIN CAPITAL LETTER R', 'CJK UNIFIED IDEOGRAPH-7DDA', 'HIRAGANA LETTER WO', 'HIRAGANA LETTER GO', 'CJK UNIFIED IDEOGRAPH-5229', 'CJK UNIFIED IDEOGRAPH-7528', 'HIRAGANA LETTER KU', 'HIRAGANA LETTER DA', 'HIRAGANA LETTER SA', 'HIRAGANA LETTER I', 'IDEOGRAPHIC FULL STOP']"
+}

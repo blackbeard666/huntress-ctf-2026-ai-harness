@@ -1,0 +1,10 @@
+{
+ "material": "c0DnCY+-I^bzx^^J$7PqV{&P5bbNAeY-K%cZ((F*a(rQQbYWv_JybC;GB<p4bY*aJJ!EBLZ)9a(aAA3DZ((FCX>Mk0VRU6*b97;6Wh`=aZhT{5ZE#^}XKr6<WIab(Ej48^H)AklWqfsVY&~dnbZ~PzFE3|$Ej48^H)AklWiDlSVQp}1WiDxMc42I3WG{1cVP|C",
+ "rep": "base85",
+ "transform": "identity",
+ "key": "",
+ "expected": "v=1|language=vbscript|role=loader|attack=T1027|steps=decode_payload,inflate_stage,run|campaign_id=GZ-5e17c0de|url=https://gz-5e17c0de.example.invalid/stage",
+ "generator_cmd": "python3 -I -c 'import base64,sys; sys.stdout.write(base64.b85encode(open(\"plan.txt\",\"rb\").read()).decode())'",
+ "oracle_cmd": "python3 -I -c 'import base64,sys; print(base64.b85decode(sys.argv[1]).decode())' '<material>'",
+ "decoy": false
+}

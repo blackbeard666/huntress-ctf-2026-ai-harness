@@ -1,0 +1,8 @@
+{
+ "field": "elf.e_phnum",
+ "expected": "14",
+ "generator_cmd": "gcc -O0 -Wl,--build-id=sha1 -o x64_dyn m.c   (m.c: int main(void){return 0;}; gcc 13 x86-64)  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW gcc_x64_dyn__e_phnum.bin | grep 'Number of program headers'",
+ "decoy": false,
+ "member": "x64_dyn"
+}

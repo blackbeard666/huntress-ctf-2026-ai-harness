@@ -1,0 +1,8 @@
+{
+ "field": "elf.build_id_hex",
+ "expected": "none",
+ "generator_cmd": "gcc -m32 -static -nostdlib -ffreestanding -Wl,--build-id=none -o x86_static_noid s.c   (s.c: void _start(void){for(;;);})  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW gcc_m32_static_noid__build_id_hex.bin | grep 'Build ID:'",
+ "decoy": true,
+ "member": "x86_static_noid"
+}

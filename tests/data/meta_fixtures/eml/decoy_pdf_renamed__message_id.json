@@ -1,0 +1,8 @@
+{
+ "field": "eml.message_id",
+ "expected": "none",
+ "generator_cmd": "printf '%%PDF-1.4\\n1 0 obj << /Type /Catalog >> endobj\\ntrailer << /Root 1 0 R >>\\n%%%%EOF\\n' > decoy.eml  (PDF renamed .eml)",
+ "oracle_cmd": "file -b <file> -> PDF document, version 1.4; eml_parser -> header.header == {} (no RFC 5322 headers)",
+ "decoy": true,
+ "member": "evidence-01/message.eml"
+}

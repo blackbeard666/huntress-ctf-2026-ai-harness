@@ -1,0 +1,8 @@
+{
+ "field": "gzip.isize",
+ "expected": "1230",
+ "generator_cmd": "python3 -I -c \"import gzip; gzip.GzipFile(filename='beacon_cfg.json', mode='wb', fileobj=open('py_named.gz','wb'), mtime=1700000000).write(b'{\\\"c2\\\":\\\"x\\\"}'*123)\"  (CPython gzip writer, OS byte 0xff)",
+ "oracle_cmd": "gzip -l py_named.gz -> uncompressed 1230",
+ "decoy": false,
+ "member": "py_named.gz"
+}

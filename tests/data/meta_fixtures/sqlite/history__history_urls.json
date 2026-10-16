@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.history_urls",
+ "expected": "[\"https://example.com/\",\"http://evil.test/payload.ps1\",\"https://huntress.com/\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_cli.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> History)",
+ "oracle_cmd": "sqlite3 -readonly History \"select json_group_array(url) from (select url from urls order by rowid)\"  (SQLite 3.46.1 CLI) -> [\"https://example.com/\",\"http://evil.test/payload.ps1\",\"https://huntress.com/\"]",
+ "decoy": false,
+ "member": "History"
+}

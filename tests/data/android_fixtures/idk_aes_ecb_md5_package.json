@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-E05A6B19C4D7F832",
+ "generator_cmd": "sh tests/data/android_fixtures/gen_identity_keys.sh challenges/day11/mobile-local-secrets/single_solve/artifacts/latest/local_secrets.apk tests/data/android_fixtures  # apktool d/b + openssl enc -aes-128-ecb -K $(printf com.huntress.mobile.d11.v40490034623b | md5sum | cut -c1-32) | base64, codec aes, no key field (package only in the binary manifest)",
+ "oracle_cmd": "aapt dump badging idk_aes_ecb_md5_package.apk | grep package  # com.huntress.mobile.d11.v40490034623b; unzip -p idk_aes_ecb_md5_package.apk assets/huntress_puzzle.json | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"data\"])' | base64 -d | openssl enc -d -aes-128-ecb -K $(printf com.huntress.mobile.d11.v40490034623b | md5sum | cut -c1-32)"
+}

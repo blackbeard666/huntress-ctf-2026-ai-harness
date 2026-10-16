@@ -1,0 +1,7 @@
+{
+ "field": "pe.debug_codeview_guid",
+ "expected": "bd2b7c95-c8dd-4547-99f6-0dbbfedf5a30",
+ "generator_cmd": "cp .venv/lib/python3.12/site-packages/pip/_vendor/distlib/t64.exe (MSVC x64 launcher, Rich + RSDS) tests/data/meta_fixtures/pe/dbg_t64_guid.bin  (unmodified)",
+ "oracle_cmd": ".venv/bin/python -c \"import lief,sys;l=lief.parse(sys.argv[1]);c=[d for d in l.debug if isinstance(d,lief.PE.CodeViewPDB)];print(c[0].guid if c else 'none')\" tests/data/meta_fixtures/pe/dbg_t64_guid.bin",
+ "decoy": false
+}

@@ -1,0 +1,15 @@
+{
+ "encoding": null,
+ "expected_offset": null,
+ "expected_config": "none",
+ "decoy": true,
+ "packed_sha256": "40f58d26e657fd48d8f1511050cfac697d640dcae38f66d6628332cf9feaf7be",
+ "answered_from": {
+  "sha256/md5/size": "packed artifact bytes (as handed out)",
+  "format/has_hcfg_section/section names/hcfg offset+config": "UNPACKED image (upx -d layout) via lib.binary.upx_unpack"
+ },
+ "generator_cmd": "PY=.venv/bin/python sh tests/data/binary_fixtures/upx_gen.sh tests/data/binary_fixtures  (gcc -O2 + lief add_section on setuptools cli-64.exe, then upx -9 4.2.4; scrub = UPX! zeroed, UPX0/1 -> .pk0/.pk1)",
+ "oracle_cmd": "sh tests/data/binary_fixtures/upx_oracle.sh upx_decoy_nohcfg.bin   (restore magic from twin, real `upx -d` on a copy, readelf -SW / pefile .hcfg PointerToRawData, python zlib.crc32+json at that offset)",
+ "oracle_output": "none",
+ "note": "real upx -9 ELF with no .hcfg section / no HCFG blob"
+}

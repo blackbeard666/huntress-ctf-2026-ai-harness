@@ -1,0 +1,8 @@
+{
+ "field": "jpeg.app_segments",
+ "expected": "[\"APP0\"]",
+ "generator_cmd": "python3 -c 'from PIL import Image; Image.new(\"L\",(32,32),128).save(\"base.jpg\",\"JPEG\")'  (run in $TMPDIR/jpegfx)",
+ "oracle_cmd": "exiftool -v1 plain_jfif.jpg | grep -o 'APP[0-9]*'  (file order -> JSON list)",
+ "decoy": true,
+ "member": "plain_jfif.jpg"
+}

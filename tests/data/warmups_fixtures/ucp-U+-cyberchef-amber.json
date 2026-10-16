@@ -1,0 +1,9 @@
+{
+ "codec": "ucp-U+",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "U+004EU+0069U+0063U+0065U+0020U+0077U+006FU+0072U+006BU+0020U+0064U+0065U+0063U+006FU+0064U+0069U+006EU+0067U+0020U+0074U+0068U+0069U+0073U+0020U+0077U+0061U+0072U+006DU+0075U+0070U+0021U+0020U+0054U+006FU+0020U+0073U+006FU+006CU+0076U+0065U+002CU+0020U+0073U+0075U+0062U+006DU+0069U+0074U+0020U+0074U+0068U+0069U+0073U+0020U+0065U+0078U+0061U+0063U+0074U+0020U+0061U+006EU+0073U+0077U+0065U+0072U+0020U+0074U+006FU+0020U+0074U+0068U+0065U+0020U+0047U+0061U+006DU+0065U+0020U+004DU+0061U+0073U+0074U+0065U+0072U+003AU+0020U+0061U+006DU+0062U+0065U+0072U+002DU+0066U+0061U+006CU+0063U+006FU+006EU+002DU+0034U+0032",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/ucp_cyberchef.mjs enc 'U+'  # CyberChef \"Escape Unicode Characters\" U+, Encode all chars, pad 4, upper",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/ucp_cyberchef.mjs dec 'U+'  # CyberChef \"Unescape Unicode Characters\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

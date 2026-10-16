@@ -1,0 +1,10 @@
+{
+    "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwIQ==",
+    "plain": null,
+    "decoy": true,
+    "expected": "none",
+    "codec": "polyalpha",
+    "generator_cmd": "printf %s 'Nice work decoding this warmup!' | base64  # coreutils base64, wrong family",
+    "oracle_cmd": "printf %s \"$encoded\" | base64 -d  # Nice work decoding this warmup! (base64, not a polyalphabetic letter stream)",
+    "oracle_plain": null
+}

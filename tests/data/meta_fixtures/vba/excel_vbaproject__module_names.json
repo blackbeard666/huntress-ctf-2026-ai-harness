@@ -1,0 +1,8 @@
+{
+ "field": "vba.module_names",
+ "expected": "[\"ThisWorkbook\",\"Sheet1\",\"Module1\",\"ThisWorkbook1\",\"Sheet2\"]",
+ "generator_cmd": "Microsoft Excel (XlsxWriter 3.2.9 sdist examples/vbaProject.bin), copied verbatim: cp xlsxwriter-3.2.9/examples/vbaProject.bin",
+ "oracle_cmd": ".venv/bin/python -I -c \"from oletools.olevba import VBA_Parser, VBA_Project; v=VBA_Parser(f); o,r,pp,dp=[(s.ole_file,)+x for s in [v]+(v.ole_subfiles or []) if s.ole_file for x in s.find_vba_projects()][0]; p=VBA_Project(o,r,pp,dp); p.parse_project_stream(); list(p.parse_modules()); print(json.dumps([m.name for m in p.modules],separators=(',',':')))\" excel_vbaproject__module_names.bin   (oletools 0.60.2 olevba reader; dir-stream MODULENAME order)",
+ "decoy": false,
+ "member": "vbaProject.bin"
+}

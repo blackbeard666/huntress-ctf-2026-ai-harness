@@ -1,0 +1,18 @@
+{
+ "encoding": "raw",
+ "expected_machine": "ARM",
+ "readelf_machine": "ARM",
+ "expected_machine_num": "40",
+ "endian": "little",
+ "expected_offset": 156,
+ "expected_config": {
+  "c2": "198.51.100.7:443",
+  "campaign": "tower",
+  "sleep": 9,
+  "flag": "flag{mult1_4rch}"
+ },
+ "generator_cmd": "bash march_gen.sh march_arm.bin armv7-linux-gnueabihf '{\"c2\":\"198.51.100.7:443\",\"campaign\":\"tower\",\"sleep\":9,\"flag\":\"flag{mult1_4rch}\"}' 0x21",
+ "oracle_cmd": "bash march_oracle.sh march_arm.bin   # GNU readelf -h/-SW, llvm-objcopy-18 --only-section=.hcfg, perl unpack (header in ELF byte order) + xor, gzip trailer crc32",
+ "oracle_output": "ARM | 40 | little | 156 | HCFG 1 33 80 2640537683 2640537683 | {\"c2\":\"198.51.100.7:443\",\"campaign\":\"tower\",\"sleep\":9,\"flag\":\"flag{mult1_4rch}\"}",
+ "note": "machine label = readelf spelling except EM_386 -> 'x86' (lib.knowledge vocabulary); expected_machine_num = decimal e_machine for kind:integer"
+}

@@ -1,0 +1,7 @@
+{
+ "field": "pe.export_names",
+ "expected": "[\"_Java_org_catacombae_hfsexplorer_win32_WindowsLowLevelIO_close@12\",\"_Java_org_catacombae_hfsexplorer_win32_WindowsLowLevelIO_ejectMedia@12\",\"_Java_org_catacombae_hfsexplorer_win32_WindowsLowLevelIO_getFilePointer@12\",\"_Java_org_catacombae_hfsexplorer_win32_WindowsLowLevelIO_getSectorSize@12\",\"_Java_org_catacombae_hfsexplorer_win32_WindowsLowLevelIO_length@12\",\"_Java_org_catacombae_hfsexplorer_win32_WindowsLowLevelIO_loadMedia@12\",\"_Java_org_catacombae_hfsexplorer_win32_WindowsLowLevelIO_openNative@12\",\"_Java_org_catacombae_hfsexplorer_win32_WindowsLowLevelIO_read@24\",\"_Java_org_catacombae_hfsexplorer_win32_WindowsLowLevelIO_seek@20\",\"_Java_org_catacombae_hfsexplorer_win32_WritableWin32File_openNative@12\",\"_Java_org_catacombae_hfsexplorer_win32_WritableWin32File_write@24\"]",
+ "generator_cmd": "cp tools/ghidra/GPL/DMG/data/os/win_x86_32/llio_i386.dll (MSVC DLL, 11 named exports) tests/data/meta_fixtures/pe/exports_llio.bin  (unmodified)",
+ "oracle_cmd": ".venv/bin/python -c \"import pefile,sys,json;p=pefile.PE(sys.argv[1]);print(json.dumps([s.name.decode() for s in p.DIRECTORY_ENTRY_EXPORT.symbols if s.name],separators=(',',':')))\" tests/data/meta_fixtures/pe/exports_llio.bin  ; cross-check: objdump -p ([Ordinal/Name Pointer] Table, same order)",
+ "decoy": false
+}

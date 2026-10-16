@@ -1,0 +1,9 @@
+{
+ "codec": "vigenere:lemon(fragment)",
+ "plain": "t this exact answer to the Game Master: jade-badger-71",
+ "encoded": "e xtwf pbmqg lrekrc xa hup Kmar Xeehrc: nmrr-mepurc-71",
+ "generator_cmd": "plain=\"$plain\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import sys,os,pycipher as P;p=os.environ['plain'];c=iter(P.Vigenere('LEMON').encipher(p) if 'e'=='e' else P.Vigenere('LEMON').decipher(p));print(''.join((lambda x:x if ch.isupper() else x.lower())(next(c)) if ch.isalpha() else ch for ch in p))\"  # Mastery fragment full[47:], key restarted",
+ "oracle_cmd": "encoded=\"$encoded\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import os,pycipher as P;e=os.environ['encoded'];print(P.Vigenere('LEMON').decipher(e).lower())\"  # pycipher reader, letters only",
+ "oracle_plain": "tthisexactanswertothegamemasterjadebadger",
+ "expected": "match"
+}

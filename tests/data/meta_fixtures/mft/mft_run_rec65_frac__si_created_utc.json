@@ -1,0 +1,12 @@
+{
+ "field": "mft.si_created_utc",
+ "expected": "2024-03-09T16:01:40.1111111Z",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/mft/GENERATOR_mft_struct.py.txt <outdir>  (stdlib struct FILE-record writer, update-sequence fixups applied -> mft_run_dir.bin)",
+ "oracle_cmd": "dissect.ntfs 3.16 StandardInformation.creation_time_ns of record index 2 -> 7-digit 100-ns fraction",
+ "decoy": false,
+ "member": "mft_record_65.bin",
+ "answer_format": {
+  "type": "string",
+  "example": "2024-01-01T00:00:00.0000000Z"
+ }
+}

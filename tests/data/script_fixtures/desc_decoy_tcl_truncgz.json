@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "printf %s '<plan>' | gzip -n9 | head -c 40 | base64 -w 40  (truncated gzip)  -> literal written into desc_decoy_tcl_truncgz.tcl",
+ "oracle_cmd": "tclsh <(cat tests/data/script_fixtures/desc_decoy_tcl_truncgz.tcl; echo 'puts -nonewline [string map {\"\\n\" \"\"} $descriptor_deadf00d]') | base64 -d | gunzip  (unexpected end of file)"
+}

@@ -1,0 +1,11 @@
+{
+ "codec": "unistyle",
+ "plain": null,
+ "encoded": "Visited 🇯🇵 and 🇫🇷 last year, then 🇩🇪 in May.",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "perl -CS -Mcharnames=:full -e 'print \"Visited \\N{REGIONAL INDICATOR SYMBOL LETTER J}\\N{REGIONAL INDICATOR SYMBOL LETTER P} and \\N{REGIONAL INDICATOR SYMBOL LETTER F}\\N{REGIONAL INDICATOR SYMBOL LETTER R} last year, then \\N{REGIONAL INDICATOR SYMBOL LETTER D}\\N{REGIONAL INDICATOR SYMBOL LETTER E} in May.\"'  # genuine flag emoji (regional-indicator pairs) inside ASCII prose: < 50% styled",
+ "oracle_cmd": "python3 -I -c 'import sys,unicodedata as u;print([u.name(c,\"?\") for c in sys.argv[1] if not c.isascii()])' \"$encoded\"  # names",
+ "oracle_plain": null,
+ "oracle_names": "['REGIONAL INDICATOR SYMBOL LETTER J', 'REGIONAL INDICATOR SYMBOL LETTER P', 'REGIONAL INDICATOR SYMBOL LETTER F', 'REGIONAL INDICATOR SYMBOL LETTER R', 'REGIONAL INDICATOR SYMBOL LETTER D', 'REGIONAL INDICATOR SYMBOL LETTER E']"
+}

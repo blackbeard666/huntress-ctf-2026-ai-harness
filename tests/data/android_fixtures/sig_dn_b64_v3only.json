@@ -1,0 +1,6 @@
+{
+ "entry": "signing_cert_scan",
+ "expected": "ANS-C41E8B7290DF365A",
+ "generator_cmd": "sh tests/data/android_fixtures/gen_signing_certs.sh tests/data/android_fixtures  # keytool -genkeypair + zip -X + apksigner sign (v3 only, no META-INF); base64(token) as subject O",
+ "oracle_cmd": "apksigner verify --min-sdk-version 28 --print-certs sig_dn_b64_v3only.apk | grep -m1 'DN:' | sed 's/.*O=\"\\([^\"]*\\)\".*/\\1/' | base64 -d"
+}

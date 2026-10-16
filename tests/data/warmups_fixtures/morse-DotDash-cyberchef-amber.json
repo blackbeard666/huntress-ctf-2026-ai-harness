@@ -1,0 +1,9 @@
+{
+ "codec": "morse-DotDash",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "DashDot DotDot DashDotDashDot Dot\nDotDashDash DashDashDash DotDashDot DashDotDash\nDashDotDot Dot DashDotDashDot DashDashDash DashDotDot DotDot DashDot DashDashDot\nDash DotDotDotDot DotDot DotDotDot\nDotDashDash DotDash DotDashDot DashDash DotDotDash DotDashDashDot DashDotDashDotDashDash\nDash DashDashDash\nDotDotDot DashDashDash DotDashDotDot DotDotDotDash Dot DashDashDotDotDashDash\nDotDotDot DotDotDash DashDotDotDot DashDash DotDot Dash\nDash DotDotDotDot DotDot DotDotDot\nDot DashDotDotDash DotDash DashDotDashDot Dash\nDotDash DashDot DotDotDot DotDashDash Dot DotDashDot\nDash DashDashDash\nDash DotDotDotDot Dot\nDashDashDot DotDash DashDash Dot\nDashDash DotDash DotDotDot Dash Dot DotDashDot DashDashDashDotDotDot\nDotDash DashDash DashDotDotDot Dot DotDashDot DashDotDotDotDotDash DotDotDashDot DotDash DotDashDotDot DashDotDashDot DashDashDash DashDot DashDotDotDotDotDash DotDotDotDotDash DotDotDashDashDash",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs enc 'Dash/Dot' 'Space' 'Line feed'  # CyberChef 'To Morse Code' Dash/Dot words",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs dec 'Space' 'Line feed'  # CyberChef 'From Morse Code' (reads Dash/Dot words)",
+ "oracle_plain": "NICE WORK DECODING THIS WARMUP! TO SOLVE, SUBMIT THIS EXACT ANSWER TO THE GAME MASTER: AMBER-FALCON-42",
+ "expected": "match"
+}

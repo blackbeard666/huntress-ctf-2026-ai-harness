@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ps_layer_gen.py tests/data/script_fixtures (stdlib base64/zlib raw-deflate/gzip(mtime=0)/str.encode('utf-16-le'); script text below in the fixture's generator note) -- DECOY: same -ec + DeflateStream shape, benign stage2 (no plan)",
+ "oracle_cmd": "pwsh -NoProfile -c '$b = (Get-Content -Raw tests/data/script_fixtures/ps_decoy_enc_noplan.ps1).Split(\" \")[-1].Trim(); $s1 = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($b)); $m = [regex]::Match($s1, \"FromBase64String\\(\\x27([^\\x27]+)\\x27\\)\").Groups[1].Value; (New-Object IO.StreamReader(New-Object IO.Compression.DeflateStream([IO.MemoryStream][Convert]::FromBase64String($m), [IO.Compression.CompressionMode]::Decompress))).ReadToEnd()'  -> stage2 holds no v=3 plan (descriptor = base64('hello world'))"
+}

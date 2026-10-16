@@ -1,0 +1,10 @@
+{
+ "codec": "upsidedown",
+ "plain": null,
+ "encoded": "ðə kwɪk braʊn fɑks dʒʌmps ˈoʊvər ðə ˈleɪzi dɔɡ",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written IPA transcription of 'the quick brown fox jumps over the lazy dog' (ə ɪ ʊ ɑ ʌ ˈ ð ʒ are phonetic, not flip images; plain ASCII k w r m v)",
+ "oracle_cmd": "PYTHONPATH=tools/pychepy python3 -c 'import sys;from chepy import Chepy;print(Chepy(sys.argv[1]).from_upside_down(reverse=True).o.decode())' \"$encoded\"  # chepy 7.2.0 from_upside_down -> non-English junk; python3 -c 'import sys,unicodedata as u;print([u.name(c) for c in sys.argv[1] if ord(c)>127])' \"$encoded\" names LATIN SMALL LETTER SCHWA/SMALL CAPITAL I/... (IPA block)",
+ "oracle_plain": "ɡcp izɪelˈ əð rəvʊoˈ sdmvʒp skɑf uʊarq kɪwk əð"
+}

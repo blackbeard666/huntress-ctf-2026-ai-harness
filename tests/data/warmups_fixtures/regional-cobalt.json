@@ -1,0 +1,10 @@
+{
+ "codec": "regional",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-quail-80",
+ "encoded": "🇳🇮🇨🇪 🇼🇴🇷🇰 🇩🇪🇨🇴🇩🇮🇳🇬 🇹🇭🇮🇸 🇼🇦🇷🇲🇺🇵! 🇹🇴 🇸🇴🇱🇻🇪, 🇸🇺🇧🇲🇮🇹 🇹🇭🇮🇸 🇪🇽🇦🇨🇹 🇦🇳🇸🇼🇪🇷 🇹🇴 🇹🇭🇪 🇬🇦🇲🇪 🇲🇦🇸🇹🇪🇷: 🇨🇴🇧🇦🇱🇹-🇶🇺🇦🇮🇱-80",
+ "generator_cmd": "perl -CSA tests/data/warmups_fixtures/unistyle_perl.pl regional \"$(printf %s \"$plain\" | tr a-z A-Z)\"  # Perl charnames: REGIONAL INDICATOR SYMBOL LETTER X (capitals only; digits pass through)",
+ "oracle_cmd": "python3 -I -c 'import sys,unicodedata as u;print(\"\".join(u.name(c)[-1] if u.name(c,\"\").startswith(\"REGIONAL INDICATOR SYMBOL LETTER \") else c for c in sys.argv[1]))' \"$encoded\"  # Unicode character names",
+ "oracle_plain": "NICE WORK DECODING THIS WARMUP! TO SOLVE, SUBMIT THIS EXACT ANSWER TO THE GAME MASTER: COBALT-QUAIL-80",
+ "expected": "match_upper",
+ "note": "capital-only style: the decode is the plain upper-cased (oracle_plain)"
+}

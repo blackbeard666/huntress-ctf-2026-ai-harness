@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "php -r: str_rot13(base64_encode(gzdeflate('echo \"v=3 is the theme version\"; $x = ...;',9))) under `@eval(gzinflate(base64_decode(str_rot13('..'))))` (same chain, benign payload: no v=N| plan)",
+ "oracle_cmd": "php -r 'eval(gzinflate(base64_decode(str_rot13($argv[1]))));' <literal>  -> prints 'v=3 is the theme version' (not a plan)"
+}

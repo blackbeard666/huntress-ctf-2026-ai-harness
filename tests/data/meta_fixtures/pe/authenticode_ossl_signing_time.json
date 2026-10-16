@@ -1,0 +1,7 @@
+{
+ "field": "pe.signing_time_utc",
+ "expected": "2026-10-15T15:39:47Z",
+ "generator_cmd": "openssl req -x509 ... -subj '/O=Huntress Lab/CN=Arena Test Root CA'; openssl req -newkey ... -subj '/C=US/O=Contoso Ltd/CN=Contoso Code Signer'; openssl x509 -req -CA ca.pem -set_serial 0x00a1b2c3d4e5f60718 -extfile(codeSigning,SKI); openssl cms -sign -binary -nodetach -outform DER -signer leaf.pem -inkey leaf.key -certfile ca.pem -md sha256 -> p7; stdlib writer appends WIN_CERTIFICATE(len,0x0200,2,p7) 8-aligned at EOF of setuptools cli-32.exe (cli32_tds.bin) and sets data dir 4 = (file offset, size)",
+ "oracle_cmd": "python3 -I blob.py tests/data/meta_fixtures/pe/authenticode_ossl_signing_time.bin blob.p7  (pefile: bytes [DATA_DIRECTORY[4].VirtualAddress+8 : +Size]); openssl cms -cmsout -print -inform DER -in blob.p7 -> signerInfos signedAttrs signingTime UTCTIME 'Oct 15 15:39:47 2026 GMT'",
+ "decoy": false
+}

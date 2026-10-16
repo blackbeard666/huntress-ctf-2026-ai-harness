@@ -1,0 +1,8 @@
+{
+ "field": "mp3.id3_version",
+ "expected": "none",
+ "generator_cmd": "cp tests/data/meta_fixtures/wav/mono8k__fmt_channels.bin renamed_wav.mp3 (stdlib wave WAV renamed)",
+ "oracle_cmd": "file -b renamed_wav.mp3 -> 'RIFF (little-endian) data, WAVE audio' (no ID3)",
+ "decoy": true,
+ "member": "renamed_wav.mp3"
+}

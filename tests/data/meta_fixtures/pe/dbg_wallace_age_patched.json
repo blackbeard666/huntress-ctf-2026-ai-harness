@@ -1,0 +1,7 @@
+{
+ "field": "pe.debug_codeview_age",
+ "expected": "3",
+ "generator_cmd": "python3 -c \"import sys;d=bytearray(open(sys.argv[1],'rb').read());i=d.find(b'RSDS');d[i+20:i+24]=(3).to_bytes(4,'little');open(sys.argv[2],'wb').write(d)\" WallaceSrc.exe dbg_wallace_age_patched.bin  (RSDS Age 1 -> 3)",
+ "oracle_cmd": ".venv/bin/python -c \"import lief,sys;l=lief.parse(sys.argv[1]);c=[d for d in l.debug if isinstance(d,lief.PE.CodeViewPDB)];print(c[0].age if c else 'none')\" tests/data/meta_fixtures/pe/dbg_wallace_age_patched.bin",
+ "decoy": false
+}

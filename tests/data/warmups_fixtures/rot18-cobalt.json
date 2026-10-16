@@ -1,0 +1,9 @@
+{
+ "codec": "rot18",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-river-lantern-907",
+ "encoded": "Avpr jbex qrpbqvat guvf jnezhc! Gb fbyir, fhozvg guvf rknpg nafjre gb gur Tnzr Znfgre: pbonyg-evire-ynagrea-452",
+ "generator_cmd": "printf %s \"$plain\" | tr 'A-Za-z0-9' 'N-ZA-Mn-za-m5-90-4'  # coreutils tr: ROT13 letters + ROT5 digits",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -pe 'y/A-Za-z0-9/N-ZA-Mn-za-m5-90-4/'  # perl y///, ROT18 is self-inverse",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-river-lantern-907",
+ "expected": "match"
+}

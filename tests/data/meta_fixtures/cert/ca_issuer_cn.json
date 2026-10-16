@@ -1,0 +1,8 @@
+{
+ "field": "cert.issuer_cn",
+ "expected": "Arena Root CA 2026",
+ "generator_cmd": "openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.pem -subj \"/C=US/O=Huntress Labs/CN=Arena Root CA 2026\" -days 3650 -set_serial 0x1001",
+ "oracle_cmd": "openssl x509 -inform PEM -in ca.pem -noout -issuer -nameopt RFC2253 -> CN=Arena Root CA 2026,O=Huntress Labs,C=US",
+ "decoy": false,
+ "member": "ca.pem"
+}

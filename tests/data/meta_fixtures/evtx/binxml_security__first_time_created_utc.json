@@ -1,0 +1,8 @@
+{
+ "field": "evtx.first_time_created_utc",
+ "expected": "2024-03-11T08:15:42Z",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/evtx/GENERATOR_evtx_binxml.py.txt <outdir>  (stdlib struct/zlib EVTX writer with real BinXML template records -> binxml_security.bin)",
+ "oracle_cmd": ".venv/bin/python -I -c \"import sys,json; sys.path.insert(0,'tools/pyevtxrs'); import evtx; R=[json.loads(r['data'])['Event']['System'] for r in evtx.PyEvtxParser(sys.argv[1]).records_json()]; E=lambda s: s['EventID']['#text'] if isinstance(s['EventID'],dict) else s['EventID']; P=[]; [P.append(s['Provider']['#attributes']['Name']) for s in R if s['Provider']['#attributes']['Name'] not in P]; print(len(R), E(R[0]) if R else 'none', R[0]['TimeCreated']['#attributes']['SystemTime'][:19]+'Z' if R else 'none', json.dumps(P,separators=(',',':')) if P else 'none', R[0]['Channel'] if R else 'none', R[0]['Computer'] if R else 'none', sep='|')\" tests/data/meta_fixtures/evtx/binxml_security__first_time_created_utc.bin  (pyevtx-rs 0.13.1 = Rust evtx crate; fields record_count|first_event_id|first_time_created_utc|provider_names|channel|computer_name); python-evtx 0.8.1 and dissect.eventlog 3.11 agree",
+ "decoy": false,
+ "member": "binxml_security.evtx"
+}

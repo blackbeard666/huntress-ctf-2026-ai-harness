@@ -1,0 +1,97 @@
+"""Stdlib struct writer for NTFS $MFT FILE-record fixtures (spec: MS NTFS docs / libfsntfs). Usage: python3 -I this <outdir>
+Writes: timestomped_single.bin (one 1024-B record, fixups APPLIED: a sector tail sits inside the resident $DATA),
+        mft_run_dir.bin (3 records: $MFT metafile, a directory, a clean file), decoy_indx.bin (an INDX block)."""
+import os
+import struct
+import sys
+
+UNIX0 = 116444736000000000          # FILETIME of 1970-01-01
+
+
+def ft(unix_s, frac100ns=0):
+    return UNIX0 + unix_s * 10_000_000 + frac100ns
+
+
+def attr_res(atype, content, name="", attr_id=0):
+    nm = name.encode("utf-16-le")
+    hdr = 0x18
+    coff = hdr + len(nm)
+    coff = (coff + 7) & ~7
+    body = bytearray(coff) + content
+    body += b"\0" * ((-len(body)) % 8)
+    struct.pack_into("<IIBBHHH", body, 0, atype, len(body), 0, len(name), hdr if nm else 0, 0, attr_id)
+    struct.pack_into("<IH", body, 0x10, len(content), coff)
+    body[hdr:hdr + len(nm)] = nm
+    return bytes(body)
+
+
+def attr_nonres_data(attr_id=0):
+    body = bytearray(0x48)
+    struct.pack_into("<IIBBHHH", body, 0, 0x80, 0x48, 1, 0, 0x40, 0, attr_id)
+    struct.pack_into("<QQHH", body, 0x10, 0, 3, 0x40, 0)
+    struct.pack_into("<QQQ", body, 0x28, 0x4000, 0x3a12, 0x3a12)
+    body[0x40:0x45] = bytes([0x11, 0x04, 0x20, 0x00, 0x00])
+    return bytes(body)
+
+
+def si(c, m, mc, a, attrs=0x20):
+    return struct.pack("<4QIIIIIIQQ", c, m, mc, a, attrs, 0, 0, 0, 0, 0x100, 0, 0)
+
+
+def fn(parent, pseq, c, m, mc, a, name, ns, attrs=0x20, size=0):
+    n = name.encode("utf-16-le")
+    return struct.pack("<Q4QQQIIBB", parent | (pseq << 48), c, m, mc, a, size, size, attrs, 0, len(name), ns) + n
+
+
+def record(recno, seq, flags, attrs, usn=0x0007, size=1024):
+    r = bytearray(size)
+    off = 0x38
+    for i, a in enumerate(attrs):
+        a = bytearray(a)
+        struct.pack_into("<H", a, 0x0E, i)
+        r[off:off + len(a)] = a
+        off += len(a)
+    r[off:off + 8] = struct.pack("<II", 0xFFFFFFFF, 0)
+    used = off + 8
+    r[0:4] = b"FILE"
+    struct.pack_into("<HHQHHHHIIQHHI", r, 4, 0x30, size // 512 + 1, 0x1234567, seq, 1, 0x38, flags, used, size, 0,
+                     len(attrs), 0, recno)
+    struct.pack_into("<H", r, 0x30, usn)
+    for i in range(1, size // 512 + 1):        # apply the update-sequence protection (what the disk stores)
+        end = i * 512
+        r[0x30 + 2 * i:0x32 + 2 * i] = r[end - 2:end]
+        struct.pack_into("<H", r, end - 2, usn)
+    return bytes(r)
+
+
+def main(out):
+    os.makedirs(out, exist_ok=True)
+    # 1) timestomped: $SI whole-second and 2 years earlier than $FN; DOS $FN first, Win32 $FN second
+    fn_t = ft(1718208000, 4_567_891)            # 2024-06-12T16:00:00.4567891Z
+    si_c, si_m = ft(1640995200), ft(1641081600)  # 2022-01-01T00:00:00Z, 2022-01-02T00:00:00Z
+    data = b"MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00\xff\xffPAYLOAD" + bytes(range(256)) * 2
+    attrs = [attr_res(0x10, si(si_c, si_m, fn_t + 5, fn_t + 9)),
+             attr_res(0x30, fn(0x2A, 3, fn_t, fn_t, fn_t, fn_t, "INVOIC~1.EXE", 2)),
+             attr_res(0x30, fn(0x2A, 3, fn_t, fn_t + 1, fn_t, fn_t, "invoice.pdf.exe", 1)),
+             attr_res(0x80, data)]
+    open(os.path.join(out, "timestomped_single.bin"), "wb").write(record(1337, 2, 0x0001, attrs))
+    # 2) $MFT run: record 0 ($MFT), record 1 (in-use directory "Staging"), record 2 (clean file, non-resident $DATA)
+    t0 = ft(1700000000, 1_234_567)
+    r0 = record(0, 1, 0x0001, [attr_res(0x10, si(t0, t0, t0, t0, 0x06)), attr_res(0x30, fn(5, 5, t0, t0, t0, t0, "$MFT", 3, 0x06)),
+                               attr_nonres_data()])
+    td = ft(1710000000, 9_876_543)
+    r1 = record(64, 4, 0x0003, [attr_res(0x10, si(td, td + 50_000_000, td, td, 0x10)),
+                                attr_res(0x30, fn(5, 5, td, td, td, td, "Staging", 3, 0x10000000)),
+                                attr_res(0x90, b"\x30\0\0\0\x01\0\0\0\0\x10\0\0\x01\0\0\0" + bytes(16), "$I30")])
+    tf = ft(1710000100, 1_111_111)
+    r2 = record(65, 1, 0x0001, [attr_res(0x10, si(tf, tf + 70_000_000, tf, tf)), attr_res(0x30, fn(64, 4, tf, tf, tf, tf, "notes.txt", 3)),
+                                attr_nonres_data()])
+    open(os.path.join(out, "mft_run_dir.bin"), "wb").write(r0 + r1 + r2)
+    # 3) decoy: an INDX index block renamed as an MFT record
+    ix = bytearray(4096)
+    ix[0:4] = b"INDX"
+    struct.pack_into("<HHQQ", ix, 4, 0x28, 9, 0x99, 0)
+    open(os.path.join(out, "decoy_indx.bin"), "wb").write(bytes(ix))
+
+
+main(sys.argv[1])

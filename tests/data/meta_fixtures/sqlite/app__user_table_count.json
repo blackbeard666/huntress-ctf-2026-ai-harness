@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.user_table_count",
+ "expected": "81",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_cli.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> app.db)",
+ "oracle_cmd": "sqlite3 -readonly app.db \"select count(*) from sqlite_master where type='table' and name not like 'sqlite\\_%' escape '\\'\"  (SQLite 3.46.1 CLI) -> 81",
+ "decoy": false,
+ "member": "app.db"
+}

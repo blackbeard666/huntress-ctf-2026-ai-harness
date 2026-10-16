@@ -1,0 +1,8 @@
+{
+ "field": "elf.e_type_u16_hex",
+ "expected": "0x0001",
+ "generator_cmd": "aarch64-linux-gnu-gcc -c -o a64_rel.o m.c  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW aarch64_rel__e_type_u16_hex.bin | grep Type: (REL/EXEC/DYN -> 1/2/3, u16 hex)",
+ "decoy": false,
+ "member": "a64_rel.o"
+}

@@ -1,0 +1,7 @@
+{
+ "field": "pe.import_dll_names",
+ "expected": "[\"KERNEL32.dll\",\"VCRUNTIME140.dll\",\"api-ms-win-crt-heap-l1-1-0.dll\",\"api-ms-win-crt-filesystem-l1-1-0.dll\",\"api-ms-win-crt-runtime-l1-1-0.dll\",\"api-ms-win-crt-stdio-l1-1-0.dll\",\"api-ms-win-crt-string-l1-1-0.dll\",\"api-ms-win-crt-math-l1-1-0.dll\",\"api-ms-win-crt-locale-l1-1-0.dll\",\"api-ms-win-crt-process-l1-1-0.dll\"]",
+ "generator_cmd": "cp .venv/lib/python3.12/site-packages/setuptools/cli-32.exe (MSVC launcher, Rich, NO debug directory) tests/data/meta_fixtures/pe/imports_cli32.bin  (unmodified)",
+ "oracle_cmd": ".venv/bin/python -c \"import pefile,sys,json;p=pefile.PE(sys.argv[1]);print(json.dumps([i.dll.decode() for i in p.DIRECTORY_ENTRY_IMPORT],separators=(',',':')))\" tests/data/meta_fixtures/pe/imports_cli32.bin  ; cross-check: objdump -p | grep \"DLL Name\" (same order)",
+ "decoy": false
+}

@@ -1,0 +1,8 @@
+{
+ "field": "gzip.header_original_filename",
+ "expected": "beacon_cfg.json",
+ "generator_cmd": "python3 -I -c \"import gzip; gzip.GzipFile(filename='beacon_cfg.json', mode='wb', fileobj=open('py_named.gz','wb'), mtime=1700000000).write(b'{\\\"c2\\\":\\\"x\\\"}'*123)\"  (CPython gzip writer, OS byte 0xff)",
+ "oracle_cmd": "TZ=UTC file -b py_named.gz -> was \"beacon_cfg.json\"",
+ "decoy": false,
+ "member": "py_named.gz"
+}

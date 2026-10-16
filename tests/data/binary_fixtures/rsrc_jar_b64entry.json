@@ -1,0 +1,17 @@
+{
+ "encoding": "zip-base64",
+ "expected_offset": 4,
+ "expected_config": {
+  "c2": "192.0.2.200:8080",
+  "campaign": "jar-b64-entry",
+  "sleep": 90,
+  "flag": "flag{b64_1n51d3_d3fl4t3}"
+ },
+ "expected_detail_has": "zip=assets/config.txt data@555",
+ "expected_locate": null,
+ "expected_overlay": null,
+ "oracle_cmd": "PY=.venv/bin/python bash tests/data/binary_fixtures/rsrc_oracle.sh tests/data/binary_fixtures   # zipinfo; struct read of the local header (data@555); unzip -p assets/config.txt | grep -abo SENGR (4); sed 's/^cfg=//' | base64 -d | perl unpack",
+ "oracle_output": "local header 508 data@ 555 | 4:SENGR | HCFG v=1 key=0 len=97 crc=44052355",
+ "convention": "NEW branch (_zip_scan): text form inside a deflated non-class entry -> 'zip-<enc>' at the offset INSIDE the inflated entry (like upx-<enc>); entry name + compressed-data start in detail. SPECULATIVE",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/rsrc_gen.sh tests/data/binary_fixtures   # dotnet 10 (Roslyn) + llvm-rc-18 / gcc -O2 -s / javac+jar; blob = printf header + crc32 from gzip trailer"
+}

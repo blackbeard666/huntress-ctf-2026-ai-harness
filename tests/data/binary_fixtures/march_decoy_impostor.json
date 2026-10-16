@@ -1,0 +1,12 @@
+{
+ "encoding": "none",
+ "expected_machine": "none",
+ "expected_machine_num": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "generator_cmd": "{ printf '#!/bin/sh\\n# HCFG loader stub, not an ELF\\n'; printf 'HCFG\\x01\\x00\\x00\\x50\\x9d\\x63\\x8e\\x53{\"c2\":\"x\"}\\n'; } > march_decoy_impostor.bin   # shell-script impostor: no ELF/PE/Mach-O magic, truncated HCFG",
+ "oracle_cmd": "file march_decoy_impostor.bin; readelf -h march_decoy_impostor.bin   # 'POSIX shell script' / 'Not an ELF file - wrong magic'",
+ "oracle_output": "POSIX shell script executable (binary data) | readelf: Error: Not an ELF file - it has the wrong magic bytes at the start",
+ "decoy": true,
+ "note": "machine label = readelf spelling except EM_386 -> 'x86' (lib.knowledge vocabulary); expected_machine_num = decimal e_machine for kind:integer"
+}

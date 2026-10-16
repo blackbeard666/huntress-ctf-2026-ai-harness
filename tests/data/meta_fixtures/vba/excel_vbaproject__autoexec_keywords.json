@@ -1,0 +1,8 @@
+{
+ "field": "vba.autoexec_keywords",
+ "expected": "none",
+ "generator_cmd": "Microsoft Excel (XlsxWriter 3.2.9 sdist examples/vbaProject.bin), copied verbatim: cp xlsxwriter-3.2.9/examples/vbaProject.bin",
+ "oracle_cmd": ".venv/bin/python -I -c \"from oletools.olevba import VBA_Parser; print([k for t,k,d in VBA_Parser(f).analyze_macros() if t=='AutoExec'])\" excel_vbaproject__autoexec_keywords.bin  (-> [] = field absent)",
+ "decoy": false,
+ "member": "vbaProject.bin"
+}

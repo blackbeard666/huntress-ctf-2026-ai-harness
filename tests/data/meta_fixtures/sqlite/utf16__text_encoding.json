@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.text_encoding",
+ "expected": "UTF-16le",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_cli.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> utf16.db)",
+ "oracle_cmd": "sqlite3 -readonly utf16.db \"PRAGMA encoding\"  (SQLite 3.46.1 CLI) -> UTF-16le",
+ "decoy": false,
+ "member": "utf16.db"
+}

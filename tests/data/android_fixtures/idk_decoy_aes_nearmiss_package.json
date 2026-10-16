@@ -1,0 +1,7 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "generator_cmd": "sh tests/data/android_fixtures/gen_identity_keys.sh challenges/day11/mobile-local-secrets/single_solve/artifacts/latest/local_secrets.apk tests/data/android_fixtures  # apktool d/b + openssl enc -aes-128-ecb -K $(printf com.huntress.mobile.d11.v40490034623c | md5sum | cut -c1-32) -- near-miss package (last hex digit), not carried by the APK",
+ "oracle_cmd": "unzip -p idk_decoy_aes_nearmiss_package.apk assets/huntress_puzzle.json | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"data\"])' | base64 -d | openssl enc -d -aes-128-ecb -K $(printf com.huntress.mobile.d11.v40490034623b | md5sum | cut -c1-32)  # bad decrypt: no identity value of the APK keys it",
+ "decoy": true
+}

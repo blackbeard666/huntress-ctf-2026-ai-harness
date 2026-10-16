@@ -1,0 +1,9 @@
+{
+ "codec": "keyword:zebras",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jazzy-quartz-falcon-17",
+ "encoded": "Kfba vloh rablrfkc qdfp vzojtm! Ql pliua, ptejfq qdfp awzbq zkpvao ql qda Czja Jzpqao: gzyyx-ntzoqy-sziblk-17",
+ "generator_cmd": "kalpha=$(printf '%s' 'zebrasabcdefghijklmnopqrstuvwxyz' | awk '{s=\"\";for(i=1;i<=length($0);i++){c=substr($0,i,1);if(index(s,c)==0)s=s c}print s}'); printf '%s' \"$plain\" | tr 'a-zA-Z' \"$kalpha${kalpha^^}\"",
+ "oracle_cmd": "encoded=\"$encoded\" PYTHONPATH=tools/pyciphers python3 -c \"import os,pycipher as P;print(P.SimpleSubstitution('ZEBRASCDFGHIJKLMNOPQTUVWXY').decipher(os.environ['encoded']).lower())\"  # pycipher reader, letters only",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemasterjazzyquartzfalcon",
+ "expected": "match"
+}

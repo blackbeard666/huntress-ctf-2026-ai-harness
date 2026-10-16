@@ -1,0 +1,8 @@
+{
+ "field": "task.registration_author",
+ "expected": "$(@%SystemRoot%\\system32\\wininet.dll,-16772)",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/task/GENERATOR_etree_prefixed.py.txt OUT.bin  (stdlib xml.etree writer, t: prefixed namespace, ComHandler-only action, GroupId principal)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/task/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/task/etree_prefixed_comhandler__registration_author.bin registration_author -> $(@%SystemRoot%\\system32\\wininet.dll,-16772)",
+ "decoy": false,
+ "member": "CacheTask"
+}

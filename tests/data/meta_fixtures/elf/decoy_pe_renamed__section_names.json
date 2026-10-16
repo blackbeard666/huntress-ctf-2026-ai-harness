@@ -1,0 +1,8 @@
+{
+ "field": "elf.section_names",
+ "expected": "none",
+ "generator_cmd": "cp setuptools/cli-32.exe decoy_pe.so   (a PE32 renamed .so: wrong magic)  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW decoy_pe_renamed__section_names.bin | Section Headers [Nr] Name column in table order, [0] NULL dropped  -> 'Not an ELF file' (file -b: PE32 executable)",
+ "decoy": true,
+ "member": "decoy_pe.so"
+}

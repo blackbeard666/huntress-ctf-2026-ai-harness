@@ -1,0 +1,6 @@
+{
+ "entry": "il2cpp_literal_scan",
+ "expected": "ANS-0b9f6c2d4e81a735",
+ "generator_cmd": "tests/data/android_fixtures/gen_il2cpp.sh -- stdlib struct writer of Il2CppGlobalMetadataHeader (magic 0xFAB11BAF) + Il2CppStringLiteral table + stringLiteralData, zip -qX <name>.apk AndroidManifest.xml lib/arm64-v8a/libil2cpp.so assets/bin/Data/Managed/Metadata/global-metadata.dat; v39 section header ({offset,size,count} triples), literals: 'MainMenu', $(printf ANS-0b9f6c2d4e81a735 | xxd -p), 'Quit'",
+ "oracle_cmd": "python3 -I -c \"import sys,struct,zipfile; b=zipfile.ZipFile(sys.argv[1]).read('assets/bin/Data/Managed/Metadata/global-metadata.dat'); v=struct.unpack_from('<I',b,4)[0]; lo,ls=struct.unpack_from('<ii',b,8); do=struct.unpack_from('<i',b,20 if v>=38 else 16)[0]; [print(b[do+i:do+i+n].decode()) for n,i in struct.iter_unpack('<Ii',b[lo:lo+ls])]\" il2cpp_v39_hex.apk | grep -E '^[0-9a-f]{40}$' | xxd -r -p"
+}

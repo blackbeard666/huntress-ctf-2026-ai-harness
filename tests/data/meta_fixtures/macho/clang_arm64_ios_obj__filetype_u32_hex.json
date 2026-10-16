@@ -1,0 +1,8 @@
+{
+ "field": "macho.filetype_u32_hex",
+ "expected": "0x00000001",
+ "generator_cmd": "clang-18 --target=arm64-apple-ios15.4 -c m.c -o ios.o  (run in $TMPDIR/mfx)",
+ "oracle_cmd": "llvm-otool-18 -h clang_arm64_ios_obj__filetype_u32_hex.bin (decimal cputype/filetype -> 0x%08x)",
+ "decoy": false,
+ "member": "ios.o"
+}

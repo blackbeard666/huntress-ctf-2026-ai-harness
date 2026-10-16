@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=rust|role=loader|verdict=malicious|attack=T1105|adapter=http_get|stage_count=2|steps=fetch_stage,run_stage|campaign_id=RU-5e11f0d3|url=https://rust-5e11f0d3.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | base64 -w0  -> literal written into desc_rust_const.rs",
+ "oracle_cmd": "rustc -o /tmp/desc_rs tests/data/script_fixtures/desc_rust_const.rs && /tmp/desc_rs | base64 -d"
+}

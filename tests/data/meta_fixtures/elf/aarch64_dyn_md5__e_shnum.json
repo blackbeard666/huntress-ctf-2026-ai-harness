@@ -1,0 +1,8 @@
+{
+ "field": "elf.e_shnum",
+ "expected": "29",
+ "generator_cmd": "aarch64-linux-gnu-gcc -Wl,--build-id=md5 -Wl,-z,max-page-size=4096 -o a64_dyn m.c  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW aarch64_dyn_md5__e_shnum.bin | grep 'Number of section headers'",
+ "decoy": false,
+ "member": "a64_dyn"
+}

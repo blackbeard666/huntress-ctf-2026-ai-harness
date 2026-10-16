@@ -1,0 +1,18 @@
+{
+ "encoding": "raw-be",
+ "expected_machine": "PowerPC64",
+ "readelf_machine": "PowerPC64",
+ "expected_machine_num": "21",
+ "endian": "big",
+ "expected_offset": 240,
+ "expected_config": {
+  "c2": "198.51.100.7:443",
+  "campaign": "tower",
+  "sleep": 9,
+  "flag": "flag{mult1_4rch}"
+ },
+ "generator_cmd": "bash march_gen.sh march_ppc64_be.bin powerpc64-linux-gnu '{\"c2\":\"198.51.100.7:443\",\"campaign\":\"tower\",\"sleep\":9,\"flag\":\"flag{mult1_4rch}\"}' 0",
+ "oracle_cmd": "bash march_oracle.sh march_ppc64_be.bin   # GNU readelf -h/-SW, llvm-objcopy-18 --only-section=.hcfg, perl unpack (header in ELF byte order) + xor, gzip trailer crc32",
+ "oracle_output": "PowerPC64 | 21 | big | 240 | HCFG 1 0 80 2640537683 2640537683 | {\"c2\":\"198.51.100.7:443\",\"campaign\":\"tower\",\"sleep\":9,\"flag\":\"flag{mult1_4rch}\"}",
+ "note": "machine label = readelf spelling except EM_386 -> 'x86' (lib.knowledge vocabulary); expected_machine_num = decimal e_machine for kind:integer"
+}

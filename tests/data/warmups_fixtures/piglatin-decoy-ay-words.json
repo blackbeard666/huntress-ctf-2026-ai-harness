@@ -1,0 +1,10 @@
+{
+ "codec": "piglatin",
+ "plain": null,
+ "encoded": "Today we may play away in May, okay?",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written English with many words ending in -ay but not all (we, in)",
+ "oracle_cmd": "printf %s \"$encoded\" | tools/bsdgames/usr/games/pig  # differs from the input: plain English, not pig output",
+ "note": "near miss: only SOME words end in ay -> none"
+}

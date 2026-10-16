@@ -1,0 +1,10 @@
+{
+ "codec": "bubble-black",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-09",
+ "encoded": "🅝🅘🅒🅔 🅦🅞🅡🅚 🅓🅔🅒🅞🅓🅘🅝🅖 🅣🅗🅘🅢 🅦🅐🅡🅜🅤🅟! 🅣🅞 🅢🅞🅛🅥🅔, 🅢🅤🅑🅜🅘🅣 🅣🅗🅘🅢 🅔🅧🅐🅒🅣 🅐🅝🅢🅦🅔🅡 🅣🅞 🅣🅗🅔 🅖🅐🅜🅔 🅜🅐🅢🅣🅔🅡: 🅒🅛🅞🅥🅔🅡-🅗🅔🅡🅞🅝-⓿❾",
+ "generator_cmd": "perl -CSA tests/data/warmups_fixtures/unistyle_perl.pl bubble-black \"$(printf %s \"$plain\" | tr a-z A-Z)\"  # Perl charnames: NEGATIVE CIRCLED LATIN CAPITAL LETTER X, DINGBAT NEGATIVE CIRCLED DIGIT n, NEGATIVE CIRCLED DIGIT ZERO",
+ "oracle_cmd": "python3 -I -c 'import sys,unicodedata as u;print(\"\".join(c if c.isascii() else u.name(c)[-1] if u.name(c).startswith(\"NEGATIVE CIRCLED LATIN CAPITAL LETTER \") else str(u.digit(c)) for c in sys.argv[1]))' \"$encoded\"  # Unicode names + Numeric_Type=Digit values",
+ "oracle_plain": "NICE WORK DECODING THIS WARMUP! TO SOLVE, SUBMIT THIS EXACT ANSWER TO THE GAME MASTER: CLOVER-HERON-09",
+ "expected": "match_upper",
+ "note": "capital-only style: the decode is the plain upper-cased (oracle_plain)"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "jumplist.destlist_hostnames",
+ "expected": "[\"desktop-7f3k2q\",\"desktop-7f3k2q\",\"ws-legacy\"]",
+ "generator_cmd": "cd $TMPDIR/jl/gen; cp tests/data/meta_fixtures/jumplist/GENERATOR_jumplist_payloads.py.txt gen_payloads.py; cp .../GENERATOR_jumplist_mkcfb.js.txt mkcfb.js; /usr/bin/python3 -I gen_payloads.py stage  (pylnk3 0.4.3 LNK writer + DestList packed per libyal Jump lists format); node mkcfb.js stage/v4 v4.bin  (SheetJS cfb 1.2.2 npm CFB writer; it adds its own \\x01Sh33tJ5 stream)",
+ "oracle_cmd": "JL=$TMPDIR/jl .venv/bin/python -I ORACLE_jumplist_plaso_dtfabric.py.txt tests/data/meta_fixtures/jumplist/cfb_v4__destlist_hostnames.bin 9b9cdc69c1c24e2b.automaticDestinations-ms  (olefile listdir + plaso-20260720 automatic_destinations.yaml read by dtfabric-20260506 for DestList + LnkParse3 1.6.0 link_info local_base_path for each hex stream) -> key destlist_hostnames",
+ "decoy": false,
+ "member": "9b9cdc69c1c24e2b.automaticDestinations-ms"
+}

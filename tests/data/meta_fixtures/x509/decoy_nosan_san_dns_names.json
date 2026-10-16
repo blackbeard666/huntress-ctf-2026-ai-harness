@@ -1,0 +1,8 @@
+{
+ "field": "x509.san_dns_names",
+ "expected": "none",
+ "generator_cmd": "openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.pem -subj \"/C=US/O=Huntress Labs/CN=Arena Root CA 2026\" -days 3650 -set_serial 0x1001  (OpenSSL 3.5.5 default config: no subjectAltName extension)",
+ "oracle_cmd": "openssl x509 -inform PEM -in ca.pem -noout -ext subjectAltName -> 'No extensions in certificate' (SAN absent)",
+ "decoy": true,
+ "member": "ca.pem"
+}

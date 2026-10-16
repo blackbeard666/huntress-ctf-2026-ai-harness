@@ -1,0 +1,10 @@
+{
+ "codec": "rot8000",
+ "plain": null,
+ "encoded": "你好世界，这是一个普通的中文句子，并没有经过任何旋转。",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written genuine Chinese prose: CyberChef ROT8000 rotates it to non-ASCII junk, not English -> not rot8000",
+ "oracle_cmd": "printf %s \\\"$encoded\\\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/rot8000_cyberchef.mjs  # CyberChef \\\"ROT8000\\\" (involution)",
+ "oracle_plain": "쬶핓짬濫笶Ᏺ짖쨀ᐳ署쨃쾻휦笶˨Ꮰ쫑쬫ᎅꯘ"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "task.action_types",
+ "expected": "[\"ComHandler\"]",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/task/GENERATOR_etree_prefixed.py.txt OUT.bin  (stdlib xml.etree writer, t: prefixed namespace, ComHandler-only action, GroupId principal)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/task/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/task/etree_prefixed_comhandler__action_types.bin action_types -> [\"ComHandler\"]",
+ "decoy": false,
+ "member": "CacheTask"
+}

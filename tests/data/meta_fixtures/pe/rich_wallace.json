@@ -1,0 +1,7 @@
+{
+ "field": "pe.rich_header_hash_md5",
+ "expected": "850df14b255eeb4e49388620acefff21",
+ "generator_cmd": "cp tools/ghidra/docs/GhidraClass/ExerciseFiles/VersionTracking/WallaceSrc.exe (MSVC 2010 Debug build, Rich + RSDS) tests/data/meta_fixtures/pe/rich_wallace.bin  (unmodified)",
+ "oracle_cmd": ".venv/bin/python -c \"import pefile,sys,json;p=pefile.PE(sys.argv[1]);print(p.get_rich_header_hash() or 'none')\" tests/data/meta_fixtures/pe/rich_wallace.bin",
+ "decoy": false
+}

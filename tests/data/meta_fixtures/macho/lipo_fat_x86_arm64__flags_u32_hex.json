@@ -1,0 +1,8 @@
+{
+ "field": "macho.flags_u32_hex",
+ "expected": "0x00300085",
+ "generator_cmd": "llvm-lipo-18 -create prog_x86 prog_arm64 -output fat_prog  (run in $TMPDIR/mfx)",
+ "oracle_cmd": "llvm-otool-18 -arch x86_64 -h lipo_fat_x86_arm64__flags_u32_hex.bin (decimal cputype/filetype -> 0x%08x)  [fat: first slice per `llvm-otool-18 -f` = x86_64]",
+ "decoy": false,
+ "member": "fat_prog"
+}

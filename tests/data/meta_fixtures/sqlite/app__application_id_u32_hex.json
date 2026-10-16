@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.application_id_u32_hex",
+ "expected": "0x0f055112",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_cli.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> app.db)",
+ "oracle_cmd": "sqlite3 -readonly app.db \"select printf('0x%08x', application_id) from pragma_application_id\"  (SQLite 3.46.1 CLI) -> 0x0f055112",
+ "decoy": false,
+ "member": "app.db"
+}

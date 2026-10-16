@@ -1,0 +1,14 @@
+{
+ "codec": "polyalpha-hint",
+ "plain": null,
+ "encoded": "Iicp ik o qmajviicx sxfamzui psxdvvjj, aabgy bjolz ezrkgpea xmm tgdi aw iyz: adhv-yxrwk-12",
+ "hints": [
+  "Running Late",
+  "Bellaso never repeats himself: every letter of this very briefing, read in order, keys the next letter of your blob."
+ ],
+ "decoy": true,
+ "expected": "none",
+ "oracle_plain": null,
+ "generator_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import pycipher as P; P.Vigenere(KEY).encipher(other_sentence)\"  # same running key, crib absent",
+ "oracle_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import pycipher as P; print(P.Vigenere(KEY).decipher(encoded).lower()[:20])\"  # hereisadifferentsent: no 'Nice work decoding'"
+}

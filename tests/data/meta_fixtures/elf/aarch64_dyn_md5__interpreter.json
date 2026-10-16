@@ -1,0 +1,8 @@
+{
+ "field": "elf.interpreter",
+ "expected": "/lib/ld-linux-aarch64.so.1",
+ "generator_cmd": "aarch64-linux-gnu-gcc -Wl,--build-id=md5 -Wl,-z,max-page-size=4096 -o a64_dyn m.c  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW aarch64_dyn_md5__interpreter.bin | grep 'Requesting program interpreter'",
+ "decoy": false,
+ "member": "a64_dyn"
+}

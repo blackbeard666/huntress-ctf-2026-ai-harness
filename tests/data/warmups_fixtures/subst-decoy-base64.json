@@ -1,0 +1,10 @@
+{
+ "codec": "subst",
+ "plain": null,
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwISBUbyBzb2x2ZSwgc3VibWl0IHRoaXMgZXhhY3QgYW5zd2VyIHRvIHRoZSBHYW1lIE1hc3RlcjogamF6enktcXVhcnR6LWZhbGNvbi0xNw==",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf '%s' \"$plain\" | base64 -w0  # coreutils base64 of the sentence: no letter map onto the crib",
+ "oracle_cmd": "printf '%s' \"$encoded\" | base64 -d  # coreutils reader -> the plain sentence (it is base64, not substitution)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jazzy-quartz-falcon-17"
+}

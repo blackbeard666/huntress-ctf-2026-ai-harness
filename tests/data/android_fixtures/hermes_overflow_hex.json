@@ -1,0 +1,6 @@
+{
+ "entry": "hermes_string_scan",
+ "expected": "ANS-e0915bd7c2a48f63",
+ "generator_cmd": "tests/data/android_fixtures/gen_hermes.sh -- hermesc (npm hermes-compiler 0.x, bytecode v98) -emit-binary -out assets/index.android.bundle index.js, then zip -qX <name>.apk AndroidManifest.xml assets/index.android.bundle; JS: var blob = '<hex of react-native-config::0x300::ANS-e0915bd7c2a48f63::end>' (696 chars -> overflow string table)",
+ "oracle_cmd": "python3 -I -c \"import sys,io,zipfile; from hermes_dec.parsers.hbc_file_parser import HBCReader; r=HBCReader(); r.read_whole_file(io.BytesIO(zipfile.ZipFile(sys.argv[1]).read('assets/index.android.bundle'))); print('\\n'.join(r.strings))\" hermes_overflow_hex.apk | grep -E '^[0-9a-f]{600,}$' | xxd -r -p | grep -o 'ANS-[0-9a-f]*'"
+}

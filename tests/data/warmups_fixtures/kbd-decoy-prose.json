@@ -1,0 +1,17 @@
+{
+ "codec": "kbd",
+ "plain": null,
+ "encoded": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written plain warmups sentence: already English -> not keyboard text",
+ "oracle_cmd": "for p in 'us|us dvorak' 'us dvorak|us' 'us|us colemak' 'us colemak|us' 'us|fr' 'fr|us'; do printf %s \"$encoded\" | sh tests/data/warmups_fixtures/kbd_oracle.sh \"${p%|*}\" \"${p#*|}\"; done  # every reading back is non-English -> no layout swap",
+ "oracle_plain": {
+  "qwerty>dvorak": "Lgid ,sov hdishglu kjg; ,aomfr! Ks ;sp.dw ;fnmgk kjg; dbaik al;,do ks kjd Uamd Ma;kdoZ amndo'yapisl'42",
+  "qwerty>colemak": "Jlck w;sn gkc;gljt fhld wasmir! F; d;uvk, dibmlf fhld kxacf ajdwks f; fhk Tamk MadfksP ambks-eauc;j-42",
+  "qwerty>azerty": "Nice zork decoding this zqr;up/ To solvem sub;it this exqct qnszer to the Gq;e :qster. q;ber6fqlcon6$@",
+  "dvorak>qwerty": "Bcj. ,rpt e.jrecbi ydco ,apmgl! Yr ornk.w ogxmcy ydco .qajy abo,.p yr yd. Iam. Maoy.pS amx.p[uanjrb[42",
+  "colemak>qwerty": "Kucf wype sfcysukd ghur wapml;! Gy ryivf, rlbmug ghur fxacg akrwfp gy ghf Damf MargfpO ambfp-taicyk-42",
+  "azerty>qwerty": "Nice zork decoding this zqr,up1 To solve; sub,it this exqct qnszer to the Gq,e ?qsterM q,ber)fqlcon)'é"
+ }
+}

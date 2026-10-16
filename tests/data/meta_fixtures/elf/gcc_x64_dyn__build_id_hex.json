@@ -1,0 +1,8 @@
+{
+ "field": "elf.build_id_hex",
+ "expected": "a9ec4636fb401c7e7da6b3f2892b861425d4deac",
+ "generator_cmd": "gcc -O0 -Wl,--build-id=sha1 -o x64_dyn m.c   (m.c: int main(void){return 0;}; gcc 13 x86-64)  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW gcc_x64_dyn__build_id_hex.bin | grep 'Build ID:'",
+ "decoy": false,
+ "member": "x64_dyn"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "trithemius:0",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-wren-23",
+ "encoded": "Njeh atxr lnmzpvbv jyal qvnjso! Tp urpak, zckwtf gvxi vptwo wkqves vr xmk Nivo Xmfhth: tguugp-tpdn-23",
+ "generator_cmd": "plain=\"$plain\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import sys,os,pycipher as P;p=os.environ['plain'];c=iter(P.Vigenere('ABCDEFGHIJKLMNOPQRSTUVWXYZ').encipher(p) if 'e'=='e' else P.Vigenere('ABCDEFGHIJKLMNOPQRSTUVWXYZ').decipher(p));print(''.join((lambda x:x if ch.isupper() else x.lower())(next(c)) if ch.isalpha() else ch for ch in p))\"  # Trithemius = Vigenere with the A..Z tabula recta key",
+ "oracle_cmd": "encoded=\"$encoded\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import os,pycipher as P;e=os.environ['encoded'];print(P.Vigenere('ABCDEFGHIJKLMNOPQRSTUVWXYZ').decipher(e).lower())\"  # pycipher reader, letters only",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemastercobaltwren",
+ "expected": "match"
+}

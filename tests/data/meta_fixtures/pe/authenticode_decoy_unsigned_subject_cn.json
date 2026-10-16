@@ -1,0 +1,7 @@
+{
+ "field": "pe.signer_subject_cn",
+ "expected": "none",
+ "generator_cmd": "cp .venv/lib/python3.12/site-packages/setuptools/cli-32.exe (unsigned) -> cli32_tds.bin",
+ "oracle_cmd": ".venv/bin/python -c \"import pefile,sys;d=pefile.PE(sys.argv[1]).OPTIONAL_HEADER.DATA_DIRECTORY[4];print(d.VirtualAddress,d.Size)\" -> 0 0 (no certificate table)",
+ "decoy": true
+}

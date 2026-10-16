@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=perl|role=backdoor|verdict=malicious|attack=T1059|steps=decode,eval|campaign_id=PL-0d6c93b8|url=https://pl-0d6c93b8.example.invalid/c",
+ "decoy": false,
+ "generator_cmd": "perl -MCompress::Zlib -MMIME::Base64 -e '$c=\"our \\$plan = q{$ARGV[0]};\\n\"; $r=reverse encode_base64(compress($c),\"\")' '<plan>' -> `eval uncompress(decode_base64(scalar reverse '<r>'));`",
+ "oracle_cmd": "perl -e 'do $ARGV[0]; print $plan' ./tests/data/script_fixtures/pl_chain_reverse_b64.pl"
+}

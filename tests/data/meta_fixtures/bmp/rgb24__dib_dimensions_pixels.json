@@ -1,0 +1,8 @@
+{
+ "field": "bmp.dib_dimensions_pixels",
+ "expected": "33x17",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import Image; Image.new('RGB',(33,17),(1,2,3)).save('rgb24.bmp'); Image.new('L',(120,7),9).save('gray8.bmp')\"  (Pillow 12.3.0 writer)",
+ "oracle_cmd": "exiftool -j -ImageWidth -ImageHeight rgb24.bmp -> 33/17; file -b -> '33 x 17 x 24'",
+ "decoy": false,
+ "member": "rgb24.bmp"
+}

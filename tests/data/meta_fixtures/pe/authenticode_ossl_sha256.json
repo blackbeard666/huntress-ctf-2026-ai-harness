@@ -1,0 +1,7 @@
+{
+ "field": "pe.signer_cert_sha256",
+ "expected": "b72b4ff70e3d48ae0f7dac60cf62f8a6a068e4db6349306ea357b5a462c6ad49",
+ "generator_cmd": "openssl req -x509 ... -subj '/O=Huntress Lab/CN=Arena Test Root CA'; openssl req -newkey ... -subj '/C=US/O=Contoso Ltd/CN=Contoso Code Signer'; openssl x509 -req -CA ca.pem -set_serial 0x00a1b2c3d4e5f60718 -extfile(codeSigning,SKI); openssl cms -sign -binary -nodetach -outform DER -signer leaf.pem -inkey leaf.key -certfile ca.pem -md sha256 -> p7; stdlib writer appends WIN_CERTIFICATE(len,0x0200,2,p7) 8-aligned at EOF of setuptools cli-32.exe (cli32_tds.bin) and sets data dir 4 = (file offset, size)",
+ "oracle_cmd": "python3 -I blob.py tests/data/meta_fixtures/pe/authenticode_ossl_sha256.bin blob.p7  (pefile: bytes [DATA_DIRECTORY[4].VirtualAddress+8 : +Size]); openssl cms -verify -noverify -inform DER -in blob.p7 -signer s.pem -out /dev/null; openssl x509 -in s.pem -noout -subject -issuer -serial -fingerprint -sha1 / -sha256 (lowercased, colons removed)",
+ "decoy": false
+}

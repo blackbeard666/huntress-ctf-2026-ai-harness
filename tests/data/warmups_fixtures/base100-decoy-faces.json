@@ -1,0 +1,10 @@
+{
+ "codec": "base100",
+ "plain": null,
+ "encoded": "😀😃😄😁😆😅🤣😂🙂🙃😉😊",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written decoy: smiley-face emoji U+1F600..U+1F643 (+U+1F923), outside the base100 block U+1F3F7..U+1F4F6",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;sys.path.insert(0,'tools/pybase100');import pybase100;print(pybase100.decode(sys.stdin.buffer.read()).decode())\"  # PyPI pybase100==0.3.1 decode  -> pybase100 (no range check) returns control-byte garbage '\\t\\x0c\\r\\n\\x0f\\x0e,\\x0bKL\\x12\\x13' -- not text",
+ "oracle_plain": null
+}

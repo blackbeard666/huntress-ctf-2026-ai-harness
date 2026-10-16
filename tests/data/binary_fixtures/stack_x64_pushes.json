@@ -1,0 +1,13 @@
+{
+ "encoding": "stack-built",
+ "expected_offset": 4096,
+ "expected_config": {
+  "c2": "10.13.37.7:9001",
+  "campaign": "pushover",
+  "sleep": 15,
+  "flag": "flag{pu5h_r4x_r3v3rs3d}"
+ },
+ "generator_cmd": "bash stack_push_gen.sh stack_x64_pushes.bin '{\"c2\":\"10.13.37.7:9001\",\"campaign\":\"pushover\",\"sleep\":15,\"flag\":\"flag{pu5h_r4x_r3v3rs3d}\"}'   # blob: printf header + gzip-trailer crc32; xxd -p -c8 | tac | per-qword byte reversal -> movabs $imm64,%rax; push %rax; GNU as + ld",
+ "oracle_cmd": "bash stack_push_oracle.sh stack_x64_pushes.bin   # the program RUNS and write(2)s its stack buffer; perl unpack header; gzip trailer = crc32(body); objdump -d first movabs + readelf -SW .text -> file offset",
+ "oracle_output": "4096 HCFG 90 765948494 {\"c2\":\"10.13.37.7:9001\",\"campaign\":\"pushover\",\"sleep\":15,\"flag\":\"flag{pu5h_r4x_r3v3rs3d}\"} 765948494"
+}

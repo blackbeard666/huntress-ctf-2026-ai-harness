@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.table_names",
+ "expected": "[\"notes\",\"tags\",\"Weird Name\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_cli.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> utf16.db)",
+ "oracle_cmd": "sqlite3 -readonly utf16.db \"select json_group_array(name) from (select name from sqlite_master where type='table')\"  (SQLite 3.46.1 CLI) -> [\"notes\",\"tags\",\"Weird Name\"]",
+ "decoy": false,
+ "member": "utf16.db"
+}

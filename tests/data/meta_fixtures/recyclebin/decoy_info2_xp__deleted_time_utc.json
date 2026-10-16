@@ -1,0 +1,8 @@
+{
+ "field": "recyclebin.deleted_time_utc",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/recycle/GENERATOR_recycle.py.txt <outdir>  (stdlib struct writer) -> <case>.raw",
+ "oracle_cmd": ".venv/bin/python tests/data/meta_fixtures/recycle/ORACLE_dissect_recyclebin.py.txt <case>.bin  (dissect.target 3.25.1 plugins/os/windows/recyclebin c_recyclebin.header_v1/v2 + dissect.util.ts.wintimestamp) -> 'version N -> not a $I' (dissect select_header only knows header 1/2)",
+ "decoy": true,
+ "member": "INFO2"
+}

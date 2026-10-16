@@ -1,0 +1,9 @@
+{
+ "codec": "z85",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "phaiHaA}:AyANe0v@C)(zF78lxLzJgCvtJeB-nGDrbS[2z!%PdefG1RvR]?3aARphB0b4svpKy4vqZdgwPw]nzY<dnwGTGKzdK?:vrlK4AYLsKzdm6%eOnBcv@Dlpg+]",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/z85_cyberchef.mjs enc  # CyberChef \"To Base85\", alphabet \"Z85 (ZeroMQ)\" (102 B: partial last group truncated ascii85-style)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys,base64;Z='0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%\\$#';B='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#\\$%&()*+-;<=>?@^_\\`{|}~';print(base64.b85decode(sys.stdin.read().strip().translate(str.maketrans(Z,B))).decode())\"  # stdlib base64.b85decode (RFC 1924) with the Z85 alphabet translated index-for-index",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

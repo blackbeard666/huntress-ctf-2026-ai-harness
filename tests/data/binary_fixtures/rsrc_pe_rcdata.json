@@ -1,0 +1,27 @@
+{
+ "encoding": "raw",
+ "expected_offset": 2700,
+ "expected_config": {
+  "c2": "203.0.113.40:8443",
+  "campaign": "rsrc-rcdata",
+  "sleep": 45,
+  "flag": "flag{rcd4t4_in_rsrc}"
+ },
+ "expected_locate": {
+  "container": "pe-resource",
+  "slot_offset": 2700,
+  "delta": 0,
+  "type_name": "RCDATA",
+  "name": "HCFG",
+  "lang": 1033,
+  "size": 104
+ },
+ "expected_overlay": {
+  "has_overlay": false,
+  "overlay_offset": null
+ },
+ "oracle_cmd": "PY=.venv/bin/python bash tests/data/binary_fixtures/rsrc_oracle.sh tests/data/binary_fixtures   # 7z l -slt (.rsrc/RCDATA/HCFG) + pefile DIRECTORY_ENTRY_RESOURCE get_offset_from_rva(OffsetToData) + get_overlay_data_start_offset; perl unpack of the blob",
+ "oracle_output": "RT_RCDATA HCFG 1033 offset 2700 size 104 | RT_RCDATA VERS 1033 offset 2820 size 13 | overlay None | magic@2700 | HCFG v=1 key=0 len=92 crc=1679189565",
+ "convention": "raw at the magic (unchanged); RT_RCDATA data start == magic here (delta 0) -- hcfg_locate gives slot_offset/delta when a prefix sits before it",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/rsrc_gen.sh tests/data/binary_fixtures   # dotnet 10 (Roslyn) + llvm-rc-18 / gcc -O2 -s / javac+jar; blob = printf header + crc32 from gzip trailer"
+}

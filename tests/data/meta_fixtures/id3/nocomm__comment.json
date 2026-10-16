@@ -1,0 +1,8 @@
+{
+ "field": "id3.comment",
+ "expected": "none",
+ "generator_cmd": ".venv/bin/python -I gen.py  (mutagen 1.48.1 ID3 writer: ID3().add(TIT2/TPE1/TALB/COMM/TDRC).save(f, v2_version=3|4) onto 4 silent MPEG-1 L3 frames)",
+ "oracle_cmd": "bin/exiftool -j -G1 -Title -Artist -Album -Comment -RecordingTime nocomm.mp3 -> no Comment tag",
+ "decoy": true,
+ "member": "nocomm.mp3"
+}

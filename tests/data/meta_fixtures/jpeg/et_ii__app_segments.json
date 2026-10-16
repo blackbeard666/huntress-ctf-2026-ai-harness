@@ -1,0 +1,8 @@
+{
+ "field": "jpeg.app_segments",
+ "expected": "[\"APP0\",\"APP1\"]",
+ "generator_cmd": "python3 -c 'from PIL import Image; Image.new(\"L\",(32,32),128).save(\"base.jpg\",\"JPEG\")' && exiftool -o et_ii.jpg -ExifByteOrder=II -Make=Apple -Model='iPhone 15 Pro' -Orientation#=8 -DateTimeOriginal='2024:02:29 12:00:01' -OffsetTimeOriginal=+05:30 -GPSLatitude=12.3456789 -GPSLatitudeRef=S base.jpg  (run in $TMPDIR/jpegfx)",
+ "oracle_cmd": "exiftool -v1 et_ii.jpg | grep -o 'APP[0-9]*'  (file order -> JSON list)",
+ "decoy": false,
+ "member": "et_ii.jpg"
+}

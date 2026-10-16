@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=python|role=stager|verdict=malicious|attack=T1059.006|steps=fetch,exec|campaign_id=PY-5be2a091|url=https://py-5be2a091.example.invalid/p",
+ "decoy": false,
+ "generator_cmd": "python3 -I: code=\"PLAN = %r\\n\" % plan; blob=codecs.encode(base64.b64encode(zlib.compress(code.encode()[::-1],9)).decode(),'rot13'); write `exec(zlib.decompress(base64.b64decode(codecs.decode('<blob>', 'rot13')))[::-1])`",
+ "oracle_cmd": "python3 -I -c 'import sys; g={}; exec(open(sys.argv[1]).read(), g); print(g[\"PLAN\"])' tests/data/script_fixtures/py_chain_codecs_rot13.py"
+}

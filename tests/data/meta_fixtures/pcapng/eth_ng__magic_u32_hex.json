@@ -1,0 +1,8 @@
+{
+ "field": "pcapng.magic_u32_hex",
+ "expected": "0x1a2b3c4d",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcapng/GENERATOR_pcapng.sh.txt  (Wireshark 4.6.4 text2pcap/editcap/mergecap; be_ns.pcap via stdlib struct) -> eth_ng.pcapng",
+ "oracle_cmd": "od -An -tx4 -j8 -N4 eth_ng.pcapng -> 1a2b3c4d (SHB byte-order magic); file -b eth_ng.pcapng -> 'pcapng capture file'",
+ "decoy": false,
+ "member": "eth_ng.pcapng"
+}

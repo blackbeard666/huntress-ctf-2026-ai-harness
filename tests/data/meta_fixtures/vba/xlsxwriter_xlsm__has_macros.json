@@ -1,0 +1,8 @@
+{
+ "field": "vba.has_macros",
+ "expected": "true",
+ "generator_cmd": ".venv/bin/python -I -c \"import xlsxwriter; wb=xlsxwriter.Workbook('macro.xlsm'); wb.add_worksheet().write('A1','hello'); wb.add_vba_project('vbaProject.bin'); wb.close()\"  (XlsxWriter 3.2.9 writer)",
+ "oracle_cmd": ".venv/bin/python -I -c \"from oletools.olevba import VBA_Parser; print(VBA_Parser(f).detect_vba_macros())\" xlsxwriter_xlsm__has_macros.bin",
+ "decoy": false,
+ "member": "macro.xlsm"
+}

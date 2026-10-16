@@ -1,0 +1,8 @@
+{
+ "field": "pcapng.packet_count",
+ "expected": "6",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcapng/GENERATOR_pcapng.sh.txt  (Wireshark 4.6.4 text2pcap/editcap/mergecap; be_ns.pcap via stdlib struct) -> multi.pcapng",
+ "oracle_cmd": "TZ=UTC capinfos -t -E -l -c -a -e -S -I multi.pcapng -> 'Number of packets: 6'",
+ "decoy": false,
+ "member": "multi.pcapng"
+}

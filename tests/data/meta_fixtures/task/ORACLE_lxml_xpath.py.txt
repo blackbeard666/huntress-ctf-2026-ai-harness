@@ -1,0 +1,44 @@
+# Independent READER: lxml (libxml2) XPath with local-name() matching. Usage: python3 -I this.py FILE FIELD
+# Rendering: empty/absent -> none; lists -> compact JSON; Settings/Hidden absent -> false, Enabled absent -> true
+# (Task Scheduler schema defaults); a document whose root is not Task / that libxml2 cannot parse -> none.
+import json, sys
+from lxml import etree as E
+f, field = sys.argv[1], sys.argv[2]
+try:
+    t = E.parse(f, E.XMLParser(resolve_entities=False, no_network=True))
+except E.XMLSyntaxError:
+    print("none"); sys.exit()
+L = lambda *ns: "/".join("*[local-name()='%s']" % n for n in ns)
+R = "/" + L("Task")
+if not t.xpath(R):
+    print("none"); sys.exit()
+P = "%s/%s[@id=%s/%s/@Context]" % (R, L("Principals", "Principal"), R, L("Actions"))   # the Actions@Context principal
+P = P if t.xpath(P) else "(%s/%s)[1]" % (R, L("Principals", "Principal"))                # else the first one
+X1 = "(%s/%s)[1]/" % (R, L("Actions", "Exec"))
+S = {"exec_command": X1 + L("Command"), "exec_arguments": X1 + L("Arguments"),
+     "exec_working_directory": X1 + L("WorkingDirectory"),
+     "registration_author": R + "/" + L("RegistrationInfo", "Author"), "registration_date": R + "/" + L("RegistrationInfo", "Date"),
+     "registration_description": R + "/" + L("RegistrationInfo", "Description"),
+     "registration_source": R + "/" + L("RegistrationInfo", "Source"), "uri": R + "/" + L("RegistrationInfo", "URI"),
+     "principal_user_id": P + "/" + L("UserId"), "principal_group_id": P + "/" + L("GroupId"),
+     "principal_logon_type": P + "/" + L("LogonType"), "run_level": P + "/" + L("RunLevel"),
+     "trigger_start_boundary": "(%s/%s/*)[1]/%s" % (R, L("Triggers"), L("StartBoundary")),
+     "com_handler_class_id": R + "/" + L("Actions", "ComHandler", "ClassId"), "task_version": R + "/@version"}
+if field in S:
+    v = t.xpath("string(%s)" % S[field]).strip()
+    print(v or "none")
+elif field == "exec_command_line":
+    c, a = t.xpath("string(%s)" % (X1 + L("Command"))).strip(), t.xpath("string(%s)" % (X1 + L("Arguments"))).strip()
+    print((c + " " + a if a else c) if c else "none")
+elif field == "exec_commands":
+    print(json.dumps([e.text.strip() for e in t.xpath(R + "/" + L("Actions", "Exec", "Command"))], separators=(",", ":")))
+elif field in ("trigger_types", "action_types"):
+    el = t.xpath(R + "/" + L("Triggers" if field == "trigger_types" else "Actions"))
+    print(json.dumps([E.QName(c).localname for c in el[0] if isinstance(c.tag, str)], separators=(",", ":")) if el else "none")
+elif field in ("trigger_count", "action_count"):
+    print(int(t.xpath("count(%s/%s/*)" % (R, L("Triggers" if field == "trigger_count" else "Actions")))))
+elif field in ("hidden", "enabled"):
+    v = t.xpath("string(%s)" % (R + "/" + L("Settings", field.capitalize()))).strip().lower()
+    print(v or ("false" if field == "hidden" else "true"))
+else:
+    sys.exit("oracle: unknown field " + field)

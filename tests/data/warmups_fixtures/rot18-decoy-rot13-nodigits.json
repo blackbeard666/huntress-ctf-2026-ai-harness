@@ -1,0 +1,9 @@
+{
+ "codec": "rot18",
+ "plain": null,
+ "encoded": "Avpr jbex qrpbqvat guvf jnezhc!",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup!' | tr 'A-Za-z' 'N-ZA-Mn-za-m'  # plain ROT13, no digits",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -pe 'y/A-Za-z/N-ZA-Mn-za-m/'  -> no digits: indistinguishable from the confirmed rot13, left to it"
+}

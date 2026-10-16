@@ -1,0 +1,15 @@
+{
+ "encoding": "stack-built",
+ "expected_offset": 4628,
+ "expected_config": {
+  "c2": "https://cdn.example.org/beacon/v2/checkin",
+  "campaign": "mov-immediate",
+  "jitter": 12,
+  "sleep": 90,
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0)",
+  "flag": "flag{v0l4t1l3_st0r3s}"
+ },
+ "generator_cmd": "bash stack_gen.sh stack_x64_O0.bin gcc 0 '{\"c2\":\"https://cdn.example.org/beacon/v2/checkin\",\"campaign\":\"mov-immediate\",\"jitter\":12,\"sleep\":90,\"user_agent\":\"Mozilla/5.0 (Windows NT 10.0)\",\"flag\":\"flag{v0l4t1l3_st0r3s}\"}'   # blob: printf header + crc32 from gzip trailer, od -tu1 byte values; C program storing b[i]=<imm> into a volatile stack buffer, one statement per byte",
+ "oracle_cmd": "bash stack_oracle.sh stack_x64_O0.bin   # the program RUNS (native / qemu-aarch64) and dumps the buffer it built; perl unpack header; gzip trailer = crc32(body); objdump -d first movb $0x48 / mov wN,#0x48 in main + readelf -SW .text -> file offset",
+ "oracle_output": "4628 HCFG 176 3967289220 {\"c2\":\"https://cdn.example.org/beacon/v2/checkin\",\"campaign\":\"mov-immediate\",\"jitter\":12,\"sleep\":90,\"user_agent\":\"Mozilla/5.0 (Windows NT 10.0)\",\"flag\":\"flag{v0l4t1l3_st0r3s}\"} 3967289220"
+}

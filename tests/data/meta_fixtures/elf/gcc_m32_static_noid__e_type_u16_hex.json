@@ -1,0 +1,8 @@
+{
+ "field": "elf.e_type_u16_hex",
+ "expected": "0x0002",
+ "generator_cmd": "gcc -m32 -static -nostdlib -ffreestanding -Wl,--build-id=none -o x86_static_noid s.c   (s.c: void _start(void){for(;;);})  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW gcc_m32_static_noid__e_type_u16_hex.bin | grep Type: (REL/EXEC/DYN -> 1/2/3, u16 hex)",
+ "decoy": false,
+ "member": "x86_static_noid"
+}

@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "M=$(head -c 120 /dev/urandom | base64 -w0); python3 -c \"import pylnk3,sys; pylnk3.for_file(r'C:\\Windows\\System32\\cmd.exe', sys.argv[1], arguments=sys.argv[2], description='Readme')\" carrier_decoy_lnk_noise.lnk \"/c \\\"set descriptor_dead0001=$M && echo %descriptor_dead0001%\\\"\"  (same LNK shape, random material: no plan)",
+ "oracle_cmd": ".venv/bin/lnkparse -j carrier_decoy_lnk_noise.lnk | jq -r .data.command_line_arguments  # random base64, decodes to no v= plan"
+}

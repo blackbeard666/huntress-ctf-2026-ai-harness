@@ -1,0 +1,7 @@
+{
+ "entry": "signing_cert_scan",
+ "expected": null,
+ "generator_cmd": "sh tests/data/android_fixtures/gen_signing_certs.sh tests/data/android_fixtures  # keytool -genkeypair + zip -X + apksigner sign (v1+v2); DECOY: OU=ANS-<15 hex> near-miss, payload xor'd with the sha256 of a DIFFERENT cert (k3) than the signer (k4)",
+ "oracle_cmd": "keytool -printcert -jarfile sig_decoy_nearmiss.apk | grep -m1 Owner  # OU=ANS-5A0C7E19D3B46F2 (15 hex: no token); apksigner --print-certs SHA-256 != the xor key",
+ "decoy": true
+}

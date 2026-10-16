@@ -1,0 +1,7 @@
+{
+ "field": "pe.signer_cert_sha256",
+ "expected": "b89f8f6bf4f50250528995fd16e228f1b24ee0017d8f87b0c756c1b85b82f58c",
+ "generator_cmd": "cp tools/pwsh/System.Buffers.dll tests/data/meta_fixtures/pe/authenticode_ms_buffers.bin  (unmodified, Microsoft-signed, RFC3161-timestamped)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib python3 sig.py tests/data/meta_fixtures/pe/authenticode_ms_sha256.bin  (signify AuthenticodeFile.iter_embedded_signatures: signer_info issuer+serial -> cert; subject.dn/issuer.dn/'%x'%serial/sha1|sha256(cert.to_der)/countersigner.signing_time); cross-check: pefile DATA_DIRECTORY[4].Size",
+ "decoy": false
+}

@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=powershell|role=loader|verdict=malicious|attack=T1105|adapter=http_get|stage_count=2|steps=fetch_stage,run_stage|campaign_id=PO-e5e5c0de|url=https://powershell-e5e5c0de.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | gzip -n9 | base64 -w 52  -> literal written into desc_ps1_marker_wrapped.ps1",
+ "oracle_cmd": "python3 -I -c 'import sys,re,base64,gzip; t=open(sys.argv[1]).read(); m=re.search(r\"GZ64-(.*?)#>\", t, re.S); sys.stdout.write(gzip.decompress(base64.b64decode(re.sub(r\"\\s\", \"\", m.group(1)))).decode())' tests/data/script_fixtures/desc_ps1_marker_wrapped.ps1"
+}

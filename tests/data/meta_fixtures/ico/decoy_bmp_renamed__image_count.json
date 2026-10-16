@@ -1,0 +1,8 @@
+{
+ "field": "ico.image_count",
+ "expected": "none",
+ "generator_cmd": "cp rgb24.bmp renamed_bmp.ico (BMP from the bmp fixture's Pillow writer)",
+ "oracle_cmd": "file -b renamed_bmp.ico -> 'PC bitmap' (not an icon)",
+ "decoy": true,
+ "member": "renamed_bmp.ico"
+}

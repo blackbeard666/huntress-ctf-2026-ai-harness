@@ -1,0 +1,10 @@
+{
+ "_doc": "DOSfuscation: plan spelled by %_k:~n,1% picks (positive and negative offsets) of an alphabet variable, caret-split `s^et`/`ec^ho`, joined %p0%%p1%.., echo(!p! under EnableDelayedExpansion; no HUNTRESS-MATERIAL line",
+ "lane": "script",
+ "target": "batch-substring-emulation",
+ "expected_plain": "v=1|steps=acquire_remote,write_file|adapter=certutil.exe|campaign_id=campaign-5be1c0d2aa|url=https://5be1c0d2aa.example.invalid/a91f.dat|file_path=C:\\Users\\Public\\HuntressLab\\stage-5be1c0d2aa.dat",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/bat_dosfu_gen.py substr 'v=1|steps=acquire_remote,write_file|adapter=certutil.exe|campaign_id=campaign-5be1c0d2aa|url=https://5be1c0d2aa.example.invalid/a91f.dat|file_path=C:\\Users\\Public\\HuntressLab\\stage-5be1c0d2aa.dat' > tests/data/script_fixtures/bat_dosfu_substr.bat",
+ "oracle_cmd": ".venv/bin/bat -D -Q < tests/data/script_fixtures/bat_dosfu_substr.bat | grep '^echo ' | cut -c6-   # binref refinery batch emulator",
+ "oracle_output": "v=1|steps=acquire_remote,write_file|adapter=certutil.exe|campaign_id=campaign-5be1c0d2aa|url=https://5be1c0d2aa.example.invalid/a91f.dat|file_path=C:\\Users\\Public\\HuntressLab\\stage-5be1c0d2aa.dat"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.application_id_u32_hex",
+ "expected": "none",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_cli.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> decoy_sqlite2.db)",
+ "oracle_cmd": "sqlite3 -readonly decoy_sqlite2.db 'select count(*) from sqlite_master' -> 'Error: in prepare, file is not a database (26)'; file -b -> 'SQLite 2.x database' (not 'SQLite format 3')",
+ "decoy": true,
+ "member": "evidence.db"
+}

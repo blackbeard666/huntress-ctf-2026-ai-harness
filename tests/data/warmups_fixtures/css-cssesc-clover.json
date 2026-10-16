@@ -1,0 +1,9 @@
+{
+ "codec": "css-escape",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-58",
+ "encoded": "\\4E\\69\\63\\65\\ \\77\\6F\\72\\6B\\ \\64\\65\\63\\6F\\64\\69\\6E\\67\\ \\74\\68\\69\\73\\ \\77\\61\\72\\6D\\75\\70\\!\\ \\54\\6F\\ \\73\\6F\\6C\\76\\65\\,\\ \\73\\75\\62\\6D\\69\\74\\ \\74\\68\\69\\73\\ \\65\\78\\61\\63\\74\\ \\61\\6E\\73\\77\\65\\72\\ \\74\\6F\\ \\74\\68\\65\\ \\47\\61\\6D\\65\\ \\4D\\61\\73\\74\\65\\72\\:\\ \\63\\6C\\6F\\76\\65\\72\\2D\\62\\61\\64\\67\\65\\72\\2D\\35\\38",
+ "generator_cmd": "printf %s \"$plain\" | CSSESC=$PWD/tools/npm-cssesc/node_modules/cssesc tools/node/bin/node tests/data/warmups_fixtures/ucp_cssesc.js  # npm cssesc 3.0.0 {escapeEverything: true}",
+ "oracle_cmd": "printf %s \"$encoded\" | PYTHONPATH=tools/pytinycss2 python3 tests/data/warmups_fixtures/ucp_tinycss2.py  # tinycss2 1.5.1 tokenizer",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-58",
+ "expected": "match"
+}

@@ -1,0 +1,10 @@
+{
+ "material": "ZT0xfG96bXRmenR2PWV5aHhpcmtnfGlsb3Y9b2x6d3ZpfHpnZ3p4cD1HMTAyN3xoZ3ZraD13dnhsd3Zfa3pib2x6dyxybXVvemd2X2hnenR2LGlmbXx4em5renJ0bV9ydz1UQS01djE3eDB3dnxmaW89c2dna2g6Ly90YS01djE3eDB3di52Y3pua292LnJtZXpvcncvaGd6dHY=",
+ "rep": "base64_literal",
+ "transform": "atbash",
+ "key": "",
+ "expected": "v=1|language=vbscript|role=loader|attack=T1027|steps=decode_payload,inflate_stage,run|campaign_id=GZ-5e17c0de|url=https://gz-5e17c0de.example.invalid/stage",
+ "generator_cmd": "printf %s '<plan>' | tr 'A-Za-z' 'ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba' | base64 -w0",
+ "oracle_cmd": "printf %s '<material>' | base64 -d | tr 'A-Za-z' 'ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba'",
+ "decoy": false
+}

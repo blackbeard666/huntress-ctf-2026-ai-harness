@@ -1,0 +1,8 @@
+{
+ "field": "ooxml.custom_properties",
+ "expected": "{\"Approved\":\"true\",\"CaseRef\":\"IR-2291\",\"Reviewed\":\"2026-10-01T08:30:00Z\",\"Score\":\"42\"}",
+ "generator_cmd": ".venv/bin/python -I -c \"import xlsxwriter,datetime; wb=xlsxwriter.Workbook(out); ws=wb.add_worksheet('Ledger'); wb.add_worksheet('Notes'); ws.write('A1','export'); ws.write_url('A2','https://exfil.example.net/drop?id=7'); ws.write_url('A3','https://cdn.example.org/a.png'); wb.set_custom_property('CaseRef','IR-2291'); wb.set_custom_property('Score',42); wb.set_custom_property('Approved',True); wb.set_custom_property('Reviewed',datetime.datetime(2026,10,1,8,30,0)); wb.close()\"  (XlsxWriter 3.2.9 writer)",
+ "oracle_cmd": "7z l -slt + 7z x -so <part> | lxml.etree (independent of zipfile/ElementTree): .venv/bin/python -I tests/data/meta_fixtures/ooxml/_siblings_oracle.py.txt xlsxwriter_custom__custom_properties.bin custom_properties where _siblings_oracle.py.txt = no [Content_Types].xml -> none; rels = every *.rels part's Relationship elements; custom_properties = docProps/custom.xml {property@name: first child text} sorted by name, compact JSON; attached_template_target = Target of Type ending /attachedTemplate; internal_relationship_targets = sorted Targets without TargetMode=External; relationship_types = sorted distinct Type; hyperlink_count = Types ending /hyperlink; embedded_object_names = sorted 7z paths under */embeddings/; main_part_content_type = [Content_Types] Override for the _rels/.rels officeDocument target (else Default by extension)",
+ "decoy": false,
+ "member": "custom.xlsx"
+}

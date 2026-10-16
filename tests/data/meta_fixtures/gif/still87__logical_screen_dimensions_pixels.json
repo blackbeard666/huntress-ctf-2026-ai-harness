@@ -1,0 +1,8 @@
+{
+ "field": "gif.logical_screen_dimensions_pixels",
+ "expected": "37x21",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import Image; im=Image.new('P',(37,21),3); im.putpalette([i%256 for i in range(768)]); im.save('still87.gif'); fr=[Image.new('RGB',(64,48),(40*i,255-40*i,90)) for i in range(4)]; fr[0].save('anim89.gif',save_all=True,append_images=fr[1:],duration=100,loop=0,comment=b'huntress test')\"  (Pillow 12.3.0 writer)",
+ "oracle_cmd": "exiftool -j -ImageWidth -ImageHeight still87.gif -> 37/21; file -b -> '37 x 21'",
+ "decoy": false,
+ "member": "still87.gif"
+}

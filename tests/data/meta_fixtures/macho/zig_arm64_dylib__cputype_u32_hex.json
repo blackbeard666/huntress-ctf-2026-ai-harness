@@ -1,0 +1,8 @@
+{
+ "field": "macho.cputype_u32_hex",
+ "expected": "0x0100000c",
+ "generator_cmd": "zig cc (pip ziglang 0.17.0: python -m ziglang cc) -target aarch64-macos.12.0 -shared -o libm_arm.dylib m.c  (run in $TMPDIR/mfx)",
+ "oracle_cmd": "llvm-otool-18 -h zig_arm64_dylib__cputype_u32_hex.bin (decimal cputype/filetype -> 0x%08x)",
+ "decoy": false,
+ "member": "libm_arm.dylib"
+}

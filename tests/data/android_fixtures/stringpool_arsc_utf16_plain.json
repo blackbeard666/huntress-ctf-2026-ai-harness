@@ -1,0 +1,6 @@
+{
+ "entry": "string_pool_scan",
+ "expected": "ANS-5be8104dc9f2a73e",
+ "generator_cmd": "META='huntress' RES=\"ANS-5be8104dc9f2a73e\"; stub android framework: aapt package -x -M fwsrc/AndroidManifest.xml(package=android) -S fwsrc/res(attrs.xml + public.xml: label 0x01010001, name 0x01010003, value 0x01010024, allowBackup 0x01010280, minSdkVersion 0x0101020c) -F fw.jar; app: manifest <meta-data android:name=\"huntress.token\" android:value=\"$META\"/> + res/values/strings.xml <string name=\"cfg_blob\">$RES</string>; aapt package -f -M AndroidManifest.xml -S res -I fw.jar -F stringpool_arsc_utf16_plain.apk ; zip -j stringpool_arsc_utf16_plain.apk classes.dex # classes.dex = day01 exported_trust.apk's (no ANS), no assets/huntress_puzzle.json",
+ "oracle_cmd": "aapt dump --values resources stringpool_arsc_utf16_plain.apk | grep -A1 cfg_blob | grep -oE 'ANS-[0-9a-f]{16}'  # (string16) pool, flags=0"
+}

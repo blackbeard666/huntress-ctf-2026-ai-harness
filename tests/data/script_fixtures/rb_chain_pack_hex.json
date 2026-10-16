@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=ruby|role=loader|verdict=malicious|attack=T1027.010|steps=unpack,eval|campaign_id=RB-e4a1f7c0|url=https://rb-e4a1f7c0.example.invalid/r",
+ "decoy": false,
+ "generator_cmd": "ruby -rzlib -e 'code=\"PLAN = #{ARGV[0].dump}\\n\"; h=[Zlib::Deflate.deflate(code,9)].pack(\"m0\").unpack1(\"H*\")' '<plan>' -> `eval(Zlib::Inflate.inflate([\"<h>\"].pack(\"H*\").unpack1(\"m\")))`",
+ "oracle_cmd": "ruby -e 'load ARGV[0]; puts PLAN' tests/data/script_fixtures/rb_chain_pack_hex.rb"
+}

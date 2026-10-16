@@ -1,0 +1,7 @@
+{
+ "field": "pe.rich_header_hash_md5",
+ "expected": "none",
+ "generator_cmd": "cp tools/exiftool/t/images/EXE.exe (GNU ld/cygwin PE: no Rich header) tests/data/meta_fixtures/pe/rich_decoy_mingw_no_rich.bin  (unmodified)",
+ "oracle_cmd": ".venv/bin/python -c \"import pefile,sys,json;p=pefile.PE(sys.argv[1]);print(p.get_rich_header_hash() or 'none')\" tests/data/meta_fixtures/pe/rich_decoy_mingw_no_rich.bin",
+ "decoy": true
+}

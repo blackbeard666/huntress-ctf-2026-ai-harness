@@ -1,0 +1,12 @@
+{
+ "codec": "zerowidth",
+ "plain": null,
+ "encoded": "\ufeffTmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwIQ==",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf '\\xef\\xbb\\xbf%s' \"$(printf %s 'Nice work decoding this warmup!' | base64 -w0)\"  # coreutils base64 behind a UTF-8 BOM",
+ "oracle_cmd": "python3 -I -c 'import sys, unicodedata as u, collections as c; print(dict(c.Counter(u.name(x, hex(ord(x))) for x in sys.argv[1] if u.category(x) == \"Cf\")))' \"$encoded\"  # stdlib: every format (Cf) char by name",
+ "oracle_plain": null,
+ "oracle_names": "{'ZERO WIDTH NO-BREAK SPACE': 1}",
+ "note": "a lone BOM (U+FEFF) before a base64 line: < 8 zero-width symbols"
+}

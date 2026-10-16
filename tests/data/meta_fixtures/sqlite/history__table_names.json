@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.table_names",
+ "expected": "[\"meta\",\"urls\",\"sqlite_sequence\",\"visits\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_cli.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> History)",
+ "oracle_cmd": "sqlite3 -readonly History \"select json_group_array(name) from (select name from sqlite_master where type='table')\"  (SQLite 3.46.1 CLI) -> [\"meta\",\"urls\",\"sqlite_sequence\",\"visits\"]",
+ "decoy": false,
+ "member": "History"
+}

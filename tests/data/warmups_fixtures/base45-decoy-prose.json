@@ -1,0 +1,10 @@
+{
+ "codec": "base45",
+ "plain": null,
+ "encoded": "Nice work decoding this warmup!",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written prose decoy (lowercase letters and '!' are outside the RFC 9285 alphabet)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;sys.path.insert(0,'tools/pychepy');from chepy import Chepy;print(Chepy(sys.stdin.read()).from_base45().o.decode())\"  # PyPI chepy==7.6.0 from_base45  -> chepy raises 'Invalid base45 string' (lowercase/'!' outside the alphabet)",
+ "oracle_plain": null
+}

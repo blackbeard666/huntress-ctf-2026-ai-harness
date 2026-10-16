@@ -1,0 +1,8 @@
+{
+ "field": "mft.file_name",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/mft/GENERATOR_mft_struct.py.txt <outdir>  (stdlib struct FILE-record writer, update-sequence fixups applied -> decoy_indx.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib-dissect .venv/bin/python -P tests/data/meta_fixtures/mft/ORACLE_mft_dissect.py.txt /home/testpwn/huntress-2026/.run/tmp/mftgen/decoy_indx.bin -> BrokenMftError 'Invalid MFT record Signature: b\\'INDX\\''; Rust mft 0.7.0 -> invalid signature error",
+ "decoy": true,
+ "member": "record.bin"
+}

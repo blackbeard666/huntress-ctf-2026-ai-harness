@@ -1,0 +1,8 @@
+{
+ "field": "gzip.header_mtime",
+ "expected": "none",
+ "generator_cmd": "printf 'abc'x5000 > n.txt; gzip -n -c n.txt > gnu_noname.gz  (-n: no FNAME, MTIME 0)",
+ "oracle_cmd": "TZ=UTC file -b gnu_noname.gz -> no 'last modified' (MTIME 0)",
+ "decoy": true,
+ "member": "gnu_noname.gz"
+}

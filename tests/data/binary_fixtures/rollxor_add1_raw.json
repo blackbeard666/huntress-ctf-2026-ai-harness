@@ -1,0 +1,13 @@
+{
+ "encoding": "rollxor-raw",
+ "expected_offset": 4100,
+ "expected_config": {
+  "c2": "10.9.8.7:443",
+  "beacon": "roll-heron",
+  "sleep": 20,
+  "flag": "flag{k3y_pl4s_1nd3x}"
+ },
+ "generator_cmd": "sh rollxor_gen.sh  # system python3 zlib.crc32 header + perl rolling/index/feedback xor",
+ "oracle_cmd": "sh rollxor_oracle.sh rollxor_add1_raw.bin",
+ "oracle_output": "{\"offset\": 4100, \"mode\": \"roll\", \"config\": {\"c2\": \"10.9.8.7:443\", \"beacon\": \"roll-heron\", \"sleep\": 20, \"flag\": \"flag{k3y_pl4s_1nd3x}\"}}"
+}

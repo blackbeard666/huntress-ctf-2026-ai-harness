@@ -1,0 +1,10 @@
+{
+ "material": "c86eeac797fd50d5ca0bf54eca0aa1e06653b377a5c5c0042d32cb146f685e908e200e50df09e2325cb9524da78d832a475836c3275947c0d3339b9a23f58fc6d3cd819e3b048701768f4f63bb5c9901535892869cb01fcb23f855a7f0bfb3cce1674824763e2228f553441368d72eb477b059df6a19a7f97a6a7f47bc6cb0b13f40a0b24a0554041418f0c8634484b89ef9480abc8b22faa4ff12",
+ "rep": "hex_compact",
+ "transform": "rc4",
+ "key": "00112233445566778899aabbccddeeff",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "(codec_rc4_hex material, declared key replaced)",
+ "oracle_cmd": "printf %s '<material>' | xxd -r -p | openssl enc -d -rc4 -K 00112233445566778899aabbccddeeff -nosalt -provider legacy -provider default | xxd | head -1  # garbage"
+}

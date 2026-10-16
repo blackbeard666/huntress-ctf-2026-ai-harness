@@ -1,0 +1,9 @@
+{
+ "codec": "kbd:qwerty>dvorak",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "Bcj. ,rpt e.jrecbi ydco ,apmgl! Yr ornk.w ogxmcy ydco .qajy abo,.p yr yd. Iam. Maoy.pS amx.p[uanjrb[42",
+ "generator_cmd": "printf %s \"$plain\" | perl tests/data/warmups_fixtures/kbd_ckbcomp.pl 'us' 'us dvorak'  # Debian console-setup ckbcomp (XKB data): qwerty typist on a dvorak machine",
+ "oracle_cmd": "printf %s \"$encoded\" | sh tests/data/warmups_fixtures/kbd_oracle.sh 'us' 'us dvorak'  # gawk over ckbcomp: dvorak chars read back as the qwerty keys pressed",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

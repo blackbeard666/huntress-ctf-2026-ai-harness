@@ -1,0 +1,6 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-3fa8d2610c7be594",
+ "generator_cmd": "tests/data/android_fixtures/gen_hermes.sh -- hermesc (npm hermes-compiler 0.x, bytecode v98) -emit-binary -out assets/index.android.bundle index.js, then zip -qX <name>.apk AndroidManifest.xml assets/index.android.bundle; JS: var label = '☃ secret ☃ $(printf ANS-3fa8d2610c7be594 | base64 -w0)' (non-Latin-1 -> isUTF16 string; no ASCII copy in the file)",
+ "oracle_cmd": "python3 -I -c \"import sys,io,zipfile; from hermes_dec.parsers.hbc_file_parser import HBCReader; r=HBCReader(); r.read_whole_file(io.BytesIO(zipfile.ZipFile(sys.argv[1]).read('assets/index.android.bundle'))); print('\\n'.join(r.strings))\" hermes_utf16_b64.apk | grep secret | awk '{print $NF}' | base64 -d"
+}

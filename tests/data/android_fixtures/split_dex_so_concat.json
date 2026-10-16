@@ -1,0 +1,6 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-7C41E09B2D58F3A6",
+ "generator_cmd": "apktool d -r -o base native_library_secrets.apk (D15); rm base/assets/huntress_puzzle.json base/lib/x86_64/libarena.so; add smali/.../SplitConfig.smali: answer() = StringBuilder.append(const-string \"ANS-\").append(const-string \"7C41E09B\").append(native part2()), noise() = const-string \"DEADBEEF\"; gcc -shared -fPIC -O0 -o base/lib/x86_64/libsplit.so c1.c  # const char *Java_..._SplitConfig_part2(){return \"2D58F3A6\";}; apktool b -o split_dex_so_concat.apk base",
+ "oracle_cmd": "apktool d -r -o o split_dex_so_concat.apk; unzip split_dex_so_concat.apk lib/x86_64/libsplit.so; echo \"ANS-$(sed -n '/answer()/,/end method/p' o/smali/com/huntress/mobile/d15/*/SplitConfig.smali | grep -oP 'const-string v\\d, \"\\K[0-9A-F]+(?=\")' | tr -d '\\n')$(readelf -p .rodata lib/x86_64/libsplit.so | grep -oP '\\]\\s+\\K[0-9A-F]+$')\""
+}

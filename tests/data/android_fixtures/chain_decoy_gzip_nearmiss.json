@@ -1,0 +1,7 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "generator_cmd": "tests/data/android_fixtures/gen_row36.sh <outdir> -- assets/huntress_puzzle.json via jq -cn '{codec,data[,key]}' then (cd d && zip -qX -r <name>.apk assets); payload: \"gz64\" \"$(printf 'token=ANS-3fa9c2e17b04d68' | gzip -9n | base64 -w0)\"",
+ "oracle_cmd": "unzip -p chain_decoy_gzip_nearmiss.apk assets/huntress_puzzle.json | jq -r .data | base64 -d | gunzip  # near miss (15 hex / non-hex tail): no valid ANS token",
+ "decoy": true
+}

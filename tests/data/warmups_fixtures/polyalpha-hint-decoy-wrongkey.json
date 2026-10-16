@@ -1,0 +1,14 @@
+{
+ "codec": "polyalpha-hint",
+ "plain": null,
+ "encoded": "Mgza rikc uurcquyq cppy beuovp! Sm pkgpx, klrbyk lahq btvwm seilse fz dqm Ngri Pcttdp: zhjpxj-nhtd-55",
+ "hints": [
+  "Running Late",
+  "Bellaso never repeats himself: every letter of this very briefing, read in order, keys the next letter of your blob."
+ ],
+ "decoy": true,
+ "expected": "none",
+ "oracle_plain": null,
+ "generator_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import pycipher as P; P.Vigenere('ZYXW...41 letters').encipher(warmup_sentence)\"  # key absent from the hints",
+ "oracle_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import pycipher as P; print(P.Vigenere(KEY).decipher(encoded).lower()[:20])\"  # garbage under the hint key"
+}

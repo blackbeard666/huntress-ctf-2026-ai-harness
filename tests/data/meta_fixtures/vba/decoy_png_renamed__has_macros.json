@@ -1,0 +1,8 @@
+{
+ "field": "vba.has_macros",
+ "expected": "none",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import Image; Image.new('RGB',(4,4),(200,10,10)).save('x.png')\"  (Pillow writer, renamed report.docm)",
+ "oracle_cmd": "file -b decoy_png_renamed__has_macros.bin -> 'PNG image data, 4 x 4'; olefile.isOleFile -> False; zipfile.is_zipfile -> False",
+ "decoy": true,
+ "member": "report.docm"
+}

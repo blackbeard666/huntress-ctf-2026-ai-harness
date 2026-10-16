@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-a4c19e07d3b2f856",
+ "generator_cmd": "apktool d -r -o proj exported_trust.apk (D01); CT=$(printf 'ANS-a4c19e07d3b2f856' | openssl enc -aes-128-ecb -K $(printf 'arena-passphrase' | sha256sum | cut -c1-32) | base64 -w0); printf '{\"schema\":\"huntress.mobile.puzzle.v1\",\"day\":16,\"codec\":\"aes\",\"data\":\"%s\",\"key\":\"arena-passphrase\"}' \"$CT\" > proj/assets/huntress_puzzle.json; apktool b -o skc_aes_ecb_json_sha256_key.apk proj",
+ "oracle_cmd": "unzip -p skc_aes_ecb_json_sha256_key.apk assets/huntress_puzzle.json | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"data\"])' | base64 -d | openssl enc -d -aes-128-ecb -K $(printf 'arena-passphrase' | sha256sum | cut -c1-32)  # key = sha256(json key)[:16]"
+}

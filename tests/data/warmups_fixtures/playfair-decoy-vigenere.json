@@ -1,0 +1,14 @@
+{
+ "codec": "playfair",
+ "key": "embassy",
+ "hints": [
+  "Fair Play at the Embassy"
+ ],
+ "decoy": true,
+ "expected": "none",
+ "plain": null,
+ "encoded": "RUDEOGPOPFCGVGRSUHAKUEDNUHLMWAMVWKSFYJTLZGWQYAULYREXEJLMXTFGSECQMTTWJAPAWEJJGHSF",
+ "oracle_plain": null,
+ "generator_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import pycipher as P; P.Vigenere('embassy').encipher(warmup_sentence)\"  # same key, WRONG cipher",
+ "oracle_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import pycipher as P; print(P.Playfair(SQUARE(KEY)).decipher(encoded).lower())\"  # SQUARE = keyword letters (J->I) deduped + rest of A-Z sans J; raw output keeps the X fillers  # garbage, no 'niceworkdecoding' crib"
+}

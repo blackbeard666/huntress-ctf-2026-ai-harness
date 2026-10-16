@@ -1,0 +1,8 @@
+{
+ "field": "gif.logical_screen_dimensions_pixels",
+ "expected": "none",
+ "generator_cmd": "Pillow writer: Image.new('RGB',(9,9)).save('decoy.png'), then renamed to renamed_png.gif",
+ "oracle_cmd": "file -b renamed_png.gif -> 'PNG image data, 9 x 9' (not GIF)",
+ "decoy": true,
+ "member": "renamed_png.gif"
+}

@@ -1,0 +1,13 @@
+{
+ "encoding": "xtea-cbc",
+ "expected_offset": 2730,
+ "expected_config": {
+  "c2": "198.18.0.9:53",
+  "beacon": "xtea-cbc",
+  "sleep": 5,
+  "flag": "flag{xt34_d3lt4_9e3779b9}"
+ },
+ "generator_cmd": "sh blk_gen.sh  # openssl enc (AES ECB/CBC/CTR), python cryptography ChaCha20, perl blk_xtea.pl (XTEA-CBC)",
+ "oracle_cmd": "sh blk_oracle.sh blk_xtea_cbc_strkey.bin 2730 xtea-cbc 'XteaKey_16bytes!' 'a1b2c3d4e5f60718'",
+ "oracle_output": "{\"offset\": 2730, \"config\": {\"c2\": \"198.18.0.9:53\", \"beacon\": \"xtea-cbc\", \"sleep\": 5, \"flag\": \"flag{xt34_d3lt4_9e3779b9}\"}}"
+}

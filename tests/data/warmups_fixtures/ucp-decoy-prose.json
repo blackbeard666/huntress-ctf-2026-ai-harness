@@ -1,0 +1,10 @@
+{
+ "codec": "ucp-U+",
+ "plain": null,
+ "encoded": "Type U+0041 then U+0042 to get AB",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written prose that MENTIONS code points (not a whole-fragment encoding)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/ucp_cyberchef.mjs dec 'U+'  # CyberChef unescapes in place: prose stays prose",
+ "oracle_plain": "Type A then B to get AB"
+}

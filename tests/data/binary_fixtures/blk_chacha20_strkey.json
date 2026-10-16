@@ -1,0 +1,13 @@
+{
+ "encoding": "chacha20",
+ "expected_offset": 5563,
+ "expected_config": {
+  "c2": "192.0.2.150:4433",
+  "beacon": "chacha-kite",
+  "sleep": 75,
+  "flag": "flag{ch4ch4_s1gm4_f0und}"
+ },
+ "generator_cmd": "sh blk_gen.sh  # openssl enc (AES ECB/CBC/CTR), python cryptography ChaCha20, perl blk_xtea.pl (XTEA-CBC)",
+ "oracle_cmd": "sh blk_oracle.sh blk_chacha20_strkey.bin 5563 chacha20 '4b3174652d4368614368612d4b65792d30313233343536373839616263646566' '000000006e6f6e63652d414243313233'",
+ "oracle_output": "{\"offset\": 5563, \"config\": {\"c2\": \"192.0.2.150:4433\", \"beacon\": \"chacha-kite\", \"sleep\": 75, \"flag\": \"flag{ch4ch4_s1gm4_f0und}\"}}"
+}

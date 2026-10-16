@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=reg|role=persistence|verdict=malicious|attack=T1547.001|adapter=run_key|stage_count=2|steps=write_run_key,launch_on_logon|campaign_id=REG-5eed0042|url=https://reg-5eed0042.example.invalid/p",
+ "decoy": false,
+ "generator_cmd": "M=$(printf %s '<plan>' | xxd -p | tr -d '\\n' | rev | base64 -w0); { printf '\\xff\\xfe'; printf 'Windows Registry Editor Version 5.00\\r\\n...\"descriptor_5eed0042\"=\"%s\"\\r\\n' \"$M\" | iconv -f UTF-8 -t UTF-16LE; } > carrier_reg_utf16.reg",
+ "oracle_cmd": "iconv -f UTF-16LE -t UTF-8 carrier_reg_utf16.reg | grep -a -o 'descriptor_5eed0042\"=\"[^\"]*' | cut -d'\"' -f3 | base64 -d | rev | xxd -r -p"
+}

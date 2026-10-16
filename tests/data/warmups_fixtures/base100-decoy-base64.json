@@ -1,0 +1,10 @@
+{
+ "codec": "base100",
+ "plain": null,
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwIQ==",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup!' | base64  # coreutils base64 (an ASCII impostor line)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;sys.path.insert(0,'tools/pybase100');import pybase100;print(pybase100.decode(sys.stdin.buffer.read()).decode())\"  # PyPI pybase100==0.3.1 decode  -> pybase100 raises UnicodeDecodeError (ASCII bytes are not 4-byte emoji)",
+ "oracle_plain": null
+}

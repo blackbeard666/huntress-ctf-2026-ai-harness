@@ -1,0 +1,8 @@
+{
+ "field": "scheduledtask.exec_command",
+ "expected": "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+ "generator_cmd": "sh tests/data/meta_fixtures/task/GENERATOR_iconv_schtasks.sh.txt OUTDIR  (printf BOM + iconv -f UTF-8 -t UTF-16LE of a schtasks /query /xml-layout task, CRLF)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/task/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/scheduledtask/schtasks_logon_hidden__exec_command.bin exec_command -> %SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+ "decoy": false,
+ "member": "OneDrive Sync Helper"
+}

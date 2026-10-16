@@ -1,0 +1,11 @@
+{
+ "codec": "unistyle",
+ "plain": null,
+ "encoded": "Nice work decoding this warmup! To solve, submit this exact answer",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written plain ASCII prose: no styled character at all",
+ "oracle_cmd": "python3 -I -c 'import sys,unicodedata as u;print([u.name(c,\"?\") for c in sys.argv[1] if not c.isascii()])' \"$encoded\"  # names: CJK/HIRAGANA/IPA/GREEK -- no Latin letter-style character",
+ "oracle_plain": null,
+ "oracle_names": "[]"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-3f9c0a7e51d2b864",
+ "_why": "<clinit> fill-array-data byte[] DATA; decrypt() xors each byte with xor-int/lit8 0x5a (no literal token in the dex string pool)",
+ "generator_cmd": "apktool d -r -o base skc_decoy_cbc_wrong_key.apk; rm base/assets/config.dat; python3 tests/data/android_fixtures/gen_dex_arrays.py base fill_lit8  # writes smali StrEnc.smali; apktool b -o dexarr_fill_lit8.apk base",
+ "oracle_cmd": "apktool d -r -o o dexarr_fill_lit8.apk; python3 -c \"import re,glob; s=open(glob.glob('o/smali/**/StrEnc.smali',recursive=True)[0]).read(); a=[int(t[:-1],16)&255 for t in re.search(r'\\.array-data 1\\n(.*?)\\.end array-data',s,re.S).group(1).split()]; k=int(re.search(r'xor-int/lit8 \\w+, \\w+, (-?0x[0-9a-f]+)',s).group(1),16)&255; print(bytes(x^k for x in a))\"  # -> b'token=ANS-3f9c0a7e51d2b864'"
+}

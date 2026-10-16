@@ -1,0 +1,9 @@
+{
+ "codec": "upsidedown-chepy",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-tiger-17",
+ "encoded": "Nᴉɔǝ ʍoɹʞ pǝɔopᴉuƃ ʇɥᴉs ʍɐɹɯnd¡ ┴o solʌǝ' snqɯᴉʇ ʇɥᴉs ǝxɐɔʇ ɐusʍǝɹ ʇo ʇɥǝ פɐɯǝ Wɐsʇǝɹ: ɔoqɐlʇ-ʇᴉƃǝɹ-Ɩㄥ",
+ "generator_cmd": "PYTHONPATH=tools/pychepy python3 -c 'import sys;from chepy import Chepy;print(Chepy(sys.argv[1]).to_upside_down(reverse=False).o.decode())' \"$plain\"  # chepy 7.2.0 (PyPI, pip install --target tools/pychepy chepy) Encoding.UPSIDE_DOWN",
+ "oracle_cmd": "PYTHONPATH=tools/pychepy python3 -c 'import sys;from chepy import Chepy;print(Chepy(sys.argv[1]).from_upside_down(reverse=False).o.decode())' \"$encoded\"  # chepy 7.2.0 from_upside_down",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-tiger-17",
+ "expected": "match"
+}

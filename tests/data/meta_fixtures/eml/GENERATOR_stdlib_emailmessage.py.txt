@@ -1,0 +1,37 @@
+# Fixture writer: stdlib email.message.EmailMessage (a WRITER; the oracle reader is eml_parser 4.2.1).
+# usage: python3 -I GENERATOR_stdlib_emailmessage.py.txt <outdir>
+import sys
+from email.message import EmailMessage
+from email import policy
+
+out = sys.argv[1]
+m = EmailMessage(policy=policy.SMTP)
+m["Return-Path"] = "<bounce-7731@mailer.invoice-portal.example>"
+m["Received"] = ("from mx-relay.corp.example (mx-relay.corp.example [10.20.30.40]) by mail.corp.example "
+                 "(Postfix) with ESMTPS id 4XyZ1; Tue, 14 Oct 2026 09:12:07 +0000 (UTC)")
+m["Received"] = ("from smtp-out.invoice-portal.example (unknown [198.51.100.23]) by mx-relay.corp.example "
+                 "with ESMTP id k2Ab; Tue, 14 Oct 2026 09:12:05 +0000")
+m["Received"] = ("from [192.168.56.101] (dsl-203-0-113-77.isp.example [203.0.113.77]) by "
+                 "smtp-out.invoice-portal.example (Postfix) with ESMTPSA id 9QwE; Tue, 14 Oct 2026 17:12:01 +0800")
+m["DKIM-Signature"] = ("v=1; a=rsa-sha256; c=relaxed/relaxed; d=invoice-portal.example; s=sel2026; "
+                       "t=1792000321; h=from:to:subject:date; bh=47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=; b=AAAA")
+m["From"] = '"Accounts Payable" <ap@invoice-portal.example>'
+m["To"] = "Finance Team <finance@corp.example>"
+m["Subject"] = "Überfällige Rechnung #4471 – action required"
+m["Date"] = "Tue, 14 Oct 2026 17:11:58 +0800"
+m["Message-ID"] = "<20261014171158.4471.ap@invoice-portal.example>"
+m["X-Mailer"] = "Microsoft Outlook 16.0"
+m.set_content("Please see the attached invoice.\n")
+m.add_attachment(b"%PDF-1.4\n%fake\n", maintype="application", subtype="pdf", filename="Invoice_4471.pdf")
+m.add_attachment(b"PK\x03\x04fake", maintype="application", subtype="zip", filename="remittance details.zip")
+open(out + "/phish.eml", "wb").write(m.as_bytes())
+
+s = EmailMessage(policy=policy.SMTP)
+s["Received"] = "from client.lan ([172.16.5.9]) by mail.lan with SMTP; Mon, 13 Oct 2026 22:01:00 -0500"
+s["From"] = "alice@lan.example"
+s["To"] = "bob@lan.example"
+s["Subject"] = "lunch?"
+s["Date"] = "Mon, 13 Oct 2026 22:00:59 -0500"
+s["Message-ID"] = "<plain-1@lan.example>"
+s.set_content("12:30?\n")
+open(out + "/plain.eml", "wb").write(s.as_bytes())

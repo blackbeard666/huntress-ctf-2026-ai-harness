@@ -1,0 +1,8 @@
+{
+ "field": "task.exec_command",
+ "expected": "\"C:\\Program Files (x86)\\Microsoft\\EdgeUpdate\\MicrosoftEdgeUpdate.exe\"",
+ "generator_cmd": "bin/pwsh -NoProfile -File tests/data/meta_fixtures/task/GENERATOR_pwsh_xmlwriter.ps1.txt OUT.bin  (.NET System.Xml.XmlWriter, Encoding.Unicode; 2 Exec actions, 2 principals, Actions Context=LocalSystem, no Hidden)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/task/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/task/pwsh_xmlwriter_multi__exec_command.bin exec_command -> \"C:\\Program Files (x86)\\Microsoft\\EdgeUpdate\\MicrosoftEdgeUpdate.exe\"",
+ "decoy": false,
+ "member": "EdgeUpdateTaskMachineCore.xml"
+}

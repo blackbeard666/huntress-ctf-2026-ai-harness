@@ -1,0 +1,24 @@
+{
+ "encoding": "raw",
+ "expected_offset": 1860,
+ "expected_config": {
+  "c2": "198.51.100.77:9001",
+  "campaign": "manifest-res",
+  "sleep": 20,
+  "flag": "flag{m4n1f3st_r3s0urc3}"
+ },
+ "expected_locate": {
+  "container": "dotnet-resource",
+  "slot_offset": 1860,
+  "delta": 0,
+  "size": 109
+ },
+ "expected_overlay": {
+  "has_overlay": false,
+  "overlay_offset": null
+ },
+ "oracle_cmd": "PY=.venv/bin/python bash tests/data/binary_fixtures/rsrc_oracle.sh tests/data/binary_fixtures   # dnfile ManifestResource row Offset + CLI ResourcesRva -> file offset + 4 (u32 length prefix); perl unpack of the blob",
+ "oracle_output": "Cfg.config.bin Offset 0 data@ 1860 | magic@1860 | HCFG v=1 key=0 len=97 crc=501952189",
+ "convention": "raw at the magic = first DATA byte of the manifest resource (the u32 length prefix sits at 1856)",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/rsrc_gen.sh tests/data/binary_fixtures   # dotnet 10 (Roslyn) + llvm-rc-18 / gcc -O2 -s / javac+jar; blob = printf header + crc32 from gzip trailer"
+}

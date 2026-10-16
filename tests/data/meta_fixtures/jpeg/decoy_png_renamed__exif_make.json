@@ -1,0 +1,8 @@
+{
+ "field": "jpeg.exif_make",
+ "expected": "none",
+ "generator_cmd": "python3 -c 'from PIL import Image; Image.new(\"RGB\",(16,16)).save(\"decoy.png\",\"PNG\")'  (renamed .jpg)  (run in $TMPDIR/jpegfx)",
+ "oracle_cmd": "file decoy.png -> PNG image data (not JPEG)",
+ "decoy": true,
+ "member": "photo.jpg"
+}

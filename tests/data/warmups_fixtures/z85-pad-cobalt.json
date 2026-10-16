@@ -1,0 +1,9 @@
+{
+ "codec": "z85",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-7",
+ "encoded": "phaiHaA}:AyANe0v@C)(zF78lxLzJgCvtJeB-nGDrbS[2z!%PdefG1RvR]?3aARphB0b4svpKy4vqZdgwPw]nzY<dnwGTGKzdK?:vrlK4AYLsMz^)c>Bs?AMBy/FAhVJ*T",
+ "generator_cmd": "{ printf %s \"$plain\"; head -c 3 /dev/zero; } | basenc -w0 --z85  # coreutils basenc on the NUL-padded 104 B (101 B text + 3 NULs)",
+ "oracle_cmd": "printf %s \"$encoded\" | basenc --z85 -d | tr -d '\\0'  # coreutils basenc decode, trailing NUL padding dropped",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-7",
+ "expected": "match"
+}

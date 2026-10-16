@@ -1,0 +1,8 @@
+{
+ "field": "mp3.id3_title",
+ "expected": "Midnight Résumé",
+ "generator_cmd": ".venv/bin/python -I gen.py  (mutagen 1.48.1 ID3 writer: ID3().add(TIT2/TPE1/TALB/COMM/TDRC).save(f, v2_version=3|4) onto 4 silent MPEG-1 L3 frames)",
+ "oracle_cmd": "bin/exiftool -j -G1 -Title -Artist -Album -Comment -RecordingTime v23.mp3",
+ "decoy": false,
+ "member": "v23.mp3"
+}

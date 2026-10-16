@@ -1,0 +1,12 @@
+{
+ "encoding": null,
+ "expected_offset": "none",
+ "expected_config": "none",
+ "decoy": true,
+ "expected_locate": null,
+ "expected_overlay": null,
+ "oracle_cmd": "PY=.venv/bin/python bash tests/data/binary_fixtures/rsrc_oracle.sh tests/data/binary_fixtures   # unzip -p config.bin | perl unpack (crc=0) vs gzip-trailer crc32 of the body (277783330)",
+ "oracle_output": "HCFG v=1 key=0 len=60 crc=0 | crc(gzip)=277783330 -> crc mismatch: no valid blob",
+ "note": "jar with config.bin holding a crc-zeroed HCFG",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/rsrc_gen.sh tests/data/binary_fixtures   # dotnet 10 (Roslyn) + llvm-rc-18 / gcc -O2 -s / javac+jar; blob = printf header + crc32 from gzip trailer"
+}

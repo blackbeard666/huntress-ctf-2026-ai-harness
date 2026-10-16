@@ -1,0 +1,10 @@
+{
+ "codec": "zw-steganographr",
+ "plain": "r: cobalt-lynx-64",
+ "encoded": "M\ufeff\u200c\u200c\u200c\u200b\u200b\u200c\u200b\u2060\u200c\u200c\u200c\u200b\u200c\u200b\u2060\u200c\u200b\u200b\u200b\u200b\u200b\u2060\u200c\u200c\u200b\u200b\u200b\u200c\u200c\u2060\u200c\u200c\u200b\u200c\u200c\u200c\u200c\u2060\u200c\u200c\u200b\u200b\u200b\u200c\u200b\u2060\u200c\u200c\u200b\u200b\u200b\u200b\u200c\u2060\u200c\u200c\u200b\u200c\u200c\u200b\u200b\u2060\u200c\u200c\u200c\u200b\u200c\u200b\u200b\u2060\u200c\u200b\u200c\u200c\u200b\u200c\u2060\u200c\u200c\u200b\u200c\u200c\u200b\u200b\u2060\u200c\u200c\u200c\u200c\u200b\u200b\u200c\u2060\u200c\u200c\u200b\u200c\u200c\u200c\u200b\u2060\u200c\u200c\u200c\u200c\u200b\u200b\u200b\u2060\u200c\u200b\u200c\u200c\u200b\u200c\u2060\u200c\u200c\u200b\u200c\u200c\u200b\u2060\u200c\u200c\u200b\u200c\u200b\u200b\ufeffeeting moved to 3pm.",
+ "generator_cmd": "php -r '$b = implode(\" \", array_map(\"decbin\", array_map(\"ord\", str_split($argv[1])))); $h = str_replace([\" \", \"0\", \"1\"], [\"\\u{2060}\", \"\\u{200B}\", \"\\u{200C}\"], $b); $p = $argv[2]; echo substr($p, 0, 1) . \"\\u{FEFF}\" . $h . \"\\u{FEFF}\" . substr($p, 1);' \"$plain\" \"$cover\"  # Neatnik Steganographr str2bin/bin2hidden/wrap (php decbin + byte substr, no mbstring here: unpadded bits, U+2060 between chars, U+FEFF wrap); a Mastery-style cut fragment",
+ "oracle_cmd": "python3 -I -c 'import sys; t = sys.argv[1].split(\"\\ufeff\")[1]; print(\"\".join(chr(int(w.translate({0x200b: \"0\", 0x200c: \"1\"}), 2)) for w in t.split(\"\\u2060\")))' \"$encoded\"  # python3 stdlib unwrap + read",
+ "oracle_plain": "r: cobalt-lynx-64",
+ "expected": "match",
+ "cover": "Meeting moved to 3pm."
+}

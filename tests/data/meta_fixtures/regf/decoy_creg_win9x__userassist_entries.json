@@ -1,0 +1,8 @@
+{
+ "field": "regf.userassist_entries",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/regf/GENERATOR_regf_struct.py.txt <outdir>  (Win9x CREG/RGKN impostor -> decoy_creg_win9x.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -c \"from Registry import Registry; Registry.Registry('tests/data/meta_fixtures/regf/decoy_creg_win9x__userassist_entries.bin')\" -> ParseException (Registry Parse Exception (Invalid REGF ID)); file -b -> not 'MS Windows registry file'",
+ "decoy": true,
+ "member": "USER.DAT"
+}

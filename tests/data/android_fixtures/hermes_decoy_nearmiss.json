@@ -1,0 +1,7 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "tests/data/android_fixtures/gen_hermes.sh -- hermesc (npm hermes-compiler 0.x, bytecode v98) -emit-binary -out assets/index.android.bundle index.js, then zip -qX <name>.apk AndroidManifest.xml assets/index.android.bundle; JS: var cfg = {token: base64('ANS-9b2d4e6f8a1c3e5') (15 hex), other: base64('ANX-0123456789abcdef')}",
+ "oracle_cmd": "python3 -I -c \"import sys,io,zipfile; from hermes_dec.parsers.hbc_file_parser import HBCReader; r=HBCReader(); r.read_whole_file(io.BytesIO(zipfile.ZipFile(sys.argv[1]).read('assets/index.android.bundle'))); print('\\n'.join(r.strings))\" hermes_decoy_nearmiss.apk | grep -E '^[A-Za-z0-9+/]{20,}=*$' | while read l; do echo $l | base64 -d; echo; done  # -> ANS-<15 hex>, ANX-...: no valid token"
+}

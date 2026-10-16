@@ -1,0 +1,8 @@
+{
+ "field": "elf.section_names",
+ "expected": "[\".data\",\".symtab\",\".strtab\",\".shstrtab\"]",
+ "generator_cmd": "printf hello > blob; objcopy -I binary -O elf32-big blob be.o  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW objcopy_elf32_big__section_names.bin | Section Headers [Nr] Name column in table order, [0] NULL dropped",
+ "decoy": false,
+ "member": "be.o"
+}

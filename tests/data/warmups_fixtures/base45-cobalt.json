@@ -1,0 +1,9 @@
+{
+ "codec": "base45",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-77",
+ "encoded": "3-9KPCV4404EJOD6VCUPCAVC3/DS44:8D.OE64F/KE4%EK84FUAR44*3EO/E1Q5$QE.JC-EDS44:8D.OEB$C1ECSUECEC*QE5$CS4482EAWEDZC319F$DY34HEC7WE$JEB44T3EAEC-UE24E7WEOJE5:6",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c \"import sys;sys.path.insert(0,'tools/pychepy');from chepy import Chepy;print(Chepy(sys.stdin.read()).to_base45().o.decode(),end='')\"  # PyPI chepy==7.6.0 to_base45",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/base45_cyberchef.mjs dec  # CyberChef 'From Base45'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-77",
+ "expected": "match"
+}

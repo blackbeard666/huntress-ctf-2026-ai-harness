@@ -1,0 +1,9 @@
+{
+ "codec": "gronsfeld:31415",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-lynx-61",
+ "encoded": "Qjgf brso ejfphjsj uljx zbvnzs! Us ttowi, tzenmu ykjw fcddx bsvxis yr ulf Ldni Nfvuis: fpcis-qbob-61",
+ "generator_cmd": "plain=\"$plain\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import sys,os,pycipher as P;p=os.environ['plain'];c=iter(P.Gronsfeld([3,1,4,1,5]).encipher(p) if 'e'=='e' else P.Gronsfeld([3,1,4,1,5]).decipher(p));print(''.join((lambda x:x if ch.isupper() else x.lower())(next(c)) if ch.isalpha() else ch for ch in p))\"  # pycipher Gronsfeld digits",
+ "oracle_cmd": "encoded=\"$encoded\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import os,pycipher as P;e=os.environ['encoded'];print(P.Gronsfeld([3,1,4,1,5]).decipher(e).lower())\"  # pycipher reader, letters only",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemasteramberlynx",
+ "expected": "match"
+}

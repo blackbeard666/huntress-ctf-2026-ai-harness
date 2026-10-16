@@ -1,0 +1,8 @@
+{
+ "field": "gzip.isize",
+ "expected": "12",
+ "generator_cmd": "printf 'hello world\\n' > 'Report Final.txt'; touch -d '2019-12-31 23:59:59 UTC' 'Report Final.txt'; 7za a -tgzip -mx=9 sevenzip.gz 'Report Final.txt'",
+ "oracle_cmd": "7za l -slt sevenzip.gz -> Size = 12",
+ "decoy": false,
+ "member": "sevenzip.gz"
+}

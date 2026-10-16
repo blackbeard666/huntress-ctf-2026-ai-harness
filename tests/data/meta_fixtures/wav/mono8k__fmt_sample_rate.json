@@ -1,0 +1,8 @@
+{
+ "field": "wav.fmt_sample_rate",
+ "expected": "8000",
+ "generator_cmd": "python3 -I -c \"import wave; w=wave.open('stereo44k.wav','wb'); w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100); w.writeframes(bytes(4000)); w.close(); w=wave.open('mono8k.wav','wb'); w.setnchannels(1); w.setsampwidth(1); w.setframerate(8000); w.writeframes(bytes(range(256))*3); w.close()\"  (stdlib wave writer)",
+ "oracle_cmd": "exiftool -j -SampleRate mono8k.wav -> 8000; file -b -> 'mono 8000 Hz'",
+ "decoy": false,
+ "member": "mono8k.wav"
+}

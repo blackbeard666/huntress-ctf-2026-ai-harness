@@ -1,0 +1,7 @@
+// Pack every file of STAGEDIR as a root stream of a new CFB (SheetJS cfb writer). Usage: node mkcfb.js STAGEDIR OUT
+const CFB = require("cfb"), fs = require("fs"), path = require("path");
+const [dir, out] = process.argv.slice(2);
+const c = CFB.utils.cfb_new();
+for (const n of fs.readdirSync(dir).sort()) CFB.utils.cfb_add(c, "/" + n, fs.readFileSync(path.join(dir, n)));
+CFB.utils.cfb_del(c, "/\u0001Sh33tJ5");
+fs.writeFileSync(out, CFB.write(c, {type: "buffer", fileType: "cfb"}));

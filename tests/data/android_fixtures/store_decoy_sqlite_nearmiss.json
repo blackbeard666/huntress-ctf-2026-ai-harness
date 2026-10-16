@@ -1,0 +1,7 @@
+{
+ "entry": "local_store_scan",
+ "expected": null,
+ "generator_cmd": "tests/data/android_fixtures/gen_local_store.sh <outdir> -- sqlite3 CLI assets/app.db kv.v = $(printf 'session ANS-6e1b0c9f4a27d85' | base64 -w0) (15 hex near miss); zip -qX",
+ "oracle_cmd": "unzip -p store_decoy_sqlite_nearmiss.apk assets/app.db > a.db && sqlite3 a.db 'select v from kv' | base64 -d  # near miss (15 hex): no valid ANS token",
+ "decoy": true
+}

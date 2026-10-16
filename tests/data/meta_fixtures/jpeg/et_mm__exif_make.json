@@ -1,0 +1,8 @@
+{
+ "field": "jpeg.exif_make",
+ "expected": "NIKON CORPORATION",
+ "generator_cmd": "python3 -c 'from PIL import Image; Image.new(\"L\",(32,32),128).save(\"base.jpg\",\"JPEG\")' && exiftool -o et_mm.jpg -Make='NIKON CORPORATION' -Model='NIKON D850' -Orientation#=1 -DateTimeOriginal='2021:12:31 23:59:58' -GPSLatitude=48.858222 -GPSLatitudeRef=N -GPSLongitude=2.2945 -GPSLongitudeRef=W -XMP:Creator=tester base.jpg  (run in $TMPDIR/jpegfx)",
+ "oracle_cmd": "exiftool -j -n -Make -Model -Orientation -DateTimeOriginal -Composite:GPSLatitude et_mm.jpg  (cross-checked: exifread.process_file)",
+ "decoy": false,
+ "member": "et_mm.jpg"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "macho.cputype_u32_hex",
+ "expected": "none",
+ "generator_cmd": "javac --release 8 Hello.java (CAFEBABE magic, major 52 as nfat_arch)",
+ "oracle_cmd": "file decoy_java_class__cputype_u32_hex.bin (file: compiled Java class data; llvm-otool-18 -h: not an object file) -> not Mach-O -> none",
+ "decoy": true,
+ "member": "Hello.class"
+}

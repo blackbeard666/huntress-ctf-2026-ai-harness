@@ -1,0 +1,10 @@
+{
+ "material": "odjTu/ucPrK9aa+ntnIBsxUh5VOaiIMmDaEafzxwU0NMfh4hqWPQmoJAfcHb3FnY3bGH5W45T46arNr4FLIWIireoqNmHdmGfsTdHlwioFTnpnIDB7l6teAEdoUGvN5Bn+DOORnkhfvvrFrMDkKCio33/Kcp+IBNH/zvoh6tCYKu8hdQw4bL4Usp3WX08e3W6A==",
+ "rep": "base64_literal",
+ "transform": "gzip_rc4",
+ "key": "686374662d7263342d6b65792d303136",
+ "expected": "v=1|language=vbscript|role=loader|attack=T1027|steps=decode_payload,inflate_stage,run|campaign_id=GZ-5e17c0de|url=https://gz-5e17c0de.example.invalid/stage",
+ "generator_cmd": "printf %s '<plan>' | gzip -9n | openssl enc -rc4 -K 686374662d7263342d6b65792d303136 -nosalt -provider legacy -provider default | base64 -w0",
+ "oracle_cmd": "printf %s '<material>' | base64 -d | openssl enc -d -rc4 -K 686374662d7263342d6b65792d303136 -nosalt -provider legacy -provider default | gunzip",
+ "decoy": false
+}

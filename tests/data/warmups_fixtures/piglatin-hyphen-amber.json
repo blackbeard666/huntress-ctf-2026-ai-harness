@@ -1,0 +1,9 @@
+{
+ "codec": "piglatin-hyphen",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "ice-Nay ork-way ecoding-day is-thay armup-way! o-Tay olve-say, ubmit-say is-thay exact-ay answer-ay o-tay e-thay ame-Gay aster-May: amber-falcon-42-ay",
+ "expected": "match",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c 'import sys; sys.path.insert(0, \"tools/pypiglatin\"); import piglatin; sys.stdout.write(piglatin.translate(sys.stdin.read()))'  # PyPI piglatin 1.0.6 translate()",
+ "oracle_cmd": "[ \"$(printf %s \"$plain\" | python3 -I -c 'import sys; sys.path.insert(0, \"tools/pypiglatin\"); import piglatin; sys.stdout.write(piglatin.translate(sys.stdin.read()))')\" = \"$encoded\" ]  # PyPI piglatin re-encodes plain to the exact bytes",
+ "note": "PyPI piglatin on the amber sentence (amber-falcon-42 -> amber-falcon-42-ay)"
+}

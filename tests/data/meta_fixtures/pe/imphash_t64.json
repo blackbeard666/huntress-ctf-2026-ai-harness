@@ -1,0 +1,7 @@
+{
+ "field": "pe.imphash",
+ "expected": "c51d659b4b1142d4af3795d09f1d63f7",
+ "generator_cmd": "cp .venv/lib/python3.12/site-packages/pip/_vendor/distlib/t64.exe (MSVC x64 launcher, Rich + RSDS) tests/data/meta_fixtures/pe/imphash_t64.bin  (unmodified)",
+ "oracle_cmd": ".venv/bin/python -c \"import pefile,sys,json;p=pefile.PE(sys.argv[1]);print(p.get_imphash() or 'none')\" tests/data/meta_fixtures/pe/imphash_t64.bin",
+ "decoy": false
+}

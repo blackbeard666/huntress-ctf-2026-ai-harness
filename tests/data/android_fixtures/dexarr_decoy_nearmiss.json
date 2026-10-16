@@ -1,0 +1,8 @@
+{
+ "entry": "dex_strings",
+ "expected": null,
+ "decoy": true,
+ "_why": "same layout as dexarr_fill_lit8 but the plaintext has only 15 hex digits after ANS- (near miss): no key yields a valid token",
+ "generator_cmd": "apktool d -r -o base skc_decoy_cbc_wrong_key.apk; rm base/assets/config.dat; python3 tests/data/android_fixtures/gen_dex_arrays.py base decoy_nearmiss  # writes smali StrEnc.smali; apktool b -o dexarr_decoy_nearmiss.apk base",
+ "oracle_cmd": "apktool d -r -o o dexarr_decoy_nearmiss.apk; python3 -c \"import re,glob; s=open(glob.glob('o/smali/**/StrEnc.smali',recursive=True)[0]).read(); a=[int(t[:-1],16)&255 for t in re.search(r'\\.array-data 1\\n(.*?)\\.end array-data',s,re.S).group(1).split()]; k=int(re.search(r'xor-int/lit8 \\w+, \\w+, (-?0x[0-9a-f]+)',s).group(1),16)&255; print(bytes(x^k for x in a))\"  # -> b'token=ANS-3f9c0a7e51d2b86' (15 hex: no token)"
+}

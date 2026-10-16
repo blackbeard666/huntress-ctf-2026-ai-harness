@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=1|language=vbscript|role=loader|attack=T1027|steps=decode_payload,inflate_stage,run|campaign_id=GZ-5e17c0de|url=https://gz-5e17c0de.example.invalid/stage",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | gzip -9n | base64 -w0  # pasted into Const Material_5e17",
+ "oracle_cmd": "grep -o 'Material_5e17 = \"[^\"]*' codec_vbs_gzip_b64.vbs | cut -d'\"' -f2 | base64 -d | gunzip"
+}

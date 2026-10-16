@@ -1,0 +1,9 @@
+{
+ "codec": "keyword:huntress",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: zesty-juniper-squirrel-58",
+ "encoded": "IBNR WJMD TRNJTBIS PABO WHMGQK! PJ OJFVR, OQUGBP PABO RXHNP HIOWRM PJ PAR SHGR GHOPRM: ZROPY-CQIBKRM-OLQBMMRF-58",
+ "generator_cmd": "kalpha=$(printf '%s' 'huntressabcdefghijklmnopqrstuvwxyz' | awk '{s=\"\";for(i=1;i<=length($0);i++){c=substr($0,i,1);if(index(s,c)==0)s=s c}print s}'); printf '%s' \"$plain\" | tr 'a-zA-Z' \"$kalpha${kalpha^^}\" | tr a-z A-Z",
+ "oracle_cmd": "encoded=\"$encoded\" PYTHONPATH=tools/pyciphers python3 -c \"import os,pycipher as P;print(P.SimpleSubstitution('HUNTRESABCDFGIJKLMOPQVWXYZ').decipher(os.environ['encoded']).lower())\"  # pycipher reader, letters only",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemasterzestyjunipersquirrel",
+ "expected": "match"
+}

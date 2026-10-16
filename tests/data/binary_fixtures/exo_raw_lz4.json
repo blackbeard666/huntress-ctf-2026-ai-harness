@@ -1,0 +1,16 @@
+{
+ "encoding": "lz4",
+ "expected_offset": 3012,
+ "expected_config": {
+  "c2": "http://192.0.2.15/l4",
+  "campaign": "lz4-raw",
+  "sleep": 90,
+  "flag": "flag{lz4_fr4m3_m4g1c}",
+  "note": "lz4-lz4-lz4-lz4-lz4-lz4-lz4-lz4-lz4-lz4-lz4-lz4-"
+ },
+ "decoy": false,
+ "generator_cmd": "bash exo_gen.sh exo_raw_lz4.bin raw-lz4 \"$J3\"   # J1..J5 = compact JSON configs (see exo_gen notes in detail); blob: printf header + crc32 from gzip trailer; stream: node zlib.zstdCompressSync (libzstd) / python-lz4 lz4.frame.compress + coreutils base64 -w0 / xxd -p",
+ "oracle_cmd": "bash exo_oracle.sh exo_raw_lz4.bin raw-lz4   # perl offset after GetConfig\\0\\0\\0 + base64 -d / xxd -r -p + refinery zstd (pyzstd) / system liblz4 LZ4F_decompress (exo_lz4dec.py); prints off at+N magic len hdrcrc crc32(body) body",
+ "oracle_output": "3012 at+0 HCFG 150 260329422 260329422 {\"c2\":\"http://192.0.2.15/l4\",\"campaign\":\"lz4-raw\",\"sleep\":90,\"flag\":\"flag{lz4_fr4m3_m4g1c}\",\"note\":\"lz4-lz4-lz4-lz4-lz4-lz4-lz4-lz4-lz4-lz4-lz4-lz4-\"}",
+ "detail": "LZ4 frame (04 22 4d 18, content-size flag set) raw in the file"
+}

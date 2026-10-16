@@ -1,0 +1,6 @@
+{
+ "entry": "local_store_scan",
+ "expected": "ANS-6e1b0c9f4a27d853",
+ "generator_cmd": "tests/data/android_fixtures/gen_local_store.sh <outdir> -- sqlite3 CLI (PRAGMA journal_mode=WAL) assets/cache.db, session.token = $(printf 'session ANS-...' | base64 -w0); zip -qX",
+ "oracle_cmd": "unzip -p store_sqlite_wal_b64.apk assets/cache.db > c.db && sqlite3 c.db 'select token from session where id=2' | base64 -d"
+}

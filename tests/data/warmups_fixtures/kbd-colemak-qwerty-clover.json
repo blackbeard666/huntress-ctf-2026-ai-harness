@@ -1,0 +1,9 @@
+{
+ "codec": "kbd:colemak>qwerty",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-23",
+ "encoded": "Jlck w;sn gkc;gljt fhld wasmir! F; d;uvk, dibmlf fhld kxacf ajdwks f; fhk Tamk MadfksP cu;vks-hks;j-23",
+ "generator_cmd": "printf %s \"$plain\" | perl tests/data/warmups_fixtures/kbd_ckbcomp.pl 'us colemak' 'us'  # Debian console-setup ckbcomp (XKB data): colemak typist on a qwerty machine",
+ "oracle_cmd": "printf %s \"$encoded\" | sh tests/data/warmups_fixtures/kbd_oracle.sh 'us colemak' 'us'  # gawk over ckbcomp: qwerty chars read back as the colemak keys pressed",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-23",
+ "expected": "match"
+}

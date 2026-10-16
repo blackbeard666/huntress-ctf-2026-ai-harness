@@ -1,0 +1,9 @@
+{
+ "codec": "base100",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "👅👠👚👜🐗👮👦👩👢🐗👛👜👚👦👛👠👥👞🐗👫👟👠👪🐗👮👘👩👤👬👧🐘🐗👋👦🐗👪👦👣👭👜🐣🐗👪👬👙👤👠👫🐗👫👟👠👪🐗👜👯👘👚👫🐗👘👥👪👮👜👩🐗👫👦🐗👫👟👜🐗🐾👘👤👜🐗👄👘👪👫👜👩🐱🐗👘👤👙👜👩🐤👝👘👣👚👦👥🐤🐫🐩",
+ "generator_cmd": "printf %s \"$plain\" | tools/cargo/bin/base100  # Rust crate base100 v0.4.1 (AdamNiederer, `cargo install base100 --root tools/cargo`)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;sys.path.insert(0,'tools/pybase100');import pybase100;print(pybase100.decode(sys.stdin.buffer.read()).decode())\"  # PyPI pybase100==0.3.1 decode",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

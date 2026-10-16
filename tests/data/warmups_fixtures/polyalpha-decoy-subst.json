@@ -1,0 +1,10 @@
+{
+ "codec": "polyalpha",
+ "plain": null,
+ "encoded": "Foet vgka rtegrofu ziol vqkdxh! Zg lgsct, lxwdoz ziol tbqez qflvtk zg zit Uqdt Dqlztk: qdwtk-yqsegf-42",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "plain=\"$plain\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import sys,os,pycipher as P;p=os.environ['plain'];c=iter(P.SimpleSubstitution('QWERTYUIOPASDFGHJKLZXCVBNM').encipher(p) if 'e'=='e' else P.SimpleSubstitution('QWERTYUIOPASDFGHJKLZXCVBNM').decipher(p));print(''.join((lambda x:x if ch.isupper() else x.lower())(next(c)) if ch.isalpha() else ch for ch in p))\"  # monoalphabetic substitution (QWERTY key): same shape, no periodic/progressive/autokey key stream",
+ "oracle_cmd": "printf '%s\\n' \"$encoded\" | python3 -c \"import sys;c=sys.stdin.read();p='Nice work decoding this warmup';print(sorted({(ord(a.lower())-ord(b.lower()))%26 for a,b in zip(c,p) if a.isalpha()}))\"  # 13 distinct c-p shifts over 26 letters at no period <= 12 -> not polyalphabetic-periodic",
+ "oracle_plain": null
+}

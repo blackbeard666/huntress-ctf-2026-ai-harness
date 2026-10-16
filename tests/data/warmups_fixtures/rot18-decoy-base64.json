@@ -1,0 +1,9 @@
+{
+ "codec": "rot18",
+ "plain": null,
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5n",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding' | base64",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d  -> 'Nice work decoding' (base64, not ROT18)"
+}

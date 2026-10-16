@@ -1,0 +1,7 @@
+{
+ "entry": "dex_strings",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "tests/data/android_fixtures/gen_native_so.sh tests/data/android_fixtures  # perl-encoded blob -> gcc -shared -fPIC -O0 native_src/jni_xor.c with the near-miss plaintext ANS-6c1f0e9b2d47a83Z; zip -qX -r <name>.apk assets lib",
+ "oracle_cmd": "unzip native_decoy_jni_xor_nearmiss.apk lib/x86_64/libvault.so && gcc -o h native_src/harness.c -ldl && ./h lib/x86_64/libvault.so Java_com_huntress_arena_NativeLib_getSecret  # 'NewStringUTF ANS-6c1f0e9b2d47a83Z' (15 hex + Z: no valid token)"
+}

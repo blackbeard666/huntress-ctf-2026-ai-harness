@@ -1,0 +1,14 @@
+{
+ "encoding": "rollxor-raw",
+ "expected_offset": 7777,
+ "expected_config": {
+  "c2": "198.51.100.23:8443",
+  "beacon": "roll-sub-ibis",
+  "sleep": 75,
+  "flag": "flag{subtr4ct_thr33_p3r_byt3}",
+  "note": "padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding"
+ },
+ "generator_cmd": "sh rollxor_gen.sh  # system python3 zlib.crc32 header + perl rolling/index/feedback xor",
+ "oracle_cmd": "sh rollxor_oracle.sh rollxor_sub3_raw.bin",
+ "oracle_output": "{\"offset\": 7777, \"mode\": \"roll\", \"config\": {\"c2\": \"198.51.100.23:8443\", \"beacon\": \"roll-sub-ibis\", \"sleep\": 75, \"flag\": \"flag{subtr4ct_thr33_p3r_byt3}\", \"note\": \"padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding padding\"}}"
+}

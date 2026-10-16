@@ -1,0 +1,8 @@
+{
+ "field": "pcap.packet_count",
+ "expected": "none",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcap/GENERATOR_pcap.sh.txt  (Wireshark 4.6.4 text2pcap/editcap/mergecap; be_ns.pcap via stdlib struct) -> decoy_snoop.pcap",
+ "oracle_cmd": "TZ=UTC capinfos -t -E -l -c -a -e -S -I decoy_snoop.pcap -> 'File type: Sun snoop' (not pcap/pcapng)",
+ "decoy": true,
+ "member": "decoy_snoop.pcap"
+}

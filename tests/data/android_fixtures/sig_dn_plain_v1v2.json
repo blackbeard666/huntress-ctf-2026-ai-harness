@@ -1,0 +1,6 @@
+{
+ "entry": "signing_cert_scan",
+ "expected": "ANS-5A0C7E19D3B46F28",
+ "generator_cmd": "sh tests/data/android_fixtures/gen_signing_certs.sh tests/data/android_fixtures  # keytool -genkeypair + zip -X + apksigner sign (v1+v2); token plain in subject OU",
+ "oracle_cmd": "keytool -printcert -jarfile sig_dn_plain_v1v2.apk | grep -m1 -o 'ANS-[0-9A-F]\\{16\\}'"
+}

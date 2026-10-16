@@ -1,0 +1,12 @@
+{
+ "codec": "zerowidth",
+ "plain": null,
+ "encoded": "Team photo \ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66 \ud83d\udc69\u200d\ud83d\udcbb \ud83c\udff3\ufe0f\u200d\ud83c\udf08 \ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66 party \ud83d\udc69\u200d\ud83d\udcbb\ud83d\udc69\u200d\ud83d\udcbb\ud83d\udc69\u200d\ud83d\udcbb",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -I -c 'import unicodedata as u; L = u.lookup; zwj = chr(0x200d); fam = zwj.join(L(n) for n in (\"MAN\", \"WOMAN\", \"GIRL\", \"BOY\")); dev = L(\"WOMAN\") + zwj + L(\"PERSONAL COMPUTER\"); flag = L(\"WAVING WHITE FLAG\") + chr(0xfe0f) + zwj + L(\"RAINBOW\"); print(\"Team photo \" + fam + \" \" + dev + \" \" + flag + \" \" + fam + \" party \" + dev * 3, end=\"\")'  # stdlib unicodedata.lookup: real RGI emoji ZWJ sequences",
+ "oracle_cmd": "python3 -I -c 'import sys, unicodedata as u, collections as c; print(dict(c.Counter(u.name(x, hex(ord(x))) for x in sys.argv[1] if u.category(x) == \"Cf\")))' \"$encoded\"  # stdlib: every format (Cf) char by name",
+ "oracle_plain": null,
+ "oracle_names": "{'ZERO WIDTH JOINER': 11}",
+ "note": "emoji ZWJ sequences: >= 8 U+200D but one symbol kind -> no payload"
+}

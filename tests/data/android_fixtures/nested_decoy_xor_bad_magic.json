@@ -1,0 +1,8 @@
+{
+ "entry": "nested_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "good.dex with magic mangled to 'dey\\n' before the xor: not a container, so it must not be unwrapped",
+ "generator_cmd": "python3 -c 'import zipfile; z=zipfile.ZipFile(\"nested_decoy_xor_bad_magic.apk\",\"w\",zipfile.ZIP_DEFLATED); z.writestr(\"AndroidManifest.xml\",...); z.writestr(\"classes.dex\",open(\"near.dex\",\"rb\").read()); z.writestr(\"assets/payload.bin\", bytes(b^0x5A for b in good.dex with d[2]=ord('y')))'  # apktool d -r exported_trust.apk -o proj; replace smali/ with one class `const-string v0, \"<s>\"`; apktool b -o x.apk proj; unzip -p x.apk classes.dex > <name>.dex",
+ "oracle_cmd": "unzip -p nested_decoy_xor_bad_magic.apk assets/payload.bin | python3 -c 'import sys;sys.stdout.buffer.write(bytes(b^0x5a for b in sys.stdin.buffer.read()))' | head -c 4 | xxd  # -> 6465790a 'dey\\n', not dex/PK magic"
+}

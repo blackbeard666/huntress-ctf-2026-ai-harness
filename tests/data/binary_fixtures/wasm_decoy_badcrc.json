@@ -1,0 +1,14 @@
+{
+ "encoding": "raw",
+ "expected_format": "wasm",
+ "expected_machine": "wasm32",
+ "expected_offset": "none",
+ "expected_mem_offset": "none",
+ "expected_segment_mem_offset": null,
+ "expected_config": "none",
+ "generator_cmd": "bash wasm_gen.sh wasm_decoy_badcrc.bin badcrc '{\"c2\":\"198.51.100.23:443\",\"campaign\":\"lattice\",\"sleep\":45,\"flag\":\"flag{w4sm_d4t4_s3g}\"}' 0",
+ "oracle_cmd": "bash wasm_oracle.sh wasm_decoy_badcrc.bin   # file -b, wasm-validate --enable-memory64, wasm-objdump -x (Memory i64 flag, Data segment init + memory-addressed hexdump), grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "WebAssembly (wasm) binary module version 0x1 (MVP) | valid | i32 | 4103 | 109 | HCFG 1 0 87 947601981 947601980 | {\"c2\":\"198.51.100.23:443\",\"campaign\":\"lattice\",\"sleep\":45,\"flag\":\"flag{w4sm_d4t4_s3g}\"}",
+ "note": "format label 'wasm' / machine 'wasm32' (wasm64 = memory64) are SPECULATIVE (GM vocabulary not seen); expected_offset = FILE offset of the 'H' (OFFSET LAW raw, = hcfg_scan); expected_mem_offset = segment init offset + position in the segment (linear-memory address) -- record both, the GM decides which hcfg_offset means; DECOY: header crc 947601981 != crc32(plain) 947601980 -> no valid HCFG",
+ "decoy": true
+}

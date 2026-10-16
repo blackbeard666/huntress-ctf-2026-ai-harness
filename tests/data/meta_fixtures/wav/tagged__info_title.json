@@ -1,0 +1,8 @@
+{
+ "field": "wav.info_title",
+ "expected": "Exfil Tone",
+ "generator_cmd": ".venv/bin/python -I gen.py  (soundfile 0.14.0 / libsndfile 1.2.2 writer: SoundFile(w, WAV, PCM_16) with .title/.artist/.comment/.software/.date/.copyright -> LIST/INFO)",
+ "oracle_cmd": "bin/exiftool -j -G1 -RIFF:all tagged.wav -> RIFF:Title",
+ "decoy": false,
+ "member": "tagged.wav"
+}

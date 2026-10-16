@@ -1,0 +1,8 @@
+{
+ "field": "jumplist.destlist_entry_count",
+ "expected": "none",
+ "generator_cmd": "zip -q decoy_zip.bin v1.bin  (Info-ZIP; a zip renamed to a jump-list member name)",
+ "oracle_cmd": "file decoy_zip.bin -> 'Zip archive data' ; olefile.isOleFile(decoy_zip.bin) -> False",
+ "decoy": true,
+ "member": "1b4dd67f29cb1962.automaticDestinations-ms"
+}

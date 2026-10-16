@@ -1,0 +1,37 @@
+# Independent reader: olefile (streams) + plaso's dtFabric DestList definitions (automatic_destinations.yaml, read with
+# dtfabric) + LnkParse3 (embedded LNK). Usage: oracle.py FILE MEMBER
+import sys, os, re, json
+R = os.environ["HCTF_ROOT"]; J = os.environ["JL"]
+sys.path[:0] = [R + "/tools/pylib", J + "/dtf/dtfabric-20260506"]
+import olefile, LnkParse3
+from dtfabric import reader, registry
+from dtfabric.runtime import fabric, data_maps
+reg = registry.DataTypeDefinitionsRegistry()
+reader.YAMLDataTypeDefinitionsFileReader().ReadFileObject(reg, open(J + "/plaso_x/plaso/parsers/olecf_plugins/automatic_destinations.yaml"))
+fac = data_maps.DataTypeMapFactory(reg)
+f, member = sys.argv[1:3]
+o = olefile.OleFileIO(f)
+names = ["/".join(e) for e in o.listdir()]
+out = {"app_id": member.split(".")[0]}
+if "DestList" in names:
+    d = o.openstream("DestList").read()
+    h = fac.CreateDataTypeMap("dest_list_header").MapByteStream(d)
+    em = fac.CreateDataTypeMap("dest_list_entry_v1" if h.format_version == 1 else "dest_list_entry_v2")
+    off, ents = 32, []
+    while off < len(d):
+        ctx = data_maps.DataTypeMapContext()
+        e = em.MapByteStream(d[off:], context=ctx); off += ctx.byte_size
+        ents.append(e)
+    out.update(destlist_version=h.format_version, destlist_entry_count=h.number_of_entries,
+               destlist_pinned_entry_count=h.number_of_pinned_entries, destlist_last_entry_number=h.last_entry_number,
+               destlist_paths=[e.path for e in ents], destlist_entry_numbers=[e.entry_number for e in ents],
+               destlist_hostnames=[e.hostname for e in ents])
+lnks = sorted((n for n in names if re.fullmatch(r"[0-9a-fA-F]+", n)), key=lambda n: int(n, 16))
+out["lnk_stream_names"] = lnks
+tp = []
+for n in lnks:
+    li = LnkParse3.lnk_file(o.openstream(n)).get_json()["link_info"]
+    tp.append(li.get("local_base_path", "") + li.get("common_path_suffix", ""))
+out["lnk_target_paths"] = tp
+out["first_target_path"] = tp[0] if tp else "none"
+print(json.dumps(out, separators=(",", ":"), ensure_ascii=False))

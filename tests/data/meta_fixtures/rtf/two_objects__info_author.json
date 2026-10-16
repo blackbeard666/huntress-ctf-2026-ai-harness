@@ -1,0 +1,8 @@
+{
+ "field": "rtf.info_author",
+ "expected": "Maïa O{x} Dubois",
+ "generator_cmd": "python3 -I gen.py two_objects.rtf plain.rtf  (stdlib writer: OLE1 ObjectHeader = struct.pack('<II',0x501,2)+lenprefixed class/topic/item+native, hex-encoded into {\\\\*\\\\objdata}, 64-col lines; Package + Equation.3; {\\\\*\\\\template http://203.0.113.9/tpl/normal.dotm}; {\\\\author Ma\\\\'efa O\\\\{x\\\\} Dubois})",
+ "oracle_cmd": "exiftool -j -Author two_objects.rtf -> 'Maïa O{x} Dubois'",
+ "decoy": false,
+ "member": "invoice.rtf"
+}

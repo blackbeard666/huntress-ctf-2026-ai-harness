@@ -1,0 +1,8 @@
+{
+ "field": "rtf.object_class_names",
+ "expected": "[\"Package\",\"Equation.3\"]",
+ "generator_cmd": "python3 -I gen.py two_objects.rtf plain.rtf  (stdlib writer: OLE1 ObjectHeader = struct.pack('<II',0x501,2)+lenprefixed class/topic/item+native, hex-encoded into {\\\\*\\\\objdata}, 64-col lines; Package + Equation.3; {\\\\*\\\\template http://203.0.113.9/tpl/normal.dotm}; {\\\\author Ma\\\\'efa O\\\\{x\\\\} Dubois})",
+ "oracle_cmd": "rtfobj two_objects.rtf (oletools 0.60) -> id 0 class name b'Package', id 1 class name b'Equation.3'",
+ "decoy": false,
+ "member": "invoice.rtf"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "base45",
+ "plain": null,
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwIQ==",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup!' | base64 -w0  # coreutils base64 impostor",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;sys.path.insert(0,'tools/pychepy');from chepy import Chepy;print(Chepy(sys.stdin.read()).from_base45().o.decode())\"  # PyPI chepy==7.6.0 from_base45  -> chepy raises 'Invalid base45 string' (lowercase/'=' outside the alphabet)",
+ "oracle_plain": null
+}

@@ -1,0 +1,10 @@
+{
+ "encoding": "base64-lz4",
+ "expected_offset": null,
+ "expected_config": "none",
+ "decoy": true,
+ "generator_cmd": "bash exo_gen.sh exo_decoy_lz4_badcrc.bin b64-lz4 \"$J5\" bad   # J1..J5 = compact JSON configs (see exo_gen notes in detail); blob: printf header + crc32 from gzip trailer; stream: node zlib.zstdCompressSync (libzstd) / python-lz4 lz4.frame.compress + coreutils base64 -w0 / xxd -p",
+ "oracle_cmd": "bash exo_oracle.sh exo_decoy_lz4_badcrc.bin b64-lz4   # perl offset after GetConfig\\0\\0\\0 + base64 -d / xxd -r -p + refinery zstd (pyzstd) / system liblz4 LZ4F_decompress (exo_lz4dec.py); prints off at+N magic len hdrcrc crc32(body) body",
+ "oracle_output": "3012 at+0 HCFG 80 3735928559 2784724349 {\"c2\":\"10.0.0.9:1\",\"campaign\":\"decoy\",\"sleep\":1,\"flag\":\"flag{n0t_th3_r34l_0n3}\"}",
+ "detail": "base64 LZ4 frame, header crc forced to 0xdeadbeef: hit may be listed but must not be valid"
+}

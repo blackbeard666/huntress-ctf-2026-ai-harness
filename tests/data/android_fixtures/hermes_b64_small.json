@@ -1,0 +1,6 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-7c3e19a04bd2f685",
+ "generator_cmd": "tests/data/android_fixtures/gen_hermes.sh -- hermesc (npm hermes-compiler 0.x, bytecode v98) -emit-binary -out assets/index.android.bundle index.js, then zip -qX <name>.apk AndroidManifest.xml assets/index.android.bundle; JS: var cfg = {endpoint: '...', token: '$(printf ANS-7c3e19a04bd2f685 | base64 -w0)'} (small string table, Latin-1)",
+ "oracle_cmd": "python3 -I -c \"import sys,io,zipfile; from hermes_dec.parsers.hbc_file_parser import HBCReader; r=HBCReader(); r.read_whole_file(io.BytesIO(zipfile.ZipFile(sys.argv[1]).read('assets/index.android.bundle'))); print('\\n'.join(r.strings))\" hermes_b64_small.apk | grep -E '^[A-Za-z0-9+/]{20,}=*$' | base64 -d"
+}

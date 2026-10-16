@@ -1,0 +1,29 @@
+{
+ "encoding": "raw",
+ "expected_format": "mach-o",
+ "expected_machine": "AArch64",
+ "expected_machine_num": "16777228",
+ "expected_machines": [
+  "AArch64"
+ ],
+ "expected_fat": false,
+ "expected_section_names": [
+  "__TEXT,__text",
+  "__DATA,__const",
+  "__LD,__compact_unwind"
+ ],
+ "expected_has_hcfg_section": "false",
+ "expected_hcfg_section_offsets": [],
+ "expected_offset": 500,
+ "expected_config": {
+  "c2": "10.9.8.7:80",
+  "campaign": "ironside",
+  "sleep": 5,
+  "flag": "flag{4rm64_sl1c3}"
+ },
+ "generator_cmd": "bash macho_gen.sh macho_decoy_nosect.bin nosect '{\"c2\":\"10.9.8.7:80\",\"campaign\":\"ironside\",\"sleep\":5,\"flag\":\"flag{4rm64_sl1c3}\"}' 0x5a",
+ "oracle_cmd": "bash macho_oracle.sh macho_decoy_nosect.bin   # llvm-lipo-18 -archs, llvm-objdump-18 --macho --universal-headers, llvm-readobj-18 --file-headers --sections, llvm-objcopy-18 --dump-section __DATA,__hcfg, perl unpack + xor, gzip trailer crc32; llvm-readobj-18 --sections macho_decoy_nosect.bin | awk '$1==\"Name:\"{n=$2} $1==\"Offset:\"&&n==\"__const\"{print $2}'   # -> 500 (blob offset, same bytes as macho_a64_key)",
+ "oracle_output": "thin | Arm64 (0x100000C) | 0 | __TEXT,__text __DATA,__const __LD,__compact_unwind | none",
+ "note": "format label 'mach-o' = lib.binary.machine_facts' existing spelling (GM vocabulary for Mach-O NOT yet confirmed; 'macho' presumed by the atlas). machine = MACHO_CPU_LABEL (x86-64 / AArch64); fat -> first slice, expected_offset = lowest __hcfg file offset (first slice in file order); has_hcfg_section = a sectname __hcfg in any segment/slice; DECOY: same HCFG blob but in __DATA,__const -> has_hcfg_section 'false' (blob still found by the raw scan)",
+ "decoy": true
+}

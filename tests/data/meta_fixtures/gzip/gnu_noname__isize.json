@@ -1,0 +1,8 @@
+{
+ "field": "gzip.isize",
+ "expected": "15000",
+ "generator_cmd": "printf 'abc'x5000 > n.txt; gzip -n -c n.txt > gnu_noname.gz  (-n: no FNAME, MTIME 0)",
+ "oracle_cmd": "gzip -l gnu_noname.gz -> uncompressed 15000",
+ "decoy": false,
+ "member": "gnu_noname.gz"
+}

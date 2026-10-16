@@ -1,0 +1,8 @@
+{
+ "field": "regf.last_written_utc",
+ "expected": "2026-09-21T05:53:20Z",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/regf/GENERATOR_regf_keys.py.txt <outdir>  (stdlib struct regf writer: nk/lh/lf/ri+li/vk cells -> ntuser_run_ua.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -c \"import json,codecs; from Registry import Registry; r=Registry.Registry('tests/data/meta_fixtures/regf/ntuser_run_ua__last_written_utc.bin'); print(r.root().timestamp())  # key-node FILETIME, rendered YYYY-MM-DDTHH:MM:SSZ\"  (python-registry 1.3.1, independent reader)",
+ "decoy": false,
+ "member": "NTUSER.DAT"
+}

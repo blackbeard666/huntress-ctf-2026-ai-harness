@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-c80f5e2b9d4a7136",
+ "generator_cmd": "tests/data/android_fixtures/gen_row36.sh <outdir> -- assets/huntress_puzzle.json via jq -cn '{codec,data[,key]}' then (cd d && zip -qX -r <name>.apk assets); payload: \"zigzag\"     \"$(printf 'ANS-c80f5e2b9d4a7136 ok' | perl -ne '$r=3;@row=();$i=0;$d=1;for(split//){$row[$i].=$_;$d=-1 if $i==$r-1;$d=1 if $i==0;$i+=$d}print join \"\",@row')\" \"3\"",
+ "oracle_cmd": "unzip -p chain_railfence.apk assets/huntress_puzzle.json | jq -r .data | python3 -I -c 'import sys; c=sys.stdin.read().rstrip(\"\\n\"); n=len(c); r=3; pat=[min(i%4,4-i%4) for i in range(n)]; idx=[i for k in range(r) for i in range(n) if pat[i]==k]; o=[None]*n; [o.__setitem__(i,ch) for i,ch in zip(idx,c)]; print(\"\".join(o))'"
+}

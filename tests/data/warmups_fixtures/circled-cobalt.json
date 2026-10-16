@@ -1,0 +1,9 @@
+{
+ "codec": "circled",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-25",
+ "encoded": "Ⓝⓘⓒⓔ ⓦⓞⓡⓚ ⓓⓔⓒⓞⓓⓘⓝⓖ ⓣⓗⓘⓢ ⓦⓐⓡⓜⓤⓟ! Ⓣⓞ ⓢⓞⓛⓥⓔ, ⓢⓤⓑⓜⓘⓣ ⓣⓗⓘⓢ ⓔⓧⓐⓒⓣ ⓐⓝⓢⓦⓔⓡ ⓣⓞ ⓣⓗⓔ Ⓖⓐⓜⓔ Ⓜⓐⓢⓣⓔⓡ: ⓒⓞⓑⓐⓛⓣ-ⓞⓣⓣⓔⓡ-②⑤",
+ "generator_cmd": "perl -CSA tests/data/warmups_fixtures/unistyle_perl.pl circled \"$plain\"  # Perl charnames: CIRCLED LATIN CAPITAL/SMALL LETTER x, CIRCLED DIGIT n",
+ "oracle_cmd": "printf %s \"$encoded\" | uconv -x '::NFKC;'  # ICU NFKC compatibility fold",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-25",
+ "expected": "match"
+}

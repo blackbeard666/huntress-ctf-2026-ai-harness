@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "printf %s '<plan>' | gzip -n9 | base64 -w 36  (of a non-plan sentence)  -> literal written into desc_decoy_yaml_noplan.yaml",
+ "oracle_cmd": "yq -r .pipeline.stage.descriptor_decafbad tests/data/script_fixtures/desc_decoy_yaml_noplan.yaml | base64 -d | gunzip   (prints a sentence, no v= plan)"
+}

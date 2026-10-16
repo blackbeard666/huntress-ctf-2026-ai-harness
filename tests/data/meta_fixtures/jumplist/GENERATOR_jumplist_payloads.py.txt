@@ -1,0 +1,51 @@
+# Stage jump-list payloads: LNK streams via pylnk3 (independent writer), DestList packed per libyal
+# "Jump lists format" (header 32 B; v1 entry 114 B + path; v2+ entry 130 B + path + u32). Usage: gen_payloads.py OUTDIR
+import sys, os, struct, datetime, uuid
+sys.path.insert(0, os.environ["HCTF_ROOT"] + "/tools/pylib")
+import pylnk3
+from io import BytesIO
+
+def lnk(path, args=None, wd=None):
+    l = pylnk3.for_file(path, arguments=args, work_dir=wd)
+    l.link_flags.HasLinkInfo = True
+    l._link_info = pylnk3.LinkInfo()
+    l.link_flags.ForceNoLinkInfo = False
+    l.specify_local_location(path, drive_type=pylnk3.DRIVE_FIXED, drive_serial=0x5EED1234, volume_label="OS")
+    l.creation_time = datetime.datetime(2026, 3, 4, 5, 6, 7)
+    b = BytesIO(); l.write(b); return b.getvalue()
+
+FT = 133800000000000000
+
+def entry(ver, num, host, path, pin=-1):
+    g = b"".join(uuid.UUID(int=(num << 8) + i).bytes_le for i in range(4))
+    head = struct.pack("<Q", 0x1234) + g + host.encode().ljust(16, b"\0") + struct.pack("<IIfQi", num, 0, 1.0, FT + num, pin)
+    p = path.encode("utf-16-le")
+    if ver == 1:
+        return head + struct.pack("<H", len(path)) + p
+    return head + struct.pack("<iIQ", 0, 1, 0) + struct.pack("<H", len(path)) + p + b"\0\0\0\0"
+
+def destlist(ver, ents, pinned=0):
+    body = b"".join(entry(ver, *e) for e in ents)
+    last = max(e[0] for e in ents)
+    return struct.pack("<IIIfIIII", ver, len(ents), pinned, 1.0, last, 0, 7, 0) + body
+
+out = sys.argv[1]
+def w(case, name, data):
+    os.makedirs(f"{out}/{case}", exist_ok=True)
+    open(f"{out}/{case}/{name}", "wb").write(data)
+
+# case v4: Win10 layout, MRU order a,2,1 -> streams 1,2,a
+p4 = {1: r"C:\Users\analyst\Documents\notes.txt", 2: r"C:\Users\analyst\Desktop\payroll_q3.xlsx",
+      10: r"\\fs01\share\drop\invoice_8812.pdf"}
+w("v4", "DestList", destlist(4, [(10, "desktop-7f3k2q", p4[10], 0), (2, "desktop-7f3k2q", p4[2]), (1, "ws-legacy", p4[1])], pinned=1))
+w("v4", "1", lnk(p4[1], wd=r"C:\Users\analyst\Documents"))
+w("v4", "2", lnk(p4[2], args="/r"))
+w("v4", "a", lnk(r"C:\Windows\System32\cmd.exe", args=r"/c \\fs01\share\drop\invoice_8812.pdf"))
+# case v1: Win7 layout, two entries -> streams 3,4
+p1 = {3: r"D:\Tools\invoice_viewer.exe", 4: r"C:\Program Files\7-Zip\7zFM.exe"}
+w("v1", "DestList", destlist(1, [(4, "win7-lab", p1[4]), (3, "win7-lab", p1[3])]))
+w("v1", "3", lnk(p1[3]))
+w("v1", "4", lnk(p1[4]))
+# decoy: compound file with only non-jump-list streams
+w("decoy", "WordDocument", b"\xec\xa5" + b"\0" * 600)
+w("decoy", "\x05SummaryInformation", b"\xfe\xff" + b"\0" * 46)

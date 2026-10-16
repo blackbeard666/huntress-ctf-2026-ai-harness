@@ -1,0 +1,14 @@
+{
+ "codec": "vigenere:<prompt letters> (running key)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-31",
+ "encoded": "Omnp wgfx hzgfumck taaz emjqfu! Xj wfjgi, lnfdwy moqk zbrau rvwbme zf xhh Onav Pejdip: sfiie-jxensg-31",
+ "hints": [
+  "Running Late",
+  "Bellaso never repeats himself: every letter of this very briefing, read in order, keys the next letter of your blob."
+ ],
+ "key": "bellasoneverrepeatshimselfeveryletterofthisverybriefingreadinorderkeysthenextletterofyourblob",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemasteramberfalcon",
+ "generator_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import pycipher as P; P.Vigenere(KEY).encipher(plain)\"  # KEY = every letter of the prompt (NFKD-folded), case/non-letters re-inserted",
+ "oracle_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import pycipher as P; print(P.Vigenere(KEY).decipher(encoded).lower())\"  # pycipher reader, letters only",
+ "expected": "match"
+}

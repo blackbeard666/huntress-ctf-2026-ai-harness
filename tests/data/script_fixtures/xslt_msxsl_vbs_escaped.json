@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=xslt|role=loader|verdict=malicious|attack=T1220|adapter=msxsl_script|host_profile=xslt_msxsl|stage_count=2|steps=fetch_stage,run_stage|campaign_id=XSLT-7c41e09a|url=https://xslt-7c41e09a.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/xslt_gen.py  (plan | gzip -n | base64 split over VBS `& _` lines, msxsl:script text serialized by xml.etree -> &amp;)",
+ "oracle_cmd": "python3 -I -c 'import sys,re,lxml.etree as E; t=E.parse(sys.argv[1]).find(\".//{urn:schemas-microsoft-com:xslt}script\").text; print(\"\".join(re.findall(r\"\\\"([^\\\"]*)\\\"\", t.split(\"descriptor_7c41e09a =\")[1].split(\"run =\")[0])))' tests/data/script_fixtures/xslt_msxsl_vbs_escaped.xsl | base64 -d | gunzip"
+}

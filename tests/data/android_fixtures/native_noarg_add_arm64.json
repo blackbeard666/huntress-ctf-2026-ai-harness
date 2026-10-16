@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": "ANS-e40b7c91d3a2f586",
+ "generator_cmd": "tests/data/android_fixtures/gen_native_so.sh tests/data/android_fixtures  # perl-encoded blob -> aarch64-linux-gnu-gcc -shared -fPIC -O2 native_src/noarg_add.c (const char *huntress_secret(void): vault_blob[i] - (13*i+7), no xor constant); zip -qX -r <name>.apk assets lib",
+ "oracle_cmd": "unzip native_noarg_add_arm64.apk lib/arm64-v8a/libcore.so && aarch64-linux-gnu-gcc -o ha native_src/harness.c -ldl && qemu-aarch64 -L /usr/aarch64-linux-gnu ./ha lib/arm64-v8a/libcore.so huntress_secret  # 'huntress_secret -> ANS-e40b7c91d3a2f586'",
+ "decoy": false
+}

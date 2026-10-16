@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.user_version",
+ "expected": "74",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_cli.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> places.sqlite)",
+ "oracle_cmd": "sqlite3 -readonly places.sqlite \"PRAGMA user_version\"  (SQLite 3.46.1 CLI) -> 74",
+ "decoy": false,
+ "member": "places.sqlite"
+}

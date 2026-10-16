@@ -1,0 +1,8 @@
+{
+ "field": "macho.min_os_version",
+ "expected": "12.0",
+ "generator_cmd": "zig cc (pip ziglang 0.17.0: python -m ziglang cc) -target aarch64-macos.12.0 -shared -o libm_arm.dylib m.c  (run in $TMPDIR/mfx)",
+ "oracle_cmd": "llvm-otool-18 -l zig_arm64_dylib__min_os_version.bin | grep -A5 -E 'LC_UUID|LC_BUILD_VERSION|LC_VERSION_MIN' | grep -E 'uuid|minos|  version' (uuid lowercased; min_os verbatim otool text)",
+ "decoy": false,
+ "member": "libm_arm.dylib"
+}

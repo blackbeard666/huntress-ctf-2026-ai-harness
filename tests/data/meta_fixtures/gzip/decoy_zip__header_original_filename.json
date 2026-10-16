@@ -1,0 +1,8 @@
+{
+ "field": "gzip.header_original_filename",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import zipfile;z=zipfile.ZipFile('decoy_zip.gz','w');z.writestr('x.txt','hi');z.close()\"  (zip renamed .gz impostor)",
+ "oracle_cmd": "TZ=UTC file -b decoy_zip.gz -> Zip archive data (not gzip)",
+ "decoy": true,
+ "member": "decoy_zip.gz"
+}

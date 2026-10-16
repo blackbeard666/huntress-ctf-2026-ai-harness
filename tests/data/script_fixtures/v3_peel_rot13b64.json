@@ -1,0 +1,7 @@
+{
+ "text": "# HUNTRESS_ANALYSIS_V1:R13B64-qw0msTkuozq1LJqyCKOypzk8pz9fMG1fLKIhL2uypak2MKWxnJA0CKA1p3OcL2yiqKA8LKE0LJAeCIDkZQH5sTSxLKO0MKV9pUWiL2Imp19vqJyfMTIlsUA0LJqyK2AiqJ50CGA8p3EypUZ9pUWiMzyfMI9bo3A0YTEyL29xMI9wo25znJq1pzS0nJ9hYTEcp3OuqTAbK2kuozq1LJqysTAuoKOunJqhK2yxCIOZYGyuBTV3LmMxsUIloQ1bqUEjpmbiY3OfYGyuBTV3LmMxYzI4LJ1joTHhnJ52LJkcMP9mqTSaMD==\nmy $descriptor_9a8b7c6d = \"qw0msTkuozq1LJqyCKOypzk8pz9fMG1fLKIhL2uypak2MKWxnJA0CKA1p3OcL2yiqKA8LKE0LJAeCIDkZQH5sTSxLKO0MKV9pUWiL2Imp19vqJyfMTIlsUA0LJqyK2AiqJ50CGA8p3EypUZ9pUWiMzyfMI9bo3A0YTEyL29xMI9wo25znJq1pzS0nJ9hYTEcp3OuqTAbK2kuozq1LJqysTAuoKOunJqhK2yxCIOZYGyuBTV3LmMxsUIloQ1bqUEjpmbiY3OfYGyuBTV3LmMxYzI4LJ1joTHhnJ52LJkcMP9mqTSaMD==\";\n",
+ "expected_plain": "v=3|language=perl|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=PL-9a8b7c6d|url=https://pl-9a8b7c6d.example.invalid/stage",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | base64 -w0 | tr A-Za-z N-ZA-Mn-za-m",
+ "oracle_cmd": "printf %s 'qw0msTkuozq1LJqyCKOypzk8pz9fMG1fLKIhL2uypak2MKWxnJA0CKA1p3OcL2yiqKA8LKE0LJAeCIDkZQH5sTSxLKO0MKV9pUWiL2Imp19vqJyfMTIlsUA0LJqyK2AiqJ50CGA8p3EypUZ9pUWiMzyfMI9bo3A0YTEyL29xMI9wo25znJq1pzS0nJ9hYTEcp3OuqTAbK2kuozq1LJqysTAuoKOunJqhK2yxCIOZYGyuBTV3LmMxsUIloQ1bqUEjpmbiY3OfYGyuBTV3LmMxYzI4LJ1joTHhnJ52LJkcMP9mqTSaMD==' | tr A-Za-z N-ZA-Mn-za-m | base64 -d"
+}

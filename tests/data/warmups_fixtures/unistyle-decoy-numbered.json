@@ -1,0 +1,11 @@
+{
+ "codec": "unistyle",
+ "plain": null,
+ "encoded": "⑴ Open the file. ⑵ Read the header. ⒜ note the size.",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written ASCII prose with real enumerators PARENTHESIZED DIGIT ONE/TWO + PARENTHESIZED LATIN SMALL LETTER A: list markers, not a styled sentence",
+ "oracle_cmd": "python3 -I -c 'import sys,unicodedata as u;print([u.name(c,\"?\") for c in sys.argv[1] if not c.isascii()])' \"$encoded\"  # names",
+ "oracle_plain": null,
+ "oracle_names": "['PARENTHESIZED DIGIT ONE', 'PARENTHESIZED DIGIT TWO', 'PARENTHESIZED LATIN SMALL LETTER A']"
+}

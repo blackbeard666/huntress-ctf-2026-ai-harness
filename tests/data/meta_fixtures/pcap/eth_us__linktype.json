@@ -1,0 +1,8 @@
+{
+ "field": "pcap.linktype",
+ "expected": "1",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcap/GENERATOR_pcap.sh.txt  (Wireshark 4.6.4 text2pcap/editcap/mergecap; be_ns.pcap via stdlib struct) -> eth_us.pcap",
+ "oracle_cmd": ".venv/bin/python -I -c \"import dpkt; r=dpkt.pcap.Reader(open('eth_us.pcap','rb')); print(r.datalink(), r.snaplen, hex(r._Reader__fh.magic))\" (dpkt 1.9.8) -> 1; capinfos -I '(1 - ether)'",
+ "decoy": false,
+ "member": "eth_us.pcap"
+}

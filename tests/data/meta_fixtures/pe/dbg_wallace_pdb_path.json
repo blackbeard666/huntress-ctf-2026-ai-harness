@@ -1,0 +1,7 @@
+{
+ "field": "pe.debug_pdb_path",
+ "expected": "C:\\Test\\VersionTracking\\Original\\VT0\\Debug\\VT0.pdb",
+ "generator_cmd": "cp tools/ghidra/docs/GhidraClass/ExerciseFiles/VersionTracking/WallaceSrc.exe (MSVC 2010 Debug build, Rich + RSDS) tests/data/meta_fixtures/pe/dbg_wallace_pdb_path.bin  (unmodified)",
+ "oracle_cmd": ".venv/bin/python -c \"import lief,sys;l=lief.parse(sys.argv[1]);c=[d for d in l.debug if isinstance(d,lief.PE.CodeViewPDB)];print(c[0].filename if c else 'none')\" tests/data/meta_fixtures/pe/dbg_wallace_pdb_path.bin  ; cross-check: objdump -p (CodeView RSDS line)",
+ "decoy": false
+}

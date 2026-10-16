@@ -1,0 +1,8 @@
+{
+ "field": "mp3.id3_version",
+ "expected": "2.3.0",
+ "generator_cmd": ".venv/bin/python -I gen.py  (mutagen 1.48.1 ID3 writer: ID3().add(TIT2/TPE1/TALB/COMM/TDRC).save(f, v2_version=3|4) onto 4 silent MPEG-1 L3 frames)",
+ "oracle_cmd": "file -b v23.mp3 -> 'Audio file with ID3 version 2.3.0'",
+ "decoy": false,
+ "member": "v23.mp3"
+}

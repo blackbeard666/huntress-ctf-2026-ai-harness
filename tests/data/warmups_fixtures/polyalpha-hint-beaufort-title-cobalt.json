@@ -1,0 +1,14 @@
+{
+ "codec": "beaufort:<title words> (accent-folded, 41-letter key)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-74",
+ "encoded": "pjci inak iacnbshz vkla mrofgy! ju aixsz, gjdgkl ymkk woeay ezmfnd sq lua uutk ftapno: pmmcxz-pewpl-74",
+ "hints": [
+  "Crème Brûlée à la Beaufort: Sir Francis's Windy Dessert Scale",
+  "Dessert is served cold, keyed by the menu."
+ ],
+ "key": "cremebruleebeaufortsirfranciswindydessertscale",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemastercobaltheron",
+ "generator_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import secretpy as S; S.Beaufort().encrypt(letters, KEY, 'abc..z')\"  # KEY = 3+-letter title words, NFKD-folded, joined",
+ "oracle_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import pycipher as P; print(P.Beaufort(KEY).decipher(encoded).lower())\"  # a DIFFERENT library reads it",
+ "expected": "match"
+}

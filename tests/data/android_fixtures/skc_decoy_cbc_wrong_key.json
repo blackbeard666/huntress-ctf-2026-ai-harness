@@ -1,0 +1,8 @@
+{
+ "entry": "static_key_cipher_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same ciphertext asset as skc_aes_cbc_dex_key_ivprefix but the dex key constant is off by its last char (...pZ4x): no key decrypts it",
+ "generator_cmd": "apktool d -r -o proj exported_trust.apk (D01); rm proj/assets/huntress_puzzle.json; add smali/com/huntress/mobile/d01/v073e9a824e9e/CryptoConfig.smali: key() = const-string \"Hx7#qLm2!vR9pZ4x\", transformation() = const-string \"AES/CBC/PKCS5Padding\"; cp <skc_aes_cbc_dex_key_ivprefix>/assets/config.dat proj/assets/; apktool b -o skc_decoy_cbc_wrong_key.apk proj",
+ "oracle_cmd": "unzip -p skc_decoy_cbc_wrong_key.apk assets/config.dat | base64 -d > d.bin; tail -c +17 d.bin | openssl enc -d -nopad -aes-128-cbc -K $(printf 'Hx7#qLm2!vR9pZ4x' | xxd -p) -iv $(head -c16 d.bin | xxd -p) | grep -caE 'ANS-[0-9a-f]{16}'  # -> 0"
+}

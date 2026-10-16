@@ -1,0 +1,10 @@
+{
+ "codec": "morse-alt",
+ "plain": null,
+ "encoded": "01001110 01001001 01000011 01000101 00100000 01010111 01001111 01010010 01001011",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"NICE WORK\" | xxd -b -c1 | awk '{printf \"%s%s\", (NR>1?\" \":\"\"), $2}'  # xxd 8-bit ASCII binary: 0/1 groups of 8, no Morse code has 8 symbols",
+ "oracle_cmd": "python3 -c 'import sys;print(all(len(g)==8 for g in sys.argv[1].split()))' \"$encoded\"  # True: every 0/1 group is 8 long -> binary ASCII, not Morse",
+ "oracle_plain": "True"
+}

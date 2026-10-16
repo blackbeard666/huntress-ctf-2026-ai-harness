@@ -1,0 +1,7 @@
+{
+ "field": "pe.security_dir_size_u32_hex",
+ "expected": "0x00002750",
+ "generator_cmd": "cp tools/pwsh/System.Buffers.dll tests/data/meta_fixtures/pe/authenticode_ms_buffers.bin  (unmodified, Microsoft-signed, RFC3161-timestamped)",
+ "oracle_cmd": ".venv/bin/python -c \"import pefile,sys;print(hex(pefile.PE(sys.argv[1]).OPTIONAL_HEADER.DATA_DIRECTORY[4].Size))\" tests/data/meta_fixtures/pe/authenticode_ms_secdir_size.bin -> 0x2750 (10064)",
+ "decoy": false
+}

@@ -1,0 +1,8 @@
+{
+ "field": "gzip.header_os_u8_hex",
+ "expected": "0xff",
+ "generator_cmd": "python3 -I -c \"import gzip; gzip.GzipFile(filename='beacon_cfg.json', mode='wb', fileobj=open('py_named.gz','wb'), mtime=1700000000).write(b'{\\\"c2\\\":\\\"x\\\"}'*123)\"  (CPython gzip writer, OS byte 0xff)",
+ "oracle_cmd": "xxd -s 9 -l 1 -p py_named.gz  (OS byte) ; TZ=UTC file -b py_named.gz -> ff (file prints no 'from <OS>')",
+ "decoy": false,
+ "member": "py_named.gz"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "beaufort:fortify",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-kestrel-17",
+ "encoded": "Sgpp mrhv lnrucqsi yman cfxfzt! Mk nagye, neecja pyqn kutgm yswvpr mk mhn Nitu Tozaeo: wrnrip-vunvapx-17",
+ "generator_cmd": "plain=\"$plain\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import sys,os,pycipher as P;p=os.environ['plain'];c=iter(P.Beaufort('FORTIFY').encipher(p) if 'e'=='e' else P.Beaufort('FORTIFY').decipher(p));print(''.join((lambda x:x if ch.isupper() else x.lower())(next(c)) if ch.isalpha() else ch for ch in p))\"  # pycipher Beaufort c=k-p",
+ "oracle_cmd": "encoded=\"$encoded\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import os,pycipher as P;e=os.environ['encoded'];print(P.Beaufort('FORTIFY').decipher(e).lower())\"  # pycipher reader, letters only",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemastercobaltkestrel",
+ "expected": "match"
+}

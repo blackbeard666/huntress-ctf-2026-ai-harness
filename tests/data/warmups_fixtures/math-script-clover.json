@@ -1,0 +1,9 @@
+{
+ "codec": "math-script",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-93",
+ "encoded": "𝒩𝒾𝒸ℯ 𝓌ℴ𝓇𝓀 𝒹ℯ𝒸ℴ𝒹𝒾𝓃ℊ 𝓉𝒽𝒾𝓈 𝓌𝒶𝓇𝓂𝓊𝓅! 𝒯ℴ 𝓈ℴ𝓁𝓋ℯ, 𝓈𝓊𝒷𝓂𝒾𝓉 𝓉𝒽𝒾𝓈 ℯ𝓍𝒶𝒸𝓉 𝒶𝓃𝓈𝓌ℯ𝓇 𝓉ℴ 𝓉𝒽ℯ 𝒢𝒶𝓂ℯ ℳ𝒶𝓈𝓉ℯ𝓇: 𝒸𝓁ℴ𝓋ℯ𝓇-𝒷𝒶𝒹ℊℯ𝓇-93",
+ "generator_cmd": "perl -CSA tests/data/warmups_fixtures/unistyle_perl.pl SCRIPT \"$plain\"  # Perl charnames; reserved B/E/F/H/I/L/M/R/e/g/o -> SCRIPT CAPITAL/SMALL x (U+21xx), digits stay ASCII",
+ "oracle_cmd": "python3 -I -c 'import sys,unicodedata as u;print(u.normalize(\"NFKC\",sys.argv[1]))' \"$encoded\"  # stdlib NFKC compatibility fold",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-93",
+ "expected": "match"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "css-escape",
+ "plain": null,
+ "encoded": "\\116\\151\\143\\145\\040\\167\\157\\162\\153\\040\\144\\145\\143",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work dec' | perl -ne 'print map { sprintf \"\\\\%03o\", ord } split //'  -> C octal escapes, not CSS hex",
+ "oracle_cmd": "printf %s \"$encoded\" | PYTHONPATH=tools/pytinycss2 python3 tests/data/warmups_fixtures/ucp_tinycss2.py  # tinycss2 1.5.1 tokenizer -> reads U+0116 U+0151 ... (non-ASCII): not the sentence",
+ "oracle_plain": "ĖőŃŅ@ŧŗŢœ@ńŅŃ"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "elf.build_id_hex",
+ "expected": "none",
+ "generator_cmd": "printf hello > blob; objcopy -I binary -O elf32-big blob be.o  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW objcopy_elf32_big__build_id_hex.bin | grep 'Build ID:'",
+ "decoy": true,
+ "member": "be.o"
+}

@@ -1,0 +1,9 @@
+{
+ "encoding": "init-decoded",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "generator_cmd": "bash ctor_gen.sh ctor_decoy_badcrc.bin gcc 2 lcg '{\"c2\":\"198.51.100.9:443\",\"campaign\":\"bad-ctor\",\"flag\":\"flag{n0t_th1s_0n3}\"}' 1   # blob: printf header + crc32 from gzip trailer; perl encodes it (LCG keystream k0=0xa7, k=k*0x6b+0x3d) into a static const array; an __attribute__((constructor)) decodes it into global g_buf at load time",
+ "oracle_cmd": "bash ctor_oracle.sh ctor_decoy_badcrc.bin   # the program RUNS (native / qemu-aarch64) so the loader runs .init_array, then dumps the decoded buffer; perl unpack header; gzip trailer = crc32(body); nm address of the stored array enc + readelf -SW section -> file offset",
+ "oracle_output": "8224 HCFG 75 1074433149 {\"c2\":\"198.51.100.9:443\",\"campaign\":\"bad-ctor\",\"flag\":\"flag{n0t_th1s_0n3}\"} 1074433148   <header crc != gzip crc32 of body: corrupted blob>",
+ "decoy": true
+}

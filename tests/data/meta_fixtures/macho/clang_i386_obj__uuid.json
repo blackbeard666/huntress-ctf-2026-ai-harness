@@ -1,0 +1,8 @@
+{
+ "field": "macho.uuid",
+ "expected": "none",
+ "generator_cmd": "clang-18 --target=i386-apple-macosx10.6 -c m.c -o i386.o  (run in $TMPDIR/mfx)",
+ "oracle_cmd": "llvm-otool-18 -l clang_i386_obj__uuid.bin | grep -A5 -E 'LC_UUID|LC_BUILD_VERSION|LC_VERSION_MIN' | grep -E 'uuid|minos|  version' (uuid lowercased; min_os verbatim otool text)",
+ "decoy": true,
+ "member": "i386.o"
+}

@@ -1,0 +1,10 @@
+{
+ "material": "H4sIAAAAAAACAz2MQQ7CIBAAP1RLMTFNTPbsBzx5",
+ "rep": "gzip_base64",
+ "transform": "identity",
+ "key": "",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "printf %s '<plan>' | gzip -9n | base64 -w0 | head -c 40",
+ "oracle_cmd": "printf %s '<material>' | base64 -d | gunzip  # -> 'unexpected end of file', no plan"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "upsidedown",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "ᘔᔭ-uoɔꞁɐɟ-ɹǝqɯɐ :ɹǝʇsɐW ǝɯɐ⅁ ǝɥʇ oʇ ɹǝʍsuɐ ʇɔɐxǝ sᴉɥʇ ʇᴉɯqns 'ǝʌꞁos o⊥ ¡dnɯɹɐʍ sᴉɥʇ ƃuᴉpoɔǝp ʞɹoʍ ǝɔᴉN",
+ "generator_cmd": "printf '%s\\n' \"$plain\" | python3 -I tools/pyupsidedown/upsidedown.py  # upsidedown 0.4 (PyPI, cburgmer; fileformat.info flip map, reads back to front)",
+ "oracle_cmd": "printf '%s\\n' \"$encoded\" | python3 -I tools/pyupsidedown/upsidedown.py  # upsidedown 0.4 transform is its own inverse (bijective flip map + reverse)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

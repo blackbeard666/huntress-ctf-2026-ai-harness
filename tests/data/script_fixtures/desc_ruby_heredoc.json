@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=ruby|role=loader|verdict=malicious|attack=T1105|adapter=http_get|stage_count=2|steps=fetch_stage,run_stage|campaign_id=RU-a1b2c3d4|url=https://ruby-a1b2c3d4.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | gzip -n9 | base64 -w 48  -> literal written into desc_ruby_heredoc.rb",
+ "oracle_cmd": "ruby -e 'load ARGV[0]; print DESCRIPTOR_A1B2C3D4.delete(\"\\n\")' tests/data/script_fixtures/desc_ruby_heredoc.rb | base64 -d | gunzip"
+}

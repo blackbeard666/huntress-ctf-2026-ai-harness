@@ -1,0 +1,27 @@
+"""Independent oracle: dissect.ntfs 3.16 (Fox-IT) MftRecord.from_bytes (applies fixups itself).
+record_number cross-checked with `od -An -tu4 -j44 -N4` (a fixup never touches 0x2C).
+Usage: PYTHONPATH=tools/pylib-dissect .venv/bin/python -I this <file.bin> [record_index]  -> JSON of every field."""
+import json
+import sys
+
+from dissect.ntfs.c_ntfs import ATTRIBUTE_TYPE_CODE as T
+from dissect.ntfs.mft import MftRecord
+
+b = open(sys.argv[1], "rb").read()
+i = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+r = MftRecord.from_bytes(b[i * 1024:(i + 1) * 1024])
+iso = lambda d: d.strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
+si = r.attributes[T.STANDARD_INFORMATION][0]
+fns = r.attributes[T.FILE_NAME]
+fn = [f for f in fns if f.flags != 2][0]            # long name (not the DOS 8.3 one)
+data = [a for a in r.attributes[T.DATA] if a.name == ""]
+sc, sm, fc, fm = si.creation_time_ns, si.last_modification_time_ns, fn.creation_time_ns, fn.last_modification_time_ns
+stomp = sc < fc or sm < fc or any(s % 10**9 == 0 and f % 10**9 for s, f in ((sc, fc), (sm, fm)))
+print(json.dumps({
+    "file_name": fn.file_name, "record_number": int.from_bytes(r.data[0x2C:0x30], "little"),  # dissect 3.16 header struct stops at 0x2A
+    "parent_record_number": fn.attr.ParentDirectory.SegmentNumberLowPart | (fn.attr.ParentDirectory.SegmentNumberHighPart << 32),
+    "si_created_utc": iso(si.creation_time), "si_modified_utc": iso(si.last_modification_time),
+    "fn_created_utc": iso(fn.creation_time), "fn_modified_utc": iso(fn.last_modification_time),
+    "timestomp_suspected": "true" if stomp else "false", "is_directory": "true" if r.is_dir() else "false",
+    "resident_data_hex_16": data[0].data()[:16].hex() if data and data[0].resident else "none",
+}, indent=1))

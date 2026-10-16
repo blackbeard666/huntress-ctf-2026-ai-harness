@@ -1,0 +1,9 @@
+{
+ "codec": "autokey-vigenere:queen",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-88",
+ "encoded": "Dcgi jbzm haqfnlri hkqf ctyuml! Tf eiaos, kimhml niua xqhkl eksyxr gg plv Zofl Qgsfid: cdhzvt-ssmse-88",
+ "generator_cmd": "plain=\"$plain\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import sys,os,pycipher as P;p=os.environ['plain'];c=iter(P.Autokey('QUEEN').encipher(p) if 'e'=='e' else P.Autokey('QUEEN').decipher(p));print(''.join((lambda x:x if ch.isupper() else x.lower())(next(c)) if ch.isalpha() else ch for ch in p))\"  # pycipher Autokey primer QUEEN",
+ "oracle_cmd": "encoded=\"$encoded\" PYTHONPATH=pycipher-0.5.2 python3 -c \"import os,pycipher as P;e=os.environ['encoded'];print(P.Autokey('QUEEN').decipher(e).lower())\"  # pycipher reader, letters only",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemastercloverheron",
+ "expected": "match"
+}

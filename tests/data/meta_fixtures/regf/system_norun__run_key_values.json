@@ -1,0 +1,8 @@
+{
+ "field": "regf.run_key_values",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/regf/GENERATOR_regf_keys.py.txt <outdir>  (stdlib struct regf writer: nk/lh/lf/ri+li/vk cells -> system_norun.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -c \"import json,codecs; from Registry import Registry; r=Registry.Registry('tests/data/meta_fixtures/regf/system_norun__run_key_values.bin'); r.open(r'Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run') and r.open(r'Microsoft\\\\Windows\\\\CurrentVersion\\\\Run') -> RegistryKeyNotFoundException\"  (python-registry 1.3.1, independent reader)",
+ "decoy": true,
+ "member": "SYSTEM"
+}

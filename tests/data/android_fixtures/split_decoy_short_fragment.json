@@ -1,0 +1,7 @@
+{
+ "entry": "dex_strings",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "apktool d -r -o base native_library_secrets.apk (D15); rm base/assets/huntress_puzzle.json base/lib/x86_64/libarena.so; add smali/.../SplitConfig.smali: answer() = StringBuilder.append(const-string \"ANS-\").append(const-string \"7C41E09B\").append(native part2()), noise() = const-string \"DEAD\"; gcc -shared -fPIC -O0 -o base/lib/x86_64/libsplit.so c3.c  # part2 returns \"2D58F3A\" (7 hex: near-miss, 8+7 != 16); apktool b -o split_decoy_short_fragment.apk base",
+ "oracle_cmd": "apktool d -r -o o split_decoy_short_fragment.apk; grep -h const-string o/smali/com/huntress/mobile/d15/*/SplitConfig.smali  # ANS-, 7C41E09B, DEAD; readelf -p .rodata lib/x86_64/libsplit.so  # 2D58F3A -> no 16-hex concatenation; unzip -p split_decoy_short_fragment.apk | strings | grep -cE 'ANS-[0-9A-F]{16}' -> 0"
+}

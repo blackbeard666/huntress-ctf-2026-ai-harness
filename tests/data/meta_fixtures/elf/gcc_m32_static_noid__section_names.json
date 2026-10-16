@@ -1,0 +1,8 @@
+{
+ "field": "elf.section_names",
+ "expected": "[\".text\",\".eh_frame\",\".got.plt\",\".comment\",\".symtab\",\".strtab\",\".shstrtab\"]",
+ "generator_cmd": "gcc -m32 -static -nostdlib -ffreestanding -Wl,--build-id=none -o x86_static_noid s.c   (s.c: void _start(void){for(;;);})  (run in $TMPDIR/elffx)",
+ "oracle_cmd": "readelf -hlnSW gcc_m32_static_noid__section_names.bin | Section Headers [Nr] Name column in table order, [0] NULL dropped",
+ "decoy": false,
+ "member": "x86_static_noid"
+}
