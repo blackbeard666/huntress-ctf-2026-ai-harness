@@ -132,8 +132,11 @@ else
     MEMKB=$(awk '/^MemTotal/{print $2}' /proc/meminfo)
     MAXMB=$(( MEMKB / 1024 - ${HCTF_RUN_MEM_RESERVE_MB:-600} )); HIGHMB=$(( MAXMB - 700 ))
     UNIT="hctf-$DAYTAG-$(date +%H%M%S)"
+    # a user unit does NOT inherit this shell's environment: carry every HCTF_* / HUNTRESS_* override over explicitly
+    SETENV=()
+    while IFS= read -r kv; do SETENV+=(--setenv="$kv"); done < <(env | grep -E '^(HCTF_|HUNTRESS_)[A-Za-z0-9_]*=' || true)
     systemd-run --user --collect --unit "$UNIT" --working-directory "$ROOT" -p MemoryHigh="${HIGHMB}M" \
-      -p MemoryMax="${MAXMB}M" bash -lc "$SCRIPT" >/dev/null 2>&1
+      -p MemoryMax="${MAXMB}M" "${SETENV[@]}" bash -lc "$SCRIPT" >/dev/null 2>&1
     echo "$UNIT" > "$ROOT/.run/$DAYTAG.unit"
     echo "[run] launched as systemd user unit $UNIT (MemoryHigh ${HIGHMB}M, MemoryMax ${MAXMB}M; pid in $PIDF)."
     echo "      status:  systemctl --user status $UNIT"
