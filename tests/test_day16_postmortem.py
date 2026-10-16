@@ -421,4 +421,29 @@ finally:
     _sh.rmtree(_paths.CHALLENGES / "day98", ignore_errors=True)
 print("ok  postrun: phase markers + state (done / FAILED); recover() restores an interrupted generalize snapshot")
 
+# ratchet gate: a suite that fails on the PRE-ratchet lib too does not revert the merge (rehearsal fair D16)
+from hctf import orchestrate as _og  # noqa: E402
+gr = Path(tempfile.mkdtemp(prefix="gate-"))
+(gr / "lib").mkdir()
+(gr / "tests").mkdir()
+(gr / "tests" / "t_pre.py").write_text("raise SystemExit(1)")
+(gr / "tests" / "t_new.py").write_text("import sys; sys.exit(open('lib/m.txt').read() == 'after')")
+bk = gr / "backup"
+bk.mkdir()
+(bk / "m.txt").write_text("before")
+_saved = (_og.ROOT, _og.RATCHET_GATE, _og.say)
+_said = []
+_og.ROOT, _og.RATCHET_GATE, _og.say = gr, ("tests/t_pre.py", "tests/t_new.py"), _said.append
+try:
+    (gr / "lib" / "m.txt").write_text("after")
+    assert _og._gate_with_baseline("day99", bk) is False and (gr / "lib" / "m.txt").read_text() == "after"
+    assert any("breaks ['tests/t_new.py']" in m for m in _said), _said
+    (gr / "lib" / "m.txt").write_text("fine")
+    assert _og._gate_with_baseline("day99", bk) is True and (gr / "lib" / "m.txt").read_text() == "fine"
+    assert any("PRE-ratchet lib too" in m for m in _said), _said
+finally:
+    _og.ROOT, _og.RATCHET_GATE, _og.say = _saved
+print("ok  ratchet gate: a suite failing before the merge too is not counted; a newly failing one reverts; lib/ "
+      "swapped back")
+
 print("ALL PASS")

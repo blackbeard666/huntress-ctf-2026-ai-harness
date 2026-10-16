@@ -4464,16 +4464,19 @@ def _lib_changed(backup):
     return bool(walk(filecmp.dircmp(ROOT / "lib", backup, ignore=["__pycache__"])))
 
 
-def ratchet_gate(tag, log=None):
+def ratchet_gate(tag, log=None, only=None, quiet=False):
     """The lib/ merge gate: the suites the ratchet prompt names + the ATT&CK coverage check all pass. The suites run in
     PARALLEL (independent processes; serially ~3-5 min, and the ratchet worker ran them itself 2-3x per night).
     The worker runs this same gate: `python3 -m hctf.orchestrate ratchet-gate dayNN` (prints failing tails)."""
     import subprocess as _sp
+    global _GATE_FAILING
     log = log or say
     cmds = [[sys.executable, t] for t in RATCHET_GATE if (ROOT / t).exists()]
     cmds.append([sys.executable, "-m", "lib.refs.coverage", str(int(tag[3:]))])
+    if only is not None:
+        cmds = [c for c in cmds if " ".join(c[1:]) in only]
     procs = [(cmd, _sp.Popen(cmd, cwd=ROOT, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True)) for cmd in cmds]
-    ok, end = True, time.time() + 600
+    ok, end, failing = True, time.time() + 600, []
     for cmd, p in procs:
         try:
             out, _ = p.communicate(timeout=max(1.0, end - time.time()))
@@ -4484,9 +4487,42 @@ def ratchet_gate(tag, log=None):
             bad = "timeout"
         if bad:
             tail = " | ".join((out or "").strip().splitlines()[-4:])[:500]
-            log(f"[ratchet] {tag}: `{' '.join(cmd[1:])}` fails after the merge ({bad}): {tail}")
+            if not quiet:
+                log(f"[ratchet] {tag}: `{' '.join(cmd[1:])}` fails after the merge ({bad}): {tail}")
+            failing.append(" ".join(cmd[1:]))
             ok = False
+    _GATE_FAILING = failing
     return ok
+
+
+_GATE_FAILING = []
+
+
+def _gate_with_baseline(tag, backup):
+    """ratchet_gate, but a suite that ALSO fails on the pre-ratchet lib (the snapshot in `backup`) does not block the
+    merge: rehearsal fair D16, test_day7_fixes asserted a newer day's lib knowledge, failed before any edit and reverted the
+    night's whole lib learning. Only failing suites are re-run against the snapshot (lib/ swapped back meanwhile)."""
+    if ratchet_gate(tag):
+        return True
+    failing = list(_GATE_FAILING)
+    after = ROOT / ".run" / f"ratchet-after-lib-{tag}"
+    shutil.rmtree(after, ignore_errors=True)
+    try:
+        shutil.move(str(ROOT / "lib"), str(after))
+        shutil.copytree(backup, ROOT / "lib")
+        ratchet_gate(tag, only=set(failing), quiet=True)
+        before_fail = set(_GATE_FAILING)
+    finally:
+        shutil.rmtree(ROOT / "lib", ignore_errors=True)
+        shutil.move(str(after), str(ROOT / "lib"))
+    new = [f for f in failing if f not in before_fail]
+    if new:
+        say(f"[ratchet] {tag}: the merge breaks {new}"
+            + (f" (also failing BEFORE it, not counted: {sorted(before_fail)})" if before_fail else ""))
+        return False
+    say(f"!!! [ratchet] {tag}: gate suites {failing} fail on the PRE-ratchet lib too (not caused by the merge): kept "
+        "-- fix those suites")
+    return True
 
 
 _PROPOSALS_RE = re.compile(r"^##\s*Proposed lib additions\s*$(.*?)(?=^##\s|\Z)", re.M | re.S)
@@ -4701,7 +4737,7 @@ def ratchet_lib(day):
                 for n in edited}
         for n in edited:
             shutil.copy2(tsnap / n, ROOT / "tests" / n)
-        if not changed or ratchet_gate(tag):
+        if not changed or _gate_with_baseline(tag, backup):
             say(f"[ratchet] {tag}: the worker modified existing assertions in {edited}; the gate passes with the "
                 f"ORIGINAL tests, so those stay (worker's diff: {patch.relative_to(ROOT)})")
             ok = True
@@ -4709,12 +4745,12 @@ def ratchet_lib(day):
             for n, txt in mine.items():
                 if txt is not None:
                     (ROOT / "tests" / n).write_text(txt)
-            ok = ratchet_gate(tag)
+            ok = _gate_with_baseline(tag, backup)
             if ok:
                 say(f"!!! [ratchet] {tag}: the lib edits only pass with MODIFIED existing assertions in {edited}: kept "
                     f"-- REVIEW {patch.relative_to(ROOT)} before the next drop")
     else:
-        ok = not changed or ratchet_gate(tag)
+        ok = not changed or _gate_with_baseline(tag, backup)
     if not changed:
         say(f"[ratchet] {tag}: lib/ unchanged (worker exit {rc}; {Path(log).name})")
     elif ok:
