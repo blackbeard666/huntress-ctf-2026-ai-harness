@@ -95,8 +95,9 @@ def recover(day, log=None):
         try:
             ch = json.loads((root / "chain.json").read_text())
             if str(ch.get("stage", "")).endswith((":generalizing", ":solving")):
-                ch["stage"] = "done" if all(str(ch.get(f"{m}_result", "")).lower() == "correct"
-                                            for m in ("single_solve", "time_trial", "mastery")) else "interrupted"
+                from . import cli
+                ids = (json.loads((root / "meta.json").read_text()).get("ids") or {}).values()
+                ch["stage"] = "done" if ids and all(cli.gm_solved(i) for i in ids) else "interrupted"
                 ch["worker"] = None
                 (root / "chain.json").write_text(json.dumps(ch, indent=2))
         except (OSError, ValueError):

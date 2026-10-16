@@ -7,6 +7,8 @@
 - timed runner: the no-clock timeout scales with the contract (5475 ids -> > 259 s of localization fits); a CORRECT
   latest attempt is reported (already_passed), never re-rolled; the attempt id + banked sets survive a kill (progress
   file -> exec_error carries them); the runner stops before the caller's deadline; one runner per mode (lock).
+- post-run: phase markers + state file; recover() restores an interrupted generalize; the feed follows the post-run
+  to "post-run finished" and reports a dead run instead of going silent.
 
 Run:  source bin/env.sh && python3 tests/test_day16_postmortem.py      (exit 0 = all pass)
 """
@@ -324,5 +326,75 @@ print("ok  timed: one runner per mode (a second one waits, then gives up at its 
 cli.cdir = cli_cdir
 for f in (ROOT / ".run" / "tmp-timed").glob("t16_*"):
     f.unlink(missing_ok=True)
+
+# ------------------------------------------------------------------------------------------------ post-run
+from hctf import feed, postrun  # noqa: E402
+lines = ["21:00:14 5 chains (15 challenge modes), slots local=5 homebase=0, credits=None",
+         "21:00:24 [mobile-android-day-16-x] reuse race WON: single CORRECT at +5.7s",
+         "21:15:58 all chains finished",
+         "21:15:58 [postrun] ratchet start",
+         "21:19:23 [ratchet-log] day16 warmups: worker exit 0 (w.log)",
+         "21:23:47 [ratchet] day16: merged (worker-ratchet.log)",
+         "21:23:47 [postrun] ratchet done (469s)",
+         "21:23:48 [postrun] speed-harden start",
+         "21:25:51 [speed-harden] binary-reverse-engineering-day-16-x: slowest case case-1 115.6s > 2.5s -> speed generalize",
+         "21:26:11 [binary-reverse-engineering-day-16-x] generalize worker -> local (timeout 720s)"]
+f = feed.Feed(follow_post=True)
+out = [m for ln in lines for m in f.process(ln)]
+assert not f.done and f.post and f.phase[0] == "speed-harden", (f.done, f.phase)
+assert any("post-run: ratchet done" in m for m in out) and any("technique log" in m for m in out), out
+assert "post-run: speed-harden" in f.heartbeat() and "binary single generalize" in f.heartbeat(), f.heartbeat()
+f.process("22:39:08 [postrun] day16: restored challenges/day16/x/solver from its interrupted generalize (w)")
+assert "generalize" not in f.heartbeat(), f.heartbeat()
+out = f.process("23:10:00 post-run finished")
+assert f.done and "post-run finished" in out[-1], out
+f2 = feed.Feed()                       # not a day.sh run: ends at the chains, as before
+[f2.process(ln) for ln in lines[:3]]
+assert f2.done
+print("ok  feed: follows the post-run (phases, technique logs, ratchet, speed-harden) to 'post-run finished'; "
+      "a restore clears the dead generalize")
+
+lp = TMP / "d.log"
+lp.write_text("\n".join(lines) + "\n")
+pf = TMP / "d.pid"
+dead = subprocess.Popen([sys.executable, "-c", "pass"])
+dead.wait()
+pf.write_text(str(dead.pid))
+r = subprocess.run([sys.executable, "-c", f"import sys; sys.path.insert(0, {str(ROOT)!r}); from hctf import feed; "
+                    f"sys.exit(feed.follow({str(lp)!r}, heartbeat=0.5, poll=0.1, pidfile={str(pf)!r}))"],
+                   capture_output=True, text=True, timeout=30)
+assert r.returncode == 1 and "run process is gone" in r.stdout and "speed-harden" in r.stdout, (r.returncode, r.stdout)
+print("ok  feed: a dead run (pid file, no end marker) -> ⚠ died during post-run phase speed-harden, exit 1")
+
+import hctf.paths as _paths  # noqa: E402
+ROOT_RUN = ROOT / ".run"
+day = 98
+logs = []
+with postrun.phase(day, "speed-harden", log=logs.append):
+    pass
+try:
+    with postrun.phase(day, "train", log=logs.append):
+        raise RuntimeError("boom")
+except RuntimeError:
+    pass
+st = postrun.load(day)
+assert st["phases"]["speed-harden"]["status"] == "done" and st["phases"]["train"]["status"] == "FAILED", st
+assert logs[0] == "[postrun] speed-harden start" and logs[-1].startswith("[postrun] train FAILED"), logs
+postrun.state_path(day).unlink()
+chal = _paths.CHALLENGES / "day98" / "x-chal"
+(chal / ".generalize-snapshot").mkdir(parents=True)
+(chal / ".generalize-snapshot" / "solve.py").write_text("ORIGINAL")
+(chal / "solver").mkdir()
+(chal / "solver" / "solve.py").write_text("HALF-EDITED")
+(chal / "meta.json").write_text(json.dumps({"ids": {}}))
+(chal / "chain.json").write_text(json.dumps({"stage": "single_solve:generalizing", "worker": "generalize@local"}))
+try:
+    acts = postrun.recover(day, log=logs.append)
+    assert (chal / "solver" / "solve.py").read_text() == "ORIGINAL" and not (chal / ".generalize-snapshot").exists()
+    assert json.loads((chal / "chain.json").read_text())["stage"] == "interrupted" and acts, acts
+finally:
+    import shutil as _sh
+    _sh.rmtree(_paths.CHALLENGES / "day98", ignore_errors=True)
+print("ok  postrun: phase markers + state (done / FAILED); recover() restores an interrupted generalize snapshot")
 
 print("ALL PASS")

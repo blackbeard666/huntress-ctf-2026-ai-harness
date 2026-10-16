@@ -181,6 +181,9 @@ class Feed:
                 self.phase = None
                 self.phases_done.append(name if what == "done" else f"{name} FAILED")
                 return [f"{t} {'✔' if what == 'done' else '⚠'} post-run: {name} {what}{rest[:120]}"]
+            if "interrupted generalize" in msg:
+                # a resumed post-run restored a dead process's generalize: its activity is stale
+                self.activity = {b: v for b, v in self.activity.items() if "generalize" not in v[0]}
             if msg.startswith("run phases done") and not self.follow_post:
                 self.done = True
                 return [f"{t} 🏁 post-run finished: {', '.join(self.phases_done)}"]
@@ -190,6 +193,9 @@ class Feed:
         if tag == "ratchet" and re.search(r": (merged|REVERTED|lib/ unchanged|nothing to learn)", msg):
             return [f"{t} 📚 lib ratchet {msg.split(': ', 1)[-1][:140]}"]
         if tag == "speed-harden" and ("->" in msg or "skipped" in msg):
+            base = msg.split(":", 1)[0].strip()
+            if re.search(r"slowest case [\d.]+s -> [\d.]+s", msg):
+                self.activity.pop(base, None)       # the speed generalize of that solver is over
             return [f"{t} 🐢 speed-harden {msg[:150]}"]
         if tag == "train" and re.search(r"adopted|after round|removed|skipped|deadline", msg):
             return [f"{t} 🎓 train {msg[:150]}"]
