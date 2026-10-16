@@ -32,9 +32,9 @@ LANES = {x.strip() for x in os.environ.get(
     "HCTF_DUEL_LANES", "warmups,metadata-forensics,script-analysis,mobile-android").split(",") if x.strip()}
 MAX_CONCURRENT = int(os.environ.get("HCTF_DUEL_MAX", "3"))
 MODEL = os.environ.get("HCTF_DUEL_MODEL", "")            # "" = the lane's normal worker model
-# "" = the lane's worker effort (user rule 2026-10-16: every worker high). D16 for the record: the medium-effort duel won
-# all three singles it ran (warmups, metadata, script) -- HCTF_DUEL_EFFORT=medium brings that back.
-EFFORT = os.environ.get("HCTF_DUEL_EFFORT", "")
+# medium (user, 2026-10-16): diversity + speed beside the chain's high-effort worker -- on D16 the medium duel won all
+# three singles it ran (warmups, metadata, script). HCTF_DUEL_EFFORT="" = the lane's worker effort.
+EFFORT = os.environ.get("HCTF_DUEL_EFFORT", "medium")
 DELAY = float(os.environ.get("HCTF_DUEL_DELAY", "15"))    # single: give the reuse race its 3-9 s first
 GEN_AFTER = int(os.environ.get("HCTF_DUEL_GENERALIZE_AFTER", "1"))   # duel the 2nd+ generalize of a mode; -1 = never
 GEN_FIRST = os.environ.get("HCTF_DUEL_GENERALIZE_FIRST", "1") != "0"  # ... and the 1st when label-only / speed-only
