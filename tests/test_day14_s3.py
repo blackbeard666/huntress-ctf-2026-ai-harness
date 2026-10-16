@@ -17,6 +17,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+if os.environ.get("HCTF_PREBUILD") == "1":
+    # never inside a prebuild worker: this suite snapshots/restores the REAL tree, writes the real prebuild lock and
+    # exercises stop() -- a worker running it SIGTERMed the live parallel batch (2026-10-16 09:53 / 10:09)
+    print("skip test_day14_s3: inside a prebuild worker (HCTF_PREBUILD=1)")
+    sys.exit(0)
 for k in ("HCTF_META_MAX_DAY", "HCTF_META_LANE_SOLVER", "HCTF_LANE_SOLVERS"):
     os.environ.pop(k, None)
 from hctf import orchestrate, paths, prebuild, solvers, workers  # noqa: E402
@@ -81,10 +86,10 @@ print("ok  AST gate: subprocess/socket/ctypes/os/urllib.request + eval/open flag
 saved_rm = workers.read_metrics
 try:
     workers.read_metrics = lambda: []
-    assert prebuild.budget_for(3) == min(prebuild.BUDGET_CAP, round(prebuild.DEFAULT_COST * 3 * 1.2, 2))
+    assert prebuild.budget_for(3) == min(prebuild.BUDGET_CAP, round(prebuild.DEFAULT_COST * 3 * 2.0, 2))
     workers.read_metrics = lambda: [{"stage": "prebuild", "cost_usd": c} for c in (1.0, 2.0, 3.0, 4.0)] + \
         [{"stage": "single", "cost_usd": 99.0}]
-    assert prebuild.budget_for(2) == round(4.0 * 2 * 1.2, 2), prebuild.budget_for(2)   # p75 of prebuild rows only
+    assert prebuild.budget_for(2) == round(4.0 * 2 * 2.0, 2), prebuild.budget_for(2)   # p75 of prebuild rows only
     workers.read_metrics = lambda: [{"stage": "prebuild", "cost_usd": 50.0}]
     assert prebuild.budget_for(3) == prebuild.BUDGET_CAP
 finally:
@@ -93,7 +98,7 @@ now = datetime(2026, 10, 14, 0, 30)
 assert prebuild.default_deadline(now) == datetime(2026, 10, 14, 20, 30)
 assert prebuild.next_drop(datetime(2026, 10, 14, 21, 5)) == datetime(2026, 10, 15, 21, 0)
 assert prebuild.parse_deadline("20:30", datetime(2026, 10, 14, 22, 0)) == datetime(2026, 10, 15, 20, 30)
-print("ok  budget = n x p75(metrics prebuild cost) x 1.2, capped; deadline = next 21:00 drop - 30 min")
+print("ok  budget = n x p75(metrics prebuild cost) x 2.0, capped; deadline = next 21:00 drop - 30 min")
 
 # 5) the gate + transactional revert with STUB workers (temp state/lock/snapshot; real lib/ restored by the harness)
 tmp = Path(tempfile.mkdtemp(prefix="s3pb-", dir=paths.TMP))
@@ -233,7 +238,7 @@ print("ok  prebuild gate (stub workers): good module kept; outside-allowlist / s
 
 # 6) stop(): SIGTERM the lock holder, SIGKILL HCTF_PREBUILD=1 processes, recover the snapshot
 tmp = Path(tempfile.mkdtemp(prefix="s3stop-", dir=paths.TMP))
-saved = {k: getattr(prebuild, k) for k in ("LOCK", "SNAP", "_worker_pids")}
+saved = {k: getattr(prebuild, k) for k in ("LOCK", "SNAP", "_worker_pids", "_batch_pids")}
 prebuild.LOCK, prebuild.SNAP = tmp / "lock", tmp / "snap"
 try:
     batch = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
@@ -241,6 +246,7 @@ try:
     # the real scan, limited to THIS test's worker: unscoped, stop() SIGKILLed a real post-run prebuild's workers
     # (2026-10-15: 5 of 8 D15 targets died rc -9 while the suite ran)
     prebuild._worker_pids = lambda real=saved["_worker_pids"]: [p for p in real() if p == worker.pid]
+    prebuild._batch_pids = lambda: ([], [])   # never a REAL running batch
     prebuild.LOCK.write_text(json.dumps({"pid": batch.pid}))
     assert prebuild.lock_holder() == batch.pid and worker.pid in prebuild._worker_pids()
     t0 = time.time()
@@ -274,7 +280,8 @@ try:
     p = prebuild.launch_background(14, log=lambda m: None, popen=FakePopen)
     assert p is not None and len(calls) == 1
     cmd, kw = calls[0]
-    assert "hctf.cli prebuild --lane metadata-forensics" in cmd[2] and "--budget-usd" in cmd[2] and "--deadline" in cmd[2]
+    assert ("hctf.cli prebuild --parallel" in cmd[2] if prebuild.PARALLEL else            # 2026-10-16: lanes at once
+            "hctf.cli prebuild --lane metadata-forensics" in cmd[2]) and "--budget-usd" in cmd[2] and "--deadline" in cmd[2]
     assert kw.get("start_new_session") is True
     prebuild.default_deadline = lambda now=None: datetime.now() + timedelta(minutes=5)
     assert prebuild.launch_background(14, log=lambda m: None, popen=FakePopen) is None and len(calls) == 1

@@ -28,6 +28,9 @@ prebuild builds its `## Readiness gaps` in priority order, and its "Recognition 
 - re-rank the readiness gaps for the NEXT days from the lane's progression (one new concept per day so far; the title
   pun; what today's twist suggests next): priority 1 = plausible within ~3 days. Add a gap when today revealed a new
   direction; keep the ```json block valid with the same keys (id, concept, priority, action, detail);
+- keep the queue full: the prebuild drains every pending `prebuild` gap each night, so keep at least 8 NOT-yet-built
+  `prebuild` gaps for this lane (built or given up = `.run/prebuild-state.json` keys `{lane}:<id>` with `ok: true` or
+  `attempts >= 2`); when fewer remain, research the lane's likely next concepts and add new gaps (ids never reused);
 - keep "## Recognition cues (worker quick-reference)" at most 60 lines.
 These logs are inlined into tomorrow's single-solve prompt and are LEARNING NOTES for future, possibly unrelated
 challenges: record methods, cues and conventions -- never "rerun this solver". Keep the file skimmable (~200 lines;

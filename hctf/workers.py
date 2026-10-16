@@ -215,8 +215,9 @@ def sandbox_hidden_paths(stage=None):
     return [p for p in hide if p.exists()]
 
 
-def sandboxed(cmd, stage=None):
-    """Wrap a worker command in bwrap with sandbox_hidden_paths() masked; unchanged if bwrap is unavailable."""
+def sandboxed(cmd, stage=None, extra_binds=()):
+    """Wrap a worker command in bwrap with sandbox_hidden_paths() masked; unchanged if bwrap is unavailable.
+    extra_binds: [(src, dst)] read-write binds (the parallel prebuild gives each lane worker a private lib/ + tests/data/)."""
     import shutil as _sh
     if not WORKER_SANDBOX or not _sh.which("bwrap"):
         return cmd
@@ -232,6 +233,7 @@ def sandboxed(cmd, stage=None):
             tgt = link.resolve()
             if tgt.exists() and any(str(tgt).startswith(str(h) + "/") for h in hidden if Path(h).is_dir()):
                 binds += ["--ro-bind", str(tgt), str(tgt)]
+    binds += [a for s, d in extra_binds for a in ("--bind", str(s), str(d))]
     return ["bwrap", "--dev-bind", "/", "/", *masks, *binds, "--die-with-parent", "--", *cmd]
 
 
@@ -424,7 +426,13 @@ def _run_local_once(chal_dir, stage, prompt, env_extra, timeout, stop, warm, war
     lane = env_extra.get("HCTF_LANE") or env.get("HCTF_LANE")
     cmd = _worker_cmd(stage, lane, prompt, model=env_extra.get("HCTF_X_MODEL"), effort=env_extra.get("HCTF_X_EFFORT"))
     with open(log, "w") as out:
-        p = subprocess.Popen(sandboxed(cmd, stage), cwd=ROOT, stdout=out,
+        try:
+            xb = [tuple(x) for x in json.loads(env_extra.get("HCTF_SANDBOX_BINDS") or "[]")]
+        except (ValueError, TypeError):
+            xb = []
+        if env_extra.get("HCTF_NICE"):      # background breadth workers yield the CPU to timing-sensitive gates
+            cmd = ["nice", "-n", str(env_extra["HCTF_NICE"]), *cmd]
+        p = subprocess.Popen(sandboxed(cmd, stage, xb), cwd=ROOT, stdout=out,
                              stderr=subprocess.STDOUT, env=env, start_new_session=True)
         key = _live_add(log, env_extra)
         try:
@@ -807,11 +815,19 @@ def live_overlay(cid, attempt=None):
                 r = json.loads(ln)
             except ValueError:
                 continue
-            if r.get("attempt") == attempt and str(r.get("kind", "")).lower() in ("accepted", "correct"):
+            # only plain submits (the live worker's few fields): harness probe batches can be ~800 fields and an env
+            # var that size fails execve (E2BIG) on the local / ssh routes
+            if (r.get("attempt") == attempt and str(r.get("kind", "")).lower() in ("accepted", "correct")
+                    and not r.get("probe") and not r.get("harness") and len(r.get("answers") or {}) <= 50):
                 got.update({k: v for k, v in (r.get("answers") or {}).items() if v not in (None, "")})
     except OSError:
         return None
+    if len(got) > LIVE_OVERLAY_MAX:
+        got = dict(list(got.items())[-LIVE_OVERLAY_MAX:])
     return {"attempt": attempt, "answers": got} if got else None
+
+
+LIVE_OVERLAY_MAX = int(os.environ.get("HCTF_LIVE_OVERLAY_MAX", "200"))
 
 
 def run_timed(solver_dir, cid, op="start", timeout=60):
@@ -828,6 +844,8 @@ def run_timed(solver_dir, cid, op="start", timeout=60):
                            cwd=ROOT, capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
         return {"result": "exec_error", "detail": "local hb_timed timed out"}
+    except OSError as e:   # e.g. E2BIG: never crash the chain on a runner that could not start
+        return {"result": "exec_error", "detail": f"local hb_timed did not start: {e}"[:300]}
     try:
         return json.loads(r.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError):
@@ -1414,7 +1432,8 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60, on_event=None):
             return res
         except Exception as e:  # noqa: BLE001 - fall through to the pull
             res["capture_note"] = f"inline bytes unusable ({str(e)[:120]}); "
-    if PUBLIC_FAIL_PULL and res.get("deadline") is None and (res.get("untimed") or res.get("run_for_time") is False):
+    if PUBLIC_FAIL_PULL and res.get("deadline") is None and (res.get("untimed") or res.get("no_clock")
+                                                              or res.get("run_for_time") is False):
         try:
             t0 = time.time()
             got = public_pull(res, slug, local, cid)
@@ -1451,7 +1470,11 @@ def public_pull(res, slug, local, cid):
     import hashlib
     from concurrent.futures import ThreadPoolExecutor as _TPE
     from . import hb_timed as ht
-    body = ht._post_start({"op": "start", "challenge": cid})
+    with ht._POOL_LOCK:   # a small pool in this process (the default pre-opens 32 TLS sockets for a Mastery window)
+        if ht._POOL is None:
+            ht._POOL = ht._Pool(ht.GM, size=4)
+    # _post_once, NOT _post_start: the pool policy could upgrade this to run_for_time (a fresh ranked attempt)
+    body = ht._post_once({"op": "start", "challenge": cid})
     if not isinstance(body, dict) or body.get("attempt_id") != res.get("attempt_id") or not body.get("answer_ids"):
         raise RuntimeError(f"public start did not resume attempt {str(res.get('attempt_id'))[:8]}: "
                            f"{str((body or {}).get('error') or (body or {}).get('result') or 'other attempt')[:80]}")

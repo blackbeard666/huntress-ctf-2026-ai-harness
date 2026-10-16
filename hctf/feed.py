@@ -113,6 +113,12 @@ class Feed:
             out.append(f"{self._t()} ⏳ {lane} {ms} blocked")
         elif msg.startswith("result: error") or msg.startswith("result: expired"):
             out.append(f"{self._t()} ⚠ {lane} {ms} {msg[len('result: '):][:80]}")
+        elif msg.startswith("passed by the live-answer worker"):
+            out += self._solve(base, mode, " (live-answer)")
+        elif msg.startswith("live-answer worker on attempt"):
+            out.append(f"{self._t()} 🏃 {lane} {ms} live-answer started")
+        elif msg.startswith("in-attempt localization cut short"):
+            out.append(f"{self._t()} ↻ {lane} {ms} reconnecting to finish in-attempt")
         elif "reuse race WON" in msg:
             out += self._solve(base, "single_solve", " (reuse race)")
         elif msg.startswith("after worker: stopped at CORRECT") or msg.startswith("solved via GM issued_flag") or \

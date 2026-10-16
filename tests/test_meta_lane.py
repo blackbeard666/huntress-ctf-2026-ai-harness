@@ -72,11 +72,14 @@ bad = [(c.relative_to(paths.CHALLENGES), [k for k, v in e.items() if g.get(k) !=
 assert not bad, f"baseline day solvers fail their own verified cases: {bad}"
 print(f"ok  0) baseline: D10/D11/D12/D13 day solvers pass {len(base)} verified case(s) of D1-D13")
 
+# in-window budget 1 s per case; HCTF_TEST_TIME_SLACK scales it when the box is deliberately loaded (the parallel
+# prebuild gates run beside 4 other lane workers: 1.01-1.48 s cases failed on contention, not on the solver)
+SLOW_S = 1.0 * float(os.environ.get("HCTF_TEST_TIME_SLACK", "1"))
 # 1) every metadata case through the lane solver
 with ThreadPoolExecutor(max_workers=4) as ex:
     res = list(ex.map(lambda c: (c, run_case(LANE, c)), CASES))
 for i, (case, r) in enumerate(res):        # a case over budget under the 4-way load is re-timed alone
-    if r[4] > 1.0:
+    if r[4] > SLOW_S:
         res[i] = (case, run_case(LANE, case))
 fails, gaps, slow, n_vals = [], [], [], 0
 for case, (contract, expected, got, err, dt) in res:
@@ -84,7 +87,7 @@ for case, (contract, expected, got, err, dt) in res:
     if err:
         fails.append(f"{rel}: {err[:300]}")
         continue
-    if dt > 1.0:
+    if dt > SLOW_S:
         slow.append(f"{rel}: {dt:.2f}s")
     qs = dict(solvers.paired_questions(contract))
     for aid, want in expected.items():

@@ -35,10 +35,10 @@ def day_solvers(day):
     return out
 
 
-def assess(sdir, mutation=True, timeout=60):
+def assess(sdir, mutation=True, timeout=60, deadline=None):
     """-> {"compound": [results], "hard": [hard-miss results], "mut_text", "mut_hard": [case dirs]} (no edits)."""
     from . import orchestrate
-    res = compound.check(sdir, per_day=None, timeout=timeout)
+    res = compound.check(sdir, per_day=None, timeout=timeout, deadline=deadline)
     out = {"compound": res, "hard": compound.hard_misses(res), "mut_text": "", "mut_hard": []}
     if mutation:
         mc = sorted((Path(sdir).parent / "mastery").glob("contract.json"))
@@ -63,8 +63,11 @@ def run(day, log=print, rounds=None, mutation=True, dry_run=False, deadline=None
     for base, lane, sdir in day_solvers(day):
         if lanes and lane not in lanes:
             continue
+        if time.time() > deadline:
+            log(f"[train] {base}: past the pre-drop deadline, skipped")
+            continue
         t0 = time.time()
-        a = assess(sdir, mutation=mutation)
+        a = assess(sdir, mutation=mutation, deadline=deadline)
         before = _line(a)
         log(f"[train] {base}: {before} ({time.time() - t0:.0f}s)")
         rep = {"before": before, "after": None, "generalized": 0}
@@ -74,6 +77,7 @@ def run(day, log=print, rounds=None, mutation=True, dry_run=False, deadline=None
                 log(f"[train]   miss d{r['day']:02d} {r['case']}: {r['correct']}/{r['expected']} verified"
                     + (f" ERROR {r['error'][:80]}" if r["error"] else ""))
             continue
+        adopted = set()
         for rnd in range(rounds):
             if not (a["hard"] or a["mut_hard"]):
                 break
@@ -83,21 +87,34 @@ def run(day, log=print, rounds=None, mutation=True, dry_run=False, deadline=None
             diag = {}
             if a["hard"]:
                 n = compound.adopt(sdir, a["compound"], limit=12)
+                adopted |= {f"compound-d{r['day']:02d}-{Path(r['path']).name}" for r in a["hard"][:12]}
                 diag["compound_pre"] = compound.summary(a["compound"])
                 log(f"[train] {base}: round {rnd + 1}: {n} earlier-day case(s) adopted as compound-dKK-* cases")
             if a["mut_hard"]:
                 gov = orchestrate.Governor()
                 chain = orchestrate.chain_for(base, orchestrate.Pools(1, 0, gov), gov)
                 n = chain._adopt_mutation_cases(a["mut_hard"])
+                adopted |= {Path(c).name for c in a["mut_hard"]}
                 diag["mutation_pre"] = a["mut_text"]
                 log(f"[train] {base}: round {rnd + 1}: {n} mutation case(s) adopted")
             gov = orchestrate.Governor()
             orchestrate.chain_for(base, orchestrate.Pools(1, 0, gov), gov).generalize(base, wrong=None, fixed=None,
                                                                                      diag=diag)
             rep["generalized"] += 1
-            a = assess(sdir, mutation=mutation)
+            a = assess(sdir, mutation=mutation, deadline=deadline)
             rep["after"] = _line(a)
             log(f"[train] {base}: after round {rnd + 1}: {rep['after']}")
+        if adopted:
+            # a case the generalize could not fix must not ride into tomorrow's copy (cumulative lanes copy cases/):
+            # the single's Stop gate requires every case to pass
+            from . import solvers
+            still = {r["case"] for r in solvers.test_solver(sdir) if not r.get("ok")} & adopted
+            for name in sorted(still):
+                import shutil
+                shutil.rmtree(Path(sdir) / "cases" / name, ignore_errors=True)
+            if still:
+                log(f"[train] {base}: removed {len(still)} adopted case(s) still failing: {sorted(still)[:4]}")
+                rep["dropped"] = sorted(still)
     return report
 
 

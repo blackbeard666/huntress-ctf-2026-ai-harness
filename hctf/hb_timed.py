@@ -340,10 +340,14 @@ def _post_once(payload, tries=3):
     import http.client
     for i in range(tries):
         try:
-            return _post(payload, timeout=START_TIMEOUT)
+            res = _post(payload, timeout=START_TIMEOUT)
         except (OSError, http.client.HTTPException):
             if i == tries - 1:
                 raise
+            continue
+        if isinstance(res, dict) and res.get("error") == "unjudged_transport" and i < tries - 1:
+            continue    # reply cut off mid-body (IncompleteRead, now an unjudged body, not a raise): idempotent -> resend
+        return res
 
 
 # Day 8: Time Trial / Mastery became DUAL-POOL routes. A plain start/retry = the regular (untimed, not Hall of Fame)
@@ -677,12 +681,22 @@ def _localize(cid, answers, groups, per_set, body, out):
 
     vocab = _vocab()
     hints = _hints()
+    # _CTX is thread-local: the pool threads below would see lane/opts = None (no playbook alternatives, the daemon's
+    # HCTF_LOCALIZE_UNTIMED_S ignored) -- hand this attempt's context to each of them
+    ctx = (_CTX.lane, _CTX.opts, _CTX.on_event, _CTX.solver_dir)
+
+    def one_set_ctx(key, v, vocab):
+        _CTX.lane, _CTX.opts, _CTX.on_event, _CTX.solver_dir = ctx
+        try:
+            return one_set(key, v, vocab)
+        finally:
+            _CTX.lane = _CTX.opts = _CTX.on_event = _CTX.solver_dir = None
     by_set = {}
     try:
         keys = list(per_set)
         par = max(1, min(int(_opt("HCTF_LOCALIZE_PARALLEL", "5")), len(keys)))
         with ThreadPoolExecutor(max_workers=par) as ex:
-            futs = {k: ex.submit(one_set, k, per_set[k], vocab) for k in keys}
+            futs = {k: ex.submit(one_set_ctx, k, per_set[k], vocab) for k in keys}
             for k in keys:
                 by_set[k] = futs[k].result()
     except Exception as e:  # noqa: BLE001 - diagnostics only
@@ -979,6 +993,8 @@ def _attempt(a):
         body = _post_start({"op": "retry", "challenge": a.cid})
         left = _deadline_left(body)
     out["deadline"] = body.get("deadline")
+    if body.get("answer_ids") and not body.get("deadline"):
+        out["no_clock"] = True     # a live attempt without a clock (regular pool / resumed untimed): resumable as-is
     out["attempt_id"] = body.get("attempt_id")
     out["window"] = _window(body)
     ids = body.get("answer_ids") or []

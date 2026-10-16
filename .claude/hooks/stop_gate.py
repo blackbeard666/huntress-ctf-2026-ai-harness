@@ -68,6 +68,26 @@ if stage == "generalize":
     block(f"`hctf solver-test {paths.base_id(cid)}` does not pass for every case yet: {json.dumps(res)[:700]}. "
           "Fix solve.py (never edit cases/*/expected.json -- it is GM-verified only), then re-run.")
 
+if stage == "live":
+    # done = the attempt is CORRECT or every field this worker owes (orchestrate.LiveAnswer) has been ACCEPTED
+    try:
+        owe = json.loads((mdir / ".live_fields.json").read_text())
+    except (OSError, ValueError):
+        allow()
+    att, fields, acc, correct = owe.get("attempt"), set(owe.get("fields") or []), set(), False
+    try:
+        for ln in (mdir / "submissions.jsonl").read_text().splitlines():
+            r = json.loads(ln)
+            if r.get("attempt") == att and r.get("kind") in ("accepted", "correct"):
+                acc |= set(r.get("answers") or {})
+                correct = correct or r.get("kind") == "correct"
+    except (OSError, ValueError):
+        pass
+    if correct or fields <= acc:
+        allow()
+    block(f"Not done: {len(fields - acc)} listed field(s) not accepted yet: {sorted(fields - acc)[:12]}. Derive each "
+          f"from the attempt's bytes and `hctf submit {cid} '{{\"<id>\": \"<value>\"}}'` (never a REJECTED value).")
+
 if stage == "fix":
     contract = cli.load(cid, "start.json") or {}
     left = timed.seconds_left(contract)

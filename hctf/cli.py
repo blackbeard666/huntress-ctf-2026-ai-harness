@@ -846,6 +846,11 @@ def c_prebuild(a):
     if a.recover:
         pb.recover(log=print)
         return 0
+    if a.parallel and not a.list:
+        res = pb.run_parallel(n=a.n, budget_usd=a.budget_usd,
+                              deadline=pb.parse_deadline(a.deadline) if a.deadline else None, log=print)
+        emit(res)
+        return 0
     lane = pb.lane_key(a.lane)
     if a.list:
         cfg = pb.LANES.get(lane) or {}
@@ -874,6 +879,13 @@ def c_tool_wait(a):
 def c_tool_gaps(a):
     from . import toolchain
     return toolchain.main(["report"] + (["--day", str(a.day)] if a.day else []))
+
+
+def c_effort_report(a):
+    """Side-by-side effort A/B of one day across harness copies (hctf/effort_report.py)."""
+    from . import effort_report
+    print(effort_report.report(a.day, a.root or None))
+    return 0
 
 
 def c_train(a):
@@ -1252,11 +1264,16 @@ def main(argv=None):
     ppb.add_argument("--stop", action="store_true", help="stop a running batch + restore its snapshot (bin/day.sh)")
     ppb.add_argument("--recover", action="store_true", help="restore a snapshot a killed batch left behind")
     ppb.add_argument("--list", action="store_true", help="targets + their state, budget, deadline")
+    ppb.add_argument("--parallel", action="store_true", help="every enabled lane at once (private lib/ per lane, gated "
+                     "one at a time); --n per lane (default: drain), --lane ignored")
     ptw = sub.add_parser("tool-wait", help="block until a toolchain tool triage started installing is ready")
     ptw.add_argument("tool")
     ptw.add_argument("--timeout", type=int, default=600)
     ptg = sub.add_parser("tool-gaps", help="post-run review: toolchain tools that were missing (installed / no recipe)")
     ptg.add_argument("--day", type=int)
+    per = sub.add_parser("effort-report", help="effort A/B: one day across harness copies (main xhigh vs the rehearsal copy high)")
+    per.add_argument("--day", type=int, required=True)
+    per.add_argument("--root", action="append", help="harness copy root (repeatable; default main)")
     ptr = sub.add_parser("train", help="offline training: a day's solvers vs every earlier day's verified cases")
     ptr.add_argument("--day", type=int, required=True)
     ptr.add_argument("--lane", action="append")
@@ -1329,7 +1346,7 @@ def main(argv=None):
     pl2.add_argument("--dry-run", action="store_true", help="only print the ranked candidates")
     a = p.parse_args(argv)
     fn = {"hb": c_hb, "list": c_list, "status": c_status, "start": c_start, "retry": c_retry,
-          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test, "compound-check": c_compound_check, "train": c_train, "tool-wait": c_tool_wait, "speed-harden": c_speed_harden, "prebuild": c_prebuild, "tool-gaps": c_tool_gaps,
+          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test, "compound-check": c_compound_check, "train": c_train, "effort-report": c_effort_report, "tool-wait": c_tool_wait, "speed-harden": c_speed_harden, "prebuild": c_prebuild, "tool-gaps": c_tool_gaps,
           "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
           "reconcile": c_reconcile, "solutions": c_solutions,
           "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout,

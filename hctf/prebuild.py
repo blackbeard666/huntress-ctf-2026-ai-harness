@@ -15,9 +15,11 @@ The LLM never runs at drop time: prebuilt code only RACES beside the day's worke
 """
 import ast
 import filecmp
+import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import statistics
@@ -37,7 +39,14 @@ STATE = RUN / "prebuild-state.json"
 SNAP = RUN / "prebuild-snapshot"
 LOGDIR = RUN / "prebuild"
 
-TIMEOUT = float(os.environ.get("HCTF_PREBUILD_TIMEOUT", str(15 * 60)))
+TIMEOUT = float(os.environ.get("HCTF_PREBUILD_TIMEOUT", str(25 * 60)))   # 25 min (xhigh trial headroom; high ~6 min)
+# high, not xhigh (user 2026-10-16): xhigh averaged 542 s/target vs 357 s at high with the same keep rate (9/10 vs 15/15
+# excluding gate bugs); throughput comes from running the lanes in parallel instead. HCTF_PREBUILD_EFFORT overrides.
+EFFORT = os.environ.get("HCTF_PREBUILD_EFFORT", "high")
+# Drain: after the first n/lane pass, a second pass works through EVERY pending target of every lane until the
+# deadline (subscription: throughput, not dollars, is the limit; the budget ceiling is only a runaway guard).
+DRAIN = os.environ.get("HCTF_PREBUILD_DRAIN", "1") != "0"
+DRAIN_N = 999
 MAX_ATTEMPTS = int(os.environ.get("HCTF_PREBUILD_MAX_ATTEMPTS", "2"))     # per target, across nights
 DEFAULT_N = int(os.environ.get("HCTF_PREBUILD_N", "5"))
 BUDGET_CAP = float(os.environ.get("HCTF_PREBUILD_BUDGET_USD", "60"))     # hard ceiling per batch (subscription)
@@ -104,7 +113,10 @@ ALLOWED_IMPORTS = {
     "__future__", "array", "base64", "binascii", "bisect", "bz2", "calendar", "codecs", "collections", "copy",
     "dataclasses", "datetime", "decimal", "email", "enum", "fractions", "functools", "gzip", "hashlib", "heapq", "html",
     "io", "ipaddress", "itertools", "json", "lzma", "math", "operator", "plistlib", "quopri", "re", "string", "struct",
-    "tarfile", "textwrap", "typing", "unicodedata", "uuid", "xml", "zipfile", "zlib", "urllib.parse",
+    "tarfile", "textwrap", "time", "typing", "unicodedata", "uuid", "xml", "zipfile", "zlib", "urllib.parse",
+    # pure helpers with no I/O of their own (D15 night: ooxml-siblings reverted for `import posixpath`)
+    "posixpath", "ntpath", "fnmatch", "difflib", "statistics", "random", "contextlib", "abc", "numbers", "hmac",
+    "logging", "warnings",   # pypdf / lief warning silencing (pdf-info reverted for `import logging`, 10-16)
     "lib", "pefile", "elftools", "capstone", "Crypto", "androguard", "pyzipper",
     # installed on BOTH this host's .venv and the Homebase VM's python3 (checked 2026-10-15; setup/install_tools.sh +
     # setup/homebase_setup.sh): DFIR / format parsers the coverage atlas needs (bytes in via io.BytesIO; open() stays banned)
@@ -153,8 +165,13 @@ def atlas_gaps(cfg):
         gaps = json.loads(m.group(1)) if m else []
     except ValueError:
         return []
+    def prio(v):
+        try:
+            return int(v)
+        except (TypeError, ValueError):     # an LLM-refreshed atlas may write "high" / "p1"
+            return {"high": 1, "p1": 1, "medium": 2, "med": 2, "p2": 2}.get(str(v).strip().lower(), 3)
     return [{"id": g["id"], "goal": f"{g.get('concept', g['id'])}: {g.get('detail', '')}".strip(": "),
-             "priority": int(g.get("priority") or 3), "source": f"coverage atlas {cfg['atlas']}"}
+             "priority": prio(g.get("priority")), "source": f"coverage atlas {cfg['atlas']}"}
             for g in gaps if isinstance(g, dict) and g.get("id") and g.get("action") == "prebuild"]
 
 
@@ -237,7 +254,7 @@ def budget_for(n):
     """Batch budget: n x the p75 historical prebuild worker cost (DEFAULT_COST before any history), capped."""
     h = sorted(history_costs())
     per = h[min(len(h) - 1, int(len(h) * 0.75))] if h else DEFAULT_COST
-    return round(min(BUDGET_CAP, max(per, 0.5) * max(n, 1) * 1.2), 2)
+    return round(min(BUDGET_CAP, max(per, 0.5) * max(n, 1) * 2.0), 2)   # subscription: no tight cap (user)
 
 
 def next_drop(now=None, drop=None):
@@ -357,8 +374,9 @@ def check_meta_fixtures(root=None):
         except Exception as e:  # noqa: BLE001
             probs.append(f"{fj.relative_to(root)}: extractor raised {e!r}")
             continue
-        if time.time() - t0 > 1.0:
-            probs.append(f"{fj.relative_to(root)}: {time.time() - t0:.2f}s (> 1 s in-window budget)")
+        budget = 1.0 * float(os.environ.get("HCTF_TEST_TIME_SLACK", "1"))   # 2x inside a loaded parallel gate
+        if time.time() - t0 > budget:
+            probs.append(f"{fj.relative_to(root)}: {time.time() - t0:.2f}s (> {budget:g} s in-window budget)")
         if str(got) != str(fx["expected"]):
             probs.append(f"{fj.relative_to(root)}: {fmt_field} got {got!r}, expected {fx['expected']!r}")
     return probs
@@ -445,7 +463,9 @@ def gate(lane, cfg, snap_root, before_dirty, before_src, base_regress=None, log=
         if outside:
             reasons.append("wrote outside the allowlist: " + ", ".join(outside[:8]))
         for p in changed:
-            if p.endswith(".py") and (ROOT / p).exists():
+            # in-window code only: an offline fixture GENERATOR under tests/data/ may use random/subprocess/open (D15
+            # night: binary aes-tea-chacha-hcfg reverted for its cipher_gen.py, not for its lib/binary.py change)
+            if p.endswith(".py") and p.startswith("lib/") and (ROOT / p).exists():
                 reasons += ast_problems(ROOT / p, before_src.get(p))
         if "meta" in cfg.get("checks", ()):
             reasons += meta_structure_problems() + _fresh_fixture_problems()
@@ -485,6 +505,34 @@ def snapshot(cfg):
     return SNAP
 
 
+def _sync_dir(src, dst):
+    """Make dst's tree equal src's IN PLACE -- never remove dst itself. A parallel lane worker's bwrap bind sits ON
+    ROOT/lib and ROOT/tests/data: deleting that directory detaches the bind in every worker namespace (Linux >= 3.18),
+    and those workers then write straight into the real tree (2026-10-16: 36 ungated files leaked into main)."""
+    src, dst = Path(src), Path(dst)
+    dst.mkdir(parents=True, exist_ok=True)
+    for q in sorted(dst.rglob("*"), key=lambda x: len(x.parts), reverse=True):
+        rel = q.relative_to(dst)
+        if "__pycache__" in rel.parts:
+            continue
+        p = src / rel
+        if not p.exists() or p.is_dir() != q.is_dir():
+            if q.is_dir() and not q.is_symlink():
+                shutil.rmtree(q, ignore_errors=True)
+            else:
+                q.unlink(missing_ok=True)
+    for p in sorted(src.rglob("*")):
+        rel = p.relative_to(src)
+        if "__pycache__" in rel.parts:
+            continue
+        q = dst / rel
+        if p.is_dir():
+            q.mkdir(parents=True, exist_ok=True)
+        elif not q.exists() or not filecmp.cmp(p, q, shallow=False):
+            q.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(p, q)
+
+
 def restore(log=print, reason=""):
     """Put lib/ + tests/data/ back from the snapshot; revert code files outside them that were clean before."""
     meta = _load_json(SNAP / "snapshot.json", None)
@@ -492,8 +540,7 @@ def restore(log=print, reason=""):
         return False
     for d in meta["dirs"]:
         if (SNAP / d).exists():
-            shutil.rmtree(ROOT / d, ignore_errors=True)
-            shutil.copytree(SNAP / d, ROOT / d)
+            _sync_dir(SNAP / d, ROOT / d)
     before = set(meta.get("dirty", ()))
     for p in sorted(_git_dirty() - before):
         if any(p == d or p.startswith(d + "/") for d in meta["dirs"]):
@@ -548,7 +595,22 @@ def stop(log=print, grace=15.0):
     """Stop a running prebuild NOW (bin/day.sh before a run): SIGTERM the batch (it kills its worker and restores the
     snapshot), SIGKILL whatever is left after `grace` s, then recover any leftover snapshot. Returns True if one ran."""
     pid = lock_holder()
-    ran = pid is not None or bool(_worker_pids())
+    # every prebuild process, not just the lock holder: the post-run chain is `bash -c 'prebuild --lane A ; prebuild
+    # --lane B ; ...'` -- killing only the current batch let the chain start the next lane, and a later --stop then
+    # "recovered" (restored) the snapshot UNDER that live batch (2026-10-16: 3 mobile targets falsely reverted)
+    shells, batches = _batch_pids()
+    for sp in shells:                       # the chain first, so it cannot start another lane
+        try:
+            os.kill(sp, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
+    ran = pid is not None or bool(_worker_pids()) or bool(shells or batches)
+    for bp in batches:
+        if bp != pid:
+            try:
+                os.kill(bp, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                pass
     if pid:
         log(f"[prebuild] stopping batch pid {pid}")
         try:
@@ -568,9 +630,51 @@ def stop(log=print, grace=15.0):
             os.kill(wp, signal.SIGKILL)
         except (ProcessLookupError, PermissionError):
             pass
+    end = time.time() + grace
+    while time.time() < end and any(_pid_alive(b) for b in batches):
+        time.sleep(0.2)
+    for bp in batches:
+        if _pid_alive(bp):
+            try:
+                os.kill(bp, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
     LOCK.unlink(missing_ok=True)
+    if any(_pid_alive(b) for b in _batch_pids()[1]):
+        log("[prebuild] a prebuild batch is still alive: NOT recovering its snapshot (run --stop again)")
+        return ran
     recover(log)
     return ran
+
+
+def _batch_pids():
+    """([chain shell pids], [batch pids]) of running prebuilds, matched STRICTLY (a substring match also hit an
+    operator's / the assistant's own shell whose command text merely mentioned the CLI, and SIGTERMed it):
+    batch = argv contains `-m hctf.cli prebuild` as separate args (not --stop/--list/--recover);
+    chain shell = `bash|sh -c <script>` whose script STARTS with an interpreter running `-m hctf.cli prebuild`."""
+    me = os.getpid()
+    shells, batches = [], []
+    for c in Path("/proc").glob("[0-9]*/cmdline"):
+        try:
+            pid = int(c.parent.name)
+            argv = [a.decode(errors="replace") for a in c.read_bytes().split(b"\0") if a]
+        except (OSError, ValueError):
+            continue
+        if pid == me or not argv:
+            continue
+        try:   # this copy's batches only (main and alt share the box)
+            if Path(os.readlink(f"/proc/{pid}/cwd")).resolve() != ROOT.resolve():
+                continue
+        except OSError:
+            continue
+        if any(argv[i:i + 3] == ["-m", "hctf.cli", "prebuild"] for i in range(len(argv))):
+            if not any(x in argv for x in ("--stop", "--list", "--recover")):
+                batches.append(pid)
+            continue
+        if (Path(argv[0]).name in ("bash", "sh") and len(argv) >= 3 and argv[1] == "-c"
+                and re.match(r"\S*python[\d.]*\s+-m\s+hctf\.cli\s+prebuild\b", argv[2].lstrip())):
+            shells.append(pid)
+    return shells, batches
 
 
 # ------------------------------------------------------------------------------------------------ the batch
@@ -656,6 +760,8 @@ def run(lane, n=None, only=None, budget_usd=None, deadline=None, log=print, runn
             prompt = _render(lane, cfg, t, budget - spent, deadline)
             env = {"HCTF_STAGE": "prebuild", "HCTF_LANE": lane, "HCTF_PREBUILD": "1", "HCTF_BASE": f"prebuild-{lane}",
                    "HCTF_CHAL": f"prebuild:{tid}"}
+            if EFFORT:
+                env["HCTF_X_EFFORT"] = EFFORT
             LOGDIR.mkdir(parents=True, exist_ok=True)
             t0 = time.time()
             log(f"[prebuild] {lane}/{tid}: worker start (timeout {min(TIMEOUT, left - 60):.0f}s)")
@@ -694,11 +800,238 @@ def run(lane, n=None, only=None, budget_usd=None, deadline=None, log=print, runn
             pass
 
 
+# ------------------------------------------------------------------------------------------------ parallel lanes
+# One worker per lane at once (user 2026-10-16: the sequential batch took ~8 h for 52 targets). Each lane's worker edits
+# a PRIVATE copy of lib/ + tests/data/ bound over the real ones inside its bwrap sandbox, so no worker ever sees another's
+# half-written files; a finished target's lane files are merged into the real tree and gated there ONE AT A TIME under
+# GATE_LOCK (the existing snapshot -> gate -> keep/restore), so the tree only ever holds gated work plus one candidate.
+PARALLEL = os.environ.get("HCTF_PREBUILD_PARALLEL", "1") != "0"
+PRIV = RUN / "pb-lane"
+GATE_LOCK = threading.Lock()
+_TREE = {"sig": None}
+
+
+def _tree_sig():
+    """(path, size, mtime_ns) of every file under lib/ + tests/data (no __pycache__): the real tree may only change under
+    GATE_LOCK while a parallel batch runs."""
+    out = []
+    for d in (ROOT / "lib", ROOT / "tests" / "data"):
+        for f in d.rglob("*"):
+            if f.is_file() and "__pycache__" not in f.parts:
+                st = f.stat()
+                out.append((str(f.relative_to(ROOT)), st.st_size, st.st_mtime_ns))
+    return tuple(sorted(out))
+
+
+def _tripped(log, stop_evt):
+    """True (and the whole batch stops) when lib/ or tests/data changed OUTSIDE the gate since the last gate."""
+    if _TREE["sig"] is not None and _tree_sig() != _TREE["sig"]:
+        changed = sorted(set(_tree_sig()) ^ set(_TREE["sig"]))
+        log("!!! [prebuild] lib/ or tests/data changed OUTSIDE the gate (a worker escaped its private copy?): "
+            f"stopping the batch -- {[c[0] for c in changed][:6]}")
+        stop_evt.set()
+        return True
+    return False
+
+
+def _priv_refresh(lane):
+    """Fresh private lib/ + tests/data/ for `lane` from the real tree (picks up what other lanes kept). -> its dir."""
+    d = PRIV / lane
+    shutil.rmtree(d, ignore_errors=True)
+    d.mkdir(parents=True)
+    ig = shutil.ignore_patterns("__pycache__")
+    shutil.copytree(ROOT / "lib", d / "lib", ignore=ig)
+    shutil.copytree(ROOT / "tests" / "data", d / "tests_data", ignore=ig)
+    (d / "manifest.json").write_text(json.dumps(_manifest(d)))
+    return d
+
+
+def _manifest(d):
+    """{"lib/x" | "tests/data/x": sha1} of a private copy: the baseline its worker's own writes are measured against."""
+    out = {}
+    for rel_root, sub in (("lib", d / "lib"), ("tests/data", d / "tests_data")):
+        for f in sub.rglob("*"):
+            if f.is_file() and "__pycache__" not in f.parts:
+                out[f"{rel_root}/{f.relative_to(sub)}"] = hashlib.sha1(f.read_bytes()).hexdigest()
+    return out
+
+
+def _priv_changes(lane, cfg, d):
+    """(changed lane files [(rel, src or None=deleted)], files written OUTSIDE the lane's writable paths) = what THIS
+    worker wrote: its private copy now vs the manifest taken when it was created. Never vs the live tree, which may
+    hold another lane's candidate under its gate (2026-10-16: two targets falsely rejected that way)."""
+    base = json.loads((d / "manifest.json").read_text())
+    cur = _manifest(d)
+    changed, outside = [], []
+    for rel in sorted(set(base) | set(cur)):
+        if base.get(rel) == cur.get(rel):
+            continue
+        sub = d / "lib" / rel[len("lib/"):] if rel.startswith("lib/") else d / "tests_data" / rel[len("tests/data/"):]
+        (changed if _in(rel, cfg["writable"]) else outside).append((rel, sub if sub.exists() else None))
+    return changed, outside
+
+
+def _lane_worker(lane, cfg, n, budget, deadline, stop_evt, runner, log, out):
+    todo = pending(lane, cfg, n)
+    log(f"[prebuild] {lane}: {len(todo)} target(s) (parallel) {[t.get('id') for t in todo][:8]}, budget ${budget:.2f}")
+    hist, spent, kept = history_costs(), 0.0, 0
+    with GATE_LOCK:
+        base_regress = regress_baseline(cfg["regress_lane"]) if cfg.get("regress_lane") else None
+    for t in todo:
+        est = statistics.median(hist) if hist else DEFAULT_COST
+        left = (deadline - datetime.now()).total_seconds()
+        if stop_evt.is_set() or spent + est > budget or left < 120:
+            log(f"[prebuild] {lane}: {'stopped' if stop_evt.is_set() else 'budget' if spent + est > budget else 'deadline'}"
+                " -- lane done")
+            break
+        tid = t.get("id")
+        d = _priv_refresh(lane)
+        prompt = _render(lane, cfg, t, budget - spent, deadline)
+        env = {"HCTF_STAGE": "prebuild", "HCTF_LANE": lane, "HCTF_PREBUILD": "1", "HCTF_BASE": f"prebuild-{lane}",
+               "HCTF_CHAL": f"prebuild:{tid}",
+               "HCTF_NICE": "10",   # 5 workers at once: the gate's timing asserts (test_meta_lane 1 s) need the CPU
+               "HCTF_SANDBOX_BINDS": json.dumps([[str(d / "lib"), str(ROOT / "lib")],
+                                                 [str(d / "tests_data"), str(ROOT / "tests" / "data")]])}
+        if EFFORT:
+            env["HCTF_X_EFFORT"] = EFFORT
+        LOGDIR.mkdir(parents=True, exist_ok=True)
+        t0 = time.time()
+        log(f"[prebuild] {lane}/{tid}: worker start (parallel, timeout {min(TIMEOUT, left - 60):.0f}s)")
+        rc, wlog = runner(LOGDIR / lane, "prebuild", prompt, env, min(TIMEOUT, left - 60), stop_evt)
+        cost = 0.0
+        try:
+            cost = float(workers.worker_outcome(wlog).get("cost_usd") or 0.0)
+        except Exception:  # noqa: BLE001
+            pass
+        spent += cost
+        if cost:
+            hist.append(cost)
+        if stop_evt.is_set():
+            out.append({"lane": lane, "target": tid, "ok": False, "reasons": ["stopped"], "cost": cost})
+            break
+        changed, outside = _priv_changes(lane, cfg, d)
+        reasons = ["wrote outside the allowlist: " + ", ".join(r for r, _ in outside[:8])] if outside else []
+        if not changed and not reasons:
+            reasons = ["no change (nothing written)"]
+        ok = False
+        if not reasons:
+            with GATE_LOCK:   # merge + gate on the real tree, one lane at a time
+                if _tripped(log, stop_evt):
+                    out.append({"lane": lane, "target": tid, "ok": False, "reasons": ["tree changed outside the gate"],
+                                "cost": cost})
+                    break
+                snap = snapshot(cfg)
+                meta = _load_json(snap / "snapshot.json", {})
+                before_src = {}
+                for sd in cfg["snapshot"]:
+                    for p in (snap / sd).rglob("*.py") if (snap / sd).exists() else ():
+                        before_src[str(p.relative_to(snap))] = p.read_text(errors="replace")
+                for rel, src in changed:
+                    dst = ROOT / rel
+                    if src is None:
+                        dst.unlink(missing_ok=True)
+                    else:
+                        dst.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(src, dst)
+                ok, reasons = gate(lane, cfg, snap, set(meta.get("dirty", ())), before_src, base_regress, log)
+                if ok:
+                    shutil.rmtree(SNAP, ignore_errors=True)
+                    if cfg.get("regress_lane"):
+                        base_regress = regress_baseline(cfg["regress_lane"])
+                else:
+                    restore(log, f"gate failed for {tid}")
+                _TREE["sig"] = _tree_sig()
+        if ok:
+            kept += 1
+            log(f"[prebuild] {lane}/{tid}: KEPT (gate green, {time.time() - t0:.0f}s, ${cost:.2f})")
+        else:
+            log(f"[prebuild] {lane}/{tid}: REVERTED ({'; '.join(reasons)[:600]})")
+        _record(lane, tid, ok=ok, reasons=reasons[:6], cost=cost, rc=rc, log=str(wlog))
+        out.append({"lane": lane, "target": tid, "ok": ok, "reasons": reasons, "cost": cost})
+    log(f"[prebuild] {lane}: {kept} kept (parallel), ${spent:.2f} spent")
+
+
+def run_parallel(lanes=None, n=None, budget_usd=None, deadline=None, log=print, runner=None):
+    """Every lane at once (one worker each), merged + gated one at a time. Returns [{lane, target, ok, ...}]."""
+    import shutil as _sh
+    lanes = [lane_key(x) for x in (lanes or AUTO_LANES) if lane_key(x) in enabled_lanes()]
+    if runner is None and not (workers.WORKER_SANDBOX and _sh.which("bwrap")):
+        log("[prebuild] parallel mode needs the bwrap worker sandbox (private lib/ per lane); running sequentially")
+        out = []
+        for ln in lanes:
+            out += [dict(r, lane=ln) for r in run(ln, n=n, budget_usd=budget_usd, deadline=deadline, log=log)]
+        return out
+    holder = lock_holder()
+    if holder and holder != os.getpid():
+        log(f"[prebuild] another prebuild is running (pid {holder}); not starting a second one")
+        return []
+    RUN.mkdir(parents=True, exist_ok=True)
+    LOCK.write_text(json.dumps({"pid": os.getpid(), "lane": "parallel", "t": time.time()}))
+    recover(log)
+    n = n or DRAIN_N
+    budget = budget_usd if budget_usd is not None else BUDGET_CAP
+    deadline = deadline or default_deadline()
+    runner = runner or workers.run_local
+    stop_evt = threading.Event()
+    prev = {}
+
+    def on_term(signum, frame):
+        # who stopped us? (2026-10-16: a batch was SIGTERMed at 09:53 with no stop command in sight)
+        try:
+            ps = subprocess.run(["ps", "-eo", "pid,ppid,etime,args"], capture_output=True, text=True, timeout=5).stdout
+            keep = [ln[:200] for ln in ps.splitlines() if any(k in ln for k in ("hctf", "prebuild", "day.sh", "kill"))]
+        except Exception as e:  # noqa: BLE001
+            keep = [f"ps failed: {e}"]
+        log(f"!!! [prebuild] parallel batch got signal {signum} at {time.strftime('%H:%M:%S')} -- stopping; processes:\n"
+            + "\n".join("    " + k for k in keep[:25]))
+        stop_evt.set()
+    if threading.current_thread() is threading.main_thread():
+        for s in (signal.SIGTERM, signal.SIGINT):
+            prev[s] = signal.signal(s, on_term)
+    out = []
+    _TREE["sig"] = _tree_sig()
+    # gate suites run beside 4 other lane workers: timing asserts get 2x slack (still catch a real >2x regression)
+    os.environ.setdefault("HCTF_TEST_TIME_SLACK", os.environ.get("HCTF_PREBUILD_TIME_SLACK", "2"))
+    log(f"[prebuild] parallel batch: {', '.join(lanes)} (n={n}/lane, ${budget:g}/lane, effort {EFFORT or 'default'}, "
+        f"deadline {deadline:%Y-%m-%d %H:%M})")
+    try:
+        ths = [threading.Thread(target=_lane_worker, name=f"pb-{ln}", daemon=True,
+                                args=(ln, LANES[ln], n, budget, deadline, stop_evt, runner, log, out)) for ln in lanes]
+        for th in ths:
+            th.start()
+        for th in ths:
+            while th.is_alive():
+                th.join(1.0)
+        log(f"[prebuild] parallel batch done: {sum(r['ok'] for r in out)}/{len(out)} kept")
+        return out
+    finally:
+        recover(log)
+        shutil.rmtree(PRIV, ignore_errors=True)
+        for s, h in prev.items():
+            signal.signal(s, h)
+        try:
+            if json.loads(LOCK.read_text()).get("pid") == os.getpid():
+                LOCK.unlink()
+        except (OSError, ValueError):
+            pass
+
+
 # ------------------------------------------------------------------------------------------------ post-run hook
 AFTER_RATCHET = os.environ.get("HCTF_PREBUILD_AFTER_RATCHET", "1") != "0"
 AUTO_LANES = [x.strip() for x in os.environ.get("HCTF_PREBUILD_LANES", "metadata-forensics,warmups,"
                                                  "binary-reverse-engineering,mobile-android,script-analysis").split(",")
               if x.strip()]
+
+
+SYSTEMD = os.environ.get("HCTF_PREBUILD_SYSTEMD", "1") != "0"
+
+
+def _user_systemd():
+    try:
+        r = subprocess.run(["systemctl", "--user", "is-system-running"], capture_output=True, text=True, timeout=10)
+        return r.stdout.strip() in ("running", "degraded")
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def launch_background(day=None, log=print, popen=subprocess.Popen):
@@ -721,8 +1054,25 @@ def launch_background(day=None, log=print, popen=subprocess.Popen):
     out = RUN / f"prebuild-{tag}.log"
     cmds = [f"{sys.executable} -m hctf.cli prebuild --lane {ln} --n {n} --budget-usd {budget} --deadline {dl:%H:%M}"
             for ln in lanes]
-    p = popen(["bash", "-c", " ; ".join(cmds)], cwd=ROOT, stdout=open(out, "a"), stderr=subprocess.STDOUT,
-              start_new_session=True, env=dict(os.environ, PYTHONPATH=str(ROOT)))
-    log(f"[prebuild] launched in the background for {', '.join(lanes)} (n={n}/lane, ${budget}/lane, deadline "
+    if PARALLEL:   # one process, every lane at once, each draining its whole ranked list until the deadline
+        cmds = [f"{sys.executable} -m hctf.cli prebuild --parallel --n {DRAIN_N if DRAIN else n} "
+                f"--budget-usd {BUDGET_CAP:g} --deadline {dl:%H:%M}"]
+    elif DRAIN:   # round 2: every remaining target, lane by lane, until the deadline
+        cmds += [f"{sys.executable} -m hctf.cli prebuild --lane {ln} --n {DRAIN_N} --budget-usd {BUDGET_CAP:g} "
+                 f"--deadline {dl:%H:%M}" for ln in lanes]
+    if SYSTEMD and popen is subprocess.Popen and shutil.which("systemd-run") and _user_systemd():
+        # A transient user unit: fully outside this terminal / WSL session. A batch adopted by the session's WSL /init
+        # was SIGTERMed mid-run (2026-10-16 09:53, no stop command anywhere).
+        unit = f"hctf-prebuild-{tag}-{time.strftime('%H%M%S')}"
+        script = (f"cd {shlex.quote(str(ROOT))} && source bin/env.sh >/dev/null 2>&1; "
+                  + " ; ".join(cmds) + f" >> {shlex.quote(str(out))} 2>&1")
+        p = popen(["systemd-run", "--user", "--collect", "--unit", unit, "--working-directory", str(ROOT),
+                   "bash", "-lc", script], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        log(f"[prebuild] systemd user unit {unit} (`systemctl --user status {unit}`)")
+    else:
+        p = popen(["bash", "-c", " ; ".join(cmds)], cwd=ROOT, stdout=open(out, "a"), stderr=subprocess.STDOUT,
+                  start_new_session=True, env=dict(os.environ, PYTHONPATH=str(ROOT)))
+    log(f"[prebuild] launched in the background for {', '.join(lanes)} (n={n}/lane, ${budget}/lane"
+        f"{', then drain every pending target' if DRAIN else ''}, effort {EFFORT or 'lane default'}, deadline "
         f"{dl:%H:%M}) -> {out.relative_to(ROOT)}; `hctf prebuild --stop` ends it")
     return p

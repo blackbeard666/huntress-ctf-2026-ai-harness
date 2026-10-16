@@ -81,7 +81,8 @@ for name, fn in (("rot47", W.rot47), ("morse", W.morse_enc), ("a1z26", W.a1z26_e
     assert r and r[1](plain) == fn(plain), (name, r and r[0])
 r = W.infer(plain, W.vigenere(plain, "opposite"), hints=["Opposite Day"])
 assert r and r[0] == "vigenere:opposite", r
-assert W.infer(plain, W.vigenere(plain, "zebrafish")) is None                       # no key hint, no fit -> None
+r = W.infer(plain, W.vigenere(plain, "zebrafish"))       # no key hint: the fixed sentence is a crib (prebuild
+assert r and r[0] == "vigenere:zebrafish" and r[1](plain) == W.vigenere(plain, "zebrafish"), r   # crib-polyalpha-key, 10-16)
 sub = dict(zip("abcdefghijklmnopqrstuvwxyz", "qwertyuiopasdfghjklzxcvbnm"))
 r = W.infer(plain, "".join(sub.get(c, c) for c in plain))
 assert r and r[0] == "subst", r
@@ -210,7 +211,9 @@ print(f"ok  D3 probe: {dt:.2f}s, D13 solver passes even cuts but misses 1 edge-c
 unk = fake_chal(14, name="unknown")
 (unk / "cases" / "single_solve" / "artifacts").mkdir(parents=True)
 slug = "brisk-otter-maple-14"
-(unk / "cases" / "single_solve" / "artifacts" / "blob.txt").write_text(W.vigenere(W.SENTENCE.format(slug=slug), "zebrafish"))
+_k = b"k3y!Zq9#Lm2@P"   # keyed Vigenere is no longer "unknown": the fixed sentence is a crib (crib-polyalpha-key, 10-16)
+(unk / "cases" / "single_solve" / "artifacts" / "blob.txt").write_text(base64.b64encode(bytes(
+    b ^ _k[i % len(_k)] for i, b in enumerate(W.SENTENCE.format(slug=slug).encode()))).decode())
 (unk / "cases" / "single_solve" / "contract.json").write_text(json.dumps(
     {"answer_ids": ["message"], "questions": [{"id": "message", "artifact": "blob.txt"}], "prompt": "Mystery"}))
 (unk / "cases" / "single_solve" / "expected.json").write_text(json.dumps({"message": slug}))

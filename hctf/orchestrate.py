@@ -136,7 +136,8 @@ def _cut_short(last):
     one cut-off reply ended localization with 16 `delayed` -> `percent` fixes found; a 3-min generalize followed."""
     if str(last.get("result", "")).lower() != "incorrect" or not _prev_banked(last):
         return False
-    if last.get("deadline") is not None or not (last.get("untimed") or last.get("run_for_time") is False):
+    if last.get("deadline") is not None or not (last.get("untimed") or last.get("no_clock")
+                                                or last.get("run_for_time") is False):
         return False   # a clocked attempt is gone by now
     if not last.get("localize_complete"):
         return True
@@ -146,7 +147,8 @@ def _cut_short(last):
 
 def _live_fields(last, wrong, fixed):
     """Answer ids still unresolved on a failed UNTIMED attempt (wrong and not fixed in-window, or missing), else []."""
-    if last.get("deadline") is not None or not (last.get("untimed") or last.get("run_for_time") is False):
+    if last.get("deadline") is not None or not (last.get("untimed") or last.get("no_clock")
+                                                or last.get("run_for_time") is False):
         return []
     if not last.get("attempt_id"):
         return []
@@ -186,13 +188,18 @@ class LiveAnswer:
             lines.append(f"  - `{a}`: {str(q.get('question') or '?')[:220]} | artifact `{q.get('artifact') or '?'}` | "
                          f"format {json.dumps(fmt)[:160]} | solver gave {sub.get(a)!r}"
                          + (f" | REJECTED: {sorted(rejected[a])[:6]}" if rejected.get(a) else ""))
-        art = tdir if (tdir / "contract.json").exists() else (timed.latest_artifacts(cid) or tdir)
-        self.prompt = workers.render(
-            "live", persona=workers.lane_persona(chain.lane), cid=cid, attempt=str(self.attempt)[:8],
+        self._need = {os.path.basename(str((qmap.get(a) or {}).get("artifact") or "").split("->")[0].strip())
+                      for a in fields} - {""}
+        self._render = dict(
+            persona=workers.lane_persona(chain.lane), cid=cid, attempt=str(self.attempt)[:8],
             accepted=len(last.get("verified") or {}), n=len(fields), fields="\n".join(lines),
             contract=(tdir / "contract.json").relative_to(ROOT) if (tdir / "contract.json").exists() else
-            cli.cdir(cid).relative_to(ROOT) / "start.json", art_dir=Path(art).relative_to(ROOT),
+            cli.cdir(cid).relative_to(ROOT) / "start.json",
             solver_dir=chain.sdir.relative_to(ROOT), lane=chain.lane, chal_dir=cli.cdir(cid).relative_to(ROOT))
+        try:   # the Stop gate (.claude/hooks/stop_gate.py, stage live) reads what this worker owes
+            (cli.cdir(cid) / ".live_fields.json").write_text(json.dumps({"attempt": self.attempt, "fields": fields}))
+        except OSError:
+            pass
         self.thread = threading.Thread(target=self._run, daemon=True, name=f"live-{cid}")
         self.watch = threading.Thread(target=self._watch, daemon=True, name=f"live-watch-{cid}")
 
@@ -209,9 +216,29 @@ class LiveAnswer:
         if self.passed or self.all_accepted:
             evt.set()
 
+    def _art_dir(self):
+        """Where every listed field's delivery is: the failure pull fetched ONE representative set per failing family
+        (enough for the generalize); a live answer needs each listed set -> public download of the attempt otherwise."""
+        tdir = timed.timed_dir(self.cid)
+        have = {p.name for p in tdir.iterdir()} if tdir.is_dir() else set()
+        if (tdir / "contract.json").exists() and self._need <= have:
+            return tdir
+        try:
+            class A:  # argparse-like namespace for cli.c_artifact (downloads start.json's deliveries, public GM)
+                id, delivery = self.cid, None
+            with cli.quiet():
+                cli.c_artifact(A)
+        except Exception as e:  # noqa: BLE001 - the worker can still fetch with `hctf artifact`
+            say(f"[{self.cid}] live-answer: artifact download note: {str(e)[:160]}")
+        return timed.latest_artifacts(self.cid) or tdir
+
     def _run(self):
         try:
+            art = self._art_dir()
+            self.prompt = workers.render("live", art_dir=Path(art).relative_to(ROOT), **self._render)
             self.chain.run_worker(self.cid, "live", self.prompt, LIVE_TIMEOUT, urgent=True, stop=self.stop_evt)
+        except Exception as e:  # noqa: BLE001 - the generalize carries on regardless
+            say(f"[{self.cid}] live-answer worker failed: {str(e)[:200]}")
         finally:
             self.done.set()
 
@@ -536,9 +563,17 @@ def _contract_shape(contract):
     return fams, exts
 
 
+_SHAPE_LOCK = threading.Lock()
+
+
 def lane_known_shapes(lane, day):
     """Field shapes this lane asked on any EARLIER day (single / time_trial / mastery contracts as saved). Cached per
     file (size + mtime) in .run/shape-cache.json: script's Mastery contracts are ~3 MB each."""
+    with _SHAPE_LOCK:   # five lanes build their single prompts at once at the drop
+        return _lane_known_shapes(lane, day)
+
+
+def _lane_known_shapes(lane, day):
     cache_p = ROOT / ".run" / "shape-cache.json"
     try:
         cache = json.loads(cache_p.read_text())
@@ -567,7 +602,9 @@ def lane_known_shapes(lane, day):
                 continue
     if dirty:
         try:
-            cache_p.write_text(json.dumps(cache))
+            tmp = cache_p.with_suffix(".tmp")
+            tmp.write_text(json.dumps(cache))
+            tmp.replace(cache_p)
         except OSError:
             pass
     return known
@@ -3358,7 +3395,8 @@ class Chain:
             need = _resume_need(prev)
             live_banked = KEEP_BANKED and _prev_banked(prev) and (
                 (left is not None and left > 0) or (left is None and prev.get("deadline") is None
-                                                    and (prev.get("untimed") or prev.get("run_for_time") is False)))
+                                                    and (prev.get("untimed") or prev.get("no_clock")
+                                                         or prev.get("run_for_time") is False)))
             if live_banked:
                 say(f"[{cid}] retry_skipped_banked: attempt {str(prev.get('attempt_id'))[:8]} holds GM-accepted ids "
                     f"({'untimed' if left is None else f'{left:.1f}s left'}) -- reconnecting with start, never retry")
@@ -3645,9 +3683,14 @@ class Chain:
             say(f"[{cid}] Time Trial needed {len(wrong)} in-window fix(es) ({len(fixed)} GM-accepted); its pool was "
                 "untimed, so Mastery starts now and corrects them in-attempt (TT's values ranked first)")
             return
-        n = timed.join_capture(tt["id"], 120)
+        if timed.join_capture(tt["id"], 120):
+            # no auto-time_trial-* case on disk yet = no failing target for the green watcher: the generalize would run
+            # to its own timeout in front of Mastery. Mastery now; a failure generalize has the case by then.
+            say(f"[{cid}] Time Trial needed {len(wrong)} in-window fix(es) on a CLOCKED pool, but its regression case is "
+                "still being captured: Mastery now (no blind pre-generalize)")
+            return
         say(f"[{cid}] Time Trial needed {len(wrong)} in-window fix(es) on a CLOCKED pool: teaching the solver on that "
-            f"variant BEFORE Mastery{' (its regression case is still being captured)' if n else ''}")
+            "variant BEFORE Mastery")
         self.generalize(cid, wrong=wrong, fixed=fixed, diag={"tt_inwindow_fixes": len(wrong)})
 
     def _label_scout(self, cid, mode, wrong, fixed):
@@ -4341,6 +4384,10 @@ def speed_harden(day=None, cid=None, log=None):
             continue
         res = solvers.test_solver(sdir)
         bad = [r["case"] for r in res if not r.get("ok") and not r.get("unverified")]
+        from . import prebuild as _pb
+        if bad and time.time() > _pb.default_deadline().timestamp():
+            log(f"[speed-harden] {base}: {len(bad)} failing case(s) but past the pre-drop deadline: skipped")
+            bad = []
         if bad:
             # GM-verified cases the solver fails: modes passed by in-attempt fixes (localize + resubmit / reconnect)
             # that no generalize ever taught it. Tomorrow's reuse race copies this solver: fix it now, off the clock.
