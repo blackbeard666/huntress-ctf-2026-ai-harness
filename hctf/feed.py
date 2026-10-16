@@ -174,6 +174,9 @@ class Feed:
         if tag == "postrun":
             if re.match(r"(\S+ start|day \d+: resuming)", msg):
                 # a resumed post-run (`hctf postrun`) appends to the same log after an earlier "post-run finished"
+                if self.done or msg.startswith("day "):
+                    self.phases_done = []
+                    self.activity = {b: v for b, v in self.activity.items() if "generalize" not in v[0]}
                 self.done, self.post = False, True
             m = re.match(r"(\S+) (start|done|FAILED)\b(.*)", msg)
             if m:
