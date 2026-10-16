@@ -450,8 +450,27 @@ def regress_baseline(lane):
     return out
 
 
-def gate(lane, cfg, snap_root, before_dirty, before_src, base_regress=None, log=print):
-    """(ok, [reasons]). Never raises."""
+# Which ratchet-gate suites can a lane's prebuild break? A lane only writes its own lib module + fixtures, and
+# test_orchestrate / test_day6_fixes test hctf/ alone. 2026-10-16 parallel batch: GATE_LOCK was held ~81% of the batch,
+# 163 s per gate on average, mostly running suites no prebuild lane can affect. A suite missing here gates every lane.
+SUITE_LANES = {
+    "tests/test_orchestrate.py": (),
+    "tests/test_day6_fixes.py": (),
+    "tests/test_day7_fixes.py": ("metadata-forensics", "warmups", "script-analysis"),   # lib.meta/decode/codec/warmups
+    "tests/test_codec.py": ("warmups", "script-analysis"),
+    "tests/test_meta_lane.py": ("metadata-forensics",),
+}
+
+
+def gate_suites(lane, cfg):
+    from . import orchestrate
+    return [t for t in dict.fromkeys(tuple(cfg.get("gate", ())) + tuple(orchestrate.RATCHET_GATE))
+            if (ROOT / t).exists() and (t in cfg.get("gate", ()) or lane in SUITE_LANES.get(t, (lane,)))]
+
+
+def gate(lane, cfg, snap_root, before_dirty, before_src, base_regress=None, log=print, info=None):
+    """(ok, [reasons]). Never raises. `info` (dict) receives "after": the post-merge regress baseline (the next
+    target's baseline when this one is kept -- no second full replay)."""
     reasons = []
     try:
         changed = changed_paths(snap_root, cfg)
@@ -471,23 +490,42 @@ def gate(lane, cfg, snap_root, before_dirty, before_src, base_regress=None, log=
             reasons += meta_structure_problems() + _fresh_fixture_problems()
         if reasons:
             return False, reasons
-        from . import orchestrate
-        for t in dict.fromkeys(tuple(cfg.get("gate", ())) + tuple(orchestrate.RATCHET_GATE)):
-            if not (ROOT / t).exists():
-                continue
+        # the lane's suites in parallel subprocesses, the solver-case regress replay beside them (one lane holds the lock)
+        procs = {t: subprocess.Popen([sys.executable, t], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                     text=True, env=dict(os.environ, HCTF_META_MAX_DAY="0"))
+                 for t in gate_suites(lane, cfg)}
+        reg = {}
+        thr = None
+        if cfg.get("regress_lane") and base_regress is not None:
+            def _reg():
+                try:
+                    reg["after"] = regress_baseline(cfg["regress_lane"])
+                except Exception as e:  # noqa: BLE001
+                    reg["error"] = repr(e)
+            thr = threading.Thread(target=_reg, daemon=True)
+            thr.start()
+        end = time.time() + 900
+        for t, p in procs.items():
             try:
-                rc = subprocess.run([sys.executable, t], cwd=ROOT, capture_output=True, text=True, timeout=900,
-                                    env=dict(os.environ, HCTF_META_MAX_DAY="0"))
-                if rc.returncode:
-                    tail = (rc.stdout + rc.stderr).strip().splitlines()[-3:]
+                outp, _ = p.communicate(timeout=max(1.0, end - time.time()))
+                if p.returncode:
+                    tail = (outp or "").strip().splitlines()[-3:]
                     reasons.append(f"{t} fails: {' | '.join(tail)[:400]}")
             except subprocess.TimeoutExpired:
+                p.kill()
+                p.communicate()
                 reasons.append(f"{t} timed out")
-        if cfg.get("regress_lane") and base_regress is not None:
-            after = regress_baseline(cfg["regress_lane"])
-            broke = [k for k, ok in base_regress.items() if ok and not after.get(k)]
-            if broke:
-                reasons.append(f"{len(broke)} verified {cfg['regress_lane']} case(s) regress: {broke[:4]}")
+        if thr is not None:
+            thr.join()
+            if "error" in reg:
+                reasons.append(f"regress replay error {reg['error']}")
+            else:
+                after = reg["after"]
+                if info is not None:
+                    info["after"] = after
+                broke = [k for k, ok in base_regress.items() if ok and not after.get(k)]
+                if broke:
+                    reasons.append(f"{len(broke)} verified {cfg['regress_lane']} case(s) regress: {broke[:4]}")
     except Exception as e:  # noqa: BLE001 - a crashing gate is a failing gate
         reasons.append(f"gate error {e!r}")
     return not reasons, reasons
@@ -933,11 +971,13 @@ def _lane_worker(lane, cfg, n, budget, deadline, stop_evt, runner, log, out):
                     else:
                         dst.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(src, dst)
-                ok, reasons = gate(lane, cfg, snap, set(meta.get("dirty", ())), before_src, base_regress, log)
+                ginfo = {}
+                ok, reasons = gate(lane, cfg, snap, set(meta.get("dirty", ())), before_src, base_regress, log,
+                                   info=ginfo)
                 if ok:
                     shutil.rmtree(SNAP, ignore_errors=True)
                     if cfg.get("regress_lane"):
-                        base_regress = regress_baseline(cfg["regress_lane"])
+                        base_regress = ginfo.get("after") or regress_baseline(cfg["regress_lane"])
                 else:
                     restore(log, f"gate failed for {tid}")
                 _TREE["sig"] = _tree_sig()

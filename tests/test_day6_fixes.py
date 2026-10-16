@@ -63,7 +63,7 @@ cli.confirmed_answers = lambda cid, att=None: {}
 (_d / "submissions.jsonl").write_text(_json.dumps({"attempt": "att1", "kind": "incorrect", "answers": {"a-x": "1", "a-y": "2"}}) + "\n"
                                       + _json.dumps({"attempt": "att1", "kind": "incorrect", "answers": {"a-y": "2"}, "probe": True}) + "\n")
 _sent = []
-cli.call = lambda *a, **k: (_sent.append(a), {"http": 200, "body": {"result": "correct"}, "saved": []})[1]
+cli.call = lambda *a, **k: (_sent.append(a), {"http": 200, "body": {"result": "accepted"}, "saved": []})[1]
 try:
     kind, _b, probs = cli.submit("c", {"a-x": "1", "a-y": "3"})
     assert kind is not None and not probs, f"multi-field rejection must not block its values: {probs}"

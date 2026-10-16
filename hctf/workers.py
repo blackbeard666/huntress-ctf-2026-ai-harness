@@ -412,7 +412,7 @@ def _run_local_once(chal_dir, stage, prompt, env_extra, timeout, stop, warm, war
             warm.send_task(warm_task)
             key = _live_add(warm.log, env_extra)
             try:
-                return _wait_worker(warm.p, warm.log, timeout, stop, out=warm.out)
+                return _wait_worker(warm.p, warm.log, timeout, stop, out=warm.out, strays=env_extra)
             finally:
                 _live_drop(key)
         except OSError:
@@ -436,12 +436,12 @@ def _run_local_once(chal_dir, stage, prompt, env_extra, timeout, stop, warm, war
                              stderr=subprocess.STDOUT, env=env, start_new_session=True)
         key = _live_add(log, env_extra)
         try:
-            return _wait_worker(p, log, timeout, stop)
+            return _wait_worker(p, log, timeout, stop, strays=env_extra)
         finally:
             _live_drop(key)
 
 
-def _wait_worker(p, log, timeout, stop, out=None):
+def _wait_worker(p, log, timeout, stop, out=None, strays=None):
     deadline = time.time() + timeout
     try:
         while True:
@@ -456,10 +456,10 @@ def _wait_worker(p, log, timeout, stop, out=None):
                     if ASYNC_STOP:
                         # the worker's job is done: SIGTERM it in the background instead of holding the timed modes
                         # for its up-to-2 s grace (it usually exits within 1 s)
-                        threading.Thread(target=_kill_group, args=(p, 2.0), daemon=True,
+                        threading.Thread(target=_stop_all, args=(p, 2.0, strays), daemon=True,
                                          name=f"stop-{p.pid}").start()
                     else:
-                        _kill_group(p, grace=2.0)
+                        _stop_all(p, 2.0, strays)
                     return STOPPED_RC, log
             else:
                 try:
@@ -467,11 +467,52 @@ def _wait_worker(p, log, timeout, stop, out=None):
                 except subprocess.TimeoutExpired:
                     pass
             if time.time() >= deadline:
-                _kill_group(p, grace=0)
+                _stop_all(p, 0, strays)
                 return -9, log
     finally:
         if out is not None:
             out.close()
+
+
+def _kill_strays(env_extra):
+    """SIGKILL processes left over from an ended worker: a Claude Code background task (`run_in_background` shell) runs
+    in its own session, so the process-group kill misses it (alt armA D15: a `hctf submit --from-solver` bisect kept
+    submitting for 38 s after its single worker was ended). Matched on the worker's HCTF_CHAL + HCTF_STAGE +
+    HCTF_LOG_POOL (a duel's are distinct), this user's processes only."""
+    if not env_extra or not env_extra.get("HCTF_CHAL"):
+        return 0
+    import signal
+    want = {f"HCTF_CHAL={env_extra['HCTF_CHAL']}".encode(), f"HCTF_STAGE={env_extra.get('HCTF_STAGE', '')}".encode()}
+    pool = env_extra.get("HCTF_LOG_POOL")
+    me, uid, n = os.getpid(), os.getuid(), 0
+    for d in Path("/proc").iterdir():
+        if not d.name.isdigit() or int(d.name) == me:
+            continue
+        try:
+            if d.stat().st_uid != uid:
+                continue
+            env = set((d / "environ").read_bytes().split(b"\0"))
+        except OSError:
+            continue
+        if not want <= env:
+            continue
+        their = next((e[len(b"HCTF_LOG_POOL="):].decode() for e in env if e.startswith(b"HCTF_LOG_POOL=")), None)
+        if (their or None) != (pool or None):
+            continue
+        try:
+            os.kill(int(d.name), signal.SIGKILL)
+            n += 1
+        except OSError:
+            pass
+    return n
+
+
+def _stop_all(p, grace, strays):
+    _kill_group(p, grace)
+    try:
+        _kill_strays(strays)
+    except Exception:  # noqa: BLE001 - best effort
+        pass
 
 
 def _kill_group(p, grace):

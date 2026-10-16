@@ -26,8 +26,14 @@ minutes on that and found nothing). The GM-verified labels in every case's expec
 byte-observable features (the construct's syntax, its guard/wrapper, the fragment pool, the join) that reproduces EVERY
 verified label across ALL cases at once -- start from the harness's LABEL TABLE above (GM label vs solver output for
 every case: do not re-tabulate it), add only the byte features it lacks, then pick the smallest feature set that
-separates them. Never gate on dates, `started_at`, attempt ids or case names. Make your first solver edit within ~10
-tool calls.
+separates them. Never gate on attempt ids or case names. Dates ONLY when the LABEL TABLE prints `GENERATION SPLIT`:
+the GM re-labelled byte-identical constructs from one day on (it grades with the rubric of the day the attempt STARTED),
+so no byte feature separates them -- don't hunt for one. Gate THAT family's label on the contract's `started_at` UTC
+date (>= the first new-label day -> the new label; missing / unparseable -> the NEWEST rule, which is what a fresh attempt
+gets), make that edit first, run the failing cases, stop. Make your first solver edit within ~10 tool calls.
+
+THE HARNESS ALREADY RAN THE FULL SUITE on the current solver (that is where the failures and the LABEL TABLE above come
+from): do NOT re-run the whole suite before your first edit -- go straight to the failing cases.
 
 ITERATE FAST: while fixing, test only the failing cases -- `hctf solver-test {base} --case 'variant-*' --timeout 20`
 (repeatable `--case NAME_OR_GLOB`; a few seconds instead of the whole corpus) -- and run the full `hctf solver-test

@@ -30,9 +30,13 @@ alone: the GM judges every value, and the day's worker still solves from scratch
 - Budget: ~{minutes} min wall clock (hard stop {deadline} host time) and few turns. Finish one solid format rather than three half-done ones; stop
   when the gate passes.
 
-## The gate (run it yourself before you stop; the harness re-runs it)
+## The gate (the harness runs it on merge, one lane at a time)
 {gate}
-plus the harness's ratchet gate suites. Every existing regression case of the lane (all days) must stay green.
+plus every existing regression case of the lane (all days), which must stay green.
+While you build, test ONLY your own module and fixtures (a `python3 -c` on your fixture files, or the lane's fixture
+test above ONCE before you stop). Never loop over `tests/test_*.py` or run unrelated suites: other lanes are building
+at the same time, those suites are minutes long, and the harness runs the gate itself (2026-10-16 batch: workers
+spent ~48% of their wall time in suite runs, and several hit the timeout doing it).
 
 {brief}
 

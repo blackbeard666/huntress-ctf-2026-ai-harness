@@ -46,7 +46,8 @@ SLUG_GATE = os.environ.get("HCTF_SLUG_GATE", "1") != "0"
 FORMAT_ALTS = os.environ.get("HCTF_FORMAT_ALTS", "1") != "0"
 FORMAT_ALTS_MAX = int(os.environ.get("HCTF_FORMAT_ALTS_MAX", "3"))
 FLAG_RE = re.compile(r"^[0-9a-f]{32}$")
-EXIT = {"correct": 0, "incorrect": 1, "accepted": 2, "expired": 3, "refused": 4, "unreachable": 5, "error": 6}
+EXIT = {"correct": 0, "incorrect": 1, "accepted": 2, "expired": 3, "refused": 4, "unreachable": 5, "error": 6,
+        "already_solved": 0}
 
 
 def cdir(cid):
@@ -57,8 +58,22 @@ def now():
     return time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
 
 
+# Re-sent challenge text in GM submit replies (script D15: `questions` = 548 KB per reply). Stored per submit it made
+# submissions.jsonl 53 MB (93 submits, alt armA) -> is_complete 0.79 s/call and a ready-watcher crash on a half-written line.
+BIG_BODY_KEYS = ("questions", "prompt", "guidance", "instructions", "description")
+
+
+def slim_body(body):
+    """A GM reply minus the challenge text it re-sends (verdict, remaining, ids and errors are kept)."""
+    if not isinstance(body, dict):
+        return body
+    return {k: v for k, v in body.items() if k not in BIG_BODY_KEYS}
+
+
 def log(cid, op, env):
     target = cdir(cid) / "log.jsonl" if cid else paths.LOGS / "gm.jsonl"
+    if op == "submit" and isinstance(env, dict) and isinstance(env.get("body"), dict):
+        env = {**env, "body": slim_body(env["body"])}
     with open(target, "a") as f:   # t: sub-second wall clock (drop-time latency forensics; ts is 1 s resolution)
         f.write(json.dumps({"ts": now(), "t": round(time.time(), 3), "op": op, **env}, ensure_ascii=False) + "\n")
 
@@ -108,7 +123,7 @@ def result_kind(body):
     r = str((body or {}).get("result", "")).lower()
     if r == "correct":
         return "correct"
-    if r in ("incorrect", "accepted", "expired"):
+    if r in ("incorrect", "accepted", "expired", "already_solved"):
         return r
     return None
 
@@ -436,6 +451,9 @@ def _bisect_rejected(cid, answers, budget=40, harness=None, families=True):
                 return "ok"
             if kind == "incorrect":
                 return "bad"
+            if kind == "already_solved":
+                n[0] = budget             # the attempt is CORRECT: nothing left to learn, stop the whole bisect
+                return None
             # rate_limited / empty / non-JSON / expired: UNJUDGED, never a rejection (a 'bad' here recorded fields the
             # GM never judged as wrong) -- resend once, then leave the group unjudged
             print(f"bisect: probe of {len(g)} field(s) unjudged ({kind}); resending once", file=sys.stderr)
@@ -630,7 +648,18 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
     # Auto-apply the GM's stated normalization so a stray space/case never wastes a submission.
     answers = {k: _normalize(str(v), qmap.get(k, {})) for k, v in answers.items()}
     subs_path = cdir(cid) / "submissions.jsonl"
-    history = [json.loads(l) for l in subs_path.read_text().splitlines()] if subs_path.exists() else []
+    if att and att in _correct_attempts(subs_path):
+        # Already CORRECT: the GM answers already_solved ("not scored"). alt armA D15: a background bisect kept sending
+        # 11 of those after its worker was ended, beside the Time Trial kickoff.
+        print("note: this attempt is already CORRECT (already_solved): nothing sent", file=sys.stderr)
+        return "already_solved", {"result": "already_solved", "local": True}, []
+    history = []
+    if subs_path.exists():
+        for ln in subs_path.read_text().splitlines():
+            try:
+                history.append(json.loads(ln))
+            except ValueError:
+                continue          # a torn line (writer mid-append)
     # probe=True submissions (harness reuse/localization batches) prove nothing about any single value when the
     # batch is incorrect, so they never feed the "already judged incorrect" / per-field wrong-count guards.
     same_attempt = [h for h in history if h.get("attempt") == att and not h.get("probe")]
@@ -725,7 +754,7 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
 
     with open(subs_path, "a") as f:
         f.write(json.dumps({"ts": now(), "attempt": att, "answers": answers, "http": env["http"],
-                            "kind": kind, "confirmed": sorted(newly), "body": env["body"],
+                            "kind": kind, "confirmed": sorted(newly), "body": slim_body(env["body"]),
                             **({"probe": True} if probe else {}), **({"harness": harness} if harness else {})},
                            ensure_ascii=False) + "\n")
     return kind, body, []
@@ -737,7 +766,7 @@ def record_remote_result(cid, att, answers, kind, body=None):
     with open(cdir(cid) / "submissions.jsonl", "a") as f:
         f.write(json.dumps({"ts": now(), "attempt": att, "answers": answers, "http": 200,
                             "kind": kind, "confirmed": sorted(answers) if kind in ("correct", "accepted") else [],
-                            "body": body, "via": "homebase"}, ensure_ascii=False) + "\n")
+                            "body": slim_body(body), "via": "homebase"}, ensure_ascii=False) + "\n")
     if kind in ("correct", "accepted") and answers:
         allc = load(cid, "confirmed.json") or {}
         allc.setdefault(att or "_", {}).update(answers)
@@ -796,15 +825,42 @@ def ever_correct(cid):
     return False
 
 
+_correct_cache = {}
+
+
+def _correct_attempts(p):
+    """Attempt ids with a `correct` submission in submissions.jsonl. Cached by (size, mtime); a torn / bad line (a
+    writer mid-append) is skipped, never raised (alt armA D15: `Unterminated string` killed the ready-watcher)."""
+    try:
+        st = p.stat()
+    except OSError:
+        return set()
+    key = (st.st_size, st.st_mtime_ns)
+    hit = _correct_cache.get(str(p))
+    if hit and hit[0] == key:
+        return hit[1]
+    out = set()
+    with open(p, "rb") as f:
+        for raw in f:
+            if b'"correct"' not in raw:
+                continue
+            try:
+                r = json.loads(raw)
+            except ValueError:
+                continue
+            if r.get("kind") == "correct":
+                out.add(r.get("attempt"))
+    _correct_cache[str(p)] = (key, out)
+    return out
+
+
 def is_complete(cid):
     """All answer_ids of the current attempt confirmed, or a CORRECT result recorded for it."""
     start = load(cid, "start.json")
     if not start:
         return False
     att = attempt_id(start)
-    p = cdir(cid) / "submissions.jsonl"
-    if p.exists() and any(json.loads(l).get("attempt") == att and json.loads(l).get("kind") == "correct"
-                          for l in p.read_text().splitlines()):
+    if att in _correct_attempts(cdir(cid) / "submissions.jsonl"):
         return True
     ids = start.get("answer_ids") or []
     return bool(ids) and set(ids) <= set(confirmed_answers(cid, att))

@@ -209,6 +209,10 @@ class Duel:
                 if not _reserve(self.key):
                     log(f"[{self.cid}] no duel {self.stage}: {MAX_CONCURRENT} duels already running")
                     return
+                if self.cases and self.stage == "single":
+                    join = getattr(self.chain, "_join_prior_cases", None)
+                    if join:
+                        join(self.cid)    # the background prior cases/ copy (stage_prior_cases) must be complete
                 _copy_solver(self.chain.sdir, self.ddir, self.cases)
                 self.copied.set()
                 log(f"[{self.cid}] duel {self.stage} worker -> local (effort {EFFORT}"
@@ -261,8 +265,9 @@ class Duel:
 
     def watch_single(self, ready_get, log=print):
         """Thread body beside a single duel: hand a verified snapshot to the chain the moment the single is CORRECT."""
-        try:
-            while not self.stop_evt.wait(POLL):
+        errs = 0
+        while not self.stop_evt.wait(POLL):
+            try:
                 if not cli.is_complete(self.cid):
                     if not self.alive() and self.thread is not None:
                         return
@@ -283,8 +288,12 @@ class Duel:
                     return
                 if not self.alive():
                     return
-        except Exception as e:  # noqa: BLE001 - must never hurt the chain
-            log(f"[{self.cid}] duel watch note: {e}")
+            except Exception as e:  # noqa: BLE001 - must never hurt the chain; one bad poll must not end the watch
+                errs += 1
+                if errs <= 3:
+                    log(f"[{self.cid}] duel watch note: {e}")
+                if errs >= 50:
+                    return
 
     def wait_snap(self, seconds, log=print):
         """Chain's own worker ended without a passing solver: wait (bounded) for the duel's verified one."""

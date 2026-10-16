@@ -184,7 +184,7 @@ truth["d12_analysis_hcfg_offset"] = "82928"
 gm, calls, conf = run_race("race-d12", truth, high, spec)
 assert len(conf) >= 120 and len(calls) <= 7 and "d12_analysis_hcfg_offset" not in conf, (len(conf), len(calls))
 note = ch._go_pending[0]
-assert "only these 1 remain" in note and "d12_analysis_hcfg_offset" in note and '"999"' in note, note
+assert "1 remain, by family" in note and "d12_analysis_hcfg_offset" in note and '"999"' in note, note
 print(f"ok  race D12 replica: {len(conf)}/121 banked in {len(calls)} submits; note names only hcfg_offset + its bad value")
 
 gm, calls, conf = run_race("race-inc", truth, dict(list(truth.items())[:100]), {})
