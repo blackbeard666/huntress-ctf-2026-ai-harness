@@ -135,8 +135,10 @@ else
     # a user unit does NOT inherit this shell's environment: carry every HCTF_* / HUNTRESS_* override over explicitly
     SETENV=()
     while IFS= read -r kv; do SETENV+=(--setenv="$kv"); done < <(env | grep -E '^(HCTF_|HUNTRESS_)[A-Za-z0-9_]*=' || true)
+    # the script goes to a FILE: systemd expands `$` in a unit's command line ($$ -> $, $(date) mangled)
+    printf '%s\n' "$SCRIPT" > "$ROOT/.run/$DAYTAG.unit.sh"
     systemd-run --user --collect --unit "$UNIT" --working-directory "$ROOT" -p MemoryHigh="${HIGHMB}M" \
-      -p MemoryMax="${MAXMB}M" "${SETENV[@]}" bash -lc "$SCRIPT" >/dev/null 2>&1
+      -p MemoryMax="${MAXMB}M" "${SETENV[@]}" bash -l "$ROOT/.run/$DAYTAG.unit.sh" >/dev/null 2>&1
     echo "$UNIT" > "$ROOT/.run/$DAYTAG.unit"
     echo "[run] launched as systemd user unit $UNIT (MemoryHigh ${HIGHMB}M, MemoryMax ${MAXMB}M; pid in $PIDF)."
     echo "      status:  systemctl --user status $UNIT"
