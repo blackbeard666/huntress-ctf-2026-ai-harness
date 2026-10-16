@@ -372,6 +372,9 @@ f.process("22:39:08 [postrun] day16: restored challenges/day16/x/solver from its
 assert "generalize" not in f.heartbeat(), f.heartbeat()
 out = f.process("23:10:00 post-run finished")
 assert f.done and "post-run finished" in out[-1], out
+f.process("23:21:11 [postrun] day 16: resuming from 'ratchet' (ratchet -> speed-harden)")
+assert not f.done and f.post                # a resumed post-run in the same log re-opens the feed
+f.process("23:30:00 post-run finished")
 f2 = feed.Feed()                       # not a day.sh run: ends at the chains, as before
 [f2.process(ln) for ln in lines[:3]]
 assert f2.done

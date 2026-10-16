@@ -172,6 +172,9 @@ class Feed:
         """Post-run lines (hctf/postrun.py phase markers + the phases' own tagged lines) -> feed messages."""
         t = self._t()
         if tag == "postrun":
+            if re.match(r"(\S+ start|day \d+: resuming)", msg):
+                # a resumed post-run (`hctf postrun`) appends to the same log after an earlier "post-run finished"
+                self.done, self.post = False, True
             m = re.match(r"(\S+) (start|done|FAILED)\b(.*)", msg)
             if m:
                 name, what, rest = m.groups()
