@@ -929,3 +929,23 @@ assert _syn15.digest_order(_q15, _files15.get) == _js15.dumps(
     sorted(_files15, key=lambda n: _hl15.sha256(_files15[n]).hexdigest()), separators=(",", ":"))
 assert _syn15.ID.search("set1.metadata-day-15-synthesis-sha256-order")
 print("ok  lib.meta: ooxml.external_relationship_targets (verified D15) + synthesis.digest_order")
+
+# Day 16 "Dot Com": Morse whose symbols spell the HEX digits of the UTF-8 sentence (lib.warmups_codecs.DAYS day 16 exact
+# encoder + decode_chunk's Morse branch; the hex reading outranks the equally 'wordy' raw hex digits).
+_s16 = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: silly-banner-marble-88"
+_m16 = _wc.day_codec(16)[1](_s16)
+assert _m16.startswith("....- . -.... ----. ") and _wc.day_codec(16)[2](_m16) == _s16 and _wc.day_codec(16)[3] is False
+assert _dc(_m16) == _s16 and _dc("... --- ...") == "SOS"   # GM-confirmed D16 single slug
+print("ok  decode: Morse-hex (D16) exact encoder + decode_chunk branch")
+
+# Day 16 "Return to Sender": email.message_id verified (Message-ID verbatim, <> kept; GM format token `email`, prebuilt
+# eml.py promoted) + resolve() aliases email <-> eml for the remaining speculative eml.* fields.
+_e16 = (b"From: a <a@example.test>\r\nTo: b@example.test\r\nMessage-ID: <artifact-assembly-line@example.test>\r\n"
+        b"Return-Path: <bounce@example.test>\r\nSubject: hi\r\n\r\nbody\r\n")
+assert _meta14.lookup("email", "message_id")[0].tier == _meta14.VERIFIED
+assert _meta14.answer("d16-email-001-email-message-id",
+                      {"question": "Determine email.message_id for message-001.eml."}, _e16) \
+    == ("<artifact-assembly-line@example.test>", _meta14.VERIFIED)
+assert _meta14.answer("d17-email-001-email-return-path", {}, _e16) == ("bounce@example.test", _meta14.SPECULATIVE)
+assert ("eml", "message_id") not in _meta14.REGISTRY and not _meta14.CONFLICTS
+print("ok  lib.meta: email.message_id registered (verified D16) + email<->eml format alias")

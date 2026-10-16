@@ -283,7 +283,13 @@ def decode_chunk(p, _nested=False):
         from lib import warmups_codecs as _wc
         syms = re.split(r"\s*/\s*|\s+", t)
         if all(x in _wc._UNMORSE for x in syms if x):
-            cands.append((_wc.morse_dec(t).upper(), 0))
+            hx = _wc.morse_dec(t).replace(" ", "")
+            hexy = _max_day() >= 16 and re.fullmatch(r"(?:[0-9a-f]{2})+", hx) and _ascii(bytes.fromhex(hx))
+            if hexy:
+                # MORSE-HEX (warmups Day 16 "Dot Com": '....- . -.... ----. ...' = '4e69...'): Morse symbols spell the
+                # hex digits of the UTF-8 text; outranks the (equally 'wordy') raw hex-digit reading
+                cands.append((hexy, 0))
+            cands.append((_wc.morse_dec(t).upper(), 1 if hexy else 0))
     if STRICT_EXTRA and re.fullmatch(r"\d{1,2}(?:-\d{1,2})+(?: +\d{1,2}(?:-\d{1,2})*)*", t) \
             and all(1 <= int(x) <= 26 for x in re.findall(r"\d+", t)):
         # A1Z26 letter numbers (no warmups day yet): dash-joined 1..26 inside a word, words split by spaces. Decimal char

@@ -50,7 +50,8 @@
     "elf",
     "pe",
     "pe_cli",
-    "jar"
+    "jar",
+    "wasm"
   ],
   "_machine": [
     "x86-64",
@@ -89,7 +90,8 @@
     "elf",
     "pe",
     "pe_cli",
-    "jar"
+    "jar",
+    "wasm"
   ],
   "machine": [
     "x86-64",

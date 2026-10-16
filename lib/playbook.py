@@ -258,7 +258,9 @@ PLAYBOOK = [
              "(bare or inside `for %%G in (..) do call set`) = `call_double` (33/33); a `for %%G in (..) do call set` "
              "join over any OTHER pool (v_a/item/fragment/FrAg..) = `for_indirect` (122/122); everything else = "
              "`delayed` (390/390) -- including h-pools joined with `!h0!!h1!..` (why D6's h-pools were delayed). "
-             "EXCEPT contract run_for_time:false (D15 regular untimed pool, 54/54): the join STATEMENT alone -- FOR = "
+             "EXCEPT contract run_for_time:false (D15 regular untimed pool, 54/54) AND every attempt started on/after "
+             "2026-10-16 (D16 single + TT, run_for_time ABSENT, 18/18; `delayed` for a %-join REJECTED on the D16 "
+             "single): the join STATEMENT alone -- FOR = "
              "`for_indirect` over ANY pool, `call set` over h = `call_double`, other `call set` = `percent`, "
              "`!x!` = `delayed`, `%x%` = `percent` (K.BATCH_EXPANSION_STATEMENT_RULE).",
         confirmed=tuple(K.BATCH_EXPANSION_VOCAB),

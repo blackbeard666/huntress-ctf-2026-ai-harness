@@ -171,6 +171,14 @@ OOXML_EXTERNAL_RELATIONSHIP_TARGETS_REJECTED = ['["https://example.test/evidence
 # digest ascending -> compact JSON list of the names. lib.meta.synthesis.digest_order(question, read).
 METADATA_SYNTHESIS_DIGEST_ORDER = "sorted(Files, key=hexdigest(member bytes)) ascending"
 
+# Day 16 "Return to Sender" (metadata-forensics), confirmed 2026-10-16 (single, TT, Mastery 5 sets): id
+# d16-email-NNN-email-message-id ("Determine email.message_id for message-NNN.eml.") = the Message-ID header VERBATIM,
+# angle brackets KEPT ("<artifact-assembly-line@example.test>"). The bracket-stripped addr-spec and "none" were
+# REJECTED on the single. The GM's format token is `email` (prebuilt keyed `eml`): lib.meta.eml.message_id, and
+# lib.meta.resolve() aliases email <-> eml for the other (speculative) prebuilt eml.* fields.
+EMAIL_MESSAGE_ID = "Message-ID header verbatim, <> kept"
+EMAIL_MESSAGE_ID_REJECTED = ["artifact-assembly-line@example.test", "none"]
+
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {
     "resource_hijacking": "T1496",     # crypto-mining / resource hijacking
@@ -214,6 +222,11 @@ BATCH_EXPANSION_VOCAB = ("percent", "delayed", "call_double", "for_indirect")
 BATCH_EXPANSION_STATEMENT_RULE = {"for": "for_indirect", "call_set_h": "call_double", "call_set": "percent",
                                   "bang": "delayed", "percent": "percent"}
 BATCH_EXPANSION_STATEMENT_REJECTED = {"for_h": ["call_double"], "percent": ["delayed"]}
+# Day 16 "Same Same, But Different": the statement rule ALSO held with run_for_time ABSENT (single + TT, 18/18
+# GM-verified; the old law's `delayed` for `set "x=%a%%b%"` + echo(!x!) was REJECTED on the single). Switch the D16
+# solver used: run_for_time is False OR contract started_at >= "2026-10-16" (the saved D16 TT contract carries no
+# started_at -- a date-only switch must also read the attempt's start time).
+BATCH_EXPANSION_STATEMENT_SINCE = "2026-10-16"
 # Batch "control-flow form" vocabulary (Day 3 "Expansion Pack", GM-confirmed): `direct` (no control construct on the
 # executed path), `errorlevel_guard` (`ver >nul` + `if errorlevel 1 exit /b 1`), `goto_dispatch` (`goto :LABEL` +
 # `:LABEL`), `call_subroutine` (`call :LABEL` ... `exit /b 0`). Rejected for `direct`: linear, straight_line,

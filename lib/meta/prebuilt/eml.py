@@ -1,4 +1,5 @@
-"""RFC 5322 / MIME e-mail (.eml) header fields (prebuilt, SPECULATIVE -- never GM-asked yet).
+"""RFC 5322 / MIME e-mail (.eml) header fields (prebuilt, SPECULATIVE; message_id PROMOTED: lib.meta _BUILTIN
+("email", "message_id") -> lib.meta.eml.message_id, GM-verified D16).
 
 Parsed with stdlib email.message_from_bytes(b, policy=email.policy.default); header values come from raw_items()
 (unfolded: CRLF + leading whitespace -> one space, then trimmed) so a malformed header never raises.
@@ -17,7 +18,6 @@ Return-Path header, binary magic) -> "none"; an absent header -> "none"."""
 import re
 
 FIELDS = {
-    ("eml", "message_id"): "eml_value",
     ("eml", "header_message_id"): "eml_value",
     ("eml", "return_path"): "eml_value",
     ("eml", "return_path_address"): "eml_value",

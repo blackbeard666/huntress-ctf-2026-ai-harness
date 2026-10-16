@@ -118,14 +118,17 @@ def decode_all(max_day=99):
     return out
 
 
+# Historic = days before the newest codec rule: D16's MORSE-HEX (lib/decode.py, `_max_day() >= 16`) changes D16 blobs
+# on purpose, so the zero-change sweep stops at D15.
+HISTORIC_MAX = 15
 # the pre-change behaviour: every new flag off and the speculative entries removed
 saved_free = list(decode._FREE)
 with mock.patch.object(decode, "STRICT_EXTRA", False), mock.patch.object(decode, "SPECULATIVE_FREE", False):
     decode._FREE[:] = [e for e in saved_free if e[1] is not None]
     t0 = time.time()
-    old = decode_all()
+    old = decode_all(HISTORIC_MAX)
     decode._FREE[:] = saved_free
-new_out = decode_all()
+new_out = decode_all(HISTORIC_MAX)
 assert len(blobs) > 300 and old == new_out, (len(blobs), sum(a != b for a, b in zip(old, new_out)))
 print(f"ok  D2 historic sweep: {len(blobs)} distinct warmups blobs (whole, chunked, every line) decode identically with "
       "strict morse/a1z26 + speculative free codecs on")

@@ -85,6 +85,9 @@ DAYS = [
     (13, "atbash", atbash, atbash, True),
     (14, "caesar+7", lambda s: rot(s, 7), lambda t: rot(t, -7), True),
     (15, "rot47", lambda s: rot47(s), lambda t: rot47(t), True),   # D15 "Room Forty-Seven": punctuation spins too
+    # D16 "Dot Com" ("Sixteen little symbols ... Dot dot dot"): Morse of the UTF-8 HEX digits, one space between symbols
+    (16, "morse-hex", lambda s: " ".join(_MORSE[c.upper()] for c in _u(s).hex()),
+     lambda t: _t(bytes.fromhex(morse_dec(t).replace(" ", ""))), False),
 ]
 
 try:   # fair runs (HCTF_CODEC_MAX_DAY=<N-1>, as lib/codec.py): only codecs GM-confirmed before day N

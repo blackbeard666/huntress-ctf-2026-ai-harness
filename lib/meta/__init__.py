@@ -75,6 +75,8 @@ _BUILTIN = {
     ("msi", "product_language"): _s("msi:property_value"),
     ("lnk", "target_path_windows"): _v("lnk:target_path", 14),
     ("ooxml", "external_relationship_targets"): _v("ooxml:external_relationship_targets", 15),
+    # D16: the GM's format token is `email` (prebuilt eml.py keys `eml`); Message-ID verbatim, angle brackets KEPT
+    ("email", "message_id"): _v("eml:message_id", 16),
 }
 
 PREBUILT_DIR = Path(__file__).resolve().parent / "prebuilt"
@@ -159,6 +161,9 @@ def lookup(fmt, field):
 # +43 s by the LLM worker instead of ~+3 s).
 _RENDER_SUFFIXES = ("_windows", "_posix", "_utc", "_iso8601", "_unix", "_text", "_string", "_str", "_value", "_bytes")
 ALIASES = os.environ.get("HCTF_META_ALIASES", "1") != "0"
+# Format tokens the GM spells differently from a prebuilt module's key (D16 asked `email.message_id`; prebuilt eml.py
+# registers `eml.*`): resolve() retries the same field under the alias format, SPECULATIVE.
+_FMT_ALIASES = {"email": ("eml",), "eml": ("email",)}
 
 
 def resolve(fmt, field):
@@ -178,6 +183,10 @@ def resolve(fmt, field):
         e = reg.get((fmt, c))
         if e is not None:
             return Extractor(e.fn, SPECULATIVE, e.days), None, c
+    for alt in _FMT_ALIASES.get(fmt, ()):
+        e, param = lookup(alt, field)
+        if e is not None:
+            return Extractor(e.fn, SPECULATIVE, e.days), param, field
     return None, None, None
 
 
@@ -198,6 +207,26 @@ def _field(fmt, field):
     return Field(fmt, field, None)
 
 
+_ID_PATTERNS = []
+
+
+def _id_patterns():
+    """[(fmt, field, compiled `-<fmt>-<field>$` id-suffix regex, size)] of every non-identity REGISTRY key, compiled
+    ONCE: ~700 keys x 2 re.search per answer id overflowed re's cache (D16 lane Mastery: 68k compiles, 1 s of 1.05 s)."""
+    if not _ID_PATTERNS:
+        for fmt, fld in REGISTRY:
+            if fmt == "file":
+                continue
+            dashed = fld.replace("_", "-")
+            if fld.endswith("_*"):
+                rx = re.compile(rf"(?:^|-){re.escape(fmt)}-{re.escape(dashed[:-1])}([a-z0-9-]+)$")
+                _ID_PATTERNS.append((fmt, fld, rx, len(dashed) - 1))
+            else:
+                _ID_PATTERNS.append((fmt, fld, re.compile(rf"(?:^|-){re.escape(fmt)}-{re.escape(dashed)}$"),
+                                     len(dashed)))
+    return _ID_PATTERNS
+
+
 def parse_field(aid, q=None):
     """Field(fmt, field, param) of an answer id (+ its question), or None. Order: the question grammar
     "Determine fmt.field for ...", the id `dNN-<fmt>-NNN-<fmt>-<field>`, an id ending in a registered `-<fmt>-<field>`,
@@ -212,18 +241,12 @@ def parse_field(aid, q=None):
     if m:
         return _field(m.group(1), m.group(2).replace("-", "_"))
     best = None
-    for fmt, fld in REGISTRY:
-        if fmt == "file":
+    for fmt, fld, rx, size in _id_patterns():
+        mm = rx.search(tail)
+        if not mm:
             continue
-        dashed = fld.replace("_", "-")
-        if fld.endswith("_*"):
-            mm = re.search(rf"(?:^|-){re.escape(fmt)}-{re.escape(dashed[:-1])}([a-z0-9-]+)$", tail)
-            hit = (fmt, fld[:-1] + mm.group(1).replace("-", "_")) if mm else None
-            size = len(dashed) - 1
-        else:
-            hit = (fmt, fld) if re.search(rf"(?:^|-){re.escape(fmt)}-{re.escape(dashed)}$", tail) else None
-            size = len(dashed)
-        if hit and (best is None or size > best[0]):
+        hit = (fmt, fld[:-1] + mm.group(1).replace("-", "_")) if fld.endswith("_*") else (fmt, fld)
+        if best is None or size > best[0]:
             best = (size, hit)
     if best:
         return _field(*best[1])
