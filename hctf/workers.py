@@ -15,7 +15,7 @@ import time
 import uuid
 from pathlib import Path
 
-from . import remote
+from . import paths, remote
 from .paths import BIN, TMP, TOOLS
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -813,6 +813,60 @@ UNTIMED_BUDGET = float(os.environ.get("HCTF_UNTIMED_BUDGET", "60"))   # solver s
 UNTIMED_ON_HOMEBASE = os.environ.get("HCTF_UNTIMED_ON_HOMEBASE", "1") != "0"   # untimed/resume attempts next to the GM
 
 
+def runner_progress(cid, since=0.0):
+    """hb_timed's progress file for this mode (attempt id, banked per-set results), if written after `since`."""
+    import re as _re
+    p = ROOT / ".run" / "tmp-timed" / (_re.sub(r"[^A-Za-z0-9]+", "_", cid) + ".progress.json")
+    try:
+        if p.stat().st_mtime < since:
+            return {}
+        d = json.loads(p.read_text())
+    except (OSError, ValueError):
+        return {}
+    d.pop("result", None)
+    return d
+
+
+LOCALIZE_UNTIMED_MAX = float(os.environ.get("HCTF_LOCALIZE_UNTIMED_MAX", "420"))
+UNTIMED_DL_MBPS = float(os.environ.get("HCTF_UNTIMED_DL_MBPS", "0.5"))   # worst local public-GM download rate seen (D16)
+
+
+def _contract_shape(cid):
+    """(answer ids, delivery bytes, sets) of the mode's saved status-time contract; zeros when unknown."""
+    from . import cli
+    try:
+        c = json.loads((cli.cdir(cid) / "contract.json").read_text())
+    except (OSError, ValueError):
+        return 0, 0, 0
+    ids = c.get("answer_ids") or [q.get("id") for q in c.get("questions") or [] if isinstance(q, dict)]
+    nb = sum(int(a.get("size") or 0) for a in c.get("artifacts") or [] if isinstance(a, dict))
+    sets = {str(i).split(".", 1)[0] for i in ids if "." in str(i)}
+    if not nb and paths.base_id(cid) != cid:
+        # status-time contracts carry no sizes: one delivery per set, each about the size of the single's bytes
+        # (D9/D16 binary: 31 MB single, 5 x 31 MB Mastery)
+        try:
+            from . import timed
+            art = timed.latest_artifacts(paths.base_id(cid))
+            one = sum(f.stat().st_size for f in art.rglob("*") if f.is_file()) if art else 0
+            nb = one * max(1, len(sets))
+        except (OSError, AttributeError):
+            pass
+    return len(ids), nb, len(sets)
+
+
+def untimed_plan(cid):
+    """(runner timeout s, in-attempt localize budget s) for a NO-CLOCK attempt, scaled to the contract.
+    D16 script Mastery (5475 ids, 5 sets): the flat UNTIMED_BUDGET + 60 = 120 s cut a ~259 s localization six times."""
+    n, nb, nsets = _contract_shape(cid)
+    if "HCTF_LOCALIZE_UNTIMED_S" in os.environ:
+        loc = float(os.environ["HCTF_LOCALIZE_UNTIMED_S"])
+    else:
+        loc = max(75.0, min(LOCALIZE_UNTIMED_MAX, 60 + n / 40))
+    dl = min(240.0, nb / 1e6 / UNTIMED_DL_MBPS)
+    sub = (nsets + 2) * max(4.0, n / 1000 * 2)          # full + per-set submits (+ the final resubmit)
+    return round(20 + dl + UNTIMED_BUDGET + sub + loc + 30), round(loc)
+
+
 def timed_env(cid):
     """Env for hb_timed (local or over ssh): pipeline knobs from this process + HCTF_EXPECT_BYTES = the delivery bytes
     the saved status-time contract lists (the live start body carries no sizes: the rehearsal's binary Mastery,
@@ -835,6 +889,7 @@ def timed_env(cid):
     ov = live_overlay(cid)
     if ov:
         env["HCTF_LIVE_OVERLAY"] = json.dumps(ov, separators=(",", ":"))
+    env.setdefault("HCTF_LOCALIZE_UNTIMED_S", str(untimed_plan(cid)[1]))   # only used on a no-clock attempt
     return env
 
 
@@ -880,11 +935,17 @@ def run_timed(solver_dir, cid, op="start", timeout=60):
         # Clock-critical calls straight to this GM (e.g. the real one while a replay proxy fronts everything else: the
         # proxy opens a fresh TLS connection per call, ~0.5-1 s each inside a 6-7 s window).
         env["HUNTRESS_GAME_MASTER_URL"] = os.environ["HCTF_TIMED_GM_URL"]
+    from . import procgov
+    # hb_timed stops localizing ~15 s before this deadline and prints its result (never killed mid-localization)
+    env["HCTF_RUNNER_DEADLINE"] = f"{time.time() + timeout:.3f}"
+    t_call = time.time()
     try:
-        r = subprocess.run([sys.executable, str(ROOT / "hctf" / "hb_timed.py"), cid, str(rel), "--op", op],
-                           cwd=ROOT, capture_output=True, text=True, timeout=timeout, env=env)
+        r = procgov.run([sys.executable, str(ROOT / "hctf" / "hb_timed.py"), cid, str(rel), "--op", op],
+                        cwd=ROOT, timeout=timeout, env=env, background=False)
     except subprocess.TimeoutExpired:
-        return {"result": "exec_error", "detail": "local hb_timed timed out"}
+        # what the runner persisted before the kill: the attempt id (-> the next try RESUMES it, never op=start) and
+        # what the GM accepted (-> _prev_banked)
+        return {"result": "exec_error", "detail": "local hb_timed timed out", **runner_progress(cid, since=t_call)}
     except OSError as e:   # e.g. E2BIG: never crash the chain on a runner that could not start
         return {"result": "exec_error", "detail": f"local hb_timed did not start: {e}"[:300]}
     try:
@@ -957,22 +1018,85 @@ def _provision(log):
         _hb["provisioned"] = True
 
 
-def _bench_vm(log=print):
+def _bench_vm(log=print, again=True):
     """CPU benchmark: the same pure-Python + sha256 loop here and on the VM (timed inside the interpreter, so ssh latency
-    is not counted) -> _hb["cpu_ratio"] (VM seconds / local seconds) + _hb["mem_mb"]. Best effort."""
+    is not counted) -> _hb["cpu_ratio"] (VM seconds / local seconds) + _hb["mem_mb"]. Best of two runs on the VM; a VM
+    booted < 5 min ago is benchmarked again at 5 min of uptime (D16: x14.3 at boot + 2 min, x9-10 steady). Best effort."""
     try:
         loc = subprocess.run([sys.executable, "-c", BENCH_PY], capture_output=True, text=True, timeout=60)
         t_loc = float(loc.stdout.strip().splitlines()[-1])
-        r = remote.ssh(f"python3 -c {shlex.quote(BENCH_PY)}; awk '/^MemTotal/{{print int($2/1024)}}' /proc/meminfo",
-                       timeout=90, check=False)
+        r = remote.ssh(f"python3 -c {shlex.quote(BENCH_PY)}; python3 -c {shlex.quote(BENCH_PY)}; "
+                       "awk '/^MemTotal/{print int($2/1024)}' /proc/meminfo; awk '{print int($1)}' /proc/uptime",
+                       timeout=150, check=False)
         lines = r.stdout.strip().splitlines()
-        t_vm, mem = float(lines[0]), int(lines[1]) if len(lines) > 1 else None
+        t_vm = min(float(lines[0]), float(lines[1]))
+        mem = int(lines[2]) if len(lines) > 2 else None
+        up = int(lines[3]) if len(lines) > 3 else None
         _hb.update(cpu_ratio=round(t_vm / max(t_loc, 1e-3), 2), mem_mb=mem)
         slow = _hb["cpu_ratio"] >= SLOW_VM_RATIO
         log(f"[homebase] CPU benchmark: VM {t_vm:.2f}s vs local {t_loc:.2f}s (x{_hb['cpu_ratio']:g}), {mem} MB RAM"
-            + (f" -> SLOW VM: untimed / >{SLOW_VM_WINDOW:g}s-window attempts run locally" if slow else ""))
+            + (f", VM up {up // 60} min" if up is not None else "")
+            + (" -> SLOW VM (routing weighs CPU against bytes + GM round trips)" if slow else ""))
+        if again and up is not None and up < 300:
+            def later():
+                time.sleep(300 - up + 5)
+                _bench_vm(log, again=False)
+            threading.Thread(target=later, daemon=True, name="hb-rebench").start()
     except Exception as e:  # noqa: BLE001 - routing then stays Homebase-first
         log(f"[homebase] CPU benchmark skipped: {str(e)[:120]}")
+
+
+# Cost model for an attempt with no / a roomy clock: bytes + GM round trips + solver time, local vs Homebase.
+# D16: the CPU-only slow-VM rule sent binary's 31 MB Time Trial local -> 52 s of download at ~0.6 MB/s; the VM pulls
+# ~140 MB/s and sits next to the GM. Rates are conservative defaults, overridable.
+# Per download STREAM (hb_timed fetches every set's delivery at once): D16 local, a 31 MB single in ~10 s (~3 MB/s) and
+# the 5 x 32 MB Mastery in 14.6 s; the TT's 52 s was the host at load 27.
+LOCAL_DL_BPS = float(os.environ.get("HCTF_LOCAL_DL_MBPS", "3")) * 1e6
+HB_DL_BPS = float(os.environ.get("HCTF_HB_DL_MBPS", "40")) * 1e6
+LOCAL_RTT = float(os.environ.get("HCTF_LOCAL_GM_RTT", "1.8"))      # public GM submit, measured 2026-10-16
+HB_RTT = float(os.environ.get("HCTF_HB_GM_RTT", "0.4"))            # next to the GM (daemon), incl. the ssh hop
+
+
+def _solve_estimate(cid):
+    """Seconds this mode's solver takes locally: its last attempt's solve phase, else the single's stamp scaled by the
+    contract size, else 2 s."""
+    from . import cli
+    est = []
+    for c in (cid, f"{paths.base_id(cid)}/time_trial"):
+        try:
+            ph = json.loads((cli.cdir(c) / "last_timed.json").read_text()).get("phases") or {}
+            if ph.get("solve"):
+                est.append(float(ph["solve"]))
+                break
+        except (OSError, ValueError, AttributeError):
+            pass
+    try:
+        st = json.loads((cli.cdir(paths.base_id(cid)) / ".solver_stamp.json").read_text())
+        n1 = max(1, len(st.get("answers") or {}))
+        n, _, nsets = _contract_shape(cid)
+        # sets solve in parallel (the skeleton's per-set pool): scale by the per-set size, not the total
+        est.append(float(st.get("seconds") or 2.0) * max(1.0, n / max(1, nsets) / n1))
+    except (OSError, ValueError, AttributeError):
+        pass
+    return min(est) if est else 2.0   # the fastest measurement: a contended one (D16 load 27) overstates it
+
+
+def route_costs(cid):
+    """(local s, homebase s) estimates for one attempt of this mode."""
+    n, nb, nsets = _contract_shape(cid)
+    calls = 3 + nsets + n / 1000          # start + full/per-set submits (+ large-body transfer)
+    solve = _solve_estimate(cid)
+    ratio = float(_hb.get("cpu_ratio") or 1.0)
+    per_stream = nb / max(1, nsets)       # the deliveries download in parallel, one stream per set
+    return (per_stream / LOCAL_DL_BPS + calls * LOCAL_RTT + solve,
+            per_stream / HB_DL_BPS + calls * HB_RTT + solve * ratio)
+
+
+def homebase_cheaper(cid, log=None):
+    loc, hb = route_costs(cid)
+    if log:
+        log(f"[{cid}] route estimate: local {loc:.1f}s vs Homebase {hb:.1f}s (VM x{_hb.get('cpu_ratio') or '?'})")
+    return hb < loc
 
 
 def slow_vm():
@@ -1065,9 +1189,9 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=
         # attempt's GM calls still dominate: rehearsal D13 replay, a script retry took 115 s locally (~25 localize submits at
         # ~3.3 s over the public GM) vs ~0.5 s/submit next to the GM. Homebase when it is up (the failure path pulls
         # the variant bytes back for the generalize worker either way); local is the fallback.
-        ut = max(timeout, UNTIMED_BUDGET + 60)
-        if (UNTIMED_ON_HOMEBASE and AUTO_HOMEBASE and remote.gm_transport() == "local" and not slow_vm()
-                and _homebase_ready(log)):
+        ut = max(timeout, untimed_plan(cid)[0])     # scaled to the contract (D16: a flat 120 s, killed 6x)
+        if (UNTIMED_ON_HOMEBASE and AUTO_HOMEBASE and remote.gm_transport() == "local"
+                and (not slow_vm() or homebase_cheaper(cid, log)) and _homebase_ready(log)):
             res = run_hb_timed(solver_dir, cid, op=op, timeout=ut)
             if str(res.get("result", "")).lower() != "exec_error" or res.get("gm_rate_limited"):
                 res.setdefault("routed", "homebase (untimed)")
@@ -1087,14 +1211,14 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=
         return res
     win = known_window(cid)
     tight = win is None or win <= TIGHT_WINDOW
-    if tight and slow_vm() and (win is None or win > SLOW_VM_WINDOW):
+    if tight and slow_vm() and (win is None or win > SLOW_VM_WINDOW) and not homebase_cheaper(cid, log):
         tight = False
         log(f"[{cid}] Homebase VM is x{_hb.get('cpu_ratio')} slower than this host and the window is "
             f"{'unknown/untimed' if win is None else f'{win:g}s'}: running locally")
     if win is None:
         # no known clock (HCTF_RUN_FOR_TIME=auto -> the untimed regular pool): the attempt may localize for up to
         # HCTF_LOCALIZE_UNTIMED_S; a 60 s call timeout cut it off and re-ran it over ssh + locally (a13sota6: 12 min)
-        timeout = max(timeout, UNTIMED_BUDGET + 60)
+        timeout = max(timeout, untimed_plan(cid)[0])
     if AUTO_HOMEBASE and tight and _homebase_ready(log):
         res = run_hb_timed(solver_dir, cid, op=op, timeout=timeout, on_event=on_event)
         if (str(res.get("result", "")).lower() in ("solver_incomplete", "solver_error") and res.get("missing")
@@ -1448,6 +1572,7 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60, on_event=None):
     d = hb_daemon()
     if d is not None:
         opts = timed_env(cid)
+        opts["HCTF_RUNNER_BUDGET"] = str(max(10, timeout - 5))   # hb_timed prints before this call times out
         if os.environ.get("HCTF_RUN_FOR_TIME") is not None:
             opts["HCTF_RUN_FOR_TIME"] = os.environ["HCTF_RUN_FOR_TIME"]
         try:
@@ -1464,7 +1589,8 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60, on_event=None):
     if res is None:
         try:
             rft = os.environ.get("HCTF_RUN_FOR_TIME")   # pool policy (hb_timed._rft); default there: auto (regular first)
-            fwd = "".join(f"{k}={shlex.quote(v)} " for k, v in timed_env(cid).items())
+            fwd = "".join(f"{k}={shlex.quote(v)} " for k, v in {**timed_env(cid),
+                                                                 "HCTF_RUNNER_BUDGET": str(max(10, timeout - 8))}.items())
             r = remote.ssh(f"cd ~/{HB_WORK} && HUNTRESS_GAME_MASTER_URL={remote.INSIDE_GM} "
                            + (f"HCTF_RUN_FOR_TIME={shlex.quote(rft)} " if rft is not None else "") + fwd
                            + f"python3 hctf/hb_timed.py {shlex.quote(cid)} {shlex.quote(str(rel))} --op {op}",

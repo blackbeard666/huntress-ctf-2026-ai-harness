@@ -56,6 +56,21 @@ def base_id(cid):
     return re.sub(r"/(time_trial|mastery)$", "", cid)
 
 
+def resolve_id(x):
+    """A GM challenge id as given, or the `dayNN/<dir>[/mode]` name `hctf dash` prints -> the GM id (D16: `hctf why
+    day16/metadata-return-to-sender` printed an empty '?' chain)."""
+    m = re.match(r"^(day\d+/[^/]+)(?:/(single_solve|time_trial|mastery))?/?$", str(x))
+    if not m:
+        return x
+    try:
+        import json as _json
+        meta = _json.loads((CHALLENGES / m.group(1) / "meta.json").read_text())
+    except (OSError, ValueError):
+        return x
+    base = meta.get("base") or x
+    return base if m.group(2) in (None, "single_solve") else f"{base}/{m.group(2)}"
+
+
 def mode_of(cid):
     m = re.search(r"/(time_trial|mastery)$", cid)
     return m.group(1) if m else "single_solve"

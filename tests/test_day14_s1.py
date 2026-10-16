@@ -182,7 +182,9 @@ spec = dict(list(truth.items())[110:])
 spec["d12_analysis_hcfg_offset"] = "999"          # the one wrong speculative field (D12)
 truth["d12_analysis_hcfg_offset"] = "82928"
 gm, calls, conf = run_race("race-d12", truth, high, spec)
-assert len(conf) >= 120 and len(calls) <= 7 and "d12_analysis_hcfg_offset" not in conf, (len(conf), len(calls))
+# <= 12 submits (was 7 sequential): the bisect now runs in parallel waves (hctf/grouptest.py, D16 post-mortem) -- both
+# halves of a failing group at once costs ~1 extra submit per level and saves a GM round trip per level
+assert len(conf) >= 120 and len(calls) <= 12 and "d12_analysis_hcfg_offset" not in conf, (len(conf), len(calls))
 note = ch._go_pending[0]
 assert "1 remain, by family" in note and "d12_analysis_hcfg_offset" in note and '"999"' in note, note
 print(f"ok  race D12 replica: {len(conf)}/121 banked in {len(calls)} submits; note names only hcfg_offset + its bad value")

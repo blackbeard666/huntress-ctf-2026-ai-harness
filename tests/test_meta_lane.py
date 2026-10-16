@@ -75,6 +75,9 @@ print(f"ok  0) baseline: D10/D11/D12/D13 day solvers pass {len(base)} verified c
 # in-window budget 1 s per case; HCTF_TEST_TIME_SLACK scales it when the box is deliberately loaded (the parallel
 # prebuild gates run beside 4 other lane workers: 1.01-1.48 s cases failed on contention, not on the solver)
 SLOW_S = 1.0 * float(os.environ.get("HCTF_TEST_TIME_SLACK", "1"))
+# The ratchet gate runs suites in parallel (and other suites/solvers may share the box): scale the budget with the
+# 1-min load per core, so a loaded host can't fail -- and REVERT -- a good lib merge on timing alone (D16 post-mortem).
+SLOW_S *= max(1.0, os.getloadavg()[0] / max(1, (os.cpu_count() or 2) / 2))
 # 1) every metadata case through the lane solver
 with ThreadPoolExecutor(max_workers=4) as ex:
     res = list(ex.map(lambda c: (c, run_case(LANE, c)), CASES))

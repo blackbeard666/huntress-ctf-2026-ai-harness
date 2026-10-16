@@ -10,9 +10,9 @@ Used by the orchestrator as a pre-attempt probe (orchestrate.Chain._compound_pre
 """
 import json
 import time
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from .procgov import Executor as _BgExecutor
 from . import paths, solvers
 
 ROOT = paths.ROOT
@@ -80,7 +80,7 @@ def check(sdir, per_day=3, timeout=30, parallel=6, deadline=None):
                 "total": len(ids), "wrong": wrong, "error": err, "seconds": round(dt, 2)}
 
     items = earlier_cases(sdir, per_day)
-    with ThreadPoolExecutor(max_workers=max(1, parallel)) as ex:
+    with _BgExecutor(max_workers=max(1, parallel)) as ex:
         return [r for r in ex.map(one, items) if r]
 
 

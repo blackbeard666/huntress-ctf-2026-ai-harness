@@ -4,13 +4,17 @@ The day log is hundreds of noisy lines and `hctf watch` is a full-screen board, 
 session (the orchestrator's Monitor, a reviewer's terminal) saw "binary Mastery solved, 9/15 at T+1:12" as it happened
 (rehearsal D13 replays: the old grep|cut monitor buffered everything until the run ended).
 
-    hctf feed --day 15                 follow .run/day15.log until "all chains finished"
-    hctf feed --log PATH [--from-start] [--no-follow]
+    hctf feed --day 15                 follow .run/day15.log; a bin/day.sh run (.run/day15.pid) is followed through the
+                                       POST-RUN too (ratchet, technique logs, speed-harden, train, prebuild, coverage)
+                                       until "post-run finished" -- or a ⚠ when the run process dies (D16: OOM)
+    hctf feed --log PATH [--from-start] [--no-follow] [--postrun]
 
 Lines:  T+1:03 ✅ script TT solved (in-attempt fix) [7/15]   ·   T+0:41 ⏳ metadata TT blocked -> generalize (+duel)
         T+1:55 🟢 metadata generalize accepted (42s)   ·   T+0:58 🤝 warmups duel won the single   ·   T+3:10 💬 hint ...
         T+2:00 · 12/15 solved · working: script Mastery (generalize 1:12)        (heartbeat, every 60 s while running)
+        T+9:12 🧹 post-run: speed-harden started   ·   T+9:40 📝 technique log binary: exit 0   ·   post-run heartbeat
 """
+import os
 import json
 import re
 import sys
@@ -43,7 +47,7 @@ def _fmt(sec):
 
 
 class Feed:
-    def __init__(self):
+    def __init__(self, follow_post=False):
         self.t0 = None
         self.now = None
         self.total = None
@@ -52,6 +56,10 @@ class Feed:
         self.gen_start = {}          # base -> secs
         self.in_attempt = set()      # (base, mode) passed by in-attempt correction
         self.done = False
+        self.follow_post = follow_post   # keep going after "all chains finished" (a day.sh run: post-run + marker)
+        self.post = False            # in the post-run
+        self.phase = None            # (name, since secs) of the running post-run phase
+        self.phases_done = []
 
     def _t(self):
         return f"T+{_fmt((self.now or 0) - (self.t0 or self.now or 0))}"
@@ -80,8 +88,16 @@ class Feed:
                     self.t0 = self.now          # T+ counts from the run's start (after any release wait)
                     out.append(f"{self._t()} ▶ run started: {c.group(1)} chains, {c.group(2)} modes")
                 elif msg.startswith("all chains finished"):
-                    self.done = True
                     out.append(self.summary())
+                    if self.follow_post:
+                        self.post = True
+                        out.append(f"{self._t()} 🧹 post-run started (feed follows it to the end)")
+                    else:
+                        self.done = True
+                elif msg.startswith("post-run finished"):
+                    self.done = True
+                    out.append(f"{self._t()} 🏁 post-run finished"
+                               + (f": {', '.join(self.phases_done)}" if self.phases_done else ""))
                 elif "!!!" in msg:
                     out.append(f"{self._t()} ⚠ {msg[:200]}")
             elif "!!!" in line:
@@ -93,7 +109,10 @@ class Feed:
             self.t0 = self.now
         if "!!!" in line:
             out.append(f"{self._t()} ⚠ {msg[:200]}")
-        if tag in ("homebase", "coord", "hof", "capture", "effort", "prebuild", "ratchet"):
+        if tag in ("postrun", "ratchet", "ratchet-log", "speed-harden", "train", "prebuild", "attack-coverage",
+                   "tool-gaps"):
+            return out + self._post_line(tag, msg)
+        if tag in ("homebase", "coord", "hof", "capture", "effort"):
             return out
         base, mode = _split(tag)
         lane = lane_of(base)
@@ -149,7 +168,42 @@ class Feed:
             out.append(f"{self._t()} 🆘 {lane} {ms} asked for help: {msg[:120]}")
         return out
 
+    def _post_line(self, tag, msg):
+        """Post-run lines (hctf/postrun.py phase markers + the phases' own tagged lines) -> feed messages."""
+        t = self._t()
+        if tag == "postrun":
+            m = re.match(r"(\S+) (start|done|FAILED)\b(.*)", msg)
+            if m:
+                name, what, rest = m.groups()
+                if what == "start":
+                    self.phase = (name, self.now)
+                    return [f"{t} 🧹 post-run: {name} started"]
+                self.phase = None
+                self.phases_done.append(name if what == "done" else f"{name} FAILED")
+                return [f"{t} {'✔' if what == 'done' else '⚠'} post-run: {name} {what}{rest[:120]}"]
+            if msg.startswith("run phases done") and not self.follow_post:
+                self.done = True
+                return [f"{t} 🏁 post-run finished: {', '.join(self.phases_done)}"]
+            return [f"{t} 🧹 {msg[:160]}"]
+        if tag == "ratchet-log":
+            return [f"{t} 📝 technique log {msg.split(' ', 1)[-1][:120]}"]
+        if tag == "ratchet" and re.search(r": (merged|REVERTED|lib/ unchanged|nothing to learn)", msg):
+            return [f"{t} 📚 lib ratchet {msg.split(': ', 1)[-1][:140]}"]
+        if tag == "speed-harden" and ("->" in msg or "skipped" in msg):
+            return [f"{t} 🐢 speed-harden {msg[:150]}"]
+        if tag == "train" and re.search(r"adopted|after round|removed|skipped|deadline", msg):
+            return [f"{t} 🎓 train {msg[:150]}"]
+        if tag == "prebuild" and re.search(r"launched|systemd user unit|skipped|not launched|already running", msg):
+            return [f"{t} 🏗 prebuild {msg[:150]}"]
+        return []
+
     def heartbeat(self):
+        if self.post and not self.done:
+            ph = f"{self.phase[0]} {_fmt((self.now or self.phase[1]) - self.phase[1])}" if self.phase else "between phases"
+            gens = [f"{lane_of(b)} {w} {_fmt((self.now or s) - s)}" for b, (w, _m, s) in sorted(self.activity.items())
+                    if "generalize" in w]
+            return (f"{self._t()} · post-run: {ph}" + (f" · done: {', '.join(self.phases_done)}" if self.phases_done else "")
+                    + (" · working: " + ", ".join(gens) if gens else ""))
         tot = f"/{self.total}" if self.total else ""
         work = []
         for base, (what, mode, since) in sorted(self.activity.items()):
@@ -175,13 +229,31 @@ def parse_lines(lines):
     return out
 
 
-def follow(path, from_start=False, follow_=True, heartbeat=60.0, poll=0.5):
+def _pid_alive(pidfile):
+    """None: no pid file (not a day.sh run); else is the run's process alive?"""
+    if not pidfile:
+        return None
+    try:
+        pid = int(Path(pidfile).read_text().strip())
+    except (OSError, ValueError):
+        return None
+    try:
+        os.kill(pid, 0)
+        st = Path(f"/proc/{pid}/stat").read_text().split()[2]
+        return st != "Z"
+    except (OSError, IndexError):
+        return False
+
+
+def follow(path, from_start=False, follow_=True, heartbeat=60.0, poll=0.5, pidfile=None, follow_post=None):
     path = Path(path)
+    if follow_post is None:
+        follow_post = _pid_alive(pidfile) is not None
     for _ in range(int(3600 / poll)):           # the day log appears at launch
         if path.exists():
             break
         time.sleep(poll)
-    f = Feed()
+    f = Feed(follow_post=follow_post)
     say = lambda s: print(s, flush=True)  # noqa: E731
     with open(path, errors="replace") as fh:
         for ln in fh:                           # history: state always, messages only with --from-start
@@ -208,6 +280,12 @@ def follow(path, from_start=False, follow_=True, heartbeat=60.0, poll=0.5):
                 continue
             if time.time() - last_hb >= heartbeat:
                 last_hb = time.time()
+                if _pid_alive(pidfile) is False and not f.done:
+                    # the run died without its end marker (D16: a machine-wide OOM in the post-run speed-harden)
+                    where = (f"post-run phase {f.phase[0]}" if f.phase else "the post-run") if f.post else "the run"
+                    say(f"{f._t()} ⚠ the run process is gone (died during {where}) -- resume with "
+                        f"`hctf postrun --day N` (see .run/*.postrun.json)")
+                    return 1
                 if f.now is not None:
                     # advance the clock to wall time for the heartbeat (log timestamps are local HH:MM:SS)
                     lt = time.localtime()
@@ -216,9 +294,11 @@ def follow(path, from_start=False, follow_=True, heartbeat=60.0, poll=0.5):
             time.sleep(poll)
 
 
-def main(day=None, log=None, from_start=False, follow_=True, heartbeat=60.0):
+def main(day=None, log=None, from_start=False, follow_=True, heartbeat=60.0, postrun=None):
     path = Path(log) if log else ROOT / ".run" / f"day{int(day):02d}.log"
-    return follow(path, from_start=from_start, follow_=follow_, heartbeat=heartbeat)
+    pidfile = None if log else ROOT / ".run" / f"day{int(day):02d}.pid"
+    return follow(path, from_start=from_start, follow_=follow_, heartbeat=heartbeat, pidfile=pidfile,
+                  follow_post=postrun)
 
 
 if __name__ == "__main__":

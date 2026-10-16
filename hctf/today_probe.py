@@ -28,9 +28,9 @@ import re
 import shutil
 import time
 import zipfile
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from .procgov import Executor as _BgExecutor
 from . import paths, solvers
 
 ROOT = paths.ROOT
@@ -286,7 +286,7 @@ def probe(sdir, deadline=None, out_dir=None, salt=0):
         made = synth(sdir, codec[1], codec[0], base=base, variants=variants, out_dir=out_dir, salt=salt)
         if not made:
             continue
-        with ThreadPoolExecutor(max_workers=max(1, min(PROBE_WORKERS, 1 + len(made)))) as ex:
+        with _BgExecutor(max_workers=max(1, min(PROBE_WORKERS, 1 + len(made)))) as ex:
             runs += list(ex.map(lambda c: _run(sdir, c, timeout), ([] if runs else [base]) + made))
         cases += made
         if not runs or runs[0]["error"] or runs[0]["wrong"] or any(r["error"] or r["wrong"] for r in runs[1:]):
@@ -447,7 +447,7 @@ def merge_probe(sdir, deadline=None, out_dir=None):
     if case is None:
         return dict(res, status="no-cases", seconds=round(time.time() - t0, 2))
     timeout = max(10.0, (deadline - time.time()) if deadline else 60.0)
-    with ThreadPoolExecutor(max_workers=3) as ex:
+    with _BgExecutor(max_workers=3) as ex:
         runs = list(ex.map(lambda c: _run(sdir, c, timeout), [base, sdir / "cases" / "single_solve", case]))
     res["results"] = [runs[2]]
     res["base_ok"] = all(not r["error"] and not r["wrong"] for r in runs[:2])

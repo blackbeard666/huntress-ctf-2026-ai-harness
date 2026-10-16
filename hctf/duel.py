@@ -32,7 +32,9 @@ LANES = {x.strip() for x in os.environ.get(
     "HCTF_DUEL_LANES", "warmups,metadata-forensics,script-analysis,mobile-android").split(",") if x.strip()}
 MAX_CONCURRENT = int(os.environ.get("HCTF_DUEL_MAX", "3"))
 MODEL = os.environ.get("HCTF_DUEL_MODEL", "")            # "" = the lane's normal worker model
-EFFORT = os.environ.get("HCTF_DUEL_EFFORT", "medium")     # diversity + speed: the chain's worker runs at high
+# "" = the lane's worker effort (user rule 2026-10-16: every worker high). D16 for the record: the medium-effort duel won
+# all three singles it ran (warmups, metadata, script) -- HCTF_DUEL_EFFORT=medium brings that back.
+EFFORT = os.environ.get("HCTF_DUEL_EFFORT", "")
 DELAY = float(os.environ.get("HCTF_DUEL_DELAY", "15"))    # single: give the reuse race its 3-9 s first
 GEN_AFTER = int(os.environ.get("HCTF_DUEL_GENERALIZE_AFTER", "1"))   # duel the 2nd+ generalize of a mode; -1 = never
 GEN_FIRST = os.environ.get("HCTF_DUEL_GENERALIZE_FIRST", "1") != "0"  # ... and the 1st when label-only / speed-only
@@ -184,7 +186,9 @@ class Duel:
     def _env(self):
         env = self.chain._worker_env(self.cid, self.stage)
         env.update({"HCTF_SOLVER_DIR": self.ddir, "HCTF_SOLVER_DIR_OVERRIDE": self.ddir, "HCTF_DUEL": "1",
-                    "HCTF_LOG_POOL": "duel", "HCTF_X_EFFORT": EFFORT})
+                    "HCTF_LOG_POOL": "duel"})
+        if EFFORT:
+            env["HCTF_X_EFFORT"] = EFFORT
         if MODEL:
             env["HCTF_X_MODEL"] = MODEL
         return env
@@ -215,7 +219,7 @@ class Duel:
                         join(self.cid)    # the background prior cases/ copy (stage_prior_cases) must be complete
                 _copy_solver(self.chain.sdir, self.ddir, self.cases)
                 self.copied.set()
-                log(f"[{self.cid}] duel {self.stage} worker -> local (effort {EFFORT}"
+                log(f"[{self.cid}] duel {self.stage} worker -> local (effort {EFFORT or workers.worker_effort(self.chain.lane)}"
                     f"{', model ' + MODEL if MODEL else ''}) on {self.ddir.relative_to(ROOT)}")
                 self.rc, lg = workers.run_local(cli.cdir(self.cid), self.stage, self._render(), self._env(),
                                                 self.timeout, stop=self.stop_evt)

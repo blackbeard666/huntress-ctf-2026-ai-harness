@@ -169,6 +169,22 @@ r = subprocess.run(cmd, capture_output=True, text=True, timeout=25); print(r.std
 if grep -q sandbox-ok <<<"$sb_out"; then ok "workers' sandbox has the venv + solver deps (pyzipper, pyelftools, pefile, capstone)."
 else fail "worker sandbox can't import solver deps: $(tail -1 <<<"$sb_out")"; fi
 
+# 3c1) Run supervision: bin/day.sh launches the run as a memory-capped systemd USER unit. D16: the run lived in WSL's
+# init scope with no cap -- a post-run fan-out hit the kernel OOM killer, which took WSL's init (and the run) with it.
+# Linger keeps the user manager (and the unit) alive when the launching session ends.
+hdr "Run supervision"
+if command -v systemd-run >/dev/null && systemctl --user is-system-running 2>/dev/null | grep -qE 'running|degraded'; then
+  if [ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" = "yes" ]; then
+    ok "user systemd + linger: the day run is a memory-capped unit that outlives this session."
+  elif [ "$FIX" -eq 1 ] && sudo -n loginctl enable-linger "$USER" 2>/dev/null; then
+    ok "linger enabled (--fix): the day run's unit outlives this session."
+  else
+    warn "linger is off: the day run's user unit dies with the login session. Fix: sudo loginctl enable-linger $USER"
+  fi
+else
+  warn "no user systemd: day.sh falls back to setsid (no memory cap; an OOM can take WSL down -- D16)."
+fi
+
 # 3c2) Claude auth for workers: Day 1, six single workers died within 50 s on "OAuth session expired and could not be
 # refreshed" and nothing flagged it. Check the refresh token's expiry against the CTF's last day, then one live turn
 # (haiku, ~1 s, fractions of a cent) proves the refresh works. HCTF_PREFLIGHT_NO_LLM=1 skips the live turn.
@@ -248,8 +264,17 @@ elif grep -q hb-ok <<<"$hb_out"; then
     warn "Homebase Bedrock role/Claude Code not confirmed (shadow workers will fail to launch; local workers unaffected): $(head -2 <<<"$hbx" | tr '\n' ' ')"
   fi
   hbmiss="$(grep -o 'nohbtool:[A-Za-z]*' <<<"$hbx" | cut -d: -f2 | tr '\n' ' ')"
+  if [ -n "$hbmiss" ]; then
+    # Install it now when the drop is far enough away (~2 min on main, 2026-10-16; never inside the last 15 min).
+    to_drop="$(python3 -c "import datetime as d; n=d.datetime.now(); t=n.replace(hour=${HCTF_DROP_HOUR:-21},minute=0,second=0,microsecond=0); t=t if t>n else t+d.timedelta(days=1); print(int((t-n).total_seconds()//60))")"
+    if [ "${to_drop:-0}" -gt 15 ] && [ "${HCTF_PREFLIGHT_HB_TOOLS:-1}" != "0" ]; then
+      echo "  ...  Homebase toolchain missing ($hbmiss); installing (hctf hb tools, ${to_drop} min to the drop)"
+      if timeout 900 hctf hb tools >/dev/null 2>&1; then hbmiss=""; ok "Homebase toolchain installed (hctf hb tools)."
+      else warn "hctf hb tools did not complete; still missing: $hbmiss"; fi
+    fi
+  fi
   if [ -z "$hbmiss" ]; then ok "Homebase toolchain (~/hbtools) complete."
-  else warn "Homebase toolchain missing: $hbmiss -> hctf hb tools   (shadow workers fall back to python libs)"; fi
+  elif [ -n "$hbmiss" ]; then warn "Homebase toolchain missing: $hbmiss -> hctf hb tools   (shadow workers fall back to python libs)"; fi
   bud="$(timeout 30 hctf hb budget 2>&1 | tail -1)"
   left="$(grep -o '[0-9.]* left' <<<"$bud" | cut -d' ' -f1)"
   if [ -n "$left" ] && awk "BEGIN{exit !($left < 15)}"; then warn "$bud (shadows stop when the day's budget runs low)"

@@ -20,7 +20,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from . import cli, paths, remote, scout, solvers, timed, workers
+from . import cli, paths, procgov, remote, scout, solvers, timed, workers
 
 ROOT = Path(__file__).resolve().parent.parent
 CREDIT_SOFT = float(os.environ.get("HCTF_CREDIT_SOFT", "4"))   # below: no new Homebase (codex) workers
@@ -364,8 +364,12 @@ REUSE_RACE_TIMEOUT = float(os.environ.get("HCTF_REUSE_RACE_TIMEOUT", "20"))
 # after a rejected/incomplete merged set, bank the CONFIDENT subset as one batch, then the speculative remainder, then
 # other solvers' values / spelling alternates for each isolated wrong field -- stopping the moment the worker submits.
 RACE_PARTIAL = os.environ.get("HCTF_RACE_PARTIAL", "1") != "0"
-RACE_TOTAL_PROBES = int(os.environ.get("HCTF_RACE_TOTAL_PROBES", "7"))
-RACE_SPEC_PROBES = int(os.environ.get("HCTF_RACE_SPEC_PROBES", "4"))
+# Budgets in probes (submits). The bisect runs in parallel waves (hctf/grouptest.py, D16 post-mortem): ~24 groups, then
+# 2 halves per open group per wave, so a 1095-field batch with a few wrong fields takes ~30-60 probes in ~6-8 waves
+# (~15 s) -- the old sequential 2-4 probe budgets left D16 script's 5 wrong fields to the worker (55 submits, 4:04).
+RACE_TOTAL_PROBES = int(os.environ.get("HCTF_RACE_TOTAL_PROBES", "200"))
+RACE_SPEC_PROBES = int(os.environ.get("HCTF_RACE_SPEC_PROBES", "80"))
+RACE_BISECT_PROBES = int(os.environ.get("HCTF_RACE_BISECT_PROBES", "120"))
 # Drop race values that fail the local format checks or the slug plausibility gate (lib/slug.py) BEFORE submitting:
 # the race submits with force=True, which skips them (D13 warmups: a rot-N gibberish slug cost a GM submission).
 RACE_FORMAT_GATE = os.environ.get("HCTF_RACE_FORMAT_GATE", "1") != "0"
@@ -912,11 +916,24 @@ def ensure_case_and_test(cid, sdir, full=True):
 
 def record_timed_case(cid, sdir):
     contract = cli.load(cid, "start.json")
-    art = timed.latest_artifacts(cid)
+    art = timed.latest_artifacts(cid) or _timed_bytes_of(cid, cli.attempt_id(contract))
     conf = cli.confirmed_answers(cid)
     if contract and art and conf:
         name = f"{solvers.mode_of(cid)}-{(cli.attempt_id(contract) or 'x')[:8]}"
         solvers.add_case(sdir, name, contract, art, conf)
+
+
+def _timed_bytes_of(cid, att):
+    """The timed runner's download dir when it holds THIS attempt's bytes (a timed mode has no artifacts/latest: D16
+    metadata TT passed through the live answer, no case was recorded, and the background generalize silently skipped)."""
+    tdir = timed.timed_dir(cid)
+    try:
+        c = json.loads((tdir / "contract.json").read_text())
+    except (OSError, ValueError):
+        return None
+    if att and cli.attempt_id(c) == att and any(p.name != "contract.json" for p in tdir.iterdir()):
+        return tdir
+    return None
 
 
 def capture_variant(cid, sdir):
@@ -1140,13 +1157,13 @@ MASTERY_GATE_RATIO = float(os.environ.get("HCTF_MASTERY_GATE_RATIO", "2.0"))
 
 def mutation_probe(sdir, mastery_contract=None, timeout=90):
     """Run hctf/mutate.py under the venv -> (text, [failing HARD mutation case dirs], summary)."""
-    import subprocess
     out = ROOT / ".run" / "mutation" / Path(sdir).resolve().parent.name
     argv = [str(paths.VENV_PY), "-m", "hctf.mutate", "probe", str(sdir), "--out", str(out)]
     if mastery_contract and Path(mastery_contract).exists():
         argv += ["--mastery-contract", str(mastery_contract)]
     try:
-        r = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+        # every solver run inside the probe process is background (procgov: nice, pinned, single-process, slots)
+        r = procgov.run(argv, cwd=ROOT, timeout=timeout, background=False, env=dict(os.environ, HCTF_PROC_BG="1"))
         d = json.loads(r.stdout.strip().splitlines()[-1])
     except Exception as e:  # noqa: BLE001 - advisory
         return f"(mutation probe skipped: {str(e)[:120]})", [], {}
@@ -1252,10 +1269,9 @@ def mastery_estimate(mut_summary, mastery_contract):
 
 def _family_cli(action, sdir, out, extra=(), timeout=60):
     """Run hctf/family.py under the venv (AES zips need pyzipper) -> parsed JSON, or {"error": ...}."""
-    import subprocess
     argv = [str(paths.VENV_PY), "-m", "hctf.family", action, str(sdir), "--out", str(out), *extra]
     try:
-        r = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+        r = procgov.run(argv, cwd=ROOT, timeout=timeout, background=False, env=dict(os.environ, HCTF_PROC_BG="1"))
         return json.loads(r.stdout.strip().splitlines()[-1])
     except Exception as e:  # noqa: BLE001 - advisory
         return {"error": str(e)[:120]}
@@ -2072,7 +2088,7 @@ class Chain:
                     self._accepted_res = (m0, names0, res)
             except Exception as e:  # noqa: BLE001 - optimization only
                 say(f"[{cid}] background baseline note: {e}")
-        self._baseline_thr = threading.Thread(target=body, daemon=True, name=f"baseline-{self.base}")
+        self._baseline_thr = threading.Thread(target=procgov.bg_wrap(body, owner_tag=self.base), daemon=True, name=f"baseline-{self.base}")
         self._baseline_thr.start()
 
     def _baseline_results(self):
@@ -2320,7 +2336,7 @@ class Chain:
         if len(merged) == len(ids):
             wrong |= batch(merged, 0)              # complete set: one submit (a script/binary/mobile win needs no more)
         if not cli.is_complete(cid):
-            wrong |= batch({a: v for a, v in high.items() if a in merged}, 2)
+            wrong |= batch({a: v for a, v in high.items() if a in merged}, RACE_BISECT_PROBES)
             wrong |= batch({a: v for a, v in spec.items() if a in merged and a not in high}, RACE_SPEC_PROBES)
         self._race_wrong = {a: merged[a] for a in wrong if a in merged}
         try:
@@ -2996,7 +3012,8 @@ class Chain:
         prior = prior_solver_dir(self.lane, self.sdir)
         if prior:
             out = ROOT / ".run" / "family" / f"calib-{prior.parent.name}"
-            self._fam_noise_fut = ThreadPoolExecutor(max_workers=1).submit(_family_cli, "calibrate", prior, out, (), 120)
+            self._fam_noise_fut = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(_family_cli, owner_tag=self.base), "calibrate",
+                                                                           prior, out, (), 120)
 
     def _family_noise(self):
         """Calibrated noise languages, or None if no calibration is available (then never act pre-emptively)."""
@@ -3015,7 +3032,7 @@ class Chain:
         if not MUTATION_PROBE or not (self.sdir / "solve.py").exists():
             return
         mc = cli.cdir(f"{self.base}/mastery") / "contract.json"
-        self._mut_pre_fut = ThreadPoolExecutor(max_workers=1).submit(mutation_probe, self.sdir, mc)
+        self._mut_pre_fut = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(mutation_probe, owner_tag=self.base), self.sdir, mc)
 
     def _mutation_pre_result(self, wait=True):
         """wait=False (the single is too slow, a speed generalize is coming anyway): take the result only if the probe
@@ -3040,7 +3057,7 @@ class Chain:
         self._cmp_pre_fut = None
         if not COMPOUND_PROBE or not (self.sdir / "solve.py").exists():
             return
-        self._cmp_pre_fut = ThreadPoolExecutor(max_workers=1).submit(compound_probe, self.sdir)
+        self._cmp_pre_fut = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(compound_probe, owner_tag=self.base), self.sdir)
 
     def _compound_pre_result(self, wait=True):
         if getattr(self, "_cmp_pre_fut", None) is None:
@@ -3063,8 +3080,8 @@ class Chain:
         kind = self._today_kind()
         if kind is None or not (self.sdir / "solve.py").exists():
             return
-        self._today_fut = ThreadPoolExecutor(max_workers=1).submit(today_probe, self.sdir, 60 if kind == "merge" else 30,
-                                                                   kind)
+        self._today_fut = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(today_probe, owner_tag=self.base), self.sdir,
+                                                                   60 if kind == "merge" else 30, kind)
 
     def _today_kind(self):
         lane = getattr(self, "lane", None)
@@ -3267,7 +3284,7 @@ class Chain:
             if noise is None:
                 return "", []
             return family_probe(self.sdir, None, noise=noise, exclude=noise)
-        self._fam_pre_fut = ThreadPoolExecutor(max_workers=1).submit(run)
+        self._fam_pre_fut = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(run, owner_tag=self.base))
 
     def _family_pre_result(self, wait=True):
         """(text, missed family case dirs). Each result is consumed ONCE (pre-attempt block or _late_probes).
@@ -3421,7 +3438,8 @@ class Chain:
         key = self._newid_key(m)
         if key in self._newid or len(self._newid) >= NEWID_MAX:
             return
-        self._newid[key] = ThreadPoolExecutor(max_workers=1).submit(self._newid_gaps, self.base, self.sdir)
+        self._newid[key] = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(self._newid_gaps, owner_tag=self.base), self.base,
+                                                                    self.sdir)
 
     def _newid_gaps(self, cid, sdir):
         """Answer ids NEW to this lane (no earlier day asked their shape, nor today's single) that the solver leaves EMPTY
@@ -3662,6 +3680,8 @@ class Chain:
             else:
                 op = {"op": "retry"} if left is not None and left <= 0 else {}
             res = timed.run(cid, self.sdir, log=say, **op, **self._early_kw(cid, untimed))
+            if res == "error:exec" and self._gm_passed(cid):
+                res = "correct"
             say(f"[{cid}] result: {res}{' (untimed)' if untimed else ''}")
             set_state(self.base, **{f"{mode}_result": res})
             if self._early_join(cid) and res in ("expired", "blocked"):
@@ -3925,7 +3945,10 @@ class Chain:
             return
         prompt = getattr(self, "_gen_prompt", None)
         target = f"time_trial-{(cli.attempt_id(cli.load(cid, 'start.json')) or 'x')[:8]}"
+        if not (self.sdir / "cases" / target / "expected.json").exists():
+            record_timed_case(cid, self.sdir)    # the live-answered TT: its bytes are in the timed runner's dir
         if not prompt or not (self.sdir / "cases" / target / "expected.json").exists():
+            say(f"[{cid}] no background generalize: {'no generalize prompt' if not prompt else f'no case {target}'}")
             return
         ok, why = duel.eligible(self.lane)
         if not ok:
@@ -4046,6 +4069,25 @@ class Chain:
             f"GM-corrected, {len(wrong)} field(s) for the generalize")
         return False
 
+    @staticmethod
+    def _gm_passed(cid):
+        """After a runner failure: did the attempt pass anyway (the GM judged the last submit, a live-answer / manual
+        submit completed it)? D16 script Mastery: CORRECT on the GM at 21:12, yet the loop re-ran (and re-rolled) it
+        until 14/15. Records the pass locally so is_complete / dash agree."""
+        try:
+            day = cli._day_of(cid)
+            if not (cli.gm_latest_correct(cid) or (day and cid in cli.gm_list_solved(day, max_age=0))):
+                return False
+        except Exception:  # noqa: BLE001
+            return False
+        att = (cli.load(cid, "start.json") or {}).get("attempt_id") or (timed.last_result(cid) or {}).get("attempt_id")
+        say(f"[{cid}] the runner failed, but the GM's latest attempt is CORRECT: mode passed")
+        try:
+            cli.record_remote_result(cid, att, {}, "correct", None)
+        except Exception as e:  # noqa: BLE001
+            say(f"[{cid}] record note: {e}")
+        return True
+
     def ensure_latest_pass(self, cid, tries=3):
         """Make the GM's LATEST attempt for this timed mode CORRECT (after scouting), so a prerequisite check that
         reads the latest status sees a pass. The solve itself is already banked on the scoreboard."""
@@ -4085,6 +4127,16 @@ class Chain:
             f"unresolved={len(s.get('unresolved') or [])}; latest Time Trial {'CORRECT' if ok else 'NOT correct'}")
 
     def run(self):
+        try:
+            return self._run_retrying()
+        finally:
+            # leftover background probes of this chain (mutation/compound/today/new-id/baseline): their answers can no
+            # longer matter. D16: ~20 binary solve.py forks still ran 5 min after the binary chain finished.
+            n = procgov.kill_owner(self.base)
+            if n:
+                say(f"[{self.base}] killed {n} leftover background solver run(s)")
+
+    def _run_retrying(self):
         for n in range(CHAIN_CRASH_RETRIES + 1):
             try:
                 return self._run()
@@ -4270,14 +4322,19 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
             say("[homebase] left running (--keep-homebase); power it off with `hctf hb off` when done")
     say("all chains finished")
     if RATCHET and day is not None:
+        from . import postrun
         ratchet(day)
         if PREBUILD_AFTER_RATCHET:
             try:   # off-peak breadth (hctf/prebuild.py): detached, budget-capped, ends 30 min before the next drop
                 from . import prebuild as _prebuild
-                _prebuild.launch_background(day, log=say)
+                with postrun.phase(day, "prebuild"):
+                    _prebuild.launch_background(day, log=say)
             except Exception as e:  # noqa: BLE001 - post-run best-effort
                 say(f"[prebuild] not launched ({e})")
     _join_captures(f"day{int(day):02d}" if day is not None else "run")   # never exit mid-pull (daemon threads)
+    if day is not None:
+        from . import postrun
+        postrun.finished(day)
 
 
 CAPTURE_JOIN_TIMEOUT = float(os.environ.get("HCTF_CAPTURE_JOIN_TIMEOUT", "900"))
@@ -4556,6 +4613,30 @@ def _ratchet_logs(tag, digest):
 
 
 def ratchet(day):
+    """The run's post-run: lib ratchet + technique logs, speed-harden, train -- each a marked phase (hctf/postrun.py)."""
+    from . import postrun
+    tag = f"day{int(day):02d}"
+    with postrun.phase(day, "ratchet"):
+        if not ratchet_lib(day):
+            return
+    if SPEED_HARDEN:
+        try:
+            with postrun.phase(day, "speed-harden"):
+                speed_harden(day=day)
+        except Exception as e:  # noqa: BLE001 - post-run best-effort
+            say(f"[speed-harden] {tag}: skipped ({e})")
+    if TRAIN:
+        # Offline training on every earlier day (hctf/train.py): tomorrow's seed solvers vs ALL earlier GM-verified
+        # cases + answer-invariant mutations; misses -> adopted cases + a transactional generalize. Before the prebuild.
+        try:
+            from . import train as _train
+            with postrun.phase(day, "train"):
+                _train.run(day, log=say)
+        except Exception as e:  # noqa: BLE001 - post-run best-effort
+            say(f"[train] {tag}: skipped ({e})")
+
+
+def ratchet_lib(day):
     """Post-run, single-writer knowledge merge: collect every `## Proposed lib additions` section the day's workers
     wrote in solver/NOTES.md and let ONE worker fold the GM-confirmed ones into lib/ (workers no longer edit lib/
     mid-run: Day 6's script worker rewrote lib/knowledge.py + lib/scripts.py while four other lanes imported them).
@@ -4569,7 +4650,7 @@ def ratchet(day):
     chals = sorted(str(p.relative_to(ROOT)) for p in (paths.CHALLENGES / tag).glob("*/meta.json"))
     if not chals:
         say(f"[ratchet] {tag}: nothing to learn from")
-        return
+        return False
     digest = ratchet_digest(tag)
     prompt = workers.render("ratchet", day=tag, day_num=int(day), challenges="\n".join(f"- {c}" for c in chals),
                             digest="\n".join(line for _lane, line in digest.values()),
@@ -4630,19 +4711,7 @@ def ratchet(day):
     for t in log_threads:   # reference/ must be quiet before the prebuild starts (its allowlist flags outside edits)
         t.join(timeout=max(1.0, RATCHET_LOG_TIMEOUT))
     _join_captures(tag)     # speed-harden times every case: today's pass captures must be on disk first
-    if SPEED_HARDEN:
-        try:
-            speed_harden(day=day)
-        except Exception as e:  # noqa: BLE001 - post-run best-effort
-            say(f"[speed-harden] {tag}: skipped ({e})")
-    if TRAIN:
-        # Offline training on every earlier day (hctf/train.py): tomorrow's seed solvers vs ALL earlier GM-verified
-        # cases + answer-invariant mutations; misses -> adopted cases + a transactional generalize. Before the prebuild.
-        try:
-            from . import train as _train
-            _train.run(day, log=say)
-        except Exception as e:  # noqa: BLE001 - post-run best-effort
-            say(f"[train] {tag}: skipped ({e})")
+    return True
 
 
 def prebuild(lane="metadata-forensics", n=None, targets=None, budget_usd=None, deadline=None, log=None, runner=None):
@@ -4796,6 +4865,25 @@ def dashboard():
     w = [max(len(str(r[i])) for r in rows + [hdr]) for i in range(len(hdr))]
     for r in [hdr] + rows:
         print("  ".join(str(x).ljust(w[i]) for i, x in enumerate(r)))
+    from . import postrun
+    for st_p in sorted((ROOT / ".run").glob("day*.postrun.json"))[-2:]:
+        # post-run phases of the latest days (hctf/postrun.py): the dashboard used to stop at the chains
+        try:
+            st = json.loads(st_p.read_text())
+        except (OSError, ValueError):
+            continue
+        day = int(st_p.name[3:5])
+        ph = st.get("phases") or {}
+        parts = []
+        for n in postrun.PHASES:
+            if n in ph:
+                secs = ph[n].get("seconds")
+                parts.append(f"{n}={ph[n].get('status')}" + (f" {secs}s" if secs is not None else ""))
+        alive = postrun.run_alive(day)
+        cur = st.get("current")
+        print(f"post-run day{day:02d}: " + (", ".join(parts) or "(not started)")
+              + (f"  [running: {cur}]" if cur and alive else "")
+              + ("  !! run process DEAD mid-phase -> `hctf postrun --day %d`" % day if cur and not alive else ""))
 
 
 if __name__ == "__main__" and len(sys.argv) == 3 and sys.argv[1] == "ratchet-gate":

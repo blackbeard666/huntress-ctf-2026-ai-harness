@@ -316,13 +316,23 @@ def _fake_post(payload, timeout=20):
 _op, _opool = hb_timed._post, hb_timed._pool
 hb_timed._post, hb_timed._pool = _fake_post, (lambda: None)
 _oargv, _ostdout = sys.argv, sys.stdout
+# D16 post-mortem: on the REAL GM a CORRECT latest attempt is reported (already_passed), never re-rolled; the re-roll
+# stays for replays (local stand-in GM) and HCTF_REROLL_CORRECT=1
+os.environ["HCTF_REROLL_CORRECT"] = "1"
 sys.argv, sys.stdout = ["hb_timed.py", "c/time_trial", "solver"], _io.StringIO()
 try:
     hb_timed.main()
+    assert posts == ["start", "retry"], posts
+    del os.environ["HCTF_REROLL_CORRECT"]
+    posts.clear()
+    sys.stdout = _io.StringIO()
+    hb_timed.main()
+    _passed = _json.loads(sys.stdout.getvalue().strip().splitlines()[-1])
 finally:
+    os.environ.pop("HCTF_REROLL_CORRECT", None)
     sys.argv, sys.stdout = _oargv, _ostdout
     hb_timed._post, hb_timed._pool = _op, _opool
-assert posts == ["start", "retry"], posts
+assert posts == ["start"] and _passed.get("already_passed") and _passed["result"] == "correct", (posts, _passed)
 timed._remember = timed._keep_failed_attempt = lambda *a, **k: None
 _occ = timed.capture_case
 timed.capture_case = lambda *a, **k: None

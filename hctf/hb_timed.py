@@ -33,6 +33,7 @@ class _Ctx(__import__("threading").local):
     opts = None
     on_event = None   # hb_daemon (HCTF_EARLY_GENERALIZE): callable(dict) for mid-attempt events
     solver_dir = None  # rel. to HW: the challenge dir next to it holds label_hints.json (shared by its modes)
+    t0 = None          # this attempt's start (HCTF_RUNNER_BUDGET is relative to it)
 
 
 _CTX = _Ctx()
@@ -71,7 +72,33 @@ def _run_solver(solve, contract, artifacts, timeout, env):
     env["HCTF_SOLVE_DEADLINE"] = f"{time.time() + timeout - min(1.0, 0.25 * timeout):.3f}"
     if SOLVER is not None:
         return SOLVER(str(solve), args, env, timeout)
-    return subprocess.run([sys.executable, str(solve), *args], capture_output=True, text=True, timeout=timeout, env=env)
+    return run_group([sys.executable, str(solve), *args], timeout=timeout, env=env)
+
+
+def run_group(cmd, timeout, env=None, **kw):
+    """subprocess.run(capture_output, text) in its own session; on timeout the WHOLE group is SIGKILLed (a solver's
+    fork pool too -- D16: ~20 orphaned solve.py forks kept a 12-core host at load 27) and TimeoutExpired raised.
+    Self-contained (this file also runs alone on Homebase)."""
+    import signal
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+                         start_new_session=True, **kw)
+    try:
+        out, err = p.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        try:
+            p.communicate(timeout=5)
+        except (subprocess.TimeoutExpired, ValueError, OSError):
+            pass
+        raise
+    try:
+        os.killpg(p.pid, signal.SIGKILL)      # forks left behind after a normal exit
+    except OSError:
+        pass
+    return subprocess.CompletedProcess(cmd, p.returncode, out, err)
 
 
 def _token():
@@ -149,13 +176,18 @@ class _Pool:
         return self
 
     IDLE_MAX = float(os.environ.get("HCTF_POOL_IDLE_MAX", "3"))   # s idle before reuse (D8: 3.5 s ok, 5.7 s dropped)
+    # A no-resend call (submit) reuses a socket only if it carried a reply within this many s: localization waves keep
+    # sockets hot (D16: every probe paid a fresh TCP+TLS, 30+ sockets left in CLOSE-WAIT); a socket idle through a solve
+    # still gets a fresh connection (D8: RemoteDisconnected on an idle kept-alive socket lost the verdict).
+    NORESEND_IDLE = float(os.environ.get("HCTF_POOL_NORESEND_IDLE", "0.25"))
 
     def request(self, method, query, body=None, headers=None, timeout=None):
         """-> (status, bytes). Reconnects once if the kept-alive socket was dropped. `timeout` (s): a hard per-call
         bound with NO resend -- used for the submit, which must not outlive the clock nor be POSTed twice."""
         import http.client
         c = self.q.get() if not self.q.empty() else self._new(connect=False)
-        if timeout is not None or time.time() - getattr(c, "_hctf_used", time.time()) > self.IDLE_MAX:
+        idle = time.time() - getattr(c, "_hctf_used", time.time())
+        if idle > self.IDLE_MAX or (timeout is not None and (idle > self.NORESEND_IDLE or c.sock is None)):
             # Never reuse a kept-alive socket that sat idle (e.g. through the solve): the GM proxy closes it. Day 8
             # binary + script Mastery (8 s / 5.4 s solves): the no-resend submit got RemoteDisconnected, no verdict,
             # attempt lost three times. A no-resend call always gets a fresh connection (sub-ms on the inside proxy).
@@ -165,10 +197,22 @@ class _Pool:
             c.timeout = timeout
             if c.sock is not None:
                 c.sock.settimeout(timeout)
+        reused = c.sock is not None
         try:
             for retry in ((False,) if timeout is not None else (True, False)):
                 try:
-                    c.request(method, self.path + query, body=body, headers=headers or {})
+                    try:
+                        c.request(method, self.path + query, body=body, headers=headers or {})
+                    except (BrokenPipeError, ConnectionResetError):
+                        if not reused:
+                            raise
+                        # a hot kept-alive socket the server had just closed: the request never went out (the SEND
+                        # failed), so one fresh connection is safe even for a no-resend submit
+                        c.close()
+                        c = self._new(connect=False)
+                        if timeout is not None:
+                            c.timeout = timeout
+                        c.request(method, self.path + query, body=body, headers=headers or {})
                     r = c.getresponse()
                     return r.status, r.read()
                 except (http.client.HTTPException, ConnectionError, OSError):
@@ -563,6 +607,55 @@ def _label_first(group, answers, vocab):
     return [g for g in (unc, lab, rest) if g]
 
 
+PROGRESS_KEYS = ("attempt_id", "deadline", "no_clock", "untimed", "run_for_time", "window", "per_set", "full_result",
+                 "partial_submit", "verified", "result", "already_passed", "resumed_banked", "phase")
+
+
+def _progress_path(cid):
+    return HW / ".run" / "tmp-timed" / (re.sub(r"[^A-Za-z0-9]+", "_", cid) + ".progress.json")
+
+
+def _write_progress(cid, out, phase=None):
+    """Persist this attempt's identity + what the GM has accepted so far (atomic). A runner killed from outside (the
+    caller's subprocess timeout) used to lose everything: D16 script Mastery, six kills, each time `op=start` again
+    because last_timed.json had no attempt_id. workers.run_timed reads this back on a timeout."""
+    if phase:
+        out["phase"] = phase
+    try:
+        p = _progress_path(cid)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + f".{os.getpid()}.tmp")
+        tmp.write_text(json.dumps({k: out[k] for k in PROGRESS_KEYS if k in out}))
+        os.replace(tmp, p)
+    except (OSError, TypeError, ValueError):
+        pass
+
+
+def _runner_left():
+    """Seconds until the CALLER kills this process (HCTF_RUNNER_DEADLINE, epoch), minus a margin for the final resubmit +
+    printing the result; None when unbounded."""
+    try:
+        margin = float(_opt("HCTF_RUNNER_MARGIN", "15"))
+        d = _opt("HCTF_RUNNER_DEADLINE")
+        if d:
+            return float(d) - time.time() - margin
+        b = _opt("HCTF_RUNNER_BUDGET")       # Homebase: relative to this attempt's start (no cross-host clock skew)
+        if b and getattr(_CTX, "t0", None):
+            return _CTX.t0 + float(b) - time.time() - margin
+    except ValueError:
+        pass
+    return None
+
+
+try:
+    import grouptest as _GT          # hctf/ is this file's directory (synced whole to Homebase)
+except ImportError:
+    try:
+        from hctf import grouptest as _GT     # imported as hctf.hb_timed
+    except ImportError:  # pragma: no cover - an old Homebase copy: the sequential bisect below
+        _GT = None
+
+
 def _localize(cid, answers, groups, per_set, body, out):
     """Window permitting, binary-search the wrong answer_ids inside each failed set (subset submits on the SAME
     attempt), then try the field's other known labels (lib/vocab.json). Reports what the GM verified so the
@@ -588,8 +681,9 @@ def _localize(cid, answers, groups, per_set, body, out):
         # script Mastery localized 5 sets x 913 fields past the 60 s orchestrator call timeout, 4 times (12 min lost)
         left = _deadline_left(body)
         if left is None:
-            return float(_opt("HCTF_LOCALIZE_UNTIMED_S", "75")) - (time.time() - t_loc)
-        return left
+            left = float(_opt("HCTF_LOCALIZE_UNTIMED_S", "75")) - (time.time() - t_loc)
+        rl = _runner_left()        # never outlive the caller's kill: stop, resubmit what is fixed, print the result
+        return left if rl is None else min(left, rl)
 
     def incomplete():
         with lock:
@@ -668,6 +762,43 @@ def _localize(cid, answers, groups, per_set, body, out):
                 # a one-field set judged incorrect IS that field's verdict: re-submitting it alone only repeats it
                 # (rehearsal D13 replay, warmups Mastery: 41 such submits, ~20 s of a failed attempt)
                 wrong.append(next(iter(groups[key])))
+            elif _GT is not None:
+                # parallel waves (hctf/grouptest.py): the set's label-first groups cut into contiguous sub-groups, every
+                # open group probed at once, failing ones halved -- D16 script Mastery: the sequential bisect of 5 x 1095
+                # fields needed ~259 s for 4 wrong fields; the outer runner killed it at 120 s, six times.
+                def gprobe(g):
+                    # grouptest's pool threads: this attempt's context (daemon opts, lane, t0) is thread-local
+                    _CTX.lane, _CTX.opts, _CTX.on_event, _CTX.solver_dir, _CTX.t0 = ctx
+                    if budget_left() < 0.8:
+                        return None
+                    res = sub(g)
+                    if ok(res):
+                        with lock:
+                            ok_fields.update(g)
+                        return "solved" if out.get("localize_completed_attempt") else "ok"
+                    if _unjudged(res):     # retried once by grouptest; still-unjudged ids come back in st
+                        return "rate" if "rate_limited" in json.dumps(res)[:2000] else None
+                    return "bad"
+                gs = []
+                for grp in _label_first(list(groups.get(key, {}).keys()), answers, vocab):
+                    gs += _GT.initial_groups({a: answers[a] for a in grp}, target=max(2, _GT.TARGET_GROUPS // 3),
+                                             families=False)
+                found, st = _GT.find_rejected(gprobe, {a: answers[a] for g in gs for a in g}, groups=gs,
+                                              conc=max(2, _GT.CONC // max(1, n_failed)),
+                                              # only a set the GM itself judged incorrect is KNOWN bad; an assumed
+                                              # one (the bulk submit failed) gets its lone field probed
+                                              whole_known_bad=v["result"] == "incorrect" and not v.get("assumed"),
+                                              stop=lambda: budget_left() < 0.8)
+                with lock:
+                    out.setdefault("localize_waves", []).append({"set": key, **{k: st.get(k) for k in
+                                                                 ("probes", "waves", "rate_limited", "seconds")}})
+                if st.get("unjudged_ids"):
+                    with lock:
+                        unjudged.extend(st["unjudged_ids"])
+                if st.get("unjudged_fields") or budget_left() < 0.8:
+                    incomplete()
+                order = list(groups.get(key, {}).keys())
+                wrong += sorted(found, key=order.index)
             else:
                 for grp in _label_first(list(groups.get(key, {}).keys()), answers, vocab):
                     narrow(grp, wrong)
@@ -683,15 +814,16 @@ def _localize(cid, answers, groups, per_set, body, out):
     hints = _hints()
     # _CTX is thread-local: the pool threads below would see lane/opts = None (no playbook alternatives, the daemon's
     # HCTF_LOCALIZE_UNTIMED_S ignored) -- hand this attempt's context to each of them
-    ctx = (_CTX.lane, _CTX.opts, _CTX.on_event, _CTX.solver_dir)
+    ctx = (_CTX.lane, _CTX.opts, _CTX.on_event, _CTX.solver_dir, getattr(_CTX, "t0", None))
 
     def one_set_ctx(key, v, vocab):
-        _CTX.lane, _CTX.opts, _CTX.on_event, _CTX.solver_dir = ctx
+        _CTX.lane, _CTX.opts, _CTX.on_event, _CTX.solver_dir, _CTX.t0 = ctx
         try:
             return one_set(key, v, vocab)
         finally:
-            _CTX.lane = _CTX.opts = _CTX.on_event = _CTX.solver_dir = None
+            _CTX.lane = _CTX.opts = _CTX.on_event = _CTX.solver_dir = _CTX.t0 = None
     by_set = {}
+    n_failed = sum(1 for v in per_set.values() if v.get("result") not in ("correct", "accepted"))
     try:
         keys = list(per_set)
         par = max(1, min(int(_opt("HCTF_LOCALIZE_PARALLEL", "5")), len(keys)))
@@ -945,10 +1077,47 @@ def run_attempt(cid, solver_dir, op="start", min_left=None, opts=None, on_event=
     from types import SimpleNamespace
     _CTX.lane, _CTX.opts, _CTX.on_event = _lane_from_solver_dir(solver_dir), dict(opts or {}), on_event
     _CTX.solver_dir = solver_dir
+    _CTX.t0 = time.time()
+    lock = _mode_lock(cid)
     try:
+        if lock is None:
+            return {"cid": cid, "result": "exec_error", "detail": "another runner holds this mode (mode lock)",
+                    "submitted": {}, **_read_progress(cid)}
         return _attempt(SimpleNamespace(cid=cid, solver_dir=solver_dir, op=op, min_left=min_left))
     finally:
-        _CTX.lane = _CTX.opts = _CTX.on_event = _CTX.solver_dir = None
+        if lock is not None:
+            lock.close()
+        _CTX.lane = _CTX.opts = _CTX.on_event = _CTX.solver_dir = _CTX.t0 = None
+
+
+def _mode_lock(cid):
+    """One runner per mode at a time (flock on .run/tmp-timed/<slug>.lock): every runner of a mode shares (and wipes)
+    .run/tmp-timed/<slug>/ -- D16, a manual resume and the orchestrator's retry deleted each other's bytes mid-attempt.
+    A second runner waits for the first (it would only work the same live attempt); None = still held at our deadline."""
+    import fcntl
+    p = _progress_path(cid).with_suffix("").with_suffix(".lock")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    f = open(p, "w")
+    rl = _runner_left()
+    until = time.time() + (rl if rl is not None else 600)
+    while True:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return f
+        except BlockingIOError:
+            if time.time() >= until:
+                f.close()
+                return None
+            time.sleep(0.5)
+
+
+def _read_progress(cid):
+    try:
+        d = json.loads(_progress_path(cid).read_text())
+        d.pop("result", None)
+        return d
+    except (OSError, ValueError):
+        return {}
 
 
 def _attempt(a):
@@ -977,6 +1146,16 @@ def _attempt(a):
     # answer_ids): the GM resumes the latest attempt, so re-attempting a passed mode (Mastery prerequisite re-pass,
     # scout, replay) got 'no_answer_ids' forever -- replay d7fix2 burned ~20 generalize workers on it.
     finished = not body.get("error") and not body.get("answer_ids")
+    replay = any(h in GM for h in ("127.0.0.1", "localhost"))   # replay_gm stand-in: re-runs passed modes (d7fix2)
+    if (finished and a.op in ("start", "resume") and str(body.get("result", "")).upper() == "CORRECT"
+            and not replay and _opt("HCTF_REROLL_CORRECT", "0") != "1"):
+        # The mode's latest attempt is already CORRECT: report the pass, never re-roll it. D16 script Mastery: a retry
+        # after an out-of-band pass re-rolled e50cf4a5 into a fresh 5475-question attempt (the GM's latest status then
+        # read not-correct). Callers that WANT a new variant (scout, hof) say op=retry.
+        out.update(result="correct", already_passed=True, attempt_id=body.get("attempt_id"),
+                   deadline=body.get("deadline"), no_clock=not body.get("deadline"))
+        _write_progress(a.cid, out)
+        return out
     if not untimed and (body.get("result") == "expired" or finished or (left is not None and left <= 0.5)):
         body = _post_start({"op": "retry", "challenge": a.cid})
         left = _deadline_left(body)
@@ -997,6 +1176,8 @@ def _attempt(a):
         out["no_clock"] = True     # a live attempt without a clock (regular pool / resumed untimed): resumable as-is
     out["attempt_id"] = body.get("attempt_id")
     out["window"] = _window(body)
+    if body.get("attempt_id") and body.get("answer_ids"):
+        _write_progress(a.cid, out, "started")
     ids = body.get("answer_ids") or []
     qmap = _paired(ids, body.get("questions") or [])
     if body.get("unique_attempts_remaining") is not None:
@@ -1138,6 +1319,7 @@ def _attempt(a):
         out["phases"]["submit"] = round(time.time() - t_solved, 2)
         per_set = {k: {"result": str(r.get("result", "")).lower(), "remaining": r.get("remaining")} for k, r in ress.items()}
         out["per_set"], out["submit_mode"] = per_set, "parallel_sets"
+        _write_progress(a.cid, out, "submitted")
         if all(v["result"] in ("correct", "accepted") for v in per_set.values()):
             out["result"] = "correct"
             out["verified"] = dict(answers)
@@ -1209,6 +1391,7 @@ def _attempt(a):
             final = "unjudged"
     out["result"] = "correct" if all(v["result"] in ("correct", "accepted") for v in per_set.values()) and per_set else final
     out["per_set"] = per_set
+    _write_progress(a.cid, out, "submitted")
     out["bad_sets"] = [k for k, v in per_set.items() if v["result"] == "incorrect"]
     if final == "incorrect":
         _localize(a.cid, answers, groups, {k: v for k, v in per_set.items() if v["result"] != "unjudged"}, body, out)
@@ -1335,6 +1518,8 @@ def _partial_submit(cid, part, body, out, setkey=_setkey):
 def _emit(out, adir):
     """Print the one-line result and keep a copy next to the attempt's bytes (contract.json + downloads), so the
     caller can turn the variant into a regression case with the GM-verified answers."""
+    if out.get("cid"):
+        _write_progress(out["cid"], out, "done")
     try:
         (adir / "result.json").write_text(json.dumps(out))
     except OSError:

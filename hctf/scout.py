@@ -56,7 +56,8 @@ def scout(cid, solver_dir, rounds=3, clean=2, log=print):
         if i and left is not None and left < SCOUT_MIN_ATTEMPTS:
             log(f"[{cid}] scout: only {left} unique attempt(s) left for this mode today -- stopping")
             break
-        res = workers.run_timed_auto(solver_dir, cid, log=log)
+        # op=retry: a NEW variant each round (start on the passed attempt now reports already_passed, never re-rolls)
+        res = workers.run_timed_auto(solver_dir, cid, op="retry", log=log)
         timed.process_result(cid, solver_dir, res, log=log)   # case capture + label caching + local record
         r = str(res.get("result", "")).lower()
         deadline = res.get("deadline")

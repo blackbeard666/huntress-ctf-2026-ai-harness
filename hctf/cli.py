@@ -32,6 +32,8 @@ from .paths import ROOT
 MAX_WRONG_PER_ATTEMPT = int(os.environ.get("HCTF_MAX_WRONG", "6"))   # per non-flag answer_id
 FLAG_WRONG_CAP = int(os.environ.get("HCTF_FLAG_WRONG_CAP", "3"))     # wrong flag guesses per attempt
 GLOBAL_WRONG_CAP = int(os.environ.get("HCTF_GLOBAL_WRONG_CAP", "80"))  # total wrong per attempt (sanity)
+# Probe budget of one bisect (parallel waves, hctf/grouptest.py): ~24 groups + 2 halves per wrong field per level.
+BISECT_BUDGET = int(os.environ.get("HCTF_BISECT_BUDGET", "160"))
 # Confirm exactly the GM's `accepted_ids` on a partial accept (real GM and replay_gm both send it); off = infer from
 # the drop in `remaining`, which a concurrent submit (race bisect beside the worker) can mis-attribute.
 ACCEPTED_IDS = os.environ.get("HCTF_ACCEPTED_IDS", "1") != "0"
@@ -92,7 +94,11 @@ def load_json(path):
 
 
 def save(cid, name, obj):
-    (cdir(cid) / name).write_text(json.dumps(obj, indent=2, ensure_ascii=False))
+    """Atomic (temp file + rename): concurrent probe submits read confirmed.json while another one rewrites it."""
+    p = cdir(cid) / name
+    tmp = p.with_name(f".{name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(json.dumps(obj, indent=2, ensure_ascii=False))
+    os.replace(tmp, p)
 
 
 @contextmanager
@@ -208,7 +214,12 @@ def c_hb(a):
         return 0 if r.returncode == 0 else EXIT["error"]
     if a.action == "exec":
         # Run a command ON Homebase (inside the CTF network), e.g. to reach a live challenge backend.
-        cmd = a.command[1:] if a.command[:1] == ["--"] else a.command
+        cmd = list(a.command)
+        # argparse.REMAINDER swallows options written after the action: `hb exec --timeout 30 -- cmd` (D16: the
+        # --timeout reached ssh as "unknown option --")
+        while cmd[:1] == ["--timeout"] and len(cmd) >= 2:
+            a.timeout, cmd = int(cmd[1]), cmd[2:]
+        cmd = cmd[1:] if cmd[:1] == ["--"] else cmd
         if not cmd:
             print("usage: hctf hb exec [--timeout N] -- <command ...>", file=sys.stderr)
             return EXIT["refused"]
@@ -247,6 +258,7 @@ def c_list(a):
 
 
 def c_status(a):
+    a.id = paths.resolve_id(a.id)
     env = call(a.id, "status", a.id)
     if env["body"] is not None:
         save(a.id, "status.json", env["body"])
@@ -424,81 +436,38 @@ def _slug_problem(value, q):
         return None
 
 
-def _bisect_rejected(cid, answers, budget=40, harness=None, families=True):
-    """Split an incorrect batch by answer-id family (prefix before the last '-'/'_' field word), then halves, submitting
-    each group (probe-tagged); accepted groups are banked. Returns the set of individually rejected answer_ids.
-    families=False: pure halving of the (known-rejected) batch -- ~log2(n) probes for one bad field whatever the ids
-    look like (the reuse race's speculative remainder spans many families)."""
-    def family(aid):
-        m = re.match(r"((?:set\d+\.)?[a-z0-9]+(?:[-_][a-z0-9]+)?)", aid)
-        return m.group(1) if m else aid
-    fams = {}
-    for k, v in answers.items():
-        fams.setdefault(family(k), {})[k] = v
-    bad, n = set(), [0]
+def _bisect_rejected(cid, answers, budget=BISECT_BUDGET, harness=None, families=True):
+    """Which of a rejected batch's answer_ids does the GM reject? PARALLEL group testing (hctf/grouptest.py): the batch
+    cut into ~24 family-ordered groups probed at once, then every failing group halved and both halves probed at once,
+    each probe-tagged (accepted groups are banked). Returns the set of individually rejected answer_ids.
+    families=False: the groups are plain contiguous cuts (the reuse race's speculative remainder spans many families).
+    D16 script single: the sequential version took 55 submits / 4:04 for 5 wrong fields of 1095."""
+    from . import grouptest
+    conf0 = confirmed_answers(cid)
+    answers = {k: v for k, v in answers.items() if conf0.get(k) != v}
 
     def probe(g):
-        """'ok' | 'bad' | None (GM unreachable twice: leave the group unjudged, keep everything already banked --
-        Day 8 binary: one hung POST killed the whole bisect and the worker re-ran it from scratch, ~60 s)."""
-        for _ in range(2):
-            n[0] += 1
-            try:
-                kind, _b, _p = submit(cid, g, force=True, probe=True, **({"harness": harness} if harness else {}))
-            except (remote.Unreachable, OSError, RuntimeError) as e:
-                print(f"bisect: probe of {len(g)} field(s) failed ({str(e)[:80]}); retrying once", file=sys.stderr)
-                continue
-            if kind in ("correct", "accepted"):
-                return "ok"
-            if kind == "incorrect":
-                return "bad"
-            if kind == "already_solved":
-                n[0] = budget             # the attempt is CORRECT: nothing left to learn, stop the whole bisect
-                return None
-            # rate_limited / empty / non-JSON / expired: UNJUDGED, never a rejection (a 'bad' here recorded fields the
-            # GM never judged as wrong) -- resend once, then leave the group unjudged
-            print(f"bisect: probe of {len(g)} field(s) unjudged ({kind}); resending once", file=sys.stderr)
-        return None
-
-    def split(g):
-        """g holds >= 1 rejected field. Halve; when the first half passes, the second must hold it -- no probe."""
-        g = {k: v for k, v in g.items() if k not in confirmed_answers(cid)}
-        if not g or n[0] >= budget:
-            return
-        if len(g) == 1:
-            bad.update(g)
-            return
-        ks = list(g)
-        h1, h2 = {k: g[k] for k in ks[:len(ks) // 2]}, {k: g[k] for k in ks[len(ks) // 2:]}
-        r1 = probe(h1)
-        if r1 == "ok":
-            split(h2)                     # inferred: g was rejected and h1 is clean
-            return
-        if r1 == "bad":
-            split(h1)
-        r2 = probe(h2)
-        if r2 == "bad":
-            split(h2)
-        elif r2 == "ok" and r1 is None:
-            split(h1)                     # h1 unjudged, h2 clean: h1 holds it
-
-    if not families:
-        split(dict(answers))
-        return bad
-    groups = list(fams.values())
-    unsure = False
-    for i, g in enumerate(groups):
-        if n[0] >= budget:
-            break
         g = {k: v for k, v in g.items() if k not in confirmed_answers(cid)}
         if not g:
-            continue
-        if i == len(groups) - 1 and not bad and not unsure:
-            split(g)                      # every other family passed: the rejection is in this one (no probe)
-            continue
-        r = probe(g)
-        unsure = unsure or r is None
-        if r == "bad":
-            split(g)
+            return "ok"
+        try:
+            kind, body, _p = submit(cid, g, force=True, probe=True, **({"harness": harness} if harness else {}))
+        except (remote.Unreachable, OSError, RuntimeError) as e:
+            print(f"bisect: probe of {len(g)} field(s) failed ({str(e)[:80]})", file=sys.stderr)
+            return None
+        if kind in ("correct", "accepted"):
+            return "ok"
+        if kind == "incorrect":
+            return "bad"
+        if kind == "already_solved":
+            return "solved"          # the attempt is CORRECT: nothing left to learn
+        # rate_limited / empty / non-JSON / expired: UNJUDGED, never a rejection
+        return "rate" if "rate_limited" in json.dumps(body or {})[:2000] else None
+
+    bad, st = grouptest.find_rejected(probe, answers, budget=budget, families=families)
+    print(f"bisect: {st['probes']} probe(s) in {st['waves']} parallel wave(s), {st['seconds']}s"
+          + (f", {st['rate_limited']} rate-limited (concurrency down to {st['conc_min']})" if st["rate_limited"] else "")
+          + (f", {st['unjudged_fields']} field(s) left unjudged" if st.get("unjudged_fields") else ""), file=sys.stderr)
     return bad
 
 
@@ -723,8 +692,16 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
     if problems and not force:
         return None, None, problems
 
-    with chal_lock(cid):
+    t_call = time.time()
+    if ACCEPTED_IDS:
+        # Concurrent submits are safe: the GM names what it accepted (accepted_ids), so nothing is inferred from
+        # `remaining`; only the local bookkeeping below is locked. D16: holding chal_lock across the ~1.8 s GM call
+        # serialized every probe of a bisect (the GM itself judges 12 concurrent submits in 3.3 s).
         env = call(cid, "submit", cid, json.dumps(answers))
+    else:
+        with chal_lock(cid):
+            env = call(cid, "submit", cid, json.dumps(answers))
+    dt_call = round(time.time() - t_call, 2)
     body = env["body"] if env["body"] is not None else env
     kind = result_kind(env["body"]) or ("error" if env["http"] != 200 else "unknown")
 
@@ -747,16 +724,18 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
             prev = before[-1]["body"]["remaining"] if before else len(qmap) - len(confirmed) if qmap else None
             if len(answers) == 1 or (isinstance(remaining, int) and prev is not None and prev - remaining == len(answers)):
                 newly = dict(answers)
-    if newly:
-        allc = load(cid, "confirmed.json") or {}
-        allc.setdefault(att or "_", {}).update(newly)
-        save(cid, "confirmed.json", allc)
-
-    with open(subs_path, "a") as f:
-        f.write(json.dumps({"ts": now(), "attempt": att, "answers": answers, "http": env["http"],
-                            "kind": kind, "confirmed": sorted(newly), "body": slim_body(env["body"]),
-                            **({"probe": True} if probe else {}), **({"harness": harness} if harness else {})},
-                           ensure_ascii=False) + "\n")
+    with chal_lock(cid):      # confirmed.json read-modify-write + the log append (concurrent probe submits)
+        if newly:
+            allc = load(cid, "confirmed.json") or {}
+            allc.setdefault(att or "_", {}).update(newly)
+            save(cid, "confirmed.json", allc)
+        with open(subs_path, "a") as f:
+            f.write(json.dumps({"ts": now(), "attempt": att, "answers": answers, "http": env["http"],
+                                "kind": kind, "confirmed": sorted(newly), "body": slim_body(env["body"]),
+                                **({"probe": True} if probe else {}), **({"harness": harness} if harness else {}),
+                                **({"transport": env["transport"]} if env.get("transport") else {}),
+                                "elapsed": dt_call},
+                               ensure_ascii=False) + "\n")
     return kind, body, []
 
 
@@ -799,7 +778,39 @@ def gm_solved(cid):
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text(json.dumps({"attempt": attempt_id(body), "seen": time.strftime("%Y-%m-%dT%H:%M:%S")}))
         return True
+    at = gm_list_solved(_day_of(cid)).get(cid) if _day_of(cid) else None
+    if at:
+        # the scoreboard has it on an EARLIER attempt (D16 script Mastery: CORRECT out of band, then a re-roll made
+        # the latest attempt not-correct and `reconcile` reported 0 updated)
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(json.dumps({"attempt": None, "solved_at": at, "seen": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                                      "via": "list"}))
+        return True
     return False
+
+
+def _day_of(cid):
+    m = re.search(r"-day-(\d+)", cid)
+    return int(m.group(1)) if m else None
+
+
+_list_cache = {}
+
+
+def gm_list_solved(day, max_age=20.0):
+    """{mode id: solved_at} from the GM's `list` for a day: `solved` is the scoreboard's per-mode truth (sticky across
+    attempts), unlike status (the latest attempt only). One call per day, cached max_age s."""
+    hit = _list_cache.get(day)
+    if hit and time.time() - hit[0] < max_age:
+        return hit[1]
+    try:
+        body = remote.gm("list", "--day", str(day))["body"] or {}
+    except Exception:  # noqa: BLE001 - unknown = nothing known solved
+        return {}
+    out = {c["id"]: ((c.get("solved_by") or {}).get("at") or True) for c in body.get("challenges") or []
+           if isinstance(c, dict) and c.get("solved") and c.get("id")}
+    _list_cache[day] = (time.time(), out)
+    return out
 
 
 def gm_latest_correct(cid):
@@ -952,6 +963,25 @@ def c_train(a):
     return train.main(argv)
 
 
+def c_postrun(a):
+    """Resume a day's post-run after a crash (hctf/postrun.py): restore what the killed run left, then the phases from
+    --from (default: the first phase not marked done in .run/dayNN.postrun.json)."""
+    from . import postrun
+    from .orchestrate import say     # timestamped lines: appended to .run/dayNN.log, `hctf feed --postrun` follows them
+    if not a.no_recover:
+        postrun.recover(a.day, log=say)
+    start = a.start
+    if start is None:
+        done = {k for k, v in (postrun.load(a.day).get("phases") or {}).items() if v.get("status") == "done"}
+        start = next((ph for ph in postrun.PHASES if ph not in done), None)
+        if start is None:
+            print(f"day {a.day}: every post-run phase is already done ({', '.join(postrun.PHASES)})")
+            return 0
+    say(f"[postrun] day {a.day}: resuming from '{start}' ({' -> '.join(postrun.PHASES[postrun.PHASES.index(start):])})")
+    postrun.run_phases(a.day, start, log=say)
+    return 0
+
+
 def c_compound_check(a):
     """Compounding readiness: today's solver vs every earlier day's GM-verified cases of its lane (hctf/compound.py)."""
     from . import compound
@@ -1028,7 +1058,7 @@ def c_why(a):
     """Explain a chain's state at a glance: is each mode converging or actually stuck? Prints the block reason,
     wrong fields, attempt/block counts, timing vs window, and the last worker RESULT -- the facts otherwise
     assembled by hand from last_timed.json / window.json / diagnosis.json / the worker logs."""
-    base = paths.base_id(a.id)
+    base = paths.base_id(paths.resolve_id(a.id))
     chain = load_json(paths.challenge_root(base) / "chain.json") or {}
     print(f"== {base}  [{chain.get('lane', '?')}]  {chain.get('name', '')}")
     print(f"   stage={chain.get('stage', '?')}  worker={chain.get('worker') or '-'}  "
@@ -1200,7 +1230,8 @@ def c_feed(a):
     if not a.day and not a.log:
         print("give --day N or --log PATH", file=sys.stderr)
         return 2
-    return feed.main(day=a.day, log=a.log, from_start=a.from_start, follow_=not a.no_follow, heartbeat=a.heartbeat)
+    return feed.main(day=a.day, log=a.log, from_start=a.from_start, follow_=not a.no_follow, heartbeat=a.heartbeat,
+                     postrun=True if a.postrun else None)
 
 
 def c_timeline(a):
@@ -1245,7 +1276,7 @@ def c_watch(a):
 
 def c_tail(a):
     from . import watch
-    watch.tail(a.id)
+    watch.tail(paths.resolve_id(a.id), n=a.n, follow=not a.no_follow)
     return 0
 
 
@@ -1330,6 +1361,11 @@ def main(argv=None):
     per = sub.add_parser("effort-report", help="effort A/B: one day across harness copies (main xhigh vs the rehearsal copy high)")
     per.add_argument("--day", type=int, required=True)
     per.add_argument("--root", action="append", help="harness copy root (repeatable; default main)")
+    ppr = sub.add_parser("postrun", help="resume a day's post-run after a crash (ratchet/speed-harden/train/prebuild/"
+                                         "coverage); restores interrupted generalize/ratchet snapshots first")
+    ppr.add_argument("--day", type=int, required=True)
+    ppr.add_argument("--from", dest="start", choices=["ratchet", "speed-harden", "train", "prebuild", "coverage"])
+    ppr.add_argument("--no-recover", action="store_true", help="skip restoring interrupted snapshots")
     ptr = sub.add_parser("train", help="offline training: a day's solvers vs every earlier day's verified cases")
     ptr.add_argument("--day", type=int, required=True)
     ptr.add_argument("--lane", action="append")
@@ -1383,13 +1419,18 @@ def main(argv=None):
     pfd.add_argument("--from-start", action="store_true", help="also print the milestones already in the log")
     pfd.add_argument("--no-follow", action="store_true", help="print what is there and exit")
     pfd.add_argument("--heartbeat", type=float, default=60.0, help="status line every N seconds while running")
+    pfd.add_argument("--postrun", action="store_true",
+                     help="follow the post-run to 'post-run finished' (default: only for a bin/day.sh run, by pid file)")
     phf = sub.add_parser("hof", help="Hall of Fame speed board: our rank/ms vs #1 per challenge + day sums (public)")
     phf.add_argument("--day", type=int)
     phf.add_argument("--save", action="store_true", help="also snapshot the board to reference/hof/")
     sub.add_parser("solutions", help="(re)generate reference/SOLUTIONS.md index from every solver/NOTES.md")
     pw = sub.add_parser("watch", help="live board of every challenge + each agent's current action")
     pw.add_argument("--interval", type=float, default=2.0)
-    sub.add_parser("tail", help="follow one agent's reasoning + tool calls live").add_argument("id")
+    ptl = sub.add_parser("tail", help="follow one agent's reasoning + tool calls live")
+    ptl.add_argument("id", help="GM id or the dayNN/<dir>[/mode] name hctf dash prints")
+    ptl.add_argument("-n", type=int, default=None, help="first print the last N events of the log")
+    ptl.add_argument("--no-follow", action="store_true", help="print and exit (scripts / monitors)")
     pl2 = sub.add_parser("labels", help="resolve a non-flag field's exact GM label: rank candidates from sibling "
                                         "confirmed labels + artifact terms, then probe them one at a time")
     pl2.add_argument("id")
@@ -1402,7 +1443,7 @@ def main(argv=None):
     pl2.add_argument("--dry-run", action="store_true", help="only print the ranked candidates")
     a = p.parse_args(argv)
     fn = {"hb": c_hb, "list": c_list, "status": c_status, "start": c_start, "retry": c_retry,
-          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test, "compound-check": c_compound_check, "train": c_train, "effort-report": c_effort_report, "tool-wait": c_tool_wait, "speed-harden": c_speed_harden, "prebuild": c_prebuild, "tool-gaps": c_tool_gaps,
+          "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test, "compound-check": c_compound_check, "train": c_train, "postrun": c_postrun, "effort-report": c_effort_report, "tool-wait": c_tool_wait, "speed-harden": c_speed_harden, "prebuild": c_prebuild, "tool-gaps": c_tool_gaps,
           "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
           "reconcile": c_reconcile, "solutions": c_solutions,
           "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout,

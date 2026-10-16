@@ -132,8 +132,7 @@ class Zygotes:
             raise
         except Exception as e:  # noqa: BLE001 - never lose an attempt to the warm path
             log(f"zygote fallback ({e}); cold solve")
-            return subprocess.run([sys.executable, solve_path, *args], capture_output=True, text=True, timeout=timeout,
-                                  env=env)
+            return sys.modules["hb_timed"].run_group([sys.executable, solve_path, *args], timeout=timeout, env=env)
 
     def close(self):
         for z in self.by_dir.values():

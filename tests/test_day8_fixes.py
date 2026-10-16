@@ -264,7 +264,8 @@ for args, out in ((["x", "-y", f"-o{wd}/o1", "-pinfected"], "o1"), (["x", f"-o{w
     assert r.returncode == 0 and (wd / out / "a.txt").read_text() == "hello\n", (args, r.stdout[-300:], r.stderr[-300:])
 print("ok  bin/7z: works with and without the caller's -y (passworded zip)")
 
-# 10) Single-solve bisect: one hung probe doesn't kill it; a clean first half implies the second (no probe).
+# 10) Single-solve bisect: one hung probe doesn't kill it (unjudged -> probed again in the next wave). D16 post-mortem:
+#     parallel waves (hctf/grouptest.py) -- groups are probed together, nothing is inferred sequentially.
 subs = []
 truth = {"d01_a": "1", "d01_b": "2", "d02_a": "3", "d08_x": "64", "d08_y": "62", "d08_z": "z"}
 fail_once = {"d02_a"}
@@ -284,11 +285,12 @@ try:
     answers = {**truth, "d08_x": "2"}
     bad = cli._bisect_rejected("c", answers)
     assert bad == {"d08_x"}, bad
-    assert sorted(["d02_a"]) in subs and subs.count(["d02_a"]) == 2      # retried after the hang
-    assert ["d08_x", "d08_y", "d08_z"] not in subs                       # last family inferred, not probed
+    hung = [g for g in subs if "d02_a" in g]
+    assert len(hung) == 2 and hung[0] == hung[1], subs                  # the hung group, retried once
+    assert len(subs) <= 8, subs
 finally:
     cli.submit, cli.confirmed_answers = _o
-print(f"ok  bisect: survives a hung probe, infers the last family / second half ({len(subs)} probes)")
+print(f"ok  bisect: survives a hung probe (its group retried next wave), isolates the wrong field ({len(subs)} probes)")
 
 # 11) kind-aware binary label laws (D8 elf_class kind integer -> bit width 64, not EI_CLASS 2).
 from lib import playbook  # noqa: E402

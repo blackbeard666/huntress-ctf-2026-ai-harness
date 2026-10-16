@@ -314,7 +314,7 @@ with mock.patch.object(orch, "say", said.append):
 assert timed.join_captures(0) == 0 and any("all captured" in s for s in said), said
 timed._captures.remove(t)
 src = __import__("inspect").getsource(orch.run)
-assert "_join_captures(" in src and "_join_captures(tag)" in __import__("inspect").getsource(orch.ratchet)
+assert "_join_captures(" in src and "_join_captures(tag)" in __import__("inspect").getsource(orch.ratchet_lib)
 print("ok  C1 background pass captures tracked + joined before speed-harden and before the run exits")
 
 # ---------------------------------------------------------------------------------------------------------------- G1

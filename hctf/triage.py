@@ -5,6 +5,7 @@ routes to the right lane skill, so the agent doesn't burn turns rediscovering wh
 """
 import hashlib
 import json
+import os
 import re
 import shlex
 import shutil
@@ -449,6 +450,9 @@ def _extract_all(files, dest, depth=2):
     return (["", "## Extracted (pre-unpacked for you -- read these instead of unzipping again)", ""] + lines) if lines else []
 
 
+RECON_WAIT = float(os.environ.get("HCTF_TRIAGE_RECON_WAIT", "5"))   # s the go text waits for recon
+
+
 def triage(cid, defer_recon=None, log=None):
     """Write <mode dir>/triage.md from the latest downloaded artifacts. Returns the path or None.
     The toolchain check and recon run in parallel (D9 binary: 2.3 s + 3.6 s, serial before). defer_recon: a callable;
@@ -491,9 +495,13 @@ def triage(cid, defer_recon=None, log=None):
             out.append(f"- `{aid}`: {q.get('question', '')[:110]}  _(fmt: {str(syn)[:80]}; norm: {q.get('normalization')})_")
         out.append("")
     out += ["## Artifacts", ""]
+    import time as _time
+    tm = {"t0": _time.time()}
     for f in files:
         out += _describe(f)
+    tm["describe"] = _time.time()
     out += _extract_all(files, mdir / "work" / "extracted")
+    tm["extract"] = _time.time()
     from concurrent.futures import ThreadPoolExecutor
     pool = ThreadPoolExecutor(max_workers=1)
     recon_fut = pool.submit(_recon, cid, mdir / "work" / "extracted")   # beside the toolchain check
@@ -508,6 +516,13 @@ def triage(cid, defer_recon=None, log=None):
         out += toolchain.check(files + members, cid=cid, text=toolchain.challenge_text(contract))
     except Exception as e:  # noqa: BLE001 - best-effort
         out += ["", f"_toolchain check skipped: {e}_"]
+    tm["toolchain"] = _time.time()
+
+    def timing(recon):
+        # D16 binary: go text at +64 s with no breakdown (3 s uncontended); the next slow triage says where it went
+        if log:
+            log(f"[{cid}] triage timing: describe {tm['describe'] - tm['t0']:.1f}s, extract "
+                f"{tm['extract'] - tm['describe']:.1f}s, toolchain {tm['toolchain'] - tm['extract']:.1f}s, recon {recon}")
     tail = ["", "_Deterministic triage (no LLM). Verify against the bytes; see the routed lane skill._"]
     path = mdir / "triage.md"
 
@@ -522,9 +537,19 @@ def triage(cid, defer_recon=None, log=None):
             deferred = bool(defer_recon())
         except Exception:  # noqa: BLE001
             deferred = False
+    if not deferred and log is not None and not recon_fut.done():
+        # never hold the go text on recon: wait up to RECON_WAIT s, then let it land in the background
+        try:
+            recon_fut.result(timeout=RECON_WAIT)
+        except Exception:  # noqa: BLE001 - timeout or recon error: defer (recon_lines reports the error)
+            deferred = not recon_fut.done()
     if not deferred:
-        path.write_text("\n".join(out + recon_lines() + tail), encoding="utf-8")
+        t_r = _time.time()
+        lines = recon_lines()
+        timing(f"{_time.time() - t_r:.1f}s (inline)")
+        path.write_text("\n".join(out + lines + tail), encoding="utf-8")
         return path
+    timing("deferred")
     path.write_text("\n".join(out + ["", "## Recon (standard tools, pre-run for you -- facts, not answers)", "",
                                       f"_Still running in the background: it replaces this note in `{path}` within "
                                       "seconds. Re-read this section there only if you need it._"] + tail),

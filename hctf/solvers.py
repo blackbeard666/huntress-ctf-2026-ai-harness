@@ -97,8 +97,11 @@ def sub_contract(contract, answer_ids):
     return c
 
 
-def run_solver(sdir, contract, artifacts, timeout=120):
-    """Run one solver. Returns (answers dict, error string or None, seconds)."""
+def run_solver(sdir, contract, artifacts, timeout=120, background=None):
+    """Run one solver. Returns (answers dict, error string or None, seconds).
+    Own process group, killed as a group on timeout (its fork pool too); background=True (or the calling thread's
+    procgov flag) = the low-priority class -- see hctf/procgov.py."""
+    from . import procgov
     if not (Path(sdir) / "solve.py").exists():
         return {}, f"no solver yet at {Path(sdir).relative_to(ROOT)}/solve.py", 0.0
     tmp = TMP / f"contract-{sdir.parent.name}-{time.time_ns()}.json"
@@ -108,8 +111,8 @@ def run_solver(sdir, contract, artifacts, timeout=120):
     env["PYTHONPATH"] = f"{ROOT}:{env.get('PYTHONPATH', '')}"  # solvers can `import lib.*`
     t0 = time.time()
     try:
-        r = subprocess.run([py, str(sdir / "solve.py"), "--contract", str(tmp), "--artifacts", str(artifacts)],
-                           capture_output=True, text=True, timeout=timeout, cwd=sdir, env=env)
+        r = procgov.run([py, str(sdir / "solve.py"), "--contract", str(tmp), "--artifacts", str(artifacts)],
+                        timeout=timeout, cwd=sdir, env=env, background=background)
     except subprocess.TimeoutExpired:
         return {}, f"timeout after {timeout}s", time.time() - t0
     finally:
@@ -129,26 +132,21 @@ def dry_run_diagnostics(sdir, contract, artifacts, timeout=15, known=None, shape
     (user rule: old solvers are not an answer source). On a timeout it gets SIGINT first, so the traceback names the
     loop that hangs. Rehearsal D8: the copied Day 7 binary solver hung twice to the worker's 60 s cap on a 67 MB Swift ELF
     (~140 s of the single) before the worker found the slow path. Returns a dict (see render_dry_run)."""
-    import signal
+    from . import procgov
     tmp = TMP / f"dryrun-{Path(sdir).parent.name}-{time.time_ns()}.json"
     tmp.write_text(json.dumps(contract))
     py = str(VENV_PY) if VENV_PY.exists() else "python3"
     env = dict(os.environ, PYTHONPATH=f"{ROOT}:{os.environ.get('PYTHONPATH', '')}")
     t0 = time.time()
-    p = subprocess.Popen([py, str(Path(sdir) / "solve.py"), "--contract", str(tmp), "--artifacts", str(artifacts)],
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=sdir, env=env,
-                         start_new_session=True)
     timed_out = False
     try:
-        out, err = p.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
+        # SIGINT to the group first (KeyboardInterrupt -> a traceback at the hot loop), then SIGKILL the group
+        r = procgov.run([py, str(Path(sdir) / "solve.py"), "--contract", str(tmp), "--artifacts", str(artifacts)],
+                        timeout=timeout, cwd=sdir, env=env, grace=3)
+        out, err, rc = r.stdout, r.stderr, r.returncode
+    except subprocess.TimeoutExpired as e:
         timed_out = True
-        p.send_signal(signal.SIGINT)              # KeyboardInterrupt -> a traceback at the hot loop
-        try:
-            out, err = p.communicate(timeout=3)
-        except subprocess.TimeoutExpired:
-            p.kill()
-            out, err = p.communicate()
+        out, err, rc = e.output or "", e.stderr or "", -2     # SIGINT, then the group was killed
     finally:
         tmp.unlink(missing_ok=True)
     dt = time.time() - t0
@@ -188,7 +186,7 @@ def dry_run_diagnostics(sdir, contract, artifacts, timeout=15, known=None, shape
         for i in new:
             new_by_art.setdefault(str((qs.get(i) or {}).get("artifact") or "?"), []).append(i)
     return {"solver": str(Path(sdir).relative_to(ROOT)), "seconds": round(dt, 1), "timed_out": timed_out,
-            "rc": p.returncode, "frames": frames, "error": last[:200] if (p.returncode and not timed_out) else "",
+            "rc": rc, "frames": frames, "error": last[:200] if (rc and not timed_out) else "",
             "warnings": warn[:8], "answered": len(ids) - len(empty), "total": len(ids), "empty": empty[:15],
             "empty_q": empty_q, "new": len(new), "new_by_art": new_by_art}
 
@@ -202,7 +200,7 @@ def profile_solver(sdir, case_dir, timeout=45, top=25, interrupt=False):
     speed generalize so the worker starts at the hot path (rehearsal D8 + d8tc1: both speed workers lost a turn to a profile
     piped to /dev/null). interrupt=True: SIGINT at `timeout` instead of giving up -- cProfile still prints the stats of
     the run so far (a solver too slow to finish is exactly the one worth profiling)."""
-    import signal
+    from . import procgov
     case_dir = Path(case_dir)
     if not (case_dir / "contract.json").exists():
         return ""
@@ -211,24 +209,14 @@ def profile_solver(sdir, case_dir, timeout=45, top=25, interrupt=False):
     argv = [py, "-m", "cProfile", "-s", "cumtime", str(Path(sdir).resolve() / "solve.py"), "--contract",
             str(case_dir.resolve() / "contract.json"), "--artifacts", str(case_dir.resolve() / "artifacts")]
     cut = ""
-    if interrupt:
-        p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=sdir, env=env,
-                             start_new_session=True)
-        try:
-            stdout, _ = p.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            p.send_signal(signal.SIGINT)
-            cut = f", INTERRUPTED at {timeout:g}s"
-            try:
-                stdout, _ = p.communicate(timeout=10)
-            except subprocess.TimeoutExpired:
-                p.kill()
-                stdout, _ = p.communicate()
-    else:
-        try:
-            stdout = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, cwd=sdir, env=env).stdout
-        except subprocess.TimeoutExpired:
+    try:
+        # interrupt: SIGINT to the group at `timeout` -- cProfile still prints the stats so far -- then SIGKILL it
+        stdout = procgov.run(argv, timeout=timeout, cwd=sdir, env=env, grace=10 if interrupt else 0).stdout
+    except subprocess.TimeoutExpired as e:
+        if not interrupt:
             return f"(profile of {case_dir.name} did not finish in {timeout}s)"
+        stdout = e.output or ""
+        cut = f", INTERRUPTED at {timeout:g}s"
     out = (stdout or "").splitlines()
     i = next((k for k, ln in enumerate(out) if ln.strip().startswith("ncalls")), None)
     if i is None:
@@ -361,14 +349,38 @@ def targets_pass(sdir, targets, fill=(), timeout=8):
                for f in fill)
 
 
-def test_solver(sdir, timeout=120, parallel=min(8, os.cpu_count() or 4), cases=None):
+def _mem_avail_gb():
+    try:
+        for ln in open("/proc/meminfo"):
+            if ln.startswith("MemAvailable:"):
+                return int(ln.split()[1]) / 1048576
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+# GB of MemAvailable per parallel case: D16 post-run, 8 cases x a solver's own fork pool (~195 MB per process) OOM'd
+# WSL. Background runs are single-process (procgov), foreground ones may fork.
+CASE_MEM_GB = float(os.environ.get("HCTF_CASE_MEM_GB", "1.25"))
+
+
+def case_parallel(cap=8):
+    """Parallel case runs this box can afford right now: min(cap, cpus, MemAvailable / HCTF_CASE_MEM_GB), >= 1."""
+    n = min(cap, os.cpu_count() or 4)
+    gb = _mem_avail_gb()
+    if gb is not None:
+        n = min(n, int(gb / CASE_MEM_GB))
+    return max(1, n)
+
+
+def test_solver(sdir, timeout=120, parallel=None, cases=None):
     """Run the solver on every case (cases in parallel: they are independent; replay run 2 spent 141s replaying a
     slow solver's cases one by one). Returns list of {case, ok, seconds, diff/error}, in case-name order.
     Also verified_n (GM-verified fields), rejected_hits (GM-rejected values produced again, gm_feedback.json) and
     fully_verified (every asked field has a verified answer).
     `cases`: only case names matching any of these names / fnmatch globs (None = all) -- the generalize watchers and
     `hctf solver-test --case` test the target cases first instead of the whole corpus on every edit."""
-    from concurrent.futures import ThreadPoolExecutor
+    from . import procgov
 
     def one(case):
         contract = json.loads((case / "contract.json").read_text())
@@ -398,7 +410,9 @@ def test_solver(sdir, timeout=120, parallel=min(8, os.cpu_count() or 4), cases=N
     if pats is not None:
         import fnmatch
         cases = [c for c in cases if any(fnmatch.fnmatchcase(c.name, p) for p in pats)]
-    with ThreadPoolExecutor(max_workers=max(1, parallel)) as ex:
+    if parallel is None:
+        parallel = case_parallel()
+    with procgov.Executor(max_workers=max(1, parallel)) as ex:   # the caller's background flag flows into each run
         return list(ex.map(one, cases))
 
 

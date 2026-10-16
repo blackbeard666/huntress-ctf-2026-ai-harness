@@ -163,14 +163,14 @@ finally:
     else:
         _os.environ["HCTF_SOLVE_DEADLINE"] = _old
 _seen = {}
-_orig_run = hb_timed.subprocess.run
+_orig_run = hb_timed.run_group          # the cold path: own session, group kill on timeout (D16 post-mortem)
 _orig_solver = hb_timed.SOLVER
 try:
     hb_timed.SOLVER = None
-    hb_timed.subprocess.run = lambda cmd, **kw: _seen.update(kw["env"]) or None
+    hb_timed.run_group = lambda cmd, **kw: _seen.update(kw["env"]) or None
     hb_timed._run_solver("solve.py", "c.json", "a", 10.0, {"X": "1"})
 finally:
-    hb_timed.subprocess.run, hb_timed.SOLVER = _orig_run, _orig_solver
+    hb_timed.run_group, hb_timed.SOLVER = _orig_run, _orig_solver
 assert _seen["X"] == "1" and 8.5 < float(_seen["HCTF_SOLVE_DEADLINE"]) - _time.time() < 9.1, _seen
 print("ok  in-window deadline: peel + skeleton fallback stop at HCTF_SOLVE_DEADLINE (runner sets it 1 s before the kill)")
 # 6) pre-attempt gate: HARD mutation misses -> mutation-* cases adopted + ONE generalize with mutation_pre, before any

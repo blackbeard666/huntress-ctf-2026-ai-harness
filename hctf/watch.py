@@ -16,7 +16,8 @@ C = {"dim": "\033[2m", "b": "\033[1m", "grn": "\033[32m", "yel": "\033[33m", "re
 
 
 def _latest_worker_log(chal_root):
-    logs = glob.glob(str(chal_root / "*" / "worker-*.log"))
+    # mode dirs AND the challenge root itself (post-run technique-log workers write worker-ratchet_log-*.log there)
+    logs = glob.glob(str(chal_root / "*" / "worker-*.log")) + glob.glob(str(chal_root / "worker-*.log"))
     return max(logs, key=os.path.getmtime) if logs else None
 
 
@@ -103,11 +104,45 @@ def watch(interval=2.0):
         print()
 
 
-def tail(cid):
-    """Follow the newest worker log for a challenge, pretty-printing thinking + tool calls live."""
+def _fmt_event(o):
+    """One stream-json worker event -> printable lines."""
+    out = []
+    t = o.get("type")
+    if t == "assistant":
+        for blk in o.get("message", {}).get("content", []):
+            if blk.get("type") == "text" and blk.get("text", "").strip():
+                out.append(f"{C['cyn']}🧠 {blk['text'].strip()}{C['rst']}")
+            elif blk.get("type") == "tool_use":
+                out.append(f"{C['mag']}⚙ {blk.get('name')}{C['rst']} {json.dumps(blk.get('input', {}))[:200]}")
+    elif t == "user":
+        for blk in o.get("message", {}).get("content", []):
+            if isinstance(blk, dict) and blk.get("type") == "tool_result":
+                c = blk.get("content")
+                txt = c if isinstance(c, str) else json.dumps(c)
+                out.append(f"{C['dim']}  → {txt[:200].strip()}{C['rst']}")
+    elif t == "result":
+        out.append(f"{C['grn']}✔ {str(o.get('result', ''))[:300]}{C['rst']}")
+    return out
+
+
+def _events(lines):
+    for line in lines:
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            yield json.loads(line)
+        except ValueError:
+            continue
+
+
+def tail(cid, n=None, follow=True):
+    """The newest worker log for a challenge, pretty-printed: the last `n` events (all of them when not following),
+    then (follow) new thinking + tool calls live. follow=False exits at the end of the file (D16: an always-following
+    tail hung every script and monitor that called it)."""
     root = paths.challenge_root(cid)
     log = None
-    for _ in range(60):
+    for _ in range(60 if follow else 1):
         log = _latest_worker_log(root)
         if log:
             break
@@ -115,35 +150,22 @@ def tail(cid):
     if not log:
         print(f"no worker log yet for {cid}")
         return
-    print(f"{C['b']}tail {Path(log).relative_to(paths.ROOT)}{C['rst']}  (Ctrl-C to exit)\n")
+    print(f"{C['b']}tail {Path(log).relative_to(paths.ROOT)}{C['rst']}" + ("  (Ctrl-C to exit)\n" if follow else "\n"))
     try:
         with open(log, "r", encoding="utf-8", errors="replace") as f:
+            if n is not None or not follow:
+                shown = [ln for o in _events(f.readlines()) for ln in _fmt_event(o)]
+                for ln in shown[-n:] if n else shown:
+                    print(ln)
+            if not follow:
+                return
             while True:
                 line = f.readline()
                 if not line:
                     time.sleep(0.4)
                     continue
-                line = line.strip()
-                if not line.startswith("{"):
-                    continue
-                try:
-                    o = json.loads(line)
-                except ValueError:
-                    continue
-                t = o.get("type")
-                if t == "assistant":
-                    for blk in o.get("message", {}).get("content", []):
-                        if blk.get("type") == "text" and blk.get("text", "").strip():
-                            print(f"{C['cyn']}🧠 {blk['text'].strip()}{C['rst']}")
-                        elif blk.get("type") == "tool_use":
-                            print(f"{C['mag']}⚙ {blk.get('name')}{C['rst']} {json.dumps(blk.get('input', {}))[:200]}")
-                elif t == "user":
-                    for blk in o.get("message", {}).get("content", []):
-                        if isinstance(blk, dict) and blk.get("type") == "tool_result":
-                            c = blk.get("content")
-                            txt = c if isinstance(c, str) else json.dumps(c)
-                            print(f"{C['dim']}  → {txt[:200].strip()}{C['rst']}")
-                elif t == "result":
-                    print(f"{C['grn']}✔ {str(o.get('result',''))[:300]}{C['rst']}")
+                for o in _events([line]):
+                    for ln in _fmt_event(o):
+                        print(ln, flush=True)
     except KeyboardInterrupt:
         print()

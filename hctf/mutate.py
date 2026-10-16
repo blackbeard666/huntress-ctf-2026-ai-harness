@@ -26,8 +26,9 @@ import json
 import re
 import shutil
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+from .procgov import Executor as _BgExecutor
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -214,7 +215,7 @@ def probe(sdir, out_dir, mastery_contract=None, timeout=20, soft=True):
         return {"ok": not err and not bad, "error": (err or "")[-300:] or None, "wrong": len(bad),
                 "empty": sum(1 for a in bad if got.get(a) in (None, "")), "of": len(exp), "seconds": round(dt, 2),
                 "sample": [{"id": a, "expected": exp[a], "got": got.get(a)} for a in bad[:3]]}
-    with ThreadPoolExecutor(max_workers=min(8, len(summary["made"]) + 1)) as ex:
+    with _BgExecutor(max_workers=min(8, len(summary["made"]) + 1)) as ex:
         bfut = ex.submit(run, base)
         futs = [(m, ex.submit(run, m["case"])) for m in summary["made"]]
         b = bfut.result()

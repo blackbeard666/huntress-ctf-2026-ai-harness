@@ -98,7 +98,8 @@ fi
 if [ "$WAIT" -eq 1 ]; then
   echo "[wait] armed: the run polls the GM in-process for day $DAY (every ${HCTF_RELEASE_POLL:-0.3}s + call time)"
 fi
-if pgrep -f "hctf.cli run --day $DAY( |$)|hctf run --day $DAY( |$)" >/dev/null; then
+if pgrep -f "hctf.cli run --day $DAY( |$)|hctf run --day $DAY( |$)" >/dev/null \
+   || { [ -f "$ROOT/.run/$DAYTAG.unit" ] && systemctl --user is-active --quiet "$(cat "$ROOT/.run/$DAYTAG.unit")" 2>/dev/null; }; then
   echo "[run] a day $DAY run is already in progress -- not launching a second one." >&2
   exit 0
 fi
@@ -121,9 +122,26 @@ if [ "$FG" -eq 1 ]; then
   echo "[done] run exited rc=$rc"; echo "=== ATT&CK coverage ($DAYTAG) ==="; eval "$POST" | tee -a "$LOG"
   exit "$rc"
 else
-  # setsid detaches into its own session so it survives the launching shell cleanly (nohup+& was fragile).
-  setsid bash -c "cd '$ROOT' && source bin/env.sh && echo '$EFFORT_LINE' > '$LOG'; hctf ${RUN_ARGS[*]} >> '$LOG' 2>&1; { echo; echo '=== ATT&CK coverage ($DAYTAG) ==='; $POST; } >> '$LOG' 2>&1" >/dev/null 2>&1 &
-  echo "[run] launched in background (pid $!)."
-  echo "      watch:  tail -f $LOG     board:  hctf dash | grep $DAYTAG     health:  hctf why <id>"
+  PIDF="$ROOT/.run/$DAYTAG.pid"
+  SCRIPT="cd '$ROOT' && source bin/env.sh && echo \$\$ > '$PIDF' && echo '$EFFORT_LINE' > '$LOG'; hctf ${RUN_ARGS[*]} >> '$LOG' 2>&1; { echo; echo \"\$(date +%H:%M:%S) [postrun] coverage start\"; echo '=== ATT&CK coverage ($DAYTAG) ==='; $POST; echo \"\$(date +%H:%M:%S) post-run finished\"; } >> '$LOG' 2>&1"
+  if command -v systemd-run >/dev/null && systemctl --user is-system-running 2>/dev/null | grep -qE 'running|degraded' \
+     && [ "${HCTF_RUN_SYSTEMD:-1}" != "0" ]; then
+    # A transient USER unit (linger on: preflight): outside this terminal / Claude session, and memory-capped so a
+    # runaway fan-out is OOM-killed INSIDE the unit (solver forks first: oom_score_adj 300/800) -- D16: the kernel
+    # OOM killer took WSL's init with it and the post-run never finished.
+    MEMKB=$(awk '/^MemTotal/{print $2}' /proc/meminfo)
+    MAXMB=$(( MEMKB / 1024 - ${HCTF_RUN_MEM_RESERVE_MB:-600} )); HIGHMB=$(( MAXMB - 700 ))
+    UNIT="hctf-$DAYTAG-$(date +%H%M%S)"
+    systemd-run --user --collect --unit "$UNIT" --working-directory "$ROOT" -p MemoryHigh="${HIGHMB}M" \
+      -p MemoryMax="${MAXMB}M" bash -lc "$SCRIPT" >/dev/null 2>&1
+    echo "$UNIT" > "$ROOT/.run/$DAYTAG.unit"
+    echo "[run] launched as systemd user unit $UNIT (MemoryHigh ${HIGHMB}M, MemoryMax ${MAXMB}M; pid in $PIDF)."
+    echo "      status:  systemctl --user status $UNIT"
+  else
+    # setsid detaches into its own session so it survives the launching shell cleanly (nohup+& was fragile).
+    setsid bash -c "$SCRIPT" >/dev/null 2>&1 &
+    echo "[run] launched in background (pid $!; no user systemd -- not memory-capped)."
+  fi
+  echo "      watch:  hctf feed --day $DAY (follows the post-run too)     board:  hctf dash | grep $DAYTAG"
   echo "      the ATT&CK generalization report (python3 -m lib.refs.coverage $DAY) appends to $LOG when the run finishes."
 fi
