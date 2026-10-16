@@ -37,9 +37,10 @@ solver/{solve.py,NOTES.md})
    - Warmups: if the day's warmups codec is not in `lib/warmups_codecs.py` `DAYS` yet, append it (exact encoder +
      decoder + free flag, tagged with day {day_num}) as verified by the day's confirmed answers; a free-text codec also
      goes in `lib/decode.py` `FREE_CODECS`. `lib.decode.decode_chunked` decodes Mastery line k with day k's codec.
-2. Tests: run ONLY the gate, once at the end (and again after a fix): `python3 tests/test_orchestrate.py`,
-   `python3 tests/test_day6_fixes.py`, `python3 tests/test_day7_fixes.py`, `python3 tests/test_codec.py`,
-   `python3 tests/test_meta_lane.py`, `python3 -m lib.refs.coverage {day_num}`. Do NOT run other suites, and do NOT
+2. Tests: run ONLY the gate, once at the end (and again after a fix), as ONE command that runs every gate suite in
+   parallel and prints only the failures: `python3 -m hctf.orchestrate ratchet-gate {day}` (= tests/test_orchestrate,
+   test_day6_fixes, test_day7_fixes, test_codec, test_meta_lane + `lib.refs.coverage {day_num}`; exit 0 = green). While
+   editing, check one module with a `python3 -c` on its own samples, never a suite loop. Do NOT run other suites, and do NOT
    swap lib files with `git show HEAD:...` to compare -- the harness diffs lib/ itself. If a lib edit breaks a test,
    fix or revert THAT edit. You may ADD new assertions/tests; do NOT modify or delete an existing assertion to make it
    pass -- the harness detects that, re-runs the gate with the original tests, and flags the change for human review.

@@ -73,6 +73,13 @@ def label_only_failure(wrong):
     return all(field_family(a) in CACHEABLE_FAMILIES for a in ids)
 
 
+def _rel(p):
+    try:
+        return Path(p).relative_to(ROOT)
+    except ValueError:
+        return Path(p)
+
+
 def generation_split(bad_dates, good_dates):
     """The cases the solver gets a label family WRONG on and the ones it gets RIGHT come from disjoint attempt-start
     date ranges -> the GM re-labelled from one day on (alt armA D15 script: 35 earlier-day cases say batch expansion
@@ -163,6 +170,16 @@ BASELINE_PRE_JOIN = float(os.environ.get("HCTF_BASELINE_PRE_JOIN", "60"))
 # generalize green watcher: poll / code-quiet seconds (was 2 s / 3 s: up to ~5 s between the fix and the worker's end)
 GREEN_POLL = float(os.environ.get("HCTF_GREEN_POLL", "0.5"))
 GREEN_QUIET = float(os.environ.get("HCTF_GREEN_QUIET", "1.5"))
+LIVE_BG_GEN = os.environ.get("HCTF_LIVE_BG_GEN", "1") == "1"   # TT live pass + solver misses: generalize goes on aside
+BG_GEN_NOTE = """
+- BACKGROUND JOB: the Time Trial already PASSED (a live worker answered on the open attempt). Nothing waits on you. Your
+  only job: the solver must PRODUCE the {n} field(s) it left empty there ({ids}) -- Mastery asks them again. Their
+  GM-verified answers are in `cases/{target}/expected.json`. Pass that case + every case that passes now, then stop.
+"""
+NEWID_HOLD = float(os.environ.get("HCTF_NEWID_HOLD", "45"))     # 0 = off
+NEWID_STABLE = float(os.environ.get("HCTF_NEWID_STABLE", "1.0"))
+NEWID_MAX = int(os.environ.get("HCTF_NEWID_MAX", "6"))           # background dry runs per single
+NEWID_WAIT = float(os.environ.get("HCTF_NEWID_WAIT", "2.0"))     # at CORRECT: wait this long for a running dry run
 UNTIMED_SKIP_PREGEN = os.environ.get("HCTF_UNTIMED_SKIP_PREGEN", "1") == "1"   # no pre-Mastery generalize on an untimed pool
 
 
@@ -1532,6 +1549,7 @@ class Chain:
         `wrong`: (answer_id, solver_value) pairs the GM rejected; `fixed`: {answer_id: value} the GM accepted as the
         right label on that attempt; `diag`: facts about the attempt (window, elapsed, how much was judged), so the
         worker is told the truth — "timing" only when every field was actually judged correct."""
+        self._bg_gen_take(cid, "a new generalize starts")
         mode = solvers.mode_of(cid)
         probs = []
         fam = None
@@ -1773,6 +1791,7 @@ class Chain:
             gen_duel = self._maybe_start_gen_duel(cid, prompt, targets, fill, bool(d.get("solver_too_slow")), green,
                                                   first=lab or bool(d.get("solver_too_slow")), quick=lab)
         try:
+            self._gen_prompt = prompt   # a background generalize after a live pass reuses it (_start_bg_gen)
             self.run_worker(cid, "generalize", prompt, GENERALIZE_TIMEOUT, stop=green)
         finally:
             self._restore_expected(cid, expected_before)
@@ -3342,8 +3361,11 @@ class Chain:
         worker and the timed modes start from the snapshot at once. Day 6: 60% of worker time (1101/1850s) came after
         the first CORRECT, and every first-correct snapshot already passed its real TT+Mastery variants offline."""
         early, spec_n, errs = None, 0, 0
+        self._newid = {}          # solver mtimes key -> Future of the new-id dry run (computed while the code is stable)
+        held = False
         while not done.wait(SPEC_POLL):
             try:
+                self._newid_kick()
                 if PREPUSH_AT_STAMP:
                     # Push this code to Homebase BEFORE the verdict (D10: TT kickoffs waited 1.1-1.4 s on a push started
                     # at the verdict): at the `hctf submit --from-solver` stamp, or speculatively once the code has been
@@ -3360,6 +3382,11 @@ class Chain:
                     if ready.is_set():
                         return   # the Homebase shadow handed over first
                     snap = self._spec_snapshot(cid) or getattr(self, "_race_snap", None)
+                    if snap and not held and snap is not getattr(self, "_race_snap", None):
+                        held = True
+                        snap = self._newid_hold(cid, snap, ready, done)
+                        if snap is None:
+                            return   # the worker ended by itself during the hold: the normal post-worker path runs
                     if snap:
                         with getattr(self, "_ready_lock", None) or threading.Lock():
                             if ready.is_set():
@@ -3377,6 +3404,115 @@ class Chain:
                     say(f"[{cid}] ready-watch note: {e}")
                 if errs >= 50:
                     return
+
+    # -- new-id check at the single's handoff: the CORRECT submit's own dry-run warning reached a worker that was
+    #    ended ~1 s later (main armB D15: the TT then missed a field only the timed contracts ask, 60 s block)
+    def _newid_key(self, m):
+        return tuple(sorted(m.items()))
+
+    def _newid_kick(self):
+        """Start the new-id dry run in the background once the solver code has been quiet NEWID_STABLE s (one per code
+        version, at most NEWID_MAX per single) -- so the handoff never waits for it."""
+        if NEWID_HOLD <= 0:
+            return
+        m = self._solver_mtimes()
+        if not m or "solve.py" not in m or time.time() - max(m.values()) < NEWID_STABLE or _is_skeleton(self.sdir):
+            return
+        key = self._newid_key(m)
+        if key in self._newid or len(self._newid) >= NEWID_MAX:
+            return
+        self._newid[key] = ThreadPoolExecutor(max_workers=1).submit(self._newid_gaps, self.base, self.sdir)
+
+    def _newid_gaps(self, cid, sdir):
+        """Answer ids NEW to this lane (no earlier day asked their shape, nor today's single) that the solver leaves EMPTY
+        on a dry run of the TT / Mastery status-time contracts with the single's bytes under their artifact names.
+        [] when none or inconclusive (multi-file single, solver error, under half the carried-over ids answered)."""
+        import tempfile
+        dm = re.match(r"day(\d+)", self.sdir.parent.parent.name)
+        single = cli.load(cid, "start.json") or cli.load(cid, "contract.json") or {}
+        art = timed.latest_artifacts(cid)
+        files = [p for p in (art.iterdir() if art else []) if p.is_file() and p.name != "manifest.json"]
+        if not dm or len(files) != 1:
+            return []
+        known = lane_known_shapes(self.lane, int(dm.group(1))) | {field_shape(a) for a in _contract_ids(single)}
+        gaps = []
+        for m in ("time_trial", "mastery"):
+            tc = cli.load(f"{self.base}/{m}", "contract.json") or {}
+            ids = list(dict.fromkeys(_contract_ids(tc)))
+            new = [a for a in ids if field_shape(a) not in known]
+            if not new or not tc.get("questions"):
+                continue
+            tmp = Path(tempfile.mkdtemp(prefix="newid-", dir=str(paths.TMP)))
+            try:
+                for q in tc["questions"]:
+                    name = os.path.basename((q.get("artifact") or "").partition("->")[0].strip())
+                    if name and not (tmp / name).exists():
+                        shutil.copy2(files[0], tmp / name)
+                c = {**{k: v for k, v in tc.items() if k not in ("artifacts", "error")}, "answer_ids": ids}
+                got, err, _ = solvers.run_solver(Path(sdir), c, tmp, timeout=20)
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+            old = [a for a in ids if a not in new]
+            if err or (old and sum(1 for a in old if got.get(a) not in (None, "")) < 0.5 * len(old)):
+                continue   # the copies don't fit this solver at all: no signal
+            gaps += [a for a in new if got.get(a) in (None, "")]
+        return list(dict.fromkeys(gaps))
+
+    def _newid_result(self, snap):
+        """The dry-run gaps for the snapshot's code (computed in the background; waits <= NEWID_WAIT s), or None."""
+        key = self._newid_key({p.name: p.stat().st_mtime for p in Path(snap).iterdir()
+                               if p.is_file() and p.suffix == ".py"})
+        fut = getattr(self, "_newid", {}).get(key)
+        if fut is None:
+            return None
+        try:
+            return fut.result(timeout=NEWID_WAIT)
+        except Exception:  # noqa: BLE001 - still running / failed: no hold
+            return None
+
+    def _newid_hold(self, cid, snap, ready, done):
+        """Single CORRECT + verified snapshot. When the timed contracts ask ids NEW to the lane the solver leaves empty,
+        tell the still-running worker and give it up to NEWID_HOLD s to fill them (handoff the moment a verified
+        snapshot fills them); else hand over the verified snapshot as before. None = the worker ended on its own."""
+        gaps = self._newid_result(snap)
+        if not gaps:
+            return snap
+        shapes = sorted({field_shape(a) for a in gaps})
+        hold = Path(str(snap.parent.parent) + "-hold") / snap.parent.name / "solver"
+        shutil.rmtree(hold.parent, ignore_errors=True)
+        hold.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(snap, hold, ignore=shutil.ignore_patterns("__pycache__"))
+        if (snap.parent / "meta.json").exists():
+            shutil.copy2(snap.parent / "meta.json", hold.parent / "meta.json")
+        note = (f"SINGLE IS CORRECT -- keep going for {NEWID_HOLD:g}s more: the Time Trial / Mastery contracts ask "
+                f"{len(gaps)} id(s) NEW to this lane that your solver leaves EMPTY ({', '.join(shapes[:8])}; e.g. "
+                f"{gaps[:4]}). Read their questions in {_rel(cli.cdir(self.base).parent)}/time_trial/"
+                "contract.json and mastery/contract.json, make solve.py answer them from the bytes, run "
+                "`hctf solver-test` once, then stop. No submit needed; the harness hands over the moment they are filled.")
+        if INBOX:
+            from . import inbox
+            inbox.post(cli.cdir(cid), note, key="newid")
+        say(f"[{cid}] single CORRECT, but the solver leaves {len(gaps)} timed id(s) NEW to the lane empty "
+            f"({', '.join(shapes[:4])}): worker told, handoff held up to {NEWID_HOLD:g}s")
+        end, seen = time.time() + NEWID_HOLD, None
+        while time.time() < end:
+            if done.wait(SPEC_POLL):
+                return None
+            if ready.is_set():
+                return hold
+            m = self._solver_mtimes()
+            if not m or self._newid_key(m) == seen or time.time() - max(m.values()) < NEWID_STABLE:
+                continue
+            seen = self._newid_key(m)
+            s2 = self._spec_snapshot(cid)
+            if s2 is None:
+                continue
+            g2 = self._newid_gaps(self.base, s2)
+            if len(g2) < len(gaps):
+                say(f"[{cid}] new-id hold: the solver now fills {len(gaps) - len(g2)}/{len(gaps)} -> handing over")
+                return s2
+        say(f"[{cid}] new-id hold: {NEWID_HOLD:g}s passed without a fix -> handing over the verified solver")
+        return hold
 
     def _prepush_verified(self, cid, snap, warm=True):
         """Push the verified snapshot to Homebase while the worker is ended and the single recorded (D9: single
@@ -3738,6 +3874,9 @@ class Chain:
                 say(f"[{cid}] probe: every field correct -> environment/timing, retrying without generalize")
                 set_state(self.base, stage=f"{mode}:retrying")
                 continue
+            if self._bg_gen_take(cid, "the attempt failed", only_won=True):
+                say(f"[{cid}] {res}: retrying with the background generalize's solver (no new generalize)")
+                continue
             if label_only_failure(wrong):
                 fixed = dict(fixed or {})
                 if self._label_scout(cid, mode, wrong, fixed):
@@ -3764,12 +3903,79 @@ class Chain:
                     say(f"[{cid}] passed by the live-answer worker (attempt {str(live.attempt)[:8]})")
                     set_state(self.base, **{f"{mode}_result": "correct"})
                     record_timed_case(cid, self.sdir)
+                    self._start_bg_gen(cid, last)
                     return True
                 if live.all_accepted:
                     say(f"[{cid}] live-answer: every listed field accepted -> reconnecting to complete the attempt")
                     attempt -= 1
         set_state(self.base, stage=f"{mode}:blocked")
         return False
+
+    def _start_bg_gen(self, cid, last):
+        """The Time Trial passed through the LIVE answer while its solver still MISSES fields (`missing`) Mastery asks
+        again (alt armB D15 metadata: Mastery then came back solver_incomplete on the same synthesis-sha256-order field,
+        ~50 s + a second generalize). The ended generalize goes on OFF the critical path: a duel-style worker on a COPY of
+        the solver, target = the TT variant case (GM-verified answers incl. the live worker's). Mastery starts now with
+        the current solver; its failure (or the chain's end) adopts the copy when it went green (_bg_gen_take)."""
+        from . import duel
+        mst = self.entries.get("mastery")
+        missing = list(last.get("missing") or [])
+        if not (LIVE_BG_GEN and missing and mst and not cli.is_complete(mst["id"])
+                and solvers.mode_of(cid) == "time_trial"):
+            return
+        prompt = getattr(self, "_gen_prompt", None)
+        target = f"time_trial-{(cli.attempt_id(cli.load(cid, 'start.json')) or 'x')[:8]}"
+        if not prompt or not (self.sdir / "cases" / target / "expected.json").exists():
+            return
+        ok, why = duel.eligible(self.lane)
+        if not ok:
+            say(f"[{cid}] no background generalize: {why}")
+            return
+        green = threading.Event()
+        d = duel.Duel(self, cid, "generalize", prompt, GENERALIZE_TIMEOUT, cases=True,
+                      note_extra=BG_GEN_NOTE.format(target=target, n=len(missing), ids=missing[:12]))
+        d.start(log=say)
+        threading.Thread(target=d.watch_green, name=f"bg-gen-{self.base}", daemon=True,
+                         args=({target}, set(getattr(self, "_baseline", set()) or ()), False, frozenset(), green,
+                               say)).start()
+        self._bg_gen = (d, green)
+        say(f"[{cid}] background generalize on a solver copy for {len(missing)} field(s) the solver missed "
+            f"(target case {target}); Mastery does not wait for it")
+
+    def _bg_gen_take(self, cid, why, only_won=False):
+        """Consume the background generalize: adopt its code when it went green and nothing that passes now breaks,
+        else end it (unless `only_won`: then a still-running one is left alone). -> True when adopted."""
+        bg = getattr(self, "_bg_gen", None)
+        if not bg:
+            return False
+        d, green = bg
+        won = green.is_set() and d.won
+        if only_won and not won:
+            return False
+        self._bg_gen = None
+        d.stop()
+        if not won:
+            say(f"[{cid}] background generalize ended ({why}) before it went green")
+            return False
+        keep = {p.name: p.read_bytes() for p in self.sdir.iterdir() if p.is_file() and p.suffix == ".py"}
+        before = {r["case"] for r in self._baseline_results() if r.get("ok")}
+        try:
+            d.adopt_into(self.sdir, log=say)
+            after = {r["case"] for r in solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT) if r.get("ok")}
+        except Exception as e:  # noqa: BLE001
+            after, before = set(), before or {"?"}
+            say(f"[{cid}] background generalize adopt note: {e}")
+        if before - after:
+            for p in self.sdir.iterdir():
+                if p.is_file() and p.suffix == ".py" and p.name not in keep:
+                    p.unlink()
+            for n, b in keep.items():
+                (self.sdir / n).write_bytes(b)
+            say(f"[{cid}] background generalize NOT adopted ({why}): it breaks {sorted(before - after)[:4]}")
+            return False
+        self._accepted_res = None
+        say(f"[{cid}] background generalize adopted ({why}): {len(after)} case(s) pass")
+        return True
 
     def _tt_fix_gate(self, cid):
         """The Time Trial passed only through in-window fixes (wrong -> GM-accepted values): the solver still produces
@@ -3903,6 +4109,7 @@ class Chain:
                 self.scout_stage()   # no-op unless SCOUT_ROUNDS > 0
             if mode in modes and mode in self.entries and not self.timed_stage(mode):
                 return
+        self._bg_gen_take(self.base, "chain complete")
         set_state(self.base, stage="done")
         say(f"[{self.base}] chain complete")
 
@@ -4181,20 +4388,29 @@ def _lib_changed(backup):
     return bool(walk(filecmp.dircmp(ROOT / "lib", backup, ignore=["__pycache__"])))
 
 
-def ratchet_gate(tag):
-    """The lib/ merge gate: the suites the ratchet prompt names + the ATT&CK coverage check all pass."""
+def ratchet_gate(tag, log=None):
+    """The lib/ merge gate: the suites the ratchet prompt names + the ATT&CK coverage check all pass. The suites run in
+    PARALLEL (independent processes; serially ~3-5 min, and the ratchet worker ran them itself 2-3x per night).
+    The worker runs this same gate: `python3 -m hctf.orchestrate ratchet-gate dayNN` (prints failing tails)."""
     import subprocess as _sp
+    log = log or say
     cmds = [[sys.executable, t] for t in RATCHET_GATE if (ROOT / t).exists()]
     cmds.append([sys.executable, "-m", "lib.refs.coverage", str(int(tag[3:]))])
-    for cmd in cmds:
+    procs = [(cmd, _sp.Popen(cmd, cwd=ROOT, stdout=_sp.PIPE, stderr=_sp.STDOUT, text=True)) for cmd in cmds]
+    ok, end = True, time.time() + 600
+    for cmd, p in procs:
         try:
-            bad = _sp.run(cmd, cwd=ROOT, capture_output=True, timeout=600).returncode
+            out, _ = p.communicate(timeout=max(1.0, end - time.time()))
+            bad = p.returncode
         except _sp.TimeoutExpired:
+            p.kill()
+            out, _ = p.communicate()
             bad = "timeout"
         if bad:
-            say(f"[ratchet] {tag}: `{' '.join(cmd[1:])}` fails after the merge ({bad})")
-            return False
-    return True
+            tail = " | ".join((out or "").strip().splitlines()[-4:])[:500]
+            log(f"[ratchet] {tag}: `{' '.join(cmd[1:])}` fails after the merge ({bad}): {tail}")
+            ok = False
+    return ok
 
 
 _PROPOSALS_RE = re.compile(r"^##\s*Proposed lib additions\s*$(.*?)(?=^##\s|\Z)", re.M | re.S)
@@ -4580,3 +4796,10 @@ def dashboard():
     w = [max(len(str(r[i])) for r in rows + [hdr]) for i in range(len(hdr))]
     for r in [hdr] + rows:
         print("  ".join(str(x).ljust(w[i]) for i, x in enumerate(r)))
+
+
+if __name__ == "__main__" and len(sys.argv) == 3 and sys.argv[1] == "ratchet-gate":
+    # the ratchet worker's own gate run (hctf/prompts/ratchet.md): parallel suites, failing tails only
+    _ok = ratchet_gate(sys.argv[2], log=print)
+    print("ratchet gate: GREEN" if _ok else "ratchet gate: FAILING (see above)")
+    sys.exit(0 if _ok else 1)

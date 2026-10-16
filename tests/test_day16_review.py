@@ -120,6 +120,126 @@ assert "tests/test_day6_fixes.py" not in scr
 assert "Never loop over `tests/test_*.py`" in (ROOT / "hctf/prompts/prebuild.md").read_text()
 print(f"ok  prebuild gate suites: binary none, metadata {len(meta)}, script {len(scr)}")
 
+# 7) slow-VM routing: untimed / roomy windows go local on a VM benchmarked >= SLOW_VM_RATIO x slower
+calls = []
+_orig7 = (workers.known_window, workers._homebase_ready, workers.run_hb_timed, workers.run_timed, workers.AUTO_HOMEBASE,
+          dict(workers._hb))
+workers.known_window = lambda cid: None
+workers._homebase_ready = lambda log=print: True
+workers.run_hb_timed = lambda *a, **k: calls.append("hb") or {"result": "correct"}
+workers.run_timed = lambda *a, **k: calls.append("local") or {"result": "correct"}
+workers.AUTO_HOMEBASE = True
+_tr = workers.remote.gm_transport
+workers.remote.gm_transport = lambda: "local"
+try:
+    workers._hb["cpu_ratio"] = 9.0
+    r = workers.run_timed_auto("s", "c/mastery", log=lambda *a: None)
+    assert calls == ["local"] and r["routed"] == "local", (calls, r)
+    calls.clear()
+    workers.run_timed_auto("s", "c/mastery", op="untimed", log=lambda *a: None)
+    assert calls == ["local"], calls
+    calls.clear()
+    workers.known_window = lambda cid: 6.0          # tight clocked window: still next to the GM
+    workers.run_timed_auto("s", "c/mastery", log=lambda *a: None)
+    assert calls == ["hb"], calls
+    calls.clear()
+    workers._hb["cpu_ratio"] = 1.5
+    workers.known_window = lambda cid: None
+    workers.run_timed_auto("s", "c/mastery", log=lambda *a: None)
+    assert calls == ["hb"], calls
+finally:
+    (workers.known_window, workers._homebase_ready, workers.run_hb_timed, workers.run_timed, workers.AUTO_HOMEBASE,
+     hb0) = _orig7
+    workers._hb.clear()
+    workers._hb.update(hb0)
+    workers.remote.gm_transport = _tr
+out = subprocess.run([sys.executable, "-c", workers.BENCH_PY], capture_output=True, text=True, timeout=60).stdout
+assert float(out.strip()) > 0, out
+print("ok  slow VM (x9): untimed / unknown window -> local; tight 6 s window -> Homebase; normal VM -> Homebase")
+
+# 8) ratchet gate: parallel, and the worker is told to run it as one command
+assert "python3 -m hctf.orchestrate ratchet-gate {day}" in (ROOT / "hctf/prompts/ratchet.md").read_text()
+src = Path(orchestrate.__file__).read_text()
+assert "Popen(cmd, cwd=ROOT" in src and 'sys.argv[1] == "ratchet-gate"' in src
+assert workers.MAX_TURNS["ratchet"] >= 110
+print("ok  ratchet gate parallel + worker runs it as one command; ratchet turn cap 110")
+
+# 9) background generalize after a TT live pass: adopted only when green and nothing breaks
+from hctf import solvers as _solvers  # noqa: E402
+sd9 = TMP / "bg" / "solver"
+sd9.mkdir(parents=True)
+(sd9 / "solve.py").write_text("OLD\n")
+
+
+class _D:
+    def __init__(self, won):
+        self.won = won
+        self.stopped = False
+
+    def stop(self):
+        self.stopped = True
+
+    def adopt_into(self, sdir, log=print):
+        (sdir / "solve.py").write_text("NEW\n")
+
+
+ch9 = SimpleNamespace(sdir=sd9, base="b")
+ch9._baseline_results = lambda: [{"case": "a", "ok": True}, {"case": "b", "ok": True}]
+_ts = _solvers.test_solver
+for won, after, adopted, text in ((True, {"a", "b", "t"}, True, "NEW\n"), (True, {"a"}, False, "OLD\n"),
+                                  (False, set(), False, "OLD\n")):
+    (sd9 / "solve.py").write_text("OLD\n")
+    g = __import__("threading").Event()
+    if won:
+        g.set()
+    d = _D(won)
+    ch9._bg_gen = (d, g)
+    _solvers.test_solver = lambda sdir, timeout=8, _a=after: [{"case": c, "ok": True} for c in _a]
+    got = orchestrate.Chain._bg_gen_take(ch9, "c", "test")
+    assert got is adopted and (sd9 / "solve.py").read_text() == text and d.stopped and ch9._bg_gen is None, \
+        (won, after, got, (sd9 / "solve.py").read_text())
+ch9._bg_gen = (_D(False), __import__("threading").Event())
+assert orchestrate.Chain._bg_gen_take(ch9, "c", "test", only_won=True) is False and ch9._bg_gen is not None
+_solvers.test_solver = _ts
+assert "self._start_bg_gen(cid, last)" in src and 'self._bg_gen_take(cid, "a new generalize starts")' in src
+print("ok  background generalize: green -> adopted; regression -> reverted; not green -> ended; only_won leaves it")
+
+# 10) new-id hold: gaps found in the background -> worker told, handoff held, hold snapshot handed over at the deadline
+import threading as _th  # noqa: E402
+day = TMP / "day99" / "chal"
+(day / "solver").mkdir(parents=True)
+(day / "solver" / "solve.py").write_text("x\n")
+snap = TMP / "spec-day99" / "chal" / "solver"
+snap.mkdir(parents=True)
+(snap / "solve.py").write_text("x\n")
+ch10 = SimpleNamespace(sdir=day / "solver", base="b10", lane="metadata-forensics")
+ch10._solver_mtimes = lambda: {"solve.py": 1.0}
+ch10._newid_key = lambda m: orchestrate.Chain._newid_key(ch10, m)
+ch10._spec_snapshot = lambda cid: None
+f = __import__("concurrent.futures", fromlist=["Future"]).Future()
+f.set_result(["set1.d99-synthesis-order"])
+ch10._newid = {orchestrate.Chain._newid_key(ch10, {"solve.py": (snap / "solve.py").stat().st_mtime}): f}
+ch10._newid_result = lambda s: orchestrate.Chain._newid_result(ch10, s)
+posted = []
+from hctf import inbox as _inbox  # noqa: E402
+_post = _inbox.post
+_inbox.post = lambda d, text, key="": posted.append((key, text))
+_hold = orchestrate.NEWID_HOLD
+orchestrate.NEWID_HOLD = 0.6
+(TMP / "b10").mkdir(exist_ok=True)
+try:
+    out = orchestrate.Chain._newid_hold(ch10, "b10", snap, _th.Event(), _th.Event())
+finally:
+    _inbox.post = _post
+    orchestrate.NEWID_HOLD = _hold
+assert out is not None and out.parent.parent.name == "spec-day99-hold" and (out / "solve.py").exists(), out
+assert posted and posted[0][0] == "newid" and "d99-synthesis-order" in posted[0][1], posted
+f2 = __import__("concurrent.futures", fromlist=["Future"]).Future()
+f2.set_result([])
+ch10._newid = {k: f2 for k in ch10._newid}
+assert orchestrate.Chain._newid_hold(ch10, "b10", snap, _th.Event(), _th.Event()) is snap
+print("ok  new-id hold: worker told + hold snapshot after the deadline; no gaps -> immediate handoff")
+
 cli.cdir = _cdir
 shutil.rmtree(TMP, ignore_errors=True)
 print("ALL PASS")

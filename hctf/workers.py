@@ -40,7 +40,7 @@ def _logfile(chal_dir, stage, pool):
 
 # ilio-style bounds: cap each worker's turns so a stuck agent can't grind up cost. Wall-clock timeout
 # is passed in; turns are a second, independent ceiling. Override via HCTF_MAX_TURNS_<STAGE>.
-MAX_TURNS = {"single": 80, "generalize": 50, "fix": 30, "ratchet": 80,  # ratchet: a serial pass needs ~50-60 (D8/D10 cut at 40)
+MAX_TURNS = {"single": 80, "generalize": 50, "fix": 30, "ratchet": 110,  # ratchet: D15 used 78, D14 hit the 80 cap (exit 1); D8/D10 cut at 40
              "ratchet_log": 40,  # one lane's technique log + coverage atlas forecast (split out of the ratchet after D14)
              "live": 60,         # live-answer worker on an open untimed attempt (orchestrate.LiveAnswer)
              "prebuild": 40}   # off-peak breadth worker (hctf/prebuild.py): one module + fixtures
@@ -901,6 +901,18 @@ CREDIT_FLOOR = float(os.environ.get("HCTF_CREDIT_HARD", "1.5"))      # never pow
 _hb_lock = threading.Lock()
 HB_HEALTH_S = float(os.environ.get("HCTF_HB_HEALTH_S", "5"))   # background Homebase reachability probe period
 HB_FRESH_S = 3 * HB_HEALTH_S                                     # a health verdict older than this is "unknown"
+# Slow-VM routing: the VM's CPU is benchmarked against this host once per run (_bench_vm). When it is >= SLOW_VM_RATIO
+# times slower, attempts with NO clock or a roomy one (> SLOW_VM_WINDOW s) run locally; tight windows stay next to the GM.
+# rehearsal D15 (t3.small, 2 GB after the 10-12 reset): binary Mastery solve 29.7 s on Homebase vs 0.8 s locally, same bytes.
+SLOW_VM_RATIO = float(os.environ.get("HCTF_SLOW_VM_RATIO", "4"))   # unmeasured on main: logged at every prewarm
+SLOW_VM_WINDOW = float(os.environ.get("HCTF_SLOW_VM_WINDOW", "10"))
+# 4 processes at once (Mastery solvers fan sets out over a process pool): catches a 2-vCPU / throttled VM, not just a
+# slower core
+BENCH_PY = ("import time,hashlib\nfrom concurrent.futures import ProcessPoolExecutor\n"
+            "def w(_):\n b=bytes(1<<20);[hashlib.sha256(b).digest() for _ in range(100)];s=0\n"
+            " for i in range(2800000): s+=i*i\n return s\n"
+            "t=time.perf_counter()\nwith ProcessPoolExecutor(4) as ex: list(ex.map(w,range(4)))\n"
+            "print(round(time.perf_counter()-t,4))")
 _hb = {"powered_by_us": False, "provisioned": False, "ok": False, "checked": 0.0, "thread": None}
 HB_DEPS = ["elftools", "pefile", "capstone", "Crypto", "pyzipper", "androguard", "droidasc", "refinery",
            "bs4", "jwt", "dpkt"]   # last line: web lane (homebase_setup.sh installs them)
@@ -939,9 +951,32 @@ def _provision(log):
         _hb["provisioned"] = True
         warm_homebase_imports()
         hb_daemon(log)            # up before the first clock (its own TLS handshakes + interpreter start)
+        _bench_vm(log)
     except Exception as e:  # noqa: BLE001 - provisioning is best-effort; deps usually already present
         log(f"[homebase] provisioning note (continuing): {e}")
         _hb["provisioned"] = True
+
+
+def _bench_vm(log=print):
+    """CPU benchmark: the same pure-Python + sha256 loop here and on the VM (timed inside the interpreter, so ssh latency
+    is not counted) -> _hb["cpu_ratio"] (VM seconds / local seconds) + _hb["mem_mb"]. Best effort."""
+    try:
+        loc = subprocess.run([sys.executable, "-c", BENCH_PY], capture_output=True, text=True, timeout=60)
+        t_loc = float(loc.stdout.strip().splitlines()[-1])
+        r = remote.ssh(f"python3 -c {shlex.quote(BENCH_PY)}; awk '/^MemTotal/{{print int($2/1024)}}' /proc/meminfo",
+                       timeout=90, check=False)
+        lines = r.stdout.strip().splitlines()
+        t_vm, mem = float(lines[0]), int(lines[1]) if len(lines) > 1 else None
+        _hb.update(cpu_ratio=round(t_vm / max(t_loc, 1e-3), 2), mem_mb=mem)
+        slow = _hb["cpu_ratio"] >= SLOW_VM_RATIO
+        log(f"[homebase] CPU benchmark: VM {t_vm:.2f}s vs local {t_loc:.2f}s (x{_hb['cpu_ratio']:g}), {mem} MB RAM"
+            + (f" -> SLOW VM: untimed / >{SLOW_VM_WINDOW:g}s-window attempts run locally" if slow else ""))
+    except Exception as e:  # noqa: BLE001 - routing then stays Homebase-first
+        log(f"[homebase] CPU benchmark skipped: {str(e)[:120]}")
+
+
+def slow_vm():
+    return float(_hb.get("cpu_ratio") or 0) >= SLOW_VM_RATIO
 
 
 VM_METER_S = float(os.environ.get("HCTF_HB_METER_S", "60"))   # how often a reachable VM's uptime is booked
@@ -1031,7 +1066,8 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=
         # ~3.3 s over the public GM) vs ~0.5 s/submit next to the GM. Homebase when it is up (the failure path pulls
         # the variant bytes back for the generalize worker either way); local is the fallback.
         ut = max(timeout, UNTIMED_BUDGET + 60)
-        if UNTIMED_ON_HOMEBASE and AUTO_HOMEBASE and remote.gm_transport() == "local" and _homebase_ready(log):
+        if (UNTIMED_ON_HOMEBASE and AUTO_HOMEBASE and remote.gm_transport() == "local" and not slow_vm()
+                and _homebase_ready(log)):
             res = run_hb_timed(solver_dir, cid, op=op, timeout=ut)
             if str(res.get("result", "")).lower() != "exec_error" or res.get("gm_rate_limited"):
                 res.setdefault("routed", "homebase (untimed)")
@@ -1051,6 +1087,10 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=
         return res
     win = known_window(cid)
     tight = win is None or win <= TIGHT_WINDOW
+    if tight and slow_vm() and (win is None or win > SLOW_VM_WINDOW):
+        tight = False
+        log(f"[{cid}] Homebase VM is x{_hb.get('cpu_ratio')} slower than this host and the window is "
+            f"{'unknown/untimed' if win is None else f'{win:g}s'}: running locally")
     if win is None:
         # no known clock (HCTF_RUN_FOR_TIME=auto -> the untimed regular pool): the attempt may localize for up to
         # HCTF_LOCALIZE_UNTIMED_S; a 60 s call timeout cut it off and re-ran it over ssh + locally (a13sota6: 12 min)
