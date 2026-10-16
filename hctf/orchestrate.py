@@ -1945,11 +1945,18 @@ class Chain:
         for _ in range(n):
             if not self._harvest_sleep(prev, done):
                 break
+            if done.is_set() or cli.is_complete(cid):
+                break   # the mode passed (live answer): a re-roll now would make the GM's LATEST attempt an unpassed one
             try:
                 for _poll in range(8):
                     with cli.chal_lock(cid), cli.quiet():
                         env = cli.call(cid, "start", cid, timeout=HARVEST_CALL_TIMEOUT)
                         body = env.get("body") or {}
+                        if str(body.get("result", "")).upper() == "CORRECT":
+                            # rehearsal fair D16: the live answer passed the TT, the harvest re-rolled it -> Mastery got 409
+                            # prerequisite_required (latest TT attempt not CORRECT) and had to re-pass the TT first
+                            say(f"[{cid}] harvest: the mode's latest attempt is CORRECT -- stopping (no re-roll)")
+                            return
                         if env.get("http") == 200 and not body.get("error") and attempt_over(body):
                             # `start` RESUMES the latest attempt: after the failed one's deadline that is an expired or
                             # finished attempt -- with OR without its attempt_id (main's GM keeps the id: the harvest
@@ -2330,7 +2337,7 @@ class Chain:
             if len(d) == 1:
                 return set(d)
             return cli._bisect_rejected(cid, d, budget=min(bisect_budget, max(left(), 0)), harness="race",
-                                        families=False)
+                                        families=False, stop=lambda: left() <= 0)
 
         wrong = set()
         if len(merged) == len(ids):
@@ -4095,9 +4102,21 @@ class Chain:
         for _ in range(tries):
             if cli.gm_latest_correct(cid):
                 return True
+            # a green background generalize (the live-answered TT's missing field) is the fix this re-pass needs
+            self._bg_gen_take(cid, "prerequisite re-pass", only_won=True)
             scout._wait_expired((timed.last_result(cid) or {}).get("deadline"), say, cid)
             time.sleep(scout.RATE_GAP)
-            timed.run(cid, self.sdir, log=say)
+            res = timed.run(cid, self.sdir, log=say)
+            last = timed.last_result(cid) or {}
+            fields = _live_fields(last, last.get("wrong"), last.get("fixed")) if res == "blocked" else []
+            if fields and len(fields) <= LIVE_MAX_FIELDS:
+                # rehearsal fair D16: the re-pass resumed an attempt the solver can't complete (missing field) and spun
+                # 3 x 20 s with no live answer -- answer exactly those fields on that attempt, as the TT stage would
+                live = LiveAnswer(self, cid, last, fields, last.get("wrong"), last.get("fixed")).start()
+                live.done.wait(LIVE_TIMEOUT)
+                live.finish()
+                if live.passed:
+                    say(f"[{cid}] prerequisite re-pass completed by the live-answer worker")
         return cli.gm_latest_correct(cid)
 
     def scout_stage(self):

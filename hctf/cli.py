@@ -436,11 +436,13 @@ def _slug_problem(value, q):
         return None
 
 
-def _bisect_rejected(cid, answers, budget=BISECT_BUDGET, harness=None, families=True):
+def _bisect_rejected(cid, answers, budget=BISECT_BUDGET, harness=None, families=True, stop=None):
     """Which of a rejected batch's answer_ids does the GM reject? PARALLEL group testing (hctf/grouptest.py): the batch
     cut into ~24 family-ordered groups probed at once, then every failing group halved and both halves probed at once,
     each probe-tagged (accepted groups are banked). Returns the set of individually rejected answer_ids.
     families=False: the groups are plain contiguous cuts (the reuse race's speculative remainder spans many families).
+    stop(): checked before every wave -- the reuse race yields to the worker's own submit (rehearsal fair D16: both bisected
+    the same 1095 fields at once, ~5 s per probe).
     D16 script single: the sequential version took 55 submits / 4:04 for 5 wrong fields of 1095."""
     from . import grouptest
     conf0 = confirmed_answers(cid)
@@ -464,7 +466,7 @@ def _bisect_rejected(cid, answers, budget=BISECT_BUDGET, harness=None, families=
         # rate_limited / empty / non-JSON / expired: UNJUDGED, never a rejection
         return "rate" if "rate_limited" in json.dumps(body or {})[:2000] else None
 
-    bad, st = grouptest.find_rejected(probe, answers, budget=budget, families=families)
+    bad, st = grouptest.find_rejected(probe, answers, budget=budget, families=families, stop=stop)
     print(f"bisect: {st['probes']} probe(s) in {st['waves']} parallel wave(s), {st['seconds']}s"
           + (f", {st['rate_limited']} rate-limited (concurrency down to {st['conc_min']})" if st["rate_limited"] else "")
           + (f", {st['unjudged_fields']} field(s) left unjudged" if st.get("unjudged_fields") else ""), file=sys.stderr)

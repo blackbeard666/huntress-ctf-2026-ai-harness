@@ -375,7 +375,9 @@ import contextlib  # noqa: E402
 _STARTED = {"attempt_id": "abcdef1234", "deadline": None, "answer_ids": ["a"], "questions": [{"id": "a"}]}
 for first, want_ops, want_refused in (
         ({"http": 200, "body": {"result": "expired", "name": "x"}}, ["start", "retry"], False),
-        ({"http": 200, "body": {"result": "CORRECT", "name": "x"}}, ["start", "retry"], False),
+        # D16 post-mortem: a CORRECT latest attempt = the mode PASSED (live answer) -> stop, never re-roll it (rehearsal fair
+        # D16: the re-roll made Mastery's prerequisite check fail -- latest TT attempt not CORRECT)
+        ({"http": 200, "body": {"result": "CORRECT", "name": "x"}}, ["start"], False),
         ({"http": 409, "body": {"error": "rotation_exhausted"}}, ["start"], True)):
     ops, said = [], []
 
@@ -402,7 +404,7 @@ for first, want_ops, want_refused in (
             setattr(mod, name, fn)
     assert ops == want_ops, (first, ops)
     assert any("start refused" in s for s in said) is want_refused, said
-print("ok  harvest: expired/finished start -> retry for a fresh variant; rotation_exhausted -> stop, no retry")
+print("ok  harvest: expired start -> retry for a fresh variant; CORRECT (mode passed) / rotation_exhausted -> stop")
 
 # 17) _accept_or_restore reuses the watcher's green suite result when the solver code + case set are unchanged (alt
 #     Day 7: a second full run added 5-10 s between "green" and the retry); any change -> a fresh run.

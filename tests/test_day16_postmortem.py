@@ -218,6 +218,11 @@ assert st["solved"] and st["waves"] == 1 and not bad, st
 bad, st = grouptest.find_rejected(fake_probe, ans, budget=10)
 assert st["probes"] <= 10 and st["unjudged_fields"] > 0, st
 print("ok  grouptest: unjudged never wrong; already_solved stops; budget bounds probes")
+waves = [0]
+bad, st = grouptest.find_rejected(lambda g: (waves.__setitem__(0, waves[0] + 1), fake_probe(g, 0))[1], ans,
+                                  stop=lambda: waves[0] >= 24)
+assert st.get("stopped") and st["unjudged_ids"] and set(st["unjudged_ids"]).isdisjoint(bad), st["waves"]
+print("ok  grouptest: stop() (the worker took over) ends the bisect; the open fields come back unjudged")
 
 # cli._bisect_rejected through the real cli.submit against a fake GM: concurrent, banked
 CT = TMP / "cdirs"
@@ -323,6 +328,25 @@ assert l3 is not None
 l3.close()
 os.environ.pop("HCTF_RUNNER_DEADLINE")
 print("ok  timed: one runner per mode (a second one waits, then gives up at its own deadline)")
+
+# harvest: a mode the live answer just passed is never re-rolled (rehearsal fair D16: Mastery 409 prerequisite_required)
+import threading as _th  # noqa: E402
+from hctf import orchestrate as _orch  # noqa: E402
+calls_h = []
+ch_h = object.__new__(_orch.Chain)
+ch_h.base, ch_h.root, ch_h.sdir = "hv", CT / "hv", CT / "hv" / "solver"
+ch_h._harvest_sleep = lambda prev, done: True
+(CT / "hv" / "time_trial").mkdir(parents=True)
+cli.cdir = lambda cid: CT / cid
+_oc, _oic = cli.call, cli.is_complete
+cli.is_complete = lambda cid: False
+cli.call = lambda cid, op, *a, **k: calls_h.append(op) or {"http": 200, "body": {"result": "CORRECT", "attempt_id": "P1"}}
+try:
+    ch_h._harvest("hv/time_trial", 2, set(), _th.Event())
+finally:
+    cli.call, cli.is_complete, cli.cdir = _oc, _oic, cli_cdir
+assert calls_h == ["start"], calls_h
+print("ok  harvest: the mode's latest attempt is CORRECT -> stop, never `retry` (the GM's latest stays the pass)")
 cli.cdir = cli_cdir
 for f in (ROOT / ".run" / "tmp-timed").glob("t16_*"):
     f.unlink(missing_ok=True)
