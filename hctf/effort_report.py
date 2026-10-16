@@ -44,7 +44,7 @@ def solves(root, day):
     for ln in _log(root, day):
         m = LINE.match(ln)
         if not m:
-            if t0 is None and "released" in ln:
+            if t0 is None and ("released" in ln or re.search(r"\d+ chains \(", ln)):   # replays / no --wait: run start
                 mm = re.match(r"^(\d\d):(\d\d):(\d\d)", ln)
                 t0 = _secs(*mm.groups()) if mm else None
             continue
@@ -61,8 +61,14 @@ def solves(root, day):
     return out
 
 
+def _window(root, day):
+    """(first, last) HH:MM:SS seconds of the copy's day log (both arms of an A/B on ONE copy share metrics.tsv)."""
+    ts = [_secs(*m.groups()) for ln in _log(root, day) for m in [re.match(r"^(\d\d):(\d\d):(\d\d)", ln)] if m]
+    return (min(ts), max(ts)) if ts else (None, None)
+
+
 def worker_stats(root, day):
-    """{(lane, stage): {n, wall, turns, out_tok}} from the copy's metrics.tsv rows of that day."""
+    """{(lane, stage): {n, wall, turns, out_tok}} from the copy's metrics.tsv rows of that day, inside its log window."""
     p = Path(root) / ".run" / "metrics.tsv"
     agg = defaultdict(lambda: {"n": 0, "wall": 0.0, "turns": 0.0, "out_tok": 0.0})
     if not p.exists():
@@ -70,9 +76,13 @@ def worker_stats(root, day):
     lines = p.read_text(errors="replace").splitlines()
     cols = lines[0].split("\t") if lines else []
     tag = f"-day-{int(day):02d}"
+    lo, hi = _window(root, day)
     for ln in lines[1:]:
         r = dict(zip(cols, ln.split("\t")))
         if tag not in (r.get("base") or "") or r.get("stage") in ("prebuild", "ratchet", "ratchet_log"):
+            continue
+        m = re.search(r"T(\d\d):(\d\d):(\d\d)", r.get("ts") or "")
+        if lo is not None and m and not (lo - 60 <= _secs(*m.groups()) <= hi + 60):
             continue
         a = agg[(r.get("lane") or _lane(r["base"]), r.get("stage"))]
         a["n"] += 1
