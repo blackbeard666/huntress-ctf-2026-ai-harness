@@ -1310,6 +1310,24 @@ def c_timeline(a):
     return 0
 
 
+def c_kpi(a):
+    from . import kpi
+    days = kpi.days_with_logs() if a.all else ([a.day] if a.day else [])
+    if not days:
+        print("give --day N or --all", file=sys.stderr)
+        return 2
+    for d in days:
+        try:
+            k = kpi.compute(day=d)
+        except (OSError, ValueError) as e:
+            print(f"day {d}: {e}")
+            continue
+        print(kpi.render(k) if not a.all else kpi.row(k).rstrip())
+        if a.record:
+            print(f"  -> {kpi.record(k).relative_to(ROOT)}")
+    return 0
+
+
 def c_hof(a):
     from . import hof
     tt, ms = hof.fetch("time_trial"), hof.fetch("mastery")
@@ -1488,6 +1506,11 @@ def main(argv=None):
     pfd.add_argument("--heartbeat", type=float, default=60.0, help="status line every N seconds while running")
     pfd.add_argument("--postrun", action="store_true",
                      help="follow the post-run to 'post-run finished' (default: only for a bin/day.sh run, by pid file)")
+    pkp = sub.add_parser("kpi", help="per-day KPI row: T+ 14/15 and 15/15, release lag, race wins, first-try timed "
+                                     "modes, generalizes on the critical path, cost (reference/PLAN_SUB2MIN.md)")
+    pkp.add_argument("--day", type=int)
+    pkp.add_argument("--all", action="store_true", help="one row per day with a .run/dayNN.log")
+    pkp.add_argument("--record", action="store_true", help="append the row(s) to reference/KPI.md")
     phf = sub.add_parser("hof", help="Hall of Fame speed board: our rank/ms vs #1 per challenge + day sums (public)")
     phf.add_argument("--day", type=int)
     phf.add_argument("--save", action="store_true", help="also snapshot the board to reference/hof/")
@@ -1514,7 +1537,7 @@ def main(argv=None):
           "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
           "reconcile": c_reconcile, "solutions": c_solutions,
           "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout,
-          "timeline": c_timeline, "cost": c_cost, "hof": c_hof, "feed": c_feed}[a.cmd]
+          "timeline": c_timeline, "cost": c_cost, "hof": c_hof, "feed": c_feed, "kpi": c_kpi}[a.cmd]
     try:
         return fn(a)
     except remote.Unreachable as e:

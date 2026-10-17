@@ -266,7 +266,8 @@ def _remember(cid, res):
                                      "run_for_time", "hall_of_fame_eligible", "ranked_attempts_remaining",
                                      "variant_fresh", "clock_short", "submit_transport_error", "submit_resent",
                                      "start_refused", "rerolled_short", "capture_note", "untimed", "no_clock", "practice",
-                                     "exhausted")
+                                     "exhausted", "already_passed", "bank_overlay", "resumed_banked", "unjudged_resends",
+                                     "localize_error", "localize_waves", "resubmit_fixed", "gm_remaining")
             if k in res}
     (cli.cdir(cid) / "last_timed.json").write_text(json.dumps(keep, indent=2, ensure_ascii=False))
     if res.get("window"):

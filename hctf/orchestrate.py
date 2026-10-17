@@ -159,7 +159,9 @@ def label_table(sdir, res, wrong, cap=60):
 
 
 LIVE_ANSWER = os.environ.get("HCTF_LIVE_ANSWER", "1") == "1"
-LIVE_MAX_FIELDS = int(os.environ.get("HCTF_LIVE_MAX_FIELDS", "40"))
+# 80 (was 40): D12 warmups Mastery left 58 slug fields empty -- above the cap, so two 100 s generalizes ran where a live
+# worker on the open untimed attempt would have answered them (reference/PLAN_SUB2MIN.md P0)
+LIVE_MAX_FIELDS = int(os.environ.get("HCTF_LIVE_MAX_FIELDS", "80"))
 LIVE_TIMEOUT = float(os.environ.get("HCTF_LIVE_TIMEOUT", "900"))
 RESUME_CONTINUES = int(os.environ.get("HCTF_RESUME_CONTINUES", "2"))
 TT_FIX_GATE = os.environ.get("HCTF_TT_FIX_GATE", "1") == "1"
@@ -4299,11 +4301,133 @@ def release_interval(now, drop, poll=None):
     return poll
 
 
+def _probe_ids(day):
+    """Ids whose existence announces the drop before the day's list returns. `warmups-day-NN` has been the warmups base
+    id every day so far (challenges/index.json); a GET status on it answers in ~0.5 s (404 before the drop, 409
+    start_required / 200 after) while `list --day N` for a POPULATED day takes 2-13 s (D15: released seen 21:00:13,
+    D16: 21:00:14 -- the list call itself was most of that)."""
+    return [f"warmups-day-{int(day):02d}"]
+
+
+def _lanes_for(day):
+    """The GM `lane` names of the previous day (challenges/index.json), else the five known lanes: the per-lane lists
+    raced against the full list at the drop."""
+    lanes = []
+    try:
+        idx = paths._load_index()
+        lanes = sorted({v.get("lane") for v in idx.values() if v.get("day") == int(day) - 1 and v.get("lane")})
+    except Exception:  # noqa: BLE001 - the known lanes cover it
+        lanes = []
+    return lanes or ["warmups", "metadata-forensics", "script-analysis", "binary-reverse-engineering", "mobile-android"]
+
+
+def _released_fast(day, timeout=8):
+    """True once the GM knows the day's probe id (status 200/409); False on 404 / any failure."""
+    for cid in _probe_ids(day):
+        try:
+            env = remote.gm("status", cid, timeout=timeout)
+        except Exception:  # noqa: BLE001 - unknown = not released yet
+            return False
+        if env.get("http") in (200, 409):
+            return True
+    return False
+
+
+def _expected_modes(day):
+    """How many challenge modes the day's list should hold: 3 per base id of the previous day (index.json), else 15."""
+    try:
+        idx = paths._load_index()
+        n = 3 * sum(1 for v in idx.values() if v.get("day") == int(day) - 1 and v.get("lane") != "welcome")
+    except Exception:  # noqa: BLE001
+        n = 0
+    return n or 15
+
+
+def _list_race(day, lanes, log=None, timeout=40, expected=None):
+    """The day's challenge list as fast as the GM gives it: the full `list --day N` and one `--lane L` list per lane
+    all at once; the first complete answer wins (every lane list back -> their union; or the full list). Lane lists for
+    a populated day answered in ~1.8-2.5 s vs 3.6-13 s for the full one (measured 2026-10-17). Registers the
+    challenge folders exactly as cli.call does for a list."""
+    from concurrent.futures import ThreadPoolExecutor, wait as _wait, FIRST_COMPLETED
+    log = log or say
+    t0 = time.time()
+    expect = expected if expected is not None else _expected_modes(day)
+
+    def full():
+        return ("*", released_challenges(day))
+
+    def lane(ln):
+        env = remote.gm("list", "--day", str(day), "--lane", ln, timeout=timeout)
+        body = env.get("body") if isinstance(env.get("body"), dict) else {}
+        got = list(body.get("challenges") or [])
+        if not got:
+            # the GM's lane filter knows `binary`, not `binary-reverse-engineering`, and `binary` matched nothing on
+            # D16 (2026-10-17); `--search binary` found the 3 modes in 2.5 s -- the text search is the fallback
+            env = remote.gm("list", "--day", str(day), "--search", ln.split("-")[0], timeout=timeout)
+            body = env.get("body") if isinstance(env.get("body"), dict) else {}
+            got = list(body.get("challenges") or [])
+        return (ln, got)
+
+    by_lane, result = {}, None
+    ex = ThreadPoolExecutor(max_workers=1 + len(lanes))   # not `with`: its exit would wait for the slow full list
+    try:
+        futs = {ex.submit(full)} | {ex.submit(lane, ln) for ln in lanes}
+        pending = set(futs)
+        while pending and result is None:
+            done, pending = _wait(pending, timeout=timeout, return_when=FIRST_COMPLETED)
+            if not done:
+                break
+            for f in done:
+                try:
+                    key, got = f.result()
+                except Exception as e:  # noqa: BLE001 - one slow/failed list: the others still race
+                    log(f"[wait] list race note: {str(e)[:120]}")
+                    continue
+                if key == "*":
+                    if got:
+                        result = ("full", got)
+                        break
+                else:
+                    by_lane[key] = got
+                    if len(by_lane) == len(lanes) and all(by_lane.values()) and \
+                            sum(map(len, by_lane.values())) >= expect:
+                        # every lane answered with modes and the union is at least yesterday's size: complete. A lane
+                        # filter the GM doesn't know answers [] (binary-reverse-engineering did on 2026-10-17) -- then
+                        # only the full list is trusted.
+                        result = ("lanes", [c for ln in lanes for c in by_lane[ln]])
+                        break
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
+    if result is None:
+        return []
+    how, got = result
+    seen, out = set(), []
+    for c in got:
+        if isinstance(c, dict) and c.get("id") and c["id"] not in seen:
+            seen.add(c["id"])
+            if c.get("lane") and paths.canonical_lane(c["lane"]) != c["lane"]:
+                c["gm_lane"], c["lane"] = c["lane"], paths.canonical_lane(c["lane"])
+            out.append(c)
+    if how == "lanes":
+        paths.register(out)
+    log(f"[wait] list race: {how} list first ({len(out)} modes in {time.time() - t0:.1f}s; "
+        f"lane lists back: {len(by_lane)}/{len(lanes)})")
+    return out
+
+
+RELEASE_FAST_PROBE = os.environ.get("HCTF_RELEASE_FAST_PROBE", "1") != "0"
+RELEASE_HOT_AFTER = float(os.environ.get("HCTF_RELEASE_HOT_AFTER", "180"))   # s after the drop the fast probe keeps running
+RELEASE_LIST_EVERY = float(os.environ.get("HCTF_RELEASE_LIST_EVERY", "3"))   # fallback full list period in the hot window
+
+
 def wait_for_release(day, poll=None, log=None, drop=None):
     """Block until the GM lists `day`, polling IN this process (warm GM connections, no interpreter start) -> the
     listed challenges. Replaces bin/day.sh's shell loop of `hctf list` + a second list inside `hctf run`: D9 the first
     GM start landed 3-5 s after the drop was seen. Clock-aware (release_interval) against the real GM only: a replay's
-    stand-in releases whenever it is started, so it keeps the flat poll (as does HCTF_RELEASE_CLOCK=0)."""
+    stand-in releases whenever it is started, so it keeps the flat poll (as does HCTF_RELEASE_CLOCK=0).
+    Around the drop (T-RELEASE_LEAD .. T+RELEASE_HOT_AFTER) the release is detected by a 0.5 s status probe on the
+    day's warmups id (_released_fast) and the list is then fetched as a race of lane lists vs the full list
+    (_list_race); a full list still runs every RELEASE_LIST_EVERY s as the fallback (an id pattern change)."""
     poll = RELEASE_POLL if poll is None else poll
     clock = RELEASE_CLOCK and (drop is not None or remote._public_gm())
     if clock and drop is None:
@@ -4313,9 +4437,22 @@ def wait_for_release(day, poll=None, log=None, drop=None):
     except Exception:  # noqa: BLE001 - connections open on first use instead
         pass
     n = 0
+    last_list = 0.0
     while True:
+        now = time.time()
+        hot = RELEASE_FAST_PROBE and clock and drop is not None and -RELEASE_LEAD <= (drop - now) <= RELEASE_HOT_AFTER
+        got = []
         try:
-            got = released_challenges(day)
+            if hot:
+                if _released_fast(day):
+                    say(f"[wait] day {day} announced by the GM (status probe, {time.time() - drop:+.1f}s from the "
+                        "drop) -- fetching its list")
+                    got = _list_race(day, _lanes_for(day), say) or released_challenges(day)
+                elif now - last_list >= RELEASE_LIST_EVERY:
+                    last_list = now
+                    got = released_challenges(day)
+            else:
+                got = released_challenges(day)
         except Exception as e:  # noqa: BLE001 - a GM hiccup while waiting: keep polling
             got = []
             if n % 60 == 0:
@@ -4325,10 +4462,13 @@ def wait_for_release(day, poll=None, log=None, drop=None):
             return got
         n += 1
         wait = release_interval(time.time(), drop, poll) if clock else poll
+        if hot:
+            wait = min(wait, poll)
         if n == 1 or n % 300 == 0:
             say(f"[wait] polling the GM for day {day} (every {poll:g}s + call time"
                 + (f"; heartbeat {RELEASE_HEARTBEAT:g}s until {RELEASE_LEAD:g}s before the "
-                   f"{datetime.datetime.fromtimestamp(drop):%H:%M} drop)" if clock else ")"))
+                   f"{datetime.datetime.fromtimestamp(drop):%H:%M} drop; then a {'status probe + ' if RELEASE_FAST_PROBE else ''}"
+                   f"list race)" if clock else ")"))
         time.sleep(wait)
 
 

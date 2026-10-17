@@ -1,0 +1,200 @@
+# Plan: consistent sub-2-minute (then sub-1-minute) days, with a loop that still improves
+
+Written 2026-10-17 (before Day 17) from `.run/day09..16.log`, `hctf timeline`, `hctf cost`, SPEED.md and the memory log.
+
+## 1. Premise, restated
+
+The organizers' framing: a deterministic, general-purpose solver on autopilot for a month, moving at machine speed and
+coping with unseen variation. Our standing goals (north-star list): autonomy, robustness, speed, transfer,
+determinism ratchet, knowing the breaking point. The user's rules that bound the design: LLM-first with standard
+tools (no hand-built parsers ahead of the model), worker effort high on every lane (duels medium), HoF is not a
+goal, incomplete runs are never "best", report N/15 first.
+
+Since Day 15 every TT/Mastery attempt comes from the GM's UNTIMED regular pool. There is no in-window clock on our
+critical path any more: the day's T+ is purely our own wall time, and a failed attempt can be completed in-attempt
+(the GM accepts partial submits and pins each confirmed id). This changes what "speed" means: the clock we fight is
+LLM turns + GM round trips + our own harness, not a 6 s window.
+
+## 2. Where the time went (Days 9-16, main real runs)
+
+| Day | 15/15 at | 14/15 at | Tail (what alone set the day's T+) | Best fair/blind replay |
+|---|---|---|---|---|
+| 9  | 1:59 | ~1:00 | binary single LLM 91 s (new field) | r9b 1:00 |
+| 10 | 1:37 | ~0:55 | metadata single LLM 86 s | alt 1:24 |
+| 11 | 1:09 | ~0:52 | script single LLM 58 s | alt 1:03 |
+| 12 | 7:12 | 1:16 | warmups Mastery: solver fallback with no deadline + harness bundle bug (2 generalizes) | alt 1:06 |
+| 13 | 3:38 | ~1:30 | warmups Mastery 4 attempts + generalize 107 s; binary generalize 104 s | alt 1:31 |
+| 14 | 2:20 | 0:49 | warmups Mastery compounding: 2 generalizes 104 s + untimed fallback | alt 5:34 (its own tail) |
+| 15 | 6:43 | 2:26 | script Mastery: one GM reply cut off killed in-attempt localize -> 181 s generalize + duel | - |
+| 16 | ~15:44 (manual) | 4:52 | script single: 55 sequential GM probes = 4 min of a 66 s model solve; script Mastery: fixed 120 s runner cap vs 5475 ids; WSL OOM | alt 7:02 |
+
+Three facts fall out of this table.
+
+1. **The fast path already exists and is ~50-70 s.** On D9-D11 and on every rehearsal fair run, four lanes finish their
+   whole chain by T+40-70. The floor is the slowest LLM single_solve: 4-8 turns at ~10 s/turn = 40-90 s, plus
+   drop->GM start 3-5 s, download+triage 8-15 s, handoffs 1-5 s per mode, TT+Mastery solve+GM ~6-12 s.
+2. **Every day over 2 minutes was ONE lane with a generalize on the critical path or a harness bug new to that
+   day** (never both the LLM being slow and the answer being hard). A generalize costs 41-182 s (7-31 turns) and
+   each day has had 1-2 of them. The harness bugs were each different: no solve deadline in a fallback (D12),
+   bundle-case trimming (D12), single-attempt pool (D14), IncompleteRead escaping `_post` (D15), fixed untimed
+   budget + sequential bisect + process fan-out OOM (D16).
+3. **The improvement loop works but lags by one day.** The rehearsal fair run after each day's fixes is 2-6x faster than
+   the real run (D12 66 s vs 432 s, D13 91 vs 218, D16 422 vs 944). Fixes land; they just land after the day
+   that needed them. The next day then finds a new class.
+
+Reuse-race (no-LLM single) hit rate D12-D16, the determinism we actually have per lane:
+
+| lane | race won | typical LLM single when lost |
+|---|---|---|
+| mobile | 5/5 (+2.6..+5.7 s) | - |
+| script | 3/5 (+7.8..+24.7 s) | 13-19 s (D13-15), 271 s (D16, bisect) |
+| binary | 2/5 (+8.3..+10.5 s) | 18-93 s |
+| warmups | 2/5 (+3.9..+4.6 s) | 34-75 s |
+| metadata | 0/5 | 42-86 s + duel |
+
+Metadata is a new container format every day, so text-matched reuse never fires; it is the lane whose single is
+always LLM-bound, and the one whose single most often sets the 14/15 time.
+
+Cost of the loop today: ratchet 5-23 min / $2-8 per day, ratchet_log workers up to 23 min / $7.7 (D16), speed-harden
+~4 min, train ~1 min, prebuild hours (off-peak), total $8-15 per day on top of $2-6 of live workers.
+
+## 3. Target
+
+- **SLO-A: 15/15 by T+2:00 on at least 4 of 5 days. SLO-B: 14/15 by T+1:00 median.** Then push SLO-A to 1:00.
+- Zero manual interventions (D16 needed one).
+- Determinism ratio (answer ids confirmed without an LLM turn / total ids) reported per day; today roughly
+  mobile 100%, script ~94%, binary ~94%, warmups ~90%, metadata 0%.
+
+## 4. The plan, in priority order
+
+Each item names the mechanism, the measured gain it targets, and the gate that proves it.
+
+### P0. Never generalize on the critical path (the 2-7 min item)
+
+The pool is untimed, so an attempt that is 95% right can always be finished IN the attempt. Make that the only
+path during the run; generalize is a background activity whose output is adopted if it arrives in time.
+
+- **Fix-in-attempt first, always.** On any `incorrect`/`accepted`, the runner localizes with the parallel group
+  bisect (grouptest, 12 in flight, already shipped D16) and resubmits; the orchestrator calls generalize only when
+  localize reports it cannot resolve a field (empty ids with no candidate). D15's 181 s and D16's 12 min would have
+  been ~1 min each. Gate: a replay of D15 and D16 with the real GM verdicts ends both Masteries without a generalize.
+- **Candidate ranking before the model.** For a wrong closed-vocab field, try `label_hints.json` + `lib/vocab.json`
+  + the lane's playbook grammar as the probe candidate list (deterministic, ~5 s on Homebase), then the model.
+  D15's `delayed -> percent` was a 28-turn duel for one spelling. Gate: `hctf labels` resolves every D9-D16 wrong
+  field from hints alone in the replay.
+- **Carry TT verdicts into Mastery deterministically.** The TT's in-window fixed map (field -> accepted value) is
+  overlaid per field, not per value (D15 showed a value remap can be wrong). Already partly there (bank overlay,
+  label_hints); make it the default and test it.
+- **Generalize budget.** When a generalize is unavoidable: duel at medium (shipped), max 20 turns, 90 s wall, and
+  it never blocks the next mode on an untimed pool (background generalize exists since bfd2dcd; make the
+  foreground wait path unreachable when `_expect_untimed()`).
+
+### P1. Make the harness bug of the day a replay failure the night before (the robustness item)
+
+Four of the last five tails were harness faults, each one new. Build a **fault-injection replay** on top of
+`hctf/replay_gm.py` and run it in the post-run gate every night:
+
+- Faults: IncompleteRead / short body mid-submit, 429 bursts, 5 s GM latency, the 500-answer submit cap, a 5475-id
+  contract, a 1-attempt pool, `prerequisite_required` 409, a finished-CORRECT body on start, a slow VM, a download
+  stall, a solver that never prints (deadline), a worker that dies on auth.
+- Invariants asserted: every mode ends CORRECT per GM truth with no manual step; no runner killed before its
+  scaled budget; no re-roll of a CORRECT attempt; every subprocess group reaped; peak RSS under the unit's
+  MemoryHigh.
+- Budgets scale with the contract everywhere (`untimed_plan` does this for the runner; audit the single's submit
+  loop, the harvest, localize, prefetch and probes for any flat constant).
+
+Gate: the fault suite is green before `day.sh` is armed; a red suite is a FAIL in preflight, not a WARN.
+
+### P2. Shrink the LLM single floor from 40-90 s to ~25 s (the 1-minute item)
+
+- **One-shot "live answer" worker on every LLM-bound single**, in parallel with the solver-building worker: it gets
+  triage + the standard-tool dumps (exiftool, readelf, jadx/aapt summaries, decoded text) + the contract and must
+  answer in <=2 turns, submitting whatever it is confident in; the solver worker then only has the empty/wrong ids
+  to chase. This is the D16 metadata `live` path generalized to the single. Target: 14/15 by T+40.
+- **Pre-drop warm workers.** `WarmWorker` is READY in 3 s but is launched at chain start; launch at T-30 s off the
+  clock-aware drop wait so handoff happens at T+1 instead of T+7-8 (SPEED.md: "only a pre-drop launch could help").
+- **Triage that ends the first turn.** Metadata/binary workers spend 2-3 turns re-discovering what triage could
+  have printed (format facts, strings, section/manifest summaries). Measure turns-to-first-submit per lane each
+  day (`hctf cost` has turns; add first-submit time) and push the standard-tool output the worker asked for in
+  turn 1 into triage. Keep effort at high (user rule): the lever is turns, not effort.
+- **Metadata reuse that matches on format, not text.** The race keys on normalized question text; metadata questions
+  are per-format and never repeat. Key the race on the triage-detected container (regf/ole/ooxml/pdf/eml/lnk/png...)
+  -> prebuilt `lib/meta` extractor, so a known format answers deterministically and only a genuinely new format
+  reaches the model. Gate: `hctf train` metadata cumulative = 100% and the race wins the replay single on D10-D16.
+
+### P3. Keep Homebase for probe throughput, not window fit
+
+With untimed pools the VM's job is the 12-way bisect/localize probes and start/submit round trips (0.5 s vs 2-5 s
+public). Route by `route_costs` (shipped) and treat a slow VM (t3.small after the reset) as "local". If main's VM
+stays slow, ask for the reset to be undone or budget credits for a bigger instance; do not spend engineering on
+in-window latency any more.
+
+### P4. Make the improvement loop pay for itself (the "still improving" requirement)
+
+The loop must be judged by tomorrow's T+, not by whether a ratchet merged.
+
+- **Nightly blind replay of today on the post-ratchet harness** (replay_gm, knowledge pinned to pre-day). Record
+  T+ 14/15 and 15/15 and the determinism ratio. A ratchet that does not improve the replay (or breaks any earlier
+  day in `hctf train`) is kept out, as the baseline-aware gate already does for tests.
+- **One ratchet process, bounded.** Ratchet + ratchet_log cost up to 23 min / $10 (D16) and once ran out of turns
+  mid-binary (D14). Split by lane with a 40-turn cap each, run in parallel under procgov, and make them write
+  technique notes first (the part that ran out on D14).
+- **Prebuild aimed by misses.** Prebuild modules are only worth it if they later win a race. Feed it the atlas gaps
+  ranked by (a) lanes whose race lost this week and (b) formats/toolchains the organizers have escalated to
+  (today-probe + mastery_delta). Report prebuild hit rate: modules that answered a live field / modules built.
+- **Scoreboard in one place.** `hctf timeline` + `hctf cost` + race wins + generalizes-on-critical-path + manual
+  steps -> a per-day row appended to `reference/SPEED.md` (or a `hctf kpi --day N`), so the trend is visible and
+  the user never has to ask whether a change helped.
+
+### P5. Governance that stops a bad day becoming a lost day
+
+- Preflight FAILs (not WARNs) on: fault-replay red, MemAvailable < 6 GB, linger off, VM slow when Homebase is
+  expected, token < 3 days.
+- Feed `⚠` on: runner killed by budget, exec_error twice on one mode, generalize > 90 s, any sequential GM loop
+  > 20 calls, load > cores.
+- A day that is 14/15 at T+2 with one mode in a generalize loop auto-switches that mode to the untimed fallback +
+  resume path rather than retrying generalize (D16's loop ran 11 minutes).
+
+## 5. Sequencing before the next drops
+
+- **Tonight / Day 17 warm-up (no lib edits during prebuild):** P0 fix-in-attempt default + budget audit; P5 preflight
+  FAILs; P1 fault suite with the D15/D16 faults first (IncompleteRead, 5475 ids, sequential bisect). Validate on an
+  rehearsal fair replay of D16: expect script Mastery < 2 min, 15/15 < 3 min.
+- **Day 18-19:** P2 live-answer single on metadata + binary, pre-drop warm workers, triage turn-1 audit. Validate:
+  rehearsal fair D17 14/15 <= 1:00.
+- **Day 20+:** P4 nightly replay KPI, lane-split ratchet, prebuild hit rate; P2 format-keyed metadata race.
+
+What would have to be true for a sub-1-minute 15/15: every single either race-won (<10 s) or live-answered in two
+turns (<30 s), no generalize anywhere, GM round trips on Homebase, and the harness fault suite green. Nothing in
+that list is new capability; it is the existing pieces (race, live answer, grouptest, bank overlay, background
+generalize, replay GM, warm workers) made the default path and gated nightly.
+
+## 6. Implemented 2026-10-17 (before Day 17)
+
+- **Release detection (new finding, not in the plan above):** D15/D16 saw the release 13-14 s after the drop because a
+  `list --day N` for a populated day takes 2-13 s. `wait_for_release` now probes `status warmups-day-NN` (0.5-2 s,
+  404 until the drop) every poll in the hot window and then races per-lane lists against the full list
+  (`_list_race`; the GM's `binary` lane filter matches nothing, so a lane that answers [] falls back to `--search`;
+  the union counts only when every lane answered and it is at least yesterday's size). Knobs:
+  HCTF_RELEASE_FAST_PROBE, HCTF_RELEASE_HOT_AFTER, HCTF_RELEASE_LIST_EVERY.
+- **P1 fault-injection replay:** `hctf/replay_gm.py --timed <cid>=<case dir>,...` serves Time Trial / Mastery locally
+  with the real GM's untimed regular-pool semantics (reconnect, retry = next variant, pool, prerequisite, finished
+  CORRECT body, accepted_ids/remaining, already_solved, practice) plus faults `--fault-cut/-latency/-429/-start-503/
+  -prereq-flap/-dl-stall`, `--pool N`, and a `{"op":"_fault"}` control. `tests/test_fault_replay.py` = 26 checks over
+  11 scenarios (D8 503, D14 one-variant pool, D15 cut reply, D16 slow GM + big contract + runner deadline/resume,
+  alt-D16 prerequisite flap, r9b finished body, 429s, stalled download, release detection). Green in ~2 min.
+  `bin/preflight.sh` runs it (FAIL when red; skipped inside the last 12 min or with HCTF_PREFLIGHT_NO_FAULT=1).
+- **P5 preflight gates:** host memory (FAIL < 2.5 GB available, WARN < 4 GB), pairing token and Claude login FAIL at
+  <= 2 days, the fault suite above.
+- **P4 KPI:** `hctf kpi --day N [--record]` / `--all` -> T+ 14/15 and 15/15 from the release line, release lag, race
+  wins, timed first-try count, generalizes (count / s / on the critical chain), live-answer / in-attempt / untimed
+  passes, `!!!` count, live vs post-run worker cost; rows in `reference/KPI.md`.
+- **P0 knobs:** HCTF_LIVE_MAX_FIELDS 40 -> 80 (D12's 58 empty slug fields now go to a live worker on the open attempt
+  instead of a generalize); last_timed.json keeps already_passed / bank_overlay / resumed_banked / unjudged_resends /
+  localize_error / localize_waves / resubmit_fixed for `hctf why`; HCTF_REPLAY_REROLL=0 keeps the real GM's
+  no-re-roll rule against a local stand-in.
+- The rest of P0 (fix-in-attempt, label hints, resume, live answer racing the generalize, background generalize) was
+  already in place; the suite now proves the runner half of it offline.
+
+Still open (next): P2 pre-drop warm workers, live-answer one-shot single, format-keyed metadata race; P4 nightly blind
+replay KPI + lane-split ratchet + prebuild hit rate; P5 feed warnings for sequential GM loops / long generalizes.

@@ -1193,7 +1193,9 @@ def _attempt(a):
     # answer_ids): the GM resumes the latest attempt, so re-attempting a passed mode (Mastery prerequisite re-pass,
     # scout, replay) got 'no_answer_ids' forever -- replay d7fix2 burned ~20 generalize workers on it.
     finished = not body.get("error") and not body.get("answer_ids")
-    replay = any(h in GM for h in ("127.0.0.1", "localhost"))   # replay_gm stand-in: re-runs passed modes (d7fix2)
+    # replay_gm stand-in: re-runs passed modes (d7fix2). HCTF_REPLAY_REROLL=0 keeps the real GM's rule against a local
+    # stand-in (the fault-injection suite serves timed modes locally with the real semantics).
+    replay = any(h in GM for h in ("127.0.0.1", "localhost")) and _opt("HCTF_REPLAY_REROLL", "1") == "1"
     if (finished and a.op in ("start", "resume") and str(body.get("result", "")).upper() == "CORRECT"
             and not replay and _opt("HCTF_REROLL_CORRECT", "0") != "1"):
         # The mode's latest attempt is already CORRECT: report the pass, never re-roll it. D16 script Mastery: a retry

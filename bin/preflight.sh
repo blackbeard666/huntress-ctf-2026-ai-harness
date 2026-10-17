@@ -46,6 +46,7 @@ else
   if   [ "$days_left" -lt 0 ]; then fail "token EXPIRED ($TOKEN_EXPIRY). Re-pair now."
   elif [ "$exp_epoch" -lt "$last_epoch" ]; then
        warn "token expires $TOKEN_EXPIRY ($days_left d) — BEFORE the CTF's last day ($last_date). Re-pair before then or days 30-31 will fail."
+  elif [ "$days_left" -le 2 ]; then fail "token expires in $days_left d ($TOKEN_EXPIRY): re-pair NOW (reference/RUNBOOK.md), then update TOKEN_EXPIRY here."
   elif [ "$days_left" -le 5 ]; then warn "token expires in $days_left d ($TOKEN_EXPIRY) — re-pair soon."
   else ok "token present, expires $TOKEN_EXPIRY ($days_left days left; CTF ends ~$last_date)."
   fi
@@ -205,6 +206,8 @@ left = (r - time.time()) / 86400
 when = datetime.datetime.fromtimestamp(r).strftime("%Y-%m-%d %H:%M")
 if left <= 0:
     print(f"FAIL Claude login EXPIRED ({when}): run `claude auth login`")
+elif left <= 2:
+    print(f"FAIL Claude login expires {when} ({left:.1f} d): run `claude auth login` NOW (workers die mid-run on an expired refresh token)")
 elif r < end.timestamp():
     print(f"WARN Claude login expires {when} ({left:.1f} d) -- BEFORE the CTF's last day; `claude auth login` again before then")
 else:
@@ -219,6 +222,41 @@ if [ "${HCTF_PREFLIGHT_NO_LLM:-0}" != 1 ]; then
     ok "live worker-auth turn succeeded (claude -p)."
   else
     fail "claude -p failed -- workers can't start: $(tail -c 220 <<<"$smoke" | tr '\n' ' ')  (fix: claude auth login)"
+  fi
+fi
+
+# 3c3) Host memory: D16's post-run fan-out hit the kernel OOM killer, which took WSL's init (and the run) down. The run
+# is memory-capped now (3c1), but a box that is already short before the drop has no headroom for 5 workers + solvers.
+hdr "Host memory"
+mem_avail_mb=$(( $(awk '/^MemAvailable/{print $2}' /proc/meminfo) / 1024 ))
+mem_total_mb=$(( $(awk '/^MemTotal/{print $2}' /proc/meminfo) / 1024 ))
+if [ "$mem_avail_mb" -lt "${HCTF_MEM_FAIL_MB:-2500}" ]; then
+  fail "only ${mem_avail_mb} MB of ${mem_total_mb} MB available: free memory before the drop (stray solvers/prebuild? \`pgrep -af solve.py\`; Windows apps; wsl --shutdown)."
+elif [ "$mem_avail_mb" -lt "${HCTF_MEM_WARN_MB:-4000}" ]; then
+  warn "${mem_avail_mb} MB of ${mem_total_mb} MB available (< ${HCTF_MEM_WARN_MB:-4000} MB): tight for 5 workers + solvers."
+else
+  ok "${mem_avail_mb} MB of ${mem_total_mb} MB available."
+fi
+
+# 3c4) Fault-injection replay of the timed runner (tests/test_fault_replay.py, ~2 min, offline): the harness faults
+# that set a day's T+ before (cut-off reply, slow GM + big contract, 429s, 503 starts, prerequisite flap, 1-variant
+# pool, runner deadline) must all end CORRECT in-attempt. A red suite BLOCKS (reference/PLAN_SUB2MIN.md P1).
+hdr "Timed runner vs GM faults (offline replay)"
+if [ "${HCTF_PREFLIGHT_NO_FAULT:-0}" = 1 ]; then
+  warn "fault-replay suite skipped (HCTF_PREFLIGHT_NO_FAULT=1)."
+else
+  to_drop_f="$(python3 -c "import datetime as d; n=d.datetime.now(); t=n.replace(hour=${HCTF_DROP_HOUR:-21},minute=0,second=0,microsecond=0); t=t if t>n else t+d.timedelta(days=1); print(int((t-n).total_seconds()//60))")"
+  if [ "${to_drop_f:-0}" -le 12 ]; then
+    warn "fault-replay suite skipped: ${to_drop_f} min to the drop (never inside the last 12 min)."
+  else
+    fr_t0=$(date +%s)
+    fr_out="$(timeout 480 python3 tests/test_fault_replay.py 2>&1)"; fr_rc=$?
+    fr_s=$(( $(date +%s) - fr_t0 ))
+    if [ "$fr_rc" -eq 0 ]; then
+      ok "fault-replay suite green in ${fr_s}s ($(grep -c '^ok ' <<<"$fr_out") scenarios)."
+    else
+      fail "fault-replay suite RED (rc=$fr_rc, ${fr_s}s): $(grep -E '^FAIL|FAILED|Error|Traceback' <<<"$fr_out" | head -3 | tr '\n' ' ' | cut -c1-400)  -> python3 tests/test_fault_replay.py"
+    fi
   fi
 fi
 

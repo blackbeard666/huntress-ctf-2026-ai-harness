@@ -46,6 +46,7 @@ hctf watch                 # board: every challenge x mode, stage, each agent's 
 hctf tail <challenge-id>   # follow one agent's reasoning + tool calls as they stream
 hctf dash                  # one-shot status table
 hctf cost --day N          # worker LLM cost/turns per chain x stage + non-ok worker exits
+hctf kpi --day N [--record] # the day's KPI row (T+ 14/15, 15/15, release lag, race wins, generalizes on the critical path)
 ```
 
 ## Manual / debugging commands
