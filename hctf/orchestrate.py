@@ -332,6 +332,141 @@ class LiveAnswer:
         return self
 
 
+# Answer-first worker (PLAN_SUB2MIN.md P2): on a Single Solve the reuse race did not win, a second LLM worker whose only
+# job is to derive and SUBMIT the fields from the bytes in a few tool calls (no solver), beside the chain's worker that
+# builds the solver. D13-D16 singles were mostly ONE flag field, and the LLM-bound lanes (metadata every day, binary /
+# warmups half the days) took 40-90 s because one worker both found the answer and wrote the solver. GM-confirmed
+# values reach the solver worker through its inbox (never recompute), and the ready watcher still waits for a solver
+# that reproduces them before the timed modes start. A duel variant: same slot rules, medium effort by default.
+ANSWER_FIRST = os.environ.get("HCTF_ANSWER_FIRST", "1") != "0"
+ANSWER_FIRST_MAX_FIELDS = int(os.environ.get("HCTF_ANSWER_FIRST_MAX_FIELDS", "80"))
+ANSWER_FIRST_LANES = {x.strip() for x in os.environ.get(
+    "HCTF_ANSWER_FIRST_LANES",
+    "warmups,metadata-forensics,mobile-android,binary-reverse-engineering,script-analysis").split(",") if x.strip()}
+ANSWER_FIRST_EFFORT = os.environ.get("HCTF_ANSWER_FIRST_EFFORT", "medium")
+ANSWER_FIRST_TIMEOUT = float(os.environ.get("HCTF_ANSWER_FIRST_TIMEOUT", "420"))
+ANSWER_FIRST_MAX = int(os.environ.get("HCTF_ANSWER_FIRST_MAX", "3"))          # concurrent answer-first workers
+ANSWER_FIRST_MIN_AVAIL_GB = float(os.environ.get("HCTF_ANSWER_FIRST_MIN_AVAIL_GB", "2.0"))
+ANSWER_FIRST_RACE_WAIT = float(os.environ.get("HCTF_ANSWER_FIRST_RACE_WAIT", "10"))   # give the reuse race its 3-9 s
+_af_live, _af_lock = set(), threading.Lock()
+
+
+def answer_first_eligible(lane, n_fields):
+    """(ok, why) for launching an answer-first worker on a single with n_fields answer ids."""
+    if not ANSWER_FIRST:
+        return False, "HCTF_ANSWER_FIRST=0"
+    if lane not in ANSWER_FIRST_LANES:
+        return False, f"lane {lane} not in HCTF_ANSWER_FIRST_LANES"
+    if n_fields <= 0 or n_fields > ANSWER_FIRST_MAX_FIELDS:
+        return False, f"{n_fields} fields (cap {ANSWER_FIRST_MAX_FIELDS}: a hand-answered single must be small)"
+    try:
+        from . import duel as _duel
+        avail = _duel._mem_avail_gb()
+    except Exception:  # noqa: BLE001
+        avail = 99.0
+    if avail < ANSWER_FIRST_MIN_AVAIL_GB:
+        return False, f"only {avail:.1f} GB available"
+    with _af_lock:
+        if len(_af_live) >= ANSWER_FIRST_MAX:
+            return False, f"{len(_af_live)} answer-first workers already running"
+    return True, ""
+
+
+class AnswerFirst:
+    """The answer-first worker of a Single Solve (see ANSWER_FIRST). start() waits for the reuse race (bounded), skips
+    when the single is already CORRECT, else runs a `live`-stage worker (stop gate: done when every listed field is
+    accepted or the attempt is CORRECT) and watches confirmed.json: every newly confirmed value is posted to the chain
+    worker's inbox; the worker is ended the moment the single is complete (by anyone)."""
+
+    def __init__(self, chain, cid):
+        self.chain, self.cid = chain, cid
+        contract = cli.load(cid, "start.json") or cli.load(cid, "contract.json") or {}
+        self.ids = list(contract.get("answer_ids") or [])
+        self.attempt = cli.attempt_id(contract)
+        qmap = {q.get("id"): q for q in contract.get("questions") or [] if isinstance(q, dict)}
+        lines = []
+        for a in self.ids:
+            q = qmap.get(a) or {}
+            fmt = q.get("answer_format") or {}
+            lines.append(f"  - `{a}`: {str(q.get('question') or '?')[:220]} | artifact `{q.get('artifact') or '?'}` | "
+                         f"format {json.dumps(fmt)[:160]}")
+        art = timed.latest_artifacts(cid) or cli.cdir(cid)
+        cdir = cli.cdir(cid)
+        self.prompt = workers.render(
+            "answer_first", persona=workers.lane_persona(chain.lane), cid=cid, attempt=str(self.attempt)[:8],
+            n=len(self.ids), fields="\n".join(lines), lane=chain.lane,
+            contract=(cdir / "start.json").relative_to(ROOT) if (cdir / "start.json").exists()
+            else (cdir / "contract.json").relative_to(ROOT),
+            art_dir=Path(art).relative_to(ROOT), triage=triage_summary(cid, cap=6000),
+            chal_dir=cdir.relative_to(ROOT), solver_dir=chain.sdir.relative_to(ROOT))
+        self.stop_evt, self.done, self.started = threading.Event(), threading.Event(), threading.Event()
+        self.rc = None
+        self.seen = set()
+
+    def start(self, race_done=None):
+        threading.Thread(target=self._run, args=(race_done,), daemon=True, name=f"answer-first-{self.cid}").start()
+        return self
+
+    def _run(self, race_done):
+        try:
+            if race_done is not None:
+                race_done.wait(ANSWER_FIRST_RACE_WAIT)
+            if self.stop_evt.is_set() or cli.is_complete(self.cid):
+                say(f"[{self.cid}] no answer-first worker: the single is already complete")
+                return
+            ok, why = answer_first_eligible(self.chain.lane, len(self.ids))
+            if not ok:
+                say(f"[{self.cid}] no answer-first worker: {why}")
+                return
+            with _af_lock:
+                _af_live.add(self.cid)
+            try:   # the Stop gate (.claude/hooks/stop_gate.py, stage live) reads what this worker owes
+                (cli.cdir(self.cid) / ".live_fields.json").write_text(json.dumps({"attempt": self.attempt,
+                                                                                  "fields": self.ids}))
+            except OSError:
+                pass
+            self.started.set()
+            say(f"[{self.cid}] answer-first worker ({ANSWER_FIRST_EFFORT}) on {len(self.ids)} field(s) beside the "
+                "solver worker")
+            threading.Thread(target=self._watch, daemon=True, name=f"answer-first-watch-{self.cid}").start()
+            self.rc = self.chain.run_worker(self.cid, "live", self.prompt, ANSWER_FIRST_TIMEOUT, urgent=True,
+                                            stop=self.stop_evt,
+                                            env_extra={"HCTF_X_EFFORT": ANSWER_FIRST_EFFORT,
+                                                       "HCTF_LOG_POOL": "answer-first"})
+        except Exception as e:  # noqa: BLE001 - the chain's own worker is unaffected
+            say(f"[{self.cid}] answer-first worker failed: {str(e)[:200]}")
+        finally:
+            with _af_lock:
+                _af_live.discard(self.cid)
+            self.done.set()
+
+    def _watch(self):
+        while not self.done.is_set() and not self.stop_evt.is_set():
+            try:
+                conf = cli.confirmed_answers(self.cid)
+                new = {k: v for k, v in conf.items() if k not in self.seen}
+                if new:
+                    self.seen |= set(new)
+                    rest = [a for a in self.ids if a not in conf]
+                    note = (f"ANSWER-FIRST WORKER: the GM CONFIRMED {len(conf)}/{len(self.ids)} field(s) of this attempt: "
+                            + json.dumps({k: str(v)[:80] for k, v in list(new.items())[:12]}, ensure_ascii=False)
+                            + ". Never recompute or resubmit them; your solver must PRODUCE exactly these values "
+                            f"(`hctf solver-test {self.cid}` checks them against confirmed.json)."
+                            + (f" Still open: {rest[:12]}." if rest else " Every field is confirmed: finish the solver."))
+                    self.chain._deliver_note(self.cid, note, key="answer-first")
+                if cli.is_complete(self.cid):
+                    say(f"[{self.cid}] single complete -> ending the answer-first worker")
+                    self.stop_evt.set()
+                    break
+            except Exception as e:  # noqa: BLE001
+                say(f"[{self.cid}] answer-first watch note: {str(e)[:120]}")
+            self.done.wait(1.0)
+
+    def stop(self, join=5.0):
+        self.stop_evt.set()
+        self.done.wait(join)
+
+
 def _resume_need(prev):
     """Seconds of clock a resumed attempt must still have to be worth running: the last run's in-window phases
     (download + solve + submit) + 1.5 s, at least 3 s (half the window when no phases are known)."""
@@ -1529,8 +1664,10 @@ class Chain:
             w.cancel()
 
     def run_worker(self, cid, stage, prompt, timeout, urgent=False, prefer_homebase=False, stop=None, warm=None,
-                   warm_task=None):
+                   warm_task=None, env_extra=None):
         env = self._worker_env(cid, stage)
+        if env_extra:
+            env.update(env_extra)   # e.g. HCTF_X_EFFORT / HCTF_LOG_POOL for a second worker on the same challenge
         # A warm worker is already running locally: it takes no pool slot (and so must not release one).
         acquired = not urgent and not (warm is not None and warm.alive())
         pool = self.pools.acquire(prefer_homebase) if acquired else "local"
@@ -2869,6 +3006,16 @@ class Chain:
                     self._maybe_start_duel(cid, prompt)
                 except Exception as e:  # noqa: BLE001 - the duel is optional
                     say(f"[{cid}] duel launch note: {e}")
+            if n == 0 and not welcome and ANSWER_FIRST and getattr(self, "_af", None) is None:
+                try:
+                    af = AnswerFirst(self, cid)
+                    ok, why = answer_first_eligible(self.lane, len(af.ids))
+                    if ok:
+                        self._af = af.start(race_done=getattr(self, "_race_done", None))
+                    else:
+                        say(f"[{cid}] no answer-first worker: {why}")
+                except Exception as e:  # noqa: BLE001 - optional
+                    say(f"[{cid}] answer-first launch note: {e}")
             warm, self._warm = (self._warm, None) if n == 0 else (None, None)
             warm_task = None
             if warm is not None:
@@ -2882,6 +3029,9 @@ class Chain:
                                      warm=warm, warm_task=warm_task)
             finally:
                 done_evt.set()
+                af = getattr(self, "_af", None)
+                if af is not None:
+                    af.stop()          # the single's worker ended (by the handoff or by itself): nothing left to answer
                 if watch:
                     watch.join()
                 self._join_prior_cases(cid)
