@@ -28,6 +28,7 @@ LANES = (("warmups", "warmups"), ("metadata-forensics", "metadata"), ("script-an
          ("binary-reverse-engineering", "binary"), ("mobile-android", "mobile"), ("welcome", "welcome"))
 MODE_SHORT = {"single_solve": "single", "time_trial": "TT", "mastery": "Mastery"}
 CHAINS = re.compile(r"(\d+) chains \((\d+) challenge modes\)")
+GEN_WARN_S = float(os.environ.get("HCTF_FEED_GEN_WARN_S", "90"))   # a generalize past this draws a ⚠ in the heartbeat
 
 
 def lane_of(base):
@@ -55,6 +56,7 @@ class Feed:
         self.activity = {}           # base -> (what, mode, since_secs)
         self.gen_start = {}          # base -> secs
         self.in_attempt = set()      # (base, mode) passed by in-attempt correction
+        self.gen_warned = set()      # bases whose running generalize already drew the ⚠ (GEN_WARN_S)
         self.done = False
         self.follow_post = follow_post   # keep going after "all chains finished" (a day.sh run: post-run + marker)
         self.post = False            # in the post-run
@@ -217,12 +219,20 @@ class Feed:
             return (f"{self._t()} · post-run: {ph}" + (f" · done: {', '.join(self.phases_done)}" if self.phases_done else "")
                     + (" · working: " + ", ".join(gens) if gens else ""))
         tot = f"/{self.total}" if self.total else ""
-        work = []
+        work, warn = [], []
         for base, (what, mode, since) in sorted(self.activity.items()):
             if (base, mode) in self.solved and "generalize" not in what:
                 continue
-            work.append(f"{lane_of(base)} {what} {_fmt((self.now or since) - since)}")
-        return (f"{self._t()} · {len(self.solved)}{tot} solved" + (" · working: " + ", ".join(work) if work else ""))
+            el = (self.now or since) - since
+            work.append(f"{lane_of(base)} {what} {_fmt(el)}")
+            if "generalize" in what and el > GEN_WARN_S and base not in self.gen_warned:
+                # PLAN_SUB2MIN.md P5: a generalize past its budget is the day's critical path -- say so in the live
+                # feed instead of only in `hctf why` (D15: 181 s, D16: 153 s, each the day's tail)
+                self.gen_warned.add(base)
+                warn.append(f"{self._t()} ⚠ {lane_of(base)} {what} running {_fmt(el)} (> {GEN_WARN_S:g} s budget): "
+                            f"hctf why {base}")
+        line = f"{self._t()} · {len(self.solved)}{tot} solved" + (" · working: " + ", ".join(work) if work else "")
+        return "\n".join(warn + [line])
 
     def summary(self):
         tot = f"/{self.total}" if self.total else ""
