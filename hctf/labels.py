@@ -283,3 +283,108 @@ def probe(cid, aid, cands, budget=25, delay=1.0, log=print):
         time.sleep(delay)
     return {"accepted": None, "tried": tried,
             "hint": "add better --term values (keywords, magic, spec names seen in the bytes) and rerun"}
+
+
+# ------------------------------------------------------------------------------------- parallel resolution
+# The moment a bisect isolates wrong fields, resolve their labels WITHOUT the LLM: rehearsal fair D16 script single, the 5
+# isolated `batch-*-expansion` fields were ENUMS (accepted_values handed over by the contract) -- the GM wanted
+# `percent`, the race had sent `delayed`, and the worker spent ~57 s finding it. All (field x candidate) pairs go out
+# as one-field probe submits in one parallel wave (<= HCTF_PROBE_CONC in flight); a field's first accept wins.
+RESOLVE_N = int(os.environ.get("HCTF_LABEL_RESOLVE_N", "4"))       # non-enum candidates per field
+RESOLVE = os.environ.get("HCTF_LABEL_RESOLVE", "1") != "0"
+
+
+def all_label_hints():
+    """{suffix: {rejected value: {accepted value: n}}} merged over every challenge dir's label_hints.json (hb_timed
+    writes one per challenge: D16 Mastery learnt call_double -> for_indirect, which the next lane/day never saw)."""
+    out = {}
+    for p in paths.CHALLENGES.glob("day*/*/label_hints.json"):
+        try:
+            d = json.loads(p.read_text())
+        except (OSError, ValueError):
+            continue
+        for suf, m in (d or {}).items():
+            for wrong, rights in (m or {}).items():
+                tgt = out.setdefault(suf, {}).setdefault(wrong, {})
+                for v, n in (rights or {}).items():
+                    tgt[v] = tgt.get(v, 0) + int(n or 0)
+    return out
+
+
+def ranked_alternatives(cid, aid, rejected, hints=None, sibling_ok=None):
+    """Candidates for a field whose value `rejected` the GM just refused, best first:
+      1. what the GM accepted for a SIBLING field of the same ending in this attempt (same construct, same rubric)
+      2. label_hints: what replaced this exact wrong value before (any challenge)
+      3. labels.candidates() -- for an enum exactly accepted_values; else playbook / vocab / composed spellings
+    Never the rejected value, never a value judged wrong for this field."""
+    hints = all_label_hints() if hints is None else hints
+    suf = _suffix_key(aid) or ""
+    base = candidates(cid, aid, solver_value=None)
+    enum = bool(accepted_values(cid, aid))
+    score = Counter()
+    for v, n in (sibling_ok or Counter()).items():
+        score[v] += 100 * n
+    for v, n in (hints.get(suf, {}).get(str(rejected), {}) or {}).items():
+        score[v] += 10 * n
+    pool = list(dict.fromkeys(base + ([v for v in score if v in base] if enum else list(score))))
+    pool = [v for v in pool if v != str(rejected)]
+    order = {v: i for i, v in enumerate(pool)}
+    pool = sorted(pool, key=lambda v: (-score[v], order[v]))
+    return pool if enum else pool[:RESOLVE_N]
+
+
+def resolve_parallel(cid, wrong, harness="label", conc=None, log=None, extra=None):
+    """Resolve {answer_id: rejected value} by parallel one-field probes. Returns {answer_id: accepted value}.
+    `extra` {answer_id: [values]}: more candidates (the reuse race: other prior solvers' values), tried right after
+    the best-ranked one. Flags are never probed; closed-vocab non-enum values the GM accepts are cached in vocab.json."""
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    from . import grouptest
+    if not RESOLVE or not wrong:
+        return {}
+    conf = cli.confirmed_answers(cid)
+    hints = all_label_hints()
+    tasks, plan = [], {}
+    for aid, rej in wrong.items():
+        q = _question(cid, aid)
+        if FLAG_HINT.search(json.dumps(q.get("answer_format", ""))):
+            continue
+        av = accepted_values(cid, aid)
+        if av or ending(aid) in CACHEABLE_FAMILIES:
+            sib = Counter(str(v) for k, v in conf.items() if k != aid and ending(k) == ending(aid))
+            cands = ranked_alternatives(cid, aid, rej, hints=hints, sibling_ok=sib)
+        else:
+            cands = []    # a derived value (hash, GUID, url, path...): no label vocabulary -- only `extra` values
+        more = [str(v) for v in (extra or {}).get(aid, []) if str(v) != str(rej) and (not av or str(v) in av)]
+        plan[aid] = [v for v in dict.fromkeys(cands[:1] + more + cands[1:]) if v]   # best ranked, then extras
+        if not plan[aid]:
+            del plan[aid]
+    # round-robin across fields: every field's best candidate goes out first
+    for i in range(max((len(v) for v in plan.values()), default=0)):
+        tasks += [(aid, c[i]) for aid, c in plan.items() if i < len(c)]
+    won, lock = {}, threading.Lock()
+
+    def one(t):
+        aid, v = t
+        with lock:
+            if aid in won:
+                return
+        try:
+            kind, _b, _p = cli.submit(cid, {aid: v}, force=True, probe=True, harness=harness)
+        except Exception:  # noqa: BLE001 - an unjudged probe resolves nothing
+            return
+        if kind in ("correct", "accepted"):
+            with lock:
+                won.setdefault(aid, v)
+    t0 = time.time()
+    with ThreadPoolExecutor(max_workers=max(1, min(conc or grouptest.CONC, len(tasks) or 1))) as ex:
+        list(ex.map(one, tasks))
+    if won:
+        try:
+            record_values(cid, won)
+        except Exception:  # noqa: BLE001 - caching only
+            pass
+    if log and plan:
+        log(f"[{cid}] label resolve: {len(won)}/{len(plan)} field(s) resolved in {time.time() - t0:.1f}s "
+            f"({len(tasks)} candidate(s)): " + ", ".join(f"{a.rsplit('.', 1)[-1]}={v}" for a, v in won.items()))
+    return won

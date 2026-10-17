@@ -74,6 +74,27 @@ POOL_IDLE_MAX = float(os.environ.get("HCTF_GM_POOL_IDLE_MAX", "3"))
 _POOL_Q = __import__("queue").LifoQueue()
 
 
+GZIP = os.environ.get("HCTF_GM_GZIP", "1") != "0"
+
+
+def _gz(headers, params):
+    """Ask for gzip on API replies (2026-10-17: the GM honors it -- script Mastery status 3.3 MB -> 117 KB on the wire,
+    10.6 s -> 5.6 s from WSL); never on artifact bytes (download/artifact: saved as-is, sha-checked)."""
+    if GZIP and str((params or {}).get("op", "")) not in ("download", "artifact"):
+        return {**(headers or {}), "Accept-Encoding": "gzip"}
+    return headers or {}
+
+
+def _gunzip(raw, enc):
+    if raw and str(enc or "").lower() == "gzip":
+        import gzip
+        try:
+            return gzip.decompress(raw)
+        except (OSError, EOFError):
+            return raw
+    return raw
+
+
 def _conn(fresh=False):
     import http.client
     import queue
@@ -102,9 +123,9 @@ def _pooled(method, params, data, headers, timeout):
         if c.sock is not None:
             c.sock.settimeout(timeout)
         try:
-            c.request(method, path, body=data, headers=headers)
+            c.request(method, path, body=data, headers=_gz(headers, params))
             r = c.getresponse()
-            raw = r.read()
+            raw = _gunzip(r.read(), r.getheader("Content-Encoding"))
         except (http.client.HTTPException, OSError):
             c.close()
             if method == "GET" and reused and attempt == 0:
@@ -148,16 +169,16 @@ def _request(method, params=None, payload=None):
     tok = _token()
     if tok:
         headers["Authorization"] = "Bearer " + tok
-    req = urllib.request.Request(url, data=data, method=method, headers=headers)
+    req = urllib.request.Request(url, data=data, method=method, headers=_gz(headers, params))
     # Short read timeout + one retry for idempotent GETs: a hung call once stalled a worker 65.7 s (60 s timeout).
     # POSTs (start/submit) get a longer timeout and no blind retry -- the GM may have processed them.
     timeout, net_retries = (GET_TIMEOUT, 1) if method == "GET" else (TIMEOUT, 0)
     for attempt in range(RATE_RETRIES + 1):
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
-                return r.status, dict(r.headers), r.read()
+                return r.status, dict(r.headers), _gunzip(r.read(), r.headers.get("Content-Encoding"))
         except urllib.error.HTTPError as e:
-            raw = e.read()
+            raw = _gunzip(e.read(), (e.headers or {}).get("Content-Encoding"))
             if e.code in (429, 503) and attempt < RATE_RETRIES and not _refusal(raw):
                 wait = _retry_after(e.headers, attempt)
                 # rate-limited: back off, don't fail the caller -- but SAY so (Day 7: 9.5-18 s single submits with no

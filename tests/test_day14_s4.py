@@ -116,7 +116,8 @@ assert h and h.offset == len(big) - 4096 + e["offset"] and h.encoding == "zlib",
 t = time.time()
 B.hcfg_scan(big, deadline=time.time() - 1)
 t_late = time.time() - t
-assert t_none < 1.0 and t_hit < 1.0 and t_late < 0.2, (t_none, t_hit, t_late)
+# full no-blob scan: ~0.6 s alone, 1.3-1.5 s with the other suites running in parallel (2026-10-17) -> 2.5 s cap
+assert t_none < 2.5 and t_hit < 1.0 and t_late < 0.2, (t_none, t_hit, t_late)
 print(f"ok  runtime on 4 MB: no blob {t_none * 1000:.0f} ms (all passes), zlib blob at the end {t_hit * 1000:.0f} ms, "
       f"expired deadline {t_late * 1000:.0f} ms")
 

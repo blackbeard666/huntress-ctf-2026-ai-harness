@@ -215,6 +215,11 @@ def _gm_call(hb_timed, req):
         parsed, text = json.loads(raw), None
     except ValueError:
         parsed, text = None, (raw or b"")[:2000].decode("utf-8", "replace")
+    if kind == "submit" and isinstance(parsed, dict) and isinstance(parsed.get("accepted_ids"), list):
+        # the GM sends the attempt's CUMULATIVE accepted ids (~38 KB on a 1095-field single); the client only intersects
+        # them with this request's answers -- 12 parallel probes x 38 KB clogged the one ssh stdio channel
+        mine = set(req.get("answers") or {})
+        parsed["accepted_ids"] = [a for a in parsed["accepted_ids"] if a in mine]
     return {"http": status, "body": parsed, "text": text, "saved": [], "content_type": "application/json",
             "elapsed": round(time.time() - t0, 3), "retries": int(slept > 0), "slept": slept}
 

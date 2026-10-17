@@ -7,7 +7,7 @@ one-field families -> 55 sequential submits, 4:04 of the day's 6-min critical pa
 parallel (12 at once: 3.3 s wall vs 1.9 s for one, no 429), so each WAVE probes every open group at once:
 
   wave 1   the batch cut into ~TARGET contiguous groups (ids ordered by family, so a family stays together)
-  wave k   every group that failed in wave k-1, halved; both halves probed together
+  wave k   every group that failed in wave k-1, cut into max(2, conc / failing groups) parts, all probed together
   unjudged (rate_limited / empty / transport): probed again once in the next wave, never counted as wrong
   already_solved: stop at once (the attempt is CORRECT)
 
@@ -25,8 +25,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 CONC = max(1, int(os.environ.get("HCTF_PROBE_CONC", "12")))
 CONC_MIN = 2
-TARGET_GROUPS = int(os.environ.get("HCTF_PROBE_GROUPS", "24"))
+TARGET_GROUPS = int(os.environ.get("HCTF_PROBE_GROUPS", str(CONC)))   # wave 1 = one round at full concurrency
 UNJUDGED_RETRIES = 1
+SINGLES_MAX = int(os.environ.get("HCTF_PROBE_SINGLES_MAX", "6"))
 
 
 def family(aid):
@@ -38,14 +39,16 @@ def family(aid):
 def initial_groups(answers, target=None, families=True):
     """Cut answers into <= target contiguous groups, ids ordered by family (stable within a family)."""
     ids = list(answers)
+    if not ids:
+        return []
     if families:
         order = {}
         for a in ids:
             order.setdefault(family(a), len(order))
         ids.sort(key=lambda a: order[family(a)])
     n = len(ids)
-    # ~8 fields per group, 2..TARGET groups: a 1095-field batch is cut in 24 (one wave covers it), an 11-field
-    # speculative remainder in 2 (not 11 one-field probes)
+    # ~8 fields per group, 2..TARGET groups: a 1095-field batch is cut in 12 (one round at full concurrency), an
+    # 11-field speculative remainder in 2 (not 11 one-field probes)
     target = max(1, min(n, target or max(2, min(TARGET_GROUPS, n // 8))))
     size = -(-n // target)
     return [{a: answers[a] for a in ids[i:i + size]} for i in range(0, n, size)]
@@ -97,6 +100,10 @@ def find_rejected(probe, answers, budget=None, conc=None, groups=None, families=
         with ThreadPoolExecutor(max_workers=max(1, min(c, len(wave)))) as ex:
             list(ex.map(one, range(len(wave))))
         rate = False
+        # k-ary split: the failing groups share the next wave's slots (rehearsal fair D16: halving took 7 waves x ~9 s over
+        # the public GM for 5 wrong fields of 1095; splitting 12-way finds them in ~3 at the same 12 in flight)
+        n_bad = sum(1 for r in results if r == "bad")
+        parts = max(2, min(cmax, c) // max(1, n_bad))
         for (g, tries), r in zip(wave, results):
             if r == "solved":
                 stats["solved"] = True
@@ -109,8 +116,11 @@ def find_rejected(probe, answers, budget=None, conc=None, groups=None, families=
                     bad.update(g)
                 else:
                     ks = list(g)
-                    h = len(ks) // 2
-                    todo += [({k: g[k] for k in ks[:h]}, 0), ({k: g[k] for k in ks[h:]}, 0)]
+                    # a small failing group goes straight to one-field probes (2 more halving waves cost more than
+                    # the few extra probes)
+                    k = len(ks) if len(ks) <= SINGLES_MAX else min(len(ks), parts)
+                    size = -(-len(ks) // k)
+                    todo += [({x: g[x] for x in ks[i:i + size]}, 0) for i in range(0, len(ks), size)]
                 continue
             # unjudged: rate-limited or other -- retry once next wave, never call it wrong
             if r == "rate":

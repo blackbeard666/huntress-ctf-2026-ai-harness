@@ -436,7 +436,7 @@ def _slug_problem(value, q):
         return None
 
 
-def _bisect_rejected(cid, answers, budget=BISECT_BUDGET, harness=None, families=True, stop=None):
+def _bisect_rejected(cid, answers, budget=BISECT_BUDGET, harness=None, families=True, stop=None, resolve=True):
     """Which of a rejected batch's answer_ids does the GM reject? PARALLEL group testing (hctf/grouptest.py): the batch
     cut into ~24 family-ordered groups probed at once, then every failing group halved and both halves probed at once,
     each probe-tagged (accepted groups are banked). Returns the set of individually rejected answer_ids.
@@ -470,7 +470,20 @@ def _bisect_rejected(cid, answers, budget=BISECT_BUDGET, harness=None, families=
     print(f"bisect: {st['probes']} probe(s) in {st['waves']} parallel wave(s), {st['seconds']}s"
           + (f", {st['rate_limited']} rate-limited (concurrency down to {st['conc_min']})" if st["rate_limited"] else "")
           + (f", {st['unjudged_fields']} field(s) left unjudged" if st.get("unjudged_fields") else ""), file=sys.stderr)
+    if resolve and bad and not is_complete(cid):
+        # resolve the isolated fields' labels right away (enum: the contract's accepted_values) -- no LLM turn
+        from . import labels
+        won = labels.resolve_parallel(cid, {a: answers[a] for a in bad if a in answers},
+                                      harness=harness or "label", log=lambda m: print(m, file=sys.stderr))
+        _print_resolved(cid, won, answers)
+        bad = {a for a in bad if a not in won}
     return bad
+
+
+def _print_resolved(cid, won, answers):
+    if won:
+        print("RESOLVED by the harness (the GM ACCEPTED these on this attempt) -- make solve.py emit them: "
+              + "; ".join(f"{a} = {v!r} (you sent {answers.get(a)!r})" for a, v in won.items()), file=sys.stderr)
 
 
 def _mastery_dry_run(cid):
@@ -555,6 +568,18 @@ def c_submit(a):
     kind, body, problems = submit(a.id, answers, force=a.force)
     bad = set()
     if a.from_solver and not problems and kind == "incorrect" and len(answers) > 1:
+        race = _await_race(a.id)
+        if race is not None:
+            # the harness race bisected this attempt (one bisector per attempt): resubmit only what is still open
+            if is_complete(a.id):
+                kind = "correct"
+            else:
+                conf = confirmed_answers(a.id)
+                rest = {k: v for k, v in answers.items() if conf.get(k) != v}
+                if rest and rest != answers:
+                    answers = rest
+                    kind, body, problems = submit(a.id, answers, force=a.force)
+    if a.from_solver and not problems and kind == "incorrect" and len(answers) > 1:
         # A bulk "incorrect" says nothing about WHICH field: bisect (probe-tagged, untimed single) and print the
         # rejected answer_ids, so the worker fixes exactly those (a script worker spent 88 s bisecting by hand).
         bad = _bisect_rejected(a.id, answers)
@@ -566,6 +591,13 @@ def c_submit(a):
         return EXIT["refused"]
     if kind in ("incorrect", "accepted") and not is_complete(a.id):
         rejected = list(answers) if kind == "incorrect" and len(answers) == 1 else sorted(bad)
+        if kind == "incorrect" and len(answers) == 1:
+            from . import labels      # a lone rejected field: its other labels (enum: accepted_values) in parallel
+            won = labels.resolve_parallel(a.id, dict(answers), harness="label", log=lambda m: print(m, file=sys.stderr))
+            _print_resolved(a.id, won, answers)
+            rejected = [k for k in rejected if k not in won]
+            if is_complete(a.id):
+                kind = "correct"
         k2, b2 = _try_format_alts(a.id, {k: answers[k] for k in rejected if k in answers})
         if k2:
             kind, body = k2, b2
@@ -574,6 +606,37 @@ def c_submit(a):
         sys.stdout.flush()
         _mastery_dry_run(a.id)
     return EXIT.get(kind, EXIT["error"])
+
+
+RACE_DEFER_S = float(os.environ.get("HCTF_RACE_DEFER_S", "90"))
+
+
+def _await_race(cid, max_wait=None):
+    """If the orchestrator's reuse race is bisecting THIS attempt (race_bisect.json, pid alive), wait for it instead of
+    running a second bisect over the same fields, then print what it found. -> the marker dict, or None."""
+    m = load(cid, "race_bisect.json") or {}
+    att = attempt_id(load(cid, "start.json"))
+    if not m or m.get("attempt") != att:
+        return None
+    if not m.get("done"):
+        try:
+            os.kill(int(m.get("pid")), 0)
+        except (OSError, TypeError, ValueError):
+            return None
+        if time.time() - float(m.get("started") or 0) > 600:
+            return None
+        print("the harness reuse race is bisecting this attempt -- waiting for it instead of a second bisect",
+              file=sys.stderr)
+        end = time.time() + (RACE_DEFER_S if max_wait is None else max_wait)
+        while time.time() < end and not is_complete(cid):
+            m = load(cid, "race_bisect.json") or {}
+            if m.get("done") or m.get("attempt") != att:
+                break
+            time.sleep(0.5)
+    if m.get("done"):
+        print(f"race result: {len(confirmed_answers(cid))} field(s) banked; still REJECTED: {m.get('wrong') or []}; "
+              f"labels resolved by the harness: {m.get('resolved') or {}}", file=sys.stderr)
+    return m
 
 
 def _try_format_alts(cid, rejected):
@@ -625,7 +688,9 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
         print("note: this attempt is already CORRECT (already_solved): nothing sent", file=sys.stderr)
         return "already_solved", {"result": "already_solved", "local": True}, []
     history = []
-    if subs_path.exists():
+    # force=True ignores every guard below: skip parsing the (multi-MB) log -- the parallel probes of a bisect each re-read
+    # 2.3 MB of submissions.jsonl under the GIL (rehearsal fair D16)
+    if subs_path.exists() and not force:
         for ln in subs_path.read_text().splitlines():
             try:
                 history.append(json.loads(ln))

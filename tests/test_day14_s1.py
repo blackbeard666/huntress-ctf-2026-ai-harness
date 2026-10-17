@@ -194,7 +194,9 @@ assert len(conf) == 100 and len(calls) == 1, (len(conf), len(calls))       # old
 gm, calls, conf = run_race("race-all", dict(list(truth.items())[:10]), dict(list(truth.items())[:10]), {})
 assert len(calls) == 1 and len(conf) == 10 and any("WON" in m for m in msgs)
 gm, calls, conf = run_race("race-yield", truth, high, spec, worker_at=1)
-assert len(calls) == 2, len(calls)          # the worker submitted during race submit #2: no third race submit
+# D17 prep: the race no longer yields when the worker submits -- it is the attempt's ONE bisector (the worker's
+# `hctf submit` waits on race_bisect.json instead of a second bisect over the same fields)
+assert len(calls) > 2 and len(conf) >= 120, (len(calls), len(conf))
 gm, calls, conf = run_race("race-alts", {"a": "1", "b": "2"}, {"a": "1"}, {"b": "x"}, alts={"b": ["x", "2"]})
 assert conf == {"a": "1", "b": "2"} and len(calls) <= 4, calls              # isolated wrong -> other solver's value
 SL = {"message": "handy-candle-quartz-31"}
@@ -207,7 +209,8 @@ orchestrate.RACE_PARTIAL = False
 gm, calls, conf = run_race("race-old", truth, dict(list(truth.items())[:100]), {})
 assert calls == []                                                           # kill switch: old all-or-nothing contract
 orchestrate.RACE_PARTIAL = True
-print("ok  race banking: incomplete banks confident, complete = 1 submit, yields to the worker, alts, slug gate, kill switch")
+print("ok  race banking: incomplete banks confident, complete = 1 submit, keeps bisecting past a worker submit, alts, "
+      "slug gate, kill switch")
 
 # --- C2 note routing: before go -> pending (go text); after go -> inbox ------------------------------------------------
 ch._go_sent, ch._go_pending = False, []

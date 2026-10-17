@@ -2320,8 +2320,10 @@ class Chain:
         """RACE_PARTIAL: merged (when complete) -> confident subset -> speculative remainder -> alternates for isolated
         wrong fields, all harness="race" probes within RACE_TOTAL_PROBES; stop when the worker submits -> used."""
         def left():
-            used, worker = self._race_used(cid)
-            return 0 if worker or cli.is_complete(cid) else RACE_TOTAL_PROBES - used
+            # the race no longer yields to the worker: it is the attempt's ONE bisector (rehearsal fair D16: race + worker
+            # bisected the same 1095 fields at once); the worker's `hctf submit` waits on race_bisect.json instead
+            used, _worker = self._race_used(cid)
+            return 0 if cli.is_complete(cid) else RACE_TOTAL_PROBES - used
 
         def todo(d):
             done = cli.confirmed_answers(cid)
@@ -2337,34 +2339,34 @@ class Chain:
             if len(d) == 1:
                 return set(d)
             return cli._bisect_rejected(cid, d, budget=min(bisect_budget, max(left(), 0)), harness="race",
-                                        families=False, stop=lambda: left() <= 0)
+                                        families=False, stop=lambda: cli.is_complete(cid), resolve=False)
 
-        wrong = set()
-        if len(merged) == len(ids):
-            wrong |= batch(merged, 0)              # complete set: one submit (a script/binary/mobile win needs no more)
-        if not cli.is_complete(cid):
-            wrong |= batch({a: v for a, v in high.items() if a in merged}, RACE_BISECT_PROBES)
-            wrong |= batch({a: v for a, v in spec.items() if a in merged and a not in high}, RACE_SPEC_PROBES)
-        self._race_wrong = {a: merged[a] for a in wrong if a in merged}
+        marker = cli.cdir(cid) / "race_bisect.json"
+        att = cli.attempt_id(cli.load(cid, "start.json"))
+        cli.save(cid, "race_bisect.json", {"attempt": att, "pid": os.getpid(), "started": time.time(), "done": False})
         try:
-            from . import fmtalt
-        except Exception:  # noqa: BLE001
-            fmtalt = None
-        qmap = cli._questions(cli.load(cid, "start.json") or {})
-        for a in sorted(self._race_wrong):
-            if a in cli.confirmed_answers(cid):
-                continue
-            tried = {self._race_wrong[a]}
-            alts = [v for v in plan.get("alts", {}).get(a, []) if v not in tried]
-            if fmtalt is not None:
-                alts += [v for v, _t in fmtalt.alternates(a, self._race_wrong[a], qmap.get(a, {}), max_n=2)]
-            for v in alts:
-                if left() <= 0 or v in tried:
-                    break
-                tried.add(v)
-                kind, _b, refused = cli.submit(cid, {a: v}, harness="race")
-                if kind in ("correct", "accepted"):
-                    break
+            wrong = set()
+            if len(merged) == len(ids):
+                wrong |= batch(merged, 0)          # complete set: one submit (a script/binary/mobile win needs no more)
+            if not cli.is_complete(cid):
+                wrong |= batch({a: v for a, v in high.items() if a in merged}, RACE_BISECT_PROBES)
+                wrong |= batch({a: v for a, v in spec.items() if a in merged and a not in high}, RACE_SPEC_PROBES)
+            self._race_wrong = {a: merged[a] for a in wrong if a in merged}
+            # every isolated field's labels at once (enum: the contract's accepted_values; + the other prior solvers'
+            # values), one parallel wave -- the old loop tried 1-2 alternates per field one by one and stopped as soon
+            # as the worker submitted (rehearsal fair D16: never ran)
+            open_wrong = {a: v for a, v in self._race_wrong.items() if a not in cli.confirmed_answers(cid)}
+            won = {}
+            if open_wrong and not cli.is_complete(cid):
+                from . import labels
+                won = labels.resolve_parallel(cid, open_wrong, harness="race", log=say,
+                                              extra={a: plan.get("alts", {}).get(a, []) for a in open_wrong})
+            cli.save(cid, "race_bisect.json", {"attempt": att, "pid": os.getpid(), "done": True, "ended": time.time(),
+                                                 "wrong": sorted(a for a in open_wrong if a not in won),
+                                                 "resolved": won, "complete": cli.is_complete(cid)})
+        except BaseException:
+            marker.unlink(missing_ok=True)
+            raise
         used, _w = self._race_used(cid)
         return used
 
@@ -3098,7 +3100,7 @@ class Chain:
             return "merge"
         return None
 
-    def _today_pre_result(self, cid):
+    def _today_pre_result(self, cid, wait=True):
         """-> diag {"compound_today": text} when the solver misses the rehearsal (cases adopted), else {}. Waits at most
         TODAY_PROBE_WAIT s; a probe still running stays pending for the next consumer (a Mastery-failure generalize).
         Consumed once; never held back by _compound_relevant (the rehearsal IS this Mastery's shape)."""
@@ -3110,6 +3112,8 @@ class Chain:
         if fut is None:
             self._today_done = True
             return {}
+        if not wait and not fut.done():
+            return {}           # untimed Mastery: never held for it (its result goes to a failure generalize)
         wait = TODAY_PROBE_WAIT if self._today_kind() == "codec" else TODAY_MERGE_WAIT
         try:
             res = fut.result(timeout=wait)
@@ -3201,6 +3205,60 @@ class Chain:
                 return True
         return False
 
+    def _prefetch_tt(self):
+        """Pre-start the Time Trial the moment the single is CORRECT on the GM (untimed pool: no clock, so starting early
+        costs nothing) and download its bytes into the timed runner's dir under the runner's own mode lock; hb_timed
+        reuses them when its start reconnects to the same attempt. Rehearsal fair D16: the single -> TT gap was 10-29 s, ~4 s
+        of it harness handoff (verify, stop the worker, probes) before the TT start + download even began."""
+        tt = self.entries.get("time_trial")
+        if not (PREFETCH_TT and tt and self._expect_untimed()) or getattr(self, "_prefetch_started", False):
+            return
+        self._prefetch_started = True
+        mcid = tt["id"]
+
+        def run():
+            import fcntl
+            from concurrent.futures import ThreadPoolExecutor as _TPE
+            from . import hb_timed as _H
+            t0 = time.time()
+            adir = timed.timed_dir(mcid)
+            adir.parent.mkdir(parents=True, exist_ok=True)
+            with open(adir.with_suffix(".lock"), "w") as lf:
+                try:
+                    fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    return                      # the runner is already on it
+                with cli.quiet():
+                    env = cli.call(mcid, "start", mcid, timeout=60)
+                body = env.get("body") or {}
+                att = cli.attempt_id(body)
+                if env.get("http") != 200 or body.get("error") or not body.get("answer_ids") or body.get("deadline"):
+                    say(f"[{mcid}] TT pre-start skipped ({str(body.get('error') or 'clocked / no ids')[:80]})")
+                    return
+                adir.mkdir(parents=True, exist_ok=True)
+                for f in adir.glob("*"):
+                    if f.is_file():
+                        f.unlink()
+                (adir / "contract.json").write_text(json.dumps(body))
+                plan = _H._plan(body)
+                with _TPE(max_workers=max(1, min(8, len(plan)))) as ex, cli.quiet():
+                    envs = list(ex.map(lambda it: cli.call(mcid, "download", it[1], str(adir), "--name", it[0],
+                                                           timeout=180), plan))
+                if not plan or not all(e.get("saved") for e in envs):
+                    say(f"[{mcid}] TT pre-start: download incomplete; the runner fetches the bytes itself")
+                    return
+                (adir / ".prefetch.json").write_text(json.dumps({"attempt_id": att, "files": [n for n, _c in plan],
+                                                                 "t": time.time()}))
+                say(f"[{mcid}] TT pre-started at the single's CORRECT: attempt {str(att)[:8]}, {len(plan)} file(s) "
+                    f"in {time.time() - t0:.1f}s")
+        threading.Thread(target=lambda: _quiet_errors(run, mcid), daemon=True, name=f"tt-prefetch-{self.base}").start()
+
+    def _expect_untimed(self):
+        """Will this chain's timed modes run without a clock? Known after a TT attempt; before one, hb_timed's default
+        run_for_time policy (`auto`: the regular pool first) means no clock unless HCTF_RUN_FOR_TIME=1 (D15/D16: every
+        TT and Mastery attempt was untimed)."""
+        return self._tt_pool_untimed() or os.environ.get("HCTF_RUN_FOR_TIME", "auto") != "1"
+
     def _tt_pool_untimed(self):
         """This day's timed pool has no clock: the Time Trial's last attempt came from the regular pool (no deadline,
         run_for_time false / untimed / no_clock). D15: every lane's TT AND Mastery started that way (HoF ineligible), so
@@ -3248,7 +3306,7 @@ class Chain:
                 self._mutation_soft = mtxt
         if solvers.mode_of(cid) == "mastery":
             # today-probe: before Mastery (bounded wait of its own, whatever `wait` says) or a Mastery-failure generalize
-            pre.update(self._today_pre_result(cid))
+            pre.update(self._today_pre_result(cid, wait=wait))
         if not getattr(self, "_cmp_late_done", False):
             ctxt, hard = self._compound_pre_result(wait=wait)
             if hard or ctxt or wait:
@@ -3403,6 +3461,7 @@ class Chain:
                             early, spec_n = m, spec_n + (not stamped)
                             self._prepush_verified(cid, self.sdir, warm=stamped)
                 if cli.is_complete(cid):
+                    self._prefetch_tt()      # the TT attempt + its bytes while the handoff runs (untimed: no clock)
                     if ready.is_set():
                         return   # the Homebase shadow handed over first
                     snap = self._spec_snapshot(cid) or getattr(self, "_race_snap", None)
@@ -3617,9 +3676,12 @@ class Chain:
             # Bounded: what finished within LATE_PROBE_WAIT s is acted on now; a probe still running is consumed by a
             # Mastery-failure generalize instead (timed_stage awaits all probes there). D9 + rehearsal: script's Mastery
             # sat 5.2-5.4 s on the codec-family probe (~10 s under 5-lane load); its only hits ever were D7 replays.
-            done = self._await_probes(LATE_PROBE_WAIT)
+            untimed_m = mode == "mastery" and self._tt_pool_untimed()
+            # untimed pool: no clock, and the probes' misses are only HELD for a failure generalize -> never wait for
+            # them (rehearsal fair D16: binary Mastery sat 2 s on `probes still running`; warmups' codec wait is up to 30 s)
+            done = False if untimed_m else self._await_probes(LATE_PROBE_WAIT)
             late = self._late_probes(cid, wait=done, defer_compound=mode == "mastery")
-            if not done:
+            if not done and not untimed_m:
                 say(f"[{cid}] probes still running after {LATE_PROBE_WAIT:g}s: Mastery starts now (a failure "
                     "generalize takes their results)")
             if late and mode == "mastery" and self._tt_pool_untimed():
@@ -4470,6 +4532,7 @@ def ratchet_gate(tag, log=None, only=None, quiet=False):
     The worker runs this same gate: `python3 -m hctf.orchestrate ratchet-gate dayNN` (prints failing tails)."""
     import subprocess as _sp
     global _GATE_FAILING
+    _GATE_FAILING = []
     log = log or say
     cmds = [[sys.executable, t] for t in RATCHET_GATE if (ROOT / t).exists()]
     cmds.append([sys.executable, "-m", "lib.refs.coverage", str(int(tag[3:]))])
@@ -4505,6 +4568,8 @@ def _gate_with_baseline(tag, backup):
     if ratchet_gate(tag):
         return True
     failing = list(_GATE_FAILING)
+    if not failing:
+        return False            # no record of WHICH suites failed: nothing to compare -> the merge is not kept
     after = ROOT / ".run" / f"ratchet-after-lib-{tag}"
     shutil.rmtree(after, ignore_errors=True)
     try:
@@ -4665,6 +4730,16 @@ def _ratchet_logs(tag, digest):
         t.start()
         threads.append(t)
     return threads
+
+
+def _quiet_errors(fn, tag):
+    try:
+        fn()
+    except Exception as e:  # noqa: BLE001 - an optimization must never hurt the chain
+        say(f"[{tag}] background note: {str(e)[:160]}")
+
+
+PREFETCH_TT = os.environ.get("HCTF_PREFETCH_TT", "1") != "0"
 
 
 def ratchet(day):

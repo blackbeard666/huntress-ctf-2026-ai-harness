@@ -262,15 +262,23 @@ def _public_gm():
     return os.environ.get("HUNTRESS_GAME_MASTER_URL", PUBLIC_GM).rstrip("/") == PUBLIC_GM
 
 
-def _master_alive():
+_master_cache = {"t": 0.0, "ok": False}
+
+
+def _master_alive(max_age=2.0):
     """True if the shared SSH ControlMaster to Homebase is up (a ~10 ms local socket check, never a cold connect:
-    a submit must not wait 15 s on a dead tunnel)."""
+    a submit must not wait 15 s on a dead tunnel). Cached max_age s: every probe submit ran its own `ssh -O check`
+    subprocess (rehearsal fair D16: 12 parallel probes, sporadic 0.5-6 s before the GM call even started)."""
+    if time.time() - _master_cache["t"] < max_age:
+        return _master_cache["ok"]
     try:
         r = subprocess.run(["ssh", *SSH_OPTS, "-O", "check", f"{HB_USER}@{HB_HOST}"],
                            capture_output=True, text=True, timeout=3)
-        return r.returncode == 0
+        ok = r.returncode == 0
     except (subprocess.SubprocessError, OSError):
-        return False
+        ok = False
+    _master_cache.update(t=time.time(), ok=ok)
+    return ok
 
 
 def _gm_via_daemon(args, timeout):

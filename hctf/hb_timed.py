@@ -198,11 +198,14 @@ class _Pool:
             if c.sock is not None:
                 c.sock.settimeout(timeout)
         reused = c.sock is not None
+        headers = dict(headers or {})
+        if _opt("HCTF_GM_GZIP", "1") != "0" and "op=download" not in query and "op=artifact" not in query:
+            headers["Accept-Encoding"] = "gzip"   # API replies only (script Mastery start body 3.2 MB -> ~100 KB)
         try:
             for retry in ((False,) if timeout is not None else (True, False)):
                 try:
                     try:
-                        c.request(method, self.path + query, body=body, headers=headers or {})
+                        c.request(method, self.path + query, body=body, headers=headers)
                     except (BrokenPipeError, ConnectionResetError):
                         if not reused:
                             raise
@@ -212,9 +215,13 @@ class _Pool:
                         c = self._new(connect=False)
                         if timeout is not None:
                             c.timeout = timeout
-                        c.request(method, self.path + query, body=body, headers=headers or {})
+                        c.request(method, self.path + query, body=body, headers=headers)
                     r = c.getresponse()
-                    return r.status, r.read()
+                    raw = r.read()
+                    if str(r.getheader("Content-Encoding") or "").lower() == "gzip":
+                        import gzip
+                        raw = gzip.decompress(raw)
+                    return r.status, raw
                 except (http.client.HTTPException, ConnectionError, OSError):
                     c.close()
                     c = self._new(connect=False)
@@ -727,14 +734,20 @@ def _localize(cid, answers, groups, per_set, body, out):
         cur = answers.get(aid)
         # what an EARLIER attempt of this challenge (D15: the Time Trial) learned for this family + this rejected value
         hint = hints.get(_suffix(aid) or "", {}).get(str(cur), {})
+        enum = enums.get(aid) or []
         alts = []
         for alt in list(hint) + list(vocab.get(_suffix(aid) or "", [])) + _playbook_alts(aid, cur):
-            if alt != cur and alt not in alts:
+            if alt != cur and alt not in alts and (not enum or alt in enum):
                 alts.append(alt)
+        alts += [v for v in enum if v != cur and v not in alts]     # an enum: the contract's complete vocabulary
         with lock:   # the value this attempt has accepted most often so far goes first (a13sota8: 20 of 21 fixes
             seen = {}  # were one label, tried third every time)
             for v in fixed.values():
                 seen[v] = seen.get(v, 0) + 1
+            # + values the GM ACCEPTED for sibling fields of the same family in this attempt (same construct, rubric)
+            for a2 in ok_fields:
+                if a2 != aid and _suffix(a2) == _suffix(aid) and answers.get(a2) not in (None, cur):
+                    seen[answers[a2]] = seen.get(answers[a2], 0) + 1
         alts.sort(key=lambda v: (-hint.get(v, 0), -seen.get(v, 0)))
         for alt in alts:
             if budget_left() < 0.5:
@@ -780,7 +793,13 @@ def _localize(cid, answers, groups, per_set, body, out):
                         return "rate" if "rate_limited" in json.dumps(res)[:2000] else None
                     return "bad"
                 gs = []
-                for grp in _label_first(list(groups.get(key, {}).keys()), answers, vocab):
+                # SUSPECTS first, one field per group: a value label_hints records as GM-rejected before (D16 Mastery:
+                # call_double -> for_indirect, x6) -- the rest of the set then banks in large groups
+                keys = list(groups.get(key, {}).keys())
+                sus = [x for x in keys if hints.get(_suffix(x) or "", {}).get(str(answers.get(x)))][:_GT.CONC]
+                gs += [{x: answers[x]} for x in sus]
+                rest = [x for x in keys if x not in sus]
+                for grp in _label_first(rest, answers, vocab):
                     gs += _GT.initial_groups({a: answers[a] for a in grp}, target=max(2, _GT.TARGET_GROUPS // 3),
                                              families=False)
                 found, st = _GT.find_rejected(gprobe, {a: answers[a] for g in gs for a in g}, groups=gs,
@@ -802,8 +821,16 @@ def _localize(cid, answers, groups, per_set, body, out):
             else:
                 for grp in _label_first(list(groups.get(key, {}).keys()), answers, vocab):
                     narrow(grp, wrong)
-            for aid in wrong:
-                alternatives(aid, vocab)
+            if len(wrong) > 1:
+                # every wrong field's alternatives at once (sequential, D16 alt: ~2-5 s per probe per field)
+                def alt_ctx(aid):
+                    _CTX.lane, _CTX.opts, _CTX.on_event, _CTX.solver_dir, _CTX.t0 = ctx
+                    alternatives(aid, vocab)
+                with ThreadPoolExecutor(max_workers=min(len(wrong), 6)) as ax:
+                    list(ax.map(alt_ctx, wrong))
+            else:
+                for aid in wrong:
+                    alternatives(aid, vocab)
         except Exception as e:  # noqa: BLE001
             with lock:
                 out.setdefault("localize_errors", []).append(f"{key}: {e!r}"[:160])
@@ -812,6 +839,16 @@ def _localize(cid, answers, groups, per_set, body, out):
 
     vocab = _vocab()
     hints = _hints()
+    enums = {}
+    for q in body.get("questions") or []:
+        af = q.get("answer_format") or {}
+        if af.get("kind") == "enum" and af.get("accepted_values") and q.get("id"):
+            enums[q["id"]] = [str(x) for x in af["accepted_values"]]
+    for aid in answers:            # answer ids may carry a set prefix the question id lacks (set2.batch-x-expansion)
+        if aid not in enums:
+            base_q = aid.split(".", 1)[-1]
+            if base_q in enums:
+                enums[aid] = enums[base_q]
     # _CTX is thread-local: the pool threads below would see lane/opts = None (no playbook alternatives, the daemon's
     # HCTF_LOCALIZE_UNTIMED_S ignored) -- hand this attempt's context to each of them
     ctx = (_CTX.lane, _CTX.opts, _CTX.on_event, _CTX.solver_dir, getattr(_CTX, "t0", None))
@@ -858,9 +895,19 @@ def _hints():
     Time Trial's 8 x expansion delayed -> percent held for 20 of Mastery's 30 `delayed` answers, not the other 10."""
     p = _hints_path()
     try:
-        return json.loads(p.read_text()) if p else {}
+        h = json.loads(p.read_text()) if p else {}
     except (OSError, ValueError):
-        return {}
+        h = {}
+    try:   # + every OTHER challenge's hints (workers.timed_env -> HCTF_LABEL_HINTS): D16 Mastery learnt
+        # call_double -> for_indirect, which the next challenge's corrector never saw
+        for suf, m in (json.loads(_opt("HCTF_LABEL_HINTS") or "{}") or {}).items():
+            for wrong, rights in (m or {}).items():
+                tgt = h.setdefault(suf, {}).setdefault(wrong, {})
+                for v, n in (rights or {}).items():
+                    tgt[v] = max(tgt.get(v, 0), int(n or 0))
+    except (ValueError, TypeError, AttributeError):
+        pass
+    return h
 
 
 def _record_hints(answers, fixed):
@@ -1203,8 +1250,19 @@ def _attempt(a):
     # download artifacts into a temp dir next to the GM
     adir = HW / ".run" / "tmp-timed" / re.sub(r"[^A-Za-z0-9]+", "_", a.cid)
     adir.mkdir(parents=True, exist_ok=True)
-    for f in adir.glob("*"):
-        f.unlink()
+    prefetched = False
+    try:   # the orchestrator pre-started THIS attempt at the single's CORRECT and already downloaded its bytes
+        pj = json.loads((adir / ".prefetch.json").read_text())
+        prefetched = (pj.get("attempt_id") == body.get("attempt_id") and bool(pj.get("files"))
+                      and all((adir / n).exists() for n in pj["files"]))
+    except (OSError, ValueError, AttributeError):
+        pass
+    if prefetched:
+        out["prefetched"] = True
+    else:
+        for f in adir.glob("*"):
+            if f.is_file():
+                f.unlink()
     # Download every per-set delivery CONCURRENTLY: over the public GM each call is ~0.2s RTT, so a
     # many-file Mastery bundle must fetch in parallel or the ~6-10s window expires before the solver runs.
     plan = _plan(body)
@@ -1222,13 +1280,13 @@ def _attempt(a):
     min_mb = float(_opt("HCTF_PIPELINE_MIN_MB", "20"))
     if plan and _sequential_solver(solve):
         min_mb = min(min_mb, float(_opt("HCTF_PIPELINE_SEQ_MIN_MB", str(PIPELINE_SEQ_MIN_MB))))
-    sets = (_set_plan(body, plan, ids) if _opt("HCTF_PIPELINE_SETS", "1") == "1" and plan
+    sets = (_set_plan(body, plan, ids) if _opt("HCTF_PIPELINE_SETS", "1") == "1" and plan and not prefetched
             and _total_bytes(body) >= min_mb * 1e6 else None)
     piped = None
     try:
         if sets:
             piped = _pipelined(sets, plan, body, ids, adir, solve, env, _fetch, left, out, t_started)
-        elif plan:
+        elif plan and not prefetched:
             with ThreadPoolExecutor(max_workers=min(int(_opt("HCTF_DL_PARALLEL", "48")), len(plan))) as ex:
                 for _ in ex.map(_fetch, plan):  # propagate any download exception
                     pass
@@ -1375,11 +1433,21 @@ def _attempt(a):
     # An UNJUDGED full submit (still rate_limited / non-JSON after the resends) never becomes "incorrect": the per-set
     # breakdown below judges what it can; sets the GM never judged stay unjudged (no localize, no wrong fields).
     per_set, final = {}, fk if fk in VERDICTS else "unjudged"
-    for key, grp in groups.items():
+
+    def _set_submit(grp):
         try:
-            res = _submit(a.cid, grp, body, out)
+            return _submit(a.cid, grp, body, out)
         except OSError as e:    # no answer before the clock (+grace): never judged -- not a wrong set
-            res = {"error": f"unjudged_timeout {e!r}"[:120]}
+            return {"error": f"unjudged_timeout {e!r}"[:120]}
+    pre = None
+    if len(groups) > 1 and _deadline_left(body) is None and _opt("HCTF_PARALLEL_SET_BREAKDOWN", "1") == "1":
+        # no clock: judge every set at once (rehearsal fair D16 script Mastery: 5 x 1095-answer resubmits one by one, ~38 s;
+        # the GM judges concurrent submits -- 12 in 3.3 s vs 1.9 s for one)
+        with ThreadPoolExecutor(max_workers=len(groups)) as ex:
+            pre = dict(zip(groups, ex.map(_set_submit, groups.values())))
+        out["breakdown"] = "parallel"
+    for key, grp in groups.items():
+        res = pre[key] if pre is not None else _set_submit(grp)
         rk = str(res.get("result", "")).lower() if not _unjudged(res) else "unjudged"
         per_set[key] = {"result": rk, "remaining": res.get("remaining")}
         if rk == "expired":

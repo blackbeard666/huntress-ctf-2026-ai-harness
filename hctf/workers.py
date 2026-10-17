@@ -890,6 +890,14 @@ def timed_env(cid):
     if ov:
         env["HCTF_LIVE_OVERLAY"] = json.dumps(ov, separators=(",", ":"))
     env.setdefault("HCTF_LOCALIZE_UNTIMED_S", str(untimed_plan(cid)[1]))   # only used on a no-clock attempt
+    try:   # every challenge's in-window label fixes (wrong -> right) rank the corrector's alternatives
+        from . import labels
+        h = labels.all_label_hints()
+        js = json.dumps(h, separators=(",", ":")) if h else ""
+        if js and len(js) <= 20000:        # env var size: never a truncated (invalid) JSON
+            env["HCTF_LABEL_HINTS"] = js
+    except Exception:  # noqa: BLE001 - ranking aid only
+        pass
     return env
 
 
