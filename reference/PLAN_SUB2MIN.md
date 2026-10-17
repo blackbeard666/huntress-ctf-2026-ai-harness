@@ -196,5 +196,19 @@ generalize, replay GM, warm workers) made the default path and gated nightly.
 - The rest of P0 (fix-in-attempt, label hints, resume, live answer racing the generalize, background generalize) was
   already in place; the suite now proves the runner half of it offline.
 
-Still open (next): P2 pre-drop warm workers, live-answer one-shot single, format-keyed metadata race; P4 nightly blind
-replay KPI + lane-split ratchet + prebuild hit rate; P5 feed warnings for sequential GM loops / long generalizes.
+- **P2 answer-first single (shipped later the same evening):** when the reuse race does not win a single of <= 80
+  fields, a second `live`-stage worker (medium effort, 3 concurrent, memory-gated) derives and SUBMITS the fields from
+  the bytes in a few tool calls while the chain's worker builds the solver; confirmed values go to the solver worker's
+  inbox; ended at CORRECT. Smoke vs a stand-in GM serving the D16 metadata single: CORRECT in 8.0 s / 2 tool calls
+  (real D16: 74 s single + 49 s duel). Knobs: HCTF_ANSWER_FIRST(=1), _MAX_FIELDS, _LANES, _EFFORT, _MAX, _RACE_WAIT.
+  The chain still waits for a solver that reproduces the confirmed answers before TT/Mastery (the solver worker now
+  gets the truth early instead of probing the GM for it).
+- **P2 metadata format-keyed race:** already present -- `solvers.reuse_plan` includes `paths.lane_solver_dirs` (the
+  lib/meta lane solver), so a known container answers in the race; what metadata lacks is breadth (prebuild), not
+  dispatch.
+- **P5 feed:** ⚠ once a generalize runs past 90 s (HCTF_FEED_GEN_WARN_S), naming `hctf why <base>`.
+
+Still open (next): P2 pre-drop warm workers (design: the warm worker's env/prompt carry the challenge id and dirs,
+which exist only after the list -- needs a per-lane placeholder dir + a redirect the hooks honour; validate on an alt
+fair replay before a live day); P2 triage turn-1 audit (turns-to-first-submit per single worker into `hctf kpi`);
+P4 nightly blind-replay KPI + lane-split ratchet + prebuild hit rate; P5 feed warning for sequential GM loops.
