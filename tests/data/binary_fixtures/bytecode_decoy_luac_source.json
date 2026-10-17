@@ -1,0 +1,13 @@
+{
+ "encoding": "none",
+ "expected_format": "none",
+ "expected_machine": "none",
+ "file_b": "ASCII text",
+ "expected_offset": null,
+ "expected_config": null,
+ "generator_cmd": "printf 'local cfg = \"HCFG\"\\n-- \\\\x1bLua impostor: lua SOURCE, not luac\\nprint(cfg)\\n' > bytecode_decoy_luac_source.bin   # bare magic, no blob",
+ "oracle_cmd": "bash bytecode_oracle.sh bytecode_decoy_luac_source.bin",
+ "oracle_output": "ASCII text | none | 13 | HCFG 34 10 11565 829971488 3402529697 | hF\u007fk*cgzey~ex0*f\u007fk*YE_XIO&*de~*f\u007fkizxcd~\"ilm#",
+ "decoy": true,
+ "note": "format labels SPECULATIVE (GM vocabulary not seen; candidates in machine_facts()['format_candidates']); machine 'none' (wrapper: Mach-O cputype); expected_offset = first stored byte per the OFFSET LAW (grep -obUa); bitcode strings are bit-packed (char6 / fixed-8 arrays) so no byte-exact independent offset exists -> expected_offset null (not asserted)"
+}

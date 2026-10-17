@@ -1,0 +1,7 @@
+{
+ "entry": "webview_asset_scan",
+ "expected": "ANS-e86f3a0d2c719b45",
+ "generator_cmd": "tests/data/android_fixtures/gen_webview_assets.sh tests/data/android_fixtures  # printf/base64/perl write the asset, zip -qX -r <name>.apk assets; assets/flutter_assets/assets/config.json: {\"secret\": \"\\u0041\\u004E...\"} (perl: every char as \\uXXXX)",
+ "oracle_cmd": "unzip -p webview_flutter_json_uesc.apk assets/flutter_assets/assets/config.json | jq -r .secret  # -> ANS-e86f3a0d2c719b45",
+ "decoy": false
+}

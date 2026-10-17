@@ -1,0 +1,10 @@
+{
+ "codec": "spelled-digits",
+ "plain": null,
+ "encoded": "zero zero / zero one / f f / zero two / zero zero / one f",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written spelled hex of control/0xFF bytes (00 01 ff 02 00 1f)",
+ "oracle_cmd": "printf %s \"$encoded\" | sed -e 's/zero/0/g; s/one/1/g; s/two/2/g; s/[ \\/]//g' | xxd -r -p | od -An -c  # \\0 001 377 002 \\0 037: not printable text",
+ "oracle_plain": null
+}

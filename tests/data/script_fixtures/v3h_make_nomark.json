@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=makefile|role=launcher|verdict=malicious|attack=T1059.004|adapter=recipe_shell|host_profile=standalone|obfuscation_profile=nomark|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=expand_var,spawn_shell|campaign_id=MAK-db9fa1b0|url=https://make-db9fa1b098.example.invalid/stage|file_path=/tmp/huntress-make/.982ead2eb5e6cabe.stage",
+ "decoy": false,
+ "host": "make",
+ "tag": null,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> base64, descriptor literal only, no HUNTRESS_ANALYSIS marker)",
+ "oracle_cmd": "make -s -f tests/data/script_fixtures/v3h_make_nomark.mk --eval 'p:;@printf %s \"$(DESCRIPTOR_C2E00258)\"' p | tr -d ' \\n\\r' | base64 -d"
+}

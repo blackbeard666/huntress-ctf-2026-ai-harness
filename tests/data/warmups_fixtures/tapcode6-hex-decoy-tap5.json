@@ -1,0 +1,10 @@
+{
+ "codec": "tapcode6(hex)",
+ "plain": null,
+ "encoded": "... ...  .. ....  . ...  . .....  ..... ..  ... ....  .... ..  . ...  . ....  . .....  . ...  ... ....  . ....  .. ....  ... ...  .. ..  .... ....  .. ...  .. ....  .... ...  ..... ..  . .  .... ..  ... ..  .... .....  ... .....  .... ....  ... ....  .... ...  ... ....  ... .  ..... .  . .....  .... ...  .... .....  . ..  ... ..  .. ....  .... ....  .... ....  .. ...  .. ....  .... ...  . .....  ..... ...  . .  . ...  .... ....  . .  ... ...  .... ...  ..... ..  . .....  .... ..  .... ....  ... ....  .... ....  .. ...  . .....  .. ..  . .  ... ..  . .....  ... ..  . .  .... ...  .... ....  . .....  .... ..  . ...  ... ....  . ..  . .  ... .  .... ....  . ...  . .....  .... ...  .... ....  .... ..  . .....  ... .",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "copied from tapcode-cobalt.json: classic 5x5 tap code (C/K merged) of the sentence letters, pycipher + awk",
+ "oracle_cmd": "printf %s \"$encoded\" | awk '{n=split($0,a,\"  \");for(i=1;i<=n;i++){split(a[i],b,\" \");printf \"%d%d\",length(b[1]),length(b[2])}}' | perl -ne '@g=split//,\"abcdefghijklmnopqrstuvwxyz0123456789\";s/\\D//g;print map {$g[(substr($_,0,1)-1)*6+substr($_,1,1)-1]} /(..)/g'  # read on the 6x6 grid -> letters g-z, not hex -> none",
+ "oracle_plain": null
+}

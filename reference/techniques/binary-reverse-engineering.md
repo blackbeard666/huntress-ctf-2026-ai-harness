@@ -1,4 +1,4 @@
-# binary-reverse-engineering — technique log (days 1-15; updated after every day)
+# binary-reverse-engineering — technique log (days 1-16; updated after every day)
 
 How this lane has looked so far (OBSERVATIONS, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -10,27 +10,29 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   dynamic glibc, stripped, clang/LLD 19 zig-bootstrap in `.comment`) -- a Zig PE `.exe` in Mastery set2, D11 D-language ELF (1 MB,
   DMD, druntime static + dynamic glibc, not stripped, debug_info), D12 Free Pascal ELF (100 KB, FPC 3.2.2, static, stripped), D13
   Crystal ELF (749 KB, dynamic glibc + libgc, not stripped), D14 Objective-C ELF (17 KB, GNUstep libobjc ABI, dynamic, not stripped),
-  D15 a PAIR of C ELFs from one source (`dNN--variant-XXX-stripped.elf` 14 KB + `-symbolized.elf` 16 KB, identical `.text`/`.hcfg`).
+  D15 a PAIR of C ELFs from one source (`dNN--variant-XXX-stripped.elf` 14 KB + `-symbolized.elf` 16 KB, identical `.text`/`.hcfg`),
+  D16 a PAIR of WebAssembly modules from one source (`-compact.wasm` 561 B / `-direct.wasm` 570 B: same data, different code) --
+  the first NON-native container since D7 (format `wasm`, architecture `wasm32`). From D15 on the twist is "one source, two builds".
   Answer ids `dNN_artifact_sha256_K` / `dNN_analysis_<field>`; a multi-member group adds a member qualifier:
-  `dNN_analysis_<qualifier>_<field>` (D15 `stripped_`/`symbolized_`).
+  `dNN_analysis_<qualifier>_<field>` (D15 `stripped_`/`symbolized_`, D16 `compact_`/`direct_`).
 - From Day 2 on, every new-day member carries the same embedded **HCFG** config blob: `'HCFG' | u8 ver | u8 xor_key | u16 len (LE) |
   u32 crc32 | xor'd JSON` (JSON at offset 12; crc32 is over the decoded plaintext). Only its storage location changes
   (`.hcfg` section on D2/D10/D14, .NET FieldRVA array, Go/Rust rodata, base64'd in a Java/Kotlin constant pool, base64 Swift/Nim/D/
-  Crystal String literal in `.rodata` on D8/D9/D11/D13, RAW in FPC `.data` on D12). Scan raw bytes for `HCFG` AND for its base64
+  Crystal String literal in `.rodata` on D8/D9/D11/D13, RAW in FPC `.data` on D12, RAW in WASM data segment 0 on D16). Scan raw bytes for `HCFG` AND for its base64
   form `SENGR...` (raw `HCFG` can also be a false hit inside code: check crc).
   The JSON also carries never-asked keys (ipv4, windows_path, linux_path, service, host_model on D7): parse the whole dict so a new `config_<key>` id is free.
 - The analysis is easy (headers, symbols, one config blob). The hard part is the GM's exact label for a few `exact_text` fields (format,
-  machine, disassembly, symbol). The question set grows +10/day from D8 (80 → 90 → ... → 140 on D14); old groups reuse the same
+  machine, disassembly, symbol). The question set grows +10/day from D8 (80 → 90 → ... → 160 on D16); old groups reuse the same
   bytes, but D8 BACKFILLED old groups to 10 ids each (new: has_symtab, has_cpp_typeinfo/vtable, xor_key_hex, hcfg_version, compression_methods).
 - **The prompt's language theme has NOT been asked since D4** (Rust panics, Kotlin "state machine", Swift "protocols", Nim
   "runtime fingerprints", D "templates", Pascal "record layouts", Crystal "DNS labels", ObjC "classes/selectors/persistence
-  descriptor"). The new group gets sha256, format, architecture, machine, config_campaign/domain/mutex/url/crc32_hex + ONE
+  descriptor", D15 "calling conventions", D16 wasm "imports, memory, indirect calls"). The new group gets sha256, format, architecture, machine, config_campaign/domain/mutex/url/crc32_hex + ONE
   rotating extra id from a small pool: hcfg_version (D6-D7), `hcfg_offset` (D9, D11-D13), `has_hcfg_section` (D10, D14),
-  elf_class/machine as INTEGERS (D8-D9, D15 `machine` = `62`). D11-D15 introduced NO never-seen field NAME (D15's novelty was
-  the qualifier prefix, not the field): grep the new group's ids against the solver's
+  elf_class/machine as INTEGERS (D8-D9, D15 `machine` = `62`). D11-D16 introduced NO never-seen field NAME (D15/D16 novelty =
+  the qualifier prefix and a new container LABEL, not a field): grep the new group's ids against the solver's
   field table before anything else; if all are known, run the carried-over solver and submit.
 - Time Trial ≈ 6-16 s early; Mastery = `setN.` prefixed copies, 2 sets through D7, 5 sets / 400-450 ids on D8-D9, 3 sets / 300-420
-  ids on D10-D14, 5 sets / 750 ids on D15 (TT 30 s; D13 TT 80 s / Mastery 200 s; D14 both 30 s); artifacts are named
+  ids on D10-D14, 5 sets / 750 ids on D15, 5 sets / 800 ids on D16 (TT 30 s; D13 TT 80 s / Mastery 200 s; D14 both 30 s); artifacts are named
   `delivery N: evidence.zip`.
 - **D10 RELAXED the label fields**: 36 ids are now `kind: pattern` whose syntax ACCEPTS equivalents (format: "ELF or PE; case,
   ELF32/ELF64/PE32/PE32+ accepted"; machine/architecture: "standard tool or symbolic label, or decimal/hex code"; e_type and
@@ -40,7 +42,8 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
 - **HCFG location / encoding** -- same blob, different storage per container (`.hcfg` section, .NET FieldRVA, Go/Rust rodata,
-  base64 inside a Java/Kotlin constant pool, base64 Swift/Nim/D/Crystal string literal in ELF `.rodata`, raw FPC `.data`): scan raw
+  base64 inside a Java/Kotlin constant pool, base64 Swift/Nim/D/Crystal string literal in ELF `.rodata`, raw FPC `.data`, RAW as the
+  first payload byte of WASM active data segment 0 (`i32.const 1024`; file 116/125, D16)): scan raw
   bytes for `HCFG` and for `SENGR[A-Za-z0-9+/_-]*=*` (base64 of `HCFG`, std or urlsafe), decode, accept only if crc32(plain)
   matches AND the JSON parses -- keep scanning past a failing hit (D9 Nim had two raw `HCFG` decoys); never a fixed offset.
   Storage did NOT change across a day's variants on any day so far (D14 `.hcfg` at file 0xfa0 in single/TT/all 3 sets).
@@ -52,39 +55,33 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   Returns every `HcfgHit` (offset, encoding, version, key, length, crc, crc_ok, config, plain, speculative, detail) best first;
   take `lib.binary.hcfg_find(data)` (first crc-valid + JSON-parsing hit). Covers raw, base64 (std/url/wrapped), hex (plain, `48 43`,
   `48:43`, `\x48`, `0x48, `), base32, base85, ascii85, UTF-16LE/BE of those, reversed raw/base64, single-byte xor'd base64/raw,
-  zlib, gzip, raw deflate. Decoys come back `valid=False`. Offset convention per encoding (`hcfg_offset`):
-
-  | encoding | offset = | status |
-  |---|---|---|
-  | raw | the `H` of the magic | GM-confirmed (D12) |
-  | base64 | first base64 char (`S` of `SENGR`) | GM-confirmed (D9/D11/D13) |
-  | base64url, base32, base85, hex, hex-sep | first char of the stored text (`\` of `\x48`, `0` of `0x48`) | speculative |
-  | ascii85 | the `<` of `<~` if present, else first char | speculative |
-  | utf16le-* / utf16be-* | first byte of the first code unit (BE: its `00`); LE/BE tie -> the 2-aligned reading, else LE | speculative |
-  | reversed-raw / reversed-base64 | lowest file offset of the reversed region | speculative |
-  | xor-base64 / xor-raw | first stored byte (`detail` = `xor=0x..`) | speculative |
-  | zlib / gzip / deflate | first byte of the compressed stream | speculative |
-
-  Wired into the binary solver as a fallback (kill switch `HCTF_HCFG_SCAN_EXT=0`); not needed on D14. A speculative offset is a
-  first guess: if rejected, try the offset of the container header in front of the stored form next. Fixtures: `tests/data/hcfg_fixtures/`.
+  zlib, gzip, raw deflate (+ prebuilt multibyte/rolling xor, byte maps, custom/rot13 base64, split/int-array/strided, RC4, AES/TEA/
+  ChaCha, stack-built). Decoys come back `valid=False`. `hcfg_offset` per encoding: raw = the `H` (GM D12), base64 = the `S` (GM
+  D9/D11/D13); every other encoding = first stored byte/char (`<` of `<~`, BE UTF-16 its `00`, lowest offset of a reversed region)
+  -- SPECULATIVE: if rejected, try the container header in front of the stored form. Kill switch `HCTF_HCFG_SCAN_EXT=0`.
 - **xor key / config values** -- re-roll per variant (`BRNN-00V`, `node-00V.dayNN...`, crc); derive from the header byte, never
   from the sample. D13 key = 0x91+N; D14 single BR14-000 key 0xa1, TT BR14-002, Mastery BR14-002/007/004.
 - **Container per member** -- ELF vs PE32+ `.exe` re-rolls per member: Mastery set2 had d02 C++ as `.exe` (D3-D5, D7, D10) and d04
   Go as `.exe` (D4, D5, D7, D10); D10 set2 had the NEW d10 Zig member as a PE too (format `pe`). Labels come from the header of
-  THIS member (Go PE: format `pe`, architecture `x86-64` from Machine).
-- **Member qualifier in the id (multi-member group, D15)** -- `dNN_analysis_<qualifier>_<field>` names ONE member of the day's
+  THIS member (Go PE: format `pe`, architecture `x86-64` from Machine). Dispatch on MAGIC, not extension: `7f454c46` ELF, `MZ`
+  PE, `PK` jar, `\0asm` + u32 version 1 WASM (D16: `wasm`/`wasm32`; `wasm64` only if a memory has limits flag 0x04 -- unconfirmed).
+- **Member qualifier in the id (multi-member group, D15-D16)** -- `dNN_analysis_<qualifier>_<field>` names ONE member of the day's
   group by a token of its FILE NAME (`d15--variant-000-stripped.elf` -> `stripped_*`, `-symbolized.elf` -> `symbolized_*`). Rule:
   if the group has >= 2 members, split the field at the first `_`; if that token (not `variant`/`elf`/`has`/`hcfg`/`config`/
-  digits...) is a `[^a-z0-9]+`-separated token of exactly one member name, answer `<field>` from THAT member only. Fallback if
-  names stop carrying the tag: stripped = the member without `.symtab`, symbolized/unstripped = the one with it. Config ids were
-  asked only for `stripped_` (same `.hcfg` in both). Before D15 a multi-member group (D3 dll + runtimeconfig.json) was answered by
-  index `sha256_K`; now the qualifier can sit INSIDE the analysis field name too -- grep new ids for an unknown first token.
+  digits...) is a `[^a-z0-9]+`-separated token of exactly one member name, answer `<field>` from THAT member only. Tags seen:
+  `stripped`/`symbolized` (D15), `compact`/`direct` (D16, two codegens of one wasm function: `select` chain vs nested
+  `if/else`, identical data section). Fallback if names stop carrying the tag: stripped = no `.symtab`; compact = the smaller
+  file / shorter code section. Config ids were asked only for ONE tag (D15 `stripped_`, D16 `compact_` -- both times the
+  alphabetically-first tag; the blob is identical in both members anyway). `sha256_K` = ARCHIVE order, which was reverse-
+  alphabetical both days (symbolized, stripped; direct, compact): read the zip central directory, never sort names. Grep new ids for an
+  unknown first token after `dNN_analysis_` before declaring a field unknown (pre-D15 groups were only indexed by `sha256_K`).
 - **Variant index per group** -- `dNN--variant-XXX` re-rolls per group and mode; sizes and config values change, names/layout
   don't. TT often == Mastery set1 bytes (D7, D9, D14: TT and set1 both BR14-002) but not always (D15: TT BR15-005, Mastery
-  BR15-004/003/002/001/000 -- set5 == the single's bytes); a carry-over d01 can differ (D9 Mastery d01 `mov eax, 8104`; D15
-  Mastery set1 d01 STRIPPED again -> symbols/disassembly `[]`, has_symtab `false`, and set1 d02 a PE). Pair by sha256, never index.
+  BR15-004/003/002/001/000 -- set5 == the single; D16: TT == the single BR16-000, Mastery BR16-001..005); a
+  carry-over d01 can differ (D9 Mastery d01 `mov eax, 8104`; D15-D16 Mastery set1 d01 STRIPPED -> symbols/disassembly `[]`,
+  has_symtab `false`; set1 d02 a PE). Pair by sha256, never index.
 - **Mastery packaging** -- `setN.` prefixed ids, each set its own `delivery N: evidence.zip` (same filename): pair by sha256.
-  Set count re-rolls: 2 (D2-D7), 5 (D8-D9), 3 (D10-D14), 5 (D15): loop over every `setN.`. From D9 the first question of each set ends
+  Set count re-rolls: 2 (D2-D7), 5 (D8-D9), 3 (D10-D14), 5 (D15-D16): loop over every `setN.`. From D9 each set's 1st question ends
   `Evidence case: dNN-m-<16hex>. [assigned-artifact-sha256:<zip sha256>]` (TT: `dNN-tt-...`): an explicit set -> delivery map;
   it is question TEXT, never part of an answer.
 - **answer_format.kind for the same field name** -- D8: `d01_analysis_elf_class`/`machine` exact_text (`ELF64`/`x86-64`) and
@@ -95,10 +92,9 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   Don't confuse with the many `__objc_*` sections on D14 -- only the literal name counts.
 - **Field set per old group** -- old groups gain ids over days (D8 padded every group to 10). Answer by field name from the
   parsed facts dict of THAT member; an unknown field must log and fall through, never crash.
-- **Speed flags (no answer change)** -- the harness's per-case timings (e.g. "4.11 s on single_solve", D14) are often taken under
-  CPU contention from parallel solver-tests; measure isolated with `taskset -c 0,1 /usr/bin/time python3 solve.py ...` before
-  optimising. Floor of the cumulative bundle = AES-CTR + inflate + sha256 of the 67 MB d08 Swift member (~0.35 s/set); real
-  runs: single 0.5 s, 5-set Mastery ~1.4 s pinned.
+- **Speed flags (no answer change)** -- per-case timings ("4.11 s on single_solve") are usually CPU contention from parallel
+  solver-tests: re-measure with `taskset -c 0,1 /usr/bin/time python3 solve.py ...` first. Floor = AES-CTR+inflate+sha256 of the
+  67 MB d08 member (~0.35 s/set); the timed windows are dominated by DOWNLOAD (D16 TT 52 s of 64 s), not by the solve.
 
 ## Recognition cues -> first move
 | You see | First move |
@@ -121,6 +117,7 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
 | Crystal ELF (`Crystal:H`, Boehm `GC_malloc`, `*crystal*` symbols) | Plain ELF; base64 `SENGR...` String literal behind a 12-byte header (`type_id=1, bytesize, length`); offset = the `S` |
 | Objective-C ELF (`__objc_selectors`/`__objc_classes`/`__objc_cats`/`__objc_protocols` sections, `objc_msg_lookup_super`/`__objc_load` imports = GNUstep libobjc, `._OBJC_CLASS_<Name>`, `_i_<Class>__<sel>_` method symbols) | Plain ELF: readelf header ids as usual. HCFG RAW in its own `.hcfg` PROGBITS section (`readelf -x .hcfg`); `has_hcfg_section` = `true`. The ObjC class/selector "persistence descriptor" (`TriggerDescriptor initWithTrigger:`) was flavour, unasked. If ObjC metadata is ever asked: `readelf -sW \| grep -E '_OBJC_CLASS_\|objc_sel_name_'` |
 | Two members of one day differing by a name tag (`-stripped.elf` / `-symbolized.elf`, D15), ids `dNN_analysis_<tag>_<field>` | Same header ids per member; route each id to the member whose file name carries `<tag>` (fallback: `.symtab` absent = stripped). HCFG RAW in `.hcfg` (`grep -abo HCFG`, crc-gate) in both. The prompt's "reconstruct the stripped functions / calling conventions" was NOT asked |
+| `00 61 73 6d 01 00 00 00` (`\0asm`), `.wasm`, ids `dNN_analysis_<tag>_format/architecture` (D16) | `lib.binary.wasm_layout(data)` (sections, memories, data_segments with file + memory offsets; handles 5-byte padded LEB128) or `wasm-objdump -x f.wasm` / `wasm2wat f.wasm` (wabt installed); format `wasm`, architecture `wasm32`. HCFG RAW in data segment 0 (`grep -abo HCFG`, crc-gate); segment 1 = a NUL-terminated `huntress.binary.dynamic_trace.v1.sandboxed_module_inventory` marker (unasked). D16 module had NO import/table/elem section despite the "imports, indirect calls" prompt |
 | Packed / high entropy / `UPX!` | `lib.binary.packer_info` → `upx -d` on a COPY (not seen yet) |
 | Real code-reversing question (not seen yet) | `rizin -q -c "aaa; pdf @ sym.<fn>"`; Ghidra headless `lib.binary.ghidra_decompile` (heavy, last resort) |
 
@@ -134,22 +131,26 @@ constant-pool base64 HCFG, `jar`; keep nested jars whole. **D7 "Routine Check"**
 and xor brute force cost 60 s+; Mastery d01 STRIPPED → `[]`/`false`. **D9 "Nimble"** (86 s): two raw `HCFG` decoys, base64 blob,
 NEW `hcfg_offset`. **D10 "Zig Zag"** (33 s): `.hcfg` section, NEW `has_hcfg_section`; Mastery Zig PE. **D11 "D-Day"** (36 s).
 **D12 "Pascal's Wager"** (54 s, 2 wrong): HCFG RAW, raw-scan branch lacked its offset → bisect POSTs. **D13 "Crystal Clear"** (14 s).
-**D14 "Selective Memory"** (140 Qs; 9 s, 0 wrong, carried-over solver). 17 KB GNUstep Objective-C ELF; HCFG RAW in a `.hcfg`
-section (file 0xfa0) → `has_hcfg_section` `true`; ObjC "persistence descriptor" theme unasked. TT 2.4 s / Mastery 3 sets 6.0 s.
+**D14 "Selective Memory"** (9 s, carried-over solver): GNUstep ObjC ELF, HCFG RAW in `.hcfg` → `has_hcfg_section` `true`.
+**D15 "Stripped"** (74 s, 0 wrong): stripped + symbolized C ELF pair, identical `.text`/`.hcfg`; only novelty = the `<qualifier>_`
+inside the field name (file-name token → member router, `.symtab` fallback); `machine` integer `62`. Mastery 5 sets 9.35 s.
 
-**D15 "Stripped"** (150 Qs; GM CORRECT 74 s after start, 0 wrong POSTs; TT + Mastery first try). Prompt: "No symbols. No names.
-Just raw assembly and the calling conventions it can't hide. Reconstruct the stripped functions from the instructions alone."
-New group = TWO members built from one C source: `d15--variant-000-stripped.elf` (14,360 B, no `.symtab`) and
-`d15--variant-000-symbolized.elf` (16,160 B, `.symtab` with `main`/`_start` + getenv/strcmp/printf imports); ELF64 x86-64
-ET_EXEC, dynamic glibc, byte-identical `.text` (0x18d) and `.hcfg` section (file 0x210d, RAW `HCFG 01 b1 6f01`).
-- d15 ids: `sha256_1`/`_2` = ARCHIVE order (symbolized is member 1, stripped member 2 -- not alphabetical, GM-confirmed);
-  `stripped_`/`symbolized_` × architecture (`x86-64`), format (`elf`, exact_text), machine (`kind: integer` → `62`), plus
-  `stripped_config_campaign`/`_domain` only.
-- Key insight: the ONLY new thing was the `<qualifier>_` inside the field name. The carried-over solver answered the 140 old ids
-  (POST at T+17 s) and the two shas (next POST, banked `accepted remaining 8`); the worker added a `_qualified(group, field)` router
-  (file-name token → member, `.symtab` fallback) and the 8 analysis ids went CORRECT on the next POST.
-- No disassembly / calling-convention / function-reconstruction id was asked despite the prompt -- 10th day the theme is decoration.
-- TT 5.2 s in_window (BR15-005); Mastery 5 sets / 750 ids, 9.35 s in_window (download 2.1 s + solve 5.8 s), set1 d01 stripped.
+**D16 "Wasm Up"** (internal slug `webassembly-optimization-equivalence`; 160 Qs; GM CORRECT 91 s after start, 0 wrong POSTs;
+TT + Mastery first try). Prompt: "WebAssembly runs in a sandbox, but the sandbox has doors: imports, memory, indirect calls. Map
+every door in this module and inventory what passes through." New group = TWO wasm MVP modules from one source:
+`d16--variant-000-compact.wasm` (561 B) and `-direct.wasm` (570 B). Sections type/function/memory(min 1)/export(`memory`,
+`evaluate`)/code/data, LLVM-style 5-byte padded LEB128 sizes; ONE function `evaluate(i32)->i32` mapping 0/1/2 to constants --
+compact = `select` chain, direct = nested `if/else` (the "optimization equivalence"). NO import, table or element section.
+Data seg 0 (mem 1024) = RAW HCFG (`01 c1` = ver 1, key 0xc1), seg 1 (mem 2048) = trace-marker string.
+- d16 ids: `sha256_1`/`_2` (archive order: direct, compact), `compact_`/`direct_` × format `wasm` + architecture `wasm32` (both
+  `exact_text`), `compact_config_campaign/domain/mutex/url` only. No machine/hcfg_offset/import/export/table id.
+- How it went: race-harness POSTs banked the 150 old ids at T+25 s and the shas + configs at T+27 s (generic qualifier router +
+  raw HCFG scan already worked on wasm bytes); the worker added a 6-line `\0asm` branch to the solver's container dispatch that
+  calls the prebuilt `lib.binary.wasm_layout` (format `wasm`, machine `wasm32`), and the 4 label ids went CORRECT on the
+  first try at T+91 s. The prebuild (`wasm-hcfg-data-segment`) paid for itself: no label guessing. The "doors" theme was NOT
+  asked (12th day the theme is decoration); a later day may ask `imports`/`exports`/`memory_min`/`has_table` style ids.
+- TT correct, 64 s in-window of which download 52 s (bundle 32 MB; the solve was 7.6 s); Mastery 5 sets / 800 ids, 23 s in-window
+  (download 14.6 s, solve 2.9 s); Mastery set1 d01 STRIPPED again, set1 d02 a PE.
 
 ## GM answer conventions learned
 | Field family | Accepted form | Rejected (never resubmit) |
@@ -170,6 +171,7 @@ ET_EXEC, dynamic glibc, byte-identical `.text` (0x18d) and `.hcfg` section (file
 | format (.NET) | `pe_cli` | ~50 synonyms — lib/knowledge.py DOTNET_FORMAT_REJECTED |
 | format (Java/Kotlin jar) | `jar` (D6 Java, D7 Kotlin) | jar_jvm |
 | format / architecture (Swift, Nim, Zig, D, FPC, Crystal, ObjC ELF, stripped/symbolized C pair; D8-D15) | `elf` / `x86-64` (source language never changes the container label) | — |
+| format / architecture (WebAssembly module, D16, exact_text) | `wasm` / `wasm32` (lowercase; first try) | — (not tried: WebAssembly, wasm-mvp, wasm32-unknown) |
 | C++ symbols (ELF) | bare Itanium mangled name (`_ZNK...`, `_ZTV...`) | the demangled form |
 | C++ symbols (PE/MinGW) | COMDAT section name `.text$<mangled>` (function), `.rdata$<mangled>` (vtable) | bare mangled name |
 | section_names (JSON) | pyelftools order INCLUDING the leading `""` | list without "" |
@@ -190,8 +192,8 @@ Java broke the compound law (`jar`), so when a label is new, try the plain conta
   rejected for hours). Submit unconfirmed/new fields ALONE; batch only the known ones.
 - **Guessing synonyms for a synthetic label** (D3 .NET format: ~50 tries, ~1.5 h). Derive from spec tokens and the playbook naming laws,
   use `hctf labels`, and read the question `syntax` first: the GM embeds hints.
-- **Chasing the prompt's theme** (D5-D15): the language flavour (selectors, protocols, coroutines, record layouts, D15's "reconstruct
-  stripped functions from calling conventions") has never been asked since D4. Read the contract ids first; reverse only what an id asks for.
+- **Chasing the prompt's theme** (D5-D16): the flavour (selectors, protocols, coroutines, record layouts, D15 "calling conventions",
+  D16 wasm "imports, memory, indirect calls") has never been asked since D4. Read the contract ids first; reverse only what an id asks for.
 - **Shell/JSON quoting** of `Global\Huntress...` mutexes: build the submit JSON with python/jq, not by hand in a shell string.
 - **capstone `ret` has an empty op_str**: `f"{m} {o}"` gives `"ret "`. Strip it, and convert immediates to decimal.
 - **Cumulative zip**: old groups' answers carry over when their sha256 match; spend the time on the NEW group only. POST the
@@ -211,9 +213,9 @@ Java broke the compound law (`jar`), so when a label is new, try the plain conta
 - **Jar members are deflated**: `grep HCFG file.jar` finds nothing. Inflate the class, read constant-pool strings, base64-decode.
 - **Stripped builds / renamed functions** in variants (D1 TT, D2 Mastery set2, D8 Mastery d01): answer what the question defines
   for absence (`[]`, `none`, has_symtab=false); never substitute a heuristic constant.
-- **Speed flags measured under load** (D12, D14): "N s on single_solve" from a parallel solver-test is contention; re-measure
-  pinned and isolated before touching code.
 - **Tool parity**: ilspycmd, dotnet, rustfilt, GoReSym, rabin2, swift-demangle are in `bin/`; monodis/de4dot are not.
-- **Timed windows** (6-30 s; download is a big share of a 3-5 set Mastery): early TT/Mastery expiries were download/orchestration
-  latency, not solver speed. After editing hctf/*.py, restart the orchestrator (D1/D2 ran stale modules).
+- **Timed windows**: download dominates (D16 TT: 52 s of 64 s in-window on the 32 MB bundle; solve 7.6 s); early expiries were
+  download/orchestration latency, not solver speed. After editing hctf/*.py, restart the orchestrator (D1/D2 ran stale modules).
+- **WASM parsing**: section/segment sizes are 5-byte PADDED LEB128 (`86 80 80 80 00`); a parser that assumes 1-byte sizes or
+  minimal LEBs misreads every offset. Read LEB128 generically (`lib.binary.wasm_layout`); validate the whole module, not just the magic.
 - **PE machine map must include 0x8664 → `x86-64`**: a from-scratch replay once emitted `0x8664` and failed TT twice.

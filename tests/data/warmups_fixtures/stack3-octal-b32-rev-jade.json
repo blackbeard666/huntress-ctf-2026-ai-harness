@@ -1,0 +1,9 @@
+{
+ "codec": "stack:octal3>base32>reverse",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-108",
+ "encoded": "110 101 131 104 103 114 114 117 116 065 132 107 113 062 102 116 115 126 123 107 103 062 122 101 110 112 132 107 113 065 104 124 115 106 107 123 101 132 114 116 115 106 104 123 101 132 114 111 117 121 121 107 066 065 102 101 117 112 123 130 117 064 063 117 115 105 121 110 111 131 063 102 120 102 123 123 101 064 063 112 116 102 062 103 101 065 104 112 116 126 122 110 113 064 132 101 106 122 123 130 115 063 104 120 117 115 121 107 066 126 102 101 105 106 131 110 113 063 114 123 115 106 063 123 101 064 063 112 116 102 062 103 101 132 063 117 116 106 123 107 066 131 063 106 115 121 121 107 127 064 124 120 117 064 121 107 113 131 063 112 112 131 075 075 075 075 075 075",
+ "generator_cmd": "printf %s \"$plain\" | rev | base32 -w0 | od -An -v -to1 | tr -s ' \\n' ' ' | sed 's/^ //;s/ $//'  # util-linux rev, coreutils base32 + od",
+ "oracle_cmd": "python3 -I -c \"import sys,base64;print(base64.b32decode(bytes(int(x,8) for x in sys.argv[1].split())).decode()[::-1])\" \"$encoded\"  # stdlib int(x,8) + base64.b32decode + slice",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-108",
+ "expected": "match"
+}

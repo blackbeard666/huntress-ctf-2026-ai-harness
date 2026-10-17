@@ -1,0 +1,8 @@
+{
+ "field": "mbox.message_count",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/mbox/GENERATOR_stdlib_mailbox_mbox.py.txt <outdir>  (stdlib mailbox.mbox writer + email.message.EmailMessage) -> single_eml_renamed.mbox",
+ "oracle_cmd": "file <file> -> 'news or mail, ASCII text' (not 'Mailbox text': no envelope 'From ' line); python3 -I -c \"import mailbox,sys; print(len(mailbox.mbox(sys.argv[1], create=False)))\" <file> -> 0 messages",
+ "decoy": true,
+ "member": "export/single_eml_renamed.mbox"
+}

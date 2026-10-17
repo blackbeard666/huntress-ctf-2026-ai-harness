@@ -1,0 +1,8 @@
+{
+ "field": "tnef.attachment_count",
+ "expected": "1",
+ "generator_cmd": "tnefparse-1.4.0 sdist tests/examples/long-filename.tnef (real Outlook winmail.dat; pip download --no-binary :all: tnefparse==1.4.0), copied verbatim",
+ "oracle_cmd": "python3 -I -c \"import tnefparse,json;t=tnefparse.TNEF(open('tests/data/meta_fixtures/tnef/outlook_long_filename__attachment_count.bin','rb').read());print(len(t.attachments))\"  (tnefparse 1.4.0 reader)",
+ "decoy": false,
+ "member": "winmail.dat"
+}

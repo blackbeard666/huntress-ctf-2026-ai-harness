@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": "ANS-c81e5f02b7a94d63",
+ "generator_cmd": "tests/data/android_fixtures/gen_gated_jni.sh tests/data/android_fixtures  # perl hex(token ^ 0x2a), hex-decoded + eor #0x2a in the export; aarch64-linux-gnu-gcc -shared -fPIC -O2 native_src/gated_evidence.c (Java_com_huntress_arena_JNIBoundary_nativeEvidence(len): returns arena_value only if len > 0xffff && (u16)len == 0; 40 filler .rodata strings); zip -qX -r <name>.apk assets lib",
+ "oracle_cmd": "unzip native_gated_hexxor_arm64.apk lib/arm64-v8a/libboundary.so && aarch64-linux-gnu-gcc -static -o h native_src/gated_harness.c -ldl && qemu-aarch64 -L /usr/aarch64-linux-gnu ./h lib/arm64-v8a/libboundary.so Java_com_huntress_arena_JNIBoundary_nativeEvidence 0x10000  # real .so run with a fake JNIEnv: 'NewStringUTF ANS-c81e5f02b7a94d63'; len 0 -> 'NewStringUTF denied'",
+ "decoy": false
+}

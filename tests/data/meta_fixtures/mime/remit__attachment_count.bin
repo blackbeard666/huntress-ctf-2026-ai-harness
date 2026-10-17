@@ -1,0 +1,37 @@
+Return-Path: <returns@billing.contoso-pay.example>
+Received: from mx2.relay.example (mx2.relay.example [198.51.100.23]) by
+ mail.victim.example with ESMTPS id 4Xa9; Wed, 14 Oct 2026 22:41:07 +0000
+Received: from desk-07 (pool-198-18-4-61.isp.example [198.18.4.61]) by
+ mx2.relay.example with ESMTP id 77Bq; Wed, 14 Oct 2026 15:41:05 -0700
+From: Contoso Billing <billing@contoso-pay.example>
+To: Dana Ruiz <dana.ruiz@victim.example>
+Subject: Payment remittance 10/14
+Date: Wed, 14 Oct 2026 15:41:02 -0700
+Message-ID: <CAF7.remit-2026.1014.9931@mailhost.contoso-pay.example>
+X-Mailer: Thunderbird 128.3.1
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="===============3089870435207521949=="
+
+--===============3089870435207521949==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Please see the attached remittance.
+
+--===============3089870435207521949==
+Content-Type: application/pdf
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="Remittance_1014.pdf"
+MIME-Version: 1.0
+
+JVBERi0xLjcKJXN0dWIK
+
+--===============3089870435207521949==
+Content-Type: application/octet-stream
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="viewer.scr"
+MIME-Version: 1.0
+
+TVqQAHN0dWI=
+
+--===============3089870435207521949==--

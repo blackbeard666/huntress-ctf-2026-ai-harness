@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=powershell_module|role=loader|verdict=malicious|attack=T1059.001|adapter=module_import|host_profile=standalone|obfuscation_profile=frag|stage_profile=two_stage_download_execute|next_language=csharp|stage_count=2|steps=import_module,invoke_stage|campaign_id=PSM-7d06ac5c|url=https://psm1-7d06ac5c3c.example.invalid/stage|file_path=/tmp/huntress-psm1/.3cddf5c736150000.stage",
+ "decoy": false,
+ "host": "psm1",
+ "tag": "FRAG",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> FRAG: stdlib base64/bytes.hex; psm1 template)",
+ "oracle_cmd": "cat tests/data/script_fixtures/v3h_psm1_frag.psm1 | grep -o 'HUNTRESS_ANALYSIS_V1:FRAG-[^ \"<]*' | head -1 | cut -d- -f2- | tr -d '\\r' | tr -d . | xxd -r -p"
+}

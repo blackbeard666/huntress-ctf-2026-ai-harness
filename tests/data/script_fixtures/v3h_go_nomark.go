@@ -1,0 +1,15 @@
+package main
+
+import "fmt"
+
+func main() {
+	descriptor_efad879b := `dj0zfGxhbmd1YWdlPWdvfHJvbGU9bGF1bmNoZXJ8dmVyZGljdD1tYWxpY2lvdXN8
+YXR0YWNrPVQxMTA2fGFkYXB0ZXI9b3NfZXhlY3xob3N0X3Byb2ZpbGU9c3RhbmRh
+bG9uZXxvYmZ1c2NhdGlvbl9wcm9maWxlPW5vbWFya3xzdGFnZV9wcm9maWxlPXR3
+b19zdGFnZV9kb3dubG9hZF9leGVjdXRlfG5leHRfbGFuZ3VhZ2U9cG93ZXJzaGVs
+bHxzdGFnZV9jb3VudD0yfHN0ZXBzPWJ1aWxkX2NtZCxzcGF3bl9wcm9jZXNzfGNh
+bXBhaWduX2lkPUdPLThmMjVmZGFjfHVybD1odHRwczovL2dvLThmMjVmZGFjZGUu
+ZXhhbXBsZS5pbnZhbGlkL3N0YWdlfGZpbGVfcGF0aD0vdG1wL2h1bnRyZXNzLWdv
+Ly5kZTljMmY4ZmM4MTVmYjMzLnN0YWdl`
+	fmt.Print(descriptor_efad879b)
+}

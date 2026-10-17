@@ -1,0 +1,8 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "docker",
+ "tag": null,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (benign text -> base64 descriptor, no marker, no v= plan)",
+ "oracle_cmd": "sed -n 's/^ARG DESCRIPTOR_591FED5C=//p' tests/data/script_fixtures/v3h_docker_decoy.Dockerfile | tr -d ' \\n\\r' | base64 -d   # -> benign text, not a v=3 plan"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": "ANS-5b0e8d71f3a9c246",
+ "generator_cmd": "tests/data/android_fixtures/gen_stack_string.sh tests/data/android_fixtures  # perl c^0x37 initializer list -> gcc -shared -fPIC -O0 native_src/stack_check.c (Java_*check builds s[] on the stack: movabs rax/rdx + mov qword/dword [rbp-off]; compares in[i]^0x37 to s[i]; no ANS literal / blob in any section); zip -qX -r <name>.apk assets lib",
+ "oracle_cmd": "unzip native_stack_xor_x86_64.apk lib/x86_64/libcheck.so && gcc -o h native_src/stack_harness.c -ldl && ./h ./lib/x86_64/libcheck.so Java_com_huntress_arena_NativeLib_check ANS-5b0e8d71f3a9c246  # real .so run with a fake JNIEnv: 'check(ANS-5b0e8d71f3a9c246) = 1' (last hex changed -> 0); strings | grep ANS -> nothing",
+ "decoy": false
+}

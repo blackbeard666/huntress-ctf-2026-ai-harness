@@ -1,0 +1,41 @@
+{
+ "encoding": "raw",
+ "expected_format": "none",
+ "expected_offset": 336,
+ "expected_mem_offset": "none",
+ "expected_config": {
+  "c2": "203.0.113.9:8443",
+  "campaign": "doorframe",
+  "sleep": 30,
+  "flag": "flag{w4sm_d00rs_0p3n}"
+ },
+ "expected_fields": {
+  "imports": "none",
+  "import_count": "none",
+  "exports": "none",
+  "export_count": "none",
+  "function_count": "none",
+  "table_count": "none",
+  "global_count": "none",
+  "elem_count": "none",
+  "data_segment_count": "none",
+  "mutable_global_count": "none",
+  "passive_data_segment_count": "none",
+  "indirect_targets": "none",
+  "memory_min": "none",
+  "memory_max": "none",
+  "memory_shared": "none",
+  "data_offsets": "none",
+  "custom_sections": "none",
+  "has_table": "none",
+  "hcfg_mem_offset": "none",
+  "start_function": "none",
+  "hcfg_offset": "none"
+ },
+ "generator_cmd": "bash wasminv_gen.sh wasminv_decoy_trunc.bin trunc '{\"c2\":\"203.0.113.9:8443\",\"campaign\":\"doorframe\",\"sleep\":30,\"flag\":\"flag{w4sm_d00rs_0p3n}\"}' 0x33",
+ "oracle_cmd": "bash wasminv_oracle.sh wasminv_decoy_trunc.bin   # wasm-objdump -x (wabt 1.0.36) + wasm-validate --enable-threads + grep -obUa HCFG; config: bash wasm_oracle.sh wasminv_decoy_trunc.bin (grep -obUa, perl unpack + xor, gzip-trailer crc32)",
+ "oracle_output": "{\"custom_sections\": [\"producers\"], \"data_offsets\": [1024, 4096], \"data_segment_count\": 3, \"elem_count\": 2, \"export_count\": 3, \"exports\": [\"dispatch\", \"tasks\", \"counter\"], \"function_count\": 5, \"global_count\": 3, \"has_table\": true, \"hcfg_file_offset\": \"336\", \"hcfg_mem_offset\": 4103, \"import_count\": 5, \"imports\": [\"env.log\", \"wasi_snapshot_preview1.fd_write\", \"env.memory\", \"env.__indirect_function_table\", \"env.__stack_pointer\"], \"indirect_targets\": [], \"memory_max\": 16, \"memory_min\": 1, \"memory_shared\": true, \"mutable_global_count\": 3, \"passive_data_segment_count\": 1, \"start\": \"none\", \"table_count\": 1, \"valid\": false}",
+ "oracle_output_hcfg": "WebAssembly (wasm) binary module version 0x1 (MVP) | invalid | i32 | 4103 | 336 | HCFG 1 51 90 2670209175 2670209175 | {\"c2\":\"203.0.113.9:8443\",\"campaign\":\"doorframe\",\"sleep\":30,\"flag\":\"flag{w4sm_d00rs_0p3n}\"}",
+ "note": "wasm 'doors' inventory (lib.binary.wasm_fields / wasm_field): lists in section order (JSON), imports as module.name, *_count = entries of that section (wasm-objdump Section[N]; imports not counted), has_table includes an imported table, memory_min/max in 64 KiB pages, indirect_targets = funcs of ACTIVE elem segments by name, hcfg_offset = file offset of the 'H' (hcfg_mem_offset = linear-memory address); field spellings SPECULATIVE (GM vocabulary not seen); DECOY: module truncated 9 bytes short (wasm-validate fails) -> not wasm, every field 'none'; the raw HCFG blob is still a plain hcfg_scan hit at its file offset",
+ "decoy": true
+}

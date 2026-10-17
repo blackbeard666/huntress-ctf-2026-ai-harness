@@ -1,0 +1,8 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "psm1",
+ "tag": null,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (benign text -> base64 descriptor, no marker, no v= plan)",
+ "oracle_cmd": "pwsh -NoProfile -c \"Import-Module ./tests/data/script_fixtures/v3h_psm1_decoy.psm1 -Force; & (Get-Module (Get-Item ./tests/data/script_fixtures/v3h_psm1_decoy.psm1).BaseName) { \\$descriptor_cb15de19 }\" | tr -d ' \\n\\r' | base64 -d   # -> benign text, not a v=3 plan"
+}

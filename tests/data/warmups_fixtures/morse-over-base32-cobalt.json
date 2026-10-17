@@ -1,0 +1,9 @@
+{
+ "codec": "morse-cat(base32)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "encoded": ".--- --.. ..- .-- --. --.. .--- .- --- ..... -..- -..- . ..--- --.. .- -- .-. ... .-- --. ...-- ...-- . -. ..-. -..- --. --- .. -.. ..- -. -... ..- -..- --. .. -.. -..- -- ..-. --.. --. ..--- ..... .-.. --.- . . --.- ..-. .. ...-- --.. .- --- -. -..- .-- -.-- ..... - ..-. ..-. --.- --.- .... --. ..... .-.. -.-. -. ...- ..- -..- .. .. -.. ..- -. -... ..- -..- --. .. -.. ..-. .--. -... --.- .-- --. ..... -... .- -- ..-. -..- .... --. ..... ...-- ..-. --- .. --.- .... .. ...-- --.. .- --- .-. ..- --. -.- .. -.-. .... -- ..-. .-- .-- -.- .. -.-. -. -- ..-. --.. -..- .. --.. .-.. ... .... .. --.- --. --. ...-- ...-- -.-. -- ..-. .-- .... .. .-.. .-.. .. -- ...- --.. --. -.... ...-- .-. -. --. . ...-- --.- -...- -...- -...- -...-",
+ "generator_cmd": "printf %s \"$plain\" | base32 -w0 | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs enc '-/.' 'Space' 'Line feed'  # coreutils base32 (padded), then CyberChef 'To Morse Code' one space between symbols",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs dec 'Space' 'Line feed' | python3 -I -c \"import sys,base64;print(base64.b32decode(sys.stdin.read().strip()).decode())\"  # CyberChef 'From Morse Code' then stdlib b32decode",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "expected": "match"
+}

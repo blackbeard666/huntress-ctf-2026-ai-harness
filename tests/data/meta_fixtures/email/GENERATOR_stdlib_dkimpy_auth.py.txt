@@ -1,0 +1,47 @@
+# Writes auth-results test messages: stdlib email.message.EmailMessage (policy.SMTP) + dkimpy 1.1.8 dkim.sign /
+# dkim.arc_sign (real DKIM-Signature and ARC-Seal/ARC-Message-Signature/ARC-Authentication-Results headers), RSA key
+# from `cryptography`. argv: <pylib-auth dir> <outdir>
+import sys
+sys.path.insert(0, sys.argv[1])
+import dkim
+from email.message import EmailMessage
+from email import policy
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
+out = sys.argv[2]
+key = rsa.generate_private_key(public_exponent=65537, key_size=1024).private_bytes(
+    serialization.Encoding.PEM, serialization.PrivateFormat.TraditionalOpenSSL, serialization.NoEncryption())
+m = EmailMessage()
+m["Return-Path"] = "<bounce-7731@mailer.bulk-sender.example>"
+m["Received-SPF"] = ("Softfail (protection.outlook.com: domain of transitioning mailer.bulk-sender.example "
+                     "discourages use of 203.0.113.45 as permitted sender) receiver=protection.outlook.com; "
+                     "client-ip=203.0.113.45; helo=mx1.bulk-sender.example; envelope-from=bounce-7731@mailer.bulk-sender.example")
+m["From"] = "PayPal Billing <service@PayPal.example>"
+m["Reply-To"] = "PayPal Support <support-desk@secure-verify.example>"
+m["To"] = "victim@contoso.example"
+m["Subject"] = "Action required: account limited"
+m["Date"] = "Wed, 02 Oct 2024 09:00:00 +0000"
+m["Message-ID"] = "<auth.1001@mailer.bulk-sender.example>"
+m.set_content("Please verify your account.\n")
+b = m.as_bytes(policy=policy.SMTP)
+sig = dkim.sign(b, b"s2024", b"bulk-sender.example", key, include_headers=[b"from", b"to", b"subject", b"date",
+                b"message-id", b"reply-to"], canonicalize=(b"relaxed", b"relaxed"))
+ar = (b"Authentication-Results: mx.contoso.example 1;\r\n spf=softfail (sender IP is 203.0.113.45)"
+      b" smtp.mailfrom=mailer.bulk-sender.example;\r\n dkim=pass (signature was verified; key=1024)"
+      b" header.d=bulk-sender.example header.s=s2024;\r\n dmarc=fail action=quarantine header.from=paypal.example;\r\n"
+      b" compauth=fail reason=000\r\n")
+older = b"Authentication-Results: relay.bulk-sender.example; spf=pass smtp.mailfrom=bulk-sender.example\r\n"
+b2 = ar + sig + older + b
+arc = dkim.arc_sign(b2, b"arc1", b"contoso.example", key, b"mx.contoso.example", timestamp="1727859600")
+open(f"{out}/authres_phish.eml", "wb").write(b"".join(arc) + b2)
+# plain: Received-SPF only, no Authentication-Results / DKIM / ARC / Reply-To; aligned Return-Path
+n = EmailMessage()
+n["Return-Path"] = "<alerts@northwind.example>"
+n["Received-SPF"] = "pass (mx.fabrikam.example: domain of alerts@northwind.example designates 198.51.100.7 as permitted sender) client-ip=198.51.100.7; envelope-from=alerts@northwind.example; helo=smtp.northwind.example;"
+n["From"] = "Northwind Alerts <alerts@northwind.example>"
+n["To"] = "dana@fabrikam.example"
+n["Subject"] = "Weekly report"
+n["Date"] = "Thu, 03 Oct 2024 12:00:00 +0000"
+n["Message-ID"] = "<plain.2002@northwind.example>"
+n.set_content("report attached\n")
+open(f"{out}/authres_plain.eml", "wb").write(n.as_bytes(policy=policy.SMTP))

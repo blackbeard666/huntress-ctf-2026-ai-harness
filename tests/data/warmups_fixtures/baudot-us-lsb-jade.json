@@ -1,0 +1,9 @@
+{
+ "codec": "baudot-lsb-us",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-93",
+ "encoded": "11111 00110 01100 01110 10000 00100 11001 00011 01010 11110 00100 10010 10000 01110 00011 10010 01100 00110 01011 00100 00001 00101 01100 10100 00100 11001 11000 01010 00111 11100 01101 11011 10110 00100 11111 00001 00011 00100 10100 00011 01001 01111 10000 11011 00110 00100 11111 10100 11100 10011 00111 01100 00001 00100 00001 00101 01100 10100 00100 10000 10111 11000 01110 00001 00100 11000 00110 10100 11001 10000 01010 00100 00001 00011 00100 00001 00101 10000 00100 01011 11000 00111 10000 00100 00111 11000 10100 00001 10000 01010 11011 01110 00100 11111 11010 11000 10010 10000 11011 11000 11111 00011 00001 00001 10000 01010 11011 11000 00011 10000",
+ "generator_cmd": "printf %s \"$plain\" | tr a-z A-Z | PYTHONPATH=tools/pybaudot python3 tests/data/warmups_fixtures/baudot_lib.py groups us | perl -pe 's/([01]{5})/reverse $1/ge'  # PyPI baudot ITA2_US, each frame bit-reversed (dCode/tape order A=11000)",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -pe 's/([01]{5})/reverse $1/ge' | perl tests/data/warmups_fixtures/baudot_oracle.pl",
+ "oracle_plain": "NICE WORK DECODING THIS WARMUP! TO SOLVE, SUBMIT THIS EXACT ANSWER TO THE GAME MASTER: JADE-OTTER-93",
+ "expected": "match"
+}

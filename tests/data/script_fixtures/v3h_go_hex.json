@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=go|role=launcher|verdict=malicious|attack=T1106|adapter=os_exec|host_profile=standalone|obfuscation_profile=hex|stage_profile=two_stage_download_execute|next_language=powershell|stage_count=2|steps=build_cmd,spawn_process|campaign_id=GO-82bbfbee|url=https://go-82bbfbeee2.example.invalid/stage|file_path=/tmp/huntress-go/.e2bdf8a569f41256.stage",
+ "decoy": false,
+ "host": "go",
+ "tag": "HEX",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> HEX: stdlib base64/bytes.hex; go template)",
+ "oracle_cmd": "cat tests/data/script_fixtures/v3h_go_hex.go | grep -o 'HUNTRESS_ANALYSIS_V1:HEX-[^ \"<]*' | head -1 | cut -d- -f2- | tr -d '\\r' | xxd -r -p"
+}

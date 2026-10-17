@@ -1,0 +1,9 @@
+{
+ "codec": "braille-pyb(HEX)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-kestrel-17",
+ "encoded": "⠼⠙⠠⠑⠼⠋⠊⠋⠉⠋⠑⠃⠚⠛⠛⠋⠠⠋⠼⠛⠃⠋⠠⠃⠼⠃⠚⠋⠙⠋⠑⠋⠉⠋⠠⠋⠼⠋⠙⠋⠊⠋⠠⠑⠼⠋⠛⠃⠚⠛⠙⠋⠓⠋⠊⠛⠉⠃⠚⠛⠛⠋⠁⠛⠃⠋⠠⠙⠼⠛⠑⠛⠚⠃⠁⠃⠚⠑⠙⠋⠠⠋⠼⠃⠚⠛⠉⠋⠠⠋⠼⠋⠠⠉⠼⠛⠋⠋⠑⠃⠠⠉⠼⠃⠚⠛⠉⠛⠑⠋⠃⠋⠠⠙⠼⠋⠊⠛⠙⠃⠚⠛⠙⠋⠓⠋⠊⠛⠉⠃⠚⠋⠑⠛⠓⠋⠁⠋⠉⠛⠙⠃⠚⠋⠁⠋⠠⠑⠼⠛⠉⠛⠛⠋⠑⠛⠃⠃⠚⠛⠙⠋⠠⠋⠼⠃⠚⠛⠙⠋⠓⠋⠑⠃⠚⠙⠛⠋⠁⠋⠠⠙⠼⠋⠑⠃⠚⠙⠠⠙⠼⠋⠁⠛⠉⠛⠙⠋⠑⠛⠃⠉⠠⠁⠼⠃⠚⠋⠉⠋⠠⠋⠼⠋⠃⠋⠁⠋⠠⠉⠼⠛⠙⠃⠠⠙⠼⠋⠠⠃⠼⠋⠑⠛⠉⠛⠙⠛⠃⠋⠑⠋⠠⠉⠼⠃⠠⠙⠼⠉⠁⠉⠛",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c0 | tr a-f A-F | python3 -c 'import sys;sys.path.insert(0,\"tools/pybraille\");from pybraille import convertText;print(convertText(sys.stdin.read().strip()),end=\"\")'  # pybraille 1.0.0 over uppercase hex: ⠠ before A-F ends the number run",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/braille_cyberchef.mjs dec | perl -pe 's/#([A-J]+)/($x=$1)=~tr|A-J|1-90|;$x/ge; s/,([A-F])/$1/g' | xxd -r -p  # CyberChef From Braille (Braille ASCII: # number sign, , capital) -> perl number-run reader -> xxd -r -p",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-kestrel-17",
+ "expected": "match"
+}

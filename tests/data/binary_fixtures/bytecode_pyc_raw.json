@@ -1,0 +1,18 @@
+{
+ "encoding": "raw",
+ "expected_format": "pyc",
+ "expected_machine": "none",
+ "expected_version": "pyc 3531",
+ "file_b": "Byte-compiled Python module for CPython 3.12 (magic: 3531), timestamp-based, .py timestamp: Fri Oct 16 15:32:20 2026 UTC, .py size: 422 bytes",
+ "expected_offset": 85,
+ "expected_config": {
+  "c2": "192.0.2.15:9001",
+  "campaign": "marshal",
+  "sleep": 30,
+  "flag": "flag{pyc_byt3s_c0nst}"
+ },
+ "generator_cmd": "bash bytecode_gen.sh bytecode_pyc_raw.bin pyc '{\"c2\":\"192.0.2.15:9001\",\"campaign\":\"marshal\",\"sleep\":30,\"flag\":\"flag{pyc_byt3s_c0nst}\"}' 0x21 raw",
+ "oracle_cmd": "bash bytecode_oracle.sh bytecode_pyc_raw.bin   # file -b, javap -v / python3.14 marshal / luac5.4 -l / llvm-dis-18, grep -obUa, coreutils base64 + perl unpack/xor, gzip trailer crc32",
+ "oracle_output": "Byte-compiled Python module for CPython 3.12 (magic: 3531), timestamp-based, .py timestamp: Fri Oct 16 15:32:20 2026 UTC, .py size: 422 bytes | pyc 3531 | 85 | HCFG 1 33 87 2425980483 2425980483 | {\"c2\":\"192.0.2.15:9001\",\"campaign\":\"marshal\",\"sleep\":30,\"flag\":\"flag{pyc_byt3s_c0nst}\"}",
+ "note": "format labels SPECULATIVE (GM vocabulary not seen; candidates in machine_facts()['format_candidates']); machine 'none' (wrapper: Mach-O cputype); expected_offset = first stored byte per the OFFSET LAW (grep -obUa); bitcode strings are bit-packed (char6 / fixed-8 arrays) so no byte-exact independent offset exists -> expected_offset null (not asserted)"
+}

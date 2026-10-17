@@ -1,0 +1,10 @@
+From: it-helpdesk@victim.example
+To: all@victim.example
+Subject: Password expiry
+Date: Thu, 15 Oct 2026 10:00:00 +0000
+Message-ID: <pw.1015@victim.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Your password expires today.

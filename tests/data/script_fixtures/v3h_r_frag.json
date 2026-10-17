@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=r|role=exfiltrator|verdict=malicious|attack=T1041|adapter=http_post|host_profile=standalone|obfuscation_profile=frag|stage_profile=two_stage_download_execute|next_language=python|stage_count=2|steps=read_table,post_remote|campaign_id=R-ad4d3042|url=https://r-ad4d3042c2.example.invalid/stage|file_path=/tmp/huntress-r/.c29113f149c6ea3d.stage",
+ "decoy": false,
+ "host": "r",
+ "tag": "FRAG",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> FRAG: stdlib base64/bytes.hex; r template)",
+ "oracle_cmd": "cat tests/data/script_fixtures/v3h_r_frag.R | grep -o 'HUNTRESS_ANALYSIS_V1:FRAG-[^ \"<]*' | head -1 | cut -d- -f2- | tr -d '\\r' | tr -d . | xxd -r -p"
+}

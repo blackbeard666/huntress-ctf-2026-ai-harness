@@ -1,0 +1,10 @@
+{
+ "codec": "dtmf",
+ "plain": null,
+ "encoded": "*67 1 555 0123 #",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written dial string (caller-ID block star code + phone number) in keypad chars",
+ "oracle_cmd": "printf %s \"$encoded\" | tr -d ' ' | tr '*#' 'ef' | xxd -r -p | od -c  # odd nibble count / non-text bytes -> no hex text layer",
+ "oracle_plain": null
+}

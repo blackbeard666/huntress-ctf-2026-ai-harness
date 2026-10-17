@@ -1,0 +1,10 @@
+{
+ "codec": "stack:base64>hex>rot47",
+ "plain": " this exact ",
+ "encoded": "MjA0NTM5M2E0NDIwMzY0OTMyMzQ0NTIw",
+ "mastery_line": true,
+ "generator_cmd": "printf %s ' this exact ' | tr '!-~' 'P-~!-O' | xxd -p | tr -d '\\n' | base64 -w0  # coreutils tr (rot47) + xxd + base64",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | xxd -r -p | tr '!-~' 'P-~!-O'  # coreutils base64 -d, xxd -r, tr",
+ "oracle_plain": " this exact ",
+ "expected": "match"
+}

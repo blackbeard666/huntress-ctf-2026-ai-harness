@@ -1,0 +1,18 @@
+{
+ "encoding": "base64",
+ "expected_format": "dex",
+ "expected_machine": "none",
+ "expected_version": "035",
+ "file_b": "Dalvik dex file version 035",
+ "expected_offset": 548,
+ "expected_config": {
+  "c2": "198.51.100.89:8080",
+  "campaign": "dalvik",
+  "sleep": 16,
+  "flag": "flag{d3x_str1ng_b64}"
+ },
+ "generator_cmd": "bash bytecode_gen.sh bytecode_dex_b64.bin dex '{\"c2\":\"198.51.100.89:8080\",\"campaign\":\"dalvik\",\"sleep\":16,\"flag\":\"flag{d3x_str1ng_b64}\"}' 0 b64",
+ "oracle_cmd": "bash bytecode_oracle.sh bytecode_dex_b64.bin   # file -b, javap -v / python3.14 marshal / luac5.4 -l / llvm-dis-18, grep -obUa, coreutils base64 + perl unpack/xor, gzip trailer crc32",
+ "oracle_output": "Dalvik dex file version 035 | 035 | 548 | HCFG 1 0 88 20869539 20869539 | {\"c2\":\"198.51.100.89:8080\",\"campaign\":\"dalvik\",\"sleep\":16,\"flag\":\"flag{d3x_str1ng_b64}\"}",
+ "note": "format labels SPECULATIVE (GM vocabulary not seen; candidates in machine_facts()['format_candidates']); machine 'none' (wrapper: Mach-O cputype); expected_offset = first stored byte per the OFFSET LAW (grep -obUa); bitcode strings are bit-packed (char6 / fixed-8 arrays) so no byte-exact independent offset exists -> expected_offset null (not asserted)"
+}

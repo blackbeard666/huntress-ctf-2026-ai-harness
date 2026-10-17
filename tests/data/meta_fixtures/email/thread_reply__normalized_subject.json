@@ -1,0 +1,8 @@
+{
+ "field": "email.normalized_subject",
+ "expected": "Invoice 4471 overdue",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/email/GENERATOR_stdlib_thread.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP; Thread-Index built with struct/uuid) -> thread_reply.eml",
+ "oracle_cmd": "eml_parser subject | sed -E 's/^((re|fwd?|fw)[[:space:]]*:[[:space:]]*)+//I'  -> 'Invoice 4471 overdue'",
+ "decoy": false,
+ "member": "evidence-01/thread_reply.eml"
+}

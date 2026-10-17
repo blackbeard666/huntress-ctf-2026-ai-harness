@@ -1,0 +1,32 @@
+{
+ "encoding": "raw",
+ "decoy": false,
+ "expected_offset": 8224,
+ "expected_config": {
+  "c2": "198.51.100.23:443",
+  "campaign": "headless",
+  "sleep": 45,
+  "flag": "flag{n0_s3ct10ns_n0_pr0bl3m}"
+ },
+ "expected_elf_header_facts": {
+  "format": "elf",
+  "elf_class": "ELF64",
+  "endianness": "little",
+  "machine": "x86-64",
+  "elf_type": "ET_DYN",
+  "entry_point": "0x1060",
+  "program_header_count": 14,
+  "has_interp": "true",
+  "section_count": 0,
+  "has_section_headers": "false",
+  "section_names": [],
+  "has_symtab": "false",
+  "has_hcfg_section": "false",
+  "hcfg_section": "none",
+  "hcfg_offset": 8224
+ },
+ "generator_cmd": "bash sstrip_gen.sh sstrip_zero.bin zero '{\"c2\":\"198.51.100.23:443\",\"campaign\":\"headless\",\"sleep\":45,\"flag\":\"flag{n0_s3ct10ns_n0_pr0bl3m}\"}' 0x33",
+ "oracle_cmd": "bash sstrip_oracle.sh sstrip_zero.bin   # file -b, GNU readelf -hW (Class/Data/Type/Machine/Entry/phnum), readelf -lW (INTERP), readelf -SW (non-NULL entries, names minus <no-strings>, SYMTAB type, section holding the blob), grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), BuildID[sha1]=f9df54534e94ecc0f4e01177a98a78a65ba2b33a, for GNU/Linux 3.2.0, dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, no section header | Class:                             ELF64 | Data:                              2's complement, little endian | Type:                              DYN (Position-Independent Executable file) | Machine:                           Advanced Micro Devices X86-64 | Entry point address:               0x1060 | Number of program headers:         14 | interp: 1 | sections: 0 | names: | symtab: 0 | blob@8224 HCFG 1 51 97 2848654474 gzipcrc=2848654474 | {\"c2\":\"198.51.100.23:443\",\"campaign\":\"headless\",\"sleep\":45,\"flag\":\"flag{n0_s3ct10ns_n0_pr0bl3m}\"}",
+ "note": "sstrip-style: e_shoff/e_shnum/e_shstrndx zeroed and the section header table cut off -> `readelf -S`: There are no sections; header fields still from the ELF header, blob via raw scan. Field names beyond format/elf_class/endianness/machine/elf_type/entry_point/has_symtab are SPECULATIVE; section_names skip the NULL section (bpf_fields convention); expected_offset = FILE offset of the 'H' (raw, = hcfg_scan)"
+}

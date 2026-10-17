@@ -1,0 +1,10 @@
+{
+ "entry": "jni_gate_scan",
+ "expected": null,
+ "expected_input": 32768,
+ "expected_arg2": null,
+ "expected_narrowing": "s16",
+ "generator_cmd": "tests/data/android_fixtures/gen_gate_bypass.sh tests/data/android_fixtures  # as jnigate_s16_x86_64 but the token is a near-miss 'ANS-3f9a07c2d4e8b61Q' (15 hex + Q)",
+ "oracle_cmd": "tests/data/android_fixtures/gate_oracle.sh jnigate_decoy_s16_nearmiss.apk  # 'a=0x8000 b=0 NewStringUTF ANS-3f9a07c2d4e8b61Q' -> no ANS-<16 hex>",
+ "decoy": true
+}

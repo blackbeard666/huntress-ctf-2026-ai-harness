@@ -1,0 +1,10 @@
+{
+ "codec": "morse-punct",
+ "plain": " this exact answer to the Game Master: jade-otter-cloud-93",
+ "encoded": " / - .... .. ... / . -..- .- -.-. - / .- -. ... .-- . .-. / - --- / - .... . / --. .- -- . / -- .- ... - . .-. ---... / .--- .- -.. . -....- --- - - . .-. -....- -.-. .-.. --- ..- -.. -....- ----. ...--",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs enc '-/.' 'Space' 'Forward slash' | sed 's#/# / #g'  # CyberChef 'To Morse Code' (-/., letters by space, words by '/'), then '/' -> ' / '",
+ "oracle_cmd": "printf %s \"$encoded\" | sed 's# / #/#g' | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs dec 'Space' 'Forward slash'  # CyberChef 'From Morse Code'",
+ "oracle_plain": " THIS EXACT ANSWER TO THE GAME MASTER: JADE-OTTER-CLOUD-93",
+ "expected": "match",
+ "note": "Mastery-style fragment cut at a word gap: the leading ' / ' is the space before 'this' (lib.decode's strict Morse branch misses it; morse_free keeps it and re-cases onto the template)"
+}

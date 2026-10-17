@@ -1,0 +1,8 @@
+{
+ "field": "mail.date_utc",
+ "expected": "2026-10-14T22:41:02Z",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/email/GENERATOR_stdlib_emailmessage_alias.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP) -> remit.eml",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/email/ORACLE_eml_parser_alias.py.txt tools/pylib-eml <file>  (eml_parser 4.2.1 EmlParser.decode_email_bytes) -> header.date = 2026-10-14 15:41:02-07:00 -> UTC",
+ "decoy": false,
+ "member": "evidence-01/remit.eml"
+}

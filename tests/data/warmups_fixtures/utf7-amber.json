@@ -1,0 +1,9 @@
+{
+ "codec": "utf-7",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "Nice work decoding this warmup+ACE To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "generator_cmd": "printf %s \"$plain\" | iconv -f UTF-8 -t UTF-7  # glibc iconv UTF-7 (RFC 2152, set O shifted)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;print(sys.stdin.read().encode().decode('utf-7'),end='')\"  # CPython stdlib codecs (independent of glibc iconv)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

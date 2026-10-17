@@ -1,0 +1,8 @@
+{
+ "field": "eml.parent_message_id",
+ "expected": "<side.9@lists.example>",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/eml/GENERATOR_stdlib_thread.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP; Thread-Index built with struct/uuid) -> thread_reply.eml",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/eml/ORACLE_eml_parser_thread.py.txt tools/pylib-eml <file>  (eml_parser 4.2.1 decode_email_bytes headers) -> references[-1]",
+ "decoy": false,
+ "member": "evidence-01/thread_reply.eml"
+}

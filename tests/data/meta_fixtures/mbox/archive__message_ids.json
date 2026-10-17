@@ -1,0 +1,8 @@
+{
+ "field": "mbox.message_ids",
+ "expected": "[\"<inv4471.a1@mail.contoso-pay.example>\",\"<inv4471.a2@mx.fabrikam.example>\",\"<payroll-q3.b1@hr.fabrikam.example>\",\"<inv4471.a3@mail.contoso-pay.example>\",\"<inv4471.a2@mx.fabrikam.example>\",\"<vpn.c1@it.fabrikam.example>\",\"<payroll-q3.b2@hr.fabrikam.example>\",\"<wire.d2@mx.fabrikam.example>\"]",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/mbox/GENERATOR_stdlib_mailbox_mbox.py.txt <outdir>  (stdlib mailbox.mbox writer + email.message.EmailMessage) -> archive.mbox",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/mbox/ORACLE_stdlib_mailbox_networkx.py.txt <file>  (stdlib mailbox.mbox reader, policy.default + networkx 3.1 weakly_connected_components + Counter) -> message_ids",
+ "decoy": false,
+ "member": "export/archive.mbox"
+}

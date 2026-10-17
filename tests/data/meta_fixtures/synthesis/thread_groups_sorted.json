@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.thread_groups_sorted",
+ "expected": "[[\"msg-01.eml\",\"msg-09.eml\"],[\"msg-02.eml\",\"msg-05.eml\",\"msg-07.eml\"],[\"msg-04.eml\"]]",
+ "generator_cmd": "python3 tests/data/meta_fixtures/synthesis/gen_threads.py $T/mail && cd $T/mail && zip -q -X ../threads.zip msg-0*.eml readme.txt",
+ "oracle_cmd": "python3 tests/data/meta_fixtures/synthesis/oracle_threads.py <case>.bin  (stdlib email.parser compat32 + networkx.connected_components; key 'sorted')",
+ "decoy": false
+}

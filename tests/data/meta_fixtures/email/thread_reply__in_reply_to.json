@@ -1,0 +1,8 @@
+{
+ "field": "email.in_reply_to",
+ "expected": "<fwd2.5512@mx.contoso.example>",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/email/GENERATOR_stdlib_thread.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP; Thread-Index built with struct/uuid) -> thread_reply.eml",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/email/ORACLE_eml_parser_thread.py.txt tools/pylib-eml <file>  (eml_parser 4.2.1 decode_email_bytes headers) -> header['in-reply-to'][0]",
+ "decoy": false,
+ "member": "evidence-01/thread_reply.eml"
+}

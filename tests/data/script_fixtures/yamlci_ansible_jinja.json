@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=ansible_yaml|role=persistence|verdict=malicious|attack=T1053|adapter=workflow_cron|host_profile=ansible_vars|stage_count=2|steps=register_schedule,run_stage|campaign_id=YC-c40f2a19|url=https://yc-c40f2a19.example.invalid/stage|file_path=/tmp/huntress-yc/.c40f2a19.stage",
+ "decoy": false,
+ "host": "yaml-ci",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/yamlci_gen.py  (stdlib base64/gzip/bytes.hex encode; Ansible vars \"{{ '<b64>' | b64decode }}\")",
+ "oracle_cmd": ".venv/bin/python -I -c 'import yaml,sys;print(yaml.safe_load(open(sys.argv[1]))[0][\"vars\"][\"descriptor_c40f2a19\"])' tests/data/script_fixtures/yamlci_ansible_jinja.yml | cut -d\"'\" -f2 | base64 -d"
+}

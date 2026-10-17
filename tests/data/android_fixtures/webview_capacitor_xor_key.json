@@ -1,0 +1,7 @@
+{
+ "entry": "webview_asset_scan",
+ "expected": "ANS-7d02b6e9f1a4c853",
+ "generator_cmd": "tests/data/android_fixtures/gen_webview_assets.sh tests/data/android_fixtures  # printf/base64/perl write the asset, zip -qX -r <name>.apk assets; Capacitor assets/public/assets/index-4f2a.js: const KEY = \"arena\"; const ENC = [0x20, ...] (perl: token ^ repeating 'arena'), decoded by ENC.map(c ^ KEY.charCodeAt(i % KEY.length))",
+ "oracle_cmd": "unzip -p webview_capacitor_xor_key.apk assets/public/assets/index-4f2a.js | node -e 'const vm=require(\"vm\");let s=require(\"fs\").readFileSync(0,\"utf8\").replace(/^export /mg,\"\");const c={atob,document:{addEventListener:(e,f)=>f(),getElementById:()=>({})},window:{}};vm.runInNewContext(s+\";globalThis.__s=typeof secret!=\\\"undefined\\\"?secret:window.secret\",c);console.log(c.__s)'  # -> ANS-7d02b6e9f1a4c853",
+ "decoy": false
+}

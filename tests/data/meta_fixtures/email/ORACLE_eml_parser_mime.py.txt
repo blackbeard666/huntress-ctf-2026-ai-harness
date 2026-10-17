@@ -1,0 +1,33 @@
+# Oracle for the email MIME-tree / attachment fixtures: eml_parser 4.2.1 (tools/pylib-eml) for attachments + bodies,
+# and a MIME-structure count straight off the raw bytes (boundary delimiter lines, RFC 2046 5.1.1) -- no stdlib email.
+# usage: python3 -I <this> tools/pylib-eml <file.eml>
+import json, re, sys
+sys.path.insert(0, sys.argv[1])
+import eml_parser
+raw = open(sys.argv[2], "rb").read()
+try:
+    p = eml_parser.EmlParser(include_attachment_data=True, include_raw_body=True).decode_email_bytes(raw)
+except Exception as e:
+    print(json.dumps({"error": repr(e)})); sys.exit()
+import base64, hashlib
+atts = p.get("attachment", [])
+hh = p.get("header", {}).get("header", {})
+ct = (hh.get("content-type") or [""])[0]
+bnds = re.findall(rb'boundary="?([^";\r\n]+)"?', raw)
+# leaf parts = delimiter lines of every boundary (open delimiters only); containers = each boundary; +1 root
+opens = sum(len(re.findall(rb"(?m)^--" + re.escape(b) + rb"[ \t]*\r?$", raw)) for b in bnds)
+datas = [base64.b64decode(a["raw"]) for a in atts]
+print(json.dumps({
+    "content_type_header": ct, "boundaries": [b.decode() for b in bnds],
+    "part_count_rawscan": (1 + opens) if bnds else 1,
+    "attachment_names": [a.get("filename") for a in atts],
+    "attachment_sizes": [a.get("size") for a in atts],
+    "attachment_sha256s": [a["hash"]["sha256"] for a in atts],
+    "attachment_md5s": [a["hash"]["md5"] for a in atts],
+    "attachment_sha1s": [a["hash"]["sha1"] for a in atts],
+    "attachment_magic16": [d[:16].hex() for d in datas],
+    "attachment_content_types": [(a.get("content_header", {}).get("content-type") or [""])[0].split(";")[0].strip().lower() for a in atts],
+    "attachment_cte": [(a.get("content_header", {}).get("content-transfer-encoding") or ["7bit"])[0].lower() for a in atts],
+    "bodies": [{"ct": b.get("content_type"), "cte": b.get("content_header", {}).get("content-transfer-encoding"),
+                "hash": b.get("hash"), "raw_sha256": hashlib.sha256(b["raw_body"].encode() if isinstance(b.get("raw_body"), str) else b"").hexdigest()} for b in p.get("body", [])],
+}, default=str, indent=1))

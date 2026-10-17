@@ -1,0 +1,9 @@
+{
+ "codec": "polybius6(hex)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-mink-58",
+ "encoded": "61156366635663625553646463166455631255536361636263566316636163666315636455536461636563666456555364646354645563146462645355545553626163165553645663166313646363625513555364566462635563146366646155536461636563666456555363626465635463566461555363546315645664646362645555536461631655536461636563625553616463546314636255536114635464566461636264555611555363566313631664636362645555146314636663156312551456625665",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c0 | python3 -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from secretpy import Polybius;print(Polybius().encrypt(sys.stdin.read().strip(),alphabet=\"abcdefghijklmnopqrstuvwxyz0123456789\"),end=\"\")'  # secretpy 0.12.0 Polybius.encrypt, 6x6 square a-z0-9 (row,col 1-based)",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -ne '@g=split//,\"abcdefghijklmnopqrstuvwxyz0123456789\";s/\\D//g;print map {$g[(substr($_,0,1)-1)*6+substr($_,1,1)-1]} /(..)/g' | xxd -r -p  # perl 6x6 grid reader -> xxd -r -p",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-mink-58",
+ "expected": "match"
+}

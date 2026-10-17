@@ -1,0 +1,30 @@
+# Fixture generator for the email/mail/mime alias fixtures: stdlib email.message.EmailMessage writer + Pillow (decoy).
+# usage: python3 -I GENERATOR_stdlib_emailmessage_alias.py.txt <outdir>
+import io
+import sys
+from email.message import EmailMessage
+from email.policy import SMTP
+
+out = sys.argv[1]
+
+m = EmailMessage(policy=SMTP)
+m["Return-Path"] = "<returns@billing.contoso-pay.example>"
+m["Received"] = ("from mx2.relay.example (mx2.relay.example [198.51.100.23]) by mail.victim.example "
+                 "with ESMTPS id 4Xa9; Wed, 14 Oct 2026 22:41:07 +0000")
+m["Received"] = ("from desk-07 (pool-198-18-4-61.isp.example [198.18.4.61]) by mx2.relay.example "
+                 "with ESMTP id 77Bq; Wed, 14 Oct 2026 15:41:05 -0700")
+m["From"] = "Contoso Billing <billing@contoso-pay.example>"
+m["To"] = "Dana Ruiz <dana.ruiz@victim.example>"
+m["Subject"] = "Payment remittance 10/14"
+m["Date"] = "Wed, 14 Oct 2026 15:41:02 -0700"
+m["Message-ID"] = "<CAF7.remit-2026.1014.9931@mailhost.contoso-pay.example>"
+m["X-Mailer"] = "Thunderbird 128.3.1"
+m.set_content("Please see the attached remittance.\n")
+m.add_attachment(b"%PDF-1.7\n%stub\n", maintype="application", subtype="pdf", filename="Remittance_1014.pdf")
+m.add_attachment(b"MZ\x90\x00stub", maintype="application", subtype="octet-stream", filename="viewer.scr")
+open(f"{out}/remit.eml", "wb").write(m.as_bytes())
+
+from PIL import Image  # decoy: a PNG renamed .eml (no RFC 5322 headers)
+buf = io.BytesIO()
+Image.new("RGB", (4, 3), (200, 10, 10)).save(buf, "PNG")
+open(f"{out}/decoy_png_renamed.eml", "wb").write(buf.getvalue())

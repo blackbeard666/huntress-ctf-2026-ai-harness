@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=reg|role=persistence|verdict=malicious|attack=T1547.004|adapter=winlogon_multisz|stage_count=2|steps=append_userinit,launch_on_logon|campaign_id=REG-7a11c0de|url=https://reg-7a11c0de.example.invalid/m",
+ "decoy": false,
+ "generator_cmd": "python3 -I reg_inf_gen.py <outdir>  (stdlib writer: gzip/base64/utf-16-le/comma-hex with regedit ',\\\\' wrapping; `file` reports 'Windows Registry little-endian text' / 'Windows setup INFormation') -- Userinit = hex(7) multi-sz, 3rd string is HUNTRESS_ANALYSIS_V1:HEX-<hex(plan)>",
+ "oracle_cmd": "iconv -f UTF-16LE -t UTF-8 reg_hex7_multisz.reg | tr -d '\\r' | sed -n '/\"Userinit\"/,/^$/p' | sed 's/.*hex(7)://' | tr -d ',\\\\ \\n' | xxd -r -p | iconv -f UTF-16LE -t UTF-8 | tr '\\0' '\\n' | grep -o 'HUNTRESS_ANALYSIS_V1:HEX-.*' | cut -d- -f2 | xxd -r -p"
+}

@@ -1,0 +1,9 @@
+{
+  "608f8a05-f4d2-4b1c-a99a-edc87111cfab": {
+    "set1.metadata-day-16-synthesis-sha256-order": "[\"message-001.eml\",\"managed-001.dll\",\"evidence-note.txt\",\"panel-001.png\"]",
+    "set2.metadata-day-16-synthesis-sha256-order": "[\"message-001.eml\",\"panel-001.png\",\"managed-001.dll\",\"evidence-note.txt\"]",
+    "set3.metadata-day-16-synthesis-sha256-order": "[\"message-001.eml\",\"managed-001.dll\",\"panel-001.png\",\"evidence-note.txt\"]",
+    "set4.metadata-day-16-synthesis-sha256-order": "[\"message-001.eml\",\"panel-001.png\",\"managed-001.dll\",\"evidence-note.txt\"]",
+    "set5.metadata-day-16-synthesis-sha256-order": "[\"message-001.eml\",\"evidence-note.txt\",\"managed-001.dll\",\"panel-001.png\"]"
+  }
+}

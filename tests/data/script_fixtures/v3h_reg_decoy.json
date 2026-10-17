@@ -1,0 +1,8 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "reg",
+ "tag": null,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (benign text -> base64 descriptor, no marker, no v= plan)",
+ "oracle_cmd": "iconv -f UTF-16LE -t UTF-8 tests/data/script_fixtures/v3h_reg_decoy.reg | sed -n 's/^\"descriptor_a7929724\"=\"\\(.*\\)\"\\r$/\\1/p' | tr -d ' \\n\\r' | base64 -d   # -> benign text, not a v=3 plan"
+}

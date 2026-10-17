@@ -1,0 +1,7 @@
+{
+ "entry": "native_gate_branch_scan",
+ "expected": "ANS-29b4f7a10c8e6d35",
+ "generator_cmd": "tests/data/android_fixtures/gen_antidebug_gate.sh tests/data/android_fixtures  # gcc / aarch64-linux-gnu-gcc -shared -fPIC -O2 native_src/antidebug_gate.c (Java_com_huntress_arena_Guard_nativeCheck: plaintext TRAP tokens behind ptrace(PTRACE_TRACEME)==-1 / access(su)==0 / fopen(su)!=NULL / strstr(getenv(LD_PRELOAD),frida); clean path returns ARENA); ARENA = perl hex(token ^ 0x5c), -DXKEY=0x5c (hex-decoded + xor'd in the export); zip -qX -r <name>.apk assets lib",
+ "oracle_cmd": "unzip antigate_root_hexxor_arm64.apk 'lib/*' && aarch64-linux-gnu-gcc -rdynamic -o h native_src/antigate_harness.c -ldl && qemu-aarch64 -L /usr/aarch64-linux-gnu ./h lib/arm64-v8a/libguard.so Java_com_huntress_arena_Guard_nativeCheck  # real .so on a clean host (ptrace TRACEME answered 0 as on an untraced device; real access/fopen/getenv): 'NewStringUTF ANS-29b4f7a10c8e6d35'",
+ "decoy": false
+}

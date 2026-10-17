@@ -1,0 +1,10 @@
+{
+ "codec": "nato-layer",
+ "plain": null,
+ "encoded": "Four Eight / Six Nine / Six Bananas / Two Zero",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-edited NATO hex line with a non-alphabet word ('Bananas') spliced in",
+ "oracle_cmd": "printf %s \"$encoded\" | tr ' /' '\\n\\n' | grep -vixE '|zero|one|two|three|four|five|six|seven|eight|nine|niner|alfa|alpha|bravo|charlie|delta|echo|foxtrot'  # prints Bananas -> not a whole NATO fragment",
+ "oracle_plain": null
+}

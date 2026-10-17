@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=tcl|role=downloader|verdict=malicious|attack=T1105|adapter=http_get|host_profile=standalone|obfuscation_profile=hex|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=fetch_stage,write_stage|campaign_id=TCL-27243d5f|url=https://tcl-27243d5fb2.example.invalid/stage|file_path=/tmp/huntress-tcl/.b28f962b16bbf162.stage",
+ "decoy": false,
+ "host": "tcl",
+ "tag": "HEX",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> HEX: stdlib base64/bytes.hex; tcl template)",
+ "oracle_cmd": "cat tests/data/script_fixtures/v3h_tcl_hex.tcl | grep -o 'HUNTRESS_ANALYSIS_V1:HEX-[^ \"<]*' | head -1 | cut -d- -f2- | tr -d '\\r' | xxd -r -p"
+}

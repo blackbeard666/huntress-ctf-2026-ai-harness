@@ -1,0 +1,7 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-7c1e9a40d2b85f63",
+ "decoy": false,
+ "generator_cmd": "bash gen_cert_pins.sh  # pin() = base64(printf TOKEN + sha256sum(seed)|xxd -r -p|head -c 32-len) ; smali const-string \"sha256/<pin>\" + res/xml/network_security_config.xml <pin-set><pin digest=\"SHA-256\">; apktool b (3.0.3, aapt2) -- variant 1: token in the dex OkHttp pin",
+ "oracle_cmd": "unzip -p pin_dex_okhttp_b64.apk classes.dex | strings | grep -oP 'sha256/\\K\\S+' | base64 -d | head -c 20"
+}

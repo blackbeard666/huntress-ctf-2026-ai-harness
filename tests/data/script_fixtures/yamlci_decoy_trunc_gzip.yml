@@ -1,0 +1,7 @@
+on:
+  workflow_dispatch:
+    inputs:
+      descriptor_dd44ee55:
+        default: |
+          H4sIAAAAAAACAz2OwW4DIQxEf6hZ2iZ7qcSpv9BLT8gxzoLCArLNJg==
+jobs: {}

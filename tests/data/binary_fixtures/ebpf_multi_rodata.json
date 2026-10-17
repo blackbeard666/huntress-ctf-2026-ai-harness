@@ -1,0 +1,34 @@
+{
+ "encoding": "raw",
+ "decoy": false,
+ "expected_offset": 136,
+ "expected_config": {
+  "c2": "198.51.100.9:443",
+  "campaign": "kprobe-lattice",
+  "sleep": 12,
+  "flag": "flag{bpf_r0d4t4}"
+ },
+ "expected_bpf_fields": {
+  "format": "elf",
+  "elf_type": "ET_REL",
+  "machine": "Linux BPF",
+  "machine_num": "247",
+  "entry_point": "0x0",
+  "programs": [
+   "kprobe/do_sys_openat2",
+   "tracepoint/syscalls/sys_enter_execve"
+  ],
+  "license": "Dual BSD/GPL",
+  "maps": [
+   "pid_seen",
+   "events"
+  ],
+  "has_hcfg_section": false,
+  "hcfg_section": ".rodata",
+  "hcfg_offset": 136
+ },
+ "generator_cmd": "bash ebpf_gen.sh ebpf_multi_rodata.bin multi '{\"c2\":\"198.51.100.9:443\",\"campaign\":\"kprobe-lattice\",\"sleep\":12,\"flag\":\"flag{bpf_r0d4t4}\"}' 0x5a",
+ "oracle_cmd": "bash ebpf_oracle.sh ebpf_multi_rodata.bin   # file -b, GNU readelf -h (Type/Machine/Entry), readelf -SW (exec PROGBITS != .text = programs; section list), readelf -p license, readelf -sW (OBJECT syms in .maps/maps), grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "ELF 64-bit LSB relocatable, eBPF, with debug_info | REL | Linux BPF | 0x0 | programs: kprobe/do_sys_openat2 tracepoint/syscalls/sys_enter_execve | license: Dual BSD/GPL | maps(.maps): pid_seen events | sections: no .hcfg, .rodata at the blob | blob@136 HCFG 1 90 90 1299060578 gzipcrc=1299060578",
+ "note": "machine 'Linux BPF' = GNU readelf Machine: spelling (e_machine 247); field names programs/program_types/maps/license/hcfg_section are SPECULATIVE (GM vocabulary for BPF not seen); expected_offset = FILE offset of the 'H' (OFFSET LAW raw, = hcfg_scan)"
+}

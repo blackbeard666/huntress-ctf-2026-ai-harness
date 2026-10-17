@@ -1,0 +1,10 @@
+From: ap@contoso-pay.example
+To: finance@fabrikam.example
+Subject: Not a mailbox
+Date: Sat, 10 Oct 2026 12:00:00 +0000
+Message-ID: <solo@corp.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+ok

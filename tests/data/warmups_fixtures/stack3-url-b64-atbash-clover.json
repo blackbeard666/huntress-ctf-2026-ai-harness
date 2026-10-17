@@ -1,0 +1,9 @@
+{
+ "codec": "stack:url%xx>base64>atbash",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-31",
+ "encoded": "%54%58%4a%34%64%69%42%6b%62%47%6c%77%49%48%64%32%65%47%78%33%63%6d%31%30%49%47%64%7a%63%6d%67%67%5a%48%70%70%62%6d%5a%72%49%53%42%48%62%43%42%6f%62%47%39%6c%64%69%77%67%61%47%5a%35%62%6e%4a%6e%49%47%64%7a%63%6d%67%67%64%6d%4e%36%65%47%63%67%65%6d%31%6f%5a%48%5a%70%49%47%64%73%49%47%64%7a%64%69%42%55%65%6d%35%32%49%45%35%36%61%47%64%32%61%54%6f%67%65%47%39%73%5a%58%5a%70%4c%58%6c%36%64%33%52%32%61%53%30%7a%4d%51%3d%3d",
+ "generator_cmd": "printf %s \"$plain\" | tr 'A-Za-z' 'ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba' | base64 -w0 | xxd -p | tr -d '\\n' | sed 's/../%&/g'  # coreutils tr + base64, xxd, sed %xx",
+ "oracle_cmd": "python3 -I -c \"import sys,urllib.parse,base64;print(base64.b64decode(urllib.parse.unquote(sys.argv[1])).decode())\" \"$encoded\" | tr 'A-Za-z' 'ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba'  # stdlib urllib.parse.unquote + base64, coreutils tr",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-31",
+ "expected": "match"
+}

@@ -1,0 +1,24 @@
+{
+ "encoding": "raw",
+ "expected_offset": 2320,
+ "expected_config": {
+  "c2": "203.0.113.5:8080",
+  "campaign": "readytorun",
+  "sleep": 15,
+  "flag": "flag{r2r_st1ll_p3_cl1}"
+ },
+ "expected_facts": {
+  "format": "pe_cli",
+  "dotnet_build": "il"
+ },
+ "expected_locate": {
+  "container": "section",
+  "slot_offset": 512,
+  "delta": 1808,
+  "section": ".text"
+ },
+ "oracle_output": "il | file: PE32+ executable (console), x86-64 Mono/.Net assembly | COR flags 0x1 | ManagedNativeHeader 0x0 | HCFG @ 2320 crc_ok",
+ "convention": "plain IL build of the same source (facts decoy for readytorun)",
+ "generator_cmd": "source bin/env.sh; DNSF_INPUTS=$TMPDIR/dnsf_inputs.tar bash tests/data/binary_fixtures/dnsf_gen.sh tests/data/binary_fixtures   # dotnet 10 SDK: dotnet publish (PublishSingleFile / PublishReadyToRun) + Microsoft.NET.HostModel Bundler(EnableCompression); blob = printf header + crc32 from gzip trailer",
+ "oracle_cmd": "mkdir -p $TMPDIR/dnsf_in && tar -C $TMPDIR/dnsf_in -xf $TMPDIR/dnsf_inputs.tar && .venv/bin/python -I tests/data/binary_fixtures/dnsf_oracle.py tests/data/binary_fixtures $TMPDIR/dnsf_in   # obj/ IL dll located in the bundle by bytes.find / brute raw-inflate; struct+zlib.crc32 header; dnfile/pefile COR flags + ManagedNativeHeader RTR; file(1)"
+}

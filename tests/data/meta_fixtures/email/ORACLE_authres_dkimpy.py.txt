@@ -1,0 +1,46 @@
+# Independent reader: eml_parser 4.2.1 (tools/pylib-eml) for the header table and addresses, authres 1.2.0
+# (RFC 8601 parser) for Authentication-Results, dkimpy 1.1.8 dkim.util.parse_tag_value for DKIM-Signature / ARC-Seal.
+# argv: <pylib-eml> <pylib-auth> <file>. Prints {field: value} (lists/bools JSON-rendered the GM way).
+import json, sys
+sys.path.insert(0, sys.argv[1]); sys.path.insert(0, sys.argv[2])
+import eml_parser, authres
+from dkim.util import parse_tag_value
+raw = open(sys.argv[3], "rb").read()
+try:
+    p = eml_parser.EmlParser(include_attachment_data=False).decode_email_bytes(raw)
+except Exception as e:
+    print(json.dumps({"error": repr(e)})); sys.exit()
+hh = p.get("header", {}).get("header", {})
+first = lambda k: (hh.get(k) or [None])[0]
+o = {}
+ar = first("authentication-results")
+if ar:
+    a = authres.AuthenticationResultsHeader.parse("Authentication-Results: " + ar)
+    o["authserv_id"] = a.authserv_id
+    for meth in ("spf", "dkim", "dmarc", "compauth"):
+        r = [x for x in a.results if x.method == meth]
+        if r:
+            o[meth + "_result"] = r[0].result
+    o["spf_smtp_mailfrom"] = [x for x in a.results if x.method == "spf"][0].smtp_mailfrom
+o["authentication_results_count"] = len(hh.get("authentication-results") or [])
+rs = first("received-spf")
+if rs:
+    o["received_spf_result"] = rs.split()[0].lower()
+ds = first("dkim-signature")
+if ds:
+    t = parse_tag_value(ds.encode())
+    o["dkim_signed_headers"] = [h.strip().decode() for h in t[b"h"].split(b":")]
+    o["dkim_algorithm"] = t[b"a"].decode(); o["dkim_canonicalization"] = t[b"c"].decode()
+    o["dkim_body_hash"] = t[b"bh"].decode()
+seals = hh.get("arc-seal") or []
+o["arc_seal_count"] = len(seals)
+if seals:
+    st = [parse_tag_value(s.encode()) for s in seals]
+    o["arc_chain_validation"] = max(st, key=lambda t: int(t[b"i"]))[b"cv"].decode()
+dom = lambda v: v.rsplit("@", 1)[1].strip("<> ").lower() if v and "@" in v else None
+fr = dom((p["header"].get("from") or ""))
+rp = dom(first("return-path"))
+rt = dom((p["header"].get("reply-to") or [""])[0] if isinstance(p["header"].get("reply-to"), list) else first("reply-to"))
+o.update(from_domain=fr, return_path_domain=rp, reply_to_domain=rt,
+         from_return_path_mismatch=bool(rp and rp != fr), reply_to_mismatch=bool(rt and rt != fr))
+print(json.dumps(o, indent=1))

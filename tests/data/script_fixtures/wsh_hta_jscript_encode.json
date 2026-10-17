@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=1|language=jscript|role=dropper|attack=T1218.005|steps=decode,write_temp,run|campaign_id=JSE-0be1c0de|url=https://jse-0be1c0de.example.invalid/p",
+ "decoy": false,
+ "generator_cmd": "python3 -c 'print(bytes(b^0x5a for b in PLAN.encode()).hex())' -> var Material_0be1 (+ `<`, `>`, `@` to exercise @!/@*/@$ escapes); `.venv/bin/wshenc -R < wsh2.js`, header rewritten to the real screnc form `#@~^`+b64(struct.pack('<I',len(body)))[:6]+'==' ; wrapped in <script language=\"JScript.Encode\"> of an HTA",
+ "oracle_cmd": ".venv/bin/wshenc < wsh_hta_jscript_encode.hta | grep -o 'Material_0be1 = \"[^\"]*' | cut -d'\"' -f2 | python3 -c 'import sys;print(bytes(b^0x5a for b in bytes.fromhex(sys.stdin.read().strip())).decode())'"
+}

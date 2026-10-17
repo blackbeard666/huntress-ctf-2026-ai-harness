@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=xslt_msxsl|role=loader|verdict=malicious|attack=T1220|adapter=msxsl_script|host_profile=standalone|obfuscation_profile=hex|stage_profile=two_stage_download_execute|next_language=jscript|stage_count=2|steps=load_stylesheet,run_script|campaign_id=XSL-4f833759|url=https://xslt-4f833759ae.example.invalid/stage|file_path=/tmp/huntress-xslt/.ae043183245399e1.stage",
+ "decoy": false,
+ "host": "xslt",
+ "tag": "HEX",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> HEX: stdlib base64/bytes.hex; xslt template)",
+ "oracle_cmd": "cat tests/data/script_fixtures/v3h_xslt_hex.xsl | grep -o 'HUNTRESS_ANALYSIS_V1:HEX-[^ \"<]*' | head -1 | cut -d- -f2- | tr -d '\\r' | xxd -r -p"
+}

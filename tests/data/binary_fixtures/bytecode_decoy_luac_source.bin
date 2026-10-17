@@ -1,0 +1,3 @@
+local cfg = "HCFG"
+-- \x1bLua impostor: lua SOURCE, not luac
+print(cfg)

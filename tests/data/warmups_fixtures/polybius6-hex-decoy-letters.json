@@ -1,0 +1,10 @@
+{
+ "codec": "polybius6(hex)",
+ "plain": null,
+ "encoded": "322313154533362514151333142332214222234145113631433442334133264415414312312342422223411546111342113241451536423342221521113115311141421536133312112642251541423615265464",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$plain_cobalt\" | tr -cd A-Za-z0-9 | tr A-Z a-z | python3 -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from secretpy import Polybius;print(Polybius().encrypt(sys.stdin.read().strip(),alphabet=\"abcdefghijklmnopqrstuvwxyz0123456789\"),end=\"\")'  # 6x6 Polybius of the sentence letters themselves (no hex layer)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from secretpy import Polybius;print(Polybius().decrypt(sys.stdin.read().strip(),alphabet=\"abcdefghijklmnopqrstuvwxyz0123456789\"))'  # secretpy decrypt -> niceworkdecoding... = letters g-z, not hex pairs -> no fromhex reading",
+ "oracle_plain": null
+}

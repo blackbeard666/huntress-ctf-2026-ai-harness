@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=reg_utf16|role=persistence|verdict=malicious|attack=T1547.001|adapter=run_key|host_profile=standalone|obfuscation_profile=nomark|stage_profile=two_stage_download_execute|next_language=powershell|stage_count=2|steps=write_run_key,launch_at_logon|campaign_id=REG-7ddc3a98|url=https://reg-7ddc3a98df.example.invalid/stage|file_path=/tmp/huntress-reg/.dfe102f6da3d9630.stage",
+ "decoy": false,
+ "host": "reg",
+ "tag": null,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> base64, descriptor literal only, no HUNTRESS_ANALYSIS marker)",
+ "oracle_cmd": "iconv -f UTF-16LE -t UTF-8 tests/data/script_fixtures/v3h_reg_nomark.reg | sed -n 's/^\"descriptor_2853fc77\"=\"\\(.*\\)\"\\r$/\\1/p' | tr -d ' \\n\\r' | base64 -d"
+}

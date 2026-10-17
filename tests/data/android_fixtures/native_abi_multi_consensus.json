@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": "ANS-71c3e9a05d2b48f6",
+ "generator_cmd": "tests/data/android_fixtures/gen_multi_abi.sh tests/data/android_fixtures  # native_src/onload_reg.c -> one object per ABI (arm64-v8a/armeabi-v7a(Thumb)/x86 carry ANS-71c3e9a05d2b48f6, x86_64 alone a different token; native_export_scan must rank the 3-ABI token first), linked into lib/arm64-v8a,armeabi-v7a,x86,x86_64/libreg.so (zig cc -shared -s); zip -qX -r <name>.apk assets lib; no ANS literal in any .so",
+ "oracle_cmd": "same object linked statically with native_src/static_harness.c (zig cc -static) and run under qemu-aarch64 / qemu-arm / qemu-i386 / native x86_64 with a fake JNIEnv/JavaVM: 'NewStringUTF ANS-71c3e9a05d2b48f6' on arm64-v8a, armeabi-v7a and x86; 'NewStringUTF ANS-dead0000beef1111' on x86_64; readelf -h lib/arm64-v8a/libreg.so: Machine AArch64 / ARM / Intel 80386 / X86-64",
+ "decoy": false
+}

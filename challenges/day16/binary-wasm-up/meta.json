@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-16-webassembly-optimization-equivalence",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Wasm Up",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-16-webassembly-optimization-equivalence",
+    "time_trial": "binary-reverse-engineering-day-16-webassembly-optimization-equivalence/time_trial",
+    "mastery": "binary-reverse-engineering-day-16-webassembly-optimization-equivalence/mastery"
+  }
+}

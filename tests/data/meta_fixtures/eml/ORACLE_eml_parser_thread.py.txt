@@ -1,0 +1,16 @@
+# Independent reader: eml_parser 4.2.1 (tools/pylib-eml) headers + stdlib base64/uuid for the Thread-Index bytes.
+import base64, datetime, json, re, sys, uuid
+sys.path.insert(0, sys.argv[1])
+import eml_parser
+p = eml_parser.EmlParser(include_attachment_data=False).decode_email_bytes(open(sys.argv[2], "rb").read())
+hh = p.get("header", {}).get("header", {})
+first = lambda k: (hh.get(k) or [None])[0]
+refs = (first("references") or "").split()
+ti = first("thread-index"); tib = base64.b64decode(ti) if ti else b""
+print(json.dumps({"in-reply-to": first("in-reply-to"), "references": refs, "n_refs": len(refs),
+    "message-id": first("message-id"), "subject": p.get("header", {}).get("subject"), "thread-topic": first("thread-topic"),
+    "resent-message-id": first("resent-message-id"), "x-forwarded": [k for k in hh if k.startswith("x-forwarded-")],
+    "x-ms-exchange-organization-authas": first("x-ms-exchange-organization-authas"),
+    "ti_guid": str(uuid.UUID(bytes_le=tib[6:22])) if tib else None, "ti_children": (len(tib) - 22) // 5 if tib else None,
+    "ti_time": (datetime.datetime(1601, 1, 1) + datetime.timedelta(microseconds=(int.from_bytes(tib[:6], "big") << 16) // 10)).isoformat() if tib else None},
+    indent=1, default=str))

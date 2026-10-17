@@ -1,0 +1,26 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "8c6bc748-c3ed-4932-9577-264f50966da9",
+  "window": null,
+  "elapsed": 11.12,
+  "in_window": 8.29,
+  "phases": {
+    "start": 2.83,
+    "download": 2.03,
+    "solve": 1.97,
+    "submit": 4.28
+  },
+  "routed": "local",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "daring-castle-hazel-90"
+  },
+  "attempts_remaining": 256,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 256,
+  "variant_fresh": true,
+  "no_clock": true
+}

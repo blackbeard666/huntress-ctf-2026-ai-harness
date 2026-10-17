@@ -21,9 +21,11 @@ than the newest confirmed codec's day -- never on D1-D13 bytes. Pure stdlib.
 import base64
 import codecs
 import collections
+import functools
 import html
 import itertools
 import json
+import math
 import quopri
 import os
 import re
@@ -139,6 +141,52 @@ def morse_dec(t):
     return " ".join("".join(_UNMORSE.get(x, "") for x in w.split()) for w in words).lower()
 
 
+# Plain-text Morse with punctuation (`!` `,` `:` `-` as Morse, ' / ' / '/' / 3-space word gaps), exact per symbol: a
+# Mastery fragment cut at a word gap (' / - .... ..' = ' this') misses lib.decode's strict Morse branch and falls to
+# lib.ciphers.morse_decode, which drops punctuation (the slug hyphen `-....-`). Case is lost, so morse_free also offers
+# the reading re-cased onto the warmups template ("game master:" -> "Game Master:") for the positional/template check.
+_MORSE_WGAP = re.compile(r"\s*/\s*|\s{3,}")
+
+
+def morse_text_dec(t):
+    """Morse (dots/dashes only) -> lowercase text keeping a leading/trailing word gap as a space, else None (an
+    unknown symbol, other characters, no symbols)."""
+    if not isinstance(t, str) or not re.fullmatch(r"[.\-/\s]*[.\-][.\-/\s]*", t) or "\n" in t.strip():
+        return None
+    words = _MORSE_WGAP.split(t)
+    out = []
+    for w in words:
+        syms = w.split()
+        if any(x not in _UNMORSE for x in syms):
+            return None
+        out.append("".join(_UNMORSE[x] for x in syms))
+    return " ".join(out).lower()
+
+
+_TPL = SENTENCE.split("{slug}")[0]
+
+
+def _recase(x):
+    """Lowercase template text -> the template's own casing (a substring of it, or its tail + the slug), else None."""
+    tl = _TPL.lower()
+    j = tl.find(x)
+    if j >= 0:
+        return _TPL[j:j + len(x)]
+    for i in range(len(_TPL)):
+        if x.startswith(tl[i:]):
+            return _TPL[i:] + x[len(_TPL) - i:]
+    return None
+
+
+def morse_free(p):
+    """Speculative Mastery-line decoder: plain-text Morse -> [template-cased reading, lowercase reading]."""
+    x = morse_text_dec(p)
+    if not x:
+        return []
+    r = _recase(x)
+    return [r, x] if r and r != x else [x]
+
+
 # Morse in any 2-symbol alphabet: glyphs (•/—, ·/−, ./_, 1/0, x/o ...) or symbol words (dit/dah, "di-dah-dit",
 # CyberChef "DotDash"/"dash dot", beep/boop), with any gap separators (space, /, |, \, comma, newline).
 _MORSE_GAP = set(" \t\r\n/|\\,;:")
@@ -232,6 +280,348 @@ def morse_alt_dec(t):
     return best[1] if best else None
 
 
+# Morse carrying another codec (D16 "Dot Com" = Morse over hex): Morse loses case, so the inner codec is a case-free
+# one -- hex digits (GM-confirmed, tried first), decimal / octal char codes, 8-bit binary, base32, A1Z26. Inner
+# separators ride as Morse word gaps (' / ', CyberChef '/', 3 spaces) or are dropped (fixed-width codes concatenated).
+_MORSE_INNER = {
+    "hex": lambda s: _u(s).hex().upper(),
+    "decimal": lambda s: " ".join(str(b) for b in _u(s)),
+    "octal3": lambda s: " ".join(f"{b:03o}" for b in _u(s)),
+    "binary8": lambda s: " ".join(f"{b:08b}" for b in _u(s)),
+    "base32": lambda s: base64.b32encode(_u(s)).decode(),
+    "base32-nopad": lambda s: base64.b32encode(_u(s)).decode().rstrip("="),
+    "a1z26": lambda s: a1z26_enc(s),
+}
+
+
+def morse_over_enc(s, inner, word=" / "):
+    """Morse (one space between symbols, `word` between the inner codec's space-separated tokens) of inner(s);
+    word="" drops the inner separators (D16 morse-hex shape)."""
+    x = _MORSE_INNER[inner](s)
+    return word.join(" ".join(_MORSE[c] for c in w) for w in (x.split(" ") if word else [x.replace(" ", "")]))
+
+
+def _txt(b):
+    try:
+        s = b.decode("utf-8")
+    except (UnicodeDecodeError, AttributeError):
+        return None
+    return s if s and all(c.isprintable() or c in "\t\r\n" for c in s) else None
+
+
+def _dec_concat(d):
+    """Unseparated decimal char codes: printable ASCII 32-126 parses uniquely (1xx = 100-126, else 32-99)."""
+    out, i = [], 0
+    while i < len(d):
+        n = 3 if d[i] == "1" else 2
+        v = int(d[i:i + n]) if len(d) - i >= n else -1
+        if not 32 <= v <= 126:
+            return None
+        out.append(v)
+        i += n
+    return bytes(out)
+
+
+def _morse_inner_reads(x):
+    """[(inner, text)] readings of the Morse layer's UPPERCASE text `x` (inner tokens split by single spaces)."""
+    flat, toks, out = x.replace(" ", ""), x.split(), []
+
+    def add(name, fn):
+        try:
+            s = fn()
+        except Exception:  # noqa: BLE001 - not this inner codec
+            return
+        s = _txt(s) if isinstance(s, bytes) else s
+        if s:
+            out.append((name, s))
+    if re.fullmatch(r"(?:[0-9A-F]{2})+", flat) and (len(toks) == 1 or all(len(t) == 2 for t in toks)):
+        add("hex", lambda: bytes.fromhex(flat))
+    if re.fullmatch(r"[01]+", flat):
+        if len(toks) > 1 and len({len(t) for t in toks}) == 1 and len(toks[0]) in (7, 8):
+            add("binary8", lambda: bytes(int(t, 2) for t in toks))
+        elif len(toks) == 1 and len(flat) % 8 == 0:
+            add("binary8", lambda: bytes(int(flat[i:i + 8], 2) for i in range(0, len(flat), 8)))
+    if re.fullmatch(r"\d+", flat):
+        if len(toks) > 1:
+            add("decimal", lambda: bytes(int(t) for t in toks))
+            if re.fullmatch(r"[0-7]+", flat):
+                add("octal3", lambda: bytes(int(t, 8) for t in toks))
+        else:
+            if re.fullmatch(r"[0-7]+", flat) and len(flat) % 3 == 0:
+                add("octal3", lambda: bytes(int(flat[i:i + 3], 8) for i in range(0, len(flat), 3)))
+            add("decimal", lambda: _dec_concat(flat))
+    if len(toks) == 1 and re.fullmatch(r"[A-Z2-7]+=*", flat) and len(flat.rstrip("=")) % 8 not in (1, 3, 6):
+        add("base32", lambda: base64.b32decode(flat.rstrip("=") + "=" * (-len(flat.rstrip("=")) % 8)))
+    nums = [int(n) for n in re.findall(r"\d+", x)]
+    if "-" in x and re.fullmatch(r"[\d\- !,.:?']+", x) and sum(1 <= n <= 26 for n in nums) >= 0.8 * len(nums):
+        add("a1z26", lambda: a1z26_dec(x))
+    return out
+
+
+def _texty(s):
+    return sum(c.isalnum() or c in " .,!?:;'-_\n" for c in s) / max(len(s), 1)
+
+
+def morse_layer_reads(t):
+    """[(inner, text)] for Morse (strict `.-`, else any 2-symbol alphabet) carrying a case-free inner codec, best
+    first: hex first (GM-confirmed D16), then by how much the result reads as text. Plain-English Morse -> []."""
+    t = t.strip()
+    if not t or len(t) > 200000:
+        return []
+    syms = [x for x in re.split(r"\s*/\s*|\s+", t) if x]
+    if syms and all(x in _UNMORSE for x in syms):
+        x = morse_dec(t).upper()
+    else:
+        x = (morse_alt_dec(t) or morse_timing_text(t) or "").upper()
+    x = re.sub(r" +", " ", x.strip())
+    if not x:
+        return []
+    reads = [(n, s) for n, s in _morse_inner_reads(x) if _texty(s) >= 0.85]
+    if not reads:
+        return []
+    try:
+        from lib.decode import _bigram
+    except Exception:  # noqa: BLE001
+        def _bigram(_s):
+            return 0.0
+    return sorted(reads, key=lambda r: (r[0] == "hex", round(_texty(r[1]), 2), _bigram(r[1])), reverse=True)
+
+
+def morse_layer_dec(t):
+    """The text under Morse-over-<case-free codec>, else None."""
+    r = morse_layer_reads(t)
+    return r[0][1] if r else None
+
+
+def morse_layer_free(p):
+    """Speculative Mastery-line decoder: every inner reading of a Morse line (the slug/template check picks)."""
+    return [s for _n, s in morse_layer_reads(p)]
+
+
+
+# Morse as on/off timing units (ITU timing / "Morse as binary"): dit = 1 on-unit, dah = 3, in-letter gap = 1 off-unit,
+# letter gap = 3, word gap = 7 -- one run of two symbols (`1`/`0`, Wikipedia's `=`/`.`, `#`/space ...). Told from 8-bit
+# binary by the run lengths: on-runs only 1/3, off-runs only 1/3/7+ (binary ASCII has 0-runs of 2, 4-6).
+_TIMING_ON = "1=#*█■xX"
+
+
+def morse_timing_enc(s, on="1", off="0", inner=None, cat=False):
+    """Morse timing units of s (or of inner(s): inner tokens split by word gaps, run together when cat)."""
+    x = _MORSE_INNER[inner](s) if inner else s
+    ws = [x.replace(" ", "")] if cat else x.split(" ")
+    return (off * 7).join((off * 3).join(off.join(on * (1 if d == "." else 3) for d in _MORSE[c.upper()])
+                                         for c in w if c.upper() in _MORSE) for w in ws)
+
+
+def morse_timing_text(t):
+    """Morse timing units -> lowercase text, else None (not exactly two symbols, a run length outside 1/3 on and
+    1/3/7+ off, an unknown code)."""
+    if not isinstance(t, str) or len(t) > 400000:
+        return None
+    t = t.strip("\r\n")
+    sym = set(t) - set(" \t\r\n")
+    if len(sym) == 2:
+        t = re.sub(r"\s+", "", t)
+    elif len(sym) == 1 and " " in t and "\n" not in t:
+        sym |= {" "}
+    else:
+        return None
+    a, b = sorted(sym, key=lambda c: c not in _TIMING_ON)
+    for on, off in ((a, b), (b, a)):
+        runs = [(m.group()[0] == on, len(m.group())) for m in re.finditer(f"{re.escape(on)}+|{re.escape(off)}+", t)]
+        while runs and not runs[0][0]:
+            runs.pop(0)
+        while runs and not runs[-1][0]:
+            runs.pop()
+        if sum(r[0] for r in runs) < 6 or any(n not in (1, 3) and (o or n < 7) for o, n in runs):
+            continue
+        words, cur, code = [], [], ""
+        for o, n in runs + [(False, 3)]:
+            if o:
+                code += "." if n == 1 else "-"
+            elif n > 1:
+                if code not in _UNMORSE:
+                    break
+                cur.append(_UNMORSE[code])
+                code = ""
+                if n >= 7:
+                    words.append("".join(cur))
+                    cur = []
+        else:
+            words.append("".join(cur))
+            return " ".join(words).lower()
+    return None
+
+
+def morse_timing_free(p):
+    """Speculative Mastery-line decoder: plain-text Morse timing units -> [template-cased reading, lowercase]."""
+    x = morse_timing_text(p)
+    if not x:
+        return []
+    r = _recase(x)
+    return [r, x] if r and r != x else [x]
+
+# Baudot-Murray / ITA2 5-bit telegraph code (sequel to D16 Morse): code = index, written MSB-first (A=00011 E=00001;
+# dCode/tape-order writers reverse it: A=11000). LTRS 11111 / FIGS 11011 shift the state; space, LF, CR exist in
+# both. Rendered as 5-bit groups (spaced or run together), 5-hole tape (`*`/`.`, `o`/` `, 6-wide with a sprocket
+# column) or decimal 0-31. Case-free, so it can also carry hex (FIGS digits + LTRS A-F). US-TTY differs only in
+# figures (S=BEL D=$ J=' Z=" H=# V=;). USOS (unshift on space): a receiver drops back to LTRS after every space.
+_ITA2_L = ["\x00", "E", "\n", "A", " ", "S", "I", "U", "\r", "D", "R", "J", "N", "F", "C", "K",
+           "T", "Z", "L", "W", "H", "Y", "P", "Q", "O", "B", "G", None, "M", "X", "V", None]
+_ITA2_F = {"ita2": ["\x00", "3", "\n", "-", " ", "'", "8", "7", "\r", "\x05", "4", "\x07", ",", "!", ":", "(",
+                    "5", "+", ")", "2", "£", "6", "0", "1", "9", "?", "&", None, ".", "/", "=", None]}
+_ITA2_F["us"] = [{5: "\x07", 9: "$", 11: "'", 17: '"', 20: "#", 30: ";"}.get(i, c) for i, c in enumerate(_ITA2_F["ita2"])]
+_BD_LTRS, _BD_FIGS = 31, 27
+_BD_PUNCH, _BD_BLANK = set("*oOxX#●■1"), set(".○□0 ")
+
+
+def baudot_codes(s, table="ita2", init=True, usos=False):
+    """Text -> ITA2 code list (uppercased; LTRS first when init, else the line starts in letters unannounced)."""
+    figs, state, out = _ITA2_F[table], None if init else "L", []
+    for c in s.upper():
+        if c in _ITA2_L and c in figs and _ITA2_L.index(c) == figs.index(c):
+            out.append(_ITA2_L.index(c))
+        elif c in _ITA2_L:
+            if state != "L":
+                out.append(_BD_LTRS)
+                state = "L"
+            out.append(_ITA2_L.index(c))
+        elif c in figs:
+            if state != "F":
+                out.append(_BD_FIGS)
+                state = "F"
+            out.append(figs.index(c))
+        else:
+            raise ValueError(f"no ITA2 code for {c!r}")
+        if usos and c == " ":
+            state = "L"
+    return out
+
+
+def baudot_enc(s, fmt="bin", sep=" ", table="ita2", init=True, usos=False, lsb=False, inner=None):
+    """ITA2 of s (or of the case-free inner codec's text, e.g. inner="hex"): fmt bin (5-bit groups), tape (`*`/`.`)
+    or dec (0-31), `sep` between codes; lsb = tape/dCode bit order (A=11000)."""
+    x = _MORSE_INNER[inner](s) if inner else s
+    out = []
+    for c in baudot_codes(x, table, init, usos):
+        b = f"{c:05b}"[::-1] if lsb else f"{c:05b}"
+        out.append(str(c) if fmt == "dec" else b.translate(str.maketrans("10", "*.")) if fmt == "tape" else b)
+    return sep.join(out)
+
+
+def _bd_parse(t):
+    """[code lists] the blob can be read as (MSB-first and LSB-first), else []."""
+    t = t.strip("\r\n\t ")
+    if not t or len(t) > 200000:
+        return []
+    rows = [r.rstrip("\r") for r in t.split("\n")]
+    toks = t.split()
+    if len(rows) >= 3 and all(r.strip() for r in rows) and max(map(len, rows)) <= 6 \
+            and set(t) - set("\r\n") <= _BD_PUNCH | _BD_BLANK | set(".:|"):
+        # one tape frame per line, blank may be a space (lines rstripped by editors): pad, drop a sprocket column
+        w = max(map(len, rows))
+        rows = [r.ljust(w) for r in rows]
+        if w == 6:
+            sp = [i for i in range(6) if len({r[i] for r in rows}) == 1 and rows[0][i] in ".:|"]
+            if not sp:
+                return []
+            rows = [r[:sp[0]] + r[sp[0] + 1:] for r in rows]
+        elif w != 5:
+            return []
+        bits = ["".join("1" if c in _BD_PUNCH else "0" for c in r) for r in rows]
+    elif re.fullmatch(r"\d+(?:[\s,]+\d+)*", t) and not re.fullmatch(r"[01\s]+", t):
+        nums = [int(x) for x in re.findall(r"\d+", t)]
+        if len(nums) < 4 or max(nums) > 31 or not {_BD_LTRS, _BD_FIGS} & set(nums):
+            return []
+        return [nums]
+    elif len(toks) == 1 and re.fullmatch(r"[01]+", t) and len(t) % 5 == 0:
+        bits = [t[i:i + 5] for i in range(0, len(t), 5)]
+    elif toks and all(len(x) in (5, 6) for x in toks) and len({len(x) for x in toks}) == 1:
+        if len(toks[0]) == 6:   # 6-wide frames: one constant sprocket column
+            sp = [i for i in range(6) if len({x[i] for x in toks}) == 1 and toks[0][i] in ".:|"]
+            if not sp:
+                return []
+            toks = [x[:sp[0]] + x[sp[0] + 1:] for x in toks]
+        al = set("".join(toks))
+        if len(al) > 2:
+            return []
+        if al <= set("01"):
+            bits = toks
+        elif al <= _BD_PUNCH | _BD_BLANK:
+            bits = ["".join("1" if c in _BD_PUNCH else "0" for c in x) for x in toks]
+        else:
+            return []
+    else:
+        return []
+    if len(bits) < 4:
+        return []
+    return [[int(b, 2) for b in bits], [int(b[::-1], 2) for b in bits]]
+
+
+def _bd_text(codes, table, usos):
+    figs, state, out = _ITA2_F[table], "L", []
+    for c in codes:
+        if c == _BD_LTRS:
+            state = "L"
+        elif c == _BD_FIGS:
+            state = "F"
+        else:
+            ch = _ITA2_L[c] if state == "L" else figs[c]
+            out.append(ch)
+            if usos and ch == " ":
+                state = "L"
+    s = "".join(out).replace("\x00", "").replace("\r\n", "\n").replace("\r", "")
+    return s if s.strip() and all(c.isprintable() or c == "\n" for c in s) else None
+
+
+def baudot_reads(t):
+    """[(variant, text)] for an ITA2 blob, best first: a case-free inner codec under it (hex first) when the
+    decoded text is just that codec's symbols, else the lowercase English reading. Bacon / binary8 / prose -> []."""
+    if not isinstance(t, str):
+        return []
+    try:
+        from lib.decode import _bigram
+    except Exception:  # noqa: BLE001
+        def _bigram(_s):
+            return -4.0
+    seen, reads = set(), []
+    for codes in _bd_parse(t):
+        for table in ("ita2", "us"):
+            for usos in (False, True):
+                s = _bd_text(codes, table, usos)
+                if not s or s in seen:
+                    continue
+                seen.add(s)
+                x = re.sub(r"\s+", " ", s.strip())
+                inner = [(f"baudot({n})", v) for n, v in _morse_inner_reads(x) if _texty(v) >= 0.85]
+                if inner:
+                    reads += [(n, v, 2 + (n == "baudot(hex)"), _bigram(v)) for n, v in inner]
+                    continue
+                letters = sum(c.isalpha() for c in x)
+                if letters >= 0.6 * len(x) and _texty(x) >= 0.9 and _bigram(x) > -6.5:
+                    reads.append(("baudot", x.lower(), 1, _bigram(x)))
+    reads.sort(key=lambda r: (r[2], r[3]), reverse=True)
+    return [(n, v) for n, v, _p, _b in reads]
+
+
+def baudot_dec(t):
+    """The text under an ITA2 blob (plain text lowercase, or in the warmups template's casing when it is that
+    sentence; the inner codec's text when it carries one), else None."""
+    r = baudot_reads(t)
+    return ((r[0][0] == "baudot" and _recase(r[0][1])) or r[0][1]) if r else None
+
+
+def baudot_free(p):
+    """Speculative Mastery-line decoder: every ITA2 reading, plain text also in the template's casing."""
+    out = []
+    for _n, s in baudot_reads(p):
+        r = _recase(s) if _n == "baudot" else None
+        for x in (r, s):
+            if x and x not in out:
+                out.append(x)
+    return out
+
+
 _NATO = ("Alfa Bravo Charlie Delta Echo Foxtrot Golf Hotel India Juliett Kilo Lima Mike November Oscar Papa Quebec "
          "Romeo Sierra Tango Uniform Victor Whiskey Xray Yankee Zulu").split()
 _NATO_DIG = "Zero One Two Three Four Five Six Seven Eight Nine".split()
@@ -251,6 +641,226 @@ def nato_dec(t):
     m.update({w.lower(): str(i) for i, w in enumerate(_NATO_DIG)})
     words = re.split(r"\s*/\s*", t.strip())
     return " ".join("".join(m.get(x.lower(), x) for x in w.split()) for w in words)
+
+
+# NATO / ICAO words spelling the symbols (D16 "spell the symbols" stack with a word alphabet): words -> chars, then the
+# case-free inner layer (hex digits, decimal / octal / binary codes, base32, A1Z26) when the spelled string isn't text.
+# Strict: every token of the fragment is an alphabet word (both spellings, Niner/Tree/Fower/Fife, Decimal/Stop) or a
+# lone punctuation mark; groups split on '/', '|' or 2+ spaces; CamelCase run-together words are split.
+_NATO_WORDS = {w.lower(): chr(97 + i) for i, w in enumerate(_NATO)}
+_NATO_WORDS.update({w.lower(): str(i) for i, w in enumerate(_NATO_DIG)})
+_NATO_WORDS.update({"alpha": "a", "juliet": "j", "whisky": "w", "x-ray": "x", "x_ray": "x", "niner": "9", "tree": "3",
+                    "fower": "4", "fife": "5", "decimal": ".", "stop": ".", "period": ".", "point": ".", "dot": ".",
+                    "comma": ",", "dash": "-", "hyphen": "-", "colon": ":", "exclamation": "!", "space": " "})
+_NATO_TOK = re.compile(r"x-ray|[a-z]+|[^\sa-z0-9]", re.I)
+
+
+def nato_layer_enc(s, inner=None, alt=False, sep=" ", word=" / "):
+    """NATO words of inner(s) (inner=None: the text itself), `sep` between words, `word` between the inner's
+    space-separated tokens. alt=True: Alpha/Juliet spellings and Niner."""
+    x = (" ".join(f"{b:02X}" for b in _u(s)) if inner == "hex" else _MORSE_INNER[inner](s)) if inner else s
+    names = [("Alpha" if alt and i == 0 else "Juliet" if alt and i == 9 else "X-ray" if alt and i == 23 else w)
+             for i, w in enumerate(_NATO)]
+    digs = [("Niner" if alt and i == 9 else w) for i, w in enumerate(_NATO_DIG)]
+
+    def sp(c):
+        return names[ord(c.lower()) - 97] if c.isascii() and c.isalpha() else digs[int(c)] if c.isdigit() else c
+    return word.join(sep.join(sp(c) for c in g) for g in (x.split(" ") if word else [x.replace(" ", "")]))
+
+
+def _nato_spell(t):
+    """The string the NATO words spell (groups joined by one space), or None unless EVERY token is an alphabet word or
+    a lone punctuation mark and most tokens are words."""
+    t = t.strip()
+    if not t or len(t) > 400000:
+        return None
+    groups, out, nwords, ntok = [g for g in re.split(r"\s*[/|]\s*|\s{2,}|\n", t) if g.strip()], [], 0, 0
+    for g in groups:
+        if not re.search(r"\s", g.strip()) and re.fullmatch(r"(?:[A-Z][a-z]+|X-[Rr]ay)+", g.strip()):
+            g = " ".join(re.findall(r"X-[Rr]ay|[A-Z][a-z]+", g))   # CamelCase run-together
+        pos, cs = 0, []
+        for m in _NATO_TOK.finditer(g):
+            if g[pos:m.start()].strip():
+                return None
+            pos, tok = m.end(), m.group().lower()
+            ntok += 1
+            if tok in _NATO_WORDS:
+                nwords += 1
+                cs.append(_NATO_WORDS[tok])
+            elif len(tok) == 1 and not tok.isalnum():
+                cs.append(tok)
+            else:
+                return None
+        if g[pos:].strip():
+            return None
+        out.append("".join(cs))
+    if nwords < 3 or nwords < 0.7 * ntok:
+        return None
+    return re.sub(r" +", " ", " ".join(out)).strip()
+
+
+def nato_layer_reads(t):
+    """[(inner, text)] for a strict NATO fragment, best first: a case-free inner layer (hex first) when the spelled
+    string decodes to text, else the spelled text itself when it reads as words ("text")."""
+    x = _nato_spell(t)
+    if not x:
+        return []
+    reads = [(n, s) for n, s in _morse_inner_reads(x.upper()) if _texty(s) >= 0.85]
+    try:
+        from lib.decode import _bigram
+    except Exception:  # noqa: BLE001
+        def _bigram(_s):
+            return 0.0
+    reads.sort(key=lambda r: (r[0] == "hex", round(_texty(r[1]), 2), _bigram(r[1])), reverse=True)
+    letters = [c for c in x if c.isalpha()]
+    if (len(letters) >= 0.5 * len(x.replace(" ", "")) and sum(c in "aeiouy" for c in letters) >= 0.2 * len(letters)
+            and not re.fullmatch(r"[0-9a-f ]+", x)):
+        reads.append(("text", x))
+    return reads
+
+
+def nato_layer_dec(t, inner=None):
+    """The text under NATO words (directly, or over hex / char codes), else None. inner: accept only that reading
+    ("text" = the words spell the sentence itself) -- one CANDIDATES entry per shape, so infer()'s decoder pass
+    returns the matching encoder."""
+    r = [x for x in nato_layer_reads(t) if inner is None or x[0] == inner]
+    return r[0][1] if r else None
+
+
+def nato_layer_free(p):
+    """Speculative Mastery-line decoder: every reading of a strict NATO line (the slug/template check picks)."""
+    return [s for _n, s in nato_layer_reads(p)]
+
+
+# Digits / hex spelled as English words ("four e six nine", "zero one zero ...", "seventy-eight, one hundred five"):
+# words -> the inner case-free layer (hex / binary / octal / decimal codes). Strict: every token is a digit word
+# (zero..nine, niner, oh), a hex letter a-f, a nibble value ten..fifteen, or (numeral reading) an English cardinal word
+# (eleven..nineteen, twenty..ninety, hundred, and). Groups split on '/', '|', ',', ';', newlines or 2+ spaces; tokens
+# on spaces and hyphens; CamelCase run-together words are split.
+_SP_DIG = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine")
+_SP_TEEN = ("ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen")
+_SP_TENS = ("", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety")
+_SP_CHAR = {w: str(i) for i, w in enumerate(_SP_DIG)}
+_SP_CHAR.update({"niner": "9", "oh": "0", **{c: c for c in "abcdef"}, **{_SP_TEEN[i]: "abcdef"[i] for i in range(6)}})
+_SP_NUM = {**{w: i for i, w in enumerate(_SP_DIG)}, "niner": 9, **{w: 10 + i for i, w in enumerate(_SP_TEEN)},
+           **{w: 10 * i for i, w in enumerate(_SP_TENS) if w}, "fourty": 40}
+
+
+def _sp_num_words(n, conj=False):
+    """English cardinal 0-999 ("one hundred five" / conj: "one hundred and five"), tens-units hyphenated."""
+    h, r = divmod(n, 100)
+    tail = _SP_DIG[r] if r < 10 else _SP_TEEN[r - 10] if r < 20 else \
+        _SP_TENS[r // 10] + (f"-{_SP_DIG[r % 10]}" if r % 10 else "")
+    if not h:
+        return tail
+    return f"{_SP_DIG[h]} hundred" + (f"{' and' if conj else ''} {tail}" if r else "")
+
+
+def spelled_enc(s, inner="hex", sep=" ", word=" / ", title=False, nib=False, num=False, conj=False):
+    """English words of inner(s): one word per symbol (`sep` between words, `word` between the inner's tokens; hex is
+    spaced per byte; word="" runs the symbols together); nib=True spells hex a-f as ten..fifteen; num=True spells each
+    byte as a cardinal number ("seventy-eight", `word` between numbers, conj: "one hundred and five")."""
+    if num:
+        out = word.join(_sp_num_words(b, conj) for b in _u(s))
+    else:
+        x = " ".join(f"{b:02x}" for b in _u(s)) if inner == "hex" else _MORSE_INNER[inner](s).lower()
+
+        def sp(c):
+            return _SP_DIG[int(c)] if c.isdigit() else _SP_TEEN["abcdef".index(c)] if nib else c
+        out = word.join(sep.join(sp(c) for c in g) for g in (x.split(" ") if word else [x.replace(" ", "")]))
+    return re.sub(r"[a-z]+", lambda m: m.group().capitalize(), out) if title else out
+
+
+def _sp_groups(t):
+    """[[token, ...] per group] (lowercase), or None unless every token is a spelled-number word."""
+    t = t.strip()
+    if not t or len(t) > 400000 or re.search(r"[^A-Za-z\s/|,;\-]", t):
+        return None
+    out = []
+    for g in re.split(r"\s*[/|,;]\s*|\s{2,}|\n", t):
+        g = g.strip()
+        if not g:
+            continue
+        if not re.search(r"[\s-]", g) and re.fullmatch(r"(?:[A-Z][a-z]*)+", g) and re.search(r"[a-z]", g):
+            g = " ".join(re.findall(r"[A-Z][a-z]*", g))   # CamelCase run-together
+        toks = [x for x in re.split(r"[\s-]+", g.lower()) if x]
+        if not toks or any(x not in _SP_CHAR and x not in _SP_NUM and x not in ("hundred", "and") for x in toks):
+            return None
+        out.append(toks)
+    return out if sum(map(len, out)) >= 4 else None
+
+
+def _sp_cardinals(toks):
+    """Greedy English cardinals 0-999 from a token run -> [int], or None if the run isn't a sequence of numbers."""
+    nums, cur, st = [], None, ""   # st: u unit, h N hundred, t tens (unit may follow), d closed
+    for x in toks:
+        if x in ("and", "hundred"):
+            if (x == "and") != (st == "h") or (x == "hundred" and st != "u"):
+                return None
+            if x == "hundred":
+                cur, st = cur * 100, "h"
+            continue
+        v = _SP_NUM.get(x)
+        if v is None:
+            return None
+        if (st == "h" and v) or (st == "t" and v < 10 and v):
+            cur, st = cur + v, "t" if st == "h" and v >= 20 else "d"
+            continue
+        if cur is not None:
+            nums.append(cur)
+        cur, st = v, "u" if 1 <= v <= 9 else "t" if v >= 20 else "d"
+    if cur is not None:
+        nums.append(cur)
+    return nums
+
+
+def spelled_reads(t):
+    """[(inner, text)] for a strict spelled-digits fragment, best first: per-symbol words (hex first) over the
+    inner case-free layer, and cardinal numbers as char codes ("num")."""
+    groups = _sp_groups(t)
+    if not groups:
+        return []
+    reads, flat = [], [x for g in groups for x in g]
+    if all(x in _SP_CHAR for x in flat):
+        x = " ".join("".join(_SP_CHAR[w] for w in g) for g in groups)
+        reads += [(n, s) for n, s in _morse_inner_reads(x.upper()) if _texty(s) >= 0.85]
+    if any(_SP_NUM.get(x, 0) >= 10 or x == "hundred" for x in flat):
+        nums = []
+        for g in groups:
+            n = _sp_cardinals(g)
+            if n is None:
+                nums = None
+                break
+            nums += n
+        if nums and len(nums) >= 2 and all(0 < n < 0x110000 for n in nums):
+            s = _txt(bytes(nums)) if max(nums) < 256 else "".join(map(chr, nums))
+            if s and _texty(s) >= 0.85:
+                reads.append(("num", s))
+    try:
+        from lib.decode import _bigram
+    except Exception:  # noqa: BLE001
+        def _bigram(_s):
+            return 0.0
+    reads.sort(key=lambda r: (r[0] == "hex", round(_texty(r[1]), 2), _bigram(r[1])), reverse=True)
+    return reads
+
+
+def spelled_dec(t, inner=None):
+    """The text under spelled digit / number words, else None. inner: accept only that reading (one CANDIDATES entry
+    per shape, so infer()'s decoder pass returns the matching encoder)."""
+    try:
+        r = [x for x in spelled_reads(t) if inner is None or x[0] == inner]
+    except Exception:  # noqa: BLE001 - parse defensively
+        return None
+    return r[0][1] if r else None
+
+
+def spelled_free(p):
+    """Speculative Mastery-line decoder: every reading of a strict spelled-digits line (the slug/template check picks)."""
+    try:
+        return [s for _n, s in spelled_reads(p)]
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def a1z26_enc(s, sep="-"):
@@ -1470,6 +2080,144 @@ def braille_ascii_dec(t):
     return "".join(_BR_ASCII[ord(c) - 0x2800] if "\u2800" <= c <= "\u283f" else c for c in t).lower()
 
 
+# Hex carried by digit-capable grids: 6x6 Polybius / 6x6 tap code (A-Z then 0-9, row then column, 1-based -- secretpy
+# Polybius with a 36-char alphabet) and Braille (⠼ number sign). The decoders answer only when the grid's output is
+# nothing but hex pairs whose bytes are printable text.
+_POLY6 = "abcdefghijklmnopqrstuvwxyz0123456789"
+
+
+def _hex_text(h):
+    h = re.sub(r"[\s,:]", "", h or "")
+    if len(h) < 4 or len(h) % 2 or not re.fullmatch(r"[0-9a-fA-F]+", h):
+        return None
+    try:
+        s = bytes.fromhex(h).decode("utf-8")
+    except ValueError:
+        return None
+    return s if all(c.isprintable() or c in "\t\r\n" for c in s) else None
+
+
+def polybius6_enc(s, sep=" ", inner="hex"):
+    src = s.encode().hex() if inner == "hex" else s.lower()
+    return sep.join(f"{i // 6 + 1}{i % 6 + 1}" for i in (_POLY6.find(c) for c in src) if i >= 0)
+
+
+def polybius6_dec(t):
+    t = t.strip()
+    if len(t) > 50000 or not re.fullmatch(r"[1-6][1-6\s,/|.-]*", t):
+        return None
+    d = re.sub(r"\D", "", t)
+    if len(d) < 8 or len(d) % 2:
+        return None
+    return _hex_text("".join(_POLY6[(int(d[i]) - 1) * 6 + int(d[i + 1]) - 1] for i in range(0, len(d), 2)))
+
+
+def tap6_enc(s, tap=".", gap=" ", letter="  "):
+    return letter.join(f"{tap * (i // 6 + 1)}{gap}{tap * (i % 6 + 1)}" for i in (_POLY6.find(c) for c in
+                                                                                 s.encode().hex()))
+
+
+def tap6_dec(t):
+    t = t.strip()
+    if len(t) > 100000 or not re.fullmatch(r"[.*•·xX][.*•·xX\s/|]*", t) \
+            or len(set(re.sub(r"[\s/|]", "", t))) != 1:
+        return None
+    runs = [len(r) for r in re.findall(r"[.*•·xX]+", t)]
+    if len(runs) < 8 or len(runs) % 2 or max(runs) > 6:
+        return None
+    return _hex_text("".join(_POLY6[(runs[i] - 1) * 6 + runs[i + 1] - 1] for i in range(0, len(runs), 2)))
+
+
+_BR_AJ = "⠁⠃⠉⠙⠑⠋⠛⠓⠊⠚"
+
+
+def braille_pyb_enc(s):
+    """pybraille 1.0 convertText: ⠠ per capital, ⠼ re-sent before every digit run, NO letter sign -- so a-f after a
+    digit read back as digits 1-6 (lossy for lowercase hex: ⠼⠙⠑ = 45 or 4e)."""
+    out, num = [], False
+    for c in s:
+        if c.isupper():
+            out.append("⠠")
+            c = c.lower()
+        if c in "1234567890":
+            out.append("" if num else "⠼")
+            num = True
+            out.append(_BR_DIG[c])
+            continue
+        num = num and c in ".,-/$"
+        out.append(_BR_LET.get(c) or (" " if c == " " else _BR_PUN.get(c, c)))
+    return "".join(out)
+
+
+def braille_hex_reads(t, k=3):
+    """Hex under Grade 1 Braille -> up to k texts (best first). ⠰ / ⠠ present = unambiguous (letter sign or capital
+    ends the number run); else pybraille style: inside a ⠼ run the a-f cells are digits up to an unknown switch point,
+    resolved by a beam over printable bytes scored by English letter bigrams."""
+    from lib.decode import _BIGRAM
+    t = t.strip()
+    if not t or len(t) > 50000 or not all("\u2800" <= c <= "\u283f" or c in " \t\r\n" for c in t) \
+            or not any(c in t for c in _BR_AJ):
+        return []
+    strict = "⠰" in t or "⠠" in t
+    if not strict:
+        from lib import slug
+        vocab = slug.english() | slug.vocab() | _KBD_KNOWN
+    hyps = {("", False): 0.0}   # (hex so far, run switched to letters) -> score
+    num = False
+    for c in t:
+        if c in " \t\r\n\u2800⠠⠰":
+            num = False
+            continue
+        if c == "⠼":
+            num = True
+            hyps = {(h, False): s for (h, _l), s in hyps.items()}
+            continue
+        i = _BR_AJ.find(c)
+        if i < 0:
+            return []
+        nxt = {}
+        for (h, let), s in hyps.items():
+            opts = []
+            if num and not let:
+                opts.append(("1234567890"[i], False))
+            if i < 6 and (not num or not strict):
+                opts.append(("abcdef"[i], num))
+            for ch, l2 in opts:
+                h2, s2 = h + ch, s
+                if len(h2) % 2 == 0:
+                    b = int(h2[-2:], 16)
+                    if not (32 <= b < 127 or b in (9, 10, 13)):
+                        continue
+                    p = chr(b).lower()
+                    q = chr(int(h2[-4:-2], 16)).lower() if len(h2) >= 4 else " "
+                    s2 += (math.log(_BIGRAM.get(q + p, 0.00005)) if q.isalpha() and p.isalpha()
+                           else 0.0 if p.isalpha() or p == " " else -6.0 if p.isdigit() and q.isalpha()
+                           else -2.0 if p.isdigit() or p in ".,!?:;'-\"" else -6.0)
+                    if not strict and q.isalpha() and not p.isalpha():   # word ended: English / slug word?
+                        w = re.search(r"[a-z]+$", bytes.fromhex(h2[:-2]).decode("latin-1").lower()).group()
+                        s2 += 6.0 if w in vocab else -3.0 if len(w) > 2 else 0.0
+                if nxt.get((h2, l2), -1e18) < s2:
+                    nxt[(h2, l2)] = s2
+        hyps = dict(sorted(nxt.items(), key=lambda kv: -kv[1])[:64])
+        if not hyps:
+            return []
+    out = []
+    for (h, _l), _s in sorted(hyps.items(), key=lambda kv: -kv[1]):
+        x = _hex_text(h)
+        if x and x not in out:
+            out.append(x)
+    return out[:k]
+
+
+def braille_hex_dec(t):
+    r = braille_hex_reads(t, 1)
+    return r[0] if r else None
+
+
+def braille_ascii_hex_dec(t):
+    return _hex_text(safe(braille_ascii_dec, t) or "")
+
+
 # Upside-down ("flip") text: each char -> its 180°-rotated look-alike, usually read back to front. Two encoder tables
 # (upsidedown 0.4 on PyPI = fileformat.info map, reverses; chepy to_upside_down, lossy B->q R->ɹ, no reverse by
 # default); the decoder takes the union of both plus common web alternates.
@@ -2174,6 +2922,128 @@ def t9_dec(t):
     return "".join(out)
 
 
+# DTMF (touch-tone) keypad: 16 symbols, each = one row tone (697/770/852/941 Hz) + one column tone (1209/1336/1477/
+# 1633 Hz); `697+1209` -> 1. Text form = frequency pairs (either order, optional Hz, any separator) or the keypad chars
+# themselves; inner layer = hex (16 symbols <-> 16 nibbles under three maps) or a digits-only codec (decimal/octal/...).
+_DTMF_ROWS = (697, 770, 852, 941)
+_DTMF_COLS = (1209, 1336, 1477, 1633)
+_DTMF_PAD = ("123A", "456B", "789C", "*0#D")
+_DTMF_FREQ = {_DTMF_PAD[r][c]: (_DTMF_ROWS[r], _DTMF_COLS[c]) for r in range(4) for c in range(4)}
+_DTMF_SYM = {v: k for k, v in _DTMF_FREQ.items()}
+# symbol string indexed by nibble: natural (0-9 A-D, *=E #=F), keypad row-major order, MT8870 decoder code (D=0, 0=10)
+_DTMF_NIB = {"hex": "0123456789ABCD*#", "hex-keypad": "123A456B789C*0#D", "hex-mt8870": "D1234567890*#ABC"}
+
+
+def dtmf_enc(s, inner="hex", keys=False, pair="+", sep=" ", word=" / ", hz=False, hi_first=False):
+    """DTMF of inner(s): each symbol -> `lo+hi` tone pair (keys=True: the keypad char), `sep` between symbols, `word`
+    between the inner's byte tokens (word="" runs everything together with `sep`)."""
+    if inner in _DTMF_NIB:
+        toks = ["".join(_DTMF_NIB[inner][int(c, 16)] for c in f"{b:02x}") for b in _u(s)]
+    else:
+        toks = _MORSE_INNER[inner](s).split(" ")
+
+    def sym(c):
+        if keys:
+            return c
+        lo, hi = _DTMF_FREQ[c]
+        u = "Hz" if hz else ""
+        return f"{hi}{u}{pair}{lo}{u}" if hi_first else f"{lo}{u}{pair}{hi}{u}"
+    return (word or sep).join(sep.join(sym(c) for c in t) for t in toks)
+
+
+_DTMF_FREQ_OK = re.compile(r"(?:\d{3,4}|[Hh][Zz]|[\s+&/,;|:\-x()\[\]])+")
+_DTMF_KEYS_OK = re.compile(r"[0-9A-Da-d*#\s/,;|\-]+")
+
+
+def _dtmf_items(t):
+    """[(symbol, start, end)] of a strict DTMF line (every number a DTMF tone, consecutive row+column pairs; or bare
+    keypad chars holding a * or #), else None."""
+    if _DTMF_FREQ_OK.fullmatch(t):
+        nums = list(re.finditer(r"\d+(?:\s*[Hh][Zz])?", t))
+        if len(nums) < 8 or len(nums) % 2:
+            return None
+        out = []
+        for a, b in zip(nums[::2], nums[1::2]):
+            x, y = int(re.match(r"\d+", a.group()).group()), int(re.match(r"\d+", b.group()).group())
+            c = _DTMF_SYM.get((x, y)) or _DTMF_SYM.get((y, x))
+            if c is None:
+                return None
+            out.append((c, a.start(), b.end()))
+        return out
+    if _DTMF_KEYS_OK.fullmatch(t) and re.search(r"[*#]", t) and re.search(r"[0-9]", t):
+        return [(m.group().upper(), m.start(), m.end()) for m in re.finditer(r"[0-9A-Da-d*#]", t)]
+    return None
+
+
+def _dtmf_groupings(t, items):
+    """Symbol groupings: one flat run, and for each separator kind between symbols, the split at every other kind."""
+    syms = [c for c, _s, _e in items]
+    gaps = [t[a[2]:b[1]] for a, b in zip(items, items[1:])]
+    out = [["".join(syms)]]
+    kinds = sorted(set(gaps))
+    if 2 <= len(kinds) <= 3:
+        for base in kinds:
+            groups, cur = [], syms[0]
+            for g, c in zip(gaps, syms[1:]):
+                if g == base:
+                    cur += c
+                else:
+                    groups.append(cur)
+                    cur = c
+            out.append(groups + [cur])
+    elif len(kinds) == 1 and kinds[0].strip(" \t") and len(syms) > 1:
+        out.append(syms)
+    return out
+
+
+def dtmf_reads(t):
+    """[(inner, text)] for a strict DTMF line (tone pairs or keypad chars), best first: hex under each nibble map,
+    digits-only inner codecs (decimal/octal3/binary8). Text-like (>= 85%) readings only."""
+    if not isinstance(t, str):
+        return []
+    t = t.strip()
+    if not t or len(t) > 400000:
+        return []
+    items = _dtmf_items(t)
+    if not items:
+        return []
+    reads = []
+    for groups in _dtmf_groupings(t, items):
+        flat = "".join(groups)
+        if len(groups) == 1 or all(len(g) == 2 for g in groups):
+            for name, nib in _DTMF_NIB.items():
+                if len(flat) % 2 == 0:
+                    s = _txt(bytes.fromhex("".join("%x" % nib.index(c) for c in flat)))
+                    if s:
+                        reads.append((name, s))
+        if flat.isdigit():
+            reads += [r for r in _morse_inner_reads(" ".join(groups)) if r[0] != "hex"]
+    reads = [r for r in dict.fromkeys(reads) if _texty(r[1]) >= 0.85]
+    try:
+        from lib.decode import _bigram
+    except Exception:  # noqa: BLE001
+        def _bigram(_s):
+            return 0.0
+    return sorted(reads, key=lambda r: (round(_texty(r[1]), 2), _bigram(r[1]), r[0] == "hex"), reverse=True)
+
+
+def dtmf_dec(t, inner=None):
+    """The text under DTMF, else None. inner: accept only that reading (one CANDIDATES entry per shape)."""
+    try:
+        r = [x for x in dtmf_reads(t) if inner is None or x[0] == inner]
+    except Exception:  # noqa: BLE001 - parse defensively
+        return None
+    return r[0][1] if r else None
+
+
+def dtmf_free(p):
+    """Speculative Mastery-line decoder: every inner reading of a strict DTMF line (the slug/template check picks)."""
+    try:
+        return [s for _n, s in dtmf_reads(p)]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 # Unicode code-point notation (sibling of D9 \uXXXX): U+XXXX (CyberChef "Escape Unicode Characters" U+, run together
 # or spaced), JS escape() %uXXXX (UTF-16, astral = surrogate pair), Python \U0000XXXX, ES6 \u{XX}, and CSS escapes
 # (cssesc escapeEverything: \HEX with an optional one-space terminator, punctuation as \c). Whole fragment only.
@@ -2247,6 +3117,179 @@ def ucp_dec(t):
 def ucp_free(p):
     d = ucp_dec(p)
     return [p[:len(p) - len(p.lstrip())] + d] if d else []
+
+
+# ------------------------------------------------- inner byte encodings: EBCDIC (cp037/cp500), UTF-16, UTF-32, UTF-7
+# A byte layer (hex / base64 / base32 / binary / decimal / octal / %xx) whose bytes are NOT UTF-8: EBCDIC (`40` = space,
+# letters c1-e9 / 81-a9, `!` = 5a cp037 / 4f cp500), UTF-16 (`00` every 2nd byte, maybe a ff fe / fe ff BOM), UTF-32,
+# or UTF-7 text (`+ACE-` shift runs, RFC 2152 strict: set-O punctuation encoded, as glibc iconv). Readings must be
+# printable ASCII (the warmups sentence is): a UTF-8 hex/base64 line never reads as EBCDIC/UTF-16 under that gate.
+_BYTE_INNERS = ("cp037", "cp500", "utf-16le", "utf-16be", "utf-16", "utf-32le", "utf-32be")
+_UTF7_DIRECT = set(string.ascii_letters + string.digits + "'(),-./:? \t\r\n")
+_UTF7_B64 = set(string.ascii_letters + string.digits + "+/")
+
+
+def utf7_enc(s, dash=False):
+    """RFC 2152 UTF-7, set-O chars shifted (glibc iconv -t UTF-7); dash=True: every shift run closed with '-'."""
+    out, i = [], 0
+    while i < len(s):
+        c = s[i]
+        if c in _UTF7_DIRECT:
+            out.append(c)
+            i += 1
+            continue
+        if c == "+":
+            out.append("+-")
+            i += 1
+            continue
+        j = i
+        while j < len(s) and s[j] not in _UTF7_DIRECT and s[j] != "+":
+            j += 1
+        out.append("+" + base64.b64encode(s[i:j].encode("utf-16-be")).decode().rstrip("="))
+        if dash or (j < len(s) and (s[j] in _UTF7_B64 or s[j] == "-")):
+            out.append("-")
+        i = j
+    return "".join(out)
+
+
+def utf7_dec(t):
+    """UTF-7 text -> text, None unless it holds a real shift run (`+<base64>`) and reads printable ASCII."""
+    t = _t(t)
+    if not isinstance(t, str) or not t.isascii() or not re.search(r"\+[A-Za-z0-9/][A-Za-z0-9+/]*", t):
+        return None
+    try:
+        out = t.encode("ascii").decode("utf-7")
+    except (UnicodeError, ValueError):
+        return None
+    return out if out != t and out.isascii() and all(c.isprintable() or c in "\t\r\n" for c in out) else None
+
+
+def _bytes_reads(t):
+    """[(layer, bytes)] for every byte layer the text strictly parses as (hex, base64, base32, binary8, decimal,
+    octal3, %xx). Never raises."""
+    if not isinstance(t, str):
+        return []
+    s = t.strip()
+    if not s or len(s) > 400000:
+        return []
+    out = []
+    flat = re.sub(r"\s+", "", s)
+    h = re.sub(r"(?i)0x|\\x|[:,]", "", re.sub(r"\s+", "", s))
+    if h and re.fullmatch(r"[0-9a-fA-F]+", h) and len(h) % 2 == 0:
+        out.append(("hex", bytes.fromhex(h)))
+    toks = _toks(s)
+    if toks and all(re.fullmatch(r"[01]{8}", x) for x in toks):
+        out.append(("binary8", bytes(int(x, 2) for x in toks)))
+    elif re.fullmatch(r"(?:[01]{8})+", flat) and len(toks) == 1:
+        out.append(("binary8", bytes(int(flat[i:i + 8], 2) for i in range(0, len(flat), 8))))
+    if len(toks) > 1 and all(re.fullmatch(r"\d{1,3}", x) and int(x) < 256 for x in toks):
+        out.append(("decimal", bytes(int(x) for x in toks)))
+        if all(re.fullmatch(r"[0-7]{3}", x) for x in toks):
+            out.append(("octal3", bytes(int(x, 8) for x in toks)))
+    if "%" in s and re.fullmatch(r"(?:%[0-9a-fA-F]{2}|[^%\s])+", flat):
+        out.append(("url%xx", urllib.parse.unquote_to_bytes(flat)))
+    if re.fullmatch(r"[A-Z2-7]+=*", flat) and len(flat) % 8 in (0, 2, 4, 5, 7):
+        try:
+            out.append(("base32", base64.b32decode(flat.rstrip("=") + "=" * (-len(flat.rstrip("=")) % 8))))
+        except (ValueError, TypeError):
+            pass
+    if re.fullmatch(r"[A-Za-z0-9+/\-_]+=*", flat) and len(flat.rstrip("=")) % 4 != 1:
+        try:
+            out.append(("base64", base64.b64decode(_b64pad(flat.rstrip("=").replace("-", "+").replace("_", "/")),
+                                                    validate=True)))
+        except (ValueError, TypeError):
+            pass
+    return out
+
+
+def inner_bytes_dec(b, inner):
+    """bytes -> text under one inner encoding, None unless it reads printable ASCII and is no plain UTF-8/ASCII read
+    (EBCDIC: some byte >= 0x80; UTF-16/32: right length, a BOM or a NUL in every code unit's high bytes)."""
+    if not isinstance(b, (bytes, bytearray)) or not b:
+        return None
+    b = bytes(b)
+    try:
+        if inner.startswith("cp"):
+            if max(b) < 0x80:
+                return None
+            out = b.decode(inner)
+        elif inner == "utf-7":
+            return utf7_dec(b.decode("ascii"))
+        else:
+            w = 4 if "32" in inner else 2
+            if len(b) % w or (inner in ("utf-16", "utf-32") and b[:w] not in (
+                    (b"\xff\xfe", b"\xfe\xff") if w == 2 else (b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff"))):
+                return None
+            out = b.decode(inner).lstrip("\ufeff")
+    except (UnicodeError, ValueError, LookupError):
+        return None
+    if not out or not out.isascii() or not all(c.isprintable() or c in "\t\r\n" for c in out):
+        return None
+    if inner in _EBCDIC_ALT:   # cp037 / cp500 differ only on ! [ ] | ^ : the page reading more `!`, fewer brackets
+        alt = b.decode(_EBCDIC_ALT[inner])
+        if alt.isascii() and _ebcdic_score(alt) > _ebcdic_score(out):
+            return None
+    return out
+
+
+_EBCDIC_ALT = {"cp037": "cp500", "cp500": "cp037"}
+
+
+def _ebcdic_score(x):
+    return x.count("!") - sum(x.count(c) for c in "[]|^")
+
+
+def inner_enc(s, inner, outer="hex"):
+    """Text -> `outer` text of its `inner`-encoded bytes (outer: hex, HEX, hex-spaced, base64, base64-nopad, base32,
+    binary8, decimal)."""
+    b = utf7_enc(s).encode() if inner == "utf-7" else s.encode(inner)
+    if outer == "hex":
+        return b.hex()
+    if outer == "HEX":
+        return b.hex().upper()
+    if outer == "hex-spaced":
+        return " ".join(f"{x:02x}" for x in b)
+    if outer == "base64":
+        return base64.b64encode(b).decode()
+    if outer == "base64-nopad":
+        return base64.b64encode(b).decode().rstrip("=")
+    if outer == "base32":
+        return base64.b32encode(b).decode()
+    if outer == "binary8":
+        return " ".join(f"{x:08b}" for x in b)
+    if outer == "decimal":
+        return " ".join(str(x) for x in b)
+    raise ValueError(outer)
+
+
+def inner_reads(t, inner=None):
+    """[(layer, inner, text)] for every byte-layer x inner-encoding reading of `t` (inner: only that one)."""
+    out = []
+    for layer, b in _bytes_reads(_t(t)):
+        for enc in ((inner,) if inner else _BYTE_INNERS + ("utf-7",)):
+            got = inner_bytes_dec(b, enc)
+            if got is not None:
+                out.append((layer, enc, got))
+    return out
+
+
+def inner_dec(t, inner=None):
+    """The first byte-layer reading of `t` under `inner` (or any inner encoding), else None."""
+    r = inner_reads(t, inner)
+    return r[0][2] if r else None
+
+
+def inner_free(p):
+    """Speculative Mastery-line decoder: every EBCDIC / UTF-16 / UTF-32 / UTF-7 reading under a byte layer, plus bare
+    UTF-7 text; most English first."""
+    if not isinstance(p, str) or not p.strip():
+        return []
+    lead = p[:len(p) - len(p.lstrip())]
+    outs = [x for _l, _i, x in inner_reads(p)]
+    u7 = utf7_dec(p.strip())
+    if u7:
+        outs.append(u7)
+    return [lead + x for x in _top(p, outs, 4)] if outs else []
 
 
 def _xor(s, k):
@@ -2481,9 +3524,49 @@ def _cands():
         ("qwerty-left", lambda s: qwerty_shift(s, -1), lambda t: qwerty_shift(t, 1)),
         *[(f"kbd:{a}>{b}", (lambda a, b: lambda s: kbd_swap(s, a, b))(a, b),
            (lambda a, b: lambda t: kbd_dec(t, a, b))(a, b)) for a, b in _KBD_PAIRS],
-        ("morse", morse_enc, morse_dec),
-        ("morse-3space", lambda s: morse_enc(s, word=" "), morse_dec),
+        ("morse", morse_enc, morse_text_dec),
+        ("morse-3space", lambda s: morse_enc(s, word=" "), morse_text_dec),
+        # Morse as timing units (1=dit 111=dah, gaps 0/000/0000000; `=`/`.`), plain and over a case-free inner codec
+        ("morse-timing", morse_timing_enc, morse_timing_text),
+        ("morse-timing=.", lambda s: morse_timing_enc(s, "=", "."), morse_timing_text),
+        *[(f"morse-timing{('', '-cat')[cat]}({inner})", (lambda i, c: lambda s: morse_timing_enc(s, inner=i, cat=c))(
+            inner, cat), morse_layer_dec) for inner in ("hex", "decimal", "octal3", "binary8", "a1z26")
+          for cat in (False, True) if not (cat and inner == "a1z26")],
+        # Morse over a case-free inner codec (D16 morse-hex generalized): spaced inners x word gap, fixed-width concat
+        *[(f"morse{tag}({inner})", (lambda i, w: lambda s: morse_over_enc(s, i, w))(inner, w), morse_layer_dec)
+          for inner in ("decimal", "octal3", "binary8", "a1z26") for tag, w in (("", " / "), ("/", "/"), ("3", "   "))],
+        *[(f"morse-cat({inner})", (lambda i: lambda s: morse_over_enc(s, i, ""))(inner), morse_layer_dec)
+          for inner in ("octal3", "binary8", "decimal", "base32", "base32-nopad")],
+        # Baudot / ITA2: 5-bit groups (spaced / run together / dCode bit order), `*`/`.` tape, decimal; ITA2 or US-TTY
+        # figures, leading LTRS or not, USOS; also over hex (FIGS digits + LTRS A-F)
+        *[(f"baudot{tag}{('', '-us')[us]}{('', '-noinit')[not ini]}{('', '-usos')[uo]}",
+           (lambda kw, us, ini, uo: lambda s: baudot_enc(s, table=("ita2", "us")[us], init=ini, usos=uo, **kw))(
+               kw, us, ini, uo), baudot_dec)
+          for tag, kw in (("", {}), ("-cat", {"sep": ""}), ("-lsb", {"lsb": True}), ("-tape", {"fmt": "tape"}),
+                          ("-tape-lines", {"fmt": "tape", "sep": "\n"}), ("-dec", {"fmt": "dec"}))
+          for us in (False, True) for ini in (True, False) for uo in (False, True)],
+        *[(f"baudot{tag}(hex)", (lambda kw: lambda s: baudot_enc(s, inner="hex", **kw))(kw), baudot_dec)
+          for tag, kw in (("", {}), ("-noinit", {"init": False}), ("-cat", {"sep": ""}), ("-lsb", {"lsb": True}),
+                          ("-tape", {"fmt": "tape"}))],
         ("nato", nato_enc, nato_dec),
+        ("nato-strict", nato_enc, lambda t: nato_layer_dec(t, "text")),
+        ("nato-alt", lambda s: nato_layer_enc(s, alt=True), lambda t: nato_layer_dec(t, "text")),
+        # NATO words over a case-free inner codec (spell the symbols): spaced inner tokens x group gap, and run together
+        *[(f"nato{tag}({inner})", (lambda i, a, w: lambda s: nato_layer_enc(s, i, a, word=w))(inner, alt, w),
+           (lambda i: lambda t: nato_layer_dec(t, i))(inner)) for inner in ("hex", "decimal", "octal3", "binary8")
+          for tag, alt, w in (("", False, " / "), ("-alt", True, " / "), ("|", False, " | "), ("|-alt", True, " | "),
+                              ("-cat", False, ""), ("-cat-alt", True, ""))],
+        # digits / hex spelled as English words over a case-free inner codec; cardinal numbers as char codes
+        *[(f"spelled{tag}({inner})", (lambda i, kw: lambda s: spelled_enc(s, i, **kw))(inner, kw),
+           (lambda i: lambda t: spelled_dec(t, i))(inner)) for inner in ("hex", "decimal", "octal3", "binary8")
+          for tag, kw in (("", {}), ("-title", {"title": True}), ("|", {"word": " | "}), ("-cat", {"word": ""}),
+                          ("-cat-title", {"word": "", "title": True}), ("-comma", {"word": ", "}),
+                          ("-nib", {"nib": True}), ("-nib-cat", {"nib": True, "word": ""}))
+          if inner == "hex" or "nib" not in tag],
+        *[(f"spelled-num{tag}", (lambda kw: lambda s: spelled_enc(s, num=True, **kw))(kw),
+           lambda t: spelled_dec(t, "num"))
+          for tag, kw in (("", {"word": ", "}), ("-and", {"word": ", ", "conj": True}), ("/", {"word": " / "}),
+                          ("-title", {"word": ", ", "title": True}), ("-lines", {"word": "\n"}))],
         ("a1z26", a1z26_enc, a1z26_dec),
         ("a1z26-comma", lambda s: a1z26_enc(s, sep=","), lambda t: a1z26_dec(t, sep=",")),
         ("polybius", lambda s: polybius_enc(s, sep=""), polybius_dec),
@@ -2498,6 +3581,18 @@ def _cands():
         ("braille", braille_enc, braille_dec),
         ("braille-blank", lambda s: braille_enc(s, space="\u2800"), braille_dec),
         ("braille-ascii", braille_ascii_enc, braille_ascii_dec),
+        # hex digits through digit-capable grids: Braille ⠼ runs, Braille ASCII cells, 6x6 Polybius / tap (A-Z0-9)
+        ("braille(hex)", lambda s: braille_enc(s.encode().hex()), braille_hex_dec),
+        ("braille(HEX)", lambda s: braille_enc(s.encode().hex().upper()), braille_hex_dec),
+        ("braille-spaced(hex)", lambda s: braille_enc(" ".join(f"{b:02x}" for b in s.encode())), braille_hex_dec),
+        ("braille-pyb(hex)", lambda s: braille_pyb_enc(s.encode().hex()), braille_hex_dec),
+        ("braille-pyb(HEX)", lambda s: braille_pyb_enc(s.encode().hex().upper()), braille_hex_dec),
+        ("braille-ascii(hex)", lambda s: braille_ascii_enc(s.encode().hex()), braille_ascii_hex_dec),
+        ("polybius6(hex)", lambda s: polybius6_enc(s, sep=""), polybius6_dec),
+        ("polybius6-spaced(hex)", polybius6_enc, polybius6_dec),
+        ("polybius6-comma(hex)", lambda s: polybius6_enc(s, sep=","), polybius6_dec),
+        ("tapcode6(hex)", tap6_enc, tap6_dec),
+        ("tapcode6-knock(hex)", lambda s: tap6_enc(s, tap="x"), tap6_dec),
         ("upsidedown", upside_enc, upside_dec),
         ("upsidedown-noreverse", lambda s: upside_enc(s, rev=False), lambda t: upside_dec(t, rev=False)),
         ("upsidedown-chepy", lambda s: upside_enc(s, _UD_CHEPY, rev=False), lambda t: upside_dec(t, rev=False)),
@@ -2509,6 +3604,13 @@ def _cands():
         ("multitap-2space", lambda s: multitap_enc(s, word="  "), multitap_dec),
         ("t9", t9_enc, t9_dec),
         ("t9-0", lambda s: t9_enc(s, space="0"), t9_dec),
+        # DTMF tone pairs / keypad chars over hex (3 nibble maps) or a digits-only inner codec
+        *[(f"dtmf{tag}({inner})", (lambda i, kw: lambda s: dtmf_enc(s, i, **kw))(inner, kw),
+           (lambda i: lambda t: dtmf_dec(t, i))(inner))
+          for inner in ("hex", "hex-keypad", "hex-mt8870", "decimal", "octal3", "binary8")
+          for tag, kw in (("", {}), ("-cat", {"word": ""}), ("-hz", {"hz": True}), ("-comma", {"sep": ", ", "word": ""}),
+                          ("-keys", {"keys": True, "sep": "", "word": " "}), ("-keys-cat", {"keys": True, "sep": "", "word": ""}))
+          if inner.startswith("hex") or not kw.get("keys")],
         ("fullwidth", unistyle_enc, unistyle_dec),
         ("fullwidth-space", lambda s: unistyle_enc(s, space=" "), unistyle_dec),
         ("smallcaps", lambda s: unistyle_enc(s, "smallcaps"), unistyle_dec),
@@ -2537,7 +3639,14 @@ def _cands():
         ("css-escape", css_enc, ucp_dec),
         ("css-escape-spaced", lambda s: css_enc(s, spaced=True), ucp_dec),
         ("css-escape6", lambda s: ucp_enc(s, "\\{:06x}"), ucp_dec),
+        ("utf-7", utf7_enc, utf7_dec),
+        ("utf-7-dash", lambda s: utf7_enc(s, dash=True), utf7_dec),
     ]
+    # inner byte encodings under a byte layer: hex / base64 / ... of the cp037 / cp500 / UTF-16 / UTF-32 / UTF-7 bytes
+    out += [(f"{outer}({inner})", (lambda i, o: lambda s: inner_enc(s, i, o))(inner, outer),
+             (lambda i: lambda t: inner_dec(t, i))(inner))
+            for inner in _BYTE_INNERS + ("utf-7",)
+            for outer in ("hex", "HEX", "hex-spaced", "base64", "base64-nopad", "base32", "binary8", "decimal")]
     out += [(name, (lambda kw: lambda s: pig_enc(s, **kw))(kw), (lambda kw: lambda t: pig_dec(t, **kw))(kw))
             for name, kw in _PIG_VARIANTS.items()]
     out += [(f"math-{st}", (lambda st: lambda s: unistyle_enc(s, st))(st), unistyle_dec) for st in _MATH_LATIN]
@@ -2672,6 +3781,9 @@ def infer(plain, blob, hints=()):
     for name, enc, dec in cands:
         if dec is not None and safe(dec, want) == p:
             return name, enc
+    st = stack_fit(p, want)
+    if st:
+        return st
     ab = _fit_affine(p, want)
     if ab:
         a, b = ab
@@ -2703,16 +3815,23 @@ def plaintext(blob, slug, deadline=None, hints=()):
     except Exception:  # noqa: BLE001
         d = None
     if d and slug in d:
-        return d.strip()
+        u7 = utf7_dec(d.strip())   # UTF-7 keeps the slug readable: `warmup+ACE To` only reads as the template decoded
+        return u7.strip() if u7 and _TPL in u7 and _TPL not in d and slug in u7 else d.strip()
     rs = rail_solve(text)   # strict (crib + slug, anagram-gated): before the loose `slug in` decoders below
     if rs and slug in rs[1]:
         return rs[1]
+    for _l, _i, x in inner_reads(text):   # strict (printable ASCII, not a UTF-8 read): before the slow peel
+        if slug in x:
+            return x.strip()
     try:
         out, _steps = decode.peel(_u(text), lambda t: slug in t, max_nodes=4000, deadline=deadline)
     except Exception:  # noqa: BLE001
         out = None
     if out and slug in out:
         return out.strip()
+    st = stack_dec(text)
+    if st and slug in st:
+        return st
     for _name, _enc, dec in CANDIDATES:
         if dec is not None:
             got = safe(dec, text.strip())
@@ -2758,6 +3877,129 @@ def infer_case(case_dir, hints=()):
     return got[0], got[1], plain
 
 
+# ------------------------------------------- three-layer stacks of confirmed codecs (depth-3 peel of the DAYS codecs)
+# "Morse -> hex -> base64", "base64 -> hex -> rot13": a blob under 3 stacked GM-confirmed codecs (outermost peeled
+# first). CANDIDATES' chained pairs cover depth 2 and plaintext()'s 4000-node lib.decode.peel (25 rot-N per node) stalls
+# near depth 2 and lacks Atbash / rot47 / octal / entities / Morse, so this is a BFS over the DAYS decoders plus a
+# case-free Morse text layer: each step keeps only printable text that is new, a self-inverse layer never repeats
+# back-to-back, and a chain holds at most 2 free (letter-only) layers. A full blob is accepted only as printable
+# one-line text ending in a slug; a Mastery fragment only as a piece of the warmups template (or its tail + slug chars).
+_STACK_INV = {"rot13", "reverse", "atbash", "rot47"}
+_STACK_END = re.compile(r"[a-z]+(?:-[a-z]+)+-\d{2,}$")
+
+
+def _stack_morse(t):
+    x = morse_text_dec(t)
+    return [x.upper(), x] if x else []
+
+
+def _stack_layers():
+    out = [(name, free, (lambda d: lambda t: [x for x in (safe(d, t),) if x])(dec)) for _d, name, _e, dec, free in DAYS]
+    return out + [("morse", False, _stack_morse)]
+
+
+def _stack_encs():
+    out = {name: enc for _d, name, enc, _dec, _f in DAYS}
+    out["morse"] = morse_enc
+    return out
+
+
+def stack_reads(t, accept, depth=3, budget=0.4, strict_first=False):
+    """[(chain, text)] for every <= `depth`-layer stack of DAYS decoders turning `t` into text `accept` takes, shortest
+    chain first; chain = layer names, outermost first (strict_first: the outermost is a format layer, not a letter
+    map). Never raises; stops after `budget` seconds."""
+    import time
+    if not isinstance(t, str) or not t.strip():
+        return []
+    end = time.time() + budget
+    layers = _stack_layers()
+    found, seen, frontier = [], {t}, [(t, (), 0)]
+    for _ in range(depth):
+        nxt = []
+        for cur, path, nfree in frontier:
+            for name, free, fn in layers:
+                if (path and path[-1] == name and name in _STACK_INV) or (free and (nfree >= 2 or strict_first
+                                                                                     and not path)):
+                    continue
+                if time.time() > end:
+                    return found
+                try:
+                    outs = fn(cur)
+                except Exception:  # noqa: BLE001 - a layer that doesn't apply
+                    continue
+                for o in outs:
+                    if not o or o in seen:
+                        continue
+                    seen.add(o)
+                    p2 = path + (name,)
+                    try:
+                        if accept(o):
+                            found.append((p2, o))
+                    except Exception:  # noqa: BLE001
+                        pass
+                    nxt.append((o, p2, nfree + free))
+        frontier = nxt
+    return found
+
+
+def _stack_full(x):
+    x = x.strip()
+    return bool(_STACK_END.search(x)) and x.isprintable()
+
+
+def stack_dec(t):
+    """The decoded sentence of a <=3-layer DAYS stack (template-bearing reading first), else None."""
+    r = stack_reads(_t(t).strip(), _stack_full) if isinstance(t, (str, bytes, bytearray)) else []
+    return next((x.strip() for _c, x in r if _TPL in x), r[0][1].strip() if r else None)
+
+
+def _stack_apply(s, chain, encs):
+    for n in reversed(chain):
+        s = encs[n](s)
+    return s
+
+
+def stack_fit(plain, blob):
+    """(name, enc) of the stack whose re-encoding of `plain` is exactly `blob` (else the first that decodes to it)."""
+    encs = _stack_encs()
+    hits = [c for c, x in stack_reads(_t(blob).strip(), lambda x: x.strip() == plain.strip())]
+    for chain in hits:
+        try:
+            if _stack_apply(plain, chain, encs).strip() == _t(blob).strip():
+                return "stack:" + ">".join(chain), (lambda s, chain=chain: _stack_apply(s, chain, encs))
+        except Exception:  # noqa: BLE001
+            continue
+    if hits:
+        chain = hits[0]
+        return "stack:" + ">".join(chain), (lambda s, chain=chain: _stack_apply(s, chain, encs))
+    return None
+
+
+def _stack_frag(x):
+    if len(x) < 4 or not x.isprintable():
+        return False
+    if x in _TPL:
+        return True
+    m = re.search(r"[a-z0-9-]*$", x)
+    head = x[:m.start()]
+    if head:
+        return m.end() > m.start() and _TPL.endswith(head)
+    return "-" in x
+
+
+@functools.lru_cache(maxsize=4096)
+def _stack_free(p):
+    from lib.decode import _bigram
+    r = [x for c, x in stack_reads(p, _stack_frag, budget=0.03, strict_first=True) if len(c) >= 2]
+    return tuple(sorted(dict.fromkeys(r), key=lambda x: (x not in _TPL, -_bigram(x)))[:4])
+
+
+def stack_free(p):
+    """Speculative Mastery-line decoder: a 2-3 layer stack fragment (outermost a format layer) -> its template / slug
+    readings, template pieces first, then the most English slug reading."""
+    return list(_stack_free(p.strip())) if isinstance(p, str) and p.strip() else []
+
+
 # --------------------------------------------------------------------- speculative free-text decoders for lib.decode
 def _top(p, outs, k=3):
     from lib.decode import _bigram
@@ -2782,15 +4024,26 @@ SPECULATIVE_FREE = (
     ("columnar", lambda p: [b for b in (col_solve(p),) if b]),
     ("punycode", lambda p: [p[:len(p) - len(p.lstrip())] + puny_dec(p)]),
     ("braille", lambda p: [b for b in (braille_dec(p),) if b]),
+    ("braille-hex", lambda p: braille_hex_reads(p) or [b for b in (braille_ascii_hex_dec(p),) if b]),
+    ("polybius6-hex", lambda p: [b for b in (polybius6_dec(p), tap6_dec(p)) if b]),
+    ("morse-layer", morse_layer_free),
+    ("morse", morse_free),
+    ("morse-timing", morse_timing_free),
+    ("nato-layer", nato_layer_free),
+    ("spelled-digits", spelled_free),
+    ("baudot", baudot_free),
     ("base45", b45_free),
     ("z85", z85_free),
     ("base100", b100_free),
     ("upsidedown", upside_free),
     ("leet", lambda p: [b for b in (leet_dec(p),) if b]),
     ("multitap", lambda p: [b for b in (multitap_dec(p),) if b]),
+    ("stack3", stack_free),
     ("t9", lambda p: [b for b in (t9_dec(p),) if b]),
+    ("dtmf", dtmf_free),
     ("unistyle", lambda p: [p[:len(p) - len(p.lstrip())] + b for b in (unistyle_dec(p),) if b]),
     ("codepoint", ucp_free),
+    ("inner-bytes", inner_free),
     ("zerowidth", zw_cands),
     ("polyalpha", crib_fragment),
     ("subst", subst_fragment),

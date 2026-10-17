@@ -1,0 +1,9 @@
+{
+ "codec": "morse-punct",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-river-47",
+ "encoded": "-. .. -.-. . / .-- --- .-. -.- / -.. . -.-. --- -.. .. -. --. / - .... .. ... / .-- .- .-. -- ..- .--. -.-.-- / - --- / ... --- .-.. ...- . --..-- / ... ..- -... -- .. - / - .... .. ... / . -..- .- -.-. - / .- -. ... .-- . .-. / - --- / - .... . / --. .- -- . / -- .- ... - . .-. ---... / .- -- -... . .-. -....- ..-. .- .-.. -.-. --- -. -....- .-. .. ...- . .-. -....- ....- --...",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs enc '-/.' 'Space' 'Forward slash' | sed 's#/# / #g'  # CyberChef 'To Morse Code' (-/., letters by space, words by '/'), then '/' -> ' / '",
+ "oracle_cmd": "printf %s \"$encoded\" | sed 's# / #/#g' | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs dec 'Space' 'Forward slash'  # CyberChef 'From Morse Code'",
+ "oracle_plain": "NICE WORK DECODING THIS WARMUP! TO SOLVE, SUBMIT THIS EXACT ANSWER TO THE GAME MASTER: AMBER-FALCON-RIVER-47",
+ "expected": "match"
+}

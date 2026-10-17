@@ -1,0 +1,10 @@
+{
+ "codec": "stack:base64>hex>rot13",
+ "plain": null,
+ "encoded": "NDE3NjcwNzIyMDZhNjI2NTc4MjA3MTcyNzA2MjcxNzY2MTc0MjA2Nzc1NzY2NjIwNmE2ZTY1N2E2ODYzMjEyMDQ3NjIyMDY2NjI3OTY5NzIyYzIwNjY2ODZmN2E3NjY3MjA2MTYyNjc3NTc2NjE3NDIwNmU2NzIwNmU3OTc5MmU=",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup! To solve, submit nothing at all.' | tr 'A-Za-z' 'N-ZA-Mn-za-m' | xxd -p | tr -d '\\n' | base64 -w0  # a real 3-layer stack whose text ends in no slug",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | xxd -r -p | tr 'A-Za-z' 'N-ZA-Mn-za-m'  # -> 'Nice work ... submit nothing at all.' (no slug: stack_dec must return None)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit nothing at all."
+}

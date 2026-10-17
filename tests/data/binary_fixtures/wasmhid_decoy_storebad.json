@@ -1,0 +1,15 @@
+{
+ "encoding": "wasm-store-raw",
+ "expected_format": "wasm",
+ "expected_machine": "wasm32",
+ "expected_offset": "none",
+ "expected_mem_offset": "none",
+ "expected_has_hcfg_section": false,
+ "expected_storage": "none",
+ "expected_config": "none",
+ "generator_cmd": "bash wasmhid_gen.sh wasmhid_decoy_storebad.bin storebad '{\"c2\":\"198.51.100.200:9001\",\"campaign\":\"undertow\",\"sleep\":5,\"flag\":\"flag{st0r3_1mm3d14t3s}\"}' 0x11",
+ "oracle_cmd": "bash wasmhid_oracle.sh wasmhid_decoy_storebad.bin   # wasm-validate, wasm-objdump -x (custom names, Data init + hexdump) / -d (i32.const..i32.store, memory.init) -> perl linear-memory image, grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "valid | none | 12288 | 56 | HCFG 1 17 92 1299678401 1299678400 | {\"c2\":\"198.51.100.200:9001\",\"campaign\":\"undertow\",\"sleep\":5,\"flag\":\"flag{st0r3_1mm3d14t3s}\"}",
+ "note": "SPECULATIVE encoding/storage names; DECOY: store-built blob with header crc off by one (1299678401 != 1299678400)",
+ "decoy": true
+}

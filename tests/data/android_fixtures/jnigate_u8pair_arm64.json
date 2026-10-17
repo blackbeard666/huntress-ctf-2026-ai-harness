@@ -1,0 +1,10 @@
+{
+ "entry": "jni_gate_scan",
+ "expected": "ANS-a51c6e0f92d7b384",
+ "expected_input": 256,
+ "expected_arg2": 65535,
+ "expected_narrowing": "u8 (a) / u16 (b)",
+ "generator_cmd": "tests/data/android_fixtures/gen_gate_bypass.sh tests/data/android_fixtures  # perl enc = token[i]^0xfe^i; aarch64-linux-gnu-gcc -shared -fPIC -O2 native_src/gate_bypass.c -DGATE='(uint8_t)a == 0 && a > 0 && (uint16_t)b == 0xffff' -DKEY='(a >> 8) ^ b'; zip -qX -r",
+ "oracle_cmd": "tests/data/android_fixtures/gate_oracle.sh jnigate_u8pair_arm64.apk qemu  # aarch64-linux-gnu-gcc native_src/gate_harness2.c under qemu-aarch64 -L /usr/aarch64-linux-gnu: 'a=0x100 b=0xffff NewStringUTF ANS-a51c6e0f92d7b384'; aarch64-linux-gnu-objdump -d accepts: 'and w1, w1, #0xffff', 'and w2, w0, #0xff'",
+ "decoy": false
+}

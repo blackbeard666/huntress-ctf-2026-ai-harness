@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=powershell_module|role=loader|verdict=malicious|attack=T1059.001|adapter=module_import|host_profile=standalone|obfuscation_profile=hb64|stage_profile=two_stage_download_execute|next_language=csharp|stage_count=2|steps=import_module,invoke_stage|campaign_id=PSM-08b906a9|url=https://psm1-08b906a95c.example.invalid/stage|file_path=/tmp/huntress-psm1/.5c4582693077f654.stage",
+ "decoy": false,
+ "host": "psm1",
+ "tag": "HB64",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> HB64: stdlib base64/bytes.hex; psm1 template)",
+ "oracle_cmd": "cat tests/data/script_fixtures/v3h_psm1_hb64.psm1 | grep -o 'HUNTRESS_ANALYSIS_V1:HB64-[^ \"<]*' | head -1 | cut -d- -f2- | tr -d '\\r' | xxd -r -p | base64 -d"
+}

@@ -1,0 +1,1 @@
+{"field": "synthesis.thread_count", "expected": "None", "generator_cmd": "printf 'From: x@y\\nSubject: lone\\nMessage-ID: <z@y>\\n\\nhi\\n' > lone_eml_decoy.bin", "oracle_cmd": "file lone_eml_decoy.bin  (a single RFC 822 message, no container and no Files list: siblings unreadable -> cannot answer -> None)", "decoy": true}

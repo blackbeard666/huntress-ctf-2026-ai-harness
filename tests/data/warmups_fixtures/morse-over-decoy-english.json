@@ -1,0 +1,10 @@
+{
+ "codec": "morse-layer",
+ "plain": null,
+ "encoded": "-. .. -.-. ./.-- --- .-. -.-/-.. . -.-. --- -.. .. -. --./- .... .. .../.-- .- .-. -- ..- .--.",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup' | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs enc '-/.' 'Space' 'Forward slash'  # plain-text Morse of English: no inner codec layer",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs dec 'Space' 'Forward slash'  # CyberChef 'From Morse Code' -> English words, not a case-free inner codec",
+ "oracle_plain": "NICE WORK DECODING THIS WARMUP",
+ "decoy": true,
+ "expected": "none"
+}

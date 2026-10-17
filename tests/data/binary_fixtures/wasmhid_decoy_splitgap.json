@@ -1,0 +1,15 @@
+{
+ "encoding": "wasm-split-raw",
+ "expected_format": "wasm",
+ "expected_machine": "wasm32",
+ "expected_offset": "none",
+ "expected_mem_offset": "none",
+ "expected_has_hcfg_section": false,
+ "expected_storage": "none",
+ "expected_config": "none",
+ "generator_cmd": "bash wasmhid_gen.sh wasmhid_decoy_splitgap.bin splitgap '{\"c2\":\"192.0.2.150:8080\",\"campaign\":\"riptide\",\"sleep\":40,\"flag\":\"flag{spl1t_s3gm3nts}\"}' 0x5a",
+ "oracle_cmd": "bash wasmhid_oracle.sh wasmhid_decoy_splitgap.bin   # wasm-validate, wasm-objdump -x (custom names, Data init + hexdump) / -d (i32.const..i32.store, memory.init) -> perl linear-memory image, grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "valid | none | 2048 | 143 | HCFG 1 90 87 534934513 1514579398 | {\"c2\":\"19",
+ "note": "SPECULATIVE encoding/storage names; DECOY: tail segment 1 byte too far (2070): linear memory has a gap -> crc fails (oracle crc 534934513 != 1514579398)",
+ "decoy": true
+}

@@ -1,0 +1,14 @@
+Return-Path: <alerts@northwind.example>
+Received-SPF: pass (mx.fabrikam.example: domain of alerts@northwind.example
+ designates 198.51.100.7 as permitted sender) client-ip=198.51.100.7;
+ envelope-from=alerts@northwind.example; helo=smtp.northwind.example;
+From: Northwind Alerts <alerts@northwind.example>
+To: dana@fabrikam.example
+Subject: Weekly report
+Date: Thu, 03 Oct 2024 12:00:00 +0000
+Message-ID: <plain.2002@northwind.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+report attached

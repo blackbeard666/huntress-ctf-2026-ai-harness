@@ -1,0 +1,37 @@
+# Writes threading test messages with the stdlib email.message.EmailMessage writer (policy.SMTP) + a Pillow PNG decoy.
+import base64, io, struct, sys, uuid
+from email.message import EmailMessage
+from email import policy
+out = sys.argv[1]
+def save(name, m):
+    open(f"{out}/{name}", "wb").write(m.as_bytes(policy=policy.SMTP))
+# Outlook Thread-Index: 0x01 + 5 bytes of FILETIME>>16 (6 bytes BE) + GUID bytes_le + 2 child blocks of 5 bytes
+ft = 133725024000000000  # FILETIME 2024-10-04T08:00:00Z (stored >> 16, so it reads back as 07:59:59.995)
+g = uuid.UUID("3f2504e0-4f89-11d3-9a0c-0305e82c3301")
+ti = (ft >> 16).to_bytes(6, "big") + g.bytes_le + bytes.fromhex("0000a1b2c3") + bytes.fromhex("0001d4e5f6")
+m = EmailMessage()
+m["From"] = "Dana Ops <dana@fabrikam.example>"
+m["To"] = "ap@contoso.example"
+m["Subject"] = "RE: Fwd: RE: Invoice 4471 overdue"
+m["Date"] = "Tue, 01 Oct 2024 10:15:00 +0200"
+m["Message-ID"] = "<reply3.7781@mail.fabrikam.example>"
+m["In-Reply-To"] = "<fwd2.5512@mx.contoso.example>"
+m["References"] = ("<root1.0042@billing.northwind.example> <fwd2.5512@mx.contoso.example>"
+                   " <side.9@lists.example>")  # policy.SMTP folds this > 78 cols
+m["Thread-Topic"] = "Invoice 4471 overdue"
+m["Thread-Index"] = base64.b64encode(ti).decode()
+m["X-Forwarded-To"] = "ap@contoso.example"
+m["Resent-Message-ID"] = "<resent.77@relay.contoso.example>"
+m["X-MS-Exchange-Organization-AuthAs"] = "Anonymous"
+m.set_content("see below\n")
+save("thread_reply.eml", m)
+# a fresh message: no threading headers at all
+n = EmailMessage()
+n["From"] = "root@northwind.example"; n["To"] = "dana@fabrikam.example"
+n["Subject"] = "Invoice 4471"; n["Date"] = "Mon, 30 Sep 2024 09:00:00 +0000"
+n["Message-ID"] = "<root1.0042@billing.northwind.example>"
+n.set_content("pay up\n")
+save("thread_root.eml", n)
+from PIL import Image
+b = io.BytesIO(); Image.new("RGB", (4, 3)).save(b, "PNG")
+open(f"{out}/decoy_png_thread.eml", "wb").write(b.getvalue())

@@ -1,0 +1,27 @@
+cProfile of `cases/single_solve` (45592 function calls (44610 primitive calls) in 0.050 seconds):
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     84/1    0.000    0.000    0.050    0.050 {built-in method builtins.exec}
+        1    0.000    0.000    0.050    0.050 solve.py:1(<module>)
+    102/8    0.000    0.000    0.049    0.006 <frozen importlib._bootstrap>:1349(_find_and_load)
+    102/8    0.000    0.000    0.049    0.006 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+    94/10    0.000    0.000    0.048    0.005 <frozen importlib._bootstrap>:911(_load_unlocked)
+    82/10    0.000    0.000    0.047    0.005 <frozen importlib._bootstrap_external>:993(exec_module)
+   204/16    0.000    0.000    0.046    0.003 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+       12    0.000    0.000    0.033    0.003 __init__.py:1(<module>)
+        1    0.000    0.000    0.031    0.031 elffile.py:1(<module>)
+  336/331    0.003    0.000    0.015    0.000 {built-in method builtins.__build_class__}
+       82    0.000    0.000    0.013    0.000 <frozen importlib._bootstrap_external>:1066(get_code)
+        1    0.000    0.000    0.011    0.011 dwarfinfo.py:1(<module>)
+        1    0.000    0.000    0.011    0.011 utils.py:1(<module>)
+       82    0.001    0.000    0.010    0.000 <frozen importlib._bootstrap_external>:755(_compile_bytecode)
+       82    0.009    0.000    0.009    0.000 {built-in method marshal.loads}
+      101    0.001    0.000    0.006    0.000 <frozen importlib._bootstrap>:1240(_find_spec)
+        1    0.000    0.000    0.006    0.006 pathlib.py:1(<module>)
+        1    0.000    0.000    0.006    0.006 debug.py:1(<module>)
+        1    0.000    0.000    0.005    0.005 lineprogram.py:1(<module>)
+       89    0.000    0.000    0.005    0.000 <frozen importlib._bootstrap_external>:1524(find_spec)
+       89    0.000    0.000    0.005    0.000 <frozen importlib._bootstrap_external>:1495(_get_spec)
+        3    0.000    0.000    0.005    0.002 constants.py:1(<module>)
+      9/8    0.000    0.000    0.005    0.001 {built-in method builtins.__import__}
+      209    0.001    0.000    0.004    0.000 <frozen importlib._bootstrap_external>:1597(find_spec)
+        1    0.000    0.000    0.004    0.004 pdb.py:1(<module>)

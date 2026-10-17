@@ -1,0 +1,8 @@
+{
+ "field": "email.arc_chain_validation",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/email/GENERATOR_stdlib_dkimpy_auth.py.txt tools/pylib-auth <outdir>  (stdlib EmailMessage policy.SMTP + dkimpy 1.1.8 dkim.sign/arc_sign) -> authres_phish.eml",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/email/ORACLE_authres_dkimpy.py.txt tools/pylib-eml tools/pylib-auth <file>  (eml_parser 4.2.1 headers + authres 1.2.0 + dkimpy parse_tag_value) -> ['arc_chain_validation']",
+ "decoy": false,
+ "member": "evidence-01/authres_phish.eml"
+}

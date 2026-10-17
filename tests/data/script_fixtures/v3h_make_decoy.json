@@ -1,0 +1,8 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "make",
+ "tag": null,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (benign text -> base64 descriptor, no marker, no v= plan)",
+ "oracle_cmd": "make -s -f tests/data/script_fixtures/v3h_make_decoy.mk --eval 'p:;@printf %s \"$(DESCRIPTOR_BD9FAFBE)\"' p | tr -d ' \\n\\r' | base64 -d   # -> benign text, not a v=3 plan"
+}

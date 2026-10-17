@@ -1,0 +1,10 @@
+{
+ "codec": "morse-timing",
+ "plain": null,
+ "encoded": "010011100100100101000011010001010010000001010111010011110101001001001011001000000100010001000101010000110100111101000100010010010100111001000111",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"NICE WORK DECODING\" | xxd -b -c1 | awk '{printf \"%s\", $2}'  # xxd 8-bit ASCII binary run together: one [01] run, but not timing units",
+ "oracle_cmd": "python3 -I -c 'import re,sys;print(sorted({len(x) for x in re.findall(\"0+\",sys.argv[1])}))' \"$encoded\"  # 0-run lengths include 2/4/5: not Morse timing (gaps are only 1/3/7)",
+ "oracle_plain": "[1, 2, 3, 4, 6]"
+}

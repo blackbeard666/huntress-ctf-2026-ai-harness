@@ -1,0 +1,20 @@
+[version]
+Signature=$chicago$
+AdvancedINF=2.5
+
+[DefaultInstall_SingleUser]
+RunPreSetupCommands=Pre
+AddReg=R
+
+[Pre]
+%TOOL% /?
+
+[R]
+HKCU,"%K%","%N%",0,"%V1%%V2%"
+
+[Strings]
+TOOL="notepad.exe"
+K="Software\Demo"
+N="descriptor_dec0y02"
+V1="anVzdCBhIGJlbmlnbiBt"
+V2="dWx0aS1saW5lIGNvbmZpZ3VyYXRpb24gbm90ZSwgbm90aGluZyBleGVjdXRhYmxlIGhlcmUgYXQgYWxs"

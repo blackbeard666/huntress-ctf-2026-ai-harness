@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I reg_inf_gen.py <outdir>  (stdlib writer: gzip/base64/utf-16-le/comma-hex with regedit ',\\\\' wrapping; `file` reports 'Windows Registry little-endian text' / 'Windows setup INFormation') -- INF [Strings] %V1%%V2% = base64(non-plan prose)",
+ "oracle_cmd": "tr -d '\\r' < inf_decoy_noplan.inf | awk -F'\"' '/^V1=/{a=$2}/^V2=/{b=$2}END{printf \"%s%s\",a,b}' | base64 -d   # -> prose, no v= plan"
+}

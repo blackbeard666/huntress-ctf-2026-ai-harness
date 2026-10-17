@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I reg_inf_gen.py <outdir>  (stdlib writer: gzip/base64/utf-16-le/comma-hex with regedit ',\\\\' wrapping; `file` reports 'Windows Registry little-endian text' / 'Windows setup INFormation') -- hex(2)/hex(7) benign paths + descriptor_decoy01 = hex(2) of base64(non-plan prose)",
+ "oracle_cmd": "iconv -f UTF-16LE -t UTF-8 reg_decoy_benign_hex.reg | tr -d '\\r' | sed -n '/descriptor_decoy01/,/^$/p' | sed 's/.*hex(2)://' | tr -d ',\\\\ \\n' | xxd -r -p | iconv -f UTF-16LE -t UTF-8 | tr -d '\\0' | base64 -d   # -> 'just a benign ... note', no v= plan"
+}

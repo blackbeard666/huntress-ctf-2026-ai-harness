@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=kotlin_script|role=collector|verdict=malicious|attack=T1005|adapter=file_walk|host_profile=standalone|obfuscation_profile=nomark|stage_profile=two_stage_download_execute|next_language=python|stage_count=2|steps=enumerate_files,stage_archive|campaign_id=KTS-f0bf4046|url=https://kts-f0bf404649.example.invalid/stage|file_path=/tmp/huntress-kts/.499a3a247463e172.stage",
+ "decoy": false,
+ "host": "kts",
+ "tag": null,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> base64, descriptor literal only, no HUNTRESS_ANALYSIS marker)",
+ "oracle_cmd": "sed -n '/\"\"\"$/,/^\"\"\"/p' tests/data/script_fixtures/v3h_kts_nomark.kts | grep -v '\"\"\"' | tr -d ' \\n\\r' | base64 -d"
+}

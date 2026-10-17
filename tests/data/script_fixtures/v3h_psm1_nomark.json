@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=powershell_module|role=loader|verdict=malicious|attack=T1059.001|adapter=module_import|host_profile=standalone|obfuscation_profile=nomark|stage_profile=two_stage_download_execute|next_language=csharp|stage_count=2|steps=import_module,invoke_stage|campaign_id=PSM-b779883d|url=https://psm1-b779883d66.example.invalid/stage|file_path=/tmp/huntress-psm1/.66fd520f917ab328.stage",
+ "decoy": false,
+ "host": "psm1",
+ "tag": null,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> base64, descriptor literal only, no HUNTRESS_ANALYSIS marker)",
+ "oracle_cmd": "pwsh -NoProfile -c \"Import-Module ./tests/data/script_fixtures/v3h_psm1_nomark.psm1 -Force; & (Get-Module (Get-Item ./tests/data/script_fixtures/v3h_psm1_nomark.psm1).BaseName) { \\$descriptor_06630147 }\" | tr -d ' \\n\\r' | base64 -d"
+}

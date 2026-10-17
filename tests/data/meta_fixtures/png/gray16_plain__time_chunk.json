@@ -1,0 +1,8 @@
+{
+ "field": "png.time_chunk",
+ "expected": "none",
+ "generator_cmd": "PngInfo(); add_text('Comment','huntress png test'); add_text('Author','A. Analyst', zip=True); add_itxt('Description','caf\\u00e9 r\\u00e9sum\\u00e9', lang='fr', tkey='Beschreibung'); add(b'tIME', pack('>HBBBBB',2024,3,15,12,34,56)); Image.new('RGBA',(40,30)).save('rgba_text.png', pnginfo=pi); Image.new('I;16',(17,9),1234).save('gray16_plain.png'); Image.new('RGB',(8,8)).save('decoy_jpeg.png', format='JPEG')  (.venv Pillow 12.3.0 writer)",
+ "oracle_cmd": "exiftool -j -ModifyDate -> absent; pngcheck lists no tIME",
+ "decoy": true,
+ "member": "gray16_plain.png"
+}

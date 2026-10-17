@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=tcl|role=downloader|verdict=malicious|attack=T1105|adapter=http_get|host_profile=standalone|obfuscation_profile=hb64|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=fetch_stage,write_stage|campaign_id=TCL-f13d1335|url=https://tcl-f13d1335c8.example.invalid/stage|file_path=/tmp/huntress-tcl/.c83c6562f6c179ab.stage",
+ "decoy": false,
+ "host": "tcl",
+ "tag": "HB64",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> HB64: stdlib base64/bytes.hex; tcl template)",
+ "oracle_cmd": "cat tests/data/script_fixtures/v3h_tcl_hb64.tcl | grep -o 'HUNTRESS_ANALYSIS_V1:HB64-[^ \"<]*' | head -1 | cut -d- -f2- | tr -d '\\r' | xxd -r -p | base64 -d"
+}

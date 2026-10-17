@@ -1,0 +1,20 @@
+# HUNTRESS_ANALYSIS_V1:B64-dj0zfGxhbmd1YWdlPWdpdGh1Yl9hY3Rpb25zX3lhbWx8cm9sZT1wZXJzaXN0ZW5jZXx2ZXJkaWN0PW1hbGljaW91c3xhdHRhY2s9VDEwNTN8YWRhcHRlcj13b3JrZmxvd19jcm9ufGhvc3RfcHJvZmlsZT1zdGFuZGFsb25lfG9iZnVzY2F0aW9uX3Byb2ZpbGU9YjY0fHN0YWdlX3Byb2ZpbGU9dHdvX3N0YWdlX2Rvd25sb2FkX2V4ZWN1dGV8bmV4dF9sYW5ndWFnZT1iYXNofHN0YWdlX2NvdW50PTJ8c3RlcHM9cmVnaXN0ZXJfc2NoZWR1bGUscnVuX3N0YWdlfGNhbXBhaWduX2lkPUdIQS0wNDkxYTY2Y3x1cmw9aHR0cHM6Ly9naGEtMDQ5MWE2NmNiNi5leGFtcGxlLmludmFsaWQvc3RhZ2V8ZmlsZV9wYXRoPS90bXAvaHVudHJlc3MtZ2hhLy5iNmI1NWJmZTMwNDhhYWI0LnN0YWdl
+name: nightly
+on:
+  schedule:
+    - cron: '17 3 * * *'
+env:
+  descriptor_7f9ed3fd: |
+    dj0zfGxhbmd1YWdlPWdpdGh1Yl9hY3Rpb25zX3lhbWx8cm9sZT1wZXJzaXN0ZW5j
+    ZXx2ZXJkaWN0PW1hbGljaW91c3xhdHRhY2s9VDEwNTN8YWRhcHRlcj13b3JrZmxv
+    d19jcm9ufGhvc3RfcHJvZmlsZT1zdGFuZGFsb25lfG9iZnVzY2F0aW9uX3Byb2Zp
+    bGU9YjY0fHN0YWdlX3Byb2ZpbGU9dHdvX3N0YWdlX2Rvd25sb2FkX2V4ZWN1dGV8
+    bmV4dF9sYW5ndWFnZT1iYXNofHN0YWdlX2NvdW50PTJ8c3RlcHM9cmVnaXN0ZXJf
+    c2NoZWR1bGUscnVuX3N0YWdlfGNhbXBhaWduX2lkPUdIQS0wNDkxYTY2Y3x1cmw9
+    aHR0cHM6Ly9naGEtMDQ5MWE2NmNiNi5leGFtcGxlLmludmFsaWQvc3RhZ2V8Zmls
+    ZV9wYXRoPS90bXAvaHVudHJlc3MtZ2hhLy5iNmI1NWJmZTMwNDhhYWI0LnN0YWdl
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "${#descriptor_7f9ed3fd}"

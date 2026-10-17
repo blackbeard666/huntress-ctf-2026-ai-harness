@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=inf|role=proxy_execution|verdict=malicious|attack=T1218.003|adapter=cmstp_inf|stage_count=3|steps=run_presetup,unregister_ocx,write_run_key|campaign_id=INF-0a1b2c3d|url=https://inf-0a1b2c3d.example.invalid/s",
+ "decoy": false,
+ "generator_cmd": "python3 -I reg_inf_gen.py <outdir>  (stdlib writer: gzip/base64/utf-16-le/comma-hex with regedit ',\\\\' wrapping; `file` reports 'Windows Registry little-endian text' / 'Windows setup INFormation') -- CMSTP INF: RunPreSetupCommands/UnRegisterOCXSection/AddReg, descriptor name+value spelled via [Strings] %DNAME% / %DPART1%%DPART2%",
+ "oracle_cmd": "tr -d '\\r' < inf_strings_subst.inf | awk -F'\"' '/^DPART1=/{a=$2}/^DPART2=/{b=$2}END{printf \"%s%s\",a,b}' | base64 -d"
+}

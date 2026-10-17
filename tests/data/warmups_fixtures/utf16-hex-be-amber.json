@@ -1,0 +1,9 @@
+{
+ "codec": "hex(utf-16be)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-lynx-63",
+ "encoded": "004e00690063006500200077006f0072006b0020006400650063006f00640069006e0067002000740068006900730020007700610072006d00750070002100200054006f00200073006f006c00760065002c0020007300750062006d006900740020007400680069007300200065007800610063007400200061006e007300770065007200200074006f0020007400680065002000470061006d00650020004d00610073007400650072003a00200061006d006200650072002d006c0079006e0078002d00360033",
+ "generator_cmd": "printf %s \"$plain\" | iconv -f UTF-8 -t UTF-16BE | xxd -p | tr -d '\\n'  # glibc iconv UTF-16BE + xxd -p",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;print(bytes.fromhex(sys.stdin.read()).decode('utf-16-be'),end='')\"  # CPython stdlib codecs (independent of glibc iconv)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-lynx-63",
+ "expected": "match"
+}

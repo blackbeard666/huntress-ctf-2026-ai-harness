@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=1|language=vbscript|role=loader|attack=T1027|steps=decode_payload,inflate_stage,run|campaign_id=VBE-7c0de511|url=https://vbe-7c0de511.example.invalid/stage",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | gzip -9n | base64 -w0  # into Const Material_7c0d of a CRLF .vbs; then `.venv/bin/wshenc -R < wsh1.vbs > wsh_vbe_gzip_b64.vbe` (binref VBScript.Encode, whole file)",
+ "oracle_cmd": ".venv/bin/wshenc < wsh_vbe_gzip_b64.vbe | grep -o 'Material_7c0d = \"[^\"]*' | cut -d'\"' -f2 | base64 -d | gunzip"
+}

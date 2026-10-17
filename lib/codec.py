@@ -518,6 +518,268 @@ def material_text(src, ident):
     return "".join(pieces) or None
 
 
+# Unix scripting-language material templates (prebuild ruby-perl-pack-reps, 10-16): a v=1 `Codec_<id>` whose material
+# is WRITTEN through the language's own byte syntax instead of one plain literal -- Ruby `["..."].pack("H*")`,
+# `"..".unpack1("m0")`, `[118, 61].pack("C*")`, `%w[76 3d].map(&:hex).pack("C*")`, `"\u{76 3d}"`; Perl
+# `pack("H*", "..")`, `pack("C*", qw(..))`, `MIME::Base64::decode("..")`, `"\x{76}"`; Tcl `set Material_x [binary
+# decode hex|base64 ".."]`, `binary format c* {..}`, `set Codec_x {..}`; Lua `"\118\061"`, `string.char(..)`.
+# material_text() joins every literal (format `H*` / `m0` included) or misses the statement (Tcl `set`); here the
+# assignment is read by its shape + the named template: the inner literal under the declared rep, then the bytes the
+# template evaluates to (also with the template ops chained in either order) under the declared transform. Only
+# consulted when the plain material reading found no plan, so every earlier result is unchanged. Bounded, never raises.
+_TPL_CODEC_RES = (re.compile(r"""\bset\s+(?:Codec|CODEC)_(?P<id>[0-9A-Za-z]+)\s+(?:"(?P<q>[^"]*)"|\{(?P<b>[^{}]*)\})"""),
+                  re.compile(r"""(?:Codec|CODEC)_(?P<id>[0-9A-Za-z]+)['"]?\s*=>\s*(?:"(?P<q>[^"]*)"|'(?P<b>[^']*)')"""))
+_TPL_FMT = re.compile(r"[A-Za-z][*\d]{0,3}")
+_TPL_WORDS = re.compile(r"(?:%[wWiI]|\bqw)\s*([\[({</|!])")
+_TPL_ESC_PERL = re.compile(r"\\(x\{[0-9a-fA-F\s]{1,8}\}|x[0-9a-fA-F]{1,2}|u\{[0-9a-fA-F\s]{1,64}\}|u[0-9a-fA-F]{4}|"
+                           r"[0-7]{1,3}|.)", re.S)
+_TPL_ESC_LUA = re.compile(r"\\(x[0-9a-fA-F]{2}|u\{[0-9a-fA-F]{1,6}\}|\d{1,3}|.)", re.S)
+
+
+def _tpl_unescape(body, lua=False):
+    """Double-quoted literal body -> its bytes: Ruby/Perl/Tcl (`\\u{76 3d}`, `\\x{76}`, `\\xHH`, octal `\\166`) or Lua
+    (decimal `\\118`, `\\xHH`, `\\u{..}`). None when an escape is out of range."""
+    def sub(m):
+        s = m.group(1)
+        if s[0] in "xu" and len(s) > 1 and (s[1] == "{" or s[0] == "x" or len(s) == 5):
+            return "".join(chr(int(h, 16)) for h in s[1:].strip("{}").split())
+        if s[0].isdigit():
+            v = int(s, 10 if lua else 8)
+            if v > 255:
+                raise ValueError(s)
+            return chr(v)
+        return _CH_DQ_ESC.get(s, s)
+    try:
+        t = (_TPL_ESC_LUA if lua else _TPL_ESC_PERL).sub(sub, body)
+        return t.encode("latin-1") if max(map(ord, t or "\0")) < 256 else t.encode("utf-8")
+    except (ValueError, OverflowError):
+        return None
+
+
+def _tpl_stmts(src, ident, limit=8):
+    """RHS text of each `Material_<id> = ..` / `=> ..` / `.= ..` / `<< ..` / Tcl `set Material_<id> ..` statement."""
+    pat = re.compile(r"(\bset\s+|\bappend\s+)?[$@]?(?:Material|MATERIAL)_" + re.escape(ident) + r"(?:_[0-9A-Za-z]+)?\b")
+    out = []
+    for m in pat.finditer(src):
+        a = re.compile(r"[ \t]+" if m.group(1) else r"['\"]?\s*(\+=|\.=|<<|=>|=(?![=~]))\s*").match(src, m.end())
+        if not a:
+            continue
+        i, depth, q, prev = a.end(), 0, None, ""
+        while i < len(src) and i - a.end() < 65536:
+            c = src[i]
+            if q:
+                if c == "\\":
+                    i += 1
+                elif c == q:
+                    q = None
+            elif c in "\"'":
+                q = c
+            elif c in "([{":
+                depth += 1
+            elif c in ")]}":
+                depth -= 1
+                if depth < 0:
+                    break
+            elif depth <= 0 and (c == ";" or c == "\n" and prev not in "\\+.,&(|"):
+                break
+            if not c.isspace():
+                prev = c
+            i += 1
+        out.append(src[a.end():i])
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _tpl_parse(stmt, tcl):
+    """(literals [(quote, body)], words, bare text outside literals) of one RHS."""
+    lits, words, bare, i, s = [], [], [], 0, stmt
+    while i < len(s):
+        c = s[i]
+        w = _TPL_WORDS.match(s, i)
+        if w:
+            close = _CH_PAIR.get(w.group(1), w.group(1))
+            j = s.find(close, w.end())
+            j = len(s) if j < 0 else j
+            words += s[w.end():j].split()
+            i = j + 1
+            continue
+        if c in "\"'" or (tcl and c == "{"):
+            close = "}" if c == "{" else c
+            j, body = i + 1, []
+            while j < len(s) and s[j] != close:
+                if s[j] == "\\" and j + 1 < len(s) and c != "{":
+                    body.append(s[j:j + 2])
+                    j += 2
+                    continue
+                body.append(s[j])
+                j += 1
+            lits.append((c, "".join(body)))
+            i = j + 1
+            bare.append(" ")
+            continue
+        bare.append(c)
+        i += 1
+    return lits, words, "".join(bare)
+
+
+def _tpl_ops(stmt):
+    """Decoding ops the statement names, in source order: 'hex' / 'hexlo' / 'b64' / 'bytes'."""
+    ops = []
+    pats = ((r"""\bunpack1?\s*\(?\s*["']m0?\*?["']|\bdecode64\b|\bstrict_decode64\b|\bdecode_base64\b|"""
+             r"""MIME::Base64::decode\b|\bb64decode\b|\bbase64_decode\b|binary\s+decode\s+base64\b|\bfrom_base64\b""",
+             "b64"),
+            (r"""\bpack\s*\(?\s*["']H\*?\d*["']|binary\s+(?:decode\s+hex|format\s+H\*?\d*)\b|\bhex2bin\b|"""
+             r"""\bunhexlify\b|\bfrom_hex\b""", "hex"),
+            (r"""\bpack\s*\(?\s*["']h\*?\d*["']|binary\s+format\s+h\*?\d*\b""", "hexlo"),
+            (r"""\bpack\s*\(?\s*["'][CcUW]\*?\d*["']|binary\s+format\s+[cC]\*?\d*\b|\bstring\.char\b|\bchr\b|"""
+             r"""\.chr\b|&:chr\b""", "bytes"))
+    for p, op in pats:
+        ops += [(m.start(), op) for m in re.finditer(p, stmt)]
+    return [op for _, op in sorted(ops)]
+
+
+def _tpl_apply(op, text):
+    if op == "b64":
+        return b64(text)
+    h = hex_bytes(text) if re.fullmatch(r"[\s0-9a-fA-F]+", text or "") else None
+    if h and op == "hexlo":
+        return bytes(((x & 15) << 4) | (x >> 4) for x in h)
+    return h
+
+
+def _tpl_numbers(words, lits, bare, stmt):
+    """Byte list of a pack('C*') / string.char / binary format c* template, radix read from the code (`hex`, `16`)."""
+    toks = list(words)
+    for q, body in lits:
+        if re.fullmatch(r"[\s,0-9a-fA-FxX]+", body) and re.search(r"[\s,]", body.strip()):
+            toks += re.split(r"[\s,]+", body.strip())
+    b = re.sub(r"\bto_i\s*\(\s*16\s*\)|\bunpack1\b|[\w.]*[A-Za-z_][\w.]*\d\w*", " ", bare)
+    toks += re.findall(r"(?<![\w.])(?:0[xX][0-9a-fA-F]+|\d+)(?![\w.])", b)
+    toks = [t for t in toks if t]
+    if not toks:
+        return []
+    hexy = bool(re.search(r"\bhex\b|&:hex|to_i\s*\(\s*16|\b16\b|scan\s*%x", stmt)) or \
+        any(re.search(r"[a-fA-F]", t) and not t.lower().startswith("0x") for t in toks)
+    out = []
+    for radix in ((16, 10) if hexy else (10, 16)):
+        try:
+            v = [int(t, 16) if t.lower().startswith("0x") else int(t, radix) for t in toks]
+        except ValueError:
+            continue
+        if all(0 <= x < 256 for x in v):
+            out.append(bytes(v))
+        elif "U*" in stmt and all(0 <= x < 0x110000 for x in v):
+            out.append("".join(map(chr, v)).encode("utf-8"))
+    return out
+
+
+def _tpl_decode(src, ident, rep, tr, key, budget=0.8):
+    """(plain, statement) for a template-written material (see the section comment), else (None, None)."""
+    try:
+        end = time.time() + budget
+        stmts = _tpl_stmts(src, ident)
+        if not stmts:
+            return None, None
+        blobs = []
+        parts = [[], [], [], []]                       # raw text / perl-unescaped / lua-unescaped / evaluated bytes
+        for st in stmts:
+            tcl = bool(re.match(r"\s*\[", st)) or "binary " in st or bool(re.search(r"\bset\s+(?:Material|MATERIAL)_"
+                                                                                  + re.escape(ident), src))
+            lits, words, bare = _tpl_parse(st, tcl)
+            fmt = bool(re.search(r"\b(?:un)?pack1?\b|binary\s+format", st))
+            body = [(q, b) for q, b in lits if not (fmt and _TPL_FMT.fullmatch(b))]
+            raw = "".join(b for _, b in body) + " ".join(words)
+            perl = b"".join((_tpl_unescape(b) or b"") if q == '"' else b.encode("latin-1", "ignore") for q, b in body)
+            lua = b"".join((_tpl_unescape(b, True) or b"") if q == '"' else b.encode("latin-1", "ignore")
+                           for q, b in body)
+            ops = _tpl_ops(st)
+            ev = []
+            for seq in dict.fromkeys((tuple(ops), tuple(reversed(ops)))):
+                for start in (perl, lua):
+                    cur = [start] if seq[:1] != ("bytes",) else _tpl_numbers(words, lits, bare, st)
+                    for op in seq:
+                        if op == "bytes":
+                            continue
+                        cur = [x for x in (_tpl_apply(op, c.decode("latin-1")) for c in cur) if x]
+                    ev += cur
+                    for op in seq[:1]:                     # a single op of a two-op chain
+                        if op != "bytes" and len(seq) > 1:
+                            x = _tpl_apply(op, start.decode("latin-1"))
+                            ev += [x] if x else []
+            for k, v in enumerate((raw.encode("latin-1", "ignore"), perl, lua, b"".join(ev[:1]))):
+                parts[k].append(v)
+            blobs += ev[1:4]
+        texts = [b"".join(p) for p in parts[:3]]
+        blobs = [b"".join(parts[3])] + blobs + texts[1:]
+        # the inner literal under the declared rep, then the evaluated bytes under the declared transform; names
+        # only first (cheap), then decode() with its name-agnostic fallback
+        cands = list(dict.fromkeys([(t.decode("latin-1"), rep) for t in texts if t] +
+                                   [(b.hex(), "hex_compact") for b in blobs if b]))
+        for full in (False, True):
+            for m, r in cands:
+                if time.time() > end:
+                    return None, None
+                t2, k2 = _spec(r, tr, key)
+                if full:
+                    p = decode(m, r, tr, key)
+                elif known(r, t2):
+                    p = next((o.decode("utf-8").lstrip("\ufeff") for d in _rep_candidates(r, m)
+                              for o in _transform_candidates(t2, k2, d) if looks_like_plan(o)), None)
+                else:
+                    continue
+                if p:
+                    return p, stmts[0]
+    except Exception:  # noqa: BLE001 - unknown -> None, never an exception
+        pass
+    return None, None
+
+
+# JScript.Encode / VBScript.Encode (screnc: .jse/.vbe, `language="VBScript.Encode"` in WSF/HTA/SCT/ASP hosts):
+# `#@~^<len b64>==<body><checksum b64>==^#~@`. Each body char < 0x80 advances a position i; tab and 0x20-0x7F (bar
+# `<` `>` `@`) go through one of 3 permutation tables picked by _WSH_SLOT[i % 64]; `@&` `@#` `@*` `@!` `@$` are \n \r
+# > < @. _WSH_ENC[s] lists the slot-s ciphertext of each _WSH_PLAIN char. find_codecs() reads the decoded source
+# (blocks substituted in place) when the text carries the marker. Length/checksum are not enforced (lenient).
+_WSH_PLAIN = "\t" + "".join(chr(c) for c in range(32, 128) if c not in (60, 62, 64))
+_WSH_ENC = (
+    '7~ZE:yY\'vcbMQSR &Tq+f*X\x7f{01lIx_)$/93o!u(BFJ\\H6K}]jPi#\tpet,wD?m|C8^[nWL4r%VshUG25.dO;-Aaz"`kN=g',
+    'i,er[fuLEv*C3B cJZ8y2Wl+FRO=p{Qz~;GAwV_&xndtg}h5"U:`jqoI\\]\'Y%|#m(19\x7f6T4bN0^s\tKa$MkD!7SXH.P-)?/',
+    'dP"Ja^][B`#e_~ORz!F &c*vG%,)i\'gbAZf2sMCq9|SH1rnpI?Kj.\x7f(5}$-T7{=l4mN+0otkL3V:xWw;D/YE\\h6Xy\tu8UQ',
+)
+_WSH_SLOT = "0120121221210212021200122102122100212120200120210212001220012021"
+_WSH_DEC = tuple({e: p for e, p in zip(enc, _WSH_PLAIN)} for enc in _WSH_ENC)
+_WSH_ESC = {"&": "\n", "#": "\r", "*": ">", "!": "<", "$": "@"}
+_WSH_RE = re.compile(r"#@~\^[A-Za-z0-9+/]{6}==(.*?)[A-Za-z0-9+/]{6}==\^#~@", re.S)
+
+
+def wsh_decode_block(body):
+    """Plain text of one screnc body (between the `#@~^XXXXXX==` header and the `XXXXXX==^#~@` trailer)."""
+    out, i, k = [], 0, 0
+    while k < len(body):
+        c = body[k]
+        k += 1
+        if c == "@" and k < len(body) and body[k] in _WSH_ESC:
+            c = _WSH_ESC[body[k]]
+            k += 1
+        elif c < "\x80" and c not in "<>@":
+            c = _WSH_DEC[int(_WSH_SLOT[i & 63])].get(c, c)
+        if c < "\x80":
+            i += 1
+        out.append(c)
+    return "".join(out)
+
+
+def wsh_decode(src):
+    """`src` with every `#@~^..^#~@` encoded block replaced by its plain script, or None when it carries none."""
+    try:
+        if not isinstance(src, str) or "#@~^" not in src:
+            return None
+        dec = _WSH_RE.sub(lambda m: wsh_decode_block(m.group(1)), src)
+        return dec if dec != src else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def find_codecs(src, _depth=0):
     """Every declared codec in a source text: [{id, rep, transform, key, material, plain}] (plain = decode() or None).
     Batch `HUNTRESS-CODEC:` has no id -- its material is the `HUNTRESS-MATERIAL:` line.
@@ -527,6 +789,7 @@ def find_codecs(src, _depth=0):
     if isinstance(src, (bytes, bytearray)):
         raw = bytes(src)
         src = raw.decode("utf-8", "ignore")
+    src = wsh_decode(src) or src                         # JScript.Encode / VBScript.Encode blocks: read the plain
     out = _find_codecs_text(src)
     if _depth < 2 and not any(c.get("plain") for c in out):
         out = out + _carrier_codecs(src, raw, _depth)
@@ -543,6 +806,12 @@ def find_codecs(src, _depth=0):
         out = x + out
     if _depth < 2 and not any(c.get("plain") for c in out):
         out = out + _chain_codecs(src, _depth)
+    if _depth < 1 and not any(c.get("plain") for c in out):
+        norm = normalize(raw if raw is not None else src)     # whole-leaf UTF-16 / gzip / base64: rescan the source
+        if norm:
+            out = out + [dict(c, id=f"{c['id']}@leaf") for c in find_codecs(norm, _depth + 1) if c.get("plain")]
+    if _depth < 1 and not any(c.get("plain") for c in out):
+        out = out + _reg_inf_codecs(normalize(raw if raw is not None else src) or src, _depth)
     return out
 
 
@@ -554,6 +823,21 @@ def _find_codecs_text(src):
         mat = material_text(src, m.group("id"))
         out.append({"id": m.group("id"), "rep": rep, "transform": tr, "key": key, "material": mat,
                     "plain": decode(mat, rep, tr, key)})
+    seen = {c["id"] for c in out}
+    for rx in _TPL_CODEC_RES:                         # Tcl `set Codec_x {..}`, Perl `CODEC_X => '..'`
+        for m in rx.finditer(src or ""):
+            if m.group("id") not in seen:
+                seen.add(m.group("id"))
+                rep, tr, key = ((m.group("q") or m.group("b") or "").split("|") + ["", "", ""])[:3]
+                mat = material_text(src, m.group("id"))
+                out.append({"id": m.group("id"), "rep": rep, "transform": tr, "key": key, "material": mat,
+                            "plain": decode(mat, rep, tr, key)})
+    tpl_end = time.time() + 1.0
+    for c in out:                                     # material written through a pack/unpack/escape template
+        if c["plain"] is None and c["rep"] and time.time() < tpl_end:
+            p, st = _tpl_decode(src, c["id"], c["rep"], c["transform"], c["key"], max(0.05, tpl_end - time.time()))
+            if p:
+                c["plain"], c["material"] = p, st
     bc, bm = _BATCH_CODEC_RE.search(src or ""), _BATCH_MAT_RE.search(src or "")
     if bc:
         parts = bc.group("spec").split("|")
@@ -633,9 +917,110 @@ _XML_DESC_RES = (
 )
 
 
-def _read_literal(src, i, op):
+# YAML value shapes (target yaml-ci-host-route: GitHub Actions / GitLab CI / Ansible hosts) the quoting forms below miss:
+# `!!binary` / `!tag` / `&anchor` properties, `*alias`, `[..]` flow sequences, a value on the deeper-indented lines
+# below its key (block sequence items joined, a mapping's default/value/data child, a lone scalar), `|2-` indicators,
+# plain scalars folded over deeper-indented lines, and `- name: descriptor_x` + sibling `value:`. Pure regex/indent
+# reading (no PyYAML in-window); every shape here used to read as None, so earlier readings are unchanged.
+_YAML_PROPS = re.compile(r"(?:(?:!!?[\w:/.-]*|!<[^>\s]*>|&[\w-]+)(?:[ \t]+|(?=[ \t]*(?:#[^\n]*)?\r?\n)))+")
+_YAML_SUB_KEYS = ("default", "value", "data", "content", "payload", "text", "body", "stdin", "src")
+_YAML_KEY = re.compile(r"""[ \t]*(?:-[ \t]+)?(["']?)([\w.-]+)\1[ \t]*:(?:[ \t]+|(?=\r?$))""")
+_YAML_PLAIN_CONT = re.compile(r"\n( +)([A-Za-z0-9+/=_\-.%~]+)[ \t]*(?=\r?\n|$)")
+_YAML_JINJA = re.compile(r"""\s*\{\{-?\s*(["'])(.*?)\1\s*(?:\|\s*\w+(?:\([^)]*\))?\s*)*-?\}\}\s*""", re.S)
+_YAML_FLOW_ITEM = re.compile(r""""([^"]*)"|'([^']*)'|([^,\s\[\]"']+)""")
+
+
+def _yaml_indent(src, i):
+    ls = src.rfind("\n", 0, i) + 1
+    line = src[ls:i]
+    return len(line) - len(line.lstrip(" \t"))
+
+
+def _yaml_children(src, j, base, lim=1 << 16):
+    """[(indent, line, offset)] of the non-blank, non-comment lines from src[j] on that sit deeper than `base`."""
+    out, stop = [], j + lim
+    while j < len(src) and j < stop and len(out) < 512:
+        e = src.find("\n", j)
+        e = len(src) if e < 0 else e
+        line = src[j:e].rstrip("\r")
+        s = line.strip()
+        if s and not s.startswith("#"):
+            ind = len(line) - len(line.lstrip(" \t"))
+            if ind <= base:
+                break
+            out.append((ind, line, j))
+        j = e + 1
+    return out
+
+
+def _yaml_node(src, i, depth=0):
+    """(text, end) of a YAML value at src[i] in one of the shapes above, or (None, i)."""
+    if depth > 2 or i >= len(src):
+        return None, i
+    p = _YAML_PROPS.match(src, i)
+    if p and p.end() > i:
+        return _read_literal(src, p.end(), ":", depth + 1)
+    m = re.match(r"\*([\w-]+)", src[i:i + 80])
+    if m:                                                            # alias -> the anchored value
+        a = re.search(r"(?<![\w*-])&" + re.escape(m.group(1)) + r"(?=[ \t\r\n])", src)
+        return (_read_literal(src, a.start(), ":", depth + 1)[0] if a else None), i + m.end()
+    if src.startswith("[", i):                                       # flow sequence ["ab", 'cd', ef]
+        j = src.find("]", i, i + (1 << 16))
+        if j < 0:
+            return None, i
+        text = "".join(a or b or c for a, b, c in _YAML_FLOW_ITEM.findall(src[i + 1:j]))
+        return (text or None), j + 1
+    m = re.match(r"[ \t]*(?:#[^\n]*)?\r?\n", src[i:i + 4096])
+    if not m:
+        return None, i
+    kids = _yaml_children(src, i + m.end(), _yaml_indent(src, i))
+    if not kids:
+        return None, i
+    ind0 = kids[0][0]
+    top = [k for k in kids if k[0] == ind0]
+    end = kids[-1][2] + len(kids[-1][1])
+    if top[0][1].lstrip().startswith("- "):                          # block sequence: scalar items joined
+        parts = []
+        for ind, line, off in top:
+            body = line.lstrip()
+            if not body.startswith("- ") or _YAML_KEY.match(body[2:]):
+                return None, i
+            t, _ = _read_literal(src, off + ind + 2, ":", depth + 1)
+            parts.append(body[2:].strip() if t is None else t)
+        return "".join(parts), end
+    keyed = [(km, off + ind) for ind, line, off in top for km in [_YAML_KEY.match(line.lstrip())] if km]
+    if keyed:                                                        # nested mapping: default/value/data, else longest
+        vals = []
+        for km, off in keyed:
+            t, _ = _read_literal(src, off + km.end(), ":", depth + 1)
+            if t:
+                vals.append((km.group(2).lower() in _YAML_SUB_KEYS, len(t), t))
+        return (max(vals)[2] if vals else None), end
+    t, e = _read_literal(src, top[0][2] + ind0, ":", depth + 1)      # lone scalar on the next line
+    return t, (e if t is not None else i)
+
+
+def _yaml_sibling_value(src, start):
+    """`- name: descriptor_x` (k8s env / Actions inputs list): the sibling `value:` / `default:` literal, else None."""
+    ls = src.rfind("\n", 0, start) + 1
+    m = re.match(r"""([ \t]*(?:-[ \t]+)?)(?:name|key|id|variable)[ \t]*:[ \t]*["']?$""", src[ls:start])
+    if not m:
+        return None
+    col, j = len(m.group(1)), src.find("\n", start)
+    for ind, line, off in _yaml_children(src, j + 1 if j >= 0 else len(src), col - 1)[:32]:
+        km = _YAML_KEY.match(line) if ind == col else None
+        if km and km.group(2).lower() in _YAML_SUB_KEYS:
+            return _read_literal(src, off + km.end(), ":")[0]
+    return None
+
+
+def _read_literal(src, i, op, _depth=0):
     """(text, end) of the literal starting at src[i] in any common quoting form, or (None, i)."""
     lim = 1 << 16
+    if op == ":":
+        r = _yaml_node(src, i, _depth)
+        if r[0] is not None:
+            return r
     t = src[i:i + 3]
     if t in ('"""', "'''"):
         j = src.find(t, i + 3, i + lim)
@@ -671,7 +1056,7 @@ def _read_literal(src, i, op):
                 return src[i + 1:j], j + 1
             j += 1
         return None, i
-    m = re.match(r"[|>][-+]?\d?[ \t]*(?:#[^\n]*)?\r?\n", src[i:i + 40])   # YAML block scalar
+    m = re.match(r"[|>](?:[-+]?\d?|\d[-+])[ \t]*(?:#[^\n]*)?\r?\n", src[i:i + 40])   # YAML block scalar
     if m and op == ":":
         ls = src.rfind("\n", 0, i) + 1
         base = len(src[ls:i]) - len(src[ls:i].lstrip(" \t"))
@@ -685,7 +1070,21 @@ def _read_literal(src, i, op):
     if op in ("=", ":", ":="):                                       # YAML / INI / env plain scalar
         m = re.match(r"[^\s#;,\"'<>(){}\[\]]{8,}", src[i:i + lim])
         if m:
-            return m.group(0), i + m.end()
+            text, j = m.group(0), i + m.end()
+            # Makefile / Dockerfile / shell `\`-newline continuation: `X := aaaa\` + `bbbb\` + `cccc` (joined)
+            while text.endswith("\\") and len(text) < lim:
+                c = re.match(r"\r?\n[ \t]*([^\s#;,\"'<>(){}\[\]]+)", src[j:j + lim])
+                if not c:
+                    break
+                text, j = text[:-1] + c.group(1), j + c.end()
+            if op == ":" and not text.endswith("\\"):                 # YAML plain scalar folded over deeper lines
+                base = _yaml_indent(src, i)
+                while len(text) < lim:
+                    c = _YAML_PLAIN_CONT.match(src, j)
+                    if not c or len(c.group(1)) <= base:
+                        break
+                    text, j = text + c.group(2), c.end()
+            return text, j
     return None, i
 
 
@@ -701,6 +1100,11 @@ def _descriptor_literals_ext(src, limit=24):
                 not re.search(r"\bset\s*$", src[max(0, m.start() - 12):m.start()], re.I) and op is None:
             continue                                                 # `descriptor_x {` that is not a Tcl `set`
         lit, end = _read_literal(src, i, op)
+        if lit is None and op is None:
+            lit = _yaml_sibling_value(src, m.start())
+            if lit:
+                out.append((m.group("id"), lit))
+            continue
         if lit is None:
             continue
         pieces = [lit]
@@ -714,6 +1118,9 @@ def _descriptor_literals_ext(src, limit=24):
             pieces.append(nxt)
             end = e2
         out.append((m.group("id"), "".join(pieces)))
+        jm = _YAML_JINJA.fullmatch(out[-1][1])                       # Ansible "{{ 'blob' | b64decode }}"
+        if jm:
+            out.append((m.group("id"), jm.group(2)))
     for rx in _XML_DESC_RES:
         for m in rx.finditer(src or ""):
             if len(out) >= 2 * limit:
@@ -781,6 +1188,73 @@ def _utf16(b):
         return None
 
 
+# Whole-leaf encodings (prebuild source-encoding-normalize, 10-16): the zip member itself is UTF-16 (BOM'd or not,
+# .reg / PS `-Encoding Unicode` saves), UTF-32, gzip'd, or one base64 blob of the source (optionally gzip'd / UTF-16
+# under it). find_codecs() rescans normalize(src) only when every other reading of the text found no plan.
+_LEAF_B64 = re.compile(r"[A-Za-z0-9+/\-_]+={0,2}")
+
+
+def _leaf_text(b):
+    """Source text of a leaf's bytes when they read as a printable script (UTF-8, UTF-16/32 by BOM or NUL
+    interleave), else None."""
+    if b[:4] in (b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff"):
+        try:
+            t = b.decode("utf-32")
+        except UnicodeDecodeError:
+            return None
+    else:
+        u = _utf16(b[:len(b) & ~1]) if b"\x00" in b[:256] or b[:2] in (b"\xff\xfe", b"\xfe\xff") else None
+        try:
+            t = (u or b).decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+    t = t.lstrip("\ufeff")
+    if not t.strip() or sum(c.isprintable() or c in "\r\n\t" for c in t) < 0.95 * len(t):
+        return None
+    return t
+
+
+def normalize(data, depth=3):
+    """The source text under a whole-leaf encoding: BOM / UTF-16 / UTF-32 sniff, gzip / zlib / bz2 / xz, one base64
+    (or base64url) blob, peeled up to `depth` layers. `data` is bytes or (lossy-decoded) text. None when the leaf is
+    plain text already or reads as nothing printable -- never raises."""
+    try:
+        if isinstance(data, str):
+            if not data:
+                return None
+            b = data.encode("latin-1") if max(data) < "\u0100" else data.encode("utf-8", "surrogateescape")
+        else:
+            b = bytes(data or b"")
+        start, cur = b, b
+        for _ in range(depth):
+            if len(cur) < 8:
+                break
+            nxt = None
+            if cur[:2] in (b"\xff\xfe", b"\xfe\xff", b"\xef\xbb") or b"\x00" in cur[:256]:
+                t = _leaf_text(cur)
+                nxt = t.encode("utf-8") if t is not None else None
+            if nxt is None and (cur[:2] == b"\x1f\x8b" or cur[:3] == b"BZh" or cur[:6] == b"\xfd7zXZ\x00"
+                                or (cur[0] & 0x0F == 8 and ((cur[0] << 8) | cur[1]) % 31 == 0)):
+                nxt = _inflate(cur, raw=False)
+            if nxt is None:
+                s = re.sub(rb"\s+", b"", cur).decode("latin-1")
+                if len(s) >= 24 and len(s) <= (1 << 20) and _LEAF_B64.fullmatch(s):
+                    s = s.replace("-", "+").replace("_", "/").rstrip("=")
+                    try:
+                        nxt = base64.b64decode(s + "=" * (-len(s) % 4), validate=True)
+                    except (binascii.Error, ValueError):
+                        nxt = None
+            if not nxt or nxt == cur:
+                break
+            cur = nxt
+        if cur is start:
+            return None
+        t = _leaf_text(cur)
+        return t if t is not None and t != data else None
+    except Exception:  # noqa: BLE001 - a decoy / truncated leaf reads as nothing
+        return None
+
+
 def _peel_children(b, tag):
     from lib import decode as _d
     import zlib
@@ -841,6 +1315,160 @@ def peel_plan(material, tag="", depth=4, max_nodes=3000, budget=0.5):
     except Exception:  # noqa: BLE001 - unknown -> None, never an exception
         return None
     return None
+
+
+# ------------------------------------------------------------------------------------------------ .reg / .inf hosts
+# Target reg-inf-host-route (persistence hosts; builds on source-encoding-normalize): a regedit export (UTF-16LE + BOM
+# for `Version 5.00`, ANSI for REGEDIT4) hides values as `"name"=hex(2):`/`hex(7):`/`hex:` comma-hex (UTF-16LE text,
+# NUL-terminated / NUL-separated) wrapped with `,\` line continuations; an INF (CMSTP / setupapi) spells its values as
+# %var% references into [Strings] and its registry writes as `root,subkey,name,flags,value` AddReg lines
+# (RunPreSetupCommands / UnRegisterOCXSection name the command sections). _reg_inf_host() rewrites the host as plain
+# text -- every hex value decoded to `"name"="text"`, every %var% substituted, every AddReg line as `"name"="value"` --
+# and _reg_inf_codecs() rescans it, then peels each decoded value name-agnostically. Only consulted when nothing else
+# produced a plan, so every earlier reading is unchanged. Bounded, regex + bytes only, never raises.
+_REG_HDR = re.compile(r"^.{0,4}?(?:Windows Registry Editor Version [\d.]+|REGEDIT4)[ \t]*\r?$", re.M | re.I)
+_REG_HEXVAL = re.compile(r"""^[ \t]*(?P<name>@|"(?:[^"\\\r\n]|\\.)*")[ \t]*=[ \t]*hex(?:\((?P<t>[0-9a-fA-F]{1,8})\))?:"""
+                         r"""(?P<body>(?:[0-9a-fA-F]{2}|[ \t,]|\\[ \t]*\r?\n)*)""", re.M)
+_INF_HINT = re.compile(r"^[ \t]*\[(?:version|strings|defaultinstall[\w.]*)\][ \t]*\r?$", re.M | re.I)
+_INF_SECT = re.compile(r"^[ \t]*\[([^\]\r\n]+)\][ \t]*\r?$", re.M)
+_INF_VAR = re.compile(r"%([^%\s,\"]{1,64})%|%%")
+_INF_ROOTS = {"hkcr", "hkcu", "hklm", "hku", "hkr", "hkey_classes_root", "hkey_current_user", "hkey_local_machine",
+              "hkey_users"}
+
+
+def _reg_bytes_text(b, wide):
+    """Strings of a registry value's bytes (UTF-16LE when `wide` or NUL-interleaved, else latin-1), NUL-split."""
+    if wide or (len(b) >= 4 and b[1::2].count(0) >= 0.8 * (len(b) // 2)):
+        t = b[:len(b) & ~1].decode("utf-16-le", "replace")
+    else:
+        t = b.decode("latin-1")
+    return [s for s in t.lstrip("﻿").split("\x00") if s.strip()]
+
+
+def _inf_split(line):
+    """INF fields: comma-separated, `"..."` quoted with `""` as a literal quote, `;` comments outside quotes."""
+    out, cur, q, i, quoted = [], [], False, 0, False
+    while i < len(line):
+        c = line[i]
+        if q:
+            if c == '"' and line[i + 1:i + 2] == '"':
+                cur.append('"')
+                i += 1
+            elif c == '"':
+                q = False
+            else:
+                cur.append(c)
+        elif c == '"':
+            q = quoted = True
+        elif c == ",":
+            out.append("".join(cur) if quoted else "".join(cur).strip())
+            cur, quoted = [], False
+        elif c == ";":
+            break
+        else:
+            cur.append(c)
+        i += 1
+    out.append("".join(cur) if quoted else "".join(cur).strip())
+    return out
+
+
+def _reg_inf_host(src):
+    """(rewritten text, [(name, value)]) for a .reg / .inf host, else None."""
+    if not src or len(src) > (1 << 21):
+        return None
+    vals, extra = [], []
+    if _REG_HDR.search(src[:4096]) or (re.match(r"\W{0,6}\[HKEY_", src) and "=hex" in src):
+        ansi = bool(re.search(r"^.{0,4}?REGEDIT4", src[:256], re.I | re.M))
+
+        def sub(m):
+            t = (m.group("t") or "3").lower().lstrip("0") or "0"
+            if t in ("4", "5", "b"):                          # dword / big-endian / qword: no text
+                return m.group(0)
+            b = bytes.fromhex("".join(re.findall(r"[0-9a-fA-F]{2}", m.group("body")))[:1 << 18])
+            parts = _reg_bytes_text(b, not ansi and t in ("1", "2", "6", "7"))
+            if t in ("3", "0") and parts and sum(ch.isprintable() for ch in "".join(parts)) < 0.9 * len("".join(parts)):
+                return m.group(0)                             # binary blob, not text
+            name = m.group("name").strip('"')
+            vals.extend((name, p) for p in parts[:32])
+            nl = "\r\n" if "\r\n" in m.group(0) else "\n"
+            return nl.join('"%s"="%s"' % (name, p) for p in parts[:32]) + nl if parts else m.group(0)
+        out = _REG_HEXVAL.sub(sub, src)
+        return (out, vals) if vals else None
+    if not _INF_HINT.search(src):
+        return None
+    txt = re.sub(r"\\[ \t]*\r?\n[ \t]*", "", src)            # INF `\` line continuation
+    secs, last = {}, None
+    for m in _INF_SECT.finditer(txt):
+        if last is not None:
+            secs.setdefault(last[0].strip().lower(), []).append(txt[last[1]:m.start()])
+        last = (m.group(1), m.end())
+    if last is not None:
+        secs.setdefault(last[0].strip().lower(), []).append(txt[last[1]:])
+    strings = {}
+    for body in secs.get("strings", []) + [b for k, v in secs.items() if k.startswith("strings.") for b in v]:
+        for ln in body.splitlines()[:4096]:
+            k, eq, v = ln.partition("=")
+            k = k.strip().strip('"')
+            if eq and k and not k.startswith(";"):
+                f = _inf_split(v.strip())
+                strings.setdefault(k.lower(), f[0] if len(f) == 1 else v.strip())
+    if not strings and "addreg" not in txt.lower():
+        return None
+
+    def subst(s):
+        for _ in range(4):
+            n = _INF_VAR.sub(lambda m: "%" if m.group(0) == "%%" else strings.get(m.group(1).lower(), m.group(0)), s)
+            if n == s:
+                break
+            s = n
+        return s
+    out = subst(txt)
+    for k, v in strings.items():
+        vals.append((k, subst(v)))
+    for ln in out.splitlines()[:8192]:                         # AddReg: root,subkey,name,flags,value[,value..]
+        f = _inf_split(ln)
+        if len(f) >= 5 and f[0].strip().lower() in _INF_ROOTS:
+            try:
+                flags = int(f[3] or "0", 0)
+            except ValueError:
+                flags = 0
+            if flags & 1:                                      # FLG_ADDREG_BINVALUETYPE: hex byte fields
+                try:
+                    parts = _reg_bytes_text(bytes(int(x, 16) for x in f[4:] if x), False)
+                except ValueError:
+                    parts = []
+            else:
+                parts = [x for x in f[4:] if x]
+            vals.extend((f[2], p) for p in parts[:32])
+            extra.extend('"%s"="%s"' % (f[2], p) for p in parts[:32])
+    return out + "\n" + "\n".join(extra) + "\n", vals
+
+
+def _reg_inf_codecs(src, depth=0):
+    """Codecs of a .reg / .inf host read as text (see _reg_inf_host): the rewritten host rescanned, then each decoded
+    value peeled on its own. [] when `src` is not such a host or nothing reads as a plan."""
+    try:
+        host = _reg_inf_host(src)
+        if not host:
+            return []
+        text, vals = host
+        out = [dict(c, id=f"{c['id']}@host") for c in find_codecs(text, depth + 1) if c.get("plain")]
+        if out:
+            return out
+        end = time.time() + 0.8
+        for name, v in sorted(vals[:128], key=lambda nv: "descriptor" not in nv[0].lower()):
+            if time.time() > end:
+                break
+            v = v.strip()
+            if len(v) < 8:
+                continue
+            p = peel_plan(v, budget=max(0.05, min(0.3, end - time.time())))
+            if p:
+                return [{"id": f"host:{name}", "rep": "reg_value", "transform": "identity", "key": "", "material": v,
+                         "plain": p}]
+    except Exception:  # noqa: BLE001 - a decoy / truncated host reads as nothing
+        return []
+    return []
 
 
 # ------------------------------------------------------------------------------------------------ XSLT msxsl:script host
@@ -2136,3 +2764,230 @@ def _chain_codecs(src, depth=0, budget=0.4):
     except Exception:  # noqa: BLE001 - unknown -> nothing, never an exception
         return []
     return []
+
+
+# ------------------------------------------------------------------------------------------------ equivalence
+# Sibling-outlier / semantic-equivalence questions (prebuild equivalence-outlier-compare, 10-16): D8 "doesn't match its
+# siblings", D15/D16 "prove which are truly equivalent, expose the variant that quietly changed the plot". D16 polyglot
+# families (9 languages x {benign_utility, downloader, launcher, staged_chain}, GM-verified fields): role / attack /
+# adapter agree across the family, steps / stage_count / stage_profile / obfuscation rotate through 4 obfuscation
+# profiles (the "scrambling"), and exactly one member (php) changes next_language. So the plot outlier is the
+# minority on a field that is otherwise near-unanimous, never a field whose values spread across the family.
+EQ_KEEP = ("role", "steps", "adapter", "attack", "stage_count", "stage_profile", "next_language", "scenario",
+           "nativetypes", "native_types")
+EQ_DROP = ("campaign", "campaign_id", "host", "host_id", "url", "file_path", "path", "upload_url", "next_stage",
+           "codec", "rep", "transform", "key", "material", "v", "id", "ids", "obfuscation", "obfuscation_profile",
+           "host_profile", "wallet", "mutex", "user_agent", "file", "note", "note_name", "extension", "dest")
+
+
+def _eq_field(k):
+    k = re.sub(r"[^0-9a-z]+", "_", str(k).strip().lower()).strip("_")
+    return {"campaign": "campaign_id", "host": "host_id", "nativetypes": "native_types"}.get(k, k)
+
+
+def _eq_value(field, v):
+    """Comparison form of one plan value: steps as an ordered tuple, T1059.xxx as T1059 (the interpreter sub-id is the
+    host language, not the plot), everything else stripped and case-folded."""
+    if v is None:
+        return None
+    if field == "steps":
+        parts = v if isinstance(v, (list, tuple)) else re.split(r"[>,|;\s]+", str(v))
+        return tuple(str(p).strip().lower() for p in parts if str(p).strip()) or None
+    if isinstance(v, (list, tuple)):
+        return tuple(sorted(str(x).strip().casefold() for x in v))
+    s = str(v).strip()
+    if field == "attack":
+        s = re.sub(r"^(T1059)\.\d{3}$", r"\1", s.upper())
+    return s.casefold() or None
+
+
+def _eq_dict(plan):
+    """A decoded plan as a dict: dict as is, 'k=v|..' or JSON text / bytes parsed; None otherwise."""
+    if isinstance(plan, (bytes, bytearray)):
+        plan = bytes(plan).decode("utf-8", "replace")
+    if isinstance(plan, str):
+        s = plan.strip()
+        if s[:1] == "{":
+            import json
+            plan = json.loads(s)
+        else:
+            plan = plan_kv(s)
+    return plan if isinstance(plan, dict) else None
+
+
+def plan_canonical(plan, keep=EQ_KEEP, drop=EQ_DROP):
+    """{field: comparison value} of one decoded plan (dict, 'k=v|..' text or JSON text); identity fields dropped.
+    `keep` None = every field not in `drop`. None when the plan is unreadable or has no comparable field."""
+    try:
+        plan = _eq_dict(plan)
+        if not plan:
+            return None
+        kset = {_eq_field(k) for k in keep} if keep else None
+        dset = {_eq_field(k) for k in drop or ()}
+        out = {}
+        for k, v in plan.items():
+            f = _eq_field(k)
+            if f in dset or (kset is not None and f not in kset) or isinstance(v, dict):
+                continue
+            cv = _eq_value(f, v)
+            if cv is not None:
+                out.setdefault(f, cv)
+        return out or None
+    except Exception:  # noqa: BLE001 - a decoy plan compares as nothing
+        return None
+
+
+def equivalence(plans, keep=EQ_KEEP, drop=EQ_DROP, unanimity=2 / 3):
+    """{member: decoded plan} -> equivalence report, or None (< 2 comparable plans).
+      classes        members grouped by identical canonical plan (largest first, then by name), class_count, singletons
+      majority       {field: value} for every field one value holds in >= `unanimity` of the members that carry it
+      outliers       members that differ from such a near-unanimous field (the variant that "changed the plot"),
+                     diffs {member: {field: its raw value}}, diff_fields (sorted union)
+      plot_classes   classes over the near-unanimous fields only (scrambling fields that spread are ignored),
+                     plot_class_count, equivalent (the members agreeing with every majority value)
+    Field values in diffs / majority are the member's original text (exact_text answers)."""
+    try:
+        canon, raw = {}, {}
+        for m, p in (plans or {}).items():
+            c = plan_canonical(p, keep, drop)
+            if c:
+                canon[m] = c
+                raw[m] = {_eq_field(k): v for k, v in _eq_dict(p).items()}
+        if len(canon) < 2:
+            return None
+
+        def group(fields):
+            g = {}
+            for m in sorted(canon):
+                g.setdefault(tuple((f, canon[m].get(f)) for f in fields), []).append(m)
+            return sorted(g.values(), key=lambda ms: (-len(ms), ms[0]))
+
+        fields = sorted({f for c in canon.values() for f in c})
+        classes = group(fields)
+        majority, diffs = {}, {}
+        for f in fields:
+            vals = [(m, canon[m][f]) for m in sorted(canon) if f in canon[m]]
+            if len(vals) < 2:
+                continue
+            counts = {}
+            for _, v in vals:
+                counts[v] = counts.get(v, 0) + 1
+            top, n = max(counts.items(), key=lambda kv: kv[1])
+            if n < len(vals) and n >= unanimity * len(vals) and n > len(vals) - n:
+                for m, v in vals:
+                    if v != top:
+                        diffs.setdefault(m, {})[f] = raw[m].get(f)
+            if n >= unanimity * len(vals) and n > len(vals) - n:
+                maj_m = next(m for m, v in vals if v == top)
+                majority[f] = raw[maj_m].get(f)
+        plot = group(sorted(majority))
+        return {"classes": classes, "class_count": len(classes), "singletons": [c[0] for c in classes if len(c) == 1],
+                "majority": majority, "outliers": sorted(diffs), "diffs": diffs,
+                "diff_fields": sorted({f for d in diffs.values() for f in d}),
+                "plot_classes": plot, "plot_class_count": len(plot),
+                "equivalent": sorted(m for m in canon if m not in diffs)}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def equivalence_answer(report, kind, accepted_values=None, what="outlier"):
+    """One GM answer from an equivalence() report. kind enum -> the outlier member (matched to accepted_values by name
+    or stem), integer -> class count (what='plot' -> plot classes), exact_text -> the differing field (what='field')
+    or the outlier's value on it (what='value'). "none" when the family has no outlier; None when unanswerable."""
+    try:
+        if not report:
+            return None
+        if kind == "integer":
+            return str(report["plot_class_count"] if what == "plot" else report["class_count"])
+        outs = report["outliers"]
+        if not outs:
+            return "none"
+        if kind == "enum" or what == "outlier":
+            m = outs[0] if len(outs) == 1 else None
+            if m is None:
+                return None
+            stem = lambda s: re.sub(r"\.[A-Za-z0-9_]+$", "", str(s).rsplit("/", 1)[-1]).lower()
+            for a in accepted_values or ():
+                if stem(a) == stem(m) or stem(a) in stem(m).split("-") or stem(m) in stem(a):
+                    return a
+            return None if accepted_values else m
+        f = report["diff_fields"]
+        if len(f) != 1:
+            return None
+        if what == "field":
+            return f[0]
+        vals = {str(d[f[0]]) for d in report["diffs"].values() if f[0] in d}
+        return vals.pop() if len(vals) == 1 else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# --- GM label regimes (prebuild batch-expansion-regime-lib) ----------------------------------------------------------
+# Some GM labels flipped meaning mid-event. Each entry says when a contract is in the newer regime: `untimed` = an
+# explicit run_for_time:false contract is in it, `since` = any contract whose started_at date is >= this is in it.
+#   batch_expansion: old regime (D3-D14, timed D15) labels the handoff -- echo(!var!) makes any non-FOR join `delayed`;
+#     statement regime (D15 untimed TT 0df5072d / Mastery 7fbfc526, D16 single 89161077 / TT a719c002 / Mastery
+#     81bb44e6, all GM-verified) labels the join statement alone.
+#   batch_control / vbs_control: no flip observed yet; set `untimed` / `since` here if they flip next.
+LABEL_REGIMES = {
+    "batch_expansion": {"untimed": True, "since": "2026-10-16"},
+    "batch_control": {"untimed": False, "since": None},
+    "vbs_control": {"untimed": False, "since": None},
+}
+
+
+def label_regime(field, contract=None):
+    """'statement' when `contract` falls in `field`'s newer GM labelling regime (LABEL_REGIMES), else 'legacy'."""
+    try:
+        rule = LABEL_REGIMES.get(field) or {}
+        c = contract if isinstance(contract, dict) else {}
+        if rule.get("untimed") and c.get("run_for_time") is False:
+            return "statement"
+        since = rule.get("since")
+        if since and str(c.get("started_at") or "")[:10] >= since:
+            return "statement"
+    except Exception:  # noqa: BLE001
+        pass
+    return "legacy"
+
+
+def batch_join_pool(join_stmt):
+    """Fragment-variable pool of a batch join line: `%%h%%G%%` / `%%h0%%` -> 'h', `%%FrAg0%%` -> 'frag'; None if absent."""
+    s = str(join_stmt or "")
+    m = re.search(r"%%([A-Za-z_]+?)%%G%%", s) or re.search(r"%%([A-Za-z_]+?)\d%%", s)
+    return m.group(1).lower() if m else None
+
+
+def label_expansion(join_stmt, pool=None, contract=None, echo_delayed=True):
+    """GM `expansion` label for a batch join statement (`set "x=..."`, `call set ...`, `for ... do call set ...`).
+
+    pool = the fragment-variable prefix (None: read it off the line); echo_delayed = the handoff is echo(!var!) (old
+    regime only). Tables (all GM-verified):
+      legacy:    FOR join -> call_double on the h pool, else for_indirect; bare `call set` over %%h..%% -> call_double;
+                 echo(!var!) handoff -> delayed; other `call set` -> call_double; !a!!b! -> delayed; else percent.
+      statement: FOR join -> for_indirect (any pool); bare `call set` over %%h..%% -> call_double; !a!!b! -> delayed;
+                 anything else (other pools' call set, plain %a%%b%) -> percent.
+    None when the line is not a join (no `=`, no %/! on the right-hand side)."""
+    try:
+        raw = str(join_stmt or "").strip()
+        if "=" not in raw:
+            return None
+        rhs = raw.split("=", 1)[1]
+        if not re.search(r"[%!]", rhs):
+            return None
+        pool = (pool or batch_join_pool(raw) or "").lower() or None
+        stmt = label_regime("batch_expansion", contract) == "statement"
+        if re.match(r"(?i)(?:@?\s*)for\s", raw) or re.search(r"(?i)\bdo\s+call\s+set\b", raw):
+            return "for_indirect" if stmt or pool != "h" else "call_double"
+        call_set = re.search(r"(?i)\bcall\s+set\b", raw)
+        if call_set and "%%" in rhs and pool == "h":
+            return "call_double"
+        if stmt:
+            return "delayed" if re.search(r"![^!\s]+!", rhs) else "percent"
+        if echo_delayed:
+            return "delayed"
+        if call_set:
+            return "call_double"
+        return "delayed" if re.search(r"![^!\s]+!", rhs) else "percent"
+    except Exception:  # noqa: BLE001
+        return None

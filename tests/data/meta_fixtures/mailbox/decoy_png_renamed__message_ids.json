@@ -1,0 +1,8 @@
+{
+ "field": "mailbox.message_ids",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/mbox/GENERATOR_stdlib_mailbox_mbox.py.txt <outdir>  (stdlib mailbox.mbox writer + email.message.EmailMessage) -> png_renamed.mbox",
+ "oracle_cmd": "file <file> -> 'PNG image data, 4 x 3, 8-bit/color RGB' (no mbox envelope line)",
+ "decoy": true,
+ "member": "export/png_renamed.mbox"
+}

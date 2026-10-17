@@ -1,0 +1,137 @@
+{
+ "format": "zip of a cross-arch same-source build pair",
+ "members": [
+  "d17--variant-000-riscv64.o",
+  "d17--variant-001-armv7.o"
+ ],
+ "expected_sha256": [
+  "6bb30a3a16e89f4fad482c21bbc00cf06f094b3bf698b23adc650f26fb31f762",
+  "64a20d14355914607a2f7af454ed5d38c824ce7377c93e343bc01a7cb81088a7"
+ ],
+ "routes": {
+  "riscv64_machine": {
+   "member": "d17--variant-000-riscv64.o",
+   "value": "RISC-V"
+  },
+  "riscv64_machine_num": {
+   "member": "d17--variant-000-riscv64.o",
+   "value": "243"
+  },
+  "riscv64_bits": {
+   "member": "d17--variant-000-riscv64.o",
+   "value": 64
+  },
+  "riscv64_endian": {
+   "member": "d17--variant-000-riscv64.o",
+   "value": "little"
+  },
+  "riscv64_elf_type": {
+   "member": "d17--variant-000-riscv64.o",
+   "value": "ET_REL"
+  },
+  "riscv64_entry_point": {
+   "member": "d17--variant-000-riscv64.o",
+   "value": "0x0"
+  },
+  "riscv_machine": {
+   "member": "d17--variant-000-riscv64.o",
+   "value": "RISC-V"
+  },
+  "riscv_machine_num": {
+   "member": "d17--variant-000-riscv64.o",
+   "value": "243"
+  },
+  "riscv_bits": {
+   "member": "d17--variant-000-riscv64.o",
+   "value": 64
+  },
+  "riscv_endian": {
+   "member": "d17--variant-000-riscv64.o",
+   "value": "little"
+  },
+  "riscv_elf_type": {
+   "member": "d17--variant-000-riscv64.o",
+   "value": "ET_REL"
+  },
+  "riscv_entry_point": {
+   "member": "d17--variant-000-riscv64.o",
+   "value": "0x0"
+  },
+  "armv7_machine": {
+   "member": "d17--variant-001-armv7.o",
+   "value": "ARM"
+  },
+  "armv7_machine_num": {
+   "member": "d17--variant-001-armv7.o",
+   "value": "40"
+  },
+  "armv7_bits": {
+   "member": "d17--variant-001-armv7.o",
+   "value": 32
+  },
+  "armv7_endian": {
+   "member": "d17--variant-001-armv7.o",
+   "value": "little"
+  },
+  "armv7_elf_type": {
+   "member": "d17--variant-001-armv7.o",
+   "value": "ET_REL"
+  },
+  "armv7_entry_point": {
+   "member": "d17--variant-001-armv7.o",
+   "value": "0x0"
+  },
+  "arm_machine": {
+   "member": "d17--variant-001-armv7.o",
+   "value": "ARM"
+  },
+  "arm_machine_num": {
+   "member": "d17--variant-001-armv7.o",
+   "value": "40"
+  },
+  "arm_bits": {
+   "member": "d17--variant-001-armv7.o",
+   "value": 32
+  },
+  "arm_endian": {
+   "member": "d17--variant-001-armv7.o",
+   "value": "little"
+  },
+  "arm_elf_type": {
+   "member": "d17--variant-001-armv7.o",
+   "value": "ET_REL"
+  },
+  "arm_entry_point": {
+   "member": "d17--variant-001-armv7.o",
+   "value": "0x0"
+  },
+  "armhf_machine": {
+   "member": "d17--variant-001-armv7.o",
+   "value": "ARM"
+  },
+  "armhf_machine_num": {
+   "member": "d17--variant-001-armv7.o",
+   "value": "40"
+  },
+  "armhf_bits": {
+   "member": "d17--variant-001-armv7.o",
+   "value": 32
+  },
+  "armhf_endian": {
+   "member": "d17--variant-001-armv7.o",
+   "value": "little"
+  },
+  "armhf_elf_type": {
+   "member": "d17--variant-001-armv7.o",
+   "value": "ET_REL"
+  },
+  "armhf_entry_point": {
+   "member": "d17--variant-001-armv7.o",
+   "value": "0x0"
+  }
+ },
+ "generator_cmd": "bash pair_arch_gen.sh   # gcc / aarch64-linux-gnu-gcc-15 -O2, clang-18 --target=riscv64,armv7 -c, zip -X -j",
+ "oracle_cmd": "bash pair_arch_oracle.sh pair_arch_riscv_arm_obj.bin   # unzip -Z1 + sha256sum, readelf -hW, od -tu2 -j18 (e_machine)",
+ "decoy": false,
+ "note": "clang-18 --target=riscv64/armv7 -c ET_REL members; `arm`/`armhf` aliases route by e_machine 40, `riscv` by 243"
+}

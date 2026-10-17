@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=reg|role=persistence|verdict=malicious|attack=T1547.001|adapter=regedit4_ansi|stage_count=2|steps=write_expand_sz,launch_on_logon|campaign_id=REG-4a45e101|url=https://reg-4a45e101.example.invalid/a",
+ "decoy": false,
+ "generator_cmd": "python3 -I -c 'import sys; P=\"v=3|language=reg|role=persistence|verdict=malicious|attack=T1547.001|adapter=regedit4_ansi|stage_count=2|steps=write_expand_sz,launch_on_logon|campaign_id=REG-4a45e101|url=https://reg-4a45e101.example.invalid/a\"; m=P.encode().hex()[::-1].encode()+b\"\\0\"; h=\",\".join(\"%02x\"%x for x in m); L=[h[i:i+75] for i in range(0,len(h),75)]; body=\",\\\\\\r\\n  \".join(x.strip(\",\") for x in L); sys.stdout.buffer.write(b\"REGEDIT4\\r\\n\\r\\n[HKEY_CURRENT_USER\\\\Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\RunOnce]\\r\\n\\\"Upd\\\"=hex(2):\"+body.encode()+b\"\\r\\n\\r\\n\")' > reg_regedit4_ansi_value.reg  (REGEDIT4 ANSI hex(2), value name not a descriptor: reverse(hex(plan)))",
+ "oracle_cmd": "tr -d '\\r' < reg_regedit4_ansi_value.reg | sed -n '/\"Upd\"/,/^$/p' | sed 's/.*hex(2)://' | tr -d ',\\\\ \\n' | xxd -r -p | tr -d '\\0' | rev | xxd -r -p"
+}

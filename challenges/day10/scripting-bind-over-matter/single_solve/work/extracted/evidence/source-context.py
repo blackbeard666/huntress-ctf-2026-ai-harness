@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+
+# Huntress Script Triage -- inert static-analysis fixture (cpython3)
+
+import base64
+
+import io
+
+import os
+
+
+
+MATERIAL_14c915e7 = b"\x3d\x6e\x68\x3b\x33\x6e\x6c\x6b\x6e\x33\x27\x7e\x79\x65\x62\x37\x6e\x63\x55\x7e\x79\x65\x62\x76\x3d\x6e\x68\x3b\x33\x6e\x6c\x6b\x6e\x33\x27\x64\x6d\x63\x6b\x7a\x67\x6b\x69\x37\x6e\x63\x55\x64\x6d\x63\x6b\x7a\x67\x6b\x69\x76\x6f\x72\x6f\x55\x64\x65\x62\x7e\x73\x7a\x55\x7e\x69\x6f\x78\x63\x6e\x37\x64\x63\x6b\x62\x69\x55\x79\x7d\x65\x6e\x64\x63\x7d\x76\x6f\x69\x78\x7f\x65\x79\x55\x7d\x6b\x78\x37\x78\x6f\x63\x78\x78\x6b\x69\x76\x73\x66\x64\x65\x55\x67\x78\x65\x6c\x79\x64\x6b\x78\x7e\x37\x64\x65\x63\x7e\x6b\x69\x79\x7f\x6c\x68\x65\x76\x79\x64\x65\x63\x7e\x69\x64\x7f\x6c\x55\x64\x63\x6b\x66\x7a\x37\x72\x6b\x7e\x64\x73\x79\x76\x3b\x37\x7e\x64\x7f\x65\x69\x55\x6f\x6d\x6b\x7e\x79\x76\x6f\x69\x6b\x7a\x79\x6f\x67\x6b\x64\x55\x6f\x79\x78\x6b\x7a\x6d\x78\x6b\x37\x78\x6f\x7e\x7a\x6b\x6e\x6b\x76\x64\x65\x63\x7e\x6b\x78\x7f\x6d\x63\x6c\x64\x65\x69\x55\x64\x78\x7f\x7e\x6f\x78\x26\x64\x65\x63\x7e\x6b\x78\x7f\x6d\x63\x6c\x64\x65\x69\x55\x6f\x6e\x65\x69\x6f\x6e\x37\x79\x7a\x6f\x7e\x79\x76\x38\x37\x7c"
+
+CODEC_14c915e7 = "hex_escape|reverse_then_xor|0a"
+
+
+
+def load_14c915e7():
+
+    return bytes(MATERIAL_14c915e7)
+
+
+
+def decode_14c915e7(stored_bytes):
+
+    return bytes(value ^ 10 for value in reversed(stored_bytes))
+
+
+
+def recover_14c915e7():
+
+    harmless_value = None
+
+    try:
+
+        recovered_bytes = decode_14c915e7(load_14c915e7())
+
+    except (TypeError, ValueError) as error:
+
+        raise RuntimeError("configuration recovery failed") from error
+
+    configuration_text = recovered_bytes.decode("ascii", "strict")
+
+    return configuration_text
+
+
+
+def inspect_14c915e7():
+
+    stream = io.BytesIO(recover_14c915e7().encode("ascii"))
+
+    return stream.read().decode("ascii")
+
+
+
+def surface_14c915e7():
+
+    return ("plain_functions", "transform_only", "raw_source", "direct_python_exe")
+
+
+
+def obfuscation_14c915e7():
+
+    return "transform_only"
+
+
+
+def plan_14c915e7():
+
+    fields = dict(item.split("=", 1) for item in inspect_14c915e7().split("|"))
+
+    analysis_surface = surface_14c915e7()
+
+    obfuscation_surface = obfuscation_14c915e7()
+
+    operation_plan = ("report", fields.get("host_id", ""))
+
+    return operation_plan + (analysis_surface, obfuscation_surface)
+
+
+
+if os.environ.get("HUNTRESS_INSPECT_ONLY") == "1":
+
+    print(inspect_14c915e7())
+

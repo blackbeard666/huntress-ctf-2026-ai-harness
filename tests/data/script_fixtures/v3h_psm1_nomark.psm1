@@ -1,0 +1,18 @@
+<#
+.SYNOPSIS
+    Inventory helper module (synthetic, inert).
+#>
+$descriptor_06630147 = @'
+dj0zfGxhbmd1YWdlPXBvd2Vyc2hlbGxfbW9kdWxlfHJvbGU9bG9hZGVyfHZlcmRp
+Y3Q9bWFsaWNpb3VzfGF0dGFjaz1UMTA1OS4wMDF8YWRhcHRlcj1tb2R1bGVfaW1w
+b3J0fGhvc3RfcHJvZmlsZT1zdGFuZGFsb25lfG9iZnVzY2F0aW9uX3Byb2ZpbGU9
+bm9tYXJrfHN0YWdlX3Byb2ZpbGU9dHdvX3N0YWdlX2Rvd25sb2FkX2V4ZWN1dGV8
+bmV4dF9sYW5ndWFnZT1jc2hhcnB8c3RhZ2VfY291bnQ9MnxzdGVwcz1pbXBvcnRf
+bW9kdWxlLGludm9rZV9zdGFnZXxjYW1wYWlnbl9pZD1QU00tYjc3OTg4M2R8dXJs
+PWh0dHBzOi8vcHNtMS1iNzc5ODgzZDY2LmV4YW1wbGUuaW52YWxpZC9zdGFnZXxm
+aWxlX3BhdGg9L3RtcC9odW50cmVzcy1wc20xLy42NmZkNTIwZjkxN2FiMzI4LnN0
+YWdl
+'@
+
+function Invoke-Stage { param([string]$d) return $d.Length }
+Export-ModuleMember -Function Invoke-Stage

@@ -1,0 +1,8 @@
+{
+ "entry": "dex_native_calls",
+ "expected": "ANS-7e2a9c41d0b8f356",
+ "_why": "static native nativeVerify(String,int) called with const-string token + const/high16 0x10000 behind String.length()==20; nativeLen(short) gets -0x8000",
+ "oracle_out": "if (\"ANS-7e2a9c41d0b8f356\".length() == 20) { return JNIBoundary.nativeVerify(\"ANS-7e2a9c41d0b8f356\", 65536); } ... JNIBoundary.nativeLen(Short.MIN_VALUE)",
+ "generator_cmd": "apktool d -r -o base dexarr_fill_lit8.apk; rm base/smali/com/huntress/mobile/d01/v073e9a824e9e/StrEnc.smali; python3 tests/data/android_fixtures/gen_native_calls.py base string_arg  # writes smali JNIBoundary/Gate; apktool b -o natcall_string_arg.apk base",
+ "oracle_cmd": "jadx -q -d j natcall_string_arg.apk; grep -rhn 'native \\|nativeVerify(\\|nativeEvidence(\\|nativeLen(\\|getBytes\\|length()' j/sources/com/huntress/mobile/d17"
+}

@@ -1,0 +1,32 @@
+{
+ "encoding": "raw",
+ "decoy": false,
+ "expected_offset": 124,
+ "expected_config": {
+  "c2": "203.0.113.77:8443",
+  "campaign": "verifier",
+  "sleep": 30,
+  "flag": "flag{xdp_h00k_cfg}"
+ },
+ "expected_bpf_fields": {
+  "format": "elf",
+  "elf_type": "ET_REL",
+  "machine": "Linux BPF",
+  "machine_num": "247",
+  "entry_point": "0x0",
+  "programs": [
+   "xdp"
+  ],
+  "license": "GPL",
+  "maps": [
+   "pkt_count"
+  ],
+  "has_hcfg_section": true,
+  "hcfg_section": ".hcfg",
+  "hcfg_offset": 124
+ },
+ "generator_cmd": "bash ebpf_gen.sh ebpf_xdp_hcfg.bin xdp '{\"c2\":\"203.0.113.77:8443\",\"campaign\":\"verifier\",\"sleep\":30,\"flag\":\"flag{xdp_h00k_cfg}\"}' 0",
+ "oracle_cmd": "bash ebpf_oracle.sh ebpf_xdp_hcfg.bin   # file -b, GNU readelf -h (Type/Machine/Entry), readelf -SW (exec PROGBITS != .text = programs; section list), readelf -p license, readelf -sW (OBJECT syms in .maps/maps), grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "ELF 64-bit LSB relocatable, eBPF | REL | Linux BPF | 0x0 | programs: xdp | license: GPL | maps(maps): pkt_count | blob@124 HCFG 1 0 87 4229353832 gzipcrc=4229353832",
+ "note": "machine 'Linux BPF' = GNU readelf Machine: spelling (e_machine 247); field names programs/program_types/maps/license/hcfg_section are SPECULATIVE (GM vocabulary for BPF not seen); expected_offset = FILE offset of the 'H' (OFFSET LAW raw, = hcfg_scan)"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "mailbox.message_count",
+ "expected": "3",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/mbox/GENERATOR_stdlib_mailbox_mbox.py.txt <outdir>  (stdlib mailbox.mbox writer + email.message.EmailMessage) -> export2.mbox",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/mbox/ORACLE_stdlib_mailbox_networkx.py.txt <file>  (stdlib mailbox.mbox reader, policy.default + networkx 3.1 weakly_connected_components + Counter) -> message_count",
+ "decoy": false,
+ "member": "export/export2.mbox"
+}

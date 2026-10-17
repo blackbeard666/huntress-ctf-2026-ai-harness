@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "yaml-ci",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/yamlci_gen.py  (stdlib base64/gzip/bytes.hex encode; DECOY: !!binary of benign k=v text, no v=3 plan)",
+ "oracle_cmd": ".venv/bin/python -I -c 'import yaml,sys;sys.stdout.write(yaml.safe_load(open(sys.argv[1]))[\"env\"][\"descriptor_aa11bb22\"].decode())' tests/data/script_fixtures/yamlci_decoy_gha_benign.yml   # -> benign k=v text, no v=3 plan"
+}

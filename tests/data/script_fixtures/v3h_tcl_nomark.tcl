@@ -1,0 +1,13 @@
+#!/usr/bin/env tclsh
+# stage loader
+set descriptor_229eb428 {
+dj0zfGxhbmd1YWdlPXRjbHxyb2xlPWRvd25sb2FkZXJ8dmVyZGljdD1tYWxpY2lv
+dXN8YXR0YWNrPVQxMTA1fGFkYXB0ZXI9aHR0cF9nZXR8aG9zdF9wcm9maWxlPXN0
+YW5kYWxvbmV8b2JmdXNjYXRpb25fcHJvZmlsZT1ub21hcmt8c3RhZ2VfcHJvZmls
+ZT10d29fc3RhZ2VfZG93bmxvYWRfZXhlY3V0ZXxuZXh0X2xhbmd1YWdlPWJhc2h8
+c3RhZ2VfY291bnQ9MnxzdGVwcz1mZXRjaF9zdGFnZSx3cml0ZV9zdGFnZXxjYW1w
+YWlnbl9pZD1UQ0wtOWMzZDIxNjN8dXJsPWh0dHBzOi8vdGNsLTljM2QyMTYzOTMu
+ZXhhbXBsZS5pbnZhbGlkL3N0YWdlfGZpbGVfcGF0aD0vdG1wL2h1bnRyZXNzLXRj
+bC8uOTMyZTYyOGZlMTc2ZDc1Yy5zdGFnZQ==
+}
+proc run_stage {d} { return [string length $d] }

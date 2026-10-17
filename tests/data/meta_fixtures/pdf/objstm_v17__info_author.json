@@ -1,0 +1,8 @@
+{
+ "field": "pdf.info_author",
+ "expected": "J. Doe",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import Image; import time,calendar; fr=[Image.new('RGB',(60,40),(50*i,90,200)) for i in range(3)]; fr[0].save('info3.pdf',save_all=True,append_images=fr[1:],title='Quarterly Ledger',author='J. Doe',creator='LedgerTool 2.1',producer='HuntressPDF 9',creationDate=time.gmtime(calendar.timegm((2024,3,5,14,7,9,0,0,0)))); Image.new('RGB',(30,30),(1,2,3)).save('info3.pdf',append=True)\"  (Pillow 12 PDF writer; append=True = incremental update) && .venv/bin/python -I -c \"import pypdf; from pypdf.generic import NameObject; w=pypdf.PdfWriter(clone_from='info3.pdf'); w._root_object[NameObject('/Version')]=NameObject('/1.7'); w.write('v17.pdf')\" && qpdf --object-streams=generate v17.pdf objstm_v17.pdf",
+ "oracle_cmd": "pdfinfo objstm_v17.pdf -> Author: J. Doe (Info dict inside an /ObjStm)",
+ "decoy": false,
+ "member": "objstm_v17.pdf"
+}

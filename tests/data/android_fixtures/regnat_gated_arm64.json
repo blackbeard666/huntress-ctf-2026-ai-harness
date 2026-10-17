@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": "ANS-c4085be1f9a2d736",
+ "generator_cmd": "tests/data/android_fixtures/gen_regnat.sh tests/data/android_fixtures  # perl blob = token[i]^KEY; aarch64-linux-gnu-gcc -shared -fPIC -O2 -s -fno-tree-vectorize native_src/regnat_gated.c (stripped, only JNI_OnLoad exported; static const JNINativeMethod{ping ()I, vaultValue (I)Ljava/lang/String;} in .data.rel.ro via R_*_RELATIVE; vaultValue decodes only for n == 0x10000); zip -qX -r <name>.apk assets lib",
+ "oracle_cmd": "tests/data/android_fixtures/regnat_oracle.sh regnat_gated_arm64.apk qemu  # native_src/regnat_harness.c dlopen()s the real .so, runs JNI_OnLoad with a fake JavaVM/JNIEnv, prints each RegisterNatives entry and calls the (I) native with 0x10000: 'registered vaultValue (I)Ljava/lang/String;' / 'NewStringUTF ANS-c4085be1f9a2d736'; readelf -rW: 9 R_*_RELATIVE relocs",
+ "decoy": false
+}

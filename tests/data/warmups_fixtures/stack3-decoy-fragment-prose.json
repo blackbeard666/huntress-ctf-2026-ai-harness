@@ -1,0 +1,11 @@
+{
+ "codec": "stack:base64>hex>rot13",
+ "plain": null,
+ "encoded": "NTk2MjY1NzI3YTIwNzY2MzY2Njg3YTIwNzE2Mjc5NjI2NTIwNjY3NjY3",
+ "decoy": true,
+ "mastery_line": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Lorem ipsum dolor sit' | tr 'A-Za-z' 'N-ZA-Mn-za-m' | xxd -p | tr -d '\\n' | base64 -w0  # a 3-layer stack of prose outside the warmups template",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | xxd -r -p | tr 'A-Za-z' 'N-ZA-Mn-za-m'  # -> 'Lorem ipsum dolor sit' (not a template piece: stack_free must return [])",
+ "oracle_plain": "Lorem ipsum dolor sit"
+}

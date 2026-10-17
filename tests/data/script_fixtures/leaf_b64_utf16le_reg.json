@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=reg|role=persistence|verdict=malicious|attack=T1547.001|adapter=run_key|stage_count=2|steps=write_run_key,launch_on_logon|campaign_id=REG-1eaf16le|url=https://reg-1eaf16le.example.invalid/p",
+ "decoy": false,
+ "generator_cmd": "M=$(printf %s '<plan>' | base64 -w0); { printf '\\xff\\xfe'; printf 'Windows Registry Editor Version 5.00\\r\\n\\r\\n[HKEY_CURRENT_USER\\\\...\\\\Run]\\r\\n\"Updater\"=\"HUNTRESS_ANALYSIS_V1:B64-%s\"\\r\\n' \"$M\" | iconv -f UTF-8 -t UTF-16LE; } | base64 -w 64 > leaf_b64_utf16le_reg.b64  (whole leaf = base64(BOM + UTF-16LE .reg))",
+ "oracle_cmd": "base64 -d leaf_b64_utf16le_reg.b64 | iconv -f UTF-16 -t UTF-8 | grep -o 'B64-[^\"]*' | cut -c5- | base64 -d"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "morse(binary8)",
+ "plain": " work decoding th",
+ "encoded": "----- ----- .---- ----- ----- ----- ----- ----- / ----- .---- .---- .---- ----- .---- .---- .---- / ----- .---- .---- ----- .---- .---- .---- .---- / ----- .---- .---- .---- ----- ----- .---- ----- / ----- .---- .---- ----- .---- ----- .---- .---- / ----- ----- .---- ----- ----- ----- ----- ----- / ----- .---- .---- ----- ----- .---- ----- ----- / ----- .---- .---- ----- ----- .---- ----- .---- / ----- .---- .---- ----- ----- ----- .---- .---- / ----- .---- .---- ----- .---- .---- .---- .---- / ----- .---- .---- ----- ----- .---- ----- ----- / ----- .---- .---- ----- .---- ----- ----- .---- / ----- .---- .---- ----- .---- .---- .---- ----- / ----- .---- .---- ----- ----- .---- .---- .---- / ----- ----- .---- ----- ----- ----- ----- ----- / ----- .---- .---- .---- ----- .---- ----- ----- / ----- .---- .---- ----- .---- ----- ----- -----",
+ "generator_cmd": "printf %s \"$plain\" | xxd -b -c1 | awk '{printf \"%s%s\", (NR>1?\" \":\"\"), $2}' | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs enc '-/.' 'Space' 'Forward slash' | sed 's|/| / |g'  # xxd 8-bit binary, CyberChef 'To Morse Code', ' / ' word gaps (lib morse_enc shape)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs dec 'Space' 'Forward slash' | python3 -I -c \"import sys;print(bytes(int(x,2) for x in sys.stdin.read().split()).decode(),end='')\"  # CyberChef 'From Morse Code' then stdlib int(.,2)",
+ "oracle_plain": " work decoding th",
+ "expected": "match",
+ "note": "Mastery-line shape: the fragment (leading space) is the line payload after 'NN<TAB>'"
+}

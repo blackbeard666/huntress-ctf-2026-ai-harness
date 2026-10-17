@@ -1,0 +1,8 @@
+{
+ "field": "tnef.signature_u32_hex",
+ "expected": "0x223e9f78",
+ "generator_cmd": "tnefparse-1.4.0 sdist tests/examples/long-filename.tnef (real Outlook winmail.dat; pip download --no-binary :all: tnefparse==1.4.0), copied verbatim",
+ "oracle_cmd": "python3 -I -c \"import tnefparse,json;t=tnefparse.TNEF(open('tests/data/meta_fixtures/tnef/outlook_long_filename__signature_u32_hex.bin','rb').read());print('0x%08x'%t.signature)\"  (tnefparse 1.4.0 reader); file -b -> 'Transport Neutral Encapsulation Format (TNEF)'",
+ "decoy": false,
+ "member": "winmail.dat"
+}

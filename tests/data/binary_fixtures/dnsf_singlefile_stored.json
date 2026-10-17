@@ -1,0 +1,26 @@
+{
+ "encoding": "raw",
+ "expected_offset": 81232,
+ "expected_config": {
+  "c2": "203.0.113.61:8443",
+  "campaign": "singlefile-stored",
+  "sleep": 30,
+  "flag": "flag{b4ndl3d_n0t_h1dd3n}"
+ },
+ "expected_facts": {
+  "format": "elf",
+  "dotnet_build": "singlefile",
+  "main_assembly": "app.dll",
+  "main_assembly_offset": 78912
+ },
+ "expected_locate": {
+  "container": "dotnet-bundle",
+  "slot_offset": 78912,
+  "delta": 2320,
+  "path": "app.dll"
+ },
+ "oracle_output": "singlefile_stored | file: ELF 64-bit LSB pie executable, x86-64 | dll stored @ 78912 | HCFG @ 81232 crc_ok",
+ "convention": "stored bundle entry = plain bytes: raw at the magic; hcfg_locate slot = the embedded app.dll's file offset",
+ "generator_cmd": "source bin/env.sh; DNSF_INPUTS=$TMPDIR/dnsf_inputs.tar bash tests/data/binary_fixtures/dnsf_gen.sh tests/data/binary_fixtures   # dotnet 10 SDK: dotnet publish (PublishSingleFile / PublishReadyToRun) + Microsoft.NET.HostModel Bundler(EnableCompression); blob = printf header + crc32 from gzip trailer",
+ "oracle_cmd": "mkdir -p $TMPDIR/dnsf_in && tar -C $TMPDIR/dnsf_in -xf $TMPDIR/dnsf_inputs.tar && .venv/bin/python -I tests/data/binary_fixtures/dnsf_oracle.py tests/data/binary_fixtures $TMPDIR/dnsf_in   # obj/ IL dll located in the bundle by bytes.find / brute raw-inflate; struct+zlib.crc32 header; dnfile/pefile COR flags + ManagedNativeHeader RTR; file(1)"
+}

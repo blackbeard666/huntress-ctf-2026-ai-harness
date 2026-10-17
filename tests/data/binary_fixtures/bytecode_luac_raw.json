@@ -1,0 +1,18 @@
+{
+ "encoding": "raw",
+ "expected_format": "luac",
+ "expected_machine": "none",
+ "expected_version": "lua 5.4",
+ "file_b": "Lua bytecode, version 5.4",
+ "expected_offset": 124,
+ "expected_config": {
+  "c2": "203.0.113.9:53",
+  "campaign": "moon",
+  "sleep": 5,
+  "flag": "flag{lu4c_r4w_str1ng}"
+ },
+ "generator_cmd": "bash bytecode_gen.sh bytecode_luac_raw.bin luac '{\"c2\":\"203.0.113.9:53\",\"campaign\":\"moon\",\"sleep\":5,\"flag\":\"flag{lu4c_r4w_str1ng}\"}' 0x33 raw",
+ "oracle_cmd": "bash bytecode_oracle.sh bytecode_luac_raw.bin   # file -b, javap -v / python3.14 marshal / luac5.4 -l / llvm-dis-18, grep -obUa, coreutils base64 + perl unpack/xor, gzip trailer crc32",
+ "oracle_output": "Lua bytecode, version 5.4 | lua 5.4 | 124 | HCFG 1 51 82 857615372 857615372 | {\"c2\":\"203.0.113.9:53\",\"campaign\":\"moon\",\"sleep\":5,\"flag\":\"flag{lu4c_r4w_str1ng}\"}",
+ "note": "format labels SPECULATIVE (GM vocabulary not seen; candidates in machine_facts()['format_candidates']); machine 'none' (wrapper: Mach-O cputype); expected_offset = first stored byte per the OFFSET LAW (grep -obUa); bitcode strings are bit-packed (char6 / fixed-8 arrays) so no byte-exact independent offset exists -> expected_offset null (not asserted)"
+}

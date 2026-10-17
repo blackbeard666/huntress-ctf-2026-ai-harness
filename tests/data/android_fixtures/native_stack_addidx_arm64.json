@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": "ANS-e7d2094cb1f86a3e",
+ "generator_cmd": "tests/data/android_fixtures/gen_stack_string.sh tests/data/android_fixtures  # perl s[i]=c+7+13*i volatile per-byte stores -> aarch64-linux-gnu-gcc -shared -fPIC -O2 native_src/stack_check.c (mov w2,#imm; strb w2,[sp,#off]); zip -qX -r <name>.apk assets lib",
+ "oracle_cmd": "unzip native_stack_addidx_arm64.apk lib/arm64-v8a/libcheck.so && aarch64-linux-gnu-gcc -o ha native_src/stack_harness.c -ldl && qemu-aarch64 -L /usr/aarch64-linux-gnu ./ha ./lib/arm64-v8a/libcheck.so Java_com_huntress_arena_NativeLib_check ANS-e7d2094cb1f86a3e  # 'check(ANS-e7d2094cb1f86a3e) = 1'",
+ "decoy": false
+}

@@ -1,0 +1,11 @@
+{
+  "stage": "single_solve:generalizing",
+  "name": "\ud83d\udcdc Same Same, But Different",
+  "lane": "script-analysis",
+  "worker": null,
+  "updated": "2026-10-16T22:43:14",
+  "launches": 1,
+  "attempt": 6,
+  "time_trial_result": "correct",
+  "mastery_result": "correct"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "spelled-digits",
+ "plain": null,
+ "encoded": "Four Echo / Six Niner / Six Three / Six Echo",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "NATO ICAO words over hex (perl hash writer): letters as Echo/Foxtrot words, not bare a-f",
+ "oracle_cmd": "printf %s \"$encoded\" | tr ' /' '\\n\\n' | grep -vixE '|zero|one|two|three|four|five|six|seven|eight|nine|niner|[a-f]|ten|eleven|twelve|thirteen|fourteen|fifteen'  # prints Echo -> NATO, not spelled digits",
+ "oracle_plain": null
+}

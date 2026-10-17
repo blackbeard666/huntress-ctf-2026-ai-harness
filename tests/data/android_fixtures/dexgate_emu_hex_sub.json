@@ -1,0 +1,7 @@
+{
+ "entry": "dex_gated_branch_scan",
+ "expected": "ANS-e2a95d0c7b3418f6",
+ "_why": "Vault.reveal(): !EnvProbe.hostile() ? unhex(hex) : 'emulator detected'; the helper unhex() subtracts 11 (add-int/lit8 -0xb); EnvProbe checks Build.HARDWARE goldfish/ranchu, TracerPid in /proc/self/status, frida in /proc/self/maps",
+ "generator_cmd": "python3 tests/data/android_fixtures/dexgate_src/gen_dexgate.py emu_hex_sub tests/data/android_fixtures/dexgate_emu_hex_sub.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "jadx -q -d o tests/data/android_fixtures/dexgate_emu_hex_sub.apk; python3 -c \"import re,glob; s=open(glob.glob('o/sources/**/Vault.java',recursive=True)[0]).read(); e=re.search(r'unhex\\(\\\"([0-9a-f]+)\\\"\\)',s).group(1); k=int(re.search(r'16\\) - (\\d+)',s).group(1)); print(bytes((b-k)&255 for b in bytes.fromhex(e)))\"  # -> b'ANS-e2a95d0c7b3418f6'"
+}

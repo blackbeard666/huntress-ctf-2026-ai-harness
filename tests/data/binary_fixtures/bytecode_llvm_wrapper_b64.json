@@ -1,0 +1,18 @@
+{
+ "encoding": "bitcode-base64",
+ "expected_format": "llvm_bitcode",
+ "expected_machine": "x86-64",
+ "expected_version": "x86_64-apple-macosx11.0.0",
+ "file_b": "LLVM bitcode, wrapper x86_64",
+ "expected_offset": null,
+ "expected_config": {
+  "c2": "198.51.100.23:443",
+  "campaign": "wrapper",
+  "sleep": 7,
+  "flag": "flag{0b17c0de_wr4pp3r}"
+ },
+ "generator_cmd": "bash bytecode_gen.sh bytecode_llvm_wrapper_b64.bin llvm-darwin '{\"c2\":\"198.51.100.23:443\",\"campaign\":\"wrapper\",\"sleep\":7,\"flag\":\"flag{0b17c0de_wr4pp3r}\"}' 0 b64",
+ "oracle_cmd": "bash bytecode_oracle.sh bytecode_llvm_wrapper_b64.bin   # file -b, javap -v / python3.14 marshal / luac5.4 -l / llvm-dis-18, grep -obUa, coreutils base64 + perl unpack/xor, gzip trailer crc32",
+ "oracle_output": "LLVM bitcode, wrapper x86_64 | x86_64-apple-macosx11.0.0 | none | HCFG 1 0 89 2140259723 2140259723 | {\"c2\":\"198.51.100.23:443\",\"campaign\":\"wrapper\",\"sleep\":7,\"flag\":\"flag{0b17c0de_wr4pp3r}\"}",
+ "note": "format labels SPECULATIVE (GM vocabulary not seen; candidates in machine_facts()['format_candidates']); machine 'none' (wrapper: Mach-O cputype); expected_offset = first stored byte per the OFFSET LAW (grep -obUa); bitcode strings are bit-packed (char6 / fixed-8 arrays) so no byte-exact independent offset exists -> expected_offset null (not asserted)"
+}

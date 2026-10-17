@@ -1,0 +1,8 @@
+{
+ "field": "email.mime_boundary",
+ "expected": "==mixed-boundary-7f3a==",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/email/GENERATOR_stdlib_mime_attachments.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP; scan_rfc2047 = hand-written raw bytes; decoy = Pillow PNG) -> invoice_mixed.eml",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/email/ORACLE_eml_parser_mime.py.txt tools/pylib-eml <file>  (eml_parser 4.2.1 EmlParser(include_attachment_data, include_raw_body).decode_email_bytes + raw boundary-delimiter scan) -> boundaries[0] (top-level Content-Type)",
+ "decoy": false,
+ "member": "evidence-01/invoice_mixed.eml"
+}

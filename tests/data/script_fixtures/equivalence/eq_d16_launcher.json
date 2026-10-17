@@ -1,0 +1,29 @@
+{
+ "entry": "equivalence",
+ "plans": {
+  "polyglot-applescript-launcher.applescript": "v=3|role=launcher|attack=T1059|adapter=process_builder|campaign_id=APPLESCRIPT-fc26fc69|url=https://applescript-fc26fc69a8.example.invalid/stage|stage_count=3|steps=profile_host>decode_configuration>dispatch_language|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=batch",
+  "polyglot-autoit-launcher.au3": "v=3|role=launcher|attack=T1059|adapter=process_builder|campaign_id=AUTOIT-c28c2796|url=https://autoit-c28c2796f8.example.invalid/stage|stage_count=3|steps=decode_embedded>write_file>dispatch_process|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch",
+  "polyglot-lua-launcher.lua": "v=3|role=launcher|attack=T1059|adapter=process_builder|campaign_id=LUA-f76643e2|url=https://lua-f76643e2a5.example.invalid/stage|stage_count=3|steps=profile_host>decode_configuration>dispatch_language|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=batch",
+  "polyglot-msbuild_xml-launcher.proj": "v=3|role=launcher|attack=T1059|adapter=process_builder|campaign_id=MSBUILD_XML-7c150600|url=https://msbuild_xml-7c150600b9.example.invalid/stage|stage_count=2|steps=decode_configuration>return_configuration|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=batch",
+  "polyglot-perl-launcher.pl": "v=3|role=launcher|attack=T1059|adapter=process_builder|campaign_id=PERL-5c04a678|url=https://perl-5c04a67881.example.invalid/stage|stage_count=2|steps=acquire_remote>dispatch_process|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=batch",
+  "polyglot-php-launcher.php": "v=3|role=launcher|attack=T1059|adapter=process_builder|campaign_id=PHP-dd4d375d|url=https://php-dd4d375d2b.example.invalid/stage|stage_count=2|steps=acquire_remote>dispatch_process|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=bash",
+  "polyglot-ruby-launcher.rb": "v=3|role=launcher|attack=T1059|adapter=process_builder|campaign_id=RUBY-7a6bbff2|url=https://ruby-7a6bbff278.example.invalid/stage|stage_count=3|steps=decode_embedded>write_file>dispatch_process|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch",
+  "polyglot-typescript-launcher.ts": "v=3|role=launcher|attack=T1059|adapter=process_builder|campaign_id=TYPESCRIPT-c2a2e4e1|url=https://typescript-c2a2e4e16a.example.invalid/stage|stage_count=2|steps=acquire_remote>dispatch_process|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=batch",
+  "polyglot-wmi_mof-launcher.mof": "v=3|role=launcher|attack=T1059|adapter=process_builder|campaign_id=WMI_MOF-0aa04c1b|url=https://wmi_mof-0aa04c1bc0.example.invalid/stage|stage_count=2|steps=decode_configuration>return_configuration|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=batch"
+ },
+ "expected": {
+  "outliers": [
+   "polyglot-php-launcher.php"
+  ],
+  "diffs": {
+   "polyglot-php-launcher.php": {
+    "next_language": "bash"
+   }
+  },
+  "plot_class_count": 2,
+  "class_count": 5
+ },
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/equivalence/eq_gen.py  (D16 single 89161077 GM-verified expected.json -> v=3 k=v plans)",
+ "oracle_cmd": "python3 -I -c \"import json,collections as C;f=json.load(open('tests/data/script_fixtures/equivalence/eq_d16_launcher.json'));P={m:dict(x.split('=',1) for x in p.split('|')) for m,p in f['plans'].items()};[print(k,C.Counter(p.get(k) for p in P.values())) for k in ('role','attack','adapter','next_language','steps','stage_profile','stage_count')]\"  (minority on a field >=2/3 unanimous = outlier; distinct (role,attack,adapter,next_language) tuples = plot classes)"
+}

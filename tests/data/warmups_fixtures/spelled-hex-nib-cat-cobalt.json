@@ -1,0 +1,9 @@
+{
+ "codec": "spelled-nib-cat(hex)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-64",
+ "encoded": "four fourteen six nine six three six five two zero seven seven six fifteen seven two six eleven two zero six four six five six three six fifteen six four six nine six fourteen six seven two zero seven four six eight six nine seven three two zero seven seven six one seven two six thirteen seven five seven zero two one two zero five four six fifteen two zero seven three six fifteen six twelve seven six six five two twelve two zero seven three seven five six two six thirteen six nine seven four two zero seven four six eight six nine seven three two zero six five seven eight six one six three seven four two zero six one six fourteen seven three seven seven six five seven two two zero seven four six fifteen two zero seven four six eight six five two zero four seven six one six thirteen six five two zero four thirteen six one seven three seven four six five seven two three ten two zero six three six fifteen six two six one six twelve seven four two thirteen six eight six five seven two six fifteen six fourteen two thirteen three six three four",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c1 | tr -d \"\\n\" | perl -ne '@w=qw(zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen);print join(\" \", map { $w[hex $_] } split //)'",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys,binascii; m={w:i for i,w in enumerate(\\\"zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen\\\".split())}; sys.stdout.write(binascii.unhexlify(\\\"\\\".join(\\\"%x\\\"%m[w] for w in sys.stdin.read().split())).decode())\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-64",
+ "expected": "match"
+}

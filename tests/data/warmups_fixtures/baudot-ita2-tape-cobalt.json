@@ -1,0 +1,9 @@
+{
+ "codec": "baudot-tape-lines",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-kestrel-17",
+ "encoded": "*****\n.**..\n..**.\n.***.\n....*\n..*..\n*..**\n**...\n.*.*.\n.****\n..*..\n.*..*\n....*\n.***.\n**...\n.*..*\n..**.\n.**..\n**.*.\n..*..\n*....\n*.*..\n..**.\n..*.*\n..*..\n*..**\n...**\n.*.*.\n***..\n..***\n*.**.\n**.**\n.**.*\n..*..\n*****\n*....\n**...\n..*..\n..*.*\n**...\n*..*.\n****.\n....*\n**.**\n.**..\n..*..\n*****\n..*.*\n..***\n**..*\n***..\n..**.\n*....\n..*..\n*....\n*.*..\n..**.\n..*.*\n..*..\n....*\n***.*\n...**\n.***.\n*....\n..*..\n...**\n.**..\n..*.*\n*..**\n....*\n.*.*.\n..*..\n*....\n**...\n..*..\n*....\n*.*..\n....*\n..*..\n**.*.\n...**\n***..\n....*\n..*..\n***..\n...**\n..*.*\n*....\n....*\n.*.*.\n**.**\n.***.\n..*..\n*****\n.***.\n**...\n**..*\n...**\n*..*.\n*....\n**.**\n...**\n*****\n.****\n....*\n..*.*\n*....\n.*.*.\n....*\n*..*.\n**.**\n...**\n*.***\n..***",
+ "generator_cmd": "printf %s \"$plain\" | tr a-z A-Z | PYTHONPATH=tools/pybaudot python3 tests/data/warmups_fixtures/baudot_lib.py tape ita2  # PyPI baudot TapeWriter(TapeConfig('*','.','')): one `*`/`.` 5-hole frame per line",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/baudot_oracle.pl  # perl reader maps * -> 1, . -> 0",
+ "oracle_plain": "NICE WORK DECODING THIS WARMUP! TO SOLVE, SUBMIT THIS EXACT ANSWER TO THE GAME MASTER: COBALT-KESTREL-17",
+ "expected": "match"
+}

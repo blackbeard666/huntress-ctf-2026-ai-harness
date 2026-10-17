@@ -1,0 +1,8 @@
+{
+ "field": "email.from_address",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/email/GENERATOR_stdlib_emailmessage_alias.py.txt <outdir>  (Pillow Image.save PNG, renamed .eml) -> decoy_png_renamed.eml",
+ "oracle_cmd": "file <file> -> 'PNG image data, 4 x 3'; eml_parser 4.2.1 (ORACLE_eml_parser_alias.py.txt) -> from_address null / no headers",
+ "decoy": true,
+ "member": "evidence-01/message.eml"
+}

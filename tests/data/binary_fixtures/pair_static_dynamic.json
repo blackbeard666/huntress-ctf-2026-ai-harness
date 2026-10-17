@@ -1,0 +1,142 @@
+{
+ "format": "zip of a same-source build pair",
+ "members": [
+  "d17--variant-000-static.elf",
+  "d17--variant-001-dynamic.elf"
+ ],
+ "expected_sha256": [
+  "922616a97113e6fff1f4ac3a552fdc4b5705340807cbc12f2dbdbb70a50e871e",
+  "c9b20922f3000ff3a2d784f15ace353c9c1bc1296a92f7021c18075b80c49fba"
+ ],
+ "routes": {
+  "static_elf_type": {
+   "member": "d17--variant-000-static.elf",
+   "value": "ET_EXEC"
+  },
+  "static_entry_point": {
+   "member": "d17--variant-000-static.elf",
+   "value": "0x401000"
+  },
+  "static_has_symtab": {
+   "member": "d17--variant-000-static.elf",
+   "value": "true"
+  },
+  "static_section_names": {
+   "member": "d17--variant-000-static.elf",
+   "value": [
+    "",
+    ".note.gnu.build-id",
+    ".text",
+    ".rodata",
+    ".hcfg",
+    ".eh_frame",
+    ".note.gnu.property",
+    ".comment",
+    ".symtab",
+    ".strtab",
+    ".shstrtab"
+   ]
+  },
+  "static_imports": {
+   "member": "d17--variant-000-static.elf",
+   "value": []
+  },
+  "static_has_interp": {
+   "member": "d17--variant-000-static.elf",
+   "value": "false"
+  },
+  "static_has_debug_info": {
+   "member": "d17--variant-000-static.elf",
+   "value": "false"
+  },
+  "static_is_packed": {
+   "member": "d17--variant-000-static.elf",
+   "value": "false"
+  },
+  "static_needed": {
+   "member": "d17--variant-000-static.elf",
+   "value": []
+  },
+  "dynamic_elf_type": {
+   "member": "d17--variant-001-dynamic.elf",
+   "value": "ET_DYN"
+  },
+  "dynamic_entry_point": {
+   "member": "d17--variant-001-dynamic.elf",
+   "value": "0x10b0"
+  },
+  "dynamic_has_symtab": {
+   "member": "d17--variant-001-dynamic.elf",
+   "value": "true"
+  },
+  "dynamic_section_names": {
+   "member": "d17--variant-001-dynamic.elf",
+   "value": [
+    "",
+    ".note.gnu.build-id",
+    ".interp",
+    ".gnu.hash",
+    ".dynsym",
+    ".dynstr",
+    ".gnu.version",
+    ".gnu.version_r",
+    ".rela.dyn",
+    ".rela.plt",
+    ".init",
+    ".plt",
+    ".plt.got",
+    ".plt.sec",
+    ".text",
+    ".fini",
+    ".rodata",
+    ".hcfg",
+    ".eh_frame_hdr",
+    ".eh_frame",
+    ".note.gnu.property",
+    ".note.ABI-tag",
+    ".init_array",
+    ".fini_array",
+    ".dynamic",
+    ".got",
+    ".data",
+    ".bss",
+    ".comment",
+    ".symtab",
+    ".strtab",
+    ".shstrtab"
+   ]
+  },
+  "dynamic_imports": {
+   "member": "d17--variant-001-dynamic.elf",
+   "value": [
+    "__libc_start_main",
+    "_ITM_deregisterTMCloneTable",
+    "__gmon_start__",
+    "__printf_chk",
+    "_ITM_registerTMCloneTable",
+    "__cxa_finalize"
+   ]
+  },
+  "dynamic_has_interp": {
+   "member": "d17--variant-001-dynamic.elf",
+   "value": "true"
+  },
+  "dynamic_has_debug_info": {
+   "member": "d17--variant-001-dynamic.elf",
+   "value": "false"
+  },
+  "dynamic_is_packed": {
+   "member": "d17--variant-001-dynamic.elf",
+   "value": "false"
+  },
+  "dynamic_needed": {
+   "member": "d17--variant-001-dynamic.elf",
+   "value": [
+    "libc.so.6"
+   ]
+  }
+ },
+ "generator_cmd": "bash pair_gen.sh   # gcc -O0/-O2/-Os/-static -nostdlib/-pie/-no-pie/-g, strip, upx -9, zip -X -j",
+ "oracle_cmd": "bash pair_oracle.sh pair_static_dynamic.bin   # unzip -Z1 + sha256sum, readelf -hW/-SW/-lW/--dyn-syms/-dW, upx -t",
+ "decoy": false
+}

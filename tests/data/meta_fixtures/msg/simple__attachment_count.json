@@ -1,0 +1,8 @@
+{
+ "field": "msg.attachment_count",
+ "expected": "0",
+ "generator_cmd": "tools/node/bin/node $TMPDIR/msggen/gen.js simple out.msg tools/npm-cfb  (SheetJS cfb@1.2.2 CFB writer, MS-OXMSG __substg1.0_/__properties_version1.0/__attach_version1.0_# layout; `file -b` -> 'CDFV2 Microsoft Outlook Message')",
+ "oracle_cmd": ".venv/bin/python -I $TMPDIR/msggen/oracle.py tools/pyextractmsg tests/data/meta_fixtures/msg/simple__attachment_count.bin  (extract-msg 0.56.1 reader: messageId/inReplyTo/subject/classType/getStringStream('__substg1.0_0C1F'|'5D01'|'007D')/attachments longFilename|shortFilename/props.date.astimezone(UTC); null or [] -> none)",
+ "decoy": false,
+ "member": "simple.msg"
+}

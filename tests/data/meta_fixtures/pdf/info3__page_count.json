@@ -1,0 +1,8 @@
+{
+ "field": "pdf.page_count",
+ "expected": "4",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import Image; import time,calendar; fr=[Image.new('RGB',(60,40),(50*i,90,200)) for i in range(3)]; fr[0].save('info3.pdf',save_all=True,append_images=fr[1:],title='Quarterly Ledger',author='J. Doe',creator='LedgerTool 2.1',producer='HuntressPDF 9',creationDate=time.gmtime(calendar.timegm((2024,3,5,14,7,9,0,0,0)))); Image.new('RGB',(30,30),(1,2,3)).save('info3.pdf',append=True)\"  (Pillow 12 PDF writer; append=True = incremental update)",
+ "oracle_cmd": "pdfinfo info3.pdf -> Pages: 4 (3 + 1 appended in the incremental update)",
+ "decoy": false,
+ "member": "info3.pdf"
+}

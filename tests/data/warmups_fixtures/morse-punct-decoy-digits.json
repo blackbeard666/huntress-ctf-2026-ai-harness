@@ -1,0 +1,10 @@
+{
+ "codec": "morse-punct",
+ "plain": null,
+ "encoded": "44 23 13 15 11 52 34 42 25",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s '44 23 13 15 11 52 34 42 25'  # hand-written tap-code style digit pairs: no dot/dash symbol at all",
+ "oracle_cmd": "python3 -c 'import re,sys;print(bool(re.fullmatch(r\"[.\\-/\\s]+\",sys.argv[1])))' \"$encoded\"  # False: not a dot/dash alphabet -> not plain Morse",
+ "oracle_plain": "False"
+}

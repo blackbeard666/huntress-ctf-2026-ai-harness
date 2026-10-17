@@ -1,0 +1,8 @@
+{
+ "field": "email.attachment_sha1s",
+ "expected": "[\"2bdb42c9cdb7e18cada3631b51b435db17693ed6\"]",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/email/GENERATOR_stdlib_mime_attachments.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP; scan_rfc2047 = hand-written raw bytes; decoy = Pillow PNG) -> scan_rfc2047.eml",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/email/ORACLE_eml_parser_mime.py.txt tools/pylib-eml <file>  (eml_parser 4.2.1 EmlParser(include_attachment_data, include_raw_body).decode_email_bytes + raw boundary-delimiter scan) -> attachment_sha1s (filename RFC 2047 =?UTF-8?B?...?= -> Scan_été.png)",
+ "decoy": false,
+ "member": "evidence-01/scan_rfc2047.eml"
+}

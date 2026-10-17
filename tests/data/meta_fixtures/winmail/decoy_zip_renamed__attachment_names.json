@@ -1,0 +1,8 @@
+{
+ "field": "winmail.attachment_names",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import zipfile;z=zipfile.ZipFile('tests/data/meta_fixtures/winmail/decoy_zip_renamed__attachment_names.bin','w');z.writestr('winmail.dat.txt','IPM.Microsoft Mail.Note AUTHORS');z.close()\"  (zip renamed impostor winmail.dat)",
+ "oracle_cmd": "file -b tests/data/meta_fixtures/winmail/decoy_zip_renamed__attachment_names.bin -> 'Zip archive data'; python3 -I -c \"import tnefparse,json;t=tnefparse.TNEF(open('tests/data/meta_fixtures/winmail/decoy_zip_renamed__attachment_names.bin','rb').read());print(t)\"  (tnefparse 1.4.0 reader) -> ValueError 'Wrong TNEF signature'",
+ "decoy": true,
+ "member": "winmail.dat"
+}

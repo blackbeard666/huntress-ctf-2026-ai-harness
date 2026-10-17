@@ -1,0 +1,9 @@
+{
+ "codec": "braille-ascii(hex)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-93",
+ "encoded": "⠲⠑⠖⠔⠖⠒⠖⠢⠆⠴⠶⠶⠖⠋⠶⠆⠖⠃⠆⠴⠖⠲⠖⠢⠖⠒⠖⠋⠖⠲⠖⠔⠖⠑⠖⠶⠆⠴⠶⠲⠖⠦⠖⠔⠶⠒⠆⠴⠶⠶⠖⠂⠶⠆⠖⠙⠶⠢⠶⠴⠆⠂⠆⠴⠢⠲⠖⠋⠆⠴⠶⠒⠖⠋⠖⠉⠶⠖⠖⠢⠆⠉⠆⠴⠶⠒⠶⠢⠖⠆⠖⠙⠖⠔⠶⠲⠆⠴⠶⠲⠖⠦⠖⠔⠶⠒⠆⠴⠖⠢⠶⠦⠖⠂⠖⠒⠶⠲⠆⠴⠖⠂⠖⠑⠶⠒⠶⠶⠖⠢⠶⠆⠆⠴⠶⠲⠖⠋⠆⠴⠶⠲⠖⠦⠖⠢⠆⠴⠲⠶⠖⠂⠖⠙⠖⠢⠆⠴⠲⠙⠖⠂⠶⠒⠶⠲⠖⠢⠶⠆⠒⠁⠆⠴⠖⠁⠖⠂⠖⠲⠖⠢⠆⠙⠖⠋⠶⠲⠶⠲⠖⠢⠶⠆⠆⠙⠒⠔⠒⠒",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c0 | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/braille_cyberchef.mjs enc  # xxd hex -> CyberChef To Braille (NA Braille ASCII cells, digits = lower cells)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/braille_cyberchef.mjs dec | xxd -r -p  # CyberChef From Braille -> xxd -r -p",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-93",
+ "expected": "match"
+}

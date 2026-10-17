@@ -1,0 +1,8 @@
+{
+ "field": "eml.is_forward",
+ "expected": "false",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/eml/GENERATOR_stdlib_thread.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP; Thread-Index built with struct/uuid) -> thread_root.eml",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/eml/ORACLE_eml_parser_thread.py.txt tools/pylib-eml <file>  (eml_parser 4.2.1 decode_email_bytes headers) -> subject 'Invoice 4471', no x-forwarded-*",
+ "decoy": false,
+ "member": "evidence-01/thread_root.eml"
+}

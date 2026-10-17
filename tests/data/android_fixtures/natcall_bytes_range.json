@@ -1,0 +1,8 @@
+{
+ "entry": "dex_native_calls",
+ "expected": "ANS-c3f0b18e94a7d265",
+ "_why": "instance native nativeEvidence(int,byte[],long) via invoke-virtual/range: 0xffff, \"token\".getBytes() (array-length != 0 check), const-wide 0x7fffffff00000001",
+ "oracle_out": "byte[] bytes = \"ANS-c3f0b18e94a7d265\".getBytes(); ... return jNIBoundary.nativeEvidence(65535, bytes, 9223372032559808513L);",
+ "generator_cmd": "apktool d -r -o base dexarr_fill_lit8.apk; rm base/smali/com/huntress/mobile/d01/v073e9a824e9e/StrEnc.smali; python3 tests/data/android_fixtures/gen_native_calls.py base bytes_range  # writes smali JNIBoundary/Gate; apktool b -o natcall_bytes_range.apk base",
+ "oracle_cmd": "jadx -q -d j natcall_bytes_range.apk; grep -rhn 'native \\|nativeVerify(\\|nativeEvidence(\\|nativeLen(\\|getBytes\\|length()' j/sources/com/huntress/mobile/d17"
+}

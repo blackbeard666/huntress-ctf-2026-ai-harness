@@ -1,0 +1,26 @@
+{
+ "encoding": "raw",
+ "expected_offset": 2176,
+ "expected_config": {
+  "c2": "203.0.113.5:8080",
+  "campaign": "readytorun",
+  "sleep": 15,
+  "flag": "flag{r2r_st1ll_p3_cl1}"
+ },
+ "expected_facts": {
+  "format": "pe_cli",
+  "dotnet_build": "readytorun",
+  "r2r_os": "linux",
+  "machine": "x86-64"
+ },
+ "expected_locate": {
+  "container": "section",
+  "slot_offset": 512,
+  "delta": 1664,
+  "section": ".text"
+ },
+ "oracle_output": "r2r | file: PE32+ ... (DLL), Unknown processor | COR flags 0x4 | ManagedNativeHeader 0x107a0 b'RTR\\x00' | HCFG @ 2176 crc_ok | pefile Machine 0xfd1d ^ 0x7b79 = 0x8664",
+ "convention": "ReadyToRun dll keeps its CLI header -> format pe_cli; Machine is xor'd with the Linux cookie 0x7B79",
+ "generator_cmd": "source bin/env.sh; DNSF_INPUTS=$TMPDIR/dnsf_inputs.tar bash tests/data/binary_fixtures/dnsf_gen.sh tests/data/binary_fixtures   # dotnet 10 SDK: dotnet publish (PublishSingleFile / PublishReadyToRun) + Microsoft.NET.HostModel Bundler(EnableCompression); blob = printf header + crc32 from gzip trailer",
+ "oracle_cmd": "mkdir -p $TMPDIR/dnsf_in && tar -C $TMPDIR/dnsf_in -xf $TMPDIR/dnsf_inputs.tar && .venv/bin/python -I tests/data/binary_fixtures/dnsf_oracle.py tests/data/binary_fixtures $TMPDIR/dnsf_in   # obj/ IL dll located in the bundle by bytes.find / brute raw-inflate; struct+zlib.crc32 header; dnfile/pefile COR flags + ManagedNativeHeader RTR; file(1)"
+}

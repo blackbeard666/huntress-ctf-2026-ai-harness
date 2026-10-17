@@ -89,6 +89,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Stripped"
   },
+  "binary-reverse-engineering-day-16-webassembly-optimization-equivalence": {
+    "day": 16,
+    "dir": "day16/binary-wasm-up",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Wasm Up"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -179,6 +185,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 A Word to the Wise"
   },
+  "metadata-forensics-day-16-return-to-sender": {
+    "day": 16,
+    "dir": "day16/metadata-return-to-sender",
+    "lane": "metadata-forensics",
+    "name": "🔎 Return to Sender"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -268,6 +280,12 @@
     "dir": "day15/mobile-native-library-secrets",
     "lane": "mobile-android",
     "name": "📱 Native Library Secrets"
+  },
+  "mobile-android-day-16-jni-boundary": {
+    "day": 16,
+    "dir": "day16/mobile-jni-boundary",
+    "lane": "mobile-android",
+    "name": "📱 JNI Boundary"
   },
   "read-the-rules": {
     "day": 1,
@@ -365,6 +383,12 @@
     "lane": "script-analysis",
     "name": "📜 Crumb Trail"
   },
+  "script-analysis-day-16-obfuscation-equivalence": {
+    "day": 16,
+    "dir": "day16/scripting-same-same-but-different",
+    "lane": "script-analysis",
+    "name": "📜 Same Same, But Different"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -454,6 +478,12 @@
     "dir": "day15/warmups-room-forty-seven",
     "lane": "warmups",
     "name": "👶 Room Forty-Seven"
+  },
+  "warmups-day-16": {
+    "day": 16,
+    "dir": "day16/warmups-dot-com",
+    "lane": "warmups",
+    "name": "👶 Dot Com"
   },
   "welcome-robots": {
     "day": 1,

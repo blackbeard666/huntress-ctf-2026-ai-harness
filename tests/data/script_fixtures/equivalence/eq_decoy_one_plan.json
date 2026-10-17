@@ -1,0 +1,13 @@
+{
+ "entry": "equivalence",
+ "plans": {
+  "README.txt": "This folder holds sample scripts for the lab.",
+  "notes.md": "# notes\nnothing here",
+  "polyglot-php-downloader.php": "v=3|role=downloader|attack=T1105|adapter=http_client|campaign_id=APPLESCRIPT-fdc9362a|url=https://applescript-fdc9362a99.example.invalid/stage|stage_count=3|steps=decode_embedded>write_file>dispatch_process|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=jscript",
+  "trunc.lua": "v=3|camp"
+ },
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/equivalence/eq_gen.py  (D16 single 89161077 GM-verified expected.json -> v=3 k=v plans) (decoy: 1 plan + noise)",
+ "oracle_cmd": "python3 -I -c \"import json;f=json.load(open('tests/data/script_fixtures/equivalence/eq_decoy_one_plan.json'));print(sum('role=' in p for p in f['plans'].values()))\"  (1 comparable plan < 2 -> no equivalence)"
+}

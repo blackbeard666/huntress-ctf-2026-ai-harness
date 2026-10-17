@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=1|language=perl|role=loader|attack=T1027|steps=decode_payload,eval|campaign_id=PM-55aa0f17|host=pm-55aa0f17.example.invalid",
+ "decoy": false,
+ "generator_cmd": "sh tests/data/script_fixtures/tpl_gen.sh  (written by the language's own interpreter: perl: use constant X => MIME::Base64::decode(encode_base64(scalar reverse plan)))",
+ "oracle_cmd": "cd tests/data/script_fixtures && perl -e 'do \"./pl_tpl_mime_b64.pl\"; print scalar reverse(main::MATERIAL_PM55())'"
+}

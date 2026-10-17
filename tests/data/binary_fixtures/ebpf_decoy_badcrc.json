@@ -1,0 +1,21 @@
+{
+ "encoding": "raw",
+ "decoy": true,
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_bpf_fields": {
+  "format": "elf",
+  "machine": "Linux BPF",
+  "programs": [
+   "kprobe/do_sys_openat2",
+   "tracepoint/syscalls/sys_enter_execve"
+  ],
+  "has_hcfg_section": false,
+  "hcfg_section": "none",
+  "hcfg_offset": "none"
+ },
+ "generator_cmd": "bash ebpf_gen.sh ebpf_decoy_badcrc.bin badcrc '{\"c2\":\"192.0.2.1:80\",\"campaign\":\"ghost\",\"sleep\":1,\"flag\":\"flag{n0t_th1s}\"}' 0x5a",
+ "oracle_cmd": "bash ebpf_oracle.sh ebpf_decoy_badcrc.bin   # file -b, GNU readelf -h (Type/Machine/Entry), readelf -SW (exec PROGBITS != .text = programs; section list), readelf -p license, readelf -sW (OBJECT syms in .maps/maps), grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "eBPF REL | blob@136 HCFG 1 90 74 1955559679 gzipcrc=1955559678 (crc mismatch: no valid blob)",
+ "note": "machine 'Linux BPF' = GNU readelf Machine: spelling (e_machine 247); field names programs/program_types/maps/license/hcfg_section are SPECULATIVE (GM vocabulary for BPF not seen); expected_offset = FILE offset of the 'H' (OFFSET LAW raw, = hcfg_scan)"
+}

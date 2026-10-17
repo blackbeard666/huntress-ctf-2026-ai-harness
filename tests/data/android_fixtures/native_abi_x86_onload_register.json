@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": "ANS-0e7d4c2b9a183f56",
+ "generator_cmd": "tests/data/android_fixtures/gen_multi_abi.sh tests/data/android_fixtures  # native_src/onload_reg.c -> one object per ABI (zig cc -target x86-linux-musl -O2; JNI_OnLoad+RegisterNatives (12-byte entries), rolling xor 0x21+3i), linked into lib/x86/libreg.so (zig cc -shared -s); zip -qX -r <name>.apk assets lib; no ANS literal in any .so",
+ "oracle_cmd": "same object linked statically with native_src/static_harness.c (zig cc -static) and run under qemu-i386 with a fake JNIEnv/JavaVM: 'registered reveal / NewStringUTF ANS-0e7d4c2b9a183f56'; readelf -h lib/x86/libreg.so: Machine Intel 80386",
+ "decoy": false
+}

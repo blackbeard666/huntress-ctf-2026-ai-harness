@@ -1,0 +1,60 @@
+# Fixture generator for the email MIME-tree / attachment fixtures: stdlib email.message.EmailMessage WRITER (+ one
+# hand-written raw RFC 2047/2231 message, + Pillow for the decoy).  usage: python3 -I <this> <outdir>
+import base64
+import io
+import sys
+import zipfile
+from email.message import EmailMessage
+from email.policy import SMTP
+
+out = sys.argv[1]
+
+# 1. multipart/mixed { multipart/alternative {text/plain (QP), text/html}, pdf, "pdf" that is really MZ, zip, RFC 2231 name }
+m = EmailMessage(policy=SMTP)
+m["From"] = "Accounts Payable <ap@northwind-billing.example>"
+m["To"] = "lee.ortiz@victim.example"
+m["Subject"] = "Overdue invoice -- final notice"
+m["Date"] = "Thu, 15 Oct 2026 09:12:44 +0000"
+m["Message-ID"] = "<inv.20261015.0912@northwind-billing.example>"
+m.set_content("Hello,\n\nYour invoice is overdue. Pay now: café terms apply.\n\nRegards\n",
+              cte="quoted-printable")
+m.add_alternative("<html><body><p>Your invoice is <b>overdue</b>.</p></body></html>\n", subtype="html")
+zbuf = io.BytesIO()
+with zipfile.ZipFile(zbuf, "w") as z:
+    z.writestr("readme.txt", "hello from the zip\n")
+m.add_attachment(b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n", maintype="application", subtype="pdf",
+                 filename="Invoice_10-15.pdf")
+m.add_attachment(b"MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00\xff\xff\x00\x00" + b"\x00" * 48 + b"stub-pe",
+                 maintype="application", subtype="pdf", filename="Statement.pdf")
+m.add_attachment(zbuf.getvalue(), maintype="application", subtype="zip", filename="records.zip")
+m.add_attachment("café über notes\n".encode("utf-8"), maintype="text", subtype="plain",
+                 filename="Rechnung_über_café.txt")
+m.set_boundary("==mixed-boundary-7f3a==")
+open(f"{out}/invoice_mixed.eml", "wb").write(m.as_bytes())
+
+# 2. single-part text/plain, no attachments
+s = EmailMessage(policy=SMTP)
+s["From"] = "it-helpdesk@victim.example"
+s["To"] = "all@victim.example"
+s["Subject"] = "Password expiry"
+s["Date"] = "Thu, 15 Oct 2026 10:00:00 +0000"
+s["Message-ID"] = "<pw.1015@victim.example>"
+s.set_content("Your password expires today.\n")
+open(f"{out}/plain_single.eml", "wb").write(s.as_bytes())
+
+# 3. hand-written raw message: RFC 2047 encoded-word filename + Content-Type name only, base64 PNG-declared payload
+#    whose bytes are a ZIP (declared-vs-magic mismatch), CRLF line ends
+payload = zbuf.getvalue()
+raw = ("From: \"Scanner\" <scan@printer.example>\r\nTo: lee.ortiz@victim.example\r\nSubject: Scan\r\n"
+       "Date: Thu, 15 Oct 2026 11:00:00 +0000\r\nMessage-ID: <scan.1015@printer.example>\r\nMIME-Version: 1.0\r\n"
+       "Content-Type: multipart/mixed; boundary=\"b1_scan\"\r\n\r\npreamble\r\n--b1_scan\r\n"
+       "Content-Type: text/plain; charset=us-ascii\r\n\r\nScanned document attached.\r\n--b1_scan\r\n"
+       "Content-Type: image/png; name=\"=?UTF-8?B?" + base64.b64encode("Scan_été.png".encode()).decode() +
+       "?=\"\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment\r\n\r\n" +
+       base64.encodebytes(payload).decode().replace("\n", "\r\n") + "--b1_scan--\r\n")
+open(f"{out}/scan_rfc2047.eml", "wb").write(raw.encode("ascii"))
+
+from PIL import Image  # decoy: a PNG renamed .eml (no RFC 5322 headers)
+buf = io.BytesIO()
+Image.new("RGB", (5, 2), (10, 200, 10)).save(buf, "PNG")
+open(f"{out}/decoy_png_renamed.eml", "wb").write(buf.getvalue())

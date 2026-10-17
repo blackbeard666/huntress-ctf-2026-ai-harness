@@ -1,0 +1,8 @@
+{
+ "field": "msg.client_submit_time_utc",
+ "expected": "2026-09-15T08:42:17Z",
+ "generator_cmd": "tools/node/bin/node $TMPDIR/msggen/gen.js full out.msg tools/npm-cfb  (SheetJS cfb@1.2.2 CFB writer, MS-OXMSG __substg1.0_/__properties_version1.0/__attach_version1.0_# layout; `file -b` -> 'CDFV2 Microsoft Outlook Message')",
+ "oracle_cmd": ".venv/bin/python -I $TMPDIR/msggen/oracle.py tools/pyextractmsg tests/data/meta_fixtures/msg/full__client_submit_time_utc.bin  (extract-msg 0.56.1 reader: messageId/inReplyTo/subject/classType/getStringStream('__substg1.0_0C1F'|'5D01'|'007D')/attachments longFilename|shortFilename/props.date.astimezone(UTC); null or [] -> none)",
+ "decoy": false,
+ "member": "full.msg"
+}

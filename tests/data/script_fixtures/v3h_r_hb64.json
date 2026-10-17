@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=r|role=exfiltrator|verdict=malicious|attack=T1041|adapter=http_post|host_profile=standalone|obfuscation_profile=hb64|stage_profile=two_stage_download_execute|next_language=python|stage_count=2|steps=read_table,post_remote|campaign_id=R-df43548a|url=https://r-df43548a4b.example.invalid/stage|file_path=/tmp/huntress-r/.4b66d0f7a78e6882.stage",
+ "decoy": false,
+ "host": "r",
+ "tag": "HB64",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> HB64: stdlib base64/bytes.hex; r template)",
+ "oracle_cmd": "cat tests/data/script_fixtures/v3h_r_hb64.R | grep -o 'HUNTRESS_ANALYSIS_V1:HB64-[^ \"<]*' | head -1 | cut -d- -f2- | tr -d '\\r' | xxd -r -p | base64 -d"
+}

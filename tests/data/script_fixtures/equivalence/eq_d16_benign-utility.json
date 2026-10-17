@@ -1,0 +1,23 @@
+{
+ "entry": "equivalence",
+ "plans": {
+  "polyglot-applescript-benign-utility.applescript": "v=3|role=benign_utility|attack=none|adapter=local_parser|campaign_id=APPLESCRIPT-40a9582d|file_path=/tmp/huntress-applescript/.40a9582d4cc6294e.stage|stage_count=2|steps=acquire_remote>dispatch_process|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=powershell",
+  "polyglot-autoit-benign-utility.au3": "v=3|role=benign_utility|attack=none|adapter=local_parser|campaign_id=AUTOIT-bc0ee2f1|file_path=/tmp/huntress-autoit/.bc0ee2f1d29f68eb.stage|stage_count=2|steps=decode_configuration>return_configuration|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=powershell",
+  "polyglot-lua-benign-utility.lua": "v=3|role=benign_utility|attack=none|adapter=local_parser|campaign_id=LUA-1dc70c64|file_path=/tmp/huntress-lua/.1dc70c6407824f15.stage|stage_count=2|steps=acquire_remote>dispatch_process|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=powershell",
+  "polyglot-msbuild_xml-benign-utility.proj": "v=3|role=benign_utility|attack=none|adapter=local_parser|campaign_id=MSBUILD_XML-0257d2d8|file_path=/tmp/huntress-msbuild_xml/.0257d2d85c641260.stage|stage_count=3|steps=decode_embedded>write_file>dispatch_process|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=powershell",
+  "polyglot-perl-benign-utility.pl": "v=3|role=benign_utility|attack=none|adapter=local_parser|campaign_id=PERL-215b5554|file_path=/tmp/huntress-perl/.215b5554d82901e7.stage|stage_count=3|steps=profile_host>decode_configuration>dispatch_language|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=powershell",
+  "polyglot-php-benign-utility.php": "v=3|role=benign_utility|attack=none|adapter=local_parser|campaign_id=PHP-c51c7192|file_path=/tmp/huntress-php/.c51c7192990e7cec.stage|stage_count=2|steps=decode_configuration>return_configuration|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=powershell",
+  "polyglot-ruby-benign-utility.rb": "v=3|role=benign_utility|attack=none|adapter=local_parser|campaign_id=RUBY-9da35ea0|file_path=/tmp/huntress-ruby/.9da35ea028fcce21.stage|stage_count=2|steps=decode_configuration>return_configuration|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=powershell",
+  "polyglot-typescript-benign-utility.ts": "v=3|role=benign_utility|attack=none|adapter=local_parser|campaign_id=TYPESCRIPT-4193662f|file_path=/tmp/huntress-typescript/.4193662f832d8679.stage|stage_count=3|steps=profile_host>decode_configuration>dispatch_language|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=powershell",
+  "polyglot-wmi_mof-benign-utility.mof": "v=3|role=benign_utility|attack=none|adapter=local_parser|campaign_id=WMI_MOF-ff09ab8f|file_path=/tmp/huntress-wmi_mof/.ff09ab8fe683328d.stage|stage_count=3|steps=decode_embedded>write_file>dispatch_process|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=powershell"
+ },
+ "expected": {
+  "outliers": [],
+  "diffs": {},
+  "plot_class_count": 1,
+  "class_count": 4
+ },
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/equivalence/eq_gen.py  (D16 single 89161077 GM-verified expected.json -> v=3 k=v plans)",
+ "oracle_cmd": "python3 -I -c \"import json,collections as C;f=json.load(open('tests/data/script_fixtures/equivalence/eq_d16_benign-utility.json'));P={m:dict(x.split('=',1) for x in p.split('|')) for m,p in f['plans'].items()};[print(k,C.Counter(p.get(k) for p in P.values())) for k in ('role','attack','adapter','next_language','steps','stage_profile','stage_count')]\"  (minority on a field >=2/3 unanimous = outlier; distinct (role,attack,adapter,next_language) tuples = plot classes)"
+}

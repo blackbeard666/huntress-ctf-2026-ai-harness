@@ -558,7 +558,8 @@ def wasm_layout(data):
     offset (payload file offset), size}], section_names (custom sections by their own name), memories [{index,
     memory64, min, max, imported}], data_segments [{index, mode active/passive, memory, mem_offset (int, None when
     the init expr is a global.get e.g. Emscripten __memory_base), file_offset (first payload byte), size}]}; None if
-    not a version-1 wasm binary (the '\\0asm' magic alone does not count: every section must parse to the end)."""
+    not a version-1 wasm binary (the '\\0asm' magic alone does not count: every section must parse to the end).
+    Plus the _wasm_inventory keys (imports/exports/tables/elems/start/globals/custom_names/...; see wasm_fields)."""
     try:
         data = memoryview(data) if not isinstance(data, memoryview) else data
         if bytes(data[:4]) != b"\0asm" or len(data) < 8 or int.from_bytes(data[4:8], "little") != 1:
@@ -604,7 +605,7 @@ def wasm_layout(data):
                     elif kind == 2:
                         fl, mn, mx, r = limits(r)
                         mems.append({"index": len(mems), "memory64": bool(fl & 4), "min": mn, "max": mx,
-                                     "imported": True})
+                                     "imported": True, "shared": bool(fl & 2)})
                     elif kind == 3:
                         r += 2
                     elif kind == 4:
@@ -616,7 +617,7 @@ def wasm_layout(data):
                 for _ in range(n):
                     fl, mn, mx, r = limits(r)
                     mems.append({"index": len(mems), "memory64": bool(fl & 4), "min": mn, "max": mx,
-                                 "imported": False})
+                                 "imported": False, "shared": bool(fl & 2)})
             elif sid == 11:
                 n, r = _leb(data, q, cap=5)
                 for k in range(n):
@@ -645,11 +646,319 @@ def wasm_layout(data):
                                  "mem_offset": moff, "file_offset": r, "size": ln})
                     r += ln
             p = e
-        return {"format": "wasm", "machine": "wasm64" if any(m["memory64"] for m in mems) else "wasm32",
-                "version": 1, "sections": secs, "section_names": [s["name"] for s in secs], "memories": mems,
-                "data_segments": segs}
+        out = {"format": "wasm", "machine": "wasm64" if any(m["memory64"] for m in mems) else "wasm32",
+               "version": 1, "sections": secs, "section_names": [s["name"] for s in secs], "memories": mems,
+               "data_segments": segs}
     except (IndexError, ValueError, TypeError):
         return None
+    out.update(_wasm_inventory(data, secs))
+    return out
+
+
+WASM_EXTERN_KINDS = {0: "func", 1: "table", 2: "memory", 3: "global", 4: "tag"}
+WASM_VALTYPES = {0x7f: "i32", 0x7e: "i64", 0x7d: "f32", 0x7c: "f64", 0x7b: "v128", 0x70: "funcref",
+                 0x6f: "externref"}
+
+
+def _wasm_const(data, q):
+    """(value, next position after the 0x0b) of a constant init expr: int for i32/i64.const, ('global', i) for
+    global.get, ('func', i) for ref.func, None for ref.null / floats / extended-const arithmetic."""
+    val, ops = None, 0
+    while True:
+        op = data[q]
+        q += 1
+        if op == 0x0b:
+            return (val if ops == 1 else None), q
+        ops += 1
+        if op in (0x41, 0x42):
+            v, q = _leb(data, q, signed=True)
+            val = v & ((1 << (32 if op == 0x41 else 64)) - 1)
+        elif op == 0x23:
+            v, q = _leb(data, q)
+            val = ("global", v)
+        elif op == 0xd2:
+            v, q = _leb(data, q)
+            val = ("func", v)
+        elif op == 0xd0:
+            q = _leb(data, q, signed=True)[1]    # heap type (0x70 / 0x6f or a type index)
+            val = None
+        elif op == 0x43:
+            q += 4
+        elif op == 0x44:
+            q += 8
+        elif op == 0xfd:                          # v128.const
+            q = _leb(data, q)[1] + 16
+        elif op in (0x6a, 0x6b, 0x6c, 0x7c, 0x7d, 0x7e):   # extended-const add/sub/mul
+            pass
+        else:
+            raise ValueError("init expr op %#x" % op)
+
+
+def _wasm_name(data, q):
+    n, q = _leb(data, q, cap=5)
+    return bytes(data[q:q + n]).decode("utf-8", "replace"), q + n
+
+
+def _wasm_inventory(data, secs):
+    """The module's 'doors' (wasm_layout extras): imports [{module, name, kind, index}] (index in its kind's index
+    space), import_names ["module.name"] in section order, exports [{name, kind, index}], export_names, tables
+    [{index, reftype, min, max, imported}], elems [{index, mode active/passive/declarative, table, offset,
+    func_indices (None = ref.null)}], start (func index or None), globals [{index, valtype, mutable, imported,
+    init}], type_count, function_count (defined), code_count, data_count (DataCount section or None),
+    custom_names, func_names {index: name} (name section, else the linking symbol table), module_name, producers
+    {field: [[name, version]]}, inventory_ok (False when some section failed to parse -> fields partial)."""
+    imps, exps, tabs, elems, globs, fnames, prod = [], [], [], [], [], {}, {}
+    inv = {"imports": imps, "import_names": [], "exports": exps, "export_names": [], "tables": tabs, "elems": elems,
+           "start": None, "globals": globs, "type_count": 0, "function_count": 0, "code_count": 0, "data_count": None,
+           "custom_names": [s["name"] for s in secs if s["id"] == 0], "func_names": fnames, "module_name": None,
+           "producers": prod, "inventory_ok": True}
+    cnt = {k: 0 for k in WASM_EXTERN_KINDS.values()}
+
+    def limits(q):
+        fl, q = _leb(data, q)
+        mn, q = _leb(data, q)
+        mx = None
+        if fl & 1:
+            mx, q = _leb(data, q)
+        if fl & 8:
+            q = _leb(data, q)[1]
+        return mn, mx, q
+
+    def reftype(q):
+        b = data[q]
+        if b in (0x63, 0x64):                       # (ref null? ht) typed reference
+            return "ref", _leb(data, q + 1, signed=True)[1]
+        return WASM_VALTYPES.get(b, "0x%02x" % b), q + 1
+
+    for s in secs:
+        sid, q = s["id"], s["offset"]
+        e = q + s["size"]
+        try:
+            if sid == 1:
+                inv["type_count"] = _leb(data, q, cap=5)[0]
+            elif sid == 3:
+                inv["function_count"] = _leb(data, q, cap=5)[0]
+            elif sid == 10:
+                inv["code_count"] = _leb(data, q, cap=5)[0]
+            elif sid == 12:
+                inv["data_count"] = _leb(data, q, cap=5)[0]
+            elif sid == 8:
+                inv["start"] = _leb(data, q, cap=5)[0]
+            elif sid == 2:
+                n, r = _leb(data, q, cap=5)
+                for _ in range(n):
+                    mod, r = _wasm_name(data, r)
+                    nm, r = _wasm_name(data, r)
+                    kind = WASM_EXTERN_KINDS.get(data[r], None)
+                    r += 1
+                    if kind == "func":
+                        r = _leb(data, r)[1]
+                    elif kind == "table":
+                        rt, r = reftype(r)
+                        mn, mx, r = limits(r)
+                        tabs.append({"index": cnt["table"], "reftype": rt, "min": mn, "max": mx, "imported": True})
+                    elif kind == "memory":
+                        r = limits(r)[2]
+                    elif kind == "global":
+                        vt = WASM_VALTYPES.get(data[r], "0x%02x" % data[r])
+                        globs.append({"index": cnt["global"], "valtype": vt, "mutable": bool(data[r + 1] & 1),
+                                      "imported": True, "init": None})
+                        r += 2
+                    elif kind == "tag":
+                        r = _leb(data, r + 1)[1]
+                    else:
+                        raise ValueError("import kind")
+                    imps.append({"module": mod, "name": nm, "kind": kind, "index": cnt[kind]})
+                    inv["import_names"].append(mod + "." + nm)
+                    cnt[kind] += 1
+            elif sid == 4:
+                n, r = _leb(data, q, cap=5)
+                for _ in range(n):
+                    init = None
+                    if data[r] == 0x40 and data[r + 1] == 0:   # function-references: table with an init expr
+                        rt, r = reftype(r + 2)
+                        mn, mx, r = limits(r)
+                        init, r = _wasm_const(data, r)
+                    else:
+                        rt, r = reftype(r)
+                        mn, mx, r = limits(r)
+                    tabs.append({"index": len(tabs), "reftype": rt, "min": mn, "max": mx, "imported": False})
+            elif sid == 6:
+                n, r = _leb(data, q, cap=5)
+                for _ in range(n):
+                    b = data[r]
+                    if b in (0x63, 0x64):
+                        vt, r = reftype(r)
+                    else:
+                        vt, r = WASM_VALTYPES.get(b, "0x%02x" % b), r + 1
+                    mut = bool(data[r] & 1)
+                    init, r = _wasm_const(data, r + 1)
+                    globs.append({"index": len(globs), "valtype": vt, "mutable": mut, "imported": False,
+                                  "init": init if isinstance(init, int) else None})
+            elif sid == 7:
+                n, r = _leb(data, q, cap=5)
+                for _ in range(n):
+                    nm, r = _wasm_name(data, r)
+                    kind = WASM_EXTERN_KINDS.get(data[r], "0x%02x" % data[r])
+                    idx, r = _leb(data, r + 1, cap=5)
+                    exps.append({"name": nm, "kind": kind, "index": idx})
+                    inv["export_names"].append(nm)
+            elif sid == 9:
+                n, r = _leb(data, q, cap=5)
+                for k in range(n):
+                    fl, r = _leb(data, r, cap=5)
+                    tab, off = 0, None
+                    mode = "passive" if fl & 3 == 1 else "declarative" if fl & 3 == 3 else "active"
+                    if fl & 2 and not fl & 1:
+                        tab, r = _leb(data, r, cap=5)
+                    if mode == "active":
+                        off, r = _wasm_const(data, r)
+                        off = off if isinstance(off, int) else None
+                    if fl & 3:                       # elemkind (0x00) / reftype byte
+                        r = reftype(r)[1] if fl & 4 else r + 1
+                    m, r = _leb(data, r, cap=5)
+                    fi = []
+                    for _i in range(m):
+                        if fl & 4:
+                            v, r = _wasm_const(data, r)
+                            fi.append(v[1] if isinstance(v, tuple) and v[0] == "func" else None)
+                        else:
+                            v, r = _leb(data, r, cap=5)
+                            fi.append(v)
+                    elems.append({"index": k, "mode": mode, "table": tab, "offset": off, "func_indices": fi})
+            elif sid == 0 and s["name"] == "name":
+                r = _wasm_name(data, q)[1]
+                while r < e:
+                    sub = data[r]
+                    sz, r = _leb(data, r + 1, cap=5)
+                    if sub == 0:
+                        inv["module_name"] = _wasm_name(data, r)[0]
+                    elif sub == 1:
+                        n, t = _leb(data, r, cap=5)
+                        for _ in range(n):
+                            i, t = _leb(data, t, cap=5)
+                            fnames[i], t = _wasm_name(data, t)
+                    r += sz
+            elif sid == 0 and s["name"] == "producers":
+                r = _wasm_name(data, q)[1]
+                n, r = _leb(data, r, cap=5)
+                for _ in range(n):
+                    fld, r = _wasm_name(data, r)
+                    m, r = _leb(data, r, cap=5)
+                    vals = []
+                    for _i in range(m):
+                        a, r = _wasm_name(data, r)
+                        b, r = _wasm_name(data, r)
+                        vals.append([a, b])
+                    prod[fld] = vals
+            elif sid == 0 and s["name"] == "linking" and not fnames:
+                r = _leb(data, _wasm_name(data, q)[1], cap=5)[1]          # version
+                while r < e:
+                    sub = data[r]
+                    sz, r = _leb(data, r + 1, cap=5)
+                    if sub == 8:                                          # WASM_SYMBOL_TABLE
+                        n, t = _leb(data, r, cap=5)
+                        for _ in range(n):
+                            kind = data[t]
+                            fl, t = _leb(data, t + 1, cap=5)
+                            if kind in (0, 2, 4, 5):                      # func / global / tag / table
+                                idx, t = _leb(data, t, cap=5)
+                                nm = None
+                                if not fl & 0x10 or fl & 0x40:            # defined, or explicit name
+                                    nm, t = _wasm_name(data, t)
+                                if kind == 0 and nm is not None:
+                                    fnames.setdefault(idx, nm)
+                            elif kind == 1:                               # data
+                                t = _wasm_name(data, t)[1]
+                                if not fl & 0x10:
+                                    for _i in range(3):
+                                        t = _leb(data, t)[1]
+                            elif kind == 3:                               # section
+                                t = _leb(data, t, cap=5)[1]
+                            else:
+                                break
+                    r += sz
+        except (IndexError, ValueError, TypeError, KeyError):
+            inv["inventory_ok"] = False
+    return inv
+
+
+def wasm_fields(data):
+    """Flat answer-field candidates for a wasm module's 'doors' (None if not wasm). Lists are in section order
+    (render as JSON); absent singletons are "none"; counts are ints; booleans are True/False. Imports render as
+    "module.name"; functions by their name-section / linking-symbol name, else "module.name" for imports, else the
+    index. *_count = entries of that section (defined), total_*_count = the index space incl. imports; has_table
+    counts an imported table too. memory_* = memory 0 (pages, 64 KiB each). indirect_targets = the funcs placed in tables by active elem
+    segments (call_indirect targets) in segment/slot order. hcfg_offset = FILE offset of the 'H' of the first crc-valid
+    blob in a data segment (else a custom section, else the wasm-split/init/store hcfg_scan hit), hcfg_mem_offset = its
+    linear-memory address (passive segments: where memory.init copies it; "none" if never / custom section);
+    has_hcfg_section = a custom section named hcfg/.hcfg exists; hcfg_section = the custom section holding the blob;
+    hcfg_storage = active/passive/custom/split/init/store (SPECULATIVE names)."""
+    lay = wasm_layout(data)
+    if not lay:
+        return None
+    imps, fn = lay["imports"], lay["func_names"]
+    nimpf = sum(1 for i in imps if i["kind"] == "func")
+    impf = {i["index"]: i["module"] + "." + i["name"] for i in imps if i["kind"] == "func"}
+
+    def fname(i):
+        return fn.get(i) or impf.get(i) or i
+
+    def nz(v):
+        return "none" if v is None or v == [] or v == {} else v
+
+    mem = (lay["memories"] or [None])[0]
+    tab = (lay["tables"] or [None])[0]
+    act = [e for e in lay["elems"] if e["mode"] == "active"]
+    tgt = [fname(i) for e in act for i in e["func_indices"] if i is not None]
+    segs = lay["data_segments"]
+    hc = next(iter(wasm_hcfg_segment(data)), {})
+    st = lay["start"]
+    return {
+        "format": "wasm", "machine": lay["machine"],
+        "import_count": len(imps), "imports": nz(lay["import_names"]),
+        "import_modules": nz(list(dict.fromkeys(i["module"] for i in imps))),
+        "imported_functions": nz([i["module"] + "." + i["name"] for i in imps if i["kind"] == "func"]),
+        "imported_function_count": nimpf,
+        "export_count": len(lay["exports"]), "exports": nz(lay["export_names"]),
+        "exported_functions": nz([e["name"] for e in lay["exports"] if e["kind"] == "func"]),
+        "function_count": lay["function_count"], "total_function_count": nimpf + lay["function_count"],
+        "type_count": lay["type_count"],
+        "memory_count": len(lay["memories"]), "has_memory": bool(lay["memories"]),
+        "memory_min": nz(mem and mem["min"]), "memory_max": nz(mem and mem["max"]),
+        "memory_shared": bool(mem and mem["shared"]), "memory64": bool(mem and mem["memory64"]),
+        "memory_imported": bool(mem and mem["imported"]),
+        "has_table": bool(lay["tables"]), "total_table_count": len(lay["tables"]),
+        "table_count": sum(1 for t in lay["tables"] if not t["imported"]),
+        "table_min": nz(tab and tab["min"]), "table_max": nz(tab and tab["max"]),
+        "table_reftype": nz(tab and tab["reftype"]), "table_imported": bool(tab and tab["imported"]),
+        "elem_count": len(lay["elems"]), "active_elem_count": len(act),
+        "indirect_targets": nz(tgt), "indirect_target_count": len(tgt),
+        "has_start": st is not None, "start_index": nz(st), "start_function": nz(None if st is None else fname(st)),
+        "global_count": sum(1 for g in lay["globals"] if not g["imported"]), "total_global_count": len(lay["globals"]),
+        "mutable_global_count": sum(1 for g in lay["globals"] if g["mutable"]),
+        "imported_global_count": sum(1 for g in lay["globals"] if g["imported"]),
+        "data_segment_count": len(segs),
+        "active_data_segment_count": sum(1 for d in segs if d["mode"] == "active"),
+        "passive_data_segment_count": sum(1 for d in segs if d["mode"] == "passive"),
+        "data_offsets": nz([d["mem_offset"] for d in segs if d["mode"] == "active"]),
+        "data_count": nz(lay["data_count"]),
+        "custom_sections": nz(lay["custom_names"]), "custom_section_count": len(lay["custom_names"]),
+        "has_name_section": "name" in lay["custom_names"], "module_name": nz(lay["module_name"]),
+        "producers": nz(lay["producers"]),
+        "hcfg_offset": nz(hc.get("file_offset")), "hcfg_mem_offset": nz(hc.get("mem_offset")),
+        "hcfg_segment": nz(hc.get("segment")),
+        "has_hcfg_section": any(n.lower().lstrip(".") == "hcfg" for n in lay["custom_names"]),
+        "hcfg_section": nz(hc.get("section")), "hcfg_storage": nz(hc.get("mode")),
+    }
+
+
+def wasm_field(data, name):
+    """One wasm_fields value; "none" when the input is not wasm or the field is unknown/absent."""
+    try:
+        return (wasm_fields(data) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001 -- untrusted bytes: never raise past the field
+        return "none"
 
 
 def wasm_hcfg_segment(data):
@@ -659,6 +968,11 @@ def wasm_hcfg_segment(data):
     passive / global-based segments)."""
     lay = wasm_layout(data) or {}
     out = []
+    inits = {}   # passive segment file offset -> linear address it is memory.init'ed to (first such copy)
+    if any(s["mode"] == "passive" for s in lay.get("data_segments", ())):
+        for a, _b, fo, k in wasm_memory_writes(data, lay):
+            if k == "init":
+                inits.setdefault(fo, a)
     for s in lay.get("data_segments", ()):
         lo = s["file_offset"]
         seg = bytes(data[lo:lo + s["size"]])
@@ -668,11 +982,527 @@ def wasm_hcfg_segment(data):
             r = _parse_blob(blob[:_need(blob[:8])]) if len(blob) >= 12 else None
             if r and r[5]:
                 mo = s["mem_offset"]
+                if mo is None and s["mode"] == "passive":   # memory.init'ed copy covering the blob start
+                    mo = next((a - (f - lo) for f, a in inits.items() if lo <= f <= lo + i), None)
                 out.append({"segment": s["index"], "mode": s["mode"], "file_offset": lo + i,
                             "mem_offset": None if mo is None else mo + i, "segment_file_offset": lo,
                             "segment_mem_offset": mo})
             i = seg.find(HCFG_MAGIC, i + 1)
+    for s in lay.get("sections", ()):   # custom section (e.g. `hcfg`): no linear-memory address
+        if s["id"] == 0:
+            lo, e = s["offset"], s["offset"] + s["size"]
+            i = bytes(data[lo:e]).find(HCFG_MAGIC)
+            while i >= 0:
+                blob = bytes(data[lo + i:e])
+                r = _parse_blob(blob[:_need(blob[:8])]) if len(blob) >= 12 else None
+                if r and r[5]:
+                    out.append({"segment": None, "mode": "custom", "section": s["name"], "file_offset": lo + i,
+                                "mem_offset": None, "segment_file_offset": lo, "segment_mem_offset": None})
+                i = bytes(data[lo:e]).find(HCFG_MAGIC, i + 1)
+    if not out:   # not contiguous in the file: split over segments / memory.init'ed / built by const stores
+        got = []
+        _wasm_mem_scan(bytes(data), lambda off, enc, blob, det="": got.append((off, enc, det)), None, 0)
+        for off, enc, det in got[:1]:
+            out.append({"segment": None, "mode": enc.split("-")[1], "file_offset": off,
+                        "mem_offset": int(det.split("mem=")[1].split()[0]), "segment_file_offset": None,
+                        "segment_mem_offset": None})
     return out
+
+
+def bpf_layout(data):
+    """Pure-struct eBPF ELF object facts (clang -target bpf -c; e_machine 247 EM_BPF, either byte order), None if not
+    an ELF with e_machine 247 or its section table does not parse. {format "elf", elf_type ET_* (readelf constant),
+    machine "Linux BPF" (GNU readelf spelling), machine_num "247", entry_point hex, bits, endian, section_names
+    (header order, NULL section skipped), sections [{name, type, flags, offset, size}], programs (non-empty
+    SHF_EXECINSTR PROGBITS sections except .text = libbpf's SEC() names, e.g. "xdp", "kprobe/do_sys_openat2"),
+    program_names (the GLOBAL FUNC symbols defined in them, program order), license (the `license` section string),
+    maps (OBJECT symbols in `.maps` (BTF-defined) then legacy `maps`), has_btf (.BTF section)}."""
+    if data[:4] != b"\x7fELF" or data[4:5] not in (b"\x01", b"\x02") or data[5:6] not in (b"\x01", b"\x02"):
+        return None
+    b64, E = data[4] == 2, "<" if data[5] == 1 else ">"
+    u16 = lambda o: struct.unpack_from(E + "H", data, o)[0]
+    u32 = lambda o: struct.unpack_from(E + "I", data, o)[0]
+    uw = (lambda o: struct.unpack_from(E + "Q", data, o)[0]) if b64 else u32
+    if len(data) < (64 if b64 else 52) or u16(18) != 247:
+        return None
+    et, entry = u16(16), uw(24)
+    shoff = uw(40) if b64 else u32(32)
+    p = 52 if b64 else 40
+    shes, shnum, shstr = u16(p + 6), u16(p + 8), u16(p + 10)
+    if not shoff or shes < (64 if b64 else 40) or not 0 < shnum <= 4096 or shoff + shes * shnum > len(data):
+        return None
+    raw = []   # (name_off, type, flags, offset, size, link, info, entsize)
+    for k in range(shnum):
+        o = shoff + k * shes
+        if b64:
+            raw.append((u32(o), u32(o + 4), uw(o + 8), uw(o + 24), uw(o + 32), u32(o + 40), u32(o + 44), uw(o + 56)))
+        else:
+            raw.append((u32(o), u32(o + 4), u32(o + 8), u32(o + 16), u32(o + 20), u32(o + 24), u32(o + 28),
+                        u32(o + 36)))
+
+    def cstr(i, off):
+        if not 0 <= i < len(raw) or raw[i][1] == 8:
+            return ""
+        s = raw[i][3] + off
+        e = data.find(b"\0", s, s + 4096)
+        return bytes(data[s:e]).decode("utf-8", "replace") if s < len(data) and e >= s else ""
+
+    names = [cstr(shstr, r[0]) for r in raw]
+    progs = [i for i, r in enumerate(raw) if r[1] == 1 and r[2] & 4 and r[4] and names[i] != ".text"]
+    pnames, maps = {i: [] for i in progs}, {}
+    mapsec = [i for n in (".maps", "maps") for i, m in enumerate(names) if m == n]
+    for t, off, size, link, ent in ((r[1], r[3], r[4], r[5], r[7]) for r in raw):
+        if t != 2 or not ent:   # SHT_SYMTAB
+            continue
+        for k in range(1, min(size // ent, 50000)):
+            o = off + k * ent
+            if o + ent > len(data):
+                break
+            nm, info, shndx = (u32(o), data[o + 4], u16(o + 6)) if b64 else (u32(o), data[o + 12], u16(o + 14))
+            if shndx in pnames and info & 15 == 2 and info >> 4 == 1:
+                pnames[shndx].append(cstr(link, nm))
+            elif shndx in mapsec and info & 15 == 1:
+                maps.setdefault(shndx, []).append(cstr(link, nm))
+        break
+    lic = next((bytes(data[r[3]:r[3] + r[4]]).split(b"\0")[0].decode("utf-8", "replace")
+                for r, n in zip(raw, names) if n == "license" and r[1] != 8), None)
+    return {"format": "elf", "elf_type": ELF_TYPE_NAME.get(et, str(et)), "machine": "Linux BPF",
+            "machine_num": "247", "entry_point": hex(entry), "bits": 64 if b64 else 32,
+            "endian": "little" if E == "<" else "big", "section_names": names[1:],
+            "sections": [{"name": n, "type": r[1], "flags": r[2], "offset": r[3], "size": r[4]}
+                         for n, r in zip(names[1:], raw[1:])],
+            "programs": [names[i] for i in progs], "program_names": [x for i in progs for x in pnames[i] if x],
+            "license": lic, "maps": [x for i in mapsec for x in maps.get(i, []) if x],
+            "has_btf": ".BTF" in names}
+
+
+def bpf_fields(data):
+    """Flat answer-field candidates for an eBPF object (None if not EM_BPF). Lists in header order (render as JSON);
+    absent singletons "none". program_types = the SEC() prefix before the first '/' (xdp, kprobe, tracepoint, ...).
+    hcfg_offset = FILE offset of the 'H' of the first crc-valid raw blob inside a section (= hcfg_scan raw offset),
+    hcfg_section = that section's name (".hcfg", ".rodata", ...), hcfg_section_offset = the blob's offset inside it;
+    has_hcfg_section = a section named hcfg/.hcfg exists. Field names other than format/elf_type/machine/entry_point
+    are SPECULATIVE (GM vocabulary for BPF not seen)."""
+    try:
+        lay = bpf_layout(data)
+    except (struct.error, IndexError, ValueError, TypeError):   # truncated / hostile header: cannot answer
+        return None
+    if not lay:
+        return None
+
+    def nz(v):
+        return "none" if v is None or v == [] else v
+
+    hc = {}
+    for s in lay["sections"]:
+        if s["type"] == 8 or hc:
+            continue
+        lo, e = s["offset"], s["offset"] + s["size"]
+        seg = bytes(data[lo:e])
+        i = seg.find(HCFG_MAGIC)
+        while i >= 0 and not hc:
+            blob = seg[i:]
+            r = _parse_blob(blob[:_need(blob[:8])]) if len(blob) >= 12 else None
+            if r and r[5]:
+                hc = {"hcfg_offset": lo + i, "hcfg_section": s["name"], "hcfg_section_offset": i}
+            i = seg.find(HCFG_MAGIC, i + 1)
+    out = {k: lay[k] for k in ("format", "elf_type", "machine", "machine_num", "entry_point", "bits", "endian")}
+    out.update({
+        "section_names": lay["section_names"], "section_count": len(lay["section_names"]),
+        "programs": nz(lay["programs"]), "program_count": len(lay["programs"]),
+        "program_types": nz(list(dict.fromkeys(p.split("/")[0] for p in lay["programs"]))),
+        "program_names": nz(lay["program_names"]), "license": nz(lay["license"]),
+        "maps": nz(lay["maps"]), "map_count": len(lay["maps"]), "has_btf": lay["has_btf"],
+        "has_hcfg_section": any(n.lower().lstrip(".") == "hcfg" for n in lay["section_names"]),
+        "hcfg_offset": hc.get("hcfg_offset", "none"), "hcfg_section": hc.get("hcfg_section", "none"),
+        "hcfg_section_offset": hc.get("hcfg_section_offset", "none")})
+    return out
+
+
+def bpf_field(data, name):
+    """One bpf_fields value; "none" when the input is not an eBPF object or the field is unknown/absent."""
+    try:
+        return (bpf_fields(data) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001 -- untrusted bytes: never raise past the field
+        return "none"
+
+def elf_header_facts(data, hcfg=True):
+    """ELF facts from the raw header structs only, for sstrip'd / corrupted images that make pyelftools / readelf -S
+    fail (e_shnum 0, e_shoff past EOF, garbage e_shstrndx, renamed sections). None if the 52/64-byte ELF header is not
+    all there. Header fields always come from the ELF header: format, elf_class ELF32/ELF64 (+ elf_class_int),
+    endianness little/big, machine label (+ machine_num / machine_int decimal), elf_type ET_*, entry_point hex,
+    program_header_count, has_interp. Section table: has_section_headers "true" only when e_shoff/e_shentsize/e_shnum
+    describe a table inside the file (SHN_UNDEF count / SHN_XINDEX index read from section 0); section_names = header
+    order, NULL section skipped, [] when there is no table OR no usable name table (e_shstrndx out of range / not
+    SHT_STRTAB / past EOF: readelf's "<no-strings>"); section_count = table entries minus the NULL one; has_symtab =
+    an SHT_SYMTAB section (by type, like readelf -S); has_hcfg_section = a section literally named hcfg/.hcfg (a renamed
+    impostor counts; the blob need not be in it). hcfg_* = the first crc-valid blob of hcfg_find (raw scan over the
+    whole file, independent of sections): hcfg_offset, hcfg_encoding, hcfg_config, hcfg_section = the named section
+    whose file range holds it ("none" without names); hcfg=False skips that scan (header fields only). Never raises on
+    malformed input."""
+    try:
+        if data[:4] != b"\x7fELF" or data[4:5] not in (b"\x01", b"\x02") or data[5:6] not in (b"\x01", b"\x02"):
+            return None
+        b64, E = data[4] == 2, "<" if data[5] == 1 else ">"
+        if len(data) < (64 if b64 else 52):
+            return None
+        u16 = lambda o: struct.unpack_from(E + "H", data, o)[0]
+        u32 = lambda o: struct.unpack_from(E + "I", data, o)[0]
+        uw = (lambda o: struct.unpack_from(E + "Q", data, o)[0]) if b64 else u32
+        et, m, entry = u16(16), u16(18), uw(24)
+        phoff, shoff = (uw(32), uw(40)) if b64 else (u32(28), u32(32))
+        p = 52 if b64 else 40
+        phes, phn, shes, shn, shstr = u16(p + 2), u16(p + 4), u16(p + 6), u16(p + 8), u16(p + 10)
+        ptypes = []
+        if phoff and phes >= (56 if b64 else 32):
+            for k in range(min(phn, 4096)):
+                o = phoff + k * phes
+                if o + phes > len(data):
+                    break
+                ptypes.append(u32(o))
+        sw = 64 if b64 else 40
+        secs = []   # (name_off, type, offset, size)
+
+        def sec(o):
+            return (u32(o), u32(o + 4), uw(o + 24), uw(o + 32)) if b64 else (u32(o), u32(o + 4), u32(o + 16),
+                                                                               u32(o + 20))
+        if shoff and shes >= sw and shoff + shes <= len(data):
+            s0 = sec(shoff)
+            n = shn or s0[3]                                  # e_shnum 0 + table: real count in section 0 sh_size
+            if shstr == 0xffff:                               # SHN_XINDEX: real index in section 0 sh_link
+                shstr = u32(shoff + (40 if b64 else 24))
+            if 0 < n <= 65535 and shoff + n * shes <= len(data):
+                secs = [sec(shoff + k * shes) for k in range(n)]
+        names = []
+        if secs and 0 < shstr < len(secs) and secs[shstr][1] == 3 and secs[shstr][2] + secs[shstr][3] <= len(data):
+            so, sn = secs[shstr][2], secs[shstr][3]
+            tab = bytes(data[so:so + sn])
+            names = [tab[s[0]:tab.find(b"\0", s[0]) if tab.find(b"\0", s[0]) >= 0 else sn].decode("utf-8", "replace")
+                     if s[0] < sn else "" for s in secs[1:]]
+        hit = hcfg_find(data) if hcfg else None
+        hsec = "none"
+        if hit is not None and names:
+            hsec = next((nm for nm, s in zip(names, secs[1:]) if s[1] != 8 and s[2] <= hit.offset < s[2] + s[3]),
+                        "none")
+        cls = "ELF64" if b64 else "ELF32"
+        return {"format": "elf", "elf_class": cls, "elf_class_int": "64" if b64 else "32", "bits": 64 if b64 else 32,
+                "endianness": "little" if E == "<" else "big", "endian": "little" if E == "<" else "big",
+                "machine": ELF_MACHINE_LABEL.get(m, str(m)), "machine_num": str(m), "machine_int": str(m),
+                "elf_type": ELF_TYPE_NAME.get(et, str(et)), "entry_point": hex(entry),
+                "program_header_count": len(ptypes), "has_interp": "true" if 3 in ptypes else "false",
+                "has_section_headers": "true" if secs else "false", "section_count": max(len(secs) - 1, 0),
+                "section_names": names, "has_symtab": "true" if any(s[1] == 2 for s in secs) else "false",
+                "has_hcfg_section": "true" if any(x.lower().lstrip(".") == "hcfg" for x in names) else "false",
+                "hcfg_offset": hit.offset if hit else "none", "hcfg_encoding": hit.encoding if hit else "none",
+                "hcfg_config": hit.config if hit else "none", "hcfg_section": hsec}
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def elf_header_field(data, name):
+    """One elf_header_facts value; "none" when the input is no (complete-header) ELF or the field is unknown."""
+    try:
+        return (elf_header_facts(data, hcfg=name.startswith("hcfg")) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+_WASM_MEMARG = set(range(0x28, 0x3f))            # loads/stores: memarg (align [+memidx], offset)
+_WASM_STORE = {0x36: 4, 0x37: 8, 0x38: 4, 0x39: 8, 0x3a: 1, 0x3b: 2, 0x3c: 1, 0x3d: 2, 0x3e: 4}
+_WASM_LEB1 = {0x0c, 0x0d, 0x10, 0x12, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x3f, 0x40, 0xd2, 0xd0}
+_WASM_LEB2 = {0x11, 0x13}
+_WASM_FC = {8: 2, 9: 1, 10: 2, 11: 1, 12: 2, 13: 1, 14: 2, 15: 1, 16: 1, 17: 1}   # 0xfc sub-op -> LEB immediates
+
+
+def wasm_memory_writes(data, lay=None, max_ops=500_000):
+    """What instantiating + running the module's const-address code would put in linear memory, WITHOUT executing it:
+    [(mem_addr, bytes, file_offset, kind)] in application order. kind "segment" = an active data segment at a constant
+    offset (file_offset = its first payload byte); "init" = a passive segment copied by `i32.const dst; i32.const src;
+    i32.const n; memory.init seg` (file_offset = the copied segment byte); "store" = `<const addr>; <const imm>;
+    iNN.store[8/16/32] offset=k` (file_offset = the address const's opcode). A tiny const-only stack tracker over
+    every function body: any non-const op forgets the tracked consts (no locals/globals/branches are modeled)."""
+    lay = lay or wasm_layout(data)
+    if not lay:
+        return []
+    segs = lay["data_segments"]
+    out = [(s["mem_offset"], bytes(data[s["file_offset"]:s["file_offset"] + s["size"]]), s["file_offset"], "segment")
+           for s in segs if s["mode"] == "active" and s["mem_offset"] is not None and s["size"]]
+    code = next((s for s in lay["sections"] if s["id"] == 10), None)
+    if not code:
+        return out
+    ops = 0
+    try:
+        n, p = _leb(data, code["offset"], cap=5)
+        for _ in range(n):
+            sz, p = _leb(data, p, cap=5)
+            fe = p + sz
+            nl, q = _leb(data, p, cap=5)
+            for _l in range(nl):
+                q = _leb(data, q, cap=5)[1] + 1
+            st = []   # (value, opcode file offset) of the consecutive consts just pushed
+            while q < fe and ops < max_ops:
+                ops += 1
+                op, at = data[q], q
+                q += 1
+                if op in (0x41, 0x42):
+                    v, q = _leb(data, q, signed=True)
+                    st.append((v & ((1 << (32 if op == 0x41 else 64)) - 1), at))
+                    continue
+                if op in _WASM_MEMARG:
+                    al, q = _leb(data, q, cap=5)
+                    if al & 0x40:
+                        q = _leb(data, q, cap=5)[1]
+                    mo, q = _leb(data, q)
+                    w = _WASM_STORE.get(op)
+                    if w and len(st) >= 2:
+                        (a, aat), (v, _) = st[-2], st[-1]
+                        out.append((a + mo, (v & ((1 << 8 * w) - 1)).to_bytes(w, "little"), aat, "store"))
+                elif op in _WASM_LEB1:
+                    q = _leb(data, q)[1]
+                elif op in _WASM_LEB2:
+                    q = _leb(data, _leb(data, q)[1])[1]
+                elif op in (0x02, 0x03, 0x04):
+                    q = _leb(data, q, signed=True, cap=5)[1]
+                elif op == 0x0e:
+                    k, q = _leb(data, q, cap=5)
+                    for _b in range(k + 1):
+                        q = _leb(data, q, cap=5)[1]
+                elif op == 0x1c:
+                    k, q = _leb(data, q, cap=5)
+                    q += k
+                elif op == 0x43:
+                    q += 4
+                elif op == 0x44:
+                    q += 8
+                elif op == 0xfc:
+                    sub, q = _leb(data, q, cap=5)
+                    imm = []
+                    for _b in range(_WASM_FC.get(sub, 0) if sub <= 17 else -1):
+                        v, q = _leb(data, q)
+                        imm.append(v)
+                    if sub > 17:
+                        break
+                    if sub == 8 and len(st) >= 3 and imm[0] < len(segs):   # memory.init seg: dst src n
+                        s, d, src, ln = segs[imm[0]], st[-3][0], st[-2][0], st[-1][0]
+                        if src + ln <= s["size"] and ln:
+                            fo = s["file_offset"] + src
+                            out.append((d, bytes(data[fo:fo + ln]), fo, "init"))
+                elif not (op in (0x00, 0x01, 0x05, 0x0b, 0x0f, 0x1a, 0x1b, 0xd1) or 0x45 <= op <= 0xc4):
+                    break   # SIMD/atomics/GC/unknown: stop this body (immediates not modeled)
+                st = []
+            p = fe
+    except (IndexError, ValueError):
+        pass
+    return out
+
+
+def wasm_memory_runs(data, lay=None, max_bytes=64 << 20):
+    """The reassembled linear-memory image as contiguous runs [(base_addr, bytes, writes)] (writes = the
+    wasm_memory_writes entries that built the run, application order: later writes win). Runs touching/adjacent
+    writes are merged, so a blob split over adjacent segments or built by stores reads back contiguous."""
+    ws = [w for w in wasm_memory_writes(data, lay) if w[1]]
+    if sum(len(w[1]) for w in ws) > max_bytes:
+        return []
+    runs, cur = [], None
+    for w in sorted(ws, key=lambda w: w[0]):
+        if cur and w[0] <= cur[1]:
+            cur[1] = max(cur[1], w[0] + len(w[1]))
+            cur[2].append(w)
+        else:
+            cur = [w[0], w[0] + len(w[1]), [w]]
+            runs.append(cur)
+    out = []
+    for lo, hi, mem in runs:
+        mem.sort(key=ws.index) if len(mem) > 1 else None
+        img = bytearray(hi - lo)
+        for a, b, _fo, _k in mem:
+            img[a - lo:a - lo + len(b)] = b
+        out.append((lo, bytes(img), mem))
+    return out
+
+
+def _wasm_mem_src(writes, addr):
+    """(file offset, kind) of the byte at linear-memory `addr` per the last write covering it."""
+    for a, b, fo, k in reversed(writes):
+        if a <= addr < a + len(b):
+            return (fo + addr - a if k != "store" else fo), k
+    return None, None
+
+
+def _wasm_mem_scan(data, emit, deadline, _depth):
+    """hcfg_scan pass for wasm: a blob not contiguous in the file (split over adjacent active segments, a passive
+    segment placed by memory.init next to another, or built by const stores in code) -> scan every COMPOSITE run of the
+    reassembled linear memory. Encoding wasm-<split|init|store>-<inner>; offset = the file byte that the blob's first
+    stored byte came from (store: the address i32.const opcode); detail mem=<linear address>."""
+    for lo, img, ws in wasm_memory_runs(data):
+        if len(ws) < 2 or len(img) > 8 << 20:
+            continue   # a single-source run is already plain bytes in the file
+        for h in hcfg_scan(img, deadline=deadline, stop_on_valid=True, _depth=_depth + 1):
+            if h.valid:
+                fo, k = _wasm_mem_src(ws, lo + h.offset)
+                if fo is not None:
+                    kind = {"segment": "split"}.get(k, k)
+                    emit(fo, f"wasm-{kind}-{h.encoding}", struct.pack("<4sBBHI", HCFG_MAGIC, h.version, h.key, h.length, h.crc) +
+                         bytes(c ^ h.key for c in h.plain), (f"mem={lo + h.offset} " + h.detail).strip())
+                return
+
+
+# ------------------------------------------------------------------ LLVM bitcode string constants
+_BC_MAGIC = b"BC\xc0\xde"
+_BC_WRAPPER = b"\xde\xc0\x17\x0b"   # 0x0B17C0DE LE: {magic, version, offset, size, cputype} then the raw bitcode
+_BC_CHAR6 = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._"
+_BC_ENTER = {0, 8, 11}   # BLOCKINFO, MODULE, module-level CONSTANTS (global strings): every other block skipped by length
+
+
+def bitcode_strings(data, start=0, max_ops=2_000_000):
+    """[(bit offset of the first element, bytes, element bit width or None for vbr)] of every i8 string constant (CST_CODE_STRING 8 / CSTRING 9 / DATA 22
+    with all elements < 256) in the LLVM bitstream at data[start:] ('BC' 0xC0DE magic). Pure Python LLVM bitstream
+    reader (abbrevs + BLOCKINFO); [] if it does not parse. Bit offsets are absolute in `data`."""
+    out = []
+    n_bits = len(data) * 8
+    pos = [start * 8 + 32]
+    budget = [max_ops]
+
+    def rd(w):
+        p = pos[0]
+        if w == 0:
+            return 0
+        if p + w > n_bits:
+            raise IndexError
+        pos[0] = p + w
+        return (int.from_bytes(data[p >> 3:(p + w + 7 >> 3) + 1], "little") >> (p & 7)) & ((1 << w) - 1)
+
+    def vbr(w):
+        hi, v, s = 1 << (w - 1), 0, 0
+        while True:
+            c = rd(w)
+            v |= (c & (hi - 1)) << s
+            if not c & hi:
+                return v
+            s += w - 1
+            if s > 64:
+                raise ValueError
+
+    def align():
+        pos[0] = (pos[0] + 31) & ~31
+
+    def scalar(op):
+        kind, w = op
+        return rd(w) if kind == 1 else vbr(w) if kind == 2 else _BC_CHAR6[rd(6)] if kind == 4 else None
+
+    blockinfo = {}
+
+    def block(bid, width, end):
+        abbrevs = list(blockinfo.get(bid, ()))
+        cur = None   # BLOCKINFO SETBID target
+        while pos[0] < end:
+            budget[0] -= 1
+            if budget[0] < 0:
+                raise ValueError
+            a = rd(width)
+            if a == 0:
+                align()
+                return
+            if a == 1:
+                sub, w2 = vbr(8), vbr(4)
+                align()
+                n = rd(32)
+                e2 = pos[0] + 32 * n
+                if e2 > n_bits or not w2:
+                    raise ValueError
+                if sub in _BC_ENTER:
+                    block(sub, w2, e2)
+                pos[0] = e2
+                continue
+            if a == 2:
+                ops = []
+                for _ in range(vbr(5)):
+                    if rd(1):
+                        ops.append((0, vbr(8)))
+                    else:
+                        k = rd(3)
+                        if k not in (1, 2, 3, 4, 5):
+                            raise ValueError
+                        ops.append((k, vbr(5) if k in (1, 2) else 0))
+                (blockinfo.setdefault(cur, []) if bid == 0 else abbrevs).append(ops)
+                continue
+            first, ew = None, None
+            if a == 3:
+                code, n = vbr(6), vbr(6)
+                first = pos[0]
+                vals = [vbr(6) for _ in range(n)]
+            else:
+                if a - 4 >= len(abbrevs):
+                    raise ValueError
+                ops, vals, i = abbrevs[a - 4], [], 0
+                while i < len(ops):
+                    kind, v = ops[i]
+                    if kind == 0:
+                        vals.append(v)
+                    elif kind == 3:
+                        n, el = vbr(6), ops[i + 1]
+                        first, ew = pos[0], {0: 0, 1: el[1], 4: 6}.get(el[0])
+                        vals.extend(el[1] if el[0] == 0 else scalar(el) for _ in range(n))
+                        budget[0] -= n
+                        i += 1
+                    elif kind == 5:
+                        n = vbr(6)
+                        align()
+                        first, ew = pos[0], 8
+                        vals.extend(data[pos[0] >> 3:(pos[0] >> 3) + n])
+                        pos[0] += 8 * n
+                        align()
+                    else:
+                        vals.append(scalar(ops[i]))
+                    i += 1
+                code, vals = vals[0], vals[1:]
+            if bid == 0 and code == 1 and vals:
+                cur = vals[0]
+            elif bid == 11 and code in (8, 9, 22) and vals and all(0 <= c < 256 for c in vals):
+                out.append((first if first is not None else pos[0], bytes(vals), ew))
+
+    try:
+        while pos[0] + 36 <= n_bits:
+            if rd(2) != 1:
+                break
+            sub, w2 = vbr(8), vbr(4)
+            align()
+            n = rd(32)
+            e2 = pos[0] + 32 * n
+            if e2 > n_bits or not w2:
+                break
+            if sub in _BC_ENTER:
+                block(sub, w2, e2)
+            pos[0] = e2
+    except (IndexError, ValueError, TypeError, RecursionError):
+        pass
+    return out
+
+
+def _bitcode_scan(data, emit, deadline, _depth):
+    """hcfg_scan pass for LLVM bitcode (raw 'BC' 0xC0DE, the 0x0B17C0DE wrapper, or an embedded .llvmbc copy):
+    decode every i8 string constant and scan them. Encoding bitcode-<inner> (bitcode-raw = the blob bytes are the
+    string); offset (SPECULATIVE) = the file byte holding the first bit of the blob's first stored element."""
+    i, n = data.find(_BC_MAGIC), 0
+    while i >= 0 and n < 8:
+        strs = bitcode_strings(data, i)
+        if strs:
+            buf, marks, p = bytearray(), [], 0
+            for bit, s, w in strs:
+                marks.append((p, bit, w))
+                buf += s + b"\n"
+                p += len(s) + 1
+            for h in hcfg_scan(bytes(buf), deadline=deadline, stop_on_valid=True, _depth=_depth + 1):
+                if h.valid:
+                    for p0, bit, w in reversed(marks):
+                        if p0 <= h.offset:
+                            break
+                    # fixed-width elements (Fixed 8/7, char6, blob 8): exact; vbr6: the string's first element
+                    emit((bit + (h.offset - p0) * (w or 0)) // 8, f"bitcode-{h.encoding}",
+                         struct.pack("<4sBBHI", HCFG_MAGIC, h.version, h.key, h.length, h.crc) +
+                         bytes(c ^ h.key for c in h.plain), (f"str+{h.offset - p0} " + h.detail).strip())
+                    return
+        i, n = data.find(_BC_MAGIC, i + 4), n + 1
 
 
 # --- robust constant recovery (replaces the fragile b8..c3 regex) --------------------------------
@@ -767,6 +1597,9 @@ def ghidra_decompile(path, timeout=300):
 #                    A DEFLATED jar/zip entry -> "deflate" at the entry's compressed-data start, detail "at+N zip=<name>"
 #                    (= what the fixed-Huffman anchor reports); a text form inside an entry -> "zip-<enc>" at the
 #                    offset INSIDE the inflated entry (like upx-<enc>), detail "zip=<name> data@<compressed start>".
+#                    .NET single-file bundle: a stored entry is plain bytes (raw at the magic; hcfg_locate -> container
+#                    "dotnet-bundle", slot = the embedded dll's offset); a COMPRESSED entry -> "deflate" / "bundle-<enc>"
+#                    exactly like a zip entry (detail "bundle=<path>").
 HCFG_MAGIC = b"HCFG"
 HCFG_SCAN_EXT = os.environ.get("HCTF_HCFG_SCAN_EXT", "1") != "0"   # 0: only the D13 encodings (_LEGACY)
 HCFG_DEFLATE_BRUTE_MAX = int(os.environ.get("HCTF_HCFG_DEFLATE_MAX", str(1 << 20)))   # headerless deflate brute cap
@@ -1906,10 +2739,19 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False, _depth=0):
     if not ext or done():
         return _rank(hits)
     # expensive passes, only while nothing valid was found
+    if not valid() and not late() and _depth == 0 and data[:4] == b"\0asm":
+        # wasm: blob split over adjacent data segments / placed by memory.init / built by const stores -> linear memory
+        _wasm_mem_scan(data, emit, deadline, _depth)
+    if not valid() and not late() and _depth == 0 and _BC_MAGIC in data:
+        # LLVM bitcode (.bc / wrapper / embedded .llvmbc): string constants are bit-packed, never verbatim in the file
+        _bitcode_scan(data, emit, deadline, _depth)
     if not valid() and not late() and _depth < 2 and b"PK\x05\x06" in data[-65600:]:
         # jar/zip/apk: a compressed NON-class entry (config.bin, assets/...) the deflate anchors/brute miss (dynamic
         # Huffman in a > 1 MiB jar, or a text form inside) -> inflate it and look inside (offsets: OFFSET LAW)
         _zip_scan(data, emit, hits, deadline, late, _depth)
+    if not valid() and not late() and _depth < 2 and _BUNDLE_SIG in data:
+        # .NET single-file bundle with EnableCompressionInSingleFile: each entry (app dll, config) is raw deflate
+        _bundle_scan(data, emit, hits, deadline, late, _depth)
     if not valid() and not late():
         # base64/hex text of a zlib/gzip/xz/bz2/lzma stream, or an xz/bz2/lzma stream raw in the file (offset = first
         # stored byte of the text / stream; detail at+N when the blob sits further into the output)
@@ -2203,7 +3045,7 @@ def machine_facts(data):
               b"\xfe\xed\xfa\xce": ("big", 32), b"\xfe\xed\xfa\xcf": ("big", 64)}.get(bytes(data[:4]))
         if data[:4] in (b"\xca\xfe\xba\xbe", b"\xca\xfe\xba\xbf"):   # fat/fat64: first slice (Java .class shares 0xcafebabe)
             lay = macho_layout(data)
-            return machine_facts(data[lay["slices"][0]["slice_offset"]:]) if lay else None
+            return machine_facts(data[lay["slices"][0]["slice_offset"]:]) if lay else bytecode_facts(data)
         if mo and len(data) >= 8:
             m = int.from_bytes(data[4:8], mo[0])
             return {"format": "mach-o", "machine": MACHO_CPU_LABEL.get(m, str(m)), "machine_num": str(m),
@@ -2213,9 +3055,67 @@ def machine_facts(data):
             if lay:
                 return {"format": "wasm", "machine": lay["machine"], "machine_num": "none", "endian": "little",
                         "bits": 64 if lay["machine"] == "wasm64" else 32}
+        return bytecode_facts(data)
     except (IndexError, ValueError, TypeError):
         pass
     return None
+
+
+# Bytecode containers (group members next to native builds). Labels SPECULATIVE (GM vocabulary not seen): format is
+# the first of `format_candidates`; machine/machine_num "none" (VM bytecode has no target; an Apple bitcode wrapper's
+# cputype -> MACHO_CPU_LABEL). pyc: the version whose FINAL magic it is (CPython Lib/importlib/_bootstrap_external.py).
+PYC_MAGIC_VERSION = {3379: "3.6", 3394: "3.7", 3413: "3.8", 3425: "3.9", 3439: "3.10", 3495: "3.11", 3531: "3.12",
+                     3571: "3.13", 3627: "3.14"}
+_BYTECODE_CANDIDATES = {"llvm_bitcode": ["llvm_bitcode", "bitcode", "llvm-bc", "bc"], "pyc": ["pyc", "python_bytecode"],
+                        "luac": ["luac", "lua", "lua_bytecode"], "class": ["class", "java_class", "jvm"],
+                        "dex": ["dex", "dalvik"]}
+
+
+def bytecode_facts(data):
+    """{format, format_candidates, machine "none", machine_num "none", endian, bits "none", + format version} for an
+    LLVM bitcode file (raw 'BC' 0xC0DE or the 0x0B17C0DE wrapper), CPython .pyc, Lua luac, Java .class or Android
+    .dex; None otherwise (header fields must be consistent: a bare magic is no container)."""
+    try:
+        d = bytes(data[:0x70])
+        out = None
+        if d[:4] == _BC_MAGIC and len(data) >= 8:
+            out = {"format": "llvm_bitcode", "wrapper": "false"}
+        elif d[:4] == _BC_WRAPPER and len(d) >= 20:
+            ver, off, size, cpu = struct.unpack_from("<IIII", d, 4)
+            if off >= 20 and size >= 4 and off + size <= len(data) and data[off:off + 4] == _BC_MAGIC:
+                out = {"format": "llvm_bitcode", "wrapper": "true"}
+                if cpu:
+                    out.update(machine=MACHO_CPU_LABEL.get(cpu, str(cpu)), machine_num=str(cpu))
+        elif d[2:4] == b"\r\n" and len(d) >= 17 and 3000 <= int.from_bytes(d[:2], "little") < 4000 \
+                and int.from_bytes(d[4:8], "little") <= 3 and d[16] & 0x7f == 0x63:   # flags, marshal TYPE_CODE
+            m = int.from_bytes(d[:2], "little")
+            out = {"format": "pyc", "pyc_magic": str(m), "python_version": PYC_MAGIC_VERSION.get(m, "3.x")}
+        elif d[:4] == b"\x1bLua" and len(d) >= 12 and d[4] in (0x50, 0x51, 0x52, 0x53, 0x54, 0x55) and d[5] == 0:
+            out = {"format": "luac", "lua_version": f"{d[4] >> 4}.{d[4] & 15}"}
+            if d[4] in (0x53, 0x54) and d[6:12] == b"\x19\x93\r\n\x1a\n":   # LUAC_DATA, sizes, then LUAC_INT 0x5678
+                q, n = (17, d[15]) if d[4] == 0x53 else (15, d[13])   # LUAC_INT offset, sizeof(lua_Integer)
+                if n in (4, 8) and len(d) >= q + n:
+                    v = d[q:q + n]
+                    out["endian"] = "little" if v[:2] == b"\x78\x56" else "big" if v[-2:] == b"\x56\x78" else "none"
+        elif d[:4] == b"\xca\xfe\xba\xbe" and len(d) >= 10 and macho_layout(data) is None:
+            major = int.from_bytes(d[6:8], "big")
+            if 45 <= major <= 120 and int.from_bytes(d[8:10], "big") >= 2:   # constant_pool_count
+                out = {"format": "class", "class_major": str(major),
+                       "java_version": str(major - 44) if major >= 49 else f"1.{major - 44}"}
+                out["endian"] = "big"
+        elif d[:4] == b"dex\n" and len(d) >= 0x70 and d[7] == 0 and d[4:7].isdigit() \
+                and int.from_bytes(d[0x24:0x28], "little") == 0x70 and d[0x28:0x2c] in (b"\x78\x56\x34\x12",
+                                                                                        b"\x12\x34\x56\x78"):
+            out = {"format": "dex", "dex_version": d[4:7].decode(),
+                   "endian": "little" if d[0x28] == 0x78 else "big"}
+        if out is None:
+            return None
+        base = {"format_candidates": _BYTECODE_CANDIDATES[out["format"]], "machine": "none", "machine_num": "none",
+                "endian": "little", "bits": "none"}
+        base.update(out)
+        return base
+    except (IndexError, ValueError, TypeError, struct.error):
+        return None
 
 
 ELF_TYPE_NAME = {0: "ET_NONE", 1: "ET_REL", 2: "ET_EXEC", 3: "ET_DYN", 4: "ET_CORE"}
@@ -2856,6 +3756,169 @@ def _zip_scan(data, emit, hits, deadline, late, depth):
                     return
 
 
+# .NET single-file bundle (`dotnet publish -p:PublishSingleFile=true`): an apphost (ELF / PE / Mach-O) whose data holds
+# [i64 manifest offset][the 32-byte '.net core bundle' sha256 signature]; offset 0 = an unbundled apphost. Manifest (.NET
+# runtime src/native/corehost/bundle/header.cpp): u32 major, u32 minor, i32 count, str bundle id, v2+: i64 deps offset/size,
+# i64 runtimeconfig offset/size, u64 flags; then per file i64 offset, i64 size, v6+: i64 compressed size (0 = stored),
+# u8 type, str path (str = 7-bit varint length + UTF-8). Compressed entries (EnableCompressionInSingleFile) = raw deflate.
+_BUNDLE_SIG = bytes.fromhex("8b1202b96a612038727b930214d7a03213f5b9e6efae3318ee3b2dce24b36aae")
+_BUNDLE_TYPES = {0: "unknown", 1: "assembly", 2: "native", 3: "deps_json", 4: "runtimeconfig_json", 5: "symbols"}
+_BUNDLE_FW = re.compile(r"(System|Microsoft|netstandard|mscorlib|WindowsBase)[./]|.*\.(so|dylib|pdb)$")   # no deep scan
+HCFG_BUNDLE_MAX = int(os.environ.get("HCTF_HCFG_BUNDLE_MAX", str(32 << 20)))   # inflated bytes over all bundle entries
+
+
+def dotnet_bundle(data, limit=20000):
+    """{"header_offset", "version" ("6.0"), "bundle_id", "flags", "files": [{path, type, offset, size, compressed_size}]}
+    of a .NET single-file bundle (offset = file offset of the entry's stored bytes; compressed_size 0 = stored as is),
+    None when `data` is no bundle (no signature / unbundled apphost placeholder / manifest out of range)."""
+    data = bytes(data)
+    s = data.find(_BUNDLE_SIG)
+    while s >= 8:
+        hdr = int.from_bytes(data[s - 8:s], "little")
+        if 0 < hdr < len(data) - 12:
+            break
+        s = data.find(_BUNDLE_SIG, s + 1)
+    else:
+        return None
+    p = [hdr]
+
+    def u(fmt):
+        v = struct.unpack_from(fmt, data, p[0])
+        p[0] += struct.calcsize(fmt)
+        return v[0] if len(v) == 1 else v
+
+    def s7():
+        n = sh = 0
+        while True:
+            b = data[p[0]]
+            p[0] += 1
+            n |= (b & 0x7f) << sh
+            sh += 7
+            if b < 0x80 or sh > 28:
+                break
+        if p[0] + n > len(data):
+            raise ValueError("string past end")
+        p[0] += n
+        return data[p[0] - n:p[0]].decode("utf-8", "replace")
+
+    try:
+        major, minor, count = u("<IIi")
+        if not 1 <= major <= 64 or not 0 <= count <= limit:
+            return None
+        out = {"header_offset": hdr, "version": f"{major}.{minor}", "bundle_id": s7(), "flags": 0, "files": []}
+        if major >= 2:
+            u("<qqqq")
+            out["flags"] = u("<Q")
+        for _ in range(count):
+            off, size = u("<qq")
+            csize = u("<q") if major >= 6 else 0
+            typ = u("<B")
+            path = s7()
+            stored = csize or size
+            if off < 0 or size < 0 or csize < 0 or off + stored > len(data):
+                return None
+            out["files"].append({"path": path, "type": _BUNDLE_TYPES.get(typ, str(typ)), "offset": off, "size": size,
+                                 "compressed_size": csize})
+        return out
+    except _PARSE_ERR:
+        return None
+
+
+def _bundle_scan(data, emit, hits, deadline, late, depth):
+    """Inflate every compressed entry of the .NET single-file bundle in `data` and report an HCFG inside: raw -> "deflate"
+    at the entry's compressed-data start, detail "at+N bundle=<path>"; any other form -> "bundle-<enc>" at the offset
+    INSIDE the inflated entry, detail "bundle=<path> data@<compressed start>" (the zip-entry convention, OFFSET LAW)."""
+    b = dotnet_bundle(data)
+    budget = HCFG_BUNDLE_MAX
+    for f in (b or {}).get("files", ()):
+        if late() or budget <= 0:
+            break
+        if not f["compressed_size"] or f["size"] < 12 or f["size"] > budget:
+            continue
+        budget -= f["size"]
+        try:
+            d = zlib.decompressobj(-15)
+            buf = d.decompress(data[f["offset"]:f["offset"] + f["compressed_size"]], f["size"])
+        except zlib.error:
+            continue
+        tag, dstart = f"bundle={f['path']}", f["offset"]
+        i, n = buf.find(HCFG_MAGIC), 0
+        while i >= 0 and n < 64:
+            emit(dstart, "deflate", buf[i:i + _need(buf[i:i + 8])], f"at+{i} {tag}" if i else tag)
+            i, n = buf.find(HCFG_MAGIC, i + 1), n + 1
+        if any(h.valid for h in hits):
+            return
+        if len(buf) <= 8 << 20 and f["type"] != "native" and not _BUNDLE_FW.match(f["path"]):   # app entries only
+            for h in hcfg_scan(buf, deadline=deadline, stop_on_valid=True, _depth=depth + 1):
+                if h.valid and h.encoding != "raw":
+                    h.encoding, h.detail = "bundle-" + h.encoding, f"{tag} data@{dstart} {h.detail}".strip()
+                    hits.append(h)
+                    return
+
+
+_R2R_OS_XOR = {"windows": 0, "linux": 0x7B79, "osx": 0x4644, "freebsd": 0xADC4, "netbsd": 0x1993, "sunos": 0x1992}
+_AOT_SECTIONS = {"__managedcode", ".managedcode", "__modules", ".dotnet_eh_table", ".hydrated", "hydrated", ".managed"}
+
+
+def dotnet_build_facts(data):
+    """How a .NET program was published, from the bytes alone: {"format" (container label: "elf" / "pe" / "mach-o", or
+    "pe_cli" for a CLI assembly -- a ReadyToRun dll is still pe_cli), "dotnet_build": "singlefile" (apphost + bundle) |
+    "apphost" (unbundled host) | "readytorun" (CLI header flag IL_LIBRARY + ManagedNativeHeader 'RTR') | "il" (plain CLI)
+    | "nativeaot" (native image: __managedcode/__modules/hydrated sections, no CLI header) | "none"; R2R adds r2r_os +
+    the real machine/machine_num (the header's Machine is xor'd with an OS cookie); "main_assembly" /
+    "main_assembly_offset" / "bundle_version" / "bundle_files" for a bundle}; None when not an ELF / PE / Mach-O."""
+    data = bytes(data)
+    mf = machine_facts(data)
+    if not mf or mf.get("format") not in ("elf", "pe", "mach-o"):
+        return None
+    out = {"format": mf["format"], "dotnet_build": "none"}
+    pe = _pe_layout(data) if mf["format"] == "pe" else None
+    if pe and len(pe[2]) > 14 and pe[2][14][0]:
+        out["format"] = "pe_cli"
+        try:
+            cli = _pe_rva(pe[1], pe[2][14][0])
+            flags = struct.unpack_from("<I", data, cli + 16)[0]
+            mnh = struct.unpack_from("<I", data, cli + 64)[0]
+            mo = _pe_rva(pe[1], mnh) if mnh else None
+            r2r = mo is not None and data[mo:mo + 4] == b"RTR\0"
+        except _PARSE_ERR:
+            flags, r2r = 0, False
+        out["dotnet_build"] = "readytorun" if r2r or flags & 0x4 else "il"
+        if out["dotnet_build"] == "readytorun":   # crossgen2 stores Machine ^ per-OS cookie (Windows: plain Machine)
+            m = int(mf["machine_num"])
+            for osn, x in _R2R_OS_XOR.items():
+                if (m ^ x) in PE_MACHINE_LABEL:
+                    out.update({"r2r_os": osn, "machine": PE_MACHINE_LABEL[m ^ x], "machine_num": str(m ^ x)})
+                    break
+        return out
+    b = dotnet_bundle(data)
+    if b:
+        asm = [f for f in b["files"] if f["type"] == "assembly"]
+        main = b["bundle_id"] and asm and asm[0]
+        for f in asm:   # the app's own dll is named like the runtimeconfig.json/deps.json entries
+            stem = f["path"].rsplit(".", 1)[0]
+            if any(g["path"] in (stem + ".runtimeconfig.json", stem + ".deps.json") for g in b["files"]):
+                main = f
+                break
+        out.update({"dotnet_build": "singlefile", "bundle_version": b["version"], "bundle_files": len(b["files"]),
+                    "main_assembly": main["path"] if main else "none",
+                    "main_assembly_offset": main["offset"] if main else None,
+                    "main_assembly_compressed": bool(main and main["compressed_size"])})
+        return out
+    if _BUNDLE_SIG in data:
+        out["dotnet_build"] = "apphost"
+        return out
+    if pe:
+        names = {n for n, *_ in pe[1]}
+    elif mf["format"] == "elf":
+        names = {n for n, _, _ in (_elf_layout(data) or (0, []))[1]}
+    else:
+        names = set((macho_layout(data) or {}).get("section_names_short") or ())
+    if names & _AOT_SECTIONS:
+        out["dotnet_build"] = "nativeaot"
+    return out
+
+
 # ------------------------------------------------------------------ container slots: PE/.NET resources, overlay
 _PARSE_ERR = (struct.error, IndexError, OverflowError, ValueError, TypeError)   # hostile header fields
 _RT_NAMES = {1: "CURSOR", 2: "BITMAP", 3: "ICON", 4: "MENU", 5: "DIALOG", 6: "STRING", 7: "FONTDIR", 8: "FONT",
@@ -3030,8 +4093,9 @@ def dotnet_resources(data, limit=4096):
 
 def hcfg_locate(data, off):
     """Which container slot holds file offset `off` (a Hit.offset): {"container": "pe-resource" | "dotnet-resource" |
-    "overlay" | "section", "slot_offset" (resource data start / overlay start / section start), "delta" (off - slot),
-    + type_name/name/lang | section}, or None. For a resource-relative or overlay-relative offset question."""
+    "dotnet-bundle" | "overlay" | "section", "slot_offset" (resource data start / bundle entry start = the embedded
+    dll's offset / overlay start / section start), "delta" (off - slot), + type_name/name/lang | path/file_type (+ inner
+    = the slot inside a stored bundled dll) | section}, or None. For a resource/entry/overlay-relative offset question."""
     data = bytes(data)
     for r in pe_resources(data):
         if r["offset"] is not None and r["offset"] <= off < r["offset"] + r["size"]:
@@ -3041,6 +4105,15 @@ def hcfg_locate(data, off):
         if r["offset"] <= off < r["offset"] + r["size"]:
             return {"container": "dotnet-resource", "slot_offset": r["offset"], "delta": off - r["offset"],
                     "size": r["size"]}
+    for f in (dotnet_bundle(data) or {}).get("files", ()):   # .NET single-file bundle entry (stored or compressed bytes)
+        if f["offset"] <= off < f["offset"] + (f["compressed_size"] or f["size"]):
+            r = {"container": "dotnet-bundle", "slot_offset": f["offset"], "delta": off - f["offset"], "path": f["path"],
+                 "file_type": f["type"], "size": f["size"], "compressed_size": f["compressed_size"]}
+            if not f["compressed_size"] and f["type"] == "assembly":   # resource/section inside the embedded dll
+                inner = hcfg_locate(data[f["offset"]:f["offset"] + f["size"]], off - f["offset"])
+                if inner:
+                    r["inner"] = inner
+            return r
     ov = overlay_info(data)
     if ov and ov["has_overlay"] and off >= ov["overlay_offset"]:
         return {"container": "overlay", "slot_offset": ov["overlay_offset"], "delta": off - ov["overlay_offset"],
@@ -3052,3 +4125,237 @@ def hcfg_locate(data, off):
             return {"container": "section", "section": n, "slot_offset": o, "delta": off - o, "size": size}
     return None
 
+
+
+# --- same-source build pairs (D15 stripped/symbolized, D16 compact/direct; D17+ O0/O2, static/dynamic, pie/nopie,
+# debug/release, packed/unpacked, plain/obfuscated). Ids are `dNN_analysis_<tag>_<field>`: the tag names ONE member.
+
+def _elf_pair_facts(data):
+    E = "<" if data[5] == 1 else ">"
+    b64 = data[4] == 2
+    u16 = lambda o: struct.unpack_from(E + "H", data, o)[0]
+    u32 = lambda o: struct.unpack_from(E + "I", data, o)[0]
+    uw = (lambda o: struct.unpack_from(E + "Q", data, o)[0]) if b64 else u32
+    et, entry = u16(16), uw(24)
+    phoff, shoff = (uw(32), uw(40)) if b64 else (u32(28), u32(32))
+    p = 52 if b64 else 40
+    phes, phn, shes, shn, shstr = u16(p + 2), u16(p + 4), u16(p + 6), u16(p + 8), u16(p + 10)
+    ptypes, xseg = [], 0
+    for k in range(min(phn, 256) if phoff else 0):
+        o = phoff + k * phes
+        if o + (56 if b64 else 32) > len(data):
+            break
+        t = u32(o)
+        ptypes.append(t)
+        flags, filesz = (u32(o + 4), uw(o + 32)) if b64 else (u32(o + 24), u32(o + 16))
+        if t == 1 and flags & 1:   # PT_LOAD + PF_X
+            xseg += filesz
+    secs = []   # (name_off, type, flags, offset, size, link, entsize)
+    if shoff and shes >= (64 if b64 else 40):
+        for k in range(min(shn, 4096)):
+            o = shoff + k * shes
+            if o + shes > len(data):
+                break
+            if b64:
+                secs.append((u32(o), u32(o + 4), uw(o + 8), uw(o + 24), uw(o + 32), u32(o + 40), uw(o + 56)))
+            else:
+                secs.append((u32(o), u32(o + 4), u32(o + 8), u32(o + 16), u32(o + 20), u32(o + 24), u32(o + 36)))
+
+    def cstr(i, off):
+        if not 0 <= i < len(secs):
+            return ""
+        s = secs[i][3] + off
+        e = data.find(b"\0", s, s + 4096)
+        return data[s:e].decode("utf-8", "replace") if s < len(data) and e >= s else ""
+
+    names = [cstr(shstr, s[0]) if shstr < len(secs) else "" for s in secs]
+    imports, needed = [], []
+    for i, (_, t, _, off, size, link, ent) in enumerate(secs):
+        if t == 11 and ent:   # .dynsym: undefined (SHN_UNDEF) named symbols = what the image imports
+            for k in range(1, min(size // ent, 50000)):
+                o = off + k * ent
+                if o + ent > len(data):
+                    break
+                nm, shndx = (u32(o), u16(o + 6)) if b64 else (u32(o), u16(o + 14))
+                n = cstr(link, nm) if shndx == 0 else ""
+                if n:
+                    imports.append(n)
+        elif t == 6:   # .dynamic: DT_NEEDED (1)
+            w = 16 if b64 else 8
+            for o in range(off, min(off + size, len(data) - w + 1), w):
+                tag = uw(o)
+                if tag == 0:
+                    break
+                if tag == 1:
+                    needed.append(cstr(link, uw(o + w // 2)))
+    interp = 3 in ptypes
+    code = sum(s[4] for s in secs if s[2] & 4 and s[1] != 8) or xseg   # SHF_EXECINSTR, else PF_X segments
+    return {"format": "elf", "elf_type": ELF_TYPE_NAME.get(et, str(et)), "entry_point": hex(entry),
+            "section_names": names, "has_symtab": "true" if any(s[1] == 2 for s in secs) else "false",
+            "has_interp": "true" if interp else "false", "linking": "dynamic" if interp else "static",
+            "is_static": "false" if interp else "true", "is_pie": "true" if et == 3 and interp else "false",
+            "has_debug_info": "true" if {".debug_info", ".zdebug_info"} & set(names) else "false",
+            "imports": imports, "needed": needed, "code_size": code}
+
+
+def pair_member_facts(data):
+    """Per-member facts that DIFFER inside a same-source build pair, pure header walk (no subprocess):
+    ELF {format, elf_type ET_* (readelf constant), entry_point hex (e_entry), section_names (header-table order,
+    index 0 = ""), has_symtab, has_interp, linking static/dynamic + is_static (no PT_INTERP), is_pie (ET_DYN +
+    PT_INTERP), has_debug_info (.debug_info), imports (undefined named .dynsym symbols, .dynsym order, no @version),
+    needed (DT_NEEDED order), code_size (SHF_EXECINSTR bytes, else PF_X filesz), is_packed (UPX)}
+    + machine_facts {machine (label), machine_num (decimal e_machine / PE Machine), bits, endian} (ELF and PE).
+    PE: {format, entry_point (ImageBase+AddressOfEntryPoint), section_names, code_size, is_packed}. Else None."""
+    try:
+        head = bytes(data[:4096])
+        packed = b"UPX!" in head or b"UPX0" in head or b"UPX1" in head
+        if data[:4] == b"\x7fELF" and data[4:5] in (b"\x01", b"\x02") and data[5:6] in (b"\x01", b"\x02") \
+                and len(data) >= 52:
+            if data[6] != 1:   # EI_VERSION: a garbage / impostor header, not a build
+                return None
+            f = _elf_pair_facts(data)
+        else:
+            lay = _pe_layout(data)
+            if not lay:
+                return None
+            pe = int.from_bytes(data[0x3c:0x40], "little")
+            opt = pe + 24
+            magic, aep = struct.unpack_from("<H", data, opt)[0], struct.unpack_from("<I", data, opt + 16)[0]
+            base = struct.unpack_from("<Q", data, opt + 24)[0] if magic == 0x20b else \
+                struct.unpack_from("<I", data, opt + 28)[0]
+            secs = lay[1]
+            chars = [struct.unpack_from("<I", data, lay[0] + 40 * k + 36)[0] for k in range(len(secs))]
+            f = {"format": "pe", "entry_point": hex(base + aep), "section_names": [s[0] for s in secs],
+                 "code_size": sum(s[4] for s, c in zip(secs, chars) if c & 0x20000000)}
+            packed = packed or any(s[0].startswith("UPX") for s in secs)
+        f["is_packed"] = "true" if packed else "false"
+        mf = machine_facts(data) or {}   # cross-arch pairs: machine label / e_machine decimal / bits / endian
+        for k in ("machine", "machine_num", "bits", "endian"):
+            if k in mf:
+                f[k] = mf[k]
+        return f
+    except Exception:   # truncated / hostile headers: cannot answer
+        return None
+
+
+_PAIR_NEG = {"no", "non", "not", "un"}
+_PAIR_SKIP = {"variant", "elf", "exe", "jar", "dll", "bin", "so", "config", "has", "hcfg", "analysis", "artifact",
+              "is", "entry", "section"}
+# tag (tokens joined) -> structural predicates tried in order until one picks exactly one member:
+# (fact, value) = that fact equals value; ("code_size", "max"/"min") = the largest / smallest code.
+_PAIR_FAMILY = {}
+for _t, _p in (
+        (("static", "statically", "staticlink"), [("is_static", "true")]),
+        (("dynamic", "dynamically", "shared", "dyn"), [("is_static", "false")]),
+        (("pie",), [("is_pie", "true")]),
+        (("nopie", "nonpie", "notpie", "exec", "fixed"), [("is_pie", "false")]),
+        (("packed", "upx", "upxed", "compressed", "packer"), [("is_packed", "true")]),
+        (("unpacked", "original", "unpack"), [("is_packed", "false")]),
+        (("debug", "g", "dbg", "debuginfo", "dwarf"), [("has_debug_info", "true"), ("has_symtab", "true")]),
+        (("release", "nodebug", "rel"), [("has_debug_info", "false"), ("has_symtab", "false"), ("code_size", "min")]),
+        (("stripped", "strip"), [("has_symtab", "false"), ("has_debug_info", "false")]),
+        (("symbolized", "unstripped", "symbolic", "symbols", "nostrip"), [("has_symtab", "true")]),
+        (("plain", "clean", "normal"), [("is_packed", "false"), ("code_size", "min")]),
+        (("obfuscated", "obf", "obfus", "ollvm"), [("code_size", "max")]),
+        (("o0", "unoptimized", "noopt", "o0g"), [("code_size", "max")]),
+        (("o1", "o2", "o3", "os", "oz", "og", "optimized", "opt", "compact", "small", "size", "fast"),
+         [("code_size", "min")]),
+        # cross-arch pairs (tag tokens joined: `x86_64` -> x8664); an alias tag (`arm64` vs a `-aarch64` name) or a
+        # renamed member falls through the name match to the e_machine number (62 / 183 / 243 / 40 / 3)
+        (("x8664", "amd64", "x64", "x86x64"), [("machine_num", "62")]),
+        (("aarch64", "arm64", "armv8", "a64"), [("machine_num", "183")]),
+        (("riscv", "riscv64", "rv64", "riscv32", "rv32", "rv64gc", "rv64imac"), [("machine_num", "243")]),
+        (("arm", "arm32", "armv7", "armv7a", "armhf", "armel", "aarch32", "thumb"), [("machine_num", "40")]),
+        (("x86", "i386", "i686", "x8632", "ia32"), [("machine_num", "3")])):
+    for _k in _t:
+        _PAIR_FAMILY[_k] = _p
+del _t, _p, _k
+
+
+def _pair_tokens(name):
+    stem = name.lower().replace("\\", "/").rsplit("/", 1)[-1]
+    stem = re.sub(r"\.[a-z]{1,5}$", "", stem)   # extension never carries the tag (`-no-pie.elf` != `no_pie_elf`)
+    return [t for t in re.split(r"[^a-z0-9]+", stem) if t]
+
+
+def _pair_name_hit(want, toks):
+    """True if `want` (tag tokens joined) equals whole adjacent name tokens joined, not after a negation token."""
+    for s in range(len(toks)):
+        acc = ""
+        for e in range(s, len(toks)):
+            acc += toks[e]
+            if acc == want:
+                if s and toks[s - 1] in _PAIR_NEG:
+                    break
+                return True
+            if len(acc) >= len(want) or not want.startswith(acc):
+                break
+    return False
+
+
+def pair_route(field, members):
+    """Route `<tag>_<field>` (the part after `analysis_`) to ONE member of a build pair.
+    members = [(name, bytes)] of the day's group. Returns (index, rest_field, how) or None (not a pair field).
+    1) the LONGEST leading tag (1..n-1 tokens; `no_pie` == `nopie` == `no-pie`) found in exactly one member's file
+       name as whole tokens (`pie` does not match `no-pie`); 2) renamed members: the tag family's structural
+       predicate over pair_member_facts (no INTERP = static, ET_DYN+INTERP = pie, UPX = packed, .debug_info = debug,
+       no .symtab = stripped, smaller code = O1-Os/compact/optimized, larger = O0/obfuscated)."""
+    try:
+        parts = [p for p in field.lower().split("_") if p]
+        if len(members) < 2 or len(parts) < 2 or parts[0] in _PAIR_SKIP or parts[0].isdigit():
+            return None
+        toks = [_pair_tokens(n) for n, _ in members]
+        for k in range(len(parts) - 1, 0, -1):
+            if parts[k - 1] in _PAIR_SKIP:
+                continue
+            want = "".join(parts[:k])
+            hit = [i for i, t in enumerate(toks) if _pair_name_hit(want, t)]
+            if len(hit) == 1:
+                return hit[0], "_".join(parts[k:]), "name"
+            if hit:
+                break   # a shorter tag can only hit more members
+        for k in range(len(parts) - 1, 0, -1):
+            preds = _PAIR_FAMILY.get("".join(parts[:k]))
+            if not preds:
+                continue
+            fx = [pair_member_facts(b) if isinstance(b, (bytes, bytearray, memoryview)) else None for _, b in members]
+            for fact, want in preds:
+                vals = [f.get(fact) if f else None for f in fx]
+                if fact == "code_size":
+                    sizes = [v for v in vals if isinstance(v, int) and v > 0]
+                    if len(sizes) < 2 or len(set(sizes)) < len(sizes):
+                        continue
+                    pick = (max if want == "max" else min)(sizes)
+                    hit = [i for i, v in enumerate(vals) if v == pick]
+                else:
+                    hit = [i for i, v in enumerate(vals) if v == want]
+                if len(hit) == 1:
+                    return hit[0], "_".join(parts[k:]), "struct:" + fact
+            return None
+    except Exception:   # noqa: BLE001 -- never raise past the router
+        pass
+    return None
+
+
+def zip_cd_sha256(data, pwd=None, prefix=None):
+    """[(name, sha256 hex)] of the archive's file members in CENTRAL-DIRECTORY order (= `dNN_artifact_sha256_K`
+    numbering, K 1-based), optionally only names starting with `prefix` (path-insensitive). AES zips via pyzipper.
+    None if not a readable zip."""
+    import hashlib
+    try:
+        try:
+            import pyzipper
+            z = pyzipper.AESZipFile(io.BytesIO(data))
+        except ImportError:
+            z = zipfile.ZipFile(io.BytesIO(data))
+        if pwd:
+            z.setpassword(pwd if isinstance(pwd, bytes) else pwd.encode())
+        out = []
+        for zi in z.infolist():
+            base = zi.filename.rsplit("/", 1)[-1]
+            if zi.is_dir() or (prefix and not base.lower().startswith(prefix.lower())):
+                continue
+            out.append((zi.filename, hashlib.sha256(z.read(zi)).hexdigest()))
+        return out
+    except Exception:   # noqa: BLE001
+        return None

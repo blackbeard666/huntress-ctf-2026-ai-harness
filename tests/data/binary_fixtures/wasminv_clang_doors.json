@@ -1,0 +1,60 @@
+{
+ "encoding": "raw",
+ "expected_format": "wasm",
+ "expected_offset": 269,
+ "expected_mem_offset": 0,
+ "expected_config": {
+  "c2": "203.0.113.9:8443",
+  "campaign": "doorframe",
+  "sleep": 30,
+  "flag": "flag{w4sm_d00rs_0p3n}"
+ },
+ "expected_fields": {
+  "imports": [
+   "env.__linear_memory",
+   "env.beacon_send",
+   "env.__indirect_function_table"
+  ],
+  "import_count": 3,
+  "exports": [
+   "dispatch"
+  ],
+  "export_count": 1,
+  "function_count": 4,
+  "table_count": 0,
+  "global_count": 0,
+  "elem_count": 1,
+  "data_segment_count": 3,
+  "mutable_global_count": 0,
+  "passive_data_segment_count": 0,
+  "indirect_targets": [
+   "t_ping",
+   "t_exfil",
+   "t_sleep"
+  ],
+  "memory_min": 1,
+  "memory_max": "none",
+  "memory_shared": false,
+  "data_offsets": [
+   0,
+   104,
+   116
+  ],
+  "custom_sections": [
+   "linking",
+   "reloc.CODE",
+   "reloc.DATA",
+   "producers",
+   "target_features"
+  ],
+  "has_table": true,
+  "hcfg_mem_offset": 0,
+  "start_function": "none",
+  "hcfg_offset": 269
+ },
+ "generator_cmd": "bash wasminv_gen.sh wasminv_clang_doors.bin clang '{\"c2\":\"203.0.113.9:8443\",\"campaign\":\"doorframe\",\"sleep\":30,\"flag\":\"flag{w4sm_d00rs_0p3n}\"}' 0x21",
+ "oracle_cmd": "bash wasminv_oracle.sh wasminv_clang_doors.bin   # wasm-objdump -x (wabt 1.0.36) + wasm-validate --enable-threads + grep -obUa HCFG; config: bash wasm_oracle.sh wasminv_clang_doors.bin (grep -obUa, perl unpack + xor, gzip-trailer crc32)",
+ "oracle_output": "{\"custom_sections\": [\"linking\", \"reloc.CODE\", \"reloc.DATA\", \"producers\", \"target_features\"], \"data_offsets\": [0, 104, 116], \"data_segment_count\": 3, \"elem_count\": 1, \"export_count\": 1, \"exports\": [\"dispatch\"], \"function_count\": 4, \"global_count\": 0, \"has_table\": true, \"hcfg_file_offset\": \"269\", \"hcfg_mem_offset\": 0, \"import_count\": 3, \"imports\": [\"env.__linear_memory\", \"env.beacon_send\", \"env.__indirect_function_table\"], \"indirect_targets\": [\"t_ping\", \"t_exfil\", \"t_sleep\"], \"memory_max\": \"none\", \"memory_min\": 1, \"memory_shared\": false, \"mutable_global_count\": 0, \"passive_data_segment_count\": 0, \"start\": \"none\", \"table_count\": 0, \"valid\": true}",
+ "oracle_output_hcfg": "WebAssembly (wasm) binary module version 0x1 (MVP) | valid | i32 | none | 269 | HCFG 1 33 90 2670209175 2670209175 | {\"c2\":\"203.0.113.9:8443\",\"campaign\":\"doorframe\",\"sleep\":30,\"flag\":\"flag{w4sm_d00rs_0p3n}\"}",
+ "note": "wasm 'doors' inventory (lib.binary.wasm_fields / wasm_field): lists in section order (JSON), imports as module.name, *_count = entries of that section (wasm-objdump Section[N]; imports not counted), has_table includes an imported table, memory_min/max in 64 KiB pages, indirect_targets = funcs of ACTIVE elem segments by name, hcfg_offset = file offset of the 'H' (hcfg_mem_offset = linear-memory address); field spellings SPECULATIVE (GM vocabulary not seen)"
+}

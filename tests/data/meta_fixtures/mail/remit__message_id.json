@@ -1,0 +1,8 @@
+{
+ "field": "mail.message_id",
+ "expected": "<CAF7.remit-2026.1014.9931@mailhost.contoso-pay.example>",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/email/GENERATOR_stdlib_emailmessage_alias.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP) -> remit.eml",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/email/ORACLE_eml_parser_alias.py.txt tools/pylib-eml <file>  (eml_parser 4.2.1 EmlParser.decode_email_bytes) -> header.header['message-id'][0] (verbatim, angle brackets kept)",
+ "decoy": false,
+ "member": "evidence-01/remit.eml"
+}

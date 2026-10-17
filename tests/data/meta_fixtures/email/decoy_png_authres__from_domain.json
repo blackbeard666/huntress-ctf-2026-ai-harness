@@ -1,0 +1,8 @@
+{
+ "field": "email.from_domain",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"from PIL import Image; Image.new('RGB',(4,4),(9,9,9)).save('authres_decoy.png')\"  (Pillow PNG renamed .eml)",
+ "oracle_cmd": "file <file> -> PNG image data, 4 x 4 (not RFC 5322: no headers)",
+ "decoy": true,
+ "member": "evidence-01/authres_notice.eml"
+}

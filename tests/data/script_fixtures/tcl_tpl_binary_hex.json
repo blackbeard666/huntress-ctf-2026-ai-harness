@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=1|language=tcl|role=launcher|attack=T1059|steps=decode,exec|campaign_id=TC-3e8b6d04|path=/tmp/.tc-3e8b6d04",
+ "decoy": false,
+ "generator_cmd": "sh tests/data/script_fixtures/tpl_gen.sh  (written by the language's own interpreter: tclsh: set Codec_ {..} + [binary decode hex ..], add 7)",
+ "oracle_cmd": "tclsh <(echo 'source tests/data/script_fixtures/tcl_tpl_binary_hex.tcl; binary scan $Material_tc3e cu* bs; set o {}; foreach b $bs {append o [format %c [expr {($b - 7) % 256}]]}; puts -nonewline $o')"
+}

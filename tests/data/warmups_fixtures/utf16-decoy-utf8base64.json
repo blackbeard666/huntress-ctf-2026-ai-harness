@@ -1,0 +1,10 @@
+{
+ "codec": "base64(utf-16le)",
+ "plain": null,
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwIQ==",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup!' | base64 -w0  # coreutils base64 of UTF-8 impostor",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | iconv -f UTF-16LE -t UTF-8  # iconv: odd byte count (31) -> incomplete character; no NUL high bytes, not UTF-16",
+ "oracle_plain": null
+}

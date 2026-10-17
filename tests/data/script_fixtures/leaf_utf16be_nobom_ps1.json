@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=powershell|role=collector|verdict=malicious|attack=T1005|adapter=file_sweep|stage_count=1|steps=collect_docs|campaign_id=PS-1eafbe16|url=https://powershell-1eafbe16.example.invalid/c",
+ "decoy": false,
+ "generator_cmd": "M=$(printf %s '<plan>' | xxd -p | tr -d '\\n'); printf '# saved with -Encoding BigEndianUnicode\\r\\n$Material_be16 = \"%s\"\\r\\n$Codec_be16 = \"hex|identity|\"\\r\\n' \"$M\" | iconv -f UTF-8 -t UTF-16BE > leaf_utf16be_nobom_ps1.ps1  (no BOM)",
+ "oracle_cmd": "iconv -f UTF-16BE -t UTF-8 leaf_utf16be_nobom_ps1.ps1 | grep -o 'Material_be16 = \"[^\"]*' | cut -d'\"' -f2 | xxd -r -p"
+}

@@ -1,0 +1,11 @@
+{
+ "encoding": "raw",
+ "decoy": true,
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_elf_header_facts": "none",
+ "generator_cmd": "bash sstrip_gen.sh sstrip_decoy_trunc.bin trunc '{\"c2\":\"198.51.100.23:443\",\"campaign\":\"headless\",\"sleep\":45,\"flag\":\"flag{n0_s3ct10ns_n0_pr0bl3m}\"}' 0x33",
+ "oracle_cmd": "bash sstrip_oracle.sh sstrip_decoy_trunc.bin   # file -b, GNU readelf -hW (Class/Data/Type/Machine/Entry/phnum), readelf -lW (INTERP), readelf -SW (non-NULL entries, names minus <no-strings>, SYMTAB type, section holding the blob), grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "ELF 64-bit LSB shared object, x86-64, version 1 (SYSV) | readelf: Error: sstrip_decoy_trunc.bin: Failed to read file header | interp: 0 | sections: 0 | names: | symtab: 0",
+ "note": "DECOY: the sstrip'd build cut to 40 bytes (ELF magic, no complete header): readelf 'Failed to read file header' -> elf_header_facts None, every field \"none\", no blob. Field names beyond format/elf_class/endianness/machine/elf_type/entry_point/has_symtab are SPECULATIVE; section_names skip the NULL section (bpf_fields convention); expected_offset = FILE offset of the 'H' (raw, = hcfg_scan)"
+}

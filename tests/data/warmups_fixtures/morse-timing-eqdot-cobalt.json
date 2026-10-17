@@ -1,0 +1,9 @@
+{
+ "codec": "morse-timing=.",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "encoded": "===.=...=.=...===.=.===.=...=.......=.===.===...===.===.===...=.===.=...===.=.===.......===.=.=...=...===.=.===.=...===.===.===...===.=.=...=.=...===.=...===.===.=.......===...=.=.=.=...=.=...=.=.=.......=.===.===...=.===...=.===.=...===.===...=.=.===...=.===.===.=...===.=.===.=.===.===.......===...===.===.===.......=.=.=...===.===.===...=.===.=.=...=.=.=.===...=...===.===.=.=.===.===.......=.=.=...=.=.===...===.=.=.=...===.===...=.=...===.......===...=.=.=.=...=.=...=.=.=.......=...===.=.=.===...=.===...===.=.===.=...===.......=.===...===.=...=.=.=...=.===.===...=...=.===.=.......===...===.===.===.......===...=.=.=.=...=.......===.===.=...=.===...===.===...=.......===.===...=.===...=.=.=...===...=...=.===.=...===.===.===.=.=.=.......===.=.===.=...===.===.===...===.=.=.=...=.===...=.===.=.=...===...===.=.=.=.=.===...=.=.=.=...=...=.===.=...===.===.===...===.=...===.=.=.=.=.===...=.===.===.===.===...===.===.=.=.=",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs enc '-/.' 'Space' 'Forward slash' | sed 's/\\./D/g; s/-/A/g; s/D/10/g; s/A/1110/g; s/ /00/g; s#/#000000#g; s/0$//' | tr 10 '=.'  # CyberChef 'To Morse Code' -> sed timing units -> tr on='=' off='.' (Wikipedia notation)",
+ "oracle_cmd": "printf %s \"$encoded\" | tr '=.' 10 | sed 's#0000000#/#g; s/000/ /g; s/111/-/g; s/1/./g; s/0//g' | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs dec 'Space' 'Forward slash'  # tr back to 1/0, sed timing->dots/dashes, CyberChef 'From Morse Code'",
+ "oracle_plain": "NICE WORK DECODING THIS WARMUP! TO SOLVE, SUBMIT THIS EXACT ANSWER TO THE GAME MASTER: COBALT-HERON-17",
+ "expected": "match"
+}

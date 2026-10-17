@@ -1,0 +1,8 @@
+{
+ "field": "tnef.attachment_sizes_bytes",
+ "expected": "[244,893]",
+ "generator_cmd": "tnefparse-1.4.0 sdist tests/examples/two-files.tnef (real Outlook winmail.dat; pip download --no-binary :all: tnefparse==1.4.0), copied verbatim",
+ "oracle_cmd": "python3 -I -c \"import tnefparse,json;t=tnefparse.TNEF(open('tests/data/meta_fixtures/tnef/outlook_two_files__attachment_sizes_bytes.bin','rb').read());print([len(a.data) for a in t.attachments])\"  (tnefparse 1.4.0 reader)",
+ "decoy": false,
+ "member": "winmail.dat"
+}

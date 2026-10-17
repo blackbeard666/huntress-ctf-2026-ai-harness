@@ -1,0 +1,10 @@
+{
+ "codec": "nato-layer",
+ "plain": null,
+ "encoded": "-. .. -.-. . / .-- --- .-. -.- / -.. . -.-. --- -.. .. -. --.",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'NICE WORK DECODING' | perl -e '<Morse hash> ...' (perl Morse writer, ' / ' word gap)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs dec 'Space' 'Forward slash'  # CyberChef reads Morse, not NATO words",
+ "oracle_plain": "NICE WORK DECODING"
+}

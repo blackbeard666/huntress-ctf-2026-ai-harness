@@ -1,0 +1,68 @@
+From: Accounts Payable <ap@northwind-billing.example>
+To: lee.ortiz@victim.example
+Subject: Overdue invoice -- final notice
+Date: Thu, 15 Oct 2026 09:12:44 +0000
+Message-ID: <inv.20261015.0912@northwind-billing.example>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="==mixed-boundary-7f3a=="
+
+--==mixed-boundary-7f3a==
+Content-Type: multipart/alternative;
+ boundary="===============0152257775816200962=="
+
+--===============0152257775816200962==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Hello,
+
+Your invoice is overdue. Pay now: caf=C3=A9 terms apply.
+
+Regards
+
+--===============0152257775816200962==
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+<html><body><p>Your invoice is <b>overdue</b>.</p></body></html>
+
+--===============0152257775816200962==--
+
+--==mixed-boundary-7f3a==
+Content-Type: application/pdf
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="Invoice_10-15.pdf"
+MIME-Version: 1.0
+
+JVBERi0xLjQKMSAwIG9iajw8Pj5lbmRvYmoKdHJhaWxlcjw8Pj4KJSVFT0YK
+
+--==mixed-boundary-7f3a==
+Content-Type: application/pdf
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="Statement.pdf"
+MIME-Version: 1.0
+
+TVqQAAMAAAAEAAAA//8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAHN0dWItcGU=
+
+--==mixed-boundary-7f3a==
+Content-Type: application/zip
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="records.zip"
+MIME-Version: 1.0
+
+UEsDBBQAAAAAADS5UF0YAS6eEwAAABMAAAAKAAAAcmVhZG1lLnR4dGhlbGxvIGZyb20gdGhlIHpp
+cApQSwECFAMUAAAAAAA0uVBdGAEunhMAAAATAAAACgAAAAAAAAAAAAAAgAEAAAAAcmVhZG1lLnR4
+dFBLBQYAAAAAAQABADgAAAA7AAAAAAA=
+
+--==mixed-boundary-7f3a==
+Content-Type: text/plain
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment;
+ filename*=utf-8''Rechnung_%C3%BCber_caf%C3%A9.txt
+MIME-Version: 1.0
+
+Y2Fmw6kgw7xiZXIgbm90ZXMK
+
+--==mixed-boundary-7f3a==--

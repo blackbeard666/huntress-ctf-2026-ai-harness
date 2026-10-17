@@ -1,0 +1,8 @@
+{
+ "field": "winmail.attachment_names",
+ "expected": "[\"ALLPRO~1.DAT\"]",
+ "generator_cmd": "tnefparse-1.4.0 sdist tests/examples/long-filename.tnef (real Outlook winmail.dat; pip download --no-binary :all: tnefparse==1.4.0), copied verbatim",
+ "oracle_cmd": "python3 -I -c \"import tnefparse,json;t=tnefparse.TNEF(open('tests/data/meta_fixtures/winmail/outlook_long_filename__attachment_names.bin','rb').read());print([a.name for a in t.attachments])  # attAttachTitle\"  (tnefparse 1.4.0 reader)",
+ "decoy": false,
+ "member": "winmail.dat"
+}

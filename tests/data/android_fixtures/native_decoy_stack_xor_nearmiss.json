@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": null,
+ "generator_cmd": "tests/data/android_fixtures/gen_stack_string.sh tests/data/android_fixtures  # DECOY: as native_stack_xor_x86_64 but the stacked value is the near-miss 'ANS-5b0e8d71f3a9c24Z' (15 hex + Z)",
+ "oracle_cmd": "unzip native_decoy_stack_xor_nearmiss.apk lib/x86_64/libcheck.so && gcc -o h native_src/stack_harness.c -ldl && ./h ./lib/x86_64/libcheck.so Java_com_huntress_arena_NativeLib_check ANS-5b0e8d71f3a9c24Z  # 'check(ANS-5b0e8d71f3a9c24Z) = 1': the only accepted value is not an ANS-<16 hex> token",
+ "decoy": true
+}

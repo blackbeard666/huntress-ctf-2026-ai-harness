@@ -1,0 +1,29 @@
+{
+ "entry": "equivalence",
+ "plans": {
+  "polyglot-applescript-downloader.applescript": "v=3|role=downloader|attack=T1105|adapter=http_client|campaign_id=APPLESCRIPT-fdc9362a|url=https://applescript-fdc9362a99.example.invalid/stage|stage_count=3|steps=decode_embedded>write_file>dispatch_process|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=jscript",
+  "polyglot-autoit-downloader.au3": "v=3|role=downloader|attack=T1105|adapter=http_client|campaign_id=AUTOIT-3b06a4d1|url=https://autoit-3b06a4d18b.example.invalid/stage|stage_count=2|steps=acquire_remote>dispatch_process|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=jscript",
+  "polyglot-lua-downloader.lua": "v=3|role=downloader|attack=T1105|adapter=http_client|campaign_id=LUA-cb7ebbb3|url=https://lua-cb7ebbb323.example.invalid/stage|stage_count=3|steps=decode_embedded>write_file>dispatch_process|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=jscript",
+  "polyglot-msbuild_xml-downloader.proj": "v=3|role=downloader|attack=T1105|adapter=http_client|campaign_id=MSBUILD_XML-730749c3|url=https://msbuild_xml-730749c386.example.invalid/stage|stage_count=3|steps=profile_host>decode_configuration>dispatch_language|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=jscript",
+  "polyglot-perl-downloader.pl": "v=3|role=downloader|attack=T1105|adapter=http_client|campaign_id=PERL-22bf469c|url=https://perl-22bf469c69.example.invalid/stage|stage_count=2|steps=decode_configuration>return_configuration|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=jscript",
+  "polyglot-php-downloader.php": "v=3|role=downloader|attack=T1105|adapter=http_client|campaign_id=PHP-6f27aede|url=https://php-6f27aede39.example.invalid/stage|stage_count=3|steps=profile_host>decode_configuration>dispatch_language|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript",
+  "polyglot-ruby-downloader.rb": "v=3|role=downloader|attack=T1105|adapter=http_client|campaign_id=RUBY-d5202c5b|url=https://ruby-d5202c5bef.example.invalid/stage|stage_count=2|steps=acquire_remote>dispatch_process|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=jscript",
+  "polyglot-typescript-downloader.ts": "v=3|role=downloader|attack=T1105|adapter=http_client|campaign_id=TYPESCRIPT-00ff7ff1|url=https://typescript-00ff7ff1ab.example.invalid/stage|stage_count=2|steps=decode_configuration>return_configuration|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=jscript",
+  "polyglot-wmi_mof-downloader.mof": "v=3|role=downloader|attack=T1105|adapter=http_client|campaign_id=WMI_MOF-3104d9e1|url=https://wmi_mof-3104d9e1e2.example.invalid/stage|stage_count=3|steps=profile_host>decode_configuration>dispatch_language|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=jscript"
+ },
+ "expected": {
+  "outliers": [
+   "polyglot-php-downloader.php"
+  ],
+  "diffs": {
+   "polyglot-php-downloader.php": {
+    "next_language": "vbscript"
+   }
+  },
+  "plot_class_count": 2,
+  "class_count": 5
+ },
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/equivalence/eq_gen.py  (D16 single 89161077 GM-verified expected.json -> v=3 k=v plans)",
+ "oracle_cmd": "python3 -I -c \"import json,collections as C;f=json.load(open('tests/data/script_fixtures/equivalence/eq_d16_downloader.json'));P={m:dict(x.split('=',1) for x in p.split('|')) for m,p in f['plans'].items()};[print(k,C.Counter(p.get(k) for p in P.values())) for k in ('role','attack','adapter','next_language','steps','stage_profile','stage_count')]\"  (minority on a field >=2/3 unanimous = outlier; distinct (role,attack,adapter,next_language) tuples = plot classes)"
+}

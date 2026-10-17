@@ -1,0 +1,48 @@
+ARC-Seal: i=1; cv=none; a=rsa-sha256; d=contoso.example; s=arc1;
+ t=1727859600;
+ b=B/Gy7QggJPtmdnCgplfOjGmZFaV7+1b0y0JzdqwYy0/t1JUGcrv2SC5A6bvF0kqzdzMoi
+ aH066qYUEl4aBTYFE9F1Nm9/29GImZYFda88oQG1xEtGOVWX5n0SsardOC+X8wIKdJkalBm
+ MaxvKnDLATcDjBR+M64U45sT0lgHhyI=
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed;
+ d=contoso.example; s=arc1; t=1727859600; h=from : reply-to : to :
+ subject : date : message-id : content-type : content-transfer-encoding
+ : mime-version : from;
+ bh=Ei1egdw0HfO5Mrq/XsC8VOYw3gWcbNPc4vko0tA3BsU=;
+ b=V+m+I8CsLe2AUlWwl7aO5UuPdMNSvtMdM5dE2CXJCR50Fqz1Nd4o92ymgZi1LG0yLq4dy
+ TOAjZUJ+6xsZSgr8W/vydi+Gkpxq2gHsjBpKNV2LWFDHX7rlA0qMy9EfO4snZO8VoN1DFkJ
+ 68AZ/+OQbHlZ1x+uIan8ZiNgeTtddH4=
+ARC-Authentication-Results: i=1; mx.contoso.example;
+ spf=softfail smtp.mailfrom=mailer.bulk-sender.example;
+ dkim=pass header.d=bulk-sender.example header.s=s2024;
+ dmarc=fail header.from=paypal.example;
+ compauth=fail reason=000
+Authentication-Results: mx.contoso.example 1;
+ spf=softfail (sender IP is 203.0.113.45) smtp.mailfrom=mailer.bulk-sender.example;
+ dkim=pass (signature was verified; key=1024) header.d=bulk-sender.example header.s=s2024;
+ dmarc=fail action=quarantine header.from=paypal.example;
+ compauth=fail reason=000
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+ d=bulk-sender.example; i=@bulk-sender.example; q=dns/txt; s=s2024;
+ t=1792164539; h=from : to : subject : date : message-id : reply-to;
+ bh=Ei1egdw0HfO5Mrq/XsC8VOYw3gWcbNPc4vko0tA3BsU=;
+ b=fA8ltLM95ayxCuTL8BQk2c95Nd670TASpVhGfnkHE3Vd6M4FokTVSDcRgfhJOafTkZ2/V
+ cl1YWmrHlA/uozM2V9YRF5wKkIGgKq4MFW6Wkjj3TD65U9T7oLVNykvWwrO2BuVRL3iSW1y
+ 6Sd4uLQukpO4JB1c8fsOdgwF1kdUG6w=
+Authentication-Results: relay.bulk-sender.example; spf=pass smtp.mailfrom=bulk-sender.example
+Return-Path: <bounce-7731@mailer.bulk-sender.example>
+Received-SPF: Softfail (protection.outlook.com: domain of transitioning
+ mailer.bulk-sender.example discourages use of 203.0.113.45 as permitted
+ sender) receiver=protection.outlook.com; client-ip=203.0.113.45;
+ helo=mx1.bulk-sender.example;
+ envelope-from=bounce-7731@mailer.bulk-sender.example
+From: PayPal Billing <service@PayPal.example>
+Reply-To: PayPal Support <support-desk@secure-verify.example>
+To: victim@contoso.example
+Subject: Action required: account limited
+Date: Wed, 02 Oct 2024 09:00:00 +0000
+Message-ID: <auth.1001@mailer.bulk-sender.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Please verify your account.

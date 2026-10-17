@@ -1,0 +1,16 @@
+{
+ "encoding": "raw",
+ "decoy": true,
+ "expected_offset": 96,
+ "expected_config": {
+  "c2": "192.0.2.44:80",
+  "campaign": "native",
+  "sleep": 5,
+  "flag": "flag{n0t_bpf}"
+ },
+ "expected_bpf_fields": "none",
+ "generator_cmd": "bash ebpf_gen.sh ebpf_decoy_x86.bin x86 '{\"c2\":\"192.0.2.44:80\",\"campaign\":\"native\",\"sleep\":5,\"flag\":\"flag{n0t_bpf}\"}' 0",
+ "oracle_cmd": "bash ebpf_oracle.sh ebpf_decoy_x86.bin   # file -b, GNU readelf -h (Type/Machine/Entry), readelf -SW (exec PROGBITS != .text = programs; section list), readelf -p license, readelf -sW (OBJECT syms in .maps/maps), grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "ELF 64-bit LSB relocatable, x86-64 | Machine: Advanced Micro Devices X86-64 (not EM_BPF: bpf_fields -> None) | blob@96 valid (hcfg_scan still finds it)",
+ "note": "machine 'Linux BPF' = GNU readelf Machine: spelling (e_machine 247); field names programs/program_types/maps/license/hcfg_section are SPECULATIVE (GM vocabulary for BPF not seen); expected_offset = FILE offset of the 'H' (OFFSET LAW raw, = hcfg_scan)"
+}

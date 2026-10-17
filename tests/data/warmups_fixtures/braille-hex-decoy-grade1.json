@@ -1,0 +1,10 @@
+{
+ "codec": "braille(hex)",
+ "plain": null,
+ "encoded": "⠠⠝⠊⠉⠑ ⠺⠕⠗⠅ ⠙⠑⠉⠕⠙⠊⠝⠛ ⠞⠓⠊⠎ ⠺⠁⠗⠍⠥⠏⠖ ⠠⠞⠕ ⠎⠕⠇⠧⠑⠂ ⠎⠥⠃⠍⠊⠞ ⠞⠓⠊⠎ ⠑⠭⠁⠉⠞ ⠁⠝⠎⠺⠑⠗ ⠞⠕ ⠞⠓⠑ ⠠⠛⠁⠍⠑ ⠠⠍⠁⠎⠞⠑⠗⠒ ⠁⠍⠃⠑⠗⠤⠋⠁⠇⠉⠕⠝⠤⠼⠙⠃",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "copied from braille-amber.json: pybraille Grade 1 of the plain sentence (letters k-z, punctuation -- no hex layer)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/braille_cyberchef.mjs dec  # CyberChef From Braille -> ,NICE WORK ... = English, not hex pairs -> none",
+ "oracle_plain": null
+}

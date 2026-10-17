@@ -1,0 +1,8 @@
+{
+ "field": "email.received_hops",
+ "expected": "2",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/email/GENERATOR_stdlib_emailmessage_alias.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP) -> remit.eml",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/email/ORACLE_eml_parser_alias.py.txt tools/pylib-eml <file>  (eml_parser 4.2.1 EmlParser.decode_email_bytes) -> len(header.received)",
+ "decoy": false,
+ "member": "evidence-01/remit.eml"
+}

@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=r|role=exfiltrator|verdict=malicious|attack=T1041|adapter=http_post|host_profile=standalone|obfuscation_profile=nomark|stage_profile=two_stage_download_execute|next_language=python|stage_count=2|steps=read_table,post_remote|campaign_id=R-59716949|url=https://r-59716949dd.example.invalid/stage|file_path=/tmp/huntress-r/.dda5ef319845a0b7.stage",
+ "decoy": false,
+ "host": "r",
+ "tag": null,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> base64, descriptor literal only, no HUNTRESS_ANALYSIS marker)",
+ "oracle_cmd": "sed -n 's/^descriptor_fcf7b2b4 <- \"\\(.*\\)\"$/\\1/p' tests/data/script_fixtures/v3h_r_nomark.R | tr -d ' \\n\\r' | base64 -d"
+}

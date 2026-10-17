@@ -1,0 +1,93 @@
+{
+ "format": "zip of a same-source build pair",
+ "members": [
+  "d17--variant-000-pie.elf",
+  "d17--variant-001-no-pie.elf"
+ ],
+ "expected_sha256": [
+  "695c0941194bfba09d163774dee5e1ea5f8b93d279aa84e23efeb213d546aa47",
+  "6e8489c16e6431508cfc938b13ebf591c926d3ec27eca7c1c05eb9e6d3cc061b"
+ ],
+ "routes": {
+  "pie_elf_type": {
+   "member": "d17--variant-000-pie.elf",
+   "value": "none"
+  },
+  "pie_entry_point": {
+   "member": "d17--variant-000-pie.elf",
+   "value": "none"
+  },
+  "pie_has_symtab": {
+   "member": "d17--variant-000-pie.elf",
+   "value": "none"
+  },
+  "pie_section_names": {
+   "member": "d17--variant-000-pie.elf",
+   "value": "none"
+  },
+  "pie_imports": {
+   "member": "d17--variant-000-pie.elf",
+   "value": "none"
+  },
+  "pie_has_interp": {
+   "member": "d17--variant-000-pie.elf",
+   "value": "none"
+  },
+  "pie_has_debug_info": {
+   "member": "d17--variant-000-pie.elf",
+   "value": "none"
+  },
+  "pie_is_packed": {
+   "member": "d17--variant-000-pie.elf",
+   "value": "none"
+  },
+  "pie_needed": {
+   "member": "d17--variant-000-pie.elf",
+   "value": "none"
+  },
+  "no_pie_elf_type": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "none"
+  },
+  "no_pie_entry_point": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "none"
+  },
+  "no_pie_has_symtab": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "none"
+  },
+  "no_pie_section_names": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "none"
+  },
+  "no_pie_imports": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "none"
+  },
+  "no_pie_has_interp": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "none"
+  },
+  "no_pie_has_debug_info": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "none"
+  },
+  "no_pie_is_packed": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "none"
+  },
+  "no_pie_needed": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "none"
+  },
+  "entry_point": null,
+  "config_domain": null,
+  "elf_type": null,
+  "has_symtab": null
+ },
+ "generator_cmd": "bash pair_gen.sh   # gcc -O0/-O2/-Os/-static -nostdlib/-pie/-no-pie/-g, strip, upx -9, zip -X -j",
+ "oracle_cmd": "bash pair_oracle.sh pair_decoy.bin   # unzip -Z1 + sha256sum, readelf -hW/-SW/-lW/--dyn-syms/-dW, upx -t",
+ "decoy": true,
+ "decoy_why": "tagged names but a 40-byte truncated ELF and a text file: routed, every fact \"none\"; untagged fields do not route"
+}

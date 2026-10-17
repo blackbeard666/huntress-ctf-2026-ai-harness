@@ -1,0 +1,9 @@
+{
+ "expected_plain": "v=3|language=reg_utf16|role=persistence|verdict=malicious|attack=T1547.001|adapter=run_key|host_profile=standalone|obfuscation_profile=frag|stage_profile=two_stage_download_execute|next_language=powershell|stage_count=2|steps=write_run_key,launch_at_logon|campaign_id=REG-863d0539|url=https://reg-863d053924.example.invalid/stage|file_path=/tmp/huntress-reg/.248de370922fdaad.stage",
+ "decoy": false,
+ "host": "reg",
+ "tag": "FRAG",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> FRAG: stdlib base64/bytes.hex; reg template, UTF-16LE+BOM)",
+ "oracle_cmd": "iconv -f UTF-16LE -t UTF-8 tests/data/script_fixtures/v3h_reg_frag.reg | grep -o 'HUNTRESS_ANALYSIS_V1:FRAG-[^ \"<]*' | head -1 | cut -d- -f2- | tr -d '\\r' | tr -d . | xxd -r -p",
+ "note": "lib.codec find_codecs reads it (UTF-16 normalize); the carried D16 solve.py does NOT: its V3_MARK runs on the raw UTF-16LE bytes, so is_v3 stays False -- decode a BOM'd/NUL-interleaved member to text before V3_MARK.search"
+}

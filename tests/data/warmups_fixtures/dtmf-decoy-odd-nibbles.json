@@ -1,0 +1,10 @@
+{
+ "codec": "dtmf",
+ "plain": null,
+ "encoded": "697+1209 770+1209 697+1336 852+1209 941+1209 770+1477 697+1477 941+1477 697+1633",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written 9 valid DTMF pairs (odd symbol count: 1 4 2 7 * 6 3 # A)",
+ "oracle_cmd": "printf %s \"$encoded\" | awk '{print NF\" symbols\"}'  # 9 symbols -> no whole hex bytes, digits mix A-D*# -> no decimal layer",
+ "oracle_plain": null
+}

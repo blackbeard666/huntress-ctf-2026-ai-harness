@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=1|language=lua|role=downloader|attack=T1105|steps=fetch,load,run|campaign_id=LU-d2f0a9c6|url=https://lu-d2f0a9c6.example.invalid/m",
+ "decoy": false,
+ "generator_cmd": "sh tests/data/script_fixtures/tpl_gen.sh  (written by the language's own interpreter: lua5.4: \\ddd decimal escapes, xor 0x5a)",
+ "oracle_cmd": "cd tests/data/script_fixtures && lua5.4 -e 'dofile(\"lua_tpl_decimal_esc.lua\"); local t={} for i=1,#Material_lud2 do t[#t+1]=string.char(Material_lud2:byte(i) ~ 0x5a) end io.write(table.concat(t))'"
+}

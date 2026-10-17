@@ -1,0 +1,8 @@
+{
+ "field": "email.attachment_declared_vs_magic_mismatch",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/email/GENERATOR_stdlib_mime_attachments.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP; scan_rfc2047 = hand-written raw bytes; decoy = Pillow PNG) -> decoy_png_renamed.eml",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/email/ORACLE_eml_parser_mime.py.txt tools/pylib-eml <file>  (eml_parser 4.2.1 EmlParser(include_attachment_data, include_raw_body).decode_email_bytes + raw boundary-delimiter scan) -> no RFC 5322 header, no attachment, no boundary; `file` -> PNG image data (renamed impostor)",
+ "decoy": true,
+ "member": "evidence-01/decoy_png_renamed.eml"
+}

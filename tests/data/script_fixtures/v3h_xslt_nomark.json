@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=xslt_msxsl|role=loader|verdict=malicious|attack=T1220|adapter=msxsl_script|host_profile=standalone|obfuscation_profile=nomark|stage_profile=two_stage_download_execute|next_language=jscript|stage_count=2|steps=load_stylesheet,run_script|campaign_id=XSL-8692e4f2|url=https://xslt-8692e4f2b6.example.invalid/stage|file_path=/tmp/huntress-xslt/.b6ed68242d551d4d.stage",
+ "decoy": false,
+ "host": "xslt",
+ "tag": null,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> base64, descriptor literal only, no HUNTRESS_ANALYSIS marker)",
+ "oracle_cmd": "python3 -I -c \"import sys, xml.etree.ElementTree as E; print(E.parse(sys.argv[1]).find('{urn:schemas-microsoft-com:xslt}script').text)\" tests/data/script_fixtures/v3h_xslt_nomark.xsl | sed -n 's/.*descriptor_da4c59fe = \"\\(.*\\)\";/\\1/p' | tr -d ' \\n\\r' | base64 -d"
+}

@@ -1,0 +1,23 @@
+From: Huntress Analyst <analyst@example.test>
+To: Arena Player <player@example.test>
+Date: Thu, 01 Oct 2026 09:00:00 +0000
+Subject: Evidence package a13d4ebca69c
+Message-ID: <artifact-assembly-line@example.test>
+X-Huntress-Correlation: a13d4ebca69c
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="huntress-a13d4ebca69c"
+
+--huntress-a13d4ebca69c
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+Review the attached evidence note.
+Correlation token: a13d4ebca69c
+--huntress-a13d4ebca69c
+Content-Type: text/plain
+Content-Disposition: attachment; filename="evidence-note.txt"
+Content-Transfer-Encoding: base64
+
+QXJ0aWZhY3QgQXNzZW1ibHkgTGluZSBldmlkZW5jZQpDb3JyZWxhdGlvbiB0b2tlbjogYTEzZDRl
+YmNhNjljCg==
+--huntress-a13d4ebca69c--

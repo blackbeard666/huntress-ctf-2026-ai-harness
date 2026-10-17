@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "printf 'MsgBox \"Hello from VBScript.Encode\"\\r\\nDim x : x = 1 + 2\\r\\n' | .venv/bin/wshenc -R > wsh_decoy_benign.vbe",
+ "oracle_cmd": ".venv/bin/wshenc < wsh_decoy_benign.vbe  # benign MsgBox, no Codec_/Material_/descriptor: no plan"
+}

@@ -1,0 +1,245 @@
+{
+ "format": "zip of a same-source build pair",
+ "members": [
+  "d17--variant-000-pie.elf",
+  "d17--variant-001-no-pie.elf"
+ ],
+ "expected_sha256": [
+  "556c5d38d48c2c7f3e4b799c2621f796eb711a05ebb414e7aaa3dc735166872d",
+  "c2b3612ed3add661f033cd4596ca2d044da8c6765dfdd881c04e494f1efdb812"
+ ],
+ "routes": {
+  "pie_elf_type": {
+   "member": "d17--variant-000-pie.elf",
+   "value": "ET_DYN"
+  },
+  "pie_entry_point": {
+   "member": "d17--variant-000-pie.elf",
+   "value": "0x10e0"
+  },
+  "pie_has_symtab": {
+   "member": "d17--variant-000-pie.elf",
+   "value": "true"
+  },
+  "pie_section_names": {
+   "member": "d17--variant-000-pie.elf",
+   "value": [
+    "",
+    ".note.gnu.build-id",
+    ".interp",
+    ".gnu.hash",
+    ".dynsym",
+    ".dynstr",
+    ".gnu.version",
+    ".gnu.version_r",
+    ".rela.dyn",
+    ".rela.plt",
+    ".init",
+    ".plt",
+    ".plt.got",
+    ".plt.sec",
+    ".text",
+    ".fini",
+    ".rodata",
+    ".hcfg",
+    ".eh_frame_hdr",
+    ".eh_frame",
+    ".note.gnu.property",
+    ".note.ABI-tag",
+    ".init_array",
+    ".fini_array",
+    ".dynamic",
+    ".got",
+    ".data",
+    ".bss",
+    ".comment",
+    ".symtab",
+    ".strtab",
+    ".shstrtab"
+   ]
+  },
+  "pie_imports": {
+   "member": "d17--variant-000-pie.elf",
+   "value": [
+    "__libc_start_main",
+    "_ITM_deregisterTMCloneTable",
+    "__gmon_start__",
+    "__printf_chk",
+    "_ITM_registerTMCloneTable",
+    "__cxa_finalize"
+   ]
+  },
+  "pie_has_interp": {
+   "member": "d17--variant-000-pie.elf",
+   "value": "true"
+  },
+  "pie_has_debug_info": {
+   "member": "d17--variant-000-pie.elf",
+   "value": "false"
+  },
+  "pie_is_packed": {
+   "member": "d17--variant-000-pie.elf",
+   "value": "false"
+  },
+  "pie_needed": {
+   "member": "d17--variant-000-pie.elf",
+   "value": [
+    "libc.so.6"
+   ]
+  },
+  "no_pie_elf_type": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "ET_EXEC"
+  },
+  "no_pie_entry_point": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "0x4010d0"
+  },
+  "no_pie_has_symtab": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "true"
+  },
+  "no_pie_section_names": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": [
+    "",
+    ".note.gnu.build-id",
+    ".interp",
+    ".gnu.hash",
+    ".dynsym",
+    ".dynstr",
+    ".gnu.version",
+    ".gnu.version_r",
+    ".rela.dyn",
+    ".rela.plt",
+    ".init",
+    ".plt",
+    ".plt.sec",
+    ".text",
+    ".fini",
+    ".rodata",
+    ".hcfg",
+    ".eh_frame_hdr",
+    ".eh_frame",
+    ".note.gnu.property",
+    ".note.ABI-tag",
+    ".init_array",
+    ".fini_array",
+    ".dynamic",
+    ".got",
+    ".got.plt",
+    ".data",
+    ".bss",
+    ".comment",
+    ".symtab",
+    ".strtab",
+    ".shstrtab"
+   ]
+  },
+  "no_pie_imports": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": [
+    "__libc_start_main",
+    "__gmon_start__",
+    "__printf_chk"
+   ]
+  },
+  "no_pie_has_interp": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "true"
+  },
+  "no_pie_has_debug_info": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "false"
+  },
+  "no_pie_is_packed": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "false"
+  },
+  "no_pie_needed": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": [
+    "libc.so.6"
+   ]
+  },
+  "nopie_elf_type": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "ET_EXEC"
+  },
+  "nopie_entry_point": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "0x4010d0"
+  },
+  "nopie_has_symtab": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "true"
+  },
+  "nopie_section_names": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": [
+    "",
+    ".note.gnu.build-id",
+    ".interp",
+    ".gnu.hash",
+    ".dynsym",
+    ".dynstr",
+    ".gnu.version",
+    ".gnu.version_r",
+    ".rela.dyn",
+    ".rela.plt",
+    ".init",
+    ".plt",
+    ".plt.sec",
+    ".text",
+    ".fini",
+    ".rodata",
+    ".hcfg",
+    ".eh_frame_hdr",
+    ".eh_frame",
+    ".note.gnu.property",
+    ".note.ABI-tag",
+    ".init_array",
+    ".fini_array",
+    ".dynamic",
+    ".got",
+    ".got.plt",
+    ".data",
+    ".bss",
+    ".comment",
+    ".symtab",
+    ".strtab",
+    ".shstrtab"
+   ]
+  },
+  "nopie_imports": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": [
+    "__libc_start_main",
+    "__gmon_start__",
+    "__printf_chk"
+   ]
+  },
+  "nopie_has_interp": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "true"
+  },
+  "nopie_has_debug_info": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "false"
+  },
+  "nopie_is_packed": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": "false"
+  },
+  "nopie_needed": {
+   "member": "d17--variant-001-no-pie.elf",
+   "value": [
+    "libc.so.6"
+   ]
+  }
+ },
+ "generator_cmd": "bash pair_gen.sh   # gcc -O0/-O2/-Os/-static -nostdlib/-pie/-no-pie/-g, strip, upx -9, zip -X -j",
+ "oracle_cmd": "bash pair_oracle.sh pair_pie_nopie.bin   # unzip -Z1 + sha256sum, readelf -hW/-SW/-lW/--dyn-syms/-dW, upx -t",
+ "decoy": false,
+ "note": "`pie` must not match the `no-pie` member; `no_pie` == name tokens no,pie"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "webview_asset_scan",
+ "expected": "ANS-3f9a1c7e05b2d684",
+ "generator_cmd": "tests/data/android_fixtures/gen_webview_assets.sh tests/data/android_fixtures  # printf/base64/perl write the asset, zip -qX -r <name>.apk assets; Cordova assets/www/js/app.js: atob(\"QU5TLTNm\" + \"\\x4f..\" + 'MDViMmQ2ODQ=') -- coreutils base64 of the token split in 3 literals, middle one as \\x escapes",
+ "oracle_cmd": "unzip -p webview_cordova_atob_concat.apk assets/www/js/app.js | node -e 'const vm=require(\"vm\");let s=require(\"fs\").readFileSync(0,\"utf8\").replace(/^export /mg,\"\");const c={atob,document:{addEventListener:(e,f)=>f(),getElementById:()=>({})},window:{}};vm.runInNewContext(s+\";globalThis.__s=typeof secret!=\\\"undefined\\\"?secret:window.secret\",c);console.log(c.__s)'  # -> ANS-3f9a1c7e05b2d684",
+ "decoy": false
+}

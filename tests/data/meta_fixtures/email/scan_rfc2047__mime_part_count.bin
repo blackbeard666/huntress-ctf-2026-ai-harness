@@ -1,0 +1,22 @@
+From: "Scanner" <scan@printer.example>
+To: lee.ortiz@victim.example
+Subject: Scan
+Date: Thu, 15 Oct 2026 11:00:00 +0000
+Message-ID: <scan.1015@printer.example>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="b1_scan"
+
+preamble
+--b1_scan
+Content-Type: text/plain; charset=us-ascii
+
+Scanned document attached.
+--b1_scan
+Content-Type: image/png; name="=?UTF-8?B?U2Nhbl/DqXTDqS5wbmc=?="
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment
+
+UEsDBBQAAAAAADS5UF0YAS6eEwAAABMAAAAKAAAAcmVhZG1lLnR4dGhlbGxvIGZyb20gdGhlIHpp
+cApQSwECFAMUAAAAAAA0uVBdGAEunhMAAAATAAAACgAAAAAAAAAAAAAAgAEAAAAAcmVhZG1lLnR4
+dFBLBQYAAAAAAQABADgAAAA7AAAAAAA=
+--b1_scan--

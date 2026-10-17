@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=1|language=perl|role=exfil|attack=T1041|steps=collect,encode,post|campaign_id=PL-91fe33a0|url=https://pl-91fe33a0.example.invalid/up",
+ "decoy": false,
+ "generator_cmd": "sh tests/data/script_fixtures/tpl_gen.sh  (written by the language's own interpreter: perl: pack('C*', qw(decimal)), repeating xor 1f2e3d)",
+ "oracle_cmd": "cd tests/data/script_fixtures && perl -e 'do \"./pl_tpl_pack_c.pl\"; my @k=(0x1f,0x2e,0x3d); my $i=0; print pack(\"C*\", map { $_ ^ $k[$i++ % 3] } unpack(\"C*\", $main::Material_pl91))'"
+}

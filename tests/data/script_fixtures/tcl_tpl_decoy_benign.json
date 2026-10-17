@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "sh tests/data/script_fixtures/tpl_gen.sh  (written by the language's own interpreter: tclsh: DECOY [binary decode base64 ..] of a benign xor_5a'd config line, no plan)",
+ "oracle_cmd": "tclsh <(echo 'source tests/data/script_fixtures/tcl_tpl_decoy_benign.tcl; binary scan $Material_tcd0 cu* bs; set o {}; foreach b $bs {append o [format %c [expr {$b ^ 0x5a}]]}; puts -nonewline $o')  -> 'mode=quiet|retries=3|log=/var/log/updater.log' (no plan)"
+}

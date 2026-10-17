@@ -1,0 +1,19 @@
+{
+ "encoding": "raw",
+ "expected_format": "wasm",
+ "expected_machine": "wasm32",
+ "expected_offset": 59,
+ "expected_mem_offset": "none",
+ "expected_has_hcfg_section": true,
+ "expected_storage": "custom",
+ "expected_config": {
+  "c2": "198.51.100.61:8443",
+  "campaign": "saltmarsh",
+  "sleep": 30,
+  "flag": "flag{cust0m_s3ct10n}"
+ },
+ "generator_cmd": "bash wasmhid_gen.sh wasmhid_custom.bin custom '{\"c2\":\"198.51.100.61:8443\",\"campaign\":\"saltmarsh\",\"sleep\":30,\"flag\":\"flag{cust0m_s3ct10n}\"}' 0x21",
+ "oracle_cmd": "bash wasmhid_oracle.sh wasmhid_custom.bin   # wasm-validate, wasm-objdump -x (custom names, Data init + hexdump) / -d (i32.const..i32.store, memory.init) -> perl linear-memory image, grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "valid | hcfg, | none | 59 | HCFG 1 33 91 1313635300 1313635300 | {\"c2\":\"198.51.100.61:8443\",\"campaign\":\"saltmarsh\",\"sleep\":30,\"flag\":\"flag{cust0m_s3ct10n}\"}",
+ "note": "SPECULATIVE encoding/storage names; blob raw in a custom section named hcfg (@custom annotation): has_hcfg_section true, no linear address"
+}

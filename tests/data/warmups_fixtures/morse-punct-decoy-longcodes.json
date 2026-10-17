@@ -1,0 +1,10 @@
+{
+ "codec": "morse-punct",
+ "plain": null,
+ "encoded": "-.-.-.-.-.-.-. .-.-.-.-.-.-.-.- / --------",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s '-.-.-.-.-.-.-. .-.-.-.-.-.-.-.- / --------'  # hand-made dot/dash groups longer than any ITU code (max 6 symbols with punctuation)",
+ "oracle_cmd": "printf %s \"$encoded\" | sed 's# / #/#g' | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs dec 'Space' 'Forward slash'  # CyberChef 'From Morse Code' -> ' ' (only the word gap; no group is a valid code)",
+ "oracle_plain": " "
+}

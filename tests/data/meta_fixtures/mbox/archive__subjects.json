@@ -1,0 +1,8 @@
+{
+ "field": "mbox.subjects",
+ "expected": "[\"Invoice 4471 overdue\",\"Re: Invoice 4471 overdue\",\"Q3 payroll export\",\"Re: Re: Invoice 4471 overdue\",\"Re: Invoice 4471 overdue\",\"VPN token réset\",\"Re: Q3 payroll export\",\"Re: Wire instructions changed\"]",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/mbox/GENERATOR_stdlib_mailbox_mbox.py.txt <outdir>  (stdlib mailbox.mbox writer + email.message.EmailMessage) -> archive.mbox",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/mbox/ORACLE_stdlib_mailbox_networkx.py.txt <file>  (stdlib mailbox.mbox reader, policy.default + networkx 3.1 weakly_connected_components + Counter) -> subjects",
+ "decoy": false,
+ "member": "export/archive.mbox"
+}

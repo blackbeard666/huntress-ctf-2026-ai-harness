@@ -1,0 +1,19 @@
+{
+ "encoding": "wasm-split-raw",
+ "expected_format": "wasm",
+ "expected_machine": "wasm32",
+ "expected_offset": 143,
+ "expected_mem_offset": 2048,
+ "expected_has_hcfg_section": false,
+ "expected_storage": "split",
+ "expected_config": {
+  "c2": "192.0.2.150:8080",
+  "campaign": "riptide",
+  "sleep": 40,
+  "flag": "flag{spl1t_s3gm3nts}"
+ },
+ "generator_cmd": "bash wasmhid_gen.sh wasmhid_split.bin split '{\"c2\":\"192.0.2.150:8080\",\"campaign\":\"riptide\",\"sleep\":40,\"flag\":\"flag{spl1t_s3gm3nts}\"}' 0x5a",
+ "oracle_cmd": "bash wasmhid_oracle.sh wasmhid_split.bin   # wasm-validate, wasm-objdump -x (custom names, Data init + hexdump) / -d (i32.const..i32.store, memory.init) -> perl linear-memory image, grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "valid | none | 2048 | 143 | HCFG 1 90 87 534934513 534934513 | {\"c2\":\"192.0.2.150:8080\",\"campaign\":\"riptide\",\"sleep\":40,\"flag\":\"flag{spl1t_s3gm3nts}\"}",
+ "note": "SPECULATIVE encoding/storage names; blob cut 21 bytes in over two ADJACENT active segments (2048 | 2069), tail segment first in the file: raw anchor crc fails, linear-memory reassembly is valid; offset = file 'H' (segment 2)"
+}

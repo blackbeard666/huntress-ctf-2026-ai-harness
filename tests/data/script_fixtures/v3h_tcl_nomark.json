@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=tcl|role=downloader|verdict=malicious|attack=T1105|adapter=http_get|host_profile=standalone|obfuscation_profile=nomark|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=fetch_stage,write_stage|campaign_id=TCL-9c3d2163|url=https://tcl-9c3d216393.example.invalid/stage|file_path=/tmp/huntress-tcl/.932e628fe176d75c.stage",
+ "decoy": false,
+ "host": "tcl",
+ "tag": null,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> base64, descriptor literal only, no HUNTRESS_ANALYSIS marker)",
+ "oracle_cmd": "tclsh <(cat tests/data/script_fixtures/v3h_tcl_nomark.tcl; echo 'puts -nonewline $descriptor_229eb428') | tr -d ' \\n\\r' | base64 -d"
+}

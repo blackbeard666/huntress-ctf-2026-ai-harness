@@ -1,0 +1,8 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "xslt",
+ "tag": null,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (benign text -> base64 descriptor, no marker, no v= plan)",
+ "oracle_cmd": "python3 -I -c \"import sys, xml.etree.ElementTree as E; print(E.parse(sys.argv[1]).find('{urn:schemas-microsoft-com:xslt}script').text)\" tests/data/script_fixtures/v3h_xslt_decoy.xsl | sed -n 's/.*descriptor_d154b746 = \"\\(.*\\)\";/\\1/p' | tr -d ' \\n\\r' | base64 -d   # -> benign text, not a v=3 plan"
+}

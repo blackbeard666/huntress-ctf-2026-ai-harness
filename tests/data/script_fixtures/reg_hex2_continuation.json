@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=reg|role=persistence|verdict=malicious|attack=T1547.001|adapter=run_key_expand|stage_count=2|steps=write_expand_sz,launch_on_logon|campaign_id=REG-c0de7701|url=https://reg-c0de7701.example.invalid/k",
+ "decoy": false,
+ "generator_cmd": "python3 -I reg_inf_gen.py <outdir>  (stdlib writer: gzip/base64/utf-16-le/comma-hex with regedit ',\\\\' wrapping; `file` reports 'Windows Registry little-endian text' / 'Windows setup INFormation') -- descriptor_c0de7701 = hex(2) of UTF-16LE(base64(gzip(plan)))",
+ "oracle_cmd": "iconv -f UTF-16LE -t UTF-8 reg_hex2_continuation.reg | tr -d '\\r' | sed -n '/descriptor_c0de7701/,/^$/p' | sed 's/.*hex(2)://' | tr -d ',\\\\ \\n' | xxd -r -p | iconv -f UTF-16LE -t UTF-8 | tr -d '\\0' | base64 -d | gunzip"
+}

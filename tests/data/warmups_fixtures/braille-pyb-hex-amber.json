@@ -1,0 +1,10 @@
+{
+ "codec": "braille-pyb(hex)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "⠼⠙⠑⠼⠋⠊⠋⠉⠋⠑⠃⠚⠛⠛⠋⠋⠼⠛⠃⠋⠃⠼⠃⠚⠋⠙⠋⠑⠋⠉⠋⠋⠼⠋⠙⠋⠊⠋⠑⠼⠋⠛⠃⠚⠛⠙⠋⠓⠋⠊⠛⠉⠃⠚⠛⠛⠋⠁⠛⠃⠋⠙⠼⠛⠑⠛⠚⠃⠁⠃⠚⠑⠙⠋⠋⠼⠃⠚⠛⠉⠋⠋⠼⠋⠉⠼⠛⠋⠋⠑⠃⠉⠼⠃⠚⠛⠉⠛⠑⠋⠃⠋⠙⠼⠋⠊⠛⠙⠃⠚⠛⠙⠋⠓⠋⠊⠛⠉⠃⠚⠋⠑⠛⠓⠋⠁⠋⠉⠛⠙⠃⠚⠋⠁⠋⠑⠼⠛⠉⠛⠛⠋⠑⠛⠃⠃⠚⠛⠙⠋⠋⠼⠃⠚⠛⠙⠋⠓⠋⠑⠃⠚⠙⠛⠋⠁⠋⠙⠼⠋⠑⠃⠚⠙⠙⠼⠋⠁⠛⠉⠛⠙⠋⠑⠛⠃⠉⠁⠼⠃⠚⠋⠁⠋⠙⠼⠋⠃⠋⠑⠛⠃⠃⠙⠼⠋⠋⠋⠁⠋⠉⠼⠋⠉⠋⠋⠼⠋⠑⠼⠃⠙⠼⠉⠙⠉⠃",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c0 | python3 -c 'import sys;sys.path.insert(0,\"tools/pybraille\");from pybraille import convertText;print(convertText(sys.stdin.read().strip()),end=\"\")'  # pybraille 1.0.0 convertText over lowercase hex: ⠼ re-sent per digit run, no letter sign (a-f after a digit is unmarked)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/braille_cyberchef.mjs dec  # CyberChef From Braille shows the run structure (#DE#FIFC...); the reading is ambiguous by construction (⠼⠙⠑ = 45|4e), so the oracle is the preimage check: printf %s \"$plain\" | xxd -p -c0 | python3 -c 'import sys;sys.path.insert(0,\"tools/pybraille\");from pybraille import convertText;print(convertText(sys.stdin.read().strip()),end=\"\")' == \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match",
+ "note": "lossy encoding: lib resolves the digit/letter switch inside each ⠼ run by a beam over printable bytes + bigram + English/slug word bonus (60/60 random vocab slugs)"
+}

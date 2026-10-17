@@ -1,0 +1,9 @@
+{
+ "codec": "dtmf-keys(hex-mt8870)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-kestrel-17",
+ "encoded": "4B 69 63 65 2D 77 6C 72 6* 2D 64 65 63 6C 64 69 6B 67 2D 74 68 69 73 2D 77 61 72 6A 75 7D 21 2D 54 6C 2D 73 6C 6# 76 65 2# 2D 73 75 62 6A 69 74 2D 74 68 69 73 2D 65 78 61 63 74 2D 61 6B 73 77 65 72 2D 74 6C 2D 74 68 65 2D 47 61 6A 65 2D 4A 61 73 74 65 72 30 2D 63 6C 62 61 6# 74 2A 6* 65 73 74 72 65 6# 2A 31 37",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c0 | tr '0123456789abcdef' 'D1234567890*#ABC' | sed 's/../& /g;s/ $//'  # coreutils tr: nibble -> MT8870/HT9170 decoder code (D=0, 0=10, *=11, #=12, A-C=13-15)",
+ "oracle_cmd": "printf %s \"$encoded\" | tr -d ' ' | tr 'D1234567890*#ABC' '0123456789abcdef' | xxd -r -p  # coreutils tr inverse table + xxd -r -p",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-kestrel-17",
+ "expected": "match"
+}

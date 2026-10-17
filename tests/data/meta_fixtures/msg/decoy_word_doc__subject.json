@@ -1,0 +1,8 @@
+{
+ "field": "msg.subject",
+ "expected": "none",
+ "generator_cmd": "cp tests/data/meta_fixtures/ole/word_doc__stream_names.bin (a Word .doc CFB, renamed .msg)",
+ "oracle_cmd": "file -b tests/data/meta_fixtures/msg/decoy_word_doc__subject.bin -> 'Composite Document File V2 Document ... Microsoft Office Word' (not Outlook Message); olefile listdir has no __substg1.0_* stream; extract_msg.openMsg raises StandardViolationError",
+ "decoy": true,
+ "member": "mail.msg"
+}

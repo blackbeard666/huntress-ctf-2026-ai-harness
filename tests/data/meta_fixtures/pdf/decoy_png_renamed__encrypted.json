@@ -1,0 +1,8 @@
+{
+ "field": "pdf.encrypted",
+ "expected": "none",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import Image; Image.new('RGB',(30,30),(1,2,3)).save('fake.png')\" && cp fake.png decoy_png_renamed.pdf",
+ "oracle_cmd": "file -b decoy_png_renamed.pdf -> PNG image data (not a PDF)",
+ "decoy": true,
+ "member": "decoy_png_renamed.pdf"
+}

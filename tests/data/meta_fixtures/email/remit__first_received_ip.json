@@ -1,0 +1,8 @@
+{
+ "field": "email.first_received_ip",
+ "expected": "198.18.4.61",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/email/GENERATOR_stdlib_emailmessage_alias.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP) -> remit.eml",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/email/ORACLE_eml_parser_alias.py.txt tools/pylib-eml <file>  (eml_parser 4.2.1 EmlParser.decode_email_bytes) -> header.received[-1].from = ['pool-198-18-4-61.isp.example','198.18.4.61']",
+ "decoy": false,
+ "member": "evidence-01/remit.eml"
+}

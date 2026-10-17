@@ -1,0 +1,8 @@
+{
+ "field": "tnef.message_class",
+ "expected": "IPM.Microsoft Mail.Note",
+ "generator_cmd": "tnefparse-1.4.0 sdist tests/examples/long-filename.tnef (real Outlook winmail.dat; pip download --no-binary :all: tnefparse==1.4.0), copied verbatim",
+ "oracle_cmd": "python3 -I -c \"import tnefparse,json;t=tnefparse.TNEF(open('tests/data/meta_fixtures/tnef/outlook_long_filename__message_class.bin','rb').read());print([a.data for a in t.msgprops if a.name==0x8008][0])\"  (tnefparse 1.4.0 reader); file -b -> MessageAttribute \"...\"",
+ "decoy": false,
+ "member": "winmail.dat"
+}

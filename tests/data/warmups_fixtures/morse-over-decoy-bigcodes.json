@@ -1,0 +1,10 @@
+{
+ "codec": "morse-layer",
+ "plain": null,
+ "encoded": "----. ---.. --.../-.... ..... ....-/...-- ..--- .----/----. ----. ----./---.. ---.. ---..",
+ "generator_cmd": "printf %s '987 654 321 999 888' | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs enc '-/.' 'Space' 'Forward slash'  # Morse of numbers > 255: no byte codes",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs dec 'Space' 'Forward slash' | python3 -I -c \"import sys;print(all(int(x)<256 for x in sys.stdin.read().split()))\"  # False: not decimal/octal char codes",
+ "oracle_plain": "False",
+ "decoy": true,
+ "expected": "none"
+}

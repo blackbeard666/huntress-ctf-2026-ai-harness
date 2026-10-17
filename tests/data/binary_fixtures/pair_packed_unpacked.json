@@ -1,0 +1,101 @@
+{
+ "format": "zip of a same-source build pair",
+ "members": [
+  "d17--variant-000-packed.elf",
+  "d17--variant-001-unpacked.elf"
+ ],
+ "expected_sha256": [
+  "efd9d1a1aca831431c8f8bb9dd42ea4ad73b979cd6035d9107c8d30d6f6f2e24",
+  "922616a97113e6fff1f4ac3a552fdc4b5705340807cbc12f2dbdbb70a50e871e"
+ ],
+ "routes": {
+  "packed_elf_type": {
+   "member": "d17--variant-000-packed.elf",
+   "value": "ET_EXEC"
+  },
+  "packed_entry_point": {
+   "member": "d17--variant-000-packed.elf",
+   "value": "0x4112e8"
+  },
+  "packed_has_symtab": {
+   "member": "d17--variant-000-packed.elf",
+   "value": "false"
+  },
+  "packed_section_names": {
+   "member": "d17--variant-000-packed.elf",
+   "value": []
+  },
+  "packed_imports": {
+   "member": "d17--variant-000-packed.elf",
+   "value": []
+  },
+  "packed_has_interp": {
+   "member": "d17--variant-000-packed.elf",
+   "value": "false"
+  },
+  "packed_has_debug_info": {
+   "member": "d17--variant-000-packed.elf",
+   "value": "false"
+  },
+  "packed_is_packed": {
+   "member": "d17--variant-000-packed.elf",
+   "value": "true"
+  },
+  "packed_needed": {
+   "member": "d17--variant-000-packed.elf",
+   "value": []
+  },
+  "unpacked_elf_type": {
+   "member": "d17--variant-001-unpacked.elf",
+   "value": "ET_EXEC"
+  },
+  "unpacked_entry_point": {
+   "member": "d17--variant-001-unpacked.elf",
+   "value": "0x401000"
+  },
+  "unpacked_has_symtab": {
+   "member": "d17--variant-001-unpacked.elf",
+   "value": "true"
+  },
+  "unpacked_section_names": {
+   "member": "d17--variant-001-unpacked.elf",
+   "value": [
+    "",
+    ".note.gnu.build-id",
+    ".text",
+    ".rodata",
+    ".hcfg",
+    ".eh_frame",
+    ".note.gnu.property",
+    ".comment",
+    ".symtab",
+    ".strtab",
+    ".shstrtab"
+   ]
+  },
+  "unpacked_imports": {
+   "member": "d17--variant-001-unpacked.elf",
+   "value": []
+  },
+  "unpacked_has_interp": {
+   "member": "d17--variant-001-unpacked.elf",
+   "value": "false"
+  },
+  "unpacked_has_debug_info": {
+   "member": "d17--variant-001-unpacked.elf",
+   "value": "false"
+  },
+  "unpacked_is_packed": {
+   "member": "d17--variant-001-unpacked.elf",
+   "value": "false"
+  },
+  "unpacked_needed": {
+   "member": "d17--variant-001-unpacked.elf",
+   "value": []
+  }
+ },
+ "generator_cmd": "bash pair_gen.sh   # gcc -O0/-O2/-Os/-static -nostdlib/-pie/-no-pie/-g, strip, upx -9, zip -X -j",
+ "oracle_cmd": "bash pair_oracle.sh pair_packed_unpacked.bin   # unzip -Z1 + sha256sum, readelf -hW/-SW/-lW/--dyn-syms/-dW, upx -t",
+ "decoy": false,
+ "note": "`packed` must not match `unpacked`; UPX member has no section headers"
+}

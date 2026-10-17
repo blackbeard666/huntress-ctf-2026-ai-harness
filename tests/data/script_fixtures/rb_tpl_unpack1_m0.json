@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=1|language=ruby|role=downloader|attack=T1105|steps=fetch_stage,write_stage,run|campaign_id=RB-7a3c19e2|url=https://rb-7a3c19e2.example.invalid/p",
+ "decoy": false,
+ "generator_cmd": "sh tests/data/script_fixtures/tpl_gen.sh  (written by the language's own interpreter: ruby: [x].pack('m0') inside \"..\".unpack1(\"m0\"), xor 0x5a)",
+ "oracle_cmd": "ruby -e 'load ARGV[0]; print MATERIAL_RB7A.bytes.map { |b| b ^ 0x5a }.pack(\"C*\")' tests/data/script_fixtures/rb_tpl_unpack1_m0.rb"
+}

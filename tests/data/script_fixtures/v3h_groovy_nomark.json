@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=groovy_jenkinsfile|role=stager|verdict=malicious|attack=T1059|adapter=pipeline_sh|host_profile=standalone|obfuscation_profile=nomark|stage_profile=two_stage_download_execute|next_language=bash|stage_count=3|steps=checkout,fetch_stage,run_stage|campaign_id=GRO-89b9eaed|url=https://groovy-89b9eaede3.example.invalid/stage|file_path=/tmp/huntress-groovy/.e3bcd6b01cc20d26.stage",
+ "decoy": false,
+ "host": "groovy",
+ "tag": null,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> base64, descriptor literal only, no HUNTRESS_ANALYSIS marker)",
+ "oracle_cmd": "perl -0ne \"print \\$1 if /'''(.*?)'''/s\" tests/data/script_fixtures/v3h_groovy_nomark.groovy | tr -d ' \\n\\r' | base64 -d"
+}

@@ -1,0 +1,14 @@
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import eml_parser
+raw = open(sys.argv[2], "rb").read()
+try:
+    p = eml_parser.EmlParser(include_attachment_data=False).decode_email_bytes(raw)
+except Exception as e:
+    print(json.dumps({"error": repr(e)})); sys.exit()
+h = p.get("header", {})
+hh = h.get("header", {})
+print(json.dumps({"message-id": hh.get("message-id"), "from": h.get("from"), "subject": h.get("subject"),
+                  "date": str(h.get("date")), "return-path": hh.get("return-path"), "x-mailer": hh.get("x-mailer"),
+                  "received_n": len(h.get("received", [])), "received_last_from": (h.get("received") or [{}])[-1].get("from"),
+                  "attachments": [a.get("filename") for a in p.get("attachment", [])]}, default=str, indent=1))

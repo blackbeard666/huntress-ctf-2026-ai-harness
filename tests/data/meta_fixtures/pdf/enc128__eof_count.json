@@ -1,0 +1,8 @@
+{
+ "field": "pdf.eof_count",
+ "expected": "1",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import Image; import time,calendar; fr=[Image.new('RGB',(60,40),(50*i,90,200)) for i in range(3)]; fr[0].save('info3.pdf',save_all=True,append_images=fr[1:],title='Quarterly Ledger',author='J. Doe',creator='LedgerTool 2.1',producer='HuntressPDF 9',creationDate=time.gmtime(calendar.timegm((2024,3,5,14,7,9,0,0,0)))); Image.new('RGB',(30,30),(1,2,3)).save('info3.pdf',append=True)\"  (Pillow 12 PDF writer; append=True = incremental update) && qpdf --allow-weak-crypto --encrypt '' ownerpw 128 --use-aes=n -- info3.pdf enc128.pdf",
+ "oracle_cmd": "grep -a -o '%%EOF' enc128.pdf | wc -l -> 1 (qpdf rewrite flattens the update)",
+ "decoy": false,
+ "member": "enc128.pdf"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "email.is_forward",
+ "expected": "true",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/email/GENERATOR_stdlib_thread.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP; Thread-Index built with struct/uuid) -> thread_reply.eml",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/email/ORACLE_eml_parser_thread.py.txt tools/pylib-eml <file>  (eml_parser 4.2.1 decode_email_bytes headers) -> x-forwarded-* header list ['x-forwarded-to'] non-empty",
+ "decoy": false,
+ "member": "evidence-01/thread_reply.eml"
+}

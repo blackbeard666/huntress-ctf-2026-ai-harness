@@ -329,7 +329,8 @@ def raw_entry_scan(apk):
     exists anywhere, falls back to string_pool_scan() (UTF-16LE tokens + decoded AXML/resources.arsc pool strings), then
     hermes_string_scan() (decoded strings of a React Native Hermes bytecode bundle), then
     local_store_scan() (SQLite db cells / shared_prefs values / adb backup .ab members), then
-    il2cpp_literal_scan() (decoded C# string literals of a Unity IL2CPP global-metadata.dat)."""
+    il2cpp_literal_scan() (decoded C# string literals of a Unity IL2CPP global-metadata.dat), then
+    webview_asset_scan() (decoded JS literals / char-code arrays of assets/**/*.html|js|json)."""
     hits = []
     try:
         with zipfile.ZipFile(apk) as z:
@@ -348,6 +349,8 @@ def raw_entry_scan(apk):
         hits = local_store_scan(apk)
     if not hits:
         hits = il2cpp_literal_scan(apk)
+    if not hits:
+        hits = webview_asset_scan(apk)
     return hits
 
 
@@ -539,8 +542,10 @@ def hermes_string_scan(apk, deadline_s=1.0):
 
 def dex_strings(apk):
     """ANS tokens from the UTF-8 string pool of every classes*.dex (handles multidex, renamed code). When no literal
-    token exists, falls back to split_native_assembly() (an `ANS-` prefix + hex fragments split across dex and .so), then
-    dex_array_scan() (a <clinit> byte/char array xor'd with a class constant), then native_export_scan() (a token computed by a .so export: xor constants, then unicorn emulation)."""
+    token exists, falls back to cert_pin_scan() (a token encoded as a `sha256/<b64>` pin / NSC <pin>), then
+    split_native_assembly() (an `ANS-` prefix + hex fragments split across dex and .so), then
+    dex_array_scan() (a <clinit> byte/char array xor'd with a class constant), then dex_gated_branch_scan() (an encoded
+    const-string behind a Java root / emulator / signature check), then native_export_scan() (a token computed by a .so export: xor constants, then unicorn emulation)."""
     hits = []
     try:
         with zipfile.ZipFile(apk) as z:
@@ -550,9 +555,13 @@ def dex_strings(apk):
     except (OSError, zipfile.BadZipFile):
         pass
     if not hits:
+        hits = cert_pin_scan(apk)
+    if not hits:
         hits = split_native_assembly(apk)
     if not hits:
         hits = dex_array_scan(apk)
+    if not hits:
+        hits = dex_gated_branch_scan(apk)
     if not hits:
         hits = native_export_scan(apk)
     return hits
@@ -1024,6 +1033,155 @@ def dex_array_scan(apk):
     return list(dict.fromkeys(hits))
 
 
+# --- root / emulator / debugger / signature check in Java gating a constant (coverage atlas rows 47-49) ---------------
+_DGB_MARK = re.compile(r"(?i)(?:^|/)su$|magisk|supersu|superuser|test-keys|rootbeer|busybox|goldfish|ranchu|ro\.kernel\.qemu"
+                       r"|qemu_pipe|genymotion|sdk_gphone|frida|27042|xposed|tracerpid|/proc/self/(?:maps|status)"
+                       r"|^(?:isDebuggerConnected|getPackageInfo|getInstallerPackageName|getInstallingPackageName"
+                       r"|getApkContentsSigners|hasSigningCertificateHistory|signatures|signingInfo|TAGS|HARDWARE)$")
+_DGB_PRE = re.compile(rb"(?i)magisk|test-keys|goldfish|ranchu|qemu|frida|xposed|tracerpid|/su\0|rootbeer|busybox"
+                      rb"|isDebuggerConnected|getPackageInfo|getInstall\w*PackageName|signingInfo|getApkContentsSigners")
+_DGB_PAYLOAD = re.compile(r"[\x21-\x7e]{12,4096}")
+_DGB_MAX_DEX, _DGB_UNITS, _DGB_BUDGET_S, _DGB_PAYLOADS, _DGB_KEYS = 32 << 20, 1_000_000, 0.7, 48, 24
+
+
+def _dgb_methods(d, budget, deadline):
+    """Per-method facts of one dex whose pool holds an anti-root / anti-emulator / signature marker:
+    {method_idx: (marked, [string idx], [int literal], {invoked method idx})}, plus the string reader. ({}, None) else."""
+    if d[:4] != b"dex\n" or len(d) < 0x70 or not _DGB_PRE.search(d):
+        return {}, None
+    u32 = lambda o: struct.unpack_from("<I", d, o)[0]  # noqa: E731
+    n_str, o_str, n_fld, o_fld, n_mth, o_mth, n_cls, o_cls = (u32(o) for o in (0x38, 0x3C, 0x50, 0x54, 0x58, 0x5C, 0x60, 0x64))
+    if (n_str > 1 << 22 or n_cls > 1 << 20 or o_str + 4 * n_str > len(d) or o_cls + 32 * n_cls > len(d)
+            or o_fld + 8 * n_fld > len(d) or o_mth + 8 * n_mth > len(d)):
+        return {}, None
+
+    @lru_cache(maxsize=None)
+    def sget(si):
+        if si >= n_str:
+            return None
+        _, j = _uleb(d, u32(o_str + 4 * si))
+        e = d.find(b"\0", j, j + 4100)
+        return d[j:e].decode("utf-8", "replace") if e >= j else None
+
+    mark_s = {i for i in range(n_str) if _DGB_PRE.search(d, u32(o_str + 4 * i) + 1, u32(o_str + 4 * i) + 80)
+              or (d[u32(o_str + 4 * i) + 1:u32(o_str + 4 * i) + 5] in (b"su\0", b"TAGS", b"HARD", b"sign"))}
+    mark_s = {i for i in mark_s if _DGB_MARK.search(sget(i) or "")}
+    mark_m = {i for i in range(n_mth) if u32(o_mth + 8 * i + 4) in mark_s}
+    mark_f = {i for i in range(n_fld) if u32(o_fld + 8 * i + 4) in mark_s}
+    out = {}
+    for c in range(n_cls):
+        cdata = u32(o_cls + 32 * c + 24)
+        if not cdata:
+            continue
+        i = cdata
+        sf, i = _uleb(d, i)
+        inf, i = _uleb(d, i)
+        dm, i = _uleb(d, i)
+        vm, i = _uleb(d, i)
+        for _ in range(2 * (sf + inf)):
+            _, i = _uleb(d, i)
+        for cnt in (dm, vm):
+            midx = 0
+            for _ in range(cnt):
+                dlt, i = _uleb(d, i)
+                midx += dlt
+                _, i = _uleb(d, i)
+                code, i = _uleb(d, i)
+                if not code or code + 16 > len(d):
+                    continue
+                n_ins = u32(code + 12)
+                budget[0] -= n_ins
+                if budget[0] < 0 or time.time() > deadline:
+                    return out, sget
+                ins = d[code + 16:code + 16 + 2 * n_ins]
+                marked, strs, ints, calls, pc = False, [], [], set(), 0
+                while pc < n_ins and 2 * pc + 1 < len(ins):
+                    p = 2 * pc
+                    op = ins[p]
+                    if op in (0x1A, 0x1B):
+                        si = struct.unpack_from("<H" if op == 0x1A else "<I", ins, p + 2)[0]
+                        strs.append(si)
+                        marked |= si in mark_s
+                    elif op == 0x12:
+                        ints.append(((ins[p + 1] >> 4) ^ 8) - 8)
+                    elif op in (0x13, 0x14) or 0xD0 <= op <= 0xD7:
+                        ints.append(struct.unpack_from("<i", ins, p + 2)[0] if op == 0x14 else _s16(struct.unpack_from("<H", ins, p + 2)[0]))
+                    elif 0xD8 <= op <= 0xE2:
+                        ints.append((ins[p + 3] ^ 0x80) - 0x80)
+                    elif 0x6E <= op <= 0x72 or 0x74 <= op <= 0x78:
+                        mi = struct.unpack_from("<H", ins, p + 2)[0]
+                        calls.add(mi)
+                        marked |= mi in mark_m
+                    elif 0x52 <= op <= 0x6D:  # iget*/iput*/sget*/sput* field@CCCC
+                        marked |= struct.unpack_from("<H", ins, p + 2)[0] in mark_f
+                    elif op == 0 and ins[p + 1] in (1, 2, 3):  # switch / fill-array payloads
+                        if ins[p + 1] == 1:
+                            pc += 4 + 2 * struct.unpack_from("<H", ins, p + 2)[0]
+                        elif ins[p + 1] == 2:
+                            pc += 2 + 4 * struct.unpack_from("<H", ins, p + 2)[0]
+                        else:
+                            w, n = struct.unpack_from("<HI", ins, p + 2)
+                            pc += 4 + (w * n + 1) // 2
+                        continue
+                    pc += _DOP_W[op]
+                out[midx] = (marked, strs, ints, calls)
+    return out, sget
+
+
+def dex_gated_branch_scan(apk):
+    """ANS tokens behind a Java root / emulator / debugger / signature gate: methods that reference a check marker (su /
+    magisk / test-keys / goldfish / ranchu / frida / TracerPid / /proc/self/maps / isDebuggerConnected / getPackageInfo
+    signatures / installer ...), their callers (the method holding `if (isRooted()) ... else <secret>`) and those
+    callers' callees (the decode helper). Their encoded const-strings are run through decode_any keyless, then with
+    the small int literals and short strings of the same method set as keys (xor / add / sub, base64-of-xor ...).
+    Static only; both branches are read and the ANS shape is the oracle. [] when absent; never raises; ~0.7 s bound."""
+    hits = []
+    deadline = time.time() + _DGB_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            dexes = [i for i in z.infolist()
+                     if i.file_size <= _DGB_MAX_DEX and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+            budget = [_DGB_UNITS]
+            for info in dexes:
+                meths, sget = _dgb_methods(z.read(info), budget, deadline)
+                gated = {m for m, f in meths.items() if f[0]}
+                if not gated:
+                    continue
+                callers = {m for m, f in meths.items() if f[3] & gated} - gated
+                helpers = {c for m in callers for c in meths[m][3] if c in meths} - gated - callers
+                payloads, keys = [], []
+                for group in (callers, gated, helpers):
+                    for m in sorted(group):
+                        _, strs, ints, _ = meths[m]
+                        for si in strs:
+                            s = sget(si)
+                            if not s:
+                                continue
+                            m_ans = ANS_RE_T.search(s)
+                            if m_ans:
+                                hits.append(m_ans.group(0))
+                            elif _DGB_PAYLOAD.fullmatch(s) and not _DGB_MARK.search(s) and s not in payloads:
+                                payloads.append(s)
+                            elif 0 < len(s) <= 32 and s not in keys:
+                                keys.append(s)
+                        keys += [k for k in ints if 1 < abs(k) < 0x10000 and k not in keys and k not in (16, 0xFF)]
+                payloads.sort(key=lambda s: -len(s))
+                ikeys = [k for k in keys if isinstance(k, int)][:_DGB_KEYS]
+                skeys = [k for k in keys if isinstance(k, str)][:_DGB_KEYS // 2]
+                for s in payloads[:_DGB_PAYLOADS]:
+                    for key in (None, *ikeys, *skeys):
+                        if time.time() > deadline:
+                            return list(dict.fromkeys(hits))
+                        t = decode_any(s, key, depth=3 if key is None else 2, cap=600, chain=False)
+                        m_ans = t and ANS_RE_T.search(t)
+                        if m_ans:
+                            hits.append(m_ans.group(0))
+                            break
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    return list(dict.fromkeys(hits))
+
+
 # --- JNI secret computed inside a .so export, not a literal (coverage atlas rows 37, 39, 40) --------------------------
 _NSO_MAX_SO, _NSO_MAX_BYTES, _NSO_MAX_FUNCS, _NSO_FUNC_CAP = 8, 32 << 20, 48, 16384
 _NSO_BUDGET_S, _NSO_DECODE_S, _NSO_FN_US, _NSO_FN_INSNS = 1.2, 0.3, 150_000, 2_000_000
@@ -1037,8 +1195,11 @@ _NSO_ARCH = {
     "EM_AARCH64": (("UC_ARCH_ARM64", "UC_MODE_ARM"), ("CS_ARCH_ARM64", "CS_MODE_ARM"),
                    ("X0", "X1", "X2", "X3", "X4", "X5"), "X0", b"\xc0\x03\x5f\xd6",
                    {1027: "rel", 1025: "sym", 1026: "sym", 257: "sym"}),
-    "EM_ARM": (None, ("CS_ARCH_ARM", "CS_MODE_ARM"), (), "", b"", {}),
-    "EM_386": (None, ("CS_ARCH_X86", "CS_MODE_32"), (), "", b"", {}),
+    # 32-bit ABIs (row 40: armeabi-v7a Thumb / x86): REL relocations (addend in place); x86 passes args on the stack
+    "EM_ARM": (("UC_ARCH_ARM", "UC_MODE_ARM"), ("CS_ARCH_ARM", "CS_MODE_ARM"),
+               ("R0", "R1", "R2", "R3"), "R0", b"\x1e\xff\x2f\xe1", {23: "rel", 21: "sym", 22: "sym", 2: "abs"}),
+    "EM_386": (("UC_ARCH_X86", "UC_MODE_32"), ("CS_ARCH_X86", "CS_MODE_32"),
+               (), "EAX", b"\xc3", {8: "rel", 6: "sym", 7: "sym", 1: "abs"}),
 }
 
 
@@ -1157,7 +1318,285 @@ def _nso_static(elf, keys, deadline):
     return [h.decode() for h in hits]
 
 
-def _nso_emulate(elf, arch, funcs, deadline):
+_NSO_REG_WORDS = 1 << 18
+_NSO_REG_NAME = re.compile(rb"[A-Za-z_$][\w$]{0,127}")
+_NSO_REG_SIG = re.compile(rb"\((?:\[*(?:[ZBCSIJFD]|L[^;()]+;))*\)\[*(?:[ZBCSIJFDV]|L[^;()]+;)")
+
+
+def _nso_registered(elf, dex=b""):
+    """RegisterNatives tables without running JNI_OnLoad (row 39): every pointer-aligned {char* name, char* sig,
+    void* fn} triple in .data.rel.ro / .data (pointers from R_*_RELATIVE RELA / RELR relocations, else the in-place
+    word) whose name is a Java identifier, sig a JNI method descriptor and fn inside .text. Names that are also dex
+    strings (the `native` method's name) rank first. [(name, fn va)]; [] when none (x86_64 / arm64 LE only)."""
+    if not elf.is64 or elf.e != "<" or elf.arch not in ("EM_X86_64", "EM_AARCH64"):
+        return []
+    rel_t = 8 if elf.arch == "EM_X86_64" else 1027
+    ptr = {}
+    for _, typ, _, off, ssz, _ in elf.secs:
+        if typ == 4:  # SHT_RELA: R_*_RELATIVE -> addend
+            for r_off, info, add in struct.iter_unpack("<QQq", elf.b[off:off + min(ssz, 24 * _NSO_REG_WORDS) // 24 * 24]):
+                if info & 0xFFFFFFFF == rel_t:
+                    ptr[r_off] = add
+        elif typ == 19:  # SHT_RELR: the in-place word is the target
+            where = 0
+            for (e,) in struct.iter_unpack("<Q", elf.b[off:off + (min(ssz, 8 * _NSO_REG_WORDS) & ~7)]):
+                for o in ([e] if not e & 1 else [where + 8 * j for j in range(63) if e >> (j + 1) & 1]):
+                    ptr.setdefault(o, int.from_bytes(elf.at(o, 8).ljust(8, b"\0"), "little"))
+                where = e + 8 if not e & 1 else where + 63 * 8
+    text = [(addr, addr + len(d)) for name, addr, d in elf.sections() if name == ".text"]
+    out, words = [], 0
+    for name, addr, d in elf.sections():
+        if name not in (".data.rel.ro", ".data", ".data.rel.ro.local", ".data.rel"):
+            continue
+        for i in range((-addr) % 8, len(d) - 23, 8):
+            words += 1
+            if words > _NSO_REG_WORDS:
+                break
+            va = addr + i
+            p = [ptr.get(va + 8 * k) or int.from_bytes(d[i + 8 * k:i + 8 * k + 8], "little") for k in range(3)]
+            if not all(p) or not any(lo <= p[2] < hi for lo, hi in text):
+                continue
+            nm, sig = elf.at(p[0], 130).split(b"\0")[0], elf.at(p[1], 512).split(b"\0")[0]
+            if _NSO_REG_NAME.fullmatch(nm) and _NSO_REG_SIG.fullmatch(sig):
+                out.append((nm.decode(), p[2]))
+    rank = {n: bool(dex) and bytes([len(n)]) + n.encode() + b"\0" in dex for n, _ in out}
+    return sorted(dict.fromkeys(out), key=lambda t: not rank[t[0]])
+
+
+_NSO_REF_FUNCS, _NSO_REF_TARGETS, _NSO_REF_S = 24, 96, 0.35
+_NSO_RIP = re.compile(r"\[rip ([+-]) (0x[0-9a-f]+|\d+)\]")
+_NSO_IMM = re.compile(r"#?(0x[0-9a-f]+|\d+)$")
+
+
+def _nso_refs(elf, arch, funcs, deadline, extra=()):
+    """What a Java_* / huntress_* export can return (rows 37, 65 -- D16's gated nativeEvidence returned &arena_value
+    only for len 65536, so emulating it with len 0 misses): disassemble each export (and the local functions it calls,
+    one level) for its rip-relative lea/mov targets (x86_64) and adrp+add / adrp+ldr pairs (arm64), read the C string
+    / sized object at each target in a data section, and match it raw, xor'd with the function's own immediates, and
+    through decode_any. Tokens in export order; [] when none."""
+    import capstone
+    if arch not in ("EM_X86_64", "EM_AARCH64"):
+        return []
+    a, m = _NSO_ARCH[arch][1]
+    md = capstone.Cs(getattr(capstone, a), getattr(capstone, m))
+    text = [(addr, addr + len(d)) for name, addr, d in elf.sections() if name == ".text"]
+    datas = [(addr, addr + len(d)) for name, addr, d in elf.sections(data_only=True)]
+    objs = {val: size for syms in elf.syms.values() for _, val, size, typ, shndx in syms
+            if typ == 1 and shndx and 0 < size <= 4096}
+    sizes = {va: size for _, va, size in funcs}
+    end = min(deadline, time.time() + _NSO_REF_S)
+    queue = [va for n, va, _ in funcs if n.startswith("Java_") or "huntress" in n.lower()][:_NSO_REF_FUNCS]
+    starts = sorted({va for _, va, _ in funcs} | {va for _, va in extra} | {hi for _, hi in text})
+    extra_va = {va for _, va in extra}
+    for _, va in extra:  # RegisterNatives targets (stripped, unsized): up to the next known start, past early rets
+        if va not in sizes and any(lo <= va < hi for lo, hi in text):
+            sizes[va] = min(next((s for s in starts if s > va), va + 0x400) - va, 0x400)
+            queue.append(va)
+    seen, hits = set(), []
+    while queue and time.time() < end and len(seen) < _NSO_REF_FUNCS:
+        va = queue.pop(0)
+        if va in seen:
+            continue
+        seen.add(va)
+        targets, keys, pages, callees, lens = [], [], {}, [], []
+        for ins in md.disasm(elf.at(va, min(sizes.get(va) or 1024, _NSO_FUNC_CAP)), va):
+            mn, ops = ins.mnemonic, ins.op_str
+            if arch == "EM_X86_64":
+                r = _NSO_RIP.search(ops)
+                if r:
+                    targets.append(ins.address + ins.size + int(r.group(2), 0) * (1 if r.group(1) == "+" else -1))
+            elif mn == "adrp":
+                reg, _, page = ops.partition(", ")
+                pages[reg] = int(page.lstrip("#"), 0)
+            elif mn in ("add", "ldr", "ldrb", "ldrsb") and ops.count(",") >= 1:
+                p = [x.strip(" []!") for x in ops.split(",")]
+                base = p[1] if len(p) > 1 else ""
+                if base in pages:
+                    off = int(p[2].lstrip("#"), 0) if len(p) > 2 and p[2].lstrip("#")[:1].isdigit() else 0
+                    targets.append(pages[base] + off)
+            if mn.startswith(("call", "bl", "jmp", "b")) and not mn.startswith(("blr", "br")):
+                t = _NSO_IMM.search(ops)
+                if t and any(lo <= int(t.group(1), 0) < hi for lo, hi in text):
+                    callees.append(int(t.group(1), 0))
+            mi = _NSO_IMM.search(ops)
+            if mi and mn.startswith(("xor", "eor", "mov", "cmp", "sub", "add")):
+                v = int(mi.group(1), 0) & 0xFFFFFFFF
+                if mn.startswith("cmp") and 8 <= v <= 512 and va in extra_va:
+                    lens.append(v)  # loop bound: the length of an unsized (stripped) blob whose xor holds a NUL
+                k = bytes([v]) if 0 < v < 256 else v.to_bytes(4, "little").rstrip(b"\0") if mn.startswith(("xor", "eor")) else b""
+                if k and k not in keys:
+                    keys.append(k)
+            if mn in ("ret", "retq") and not sizes.get(va):
+                break
+        queue += [c for c in callees if c not in seen]
+        for t in list(dict.fromkeys(targets))[:_NSO_REF_TARGETS]:
+            if not any(lo <= t < hi for lo, hi in datas) or time.time() > end:
+                continue
+            raw = elf.at(t, objs.get(t, 512))
+            blobs = [raw[:objs[t]]] if t in objs else []
+            blobs += [b for b in (raw.split(b"\0")[0],) if len(b) >= 8 and b not in blobs]
+            blobs += [raw[:n] for n in dict.fromkeys(lens) if t not in objs and len(raw) >= n and raw[:n] not in blobs]
+            for b in blobs:
+                found = ANS_RE_B.findall(b)
+                for k in keys[:16]:
+                    found = found or ANS_RE_B.findall(bytes(x ^ k[j % len(k)] for j, x in enumerate(b)))
+                for k in [None] + keys[:6]:
+                    if found or time.time() > end:
+                        break
+                    r = decode_any(b, key=None if k is None else k[0] if len(k) == 1 else k.decode("latin-1"),
+                                   depth=2, cap=300, chain=False)
+                    found = [h.encode() for h in ANS_RE_T.findall(r or "")]
+                hits += [h.decode() for h in found]
+    return hits
+
+
+_NSO_STK_FUNCS, _NSO_STK_S = 64, 0.3
+_NSO_STK_X86 = re.compile(r"(byte|word|dword|qword) ptr \[(rbp|rsp|ebp|esp)(?: ([+-]) (0x[0-9a-f]+|\d+))?\], (\w+)$")
+_NSO_STK_A64 = re.compile(r"([wx]\w+), (?:([wx]\w+), )?\[(sp|x29)(?:, #(-?0x[0-9a-f]+|-?\d+))?\]$")
+_NSO_STK_W = {"byte": 1, "word": 2, "dword": 4, "qword": 8}
+_NSO_STK_HEAD = b"ANS-"
+
+
+def _nso_stack_runs(md, arch, code, va):
+    """Immediate stores into one stack frame, ordered by offset: x86_64 `mov byte/word/dword/qword [rbp/rsp +- off],
+    imm` and `movabs/mov reg, imm; mov [..], reg`; arm64 `mov/movz/movk/movn w|x, #imm` then `strb/strh/str/stur/stp
+    reg, [sp|x29, #off]` (wzr/xzr = 0). Later stores to an offset win. Yields each contiguous byte run (>= 8)."""
+    regs, mem = {}, {}
+
+    def put(base, off, val, n):
+        for j in range(n):
+            mem[(base, off + j)] = (val >> (8 * j)) & 0xFF
+
+    for ins in md.disasm(code, va):
+        mn, ops = ins.mnemonic, ins.op_str
+        if arch == "EM_X86_64":
+            if mn in ("mov", "movabs"):
+                r = _NSO_STK_X86.match(ops)
+                if r:
+                    src, n = r.group(5), _NSO_STK_W[r.group(1)]
+                    v = int(src, 0) if src[:1].isdigit() else regs.get(src[-2:])
+                    if v is not None:
+                        off = int(r.group(4) or "0", 0) * (-1 if r.group(3) == "-" else 1)
+                        put(r.group(2)[-2:], off, v, n)
+                    continue
+                d, _, s = ops.partition(", ")
+                if s[:1].isdigit() and "[" not in d:
+                    regs[d[-2:]] = int(s, 0)  # rax/eax/ax share the low bytes
+                    continue
+            if mn.startswith(("call", "j", "ret")):
+                regs.clear()
+            elif ops and "[" not in ops.split(",")[0]:
+                regs.pop(ops.split(",")[0][-2:], None)
+        else:
+            p = [x.strip() for x in ops.split(",")]
+            reg = lambda x: "x" + x[1:] if x[:1] in "wx" else x
+            if mn in ("mov", "movz", "movk", "movn") and len(p) >= 2 and p[1].startswith("#"):
+                try:
+                    v = int(p[1][1:], 0)
+                except ValueError:
+                    continue
+                sh = int(p[2].split("#")[-1], 0) if len(p) > 2 and "lsl" in p[2] else 0
+                if mn == "movk":
+                    old = regs.get(reg(p[0]), 0)
+                    regs[reg(p[0])] = (old & ~(0xFFFF << sh)) | (v << sh)
+                else:
+                    v <<= sh
+                    regs[reg(p[0])] = ~v if mn == "movn" else v
+                continue
+            r = _NSO_STK_A64.match(ops) if mn in ("str", "stur", "strb", "sturb", "strh", "sturh", "stp", "stnp") else None
+            if r:
+                n = 1 if mn.endswith("b") else 2 if mn.endswith("h") else 8 if r.group(1)[0] == "x" else 4
+                off = int(r.group(4) or "0", 0)
+                for j, src in enumerate((r.group(1), r.group(2)) if mn.startswith(("stp", "stnp")) else (r.group(1),)):
+                    v = 0 if src and src[1:] == "zr" else regs.get(reg(src or ""))
+                    if v is not None:
+                        put(r.group(3), off + j * n, v, n)
+                continue
+            if mn.startswith(("bl", "ret", "b.", "cb", "tb")) or mn == "b":
+                regs.clear()
+            elif p and p[0][:1] in "wx":
+                regs.pop(reg(p[0]), None)
+    for base in {b for b, _ in mem}:
+        offs = sorted(o for b, o in mem if b == base)
+        run, prev = bytearray(), None
+        for o in offs + [None]:
+            if o is None or (prev is not None and o != prev + 1):
+                if len(run) >= 8:
+                    yield bytes(run)
+                run = bytearray()
+            if o is not None:
+                run.append(mem[(base, o)])
+                prev = o
+
+
+def _nso_stack_decode(b, keys):
+    """ANS tokens in a stack byte run: raw; known-plaintext anchored ("ANS-" at each start) xor / add / sub with an
+    affine per-index key k + m*i, and a 4-byte repeating xor key; then decode_any with the function's imm8 keys."""
+    hits = [h.decode() for h in ANS_RE_B.findall(b)]
+    for s in (b, b[::-1]):
+        for i in range(len(s) - 19):
+            c = s[i:i + 20]
+            for op, inv in ((lambda x, k: x ^ k, lambda x, p: x ^ p), (lambda x, k: x - k, lambda x, p: x - p),
+                            (lambda x, k: x + k, lambda x, p: p - x)):
+                k0, k1 = inv(c[0], 0x41) & 0xFF, inv(c[1], 0x4E) & 0xFF
+                m = (k1 - k0) & 0xFF
+                t = bytes(op(x, (k0 + m * j) & 0xFF) & 0xFF for j, x in enumerate(c))
+                if t[:4] == _NSO_STK_HEAD and ANS_RE_B.fullmatch(t):
+                    hits.append(t.decode())
+            k = bytes(x ^ y for x, y in zip(c[:4], _NSO_STK_HEAD))
+            t = bytes(x ^ k[j % 4] for j, x in enumerate(c))
+            if ANS_RE_B.fullmatch(t):
+                hits.append(t.decode())
+    if not hits and len(b) >= 16:
+        for k in [None] + keys[:4]:
+            r = decode_any(b, key=k, depth=2, cap=150, chain=False)
+            hits += ANS_RE_T.findall(r or "")
+            if hits:
+                break
+    return hits
+
+
+def _nso_stack(elf, arch, funcs, deadline):
+    """Row 40 stack strings: the answer (encoded) is assembled on the stack by immediate stores in an export (or a
+    local function it calls) and never sits in a data section -- strings / the section sweeps miss it, and a checker
+    that compares enc(input) to it never materialises the plaintext for emulation. Each run of stores, ordered by
+    stack offset, goes through _nso_stack_decode. x86_64 / arm64; tokens in function order; [] when none."""
+    import capstone
+    if arch not in ("EM_X86_64", "EM_AARCH64"):
+        return []
+    a, m = _NSO_ARCH[arch][1]
+    md = capstone.Cs(getattr(capstone, a), getattr(capstone, m))
+    text = [(addr, addr + len(d)) for name, addr, d in elf.sections() if name == ".text"]
+    starts = sorted({va for _, va, _ in funcs} | {hi for _, hi in text})
+    sizes = {va: size for _, va, size in funcs}
+    queue = [va for _, va, _ in funcs[:_NSO_MAX_FUNCS]]
+    end, seen, hits = min(deadline, time.time() + _NSO_STK_S), set(), []
+    while queue and time.time() < end and len(seen) < _NSO_STK_FUNCS:
+        va = queue.pop(0)
+        if va in seen:
+            continue
+        seen.add(va)
+        size = sizes.get(va) or min(next((s for s in starts if s > va), va + 0x800) - va, 0x800)
+        code = elf.at(va, min(size, _NSO_FUNC_CAP))
+        keys = []
+        for ins in md.disasm(code, va):
+            mn, ops = ins.mnemonic, ins.op_str
+            t = _NSO_IMM.search(ops)
+            if t and mn.startswith(("call", "bl", "jmp", "b")) and not mn.startswith(("blr", "br")):
+                c = int(t.group(1), 0)
+                if any(lo <= c < hi for lo, hi in text) and c not in seen:
+                    queue.append(c)
+            elif t and mn.startswith(("xor", "eor", "add", "sub")) and 0 < int(t.group(1), 0) < 256:
+                k = int(t.group(1), 0)
+                keys += [k] if k not in keys else []
+        for run in _nso_stack_runs(md, arch, code, va):
+            if time.time() > end:
+                break
+            hits += _nso_stack_decode(run, keys)
+    return hits
+
+
+def _nso_emulate(elf, arch, funcs, deadline, gate=None):
     """Run the exports in unicorn: JNI_OnLoad (fake JavaVM; RegisterNatives' fn pointers are queued), Java_* and the
     registered natives with a fake JNIEnv (NewStringUTF strings are captured), every other export with no args (its
     char* return is read). Imports: malloc/calloc/new bump-allocate, mem/str copies are done, the rest return 0.
@@ -1167,14 +1606,16 @@ def _nso_emulate(elf, arch, funcs, deadline):
     if spec[0] is None:
         return []
     ua, um = spec[0]
-    rc = U.x86_const if arch == "EM_X86_64" else U.arm64_const
-    pfx = "UC_X86_REG_" if arch == "EM_X86_64" else "UC_ARM64_REG_"
+    rc, pfx = {"EM_X86_64": (U.x86_const, "UC_X86_REG_"), "EM_386": (U.x86_const, "UC_X86_REG_"),
+               "EM_AARCH64": (U.arm64_const, "UC_ARM64_REG_"), "EM_ARM": (U.arm_const, "UC_ARM_REG_")}[arch]
     argr = [getattr(rc, pfx + r) for r in spec[2]]
     retr = getattr(rc, pfx + spec[3])
     BASE, STUB, JNI, HEAP, STACK, TLS = 0x10000000, 0x60000000, 0x61000000, 0x62000000, 0x63000000, 0x64000000
     RET = STUB + 0xF000
-    if not elf.is64 or elf.e != "<":
+    if elf.e != "<" or elf.is64 != (arch in ("EM_X86_64", "EM_AARCH64")):
         return []
+    W = 8 if elf.is64 else 4  # pointer width: JNI tables, relocated words, JNINativeMethod entries (3 * W)
+    MASK = (1 << 8 * W) - 1
     top = max(v + ms for v, _, _, ms in elf.segs)
     size = (top + 0xFFFF) & ~0xFFFF
     if size > 64 << 20:
@@ -1186,39 +1627,53 @@ def _nso_emulate(elf, arch, funcs, deadline):
     for a, n in ((STUB, 0x10000), (JNI, 0x10000), (HEAP, 1 << 20), (STACK, 1 << 20), (TLS, 0x10000)):
         uc.mem_map(a, n)
     uc.mem_write(STUB, spec[4] * (0x10000 // len(spec[4])))
-    uc.mem_write(JNI, (JNI + 0x100).to_bytes(8, "little"))
-    uc.mem_write(JNI + 0x100, b"".join((STUB + 16 * i).to_bytes(8, "little") for i in range(300)))
+    uc.mem_write(JNI, (JNI + 0x100).to_bytes(W, "little"))
+    uc.mem_write(JNI + 0x100, b"".join((STUB + 16 * i).to_bytes(W, "little") for i in range(300)))
     VM = JNI + 0x2000
-    uc.mem_write(VM, (VM + 0x100).to_bytes(8, "little"))
-    uc.mem_write(VM + 0x100, b"".join((STUB + 16 * (300 + i)).to_bytes(8, "little") for i in range(16)))
-    uc.mem_write(TLS, (TLS + 0x8000).to_bytes(8, "little"))
+    uc.mem_write(VM, (VM + 0x100).to_bytes(W, "little"))
+    uc.mem_write(VM + 0x100, b"".join((STUB + 16 * (300 + i)).to_bytes(W, "little") for i in range(16)))
+    uc.mem_write(TLS, (TLS + 0x8000).to_bytes(W, "little"))
     if arch == "EM_X86_64":
         uc.reg_write(rc.UC_X86_REG_FS_BASE, TLS)
-    else:
+    elif arch == "EM_AARCH64":
         uc.reg_write(rc.UC_ARM64_REG_TPIDR_EL0, TLS)
+    elif arch == "EM_386":  # bionic's canary is %gs:0x14 with gs = 0 here: a zero page answers it
+        uc.mem_map(0, 0x10000)
+    else:
+        try:  # VFP / NEON on (vectorised Thumb-2 loops), else the first vld1 faults
+            uc.reg_write(rc.UC_ARM_REG_C1_C0_2, uc.reg_read(rc.UC_ARM_REG_C1_C0_2) | 0xF00000)
+            uc.reg_write(rc.UC_ARM_REG_FPEXC, 0x40000000)
+        except Exception:  # noqa: BLE001
+            pass
     imports = {}  # import name -> stub slot
 
     def put(o, v):
-        if BASE <= o <= BASE + size - 8:
-            uc.mem_write(o, (v & (2 ** 64 - 1)).to_bytes(8, "little"))
+        if BASE <= o <= BASE + size - W:
+            uc.mem_write(o, (v & MASK).to_bytes(W, "little"))
 
     for _, typ, _, off, ssz, link in elf.secs:
         if typ == 19:  # SHT_RELR: even word = address, odd word = bitmap of the next 63 words
             where = 0
-            for (e,) in struct.iter_unpack("<Q", elf.b[off:off + (min(ssz, 8 << 17) & ~7)]):
-                for o in ([e] if not e & 1 else [where + 8 * j for j in range(63) if e >> (j + 1) & 1]):
-                    if o <= size - 8:
-                        put(BASE + o, BASE + int.from_bytes(uc.mem_read(BASE + o, 8), "little"))
-                where = e + 8 if not e & 1 else where + 63 * 8
-        if typ != 4:  # SHT_RELA
+            for (e,) in struct.iter_unpack("<" + "IQ"[W // 8], elf.b[off:off + (min(ssz, W << 17) & -W)]):
+                for o in ([e] if not e & 1 else [where + W * j for j in range(8 * W - 1) if e >> (j + 1) & 1]):
+                    if o <= size - W:
+                        put(BASE + o, BASE + int.from_bytes(uc.mem_read(BASE + o, W), "little"))
+                where = e + W if not e & 1 else where + (8 * W - 1) * W
+        if typ not in (4, 9):  # SHT_RELA, SHT_REL (32-bit ABIs: the addend is the word in place)
             continue
         syms = elf.syms.get(link, [])
-        for r_off, info, add in struct.iter_unpack("<QQq", elf.b[off:off + min(ssz, 24 * 200_000) // 24 * 24]):
-            kind, si = spec[5].get(info & 0xFFFFFFFF), info >> 32
+        fmt = "<" + ("QQq" if W == 8 else "IIi" if typ == 4 else "II")
+        n = struct.calcsize(fmt)
+        for r in struct.iter_unpack(fmt, elf.b[off:off + min(ssz, n * 200_000) // n * n]):
+            r_off, info = r[:2]
+            inplace = int.from_bytes(elf.at(r_off, W).ljust(W, b"\0"), "little") if len(r) == 2 else 0
+            add = r[2] if len(r) == 3 else inplace
+            kind, si = (spec[5].get(info & 0xFFFFFFFF), info >> 32) if W == 8 else (spec[5].get(info & 0xFF), info >> 8)
             if kind == "rel":
                 put(BASE + r_off, BASE + add)
-            elif kind == "sym" and si < len(syms):
+            elif kind in ("sym", "abs") and si < len(syms):
                 name, val, _, _, shndx = syms[si]
+                add = add if kind == "abs" or len(r) == 3 else 0  # REL GLOB_DAT / JUMP_SLOT ignore the word in place
                 if shndx and val:
                     put(BASE + r_off, BASE + val + add)
                 else:
@@ -1250,7 +1705,10 @@ def _nso_emulate(elf, arch, funcs, deadline):
         if addr == RET:
             uc.emu_stop()
             return
-        a = [uc.reg_read(r) for r in argr]
+        if argr:
+            a = [uc.reg_read(r) for r in argr] + [0] * (6 - len(argr))
+        else:  # i386 cdecl: [esp] = return address, then the args
+            a = list(struct.unpack("<6I", rd(uc.reg_read(rc.UC_X86_REG_ESP) + 4, 24).ljust(24, b"\0")))
         for x in a[:4]:
             s = cstr(x)
             if len(s) >= 4:
@@ -1265,12 +1723,12 @@ def _nso_emulate(elf, arch, funcs, deadline):
                 ret = alloc(16)
             elif i == 215:
                 for j in range(min(a[3], 64)):
-                    e = rd(a[2] + 24 * j, 24)
-                    if len(e) == 24:
-                        natives.append(int.from_bytes(e[16:], "little"))
+                    e = rd(a[2] + 3 * W * j, 3 * W)
+                    if len(e) == 3 * W:
+                        natives.append(int.from_bytes(e[2 * W:], "little"))
         elif i < 316:
             if i - 300 in (4, 6, 7):
-                uc.mem_write(a[1], JNI.to_bytes(8, "little"))
+                uc.mem_write(a[1], JNI.to_bytes(W, "little"))
         elif i - 400 in slot_name:
             n = slot_name[i - 400]
             if n in _NSO_ALLOC:
@@ -1292,7 +1750,7 @@ def _nso_emulate(elf, arch, funcs, deadline):
                 ret = a[0]
             elif n in ("__stack_chk_fail", "abort", "exit", "_exit", "__cxa_throw"):
                 uc.emu_stop()
-        uc.reg_write(retr, ret & (2 ** 64 - 1))
+        uc.reg_write(retr, ret & MASK)
 
     uc.hook_add(U.UC_HOOK_CODE, hook, begin=STUB, end=STUB + 0xFFFF)
 
@@ -1306,6 +1764,13 @@ def _nso_emulate(elf, arch, funcs, deadline):
             sp -= 8
             uc.mem_write(sp, RET.to_bytes(8, "little"))
             uc.reg_write(rc.UC_X86_REG_RSP, sp)
+        elif arch == "EM_386":
+            sp -= 28
+            uc.mem_write(sp, struct.pack("<7I", RET, *[v & MASK for v in (list(args) + [0] * 6)[:6]]))
+            uc.reg_write(rc.UC_X86_REG_ESP, sp)
+        elif arch == "EM_ARM":  # a Thumb target keeps its odd address: unicorn starts it in Thumb state
+            uc.reg_write(rc.UC_ARM_REG_SP, sp)
+            uc.reg_write(rc.UC_ARM_REG_LR, RET)
         else:
             uc.reg_write(rc.UC_ARM64_REG_SP, sp)
             uc.reg_write(rc.UC_ARM64_REG_LR, RET)
@@ -1317,6 +1782,8 @@ def _nso_emulate(elf, arch, funcs, deadline):
         if s:
             strs.append(s)
 
+    if gate is not None:  # jni_gate_scan: the caller drives the probing through call()
+        return gate(call, strs, lambda: uc.reg_read(retr), (BASE, JNI, VM), natives)
     hits = []
     for name, va, _ in funcs[:_NSO_MAX_FUNCS]:
         if name == "JNI_OnLoad":
@@ -1332,12 +1799,270 @@ def _nso_emulate(elf, arch, funcs, deadline):
     return hits
 
 
+# Anti-debug / root / instrumentation gates (rows 41, 47, 48, 66): the import's return value on a clean device
+# (untraced, no su, no frida). fopen/open of a /proc path succeeds when clean (the gate then reads it).
+_NGB_CLEAN = {"ptrace": 0, "fopen": 0, "fopen64": 0, "open": -1, "open64": -1, "openat": -1, "opendir": 0, "popen": 0,
+              "access": -1, "faccessat": -1, "stat": -1, "lstat": -1, "stat64": -1, "lstat64": -1, "strstr": 0,
+              "strcasestr": 0, "memmem": 0, "dlopen": 0, "__system_property_find": 0}
+_NGB_PATH2 = {"openat", "faccessat"}  # path is the 2nd argument
+_NGB_FUNCS, _NGB_INSNS, _NGB_S = 24, 6000, 0.25
+_NGB_X86_JCC = {"je": "eq", "jz": "eq", "jne": "ne", "jnz": "ne", "js": "mi", "jns": "pl", "jl": "lt", "jge": "ge",
+                "jle": "le", "jg": "gt", "jb": "lo", "jae": "hs", "jbe": "ls", "ja": "hi"}
+
+
+def _ngb_reg(n):
+    """Canonical 64-bit register name (eax/ax/al -> rax, r12d -> r12, w3 -> x3)."""
+    m = re.fullmatch(r"(r\d+)[dwb]?", n) or re.fullmatch(r"e?([abcd])[xlh]", n) or re.fullmatch(r"[er]?(si|di|bp|sp)l?", n)
+    if m:
+        g = m.group(1)
+        return g if g.startswith("r") else "r" + g + ("x" if len(g) == 1 else "")
+    return "x" + n[1:] if re.fullmatch(r"w\d+", n) else n
+
+
+def _ngb_cond(cc, a, b, w):
+    """Does condition `cc` hold after `cmp a, b` (width w bits)? None when unknown."""
+    m = (1 << w) - 1
+    sa, sb = [((v & m) ^ (1 << w - 1)) - (1 << w - 1) for v in (a, b)]
+    ua, ub = a & m, b & m
+    r = {"eq": ua == ub, "ne": ua != ub, "lt": sa < sb, "ge": sa >= sb, "le": sa <= sb, "gt": sa > sb,
+         "mi": (sa - sb) & m >> (w - 1) & 1 == 1, "pl": (sa - sb) & m >> (w - 1) & 1 == 0, "lo": ua < ub, "hs": ua >= ub,
+         "ls": ua <= ub, "hi": ua > ub, "cc": ua < ub, "cs": ua >= ub}
+    return r.get(cc)
+
+
+def _ngb_imports(elf):
+    """GOT slot va -> imported name (JUMP_SLOT / GLOB_DAT RELA entries against .dynsym)."""
+    want = {"EM_X86_64": (7, 6), "EM_AARCH64": (1026, 1025)}.get(elf.arch, ())
+    got = {}
+    for _, typ, _, off, ssz, link in elf.secs:
+        syms = elf.syms.get(link)
+        if typ != 4 or not syms:
+            continue
+        for r_off, info, _ in struct.iter_unpack("<QQq", elf.b[off:off + min(ssz, 24 << 16) // 24 * 24]):
+            if info & 0xFFFFFFFF in want and info >> 32 < len(syms):
+                got[r_off] = syms[info >> 32][0].split("@")[0]
+    return got
+
+
+def _ngb_walk(elf, md, arch, va, size, got, ctx, depth):
+    """Walk one function from `va`, following ONLY the clean side of every gate branch (a conditional branch on the
+    register holding a gate import's result, evaluated with _NGB_CLEAN) and both sides of every other branch.
+    Appends data refs / immediates seen to ctx['refs'] / ctx['keys']; ctx['gates'] counts resolved gate branches."""
+    lo, hi = va, va + (size or 0x1000)
+    work, seen, plt = [va], set(), ctx["plt"]
+    while work and ctx["n"] < _NGB_INSNS and time.time() < ctx["end"]:
+        a = work.pop(0)
+        if a in seen or not lo <= a < hi:
+            continue
+        alias, flags, pages, argref, chain = set(), None, {}, {}, {}
+        for ins in md.disasm(elf.at(a, hi - a), a):
+            if ins.address in seen:
+                break
+            seen.add(ins.address)
+            ctx["n"] += 1
+            mn, ops = ins.mnemonic, ins.op_str
+            p = [x.strip(" []!") for x in ops.split(",")] if ops else []
+            dst = _ngb_reg(p[0].split()[-1]) if p and p[0] else ""
+            tgt = None
+            if arch == "EM_X86_64":
+                r = _NSO_RIP.search(ops)
+                if r:
+                    tgt = ins.address + ins.size + int(r.group(2), 0) * (1 if r.group(1) == "+" else -1)
+            elif mn == "adrp":
+                pages[dst] = int(p[1].lstrip("#"), 0)
+            elif mn in ("add", "ldr", "ldrb") and len(p) >= 2 and _ngb_reg(p[1]) in pages:
+                off = int(p[2].lstrip("#"), 0) if len(p) > 2 and p[2].lstrip("#")[:1].isdigit() else 0
+                tgt = pages[_ngb_reg(p[1])] + off
+                if mn == "add":
+                    pages[dst] = tgt
+            if tgt is not None:
+                if mn == "add" and _ngb_reg(p[1]) == dst and dst in chain:  # adrp; add #lo; add #field: one ref
+                    ctx["refs"][chain[dst]] = tgt
+                else:
+                    ctx["refs"].append(tgt)
+                chain.pop(dst, None)
+                if mn == "add":
+                    chain[dst] = len(ctx["refs"]) - 1
+                if mn in ("lea", "add") or arch == "EM_X86_64" and mn == "mov" and "ptr" not in p[0]:
+                    argref[dst] = tgt
+            mi = _NSO_IMM.search(ops)
+            if mi and mn.startswith(("xor", "eor", "mov")) and 0 < int(mi.group(1), 0) < 256:
+                k = bytes([int(mi.group(1), 0)])
+                if k not in ctx["keys"]:
+                    ctx["keys"].append(k)
+            t = _NSO_IMM.search(ops)
+            t = int(t.group(1), 0) if t and mn.startswith(("call", "bl", "j", "b", "cb", "tb")) else None
+            if mn in ("call", "bl"):
+                slot = tgt if mn == "call" and "ptr" in ops else plt.get(t) if t is not None else None
+                name = got.get(slot) if slot is not None else None
+                if name in _NGB_CLEAN:
+                    path = argref.get("rsi" if name in _NGB_PATH2 else "rdi") if arch == "EM_X86_64" else \
+                        argref.get("x1" if name in _NGB_PATH2 else "x0")
+                    s = b"" if path is None else elf.at(path, 64).split(b"\0")[0]
+                    clean = 3 if name.startswith(("fopen", "open")) and s.startswith(b"/proc/") else _NGB_CLEAN[name]
+                    alias, flags = {"rax" if arch == "EM_X86_64" else "x0"}, None
+                    ctx["clean"] = clean
+                    continue
+                if t is not None and depth < 2 and ctx["text"][0] <= t < ctx["text"][1] and t not in plt:
+                    ctx["callees"].append(t)
+                alias, flags = set(), None
+                argref.clear()
+                continue
+            if alias:
+                c = ctx["clean"]
+                taken = None
+                if mn in ("test", "cmp", "cmn") and len(p) == 2:
+                    r0 = _ngb_reg(p[0])
+                    w = 32 if re.match(r"e|w|r\d+d", p[0]) else 64
+                    if r0 in alias and mn == "test" and _ngb_reg(p[1]) == r0:
+                        flags = (c, 0, w)
+                    elif r0 in alias and _NSO_IMM.search(p[1]) and mn in ("cmp", "cmn"):
+                        v = int(p[1].lstrip("#"), 0)
+                        flags = (c, -v if mn == "cmn" else v, w)
+                    else:
+                        alias = set()
+                    continue
+                cc = _NGB_X86_JCC.get(mn) if arch == "EM_X86_64" else mn[2:] if mn.startswith("b.") else None
+                if cc and flags and t is not None:
+                    taken = _ngb_cond(cc, *flags)
+                elif mn in ("cbz", "cbnz") and _ngb_reg(p[0]) in alias and t is not None:
+                    taken = (c == 0) == (mn == "cbz")
+                elif mn in ("tbz", "tbnz") and _ngb_reg(p[0]) in alias and t is not None:
+                    bit = (c >> int(p[1].lstrip("#"), 0)) & 1
+                    taken = bit == (mn == "tbnz")
+                elif mn == "mov" and len(p) == 2 and _ngb_reg(p[1]) in alias:
+                    alias.add(dst)
+                    continue
+                elif dst in alias and not mn.startswith(("j", "b", "st", "push")):
+                    alias.discard(dst)
+                if taken is not None:
+                    ctx["gates"] += 1
+                    alias, flags = set(), None
+                    if taken:
+                        work.append(t)
+                        break
+                    continue
+            if mn.startswith(("ret", "hlt", "ud2", "br", "blr")) or mn == "jmp" and t is None:
+                break
+            if t is not None and (mn.startswith(("j", "cb", "tb")) or mn == "b" or mn.startswith("b.")):
+                work.append(t)
+                if mn in ("jmp", "b"):
+                    break
+
+
+def native_gate_branch_scan(apk):
+    """ANS token on the clean ('not debugged / not rooted') path of a native anti-debug / root / emulator gate (rows
+    41, 47, 48, 66), static only: in each Java_* / huntress_* export of the x86_64 / arm64 lib/*/*.so, calls to
+    ptrace / fopen / open / access / stat / strstr / ... (PLT stub or -fno-plt GOT slot -> .rela.plt / .rela.dyn
+    name) are followed by the first conditional branch on their result (test/cmp/cmn + jcc/b.cond, cbz/cbnz,
+    tbz/tbnz); the branch is evaluated with the import's clean return value (_NGB_CLEAN) and only that side is walked
+    (other branches: both), local callees one level down too. The data refs on the clean path are matched raw, xor'd
+    with the path's byte immediates and through decode_any. Tokens only when >= 1 gate branch was resolved; [] when
+    absent; never raises."""
+    import capstone
+    hits = []
+    end = time.time() + _NGB_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            sos = [i for i in z.infolist() if i.filename.startswith("lib/") and i.filename.endswith(".so")
+                   and 0 < i.file_size <= _NSO_MAX_BYTES][:_NSO_MAX_SO]
+            sos.sort(key=lambda i: ("x86_64" not in i.filename, "arm64" not in i.filename))
+            for info in sos:
+                if time.time() > end:
+                    break
+                try:
+                    b = z.read(info)
+                    if b[:4] != b"\x7fELF":
+                        continue
+                    elf = _NsoElf(b)
+                    if elf.arch not in ("EM_X86_64", "EM_AARCH64") or not elf.is64 or elf.e != "<":
+                        continue
+                    hits += _ngb_elf(elf, capstone, end)
+                except Exception:  # noqa: BLE001 - a malformed .so contributes nothing
+                    continue
+    except Exception:  # noqa: BLE001 - truncated / impostor APK
+        pass
+    return list(dict.fromkeys(hits))
+
+
+def _ngb_elf(elf, capstone, end):
+    arch = elf.arch
+    a, m = _NSO_ARCH[arch][1]
+    md = capstone.Cs(getattr(capstone, a), getattr(capstone, m))
+    got = _ngb_imports(elf)
+    if not any(n in _NGB_CLEAN for n in got.values()):
+        return []
+    plt = {}  # PLT stub va -> GOT slot va
+    for name, addr, d in elf.sections():
+        if not name.startswith(".plt"):
+            continue
+        page = {}
+        for ins in md.disasm(d[:0x10000], addr):
+            r = _NSO_RIP.search(ins.op_str) if arch == "EM_X86_64" else None
+            if r and ins.mnemonic.endswith("jmp"):
+                plt[addr + (ins.address - addr) // 16 * 16] = ins.address + ins.size + int(r.group(2), 0) * (
+                    1 if r.group(1) == "+" else -1)
+            elif ins.mnemonic == "adrp":
+                page = {"at": ins.address, "v": int(ins.op_str.split("#")[-1], 0)}
+            elif ins.mnemonic == "ldr" and page and "x16" in ins.op_str:
+                o = re.search(r"#(0x[0-9a-f]+|\d+)\]", ins.op_str)
+                plt[page["at"]] = page["v"] + (int(o.group(1), 0) if o else 0)
+                page = {}
+    text = next(((ad, ad + len(d)) for n, ad, d in elf.sections() if n == ".text"), (0, 0))
+    datas = [(ad, ad + len(d)) for _, ad, d in elf.sections(data_only=True)]
+    objs = {val: size for syms in elf.syms.values() for _, val, size, typ, shndx in syms
+            if typ == 1 and shndx and 0 < size <= 4096}
+    funcs = _nso_exports(elf)
+    sizes = {va: size for _, va, size in funcs}
+    hits = []
+    for name, va, size in [f for f in funcs if f[0].startswith("Java_") or "huntress" in f[0].lower()][:_NGB_FUNCS]:
+        if time.time() > end:
+            break
+        ctx = {"refs": [], "keys": [], "gates": 0, "callees": [], "plt": plt, "text": text, "n": 0, "end": end,
+               "clean": 0}
+        _ngb_walk(elf, md, arch, va, size, got, ctx, 0)
+        if not ctx["gates"]:
+            continue
+        done = {va}
+        while ctx["callees"]:
+            c = ctx["callees"].pop(0)
+            if c not in done and len(done) < 8:
+                done.add(c)
+                _ngb_walk(elf, md, arch, c, sizes.get(c) or 0x400, got, ctx, 1)
+        for t in list(dict.fromkeys(ctx["refs"]))[:_NSO_REF_TARGETS]:
+            if not any(lo <= t < hi for lo, hi in datas) or time.time() > end:
+                continue
+            raw = elf.at(t, objs.get(t, 512))
+            blobs = [raw[:objs[t]]] if t in objs else []
+            blobs += [x for x in (raw.split(b"\0")[0],) if len(x) >= 8 and x not in blobs]
+            for x in blobs:
+                found = ANS_RE_B.findall(x)
+                for k in ctx["keys"][:16]:
+                    found = found or ANS_RE_B.findall(x.translate(bytes(i ^ k[0] for i in range(256))))
+                for k in [None] + ctx["keys"][:6]:
+                    if found or time.time() > end:
+                        break
+                    r = decode_any(x, key=None if k is None else k[0], depth=2, cap=300, chain=False)
+                    found = [h.encode() for h in ANS_RE_T.findall(r or "")]
+                hits += [h.decode() for h in found]
+    return hits
+
+
 def native_export_scan(apk):
     """ANS tokens computed by native code (no literal in the .so): for each lib/*/*.so (pyelftools) the exported funcs
     (JNI_OnLoad, Java_*, huntress_*, the rest) are disassembled (capstone) for their xor/eor byte constants, and every
-    .rodata/.data blob is xor'd / decode_any'd with them; when that finds nothing, x86_64 / arm64 exports are emulated
-    in unicorn (fake JNIEnv/JavaVM, RegisterNatives followed). Bounded (~1.2 s total); [] when absent; never raises."""
-    hits = []
+    .rodata/.data blob is xor'd / decode_any'd with them; when that finds nothing, the exports are emulated in unicorn
+    (x86_64 / arm64 / armeabi-v7a ARM+Thumb / x86; fake JNIEnv/JavaVM, RegisterNatives followed). Multi-ABI (row 40):
+    emulation goes on through the other lib/<abi>/ dirs until one token is confirmed by >= 2 ABIs; tokens rank by
+    the number of ABIs that produced them, then by an assets/ entry quoting them. Bounded (~1.2 s total); [] when
+    absent; never raises."""
+    hits, abis = [], {}  # token -> {lib/<abi> dirs that produced it}
+
+    def note(new, abi):
+        hits.extend(new)
+        for t in new:
+            abis.setdefault(t, set()).add(abi)
+
     deadline = time.time() + _NSO_BUDGET_S
     try:
         with zipfile.ZipFile(apk) as z:
@@ -1349,8 +2074,9 @@ def native_export_scan(apk):
                 import elftools.elf.elffile  # noqa: F401
                 import unicorn  # noqa: F401
                 deadline = time.time() + _NSO_BUDGET_S
-            elves = []
+            elves, dex = [], None
             for info in sos:
+                abi = info.filename.rsplit("/", 2)[-2] if info.filename.count("/") >= 2 else ""
                 try:
                     b = z.read(info)
                     if b[:4] != b"\x7fELF":
@@ -1360,20 +2086,463 @@ def native_export_scan(apk):
                     if arch not in _NSO_ARCH:
                         continue
                     funcs = _nso_exports(elf)
-                    hits += _nso_static(elf, _nso_xor_keys(elf, arch, funcs, deadline), deadline)
-                    elves.append((elf, arch, funcs))
+                    reg = []
+                    if not any(n.startswith("Java_") for n, _, _ in funcs):  # row 39: dynamic registration only
+                        try:
+                            if dex is None:
+                                dex = b"".join(z.read(n) for n in z.namelist()
+                                               if re.fullmatch(r"classes\d*\.dex", n))[:64 << 20]
+                            reg = _nso_registered(elf, dex)
+                        except Exception:  # noqa: BLE001
+                            reg = []
+                    try:  # the export-referenced candidates rank first; the section-wide sweep follows
+                        note(_nso_refs(elf, arch, funcs, deadline, reg), abi)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    try:  # row 40: stack strings built by immediate stores
+                        note(_nso_stack(elf, arch, funcs, deadline), abi)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    note(_nso_static(elf, _nso_xor_keys(elf, arch, funcs, deadline), deadline), abi)
+                    elves.append((elf, arch, funcs, abi))
                 except Exception:  # noqa: BLE001 - a malformed .so contributes nothing
                     continue
-            for elf, arch, funcs in elves:
-                if hits or time.time() > deadline:
-                    break
+            for elf, arch, funcs, abi in elves:
+                done = {a for v in abis.values() for a in v}
+                if time.time() > deadline or (hits and (any(len(v) >= 2 for v in abis.values())
+                                                        or all(e[3] in done for e in elves))):
+                    break  # one ABI only (every day so far): the first hits end it, as before
+                if abi in done:
+                    continue
                 try:
-                    hits += _nso_emulate(elf, arch, funcs, deadline)
+                    note(_nso_emulate(elf, arch, funcs, deadline), abi)
                 except Exception:  # noqa: BLE001
                     continue
+            hits = list(dict.fromkeys(hits))
+            if len(hits) > 1:  # consensus across ABIs, then an asset quoting the token
+                quoted = b"".join(z.read(i)[:1 << 20] for i in z.infolist()[:256]
+                                  if i.filename.startswith("assets/") and 0 < i.file_size <= 4 << 20)
+                hits.sort(key=lambda t: (-len(abis.get(t, ())), t.encode() not in quoted))
+            if hits and sos:  # rows 41/47/48/66: a token on the clean side of an anti-debug / root gate ranks first
+                gated = native_gate_branch_scan(apk)
+                hits = gated + [t for t in hits if t not in gated]
     except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
         pass
     return list(dict.fromkeys(hits))
+
+
+_GATE_INPUTS = (0, 1, 0x7F, 0x80, 0xFF, 0x100, 0x7FFF, 0x8000, 0xFFFF, 0x10000, 0x10001, 0x7FFFFFFF, -1, -0x8000,
+                -0x10000)
+_GATE_MAX_FN = 0x400      # Java_* exports probed (an `int` gate sits in the export or a small helper it calls)
+_GATE_MAX_CHECK = 0x100   # other exports: small int checkers only
+_GATE_BUDGET_S = 1.0
+_GATE_X86_R16 = re.compile(r"^(ax|bx|cx|dx|si|di|bp|r\d+w)$")
+_GATE_X86_R8 = re.compile(r"^(al|bl|cl|dl|sil|dil|bpl|r\d+b)$")
+
+
+def _gate_order(v):
+    return (v < 0, abs(v))
+
+
+def _gate_narrowing(elf, arch, va, size):
+    """[u8/s8/u16/s16 found, strongest first] or ["u32"] from the gate's code (the export up to its first conditional
+    branch + the helpers it calls directly): x86 movzx/movsx of
+    a 16/8-bit register, cwde/cbw, 16-bit cmp/test, and/test with 0xffff/0xff/0x8000/0x80; arm64 uxth/sxth/uxtb/sxtb
+    (also as operand extends), tst/and with #0xffff/#0xff/#0x8000/#0x80."""
+    import capstone
+    a, m = _NSO_ARCH[arch][1]
+    md = capstone.Cs(getattr(capstone, a), getattr(capstone, m))
+    seen, todo, tags = set(), [(va, min(size or _GATE_MAX_CHECK, _GATE_MAX_FN))], []
+    while todo and len(seen) < 6:
+        start, n = todo.pop(0)
+        if start in seen:
+            continue
+        seen.add(start)
+        for ins in md.disasm(elf.at(start, n), start):
+            mn, ops = ins.mnemonic, [o.strip() for o in ins.op_str.split(",")]
+            if mn in ("call", "bl") and ops[0].startswith(("0x", "#0x")):
+                t = int(ops[0].lstrip("#"), 16)
+                if elf.at(t, 1) and not any(t == s[2] for s in elf.secs if s[0] in (".plt", ".plt.sec")):
+                    todo.append((t, _GATE_MAX_CHECK))
+            if mn in ("ret", "retq") and start != va and ins.address > start:
+                break
+            imm = ops[-1].lstrip("#") if ops else ""
+            if mn in ("uxth", "sxth", "uxtb", "sxtb"):
+                tags.append({"uxth": "u16", "sxth": "s16", "uxtb": "u8", "sxtb": "s8"}[mn])
+            elif arch == "EM_AARCH64" and any(x in ins.op_str for x in ("uxth", "sxth", "uxtb", "sxtb")):
+                tags.append(next(t for x, t in (("uxth", "u16"), ("sxth", "s16"), ("uxtb", "u8"), ("sxtb", "s8"))
+                                 if x in ins.op_str))
+            elif mn in ("movzx", "movsx") and len(ops) == 2:
+                w = "16" if _GATE_X86_R16.match(ops[1]) or ops[1].startswith("word") else \
+                    "8" if _GATE_X86_R8.match(ops[1]) or ops[1].startswith("byte") else ""
+                if w:
+                    tags.append(("u" if mn == "movzx" else "s") + w)
+            elif mn in ("cwde", "cwd", "cwtl"):
+                tags.append("s16")
+            elif mn in ("cbw",):
+                tags.append("s8")
+            elif mn in ("cmp", "test") and ops and _GATE_X86_R16.match(ops[0]):
+                tags.append("u16")
+            elif mn in ("and", "ands", "tst", "test") and imm in ("0xffff", "0xff", "0x8000", "0x80"):
+                tags.append({"0xffff": "u16", "0xff": "u8", "0x8000": "s16", "0x80": "s8"}[imm])
+            elif mn in ("shr", "sar") and ops and _GATE_X86_R16.match(ops[0]):  # shr $0xf, %dx: the int16 sign bit
+                tags.append("s16" if imm == "0xf" else "u16")
+            elif mn in ("tbz", "tbnz") and imm in ("0xf", "0x7", "15", "7"):
+                tags.append("s16" if imm in ("0xf", "15") else "s8")
+            elif mn in ("ubfx", "sbfx") and len(ops) == 4 and ops[2].lstrip("#") in ("0", "0x0") and \
+                    ops[3].lstrip("#") in ("16", "0x10", "8", "0x8"):
+                tags.append(mn[0] + ("16" if ops[3].lstrip("#") in ("16", "0x10") else "8"))
+            if start == va and (mn.startswith(("b.", "cbz", "cbnz", "tbz", "tbnz")) or
+                                (mn.startswith("j") and mn != "jmp")):
+                break  # the export's gate ends at its first conditional branch (the payload after it is not the gate)
+    return [t for t in ("s16", "u16", "s8", "u8") if t in tags] or ["u32"]
+
+
+def jni_gate_scan(apk):
+    """Bypass input of a JNI type/length-narrowing gate (row 65; D16 nativeEvidence(len) passed only for 65536): every
+    Java_* export (<= 0x400 bytes), every RegisterNatives target and every small (< 0x100) other export of the x86_64 /
+    arm64 lib/*/*.so is run in unicorn (fake JNIEnv, as native_export_scan) over the boundary ints _GATE_INPUTS, then,
+    if none passes, over (a, b) pairs of them. The commonest outcome (NewStringUTF strings, else the int return) is
+    the denial; every other outcome passes. Returns [{"export", "input", "arg2", "narrowing", "narrowings" (all the
+    narrowing ops seen, for a two-arg gate), "returns", "answer"}],
+    smallest passing input first per export (non-negative ascending, then negative); arg2 None when one int arg
+    sufficed; `answer` = the ANS token in / decode_any of what it returned (None if none). [] when absent; never raises."""
+    out = []
+    deadline = time.time() + _GATE_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            sos = [i for i in z.infolist() if i.filename.startswith("lib/") and i.filename.endswith(".so")
+                   and 0 < i.file_size <= _NSO_MAX_BYTES][:_NSO_MAX_SO]
+            sos.sort(key=lambda i: ("x86_64" not in i.filename, "arm64" not in i.filename))
+            if sos:
+                import capstone  # noqa: F401
+                import elftools.elf.elffile  # noqa: F401
+                import unicorn  # noqa: F401
+                deadline = time.time() + _GATE_BUDGET_S
+            done = set()
+            for info in sos:
+                if time.time() > deadline:
+                    break
+                try:
+                    b = z.read(info)
+                    if b[:4] != b"\x7fELF":
+                        continue
+                    elf = _NsoElf(b)
+                    if elf.arch not in ("EM_X86_64", "EM_AARCH64"):
+                        continue
+                    funcs = _nso_exports(elf)
+                    for r in _nso_emulate(elf, elf.arch, funcs, deadline, gate=_gate_probe(elf, funcs, deadline)):
+                        if r["export"] not in done:  # one ABI's answer per export
+                            out.append(r)
+                    done.update(r["export"] for r in out)
+                except Exception:  # noqa: BLE001 - a malformed .so contributes nothing
+                    continue
+    except Exception:  # noqa: BLE001 - truncated / impostor APK
+        pass
+    return out
+
+
+def _gate_probe(elf, funcs, deadline):
+    def probe(call, strs, ret, bases, natives):
+        BASE, JNI, VM = bases
+        targets = []
+        for name, va, size in funcs[:_NSO_MAX_FUNCS]:
+            if name == "JNI_OnLoad":
+                call(BASE + va, (VM, 0))
+                strs.clear()
+                targets += [(f"native@{(fn - BASE if fn >= BASE else fn):#x}", fn - BASE if fn >= BASE else fn, 0, True)
+                            for fn in list(dict.fromkeys(natives))[:16]]
+            elif name.startswith("Java_") and 0 < size <= _GATE_MAX_FN:
+                targets.append((name, va, size, True))
+            elif 0 < size < _GATE_MAX_CHECK:
+                targets.append((name, va, size, False))
+        res = []
+        for name, va, size, jni in targets[:24]:
+            def run(a, b):
+                strs.clear()
+                call(BASE + va, ((JNI, 0) if jni else ()) + (a & 0xFFFFFFFF, b & 0xFFFFFFFF))
+                r = ret()
+                o = tuple(strs) if strs else r & 0xFFFFFFFF
+                strs.clear()
+                return o
+            for pairs in ([(a, 0) for a in _GATE_INPUTS],
+                          [(a, b) for a in _GATE_INPUTS for b in _GATE_INPUTS if b]):
+                if time.time() > deadline:
+                    return res
+                outs = {p: run(*p) for p in pairs}
+                if len(pairs) > len(_GATE_INPUTS):
+                    outs.update({(a, 0): o for (a, b), o in one.items()})
+                vals = list(outs.values())
+                deny = max(vals, key=lambda o: (vals.count(o), o == outs[(0, 0)]))
+                if 2 * vals.count(deny) <= len(vals):  # a lookup (notes[i % n]), not a gate
+                    break
+                ok = sorted((p for p, o in outs.items() if o != deny),
+                            key=lambda p: (_gate_order(p[0]), _gate_order(p[1])))
+                if ok and len(ok) < len(outs):
+                    a, b = ok[0]
+                    o = outs[ok[0]]
+                    txt = "\n".join(dict.fromkeys(t.decode("latin-1") for t in o if t.isascii() and bytes(
+                        t).decode().isprintable())) if isinstance(o, tuple) else str(o)
+                    m = ANS_RE_T.search(txt)
+                    if not m:
+                        for s in (o if isinstance(o, tuple) else ()):
+                            m = ANS_RE_T.search(str(decode_any(s, depth=2, chain=False) or ""))
+                            if m:
+                                break
+                    ans = m.group(0) if m else None
+                    nw = _gate_narrowing(elf, elf.arch, va, size)
+                    res.append({"export": name, "input": a, "arg2": b if len(pairs) > len(_GATE_INPUTS) else None,
+                                "narrowing": nw[0], "narrowings": nw, "returns": txt[:200],
+                                "answer": ans})
+                    break
+                one = outs
+        return res
+    return probe
+
+
+# --- Java side of the JNI boundary: dex `native` methods and the constants each call site passes (row 65) ------------
+_DNC_MAX_DEX = 32 << 20
+_DNC_MAX_UNITS = 2_000_000  # code units decoded across all methods
+_DNC_BUDGET_S = 1.0
+_DNC_NOWRITE = frozenset([0x00, 0x0E, 0x0F, 0x10, 0x11, 0x1D, 0x1E, 0x1F, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C]
+                         + list(range(0x32, 0x3E)) + list(range(0x4B, 0x52)) + list(range(0x59, 0x60))
+                         + list(range(0x67, 0x79)) + [0xFA, 0xFB, 0xFC, 0xFD])
+_DNC_NIBDST = frozenset([0x01, 0x04, 0x07, 0x12, 0x20, 0x21, 0x23] + list(range(0x52, 0x59)) + list(range(0x7B, 0x90))
+                        + list(range(0xB0, 0xD8)))
+_DNC_IFOP = {0x32: "==", 0x33: "!=", 0x34: "<", 0x35: ">=", 0x36: ">", 0x37: "<="}
+_DNC_NEG = {"==": "!=", "!=": "==", "<": ">=", ">=": "<", ">": "<=", "<=": ">"}
+_DNC_SWAP = {"==": "==", "!=": "!=", "<": ">", ">=": "<=", ">": "<", "<=": ">="}
+
+
+def _dnc_tables(d):
+    """(sget, tdesc, mref) for one dex: string by idx, type descriptor by idx, method_id idx -> (class, name, params, ret)."""
+    u32 = lambda o: struct.unpack_from("<I", d, o)[0]  # noqa: E731
+    n_str, o_str, n_typ, o_typ = u32(0x38), u32(0x3C), u32(0x40), u32(0x44)
+    n_pro, o_pro, n_met, o_met = u32(0x48), u32(0x4C), u32(0x58), u32(0x5C)
+    if (n_str > 1 << 22 or o_str + 4 * n_str > len(d) or o_typ + 4 * n_typ > len(d) or o_pro + 12 * n_pro > len(d)
+            or o_met + 8 * n_met > len(d)):
+        return None
+
+    @lru_cache(maxsize=None)
+    def sget(si):
+        if si >= n_str:
+            return None
+        n, j = _uleb(d, u32(o_str + 4 * si))
+        e = d.find(b"\0", j, j + 4 * n + 1)
+        return d[j:e].decode("utf-8", "replace") if e >= j else None
+
+    def tdesc(ti):
+        return sget(u32(o_typ + 4 * ti)) if ti < n_typ else None
+
+    @lru_cache(maxsize=None)
+    def mref(mi):
+        if mi >= n_met:
+            return None
+        ci, pi, ni = struct.unpack_from("<HHI", d, o_met + 8 * mi)
+        if pi >= n_pro:
+            return None
+        _, rt, poff = struct.unpack_from("<III", d, o_pro + 12 * pi)
+        ps = []
+        if poff and poff + 4 <= len(d):
+            ps = [tdesc(struct.unpack_from("<H", d, poff + 4 + 2 * k)[0]) for k in range(min(u32(poff), 255))]
+        return tdesc(ci), sget(ni), tuple(ps), tdesc(rt)
+    return sget, tdesc, mref
+
+
+def _dnc_methods(d):
+    """[(method_idx, access_flags, code_off)] of every encoded method in one dex's class_data."""
+    u32 = lambda o: struct.unpack_from("<I", d, o)[0]  # noqa: E731
+    n_cls, o_cls = u32(0x60), u32(0x64)
+    if n_cls > 1 << 20 or o_cls + 32 * n_cls > len(d):
+        return []
+    out = []
+    for c in range(n_cls):
+        cdata = u32(o_cls + 32 * c + 24)
+        if not cdata or cdata >= len(d):
+            continue
+        try:
+            i = cdata
+            sf, i = _uleb(d, i)
+            inf, i = _uleb(d, i)
+            dm, i = _uleb(d, i)
+            vm, i = _uleb(d, i)
+            for _ in range(2 * (sf + inf)):
+                _, i = _uleb(d, i)
+            for n in (dm, vm):
+                mi = 0
+                for _ in range(n):
+                    diff, i = _uleb(d, i)
+                    fl, i = _uleb(d, i)
+                    code, i = _uleb(d, i)
+                    mi += diff
+                    out.append((mi, fl, code))
+        except (IndexError, ValueError):
+            continue
+    return out
+
+
+def _dnc_val(v):
+    if v is None:
+        return None
+    k, x = v[0], v[1]
+    if k == "int":
+        return x
+    if k == "str":
+        return x
+    if k == "bytes":
+        return {"bytes_of": x, "length": len(x.encode())}
+    if k == "len":
+        return {"length_of": x[0], "value": x[1]}
+    return None
+
+
+def _dnc_walk(ins, n_ins, sget, mref, natives):
+    """Linear register walk of one method: [(native key, args, static, length checks seen before the call)]."""
+    regs, pend, checks, calls, pc = {}, None, [], [], 0
+    while pc < n_ins:
+        p = 2 * pc
+        op = ins[p]
+        a8 = ins[p + 1]
+        if op == 0 and a8 in (1, 2, 3):  # switch / fill-array payloads
+            if a8 == 1:
+                pc += 4 + 2 * struct.unpack_from("<H", ins, p + 2)[0]
+            elif a8 == 2:
+                pc += 2 + 4 * struct.unpack_from("<H", ins, p + 2)[0]
+            else:
+                w, n = struct.unpack_from("<HI", ins, p + 2)
+                pc += 4 + (w * n + 1) // 2
+            continue
+        if p + 2 * _DOP_W[op] > len(ins):
+            break
+        res = None
+        if op == 0x12:  # const/4
+            regs[a8 & 0xF] = ("int", ((a8 >> 4) ^ 8) - 8)
+        elif op in (0x13, 0x15, 0x16, 0x19):  # const/16, const/high16, const-wide/16, const-wide/high16
+            v = _s16(struct.unpack_from("<H", ins, p + 2)[0])
+            regs[a8] = ("int", v << 16 if op == 0x15 else v << 48 if op == 0x19 else v)
+        elif op in (0x14, 0x17):  # const, const-wide/32
+            regs[a8] = ("int", struct.unpack_from("<i", ins, p + 2)[0])
+        elif op == 0x18:  # const-wide
+            regs[a8] = ("int", struct.unpack_from("<q", ins, p + 2)[0])
+        elif op in (0x1A, 0x1B):  # const-string(/jumbo)
+            s = sget(struct.unpack_from("<H" if op == 0x1A else "<I", ins, p + 2)[0])
+            regs[a8] = ("str", s) if s is not None else None
+        elif op in (0x01, 0x04, 0x07):  # move vA, vB
+            regs[a8 & 0xF] = regs.get(a8 >> 4)
+        elif op in (0x02, 0x05, 0x08):  # move/from16 vAA, vBBBB
+            regs[a8] = regs.get(struct.unpack_from("<H", ins, p + 2)[0])
+        elif op in (0x0A, 0x0B, 0x0C):  # move-result*
+            regs[a8] = pend
+        elif op == 0x21:  # array-length vA, vB
+            src = regs.get(a8 >> 4)
+            regs[a8 & 0xF] = ("len", (src[1], len(src[1].encode()))) if src and src[0] == "bytes" else None
+        elif op in _DNC_IFOP or 0x38 <= op <= 0x3D:  # length checks: if-cmp vA, vB / if-cmpz vAA
+            if op in _DNC_IFOP:
+                x, y, cmp = regs.get(a8 & 0xF), regs.get(a8 >> 4), _DNC_IFOP[op]
+            else:
+                x, y, cmp = regs.get(a8), ("int", 0), _DNC_IFOP[op - 6]
+            if y and y[0] == "len":
+                x, y, cmp = y, x, _DNC_SWAP[cmp]
+            if x and x[0] == "len" and y and y[0] == "int":
+                # the branch skips the call when `cmp` holds: the fall-through (the call) needs the negation
+                checks.append({"length_of": x[1][0], "branch_if": f"len {cmp} {y[1]}", "requires": f"len {_DNC_NEG[cmp]} {y[1]}",
+                               "value": y[1]})
+        elif 0x6E <= op <= 0x78 and op != 0x73:  # invoke-kind 35c / 3rc
+            mi = struct.unpack_from("<H", ins, p + 2)[0]
+            if op <= 0x72:
+                cnt, g = a8 >> 4, a8 & 0xF
+                fe = struct.unpack_from("<H", ins, p + 4)[0]
+                rl = [fe & 0xF, (fe >> 4) & 0xF, (fe >> 8) & 0xF, (fe >> 12) & 0xF, g][:cnt]
+            else:
+                c0 = struct.unpack_from("<H", ins, p + 4)[0]
+                rl = list(range(c0, c0 + a8))
+            m = mref(mi)
+            static = op in (0x71, 0x77)
+            if m:
+                cls, name, params, _ = m
+                r0 = regs.get(rl[0]) if rl else None
+                if cls == "Ljava/lang/String;" and r0 and r0[0] == "str":
+                    if name == "length" and not params:
+                        res = ("len", (r0[1], len(r0[1])))
+                    elif name == "getBytes":
+                        res = ("bytes", r0[1])
+                    elif name in ("trim", "toString", "intern"):
+                        res = r0
+                key = (cls, name, params)
+                if key in natives:
+                    k, args = (0 if static else 1), []
+                    for t in params:
+                        args.append(_dnc_val(regs.get(rl[k])) if k < len(rl) else None)
+                        k += 2 if t in ("J", "D") else 1
+                    calls.append((key, args, static, list(checks)))
+        elif op in _DNC_NIBDST:
+            regs.pop(a8 & 0xF, None)
+        elif op not in _DNC_NOWRITE:
+            regs.pop(a8, None)
+        if op in (0x16, 0x17, 0x18, 0x19, 0x0B, 0x04, 0x05):
+            regs.pop((a8 & 0xF if op == 0x04 else a8) + 1, None)
+        pend = res
+        pc += _DOP_W[op]
+    return calls
+
+
+def dex_native_calls(apk):
+    """Java side of the JNI boundary (coverage atlas row 65): every `native` method declared in the classes*.dex
+    (class, name, param descriptors, return, static) and, for each invoke of it, the constants the caller loads into the
+    argument registers (const/const-wide ints, const-string, "s".getBytes() -> {bytes_of, length}, "s".length()) plus the
+    String.length()/byte[].length checks seen before the call in that method. [] when none; never raises.
+    Answers 'which length/type crosses the boundary' and feeds call-site ints to jni_gate_scan-style bypass questions."""
+    out, deadline, budget = {}, time.time() + _DNC_BUDGET_S, [_DNC_MAX_UNITS]
+    try:
+        z = zipfile.ZipFile(apk)
+        dexes = [n for n in z.namelist() if re.fullmatch(r"classes\d*\.dex", Path(n).name)
+                 and z.getinfo(n).file_size <= _DNC_MAX_DEX]
+        loaded = []
+        for n in dexes:
+            d = z.read(n)
+            if d[:4] != b"dex\n" or len(d) < 0x70:
+                continue
+            tabs = _dnc_tables(d)
+            if not tabs:
+                continue
+            meths = _dnc_methods(d)
+            loaded.append((d, tabs, meths))
+            for mi, fl, _ in meths:
+                if fl & 0x100:  # ACC_NATIVE
+                    m = tabs[2](mi)
+                    if m and m[1]:
+                        out.setdefault((m[0], m[1], m[2]), {
+                            "method": f"{m[0]}->{m[1]}({''.join(m[2])}){m[3]}", "class": m[0], "name": m[1],
+                            "params": list(m[2]), "returns": m[3], "static": bool(fl & 0x8), "calls": []})
+        if not out:
+            return []
+        names = {k[1] for k in out}
+        for d, (sget, _, mref), meths in loaded:
+            n_met, o_met = struct.unpack_from("<II", d, 0x58)
+            hot = [struct.pack("<H", mi) for mi, (_, _, ni) in enumerate(struct.iter_unpack("<HHI", d[o_met:o_met + 8 * n_met]))
+                   if sget(ni) in names and (mref(mi) or ())[:3] in out]
+            for mi, fl, code in meths if hot else ():
+                if not code or code + 16 > len(d) or time.time() > deadline:
+                    continue
+                n_ins = struct.unpack_from("<I", d, code + 12)[0]
+                budget[0] -= n_ins
+                if budget[0] < 0:
+                    break
+                ins = d[code + 16:code + 16 + 2 * n_ins]
+                if not any(h in ins for h in hot):
+                    continue
+                try:
+                    calls = _dnc_walk(ins, n_ins, sget, mref, out)
+                except (IndexError, ValueError, struct.error):
+                    continue
+                if calls:
+                    m = mref(mi)
+                    caller = f"{m[0]}->{m[1]}({''.join(m[2])}){m[3]}" if m else str(mi)
+                    for key, args, static, checks in calls:
+                        out[key]["calls"].append({"caller": caller, "args": args, "length_checks": checks})
+    except Exception:  # noqa: BLE001 -- decoy / truncated input: report what was parsed
+        pass
+    return sorted(out.values(), key=lambda r: r["method"])
 
 
 _NEST_MAGICS = (b"PK\x03\x04", b"dex\n")
@@ -1698,6 +2867,129 @@ def il2cpp_literal_scan(apk):
             if d:
                 hits += ANS_RE_T.findall(d)
     except Exception:  # noqa: BLE001 - truncated / impostor metadata: no answer here
+        pass
+    return list(dict.fromkeys(hits))
+
+
+# --- WebView / hybrid-app assets: html / js / json under assets/ (coverage atlas rows 13, 14, 57) ----------------------
+_WV_EXT = re.compile(r"(?i)^assets/.*\.(?:html?|m?js|json|xhtml)$")
+_WV_MAX_ENTRY = 4 << 20
+_WV_MAX_TOTAL = 24 << 20
+_WV_DECODE_BUDGET = 300
+_WV_LIT = re.compile(r"""(["'`])((?:[^"'`\\\n]|\\.|(?!\1)["'`]){1,16384}?)\1""", re.S)
+_WV_CONCAT = re.compile(r"""(?:(["'])(?:[^"'\\\n]|\\.)*?\1\s*\+\s*)+(["'])(?:[^"'\\\n]|\\.)*?\2""")
+_WV_NUM = r"(?:0[xX][0-9a-fA-F]+|\d+)"
+_WV_FCC = re.compile(r"fromCharCode\s*(?:\.apply\s*\(\s*\w*\s*,|\(\s*\.\.\.|\()\s*\[?\s*(" + _WV_NUM + r"(?:\s*,\s*" + _WV_NUM + r")*)")
+_WV_ARR = re.compile(r"\[\s*(" + _WV_NUM + r"(?:\s*,\s*" + _WV_NUM + r"){7,4095})\s*,?\s*\]")
+_WV_XKEY = re.compile(r"\^\s*(?:(" + _WV_NUM + r")\b|(?:\w+\.)?(\w+)\s*(?:\.charCodeAt|\[))")
+_WV_ESC = re.compile(r"\\(?:x([0-9a-fA-F]{2})|u\{([0-9a-fA-F]{1,6})\}|u([0-9a-fA-F]{4})|([0-7]{1,3})|(.))", re.S)
+_WV_SIMPLE = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "v": "\v", "0": "\0"}
+
+
+def _wv_unescape(s):
+    def sub(m):
+        h = m.group(1) or m.group(2) or m.group(3)
+        if h:
+            return chr(min(int(h, 16), 0x10FFFF))
+        if m.group(4):
+            return chr(int(m.group(4), 8) & 0xFF)
+        c = m.group(5)
+        return "" if c == "\n" else _WV_SIMPLE.get(c, c)
+    return _WV_ESC.sub(sub, s)
+
+
+def _wv_nums(s):
+    return [int(t, 0) for t in re.findall(_WV_NUM, s)]
+
+
+def _wv_candidates(text):
+    """(strings, keys) from one html/js/json asset: unescaped string literals (adjacent `"a" + "b"` concatenations
+    joined), String.fromCharCode lists, numeric/hex byte arrays; keys = short literals and `^ <int>` / `^ name[...]`
+    xor operands (a named key resolves to that variable's literal)."""
+    lits, cands, keys = [], [], []
+    for m in _WV_CONCAT.finditer(text):
+        parts = [_wv_unescape(p.group(2)) for p in _WV_LIT.finditer(m.group(0))]
+        cands.append("".join(parts))
+    for m in _WV_LIT.finditer(text):
+        if m.group(1) == "`" and "${" in m.group(2):
+            continue
+        lits.append(_wv_unescape(m.group(2)))
+    for m in _WV_FCC.finditer(text):
+        try:
+            cands.append("".join(chr(n) for n in _wv_nums(m.group(1))))
+        except (ValueError, OverflowError):
+            pass
+    for m in _WV_ARR.finditer(text):
+        ns = _wv_nums(m.group(1))
+        if all(n < 256 for n in ns):
+            cands.append(bytes(ns))
+        elif all(n < 0x110000 for n in ns):
+            cands.append("".join(chr(n) for n in ns))
+    named = {}
+    for m in re.finditer(r"""\b(\w+)\s*[:=]\s*(["'`])((?:[^"'`\\\n]|\\.){1,64}?)\2""", text):
+        named[m.group(1)] = _wv_unescape(m.group(3))
+    for m in _WV_XKEY.finditer(text):
+        k = int(m.group(1), 0) if m.group(1) else named.get(m.group(2))
+        if k is not None and k not in keys:
+            keys.append(k)
+    keys += [s for s in lits if 1 <= len(s) <= 32 and s.strip() == s and s not in keys][:24]
+    cands = cands + [s for s in lits if len(s) >= 16]
+    return lits + cands, cands, keys
+
+
+def webview_asset_scan(apk):
+    """ANS tokens hidden in a WebView / Cordova / Capacitor / Flutter app's web assets (assets/**/*.html|js|json,
+    incl. assets/www, assets/public, flutter_assets). Pure regex, no JS engine: each asset's string literals (JS
+    escapes \\xHH / \\uHHHH / \\u{..} / octal undone, `"a"+"b"` joined), String.fromCharCode lists and numeric/hex byte
+    arrays are scanned for a literal token, then run through decode_any -- unkeyed, then keyed by the file's `^ <int>`
+    / `^ key[...]` xor operands and short literals. huntress_puzzle.json is puzzle_candidates' job and skipped.
+    [] when absent; never raises."""
+    hits, files = [], []
+    deadline = time.time() + 0.9
+    try:
+        with zipfile.ZipFile(apk) as z:
+            total = 0
+            for info in z.infolist():
+                n = info.filename
+                if (info.is_dir() or not _WV_EXT.match(n) or n.endswith("huntress_puzzle.json")
+                        or info.file_size > _WV_MAX_ENTRY or total + info.file_size > _WV_MAX_TOTAL):
+                    continue
+                try:
+                    files.append(z.read(info).decode("utf-8", "replace"))
+                    total += info.file_size
+                except (OSError, RuntimeError, zipfile.BadZipFile, EOFError, ValueError, NotImplementedError):
+                    continue
+        parsed = []
+        for t in files:
+            if time.time() > deadline:
+                break
+            strs, cands, keys = _wv_candidates(t)
+            for s in strs:
+                if isinstance(s, str):
+                    hits += ANS_RE_T.findall(s)
+            parsed.append((cands, keys))
+        if hits:
+            return list(dict.fromkeys(hits))
+        budget = _WV_DECODE_BUDGET
+        for cands, keys in parsed:
+            for c in cands:
+                if budget <= 0 or time.time() > deadline:
+                    break
+                b = c.encode("utf-8", "surrogatepass") if isinstance(c, str) else c
+                if not 8 <= len(b) <= _CHAIN_MAX_IN:
+                    continue
+                budget -= 1
+                d = decode_any(b, chain=True, chain_s=0.03)
+                for k in keys:
+                    if d or budget <= 0 or time.time() > deadline:
+                        break
+                    if k == c:
+                        continue
+                    budget -= 1
+                    d = decode_any(b, k, depth=2, chain=False)
+                if d:
+                    hits += ANS_RE_T.findall(d)
+    except Exception:  # noqa: BLE001 - not a zip / malformed asset: no answer here
         pass
     return list(dict.fromkeys(hits))
 
@@ -2141,6 +3433,187 @@ def apktool_dir(apk, timeout=120):
         if r is None or not (out / "AndroidManifest.xml").exists():
             return None
     return out
+
+
+# --- certificate pinning: OkHttp `sha256/<b64>` pins in dex + NSC <pin-set> (coverage atlas rows 27, 28) ---------------
+_PIN_DEX = re.compile(rb"(sha(?:256|1))/([A-Za-z0-9+/]{27,86}={0,2})")
+_PIN_POOL = re.compile(rb"([\x04-\x7f])([\x21-\x7e]{4,127})\0")
+_PIN_HOST = re.compile(r"(?:\*{1,2}\.)?[a-z0-9](?:[a-z0-9-]{0,62}\.)+[a-z][a-z0-9-]{1,62}", re.I)
+_PIN_URL = re.compile(r"https?://([^/:?#\s]+)")
+_PIN_NOTHOST = frozenset(("com", "org", "net", "io", "android", "androidx", "java", "javax", "kotlin", "kotlinx",
+                          "okhttp3", "okio", "dalvik", "retrofit2", "sun", "libcore", "junit", "me", "de", "ch"))
+_PIN_MAX_ENTRY = 32 << 20
+
+
+def _pin_b64(v):
+    """Raw digest bytes of a pin's base64 (std or url-safe, padding optional); None when not base64."""
+    v = v.strip()
+    try:
+        return base64.b64decode(v + "=" * (-len(v) % 4), altchars=b"-_" if ("-" in v or "_" in v) else None,
+                                validate=True)
+    except (binascii.Error, ValueError):
+        return None
+
+
+def _pin_rec(algo, b64, source, hosts=()):
+    raw = _pin_b64(b64)
+    return {"pin": f"{algo.lower().replace('-', '')}/{b64}", "algo": algo.lower().replace("-", ""), "b64": b64,
+            "hex": raw.hex() if raw is not None else None, "len": len(raw) if raw is not None else None,
+            "source": source, "hosts": list(hosts)}
+
+
+def _axml_events(b):
+    """(kind, name, attrs, text) events of a binary AXML: ("start", tag, {attr: value}, None), ("end", tag, None, None),
+    ("text", None, None, cdata). Attribute values are the raw string (or the typed int as str / "true"/"false")."""
+    pool = None
+    i = 8 if b[:2] == b"\x03\x00" else len(b)
+    while i + 8 <= len(b):
+        typ, hsz, size = struct.unpack_from("<HHI", b, i)
+        if size < 8 or i + size > len(b):
+            break
+        if typ == 0x0001 and pool is None:
+            pool = _pool_strings(b[i:i + size])
+        elif pool is not None and typ in (0x0102, 0x0103, 0x0104):
+            s = lambda k: pool[k] if 0 <= k < len(pool) else None  # noqa: E731
+            e = i + hsz
+            if typ == 0x0102:
+                _ns, name, astart, asize, acount = struct.unpack_from("<IIHHH", b, e)
+                attrs = {}
+                for k in range(min(acount, 256)):
+                    a = e + astart + k * max(asize, 20)
+                    _ans, an, raw, _sz, _r0, dtype, data = struct.unpack_from("<IIIHBBI", b, a)
+                    if raw != 0xFFFFFFFF:
+                        v = s(raw)
+                    elif dtype == 0x12:
+                        v = "true" if data else "false"
+                    elif dtype == 0x03:
+                        v = s(data)
+                    else:
+                        v = str(data)
+                    attrs[s(an) or str(an)] = v
+                yield "start", s(name), attrs, None
+            elif typ == 0x0103:
+                yield "end", s(struct.unpack_from("<II", b, e)[1]), None, None
+            else:
+                yield "text", None, None, s(struct.unpack_from("<I", b, e)[0])
+        i += size
+
+
+def _xml_events(b):
+    """Same events from a plaintext (uncompiled) XML file."""
+    def walk(el):
+        yield "start", el.tag.split("}")[-1], {k.split("}")[-1]: v for k, v in el.attrib.items()}, None
+        if (el.text or "").strip():
+            yield "text", None, None, el.text
+        for c in el:
+            yield from walk(c)
+        yield "end", el.tag.split("}")[-1], None, None
+    yield from walk(ET.fromstring(b))
+
+
+def _nsc_parse(name, b):
+    """Network-security-config facts of one res/xml file: [{"file", "kind" (domain-config / base-config /
+    debug-overrides), "domains" [{"host", "includeSubdomains"}], "pins", "expiration", "cleartextTrafficPermitted",
+    "trust_anchors"}]; [] when the file is not an NSC."""
+    ev = _axml_events(b) if b[:2] == b"\x03\x00" else _xml_events(b) if b.lstrip()[:1] == b"<" else ()
+    out, stack, cur, last = [], [], [], None
+    for kind, tag, attrs, text in ev:
+        if kind == "start":
+            stack.append(tag)
+            last = (tag, attrs)
+            if tag in ("domain-config", "base-config", "debug-overrides"):
+                cur.append({"file": name, "kind": tag, "domains": [], "pins": [], "expiration": None,
+                            "cleartextTrafficPermitted": attrs.get("cleartextTrafficPermitted"), "trust_anchors": []})
+                out.append(cur[-1])
+            elif cur and tag == "pin-set":
+                cur[-1]["expiration"] = attrs.get("expiration")
+            elif cur and tag == "certificates":
+                cur[-1]["trust_anchors"].append(attrs.get("src"))
+        elif kind == "end":
+            if stack:
+                stack.pop()
+            if tag in ("domain-config", "base-config", "debug-overrides") and cur:
+                cur.pop()
+            last = None
+        elif kind == "text" and cur and last and (text or "").strip():
+            tag, attrs = last
+            if tag == "domain":
+                cur[-1]["domains"].append({"host": text.strip(), "includeSubdomains": attrs.get("includeSubdomains")})
+            elif tag == "pin":
+                cur[-1]["pins"].append(_pin_rec(attrs.get("digest") or "SHA-256", text.strip(), name,
+                                                [d["host"] for d in cur[-1]["domains"]]))
+    return out
+
+
+def cert_pins(apk):
+    """Certificate-pinning facts of an APK (rows 27, 28): {"pins": [{"pin" ("sha256/<b64>"), "algo", "b64", "hex" (digest
+    bytes, lower hex), "len", "source" (dex / res/xml file), "hosts"}], "hosts": pinned / referenced hostnames,
+    "nsc": per-<domain-config> records of every res/xml network-security-config (domains, includeSubdomains, pins,
+    pin-set expiration, cleartextTrafficPermitted, trust anchors)}. Dex pins come from OkHttp CertificatePinner-style
+    `sha256/<b64>` / `sha1/<b64>` constants; dex hosts are string-pool hostnames / URL hosts of a dex that holds a pin.
+    Empty lists when absent; never raises."""
+    facts = {"pins": [], "hosts": [], "nsc": []}
+    try:
+        with zipfile.ZipFile(apk) as z:
+            for info in z.infolist():
+                n = info.filename
+                if info.is_dir() or info.file_size > _PIN_MAX_ENTRY:
+                    continue
+                is_dex = bool(re.fullmatch(r"classes\d*\.dex", Path(n).name))
+                if not (is_dex or (n.startswith("res/") and n.endswith(".xml"))):
+                    continue
+                try:
+                    b = z.read(info)
+                except (OSError, RuntimeError, zipfile.BadZipFile, EOFError, ValueError):
+                    continue
+                if is_dex:
+                    pins = list(dict.fromkeys((m.group(1).decode(), m.group(2).decode()) for m in _PIN_DEX.finditer(b)))
+                    if not pins:
+                        continue
+                    hosts = []
+                    for m in _PIN_POOL.finditer(b, 0x70):
+                        if m.group(1)[0] != len(m.group(2)):
+                            continue
+                        t = m.group(2).decode()
+                        u = _PIN_URL.match(t)
+                        h = u.group(1) if u else t
+                        if _PIN_HOST.fullmatch(h) and h.lstrip("*.").split(".")[0].lower() not in _PIN_NOTHOST:
+                            hosts.append(h)
+                    hosts = list(dict.fromkeys(hosts))
+                    facts["pins"] += [_pin_rec(a, v, n, hosts) for a, v in pins]
+                    facts["hosts"] += hosts
+                elif b"pin" in b or b"domain" in b or b[:2] == b"\x03\x00":
+                    try:
+                        recs = _nsc_parse(n, b)
+                    except Exception:  # noqa: BLE001 - malformed AXML: skip the file
+                        continue
+                    facts["nsc"] += recs
+                    for r in recs:
+                        facts["pins"] += r["pins"]
+                        facts["hosts"] += [d["host"] for d in r["domains"]]
+    except Exception:  # noqa: BLE001 - not a zip
+        pass
+    facts["hosts"] = list(dict.fromkeys(facts["hosts"]))
+    return facts
+
+
+def cert_pin_scan(apk):
+    """ANS tokens encoded as a certificate pin (rows 27, 28): each dex `sha256/<b64>` / NSC <pin> value's digest bytes
+    scanned for a literal token, then the b64 text through decode_any; pinned hostnames scanned too. [] when absent."""
+    hits = []
+    try:
+        f = cert_pins(apk)
+        for p in f["pins"]:
+            raw = _pin_b64(p["b64"]) or b""
+            hits += [t.decode() for t in ANS_RE_B.findall(raw)]
+            if not hits:
+                d = decode_any(p["b64"], depth=2, cap=300, chain=False)
+                hits += ANS_RE_T.findall(d or "")
+        for h in f["hosts"]:
+            hits += ANS_RE_T.findall(h)
+    except Exception:  # noqa: BLE001
+        pass
+    return list(dict.fromkeys(hits))
 
 
 def decompiled_scan(apk):

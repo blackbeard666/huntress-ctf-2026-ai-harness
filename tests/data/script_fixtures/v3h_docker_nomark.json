@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=dockerfile|role=downloader|verdict=malicious|attack=T1105|adapter=build_arg_fetch|host_profile=standalone|obfuscation_profile=nomark|stage_profile=two_stage_download_execute|next_language=sh|stage_count=2|steps=fetch_stage,chmod_stage|campaign_id=DOC-de9564b6|url=https://docker-de9564b63f.example.invalid/stage|file_path=/tmp/huntress-docker/.3fff18909379daea.stage",
+ "decoy": false,
+ "host": "docker",
+ "tag": null,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v3h_gen.py  (plan -> base64, descriptor literal only, no HUNTRESS_ANALYSIS marker)",
+ "oracle_cmd": "sed -n 's/^ARG DESCRIPTOR_686A4168=//p' tests/data/script_fixtures/v3h_docker_nomark.Dockerfile | tr -d ' \\n\\r' | base64 -d"
+}

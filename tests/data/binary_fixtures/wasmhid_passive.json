@@ -1,0 +1,19 @@
+{
+ "encoding": "raw",
+ "expected_format": "wasm",
+ "expected_machine": "wasm32",
+ "expected_offset": 96,
+ "expected_mem_offset": 8192,
+ "expected_has_hcfg_section": false,
+ "expected_storage": "passive",
+ "expected_config": {
+  "c2": "203.0.113.9:443",
+  "campaign": "lowtide",
+  "sleep": 15,
+  "flag": "flag{p4ss1v3_1n1t}"
+ },
+ "generator_cmd": "bash wasmhid_gen.sh wasmhid_passive.bin passive '{\"c2\":\"203.0.113.9:443\",\"campaign\":\"lowtide\",\"sleep\":15,\"flag\":\"flag{p4ss1v3_1n1t}\"}' 0x3c",
+ "oracle_cmd": "bash wasmhid_oracle.sh wasmhid_passive.bin   # wasm-validate, wasm-objdump -x (custom names, Data init + hexdump) / -d (i32.const..i32.store, memory.init) -> perl linear-memory image, grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "valid | none | 8192 | 96 | HCFG 1 60 84 4154905709 4154905709 | {\"c2\":\"203.0.113.9:443\",\"campaign\":\"lowtide\",\"sleep\":15,\"flag\":\"flag{p4ss1v3_1n1t}\"}",
+ "note": "SPECULATIVE encoding/storage names; blob 4 bytes into a passive segment, memory.init'ed by the start func to linear 8192 (hcfg_mem_offset); file offset = raw 'H'"
+}

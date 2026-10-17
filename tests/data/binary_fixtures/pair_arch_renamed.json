@@ -1,0 +1,90 @@
+{
+ "format": "zip of a cross-arch same-source build pair",
+ "members": [
+  "d17--build-a.elf",
+  "d17--build-b.elf"
+ ],
+ "expected_sha256": [
+  "c268923066d74a8b4b7932a06ca81f23770b175dbe0f8bc9c2598ffd155e31af",
+  "31216422222b6fc5f0a3b08844aeee0aebc3ba745ca711c12b246726e4f2c003"
+ ],
+ "routes": {
+  "x86_64_machine": {
+   "member": "d17--build-b.elf",
+   "value": "x86-64"
+  },
+  "x86_64_machine_num": {
+   "member": "d17--build-b.elf",
+   "value": "62"
+  },
+  "x86_64_bits": {
+   "member": "d17--build-b.elf",
+   "value": 64
+  },
+  "x86_64_endian": {
+   "member": "d17--build-b.elf",
+   "value": "little"
+  },
+  "x86_64_elf_type": {
+   "member": "d17--build-b.elf",
+   "value": "ET_DYN"
+  },
+  "x86_64_entry_point": {
+   "member": "d17--build-b.elf",
+   "value": "0x10e0"
+  },
+  "aarch64_machine": {
+   "member": "d17--build-a.elf",
+   "value": "AArch64"
+  },
+  "aarch64_machine_num": {
+   "member": "d17--build-a.elf",
+   "value": "183"
+  },
+  "aarch64_bits": {
+   "member": "d17--build-a.elf",
+   "value": 64
+  },
+  "aarch64_endian": {
+   "member": "d17--build-a.elf",
+   "value": "little"
+  },
+  "aarch64_elf_type": {
+   "member": "d17--build-a.elf",
+   "value": "ET_DYN"
+  },
+  "aarch64_entry_point": {
+   "member": "d17--build-a.elf",
+   "value": "0x700"
+  },
+  "arm64_machine": {
+   "member": "d17--build-a.elf",
+   "value": "AArch64"
+  },
+  "arm64_machine_num": {
+   "member": "d17--build-a.elf",
+   "value": "183"
+  },
+  "arm64_bits": {
+   "member": "d17--build-a.elf",
+   "value": 64
+  },
+  "arm64_endian": {
+   "member": "d17--build-a.elf",
+   "value": "little"
+  },
+  "arm64_elf_type": {
+   "member": "d17--build-a.elf",
+   "value": "ET_DYN"
+  },
+  "arm64_entry_point": {
+   "member": "d17--build-a.elf",
+   "value": "0x700"
+  },
+  "riscv64_machine": null
+ },
+ "generator_cmd": "bash pair_arch_gen.sh   # gcc / aarch64-linux-gnu-gcc-15 -O2, clang-18 --target=riscv64,armv7 -c, zip -X -j",
+ "oracle_cmd": "bash pair_arch_oracle.sh pair_arch_renamed.bin   # unzip -Z1 + sha256sum, readelf -hW, od -tu2 -j18 (e_machine)",
+ "decoy": false,
+ "note": "no tag in the names: e_machine fallback (62 = x86_64, 183 = aarch64)"
+}

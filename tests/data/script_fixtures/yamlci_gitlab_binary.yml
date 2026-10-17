@@ -1,0 +1,14 @@
+stages: [build, deploy]
+variables:
+  GIT_DEPTH: "1"
+  DESCRIPTOR_9e33b104: !!binary |
+    dj0zfGxhbmd1YWdlPWdpdGxhYl9jaV95YW1sfHJvbGU9cGVyc2lzdGVuY2V8dmVy
+    ZGljdD1tYWxpY2lvdXN8YXR0YWNrPVQxMDUzfGFkYXB0ZXI9d29ya2Zsb3dfY3Jv
+    bnxob3N0X3Byb2ZpbGU9Z2l0bGFiX3ZhcmlhYmxlc3xzdGFnZV9jb3VudD0yfHN0
+    ZXBzPXJlZ2lzdGVyX3NjaGVkdWxlLHJ1bl9zdGFnZXxjYW1wYWlnbl9pZD1ZQy05
+    ZTMzYjEwNHx1cmw9aHR0cHM6Ly95Yy05ZTMzYjEwNC5leGFtcGxlLmludmFsaWQv
+    c3RhZ2V8ZmlsZV9wYXRoPS90bXAvaHVudHJlc3MteWMvLjllMzNiMTA0LnN0YWdl
+build:
+  stage: build
+  script:
+    - echo "$DESCRIPTOR_9e33b104" > /tmp/.c

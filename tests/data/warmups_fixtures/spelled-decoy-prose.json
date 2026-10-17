@@ -1,0 +1,10 @@
+{
+ "codec": "spelled-digits",
+ "plain": null,
+ "encoded": "One hundred and five people saw seven cats and two dogs at the fair",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written English sentence containing number words (not every token is a number word)",
+ "oracle_cmd": "printf %s \"$encoded\" | tr ' ' '\\n' | grep -vixE 'zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|and|[a-f]'  # non-number words remain -> not spelled digits",
+ "oracle_plain": null
+}

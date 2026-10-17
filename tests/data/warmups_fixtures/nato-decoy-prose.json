@@ -1,0 +1,10 @@
+{
+ "codec": "nato-layer",
+ "plain": null,
+ "encoded": "Mike and Victor met Juliet at the Hotel Sierra in Lima on Tango night",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written English sentence using NATO words as names (not every token is an alphabet word)",
+ "oracle_cmd": "printf %s \"$encoded\" | tr ' ' '\\n' | grep -vixE 'alfa|alpha|bravo|charlie|delta|echo|foxtrot|golf|hotel|india|juliett?|kilo|lima|mike|november|oscar|papa|quebec|romeo|sierra|tango|uniform|victor|whiskey|x-?ray|yankee|zulu'  # non-alphabet words remain -> not NATO",
+ "oracle_plain": null
+}

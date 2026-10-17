@@ -1,0 +1,9 @@
+{
+ "entry": "dex_native_calls",
+ "expected": null,
+ "decoy": true,
+ "_why": "token only reaches Log.d and a same-named NON-native Gate.nativeVerify; the real natives only get ints (nativeLen((short)256))",
+ "oracle_out": "nativeVerify(\"ANS-0b9d4e6a21f7c853\", 7) is Gate's own (non-native) method; JNIBoundary.nativeLen((short) 256)",
+ "generator_cmd": "apktool d -r -o base dexarr_fill_lit8.apk; rm base/smali/com/huntress/mobile/d01/v073e9a824e9e/StrEnc.smali; python3 tests/data/android_fixtures/gen_native_calls.py base decoy_lognative  # writes smali JNIBoundary/Gate; apktool b -o natcall_decoy_lognative.apk base",
+ "oracle_cmd": "jadx -q -d j natcall_decoy_lognative.apk; grep -rhn 'native \\|nativeVerify(\\|nativeEvidence(\\|nativeLen(\\|getBytes\\|length()' j/sources/com/huntress/mobile/d17"
+}

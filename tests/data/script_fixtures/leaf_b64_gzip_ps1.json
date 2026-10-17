@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=powershell|role=loader|verdict=malicious|attack=T1059.001|adapter=iex_stage|stage_count=2|steps=fetch_stage,invoke_stage|campaign_id=PS-1eaf0b64|url=https://powershell-1eaf0b64.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "M=$(printf %s '<plan>' | gzip -n9 | base64 -w0); printf '# stage loader\\r\\n$Material_1eaf = \"%s\"\\r\\n$Codec_1eaf = \"gzip_base64|identity|\"\\r\\nWrite-Output \"ok\"\\r\\n' \"$M\" | gzip -n9 | base64 -w 76 > leaf_b64_gzip_ps1.b64  (whole leaf = base64(gzip(ps1)))",
+ "oracle_cmd": "base64 -d leaf_b64_gzip_ps1.b64 | gunzip | grep -o 'Material_1eaf = \"[^\"]*' | cut -d'\"' -f2 | base64 -d | gunzip"
+}

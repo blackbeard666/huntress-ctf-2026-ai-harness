@@ -1,0 +1,7 @@
+{
+ "entry": "webview_asset_scan",
+ "expected": "ANS-c41e8d27a90f3b56",
+ "generator_cmd": "tests/data/android_fixtures/gen_webview_assets.sh tests/data/android_fixtures  # printf/base64/perl write the asset, zip -qX -r <name>.apk assets; assets/index.html <script>: var secret = String.fromCharCode(65,0x4e,...) (perl: alternating decimal / hex char codes)",
+ "oracle_cmd": "unzip -p webview_html_fromcharcode.apk assets/index.html | sed -n '/<script>/,/<\\/script>/p' | sed '1d;$d' | node -e 'const vm=require(\"vm\");let s=require(\"fs\").readFileSync(0,\"utf8\").replace(/^export /mg,\"\");const c={atob,document:{addEventListener:(e,f)=>f(),getElementById:()=>({})},window:{}};vm.runInNewContext(s+\";globalThis.__s=typeof secret!=\\\"undefined\\\"?secret:window.secret\",c);console.log(c.__s)'  # -> ANS-c41e8d27a90f3b56",
+ "decoy": false
+}

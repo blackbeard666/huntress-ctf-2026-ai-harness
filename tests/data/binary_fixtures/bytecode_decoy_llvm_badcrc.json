@@ -1,0 +1,13 @@
+{
+ "encoding": "none",
+ "expected_format": "llvm_bitcode",
+ "expected_machine": "none",
+ "file_b": "LLVM IR bitcode",
+ "expected_offset": null,
+ "expected_config": null,
+ "generator_cmd": "BADCRC=1 bash bytecode_gen.sh bytecode_decoy_llvm_badcrc.bin llvm '{\"c2\":\"203.0.113.41:8443\",\"campaign\":\"bitstream\",\"sleep\":12,\"flag\":\"flag{ch4r6_n0t_v3rb4t1m}\"}' 0x5a raw   # header crc 0xefbeadde: the blob fails its crc",
+ "oracle_cmd": "bash bytecode_oracle.sh bytecode_decoy_llvm_badcrc.bin",
+ "oracle_output": "LLVM IR bitcode | x86_64-pc-linux-gnu | none | HCFG 1 90 94 4022250974 3658746098 | {\"c2\":\"203.0.113.41:8443\",\"campaign\":\"bitstream\",\"sleep\":12,\"flag\":\"flag{ch4r6_n0t_v3rb4t1m}\"}",
+ "decoy": true,
+ "note": "format labels SPECULATIVE (GM vocabulary not seen; candidates in machine_facts()['format_candidates']); machine 'none' (wrapper: Mach-O cputype); expected_offset = first stored byte per the OFFSET LAW (grep -obUa); bitcode strings are bit-packed (char6 / fixed-8 arrays) so no byte-exact independent offset exists -> expected_offset null (not asserted)"
+}

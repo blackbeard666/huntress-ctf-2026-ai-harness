@@ -1,0 +1,11 @@
+name: lint
+on: [push]
+env:
+  descriptor_aa11bb22: !!binary |
+    cmV0cmllcz0zfGNhY2hlPW5wbXxub2RlPTIwfHZlcmJvc2U9ZmFsc2V8dGlt
+    ZW91dF9taW51dGVzPTE1fG5vdGU9bm90aGluZyB0byBzZWUgaGVyZQ==
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm ci && npm run lint

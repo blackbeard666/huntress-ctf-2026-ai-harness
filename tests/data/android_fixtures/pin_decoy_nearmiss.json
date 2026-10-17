@@ -1,0 +1,7 @@
+{
+ "entry": "dex_strings",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "bash gen_cert_pins.sh  # pin() = base64(printf TOKEN + sha256sum(seed)|xxd -r -p|head -c 32-len) ; smali const-string \"sha256/<pin>\" + res/xml/network_security_config.xml <pin-set><pin digest=\"SHA-256\">; apktool b (3.0.3, aapt2) -- variant 3: DECOY, plain digests + near-miss NSC pin ANS-e04b9d7a1c26f83Z (15 hex + Z)",
+ "oracle_cmd": "aapt dump xmltree pin_decoy_nearmiss.apk res/xml/network_security_config.xml | grep -oP 'C: \"\\K[A-Za-z0-9+/=]{40,}' | while read v; do echo \"$v\" | base64 -d | head -c 20; echo; done  # -> ANS-e04b9d7a1c26f83Z (not a valid token)"
+}

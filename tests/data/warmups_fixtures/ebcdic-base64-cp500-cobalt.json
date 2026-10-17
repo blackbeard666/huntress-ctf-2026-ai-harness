@@ -1,0 +1,9 @@
+{
+ "codec": "base64(cp500)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "encoded": "1YmDhUCmlpmSQISFg5aEiZWHQKOIiaJApoGZlKSXT0DjlkCilpOlhWtAoqSClImjQKOIiaJAhaeBg6NAgZWipoWZQKOWQKOIhUDHgZSFQNSBoqOFmXpAg5aCgZOjYIiFmZaVYPf3",
+ "generator_cmd": "printf %s \"$plain\" | iconv -f UTF-8 -t IBM500 | base64 -w0  # glibc iconv IBM500 + coreutils base64",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys,base64;print(base64.b64decode(sys.stdin.read()).decode('cp500'),end='')\"  # CPython stdlib codecs (independent of glibc iconv)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "expected": "match"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "utf-7",
+ "plain": null,
+ "encoded": "Nice work decoding this warmup, to solve submit the answer.",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup, to solve submit the answer.'  # plain ASCII prose, no '+' shift run",
+ "oracle_cmd": "printf %s \"$encoded\" | iconv -f UTF-7 -t UTF-8  # iconv reads it back unchanged: no shift sequence, so it is not UTF-7-encoded text",
+ "oracle_plain": null
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "hex(cp037)",
+ "plain": null,
+ "encoded": "4e69636520776f726b206465636f64696e672074686973207761726d757021",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup!' | xxd -p | tr -d '\\n'  # plain UTF-8 hex impostor",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | file -  # file(1) says ASCII text: no byte >= 0x80, so not EBCDIC letters (cp037 would read '\u00e5\u00d1\u00c4\u00c1...' non-ASCII)",
+ "oracle_plain": null
+}

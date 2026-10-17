@@ -1,0 +1,8 @@
+{
+ "field": "email.attachment_sha256s",
+ "expected": "[\"5a838678058f6de375e8635b5f2fea47a4e5f07cb1a882a44b10f39abc6f34ff\",\"5341d4c8ab2a602aa0dccd8b5b817afa2f0abb69de238f13aa05c96c03a943f8\",\"749367734a6dfcce48f7768384dbb176f9b1c69200fdab17cdd9893c8e7a98ee\",\"586fae68102ebd6c60ada7225a14824d939d395bf915e150423b91935c0240f5\"]",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/email/GENERATOR_stdlib_mime_attachments.py.txt <outdir>  (stdlib email.message.EmailMessage writer, policy.SMTP; scan_rfc2047 = hand-written raw bytes; decoy = Pillow PNG) -> invoice_mixed.eml",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/email/ORACLE_eml_parser_mime.py.txt tools/pylib-eml <file>  (eml_parser 4.2.1 EmlParser(include_attachment_data, include_raw_body).decode_email_bytes + raw boundary-delimiter scan) -> attachment_sha256s",
+ "decoy": false,
+ "member": "evidence-01/invoice_mixed.eml"
+}

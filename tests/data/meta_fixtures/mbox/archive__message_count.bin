@@ -1,0 +1,108 @@
+From MAILER-DAEMON Fri Oct 16 15:13:46 2026
+From: ap@contoso-pay.example
+To: finance@fabrikam.example
+Subject: Invoice 4471 overdue
+Date: Tue, 13 Oct 2026 09:15:00 -0700
+Message-ID: <inv4471.a1@mail.contoso-pay.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Please pay invoice 4471.
+>From the AP team
+>From quoted
+
+From MAILER-DAEMON Fri Oct 16 15:13:46 2026
+From: finance@fabrikam.example
+To: ap@contoso-pay.example
+Subject: Re: Invoice 4471 overdue
+Date: Tue, 13 Oct 2026 17:02:11 +0000
+Message-ID: <inv4471.a2@mx.fabrikam.example>
+In-Reply-To: <inv4471.a1@mail.contoso-pay.example>
+References: <inv4471.a1@mail.contoso-pay.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+ok
+
+From MAILER-DAEMON Fri Oct 16 15:13:46 2026
+From: hr@fabrikam.example
+To: finance@fabrikam.example
+Subject: Q3 payroll export
+Date: Mon, 12 Oct 2026 23:59:59 +0200
+Message-ID: <payroll-q3.b1@hr.fabrikam.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+ok
+
+From MAILER-DAEMON Fri Oct 16 15:13:46 2026
+From: ap@contoso-pay.example
+To: finance@fabrikam.example
+Subject: Re: Re: Invoice 4471 overdue
+Date: Wed, 14 Oct 2026 08:00:00 +0900
+Message-ID: <inv4471.a3@mail.contoso-pay.example>
+In-Reply-To: <inv4471.a2@mx.fabrikam.example>
+References: <inv4471.a1@mail.contoso-pay.example> <inv4471.a2@mx.fabrikam.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+ok
+
+From MAILER-DAEMON Fri Oct 16 15:13:46 2026
+From: finance@fabrikam.example
+To: ap@contoso-pay.example
+Subject: Re: Invoice 4471 overdue
+Date: Tue, 13 Oct 2026 17:02:11 +0000
+Message-ID: <inv4471.a2@mx.fabrikam.example>
+In-Reply-To: <inv4471.a1@mail.contoso-pay.example>
+References: <inv4471.a1@mail.contoso-pay.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+ok
+
+From MAILER-DAEMON Fri Oct 16 15:13:46 2026
+From: it@fabrikam.example
+To: finance@fabrikam.example
+Subject: VPN token =?utf-8?q?r=C3=A9set?=
+Date: Thu, 15 Oct 2026 06:30:00 -0400
+Message-ID: <vpn.c1@it.fabrikam.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+ok
+
+From MAILER-DAEMON Fri Oct 16 15:13:46 2026
+From: ap@contoso-pay.example
+To: finance@fabrikam.example
+Subject: Re: Q3 payroll export
+Date: Tue, 13 Oct 2026 01:00:00 +0000
+Message-ID: <payroll-q3.b2@hr.fabrikam.example>
+In-Reply-To: <payroll-q3.b1@hr.fabrikam.example>
+References: <payroll-q3.b1@hr.fabrikam.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+ok
+
+From MAILER-DAEMON Fri Oct 16 15:13:46 2026
+From: ap@contoso-pay.example
+To: finance@fabrikam.example
+Subject: Re: Wire instructions changed
+Date: Fri, 16 Oct 2026 02:45:30 -0500
+Message-ID: <wire.d2@mx.fabrikam.example>
+In-Reply-To: <wire.d1@attacker.example>
+References: <wire.d1@attacker.example>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+ok
+

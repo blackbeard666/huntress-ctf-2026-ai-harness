@@ -1,0 +1,9 @@
+{
+ "codec": "spelled(hex)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-27",
+ "encoded": "four e / six nine / six three / six five / two zero / seven seven / six f / seven two / six b / two zero / six four / six five / six three / six f / six four / six nine / six e / six seven / two zero / seven four / six eight / six nine / seven three / two zero / seven seven / six one / seven two / six d / seven five / seven zero / two one / two zero / five four / six f / two zero / seven three / six f / six c / seven six / six five / two c / two zero / seven three / seven five / six two / six d / six nine / seven four / two zero / seven four / six eight / six nine / seven three / two zero / six five / seven eight / six one / six three / seven four / two zero / six one / six e / seven three / seven seven / six five / seven two / two zero / seven four / six f / two zero / seven four / six eight / six five / two zero / four seven / six one / six d / six five / two zero / four d / six one / seven three / seven four / six five / seven two / three a / two zero / six one / six d / six two / six five / seven two / two d / six six / six one / six c / six three / six f / six e / two d / three two / three seven",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c1 | perl -ne '@w=qw(zero one two three four five six seven eight nine);chomp;push @o, join(\" \", map { /\\d/ ? $w[$_] : $_ } split //)}{print join(\" / \", @o)'",
+ "oracle_cmd": "printf %s \"$encoded\" | awk 'BEGIN{RS=\" / \";split(\"zero one two three four five six seven eight nine\",W,\" \");for(i=1;i<=10;i++)M[W[i]]=i-1}{n=split($0,T,\" \");v=\"\";for(i=1;i<=n;i++)v=v ((T[i] in M)?M[T[i]]:T[i]);printf \"%s\",v}' | xxd -r -p",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-27",
+ "expected": "match"
+}

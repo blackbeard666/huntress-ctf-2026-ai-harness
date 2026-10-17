@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "printf '# benign maintenance script\\r\\nGet-ChildItem $env:TEMP | Remove-Item -WhatIf\\r\\nWrite-Output \"cleanup done\"\\r\\n' | gzip -n9 | base64 -w 76 > leaf_decoy_b64_benign.b64  (base64(gzip) leaf, no codec / marker / plan)",
+ "oracle_cmd": "base64 -d leaf_decoy_b64_benign.b64 | gunzip | grep -c 'v=3' (0: no plan)"
+}

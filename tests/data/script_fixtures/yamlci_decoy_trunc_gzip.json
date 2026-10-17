@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "yaml-ci",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/yamlci_gen.py  (stdlib base64/gzip/bytes.hex encode; DECOY: inputs default block holding a truncated gzip stream)",
+ "oracle_cmd": ".venv/bin/python -I -c 'import yaml,sys;print(yaml.safe_load(open(sys.argv[1]))[True][\"workflow_dispatch\"][\"inputs\"][\"descriptor_dd44ee55\"][\"default\"])' tests/data/script_fixtures/yamlci_decoy_trunc_gzip.yml | base64 -d | gunzip   # -> unexpected end of file (truncated)"
+}

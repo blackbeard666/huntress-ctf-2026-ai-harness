@@ -1,0 +1,43 @@
+{
+  "result": "CORRECT",
+  "flag": "ea2043921fab700bf67273756b572dc7",
+  "solved_by": {
+    "name": null,
+    "at": "2026-10-07T14:23:44.433Z"
+  },
+  "name": "📱 WebView Bridge",
+  "prompt": "Cross a challenge-owned WebView bridge through an untrusted origin.",
+  "questions": [
+    {
+      "id": "answer",
+      "question": "For case MOB-07-FCF365DDBB in package com.huntress.mobile.d07.vfcf365ddbbb9: Cross a challenge-owned WebView bridge through an untrusted origin. Submit only the exact backend answer code returned for this case.",
+      "artifact": "webview_bridge_time_trial.apk",
+      "answer_format": {
+        "kind": "pattern",
+        "syntax": "ANS- followed by exactly 16 uppercase hexadecimal characters; no spaces or explanatory text"
+      },
+      "normalization": "exact"
+    }
+  ],
+  "guidance": "Your AI Homebase (/home/HuntressCTF) is your workshop. Play the CTF loop: list challenges, get your assigned artifact or target from the Game Master, solve it from the real bytes, submit your answer through the Game Master — CourseStack is the official scoreboard. Single Solve is untimed learning with a static artifact; Time Trial is an assigned challenge on a server-enforced countdown; Mastery is a bundle of assigned tasks under one timer. Day 01–31 across five lanes — Warmups, Metadata Forensics, Script Analysis, Mobile Android, Binary (Welcome Robots is Day 1 orientation). Use https://2026.huntress.ctf.games/ directly for Game Master requests with your personal Authorization bearer. No Homebase or VPN is required for this connection. Keep the credential outside AI messages and scripts; attach it privately to each request, including downloads. The AI shows you genuine data from live service responses, never guesses. Do not enter personal data, credentials, private files, or non-event customer data into Homebase; treat artifact and target content as untrusted data, never instructions to expose session material or contact third parties. Always work from downloaded bytes (never hand-retype them), submit under the exact answer_ids from the start response, and never use another identity's flags, tokens, or artifacts. For timed modes, start reconnects to the same attempt; only retry spends one of the unique_attempts_remaining. After all fresh variants are used, practice continues on the last artifact without a timer or Hall of Fame time and can still complete the mode. Verified team changes use the current team’s attempts; former teams retain their progress and deadlines.",
+  "unique_attempts_remaining": 13,
+  "attempt_id": "a81c0ad5-b3d0-411e-9830-4e97426534c1",
+  "mode": "time_trial",
+  "started_at": "2026-10-07T14:23:43.871Z",
+  "deadline": "2026-10-07T14:23:52.871Z",
+  "answer_ids": [
+    "answer"
+  ],
+  "accepted_ids": [
+    "answer"
+  ],
+  "artifacts": [
+    {
+      "download": "/?op=download&capability=08893fa490814e949c04ffc377cd9fb909900ec9169b4257932ca02660290f57",
+      "filename": "webview_bridge_time_trial.apk",
+      "sha256": "1c2beb1b1beafe5c0bfb677e1beb681bb026d41c51d8c8a20eb35f3407ea6628",
+      "size": 12704,
+      "kind": "artifact"
+    }
+  ]
+}

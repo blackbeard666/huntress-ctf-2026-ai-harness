@@ -1,0 +1,45 @@
+{
+ "encoding": "raw",
+ "expected_format": "wasm",
+ "expected_offset": 34,
+ "expected_mem_offset": 2048,
+ "expected_config": {
+  "c2": "203.0.113.9:8443",
+  "campaign": "doorframe",
+  "sleep": 30,
+  "flag": "flag{w4sm_d00rs_0p3n}"
+ },
+ "expected_fields": {
+  "imports": "none",
+  "import_count": 0,
+  "exports": [
+   "memory"
+  ],
+  "export_count": 1,
+  "function_count": 0,
+  "table_count": 0,
+  "global_count": 0,
+  "elem_count": 0,
+  "data_segment_count": 1,
+  "mutable_global_count": 0,
+  "passive_data_segment_count": 0,
+  "indirect_targets": "none",
+  "memory_min": 2,
+  "memory_max": "none",
+  "memory_shared": false,
+  "data_offsets": [
+   2048
+  ],
+  "custom_sections": "none",
+  "has_table": false,
+  "hcfg_mem_offset": 2048,
+  "start_function": "none",
+  "hcfg_offset": 34
+ },
+ "generator_cmd": "bash wasminv_gen.sh wasminv_decoy_bare.bin bare '{\"c2\":\"203.0.113.9:8443\",\"campaign\":\"doorframe\",\"sleep\":30,\"flag\":\"flag{w4sm_d00rs_0p3n}\"}' 0",
+ "oracle_cmd": "bash wasminv_oracle.sh wasminv_decoy_bare.bin   # wasm-objdump -x (wabt 1.0.36) + wasm-validate --enable-threads + grep -obUa HCFG; config: bash wasm_oracle.sh wasminv_decoy_bare.bin (grep -obUa, perl unpack + xor, gzip-trailer crc32)",
+ "oracle_output": "{\"custom_sections\": [], \"data_offsets\": [2048], \"data_segment_count\": 1, \"elem_count\": 0, \"export_count\": 1, \"exports\": [\"memory\"], \"function_count\": 0, \"global_count\": 0, \"has_table\": false, \"hcfg_file_offset\": \"34\", \"hcfg_mem_offset\": 2048, \"import_count\": 0, \"imports\": [], \"indirect_targets\": [], \"memory_max\": \"none\", \"memory_min\": 2, \"memory_shared\": false, \"mutable_global_count\": 0, \"passive_data_segment_count\": 0, \"start\": \"none\", \"table_count\": 0, \"valid\": true}",
+ "oracle_output_hcfg": "WebAssembly (wasm) binary module version 0x1 (MVP) | valid | i32 | 2048 | 34 | HCFG 1 0 90 2670209175 2670209175 | {\"c2\":\"203.0.113.9:8443\",\"campaign\":\"doorframe\",\"sleep\":30,\"flag\":\"flag{w4sm_d00rs_0p3n}\"}",
+ "note": "wasm 'doors' inventory (lib.binary.wasm_fields / wasm_field): lists in section order (JSON), imports as module.name, *_count = entries of that section (wasm-objdump Section[N]; imports not counted), has_table includes an imported table, memory_min/max in 64 KiB pages, indirect_targets = funcs of ACTIVE elem segments by name, hcfg_offset = file offset of the 'H' (hcfg_mem_offset = linear-memory address); field spellings SPECULATIVE (GM vocabulary not seen); DECOY: bare module -- no imports/table/elem/start/globals/custom sections -> 'none' / 0 / false",
+ "decoy": true
+}

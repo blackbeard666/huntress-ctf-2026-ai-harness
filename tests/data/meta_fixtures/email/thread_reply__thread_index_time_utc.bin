@@ -1,0 +1,18 @@
+From: Dana Ops <dana@fabrikam.example>
+To: ap@contoso.example
+Subject: RE: Fwd: RE: Invoice 4471 overdue
+Date: Tue, 01 Oct 2024 10:15:00 +0200
+Message-ID: <reply3.7781@mail.fabrikam.example>
+In-Reply-To: <fwd2.5512@mx.contoso.example>
+References: <root1.0042@billing.northwind.example>
+ <fwd2.5512@mx.contoso.example> <side.9@lists.example>
+Thread-Topic: Invoice 4471 overdue
+Thread-Index: AdsWM2kZ4AQlP4lP0xGaDAMF6CwzAQAAobLDAAHU5fY=
+X-Forwarded-To: ap@contoso.example
+Resent-Message-ID: <resent.77@relay.contoso.example>
+X-MS-Exchange-Organization-AuthAs: Anonymous
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+see below

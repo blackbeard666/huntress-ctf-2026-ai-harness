@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": "ANS-5b9e07c3a1f2d864",
+ "generator_cmd": "tests/data/android_fixtures/gen_multi_abi.sh tests/data/android_fixtures  # native_src/noarg_add.c -> one object per ABI (zig cc -target arm-linux-musleabihf -mcpu=cortex_a7 -mthumb -O2; blob[i]=c+13i+7, no xor imm), linked into lib/armeabi-v7a/libcore.so (zig cc -shared -s); zip -qX -r <name>.apk assets lib; no ANS literal in any .so",
+ "oracle_cmd": "same object linked statically with native_src/static_harness.c (zig cc -static) and run under qemu-arm with a fake JNIEnv/JavaVM: 'huntress_secret -> ANS-5b9e07c3a1f2d864'; readelf -h lib/armeabi-v7a/libcore.so: Machine ARM",
+ "decoy": false
+}

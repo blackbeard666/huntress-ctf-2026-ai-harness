@@ -1,0 +1,177 @@
+{
+ "format": "zip of a same-source build pair",
+ "members": [
+  "d17--variant-001-stripped.elf",
+  "d17--variant-000-debug.elf"
+ ],
+ "expected_sha256": [
+  "905a13b1156ae7fa9a31d2c0b5da0efdd947ff86bab8269046fa0d7be1c4b529",
+  "fd1454ba0866380f9399b3e068015737ed7f5b4d2e31e2fafbeb685519423a60"
+ ],
+ "routes": {
+  "debug_elf_type": {
+   "member": "d17--variant-000-debug.elf",
+   "value": "ET_DYN"
+  },
+  "debug_entry_point": {
+   "member": "d17--variant-000-debug.elf",
+   "value": "0x1060"
+  },
+  "debug_has_symtab": {
+   "member": "d17--variant-000-debug.elf",
+   "value": "true"
+  },
+  "debug_section_names": {
+   "member": "d17--variant-000-debug.elf",
+   "value": [
+    "",
+    ".note.gnu.build-id",
+    ".interp",
+    ".gnu.hash",
+    ".dynsym",
+    ".dynstr",
+    ".gnu.version",
+    ".gnu.version_r",
+    ".rela.dyn",
+    ".rela.plt",
+    ".init",
+    ".plt",
+    ".plt.got",
+    ".plt.sec",
+    ".text",
+    ".fini",
+    ".rodata",
+    ".hcfg",
+    ".eh_frame_hdr",
+    ".eh_frame",
+    ".note.gnu.property",
+    ".note.ABI-tag",
+    ".init_array",
+    ".fini_array",
+    ".dynamic",
+    ".got",
+    ".data",
+    ".bss",
+    ".comment",
+    ".debug_aranges",
+    ".debug_info",
+    ".debug_abbrev",
+    ".debug_line",
+    ".debug_str",
+    ".debug_line_str",
+    ".symtab",
+    ".strtab",
+    ".shstrtab"
+   ]
+  },
+  "debug_imports": {
+   "member": "d17--variant-000-debug.elf",
+   "value": [
+    "__libc_start_main",
+    "_ITM_deregisterTMCloneTable",
+    "printf",
+    "__gmon_start__",
+    "_ITM_registerTMCloneTable",
+    "__cxa_finalize"
+   ]
+  },
+  "debug_has_interp": {
+   "member": "d17--variant-000-debug.elf",
+   "value": "true"
+  },
+  "debug_has_debug_info": {
+   "member": "d17--variant-000-debug.elf",
+   "value": "true"
+  },
+  "debug_is_packed": {
+   "member": "d17--variant-000-debug.elf",
+   "value": "false"
+  },
+  "debug_needed": {
+   "member": "d17--variant-000-debug.elf",
+   "value": [
+    "libc.so.6"
+   ]
+  },
+  "stripped_elf_type": {
+   "member": "d17--variant-001-stripped.elf",
+   "value": "ET_DYN"
+  },
+  "stripped_entry_point": {
+   "member": "d17--variant-001-stripped.elf",
+   "value": "0x1060"
+  },
+  "stripped_has_symtab": {
+   "member": "d17--variant-001-stripped.elf",
+   "value": "false"
+  },
+  "stripped_section_names": {
+   "member": "d17--variant-001-stripped.elf",
+   "value": [
+    "",
+    ".note.gnu.build-id",
+    ".interp",
+    ".gnu.hash",
+    ".dynsym",
+    ".dynstr",
+    ".gnu.version",
+    ".gnu.version_r",
+    ".rela.dyn",
+    ".rela.plt",
+    ".init",
+    ".plt",
+    ".plt.got",
+    ".plt.sec",
+    ".text",
+    ".fini",
+    ".rodata",
+    ".hcfg",
+    ".eh_frame_hdr",
+    ".eh_frame",
+    ".note.gnu.property",
+    ".note.ABI-tag",
+    ".init_array",
+    ".fini_array",
+    ".dynamic",
+    ".got",
+    ".data",
+    ".bss",
+    ".comment",
+    ".shstrtab"
+   ]
+  },
+  "stripped_imports": {
+   "member": "d17--variant-001-stripped.elf",
+   "value": [
+    "__libc_start_main",
+    "_ITM_deregisterTMCloneTable",
+    "printf",
+    "__gmon_start__",
+    "_ITM_registerTMCloneTable",
+    "__cxa_finalize"
+   ]
+  },
+  "stripped_has_interp": {
+   "member": "d17--variant-001-stripped.elf",
+   "value": "true"
+  },
+  "stripped_has_debug_info": {
+   "member": "d17--variant-001-stripped.elf",
+   "value": "false"
+  },
+  "stripped_is_packed": {
+   "member": "d17--variant-001-stripped.elf",
+   "value": "false"
+  },
+  "stripped_needed": {
+   "member": "d17--variant-001-stripped.elf",
+   "value": [
+    "libc.so.6"
+   ]
+  }
+ },
+ "generator_cmd": "bash pair_gen.sh   # gcc -O0/-O2/-Os/-static -nostdlib/-pie/-no-pie/-g, strip, upx -9, zip -X -j",
+ "oracle_cmd": "bash pair_oracle.sh pair_debug_stripped.bin   # unzip -Z1 + sha256sum, readelf -hW/-SW/-lW/--dyn-syms/-dW, upx -t",
+ "decoy": false,
+ "note": "CD order (stripped first) differs from variant numbering"
+}

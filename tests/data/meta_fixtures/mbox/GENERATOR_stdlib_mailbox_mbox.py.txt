@@ -1,0 +1,65 @@
+# Fixture generator: stdlib mailbox.mbox WRITER (+ email.message.EmailMessage, Pillow for the decoy).
+# usage: python3 -I GENERATOR_stdlib_mailbox_mbox.py.txt <outdir>
+import email.utils, io, mailbox, os, sys
+from email.message import EmailMessage
+from email.headerregistry import Address  # noqa: F401
+out = sys.argv[1]
+os.makedirs(out, exist_ok=True)
+
+
+def msg(mid, subj, date, frm="ap@contoso-pay.example", to="finance@fabrikam.example", irt=None, refs=None, body="ok\n"):
+    m = EmailMessage()
+    m["From"] = frm
+    m["To"] = to
+    m["Subject"] = subj
+    m["Date"] = date
+    m["Message-ID"] = mid
+    if irt:
+        m["In-Reply-To"] = irt
+    if refs:
+        m["References"] = refs
+    m.set_content(body)
+    return m
+
+
+A1, A2, A3 = "<inv4471.a1@mail.contoso-pay.example>", "<inv4471.a2@mx.fabrikam.example>", "<inv4471.a3@mail.contoso-pay.example>"
+B1, B2 = "<payroll-q3.b1@hr.fabrikam.example>", "<payroll-q3.b2@hr.fabrikam.example>"
+C1, D2, MISSING = "<vpn.c1@it.fabrikam.example>", "<wire.d2@mx.fabrikam.example>", "<wire.d1@attacker.example>"
+msgs = [
+    msg(A1, "Invoice 4471 overdue", "Tue, 13 Oct 2026 09:15:00 -0700",
+        body="Please pay invoice 4471.\nFrom the AP team\n>From quoted\n"),
+    msg(A2, "Re: Invoice 4471 overdue", "Tue, 13 Oct 2026 17:02:11 +0000", frm="finance@fabrikam.example",
+        to="ap@contoso-pay.example", irt=A1, refs=A1),
+    msg(B1, "Q3 payroll export", "Mon, 12 Oct 2026 23:59:59 +0200", frm="hr@fabrikam.example"),
+    msg(A3, "Re: Re: Invoice 4471 overdue", "Wed, 14 Oct 2026 08:00:00 +0900", irt=A2, refs=A1 + " " + A2),
+    msg(A2, "Re: Invoice 4471 overdue", "Tue, 13 Oct 2026 17:02:11 +0000", frm="finance@fabrikam.example",
+        to="ap@contoso-pay.example", irt=A1, refs=A1),          # exported twice: duplicate Message-ID
+    msg(C1, "=?utf-8?q?VPN_token_r=C3=A9set?=", "Thu, 15 Oct 2026 06:30:00 -0400", frm="it@fabrikam.example"),
+    msg(B2, "Re: Q3 payroll export", "Tue, 13 Oct 2026 01:00:00 +0000", irt=B1, refs=B1),
+    msg(D2, "Re: Wire instructions changed", "Fri, 16 Oct 2026 02:45:30 -0500", irt=MISSING, refs=MISSING),
+]
+p = os.path.join(out, "archive.mbox")
+if os.path.exists(p):
+    os.remove(p)
+box = mailbox.mbox(p)
+for m in msgs:
+    box.add(m)
+box.flush(); box.close()
+
+# second mailbox: 3 messages, one reply chain via In-Reply-To only
+p2 = os.path.join(out, "export2.mbox")
+if os.path.exists(p2):
+    os.remove(p2)
+box = mailbox.mbox(p2)
+box.add(msg("<x1@corp.example>", "Shared drive moved", "Sat, 10 Oct 2026 12:00:00 +0000"))
+box.add(msg("<x2@corp.example>", "Re: Shared drive moved", "Sat, 10 Oct 2026 12:30:00 +0000", irt="<x1@corp.example>"))
+box.add(msg("<y1@corp.example>", "Lunch", "Sun, 11 Oct 2026 12:00:00 +0000"))
+box.flush(); box.close()
+
+# decoys: a single .eml renamed .mbox (no envelope "From " line), and a PNG renamed .mbox
+with open(os.path.join(out, "single_eml_renamed.mbox"), "wb") as f:
+    f.write(bytes(msg("<solo@corp.example>", "Not a mailbox", "Sat, 10 Oct 2026 12:00:00 +0000")))
+from PIL import Image
+b = io.BytesIO(); Image.new("RGB", (4, 3), (200, 10, 10)).save(b, "PNG")
+with open(os.path.join(out, "png_renamed.mbox"), "wb") as f:
+    f.write(b.getvalue())

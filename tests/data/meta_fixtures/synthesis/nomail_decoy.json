@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.thread_groups",
+ "expected": "none",
+ "generator_cmd": "cd $T/mail && zip -q -X ../nomail.zip readme.txt  (a container with no e-mail member)",
+ "oracle_cmd": "unzip -l nomail_decoy.bin  (1 file: readme.txt, no .eml member -> field absent)",
+ "decoy": true
+}

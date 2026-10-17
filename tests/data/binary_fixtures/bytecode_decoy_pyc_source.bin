@@ -1,0 +1,2 @@
+CFG = "SENGRwEAUAAAAA"  # truncated base64 HCFG header, no body
+print(CFG)

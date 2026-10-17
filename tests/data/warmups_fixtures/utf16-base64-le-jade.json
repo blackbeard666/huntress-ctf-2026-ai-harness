@@ -1,0 +1,9 @@
+{
+ "codec": "base64(utf-16le)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-19",
+ "encoded": "TgBpAGMAZQAgAHcAbwByAGsAIABkAGUAYwBvAGQAaQBuAGcAIAB0AGgAaQBzACAAdwBhAHIAbQB1AHAAIQAgAFQAbwAgAHMAbwBsAHYAZQAsACAAcwB1AGIAbQBpAHQAIAB0AGgAaQBzACAAZQB4AGEAYwB0ACAAYQBuAHMAdwBlAHIAIAB0AG8AIAB0AGgAZQAgAEcAYQBtAGUAIABNAGEAcwB0AGUAcgA6ACAAagBhAGQAZQAtAG8AdAB0AGUAcgAtADEAOQA=",
+ "generator_cmd": "printf %s \"$plain\" | iconv -f UTF-8 -t UTF-16LE | base64 -w0  # glibc iconv UTF-16LE + coreutils base64",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys,base64;print(base64.b64decode(sys.stdin.read()).decode('utf-16-le'),end='')\"  # CPython stdlib codecs (independent of glibc iconv)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-19",
+ "expected": "match"
+}

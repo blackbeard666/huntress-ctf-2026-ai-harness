@@ -1,0 +1,29 @@
+{
+ "entry": "equivalence",
+ "plans": {
+  "polyglot-applescript-staged-chain.applescript": "v=3|role=staged_chain|attack=T1059|adapter=operation_graph|campaign_id=APPLESCRIPT-a9325875|url=https://applescript-a932587543.example.invalid/stage|stage_count=2|steps=decode_configuration>return_configuration|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=vbscript",
+  "polyglot-autoit-staged-chain.au3": "v=3|role=staged_chain|attack=T1059|adapter=operation_graph|campaign_id=AUTOIT-4ea3c0c2|url=https://autoit-4ea3c0c24f.example.invalid/stage|stage_count=3|steps=profile_host>decode_configuration>dispatch_language|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript",
+  "polyglot-lua-staged-chain.lua": "v=3|role=staged_chain|attack=T1059|adapter=operation_graph|campaign_id=LUA-300cbcdc|url=https://lua-300cbcdc01.example.invalid/stage|stage_count=2|steps=decode_configuration>return_configuration|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=vbscript",
+  "polyglot-msbuild_xml-staged-chain.proj": "v=3|role=staged_chain|attack=T1059|adapter=operation_graph|campaign_id=MSBUILD_XML-18755f0a|url=https://msbuild_xml-18755f0a51.example.invalid/stage|stage_count=2|steps=acquire_remote>dispatch_process|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=vbscript",
+  "polyglot-perl-staged-chain.pl": "v=3|role=staged_chain|attack=T1059|adapter=operation_graph|campaign_id=PERL-81fb7588|url=https://perl-81fb758847.example.invalid/stage|stage_count=3|steps=decode_embedded>write_file>dispatch_process|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=vbscript",
+  "polyglot-php-staged-chain.php": "v=3|role=staged_chain|attack=T1059|adapter=operation_graph|campaign_id=PHP-597f9d33|url=https://php-597f9d33c5.example.invalid/stage|stage_count=3|steps=profile_host>decode_configuration>dispatch_language|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=php",
+  "polyglot-ruby-staged-chain.rb": "v=3|role=staged_chain|attack=T1059|adapter=operation_graph|campaign_id=RUBY-fc8ff96b|url=https://ruby-fc8ff96b3a.example.invalid/stage|stage_count=3|steps=profile_host>decode_configuration>dispatch_language|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript",
+  "polyglot-typescript-staged-chain.ts": "v=3|role=staged_chain|attack=T1059|adapter=operation_graph|campaign_id=TYPESCRIPT-e695d5e4|url=https://typescript-e695d5e479.example.invalid/stage|stage_count=3|steps=decode_embedded>write_file>dispatch_process|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=vbscript",
+  "polyglot-wmi_mof-staged-chain.mof": "v=3|role=staged_chain|attack=T1059|adapter=operation_graph|campaign_id=WMI_MOF-7526fb4d|url=https://wmi_mof-7526fb4dd1.example.invalid/stage|stage_count=2|steps=acquire_remote>dispatch_process|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=vbscript"
+ },
+ "expected": {
+  "outliers": [
+   "polyglot-php-staged-chain.php"
+  ],
+  "diffs": {
+   "polyglot-php-staged-chain.php": {
+    "next_language": "php"
+   }
+  },
+  "plot_class_count": 2,
+  "class_count": 5
+ },
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/equivalence/eq_gen.py  (D16 single 89161077 GM-verified expected.json -> v=3 k=v plans)",
+ "oracle_cmd": "python3 -I -c \"import json,collections as C;f=json.load(open('tests/data/script_fixtures/equivalence/eq_d16_staged-chain.json'));P={m:dict(x.split('=',1) for x in p.split('|')) for m,p in f['plans'].items()};[print(k,C.Counter(p.get(k) for p in P.values())) for k in ('role','attack','adapter','next_language','steps','stage_profile','stage_count')]\"  (minority on a field >=2/3 unanimous = outlier; distinct (role,attack,adapter,next_language) tuples = plot classes)"
+}

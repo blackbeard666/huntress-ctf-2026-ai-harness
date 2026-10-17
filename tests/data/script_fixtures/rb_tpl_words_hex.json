@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=1|language=ruby|role=persistence|attack=T1053.003|steps=write_cron,run|campaign_id=RW-0c4d2b11|file_path=/etc/cron.d/rw-0c4d2b11",
+ "decoy": false,
+ "generator_cmd": "sh tests/data/script_fixtures/tpl_gen.sh  (written by the language's own interpreter: ruby: %w[hex words].map(&:hex).pack('C*'), add 7)",
+ "oracle_cmd": "ruby -e 'load ARGV[0]; print MATERIAL_RW0C.bytes.map { |b| (b - 7) % 256 }.pack(\"C*\")' tests/data/script_fixtures/rb_tpl_words_hex.rb"
+}

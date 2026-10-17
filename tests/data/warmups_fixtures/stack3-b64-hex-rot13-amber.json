@@ -1,0 +1,9 @@
+{
+ "codec": "stack:base64>hex>rot13",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "NDE3NjcwNzIyMDZhNjI2NTc4MjA3MTcyNzA2MjcxNzY2MTc0MjA2Nzc1NzY2NjIwNmE2ZTY1N2E2ODYzMjEyMDQ3NjIyMDY2NjI3OTY5NzIyYzIwNjY2ODZmN2E3NjY3MjA2Nzc1NzY2NjIwNzI2YjZlNzA2NzIwNmU2MTY2NmE3MjY1MjA2NzYyMjA2Nzc1NzIyMDU0NmU3YTcyMjA1YTZlNjY2NzcyNjUzYTIwNmU3YTZmNzI2NTJkNzM2ZTc5NzA2MjYxMmQzNDMy",
+ "generator_cmd": "printf %s \"$plain\" | tr 'A-Za-z' 'N-ZA-Mn-za-m' | xxd -p | tr -d '\\n' | base64 -w0  # coreutils tr + xxd + base64",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | xxd -r -p | tr 'A-Za-z' 'N-ZA-Mn-za-m'  # coreutils base64 -d, xxd -r -p, tr",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

@@ -1,0 +1,68 @@
+{
+ "format": "zip of a cross-arch same-source build pair",
+ "members": [
+  "d17--variant-001-aarch64.elf",
+  "d17--variant-000-x86_64.elf"
+ ],
+ "expected_sha256": [
+  "7dcabebde4e190b1a5fdabaf4222a20c13abc94da6451594a3793d8608ab3d4d",
+  "6e8489c16e6431508cfc938b13ebf591c926d3ec27eca7c1c05eb9e6d3cc061b"
+ ],
+ "routes": {
+  "x86_64_machine": {
+   "member": "d17--variant-000-x86_64.elf",
+   "value": "none"
+  },
+  "x86_64_machine_num": {
+   "member": "d17--variant-000-x86_64.elf",
+   "value": "none"
+  },
+  "x86_64_bits": {
+   "member": "d17--variant-000-x86_64.elf",
+   "value": "none"
+  },
+  "x86_64_endian": {
+   "member": "d17--variant-000-x86_64.elf",
+   "value": "none"
+  },
+  "x86_64_elf_type": {
+   "member": "d17--variant-000-x86_64.elf",
+   "value": "none"
+  },
+  "x86_64_entry_point": {
+   "member": "d17--variant-000-x86_64.elf",
+   "value": "none"
+  },
+  "aarch64_machine": {
+   "member": "d17--variant-001-aarch64.elf",
+   "value": "none"
+  },
+  "aarch64_machine_num": {
+   "member": "d17--variant-001-aarch64.elf",
+   "value": "none"
+  },
+  "aarch64_bits": {
+   "member": "d17--variant-001-aarch64.elf",
+   "value": "none"
+  },
+  "aarch64_endian": {
+   "member": "d17--variant-001-aarch64.elf",
+   "value": "none"
+  },
+  "aarch64_elf_type": {
+   "member": "d17--variant-001-aarch64.elf",
+   "value": "none"
+  },
+  "aarch64_entry_point": {
+   "member": "d17--variant-001-aarch64.elf",
+   "value": "none"
+  },
+  "arm64_machine": null,
+  "machine": null,
+  "riscv_machine": null
+ },
+ "generator_cmd": "bash pair_arch_gen.sh   # gcc / aarch64-linux-gnu-gcc-15 -O2, clang-18 --target=riscv64,armv7 -c, zip -X -j",
+ "oracle_cmd": "bash pair_arch_oracle.sh pair_arch_decoy.bin   # unzip -Z1 + sha256sum, readelf -hW, od -tu2 -j18 (e_machine)",
+ "decoy": true,
+ "decoy_why": "arch-tagged names on a 40-byte truncated ELF and a text file: routed by name, every fact \"none\"; alias/untagged fields do not route"
+}

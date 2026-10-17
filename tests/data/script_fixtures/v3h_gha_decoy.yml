@@ -1,0 +1,13 @@
+name: nightly
+on:
+  schedule:
+    - cron: '17 3 * * *'
+env:
+  descriptor_32bcd41a: |
+    YnVpbGQgY2FjaGUgd2FybXVwIGZvciB0aGUgbmlnaHRseSBpbnZlbnRvcnk7IG5v
+    dGhpbmcgdG8gZXhlY3V0ZQ==
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "${#descriptor_32bcd41a}"

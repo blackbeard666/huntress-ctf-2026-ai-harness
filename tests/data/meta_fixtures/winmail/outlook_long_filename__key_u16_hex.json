@@ -1,0 +1,8 @@
+{
+ "field": "winmail.key_u16_hex",
+ "expected": "0x1422",
+ "generator_cmd": "tnefparse-1.4.0 sdist tests/examples/long-filename.tnef (real Outlook winmail.dat; pip download --no-binary :all: tnefparse==1.4.0), copied verbatim",
+ "oracle_cmd": "python3 -I -c \"import tnefparse,json;t=tnefparse.TNEF(open('tests/data/meta_fixtures/winmail/outlook_long_filename__key_u16_hex.bin','rb').read());print('0x%04x'%t.key)\"  (tnefparse 1.4.0 reader)",
+ "decoy": false,
+ "member": "winmail.dat"
+}

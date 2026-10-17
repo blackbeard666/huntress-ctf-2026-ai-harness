@@ -1,6 +1,6 @@
-# script-analysis — coverage atlas (D1-D15 seen vs. D16+ candidates)
+# script-analysis — coverage atlas (D1-D16 seen vs. D17+ candidates)
 
-Built 2026-10-15 after D15 (1026 ids, 116 members). Read with `reference/techniques/script-analysis.md` (what the GM
+Updated 2026-10-16 after D16 (1095 ids, 123 members; D16 added Ruby). Read with `reference/techniques/script-analysis.md` (what the GM
 actually asked) — this file is the BREADTH map: which common script/malware-script CTF concepts we have met, which we
 have not, how to fingerprint and statically decode each, and what to prebuild/install before they drop.
 
@@ -9,14 +9,17 @@ Context that drives the likelihood column:
   staged-chain}` (44 ids: role/attack/adapter/campaign/steps/stage-count/host-profile/obfuscation/stage-profile/
   next-language + url) plus sometimes one `host-<profile>-<lang>` file. All answers are plan-verbatim; the plan sits
   behind `HUNTRESS_ANALYSIS_V1:<B64|HEX|HB64|FRAG>-..` in the host's comment syntax + a `descriptor_<id>` literal.
-  The D15 solver (`challenges/day15/scripting-crumb-trail/solver/solve.py`, `V3_MARK` / `_v3_peel` / `analyse_v3`)
-  is language-agnostic **as long as** the marker is ASCII/UTF-8 in raw bytes, on one line, peelable by hex/base64/
-  reverse within 3 layers. The real D16+ risk is not a new language — it is a new **carrier/encoding/container** or a
-  new **synthetic-label family** (the D2-D7 style/control/expansion era).
+  The carried solver (`challenges/day16/scripting-same-same-but-different/solver/solve.py`, `V3_MARK` / `_v3_peel` /
+  `analyse_v3`; ran unchanged D9-D16) is language-agnostic **as long as** the marker is ASCII/UTF-8 in raw bytes, on one line, peelable by hex/base64/
+  reverse within 3 layers. The real D17+ risk is not a new language — it is a new **carrier/encoding/container**, a
+  new **synthetic-label family** (D2-D7 era), or a **GM label-regime flip** on an old one (D15 pool-keyed, D16 date-keyed
+  batch `expansion`: same bytes, new label). Narrative prompts (D8 siblings, D15 phantom store, D16 "prove which are
+  truly equivalent, expose the variant that changed the plot") have never been asked -- yet; row 66 prepares for it.
 - Family names may contain `_` (D14 `polyglot-msbuild_xml`); host profiles seen: standalone, wsf_jscript, wsf_mixed,
-  hta_jscript, php_webshell, sct_scriptlet, lua_openresty, perl_cgi. D14 picked a Windows LOLBin (MSBuild), D10 a WMI
-  host (MOF), D13 a macOS host: the organizers alternate "language" days and "trusted-host abuse" days.
-- ~16 drops left (D16-D31). Paths below: `$R=/home/testpwn/huntress-2026`; `source bin/env.sh` puts `bin/` on PATH
+  hta_jscript, php_webshell, sct_scriptlet, lua_openresty, perl_cgi, ruby_rack. D14 picked a Windows LOLBin (MSBuild), D10 a WMI
+  host (MOF), D13 a macOS host: the organizers alternate "language" days and "trusted-host abuse" days. D15-D16
+  went Perl -> Ruby (+ CGI/Rack web hosts): the unix-scripting/web-host track continues (Tcl, Go, Groovy, PS v=3 next?).
+- ~15 drops left (D17-D31). Paths below: `$R=/home/testpwn/huntress-2026`; `source bin/env.sh` puts `bin/` on PATH
   (pwsh 7.6.6, box-js, js-beautify, webcrack, pycdc/pycdas, 7z, autoit-ripper, ilspycmd). `R/.venv/bin` holds oletools,
   msoffcrypto-tool, decompyle3/uncompyle6/xdis, pyinstxtractor-ng, LnkParse3, chepy, lxml, and **binary refinery 0.11.1**
   (AST deobfuscators `ps1` `js` `vba`, batch emulator `bat`, `wshenc`, `xlmdeobf`, `xtone`, `xtchm`, `lnk`, `xtpyi`,
@@ -34,7 +37,7 @@ fixture's behaviour: run only decoders / AST deobfuscators / emulators on extrac
 | 3 | Batch `.bat/.cmd` + expansion (%/!/call/for) | seen D3 | `rem HUNTRESS-CODEC:`, `setlocal EnableDelayedExpansion`, `call set %%..%%` | Python cmd-expansion emulation (solver `batchplan.py`); `.venv/bin/bat < f.bat` (INSTALLED, refinery emulator prints command lines) | carried daily |
 | 4 | VBScript `.vbs` | seen D4 | `Const Codec_<id>`, `Chr(`, `On Error Resume Next`, `Select Case` | lib.codec from the Codec const; `.venv/bin/vba < f.vbs` (INSTALLED) | carried daily |
 | 5 | Python carriers (pyinstaller/pyarmor/py2exe/cx_Freeze/zipapp/wheel/pyc38) | seen D5 (recovered `.py`), D6 TT real cx_Freeze binary | `*-recovered.py`, `MATERIAL_<id>`, `CODEC_<id>`; binary: `MEI\x0c\x0b\x0a\x0b\x0e`, `PYZ`, `library.zip` | `lib.pyc.recover_python(path)`; `pyinstxtractor-ng x.exe`; `pycdc f.pyc` / `decompyle3 f.pyc` (all INSTALLED); `.venv/bin/xtpyi -l < x.exe` | med: a real frozen binary variant |
-| 6 | Bash `.sh` + bash-advanced (`Feature_<id>`) | seen D6/D7-D14 | `readonly Material_`, `${!ptr}`, `local -A`, `trap`, here-strings | lib.codec; never run bash; `bash -n f.sh` (syntax only) | carried; +2 fixtures some days |
+| 6 | Bash `.sh` + bash-advanced (`Feature_<id>`) | seen D6/D7-D16 (D16 ansi_c_quoting, regex_conditional) | `readonly Material_`, `${!ptr}`, `local -A`, `trap`, here-strings | lib.codec; never run bash; `bash -n f.sh` (syntax only) | carried; +2 fixtures some days |
 | 7 | Node ESM `.mjs` | seen D7 | `import`, top-level `await`, `process.env.HUNTRESS_INSPECT_ONLY`, `Buffer.from` | lib.codec static; `webcrack f.mjs -o out/` (INSTALLED) | carried daily |
 | 8 | PHP polyglot + webshell host | seen D8 | `<?php`, `$descriptor_<id>`, `eval(`/`assert(`, `$_POST`/`$_REQUEST` | V3_MARK peel; `php` MISSING (`apt install php-cli` for `php -l`/token dump only) | carried daily |
 | 9 | WSF / HTA hosts | seen D8 | `<job><script language=..>`, `<hta:application>`, mixed JScript+VBS | extract each `<script>` body (lxml/bs4 INSTALLED) and route by language | carried |
@@ -46,7 +49,7 @@ fixture's behaviour: run only decoders / AST deobfuscators / emulators on extrac
 | 15 | AppleScript (source) | seen D13 | `property descriptor_<id> :`, `--` comments, `do shell script`, `osascript -e` | V3_MARK; compiled `.scpt` (`FasdUAS` magic) = no decompiler (MISSING: applescript-disassembler) | carried; `.scpt` = low/med |
 | 16 | MSBuild `.proj` inline task | seen D14 | `<Project xmlns=..msbuild..>`, `<UsingTask TaskFactory="CodeTaskFactory">`, `<Code Type="Fragment">` C# CDATA, `<HuntressDescriptor>` | V3_MARK in `<!-- -->`; lxml for the property element | carried |
 | 17 | Perl `.pl` + perl_cgi host | seen D15 | `#!/usr/bin/env perl`, `use strict;`, `my $descriptor_`, `print "Content-Type:` | V3_MARK; `perl -MO=Deparse f.pl` (INSTALLED, parse-only, BEGIN blocks still run - strip them) | carried |
-| 18 | Ruby `.rb` (+ ERB/Rack/Rails host) | gap | `require`, `def ..end`, `puts`, `#{}` interpolation, `=begin/=end`, `.unpack1('m0')`, `Base64.decode64`, `eval`/`instance_eval`, `<%= %>` | `ruby -c f.rb` (INSTALLED /usr/bin/ruby, syntax only); `ruby -e 'print ARGV[0].unpack1("m")' <b64>`; Ruby CONSTANTS are uppercase -> descriptor may be `DESCRIPTOR_X =` | **high**: last major mainstream script language; ruby already installed |
+| 18 | Ruby `.rb` (+ Rack host) | seen D16 | `# HUNTRESS_ANALYSIS_V1:<TAG>-..` + `DESCRIPTOR_<8HEX> = ".."` (uppercase const), `require`, `def ..end`, `def build_plan_<id>` returning `{ descriptor: DESCRIPTOR_<ID> }`, host `ruby_rack` = `INERT_RACK_<ID> = ->(_env) { [200, {..}, [..]] }` lambda | V3_MARK (carried solver, unchanged); `ruby -c f.rb` syntax only; ERB/Rails `<%= %>` hosts still unseen | carried |
 | 19 | PowerShell module / `.psm1` `.psd1` `.ps1xml` (v=3 polyglot-powershell) | gap (PS only v=1) | `Export-ModuleMember`, `FunctionsToExport`, `<Types><Type><ScriptMethod><Script>`, `<#  #>` block comments (marker may sit inside `<# #>`) | `.venv/bin/ps1 < f.psm1`; lxml for ps1xml `<Script>` nodes | **high**: PS is the canonical malware language and has no v=3 fixture |
 | 20 | Tcl / Expect | gap | `#!/usr/bin/tclsh`, `set descriptor_x "..."` (no `=`!), `proc`, `puts`, `binary decode base64`, `{braces}` strings | `tclsh` MISSING (`apt install tcl`); static: regex `set\s+descriptor_\w+\s+["{]` | med |
 | 21 | R script | gap | `<-` assignment, `library(`, `base64enc::`, `rawToChar(`, `system(`, `#` comments | `Rscript` MISSING (`apt install r-base-core`, big); static `<-` descriptor regex | low/med |
@@ -94,8 +97,9 @@ fixture's behaviour: run only decoders / AST deobfuscators / emulators on extrac
 | 63 | Lua obfuscators (luac bytecode, `\ddd` decimal escapes, `loadstring`/`load` layers, IronBrew/Prometheus VMs) | gap | `\27Lua` magic, `string.char(`, `loadstring(`, huge `\104\101` strings | decode `\ddd` statically; `unluac.jar` MISSING (`java -jar unluac.jar f.luac`, java INSTALLED); `luadec` MISSING | low/med |
 | 64 | PHP layered eval (`eval(gzinflate(base64_decode(str_rot13(..))))`, `chr()` concat, `preg_replace /e`, `create_function`) | gap (D8 PHP was plain hex/b64) | the nested call chain, `?>` + base64 blob | Python reimplementation of each named PHP fn in chain order (`.venv/bin/rot`, `b64`, `decompress`); php MISSING | med |
 | 65 | Source-file encoding / container wrapping (UTF-16LE/BE, gzip'd file, nested zip, base64'd member) | gap | `FF FE`/`FE FF` BOM, NUL-interleaved ASCII, `1F 8B`, `PK\x03\x04` inside a leaf | `file f`; `iconv -f UTF-16LE -t UTF-8 f`; `.venv/bin/decompress < f` | **high**: cheapest variant mutation; silently defeats raw-bytes regexes |
+| 66 | Semantic equivalence / sibling-outlier questions ("which variants are equivalent", "which one changed the plot") | gap (prompts D8, D15, D16; never asked) | prompt words equivalent/siblings/odd one out; enum of member names; questions without a per-file artifact | canonicalise every decoded plan (drop campaign/url/path/ids, keep role/steps/adapter/attack/stage_profile/next_language), group by canonical tuple, answer the singleton; see gap `equivalence-outlier-compare` | **high**: D16 prompt said it outright |
 
-Counts: 65 rows; seen 22 (rows 1-17, 48-52), gap 43.
+Counts: 66 rows; seen 23 (rows 1-18, 48-52), gap 43.
 
 ## Recognition cues (worker quick-reference)
 ```
@@ -105,7 +109,7 @@ FINGERPRINT (first 512 bytes + `file`), never by extension:
  E4 52 5C 7B onenote | \x1bLua luac | FasdUAS compiled AppleScript | MEI\x0c / PYZ pyinstaller | 0x0d0d0a.. pyc magic
  #@~^ ..^#~@ = Script-Encoder (.vbe/.jse) -> .venv/bin/wshenc < f
 SHEBANG/HEADER -> language:
- #!..perl / use strict;  -> perl      #!..ruby / require / def..end / =begin -> ruby
+ #!..perl / use strict; / my $descriptor_ -> perl (D15)   DESCRIPTOR_<HEX> = / def build_plan_ / ->(_env) -> ruby (D16)
  #!..tclsh / set x "v" / proc -> tcl  x <- v / library( -> R          package main / := -> go
  fn main / let mut / r#".."# -> rust  val/fun + plugins{ -> kotlin(.kts)   pipeline{ stages{ / def x= -> groovy/Jenkinsfile
  BEGIN{ / getline -> awk              target:\n\tcmd / $(shell -> make     FROM / RUN -> Dockerfile
@@ -119,7 +123,7 @@ SHEBANG/HEADER -> language:
 PLAN FIRST (the lane's contract since D2):
  grep raw AND utf-16-decoded text for HUNTRESS_ANALYSIS_V\d+ / Codec_ / CODEC_ / HUNTRESS-CODEC / MATERIAL_ / descriptor
  descriptor syntaxes to accept: `x = ".."` `x := ".."` `set x ".."`/`set x {..}` `x <- ".."` `X: &str = ".."`
-   `DESCRIPTOR_X = ".."` (Ruby const) `descriptor_x: ".."` (YAML) `<HuntressDescriptor>..</..>` (XML) heredoc/block scalar
+   `DESCRIPTOR_X = ".."` (Ruby const, seen D16) `descriptor_x: ".."` (YAML) `<HuntressDescriptor>..</..>` (XML) heredoc/block scalar
  material may wrap across lines (`|` YAML block, `=begin`, `<# #>`, `"""`, `\` continuation, `.`/`+`/`&`/`..` concat):
    join the literal pieces, strip whitespace/separators, THEN peel
  peel by SHAPE, max 4 layers, accept only output starting `v=` (or `{` JSON): hex (any separators) | base64 std/urlsafe
@@ -139,7 +143,11 @@ LAYERED OBFUSCATION -> standard tool (static, no network, no exec of behaviour):
 NEVER: run the fixture's interpreter on the file (ruby/perl/php/tclsh/Rscript/make/go run/msbuild/pwsh -File);
  `perl -MO=Deparse` and `make -n` still execute BEGIN/$(shell) -> strip first; apply XSLT; open URLs from the plan.
 SYNTHETIC LABELS (if a new language brings code-shape questions): read accepted_values; compose `<keyword>_guard`,
- `<keyword>_once`, `<keyword>_<action>`; branch label tables on contract run_for_time:false (D15 regime flip).
+ `<keyword>_once`, `<keyword>_<action>`. Batch `expansion` = STATEMENT-ONLY table by default (D15 run_for_time:false pools,
+ every contract from D16 incl. the single); if a carried label is rejected on unchanged bytes, the GM regime moved:
+ tabulate (construct, label) vs started_at/run_for_time/variant_fresh before probing synonyms.
+EQUIVALENCE/OUTLIER prompt (D16 "same logic, which changed the plot"): only answer it if a question asks; then compare
+ canonical plans (role, steps, adapter, attack, stage_profile, next_language), never campaign/url/ids which always differ.
 ATT&CK when no attack= in plan: role table in lib.scripts.role_attack; host-language sub-ids T1059.001 PS .002 AppleScript
  .003 cmd .004 unix shell .005 VB .006 python .007 JS .010 AutoHotKey/AutoIt .011 Lua; v=3 plans so far used parent T1059.
 ```
@@ -147,51 +155,29 @@ ATT&CK when no attack= in plan: role table in lib.scripts.role_attack; host-lang
 ## Readiness gaps
 ```json
 [
-  {"id": "v3-peel-widen", "concept": "v=3 marker/descriptor peel beyond hex/base64/reverse", "priority": 1, "action": "prebuild",
-   "detail": "solve.py _v3_peel only tries hex, base64 and reversal (3 layers). A new tag (B32, Z64/GZ, XOR, ROT, A85, URL, UTF-16 b64) silently yields no plan for 44 ids. Fall back to lib.decode.peel (already does b32/b85/a85/zlib/gzip/bz2/lzma/rot/url) with accept=looks_like_plan, depth 4; carry over to the D16 solver template."},
-  {"id": "source-encoding-normalize", "concept": "UTF-16LE/BE, BOM, gzip'd or base64'd leaf before marker scan", "priority": 1, "action": "prebuild",
-   "detail": "V3_MARK, Codec_ regexes and descriptor scans run on raw bytes / utf-8 decode. Add normalize(data)->text: BOM sniff, NUL-interleave heuristic, utf-16 decode, gunzip, then scan both raw and normalized. .reg files and PS 'Unicode' saves are UTF-16LE by default."},
-  {"id": "descriptor-syntax-generic", "concept": "descriptor literal in non-`=` languages and multi-line materials", "priority": 1, "action": "prebuild",
-   "detail": "analyse_v3 regex is `descriptor_\\w*\\s*=` (case-sensitive): misses Tcl `set descriptor_x {..}`, R `<-`, Go/Make `:=`, Rust `const X: &str =`, Ruby `DESCRIPTOR_X =`, YAML `descriptor_x: |`, XML elements (D14 relied on the comment marker alone). Also the marker material can wrap across lines (YAML block scalar, =begin, <# #>, triple quotes): join continuation lines before peeling."},
-  {"id": "container-carrier-extract", "concept": "script inside OLE/OOXML/XLM/OneNote/CHM/LNK/pyc/a3x/luac", "priority": 1, "action": "prebuild",
-   "detail": "Pure-python (gate forbids subprocess) member walker: zipfile for OOXML + vbaProject.bin via olefile, LNK string data (LnkParse3), CHM via 7z-style ITSF directory, OneNote FileDataStoreObject GUID scan, gzip; emit every text stream to the plan scanner. Oracles for fixtures: olevba, .venv/bin/xtone, xtchm, lnk, xtpyi (all installed)."},
-  {"id": "prebuild-lane-config-script", "concept": "hctf prebuild has no script-analysis lane", "priority": 1, "action": "note",
-   "detail": "hctf/prebuild.py LANES lists metadata-forensics, warmups, binary only. Add a script-analysis entry (writable lib/scripts_prebuilt/ + tests/data/script_fixtures/, gate = codec tests + regress_lane script-analysis) so the 4 prebuild targets above can race at drop time."},
-  {"id": "ps-layer-peel", "concept": "PowerShell -EncodedCommand / FromBase64String+Deflate/Gzip / -f / -join [char] / env-substring", "priority": 2, "action": "prebuild",
-   "detail": "Static peeler for the Invoke-Obfuscation family: UTF-16LE b64, DeflateStream/GzipStream b64, format-operator reorder, [char] joins, `+` concat, backtick strip, $env:comspec/$PSHome index table. Oracle: .venv/bin/ps1 (refinery AST deob) + pwsh decode-only expressions. High value only if a polyglot-powershell / psm1 day comes."},
-  {"id": "batch-substring-emulation", "concept": "DOSfuscation %VAR:~n,m%, %VAR:a=b%, ^ carets, cmd /V:ON", "priority": 2, "action": "prebuild",
-   "detail": "solver batch emulator handles %/!/call/for joins only. Add substring/substitution/caret handling; oracle .venv/bin/bat (refinery emulator). Batch is the lane's synthetic-label language, so a 'batch advanced' fixture set is plausible."},
-  {"id": "xslt-msxsl-route", "concept": "XSLT with msxsl:script (wmic /format, msxsl.exe)", "priority": 2, "action": "prebuild",
-   "detail": "lxml: collect <msxsl:script> and <ms:script> CDATA, route by language= attr to the JS/VBS paths; marker likely in <!-- -->. Same shape as D9 SCT and D14 MSBuild hosts."},
-  {"id": "gzip-zlib-codec-rep", "concept": "compressed reps in Codec_ consts", "priority": 2, "action": "prebuild",
-   "detail": "lib.codec REPS/TRANSFORMS lack gzip/zlib/deflate/base32/base85/rot13/atbash/rc4. Add as generic readings in _fallback (shape: H4sI, eJ, [A-Z2-7]=) and transform candidates (rot13, rc4 with stated key)."},
-  {"id": "php-eval-chain", "concept": "eval(gzinflate(base64_decode(str_rot13(..)))) chains", "priority": 2, "action": "prebuild",
-   "detail": "Parse the nested call chain and apply each named function innermost-first (base64_decode, gzinflate=raw deflate, gzuncompress=zlib, gzdecode=gzip, str_rot13, strrev, hex2bin, urldecode, convert_uudecode). Same pattern for Ruby/Python/Perl decode chains (unpack('m'), pack('H*'), zlib.decompress)."},
-  {"id": "python-exec-layers", "concept": "marshal/zlib/base64 exec onion (pyobfuscate, BlankOBF)", "priority": 2, "action": "note",
-   "detail": "Worker recipe, not a module: replace exec/eval with a capture and run under python3 -I in an empty dir; marshal blobs -> pycdc/xdis with matching magic. lib.pyc.recover_python already covers real pyinstaller/pyc carriers."},
-  {"id": "php-cli", "concept": "PHP CLI for lint/tokenize", "priority": 2, "action": "tool",
-   "detail": "sudo apt-get install -y php-cli  (php -l, token_get_all; never run fixtures). PHP is a carried language since D8."},
-  {"id": "lua-unluac", "concept": "Lua interpreter + bytecode decompiler", "priority": 2, "action": "tool",
-   "detail": "sudo apt-get install -y lua5.4 luajit ; unluac.jar from https://sourceforge.net/projects/unluac/ into tools/unluac (java 25 installed) with bin/unluac wrapper. Needed if a luac-compiled carrier variant of the D9 Lua fixtures appears."},
-  {"id": "xsltproc-cabextract-yq", "concept": "XML/CAB/YAML helpers", "priority": 2, "action": "tool",
-   "detail": "sudo apt-get install -y xsltproc cabextract ; yq: pip install yq into .venv (jq wrapper; jq installed). xsltproc only for --noout lint, never to apply a stylesheet."},
-  {"id": "tcl-r-interpreters", "concept": "tclsh / Rscript for syntax checks", "priority": 3, "action": "tool",
-   "detail": "sudo apt-get install -y tcl (small); r-base-core is ~100 MB, install only on an R day. Static reading is enough for v=3 plans."},
-  {"id": "applescript-scpt", "concept": "compiled AppleScript (.scpt FasdUAS) disassembly", "priority": 3, "action": "tool",
-   "detail": "git clone https://github.com/Jinmo/applescript-disassembler into tools/ (pure python). D13 shipped source .applescript only; a compiled variant would hide the marker in UTF-16/MacRoman strings."},
-  {"id": "js-deob-extras", "concept": "synchrony / JSFuck decoding", "priority": 3, "action": "tool",
-   "detail": "npm i deobfuscator (synchrony CLI) into tools/npm; webcrack (installed) already handles obfuscator.io; JSFuck/JJencode via js_sandbox capture of the final call."},
-  {"id": "ps-deob-modules", "concept": "PowerDecode / PSDecode for pwsh", "priority": 3, "action": "tool",
-   "detail": "git clone https://github.com/Malandrone/PowerDecode and https://github.com/R3MRUM/PSDecode into tools/ (pwsh 7.6.6 installed). refinery ps1 covers most; these add layer-by-layer IEX override tracing."},
-  {"id": "xlm-standalone", "concept": "XLMMacroDeobfuscator CLI", "priority": 3, "action": "tool",
-   "detail": "uv pip install --python .venv/bin/python XLMMacroDeobfuscator  (refinery xlmdeobf is an inlined port and already works; standalone gives --sort-formulas/--extract-only)."},
-  {"id": "dotnet-script", "concept": "csx inspection", "priority": 3, "action": "tool",
-   "detail": "dotnet tool install --tool-path tools/dotnet-tools dotnet-script  (only to parse; ilspycmd covers compiled InstallUtil/MSBuild payloads)."},
-  {"id": "leaf-ext-list", "concept": "nested-zip sniff skips unknown leaf extensions", "priority": 3, "action": "note",
-   "detail": "_LEAF_EXT in solve.py still lacks .lua .mof .ts .au3 .applescript .proj .pl (and future .rb .tcl .r .groovy .kts .go .rs .awk .yml .tf .xsl .reg .inf). Speed only (~1 s); prefer sniffing PK magic over an extension list."},
-  {"id": "new-synthetic-label-family", "concept": "code-shape labels for a new language (D2-D7 style)", "priority": 3, "action": "note",
-   "detail": "Polyglot days have been plan-verbatim since D8, but an 'advanced <lang>' set (like bash-advanced) would bring feature/primitive or control/style labels. Apply playbook NAMING LAWS; probe one field per submit; check run_for_time regime first."},
-  {"id": "family-name-underscore", "concept": "host-type families like polyglot-github_actions / host-<profile>-<lang>", "priority": 3, "action": "note",
-   "detail": "Keep the longest-known-suffix field parse; derive the family prefix from the contract ids, never from the file stem (D14 msbuild_xml)."}
+  {"id": "source-encoding-normalize", "concept": "UTF-16LE/BE, BOM, gzip'd or base64'd leaf before marker scan", "priority": 1, "action": "prebuild", "detail": "V3_MARK, Codec_ regexes and descriptor scans run on raw bytes / utf-8 decode. Add normalize(data)->text: BOM sniff, NUL-interleave heuristic, utf-16 decode, gunzip, then scan both raw and normalized. .reg files and PS 'Unicode' saves are UTF-16LE by default. (1st prebuild attempt failed on D15 night -- retry; still the cheapest variant mutation the GM could make.)"},
+  {"id": "equivalence-outlier-compare", "concept": "semantic-equivalence / sibling-outlier questions over decoded plans", "priority": 1, "action": "prebuild", "detail": "D8 ('doesn't match its siblings'), D15 and D16 ('prove which are truly equivalent, expose the variant that quietly changed the plot') prompts all describe it; no question asked yet. Module: given {member: decoded plan dict}, canonicalise (drop campaign_id/host_id/url/file_path/upload_url/next_stage/ids/codec; keep role, steps, adapter, attack, stage_count, stage_profile, next_language, scenario/nativeTypes for PS), group into equivalence classes, return classes + singletons + the field(s) that differ. Answer-kind ready for enum-of-member-names, integer (class count) and exact_text (differing field/value). Fixtures: today's 123 members (5 same-role families across 10+ languages)."},
+  {"id": "batch-expansion-regime-lib", "concept": "batch `expansion` label tables (old echo(!var!) regime vs statement-only) as one tested function", "priority": 1, "action": "prebuild", "detail": "Today the regime switch lives in a solve.py comment (run_for_time is False OR started_at >= 2026-10-16). Move it into a prebuilt function label_expansion(join_stmt, pool, contract) with both tables and GM-verified fixtures (D3-D14 cases old regime; D15 TT 0df5072d/Mastery 7fbfc526 and D16 single 89161077/TT a719c002 statement regime: !a!!b! delayed, for..call set for_indirect, bare call set h-pool call_double, bare call set other pools / plain %a%%b% percent). Same switch hook for batch control and VBS control in case they flip next."},
+  {"id": "v3-next-lang-fixture-battery", "concept": "regression fixtures for the next likely v=3 hosts", "priority": 1, "action": "prebuild", "detail": "Synthetic inert fixtures x 4 tags (B64/HEX/HB64/FRAG) for: PowerShell .psm1 (marker inside <# #>, `$descriptor_x = @'..'@` here-string), Tcl (`set descriptor_x {..}`), Go (`descriptor_x := `..``), Groovy/Jenkinsfile (`def descriptor_x = '''..'''`), Kotlin .kts (`val`), R (`<-`), GH Actions YAML (`descriptor_x: |` block scalar), Dockerfile (`ARG DESCRIPTOR_X=`), Makefile (`DESCRIPTOR_X := ` + `\\` continuation), XSLT (`<msxsl:script>` CDATA), .reg (UTF-16LE). Gate: the carried solve.py v=3 path returns the plan for every one. Ruby (D16) and Perl (D15) passed unchanged -- keep proving the next ones before they drop."},
+  {"id": "mastery-runner-budget", "concept": "5-set Mastery bundles exceed the 60 s local hb_timed cap", "priority": 1, "action": "note", "detail": "D16 Mastery (5475 ids, 3.2-3.7 MB contract/status bodies at 5-8 s each) ended exec_error 'local hb_timed timed out' on 5/5 attempts, nothing submitted. Orchestrator item (hctf/workers.py run_timed timeout=60), not a lane module: raise the cap for untimed run_for_time:false pools or stream start->download->solve->chunked submit. Lane side: keep solve under ~3 s (fork per set)."},
+  {"id": "wsh-script-encoder-decode", "concept": "JScript.Encode / VBScript.Encode (#@~^..^#~@) in pure Python", "priority": 2, "action": "prebuild", "detail": "Cheap mutation of the carried .js/.vbs/WSF/HTA/SCT hosts (`language=\"JScript.Encode\"`, .jse/.vbe). Pure-python decoder (the 3 permutation tables + checksum) -> then normal routing. Oracle: .venv/bin/wshenc."},
+  {"id": "ruby-perl-pack-reps", "concept": "pack/unpack-style codec reps of the Unix scripting languages", "priority": 2, "action": "prebuild", "detail": "If v=1-style Codec_ fixtures come to Perl/Ruby/Tcl: `[\"..\"].pack(\"H*\")`, `.unpack1(\"m0\")`/`unpack(\"m\")`, `pack(\"C*\", ..)`, `\\u{..}`/`\\x{..}` escapes, `%w[..]` word arrays, Perl `pack(\"H*\", ..)`/`MIME::Base64::decode`, Tcl `binary decode hex|base64`, Lua `\\ddd`. Add as lib.codec-compatible readings keyed by material shape + named template."},
+  {"id": "yaml-ci-host-route", "concept": "GitHub Actions / GitLab CI / Ansible YAML host", "priority": 2, "action": "prebuild", "detail": "Supply-chain / trusted-toolchain host fits the D14 MSBuild + D15/D16 web-host direction. yaml.safe_load (installed) walk of every string; marker in `#` comments (not in the parsed tree -> also regex raw text); descriptor as a key or `|`/`>` block scalar (strip indentation, join folded lines). Family likely `host-github_actions-<lang>` (underscore)."},
+  {"id": "python-exec-onion-static", "concept": "exec(marshal/zlib/base64(..)) / lambda onions without exec", "priority": 2, "action": "prebuild", "detail": "AST walker that folds b64decode/b85decode/zlib.decompress/bytes.fromhex/[::-1]/codecs.decode(rot13) calls on literals and stops at exec/eval/marshal.loads; marshal blobs -> xdis disassembly (version from magic) to pull const strings. Replaces the old python-exec-layers note; Python is the only carried language with a carrier axis (D6 cx_Freeze)."},
+  {"id": "reg-inf-host-route", "concept": ".reg / .inf persistence hosts", "priority": 2, "action": "prebuild", "detail": ".reg = UTF-16LE + BOM; values `hex(2):`/`hex(7):` are comma-hex of UTF-16LE text, `\\` line continuations; .inf [Strings] %var% substitution, RunPreSetupCommands / UnRegisterOCXSection. Decode every value to text, then plan-scan. Builds on source-encoding-normalize."},
+  {"id": "vba-module-route", "concept": "VBA modules (.bas/.cls, vbaProject.bin MS-OVBA compressed source)", "priority": 2, "action": "prebuild", "detail": "4th WSH-family language never polyglotted. Check what container-carrier-extract emits for vbaProject.bin; add pure-python MS-OVBA decompression (dir stream -> module offsets) if missing, then Codec_/marker scan. Oracle: .venv/bin/olevba --decode."},
+  {"id": "dockerfile-makefile-route", "concept": "Dockerfile / Makefile build hosts", "priority": 3, "action": "prebuild", "detail": "Join `\\` continuations; Dockerfile `ARG/ENV DESCRIPTOR_X=..`, `RUN echo .. | base64 -d | sh`; Makefile `DESCRIPTOR_X := ..`, TAB recipes, `$(shell ..)` (never `make -n`). Marker in `#` comments."},
+  {"id": "php-cli", "concept": "PHP CLI for lint/tokenize", "priority": 2, "action": "tool", "detail": "sudo apt-get install -y php-cli  (php -l, token_get_all; never run fixtures). PHP is a carried language since D8."},
+  {"id": "lua-unluac", "concept": "Lua interpreter + bytecode decompiler", "priority": 2, "action": "tool", "detail": "sudo apt-get install -y lua5.4 luajit ; unluac.jar from https://sourceforge.net/projects/unluac/ into tools/unluac (java 25 installed) with bin/unluac wrapper. Needed if a luac-compiled carrier variant of the D9 Lua fixtures appears."},
+  {"id": "xsltproc-cabextract-yq", "concept": "XML/CAB/YAML helpers", "priority": 2, "action": "tool", "detail": "sudo apt-get install -y xsltproc cabextract ; yq: pip install yq into .venv (jq wrapper; jq installed). xsltproc only for --noout lint, never to apply a stylesheet."},
+  {"id": "tcl-r-interpreters", "concept": "tclsh / Rscript for syntax checks", "priority": 3, "action": "tool", "detail": "sudo apt-get install -y tcl (small); r-base-core is ~100 MB, install only on an R day. Static reading is enough for v=3 plans."},
+  {"id": "applescript-scpt", "concept": "compiled AppleScript (.scpt FasdUAS) disassembly", "priority": 3, "action": "tool", "detail": "git clone https://github.com/Jinmo/applescript-disassembler into tools/ (pure python). D13 shipped source .applescript only; a compiled variant would hide the marker in UTF-16/MacRoman strings."},
+  {"id": "js-deob-extras", "concept": "synchrony / JSFuck decoding", "priority": 3, "action": "tool", "detail": "npm i deobfuscator (synchrony CLI) into tools/npm; webcrack (installed) already handles obfuscator.io; JSFuck/JJencode via js_sandbox capture of the final call."},
+  {"id": "ps-deob-modules", "concept": "PowerDecode / PSDecode for pwsh", "priority": 3, "action": "tool", "detail": "git clone https://github.com/Malandrone/PowerDecode and https://github.com/R3MRUM/PSDecode into tools/ (pwsh 7.6.6 installed). refinery ps1 covers most; these add layer-by-layer IEX override tracing."},
+  {"id": "xlm-standalone", "concept": "XLMMacroDeobfuscator CLI", "priority": 3, "action": "tool", "detail": "uv pip install --python .venv/bin/python XLMMacroDeobfuscator  (refinery xlmdeobf is an inlined port and already works; standalone gives --sort-formulas/--extract-only)."},
+  {"id": "dotnet-script", "concept": "csx inspection", "priority": 3, "action": "tool", "detail": "dotnet tool install --tool-path tools/dotnet-tools dotnet-script  (only to parse; ilspycmd covers compiled InstallUtil/MSBuild payloads)."},
+  {"id": "leaf-ext-list", "concept": "nested-zip sniff skips unknown leaf extensions", "priority": 3, "action": "note", "detail": "_LEAF_EXT in solve.py still lacks .lua .mof .ts .au3 .applescript .proj .pl .rb (and future .tcl .r .groovy .kts .go .rs .awk .yml .tf .xsl .reg .inf). Speed only (~1 s); prefer sniffing PK magic over an extension list."},
+  {"id": "new-synthetic-label-family", "concept": "code-shape labels for a new language (D2-D7 style)", "priority": 3, "action": "note", "detail": "Polyglot days have been plan-verbatim since D8, but an 'advanced <lang>' set (like bash-advanced) would bring feature/primitive or control/style labels, and OLD label families can flip regime (batch expansion D15/D16). Apply playbook NAMING LAWS; probe one field per submit; check started_at/run_for_time first."},
+  {"id": "family-name-underscore", "concept": "host-type families like polyglot-github_actions / host-<profile>-<lang>", "priority": 3, "action": "note", "detail": "Keep the longest-known-suffix field parse; derive the family prefix from the contract ids, never from the file stem (D14 msbuild_xml)."}
 ]
 ```
