@@ -270,6 +270,39 @@ def c_status(a):
     return http_exit(env) if env["http"] != 409 else EXIT["error"]
 
 
+def contract_drift(cid):
+    """Re-fetch cid's contract and diff its questions against start.json (same attempt only). Questions the GM REWROTE
+    in place -- D17 binary: two open-vocab hcfg_storage fields became enums ~4 h after the drop, same attempt/sha/ids --
+    are saved into start.json + contract.json and stamped in drift.json, so the submit guards forget their earlier
+    (old-question) rejections. Returns the changed/added answer ids; [] when nothing changed or the GM is unreachable."""
+    old = load(cid, "start.json") or {}
+    if not old.get("questions"):
+        return []
+    try:
+        env = call(cid, "status", cid)
+    except Exception:  # noqa: BLE001 - GM unreachable: no drift known
+        return []
+    new = env.get("body") if isinstance(env.get("body"), dict) else {}
+    if not new.get("questions") or (attempt_id(new) and attempt_id(new) != attempt_id(old)):
+        return []
+    qo = {q.get("id"): q for q in old["questions"] if isinstance(q, dict)}
+    qn = {q.get("id"): q for q in new["questions"] if isinstance(q, dict)}
+    changed = [i for i in qn if i in qo and json.dumps(qn[i], sort_keys=True) != json.dumps(qo[i], sort_keys=True)]
+    added = [i for i in qn if i not in qo]
+    if not changed and not added:
+        return []
+    old["questions"] = [qn.get(q.get("id"), q) for q in old["questions"] if isinstance(q, dict)] + [qn[i] for i in added]
+    if added:
+        old["answer_ids"] = list(dict.fromkeys(list(old.get("answer_ids") or []) + added))
+    save(cid, "start.json", old)
+    save(cid, "contract.json", old)
+    drift = load(cid, "drift.json") or {}
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    drift.update({i: stamp for i in changed + added})
+    save(cid, "drift.json", drift)
+    return changed + added
+
+
 def c_start(a, op="start"):
     with chal_lock(a.id):
         env = call(a.id, op, a.id)
@@ -698,6 +731,12 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
                 continue          # a torn line (writer mid-append)
     # probe=True submissions (harness reuse/localization batches) prove nothing about any single value when the
     # batch is incorrect, so they never feed the "already judged incorrect" / per-field wrong-count guards.
+    drift = load(cid, "drift.json") or {}
+    if drift:
+        # A question the GM rewrote in place (contract_drift): verdicts given BEFORE the rewrite judged the old question.
+        # Drop every entry that holds such a field (a trimmed batch would read as a single-field rejection).
+        history = [h for h in history if not any(k in drift and str(h.get("ts", "")) < drift[k]
+                                                  for k in (h.get("answers") or {}))]
     same_attempt = [h for h in history if h.get("attempt") == att and not h.get("probe")]
     # Only a SINGLE-field rejection says anything about that one value (probe or not). A rejected multi-field batch
     # only says "something in here is wrong": replays 3-5 had every worker resubmit its fixed 399-field batch, get
@@ -1189,6 +1228,29 @@ def c_why(a):
     return 0
 
 
+def c_drift(a):
+    """Re-fetch every UNSOLVED mode's contract (optionally one --day) and report questions the GM rewrote in place.
+    Changed questions are saved (contract_drift) so a resumed run / worker sees them and the guards forget the old
+    rejections. D17: the binary storage fix landed ~4 h after the drop with no notice; this finds such a fix at once."""
+    daytag = f"day{int(a.day):02d}" if getattr(a, "day", None) else None
+    found = 0
+    for p in sorted(paths.CHALLENGES.glob("day*/*/meta.json")):
+        if daytag and p.parent.parent.name != daytag:
+            continue
+        ids = (load_json(p) or {}).get("ids") or {}
+        for mode in paths.MODES:
+            cid = ids.get(mode)
+            if not cid or not load(cid, "start.json") or gm_solved(cid):
+                continue
+            changed = contract_drift(cid)
+            if changed:
+                found += 1
+                print(f"  DRIFT {cid}: {len(changed)} question(s) rewritten by the GM: {changed[:6]}")
+    print(f"drift: {found} mode(s) with rewritten questions"
+          + (" -> resume with `hctf run --day N --only <id>`" if found else ""))
+    return 0
+
+
 def c_reconcile(a):
     """Reconcile local chain.json with GM truth. Local state can lag reality (fixes applied out-of-band, timed runs
     that never rewrote the chain), so the dashboard under-reports — this asks the GM (status==CORRECT) for every mode
@@ -1495,6 +1557,8 @@ def main(argv=None):
                    ).add_argument("id")
     prc = sub.add_parser("reconcile", help="rewrite local chain.json from GM truth (fixes stale/under-reported dash)")
     prc.add_argument("--day")
+    pdr = sub.add_parser("drift", help="re-fetch unsolved modes' contracts; report + save questions the GM rewrote in place")
+    pdr.add_argument("--day")
     ptl = sub.add_parser("timeline", help="per-chain T+ per mode, attempts, generalize cycles, LLM vs overhead")
     ptl.add_argument("--day", type=int)
     ptl.add_argument("--log", help="a dayNN.log path (default .run/dayNN.log)")
@@ -1535,7 +1599,7 @@ def main(argv=None):
     fn = {"hb": c_hb, "list": c_list, "status": c_status, "start": c_start, "retry": c_retry,
           "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test, "compound-check": c_compound_check, "train": c_train, "postrun": c_postrun, "effort-report": c_effort_report, "tool-wait": c_tool_wait, "speed-harden": c_speed_harden, "prebuild": c_prebuild, "tool-gaps": c_tool_gaps,
           "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
-          "reconcile": c_reconcile, "solutions": c_solutions,
+          "reconcile": c_reconcile, "drift": c_drift, "solutions": c_solutions,
           "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout,
           "timeline": c_timeline, "cost": c_cost, "hof": c_hof, "feed": c_feed, "kpi": c_kpi}[a.cmd]
     try:
