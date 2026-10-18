@@ -1,4 +1,4 @@
-"""DUEL workers: best-of-2 for the LLM stages that bound a day (brand-new Single Solves, repeat generalizes).
+"""DUEL workers: best-of-N for the LLM stages that bound a day (brand-new Single Solves, repeat generalizes).
 
 Every top autonomous CTF system of 2025-26 races several differently-configured agents per challenge and keeps the
 first verified result (Veria BSidesSF 2026, Team Atlanta's 8 patchers, 42-b3yond-6ug's temperature x prompt sweep,
@@ -17,6 +17,12 @@ second, local one with a different configuration (effort, optionally model) besi
                 over the live solver and the chain's transactional _accept_or_restore judges it like any other edit.
 
 The duel is ended the moment the chain's own worker wins (or the chain leaves the stage).
+
+Roster (2026-10-18, user): the duel is a GROUP of racers. Racer 1 = the original duel (HCTF_DUEL_MODEL / _EFFORT:
+the lane's model at medium). HCTF_DUEL_EXTRA adds racers with a DIFFERENT model ("model:effort", comma-separated;
+default claude-sonnet-5-5:high -- model diversity beside two Opus 5.5 configurations, Veria-style). Extras have their
+own concurrency cap (EXTRA_MAX) and launch only with EXTRA_MIN_AVAIL_GB of MemAvailable, so racer 1 behaves exactly as
+before. Each racer has its own solver copy (.run/duel{N}-dayNN/...), notes file and worker log pool.
 """
 import os
 import shutil
@@ -36,6 +42,11 @@ MODEL = os.environ.get("HCTF_DUEL_MODEL", "")            # "" = the lane's norma
 # medium (user, 2026-10-16): diversity + speed beside the chain's high-effort worker -- on D16 the medium duel won all
 # three singles it ran (warmups, metadata, script). HCTF_DUEL_EFFORT="" = the lane's worker effort.
 EFFORT = os.environ.get("HCTF_DUEL_EFFORT", "medium")
+# extra racers: "model:effort" (empty effort = the lane's worker effort); HCTF_DUEL_EXTRA="" = best-of-2 as before
+EXTRA = [tuple((x.strip().split(":", 1) + [""])[:2]) for x in
+         os.environ.get("HCTF_DUEL_EXTRA", "claude-sonnet-5-5:high").split(",") if x.strip()]
+EXTRA_MAX = int(os.environ.get("HCTF_DUEL_EXTRA_MAX", "3"))
+EXTRA_MIN_AVAIL_GB = float(os.environ.get("HCTF_DUEL_EXTRA_MIN_AVAIL_GB", "1.5"))   # ~0.3 GB per claude worker
 DELAY = float(os.environ.get("HCTF_DUEL_DELAY", "15"))    # single: give the reuse race its 3-9 s first
 GEN_AFTER = int(os.environ.get("HCTF_DUEL_GENERALIZE_AFTER", "1"))   # duel the 2nd+ generalize of a mode; -1 = never
 GEN_FIRST = os.environ.get("HCTF_DUEL_GENERALIZE_FIRST", "1") != "0"  # ... and the 1st when label-only / speed-only
@@ -45,6 +56,7 @@ STABLE = float(os.environ.get("HCTF_DUEL_STABLE", "0.75"))
 GREEN_CASE_TIMEOUT = float(os.environ.get("HCTF_BASELINE_CASE_TIMEOUT", "8"))
 
 _live = set()
+_live_extra = set()
 _live_lock = threading.Lock()
 
 
@@ -81,23 +93,33 @@ def _binary_ok(lane):
             and _mem_avail_gb() >= BINARY_MIN_AVAIL_GB)
 
 
-def _reserve(key):
+def _reserve(key, extra=False):
+    """Racer 1 counts against MAX_CONCURRENT; extra racers against EXTRA_MAX and need EXTRA_MIN_AVAIL_GB free."""
+    if extra and _mem_avail_gb() < EXTRA_MIN_AVAIL_GB:
+        return False
     with _live_lock:
-        if len(_live) >= MAX_CONCURRENT:
+        live, cap = (_live_extra, EXTRA_MAX) if extra else (_live, MAX_CONCURRENT)
+        if len(live) >= cap:
             return False
-        _live.add(key)
+        live.add(key)
         return True
 
 
-def _mirror(sdir, kind):
-    """.run/duel[-gen]-dayNN/<chal>/solver for challenges/dayNN/<chal>/solver (None for other layouts)."""
+def _release(key):
+    with _live_lock:
+        _live.discard(key)
+        _live_extra.discard(key)
+
+
+def _mirror(sdir, kind, n=1):
+    """.run/duel[N][-gen]-dayNN/<chal>/solver for challenges/dayNN/<chal>/solver (None for other layouts); racer n."""
     try:
         rel = sdir.relative_to(paths.CHALLENGES).parts
     except ValueError:
         return None
     if len(rel) != 3:
         return None
-    tag = "duel" if kind == "single" else "duel-gen"
+    tag = ("duel" if n == 1 else f"duel{n}") + ("" if kind == "single" else "-gen")
     return ROOT / ".run" / f"{tag}-{rel[0]}" / rel[1] / "solver"
 
 
@@ -137,11 +159,11 @@ NOTE = """
 
 ---
 ## You are the DUEL worker
-Another worker (different configuration) is working on this same task right now from the same starting point; the
-first verified result wins and the other is ended. Work independently:
+Other workers (different configurations) are working on this same task right now from the same starting point; the
+first verified result wins and the others are ended. Work independently:
 - YOUR solver directory is `{ddir}` -- every mention of the solver directory above means this one, and
   `hctf submit --from-solver`, `hctf solver-test` and `hctf solver-run` already use it. Never write under `{main}`.
-- Keep your notes in `{notes}` (the other worker writes notes.md; read it for leads, never edit it).
+- Keep your notes in `{notes}` (the chain's worker writes notes.md; read it for leads, never edit it).
 - GM submissions are shared: answers either worker gets accepted appear in confirmed.json -- re-read it before
   re-deriving a field. The per-field wrong-answer budget is shared too: submit only values derived from the bytes.
 - Diversity is the point: if the other worker's notes.md commits to one hypothesis, test the strongest alternative first.
@@ -158,11 +180,14 @@ QUICK_FIX_NOTE = """- YOUR STRATEGY IS DIFFERENT -- QUICK FIX (the other worker 
 
 
 class Duel:
-    def __init__(self, chain, cid, stage, prompt, timeout, cases, note_extra=""):
+    def __init__(self, chain, cid, stage, prompt, timeout, cases, note_extra="", n=1, model=None, effort=None):
         self.chain, self.cid, self.stage, self.timeout = chain, cid, stage, timeout
         self.note_extra = note_extra
-        self.key = f"{chain.base}:{stage}"
-        self.ddir = _mirror(chain.sdir, stage)
+        self.n = n                                   # racer number: 1 = the original duel, 2+ = HCTF_DUEL_EXTRA
+        self.model = MODEL if model is None else model
+        self.effort = EFFORT if effort is None else effort
+        self.key = f"{chain.base}:{stage}" + ("" if n == 1 else f":r{n}")
+        self.ddir = _mirror(chain.sdir, stage, n)
         self.cases = cases
         self.prompt = prompt
         self.stop_evt = threading.Event()
@@ -180,18 +205,18 @@ class Duel:
     def _render(self):
         main_rel, d_rel = str(self.chain.sdir.relative_to(ROOT)), str(self.ddir.relative_to(ROOT))
         text = self.prompt.replace(str(self.chain.sdir), str(self.ddir)).replace(main_rel, d_rel)
-        notes = cli.cdir(self.cid).relative_to(ROOT) / "duel-notes.md"
+        notes = cli.cdir(self.cid).relative_to(ROOT) / ("duel-notes.md" if self.n == 1 else f"duel{self.n}-notes.md")
         return text + NOTE.format(ddir=d_rel, main=main_rel, notes=notes) + self.note_extra.replace("<base>",
                                                                                                    self.chain.base)
 
     def _env(self):
         env = self.chain._worker_env(self.cid, self.stage)
         env.update({"HCTF_SOLVER_DIR": self.ddir, "HCTF_SOLVER_DIR_OVERRIDE": self.ddir, "HCTF_DUEL": "1",
-                    "HCTF_LOG_POOL": "duel"})
-        if EFFORT:
-            env["HCTF_X_EFFORT"] = EFFORT
-        if MODEL:
-            env["HCTF_X_MODEL"] = MODEL
+                    "HCTF_LOG_POOL": "duel" if self.n == 1 else f"duel{self.n}"})
+        if self.effort:
+            env["HCTF_X_EFFORT"] = self.effort
+        if self.model:
+            env["HCTF_X_MODEL"] = self.model
         return env
 
     def start(self, delay=0.0, skip=None, log=print, wake=None):
@@ -211,8 +236,10 @@ class Duel:
                         self.stop_evt.wait(0.2)
                     if self.stop_evt.is_set() or (skip and skip()):
                         return
-                if not _reserve(self.key):
-                    log(f"[{self.cid}] no duel {self.stage}: {MAX_CONCURRENT} duels already running")
+                if not (_reserve(self.key, extra=True) if self.n > 1 else _reserve(self.key)):
+                    log(f"[{self.cid}] no duel{'' if self.n == 1 else f' racer {self.n}'} {self.stage}: "
+                        + (f"{MAX_CONCURRENT} duels already running" if self.n == 1 else
+                           f"{EXTRA_MAX} extra racers running or < {EXTRA_MIN_AVAIL_GB:g} GB available"))
                     return
                 if self.cases and self.stage == "single":
                     join = getattr(self.chain, "_join_prior_cases", None)
@@ -220,25 +247,26 @@ class Duel:
                         join(self.cid)    # the background prior cases/ copy (stage_prior_cases) must be complete
                 _copy_solver(self.chain.sdir, self.ddir, self.cases)
                 self.copied.set()
-                log(f"[{self.cid}] duel {self.stage} worker -> local (effort {EFFORT or workers.worker_effort(self.chain.lane)}"
-                    f"{', model ' + MODEL if MODEL else ''}) on {self.ddir.relative_to(ROOT)}")
+                log(f"[{self.cid}] duel {self.stage} worker -> local (effort "
+                    f"{self.effort or workers.worker_effort(self.chain.lane)}"
+                    f"{', model ' + self.model if self.model else ''}{'' if self.n == 1 else f', racer {self.n}'}) "
+                    f"on {self.ddir.relative_to(ROOT)}")
                 self.rc, lg = workers.run_local(cli.cdir(self.cid), self.stage, self._render(), self._env(),
                                                 self.timeout, stop=self.stop_evt)
                 log(f"[{self.cid}] duel {self.stage} worker exit {self.rc} ({lg.name})")
             except Exception as e:  # noqa: BLE001 - the duel is optional
                 log(f"[{self.cid}] duel {self.stage} note: {e}")
             finally:
-                with _live_lock:
-                    _live.discard(self.key)
-        self.thread = threading.Thread(target=body, daemon=True, name=f"duel-{self.stage}-{self.chain.base}")
+                _release(self.key)
+        self.thread = threading.Thread(target=body, daemon=True,
+                                       name=f"duel{'' if self.n == 1 else self.n}-{self.stage}-{self.chain.base}")
         self.thread.start()
 
     def stop(self, join=10.0):
         self.stop_evt.set()
         if self.thread is not None:
             self.thread.join(timeout=join)
-        with _live_lock:
-            _live.discard(self.key)
+        _release(self.key)
 
     # ---- single: verified snapshot of the duel's solver
     def verified_snapshot(self, log=print):
@@ -371,3 +399,83 @@ class Duel:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
         log(f"[{self.chain.base}] duel solver copied into {sdir.relative_to(ROOT)}")
+
+
+class DuelGroup:
+    """Racer 1 (the original duel) + the HCTF_DUEL_EXTRA racers behind the Duel interface the chain already uses:
+    first verified single snapshot / first green generalize wins (each racer's watcher takes the chain's own
+    ready / _gen_lock, so exactly one hands over)."""
+
+    def __init__(self, members):
+        self.members = members
+
+    def start(self, **kw):
+        for m in self.members:
+            m.start(**kw)
+
+    def stop(self, join=10.0):
+        for m in self.members:
+            m.stop_evt.set()
+        for m in self.members:
+            m.stop(join=join)
+
+    def alive(self):
+        return any(m.alive() for m in self.members)
+
+    def _winner(self):
+        return next((m for m in self.members if m.won), None)
+
+    @property
+    def won(self):
+        return self._winner() is not None
+
+    @property
+    def snap(self):
+        w = self._winner()
+        if w is not None and w.snap is not None:
+            return w.snap
+        return next((m.snap for m in self.members if m.snap is not None), None)
+
+    @property
+    def green_res(self):
+        w = self._winner()
+        return w.green_res if w is not None else None
+
+    def _fan(self, fn, args):
+        ts = [threading.Thread(target=getattr(m, fn), args=args, daemon=True,
+                               name=f"{fn}-r{m.n}-{m.chain.base}") for m in self.members]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join()
+
+    def watch_single(self, ready_get, log=print):
+        self._fan("watch_single", (ready_get, log))
+
+    def watch_green(self, targets, baseline, need_fast, fill, green, log=print):
+        self._fan("watch_green", (targets, baseline, need_fast, fill, green, log))
+
+    def wait_snap(self, seconds, log=print):
+        end = time.time() + seconds
+        while time.time() < end and self.snap is None:
+            if cli.is_complete(self.members[0].cid):
+                for m in self.members:
+                    m.verified_snapshot(log)
+            if self.snap is not None or not self.alive():
+                break
+            time.sleep(POLL)
+        return self.snap
+
+    def adopt_into(self, sdir, log=print):
+        (self._winner() or self.members[0]).adopt_into(sdir, log=log)
+
+
+def make(chain, cid, stage, prompt, timeout, cases, note_extra=""):
+    """The duel for a chain stage: racer 1 alone when HCTF_DUEL_EXTRA is empty, else a DuelGroup. A strategy note
+    (QUICK_FIX_NOTE) goes to racer 1 only: the extra racers' diversity is the model."""
+    first = Duel(chain, cid, stage, prompt, timeout, cases, note_extra=note_extra)
+    if not EXTRA:
+        return first
+    extra = [Duel(chain, cid, stage, prompt, timeout, cases, n=i, model=m, effort=e)
+             for i, (m, e) in enumerate(EXTRA, start=2)]
+    return DuelGroup([first, *extra])

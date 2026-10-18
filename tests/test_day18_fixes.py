@@ -116,4 +116,65 @@ from hctf import duel  # noqa: E402
 assert duel.eligible("web")[0] or "duels already running" in duel.eligible("web")[1], duel.eligible("web")
 assert "web" in duel.LANES and "binary-reverse-engineering" not in duel.LANES, duel.LANES
 print("ok  duel: web lane eligible by default (binary still out)")
+
+# 4) duel roster: racer 1 unchanged + a Sonnet 5.5 high racer by default, own dirs / caps / memory guard; first wins
+import threading  # noqa: E402
+from hctf import paths  # noqa: E402
+
+
+class FakeChain:
+    def __init__(self, sdir, base="day99-x"):
+        self.sdir, self.root, self.base, self.lane = sdir, sdir.parent, base, "web"
+        self._gen_lock = threading.Lock()
+        self._ready_snap = None
+
+    def _worker_env(self, cid, stage):
+        return {"HCTF_CHAL": cid, "HCTF_BASE": self.base, "HCTF_STAGE": stage, "HCTF_SOLVER_DIR": self.sdir,
+                "HCTF_LANE": self.lane}
+
+
+assert duel.EXTRA == [("claude-sonnet-5-5", "high")], duel.EXTRA
+ch = FakeChain(paths.CHALLENGES / "day99" / "web-test-roster" / "solver")
+g = duel.make(ch, "web-day-99", "single", "PROMPT", 60, cases=False, note_extra="QUICK")
+assert isinstance(g, duel.DuelGroup) and [m.n for m in g.members] == [1, 2], g
+r1, r2 = g.members
+assert (r1.model, r1.effort, r1.note_extra) == (duel.MODEL, duel.EFFORT, "QUICK"), (r1.model, r1.effort)
+assert (r2.model, r2.effort, r2.note_extra) == ("claude-sonnet-5-5", "high", ""), (r2.model, r2.effort)
+assert r1.ddir == ROOT / ".run" / "duel-day99" / "web-test-roster" / "solver", r1.ddir      # racer 1 path unchanged
+assert r2.ddir == ROOT / ".run" / "duel2-day99" / "web-test-roster" / "solver", r2.ddir
+assert duel._mirror(ch.sdir, "generalize", 2).parts[-3] == "duel2-gen-day99"
+assert r1.key == "day99-x:single" and r2.key == "day99-x:single:r2"
+e1, e2 = r1._env(), r2._env()
+assert e1["HCTF_LOG_POOL"] == "duel" and e2["HCTF_LOG_POOL"] == "duel2", (e1, e2)
+assert e2["HCTF_X_MODEL"] == "claude-sonnet-5-5" and e2["HCTF_X_EFFORT"] == "high", e2
+assert "HCTF_X_MODEL" not in e1 or e1["HCTF_X_MODEL"] == duel.MODEL
+# separate caps: extras never take racer 1's slots; the memory guard holds extras back
+_mem, _cap, _xcap = duel._mem_avail_gb, duel.MAX_CONCURRENT, duel.EXTRA_MAX
+try:
+    duel._mem_avail_gb = lambda: 8.0
+    duel.MAX_CONCURRENT, duel.EXTRA_MAX = 1, 1
+    assert duel._reserve("a:single") and not duel._reserve("b:single")
+    assert duel._reserve("a:single:r2", extra=True) and not duel._reserve("b:single:r2", extra=True)
+    duel._release("a:single:r2")
+    duel._mem_avail_gb = lambda: 1.0
+    assert not duel._reserve("c:single:r2", extra=True), "memory guard"
+finally:
+    duel._release("a:single")
+    duel._mem_avail_gb, duel.MAX_CONCURRENT, duel.EXTRA_MAX = _mem, _cap, _xcap
+assert not duel._live and not duel._live_extra
+# the group reports the WINNING racer's result
+r2.won, r2.snap, r2.green_res = True, Path("/snap2"), ("m", [], [])
+assert g.won and g.snap == Path("/snap2") and g.green_res == ("m", [], []) and not g.alive()
+r2.won, r2.snap = False, None
+assert not g.won and g.snap is None
+# HCTF_DUEL_EXTRA="" -> the plain best-of-2 Duel as before
+_x = duel.EXTRA
+try:
+    duel.EXTRA = []
+    assert isinstance(duel.make(ch, "web-day-99", "single", "P", 60, cases=False), duel.Duel)
+finally:
+    duel.EXTRA = _x
+src = inspect.getsource(orchestrate.Chain._maybe_start_duel) + inspect.getsource(orchestrate.Chain._maybe_start_gen_duel)
+assert src.count("duel.make(") == 2 and "duel.Duel(" not in src
+print("ok  duel roster: racer 2 = Sonnet 5.5 high, own dir/key/log pool, separate cap + memory guard, winner reported")
 print("all Day 18 fix checks passed")

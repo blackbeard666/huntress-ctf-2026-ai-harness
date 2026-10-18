@@ -2782,7 +2782,7 @@ class Chain:
         # cases=True: the duel's solver-test must see the earlier days' regression cases too (alt armA D15: a duel won
         # the single with no cases/ and lost 35 earlier-day cases -> a 372 s generalize before Mastery). Artifacts are
         # hard-linked (duel._copy_solver), so the copy is cheap.
-        d = duel.Duel(self, cid, "single", prompt, SINGLE_TIMEOUT, cases=SINGLE_DUEL_CASES)
+        d = duel.make(self, cid, "single", prompt, SINGLE_TIMEOUT, cases=SINGLE_DUEL_CASES)   # + HCTF_DUEL_EXTRA racers
         self._duel = d
         d.start(delay=duel.DELAY, skip=lambda: cli.is_complete(cid), log=say, wake=getattr(self, "_race_done", None))
         threading.Thread(target=d.watch_single, name=f"duel-watch-{self.base}", daemon=True,
@@ -2800,7 +2800,7 @@ class Chain:
             say(f"[{cid}] no generalize duel: {why}")
             return None
         try:
-            d = duel.Duel(self, cid, "generalize", prompt, GENERALIZE_TIMEOUT, cases=True,
+            d = duel.make(self, cid, "generalize", prompt, GENERALIZE_TIMEOUT, cases=True,
                           note_extra=duel.QUICK_FIX_NOTE if quick else "")
             d.start(log=say)
             threading.Thread(target=d.watch_green, name=f"duel-green-{self.base}", daemon=True,
