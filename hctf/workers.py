@@ -263,10 +263,16 @@ WORKER_TOOLS = os.environ.get("HCTF_WORKER_TOOLS", "Bash,Read,Write,Edit,Skill,T
 CLAUDE_BIN = os.environ.get("HCTF_CLAUDE_BIN", "claude")   # tests point this at a stub
 
 
-def _worker_cmd(stage, lane, prompt=None, model=None, effort=None):
+# Linux caps ONE argv string at MAX_ARG_STRLEN (128 KiB): D18 prebuild metadata (17 targets) died at launch with
+# "OSError: [Errno 7] Argument list too long: 'bwrap'". A prompt past this goes to `claude -p` on stdin instead.
+PROMPT_ARGV_MAX = int(os.environ.get("HCTF_PROMPT_ARGV_MAX", "100000"))
+
+
+def _worker_cmd(stage, lane, prompt=None, model=None, effort=None, stdin_prompt=False):
     """claude argv. prompt=None -> stream-json input (a warm worker gets its messages on stdin).
+    stdin_prompt -> plain-text prompt on stdin (the caller feeds it; too long for argv).
     model/effort: per-launch overrides (the duel worker runs a deliberately different configuration)."""
-    cmd = [CLAUDE_BIN, "-p"] + ([prompt] if prompt is not None else []) + [
+    cmd = [CLAUDE_BIN, "-p"] + ([prompt] if prompt is not None and not stdin_prompt else []) + [
            "--dangerously-skip-permissions", "--max-turns", str(_max_turns(stage)),
            "--model", model or worker_model(lane), "--effort", effort or worker_effort(lane),
            "--output-format", "stream-json", "--verbose",
@@ -276,7 +282,7 @@ def _worker_cmd(stage, lane, prompt=None, model=None, effort=None):
            "--strict-mcp-config", "--settings", json.dumps(worker_settings(lane))]
     if WORKER_TOOLS:
         cmd += ["--tools", WORKER_TOOLS]
-    if prompt is None:
+    if prompt is None and not stdin_prompt:
         cmd += ["--input-format", "stream-json"]
     return cmd
 
@@ -424,7 +430,14 @@ def _run_local_once(chal_dir, stage, prompt, env_extra, timeout, stop, warm, war
     log = _logfile(chal_dir, stage, str(env_extra.get("HCTF_LOG_POOL") or "local"))
     env = _worker_env(env_extra)
     lane = env_extra.get("HCTF_LANE") or env.get("HCTF_LANE")
-    cmd = _worker_cmd(stage, lane, prompt, model=env_extra.get("HCTF_X_MODEL"), effort=env_extra.get("HCTF_X_EFFORT"))
+    via_stdin = prompt is not None and len(prompt.encode()) > PROMPT_ARGV_MAX
+    cmd = _worker_cmd(stage, lane, prompt, model=env_extra.get("HCTF_X_MODEL"), effort=env_extra.get("HCTF_X_EFFORT"),
+                      stdin_prompt=via_stdin)
+    stdin = None                        # inherit, as before
+    if via_stdin:
+        pf = Path(str(log) + ".prompt")
+        pf.write_text(prompt)
+        stdin = open(pf)
     with open(log, "w") as out:
         try:
             xb = [tuple(x) for x in json.loads(env_extra.get("HCTF_SANDBOX_BINDS") or "[]")]
@@ -432,8 +445,12 @@ def _run_local_once(chal_dir, stage, prompt, env_extra, timeout, stop, warm, war
             xb = []
         if env_extra.get("HCTF_NICE"):      # background breadth workers yield the CPU to timing-sensitive gates
             cmd = ["nice", "-n", str(env_extra["HCTF_NICE"]), *cmd]
-        p = subprocess.Popen(sandboxed(cmd, stage, xb), cwd=ROOT, stdout=out,
-                             stderr=subprocess.STDOUT, env=env, start_new_session=True)
+        try:
+            p = subprocess.Popen(sandboxed(cmd, stage, xb), cwd=ROOT, stdin=stdin, stdout=out,
+                                 stderr=subprocess.STDOUT, env=env, start_new_session=True)
+        finally:
+            if via_stdin:
+                stdin.close()           # the child holds its own copy of the fd
         key = _live_add(log, env_extra)
         try:
             return _wait_worker(p, log, timeout, stop, strays=env_extra)

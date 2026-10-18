@@ -288,6 +288,7 @@ class Duel:
                             self.chain._ready_snap = snap
                             self.won = True
                             log(f"[{self.cid}] duel reached a verified solver first -> ending the chain's worker")
+                            getattr(self.chain, "_prefetch_tt", lambda: None)()   # the TT pre-start belongs to the verified handoff
                             ready.set()
                     return
                 if not self.alive():

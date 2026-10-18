@@ -3430,8 +3430,15 @@ class Chain:
         return False
 
     def _prefetch_tt(self):
-        """Pre-start the Time Trial the moment the single is CORRECT on the GM (untimed pool: no clock, so starting early
-        costs nothing) and download its bytes into the timed runner's dir under the runner's own mode lock; hb_timed
+        """Never raises: callers sit right before ready.set() at a handoff."""
+        try:
+            self._prefetch_tt_start()
+        except Exception as e:  # noqa: BLE001 - a pre-start is an optimisation; the handoff must happen regardless
+            say(f"[{self.base}] TT pre-start note: {e}")
+
+    def _prefetch_tt_start(self):
+        """Pre-start the Time Trial at the handoff (single CORRECT on the GM + verified solver snapshot, after any new-id
+        hold) and download its bytes into the timed runner's dir under the runner's own mode lock; hb_timed
         reuses them when its start reconnects to the same attempt. Rehearsal fair D16: the single -> TT gap was 10-29 s, ~4 s
         of it harness handoff (verify, stop the worker, probes) before the TT start + download even began."""
         tt = self.entries.get("time_trial")
@@ -3457,7 +3464,9 @@ class Chain:
                 body = env.get("body") or {}
                 att = cli.attempt_id(body)
                 if env.get("http") != 200 or body.get("error") or not body.get("answer_ids") or body.get("deadline"):
-                    say(f"[{mcid}] TT pre-start skipped ({str(body.get('error') or 'clocked / no ids')[:80]})")
+                    why = body.get("error") or (f"clocked to {body['deadline']}: the runner reconnects to it"
+                                                if body.get("deadline") else "no ids")
+                    say(f"[{mcid}] TT pre-start skipped ({str(why)[:80]})")
                     return
                 adir.mkdir(parents=True, exist_ok=True)
                 for f in adir.glob("*"):
@@ -3685,7 +3694,6 @@ class Chain:
                             early, spec_n = m, spec_n + (not stamped)
                             self._prepush_verified(cid, self.sdir, warm=stamped)
                 if cli.is_complete(cid):
-                    self._prefetch_tt()      # the TT attempt + its bytes while the handoff runs (untimed: no clock)
                     if ready.is_set():
                         return   # the Homebase shadow handed over first
                     snap = self._spec_snapshot(cid) or getattr(self, "_race_snap", None)
@@ -3700,6 +3708,10 @@ class Chain:
                                 return
                             self._ready_snap = snap
                             say(f"[{cid}] single CORRECT + solver verified -> ending the worker, timed modes start now")
+                            # the TT attempt + its bytes while the handoff runs -- only now: a clocked route starts
+                            # its clock on this call (D18 warmups: pre-started at the answer-first CORRECT, the
+                            # solver verified 25 s later, 4 s of a 30 s window left)
+                            self._prefetch_tt()
                             ready.set()
                         self._prepush_verified(cid, snap)
                         return

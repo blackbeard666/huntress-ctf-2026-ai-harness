@@ -1211,10 +1211,13 @@ def _attempt(a):
     # ...and never run on a RESUMED attempt that is nearly out of clock (Day 8 script Mastery: `start` resumed an
     # attempt with ~3.5 s left -> 2 s solver budget -> misread as "solver too slow" -> 143 s generalize). Wait it out
     # (still before OUR clock) and re-roll. A fresh attempt (age ~0) has left == window and never trips this.
+    # D18 warmups TT: a retry can never succeed once the GM says unique_attempts_remaining == 0 -- the re-roll slept out a
+    # 4 s tail (a ~1 s solve fit) and got retry_variants_unavailable. Run on whatever clock is left instead.
     for _ in range(2):
         win, age = _window(body), _age(body)
         need = a.min_left if a.min_left is not None else max(3.0, (win or 0) / 2)
-        if resume or body.get("error") or left is None or left >= need or (age is not None and age < 2.0):
+        if (resume or body.get("error") or left is None or left >= need or (age is not None and age < 2.0)
+                or body.get("unique_attempts_remaining") == 0):
             break
         out["rerolled_short"] = round(left, 2)
         time.sleep(max(0.0, left) + 0.6)

@@ -337,6 +337,7 @@ def run_beside(chain, cid, prompt, ready_get, done, log=print):
                             if not ready.is_set():
                                 chain._ready_snap = snap
                                 log(f"[{cid}] shadow reached a verified solver first -> ending the local worker")
+                                getattr(chain, "_prefetch_tt", lambda: None)()   # the TT pre-start belongs to the verified handoff
                                 ready.set()
             if not sh.alive:
                 if not cli.is_complete(cid):
