@@ -8,6 +8,7 @@ import base64
 import binascii
 import bz2
 import codecs
+import functools
 import gzip
 import io
 import json
@@ -225,7 +226,9 @@ def _bigram(s):
     return sum(math.log(_BIGRAM.get(x, 0.00005)) for x in pairs) / len(pairs) if pairs else -12.0
 
 
+@functools.lru_cache(maxsize=8192)
 def _best_rot(p):
+    # pure in p (fixed tables): cached -- D17 warmups Mastery re-scored the same lines 2416x (26 shifts each) = ~60 s
     return max((_rot(p, n) for n in range(26)), key=lambda s: (_bigram(s), _eng(s), s == _rot(p, 13)))
 
 
@@ -366,6 +369,7 @@ def _generic_chunk(t):
 FREE_CODECS = (("rot", 2), ("rev", 12), ("atb", 13), ("caesar7", 14),   # D14: fixed Caesar +7 (decode rot-7)
                ("rot47", 15))   # D15: ROT47 over printable ASCII 33-126 (self-inverse)
 _SLUG_END = re.compile(r"[a-z]+(?:-[a-z]+)+-\d{2,}\s*$")
+_D2 = re.compile(r"\d\d")
 # The GM's slug is adj-noun-noun-NN: a 3-word slug end outranks a 2-word one (D14 Mastery set22: rev/atb swapped on
 # lines 12/13 still ended in a 2-word 'x-yyyy...-NN' tail and out-scored the true slug on bigrams).
 _SLUG3_END = re.compile(r"(?<![A-Za-z0-9])[a-z]+(?:-[a-z]+){2,}-\d{2,}\s*$")
@@ -479,9 +483,15 @@ def _joint_ranked(rows):
     fixed = [None if i in free else decode_chunk(p) for i, (_, p) in enumerate(rows)]
     if any(x is None for i, x in enumerate(fixed) if i not in free):
         return []
-    scored = {}
+    scored, memo = {}, {}
+
+    def cands(n, i):
+        # each (codec, line) decodes ONCE: every permutation holding the pair re-asked it (D17 Mastery: 2410 rot decodes)
+        if (n, i) not in memo:
+            memo[n, i] = _free_cands(n, rows[i][1])
+        return memo[n, i]
     for combo in itertools.permutations(names, len(free)):
-        for picks in itertools.product(*(_free_cands(n, rows[i][1]) for n, i in zip(combo, free))):
+        for picks in itertools.product(*(cands(n, i) for n, i in zip(combo, free))):
             parts = list(fixed)
             for i, v in zip(free, picks):
                 parts[i] = v
@@ -490,9 +500,13 @@ def _joint_ranked(rows):
                 continue
             last = [ln for ln in text.splitlines() if ln.strip()]
             last = last[-1] if last else ""
-            slug_end = _SLUG_END.search(last) is not None
+            tail = last.rstrip()[-2:]
+            # necessary condition first (a slug ends in \d{2,}): the unanchored search backtracked through every start
+            slug_end = len(tail) == 2 and _D2.fullmatch(tail) is not None and _SLUG_END.search(last) is not None
+            # Only slug-ending texts are ever read (decode_candidates / _joint_free take sc[0] only): bigram-score just
+            # those. D17 Mastery: 80k assignments over 6 blobs, none ending in a slug, all scored = most of the cost.
             scored[text] = (slug_end, slug_end and _SLUG3_END.search(last) is not None,
-                            _slug_known(last) if slug_end else 0, _bigram(text))
+                            _slug_known(last) if slug_end else 0, _bigram(text) if slug_end else -99.0)
     return sorted(((sc, t) for t, sc in scored.items()), key=lambda x: x[0], reverse=True)
 
 
