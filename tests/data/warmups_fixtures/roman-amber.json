@@ -1,0 +1,9 @@
+{
+ "codec": "roman",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "LXXVIII CV XCIX CI XXXII CXIX CXI CXIV CVII XXXII C CI XCIX CXI C CV CX CIII XXXII CXVI CIV CV CXV XXXII CXIX XCVII CXIV CIX CXVII CXII XXXIII XXXII LXXXIV CXI XXXII CXV CXI CVIII CXVIII CI XLIV XXXII CXV CXVII XCVIII CIX CV CXVI XXXII CXVI CIV CV CXV XXXII CI CXX XCVII XCIX CXVI XXXII XCVII CX CXV CXIX CI CXIV XXXII CXVI CXI XXXII CXVI CIV CI XXXII LXXI XCVII CIX CI XXXII LXXVII XCVII CXV CXVI CI CXIV LVIII XXXII XCVII CIX XCVIII CI CXIV XLV CII XCVII CVIII XCIX CXI CX XLV LII L",
+ "generator_cmd": "python3 -I -c \"import sys;sys.path.insert(0,'tools/pyroman');import roman;print(' '.join(roman.toRoman(ord(c)) for c in sys.argv[1]))\" \"$plain\"  # PyPI roman==5.2 toRoman per code point (tools/pyroman)",
+ "oracle_cmd": "printf %s \"$encoded\" | /usr/bin/python3 -I -c \"import sys,roman_numerals as r;print(''.join(chr(int(r.RomanNumeral.from_string(x))) for x in sys.stdin.read().split()))\"  # Debian python3-roman-numerals 4.1.0 RomanNumeral.from_string",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

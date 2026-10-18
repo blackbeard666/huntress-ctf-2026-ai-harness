@@ -1,0 +1,15 @@
+{
+ "entry": "observed_fetches",
+ "file": "nl_iis_w3c.log",
+ "expected": {
+  "values": [
+   "http://10.1.1.20/favicon.ico",
+   "http://mail.corp-victim.example/aspnet_client/shell.aspx?cmd=whoami",
+   "http://mail.corp-victim.example/owa/auth/x.js"
+  ]
+ },
+ "expected_images": {},
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/netlogs/netlog_gen.py  (printf IIS 10 W3C extended log (#Fields header, cs-host '-' on one line))",
+ "oracle_cmd": "gawk '/^#Fields:/{for(i=2;i<=NF;i++)f[$i]=i-1;next} /^#/{next} {h=$f[\"cs-host\"];if(h==\"-\")h=$f[\"s-ip\"];q=$f[\"cs-uri-query\"];print \"http://\" h $f[\"cs-uri-stem\"] (q==\"-\"?\"\":\"?\" q)}' nl_iis_w3c.log"
+}

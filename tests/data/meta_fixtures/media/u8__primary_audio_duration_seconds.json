@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_audio_duration_seconds",
+ "expected": "0.369977",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i sine=f=440:d=0.37:r=11025 -ac 1 -c:a pcm_u8 u8.wav (ffmpeg 7.0.2 static)",
+ "oracle_cmd": "python3 -I -c \"import wave; w=wave.open('u8.wav'); print('%f'%(w.getnframes()/w.getframerate()))\" -> 0.369977",
+ "decoy": false,
+ "member": "u8.wav"
+}

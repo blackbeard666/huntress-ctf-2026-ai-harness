@@ -1,0 +1,8 @@
+{
+ "entry": "v1_tamper_scan",
+ "expected": "ANS-C0FFEE1234ABCD99",
+ "decoy": false,
+ "note": "SHA-1-Digest manifest; assets/patch.bin (hex token) appended after signing, so it is absent from MANIFEST.MF",
+ "generator_cmd": "python3 -c 'import zipfile ...' (zipfile.writestr of AndroidManifest.xml / classes.dex stubs + assets) ; keytool -genkeypair -keystore ks.jks -keyalg RSA -dname 'CN=Tamper Test, O=Huntress' ; jarsigner -digestalg SHA-1 -sigalg SHA256withRSA t2.apk k ; python3 -c 'zipfile.ZipFile(apk,\"a\").writestr(\"assets/patch.bin\", b\"ANS-C0FFEE1234ABCD99\".hex())'",
+ "oracle_cmd": "jarsigner -verify -verbose v1tamper_unlisted_sha1.apk (assets/patch.bin is the only entry without the 'm' in-manifest flag) ; unzip -p v1tamper_unlisted_sha1.apk assets/patch.bin | xxd -r -p"
+}

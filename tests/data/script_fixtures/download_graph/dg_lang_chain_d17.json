@@ -1,0 +1,20 @@
+{
+ "entry": "download_graph",
+ "plans": {
+  "loader.js": "v=3|language=jscript|role=downloader|next_language=powershell|stage_count=4|steps=acquire_remote,write_file,dispatch_process|url=https://cdn-0dfc6f5541.example.invalid/950800736965.bin|file_path=C:/ProgramData/HuntressLab/.update-4da41d72d5.py",
+  "stage2.ps1": "v=3|language=powershell|role=downloader|next_language=python|stage_count=3|steps=acquire_remote,write_file,dispatch_process|url=https://javascript-8dbe7f0d9b.example.invalid/stage|file_path=C:/ProgramData/HuntressLab/.update-dfbb0ffc89.py",
+  "stage3.py": "v=3|language=python|role=downloader|next_language=bash|stage_count=2|steps=acquire_remote,write_file,dispatch_process|url=https://lua-78f5c27ddc.example.invalid/stage|file_path=C:\\Users\\Public\\HuntressLab\\stage-7a032dbb52.dat",
+  "final.sh": "v=3|language=bash|role=downloader|next_language=bash|stage_count=1|steps=acquire_remote,write_file,dispatch_process|url=https://perl-a698d0e5e8.example.invalid/stage|file_path=/tmp/huntress-cache/.stage-1369f7863b"
+ },
+ "expected": {
+  "chain": "jscript>powershell>python>bash",
+  "root": "loader.js",
+  "leaf": "final.sh",
+  "hosts": 4,
+  "edges": 12,
+  "write_edges": 4
+ },
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/download_graph/dg_gen.py  (D17 single GM-verified url/file-path -> plans; 4 members language->next_language jscript..bash, D17 urls/file-paths)",
+ "oracle_cmd": "awk language/next_language pairs | tsort -> jscript>powershell>python>bash; cut -d/ -f3 | sort -u | wc -l -> 4; grep -oE '[|](url|file_path|next_language|next_stage)=' | wc -l -> 12 edges; grep -oE '[|]file_path=' | wc -l -> 4"
+}

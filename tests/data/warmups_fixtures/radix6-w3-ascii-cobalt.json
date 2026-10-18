@@ -1,0 +1,9 @@
+{
+ "codec": "radix6-w3-ascii",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "encoded": "210,253,243,245,052,315,303,310,255,052,244,245,243,303,244,253,302,251,052,312,252,253,311,052,315,241,310,301,313,304,053,052,220,303,052,311,303,300,314,245,112,052,311,313,242,301,253,312,052,312,252,253,311,052,245,320,241,243,312,052,241,302,311,315,245,310,052,312,303,052,312,252,245,052,155,241,301,245,052,205,241,311,312,245,310,134,052,243,303,242,241,300,312,113,252,245,310,303,302,113,121,131",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c \"import sys,numpy;b=sys.stdin.buffer.read();r,w,inner,sep=int(sys.argv[1]),int(sys.argv[2]),sys.argv[3],sys.argv[4];v=[int(c,16) for c in b.hex()] if inner=='hex' else list(b);print(sep.join(numpy.base_repr(x,r).zfill(w) for x in v),end='')\" 6 3 ascii ','  # numpy.base_repr writer",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -e 'local $/; my $t=<STDIN>; $t=~s/[^0-9]+//g; my $s=\"\"; for my $g ($t=~/(.{3})/g) { my $v=0; $v=$v*6+$_ for split //, $g; $s.=chr $v } print $s'  # independent Perl base-6 reader, values as char codes",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "expected": "match"
+}

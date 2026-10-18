@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_audio_nb_samples",
+ "expected": "24000",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i sine=f=440:d=0.5:r=48000 -ac 2 -c:a flac fl.flac (ffmpeg 7.0.2 static)",
+ "oracle_cmd": ".venv/bin/python -I -c \"import mutagen.flac as f; print(f.FLAC('fl.flac').info.total_samples)\" -> 24000",
+ "decoy": false,
+ "member": "fl.flac"
+}

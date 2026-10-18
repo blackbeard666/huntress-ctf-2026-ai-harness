@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-17-download-graph",
+  "lane": "script-analysis",
+  "name": "📜 Fetch Quest",
+  "ids": {
+    "single_solve": "script-analysis-day-17-download-graph",
+    "time_trial": "script-analysis-day-17-download-graph/time_trial",
+    "mastery": "script-analysis-day-17-download-graph/mastery"
+  }
+}

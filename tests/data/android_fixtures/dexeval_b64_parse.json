@@ -1,0 +1,7 @@
+{
+ "entry": "dex_eval_scan",
+ "expected": "ANS-a41f07c3e98d2b56",
+ "_why": "Cfg.proof(host): java.util.Base64 decode of a static String, Integer.parseInt(\"3\"), byte loop raw[i]-d-(i%5), new String(bytes, UTF_8), StringBuilder proof= builder via charAt/length",
+ "generator_cmd": "python3 tests/data/android_fixtures/dexeval_src/gen_dexeval.py b64_parse tests/data/android_fixtures/dexeval_b64_parse.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/dexeval_src/oracle.sh tests/data/android_fixtures/dexeval_b64_parse.apk  # d2j-dex2jar back to classes, RUN the String methods on the JVM -> proof -> https:///evidence?proof=ANS-a41f07c3e98d2b56"
+}

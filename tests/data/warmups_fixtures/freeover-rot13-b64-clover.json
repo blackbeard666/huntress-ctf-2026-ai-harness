@@ -1,0 +1,9 @@
+{
+ "codec": "stack:rot13(base64)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lynx-63",
+ "encoded": "GzywMFO3o3WeVTEyL29xnJ5aVUEbnKZtq2SloKIjVFOHolOmo2k2MFjtp3IvoJy0VUEbnKZtMKuuL3DtLJ5mq2IlVUEiVUEbMFOULJ1yVR1up3EypwbtL2kiqzIlYJk5oatgAwZ=",
+ "generator_cmd": "printf %s \"$plain\" | base64 -w0 | tr 'A-Za-z' 'N-ZA-Mn-za-m'  # coreutils base64 + tr rot13",
+ "oracle_cmd": "python3 -I -c \"import sys,base64,codecs;print(base64.b64decode(codecs.decode(sys.argv[1],'rot13')).decode())\" \"$encoded\"  # stdlib codecs rot13 + b64decode",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lynx-63",
+ "expected": "match"
+}

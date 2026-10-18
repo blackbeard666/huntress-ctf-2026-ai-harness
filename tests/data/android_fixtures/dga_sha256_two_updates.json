@@ -1,0 +1,7 @@
+{
+ "entry": "digest_answer_scan",
+ "expected": "ANS-8DD726BA83F2F5C1",
+ "_why": "Proof.token(): MessageDigest SHA-256, update(case id) + update(salt) const-strings, %02X hex, first 16 -> ANS-; no ANS-<16 hex> literal",
+ "generator_cmd": "python3 tests/data/android_fixtures/dga_src/gen_dga.py sha256_two_updates tests/data/android_fixtures/dga_sha256_two_updates.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/dga_src/oracle.sh tests/data/android_fixtures/dga_sha256_two_updates.apk  # aapt2 reads the manifest package, d2j-dex2jar back to classes, RUN Proof.token(ctx) on the JVM -> token -> ANS-8DD726BA83F2F5C1; cross-check: python3 hashlib/hmac one-liner on the same inputs"
+}

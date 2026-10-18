@@ -1,0 +1,7 @@
+{
+ "entry": "digest_answer_scan",
+ "expected": "ANS-478852C5C496F516",
+ "_why": "Proof.token(ctx): MD5(ctx.getPackageName()) -- the manifest package, not a dex string -- %02x then toUpperCase, first 16",
+ "generator_cmd": "python3 tests/data/android_fixtures/dga_src/gen_dga.py md5_pkgname tests/data/android_fixtures/dga_md5_pkgname.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/dga_src/oracle.sh tests/data/android_fixtures/dga_md5_pkgname.apk  # aapt2 reads the manifest package, d2j-dex2jar back to classes, RUN Proof.token(ctx) on the JVM -> token -> ANS-478852C5C496F516; cross-check: python3 hashlib/hmac one-liner on the same inputs"
+}

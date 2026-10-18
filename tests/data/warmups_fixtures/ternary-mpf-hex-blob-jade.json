@@ -1,0 +1,9 @@
+{
+ "codec": "ternary-mpf-w3-hex-blob",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-93",
+ "encoded": "mppppfmfmpmmmfmmpmmfmmpfmmfmmmmfpmfpmfmpfmmfpmmfmfmpmfmmfmmmmfmmppmfmmpfmfmmpmmfmpfmmfmmppmfmpmmmfmppfmfmmfpmmfmmmmfpmppmfmmffmfmpmmmfpmpmmmfmmmmfpmfpmfmmmpmfpmmfmfmpppmfpmpfmfpmmmmmfmmpmmfmmmmpfmppmfmpfmmmfmmmmfpmpmmfmpfmmfmppmmfpmfmmfmmpfmmfppmmmfmmmmfpmpmmfpmpfmfmmmfmfmpppmfmpmmmfpmppmmfmmmmfpmppmfmmffmfmpmmmfpmpmmmfmmmmfmmpfmfpmffmfmmmpmfmmpmmfpmppmmfmmmmfmmmpmfmppfmfpmpmmfpmfpmfmmpfmfpmmfmmfmmmmfpmppmfmpfmmmfmmmmfpmppmfmmffmfmmpfmmfmmmmppmfpmfmmmpmfmpppmfmmpfmmfmmmmpppppmfmmmpmfpmpmmfpmppmfmmpfmfpmmfmpmpmpmmfmmmmfmpmpmfmmmpmfmmppmfmmpfmmfpppmfmpfmmfpmppmfpmppmfmmpfmfpmmfmmfpppmpmpmmmpmmpm",
+ "generator_cmd": "printf %s \"$plain\" | python3 -c \"import sys,numpy; print(\\\"\\\".join(numpy.base_repr(int(c,16),3).zfill(3).translate(str.maketrans(\\\"012\\\",\\\"mpf\\\")) for c in sys.stdin.buffer.read().hex()), end=\\\"\\\")\"  # numpy.base_repr writer: each UTF-8 hex nibble as 3 ternary digits over m/p/f, run together",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -ne 'tr/mpf/012/; my $h=\"\"; for my $g (/(...)/g) { my $v=0; $v=$v*3+$_ for split //, $g; $h.=sprintf \"%x\",$v } print pack \"H*\",$h'  # independent Perl reader (tr mpf->012, base-3 nibbles, pack H*)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-93",
+ "expected": "match"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "xorkey",
+ "plain": null,
+ "encoded": "8b92768af369e2a4c96eb869a85d09a651052a06e22a66a188edbde8c0145397814f1a3e2c6c19a21e69856f73d1f27690440f8083718a746fbe0718885ba6abda36ffc06e0c49bc8d24e9b43892b26bf513b3718b9e4de85c467ebb553dcd66d9b72316575e",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "openssl rand -hex 102  # random bytes, sentence-length",
+ "oracle_cmd": "python3 -c \"import os,binascii;c=binascii.unhexlify(os.environ['encoded']);p=b'Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ';k=bytes(a^b for a,b in zip(c,p));print(any(all(k[i]==k[i%n] for i in range(n,len(k))) for n in range(1,44)))\"  # False = crib key stream has no period",
+ "oracle_plain": "False"
+}

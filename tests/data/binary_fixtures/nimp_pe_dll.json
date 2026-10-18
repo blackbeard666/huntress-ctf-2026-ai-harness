@@ -1,0 +1,67 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "needed": [
+   "api-ms-win-crt-runtime-l1-1-0.dll",
+   "KERNEL32.dll",
+   "api-ms-win-crt-stdio-l1-1-0.dll",
+   "api-ms-win-crt-heap-l1-1-0.dll"
+  ],
+  "imports": [
+   "_execute_onexit_table",
+   "_exit",
+   "_initialize_onexit_table",
+   "_initterm",
+   "_initterm_e",
+   "_register_onexit_function",
+   "abort",
+   "DeleteCriticalSection",
+   "EnterCriticalSection",
+   "GetLastError",
+   "InitializeCriticalSection",
+   "LeaveCriticalSection",
+   "Sleep",
+   "TlsGetValue",
+   "VirtualProtect",
+   "VirtualQuery",
+   "__acrt_iob_func",
+   "__stdio_common_vfprintf",
+   "fwrite",
+   "free"
+  ],
+  "interpreter": "none",
+  "exports": [
+   "nimp_api",
+   "nimp_ver"
+  ],
+  "imphash": "a5af47625c5d5e5a840dd7ac1fa46416",
+  "imports_qualified": [
+   "api-ms-win-crt-runtime-l1-1-0.dll!_execute_onexit_table",
+   "api-ms-win-crt-runtime-l1-1-0.dll!_exit",
+   "api-ms-win-crt-runtime-l1-1-0.dll!_initialize_onexit_table",
+   "api-ms-win-crt-runtime-l1-1-0.dll!_initterm",
+   "api-ms-win-crt-runtime-l1-1-0.dll!_initterm_e",
+   "api-ms-win-crt-runtime-l1-1-0.dll!_register_onexit_function",
+   "api-ms-win-crt-runtime-l1-1-0.dll!abort",
+   "KERNEL32.dll!DeleteCriticalSection",
+   "KERNEL32.dll!EnterCriticalSection",
+   "KERNEL32.dll!GetLastError",
+   "KERNEL32.dll!InitializeCriticalSection",
+   "KERNEL32.dll!LeaveCriticalSection",
+   "KERNEL32.dll!Sleep",
+   "KERNEL32.dll!TlsGetValue",
+   "KERNEL32.dll!VirtualProtect",
+   "KERNEL32.dll!VirtualQuery",
+   "api-ms-win-crt-stdio-l1-1-0.dll!__acrt_iob_func",
+   "api-ms-win-crt-stdio-l1-1-0.dll!__stdio_common_vfprintf",
+   "api-ms-win-crt-stdio-l1-1-0.dll!fwrite",
+   "api-ms-win-crt-heap-l1-1-0.dll!free"
+  ]
+ },
+ "decoy": false,
+ "generator_cmd": "bash nimp_gen.sh nimp_pe_dll.bin pe_dll",
+ "oracle_cmd": "bash nimp_oracle.sh nimp_pe_dll.bin   # GNU readelf -dW/--dyn-syms/-lW + nm -D (ELF); GNU objdump -p + LIEF get_imphash PEFILE mode (PE); llvm-objdump-18 --macho --private-headers + llvm-nm-18 -u -p / -gU (Mach-O)",
+ "note": "lib.binary.native_import_facts(data)[field] for each expected_facts key; lists in table/load order except exports (LC_ALL=C sorted); absent -> \"none\"; no HCFG blob (hcfg_scan finds nothing valid)"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_profile",
+ "expected": "Simple Profile",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=352x288:rate=15 -t 0.4 -c:v libxvid -vtag XVID xvid.avi",
+ "oracle_cmd": "mediainfo --Output=JSON xvid.avi -> Video track Format_Profile 'Simple' -> ffprobe 'Simple Profile'",
+ "decoy": false,
+ "member": "xvid.avi"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "library_ms.folder_type",
+ "expected": "{7d49d726-3c21-4f05-99aa-fdc2c9474656}",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/GENERATOR_lxml_builder.py.txt OUTDIR  -> library_two_locations.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/library_ms/library_two_locations__folder_type.bin folder_type -> {7d49d726-3c21-4f05-99aa-fdc2c9474656}",
+ "decoy": false,
+ "member": "Documents.library-ms"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": null,
+ "generator_cmd": "tests/data/android_fixtures/gen_zip_structure.sh <outdir> -- step 6: duplicate puzzle json (first = base64 of ANS-...2a8G, last = decoy text), archive comment base64 of a 15-hex token, base32 of ANS-...dZ7 after the EOCD",
+ "oracle_cmd": "unzip -p zipanom_decoy_nearmiss.apk assets/huntress_puzzle.json | jq -rs '.[].data' | base64 -d; unzip -z zipanom_decoy_nearmiss.apk | tail -n +2 | base64 -d; tail -c 32 zipanom_decoy_nearmiss.apk | base32 -d  -> only near-misses",
+ "decoy": true
+}

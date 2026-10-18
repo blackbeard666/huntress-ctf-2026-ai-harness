@@ -1,0 +1,15 @@
+{
+ "expected_plain": "v=3|language=javascript|role=downloader|verdict=malicious|attack=T1105|stage_count=1|campaign_id=JS-77e0b4c1|url=https://js-77e0b4c1.example.invalid/a.dat",
+ "decoy": false,
+ "expected_fetch_sites": [
+  {
+   "api": "XMLHTTP.open",
+   "url": "https://js-77e0b4c1.example.invalid/a.dat",
+   "method": "POST",
+   "line": 5
+  }
+ ],
+ "note": "String.fromCharCode(...) url fed to MSXML2.XMLHTTP .open('POST', ...); equals the plan url",
+ "generator_cmd": "P='<plan>'; printf %s \"$P\" | gzip -9n | base64 -w0  -> descriptor_<id> literal; cradle written by hand (see sibling source)",
+ "oracle_cmd": "node -e \"global.ActiveXObject=function(){return {open:(m,u)=>console.log(m,u),send(){}}}; require(require('path').resolve(process.argv[1]))\" fetch_js_charcode_xhr.js   # fetch_sites oracle (real interpreter, network mocked); plan: grep -o 'descriptor_[0-9a-f]* = \"[^\"]*\"' fetch_js_charcode_xhr.js | cut -d'\"' -f2 | base64 -d | gunzip"
+}

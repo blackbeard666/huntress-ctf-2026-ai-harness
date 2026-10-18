@@ -1,0 +1,13 @@
+{
+ "case": "wasm_custom",
+ "expected_storage": null,
+ "expected_config": {
+  "campaign": "ST-12",
+  "domain": "node-12.storage.example.invalid",
+  "mutex": "Global\\HSTOR12"
+ },
+ "key": 188,
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/storage_gen.sh storage_wasm_custom.bin wasm_custom '{\"campaign\":\"ST-12\",\"domain\":\"node-12.storage.example.invalid\",\"mutex\":\"Global\\\\HSTOR12\"}' 188",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/storage_oracle.py storage_wasm_custom.bin"
+}

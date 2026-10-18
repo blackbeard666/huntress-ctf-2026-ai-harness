@@ -1,0 +1,30 @@
+# Generator: stdlib email.message.EmailMessage (writer) + ffmpeg 7.0.2 lavfi sine audio. usage: python3 -I gen.py <audio dir> <out dir>
+import sys, os
+from email.message import EmailMessage
+from email.policy import SMTP
+A, O = sys.argv[1], sys.argv[2]
+rd = lambda n: open(os.path.join(A, n), "rb").read()
+PNG = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000")
+def base(subj):
+    m = EmailMessage()
+    m["From"] = "Voicemail <vm@pbx.example.com>"; m["To"] = "alice@example.org"
+    m["Subject"] = subj; m["Date"] = "Fri, 16 Oct 2026 09:15:00 +0000"; m["Message-ID"] = "<%s@pbx.example.com>" % subj.split()[0]
+    m.set_content("You have a new voice message.\n")
+    return m
+# 1: three genuine audio attachments (one RFC 2231 non-ASCII filename) + a PNG that is not audio
+m = base("voicemail-001 three messages")
+m.add_attachment(rd("voice-001.wav"), maintype="audio", subtype="wav", filename="voice-001.wav")
+m.add_attachment(rd("voice-002.ogg"), maintype="audio", subtype="ogg", filename="voice-002.ogg")
+m.add_attachment(rd("voice-003.flac"), maintype="audio", subtype="flac", filename="Sprachnotiz-ü.flac")
+m.add_attachment(PNG, maintype="image", subtype="png", filename="logo.png")
+open(os.path.join(O, "message-001.eml"), "wb").write(m.as_bytes(policy=SMTP))
+# 2: renamed/mislabelled: a Vorbis Ogg sent as memo.mp3 audio/mpeg; a WAV declared octet-stream; a PNG declared audio/wav
+m = base("voicemail-002 forwarded")
+m.add_attachment(rd("memo.ogg"), maintype="audio", subtype="mpeg", filename="memo.mp3")
+m.add_attachment(rd("voice-001.wav"), maintype="application", subtype="octet-stream", filename="note.wav")
+m.add_attachment(PNG, maintype="audio", subtype="wav", filename="clip.wav")
+open(os.path.join(O, "message-002.eml"), "wb").write(m.as_bytes(policy=SMTP))
+# 3: decoy, e-mail with no audio at all
+m = base("invoice-003 no audio")
+m.add_attachment(PNG, maintype="image", subtype="png", filename="scan.png")
+open(os.path.join(O, "message-003.eml"), "wb").write(m.as_bytes(policy=SMTP))

@@ -1,0 +1,21 @@
+{
+ "kind": "provenance_facts",
+ "decoy": false,
+ "expected": {
+  "format": "pe",
+  "timestamp": "3774280412",
+  "timestamp_hex": "0xe0f6f2dc",
+  "timestamp_iso": "2089-08-07T19:13:32Z",
+  "linker_version": "48.00",
+  "pdb_path": "/home/testpwn/huntress-2026/.run/tmp/tmp.ElVbnI9w9d/plain/obj/Release/net10.0/plain.pdb",
+  "pdb_guid": "3ae8a85e-2b61-4f0d-9a9d-10ff273171cf",
+  "pdb_age": "1",
+  "has_rich": "false",
+  "rich_count": "0",
+  "rich_entries": [],
+  "rich_xor_key": "none"
+ },
+ "generator_cmd": "sh tests/data/binary_fixtures/prov_gen.sh tests/data/binary_fixtures   # gcc 15.2 -g/-s + ld --build-id=sha1/md5/none, objcopy --remove-section .comment, rustc 1.93.1, setuptools cli-64.exe (MSVC), dotnet build (rsrc_pe_overlay), head -c 64",
+ "oracle_cmd": "bash tests/data/binary_fixtures/prov_oracle.sh tests/data/binary_fixtures/prov_pe_dotnet_rsds.bin   # readelf -nW / -p .comment / --debug-dump=info --dwarf-depth=1, go version; pefile for PE",
+ "note": "dotnet build PE: CodeView RSDS pdb path/guid/age, deterministic (hash) TimeDateStamp, no Rich"
+}

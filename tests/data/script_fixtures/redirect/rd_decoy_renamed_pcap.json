@@ -1,0 +1,10 @@
+{
+ "entry": "resolve_chain",
+ "file": "rd_decoy_renamed.pcap",
+ "decoy": true,
+ "expected": {
+  "resolve_chain": {}
+ },
+ "generator_cmd": "python3 -I tests/data/script_fixtures/redirect/rd_gen.py  (printf of a bare HTTP 302 response saved as .pcap: no capture magic, no request)",
+ "oracle_cmd": "file rd_decoy_renamed.pcap  -> 'ASCII text' (not a capture); capinfos fails"
+}

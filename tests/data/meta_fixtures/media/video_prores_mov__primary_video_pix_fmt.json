@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_pix_fmt",
+ "expected": "yuv444p10le",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=128x96:rate=24000/1001 -t 0.2 -c:v prores_ks -profile:v 2 prores.mov",
+ "oracle_cmd": "mediainfo --Output=JSON prores.mov -> Video track ChromaSubsampling 4:4:4 (frame header) despite apcn; ffmpeg -i: yuv444p10le",
+ "decoy": false,
+ "member": "prores.mov"
+}

@@ -1,0 +1,18 @@
+{
+ "family": "decoder_facts",
+ "expected_fields": {
+  "function": "cfg_version",
+  "function_va": "0x1149",
+  "xrefs": [
+   "0x115f"
+  ],
+  "algorithm": "none",
+  "key": "none",
+  "loop_length": "none",
+  "key_equals_header": "none"
+ },
+ "decoy": true,
+ "generator_cmd": "sh decoder_gen.sh   # gcc 15.2 x86-64 from decoder_src/decoy.c, stored blob from decoder_src/gen_blob.py (stdlib)",
+ "oracle_cmd": "sh decoder_oracle.sh decoder_decoy_noloop.bin decoder_decoy_noloop.bin 68   # binutils nm + objdump -d -M intel: xref '# <va>', FUNC symbol of the twin, backward jcc loop body (cmp bound, byte op between byte load and byte store)",
+ "note": "DECOY: the only code reference to the blob (movzx eax,BYTE PTR [rax+rdx*1] via lea 0x115f) sits in a loop-free getter -> no decoder"
+}

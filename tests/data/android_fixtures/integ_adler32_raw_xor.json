@@ -1,0 +1,7 @@
+{
+ "entry": "integrity_key_scan",
+ "expected": "ANS-81d6f2a09c4e3b57",
+ "generator_cmd": "sh tests/data/android_fixtures/gen_integrity_keys.sh tests/data/android_fixtures  # zip -X; data = base64(token xor the 4 raw bytes of the dex header checksum, xxd -s 8 -l 4)",
+ "oracle_cmd": "K=$(unzip -p integ_adler32_raw_xor.apk classes.dex | python3 -I -c 'import sys,zlib,struct;d=sys.stdin.buffer.read();a=struct.pack(\"<I\",zlib.adler32(d[12:]));assert a==d[8:12];print(a.hex())'); unzip -p integ_adler32_raw_xor.apk assets/huntress_puzzle.json | python3 -I -c 'import sys,json,base64;k=bytes.fromhex(sys.argv[1]);d=base64.b64decode(json.load(sys.stdin)[\"data\"]);print(bytes(c^k[i%len(k)] for i,c in enumerate(d)).decode())' $K",
+ "decoy": false
+}

@@ -1,0 +1,3 @@
+1760781601.123    245 10.0.0.5 TCP_MISS/200 10234 GET http://dl.payload-host.example/a/stage2.bin - HIER_DIRECT/198.51.100.20 application/octet-stream
+1760781602.456  60012 10.0.0.5 TCP_TUNNEL/200 5512 CONNECT c2.tunnel-x.example:443 - HIER_DIRECT/203.0.113.9 -
+1760781603.001      0 10.0.0.8 TCP_DENIED/403 3900 GET http://blocked.example/ - HIER_NONE/- text/html

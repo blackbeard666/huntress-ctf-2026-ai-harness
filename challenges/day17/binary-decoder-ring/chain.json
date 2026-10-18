@@ -1,0 +1,12 @@
+{
+  "stage": "done",
+  "name": "\u2699\ufe0f Decoder Ring",
+  "lane": "binary-reverse-engineering",
+  "worker": null,
+  "updated": "2026-10-18T01:07:55",
+  "launches": 1,
+  "help": "# HELP: 2 of 204 fields unresolved -- d12_analysis_hcfg_storage, d14_analysis_hcfg_storage (exact_text label)\n\n202/204 are GM-confirmed. The concept is known: `hcfg_storage` = how the HCFG blob is stored. The GM accepted `base64`\nfor d08/d09/d11/d13 (base64 `SENGR...` literal). d12 (FPC, RAW `HCFG` in `.data` @82928) and d14 (ObjC, RAW `HCFG` in its own\n`.hcfg` section @4000, symbol `huntress_config`) are RAW-stored, but the GM rejected `raw` for both.\nLocal per-field cap (6) is now exhausted for both ids, so `hctf submit` refuses further probes.\n\nRejected for d14: raw, section, hcfg, elf, data, hcfg_section, section_hcfg, elf_section, section_elf, hcfg_elf, elf_hcfg,\n  elf_data, data_section, data_hcfg, data_elf, section_data(?), ... (hctf labels run, terms section/hcfg/elf/data)\nRejected for d12: raw, byte_array, base64, bytes, byte, array, binary, xor, blob, and every pairwise combo of\n  bytes/byte/array/binary (hctf labels run, terms byte/array/binary/bytes/xor/blob).\nUntried, plausible next spellings: raw_section (d14) / raw_data (d12), section_raw, plain, raw_bytes, rawbytes, xored,\n  xor_raw, embedded, inline, literal, struct, .hcfg (d14) / .data (d12) -- the last two were refused by the cap, never sent.\nNeeds: a human/organizer hint on the raw-storage word, or a cap raise for these two ids.\n",
+  "attempt": 1,
+  "time_trial_result": "correct",
+  "mastery_result": "correct"
+}

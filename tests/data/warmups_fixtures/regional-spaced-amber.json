@@ -1,0 +1,10 @@
+{
+ "codec": "regional-spaced",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "🇳 🇮 🇨 🇪   🇼 🇴 🇷 🇰   🇩 🇪 🇨 🇴 🇩 🇮 🇳 🇬   🇹 🇭 🇮 🇸   🇼 🇦 🇷 🇲 🇺 🇵 !   🇹 🇴   🇸 🇴 🇱 🇻 🇪 ,   🇸 🇺 🇧 🇲 🇮 🇹   🇹 🇭 🇮 🇸   🇪 🇽 🇦 🇨 🇹   🇦 🇳 🇸 🇼 🇪 🇷   🇹 🇴   🇹 🇭 🇪   🇬 🇦 🇲 🇪   🇲 🇦 🇸 🇹 🇪 🇷 :   🇦 🇲 🇧 🇪 🇷 - 🇫 🇦 🇱 🇨 🇴 🇳 - 4 2",
+ "generator_cmd": "perl -CSA tests/data/warmups_fixtures/unistyle_perl.pl regional \"$(printf %s \"$plain\" | tr a-z A-Z)\" | perl -CSA -ne 'chomp; print join(\"   \", map { join(\" \", split //) } split / /)'  # Perl charnames REGIONAL INDICATOR SYMBOL LETTER X, then one space between symbols / three between words (Discord emoji-letter style, keeps neighbours from fusing into flags)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys,unicodedata as u;t=sys.stdin.read();print(\" \".join(\"\".join(u.name(c)[-1] if u.name(c,\"\").startswith(\"REGIONAL INDICATOR SYMBOL LETTER \") else c for c in w.split(\" \")) for w in t.split(\"   \")))'  # Unicode character names; 3-space gaps = words",
+ "oracle_plain": "NICE WORK DECODING THIS WARMUP! TO SOLVE, SUBMIT THIS EXACT ANSWER TO THE GAME MASTER: AMBER-FALCON-42",
+ "expected": "match_ci",
+ "note": "capital-only style, case lost: decoder reads lowercase and re-cases the warmup sentence"
+}

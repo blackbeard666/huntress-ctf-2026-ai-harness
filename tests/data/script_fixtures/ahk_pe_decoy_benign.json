@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "D=$(printf %s 'theme=dark|font=Consolas|hotkey=^!t|window=Notepad|autosave=on|interval=300' | base64 -w0); script = `descriptor_0badf00d := \"$D\"` + a hotkey; python3 -I ahk_pe_gen.py script.ahk ahk_pe_decoy_benign.exe",
+ "oracle_cmd": "../../../.venv/bin/python -I -c \"import pefile,sys,re,base64,gzip;pe=pefile.PE(sys.argv[1]);e=pe.DIRECTORY_ENTRY_RESOURCE.entries[0].directory.entries[0].directory.entries[0].data.struct;s=pe.get_data(e.OffsetToData,e.Size).decode('utf-8-sig');print((base64.b64decode(re.search(r'descriptor_\\w+ := \\\"([^\\\"]+)\\\"',s).group(1))).decode())\" ahk_pe_decoy_benign.exe  -> config text, no v=3 plan"
+}

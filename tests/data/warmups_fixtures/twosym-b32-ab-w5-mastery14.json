@@ -1,0 +1,11 @@
+{
+ "codec": "twosym base32-index (Mastery 14-group fragment)",
+ "decoder": "lib.warmups_codecs.twosym_index_dec (also twosym_dec)",
+ "plain": "Game Mas",
+ "encoded": "abaaa bbbab baaaa babba bbaba bbaab abaab aaaaa abaab babab baaaa babbb aabba bbbab",
+ "generator_cmd": "printf %s \"$plain\" | {base32 -w0 | base64 -w0 | basenc --base64url -w0 | od -An -v -to1} | tr -d \"= \\n\" | awk -v al=\"b32\" -v w=5 -v sep=\" \" \"{for(i=1;i<=length(\\$0);i++){v=index(al,substr(\\$0,i,1))-1;b=\\\"\\\";for(j=0;j<w;j++){b=(v%2)b;v=int(v/2)};printf \\\"%s%s\\\",(i>1?sep:\\\"\\\"),b}}\" | tr 01 ab  # coreutils encoder -> awk alphabet index -> fixed-width binary -> symbols | first 14 groups (Mastery fragment)   [source plain: 'Game Master: jade-heron-42']",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/twosym_index_cyberchef.mjs a b 5 b32  # CyberChef From Binary (Byte Length=5) -> alphabet index -> From Base32/From Base64/From Octal",
+ "oracle_plain": "Game Mast",
+ "expected": "prefix",
+ "note": "14 base32 chars = 70 bits = 8 whole bytes + 6 bits. CyberChef 'From Base32' zero-fills the 2 missing bits and emits a 9th byte ('t' = 0x74, could equally be 0x75-0x77); the decoder keeps only the 8 bytes the bits prove, so plain = oracle_plain minus its last char."
+}

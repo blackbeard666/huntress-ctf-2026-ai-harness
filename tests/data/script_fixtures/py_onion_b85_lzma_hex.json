@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=python|role=loader|verdict=suspicious|attack=T1140|adapter=b85_lzma_hex|stage_count=3|steps=b85,unxz,fromhex,exec|campaign_id=PY-a1f00e72|url=https://py-a1f00e72.example.invalid/ld",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/py_onion_gen.py tests/data/script_fixtures  # b64 -> getattr b85decode + lzma -> bytes.fromhex",
+ "oracle_cmd": "python3 -I -c 'import sys; g={}; exec(open(sys.argv[1]).read(), g); print(g.get(\"PLAN\"))' tests/data/script_fixtures/py_onion_b85_lzma_hex.py"
+}

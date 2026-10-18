@@ -1,0 +1,10 @@
+{
+ "codec": "glyph-radix*",
+ "plain": null,
+ "encoded": "⚀⚂⚄ ⚄⚅⚀ ⚁⚄⚄ ⚄⚃⚄ ⚄⚅⚃ ⚄⚃⚁ ⚀⚄⚀ ⚀⚂⚀ ⚃⚀⚅ ⚃⚅⚂ ⚁⚃⚂ ⚂⚂⚃ ⚅⚄⚅ ⚀⚅⚂ ⚀⚄⚄ ⚂⚂⚃ ⚁⚅⚅ ⚅⚄⚂ ⚀⚅⚂ ⚂⚃⚃ ⚀⚃⚄ ⚄⚃⚀ ⚃⚄⚄ ⚃⚃⚄ ⚂⚃⚄ ⚃⚄⚄ ⚀⚄⚁ ⚁⚀⚅ ⚄⚅⚀ ⚅⚄⚃ ⚃⚁⚃ ⚁⚀⚅ ⚅⚃⚅ ⚃⚅⚄ ⚂⚄⚃ ⚅⚂⚄ ⚅⚄⚅ ⚃⚃⚃ ⚁⚂⚂ ⚀⚀⚁",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import random;g=random.Random(2026);print(' '.join(''.join(chr(0x2680+g.randrange(6)) for _ in range(3)) for _ in range(40)),end='')\"  # 40 random 3-die rolls, not an encoding",
+ "oracle_cmd": "perl base-6 reader as in glyph-dice-w3-ascii-amber -> b'\\x10\\xae@\\xa6\\xb1\\xa3\\x18\\x0cq\\x8c8W\\xd1 \\x1cWG\\xce ]\\x16\\xa2\\x88\\x82^\\x88\\x19)\\xae\\xcfu)\\xcb\\x8ec\\xc4\\xd1\\x812\\x01' ... (control bytes / non-text)",
+ "oracle_plain": null
+}

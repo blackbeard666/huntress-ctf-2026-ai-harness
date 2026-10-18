@@ -1,0 +1,10 @@
+{
+ "codec": "css-hex",
+ "plain": null,
+ "decoy": true,
+ "expected": "none",
+ "encoded": "#002b36 #073642 #586e75 #657b83 #839496 #93a1a1 #eee8d5 #fdf6e3 #b58900 #cb4b16 #dc322f #d33682 #6c71c4 #268bd2 #2aa198 #859900",
+ "generator_cmd": "printf %s '#002b36 #073642 #586e75 #657b83 #839496 #93a1a1 #eee8d5 #fdf6e3 #b58900 #cb4b16 #dc322f #d33682 #6c71c4 #268bd2 #2aa198 #859900'  # the published Solarized palette (real colours, not text)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;from PIL import ImageColor as C;print(bytes(v for x in sys.stdin.read().split() for v in C.getrgb(x)).decode())\"  # Pillow getrgb -> UnicodeDecodeError (0xb5/0xcb... not UTF-8 text)",
+ "oracle_plain": null
+}

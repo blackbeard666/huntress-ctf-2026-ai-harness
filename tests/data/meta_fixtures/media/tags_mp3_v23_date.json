@@ -1,0 +1,8 @@
+{
+ "field": "media.tag_date",
+ "expected": "2025-07-14 23:15",
+ "generator_cmd": "mutagen.id3 ID3v2.3 save(v2_version=3): TIT2 TPE1 TYER=2025 TDAT=1407 TIME=2315 COMM TSSE, on the a.mp3 audio",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i v23.mp3 -> Metadata 'date : 2025-07-14 23:15'",
+ "decoy": false,
+ "member": "mp3_v23_date.mp3"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_codec_tag_string",
+ "expected": "hvc1",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=256x144:rate=50 -t 0.2 -c:v libx265 -pix_fmt yuv420p -tag:v hvc1 hevc.mp4",
+ "oracle_cmd": "mediainfo --Output=JSON hevc.mp4 -> Video track CodecID 'hvc1'",
+ "decoy": false,
+ "member": "hevc.mp4"
+}

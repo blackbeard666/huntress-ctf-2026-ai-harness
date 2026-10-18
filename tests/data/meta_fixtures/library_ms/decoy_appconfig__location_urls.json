@@ -1,0 +1,8 @@
+{
+ "field": "library_ms.location_urls",
+ "expected": "none",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/GENERATOR_lxml_builder.py.txt OUTDIR  -> decoy_appconfig.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/library_ms/decoy_appconfig__location_urls.bin location_urls -> none",
+ "decoy": true,
+ "member": "Documents.library-ms"
+}

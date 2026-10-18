@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "make",
+ "generator_cmd": "printf 'version=1.4.2 channel=stable build=release' | xxd -p -c 32 (define DESCRIPTOR_BEEF0001) + base64 of 'build cache warmup for the nightly inventory' split over := / +=",
+ "oracle_cmd": "make -s -f tests/data/script_fixtures/bh_make_decoy_benign.mk --eval 'p:;@printf \"%s|\" \"$(VER)\" \"$(DESCRIPTOR_BEEF0002)\"' p  -> benign version string + benign base64 (no v=3 plan)"
+}

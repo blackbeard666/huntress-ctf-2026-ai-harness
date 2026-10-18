@@ -1,0 +1,37 @@
+{
+ "family": "cobol_facts",
+ "encoding": "none",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "needed": [
+   "libcob.so.4",
+   "libc.so.6"
+  ],
+  "has_libcob_needed": "true",
+  "libcob_soname": "libcob.so.4",
+  "cob_imports": [
+   "cob_check_version",
+   "cob_display",
+   "cob_fatal_error",
+   "cob_init",
+   "cob_module_global_enter",
+   "cob_set_cancel",
+   "cob_stop_run"
+  ],
+  "has_cobol_runtime": "true",
+  "program_id": "DECOYPROG",
+  "program_ids": [
+   "DECOYPROG"
+  ],
+  "source_file": "decoy.cob",
+  "compile_date": "Oct 18 2026 12:25:14",
+  "has_gnucobol_runtime": "true"
+ },
+ "decoy": true,
+ "generator_cmd": "sh cobol_gen.sh   # real GnuCOBOL 3.2 (apt-get download gnucobol3 libcob4-dev libcob4t64; dpkg-deb -x tools/gnucobol/root; cobc drives system gcc), blob via python3 zlib.crc32+struct, gcc C decoy",
+ "oracle_cmd": "sh cobol_oracle.sh cobol_decoy_badcrc.bin cobol_decoy.cob.txt decoy.cob   # file -b, readelf -dW/-lW, nm -D --undefined-only, objdump -d, strings -a, PROGRAM-ID + X literals of the COBOL source, zlib.crc32",
+ "note": "real COBOL decoy: split X literals but the header crc is off by one -> no valid HCFG; facts still a COBOL program"
+}

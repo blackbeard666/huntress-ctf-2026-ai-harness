@@ -1,0 +1,7 @@
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-10-18 10:00:00
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) cs-host sc-status sc-substatus sc-win32-status time-taken
+2026-10-18 10:00:01 10.1.1.20 GET /owa/auth/x.js - 443 - 10.0.0.5 Mozilla/5.0+(Windows+NT+10.0) - mail.corp-victim.example 200 0 0 15
+2026-10-18 10:00:02 10.1.1.20 POST /aspnet_client/shell.aspx cmd=whoami 443 - 10.0.0.66 curl/8.4.0 - mail.corp-victim.example 200 0 0 31
+2026-10-18 10:00:03 10.1.1.20 GET /favicon.ico - 80 - 10.0.0.7 Mozilla/5.0 - - 404 0 2 1

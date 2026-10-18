@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=dockerfile|role=launcher|verdict=malicious|attack=T1059.004|adapter=env_legacy_split|stage_count=2|steps=expand_env,spawn_shell|campaign_id=DOC-7c3a9b10|url=https://docker-7c3a9b10.example.invalid/s2",
+ "decoy": false,
+ "host": "docker",
+ "generator_cmd": "B=$(printf %s \"$PLAN\" | base64 -w0); split in halves into `ARG PART_A=` / `ARG PART_B=`, legacy `ENV DESCRIPTOR_7C3A9B10 ${PART_A}${PART_B}`",
+ "oracle_cmd": "PART_A=$(sed -n 's/^ARG PART_A=//p' tests/data/script_fixtures/bh_docker_env_legacy.Dockerfile) PART_B=$(sed -n 's/^ARG PART_B=//p' tests/data/script_fixtures/bh_docker_env_legacy.Dockerfile) bash -c 'printf %s \"${PART_A}${PART_B}\"' | base64 -d"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "proof_flow_scan",
+ "expected": "ANS-e71b04c9d2a6385f",
+ "_why": "\"..evidence?proof=\" + a.b(): renamed getter a.b() returns d.f, set in d.<clinit>; asset json, a.c() (behind evidence?hint=) and d.e hold decoy ANS- values",
+ "generator_cmd": "python3 tests/data/android_fixtures/proofflow_src/gen_proofflow.py getter_chain tests/data/android_fixtures/proofflow_getter_chain.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "jadx -q -d o tests/data/android_fixtures/proofflow_getter_chain.apk; python3 -I tests/data/android_fixtures/proofflow_src/oracle.py o  # regex over jadx Java: value appended after proof= followed through fields/getters -> ANS-e71b04c9d2a6385f"
+}

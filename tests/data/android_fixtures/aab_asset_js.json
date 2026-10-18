@@ -1,0 +1,7 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-9be4271d0c6af358",
+ "_why": "AAB (row 58): token only in base/assets/www/app.js as String.fromCharCode(...) -- reached by re-laying the base module as an APK",
+ "oracle_cmd": "unzip -p aab_asset_js.zip base/assets/www/app.js | node -e 'let s=require(\"fs\").readFileSync(0,\"utf8\");eval(s+\";console.log(p)\")'",
+ "generator_cmd": "bash tests/data/android_fixtures/aab_src/gen_aab.sh tests/data/android_fixtures  # apktool-bundled aapt2 2.20 `link --proto-format -I prebuilt/android-framework.jar` -> protobuf manifest; python zipfile lays out BundleConfig.pb + base/manifest/ + base/resources.pb + base/assets/ + <feature>/manifest/"
+}

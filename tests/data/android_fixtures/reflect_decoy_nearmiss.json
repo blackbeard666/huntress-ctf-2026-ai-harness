@@ -1,0 +1,8 @@
+{
+ "entry": "reflection_scan",
+ "expected": null,
+ "_why": "same layout as field_xor; the reflected field b holds a 15-hex near miss while unreflected siblings a / c hold full tokens -> must yield none",
+ "generator_cmd": "python3 tests/data/android_fixtures/reflect_src/gen_reflect.py decoy_nearmiss tests/data/android_fixtures/reflect_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/reflect_src/oracle.sh tests/data/android_fixtures/reflect_decoy_nearmiss.apk  # d2j-dex2jar back to classes, RUN Locator.reveal() on the JVM (real reflection) -> ANS-5c2e9a07d1b3f48 (15 hex: no token)",
+ "decoy": true
+}

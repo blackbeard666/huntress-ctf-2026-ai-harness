@@ -1,0 +1,8 @@
+{
+ "field": "media.actual_audio_codec_name",
+ "expected": "none",
+ "generator_cmd": "printf '%%PDF-1.4\\n1 0 obj<<>>endobj\\ntrailer<<>>\\n%%%%EOF\\n' > voice-014.wav",
+ "oracle_cmd": "ffmpeg -hide_banner -i voice-014.wav -> no audio stream (file -b -> 'PDF document')",
+ "decoy": true,
+ "member": "voice-014.wav"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_frame_rate",
+ "expected": "15/1",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=352x288:rate=15 -t 0.4 -c:v libxvid -vtag XVID xvid.avi",
+ "oracle_cmd": "mediainfo --Output=JSON xvid.avi -> Video track FrameRate_Num 15 / FrameRate_Den 1",
+ "decoy": false,
+ "member": "xvid.avi"
+}

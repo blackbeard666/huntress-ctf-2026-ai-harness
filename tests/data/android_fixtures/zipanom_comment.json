@@ -1,0 +1,6 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-3f8e1a7c60b2d945",
+ "generator_cmd": "tests/data/android_fixtures/gen_zip_structure.sh <outdir> -- step 4: printf token | gzip -9n | base64 -w0 | zip -qz (archive comment)",
+ "oracle_cmd": "unzip -z zipanom_comment.apk | tail -n +2 | base64 -d | gunzip"
+}

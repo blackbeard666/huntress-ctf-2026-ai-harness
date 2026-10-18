@@ -1,0 +1,17 @@
+{
+ "entry": "download_graph",
+ "plans": {
+  "x.ps1": "v=3|language=powershell|next_language=python|url=https://jscript-3d2d3d0db0.example.invalid/stage",
+  "y.ps1": "v=3|language=powershell|next_language=bash|url=https://vbscript-79fe0e646b.example.invalid/stage",
+  "z.txt": "v=3|role=benign|steps=recognize_syntax"
+ },
+ "expected": {
+  "chain": null,
+  "member_chain": null,
+  "unique_host": null,
+  "root": null
+ },
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/download_graph/dg_gen.py  (D17 single GM-verified url/file-path -> plans; powershell -> python AND powershell -> bash; benign member without graph fields)",
+ "oracle_cmd": "awk language/next_language pairs | cut -d' ' -f1 | sort | uniq -d -> 'powershell' (a branching source: no single chain)"
+}

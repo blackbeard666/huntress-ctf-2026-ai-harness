@@ -1,0 +1,10 @@
+{
+ "codec": "css-hex",
+ "plain": null,
+ "decoy": true,
+ "expected": "none",
+ "encoded": "Set the background to #4e6963 and the link colour to rgb(101, 32, 119) before the warmup.",
+ "generator_cmd": "printf %s 'Set the background to #4e6963 and the link colour to rgb(101, 32, 119) before the warmup.'  # a CSS-ish prose line (colour tokens embedded in English)",
+ "oracle_cmd": "printf %s \"$encoded\" | grep -qxE '([[:space:],;|]*(#[0-9a-fA-F]{3,8}|rgba?\\([^)]*\\)))+[[:space:],;|]*' || echo none  # GNU grep: the line is not made only of colour tokens",
+ "oracle_plain": null
+}

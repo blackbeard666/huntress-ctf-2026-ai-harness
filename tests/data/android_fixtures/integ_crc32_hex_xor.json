@@ -1,0 +1,7 @@
+{
+ "entry": "integrity_key_scan",
+ "expected": "ANS-c70e4b19a2d85f36",
+ "generator_cmd": "sh tests/data/android_fixtures/gen_integrity_keys.sh tests/data/android_fixtures  # zip -X; data = base64(token xor '%08x' text of zlib.crc32(classes.dex))  (Long.toHexString(entry.getCrc()))",
+ "oracle_cmd": "CRC=$(unzip -v integ_crc32_hex_xor.apk classes.dex | awk '$NF==\"classes.dex\"{print tolower($7)}'); unzip -p integ_crc32_hex_xor.apk assets/huntress_puzzle.json | python3 -I -c 'import sys,json,base64;k=sys.argv[1].encode();d=base64.b64decode(json.load(sys.stdin)[\"data\"]);print(bytes(c^k[i%len(k)] for i,c in enumerate(d)).decode())' $CRC",
+ "decoy": false
+}

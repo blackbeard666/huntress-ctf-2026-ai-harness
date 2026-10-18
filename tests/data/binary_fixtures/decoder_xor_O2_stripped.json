@@ -1,0 +1,18 @@
+{
+ "family": "decoder_facts",
+ "expected_fields": {
+  "function": "none",
+  "function_va": "0x11a0",
+  "xrefs": [
+   "0x11b2"
+  ],
+  "algorithm": "xor",
+  "key": "0x5a",
+  "loop_length": "56",
+  "key_equals_header": "true"
+ },
+ "decoy": false,
+ "generator_cmd": "sh decoder_gen.sh   # gcc 15.2 x86-64 from decoder_src/xor.c, stored blob from decoder_src/gen_blob.py (stdlib)",
+ "oracle_cmd": "sh decoder_oracle.sh decoder_xor_O2_stripped.bin decoder_src/xor_O2_sym.tmp 68   # binutils nm + objdump -d -M intel: xref '# <va>', FUNC symbol of the twin, backward jcc loop body (cmp bound, byte op between byte load and byte store)",
+ "note": "stripped: function_va from the pre-strip twin's nm (strip moves no code); loop 0x11c0..0x11d2: xor edx,0x5a; cmp rax,0x38; jne -> 56"
+}

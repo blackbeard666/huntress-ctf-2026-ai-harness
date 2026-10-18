@@ -1,0 +1,11 @@
+{
+ "entry": "observed_fetches",
+ "file": "nl_decoy_prose_log.log",
+ "expected": {
+  "values": []
+ },
+ "expected_images": {},
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/netlogs/netlog_gen.py  (printf app log with no request / URL / host field)",
+ "oracle_cmd": "gawk '/https?:\\/\\//{print}' nl_decoy_prose_log.log"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_audio_duration_seconds",
+ "expected": "none",
+ "generator_cmd": "printf 'call log: 3 min, not audio\\n' > note_renamed.ogg (plain text renamed .ogg)",
+ "oracle_cmd": "file -b note_renamed.ogg -> 'ASCII text' (not media)",
+ "decoy": true,
+ "member": "note_renamed.ogg"
+}

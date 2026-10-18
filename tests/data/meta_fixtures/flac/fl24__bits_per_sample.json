@@ -1,0 +1,8 @@
+{
+ "field": "flac.bits_per_sample",
+ "expected": "24",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -loglevel error -f lavfi -i sine=f=300:d=0.3:r=96000 -ac 1 -c:a flac -sample_fmt s32 -bits_per_raw_sample 24 -metadata title=x fl24.flac (ffmpeg 7.0.2 static)",
+ "oracle_cmd": "bin/exiftool -j -n fl24.flac -> BitsPerSample 24",
+ "decoy": false,
+ "member": "fl24.flac"
+}

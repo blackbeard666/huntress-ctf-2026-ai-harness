@@ -1,0 +1,8 @@
+{
+ "field": "opus.pre_skip",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"from PIL import Image; Image.new('RGB',(4,4)).save('decoy.opus','PNG')\" (Pillow PNG writer, renamed .opus) ; renamed decoy.png -> decoy.opus",
+ "oracle_cmd": "file -b decoy.opus -> 'PNG image data, 4 x 4'",
+ "decoy": true,
+ "member": "decoy.opus"
+}

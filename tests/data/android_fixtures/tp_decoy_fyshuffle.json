@@ -1,0 +1,7 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "generator_cmd": "tests/data/android_fixtures/gen_transposition.sh <outdir> -- perl seeded Fisher-Yates shuffle (srand 31337; no keyless family) encoder (data[j] = answer[o[j]]), jq -cn '{codec,data}' (no index list) then (cd d && zip -qX -r <name>.apk assets)",
+ "oracle_cmd": "unzip -p tp_decoy_fyshuffle.apk assets/huntress_puzzle.json | jq -r .data | perl -ne 'chomp; print \"$_ = Fisher-Yates scramble of ANS-71F0C3E95A2B8D46 (generator), not a stride/rail/columnar/chunk order\\n\"'",
+ "decoy": true
+}

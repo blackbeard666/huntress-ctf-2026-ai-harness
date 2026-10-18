@@ -1,0 +1,9 @@
+{
+ "codec": "dna",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "CATGCGGCCGATCGCCAGAACTCTCGTTCTAGCGGTAGAACGCACGCCCGATCGTTCGCACGGCCGTGCGCTAGAACTCACGGACGGCCTATAGAACTCTCGACCTAGCGTCCTCCCTAAAGACAGAACCCACGTTAGAACTATCGTTCGTACTCGCGCCAGTAAGAACTATCTCCCGAGCGTCCGGCCTCAAGAACTCACGGACGGCCTATAGAACGCCCTGACGACCGATCTCAAGAACGACCGTGCTATCTCTCGCCCTAGAGAACTCACGTTAGAACTCACGGACGCCAGAACACTCGACCGTCCGCCAGAACATCCGACCTATCTCACGCCCTAGATGGAGAACGACCGTCCGAGCGCCCTAGAGTCCGCGCGACCGTACGATCGTTCGTGAGTCATCAATAG",
+ "generator_cmd": "perl -e 'my %m=(qw(00 A 01 C 10 G 11 T)); print join \"\", map { $m{$_} } (unpack(\"B*\", $ARGV[0]) =~ /../g)' \"$plain\"  # perl unpack B* = UTF-8 bits, bit pairs 00/01/10/11 -> A/C/G/T",
+ "oracle_cmd": "printf \"%s\\n\" \"$encoded\" | tr ACGT 0123 | fold -w4 | while read q; do printf \"\\\\x$(printf %02x $((4#$q)))\"; done  # coreutils tr + fold, bash base-4 arithmetic $((4#q)) -> byte",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

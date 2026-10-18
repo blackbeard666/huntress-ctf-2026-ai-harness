@@ -1,0 +1,61 @@
+{
+ "family": "kotlin_native_facts",
+ "encoding": "utf16le-base64",
+ "expected_offset": 11632,
+ "expected_config": {
+  "flag": "HCFG{konan_kstring_utf16}",
+  "day": 18,
+  "lang": "kotlin-native"
+ },
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "has_kotlin_native_runtime": "true",
+  "has_konan_main": "true",
+  "kfun_symbols": [
+   "kfun:#main(){}",
+   "kfun:com.huntress.cfg#decode(kotlin.String){}kotlin.ByteArray",
+   "kfun:com.huntress.cfg.Config#<get-flag>(){}kotlin.String",
+   "kfun:com.huntress.cfg.Config#<init>(){}",
+   "kfun:kotlin.io#println(kotlin.Any?){}",
+   "kfun:kotlin.native.internal#ThrowNullPointerException(){}",
+   "kfun:kotlin.text#decodeToString__at__kotlin.ByteArray(){}kotlin.String"
+  ],
+  "user_kfun_symbols": [
+   "kfun:#main(){}",
+   "kfun:com.huntress.cfg#decode(kotlin.String){}kotlin.ByteArray",
+   "kfun:com.huntress.cfg.Config#<get-flag>(){}kotlin.String",
+   "kfun:com.huntress.cfg.Config#<init>(){}"
+  ],
+  "kotlin_functions": [
+   "com.huntress.cfg.Config.<get-flag>",
+   "com.huntress.cfg.Config.<init>",
+   "com.huntress.cfg.decode",
+   "main"
+  ],
+  "kfun_owners": [
+   "com.huntress.cfg",
+   "com.huntress.cfg.Config"
+  ],
+  "kclass_names": [
+   "com.huntress.cfg.Config"
+  ],
+  "ktype_names": [
+   "com.huntress.cfg.Config"
+  ],
+  "main_function": "kfun:#main(){}",
+  "function_count": 4,
+  "stdlib_function_count": 3,
+  "hcfg_encoding": "utf16le-base64",
+  "hcfg_symbol": "kvar:com.huntress.cfg#CONFIG",
+  "hcfg_section": ".data.rel.ro",
+  "hcfg_in_kstring": "true",
+  "hcfg_kstring_header_offset": 11616,
+  "hcfg_kstring_length": 108,
+  "hcfg_kstring_type": "ktype:kotlin.String"
+ },
+ "decoy": false,
+ "generator_cmd": "bash kn_gen.sh   # gcc -O0 C with asm-label konanc symbols (kfun:<owner>#<name>(..){}<ret>, kclass:, ktype:, kvar:) + Konan_main/Kotlin_initRuntimeIfNeeded; HCFG = printf header + gzip-trailer crc32, base64 (coreutils) stored as a static KString {ktype:kotlin.String*, u32 count, u32 pad, gcc u\"\" UTF-16LE literal}",
+ "oracle_cmd": "bash kn_oracle.sh kn_utf16_b64.bin   # file -b, nm --defined-only (kfun:/kclass:/ktype:/Konan_*), grep -a ASCII + grep -caP UTF-16LE cues, grep -aobP UTF-16LE 'SENG' offset, od KString header (typeinfo -16 / count -8 / pad -4), readelf -SW section + nm symbol at header vaddr, dd|iconv UTF-16LE|base64 -d config",
+ "note": "unstripped non-PIE konanc-style image; kotlin_functions = owner.name of the non-kotlin. kfun: lines nm prints (root owner -> name)"
+}

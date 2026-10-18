@@ -1,0 +1,10 @@
+{
+ "codec": "bacon26(aphex)*",
+ "plain": null,
+ "encoded": "BABBA ABBBA BAAAB ABABA AAABB AABAA AAABA ABBBA AAABB ABAAA ABBAB AABBA BAABB AABBB ABAAA BAABA BABBA AAAAA BAAAB ABBAA BABAA ABBBB",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'work decoding this warmup' | CC=tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/bacon_cyberchef.mjs enc 'Complete' 'A/B' '0' '0'  # CyberChef 'Bacon Cipher Encode' of plain letters",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/bacon_cyberchef.mjs dec 'Complete' 'A/B' '0' '0'  # -> WORKDECODINGTHISWARMUP (letters past p: plain Bacon-26, not a-p hex)",
+ "oracle_plain": "WORKDECODINGTHISWARMUP"
+}

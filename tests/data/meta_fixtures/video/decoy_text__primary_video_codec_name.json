@@ -1,0 +1,8 @@
+{
+ "field": "video.primary_video_codec_name",
+ "expected": "none",
+ "generator_cmd": "printf 'just some notes, not a video\\n' > notes.mkv (text renamed .mkv)",
+ "oracle_cmd": "file -b notes.mkv -> 'ASCII text'",
+ "decoy": true,
+ "member": "notes.mkv"
+}

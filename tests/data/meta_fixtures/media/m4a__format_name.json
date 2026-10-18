@@ -1,0 +1,8 @@
+{
+ "field": "media.format_name",
+ "expected": "mov,mp4,m4a,3gp,3g2,mj2",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i sine=f=440:d=0.2:r=24000 -ac 1 -c:a aac m4.m4a  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i m4.m4a -> 'Input #0, mov,mp4,m4a,3gp,3g2,mj2'",
+ "decoy": false,
+ "member": "m4.m4a"
+}

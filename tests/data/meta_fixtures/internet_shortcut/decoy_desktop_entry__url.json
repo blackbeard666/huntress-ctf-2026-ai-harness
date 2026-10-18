@@ -1,0 +1,8 @@
+{
+ "field": "internet_shortcut.url",
+ "expected": "none",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/url/GENERATOR_configparser_write.py.txt OUTDIR  -> decoy_desktop_entry.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/url/ORACLE_configparser_read.py.txt tests/data/meta_fixtures/internet_shortcut/decoy_desktop_entry__url.bin URL -> none",
+ "decoy": true,
+ "member": "Portal.url"
+}

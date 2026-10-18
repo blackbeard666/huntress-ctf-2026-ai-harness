@@ -1,0 +1,17 @@
+{
+ "family": "language_of",
+ "expected_language": "c",
+ "expected_toolchain": "gcc",
+ "expected_source_language": "none",
+ "decoy": true,
+ "generator_cmd": "bash langof_gen.sh   # gcc -O2 dc.c whose puts() literal names caml_startup/ghczmprim_GHC/_gfortran_set_args/kfun:/_vinit/cob_init",
+ "oracle_cmd": "bash langof_oracle.sh langof_decoy_c_cuestrings.bin   # nm -a -D: 0 runtime-cue symbols, strings: 1 literal line -> still C (cues logged under ambiguous_with only)",
+ "expected_ambiguous_with": [
+  "cobol",
+  "fortran",
+  "haskell",
+  "kotlin-native",
+  "ocaml",
+  "v"
+ ]
+}

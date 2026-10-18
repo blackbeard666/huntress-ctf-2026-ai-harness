@@ -1,0 +1,13 @@
+{
+ "case": "pe_hcfg",
+ "expected_storage": "raw_hcfg_section",
+ "expected_config": {
+  "campaign": "ST-8",
+  "domain": "node-8.storage.example.invalid",
+  "mutex": "Global\\HSTOR8"
+ },
+ "key": 40,
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/storage_gen.sh storage_pe_hcfg.bin pe_hcfg '{\"campaign\":\"ST-8\",\"domain\":\"node-8.storage.example.invalid\",\"mutex\":\"Global\\\\HSTOR8\"}' 40",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/storage_oracle.py storage_pe_hcfg.bin"
+}

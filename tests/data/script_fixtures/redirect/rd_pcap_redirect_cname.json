@@ -1,0 +1,42 @@
+{
+ "entry": "resolve_chain+reconcile",
+ "file": "rd_pcap_redirect_cname.pcap",
+ "plans": {
+  "stager.vbs": "v=3|role=downloader|url=http://dl-b.example.invalid/x",
+  "tls.ps1": "v=3|role=downloader|url=https://tls-d.example.invalid/payload.dat",
+  "ghost.bat": "v=3|role=downloader|url=https://never-e.example.invalid/n.bin"
+ },
+ "decoy": false,
+ "expected": {
+  "resolve_chain": {
+   "http://dl-b.example.invalid/x": [
+    "http://drop-c.example.invalid/p.bin"
+   ]
+  },
+  "resolve_hosts": {
+   "dl-b.example.invalid": [
+    "edge-b.cdn.example.invalid",
+    "198.51.100.20"
+   ],
+   "tls-d.example.invalid": [
+    "tls-edge.cdn.example.invalid",
+    "edge2.cdn.example.invalid",
+    "198.51.100.30"
+   ]
+  },
+  "urls.observed_only": [
+   "http://drop-c.example.invalid/p.bin"
+  ],
+  "urls.declared_only": [
+   "https://never-e.example.invalid/n.bin"
+  ],
+  "unfetched": [
+   "ghost.bat"
+  ],
+  "fetched_via": {
+   "https://tls-d.example.invalid/payload.dat": "ip"
+  }
+ },
+ "generator_cmd": "python3 -I tests/data/script_fixtures/redirect/rd_gen.py  (dpkt.pcap.Writer: DNS dl-b CNAME edge-b -> A 198.51.100.20, GET /x -> 302 Location http://drop-c../p.bin (never requested); DNS tls-d CNAME x2 -> 198.51.100.30, SYN-only :443)",
+ "oracle_cmd": "tshark -r rd_pcap_redirect_cname.pcap -Y http.response -T fields -E separator=/t -e http.request_in -e http.response.code -e http.location ; tshark -r rd_pcap_redirect_cname.pcap -Y 'dns.flags.response==1' -T fields -E separator=/t -e dns.qry.name -e dns.cname -e dns.a ; tshark -r rd_pcap_redirect_cname.pcap -Y 'tcp.flags.syn==1 && tcp.flags.ack==0' -T fields -e ip.dst -e tcp.dstport ; tshark -r rd_pcap_redirect_cname.pcap -Y http.request -T fields -E separator=/t -e frame.number -e http.request.full_uri  -> 3xx rows give hops; a declared https url with no request to its host counts as fetched when a SYN dst is one of its DNS answers"
+}

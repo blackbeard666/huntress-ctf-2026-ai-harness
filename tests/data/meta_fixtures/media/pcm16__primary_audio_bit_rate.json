@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_audio_bit_rate",
+ "expected": "1411200",
+ "generator_cmd": "python3 -I -c \"import wave,math,struct; w=wave.open('pyw.wav','wb'); w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100); w.writeframes(b''.join(struct.pack('<hh',int(8000*math.sin(i/7)),0) for i in range(55125))); w.close()\" (stdlib wave writer)",
+ "oracle_cmd": "mediainfo --Output=JSON pyw.wav -> Audio BitRate 1411200 (ffmpeg -i: 1411 kb/s)",
+ "decoy": false,
+ "member": "pyw.wav"
+}

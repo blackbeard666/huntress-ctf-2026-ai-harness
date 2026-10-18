@@ -1,0 +1,9 @@
+{
+ "codec": "aphex-pairs",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-57",
+ "encoded": "eo gj gd gf ca hh gp hc gl ca ge gf gd gp ge gj go gh ca he gi gj hd ca hh gb hc gn hf ha cb ca fe gp ca hd gp gm hg gf cm ca hd hf gc gn gj he ca he gi gj hd ca gf hi gb gd he ca gb go hd hh gf hc ca he gp ca he gi gf ca eh gb gn gf ca en gb hd he gf hc dk ca gd gp gc gb gm he cn gi gf hc gp go cn df dh",
+ "generator_cmd": "perl -e 'print join \" \", map { join \"\", map { chr(97 + hex) } split // } unpack(\"(A2)*\", unpack(\"H*\", $ARGV[0]))' \"$plain\"  # perl unpack H* = UTF-8 hex digits, chr(97 + nibble) = a-p",
+ "oracle_cmd": "printf %s \"$encoded\" | tr -d ' ' | tr 'a-p' '0-9a-f' | xxd -r -p | iconv -f utf-8 -t utf-8  # coreutils tr (a-p -> hex digits) + vim xxd reverse",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-57",
+ "expected": "match"
+}

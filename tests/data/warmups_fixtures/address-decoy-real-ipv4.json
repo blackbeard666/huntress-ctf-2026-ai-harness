@@ -1,0 +1,10 @@
+{
+ "codec": "address",
+ "plain": null,
+ "encoded": "192.168.1.10 10.0.0.254 172.16.31.7 8.8.8.8 224.0.0.251",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf '%s\\n' '192.168.1.10 10.0.0.254 172.16.31.7 8.8.8.8 224.0.0.251'  # real host addresses, not text bytes",
+ "oracle_cmd": "perl -e 'use Socket; print join(\"\", map { inet_aton($_) } split \" \", shift)' \"$encoded\" | python3 -I -c 'import sys;sys.stdin.buffer.read().decode(\"utf-8\")'  # -> UnicodeDecodeError: not text",
+ "oracle_plain": null
+}

@@ -1,0 +1,9 @@
+{
+ "family": "lang_facts",
+ "expected_language": null,
+ "expected_facts": null,
+ "decoy": true,
+ "generator_cmd": "printf 'NimMain _D4core6 swift_retain objc_msgSend __gnat_ Crystal:: FPC 3.2.2\\\\n$s13HuntressDay0812decodeConfigSSyF campaign__v000_u82\\\\n' > lang_decoy_text_impostor.bin   # every marker, no executable container",
+ "oracle_cmd": "bash lang_oracle.sh lang_decoy_text_impostor.bin   # file -b, readelf -SW/-p .comment, nm -a/-D/--defined-only, c++filt --format=dlang, grep -aF, perl",
+ "note": "expected_facts from the binutils oracle; language label = the D-day theme (Huntress group), lang_facts()['language'] must match"
+}

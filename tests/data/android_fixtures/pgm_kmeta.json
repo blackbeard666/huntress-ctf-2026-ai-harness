@@ -1,0 +1,7 @@
+{
+ "entry": "mapping_restore_scan",
+ "expected": "ANS-72c3e9d05b16f8a4",
+ "_why": "no mapping; @kotlin.Metadata d2[0] = Lcom/huntress/vault/KeyStore; on class a, SecretVault on b; hint in original names (member ignore unresolvable from d2, so b.c's decoy is ranked after the followed value)",
+ "generator_cmd": "python3 tests/data/android_fixtures/pgm_src/gen_pgm.py kmeta tests/data/android_fixtures/pgm_kmeta.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile (mapping.txt in ProGuard/R8 format)",
+ "oracle_cmd": "tools/jadx/bin/jadx -q -d o tests/data/android_fixtures/pgm_kmeta.apk; grep -rh '^@Metadata' o/sources/com/huntress/mobile/d18/pg/; grep -o 'k = \"[^\"]*\"' o/sources/com/huntress/mobile/d18/pg/a.java | cut -d'\"' -f2 | base64 -d  # d2 = {\"Lcom/huntress/vault/KeyStore;\" ...} on a.java; -> ANS-72c3e9d05b16f8a4"
+}

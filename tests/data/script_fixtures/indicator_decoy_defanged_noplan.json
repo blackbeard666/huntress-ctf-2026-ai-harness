@@ -1,0 +1,18 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "printf %s 'this module only checks hxxps://auto_hotkey-3f9a0c1d2e[.]example[.]invalid for updates, nothing else' | base64 -w0  -> $Material_5d1e (a defanged sentence, no v= plan)",
+ "oracle_cmd": "python3 -I -c 'import sys,re,base64; t=open(sys.argv[1]).read(); print(base64.b64decode(re.search(r\"Material_5d1e = .(\\S+?).$\", t, re.M).group(1)).decode())' tests/data/script_fixtures/indicator_decoy_defanged_noplan.ps1   (prints a sentence, no plan)",
+ "canon_checks": [
+  {
+   "input": "auto_hotkey",
+   "canon_url": null,
+   "canon_host": null
+  },
+  {
+   "input": "Run.ps1",
+   "canon_url": null,
+   "canon_host": null
+  }
+ ]
+}

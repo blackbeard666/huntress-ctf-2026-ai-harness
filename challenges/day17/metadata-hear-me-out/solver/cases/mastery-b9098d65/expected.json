@@ -1,0 +1,7 @@
+{
+  "set1.metadata-day-17-synthesis-sha256-order": "[\"managed-001.dll\",\"evidence-note.txt\",\"audio-001.wav\",\"panel-001.png\"]",
+  "set2.metadata-day-17-synthesis-sha256-order": "[\"evidence-note.txt\",\"managed-001.dll\",\"panel-001.png\",\"audio-001.wav\"]",
+  "set3.metadata-day-17-synthesis-sha256-order": "[\"managed-001.dll\",\"evidence-note.txt\",\"panel-001.png\",\"audio-001.wav\"]",
+  "set4.metadata-day-17-synthesis-sha256-order": "[\"managed-001.dll\",\"panel-001.png\",\"audio-001.wav\",\"evidence-note.txt\"]",
+  "set5.metadata-day-17-synthesis-sha256-order": "[\"evidence-note.txt\",\"managed-001.dll\",\"panel-001.png\",\"audio-001.wav\"]"
+}

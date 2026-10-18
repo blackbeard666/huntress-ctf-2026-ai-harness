@@ -1,0 +1,19 @@
+{
+ "entry": "resolve_chain+reconcile",
+ "plans": {
+  "loader.ps1": "v=3|role=downloader|url=http://dl-a.example.invalid/get?id=7|file_path=C:\\Users\\Public\\s.bin",
+  "beacon.js": "v=3|role=beacon|url=https://c2-b.example.invalid/ping|host_id=host-0042"
+ },
+ "observed": "{\"log\": {\"version\": \"1.2\", \"creator\": {\"name\": \"rd_gen\", \"version\": \"1\"}, \"entries\": [{\"request\": {\"method\": \"GET\", \"url\": \"http://dl-a.example.invalid/get?id=7\", \"headers\": [{\"name\": \"User-Agent\", \"value\": \"Mozilla/5.0\"}]}, \"response\": {\"status\": 201, \"headers\": [{\"name\": \"Location\", \"value\": \"/s/created/9\"}], \"redirectURL\": \"\"}}, {\"request\": {\"method\": \"GET\", \"url\": \"https://c2-b.example.invalid/ping\", \"headers\": [{\"name\": \"User-Agent\", \"value\": \"Mozilla/5.0\"}]}, \"response\": {\"status\": 200, \"headers\": [], \"redirectURL\": \"\"}}, {\"request\": {\"method\": \"GET\", \"url\": \"https://c2-b.example.invalid/ping2\", \"headers\": [{\"name\": \"User-Agent\", \"value\": \"Mozilla/5.0\"}]}, \"response\": {\"status\": 200, \"headers\": [{\"name\": \"Location\", \"value\": \"https://elsewhere.example.invalid/\"}], \"redirectURL\": \"\"}}]}}",
+ "decoy": true,
+ "expected": {
+  "resolve_chain": {},
+  "urls.observed_only": [
+   "https://c2-b.example.invalid/ping2"
+  ],
+  "urls.declared_only": [],
+  "unfetched": []
+ },
+ "generator_cmd": "python3 -I tests/data/script_fixtures/redirect/rd_gen.py  (HAR via json.dumps: Location on 201 / 200 responses, empty redirectURL -> no redirect)",
+ "oracle_cmd": "jq -r '.log.entries[] | [.request.url, (.response.status|tostring), (.response.redirectURL // \"\"), ((.response.headers[]? | select(.name|ascii_downcase==\"location\") | .value) // \"\")] | @tsv' <HAR  -> no 3xx status row, so no hop; observed-only = request urls minus plan urls"
+}

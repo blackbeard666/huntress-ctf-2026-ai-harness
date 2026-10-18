@@ -1,0 +1,35 @@
+{
+ "family": "lang_facts",
+ "expected_language": "objc",
+ "expected_facts": {
+  "has_swift_runtime": "false",
+  "has_objc_runtime": "true",
+  "has_nim_runtime": "false",
+  "has_zig_runtime": "false",
+  "has_d_runtime": "false",
+  "has_fpc_runtime": "false",
+  "has_crystal_runtime": "false",
+  "has_gnat_runtime": "false",
+  "has_go_runtime": "false",
+  "has_rust_runtime": "false",
+  "nim_procs_mangled": [],
+  "d_functions_mangled": [],
+  "d_functions": [],
+  "swift_functions_mangled": [],
+  "objc_classes": [
+   "TriggerDescriptor"
+  ],
+  "objc_selectors": [
+   "alloc",
+   "copy",
+   "eventCountForModel:",
+   "init",
+   "initWithTrigger:",
+   "triggerName"
+  ]
+ },
+ "decoy": false,
+ "generator_cmd": "cp challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d14--variant-000.elf lang_objc_d14.bin   # real D14 GNUstep ObjC member",
+ "oracle_cmd": "bash lang_oracle.sh lang_objc_d14.bin   # file -b, readelf -SW/-p .comment, nm -a/-D/--defined-only, c++filt --format=dlang, grep -aF, perl",
+ "note": "expected_facts from the binutils oracle; language label = the D-day theme (Huntress group), lang_facts()['language'] must match"
+}

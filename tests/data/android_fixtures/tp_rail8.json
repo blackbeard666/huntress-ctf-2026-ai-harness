@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-90B7D3C1E5F2864A",
+ "generator_cmd": "tests/data/android_fixtures/gen_transposition.sh <outdir> -- perl zig-zag rail fence, 8 rails (codec zigzag + public shape rails:8; rails 7/9 tie on the ANS- prefix without it) encoder (data[j] = answer[o[j]]), jq -cn '{codec,data}+{rails:8}' (no index list) then (cd d && zip -qX -r <name>.apk assets)",
+ "oracle_cmd": "unzip -p tp_rail8.apk assets/huntress_puzzle.json | jq -r .data | python3 -I -c \"import sys; d=sys.stdin.read().strip(); n=len(d); y=[min(i%14,14-i%14) for i in range(n)]; o=sorted(range(n), key=lambda i:(y[i],i)); r=['']*n; [r.__setitem__(x, d[j]) for j,x in enumerate(o)]; print(''.join(r))\""
+}

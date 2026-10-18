@@ -1,0 +1,9 @@
+{
+ "codec": "stack:reverse(base64)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-31",
+ "encoded": "==QMz0ibvJXZo1SZkFmagojclR3ch1EIl1WYHBSZoRHIvRHIyV2dz5WYgQ3YhhXZgMXaoRHI0lWbiV3cgwSZ2x2bzBybUBSIwVXbyF2dgMXaoRHIn5Wak92YlRGIrJ3b3BSZjlmT",
+ "generator_cmd": "printf %s \"$plain\" | base64 -w0 | rev  # coreutils base64 + util-linux rev",
+ "oracle_cmd": "python3 -I -c \"import sys,base64;print(base64.b64decode(sys.argv[1][::-1]).decode())\" \"$encoded\"  # stdlib slice + b64decode",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-31",
+ "expected": "match"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "twosym-XO-w8-ascii-blob",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "XOXXOOOXXOOXOXXOXOOXXXOOXOOXXOXOXXOXXXXXXOOOXOOOXOOXOOOOXOOOXXOXXOOXOXOOXXOXXXXXXOOXXOXXXOOXXOXOXOOXXXOOXOOXOOOOXOOXXOXXXOOXOXXOXOOXOOOXXOOXXOOOXXOXXXXXXOOOXOXXXOOXOXXXXOOXOXXOXOOOXXOOXXOXXXXXXOOOXOOOXOOXXXXOXOOOXXOXXOOXOOXOXOOOXOXOXOOOXXXXXXOXXXXOXXOXXXXXXOXOXOXXXOOXOOOOXXOXXXXXXOOOXXOOXOOXOOOOXOOXOOXXXOOOXOOXXOOXXOXOXXOXOOXXXXOXXXXXXOOOXXOOXOOOXOXOXOOXXXOXXOOXOOXOXOOXOXXOXOOOXOXXXXOXXXXXXOOOXOXXXOOXOXXXXOOXOXXOXOOOXXOOXXOXXXXXXOOXXOXOXOOOOXXXXOOXXXXOXOOXXXOOXOOOXOXXXXOXXXXXXOOXXXXOXOOXOOOXXOOOXXOOXOOOXOOOXOOXXOXOXOOOXXOXXXOXXXXXXOOOXOXXXOOXOOOOXXOXXXXXXOOOXOXXXOOXOXXXXOOXXOXOXXOXXXXXXOXXXOOOXOOXXXXOXOOXOOXOXOOXXOXOXXOXXXXXXOXXOOXOXOOXXXXOXOOOXXOOXOOOXOXXXOOXXOXOXOOOXXOXXXOOOXOXXXOXXXXXXOOXXXXOXOOXOOXOXOOXXXOXXOOXXOXOXOOOXXOXXXOXOOXOXOOXXOOXXOOXXXXOXOOXOOXXXOOXXXOOXOOXOOOOXOOXOOOXXXOXOOXOXXOOXOXXXXOOXXOX",
+ "generator_cmd": "python3 -I -c 'import sys;s,p,w,inner,sep=sys.argv[1:];b=s.encode();v=[int(c,16) for c in b.hex()] if inner==\"hex\" else list(b);print(sep.join(format(x,\"0%sb\"%w).translate(str.maketrans(\"01\",p)) for x in v),end=\"\")' \"$plain\" 'XO' 8 ascii ''  # stdlib writer: UTF-8 bytes (hex: each hex digit) -> fixed-width bits -> str.translate 0/1 -> symbols",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/twosym_cyberchef.mjs 'X' 'O' 8 ascii  # CyberChef 'From Binary' (Byte Length=8)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

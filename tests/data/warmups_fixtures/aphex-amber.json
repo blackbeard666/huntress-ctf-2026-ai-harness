@@ -1,0 +1,9 @@
+{
+ "codec": "aphex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "eogjgdgfcahhgphcglcagegfgdgpgegjgoghcahegigjhdcahhgbhcgnhfhacbcafegpcahdgpgmhggfcmcahdhfgcgngjhecahegigjhdcagfhigbgdhecagbgohdhhgfhccahegpcahegigfcaehgbgngfcaengbhdhegfhcdkcagbgngcgfhccngggbgmgdgpgocndedc",
+ "generator_cmd": "perl -e 'print join \"\", map { chr(97 + hex) } split //, unpack(\"H*\", $ARGV[0])' \"$plain\"  # perl unpack H* = UTF-8 hex digits, chr(97 + nibble) = a-p",
+ "oracle_cmd": "printf %s \"$encoded\" | tr 'a-p' '0-9a-f' | xxd -r -p | iconv -f utf-8 -t utf-8  # coreutils tr (a-p -> hex digits) + vim xxd reverse",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

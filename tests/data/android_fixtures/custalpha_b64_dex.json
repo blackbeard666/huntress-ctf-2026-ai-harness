@@ -1,0 +1,7 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-5f1c8e03a7d94b26",
+ "_why": "base64 under a shuffled 64-char table held in a dex static String (Table.T)",
+ "generator_cmd": "python3 tests/data/android_fixtures/custalpha_src/gen_custalpha.py b64_dex tests/data/android_fixtures/custalpha_b64_dex.apk  # base64/base32 | tr (coreutils), base58 pip writer, javac + d2j-jar2dex, zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/custalpha_src/oracle.sh tests/data/android_fixtures/custalpha_b64_dex.apk  # javap -constants / jq alphabet, tr + base64 -d / base32 -d / int arithmetic"
+}

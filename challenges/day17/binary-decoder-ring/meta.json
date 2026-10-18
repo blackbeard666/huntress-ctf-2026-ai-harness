@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-17-encoded-configuration-recovery",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Decoder Ring",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-17-encoded-configuration-recovery",
+    "time_trial": "binary-reverse-engineering-day-17-encoded-configuration-recovery/time_trial",
+    "mastery": "binary-reverse-engineering-day-17-encoded-configuration-recovery/mastery"
+  }
+}

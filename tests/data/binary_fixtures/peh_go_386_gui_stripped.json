@@ -1,0 +1,43 @@
+{
+ "note": "Go windows/386 -H windowsgui -s -w: GUI subsystem, no COFF symtab (a .symtab SECTION still exists)",
+ "decoy": false,
+ "expected_pe_header_facts": {
+  "format": "pe",
+  "pe_type": "PE32",
+  "machine_num": "332",
+  "entry_point": "0x483cb0",
+  "entry_rva": "0x83cb0",
+  "image_base": "0x400000",
+  "timestamp": "0",
+  "characteristics": "0x102",
+  "characteristics_flags": [
+   "IMAGE_FILE_32BIT_MACHINE",
+   "IMAGE_FILE_EXECUTABLE_IMAGE"
+  ],
+  "dll_characteristics": "0x8140",
+  "dll_characteristics_flags": [
+   "IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE",
+   "IMAGE_DLLCHARACTERISTICS_NX_COMPAT",
+   "IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE"
+  ],
+  "subsystem_const": "IMAGE_SUBSYSTEM_WINDOWS_GUI",
+  "subsystem_int": "2",
+  "is_dll": "false",
+  "section_count": 6,
+  "has_symtab": "false",
+  "number_of_symbols": 0,
+  "import_dlls": [
+   "kernel32.dll"
+  ],
+  "section_names": [
+   ".text",
+   ".rdata",
+   ".data",
+   ".idata",
+   ".reloc",
+   ".symtab"
+  ]
+ },
+ "generator_cmd": "sh peh_gen.sh  (Go 1.x GOOS=windows go build; .NET copy of dnmeta_lib_net8.bin = dotnet build; decoys = python byte edits)",
+ "oracle_cmd": "sh peh_oracle.sh peh_go_386_gui_stripped.bin  (pefile fields + objdump -h section names)"
+}

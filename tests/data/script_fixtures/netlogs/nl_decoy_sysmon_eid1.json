@@ -1,0 +1,11 @@
+{
+ "entry": "observed_fetches",
+ "file": "nl_decoy_sysmon_eid1.xml",
+ "expected": {
+  "values": []
+ },
+ "expected_images": {},
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/netlogs/netlog_gen.py  (xml.etree writer: only EID 1 process-create + EID 11 file-create, no network event)",
+ "oracle_cmd": "python3 -I -c '<xml.etree: Event/System/EventID 3 -> DestinationHostname (or DestinationIp when -/empty), 22 -> QueryName; value -> Data[Image]>' nl_decoy_sysmon_eid1.xml"
+}

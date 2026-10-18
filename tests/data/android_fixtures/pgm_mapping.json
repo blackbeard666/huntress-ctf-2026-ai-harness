@@ -1,0 +1,7 @@
+{
+ "entry": "mapping_restore_scan",
+ "expected": "ANS-9e4c2a70d1b835f6",
+ "_why": "hint (dex) 'follow com.huntress.vault.SecretVault -> com.huntress.vault.KeyStore and ignore field SecretVault.cachedToken' in ORIGINAL names; assets/mapping.txt (ProGuard format) maps KeyStore -> a, SecretVault -> b, cachedToken -> c; a (unreached from onCreate) holds the base64 answer; b.c (reached) and zz.q hold decoy ANS values",
+ "generator_cmd": "python3 tests/data/android_fixtures/pgm_src/gen_pgm.py mapping tests/data/android_fixtures/pgm_mapping.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile (mapping.txt in ProGuard/R8 format)",
+ "oracle_cmd": "tools/jadx/bin/jadx -q -d o tests/data/android_fixtures/pgm_mapping.apk; unzip -p tests/data/android_fixtures/pgm_mapping.apk assets/mapping.txt | grep -E '^com.huntress.vault.(KeyStore|SecretVault)'; grep -rho 'follow[^\"]*' o/sources; grep -o 'k = \"[^\"]*\"' o/sources/com/huntress/mobile/d18/pg/a.java | cut -d'\"' -f2 | base64 -d  # KeyStore -> ...pg.a; -> ANS-9e4c2a70d1b835f6"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "renamed_chain_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same layout as hint_follow but a.k decodes to a 15-hex near-miss; the only well-formed tokens are in the hinted-ignored field b.c, the asset json and the unreached class zz",
+ "generator_cmd": "python3 tests/data/android_fixtures/rchain_src/gen_rchain.py decoy_nearmiss tests/data/android_fixtures/rchain_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "jadx -q -d o tests/data/android_fixtures/rchain_decoy_nearmiss.apk; grep -o 'k = \"[^\"]*\"' o/sources/com/huntress/mobile/d17/r8c/a.java | cut -d'\"' -f2 | base64 -d  # -> ANS-77e0d1c2b3a4958 (15 hex: no answer); b.c is the ignored field"
+}

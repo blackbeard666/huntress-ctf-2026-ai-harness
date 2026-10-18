@@ -1,0 +1,7 @@
+{
+ "field": "media.trailing_bytes_magic_prefix_hex_16",
+ "expected": "4d5a90000300000004000000ffff0000",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/media/gen_wav_deep.py <out> (stdlib wave + struct BWF/INFO/cue/iXML writer)",
+ "oracle_cmd": "tail -c +1045 patched.bin | wc -c ; ... | head -c 16 | xxd -p   (wave fmt 24 + data hdr 8 + 1000 body = offset 1044)",
+ "decoy": false
+}

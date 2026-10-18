@@ -1,0 +1,11 @@
+{
+ "family": "kotlin_native_facts",
+ "encoding": "none",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_facts": null,
+ "decoy": true,
+ "generator_cmd": "bash kn_gen.sh   # gcc -O0 C with asm-label konanc symbols (kfun:<owner>#<name>(..){}<ret>, kclass:, ktype:, kvar:) + Konan_main/Kotlin_initRuntimeIfNeeded; HCFG = printf header + gzip-trailer crc32, base64 (coreutils) stored as a static KString {ktype:kotlin.String*, u32 count, u32 pad, gcc u\"\" UTF-16LE literal}",
+ "oracle_cmd": "bash kn_oracle.sh kn_decoy_text.bin   # file -b, nm --defined-only (kfun:/kclass:/ktype:/Konan_*), grep -a ASCII + grep -caP UTF-16LE cues, grep -aobP UTF-16LE 'SENG' offset, od KString header (typeinfo -16 / count -8 / pad -4), readelf -SW section + nm symbol at header vaddr, dd|iconv UTF-16LE|base64 -d config",
+ "note": "text impostor (no ELF): K/N cue names + UTF-16LE base64 HCFG with a corrupted crc field -> None, no valid hit"
+}

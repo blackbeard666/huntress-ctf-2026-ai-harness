@@ -1,0 +1,31 @@
+{
+ "entry": "resolve_chain+reconcile",
+ "plans": {
+  "loader.ps1": "v=3|role=downloader|url=http://dl-a.example.invalid/get?id=7|file_path=C:\\Users\\Public\\s.bin",
+  "beacon.js": "v=3|role=beacon|url=https://c2-b.example.invalid/ping|host_id=host-0042"
+ },
+ "observed": "{\"log\": {\"version\": \"1.2\", \"creator\": {\"name\": \"rd_gen\", \"version\": \"1\"}, \"entries\": [{\"request\": {\"method\": \"GET\", \"url\": \"http://dl-a.example.invalid/get?id=7\", \"headers\": [{\"name\": \"User-Agent\", \"value\": \"Mozilla/5.0\"}]}, \"response\": {\"status\": 302, \"headers\": [{\"name\": \"Location\", \"value\": \"/s/stage.bin\"}], \"redirectURL\": \"\"}}, {\"request\": {\"method\": \"GET\", \"url\": \"http://dl-a.example.invalid/s/stage.bin\", \"headers\": [{\"name\": \"User-Agent\", \"value\": \"Mozilla/5.0\"}]}, \"response\": {\"status\": 301, \"headers\": [], \"redirectURL\": \"https://cdn-z.example.invalid/stage.bin\"}}, {\"request\": {\"method\": \"GET\", \"url\": \"https://c2-b.example.invalid/ping\", \"headers\": [{\"name\": \"User-Agent\", \"value\": \"Mozilla/5.0\"}]}, \"response\": {\"status\": 200, \"headers\": [], \"redirectURL\": \"\"}}]}}",
+ "decoy": false,
+ "expected": {
+  "resolve_chain": {
+   "http://dl-a.example.invalid/get?id=7": [
+    "http://dl-a.example.invalid/s/stage.bin",
+    "https://cdn-z.example.invalid/stage.bin"
+   ],
+   "http://dl-a.example.invalid/s/stage.bin": [
+    "https://cdn-z.example.invalid/stage.bin"
+   ]
+  },
+  "urls.observed_only": [
+   "http://dl-a.example.invalid/s/stage.bin",
+   "https://cdn-z.example.invalid/stage.bin"
+  ],
+  "urls.declared_only": [],
+  "unfetched": [],
+  "final_urls": {
+   "http://dl-a.example.invalid/get?id=7": "https://cdn-z.example.invalid/stage.bin"
+  }
+ },
+ "generator_cmd": "python3 -I tests/data/script_fixtures/redirect/rd_gen.py  (HAR via json.dumps: 302 Location '/s/stage.bin' -> 301 redirectURL https://cdn-z.., final hop never requested)",
+ "oracle_cmd": "jq -r '.log.entries[] | [.request.url, (.response.status|tostring), (.response.redirectURL // \"\"), ((.response.headers[]? | select(.name|ascii_downcase==\"location\") | .value) // \"\")] | @tsv' <HAR  -> 3xx rows url->(redirectURL|Location) joined by hand; observed = request urls + targets, comm against plan urls"
+}

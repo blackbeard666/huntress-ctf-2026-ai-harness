@@ -1,0 +1,8 @@
+{
+ "field": "opus.input_sample_rate",
+ "expected": "16000",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -loglevel error -f lavfi -i sine=f=440:d=0.25:r=16000 -ac 1 -c:a libopus -b:a 24k op16.opus (ffmpeg 7.0.2 static)",
+ "oracle_cmd": "bin/exiftool -j -n op16.opus -> Opus SampleRate 16000",
+ "decoy": false,
+ "member": "op16.opus"
+}

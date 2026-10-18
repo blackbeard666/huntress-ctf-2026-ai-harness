@@ -1,0 +1,7 @@
+{
+ "entry": "digest_answer_scan",
+ "expected": "ANS-34B4DE4F42EA9BDD",
+ "_why": "Proof.token(): Mac HmacSHA256 keyed by a static final String, doFinal(const msg), %02X hex, LAST 16 -> ANS-",
+ "generator_cmd": "python3 tests/data/android_fixtures/dga_src/gen_dga.py hmac_last16 tests/data/android_fixtures/dga_hmac_last16.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/dga_src/oracle.sh tests/data/android_fixtures/dga_hmac_last16.apk  # aapt2 reads the manifest package, d2j-dex2jar back to classes, RUN Proof.token(ctx) on the JVM -> token -> ANS-34B4DE4F42EA9BDD; cross-check: python3 hashlib/hmac one-liner on the same inputs"
+}

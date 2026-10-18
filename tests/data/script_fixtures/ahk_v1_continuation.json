@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=auto_hotkey|role=dropper|verdict=malicious|attack=T1105|adapter=continuation_section|stage_count=2|steps=join_section,fetch_stage|campaign_id=AHK-c0n71nue|url=https://ahk-c0n71nue.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "H=$(printf %s '<plan>' | xxd -p -c 32); { printf 'descriptor_c0n71nue =\\n(LTrim Join\\n'; printf '%s\\n' \"$H\" | sed 's/^/    /'; printf ')\\n'; } (AHK v1 legacy `=` + continuation section, indented hex lines)",
+ "oracle_cmd": "sed -n '/^(/,/^)/p' ahk_v1_continuation.ahk | grep -v '^[()]' | tr -d ' \\n' | xxd -r -p"
+}

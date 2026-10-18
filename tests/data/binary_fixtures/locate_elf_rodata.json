@@ -1,0 +1,18 @@
+{
+ "case": "elf_rodata",
+ "probe_offset": 8272,
+ "expected": {
+  "container": "elf",
+  "section": ".rodata",
+  "section_flags": "A",
+  "vaddr": "0x402050",
+  "segment": "LOAD",
+  "segment_index": 4,
+  "segment_flags": "R",
+  "rva": "0x2050"
+ },
+ "decoy": false,
+ "note": "",
+ "generator_cmd": "bash tests/data/binary_fixtures/locate_gen.sh locate_elf_rodata.bin elf_rodata",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/locate_oracle.py locate_elf_rodata.bin  (readelf -SW/-lW | pefile | lief | wasm-objdump -x)"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "v1_tamper_scan",
+ "expected": "ANS-7A3F19C0D2E4B865",
+ "decoy": false,
+ "note": "v1 anti-tamper: entry with a >72-byte name (MANIFEST.MF continuation line) re-written AFTER signing with base64 token; assets/readme.txt keeps an untouched decoy literal ANS-0000000000000000",
+ "generator_cmd": "python3 -c 'import zipfile ...' (zipfile.writestr of AndroidManifest.xml / classes.dex stubs + assets) ; keytool -genkeypair -keystore ks.jks -keyalg RSA -dname 'CN=Tamper Test, O=Huntress' ; jarsigner -digestalg SHA-256 -sigalg SHA256withRSA t1.apk k ; python3 -c 'zipfile copy, replacing assets/config/anti_tamper/integrity_check_payload_with_a_rather_long_name_beyond_72_bytes.txt with base64(b\"integrity payload: ANS-7A3F19C0D2E4B865\")'",
+ "oracle_cmd": "jarsigner -verify -verbose v1tamper_modified_sha256.apk -> 'SHA-256 digest error for assets/config/anti_tamper/integrity_check_payload_with_a_rather_long_name_beyond_72_bytes.txt' ; unzip -p v1tamper_modified_sha256.apk assets/config/anti_tamper/integrity_check_payload_with_a_rather_long_name_beyond_72_bytes.txt | base64 -d"
+}

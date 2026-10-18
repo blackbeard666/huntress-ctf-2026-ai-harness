@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_audio_duration_seconds",
+ "expected": "1.250000",
+ "generator_cmd": "python3 -I -c \"import wave,math,struct; w=wave.open('pyw.wav','wb'); w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100); w.writeframes(b''.join(struct.pack('<hh',int(8000*math.sin(i/7)),0) for i in range(55125))); w.close()\" (stdlib wave writer)",
+ "oracle_cmd": "python3 -I -c \"import wave; w=wave.open('pyw.wav'); print('%f'%(w.getnframes()/w.getframerate()))\" -> 1.250000 (mediainfo Duration 1.250)",
+ "decoy": false,
+ "member": "pyw.wav"
+}

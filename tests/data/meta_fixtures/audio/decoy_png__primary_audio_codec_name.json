@@ -1,0 +1,8 @@
+{
+ "field": "audio.primary_audio_codec_name",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"from PIL import Image; Image.new('RGB',(13,7)).save('png_renamed.wav','PNG')\" (Pillow writer, PNG renamed .wav)",
+ "oracle_cmd": "file -b png_renamed.wav -> 'PNG image data, 13 x 7' (ffmpeg -i: Video: png, no audio stream)",
+ "decoy": true,
+ "member": "png_renamed.wav"
+}

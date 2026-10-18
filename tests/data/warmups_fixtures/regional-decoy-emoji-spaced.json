@@ -1,0 +1,10 @@
+{
+ "codec": "regional-spaced",
+ "plain": null,
+ "encoded": "😀 😃 🎉   🔥 👍 🇺🇸   🚀",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written decoy: space-separated emoji reactions with one flag pair -- not letter-spaced RI text",
+ "oracle_cmd": "python3 -I -c 'import sys,unicodedata as u;print([u.name(c) for c in sys.argv[1] if not c.isspace()])' \"$encoded\"  # face/party/fire/thumbs/rocket names: only 2 RI symbols among 7",
+ "oracle_plain": null
+}

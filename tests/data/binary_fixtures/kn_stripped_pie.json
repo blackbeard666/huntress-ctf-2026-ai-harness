@@ -1,0 +1,35 @@
+{
+ "family": "kotlin_native_facts",
+ "encoding": "utf16le-base64",
+ "expected_offset": 11640,
+ "expected_config": {
+  "flag": "HCFG{stripped_konan}",
+  "ab": 2
+ },
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "has_kotlin_native_runtime": "true",
+  "has_konan_main": "false",
+  "kfun_symbols": [],
+  "user_kfun_symbols": [],
+  "kotlin_functions": [],
+  "kfun_owners": [],
+  "kclass_names": [],
+  "ktype_names": [],
+  "main_function": "none",
+  "function_count": 0,
+  "stdlib_function_count": 0,
+  "hcfg_encoding": "utf16le-base64",
+  "hcfg_symbol": "none",
+  "hcfg_section": ".data.rel.ro",
+  "hcfg_in_kstring": "true",
+  "hcfg_kstring_header_offset": 11624,
+  "hcfg_kstring_length": 68,
+  "hcfg_kstring_type": "none"
+ },
+ "decoy": false,
+ "generator_cmd": "bash kn_gen.sh   # gcc -O0 C with asm-label konanc symbols (kfun:<owner>#<name>(..){}<ret>, kclass:, ktype:, kvar:) + Konan_main/Kotlin_initRuntimeIfNeeded; HCFG = printf header + gzip-trailer crc32, base64 (coreutils) stored as a static KString {ktype:kotlin.String*, u32 count, u32 pad, gcc u\"\" UTF-16LE literal}",
+ "oracle_cmd": "bash kn_oracle.sh kn_stripped_pie.bin   # file -b, nm --defined-only (kfun:/kclass:/ktype:/Konan_*), grep -a ASCII + grep -caP UTF-16LE cues, grep -aobP UTF-16LE 'SENG' offset, od KString header (typeinfo -16 / count -8 / pad -4), readelf -SW section + nm symbol at header vaddr, dd|iconv UTF-16LE|base64 -d config",
+ "note": "strip -s PIE: no symbols, runtime from raw cues (UTF-16LE kotlin.native.internal TypeInfo name + ASCII Kotlin_initRuntimeIfNeeded); TypeInfo pointer names no symbol"
+}

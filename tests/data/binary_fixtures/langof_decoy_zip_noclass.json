@@ -1,0 +1,9 @@
+{
+ "family": "language_of",
+ "expected_language": null,
+ "expected_toolchain": null,
+ "expected_source_language": null,
+ "decoy": true,
+ "generator_cmd": "bash langof_gen.sh   # zip -q nojvm.zip readme.txt",
+ "oracle_cmd": "bash langof_oracle.sh langof_decoy_zip_noclass.bin   # file: Zip archive; unzip -l: 0 .class entries -> not a jar -> None"
+}

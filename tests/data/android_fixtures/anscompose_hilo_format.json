@@ -1,0 +1,7 @@
+{
+ "entry": "ans_compose_scan",
+ "expected": "ANS-9C41E07B2D5AF386",
+ "_why": "Proof.token(): int hi/lo consts -> \"ANS-\" + String.format(\"%08X%08X\", hi, lo); no ANS-<16 hex> literal (dex_eval_scan cannot run String.format)",
+ "generator_cmd": "python3 tests/data/android_fixtures/anscompose_src/gen_anscompose.py hilo_format tests/data/android_fixtures/anscompose_hilo_format.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/anscompose_src/oracle.sh tests/data/android_fixtures/anscompose_hilo_format.apk  # d2j-dex2jar back to classes, RUN Proof.token() on the JVM -> token -> ANS-9C41E07B2D5AF386"
+}

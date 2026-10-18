@@ -1,0 +1,7 @@
+{
+ "entry": "resource_id_scan",
+ "expected": "ANS-3e7b1d05c9a842f6",
+ "_why": "proof() does getIdentifier(\"cfg_k9\",\"string\",pkg) then getString; cfg_k9 is base64",
+ "generator_cmd": "bash tests/data/android_fixtures/gen_resid.sh tests/data/android_fixtures  # apktool b (smali + aapt2), ids pinned by res/values/public.xml",
+ "oracle_cmd": "unzip -p resid_identifier_b64.apk classes.dex > c.dex; tools/dex2jar/d2j-baksmali.sh c.dex -o s; grep -rh -A1 'const' s/com/huntress/resid/ChallengeActivity.smali | grep cfg_k9; aapt dump --values resources resid_identifier_b64.apk | grep -A1 'string/cfg_k9: t=' | grep -oE '\"[A-Za-z0-9+/=]+\"' | tr -d '\"' | base64 -d"
+}

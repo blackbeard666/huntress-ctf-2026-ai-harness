@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/py_onion_gen.py tests/data/script_fixtures  # decoy: truncated zlib",
+ "oracle_cmd": "python3 -I -c 'import sys; g={}; exec(open(sys.argv[1]).read(), g); print(g.get(\"PLAN\"))' tests/data/script_fixtures/py_onion_decoy_trunc.py"
+}

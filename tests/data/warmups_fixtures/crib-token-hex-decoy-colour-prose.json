@@ -1,0 +1,10 @@
+{
+ "codec": "crib-token-hex*",
+ "plain": null,
+ "encoded": "red blue red green blue blue red green amber teal red blue green green amber red blue teal red green red blue red green blue blue red green amber teal red blue green green amber red blue teal red green red blue red green blue blue red green amber teal red blue green green amber red blue teal red green red blue red green blue blue red green amber teal red blue green green amber red blue teal red green",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written colour-word line: 5 distinct words, even count, no crib alignment",
+ "oracle_cmd": "printf %s \"$encoded\" | tr ' ' '\\n' | sort -u | wc -l  # -> 5 distinct tokens: the crib's 31 bytes use 14 distinct hex digits, so no bijection exists",
+ "oracle_plain": null
+}

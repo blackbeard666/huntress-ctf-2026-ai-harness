@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_pix_fmt",
+ "expected": "yuv420p",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=160x120:rate=30 -t 0.2 -c:v libaom-av1 -cpu-used 8 -pix_fmt yuv420p av1.mp4",
+ "oracle_cmd": "mediainfo --Output=JSON av1.mp4 -> Video track ColorSpace YUV, ChromaSubsampling 4:2:0, BitDepth 8 -> yuv420p",
+ "decoy": false,
+ "member": "av1.mp4"
+}

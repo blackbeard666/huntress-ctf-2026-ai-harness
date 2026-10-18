@@ -1,0 +1,8 @@
+{
+ "entry": "proof_flow_scan",
+ "expected": null,
+ "_why": "same layout as sget_clinit, but the field appended after proof= is a near-miss (15 hex digits); the full ANS- values in the asset/dex are decoys the code never sends",
+ "generator_cmd": "python3 tests/data/android_fixtures/proofflow_src/gen_proofflow.py decoy_nearmiss tests/data/android_fixtures/proofflow_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "jadx -q -d o tests/data/android_fixtures/proofflow_decoy_nearmiss.apk; python3 -I tests/data/android_fixtures/proofflow_src/oracle.py o  # regex over jadx Java: value appended after proof= followed through fields/getters -> None",
+ "decoy": true
+}

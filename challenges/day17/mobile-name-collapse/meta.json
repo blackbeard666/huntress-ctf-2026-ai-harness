@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-17-name-collapse",
+  "lane": "mobile-android",
+  "name": "📱 Name Collapse",
+  "ids": {
+    "single_solve": "mobile-android-day-17-name-collapse",
+    "time_trial": "mobile-android-day-17-name-collapse/time_trial",
+    "mastery": "mobile-android-day-17-name-collapse/mastery"
+  }
+}

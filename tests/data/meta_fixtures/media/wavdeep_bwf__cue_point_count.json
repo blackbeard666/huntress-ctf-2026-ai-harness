@@ -1,0 +1,7 @@
+{
+ "field": "media.cue_point_count",
+ "expected": "3",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/media/gen_wav_deep.py <out> (stdlib wave + struct BWF/INFO/cue/iXML writer)",
+ "oracle_cmd": "exiftool -b -CuePoints bwf.bin | python3 -c 'import sys,struct; print(struct.unpack(\"<I\", sys.stdin.buffer.read(4))[0])'",
+ "decoy": false
+}

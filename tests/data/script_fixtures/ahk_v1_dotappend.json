@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=auto_hotkey|role=launcher|verdict=malicious|attack=T1059.010|adapter=dot_append|stage_count=2|steps=append_parts,run_payload|campaign_id=AHK-d07a99e1|url=https://ahk-d07a99e1.example.invalid/run",
+ "decoy": false,
+ "generator_cmd": "B=$(printf %s '<plan>' | gzip -9n | base64 -w0); printf '%s\\n' \"$B\" | fold -w 48 | while read -r l; do printf 'descriptor_d07a99e1 .= \"%s\"\\n' \"$l\"; done  (after `descriptor_d07a99e1 := \"\"`)",
+ "oracle_cmd": "grep -o '\\.= \"[^\"]*\"' ahk_v1_dotappend.ahk | cut -d'\"' -f2 | tr -d '\\n' | base64 -d | gunzip"
+}

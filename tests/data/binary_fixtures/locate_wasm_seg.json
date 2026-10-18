@@ -1,0 +1,14 @@
+{
+ "case": "wasm_seg",
+ "probe_offset": 79,
+ "expected": {
+  "container": "wasm",
+  "section": "data",
+  "wasm_data_index": 1,
+  "wasm_mem_offset": 4101
+ },
+ "decoy": false,
+ "note": "",
+ "generator_cmd": "bash tests/data/binary_fixtures/locate_gen.sh locate_wasm_seg.bin wasm_seg",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/locate_oracle.py locate_wasm_seg.bin  (readelf -SW/-lW | pefile | lief | wasm-objdump -x)"
+}

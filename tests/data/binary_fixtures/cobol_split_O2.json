@@ -1,0 +1,41 @@
+{
+ "family": "cobol_facts",
+ "encoding": "stack-built",
+ "expected_offset": 5321,
+ "expected_config": {
+  "flag": "HCFG{cobol_working_storage}",
+  "day": 18,
+  "lang": "cobol"
+ },
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "needed": [
+   "libcob.so.4",
+   "libc.so.6"
+  ],
+  "has_libcob_needed": "true",
+  "libcob_soname": "libcob.so.4",
+  "cob_imports": [
+   "cob_check_version",
+   "cob_display",
+   "cob_fatal_error",
+   "cob_init",
+   "cob_module_global_enter",
+   "cob_set_cancel",
+   "cob_stop_run"
+  ],
+  "has_cobol_runtime": "true",
+  "program_id": "CFGLOADER",
+  "program_ids": [
+   "CFGLOADER"
+  ],
+  "source_file": "split.cob",
+  "compile_date": "Oct 18 2026 12:25:14",
+  "has_gnucobol_runtime": "true"
+ },
+ "decoy": false,
+ "generator_cmd": "sh cobol_gen.sh   # real GnuCOBOL 3.2 (apt-get download gnucobol3 libcob4-dev libcob4t64; dpkg-deb -x tools/gnucobol/root; cobc drives system gcc), blob via python3 zlib.crc32+struct, gcc C decoy",
+ "oracle_cmd": "sh cobol_oracle.sh cobol_split_O2.bin cobol_split.cob.txt split.cob   # file -b, readelf -dW/-lW, nm -D --undefined-only, objdump -d, strings -a, PROGRAM-ID + X literals of the COBOL source, zlib.crc32",
+ "note": "same source, cobc -x -O2 (stripped): gcc folds the field init into movdqa-from-.rodata + movabs stores into b_N storage -> stack-built (cob-init emu), offset = the movdqa loading the HCFG constant"
+}

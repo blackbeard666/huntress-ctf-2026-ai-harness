@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=python|role=dropper|verdict=malicious|attack=T1059.006|adapter=marshal_codeobj|stage_count=2|steps=inflate,unmarshal,exec|campaign_id=PY-6e02b5d8|url=https://py-6e02b5d8.example.invalid/dr",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/py_onion_gen.py tests/data/script_fixtures  # lambda marshal.loads(zlib(b64(rev)))",
+ "oracle_cmd": "python3 -I -c 'import sys; g={}; exec(open(sys.argv[1]).read(), g); print(g.get(\"PLAN\"))' tests/data/script_fixtures/py_onion_marshal_codeobj.py"
+}

@@ -1,0 +1,11 @@
+{
+ "family": "ghc_facts",
+ "encoding": "none",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_facts": null,
+ "decoy": true,
+ "generator_cmd": "bash ghc_gen.sh   # gcc -O0 -fno-toplevel-reorder C with real GHC z-encoded symbol names + rts --info pairs + con_desc strings; blob printf+gzip-trailer crc32, coreutils base64|fold / xxd -i; strip -s",
+ "oracle_cmd": "bash ghc_oracle.sh ghc_decoy_text.bin   # file -b, nm --defined-only + perl z-decoder (GHC Encoding.hs table), strings -a -t d (GHC version pair, con_desc, SENGR base64 chunks), readelf -SW, base64 -d  (file -b: ASCII text)",
+ "note": "GHC cue names in a text file, no ELF container -> None"
+}

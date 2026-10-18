@@ -1,0 +1,15 @@
+{
+ "case": "macho_const",
+ "probe_offset": 5728,
+ "expected": {
+  "container": "mach-o",
+  "section": "__const",
+  "segment": "__TEXT",
+  "vaddr": "0x100001660",
+  "rva": "0x1660"
+ },
+ "decoy": false,
+ "note": "",
+ "generator_cmd": "bash tests/data/binary_fixtures/locate_gen.sh locate_macho_const.bin macho_const",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/locate_oracle.py locate_macho_const.bin  (readelf -SW/-lW | pefile | lief | wasm-objdump -x)"
+}

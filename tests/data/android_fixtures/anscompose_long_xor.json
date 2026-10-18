@@ -1,0 +1,7 @@
+{
+ "entry": "ans_compose_scan",
+ "expected": "ANS-accfad00014daf70",
+ "_why": "Proof.token(): two const-wide longs -> new StringBuilder(\"ANS-\").append(Long.toHexString(a ^ b)); lowercase",
+ "generator_cmd": "python3 tests/data/android_fixtures/anscompose_src/gen_anscompose.py long_xor tests/data/android_fixtures/anscompose_long_xor.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/anscompose_src/oracle.sh tests/data/android_fixtures/anscompose_long_xor.apk  # d2j-dex2jar back to classes, RUN Proof.token() on the JVM -> token -> ANS-accfad00014daf70"
+}

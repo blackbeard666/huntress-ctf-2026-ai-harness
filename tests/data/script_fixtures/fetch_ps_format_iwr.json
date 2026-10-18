@@ -1,0 +1,15 @@
+{
+ "expected_plain": "v=3|language=powershell|role=downloader|verdict=malicious|attack=T1105|stage_count=1|campaign_id=PS-c03f9a7d|file_path=C:\\Users\\Public\\HuntressLab\\c03f.dat",
+ "decoy": false,
+ "expected_fetch_sites": [
+  {
+   "api": "Invoke-WebRequest",
+   "url": "https://ps-c03f9a7d.example.invalid/c03f.dat",
+   "method": "GET",
+   "line": 5
+  }
+ ],
+ "note": "plan has no url; '+' concat host and '-f' format build the Invoke-WebRequest -Uri",
+ "generator_cmd": "P='<plan>'; printf %s \"$P\" | gzip -9n | base64 -w0  -> descriptor_<id> literal; cradle written by hand (see sibling source)",
+ "oracle_cmd": "pwsh -NoProfile -c \"function Invoke-WebRequest { param($Uri,$OutFile,$Method='GET',[switch]$UseBasicParsing) Write-Output \\\"$Method $Uri\\\" }; . ./fetch_ps_format_iwr.ps1\"   # fetch_sites oracle (real interpreter, network mocked); plan: grep -o 'descriptor_[0-9a-f]* = \"[^\"]*\"' fetch_ps_format_iwr.ps1 | cut -d'\"' -f2 | base64 -d | gunzip"
+}

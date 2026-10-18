@@ -1,0 +1,10 @@
+{
+ "codec": "roman",
+ "plain": null,
+ "encoded": "VIVID CIVIC MIMIC DID LIVID MIX",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written decoy: English words spelled only with IVXLCDM letters",
+ "oracle_cmd": "printf %s \"$encoded\" | /usr/bin/python3 -I -c \"import sys,roman_numerals as r;print(''.join(chr(int(r.RomanNumeral.from_string(x))) for x in sys.stdin.read().split()))\"  # Debian python3-roman-numerals 4.1.0 -> roman_numerals.from_string raises InvalidRomanNumeralError on 'VIVID'; no reading is text",
+ "oracle_plain": null
+}

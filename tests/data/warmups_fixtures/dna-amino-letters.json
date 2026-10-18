@@ -1,0 +1,10 @@
+{
+ "codec": "codon-amino",
+ "plain": "the flag is: clear-sky-path-42",
+ "encoded": "ACTCATGAG TTTTTGGCTGGT ATTTCT: TGTTTGGAGGCTCGT-TCTAAGTAT-CCTGCTACTCAT-42",
+ "generator_cmd": ".venv/bin/python -c \"import sys; from Bio.Data.CodonTable import standard_dna_table as T; print(\\\"\\\".join(T.back_table.get(c.upper(), c) for c in sys.argv[1]))\" \"$plain\"  # Biopython standard_dna_table.back_table (one codon per amino-acid letter), others pass through",
+ "oracle_cmd": "printf %s \"$encoded\" | .venv/bin/python -c \"import sys, re; from Bio.Seq import Seq; print(re.sub(\\\"[ACGT]+\\\", lambda g: str(Seq(g.group()).translate()), sys.stdin.read()).lower())\"  # Biopython Seq.translate (standard genetic code) per base run, lower-cased",
+ "oracle_plain": "the flag is: clear-sky-path-42",
+ "expected": "match",
+ "note": "decode-only check: back_table's codon choice may differ from codon_enc's first-codon pick; any synonymous codon decodes"
+}

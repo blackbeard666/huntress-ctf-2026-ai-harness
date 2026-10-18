@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_audio_sample_rate",
+ "expected": "16000",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i sine=f=440:d=0.2:r=16000 -ac 1 -c:a pcm_s16be af.aiff  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i af.aiff -> 'Input #0, aiff ... Audio: pcm_s16be, 16000 Hz, mono, s16'",
+ "decoy": false,
+ "member": "af.aiff"
+}

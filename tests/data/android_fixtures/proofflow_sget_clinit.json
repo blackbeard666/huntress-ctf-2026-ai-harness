@@ -1,0 +1,7 @@
+{
+ "entry": "proof_flow_scan",
+ "expected": "ANS-5c3a91e07bd2f468",
+ "_why": "ChallengeActivity.buildRequest: sb.append(\"&proof=\").append(b) -- b a static field set in <clinit> (sput-object); a/c and the asset json hold decoy ANS- values that a first-regex-hit picks",
+ "generator_cmd": "python3 tests/data/android_fixtures/proofflow_src/gen_proofflow.py sget_clinit tests/data/android_fixtures/proofflow_sget_clinit.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "jadx -q -d o tests/data/android_fixtures/proofflow_sget_clinit.apk; python3 -I tests/data/android_fixtures/proofflow_src/oracle.py o  # regex over jadx Java: value appended after proof= followed through fields/getters -> ANS-5c3a91e07bd2f468"
+}

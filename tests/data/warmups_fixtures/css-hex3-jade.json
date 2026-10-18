@@ -1,0 +1,9 @@
+{
+ "codec": "css-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-93",
+ "encoded": "#4E6,#963,#652,#077,#6F7,#26B,#206,#465,#636,#F64,#696,#E67,#207,#468,#697,#320,#776,#172,#6D7,#570,#212,#054,#6F2,#073,#6F6,#C76,#652,#C20,#737,#562,#6D6,#974,#207,#468,#697,#320,#657,#861,#637,#420,#616,#E73,#776,#572,#207,#46F,#207,#468,#652,#047,#616,#D65,#204,#D61,#737,#465,#723,#A20,#6A6,#164,#652,#D68,#657,#26F,#6E2,#D39,#330",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p | tr -d \"\\n\" | fold -w3 | awk '{while(length($0)<3)$0=$0\"0\";printf \"%s#%s\",(NR>1?\",\":\"\"),toupper($0)}'  # xxd nibble stream cut in threes + awk",
+ "oracle_cmd": "printf %s \"$encoded\" | tr -d \"#,\\n\" | sed \"s/0$//\" | xxd -r -p | tr -d \"\\\\000\"  # coreutils tr + xxd -r",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-93",
+ "expected": "match"
+}

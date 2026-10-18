@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_pix_fmt",
+ "expected": "yuvj422p",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=200x100:rate=10 -t 0.3 -c:v mjpeg -pix_fmt yuvj422p mjpeg.avi",
+ "oracle_cmd": "ffmpeg -hide_banner -i mjpeg.avi (decoder stream line) -> 'mjpeg (Baseline) (MJPG / 0x47504A4D), yuvj422p(pc, ...)' (Pillow get_sampling cannot classify ffmpeg's 2x2/1x2 SOF)",
+ "decoy": false,
+ "member": "mjpeg.avi"
+}

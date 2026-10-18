@@ -1,0 +1,13 @@
+{
+ "case": "elf_overlay",
+ "expected_storage": null,
+ "expected_config": {
+  "campaign": "ST-6",
+  "domain": "node-6.storage.example.invalid",
+  "mutex": "Global\\HSTOR6"
+ },
+ "key": 222,
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/storage_gen.sh storage_elf_overlay.bin elf_overlay '{\"campaign\":\"ST-6\",\"domain\":\"node-6.storage.example.invalid\",\"mutex\":\"Global\\\\HSTOR6\"}' 222",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/storage_oracle.py storage_elf_overlay.bin"
+}

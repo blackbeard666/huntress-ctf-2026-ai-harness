@@ -1,0 +1,59 @@
+{
+ "family": "ocaml_facts",
+ "encoding": "raw",
+ "expected_offset": 12568,
+ "expected_config": {
+  "flag": "HCFG{dune_exe_string_block}",
+  "day": 18,
+  "lang": "ocaml"
+ },
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "has_ocaml_runtime": "true",
+  "has_caml_main": "true",
+  "ocaml_version": "4.14.1",
+  "symbol_separator": "__",
+  "ocaml_modules": [
+   "CamlinternalFormat",
+   "Dune__exe__Config",
+   "Dune__exe__Main",
+   "Stdlib",
+   "Stdlib__Printf",
+   "Stdlib__Sys"
+  ],
+  "user_modules": [
+   "Config",
+   "Main"
+  ],
+  "stdlib_modules": [
+   "CamlinternalFormat",
+   "Stdlib",
+   "Stdlib__Printf",
+   "Stdlib__Sys"
+  ],
+  "entry_symbols": [
+   "camlCamlinternalFormat__entry",
+   "camlDune__exe__Config__entry",
+   "camlDune__exe__Main__entry",
+   "camlStdlib__Printf__entry",
+   "camlStdlib__Sys__entry",
+   "camlStdlib__entry"
+  ],
+  "has_dune_exe": "true",
+  "main_module": "Main",
+  "function_count": 7,
+  "hcfg_symbol": "camlDune__exe__Config__3",
+  "hcfg_module": "Dune__exe__Config",
+  "hcfg_section": ".data",
+  "hcfg_in_ocaml_block": "true",
+  "hcfg_block_header_offset": 12560,
+  "hcfg_block_wosize": 10,
+  "hcfg_block_tag": 252,
+  "hcfg_block_pad": 5
+ },
+ "decoy": false,
+ "generator_cmd": "bash ocaml_gen.sh   # gcc -O0 -no-pie C main + hand-written GNU as in ocamlopt layout (caml<M><sep>{entry,code_begin,data_begin,frametable,gc_roots}, `.quad <wosize<<10|3<<8|252>` header then label at payload, .space pad, pad byte); blob printf + gzip-trailer crc32; strip -s",
+ "oracle_cmd": "bash ocaml_oracle.sh ocaml_dune_414.bin   # file -b, nm --defined-only (+perl module regex), readelf -SW (vaddr->offset, section), od header word / pad byte / HCFG len, dd payload, grep -a version/runtime strings",
+ "note": "OCaml 4.14 dune exe: HCFG offset = String_tag block payload (label camlDune__exe__Config__3), header word 8 bytes before, pad byte 5"
+}

@@ -3,8 +3,10 @@
 Lane: one `message` question over `blob.txt`. Plaintext is ALWAYS the fixed sentence
 `Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: <adj>-<noun>-<noun>-NN`
 (87 chars + slug, ~105-115 bytes). One new keyless codec per day, named by a pun in the title; Mastery line k = day k's
-codec over a mid-word fragment (`NN<TAB>fragment`). D16 was the first STACKED codec (Morse carrying hex): from now on
-expect a new outer alphabet over an old inner codec as well as new single codecs. Snapshot 2026-10-16 (after D16).
+codec over a mid-word fragment (`NN<TAB>fragment`). D16-D17 were STACKED: a symbol carrier over HEX (D16 Morse, D17
+Baconian a/b 5-groups whose values 0-15 are the nibbles), both cued by "Sixteen". Expect another hex carrier (any
+16-symbol alphabet: 4-bit binary, a-p letters, DNA pairs, Polybius/tap/NATO/Braille digits) or the same carriers over a
+different inner codec. Snapshot 2026-10-18 (after D17 + its overnight prebuild: every D17-derived carrier gap is built).
 
 Status legend: `seen Dn` = GM-confirmed day codec (`lib.warmups_codecs.DAYS`, `lib.decode.decode_chunk`/`FREE_CODECS`).
 `prebuilt tgt:<id>` = speculative race module + fixtures from `tests/data/warmups_fixtures/TARGETS.json` (KEPT in
@@ -69,7 +71,7 @@ smallest repeat; keyword substitution = the crib map (21 of 26 letters; only f j
 | 45 | NATO phonetic | prebuilt wc:nato | yes | `November India Charlie Echo` | `nato_dec`; chepy from_nato | med-high: "Alfa Bravo" pun |
 | 46 | Polybius square | prebuilt tgt:polybius | yes (std 5x5) | digit pairs, digits 1-5 only | `polybius_dec`; pycipher PolybiusSquare | high: classical keyless grid |
 | 47 | tap code (knock) | prebuilt tgt:polybius (tapcode*) | yes | `..... ..` dot/x groups, K=C grid | `tap_dec` | med-high: "knock"/"prison" |
-| 48 | Baconian (A/B, 0/1, case stego) | prebuilt tgt:bacon (24/26, AB/01, keep, cc) | yes | 5-groups of 2 symbols; case pattern in cover text | `bacon_dec`; chepy from_bacon | high: "Bacon"/"Francis" pun |
+| 48 | Baconian (A/B, 0/1, case stego) | seen D17 (as hex carrier, row 97); letter Bacon prebuilt tgt:bacon (24/26, AB/01, keep, cc) | yes | 5-groups of 2 symbols; case pattern in cover text | `bacon_dec`; chepy from_bacon | med: plain-letter Bacon or case-stego Bacon as a sequel |
 | 49 | Braille (U+2800) | prebuilt tgt:braille (+ braille-ascii) | yes | `⠝⠊⠉⠑`, number sign `⠼` | `braille_dec`; chepy from_braille | med |
 | 50 | T9 / multitap | prebuilt tgt:t9-multitap | yes | digit runs 2-9 (`44 33 555`), `0`=space | `multitap_dec`, `t9_dec`; chepy sms_decode_multitap | med: "phone"/"dial" |
 | 51 | leetspeak | prebuilt tgt:leetspeak | yes | `N1c3 w0rk`, `4 3 1 0 5 7` in words | `leet_dec` | med |
@@ -99,25 +101,40 @@ smallest repeat; keyword substitution = the crib map (21 of 26 letters; only f j
 | 75 | Bifid / Trifid / Delastelle | gap | crib/title | letters only, length kept, not mono | pycipher Bifid; chepy bifid_decode | low |
 | 76 | ADFGX / ADFGVX | gap | crib/title | only `ADFGX(V)` letters | pycipher ADFGVX | low |
 | 77 | Nihilist / Hill / Four-square / Enigma | gap | keyed | digits / letters, length kept | pycipher; sympy matrix | low |
-| 78 | multi-byte XOR (title key) | gap (lib.codec has repeating XOR, script lane) | crib/title | hex/b64 junk, period in crib diffs | `lib.ciphers.repeating_key_xor` | low |
-| 79 | Baudot / ITA2 | gap | yes | 5-bit groups (00000-11111), LTRS/FIGS shifts | CyberChef? (no op) / table | low-med: 5-bit telegraph |
-| 80 | EBCDIC (cp037/cp500) as hex | gap | yes | hex with `c1-e9`/`81-a9`, `40` spaces | `bytes.fromhex(t).decode('cp037')` | low: "mainframe" pun |
-| 81 | UTF-16 / UTF-7 | gap | yes | hex with `00` every other byte; `+AGEA-` | `.decode('utf-16-be')`/`'utf-7'` | low |
-| 82 | Chuck Norris unary | gap | yes | only `0` blocks separated by spaces | 7-bit from `0`/`00` pairs | low |
+| 78 | multi-byte XOR (title key) | prebuilt wc:xorkey (`xorkey_solve`, crib key + period) | crib/title | hex/b64 junk, period in crib diffs | `lib.ciphers.repeating_key_xor` | low |
+| 79 | Baudot / ITA2 | prebuilt tgt:baudot | yes | 5-bit groups (00000-11111), LTRS/FIGS shifts | CyberChef? (no op) / table | low-med: 5-bit telegraph |
+| 80 | EBCDIC (cp037/cp500) as hex | prebuilt tgt:ebcdic-utf16-utf7 | yes | hex with `c1-e9`/`81-a9`, `40` spaces | `bytes.fromhex(t).decode('cp037')` | low: "mainframe" pun |
+| 81 | UTF-16 / UTF-7 | prebuilt tgt:ebcdic-utf16-utf7 | yes | hex with `00` every other byte; `+AGEA-` | `.decode('utf-16-be')`/`'utf-7'` | low |
+| 82 | Chuck Norris unary | prebuilt wc:chuck (`chuck_dec`, 7/8-bit, over hex) | yes | only `0` blocks separated by spaces | 7-bit from `0`/`00` pairs | med: another binary carrier |
 | 83 | Brainfuck / Ook! | gap | yes | `+-<>[].` / `Ook. Ook?` | bf interpreter (none installed) | low: program, not encoding |
-| 84 | DNA codon / ACGT 2-bit | gap | yes | only `ACGT` | 2-bit per base -> bytes | low |
+| 84 | DNA codon / ACGT 2-bit | prebuilt wc:dna, codon (`dna_dec`, all 24 orders) | yes | only `ACGT` | 2-bit per base -> bytes (2 bases = 1 hex nibble) | med-high: 4-symbol carrier, "double helix" |
 | 85 | chemical symbols / periodic numbers | gap | yes | `Ni Ce W O ...` or atomic numbers | symbol table | low |
-| 86 | BCD / Gray code | gap | yes | 4-bit nibbles / binary that decodes wrong | CyberChef From BCD; `g ^ (g>>1)` loop | low |
-| 87 | Roman-numeral char codes | gap | yes | `LXXVIII CV XCIX` | roman -> int -> chr | low |
+| 86 | BCD / Gray code | prebuilt wc:bcd (8421/XS-3), gray | yes | 4-bit nibbles / binary that decodes wrong | CyberChef From BCD; `g ^ (g>>1)` loop | low |
+| 87 | Roman-numeral char codes | prebuilt wc:roman | yes | `LXXVIII CV XCIX` | roman -> int -> chr | low |
 | 88 | pigpen / semaphore / flags as text | gap | yes | needs a glyph image; as-text = Unicode flags/arrows | manual table | low: blob is text |
-| 89 | Cetacean / Citrix CTX1 / Kenny code | gap | yes | `EEEEeeee`; CTX1 `A-P` pairs; `mmpf` | CyberChef ops of same name | low |
+| 89 | Cetacean / Citrix CTX1 / Kenny code | Kenny + ternary prebuilt wc:kenny/tern (`tern_dec`); Cetacean/CTX1 gap | yes | `EEEEeeee` (16-bit binary of e/E); CTX1 `A-P` pairs; Kenny `mmp fpm` 3-groups of m/p/f | CyberChef ops of same name | med: Bacon-like fixed-width group codes |
 | 90 | Morse carrying hex digits (2 layers) | seen D16 | yes | Morse tokens decode ONLY to `0-9A-F`, single-space gaps, ~11 B per char | `morse_dec` -> `bytes.fromhex`; `decode_chunk` since D16 | done (Mastery line 16) |
-| 91 | Morse carrying decimal/octal/binary/base32 | gap | yes | Morse decodes to digits only / `0 1` / `A-Z2-7` | Morse, then feed the output back to `decode_chunk` | high: same carrier, another inner codec |
-| 92 | NATO / spelled-out digits carrying hex or char codes | gap | yes | `Four Echo Six Niner ...` / `four e six nine` / `zero one ...` | word -> symbol table, then hex/decimal | med-high: "phonetic"/"say it" stacked pun |
-| 93 | Braille / tap / 6x6 Polybius carrying hex | gap | yes | Braille with `⠼` number signs everywhere; tap/digit pairs incl. 6 | table, then `fromhex` | med |
-| 94 | Morse as on/off timing units (`1`=dit, `111`=dah, `0`/`000`/`0000000` gaps) | gap | yes | one `[01]` run, many `111`, gaps of 1/3/7 zeros | split on `000`/`0000000` -> `.-` -> `morse_dec` | med: "signal"/"telegraph" sequel |
-| 95 | DTMF keypad (16 symbols 0-9 A-D * #; tones `697+1209`) | gap | yes | frequency pairs or keypad chars | (row,col) table | low-med: "calling"/"dial tone" |
-| 96 | three-layer stacks (any D1-D16 codec x2 + new carrier) | partial (`peel`, chained pairs) | yes | intermediate output is base-N/hex/digits, not English | `lib.decode.peel` depth >= 3 under a 1 s cap | med: layering is the new trend |
+| 91 | Morse carrying decimal/octal/binary/base32 | prebuilt tgt:morse-over-codec | yes | Morse decodes to digits only / `0 1` / `A-Z2-7` | Morse, then feed the output back to `decode_chunk` | high: same carrier, another inner codec |
+| 92 | NATO / spelled-out digits carrying hex or char codes | prebuilt tgt:nato-over-hex, spelled-digits | yes | `Four Echo Six Niner ...` / `four e six nine` / `zero one ...` | word -> symbol table, then hex/decimal | med-high: "phonetic"/"say it" stacked pun |
+| 93 | Braille / tap / 6x6 Polybius carrying hex | prebuilt tgt:braille-tap-over-hex | yes | Braille with `⠼` number signs everywhere; tap/digit pairs incl. 6 | table, then `fromhex` | med |
+| 94 | Morse as on/off timing units (`1`=dit, `111`=dah, `0`/`000`/`0000000` gaps) | prebuilt tgt:morse-timing-units | yes | one `[01]` run, many `111`, gaps of 1/3/7 zeros | split on `000`/`0000000` -> `.-` -> `morse_dec` | med: "signal"/"telegraph" sequel |
+| 95 | DTMF keypad (16 symbols 0-9 A-D * #; tones `697+1209`) | prebuilt tgt:dtmf-keypad | yes | frequency pairs or keypad chars | (row,col) table | low-med: "calling"/"dial tone" |
+| 96 | three-layer stacks (any D1-D17 codec x2 + new carrier) | prebuilt tgt:three-layer-peel | yes | intermediate output is base-N/hex/digits, not English | `lib.decode.peel` depth >= 3 under a 1 s cap | med: layering is the new trend |
+| 97 | Baconian a/b 5-groups carrying hex nibbles (2 layers) | seen D17 | yes | only `a`/`b` + single spaces, groups `aaaaa`-`abbbb` (all start `a`), ~12 B per char; Bacon-26 reading = letters `a`-`p` only | a=0 b=1 -> `int(g,2)` -> `%x` -> `bytes.fromhex`; `decode_chunk` branch + DAYS D17 encoder | done (Mastery line 17) |
+| 98 | generic two-symbol fixed-width groups (any 2 symbols, width 4-8, value -> nibble / letter / byte) | prebuilt wc:twosym (`twosym_dec`) | yes | 2-symbol alphabet (`.`/`-` excluded), constant group width, every group's top bit 0 | width from len, then values: <16 hex, <26 letter, 32-126 ASCII | high: D17 sequel (`0`/`1`, `X`/`O`, emoji, case) |
+| 99 | 4-bit binary nibbles (`0100 1110`) carrying hex | prebuilt wc:bin4 (`bin4_dec`, + nibble swap) | yes | `[01]{4}` groups only | `int(g,2)` -> `%x` -> `fromhex` | high: "sixteen"/"four" hex carrier |
+| 100 | a-p letter hex (nibble = ord-97, "hexdump letters") | prebuilt wc:aphex (`aphex_dec`, `aphex_over_dec`) | yes | only `a`-`p`, even length, ~2 letters/char | `bytes.fromhex(''.join('%x'%(ord(c)-97) ...))` | high: D17's middle layer as its own day |
+| 101 | base-3/4/5/7 char codes (quaternary `1032`, ternary `10012`) | prebuilt wc:radix (`radix_dec`) | yes | fixed-width digit groups over a small digit set | `chr(int(g,b))`; CyberChef From Charcode base | med |
+| 102 | w-bit groups as base-2^w INDEX (5-bit -> base32 `A-Z2-7`, 6-bit -> base64 sextets, 3-bit -> octal digits) | gap | yes | two-symbol groups of width 5/6 with values up to 31/63 (D17 used only 0-15) | value -> alphabet char, then base32/base64 decode | high: "Thirty-Two"/"Sixty-Four" + carrier pun |
+| 103 | unknown 16-token alphabet over hex, mapped by the CRIB (words, emoji, glyphs, colours) | gap | yes (crib) | exactly <=16 distinct tokens, even count, ~2 tokens per char | `Nice work` = `4e 69 63 65 20 77 6f 72 6b` fixes the token->nibble map | high: any new "sixteen" dress |
+| 104 | old outer transform over an old base string (reversed/rot13/Atbash/ROT47 base64, reversed hex) | gap | yes | base64-ish alphabet that refuses to decode; hex with `u-z`; `==` at the START | undo the free transform, then decode | med-high: stacking two seen codecs |
+| 105 | I Ching hexagrams (U+4DC0-4DFF, 64) / trigrams (U+2630-2637, 8) as base64 sextets / octal | gap | yes | `䷀䷁䷂` or `☰☱☲` only | index = cp - 0x4DC0 -> base64 alphabet | med: "Sixty-Four" pun |
+| 106 | whitespace stego (spaces/tabs = bits, SNOW trailing whitespace) | gap | yes | blob or line ends of only ` ` and TAB | space=0 tab=1, 8-bit (or 4-bit hex) | med: "invisible"/"blank" pun |
+| 107 | seven-segment display codes for hex digits 0-F | gap | yes | 7-bit masks (`0x3f 0x06`...) or segment-letter sets (`abcdef`, `bc`) | std 7-seg table -> hex digit -> fromhex | med: "Sixteen"/"segments" pun |
+| 108 | address notations (IPv4 dotted-decimal quads, IPv6 groups, MAC, UUID) carrying bytes | gap | yes | `78.105.99.101 32.119...`, `4e69:6365:...` | split -> int / hex -> bytes | med: "address"/"network" pun |
+| 109 | CSS/HTML colour codes `#4E6963` / `rgb(78,105,99)` carrying bytes | gap | yes | only `#xxxxxx` tokens, 3 bytes each | strip `#` -> fromhex | med: "colours"/"palette" pun |
+| 110 | regional-indicator letters (U+1F1E6-1F1FF, flag emoji) | gap | yes | `🇳🇮🇨🇪` pairs render as flags | cp - 0x1F1E6 -> A-Z (case lost: lowercase) | low-med: "flags" pun |
+| 111 | ordered glyph alphabets as radix digits (dice ⚀-⚅, card suits, chess, zodiac) | gap | yes | one Unicode block, <=12 distinct glyphs, fixed-width groups | glyph -> index -> `radix_dec` rules | low-med |
 
 ## Recognition cues (worker quick-reference)
 
@@ -128,14 +145,18 @@ Known plaintext: "Nice work decoding this warmup! To solve, submit this exact an
 STEP 1 - lib first: python3 -c "from lib import decode,warmups_codecs as w;t=open('blob.txt').read();
   print(decode.decode_chunk(t)); print([n for n,e,d in w.CANDIDATES if d and w.SLUG.search(w.safe(d,t.strip()) or '')])"
 STEP 2 - charset fingerprint (python: sorted(set(t)), len(t), len(t)/110):
- [01] 8/7-groups .................. binary (D4); 5-groups -> Bacon/Baudot; only 0-blocks -> Chuck Norris unary
+ [01] 8/7-groups .................. binary (D4); 4-groups -> nibbles->hex; 5-groups -> Bacon/Baudot; 0-blocks -> Chuck Norris
  [0-7] 3-digit ................... octal (D6);   [0-9] 32-126 tokens -> decimal (D5); 1-26 dashed -> A1Z26
- digit pairs, digits 1-5 only ..... Polybius / tap-code-digits
+ digit pairs, digits 1-5 only ..... Polybius / tap-code-digits;  . or x knock groups -> tap code
  digit runs of 2-9 repeats ........ multitap (44 33 555); single digits 2-9 per letter -> T9
  [0-9a-f] even, x2 ................ hex (D3); c1-e9/81-a9 + 40 -> EBCDIC cp037; 00 every 2nd byte -> UTF-16
  . - only (+ / or 3 spaces) ....... Morse (D16: output only 0-9A-F -> hex layer; digits -> char codes); 1/111 runs -> timing
- . or x knock groups .............. tap code
- A/B (or a/b) in 5s ............... Baconian; mixed-case cover text with odd casing -> Bacon via case
+ a/b (A/B) in 5s .................. Baconian (D17: all groups start `a` -> values 0-15 = HEX nibbles, 2 per byte);
+                                    values up to 25 -> letters; odd casing in cover text -> Bacon via case
+ ANY 16-symbol output (0-9A-F, a-p only, 16 words) after a carrier = hex nibbles -> fromhex (D16, D17);
+   unknown 16 tokens -> map them by the crib hex `4e 69 63 65 20 77 6f 72 6b`. lib: twosym/bin4/aphex/tern/radix_dec
+ 2-symbol groups of width 5/6 with values >15 -> base32/base64 INDEX;  ䷀.. hexagrams -> base64;  only space/TAB -> bits
+ dotted quads / #RRGGBB / 4e69:6365 . IPv4 / colour / IPv6 bytes;  base64-ish that won't decode -> undo rev/rot13/atbash 1st
  only A D F G X (V) ............... ADFGX / ADFGVX (keyed: try title word + crib)
  only A C G T ..................... DNA 2-bit / codon
  %XX .............................. URL (D7);  &#..; -> HTML (D8);  \uXXXX -> JSON (D9);  \xNN -> C escape
@@ -171,33 +192,33 @@ SAME CHARACTER MULTISET (anagram: one ! , :, slug digits intact):
  rail fence (2-6+, offset) | scytale/columnar (key = title word) | Caesar box/route | whole reverse (D12) | wordrev
 WORDS: Alfa Bravo -> NATO;  -ay endings -> Pig Latin;  N1c3 w0rk -> leet;  Ook./+-<>[] -> esoteric program
 Title pun -> key: a cipher name + a word in the title/prompt = the key; verify on the crib, never guess blind.
-Mastery: line k = day k's codec; keyed lines restart the key per line. STACKS (D16): output not English but hex/digits/b32 -> decode AGAIN.
+Mastery: line k = day k's codec; keyed lines restart the key per line. STACKS (D16-17): output not English but hex/digits/b32/a-p -> decode AGAIN.
+Solver: return on the first full slug; joint/peel fallbacks only on a miss (D17 Mastery 83x17 died at 60 s).
 ```
 
 ## Readiness gaps
 
 ```json
 [
-  {"id": "affine-free-strict", "concept": "affine as a GM-confirmed-ready free codec", "priority": 1, "action": "note", "detail": "Already prebuilt (wc:affine + SPECULATIVE_FREE + _fit_affine). Risk is only bigram ranking vs rot-N/Atbash in Mastery joint assignment; confirm ratchet path registers it with a day number on first sight."},
-  {"id": "case-and-digit-loss", "concept": "case-losing / digit-losing codecs (Morse, NATO, Polybius, tap, Bacon, A1Z26, T9)", "priority": 1, "action": "note", "detail": "Output must be lowercased; A1Z26/Polybius/Bacon/tap have no digit symbols, so slug digits are passed through literally or spelled - the decoder must keep non-alphabet tokens verbatim. decode_chunk Morse returns UPPERCASE. D16 confirmed the collapse direction: Morse output was UPPERCASE hex; lowercase only the FINAL text, and test the collapsed output for an inner hex/digit layer before lowercasing."},
-  {"id": "morse-over-codec", "concept": "Morse carrying another case-free codec (decimal/octal char codes, binary 0/1, base32, A1Z26)", "priority": 1, "action": "prebuild", "detail": "D16 = Morse over hex. Generalize: after Morse decode, if the output is not English, feed it back to decode_chunk (digits-only -> decimal/octal, `[01]` groups -> binary, `A-Z2-7` -> base32). Fixtures for single blobs and a Mastery line; keep the hex path first (GM-confirmed)."},
-  {"id": "morse-plaintext-punct", "concept": "plain-text Morse (letters, digits AND punctuation `!` `,` `:` `-` as Morse, `/` word gaps)", "priority": 1, "action": "prebuild", "detail": "The simple Morse day the D16 carrier implies. lib.ciphers.morse_decode drops punctuation (the slug hyphen `-....-` vanishes); route decode_chunk/solvers through warmups_codecs.morse_dec, lowercase the result, test with 3-space and ` / ` word gaps."},
-  {"id": "nato-over-hex", "concept": "NATO phonetic (Alfa/Alpha, Juliett/Juliet, Niner) spelling hex digits, char codes or the text", "priority": 1, "action": "prebuild", "detail": "Same 'spell the symbols' stack as D16 with a word alphabet: map words -> chars (both spellings, `Niner`, `Decimal`/`Stop`), then the hex/decimal inner layer if the result is not English; strict whole-fragment branch."},
+  {"id": "case-and-digit-loss", "concept": "case-losing / digit-losing codecs (Morse, NATO, Polybius, tap, Bacon, A1Z26, T9)", "priority": 1, "action": "note", "detail": "Output must be lowercased; A1Z26/Polybius/Bacon/tap have no digit symbols, so slug digits are passed through literally or spelled - the decoder must keep non-alphabet tokens verbatim. decode_chunk Morse returns UPPERCASE. D16 confirmed the collapse direction: Morse output was UPPERCASE hex; lowercase only the FINAL text, and test the collapsed output for an inner hex/digit layer before lowercasing. D17: Bacon is case-free too and its letter reading (a-p) was a middle layer - same rule. The D17-night carrier decoders (twosym/bin4/aphex/tern/radix/chuck/dna) return lowercase-ready text; keep the rule for any new table carrier."},
+  {"id": "bitgroup-base-index", "concept": "two-symbol / binary groups of width 5 or 6 whose VALUES index the base32 (A-Z2-7) or base64 alphabet (and width 3 -> octal digits)", "priority": 1, "action": "prebuild", "detail": "D17 used width 5 with values 0-15 (hex). The same carrier with values up to 31 is base32, width 6 up to 63 is base64 sextets ('Thirty-Two'/'Sixty-Four' + 'a's and b's' pun). Extend twosym_dec/_ts_reads: value range 16-31 at width 5 -> base32 alphabet string -> b32decode (re-pad); width 6 -> std then url alphabet -> b64decode; accept only a slug. Fixtures: single-size blob + 14-group Mastery fragment, a/b and 0/1, a decoy Bacon-26 text."},
+  {"id": "crib-token-hex", "concept": "any unknown <=16-token alphabet (words, emoji, glyph set, colours) over hex, token->nibble map recovered from the crib", "priority": 1, "action": "prebuild", "detail": "Plaintext always starts 'Nice work decoding this warmup!' = 4e 69 63 65 20 77 6f 72 6b ...: tokenize (whitespace, else per code point), if distinct tokens <= 16 and count even, align the first 2*31 tokens to the crib's hex digits, require a consistent bijection, fill the rest from it, fromhex, accept only a slug. Also the 2-token-per-byte case with <=256 tokens is NOT covered (too few crib bytes) - note only. Covers future 'sixteen' dresses without a table."},
+  {"id": "free-over-strict", "concept": "a seen free transform (reverse, rot13, Atbash, ROT47, swapcase) applied ON TOP of a seen strict encoding (base64/base32/hex/binary)", "priority": 1, "action": "prebuild", "detail": "Stack of two SEEN codecs (D16/D17 stacked a carrier over hex; next may stack old over old). Cues: base64 alphabet with '=' at the START (reversed), base64 that decodes to junk but rot13 first works, hex with u-z letters (Atbash of a-f), base32 lowercase. Check three-layer-peel coverage first; add the outer free transforms as a peel pre-step under the 1 s cap, fixtures for rev(b64), rot13(b64), atbash(hex), rot47(b32)."},
+  {"id": "affine-free-strict", "concept": "affine as a GM-confirmed-ready free codec", "priority": 2, "action": "note", "detail": "Already prebuilt (wc:affine + SPECULATIVE_FREE + _fit_affine). Risk is only bigram ranking vs rot-N/Atbash in Mastery joint assignment; confirm ratchet path registers it with a day number on first sight."},
   {"id": "chepy-cyberchef-cue", "concept": "standard-tool fallback for any unseen encoding", "priority": 2, "action": "note", "detail": "Workers should know chepy (venv) has from_base45/58/62/85/91/92/65536, rot_8000, from_upside_down, decode_zero_width, from_fullwidth, from_bacon, from_braille, from_nato, sms_decode_multitap, vigenere_decode, bifid_decode; CyberChef ops at tools/npm-cyberchef/node_modules/cyberchef/src/core/operations (run via the *_cyberchef.mjs pattern)."},
-  {"id": "baudot", "concept": "Baudot / ITA2 5-bit", "priority": 2, "action": "prebuild", "detail": "Telegraph sequel to D16 Morse. 5-bit groups (or 5-hole tape `*`/`.`) with LTRS(11111)/FIGS(11011) shifts; stdlib ITA2 table decoder + encoder fixtures; also as the outer layer over hex (FIGS-shifted digits)."},
-  {"id": "spelled-digits", "concept": "digits/hex spelled as English words (`four e six nine`, `zero one ...`)", "priority": 2, "action": "prebuild", "detail": "Word list zero..nine (+ a-f letters, 'ten'-'fifteen' for hex values); then hex/decimal/binary inner layer. Strict branch: every token in the word list."},
-  {"id": "braille-tap-over-hex", "concept": "Braille (U+2800, `⠼` number sign) / tap code / 6x6 Polybius carrying hex digits", "priority": 2, "action": "prebuild", "detail": "Extend the built braille/polybius/tap decoders: digits via number sign or 6x6 grid (A-Z0-9), then fromhex when the output is only hex pairs."},
-  {"id": "morse-timing-units", "concept": "Morse as on/off timing units (`1`=dit, `111`=dah, gaps 0/000/0000000)", "priority": 2, "action": "prebuild", "detail": "One [01] run; split letters on `000`, words on `0000000`; map 1->. 111->- ; distinguish from 8-bit binary by run lengths (only 1 and 3 ones). Then the morse-over-codec path."},
-  {"id": "three-layer-peel", "concept": "three-layer stacks of confirmed codecs (e.g. Morse -> hex -> base64, base64 -> hex -> rot13)", "priority": 2, "action": "prebuild", "detail": "lib.decode.peel + chained pairs cover depth 2; add depth-3 fixtures from D1-D16 codecs and keep a single blob under 1 s (Mastery sets x 16+ lines). Accept only printable text ending in a slug."},
+  {"id": "iching-hexagram", "concept": "I Ching hexagrams U+4DC0-4DFF as base64 sextets (and trigrams U+2630-2637 as octal digits)", "priority": 2, "action": "prebuild", "detail": "'Sixty-Four' pun. Index = cp-0x4DC0 in King Wen order -> std base64 alphabet -> b64decode (try url alphabet and binary-value order too). Trigrams: cp-0x2630 -> octal digit groups -> radix_dec rules. Fixtures single + fragment."},
+  {"id": "whitespace-stego", "concept": "whitespace steganography: spaces/tabs (and SNOW-style trailing whitespace) as bits", "priority": 2, "action": "prebuild", "detail": "Blob of only ' ' and '\\t' (maybe '\\n' separators) or text with trailing whitespace runs. Space=0 tab=1 (and swapped), 8-bit bytes or 4-bit hex nibbles; never strip() such a blob. twosym excludes spaces, so this needs its own strict branch. Fixtures: pure whitespace blob, cover text + trailing whitespace."},
+  {"id": "seven-segment-hex", "concept": "seven-segment display encoding of hex digits 0-F (bit masks or segment-letter sets)", "priority": 2, "action": "prebuild", "detail": "Std gfedcba table (0=0x3f 1=0x06 ... A=0x77 b=0x7c C=0x39 d=0x5e E=0x79 F=0x71) as hex/decimal/binary masks or as segment letter strings ('abcdef','bc'); both bit orders. -> hex digits -> fromhex; slug-gated."},
+  {"id": "address-notation", "concept": "bytes written as IPv4 dotted quads, IPv6 groups, MAC addresses or UUIDs", "priority": 2, "action": "prebuild", "detail": "'78.105.99.101 32.119.111.114' (4 decimal bytes per token, last token short or zero-padded), IPv6 '4e69:6365:2077::' (expand ::), MAC 6-byte groups, UUID 16-byte groups. Strip separators -> bytes -> strip trailing NUL padding; slug-gated."},
+  {"id": "css-color-hex", "concept": "bytes as CSS/HTML colour codes (#RRGGBB, #RGB?, rgb(r,g,b))", "priority": 2, "action": "prebuild", "detail": "Tokens '#4e6963' (3 bytes each, last padded with 00/20) or 'rgb(78, 105, 99)'; strip -> fromhex / ints -> bytes, rstrip padding. Colour NAMES (CSS 147) as a later variant: name -> hex -> bytes."},
+  {"id": "regional-indicator", "concept": "regional-indicator letters U+1F1E6-1F1FF (flag emoji) as A-Z", "priority": 2, "action": "prebuild", "detail": "cp-0x1F1E6 -> 'a'-'z' (case lost; spaces/punct/digits kept literally or spelled); pairs may render as country flags. Also enclosed/squared Latin (U+1F130-1F189) if NFKC misses them. Fixtures single + fragment."},
   {"id": "base92", "concept": "base92", "priority": 3, "action": "note", "detail": "chepy from_base92 / CyberChef From Base92 decode it; cue = printable minus double-quote and backtick."},
   {"id": "base65536", "concept": "base65536 / base2048 / base32768", "priority": 3, "action": "note", "detail": "chepy from_base65536; others need pip (base2048) - install only if seen."},
   {"id": "bifid-adfgvx", "concept": "Bifid / Trifid / ADFGX / ADFGVX / Nihilist", "priority": 3, "action": "note", "detail": "pycipher implements all; key from title; ADFGX cue is the 5/6-letter alphabet."},
-  {"id": "ebcdic-utf16-utf7", "concept": "EBCDIC / UTF-16 / UTF-7 byte encodings", "priority": 3, "action": "prebuild", "detail": "Inner-byte-encoding twist on a stacked day: hex/base64 whose bytes are cp037/cp500 (`c1-e9`, `40` spaces), UTF-16 (`00` every 2nd byte) or UTF-7 (`+AGEA-`). Add as decode candidates after any byte-producing layer."},
   {"id": "mime-encoded-word", "concept": "MIME encoded-word headers", "priority": 3, "action": "note", "detail": "email.header.decode_header handles =?charset?B|Q?...?=."},
-  {"id": "esoteric", "concept": "Brainfuck / Ook! / Chuck Norris unary", "priority": 3, "action": "tool", "detail": "No bf interpreter installed; a 20-line stdlib interpreter or pip 'brainfuck-interpreter' if one ever appears."},
-  {"id": "misc-tables", "concept": "DNA codons, chemical symbols, Roman-numeral charcodes, BCD, Gray code, Cetacean, Kenny", "priority": 3, "action": "note", "detail": "Recognition cues only; each is a lookup table the worker can write in one turn; CyberChef has From BCD and Cetacean Cipher Decode."},
+  {"id": "esoteric", "concept": "Brainfuck / Ook! (Chuck Norris unary is prebuilt: chuck_dec)", "priority": 3, "action": "tool", "detail": "No bf interpreter installed; a 20-line stdlib interpreter or pip 'brainfuck-interpreter' if one ever appears."},
+  {"id": "misc-tables", "concept": "chemical symbols, Cetacean, Citrix CTX1 (DNA/codon, Roman, BCD, Gray, Kenny are prebuilt in warmups_codecs)", "priority": 3, "action": "note", "detail": "Recognition cues only; each is a lookup table the worker can write in one turn; CyberChef has From BCD and Cetacean Cipher Decode."},
   {"id": "homoglyph", "concept": "homoglyph (Cyrillic/Greek look-alike) substitution", "priority": 3, "action": "tool", "detail": "unidecode/confusables not installed; NFKC does not fold Cyrillic. Install unidecode only if a day uses it."},
-  {"id": "multi-byte-xor", "concept": "repeating-key XOR keyed by a title word", "priority": 3, "action": "prebuild", "detail": "Stacked-day candidate: hex/b64 of text XORed with a title word; key = c ^ p over the crib, period = smallest repeat. lib.ciphers.repeating_key_xor exists; add a crib-key decoder branch."},
-  {"id": "dtmf-keypad", "concept": "DTMF keypad symbols / tone-frequency pairs (`697+1209` -> 1)", "priority": 3, "action": "prebuild", "detail": "16-symbol keypad (0-9 A-D * #) - a 'sixteen symbols, calling' pun; table decode of frequency pairs or keypad chars, then hex inner layer."}
+  {"id": "glyph-radix", "concept": "ordered Unicode glyph sets as radix digits (dice faces, card suits, chess pieces, zodiac, Mahjong)", "priority": 3, "action": "prebuild", "detail": "Map a glyph run inside one block to its index (dice U+2680-2685 = 0-5 or 1-6, chess U+2654-265F, zodiac U+2648-2653 = 12) then reuse radix_dec rules (fixed-width groups, values -> bytes or hex nibbles). Low odds; cheap once radix_dec exists."}
 ]
 ```

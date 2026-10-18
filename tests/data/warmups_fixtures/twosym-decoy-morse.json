@@ -1,0 +1,10 @@
+{
+ "codec": "twosym*",
+ "plain": null,
+ "encoded": ".-.. --- --- -.- / -.-. .-.. --- ... . .-.. -.--",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written International Morse ('LOOK CLOSELY'): `.`/`-` only = Morse, not a two-symbol bit carrier",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/twosym_cyberchef.mjs . - 5 ascii  # CyberChef reads it as non-text junk",
+ "oracle_plain": "\t\u001f\u0005\t\u0007\u0000\u0012\u0003"
+}

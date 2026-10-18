@@ -1,0 +1,7 @@
+{
+ "field": "media.riff_size_declared",
+ "expected": "2670",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/media/gen_wav_deep.py <out> (stdlib wave + struct BWF/INFO/cue/iXML writer)",
+ "oracle_cmd": "python3 -W ignore -c \"import chunk,sys; fh=open(sys.argv[1],'rb'); r=chunk.Chunk(fh,bigendian=False); fh.read(4); ...\" bwf.bin  # stdlib chunk module: RIFF getsize() + top-level ids in order (2670 / 1124 / 1104)",
+ "decoy": false
+}

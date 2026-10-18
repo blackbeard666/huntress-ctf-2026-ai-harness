@@ -1,0 +1,8 @@
+{
+ "field": "ogg.flac_sample_rate",
+ "expected": "44100",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -loglevel error -f lavfi -i sine=f=440:d=0.3:r=44100 -ac 2 -c:a flac ogfl.oga (ffmpeg 7.0.2 static; Ogg-FLAC mapping)",
+ "oracle_cmd": "bin/exiftool -j -n ogfl.oga -> SampleRate 44100",
+ "decoy": false,
+ "member": "ogfl.oga"
+}

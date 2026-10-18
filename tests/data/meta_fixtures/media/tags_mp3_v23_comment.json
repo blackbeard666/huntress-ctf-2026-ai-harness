@@ -1,0 +1,8 @@
+{
+ "field": "media.tag_comment",
+ "expected": "key is in the bridge",
+ "generator_cmd": "mutagen.id3 ID3v2.3 save(v2_version=3): COMM(lang=eng, desc='', UTF-16)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i v23.mp3 -> Metadata 'comment : key is in the bridge'",
+ "decoy": false,
+ "member": "mp3_v23_comment.mp3"
+}

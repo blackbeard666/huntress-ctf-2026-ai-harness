@@ -1,0 +1,54 @@
+{
+ "note": "Go windows/amd64 console, default link: COFF symtab + /N long DWARF section names",
+ "decoy": false,
+ "expected_pe_header_facts": {
+  "format": "pe",
+  "pe_type": "PE32+",
+  "machine_num": "34404",
+  "entry_point": "0x14007d400",
+  "entry_rva": "0x7d400",
+  "image_base": "0x140000000",
+  "timestamp": "0",
+  "characteristics": "0x22",
+  "characteristics_flags": [
+   "IMAGE_FILE_EXECUTABLE_IMAGE",
+   "IMAGE_FILE_LARGE_ADDRESS_AWARE"
+  ],
+  "dll_characteristics": "0x8160",
+  "dll_characteristics_flags": [
+   "IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE",
+   "IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA",
+   "IMAGE_DLLCHARACTERISTICS_NX_COMPAT",
+   "IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE"
+  ],
+  "subsystem_const": "IMAGE_SUBSYSTEM_WINDOWS_CUI",
+  "subsystem_int": "3",
+  "is_dll": "false",
+  "section_count": 16,
+  "has_symtab": "true",
+  "number_of_symbols": 2722,
+  "import_dlls": [
+   "kernel32.dll"
+  ],
+  "section_names": [
+   ".text",
+   ".rdata",
+   ".data",
+   ".pdata",
+   ".xdata",
+   ".zdebug_abbrev",
+   ".zdebug_line",
+   ".zdebug_frame",
+   ".debug_gdb_scripts",
+   ".zdebug_info",
+   ".zdebug_loclists",
+   ".zdebug_rnglists",
+   ".zdebug_addr",
+   ".idata",
+   ".reloc",
+   ".symtab"
+  ]
+ },
+ "generator_cmd": "sh peh_gen.sh  (Go 1.x GOOS=windows go build; .NET copy of dnmeta_lib_net8.bin = dotnet build; decoys = python byte edits)",
+ "oracle_cmd": "sh peh_oracle.sh peh_go_amd64_symtab.bin  (pefile fields + objdump -h section names)"
+}

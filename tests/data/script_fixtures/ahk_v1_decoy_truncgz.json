@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "printf %s '<plan>' | gzip -9n | head -c 60 | base64 -w0 | fold -w 40  (inside `descriptor_7runc8ed =` + `(` .. `)` continuation section)",
+ "oracle_cmd": "sed -n '/^(/,/^)/p' ahk_v1_decoy_truncgz.ahk | grep -v '^[()]' | tr -d '\\n' | base64 -d | gunzip  -> 'unexpected end of file' (truncated gzip, no full plan)"
+}

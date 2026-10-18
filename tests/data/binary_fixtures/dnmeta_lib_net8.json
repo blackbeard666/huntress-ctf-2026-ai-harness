@@ -1,0 +1,30 @@
+{
+ "kind": "dotnet_meta_facts",
+ "decoy": false,
+ "expected": {
+  "assembly_name": "ShadowLib",
+  "assembly_version": "1.0.0.0",
+  "assembly_culture": "none",
+  "module_name": "ShadowLib.dll",
+  "mvid": "3762bd83-814c-4cdf-9e08-9f907a4827dc",
+  "runtime_version": "v4.0.30319",
+  "typedefs": "[\"<Module>\",\"Beacon\"]",
+  "typedefs_full": "[\"<Module>\",\"Shadow.Beacon\"]",
+  "typedef_count": "2",
+  "methods": "[\"Ping\",\"Name\",\".ctor\"]",
+  "method_count": "3",
+  "fields": "[\"Interval\"]",
+  "field_count": "1",
+  "field_rva_count": "0",
+  "has_field_rva": "false",
+  "entry_point_token": "none",
+  "entry_point": "none",
+  "target_framework": ".NETCoreApp,Version=v8.0",
+  "assembly_refs": "[\"System.Runtime\"]",
+  "user_strings": "[\"b\"]",
+  "tfm": "net8.0"
+ },
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/dnmeta_gen.sh tests/data/binary_fixtures   # dotnet 10 SDK: dotnet build -c Release (Deterministic) of two C# projects; decoy = cp /usr/bin/true",
+ "oracle_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/dnmeta_oracle.sh tests/data/binary_fixtures/dnmeta_lib_net8.bin   # System.Reflection.Metadata PEReader/MetadataReader (BCL, not dnfile); tfm = the csproj <TargetFramework> the generator built with",
+ "note": "net8.0 Library: no entry point (token none), no FieldRVA (has_field_rva false), default 1.0.0.0"
+}

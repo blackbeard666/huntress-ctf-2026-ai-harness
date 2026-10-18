@@ -1,0 +1,8 @@
+{
+ "field": "media.rotation",
+ "expected": "90",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=320x240:rate=30000/1001 -t 0.3 -c:v libx264 -profile:v high -pix_fmt yuv420p plain.mp4 && tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -display_rotation 90 -i plain.mp4 -c copy h264_rot.mp4",
+ "oracle_cmd": "ffmpeg -hide_banner -i h264_rot.mp4 (decoder stream line) -> 'displaymatrix: rotation of 90.00 degrees' (ffprobe side_data rotation); cross-check mediainfo Rotation 270.000 / exiftool Rotation 270 (clockwise) = -90 mod 360 -> ffprobe +90",
+ "decoy": false,
+ "member": "h264_rot.mp4"
+}

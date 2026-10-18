@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_audio_channel_layout",
+ "expected": "stereo",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i sine=f=440:d=0.2:r=44100 -ac 2 -c:a pcm_s16le s16.wav  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i s16.wav -> 'Audio: pcm_s16le, 44100 Hz, stereo, s16'",
+ "decoy": false,
+ "member": "s16.wav"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "media.format_bit_rate",
+ "expected": "241680",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i sine=f=440:d=0.5:r=48000 -ac 2 -c:a flac fl.flac (ffmpeg 7.0.2 static)",
+ "oracle_cmd": "mediainfo --Output=JSON fl.flac -> General OverallBitRate 241680 (ffmpeg -i: bitrate 241 kb/s)",
+ "decoy": false,
+ "member": "fl.flac"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "media.format_name",
+ "expected": "none",
+ "generator_cmd": "printf 'meeting notes: not audio\\n' > note_renamed.wav (plain text renamed .wav)",
+ "oracle_cmd": "file -b note_renamed.wav -> 'ASCII text' (ffmpeg -i: not a media file)",
+ "decoy": true,
+ "member": "note_renamed.wav"
+}

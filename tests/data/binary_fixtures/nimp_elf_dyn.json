@@ -1,0 +1,30 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "needed": [
+   "libz.so.1",
+   "libm.so.6",
+   "libc.so.6"
+  ],
+  "imports": [
+   "__gmon_start__",
+   "__printf_chk",
+   "cos",
+   "_ITM_deregisterTMCloneTable",
+   "_ITM_registerTMCloneTable",
+   "zlibVersion",
+   "getenv",
+   "strcmp",
+   "__libc_start_main",
+   "__cxa_finalize"
+  ],
+  "interpreter": "/lib64/ld-linux-x86-64.so.2",
+  "exports": "none"
+ },
+ "decoy": false,
+ "generator_cmd": "bash nimp_gen.sh nimp_elf_dyn.bin elf_dyn",
+ "oracle_cmd": "bash nimp_oracle.sh nimp_elf_dyn.bin   # GNU readelf -dW/--dyn-syms/-lW + nm -D (ELF); GNU objdump -p + LIEF get_imphash PEFILE mode (PE); llvm-objdump-18 --macho --private-headers + llvm-nm-18 -u -p / -gU (Mach-O)",
+ "note": "lib.binary.native_import_facts(data)[field] for each expected_facts key; lists in table/load order except exports (LC_ALL=C sorted); absent -> \"none\"; no HCFG blob (hcfg_scan finds nothing valid)"
+}

@@ -1,0 +1,9 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "plan_answers": {
+  "set1.lua-x-verdict": null
+ },
+ "generator_cmd": "printf %s 'verdict=benign|language=lua|role=benign_utility (release notes, not a plan)' | base64 -w0  -> literal in planpass_decoy_noplan.lua (k=v text without a v= marker)",
+ "oracle_cmd": "sed -n 's/^local DESCRIPTOR_DEC0Y001 = \"\\(.*\\)\"$/\\1/p' tests/data/script_fixtures/planpass_decoy_noplan.lua | base64 -d   (no leading v=, not a plan)"
+}

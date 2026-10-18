@@ -1,0 +1,17 @@
+{
+ "case": "elf_sstrip",
+ "probe_offset": 8272,
+ "expected": {
+  "container": "elf",
+  "section": "none",
+  "segment": "LOAD",
+  "segment_index": 4,
+  "segment_flags": "R",
+  "vaddr": "0x402050",
+  "rva": "0x2050"
+ },
+ "decoy": true,
+ "note": "no section headers -> section \"none\", program headers still answer",
+ "generator_cmd": "bash tests/data/binary_fixtures/locate_gen.sh locate_elf_sstrip.bin elf_sstrip",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/locate_oracle.py locate_elf_sstrip.bin  (readelf -SW/-lW | pefile | lief | wasm-objdump -x)"
+}

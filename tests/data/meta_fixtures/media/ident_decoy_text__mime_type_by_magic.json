@@ -1,0 +1,8 @@
+{
+ "field": "media.mime_type_by_magic",
+ "expected": "text/plain",
+ "generator_cmd": "printf 'Voice note transcript\\nSpeaker: J. Doe\\nDuration 0:15\\n' > voice-013.wav",
+ "oracle_cmd": "exiftool -s3 -MIMEType voice-013.wav -> text/plain; file -b --mime-type -> text/plain (impostor, not audio)",
+ "decoy": true,
+ "member": "voice-013.wav"
+}

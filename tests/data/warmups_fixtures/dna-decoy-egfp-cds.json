@@ -1,0 +1,10 @@
+{
+ "codec": "dna*",
+ "plain": null,
+ "encoded": "ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTG",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "first 90 nt of the EGFP coding sequence (GenBank U55762 CDS start), a real gene, not a codec line",
+ "oracle_cmd": "printf %s \"$encoded\" | .venv/bin/python -c \"import sys; from Bio.Seq import Seq; print(Seq(sys.stdin.read()).translate())\"  # -> MVSKGEELFTGVVPILVELDGDVNGHKFSV: a protein, not text; 90 nt is not a multiple of 4 (no 2-bit byte reading)",
+ "oracle_plain": "MVSKGEELFTGVVPILVELDGDVNGHKFSV"
+}

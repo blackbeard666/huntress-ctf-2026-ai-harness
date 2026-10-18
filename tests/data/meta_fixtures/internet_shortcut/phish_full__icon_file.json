@@ -1,0 +1,8 @@
+{
+ "field": "internet_shortcut.icon_file",
+ "expected": "\\\\198.51.100.7\\icons\\pdf.ico",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/url/GENERATOR_configparser_write.py.txt OUTDIR  -> phish_full.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/url/ORACLE_configparser_read.py.txt tests/data/meta_fixtures/internet_shortcut/phish_full__icon_file.bin IconFile -> \\\\198.51.100.7\\icons\\pdf.ico",
+ "decoy": false,
+ "member": "Invoice_2026.url"
+}

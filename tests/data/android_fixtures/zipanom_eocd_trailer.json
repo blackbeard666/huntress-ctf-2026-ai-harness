@@ -1,0 +1,6 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-5be38a0f91c46d27",
+ "generator_cmd": "tests/data/android_fixtures/gen_zip_structure.sh <outdir> -- step 3: Info-ZIP zip, then printf token | base32 -w0 appended after the EOCD",
+ "oracle_cmd": "tail -c 32 zipanom_eocd_trailer.apk | base32 -d"
+}

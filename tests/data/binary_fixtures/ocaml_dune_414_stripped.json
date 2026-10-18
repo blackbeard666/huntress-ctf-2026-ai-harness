@@ -1,0 +1,37 @@
+{
+ "family": "ocaml_facts",
+ "encoding": "raw",
+ "expected_offset": 12568,
+ "expected_config": {
+  "flag": "HCFG{dune_exe_string_block}",
+  "day": 18,
+  "lang": "ocaml"
+ },
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "has_ocaml_runtime": "true",
+  "has_caml_main": "false",
+  "ocaml_version": "4.14.1",
+  "symbol_separator": "none",
+  "ocaml_modules": [],
+  "user_modules": [],
+  "stdlib_modules": [],
+  "entry_symbols": [],
+  "has_dune_exe": "false",
+  "main_module": "none",
+  "function_count": 0,
+  "hcfg_symbol": "none",
+  "hcfg_module": "none",
+  "hcfg_section": ".data",
+  "hcfg_in_ocaml_block": "true",
+  "hcfg_block_header_offset": 12560,
+  "hcfg_block_wosize": 10,
+  "hcfg_block_tag": 252,
+  "hcfg_block_pad": 5
+ },
+ "decoy": false,
+ "generator_cmd": "bash ocaml_gen.sh   # gcc -O0 -no-pie C main + hand-written GNU as in ocamlopt layout (caml<M><sep>{entry,code_begin,data_begin,frametable,gc_roots}, `.quad <wosize<<10|3<<8|252>` header then label at payload, .space pad, pad byte); blob printf + gzip-trailer crc32; strip -s",
+ "oracle_cmd": "bash ocaml_oracle.sh ocaml_dune_414_stripped.bin   # file -b, nm --defined-only (+perl module regex), readelf -SW (vaddr->offset, section), od header word / pad byte / HCFG len, dd payload, grep -a version/runtime strings  (nm: no symbols; runtime from OCAMLRUNPARAM/CAMLRUNPARAM/Fatal error strings)",
+ "note": "strip -s'd copy: runtime from raw cues, block header still validated from bytes"
+}

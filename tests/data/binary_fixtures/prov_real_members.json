@@ -1,0 +1,81 @@
+{
+ "_doc": "real D17 binary-decoder-ring members (bytes not copied: skip when not cached); expected = prov_oracle.sh",
+ "oracle_cmd": "bash tests/data/binary_fixtures/prov_oracle.sh <path>",
+ "rows": [
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d04--variant-000.elf",
+   "expected": {
+    "format": "elf",
+    "build_id": "none",
+    "compiler": "none",
+    "comment_strings": [],
+    "gcc_version": "none",
+    "rustc_version": "none",
+    "go_version": "go1.25.1",
+    "has_dwarf": "false",
+    "dwarf_producer": "none",
+    "dwarf_language_num": "none",
+    "dwarf_comp_dir": "none",
+    "dwarf_name": "none"
+   },
+   "note": "Go 1.25.1 member: go_version from buildinfo, no .comment / build-id"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d05--variant-000.elf",
+   "expected": {
+    "format": "elf",
+    "build_id": "none",
+    "compiler": "GCC: (GNU) 9.4.0",
+    "comment_strings": [
+     "GCC: (GNU) 9.4.0",
+     "rustc version 1.90.0 (1159e78c4 2025-09-14)"
+    ],
+    "gcc_version": "9.4.0",
+    "rustc_version": "1.90.0",
+    "go_version": "none",
+    "has_dwarf": "true",
+    "dwarf_producer": "GNU C99 9.4.0 -mtune=generic -march=x86-64 -g1 -Os -std=c99 -ffreestanding -fexcess-precision=standard -frounding-math -fno-unwind-tables -fno-asynchronous-unwind-tables -ffunction-sections -fdata-sections -fPIC -fno-stack-protector",
+    "dwarf_language_num": "12",
+    "dwarf_comp_dir": "/build/musl-cross-make/build/local/x86_64-linux-musl/obj_musl",
+    "dwarf_name": "../src_musl/crt/crt1.c"
+   },
+   "note": "Rust+musl member with DWARF: first CU = musl crt1.c (GNU C99 9.4.0, DW_LANG_C99=12); .comment GCC then rustc 1.90.0"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d11--variant-000.elf",
+   "expected": {
+    "format": "elf",
+    "build_id": "none",
+    "compiler": "none",
+    "comment_strings": [],
+    "gcc_version": "none",
+    "rustc_version": "none",
+    "go_version": "none",
+    "has_dwarf": "true",
+    "dwarf_producer": "GNU C11 7.5.0 -mtune=generic -march=x86-64 -g -O2 -O3 -std=gnu11 -fgnu89-inline -fmerge-all-constants -frounding-math -fstack-protector-strong -fPIC -ftls-model=initial-exec -fstack-protector-strong",
+    "dwarf_language_num": "12",
+    "dwarf_comp_dir": "/build/glibc-S9d2JN/glibc-2.27/nptl",
+    "dwarf_name": "pthread_atfork.c"
+   },
+   "note": "static glibc member: first CU pthread_atfork.c GNU C11 7.5.0 (DW_LANG_C99=12)"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d17--variant-000.elf",
+   "expected": {
+    "format": "elf",
+    "build_id": "none",
+    "compiler": "none",
+    "comment_strings": [],
+    "gcc_version": "none",
+    "rustc_version": "none",
+    "go_version": "none",
+    "has_dwarf": "true",
+    "dwarf_producer": "GNU Ada 14.2.0 -O2 -gnatwa -g -gnatpg -mtune=generic -march=x86-64 -gnatO a-contai.o",
+    "dwarf_language_num": "13",
+    "dwarf_comp_dir": "/home/runner/work/GNAT-FSF-builds/GNAT-FSF-builds/sbx/x86_64-linux/gcc/build/gcc/ada/rts",
+    "dwarf_name": "a-contai.ads"
+   },
+   "note": "D17 Ada member: first CU GNU Ada 14.2.0 a-contai.ads, DW_LANG_Ada95=13, DWARF 5, no .comment"
+  }
+ ]
+}

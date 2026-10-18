@@ -1,0 +1,43 @@
+{
+ "note": ".NET 8 class library (PE32 DLL, mscoree.dll, no COFF symtab)",
+ "decoy": false,
+ "expected_pe_header_facts": {
+  "format": "pe",
+  "pe_type": "PE32",
+  "machine_num": "332",
+  "entry_point": "0x100025ee",
+  "entry_rva": "0x25ee",
+  "image_base": "0x10000000",
+  "timestamp": "4054005191",
+  "characteristics": "0x2022",
+  "characteristics_flags": [
+   "IMAGE_FILE_DLL",
+   "IMAGE_FILE_EXECUTABLE_IMAGE",
+   "IMAGE_FILE_LARGE_ADDRESS_AWARE"
+  ],
+  "dll_characteristics": "0x8560",
+  "dll_characteristics_flags": [
+   "IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE",
+   "IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA",
+   "IMAGE_DLLCHARACTERISTICS_NO_SEH",
+   "IMAGE_DLLCHARACTERISTICS_NX_COMPAT",
+   "IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE"
+  ],
+  "subsystem_const": "IMAGE_SUBSYSTEM_WINDOWS_CUI",
+  "subsystem_int": "3",
+  "is_dll": "true",
+  "section_count": 3,
+  "has_symtab": "false",
+  "number_of_symbols": 0,
+  "import_dlls": [
+   "mscoree.dll"
+  ],
+  "section_names": [
+   ".text",
+   ".rsrc",
+   ".reloc"
+  ]
+ },
+ "generator_cmd": "sh peh_gen.sh  (Go 1.x GOOS=windows go build; .NET copy of dnmeta_lib_net8.bin = dotnet build; decoys = python byte edits)",
+ "oracle_cmd": "sh peh_oracle.sh peh_dotnet_dll.bin  (pefile fields + objdump -h section names)"
+}

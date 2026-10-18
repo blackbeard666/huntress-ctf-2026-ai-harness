@@ -1,0 +1,7 @@
+{
+ "entry": "integrity_key_scan",
+ "expected": null,
+ "generator_cmd": "sh tests/data/android_fixtures/gen_integrity_keys.sh tests/data/android_fixtures  # DECOY: data = aes-128-cbc(dex-signature[:16] key) of the near-miss 'ANS-3f9a07c2e5b1d84Q'; blob = a valid token under the signature key of an UNRELATED dex (dexeval_b64_parse.apk)",
+ "oracle_cmd": "K=$(unzip -p integ_decoy_nearmiss.apk classes.dex | xxd -s 12 -l 16 -p); unzip -p integ_decoy_nearmiss.apk assets/huntress_puzzle.json | python3 -I -c 'import sys,json;print(json.load(sys.stdin)[\"data\"])' | base64 -d | openssl enc -d -aes-128-cbc -K $K -iv 00000000000000000000000000000000  # -> 'ANS-3f9a07c2e5b1d84Q' (near-miss); the blob field gives 'bad decrypt' under this APK's key",
+ "decoy": true
+}

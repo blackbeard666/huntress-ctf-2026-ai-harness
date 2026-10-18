@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-4D8E1F07C2B9A635",
+ "generator_cmd": "tests/data/android_fixtures/gen_transposition.sh <outdir> -- perl stride k=7 off=3 (codec slotmap) encoder (data[j] = answer[o[j]]), jq -cn '{codec,data}' (no index list) then (cd d && zip -qX -r <name>.apk assets)",
+ "oracle_cmd": "unzip -p tp_stride_3p7i.apk assets/huntress_puzzle.json | jq -r .data | perl -ne 'chomp; @c=split//; $n=@c; @r=(); $r[(7*$_+3)%$n]=$c[$_] for 0..$n-1; print @r, \"\\n\"'"
+}

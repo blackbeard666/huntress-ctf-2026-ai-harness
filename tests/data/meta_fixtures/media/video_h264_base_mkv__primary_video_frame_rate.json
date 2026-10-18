@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_frame_rate",
+ "expected": "60000/1001",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=320x180:rate=60000/1001 -t 0.2 -c:v libx264 -profile:v baseline -pix_fmt yuv420p h264_base.mkv",
+ "oracle_cmd": "mediainfo --Output=JSON h264_base.mkv -> Video track FrameRate 59.940 (NTSC 60000/1001; ffmpeg -i 59.94 fps)",
+ "decoy": false,
+ "member": "h264_base.mkv"
+}

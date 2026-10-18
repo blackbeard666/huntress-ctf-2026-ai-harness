@@ -1,0 +1,7 @@
+{
+ "field": "media.riff_chunk_ids",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"from PIL import Image; im=Image.new('RGB',(8,8),(200,10,10)); im.save('decoy.webp','WEBP'); im.save('decoy.png','PNG')\"",
+ "oracle_cmd": "file decoy.webp -> RIFF (little-endian) data, Web/P image",
+ "decoy": true
+}

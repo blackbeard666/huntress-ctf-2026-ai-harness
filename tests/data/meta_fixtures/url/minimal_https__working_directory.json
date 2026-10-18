@@ -1,0 +1,8 @@
+{
+ "field": "url.working_directory",
+ "expected": "none",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/url/GENERATOR_configparser_write.py.txt OUTDIR  -> minimal_https.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/url/ORACLE_configparser_read.py.txt tests/data/meta_fixtures/url/minimal_https__working_directory.bin WorkingDirectory -> none",
+ "decoy": true,
+ "member": "Portal Login.url"
+}

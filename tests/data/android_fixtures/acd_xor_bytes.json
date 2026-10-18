@@ -1,0 +1,7 @@
+{
+ "entry": "nested_scan",
+ "expected": "ANS-e2a7419d0c6b58f3",
+ "_why": "encrypted asset dex/jar for DexClassLoader (rows 42, 44): repeating xor, 6-byte key = outer dex static final byte[] XK",
+ "generator_cmd": "python3 tests/data/android_fixtures/acd_src/gen_acd.py xor_bytes tests/data/android_fixtures/acd_xor_bytes.apk  # javac+d2j-jar2dex inner/outer dex; cipher: repeating xor, 6-byte key = outer dex static final byte[] XK",
+ "oracle_cmd": "unzip -p acd_xor_bytes.apk assets/plugin.bin | python3 -c \"import sys;k=bytes([0x4b,0x13,0xa7,0x5e,0x90,0x2c]);b=sys.stdin.buffer.read();sys.stdout.buffer.write(bytes(x^k[i%6] for i,x in enumerate(b)))\" | strings | grep -oE 'ANS-[0-9a-f]{16}'"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "crib-token-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "🐢🦖🐬🦁🐬🦉🐬🦋🐝🐙🦄🦄🐬🐞🦄🐝🐬🐌🐝🐙🐬🐢🐬🦋🐬🦉🐬🐞🐬🐢🐬🦁🐬🦖🐬🦄🐝🐙🦄🐢🐬🐸🐬🦁🦄🦉🐝🐙🦄🦄🐬🦊🦄🐝🐬🐳🦄🦋🦄🐙🐝🦊🐝🐙🦋🐢🐬🐞🐝🐙🦄🦉🐬🐞🐬🦀🦄🐬🐬🦋🐝🦀🐝🐙🦄🦉🦄🦋🐬🐝🐬🐳🐬🦁🦄🐢🐝🐙🦄🐢🐬🐸🐬🦁🦄🦉🐝🐙🐬🦋🦄🐸🐬🦊🐬🦉🦄🐢🐝🐙🐬🦊🐬🦖🦄🦉🦄🦄🐬🦋🦄🐝🐝🐙🦄🐢🐬🐞🐝🐙🦄🐢🐬🐸🐬🦋🐝🐙🐢🦄🐬🦊🐬🐳🐬🦋🐝🐙🐢🐳🐬🦊🦄🦉🦄🐢🐬🦋🦄🐝🦉🐧🐝🐙🐬🦊🐬🐳🐬🐝🐬🦋🦄🐝🐝🐳🐬🐬🐬🦊🐬🦀🐬🦉🐬🐞🐬🦖🐝🐳🦉🐢🦉🐝",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p | tr -d '\\n' | LC_ALL=C.UTF-8 sed 'y/0123456789abcdef/🐙🦊🐝🦉🐢🦋🐬🦄🐸🦁🐧🐌🦀🐳🦖🐞/'  # vim xxd hex digits, GNU sed y/// multibyte transliteration (alphabet = arbitrary order)",
+ "oracle_cmd": "printf %s \"$encoded\" | LC_ALL=C.UTF-8 sed 'y/🐙🦊🐝🦉🐢🦋🐬🦄🐸🦁🐧🐌🦀🐳🦖🐞/0123456789abcdef/' | xxd -r -p  # GNU sed reverse y/// + xxd reverse",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

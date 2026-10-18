@@ -1,0 +1,9 @@
+{
+ "codec": "css-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-17",
+ "encoded": "rgb(78, 105, 99) rgb(101, 32, 119) rgb(111, 114, 107) rgb(32, 100, 101) rgb(99, 111, 100) rgb(105, 110, 103) rgb(32, 116, 104) rgb(105, 115, 32) rgb(119, 97, 114) rgb(109, 117, 112) rgb(33, 32, 84) rgb(111, 32, 115) rgb(111, 108, 118) rgb(101, 44, 32) rgb(115, 117, 98) rgb(109, 105, 116) rgb(32, 116, 104) rgb(105, 115, 32) rgb(101, 120, 97) rgb(99, 116, 32) rgb(97, 110, 115) rgb(119, 101, 114) rgb(32, 116, 111) rgb(32, 116, 104) rgb(101, 32, 71) rgb(97, 109, 101) rgb(32, 77, 97) rgb(115, 116, 101) rgb(114, 58, 32) rgb(99, 111, 98) rgb(97, 108, 116) rgb(45, 111, 116) rgb(116, 101, 114) rgb(45, 49, 55)",
+ "generator_cmd": "printf %s \"$plain\" | od -An -v -tu1 -w3 | awk '{printf \"%srgb(%d, %d, %d)\",(NR>1?\" \":\"\"),$1,$2+0,$3+0}'  # coreutils od decimal triples + awk (missing components -> 0)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys,re;from PIL import ImageColor as C;t=re.findall(r\\\"#[0-9a-fA-F]{6}|rgb\\\\([^)]*\\\\)\\\",sys.stdin.read());sys.stdout.buffer.write(bytes(v for x in t for v in C.getrgb(x)).rstrip(b\\\"\\\\0\\\"))\"  # Pillow ImageColor.getrgb per token",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-17",
+ "expected": "match"
+}

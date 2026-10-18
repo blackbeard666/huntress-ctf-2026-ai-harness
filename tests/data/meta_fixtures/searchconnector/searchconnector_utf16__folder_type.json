@@ -1,0 +1,8 @@
+{
+ "field": "searchconnector.folder_type",
+ "expected": "{91475FE5-586B-4EBA-8D75-D17434B8CDF6}",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/GENERATOR_lxml_builder.py.txt OUTDIR  -> searchconnector_utf16.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/searchconnector/searchconnector_utf16__folder_type.bin folder_type -> {91475FE5-586B-4EBA-8D75-D17434B8CDF6}",
+ "decoy": false,
+ "member": "Invoices.searchConnector-ms"
+}

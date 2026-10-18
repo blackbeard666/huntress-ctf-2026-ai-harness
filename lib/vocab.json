@@ -58,6 +58,11 @@
     "i386",
     "62"
   ],
+  "_storage": [
+    "base64",
+    "raw_hcfg_section",
+    "raw_const_array"
+  ],
   "_type": [
     "ET_EXEC"
   ],
@@ -109,6 +114,11 @@
     "reversed_hex",
     "decimal_comma",
     "base64_chunks"
+  ],
+  "storage": [
+    "base64",
+    "raw_hcfg_section",
+    "raw_const_array"
   ],
   "transform": [
     "subtract_modulo_256",

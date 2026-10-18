@@ -1,0 +1,9 @@
+{
+ "codec": "roman",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "encoded": "lxxviii, cv, xcix, ci, xxxii, cxix, cxi, cxiv, cvii, xxxii, c, ci, xcix, cxi, c, cv, cx, ciii, xxxii, cxvi, civ, cv, cxv, xxxii, cxix, xcvii, cxiv, cix, cxvii, cxii, xxxiii, xxxii, lxxxiv, cxi, xxxii, cxv, cxi, cviii, cxviii, ci, xliv, xxxii, cxv, cxvii, xcviii, cix, cv, cxvi, xxxii, cxvi, civ, cv, cxv, xxxii, ci, cxx, xcvii, xcix, cxvi, xxxii, xcvii, cx, cxv, cxix, ci, cxiv, xxxii, cxvi, cxi, xxxii, cxvi, civ, ci, xxxii, lxxi, xcvii, cix, ci, xxxii, lxxvii, xcvii, cxv, cxvi, ci, cxiv, lviii, xxxii, xcix, cxi, xcviii, xcvii, cviii, cxvi, xlv, civ, ci, cxiv, cxi, cx, xlv, xlix, lv",
+ "generator_cmd": "python3 -I -c \"import sys;sys.path.insert(0,'tools/pyroman');import roman;print(', '.join(roman.toRoman(ord(c)).lower() for c in sys.argv[1]))\" \"$plain\"  # PyPI roman==5.2 toRoman, lowercased, ', ' separated",
+ "oracle_cmd": "printf %s \"$encoded\" | /usr/bin/python3 -I -c \"import sys,roman_numerals as r;print(''.join(chr(int(r.RomanNumeral.from_string(x.strip()))) for x in sys.stdin.read().split(',')))\"  # Debian python3-roman-numerals 4.1.0 RomanNumeral.from_string (accepts lowercase)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "expected": "match"
+}

@@ -1,0 +1,9 @@
+{
+ "family": "language_of",
+ "expected_language": "java",
+ "expected_toolchain": "javac",
+ "expected_source_language": "none",
+ "decoy": false,
+ "generator_cmd": "bash langof_gen.sh   # javac Hello.java (OpenJDK 21) -> Hello.class",
+ "oracle_cmd": "bash langof_oracle.sh langof_java_class.bin   # file: compiled Java class data 65.0; javap -v: 0 Lkotlin/Metadata; refs -> java"
+}

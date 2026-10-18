@@ -1,0 +1,15 @@
+{
+ "entry": "observed_fetches",
+ "file": "nl_squid_native.log",
+ "expected": {
+  "values": [
+   "c2.tunnel-x.example",
+   "http://blocked.example/",
+   "http://dl.payload-host.example/a/stage2.bin"
+  ]
+ },
+ "expected_images": {},
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/netlogs/netlog_gen.py  (printf squid native access.log (MISS GET, CONNECT tunnel, DENIED))",
+ "oracle_cmd": "gawk '{u=$7; if($6==\"CONNECT\"){sub(/:[0-9]+$/,\"\",u)} print u}' nl_squid_native.log"
+}

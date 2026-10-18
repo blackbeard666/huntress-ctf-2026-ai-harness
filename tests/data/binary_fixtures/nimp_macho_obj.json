@@ -1,0 +1,23 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "needed": "none",
+  "imports": [
+   "_getenv",
+   "_printf",
+   "_strcmp"
+  ],
+  "interpreter": "none",
+  "exports": [
+   "_main",
+   "_nimp_check"
+  ],
+  "install_name": "none"
+ },
+ "decoy": true,
+ "generator_cmd": "bash nimp_gen.sh nimp_macho_obj.bin macho_obj",
+ "oracle_cmd": "bash nimp_oracle.sh nimp_macho_obj.bin   # GNU readelf -dW/--dyn-syms/-lW + nm -D (ELF); GNU objdump -p + LIEF get_imphash PEFILE mode (PE); llvm-objdump-18 --macho --private-headers + llvm-nm-18 -u -p / -gU (Mach-O)",
+ "note": "lib.binary.native_import_facts(data)[field] for each expected_facts key; lists in table/load order except exports (LC_ALL=C sorted); absent -> \"none\"; no HCFG blob (hcfg_scan finds nothing valid); DECOY: MH_OBJECT, no LC_LOAD_DYLIB / LC_LOAD_DYLINKER (needed/interpreter none)"
+}

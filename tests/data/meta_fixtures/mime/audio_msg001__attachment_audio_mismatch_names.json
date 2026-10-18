@@ -1,0 +1,8 @@
+{
+ "field": "mime.attachment_audio_mismatch_names",
+ "expected": "[]",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i sine=... -c:a pcm_s16le|libopus|flac|libvorbis (voice-001.wav 8 kHz 0.5 s, voice-002.ogg opus 0.75 s, voice-003.flac 16 kHz 1 s, memo.ogg vorbis 22.05 kHz 1 s); python3 -I tests/data/meta_fixtures/email/GENERATOR_stdlib_ffmpeg_audio_attachments.py.txt <audio dir> <out dir>  (stdlib EmailMessage.add_attachment, policy.SMTP; RFC 2231 filename*=utf-8'' for the non-ASCII name) -> message-00N.eml",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/email/ORACLE_eml_parser_ffmpeg_audio.py.txt tools/pylib-eml <ffmpeg> <file.eml>  (eml_parser 4.2.1 attachments + ffmpeg 7.0.2 -i per decoded payload: 'Input #0, <fmt>', 'Audio: <codec>', 'Duration') -> every audio attachment: ffmpeg format matches extension and declared type",
+ "decoy": false,
+ "member": "evidence/message-001.eml"
+}

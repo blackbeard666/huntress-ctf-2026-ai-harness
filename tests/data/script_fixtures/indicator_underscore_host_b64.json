@@ -1,0 +1,19 @@
+{
+ "expected_plain": "v=3|language=powershell|role=loader|verdict=malicious|attack=T1105|adapter=http_get|stage_count=2|steps=fetch_stage,run_stage|campaign_id=AH-3f9a0c1d|url=https://Auto_HotKey-3f9a0c1d2e.example.invalid:443/Stage2/Run.ps1",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | base64 -w0  -> $Material_3f9a with $Codec_3f9a='base64|identity|' in indicator_underscore_host_b64.ps1",
+ "oracle_cmd": "python3 -I -c 'import sys,re,base64; t=open(sys.argv[1]).read(); print(base64.b64decode(re.search(r\"Material_3f9a = .(\\S+?).$\", t, re.M).group(1)).decode())' tests/data/script_fixtures/indicator_underscore_host_b64.ps1 ; bash oracle: printf %s \"$EVIDENCE\" | sed -E 's/h[xX]{2}p/http/; s/\\[\\.\\]|\\(\\.\\)|\\{dot\\}/./g; s/\\[:\\]/:/g' | python3 -I -c 'import sys,urllib.parse as u; p=u.urlsplit(sys.stdin.read().strip()); h=p.hostname.encode(\"idna\").decode(); print(h+(\"\" if p.port in (None,80,443) else \":%d\"%p.port)+p.path.rstrip(\"/\")+(\"?\"+p.query if p.query else \"\"), h)'  (canon_checks: url/host columns)",
+ "note": "plan text must come back VERBATIM (mixed-case underscore host, :443) -- exact_text answers; lib.codec.canon_url/canon_host only for matching against defanged evidence",
+ "canon_checks": [
+  {
+   "input": "https://Auto_HotKey-3f9a0c1d2e.example.invalid:443/Stage2/Run.ps1",
+   "canon_url": "auto_hotkey-3f9a0c1d2e.example.invalid/Stage2/Run.ps1",
+   "canon_host": "auto_hotkey-3f9a0c1d2e.example.invalid"
+  },
+  {
+   "input": "hxxps://auto_hotkey-3f9a0c1d2e[.]example[.]invalid/Stage2/Run.ps1#x",
+   "canon_url": "auto_hotkey-3f9a0c1d2e.example.invalid/Stage2/Run.ps1",
+   "canon_host": "auto_hotkey-3f9a0c1d2e.example.invalid"
+  }
+ ]
+}

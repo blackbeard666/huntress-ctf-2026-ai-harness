@@ -1,0 +1,27 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "ddaa56a0-49c3-49e7-a0cb-6b4b44d3363c",
+  "window": null,
+  "elapsed": 1.78,
+  "in_window": 1.11,
+  "phases": {
+    "start": 0.67,
+    "download": 0.26,
+    "solve": 0.05,
+    "submit": 0.8
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "witty-comet-whale-48"
+  },
+  "attempts_remaining": 256,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 256,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

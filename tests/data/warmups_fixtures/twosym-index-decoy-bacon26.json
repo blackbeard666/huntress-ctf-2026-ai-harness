@@ -1,0 +1,11 @@
+{
+ "codec": "twosym base32/base64-index",
+ "decoder": "lib.warmups_codecs.twosym_index_dec",
+ "plain": null,
+ "encoded": "abbab abaaa aaaba aabaa babba abbba baaab ababa aaabb aabaa aaaba abbba aaabb abaaa abbab aabba baabb aabbb abaaa baaba babba aaaaa baaab abbaa babaa abbbb baabb abbba baaba abbba ababb babab aabaa baaba babaa aaaab abbaa abaaa baabb baabb aabbb abaaa baaba aabaa babbb aaaaa aaaba baabb aaaaa abbab baaba babba aabaa baaab baabb abbba baabb aabbb aabaa aabba aaaaa abbaa aabaa abbaa aaaaa baaba baabb aabaa baaab abaab aaaaa aaabb aabaa aabbb aabaa baaab abbba abbab",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/bacon_cyberchef.mjs enc 'Complete' 'A/B' '0' '0' | tr AB ab  # CyberChef 'Bacon Cipher Encode' 26-letter: values 0-25 = base32 letters A-Z only, b32decode -> binary junk",
+ "oracle_cmd": "printf %s \"$encoded\" | tr ab AB | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/bacon_cyberchef.mjs dec 'Complete' 'A/B' '0' '0'  # CyberChef reads it as Bacon letters, not a base32 index string",
+ "oracle_plain": "NICEWORKDECODINGTHISWARMUPTOSOLVESUBMITTHISEXACTANSWERTOTHEGAMEMASTERJADEHERON"
+}

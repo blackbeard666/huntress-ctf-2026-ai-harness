@@ -1,0 +1,12 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "recover_code": 123536
+ },
+ "decoy": false,
+ "generator_cmd": "bash emuret_gen.sh fptr_O2",
+ "oracle_cmd": "bash emuret_oracle.sh emuret_fptr_O2.bin   # runs the binary (prints recover_code()) natively / qemu-aarch64 -L /usr/aarch64-linux-gnu; readelf -sW for the FUNC symbol; objdump -d for calls",
+ "note": "lib.binary.emulate_return_value(data, 'recover_code') == expected_facts.recover_code; gcc -O2 x86-64 PIE: function-pointer table in .data.rel.ro (needs R_X86_64_RELATIVE); no HCFG blob"
+}

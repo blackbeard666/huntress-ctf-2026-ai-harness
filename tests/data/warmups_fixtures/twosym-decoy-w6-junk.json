@@ -1,0 +1,10 @@
+{
+ "codec": "twosym*",
+ "plain": null,
+ "encoded": "ABAAAB BABAAA ABABBB BAAAAB BABBBA ABABAA ABBBAB BAABBA ABAABA BABBAA ABBBBB ABBAAB BAABAA ABABBA",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-built: 14 six-symbol A/B groups, values 16..47 (no reading under either polarity)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/twosym_cyberchef.mjs A B 6 ascii  # CyberChef reads it as non-text junk",
+ "oracle_plain": "\u0011(\u0017!.\u0014\u001d&\u0012,\u001f\u0019$\u0016"
+}

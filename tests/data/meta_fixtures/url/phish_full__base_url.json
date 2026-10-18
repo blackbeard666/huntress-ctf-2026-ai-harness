@@ -1,0 +1,8 @@
+{
+ "field": "url.base_url",
+ "expected": "https://docs.example.org/",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/url/GENERATOR_configparser_write.py.txt OUTDIR  -> phish_full.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/url/ORACLE_configparser_read.py.txt tests/data/meta_fixtures/url/phish_full__base_url.bin baseurl -> https://docs.example.org/",
+ "decoy": false,
+ "member": "Invoice_2026.url"
+}

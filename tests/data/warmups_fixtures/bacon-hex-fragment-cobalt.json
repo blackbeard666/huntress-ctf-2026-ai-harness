@@ -1,0 +1,9 @@
+{
+ "codec": "bacon-hex (Mastery line-17 style fragment, cut mid-word)",
+ "plain": "Master: cobalt-ot",
+ "encoded": "aabaa abbab aabba aaaab aabbb aaabb aabbb aabaa aabba aabab aabbb aaaba aaabb ababa aaaba aaaaa aabba aaabb aabba abbbb aabba aaaba aabba aaaab aabba abbaa aabbb aabaa aaaba abbab aabba abbbb aabbb aabaa",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p | tr -d \"\\n\" | sed \"s/./&\\n/g\" | while read c; do printf \"%05d\\n\" \"$(echo \"obase=2;ibase=16;$(echo $c | tr a-f A-F)\" | bc)\"; done | tr 01 ab | paste -sd\" \" | tr -d \"\\n\"  # shell writer: xxd -p hex digits -> bc base-2 -> %05d -> tr 01 ab, single-space groups",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/twosym_cyberchef.mjs a b 5 hex  # CyberChef 'From Binary' (Byte Length=5) + 'From Hex' of the group values",
+ "oracle_plain": "Master: cobalt-ot",
+ "expected": "match"
+}

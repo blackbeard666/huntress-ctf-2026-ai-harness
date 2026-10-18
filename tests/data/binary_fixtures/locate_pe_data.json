@@ -1,0 +1,16 @@
+{
+ "case": "pe_data",
+ "probe_offset": 761363,
+ "expected": {
+  "container": "pe",
+  "section": ".data",
+  "section_flags": "0xc0000040",
+  "segment_index": 3,
+  "rva": "0xbd013",
+  "vaddr": "0x1400bd013"
+ },
+ "decoy": false,
+ "note": "",
+ "generator_cmd": "bash tests/data/binary_fixtures/locate_gen.sh locate_pe_data.bin pe_data",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/locate_oracle.py locate_pe_data.bin  (readelf -SW/-lW | pefile | lief | wasm-objdump -x)"
+}

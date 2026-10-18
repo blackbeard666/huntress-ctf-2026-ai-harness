@@ -1,0 +1,9 @@
+{
+ "codec": "address",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-13",
+ "encoded": "4e696365-2077-6f72-6b20-6465636f6469 6e672074-6869-7320-7761-726d75702120 546f2073-6f6c-7665-2c20-7375626d6974 20746869-7320-6578-6163-7420616e7377 65722074-6f20-7468-6520-47616d65204d 61737465-723a-206a-6164-652d6f747465 722d3133-0000-0000-0000-000000000000",
+ "generator_cmd": "python3 -I -c 'import uuid,sys;b=sys.argv[1].encode();b+=bytes(-len(b)%16);print(\" \".join(str(uuid.UUID(bytes=b[i:i+16])) for i in range(0,len(b),16)))' \"$plain\"  # Python uuid.UUID(bytes=) str per 16-byte chunk",
+ "oracle_cmd": "printf %s \"$encoded\" | tr -d ' \\n-' | xxd -r -p | tr -d '\\0'  # xxd reverse hex of the dash-stripped UUIDs",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-13",
+ "expected": "match"
+}

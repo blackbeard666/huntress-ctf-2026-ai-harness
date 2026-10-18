@@ -1,0 +1,8 @@
+{
+ "entry": "mapping_restore_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same layout as pgm_mapping, but the followed KeyStore (a) holds a near-miss ANS-9e4c2a70d1b835fG; the only valid tokens sit in the mapping-ignored SecretVault.cachedToken (b.c) and unreached zz.q",
+ "generator_cmd": "python3 tests/data/android_fixtures/pgm_src/gen_pgm.py decoy_nearmiss tests/data/android_fixtures/pgm_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile (mapping.txt in ProGuard/R8 format)",
+ "oracle_cmd": "tools/jadx/bin/jadx -q -d o tests/data/android_fixtures/pgm_decoy_nearmiss.apk; grep -o 'k = \"[^\"]*\"' o/sources/com/huntress/mobile/d18/pg/a.java | cut -d'\"' -f2 | base64 -d  # -> ANS-9e4c2a70d1b835fG (not 16 hex)"
+}

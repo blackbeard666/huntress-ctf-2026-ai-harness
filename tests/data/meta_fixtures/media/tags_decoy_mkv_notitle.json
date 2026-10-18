@@ -1,0 +1,8 @@
+{
+ "field": "media.tag_title",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -i a.mkv -map_metadata -1 -fflags +bitexact -c copy c.mkv",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i c.mkv -> Metadata '(only encoder : Lavf)'",
+ "decoy": true,
+ "member": "decoy_mkv_notitle.mkv"
+}

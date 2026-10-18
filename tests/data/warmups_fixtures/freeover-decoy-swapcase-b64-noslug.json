@@ -1,0 +1,10 @@
+{
+ "codec": "stack:swapcase(base64)",
+ "plain": null,
+ "encoded": "tMLJzsb3B3jRigrLy29KAw5NihrOAxmGD2fYBxvWisbuBYbZB2X2zsWGC3vIBwL0ig5VDgHPBMCGyxqGywXSlG==",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup! To solve, submit nothing at all.' | base64 -w0 | tr 'A-Za-z' 'a-zA-Z'  # a real swapcase(base64) whose text ends in no slug",
+ "oracle_cmd": "printf %s \"$encoded\" | tr 'A-Za-z' 'a-zA-Z' | base64 -d  # -> 'Nice work ... submit nothing at all.' (no slug: stack_dec must return None)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit nothing at all."
+}

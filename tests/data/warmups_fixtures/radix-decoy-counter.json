@@ -1,0 +1,10 @@
+{
+ "codec": "radix*",
+ "plain": null,
+ "encoded": "0001 0002 0003 0010 0011 0012 0013 0020 0021 0022 0023 0030 0031 0032",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import numpy;print(' '.join(numpy.base_repr(v,4).zfill(4) for v in range(1,15)))\"  # base-4 counter 1..14: control-code values, no text",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;print([int(g,4) for g in sys.stdin.read().split()])\"  # values 1..14 -> neither printable bytes nor an even, UTF-8 nibble run of text",
+ "oracle_plain": null
+}

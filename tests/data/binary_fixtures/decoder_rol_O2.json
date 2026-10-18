@@ -1,0 +1,18 @@
+{
+ "family": "decoder_facts",
+ "expected_fields": {
+  "function": "decode_config",
+  "function_va": "0x11a0",
+  "xrefs": [
+   "0x11b2"
+  ],
+  "algorithm": "ror",
+  "key": "0x3",
+  "loop_length": "68",
+  "key_equals_header": "false"
+ },
+ "decoy": false,
+ "generator_cmd": "sh decoder_gen.sh   # gcc 15.2 x86-64 from decoder_src/rol.c, stored blob from decoder_src/gen_blob.py (stdlib)",
+ "oracle_cmd": "sh decoder_oracle.sh decoder_rol_O2.bin decoder_rol_O2.bin 68   # binutils nm + objdump -d -M intel: xref '# <va>', FUNC symbol of the twin, backward jcc loop body (cmp bound, byte op between byte load and byte store)",
+ "note": "stored rol3-raw; loop 0x11c0..0x11d2: ror dl,0x3; cmp rax,0x44; jne -> 68"
+}

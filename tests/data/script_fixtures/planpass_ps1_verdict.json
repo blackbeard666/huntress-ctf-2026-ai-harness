@@ -1,0 +1,16 @@
+{
+ "expected_plain": "v=3|language=powershell|role=uploader|verdict=suspicious|attack=T1041|adapter=Invoke-WebRequest|host_profile=standalone|obfuscation_profile=plain_base64|stage_count=3|steps=collect_files,compress_archive,upload_archive|campaign_id=PS-7c41e9a2|upload_url=https://ps-7c41e9a2.example.invalid/up|file_path=C:\\Users\\Public\\.7c41e9a2.zip",
+ "decoy": false,
+ "plan_answers": {
+  "set1.ps-uploader-verdict": "suspicious",
+  "set1.ps-uploader-language": "powershell",
+  "set1.ps-uploader-upload-url": "https://ps-7c41e9a2.example.invalid/up",
+  "set1.ps-uploader-campaign": "PS-7c41e9a2",
+  "set1.ps-uploader-file-path": "C:\\Users\\Public\\.7c41e9a2.zip",
+  "set1.ps-uploader-steps": "collect_files>compress_archive>upload_archive",
+  "set1.ps-uploader-next-language": null
+ },
+ "plan_answers_note": "lib.codec.plan_answer(aid, plain, q) targets (plan-key-passthrough); verdict asked as enum [benign, suspicious], steps as ordered_tokens",
+ "generator_cmd": "printf %s '<plan>' | base64 -w0  -> literal written as $DESCRIPTOR_7C41E9A2 into planpass_ps1_verdict.ps1",
+ "oracle_cmd": "sed -n 's/^\\$DESCRIPTOR_7C41E9A2 = \"\\(.*\\)\"$/\\1/p' tests/data/script_fixtures/planpass_ps1_verdict.ps1 | base64 -d | tr '|' '\\n'"
+}

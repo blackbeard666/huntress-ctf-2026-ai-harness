@@ -1,0 +1,8 @@
+{
+ "entry": "v1_tamper_scan",
+ "expected": null,
+ "decoy": true,
+ "note": "same layout, signed and NOT tampered: base64 token sits in an intact asset, so no tampered entry -> no answer from this branch",
+ "generator_cmd": "python3 -c 'import zipfile ...' (zipfile.writestr of AndroidManifest.xml / classes.dex stubs + assets) ; keytool -genkeypair -keystore ks.jks -keyalg RSA -dname 'CN=Tamper Test, O=Huntress' ; assets/payload.txt=$(printf ANS-5B5B5B5B5B5B5B5B | base64) ; jarsigner -digestalg SHA-256 -sigalg SHA256withRSA v1tamper_decoy_intact.apk k",
+ "oracle_cmd": "jarsigner -verify -verbose v1tamper_decoy_intact.apk -> 'jar verified.' (every entry flagged sm)"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "dex_eval_scan",
+ "expected": null,
+ "_why": "same flattened xor decoder as xor_switch, but the computed value is token=ANS- + 15 hex (near miss)",
+ "generator_cmd": "python3 tests/data/android_fixtures/dexeval_src/gen_dexeval.py decoy_nearmiss tests/data/android_fixtures/dexeval_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/dexeval_src/oracle.sh tests/data/android_fixtures/dexeval_decoy_nearmiss.apk  # d2j-dex2jar back to classes, RUN the String methods on the JVM -> token -> token=ANS-6d0e94b1c7a3f25 (15 hex: no valid token)",
+ "decoy": true
+}

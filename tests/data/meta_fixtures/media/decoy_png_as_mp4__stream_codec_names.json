@@ -1,0 +1,8 @@
+{
+ "field": "media.stream_codec_names",
+ "expected": "none",
+ "generator_cmd": "python3 -c PIL.Image.new('RGB',(8,8)).save(PNG), renamed clip.mp4",
+ "oracle_cmd": "file decoy_png_as_mp4__stream_codec_names.bin -> PNG image data, 8 x 8 (no media streams)",
+ "decoy": true,
+ "member": "clip.mp4"
+}

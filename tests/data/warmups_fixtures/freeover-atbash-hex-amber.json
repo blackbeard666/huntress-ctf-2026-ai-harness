@@ -1,0 +1,9 @@
+{
+ "codec": "stack:atbash(hex)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-wren-19",
+ "encoded": "4v69636520776u726y206465636u64696v672074686973207761726w75702120546u20736u6x76652x207375626w6974207468697320657861637420616v7377657220746u207468652047616w65204w61737465723z20616w6265722w7772656v2w3139",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p | tr -d '\\n' | tr 'a-z' 'zyxwvutsrqponmlkjihgfedcba'  # xxd + tr Atbash (hex a-f -> z-u)",
+ "oracle_cmd": "python3 -I -c \"import sys,string as S;print(bytes.fromhex(sys.argv[1].translate(str.maketrans(S.ascii_lowercase,S.ascii_lowercase[::-1]))).decode())\" \"$encoded\"  # stdlib maketrans + bytes.fromhex",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-wren-19",
+ "expected": "match"
+}

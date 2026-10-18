@@ -1,0 +1,8 @@
+{
+ "field": "media.tag_language",
+ "expected": "eng",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i sine=d=0.1:r=8000 -metadata title=Night_Shift -metadata artist=Huntress_Ops -metadata album=Blue_Team -metadata comment=beacon_at_0300 -metadata date=2026-10-17 -metadata language=eng -metadata creation_time=2026-10-17T03:00:00Z -metadata x_case_id=HX-4417 -c:a libmp3lame a.mp3  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -loglevel error -i a.mp3 -f ffmetadata - -> 'language=eng (TLAN)'",
+ "decoy": false,
+ "member": "mp3_v24_language.mp3"
+}

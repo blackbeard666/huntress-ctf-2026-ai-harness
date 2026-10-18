@@ -1,0 +1,13 @@
+{
+ "case": "pe_text",
+ "expected_storage": "raw",
+ "expected_config": {
+  "campaign": "ST-10",
+  "domain": "node-10.storage.example.invalid",
+  "mutex": "Global\\HSTOR10"
+ },
+ "key": 114,
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/storage_gen.sh storage_pe_text.bin pe_text '{\"campaign\":\"ST-10\",\"domain\":\"node-10.storage.example.invalid\",\"mutex\":\"Global\\\\HSTOR10\"}' 114",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/storage_oracle.py storage_pe_text.bin"
+}

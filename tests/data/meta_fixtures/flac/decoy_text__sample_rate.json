@@ -1,0 +1,8 @@
+{
+ "field": "flac.sample_rate",
+ "expected": "none",
+ "generator_cmd": "printf 'just some text, not audio\\n' > decoy.flac ; renamed decoy.txt -> decoy.flac",
+ "oracle_cmd": "file -b decoy.flac -> 'ASCII text' (no fLaC / STREAMINFO)",
+ "decoy": true,
+ "member": "decoy.flac"
+}

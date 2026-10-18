@@ -1,0 +1,8 @@
+{
+ "kind": "provenance_facts",
+ "decoy": true,
+ "expected": null,
+ "generator_cmd": "sh tests/data/binary_fixtures/prov_gen.sh tests/data/binary_fixtures   # gcc 15.2 -g/-s + ld --build-id=sha1/md5/none, objcopy --remove-section .comment, rustc 1.93.1, setuptools cli-64.exe (MSVC), dotnet build (rsrc_pe_overlay), head -c 64",
+ "oracle_cmd": "bash tests/data/binary_fixtures/prov_oracle.sh tests/data/binary_fixtures/prov_decoy_text.bin   # readelf -nW / -p .comment / --debug-dump=info --dwarf-depth=1, go version; pefile for PE",
+ "note": "text impostor containing 'GCC:' and 'RSDS' -> not ELF/PE: provenance_facts None, every field none"
+}

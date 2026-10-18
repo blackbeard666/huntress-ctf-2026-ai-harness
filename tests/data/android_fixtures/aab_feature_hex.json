@@ -1,0 +1,7 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-c40e9b17a2d58f63",
+ "_why": "AAB (row 58): token hex-encoded in a feature module (dynfeature/manifest/AndroidManifest.xml, protobuf) activity meta-data; base manifest clean",
+ "oracle_cmd": "mkdir o && unzip -p aab_feature_hex.zip dynfeature/manifest/AndroidManifest.xml > o/AndroidManifest.xml && (cd o && zip -q m.zip AndroidManifest.xml) && aapt2(apktool prebuilt/linux) dump xmltree --file AndroidManifest.xml o/m.zip | grep -oP 'value\\(0x01010024\\)=\"\\K[^\"]+' | xxd -r -p",
+ "generator_cmd": "bash tests/data/android_fixtures/aab_src/gen_aab.sh tests/data/android_fixtures  # apktool-bundled aapt2 2.20 `link --proto-format -I prebuilt/android-framework.jar` -> protobuf manifest; python zipfile lays out BundleConfig.pb + base/manifest/ + base/resources.pb + base/assets/ + <feature>/manifest/"
+}

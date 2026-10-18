@@ -1,0 +1,27 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "f49c77f2-9ccd-41ec-b138-de449f2fc805",
+  "window": null,
+  "elapsed": 1.23,
+  "in_window": 0.99,
+  "phases": {
+    "start": 0.24,
+    "download": 0.11,
+    "solve": 0.13,
+    "submit": 0.75
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "answer": "ANS-C30EEFE8AD4BFA35"
+  },
+  "attempts_remaining": 32,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 32,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

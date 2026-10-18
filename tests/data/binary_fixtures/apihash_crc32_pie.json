@@ -1,0 +1,16 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "algorithm": "crc32",
+  "seed": "4294967295",
+  "resolved_apis": "getenv,printf,socket,connect",
+  "hashes": "0x1db8ca5c,0xd21739f1,0x05e568bb,0x74cff91f"
+ },
+ "generator_cmd": "bash apihash_gen.sh apihash_crc32_pie.bin crc32 code \"-O2 -fPIE -pie\" getenv printf socket connect   # perl apihash_hash.pl constants -> gcc dl_iterate_phdr resolver (runs: prints $HOME via hash-resolved getenv/printf)",
+ "oracle_cmd": "bash apihash_oracle.sh apihash_crc32_pie.bin crc32   # objdump -d imm32 / objdump -s .rodata dwords in address order x perl hasher dictionary; file -b",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64",
+ "decoy": false,
+ "note": "field names / seed form SPECULATIVE (GM vocabulary not seen): algorithm token, seed decimal (seed_hex too), lists comma-joined in code order; no HCFG blob (encoding none)"
+}

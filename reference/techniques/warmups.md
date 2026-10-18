@@ -1,4 +1,4 @@
-# warmups — technique log (days 1-16; updated after every day)
+# warmups — technique log (days 1-17; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -8,12 +8,15 @@ How this lane has looked so far (observations, not guarantees):
   (character order, no other encoding), "A met Z. They really hit it off."/"Opposite Day" -> ATBASH (a<->z mirror), "Caesar took a week off."/"Seven Steps" -> Caesar +7 (decode rot-7), "Even the punctuation went for a spin."/"Room
   Forty-Seven" -> ROT47 (rotates every printable `!`-`~`, so digits/hyphens/colon change too), "Sixteen little symbols are
   calling. Dot dot dot."/"Dot Com" -> MORSE spelling the HEX digits of the text (TWO layers: Morse outer, hex inner).
-  D1-D15 single_solves were ONE layer; D16 is the first stacked one, and the pun named BOTH layers ("sixteen" = hex,
-  "dot dot dot"/"Dot Com" = Morse). Read every number/word in the prompt as a possible layer.
-- Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, ..., 73, 78). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, html-entity, `"\uXXXX"`, base32, unpadded base64url, plain reversed text, Atbash, Caesar+7, ROT47, Morse-over-hex, in that order so far). The last line has no trailing newline. The fragments join verbatim (split mid-word) into the same sentence.
+  "Sixteen guests. Five little a's and b's apiece."/"Bacon Bits" -> BACONIAN 5-symbol a/b groups whose VALUES (0-15) are
+  the HEX nibbles of the text (Bacon outer, hex inner). D1-D15 single_solves were ONE layer; D16 and D17 are stacked, the
+  pun naming BOTH layers ("sixteen" = hex both days; "dot dot dot" = Morse, "a's and b's"/"Bacon" = Baconian). Read every
+  number/word in the prompt as a possible layer; "Sixteen" has meant a hex INNER layer twice running.
+- Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, ..., 73, 78). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, html-entity, `"\uXXXX"`, base32, unpadded base64url, plain reversed text, Atbash, Caesar+7, ROT47, Morse-over-hex, Bacon-over-hex, in that order so far). The last line has no trailing newline. The fragments join verbatim (split mid-word) into the same sentence.
 - Clocks: TT about 5-8 s from day 2 on (30 s on day 1 and again on day 12), mastery about 5-9 s (30 s on day 12; the window does not reliably grow with the set count). Only a deterministic solver survives these windows. The single_solve is untimed.
 - D16 GM regime change: TT/Mastery are "regular scored challenges by default" (contract `deadline: null`, no window);
-  `run_for_time: true` on start/retry requests a timed Hall of Fame attempt. Keep the solver fast anyway.
+  `run_for_time: true` on start/retry requests a timed Hall of Fame attempt. The HARNESS still kills solve.py after 60 s
+  (D17 Mastery: `exec_error`, `solver_too_slow`, nothing submitted) -- keep every set well under 1 s.
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
 - **Encoding per line** -- Mastery line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, `&#NNN;`
@@ -54,8 +57,17 @@ How this lane has looked so far (observations, not guarantees):
   `(?:[0-9A-Fa-f]{2})+` -> `fromhex`; digits-only tokens -> decimal/octal char codes; otherwise feed it to
   `decode_chunk` once more; accept only printable ASCII ending in a slug. In lib since D16: `decode_chunk`'s Morse
   branch returns the hex-decoded text when the Morse output is pure hex pairs (gated `_max_day() >= 16`).
+  D17 = a SECOND hex carrier, Baconian: lowercase `a`/`b` 5-groups split by ONE space, only `aaaaa`..`abbbb` occur (values
+  0-15, so every group starts with `a`), TWO groups per byte, ~12 B per plaintext char (1295 B single); a Mastery line-17
+  fragment = 14 groups = 7 bytes. Read as Bacon-26 letters it gives ONLY `a`-`p` (`eogjgd...`) = the a-p hex alphabet
+  (nibble = ord-97) -- the answer-first worker went that way. Parse rule for any two-symbol group carrier: map the 2
+  symbols to 0/1, cut into fixed-width groups, then values all < 16 with an even count -> hex nibbles -> `fromhex`;
+  < 26 -> Bacon-26 letters (24-letter I=J/U=V if that reads better). In lib since the D17 night: `decode_chunk` strict
+  BACON-HEX branch (`[ab]{5}` groups, gated `_max_day() >= 17`), a `warmups_codecs.DAYS` D17 encoder, and the generic
+  `warmups_codecs.twosym_dec` (any 2 symbols, widths 4-8, both polarities; also `bin4_dec`, `aphex_dec`, `tern_dec`,
+  `radix_dec`, `chuck_dec`, `dna_dec` for the sibling carriers). The D17 solver also has `register_free("baconhex", 17, ...)`.
 - **Line wrapper** -- `NN<TAB>fragment` numbering; fragments split mid-word and join verbatim in number order.
-- **Set count** -- grows by 5 per day (33 on day 7, ..., 63 on day 13, 68 on day 14, 73 on day 15, 78 on day 16); the solver must loop over whatever the contract lists.
+- **Set count** -- grows by 5 per day, 5N-2 (33 on day 7, ..., 73 on day 15, 78 on day 16, 83 x 17 lines on day 17); the solver must loop over whatever the contract lists, and its cost grows with sets x lines.
 - **Delivery shape** -- mastery bytes arrive as ONE zip saved under the first member's name (`blob-01.txt`; the contract has NO
   `artifacts[]`, only a top-level `sha256` = the zip; same on days 7-9). Set 1's question names that same file: read the MEMBER, never decode the whole bundle.
 - **Payload only** -- TT/single differ only in the slug and length (day 7: 318 vs 333 bytes; day 8: 620 vs 621; day 9: 644 vs 650); same sentence and encoding.
@@ -79,6 +91,7 @@ How this lane has looked so far (observations, not guarantees):
 | Letters, digits AND punctuation all scrambled, word-length spacing kept, `\` where hyphens belong, `v2>6 |2DE6Ci` = "Game Master:" (prompt "punctuation went for a spin", "Forty-Seven") | ROT47: `tr '!-~' 'P-~!-O' < blob.txt`; `lib.warmups_codecs.rot47`. Slug digits are rotated too (`\he` -> `-96`), so no slug regex matches before decoding |
 | English-shaped words that no rot-N fixes, `Gsv Tznv Nzhgvi:` (prompt "A met Z", "Opposite") | Atbash: `tr 'A-Za-z' 'ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba'`; `lib.decode.decode_chunk` picks it since D13 (bigram vs rot-N and reversal); `lib.ciphers.atbash` |
 | `[A-Za-z0-9_-]`, NO trailing `=`, length %4 != 0 (prompt: "URL-friendly") | unpadded base64url: `python3 -c "import base64,sys;t=open(sys.argv[1]).read().strip();print(base64.urlsafe_b64decode(t+'='*(-len(t)%4)).decode())" blob.txt` (`base64 -d` errors on it); `lib.decode.decode_chunk` handles it |
+| Only `a`/`b` (or `A`/`B`, `0`/`1`) in 5-groups, every group starting `a` (prompt "a's and b's", "Bacon", "five", "sixteen") | Bacon over hex: `python3 -c "import sys;v=[int(w.replace('a','0').replace('b','1'),2) for w in open(sys.argv[1]).read().split()];print(bytes.fromhex(''.join('%x'%x for x in v)).decode())" blob.txt`. Groups up to `bbabb` -> plain Bacon letters (`lib.warmups_codecs.bacon_dec`); other symbol pairs/widths -> `warmups_codecs.twosym_dec` |
 | Only `.` `-` and single spaces, symbols up to 5 long, all digits/`.`/`.-`/`-...`/`-.-.`/`-..`/`..-.` (prompt "dot dot dot", "Dot Com", "sixteen") | Morse -> hex: `python3 -c "from lib import warmups_codecs as w,sys;print(bytes.fromhex(w.morse_dec(open(sys.argv[1]).read()).replace(' ','')).decode())" blob.txt`; `decode_chunk` does both layers since D16. Plain-text Morse (with `/` gaps, `-....-` hyphens) -> just `morse_dec` |
 | Magic `PK\x03\x04` even if named `.txt` (mastery `blob-01.txt`) | `unzip -l`. It is a bundle of all sets `blob-01..NN.txt` |
 | Lines `01<TAB>...`, `02<TAB>...` | Strip the `NN\t` prefix. Decode EACH line with its own encoding and concatenate without separators. Keep leading/trailing spaces |
@@ -107,44 +120,29 @@ generic fallback, then 11/58 sets where rot-N "decoded" the reversed line 12 (`6
 of Atbash text (`ovisx-tviskr-fbvecw-31`, rejected: gibberish words); Mastery 39/63 until free lines were assigned
 JOINTLY (`lib.decode._joint_free`, `FREE_CODECS`; each transform used once per blob).
 
-**Day 14: Seven Steps** ("Caesar took a week off." -- Caesar shift +7).
-- 111-byte blob, ONE layer: `Upjl dvyr kljvkpun aopz dhytbw! ... aol Nhtl Thzaly: khwwly-zwyvba-ivbskly-71` -> rot-7 ->
-  `dapper-sprout-boulder-71`. The carried-over D13 solver (best rot-N in `decode_chunk`) answered in the race, no worker
-  tool call: start 13:00:03Z -> CORRECT 13:00:07Z (~4.5 s, first submit). TT (30 s) CORRECT, solve 0.04 s.
-- Mastery 68 sets x 14 lines (line 14 = Caesar+7 fragment). A pre-Mastery generalize worker registered `caesar7` (day 14)
-  as a 4th free codec in the solver's joint assignment; the `compound-today-d14-*` synthetic cases (D13 Mastery + a
-  today-codec line 14) passed. Real attempt 18c3893f: 67/68, set22 MISSING -> `solver_incomplete`, retries 0. Cause:
-  lib `decode_chunked` returned a rev/Atbash-swapped text ending in a 2-word `g-voaafkurtle-60`, the solver's 3-word slug
-  check refused it, and its own `_joint` fallback didn't count an Atbash line as free. Second generalize worker added
-  Atbash to `_is_free`; the untimed practice run went 68/68 CORRECT 13:02:21Z (no Hall of Fame time).
-- LIB (ratchet D14): `caesar7` in `lib.decode.FREE_CODECS` + `lib.warmups_codecs.DAYS` (14, exact encoder `rot(s, 7)`),
-  and `_joint_free` ranks a 3-word slug end above a 2-word one: `decode_chunked` alone now answers every D14 case
-  (68/68 on both Mastery cases; the pre-ratchet lib alone got 2-3 of 68); D1-D13 cases unchanged.
+**Days 14-16** (Caesar +7; ROT47; Morse over hex): CORRECT in 4.5-39 s, first submit each day.
+Lessons that still matter: D14 the carried-over solver answered in the race (best rot-N); Mastery set22 went MISSING when a
+rev/Atbash swap ended in a 2-word slug -> `caesar7` in `FREE_CODECS`, 3-word slug ranked first. D15 ROT47 (`tr '!-~'
+'P-~!-O'`) is beyond rot-N/Atbash/reversal; `register_free("rot47", 15, ...)`; Mastery solve 3.46 s with 5 free lines.
+D16 Morse whose symbols are only `0-9A-F` -> `fromhex` (first two-layer warmup); `decode_chunk`'s Morse branch now
+returns the hex-decoded text; Mastery 78/78 first try.
 
-**Day 15: Room Forty-Seven** ("Even the punctuation went for a spin." -- ROT47).
-- 107-byte blob, ONE layer, every printable ASCII char rotated by 47 (spaces kept): `}:46 H@C< 564@5:?8 E9:D H2C>FAP ...
-  E96 v2>6 |2DE6Ci DF??J\42DE=6\@A2=\he` -> `tr '!-~' 'P-~!-O'` -> slug `sunny-castle-opal-96`. Rot-N/Atbash/reversal
-  can't touch it (digits and `\`/`|`/`:` would stay), so the carried-over D14 solver could not decode it; no wrong submission.
-- Both pre-warmed workers' FIRST tool call was the `tr` ROT47 (the prompt pun + "Forty-Seven" in the title), then a grep
-  for `rot47`/`register_free` in lib. The local worker patched `answer()` (`_rot47` for single/TT, `register_free("rot47",
-  15, ...)` for Mastery) and submitted. Start 13:00:15Z -> CORRECT 13:00:47Z (~31 s, first submit).
-- TT CORRECT (in_window 1.55 s, solve 0.02 s). Mastery 73 sets x 15 lines (line 15 = ROT47 fragment like `E:86C\f_` ->
-  `tiger-70`), CORRECT on attempt 1, 73/73, in_window 5.6 s with solve 3.46 s -- the slowest warmups Mastery solve yet
-  (5 free lines -> bigger joint search); fine untimed, but watch it if a 5-9 s window comes back.
-
-**Day 16: Dot Com** ("Sixteen little symbols are calling. Dot dot dot." -- Morse code of the HEX of the sentence).
-- 1257-byte blob, no newline: `....- . -.... ----. -.... ...-- ...` = `4E 69 63 ...` -> hex -> "Nice work ... Game Master:
-  silly-banner-marble-88". Token set = Morse for `0-9` plus `A`-`F` only (`.` E and `-.-.` C are hex letters, not text).
-  FIRST two-layer warmup; triage's "riddle -> hex (base 16)" hint was right, its "symbol table/demangle" hint was noise.
-- The duel worker won: one python decode (Morse -> join -> `bytes.fromhex`), then `_morsehex` in `answer()` (Morse via
-  `lib.ciphers.morse_decode`, hex check, else the Morse text lowercased) plus `register_free("morsehex", 16, ...)` for
-  Mastery line 16. Start 13:00:16Z -> CORRECT 13:00:55Z (~39 s, first submit, no wrong answer).
-- TT CORRECT (in_window 8.29 s, untimed regime). Mastery 78 sets x 16 lines, CORRECT on attempt 1 (78/78, in_window 7.57 s,
-  solve 2.59 s). Generalize/ratchet: `decode_chunk` Morse branch now returns hex-decoded text when the symbols are hex.
+**Day 17: Bacon Bits** ("Sixteen guests. Five little a's and b's apiece." -- Baconian a/b groups carrying HEX nibbles).
+- 1295-byte blob, no newline: `aabaa abbba aabba abaab ...` -> a=0 b=1 -> 4 E 6 9 ... -> `4E69...` -> "Nice work ... Game
+  Master: tidy-rocket-harbor-20". Only values 0-15 occur. Triage's "riddle -> hex (base 16)" hint was right again (it
+  also mislabelled the blob "looks base64"; ignore that, the alphabet is 2 letters + space).
+- The answer-first worker won with TWO python one-liners (Bacon-26 letters -> `eogjgd...` a-p; then `ord-97` nibbles ->
+  `bytes.fromhex`) and a direct `hctf submit`. Start 13:00:09Z -> CORRECT 13:00:33.7Z (~25 s, first submit).
+- TT CORRECT (solve 0.05 s). Mastery 83 sets x 17 lines (line 17 = 14 a/b groups): attempt f9ac3fc4 first run
+  `exec_error` -- solve.py hit the harness's 60 s budget, NOTHING submitted. cProfile (`mastery/profile.txt`): `answer()`
+  always called `decode.decode_candidates` -> `_joint_ranked` -> `_best_rot` over every free-line assignment, even when
+  `decode_chunked` had already produced the slug (profile cut at 10 s still inside ONE set's `_joint_ranked`, 9.3 s). Generalize fix: return at once when
+  `_slug(decode.decode_chunked(text))` hits, keep `decode_candidates` as the fallback -> 83 sets in 1.35 s; CORRECT
+  13:03:18Z, 83/83 (in_window 1.95 s, solve 0.44 s). Two generalize workers (local + duel) for one cheap ordering bug.
 
 ## GM answer conventions learned
 - Submit the slug ONLY, exactly as decoded (lowercase, hyphens, 2-digit number). Not the whole sentence and not "Game Master: ...". `trim` normalization only.
-- No correctly decoded warmups answer has been rejected (days 1-16; day 8's 40 and day 9's 45 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
+- No correctly decoded warmups answer has been rejected (days 1-17; day 8's 40 and day 9's 45 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
 - Mastery ids are per set (`setN.message` style). Each question names `blob-0N.txt`, but the bytes may arrive as a zip member, as same-named `blob.txt` downloads, or de-duplicated (`blob_2.txt`). Map set -> file by sha256 from `contract["artifacts"]` when present. When it is absent (day 7), open the zip and read member `blob-0N.txt`.
 - No GM-side label grammar in this lane: the answer is a derived VALUE, never a synthetic label.
 
@@ -181,5 +179,11 @@ JOINTLY (`lib.decode._joint_free`, `FREE_CODECS`; each transform used once per b
 - lib has TWO Morse tables: `lib.ciphers.morse_decode` knows letters/digits only (drops `!` `,` `:` and the slug hyphen
   `-....-`); `lib.warmups_codecs.morse_dec` knows punctuation. Use `morse_dec` for plain-text Morse.
 - A slow fallback (generic `peel` BFS per set) x 58 sets blows even a 30 s window: gate fallbacks on a hard per-set cap.
+- CHEAP PATH FIRST, RETURN EARLY (D17): a solver that builds `[decode_chunked(t)] + decode_candidates(t)` and then picks
+  pays the joint rot/rev/Atbash/... search on EVERY set. At 83 sets x 17 lines that passed 60 s and the Mastery run died
+  with no submission. Return the first candidate that yields a full slug; call the joint ranker only on a miss. Time the
+  real Mastery case (`hctf solver-test`) after every new free codec -- the cost grows with sets x lines x codecs.
+- A carrier decode that "works" can still be a middle layer: Bacon-26 letters of D17 came out as `a`-`p` only. An output
+  alphabet of exactly 16 symbols (0-9A-F, a-p, 16 words) = hex nibbles; decode again.
 - Don't over-read the prompt: "Again" (day 6) was flavour, not a second layer. Decode what the bytes show.
 - Don't contact anything beyond the GM. The decoded sentence states the answer outright.

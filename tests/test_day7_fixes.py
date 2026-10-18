@@ -961,3 +961,37 @@ assert _meta14.answer("d16-email-001-email-message-id",
 assert _meta14.answer("d17-email-001-email-return-path", {}, _e16) == ("bounce@example.test", _meta14.SPECULATIVE)
 assert ("eml", "message_id") not in _meta14.REGISTRY and not _meta14.CONFLICTS
 print("ok  lib.meta: email.message_id registered (verified D16) + email<->eml format alias")
+
+# Day 17 "Bacon Bits": each HEX digit of the UTF-8 sentence as a 5-symbol a/b Bacon group (lib.warmups_codecs.DAYS day 17
+# exact encoder + decode_chunk's bacon-hex branch); GM-confirmed D17 single slug.
+_s17 = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: tidy-rocket-harbor-20"
+_b17 = _wc.day_codec(17)[1](_s17)
+assert _b17.startswith("aabaa abbba aabba abaab ") and _wc.day_codec(17)[2](_b17) == _s17 and _wc.day_codec(17)[3] is False
+assert _dc(_b17) == _s17 and _dc(_wc.day_codec(17)[1]("-NN")) == "-NN"
+print("ok  decode: Bacon-hex (D17) exact encoder + decode_chunk branch")
+
+# Day 17 "Hear Me Out": media.primary_audio_codec_name verified (ffprobe codec_name of the first audio stream from the
+# container header; 16-bit PCM WAV -> pcm_s16le, GM-confirmed).
+import struct as _st17
+_fmt17 = _st17.pack("<HHIIHH", 1, 1, 8000, 16000, 2, 16)
+_w17 = b"RIFF" + _st17.pack("<I", 4 + 8 + len(_fmt17) + 8) + b"WAVE" + b"fmt " + _st17.pack("<I", len(_fmt17)) + _fmt17 \
+    + b"data" + _st17.pack("<I", 0)
+assert _meta14.lookup("media", "primary_audio_codec_name")[0].tier == _meta14.VERIFIED
+assert _meta14.answer("d17-audio-001-media-primary-audio-codec-name",
+                      {"question": "Determine media.primary_audio_codec_name for audio-001.wav."}, _w17) \
+    == ("pcm_s16le", _meta14.VERIFIED)
+print("ok  lib.meta: media.primary_audio_codec_name registered (verified D17)")
+
+# Day 17 "Decoder Ring": hcfg_storage closed enum (base64 / raw_hcfg_section / raw_const_array, GM-confirmed d08-d14) +
+# stripped d01 recover_code -> "none" (TT + Mastery); playbook serves both, vocab.json caches the labels.
+from lib import knowledge as _K17, playbook as _pb17  # noqa: E402
+assert _K17.hcfg_storage("base64") == "base64" and _K17.hcfg_storage("raw", ".hcfg") == "raw_hcfg_section"
+assert _K17.hcfg_storage("raw", ".data") == "raw_const_array" and _K17.hcfg_storage("hex", ".rodata") is None
+assert set(_pb17.seed_candidates(_pb17.BINARY, "d12_analysis_hcfg_storage")[:len(_K17.HCFG_STORAGE)]) == \
+    set(_K17.HCFG_STORAGE)   # the GM later PUBLISHED 5 tokens (+ wasm_data_segment, raw)
+# `raw` was wrong for d12/d14 only (their carriers have a better rule); it is the published enum's fallback token
+assert "raw" not in _pb17.rejected(_pb17.BINARY, "set2.d14_analysis_hcfg_storage")
+assert "hcfg_section" in _pb17.rejected(_pb17.BINARY, "set2.d14_analysis_hcfg_storage")
+assert "8114" in _pb17.rejected(_pb17.BINARY, "d01_analysis_recover_code") and _K17.RECOVER_CODE_ABSENT == "none"
+assert {"raw_hcfg_section", "raw_const_array"} <= set(_json.load(open(os.path.join(os.path.dirname(_K17.__file__), "vocab.json")))["storage"])
+print("ok  knowledge/playbook: D17 hcfg_storage enum + stripped recover_code none")

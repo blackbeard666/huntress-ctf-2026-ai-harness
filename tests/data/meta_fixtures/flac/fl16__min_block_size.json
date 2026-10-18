@@ -1,0 +1,8 @@
+{
+ "field": "flac.min_block_size",
+ "expected": "4608",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -loglevel error -f lavfi -i sine=f=440:d=0.4:r=44100 -ac 2 -c:a flac -sample_fmt s16 fl16.flac (ffmpeg 7.0.2 static)",
+ "oracle_cmd": "bin/exiftool -j -n fl16.flac -> BlockSizeMin 4608",
+ "decoy": false,
+ "member": "fl16.flac"
+}

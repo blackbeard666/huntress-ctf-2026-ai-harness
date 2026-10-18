@@ -1,0 +1,8 @@
+{
+ "field": "media.flac_md5_signature",
+ "expected": "none",
+ "generator_cmd": "printf 'just some text, not audio\\n' > decoy.flac ; renamed decoy.txt -> decoy.flac",
+ "oracle_cmd": "file -b decoy.flac -> 'ASCII text'",
+ "decoy": true,
+ "member": "decoy.flac"
+}

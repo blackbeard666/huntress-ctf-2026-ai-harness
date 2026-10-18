@@ -1,0 +1,9 @@
+{
+ "codec": "trigram-octal",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "☱☱☶ ☱☵☱ ☱☴☳ ☱☴☵ ☰☴☰ ☱☶☷ ☱☵☷ ☱☶☲ ☱☵☳ ☰☴☰ ☱☴☴ ☱☴☵ ☱☴☳ ☱☵☷ ☱☴☴ ☱☵☱ ☱☵☶ ☱☴☷ ☰☴☰ ☱☶☴ ☱☵☰ ☱☵☱ ☱☶☳ ☰☴☰ ☱☶☷ ☱☴☱ ☱☶☲ ☱☵☵ ☱☶☵ ☱☶☰ ☰☴☱ ☰☴☰ ☱☲☴ ☱☵☷ ☰☴☰ ☱☶☳ ☱☵☷ ☱☵☴ ☱☶☶ ☱☴☵ ☰☵☴ ☰☴☰ ☱☶☳ ☱☶☵ ☱☴☲ ☱☵☵ ☱☵☱ ☱☶☴ ☰☴☰ ☱☶☴ ☱☵☰ ☱☵☱ ☱☶☳ ☰☴☰ ☱☴☵ ☱☷☰ ☱☴☱ ☱☴☳ ☱☶☴ ☰☴☰ ☱☴☱ ☱☵☶ ☱☶☳ ☱☶☷ ☱☴☵ ☱☶☲ ☰☴☰ ☱☶☴ ☱☵☷ ☰☴☰ ☱☶☴ ☱☵☰ ☱☴☵ ☰☴☰ ☱☰☷ ☱☴☱ ☱☵☵ ☱☴☵ ☰☴☰ ☱☱☵ ☱☴☱ ☱☶☳ ☱☶☴ ☱☴☵ ☱☶☲ ☰☷☲ ☰☴☰ ☱☴☱ ☱☵☵ ☱☴☲ ☱☴☵ ☱☶☲ ☰☵☵ ☱☴☶ ☱☴☱ ☱☵☴ ☱☴☳ ☱☵☷ ☱☵☶ ☰☵☵ ☰☶☴ ☰☶☲",
+ "generator_cmd": "printf %s \"$plain\" | od -An -to1 -v | tr -s \" \\n\" \"  \" | sed \"s/^ //;s/ $//\" | perl -CS -pe 'tr/01234567/\\x{2630}-\\x{2637}/'",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys,re,unicodedata as u;t=re.sub(r\"\\s\",\"\",sys.stdin.read());assert all(u.name(c).startswith(\"TRIGRAM FOR\") for c in t);d=\"\".join(str(ord(c)-0x2630) for c in t);print(bytes(int(d[i:i+3],8) for i in range(0,len(d),3)).decode())'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

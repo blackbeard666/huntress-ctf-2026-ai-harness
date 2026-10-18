@@ -1,0 +1,9 @@
+{
+ "family": "language_of",
+ "expected_language": "wasm",
+ "expected_toolchain": "none",
+ "expected_source_language": "none",
+ "decoy": false,
+ "generator_cmd": "bash langof_gen.sh   # wat2wasm m.wat (no producers section)",
+ "oracle_cmd": "bash langof_oracle.sh langof_wasm_wat.bin   # file: WebAssembly binary module; wasm-objdump -h: no custom/producers section -> language wasm (D16), toolchain none"
+}

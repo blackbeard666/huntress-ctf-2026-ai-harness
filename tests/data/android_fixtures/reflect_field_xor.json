@@ -1,0 +1,7 @@
+{
+ "entry": "reflection_scan",
+ "expected": "ANS-5c2e9a07d1b3f486",
+ "_why": "Locator.reveal(): Class.forName(xor(k+i) char[] -> com.huntress.mobile.d20.r8.b).getDeclaredField(xor -> \"b\").get(null); sibling statics a / c hold decoy tokens",
+ "generator_cmd": "python3 tests/data/android_fixtures/reflect_src/gen_reflect.py field_xor tests/data/android_fixtures/reflect_field_xor.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/reflect_src/oracle.sh tests/data/android_fixtures/reflect_field_xor.apk  # d2j-dex2jar back to classes, RUN Locator.reveal() on the JVM (real reflection) -> ANS-5c2e9a07d1b3f486"
+}

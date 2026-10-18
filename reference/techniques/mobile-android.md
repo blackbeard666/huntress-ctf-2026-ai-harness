@@ -1,4 +1,4 @@
-# mobile-android — technique log (days 1-16; updated after every day)
+# mobile-android — technique log (days 1-17; updated after every day)
 
 How the lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -12,41 +12,51 @@ How the lane has looked so far (observations, not guarantees):
   PendingIntent, allowBackup, exported ContentProvider, JS-interface origin trust, cleartext session, permissive X509
   trust manager, NSC exception, SharedPreferences credential, client-side SQLite authz, app-controlled Keystore key,
   predictable nonce d14, `jni_secret` "challenge-owned JNI shared library" d15, `jni_length` "Java-to-native validation
-  mismatch" d16). The theme was flavour only: no day required exploiting it, even with a matching stub class
+  mismatch" d16, `identifier_obfuscation` "R8-style identifier collapse" d17). The theme was flavour only: no day required exploiting it, even with a matching stub class
   (`WebViewBridge`, `TrustEveryone`, `PredictableCrypto`, `NativeLibrarySecrets`, `JNIBoundary`) or a prompt demanding a
   live action. d16 is the first day whose TT/Mastery build had a REAL gate in code (a JNI export guarding the answer),
   yet the answer was still a literal in the asset and in `.rodata`.
 - What varied day to day was the `codec` of `huntress_puzzle.json` (plain, reverse, base64, xor+key, split, hex,
-  caesar+key, then repeats; d15-d16 `native`, whose `data` is already the plaintext answer). The dex also holds
+  caesar+key, then repeats; d15-d16 `native`, whose `data` is already the plaintext answer; d17 `indexed` = permutation
+  `data` + `order[]`). The dex also holds
   the codec name next to a `CODEC` string constant. Keys re-roll per variant. A new codec name is possible any day:
   decode it from the first 4 chars, which must become `ANS-`.
 - **Since d15 Mastery is a MIXED-DAY bundle.** The 5 sets are APKs from earlier days plus one of today's (d15: d01 plain,
-  d07 caesar, d10 split, d14 caesar, d15 native; d16: d01 plain, d04 xor, d11 xor, d13 base64, d16 native), all under
+  d07 caesar, d10 split, d14 caesar, d15 native; d16: d01 plain, d04 xor, d11 xor, d13 base64, d16 native; d17: d04 xor,
+  d08 reverse, d12 hex, d14 caesar, d17 indexed), all under
   today's prompt text. Solve each set from its own puzzle JSON, never from "today's codec".
 - In every APK, `.ChallengeActivity` builds a device-loopback URL `http://127.0.0.1:19090/mobile/attempt/<id>/evidence?
   case_id=..&client_secret=SECRET-..&proof=<answer>`. That backend is NOT reachable (it lives on the phone). The GM
-  accepted the decoded puzzle value as the "backend evidence code" on all 16 days.
+  accepted the decoded puzzle value as the "backend evidence code" on all 17 days.
 - Escalation watch: d15 shipped the first native lib and d16 the first native GATE (`Java_<pkg>_JNIBoundary_nativeEvidence
   (env, cls, int len)` returns `arena_value` only if `huntress_arena_length_accepts(len, 0)`: `len > 0xffff &&
   (uint16)len == 0`, i.e. 65536). The answer was STILL in the asset and in `.rodata`. If a later day drops it from the
   asset, read the gate statically and take the value it returns (`lib.android.extract_answer` has the fallback chain).
+- Pattern d16-d17: the SINGLE variant carries only flavour; the TT build carries the real mechanic in code (d16 JNI gate,
+  d17 renamed class `a` + dex hint `R8-style collapse: follow b -> a and ignore field c` + `decoy`/`telemetry` strings).
+  Read the TT/Mastery APK's dex strings when you reverse a day, not just the single's.
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
 - **Puzzle codec** -- single + TT always shared the day's codec. `key` (xor byte d4, d11: 81/109/205,29,44, d16 Mastery
   d04-set 21, d11-set 232; caesar shift d7: 10/18/9/3/4, d14: 9/10/17,4,7, d15 Mastery d07-set 15, d14-set 4) and split/offset parameters re-roll per variant:
   read them from `huntress_puzzle.json` every time. Keyless codecs (`reverse`, `base64`, `native`) differ only in `data`.
+  d17 `indexed`: `order[]` was the SAME list in single, TT and the Mastery d17 set (`order[i] = (3 + 7*i) mod 20`), only
+  `data` changed -- still read it from the JSON, a later day may re-roll it.
   Rule: decode by declared codec, regex-check `^ANS-[0-9A-F]{16}$`, else `decode_any`; unknown name -> known-plaintext
-  `ANS-` trick.
+  `ANS-` trick; any int-list field of len(data) -> try scatter and gather, keep the regex match.
 - **Mastery set mix (NEW d15)** -- sets can be fixtures of DIFFERENT days (codec, theme, package `dNN`, extra entries
   like `res/xml/...` or `lib/x86_64/*.so` all differ per set; the puzzle JSON `day` field and dex `DAY-NN:` tag name the
-  source day). The day picks re-roll per attempt (d15: 01/07/10/14/15 vs 03/07/09/13/15; d16: 01/04/11/13/16); the last
-  set was today's. d16: the QUESTION's case ref/package (`MOB-06-..`, `d08`, `d14`) did NOT match the APK's own
+  source day). The day picks re-roll per attempt (d15: 01/07/10/14/15 vs 03/07/09/13/15; d16: 01/04/11/13/16; d17:
+  04/08/12/14/17, while the pre-start `status` preview listed MOB-02/06/09 -- re-dealt at start); the last set was today's. d16: the QUESTION's case ref/package (`MOB-06-..`, `d08`, `d14`) did NOT match the APK's own
   (`MOB-04`, `d11`, `d13`), so the contract text does not predict the codec either.
   Rule: per-set, codec-agnostic decoding (`puzzle_candidates` over each APK) -- never branch on the day or case ref.
 - **Per-variant identity** -- case ref `MOB-NN-<10 hex>`, package suffix `v<12 hex>`, `client_secret` and the loopback
   attempt slug change per variant. None of these feed the answer.
 - **Mastery packaging** -- `delivery N: <name>_mastery_0N.apk` per set: pair by sha256. Set count varies: 3 sets
   (d1-d7, d10-d14), 5 sets (d8, d9, d15, d16). Loop over the contract's answer_ids, never assume 3.
+- **Dex decoy/hint strings (NEW d17)** -- single dex: `CODEC`, `CONTROL`, `DAY-17:` tag, `indexed`, `describe`; TT dex: no
+  codec/DAY tag at all, instead `R8-style collapse: follow b -> a and ignore field c`, `decoy`, `telemetry`,
+  `authorization` (2672 B vs 2588 B). Rule: never require the dex `CODEC`/`DAY-NN` strings to find or decode the puzzle.
 - **Answer location** -- so far always the puzzle JSON (d15-d16: also duplicated in the `.so` `.rodata`); if it decodes
   to nothing, fall back to dex/resources/native (`raw_entry_scan`, `dex_strings`, `strings -a lib/*/*.so | grep ANS-`).
 - **Native lib shape (NEW d16)** -- same day, different `.so` builds: the single variant shipped the d15-style 13648 B lib
@@ -60,14 +70,16 @@ How the lane has looked so far (observations, not guarantees):
 
 | You see | First move |
 |---|---|
-| `*.apk` artifact, answer_format `ANS- + 16 uppercase hex` | `unzip -l x.apk`, then `unzip -p x.apk assets/huntress_puzzle.json` (held the answer all 15 days). triage.md pre-extracts it to `work/extracted/` and prints the JSON |
+| `*.apk` artifact, answer_format `ANS- + 16 uppercase hex` | `unzip -l x.apk`, then `unzip -p x.apk assets/huntress_puzzle.json` (held the answer all 17 days). triage.md pre-extracts it to `work/extracted/` and prints the JSON |
 | puzzle JSON `{"codec":..,"data":..}` | decode per codec (table below). Check the result fullmatches `^ANS-[0-9A-F]{16}$` before you submit |
-| Codec name not in the table (d7 `caesar`, d15 `native`) | first check whether `data` already matches `ANS-` (d15). Else compare `data[:4]` with `ANS-`: constant ord diff = shift, constant XOR = xor key |
+| puzzle JSON with an int list next to `data` (d17 `indexed`: `data` 20 chars + `order[20]`) | `order[i]` is the OUTPUT slot of `data[i]` (scatter, same as `split`): `r[order[i]] = data[i]`. Tell: `data` holds `A`,`N`,`S`,`-` at the positions where `order` has 0,1,2,3 |
+| Codec name not in the table (d7 `caesar`, d15 `native`, d17 `indexed`) | first check whether `data` already matches `ANS-` (d15). Else compare `data[:4]` with `ANS-`: constant ord diff = shift, constant XOR = xor key |
 | `lib/<abi>/*.so` in the APK (d15-d16 `lib/x86_64/libarena.so`, 13.6-14.1 KB, not stripped) | `strings -a lib/*/*.so \| grep ANS-` and `nm -D --defined-only` first (d15: exports `huntress_arena_secret`/`huntress_arena_day`, 0x20-byte `.text`, answer as a literal in `.rodata`). Only if the answer is not a literal, route to binary-re (rizin / pyelftools + capstone, or the JNI `Java_*` export) |
 | Native GATE (d16: `Java_*_nativeEvidence(int)` -> `*_length_accepts`; "type or length assumption") | the gate only decides whether the export returns `arena_value`; that pointer is the `.rodata` `ANS-` literal. If a question ever asks for the bypass input: `objdump -d --no-show-raw-insn f.so` the checker (d16: `len > 0xffff && (u16)len == 0` -> 65536) |
 | "Recover split configuration from DEX and a native library" (d15) | the "split" was narrative: the asset `data` and the `.so` string were the SAME full answer, and the dex held only `CODEC`/`native`/`CONTROL`. Cross-check the two, submit |
 | No puzzle JSON, or it decodes to no `ANS-` | `lib.android.extract_answer` (zip scan, then dex strings incl. multidex, then apktool/jadx scan), then `strings -a classes*.dex lib/*/*.so \| grep ANS-` |
 | Need the theme, component, scheme or exported flags | `droidasc getmanifest x.apk` (fast). `aapt dump xmltree x.apk AndroidManifest.xml`. Also `lib.android.manifest_facts(apk)` |
+| 1-letter classes `<pkg>/a`, `b`; dex hint "follow b -> a and ignore field c", strings `decoy`/`telemetry` (d17 R8 theme) | first check the asset (it still held the answer d17). If the answer ever leaves it: `jadx --deobf -d w/jadx x.apk`, follow the chain the hint names, ignore the named decoy field; prefer the value that flows into `proof=` |
 | Need handler logic (URL built, extras read, constants) | `droidasc findrefs x.apk string <scheme or URL>`, then `droidasc getclass x.apk <pkg>.ChallengeActivity`; whole app: `jadx -d work/jadx x.apk` |
 | Need resources or strings.xml / smali | `apktool d -f -o work/apktool x.apk` |
 | Loopback `127.0.0.1:19090` in the code | do NOT chase it. It is device-local (refused on Homebase, times out elsewhere). The answer is static |
@@ -85,9 +97,18 @@ Puzzle codecs seen (`schema: huntress.mobile.puzzle.v1`):
 - `xor` (d4, d11): data is base64. b64-decode, then XOR every byte with the int `key` (0-255, changes per variant).
 - `split` (d5, d10): `parts[]` + `order[]`, where `order[i]` is the OUTPUT SLOT of `parts[i]` (not `parts[order[i]]`).
   Try both readings and keep the one that fullmatches `ANS-`.
-- `lib.android.decode_payload` covers every codec above, `puzzle_candidates(apk)` also does split (both order readings),
+- `indexed` (d17): `{data: 20 chars, order: [20 ints]}`, per-CHARACTER permutation with the same semantics:
+  `r[order[i]] = data[i]` (`-2FE1A2D163AA1N51SC0` + `[3,10,17,4,...]` -> `ANS-E26A5C21D3110FA1`). Built into lib after
+  d17: `lib.android.permutation_candidates(p)` tries scatter + gather over ANY int-list field of len(data) (also
+  `perm*`/`shuffle*`/unknown codecs), and `transposition_candidates(s)` covers keyless stride/rail-fence shuffles.
+- `lib.android.decode_payload` covers every codec above, `puzzle_candidates(apk)` also does split/indexed (both order readings),
   and `decode_any` is the name-agnostic fallback (base32, rot13, `lib.decode.peel`). Call them instead of re-typing a
   table. Unknown codec + int key: `key_or_shift = f(data[:4], "ANS-")` (xor: byte ^; shift: ord diff).
+- Code-side scanners prebuilt after d17 (for when the answer leaves the asset): `renamed_chain_scan` (follow R8 `b -> a`
+  chains, hint-aware), `proof_flow_scan` (rank `ANS-` candidates by what reaches `proof=`), `dex_eval_scan` (mini Dalvik
+  evaluator for xor/char-array builders), `reflection_scan`, `mapping_restore_scan`, `signing_block_scan`,
+  `zip_structure_scan`, `integrity_key_scan`. `extract_answer(apk)` chains only the entry/dex/nested/cipher/cert/integrity
+  stages -- call the chain/proof/eval/reflection scanners yourself.
 
 ## Day by day
 
@@ -111,24 +132,29 @@ Library Secrets (`jni_secret`, "split configuration from DEX and a native librar
 (13648 B, exports `huntress_arena_secret`/`_day`, `.text` 0x20 B, answer literal in `.rodata`); codec `native` = the
 plaintext answer, identical to the `.so` string -- the "split" was narrative. First MIXED-DAY Mastery (d01/07/10/14/15).
 
-**Day 16 — JNI Boundary** (manifest `huntress.mechanic`=`jni-boundary`, dex `DAY-16:jni_length:Java-to-native validation
-mismatch`; prompt "Identify a Java-to-native type or length assumption that changes backend authorization.")
-- Artifact: the d15 7-entry fixture (APK 12772 B), stub class `JNIBoundary`, codec `native`, `data` = plaintext answer,
-  same literal in `libarena.so` `.rodata`. Single variant's `.so` was byte-for-byte the d15 shape (no gate code).
-- TT/Mastery builds carried the real mechanic: `nativeEvidence(env, cls, int len)` calls
-  `huntress_arena_length_accepts(len, 0)` (`cmpl $0xffff` then a 16-bit `cmp %ax`), returning `arena_value` only for
-  a Java int > 65535 whose low 16 bits are 0. Reading it took ~1 min with `nm -D --defined-only` + `objdump -d`; it was
-  not needed for the answer.
-- Commands: `cat work/extracted/*/assets/huntress_puzzle.json` (triage.md prints it); cross-check `strings -a
-  lib/x86_64/libarena.so | grep ANS-`.
-- Solved by the generic carried-over solver (`puzzle_candidates` + `ANS-` regex, fallback `raw_entry_scan`/`dex_strings`)
-  via the harness race probe: start 13:00:15Z -> CORRECT 13:00:22Z (~7 s). TT in_window 5.3 s (solve 0.85 s), Mastery 5
-  sets mixed days (d01 plain, d04 xor 21, d11 xor 232, d13 base64, d16 native) in_window 5.5 s (solve 0.21 s). 0 wrong.
+**Day 16 — JNI Boundary** (`jni_length`): d15 fixture, codec `native`. Single `.so` = d15 shape; TT/Mastery `.so` added
+`Java_<pkg>_JNIBoundary_nativeEvidence(int len)` -> `huntress_arena_length_accepts` (`len > 0xffff && (u16)len == 0`,
+i.e. 65536), returning the `.rodata` literal that also sat in the asset. Carried-over solver via race probe, ~7 s; TT
+5.3 s, Mastery (d01/04/11/13/16) 5.5 s in-window. 0 wrong.
+
+**Day 17 — Name Collapse** (manifest `huntress.mechanic`=`R8-style identifier collapse`, dex `DAY-17:identifier_obfuscation:
+R8-style identifier collapse`; prompt "Restore behavior after deterministic identifier shrinking and decoy insertion.")
+- Artifact: back to the 6-entry fixture (APK 12704 B, no `.so`); classes `ChallengeActivity`, `MainActivity` and one
+  renamed class `<pkg>/a`. NEW codec `indexed`: `data` = the 20 answer chars shuffled, `order[i]` = output slot of
+  `data[i]`. The renaming/decoy theme was flavour for the answer: asset -> scatter -> `ANS-...`, no code reading needed.
+- TT dex (2672 B) dropped `CODEC`/`DAY-17`/`indexed` and added the real mechanic hint `R8-style collapse: follow b -> a and
+  ignore field c` + `decoy`/`telemetry`/`authorization`; the asset still held the answer (same `order[]`).
+- Key insight: spot the permutation by eye -- `data` contains exactly one each of `A`,`N`,`S`,`-` and `order` contains
+  0-3 at those indices. Scatter reading confirmed; gather (`data[order[i]]`) is wrong.
+- Time: the carried-over solver's race probe FAILED (`puzzle_candidates` has no `indexed` -> no candidate, nothing
+  submitted, 0 wrong). The duel worker added `_indexed` to solve.py and submitted via `--from-solver`: start 13:00:09Z ->
+  CORRECT 13:00:33.6Z (~24.5 s). TT in-window 0.99 s (solve 0.13 s); Mastery 5 sets (d04 xor 104, d08 reverse, d12 hex,
+  d14 caesar 14, d17 indexed) in-window 1.36 s (solve 0.05 s). All first try, 0 wrong.
 
 ## GM answer conventions learned
 - One field, `answer`. Single solve and TT use id `answer`; Mastery uses `setN.answer` (3 or 5 sets), one APK per set.
 - Format is `ANS-` + exactly 16 UPPERCASE hex, normalization `exact`. Uppercase the hex after decoding, no whitespace.
-- No mobile answer has ever been rejected (zero wrong submissions on days 1-16). The GM accepts the decoded
+- No mobile answer has ever been rejected (zero wrong submissions on days 1-17). The GM accepts the decoded
   `huntress_puzzle.json` value as the "backend evidence code" even though the prompt says "Submit only the exact backend
   answer code returned for this case".
 - Mastery feedback is per set: `{"result":"accepted","remaining":N}` after each set, then `CORRECT` on the last. An
@@ -145,7 +171,11 @@ mismatch`; prompt "Identify a Java-to-native type or length assumption that chan
 - **Reaching for Ghidra on a native-lib theme** (d15-d16): the `.so` is ~14 KB, unstripped, the answer a literal. Use
   `strings`/`nm` first, then `objdump -d` of the one `Java_*` export (d16 gate = 0x30 bytes). Ghidra is overkill.
 - **Trusting the question's case ref in Mastery** (d16): it can name a different day/case than the APK it points at.
-- **split codec order semantics:** two plausible readings exist. Validate the candidates against the answer regex
+- **New codec, generic solver silent** (d17 `indexed`): the race probe produced nothing, costing ~20 s before a worker
+  added the decoder (lib now has the generic int-list permutation, but the next unseen codec will repeat this). When the puzzle JSON has an unknown codec, write the 5-line decoder straight away (anchor on
+  `ANS-`); do not wait on lib or decompile anything.
+- **Trusting dex `CODEC`/`DAY-NN` strings** (d17 TT): the TT dex had neither. Key the decoder on the JSON's own fields.
+- **split/indexed order semantics:** two plausible readings exist. Validate the candidates against the answer regex
   instead of guessing.
 - **xor codec:** `data` is base64 first, and `key` may vary per variant (int; the solvers also accept a numeric string
   or a repeating string key).
@@ -167,4 +197,6 @@ mismatch`; prompt "Identify a Java-to-native type or length assumption that chan
   (possibly XORed/split across `huntress_arena_secret` + a dex constant), or computed by a decrypt routine. Then trace
   `ChallengeActivity`, run `lib.android.extract_answer`, and disassemble the exported native function. The d16 TT build
   already returns the answer only through a gated `Java_*` export: the next step is the literal leaving the asset, or
-  the export computing it (xor/stack string) instead of returning a `.rodata` pointer.
+  the export computing it (xor/stack string) instead of returning a `.rodata` pointer. d17's TT hint (`follow b -> a and
+  ignore field c`) previews the dex-side version: the right value chosen by a renamed call chain among decoys -- if
+  several `ANS-` candidates ever appear, take the one that flows into the `proof=` URL, never the first regex hit.

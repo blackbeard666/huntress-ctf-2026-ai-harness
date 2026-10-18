@@ -1,0 +1,55 @@
+{
+ "family": "gnat_facts",
+ "expected_facts": {
+  "gnat_version": "13.3.0",
+  "gnat_version_string": "GNAT Version: 13.3.0",
+  "has_gnat_runtime": "true",
+  "ada_main_symbol": "_ada_cfg_main",
+  "ada_main": "cfg_main",
+  "main_source": "cfg_main.adb",
+  "has_adainit": "true",
+  "has_adafinal": "true",
+  "binder_symbols": [
+   "ada_main___elabb",
+   "adafinal",
+   "adainit",
+   "main"
+  ],
+  "elab_symbols": [
+   "cfg_util___elabs"
+  ],
+  "ada_subprograms": [
+   "cfg_main",
+   "cfg_main.decode_blob",
+   "cfg_util.xor_byte"
+  ],
+  "ada_subprograms_mangled": [
+   "_ada_cfg_main",
+   "cfg_main__decode_blob",
+   "cfg_util__xor_byte"
+  ],
+  "dwarf_producer": "GNU Ada 13.3.0",
+  "dwarf_producer_version": "13.3.0",
+  "dwarf_language": "DW_LANG_Ada2005",
+  "dwarf_language_code": 46,
+  "ada_exceptions": [
+   "CFG_MAIN.BAD_CONFIG",
+   "CFG_UTIL.KEY_ERROR",
+   "CONSTRAINT_ERROR",
+   "PROGRAM_ERROR"
+  ],
+  "user_exceptions": [
+   "CFG_MAIN.BAD_CONFIG",
+   "CFG_UTIL.KEY_ERROR"
+  ],
+  "standard_exceptions": [
+   "constraint_error",
+   "program_error"
+  ],
+  "decoder_function": "none"
+ },
+ "decoy": false,
+ "generator_cmd": "sh gnat_gen.sh   # gcc -O1 -fno-inline -no-pie ada.c dw.s (GNAT binder layout in C + hand-written DWARF4 CU), strip -s, gcc plain C, printf",
+ "oracle_cmd": "sh gnat_oracle.sh gnat_synth_ada2005.bin   # file -b, strings -a, nm --defined-only, readelf --debug-dump=info, pyelftools Exception_Data walk",
+ "note": "synthetic gnatbind layout, symbols + DWARF CU (Ada 2005)"
+}

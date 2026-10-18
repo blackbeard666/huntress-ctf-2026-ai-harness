@@ -1,0 +1,8 @@
+{
+ "field": "flac.md5_signature",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -loglevel error -f lavfi -i sine=f=440:d=0.3:r=44100 -ac 2 -c:a flac ogfl.oga (ffmpeg 7.0.2 static; Ogg-FLAC mapping)",
+ "oracle_cmd": "bin/exiftool -j -n ogfl.oga -> MD5Signature 00000000000000000000000000000000 (all zero = not computed -> none)",
+ "decoy": false,
+ "member": "ogfl.oga"
+}

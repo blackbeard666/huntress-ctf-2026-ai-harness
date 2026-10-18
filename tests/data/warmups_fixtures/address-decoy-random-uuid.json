@@ -1,0 +1,10 @@
+{
+ "codec": "address",
+ "plain": null,
+ "encoded": "6ccc5591-2292-42c2-abf0-2a2744eebce3 c34ad7e7-b42d-4588-8a5a-c42e4277105b 5a385ec3-f7c1-4650-be61-19ea95d5269e da9a3aa6-9a70-4d25-ab40-f1c1a4edc846 808d5687-4957-4ca1-814d-a181bc7e33bb c29f285a-37b0-4476-8287-f4b8433ab547",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -I -c 'import uuid;print(\" \".join(str(uuid.uuid4()) for _ in range(6)))'  # random v4 UUIDs, not text bytes",
+ "oracle_cmd": "printf %s \"$encoded\" | tr -d ' -' | xxd -r -p | python3 -I -c 'import sys;sys.stdin.buffer.read().decode(\"utf-8\")'  # -> UnicodeDecodeError: not text",
+ "oracle_plain": null
+}

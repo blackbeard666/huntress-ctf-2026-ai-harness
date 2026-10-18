@@ -1,0 +1,10 @@
+{
+ "codec": "binary4*",
+ "plain": null,
+ "encoded": "01110111 01101111 01110010 01101011 00100000 01100100 01100101 01100011 01101111 01100100 01101001 01101110 01100111 00100000 01110100 01101000 01101001 01110011",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "perl -e 'print join \" \", map { sprintf \"%08b\", ord } split //, $ARGV[0]' \"work decoding this\"  # 8-bit groups = D4 binary8, not 4-bit nibbles",
+ "oracle_cmd": "CyberChef 'From Binary' (Space, Byte Length=8) via tools/node -> 'work decoding this': it is binary8 (D4 decoder's line); binary4 decoders must answer none (group width 8)",
+ "oracle_plain": "work decoding this"
+}

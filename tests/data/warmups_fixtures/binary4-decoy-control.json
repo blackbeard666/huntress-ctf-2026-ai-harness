@@ -1,0 +1,10 @@
+{
+ "codec": "binary4*",
+ "plain": null,
+ "encoded": "0000 0001 0001 1111 0000 1011 0111 1111 0000 0011 0001 0100 0000 1110",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-built: 14 four-bit groups -> bytes 01 1f 0b 7f 03 14 0e (control characters)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/bin4_cyberchef.mjs Space  # CyberChef 'From Binary' (Byte Length=4) -> 'From Hex' -> bytes \\x01\\x1f\\x0b\\x7f\\x03\\x14\\x0e (no text)",
+ "oracle_plain": "\u0001\u001f\u000b\u007f\u0003\u0014\u000e"
+}

@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-B03F6D2E91C4A758",
+ "generator_cmd": "tests/data/android_fixtures/gen_perm_fields.sh <outdir> -- perl seeded Fisher-Yates permutation + perl gather-encode (codec shuffle_v2, 1-based), jq -cn '{codec,data,positions:[ints]}' then (cd d && zip -qX -r <name>.apk assets)",
+ "oracle_cmd": "unzip -p perm_shuffle_gather1.apk assets/huntress_puzzle.json | jq -r \"[.data, (.positions|map(tostring)|join(\\\",\\\"))]|@tsv\" | python3 -I -c \"import sys; d,o=sys.stdin.read().split(); print(\\\"\\\".join(d[int(x)-1] for x in o.split(\\\",\\\")))\""
+}

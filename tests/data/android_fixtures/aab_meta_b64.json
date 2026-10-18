@@ -1,0 +1,7 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-3f9a0c7e21d4b685",
+ "_why": "AAB (row 58): base/manifest/AndroidManifest.xml is an aapt2 protobuf XmlNode; <application><meta-data android:value=base64(token)>",
+ "oracle_cmd": "mkdir o && unzip -p aab_meta_b64.zip base/manifest/AndroidManifest.xml > o/AndroidManifest.xml && (cd o && zip -q m.zip AndroidManifest.xml) && aapt2(apktool prebuilt/linux) dump xmltree --file AndroidManifest.xml o/m.zip | grep -oP 'value\\(0x01010024\\)=\"\\K[^\"]+' | base64 -d",
+ "generator_cmd": "bash tests/data/android_fixtures/aab_src/gen_aab.sh tests/data/android_fixtures  # apktool-bundled aapt2 2.20 `link --proto-format -I prebuilt/android-framework.jar` -> protobuf manifest; python zipfile lays out BundleConfig.pb + base/manifest/ + base/resources.pb + base/assets/ + <feature>/manifest/"
+}

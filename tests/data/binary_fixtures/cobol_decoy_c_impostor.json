@@ -1,0 +1,26 @@
+{
+ "family": "cobol_facts",
+ "encoding": "none",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "needed": [
+   "libc.so.6"
+  ],
+  "has_libcob_needed": "false",
+  "libcob_soname": "none",
+  "cob_imports": [],
+  "has_cobol_runtime": "false",
+  "program_id": "none",
+  "program_ids": [],
+  "source_file": "none",
+  "compile_date": "none",
+  "has_gnucobol_runtime": "false"
+ },
+ "decoy": true,
+ "generator_cmd": "sh cobol_gen.sh   # real GnuCOBOL 3.2 (apt-get download gnucobol3 libcob4-dev libcob4t64; dpkg-deb -x tools/gnucobol/root; cobc drives system gcc), blob via python3 zlib.crc32+struct, gcc C decoy",
+ "oracle_cmd": "sh cobol_oracle.sh cobol_decoy_c_impostor.bin - -   # file -b, readelf -dW/-lW, nm -D --undefined-only, objdump -d, strings -a, PROGRAM-ID + X literals of the COBOL source, zlib.crc32",
+ "note": "plain C (gcc -O1) with libcob.so.4 / cob_init / module-name+date / HCFG only as string data -> has_cobol_runtime false, no HCFG"
+}

@@ -1,0 +1,21 @@
+{
+ "family": "gnat_facts",
+ "expected_facts": {
+  "gnat_version": "none",
+  "has_gnat_runtime": "false",
+  "ada_main_symbol": "none",
+  "ada_main": "none",
+  "has_adainit": "false",
+  "has_adafinal": "false",
+  "binder_symbols": [],
+  "ada_subprograms": [],
+  "ada_exceptions": [],
+  "user_exceptions": [],
+  "decoder_function": "none",
+  "dwarf_language": "DW_LANG_C11"
+ },
+ "decoy": true,
+ "generator_cmd": "sh gnat_gen.sh   # gcc -O1 -fno-inline -no-pie ada.c dw.s (GNAT binder layout in C + hand-written DWARF4 CU), strip -s, gcc plain C, printf",
+ "oracle_cmd": "sh gnat_oracle.sh gnat_decoy_plain_c.bin   # file -b, strings -a, nm --defined-only, readelf --debug-dump=info, pyelftools Exception_Data walk",
+ "note": "plain gcc C image with DWARF: every Ada field absent, DWARF language is C11"
+}

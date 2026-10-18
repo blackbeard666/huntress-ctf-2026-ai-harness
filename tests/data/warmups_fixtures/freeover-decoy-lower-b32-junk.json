@@ -1,0 +1,10 @@
+{
+ "codec": "stack:lowercase base32 of non-text bytes",
+ "plain": null,
+ "encoded": "gf6ckgkltvt5pzibsgpv7lzk4pkosqbivsqa2bkwuazq5jozwywa====",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'free-over-strict decoy' | sha256sum | cut -c1-64 | xxd -r -p | base32 -w0 | tr 'A-Z' 'a-z'  # 32 hash bytes: valid lowercase base32, decodes to binary junk",
+ "oracle_cmd": "printf %s \"$encoded\" | tr 'a-z' 'A-Z' | base32 -d | xxd -p | tr -d '\\n'  # -> the raw sha256 digest (not printable text: stack_dec must return None)",
+ "oracle_plain": "317c25194b9d67d7e501919f5faf2ae3d4e94028aca00d0556a0330ea5d9b62c"
+}

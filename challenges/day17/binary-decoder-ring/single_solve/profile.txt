@@ -1,0 +1,27 @@
+cProfile of `cases/single_solve` (727378 function calls (718791 primitive calls) in 2.986 seconds):
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    215/1    0.007    0.000    2.670    2.670 {built-in method builtins.exec}
+      2/1    0.000    0.000    2.670    2.670 solve.py:1(<module>)
+      2/1    0.004    0.002    2.670    2.670 solve.py:903(main)
+      2/1    0.001    0.001    2.666    2.666 solve.py:863(_solve_pairs)
+    60/28    0.095    0.002    2.444    0.087 threading.py:323(wait)
+      204    0.003    0.000    2.383    0.012 solve.py:256(group_members)
+      204    0.001    0.000    2.334    0.011 solve.py:167(resolve)
+      240    0.001    0.000    2.217    0.009 _base.py:428(result)
+     1487    0.230    0.000    2.210    0.001 {method 'join' of 'bytes' objects}
+     21/1    0.007    0.000    2.210    2.210 thread.py:54(run)
+     21/1    0.006    0.000    2.205    2.205 solve.py:74(_aes_member)
+      204    0.003    0.000    2.189    0.011 solve.py:789(answer)
+   233/19    0.015    0.000    1.104    0.058 <frozen importlib._bootstrap>:1349(_find_and_load)
+   231/19    0.003    0.000    1.093    0.058 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+   217/20    0.002    0.000    1.088    0.054 <frozen importlib._bootstrap>:911(_load_unlocked)
+   191/20    0.001    0.000    1.087    0.054 <frozen importlib._bootstrap_external>:993(exec_module)
+   496/37    0.001    0.000    0.879    0.024 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+    51/42    0.001    0.000    0.879    0.021 {built-in method builtins.__import__}
+        2    0.000    0.000    0.824    0.412 solve.py:596(<lambda>)
+        2    0.000    0.000    0.824    0.412 solve.py:552(disassembly)
+       28    0.002    0.000    0.778    0.028 __init__.py:1(<module>)
+    51/26    0.003    0.000    0.740    0.028 queue.py:154(get)
+   142/84    0.001    0.000    0.612    0.007 <frozen importlib._bootstrap>:1390(_handle_fromlist)
+        1    0.000    0.000    0.580    0.580 solve.py:112(sha)
+       59    0.000    0.000    0.565    0.010 solve.py:624(facts)

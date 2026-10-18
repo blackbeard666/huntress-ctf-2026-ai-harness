@@ -1,0 +1,8 @@
+{
+ "field": "media.container_format_by_magic",
+ "expected": "none",
+ "generator_cmd": "printf 'Voice note transcript\\nSpeaker: J. Doe\\nDuration 0:15\\n' > voice-013.wav",
+ "oracle_cmd": "file -b voice-013.wav -> 'ASCII text' (no audio container)",
+ "decoy": true,
+ "member": "voice-013.wav"
+}

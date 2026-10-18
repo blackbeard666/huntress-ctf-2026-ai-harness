@@ -1,0 +1,9 @@
+{
+ "codec": "radix4-w4-ascii",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "encoded": "1032 1221 1203 1211 0200 1313 1233 1302 1223 0200 1210 1211 1203 1233 1210 1221 1232 1213 0200 1310 1220 1221 1303 0200 1313 1201 1302 1231 1311 1300 0201 0200 1110 1233 0200 1303 1233 1230 1312 1211 0230 0200 1303 1311 1202 1231 1221 1310 0200 1310 1220 1221 1303 0200 1211 1320 1201 1203 1310 0200 1201 1232 1303 1313 1211 1302 0200 1310 1233 0200 1310 1220 1211 0200 1013 1201 1231 1211 0200 1031 1201 1303 1310 1211 1302 0322 0200 1203 1233 1202 1201 1230 1310 0231 1220 1211 1302 1233 1232 0231 0301 0313",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c \"import sys,numpy;b=sys.stdin.buffer.read();r,w,inner,sep=int(sys.argv[1]),int(sys.argv[2]),sys.argv[3],sys.argv[4];v=[int(c,16) for c in b.hex()] if inner=='hex' else list(b);print(sep.join(numpy.base_repr(x,r).zfill(w) for x in v),end='')\" 4 4 ascii ' '  # numpy.base_repr writer",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -e 'local $/; my $t=<STDIN>; $t=~s/[^0-9]+//g; my $s=\"\"; for my $g ($t=~/(.{4})/g) { my $v=0; $v=$v*4+$_ for split //, $g; $s.=chr $v } print $s'  # independent Perl base-4 reader, values as char codes",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "expected": "match"
+}

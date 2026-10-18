@@ -1,0 +1,8 @@
+{
+ "field": "media.container_format_by_magic",
+ "expected": "flac",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i sine=f=440:d=0.15:r=16000 -ac 1 -map_metadata -1 -fflags +bitexact -flags +bitexact -c:a flac a.flac && cp a.flac voice-001.wav  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel)",
+ "oracle_cmd": "file -b voice-001.wav -> 'FLAC audio bitstream data' (ffmpeg -i -> 'Input #0, flac')",
+ "decoy": false,
+ "member": "voice-001.wav"
+}

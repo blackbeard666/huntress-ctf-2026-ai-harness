@@ -1,0 +1,9 @@
+{
+ "family": "language_of",
+ "expected_language": "fsharp",
+ "expected_toolchain": "dotnet",
+ "expected_source_language": "fsharp",
+ "decoy": false,
+ "generator_cmd": "bash langof_gen.sh   # dotnet new console -lang F# && dotnet build -c Release (fs.dll)",
+ "oracle_cmd": "bash langof_oracle.sh langof_fsharp_dll.bin   # file: Mono/.Net assembly; dnfile AssemblyRef = [FSharp.Core, System.Runtime, netstandard] -> F#"
+}

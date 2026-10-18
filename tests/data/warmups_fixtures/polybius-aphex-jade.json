@@ -1,0 +1,9 @@
+{
+ "codec": "polybius(aphex)",
+ "plain": "Solved. Answer to Game Master: jade-falcon-31",
+ "encoded": "21 14 22 35 22 32 23 22 22 21 22 15 13 34 13 11 15 12 22 34 23 14 23 23 22 21 23 13 13 11 23 15 22 35 13 11 15 23 22 12 22 33 22 21 13 11 15 33 22 12 23 14 23 15 22 21 23 13 14 25 13 11 22 25 22 12 22 15 22 21 13 33 22 22 22 12 22 32 22 14 22 35 22 34 13 33 14 14 14 12",
+ "generator_cmd": "perl -e '@g = split //, \"abcdefghiklmnopqrstuvwxyz\"; %p = map { $g[$_] => (int($_/5)+1).($_%5+1) } 0..24; $p{j} = $p{i}; print join \" \", map { $p{chr(97 + hex)} } split //, unpack(\"H*\", $ARGV[0])' \"$plain\"  # perl unpack H* = UTF-8 hex digits, chr(97 + nibble) = a-p",
+ "oracle_cmd": "printf %s \"$encoded\" | awk '{g=\"abcdefghiklmnopqrstuvwxyz\"; for(i=1;i<=NF;i++){r=substr($i,1,1);c=substr($i,2,1); printf \"%s\", substr(g,(r-1)*5+c,1)}}' | tr 'a-p' '0-9a-f' | xxd -r -p | iconv -f utf-8 -t utf-8  # coreutils tr (a-p -> hex digits) + vim xxd reverse  (plain chosen with no nibble 8/9, so the I/J merge is not exercised by the oracle)",
+ "oracle_plain": "Solved. Answer to Game Master: jade-falcon-31",
+ "expected": "match"
+}

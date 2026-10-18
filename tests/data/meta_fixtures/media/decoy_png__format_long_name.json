@@ -1,0 +1,8 @@
+{
+ "field": "media.format_long_name",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"from PIL import Image; Image.new('RGB',(5,3)).save('png_renamed.flac','PNG')\" (Pillow, PNG renamed .flac)",
+ "oracle_cmd": "file -b png_renamed.flac -> 'PNG image data, 5 x 3' (not audio)",
+ "decoy": true,
+ "member": "png_renamed.flac"
+}

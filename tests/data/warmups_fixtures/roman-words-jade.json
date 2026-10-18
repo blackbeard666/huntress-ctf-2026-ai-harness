@@ -1,0 +1,9 @@
+{
+ "codec": "roman",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-88",
+ "encoded": "LXXVIII CV XCIX CI / CXIX CXI CXIV CVII / C CI XCIX CXI C CV CX CIII / CXVI CIV CV CXV / CXIX XCVII CXIV CIX CXVII CXII XXXIII / LXXXIV CXI / CXV CXI CVIII CXVIII CI XLIV / CXV CXVII XCVIII CIX CV CXVI / CXVI CIV CV CXV / CI CXX XCVII XCIX CXVI / XCVII CX CXV CXIX CI CXIV / CXVI CXI / CXVI CIV CI / LXXI XCVII CIX CI / LXXVII XCVII CXV CXVI CI CXIV LVIII / CVI XCVII C CI XLV CXI CXVI CXVI CI CXIV XLV LVI LVI",
+ "generator_cmd": "python3 -I -c \"import sys;sys.path.insert(0,'tools/pyroman');import roman;print(' / '.join(' '.join(roman.toRoman(ord(c)) for c in w) for w in sys.argv[1].split(' ')))\" \"$plain\"  # PyPI roman==5.2 toRoman per char, words joined by ' / '",
+ "oracle_cmd": "printf %s \"$encoded\" | /usr/bin/python3 -I -c \"import sys,roman_numerals as r;print(' '.join(''.join(chr(int(r.RomanNumeral.from_string(x))) for x in w.split()) for w in sys.stdin.read().split(' / ')))\"  # Debian python3-roman-numerals 4.1.0 RomanNumeral.from_string per char, ' / ' -> space",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-88",
+ "expected": "match"
+}

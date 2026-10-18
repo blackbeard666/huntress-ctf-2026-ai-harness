@@ -1,0 +1,90 @@
+{
+  "case": "synth_revised",
+  "decoy": false,
+  "contract": "qrule_synth_revised.bin",
+  "baseline": "qrule_synth_morning.bin",
+  "expected_accepted": {
+    "d01_analysis_has_symtab": [
+      "true",
+      "false"
+    ],
+    "d13_analysis_hcfg_storage": [
+      "raw",
+      "base64",
+      "zlib",
+      "upx_packed"
+    ]
+  },
+  "expected_rules": {
+    "d13_analysis_hcfg_storage": [
+      [
+        "upx_packed",
+        "the HCFG appears only after UPX unpacking"
+      ],
+      [
+        "zlib",
+        "a zlib stream inflates to HCFG"
+      ],
+      [
+        "base64",
+        "a printable Base64 carrier decodes to HCFG"
+      ],
+      [
+        "raw",
+        "otherwise"
+      ]
+    ]
+  },
+  "expected_diff": {
+    "d01_analysis_elf_type": [
+      "question"
+    ],
+    "d13_analysis_hcfg_storage": [
+      "question",
+      "answer_format",
+      "normalization"
+    ],
+    "_added": [
+      "d99_new_field"
+    ]
+  },
+  "expected_pick": [
+    [
+      "d13_analysis_hcfg_storage",
+      {
+        "zlib": true,
+        "base64": true
+      },
+      "zlib"
+    ],
+    [
+      "d13_analysis_hcfg_storage",
+      {},
+      "raw"
+    ]
+  ],
+  "expected_enforce": [
+    [
+      "d13_analysis_hcfg_storage",
+      "BASE64",
+      "base64"
+    ],
+    [
+      "d13_analysis_hcfg_storage",
+      "upx_packed",
+      "upx_packed"
+    ],
+    [
+      "d13_analysis_hcfg_storage",
+      "lzma",
+      ""
+    ],
+    [
+      "d01_analysis_has_symtab",
+      "TRUE",
+      ""
+    ]
+  ],
+  "generator_cmd": "jq \"{attempt_id:\\\"synthetic\\\",mode:\\\"single_solve\\\",questions:[.questions[]|select(.id==\\\"d01_analysis_has_symtab\\\" or .id==\\\"d13_analysis_hcfg_storage\\\" or .id==\\\"d01_analysis_elf_type\\\")|if .id==\\\"d13_analysis_hcfg_storage\\\" then .question=\\\"In evidence.zip, use d13 members. Use the following rules in order: \\`upx_packed\\` if the HCFG appears only after UPX unpacking; zlib if a zlib stream inflates to HCFG; base64 if a printable Base64 carrier decodes to HCFG, otherwise raw. Answer with one listed token.\\\" | .answer_format={kind:\\\"enum\\\",accepted_values:[\\\"raw\\\",\\\"base64\\\",\\\"zlib\\\",\\\"upx_packed\\\"],syntax:\\\"exact token\\\"} | .normalization=\\\"case_insensitive\\\" elif .id==\\\"d01_analysis_elf_type\\\" then .question=\\\"Follow the house rules: report the ELF e_type exactly as readelf prints it.\\\" else . end], extra_new:1} | .questions += [{id:\\\"d99_new_field\\\",question:\\\"new\\\",answer_format:{kind:\\\"exact_text\\\"},normalization:\\\"exact\\\"}]\" qrule_d17_revised.bin > qrule_synth_revised.bin",
+  "oracle_cmd": "jq -c \"[.questions[]|select(.answer_format.accepted_values)|{key:.id,value:.answer_format.accepted_values}]|from_entries\" <bin>; jq -n -c --slurpfile a OLD --slurpfile b NEW \"(\\$a[0].questions|map({key:.id,value:.})|from_entries) as \\$A | [\\$b[0].questions[]|select(\\$A[.id] and . != \\$A[.id]) as \\$q|{key:.id,value:[\\\"question\\\",\\\"answer_format\\\",\\\"normalization\\\",\\\"artifact\\\"]|map(select(\\$q[.] != \\$A[\\$q.id][.]))}]|from_entries\"; jq -c --arg id ID \".questions[]|select(.id==\\$id).question|capture(\\\"rules in order: (?<b>.*?)\\\\\\\\. Submit\\\").b|[splits(\\\"; (?=(?:otherwise )?(?:base64|raw|raw_hcfg_section|wasm_data_segment|raw_const_array) )\\\")]|map(if startswith(\\\"otherwise \\\") then (capture(\\\"^otherwise (?<t>\\\\\\\\S+) (?<c>.*)$\\\")|[.t,\\\"otherwise \\\"+.c]) else (capture(\\\"^(?<t>\\\\\\\\S+) when (?<c>.*)$\\\")|[.t,.c]) end)\" qrule_d17_revised.bin jq -c \".questions[]|select(.id==\\\"d13_analysis_hcfg_storage\\\").question|capture(\\\"following rules in order: (?<b>.*?)\\\\\\\\. Answer\\\").b|[splits(\\\"; |, (?=otherwise )\\\")]|map(if startswith(\\\"otherwise \\\") then (capture(\\\"^otherwise (?<t>\\\\\\\\S+)(?<c>.*)$\\\")|[.t,(\\\"otherwise\\\"+.c)]) else (capture(\\\"^\\`?(?<t>[^\\` ]+)\\`? if (?<c>.*)$\\\")|[.t,.c]) end)\" qrule_synth_revised.bin"
+}

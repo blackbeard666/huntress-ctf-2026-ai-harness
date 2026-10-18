@@ -1,4 +1,4 @@
-# script-analysis — technique log (days 1-16; updated after every day)
+# script-analysis — technique log (days 1-17; updated after every day)
 
 How this lane has looked so far (these are observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -8,9 +8,10 @@ How this lane has looked so far (these are observations, not guarantees):
   +JScript (d2, 87) -> +Batch (d3, 159) -> +VBScript (d4, 231) -> +Python (d5, 357) -> +Bash (d6, 399) -> +Node `.mjs` + Bash
   advanced (d7, 469) -> +PHP polyglot + WSF/HTA/PHP-webshell hosts (d8, 615) -> +Lua + SCT/OpenResty hosts (d9, 695) -> +WMI MOF
   (d10, 753) -> +TypeScript (d11, 811) -> +AutoIt (d12, 855) -> +AppleScript (d13, 913) -> +MSBuild `.proj` (d14, 971) -> +Perl
-  + perl_cgi host (d15, 1026) -> +Ruby `.rb` + ruby_rack host (d16, 1095; 123 members). Most days also add 2 Bash advanced
-  fixtures (not d12, d15). Since D8 the TITLE/PROMPT is a pun or narrative; the new language shows up only in the member list
-  (D16 "Same Same, But Different" = "obfuscation equivalence", and the new files were Ruby). Diff the contract ids against yesterday's.
+  + perl_cgi host (d15, 1026) -> +Ruby `.rb` + ruby_rack host (d16, 1095; 123 members) -> +AutoHotkey `.ahk` (d17, 1139; 127
+  members, no host file, no new Bash). Most days also add 2 Bash advanced fixtures (not d12, d15, d17). Since D8 the TITLE/PROMPT
+  is a pun or narrative; the new language shows up only in the member list (D16 "Same Same, But Different" -> Ruby; D17 "Fetch
+  Quest" / base `download-graph` -> AutoHotkey). Diff the contract ids against yesterday's.
 - From day 2 on, every fixture hides a **self-describing plan**: `v=N|steps=a,b|adapter=..|stage_count=..|campaign_id=..|<indicators>`.
   It sits behind a codec, usually named in a `Codec_<id>` / `CODEC_<id>` / `rem HUNTRESS-CODEC:` const of the form `rep|transform|key`.
   Most exact_text answers are plan values copied verbatim. From D8 there is also a **`v=3` plan**: it carries `role=` and `attack=`
@@ -21,15 +22,18 @@ How this lane has looked so far (these are observations, not guarantees):
   outbound-transfer, impact-plan, relay-handoff, schedule-descriptor). Answer-id = `<lang>-<role>-<field>`; the artifact path picks
   the file. Don't trust the file name over the plan `steps`.
 - Narrative prompts (D8 "doesn't match its siblings", D15 "a store that was never there", D16 "prove which ones are truly
-  equivalent, expose the variant that quietly changed the plot") have NEVER been asked as a question. Answer the contract ids only.
+  equivalent, expose the variant that quietly changed the plot", D17 "reconcile source fetch targets with the generated network
+  evidence ... the indicator on only one side") have NEVER been asked as a question. D17's "network evidence" was not even in
+  the zip. Answer the contract ids only; if a network file (pcap/HAR/log) ever ships, see Recognition cues.
 - Time Trial windows ~5-17 s. Mastery has `setN.` ids: 2 sets d2-d7 and d10-d14, **5 sets d8, d9, d15 (5130 ids) and d16 (5475
-  ids)**. The artifact was `evidence-0N.zip`, `delivery N: evidence.zip` (d6), or one `evidence-01.zip` holding every
+  ids), d17 (5695 ids)**. The artifact was `evidence-0N.zip`, `delivery N: evidence.zip` (d6), or one `evidence-01.zip` holding every
   `evidence-0N.zip` (d7-d9). Same-named deliveries: pair by sha256. Timed questions carry `[assigned-artifact-sha256:<hex>]`.
   From D15 the timed contracts are the untimed regular pool (`run_for_time:false`, `variant_fresh:true`, no deadline).
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants of the SAME day -- parse every value listed)
 Each miss cost one failed timed attempt + a ~45-90 s generalize cycle (D6: 4 cycles; D7: 1; D8-D14: 0; D15: TT localize + 1
-Mastery cycle; D16: 0 answer misses -- the Mastery failures were runner timeouts, no bytes reached a verdict).
+Mastery cycle; D16: 0 answer misses -- the Mastery failures were runner timeouts, no bytes reached a verdict; D17: no axis --
+TT c474d1d8 and Mastery 65cb0a01 CORRECT first try, 0 VARIANT AXIS lines, `novel_labels: {}`).
 - **GM label regime (batch `expansion`; D15 pool-keyed, D16 DATE-keyed)** -- SAME bytes, SAME question text, DIFFERENT label.
   Old regime (every D3-D14 case + the D15 single): the whole handoff is labelled, `echo(!var!)` => `delayed` unless a FOR/h-pool
   rule fires. Statement regime (D15 TT/Mastery `run_for_time:false`; **D16 single with NO run_for_time key**; D16 TT a719c002):
@@ -48,14 +52,14 @@ Mastery cycle; D16: 0 answer misses -- the Mastery failures were runner timeouts
 - **Codec spec arity** -- `rep|transform|key`, `rep|` (empty transform = identity; Bash advanced D7-D16), or transform folded
   into the rep with the key second (`xor_hex|cd`, D16 `xor_hex|ec`). Split on `|`, never index blindly (lib.codec `_spec`).
 - **Plan carrier tag (v=3, D8-D16)** -- `HUNTRESS_ANALYSIS_V1:<TAG>-<data>` + the same data in a descriptor literal. Tags `B64`,
-  `HEX`, `HB64` (hex of base64), `FRAG` (hex split by `.` every 24 chars); stayed fixed per file in every delivery D8-D16, only
+  `HEX`, `HB64` (hex of base64), `FRAG` (hex split by `.` every 24 chars); stayed fixed per file in every delivery D8-D17, only
   values re-rolled. Parse rule: ignore the tag name; peel by shape, recurse (max 3-4 layers); accept only `v=`. Tag =
   `obfuscation_profile` (B64 base64, HEX plain_hex, HB64 hex_base64, FRAG fragmented_hex). `lib.codec.find_codecs(src)` returns it.
 - **Plan carrier host syntax (v=3)** -- marker in whatever comment the host uses: `//` (PHP, JS, HTA, WSF, SCT, MOF, TS), `--`
-  (Lua, AppleScript), `;` (AutoIt), `<!-- -->` (MSBuild), `#` (Perl D15, Ruby D16). Descriptor forms: `$descriptor_<id>`,
+  (Lua, AppleScript), `;` (AutoIt, AutoHotkey), `<!-- -->` (MSBuild), `#` (Perl D15, Ruby D16). Descriptor forms: `$descriptor_<id>`,
   `var/local descriptor_<id>`, `Global Const $descriptor_<id>`, `property descriptor_<id> :`, `<HuntressDescriptor>` element
-  (MSBuild, no name), `my $descriptor_<id> = "..";` (Perl), **`DESCRIPTOR_<8HEX> = ".."` uppercase Ruby constant (D16)**. Parse rule:
-  regex `HUNTRESS_ANALYSIS_V\d+\s*:\s*(\w*)-?\s*([^\s"'<>\]]+)` over raw bytes, independent of comment syntax, case and extension.
+  (MSBuild, no name), `my $descriptor_<id> = "..";` (Perl), `DESCRIPTOR_<8HEX> = ".."` uppercase Ruby constant (D16),
+  **`descriptor_<8hex> := ".."` AutoHotkey v2 (D17)**. Never anchor on `=` / `:=` / `set` / `<-` -- parse rule: regex `HUNTRESS_ANALYSIS_V\d+\s*:\s*(\w*)-?\s*([^\s"'<>\]]+)` over raw bytes, independent of comment syntax, case and extension.
 - **Numeric literal radix** -- decimal `23,7`, hex `0x17`, or a joined string read with `parseInt(x, R)` / `int(x, R)`: READ THE
   RADIX FROM THE CODE (D6 JScript TT hex; Mastery dash-joined DECIMALS). Applies to keys too.
 - **Base64 alphabet** -- standard and urlsafe (`-` `_`) both occur; whitelist and pad (D6 Python TT).
@@ -67,7 +71,8 @@ Mastery cycle; D16: 0 answer misses -- the Mastery failures were runner timeouts
   execfile_node/fork_module/spawn_file; persistence systemd_descriptor/npm_lifecycle_descriptor) -- always plan-verbatim.
 - **Transport/runner, not variant** -- D7 TT saved `{"error":"rate_limited"}` as the zip; D8 TT start 503
   `training_rotation_invalid`; D16 Mastery (5 sets, 5475 ids, 3.2-3.7 MB status bodies at 5-8 s each) hit the 60 s local
-  `hb_timed` cap on all 5 attempts (`exec_error`, nothing submitted). None of these is a solver change; never harvest them as cases.
+  `hb_timed` cap on all 5 attempts (`exec_error`, nothing submitted); D17 Mastery (5 sets, 5695 ids) CORRECT in 12.7 s (start
+  4.1, download 0.7, solve 5.6, submit 2.3) -- the cap problem is fixed. None of these is a solver change; never harvest them as cases.
 
 ## Recognition cues -> first move
 | You see | First move |
@@ -81,7 +86,9 @@ Mastery cycle; D16: 0 answer misses -- the Mastery failures were runner timeouts
 | `.py` `*-recovered.py` with `MATERIAL_<id>`, `CODEC_<id>` | Decode from CODEC (or AST-whitelisted `decode_(load_(..))`). Plan v=2 carries syntax/obfuscation/carrier/windows_chain verbatim. |
 | `.sh` `readonly Material_<id>` + `readonly Codec_<id>` (+ `Feature_<id>()`) | Decode from the Codec const (multi-byte key = COMMA list). `Feature_` fixtures: role `advanced_syntax`, feature/primitive/campaign/stage_count/steps plan-verbatim, attack T1059.004. Never run bash. |
 | `.mjs` ESM `const Material_<id>`, async `load_/decode_/recover_/inspect_/plan_<id>` | Static decode (`lib.codec.find_codecs` + shape fallback). Don't run it. Plan fields verbatim; role from `steps`. |
-| `HUNTRESS_ANALYSIS_V1:<B64|HEX|HB64|FRAG>-..` in any comment + a descriptor literal (`.php .lua .js(HTA/WSF/SCT) .vbs(WSF) .mof .ts .au3 .applescript .proj .pl .rb`) | **Route by the marker before the extension.** Peel to `v=3|language=..|role=..|attack=..|adapter=..|host_profile=..|obfuscation_profile=..|stage_profile=..|next_language=..|stage_count=..|steps=..|campaign_id=..|url=..|file_path=..`. EVERY answer incl. role/attack is plan-verbatim. |
+| `HUNTRESS_ANALYSIS_V1:<B64|HEX|HB64|FRAG>-..` in any comment + a descriptor literal (`.php .lua .js(HTA/WSF/SCT) .vbs(WSF) .mof .ts .au3 .applescript .proj .pl .rb .ahk`) | **Route by the marker before the extension.** Peel to `v=3|language=..|role=..|attack=..|adapter=..|host_profile=..|obfuscation_profile=..|stage_profile=..|next_language=..|stage_count=..|steps=..|campaign_id=..|url=..|file_path=..`. EVERY answer incl. role/attack is plan-verbatim. |
+| Prompt about fetch targets vs "network evidence" / "only one side" (D17), but the zip holds only scripts | Flavour: answer the per-file ids. If a HAR/Zeek/proxy/DNS log ships: `r = lib.codec.reconcile({member: plan}, raw_bytes)` -> `reconcile_answer(r, kind, accepted_values, what=)` (indicator / `urls.observed_only` / unfetched member / counts; refang + canon via `canon_url`/`canon_host`, answers keep the ORIGINAL spelling). Raw pcap is NOT parsed by lib yet: `tshark -r f -T fields -e http.host -e http.request.uri -e dns.qry.name -e tls.handshake.extensions_server_name` (INSTALLED) and pass the lines in as text. Graph questions (chain / root / leaf / unique host / counts): `lib.codec.download_graph(plans)` + `download_graph_answer`. |
+| An id whose field suffix is a plan key never asked before (`-verdict`, `-language`, ...) | `lib.codec.plan_answer(answer_id, plan, q)` / `plan_key_for` (longest suffix, hyphen->underscore, aliases). Copy plan-verbatim. |
 | Timed contract `run_for_time:false`, or any contract started on/after 2026-10-16 | Batch `expansion` = statement-only table. Check the contract keys before trusting labels harvested from older cases. |
 | Real `.pyc` / PyInstaller / pyarmor (not seen yet) | `lib.pyc.recover_python(path)` (pyinstxtractor-ng + decompyle3, `dis` fallback). |
 | `Codec_` key like `ba` / `0a` / `ec` | A hex byte. Transforms are ENCODE-side names: `subtract_modulo_256` decodes by ADDING; `rolling_xor` = c ^ previous CIPHER byte, seeded with the key. |
@@ -110,22 +117,23 @@ operation_graph; campaign `<LANG>-<8hex>`, url `https://<lang>-<10hex>.example.i
 `/tmp/huntress-<lang>/.<16hex>.stage`) + sometimes one `host-<profile>-<lang>` file. D14 family had an underscore (`msbuild_xml`)
 and its prompt's ATT&CK (T1127.001) was NOT the answer (plan said T1059). D8-D14 all modes first try. D15: single 1026/1026 at
 T+17 s; TT and Mastery (5 sets) missed ~25 batch-expansion ids -> the label-regime axis; CORRECT ~5.5 min after start.
-**D16 Same Same, But Different (`obfuscation-equivalence`; +4 Ruby `.rb` polyglot + `host-ruby-rack-ruby.rb` + Bash advanced
-`ansi-c-quoting.sh`, `regex-conditional.sh`; 1095 ids, 123 members)**:
-- Prompt: "several obfuscation families scrambled the same logic ... prove which are truly equivalent, expose the variant that
-  quietly changed the plot". Flavour only: no equivalence/outlier question; every id was the usual per-file family.
-- Ruby fixture: `# HUNTRESS_ANALYSIS_V1:<TAG>-..` + `DESCRIPTOR_<8HEX> = ".."` (uppercase constant). Plan v=3 `language=ruby`;
-  host_profile `standalone` / `ruby_rack` (host = staged_chain/T1059/operation_graph). `steps` answers are `>`-joined
-  (ordered_tokens), e.g. `profile_host>decode_configuration>dispatch_language`; stage_count is the plan field (benign = 2).
-  next_language values seen: powershell, jscript, batch, vbscript. All plan-verbatim; the carried solver decoded them unchanged.
-- Bash advanced (plan-verbatim): `ansi_c_quoting|ansi_c_escape_string` (`$'node\nbash\tfixture'`), `regex_conditional|
-  bash_regex_match` (`[[ $v =~ ^node-[0-9]+$ ]]`); codecs `hex_compact|` and `xor_hex|ec`.
-- Single: worker decided "carried solver covers Ruby" at T+33 s; the bisecting submit then hit 5 `incorrect` probes on
-  batch-{uploader,launcher,impact,chain,relay}-expansion (`delayed` -> GM `percent`): the single has NO run_for_time key yet used
-  the statement regime. Duel worker switched the regime on `started_at >= 2026-10-16`; CORRECT at T+4 min 23 s.
-- TT a719c002 (`run_for_time:false`): CORRECT first try, 16.7 s (start 6.3, download 2.1, solve 1.4, submit 6.9).
-- Mastery (5 sets, 5475 ids): 5/5 attempts `exec_error` "local hb_timed timed out" (60 s runner cap) -- the start/download/
-  submit of a 5475-id bundle does not fit the cap; no answers reached the GM, so no variant axis could be observed.
+**D16 Same Same, But Different (`obfuscation-equivalence`; +4 Ruby `.rb` + `host-ruby-rack-ruby.rb` + Bash advanced
+`ansi-c-quoting.sh` / `regex-conditional.sh`; 1095 ids)**: equivalence prompt never asked. Ruby = `# HUNTRESS_ANALYSIS_V1:..` +
+`DESCRIPTOR_<8HEX> = ".."`, plan-verbatim, carried solver unchanged. Bash advanced `ansi_c_quoting|ansi_c_escape_string`,
+`regex_conditional|bash_regex_match`; codecs `hex_compact|`, `xor_hex|ec`. Single lost 5 probes (~1.5 min) on batch expansion:
+the single had NO run_for_time key yet used the statement regime -> switch on `started_at >= 2026-10-16`; CORRECT T+4 min 23 s.
+TT 16.7 s first try; Mastery (5475 ids) 5 x exec_error on the 60 s runner cap (not a solver issue).
+**D17 Fetch Quest (`download-graph`; +4 AutoHotkey `polyglot-auto_hotkey-{benign-utility,downloader,launcher,staged-chain}.ahk`,
+no host file, no new Bash; 1139 ids, 127 members)**: prompt "source says where it would fetch from, generated network evidence
+says where the requests went; reconcile into one download graph, find the indicator on only one side" -- flavour again: NO
+network file, no graph question; the 44 new ids were the usual v=3 family. AHK fixture: `; HUNTRESS_ANALYSIS_V1:<TAG>-..`,
+`#Requires AutoHotkey v2.0`, `descriptor_<8hex> := ".."`, `buildPlan_<id>() { global ..; return Map("descriptor", ..) }`.
+Plan: `language=auto_hotkey` (underscore, like `msbuild_xml`), campaign `AUTO_HOTKEY-<8hex>`, url host
+`auto_hotkey-<10hex>.example.invalid` (underscore kept), attack parent `T1059`/`T1105`/`none` (NOT .010); `verdict=` present
+but never asked. Role, steps and stage_profile are shuffled independently (benign_utility with `acquire_remote>dispatch_process`).
+Race harness submitted the carried solver: CORRECT T+13 s, 0 wrong; TT 10.5 s, Mastery (5695 ids) 12.7 s, first try, no
+worker reasoning. Night prebuild then added `lib.codec` reconcile/download_graph/refang/canon_url/plan_answer, AHK v1 +
+compiled-Ahk2Exe RCDATA carrier, VBA MS-OVBA source, Dockerfile/Makefile routes (see atlas).
 
 ## GM answer conventions learned
 - **Check `answer_format.kind` first.** `enum` lists values (scenario, role). `mitre_attack_id` takes `T####[.###]` or literal
@@ -136,11 +144,11 @@ T+17 s; TT and Mastery (5 sets) missed ~25 batch-expansion ids -> the label-regi
   extension, note_name, handoff_id, cron_path, schedule_path, service_name -- question reads "exact X indicator", X = plan key);
   batch `graph` (linear/single/diamond/fan_out/fallback_retry/cross_language/same_language); Python syntax/obfuscation/carrier/
   windows_chain; Bash feature/primitive (16 seen D7-D16); v=3 host_profile (standalone, wsf_jscript, wsf_mixed, hta_jscript,
-  php_webshell, sct_scriptlet, lua_openresty, perl_cgi, ruby_rack), obfuscation (base64/plain_hex/hex_base64/fragmented_hex),
+  php_webshell, sct_scriptlet, lua_openresty, perl_cgi, ruby_rack; D17 standalone only), obfuscation (base64/plain_hex/hex_base64/fragmented_hex),
   stage_profile (single_descriptor/two_stage_download_execute/three_stage_decode_write_launch/cross_language_handoff), next_language.
 - **v=3 role and attack too.** GM accepted the plan's PARENT ids `T1059` (launcher, staged_chain, every host) and `T1053`
-  (persistence_descriptor). **v=3 role does NOT follow `steps`** (D14 MSBuild, D16 Ruby downloader steps
-  `acquire_remote>dispatch_process`) -- copy role= and steps= independently.
+  (persistence_descriptor); AutoHotkey (D17) too, not `.010`. **v=3 role does NOT follow `steps`** (D14 MSBuild, D16 Ruby,
+  D17 AHK benign_utility with `acquire_remote>dispatch_process`) -- copy role=, steps=, stage_profile= independently.
 - **Role from `steps`** (v=1/v=2 only): decode_configuration,return_configuration = benign_utility; acquire_remote +
   dispatch_memory/pipe = stager; acquire_remote,write_file = downloader; decode_embedded,write_file = dropper; locate_local,
   dispatch_process = launcher; read_file/upload,transmit_remote = uploader; transform + recovery_note = impact;
@@ -173,9 +181,8 @@ T+17 s; TT and Mastery (5 sets) missed ~25 batch-expansion ids -> the label-regi
   `run_for_time is False`; the GM moved the single solve to the statement regime too. When a carried label table breaks on
   byte-identical constructs, assume the GM generator changed and re-check against EVERY contract key incl. `started_at`.
 - **Diffing bytes when the regime changed** (D15 Mastery, ~5 min): tabulate (construct, GM label) per contract key at once.
-- **Big Mastery bundles vs the local runner cap** (D16: 5475 ids, 5 x exec_error at 60 s). Status/contract bodies are 3-4 MB and
-  take 5-8 s each; a 5-set bundle needs start + download + solve + chunked submit (each <= 500 answers / 512 KiB). Report it to the
-  orchestrator as a budget problem; it is not a solver bug.
+- **Big Mastery bundles vs the runner cap** (D16: 5 x exec_error at 60 s on 3-4 MB status bodies; fixed by D17, 12.7 s). A budget
+  problem for the orchestrator, not a solver bug; submit chunks <= 500 answers / 512 KiB.
 - **Probing synonyms instead of deriving.** D3 lost ~1.5 h; apply the naming laws first; `hctf labels` seeds candidates.
 - **Per-set POST is all-or-nothing.** `--from-solver` bisects and prints the rejected id(s); probe uncertain label fields ONE
   per submit (wrong cap is per field).
@@ -186,15 +193,14 @@ T+17 s; TT and Mastery (5 sets) missed ~25 batch-expansion ids -> the label-regi
   `-<field>` suffix (`stage-count`/`stage-profile` before `stage`).
 - **GM error body saved as the artifact** (D7 TT): check size + sha256 against the start response first; tiny `{"error":..}` =
   transport failure (re-download, exit non-zero), never a regression case.
-- **Stale notes travel with copied solvers** (D8-D16 `solver/NOTES.md` is still the D7 copy; D15-D16 regime fixes live only in
+- **Stale notes travel with copied solvers** (D8-D17 `solver/NOTES.md` is still the D7 copy; D15-D16 regime fixes live only in
   solve.py comments). Date every VARIANT AXIS line by day + attempt id; diagnose EVERY failed attempt.
 - **Unknown codec rep name -> silent no-plan** (D7 TT, 15 ids): fall back to material-shape readings.
 - **cmd parsing**: `%item0%` is a variable, not `%0`+`item`; CRLF/LF mixes and `SeT` casing occur. **Bash Codec key** comma
   lists (`lib.scripts.codec_key()`). **stage_count != len(steps)**: read the plan field.
-- **Timed modes are a transport race** (D2 Mastery expired on downloads; D7 TT 13.5 s for 0.4 s of solving; D16 TT 16.7 s for
-  1.4 s). Fork per set and submit all sets in one call.
-- **Same-name deliveries**: pair Mastery files by sha256; if delivery 2 is missing, leave set 2 unanswered.
-- **Nested AES zips**: index the tree once; don't decrypt script leaves to sniff for PK (leaf-ext list still lacks `.lua .mof
-  .ts .au3 .applescript .proj .pl .rb` -- speed only).
+- **Timed modes are a transport race** (D7 TT 13.5 s for 0.4 s of solving): fork per set, submit all sets in one call; pair
+  same-named Mastery deliveries by sha256; index nested AES zips once, never decrypt script leaves to sniff for PK.
+- **Reading the narrative prompt as the task** (D8, D15, D16, D17): four prompts promised comparison/reconciliation questions
+  that never came. Diff `answer_ids` first; spend time only on ids the carried solver cannot answer.
 - **Never execute fixtures.** Decode from the Codec const / descriptor plus a restricted interpreter; accept a plan only if it
   parses as `k=v|..` with `steps` (or `feature`).

@@ -1,0 +1,10 @@
+{
+ "codec": "regional",
+ "plain": null,
+ "encoded": "Greetings from 🇯🇵 and 🇫🇷, see you in 🇧🇷 next summer!",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written decoy: English prose with three country-flag emoji (RI pairs) -- the letters are plain ASCII, not regional-indicator text",
+ "oracle_cmd": "python3 -I -c 'import sys,unicodedata as u;t=sys.argv[1];print(sum(u.name(c,\"\").startswith(\"REGIONAL\") for c in t), sum(c.isascii() and c.isalpha() for c in t))' \"$encoded\"  # 6 RI vs 37 ASCII letters: prose, not RI text",
+ "oracle_plain": null
+}

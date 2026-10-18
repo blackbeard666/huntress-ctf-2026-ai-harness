@@ -1,0 +1,10 @@
+{
+ "codec": "kenny*",
+ "plain": null,
+ "encoded": "Mmm, puff the map: fmp ppm pf mmmp fffp!",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written decoy line (m/p/f letters but runs not multiples of 3: not Kenny output)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -c \"import re,sys; t=sys.stdin.read(); print(re.sub(r\\\"[mpfMPF]{3}\\\", lambda m: (lambda n: chr(65+n) if m.group()[0].isupper() else chr(97+n))(int(m.group().lower().translate(str.maketrans(\\\"mpf\\\",\\\"012\\\")),3)), t), end=\\\"\\\")\"  # the regex reader turns stray triplets into junk: not the sentence",
+ "oracle_plain": null
+}

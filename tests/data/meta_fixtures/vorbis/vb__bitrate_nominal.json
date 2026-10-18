@@ -1,0 +1,8 @@
+{
+ "field": "vorbis.bitrate_nominal",
+ "expected": "40222",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -loglevel error -f lavfi -i sine=f=440:d=0.6:r=22050 -ac 1 -c:a libvorbis vb.ogg (ffmpeg 7.0.2 static)",
+ "oracle_cmd": "bin/exiftool -j -n vb.ogg -> NominalBitrate 40222",
+ "decoy": false,
+ "member": "vb.ogg"
+}

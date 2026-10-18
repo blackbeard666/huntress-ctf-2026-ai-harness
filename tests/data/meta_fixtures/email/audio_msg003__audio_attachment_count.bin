@@ -1,0 +1,23 @@
+From: Voicemail <vm@pbx.example.com>
+To: alice@example.org
+Subject: invoice-003 no audio
+Date: Fri, 16 Oct 2026 09:15:00 +0000
+Message-ID: <invoice-003@pbx.example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="===============5592403537240987044=="
+
+--===============5592403537240987044==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+You have a new voice message.
+
+--===============5592403537240987044==
+Content-Type: image/png
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="scan.png"
+MIME-Version: 1.0
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAA=
+
+--===============5592403537240987044==--

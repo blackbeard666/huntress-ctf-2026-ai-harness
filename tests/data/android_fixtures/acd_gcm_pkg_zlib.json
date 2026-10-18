@@ -1,0 +1,7 @@
+{
+ "entry": "nested_scan",
+ "expected": "ANS-5c18e9a2f04d7b63",
+ "_why": "encrypted asset dex/jar for DexClassLoader (rows 42, 44): cryptography AESGCM, key = sha256(manifest package from `aapt dump badging`), 12-byte nonce prefix + tag, over zlib(dex)",
+ "generator_cmd": "python3 tests/data/android_fixtures/acd_src/gen_acd.py gcm_pkg_zlib tests/data/android_fixtures/acd_gcm_pkg_zlib.apk com.huntress.mobile.d01.v073e9a824e9e  # javac+d2j-jar2dex inner/outer dex; cipher: cryptography AESGCM, key = sha256(manifest package from `aapt dump badging`), 12-byte nonce prefix + tag, over zlib(dex)",
+ "oracle_cmd": "unzip -p acd_gcm_pkg_zlib.apk assets/plugin.bin | python3 -c \"import sys,hashlib,zlib;from cryptography.hazmat.primitives.ciphers.aead import AESGCM;b=sys.stdin.buffer.read();sys.stdout.buffer.write(zlib.decompress(AESGCM(hashlib.sha256(b'com.huntress.mobile.d01.v073e9a824e9e').digest()).decrypt(b[:12],b[12:],None)))\" | strings | grep -oE 'ANS-[0-9a-f]{16}'  # package via: aapt dump badging acd_gcm_pkg_zlib.apk"
+}

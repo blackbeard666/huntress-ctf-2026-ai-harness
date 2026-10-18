@@ -1,0 +1,8 @@
+{
+ "entry": "digest_answer_scan",
+ "expected": null,
+ "_why": "near-miss: same ANS- + SHA-256 hex shape but the digest input is SecureRandom bytes; nothing app-visible goes in -> no candidate",
+ "generator_cmd": "python3 tests/data/android_fixtures/dga_src/gen_dga.py decoy_random tests/data/android_fixtures/dga_decoy_random.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/dga_src/oracle.sh tests/data/android_fixtures/dga_decoy_random.apk  # aapt2 reads the manifest package, d2j-dex2jar back to classes, RUN Proof.token(ctx) on the JVM -> token -> a random value per run (no static answer); cross-check: python3 hashlib/hmac one-liner on the same inputs",
+ "decoy": true
+}

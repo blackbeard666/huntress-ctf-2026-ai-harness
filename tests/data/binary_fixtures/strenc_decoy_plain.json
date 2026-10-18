@@ -1,0 +1,21 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "family": "string_decrypt",
+ "expected_facts": {
+  "algorithm": "none",
+  "campaign_ids": "none",
+  "count": "none",
+  "decoder_va": "none",
+  "domains": "none",
+  "mutexes": "none",
+  "strings": "none",
+  "urls": "none"
+ },
+ "decoy": true,
+ "generator_cmd": "bash strenc_gen.sh strenc_decoy_plain.bin plain \"-O2\" '01:cdn.orbit-relay.org' '01:Global\\BRNN-C0FFEE' '02:BRNN-0099-LOOT' 'stack:01:Local\\orbit_sync_mtx'   # perl encrypts per string (own 1-byte key), gcc compiles shared noinline dstr(ptr,len,key) + call per string",
+ "oracle_cmd": "bash strenc_oracle.sh strenc_decoy_plain.bin decoy   # program RUNS and prints its own decoded strings; objdump -d most-called non-PLT target + its xor/psubb/sub op; perl regex buckets",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64",
+ "note": "DECOY: cleartext strings through a shared noinline emit(ptr,len,k) (k=1/2) -- no decryption; field names SPECULATIVE (GM vocabulary not seen): lists comma-joined in call-site order; no HCFG blob (encoding none)"
+}

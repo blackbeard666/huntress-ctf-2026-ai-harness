@@ -1,0 +1,11 @@
+{
+ "kind": "jvm_facts",
+ "decoy": true,
+ "member": null,
+ "expected": {
+  "_all": "none"
+ },
+ "generator_cmd": "bash jvm_gen.sh   # javac (OpenJDK 21) + jar --create --manifest; decoy Mach-O header via python3 struct",
+ "oracle_cmd": "python3 jvm_oracle.py jvm_decoy_macho_fat.bin   # javap -v -p (OpenJDK 21) text + unzip -Z1 / unzip -p META-INF/MANIFEST.MF",
+ "note": "DECOY: 0xcafebabe Mach-O universal header (nfat_arch=2): javap rejects it -> every JVM field None/none"
+}

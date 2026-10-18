@@ -1,0 +1,7 @@
+{
+ "field": "media.bext_umid_hex",
+ "expected": "060a2b340101010501010d4313000000a1b2c3d4e5f60718293a4b5c6d7e8f90",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/media/gen_wav_deep.py <out> (stdlib wave + struct BWF/INFO/cue/iXML writer)",
+ "oracle_cmd": "exiftool -j -BWF_UMID -NumberOfSamples -XML:all -Description -Originator -OriginatorReference -TimeReference -Title bwf.bin  (BWF_UMID, lowercased per the _hex law)",
+ "decoy": false
+}

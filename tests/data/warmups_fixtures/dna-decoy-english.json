@@ -1,0 +1,10 @@
+{
+ "codec": "dna*",
+ "plain": null,
+ "encoded": "gattaca: a cat at a gate, tagged a tac",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written English line whose letters are mostly a/c/g/t",
+ "oracle_cmd": "printf %s \"$encoded\" | tr -d ' ,:' | grep -qx '[acgt]*' && echo bases || echo not-bases  # -> not-bases: English words, not a base run",
+ "oracle_plain": "gattaca: a cat at a gate, tagged a tac"
+}

@@ -1,0 +1,7 @@
+{
+ "field": "media.riff_size_mismatch",
+ "expected": "false",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/media/gen_wav_deep.py <out> (stdlib wave + struct BWF/INFO/cue/iXML writer)",
+ "oracle_cmd": "python3 chunk module getsize() + 8 vs stat -c %s patched.bin (1104+8 == 1112)",
+ "decoy": false
+}

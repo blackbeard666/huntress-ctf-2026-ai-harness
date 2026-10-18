@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.equivalence_groups",
+ "expected": "none",
+ "generator_cmd": "python3 tests/data/meta_fixtures/synthesis/gen_media_equiv.py $T  (soundfile/libsndfile 1.2.2 WAV/FLAC/OGG-Vorbis/MP3 writer + mutagen ID3 TIT2 + stdlib zipfile) -> $T/noaudio.zip  (note.txt + readme.md, no audio member)",
+ "oracle_cmd": "unzip -l media_noaudio_decoy.bin; exiftool -j -FileType on each member (TXT/no audio) -> field absent",
+ "decoy": true
+}

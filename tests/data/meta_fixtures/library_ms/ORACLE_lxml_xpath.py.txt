@@ -1,0 +1,22 @@
+# Independent reader: lxml XPath on local-name(). usage: python -I THIS FILE FIELD -> GM-spelled value / none
+import json, sys
+from lxml import etree
+root = etree.parse(sys.argv[1]).getroot()
+f = sys.argv[2]
+ln = etree.QName(root).localname
+if ln not in ("libraryDescription", "searchConnectorDescription"):
+    print("none"); sys.exit()
+X = lambda p: [t.strip() for t in root.xpath(p) if t.strip()]
+q = {"location_urls": "//*[local-name()='simpleLocation']/*[local-name()='url']/text()",
+     "folder_type": "/*/*[local-name()='templateInfo']/*[local-name()='folderType']/text()",
+     "owner_sid": "/*/*[local-name()='ownerSID']/text()", "version": "/*/*[local-name()='version']/text()",
+     "is_library_pinned": "/*/*[local-name()='isLibraryPinned']/text()",
+     "is_search_only_item": "/*/*[local-name()='isSearchOnlyItem']/text()",
+     "description": "/*/*[local-name()='description']/text()"}[f]
+v = X(q)
+if not v:
+    print("none")
+elif f == "location_urls":
+    print(json.dumps(v, separators=(",", ":")))
+else:
+    print(v[0].lower() if f.startswith("is_") else v[0])

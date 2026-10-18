@@ -1,0 +1,10 @@
+{
+ "codec": "twosym base64-index (Mastery 14-group fragment)",
+ "decoder": "lib.warmups_codecs.twosym_index_dec (also twosym_dec)",
+ "plain": "answer: cl",
+ "encoded": "ABBAAA ABABBA BBBAAB BBAABB ABBBAB BBABBA ABABAB BBAABA AABBBA BAAABA AAAAAB BAAABB ABBABB AAABBA",
+ "generator_cmd": "printf %s \"$plain\" | {base32 -w0 | base64 -w0 | basenc --base64url -w0 | od -An -v -to1} | tr -d \"= \\n\" | awk -v al=\"b64\" -v w=6 -v sep=\" \" \"{for(i=1;i<=length(\\$0);i++){v=index(al,substr(\\$0,i,1))-1;b=\\\"\\\";for(j=0;j<w;j++){b=(v%2)b;v=int(v/2)};printf \\\"%s%s\\\",(i>1?sep:\\\"\\\"),b}}\" | tr 01 AB  # coreutils encoder -> awk alphabet index -> fixed-width binary -> symbols | first 14 groups (Mastery fragment)   [source plain: 'answer: clover-lynx-07']",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/twosym_index_cyberchef.mjs A B 6 b64  # CyberChef From Binary (Byte Length=6) -> alphabet index -> From Base32/From Base64/From Octal",
+ "oracle_plain": "answer: cl",
+ "expected": "match"
+}

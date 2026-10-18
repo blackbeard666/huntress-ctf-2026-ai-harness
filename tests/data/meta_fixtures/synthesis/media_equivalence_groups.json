@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.equivalence_groups",
+ "expected": "[[\"odd.wav\"],[\"rec-a-copy.wav\",\"rec-a.flac\",\"rec-a.wav\"],[\"rec-b.mp3\",\"rec-b.ogg\",\"rec-b.wav\"]]",
+ "generator_cmd": "python3 tests/data/meta_fixtures/synthesis/gen_media_equiv.py $T  (soundfile/libsndfile 1.2.2 WAV/FLAC/OGG-Vorbis/MP3 writer + mutagen ID3 TIT2 + stdlib zipfile) -> $T/equiv.zip",
+ "oracle_cmd": "python3 tests/data/meta_fixtures/synthesis/oracle_media_equiv.py $T/equiv.zip  (exiftool -j -Title + soundfile decode/info + networkx.connected_components + hashlib; key 'equivalence_groups')",
+ "decoy": false
+}

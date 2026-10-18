@@ -1,0 +1,7 @@
+{
+ "entry": "nested_scan",
+ "expected": "ANS-3f9a0c7e51d2b864",
+ "_why": "encrypted asset dex/jar for DexClassLoader (rows 42, 44): openssl enc -aes-128-cbc (key = outer dex const 'Hx7#qL2!vR9@tZ4$', IV prepended)",
+ "generator_cmd": "python3 tests/data/android_fixtures/acd_src/gen_acd.py aes_cbc_ivprefix tests/data/android_fixtures/acd_aes_cbc_ivprefix.apk  # javac+d2j-jar2dex inner/outer dex; cipher: openssl enc -aes-128-cbc (key = outer dex const 'Hx7#qL2!vR9@tZ4$', IV prepended)",
+ "oracle_cmd": "unzip -p acd_aes_cbc_ivprefix.apk assets/plugin.bin | tail -c +17 | openssl enc -d -aes-128-cbc -K $(printf 'Hx7#qL2!vR9@tZ4$' | xxd -p) -iv $(unzip -p acd_aes_cbc_ivprefix.apk assets/plugin.bin | head -c 16 | xxd -p) | strings | grep -oE 'ANS-[0-9a-f]{16}'"
+}

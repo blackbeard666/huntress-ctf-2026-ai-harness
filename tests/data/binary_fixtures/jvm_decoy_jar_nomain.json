@@ -1,0 +1,18 @@
+{
+ "kind": "jvm_facts",
+ "decoy": true,
+ "member": null,
+ "expected": {
+  "main_class": "none",
+  "class_count": "1",
+  "entry_count": "4",
+  "methods": "none",
+  "method_count": "none",
+  "access_flags": "none",
+  "major_version": "none",
+  "this_class": "none"
+ },
+ "generator_cmd": "bash jvm_gen.sh   # javac (OpenJDK 21) + jar --create --manifest; decoy Mach-O header via python3 struct",
+ "oracle_cmd": "python3 jvm_oracle.py jvm_decoy_jar_nomain.bin   # javap -v -p (OpenJDK 21) text + unzip -Z1 / unzip -p META-INF/MANIFEST.MF",
+ "note": "DECOY: library jar without Main-Class -> main_class 'none', class-level fields 'none'"
+}

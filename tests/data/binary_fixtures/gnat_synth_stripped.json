@@ -1,0 +1,27 @@
+{
+ "family": "gnat_facts",
+ "expected_facts": {
+  "gnat_version": "13.3.0",
+  "has_gnat_runtime": "true",
+  "ada_main_symbol": "_ada_cfg_main",
+  "ada_main": "cfg_main",
+  "binder_symbols": [],
+  "ada_subprograms": [],
+  "dwarf_language": "none",
+  "dwarf_producer": "none",
+  "ada_exceptions": [
+   "CFG_MAIN.BAD_CONFIG",
+   "CFG_UTIL.KEY_ERROR",
+   "CONSTRAINT_ERROR",
+   "PROGRAM_ERROR"
+  ],
+  "user_exceptions": [
+   "CFG_MAIN.BAD_CONFIG",
+   "CFG_UTIL.KEY_ERROR"
+  ]
+ },
+ "decoy": false,
+ "generator_cmd": "sh gnat_gen.sh   # gcc -O1 -fno-inline -no-pie ada.c dw.s (GNAT binder layout in C + hand-written DWARF4 CU), strip -s, gcc plain C, printf",
+ "oracle_cmd": "sh gnat_oracle.sh gnat_synth_stripped.bin   # file -b, strings -a, nm --defined-only, readelf --debug-dump=info, pyelftools Exception_Data walk",
+ "note": "strip -s of gnat_synth_ada2005: main from the binder's .rodata `_ada_cfg_main` string; exceptions from .data structs (readelf -x .data identical to the unstripped oracle run)"
+}

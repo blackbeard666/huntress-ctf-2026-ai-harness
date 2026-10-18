@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_audio_channels",
+ "expected": "2",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i sine=f=440:d=0.2:r=32000 -ac 2 -c:a aac ad.aac  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i ad.aac -> 'Audio: aac (LC), 32000 Hz, stereo, fltp'",
+ "decoy": false,
+ "member": "ad.aac"
+}

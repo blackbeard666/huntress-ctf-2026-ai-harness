@@ -1,0 +1,10 @@
+{
+ "codec": "crib-token-hex*",
+ "plain": null,
+ "encoded": "🐢🦖🐬🦁🐬🦉🐬🦋🐝🐙🦄🦄🐬🐞🦄🐝🐬🐌🐝🐙🐬🐢🐬🦋🐬🦉🐬🐞🐬🐢🐬🦁🐬🦖🐬🦄🐝🐙🦄🐢🐬🐸🐬🦁🦄🦉🐝🐙🦄🦄🐬🦊🦄🐝🐬🐳🦄🦋🦄🐙🐝🦊🐝🐙🦋🐢🐬🐞🐝🐙🦄🦉🐬🐞🐬🦀🦄🐬🐬🦋🐝🦀🐝🐙🦄🦉🦄🦋🐬🐝🐬🐳🐬🦁🦄🐢🐝🐙🦄🐢",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "head -c 400 <encoded of crib-token-hex-emoji-amber.json>  # first 100 emoji tokens only",
+ "oracle_cmd": "printf %s \"$encoded\" | LC_ALL=C.UTF-8 sed 'y/🐙🦊🐝🦉🐢🦋🐬🦄🐸🦁🐧🐌🦀🐳🦖🐞/0123456789abcdef/' | xxd -r -p  # GNU sed reverse y/// + xxd reverse  # -> 'Nice work decoding this warmup! To solve, submit t': no slug, field absent",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit t"
+}

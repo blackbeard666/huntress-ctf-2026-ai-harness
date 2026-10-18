@@ -1,0 +1,10 @@
+{
+ "codec": "dna*",
+ "plain": null,
+ "encoded": "ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCAGCG",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "first 88 nt of the EGFP CDS (GenBank U55762; 88 = a multiple of 4): a real gene read as 2-bit bytes",
+ "oracle_cmd": "for o in ACGT ACTG AGCT CAGT GATC TGCA; do printf '%s\\n' \"$encoded\" | tr $o 0123 | fold -w4 | while read q; do printf \"\\\\x$(printf %02x $((4#$q)))\"; done | iconv -f utf-8 -t utf-8 | grep -qP '^[\\x20-\\x7e]+$' && echo $o text || echo $o no; done  # bash base-4 + iconv: no base->bit order reads as printable text (checked all 24)",
+ "oracle_plain": null
+}

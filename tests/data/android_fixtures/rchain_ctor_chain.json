@@ -1,0 +1,7 @@
+{
+ "entry": "renamed_chain_scan",
+ "expected": "ANS-c4e2917a0d6b358f",
+ "_why": "no hint; onCreate -> x.y() -> ab.c() -> new d().e() -> hex(d.f), d.f set by iput-object in d.<init>; asset json + unreached zz.q hold decoy ANS values",
+ "generator_cmd": "python3 tests/data/android_fixtures/rchain_src/gen_rchain.py ctor_chain tests/data/android_fixtures/rchain_ctor_chain.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "jadx -q -d o tests/data/android_fixtures/rchain_ctor_chain.apk; grep -o 'f = \"[^\"]*\"' o/sources/com/huntress/mobile/d17/r8c/d.java | cut -d'\"' -f2 | xxd -r -p  # -> ANS-c4e2917a0d6b358f"
+}

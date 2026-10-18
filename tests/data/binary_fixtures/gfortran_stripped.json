@@ -1,0 +1,48 @@
+{
+ "family": "gfortran_facts",
+ "encoding": "raw",
+ "expected_offset": 12320,
+ "expected_config": {
+  "flag": "HCFG{fortran_module_data}",
+  "day": 18,
+  "lang": "fortran"
+ },
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "needed": [
+   "libgfortran.so.5",
+   "libc.so.6"
+  ],
+  "has_libgfortran_needed": "true",
+  "libgfortran_soname": "libgfortran.so.5",
+  "gfortran_imports": [
+   "_gfortran_set_args",
+   "_gfortran_set_options",
+   "_gfortran_st_write",
+   "_gfortran_st_write_done",
+   "_gfortran_transfer_integer_write"
+  ],
+  "has_main_program": "false",
+  "has_gfortran_runtime": "true",
+  "fortran_modules": [],
+  "module_procedures": [],
+  "module_procedures_mangled": [],
+  "module_variables": [],
+  "module_variables_mangled": [],
+  "common_blocks": [],
+  "common_blocks_mangled": [],
+  "external_procedures": [],
+  "dwarf_producer": "none",
+  "dwarf_language_code": "none",
+  "main_source": "none",
+  "program_name": "none",
+  "hcfg_symbol": "none",
+  "hcfg_entity": "none",
+  "hcfg_section": ".data"
+ },
+ "decoy": false,
+ "generator_cmd": "sh gfortran_gen.sh   # real GNU Fortran 15.2 (apt-get download gfortran-15-x86-64-linux-gnu libgfortran-15-dev libgfortran5; dpkg-deb -x tools/gfortran/root; gcc -B<f951 dir>), blob via python3 zlib.crc32, strip -s, gcc C decoy",
+ "oracle_cmd": "sh gfortran_oracle.sh gfortran_stripped.bin   # file -b, readelf -dW/-SW/-wi, nm -D --undefined-only, nm -S --defined-only, bytes.find(HCFG)+zlib.crc32",
+ "note": "strip -s of gfortran_module_data.bin: runtime cues only from DT_NEEDED + .dynsym _gfortran_ imports; no module/DWARF facts"
+}

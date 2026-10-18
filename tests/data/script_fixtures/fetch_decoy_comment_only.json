@@ -1,0 +1,8 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "expected_fetch_sites": [],
+ "note": "URLs only in a comment, an xmlns-style string and a help string printed to console: no fetch call site",
+ "generator_cmd": "cat > fetch_decoy_comment_only.js (hand-written benign utility, no network calls)",
+ "oracle_cmd": "node -e \"global.fetch=(u,o)=>console.log('FETCH',(o||{}).method||'GET',u); require(require('path').resolve(process.argv[1]))\" fetch_decoy_comment_only.js | grep -c '^FETCH'   # -> 0"
+}

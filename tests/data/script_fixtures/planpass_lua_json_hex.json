@@ -1,0 +1,16 @@
+{
+ "expected_plain": "{\"v\":3,\"language\":\"lua\",\"role\":\"benign_utility\",\"verdict\":\"benign\",\"attack\":\"none\",\"adapter\":\"local_parser\",\"stage_count\":2,\"steps\":[\"decode_configuration\",\"return_configuration\"],\"campaign_id\":\"LUA-0b9d33f1\",\"file_path\":\"/tmp/huntress-lua/.0b9d33f1.stage\"}",
+ "decoy": false,
+ "plan_answers": {
+  "set1.lua-benign-utility-verdict": "benign",
+  "set1.lua-benign-utility-language": "lua",
+  "set1.lua-benign-utility-steps": "decode_configuration>return_configuration",
+  "set1.lua-benign-utility-stage-count": "2",
+  "set1.lua-benign-utility-campaign": "LUA-0b9d33f1",
+  "set1.lua-benign-utility-next-language": null,
+  "set1.lua-benign-utility-upload-url": null
+ },
+ "plan_answers_note": "JSON plan: list steps '>'-joined, integer stage_count; absent multi-word keys stay None (never the shorter key)",
+ "generator_cmd": "printf %s '<json plan>' | xxd -p | tr -d '\\n'  -> literal written as DESCRIPTOR_0B9D33F1 into planpass_lua_json_hex.lua",
+ "oracle_cmd": "sed -n 's/^local DESCRIPTOR_0B9D33F1 = \"\\(.*\\)\"$/\\1/p' tests/data/script_fixtures/planpass_lua_json_hex.lua | xxd -r -p | jq -c ."
+}

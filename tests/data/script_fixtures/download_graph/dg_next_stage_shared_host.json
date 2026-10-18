@@ -1,0 +1,19 @@
+{
+ "entry": "download_graph",
+ "plans": {
+  "a-dropper.vbs": "v=3|role=dropper|url=https://php-25be44a3ee.example.invalid/stage|file_path=C:\\Users\\Public\\HuntressLab\\stage-710d3b4767.dat|steps=acquire_remote,write_file|next_stage=b-runner.ps1",
+  "b-runner.ps1": "v=3|role=launcher|url=https://php-25be44a3ee.example.invalid/second.dat|steps=acquire_remote,write_file|file_path=C:\\Users\\Public\\HuntressLab\\stage-31c915e145.dat|next_stage=c-final.py",
+  "c-final.py": "v=3|role=stager|url=https://jscript-5a93ad0131.example.invalid/stage|steps=acquire_remote,dispatch_process"
+ },
+ "expected": {
+  "member_chain": "a-dropper.vbs>b-runner.ps1>c-final.py",
+  "root": "a-dropper.vbs",
+  "leaf": "c-final.py",
+  "unique_host": "c-final.py",
+  "hosts": 2,
+  "stages": 2
+ },
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/download_graph/dg_gen.py  (D17 single GM-verified url/file-path -> plans; 3 members linked by next_stage member names, two share a D17 url host)",
+ "oracle_cmd": "awk self/next_stage pairs | tsort -> a-dropper.vbs>b-runner.ps1>c-final.py; awk host tally (count==1) -> c-final.py"
+}

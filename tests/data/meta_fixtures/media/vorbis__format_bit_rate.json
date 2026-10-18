@@ -1,0 +1,8 @@
+{
+ "field": "media.format_bit_rate",
+ "expected": "56080",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i sine=f=440:d=0.6:r=22050 -ac 1 -c:a libvorbis vb.ogg (ffmpeg 7.0.2 static)",
+ "oracle_cmd": "mediainfo --Output=JSON vb.ogg -> General OverallBitRate 56080 (ffmpeg -i: 56 kb/s)",
+ "decoy": false,
+ "member": "vb.ogg"
+}

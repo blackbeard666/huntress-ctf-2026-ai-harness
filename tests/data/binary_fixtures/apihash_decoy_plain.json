@@ -1,0 +1,15 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "algorithm": "none",
+  "seed": "none",
+  "resolved_apis": "none",
+  "hashes": "none"
+ },
+ "decoy": true,
+ "generator_cmd": "gcc -O2 plain.c (printf(\"%s\\n\", getenv(\"HOME\")) imported by name) && strip",
+ "oracle_cmd": "bash apihash_oracle.sh apihash_decoy_plain.bin djb2  (empty; same for ror13/fnv1a/crc32)",
+ "note": "native ELF importing by name -> no API hash: every field 'none'"
+}

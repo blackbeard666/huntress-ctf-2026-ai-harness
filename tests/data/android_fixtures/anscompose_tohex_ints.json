@@ -1,0 +1,7 @@
+{
+ "entry": "ans_compose_scan",
+ "expected": "ANS-e4a7130f6b92c5d1",
+ "_why": "Proof.token(): \"ANS-\" + Integer.toHexString(a) + Integer.toHexString(b); lowercase",
+ "generator_cmd": "python3 tests/data/android_fixtures/anscompose_src/gen_anscompose.py tohex_ints tests/data/android_fixtures/anscompose_tohex_ints.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/anscompose_src/oracle.sh tests/data/android_fixtures/anscompose_tohex_ints.apk  # d2j-dex2jar back to classes, RUN Proof.token() on the JVM -> token -> ANS-e4a7130f6b92c5d1"
+}

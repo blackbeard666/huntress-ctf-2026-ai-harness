@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-E61C0B937F2D48A5",
+ "generator_cmd": "tests/data/android_fixtures/gen_transposition.sh <outdir> -- perl columnar width 5, column order 2,0,4,1,3 (codec columnar) encoder (data[j] = answer[o[j]]), jq -cn '{codec,data}' (no index list) then (cd d && zip -qX -r <name>.apk assets)",
+ "oracle_cmd": "unzip -p tp_columnar_keyed5.apk assets/huntress_puzzle.json | jq -r .data | python3 -I -c \"import sys; d=sys.stdin.read().strip(); n=len(d); k=[2,0,4,1,3]; o=[r*5+c for c in k for r in range(4) if r*5+c<n]; r=[''] * n; [r.__setitem__(x, d[j]) for j,x in enumerate(o)]; print(''.join(r))\""
+}

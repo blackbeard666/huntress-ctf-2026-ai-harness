@@ -1,0 +1,7 @@
+{
+ "entry": "resource_id_scan",
+ "expected": "ANS-5b08e3f1a7c2d496",
+ "_why": "proof() does `const/high16 v1, 0x7f010000` (baksmali: 32513) + getStringArray()[0]; item #0 is a reference to @string/part_a (0x7f0c0005)",
+ "generator_cmd": "bash tests/data/android_fixtures/gen_resid.sh tests/data/android_fixtures  # apktool b (smali + aapt2), ids pinned by res/values/public.xml",
+ "oracle_cmd": "unzip -p resid_array_ref.apk classes.dex > c.dex; tools/dex2jar/d2j-baksmali.sh c.dex -o s; grep -rh -A1 'const' s/com/huntress/resid/ChallengeActivity.smali | grep 32513; aapt dump --values resources resid_array_ref.apk | grep -A3 'array/parts: <bag>' | grep '#0'  # (reference) 0x7f0c0005; aapt dump --values resources resid_array_ref.apk | grep -A1 'resource 0x7f0c0005 ' | grep -oE 'ANS-[0-9a-f]{16}'"
+}

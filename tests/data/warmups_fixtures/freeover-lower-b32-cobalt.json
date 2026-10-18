@@ -1,0 +1,9 @@
+{
+ "codec": "stack:swapcase(base32) = lowercase base32",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-finch-77",
+ "encoded": "jzuwgzjao5xxe2zamrswg33enfxgoidunbuxgidxmfzg25lqeeqfi3zaonxwy5tffqqhg5lcnvuxiidunbuxgidfpbqwg5bamfxhg53foiqhi3zaorugkichmfwwkicnmfzxizlshiqgg33cmfwhillgnfxgg2bng43q====",
+ "generator_cmd": "printf %s \"$plain\" | base32 -w0 | tr 'A-Z' 'a-z'  # coreutils base32 + tr lowercase",
+ "oracle_cmd": "python3 -I -c \"import sys,base64;print(base64.b32decode(sys.argv[1],casefold=True).decode())\" \"$encoded\"  # stdlib b32decode casefold=True",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-finch-77",
+ "expected": "match"
+}

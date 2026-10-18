@@ -1,0 +1,9 @@
+{
+ "codec": "glyph-mahjong-w2-ascii",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-badger-05",
+ "encoded": "🀁🀢 🀂🀑 🀂🀋 🀂🀍 🀀🀠 🀂🀟 🀂🀗 🀂🀚 🀂🀓 🀀🀠 🀂🀌 🀂🀍 🀂🀋 🀂🀗 🀂🀌 🀂🀑 🀂🀖 🀂🀏 🀀🀠 🀂🀜 🀂🀐 🀂🀑 🀂🀛 🀀🀠 🀂🀟 🀂🀉 🀂🀚 🀂🀕 🀂🀝 🀂🀘 🀀🀡 🀀🀠 🀁🀨 🀂🀗 🀀🀠 🀂🀛 🀂🀗 🀂🀔 🀂🀞 🀂🀍 🀁🀀 🀀🀠 🀂🀛 🀂🀝 🀂🀊 🀂🀕 🀂🀑 🀂🀜 🀀🀠 🀂🀜 🀂🀐 🀂🀑 🀂🀛 🀀🀠 🀂🀍 🀂🀠 🀂🀉 🀂🀋 🀂🀜 🀀🀠 🀂🀉 🀂🀖 🀂🀛 🀂🀟 🀂🀍 🀂🀚 🀀🀠 🀂🀜 🀂🀗 🀀🀠 🀂🀜 🀂🀐 🀂🀍 🀀🀠 🀁🀛 🀂🀉 🀂🀕 🀂🀍 🀀🀠 🀁🀡 🀂🀉 🀂🀛 🀂🀜 🀂🀍 🀂🀚 🀁🀎 🀀🀠 🀂🀒 🀂🀉 🀂🀌 🀂🀍 🀁🀁 🀂🀊 🀂🀉 🀂🀌 🀂🀏 🀂🀍 🀂🀚 🀁🀁 🀁🀄 🀁🀉",
+ "generator_cmd": "printf %s \"$plain\" | od -An -tu1 -v | tr -s ' \\n' '\\n' | grep . | sed 's/^/obase=44; /' | bc | python3 -I -c \"import sys;print(' '.join(''.join(chr(0x1F000+int(x)) for x in l.split()).rjust(2,chr(0x1F000)) for l in sys.stdin.read().splitlines()),end='')\"  # coreutils od + bc obase=44 (each base-44 digit printed as decimal), digit d -> chr(U+1F000 + d): Mahjong U+1F000-1F02B = 0-43",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -CS -e 'local $/; my ($r,$w,$in,$cp)=@ARGV; my $t=<STDIN>; $t=~s/[\\s,;|:\\/_.-]+//g; my @v; for my $g ($t=~/(.{$w})/g) { my $v=0; for (split //, $g) { my $d=ord($_)-hex($cp); die \"glyph outside run\\n\" if $d<0 || $d>=$r; $v=$v*$r+$d } push @v,$v } my $b = $in eq \"hex\" ? pack(\"H*\", join(\"\", map { sprintf \"%x\", $_ } @v)) : pack(\"C*\", @v); binmode STDOUT; print $b' 44 2 ascii 1F000  # independent Perl reader: ord(glyph) - U+1F000 as base-44 digits",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-badger-05",
+ "expected": "match"
+}

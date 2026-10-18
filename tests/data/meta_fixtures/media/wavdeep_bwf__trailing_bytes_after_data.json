@@ -1,0 +1,7 @@
+{
+ "field": "media.trailing_bytes_after_data",
+ "expected": "67",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/media/gen_wav_deep.py <out> (stdlib wave + struct BWF/INFO/cue/iXML writer)",
+ "oracle_cmd": "tail -c +$((RIFFSIZE+9)) bwf.bin | wc -c ; ... | head -c 16 | xxd -p   (bwf RIFF size 2670 of 2745 bytes)",
+ "decoy": false
+}

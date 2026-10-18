@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_audio_nb_samples",
+ "expected": "55125",
+ "generator_cmd": "python3 -I -c \"import wave,math,struct; w=wave.open('pyw.wav','wb'); w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100); w.writeframes(b''.join(struct.pack('<hh',int(8000*math.sin(i/7)),0) for i in range(55125))); w.close()\" (stdlib wave writer)",
+ "oracle_cmd": "mediainfo --Output=JSON pyw.wav -> Audio SamplingCount 55125",
+ "decoy": false,
+ "member": "pyw.wav"
+}

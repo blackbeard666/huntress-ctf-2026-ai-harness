@@ -1,0 +1,56 @@
+{
+ "family": "ocaml_facts",
+ "encoding": "raw",
+ "expected_offset": 12512,
+ "expected_config": {
+  "flag": "HCFG{ocaml5_dot}",
+  "day": 18,
+  "ab": 1
+ },
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "has_ocaml_runtime": "true",
+  "has_caml_main": "true",
+  "ocaml_version": "5.2.0",
+  "symbol_separator": ".",
+  "ocaml_modules": [
+   "Cfg",
+   "Main",
+   "Stdlib__Bytes",
+   "Stdlib__Domain",
+   "Stdlib__Printf"
+  ],
+  "user_modules": [
+   "Cfg",
+   "Main"
+  ],
+  "stdlib_modules": [
+   "Stdlib__Bytes",
+   "Stdlib__Domain",
+   "Stdlib__Printf"
+  ],
+  "entry_symbols": [
+   "camlCfg.entry",
+   "camlMain.entry",
+   "camlStdlib__Bytes.entry",
+   "camlStdlib__Domain.entry",
+   "camlStdlib__Printf.entry"
+  ],
+  "has_dune_exe": "false",
+  "main_module": "Main",
+  "function_count": 5,
+  "hcfg_symbol": "camlCfg.4",
+  "hcfg_module": "Cfg",
+  "hcfg_section": ".data",
+  "hcfg_in_ocaml_block": "true",
+  "hcfg_block_header_offset": 12504,
+  "hcfg_block_wosize": 7,
+  "hcfg_block_tag": 252,
+  "hcfg_block_pad": 0
+ },
+ "decoy": false,
+ "generator_cmd": "bash ocaml_gen.sh   # gcc -O0 -no-pie C main + hand-written GNU as in ocamlopt layout (caml<M><sep>{entry,code_begin,data_begin,frametable,gc_roots}, `.quad <wosize<<10|3<<8|252>` header then label at payload, .space pad, pad byte); blob printf + gzip-trailer crc32; strip -s",
+ "oracle_cmd": "bash ocaml_oracle.sh ocaml_dot_52.bin   # file -b, nm --defined-only (+perl module regex), readelf -SW (vaddr->offset, section), od header word / pad byte / HCFG len, dd payload, grep -a version/runtime strings",
+ "note": "OCaml 5.1+ '.' separator symbols; blob len 55 = 7 mod 8 -> pad byte 0 (no zero fill)"
+}

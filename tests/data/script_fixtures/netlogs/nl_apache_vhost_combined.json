@@ -1,0 +1,15 @@
+{
+ "entry": "observed_fetches",
+ "file": "nl_apache_vhost_combined.log",
+ "expected": {
+  "values": [
+   "exfil.proxy-out.example",
+   "http://files.shop-victim.example/kit/drop.ps1",
+   "https://www.shop-victim.example/wp-content/uploads/x.php?c=id"
+  ]
+ },
+ "expected_images": {},
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/netlogs/netlog_gen.py  (printf Apache vhost_combined (%v:%p %h %l %u %t \"%r\" ...) + a combined proxy CONNECT line)",
+ "oracle_cmd": "gawk '{if($1 ~ /^[0-9.]+$/){split($7,a,\":\");print a[1];next} split($1,h,\":\");print (h[2]==\"443\"?\"https\":\"http\") \"://\" h[1] (h[2]==\"443\"||h[2]==\"80\"?\"\":\":\" h[2]) $8}' nl_apache_vhost_combined.log"
+}

@@ -1,0 +1,7 @@
+{
+ "field": "media.trailing_bytes_after_data",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"from PIL import Image; im=Image.new('RGB',(8,8),(200,10,10)); im.save('decoy.webp','WEBP'); im.save('decoy.png','PNG')\"",
+ "oracle_cmd": "file decoy.png -> PNG image data",
+ "decoy": true
+}

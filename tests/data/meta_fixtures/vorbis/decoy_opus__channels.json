@@ -1,0 +1,8 @@
+{
+ "field": "vorbis.channels",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -loglevel error -f lavfi -i sine=f=440:d=0.25:r=16000 -ac 1 -c:a libopus -b:a 24k op16.opus (ffmpeg 7.0.2 static) ; renamed op16.opus -> op16.ogg",
+ "oracle_cmd": "bin/exiftool -j -n op16.ogg -> OpusVersion 1 (Opus stream, no Vorbis identification header)",
+ "decoy": true,
+ "member": "op16.ogg"
+}

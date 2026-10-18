@@ -1,0 +1,6 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-a19c04e7b85d3f62",
+ "generator_cmd": "tests/data/android_fixtures/gen_zip_structure.sh <outdir> -- step 5: python3 zipfile WRITER, ZipInfo.extra = id 0x6873 + hex(reversed token) on assets/readme.txt",
+ "oracle_cmd": "zipinfo -v zipanom_extra_field.apk (subfield 0x6873 unknown, 40 bytes); python3 -I -c \"import zipfile,sys;x=zipfile.ZipFile(sys.argv[1]).getinfo('assets/readme.txt').extra;print(bytes.fromhex(x[4:].decode()).decode()[::-1])\" zipanom_extra_field.apk"
+}

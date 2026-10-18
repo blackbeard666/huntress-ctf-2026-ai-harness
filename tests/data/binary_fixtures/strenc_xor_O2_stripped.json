@@ -1,0 +1,21 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "family": "string_decrypt",
+ "expected_facts": {
+  "algorithm": "xor",
+  "campaign_ids": "BRNN-1188",
+  "count": 5,
+  "decoder_va": "0x12a0",
+  "domains": "mail.brnn-ops.com,cache.db",
+  "mutexes": "Global\\BRNN-AB12",
+  "strings": "Global\\BRNN-AB12,mail.brnn-ops.com,/tmp/.brnn/cache.db,BRNN-1188,https://mail.brnn-ops.com:8443/p",
+  "urls": "https://mail.brnn-ops.com:8443/p"
+ },
+ "decoy": false,
+ "generator_cmd": "bash strenc_gen.sh strenc_xor_O2_stripped.bin xor \"-O2 -s\" 'a5:Global\\BRNN-AB12' 'stack:3c:mail.brnn-ops.com' '17:/tmp/.brnn/cache.db' 'stack:c8:BRNN-1188' '99:https://mail.brnn-ops.com:8443/p'   # perl encrypts per string (own 1-byte key), gcc compiles shared noinline dstr(ptr,len,key) + call per string",
+ "oracle_cmd": "bash strenc_oracle.sh strenc_xor_O2_stripped.bin   # program RUNS and prints its own decoded strings; objdump -d most-called non-PLT target + its xor/psubb/sub op; perl regex buckets",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64",
+ "note": "-O2 stripped, high keys (0xa5/0xc8/0x99), stack strings interleaved; field names SPECULATIVE (GM vocabulary not seen): lists comma-joined in call-site order; no HCFG blob (encoding none)"
+}

@@ -1,0 +1,13 @@
+{
+ "case": "elf_rodata",
+ "expected_storage": "raw_const_array",
+ "expected_config": {
+  "campaign": "ST-3",
+  "domain": "node-3.storage.example.invalid",
+  "mutex": "Global\\HSTOR3"
+ },
+ "key": 111,
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/storage_gen.sh storage_elf_rodata.bin elf_rodata '{\"campaign\":\"ST-3\",\"domain\":\"node-3.storage.example.invalid\",\"mutex\":\"Global\\\\HSTOR3\"}' 111",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/storage_oracle.py storage_elf_rodata.bin"
+}

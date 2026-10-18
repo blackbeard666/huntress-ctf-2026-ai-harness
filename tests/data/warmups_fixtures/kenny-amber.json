@@ -1,0 +1,9 @@
+{
+ "codec": "kenny",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "Pppmffmmfmpp fppppfpffpmp mpmmppmmfppfmpmmffpppmfm fmpmfpmfffmm fppmmmpffppmfmfpfm! Fmpppf fmmppfpmffpmmpp, fmmfmfmmpppmmfffmp fmpmfpmfffmm mppfpfmmmmmffmp mmmpppfmmfppmpppff fmpppf fmpmfpmpp Mfmmmmppmmpp Ppmmmmfmmfmpmpppff: mmmppmmmpmpppff-mpfmmmpmfmmfppfppp-42",
+ "generator_cmd": "printf %s \"$plain\" | perl -CS -pe 's{([A-Za-z])}{my $c=$1; my $n=ord(lc $c)-97; my @s=qw(m p f); my $g=$s[int($n/9)].$s[int($n/3)%3].$s[$n%3]; $c=~/[A-Z]/ ? ucfirst $g : $g}ge'  # independent Perl Kennyspeak writer (m=0 p=1 f=2, A=Mmm, others kept)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -c \"import re,sys; t=sys.stdin.read(); print(re.sub(r\\\"[mpfMPF]{3}\\\", lambda m: (lambda n: chr(65+n) if m.group()[0].isupper() else chr(97+n))(int(m.group().lower().translate(str.maketrans(\\\"mpf\\\",\\\"012\\\")),3)), t), end=\\\"\\\")\"  # independent regex/int(.,3) reader",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

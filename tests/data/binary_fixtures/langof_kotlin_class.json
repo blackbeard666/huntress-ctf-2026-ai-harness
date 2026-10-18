@@ -1,0 +1,9 @@
+{
+ "family": "language_of",
+ "expected_language": "kotlin",
+ "expected_toolchain": "kotlinc",
+ "expected_source_language": "none",
+ "decoy": false,
+ "generator_cmd": "bash langof_gen.sh   # cp jvm_class_kotlin_meta.bin (javac-built class carrying a @kotlin.Metadata annotation, jvm_gen.sh; kotlinc not installed)",
+ "oracle_cmd": "bash langof_oracle.sh langof_kotlin_class.bin   # javap -v: 1 Lkotlin/Metadata; constant -> kotlin"
+}

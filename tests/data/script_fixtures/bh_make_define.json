@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=makefile|role=launcher|verdict=malicious|attack=T1059.004|adapter=define_shell|stage_count=2|steps=expand_var,spawn_shell|campaign_id=MAK-41d2e7aa|url=https://make-41d2e7aa.example.invalid/stage|file_path=/tmp/huntress-make/.41d2e7aa.stage",
+ "decoy": false,
+ "host": "make",
+ "generator_cmd": "printf %s \"$PLAN\" | xxd -p -c 32  (lines of a `define DESCRIPTOR_41D2E7AA .. endef`, decoded by `$(shell echo .. | xxd -r -p)`)",
+ "oracle_cmd": "make -s -f tests/data/script_fixtures/bh_make_define.mk --eval 'p:;@printf %s \"$(STAGE)\"' p  (GNU make evaluates the define + $(shell))"
+}

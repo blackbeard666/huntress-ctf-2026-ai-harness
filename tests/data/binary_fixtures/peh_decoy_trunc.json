@@ -1,0 +1,7 @@
+{
+ "note": "PE header cut 40 bytes into the optional header -> none",
+ "decoy": true,
+ "expected_pe_header_facts": "none",
+ "generator_cmd": "sh peh_gen.sh  (Go 1.x GOOS=windows go build; .NET copy of dnmeta_lib_net8.bin = dotnet build; decoys = python byte edits)",
+ "oracle_cmd": "sh peh_oracle.sh peh_decoy_trunc.bin  (pefile fields + objdump -h section names)"
+}

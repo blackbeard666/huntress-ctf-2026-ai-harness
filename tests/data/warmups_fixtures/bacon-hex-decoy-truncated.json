@@ -1,0 +1,10 @@
+{
+ "codec": "bacon-hex",
+ "plain": null,
+ "encoded": "aabba aaabb aabba abbbb aabba aaaba aabba aaaab aabba abbaa aabbb aabaa aaaba abbab aabba abbbb aabbb aabaa aabbb aabaa aabba aabab aabbb aaaba aaaba abbab aaabb aaaab aaabb",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p | tr -d \"\\n\" | sed \"s/./&\\n/g\" | while read c; do printf \"%05d\\n\" \"$(echo \"obase=2;ibase=16;$(echo $c | tr a-f A-F)\" | bc)\"; done | tr 01 ab | paste -sd\" \" | tr -d \"\\n\"  # plain=cobalt-otter-17, then the last group dropped (odd nibble count)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/twosym_cyberchef.mjs a b 5 hex  # CyberChef 'From Hex' of an odd digit count: no clean byte string",
+ "oracle_plain": "cobalt-otter-1\u0003"
+}

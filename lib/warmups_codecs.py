@@ -90,6 +90,11 @@ DAYS = [
     # D16 "Dot Com" ("Sixteen little symbols ... Dot dot dot"): Morse of the UTF-8 HEX digits, one space between symbols
     (16, "morse-hex", lambda s: " ".join(_MORSE[c.upper()] for c in _u(s).hex()),
      lambda t: _t(bytes.fromhex(morse_dec(t).replace(" ", ""))), False),
+    # D17 "Bacon Bits" ("Sixteen guests. Five little a's and b's apiece."): each UTF-8 HEX digit as a 5-symbol Bacon
+    # group (a=0, b=1, MSB first), single spaces between groups (byte-exact on the Single + 83/83 Mastery line 17)
+    (17, "bacon-hex", lambda s: " ".join(f"{int(c, 16):05b}".replace("0", "a").replace("1", "b") for c in _u(s).hex()),
+     lambda t: _t(bytes.fromhex("".join("%x" % int(g.replace("a", "0").replace("b", "1"), 2) for g in t.split()))),
+     False),
 ]
 
 try:   # fair runs (HCTF_CODEC_MAX_DAY=<N-1>, as lib/codec.py): only codecs GM-confirmed before day N
@@ -1743,6 +1748,186 @@ def b100_free(p):
     got = safe(b100_dec, p) if len(p.strip()) >= 2 else None
     return [p[:len(p) - len(p.lstrip())] + got] if got and got.strip() else []
 
+# CSS / HTML colour codes: the bytes in RGB triples, one colour token each -- '#4e6963' (CyberChef-style "hex colour"
+# strings, Pillow pixel dumps), the short '#RGB' (3 nibbles per token, the hex stream cut in threes), '#RRGGBBAA', or
+# 'rgb(78, 105, 99)' / 'rgba(...)' decimal triples; CSS colour NAMES read through their #RRGGBB. The last token is
+# padded with 00 (or 20) bytes / a 0 nibble; the decoder concatenates every token's hex digits in order and drops
+# <= 2 trailing pad bytes. Strict: the line holds only colour tokens and separators (whitespace , ; |).
+_CSSCOL_TOK = re.compile(r"#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![0-9a-zA-Z])"
+                      r"|rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*([\d.]+%?)\s*)?\)"
+                      r"|([a-zA-Z]{3,20})", re.I)
+
+
+def _css_names():
+    try:
+        from PIL import ImageColor
+        return ImageColor.colormap
+    except Exception:  # noqa: BLE001 - no Pillow: names unsupported
+        return {}
+
+
+def css_hex_enc(s, form="hex", sep=" ", pad=b"\0", upper=False):
+    b = _u(s)
+    if form == "hex3":
+        h = b.hex()
+        h += "0" * (-len(h) % 3)
+        out = ["#" + h[i:i + 3] for i in range(0, len(h), 3)]
+    else:
+        b += pad * (-len(b) % 3)
+        tri = [b[i:i + 3] for i in range(0, len(b), 3)]
+        out = [f"rgb({t[0]}, {t[1]}, {t[2]})" for t in tri] if form == "rgb" else ["#" + t.hex() for t in tri]
+    return sep.join(o.upper() if upper and o[0] == "#" else o for o in out)
+
+
+def css_hex_dec(t):
+    t = t.strip()
+    if not t or len(t) > 65536:
+        raise ValueError("not css colours")
+    names, pos, hx, n = None, 0, [], 0
+    for m in _CSSCOL_TOK.finditer(t):
+        if t[pos:m.start()].strip(" \t\r\n,;|"):
+            raise ValueError("stray text between colour tokens")
+        pos = m.end()
+        if m.group(1):
+            hx.append(m.group(1))
+        elif m.group(2):
+            rgb = [int(m.group(k)) for k in (2, 3, 4)]
+            if max(rgb) > 255:
+                raise ValueError("rgb component > 255")
+            hx.append(bytes(rgb).hex())
+        else:
+            names = _css_names() if names is None else names
+            v = names.get(m.group(6).lower())
+            if not v:
+                raise ValueError("not a colour name")
+            hx.append(v[1:])
+        n += 1
+    if t[pos:].strip(" \t\r\n,;|") or n < 2:
+        raise ValueError("not css colours")
+    h = "".join(hx)
+    if len(h) % 2:
+        if h[-1] != "0":
+            raise ValueError("odd nibble pad")
+        h = h[:-1]
+    b = bytes.fromhex(h)
+    k = len(b) - len(b.rstrip(b"\0"))
+    if k > 2:
+        raise ValueError("css NUL run")
+    b = b[:len(b) - k] if k else b[:len(b) - min(2, len(b) - len(b.rstrip(b" ")))]
+    return _t(b)
+
+
+def css_hex_free(p):
+    """Speculative free-line CSS colours: only a line of >= 2 colour tokens (not ALL bare names) -> printable text."""
+    if not re.search(r"#[0-9a-fA-F]{3}|rgba?\(", p):
+        return []
+    got = safe(css_hex_dec, p)
+    return [p[:len(p) - len(p.lstrip())] + got] if got and got.strip() and any(c.isalpha() for c in got) else []
+
+
+# I Ching (the "Sixty-Four" pun): each hexagram U+4DC0..U+4DFF = one base64 sextet. King Wen index (cp - 0x4DC0) into
+# the std / url alphabet; or the hexagram's own 6-line binary value (lines from its trigram pair: yang=1 or yin=1,
+# bottom line MSB or LSB) into the std alphabet. '=' / ☯ padding optional. Trigrams U+2630..U+2637 = octal digits
+# (cp - 0x2630 = Unicode's broken-line bits, top line LSB; or the complement): space-separated octal char codes, or a
+# run-together blob in 3-digit groups. Strict: every char in the block, the bytes printable UTF-8 text.
+_HEX0, _TRI0 = 0x4DC0, 0x2630
+# King Wen n -> (lower, upper) trigram as cp - 0x2630 (0 heaven 1 lake 2 fire 3 thunder 4 wind 5 water 6 mountain 7 earth)
+_KING_WEN = ((0, 0), (7, 7), (3, 5), (5, 6), (0, 5), (5, 0), (5, 7), (7, 5), (0, 4), (1, 0), (0, 7), (7, 0), (2, 0),
+             (0, 2), (6, 7), (7, 3), (3, 1), (4, 6), (1, 7), (7, 4), (3, 2), (2, 6), (7, 6), (3, 7), (3, 0), (0, 6),
+             (3, 6), (4, 1), (5, 5), (2, 2), (6, 1), (4, 3), (6, 0), (0, 3), (7, 2), (2, 7), (2, 4), (1, 2), (6, 5),
+             (5, 3), (1, 6), (3, 4), (0, 1), (4, 0), (7, 1), (4, 7), (5, 1), (4, 5), (2, 1), (4, 2), (3, 3), (6, 6),
+             (6, 4), (1, 3), (2, 3), (6, 2), (4, 4), (1, 1), (5, 4), (1, 5), (1, 4), (6, 3), (2, 5), (5, 2))
+_B64STD = string.ascii_uppercase + string.ascii_lowercase + string.digits + "+/"
+_B64URL = _B64STD[:62] + "-_"
+
+
+def _hexa_lines(n):
+    """King Wen index -> 6 yang(1)/yin(0) lines, bottom first."""
+    lo, up = _KING_WEN[n]
+    return [1 - (t >> b & 1) for t in (lo, up) for b in (2, 1, 0)]
+
+
+def _hexa_order(yang=1, bottom_msb=True):
+    """sextet value -> King Wen index, for one binary-value convention."""
+    inv = {}
+    for n in range(64):
+        bits = [x if yang else 1 - x for x in _hexa_lines(n)]
+        inv[int("".join(map(str, bits if bottom_msb else bits[::-1])), 2)] = n
+    return [inv[v] for v in range(64)]
+
+
+_HEXA_ORDERS = {"kingwen": list(range(64))}
+_HEXA_ORDERS.update({f"bin-{'yang' if y else 'yin'}-{'bot' if m else 'top'}": _hexa_order(y, m)
+                     for y in (1, 0) for m in (True, False)})
+
+
+def iching_enc(s, order="kingwen", alpha=_B64STD):
+    perm = _HEXA_ORDERS[order]
+    return "".join(chr(_HEX0 + perm[alpha.index(c)]) for c in base64.b64encode(_u(s)).decode().rstrip("="))
+
+
+def iching_dec(t, order="kingwen", alpha=_B64STD):
+    t = re.sub(r"\s+", "", t).rstrip("=☯")
+    if len(t) < 2 or len(t) > 32768 or len(t) % 4 == 1 or not all(_HEX0 <= ord(c) < _HEX0 + 64 for c in t):
+        raise ValueError("not hexagrams")
+    inv = {n: v for v, n in enumerate(_HEXA_ORDERS[order])}
+    b = "".join(alpha[inv[ord(c) - _HEX0]] for c in t)
+    out = _t(base64.b64decode(b + "=" * (-len(b) % 4), altchars=alpha[62:].encode(), validate=True))
+    if any(unicodedata.category(c) == "Cc" and c not in "\t\n\r" for c in out):
+        raise ValueError("hexagram bytes not text")
+    return out
+
+
+def iching_reads(t):
+    if not isinstance(t, str):
+        return []
+    out = []
+    for order in _HEXA_ORDERS:
+        for alpha in ((_B64STD, _B64URL) if order == "kingwen" else (_B64STD,)):
+            x = safe(lambda v: iching_dec(v, order, alpha), t)
+            if x and x.strip() and x not in [y for _k, y in out]:
+                out.append((order == "kingwen", x))
+    big = _tern_bigram()
+    return [x for _k, x in sorted(out, key=lambda q: (_texty(q[1]) >= 0.9, q[0], big(q[1])), reverse=True)]
+
+
+def iching_free(p):
+    """Speculative free-line I Ching: an all-hexagram line -> its printable base64 readings, most English first."""
+    lead = p[:len(p) - len(p.lstrip())] if isinstance(p, str) else ""
+    return [lead + x for x in iching_reads(p)[:3]]
+
+
+def trigram_enc(s, sep=" ", comp=False):
+    return sep.join("".join(chr(_TRI0 + (7 - int(d) if comp else int(d))) for d in f"{b:03o}") for b in _u(s))
+
+
+def trigram_dec(t, comp=False):
+    t = t.strip()
+    toks = [x for x in re.split(r"[\s,;|/_-]+", t) if x]
+    flat = "".join(toks)
+    if len(flat) < 3 or len(flat) > 40000 or not all(_TRI0 <= ord(c) <= _TRI0 + 7 for c in flat):
+        raise ValueError("not trigrams")
+    dig = lambda g: int("".join(str(7 - (ord(c) - _TRI0) if comp else ord(c) - _TRI0) for c in g), 8)
+    if len(toks) == 1:
+        if len(flat) % 3:
+            raise ValueError("trigram blob not 3-digit groups")
+        toks = [flat[i:i + 3] for i in range(0, len(flat), 3)]
+    vals = [dig(g) for g in toks]
+    if max(vals) > 255 or min(vals) < 9:
+        raise ValueError("trigram codes out of byte range")
+    out = bytes(vals).decode("utf-8")
+    if any(unicodedata.category(c) == "Cc" and c not in "\t\n\r" for c in out):
+        raise ValueError("trigram bytes not text")
+    return out
+
+
+def trigram_free(p):
+    """Speculative free-line trigrams-as-octal: both polarities, printable readings, most English first."""
+    out = [x for x in (safe(trigram_dec, p), safe(lambda v: trigram_dec(v, True), p)) if x and x.strip()]
+    big = _tern_bigram()
+    lead = p[:len(p) - len(p.lstrip())] if isinstance(p, str) else ""
+    return [lead + x for x in sorted(dict.fromkeys(out), key=lambda x: (_texty(x) >= 0.9, big(x)), reverse=True)]
+
 
 # Punycode (RFC 3492, punycode.js / Python "punycode" codec): basic code points kept in order, then '-' and the
 # lowercase base-36 deltas of the rest -- an ASCII line comes out as itself + '-'. IDNA (RFC 5891 ToASCII): each
@@ -1864,7 +2049,1472 @@ def bacon_dec(t, alpha=26, tr="AB", keep=False):
     return "".join(out)
 
 
-# uuencode / xxencode: lines of <length char><4 chars per 3 bytes>, 45 bytes a line, optional `begin NNN name` ... `end`
+# Generic two-symbol fixed-width group carrier (generalizes D17 bacon-hex): any 2 distinct non-space symbols (a/b,
+# A/B, 0/1, X/O, an emoji pair, a/A case pattern) as bits, groups of 4-8, both symbol->bit assignments. Values read as
+# UTF-8 hex nibbles (all < 16, even count), ASCII/UTF-8 bytes (width 7-8), else Bacon-26/24 letters (width 5).
+# Values as alphabet indexes ("Thirty-Two"/"Sixty-Four" a's and b's): width 5 -> base32 A-Z2-7, width 6 -> base64
+# (std, then url alphabet), width 3 -> octal digits (3 per byte). A cut Mastery fragment is re-aligned to a whole
+# quantum and the trailing partial quantum dropped. Morse (`.`/`-` only) is left to the Morse decoders.
+_TS_KIND = {"hex": 3, "ascii": 2, "b32": 2, "b64": 2, "octal": 2, "bacon": 1}
+_TS_B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+_TS_B64 = (string.ascii_uppercase + string.ascii_lowercase + string.digits + "+/",
+           string.ascii_uppercase + string.ascii_lowercase + string.digits + "-_")
+
+
+def twosym_enc(s, pair="ab", width=5, inner="hex", sep=" "):
+    if inner == "hex":
+        vals = [int(c, 16) for c in _u(s).hex()]
+    elif inner in ("b32", "b64", "b64url"):
+        txt = (base64.b32encode if inner == "b32" else base64.b64encode)(_u(s)).decode().rstrip("=")
+        vals = [(_TS_B32 if inner == "b32" else _TS_B64[inner == "b64url"]).index(c) for c in txt]
+    elif inner == "octal":
+        vals = [int(c, 8) for c in "".join("%03o" % b for b in _u(s))]
+    elif inner == "ascii":
+        vals = list(_u(s))
+    else:
+        alpha = "abcdefghijklmnopqrstuvwxyz" if inner == "bacon26" else _BACON24
+        vals = [alpha.index({"j": "i", "v": "u"}.get(c, c) if inner == "bacon24" else c)
+                for c in s.lower() if "a" <= c <= "z"]
+    return sep.join("".join(pair[int(b)] for b in f"{v:0{width}b}") for v in vals)
+
+
+def _ts_reads(t, kinds=None):
+    """[(key, text)] for every (polarity, width, value-range) reading of a strict two-symbol fragment."""
+    t = t.strip().strip("\"'").replace("️", "").replace("︎", "")
+    sy = [c for c in t if not c.isspace()]
+    syms = sorted(set(sy), key=sy.index)
+    if len(syms) != 2 or set(syms) == {".", "-"} or len(sy) < 16 or len(sy) > 20000:
+        return []
+    if set(syms) == {"0", "1"} or {s.lower() for s in syms} == {"a", "b"}:
+        syms.sort(key=lambda c: c.lower())   # natural polarity (0/a = 0) first
+    toks = t.split()
+    lens = {len(x) for x in toks}
+    if len(toks) > 1 and len(lens) == 1 and 3 <= min(lens) <= 8:
+        widths = [min(lens)]
+    else:
+        widths = [w for w in range(4, 9) if all(n % w == 0 for n in lens)]
+    try:
+        from lib.decode import _bigram
+    except Exception:  # noqa: BLE001
+        def _bigram(_s):
+            return 0.0
+    out = []
+    for z, o in (syms, syms[::-1]):
+        bits = "".join("1" if c == o else "0" for c in sy)
+        for w in widths:
+            vals = [int(bits[i:i + w], 2) for i in range(0, len(bits), w)]
+            reads = []
+            if max(vals) < 16 and len(vals) % 2 == 0:
+                try:
+                    reads.append(("hex", bytes.fromhex("".join("%x" % v for v in vals)).decode("utf-8")))
+                except ValueError:
+                    pass
+            if w >= 7:
+                try:
+                    reads.append(("ascii", bytes(vals).decode("utf-8")))
+                except ValueError:
+                    pass
+            reads += _ts_index_reads(w, vals)
+            if w == 5 and max(vals) < 26:
+                b26 = "".join(chr(97 + v) for v in vals)
+                b24 = "".join(_BACON24[v] for v in vals) if max(vals) < 24 else None
+                reads.append(("bacon", b24 if b24 and _bigram(b24) > _bigram(b26) else b26))
+            for kind, x in reads:
+                if kinds and kind not in kinds:
+                    continue
+                if x and not any(unicodedata.category(c) == "Cc" and c not in "\t\n\r" for c in x):
+                    out.append(((_texty(x) >= 0.9, _TS_KIND[kind], _bigram(x)), x))
+    return sorted(out, key=lambda r: r[0], reverse=True)
+
+
+def _ts_index_reads(w, vals):
+    """Group values as base32 (w=5) / base64 (w=6) alphabet indexes or octal digits (w=3) -> [(kind, utf-8 text)].
+    Alignment offsets (a fragment cut mid-quantum) are tried in order until one reads as text."""
+    def ok(x):
+        return x and _texty(x) >= 0.9 and not any(unicodedata.category(c) == "Cc" and c not in "\t\n\r" for c in x)
+
+    out = []
+    if w == 3:
+        for off in range(3):
+            v = vals[off:len(vals) - (len(vals) - off) % 3]
+            bs = [v[i] * 64 + v[i + 1] * 8 + v[i + 2] for i in range(0, len(v), 3)]
+            try:
+                x = bytes(bs).decode("utf-8") if bs and max(bs) < 256 else ""
+            except ValueError:
+                continue
+            if ok(x):
+                return [("octal", x)]
+        return out
+    if w not in (5, 6):
+        return out
+    q = 8 if w == 5 else 4                       # chars per whole quantum (5 / 3 bytes)
+    for off in range(q):
+        for al in ([_TS_B32] if w == 5 else _TS_B64):
+            txt = "".join(al[v] for v in vals[off:])
+            cut = (0, 1, 0, 1, 0, 0, 1, 0)[len(txt) % 8] if w == 5 else (len(txt) % 4 == 1)   # invalid tail chars
+            body = txt[:len(txt) - cut]
+            try:
+                if w == 5:
+                    raw = base64.b32decode(body + "=" * (-len(body) % 8))
+                else:
+                    raw = base64.b64decode(body + "=" * (-len(body) % 4), altchars=al[62:].encode(), validate=True)
+                x = raw.decode("utf-8")
+            except ValueError:
+                continue
+            if ok(x) and ("b32" if w == 5 else "b64", x) not in out:
+                out.append(("b32" if w == 5 else "b64", x))
+        if out:
+            break
+    return out
+
+
+def twosym_free(p, k=3):
+    seen = []
+    for (ok, _k, _b), x in _ts_reads(p):
+        if ok and x not in seen:
+            seen.append(x)
+    return seen[:k]
+
+
+def twosym_dec(t):
+    r = twosym_free(t, 1)
+    return r[0] if r else None
+
+
+def twosym_index_dec(t):
+    """Only the alphabet-index readings (base32 w5 / base64 w6 / octal w3) of a two-symbol fragment, else None."""
+    try:
+        r = [x for (ok, _k, _b), x in _ts_reads(t, ("b32", "b64", "octal")) if ok]
+    except Exception:  # noqa: BLE001
+        return None
+    return r[0] if r else None
+
+
+# Kenny code (South Park "Kennyspeak") and other fixed-width THREE-symbol carriers: base-3 digits, Bacon-like.
+# Kenny: letter a-z -> 3 symbols of m/p/f (m=0 p=1 f=2, a=mmm .. z=ffp), an upper-case letter capitalizes its first
+# symbol (A=Mmm), every other character kept in place. Generic: any 3 distinct symbols (0/1/2, m/p/f, an emoji
+# triple) in groups of 3-6 -> a-z letters (width 3, values < 26), UTF-8 hex nibbles (all < 16), ASCII/UTF-8 bytes
+# (width 5-6). Unknown symbol order: every assignment is tried, natural order (0/1/2, m/p/f) first.
+_TERN_KIND = {"hex": 3, "ascii": 2, "alpha": 1}
+
+
+def kenny_enc(s, sym="mpf"):
+    out = []
+    for c in s:
+        lc = c.lower()
+        if "a" <= lc <= "z":
+            n = ord(lc) - 97
+            g = sym[n // 9] + sym[n // 3 % 3] + sym[n % 3]
+            out.append(g[0].upper() + g[1:] if c.isupper() else g)
+        else:
+            out.append(c)
+    return "".join(out)
+
+
+def tern_enc(s, sym="012", width=3, inner="alpha", sep=" "):
+    if inner == "hex":
+        vals = [int(c, 16) for c in _u(s).hex()]
+    elif inner in ("b32", "b64", "b64url"):
+        txt = (base64.b32encode if inner == "b32" else base64.b64encode)(_u(s)).decode().rstrip("=")
+        vals = [(_TS_B32 if inner == "b32" else _TS_B64[inner == "b64url"]).index(c) for c in txt]
+    elif inner == "octal":
+        vals = [int(c, 8) for c in "".join("%03o" % b for b in _u(s))]
+    elif inner == "ascii":
+        vals = list(_u(s))
+    else:
+        vals = [ord(c) - 97 for c in s.lower() if "a" <= c <= "z"]
+    return sep.join("".join(sym[v // 3 ** i % 3] for i in range(width - 1, -1, -1)) for v in vals)
+
+
+def _tern_orders(syms, natural):
+    """0/1/2 and m/p/f read in their natural order only; any other symbol triple tries all 6 assignments."""
+    nat = [c for c in natural if c in syms]
+    if len(nat) == 3:
+        return [nat]
+    first = sorted(syms)
+    return [first] + [list(p) for p in itertools.permutations(first) if list(p) != first]
+
+
+def _tern_bigram():
+    try:
+        from lib.decode import _bigram
+        return _bigram
+    except Exception:  # noqa: BLE001
+        return lambda _s: 0.0
+
+
+def kenny_reads(t):
+    """Kenny keep-mode readings: the letters are exactly 3 symbols (any case), runs of them decode 3 at a time, every
+    other character stays. [] unless every letter run is a clean multiple of 3 with values < 26."""
+    t = t.strip()
+    letters = [c.lower() for c in t if c.isalpha()]
+    syms = set(letters)
+    if len(syms) != 3 or len(letters) < 9 or len(letters) < 0.5 * len(re.sub(r"\s", "", t)) or len(t) > 20000:
+        return []
+    runs = re.findall(r"[^\W\d_]+|[\W\d_]+", t)
+    if any(r[0].isalpha() and len(r) % 3 for r in runs):
+        return []
+    big = _tern_bigram()
+    out = []
+    for order in _tern_orders(syms, "mpf"):
+        idx = {c: i for i, c in enumerate(order)}
+        res = []
+        for r in runs:
+            if not r[0].isalpha():
+                res.append(r)
+                continue
+            for i in range(0, len(r), 3):
+                g = r[i:i + 3]
+                n = idx[g[0].lower()] * 9 + idx[g[1].lower()] * 3 + idx[g[2].lower()]
+                if n >= 26:
+                    break
+                res.append(chr(97 + n).upper() if g[0].isupper() else chr(97 + n))
+            else:
+                continue
+            break
+        else:
+            x = "".join(res)
+            out.append(((_texty(x) >= 0.9, big(x)), x))
+    return [x for _k, x in sorted(out, key=lambda r: r[0], reverse=True) if _k[0]]
+
+
+def _tern_group_reads(t):
+    """[(key, text)] for every (symbol order, width, value range) reading of a strict 3-symbol group fragment."""
+    t = t.strip().strip("\"'").replace("️", "").replace("︎", "")
+    sy = [c for c in t if not c.isspace()]
+    syms = sorted(set(sy), key=sy.index)
+    if len(syms) != 3 or len(sy) < 12 or len(sy) > 20000 or set(syms) <= set(".-/"):
+        return []
+    toks = t.split()
+    lens = {len(x) for x in toks}
+    if len(toks) > 1 and len(lens) == 1 and 3 <= min(lens) <= 6:
+        widths = [min(lens)]
+    else:
+        widths = [w for w in range(3, 7) if all(n % w == 0 for n in lens)]
+    big = _tern_bigram()
+    natural = "012" if set(syms) == set("012") else "mpf" if {c.lower() for c in syms} == set("mpf") else ""
+    out = []
+    for order in _tern_orders(syms, natural):
+        idx = {c: i for i, c in enumerate(order)}
+        for w in widths:
+            vals = []
+            for i in range(0, len(sy), w):
+                v = 0
+                for c in sy[i:i + w]:
+                    v = v * 3 + idx[c]
+                vals.append(v)
+            reads = []
+            if w == 3 and max(vals) < 26:   # letters only: must read as English (a permuted order gives junk)
+                x = "".join(chr(97 + v) for v in vals)
+                if len(x) >= 8 and big(x) > -7.0:
+                    reads.append(("alpha", x))
+            if max(vals) < 16 and len(vals) % 2 == 0:
+                try:
+                    reads.append(("hex", bytes.fromhex("".join("%x" % v for v in vals)).decode("utf-8")))
+                except ValueError:
+                    pass
+            if w >= 5 and max(vals) < 256:
+                try:
+                    reads.append(("ascii", bytes(vals).decode("utf-8")))
+                except ValueError:
+                    pass
+            for kind, x in reads:
+                if x and not any(unicodedata.category(c) == "Cc" and c not in "\t\n\r" for c in x):
+                    out.append(((_texty(x) >= 0.9, _TERN_KIND[kind], big(x)), x))
+    return sorted(out, key=lambda r: r[0], reverse=True)
+
+
+def tern_free(p, k=3):
+    seen = []
+    kr, gr = kenny_reads(p), [x for (ok, _k, _b), x in _tern_group_reads(p) if ok]
+    if len({len(x) for x in p.split()}) == 1:   # uniform groups (or one blob): a group reading beats Kenny keep-mode
+        kr, gr = gr, kr
+    for x in kr + gr:
+        if x not in seen:
+            seen.append(x)
+    return seen[:k]
+
+
+def tern_dec(t):
+    r = tern_free(t, 1)
+    return r[0] if r else None
+
+
+# Char codes / hex nibbles as fixed-width DIGIT groups in a radix between binary and octal (base 3-7): quaternary
+# 4-digit bytes (0-3), base-5 3/4-digit, base-6/7 3-digit, 2-digit nibbles (numpy.base_repr / Python int(g, r)).
+# Radix = max digit + 1 (a sentence always shows its top digit; a larger radix turns a ternary decoy into letters),
+# width = the constant token length (a run-together blob: every width dividing it). Values all < 16 (even count) -> UTF-8 hex nibbles, else 9-255 -> UTF-8 bytes.
+# Digit 7+ (octal/decimal) or only 0/1 (binary) -> None.
+_RADIX_SEP = re.compile(r"[\s,;|:/_-]+")
+
+
+def radix_enc(s, r=4, width=4, inner="ascii", sep=" "):
+    vals = [int(c, 16) for c in _u(s).hex()] if inner == "hex" else list(_u(s))
+    out = []
+    for v in vals:
+        d = ""
+        for _ in range(width):
+            v, m = divmod(v, r)
+            d = str(m) + d
+        out.append(d)
+    return sep.join(out)
+
+
+def _radix_reads(t):
+    """[(key, text)] for every width reading (hex nibbles or char codes) of a strict base-3..7 digit-group fragment."""
+    if not isinstance(t, str):
+        return []
+    t = t.strip().strip("\"'[]()")
+    toks = [x for x in _RADIX_SEP.split(t) if x]
+    flat = "".join(toks)
+    if not toks or not flat.isdigit() or not flat.isascii() or len(flat) < 8 or len(flat) > 40000:
+        return []
+    maxd = int(max(flat))
+    if maxd < 2 or maxd > 6:
+        return []
+    lens = {len(x) for x in toks}
+    if len(toks) > 1:
+        if len(lens) != 1 or not 2 <= min(lens) <= 6:
+            return []
+        widths = [min(lens)]
+    else:
+        widths = [w for w in range(2, 7) if len(flat) % w == 0]
+    big = _tern_bigram()
+    r = maxd + 1
+    out = []
+    for w in widths:
+        vals = [int(flat[i:i + w], r) for i in range(0, len(flat), w)]
+        x = None
+        try:
+            if max(vals) < 16 and len(vals) % 2 == 0:
+                x = bytes.fromhex("".join("%x" % v for v in vals)).decode("utf-8")
+            elif max(vals) < 256 and min(vals) >= 9 and r ** w > 122:
+                x = bytes(vals).decode("utf-8")
+        except ValueError:
+            pass
+        if x and not any(unicodedata.category(c) == "Cc" and c not in "\t\n\r" for c in x):
+            out.append(((_texty(x) >= 0.9, big(x)), x))
+    return sorted(out, key=lambda q: q[0], reverse=True)
+
+
+def radix_free(p, k=3):
+    seen = []
+    for (ok, _b), x in _radix_reads(p):
+        if ok and x not in seen:
+            seen.append(x)
+    return seen[:k]
+
+
+def radix_dec(t):
+    r = radix_free(t, 1)
+    return r[0] if r else None
+
+
+# Ordered Unicode glyph sets as radix digits: a glyph's index in its run is a digit (dice U+2680-2685 = 0-5, chess
+# U+2654-265F = 0-11 or either colour's six, zodiac U+2648-2653, card suits U+2660-2667 / the four filled suits, Mahjong
+# U+1F000-1F02B), then the radix_dec rules: fixed-width groups (token length, or every width dividing a blob), values
+# < 16 (even count) -> UTF-8 hex nibbles, else 9-255 -> UTF-8 bytes. Dice "1-6" = face - 1 = the same digits (a radix-7
+# reading has no zero face). Every glyph of the line must sit in ONE set -> else None.
+_GLYPH_SETS = {
+    "dice": "".join(chr(0x2680 + i) for i in range(6)),
+    "chess": "".join(chr(0x2654 + i) for i in range(12)),
+    "chess-white": "".join(chr(0x2654 + i) for i in range(6)),
+    "chess-black": "".join(chr(0x265A + i) for i in range(6)),
+    "zodiac": "".join(chr(0x2648 + i) for i in range(12)),
+    "suits8": "".join(chr(0x2660 + i) for i in range(8)),
+    "suits4": "♠♣♥♦",       # filled suits in code-point order
+    "suits4-bridge": "♣♦♥♠",  # bridge rank order: clubs < diamonds < hearts < spades
+    "mahjong": "".join(chr(0x1F000 + i) for i in range(44)),
+}
+_GLYPH_SEP = re.compile(r"[\s,;|:/_.-]+")
+
+
+def glyph_radix_enc(s, kind="dice", width=3, inner="ascii", sep=" "):
+    al = _GLYPH_SETS[kind]
+    r = len(al)
+    vals = [int(c, 16) for c in _u(s).hex()] if inner == "hex" else list(_u(s))
+    out = []
+    for v in vals:
+        d = ""
+        for _ in range(width):
+            v, m = divmod(v, r)
+            d = al[m] + d
+        out.append(d)
+    return sep.join(out)
+
+
+def _glyph_text(vals):
+    try:
+        if max(vals) < 16 and len(vals) % 2 == 0:
+            x = bytes.fromhex("".join("%x" % v for v in vals)).decode("utf-8")
+        elif max(vals) < 256 and min(vals) >= 9:
+            x = bytes(vals).decode("utf-8")
+        else:
+            return None
+    except ValueError:
+        return None
+    return x if x and not any(unicodedata.category(c) == "Cc" and c not in "\t\n\r" for c in x) else None
+
+
+def _glyph_reads(t):
+    """[(key, text)] for every (glyph set, digit convention, width) reading of an all-one-glyph-set fragment."""
+    if not isinstance(t, str) or len(t) > 80000:
+        return []
+    t = t.strip().strip("\"'[]()").replace("️", "").replace("︎", "")
+    toks = [x for x in _GLYPH_SEP.split(t) if x]
+    flat = "".join(toks)
+    if len(flat) < 4:
+        return []
+    chars = set(flat)
+    lens = {len(x) for x in toks}
+    if len(toks) > 1 and len(lens) != 1:
+        return []
+    big = _tern_bigram()
+    out, seen = [], set()
+    for kind, al in _GLYPH_SETS.items():
+        if not chars <= set(al):
+            continue
+        digs, r = [al.index(c) for c in flat], len(al)
+        for w in ([min(lens)] if len(toks) > 1 else [w for w in range(1, 9) if len(flat) % w == 0]):
+            if r ** w < 16 or w > 8:
+                continue
+            vals = []
+            for i in range(0, len(digs), w):
+                v = 0
+                for d in digs[i:i + w]:
+                    v = v * r + d
+                vals.append(v)
+            x = _glyph_text(vals)
+            if x and x not in seen:
+                seen.add(x)
+                out.append(((_texty(x) >= 0.9, big(x)), x))
+    return sorted(out, key=lambda q: q[0], reverse=True)
+
+
+def glyph_radix_free(p, k=3):
+    """Speculative free-line glyph radix: an all-dice / chess / zodiac / suits / Mahjong line -> its English readings."""
+    lead = p[:len(p) - len(p.lstrip())] if isinstance(p, str) else ""
+    return [lead + x for (ok, _b), x in _glyph_reads(p) if ok][:k]
+
+
+def glyph_radix_dec(t):
+    r = glyph_radix_free(t, 1)
+    return r[0].strip() if r else None
+
+
+# 4-bit binary nibbles carrying hex (the next "sixteen" carrier after D16 morse-hex / D17 bacon-hex): each UTF-8 hex
+# digit as a [01]{4} group, two per byte. Groups split by whitespace or , ; | : / _ - (a wider byte gap allowed), or run
+# together (len % 8 == 0: the same bits as binary8-nospace). swap: low nibble first (perl unpack "h*", CyberChef ROL 4).
+# Told from binary8 by group width: any token that is not exactly 4 bits -> None.
+_B4_SEP = re.compile(r"[\s,;|:/_-]+")
+
+
+def bin4_enc(s, sep=" ", byte=None, swap=False):
+    hx = _u(s).hex()
+    if swap:
+        hx = "".join(hx[i + 1] + hx[i] for i in range(0, len(hx), 2))
+    g = [f"{int(c, 16):04b}" for c in hx]
+    return sep.join(g) if byte is None else byte.join(sep.join(g[i:i + 2]) for i in range(0, len(g), 2))
+
+
+def bin4_dec(t, swap=False):
+    """The text under 4-bit binary hex nibbles, else None (8-bit groups, odd nibble count, non-UTF-8, control chars)."""
+    if not isinstance(t, str):
+        return None
+    t = t.strip().strip("\"'[]()")
+    toks = [x for x in _B4_SEP.split(t) if x]
+    if not toks or any(set(x) - {"0", "1"} for x in toks):
+        return None
+    if len(toks) == 1:
+        if len(t) < 8 or len(t) % 8:
+            return None
+        toks = [t[i:i + 4] for i in range(0, len(t), 4)]
+    elif any(len(x) != 4 for x in toks) or len(toks) % 2:
+        return None
+    hx = "".join("%x" % int(x, 2) for x in toks)
+    if swap:
+        hx = "".join(hx[i + 1] + hx[i] for i in range(0, len(hx), 2))
+    try:
+        out = bytes.fromhex(hx).decode("utf-8")
+    except ValueError:
+        return None
+    if any(unicodedata.category(c) == "Cc" and c not in "\t\n\r" for c in out):
+        return None
+    return out
+
+
+def bin4_free(p):
+    """Mastery free line: the plain-order reading, then the nibble-swapped one, English-looking reads only."""
+    return [x for x in (bin4_dec(p), bin4_dec(p, swap=True)) if x and _texty(x) >= 0.9]
+
+
+# BCD of decimal char codes (CyberChef "To BCD" 8421 / Excess-3 per char code): each decimal digit of a char's code as a
+# 4-bit group. Char boundaries: a wider separator (" / ", "|", ",", ";", 2+ spaces, newline), one token per char (8/12/16
+# bits run together), or none (a nibble stream: 3-digit zero-padded, packed = padded to whole bytes, or 2/3-digit ASCII
+# greedy). Unpacked BCD (one byte per digit, high nibble 0) too. Every nibble must be a digit 0-9 (8421) / 3-12 (XS-3).
+_BCD_CHR = re.compile(r"\s*[/|,;]\s*|\s{2,}|\n")
+
+
+def bcd_enc(s, sep=" ", char=" / ", pad=0, xs3=False):
+    """pad: 0 = digits as-is, 3 = zero-pad each code to 3 digits, -1 = packed (pad to an even digit count)."""
+    out = []
+    for c in s:
+        d = str(ord(c))
+        d = d.zfill(pad) if pad > 0 else d.zfill(len(d) + len(d) % 2) if pad < 0 else d
+        out.append(sep.join(f"{int(x) + 3 * xs3:04b}" for x in d))
+    return char.join(out)
+
+
+def _bcd_digits(bits, xs3):
+    if not bits or len(bits) % 4:
+        return None
+    ds = [int(bits[i:i + 4], 2) - 3 * xs3 for i in range(0, len(bits), 4)]
+    return "".join(map(str, ds)) if all(0 <= d <= 9 for d in ds) else None
+
+
+def _bcd_stream(ds):
+    """[decimal digit stream] -> [code lists] under fixed-3, packed (0 -> 4 digits else 2) and ASCII-greedy splits."""
+    outs = []
+    if len(ds) % 3 == 0:
+        outs.append([int(ds[i:i + 3]) for i in range(0, len(ds), 3)])
+    for rule in ({"0": 4}, {"1": 3}):
+        i, codes = 0, []
+        while i < len(ds):
+            n = rule.get(ds[i], 2)
+            if i + n > len(ds):
+                codes = None
+                break
+            codes.append(int(ds[i:i + n]))
+            i += n
+        if codes:
+            outs.append(codes)
+    return outs
+
+
+def _bcd_text(codes):
+    try:
+        out = "".join(map(chr, codes))
+    except (ValueError, OverflowError):
+        return None
+    return out if out and all(c.isprintable() or c in "\t\n\r" for c in out) else None
+
+
+def bcd_reads(t):
+    """Text readings of a BCD line (8421 first, then Excess-3), else []."""
+    if not isinstance(t, str) or len(t) > 262144:
+        return []
+    t = t.strip().strip("\"'[]()")
+    if not t or set(t) - set("01 \t\r\n/|,;"):
+        return []
+    reads = []
+    for xs3 in (False, True):
+        groups = [g for g in _BCD_CHR.split(t) if g.strip()]
+        streams = []
+        if len(groups) > 1:   # explicit char boundaries
+            ds = [_bcd_digits(re.sub(r"\s", "", g), xs3) for g in groups]
+            if all(ds):
+                streams.append([[int(d) for d in ds]])
+        else:
+            toks = t.split()
+            if len(toks) > 1 and all(len(x) == 8 for x in toks) and not xs3 and all(int(x, 2) <= 9 for x in toks):
+                streams.append(_bcd_stream("".join(str(int(x, 2)) for x in toks)))   # unpacked: a byte per digit
+            elif len(toks) > 1 and any(len(x) > 4 for x in toks):              # one token per char
+                ds = [_bcd_digits(x, xs3) for x in toks]
+                if all(ds):
+                    streams.append([[int(d) for d in ds]])
+            else:
+                ds = _bcd_digits("".join(toks), xs3)
+                if ds:
+                    streams.append(_bcd_stream(ds))
+        for cl in streams:
+            for codes in cl:
+                x = _bcd_text(codes)
+                if x and x not in reads:
+                    reads.append(x)
+    return reads
+
+
+def bcd_dec(t):
+    r = sorted(bcd_reads(t), key=_texty, reverse=True)
+    return r[0] if r else None
+
+
+def bcd_free(p):
+    return [x for x in bcd_reads(p) if _texty(x) >= 0.9][:3]
+
+
+# Address notation: the bytes written as network / ID addresses -- IPv4 dotted quads ('78.105.99.101 32.119.111.114'),
+# IPv6 (8 hex groups, leading zeros dropped, the zero-padding run compressed to '::'), MAC (6 bytes: aa:bb:.. / aa-bb-..
+# / Cisco aabb.ccdd.eeff) or UUIDs (16 bytes, 8-4-4-4-12, RFC order or the Microsoft GUID mixed-endian bytes_le).
+# Addresses are split by whitespace , ; | /; the last one is short or NUL-padded (trailing NULs stripped).
+_ADDR_SPLIT = re.compile(r"(?:\s*[,;|/]\s*|\s+)+")
+_ADDR_KINDS = ("ipv4", "ipv6", "mac", "uuid", "guid")
+
+
+def _v6_compress(g):
+    """RFC 5952: lowercase, no leading zeros, the longest run of >= 2 zero groups (first on a tie) as '::'."""
+    best, run = (0, 0), None
+    for i, x in enumerate(g + [1]):
+        if x == 0 and run is None:
+            run = i
+        elif x and run is not None:
+            best, run = max(best, (i - run, -run)), None
+    h = [f"{x:x}" for x in g]
+    if best[0] < 2:
+        return ":".join(h)
+    a = -best[1]
+    return ":".join(h[:a]) + "::" + ":".join(h[a + best[0]:])
+
+
+def addr_enc(s, kind="ipv4", pad=True, sep=" ", style=":", upper=False, le=False):
+    b = _u(s)
+    le, kind = le or kind == "guid", "uuid" if kind == "guid" else kind
+    n = {"ipv4": 4, "ipv6": 16, "mac": 6, "uuid": 16}[kind]
+    if pad:
+        b += b"\0" * (-len(b) % n)
+    out = []
+    for c in (b[i:i + n] for i in range(0, len(b), n)):
+        if kind == "ipv4":
+            out.append(".".join(map(str, c)))
+        elif kind == "ipv6":
+            g = [int.from_bytes(c[i:i + 2].ljust(2, b"\0") if len(c) == n else c[i:i + 2], "big")
+                 for i in range(0, len(c), 2)]
+            out.append(_v6_compress(g) if len(c) == n else ":".join(f"{x:x}" for x in g))
+        elif kind == "mac":
+            h = c.hex()
+            out.append(".".join(h[i:i + 4] for i in range(0, len(h), 4)) if style == "." else
+                       style.join(h[i:i + 2] for i in range(0, len(h), 2)))
+        else:
+            if le and len(c) == n:
+                c = c[3::-1] + c[5:3:-1] + c[7:5:-1] + c[8:]
+            h = c.hex()
+            out.append("-".join(h[a:z] for a, z in ((0, 8), (8, 12), (12, 16), (16, 20), (20, 32)) if h[a:z]))
+    out = sep.join(out)
+    return out.upper() if upper else out
+
+
+def _addr_tok(x, kind, last):
+    """One address token -> its bytes, else None. Only the last token may be short."""
+    if kind == "ipv4":
+        if not re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){0,3}", x):
+            return None
+        v = [int(o) for o in x.split(".")]
+        return bytes(v) if max(v) < 256 and (len(v) == 4 or (last and "." in x)) else None
+    if kind == "ipv6":
+        if not re.fullmatch(r"[0-9a-fA-F:]{2,39}", x) or x.count("::") > 1 or ":::" in x:
+            return None
+        if "::" in x:
+            a, z = (p.split(":") if p else [] for p in x.split("::"))
+            if len(a) + len(z) > 6:
+                return None
+            g = a + ["0"] * (8 - len(a) - len(z)) + z
+        else:
+            g = x.split(":")
+            if len(g) != 8 and not (last and len(g) > 1):
+                return None
+        if not all(0 < len(h) <= 4 for h in g):
+            return None
+        return b"".join(int(h, 16).to_bytes(2, "big") for h in g)
+    if kind == "mac":
+        if re.fullmatch(r"[0-9a-fA-F]{4}(?:\.[0-9a-fA-F]{4}){0,2}", x):
+            g = x.split(".")
+        elif re.fullmatch(r"[0-9a-fA-F]{2}(?:([:-])[0-9a-fA-F]{2}){0,5}", x) and len({c for c in x if c in ":-"}) <= 1:
+            g = re.split(r"[:-]", x)
+        else:
+            return None
+        h = "".join(g)
+        return bytes.fromhex(h) if len(h) == 12 or (last and len(g) > 1) else None
+    x = re.sub(r"(?i)^urn:uuid:", "", x).strip("{}")
+    if re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", x):
+        return bytes.fromhex(x.replace("-", ""))
+    if last and re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{1,4}){0,3}(?:-[0-9a-fA-F]{1,12})?", x):
+        h = x.replace("-", "")
+        return bytes.fromhex(h) if len(h) % 2 == 0 else None
+    return None
+
+
+def addr_reads(t, kind=None):
+    """[(kind, text)] readings of an address-notation line (every token one kind), else []."""
+    if not isinstance(t, str) or len(t) > 262144:
+        return []
+    toks = [x for x in _ADDR_SPLIT.split(t.strip().strip("\"'[]()")) if x]
+    if not toks:
+        return []
+    reads = []
+    for k in (kind,) if kind else _ADDR_KINDS:
+        bs = [_addr_tok(x, "uuid" if k == "guid" else k, i == len(toks) - 1) for i, x in enumerate(toks)]
+        if not all(b is not None for b in bs):
+            continue
+        if k == "guid":   # Microsoft GUID text: Data1-3 little-endian
+            bs = [b[3::-1] + b[5:3:-1] + b[7:5:-1] + b[8:] if len(b) == 16 else b for b in bs]
+        for raw in (b"".join(bs).rstrip(b"\0"), b"".join(b.rstrip(b"\0") for b in bs)):
+            try:
+                x = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+            if x and all(c.isprintable() or c in "\t\n\r" for c in x) and (k, x) not in reads:
+                reads.append((k, x))
+    return reads
+
+
+def _addr_rank(reads):
+    from lib.decode import _bigram
+    return sorted(dict.fromkeys(x for _k, x in reads), key=lambda x: (round(_texty(x), 2), _bigram(x)), reverse=True)
+
+
+def addr_dec(t, kind=None):
+    r = _addr_rank(addr_reads(t, kind))
+    return r[0] if r else None
+
+
+def addr_free(p):
+    return [x for x in _addr_rank(addr_reads(p)) if _texty(x) >= 0.9][:3]
+
+
+# Gray-coded binary (reflected binary, g = b ^ b >> 1) per byte: [01]{8} (or 7-bit) groups, or run together (len % 8).
+# Plain binary of a Gray line decodes to junk; decode: b = g; g >>= 1; b ^= g until g == 0.
+def gray_enc(s, bits=8, sep=" "):
+    return sep.join(format(b ^ (b >> 1), f"0{bits}b") for b in _u(s))
+
+
+def _ungray(g):
+    b = g
+    while g:
+        g >>= 1
+        b ^= g
+    return b
+
+
+def gray_reads(t):
+    if not isinstance(t, str) or len(t) > 262144:
+        return []
+    t = t.strip().strip("\"'[]()")
+    toks = [x for x in re.split(r"[\s,;|:/_-]+", t) if x]
+    if not toks or any(set(x) - {"0", "1"} for x in toks):
+        return []
+    reads = []
+    for bits in (8, 7):
+        tk = toks
+        if len(toks) == 1:
+            if len(t) < bits * 2 or len(t) % bits:
+                continue
+            tk = [t[i:i + bits] for i in range(0, len(t), bits)]
+        elif any(len(x) != bits for x in tk):
+            continue
+        try:
+            out = bytes(_ungray(int(x, 2)) for x in tk).decode("utf-8")
+        except ValueError:
+            continue
+        if out and all(c.isprintable() or c in "\t\n\r" for c in out) and out not in reads:
+            reads.append(out)
+    return reads
+
+
+def gray_dec(t):
+    """The English-looking Gray reading, else None (plain binary Gray-decodes to junk)."""
+    r = gray_free(t)
+    return r[0] if r else None
+
+
+def gray_free(p):
+    return [x for x in gray_reads(p) if _texty(x) >= 0.9]
+
+
+# Roman-numeral char codes (`LXXVIII CV XCIX` = "Nic"): each char's decimal code point as a Roman numeral (1-3999), one
+# token per char (space / comma / dash / dot / pipe separated), any case, Unicode numeral forms (U+2160..) via NFKC.
+# Words may also be split by " / " or 2+ spaces (each group decoded, joined by a space). Nibble variant: hex nibbles
+# 0-15 with "N" / "nulla" for zero (no zero numeral), pairs -> bytes. Canonical numerals first, additive (IIII) lenient.
+_ROMAN_OK = re.compile(r"M{0,3}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})")
+_ROMAN_V = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+
+
+def roman_enc(s, sep=" ", word=None, lower=False, nib=False):
+    def r(n):
+        if nib and n == 0:
+            return "N"
+        if not 0 < n < 4000:
+            raise ValueError("no Roman numeral")
+        out = ""
+        for v, sym in ((1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"), (90, "XC"), (50, "L"),
+                       (40, "XL"), (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I")):
+            out += sym * (n // v)
+            n %= v
+        return out
+    def one(w):
+        vals = [x for b in _u(w) for x in (b >> 4, b & 15)] if nib else [ord(c) for c in w]
+        return sep.join(map(r, vals))
+    out = word.join(one(w) for w in s.split(" ")) if word else one(s)
+    return out.lower() if lower else out
+
+
+def _roman_int(tok, lenient):
+    """A Roman numeral token -> int (None if not one). Strict = canonical form only; lenient = any IVXLCDM run."""
+    u = tok.upper()
+    if u in ("N", "NULLA"):
+        return 0
+    if not u or (tok != u and tok != tok.lower()) or set(u) - set(_ROMAN_V):
+        return None
+    if _ROMAN_OK.fullmatch(u):
+        lenient = True
+    elif not lenient:
+        return None
+    n = 0
+    for i, c in enumerate(u):
+        v = _ROMAN_V[c]
+        n += -v if i + 1 < len(u) and _ROMAN_V[u[i + 1]] > v else v
+    return n if n > 0 else None
+
+
+def _roman_vals(toks):
+    for lenient in (False, True):
+        vals = [_roman_int(x, lenient) for x in toks]
+        if all(v is not None for v in vals):
+            return vals
+    return None
+
+
+def _roman_text(vals, nib):
+    if nib:
+        if len(vals) % 2 or any(v > 15 for v in vals):
+            return None
+        try:
+            return bytes(vals[i] << 4 | vals[i + 1] for i in range(0, len(vals), 2)).decode("utf-8")
+        except ValueError:
+            return None
+    if 0 in vals:
+        return None
+    try:
+        return "".join(map(chr, vals))
+    except (ValueError, OverflowError):
+        return None
+
+
+def roman_reads(t):
+    """Text readings of a Roman-numeral char-code line (char codes, then hex nibbles), else []."""
+    if not isinstance(t, str) or len(t) > 262144:
+        return []
+    t = unicodedata.normalize("NFKC", t).strip().strip("\"'[]()")
+    if not t or set(t.upper()) - set("IVXLCDMNULA \t\r\n,;|/.-_"):
+        return []
+    groups = [g for g in re.split(r"\s*/\s*|\s{2,}|\n", t) if g.strip()]
+    tok_groups = [[x for x in re.split(r"[\s,;|._-]+", g) if x] for g in groups]
+    if not tok_groups or not all(tok_groups):
+        return []
+    vals = [_roman_vals(g) for g in tok_groups]
+    if not all(vals):
+        return []
+    reads = []
+    for nib in (False, True):
+        for gs in ((vals if len(vals) > 1 else None), [sum(vals, [])]):
+            if gs is None:
+                continue
+            parts = [_roman_text(v, nib) for v in gs]
+            if all(p is not None for p in parts):
+                x = " ".join(parts)
+                if x and all(c.isprintable() or c in "\t\n\r" for c in x) and x not in reads:
+                    reads.append(x)
+    return reads
+
+
+def roman_dec(t):
+    """The most English-looking reading, else None (a lenient parse of IVXLCDM prose is junk)."""
+    r = sorted(roman_free(t), key=_texty, reverse=True)
+    return r[0] if r else None
+
+
+def roman_free(p):
+    return [x for x in roman_reads(p) if _texty(x) >= 0.9][:3]
+
+
+# Chuck Norris unary (CodinGame "Chuck Norris", dCode): the bit stream (7-bit ASCII classic, or 8-bit UTF-8 bytes =
+# 4-bit hex nibbles run together) cut into runs; each run -> "0" (run of 1s) or "00" (run of 0s), a space, then the run
+# length as that many "0"s, pairs space-separated. inner="hex": the stream carries the UTF-8 hex digits as text.
+# Strict: only "0" and single spaces, even token count, every pair head "0"/"00", bit count a multiple of the width,
+# clean printable text (a 7-bit reading must also stay ASCII); hex inner only for an even all-hex reading.
+_CN_LINE = re.compile(r"0+(?: 0+)*")
+
+
+def chuck_enc(s, bits=7, inner=None):
+    data = _u(_u(s).hex()) if inner == "hex" else _u(s)
+    st = "".join(format(b, f"0{bits}b") for b in data)
+    return " ".join(("0" if r[0] == "1" else "00") + " " + "0" * len(r) for r in re.findall(r"0+|1+", st))
+
+
+def chuck_reads(t):
+    """[(tag, text)] readings of a Chuck Norris unary line (tag = "7", "8", "7-hex", "8-hex"), else []."""
+    if not isinstance(t, str):
+        return []
+    t = t.strip()
+    if len(t) > 262144 or not _CN_LINE.fullmatch(t):
+        return []
+    toks = t.split(" ")
+    if len(toks) % 2 or any(h not in ("0", "00") for h in toks[0::2]):
+        return []
+    st = "".join(("1" if h == "0" else "0") * len(n) for h, n in zip(toks[0::2], toks[1::2]))
+    out = []
+    for w in (7, 8):
+        if len(st) % w:
+            continue
+        b = bytes(int(st[i:i + w], 2) for i in range(0, len(st), w))
+        x = _txt(b)
+        if not x or any(unicodedata.category(c) == "Cc" and c not in "\t\n\r" for c in x):
+            continue
+        out.append((str(w), x))
+        if re.fullmatch(r"(?:[0-9a-fA-F]{2})+", x):
+            y = _txt(bytes.fromhex(x))
+            if y and not any(unicodedata.category(c) == "Cc" and c not in "\t\n\r" for c in y):
+                out.append((f"{w}-hex", y))
+    return out
+
+
+def chuck_dec(t, bits=None, inner=None):
+    """The text under Chuck Norris unary, else None. bits/inner pin one reading; unpinned: the hex inner first, then
+    the most text-like of the 7-/8-bit readings."""
+    r = chuck_reads(t)
+    if bits or inner:
+        tag = f"{bits or ''}{'-hex' if inner == 'hex' else ''}"
+        r = [(g, x) for g, x in r if (g == tag if bits else g.endswith("-hex"))]
+    if not r:
+        return None
+    hexed = [x for g, x in r if g.endswith("-hex")]
+    return hexed[0] if hexed else max((x for _g, x in r), key=_texty)
+
+
+def chuck_free(p):
+    """Mastery free line: every English-looking reading, hex inner first."""
+    r = chuck_reads(p)
+    return [x for _g, x in sorted(r, key=lambda gx: not gx[0].endswith("-hex")) if _texty(x) >= 0.9]
+
+
+# a-p letter hex: each UTF-8 hex digit as one of the 16 letters a..p (nibble = ord - 97), the middle layer of D17
+# (Bacon-26 groups -> a-p -> hex). Standalone (blob, byte pairs split by whitespace or , ; | : / _ -, upper case) or as
+# the output of a letter carrier (Bacon-26/24, Polybius, tap code, A1Z26). Strict: only [a-p] in one case, even-length
+# tokens, clean UTF-8 that reads more English than the letters themselves (an English a-p word line stays None).
+# Carriers that merge two a-p letters (Polybius / Bacon-24: I/J = 8/9, tap code: C/K = 2/10) re-split each merged
+# letter by (text-likeness, bigram) fit, greedy left to right (a merged digit pair like 8/9 stays a guess).
+_AP = "abcdefghijklmnop"
+_AP_TOK = re.compile(r"[a-p]+")
+
+
+def aphex_enc(s, sep="", upper=False):
+    a = "".join(_AP[int(c, 16)] for c in _u(s).hex())
+    a = a.upper() if upper else a
+    return sep.join(a[i:i + 2] for i in range(0, len(a), 2)) if sep else a
+
+
+def _ap_text(a):
+    try:
+        out = bytes(16 * (ord(a[i]) - 97) + ord(a[i + 1]) - 97 for i in range(0, len(a), 2)).decode("utf-8")
+    except ValueError:
+        return None
+    if not out or any(unicodedata.category(c) == "Cc" and c not in "\t\n\r" for c in out):
+        return None
+    return out
+
+
+def _ap_fit(x):
+    """Merged-letter tie-break: text-likeness, then bigrams less letter/digit seams ("Master2") and stray brackets."""
+    from lib.decode import _bigram
+    depth = stray = 0
+    for c in x:
+        if c in "()":
+            depth += 1 if c == "(" else -1
+            if depth < 0:
+                depth, stray = 0, stray + 1
+    seams = len(re.findall(r"[A-Za-z][0-9]|[0-9][A-Za-z]", x)) + stray + depth
+    return _texty(x), _bigram(x) - 0.5 * seams
+
+
+def aphex_dec(t, merge=""):
+    """The text under a-p letter hex, else None. merge "ij" / "ck": the carrier wrote both letters as the first."""
+    if not isinstance(t, str):
+        return None
+    t = t.strip().strip("\"'[]()")
+    if not t or len(t) > 40000 or not (t.islower() or t.isupper()):
+        return None
+    toks = [x for x in _B4_SEP.split(t.lower()) if x]
+    if not toks or any(not _AP_TOK.fullmatch(x) or len(x) % 2 for x in toks):
+        return None
+    a = "".join(toks)
+    from lib.decode import _bigram
+    out = _ap_text(a)
+    if merge and merge[0] in a:
+        a = list(a)
+        for k in [k for k, c in enumerate(a) if c == merge[0]] * 2:   # 2nd pass: re-pick with both sides set
+            best, prev = None, a[k]
+            for c in merge:
+                a[k] = c
+                x = _ap_text("".join(a))
+                if x is not None and (best is None or _ap_fit(x) > best[0]):
+                    best = (_ap_fit(x), c, x)
+            if best is None:
+                a[k] = prev   # neither fits yet: a later merged letter may complete the UTF-8 sequence
+                continue
+            a[k], out = best[1], best[2]
+        out = _ap_text("".join(a))
+    if out is None or _texty(out) < 0.85 or _bigram(out) <= _bigram(t):
+        return None
+    return out
+
+
+def _ap_a1z26(t, sep):
+    t = t.strip()
+    if not re.fullmatch(r"\d{1,2}(?:[%s\s/|]+\d{1,2})*" % re.escape(sep), t) or len(t) > 60000:
+        return None
+    x = a1z26_dec(t, sep)
+    return None if re.search(r"\d", x) else x
+
+
+# carrier name -> (encoder of the a-p letters, decoder back to letters, the letter pair it merges)
+_AP_CARRIERS = {
+    "bacon26": (lambda a: bacon_enc(a, 26), lambda t: next(filter(None, (bacon_dec(t, 26, tr) for tr in _BACON_TR)), None),
+                ""),
+    "bacon24": (lambda a: bacon_enc(a, 24), lambda t: next(filter(None, (bacon_dec(t, 24, tr) for tr in _BACON_TR)), None),
+                "ij"),
+    "polybius": (lambda a: polybius_enc(a, sep=" ", word=" / "), lambda t: polybius_dec(t), "ij"),
+    "tapcode": (lambda a: tap_enc(a), lambda t: tap_dec(t), "ck"),
+    "a1z26": (lambda a: a1z26_enc(a), lambda t: _ap_a1z26(t, "-"), ""),
+    "a1z26-comma": (lambda a: a1z26_enc(a, sep=","), lambda t: _ap_a1z26(t, ","), ""),
+}
+
+
+def aphex_over_enc(s, carrier, sep=" "):
+    """a-p letter hex (byte pairs split by `sep`, "" = one run) under a letter carrier."""
+    return _AP_CARRIERS[carrier][0](aphex_enc(s, sep))
+
+
+def aphex_reads(t):
+    """Every clean [carrier ->] a-p letter hex reading of t, the most English first (Bacon-24 groups also read as
+    Bacon-26 a-o letters: the wrong alphabet shifts j..p and loses on bigrams)."""
+    if not isinstance(t, str):
+        return []
+    outs = []
+    for name, (_e, dec, merge) in _AP_CARRIERS.items():
+        try:
+            a = dec(t)
+            x = aphex_dec(a, merge) if a else None
+        except (ValueError, IndexError, KeyError, TypeError):
+            x = None
+        if x and x not in outs:
+            outs.append(x)
+    return sorted(outs, key=_ap_fit, reverse=True)
+
+
+def aphex_over_dec(t, carrier=None):
+    """The text under [carrier ->] a-p letter hex, else None; carrier None = the best read of any carrier."""
+    if carrier is None:
+        r = aphex_reads(t)
+        return r[0] if r else None
+    if not isinstance(t, str):
+        return None
+    _e, dec, merge = _AP_CARRIERS[carrier]
+    try:
+        a = dec(t)
+        return aphex_dec(a, merge) if a else None
+    except (ValueError, IndexError, KeyError, TypeError):
+        return None
+
+
+def aphex_free(p):
+    """Mastery free line: a-p letter hex standalone, else its letter-carrier readings (best first)."""
+    try:
+        x = aphex_dec(p)
+        return [x] if x else aphex_reads(p)[:2]
+    except (ValueError, IndexError, KeyError, TypeError):
+        return []
+
+
+# Seven-segment display hex: each UTF-8 hex digit as the segments lit to show it (0-9 A b C d E F; segments a..g, a =
+# top, clockwise, g = middle). Tokens: masks in hex (0x3f / 3F / \x3f), decimal or binary ([01]{7,8}), or segment-letter
+# sets ("abcdef", any order / case); separated by whitespace or , ; | : / _ -, or one run (hex pairs / 7- or 8-bit
+# binary). Bit layouts: gfedcba (bit i = segment i, TM1637 / HT16K33), abcdefg (a = bit 6, MAX7219 / luma), the 8-bit
+# abcdefg+dp (a = MSB, dp = LSB); the dp bit ignored, active-low (common anode) inverted masks. Alternate glyphs: 7 with
+# f, 9 without d, lowercase a / c / e (luma). Strict: every token maps, clean UTF-8 that reads as text.
+_S7 = dict(x.split(":") for x in "abcdef:0 bc:1 abdeg:2 abcdg:3 bcfg:4 acdfg:5 acdefg:6 abc:7 abcdefg:8 abcdfg:9 "
+           "abcefg:a cdefg:b adef:c bcdeg:d adefg:e aefg:f abcf:7 abcfg:9 abcdeg:a deg:c abdefg:e".split())
+_S7_SEG = {v: k for k, v in reversed(list(_S7.items()))}   # nibble -> standard segment string (first listed wins)
+_S7_LAYOUTS = (("gfedcba", 0), ("abcdefg", 0), ("abcdefg", 1), ("gfedcba", 1))   # (bit order, dp-at-LSB shift)
+
+
+def _s7_mask(seg, order="gfedcba", shift=0, inv=False):
+    m = sum(1 << (i if order == "gfedcba" else 6 - i) for i, c in enumerate("abcdefg") if c in seg)
+    return (m ^ 0x7f if inv else m) << shift
+
+
+def _s7_maps():
+    """[(mask -> nibble, the bits that are segments)] per layout x polarity (the remaining bit is the decimal point)."""
+    out = []
+    for order, shift in _S7_LAYOUTS:
+        for inv in (False, True):
+            out.append(({_s7_mask(seg, order, shift, inv): n for seg, n in _S7.items()}, 0x7f << shift))
+    return out
+
+
+_S7_MAPS = _s7_maps()
+
+
+def seg7_enc(s, fmt="hex", order="gfedcba", shift=0, inv=False, sep=" "):
+    """fmt: hex (0x3f) / hexraw (3f) / dec / bin / letters."""
+    out = []
+    for c in _u(s).hex():
+        seg = _S7_SEG[c]
+        m = _s7_mask(seg, order, shift, inv)
+        out.append({"hex": "0x%02x" % m, "hexraw": "%02x" % m, "dec": str(m), "bin": format(m, "08b" if shift else "07b"),
+                    "letters": seg}[fmt])
+    return sep.join(out)
+
+
+def _s7_text(nibs):
+    if not nibs or len(nibs) % 2:
+        return None
+    try:
+        out = bytes.fromhex("".join(nibs)).decode("utf-8")
+    except ValueError:
+        return None
+    if not out or any(unicodedata.category(c) == "Cc" and c not in "\t\n\r" for c in out) or _texty(out) < 0.85:
+        return None
+    return out
+
+
+def seg7_reads(t):
+    """Every clean seven-segment hex reading of t (the most text-like first), else []."""
+    if not isinstance(t, str) or len(t) > 60000:
+        return []
+    t = t.strip().strip("\"'[](){}")
+    if not t:
+        return []
+    reads = []
+    letters = [x for x in _B4_SEP.split(t.lower()) if x]
+    if len(letters) >= 2 and all(re.fullmatch(r"[a-g]{1,7}", x) and len(set(x)) == len(x) for x in letters):
+        x = _s7_text([_S7.get("".join(sorted(x))) for x in letters] if all(
+            "".join(sorted(x)) in _S7 for x in letters) else [])
+        if x:
+            reads.append(x)
+    u = re.sub(r"(?i)(?:0x|\\x)(?=[0-9a-f])|0b(?=[01]{7,8}(?![0-9a-f]))", " ", t)
+    toks = [x for x in _B4_SEP.split(u) if x]
+    if not toks:
+        return reads
+    vals = []   # candidate integer token lists
+    if len(toks) == 1 and len(toks[0]) >= 8:
+        r = toks[0]
+        if re.fullmatch(r"[0-9a-fA-F]+", r) and not len(r) % 2:
+            vals.append([int(r[i:i + 2], 16) for i in range(0, len(r), 2)])
+        for b in (7, 8):
+            if re.fullmatch(r"[01]+", r) and not len(r) % b:
+                vals.append([int(r[i:i + b], 2) for i in range(0, len(r), b)])
+    elif len(toks) >= 2:
+        if all(re.fullmatch(r"[0-9a-fA-F]{1,2}", x) for x in toks):
+            vals.append([int(x, 16) for x in toks])
+        if all(re.fullmatch(r"\d{1,3}", x) for x in toks):
+            vals.append([int(x) for x in toks])
+        if all(re.fullmatch(r"[01]{7,8}", x) for x in toks):
+            vals.append([int(x, 2) for x in toks])
+    for vs in vals:
+        for m, segs in _S7_MAPS:
+            nibs = []
+            for v in vs:
+                n = m.get(v & segs) if v < 0x100 else None   # either state of the decimal point
+                if n is None:
+                    break
+                nibs.append(n)
+            else:
+                x = _s7_text(nibs)
+                if x and x not in reads:
+                    reads.append(x)
+    return sorted(reads, key=_texty, reverse=True)
+
+
+def seg7_dec(t):
+    try:
+        r = seg7_reads(t)
+    except (ValueError, IndexError, KeyError, TypeError):
+        return None
+    return r[0] if r else None
+
+
+def seg7_free(p):
+    try:
+        return seg7_reads(p)[:2]
+    except (ValueError, IndexError, KeyError, TypeError):
+        return []
+
+
+# Crib-aligned token hex: any <=16-token alphabet (words, emoji, glyphs, colours) standing for the 16 UTF-8 hex digits
+# under an UNKNOWN token->nibble map, recovered from the fixed sentence: "Nice work decoding this warmup! ..." = 4e 69 63
+# 65 20 ... Tokenize (whitespace / , ; | split; else per glyph = code point + its combining marks / VS / ZWJ / skin tone;
+# else per bare code point; else CamelCase words), require <= 16 distinct tokens, an even count, a consistent bijection
+# over at least the first 31 crib bytes (extended over the whole template prefix while it stays consistent), fill up to
+# 4 unmapped tokens by trying the free digits, fromhex, and accept only text that starts with the crib and ends in a
+# slug. Plain nibble order first, then low-nibble-first. Not covered: 2 tokens a byte with <= 256 tokens (the crib holds
+# too few distinct bytes to pin the map).
+_CT_PREFIX = _CRIB
+_CT_HEAD = 31   # len("Nice work decoding this warmup!")
+_CT_END = re.compile(r"[a-z]+(?:-[a-z]+)+-\d{2,}\s*$")
+_CT_DEMO = "🍎🍌🍒🍇🍉🍓🍑🍍🥝🥥🥑🍆🥕🌽🥦🍄"
+
+
+def crib_tok_enc(s, alphabet=_CT_DEMO, sep="", swap=False):
+    h = _u(s).hex()
+    if swap:
+        h = "".join(h[i + 1] + h[i] for i in range(0, len(h), 2))
+    toks = alphabet.split() if " " in alphabet else list(alphabet)
+    return sep.join(toks[int(c, 16)] for c in h)
+
+
+def _ct_glyphs(t):
+    out = []
+    for c in t:
+        o = ord(c)
+        join = out and (unicodedata.combining(c) or 0xFE00 <= o <= 0xFE0F or 0x1F3FB <= o <= 0x1F3FF
+                        or o == 0xE0020 or 0xE0061 <= o <= 0xE007F or out[-1].endswith("‍") or o == 0x200D)
+        if join:
+            out[-1] += c
+        else:
+            out.append(c)
+    return out
+
+
+def _ct_tokenizations(t):
+    """Candidate token lists of t, the most specific first (deduplicated)."""
+    outs = []
+    if re.search(r"[\s,;|]", t):
+        outs.append([x for x in re.split(r"[\s,;|]+", t) if x])
+    flat = re.sub(r"[\s,;|]+", "", t)
+    outs.append(_ct_glyphs(flat))
+    outs.append(list(flat))
+    if re.fullmatch(r"(?:[A-Z][a-z]+)+", flat):
+        outs.append(re.findall(r"[A-Z][a-z]+", flat))
+    seen, res = set(), []
+    for o in outs:
+        k = tuple(o)
+        if o and k not in seen:
+            seen.add(k)
+            res.append(o)
+    return res
+
+
+def _ct_text(toks, m, swap):
+    h = "".join(m[x] for x in toks)
+    if swap:
+        h = "".join(h[i + 1] + h[i] for i in range(0, len(h), 2))
+    try:
+        out = bytes.fromhex(h).decode("utf-8")
+    except ValueError:
+        return None
+    if not out.startswith(_CT_PREFIX[:_CT_HEAD]) or not _CT_END.search(out):
+        return None
+    if any(unicodedata.category(c) == "Cc" and c not in "\t\n\r" for c in out):
+        return None
+    return out.strip()
+
+
+def _ct_solve_toks(toks):
+    """(token->nibble map, swap, text) for one token list, else None."""
+    alpha = set(toks)
+    if len(toks) % 2 or len(toks) < 2 * _CT_HEAD + 4 or not 2 <= len(alpha) <= 16:
+        return None
+    for swap in (False, True):
+        ch = _CT_PREFIX.encode().hex()
+        if swap:
+            ch = "".join(ch[i + 1] + ch[i] for i in range(0, len(ch), 2))
+        fwd, back, n = {}, {}, 0
+        for tok, d in zip(toks, ch):
+            if fwd.get(tok, d) != d or back.get(d, tok) != tok:
+                break
+            fwd[tok], back[d] = d, tok
+            n += 1
+        if n < 2 * _CT_HEAD:
+            continue
+        unk = sorted(alpha - set(fwd), key=toks.index)
+        free = [d for d in "0123456789abcdef" if d not in back]
+        if len(unk) > 4 or len(unk) > len(free):
+            continue
+        hits = []
+        for perm in itertools.permutations(free, len(unk)):
+            m = dict(fwd, **dict(zip(unk, perm)))
+            x = _ct_text(toks, m, swap)
+            if x is not None:
+                hits.append((m, swap, x))
+                if len(hits) > 1:
+                    break
+        if len(hits) == 1:   # an unknown token the slug can't pin to one digit = ambiguous -> no answer
+            return hits[0]
+    return None
+
+
+def crib_tok_solve(blob):
+    """(name, sentence, enc) for the warmups sentence under crib-aligned token hex, else None; enc re-encodes with the
+    recovered alphabet and the blob's own separator."""
+    if not isinstance(blob, str):
+        return None
+    t = blob.strip()
+    if not t or len(t) > 60000:
+        return None
+    for toks in _ct_tokenizations(t):
+        try:
+            got = _ct_solve_toks(toks)
+        except (ValueError, KeyError, TypeError):
+            got = None
+        if got:
+            m, swap, x = got
+            inv = {d: k for k, d in m.items()}
+            sep = next((s for s in (" ", ", ", ",", "|", ";", "\n") if t == s.join(toks)), "")
+
+            def enc(s, inv=inv, sep=sep, swap=swap):
+                h = _u(s).hex()
+                if swap:
+                    h = "".join(h[i + 1] + h[i] for i in range(0, len(h), 2))
+                return sep.join(inv[c] if c in inv else "?" for c in h)
+            return f"crib-token-hex{'-swap' if swap else ''}", x, enc
+    return None
+
+
+def crib_tok_dec(t):
+    """The sentence under crib-aligned token hex (any <=16-token alphabet), else None."""
+    r = crib_tok_solve(t)
+    return r[1] if r else None
+
+
+# DNA bases: each UTF-8 byte as 4 bases, 2 bits a base MSB first (2 bases = one hex nibble), A=00 C=01 G=10 T=11 by
+# default; the decoder tries all 24 base->bit orders (ACGT first) and keeps a slug-bearing read, else the most English
+# one. Run together or split by whitespace , ; | / : _ -, either case, RNA U for T. Second form: codons (3 bases) via
+# the 64-symbol table a-z A-Z 0-9 space . in AAA..TTT order (any of the 24 orders), or the standard genetic code
+# amino-acid letters (decode only: 20 letters, no B J O U X Z; reads lowercase). Both codon forms pass non-base
+# characters through. Strict: only bases, length a multiple of 4 (3), clean printable text that reads more English
+# than the bases (a gene-looking run or an English line stays None).
+_DNA_ORDERS = ["ACGT"] + ["".join(p) for p in itertools.permutations("ACGT") if "".join(p) != "ACGT"]
+_DNA_SEP = re.compile(r"[\s,;|/:_\-]+")
+_CODON64 = string.ascii_lowercase + string.ascii_uppercase + "1234567890 ."
+_AMINO = "KNKNTTTTRSRSIIMIQHQHPPPPRRRRLLLLEDEDAAAAGGGGVVVV*Y*YSSSS*CWCLFLF"   # AAA..TTT in ACGT order
+
+
+def dna_enc(s, order="ACGT", sep="", lower=False, rna=False):
+    """4 bases a byte, 2 bits a base MSB first; sep splits the bytes."""
+    o = order.replace("T", "U") if rna else order
+    o = o.lower() if lower else o
+    return sep.join("".join(o[b >> k & 3] for k in (6, 4, 2, 0)) for b in _u(s))
+
+
+def _dna_bases(t, n):
+    """t's bases upper-cased (U -> T) with separators removed, else None (non-base char / length not a multiple of n)."""
+    if not isinstance(t, str):
+        return None
+    t = t.strip().strip("\"'[]()")
+    if not t or len(t) > 80000 or not (t.islower() or t.isupper()):
+        return None
+    a = _DNA_SEP.sub("", t).upper()
+    if "U" in a:
+        if "T" in a:
+            return None
+        a = a.replace("U", "T")
+    if not a or len(a) % n or a.strip("ACGT"):
+        return None
+    return a
+
+
+def _dna_text(a, order):
+    v = {c: i for i, c in enumerate(order)}
+    try:
+        out = bytes(v[a[i]] << 6 | v[a[i + 1]] << 4 | v[a[i + 2]] << 2 | v[a[i + 3]]
+                    for i in range(0, len(a), 4)).decode("utf-8")
+    except ValueError:
+        return None
+    if any(unicodedata.category(c) == "Cc" and c not in "\t\n\r" for c in out):
+        return None
+    return out
+
+
+def dna_reads(t, order=None):
+    """[(order, text)] of every clean base->bit order reading of t: slug-bearing first, then by (text-likeness,
+    bigram), ACGT winning ties. order: only that order."""
+    a = _dna_bases(t, 4)
+    if a is None:
+        return []
+    from lib.decode import _bigram
+    outs = []
+    for o in [order] if order else _DNA_ORDERS:
+        x = _dna_text(a, o)
+        if x and _texty(x) >= 0.85 and len(set(x)) >= 4:
+            outs.append((o, x))
+    outs.sort(key=lambda r: (bool(SLUG.search(r[1])), _texty(r[1]), _bigram(r[1])), reverse=True)
+    return [r for r in outs if _bigram(r[1]) > _bigram(t)]
+
+
+def dna_dec(t, order=None):
+    """The text under 2-bit DNA bases, else None; order None = the best of all 24 orders."""
+    r = dna_reads(t, order)
+    return r[0][1] if r else None
+
+
+def _codon_tab(order, table):
+    return {"".join(order[i // 16] + order[i // 4 % 4] + order[i % 4]): table[i] for i in range(64)}
+
+
+def codon_enc(s, order="ACGT", sep="", amino=False):
+    """Codon letters (64-symbol table, or the first codon of each amino acid); non-table chars pass through."""
+    inv = {}
+    for k, c in _codon_tab(order, _AMINO if amino else _CODON64).items():
+        inv.setdefault(c.lower() if amino else c, k)
+    if amino:
+        s = s.lower()
+    out, run = [], []
+    for c in s:
+        if c in inv:
+            run.append(inv[c])
+        elif amino and c.isalpha():
+            raise ValueError("no codon for %r" % c)
+        else:
+            out += [sep.join(run), c]
+            run = []
+    return "".join(out + [sep.join(run)])
+
+
+_CODON_RUN = re.compile(r"[ACGTU]+", re.I)
+_CODON_GAP = re.compile(r"(?<=[ACGTU]{3}) (?=[ACGTU]{3})", re.I)
+
+
+def codon_dec(t, order=None, amino=False):
+    """The text under codon letters, else None. order None = the best of all 24 orders (64-symbol table only)."""
+    if not isinstance(t, str) or len(t) > 80000:
+        return None
+    t = t.strip()
+    if len(_CODON_RUN.findall(t)) >= 4 and all(len(r) == 3 for r in _CODON_RUN.findall(t)):
+        t = re.sub(r" / |  ", " ", _CODON_GAP.sub("", t))   # one codon per token: single spaces split codons only
+    runs = [(m.start(), m.end(), _dna_bases(m.group(), 3)) for m in _CODON_RUN.finditer(t)]
+    if not runs or any(a is None for _s, _e, a in runs) or sum(e - s for s, e, _a in runs) < 0.6 * len(t):
+        return None
+    if re.search(r"[A-Za-z]", _CODON_RUN.sub("", t)):
+        return None   # stray non-base letters: not a codon line
+    from lib.decode import _bigram
+    best = None
+    for o in ["ACGT"] if amino else [order] if order else _DNA_ORDERS:
+        tab = _codon_tab(o, _AMINO if amino else _CODON64)
+        pos, out = 0, []
+        for s, e, a in runs:
+            out += [t[pos:s], "".join(tab[a[i:i + 3]] for i in range(0, len(a), 3))]
+            pos = e
+        x = "".join(out) + t[pos:]
+        x = x.lower() if amino else x
+        if amino and "*" in x.rstrip("*"):
+            continue
+        fit = (bool(SLUG.search(x)), _texty(x), _ap_fit(x)[1])
+        if best is None or fit > best[0]:
+            best = (fit, x)
+    if best is None or best[0][1] < 0.85 or best[0][2] <= max(_bigram(t), -6.5):
+        return None   # a codon line must read as English (letter/digit seams count against it)
+    return best[1].rstrip("*") if amino else best[1]
+
+
+def dna_free(p):
+    """Mastery free line: 2-bit DNA bytes (best two orders), else the codon-table and amino-acid readings."""
+    try:
+        r = [x for _o, x in dna_reads(p)[:2]]
+        return r or [x for x in (codon_dec(p), codon_dec(p, amino=True)) if x]
+    except (ValueError, IndexError, KeyError, TypeError):
+        return []
+
+
+# uuencode / xxencode:lines of <length char><4 chars per 3 bytes>, 45 bytes a line, optional `begin NNN name` ... `end`
 # frame. uu = chr(32 + v) (0 as space or backtick), xx = the 64-char alphabet below. The decoder takes framed or bare
 # bodies and rejects a line whose characters or length don't fit its length char.
 _UU = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
@@ -2372,6 +4022,75 @@ def unistyle_dec(t):
     if any(not c.isascii() and c not in _UNSTYLE for c in body):
         return None
     return "".join(_UNSTYLE.get(c, c) for c in t if c not in _UNSTYLE_SKIP)
+
+
+# Regional-indicator "emoji letters" as the Discord / emoji-text generators write them: REGIONAL INDICATOR SYMBOL
+# LETTER A-Z (U+1F1E6-1F1FF, capitals only: case lost) each followed by a space or zero-width char so neighbours don't
+# fuse into country flags, words split by a wider gap ("   " or " / "); digits as keycaps (4 U+FE0F U+20E3, also #/*),
+# !/?/-/+ as heavy emoji marks, or Discord shortcodes (:regional_indicator_a: :four: :hash:). Read back lowercase,
+# re-cased to the warmup sentence when it is (a piece of) it.
+_KEYCAP_WORDS = "zero one two three four five six seven eight nine".split()
+_RI_SHORT = ({f"regional_indicator_{c}": chr(0x1F1E6 + i) for i, c in enumerate(string.ascii_lowercase)}
+             | {w: str(i) for i, w in enumerate(_KEYCAP_WORDS)} | {f"keycap_{i}": str(i) for i in range(10)}
+             | {"hash": "#", "asterisk": "*", "keycap_ten": "10", "exclamation": "!", "heavy_exclamation_mark": "!",
+                "grey_exclamation": "!", "white_exclamation_mark": "!", "question": "?", "grey_question": "?",
+                "white_question_mark": "?", "heavy_minus_sign": "-", "heavy_plus_sign": "+", "bangbang": "!!",
+                "interrobang": "!?"})
+_RI_EMOJI = {"❗": "!", "❕": "!", "❓": "?", "❔": "?", "➖": "-", "➕": "+", "🔟": "10", "‼": "!!", "⁉": "!?"}
+_RI_ZW = "\u200b\u200c\u200d\u2060\ufeff"
+
+
+def regional_enc(s, gap="", word=" ", keycap=False, short=False):
+    """Plain -> regional-indicator letters (upper-cased), `gap` after every symbol inside a word, `word` between words;
+    keycap: digits/#/* as keycap emoji; short: Discord :regional_indicator_x: / :four: / :hash: shortcodes."""
+    def sym(c):
+        if c.isascii() and c.isalpha():
+            return f":regional_indicator_{c.lower()}:" if short else chr(0x1F1E6 + ord(c.upper()) - 65)
+        if c.isdigit() and c.isascii() and (keycap or short):
+            return f":{_KEYCAP_WORDS[int(c)]}:" if short else c + "\ufe0f\u20e3"
+        return c
+    return word.join(gap.join(sym(c) for c in w) for w in s.split(" "))
+
+
+def regional_dec(t):
+    """Regional-indicator text (any writer above) -> lowercase / sentence-cased text, else None (needs >= 2 RI letters
+    making >= 80% of the letters, nothing else non-ASCII)."""
+    if not isinstance(t, str) or not t.strip() or len(t) > 50000:
+        return None
+    t = re.sub(r":([a-z0-9_]+):", lambda m: _RI_SHORT.get(m[1], m[0]), t.strip())
+    t = re.sub("([0-9#*])\ufe0f?\u20e3", r"\1", t)
+    t = "".join(_RI_EMOJI.get(c, c) for c in t if c not in "\ufe0e\ufe0f")
+    ri = sum(0x1F1E6 <= ord(c) <= 0x1F1FF for c in t)
+    if ri < 2 or ri < 0.8 * sum(c.isalpha() or 0x1F1E6 <= ord(c) <= 0x1F1FF for c in t):
+        return None
+    if any(not c.isascii() and not 0x1F1E6 <= ord(c) <= 0x1F1FF and c not in _RI_ZW for c in t):
+        return None
+    parts = re.split(f"([\\s{_RI_ZW}]+)", t)
+    toks, gaps = parts[0::2], parts[1::2]
+    if len(toks) >= 3 and all(len(x) <= 2 for x in toks) and sum(len(x) == 1 for x in toks) >= 0.7 * len(toks):
+        # letter-spaced: a 1-space / zero-width gap joins, a wider gap (or " / ") is a word break, a newline stays
+        unit = max(set(gaps), key=gaps.count)   # the in-word gap: the commonest one
+        uws = sum(c.isspace() for c in unit)
+        out = [toks[0]]
+        for g, x in zip(gaps, toks[1:]):
+            ws = [c for c in g if c.isspace()]
+            if x == "/" and ws:
+                x = " "
+            elif out[-1] != " ":
+                out.append("" if g == unit else "\n" if "\n" in ws else " " if len(ws) > uws else "")
+            out.append(x)
+        s = "".join(out)
+        s = re.sub(r" +", " ", s)
+    else:
+        s = "".join(c for c in t if c not in _RI_ZW)
+    s = "".join(chr(ord(c) - 0x1F1E6 + 97) if 0x1F1E6 <= ord(c) <= 0x1F1FF else c.lower() for c in s)
+    return _recase(s) or s
+
+
+def regional_free(p):
+    """Speculative free-line regional-indicator decoder (keeps the line's leading whitespace)."""
+    b = regional_dec(p) if isinstance(p, str) else None
+    return [p[:len(p) - len(p.lstrip())] + b] if b else []
 
 
 # Zero-width steganography: invisible format characters carry the text between (or instead of) visible cover text,
@@ -3119,6 +4838,105 @@ def ucp_free(p):
     return [p[:len(p) - len(p.lstrip())] + d] if d else []
 
 
+# Whitespace steganography. A blob of only ' ' / '\t' (optionally '\n'-separated) or a cover text whose lines end in
+# space/tab runs: one symbol = one bit (space=0 tab=1 or swapped), MSB-first 8-bit bytes / 7-bit ASCII / 4-bit hex
+# nibbles; or SNOW / stegsnow (uncompressed, no password): after the FIRST tab of the trailing whitespace, every run of
+# n spaces (0-7) ended by a tab or by the end of the line is 3 bits, LSB first; a partial last byte and NUL padding
+# drop. Strict: never strip() the line; >= 16 whitespace symbols, both space and tab present, printable text out.
+def ws_bits_enc(s, zero=" ", one="\t", width=8, sep=""):
+    b = _u(s)
+    groups = [f"{c:08b}" for c in b] if width == 8 else [f"{int(c, 16):04b}" for c in b.hex()]
+    return sep.join(g.replace("0", "\0").replace("1", one).replace("\0", zero) for g in groups)
+
+
+def snow_enc(s, cover=""):
+    bits = "".join(f"{c:08b}" for c in _u(s))
+    bits += "0" * (-len(bits) % 3)
+    runs = ["\t"] + [" " * (int(bits[i]) + 2 * int(bits[i + 1]) + 4 * int(bits[i + 2])) + "\t"
+                     for i in range(0, len(bits), 3)]
+    return cover + "".join(runs)
+
+
+def _ws_trailing(t):
+    """[trailing space/tab run of each line] (a pure-whitespace line counts whole)."""
+    out = []
+    for ln in t.split("\n"):
+        ln = ln.rstrip("\r")
+        out.append(ln[len(ln.rstrip(" \t")):])
+    return out
+
+
+def _ws_snow(runs):
+    bits, started = [], False
+    for r in runs:
+        if not started:
+            k = r.find("\t")
+            if k < 0:
+                continue
+            started, r = True, r[k + 1:]
+        if not r:
+            continue
+        for g in (r.split("\t")[:-1] if r.endswith("\t") else r.split("\t")):
+            n = len(g)
+            if n > 7 or g.strip(" "):
+                return None
+            bits += [n & 1, n >> 1 & 1, n >> 2 & 1]
+    out = bytes(int("".join(map(str, bits[i:i + 8])), 2) for i in range(0, len(bits) - 7, 8)).rstrip(b"\0")
+    return out.decode("utf-8") if out else None
+
+
+def _ws_bit_reads(sy, widths):
+    out = []
+    for one in ("\t", " "):
+        bits = "".join("1" if c == one else "0" for c in sy)
+        for w in widths:
+            if len(bits) % w:
+                continue
+            vals = [int(bits[i:i + w], 2) for i in range(0, len(bits), w)]
+            try:
+                out.append(bytes(vals).decode("utf-8") if w > 4 else
+                           bytes.fromhex("".join("%x" % v for v in vals)).decode("utf-8"))
+            except ValueError:
+                pass
+    return out
+
+
+def ws_cands(t, k=3):
+    """Keyless readings of the whitespace payload in t (pure space/tab blob or cover text + trailing runs), most
+    English first; [] for ordinary text (markdown two-space breaks, indentation). Never raises."""
+    try:
+        if not isinstance(t, str) or len(t) > 200000 or "\t" not in t or " " not in t:
+            return []
+        reads = []
+        pure = not t.strip(" \t\r\n")
+        runs = _ws_trailing(t) if not pure else [ln.rstrip("\r") for ln in t.split("\n")]
+        sy = "".join(runs)
+        if len(sy) < 16 or "\t" not in sy or " " not in sy:
+            return []
+        snow = safe(_ws_snow, runs)
+        if snow:
+            reads.append(snow)
+        toks = [r for r in runs if r]
+        lens = {len(r) for r in toks}
+        widths = [min(lens)] if len(toks) > 1 and len(lens) == 1 and min(lens) in (4, 7, 8) else [8, 7, 4]
+        reads += _ws_bit_reads(sy, widths)
+        from lib.decode import _bigram
+        good = []
+        for x in reads:
+            if (x and x not in good and _texty(x) >= 0.9 and any(c.isalpha() for c in x)
+                    and not any(unicodedata.category(c) == "Cc" and c not in "\t\n\r" for c in x)):
+                good.append(x)
+        return sorted(good, key=_bigram, reverse=True)[:k]
+    except Exception:  # noqa: BLE001 - malformed input reads as nothing
+        return []
+
+
+def ws_dec(t):
+    """The best whitespace-stego reading of t, or None."""
+    got = ws_cands(t, 1)
+    return got[0] if got else None
+
+
 # ------------------------------------------------- inner byte encodings: EBCDIC (cp037/cp500), UTF-16, UTF-32, UTF-7
 # A byte layer (hex / base64 / base32 / binary / decimal / octal / %xx) whose bytes are NOT UTF-8: EBCDIC (`40` = space,
 # letters c1-e9 / 81-a9, `!` = 5a cp037 / 4f cp500), UTF-16 (`00` every 2nd byte, maybe a ff fe / fe ff BOM), UTF-32,
@@ -3296,6 +5114,107 @@ def _xor(s, k):
     return bytes(b ^ k for b in _u(s))
 
 
+# repeating-key XOR keyed by a title word, hex / base64 out: key = c ^ p over the crib, period = smallest repeat
+def xorkey(b, key):
+    return bytes(x ^ key[i % len(key)] for i, x in enumerate(b))
+
+
+def xorkey_enc(s, key, rep="hex"):
+    b = xorkey(_u(s), key.encode() if isinstance(key, str) else key)
+    if rep.startswith("hex"):
+        return b.hex().upper() if rep == "HEX" else b.hex()
+    t = (base64.urlsafe_b64encode(b) if rep.startswith("base64url") else base64.b64encode(b)).decode()
+    return t.rstrip("=") if rep.endswith("-nopad") else t
+
+
+def _xor_reads(t):
+    """[(rep, bytes)] for the blob's hex / base64 / base64url readings (whitespace and 0x / \\x / : separators dropped)."""
+    s = re.sub(r"\s+", "", _t(t))
+    out = []
+    h = re.sub(r"0x|\\x|[:,]", "", s, flags=re.I)
+    if h and len(h) % 2 == 0 and re.fullmatch(r"[0-9A-Fa-f]+", h):
+        out.append(("HEX" if re.search(r"[A-F]", h) and not re.search(r"[a-f]", h) else "hex", bytes.fromhex(h)))
+    if s and re.fullmatch(r"[A-Za-z0-9+/_-]+={0,2}", s) and not ("+" in s or "/" in s) & ("-" in s or "_" in s):
+        url = "-" in s or "_" in s
+        try:
+            b = base64.b64decode(_b64pad(s.replace("-", "+").replace("_", "/")), validate=True)
+            out.append((("base64url" if url else "base64") + ("" if "=" in s or len(s) % 4 == 0 else "-nopad"), b))
+        except Exception:  # noqa: BLE001
+            pass
+    return out
+
+
+def _xor_period(ks, maxp=32):
+    """The smallest period p (2p <= len) the key stream repeats with, else None."""
+    for p in range(1, min(maxp, len(ks) // 2) + 1):
+        if all(ks[i] == ks[i % p] for i in range(p, len(ks))):
+            return p
+    return None
+
+
+def _xor_text(b):
+    try:
+        s = b.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    return s if s.isprintable() else None
+
+
+def xorkey_solve(blob, hints=()):
+    """(name, sentence, enc) when the blob is hex / base64 of the warmups sentence XORed with a repeating key (key =
+    cipher ^ crib over the fixed prefix, cut at its smallest period; a title / prompt word as the key otherwise), else
+    None. A key stream with no period <= 32 and no hint word that reads crib + slug -> None."""
+    try:
+        crib = _CRIB.encode()
+        for rep, data in _xor_reads(blob):
+            if len(data) <= len(crib):
+                continue
+            ks = bytes(c ^ p for c, p in zip(data, crib))
+            keys = []
+            per = _xor_period(ks)
+            if per and 0 not in ks[:per]:   # a zero key byte = untouched text: that's the bare hex / base64 codec
+                keys.append(ks[:per])
+            keys += [k.encode() for k in _hint_keys(hints)]
+            for key in keys:
+                got = _xor_text(xorkey(data, key))
+                if got and got.startswith(_CRIB) and SLUG.fullmatch(got[len(_CRIB):]):
+                    return (f"xorkey:{key.decode('latin-1')}-{rep}", got,
+                            (lambda key, rep: lambda s: xorkey_enc(s, key, rep))(key, rep))
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def xorkey_dec(t):
+    r = xorkey_solve(t)
+    return r[1] if r else None
+
+
+def xorkey_fragment(p):
+    """Mastery free-text fragment = hex / base64 of a sentence piece under a repeating title-word XOR key, key
+    restarting per fragment: the fixed sentence at every offset as the crib, the key stream must repeat with an
+    all-letter key (>= 2 full periods + 4 bytes confirmed) and the whole fragment must decode printable."""
+    out = []
+    try:
+        crib = _CRIB.encode()
+        for _rep, data in _xor_reads(p):
+            for off in range(len(crib)):
+                c = crib[off:]
+                m = min(len(c), len(data))
+                if m < 10:
+                    break
+                ks = bytes(x ^ y for x, y in zip(data[:m], c))
+                per = _xor_period(ks, min(16, (m - 4) // 2))
+                if not per or per < 2 or not ks[:per].isalpha():
+                    continue
+                got = _xor_text(xorkey(data, ks[:per]))
+                if got and got not in out:
+                    out.append(got)
+    except Exception:  # noqa: BLE001
+        return out
+    return out[:4]
+
+
 def _poly_cands(k):
     """Exact keyed polyalphabetic (name, enc, dec) entries for one key word: Beaufort c = k - p, variant c = p - k,
     autokey (pycipher: primer then plaintext), key advancing on every character."""
@@ -3444,6 +5363,15 @@ def playfair_solve(blob, hints=()):
 _PUN_KEYS = ("key", "lemon", "vigenere", "beaufort", "autokey", "bellaso", "blaise", "cipher", "secret", "huntress")
 
 
+_XOR_PUN = ("xor", "key", "secret", "huntress", "cipher")
+
+
+def _xorkey_cands(keys):
+    return [(f"xorkey:{k}-{rep}", (lambda k, rep: lambda s: xorkey_enc(s, k, rep))(k, rep),
+             (lambda k: lambda t: next((_xor_text(xorkey(b, k.encode())) for _r, b in _xor_reads(t)), None))(k))
+            for k in keys for rep in ("hex", "base64")]
+
+
 def _cands():
     """[(name, enc, dec|None)] in try order: the confirmed day codecs, cheap format variants, classical ciphers."""
     out = [(name, enc, dec) for _d, name, enc, dec, _f in DAYS]
@@ -3458,6 +5386,68 @@ def _cands():
         ("binary8-nospace", lambda s: "".join(f"{b:08b}" for b in _u(s)),
          lambda t: _t(int(t.strip(), 2).to_bytes(len(t.strip()) // 8, "big"))),
         ("binary7", lambda s: " ".join(f"{b:07b}" for b in _u(s)), DAYS[3][3]),
+        # 4-bit binary hex nibbles (run together = binary8-nospace above): separators, byte gaps, nibble-swapped
+        *[(f"binary4{tag}(hex)", (lambda kw: lambda s: bin4_enc(s, **kw))(kw),
+           (lambda sw: lambda t: bin4_dec(t, sw))(kw.get("swap", False)))
+          for tag, kw in (("", {}), ("-comma", {"sep": ","}), ("-comma-space", {"sep": ", "}), ("-dash", {"sep": "-"}),
+                          ("-2space", {"byte": "  "}), ("-bytes|", {"byte": " | "}), ("-pairs-dash", {"sep": "-", "byte": " "}),
+                          ("-pairs-colon", {"sep": ":", "byte": " "}), ("-swap", {"swap": True}),
+                          ("-swap-blob", {"sep": "", "swap": True}))],
+        # BCD of decimal char codes (8421 / Excess-3): char separators, one token per char, nibble streams
+        *[(f"bcd{tag}", (lambda kw: lambda s: bcd_enc(s, **kw))(kw), bcd_dec)
+          for tag, kw in (("", {}), ("-comma", {"char": ", "}), ("-2space", {"char": "  "}), ("-pipe", {"char": " | "}),
+                          ("-tok", {"sep": "", "char": " "}), ("-tok3", {"sep": "", "char": " ", "pad": 3}),
+                          ("-tokpacked", {"sep": "", "char": " ", "pad": -1}), ("-stream3", {"char": " ", "pad": 3}),
+                          ("-streampacked", {"char": " ", "pad": -1}), ("-stream", {"char": " "}),
+                          ("-blob3", {"sep": "", "char": "", "pad": 3}), ("-xs3", {"xs3": True}),
+                          ("-xs3-tok", {"sep": "", "char": " ", "xs3": True}))],
+        # address notation: IPv4 dotted quads, IPv6 ('::' padding), MAC, UUID (RFC / GUID mixed-endian)
+        *[(f"addr-{tag}", (lambda kw: lambda s: addr_enc(s, **kw))(kw),
+           (lambda k: lambda t: addr_dec(t, k))(kw["kind"]))
+          for tag, kw in (("ipv4", {"kind": "ipv4"}), ("ipv4-short", {"kind": "ipv4", "pad": False}),
+                          ("ipv4-comma", {"kind": "ipv4", "sep": ", "}), ("ipv4-lines", {"kind": "ipv4", "sep": "\n"}),
+                          ("ipv6", {"kind": "ipv6"}), ("ipv6-short", {"kind": "ipv6", "pad": False}),
+                          ("ipv6-upper", {"kind": "ipv6", "upper": True}), ("mac", {"kind": "mac"}),
+                          ("mac-dash-upper", {"kind": "mac", "style": "-", "upper": True}),
+                          ("mac-cisco", {"kind": "mac", "style": "."}), ("mac-short", {"kind": "mac", "pad": False}),
+                          ("uuid", {"kind": "uuid"}), ("uuid-upper", {"kind": "uuid", "upper": True}),
+                          ("uuid-guid", {"kind": "guid"}), ("uuid-short", {"kind": "uuid", "pad": False}))],
+        # Gray-coded binary per byte (8-bit / 7-bit, spaced or run together)
+        ("gray8", gray_enc, gray_dec), ("gray8-nospace", lambda s: gray_enc(s, sep=""), gray_dec),
+        ("gray7", lambda s: gray_enc(s, 7), gray_dec),
+        # Roman-numeral char codes (any separator / case; " / " words; hex-nibble variant with N = 0)
+        *[(f"roman{tag}", (lambda kw: lambda s: roman_enc(s, **kw))(kw), roman_dec)
+          for tag, kw in (("", {}), ("-lower", {"lower": True}), ("-comma", {"sep": ", "}), ("-dash", {"sep": "-"}),
+                          ("-dot", {"sep": "."}), ("-words", {"word": " / "}), ("-nib", {"nib": True}))],
+        # Chuck Norris unary: 7-bit ASCII classic, 8-bit bytes (= hex nibbles run together), hex digits as text
+        *[(f"chuck-unary{b}{'-hex' if i else ''}", (lambda b, i: lambda s: chuck_enc(s, b, i))(b, i),
+           (lambda b, i: lambda t: chuck_dec(t, b, i))(b, i)) for b in (7, 8) for i in (None, "hex")],
+        # a-p letter hex (D17's middle layer): standalone, then under a letter carrier
+        ("aphex", aphex_enc, aphex_dec),
+        ("aphex-pairs", lambda s: aphex_enc(s, " "), aphex_dec),
+        ("aphex-upper", lambda s: aphex_enc(s, upper=True), aphex_dec),
+        # seven-segment display hex: segment masks (gfedcba / abcdefg / abcdefg+dp, active-low) or segment-letter sets
+        *[(f"seg7{tag}", (lambda kw: lambda s: seg7_enc(s, **kw))(kw), seg7_dec)
+          for tag, kw in (("-hex", {}), ("-hexraw", {"fmt": "hexraw"}), ("-dec", {"fmt": "dec"}), ("-bin", {"fmt": "bin"}),
+                          ("-letters", {"fmt": "letters"}), ("-abc-hex", {"order": "abcdefg"}),
+                          ("-abcdp-hex", {"order": "abcdefg", "shift": 1}), ("-inv-hex", {"inv": True}),
+                          ("-run", {"fmt": "hexraw", "sep": ""}))],
+        # any <=16-token alphabet over hex, map recovered from the crib (the demo encoder is one sample alphabet)
+        ("crib-token-hex", crib_tok_enc, crib_tok_dec),
+        *[(f"{c}(aphex{tag})", (lambda c, sp: lambda s: aphex_over_enc(s, c, sp))(c, sp),
+           (lambda c: lambda t: aphex_over_dec(t, c))(c))
+          for c in ("bacon24", "polybius", "tapcode", "a1z26", "a1z26-comma") for tag, sp in (("", ""), ("-pairs", " "))],
+        # DNA bases: 2 bits a base (4 a byte, any of the 24 base->bit orders), then codons (64-symbol / amino-acid table)
+        ("dna", dna_enc, dna_dec),
+        ("dna-bytes", lambda s: dna_enc(s, sep=" "), dna_dec),
+        ("dna-lower", lambda s: dna_enc(s, lower=True), dna_dec),
+        ("rna", lambda s: dna_enc(s, rna=True), dna_dec),
+        ("codon64", codon_enc, codon_dec),
+        ("codon64-spaced", lambda s: codon_enc(s, sep=" "), codon_dec),
+        *[(f"{n}:{o}", (lambda f, o, sp: lambda s: f(s, o, sp))(f, o, sp), (lambda d, o: lambda t: d(t, o))(d, o))
+          for o in _DNA_ORDERS[1:] for n, f, d, sp in (("dna", dna_enc, dna_dec, ""), ("dna-bytes", dna_enc, dna_dec, " "),
+                                                       ("codon64", codon_enc, codon_dec, ""))],
+        ("codon-amino", lambda s: codon_enc(s, amino=True), lambda t: codon_dec(t, amino=True)),
         ("decimal-comma", lambda s: ",".join(str(b) for b in _u(s)), DAYS[4][3]),
         ("decimal-comma-space", lambda s: ", ".join(str(b) for b in _u(s)), DAYS[4][3]),
         ("decimal3", lambda s: " ".join(f"{b:03d}" for b in _u(s)), DAYS[4][3]),
@@ -3499,6 +5489,19 @@ def _cands():
         ("z85", z85_enc, z85_dec),
         ("z85-pad", lambda s: z85_enc(s, pad=True), z85_dec),
         ("base100", b100_enc, b100_dec),
+        ("css-hex", css_hex_enc, css_hex_dec),
+        ("css-hex-upper", lambda s: css_hex_enc(s, upper=True), css_hex_dec),
+        ("css-hex-pad20", lambda s: css_hex_enc(s, pad=b" "), css_hex_dec),
+        ("css-hex3", lambda s: css_hex_enc(s, "hex3"), css_hex_dec),
+        ("css-hex3-upper-comma", lambda s: css_hex_enc(s, "hex3", ",", upper=True), css_hex_dec),
+        ("css-rgb", lambda s: css_hex_enc(s, "rgb"), css_hex_dec),
+        ("iching", iching_enc, iching_dec),
+        ("iching-url", lambda s: iching_enc(s, alpha=_B64URL), lambda t: iching_dec(t, alpha=_B64URL)),
+        *[(f"iching-{o}", (lambda o: lambda s: iching_enc(s, o))(o), (lambda o: lambda t: iching_dec(t, o))(o))
+          for o in _HEXA_ORDERS if o != "kingwen"],
+        ("trigram-octal", trigram_enc, trigram_dec),
+        ("trigram-octal-blob", lambda s: trigram_enc(s, sep=""), trigram_dec),
+        ("trigram-octal-inv", lambda s: trigram_enc(s, comp=True), lambda t: trigram_dec(t, comp=True)),
         ("punycode-words", lambda s: " ".join(puny_enc(w) for w in s.split(" ")), puny_words_dec),
         ("punycode", puny_enc, puny_dec),
         ("xn--words", lambda s: idna_enc(s, force=True), lambda t: idna_dec(t, force=True)),
@@ -3621,6 +5624,12 @@ def _cands():
         ("regional", lambda s: unistyle_enc(s, "regional", upper=True), unistyle_dec),
         ("regional-zwsp", lambda s: "\u200b".join(unistyle_enc(s, "regional", upper=True)), unistyle_dec),
         ("bubble-black", lambda s: unistyle_enc(s, "bubble-black", upper=True), unistyle_dec),
+        ("regional-spaced", lambda s: regional_enc(s, " ", "   "), regional_dec),
+        ("regional-spaced-slash", lambda s: regional_enc(s, " ", " / "), regional_dec),
+        ("regional-zwgap", lambda s: regional_enc(s, "\u200b"), regional_dec),
+        ("regional-keycap", lambda s: regional_enc(s, keycap=True), regional_dec),
+        ("regional-spaced-keycap", lambda s: regional_enc(s, " ", "   ", keycap=True), regional_dec),
+        ("regional-shortcode", lambda s: regional_enc(s, " ", "   ", short=True), regional_dec),
         ("zw-bits8", zw_bits_enc, zw_dec),
         ("zw-bits8-inv", lambda s: zw_bits_enc(s, "‌", "​"), zw_dec),
         ("zw-fingerprint", lambda s: zw_bits_enc(s, "‌", "​", sep="‍", join="﻿"), zw_dec),
@@ -3628,6 +5637,12 @@ def _cands():
         ("zwsp-steg", lambda s: zw_base_enc(s, _ZWSP_STEG, 7), zw_dec),
         ("zwsp-steg-zwsp", lambda s: zw_base_enc(s, _ZWSP_STEG[:3], 11), zw_dec),
         ("zero-width-lib", lambda s: zw_base_enc(s, _ZWLIB, sep="​"), zw_dec),
+        ("ws-bits8", ws_bits_enc, ws_dec),
+        ("ws-bits8-inv", lambda s: ws_bits_enc(s, "\t", " "), ws_dec),
+        ("ws-bits8-lines", lambda s: ws_bits_enc(s, sep="\n"), ws_dec),
+        ("ws-nib4", lambda s: ws_bits_enc(s, width=4), ws_dec),
+        ("ws-nib4-inv", lambda s: ws_bits_enc(s, "\t", " ", 4), ws_dec),
+        ("snow", snow_enc, ws_dec),
         ("ucp-U+", ucp_enc, ucp_dec),
         ("ucp-U+-spaced", lambda s: ucp_enc(s, sep=" "), ucp_dec),
         ("ucp-u+-lower", lambda s: ucp_enc(s, "U+{:04x}"), ucp_dec),
@@ -3657,6 +5672,41 @@ def _cands():
              (lambda a, tr, k: lambda t: bacon_dec(t, a, tr, k))(a, tr, k))
             for a in (26, 24) for tr in _BACON_TR for k in (False, True) for cc in (False, True)
             if not (cc and (not k or tr[0] in "01"))]
+    # generic two-symbol fixed-width groups (D17 bacon-hex generalized): pair x width x inner, one decoder for all
+    out += [(f"twosym-{pr}-w{w}-{inner}{'-blob' if not sp else ''}",
+             (lambda pr, w, inner, sp: lambda s: twosym_enc(s, pr, w, inner, sp))(pr, w, inner, sp), twosym_dec)
+            for pr in ("ab", "AB", "ba", "01", "10", "XO", "OX")
+            for inner, ws in (("hex", (4, 5, 6, 7, 8)), ("ascii", (7, 8)))
+            for w in ws for sp in (" ", "")
+            if (pr, w, inner, sp) not in (("01", 8, "ascii", " "), ("ab", 5, "hex", " "))]   # = D4 binary8 / D17
+    # the group VALUES index an alphabet: base32 (w5), base64 std/url (w6), octal digits (w3)
+    out += [(f"twosym-{pr}-w{w}-{inner}{'-blob' if not sp else ''}",
+             (lambda pr, w, inner, sp: lambda s: twosym_enc(s, pr, w, inner, sp))(pr, w, inner, sp), twosym_dec)
+            for pr in ("ab", "AB", "ba", "01", "10", "XO", "OX")
+            for inner, w, sps in (("b32", 5, (" ", "")), ("b64", 6, (" ", "")), ("b64url", 6, (" ",)),
+                                  ("octal", 3, (" ",)))
+            for sp in sps]
+    # Kenny code (m/p/f triplets, other characters kept) + fixed-width ternary groups: symbols x width x inner
+    out += [("kenny", kenny_enc, tern_dec), ("kenny-lower", lambda s: kenny_enc(s.lower()), tern_dec)]
+    out += [(f"ternary-{sy}-w{w}-{inner}{'-blob' if not sp else ''}",
+             (lambda sy, w, inner, sp: lambda s: tern_enc(s, sy, w, inner, sp))(sy, w, inner, sp), tern_dec)
+            for sy in ("012", "mpf")
+            for inner, ws in (("alpha", (3,)), ("hex", (3,)), ("ascii", (5, 6)))
+            for w in ws for sp in (" ", "")]
+    # char codes / hex nibbles as fixed-width base-4..7 digit groups (ternary 0/1/2 = the entries above)
+    out += [(f"radix{r}-w{w}-{inner}{'-blob' if not sp else ''}",
+             (lambda r, w, inner, sp: lambda s: radix_enc(s, r, w, inner, sp))(r, w, inner, sp), radix_dec)
+            for r, ascii_ws in ((4, (4,)), (5, (3, 4)), (6, (3,)), (7, (3,)))
+            for inner, ws in (("hex", (2,)), ("ascii", ascii_ws))
+            for w in ws for sp in (" ", "")]
+    # ordered glyph sets (dice / chess / zodiac / suits / Mahjong) as radix digits, same group -> value rules
+    out += [(f"glyph-{kind}-w{w}-{inner}{'-blob' if not sp else ''}",
+             (lambda kind, w, inner, sp: lambda s: glyph_radix_enc(s, kind, w, inner, sp))(kind, w, inner, sp),
+             glyph_radix_dec)
+            for kind, ws in (("dice", ((3, "ascii"), (2, "hex"))), ("chess", ((2, "ascii"), (2, "hex"))),
+                             ("zodiac", ((2, "ascii"), (2, "hex"))), ("suits8", ((3, "ascii"), (2, "hex"))),
+                             ("suits4", ((4, "ascii"), (2, "hex"))), ("mahjong", ((2, "ascii"), (1, "hex"))))
+            for w, inner in ws for sp in (" ", "")]
     # columnar / scytale transposition, keyless: identity order = scytale with n columns (col-read and row-read)
     out += [(f"scytale{n}", (lambda n: lambda s: col_enc(s, n))(n), (lambda n: lambda t: col_dec(t, n))(n))
             for n in range(2, 9)]
@@ -3684,11 +5734,25 @@ def _cands():
              (lambda k: lambda t: bytes(b ^ k for b in bytes.fromhex(t.strip())).decode())(k)) for k in range(1, 256)]
     out += [(f"xor{k:#04x}-base64", (lambda k: lambda s: base64.b64encode(_xor(s, k)).decode())(k),
              (lambda k: lambda t: bytes(b ^ k for b in base64.b64decode(_b64pad(t))).decode())(k)) for k in range(1, 256)]
+    # repeating-key XOR, key = a pun word (any other key: the crib -> xorkey_solve, or _hint_cands)
+    out += _xorkey_cands(_XOR_PUN)
     # chained pairs of confirmed codecs, inner first ("base64 of the reversed text", "hex of rot13", ...)
     for (_d1, n1, e1, d1, _f1), (_d2, n2, e2, d2, _f2) in itertools.product(DAYS, DAYS):
         if n1 != n2:
             out.append((f"{n2}({n1})", (lambda e1, e2: lambda s: e2(e1(s)))(e1, e2),
                         (lambda d1, d2: lambda t: d1(d2(t)))(d1, d2)))
+    # a free letter map over a strict carrier beyond the DAYS x DAYS pairs: swapcase over the base64/32 family
+    # (swapcase(base32) = lowercase base32), and the DAYS letter maps over the carrier variants (nopad / lower / HEX)
+    have = {n: (e, d) for n, e, d in out}
+    days = {n for _d, n, _e, _dd, _f in DAYS}
+    frees = [(n, e, d) for _d, n, e, d, f in DAYS if f] + [("swapcase", str.swapcase, str.swapcase)]
+    for (n1, e1, d1), n2 in itertools.product(frees, ("base64", "base32", "base64url-nopad", "base64-nopad",
+                                                      "base32-nopad", "base64url", "base32-lower", "hex-upper")):
+        if (n1 != "swapcase" and n2 in days) or (n1 == "swapcase" and n2 in ("base32-lower", "hex-upper")):
+            continue   # a DAYS x DAYS pair above / = the bare carrier
+        e2, d2 = have[n2]
+        out.append((f"{n1}({n2})", (lambda e1, e2: lambda s: e1(e2(s)))(e1, e2),
+                    (lambda d1, d2: lambda t: d2(d1(t)))(d1, d2)))
     return out
 
 
@@ -3718,6 +5782,7 @@ def _hint_cands(hints):
                     (lambda k: lambda t: keyword_dec(t, k))(k)))
         out += _poly_cands(k)
         out += _pf_cands(k)
+        out += _xorkey_cands((k,))
         if len(k) <= 8:   # columnar transposition keyed by a title/prompt word
             out.append((f"columnar:{k}", (lambda k: lambda s: col_enc(s, k))(k), (lambda k: lambda t: col_dec(t, k))(k)))
             out.append((f"columnar-x:{k}", (lambda k: lambda s: col_enc(s, k, "x"))(k),
@@ -3780,6 +5845,9 @@ def infer(plain, blob, hints=()):
         return zf
     for name, enc, dec in cands:
         if dec is not None and safe(dec, want) == p:
+            if dec is crib_tok_dec:   # the demo alphabet can't re-encode: hand back the recovered map's encoder
+                ct = crib_tok_solve(want)
+                return ct[0], ct[2]
             return name, enc
     st = stack_fit(p, want)
     if st:
@@ -3791,6 +5859,9 @@ def infer(plain, blob, hints=()):
     cs = crib_solve(want, hints) if p.startswith(_CRIB) else None
     if cs and cs[1] == p:
         return cs[0], cs[2]
+    xk = xorkey_solve(want, hints) if p.startswith(_CRIB) else None
+    if xk and xk[1] == p:
+        return xk[0], xk[2]
     pf = playfair_solve(want, hints) if p.startswith(_CRIB) else None
     if pf and pf[1] == p:
         return pf[0], pf[2]
@@ -3840,6 +5911,9 @@ def plaintext(blob, slug, deadline=None, hints=()):
     cs = crib_solve(text, hints)
     if cs and slug in cs[1]:
         return cs[1]
+    xk = xorkey_solve(text, hints)
+    if xk and slug in xk[1]:
+        return xk[1]
     pf = playfair_solve(text, hints)
     if pf and slug in pf[1]:
         return pf[1]
@@ -3884,7 +5958,7 @@ def infer_case(case_dir, hints=()):
 # case-free Morse text layer: each step keeps only printable text that is new, a self-inverse layer never repeats
 # back-to-back, and a chain holds at most 2 free (letter-only) layers. A full blob is accepted only as printable
 # one-line text ending in a slug; a Mastery fragment only as a piece of the warmups template (or its tail + slug chars).
-_STACK_INV = {"rot13", "reverse", "atbash", "rot47"}
+_STACK_INV = {"rot13", "reverse", "atbash", "rot47", "swapcase"}
 _STACK_END = re.compile(r"[a-z]+(?:-[a-z]+)+-\d{2,}$")
 
 
@@ -3895,12 +5969,15 @@ def _stack_morse(t):
 
 def _stack_layers():
     out = [(name, free, (lambda d: lambda t: [x for x in (safe(d, t),) if x])(dec)) for _d, name, _e, dec, free in DAYS]
-    return out + [("morse", False, _stack_morse)]
+    # swapcase: a free letter layer outside the DAYS (swapcase over base64; swapcase(base32) = lowercase base32)
+    return out + [("morse", False, _stack_morse),
+                  ("swapcase", True, lambda t: [t.swapcase()] if any(c.isalpha() for c in t) else [])]
 
 
 def _stack_encs():
     out = {name: enc for _d, name, enc, _dec, _f in DAYS}
     out["morse"] = morse_enc
+    out["swapcase"] = str.swapcase
     return out
 
 
@@ -4035,18 +6112,38 @@ SPECULATIVE_FREE = (
     ("base45", b45_free),
     ("z85", z85_free),
     ("base100", b100_free),
+    ("css-hex", css_hex_free),
+    ("iching", iching_free),
+    ("trigram-octal", trigram_free),
     ("upsidedown", upside_free),
     ("leet", lambda p: [b for b in (leet_dec(p),) if b]),
     ("multitap", lambda p: [b for b in (multitap_dec(p),) if b]),
     ("stack3", stack_free),
     ("t9", lambda p: [b for b in (t9_dec(p),) if b]),
     ("dtmf", dtmf_free),
+    ("regional", regional_free),
     ("unistyle", lambda p: [p[:len(p) - len(p.lstrip())] + b for b in (unistyle_dec(p),) if b]),
     ("codepoint", ucp_free),
     ("inner-bytes", inner_free),
     ("zerowidth", zw_cands),
+    ("whitespace", ws_cands),
+    ("twosym", twosym_free),
+    ("ternary", tern_free),
+    ("radix", radix_free),
+    ("glyph-radix", glyph_radix_free),
+    ("binary4-hex", bin4_free),
+    ("bcd", bcd_free),
+    ("address", addr_free),
+    ("gray", gray_free),
+    ("roman", roman_free),
+    ("chuck-unary", chuck_free),
+    ("aphex", aphex_free),
+    ("seg7", seg7_free),
+    ("crib-token-hex", lambda p: [b for b in (crib_tok_dec(p),) if b]),
+    ("dna", dna_free),
     ("polyalpha", crib_fragment),
     ("subst", subst_fragment),
+    ("xorkey", xorkey_fragment),
 )
 
 

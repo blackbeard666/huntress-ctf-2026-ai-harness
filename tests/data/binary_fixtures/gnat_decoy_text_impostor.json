@@ -1,0 +1,8 @@
+{
+ "family": "gnat_facts",
+ "expected_facts": null,
+ "decoy": true,
+ "generator_cmd": "sh gnat_gen.sh   # gcc -O1 -fno-inline -no-pie ada.c dw.s (GNAT binder layout in C + hand-written DWARF4 CU), strip -s, gcc plain C, printf",
+ "oracle_cmd": "sh gnat_oracle.sh gnat_decoy_text_impostor.bin   # file -b, strings -a, nm --defined-only, readelf --debug-dump=info, pyelftools Exception_Data walk",
+ "note": "every GNAT marker in a text file, no executable container -> None"
+}

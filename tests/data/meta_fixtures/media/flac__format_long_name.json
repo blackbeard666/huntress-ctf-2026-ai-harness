@@ -1,0 +1,8 @@
+{
+ "field": "media.format_long_name",
+ "expected": "raw FLAC",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i sine=f=440:d=0.5:r=48000 -ac 2 -c:a flac fl.flac (ffmpeg 7.0.2 static)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -h demuxer=flac -> 'Demuxer flac [raw FLAC]'",
+ "decoy": false,
+ "member": "fl.flac"
+}

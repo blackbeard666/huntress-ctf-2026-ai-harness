@@ -1,0 +1,9 @@
+{
+ "codec": "crib-token-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: silver-heron-93",
+ "encoded": "☁️⌛❄️🌙❄️👍🏽❄️🔥☀️❤️🌈🌈❄️🎁🌈☀️❄️🎵☀️❤️❄️☁️❄️🔥❄️👍🏽❄️🎁❄️☁️❄️🌙❄️⌛❄️🌈☀️❤️🌈☁️❄️⚡❄️🌙🌈👍🏽☀️❤️🌈🌈❄️⭐🌈☀️❄️🔑🌈🔥🌈❤️☀️⭐☀️❤️🔥☁️❄️🎁☀️❤️🌈👍🏽❄️🎁❄️✏️🌈❄️❄️🔥☀️✏️☀️❤️🌈👍🏽🌈🔥❄️☀️❄️🔑❄️🌙🌈☁️☀️❤️🌈☁️❄️⚡❄️🌙🌈👍🏽☀️❤️❄️🔥🌈⚡❄️⭐❄️👍🏽🌈☁️☀️❤️❄️⭐❄️⌛🌈👍🏽🌈🌈❄️🔥🌈☀️☀️❤️🌈☁️❄️🎁☀️❤️🌈☁️❄️⚡❄️🔥☀️❤️☁️🌈❄️⭐❄️🔑❄️🔥☀️❤️☁️🔑❄️⭐🌈👍🏽🌈☁️❄️🔥🌈☀️👍🏽☕☀️❤️🌈👍🏽❄️🌙❄️✏️🌈❄️❄️🔥🌈☀️☀️🔑❄️⚡❄️🔥🌈☀️❄️🎁❄️⌛☀️🔑👍🏽🌙👍🏽👍🏽",
+ "generator_cmd": "printf %s \"$plain\" | perl -CS -e 'my @g=(\"\\x{2764}\\x{FE0F}\",\"\\x{2B50}\",\"\\x{2600}\\x{FE0F}\",\"\\x{1F44D}\\x{1F3FD}\",\"\\x{2601}\\x{FE0F}\",\"\\x{1F525}\",\"\\x{2744}\\x{FE0F}\",\"\\x{1F308}\",\"\\x{26A1}\",\"\\x{1F319}\",\"\\x{2615}\",\"\\x{1F3B5}\",\"\\x{270F}\\x{FE0F}\",\"\\x{1F511}\",\"\\x{231B}\",\"\\x{1F381}\"); local $/; my $s=<STDIN>; utf8::encode($s); print join \"\", map { $g[hex $_] } split //, unpack(\"H*\", $s)'  # perl unpack H*, multi-code-point emoji (VS16, skin tone) as glyphs",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -CS -e 'my @g=(\"\\x{2764}\\x{FE0F}\",\"\\x{2B50}\",\"\\x{2600}\\x{FE0F}\",\"\\x{1F44D}\\x{1F3FD}\",\"\\x{2601}\\x{FE0F}\",\"\\x{1F525}\",\"\\x{2744}\\x{FE0F}\",\"\\x{1F308}\",\"\\x{26A1}\",\"\\x{1F319}\",\"\\x{2615}\",\"\\x{1F3B5}\",\"\\x{270F}\\x{FE0F}\",\"\\x{1F511}\",\"\\x{231B}\",\"\\x{1F381}\"); my %r; @r{@g}=(0..15); my $re=join \"|\", map quotemeta, sort { length $b <=> length $a } @g; local $/; my $s=<STDIN>; my $h=join \"\", map { sprintf \"%x\", $r{$_} } ($s =~ /($re)/g); binmode STDOUT; print pack(\"H*\",$h)'  # perl longest-match glyph table + pack H*",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: silver-heron-93",
+ "expected": "match"
+}

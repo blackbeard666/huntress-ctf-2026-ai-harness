@@ -1,0 +1,8 @@
+{
+ "field": "library_ms.location_urls",
+ "expected": "[\"https://203.0.113.44/webdav/invoices\"]",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/GENERATOR_lxml_builder.py.txt OUTDIR  -> searchconnector_utf16.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/library_ms/searchconnector_utf16__location_urls.bin location_urls -> [\"https://203.0.113.44/webdav/invoices\"]",
+ "decoy": false,
+ "member": "Invoices.searchConnector-ms"
+}

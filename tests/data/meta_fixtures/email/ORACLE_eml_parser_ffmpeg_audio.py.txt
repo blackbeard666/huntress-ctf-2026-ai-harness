@@ -1,0 +1,21 @@
+# Oracle: eml_parser 4.2.1 (tools/pylib-eml) extracts attachments (no stdlib email); ffmpeg 7.0.2 `-i` reads each
+# decoded payload: demuxer name ("Input #0, <fmt>"), "Audio: <codec>", "Duration: HH:MM:SS.cc".
+# usage: python3 -I <this> tools/pylib-eml <ffmpeg> <file.eml>
+import base64, json, re, subprocess, sys, tempfile, os
+sys.path.insert(0, sys.argv[1])
+import eml_parser
+raw = open(sys.argv[3], "rb").read()
+p = eml_parser.EmlParser(include_attachment_data=True).decode_email_bytes(raw)
+out = []
+for a in p.get("attachment", []):
+    d = base64.b64decode(a["raw"])
+    with tempfile.NamedTemporaryFile(delete=False) as t:
+        t.write(d)
+    r = subprocess.run([sys.argv[2], "-hide_banner", "-i", t.name], capture_output=True, text=True).stderr
+    os.unlink(t.name)
+    fm = re.search(r"Input #0, ([^ ]+), from", r); co = re.search(r"Audio: (\w+)", r); du = re.search(r"Duration: ([\d:.]+)", r)
+    out.append({"filename": a.get("filename"),
+                "content_type": (a.get("content_header", {}).get("content-type") or [""])[0].split(";")[0].strip().lower(),
+                "ffmpeg_format": fm.group(1).rstrip(",") if fm else None, "ffmpeg_audio_codec": co.group(1) if co else None,
+                "ffmpeg_duration": du.group(1) if du else None})
+print(json.dumps(out, indent=1, ensure_ascii=False))

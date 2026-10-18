@@ -1,0 +1,10 @@
+{
+ "codec": "dna-bytes",
+ "order": "TGAC",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-77",
+ "encoded": "GTCA GAAG GATC GAGG TATT GCGC GACC GCTA GAAC TATT GAGT GAGG GATC GACC GAGT GAAG GACA GAGC TATT GCGT GAAT GAAG GCTC TATT GCGC GATG GCTA GACG GCGG GCTT TATG TATT GGGT GACC TATT GCTC GACC GACT GCGA GAGG TACT TATT GCTC GCGG GATA GACG GAAG GCGT TATT GCGT GAAT GAAG GCTC TATT GAGG GCAT GATG GATC GCGT TATT GATG GACA GCTC GCGC GAGG GCTA TATT GCGT GACC TATT GCGT GAAT GAGG TATT GTGC GATG GACG GAGG TATT GTCG GATG GCTC GCGT GAGG GCTA TCAA TATT GATC GACC GATA GATG GACT GCGT TACG GACC GCGT GCGT GAGG GCTA TACG TCGC TCGC",
+ "generator_cmd": "perl -e 'my %m=(qw(00 T 01 G 10 A 11 C)); print join \" \", map { join \"\", map { $m{$_} } /../g } unpack(\"(B8)*\", $ARGV[0])' \"$plain\"  # perl unpack (B8)* per byte, non-default order 00/01/10/11 -> T/G/A/C, bytes space-split",
+ "oracle_cmd": "printf \"%s\\n\" \"$encoded\" | tr -d \" \" | tr TGAC 0123 | fold -w4 | while read q; do printf \"\\\\x$(printf %02x $((4#$q)))\"; done  # tr TGAC 0123 + bash base-4 arithmetic",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-77",
+ "expected": "match"
+}

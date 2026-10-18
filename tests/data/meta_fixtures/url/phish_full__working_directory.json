@@ -1,0 +1,8 @@
+{
+ "field": "url.working_directory",
+ "expected": "C:\\Users\\Public\\Downloads",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/url/GENERATOR_configparser_write.py.txt OUTDIR  -> phish_full.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/url/ORACLE_configparser_read.py.txt tests/data/meta_fixtures/url/phish_full__working_directory.bin WorkingDirectory -> C:\\Users\\Public\\Downloads",
+ "decoy": false,
+ "member": "Invoice_2026.url"
+}

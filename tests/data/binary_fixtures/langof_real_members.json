@@ -1,0 +1,84 @@
+{
+ "family": "language_of",
+ "_doc": "Every cached GM member (D17 cumulative evidence.zip); expected_language = the day's language theme (challenge title / group, e.g. d12 pascal-s-wager, d17 Ada GNAT 14.2). Rows skip when bytes are not cached.",
+ "generator_cmd": "GM evidence.zip (hctf artifact, D17 single_solve) extracted by the day worker",
+ "oracle_cmd": "bash langof_oracle.sh <member>  +  lang_oracle.sh (binutils) ; day theme from challenges/dayNN/binary-<title>",
+ "rows": [
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d01--variant-000.elf",
+   "expected_language": "c"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d02--variant-000.elf",
+   "expected_language": "cpp"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d03--variant-000.dll",
+   "expected_language": "csharp"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d04--variant-000.elf",
+   "expected_language": "go"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d05--variant-000.elf",
+   "expected_language": "rust"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d06--variant-000.jar",
+   "expected_language": "java"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d07--variant-000.jar",
+   "expected_language": "kotlin"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d08--variant-000.elf",
+   "expected_language": "swift"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d09--variant-000.elf",
+   "expected_language": "nim"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d10--variant-000.elf",
+   "expected_language": "zig"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d11--variant-000.elf",
+   "expected_language": "d"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d12--variant-000.elf",
+   "expected_language": "pascal"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d13--variant-000.elf",
+   "expected_language": "crystal"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d14--variant-000.elf",
+   "expected_language": "objc"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d15--variant-000-stripped.elf",
+   "expected_language": "c"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d15--variant-000-symbolized.elf",
+   "expected_language": "c"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d16--variant-000-compact.wasm",
+   "expected_language": "wasm"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d16--variant-000-direct.wasm",
+   "expected_language": "wasm"
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d17--variant-000.elf",
+   "expected_language": "ada"
+  }
+ ]
+}

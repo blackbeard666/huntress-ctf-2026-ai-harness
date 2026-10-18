@@ -1,0 +1,26 @@
+{
+ "family": "ghc_facts",
+ "encoding": "none",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_facts": {
+  "has_ghc_runtime": "false",
+  "has_hs_main": "false",
+  "ghc_version": "none",
+  "rts_way": "none",
+  "haskell_modules": [],
+  "user_modules": [],
+  "haskell_packages": [],
+  "main_module": "none",
+  "bytes_literals": [],
+  "hcfg_symbol": "none",
+  "hcfg_closure": "none",
+  "format": "elf",
+  "architecture": "x86-64",
+  "hcfg_section": "none"
+ },
+ "decoy": true,
+ "generator_cmd": "bash ghc_gen.sh   # gcc -O0 -fno-toplevel-reorder C with real GHC z-encoded symbol names + rts --info pairs + con_desc strings; blob printf+gzip-trailer crc32, coreutils base64|fold / xxd -i; strip -s",
+ "oracle_cmd": "bash ghc_oracle.sh ghc_decoy_cstrings.bin   # file -b, nm --defined-only + perl z-decoder (GHC Encoding.hs table), strings -a -t d (GHC version pair, con_desc, SENGR base64 chunks), readelf -SW, base64 -d  (nm: no z-encoded / rts symbols; cues only in .rodata strings)",
+ "note": "plain C with .symtab, every GHC cue only as a string literal -> runtime false, all fields absent"
+}

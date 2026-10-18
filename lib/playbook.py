@@ -163,6 +163,23 @@ PLAYBOOK = [
         examples=("Nim b64 text at 0x77e8 -> 30696 (D9)", "D b64 text -> 368272 (D11)", "FPC raw HCFG at 0x143f0 -> 82928 (D12)",
                   "Crystal String literal: b64 text at 0x88c3c (header 12 B earlier) -> 560188 (D13)"),
     ),
+    PlaybookEntry(
+        lanes=(BINARY,), families=("storage",),
+        rule="`hcfg_storage` = <form>[_<home>_<kind>] of the stored HCFG, the GM's published ordered rules "
+             "(lib.binary.hcfg_storage / K.hcfg_storage): HCFG only after decoding a Base64 carrier -> `base64`; literal "
+             "'HCFG' starting in a native section NAMED .hcfg -> `raw_hcfg_section`; inside a WebAssembly data segment "
+             "-> `wasm_data_segment`; in another native data section (.data/.rodata, decoder-addressed) -> "
+             "`raw_const_array`; any other literal carrier -> `raw`. Compute it with lib.binary.hcfg_storage(data).",
+        confirmed=tuple(K.HCFG_STORAGE.values()), rejected=tuple(K.HCFG_STORAGE_REJECTED),
+        examples=("Nim/D/Crystal/Swift SENGR text -> base64 (D17)", "ObjC raw in .hcfg -> raw_hcfg_section (D17 d14)",
+                  "FPC raw in .data -> raw_const_array (D17 d12)"),
+    ),
+    PlaybookEntry(
+        lanes=(BINARY,), families=("code",),
+        rule="`recover_code` = decimal imm of the recover_code leaf's `mov eax, imm` (e.g. 8100). No recover_code symbol "
+             "(stripped build) -> literal `none`, NOT the constant of an anonymous lookalike leaf.",
+        rejected=tuple(K.RECOVER_CODE_REJECTED), examples=("symbolized d01 -> 8100", "stripped d01 -> none (D17 TT/Mastery)"),
+    ),
     # ---- metadata-forensics ----------------------------------------------------------------------
     PlaybookEntry(
         lanes=(METADATA,), families=("guid",),
@@ -359,7 +376,14 @@ NAMING_LAWS = (
     "named for the ENCODE direction (subtract_modulo_256 decodes by ADDING).\n"
     "- ATT&CK execution role scales by host language: launcher/staged_chain -> T1059.{003 batch, 004 bash, "
     "005 vbscript, 006 python, 007 jscript/node.js, 001 powershell}; downloader/stager T1105, dropper T1140, uploader T1041, "
-    "impact T1486, persistence_descriptor T1053.003 (by role, not adapter).")
+    "impact T1486, persistence_descriptor T1053.003 (by role, not adapter).\n"
+    "- A CLASSIFICATION of how/where something is stored is a 2-3 token compound <form>_<home>_<kind>: "
+    "raw_hcfg_section, raw_const_array, wasm_data_segment (D17). When siblings' ONE-word label covers the simple "
+    "branch (base64), the other branch is a QUALIFIED compound: every 1-2 token piece (raw, raw_hcfg, hcfg_section, "
+    "raw_const, const_array) was rejected. Go to depth 3 (`hctf labels --compose`) before inventing new words.\n"
+    "- Literal-grounding (\"the answer must appear in the bytes\") holds for IDENTIFIER values only (symbols, paths, "
+    "strings, names, hashes). Classification labels are the GM's own concept words: `section`/`array`/`segment` never "
+    "occur in the file. Do not prune them for being absent from the artifact.")
 
 
 def for_lane(lane):

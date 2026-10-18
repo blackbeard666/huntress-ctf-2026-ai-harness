@@ -1,0 +1,7 @@
+{
+ "entry": "dex_slack_scan",
+ "expected": "ANS-6d2f9a41c07e5b38",
+ "_why": "dex slack / header anomaly (rows 51, 62): base64(token) appended past the header file_size (stale size)",
+ "generator_cmd": "python3 tests/data/android_fixtures/dexslack_src/gen_dexslack.py appended_b64 tests/data/android_fixtures/dexslack_appended_b64.apk  # javac --release 8 + dex2jar d2j-jar2dex; base64(token) appended past the header file_size (stale size)",
+ "oracle_cmd": "unzip -p dexslack_appended_b64.apk classes.dex > c.dex; tail -c +$(( $(od -An -tu4 -j32 -N4 c.dex) + 1 )) c.dex | base64 -d"
+}

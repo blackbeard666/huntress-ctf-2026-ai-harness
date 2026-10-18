@@ -1,0 +1,10 @@
+{
+ "codec": "xorkey:stack-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "3d1d02064b041b13084b1711020c0f1a1a06431f1b1d12431c12060c161b5254350c4b001b0d150e5f541216091e1d15431f1b1d12430e0b1502174b121a12140e0154150c4b071c04432c121904432612071506194954000e0916064c050a1f170e0d464746",
+ "key": "stack",
+ "generator_cmd": "printf '%s' \"$plain\" | perl -0777 -ne 'my $k=$ENV{key}; my $r=$k x (length($_)/length($k)+1); print $_ ^ substr($r,0,length($_))' | xxd -p | tr -d '\\n'  # perl string XOR, key repeated",
+ "oracle_cmd": "python3 -c \"import os,binascii;from Crypto.Util.strxor import strxor;c=binascii.unhexlify(os.environ['encoded']);k=os.environ['key'].encode();print(strxor(c,(k*len(c))[:len(c)]).decode())\"  # pycryptodome strxor",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

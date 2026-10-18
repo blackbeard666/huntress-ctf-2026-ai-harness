@@ -1,0 +1,18 @@
+{
+ "case": "elf_hcfg",
+ "probe_offset": 8210,
+ "expected": {
+  "container": "elf",
+  "section": ".hcfg",
+  "section_flags": "A",
+  "vaddr": "0x2012",
+  "segment": "LOAD",
+  "segment_index": 4,
+  "segment_flags": "R",
+  "rva": "0x2012"
+ },
+ "decoy": false,
+ "note": "",
+ "generator_cmd": "bash tests/data/binary_fixtures/locate_gen.sh locate_elf_hcfg.bin elf_hcfg",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/locate_oracle.py locate_elf_hcfg.bin  (readelf -SW/-lW | pefile | lief | wasm-objdump -x)"
+}

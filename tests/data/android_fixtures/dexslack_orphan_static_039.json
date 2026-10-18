@@ -1,0 +1,7 @@
+{
+ "entry": "dex_slack_scan",
+ "expected": "ANS-0f8e4c27b9a1d653",
+ "_why": "dex slack / header anomaly (rows 51, 62): never-read `private static final String` = base32(token) (static_values only, no code loads it); magic patched to 039 + d2j-dex-recompute-checksum",
+ "generator_cmd": "python3 tests/data/android_fixtures/dexslack_src/gen_dexslack.py orphan_static_039 tests/data/android_fixtures/dexslack_orphan_static_039.apk  # javac --release 8 + dex2jar d2j-jar2dex; never-read `private static final String` = base32(token) (static_values only, no code loads it); magic patched to 039 + d2j-dex-recompute-checksum",
+ "oracle_cmd": "unzip -p dexslack_orphan_static_039.apk classes.dex > c.dex; head -c 8 c.dex | xxd; strings c.dex | grep -oE '[A-Z2-7]{24,}=*' | base32 -d"
+}

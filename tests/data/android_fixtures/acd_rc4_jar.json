@@ -1,0 +1,7 @@
+{
+ "entry": "nested_scan",
+ "expected": "ANS-b70e2d4c19f8a356",
+ "_why": "encrypted asset dex/jar for DexClassLoader (rows 42, 44): openssl enc -rc4 -provider legacy (key = outer dex const 'l0aderKey-2026!x') over a `zip`ped jar holding classes.dex",
+ "generator_cmd": "python3 tests/data/android_fixtures/acd_src/gen_acd.py rc4_jar tests/data/android_fixtures/acd_rc4_jar.apk  # javac+d2j-jar2dex inner/outer dex; cipher: openssl enc -rc4 -provider legacy (key = outer dex const 'l0aderKey-2026!x') over a `zip`ped jar holding classes.dex",
+ "oracle_cmd": "unzip -p acd_rc4_jar.apk assets/plugin.bin | openssl enc -d -rc4 -provider legacy -provider default -K $(printf 'l0aderKey-2026!x' | xxd -p) > p.jar; unzip -p p.jar classes.dex | strings | grep -oE 'ANS-[0-9a-f]{16}'"
+}

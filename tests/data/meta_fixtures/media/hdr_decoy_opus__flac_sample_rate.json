@@ -1,0 +1,8 @@
+{
+ "field": "media.flac_sample_rate",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -loglevel error -f lavfi -i sine=f=440:d=0.25:r=48000 -ac 2 -c:a libopus op48.opus (ffmpeg 7.0.2 static) ; renamed op48.opus -> op48.flac",
+ "oracle_cmd": "file -b op48.flac -> 'Ogg data, Opus audio' (no STREAMINFO)",
+ "decoy": true,
+ "member": "op48.flac"
+}

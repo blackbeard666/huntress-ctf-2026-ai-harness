@@ -1,0 +1,69 @@
+{
+ "entry": "network_indicators",
+ "file": "net_pcap_d17.pcap",
+ "expected": {
+  "http_urls": [
+   "http://cdn-0dfc6f5541.example.invalid/950800736965.bin",
+   "http://jscript-3d2d3d0db0.example.invalid/stage",
+   "http://lua-78f5c27ddc.example.invalid/stage",
+   "http://ruby-4b6368529b.example.invalid/stage"
+  ],
+  "tls_sni": [
+   "cdn-ffee00aa11.example.invalid",
+   "javascript-8dbe7f0d9b.example.invalid",
+   "jscript-5a93ad0131.example.invalid",
+   "php-25be44a3ee.example.invalid"
+  ],
+  "dns_qnames": [
+   "cdn-0dfc6f5541.example.invalid",
+   "cdn-ffee00aa11.example.invalid",
+   "javascript-8dbe7f0d9b.example.invalid",
+   "jscript-3d2d3d0db0.example.invalid",
+   "jscript-5a93ad0131.example.invalid",
+   "lua-78f5c27ddc.example.invalid",
+   "php-25be44a3ee.example.invalid",
+   "ruby-4b6368529b.example.invalid"
+  ],
+  "dns_a": [
+   "cdn-0dfc6f5541.example.invalid|203.0.113.10",
+   "cdn-ffee00aa11.example.invalid|203.0.113.17",
+   "javascript-8dbe7f0d9b.example.invalid|203.0.113.11",
+   "jscript-3d2d3d0db0.example.invalid|203.0.113.16",
+   "jscript-5a93ad0131.example.invalid|203.0.113.15",
+   "lua-78f5c27ddc.example.invalid|203.0.113.12",
+   "php-25be44a3ee.example.invalid|203.0.113.13",
+   "ruby-4b6368529b.example.invalid|203.0.113.14"
+  ],
+  "syn_dst": [
+   "203.0.113.10||80",
+   "203.0.113.11||443",
+   "203.0.113.12||80",
+   "203.0.113.13||443",
+   "203.0.113.14||80",
+   "203.0.113.15||443",
+   "203.0.113.16||80",
+   "203.0.113.17||443"
+  ]
+ },
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/network/net_gen.py  (classic LE pcap, Ethernet/IPv4; D17 plan urls minus https://perl-a698d0e5e8.example.invalid/stage, plus https://cdn-ffee00aa11.example.invalid/0badc0ffee00.bin; even urls plaintext GET :80 (some split over 2 segments), odd urls TLS ClientHello SNI :443, DNS query+A answer for each)",
+ "oracle_cmd": "tshark -r net_pcap_d17.pcap -Y http.request -T fields -e http.host -e http.request.uri; -Y 'tls.handshake.type == 1' -e tls.handshake.extensions_server_name; -Y dns -e dns.qry.name; -Y 'dns.flags.response == 1' -e dns.qry.name -e dns.a; -Y 'tcp.flags.syn == 1 && tcp.flags.ack == 0' -e ip.dst -e ipv6.dst -e tcp.dstport  -> expected (sets)",
+ "plans": {
+  "collection-sample.ps1": "v=3|role=unknown|url=https://cdn-0dfc6f5541.example.invalid/950800736965.bin|host_id=host-2022361331",
+  "host-hta-jscript-javascript.js": "v=3|role=unknown|url=https://javascript-8dbe7f0d9b.example.invalid/stage|host_id=host-2933460146",
+  "host-lua-openresty-lua.lua": "v=3|role=unknown|url=https://lua-78f5c27ddc.example.invalid/stage|host_id=host-0865090323",
+  "host-perl-cgi-perl.pl": "v=3|role=unknown|url=https://perl-a698d0e5e8.example.invalid/stage|host_id=host-2985128458",
+  "host-php-webshell-php.php": "v=3|role=unknown|url=https://php-25be44a3ee.example.invalid/stage|host_id=host-1758281919",
+  "host-ruby-rack-ruby.rb": "v=3|role=unknown|url=https://ruby-4b6368529b.example.invalid/stage|host_id=host-3938896102",
+  "host-sct-scriptlet-jscript.js": "v=3|role=unknown|url=https://jscript-5a93ad0131.example.invalid/stage|host_id=host-0764276702",
+  "host-wsf-jscript-jscript.js": "v=3|role=unknown|url=https://jscript-3d2d3d0db0.example.invalid/stage|host_id=host-2765560304"
+ },
+ "expected_reconcile": {
+  "hosts_declared_only": [
+   "perl-a698d0e5e8.example.invalid"
+  ],
+  "hosts_observed_only": [
+   "cdn-ffee00aa11.example.invalid"
+  ]
+ }
+}

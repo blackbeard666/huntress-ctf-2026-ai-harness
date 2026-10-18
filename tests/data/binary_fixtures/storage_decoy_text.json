@@ -1,0 +1,9 @@
+{
+ "case": "decoy_text",
+ "expected_storage": "none",
+ "expected_config": null,
+ "key": 117,
+ "decoy": true,
+ "generator_cmd": "tests/data/binary_fixtures/storage_gen.sh storage_decoy_text.bin decoy_text '{\"campaign\":\"ST-17\",\"domain\":\"node-17.storage.example.invalid\",\"mutex\":\"Global\\\\HSTOR17\"}' 117",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/storage_oracle.py storage_decoy_text.bin"
+}

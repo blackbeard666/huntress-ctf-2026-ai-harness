@@ -1,0 +1,8 @@
+{
+ "field": "media.extension_matches_content",
+ "expected": "false",
+ "generator_cmd": "printf '%%PDF-1.4\\n1 0 obj<<>>endobj\\ntrailer<<>>\\n%%%%EOF\\n' > voice-014.wav",
+ "oracle_cmd": "file -b voice-014.wav -> 'PDF document' vs declared .wav (renamed impostor)",
+ "decoy": true,
+ "member": "voice-014.wav"
+}

@@ -1,0 +1,9 @@
+{
+ "family": "language_of",
+ "expected_language": "csharp",
+ "expected_toolchain": "dotnet",
+ "expected_source_language": "csharp",
+ "decoy": false,
+ "generator_cmd": "bash langof_gen.sh   # cp dnmeta_exe_net10.bin (dotnet build C# console, dnmeta_gen.sh)",
+ "oracle_cmd": "bash langof_oracle.sh langof_csharp_net10.bin   # file: Mono/.Net assembly; dnfile AssemblyRef = [System.Runtime] (no FSharp.Core / Microsoft.VisualBasic) -> C#"
+}

@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-17-hear-me-out",
+  "lane": "metadata-forensics",
+  "name": "🔎 Hear Me Out",
+  "ids": {
+    "single_solve": "metadata-forensics-day-17-hear-me-out",
+    "time_trial": "metadata-forensics-day-17-hear-me-out/time_trial",
+    "mastery": "metadata-forensics-day-17-hear-me-out/mastery"
+  }
+}

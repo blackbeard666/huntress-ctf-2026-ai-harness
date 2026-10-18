@@ -1,0 +1,56 @@
+{
+ "expected_plain": "v=3|language=powershell|role=exfiltrator|verdict=malicious|stage_count=1|campaign_id=PS-9b77d0e4|upload_url=https://ps-9b77d0e4.example.invalid/up",
+ "decoy": false,
+ "expected_fetch_attack": [
+  {
+   "api": "WebClient",
+   "line": 5,
+   "adapter": "Net.WebClient",
+   "attack": [
+    "T1041",
+    "T1567",
+    "T1105"
+   ]
+  },
+  {
+   "api": "mshta",
+   "line": 6,
+   "adapter": "mshta.exe",
+   "attack": [
+    "T1218.005",
+    "T1105"
+   ]
+  },
+  {
+   "api": "rundll32",
+   "line": 7,
+   "adapter": "rundll32.exe",
+   "attack": [
+    "T1218.011",
+    "T1105"
+   ]
+  },
+  {
+   "api": "regsvr32",
+   "line": 8,
+   "adapter": "regsvr32.exe",
+   "attack": [
+    "T1218.010",
+    "T1105"
+   ]
+  },
+  {
+   "api": "Start-BitsTransfer",
+   "line": 9,
+   "adapter": "Start-BitsTransfer",
+   "attack": [
+    "T1197",
+    "T1105"
+   ]
+  }
+ ],
+ "expected_fetch_attack_answer": "T1041",
+ "note": "upload verb (WebClient.UploadFile) puts exfil ids first; signed-binary proxies lead with their T1218 sub-id",
+ "generator_cmd": "P='<plan>'; printf %s \"$P\" | gzip -9n | base64 -w0  -> $descriptor_9b77d0e4 = \"...\"; cradle lines written by hand (see sibling .ps1)",
+ "oracle_cmd": "plan: grep -o 'descriptor_[0-9a-f]* = \"[^\"]*\"' fa_ps_upload_proxies.ps1 | cut -d'\"' -f2 | base64 -d | gunzip ; sites: grep -nEi 'UploadFile|^mshta|^rundll32|^regsvr32|^Start-BitsTransfer' fa_ps_upload_proxies.ps1 ; ids: python3 -I -c \"import json;d=json.load(open('lib/refs/attack_data.json'));[print(i,d[i]['name']) for i in 'T1105 T1140 T1197 T1218.005 T1218.007 T1218.010 T1218.011 T1041 T1567'.split()]\"  # MITRE ATT&CK STIX names: Ingress Tool Transfer / Deobfuscate-Decode / BITS Jobs / Mshta / Msiexec / Regsvr32 / Rundll32 / Exfil over C2 / Exfil over Web Service (LOLBAS entries certutil, bitsadmin, mshta, msiexec, regsvr32, rundll32 list the same ids)"
+}

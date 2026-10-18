@@ -1,0 +1,39 @@
+{
+ "family": "ghc_facts",
+ "encoding": "raw",
+ "expected_offset": 8224,
+ "expected_config": {
+  "flag": "HCFG{stripped_bytestring}",
+  "day": 18
+ },
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "has_ghc_runtime": "true",
+  "has_hs_main": "false",
+  "ghc_version": "9.4.8",
+  "rts_way": "rts_v",
+  "has_threaded_rts": "false",
+  "haskell_modules": [
+   "GHC.Maybe",
+   "GHC.Types",
+   "Main"
+  ],
+  "user_modules": [
+   "Main"
+  ],
+  "haskell_packages": [
+   "base",
+   "ghc-prim"
+  ],
+  "main_module": "none",
+  "bytes_literals": [],
+  "hcfg_symbol": "none",
+  "hcfg_closure": "none",
+  "hcfg_section": ".rodata"
+ },
+ "decoy": false,
+ "generator_cmd": "bash ghc_gen.sh   # gcc -O0 -fno-toplevel-reorder C with real GHC z-encoded symbol names + rts --info pairs + con_desc strings; blob printf+gzip-trailer crc32, coreutils base64|fold / xxd -i; strip -s",
+ "oracle_cmd": "bash ghc_oracle.sh ghc_raw_stripped.bin   # file -b, nm --defined-only + perl z-decoder (GHC Encoding.hs table), strings -a -t d (GHC version pair, con_desc, SENGR base64 chunks), readelf -SW, base64 -d",
+ "note": "strip -s'd: runtime from raw rts cues (GHC RTS, +RTS, con_desc), modules/packages from con_desc strings only; raw blob with embedded NULs (unsafePackAddressLen literal)"
+}

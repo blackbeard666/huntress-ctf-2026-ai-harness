@@ -1,0 +1,7 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-a39c0e7b5f1d8264",
+ "_why": "dex slack / header anomaly (rows 51, 62): `zip -9` note appended INSIDE a patched file_size, no map_list item covers it; checksums by d2j-dex-recompute-checksum",
+ "generator_cmd": "python3 tests/data/android_fixtures/dexslack_src/gen_dexslack.py inside_zip tests/data/android_fixtures/dexslack_inside_zip.apk  # javac --release 8 + dex2jar d2j-jar2dex; `zip -9` note appended INSIDE a patched file_size, no map_list item covers it; checksums by d2j-dex-recompute-checksum",
+ "oracle_cmd": "unzip -p dexslack_inside_zip.apk classes.dex > c.dex; od -An -tu4 -j32 -N4 c.dex; stat -c%s c.dex; unzip -p c.dex note.txt | grep -oE 'ANS-[0-9a-f]{16}'"
+}

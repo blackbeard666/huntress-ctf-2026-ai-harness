@@ -1,0 +1,8 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "Walle pair with a 15-hex near-miss token; puzzle json uninformative",
+ "generator_cmd": "sh tests/data/android_fixtures/gen_signing_block.sh tests/data/android_fixtures  # keytool + zip -X + apksigner sign (v2) + stdlib Walle/VasDolly-style pair insert, apksigner verify still passes",
+ "oracle_cmd": "python3 -I -c 'import sys,re,base64;from loguru import logger;logger.remove();from androguard.core.apk import APK;a=APK(sys.argv[1]);a.parse_v2_v3_signature();[print(hex(b.id),b.data,re.findall(rb\"ANS-[0-9A-F]{16}\",b.data),re.findall(rb\"ANS-[0-9A-F]{16}\",base64.b64decode(b.data+b\"==\") if re.fullmatch(rb\"[A-Za-z0-9+/=]+\",b.data) else b\"\")) for b in a._v2_blocks if b.id not in (0x7109871a,0xf05368c0,0x1b93ad61,0x42726577)]' tests/data/android_fixtures/sigblk_decoy_nearmiss.apk  # androguard APK._v2_blocks"
+}

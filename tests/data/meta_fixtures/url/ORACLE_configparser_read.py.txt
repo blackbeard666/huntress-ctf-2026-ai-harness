@@ -1,0 +1,6 @@
+# Independent reader: stdlib configparser (strict, no interpolation). usage: python -I THIS FILE KEY -> value / none
+import configparser, sys
+cp = configparser.RawConfigParser()
+cp.read_string(open(sys.argv[1], "rb").read().decode("cp1252"))
+sec, key = ("DEFAULT", sys.argv[2]) if sys.argv[2].lower() == "baseurl" else ("InternetShortcut", sys.argv[2])
+print(cp.get(sec, key, fallback="none") if sec == "DEFAULT" or cp.has_section(sec) else "none")

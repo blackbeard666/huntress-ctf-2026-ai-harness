@@ -1,0 +1,9 @@
+{
+ "case": "elf_badcrc",
+ "expected_storage": "none",
+ "expected_config": null,
+ "key": 3,
+ "decoy": true,
+ "generator_cmd": "tests/data/binary_fixtures/storage_gen.sh storage_elf_badcrc.bin elf_badcrc '{\"campaign\":\"ST-7\",\"domain\":\"node-7.storage.example.invalid\",\"mutex\":\"Global\\\\HSTOR7\"}' 3",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/storage_oracle.py storage_elf_badcrc.bin"
+}

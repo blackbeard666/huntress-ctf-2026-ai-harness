@@ -1,0 +1,171 @@
+{
+  "case": "d17_revised",
+  "decoy": false,
+  "contract": "qrule_d17_revised.bin",
+  "baseline": "qrule_d17_morning.bin",
+  "expected_accepted": {
+    "d01_analysis_has_symtab": [
+      "true",
+      "false"
+    ],
+    "d02_analysis_has_cpp_typeinfo": [
+      "true",
+      "false"
+    ],
+    "d02_analysis_has_cpp_vtable": [
+      "true",
+      "false"
+    ],
+    "d04_analysis_has_go_runtime": [
+      "true",
+      "false"
+    ],
+    "d05_analysis_has_rust_mangled_symbol": [
+      "true",
+      "false"
+    ],
+    "d07_analysis_has_coroutine_runtime": [
+      "true",
+      "false"
+    ],
+    "d10_analysis_has_hcfg_section": [
+      "true",
+      "false"
+    ],
+    "d12_analysis_hcfg_storage": [
+      "raw",
+      "base64",
+      "raw_const_array",
+      "raw_hcfg_section",
+      "wasm_data_segment"
+    ],
+    "d14_analysis_has_hcfg_section": [
+      "true",
+      "false"
+    ],
+    "d14_analysis_hcfg_storage": [
+      "raw",
+      "base64",
+      "raw_const_array",
+      "raw_hcfg_section",
+      "wasm_data_segment"
+    ]
+  },
+  "expected_rules": {
+    "d12_analysis_hcfg_storage": [
+      [
+        "base64",
+        "the winning HCFG appears only after decoding a printable Base64 carrier"
+      ],
+      [
+        "raw_hcfg_section",
+        "literal HCFG begins in a native section named exactly .hcfg (section-header metadata is sufficient and no executable cross-reference is required)"
+      ],
+      [
+        "wasm_data_segment",
+        "literal HCFG is inside a WebAssembly data segment"
+      ],
+      [
+        "raw_const_array",
+        "literal HCFG begins in a native data section other than .hcfg (for example writable .data) as a raw in-image byte array directly addressed by the decoder; this token describes the observed layout and does not require a source-level const declaration"
+      ],
+      [
+        "raw",
+        "otherwise for a literal HCFG carrier"
+      ]
+    ],
+    "d14_analysis_hcfg_storage": [
+      [
+        "base64",
+        "the winning HCFG appears only after decoding a printable Base64 carrier"
+      ],
+      [
+        "raw_hcfg_section",
+        "literal HCFG begins in a native section named exactly .hcfg (section-header metadata is sufficient and no executable cross-reference is required)"
+      ],
+      [
+        "wasm_data_segment",
+        "literal HCFG is inside a WebAssembly data segment"
+      ],
+      [
+        "raw_const_array",
+        "literal HCFG begins in a native data section other than .hcfg (for example writable .data) as a raw in-image byte array directly addressed by the decoder; this token describes the observed layout and does not require a source-level const declaration"
+      ],
+      [
+        "raw",
+        "otherwise for a literal HCFG carrier"
+      ]
+    ]
+  },
+  "expected_diff": {
+    "d12_analysis_hcfg_storage": [
+      "question",
+      "answer_format"
+    ],
+    "d14_analysis_hcfg_storage": [
+      "question",
+      "answer_format"
+    ]
+  },
+  "expected_pick": [
+    [
+      "d12_analysis_hcfg_storage",
+      {
+        "raw_hcfg_section": true,
+        "raw_const_array": true
+      },
+      "raw_hcfg_section"
+    ],
+    [
+      "d14_analysis_hcfg_storage",
+      {
+        "raw_const_array": true
+      },
+      "raw_const_array"
+    ],
+    [
+      "d14_analysis_hcfg_storage",
+      {},
+      "raw"
+    ]
+  ],
+  "expected_enforce": [
+    [
+      "d12_analysis_hcfg_storage",
+      "raw_hcfg_section",
+      "raw_hcfg_section"
+    ],
+    [
+      "d12_analysis_hcfg_storage",
+      "hcfg_section",
+      ""
+    ],
+    [
+      "d12_analysis_hcfg_storage",
+      "RAW",
+      ""
+    ],
+    [
+      "d12_analysis_hcfg_storage",
+      "none",
+      ""
+    ],
+    [
+      "d14_analysis_hcfg_storage",
+      "base64\n",
+      "base64"
+    ],
+    [
+      "d01_analysis_has_symtab",
+      "yes",
+      ""
+    ],
+    [
+      "d01_analysis_elf_type",
+      "ET_EXEC",
+      "ET_EXEC"
+    ]
+  ],
+  "generator_cmd": "cp challenges/day17/binary-decoder-ring/single_solve/contract.json qrule_d17_revised.bin  # GM contract after the mid-day revision",
+  "oracle_cmd": "jq -c \"[.questions[]|select(.answer_format.accepted_values)|{key:.id,value:.answer_format.accepted_values}]|from_entries\" <bin>; jq -n -c --slurpfile a OLD --slurpfile b NEW \"(\\$a[0].questions|map({key:.id,value:.})|from_entries) as \\$A | [\\$b[0].questions[]|select(\\$A[.id] and . != \\$A[.id]) as \\$q|{key:.id,value:[\\\"question\\\",\\\"answer_format\\\",\\\"normalization\\\",\\\"artifact\\\"]|map(select(\\$q[.] != \\$A[\\$q.id][.]))}]|from_entries\"; jq -c --arg id ID \".questions[]|select(.id==\\$id).question|capture(\\\"rules in order: (?<b>.*?)\\\\\\\\. Submit\\\").b|[splits(\\\"; (?=(?:otherwise )?(?:base64|raw|raw_hcfg_section|wasm_data_segment|raw_const_array) )\\\")]|map(if startswith(\\\"otherwise \\\") then (capture(\\\"^otherwise (?<t>\\\\\\\\S+) (?<c>.*)$\\\")|[.t,\\\"otherwise \\\"+.c]) else (capture(\\\"^(?<t>\\\\\\\\S+) when (?<c>.*)$\\\")|[.t,.c]) end)\" qrule_d17_revised.bin jq -c \".questions[]|select(.id==\\\"d13_analysis_hcfg_storage\\\").question|capture(\\\"following rules in order: (?<b>.*?)\\\\\\\\. Answer\\\").b|[splits(\\\"; |, (?=otherwise )\\\")]|map(if startswith(\\\"otherwise \\\") then (capture(\\\"^otherwise (?<t>\\\\\\\\S+)(?<c>.*)$\\\")|[.t,(\\\"otherwise\\\"+.c)]) else (capture(\\\"^\\`?(?<t>[^\\` ]+)\\`? if (?<c>.*)$\\\")|[.t,.c]) end)\" qrule_synth_revised.bin"
+}

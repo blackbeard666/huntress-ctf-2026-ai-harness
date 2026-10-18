@@ -1,0 +1,7 @@
+{
+ "entry": "renamed_chain_scan",
+ "expected": "ANS-3b9d0c7e41a2f856",
+ "_why": "onCreate -> b.a() returns b.c (decoy ANS) or a.b(); a.k = base64 answer set in a.<clinit>; dex hint 'follow b -> a and ignore field c'; asset json + unreached zz.q hold decoy ANS values",
+ "generator_cmd": "python3 tests/data/android_fixtures/rchain_src/gen_rchain.py hint_follow tests/data/android_fixtures/rchain_hint_follow.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "jadx -q -d o tests/data/android_fixtures/rchain_hint_follow.apk; grep -o 'follow[^\"]*' o/sources/com/huntress/mobile/d17/r8c/ChallengeActivity.java; grep -o 'k = \"[^\"]*\"' o/sources/com/huntress/mobile/d17/r8c/a.java | cut -d'\"' -f2 | base64 -d  # -> ANS-3b9d0c7e41a2f856"
+}

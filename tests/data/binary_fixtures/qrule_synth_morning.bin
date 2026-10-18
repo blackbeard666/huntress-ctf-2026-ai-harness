@@ -1,0 +1,39 @@
+{
+  "attempt_id": "synthetic",
+  "mode": "single_solve",
+  "questions": [
+    {
+      "id": "d01_analysis_elf_type",
+      "question": "For the bundled Day 1 ELF, report the ELF header e_type value. The standard ELF symbolic constant, the GNU readelf label, or the equivalent decimal or hexadecimal e_type code is accepted.",
+      "artifact": "evidence.zip",
+      "answer_format": {
+        "kind": "pattern",
+        "syntax": "ELF e_type symbolic constant, readelf label, or equivalent decimal or hexadecimal code"
+      },
+      "normalization": "exact"
+    },
+    {
+      "id": "d01_analysis_has_symtab",
+      "question": "What is the exact analysis has symtab value for field d01_analysis_has_symtab in the delivered evidence set?",
+      "artifact": "evidence.zip",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "true",
+          "false"
+        ]
+      },
+      "normalization": "exact"
+    },
+    {
+      "id": "d13_analysis_hcfg_storage",
+      "question": "What is the exact analysis hcfg storage value for field d13_analysis_hcfg_storage in the delivered evidence set?",
+      "artifact": "evidence.zip",
+      "answer_format": {
+        "kind": "exact_text",
+        "syntax": "exact artifact-derived value only, without quotes or explanatory text unless quotes are part of the value; use the literal none only when the requested field is absent"
+      },
+      "normalization": "exact"
+    }
+  ]
+}

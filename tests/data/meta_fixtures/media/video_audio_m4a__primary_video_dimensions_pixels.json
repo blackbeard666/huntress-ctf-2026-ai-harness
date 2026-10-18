@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_dimensions_pixels",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i sine=d=0.3 -c:a aac audio.m4a",
+ "oracle_cmd": "mediainfo --Output=JSON audio.m4a -> Video track no Video track (General VideoCount absent)",
+ "decoy": true,
+ "member": "audio.m4a"
+}

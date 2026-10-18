@@ -1,0 +1,21 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "family": "string_decrypt",
+ "expected_facts": {
+  "algorithm": "sub",
+  "campaign_ids": "BRNN-0099-LOOT",
+  "count": 7,
+  "decoder_va": "0x12e0",
+  "domains": "cdn.orbit-relay.org,relay2.orbit-relay.org",
+  "mutexes": "Global\\BRNN-C0FFEE,Local\\orbit_sync_mtx",
+  "strings": "cdn.orbit-relay.org,Global\\BRNN-C0FFEE,BRNN-0099-LOOT,C:\\ProgramData\\orbit\\svc.exe,http://198.51.100.9/gate.php,Local\\orbit_sync_mtx,relay2.orbit-relay.org",
+  "urls": "http://198.51.100.9/gate.php"
+ },
+ "decoy": false,
+ "generator_cmd": "bash strenc_gen.sh strenc_add_O2.bin add \"-O2 -s\" '13:cdn.orbit-relay.org' '27:Global\\BRNN-C0FFEE' '05:BRNN-0099-LOOT' '44:C:\\ProgramData\\orbit\\svc.exe' '2b:http://198.51.100.9/gate.php' 'stack:0d:Local\\orbit_sync_mtx' 'stack:52:relay2.orbit-relay.org'   # perl encrypts per string (own 1-byte key), gcc compiles shared noinline dstr(ptr,len,key) + call per string",
+ "oracle_cmd": "bash strenc_oracle.sh strenc_add_O2.bin   # program RUNS and prints its own decoded strings; objdump -d most-called non-PLT target + its xor/psubb/sub op; perl regex buckets",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64",
+ "note": "-O2 stripped: decoder vectorized (psubb); stack arrays via movdqa xmm from .rodata + movabs/mov dword imm; one ciphertext (key 5) is itself printable; field names SPECULATIVE (GM vocabulary not seen): lists comma-joined in call-site order; no HCFG blob (encoding none)"
+}

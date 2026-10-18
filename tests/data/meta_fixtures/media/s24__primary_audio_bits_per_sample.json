@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_audio_bits_per_sample",
+ "expected": "24",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i sine=f=440:d=0.2:r=11025 -ac 2 -c:a pcm_s24le s24.wav  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i s24.wav -> 'Audio: pcm_s24le, 11025 Hz, stereo, s32 (24 bit)'",
+ "decoy": false,
+ "member": "s24.wav"
+}

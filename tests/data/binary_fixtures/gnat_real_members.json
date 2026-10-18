@@ -1,0 +1,33 @@
+{
+ "family": "gnat_facts",
+ "rows": [
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d17--variant-000.elf",
+   "decoy": false,
+   "generator_cmd": "GM D17 binary-decoder-ring single_solve evidence.zip member d17--variant-000.elf (real GNAT 14.2.0 build, not copied: 1.4 MB)",
+   "oracle_cmd": "sh tests/data/binary_fixtures/gnat_oracle.sh challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d17--variant-000.elf   # + objdump -d: 0x4039d3 mov $0x432a40 (blob-8) inside _ada_ada_br17_main",
+   "expected_facts": {
+    "gnat_version": "14.2.0",
+    "has_gnat_runtime": "true",
+    "ada_main_symbol": "_ada_ada_br17_main",
+    "ada_main": "ada_br17_main",
+    "main_source": "ada_br17_main.adb",
+    "has_adainit": "true",
+    "has_adafinal": "true",
+    "dwarf_producer": "GNU Ada 14.2.0",
+    "dwarf_language": "DW_LANG_Ada95",
+    "dwarf_language_code": 13,
+    "standard_exceptions": [
+     "constraint_error",
+     "numeric_error",
+     "program_error",
+     "storage_error",
+     "tasking_error"
+    ],
+    "user_exceptions": [],
+    "decoder_function": "_ada_ada_br17_main",
+    "decoder_function_ada": "ada_br17_main"
+   }
+  }
+ ]
+}

@@ -1,0 +1,9 @@
+{
+ "family": "language_of",
+ "expected_language": "cpp",
+ "expected_toolchain": "clang",
+ "expected_source_language": "none",
+ "decoy": false,
+ "generator_cmd": "bash langof_gen.sh   # clang++-18 -O2 (virtual method + std::string)",
+ "oracle_cmd": "bash langof_oracle.sh langof_cpp_clang.bin   # .comment has 'Ubuntu clang version 18.1.8', nm: 4 _Z symbols -> C++ built by clang"
+}

@@ -1,0 +1,9 @@
+{
+ "family": "language_of",
+ "expected_language": null,
+ "expected_toolchain": null,
+ "expected_source_language": null,
+ "decoy": true,
+ "generator_cmd": "bash langof_gen.sh   # printf text with GCC:/caml_startup/kfun:/PyInstaller cookie bytes",
+ "oracle_cmd": "bash langof_oracle.sh langof_decoy_text_impostor.bin   # file: data -> not an executable image -> None"
+}

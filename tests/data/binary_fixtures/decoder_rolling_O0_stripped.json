@@ -1,0 +1,18 @@
+{
+ "family": "decoder_facts",
+ "expected_fields": {
+  "function": "none",
+  "function_va": "0x1149",
+  "xrefs": [
+   "0x115f"
+  ],
+  "algorithm": "rolling-xor",
+  "key": "0x37",
+  "loop_length": "69",
+  "key_equals_header": "false"
+ },
+ "decoy": false,
+ "generator_cmd": "sh decoder_gen.sh   # gcc 15.2 x86-64 from decoder_src/roll.c, stored blob from decoder_src/gen_blob.py (stdlib)",
+ "oracle_cmd": "sh decoder_oracle.sh decoder_rolling_O0_stripped.bin decoder_src/roll_O0_sym.tmp 69   # binutils nm + objdump -d -M intel: xref '# <va>', FUNC symbol of the twin, backward jcc loop body (cmp bound, byte op between byte load and byte store)",
+ "note": "stored rollxor-raw key=0x37 step=1; loop 0x115a..0x118b: add edx,0x37; xor eax,edx; cmp DWORD PTR [rbp-0x4],0x44; jle -> 69"
+}

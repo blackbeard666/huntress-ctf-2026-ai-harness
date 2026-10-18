@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_profile",
+ "expected": "Profile 1",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=176x144:rate=24 -t 0.3 -c:v libvpx-vp9 -pix_fmt yuv444p -deadline realtime vp9_444.webm",
+ "oracle_cmd": "mediainfo --Output=JSON vp9_444.webm -> Video track Format_Profile '1' -> ffprobe 'Profile 1' (ffmpeg -i: vp9 (Profile 1))",
+ "decoy": false,
+ "member": "vp9_444.webm"
+}

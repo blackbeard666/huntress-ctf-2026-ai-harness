@@ -1,0 +1,9 @@
+{
+ "family": "lang_facts",
+ "expected_language": null,
+ "expected_facts": null,
+ "decoy": true,
+ "generator_cmd": "head -c 40 challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d09--variant-000.elf > lang_decoy_truncated_elf.bin   # ELF magic, header cut short",
+ "oracle_cmd": "bash lang_oracle.sh lang_decoy_truncated_elf.bin   # file -b, readelf -SW/-p .comment, nm -a/-D/--defined-only, c++filt --format=dlang, grep -aF, perl",
+ "note": "expected_facts from the binutils oracle; language label = the D-day theme (Huntress group), lang_facts()['language'] must match"
+}

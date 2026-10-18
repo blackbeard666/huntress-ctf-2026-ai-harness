@@ -1,0 +1,8 @@
+{
+ "field": "searchconnector.is_search_only_item",
+ "expected": "false",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/GENERATOR_lxml_builder.py.txt OUTDIR  -> searchconnector_utf16.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/searchconnector/searchconnector_utf16__is_search_only_item.bin is_search_only_item -> false",
+ "decoy": false,
+ "member": "Invoices.searchConnector-ms"
+}

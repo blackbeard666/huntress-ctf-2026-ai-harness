@@ -1,0 +1,67 @@
+{
+  "case": "d17_morning",
+  "decoy": true,
+  "contract": "qrule_d17_morning.bin",
+  "baseline": null,
+  "expected_accepted": {
+    "d01_analysis_has_symtab": [
+      "true",
+      "false"
+    ],
+    "d02_analysis_has_cpp_typeinfo": [
+      "true",
+      "false"
+    ],
+    "d02_analysis_has_cpp_vtable": [
+      "true",
+      "false"
+    ],
+    "d04_analysis_has_go_runtime": [
+      "true",
+      "false"
+    ],
+    "d05_analysis_has_rust_mangled_symbol": [
+      "true",
+      "false"
+    ],
+    "d07_analysis_has_coroutine_runtime": [
+      "true",
+      "false"
+    ],
+    "d10_analysis_has_hcfg_section": [
+      "true",
+      "false"
+    ],
+    "d14_analysis_has_hcfg_section": [
+      "true",
+      "false"
+    ]
+  },
+  "expected_rules": {},
+  "expected_diff": null,
+  "expected_pick": [],
+  "expected_enforce": [
+    [
+      "d12_analysis_hcfg_storage",
+      "raw_const_array",
+      "raw_const_array"
+    ],
+    [
+      "d12_analysis_hcfg_storage",
+      "anything goes",
+      "anything goes"
+    ],
+    [
+      "d01_analysis_has_symtab",
+      "true",
+      "true"
+    ],
+    [
+      "d01_analysis_has_symtab",
+      "True",
+      ""
+    ]
+  ],
+  "generator_cmd": "python3 -c \"import json,sys; print(json.dumps(json.loads(open(sys.argv[1]).readline())[\\\"body\\\"], indent=1))\" challenges/day17/binary-decoder-ring/single_solve/log.jsonl > qrule_d17_morning.bin  # GM start body 2026-10-17T13:00:10Z (pre-revision)",
+  "oracle_cmd": "jq -c \"[.questions[]|select(.answer_format.accepted_values)|{key:.id,value:.answer_format.accepted_values}]|from_entries\" <bin>; jq -n -c --slurpfile a OLD --slurpfile b NEW \"(\\$a[0].questions|map({key:.id,value:.})|from_entries) as \\$A | [\\$b[0].questions[]|select(\\$A[.id] and . != \\$A[.id]) as \\$q|{key:.id,value:[\\\"question\\\",\\\"answer_format\\\",\\\"normalization\\\",\\\"artifact\\\"]|map(select(\\$q[.] != \\$A[\\$q.id][.]))}]|from_entries\"; jq -c --arg id ID \".questions[]|select(.id==\\$id).question|capture(\\\"rules in order: (?<b>.*?)\\\\\\\\. Submit\\\").b|[splits(\\\"; (?=(?:otherwise )?(?:base64|raw|raw_hcfg_section|wasm_data_segment|raw_const_array) )\\\")]|map(if startswith(\\\"otherwise \\\") then (capture(\\\"^otherwise (?<t>\\\\\\\\S+) (?<c>.*)$\\\")|[.t,\\\"otherwise \\\"+.c]) else (capture(\\\"^(?<t>\\\\\\\\S+) when (?<c>.*)$\\\")|[.t,.c]) end)\" qrule_d17_revised.bin jq -c \".questions[]|select(.id==\\\"d13_analysis_hcfg_storage\\\").question|capture(\\\"following rules in order: (?<b>.*?)\\\\\\\\. Answer\\\").b|[splits(\\\"; |, (?=otherwise )\\\")]|map(if startswith(\\\"otherwise \\\") then (capture(\\\"^otherwise (?<t>\\\\\\\\S+)(?<c>.*)$\\\")|[.t,(\\\"otherwise\\\"+.c)]) else (capture(\\\"^\\`?(?<t>[^\\` ]+)\\`? if (?<c>.*)$\\\")|[.t,.c]) end)\" qrule_synth_revised.bin"
+}

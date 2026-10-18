@@ -1,0 +1,7 @@
+{
+ "entry": "resource_id_scan",
+ "expected": "ANS-9c4e17a2b5d03f68",
+ "_why": "proof() does `const v0, 0x7f0c0003` (baksmali: 2131492867) + getString; arsc also holds ANS-shaped decoys answer_token/flag/part_a; app_name has a values-fr variant",
+ "generator_cmd": "bash tests/data/android_fixtures/gen_resid.sh tests/data/android_fixtures  # apktool b (smali + aapt2), ids pinned by res/values/public.xml",
+ "oracle_cmd": "unzip -p resid_const_getstring.apk classes.dex > c.dex; tools/dex2jar/d2j-baksmali.sh c.dex -o s; grep -rh -A1 'const' s/com/huntress/resid/ChallengeActivity.smali | grep 2131492867; aapt dump --values resources resid_const_getstring.apk | grep -A1 'resource 0x7f0c0003 ' | grep -oE 'ANS-[0-9a-f]{16}'"
+}

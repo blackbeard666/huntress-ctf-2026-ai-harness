@@ -1,0 +1,7 @@
+{
+ "entry": "integrity_key_scan",
+ "expected": "ANS-e2b49c07d1f6a385",
+ "generator_cmd": "sh tests/data/android_fixtures/gen_integrity_keys.sh tests/data/android_fixtures  # keytool -genkeypair; data = base64(openssl enc -aes-128-ecb -K <first 32 hex of sha256(keytool -exportcert DER)>); zip -X + apksigner sign v2 only (no META-INF/*.RSA)",
+ "oracle_cmd": "FP=$(apksigner verify --min-sdk-version 28 --print-certs integ_cert16_aes128_ecb.apk | grep -m1 'certificate SHA-256' | awk '{print $NF}' | cut -c1-32); unzip -p integ_cert16_aes128_ecb.apk assets/huntress_puzzle.json | python3 -I -c 'import sys,json;print(json.load(sys.stdin)[\"data\"])' | base64 -d | openssl enc -d -aes-128-ecb -K $FP",
+ "decoy": false
+}

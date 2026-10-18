@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_width",
+ "expected": "176",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=176x144:rate=24 -t 0.3 -c:v libvpx-vp9 -pix_fmt yuv444p -deadline realtime vp9_444.webm",
+ "oracle_cmd": "mediainfo --Output=JSON vp9_444.webm -> Video track Width 176",
+ "decoy": false,
+ "member": "vp9_444.webm"
+}

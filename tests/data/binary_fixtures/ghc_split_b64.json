@@ -1,0 +1,54 @@
+{
+ "family": "ghc_facts",
+ "encoding": "split-base64",
+ "expected_offset": 8512,
+ "expected_config": {
+  "flag": "HCFG{z_encoded_closures}",
+  "day": 18,
+  "lang": "haskell"
+ },
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "has_ghc_runtime": "true",
+  "has_hs_main": "true",
+  "ghc_version": "9.6.6",
+  "rts_way": "rts_thr",
+  "has_threaded_rts": "true",
+  "haskell_modules": [
+   "Config",
+   "Data.ByteString.Internal.Type",
+   "Data.Text.Encoding",
+   "GHC.Base",
+   "GHC.Show",
+   "GHC.Types",
+   "Main"
+  ],
+  "user_modules": [
+   "Config",
+   "Main"
+  ],
+  "haskell_packages": [
+   "base",
+   "bytestring-0.11.5.3",
+   "ghc-prim",
+   "text-2.0.2"
+  ],
+  "main_module": "Main",
+  "bytes_literals": [
+   "Config.hcfgBlob1",
+   "Config.hcfgBlob2",
+   "Config.hcfgBlob3"
+  ],
+  "hcfg_symbol": "Config_hcfgBlob1_bytes",
+  "hcfg_closure": "Config.hcfgBlob1",
+  "hcfg_module": "Config",
+  "hcfg_unit": "main",
+  "hcfg_kind": "bytes",
+  "hcfg_section": ".rodata"
+ },
+ "decoy": false,
+ "generator_cmd": "bash ghc_gen.sh   # gcc -O0 -fno-toplevel-reorder C with real GHC z-encoded symbol names + rts --info pairs + con_desc strings; blob printf+gzip-trailer crc32, coreutils base64|fold / xxd -i; strip -s",
+ "oracle_cmd": "bash ghc_oracle.sh ghc_split_b64.bin   # file -b, nm --defined-only + perl z-decoder (GHC Encoding.hs table), strings -a -t d (GHC version pair, con_desc, SENGR base64 chunks), readelf -SW, base64 -d; nm -S: Config_hcfgBlob1_bytes covers 0x402140 = file 8512 (.rodata off 0x2000)",
+ "note": "imitation (ghc not installed): unstripped, base64 ByteString literal split over 3 Config_hcfgBlobN_bytes literals (NUL + align padding); field names SPECULATIVE"
+}

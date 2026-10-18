@@ -1,0 +1,13 @@
+{
+ "case": "macho_text",
+ "expected_storage": "raw",
+ "expected_config": {
+  "campaign": "ST-15",
+  "domain": "node-15.storage.example.invalid",
+  "mutex": "Global\\HSTOR15"
+ },
+ "key": 43,
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/storage_gen.sh storage_macho_text.bin macho_text '{\"campaign\":\"ST-15\",\"domain\":\"node-15.storage.example.invalid\",\"mutex\":\"Global\\\\HSTOR15\"}' 43",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/storage_oracle.py storage_macho_text.bin"
+}

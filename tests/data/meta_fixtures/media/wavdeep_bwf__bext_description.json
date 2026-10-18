@@ -1,0 +1,7 @@
+{
+ "field": "media.bext_description",
+ "expected": "Interview take 3 - evidence copy",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/media/gen_wav_deep.py <out> (stdlib wave + struct BWF/INFO/cue/iXML writer)",
+ "oracle_cmd": "exiftool -j -BWF_UMID -NumberOfSamples -XML:all -Description -Originator -OriginatorReference -TimeReference -Title bwf.bin",
+ "decoy": false
+}

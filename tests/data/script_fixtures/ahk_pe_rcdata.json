@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=auto_hotkey|role=launcher|verdict=malicious|attack=T1059.010|adapter=compiled_exe|stage_count=2|steps=extract_rcdata,run_script|campaign_id=AHK-5e1f00d1|url=https://ahk-5e1f00d1.example.invalid/stage|file_path=C:\\Users\\Public\\.5e1f00d1.stage",
+ "decoy": false,
+ "generator_cmd": "M=$(printf %s '<plan>' | gzip -9n | base64 -w0); script.ahk = v2 source with `descriptor_5e1f00d1 := \"$M\"` (+ `; HUNTRESS_ANALYSIS_V1:GZ64-$M` comment); python3 -I ahk_pe_gen.py script.ahk ahk_pe_rcdata.exe  (stdlib struct PE32+ writer: RT_RCDATA `>AUTOHOTKEY SCRIPT<` lang 0x409, UTF-8 BOM, comment lines stripped like Ahk2Exe)",
+ "oracle_cmd": "../../../.venv/bin/python -I -c \"import pefile,sys,re,base64,gzip;pe=pefile.PE(sys.argv[1]);e=pe.DIRECTORY_ENTRY_RESOURCE.entries[0].directory.entries[0].directory.entries[0].data.struct;s=pe.get_data(e.OffsetToData,e.Size).decode('utf-8-sig');print(gzip.decompress(base64.b64decode(re.search(r'descriptor_\\w+ := \\\"([^\\\"]+)\\\"',s).group(1))).decode())\" ahk_pe_rcdata.exe",
+ "note": "file(1): PE32+ executable (GUI) x86-64; oracle walks the resource tree with pefile, not lib.codec"
+}

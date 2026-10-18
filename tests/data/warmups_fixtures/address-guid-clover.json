@@ -1,0 +1,9 @@
+{
+ "codec": "address",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lynx-58",
+ "encoded": "6563694E-7720-726F-6B20-6465636F6469 7420676E-6968-2073-7761-726D75702120 73206F54-6C6F-6576-2C20-7375626D6974 69687420-2073-7865-6163-7420616E7377 74207265-206F-6874-6520-47616D65204D 65747361-3A72-6320-6C6F-7665722D6C79 352D786E-0038-0000-0000-000000000000",
+ "generator_cmd": "python3 -I -c 'import uuid,sys;b=sys.argv[1].encode();b+=bytes(-len(b)%16);print(\" \".join(str(uuid.UUID(bytes_le=b[i:i+16])).upper() for i in range(0,len(b),16)))' \"$plain\"  # Python uuid.UUID(bytes_le=) = Microsoft GUID mixed-endian text, uppercase",
+ "oracle_cmd": "python3 -I -c 'import uuid,sys;print(b\"\".join(uuid.UUID(x).bytes_le for x in sys.argv[1].split()).rstrip(b\"\\0\").decode())' \"$encoded\"  # Python uuid .bytes_le",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lynx-58",
+ "expected": "match"
+}

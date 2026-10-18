@@ -1,0 +1,11 @@
+{
+ "family": "ocaml_facts",
+ "encoding": "none",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_facts": null,
+ "decoy": true,
+ "generator_cmd": "bash ocaml_gen.sh   # gcc -O0 -no-pie C main + hand-written GNU as in ocamlopt layout (caml<M><sep>{entry,code_begin,data_begin,frametable,gc_roots}, `.quad <wosize<<10|3<<8|252>` header then label at payload, .space pad, pad byte); blob printf + gzip-trailer crc32; strip -s",
+ "oracle_cmd": "bash ocaml_oracle.sh ocaml_decoy_text.bin   # file -b, nm --defined-only (+perl module regex), readelf -SW (vaddr->offset, section), od header word / pad byte / HCFG len, dd payload, grep -a version/runtime strings  (file -b: ASCII text)",
+ "note": "OCaml cue names in a text file, no ELF container -> None"
+}

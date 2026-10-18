@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_profile",
+ "expected": "Main 10",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=640x360:rate=25 -t 0.3 -c:v libx265 -pix_fmt yuv420p10le hevc10.mkv",
+ "oracle_cmd": "mediainfo --Output=JSON hevc10.mkv -> Video track Format_Profile 'Main 10'",
+ "decoy": false,
+ "member": "hevc10.mkv"
+}

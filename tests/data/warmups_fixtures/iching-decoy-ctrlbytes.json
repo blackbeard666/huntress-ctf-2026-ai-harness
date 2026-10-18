@@ -1,0 +1,10 @@
+{
+ "codec": "iching",
+ "plain": null,
+ "encoded": "䷀䷀䷄䷂䷀䷰䷐䷅䷁䷠䷜䷈䷃䷠䷼䷐䷄䷑䷈䷓䷅䷁䷔䷖",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf '\\x00\\x01..\\x16' | base64 -w0 | perl -CS (same King Wen map as iching-amber)  # hexagrams over control bytes 00-08,0e-16",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys,base64,unicodedata as u;t=sys.stdin.read().strip();assert all(u.name(c).startswith(\"HEXAGRAM FOR\") for c in t);a=\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\";b=\"\".join(a[ord(c)-0x4DC0] for c in t);print(base64.b64decode(b+\"=\"*(-len(b)%4)).decode())'  # oracle fails / non-text on the decoy: ",
+ "oracle_plain": "\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016"
+}

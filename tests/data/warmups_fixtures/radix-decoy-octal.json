@@ -1,0 +1,10 @@
+{
+ "codec": "radix*",
+ "plain": null,
+ "encoded": "116 151 143 145 040 167 157 162 153",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work' | od -An -to1 | xargs  # coreutils od: 3-digit OCTAL char codes (digit 7 present -> radix 8, not base 3-7)",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -ne 'print join(\"\",map{chr oct}split)'  # Perl oct(): 'Nice work' is octal, outside the base-3..7 family",
+ "oracle_plain": null
+}

@@ -1,0 +1,13 @@
+{
+ "case": "elf_hcfg",
+ "expected_storage": "raw_hcfg_section",
+ "expected_config": {
+  "campaign": "ST-1",
+  "domain": "node-1.storage.example.invalid",
+  "mutex": "Global\\HSTOR1"
+ },
+ "key": 37,
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/storage_gen.sh storage_elf_hcfg.bin elf_hcfg '{\"campaign\":\"ST-1\",\"domain\":\"node-1.storage.example.invalid\",\"mutex\":\"Global\\\\HSTOR1\"}' 37",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/storage_oracle.py storage_elf_hcfg.bin"
+}

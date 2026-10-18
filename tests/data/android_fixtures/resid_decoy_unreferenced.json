@@ -1,0 +1,8 @@
+{
+ "entry": "resource_id_scan",
+ "expected": null,
+ "_why": "DECOY: same arsc with five ANS-shaped values, but proof() returns const-string \"pending\"; the only id the code loads is title()'s const/high16 0x7f0c0000 (app_name)",
+ "generator_cmd": "bash tests/data/android_fixtures/gen_resid.sh tests/data/android_fixtures  # apktool b (smali + aapt2), ids pinned by res/values/public.xml",
+ "oracle_cmd": "unzip -p resid_decoy_unreferenced.apk classes.dex > c.dex; tools/dex2jar/d2j-baksmali.sh c.dex -o s; grep -rh -A1 'const' s/com/huntress/resid/ChallengeActivity.smali  # only 'const/high16 v0, 32524' (0x7f0c0000); aapt dump --values resources resid_decoy_unreferenced.apk | grep -A1 'resource 0x7f0c0000 '  # (string8) \"ResId\" -> no ANS token",
+ "decoy": true
+}

@@ -21,6 +21,7 @@ import binascii
 import os
 import re
 import time
+import unicodedata
 
 # name -> first day seen in the GM's script-analysis evidence
 REPS = {
@@ -171,6 +172,78 @@ def plan_kv(text):
             k, v = part.split("=", 1)
             out.setdefault(k.strip(), v)
     return out
+
+
+# Target plan-key-passthrough: v=3 plans carry keys no question asked yet (`verdict` since D16, `language`). An answer
+# id names its plan key in its tail (`set1.php-stager-next-language` -> next_language): the longest hyphen-suffix that
+# is a plan key (or an alias of one) wins, so `-next-language` never reads `language`. Values go out plan-verbatim,
+# shaped only by the answer_format: ordered_tokens '>'-joins a comma list, integer is base-10, enum must be one of the
+# accepted_values (else None). None = this plan cannot answer the id (the per-day solver keeps its own reading).
+PLAN_KEY_ALIASES = {"campaign": "campaign_id", "obfuscation": "obfuscation_profile", "file_path": "file_path",
+                    "upload_url": "upload_url"}
+# multi-word keys seen in v=3 plans: an id ending in one the plan lacks is unanswerable here (None), never read as the
+# shorter key under it (`-next-language` must not answer `language`, `-upload-url` must not answer `url`)
+PLAN_KNOWN_KEYS = {"next_language", "host_profile", "stage_profile", "obfuscation_profile", "stage_count",
+                   "campaign_id", "file_path", "upload_url", "host_id"}
+
+
+def plan_key_for(answer_id, plan):
+    """The plan key an answer id asks for (longest suffix match, hyphens -> underscores, aliases), or None."""
+    keys = {str(k).lower(): k for k in (plan or {})}
+    parts = re.split(r"[-_]+", str(answer_id or "").rsplit(".", 1)[-1].lower())
+    for i in range(len(parts)):
+        suf = "_".join(p for p in parts[i:] if p)
+        for cand in (suf, PLAN_KEY_ALIASES.get(suf), suf + "_id"):
+            if cand and cand in keys:
+                return keys[cand]
+        if "_" in suf and (suf in PLAN_KNOWN_KEYS or PLAN_KEY_ALIASES.get(suf) in PLAN_KNOWN_KEYS):
+            return None
+    return None
+
+
+def _plan_dict(plan):
+    if isinstance(plan, dict):
+        return plan
+    if isinstance(plan, (bytes, bytearray)):
+        plan = bytes(plan).decode("utf-8", "replace")
+    t = str(plan or "").lstrip("﻿ \r\n\t")
+    if t.startswith("{"):
+        import json
+        try:
+            d = json.loads(t)
+            return d if isinstance(d, dict) else {}
+        except ValueError:
+            return {}
+    return plan_kv(t)
+
+
+def plan_answer(answer_id, plan, q=None):
+    """Answer `answer_id` straight from a decoded plan (dict, `k=v|..` text or JSON text) under the question's
+    answer_format, or None when the plan has no such key / the value does not fit the format. Never raises."""
+    try:
+        plan = _plan_dict(plan)
+        key = plan_key_for(answer_id, plan)
+        if key is None or plan.get(key) is None:
+            return None
+        val = plan[key]
+        fmt = (q or {}).get("answer_format") or {}
+        kind = str(fmt.get("kind") or "").lower()
+        if isinstance(val, (list, tuple)):
+            val = ",".join(str(x) for x in val)
+        val = str(val).strip()
+        if kind == "ordered_tokens":
+            toks = [t.strip() for t in re.split(r"[,>]", val) if t.strip()]
+            return ">".join(toks) if toks else None
+        if kind == "integer":
+            return str(int(val)) if re.fullmatch(r"[+-]?\d+", val) else None
+        if kind == "enum":
+            acc = [str(a) for a in fmt.get("accepted_values") or []]
+            if not acc:
+                return val
+            return val if val in acc else next((a for a in acc if a.lower() == val.lower()), None)
+        return val
+    except Exception:  # noqa: BLE001
+        return None
 
 
 # ------------------------------------------------------------------------------------------------ reps
@@ -477,7 +550,7 @@ def _fallback_layers(material, rep, transform, trs, keys, tried, budget=0.15):
 
 # ------------------------------------------------------------------------------------------------ source scanning
 
-_CODEC_RE = re.compile(r"""(?:Codec|CODEC)_(?P<id>[0-9A-Za-z]+)\s*=\s*["'](?P<spec>[^"']*)["']""")
+_CODEC_RE = re.compile(r"""(?:Codec|CODEC)_(?P<id>[0-9A-Za-z]+)(?:\s+(?i:As)\s+[A-Za-z_][\w.]*)?\s*=\s*["'](?P<spec>[^"']*)["']""")
 _BATCH_CODEC_RE = re.compile(r"HUNTRESS-CODEC:\s*(?P<spec>\S+)")
 _BATCH_MAT_RE = re.compile(r"HUNTRESS-MATERIAL:\s*(?P<mat>\S+)")
 # D8 cross-language v=3 fixtures (.php, .wsf/.hta markup inside .js/.vbs): `HUNTRESS_ANALYSIS_V1:<TAG>-<data>` comment +
@@ -494,7 +567,7 @@ def material_text(src, ident):
     pieces = []
     for m in pat.finditer(src):
         rest = src[m.end():]
-        a = re.match(r"\s*(\+=|&=|=|\.=)?\s*", rest)
+        a = re.match(r"(?:\s+(?i:As)\s+[A-Za-z_][\w.]*)?\s*(\+=|&=|=|\.=)?\s*", rest)   # VBA `Const X As String =`
         if not a or not a.group(1):
             continue                                   # a use, not an assignment
         body = rest[a.end():]
@@ -780,6 +853,221 @@ def wsh_decode(src):
         return None
 
 
+# ------------------------------------------------------------------------------------------------ Dockerfile / Makefile
+# Target dockerfile-makefile-route: build hosts read as the build tool would, never run (`make -n` / `docker build`).
+# Logical lines join `\`-newline continuations (Dockerfile `# escape=` honoured, comment lines inside an instruction
+# dropped; a Makefile `#` comment ending in `\` continues). Variables: Dockerfile `ARG X=..`, `ENV X=.. Y=..`, legacy
+# `ENV X value`; Makefile `X (=|:=|::=|:::=|?=|+=|!=) ..` (override/export prefixes) and `define X .. endef`, all with
+# `$(X)`/`${X}`/`$X` expanded. Payloads: `echo`/`printf` arguments of RUN / TAB-recipe / `$(shell ..)` / `!=` pipelines
+# (`| base64 -d | sh`, `xxd -r -p`, gunzip ...) and RUN heredoc bodies. Each candidate is peeled name-agnostically
+# (peel_plan); descriptor variables first, then the continued `#` marker, echo payloads, other variables. Only
+# consulted when nothing earlier yielded a plan.
+_BH_DOCKER = re.compile(r"(?im)^[ \t]*(?:FROM|ARG|ENV|RUN|LABEL)[ \t]+\S")
+_BH_MAKE = re.compile(r"(?m)^\t[^\n]*\S|^(?:override[ \t]+|export[ \t]+)*[A-Za-z_][\w.-]*[ \t]*(?:::?=|:::=|\?=|\+=|!=)"
+                      r"|^define[ \t]+\w")
+_BH_APPEND = re.compile(r"(?im)^[ \t]*(?:(?:override|export)[ \t]+)*(descriptor[_-][\w.-]*)[ \t]*"
+                        r"(?:\+=|:{0,3}=[ \t]*\$[({]\1[)}])")
+_BH_MK_ASSIGN = re.compile(r"(?:(?:override|export|private)[ \t]+)*(?P<name>[A-Za-z_][\w.-]*)[ \t]*"
+                           r"(?P<op>:::=|::=|:=|\?=|\+=|!=|=)[ \t]*(?P<val>.*)\Z", re.S)
+_BH_ENV_PAIR = re.compile(r"""(?P<name>[A-Za-z_]\w*)=(?P<val>"(?:[^"\\]|\\.)*"|'[^']*'|(?:[^\s"'\\]|\\.)*)""")
+_BH_VAR = re.compile(r"\$(?:\((?P<p>[A-Za-z_][\w.-]*)\)|\{(?P<b>[A-Za-z_][\w.-]*)(?::?[-+](?P<d>[^}]*))?\}|(?P<s>[A-Za-z_]\w*))")
+_BH_ECHO = re.compile(r"""(?:^|[\s;&|(`"'\[,])(?:/(?:usr/)?bin/)?(?P<cmd>echo|printf)\b(?P<args>(?:\\.|"[^"]*"|'[^']*'|[^|;&<>)`\n])*)""")
+_BH_HEREDOC = re.compile(r"""<<-?[ \t]*(["']?)(?P<tag>[A-Za-z_]\w*)\1[^\n]*\n(?P<body>.*?)\n[ \t]*(?P=tag)[ \t]*(?:\n|$)""", re.S)
+
+
+def _bh_lines(src, docker):
+    """Logical lines: `\\`-newline continuations joined (continuation-line indentation kept as one space)."""
+    esc = "\\"
+    if docker:
+        m = re.match(r"(?:[ \t]*#[ \t]*\w+[ \t]*=[^\n]*\n)*?[ \t]*#[ \t]*escape[ \t]*=[ \t]*([\\`])", src, re.I)
+        esc = m.group(1) if m else "\\"
+    out, cur = [], None
+    for ln in src.split("\n"):
+        ln = ln.rstrip("\r")
+        if cur is not None:
+            if docker and re.match(r"[ \t]*#", ln):                  # comment inside a continued instruction
+                continue
+            ln = (" " if ln[:1] in " \t" else "") + ln.strip(" \t")
+            cur += ln
+        else:
+            cur = ln
+        if cur.endswith(esc) and not cur.endswith(esc * 2):
+            cur = cur[:-1]
+            continue
+        out.append(cur)
+        cur = None
+    if cur is not None:
+        out.append(cur)
+    return out
+
+
+def _bh_expand(s, env, depth=0):
+    """`$(X)` / `${X}` / `${X:-d}` / `$X` from `env` (unknown -> ''), `$$` -> `$`, `$(shell ..)` left for the caller."""
+    if "$" not in s or depth > 4:
+        return s
+
+    def rep(m):
+        n = m.group("p") or m.group("b") or m.group("s")
+        if n in env:
+            return _bh_expand(env[n], env, depth + 1)
+        if m.group("s"):
+            return m.group(0)                                        # bare `$X`: a shell variable, keep
+        return m.group("d") or ""
+    s = s.replace("$$", "\0")
+    return _BH_VAR.sub(rep, s).replace("\0", "$")
+
+
+def _bh_shell_calls(s):
+    """Bodies of `$(shell ..)` calls (balanced parentheses)."""
+    out, i = [], 0
+    while len(out) < 16:
+        i = s.find("$(shell", i)
+        if i < 0:
+            break
+        d, j = 0, i + 1
+        while j < len(s):
+            d += {"(": 1, ")": -1}.get(s[j], 0)
+            if d == 0:
+                break
+            j += 1
+        out.append(s[i + 7:j])
+        i = j
+    return out
+
+
+def _bh_echo_args(cmd):
+    """Joined arguments of each echo/printf in a shell command (quotes, option flags, `%s` formats dropped)."""
+    out = []
+    for m in _BH_ECHO.finditer(cmd):
+        a = m.group("args").strip()
+        a = re.sub(r"^(?:-[neE]+[ \t]+)+", "", a)
+        if m.group("cmd") == "printf":
+            a = re.sub(r"""^(["']?)%[bs](?:\\n)?\1[ \t]+""", "", a)
+        a = re.sub(r"""["'\\]""", "", a)
+        out.append(a)
+    return out
+
+
+def _bh_payloads(cmd, env):
+    cmd = _bh_expand(cmd, env)
+    return [a for a in _bh_echo_args(cmd)] + [m.group("body") for m in _BH_HEREDOC.finditer(cmd)]
+
+
+def _build_host_codecs(src, budget=0.6):
+    """find_codecs entries read from a Dockerfile / Makefile build host (see the section comment)."""
+    try:
+        if not src or len(src) > (1 << 20):
+            return []
+        docker = bool(_BH_DOCKER.search(src))
+        make = bool(_BH_MAKE.search(src))
+        if not (docker or make):
+            return []
+        end = time.time() + budget
+        env, order, run_cmds, marks = {}, [], [], []
+        lines = _bh_lines(src, docker and not make)
+        k = 0
+        while k < len(lines):
+            ln = lines[k]
+            k += 1
+            st = ln.strip()
+            if st.startswith("#"):
+                if _ANALYSIS_RE.search(st):
+                    marks.append(re.sub(r"\s+", "", st))
+                continue
+            if ln.startswith("\t"):                                  # make recipe line
+                run_cmds.append(ln[1:].lstrip("@-+ \t"))
+                continue
+            dm = re.match(r"(?i)(ARG|ENV|LABEL)[ \t]+(.*)\Z", st, re.S) if docker else None
+            if dm:
+                body = dm.group(2)
+                pairs = list(_BH_ENV_PAIR.finditer(body))
+                if not pairs and dm.group(1).upper() != "ARG":       # legacy `ENV X value`
+                    lm = re.match(r"([A-Za-z_]\w*)[ \t]+(.+)", body, re.S)
+                    pairs = [(lm.group(1), lm.group(2).strip())] if lm else []
+                else:
+                    pairs = [(p.group("name"), p.group("val")) for p in pairs]
+                for n, v in pairs:
+                    if v[:1] in "\"'" and v[-1:] == v[:1] and len(v) > 1:
+                        v = v[1:-1].replace("\\" + '"', '"') if v[0] == '"' else v[1:-1]
+                    env[n] = _bh_expand(v, env)
+                    order.append(n)
+                continue
+            rm = re.match(r"(?i)(RUN|CMD|ENTRYPOINT)[ \t]+(.*)\Z", st, re.S) if docker else None
+            if rm:
+                cmd = rm.group(2)
+                hm = re.search(r"<<-?[ \t]*([\"']?)([A-Za-z_]\w*)\1", cmd)
+                if hm:                                               # RUN <<EOF heredoc: body up to the tag line
+                    body = []
+                    while k < len(lines) and lines[k].strip() != hm.group(2):
+                        body.append(lines[k])
+                        k += 1
+                    k += 1
+                    cmd = cmd + "\n" + "\n".join(body) + "\n" + hm.group(2) + "\n"
+                    run_cmds.extend(body)
+                run_cmds.append(cmd)
+                continue
+            if make:
+                fm = re.match(r"(?:(?:override|export)[ \t]+)*define[ \t]+([A-Za-z_][\w.-]*)", st)
+                if fm:
+                    body = []
+                    while k < len(lines) and not re.match(r"[ \t]*endef\b", lines[k]):
+                        body.append(lines[k])
+                        k += 1
+                    k += 1
+                    env[fm.group(1)] = "\n".join(body)
+                    order.append(fm.group(1))
+                    continue
+                am = _BH_MK_ASSIGN.match(st)
+                if am and not re.match(r"[^=]*:[ \t]*[^=:]", st[:am.start("op")]):
+                    n, op, v = am.group("name"), am.group("op"), re.sub(r"(?<!\\)[ \t]*#.*$", "", am.group("val"))
+                    for sc in _bh_shell_calls(v):
+                        run_cmds.append(sc)
+                    if op == "!=":
+                        run_cmds.append(v)
+                        v = ""
+                    elif op == "?=" and n in env:
+                        continue
+                    if op == "+=" and n in env:
+                        v = env[n] + " " + v
+                    elif op in (":=", "::=", ":::="):
+                        v = _bh_expand(v, env)
+                    env[n] = v
+                    order.append(n)
+        cands, seen = [], set()
+
+        def add(ident, lit):
+            if lit and lit.strip() and (ident, lit) not in seen:
+                seen.add((ident, lit))
+                cands.append((ident, lit))
+        names = list(dict.fromkeys(order))
+        for n in names:
+            if re.match(r"(?i)descriptor[_-]", n):
+                add(re.sub(r"(?i)^descriptor[_-]", "", n), _bh_expand(env[n], env))
+        for c in run_cmds:
+            if re.search(r"(?i)\bdescriptor[_-]", c):
+                for a in _bh_payloads(c, env):
+                    add("run", a)
+        for mk in marks:
+            am = _ANALYSIS_RE.search(mk)
+            plain = peel_plan(am.group("mat"), am.group("tag"), budget=min(0.3, max(0.05, end - time.time())))
+            if plain:
+                dm = re.search(r"(?i)descriptor[_-](\w+)", src)
+                return [{"id": dm.group(1) if dm else "analysis", "rep": "descriptor", "transform": "identity",
+                         "key": "", "material": am.group("mat"), "plain": plain}]
+        for c in run_cmds:
+            for a in _bh_payloads(c, env):
+                add("run", a)
+        for n in names:
+            add(n, _bh_expand(env[n], env))
+        ident, plain = _peel_ext(cands, budget=max(0.05, end - time.time()))
+        if plain:
+            return [{"id": ident, "rep": "descriptor", "transform": "identity", "key": "",
+                     "material": dict(cands).get(ident), "plain": plain}]
+    except Exception:  # noqa: BLE001 - unknown host -> nothing, never an exception
+        return []
+    return []
+
+
 def find_codecs(src, _depth=0):
     """Every declared codec in a source text: [{id, rep, transform, key, material, plain}] (plain = decode() or None).
     Batch `HUNTRESS-CODEC:` has no id -- its material is the `HUNTRESS-MATERIAL:` line.
@@ -798,6 +1086,12 @@ def find_codecs(src, _depth=0):
     if _depth < 2 and not any(c.get("plain") for c in out):
         out = out + _ps_codecs(src, _depth)
     if _depth < 2 and not any(c.get("plain") for c in out):
+        out = out + _ps_v3_codecs(src)
+    elif _depth < 2 and _PSV3_VAR.search((src or "")[:1 << 20]):
+        # a PS `"a" +` backtick-continued / `'it''s'` descriptor reads lossy elsewhere: the full plan goes first
+        x = [c for c in _ps_v3_codecs(src) if any(_psv3_lossy(c["plain"], o.get("plain")) for o in out)]
+        out = x + out
+    if _depth < 2 and not any(c.get("plain") for c in out):
         out = out + _xslt_codecs(src)
     elif _depth < 2 and _XSL_HOST.search((src or "")[:1 << 16]):
         # an XML-escaped `"a" &amp; _ "b"` reads as the plan-shaped first piece only: the full plan goes first
@@ -806,6 +1100,13 @@ def find_codecs(src, _depth=0):
         out = x + out
     if _depth < 2 and not any(c.get("plain") for c in out):
         out = out + _chain_codecs(src, _depth)
+    if _depth < 2 and not any(c.get("plain") for c in out):
+        out = out + _build_host_codecs(src)
+    elif _depth < 2 and _BH_APPEND.search((src or "")[:1 << 20]):
+        # a Makefile `descriptor_x += ..` / `:= $(descriptor_x)..` append reads as its first piece only: full plan first
+        x = [c for c in _build_host_codecs(src) if any(c["plain"] != p and c["plain"].startswith(p)
+                                                       for p in (o.get("plain") for o in out) if p)]
+        out = x + out
     if _depth < 1 and not any(c.get("plain") for c in out):
         norm = normalize(raw if raw is not None else src)     # whole-leaf UTF-16 / gzip / base64: rescan the source
         if norm:
@@ -861,12 +1162,18 @@ def _find_codecs_text(src):
                     break
             if plain is None:                    # wrapped marker material, then the wider descriptor syntax set
                 cont = [("", v) for v in _marker_continued(src, am)]
-                plain = _peel_ext(cont + _descriptor_literals_ext(src), am.group("tag"),
+                plain = _peel_ext(cont + _ahk_literals(src) + _descriptor_literals_ext(src), am.group("tag"),
                                   tried=_descriptor_literals(src) + [am.group("mat")])[1]
         out.append({"id": dm.group(1) if dm else "analysis", "rep": rep, "transform": "identity", "key": "",
                     "material": am.group("mat"), "plain": plain})
     elif not out:
-        for ident, lit in _descriptor_literals(src or "", with_id=True):    # descriptor literal, no marker line
+        for ident, lit in _ahk_literals(src):                     # AHK v1 continuation section / `.=` appends
+            plain = _peel_ext([(ident, lit)])[1]
+            if plain:
+                out.append({"id": ident, "rep": "descriptor", "transform": "identity", "key": "", "material": lit,
+                            "plain": plain})
+                break
+        for ident, lit in ([] if out else _descriptor_literals(src or "", with_id=True)):  # descriptor literal, no marker line
             plain = peel_plan(lit)
             if plain:
                 out.append({"id": ident, "rep": "descriptor", "transform": "identity", "key": "", "material": lit,
@@ -1132,6 +1439,60 @@ def _descriptor_literals_ext(src, limit=24):
                                                 or re.match(r"descriptor[_-]?(.*)", m.group("tag"), re.I)).group(1)
             out.append((ident, body))
     return out
+
+
+# AutoHotkey v1 legacy descriptor forms (target ahk-compiled-exe-extract): a continuation section
+# `descriptor_x =` / `:= "` + `(Join..` lines `)` (`)"` closes the quoted form) and `descriptor_x .= ".."` / `.= text`
+# appends. Only ids that use one of these AHK constructs are returned (whole value accumulated in source order), so a
+# plain `descriptor_x = ..` keeps its earlier reading.
+_AHK_ASSIGN_RE = re.compile(r"""^[ \t]*(?:global[ \t]+|static[ \t]+|local[ \t]+)?descriptor_(?P<id>\w+)[ \t]*(?P<op>\.=|:=|=)"""
+                            r"""[ \t]*(?P<rest>[^\r\n]*)""", re.M)
+_AHK_CONT_OPEN_RE = re.compile(r"""\r?\n[ \t]*\((?P<opts>[^\r\n)]*)\r?\n""")
+
+
+def _ahk_value(rest, op):
+    """Value of a one-line AHK v1 assignment: `:=`/`.=` take quoted pieces joined by ` . `; legacy `=` the raw text."""
+    rest = re.sub(r"""[ \t]+;.*$""", "", rest).strip()
+    if op == "=" or (op == ".=" and rest[:1] not in "\"'"):
+        return rest or None
+    pieces = re.findall(r'"((?:[^"]|"")*)"', rest)
+    return "".join(x.replace('""', '"') for x in pieces) if pieces else None
+
+
+def _ahk_literals(src, limit=16):
+    """(id, value) of descriptors written with an AHK continuation section or `.=` appends; [] otherwise."""
+    if not src or "descriptor_" not in src:
+        return []
+    vals, special = {}, set()
+    for m in _AHK_ASSIGN_RE.finditer(src[:1 << 20]):
+        ident, op, rest = m.group("id"), m.group("op"), m.group("rest").strip()
+        val = None
+        if rest in ("", '"') and op in ("=", ":="):
+            c = _AHK_CONT_OPEN_RE.match(src, m.end())
+            if c:
+                body, j = [], c.end()
+                for line in src[j:j + (1 << 16)].split("\n"):
+                    if re.match(r"[ \t]*\)", line):
+                        break
+                    body.append(line.rstrip("\r"))
+                else:
+                    continue
+                opts = c.group("opts")
+                jm = re.search(r"\bjoin(\S*)", opts, re.I)
+                lines = [ln.strip() for ln in body]                  # LTrim/RTrim: indentation never part of a blob
+                sep = (jm.group(1).replace("`s", " ").replace("`n", "\n").replace("`t", "\t") if jm else "\n")
+                val = sep.join(lines)
+                special.add(ident)
+        elif rest:
+            val = _ahk_value(rest, op)
+        if val is None:
+            continue
+        if op == ".=":
+            special.add(ident)
+            vals[ident] = vals.get(ident, "") + val
+        else:
+            vals[ident] = val
+    return [(k, v) for k, v in vals.items() if k in special and v][:limit]
 
 
 def _peel_ext(lits, tag="", tried=(), budget=1.5):
@@ -1556,6 +1917,276 @@ def _xslt_codecs(src):
     except Exception:  # noqa: BLE001 - unknown -> None, never an exception
         return []
     return []
+
+
+# ------------------------------------------------------------------------------------------------ PowerShell v=3 route
+# Target ps-v3-polyglot-route: a polyglot-PowerShell day (.ps1/.psm1/.psd1/.ps1xml) writes the v=3 descriptor in PS
+# syntax: `[string]$script:descriptor_x = "..."`, `${descriptor_x}`, `Set-Variable -Name descriptor_x -Value '..'`,
+# here-strings `@' .. '@` / `@" .. "@`, `'a' + 'b'` / backtick-continued pieces, `-join @('a','b')`, `''` / `""` /
+# backtick escapes, a .psd1 hashtable key `Descriptor = '..'` and a .ps1xml `<Name>descriptor_x</Name><Value>..`.
+# find_codecs() consults _ps_v3_codecs() when nothing else produced a plan, and puts its plan first only when an
+# earlier reading of the SAME literal is demonstrably lossy (a truncated first piece, or a `''`/`""` escape dropped).
+# is_v3() / v3_plan() let a solver route v=3 before the v=1 `$encodedMaterial` / `$nativeTypes` JSON path.
+_PSV3_VAR = re.compile(r"""(?:\[[\w.\[\]]+\]\s*)*\$\{?(?:(?:script|global|local|private|using|env):)?(?P<n>descriptor[_-]?[\w-]*)\}?"""
+                       r"""[ \t]*=(?!=)[ \t]*""", re.I)
+_PSV3_SETVAR = re.compile(r"""\b(?:Set|New)-Variable\s+(?:-Name\s+)?['"]?(?P<n>descriptor[_-]?[\w-]*)['"]?\s+"""
+                          r"""(?:-Value\s+)?""", re.I)
+_PSV3_KEY = re.compile(r"""(?:^|[;{(])[ \t]*['"]?(?P<n>descriptor[_-]?[\w-]*)['"]?[ \t]*=(?!=)[ \t]*""", re.I | re.M)
+_PSV3_XML = re.compile(r"""<Name>\s*(?P<n>descriptor[_-]?[\w-]*)\s*</Name>\s*<Value>(?P<v>.*?)</Value>""", re.I | re.S)
+_PSV3_NOTPS = re.compile(r"""<\?php|^\s*my\s+[$@%]|^\s*use\s+strict\b""", re.I | re.M)
+_PSV3_MARK = re.compile(r"HUNTRESS_ANALYSIS_V\d+:[A-Za-z0-9_]+-")
+
+
+def _psv3_str(s, i):
+    """(value, end) of the PowerShell string literal at s[i] ('..', "..", @'..'@, @"..."@), else (None, i)."""
+    n = len(s)
+    if s.startswith(("@'", '@"'), i):
+        q = s[i + 1]
+        j = s.find("\n", i + 2)
+        if j < 0 or s[i + 2:j].strip():
+            return None, i
+        m = re.compile(r"\r?\n" + q + "@").search(s, j)
+        if not m:
+            return None, i
+        body = s[j + 1:m.start()]
+        return (body if q == "'" else _psv3_dq(body, here=True)), m.end()
+    if i < n and s[i] in "'‘’":
+        out, j = [], i + 1
+        while j < n:
+            c = s[j]
+            if c in "'‘’":
+                if j + 1 < n and s[j + 1] in "'‘’":
+                    out.append(c)
+                    j += 2
+                    continue
+                return "".join(out), j + 1
+            out.append(c)
+            j += 1
+        return None, i
+    if i < n and s[i] in '"“”':
+        j = i + 1
+        while j < n:
+            c = s[j]
+            if c == "`":
+                j += 2
+                continue
+            if c in '"“”':
+                if j + 1 < n and s[j + 1] in '"“”':
+                    j += 2
+                    continue
+                return _psv3_dq(s[i + 1:j]), j + 1
+            j += 1
+        return None, i
+    return None, i
+
+
+def _psv3_dq(body, here=False):
+    """Expandable-string body: backtick escapes and `""` (no variable expansion: a constant descriptor has none)."""
+    out, j, n = [], 0, len(body)
+    while j < n:
+        c = body[j]
+        if c == "`" and j + 1 < n:
+            d = body[j + 1]
+            out.append(_PS_DQ_ESC.get(d, "" if d in "\r\n" else d))
+            j += 2
+        elif not here and c in '"“”' and j + 1 < n and body[j + 1] in '"“”':
+            out.append(c)
+            j += 2
+        else:
+            out.append(c)
+            j += 1
+    return "".join(out)
+
+
+def _psv3_ws(s, i, nl):
+    """Skip blanks (newlines too when `nl`), backtick line continuations and `<# #>` comments."""
+    n = len(s)
+    while i < n:
+        if s[i] in " \t" or (nl and s[i] in "\r\n"):
+            i += 1
+        elif s[i] == "`" and s[i + 1:i + 2] in ("\n", "\r"):
+            i += 2
+        elif s.startswith("<#", i):
+            e = s.find("#>", i + 2)
+            if e < 0:
+                return n
+            i = e + 2
+        else:
+            return i
+    return i
+
+
+def _psv3_expr(s, i, depth=0):
+    """(value, end) of a constant PowerShell string expression at s[i]: literals joined by `+`, `-join @(..)`,
+    `(..)`, `@('a','b') -join ''`, `[string]::Concat(..)` / `[string]::Join('', ..)`; else (None, i)."""
+    if depth > 6:
+        return None, i
+    parts, j = [], _psv3_ws(s, i, False)
+    while True:
+        j0 = j
+        mj = re.compile(r"-join\s*", re.I).match(s, j)
+        if not parts and mj:
+            v, j = _psv3_group(s, mj.end(), depth)
+        elif not parts and re.match(r"\[string\]::(?:concat|join)\s*\(", s[j:j + 24], re.I):
+            k = s.index("(", j)
+            isjoin = s[j:k].lower().rstrip().endswith("join")
+            items, j = _psv3_items(s, k + 1, ")", depth)
+            v = None if items is None or (isjoin and len(items) < 1) else \
+                (items[0].join(items[1:]) if isjoin else "".join(items))
+        elif s.startswith(("@(", "("), j):
+            v, j = _psv3_group(s, j, depth)
+            mj = re.compile(r"\s*-join\s*", re.I).match(s, j)
+            if v is not None and mj:
+                sep, j2 = _psv3_str(s, mj.end())
+                if sep is not None:
+                    v, j = v, j2                                # `@('a','b') -join ''`: separator already ''
+        else:
+            v, j = _psv3_str(s, j)
+        if v is None:
+            j = j0
+            break
+        parts.append(v)
+        k = _psv3_ws(s, j, False)
+        if s.startswith("+", k):
+            j = _psv3_ws(s, k + 1, True)
+            continue
+        j = k
+        break
+    return ("".join(parts), j) if parts else (None, i)
+
+
+def _psv3_items(s, i, close, depth):
+    """Comma/newline separated constant expressions up to `close`: (list, end) or (None, i)."""
+    items, j = [], i
+    while True:
+        j = _psv3_ws(s, j, True)
+        if s.startswith(close, j):
+            return items, j + 1
+        if items and s.startswith((",", ";"), j):
+            j += 1
+            continue
+        if s.startswith("@(", j) and _psv3_expr(s, j, depth + 1)[0] is None:  # nested array: flatten
+            sub, j2 = _psv3_items(s, j + 2, ")", depth + 1)
+            if sub is None:
+                return None, i
+            items += sub
+            j = j2
+            continue
+        v, j2 = _psv3_expr(s, j, depth + 1)
+        if v is None:
+            return None, i
+        items.append(v)
+        j = j2
+
+
+def _psv3_group(s, i, depth):
+    """`@(..)` / `(..)` of constant strings -> their concatenation (the `-join` reading), or a bare literal."""
+    if s.startswith("@(", i):
+        items, j = _psv3_items(s, i + 2, ")", depth)
+    elif s.startswith("(", i):
+        items, j = _psv3_items(s, i + 1, ")", depth)
+    else:
+        v, j = _psv3_str(s, i)
+        return v, j
+    return ("".join(items) if items is not None else None), j
+
+
+def _ps_descriptor_literals(src, limit=24):
+    """(id, literal) of every PowerShell-syntax descriptor assignment (see the block comment above)."""
+    out = []
+    if not src or "descriptor" not in src.lower() or _PSV3_NOTPS.search(src[:1 << 16]):
+        return out
+    texts = [src]
+    if "<Value>" in src or "&lt;" in src or "<ScriptBlock>" in src:
+        import html
+        texts.append(html.unescape(re.sub(r"<!\[CDATA\[(.*?)\]\]>", r"\1", src, flags=re.S)))
+        for m in _PSV3_XML.finditer(src):
+            out.append((m.group("n"), html.unescape(m.group("v").strip())))
+    hashtable = "@{" in src
+    for t in texts:
+        for rx in (_PSV3_VAR, _PSV3_SETVAR) + ((_PSV3_KEY,) if hashtable else ()):
+            for m in rx.finditer(t):
+                if rx is _PSV3_KEY and "@{" not in t[:m.start()]:
+                    continue
+                v, _ = _psv3_expr(t, m.end())
+                if v:
+                    out.append((m.group("n"), v))
+                if len(out) >= limit:
+                    break
+    seen, res = set(), []
+    for n, v in out:
+        ident = re.sub(r"(?i)^descriptor[_-]?", "", n) or "descriptor"
+        if (ident, v) not in seen:
+            seen.add((ident, v))
+            res.append((ident, v))
+    return res
+
+
+def _ps_v3_codecs(src, budget=1.0):
+    """Codec entries for PowerShell-syntax descriptors whose literal peels to a plan (marker TAG as the layer hint)."""
+    try:
+        lits = _ps_descriptor_literals(src)
+        if not lits:
+            return []
+        am = _ANALYSIS_RE.search(src)
+        end, out = time.time() + budget, []
+        for ident, lit in lits:
+            if time.time() > end:
+                break
+            plain = None
+            for cand in (lit, re.sub(r"\s+", "", lit), lit.strip()):
+                plain = peel_plan(cand, am.group("tag") if am else "",
+                                  budget=min(0.4, max(0.05, end - time.time()))) if cand else None
+                if plain:
+                    break
+            if plain:
+                out.append({"id": ident, "rep": "descriptor", "transform": "identity", "key": "", "material": lit,
+                            "plain": plain})
+        return out
+    except Exception:
+        return []
+
+
+def _psv3_lossy(full, part):
+    """`part` is a lossy reading of the plan `full`: its truncated first piece, or `full` with quotes dropped."""
+    if not full or not part or full == part:
+        return False
+    if full.startswith(part):
+        return True
+    sq = lambda t: re.sub(r"['\"‘’“”]", "", t)
+    return sq(full) == sq(part)
+
+
+def v3_plan(src):
+    """The v=3 plan text of a source (str or bytes, UTF-16/BOM'd sources too), else None. Never raises."""
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            b = bytes(src)
+            u = _utf16(b[:1 << 22]) if (b[:2] in (b"\xff\xfe", b"\xfe\xff") or b[1:64:2].count(0) > 20
+                                         or b[0:64:2].count(0) > 20) else None
+            src = (u or b).decode("utf-8", "ignore").lstrip("﻿")
+        for c in find_codecs(src or ""):
+            p = c.get("plain")
+            if p and (p.lstrip().startswith("v=3") or re.match(r'\s*\{\s*"v"\s*:\s*"?3\b', p)):
+                return p
+    except Exception:
+        return None
+    return None
+
+
+def is_v3(src):
+    """True when a source is a v=3 polyglot (HUNTRESS_ANALYSIS marker, or a descriptor peeling to a `v=3` plan): route
+    it to the v=3 reader before the v=1 `$encodedMaterial` / `$nativeTypes` JSON path. Never raises."""
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            b = bytes(src)
+            if _PSV3_MARK.search(b.decode("latin-1")) or _PSV3_MARK.search(b.replace(b"\x00", b"").decode("latin-1")):
+                return True
+        elif _PSV3_MARK.search(src or ""):
+            return True
+        return v3_plan(src) is not None
+    except Exception:
+        return False
 
 
 # ------------------------------------------------------------------------------------------------ PowerShell layer peel
@@ -2129,7 +2760,8 @@ def _bat_codecs(src, budget=0.4):
 # CHM content (LZX-compressed section) is NOT decompressed: only its uncompressed bytes/UTF-16 runs are scanned.
 _ONE_FDSO = bytes.fromhex("e716e3bd65261145a4c48d4d0b7a9eac")      # {BDE316E7-2665-4511-A4C4-8D4D0B7A9EAC}
 _MAGICS = (b"PK\x03\x04", b"\xd0\xcf\x11\xe0", b"\x1f\x8b", b"L\x00\x00\x00\x01\x14\x02\x00",
-           bytes.fromhex("e4525c7b8cd8a74daeb15378d02996d3"), b"ITSF")
+           bytes.fromhex("e4525c7b8cd8a74daeb15378d02996d3"), b"ITSF",
+           b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\xc3\xd4", b"\x4d\x3c\xb2\xa1", b"\xa1\xb2\x3c\x4d", b"\x0a\x0d\x0d\x0a")
 _U16_RUN = re.compile(rb"(?:[\t\n\r\x20-\x7e]\x00){12,}")
 _U16_RUN_S = re.compile(r"(?:[\t\n\r\x20-\x7e]\x00){12,}")
 _MAT_TOKEN = re.compile(r"[A-Za-z0-9+/=_\-:%.]{24,}")
@@ -2181,6 +2813,20 @@ def _vba_sources(s):
     return None
 
 
+def _vba_dir_offsets(d):
+    """{module stream name (lower): MODULEOFFSET} from a VBA `dir` stream (MS-OVBA 2.3.4.2 records), or {}."""
+    d, out, name, i = _ovba_decompress(d, 0) or b"", {}, None, 0
+    while i + 6 <= len(d) and len(out) < 4096:
+        rid, size = int.from_bytes(d[i:i + 2], "little"), int.from_bytes(d[i + 2:i + 6], "little")
+        size = 6 if rid == 0x0009 else size                     # PROJECTVERSION: Size says 4, 6 bytes follow
+        body, i = d[i + 6:i + 6 + size], i + 6 + size
+        if rid == 0x001A:                                       # MODULESTREAMNAME (MBCS; 0x0032 unicode follows)
+            name = body.decode("latin-1").lower()
+        elif rid == 0x0031 and name is not None and size == 4:  # MODULEOFFSET of the source in that stream
+            out[name] = int.from_bytes(body, "little")
+    return out
+
+
 def _carrier_blobs(b, name="", depth=0, budget=None):
     """(member name, bytes) of every stream inside a container, recursively (zip / OLE+VBA / gzip / OneNote)."""
     import io
@@ -2204,17 +2850,43 @@ def _carrier_blobs(b, name="", depth=0, budget=None):
         elif b[:4] == b"\xd0\xcf\x11\xe0":
             import olefile
             ole = olefile.OleFileIO(io.BytesIO(b))
+            offs = {}                                           # VBA storages: dir-stream module offsets
+            for ent in ole.listdir()[:300]:
+                if ent[-1].lower() == "dir" and ole.get_size("/".join(ent)) < (1 << 20):
+                    offs.update({"/".join(ent[:-1] + [k]).lower(): v
+                                 for k, v in _vba_dir_offsets(ole.openstream(ent).read()).items()})
             for ent in ole.listdir()[:300]:
                 if ole.get_size("/".join(ent)) > (8 << 20):
                     continue
                 s = ole.openstream(ent).read()
                 if len(ent) >= 2 and ent[-1].lower() not in ("dir", "_vba_project") and \
                         not ent[-1].startswith("__SRP_") and ole.exists("/".join(ent[:-1] + ["dir"])):
-                    src = _vba_sources(s)
+                    off = offs.get("/".join(ent).lower())
+                    src = (_ovba_decompress(s, off) if off is not None else None) or _vba_sources(s)
                     if src:
                         yield f"{name}:{'/'.join(ent)}", src
                         continue
                 yield from _carrier_blobs(s, f"{name}:{'/'.join(ent)}", depth + 1, budget)
+        elif b[:2] == b"MZ" and depth == 0:                    # compiled AHK (Ahk2Exe) / any PE: RT_RCDATA members
+            import pefile
+            pe = pefile.PE(data=b, fast_load=True)
+            pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"]])
+            for t in getattr(getattr(pe, "DIRECTORY_ENTRY_RESOURCE", None), "entries", [])[:64]:
+                if t.id != 10 or not hasattr(t, "directory"):
+                    continue
+                for n in t.directory.entries[:64]:
+                    for lang in getattr(getattr(n, "directory", None), "entries", [])[:8]:
+                        d = lang.data.struct
+                        if 0 < d.Size <= (8 << 20) and time.time() < budget:
+                            data = pe.get_data(d.OffsetToData, d.Size)
+                            data = data[3:] if data[:3] == b"\xef\xbb\xbf" else data
+                            yield from _carrier_blobs(data, f"{name}#rcdata:{n.name or n.id}", depth + 1, budget)
+        elif b[:4] in (b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\xc3\xd4", b"\x4d\x3c\xb2\xa1", b"\xa1\xb2\x3c\x4d",
+                       b"\x0a\x0d\x0d\x0a"):             # pcap / pcapng: reassembled HTTP bodies (the fetched stage)
+            for o in http_objects(b, budget=max(0.05, budget - time.time())):
+                if o["body"]:
+                    yield from _carrier_blobs(o["body"], f"{name}#http:{o['uri'] or o['direction']}", depth + 1,
+                                              budget)
         elif b[:2] == b"\x1f\x8b":
             yield from _carrier_blobs(zlib.decompressobj(31).decompress(b, 1 << 22), name + "|gunzip", depth + 1, budget)
         else:
@@ -2258,6 +2930,11 @@ def _carrier_codecs(src, raw, depth=0):
             for c in _find_codecs_text(text):
                 if c.get("plain"):
                     return [dict(c, id=f"{c['id']}@{name}" if name else c["id"])]
+        for name, text in texts if depth < 1 else ():   # a fetched HTTP body is a whole script: every reading
+            if "#http:" in name and not name.endswith("~u16") and time.time() < end:
+                for c in find_codecs(text, depth + 1):
+                    if c.get("plain"):
+                        return [dict(c, id=f"{c['id']}@{name}")]
         seen = set()
         for name, text in texts + ([("", src)] if src and "\x00" in src else []):
             for tok in _MAT_TOKEN.findall(text)[:48]:
@@ -2386,6 +3063,10 @@ def encode(plain, rep, transform, key=None, sample=None):
 # know (eval/exec/assert/print...) pass their first argument through. A decoded layer that is code again is re-read
 # (up to 4 levels); the result must be a plan (looks_like_plan, else peel_plan). Only consulted when nothing else
 # produced a plan, so every earlier reading is unchanged. Bounded (budget seconds, node count), never raises.
+# Target python-onion-regex-fold adds Python's module indirection (`__import__('zlib').decompress(..)`,
+# `getattr(__import__('base64'),'b85decode')(..)`) and pyobfuscate-style `_ = lambda __: ..(__[::-1]); exec((_)(b'..'))`
+# (the body is evaluated with the parameter bound). `marshal.loads` stops the fold: the code object is not unmarshalled,
+# only a plan string constant whose marshal length field matches it exactly is reported (rep "marshal").
 _CH_B64 = {"base64_decode", "b64decode", "standard_b64decode", "urlsafe_b64decode", "decode64", "decode_base64",
            "urlsafe_decode64", "strict_decode64", "decodebase64", "frombase64string", "atob", "a2b_base64",
            "decodebytes", "decodestring", "base64decode", "mime_base64_decode"}
@@ -2442,9 +3123,14 @@ def _ch_uu(b):
     return bytes(out) or None
 
 
+_CH_LAMBDA = r"(?:^|[;\n])[ \t]*{}[ \t]*=[ \t]*lambda[ \t]*([A-Za-z_]\w*)?[ \t]*:"
+_CH_IMPORT = ("__import__", "import_module")
+
+
 class _Chain:
-    def __init__(self, src, end, depth=0):
+    def __init__(self, src, end, depth=0, env=None):
         self.s, self.end, self.depth, self.nodes = src, end, depth, 0
+        self.env, self.marshal = env or {}, None
 
     # -- lexing helpers
     def ws(self, i):
@@ -2546,7 +3232,11 @@ class _Chain:
         last = parts[-1].lower()
         if k < len(s) and s[k] == "(":
             a, j = self.args(k + 1, ")", lvl)
-            return self.apply(last, a, name), j
+            if last in _CH_IMPORT and a and isinstance(a[0], bytes):   # Python __import__('zlib')
+                return ("mod", a[0].decode("latin-1")), j
+            if last == "getattr" and len(a) >= 2 and isinstance(a[1], bytes) and isinstance(a[0], tuple):
+                return ("fn", f"{a[0][1]}.{a[1].decode('latin-1')}"), j
+            return self.call(("name", name), a, i), j
         if last in _CH_ALL and k > j and k < len(s) and (s[k] in "'\"$@[(" or s[k].isalpha()):
             v, j = self.expr(k, lvl + 1)                  # Ruby/Perl paren-less call `decode64 x` / `scalar reverse`
             return self.apply(last, [v], name), j
@@ -2599,6 +3289,10 @@ class _Chain:
                         v = None
                 i = m.end()
                 continue
+            if s.startswith("(", j) and isinstance(v, tuple) and v[0] in ("name", "fn"):
+                a, i = self.args(j + 1, ")", lvl)         # `(_)(b'..')`, `getattr(m, 'f')(..)`
+                v = self.call(v, a, j)
+                continue
             m = re.compile(r"(?:\.|->|&\.)\s*([A-Za-z_]\w*[!?]?)").match(s, j)
             if not m or (isinstance(v, bytes) and s[j] == "." and j > i):
                 return v, i
@@ -2607,10 +3301,32 @@ class _Chain:
                 a, i = self.args(k + 1, ")", lvl)
             else:
                 a, i = [], m.end()
+            if isinstance(v, tuple) and v[0] == "mod":    # __import__('base64').b64decode(..)
+                q = f"{v[1]}.{name}"
+                v = self.apply(name, a, q) if k < len(s) and s[k] == "(" else ("fn", q)
+                continue
             v = self.apply(name, [v] + a)
+
+    def call(self, f, a, at):
+        """Call a function value: a Python `NAME = lambda P: BODY` bound before `at` (BODY evaluated with P = the first
+        argument), else the named decoder."""
+        name = f[1]
+        if f[0] == "name" and name.lower() not in _CH_ALL and self.depth <= 3 and re.fullmatch(r"\w+", name):
+            hit = None
+            for hit in re.finditer(_CH_LAMBDA.format(re.escape(name)), self.s[:at]):
+                pass
+            if hit:
+                sub = _Chain(self.s, self.end, self.depth + 1, {hit.group(1): a[0]} if hit.group(1) and a else {})
+                sub.nodes = self.nodes
+                v, _ = sub.expr(hit.end())
+                self.nodes, self.marshal = sub.nodes, sub.marshal or self.marshal
+                return v
+        return self.apply(name.rsplit(".", 1)[-1], a, name)
 
     def var(self, name, at):
         """The value last assigned to `name` before offset `at` (`$x = ..;`, `x = ..`, `my $x = ..`), else None."""
+        if name in self.env:
+            return self.env[name]
         if name.lower() in _CH_ALL or self.depth > 3:
             return None
         bare = name.lstrip("$")
@@ -2663,6 +3379,9 @@ class _Chain:
             v = v[0] if v and isinstance(v[0], bytes) else None
         if not isinstance(v, bytes):
             return None if n in _CH_ALL else v
+        if n == "loads" and "marshal" in qual:           # code object: stop here, keep the blob (report only)
+            self.marshal = v
+            return None
         t = v.decode("latin-1")
         if n == "decode" and sargs:                       # Python codecs.decode(x, 'rot13') / x.decode('base64')
             c = sargs[0].lower().replace("-", "_")
@@ -2707,6 +3426,20 @@ class _Chain:
         return v                                          # eval/exec/assert/print/str()/bytes()/.decode()...
 
 
+def _marshal_plan(blob):
+    """A plan string constant inside a marshal'd code object (`exec(marshal.loads(..))`), read without unmarshalling:
+    the literal must sit right after a str/bytes type byte whose length field matches it exactly. Else None."""
+    for m in re.finditer(rb"v=\d+\||\{", blob[:1 << 20]):
+        st = m.start()
+        for hdr, n in ((b"zZ", 1), (b"aAust", 4)):
+            if st > n and blob[st - n - 1] & 0x7F in hdr:
+                ln = int.from_bytes(blob[st - n:st], "little")
+                run = blob[st:st + ln]
+                if 8 <= ln == len(run) and looks_like_plan(run):
+                    return run.decode("utf-8", "replace")
+    return None
+
+
 def _chain_codecs(src, depth=0, budget=0.4):
     """find_codecs entries read from decode call chains (see the section comment)."""
     _t = time
@@ -2732,6 +3465,12 @@ def _chain_codecs(src, depth=0, budget=0.4):
                 continue
             if isinstance(v, list):
                 v = v[0] if v and isinstance(v[0], bytes) else None
+            if v is None and ch.marshal:                  # marshal.loads(..): report the code object's plan constant
+                p = _marshal_plan(ch.marshal)
+                if p:
+                    return [{"id": "callchain", "rep": "marshal", "transform": "identity", "key": "",
+                             "material": src[st:j][:400], "plain": p}]
+                continue
             if not isinstance(v, bytes) or v in seen or len(v) > (1 << 20):
                 continue
             seen.add(v)
@@ -2989,5 +3728,2422 @@ def label_expansion(join_stmt, pool=None, contract=None, echo_delayed=True):
         if call_set:
             return "call_double"
         return "delayed" if re.search(r"![^!\s]+!", rhs) else "percent"
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# --- network evidence reconcile (prebuild network-evidence-reconcile) ------------------------------------------------
+# D17 "Fetch Quest": the decoded plans say where each member would fetch from, the network evidence says where the
+# requests went; the answer is the indicator on only one side. Both sides are refanged + canonicalised for matching
+# only (canon_host / canon_url); every reported value is the original spelling (exact_text answers are verbatim).
+_RC_DEFANG = ((r"(?i)\bh(?:xx|\*\*|XX)p(s?)\b", r"http\1"), (r"(?i)\bfxp\b", "ftp"),
+              (r"\s*(?:\[\s*(?:\.|dot)\s*\]|\(\s*(?:\.|dot)\s*\)|\{\s*(?:\.|dot)\s*\}|<\s*dot\s*>)\s*", "."),
+              (r"\s*\[\s*:\s*\]\s*", ":"), (r"\[\s*:?//\s*\]", "://"), (r"\[\s*/\s*\]", "/"),
+              (r"\s*(?:\[\s*@\s*\]|\(\s*at\s*\)|\[\s*at\s*\])\s*", "@"), (r"\\\.", "."), (r"\\/", "/"))
+_RC_URL = re.compile(r"(?i)\b(?:https?|ftp|wss?)://[^\s\"'<>`|,;)\]}]+")
+_RC_HOST = re.compile(r"(?i)^(?=.{1,253}$)(?:[a-z0-9_\-\u0080-￿]{1,63}\.)+(?:[a-z\u0080-￿][a-z\-\u0080-￿]"
+                      r"{1,62}|xn--[a-z0-9\-]{1,59})$|^xn--[a-z0-9\-]+(?:\.[a-z0-9\-]+)+$")
+_RC_IP = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}$|^[0-9a-f:]*:[0-9a-f:.]+$", re.I)
+_RC_FILE_EXT = re.compile(r"(?i)\.(?:ps1|psm1|js|jse|vbs|vbe|bat|cmd|py|sh|exe|dll|dat|bin|txt|zip|hta|wsf|php|lua|pl|rb|"
+                          r"ts|ahk|au3|mof|scpt|applescript|proj|xml|json|ini|log|tmp|lnk|docm|xlsm)$")
+_RC_HOST_FIELDS = re.compile(r"(?i)(?:^|_)(?:host(?:name)?|domain|server|c2|sni|server_name|callback|beacon|"
+                             r"query|qry_name|destination(?:_?hostname)?|fqdn)$")
+_RC_PLAN_URL_FIELDS = ("url", "upload_url", "next_stage", "download_url", "fetch_url", "stage_url", "c2_url")
+
+
+def refang(s):
+    """'hxxps://a[.]b[.]c/x' -> 'https://a.b.c/x' (also (.), {.}, [dot], [:], [://], [@]); other text unchanged."""
+    s = str(s or "").strip().strip("\"'`<>")
+    for pat, rep in _RC_DEFANG:
+        s = re.sub(pat, rep, s)
+    return s
+
+
+def _rc_idna(host):
+    # IDNA mapping: fullwidth / compatibility forms fold (NFKC), and the ideographic / fullwidth / halfwidth stops
+    # U+3002 U+FF0E U+FF61 separate labels like '.'
+    host = re.sub("[\u3002\uff0e\uff61]", ".", unicodedata.normalize("NFKC", host)).lower()
+    out = []
+    for lab in host.split("."):
+        if lab and any(ord(c) > 127 for c in lab):
+            try:
+                lab = "xn--" + lab.encode("punycode").decode("ascii")
+            except Exception:  # noqa: BLE001
+                pass
+        out.append(lab)
+    return ".".join(out).rstrip(".")
+
+
+def _rc_split(s):
+    """(scheme, host, port, rest) of a refanged URL or bare host[/path]; host lowercased + IDNA, no userinfo."""
+    s = refang(s)
+    m = re.match(r"(?i)^([a-z][a-z0-9+.\-]*)://(.*)$", s)
+    scheme, body = (m.group(1).lower(), m.group(2)) if m else ("", s)
+    cut = re.search(r"[/?#]", body)
+    auth, rest = (body[:cut.start()], body[cut.start():]) if cut else (body, "")
+    auth = auth.rsplit("@", 1)[-1]
+    port = None
+    if auth.startswith("["):
+        host, _, tail = auth[1:].partition("]")
+        if tail.startswith(":") and tail[1:].isdigit():
+            port = int(tail[1:])
+    else:
+        host, sep, p = auth.rpartition(":")
+        if not sep or not p.isdigit() or ":" in host:
+            host = auth
+        else:
+            port = int(p)
+    host = _rc_idna(host.strip().rstrip(".").lower())
+    return scheme, host, port, rest
+
+
+def canon_host(s):
+    """Matching form of a host / URL's host: refanged, lowercased, IDNA punycode, no port / userinfo / trailing dot.
+    None when there is no plausible host (a bare word without a dot, a file name)."""
+    try:
+        _, host, _, _ = _rc_split(s)
+        if not host or not (_RC_HOST.match(host) or _RC_IP.match(host) or host == "localhost"):
+            return None
+        return host
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def canon_url(s):
+    """Scheme-less matching form 'host[:port]/path?query' of a URL: refanged, host canonical, default port, fragment
+    and trailing '/' dropped, unreserved %XX decoded, path case kept. A TLS-observed https request and the declared
+    http URL of the same resource compare equal. None when it is not a URL with a host."""
+    try:
+        scheme, host, port, rest = _rc_split(s)
+        if not canon_host(host):
+            return None
+        rest = rest.split("#", 1)[0]
+        rest = re.sub(r"%([0-9A-Fa-f]{2})", lambda m: chr(int(m.group(1), 16)) if re.match(
+            r"[A-Za-z0-9\-._~]", chr(int(m.group(1), 16))) else "%" + m.group(1).upper(), rest)
+        path, q, query = rest.partition("?")
+        path = re.sub(r"/{2,}", "/", path).rstrip("/")
+        dflt = {"http": 80, "https": 443, "ws": 80, "wss": 443, "ftp": 21}
+        if ":" in host:   # IPv6 literal: keep the brackets so a port stays unambiguous
+            host = f"[{host}]"
+        hp = host if port is None or port in (80, 443) or port == dflt.get(scheme) else f"{host}:{port}"
+        return hp + path + (q + query if query else "")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _rc_field(k):
+    return re.sub(r"[^0-9a-z]+", "_", str(k).strip().lower()).strip("_")
+
+
+def _rc_dict(plan):
+    if isinstance(plan, (bytes, bytearray)):
+        plan = bytes(plan).decode("utf-8", "replace")
+    if isinstance(plan, dict):
+        return plan
+    s = str(plan or "").strip()
+    if s[:1] == "{":
+        try:
+            import json
+            d = json.loads(s)
+            return d if isinstance(d, dict) else {}
+        except ValueError:
+            return {}
+    out = {}
+    for part in re.split(r"[|\r\n]+", s):
+        if "=" in part:
+            k, v = part.split("=", 1)
+            out.setdefault(k.strip(), v.strip())
+    return out
+
+
+def declared_fetches(plans):
+    """{member: decoded plan (dict / 'k=v|..' / JSON text)} -> [{member, field, value, url, host, stage}]: every plan
+    value that is a URL (any field) or a dotted host (host/domain/server/c2 fields), plus non-URL next_stage names
+    (`stage`, matched against observed URL basenames). `value` is the plan's original spelling."""
+    out = []
+    for m in sorted(plans or {}):
+        try:
+            d = _rc_dict(plans[m])
+        except Exception:  # noqa: BLE001
+            continue
+        for k, v in d.items():
+            if not isinstance(v, (str, int, float)) or isinstance(v, bool):
+                continue
+            f, v = _rc_field(k), str(v).strip()
+            if not v:
+                continue
+            r = refang(v)
+            if _RC_URL.fullmatch(r) and canon_url(r):
+                out.append({"member": m, "field": f, "value": v, "url": canon_url(r), "host": canon_host(r),
+                            "stage": None})
+            elif _RC_HOST_FIELDS.search(f) and "." in r and not _RC_FILE_EXT.search(r) and canon_host(r):
+                out.append({"member": m, "field": f, "value": v, "url": None, "host": canon_host(r), "stage": None})
+            elif f in _RC_PLAN_URL_FIELDS and re.fullmatch(r"[\w.\-]{1,128}", r):
+                out.append({"member": m, "field": f, "value": v, "url": None, "host": None,
+                            "stage": r.rsplit("/", 1)[-1].lower()})
+    return out
+
+
+# --- declared fetch call sites (download cradles) read from the CODE -------------------------------------------------
+# D17 "the source code says where it would fetch from": when a plan has no url (or disagrees), the declared side comes
+# from the call sites. Regex only (no ast / eval): string assignments build a small symbol table, the call's argument
+# is rebuilt from literals joined by + & . .. , -f / .format / % / sprintf, join() and char-code arrays.
+_FS_URL = re.compile(r"(?i)\b(?:https?|ftp)://[^\s\"'<>`|]+")
+_FS_LIT = re.compile(r'''(?P<p>[rRbBuUfF]{0,2})(?:"(?P<d>(?:[^"\\\n]|\\.|"")*)"|'(?P<s>(?:[^'\\\n]|\\.|'')*)'|`(?P<t>(?:[^`\\]|\\.)*)`)''', re.S)
+_FS_IDENT = re.compile(r"[$@%]?\{?[A-Za-z_][\w]*(?:::[A-Za-z_]\w*)*\}?%?")
+_FS_WRAP = re.compile(r"(?i)^(?:new\s+)?(?:URI(?:\.parse|\.join)?|URL|(?:urllib\.request\.|urllib2\.)?Request|str|String|"
+                      r"CStr|tostring|URI::HTTPS?\.build|quoted\s+form\s+of|\[(?:string|uri|system\.uri)\])\s*"
+                      r"(?:\((?P<a>.*)\)|(?P<b>[^()].*))$", re.S)
+_FS_CHR = re.compile(r"(?i)^(?:chrw?|chr\$|\[char\]|string\.char|String\.fromCharCode|pack\s*\(\s*['\"][CU]\*?['\"]\s*,)"
+                     r"\s*\(?\s*(?P<n>[\dxa-fA-FhH&,\s]+?)\s*\)?\s*\)?$")
+_FS_NUM = re.compile(r"\s*(0x[0-9a-fA-F]+|&[hH][0-9a-fA-F]+|\d+)\s*")
+_FS_ASSIGN = re.compile(r"""^\s*(?:<\?php\s+)?(?:(?:export|local|my|our|var|let|const|Dim|Set|Global|Local|Private|Public|static|"""
+                        r"""readonly|declare(?:\s+-\w+)?|\$global:|\$script:)\s+)*(?P<n>[$@]?[A-Za-z_]\w*)"""
+                        r"""(?:\s*:\s*[\w.\[\]<>|&' ]+?)?\s*(?P<op>:=|\+=|\.=|&=|\.\.=|<-|=(?![=~>]))\s*(?P<v>.+?)\s*;?\s*$""")
+_FS_AS_SET = re.compile(r"(?i)^\s*set\s+(?P<n>\w+)\s+to\s+(?P<v>.+?)\s*$")
+_FS_BAT_SET = re.compile(r'''(?i)^\s*@?set\s+(?:/[a-z]\s+)?(?:"(?P<n1>[^="]+)=(?P<v1>[^"]*)"|(?P<n2>[^="\s]+)=(?P<v2>.*))$''')
+_FS_COMMENT = re.compile(r"(?i)^\s*(?:#(?![!{@])|//|::|rem\b|'|;|--(?!\w)|<!--|\*|/\*)")
+_FS_ECHO = re.compile(r"(?i)^\s*@?(?:echo|write-host|write-output|print|puts|console\.log|msgbox|wscript\.echo)\b")
+_FS_VERB = re.compile(r"(?i)^(GET|POST|PUT|HEAD|DELETE|PATCH|OPTIONS)$")
+_FS_CMD_STOP = re.compile(r"""[;|\n)]|&&|(?<![\w"'])&(?!\w)""")
+# (api, regex for the call head, kind): kind 'call' = parenthesised / VB-style args, 'open' = XMLHTTP-style
+# .open(method, url), 'cmd' = command line (tokens until ; | && newline)
+_FS_HEAD = r"(?im)(?:^|(?<=[\s(;|&\"'`{\[,=]))"
+_FS_SITES = (
+    ("Invoke-WebRequest", re.compile(_FS_HEAD + r"(?:Invoke-WebRequest|iwr)(?=\s)"), "cmd"),
+    ("Invoke-RestMethod", re.compile(_FS_HEAD + r"(?:Invoke-RestMethod|irm)(?=\s)"), "cmd"),
+    ("Start-BitsTransfer", re.compile(_FS_HEAD + r"Start-BitsTransfer(?=\s)"), "cmd"),
+    ("certutil", re.compile(_FS_HEAD + r"certutil(?:\.exe)?(?=\s[^\n]*-urlcache)"), "cmd"),
+    ("bitsadmin", re.compile(_FS_HEAD + r"bitsadmin(?:\.exe)?(?=\s[^\n]*/(?:transfer|addfile))"), "cmd"),
+    ("curl", re.compile(_FS_HEAD + r"(?:/usr/bin/)?curl(?:\.exe)?(?=\s)"), "cmd"),
+    ("wget", re.compile(_FS_HEAD + r"(?:/usr/bin/|busybox\s+)?wget(?:\.exe)?(?=\s)"), "cmd"),
+    ("mshta", re.compile(_FS_HEAD + r"mshta(?:\.exe)?(?=\s+[\"']?(?:https?|ftp)://|\s+[\"']?[$%(])"), "cmd"),
+    ("regsvr32", re.compile(_FS_HEAD + r"regsvr32(?:\.exe)?(?=\s[^\n]*/i:)"), "cmd"),
+    ("WebClient", re.compile(r"(?i)\.(Download(?:String|File|Data)(?:Async|TaskAsync)?|Upload(?:String|File|Data|Values)"
+                             r"(?:Async|TaskAsync)?|OpenRead(?:Async)?)\s*\("), "call"),
+    ("HttpClient", re.compile(r"(?i)\.((?:Get(?:String|ByteArray|Stream)?|Post|Put|Send)Async)\s*\("), "call"),
+    ("WebRequest", re.compile(r"(?i)\[(?:System\.)?Net\.(?:Http)?WebRequest\]::Create\s*\("), "call"),
+    ("XMLHTTP.open", re.compile(r"(?i)\.open\s*(?=[(\s])"), "open"),
+    ("fetch", re.compile(r"(?<![\w.$])fetch\s*\("), "call"),
+    ("http.get", re.compile(r"\b(https?)\.(get|request)\s*\("), "call"),
+    ("axios", re.compile(r"\baxios(?:\.(get|post|put|delete|head|patch|request))?\s*\("), "call"),
+    ("urllib.urlopen", re.compile(r"(?<![\w$])(?:urllib2?\.(?:request\.)?|request\.)?(urlopen|urlretrieve)\s*\("), "call"),
+    ("requests", re.compile(r"\b(?:requests|httpx|session|s)\.(get|post|put|head|delete|patch|request)\s*\("), "call"),
+    ("Net::HTTP", re.compile(r"\bNet::HTTP\.(get_response|get|post_form|post|start)\s*[(\s]"), "call"),
+    ("URI.open", re.compile(r"(?<![\w.])(?:URI\.|Kernel\.)?open\s*\(\s*(?=[\"']?(?:https?|ftp)://|URI|[\"'][^\"']*#\{)"), "call"),
+    ("LWP", re.compile(r"(?<![\w>$.])(get|getstore|getprint|mirror|head)\s*\(\s*(?=[\"'$])"), "call"),
+    ("LWP", re.compile(r"->\s*(get|post|put|head|mirror|request)\s*\(\s*(?=[\"'$])"), "call"),
+    ("file_get_contents", re.compile(r"(?i)\b(file_get_contents|fopen|readfile|file|copy|curl_init)\s*\(\s*(?=[\"'$])"), "call"),
+    ("curl_setopt", re.compile(r"(?i)\bcurl_setopt\s*\(\s*\$\w+\s*,\s*CURLOPT_URL\s*,"), "call"),
+    ("socket.http", re.compile(r"\b(?:http|socket\.http|https)\.request\s*\(?\s*(?=[\"'\w{])"), "call"),
+    ("ngx.location.capture", re.compile(r"\bngx\.location\.capture\s*\("), "call"),
+    ("Download", re.compile(r"(?i)(?<![\w.])(?:Download|UrlDownloadToFile)\s*(?:\(|,)"), "call"),
+    ("InetGet", re.compile(r"(?i)(?<![\w.])(InetGet|InetRead|_INetGetSource)\s*\("), "call"),
+)
+_FS_UNESC = re.compile(r"\\(x[0-9a-fA-F]{2}|u\{[0-9a-fA-F]{1,6}\}|u[0-9a-fA-F]{4}|[0-7]{1,3}|.)|`([0abefnrtv`\"'$])", re.S)
+
+
+def _fs_unescape(s, ps=True):
+    def one(m):
+        e, b = m.group(1), m.group(2)
+        if b is not None:
+            return {"0": "\0", "a": "\a", "b": "\b", "e": "\x1b", "f": "\f", "n": "\n", "r": "\r", "t": "\t",
+                    "v": "\v"}.get(b, b) if ps else m.group(0)
+        if e[0] == "x":
+            return chr(int(e[1:], 16))
+        if e[0] == "u" and len(e) > 1:
+            return chr(int(e.strip("u{}"), 16))
+        if e[0] in "01234567":
+            return chr(int(e, 8) & 0xFF)
+        return {"n": "\n", "r": "\r", "t": "\t", "0": "\0"}.get(e, e)
+    return _FS_UNESC.sub(one, s)
+
+
+def _fs_split(expr, seps):
+    """Split at top level (outside quotes / brackets) on the regex `seps`; [] when brackets don't balance."""
+    out, depth, i, last, q = [], 0, 0, 0, None
+    n = len(expr)
+    while i < n:
+        c = expr[i]
+        if q:
+            if c == "\\" and q != "'":
+                i += 2
+                continue
+            if c == q:
+                q = None
+        elif c in "\"'`":
+            q = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+            if depth < 0:
+                return []
+        elif depth == 0:
+            m = seps.match(expr, i)
+            if m and m.end() > i:
+                out.append(expr[last:i])
+                i = last = m.end()
+                continue
+        i += 1
+    out.append(expr[last:])
+    return out
+
+
+_FS_CONCAT = re.compile(r"\s*\.\.\s*|\s*\+\s*|\s+&\s+|&(?=[\"'$\w(])|\s+\.\s+|(?<=[\"')\w])\.(?=[\"'$])")
+_FS_COMMA = re.compile(r"\s*,\s*")
+
+
+def _fs_ints(s):
+    parts = [p for p in re.split(r"[\s,]+", s.strip()) if p]
+    if not parts:
+        return None
+    try:
+        vals = [int(p, 16) if p[:2].lower() == "0x" else int(p[2:], 16) if p[:2].lower() == "&h" else int(p)
+                for p in parts]
+    except ValueError:
+        return None
+    return "".join(chr(v) for v in vals) if all(0 < v < 0x110000 for v in vals) else None
+
+
+def _fs_lookup(name, env):
+    k = name.strip("${}%@!")
+    k = k[7:] if k.lower().startswith(("global:", "script:")) else k
+    return env.get(k, env.get(k.lower()))
+
+
+def _fs_interp(body, env, kind):
+    """Substitute $x / ${x} / #{x} / %x% (and {x} for f-strings) when x is known; None when a reference is unknown."""
+    pats = {"f": r"\{([A-Za-z_]\w*)\}", "t": r"\$\{\s*([A-Za-z_]\w*)\s*\}",
+            "d": r"\$\(\s*\$?([A-Za-z_]\w*)\s*\)|\$\{([A-Za-z_]\w*)\}|#\{\s*@?([A-Za-z_]\w*)\s*\}|"
+                 r"\$([A-Za-z_]\w*)(?![\w(])|%([A-Za-z_]\w*)%"}[kind]
+    bad = []
+
+    def one(m):
+        v = _fs_lookup(next(g for g in m.groups() if g), env)
+        if v is None:
+            bad.append(m.group(0))
+            return m.group(0)
+        return v
+    s = re.sub(pats, one, body)
+    return None if bad else s
+
+
+def _fs_eval(expr, env, depth=0):
+    """String value of a literal-only expression, or None."""
+    try:
+        e = expr.strip().rstrip(";").strip()
+        if not e or depth > 8 or len(e) > 8000:
+            return None
+        while e[0] == "(" and e[-1] == ")" and _fs_split(e[1:-1], re.compile(r"(?!)")) != []:
+            e = e[1:-1].strip()
+            if not e:
+                return None
+        e = re.sub(r"(?i)^\[(?:string|uri|system\.uri)\]\s*", "", e)
+        m = _FS_LIT.fullmatch(e)
+        if m:
+            p = m.group("p").lower()
+            if m.group("s") is not None:
+                body = m.group("s").replace("''", "'") if "\\" not in m.group("s") else _fs_unescape(m.group("s"), False)
+                return _fs_interp(body, env, "f") if "f" in p else body
+            if m.group("t") is not None:
+                return _fs_interp(_fs_unescape(m.group("t"), False), env, "t")
+            body = m.group("d").replace('""', '"')
+            body = body if "r" in p else _fs_unescape(body, ps="`" in body)
+            if "f" in p:
+                return _fs_interp(body, env, "f")
+            return _fs_interp(body, env, "d") if re.search(r"[$#%]", body) else body
+        if re.fullmatch(r"\d+", e):
+            return e
+        if _FS_IDENT.fullmatch(e):
+            return _fs_lookup(e, env)
+        m = _FS_CHR.match(e)
+        if m:
+            return _fs_ints(m.group("n").rstrip(")"))
+        # -f format / .format / % / sprintf / string.format
+        ps = _fs_split(e, re.compile(r"(?i)\s+-f\s+"))
+        if len(ps) == 2:
+            fmt = _fs_eval(ps[0], env, depth + 1)
+            args = [_fs_eval(a, env, depth + 1) for a in _fs_split(ps[1].strip().lstrip("@"), _FS_COMMA)]
+            if fmt is not None and None not in args:
+                return re.sub(r"\{(\d+)(?:[:,][^}]*)?\}", lambda m: args[int(m.group(1))] if int(m.group(1)) < len(args)
+                              else m.group(0), fmt)
+            return None
+        m = re.fullmatch(r"(?s)(.+?)\.format\s*\((.*)\)", e)
+        if m and _FS_LIT.fullmatch(m.group(1).strip()):
+            fmt = _fs_eval(m.group(1), env, depth + 1)
+            args = [_fs_eval(a, env, depth + 1) for a in _fs_split(m.group(2), _FS_COMMA)]
+            if fmt is not None and None not in args:
+                it = iter(args)
+                return re.sub(r"\{(\d*)\}", lambda mm: args[int(mm.group(1))] if mm.group(1) else next(it, ""), fmt)
+            return None
+        m = (re.fullmatch(r"(?is)(?:s?printf|string\.format|String\.Format)\s*\((.*)\)", e))
+        pm = None if m else _fs_split(e, re.compile(r"\s*%\s*"))
+        if m or (pm and len(pm) == 2 and _FS_LIT.fullmatch(pm[0].strip())):
+            parts = _fs_split(m.group(1), _FS_COMMA) if m else [pm[0]] + _fs_split(pm[1].strip().strip("()"), _FS_COMMA)
+            vals = [_fs_eval(a, env, depth + 1) for a in parts]
+            if not parts or None in vals:
+                return None
+            it = iter(vals[1:])
+            return re.sub(r"%[-\d.]*[sd]|\{(\d+)\}", lambda mm: (vals[1:][int(mm.group(1))] if mm.group(1) else
+                                                                next(it, "")), vals[0])
+        # join forms over arrays of literals / char codes
+        m = (re.fullmatch(r"(?is)(?:\[char\[\]\]\s*)?@?\((?P<a>.*)\)\s*-join\s*(?P<s>.*)", e)
+             or re.fullmatch(r"(?is)-join\s*(?:\[char\[\]\]\s*)?@?\((?P<a>.*)\)(?P<s>)", e)
+             or re.fullmatch(r"(?is)(?P<s>[\"'][^\"']*[\"'])\.join\s*\(\s*(?:map\s*\(\s*chr\s*,\s*)?[\[(](?P<a>.*)[\])]\s*\)?\s*\)", e)
+             or re.fullmatch(r"(?is)\[(?P<a>.*)\](?:\.map\s*\([^)]*fromCharCode[^)]*\)\s*)?\.join\s*\(\s*(?P<s>[^)]*)\)", e)
+             or re.fullmatch(r"(?is)(?:join|implode)\s*\(\s*(?P<s>[\"'][^\"']*[\"'])\s*,\s*(?:array\s*\(|\[|\(|\{)?(?P<a>.*?)[\])}]?\s*\)", e)
+             or re.fullmatch(r"(?is)table\.concat\s*\(\s*\{(?P<a>.*)\}\s*(?:,\s*(?P<s>.+))?\)", e))
+        if m:
+            sep = _fs_eval(m.group("s"), env, depth + 1) if (m.group("s") or "").strip() else ""
+            items = _fs_split(m.group("a"), _FS_COMMA)
+            if sep is None or not items:
+                return None
+            codes = re.search(r"(?i)char|chr|fromCharCode", e) and all(re.fullmatch(r"\s*(?:0x[0-9a-f]+|\d+)\s*", i, re.I)
+                                                                       for i in items)
+            if codes:
+                return _fs_ints(",".join(items))
+            vals = [_fs_eval(i, env, depth + 1) for i in items]
+            return None if None in vals else sep.join(vals)
+        m = re.fullmatch(r"(?is)bytes\s*\(\s*\[(?P<a>[\d\s,xa-fA-F]+)\]\s*\)\.decode\s*\([^)]*\)", e)
+        if m:
+            return _fs_ints(m.group("a"))
+        m = _FS_WRAP.match(e)
+        if m and (m.group("a") or m.group("b")):
+            inner = m.group("a") if m.group("a") is not None else m.group("b")
+            first = _fs_split(inner, _FS_COMMA)
+            return _fs_eval(first[0], env, depth + 1) if first else None
+        parts = _fs_split(e, _FS_CONCAT)
+        if len(parts) < 2:
+            parts = [p for p in _fs_split(e, re.compile(r"\s+")) if p]   # adjacent literals ("a" "b")
+            if len(parts) < 2 or not all(_FS_LIT.fullmatch(p) for p in parts):
+                return None
+        vals = [_fs_eval(p, env, depth + 1) for p in parts]
+        return None if None in vals else "".join(vals)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _fs_flat(src):
+    """Join line continuations (PS `, VB _, batch ^, shell \\) keeping every offset, so line numbers stay true."""
+    return re.sub(r"(?:(?<=\s)_|`|\^|\\)(\r?\n)", lambda m: " " * len(m.group(0)), src)
+
+
+def _fs_env(flat):
+    env = {}
+    for ln in flat.splitlines()[:20000]:
+        if len(env) > 4000:
+            break
+        for st in (_fs_split(ln, re.compile(r"\s*;\s*")) or [ln])[:16]:
+            m = _FS_BAT_SET.match(st)
+            if m:
+                n, v = (m.group("n1"), m.group("v1")) if m.group("n1") else (m.group("n2"), m.group("v2"))
+                v = re.sub(r"\s*&\s*rem\b.*$", "", v, flags=re.I).replace("^", "")
+                v = re.sub(r"%(\w+)%|!(\w+)!", lambda mm: _fs_lookup(mm.group(1) or mm.group(2), env) or mm.group(0), v)
+                env[n.strip()] = env[n.strip().lower()] = v
+                continue
+            m = _FS_AS_SET.match(st)
+            if m:
+                n, op, rhs = m.group("n"), "=", m.group("v")
+            else:
+                m = _FS_ASSIGN.match(st)
+                if not m:
+                    continue
+                n, op, rhs = m.group("n"), m.group("op"), m.group("v")
+            rhs = re.sub(r"\s+(?:#|//|--|;)\s[^\"'`]*$", "", rhs)
+            if op == "=" and not re.match(r"""\s*[\"'`(\[$@%\w-]""", rhs):
+                continue
+            v = _fs_eval(rhs, env)
+            if v is None and op == "=" and n[0] not in "$@" and re.fullmatch(r"[\w.:/?&=%~+-]+", rhs) and \
+                    _FS_URL.fullmatch(rhs):
+                v = rhs                                    # bash / AHK v1 legacy bare value
+            key = n.lstrip("$@")
+            if v is None:
+                env.pop(key, None)
+                env.pop(key.lower(), None)
+                continue
+            if op != "=" and op not in (":=", "<-"):
+                old = _fs_lookup(key, env)
+                if old is None:
+                    continue
+                v = old + v
+            env[key] = env[key.lower()] = v[:4096]
+    return env
+
+
+def _fs_args(text, i):
+    """Argument list text after a call head ending at offset i: balanced (...) or the rest of the logical line."""
+    j = i
+    while j < len(text) and text[j] in " \t":
+        j += 1
+    if text[i - 1:i] == "(":
+        j = i - 1
+    if j < len(text) and text[j] == "(":
+        depth, q, k = 0, None, j
+        while k < len(text) and k - j < 4000:
+            c = text[k]
+            if q:
+                if c == "\\" and q != "'":
+                    k += 1
+                elif c == q:
+                    q = None
+            elif c in "\"'`":
+                q = c
+            elif c in "([{":
+                depth += 1
+            elif c in ")]}":
+                depth -= 1
+                if depth == 0:
+                    return text[j + 1:k]
+            elif c == "\n" and depth == 0:
+                break
+            k += 1
+        return None
+    end = text.find("\n", j)
+    return text[j:end if end >= 0 else len(text)].strip()
+
+
+def _fs_url_of(val):
+    m = _FS_URL.search(val or "")
+    return m.group(0).rstrip(".,") if m else None
+
+
+def _fs_cmd(api, rest, env):
+    """(url, method) from a command line's tokens."""
+    cut = _fs_split(rest, _FS_CMD_STOP)
+    rest = cut[0] if cut else rest
+    toks = [t for t in _fs_split(rest, re.compile(r"\s+")) if t]
+    url, method, prev = None, "GET", ""
+    for t in toks[:64]:
+        low = t.lower()
+        if api == "regsvr32" and low.startswith("/i:"):
+            t = t[3:]
+        v = _fs_eval(t, env)
+        if v is None and not re.match(r"""[\"'`($@%{]""", t):
+            v = re.sub(r"%(\w+)%|!(\w+)!|\$\{?(\w+)\}?", lambda m: _fs_lookup(next(g for g in m.groups() if g), env)
+                       or "\0", t)
+            v = None if "\0" in v else v
+        if prev in ("-x", "--request", "-method", "--method") and v and _FS_VERB.match(v):
+            method = v.upper()
+        elif low in ("-d", "--data", "--data-binary", "--data-raw", "--data-urlencode", "-f", "--form",
+                     "--post-data", "--post-file", "/upload") and api in ("curl", "wget", "bitsadmin") and \
+                not (api == "curl" and low == "-f"):
+            method = "POST"
+        elif low in ("-t", "--upload-file") and api == "curl":
+            method = "PUT"
+        elif low in ("-i", "--head") and api == "curl":
+            method = "HEAD"
+        elif low.startswith("--method="):
+            method = t.split("=", 1)[1].upper()
+        elif prev == "-transfertype" and v and v.lower() == "upload":
+            method = "POST"
+        if url is None and v and _fs_url_of(v) and (v.strip().lower().startswith(("http", "ftp")) or
+                                                    api in ("regsvr32", "mshta")):
+            url = _fs_url_of(v)
+        prev = low
+    return url, method
+
+
+def fetch_sites(src, name=""):
+    """Download-cradle call sites in a script's CODE -> [{api, url, method, line, echo}] in source order. `url` is the
+    target rebuilt from the file's own literals (concat / format / join / char codes / variables assigned literals)
+    or None when it comes from runtime data (e.g. the decoded plan); `echo` marks a site on an echo/print line (the
+    command is only displayed). Comment lines are skipped. [] for a script with no cradle / unreadable input."""
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            b = bytes(src)
+            src = (b.decode("utf-16", "replace") if b[:2] in (b"\xff\xfe", b"\xfe\xff") else
+                   b.decode("utf-8-sig", "replace"))
+        text = _fs_flat(str(src or "")[:2_000_000])
+        env = _fs_env(text)
+        lines = text.split("\n")
+        starts = [0]
+        for ln in lines:
+            starts.append(starts[-1] + len(ln) + 1)
+        out, seen = [], set()
+        import bisect
+        for api, rx, kind in _FS_SITES:
+            for m in rx.finditer(text):
+                lno = bisect.bisect_right(starts, m.start())
+                line = lines[lno - 1]
+                if _FS_COMMENT.match(line) or (lno, m.start()) in seen:
+                    continue
+                args = _fs_args(text, m.end())
+                if args is None:
+                    continue
+                url, method, sub = None, "GET", (m.group(1) if m.groups() else "") or ""
+                if kind == "cmd":
+                    url, method = _fs_cmd(api, args, env)
+                else:
+                    if kind == "call" and not text[m.end() - 1:m.end()] in "(," and api not in ("Net::HTTP", "socket.http"):
+                        args = args.strip()
+                    items = _fs_split(args, _FS_COMMA) or [args]
+                    if kind == "open":
+                        verb = _fs_eval(items[0], env) if items else None
+                        if not verb or not _FS_VERB.match(verb.strip()) or len(items) < 2:
+                            continue
+                        method, items = verb.strip().upper(), items[1:2]
+                    elif api == "requests" and sub == "request" or api == "LWP" and sub == "request":
+                        verb = _fs_eval(items[0], env) if items else None
+                        method, items = ((verb or "GET").upper(), items[1:2]) if verb and _FS_VERB.match(verb) else \
+                            (method, items)
+                    elif re.match(r"(?i)upload|post|put", sub):
+                        method = "PUT" if sub.lower().startswith("put") else "POST"
+                    for it in items[:4]:
+                        it2 = re.sub(r"^\s*(?:url|uri)\s*[:=]>?\s*", "", it)
+                        v = _fs_eval(it2, env)
+                        if v is None and _FS_URL.fullmatch(it2.strip()):
+                            v = it2.strip()                     # AHK v1 / AutoIt legacy bare argument
+                        elif v is None and re.fullmatch(r"\s*%\w+%\s*", it2):
+                            v = _fs_lookup(it2.strip(), env)
+                        if v is None and it2.strip()[:1] == "{":
+                            mm = re.search(r"""\burl\s*[:=]\s*(.+?)\s*(?:,\s*\w+\s*[:=]|\}$)""", it2.strip(), re.S)
+                            v = _fs_eval(mm.group(1), env) if mm else None
+                        if v is not None and _fs_url_of(v):
+                            url = _fs_url_of(v)
+                            break
+                        if v is not None and api == "ngx.location.capture":
+                            url = None
+                            break
+                    mm = re.search(r"""(?i)\bmethod\s*[:=]\s*['"]?(?:ngx\.HTTP_)?(GET|POST|PUT|HEAD|DELETE|PATCH)""", args)
+                    if mm:
+                        method = mm.group(1).upper()
+                    if api == "URI.open" and url is None:
+                        continue
+                if api in ("file_get_contents", "LWP", "socket.http") and url is None:
+                    continue                                    # local-file reads / plain gets
+                seen.add((lno, m.start()))
+                out.append({"api": api, "url": url, "method": method, "line": lno,
+                            "echo": bool(_FS_ECHO.match(line))})
+        out.sort(key=lambda d: d["line"])
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+# --- fetch API / LOLBin -> ATT&CK + adapter label (prebuild lolbin-download-attack-table, 10-18) ---------------------
+# GM history: a plan's own attack= always wins; this table only fills ids for members with no plan value. Candidates
+# are ordered (first = primary). `adapter` is the canonical tool/API name (plans spell it e.g. adapter=bitsadmin.exe).
+_FA_DOWNLOAD = ("T1105",)
+_FA_UPLOAD = ("T1041", "T1567", "T1105")
+FETCH_ATTACK = {
+    # api (fetch_sites name): (adapter label, ids)
+    "certutil": ("certutil.exe", ("T1105",)),
+    "bitsadmin": ("bitsadmin.exe", ("T1197", "T1105")),
+    "Start-BitsTransfer": ("Start-BitsTransfer", ("T1197", "T1105")),
+    "mshta": ("mshta.exe", ("T1218.005", "T1105")),
+    "regsvr32": ("regsvr32.exe", ("T1218.010", "T1105")),
+    "rundll32": ("rundll32.exe", ("T1218.011", "T1105")),
+    "msiexec": ("msiexec.exe", ("T1218.007", "T1105")),
+    "curl": ("curl", _FA_DOWNLOAD), "wget": ("wget", _FA_DOWNLOAD),
+    "Invoke-WebRequest": ("Invoke-WebRequest", _FA_DOWNLOAD), "Invoke-RestMethod": ("Invoke-RestMethod", _FA_DOWNLOAD),
+    "WebClient": ("Net.WebClient", _FA_DOWNLOAD), "HttpClient": ("Net.Http.HttpClient", _FA_DOWNLOAD),
+    "WebRequest": ("Net.WebRequest", _FA_DOWNLOAD), "XMLHTTP.open": ("MSXML2.XMLHTTP", _FA_DOWNLOAD),
+    "fetch": ("fetch", _FA_DOWNLOAD), "http.get": ("http.get", _FA_DOWNLOAD), "axios": ("axios", _FA_DOWNLOAD),
+    "urllib.urlopen": ("urllib.request", _FA_DOWNLOAD), "requests": ("requests", _FA_DOWNLOAD),
+    "Net::HTTP": ("Net::HTTP", _FA_DOWNLOAD), "URI.open": ("open-uri", _FA_DOWNLOAD), "LWP": ("LWP", _FA_DOWNLOAD),
+    "file_get_contents": ("file_get_contents", _FA_DOWNLOAD), "curl_setopt": ("php-curl", _FA_DOWNLOAD),
+    "socket.http": ("socket.http", _FA_DOWNLOAD), "Download": ("UrlDownloadToFile", _FA_DOWNLOAD),
+    "InetGet": ("InetGet", _FA_DOWNLOAD),
+}
+_FA_DECODE = re.compile(r"(?i)(?:^|\s)[-/]decode(?:hex)?\b")
+_FA_UPVERB = re.compile(r"(?i)\.Upload(?:String|File|Data|Values)|-transfertype\s+upload|/upload\b|--upload-file|"
+                        r"(?-i:(?:^|\s)-T\s)|-InFile\b")
+_FA_EXTRA = (   # LOLBin proxies fetch_sites does not list (it stays unchanged): (api, call head)
+    ("rundll32", re.compile(_FS_HEAD + r"rundll32(?:\.exe)?(?=\s[^\n]*(?:https?|ftp)://|\s[^\n]*javascript:)")),
+    ("msiexec", re.compile(_FS_HEAD + r"msiexec(?:\.exe)?(?=\s[^\n]*(?:/i|/package)\b[^\n]*(?:https?|ftp)://)")),
+)
+
+
+def _fa_plan_attack(plan):
+    try:
+        d = _eq_dict(plan) if plan is not None else None
+    except Exception:  # noqa: BLE001
+        return None
+    v = next((d[k] for k in d if str(k).strip().lower() in ("attack", "technique", "mitre", "attack_id")), None) if d \
+        else None
+    v = str(v).strip() if v is not None else ""
+    return v or None
+
+
+def fetch_attack(api, line="", method="GET", plan=None):
+    """Ordered ATT&CK candidates for one fetch call site: fetch_sites' `api` (or a LOLBin name), its source line
+    (certutil -decode adds T1140; upload verbs give T1041/T1567 first) and method. A plan's attack= wins and is
+    returned alone. [] for an unknown api."""
+    pa = _fa_plan_attack(plan)
+    if pa:
+        return [pa]
+    key = next((k for k in FETCH_ATTACK if k.lower() == str(api or "").strip().lower().removesuffix(".exe")), None)
+    if key is None:
+        return []
+    ids = list(FETCH_ATTACK[key][1])
+    line = str(line or "")
+    upload = bool(_FA_UPVERB.search(line)) or (str(method or "").upper() in ("POST", "PUT") and
+                                               ids[0] == "T1105")
+    if upload:      # exfil ids lead; a proxy LOLBin keeps its own id first
+        ids = list(_FA_UPLOAD) if ids[0] == "T1105" else ids[:1] + list(_FA_UPLOAD)
+    if key == "certutil" and _FA_DECODE.search(line):
+        ids.insert(ids.index("T1105") + 1 if "T1105" in ids else len(ids), "T1140")
+    out = []
+    for i in ids:
+        if i not in out:
+            out.append(i)
+    return out
+
+
+def fetch_adapter(api):
+    """Canonical adapter label for a fetch_sites api name (certutil -> 'certutil.exe'); None when unknown."""
+    key = next((k for k in FETCH_ATTACK if k.lower() == str(api or "").strip().lower().removesuffix(".exe")), None)
+    return FETCH_ATTACK[key][0] if key else None
+
+
+def fetch_attack_sites(src, name="", plan=None):
+    """fetch_sites(src) plus rundll32 / msiexec /i URL proxies, each site with `adapter` and ordered `attack`
+    candidates (plan attack= wins). [] for unreadable input or no cradle."""
+    try:
+        sites = fetch_sites(src, name)
+        if isinstance(src, (bytes, bytearray)):
+            b = bytes(src)
+            src = (b.decode("utf-16", "replace") if b[:2] in (b"\xff\xfe", b"\xfe\xff") else
+                   b.decode("utf-8-sig", "replace"))
+        text = _fs_flat(str(src or "")[:2_000_000])
+        lines = text.split("\n")
+        env, starts = None, None
+        have = {(d["line"], d["api"]) for d in sites}
+        import bisect
+        for api, rx in _FA_EXTRA:
+            for m in rx.finditer(text):
+                if starts is None:
+                    starts = [0]
+                    for ln in lines:
+                        starts.append(starts[-1] + len(ln) + 1)
+                lno = bisect.bisect_right(starts, m.start())
+                line = lines[lno - 1]
+                if _FS_COMMENT.match(line) or (lno, api) in have:
+                    continue
+                env = _fs_env(text) if env is None else env
+                args = _fs_args(text, m.end()) or ""
+                url, method = _fs_cmd("mshta" if api == "rundll32" else api, args, env)
+                if url is None:
+                    url = _fs_url_of(args)
+                have.add((lno, api))
+                sites.append({"api": api, "url": url, "method": method, "line": lno,
+                              "echo": bool(_FS_ECHO.match(line))})
+        sites.sort(key=lambda d: d["line"])
+        decode = any(re.search(r"(?i)\bcertutil(?:\.exe)?\s", ln) and _FA_DECODE.search(ln) and
+                     not _FS_COMMENT.match(ln) for ln in lines)    # download + separate `certutil -decode` step
+        for d in sites:
+            line = lines[d["line"] - 1] if 0 < d["line"] <= len(lines) else ""
+            if d["api"] == "certutil" and decode:
+                line += " -decode"
+            d["adapter"] = fetch_adapter(d["api"])
+            d["attack"] = fetch_attack(d["api"], line, d.get("method"), plan)
+        return sites
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def fetch_attack_answer(src, plan=None, name=""):
+    """Primary ATT&CK id for a member's fetch behaviour: plan attack= first, else the first non-echo site's top
+    candidate. None when there is neither."""
+    pa = _fa_plan_attack(plan)
+    if pa:
+        return pa
+    for d in fetch_attack_sites(src, name):
+        if not d.get("echo") and d.get("attack"):
+            return d["attack"][0]
+    return None
+
+
+def _rc_obs_dict(d):
+    """One network_indicators()-style record {kind, host, url, uri, ip, port, ...} -> (url value, host value)."""
+    low = {_rc_field(k): v for k, v in d.items() if isinstance(v, (str, int))}
+    url = low.get("url") or low.get("request_url") or low.get("full_uri")
+    host = next((low[k] for k in ("host", "http_host", "hostname", "server_name", "sni", "query", "qry_name",
+                                  "dns_qry_name", "queryname", "destinationhostname", "domain") if low.get(k)), None)
+    uri = low.get("uri") or low.get("path") or low.get("request_uri")
+    if not url and host and uri and str(uri).startswith("/"):
+        url = f"http://{host}{uri}"
+    if not host and low.get("ip") and not url:
+        host = low.get("ip")
+    return (str(url) if url else None), (str(host) if host else None)
+
+
+# --- network evidence -> fetch indicators (pcap / pcapng / HAR / Zeek / Sysmon / proxy & DNS logs) --------------------
+_NI_METHODS = r"GET|POST|PUT|HEAD|DELETE|OPTIONS|PATCH|CONNECT|TRACE|PROPFIND"
+_NI_REQ = re.compile(rb"(?:^|\n)(" + _NI_METHODS.encode() + rb") (\S{1,4096}) HTTP/\d(?:\.\d)?\r?\n")
+_NI_MAX_FLOW = 1 << 18
+_NI_BIN_MAGIC = (b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\xc3\xd4", b"\x4d\x3c\xb2\xa1", b"\xa1\xb2\x3c\x4d", b"\x0a\x0d\x0d\x0a",
+                 b"ElfF")
+
+
+def _ni_ip(b):
+    try:
+        import ipaddress
+        return str(ipaddress.ip_address(bytes(b)))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _ni_l3(link, pkt):
+    """Link-layer frame -> (ip version, ip packet bytes) or None. Ethernet(+VLAN), NULL/LOOP, raw IP, SLL, SLL2."""
+    import struct
+    link &= 0xFFFF
+    if link == 1:
+        if len(pkt) < 14:
+            return None
+        et, off = struct.unpack(">H", pkt[12:14])[0], 14
+        while et in (0x8100, 0x88A8, 0x9100) and len(pkt) >= off + 4:
+            et, off = struct.unpack(">H", pkt[off + 2:off + 4])[0], off + 4
+        body = pkt[off:]
+    elif link in (0, 108):
+        if len(pkt) < 4:
+            return None
+        af = struct.unpack(">I" if link == 108 else "<I", pkt[:4])[0]
+        if link == 0 and af > 0xFFFF:
+            af = struct.unpack(">I", pkt[:4])[0]
+        et, body = (0x0800 if af == 2 else 0x86DD if af in (10, 24, 28, 30) else 0), pkt[4:]
+    elif link in (101, 12, 14, 228, 229):
+        body = pkt
+        et = 0x0800 if body[:1] and body[0] >> 4 == 4 else 0x86DD if body[:1] and body[0] >> 4 == 6 else 0
+    elif link == 113:
+        if len(pkt) < 16:
+            return None
+        et, body = struct.unpack(">H", pkt[14:16])[0], pkt[16:]
+    elif link == 276:
+        if len(pkt) < 20:
+            return None
+        et, body = struct.unpack(">H", pkt[:2])[0], pkt[20:]
+    else:
+        return None
+    return (4, body) if et == 0x0800 else (6, body) if et == 0x86DD else None
+
+
+def _ni_l4(ver, ip):
+    """IP packet -> (proto, src ip, dst ip, l4 bytes) or None (non-first fragments skipped)."""
+    import struct
+    if ver == 4:
+        if len(ip) < 20 or ip[0] >> 4 != 4:
+            return None
+        ihl, tot = (ip[0] & 15) * 4, struct.unpack(">H", ip[2:4])[0]
+        if struct.unpack(">H", ip[6:8])[0] & 0x1FFF:
+            return None
+        end = tot if ihl <= tot <= len(ip) else len(ip)
+        return ip[9], _ni_ip(ip[12:16]), _ni_ip(ip[16:20]), ip[ihl:end]
+    if len(ip) < 40 or ip[0] >> 4 != 6:
+        return None
+    nh, off, plen = ip[6], 40, struct.unpack(">H", ip[4:6])[0]
+    end = 40 + plen if 0 < plen and 40 + plen <= len(ip) else len(ip)
+    for _ in range(8):
+        if nh not in (0, 43, 60, 44) or len(ip) < off + 8:
+            break
+        if nh == 44:
+            if struct.unpack(">H", ip[off + 2:off + 4])[0] & 0xFFF8:
+                return None
+            nh, off = ip[off], off + 8
+        else:
+            nh, off = ip[off], off + (ip[off + 1] + 1) * 8
+    return nh, _ni_ip(ip[8:24]), _ni_ip(ip[24:40]), ip[off:end]
+
+
+def _ni_frames(data):
+    """pcap / pcapng bytes -> iterator of (linktype, frame bytes). Truncated tails end the walk quietly."""
+    import struct
+    m = data[:4]
+    if m in (b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\xc3\xd4", b"\x4d\x3c\xb2\xa1", b"\xa1\xb2\x3c\x4d"):
+        e = "<" if m[0] in (0xD4, 0x4D) else ">"
+        if len(data) < 24:
+            return
+        link, off = struct.unpack(e + "I", data[20:24])[0], 24
+        while off + 16 <= len(data):
+            incl = struct.unpack(e + "I", data[off + 8:off + 12])[0]
+            if incl > 0x40000:
+                return
+            yield link, data[off + 16:off + 16 + incl]
+            off += 16 + incl
+        return
+    if m != b"\x0a\x0d\x0d\x0a":
+        return
+    off, e, links = 0, "<", []
+    while off + 12 <= len(data):
+        bt = data[off:off + 4]
+        if bt == b"\x0a\x0d\x0d\x0a":
+            e = "<" if data[off + 8:off + 12] == b"\x4d\x3c\x2b\x1a" else ">"
+            links = []
+        btype, blen = struct.unpack(e + "II", data[off:off + 8])
+        if blen < 12 or blen % 4 or off + blen > len(data):
+            return
+        body = data[off + 8:off + blen - 4]
+        if btype == 1 and len(body) >= 2:
+            links.append(struct.unpack(e + "H", body[:2])[0])
+        elif btype == 6 and len(body) >= 20:
+            iface, _, _, cap = struct.unpack(e + "IIII", body[:16])
+            if iface < len(links):
+                yield links[iface], body[20:20 + cap]
+        elif btype == 3 and links:
+            orig = struct.unpack(e + "I", body[:4])[0]
+            yield links[0], body[4:4 + min(orig, len(body) - 4)]
+        elif btype == 2 and len(body) >= 20:
+            iface, cap = struct.unpack(e + "H", body[:2])[0], struct.unpack(e + "I", body[12:16])[0]
+            if iface < len(links):
+                yield links[iface], body[20:20 + cap]
+        off += blen
+
+
+def _ni_dns_name(msg, off):
+    labels, jumps, end = [], 0, None
+    while off < len(msg) and jumps < 32:
+        n = msg[off]
+        if n == 0:
+            off += 1
+            break
+        if n & 0xC0 == 0xC0:
+            if off + 1 >= len(msg):
+                return None, len(msg)
+            if end is None:
+                end = off + 2
+            off, jumps = ((n & 0x3F) << 8) | msg[off + 1], jumps + 1
+            continue
+        labels.append(msg[off + 1:off + 1 + n].decode("latin-1"))
+        off += 1 + n
+    return ".".join(labels), (end if end is not None else off)
+
+
+def _ni_dns(msg):
+    """DNS message -> [(qname, [answers: A/AAAA ip or CNAME name])]."""
+    import struct
+    if len(msg) < 12:
+        return []
+    flags, qd, an = struct.unpack(">HHH", msg[2:8])
+    if qd == 0 or qd > 16 or flags & 0x7800:
+        return []
+    off, qs = 12, []
+    for _ in range(qd):
+        name, off = _ni_dns_name(msg, off)
+        if not name or off + 4 > len(msg):
+            return qs and [(q, []) for q in qs]
+        qs.append(name)
+        off += 4
+    ans = []
+    for _ in range(min(an, 64) if flags & 0x8000 else 0):
+        _, off = _ni_dns_name(msg, off)
+        if off + 10 > len(msg):
+            break
+        typ, _, _, rdl = struct.unpack(">HHIH", msg[off:off + 10])
+        rd = msg[off + 10:off + 10 + rdl]
+        if typ in (1, 28) and len(rd) in (4, 16):
+            ans.append(_ni_ip(rd))
+        elif typ == 5:
+            ans.append(_ni_dns_name(msg, off + 10)[0])
+        off += 10 + rdl
+    return [(q, [a for a in ans if a] if i == 0 else []) for i, q in enumerate(qs)]
+
+
+def _ni_sni(st):
+    """TLS byte stream (client side) -> ClientHello server_name, or None."""
+    import struct
+    hs, off = b"", 0
+    while off + 5 <= len(st) and st[off] == 0x16 and st[off + 1] == 3 and len(hs) < 1 << 16:
+        n = struct.unpack(">H", st[off + 3:off + 5])[0]
+        hs += st[off + 5:off + 5 + n]
+        off += 5 + n
+    if len(hs) < 42 or hs[0] != 1:
+        return None
+    p = 4 + 2 + 32
+    p += 1 + hs[p]
+    p += 2 + struct.unpack(">H", hs[p:p + 2])[0]
+    p += 1 + hs[p]
+    end = min(len(hs), p + 2 + struct.unpack(">H", hs[p:p + 2])[0])
+    p += 2
+    while p + 4 <= end:
+        t, n = struct.unpack(">HH", hs[p:p + 4])
+        if t == 0 and n >= 5:
+            ln = struct.unpack(">H", hs[p + 7:p + 9])[0]
+            return hs[p + 9:p + 9 + ln].decode("ascii", "replace") or None
+        p += 4 + n
+    return None
+
+
+def _ni_http(st, dst, dport, src):
+    out, skip = [], 0
+    for mm in _NI_REQ.finditer(st):
+        if mm.start() < skip:
+            continue
+        hend = st.find(b"\r\n\r\n", mm.end() - 2)
+        hend = st.find(b"\n\n", mm.end() - 1) if hend < 0 else hend
+        head = st[mm.end():hend if hend >= 0 else len(st)].decode("latin-1")
+        hdr = {}
+        for ln in head.splitlines():
+            k, sep, v = ln.partition(":")
+            if sep:
+                hdr.setdefault(k.strip().lower(), v.strip())
+        meth, tgt = mm.group(1).decode(), mm.group(2).decode("latin-1")
+        host = hdr.get("host") or (f"{dst}:{dport}" if dport != 80 else dst)
+        if meth == "CONNECT":
+            url, host = None, tgt
+        elif re.match(r"(?i)^[a-z][a-z0-9+.\-]*://", tgt):
+            url = tgt
+        else:
+            url = f"http://{host}{tgt if tgt.startswith('/') else '/' + tgt}"
+        out.append({"kind": "http", "host": host, "url": url, "ip": dst, "port": dport, "method": meth,
+                    "user_agent": hdr.get("user-agent"), "src": src})
+        try:
+            skip = (hend if hend >= 0 else len(st)) + int(hdr.get("content-length") or 0)
+        except ValueError:
+            skip = hend
+    return out
+
+
+def _ni_capture(data):
+    """pcap / pcapng -> records (TCP SYN conn, HTTP requests, TLS SNI, DNS questions with answers)."""
+    out, flows, order, reqs, resps = [], {}, [], {}, {}
+    for n, (link, fr) in enumerate(_ni_frames(data)):
+        if n > 200000:
+            break
+        l3 = _ni_l3(link, fr)
+        l4 = l3 and _ni_l4(*l3)
+        if not l4:
+            continue
+        proto, s, d, seg = l4
+        if proto == 6 and len(seg) >= 20:
+            sp, dp = int.from_bytes(seg[0:2], "big"), int.from_bytes(seg[2:4], "big")
+            seq, hl, fl = int.from_bytes(seg[4:8], "big"), (seg[12] >> 4) * 4, seg[13]
+            if fl & 0x02 and not fl & 0x10:
+                out.append({"kind": "conn", "host": None, "url": None, "ip": d, "port": dp, "method": None,
+                            "user_agent": None, "src": s})
+            pay = seg[hl:]
+            k = (s, sp, d, dp)
+            if pay:
+                if k not in flows:
+                    flows[k] = []
+                    order.append(k)
+                if sum(len(x[1]) for x in flows[k]) < _NI_MAX_FLOW:
+                    flows[k].append((seq, bytes(pay)))
+        elif proto == 17 and len(seg) >= 8:
+            sp, dp = int.from_bytes(seg[0:2], "big"), int.from_bytes(seg[2:4], "big")
+            if {sp, dp} & {53, 5353, 5355}:
+                srv, cli = (d, s) if dp in (53, 5353, 5355) else (s, d)
+                for q, ans in _ni_dns(seg[8:]):
+                    out.append({"kind": "dns", "host": q, "url": None, "ip": next((a for a in ans if _ni_ip_ok(a)),
+                                None), "port": 53, "method": None, "user_agent": None, "src": cli,
+                                "answers": ans, "server": srv})
+    for k in order:
+        segs, st, cur = sorted(flows[k]), b"", None
+        for seq, p in segs:
+            if cur is None or seq >= cur:
+                st += p
+                cur = seq + len(p)
+            elif seq + len(p) > cur:
+                st += p[cur - seq:]
+                cur = seq + len(p)
+        s, sp, d, dp = k
+        if 53 in (sp, dp):
+            off = 0
+            while off + 2 <= len(st):
+                n = int.from_bytes(st[off:off + 2], "big")
+                for q, ans in _ni_dns(st[off + 2:off + 2 + n]):
+                    out.append({"kind": "dns", "host": q, "url": None, "ip": next((a for a in ans if _ni_ip_ok(a)),
+                                None), "port": 53, "method": None, "user_agent": None,
+                                "src": s if dp == 53 else d, "answers": ans})
+                off += 2 + n
+        elif st[:1] == b"\x16":
+            sni = _ni_sni(st)
+            if sni:
+                out.append({"kind": "tls", "host": sni, "url": None, "ip": d, "port": dp, "method": None,
+                            "user_agent": None, "src": s})
+        elif st[:5] == b"HTTP/":
+            resps[k] = _ni_http_resp(st)
+        else:
+            reqs[k] = _ni_http(st, d, dp, s)
+            out += reqs[k]
+    for (s, sp, d, dp), rs in resps.items():   # server -> client stream answers the reverse flow's requests in order
+        for rq, (status, loc) in zip(reqs.get((d, dp, s, sp)) or (), rs):
+            rq["status"] = status
+            loc = _rd_join(rq.get("url"), loc, status)
+            if loc:
+                rq["location"] = loc
+    return out
+
+
+def _ni_http_resp(st):
+    """Server -> client HTTP byte stream -> [(status, Location or None)] in order (bodies skipped by Content-Length)."""
+    out, skip = [], 0
+    for mm in re.finditer(rb"(?:^|\n)HTTP/\d(?:\.\d)? (\d{3})[^\r\n]*\r?\n", st):
+        if mm.start() < skip or len(out) >= 4096:
+            continue
+        hend = st.find(b"\r\n\r\n", mm.end() - 2)
+        hend = st.find(b"\n\n", mm.end() - 1) if hend < 0 else hend
+        hdr = {}
+        for ln in st[mm.end():hend if hend >= 0 else len(st)].decode("latin-1").splitlines():
+            k, sep, v = ln.partition(":")
+            if sep:
+                hdr.setdefault(k.strip().lower(), v.strip())
+        if mm.group(1)[:1] != b"1":   # 1xx interim responses answer no request of their own
+            out.append((int(mm.group(1)), hdr.get("location") or None))
+        try:
+            skip = (hend if hend >= 0 else len(st)) + int(hdr.get("content-length") or 0)
+        except ValueError:
+            skip = hend
+    return out
+
+
+# --- pcap HTTP objects (Wireshark "Export Objects > HTTP"): reassembled bodies -> name / size / hashes / next stage -----
+_HO_MAX_FLOW = 8 << 20
+_HO_START = re.compile(rb"(?:^|(?<=\n))(?:(?P<m>" + _NI_METHODS.encode() + rb") (?P<t>\S{1,4096}) HTTP/\d(?:\.\d)?|"
+                       rb"HTTP/\d(?:\.\d)? (?P<s>\d{3})[^\r\n]*)\r?\n")
+
+
+def _ho_streams(data):
+    """pcap / pcapng -> {(src, sport, dst, dport): payload} TCP streams, segments ordered by relative seq
+    (retransmits / overlaps trimmed, wrap-safe), first-seen flow order."""
+    flows, order = {}, []
+    for n, (link, fr) in enumerate(_ni_frames(data)):
+        if n > 200000:
+            break
+        l3 = _ni_l3(link, fr)
+        l4 = l3 and _ni_l4(*l3)
+        if not l4 or l4[0] != 6 or len(l4[3]) < 20:
+            continue
+        _, s, d, seg = l4
+        pay = seg[(seg[12] >> 4) * 4:]
+        if not pay:
+            continue
+        k = (s, int.from_bytes(seg[0:2], "big"), d, int.from_bytes(seg[2:4], "big"))
+        if k not in flows:
+            flows[k] = [0, []]
+            order.append(k)
+        f = flows[k]
+        if f[0] < _HO_MAX_FLOW:
+            f[1].append((int.from_bytes(seg[4:8], "big"), bytes(pay)))
+            f[0] += len(pay)
+    out = {}
+    for k in order:
+        segs = flows[k][1]
+        base = segs[0][0]
+        rel = sorted((((q - base + (1 << 31)) & 0xFFFFFFFF) - (1 << 31), -len(p), p) for q, p in segs)
+        st, cur = bytearray(), None
+        for q, _, p in rel:
+            if cur is None or q >= cur:
+                st += p
+                cur = q + len(p)
+            elif q + len(p) > cur:
+                st += p[cur - q:]
+                cur = q + len(p)
+        out[k] = bytes(st)
+    return out
+
+
+def _ho_dechunk(st, i):
+    """chunked transfer-coding at st[i:] -> (body, next offset, complete)."""
+    out = bytearray()
+    while i < len(st):
+        e = st.find(b"\n", i)
+        if e < 0:
+            break
+        try:
+            n = int(st[i:e].split(b";")[0].strip(), 16)
+        except ValueError:
+            return bytes(out), i, False
+        i = e + 1
+        if n == 0:
+            while True:                                  # trailer fields up to the blank line
+                e = st.find(b"\n", i)
+                if e < 0:
+                    return bytes(out), len(st), True
+                ln, i = st[i:e].strip(), e + 1
+                if not ln:
+                    return bytes(out), i, True
+        out += st[i:i + n]
+        if i + n > len(st):
+            return bytes(out), len(st), False
+        i += n
+        i += 2 if st[i:i + 2] == b"\r\n" else 1 if st[i:i + 1] == b"\n" else 0
+    return bytes(out), len(st), False
+
+
+def _ho_messages(st, methods=None, limit=1024):
+    """HTTP/1.x stream -> [(method, target, status, headers, body as transferred (de-chunked), complete)].
+    `methods` (the paired request methods, in order) keeps a HEAD response from eating the next message."""
+    out, i, mi = [], 0, 0
+    while len(out) < limit:
+        m = _HO_START.search(st, i)
+        if not m:
+            break
+        hend, sep = st.find(b"\r\n\r\n", m.end() - 2), 4
+        if hend < 0:
+            hend, sep = st.find(b"\n\n", m.end() - 1), 2
+        if hend < 0:
+            hend, sep = len(st), 0
+        hdr = {}
+        for ln in st[m.end():hend].decode("latin-1").splitlines():
+            k, c, v = ln.partition(":")
+            if c:
+                hdr.setdefault(k.strip().lower(), v.strip())
+        b0, status = min(hend + sep, len(st)), int(m.group("s")) if m.group("s") else None
+        meth = m.group("m").decode() if m.group("m") else None
+        if status is not None and status >= 200 and methods is not None:
+            meth, mi = (methods[mi] if mi < len(methods) else None), mi + 1
+        cl = (hdr.get("content-length") or "").split(",")[0].strip()
+        if (status is not None and (status < 200 or status in (204, 304))) or (status and meth == "HEAD"):
+            body, nxt, ok = b"", b0, True
+        elif "chunked" in (hdr.get("transfer-encoding") or "").lower():
+            body, nxt, ok = _ho_dechunk(st, b0)
+        elif cl.isdigit():
+            body = st[b0:b0 + int(cl)]
+            nxt, ok = b0 + len(body), len(body) == int(cl)
+        elif status is not None:                         # no length: body runs to connection close
+            body, nxt, ok = st[b0:], len(st), True
+        else:
+            body, nxt, ok = b"", b0, True
+        out.append((None if status is not None else meth, m.group("t").decode("latin-1") if m.group("t") else None,
+                    status, hdr, body, ok))
+        i = max(nxt, m.end())
+    return out
+
+
+def _ho_content_decode(body, enc):
+    """Content-Encoding (gzip / x-gzip / deflate / br / zstd, stacked codings undone last-first) -> bytes or None."""
+    import zlib
+    for c in reversed([x.strip().lower() for x in (enc or "").split(",") if x.strip()]):
+        try:
+            if c in ("gzip", "x-gzip"):
+                body = zlib.decompressobj(31).decompress(body, 1 << 26)
+            elif c == "deflate":
+                try:
+                    body = zlib.decompressobj(15).decompress(body, 1 << 26)
+                except zlib.error:
+                    body = zlib.decompressobj(-15).decompress(body, 1 << 26)
+            elif c == "br":
+                import brotli
+                body = brotli.decompress(body)
+            elif c in ("zstd", "x-zstd"):
+                import zstandard
+                body = zstandard.ZstdDecompressor().decompressobj().decompress(body)
+            elif c not in ("identity", ""):
+                return None
+        except Exception:  # noqa: BLE001 - truncated / mislabelled coding
+            return None
+    return body
+
+
+def http_objects(data, plans=False, budget=0.8):
+    """pcap / pcapng bytes -> HTTP objects in capture order, like Wireshark "Export Objects > HTTP" (TCP reassembled
+    by seq, de-chunked, Content-Encoding undone): [{direction: response|request, method, uri, url, host, status,
+    content_type, content_encoding, file_name (Content-Disposition, else last URI path segment), size, md5, sha1,
+    sha256 (of the decoded body), wire_size / wire_sha256 (as transferred, de-chunked), complete, src, dst, port,
+    body}]. Responses pair with the reverse flow's requests in order; request bodies (POST/PUT uploads) are objects
+    too. plans=True adds `plain` / `codec` for a body that is itself a staged script (find_codecs on the body: the
+    fetched next stage). [] for anything that is not a capture."""
+    import hashlib
+    import time
+    from urllib.parse import unquote
+    try:
+        data = bytes(data or b"")
+        if data[:4] not in (b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\xc3\xd4", b"\x4d\x3c\xb2\xa1", b"\xa1\xb2\x3c\x4d",
+                            b"\x0a\x0d\x0d\x0a"):
+            return []
+        end = time.time() + budget
+        streams = _ho_streams(data)
+        reqs, out = {}, []
+        for k, st in streams.items():
+            m = _HO_START.search(st)
+            if m and m.group("m"):
+                reqs[k] = _ho_messages(st)
+        for k, st in streams.items():
+            if time.time() > end:
+                break
+            s, sp, d, dp = k
+            if k in reqs:
+                rq_list, rs_list, cli, srv, port = reqs[k], [], s, d, dp
+                rq_list = [r for r in rq_list if r[4]]
+                pairs = [(r, None) for r in rq_list]
+            else:
+                m = _HO_START.search(st)
+                if not m or not m.group("s"):
+                    continue
+                rq_list = reqs.get((d, dp, s, sp)) or []
+                rs_list = _ho_messages(st, [r[0] for r in rq_list])
+                cli, srv, port = d, s, sp
+                pairs, j = [], 0
+                for r in rs_list:
+                    if r[2] >= 200:
+                        pairs.append((rq_list[j] if j < len(rq_list) else None, r))
+                        j += 1
+            for rq, rs in pairs:
+                msg = rs or rq
+                hdr, wire = msg[3], msg[4]
+                body = _ho_content_decode(wire, hdr.get("content-encoding"))
+                tgt = rq[1] if rq else None
+                host = (rq[3].get("host") if rq else None) or (f"{srv}:{port}" if port != 80 else srv)
+                if tgt and re.match(r"(?i)^[a-z][a-z0-9+.\-]*://", tgt):
+                    url = tgt
+                    uri = "/" + tgt.split("://", 1)[1].partition("/")[2]
+                else:
+                    uri = tgt
+                    url = f"http://{host}{tgt if tgt.startswith('/') else '/' + tgt}" if tgt else None
+                path = unquote((uri or "").split("?", 1)[0].split("#", 1)[0])
+                name = _rc_cd_name(hdr.get("content-disposition")) or (path.rsplit("/", 1)[-1] or None)
+                b = body if body is not None else wire
+                o = {"direction": "response" if rs else "request", "method": rq[0] if rq else None, "uri": uri,
+                     "url": url, "host": host, "status": rs[2] if rs else None,
+                     "content_type": (hdr.get("content-type") or "").split(";")[0].strip().lower() or None,
+                     "content_encoding": hdr.get("content-encoding"), "file_name": name, "size": len(b),
+                     "md5": hashlib.md5(b).hexdigest(), "sha1": hashlib.sha1(b).hexdigest(),
+                     "sha256": hashlib.sha256(b).hexdigest(), "wire_size": len(wire),
+                     "wire_sha256": hashlib.sha256(wire).hexdigest(), "complete": bool(msg[5] and body is not None),
+                     "src": cli, "dst": srv, "port": port, "body": b}
+                if plans and b and time.time() < end:
+                    for c in find_codecs(b, 1):
+                        if c.get("plain"):
+                            o["plain"], o["codec"] = c["plain"], {x: c.get(x) for x in ("id", "rep", "transform")}
+                            break
+                out.append(o)
+        return out
+    except Exception:  # noqa: BLE001 - impostor / truncated capture: nothing, never an exception
+        return []
+
+
+def _ni_ip_ok(a):
+    return bool(a) and bool(re.fullmatch(r"[0-9.]+|[0-9a-fA-F:]*:[0-9a-fA-F:.]*", a))
+
+
+def _ni_rec(kind, host=None, url=None, ip=None, port=None, method=None, ua=None, src=None, **kw):
+    try:
+        port = int(port) if port not in (None, "", "-") else None
+    except (TypeError, ValueError):
+        port = None
+    r = {"kind": kind, "host": host or None, "url": url or None, "ip": ip or None, "port": port,
+         "method": method or None, "user_agent": ua or None, "src": src or None}
+    r.update({k: v for k, v in kw.items() if v})
+    return r
+
+
+def _ni_zeek(row):
+    g = lambda *ks: next((row[k] for k in ks if row.get(k) not in (None, "", "-", "(empty)")), None)  # noqa: E731
+    ip, port, src = g("id.resp_h", "id_resp_h"), g("id.resp_p", "id_resp_p"), g("id.orig_h", "id_orig_h")
+    if g("uri", "method"):
+        host, uri = g("host") or ip, g("uri") or "/"
+        url = uri if re.match(r"(?i)^https?://", uri) else f"http://{host}{uri}" if host else None
+        fn = g("resp_filenames", "orig_filenames")
+        fn = ",".join(fn) if isinstance(fn, list) else fn
+        return _ni_rec("http", host, url, ip, port, g("method"), g("user_agent"), src, filename=fn,
+                       status=g("status_code"), location=_rd_join(url, g("location", "redirect_location",
+                                                                         "redirect_url"), g("status_code")))
+    if g("query"):
+        ans = g("answers")
+        ans = ans if isinstance(ans, list) else [a for a in str(ans or "").split(",") if a]
+        return _ni_rec("dns", g("query"), None, next((a for a in ans if _ni_ip_ok(a)), None), 53, src=src,
+                       answers=ans)
+    if g("server_name"):
+        return _ni_rec("tls", g("server_name"), None, ip, port, src=src)
+    if ip:
+        return _ni_rec("conn", None, None, ip, port, src=src)
+    return None
+
+
+def _ni_csv_split(ln, sep):
+    if sep == "\t":
+        return ln.split("\t")
+    return [(q.replace('""', '"') if q is not None and q != "" or a == "" else a).strip()
+            for q, a in re.findall(r'(?:^|' + re.escape(sep) + r')\s*(?:"((?:[^"]|"")*)"|([^' + re.escape(sep) +
+                                    r']*))', ln)]
+
+
+def _ni_sysmon(xml):
+    out = []
+    for ev in re.findall(r"(?s)<Event[\s>].*?</Event>", xml)[:50000]:
+        mm = re.search(r"<EventID[^>]*>\s*(\d+)\s*<", ev)
+        if not mm or mm.group(1) not in ("3", "22"):
+            continue
+        import html
+        d = {k: html.unescape(v) for k, v in re.findall(r"<Data Name=['\"](\w+)['\"]\s*>([^<]*)</Data>", ev)}
+        img = d.get("Image")
+        if mm.group(1) == "3":
+            out.append(_ni_rec("conn", d.get("DestinationHostname") if d.get("DestinationHostname") not in ("-", "")
+                               else None, None, d.get("DestinationIp"), d.get("DestinationPort"), src=d.get("SourceIp"),
+                               image=img))
+        elif d.get("QueryName"):
+            ans = [a.strip() for a in re.sub(r"type:\s*\d+\s*", "", d.get("QueryResults") or "").split(";")
+                   if a.strip() and a.strip() != "-"]
+            ans = [a[7:] if a.startswith("::ffff:") else a for a in ans]
+            out.append(_ni_rec("dns", d["QueryName"], None, next((a for a in ans if _ni_ip_ok(a)), None), 53,
+                               answers=ans, image=img))
+    return out
+
+
+def _ni_sysmon_json(rows):
+    """Sysmon EID 3 / 22 exported as JSON (flat {EventID, Image, DestinationIp ..}, {System:{EventID}, EventData:{..}},
+    xmltodict {Event:{EventData:{Data:[{@Name, #text}]}}}, winlogbeat winlog.event_data, EvtxECmd Payload) -> records;
+    None when no row is Sysmon-shaped."""
+    def walk(x, d, depth=0):
+        if depth > 8:
+            return
+        if isinstance(x, dict):
+            nm = next((x[k] for k in ("@Name", "Name", "name", "@name") if isinstance(x.get(k), str)), None)
+            vv = next((x[k] for k in ("#text", "text", "value", "Value", "$") if k in x), None)
+            if nm and isinstance(vv, (str, int)):
+                d.setdefault(nm, str(vv))
+            for k, v in x.items():
+                if isinstance(v, str) and k.lower() == "message" and re.search(r"(?m)^\s*(?:Image|QueryName):", v):
+                    for mk, mv in re.findall(r"(?m)^\s*(\w+):[ \t]*(.*?)\s*$", v[:65536]):
+                        d.setdefault(mk, mv)   # Get-WinEvent | ConvertTo-Json: rendered 'Key: value' lines
+                if isinstance(v, (str, int)) and not isinstance(v, bool):
+                    d.setdefault(k, str(v))
+                    if k.lower() in ("eventid", "event_id", "id", "eventcode"):
+                        d.setdefault("EventID", str(v))
+                elif k.lower() == "payload" and isinstance(v, str) and v.lstrip()[:1] == "{":
+                    try:
+                        import json
+                        walk(json.loads(v), d, depth + 1)
+                    except ValueError:
+                        pass
+                else:
+                    walk(v, d, depth + 1)
+        elif isinstance(x, list):
+            for v in x[:256]:
+                walk(v, d, depth + 1)
+    out, hit = [], False
+    for row in rows[:50000]:
+        d = {}
+        walk(row, d)
+        low = {re.sub(r"[^a-z]", "", k.lower()): v for k, v in d.items()}
+        low = {k: v for k, v in low.items() if v not in ("", "-")} | {k: low[k] for k in ("eventid",) if k in low}
+        eid = str(low.get("eventid") or "").strip()
+        if not (low.get("destinationip") or low.get("queryname")) or \
+                not (eid in ("3", "22") or (not eid and "image" in low)):
+            continue
+        hit = True
+        img = low.get("image")
+        if (eid == "3" or not eid) and low.get("destinationip"):
+            out.append(_ni_rec("conn", low.get("destinationhostname"), None, low.get("destinationip"),
+                               low.get("destinationport"), src=low.get("sourceip"), image=img))
+        elif low.get("queryname"):
+            ans = [a.strip() for a in re.sub(r"type:\s*\d+\s*", "", low.get("queryresults") or "").split(";")
+                   if a.strip() and a.strip() != "-"]
+            ans = [a[7:] if a.startswith("::ffff:") else a for a in ans]
+            out.append(_ni_rec("dns", low["queryname"], None, next((a for a in ans if _ni_ip_ok(a)), None), 53,
+                               answers=ans, image=img))
+    return out if hit else None
+
+
+def _ni_w3c_split(ln):
+    return [a if a else q for q, a in re.findall(r'"([^"]*)"|(\S+)', ln)]
+
+
+def _ni_text(s):
+    import json
+    st = s.lstrip("﻿").strip()
+    if st[:1] in "[{":
+        try:
+            j = json.loads(st)
+            if isinstance(j, dict) and isinstance(j.get("log"), dict):
+                out = []
+                for e in j["log"].get("entries") or ():
+                    rq = (e or {}).get("request") or {}
+                    u = rq.get("url")
+                    if not u:
+                        continue
+                    ua = next((h.get("value") for h in rq.get("headers") or () if isinstance(h, dict)
+                               and str(h.get("name", "")).lower() == "user-agent"), None)
+                    sp = _rc_split(u)
+                    rs = (e.get("response") or {}) if isinstance(e.get("response"), dict) else {}
+                    cd = next((h.get("value") for h in (rs.get("headers") or ())
+                               if isinstance(h, dict) and str(h.get("name", "")).lower() == "content-disposition"), None)
+                    loc = rs.get("redirectURL") or next((h.get("value") for h in (rs.get("headers") or ())
+                                                         if isinstance(h, dict)
+                                                         and str(h.get("name", "")).lower() == "location"), None)
+                    out.append(_ni_rec("http", sp[1], u, e.get("serverIPAddress"), sp[2], rq.get("method"), ua,
+                                       filename=_rc_cd_name(cd), status=rs.get("status"),
+                                       location=_rd_join(u, loc, rs.get("status"))))
+                return out
+            rows = j if isinstance(j, list) else [j]
+            if len(rows) == 1 and isinstance(rows[0], dict):   # {"Events": [...]} / {"records": [...]} wrappers
+                inner = next((v for v in rows[0].values() if isinstance(v, list) and v and isinstance(v[0], dict)),
+                             None)
+                rows = inner if inner and not _ni_zeek(rows[0]) else rows
+            sj = _ni_sysmon_json([x for x in rows if isinstance(x, dict)])
+            if sj is not None:
+                return sj
+            return [r for r in (_ni_zeek(x) for x in rows if isinstance(x, dict)) if r]
+        except ValueError:
+            pass
+        if st[:1] == "{":
+            rows = []
+            for ln in st.splitlines()[:200000]:
+                try:
+                    x = json.loads(ln)
+                except ValueError:
+                    continue
+                if isinstance(x, dict):
+                    rows.append(x)
+            if rows:
+                sj = _ni_sysmon_json(rows)
+                return sj if sj is not None else [r for r in map(_ni_zeek, rows) if r]
+    if re.search(r"<EventID[^>]*>\s*(?:3|22)\s*<", s):
+        return _ni_sysmon(s)
+    lines = s.splitlines()[:200000]
+    out, fields, w3c = [], None, None
+    for ln in lines:
+        if ln.startswith("#fields"):
+            fields = ln.split("\t")[1:]
+        elif ln.startswith("#Fields:"):
+            w3c = ln[8:].split()
+        elif fields and ln and not ln.startswith("#"):
+            r = _ni_zeek(dict(zip(fields, ln.split("\t"))))
+            if r:
+                out.append(r)
+        elif w3c and ln and not ln.startswith("#"):
+            d = {k.lower(): v for k, v in zip(w3c, _ni_w3c_split(ln)) if v != "-"}
+            host = d.get("cs-host") or d.get("r-host") or d.get("cs-uri-host") or d.get("s-ip")
+            stem, q = d.get("cs-uri-stem") or d.get("cs-uri-path"), d.get("cs-uri-query")
+            full = d.get("cs-uri") or d.get("cs-url")
+            if full and re.match(r"(?i)^[a-z][\w+.\-]*://", full):
+                sp = _rc_split(full)
+                out.append(_ni_rec("http", sp[1], full, d.get("r-ip") or d.get("s-ip"), sp[2],
+                                   d.get("cs-method"), (d.get("cs(user-agent)") or "").replace("+", " "),
+                                   d.get("c-ip")))
+            elif host and stem:
+                out.append(_ni_rec("http", host, f"http://{host}{stem}" + (f"?{q}" if q and q != "-" else ""),
+                                   d.get("s-ip"), d.get("s-port"), d.get("cs-method"),
+                                   (d.get("cs(user-agent)") or "").replace("+", " "), d.get("c-ip")))
+    if fields or w3c:
+        return out
+    if lines and re.search(r"(?i)[,\t;](?:\"?)(?:url|uri|request_?url|host|hostname|query|domain|dest\w*|"
+                           r"server_?name|sni)(?:\"?)(?:[,\t;]|$)", lines[0]):
+        sep = "\t" if "\t" in lines[0] else ";" if lines[0].count(";") > lines[0].count(",") else ","
+        hdr = [_rc_field(h) for h in _ni_csv_split(lines[0], sep)]
+        for ln in lines[1:]:
+            if not ln.strip():
+                continue
+            d = {k: v for k, v in zip(hdr, _ni_csv_split(ln, sep)) if v not in ("", "-")}
+            u, h = _rc_obs_dict(d)
+            ip = d.get("dest_ip") or d.get("destination_ip") or d.get("dst_ip") or d.get("ip")
+            port = d.get("dest_port") or d.get("destination_port") or d.get("dst_port") or d.get("port")
+            kind = "http" if u else "dns" if (d.get("query") or d.get("qry_name")) else "tls" \
+                if (d.get("sni") or d.get("server_name")) else "conn" if not h or h == ip else "http"
+            if u or h or ip:
+                out.append(_ni_rec(kind, h if h != ip else None, u, ip, port, d.get("method"),
+                                   d.get("user_agent") or d.get("useragent"), d.get("src_ip") or d.get("client_ip")))
+        return out
+    for ln in lines:
+        mm = re.match(r"^\s*\d{9,}(?:\.\d+)?\s+\d+\s+(\S+)\s+[A-Z_]+/\d{3}\s+\d+\s+([A-Z]+)\s+(\S+)"
+                      r"(?:\s+\S+\s+[A-Z_]+/(\S+))?", ln)
+        if mm:   # squid native access.log: ts elapsed client code/status bytes METHOD URL [ident hier/peer type]
+            meth, tgt = mm.group(2), mm.group(3)
+            sp = _rc_split(tgt if "://" in tgt else "https://" + tgt)
+            out.append(_ni_rec("http", sp[1], tgt if "://" in tgt else None,
+                               mm.group(4) if mm.group(4) and _ni_ip_ok(mm.group(4)) else None, sp[2], meth,
+                               src=mm.group(1)))
+            continue
+        mm = re.search(r"\bquery(?:\[(\w+)\])?:\s+([\w.\-]+)\s+(?:IN\s+\w+|from\s+(\S+))", ln)
+        if mm:   # BIND query log / dnsmasq
+            out.append(_ni_rec("dns", mm.group(2), None, None, 53, src=mm.group(3)))
+            continue
+        mm = re.match(r'^(?:(\S+) )?(\S+) \S+ \S+ \[[^\]]+\] "(' + _NI_METHODS + r') (\S+) [^"]*" \d{3} \S+'
+                      r'(?: "[^"]*" "([^"]*)")?', ln)
+        if mm and "://" in mm.group(4):   # proxy in combined log format with absolute targets
+            sp = _rc_split(mm.group(4))
+            out.append(_ni_rec("http", sp[1], mm.group(4), None, sp[2], mm.group(3), mm.group(5), mm.group(2)))
+        elif mm and mm.group(3) == "CONNECT" and re.fullmatch(r"[\w.\-\[\]:]+:\d{1,5}", mm.group(4)):
+            sp = _rc_split("https://" + mm.group(4))   # proxy tunnel: host:port, no URL
+            out.append(_ni_rec("tls", sp[1], None, None, sp[2], "CONNECT", mm.group(5), mm.group(2)))
+        elif mm and mm.group(1) and mm.group(4).startswith("/"):   # vhost_combined: vhost[:port] client - - [..]
+            vh = re.fullmatch(r"([\w.\-]+|\[[0-9a-fA-F:.]+\])(?::(\d{1,5}))?", mm.group(1))
+            if vh and "." in vh.group(1) or vh and vh.group(1)[:1] == "[":
+                hp = vh.group(1) + (f":{vh.group(2)}" if vh.group(2) and vh.group(2) not in ("80", "443") else "")
+                url = ("https" if vh.group(2) == "443" else "http") + f"://{hp}{mm.group(4)}"
+                out.append(_ni_rec("http", vh.group(1), url, None, vh.group(2), mm.group(3), mm.group(5),
+                                   mm.group(2)))
+    if not out:
+        for u in _RC_URL.findall(refang(s)):
+            u = u.rstrip(".,")
+            out.append(_ni_rec("http", _rc_split(u)[1], u))
+        for h in re.findall(r"(?im)^\s*host:\s*(\S+)", s):
+            out.append(_ni_rec("http", h))
+    return out
+
+
+def _ni_evtx(data):
+    try:
+        from Evtx.Evtx import FileHeader
+        fh, xs, t0 = FileHeader(data, 0), [], time.time()
+        for ch in fh.chunks():
+            for rec in ch.records():
+                x = rec.xml()
+                if "<EventID" in x and re.search(r"<EventID[^>]*>\s*(?:3|22)\s*<", x):
+                    xs.append(x)
+            if time.time() - t0 > 3:
+                break
+        return _ni_sysmon("\n".join(xs))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def network_indicators(data, name=""):
+    """Network evidence -> [{kind: http|dns|tls|conn, host, url, ip, port, method, user_agent, src, ...}] (deduped,
+    first-seen order; dns records add `answers`, Sysmon records `image`). Sniffed by magic/shape, not by `name`:
+    pcap (D4C3B2A1/A1B2C3D4, ns variants) / pcapng (0A0D0D0A): TCP SYN dst ip:port, reassembled HTTP request lines
+    + Host (absolute proxy targets kept), TLS ClientHello SNI, DNS (UDP/TCP 53) qname + A/AAAA/CNAME answers;
+    EVTX / Sysmon XML (EID 3 DestinationIp/Port/Hostname, EID 22 QueryName/QueryResults); HAR; Zeek TSV/JSON
+    (http/dns/ssl/conn); W3C #Fields; CSV/TSV with url/host/query columns; squid / BIND / dnsmasq / combined proxy
+    lines; else free-text URLs and Host: headers. [] when nothing network-shaped is in it. Feed the list straight
+    into observed_fetches() / reconcile()."""
+    try:
+        if isinstance(data, (bytearray, memoryview)):
+            data = bytes(data)
+        if isinstance(data, bytes):
+            data = data[:1 << 26]
+            if data[:4] in (b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\xc3\xd4", b"\x4d\x3c\xb2\xa1", b"\xa1\xb2\x3c\x4d",
+                            b"\x0a\x0d\x0d\x0a"):
+                recs = _ni_capture(data)
+            elif data[:8] == b"ElfFile\x00":
+                recs = _ni_evtx(data)
+            else:
+                if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
+                    txt = data.decode("utf-16", "replace")
+                elif len(data) > 4 and data[1:4:2] == b"\x00\x00" and data[0]:
+                    txt = data.decode("utf-16-le", "replace")
+                else:
+                    txt = data.decode("utf-8", "replace")
+                if txt.count("�") > max(16, len(txt) // 20):
+                    return []
+                recs = _ni_text(txt)
+        elif isinstance(data, str):
+            recs = _ni_text(data)
+        else:
+            return []
+        out, seen = [], {}
+        for r in recs:
+            if not r or not (r.get("host") or r.get("url") or r.get("ip")):
+                continue
+            key = (r["kind"], r.get("host"), r.get("url"), r.get("method")) if r["kind"] in ("dns", "http", "tls") \
+                else (r["kind"], r.get("ip"), r.get("port"), r.get("host"))
+            if key in seen:
+                old = seen[key]
+                for a in r.get("answers") or ():
+                    if a not in old.setdefault("answers", []):
+                        old["answers"].append(a)
+                if not old.get("ip") and r.get("ip"):
+                    old["ip"] = r["ip"]
+                if not old.get("location") and r.get("location"):
+                    old["location"], old["status"] = r["location"], r.get("status")
+                continue
+            seen[key] = r
+            out.append(r)
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def observed_fetches(observed):
+    """Network evidence -> [{value, url, host, kind}]. Accepts network_indicators() output (list of dicts), a list
+    of URL / host strings, HAR JSON (log.entries[].request.url), Zeek TSV (#fields; host+uri / query / server_name),
+    or free text (every URL, then 'Host:' headers). Original spelling kept in `value`."""
+    recs = []
+    try:
+        if isinstance(observed, (bytes, bytearray)) and bytes(observed[:4]) in _NI_BIN_MAGIC:
+            observed = network_indicators(observed)   # pcap / pcapng / EVTX: binary evidence, records out
+        if isinstance(observed, (bytes, bytearray)):
+            observed = bytes(observed[:1 << 24]).decode("utf-8", "replace")
+        if isinstance(observed, str) and re.search(r"<EventID[^>]*>\s*(?:3|22)\s*<", observed[:1 << 20]):
+            observed = network_indicators(observed)   # Sysmon network-connect / DNS-query XML
+        if isinstance(observed, str) and _of_log_shaped(observed):
+            observed = network_indicators(observed) or observed   # Sysmon JSON / W3C / squid / combined logs
+        if isinstance(observed, str):
+            s = observed.lstrip("﻿").strip()
+            if s[:1] in "[{":
+                try:
+                    import json
+                    j = json.loads(s)
+                    if isinstance(j, dict) and isinstance(j.get("log"), dict):
+                        j = [e.get("request") or {} for e in j["log"].get("entries") or () if isinstance(e, dict)]
+                    observed = j if isinstance(j, list) else [j]
+                except ValueError:
+                    pass
+        if isinstance(observed, str):
+            lines = observed.splitlines()
+            fields = None
+            for ln in lines:
+                if ln.startswith("#fields"):
+                    fields = ln.split("\t")[1:]
+                elif fields and ln and not ln.startswith("#"):
+                    row = dict(zip(fields, ln.split("\t")))
+                    row = {k: v for k, v in row.items() if v not in ("-", "(empty)", "")}
+                    recs.append((_rc_obs_dict(row), "zeek"))
+            if fields is None:
+                for u in _RC_URL.findall(refang(observed)):
+                    if not u.startswith("http://schemas.microsoft.com/win/2004/08/events/"):   # Event xmlns
+                        recs.append(((u.rstrip(".,"), None), "url"))
+                for h in re.findall(r"(?im)^\s*host:\s*(\S+)", observed):
+                    recs.append(((None, h), "host"))
+        if isinstance(observed, (list, tuple)) and observed and all(isinstance(x, dict) and "kind" not in x
+                                                                    for x in observed[:64]):
+            sj = _ni_sysmon_json(list(observed))   # parsed Sysmon JSON export rows
+            observed = sj if sj is not None else observed
+        if isinstance(observed, (list, tuple, set)):
+            # a bare TCP-connect record to an IP some DNS answer / HTTP / TLS record already names adds no host
+            named = {str(a) for x in observed if isinstance(x, dict) and x.get("kind") in ("dns", "http", "tls")
+                     for a in list(x.get("answers") or ()) + [x.get("ip")] if a}
+            for x in observed:
+                if isinstance(x, dict) and x.get("kind") == "conn" and not x.get("host") and str(x.get("ip")) in named:
+                    continue
+                if isinstance(x, dict):
+                    recs.append((_rc_obs_dict(x), str(x.get("kind") or "rec"), x.get("image")))
+                elif isinstance(x, str):
+                    r = refang(x)
+                    recs.append(((x, None) if _RC_URL.fullmatch(r) else (None, x), "str"))
+    except Exception:  # noqa: BLE001
+        pass
+    out = []
+    for (u, h), kind, *img in recs:
+        cu = canon_url(u) if u else None
+        ch = canon_host(u) if cu else canon_host(h) if h else None
+        if cu or ch:
+            out.append({"value": u if cu else h, "url": cu, "host": ch, "kind": kind})
+            if img and img[0]:
+                out[-1]["image"] = str(img[0])   # Sysmon Image: the process that fetched
+    return out
+
+
+def _of_log_shaped(s):
+    """Text that network_indicators() reads as a log, not prose: Sysmon JSON (EventID 3 / 22 with DestinationIp /
+    QueryName), a W3C '#Fields:' header, or >= half of the first lines in squid native / (vhost_)combined shape."""
+    head = s[:1 << 16]
+    st = head.lstrip("\ufeff").lstrip()
+    if st[:1] in "[{" and re.search(r"(?:DestinationIp|QueryName)\b", head) and \
+            re.search(r'(?i)"(?:EventID|event_id|Id|EventCode)"\s*:\s*"?(?:3|22)\b', head):
+        return True
+    if re.search(r"(?m)^#Fields:", head):
+        return True
+    lines = [ln for ln in head.splitlines()[:40] if ln.strip() and not ln.startswith("#")]
+    if not lines:
+        return False
+    pat = re.compile(r'^\s*\d{9,}(?:\.\d+)?\s+\d+\s+\S+\s+[A-Z_]+/\d{3}\s+\d+\s+[A-Z]+\s+\S+|'
+                     r'^(?:\S+ )?\S+ \S+ \S+ \[[^\]]+\] "(?:' + _NI_METHODS + r') \S+ [^"]*" \d{3} ')
+    return sum(1 for ln in lines if pat.match(ln)) * 2 >= len(lines)
+
+
+def fetch_processes(observed):
+    """Network evidence -> {observed value: process image} for Sysmon EID 3 / 22 records (first image seen per value),
+    so an 'only one side' answer can name the process that fetched. {} when the evidence carries no Image."""
+    out = {}
+    for x in observed_fetches(observed):
+        if x.get("image"):
+            out.setdefault(x["value"], x["image"])
+    return out
+
+
+_RC_KINDS = ("ips", "user_agents", "file_names", "ports")
+_RC_UA_FIELDS = re.compile(r"(?i)(?:^|_)(?:user_?agent|ua|agent)$")
+_RC_PORT_FIELDS = re.compile(r"(?i)(?:^|_)(?:port|[lr]port|dst_?port|dest_?port|c2_?port)$")
+_RC_IP_FIELDS = re.compile(r"(?i)(?:^|_)(?:ip|ipv[46]|addr(?:ess)?|dst|dest|c2|server|host|callback)(?:_ip|_addr)?$")
+_RC_NAME_FIELDS = re.compile(r"(?i)^(?:file_?path|path|file|file_?name|filename|drop(?:_path|_file)?|"
+                             r"dest(?:ination)?(?:_path)?|payload|stage|next_stage|dropper|"
+                             r"(?:out|output|save|write|target|staging|stage|dropped|local)_?(?:path|file|name))$")
+_RC_DFLT_PORT = {"http": 80, "https": 443, "ws": 80, "wss": 443, "ftp": 21}
+
+
+def _rc_ip(v):
+    """'10.0.0.5' / '[2001:db8::1]' / '::ffff:1.2.3.4' / '1.2.3.4:8080' / defanged '1[.]2[.]3[.]4' -> canonical IP, else None."""
+    try:
+        import ipaddress
+        s = refang(str(v)).strip()
+        if s.startswith("[") and "]" in s:
+            s = s[1:s.index("]")]
+        elif s.count(":") == 1 and "." in s:
+            s = s.split(":", 1)[0]
+        a = ipaddress.ip_address(s)
+        if a.version == 6 and a.ipv4_mapped:
+            a = a.ipv4_mapped
+        return str(a)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _rc_cd_name(cd):
+    """Content-Disposition value -> filename (filename*=UTF-8''x wins over filename=), else None."""
+    if not cd:
+        return None
+    from urllib.parse import unquote
+    m = re.search(r"(?i)filename\*\s*=\s*[\w\-]*'[^']*'([^;\s]+)", str(cd))
+    if m:
+        return unquote(m.group(1)).strip("\"'")
+    m = re.search(r'(?i)filename\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;\s]+))', str(cd))
+    return (m.group(1) if m.group(1) is not None else m.group(2)).strip() if m else None
+
+
+def _rc_basename(v, need_ext=True):
+    s = str(v or "").strip().strip("\"'").split("?", 1)[0].split("#", 1)[0]
+    b = re.split(r"[\\/]", s)[-1].strip()
+    if not b or len(b) > 255 or (need_ext and not re.search(r"\.[A-Za-z0-9]{1,8}$", b)):
+        return None
+    return b
+
+
+def _rc_url_bits(u):
+    """URL -> (ip or None, port or None, basename or None) for the extra indicator kinds."""
+    from urllib.parse import unquote
+    scheme, host, port, rest = _rc_split(u)
+    port = port if port is not None else _RC_DFLT_PORT.get(scheme)
+    return _rc_ip(host), port, _rc_basename(unquote(rest.split("?", 1)[0]))
+
+
+def _rc_kinds_declared(plans):
+    """{kind: {canonical: (declared spelling, member)}} for ips / user_agents / file_names / ports."""
+    out = {k: {} for k in _RC_KINDS}
+
+    def add(kind, canon, val, m):
+        if canon is not None and canon != "":
+            out[kind].setdefault(canon, (val, m))
+    for m in sorted(plans or {}):
+        try:
+            d = _rc_dict(plans[m])
+        except Exception:  # noqa: BLE001
+            continue
+        for k, v in d.items():
+            try:
+                if not isinstance(v, (str, int)) or isinstance(v, bool):
+                    continue
+                f, v = _rc_field(k), str(v).strip()
+                if not v:
+                    continue
+                r = refang(v)
+                if _RC_URL.fullmatch(r):
+                    ip, port, base = _rc_url_bits(r)
+                    if ip:
+                        add("ips", ip, _rc_split(r)[1], m)
+                    if port:
+                        add("ports", str(port), str(port), m)
+                    if base:
+                        add("file_names", base.lower(), base, m)
+                    continue
+                if _RC_UA_FIELDS.search(f):
+                    add("user_agents", " ".join(v.split()), v, m)
+                    continue
+                if _RC_PORT_FIELDS.search(f) and re.fullmatch(r"\d{1,5}", v) and 0 < int(v) < 65536:
+                    add("ports", str(int(v)), v, m)
+                    continue
+                ip = _rc_ip(r)
+                if ip and (_RC_IP_FIELDS.search(f) or re.fullmatch(r"[\d.]+|\[?[0-9a-fA-F:.]+\]?", r)):
+                    add("ips", ip, v, m)
+                    mm = re.fullmatch(r"\[?[^\]]+\]?:(\d{1,5})", r)
+                    if mm and ("." in r or r.startswith("[")):
+                        add("ports", str(int(mm.group(1))), mm.group(1), m)
+                    continue
+                if _RC_NAME_FIELDS.match(f) and not re.match(r"(?i)^[a-z][a-z0-9+.\-]*://", r):
+                    base = _rc_basename(v)
+                    if base:
+                        add("file_names", base.lower(), base, m)
+            except Exception:  # noqa: BLE001
+                continue
+    return out
+
+
+def _rc_kinds_observed(observed):
+    """{kind: {canonical: observed spelling}} for ips / user_agents / file_names / ports from the evidence."""
+    out = {k: {} for k in _RC_KINDS}
+    try:
+        recs = observed
+        if isinstance(recs, dict):
+            import json
+            recs = network_indicators(json.dumps(recs)) if isinstance(recs.get("log"), dict) else [recs]
+        elif isinstance(recs, (bytes, bytearray, memoryview, str)):
+            recs = network_indicators(recs)
+        if not isinstance(recs, (list, tuple, set)):
+            return out
+        for x in list(recs)[:200000]:
+            if isinstance(x, str):
+                r = refang(x)
+                if _RC_URL.fullmatch(r):
+                    x = {"kind": "http", "url": x}
+                elif _rc_ip(x):
+                    x = {"kind": "conn", "ip": x}
+                else:
+                    continue
+            if not isinstance(x, dict):
+                continue
+            low = {_rc_field(k): v for k, v in x.items()}
+            kind = str(low.get("kind") or "")
+            ips = [low.get(k) for k in ("ip", "dest_ip", "destination_ip", "destinationip", "dst_ip", "id_resp_h",
+                                        "serveripaddress", "server_ip", "s_ip") if low.get(k)]
+            ans = low.get("answers") or ()
+            ips += list(ans) if isinstance(ans, (list, tuple)) else str(ans).split(",")
+            for a in ips:
+                c = _rc_ip(a)
+                if c:
+                    out["ips"].setdefault(c, str(a).strip())
+            url = low.get("url") or low.get("request_url") or low.get("full_uri")
+            uport = ubase = None
+            if url and _RC_URL.fullmatch(refang(str(url))):
+                uip, uport, ubase = _rc_url_bits(refang(str(url)))
+                if uip:
+                    out["ips"].setdefault(uip, _rc_split(str(url))[1])
+            elif low.get("uri"):
+                ubase = _rc_basename(str(low["uri"]))
+            ua = next((low[k] for k in ("user_agent", "useragent", "http_user_agent", "cs_user_agent")
+                       if isinstance(low.get(k), str) and low[k].strip() not in ("", "-")), None)
+            if ua:
+                out["user_agents"].setdefault(" ".join(ua.split()), ua)
+            if kind != "dns":
+                p = next((low[k] for k in ("port", "dest_port", "destination_port", "destinationport", "dst_port",
+                                           "id_resp_p") if low.get(k) not in (None, "", "-")), None) or uport
+                if p is not None and re.fullmatch(r"\d{1,5}", str(p).strip()) and 0 < int(p) < 65536:
+                    out["ports"].setdefault(str(int(p)), str(int(p)))
+            names = [ubase] if ubase else []
+            for k in ("filename", "file_name", "resp_filenames", "orig_filenames"):
+                v = low.get(k)
+                names += list(v) if isinstance(v, (list, tuple)) else str(v).split(",") if v else []
+            cd = _rc_cd_name(low.get("content_disposition"))
+            if cd:
+                names.append(cd)
+            for n in names:
+                b = _rc_basename(n)
+                if b:
+                    out["file_names"].setdefault(b.lower(), b)
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+# --- redirects + DNS resolution (prebuild http-redirect-dns-resolve) --------------------------------------------------
+# "Where the requests actually went" can differ from the declared URL by a 30x Location hop or a CNAME. HAR
+# (response.redirectURL / Location header + status), pcap HTTP responses (paired in order with the reverse flow's
+# requests) and Zeek http status/location give url -> next url; DNS answers (pcap / Zeek / Sysmon EID 22) give
+# host -> [CNAME .., A/AAAA]. reconcile() adds every redirect target as an observed URL (the observed-only value when no
+# plan names it) and counts a declared URL as fetched when the evidence only shows a URL-less TLS / TCP connection to
+# its host, a CNAME of it, or an IP it resolved to.
+def _rd_join(url, loc, status=None):
+    """Absolute redirect target of a response (Location resolved against the request URL), else None. A Location on a
+    non-3xx status (201 Created, 200 with a stray header) is no redirect."""
+    try:
+        loc = str(loc or "").strip()
+        st = str(status or "").strip()
+        if not loc or loc == "-" or (st and st not in ("0", "-") and not re.fullmatch(r"30[0-35-8]", st)):
+            return None
+        if url and not re.match(r"(?i)^[a-z][a-z0-9+.\-]*://", loc):
+            from urllib.parse import urljoin
+            loc = urljoin(refang(str(url)), loc)
+        return loc
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _rd_records(observed):
+    if isinstance(observed, dict):
+        import json
+        observed = json.dumps(observed) if isinstance(observed.get("log"), dict) else [observed]
+    if isinstance(observed, (bytes, bytearray, memoryview, str)):
+        return network_indicators(observed)
+    return [x for x in observed if isinstance(x, dict)] if isinstance(observed, (list, tuple)) else []
+
+
+def _rd_maps(observed):
+    """-> (hops {canon url: (canon next url, next spelling, url spelling)}, alias {canon host: [CNAME / IP spellings]},
+    host spellings {canon host: spelling}, dst {IPs reached by a URL-less TLS / TCP connection},
+    reached {canon hosts named by a URL-less TLS / conn record})."""
+    hops, alias, spell, dst, reached, named = {}, {}, {}, set(), set(), set()
+    try:
+        for x in _rd_records(observed)[:200000]:
+            low = {_rc_field(k): v for k, v in x.items()}
+            kind = str(low.get("kind") or "")
+            url = low.get("url") or low.get("request_url") or low.get("full_uri")
+            loc = next((low[k] for k in ("location", "redirect_url", "redirecturl", "redirect_location")
+                        if isinstance(low.get(k), str)), None)
+            nxt = _rd_join(url, loc, low.get("status") or low.get("status_code")) if url else None
+            if nxt:
+                cu, cn = canon_url(str(url)), canon_url(nxt)
+                if cu and cn and cu != cn:
+                    hops.setdefault(cu, (cn, nxt, str(url)))
+            host = low.get("host") or low.get("query") or low.get("queryname")
+            h = canon_host(str(host)) if host else None
+            ans = low.get("answers") or ()
+            ans = ans if isinstance(ans, (list, tuple)) else str(ans).split(",")
+            if kind == "dns":
+                for a in ans if h else ():
+                    a = str(a).strip().rstrip(".")
+                    if a and a not in alias.setdefault(h, []) and (_rc_ip(a) or canon_host(a)):
+                        spell.setdefault(h, str(host))
+                        alias[h].append(a)
+                continue
+            ip = _rc_ip(low.get("ip")) if low.get("ip") else None
+            if kind == "conn" and not h:
+                if ip:
+                    dst.add(ip)
+                continue
+            if ip:
+                named.add(ip)
+            if kind in ("conn", "tls") or (kind == "http" and not url):
+                if h and h != ip:
+                    reached.add(h)
+            elif kind == "http" and url and ip:   # HAR serverIPAddress / pcap dst: host -> ip
+                hu = canon_host(str(url))
+                if hu and hu != ip and ip not in alias.setdefault(hu, []):
+                    spell.setdefault(hu, _rc_split(str(url))[1])
+                    alias[hu].append(ip)
+    except Exception:  # noqa: BLE001
+        pass
+    # a bare TCP connect only stands for a fetch when no URL / SNI-carrying record explains its IP (shared-IP hosts)
+    return hops, alias, spell, dst - named, reached
+
+
+def _rd_resolve(h, alias):
+    """canon host -> [CNAME .., IP ..] spellings, following CNAME chains (bounded, loop-safe)."""
+    out, todo, seen = [], [h], {h}
+    while todo and len(seen) < 64:
+        for a in alias.get(todo.pop(0), ()):
+            c = _rc_ip(a) or canon_host(a)
+            if c and c not in seen:
+                seen.add(c)
+                out.append(a)
+                if not _rc_ip(a):
+                    todo.append(c)
+    return out
+
+
+def _rd_chains(hops):
+    out = {}
+    for cu, (cn, nsp, sp) in hops.items():
+        chain, seen = [], {cu}
+        while cn and cn not in seen and len(chain) < 16:
+            chain.append(nsp)
+            seen.add(cn)
+            cn, nsp = hops.get(cn, (None, None, None))[:2]
+        out[sp] = chain
+    return out
+
+
+def resolve_chain(observed):
+    """Network evidence (HAR / pcap / pcapng / Zeek / network_indicators() records) -> {url: [hop, .., final url]}:
+    every request URL answered by a 30x redirect, mapped to the Location targets it leads through (relative Locations
+    resolved against the request; loops cut). Spellings are the evidence's own. {} when nothing redirects."""
+    try:
+        return _rd_chains(_rd_maps(observed)[0])
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def resolve_hosts(observed):
+    """Network evidence -> {host: [CNAME .., A/AAAA ..]} from DNS answers (CNAME chains followed) and HAR / pcap
+    request IPs. {} when nothing resolves."""
+    try:
+        _, alias, spell, _, _ = _rd_maps(observed)
+        return {spell.get(h, h): r for h in alias for r in [_rd_resolve(h, alias)] if r}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def reconcile(plans, observed):
+    """Declared fetch targets (decoded plans of every member) vs observed network evidence -> report, or None when
+    either side is empty.
+      hosts / urls   {declared_only, observed_only, both}: original spellings (declared side's spelling for `both`),
+                     sorted by canonical form. URL level compares only records that carry a URL; DNS/TLS/conn records
+                     confirm a host, never a URL.
+      one_sided      urls.declared_only + urls.observed_only, or the host-level difference when the URL level is clean
+      indicator      the single one-sided value (URL level first, then host level), else None
+      members        {member: [declared values]}; member_of {declared value: member}
+      unfetched      members with declared URLs none of which was observed (the fetch that never happened);
+      unseen_hosts   members none of whose declared hosts shows up anywhere in the evidence
+      stages         {stage name: observed URL value} for non-URL next_stage names seen as an observed URL basename
+      ips / user_agents / file_names / ports
+                     the same {declared_only, observed_only, both} shape for non-URL indicators: plan IP literals /
+                     URL IP hosts vs conn/http dst + DNS A/AAAA answers; plan user_agent fields vs HAR / Zeek / W3C /
+                     pcap User-Agent; plan file_path / next_stage / URL basenames vs observed URI basenames +
+                     Content-Disposition / Zeek *_filenames; plan port fields + URL ports vs dst ports (DNS excluded).
+                     Never part of one_sided / indicator (those stay URL / host).
+      redirects      resolve_chain(): {request url: [Location hop, .., final url]}; every redirect target joins the
+                     observed URLs (a target no plan names is observed-only)
+      final_urls     {declared value: final url} for declared URLs that redirect
+      resolved       {declared value: [CNAME .., IP ..]} from the evidence's DNS answers / request IPs
+      fetched_via    {declared value: 'tls' | 'cname' | 'ip'}: declared URLs (hosts) with no URL-level evidence counted
+                     as fetched (seen) through a URL-less TLS / TCP connection to the host, a CNAME of it, or an IP
+                     it resolved to
+      counts         sizes of every set above (+ <kind>_one_sided)"""
+    try:
+        dec, obs = declared_fetches(plans), observed_fetches(observed)
+        xd, xo, xm = _rc_kinds_declared(plans), _rc_kinds_observed(observed), {}
+        hops, alias, _, rd_dst, rd_reached = _rd_maps(observed)
+        seen_u = {x["url"] for x in obs if x["url"]}
+        for cu, (cn, nsp, _) in hops.items():   # a redirect target is where the request went, logged or not
+            if cn not in seen_u:
+                seen_u.add(cn)
+                obs.append({"value": nsp, "url": cn, "host": canon_host(nsp), "kind": "redirect"})
+        if not dec or not obs:
+            if not (any(xd[k] for k in _RC_KINDS) and any(xo[k] for k in _RC_KINDS)):
+                return None
+
+        def sides(level):
+            def spell(x):
+                return _rc_split(x["value"])[1] if level == "host" and x["url"] else x["value"]
+            d, o = {}, {}
+            for x in dec:
+                if x[level]:
+                    d.setdefault(x[level], spell(x))
+            for x in obs:
+                if x[level]:
+                    o.setdefault(x[level], spell(x))
+            return {"declared_only": [d[k] for k in sorted(set(d) - set(o))],
+                    "observed_only": [o[k] for k in sorted(set(o) - set(d))],
+                    "both": [d[k] for k in sorted(set(d) & set(o))]}, set(d), set(o)
+
+        # a declared URL with no URL-level evidence for its host still counts as fetched when a URL-less TLS / conn
+        # record reached its host, a CNAME of it, or an IP it resolved to; a declared host whose CNAME is observed
+        # counts as seen. Matching only: the declared spelling is reported, the CNAME / IP adds no observed value.
+        url_hosts = {x["host"] for x in obs if x["url"]}
+        obs_h = {x["host"] for x in obs if x["host"]}
+        via, final, resolved = {}, {}, {}
+        for x in dec:
+            r = _rd_resolve(x["host"], alias) if x["host"] else []
+            if r:
+                resolved.setdefault(x["value"], r)
+            cr = {_rc_ip(a) or canon_host(a) for a in r}
+            if x["url"] and x["url"] not in seen_u and x["host"] not in url_hosts:
+                if x["host"] in rd_reached or cr & rd_reached:
+                    via[x["value"]] = "cname" if x["host"] not in rd_reached else "tls"
+                elif cr & rd_dst:
+                    via[x["value"]] = "ip"
+                if x["value"] in via:
+                    obs.append({"value": x["value"], "url": x["url"], "host": x["host"], "kind": "resolved"})
+            elif x["host"] and not x["url"] and x["host"] not in obs_h and cr & obs_h:
+                via[x["value"]] = "cname"
+                obs.append({"value": x["value"], "url": None, "host": x["host"], "kind": "resolved"})
+            if x["url"] in hops:
+                cn, last, walked = hops[x["url"]][0], hops[x["url"]][1], {x["url"]}
+                while cn in hops and cn not in walked and len(walked) < 17:
+                    walked.add(cn)
+                    cn, last = hops[cn][:2]
+                final[x["value"]] = last
+        urls, du, ou = sides("url")
+        hosts, dh, oh = sides("host")
+        one = urls["declared_only"] + urls["observed_only"]
+        if not one:
+            one = hosts["declared_only"] + hosts["observed_only"]
+        members, member_of, unfetched, unseen = {}, {}, [], []
+        for m in sorted({x["member"] for x in dec}):
+            xs = [x for x in dec if x["member"] == m and (x["url"] or x["host"])]
+            if not xs:
+                continue
+            members[m] = [x["value"] for x in xs]
+            for x in xs:
+                member_of.setdefault(x["value"], m)
+            us = [x["url"] for x in xs if x["url"]]
+            if us and not any(u in ou for u in us):
+                unfetched.append(m)
+            if not any(x["host"] in oh for x in xs if x["host"]):
+                unseen.append(m)
+        base = {}
+        for x in obs:
+            if x["url"]:
+                base.setdefault(x["url"].split("?", 1)[0].rsplit("/", 1)[-1].lower(), x["value"])
+        stages = {x["value"]: base[x["stage"]] for x in dec if x["stage"] and x["stage"] in base}
+        rep = {"hosts": hosts, "urls": urls, "one_sided": one, "indicator": one[0] if len(one) == 1 else None,
+               "members": members, "member_of": member_of, "unfetched": unfetched, "unseen_hosts": unseen,
+               "stages": stages, "redirects": _rd_chains(hops), "final_urls": final, "resolved": resolved,
+               "fetched_via": via}
+        for lv in _RC_KINDS:
+            d, o = {c: v for c, (v, _) in xd[lv].items()}, xo[lv]
+            rep[lv] = {"declared_only": [d[k] for k in sorted(set(d) - set(o))],
+                       "observed_only": [o[k] for k in sorted(set(o) - set(d))],
+                       "both": [d[k] for k in sorted(set(d) & set(o))]}
+            for v, m in xd[lv].values():
+                member_of.setdefault(v, m)
+        rep["counts"] = {f"{lv}_{k}": len(v) for lv in ("hosts", "urls") + _RC_KINDS for k, v in rep[lv].items()}
+        rep["counts"].update(one_sided=len(one), unfetched=len(unfetched), unseen_hosts=len(unseen),
+                             declared_members=len(members), redirects=len(rep["redirects"]),
+                             final_urls=len(final), fetched_via=len(via))
+        rep["counts"].update({f"{lv}_one_sided": len(rep[lv]["declared_only"]) + len(rep[lv]["observed_only"])
+                              for lv in _RC_KINDS})
+        return rep
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def reconcile_answer(report, kind, accepted_values=None, what="indicator"):
+    """One GM answer from a reconcile() report.
+      exact_text  what='indicator' (the one-sided value), or '<level>.<side>' e.g. 'urls.observed_only' /
+                  'hosts.declared_only' (its single value)
+      enum        the member whose fetch never happened (what='unfetched' / 'unseen_hosts'), or the member that
+                  declared the one-sided indicator; matched to accepted_values by name or stem
+      integer     counts[what] (what='indicator' -> one_sided)
+      redirects / final_urls / resolved / fetched_via: exact_text the final hop (last CNAME / IP for `resolved`,
+                  the via-kind for `fetched_via`) of the single entry, integer the entry count, enum its member
+      ips / user_agents / file_names / ports: what='<kind>.<side>' (e.g. 'user_agents.observed_only') or '<kind>'
+                  alone (declared_only + observed_only); exact_text its single value, integer its size, enum the
+                  member that declared it
+    "none" when the requested set is empty; None when unanswerable (no report, or several candidates)."""
+    try:
+        if not report:
+            return None
+        lv0 = what.partition(".")[0]
+        if lv0 in ("redirects", "final_urls", "resolved", "fetched_via"):
+            vals = report.get(lv0) or {}
+            if kind == "integer":
+                return str(len(vals))
+            if not vals:
+                return "none" if kind != "enum" else None
+            if len(vals) != 1:
+                return None
+            k0, v = next(iter(vals.items()))
+            if kind == "enum":
+                m = report["member_of"].get(k0)
+                return next((a for a in accepted_values or () if str(a) == m), None if accepted_values else m)
+            return (v[-1] if v else None) if isinstance(v, list) else v
+        if lv0 in _RC_KINDS:
+            lv, _, side = what.partition(".")
+            if lv not in report:
+                return None
+            vals = report[lv][side] if side else report[lv]["declared_only"] + report[lv]["observed_only"]
+            if kind == "integer":
+                return str(len(vals))
+            if not vals:
+                return "none" if kind != "enum" else None
+            if len(vals) != 1:
+                return None
+            if kind != "enum":
+                return vals[0]
+            m = report["member_of"].get(vals[0])
+            if not m:
+                return None
+            stem = lambda s: re.sub(r"\.[A-Za-z0-9_]+$", "", str(s).replace("\\", "/").rsplit("/", 1)[-1]).lower()
+            for a in accepted_values or ():
+                if str(a) == m or stem(a) == stem(m):
+                    return a
+            return None if accepted_values else m
+        if kind == "integer":
+            return str(report["counts"]["one_sided" if what == "indicator" else what])
+        if kind == "enum":
+            if what in ("unfetched", "unseen_hosts"):
+                ms = report[what]
+            else:
+                ind = report["indicator"]
+                ms = [report["member_of"][ind]] if ind in report["member_of"] else []
+            if not ms:
+                return "none" if what in ("unfetched", "unseen_hosts") else None
+            if len(ms) != 1:
+                return None
+            m = ms[0]
+            stem = lambda s: re.sub(r"\.[A-Za-z0-9_]+$", "", str(s).replace("\\", "/").rsplit("/", 1)[-1]).lower()
+            for a in accepted_values or ():
+                if str(a) == m or stem(a) == stem(m):
+                    return a
+            return None if accepted_values else m
+        if what == "indicator":
+            vals = report["one_sided"]
+        else:
+            lv, _, side = what.partition(".")
+            vals = report[lv][side]
+        if not vals:
+            return "none"
+        return vals[0] if len(vals) == 1 else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# --- download / handoff graph (cross-file) ---------------------------------------------------------------------------
+_DG_FILE_FIELDS = re.compile(r"(?i)^(?:file_?path|path|file|drop(?:_path|_file)?|dest(?:ination)?(?:_path)?|"
+                             r"(?:out|output|save|write|target|staging|stage|dropped|local)_?(?:path|file))$")
+_DG_STEP_FETCH = re.compile(r"(?i)acquire_remote|http_client|download|fetch|web_request|remote_fetch")
+_DG_STEP_WRITE = re.compile(r"(?i)write_file|drop_file|save_file|write_disk|write_stage")
+
+
+def _dg_member(d):
+    """One decoded plan dict -> {language, next_language, next_stage, urls:[(field, value)], file_paths, steps, ...}."""
+    low = {}
+    for k, v in d.items():
+        if isinstance(v, (list, tuple)) and k.lower() == "steps":
+            v = ",".join(str(x) for x in v)
+        if isinstance(v, (str, int, float)) and not isinstance(v, bool) and str(v).strip():
+            low.setdefault(_rc_field(k), str(v).strip())
+    r = {"language": low.get("language"), "next_language": low.get("next_language"),
+         "next_stage": low.get("next_stage"), "urls": [], "file_paths": [], "steps": [],
+         "stage_count": int(low["stage_count"]) if re.fullmatch(r"\d{1,4}", low.get("stage_count", "")) else None}
+    r["steps"] = [s for s in re.split(r"[\s,;>|]+", low.get("steps", "")) if s]
+    for f, v in low.items():
+        u = refang(v)
+        if f != "next_stage" and _RC_URL.fullmatch(u) and canon_url(u):
+            r["urls"].append((f, v))
+        elif _DG_FILE_FIELDS.match(f) and re.search(r"[\\/]|\.\w{1,6}$", v) and not _RC_URL.match(u):
+            r["file_paths"].append(v)
+    return r
+
+
+def _dg_walk(edges):
+    """{src: [dst..]} -> the single linear path from the unique root covering every node, else None."""
+    nodes = set(edges) | {d for ds in edges.values() for d in ds}
+    if not nodes or any(len(set(ds)) > 1 for ds in edges.values()):
+        return None
+    has_in = {d for ds in edges.values() for d in ds}
+    roots = [n for n in nodes if n not in has_in]
+    if len(roots) != 1:
+        return None
+    out, n = [], roots[0]
+    while n is not None and n not in out:
+        out.append(n)
+        n = (edges.get(n) or [None])[0]
+    return out if len(out) == len(nodes) else None
+
+
+def download_graph(plans):
+    """{member: decoded plan (dict / 'k=v|..' / JSON)} -> cross-file download/handoff graph report, or None when no
+    plan carries a url / file_path / next_language / next_stage.
+      members       {member: {language, next_language, next_stage, urls, hosts, file_paths, steps, stage_count}}
+      edges         [{src, dst, kind}] kind: fetch (member->url; upload for upload_url / exfil fields), write
+                    (url->file_path, or member->file_path when the member fetches nothing), handoff
+                    (member->next_language), stage (member->next_stage)
+      chain         languages in order following language -> next_language across files (None unless one linear path)
+      member_chain  members in order: next_stage naming a member (name / stem), else the one member whose language is
+                    the next_language (None unless one linear path); root / leaf = its ends (falls back to the
+                    single member of the chain's first / last language)
+      unique        {url, host, file_path: [members holding a value no other member shares]} -- only filled when at
+                    least one value IS shared (otherwise "unique" means nothing); shared {kind: [values]}
+      counts        members, urls, hosts, file_paths, languages, stages, edges, <kind>_edges, chain_length,
+                    member_chain_length, stage_count_sum, stage_count_max"""
+    try:
+        mem = {}
+        for m in sorted(plans or {}):
+            try:
+                g = _dg_member(_rc_dict(plans[m]))
+            except Exception:  # noqa: BLE001
+                continue
+            if g["urls"] or g["file_paths"] or g["next_language"] or g["next_stage"]:
+                g["hosts"] = sorted({canon_host(refang(v)) for _, v in g["urls"]} - {None})
+                mem[m] = g
+        if not mem:
+            return None
+        edges = []
+        for m, g in mem.items():
+            fetch = [v for f, v in g["urls"] if not re.search(r"upload|exfil|post|beacon|callback", f)]
+            for f, v in g["urls"]:
+                edges.append({"src": m, "dst": v, "kind": "fetch" if v in fetch else "upload"})
+            writes = not g["steps"] or any(_DG_STEP_WRITE.search(s) for s in g["steps"])
+            for p in g["file_paths"]:
+                if writes and len(fetch) == 1:
+                    edges.append({"src": fetch[0], "dst": p, "kind": "write"})
+                else:
+                    edges.append({"src": m, "dst": p, "kind": "write"})
+            if g["next_language"]:
+                edges.append({"src": m, "dst": g["next_language"], "kind": "handoff"})
+            if g["next_stage"]:
+                edges.append({"src": m, "dst": g["next_stage"], "kind": "stage"})
+        # language chain (case-insensitive, first spelling kept); self-handoffs (same_language) are not chain links
+        spell, lang_e = {}, {}
+        for g in mem.values():
+            a, b = g["language"], g["next_language"]
+            for x in (a, b):
+                if x:
+                    spell.setdefault(x.lower(), x)
+            if a and b and a.lower() != b.lower():
+                lang_e.setdefault(a.lower(), [])
+                if b.lower() not in lang_e[a.lower()]:
+                    lang_e[a.lower()].append(b.lower())
+        lw = _dg_walk(lang_e)
+        chain = [spell[x] for x in lw] if lw else None
+        # member chain
+        stem = lambda s: re.sub(r"\.[A-Za-z0-9_]+$", "", str(s).replace("\\", "/").rsplit("/", 1)[-1]).lower()
+        by_name = {}
+        for m in mem:
+            for k in (m.lower(), m.replace("\\", "/").rsplit("/", 1)[-1].lower(), stem(m)):
+                by_name.setdefault(k, set()).add(m)
+        by_lang = {}
+        for m, g in mem.items():
+            if g["language"]:
+                by_lang.setdefault(g["language"].lower(), set()).add(m)
+        mem_e = {}
+        for m, g in mem.items():
+            nxt = None
+            ns = (g["next_stage"] or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
+            for k in (ns, stem(ns)) if ns else ():
+                if len(by_name.get(k, ())) == 1:
+                    nxt = next(iter(by_name[k]))
+                    break
+            nl = (g["next_language"] or "").lower()
+            if nxt is None and nl and nl != (g["language"] or "").lower() and len(by_lang.get(nl, ())) == 1:
+                nxt = next(iter(by_lang[nl]))
+            if nxt and nxt != m:
+                mem_e[m] = [nxt]
+        mchain = _dg_walk(mem_e)
+        if mchain and len(mchain) < 2:
+            mchain = None
+        root = leaf = None
+        if mchain:
+            root, leaf = mchain[0], mchain[-1]
+        elif chain:
+            r0, l0 = by_lang.get(chain[0].lower(), set()), by_lang.get(chain[-1].lower(), set())
+            root = next(iter(r0)) if len(r0) == 1 else None
+            leaf = next(iter(l0)) if len(l0) == 1 else None
+        unique, shared = {}, {}
+        for kind, get in (("url", lambda g: [v for _, v in g["urls"]]), ("host", lambda g: g["hosts"]),
+                          ("file_path", lambda g: g["file_paths"])):
+            key = (lambda v: canon_url(refang(v))) if kind == "url" else (lambda v: str(v).lower())
+            hold = {}
+            for m, g in mem.items():
+                for v in get(g):
+                    hold.setdefault(key(v), (v, set()))[1].add(m)
+            shared[kind] = sorted(v for v, ms in hold.values() if len(ms) > 1)
+            have = [m for m, g in mem.items() if get(g)]
+            unique[kind] = (sorted(m for m in have if any(len(hold[key(v)][1]) == 1 for v in get(mem[m])))
+                            if shared[kind] else [])
+        sc = [g["stage_count"] for g in mem.values() if g["stage_count"] is not None]
+        all_urls = {canon_url(refang(v)) for g in mem.values() for _, v in g["urls"]}
+        rep = {"members": mem, "edges": edges, "chain": chain, "member_chain": mchain, "root": root, "leaf": leaf,
+               "unique": unique, "shared": shared}
+        counts = {"members": len(mem), "urls": len(all_urls - {None}),
+                  "hosts": len({h for g in mem.values() for h in g["hosts"]}),
+                  "file_paths": len({p.lower() for g in mem.values() for p in g["file_paths"]}),
+                  "languages": len(spell), "stages": len({g["next_stage"].lower() for g in mem.values()
+                                                          if g["next_stage"]}),
+                  "edges": len(edges), "chain_length": len(chain or ()), "member_chain_length": len(mchain or ()),
+                  "stage_count_sum": sum(sc), "stage_count_max": max(sc) if sc else 0}
+        for k in ("fetch", "upload", "write", "handoff", "stage"):
+            counts[f"{k}_edges"] = sum(1 for e in edges if e["kind"] == k)
+        rep["counts"] = counts
+        return rep
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def download_graph_answer(report, kind, what="chain", accepted_values=None, sep=">"):
+    """One GM answer from a download_graph() report.
+      ordered_tokens  what='chain' (languages) / 'member_chain', joined with `sep`
+      integer         counts[what] (e.g. 'hosts', 'edges', 'fetch_edges', 'stages', 'chain_length')
+      enum            what='root' / 'leaf' (member at the chain's ends), 'unique_url' / 'unique_host' /
+                      'unique_file_path' (the one member whose value nobody shares), 'root_language' /
+                      'leaf_language'; matched to accepted_values by name, stem or case
+      exact_text      '<root|leaf>.<url|host|file_path|next_stage|next_language|language>' (that member's single value)
+    None when unanswerable (no report, no single linear chain, several candidates)."""
+    try:
+        if not report:
+            return None
+        stem = lambda s: re.sub(r"\.[A-Za-z0-9_]+$", "", str(s).replace("\\", "/").rsplit("/", 1)[-1]).lower()
+
+        def pick(v):
+            if v is None:
+                return None
+            for a in accepted_values or ():
+                if str(a) == v or str(a).lower() == str(v).lower() or stem(a) == stem(v):
+                    return a
+            return None if accepted_values else v
+        if kind == "integer":
+            return str(report["counts"][what]) if what in report["counts"] else None
+        if kind == "ordered_tokens":
+            ch = report.get("member_chain" if what == "member_chain" else "chain")
+            return sep.join(ch) if ch else None
+        if kind == "enum":
+            if what in ("root", "leaf"):
+                return pick(report[what])
+            if what in ("root_language", "leaf_language"):
+                ch = report.get("chain")
+                return pick(ch[0 if what == "root_language" else -1]) if ch else None
+            if what.startswith("unique_"):
+                ms = report["unique"].get(what[len("unique_"):]) or []
+                return pick(ms[0]) if len(ms) == 1 else None
+            return None
+        end, _, fld = what.partition(".")
+        m = report.get(end) if end in ("root", "leaf") else None
+        g = report["members"].get(m) if m else None
+        if not g:
+            return None
+        vals = ([v for _, v in g["urls"]] if fld == "url" else g["hosts"] if fld == "host" else
+                g["file_paths"] if fld == "file_path" else [g.get(fld)] if g.get(fld) else [])
+        return vals[0] if len(vals) == 1 else None
     except Exception:  # noqa: BLE001
         return None

@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "tests/data/android_fixtures/gen_init_array.sh tests/data/android_fixtures  # gcc -shared -fPIC -O2 -s -DBLOB=<perl-encoded token> native_src/init_array_decrypt.c (DECOY: same as initarr_xor_x86_64_stripped but the plaintext is a near-miss (15 hex + 'Q')); zip -qX -r <name>.apk assets lib",
+ "oracle_cmd": "unzip initarr_decoy_nearmiss.apk 'lib/*' && gcc -o h native_src/harness.c -ldl && ./h lib/x86_64/libvault.so Java_com_huntress_arena_Vault_reveal  # the real dynamic loader runs .init_array on dlopen, then the export is called with a fake JNIEnv: 'NewStringUTF ANS-4b9e07d2c61fa35Q'"
+}

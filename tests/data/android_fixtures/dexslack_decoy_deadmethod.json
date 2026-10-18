@@ -1,0 +1,8 @@
+{
+ "entry": "dex_slack_scan",
+ "expected": null,
+ "_why": "dex slack / header anomaly (rows 51, 62): DECOY: base64(token) only in a never-invoked private method (decoy-likely, not an answer) + appended base64 of a 15-hex near-miss",
+ "generator_cmd": "python3 tests/data/android_fixtures/dexslack_src/gen_dexslack.py decoy_deadmethod tests/data/android_fixtures/dexslack_decoy_deadmethod.apk  # javac --release 8 + dex2jar d2j-jar2dex; DECOY: base64(token) only in a never-invoked private method (decoy-likely, not an answer) + appended base64 of a 15-hex near-miss",
+ "oracle_cmd": "unzip -p dexslack_decoy_deadmethod.apk classes.dex > c.dex; tail -c +$(( $(od -An -tu4 -j32 -N4 c.dex) + 1 )) c.dex | base64 -d  # ANS-0123456789abcde (15 hex: no token); d2j-baksmali c.dex shows decoyFlag() has no invoke caller",
+ "decoy": true
+}

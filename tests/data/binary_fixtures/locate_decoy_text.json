@@ -1,0 +1,9 @@
+{
+ "case": "decoy_text",
+ "probe_offset": 24,
+ "expected": null,
+ "decoy": true,
+ "note": "no container -> locate_offset None",
+ "generator_cmd": "bash tests/data/binary_fixtures/locate_gen.sh locate_decoy_text.bin decoy_text",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/locate_oracle.py locate_decoy_text.bin  (readelf -SW/-lW | pefile | lief | wasm-objdump -x)"
+}

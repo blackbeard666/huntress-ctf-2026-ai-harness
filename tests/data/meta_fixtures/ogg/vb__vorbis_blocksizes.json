@@ -1,0 +1,8 @@
+{
+ "field": "ogg.vorbis_blocksizes",
+ "expected": "[512,1024]",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -loglevel error -f lavfi -i sine=f=440:d=0.6:r=22050 -ac 1 -c:a libvorbis vb.ogg (ffmpeg 7.0.2 static)",
+ "oracle_cmd": ".venv/bin/python -I -c \"import mutagen.ogg as g; b=g.OggPage(open('vb.ogg','rb')).packets[0][28]; print([1<<(b&15), 1<<(b>>4)])\" -> [512, 1024] (Vorbis I 4.2.2 blocksize_0/_1 nibbles)",
+ "decoy": false,
+ "member": "vb.ogg"
+}

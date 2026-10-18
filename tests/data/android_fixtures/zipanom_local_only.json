@@ -1,0 +1,6 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-d2096fb4ae1c8357",
+ "generator_cmd": "tests/data/android_fixtures/gen_zip_structure.sh <outdir> -- step 2: Info-ZIP zip of the puzzle json, central directory cut (head -c up to PK\\x01\\x02), cat'd before an ordinary zip, zip -A",
+ "oracle_cmd": "funzip < zipanom_local_only.apk | jq -r .data | base64 -d   (unzip -l lists only classes.dex + readme.txt)"
+}

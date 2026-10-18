@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_audio_codec_tag_string",
+ "expected": "mp4a",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i sine=f=440:d=0.4:r=24000 -ac 1 -c:a aac m4.m4a (ffmpeg 7.0.2 static)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i m4.m4a -> 'aac (LC) (mp4a / 0x6134706D)'",
+ "decoy": false,
+ "member": "m4.m4a"
+}

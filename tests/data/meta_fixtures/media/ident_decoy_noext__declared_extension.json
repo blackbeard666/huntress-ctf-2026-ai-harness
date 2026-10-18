@@ -1,0 +1,8 @@
+{
+ "field": "media.declared_extension",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i sine=f=440:d=0.15:r=8000 -ac 1 -c:a libopencore_amrnb -b:a 12.2k a.amr && cp a.amr voicenote  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel)",
+ "oracle_cmd": "python3 -c \"import os;print(repr(os.path.splitext('voicenote')[1]))\" -> '' (no extension)",
+ "decoy": true,
+ "member": "voicenote"
+}

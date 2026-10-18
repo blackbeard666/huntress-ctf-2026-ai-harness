@@ -1,0 +1,8 @@
+{
+ "field": "media.tag_encoded_by",
+ "expected": "iTunes v4.0",
+ "generator_cmd": "python3: hand-built ID3v2.2 header + TT2/TP1/TEN/COM frames prepended to the a.mp3 audio",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i v22.mp3 -> Metadata 'encoded_by : iTunes v4.0'",
+ "decoy": false,
+ "member": "mp3_v22_encoded_by.mp3"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "media.rotate",
+ "expected": "90",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=320x240:rate=30000/1001 -t 0.3 -c:v libx264 -profile:v main -pix_fmt yuv420p plain2.mp4 && tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -display_rotation -90 -i plain2.mp4 -c copy h264_rotm90.mp4",
+ "oracle_cmd": "exiftool -s -Rotation h264_rotm90.mp4 -> 'Rotation : 90'; mediainfo Rotation 90.000 (legacy clockwise rotate tag)",
+ "decoy": false,
+ "member": "h264_rotm90.mp4"
+}

@@ -95,6 +95,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Wasm Up"
   },
+  "binary-reverse-engineering-day-17-encoded-configuration-recovery": {
+    "day": 17,
+    "dir": "day17/binary-decoder-ring",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Decoder Ring"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -191,6 +197,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Return to Sender"
   },
+  "metadata-forensics-day-17-hear-me-out": {
+    "day": 17,
+    "dir": "day17/metadata-hear-me-out",
+    "lane": "metadata-forensics",
+    "name": "🔎 Hear Me Out"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -286,6 +298,12 @@
     "dir": "day16/mobile-jni-boundary",
     "lane": "mobile-android",
     "name": "📱 JNI Boundary"
+  },
+  "mobile-android-day-17-name-collapse": {
+    "day": 17,
+    "dir": "day17/mobile-name-collapse",
+    "lane": "mobile-android",
+    "name": "📱 Name Collapse"
   },
   "read-the-rules": {
     "day": 1,
@@ -389,6 +407,12 @@
     "lane": "script-analysis",
     "name": "📜 Same Same, But Different"
   },
+  "script-analysis-day-17-download-graph": {
+    "day": 17,
+    "dir": "day17/scripting-fetch-quest",
+    "lane": "script-analysis",
+    "name": "📜 Fetch Quest"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -484,6 +508,12 @@
     "dir": "day16/warmups-dot-com",
     "lane": "warmups",
     "name": "👶 Dot Com"
+  },
+  "warmups-day-17": {
+    "day": 17,
+    "dir": "day17/warmups-bacon-bits",
+    "lane": "warmups",
+    "name": "👶 Bacon Bits"
   },
   "welcome-robots": {
     "day": 1,

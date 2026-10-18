@@ -1,0 +1,77 @@
+{
+ "kind": "provenance_facts",
+ "decoy": false,
+ "expected": {
+  "format": "pe",
+  "timestamp": "1684547556",
+  "timestamp_hex": "0x646827e4",
+  "timestamp_iso": "2023-05-20T01:52:36Z",
+  "linker_version": "14.36",
+  "pdb_path": "none",
+  "pdb_guid": "none",
+  "pdb_age": "none",
+  "has_rich": "true",
+  "rich_count": "11",
+  "rich_entries": [
+   [
+    147,
+    30729,
+    16
+   ],
+   [
+    257,
+    32420,
+    2
+   ],
+   [
+    253,
+    32420,
+    4
+   ],
+   [
+    261,
+    32420,
+    19
+   ],
+   [
+    260,
+    32420,
+    10
+   ],
+   [
+    259,
+    32420,
+    3
+   ],
+   [
+    257,
+    30795,
+    3
+   ],
+   [
+    1,
+    0,
+    69
+   ],
+   [
+    260,
+    32532,
+    1
+   ],
+   [
+    255,
+    32532,
+    1
+   ],
+   [
+    258,
+    32532,
+    1
+   ]
+  ],
+  "rich_xor_key": "0x31a563a3"
+ },
+ "generator_cmd": "sh tests/data/binary_fixtures/prov_gen.sh tests/data/binary_fixtures   # gcc 15.2 -g/-s + ld --build-id=sha1/md5/none, objcopy --remove-section .comment, rustc 1.93.1, setuptools cli-64.exe (MSVC), dotnet build (rsrc_pe_overlay), head -c 64",
+ "oracle_cmd": "bash tests/data/binary_fixtures/prov_oracle.sh tests/data/binary_fixtures/prov_pe_msvc_rich.bin   # readelf -nW / -p .comment / --debug-dump=info --dwarf-depth=1, go version; pefile for PE",
+ "note": "MSVC link 14.36 launcher: TimeDateStamp + Rich header (11 entries, xor key), no debug dir"
+}

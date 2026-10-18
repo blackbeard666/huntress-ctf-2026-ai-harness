@@ -1,0 +1,11 @@
+{
+ "family": "dart_facts",
+ "encoding": "none",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_facts": null,
+ "decoy": true,
+ "generator_cmd": "bash dart_gen.sh   # gcc -shared -nostdlib GNU-as .S exporting real _kDart* AOT snapshot dynsyms + snapshot.h header (magic 0xdcdcf5f5, kind 3, 32-hex version hash, features) + OneByteString-shaped HCFG; gcc C fake dartaotruntime (Dart_* API strings, version banner); dart2native append: pad 4096 + snapshot + u64 LE offset + dcdcf6f6 00000000; blob printf+gzip-trailer crc32, coreutils base64",
+ "oracle_cmd": "bash dart_oracle.sh dart_decoy_text.bin   # file -b: data (no executable container); trailer offset past EOF",
+ "note": "snapshot symbol names + a dart2native-looking trailer in a non-executable -> None"
+}

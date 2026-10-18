@@ -1,0 +1,8 @@
+{
+ "field": "library_ms.version",
+ "expected": "11",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/GENERATOR_lxml_builder.py.txt OUTDIR  -> library_two_locations.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/library_ms/library_two_locations__version.bin version -> 11",
+ "decoy": false,
+ "member": "Documents.library-ms"
+}

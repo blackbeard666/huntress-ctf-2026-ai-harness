@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_audio_codec_tag_hex",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"from PIL import Image; Image.new('RGB',(9,4)).save('jpg_renamed.m4a','JPEG')\" (Pillow, JPEG renamed .m4a)",
+ "oracle_cmd": "file -b jpg_renamed.m4a -> 'JPEG image data' (no audio stream)",
+ "decoy": true,
+ "member": "jpg_renamed.m4a"
+}

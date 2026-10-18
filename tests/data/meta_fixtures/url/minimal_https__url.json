@@ -1,0 +1,8 @@
+{
+ "field": "url.url",
+ "expected": "https://login.example-portal.net/auth?id=4417&r=1",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/url/GENERATOR_configparser_write.py.txt OUTDIR  -> minimal_https.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/url/ORACLE_configparser_read.py.txt tests/data/meta_fixtures/url/minimal_https__url.bin URL -> https://login.example-portal.net/auth?id=4417&r=1",
+ "decoy": false,
+ "member": "Portal Login.url"
+}

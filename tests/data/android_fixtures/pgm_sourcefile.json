@@ -1,0 +1,7 @@
+{
+ "entry": "mapping_restore_scan",
+ "expected": "ANS-4f0a6d2e8c1b9735",
+ "_why": "no mapping; class a declared in KeyStore.java, b in SecretVault.java (dex SourceFile); hint 'follow SecretVault -> KeyStore and ignore field SecretVault.c'",
+ "generator_cmd": "python3 tests/data/android_fixtures/pgm_src/gen_pgm.py sourcefile tests/data/android_fixtures/pgm_sourcefile.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile (mapping.txt in ProGuard/R8 format)",
+ "oracle_cmd": "tools/jadx/bin/jadx -q -d o tests/data/android_fixtures/pgm_sourcefile.apk; unzip -p tests/data/android_fixtures/pgm_sourcefile.apk classes.dex > sf.dex; python -I -c \"from androguard.core.dex import DEX; d=DEX(open('sf.dex','rb').read()); [print(c.get_name(), d.CM.get_string(c.source_file_idx)) for c in d.get_classes()]\"; grep -o 'k = \"[^\"]*\"' o/sources/com/huntress/mobile/d18/pg/a.java | cut -d'\"' -f2 | base64 -d  # ...pg/a; KeyStore.java; -> ANS-4f0a6d2e8c1b9735"
+}

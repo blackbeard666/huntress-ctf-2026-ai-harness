@@ -1,0 +1,8 @@
+{
+ "field": "media.odd_stream_index",
+ "expected": "none",
+ "generator_cmd": "python3 zipfile.ZipFile(w).writestr('a.txt','hi'), renamed voice.ogg",
+ "oracle_cmd": "file decoy_zip_as_ogg__odd_stream_index.bin -> Zip archive data (no media streams)",
+ "decoy": true,
+ "member": "voice.ogg"
+}

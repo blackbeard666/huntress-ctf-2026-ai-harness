@@ -1,0 +1,63 @@
+{
+ "family": "gfortran_facts",
+ "encoding": "raw",
+ "expected_offset": 12320,
+ "expected_config": {
+  "flag": "HCFG{fortran_module_data}",
+  "day": 18,
+  "lang": "fortran"
+ },
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "needed": [
+   "libgfortran.so.5",
+   "libc.so.6"
+  ],
+  "has_libgfortran_needed": "true",
+  "libgfortran_soname": "libgfortran.so.5",
+  "gfortran_imports": [
+   "_gfortran_set_args",
+   "_gfortran_set_options",
+   "_gfortran_st_write",
+   "_gfortran_st_write_done",
+   "_gfortran_transfer_integer_write"
+  ],
+  "has_main_program": "true",
+  "has_gfortran_runtime": "true",
+  "fortran_modules": [
+   "cfgstore"
+  ],
+  "module_procedures": [
+   "cfgstore::decode_blob",
+   "cfgstore::xor_byte"
+  ],
+  "module_procedures_mangled": [
+   "__cfgstore_MOD_decode_blob",
+   "__cfgstore_MOD_xor_byte"
+  ],
+  "module_variables": [
+   "cfgstore::cfg_len",
+   "cfgstore::hcfg_blob"
+  ],
+  "module_variables_mangled": [
+   "__cfgstore_MOD_cfg_len",
+   "__cfgstore_MOD_hcfg_blob"
+  ],
+  "common_blocks": [],
+  "common_blocks_mangled": [],
+  "external_procedures": [],
+  "dwarf_producer": "GNU Fortran2008 15.2.0",
+  "dwarf_language_code": 35,
+  "main_source": "mod.f90",
+  "program_name": "cfgmain",
+  "hcfg_symbol": "__cfgstore_MOD_hcfg_blob",
+  "hcfg_entity": "cfgstore::hcfg_blob",
+  "hcfg_section": ".data",
+  "hcfg_entity_kind": "module_variable"
+ },
+ "decoy": false,
+ "generator_cmd": "sh gfortran_gen.sh   # real GNU Fortran 15.2 (apt-get download gfortran-15-x86-64-linux-gnu libgfortran-15-dev libgfortran5; dpkg-deb -x tools/gfortran/root; gcc -B<f951 dir>), blob via python3 zlib.crc32, strip -s, gcc C decoy",
+ "oracle_cmd": "sh gfortran_oracle.sh gfortran_module_data.bin   # file -b, readelf -dW/-SW/-wi, nm -D --undefined-only, nm -S --defined-only, bytes.find(HCFG)+zlib.crc32",
+ "note": "real gfortran 15.2 -g -O1: module cfgstore, HCFG as integer(int8) module array (raw, .data)"
+}

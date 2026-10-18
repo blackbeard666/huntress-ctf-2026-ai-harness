@@ -1,0 +1,9 @@
+{
+ "codec": "radix5-w3-ascii",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "303 410 344 401 112 434 421 424 412 112 400 401 344 421 400 410 420 403 112 431 404 410 430 112 434 342 424 414 432 422 113 112 314 421 112 430 421 413 433 401 134 112 430 432 343 414 410 431 112 431 404 410 430 112 401 440 342 344 431 112 342 420 430 434 401 424 112 431 421 112 431 404 401 112 241 342 414 401 112 302 342 430 431 401 424 213 112 342 414 343 401 424 140 402 342 413 344 421 420 140 202 200",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c \"import sys,numpy;b=sys.stdin.buffer.read();r,w,inner,sep=int(sys.argv[1]),int(sys.argv[2]),sys.argv[3],sys.argv[4];v=[int(c,16) for c in b.hex()] if inner=='hex' else list(b);print(sep.join(numpy.base_repr(x,r).zfill(w) for x in v),end='')\" 5 3 ascii ' '  # numpy.base_repr writer",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -e 'local $/; my $t=<STDIN>; $t=~s/[^0-9]+//g; my $s=\"\"; for my $g ($t=~/(.{3})/g) { my $v=0; $v=$v*5+$_ for split //, $g; $s.=chr $v } print $s'  # independent Perl base-5 reader, values as char codes",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

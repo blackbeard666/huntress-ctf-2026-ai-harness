@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_audio_codec_tag_hex",
+ "expected": "0x0001",
+ "generator_cmd": "python3 -I -c \"import wave,math,struct; w=wave.open('pyw.wav','wb'); w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100); w.writeframes(b''.join(struct.pack('<hh',int(8000*math.sin(i/7)),0) for i in range(55125))); w.close()\" (stdlib wave writer)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i pyw.wav -> 'pcm_s16le ([1][0][0][0] / 0x0001)'",
+ "decoy": false,
+ "member": "pyw.wav"
+}

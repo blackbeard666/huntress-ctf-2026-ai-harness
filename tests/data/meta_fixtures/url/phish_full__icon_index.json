@@ -1,0 +1,8 @@
+{
+ "field": "url.icon_index",
+ "expected": "13",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/url/GENERATOR_configparser_write.py.txt OUTDIR  -> phish_full.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/url/ORACLE_configparser_read.py.txt tests/data/meta_fixtures/url/phish_full__icon_index.bin IconIndex -> 13",
+ "decoy": false,
+ "member": "Invoice_2026.url"
+}

@@ -1,0 +1,21 @@
+{
+ "entry": "observed_fetches",
+ "file": "nl_sysmon_winlogbeat.events.json",
+ "expected": {
+  "values": [
+   "192.0.2.44",
+   "203.0.113.77",
+   "cdn.stage-two.example",
+   "pay.loader-x.example"
+  ]
+ },
+ "expected_images": {
+  "cdn.stage-two.example": "C:\\Users\\bob\\AppData\\Roaming\\upd.exe",
+  "203.0.113.77": "C:\\Users\\bob\\AppData\\Roaming\\upd.exe",
+  "pay.loader-x.example": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+  "192.0.2.44": "C:\\Windows\\System32\\mshta.exe"
+ },
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/netlogs/netlog_gen.py  (json.dumps winlogbeat NDJSON (winlog.event_id + winlog.event_data))",
+ "oracle_cmd": "jq -c -s '[.[] | select(.winlog.event_id==3 or .winlog.event_id==22) | .winlog.event_data | {(if .QueryName then .QueryName elif ((.DestinationHostname // \"-\") | test(\"^-?$\")) then .DestinationIp else .DestinationHostname end): .Image}] | add' nl_sysmon_winlogbeat.events.json"
+}

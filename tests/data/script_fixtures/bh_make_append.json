@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=makefile|role=downloader|verdict=malicious|attack=T1105|adapter=append_recipe|stage_count=2|steps=fetch_stage,chmod_stage|campaign_id=MAK-90ab12cd|url=https://make-90ab12cd.example.invalid/stage",
+ "decoy": false,
+ "host": "make",
+ "generator_cmd": "printf %s \"$PLAN\" | base64 -w0, split in thirds over `DESCRIPTOR_90AB12CD :=` / `+=` / `override .. +=`; TAB recipe `echo $(..) \\ | tr -d \" \" | base64 -d \\ | bash`",
+ "oracle_cmd": "make -s -f tests/data/script_fixtures/bh_make_append.mk --eval 'p:;@printf %s \"$(DESCRIPTOR_90AB12CD)\"' p | tr -d ' ' | base64 -d"
+}

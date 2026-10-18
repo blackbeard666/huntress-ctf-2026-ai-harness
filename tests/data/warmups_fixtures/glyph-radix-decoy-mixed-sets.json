@@ -1,0 +1,10 @@
+{
+ "codec": "glyph-radix*",
+ "plain": null,
+ "encoded": "⚂⚁⚀ ♕⚅⚃ ⚂⚄⚃ ⚂⚄⚅ ⚀⚅⚂ ⚃⚁⚅ ⚃⚀⚃ ⚃⚁⚀ ⚂⚅⚅ ⚀⚅⚂ ⚂⚄⚄ ⚂⚄⚅ ⚂⚄⚃ ⚃⚀⚃ ⚂⚄⚄ ⚂⚅⚃ ⚃⚀⚂ ⚂⚅⚁ ⚀⚅⚂ ⚃⚁⚂ ⚂⚅⚂ ⚂⚅⚃ ⚃⚁⚁ ⚀⚅⚂ ⚃⚁⚅ ⚂⚄⚁ ⚃⚁⚀ ⚃⚀⚁ ⚃⚁⚃ ⚃⚀⚄ ⚀⚅⚃ ⚀⚅⚂ ⚂⚂⚀ ⚃⚀⚃ ⚀⚅⚂ ⚃⚁⚁ ⚃⚀⚃ ⚃⚀⚀ ⚃⚁⚄ ⚂⚄⚅ ⚁⚁⚂ ⚀⚅⚂ ⚃⚁⚁ ⚃⚁⚃ ⚂⚄⚂ ⚃⚀⚁ ⚂⚅⚃ ⚃⚁⚂ ⚀⚅⚂ ⚃⚁⚂ ⚂⚅⚂ ⚂⚅⚃ ⚃⚁⚁ ⚀⚅⚂ ⚂⚄⚅ ⚃⚂⚀ ⚂⚄⚁ ⚂⚄⚃ ⚃⚁⚂ ⚀⚅⚂ ⚂⚄⚁ ⚃⚀⚂ ⚃⚁⚁ ⚃⚁⚅ ⚂⚄⚅ ⚃⚁⚀ ⚀⚅⚂ ⚃⚁⚂ ⚃⚀⚃ ⚀⚅⚂ ⚃⚁⚂ ⚂⚅⚂ ⚂⚄⚅ ⚀⚅⚂ ⚁⚅⚅ ⚂⚄⚁ ⚃⚀⚁ ⚂⚄⚅ ⚀⚅⚂ ⚂⚀⚅ ⚂⚄⚁ ⚃⚁⚁ ⚃⚁⚂ ⚂⚄⚅ ⚃⚁⚀ ⚁⚃⚄ ⚀⚅⚂ ⚂⚄⚁ ⚃⚀⚁ ⚂⚄⚂ ⚂⚄⚅ ⚃⚁⚀ ⚁⚁⚃ ⚂⚅⚀ ⚂⚄⚁ ⚃⚀⚀ ⚂⚄⚃ ⚃⚀⚃ ⚃⚀⚂ ⚁⚁⚃ ⚁⚂⚄ ⚁⚂⚂",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "glyph-dice-w3-ascii-amber encoded with its 2nd group's first die replaced by U+2655 (white queen): glyphs from two different sets",
+ "oracle_cmd": "perl base-6 reader as in glyph-dice-w3-ascii-amber -> exit 255 'glyph outside run'",
+ "oracle_plain": null
+}

@@ -1,0 +1,24 @@
+{
+ "family": "dart_facts",
+ "encoding": "none",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "has_dart_runtime": "false",
+  "is_dart_aot": "false",
+  "packaging": "none",
+  "snapshot_offset": "none",
+  "snapshot_symbols": [],
+  "snapshot_hash": "none",
+  "snapshot_kind": "none",
+  "dart_version": "none",
+  "compressed_pointers": "none",
+  "hcfg_symbol": "none"
+ },
+ "decoy": true,
+ "generator_cmd": "bash dart_gen.sh   # gcc -shared -nostdlib GNU-as .S exporting real _kDart* AOT snapshot dynsyms + snapshot.h header (magic 0xdcdcf5f5, kind 3, 32-hex version hash, features) + OneByteString-shaped HCFG; gcc C fake dartaotruntime (Dart_* API strings, version banner); dart2native append: pad 4096 + snapshot + u64 LE offset + dcdcf6f6 00000000; blob printf+gzip-trailer crc32, coreutils base64",
+ "oracle_cmd": "bash dart_oracle.sh dart_decoy_cstrings.bin   # readelf --dyn-syms: no _kDart*; no trailer; no banner; grep: no HCFG/SENGR",
+ "note": "plain C, every Dart cue (_kDart* names, Dart_* API, features, version) only as string literals -> runtime false, all fields absent"
+}

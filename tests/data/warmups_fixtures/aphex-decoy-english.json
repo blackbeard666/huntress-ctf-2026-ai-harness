@@ -1,0 +1,10 @@
+{
+ "codec": "aphex*",
+ "plain": null,
+ "encoded": "hide deep in good mood, feed a bold calm hope",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written English line whose words use only the letters a-p, every word even length",
+ "oracle_cmd": "printf %s \"$encoded\" | tr -d ' ,' | tr 'a-p' '0-9a-f' | xxd -r -p | iconv -f utf-8 -t utf-8  # -> iconv: illegal input sequence at position 4: the a-p hex reading is not UTF-8 text, the line is plain English",
+ "oracle_plain": "hide deep in good mood, feed a bold calm hope"
+}

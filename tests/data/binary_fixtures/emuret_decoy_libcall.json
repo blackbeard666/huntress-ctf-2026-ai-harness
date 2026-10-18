@@ -1,0 +1,12 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "recover_code": null
+ },
+ "decoy": true,
+ "generator_cmd": "bash emuret_gen.sh decoy_libcall",
+ "oracle_cmd": "bash emuret_oracle.sh emuret_decoy_libcall.bin   # runs the binary (prints recover_code()) natively / qemu-aarch64 -L /usr/aarch64-linux-gnu; readelf -sW for the FUNC symbol; objdump -d for calls",
+ "note": "lib.binary.emulate_return_value(data, 'recover_code') == expected_facts.recover_code; recover_code calls getpid@plt (libc): emulation refuses -> None (null); no HCFG blob"
+}

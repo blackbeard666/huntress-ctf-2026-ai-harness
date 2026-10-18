@@ -1,0 +1,57 @@
+{
+ "family": "gfortran_facts",
+ "encoding": "raw",
+ "expected_offset": 12324,
+ "expected_config": {
+  "flag": "HCFG{common_block_data}",
+  "day": 18
+ },
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "needed": [
+   "libgfortran.so.5",
+   "libc.so.6"
+  ],
+  "has_libgfortran_needed": "true",
+  "libgfortran_soname": "libgfortran.so.5",
+  "gfortran_imports": [
+   "_gfortran_set_args",
+   "_gfortran_set_options",
+   "_gfortran_st_write",
+   "_gfortran_st_write_done",
+   "_gfortran_transfer_integer_write"
+  ],
+  "has_main_program": "true",
+  "has_gfortran_runtime": "true",
+  "fortran_modules": [],
+  "module_procedures": [],
+  "module_procedures_mangled": [],
+  "module_variables": [],
+  "module_variables_mangled": [],
+  "common_blocks": [
+   "cfgblk"
+  ],
+  "common_blocks_mangled": [
+   "cfgblk_"
+  ],
+  "external_procedures": [
+   "unmask"
+  ],
+  "dwarf_producer": "GNU Fortran2008 15.2.0",
+  "dwarf_language_code": 35,
+  "main_source": "com.f",
+  "program_name": "cfgcom",
+  "hcfg_symbol": "cfgblk_",
+  "hcfg_entity": "cfgblk",
+  "hcfg_section": ".data",
+  "hcfg_entity_kind": "common_block",
+  "block_data": [
+   "cfginit"
+  ]
+ },
+ "decoy": false,
+ "generator_cmd": "sh gfortran_gen.sh   # real GNU Fortran 15.2 (apt-get download gfortran-15-x86-64-linux-gnu libgfortran-15-dev libgfortran5; dpkg-deb -x tools/gfortran/root; gcc -B<f951 dir>), blob via python3 zlib.crc32, strip -s, gcc C decoy",
+ "oracle_cmd": "sh gfortran_oracle.sh gfortran_common_block.bin   # file -b, readelf -dW/-SW/-wi, nm -D --undefined-only, nm -S --defined-only, bytes.find(HCFG)+zlib.crc32",
+ "note": "real gfortran 15.2 -g -O0 fixed-form: COMMON /cfgblk/ initialised by BLOCK DATA cfginit (DATA stmt), external subroutine unmask"
+}

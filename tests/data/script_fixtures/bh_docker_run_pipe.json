@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=dockerfile|role=downloader|verdict=malicious|attack=T1105|adapter=run_pipe_shell|stage_count=2|steps=fetch_stage,exec_stage|campaign_id=DOC-5e1f00d2|url=https://docker-5e1f00d2a1.example.invalid/stage|file_path=/tmp/huntress-docker/.5e1f00d2.stage",
+ "decoy": false,
+ "host": "docker",
+ "generator_cmd": "printf %s \"$PLAN\" | gzip -9n | base64 -w0 | fold -w 56 | sed 's/$/\\\\/'  (GNU gzip+coreutils; wrapped as `RUN .. echo \\` continuation lines piped `| base64 -d | gunzip | sh`)",
+ "oracle_cmd": "sed -e :a -e '/\\\\$/{N;s/\\\\\\n//;ba}' tests/data/script_fixtures/bh_docker_run_pipe.Dockerfile | sed -n 's/^RUN apk add --no-cache curl && *//p' | sed 's/| sh$//' | bash  (Dockerfile `\\` join, RUN pipeline run by bash with the sh sink dropped)"
+}

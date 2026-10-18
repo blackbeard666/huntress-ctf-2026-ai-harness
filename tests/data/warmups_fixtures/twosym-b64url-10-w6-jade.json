@@ -1,0 +1,10 @@
+{
+ "codec": "twosym base64url-index, swapped polarity",
+ "decoder": "lib.warmups_codecs.twosym_index_dec (also twosym_dec)",
+ "plain": "Submit this exact answer to the Game Master: jade-heron-42 ~~>>??",
+ "encoded": "101011 001000 101010 011101 100100 101001 011010 001011 110111 111000 101110 010111 100101 101000 110011 011111 100110 101000 011110 011110 100111 001000 101111 011111 100111 101001 000110 001100 100010 001001 101010 001101 110111 111000 101110 010000 110111 111000 101110 010111 100110 101101 111110 111000 100111 101001 001010 011010 110111 111011 001010 011110 100011 001000 101110 011010 100011 011100 010111 011111 100101 011001 111010 011011 100110 101101 001010 010111 100110 101000 110110 010000 100100 011101 001011 001011 110011 011101 111110 000001 100000 011100 000111 000001 110000 001100 000011",
+ "generator_cmd": "printf %s \"$plain\" | {base32 -w0 | base64 -w0 | basenc --base64url -w0 | od -An -v -to1} | tr -d \"= \\n\" | awk -v al=\"b64url\" -v w=6 -v sep=\" \" \"{for(i=1;i<=length(\\$0);i++){v=index(al,substr(\\$0,i,1))-1;b=\\\"\\\";for(j=0;j<w;j++){b=(v%2)b;v=int(v/2)};printf \\\"%s%s\\\",(i>1?sep:\\\"\\\"),b}}\" | tr 01 10  # coreutils encoder -> awk alphabet index -> fixed-width binary -> symbols   [source plain: 'Submit this exact answer to the Game Master: jade-heron-42 ~~>>??']",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/twosym_index_cyberchef.mjs 1 0 6 b64url  # CyberChef From Binary (Byte Length=6) -> alphabet index -> From Base32/From Base64/From Octal",
+ "oracle_plain": "Submit this exact answer to the Game Master: jade-heron-42 ~~>>??",
+ "expected": "match"
+}

@@ -1,0 +1,54 @@
+{
+  "attempt_id": "synthetic",
+  "mode": "single_solve",
+  "questions": [
+    {
+      "id": "d01_analysis_elf_type",
+      "question": "Follow the house rules: report the ELF e_type exactly as readelf prints it.",
+      "artifact": "evidence.zip",
+      "answer_format": {
+        "kind": "pattern",
+        "syntax": "ELF e_type symbolic constant, readelf label, or equivalent decimal or hexadecimal code"
+      },
+      "normalization": "exact"
+    },
+    {
+      "id": "d01_analysis_has_symtab",
+      "question": "What is the exact analysis has symtab value for field d01_analysis_has_symtab in the delivered evidence set?",
+      "artifact": "evidence.zip",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "true",
+          "false"
+        ]
+      },
+      "normalization": "exact"
+    },
+    {
+      "id": "d13_analysis_hcfg_storage",
+      "question": "In evidence.zip, use d13 members. Use the following rules in order: `upx_packed` if the HCFG appears only after UPX unpacking; zlib if a zlib stream inflates to HCFG; base64 if a printable Base64 carrier decodes to HCFG, otherwise raw. Answer with one listed token.",
+      "artifact": "evidence.zip",
+      "answer_format": {
+        "kind": "enum",
+        "accepted_values": [
+          "raw",
+          "base64",
+          "zlib",
+          "upx_packed"
+        ],
+        "syntax": "exact token"
+      },
+      "normalization": "case_insensitive"
+    },
+    {
+      "id": "d99_new_field",
+      "question": "new",
+      "answer_format": {
+        "kind": "exact_text"
+      },
+      "normalization": "exact"
+    }
+  ],
+  "extra_new": 1
+}

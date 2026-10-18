@@ -1,0 +1,23 @@
+{
+ "kind": "provenance_facts",
+ "decoy": false,
+ "expected": {
+  "format": "elf",
+  "build_id": "df53bf9ed62bf68f68179495b28b1d0619d9d4c0",
+  "compiler": "GCC: (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "comment_strings": [
+   "GCC: (Ubuntu 15.2.0-16ubuntu1) 15.2.0"
+  ],
+  "gcc_version": "15.2.0",
+  "rustc_version": "none",
+  "go_version": "none",
+  "has_dwarf": "true",
+  "dwarf_producer": "GNU C23 15.2.0 -D_FORTIFY_SOURCE=3 -mtune=generic -march=x86-64 -g -O1 -fasynchronous-unwind-tables -fstack-protector-strong -fstack-clash-protection -fcf-protection -fzero-init-padding-bits=all",
+  "dwarf_language_num": "29",
+  "dwarf_comp_dir": "/home/testpwn/huntress-2026/.run/tmp/tmp.NaucKq0bBN",
+  "dwarf_name": "hello.c"
+ },
+ "generator_cmd": "sh tests/data/binary_fixtures/prov_gen.sh tests/data/binary_fixtures   # gcc 15.2 -g/-s + ld --build-id=sha1/md5/none, objcopy --remove-section .comment, rustc 1.93.1, setuptools cli-64.exe (MSVC), dotnet build (rsrc_pe_overlay), head -c 64",
+ "oracle_cmd": "bash tests/data/binary_fixtures/prov_oracle.sh tests/data/binary_fixtures/prov_gcc_g_sha1.bin   # readelf -nW / -p .comment / --debug-dump=info --dwarf-depth=1, go version; pefile for PE",
+ "note": "gcc -g -O1 -Wl,--build-id=sha1: 20-byte NT_GNU_BUILD_ID, .comment GCC banner, DWARF 5 first CU (GNU C23 producer, DW_LANG_C11=29, comp_dir = the mktemp build dir)"
+}

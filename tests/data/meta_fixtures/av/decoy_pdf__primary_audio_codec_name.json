@@ -1,0 +1,8 @@
+{
+ "field": "av.primary_audio_codec_name",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"open('fake.pdf','wb').write(b'%PDF-1.4\\n...%%EOF\\n')\" (minimal PDF)",
+ "oracle_cmd": "file -b fake.pdf -> 'PDF document, version 1.4' (no audio stream)",
+ "decoy": true,
+ "member": "fake.pdf"
+}

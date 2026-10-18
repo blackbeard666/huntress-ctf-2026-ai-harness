@@ -1,0 +1,8 @@
+{
+ "field": "media.tag_title",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"from PIL import Image; Image.new('RGB',(4,4),(9,9,9)).save('p.png')\"; renamed song.mp3",
+ "oracle_cmd": "file p.png -> PNG image data, 4 x 4, 8-bit/color RGB (no audio container, no tags)",
+ "decoy": true,
+ "member": "song.mp3"
+}

@@ -1,0 +1,49 @@
+{
+ "family": "dart_facts",
+ "encoding": "base64",
+ "expected_offset": 8888,
+ "expected_config": {
+  "flag": "HCFG{dart_standalone_b64}",
+  "day": 18
+ },
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "has_dart_runtime": "true",
+  "is_dart_aot": "true",
+  "packaging": "standalone",
+  "snapshot_offset": 0,
+  "snapshot_size": 16312,
+  "snapshot_symbols": [
+   "_kDartIsolateSnapshotBss",
+   "_kDartIsolateSnapshotData",
+   "_kDartIsolateSnapshotInstructions",
+   "_kDartSnapshotBuildId",
+   "_kDartVmSnapshotBss",
+   "_kDartVmSnapshotData",
+   "_kDartVmSnapshotInstructions"
+  ],
+  "vm_snapshot_data_offset": 8448,
+  "vm_snapshot_instructions_offset": 4608,
+  "isolate_snapshot_data_offset": 8704,
+  "isolate_snapshot_instructions_offset": 4864,
+  "snapshot_build_id": "60cded6644d7c4c740122db3b66af12fb2f8aa4c",
+  "snapshot_hash": "8f0b6a1e2c3d4e5f60718293a4b5c6d7",
+  "snapshot_kind": "full-aot",
+  "snapshot_features": "product no-code_comments no-dwarf_stack_traces_mode x64 linux null-safety",
+  "snapshot_arch": "x64",
+  "compressed_pointers": "false",
+  "null_safety": "true",
+  "product_mode": "true",
+  "dart_version": "3.7.0-209.1.beta",
+  "dart_channel": "beta",
+  "dart_target": "linux_x64",
+  "hcfg_symbol": "_kDartIsolateSnapshotData",
+  "hcfg_section": ".rodata",
+  "hcfg_in_snapshot": "true"
+ },
+ "decoy": false,
+ "generator_cmd": "bash dart_gen.sh   # gcc -shared -nostdlib GNU-as .S exporting real _kDart* AOT snapshot dynsyms + snapshot.h header (magic 0xdcdcf5f5, kind 3, 32-hex version hash, features) + OneByteString-shaped HCFG; gcc C fake dartaotruntime (Dart_* API strings, version banner); dart2native append: pad 4096 + snapshot + u64 LE offset + dcdcf6f6 00000000; blob printf+gzip-trailer crc32, coreutils base64",
+ "oracle_cmd": "bash dart_oracle.sh dart_standalone_b64.bin   # file -b, tail -c16|od (trailer), dd + readelf -W --dyn-syms/-S/-n, od/dd at the symbol file offset (snapshot header), strings -a (banner), grep -obUaP HCFG/SENGR + base64 -d",
+ "note": "standalone ELF exporting the snapshot symbols itself, base64 (SENGR...) OneByteString, no compressed pointers, Dart 3.7.0 beta"
+}

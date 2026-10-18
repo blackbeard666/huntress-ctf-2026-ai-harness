@@ -1,0 +1,9 @@
+{
+ "codec": "glyph-chess-w2-ascii",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-otter-88",
+ "encoded": "♚♚,♜♝,♜♗,♜♙,♖♜,♝♟,♝♗,♝♚,♜♟,♖♜,♜♘,♜♙,♜♗,♝♗,♜♘,♜♝,♝♖,♜♛,♖♜,♝♜,♜♜,♜♝,♝♛,♖♜,♝♟,♜♕,♝♚,♝♕,♝♝,♝♘,♖♝,♖♜,♛♔,♝♗,♖♜,♝♛,♝♗,♝♔,♝♞,♜♙,♗♜,♖♜,♝♛,♝♝,♜♖,♝♕,♜♝,♝♜,♖♜,♝♜,♜♜,♜♝,♝♛,♖♜,♜♙,♞♔,♜♕,♜♗,♝♜,♖♜,♜♕,♝♖,♝♛,♝♟,♜♙,♝♚,♖♜,♝♜,♝♗,♖♜,♝♜,♜♜,♜♙,♖♜,♙♟,♜♕,♝♕,♜♙,♖♜,♚♙,♜♕,♝♛,♝♜,♜♙,♝♚,♘♞,♖♜,♜♗,♝♔,♝♗,♝♞,♜♙,♝♚,♗♝,♝♗,♝♜,♝♜,♜♙,♝♚,♗♝,♘♜,♘♜",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c \"import sys,numpy;b=sys.stdin.buffer.read();r,w,inner,sep,cp=int(sys.argv[1]),int(sys.argv[2]),sys.argv[3],sys.argv[4],int(sys.argv[5],16);v=[int(c,16) for c in b.hex()] if inner=='hex' else list(b);print(sep.join(''.join(chr(cp+int(d,r)) for d in numpy.base_repr(x,r).zfill(w)) for x in v),end='')\" 12 2 ascii ',' 2654  # numpy.base_repr writer, digit d -> chr(U+2654 + d): chess U+2654-265F = 0-11",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -CS -e 'local $/; my ($r,$w,$in,$cp)=@ARGV; my $t=<STDIN>; $t=~s/[\\s,;|:\\/_.-]+//g; my @v; for my $g ($t=~/(.{$w})/g) { my $v=0; for (split //, $g) { my $d=ord($_)-hex($cp); die \"glyph outside run\\n\" if $d<0 || $d>=$r; $v=$v*$r+$d } push @v,$v } my $b = $in eq \"hex\" ? pack(\"H*\", join(\"\", map { sprintf \"%x\", $_ } @v)) : pack(\"C*\", @v); binmode STDOUT; print $b' 12 2 ascii 2654  # independent Perl reader: ord(glyph) - U+2654 as base-12 digits",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-otter-88",
+ "expected": "match"
+}

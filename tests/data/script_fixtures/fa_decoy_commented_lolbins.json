@@ -1,0 +1,9 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "expected_fetch_attack": [],
+ "expected_fetch_attack_answer": null,
+ "note": "every LOLBin line is a rem/:: comment and there is no plan: no site, no id, no plain",
+ "generator_cmd": "printf by hand (see sibling .bat): rem/:: comment lines naming certutil/bitsadmin/msiexec",
+ "oracle_cmd": "grep -vcE '^(rem|::|@echo|echo)' fa_decoy_commented_lolbins.bat   # 0 executable lines"
+}

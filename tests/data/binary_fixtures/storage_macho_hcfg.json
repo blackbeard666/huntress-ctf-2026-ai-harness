@@ -1,0 +1,13 @@
+{
+ "case": "macho_hcfg",
+ "expected_storage": "raw_hcfg_section",
+ "expected_config": {
+  "campaign": "ST-13",
+  "domain": "node-13.storage.example.invalid",
+  "mutex": "Global\\HSTOR13"
+ },
+ "key": 225,
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/storage_gen.sh storage_macho_hcfg.bin macho_hcfg '{\"campaign\":\"ST-13\",\"domain\":\"node-13.storage.example.invalid\",\"mutex\":\"Global\\\\HSTOR13\"}' 225",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/storage_oracle.py storage_macho_hcfg.bin"
+}

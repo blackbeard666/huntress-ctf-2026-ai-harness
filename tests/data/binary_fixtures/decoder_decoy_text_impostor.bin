@@ -1,0 +1,1 @@
+HCFG decode_config xor 0x5a lea rdx,[rip+0xeb7] # 2020 <hcfg_blob>

@@ -1,0 +1,9 @@
+{
+ "codec": "address",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "encoded": "4e69:6365:2077:6f72:6b20:6465:636f:6469 6e67:2074:6869:7320:7761:726d:7570:2120 546f:2073:6f6c:7665:2c20:7375:626d:6974 2074:6869:7320:6578:6163:7420:616e:7377 6572:2074:6f20:7468:6520:4761:6d65:204d 6173:7465:723a:2063:6f62:616c:742d:6865 726f:6e2d:3737::",
+ "generator_cmd": "python3 -I -c 'import socket,sys;b=sys.argv[1].encode();b+=bytes(-len(b)%16);print(\" \".join(socket.inet_ntop(socket.AF_INET6,b[i:i+16]) for i in range(0,len(b),16)))' \"$plain\"  # glibc inet_ntop(AF_INET6): RFC 5952 '::' compresses the NUL padding",
+ "oracle_cmd": "perl -e 'use Socket qw(inet_pton AF_INET6); print join(\"\", map { inet_pton(AF_INET6,$_) } split \" \", shift) =~ s/\\0+$//r' \"$encoded\"  # Perl Socket inet_pton(AF_INET6) per address",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "expected": "match"
+}

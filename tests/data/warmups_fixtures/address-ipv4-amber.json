@@ -1,0 +1,9 @@
+{
+ "codec": "address",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "78.105.99.101 32.119.111.114 107.32.100.101 99.111.100.105 110.103.32.116 104.105.115.32 119.97.114.109 117.112.33.32 84.111.32.115 111.108.118.101 44.32.115.117 98.109.105.116 32.116.104.105 115.32.101.120 97.99.116.32 97.110.115.119 101.114.32.116 111.32.116.104 101.32.71.97 109.101.32.77 97.115.116.101 114.58.32.97 109.98.101.114 45.102.97.108 99.111.110.45 52.50.0.0",
+ "generator_cmd": "python3 -I -c 'import socket,sys;b=sys.argv[1].encode();b+=bytes(-len(b)%4);print(\" \".join(socket.inet_ntoa(b[i:i+4]) for i in range(0,len(b),4)))' \"$plain\"  # glibc inet_ntoa per NUL-padded 4-byte chunk",
+ "oracle_cmd": "perl -e 'use Socket; print join(\"\", map { inet_aton($_) } split \" \", shift) =~ s/\\0+$//r' \"$encoded\"  # Perl Socket inet_aton per dotted quad, trailing NULs stripped",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

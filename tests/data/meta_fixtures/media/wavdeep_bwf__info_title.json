@@ -1,0 +1,7 @@
+{
+ "field": "media.info_title",
+ "expected": "Huntress audio evidence 3f9a1c0b7d2e",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/media/gen_wav_deep.py <out> (stdlib wave + struct BWF/INFO/cue/iXML writer)",
+ "oracle_cmd": "exiftool -j -BWF_UMID -NumberOfSamples -XML:all -Description -Originator -OriginatorReference -TimeReference -Title bwf.bin  (RIFF:Title)",
+ "decoy": false
+}

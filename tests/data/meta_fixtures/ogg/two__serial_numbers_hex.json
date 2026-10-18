@@ -1,0 +1,8 @@
+{
+ "field": "ogg.serial_numbers_hex",
+ "expected": "[\"0xe180224f\",\"0xbdabb39c\"]",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -loglevel error -f lavfi -i sine=f=440:d=0.3:r=44100 -f lavfi -i sine=f=880:d=0.5:r=32000 -map 0 -map 1 -c:a libvorbis two.ogg (ffmpeg 7.0.2 static, 2 logical streams)",
+ "oracle_cmd": ".venv/bin/python -I -c \"import mutagen.ogg as g; fh=open('two.ogg','rb'); ps=[]\\nwhile True:\\n try: ps.append(g.OggPage(fh))\\n except Exception: break\\ns=[]\\n[s.append(p.serial) for p in ps if p.serial not in s]; print(['0x%08x'%x for x in s])\" -> ['0xe180224f', '0xbdabb39c']",
+ "decoy": false,
+ "member": "two.ogg"
+}

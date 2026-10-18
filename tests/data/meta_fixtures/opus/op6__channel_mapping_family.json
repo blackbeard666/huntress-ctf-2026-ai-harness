@@ -1,0 +1,8 @@
+{
+ "field": "opus.channel_mapping_family",
+ "expected": "1",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -loglevel error -f lavfi -i sine=f=440:d=0.3:r=48000 -ac 6 -c:a libopus -mapping_family 1 op6.opus (ffmpeg 7.0.2 static)",
+ "oracle_cmd": ".venv/bin/python -I -c \"import struct, mutagen.ogg as g; p=g.OggPage(open('op6.opus','rb')).packets[0]; print(struct.unpack('<BBHIhB', p[8:19]))\" -> (1, 6, 312, 48000, 0, 1)",
+ "decoy": false,
+ "member": "op6.opus"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": "ANS-71f2c8e04d9b3a56",
+ "decoy": false,
+ "generator_cmd": "tests/data/android_fixtures/gen_init_array.sh tests/data/android_fixtures  # aarch64-linux-gnu-gcc -shared -fPIC -O2 -s -DBLOB=<perl-encoded token> native_src/init_array_decrypt.c (constructor xor 0xa1-7i reached only through .init_array (R_AARCH64_RELATIVE); stripped); zip -qX -r <name>.apk assets lib",
+ "oracle_cmd": "unzip initarr_xor_arm64_stripped.apk 'lib/*' && aarch64-linux-gnu-gcc -o ha native_src/harness.c -ldl && qemu-aarch64 -L /usr/aarch64-linux-gnu ./ha lib/arm64-v8a/libvault.so Java_com_huntress_arena_Vault_reveal  # the real dynamic loader runs .init_array on dlopen, then the export is called with a fake JNIEnv: 'NewStringUTF ANS-71f2c8e04d9b3a56'"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "xorkey:zebra-hex(fragment)",
+ "plain": "t this exact answer to the Game Master: jade-badger-71",
+ "encoded": "0e45161a080945070a00191142130f09120700410e0a4206091f4525130c1f452f13120e00104841100406174c180406150408485543",
+ "key": "zebra",
+ "generator_cmd": "printf '%s' \"$plain\" | perl -0777 -ne 'my $k=$ENV{key}; my $r=$k x (length($_)/length($k)+1); print $_ ^ substr($r,0,length($_))' | xxd -p | tr -d '\\n'  # perl string XOR, key repeated",
+ "oracle_cmd": "python3 -c \"import os,binascii;from Crypto.Util.strxor import strxor;c=binascii.unhexlify(os.environ['encoded']);k=os.environ['key'].encode();print(strxor(c,(k*len(c))[:len(c)]).decode())\"  # pycryptodome strxor",
+ "oracle_plain": "t this exact answer to the Game Master: jade-badger-71",
+ "expected": "match"
+}

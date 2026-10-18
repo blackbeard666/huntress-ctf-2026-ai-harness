@@ -1,0 +1,23 @@
+{
+ "kind": "provenance_facts",
+ "decoy": false,
+ "expected": {
+  "format": "elf",
+  "build_id": "5163fab42e2e76610b1ffc071f07eb96",
+  "compiler": "GCC: (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "comment_strings": [
+   "GCC: (Ubuntu 15.2.0-16ubuntu1) 15.2.0"
+  ],
+  "gcc_version": "15.2.0",
+  "rustc_version": "none",
+  "go_version": "none",
+  "has_dwarf": "false",
+  "dwarf_producer": "none",
+  "dwarf_language_num": "none",
+  "dwarf_comp_dir": "none",
+  "dwarf_name": "none"
+ },
+ "generator_cmd": "sh tests/data/binary_fixtures/prov_gen.sh tests/data/binary_fixtures   # gcc 15.2 -g/-s + ld --build-id=sha1/md5/none, objcopy --remove-section .comment, rustc 1.93.1, setuptools cli-64.exe (MSVC), dotnet build (rsrc_pe_overlay), head -c 64",
+ "oracle_cmd": "bash tests/data/binary_fixtures/prov_oracle.sh tests/data/binary_fixtures/prov_gcc_md5_stripped.bin   # readelf -nW / -p .comment / --debug-dump=info --dwarf-depth=1, go version; pefile for PE",
+ "note": "gcc -O2 -s -Wl,--build-id=md5: 16-byte build-id, .comment kept, no DWARF"
+}

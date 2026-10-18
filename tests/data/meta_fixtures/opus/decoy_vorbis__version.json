@@ -1,0 +1,8 @@
+{
+ "field": "opus.version",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -loglevel error -f lavfi -i sine=f=440:d=0.6:r=22050 -ac 1 -c:a libvorbis vb.ogg (ffmpeg 7.0.2 static) ; renamed vb.ogg -> vb.opus",
+ "oracle_cmd": "bin/exiftool -j -n vb.opus -> VorbisVersion 0, no Opus tags (Vorbis stream, no OpusHead)",
+ "decoy": true,
+ "member": "vb.opus"
+}

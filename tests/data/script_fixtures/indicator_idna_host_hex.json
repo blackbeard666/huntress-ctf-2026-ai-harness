@@ -1,0 +1,24 @@
+{
+ "expected_plain": "v=3|language=javascript|role=beacon|verdict=malicious|attack=T1071.001|adapter=http_post|stage_count=1|steps=beacon|campaign_id=BU-77c0ffee|url=https://bücher-77c0ffee.example.invalid/api/v1/Check?id=7",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | xxd -p | tr -d '\\n'  -> Material_77c0 with Codec_77c0='hex|identity|' in indicator_idna_host_hex.js",
+ "oracle_cmd": "python3 -I -c 'import sys,re; t=open(sys.argv[1]).read(); print(bytes.fromhex(re.search(r\"Material_77c0 = \\\"([0-9a-f]+)\", t).group(1)).decode())' tests/data/script_fixtures/indicator_idna_host_hex.js ; bash oracle: printf %s \"$EVIDENCE\" | sed -E 's/h[xX]{2}p/http/; s/\\[\\.\\]|\\(\\.\\)|\\{dot\\}/./g; s/\\[:\\]/:/g' | python3 -I -c 'import sys,urllib.parse as u; p=u.urlsplit(sys.stdin.read().strip()); h=p.hostname.encode(\"idna\").decode(); print(h+(\"\" if p.port in (None,80,443) else \":%d\"%p.port)+p.path.rstrip(\"/\")+(\"?\"+p.query if p.query else \"\"), h)'  (canon_checks: url/host columns)",
+ "note": "unicode host in the plan stays unicode in plain; punycode / uppercase / fullwidth-dot evidence of the same host canonicalises equal",
+ "canon_checks": [
+  {
+   "input": "https://bücher-77c0ffee.example.invalid/api/v1/Check?id=7",
+   "canon_url": "xn--bcher-77c0ffee-gsb.example.invalid/api/v1/Check?id=7",
+   "canon_host": "xn--bcher-77c0ffee-gsb.example.invalid"
+  },
+  {
+   "input": "hXXps[:]//xn--bcher-77c0ffee-gsb{dot}example(.)invalid/api/v1/Check?id=7",
+   "canon_url": "xn--bcher-77c0ffee-gsb.example.invalid/api/v1/Check?id=7",
+   "canon_host": "xn--bcher-77c0ffee-gsb.example.invalid"
+  },
+  {
+   "input": "https://BÜCHER-77c0ffee．example。invalid/api/v1/Check/?id=7",
+   "canon_url": "xn--bcher-77c0ffee-gsb.example.invalid/api/v1/Check?id=7",
+   "canon_host": "xn--bcher-77c0ffee-gsb.example.invalid"
+  }
+ ]
+}

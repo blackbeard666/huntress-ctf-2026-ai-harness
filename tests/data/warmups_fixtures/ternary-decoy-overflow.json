@@ -1,0 +1,10 @@
+{
+ "codec": "ternary*",
+ "plain": null,
+ "encoded": "222 221 220 212 211 210 202 201 200 122 121 120 112 111",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written decoy line: width-3 ternary groups with values 14..26 (not a-z text, not hex nibbles)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -c \"import sys; print([int(g,3) for g in sys.stdin.read().split()])\"  # values 26..14: no clean text",
+ "oracle_plain": null
+}

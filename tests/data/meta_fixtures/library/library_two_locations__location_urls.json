@@ -1,0 +1,8 @@
+{
+ "field": "library.location_urls",
+ "expected": "[\"knownfolder:{FDD39AD0-238F-46AF-ADB4-6C85480369C7}\",\"\\\\\\\\files.example-cdn.net@SSL\\\\DavWWWRoot\\\\shared\"]",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/GENERATOR_lxml_builder.py.txt OUTDIR  -> library_two_locations.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/library/library_two_locations__location_urls.bin location_urls -> [\"knownfolder:{FDD39AD0-238F-46AF-ADB4-6C85480369C7}\",\"\\\\\\\\files.example-cdn.net@SSL\\\\DavWWWRoot\\\\shared\"]",
+ "decoy": false,
+ "member": "Documents.library-ms"
+}

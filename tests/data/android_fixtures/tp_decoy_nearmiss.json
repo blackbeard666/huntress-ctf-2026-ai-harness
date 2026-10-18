@@ -1,0 +1,7 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "generator_cmd": "tests/data/android_fixtures/gen_transposition.sh <outdir> -- perl stride k=7 off=3 of the near-miss ANS-...246G encoder (data[j] = answer[o[j]]), jq -cn '{codec,data}' (no index list) then (cd d && zip -qX -r <name>.apk assets)",
+ "oracle_cmd": "unzip -p tp_decoy_nearmiss.apk assets/huntress_puzzle.json | jq -r .data | perl -ne 'chomp; @c=split//; $n=@c; @r=(); $r[(7*$_+3)%$n]=$c[$_] for 0..$n-1; $s=join \"\",@r; print $s, \" \", ($s=~/^ANS-[0-9A-F]{16}$/?\"valid\":\"near-miss\"), \"\\n\"'",
+ "decoy": true
+}

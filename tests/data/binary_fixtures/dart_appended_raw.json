@@ -1,0 +1,50 @@
+{
+ "family": "dart_facts",
+ "encoding": "raw",
+ "expected_offset": 25140,
+ "expected_config": {
+  "flag": "HCFG{dart_aot_appended}",
+  "day": 18,
+  "lang": "dart"
+ },
+ "expected_facts": {
+  "format": "elf",
+  "architecture": "x86-64",
+  "has_dart_runtime": "true",
+  "is_dart_aot": "true",
+  "packaging": "appended",
+  "snapshot_offset": 16384,
+  "snapshot_size": 13640,
+  "snapshot_symbols": [
+   "_kDartIsolateSnapshotBss",
+   "_kDartIsolateSnapshotData",
+   "_kDartIsolateSnapshotInstructions",
+   "_kDartSnapshotBuildId",
+   "_kDartVmSnapshotBss",
+   "_kDartVmSnapshotData",
+   "_kDartVmSnapshotInstructions"
+  ],
+  "vm_snapshot_data_offset": 24576,
+  "vm_snapshot_instructions_offset": 20480,
+  "isolate_snapshot_data_offset": 24896,
+  "isolate_snapshot_instructions_offset": 20736,
+  "snapshot_build_id": "44d1807eb8189149f65e36920c5536b9",
+  "snapshot_hash": "1ce7d8f6ba1d5c3a6e2d1b4b2a0e4f77",
+  "snapshot_kind": "full-aot",
+  "snapshot_features": "product no-code_comments no-dwarf_stack_traces_mode no-lazy_dispatchers dedup_instructions x64 linux compressed-pointers null-safety",
+  "snapshot_arch": "x64",
+  "compressed_pointers": "true",
+  "null_safety": "true",
+  "product_mode": "true",
+  "dart_version": "3.5.4",
+  "dart_channel": "stable",
+  "dart_target": "linux_x64",
+  "hcfg_symbol": "_kDartIsolateSnapshotData",
+  "hcfg_section": ".rodata",
+  "hcfg_in_snapshot": "true"
+ },
+ "decoy": false,
+ "generator_cmd": "bash dart_gen.sh   # gcc -shared -nostdlib GNU-as .S exporting real _kDart* AOT snapshot dynsyms + snapshot.h header (magic 0xdcdcf5f5, kind 3, 32-hex version hash, features) + OneByteString-shaped HCFG; gcc C fake dartaotruntime (Dart_* API strings, version banner); dart2native append: pad 4096 + snapshot + u64 LE offset + dcdcf6f6 00000000; blob printf+gzip-trailer crc32, coreutils base64",
+ "oracle_cmd": "bash dart_oracle.sh dart_appended_raw.bin   # file -b, tail -c16|od (trailer), dd + readelf -W --dyn-syms/-S/-n, od/dd at the symbol file offset (snapshot header), strings -a (banner), grep -obUaP HCFG/SENGR + base64 -d",
+ "note": "appended dart2native image, raw OneByteString HCFG in _kDartIsolateSnapshotData (.rodata of the snapshot ELF), compressed pointers, Dart 3.5.4 stable"
+}

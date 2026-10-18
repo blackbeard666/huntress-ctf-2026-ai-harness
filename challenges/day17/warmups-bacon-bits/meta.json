@@ -1,0 +1,10 @@
+{
+  "base": "warmups-day-17",
+  "lane": "warmups",
+  "name": "👶 Bacon Bits",
+  "ids": {
+    "single_solve": "warmups-day-17",
+    "time_trial": "warmups-day-17/time_trial",
+    "mastery": "warmups-day-17/mastery"
+  }
+}

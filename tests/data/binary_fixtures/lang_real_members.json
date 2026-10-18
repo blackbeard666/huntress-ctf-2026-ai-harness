@@ -1,0 +1,152 @@
+{
+ "family": "lang_facts",
+ "_doc": "real D4-D17 members too big to copy; path relative to repo root, skipped when the cache is absent",
+ "generator_cmd": "cached GM artifact bytes (hctf artifact -> single_solve/work/extracted)",
+ "oracle_cmd": "bash lang_oracle.sh <path>   # binutils readelf/nm/c++filt + grep -aF + perl",
+ "rows": [
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d04--variant-000.elf",
+   "expected_language": "go",
+   "expected_facts": {
+    "has_swift_runtime": "false",
+    "has_objc_runtime": "false",
+    "has_nim_runtime": "false",
+    "has_zig_runtime": "false",
+    "has_d_runtime": "false",
+    "has_fpc_runtime": "false",
+    "has_crystal_runtime": "false",
+    "has_gnat_runtime": "false",
+    "has_go_runtime": "true",
+    "has_rust_runtime": "false",
+    "nim_procs_mangled": [],
+    "d_functions_mangled": [],
+    "d_functions": [],
+    "swift_functions_mangled": [],
+    "objc_classes": [],
+    "objc_selectors": []
+   }
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d05--variant-000.elf",
+   "expected_language": "rust",
+   "expected_facts": {
+    "has_swift_runtime": "false",
+    "has_objc_runtime": "false",
+    "has_nim_runtime": "false",
+    "has_zig_runtime": "false",
+    "has_d_runtime": "false",
+    "has_fpc_runtime": "false",
+    "has_crystal_runtime": "false",
+    "has_gnat_runtime": "false",
+    "has_go_runtime": "false",
+    "has_rust_runtime": "true",
+    "nim_procs_mangled": [],
+    "d_functions_mangled": [],
+    "d_functions": [],
+    "swift_functions_mangled": [],
+    "objc_classes": [],
+    "objc_selectors": []
+   }
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d08--variant-000.elf",
+   "expected_language": "swift",
+   "expected_facts": {
+    "has_swift_runtime": "true",
+    "has_objc_runtime": "false",
+    "has_nim_runtime": "false",
+    "has_zig_runtime": "false",
+    "has_d_runtime": "false",
+    "has_fpc_runtime": "false",
+    "has_crystal_runtime": "false",
+    "has_gnat_runtime": "false",
+    "has_go_runtime": "false",
+    "has_rust_runtime": "false",
+    "nim_procs_mangled": [],
+    "d_functions_mangled": [],
+    "d_functions": [],
+    "swift_functions_mangled": [
+     "$s13HuntressDay0812decodeConfigSSyF",
+     "$s13HuntressDay0813encodedConfigSSyF",
+     "$s13HuntressDay088campaignSSyF"
+    ],
+    "objc_classes": [],
+    "objc_selectors": []
+   }
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d11--variant-000.elf",
+   "expected_language": "d",
+   "expected_facts": {
+    "has_swift_runtime": "false",
+    "has_objc_runtime": "false",
+    "has_nim_runtime": "false",
+    "has_zig_runtime": "false",
+    "has_d_runtime": "true",
+    "has_fpc_runtime": "false",
+    "has_crystal_runtime": "false",
+    "has_gnat_runtime": "false",
+    "has_go_runtime": "false",
+    "has_rust_runtime": "false",
+    "nim_procs_mangled": [],
+    "d_functions_mangled": [
+     "_D4v00012decodeConfigFZAya",
+     "_D4v0008campaignFZAya",
+     "_D4v0008evaluateFAyaZSQu14BehaviorResult"
+    ],
+    "d_functions": [
+     "v000.campaign",
+     "v000.decodeConfig",
+     "v000.evaluate"
+    ],
+    "swift_functions_mangled": [],
+    "objc_classes": [],
+    "objc_selectors": []
+   }
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d13--variant-000.elf",
+   "expected_language": "crystal",
+   "expected_facts": {
+    "has_swift_runtime": "false",
+    "has_objc_runtime": "false",
+    "has_nim_runtime": "false",
+    "has_zig_runtime": "false",
+    "has_d_runtime": "false",
+    "has_fpc_runtime": "false",
+    "has_crystal_runtime": "true",
+    "has_gnat_runtime": "false",
+    "has_go_runtime": "false",
+    "has_rust_runtime": "false",
+    "nim_procs_mangled": [],
+    "d_functions_mangled": [],
+    "d_functions": [],
+    "swift_functions_mangled": [],
+    "objc_classes": [],
+    "objc_selectors": []
+   }
+  },
+  {
+   "path": "challenges/day17/binary-decoder-ring/single_solve/work/extracted/evidence/d17--variant-000.elf",
+   "expected_language": "gnat",
+   "expected_facts": {
+    "has_swift_runtime": "false",
+    "has_objc_runtime": "false",
+    "has_nim_runtime": "false",
+    "has_zig_runtime": "false",
+    "has_d_runtime": "false",
+    "has_fpc_runtime": "false",
+    "has_crystal_runtime": "false",
+    "has_gnat_runtime": "true",
+    "has_go_runtime": "false",
+    "has_rust_runtime": "false",
+    "nim_procs_mangled": [],
+    "d_functions_mangled": [],
+    "d_functions": [],
+    "swift_functions_mangled": [],
+    "objc_classes": [],
+    "objc_selectors": []
+   }
+  }
+ ]
+}

@@ -1,0 +1,21 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "family": "string_decrypt",
+ "expected_facts": {
+  "algorithm": "xor",
+  "campaign_ids": "BRNN-2026-0417",
+  "count": 7,
+  "decoder_va": "0x1189",
+  "domains": "update.brnn-cdn.net",
+  "mutexes": "Global\\BRNN-7F3A21",
+  "strings": "update.brnn-cdn.net,https://update.brnn-cdn.net/api/v2/beacon,Global\\BRNN-7F3A21,BRNN-2026-0417,Mozilla/5.0 (Windows NT 10.0; Win64; x64),203.0.113.77:8443,SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+  "urls": "https://update.brnn-cdn.net/api/v2/beacon"
+ },
+ "decoy": false,
+ "generator_cmd": "bash strenc_gen.sh strenc_xor_O0.bin xor \"-O0\" '5a:update.brnn-cdn.net' '33:https://update.brnn-cdn.net/api/v2/beacon' '7c:Global\\BRNN-7F3A21' '41:BRNN-2026-0417' '1f:Mozilla/5.0 (Windows NT 10.0; Win64; x64)' 'stack:6e:203.0.113.77:8443' 'stack:29:SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run'   # perl encrypts per string (own 1-byte key), gcc compiles shared noinline dstr(ptr,len,key) + call per string",
+ "oracle_cmd": "bash strenc_oracle.sh strenc_xor_O0.bin   # program RUNS and prints its own decoded strings; objdump -d most-called non-PLT target + its xor/psubb/sub op; perl regex buckets",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64",
+ "note": "-O0, symbols: 5 .rodata arrays + 2 stack-built (movabs/mov [rbp-x]); field names SPECULATIVE (GM vocabulary not seen): lists comma-joined in call-site order; no HCFG blob (encoding none)"
+}

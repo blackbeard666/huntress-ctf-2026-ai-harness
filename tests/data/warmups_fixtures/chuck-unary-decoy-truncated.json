@@ -1,0 +1,10 @@
+{
+ "codec": "chuck-unary7",
+ "plain": null,
+ "encoded": "0 0 00 00 0 000 00 0 0 00 00 0 0 0 00 00 0 000 00 000 0 0000 00 00 0 0 00 0 0 0 00 0 0 0 00 00000 0 000 00 0 0",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "cut -d' ' -f1-41 on the chuck-unary7-amber encoding: odd token count (a dangling pair head)",
+ "oracle_cmd": "LC_ALL=C gawk -v W=7 -f tests/data/warmups_fixtures/chuck_orc.awk <<<\"$encoded\"  # independent gawk decoder  -> 'Nice p' (a truncated fragment, not the sentence)",
+ "oracle_plain": null
+}

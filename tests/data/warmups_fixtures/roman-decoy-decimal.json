@@ -1,0 +1,10 @@
+{
+ "codec": "roman",
+ "plain": null,
+ "encoded": "78 105 99 101 32 119 111 114 107",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"print(' '.join(str(ord(c)) for c in 'Nice work'))\"  # plain decimal char codes, not Roman",
+ "oracle_cmd": "printf %s \"$encoded\" | /usr/bin/python3 -I -c \"import sys,roman_numerals as r;print(''.join(chr(int(r.RomanNumeral.from_string(x))) for x in sys.stdin.read().split()))\"  # Debian python3-roman-numerals 4.1.0 -> roman_numerals.from_string raises InvalidRomanNumeralError ('78' is not a numeral)",
+ "oracle_plain": null
+}

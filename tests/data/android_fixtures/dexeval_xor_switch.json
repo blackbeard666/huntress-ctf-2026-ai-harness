@@ -1,0 +1,7 @@
+{
+ "entry": "dex_eval_scan",
+ "expected": "ANS-6d0e94b1c7a3f258",
+ "_why": "Vault.token() -> unmask(E,0x5d): <clinit> char[] E, switch-flattened state machine (packed-switch), xor with a rolling key k=k*31+7, StringBuilder.append(C); no ANS- literal in the dex",
+ "generator_cmd": "python3 tests/data/android_fixtures/dexeval_src/gen_dexeval.py xor_switch tests/data/android_fixtures/dexeval_xor_switch.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/dexeval_src/oracle.sh tests/data/android_fixtures/dexeval_xor_switch.apk  # d2j-dex2jar back to classes, RUN the String methods on the JVM -> token -> token=ANS-6d0e94b1c7a3f258"
+}

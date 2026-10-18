@@ -1,0 +1,7 @@
+{
+ "entry": "integrity_key_scan",
+ "expected": "ANS-3f9a07c2e5b1d846",
+ "generator_cmd": "sh tests/data/android_fixtures/gen_integrity_keys.sh tests/data/android_fixtures  # zip -X of a real d8 classes.dex + assets/huntress_puzzle.json; data = base64(openssl enc -aes-128-cbc -iv 0 -K $(xxd -s 12 -l 16 -p classes.dex)) i.e. key = first 16 bytes of the dex header SHA-1 signature",
+ "oracle_cmd": "K=$(unzip -p integ_dexsig_aes128_cbc.apk classes.dex | python3 -I -c 'import sys,hashlib;d=sys.stdin.buffer.read();assert hashlib.sha1(d[32:]).digest()==d[12:32];print(d[12:28].hex())'); unzip -p integ_dexsig_aes128_cbc.apk assets/huntress_puzzle.json | python3 -I -c 'import sys,json;print(json.load(sys.stdin)[\"data\"])' | base64 -d | openssl enc -d -aes-128-cbc -K $K -iv 00000000000000000000000000000000",
+ "decoy": false
+}

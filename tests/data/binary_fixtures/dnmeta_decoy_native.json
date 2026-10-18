@@ -1,0 +1,10 @@
+{
+ "kind": "dotnet_meta_facts",
+ "decoy": true,
+ "expected": {
+  "_all": "none"
+ },
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/dnmeta_gen.sh tests/data/binary_fixtures   # dotnet 10 SDK: dotnet build -c Release (Deterministic) of two C# projects; decoy = cp /usr/bin/true",
+ "oracle_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/dnmeta_oracle.sh tests/data/binary_fixtures/dnmeta_decoy_native.bin   # System.Reflection.Metadata PEReader/MetadataReader (BCL, not dnfile); tfm = the csproj <TargetFramework> the generator built with",
+ "note": "native ELF (/usr/bin/true, no CLI header): not a .NET assembly -> every field none"
+}

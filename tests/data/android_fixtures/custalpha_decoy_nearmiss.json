@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "decoy": true,
+ "_why": "same layout as b64_dex, decoded value has only 15 hex digits",
+ "generator_cmd": "python3 tests/data/android_fixtures/custalpha_src/gen_custalpha.py decoy_nearmiss tests/data/android_fixtures/custalpha_decoy_nearmiss.apk  # base64/base32 | tr (coreutils), base58 pip writer, javac + d2j-jar2dex, zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/custalpha_src/oracle.sh tests/data/android_fixtures/custalpha_decoy_nearmiss.apk  # javap -constants / jq alphabet, tr + base64 -d / base32 -d / int arithmetic"
+}

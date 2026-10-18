@@ -1,0 +1,8 @@
+{
+ "field": "media.odd_stream_index",
+ "expected": "2",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -hide_banner (ffmpeg 7.0.2 static, imageio-ffmpeg wheel) -f lavfi -i testsrc=s=64x48:d=0.5:r=10 -f lavfi -i sine=f=440:d=0.5:r=44100 -f lavfi -i sine=f=550:d=0.5:r=22050 -f lavfi -i sine=f=660:d=0.5:r=44100 -map 0 -map 1 -map 2 -map 3 -c:v libx264 -pix_fmt yuv420p -c:a aac -metadata:s:a:0 language=eng -metadata:s:a:1 language=rus -metadata:s:a:2 language=eng -metadata:s:a:1 title=Narration -metadata:s:v:0 language=eng mp4_odd_lang.mp4",
+ "oracle_cmd": "ffmpeg-7.0.2 -hide_banner -i mp4_odd_lang.mp4 (stream lines) -> only #0:2 differs (rus, 22050 Hz) among the 3 aac audio streams",
+ "decoy": false,
+ "member": "mp4_odd_lang.mp4"
+}

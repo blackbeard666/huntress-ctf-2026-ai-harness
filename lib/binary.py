@@ -77,6 +77,255 @@ def class_utf8(cls):
     return out
 
 
+# JVMS 4: full ClassFile facts (D17 re-asked D6/D7 jars: Main-Class methods in table order incl <init>, access_flags
+# decimal 49, method_count incl <init>/<clinit>). Values are answer strings: decimal ints, compact JSON lists in
+# table order, internal (slash) class names as javap -v prints them; "none" when the field is absent.
+_CP_SIZES = {3: 4, 4: 4, 5: 8, 6: 8, 7: 2, 8: 2, 9: 4, 10: 4, 11: 4, 12: 4, 15: 3, 16: 2, 17: 4, 18: 4, 19: 2, 20: 2}
+_CLASS_ACC = ((0x0001, "ACC_PUBLIC"), (0x0010, "ACC_FINAL"), (0x0020, "ACC_SUPER"), (0x0200, "ACC_INTERFACE"),
+              (0x0400, "ACC_ABSTRACT"), (0x1000, "ACC_SYNTHETIC"), (0x2000, "ACC_ANNOTATION"), (0x4000, "ACC_ENUM"),
+              (0x8000, "ACC_MODULE"))
+
+
+def _jv(v):
+    return json.dumps(v, separators=(",", ":"), ensure_ascii=False)
+
+
+def _mutf8(raw):
+    """JVMS 4.4.7 modified UTF-8: NUL is C0 80, supplementary chars are CESU-8 surrogate pairs (Kotlin d1 strings
+    are protobuf bytes stored as chars, full of both)."""
+    try:
+        s = raw.replace(b"\xc0\x80", b"\0").decode("utf-8", "surrogatepass")
+        return s.encode("utf-16-le", "surrogatepass").decode("utf-16-le")
+    except UnicodeError:
+        return raw.decode("utf-8", "replace")
+
+
+def classfile_parse(cls):
+    """Parse a .class (JVMS 4.1) -> dict of raw structures, or None if it is not a well-formed class file (a Mach-O
+    fat header shares 0xcafebabe: its 'major' is a small arch count, rejected by major < 45)."""
+    import struct
+    b = bytes(cls)
+    try:
+        if b[:4] != b"\xca\xfe\xba\xbe":
+            return None
+        minor, major, cpn = struct.unpack_from(">HHH", b, 4)
+        if not 45 <= major <= 80:
+            return None
+        cp, o, k = [None] * cpn, 10, 1
+        while k < cpn:
+            t = b[o]
+            if t == 1:
+                ln = struct.unpack_from(">H", b, o + 1)[0]
+                if o + 3 + ln > len(b):
+                    return None
+                cp[k] = (1, _mutf8(b[o + 3:o + 3 + ln]))
+                o += 3 + ln
+            elif t in _CP_SIZES:
+                raw = b[o + 1:o + 1 + _CP_SIZES[t]]
+                if len(raw) < _CP_SIZES[t]:
+                    return None
+                if t == 3:
+                    v = struct.unpack(">i", raw)[0]
+                elif t == 4:
+                    v = struct.unpack(">f", raw)[0]
+                elif t == 5:
+                    v = struct.unpack(">q", raw)[0]
+                elif t == 6:
+                    v = struct.unpack(">d", raw)[0]
+                elif t == 15:
+                    v = (raw[0], struct.unpack(">H", raw[1:])[0])
+                elif len(raw) == 2:
+                    v = struct.unpack(">H", raw)[0]
+                else:
+                    v = struct.unpack(">HH", raw)
+                cp[k] = (t, v)
+                o += 1 + _CP_SIZES[t]
+                k += 1 if t in (5, 6) else 0   # long/double take two pool slots
+            else:
+                return None
+            k += 1
+
+        def u(i):
+            e = cp[i] if 0 < i < cpn else None
+            return e[1] if e and e[0] == 1 else None
+
+        def cname(i):
+            e = cp[i] if 0 < i < cpn else None
+            return u(e[1]) if e and e[0] == 7 else None
+
+        def attrs(o):
+            n = struct.unpack_from(">H", b, o)[0]
+            o += 2
+            out = []
+            for _ in range(n):
+                ni, ln = struct.unpack_from(">HI", b, o)
+                if o + 6 + ln > len(b):
+                    raise ValueError("attr overrun")
+                out.append((u(ni), b[o + 6:o + 6 + ln]))
+                o += 6 + ln
+            return out, o
+
+        acc, this, sup, ni = struct.unpack_from(">HHHH", b, o)
+        o += 8
+        ifaces = [cname(struct.unpack_from(">H", b, o + 2 * j)[0]) for j in range(ni)]
+        o += 2 * ni
+        members = []
+        for _ in range(2):
+            n = struct.unpack_from(">H", b, o)[0]
+            o += 2
+            ms = []
+            for _ in range(n):
+                fa, nm, ds = struct.unpack_from(">HHH", b, o)
+                at, o = attrs(o + 6)
+                ms.append({"access": fa, "name": u(nm), "descriptor": u(ds), "attributes": at})
+            members.append(ms)
+        cattrs, o = attrs(o)
+    except (struct.error, IndexError, ValueError):
+        return None
+    return {"minor": minor, "major": major, "cp_count": cpn, "cp": cp, "access": acc, "this": cname(this),
+            "super": cname(sup) if sup else None, "interfaces": ifaces, "fields": members[0],
+            "methods": members[1], "attributes": cattrs, "_u": u, "_cname": cname, "trailing": len(b) - o}
+
+
+def _annotations(raw, u):
+    """RuntimeVisible/InvisibleAnnotations attribute -> [(type descriptor, {element name: value})] (JVMS 4.7.16)."""
+    import struct
+    pos = [0]
+
+    def u2():
+        v = struct.unpack_from(">H", raw, pos[0])[0]
+        pos[0] += 2
+        return v
+
+    def value(cp):
+        tag = chr(raw[pos[0]])
+        pos[0] += 1
+        if tag in "BCIJSZDF":
+            e = cp[u2()]
+            return e[1] if e else None
+        if tag == "s":
+            return u(u2())
+        if tag == "e":
+            return [u(u2()), u(u2())]
+        if tag == "c":
+            return u(u2())
+        if tag == "@":
+            return ann(cp)
+        if tag == "[":
+            return [value(cp) for _ in range(u2())]
+        raise ValueError(tag)
+
+    def ann(cp):
+        t = u(u2())
+        return t, {u(u2()): value(cp) for _ in range(u2())}
+    return ann, u2
+
+
+def classfile_facts(cls):
+    """{field: answer string} for one .class -- javap -v -p parity: minor/major_version, constant_pool_count (header
+    value = entries + 1), access_flags (decimal) / _hex / access_flag_names, this_class, super_class, interfaces,
+    fields (+descriptors/count), methods (+descriptors/count, table order incl <init>/<clinit>), attributes,
+    source_file, signature, string_constants, kotlin metadata (kotlin_k/mv/d1/d2/xi/xs/pn). None if not a class."""
+    p = classfile_parse(cls)
+    if not p:
+        return None
+    u = p["_u"]
+    acc = p["access"]
+    f = {"magic": "0xcafebabe", "minor_version": str(p["minor"]), "major_version": str(p["major"]),
+         "class_version": f"{p['major']}.{p['minor']}",
+         "java_version": str(p["major"] - 44) if p["major"] >= 49 else "1." + str(p["major"] - 44),
+         "constant_pool_count": str(p["cp_count"]),
+         "constant_pool_entries": str(sum(1 for e in p["cp"] if e)),
+         "access_flags": str(acc), "access_flags_hex": f"0x{acc:04x}",
+         "access_flag_names": _jv([n for m, n in _CLASS_ACC if acc & m]),
+         "this_class": p["this"] or "none", "this_class_dotted": (p["this"] or "none").replace("/", "."),
+         "super_class": p["super"] or "none", "super_class_dotted": (p["super"] or "none").replace("/", "."),
+         "interfaces": _jv(p["interfaces"]), "interface_count": str(len(p["interfaces"])),
+         "fields": _jv([m["name"] for m in p["fields"]]), "field_count": str(len(p["fields"])),
+         "field_descriptors": _jv([m["descriptor"] for m in p["fields"]]),
+         "methods": _jv([m["name"] for m in p["methods"]]), "method_count": str(len(p["methods"])),
+         "method_descriptors": _jv([m["descriptor"] for m in p["methods"]]),
+         "method_signatures": _jv([f"{m['name']}{m['descriptor']}" for m in p["methods"]]),
+         "method_access_flags": _jv([m["access"] for m in p["methods"]]),
+         "attributes": _jv([a for a, _ in p["attributes"]]), "attribute_count": str(len(p["attributes"])),
+         "string_constants": _jv([u(e[1]) for e in p["cp"] if e and e[0] == 8]),
+         "has_clinit": _jv(any(m["name"] == "<clinit>" for m in p["methods"])),
+         "has_main": _jv(any(m["name"] == "main" and m["descriptor"] == "([Ljava/lang/String;)V"
+                             for m in p["methods"]))}
+    ca = dict(p["attributes"])
+    sf = ca.get("SourceFile")
+    f["source_file"] = (u(int.from_bytes(sf[:2], "big")) or "none") if sf and len(sf) >= 2 else "none"
+    sg = ca.get("Signature")
+    f["signature"] = (u(int.from_bytes(sg[:2], "big")) or "none") if sg and len(sg) >= 2 else "none"
+    f["has_kotlin_metadata"] = "false"
+    for key in ("kotlin_k", "kotlin_mv", "kotlin_bv", "kotlin_d1", "kotlin_d2", "kotlin_xi", "kotlin_xs", "kotlin_pn"):
+        f[key] = "none"
+    for an in ("RuntimeVisibleAnnotations", "RuntimeInvisibleAnnotations"):
+        raw = ca.get(an)
+        if not raw:
+            continue
+        try:
+            ann, u2 = _annotations(raw, u)
+            anns = [ann(p["cp"]) for _ in range(u2())]
+        except (ValueError, IndexError, TypeError):
+            continue
+        for t, ev in anns:
+            if t == "Lkotlin/Metadata;":
+                f["has_kotlin_metadata"] = "true"
+                for k, v in ev.items():
+                    f[f"kotlin_{k}"] = _jv(v) if isinstance(v, list) else str(v)
+    f["is_suspend_lambda"] = _jv(any(m["name"] == "invokeSuspend" for m in p["methods"]))
+    return f
+
+
+def jar_jvm_facts(data, member=None):
+    """{field: answer string} for a jar (or a bare .class): jar-level main_class (Manifest Main-Class, dotted as
+    written), created_by, class_count (.class entries), entry_count (all zip entries incl directories), plus
+    classfile_facts of `member` (entry name or dotted class name) or else of the Main-Class. None if neither."""
+    import zipfile
+    b = bytes(data)
+    if b[:4] == b"\xca\xfe\xba\xbe":
+        return classfile_facts(b)
+    try:
+        z = zipfile.ZipFile(io.BytesIO(b))
+        names = z.namelist()
+        mf = z.read("META-INF/MANIFEST.MF").decode("utf-8", "replace") if "META-INF/MANIFEST.MF" in names else ""
+    except (zipfile.BadZipFile, KeyError, OSError, EOFError, RuntimeError, ValueError):
+        return None
+    mf = re.sub(r"\r?\n ", "", mf)   # manifest continuation lines (72-byte wrap)
+    man = dict(re.findall(r"^([A-Za-z0-9_-]+):\s*(.*?)\s*$", mf, re.M))
+    out = {"main_class": man.get("Main-Class") or "none", "created_by": man.get("Created-By") or "none",
+           "manifest_version": man.get("Manifest-Version") or "none",
+           "class_count": str(sum(n.endswith(".class") for n in names)), "entry_count": str(len(names)),
+           "app_class_count": str(sum(n.endswith(".class") and not n.startswith("META-INF/")
+                                      and not JVM_LIBRARY.search(n) for n in names)),
+           "has_kotlin_runtime": _jv(any(n.startswith("kotlin/") for n in names)),
+           "has_coroutine_runtime": _jv(any(n.startswith(("kotlin/coroutines/", "kotlinx/coroutines/"))
+                                             for n in names))}   # D7/D17: stdlib kotlin/coroutines/ counts (GM true)
+    target = member or (out["main_class"] if out["main_class"] != "none" else None)
+    if target:
+        ent = target if target.endswith(".class") else target.replace(".", "/") + ".class"
+        try:
+            cf = classfile_facts(z.read(ent)) if ent in names else None
+        except (zipfile.BadZipFile, OSError, EOFError, RuntimeError, ValueError):
+            cf = None
+        if cf:
+            out = {**cf, **out}
+    return out
+
+
+def jvm_field(data, field, member=None):
+    """One JVM fact as an answer string; "none" when the container parses but the field is absent, None when the
+    bytes are neither a jar nor a class file. Never raises."""
+    try:
+        f = jar_jvm_facts(data, member)
+    except Exception:  # noqa: BLE001
+        return None
+    if f is None:
+        return None
+    return f.get(field, "none")
+
+
 # --- packing -------------------------------------------------------------------------------------
 def entropy(data):
     """Shannon entropy (bits/byte, 0-8). Packed/encrypted payloads sit ~7.8+; normal code ~5-6.5."""
@@ -472,7 +721,7 @@ def _macho_thin(data, base=0):
                 sz = int.from_bytes(data[q + 32 + w:q + 32 + 2 * w], end)
                 off = u32(q + 32 + 2 * w)
                 secs.append({"segment": seg, "section": sect, "name": f"{seg},{sect}",
-                             "offset": base + off if off else 0, "size": sz})
+                             "offset": base + off if off else 0, "size": sz, "flags": u32(q + 48 + 2 * w)})
                 q += ssz
         p += size
     return {"machine": MACHO_CPU_LABEL.get(cpu, str(cpu)), "machine_num": str(cpu), "cputype": f"0x{cpu:08x}",
@@ -1207,6 +1456,125 @@ def elf_header_field(data, name):
         return "none"
 
 
+PE_SUBSYSTEM = {1: ("native", "IMAGE_SUBSYSTEM_NATIVE"), 2: ("gui", "IMAGE_SUBSYSTEM_WINDOWS_GUI"),
+                3: ("console", "IMAGE_SUBSYSTEM_WINDOWS_CUI"), 5: ("os2_console", "IMAGE_SUBSYSTEM_OS2_CUI"),
+                7: ("posix_console", "IMAGE_SUBSYSTEM_POSIX_CUI"), 9: ("wince_gui", "IMAGE_SUBSYSTEM_WINDOWS_CE_GUI"),
+                10: ("efi_application", "IMAGE_SUBSYSTEM_EFI_APPLICATION"),
+                11: ("efi_boot_service_driver", "IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER"),
+                12: ("efi_runtime_driver", "IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER"), 13: ("efi_rom", "IMAGE_SUBSYSTEM_EFI_ROM"),
+                14: ("xbox", "IMAGE_SUBSYSTEM_XBOX"), 16: ("windows_boot_application",
+                                                         "IMAGE_SUBSYSTEM_WINDOWS_BOOT_APPLICATION")}
+PE_FILE_CHAR = {0x1: "RELOCS_STRIPPED", 0x2: "EXECUTABLE_IMAGE", 0x4: "LINE_NUMS_STRIPPED", 0x8: "LOCAL_SYMS_STRIPPED",
+                0x10: "AGGRESIVE_WS_TRIM", 0x20: "LARGE_ADDRESS_AWARE", 0x80: "BYTES_REVERSED_LO", 0x100: "32BIT_MACHINE",
+                0x200: "DEBUG_STRIPPED", 0x400: "REMOVABLE_RUN_FROM_SWAP", 0x800: "NET_RUN_FROM_SWAP", 0x1000: "SYSTEM",
+                0x2000: "DLL", 0x4000: "UP_SYSTEM_ONLY", 0x8000: "BYTES_REVERSED_HI"}   # IMAGE_FILE_* (pefile names)
+PE_DLL_CHAR = {0x20: "HIGH_ENTROPY_VA", 0x40: "DYNAMIC_BASE", 0x80: "FORCE_INTEGRITY", 0x100: "NX_COMPAT",
+               0x200: "NO_ISOLATION", 0x400: "NO_SEH", 0x800: "NO_BIND", 0x1000: "APPCONTAINER", 0x2000: "WDM_DRIVER",
+               0x4000: "GUARD_CF", 0x8000: "TERMINAL_SERVER_AWARE"}   # IMAGE_DLLCHARACTERISTICS_* (pefile names)
+
+
+def pe_header_facts(data):
+    """PE/COFF facts from the raw MZ/PE/optional/section headers (no pefile; MinGW, Go, Zig, .NET, MSVC alike), the
+    PE counterpart of elf_header_facts. None if the DOS header / PE signature / COFF header / optional-header magic is
+    not there. format "pe", pe_type PE32/PE32+ (+ bits), machine (PE_MACHINE_LABEL) / machine_num (decimal) /
+    machine_hex, entry_point = hex(ImageBase + AddressOfEntryPoint) (+ entry_rva hex, entry_point_int decimal),
+    image_base hex (+ image_base_int), timestamp = TimeDateStamp decimal (+ timestamp_hex), characteristics /
+    dll_characteristics hex (+ *_int decimal, *_flags = pefile-style IMAGE_FILE_* / IMAGE_DLLCHARACTERISTICS_* names in
+    bit order), subsystem short label console/gui/native/efi_* (+ subsystem_const IMAGE_SUBSYSTEM_*, subsystem_int
+    decimal), is_dll, section_names (header order, NUL-trimmed, "/N" long names resolved through the COFF string table
+    like objdump/pefile do), section_count, has_symtab ("true" when PointerToSymbolTable and NumberOfSymbols are set;
+    Go/MinGW keep one, MSVC/.NET/stripped don't) + number_of_symbols, size_of_image / checksum / linker_version /
+    os_version / subsystem_version, is_dotnet (CLR data directory), import_dlls (import-directory order). Never raises."""
+    try:
+        if data[:2] != b"MZ" or len(data) < 0x40:
+            return None
+        pe = int.from_bytes(data[0x3c:0x40], "little")
+        if data[pe:pe + 4] != b"PE\0\0" or len(data) < pe + 26:
+            return None
+        m, nsec, ts, symp, nsym, optsz, ch = struct.unpack_from("<HHIIIHH", data, pe + 4)
+        opt = pe + 24
+        magic = struct.unpack_from("<H", data, opt)[0]
+        if magic not in (0x10b, 0x20b) or len(data) < opt + (112 if magic == 0x20b else 96):
+            return None
+        p64 = magic == 0x20b
+        lmaj, lmin = data[opt + 2], data[opt + 3]
+        aep = struct.unpack_from("<I", data, opt + 16)[0]
+        base = struct.unpack_from("<Q", data, opt + 24)[0] if p64 else struct.unpack_from("<I", data, opt + 28)[0]
+        osmaj, osmin, _, _, ssmaj, ssmin = struct.unpack_from("<6H", data, opt + 40)
+        soi, _, csum, sub, dch = struct.unpack_from("<IIIHH", data, opt + 56)
+        strtab = symp + 18 * nsym if symp and nsym else 0
+
+        def secname(raw):
+            nm = raw.split(b"\0", 1)[0]
+            if nm[:1] == b"/" and nm[1:].isdigit() and strtab and strtab + int(nm[1:]) < len(data):
+                o = strtab + int(nm[1:])
+                e = data.find(b"\0", o, o + 4096)
+                nm = bytes(data[o:e if e >= 0 else o + 4096])
+            return nm.decode("utf-8", "replace")
+        secs = []   # (name, va, vsize, raw_ptr, raw_size)
+        for k in range(min(nsec, 96)):
+            o = opt + optsz + 40 * k
+            if o + 40 > len(data):
+                break
+            vsize, va, rsize, rptr = struct.unpack_from("<IIII", data, o + 8)
+            secs.append((secname(bytes(data[o:o + 8])), va, vsize, rptr, rsize))
+        dd = opt + (112 if p64 else 96)
+        ndd = min(16, struct.unpack_from("<I", data, dd - 4)[0])
+        dirs = [struct.unpack_from("<II", data, dd + 8 * k) for k in range(ndd)
+                if dd + 8 * k + 8 <= min(opt + optsz, len(data))]
+        dlls = []
+        if len(dirs) > 1 and dirs[1][0]:
+            o = _pe_rva(secs, dirs[1][0])
+            while o is not None and o + 20 <= len(data) and len(dlls) < 4096:
+                ilt, _, _, nrva, iat = struct.unpack_from("<5I", data, o)
+                if not (ilt or nrva or iat):
+                    break
+                no = _pe_rva(secs, nrva)
+                if no is None or no >= len(data):
+                    break
+                e = data.find(b"\0", no, no + 512)
+                dlls.append(bytes(data[no:e if e >= 0 else no + 512]).decode("utf-8", "replace"))
+                o += 20
+        sl, sc = PE_SUBSYSTEM.get(sub, (str(sub), str(sub)))
+        flags = lambda v, tab, pre: [pre + n for b, n in sorted(tab.items()) if v & b]
+        return {"format": "pe", "pe_type": "PE32+" if p64 else "PE32", "bits": 64 if p64 else 32,
+                "machine": PE_MACHINE_LABEL.get(m, f"0x{m:x}"), "machine_num": str(m), "machine_hex": f"0x{m:x}",
+                "entry_point": hex(base + aep), "entry_point_int": str(base + aep), "entry_rva": hex(aep),
+                "image_base": hex(base), "image_base_int": str(base), "timestamp": str(ts), "timestamp_hex": hex(ts),
+                "characteristics": hex(ch), "characteristics_int": str(ch),
+                "characteristics_flags": flags(ch, PE_FILE_CHAR, "IMAGE_FILE_"),
+                "dll_characteristics": hex(dch), "dll_characteristics_int": str(dch),
+                "dll_characteristics_flags": flags(dch, PE_DLL_CHAR, "IMAGE_DLLCHARACTERISTICS_"),
+                "subsystem": sl, "subsystem_const": sc, "subsystem_int": str(sub),
+                "is_dll": "true" if ch & 0x2000 else "false", "section_names": [s[0] for s in secs],
+                "section_count": len(secs), "has_symtab": "true" if symp and nsym else "false",
+                "number_of_symbols": nsym, "size_of_image": hex(soi), "checksum": hex(csum),
+                "linker_version": f"{lmaj}.{lmin}", "os_version": f"{osmaj}.{osmin}",
+                "subsystem_version": f"{ssmaj}.{ssmin}",
+                "is_dotnet": "true" if len(dirs) > 14 and dirs[14][0] else "false", "import_dlls": dlls}
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def pe_header_field(data, name):
+    """One pe_header_facts value; "none" when the input is no (complete-header) PE or the field is unknown."""
+    try:
+        return (pe_header_facts(data) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+def header_field(data, name):
+    """elf_header_field for ELF input, pe_header_field for PE input, else "none" (same field names where shared:
+    format, machine, machine_num, bits, entry_point, section_names, section_count, has_symtab)."""
+    try:
+        if data[:2] == b"MZ":
+            return pe_header_field(data, name)
+        return elf_header_field(data, name)
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
 _WASM_MEMARG = set(range(0x28, 0x3f))            # loads/stores: memarg (align [+memidx], offset)
 _WASM_STORE = {0x36: 4, 0x37: 8, 0x38: 4, 0x39: 8, 0x3a: 1, 0x3b: 2, 0x3c: 1, 0x3d: 2, 0x3e: 4}
 _WASM_LEB1 = {0x0c, 0x0d, 0x10, 0x12, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x3f, 0x40, 0xd2, 0xd0}
@@ -1546,6 +1914,151 @@ def recover_return_constants(data, max_funcs=400):
     return out
 
 
+_EMU_RELATIVE = {62: 8, 183: 1027, 3: 8}   # e_machine -> R_*_RELATIVE (x86-64, AArch64, i386 REL)
+
+
+def emulate_return_value(data, symbol="recover_code", *, signed=False, max_insns=200_000, timeout_ms=300):
+    """Return value of ELF function `symbol` (FUNC symbol name or vaddr int) by emulation, for computed returns that
+    are not a `mov eax, imm; ret` leaf (xor of immediates, table lookup, flattened switch, internal helper calls).
+    unicorn x86-64 / i386 / AArch64: PT_LOADs mapped at their vaddrs (ET_DYN rebased, R_*_RELATIVE applied), scratch
+    stack, return address = sentinel page; eax / w0 at the sentinel (unsigned 32-bit unless signed=True).
+    -> int; "none" if the ELF has no such FUNC symbol; None if not an ELF / unsupported arch / refused (syscall,
+    int/svc, call through the PLT or an unrelocated GOT slot into libc, fetch outside an executable segment,
+    instruction cap or timeout)."""
+    try:
+        import unicorn as U
+        from elftools.elf.elffile import ELFFile
+    except ImportError:
+        return None
+    try:
+        elf = ELFFile(io.BytesIO(data))
+        mach = elf["e_machine"]
+        mach = {"EM_X86_64": 62, "EM_AARCH64": 183, "EM_386": 3}.get(mach, mach)
+        if mach not in _EMU_RELATIVE or (mach == 3) != (elf.elfclass == 32):
+            return None
+        e = "<" if elf.little_endian else ">"
+        b64 = elf.elfclass == 64
+        secs = list(elf.iter_sections())
+        if isinstance(symbol, int):
+            addr = symbol
+        else:
+            addr, want = None, symbol.encode()
+            for sec in secs:   # raw structs: pyelftools symbol iteration is seconds on a 50k-symbol Go/Rust binary
+                if sec["sh_type"] not in ("SHT_SYMTAB", "SHT_DYNSYM") or addr is not None:
+                    continue
+                strs = secs[sec["sh_link"]].data() if 0 <= sec["sh_link"] < len(secs) else b""
+                hits, i = set(), strs.find(b"\0" + want + b"\0")
+                while i >= 0:
+                    hits.add(i + 1)
+                    i = strs.find(b"\0" + want + b"\0", i + 1)
+                if strs.startswith(want + b"\0"):
+                    hits.add(0)
+                if not hits:
+                    continue
+                fmt, ent = (e + "IBxHQQ", 24) if b64 else (e + "IIIBxH", 16)
+                raw = sec.data()
+                for t in struct.iter_unpack(fmt, raw[:len(raw) // ent * ent]):
+                    nm, val, info, shndx = (t[0], t[3], t[1], t[2]) if b64 else (t[0], t[1], t[3], t[4])
+                    if nm in hits and info & 0xF == 2 and val and shndx:
+                        addr = val
+                        break
+            if addr is None:
+                return "none"
+        base = 0x10000000 if elf["e_type"] == "ET_DYN" else 0
+        pages = {}   # page -> prot
+        loads = []
+        for seg in elf.iter_segments():
+            if seg["p_type"] != "PT_LOAD" or not seg["p_memsz"]:
+                continue
+            va, msz = seg["p_vaddr"] + base, seg["p_memsz"]
+            if msz > 64 << 20:
+                return None
+            prot = U.UC_PROT_READ | U.UC_PROT_WRITE | (U.UC_PROT_EXEC if seg["p_flags"] & 1 else 0)
+            for p in range(va & ~0xfff, (va + msz + 0xfff) & ~0xfff, 0x1000):
+                pages[p] = pages.get(p, 0) | prot
+            off, fsz = seg["p_offset"], min(seg["p_filesz"], max(0, len(data) - seg["p_offset"]))
+            loads.append((va, data[off:off + fsz]))
+        if not pages or len(pages) > 32768:
+            return None
+        rel_type = _EMU_RELATIVE[mach]
+        rels = []
+        if base:
+            for sec in secs:
+                rela = sec["sh_type"] == "SHT_RELA"
+                if not rela and sec["sh_type"] != "SHT_REL":
+                    continue
+                fmt = e + ("QQq" if b64 else "Iii") if rela else e + ("QQ" if b64 else "II")
+                ent = struct.calcsize(fmt)
+                raw = sec.data()
+                for t in struct.iter_unpack(fmt, raw[:len(raw) // ent * ent]):
+                    if (t[1] & 0xffffffff if b64 else t[1] & 0xff) == rel_type:
+                        rels.append((t[0] + base, t[2] if rela else None))
+                        if len(rels) >= 500_000:
+                            return None
+        plt = [(s["sh_addr"] + base, s["sh_addr"] + base + s["sh_size"]) for s in secs
+               if s.name.startswith(".plt") and s["sh_size"]]
+    except Exception:  # noqa: BLE001 -- hostile / truncated ELF
+        return None
+    if mach == 183:
+        uc = U.Uc(U.UC_ARCH_ARM64, U.UC_MODE_ARM)
+        A = U.arm64_const
+        SP, RET = A.UC_ARM64_REG_SP, A.UC_ARM64_REG_W0
+    else:
+        uc = U.Uc(U.UC_ARCH_X86, U.UC_MODE_64 if mach == 62 else U.UC_MODE_32)
+        X = U.x86_const
+        SP, RET = (X.UC_X86_REG_RSP, X.UC_X86_REG_EAX) if mach == 62 else (X.UC_X86_REG_ESP, X.UC_X86_REG_EAX)
+    w = 4 if mach == 3 else 8
+    bad = []
+    try:
+        run = []
+        for p in sorted(pages):
+            if run and p == run[-1][0] + run[-1][1] and pages[p] == run[-1][2]:
+                run[-1][1] += 0x1000
+            else:
+                run.append([p, 0x1000, pages[p]])
+        for p, n, prot in run:
+            uc.mem_map(p, n, prot)
+        for va, blob in loads:
+            uc.mem_write(va, blob)
+        for off, add in rels:
+            if add is None:   # REL (i386): addend in place
+                add = int.from_bytes(uc.mem_read(off, w), "little")
+            uc.mem_write(off, ((add + base) & ((1 << (8 * w)) - 1)).to_bytes(w, "little"))
+        top = (max(pages) + 0x100000 + 0xfffff) & ~0xfffff
+        stk, sent = top, top + 0x40000
+        uc.mem_map(stk, 0x40000)
+        uc.mem_map(sent, 0x1000, U.UC_PROT_READ | U.UC_PROT_EXEC)
+        sp = stk + 0x30000
+        if mach == 183:
+            uc.reg_write(A.UC_ARM64_REG_X30, sent)
+            uc.reg_write(A.UC_ARM64_REG_X29, sp)
+        else:
+            sp -= w
+            uc.mem_write(sp, sent.to_bytes(w, "little"))
+        uc.reg_write(SP, sp)
+
+        def refuse(why):
+            def cb(uc, *a):
+                bad.append(why)
+                uc.emu_stop()
+            return cb
+        uc.hook_add(U.UC_HOOK_INTR, refuse("int/svc"))
+        if mach == 62:
+            uc.hook_add(U.UC_HOOK_INSN, refuse("syscall"), None, 1, 0, U.x86_const.UC_X86_INS_SYSCALL)
+            uc.hook_add(U.UC_HOOK_INSN, refuse("sysenter"), None, 1, 0, U.x86_const.UC_X86_INS_SYSENTER)
+        for lo, hi in plt:
+            uc.hook_add(U.UC_HOOK_CODE, refuse("plt"), None, lo, hi - 1)
+        uc.hook_add(U.UC_HOOK_MEM_INVALID, refuse("mem"))
+        uc.emu_start(addr + base, sent, timeout=timeout_ms * 1000, count=max_insns)
+        if bad or uc.reg_read(U.arm64_const.UC_ARM64_REG_PC if mach == 183 else
+                              (X.UC_X86_REG_RIP if mach == 62 else X.UC_X86_REG_EIP)) != sent:
+            return None
+        v = uc.reg_read(RET) & 0xffffffff
+    except Exception:  # noqa: BLE001 -- unicorn on hostile bytes: never raise past the caller
+        return None
+    return v - (1 << 32) if signed and v >> 31 else v
+
+
 # --- Ghidra headless decompile -------------------------------------------------------------------
 def ghidra_decompile(path, timeout=300):
     """Decompile every function with Ghidra headless (JDK 21 wired in launch.properties) and return the C
@@ -1852,6 +2365,54 @@ def _split_at(data, i, codec, emit):
         if codec is _B64 and re.search(rb"[-_]", b"".join(parts)[:r[1]]):
             name = "base64url"
         emit(i, "split-" + name, r[0], f"chunks={len(parts)}")
+
+
+def _split_raw_at(data, i, emit, left):
+    """RAW blob cut into consecutive NUL-terminated literals (GnuCOBOL WORKING-STORAGE `05 F-n PIC X(k) VALUE X"..."`
+    fields at cobc -O0 = memcpy sources in .rodata; C `char p[][k]`): the NUL runs between chunks are terminators +
+    alignment, but the blob itself holds NULs too (length high byte, crc, key-equal chars) -> DFS over how many NULs of
+    each run (<= _SPLIT_GAP) are gap, body bytes must xor to printable JSON text, crc decides. 'split-raw', offset =
+    first byte of the first chunk (the magic), detail chunks=N. Bounded: blobs <= 16 KiB, `left` = [DFS nodes] shared
+    by every anchor of one scan."""
+    win = data[i:i + 0x4000 + 64 * _SPLIT_GAP]
+
+    def walk(p, out, gaps):
+        left[0] -= 1
+        if left[0] < 0:
+            return None
+        while True:
+            if len(out) >= 12:
+                n = _need(out)
+                if n > 0x4000:
+                    return None
+                if len(out) >= n:
+                    r = _parse_blob(bytes(out[:n]))
+                    return (bytes(out[:n]), gaps) if r and r[5] and gaps else None
+            if p >= len(win):
+                return None
+            c = win[p]
+            if c:
+                if len(out) >= 12 and not (0x20 <= c ^ out[5] <= 0x7e or c ^ out[5] in (9, 10, 13)):
+                    return None
+                out.append(c)
+                p += 1
+                continue
+            q = p
+            while q < len(win) and not win[q]:
+                q += 1
+            r_ = q - p
+            for s in range(min(r_, _SPLIT_GAP) + 1):   # s NULs of this run are gap, the rest is blob content
+                nxt = out + b"\0" * (r_ - s)
+                if len(nxt) > 12 and not 0x20 <= nxt[5] <= 0x7e and max(len(out), 12) < len(nxt):
+                    continue   # a NUL in the body xors to the key: only printable keys allow body NULs
+                got = walk(q, nxt, gaps + (s > 0))
+                if got or left[0] < 0:
+                    return got
+            return None
+
+    got = walk(4, bytearray(win[:4]), 0)
+    if got:
+        emit(i, "split-raw", got[0], f"chunks={got[1] + 1}")
 
 
 def _wide_at(data, i, w, emit, budget):
@@ -2786,12 +3347,23 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False, _depth=0):
                 i, n = data.find(a, i + 1), n + 1
             if valid():
                 break
+    if not valid() and not late():
+        # raw blob cut into consecutive NUL-terminated literals (GnuCOBOL PIC X VALUE fields, C char[][k] tables)
+        i, n, left = data.find(HCFG_MAGIC), 0, [8192]
+        while i >= 0 and n < 256 and left[0] > 0 and not late():
+            _split_raw_at(data, i, emit, left)
+            i, n = data.find(HCFG_MAGIC, i + 1), n + 1
+            if valid():
+                break
     if not valid() and not late() and len(data) <= HCFG_STRIDE_MAX:
         # every k-th byte (junk filler) / zipped halves / even-then-odd bytes of the blob or its base64
         _stride_scan(data, emit, late)
     if not valid() and not late():
         # blob assembled at runtime by mov-immediate stores / pushes: emulate the builder from its first 'H' store
         _stack_scan(data, emit, late)
+    if not valid() and not late():
+        # GnuCOBOL WORKING-STORAGE VALUE init: movabs / movdqa-from-.rodata stores between two PLT calls
+        _cob_store_scan(data, emit, late)
     if not valid() and not late():
         # single-byte xor of the stored form: x[i]^x[i+1] is key-independent -> find the xor-diff of 'SENGR' / 'HCFG'
         x = int.from_bytes(data, "little")
@@ -3231,6 +3803,162 @@ def object_facts(data, max_syms=50000):
     return None
 
 
+# --- native import / export tables (D15 symbolized getenv/strcmp/printf; D17 backfill re-asks old days per group).
+
+def _elf_import_facts(data):
+    f = _elf_pair_facts(data)   # imports (UND named .dynsym, table order) + needed (DT_NEEDED order)
+    E, b64 = ("<" if data[5] == 1 else ">"), data[4] == 2
+    u16 = lambda o: struct.unpack_from(E + "H", data, o)[0]
+    u32 = lambda o: struct.unpack_from(E + "I", data, o)[0]
+    uw = (lambda o: struct.unpack_from(E + "Q", data, o)[0]) if b64 else u32
+    phoff, p = (uw(32), 52) if b64 else (u32(28), 40)
+    phes, phn = u16(p + 2), u16(p + 4)
+    interp = "none"
+    for k in range(min(phn, 256) if phoff and phes >= (56 if b64 else 32) else 0):
+        o = phoff + k * phes
+        if o + phes > len(data):
+            break
+        if u32(o) == 3:   # PT_INTERP: p_offset / p_filesz -> path, NUL dropped
+            off, sz = (uw(o + 8), uw(o + 32)) if b64 else (u32(o + 4), u32(o + 16))
+            interp = bytes(data[off:off + min(sz, 4096)]).split(b"\0")[0].decode("utf-8", "replace") or "none"
+            break
+    of = _elf_object_facts(data, 50000)
+    imports = list(dict.fromkeys(n.split("@")[0] for n in f["imports"]))
+    return {"format": "elf", "needed": f["needed"], "imports": imports, "interpreter": interp,
+            "exports": of["exports"] if of["exports"] != "none" else [], "soname": of["soname"]}
+
+
+def _pe_import_facts(data):
+    import pefile
+    pe = pefile.PE(data=bytes(data), fast_load=True)
+    D = pefile.DIRECTORY_ENTRY
+    pe.parse_data_directories(directories=[D["IMAGE_DIRECTORY_ENTRY_IMPORT"], D["IMAGE_DIRECTORY_ENTRY_EXPORT"],
+                                           D["IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT"]])
+    dlls, funcs, qual, delay = [], [], [], []
+    for ent in getattr(pe, "DIRECTORY_ENTRY_IMPORT", [])[:4096]:
+        dll = ent.dll.decode("utf-8", "replace")
+        dlls.append(dll)
+        for imp in ent.imports[:65536]:
+            fn = imp.name.decode("utf-8", "replace") if imp.name else f"ord{imp.ordinal}"
+            funcs.append(fn)
+            qual.append(f"{dll}!{fn}")
+    for ent in getattr(pe, "DIRECTORY_ENTRY_DELAY_IMPORT", [])[:4096]:
+        delay.append(ent.dll.decode("utf-8", "replace"))
+    ed = getattr(pe, "DIRECTORY_ENTRY_EXPORT", None)
+    exports = sorted({s.name.decode("utf-8", "replace") for s in ed.symbols[:65536] if s.name}) if ed else []
+    try:
+        imphash = pe.get_imphash() or "none"
+    except Exception:  # noqa: BLE001
+        imphash = "none"
+    return {"format": "pe", "needed": dlls, "import_dlls": dlls, "imports": funcs, "imports_qualified": qual,
+            "delay_import_dlls": delay, "interpreter": "none", "exports": exports, "imphash": imphash,
+            "dll_name": ed.name.decode("utf-8", "replace") if ed is not None and ed.name else "none"}
+
+
+_MO_DYLIB_CMDS = {0xc: "load", 0x80000018: "weak", 0x8000001f: "reexport", 0x20: "lazy", 0x80000023: "upward"}
+
+
+def _macho_import_facts(data):
+    lay = macho_layout(data)
+    if not lay:
+        return None
+    base = lay["slices"][0]["slice_offset"]   # fat: first slice (lipo order), like `otool -L` without -arch
+    end, bits = _MO_MAGIC[bytes(data[base:base + 4])]
+    u32 = lambda o: int.from_bytes(data[o:o + 4], end)   # noqa: E731
+    ncmds, sizeofcmds = u32(base + 16), u32(base + 20)
+    p = base + (32 if bits == 64 else 28)
+    stop = min(len(data), p + sizeofcmds)
+
+    def lcstr(lc, size, at):
+        o = u32(lc + at)
+        return bytes(data[lc + o:lc + size]).split(b"\0")[0].decode("utf-8", "replace") if 0 < o < size else ""
+    dylibs, weak, rpaths, interp, idname, symtab = [], [], [], "none", "none", None
+    for _ in range(min(ncmds, 4096)):
+        if p + 8 > stop:
+            break
+        cmd, size = u32(p), u32(p + 4)
+        if size < 8:
+            break
+        if cmd in _MO_DYLIB_CMDS:
+            dylibs.append(lcstr(p, size, 8))
+            if cmd == 0x80000018:
+                weak.append(dylibs[-1])
+        elif cmd == 0xd:   # LC_ID_DYLIB: the install name of this dylib itself (not a dependency)
+            idname = lcstr(p, size, 8) or "none"
+        elif cmd == 0xe:   # LC_LOAD_DYLINKER
+            interp = lcstr(p, size, 8) or "none"
+        elif cmd == 0x8000001c:   # LC_RPATH
+            rpaths.append(lcstr(p, size, 8))
+        elif cmd == 0x2:   # LC_SYMTAB: symoff, nsyms, stroff, strsize (slice-relative)
+            symtab = (u32(p + 8), u32(p + 12), u32(p + 16), u32(p + 20))
+        p += size
+    imports, exports = [], set()
+    if symtab:
+        symoff, nsyms, stroff, strsize = symtab
+        ent = 16 if bits == 64 else 12
+        strs = bytes(data[base + stroff:base + stroff + strsize])
+        for k in range(min(nsyms, 400_000)):
+            o = base + symoff + k * ent
+            if o + ent > len(data):
+                break
+            strx, ty = u32(o), data[o + 4]
+            if ty & 0xe0 or not ty & 1 or ty & 0x10 or not 0 < strx < len(strs):   # stab / not N_EXT / N_PEXT
+                continue
+            e = strs.find(b"\0", strx)
+            n = strs[strx:e if e >= 0 else len(strs)].decode("utf-8", "replace")
+            if n:
+                (exports.add(n) if ty & 0x0e else imports.append(n))   # N_UNDF -> import, else defined
+    return {"format": "mach-o", "needed": dylibs, "weak_dylibs": weak, "rpaths": rpaths, "install_name": idname,
+            "interpreter": interp, "imports": list(dict.fromkeys(imports)), "exports": sorted(exports)}
+
+
+def native_import_facts(data):
+    """Import / dependency / export lists of a native image (pure header + table walk, no subprocess):
+    needed = dependencies in load order (ELF DT_NEEDED, PE import descriptor DLL names as stored, Mach-O
+    LC_LOAD_DYLIB/WEAK/REEXPORT/LAZY/UPWARD paths; LC_ID_DYLIB excluded -> install_name), imports (ELF: undefined
+    named .dynsym symbols in table order, @version stripped, = readelf --dyn-syms UND; PE: function names in
+    descriptor order, ordinal-only -> ord<N>, + imports_qualified "DLL!func"; Mach-O: undefined external nlist names
+    in symtab order = `nm -u -p`, leading `_` kept), interpreter (ELF PT_INTERP / Mach-O LC_LOAD_DYLINKER, NUL
+    dropped; PE "none"), exports (sorted: ELF defined dynamic symbols = object_facts; PE export names; Mach-O defined
+    external = `nm -gU`), PE imphash (pefile), import_dlls / delay_import_dlls, Mach-O weak_dylibs / rpaths. Each list
+    also as *_sorted, *_count and *_csv; an empty list -> "none". Not ELF/PE/Mach-O or unparseable -> None."""
+    try:
+        if data[:4] == b"\x7fELF" and data[4:5] in (b"\x01", b"\x02") and data[5:6] in (b"\x01", b"\x02") \
+                and len(data) >= 64 and data[6] == 1:
+            f = _elf_import_facts(data)
+        elif data[:2] == b"MZ" and len(data) >= 0x40 and \
+                data[int.from_bytes(data[0x3c:0x40], "little"):][:4] == b"PE\0\0":
+            f = _pe_import_facts(data)
+        elif bytes(data[:4]) in _MO_MAGIC or bytes(data[:4]) in (b"\xca\xfe\xba\xbe", b"\xca\xfe\xba\xbf"):
+            f = _macho_import_facts(data)
+        else:
+            return None
+        if not f:
+            return None
+        for k in [k for k, v in f.items() if isinstance(v, list)]:
+            v = f[k]
+            f[k + "_count"] = str(len(v))
+            f[k + "_sorted"] = sorted(v) or "none"
+            f[k + "_csv"] = ",".join(v) or "none"
+            f[k] = v or "none"
+        for a, b in (("dependencies", "needed"), ("libraries", "needed"), ("dylibs", "needed"),
+                     ("imported_functions", "imports"), ("import_count", "imports_count"),
+                     ("export_count", "exports_count"), ("interp", "interpreter")):
+            if b in f:
+                f.setdefault(a, f[b])
+        return f
+    except Exception:  # noqa: BLE001 -- truncated / hostile tables: cannot answer
+        return None
+
+
+def native_import_field(data, name):
+    """One native_import_facts value; "none" when the input is not a native image or the field is unknown/absent."""
+    try:
+        return (native_import_facts(data) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
 def _be_raw_at(data, i):
     """Raw blob at i whose len/crc header fields are BIG-endian (a C struct compiled for mips/ppc/sparc/s390): the
     blob re-packed with an LE header (so _parse_blob reads it), only when crc32(plain) matches; else None."""
@@ -3402,6 +4130,122 @@ def _stack_scan(data, emit, late):
             if blob not in done:
                 done.add(blob)
                 emit(s, "stack-built", blob, f"{a} emu@{s}")
+        if done:
+            return
+
+
+_COB_LD = re.compile(rb"(?:[\x66\xf3]|[\x40-\x4f])?\x0f[\x10\x28\x6f][\x05\x0d\x15\x1d\x25\x2d\x35\x3d]"
+                     rb"|\xc5[\xf8-\xfa\xfc-\xfe]\x10|\xc5[\xf8-\xfa\xfc-\xfe][\x28\x6f]", re.S)
+
+
+def _cob_store_scan(data, emit, late):
+    """GnuCOBOL module init (x86-64 ELF64 LE, libcob cue): WORKING-STORAGE VALUE literals are copied into the static
+    b_N storage by gcc-expanded memcpy = movabs/movl immediates (cobc -O0) or movdqa/movups loads of 16-byte .rodata
+    constants interleaved with movabs (cobc -O2), in any order. Sites: a movabs/movl immediate starting 'HCFG', or a
+    rip-relative SSE/AVX load of a .rodata 'HCFG'. Emulate (unicorn, PT_LOAD-mapped, zero pages elsewhere) from just
+    after the last PLT call before the site up to the next call/ret (<= 4096 insns); crc-valid blobs only -> encoding
+    'stack-built', offset = the site instruction (speculative)."""
+    if data[:4] != b"\x7fELF" or data[4:6] != b"\x02\x01" or data[18:20] != b"\x3e\x00" or len(data) < 64:
+        return
+    if b"cob_init" not in data and b"libcob" not in data:
+        return
+    try:
+        import unicorn as U
+    except ImportError:
+        return
+    phoff = struct.unpack_from("<Q", data, 32)[0]
+    phentsz, phnum = struct.unpack_from("<HH", data, 54)
+    loads = []
+    for k in range(min(phnum, 64)):
+        p = phoff + k * phentsz
+        if p + 56 <= len(data):
+            typ, flg, off, va, _pa, fsz, msz = struct.unpack_from("<IIQQQQQ", data, p)
+            if typ == 1 and 0 < msz < 1 << 30:
+                loads.append((va, off, fsz, msz, flg))
+    if not loads:
+        return
+    o2v = lambda o: next((va + o - off for va, off, fsz, _m, _f in loads if off <= o < off + fsz), None)  # noqa: E731
+    x = [(va, off, fsz) for va, off, fsz, _m, f in loads if f & 1]
+    sites = []
+    i, n = data.find(HCFG_MAGIC), 0
+    while i >= 0 and n < 256 and len(sites) < 16:
+        if i >= 2 and data[i - 2] in (0x48, 0x49) and 0xb8 <= data[i - 1] <= 0xbf:
+            sites.append(i - 2)                              # movabs $'HCFG....', r64
+        elif i >= 6 and data[i - 6] == 0xc7 and data[i - 5] == 0x05:
+            sites.append(i - 6)                              # movl $'HCFG', disp(%rip)
+        else:
+            v = o2v(i)
+            for va, off, fsz in x if v is not None else ():  # rip-relative 16-byte load of a .rodata HCFG
+                for m in _COB_LD.finditer(data, off, min(off + fsz, off + (16 << 20))):
+                    e = m.end()
+                    if e + 4 <= len(data) and va + e + 4 - off + struct.unpack_from("<i", data, e)[0] == v:
+                        sites.append(m.start())
+                    if late():
+                        return
+        i, n = data.find(HCFG_MAGIC, i + 1), n + 1
+    done = set()
+    for s in sites[:16]:
+        if late():
+            return
+        st = s
+        for k in range(s - 5, max(0, s - 4096), -1):   # just after the last `call rel32` into code before the site
+            if data[k] == 0xe8:
+                t = k + 5 + struct.unpack_from("<i", data, k + 1)[0]   # same exec segment: file delta = va delta
+                if any(off <= t < off + fsz for _va, off, fsz in x) and (
+                        data[t:t + 4] == b"\xf3\x0f\x1e\xfa" or data[t:t + 2] == b"\xff\x25" or
+                        data[t:t + 3] == b"\xf2\xff\x25"):   # PLT / .plt.sec stub (endbr64 / jmp *GOT)
+                    st = k + 5
+                    break
+        try:
+            uc = U.Uc(U.UC_ARCH_X86, U.UC_MODE_64)
+            mapped = set()
+
+            def page(addr):
+                pg = addr & ~0xfff
+                if pg in mapped or len(mapped) > 512:
+                    return pg in mapped
+                uc.mem_map(pg, 0x1000)
+                mapped.add(pg)
+                for va, off, fsz, msz, _f in loads:
+                    a, b = max(pg, va), min(pg + 0x1000, va + fsz)
+                    if a < b:
+                        uc.mem_write(a, data[off + a - va:off + b - va])
+                return True
+
+            def unmapped(uc, access, addr, size, value, ud):
+                if access == U.UC_MEM_FETCH_UNMAPPED:
+                    return False
+                return page(addr) and page(addr + size - 1)
+
+            def code(uc, addr, size, ud):
+                b = bytes(uc.mem_read(addr, min(size, 3)))
+                if b[:1] in (b"\xe8", b"\xc3") or b[:2] in (b"\xff\x15", b"\xf2\xc3") or \
+                        (b[:1] == b"\xff" and len(b) > 1 and 0xd0 <= b[1] <= 0xd7):
+                    uc.emu_stop()
+            pva = o2v(st)
+            if pva is None:
+                continue
+            page(pva), page(pva + 0x1000)
+            uc.mem_map(0x7ff00000, 0x40000)
+            uc.reg_write(U.x86_const.UC_X86_REG_RSP, 0x7ff20000)
+            uc.reg_write(U.x86_const.UC_X86_REG_RBP, 0x7ff20000)
+            uc.hook_add(U.UC_HOOK_MEM_UNMAPPED, unmapped)
+            uc.hook_add(U.UC_HOOK_CODE, code)
+            try:
+                uc.emu_start(pva, 0, timeout=100000, count=4096)
+            except U.UcError:
+                pass
+            for b, e, _ in uc.mem_regions():
+                buf = bytes(uc.mem_read(b, e - b + 1))
+                j = buf.find(HCFG_MAGIC)
+                while j >= 0:
+                    blob = buf[j:j + _need(buf[j:j + 8])]
+                    if blob not in done and (_parse_blob(blob) or (0,) * 6)[5]:
+                        done.add(blob)
+                        emit(s, "stack-built", blob, f"x86-64 cob-init emu@{s}")
+                    j = buf.find(HCFG_MAGIC, j + 1)
+        except Exception:   # noqa: BLE001 -- unicorn on hostile bytes: never raise past the scan
+            continue
         if done:
             return
 
@@ -3919,6 +4763,158 @@ def dotnet_build_facts(data):
     return out
 
 
+# .NET metadata facts (d03 family: a plain IL dll/exe). Lists are compact JSON in metadata TABLE order, names exactly as
+# stored (`<Module>`, `<PrivateImplementationDetails>`, nested `__StaticArrayInitTypeSize=N`, `.ctor`/`.cctor` kept).
+_DN_ATTR_FACTS = {"TargetFrameworkAttribute": "target_framework", "AssemblyFileVersionAttribute": "file_version",
+                  "AssemblyInformationalVersionAttribute": "informational_version", "AssemblyTitleAttribute": "title",
+                  "AssemblyCompanyAttribute": "company", "AssemblyProductAttribute": "product",
+                  "AssemblyConfigurationAttribute": "configuration", "AssemblyDescriptionAttribute": "description",
+                  "AssemblyCopyrightAttribute": "copyright", "GuidAttribute": "guid_attribute"}
+_DN_TFM = {".NETCoreApp": "net", ".NETFramework": "net", ".NETStandard": "netstandard"}
+
+
+def _dn_serstr(blob):
+    """First fixed arg of a custom-attribute blob when it is a SerString (prolog 01 00, compressed len, UTF-8)."""
+    if len(blob) < 3 or blob[:2] != b"\x01\x00" or blob[2] == 0xFF:
+        return None
+    n, p = blob[2], 3
+    if n & 0x80:
+        n, p = (((n & 0x3F) << 8) | blob[3], 4) if not n & 0x40 else (((n & 0x1F) << 24) | int.from_bytes(blob[3:6], "big"), 6)
+    return blob[p:p + n].decode("utf-8", "replace") if p + n <= len(blob) else None
+
+
+def _dn_tfm(tf):
+    """'.NETCoreApp,Version=v10.0' -> 'net10.0'; '.NETFramework,Version=v4.7.2' -> 'net472'; netstandard2.0."""
+    m = re.match(r"(\.NET\w+),Version=v(\d+(?:\.\d+)*)$", tf or "")
+    if not m or m.group(1) not in _DN_TFM:
+        return "none"
+    v = m.group(2)
+    return "net" + v.replace(".", "") if m.group(1) == ".NETFramework" else _DN_TFM[m.group(1)] + v
+
+
+def dotnet_meta_facts(data):
+    """ECMA-335 metadata facts of a .NET (CLI) PE via dnfile: assembly_name / assembly_version (a.b.c.d) / assembly_culture,
+    module_name, mvid (lowercase dashed guid), runtime_version (metadata 'v4.0.30319'), typedefs / typedefs_full
+    (Namespace.Name) / typedef_count, methods / method_count, fields / field_count, field_rva_count / has_field_rva
+    ("true"/"false"), entry_point_token ("0x06000001", "none" for a library), entry_point (Namespace.Type.Method),
+    assembly_refs, target_framework ('.NETCoreApp,Version=v10.0') + tfm ('net10.0', the runtimeconfig form), and the
+    assembly-level string attributes (file_version, informational_version, title, company, product, configuration, ...).
+    All values are strings; absent -> "none". None when the bytes are not a CLI assembly."""
+    try:
+        import dnfile
+        pe = dnfile.dnPE(data=bytes(data), fast_load=False)
+        net = pe.net
+        if net is None or net.mdtables is None:
+            return None
+        t = net.mdtables
+    except Exception:   # noqa: BLE001 -- hostile/truncated PE: cannot answer
+        return None
+    out = {}
+    js = lambda xs: json.dumps(list(xs), separators=(",", ":"), ensure_ascii=False)   # noqa: E731
+    rows = lambda tab: list(getattr(t, tab, None) or ())   # noqa: E731
+
+    def nm(x):
+        return "" if x is None else str(x)
+
+    def step(key, fn):
+        try:
+            out[key] = fn()
+        except Exception:   # noqa: BLE001 -- one broken table must not hide the others
+            out.setdefault(key, "none")
+    asm = rows("Assembly")
+    a = asm[0] if asm else None
+    step("assembly_name", lambda: nm(a.Name) if a else "none")
+    step("assembly_version", lambda: f"{a.MajorVersion}.{a.MinorVersion}.{a.BuildNumber}.{a.RevisionNumber}" if a else "none")
+    step("assembly_culture", lambda: (nm(a.Culture) or "none") if a else "none")
+    mods = rows("Module")
+    step("module_name", lambda: nm(mods[0].Name) if mods else "none")
+    step("mvid", lambda: str(mods[0].Mvid).lower() if mods and mods[0].Mvid is not None else "none")
+    step("runtime_version", lambda: bytes(net.metadata.struct.Version).split(b"\0")[0].decode("ascii", "replace") or "none")
+    tds = rows("TypeDef")
+    full = [(nm(r.TypeNamespace) + "." if nm(r.TypeNamespace) else "") + nm(r.TypeName) for r in tds]
+    step("typedefs", lambda: js(nm(r.TypeName) for r in tds))
+    step("typedefs_full", lambda: js(full))
+    out["typedef_count"] = str(len(tds))
+    mds = rows("MethodDef")
+    step("methods", lambda: js(nm(r.Name) for r in mds))
+    out["method_count"] = str(len(mds))
+    fds = rows("Field")
+    step("fields", lambda: js(nm(r.Name) for r in fds))
+    out["field_count"] = str(len(fds))
+    rv = [r for r in rows("FieldRva") if getattr(r, "Rva", 0)]
+    out["field_rva_count"] = str(len(rv))
+    out["has_field_rva"] = "true" if rv else "false"
+    step("assembly_refs", lambda: js(nm(r.Name) for r in rows("AssemblyRef")))
+
+    def us_heap():   # #US: [compressed len][UTF-16LE][1 trailing flag byte]; empty entries skipped
+        h, p, got = bytes(getattr(net.user_strings, "__data__", b"") or b""), 1, []
+        while p < len(h) and len(got) < 20000:
+            n, q = h[p], p + 1
+            if n & 0x80:
+                n, q = (((n & 0x3F) << 8) | h[p + 1], p + 2) if not n & 0x40 else \
+                    (((n & 0x1F) << 24) | int.from_bytes(h[p + 1:p + 4], "big"), p + 4)
+            if n == 0 and h[p] == 0:
+                break   # zero padding at the end of the heap
+            if n > 1:
+                got.append(h[q:q + n - 1].decode("utf-16-le", "replace"))
+            p = q + n
+        return js(got)
+    step("user_strings", us_heap)
+
+    def entry():
+        tok = int(net.struct.EntryPointTokenOrRva or 0)
+        if not tok or net.Flags.CLR_NATIVE_ENTRYPOINT:
+            out["entry_point_token"] = "none" if not tok else f"0x{tok:08x}"
+            return "none"
+        out["entry_point_token"] = f"0x{tok:08x}"
+        idx = tok & 0xFFFFFF
+        if tok >> 24 != 6 or not 0 < idx <= len(mds):
+            return "none"
+        owner = None   # dnfile expands each TypeDef's MethodList run (ECMA-335 II.22.37)
+        for i, r in enumerate(tds):
+            if r.MethodList and any(x.row_index == idx for x in r.MethodList):
+                owner = full[i]
+                break
+        return f"{owner}.{nm(mds[idx - 1].Name)}" if owner else nm(mds[idx - 1].Name)
+    out["entry_point_token"] = "none"
+    step("entry_point", entry)
+    for k in _DN_ATTR_FACTS.values():
+        out[k] = "none"
+    try:
+        for ca in rows("CustomAttribute"):
+            par, ty = ca.Parent, ca.Type
+            if not par or not ty or getattr(par.table, "name", "") != "Assembly":
+                continue
+            r = ty.row
+            cls = getattr(r, "Class", None) if getattr(ty.table, "name", "") == "MemberRef" else None
+            tn = nm(getattr(cls.row, "TypeName", None)) if cls is not None and cls.row is not None else ""
+            key = _DN_ATTR_FACTS.get(tn)
+            if key and out[key] == "none":
+                v = _dn_serstr(bytes(ca.Value.value or b""))
+                if v is not None:
+                    out[key] = v
+    except Exception:   # noqa: BLE001
+        pass
+    out["tfm"] = _dn_tfm(out["target_framework"])
+    return out
+
+
+_DN_FIELD_ALIASES = {"name": "assembly_name", "version": "assembly_version", "types": "typedefs",
+                     "type_names": "typedefs", "typedef_names": "typedefs", "type_count": "typedef_count",
+                     "method_names": "methods", "methoddef_names": "methods", "field_names": "fields",
+                     "entry_point_token_hex": "entry_point_token", "entrypoint_token": "entry_point_token",
+                     "target_framework_moniker": "tfm", "runtimeconfig_tfm": "tfm", "module_mvid": "mvid"}
+
+
+def dotnet_meta_field(data, name):
+    """One dotnet_meta_facts value by name (aliases: version, types, method_names, ...); "none" when the field is absent,
+    None when `data` is not a CLI assembly or the name is unknown."""
+    f = dotnet_meta_facts(data)
+    if f is None:
+        return None
+    return f.get(_DN_FIELD_ALIASES.get(name, name))
+
+
 # ------------------------------------------------------------------ container slots: PE/.NET resources, overlay
 _PARSE_ERR = (struct.error, IndexError, OverflowError, ValueError, TypeError)   # hostile header fields
 _RT_NAMES = {1: "CURSOR", 2: "BITMAP", 3: "ICON", 4: "MENU", 5: "DIALOG", 6: "STRING", 7: "FONTDIR", 8: "FONT",
@@ -4125,6 +5121,292 @@ def hcfg_locate(data, off):
             return {"container": "section", "section": n, "slot_offset": o, "delta": off - o, "size": size}
     return None
 
+
+
+# Day 17 `hcfg_storage` (kind enum): the GM's rule list, applied IN ORDER -- base64 (crc-valid HCFG only after decoding a
+# printable base64 carrier; d08/d09/d11/d13, jars d06/d07) -> raw_hcfg_section (literal HCFG starts in a native section
+# named exactly .hcfg; d14, also d02/d10/d15) -> wasm_data_segment (inside a wasm data segment; d16) -> raw_const_array
+# (any OTHER native data section: d12 FPC .data, d04 Go .noptrdata, d05/d17 .rodata) -> raw. GM-confirmed: d08/d09/d11-d14.
+HCFG_STORAGE_TOKENS = ("raw", "base64", "raw_const_array", "raw_hcfg_section", "wasm_data_segment")
+_HCFG_B64_ENC = ("base64", "base64url")
+
+
+def hcfg_section_of(data, off):
+    """{container elf/pe/mach-o/wasm, section, data (bool: a native DATA section), flags} of the section holding file
+    offset `off`; {container, section None} when the container parses but no section holds it; None for an unknown
+    container. Data = ELF SHF_ALLOC && !SHF_EXECINSTR (not NOBITS); PE IMAGE_SCN_CNT_INITIALIZED_DATA && !MEM_EXECUTE;
+    Mach-O no S_ATTR_*_INSTRUCTIONS and segment __DATA* or __TEXT,__const/__cstring/__literal*; wasm = data segment."""
+    try:
+        data = bytes(data)
+        if data[:4] == b"\x7fELF":
+            e, b64 = ("<" if data[5] == 1 else ">"), data[4] == 2
+            shoff = struct.unpack_from(e + ("Q" if b64 else "I"), data, 40 if b64 else 32)[0]
+            shes, shn, shstr = struct.unpack_from(e + "3H", data, 58 if b64 else 46)
+            fmt = e + ("IIQQQQ" if b64 else "IIIIII")   # name, type, flags, addr, offset, size
+            secs = [struct.unpack_from(fmt, data, shoff + k * shes) for k in range(min(shn, 65535))] if shoff else []
+            names = b""
+            if shstr < len(secs):
+                names = data[secs[shstr][4]:secs[shstr][4] + secs[shstr][5]]
+            for nm, t, fl, _, o, n in secs:
+                if t != 8 and t != 0 and o <= off < o + n:   # SHT_NOBITS / SHT_NULL hold no file bytes
+                    name = names[nm:names.find(b"\0", nm)].decode("latin-1") if nm < len(names) else ""
+                    return {"container": "elf", "section": name, "flags": fl, "data": bool(fl & 2 and not fl & 4)}
+            return {"container": "elf", "section": None}
+        lay = _pe_layout(data)
+        if lay:
+            pe = int.from_bytes(data[0x3c:0x40], "little")
+            first = pe + 24 + struct.unpack_from("<H", data, pe + 20)[0]
+            for k, (name, _, _, rp, rs) in enumerate(lay[1]):
+                if rs and rp <= off < rp + rs:
+                    ch = struct.unpack_from("<I", data, first + 40 * k + 36)[0]
+                    return {"container": "pe", "section": name, "flags": ch,
+                            "data": bool(ch & 0x40 and not ch & 0x20000020)}
+            return {"container": "pe", "section": None}
+        mo = macho_layout(data)
+        if mo:
+            for x in (x for s in mo["slices"] for x in s["sections"]):
+                if x["offset"] and x["offset"] <= off < x["offset"] + x["size"] and x["flags"] & 0xff not in (1, 0xc):
+                    seg, sect, fl = x["segment"], x["section"], x["flags"]
+                    dat = not fl & 0x80000400 and (seg.startswith("__DATA") or seg == "__TEXT" and (
+                        sect in ("__const", "__cstring") or sect.startswith("__literal")))
+                    return {"container": "mach-o", "section": sect, "segment": seg, "flags": fl, "data": bool(dat)}
+            return {"container": "mach-o", "section": None}
+        wl = wasm_layout(data)
+        if wl:
+            for sg in wl["data_segments"]:
+                if sg["file_offset"] <= off < sg["file_offset"] + sg["size"]:
+                    return {"container": "wasm", "section": "data", "segment_index": sg["index"], "data": True}
+            return {"container": "wasm", "section": None}
+    except _PARSE_ERR:
+        return None
+    return None
+
+
+# --- file offset -> container location (likely next ids: hcfg_section, hcfg_va/hcfg_vaddr, hcfg_rva, hcfg_segment,
+# hcfg_mem_offset). Spellings tried first: section name verbatim (".rodata"), addresses lowercase 0x hex (as
+# entry_point). SPECULATIVE: ELF rva = vaddr - lowest PT_LOAD (p_vaddr - p_offset) base; Mach-O rva = vaddr - vmaddr
+# of the segment mapping file offset 0 (__TEXT).
+_ELF_SHF = ((1, "W"), (2, "A"), (4, "X"), (0x10, "M"), (0x20, "S"), (0x40, "I"), (0x80, "L"), (0x100, "O"),
+            (0x200, "G"), (0x400, "T"), (0x800, "C"), (0x80000000, "E"))
+LOCATE_KEYS = ("container", "section", "section_flags", "segment", "segment_index", "segment_flags", "vaddr", "rva",
+               "wasm_data_index", "wasm_mem_offset")
+
+
+def _hx(v):
+    return "none" if v is None else f"0x{v:x}"
+
+
+def _locate_elf(data, off, out):
+    e, b64 = ("<" if data[5] == 1 else ">"), data[4] == 2
+    if b64:
+        phoff, shoff = struct.unpack_from(e + "QQ", data, 32)
+        phes, phn, shes, shn, shstr = struct.unpack_from(e + "5H", data, 54)
+    else:
+        phoff, shoff = struct.unpack_from(e + "II", data, 28)
+        phes, phn, shes, shn, shstr = struct.unpack_from(e + "5H", data, 42)
+    loads, seg = [], None
+    for k in range(min(phn, 4096) if phoff else 0):
+        o = phoff + k * phes
+        if o + (56 if b64 else 32) > len(data):
+            break
+        if b64:
+            t, fl, po, va, _, fs = struct.unpack_from(e + "IIQQQQ", data, o)
+        else:
+            t, po, va, _, fs, _, fl = struct.unpack_from(e + "7I", data, o)
+        if t != 1:   # PT_LOAD only: the mapping that gives a file byte its address
+            continue
+        loads.append(va - po)
+        if seg is None and fs and po <= off < po + fs:
+            seg = (k, fl, va + off - po)
+    sec = None
+    if shoff and shes >= (64 if b64 else 40):
+        fmt = e + ("IIQQQQ" if b64 else "6I")   # name, type, flags, addr, offset, size
+        rows = []
+        for k in range(min(shn, 65535)):
+            b = shoff + k * shes
+            if b + shes > len(data):
+                break
+            rows.append(struct.unpack_from(fmt, data, b))
+        names = b""
+        if shstr < len(rows):
+            names = bytes(data[rows[shstr][4]:rows[shstr][4] + rows[shstr][5]])
+        for nm, t, fl, ad, o, n in rows:
+            if t not in (0, 8) and o <= off < o + n:   # SHT_NULL / SHT_NOBITS hold no file bytes
+                z = names.find(b"\0", nm)
+                sec = (names[nm:z if z >= 0 else len(names)].decode("latin-1") if nm < len(names) else "", fl, ad, o)
+                break
+    out["container"] = "elf"
+    if sec:
+        out["section"] = sec[0]
+        out["section_flags"] = "".join(c for bit, c in _ELF_SHF if sec[1] & bit)
+    va = sec[2] + off - sec[3] if sec and sec[1] & 2 and sec[2] else (seg[2] if seg else None)
+    if seg:
+        out["segment"], out["segment_index"] = "LOAD", seg[0]
+        out["segment_flags"] = "".join(c for bit, c in ((4, "R"), (2, "W"), (1, "E")) if seg[1] & bit)
+    if va is not None:
+        out["vaddr"] = _hx(va)
+        out["rva"] = _hx(va - min(loads)) if loads and va >= min(loads) else "none"
+
+
+def _locate_pe(data, off, lay, out):
+    pe = int.from_bytes(data[0x3c:0x40], "little")
+    opt = pe + 24
+    base = struct.unpack_from("<Q" if struct.unpack_from("<H", data, opt)[0] == 0x20b else "<I", data,
+                              opt + (24 if struct.unpack_from("<H", data, opt)[0] == 0x20b else 28))[0]
+    first = opt + struct.unpack_from("<H", data, pe + 20)[0]
+    out["container"] = "pe"
+    for k, (name, va, vs, rp, rs) in enumerate(lay[1]):
+        if rs and rp <= off < rp + rs:
+            out["section"] = name
+            out["section_flags"] = _hx(struct.unpack_from("<I", data, first + 40 * k + 36)[0])
+            out["segment_index"] = k
+            out["rva"], out["vaddr"] = _hx(va + off - rp), _hx(base + va + off - rp)
+            return
+    if off < lay[0] or (lay[1] and off < min((s[3] for s in lay[1] if s[4]), default=0)):
+        out["rva"], out["vaddr"] = _hx(off), _hx(base + off)   # headers map 1:1 at the image base
+
+
+def _locate_macho(data, off, out):
+    mo = macho_layout(data)
+    if not mo:
+        return False
+    out["container"] = "mach-o"
+    sl = None
+    for s in mo["slices"]:
+        if s["slice_offset"] <= off:
+            sl = s if sl is None or s["slice_offset"] >= sl["slice_offset"] else sl
+    if sl is None:
+        return True
+    end, base = sl["endian"], sl["slice_offset"]
+    u32 = lambda o: int.from_bytes(data[o:o + 4], end)   # noqa: E731
+    p = base + (32 if sl["bits"] == 64 else 28)
+    stop = min(len(data), p + u32(base + 20))
+    text_va = None
+    for _ in range(min(u32(base + 16), 4096)):
+        if p + 8 > stop:
+            break
+        cmd, size = u32(p), u32(p + 4)
+        if size < 8:
+            break
+        if cmd in (0x1, 0x19):
+            w = 8 if cmd == 0x19 else 4
+            uw = lambda o: int.from_bytes(data[o:o + w], end)   # noqa: E731
+            segname = bytes(data[p + 8:p + 24]).split(b"\0")[0].decode("latin-1")
+            vmaddr, fileoff, filesize = uw(p + 24), uw(p + 24 + 2 * w), uw(p + 24 + 3 * w)
+            if fileoff == 0 and filesize:
+                text_va = vmaddr if text_va is None else text_va
+            if filesize and base + fileoff <= off < base + fileoff + filesize and out["segment"] == "none":
+                out["segment"], out["vaddr"] = segname, _hx(vmaddr + off - base - fileoff)
+                out["segment_flags"] = _hx(u32(p + 24 + 4 * w + 4))   # initprot
+                nsects = u32(p + 24 + 4 * w + 8)
+                q, ssz = p + 24 + 4 * w + 16, 80 if w == 8 else 68
+                for _s in range(min(nsects, 1024)):
+                    if q + ssz > min(stop, p + size):
+                        break
+                    addr, sz, so = uw(q + 32), uw(q + 32 + w), u32(q + 32 + 2 * w)
+                    fl = u32(q + 48 + 2 * w)
+                    if so and fl & 0xff not in (1, 0xc) and base + so <= off < base + so + sz:
+                        out["section"] = bytes(data[q:q + 16]).split(b"\0")[0].decode("latin-1")
+                        out["section_flags"] = _hx(fl)
+                        if not segname:   # MH_OBJECT: one unnamed segment, the section names its own segname
+                            out["segment"] = bytes(data[q + 16:q + 32]).split(b"\0")[0].decode("latin-1") or "none"
+                        out["vaddr"] = _hx(addr + off - base - so)
+                        break
+                    q += ssz
+        p += size
+    if out["vaddr"] != "none" and text_va is not None:
+        out["rva"] = _hx(int(out["vaddr"], 16) - text_va)
+    return True
+
+
+def locate_offset(data, off):
+    """Map file offset `off` to its container location -> {container elf/pe/mach-o/wasm, section (name verbatim:
+    ".rodata", PE ".data", Mach-O sectname "__const", wasm section name "data"/"code"/custom name), section_flags (ELF
+    readelf letters "WA"/"AX"; PE characteristics / Mach-O section flags as 0x hex), segment (ELF "LOAD", Mach-O
+    segment name "__DATA"), segment_index (ELF program-header index of the PT_LOAD holding it; PE section index),
+    segment_flags (ELF "R"/"RW"/"RE"; Mach-O initprot hex), vaddr / rva (lowercase 0x hex), wasm_data_index,
+    wasm_mem_offset (int: segment memory offset + delta, "none" for a passive / global-based segment)}. Absent fields
+    are the literal "none". ELF works on sstripped files (no section headers -> program headers only). None for an
+    unknown container or an offset outside the file. Pure struct parsing, never raises."""
+    try:
+        data = bytes(data) if not isinstance(data, (bytes, bytearray)) else data
+        if not isinstance(off, int) or not 0 <= off < len(data):
+            return None
+        out = dict.fromkeys(LOCATE_KEYS, "none")
+        if data[:4] == b"\x7fELF" and len(data) >= 52 and data[4] in (1, 2) and data[5] in (1, 2):
+            _locate_elf(data, off, out)
+            return out
+        lay = _pe_layout(data)
+        if lay:
+            _locate_pe(data, off, lay, out)
+            return out
+        if _MO_MAGIC.get(bytes(data[:4])) or data[:4] in (b"\xca\xfe\xba\xbe", b"\xca\xfe\xba\xbf"):
+            if _locate_macho(data, off, out):
+                return out
+        wl = wasm_layout(data) if data[:4] == b"\0asm" else None
+        if wl:
+            out["container"] = "wasm"
+            for s in wl["sections"]:
+                if s["offset"] <= off < s["offset"] + s["size"]:
+                    out["section"] = s["name"]
+            for sg in wl["data_segments"]:
+                if sg["file_offset"] <= off < sg["file_offset"] + sg["size"]:
+                    out["wasm_data_index"] = sg["index"]
+                    mo = sg["mem_offset"]
+                    out["wasm_mem_offset"] = "none" if mo is None else mo + off - sg["file_offset"]
+            return out
+    except _PARSE_ERR:
+        return None
+    return None
+
+
+def hcfg_storage(data, hit=None):
+    """GM `hcfg_storage` token (HCFG_STORAGE_TOKENS) for the validated HCFG `hit` (HcfgHit or a dict with offset +
+    encoding; found with hcfg_find when omitted -- a zip/jar scans its application classes / entries). "none" when no
+    crc-valid HCFG exists; None (not a guess) when the hit's encoding is outside the rule list (hex, xor, zlib, ...),
+    or a literal HCFG lies in no section of a parsed native/wasm container (header, overlay, wasm code). A jar's
+    literal HCFG (class constant pool, no native section) and a blob in an unknown container -> "raw". SPECULATIVE
+    edges: d03 .NET FieldRVA in PE .text (code section) -> "raw" (alternative raw_const_array); Mach-O __hcfg counts as
+    the .hcfg section."""
+    try:
+        data = bytes(data)
+        if hit is None:
+            if data[:2] == b"PK":
+                for _, cls in jar_app_classes(data):
+                    tok = hcfg_storage(cls)
+                    if tok != "none":
+                        return tok
+                try:
+                    zf = zipfile.ZipFile(io.BytesIO(data))
+                    for i in zf.infolist()[:2000]:
+                        if not i.filename.endswith(".class") and 0 < i.file_size <= HCFG_ZIP_MAX:
+                            tok = hcfg_storage(zf.read(i))
+                            if tok != "none":
+                                return tok
+                except (zipfile.BadZipFile, RuntimeError, NotImplementedError, OSError, EOFError, zlib.error):
+                    pass
+                return "none"
+            hit = hcfg_find(data)
+            if hit is None:
+                return "none"
+        g = hit.get if isinstance(hit, dict) else lambda k: getattr(hit, k, None)
+        enc, off = g("encoding"), g("offset")
+        if enc in _HCFG_B64_ENC:
+            return "base64"
+        if enc not in ("raw", "split-raw") or not isinstance(off, int) or data[off:off + 4] != HCFG_MAGIC:
+            return None
+        loc = hcfg_section_of(data, off)
+        if loc is None:
+            return "raw"
+        if loc["section"] is None:
+            return None
+        if loc["container"] != "wasm" and loc["section"] in (".hcfg", "__hcfg"):
+            return "raw_hcfg_section"
+        if loc["container"] == "wasm":
+            return "wasm_data_segment"
+        return "raw_const_array" if loc["data"] else "raw"
+    except _PARSE_ERR:
+        return None
 
 
 # --- same-source build pairs (D15 stripped/symbolized, D16 compact/direct; D17+ O0/O2, static/dynamic, pie/nopie,
@@ -4359,3 +5641,2885 @@ def zip_cd_sha256(data, pwd=None, prefix=None):
         return out
     except Exception:   # noqa: BLE001
         return None
+
+
+# --- per-language identity facts (D8-D17 groups: Swift / Nim / Zig / D / FPC / Crystal / ObjC / Ada / Go / Rust) ----
+LANG_ORDER = ("swift", "objc", "nim", "zig", "d", "fpc", "crystal", "gnat", "go", "rust")
+_LANG_BYTES = {   # one raw-byte marker per runtime (only scanned when sections/symbols did not already decide it)
+    "swift": b"swift_retain", "objc": b"objc_msg", "nim": b"NimMain", "zig": b"ziglang", "d": b"_D4core",
+    "fpc": b"FPC 3.", "crystal": b"Crystal::", "gnat": b"__gnat_", "go": b"\xff Go buildinf:", "rust": b"/rustc/",
+}
+_SWIFT_SYS = {"Swift", "Foundation", "FoundationEssentials", "FoundationInternationalization", "FoundationNetworking",
+              "FoundationXML", "Dispatch", "Glibc", "Musl", "SwiftGlibc", "Synchronization", "Observation",
+              "Distributed", "RegexBuilder", "CoreFoundation", "Darwin", "ObjectiveC", "SwiftShims", "XCTest",
+              "Cxx", "CxxStdlib", "SwiftOnoneSupport", "os", "WinSDK", "Android", "Testing"}
+_D_SYS = {"core", "std", "rt", "object", "gc", "etc", "ldc", "gcc", "TypeInfo"}
+_ADA_SYS = ("ada", "system", "gnat", "interfaces", "_ada", "__gnat", "_gnat")
+_SWIFT_KIND = {"V": "struct", "C": "class", "O": "enum", "P": "protocol"}
+_D_ID = re.compile(r"(\d+)")
+_NIM_SYM = re.compile(r"^(.+?)__([A-Za-z0-9]+)_u\d+$")
+_RUST_LEGACY = re.compile(r"^_ZN.*17h[0-9a-f]{16}E$")
+_SWIFT_MANGLED = re.compile(r"^_?\$[sS](?:s|[1-9])")   # `$Slice:0` (Crystal) is no Swift mangling
+_SWIFT_MOD = re.compile(r"_?\$[sS]([1-9]\d*)")
+
+
+def _elf_symbols(data, cap=400_000):
+    """[(name, st_info type, defined)] from SHT_SYMTAB + SHT_DYNSYM (raw structs, capped); [] when absent."""
+    b64, e = data[4] == 2, "<" if data[5] == 1 else ">"
+    shoff = struct.unpack_from(e + ("Q" if b64 else "I"), data, 40 if b64 else 32)[0]
+    shes, shn = struct.unpack_from(e + "HH", data, 58 if b64 else 46)
+    sh = (e + "4xI8x8xQQIi8xQ") if b64 else (e + "4xI4x4xIIIi4xI")   # type, offset, size, link, -, entsize
+    if not shoff or shes < (64 if b64 else 40) or shoff + shn * shes > len(data):
+        return []
+    secs = [struct.unpack_from(sh, data, shoff + k * shes) for k in range(min(shn, 65535))]
+    out = []
+    for ty, off, size, link, _, ent in secs:
+        if ty not in (2, 11) or not 0 <= link < len(secs) or off + size > len(data):
+            continue
+        so, sn = secs[link][1], secs[link][2]
+        ent = ent or (24 if b64 else 16)
+        for k in range(min(size // ent, cap - len(out))):
+            o = off + k * ent
+            if b64:
+                nm, info, shndx = struct.unpack_from(e + "IBxH", data, o)
+            else:
+                nm, info, shndx = struct.unpack_from(e + "I8xBxH", data, o)
+            if not nm or nm >= sn:
+                continue
+            z = data.find(b"\0", so + nm, so + sn)
+            out.append((bytes(data[so + nm:z if z >= 0 else so + sn]).decode("latin-1"), info & 0xF, shndx != 0))
+    return out
+
+
+def _swift_ids(s, p):
+    """[(identifier, kind letter after it)] from offset p of a Swift `$s` mangling (plain <len><ident> runs only)."""
+    out = []
+    while p < len(s) and s[p].isdigit() and s[p] != "0":
+        m = _D_ID.match(s, p)
+        n, p = int(m.group(1)), m.end()
+        if p + n > len(s):
+            break
+        out.append((s[p:p + n], s[p + n:p + n + 1]))
+        p += n
+    return out
+
+
+def lang_facts(data, max_syms=400_000):
+    """Language identity + theme facts of an ELF / PE / Mach-O / wasm image (bytes only, no subprocess).
+    has_<lang>_runtime "true"/"false" for swift (swift5_* sections, `$s` symbols, Swift runtime strings), objc
+    (__objc_* / .objc_* sections or symbols, objc_msg_lookup/objc_msgSend), nim (NimMain), zig (.comment zig / zig std
+    paths), d (_D4core/_D2rt symbols, druntime), fpc (FPC banner, .fpcdata), crystal (Crystal:: symbols, crystal/src),
+    gnat (+ alias has_ada_runtime: GNAT Version, __gnat_, adainit), go (buildinfo, runtime.goexit), rust (rust_panic,
+    /rustc/ paths); has_wasm_module. has_<lang>_mangled_symbol: swift `$s`/`$S`/`_$s`, d `_D<digit>`, nim
+    `<proc>__<mod>_u<N>`, rust legacy `_ZN..17h<hash>E` / v0 `_R`, cpp `_Z` (not rust). language = first runtime hit in
+    LANG_ORDER ("c"/"wasm" fallback). User-module names (stdlib/runtime modules dropped, MANGLED forms kept alongside):
+    swift_module, swift_types {name: struct/class/enum/protocol}, swift_protocols, swift_functions (+ _mangled);
+    nim_module, nim_procs (+ _mangled); d_module, d_functions (qualified mod.name, + _mangled); objc_classes (defined
+    ._OBJC_CLASS_ / _OBJC_CLASS_$_), objc_selectors (objc_sel_name_ / __objc_methname), objc_methods "-[C sel]";
+    ada_subprograms (pkg__sub, + _mangled). Absent -> "none" / "false" / []; not an executable image -> None."""
+    try:
+        d = memoryview(data) if not isinstance(data, (bytes, bytearray)) else data
+        d = bytes(d) if isinstance(d, memoryview) else d
+        if d[:4] == b"\x7fELF" and len(d) >= 64 and d[4] in (1, 2) and d[5] in (1, 2):
+            fmt = "elf"
+        elif d[:2] == b"MZ" and len(d) >= 0x40 and d[int.from_bytes(d[0x3c:0x40], "little"):][:4] == b"PE\0\0":
+            fmt = "pe"
+        elif d[:4] in _MO_MAGIC or d[:4] in (b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca"):
+            fmt = "macho"
+        elif d[:4] == b"\0asm" and len(d) >= 8:
+            fmt = "wasm"
+        else:
+            return None
+        secnames, syms, comment = [], [], b""
+        if fmt == "elf":
+            lay = _elf_layout(d)
+            if lay:
+                for nm, o, n in lay[1]:
+                    secnames.append(nm)
+                    if nm == ".comment":
+                        comment = bytes(d[o:o + min(n, 4096)])
+            try:
+                syms = _elf_symbols(d, max_syms)
+            except _PARSE_ERR:
+                syms = []
+        elif fmt == "macho":
+            try:
+                secnames = [s.get("sectname", s.get("name", "")) for s in (macho_layout(d) or {}).get("sections", [])]
+            except Exception:   # noqa: BLE001
+                secnames = []
+        elif fmt == "pe":
+            try:
+                secnames = [s[0] for s in (_pe_layout(d) or (0, []))[1]]
+            except Exception:   # noqa: BLE001
+                secnames = []
+        names = [s[0] for s in syms]
+        nset = set(names)
+        hit = {k: False for k in LANG_ORDER}
+        hit["swift"] = any(s.startswith("swift5_") or s.startswith("__swift5_") for s in secnames)
+        hit["objc"] = any(s.startswith("__objc_") or s.startswith(".objc_") for s in secnames)
+        hit["nim"] = "NimMain" in nset or "NimMainModule" in nset
+        hit["zig"] = b"zig" in comment.lower()
+        hit["fpc"] = ".fpcdata" in secnames
+        hit["go"] = ".gopclntab" in secnames or ".go.buildinfo" in secnames or "runtime.goexit" in nset
+        mang = {"swift": False, "d": False, "nim": False, "rust": False, "cpp": False}
+        for n in names:
+            c = n[:1]
+            if c == "$" or c == "_" and n[1:2] == "$":
+                if _SWIFT_MANGLED.match(n):
+                    mang["swift"] = True
+            elif c == "_":
+                if n[1:2] == "D" and n[2:3].isdigit():
+                    mang["d"] = True
+                    if n.startswith(("_D4core", "_D2rt", "_D6object")):
+                        hit["d"] = True
+                elif n[1:2] == "R" and n[2:3].isupper() or n[1:3] == "ZN" and _RUST_LEGACY.match(n):
+                    mang["rust"] = True
+                elif n[1:2] == "Z":
+                    mang["cpp"] = True
+                elif n.startswith(("__objc_load", "_OBJC_CLASS_$_")):
+                    hit["objc"] = True
+                elif n.startswith("__gnat_"):
+                    hit["gnat"] = True
+            elif c == "." and n.startswith("._OBJC_") or c == "o" and n.startswith("objc_msg"):
+                hit["objc"] = True
+            elif c in "C*" and n.startswith(("Crystal::", "*Crystal::")):
+                hit["crystal"] = True
+            elif c in "Ff" and n.startswith(("FPC_", "fpc_")):
+                hit["fpc"] = True
+            elif c == "r" and n.startswith(("rust_panic", "rust_begin_unwind")):
+                hit["rust"] = True
+            elif c == "a" and n.startswith(("adainit", "ada__")):
+                hit["gnat"] = True
+            if not mang["nim"] and "_u" in n and _NIM_SYM.match(n):
+                mang["nim"] = True
+        hit["swift"] = hit["swift"] or mang["swift"]
+        if fmt != "wasm":
+            for lang in LANG_ORDER:
+                if not hit[lang] and _LANG_BYTES[lang] in d:
+                    hit[lang] = True
+        lang = next((k for k in LANG_ORDER if hit[k]), "wasm" if fmt == "wasm" else ("cpp" if mang["cpp"] else "c"))
+        tf = lambda b: "true" if b else "false"   # noqa: E731
+        out = {"format": fmt, "language": lang, "has_wasm_module": tf(fmt == "wasm")}
+        for k in LANG_ORDER:
+            out[f"has_{k}_runtime"] = tf(hit[k])
+        out["has_ada_runtime"] = out["has_gnat_runtime"]
+        for k, v in mang.items():
+            out[f"has_{k}_mangled_symbol"] = tf(v)
+        # --- user-module names ---
+        sw_t, sw_f, sw_fm, mods = {}, set(), set(), {}
+        if mang["swift"]:
+            for n, ty, dfn in syms:
+                m = _SWIFT_MOD.match(n)
+                if not m:
+                    continue
+                k = int(m.group(1))
+                mod = n[m.end():m.end() + k]
+                if mod in _SWIFT_SYS or mod[:1] == "_" or mod.startswith("Foundation") or len(mod) < k:
+                    continue
+                ids = _swift_ids(n, m.start(1))
+                chain = []
+                for ident, kind in ids[1:]:
+                    if kind in _SWIFT_KIND:
+                        sw_t.setdefault(ident, _SWIFT_KIND[kind])
+                        chain.append(ident)
+                        continue
+                    if dfn and ty == 2 and ident[:1].isalpha():
+                        sw_f.add(".".join(chain + [ident]))
+                        sw_fm.add(n)
+                        mods[mod] = mods.get(mod, 0) + 1
+                    break
+        out["swift_module"] = max(mods, key=mods.get) if mods else "none"
+        out["swift_types"] = dict(sorted(sw_t.items()))
+        out["swift_protocols"] = sorted(k for k, v in sw_t.items() if v == "protocol")
+        out["swift_functions"], out["swift_functions_mangled"] = sorted(sw_f), sorted(sw_fm)
+        nim_p, nim_m, nmods = set(), set(), {}
+        dfun, dfm, dmods = set(), set(), {}
+        ada_p, ada_m = set(), set()
+        cls, sels, meth = set(), set(), []
+        for n, ty, dfn in syms:
+            if not dfn:
+                continue
+            m = _NIM_SYM.match(n) if "_u" in n else None
+            if m and ty == 2 and m.group(2) != "system" and "Z" not in m.group(2) \
+                    and not (m.group(1).startswith("eq") and m.group(1).endswith("_")):   # =destroy/=copy hooks
+                nim_p.add(m.group(1))
+                nim_m.add(n)
+                nmods[m.group(2)] = nmods.get(m.group(2), 0) + 1
+            if n[:2] == "_D" and n[2:3].isdigit():
+                ids, p = [], 2
+                while p < len(n) and n[p].isdigit() and n[p] != "0":
+                    mm = _D_ID.match(n, p)
+                    k, p = int(mm.group(1)), mm.end()
+                    ids.append(n[p:p + k])
+                    p += k
+                if ty == 2 and len(ids) >= 2 and ids[0] not in _D_SYS and n[p:p + 1] in ("F", "M") \
+                        and not ids[-1].startswith("__"):
+                    dfun.add(".".join(ids))
+                    dfm.add(n)
+                    dmods[ids[0]] = dmods.get(ids[0], 0) + 1
+            for pre in ("._OBJC_CLASS_", "_OBJC_CLASS_$_", "__objc_class_name_"):
+                if n.startswith(pre):
+                    cls.add(n[len(pre):])
+            for pre in (".objc_sel_name_", "objc_sel_name_"):
+                if n.startswith(pre):
+                    sels.add(n[len(pre):])
+            if n[:3] in ("_i_", "_c_") and "__" in n[3:]:
+                meth.append(n)
+            if hit["gnat"] and ty == 2 and "__" in n.strip("_") and n == n.lower() and not n.startswith(_ADA_SYS):
+                pkg, _, sub = n.partition("__")
+                if pkg and sub and not sub.startswith("_") and pkg.isidentifier():
+                    ada_p.add(f"{pkg}.{sub.replace('__', '.')}")
+                    ada_m.add(n)
+        if fmt == "macho":
+            try:
+                for s in (macho_layout(d) or {}).get("sections", []):
+                    if s.get("sectname", s.get("name")) == "__objc_methname":
+                        o, z = s.get("offset", 0), s.get("size", 0)
+                        sels.update(x.decode("latin-1") for x in bytes(d[o:o + z]).split(b"\0") if x)
+            except Exception:   # noqa: BLE001
+                pass
+        omethods = set()
+        for n in meth:
+            c, _, rest = n[3:].partition("_")
+            cat, _, sel = rest.partition("_")
+            want = sel.replace("_", ":")
+            sel = next((s for s in sels if s.replace(":", "_") == sel), want)
+            omethods.add(f"{'-' if n[1] == 'i' else '+'}[{c}{'(' + cat + ')' if cat else ''} {sel}]")
+        out["nim_module"] = max(nmods, key=nmods.get) if nmods else "none"
+        out["nim_procs"], out["nim_procs_mangled"] = sorted(nim_p), sorted(nim_m)
+        out["d_module"] = max(dmods, key=dmods.get) if dmods else "none"
+        out["d_functions"], out["d_functions_mangled"] = sorted(dfun), sorted(dfm)
+        out["objc_classes"] = sorted(c for c in cls if f"._OBJC_METACLASS_{c}" in nset or
+                                     f"_OBJC_METACLASS_$_{c}" in nset or fmt != "elf")   # defined here, not imported
+        out["objc_selectors"], out["objc_methods"] = sorted(sels), sorted(omethods)
+        out["ada_subprograms"], out["ada_subprograms_mangled"] = sorted(ada_p), sorted(ada_m)
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def lang_field(data, name):
+    """One lang_facts value (lists as JSON-able lists); "none" when the input is no executable image or the field is
+    unknown, so a decoy never raises."""
+    try:
+        return (lang_facts(data) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+# --- gnat_facts: Ada / GNAT deep facts (D17 ada_br17_main theme) ------------------------------------------------------
+_DW_LANG = {0x01: "C89", 0x02: "C", 0x03: "Ada83", 0x04: "C_plus_plus", 0x0c: "C99", 0x0d: "Ada95", 0x1d: "C11",
+            0x21: "C_plus_plus_14", 0x2c: "C17", 0x2e: "Ada2005", 0x2f: "Ada2012", 0x1c: "Rust", 0x16: "Go"}
+_DW_FIXED = {0x01: -1, 0x05: 2, 0x06: 4, 0x07: 8, 0x0b: 1, 0x0c: 1, 0x0e: -2, 0x10: -2, 0x11: 1, 0x12: 2, 0x13: 4,
+             0x14: 8, 0x17: -2, 0x19: 0, 0x1c: 4, 0x1d: -2, 0x1e: 16, 0x1f: -2, 0x20: 8, 0x21: 0, 0x24: 8, 0x25: 1,
+             0x26: 2, 0x27: 3, 0x28: 4, 0x29: 1, 0x2a: 2, 0x2b: 3, 0x2c: 4}   # -1 = addr size, -2 = offset size
+_ADA_STD_EXC = ("constraint_error", "program_error", "storage_error", "tasking_error", "numeric_error")
+_ADA_EXC_SYS = ("ADA.", "SYSTEM.", "GNAT.", "INTERFACES.", "_ABORT_SIGNAL", "_STANDARD.")
+
+
+def _dwarf_top_dies(d, secs, e, cap=4096):
+    """[(producer, language code, name)] of each compile/partial unit's top DIE (raw .debug_info walk; strx forms and
+    compressed sections -> None values)."""
+    sec = {n: (o, z) for n, o, z in secs}
+    if ".debug_info" not in sec or ".debug_abbrev" not in sec:
+        return []
+    io_, iz = sec[".debug_info"]
+    ao, az = sec[".debug_abbrev"]
+    strs = {k: sec.get(n) for k, n in ((0x0e, ".debug_str"), (0x1f, ".debug_line_str"))}
+
+    def cstr(form, off):
+        s = strs.get(form)
+        if s is None or off >= s[1]:
+            return None
+        z = d.find(b"\0", s[0] + off, s[0] + s[1])
+        return bytes(d[s[0] + off:z if z >= 0 else s[0] + s[1]]).decode("latin-1")
+    out, p, end, abbr = [], io_, io_ + iz, {}
+    while p + 11 <= end and len(out) < cap:
+        ln, osz = struct.unpack_from(e + "I", d, p)[0], 4
+        p += 4
+        if ln == 0xffffffff:
+            ln, osz = struct.unpack_from(e + "Q", d, p)[0], 8
+            p += 8
+        nxt = p + ln
+        ver = struct.unpack_from(e + "H", d, p)[0]
+        q = p + 2
+        try:
+            if ver >= 5:
+                ut, asz = d[q], d[q + 1]
+                aoff = int.from_bytes(d[q + 2:q + 2 + osz], "little" if e == "<" else "big")
+                q += 2 + osz + (8 if ut in (4, 5) else 0)
+                if ut not in (1, 3, 4, 5):
+                    p = nxt
+                    continue
+            elif 2 <= ver <= 4:
+                aoff = int.from_bytes(d[q:q + osz], "little" if e == "<" else "big")
+                asz, q = d[q + osz], q + osz + 1
+            else:
+                break
+            code, q = _leb(d, q)
+            tab, a = abbr.get(aoff) or ({}, ao + aoff)
+            if code not in tab:
+                while a < ao + az and len(tab) < 4096:
+                    c, a = _leb(d, a)
+                    if not c:
+                        break
+                    _, a = _leb(d, a)
+                    a += 1
+                    specs = []
+                    while True:
+                        at, a = _leb(d, a)
+                        fm, a = _leb(d, a)
+                        ic = None
+                        if fm == 0x21:
+                            ic, a = _leb(d, a, True)
+                        if not at and not fm:
+                            break
+                        specs.append((at, fm, ic))
+                    tab[c] = specs
+                    if c == code:
+                        break
+                abbr[aoff] = (tab, a)
+            prod = lang = name = None
+            for at, fm, ic in tab.get(code, ()):
+                while fm == 0x16:
+                    fm, q = _leb(d, q)
+                val = None
+                if fm == 0x08:
+                    z = d.find(b"\0", q, nxt)
+                    val, q = bytes(d[q:z]).decode("latin-1"), z + 1
+                elif fm in (0x0f, 0x15, 0x1a, 0x1b, 0x22, 0x23, 0x0d):
+                    val, q = _leb(d, q, fm == 0x0d)
+                elif fm in (0x09, 0x18):
+                    n, q = _leb(d, q)
+                    q += n
+                elif fm in (0x03, 0x04, 0x0a):
+                    k = {0x03: 2, 0x04: 4, 0x0a: 1}[fm]
+                    q += k + int.from_bytes(d[q:q + k], "little" if e == "<" else "big")
+                elif fm == 0x21:
+                    val = ic
+                elif fm in _DW_FIXED:
+                    k = _DW_FIXED[fm]
+                    k = asz if k == -1 else osz if k == -2 else k
+                    val, q = int.from_bytes(d[q:q + k], "little" if e == "<" else "big"), q + k
+                else:
+                    break
+                if at in (0x25, 0x03):
+                    s = val if isinstance(val, str) else cstr(fm, val) if fm in strs and val is not None else None
+                    if at == 0x25:
+                        prod = s
+                    else:
+                        name = s
+                elif at == 0x13 and isinstance(val, int):
+                    lang = val
+            out.append((prod, lang, name))
+        except (IndexError, ValueError, struct.error, KeyError):
+            pass
+        p = nxt
+    return out
+
+
+def _ada_name(sym):
+    """GNAT-encoded symbol -> Ada name: `_ada_main` -> main, `pkg__sub__2` -> pkg.sub, `x.cold`/`x.0` suffix dropped."""
+    s = re.sub(r"\.(cold|part|isra|constprop|\d+)(\.\d+)*$", "", sym)
+    s = s[5:] if s.startswith("_ada_") else s
+    s = re.sub(r"__\d+$", "", s)
+    return s.replace("__", ".")
+
+
+def gnat_facts(data, max_syms=400_000, decoder=True, hit=None):
+    """Ada / GNAT deep facts of an ELF/PE/Mach-O image (bytes only): has_gnat_runtime (__gnat_ / ada__ / system__
+    symbols or bytes, `GNAT Version:`, adainit+adafinal), gnat_version ("14.2.0" from the binder's `GNAT Version: 14.2.0`)
+    + gnat_version_string; ada_main_symbol (`_ada_<main>`: FUNC symbol, else the binder's .rodata main-program-name
+    string) + ada_main (Ada name); main_source (`<main>.adb`); has_adainit/has_adafinal/has_gnat_main, binder_symbols
+    (defined adainit/adafinal/main/ada_main___elabb/...), elab_symbols (non-runtime `*___elab[bs]`);
+    ada_subprograms (pkg.sub + the main, user units only) + _mangled; dwarf_producer ("GNU Ada 14.2.0"),
+    dwarf_producer_full, dwarf_producer_version, dwarf_language ("DW_LANG_Ada95", Ada CUs preferred) + _code,
+    dwarf_languages; ada_exceptions / user_exceptions (Exception_Data structs: Lang 'A' + Name_Length + Full_Name
+    pointer -> "PKG.NAME"), standard_exceptions (defined constraint_error/...); decoder_function (+ _ada name), decoder_key
+    (0x..), decoder_algorithm, decoder_key_equals_header (decoder_facts over `hit` or hcfg_find; decoder=False skips it,
+    a 0.3 s scan deadline bounds a corrupted blob). Absent -> "none"/"false"/[]; not an executable image -> None."""
+    try:
+        d = bytes(data)
+        if d[:4] == b"\x7fELF" and len(d) >= 64 and d[4] in (1, 2) and d[5] in (1, 2):
+            fmt = "elf"
+        elif d[:2] == b"MZ" and len(d) >= 0x40 and d[int.from_bytes(d[0x3c:0x40], "little"):][:4] == b"PE\0\0":
+            fmt = "pe"
+        elif d[:4] in _MO_MAGIC or d[:4] in (b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca"):
+            fmt = "macho"
+        else:
+            return None
+        tf = lambda b: "true" if b else "false"   # noqa: E731
+        syms, secs, e = [], [], "<"
+        if fmt == "elf":
+            e = "<" if d[5] == 1 else ">"
+            secs = (_elf_layout(d) or (0, []))[1]
+            try:
+                syms = _elf_symbols(d, max_syms)
+            except _PARSE_ERR:
+                syms = []
+        dfn = {n for n, _, k in syms if k}
+        funcs = {n for n, ty, k in syms if k and ty == 2}
+        out = {"format": fmt}
+        m = re.search(rb"GNAT Version: ([^\0\r\n]{1,80})", d)
+        out["gnat_version_string"] = m.group(0).decode("latin-1").strip() if m else "none"
+        vm = re.match(rb"\s*(\d+(?:\.\d+)*)", m.group(1)) if m else None
+        out["gnat_version"] = vm.group(1).decode() if vm else (m.group(1).decode("latin-1").strip() if m else "none")
+        rt = any(n.startswith(("__gnat_", "ada__", "system__")) for n in dfn) or \
+            ("adainit" in dfn and "adafinal" in dfn) or m is not None or b"__gnat_" in d
+        out["has_gnat_runtime"] = out["has_ada_runtime"] = tf(rt)
+        # main program: `_ada_<unit>` FUNC symbol, else binder's main-program-name string (sits beside GNAT Version)
+        mains = sorted(n for n in funcs if n.startswith("_ada_") and "." not in n)
+        main = mains[0] if mains else None
+        if main is None and rt:
+            lo = max(0, m.start() - 512) if m else 0
+            ms = list(re.finditer(rb"\0(_ada_[a-z][a-z0-9_]{0,120})\0", d[lo:m.end() + 512] if m else d))
+            main = ms[-1].group(1).decode() if ms else None
+        out["ada_main_symbol"] = main or "none"
+        out["ada_main"] = _ada_name(main) if main else "none"
+        src = None
+        if main:
+            src = f"{main[5:]}.adb" if f"{main[5:]}.adb".encode() in d else None
+        out["main_source"] = src or "none"
+        out["has_adainit"], out["has_adafinal"] = tf("adainit" in dfn), tf("adafinal" in dfn)
+        out["has_gnat_main"] = tf("__gnat_main" in dfn)
+        if not syms and rt and fmt != "elf":
+            out["has_adainit"] = tf(b"adainit\0" in d)
+            out["has_adafinal"] = tf(b"adafinal\0" in d)
+        out["binder_symbols"] = sorted(n for n in dfn if n in ("adainit", "adafinal", "main", "__gnat_main",
+                                                               "ada_main___elabb", "ada_main__finalize_library",
+                                                               "__gnat_ada_main_program_name", "gnat_envp", "gnat_argv",
+                                                               "gnat_argc", "gnat_exit_status")) if rt else []
+        out["elab_symbols"] = sorted(n for n in dfn if re.search(r"___elab[bs]$", n) and
+                                     not n.startswith(_ADA_SYS)) if rt else []
+        ada_p, ada_m = set(), set()
+        if rt:
+            for n in funcs:
+                if n == main:
+                    ada_p.add(_ada_name(n))
+                    ada_m.add(n)
+                elif "__" in n.strip("_") and n == n.lower() and not n.startswith(_ADA_SYS) and \
+                        not n.startswith("ada_main_") and "." not in n and not re.search(r"___elab[bs]$", n):
+                    pkg, _, sub = n.partition("__")
+                    if pkg and sub and not sub.startswith("_") and pkg.isidentifier():
+                        ada_p.add(_ada_name(n))
+                        ada_m.add(n)
+        out["ada_subprograms"], out["ada_subprograms_mangled"] = sorted(ada_p), sorted(ada_m)
+        # DWARF compile units
+        cus = _dwarf_top_dies(d, secs, e) if fmt == "elf" else []
+        langs = [c[1] for c in cus if c[1] is not None]
+        ada = [c for c in cus if c[1] in (0x03, 0x0d, 0x2e, 0x2f)]
+        prods = [c[0] for c in cus if c[0]]
+        if not prods and fmt == "elf" and ".debug_str" in {s[0] for s in secs}:
+            prods = [x.decode("latin-1") for x in re.findall(rb"GNU Ada [0-9][^\0]{0,400}", d)[:1]]
+        mcu = next((c for c in ada if main and c[2] and c[2].startswith(main[5:] + ".")), None)
+        pfull = (mcu and mcu[0]) or next((c[0] for c in ada if c[0]), None) or \
+            next((p for p in prods if p.startswith("GNU Ada")), None) or (prods[0] if prods else None)
+        out["dwarf_producer_full"] = pfull or "none"
+        pm = re.match(r"(.*?\d+(?:\.\d+)+)", pfull or "")
+        out["dwarf_producer"] = pm.group(1) if pm else (pfull or "none")
+        vm2 = re.search(r"(\d+(?:\.\d+)+)", pfull or "")
+        out["dwarf_producer_version"] = vm2.group(1) if vm2 else "none"
+        lc = (mcu or (ada[0] if ada else None) or (None, max(set(langs), key=langs.count) if langs else None))[1]
+        out["dwarf_language_code"] = lc if lc is not None else "none"
+        out["dwarf_language"] = f"DW_LANG_{_DW_LANG.get(lc, hex(lc))}" if lc is not None else "none"
+        out["dwarf_languages"] = sorted({f"DW_LANG_{_DW_LANG.get(x, hex(x))}" for x in langs})
+        out["dwarf_compile_units"] = len(cus)
+        # exception ids: Exception_Data = {Not_Handled_By_Others u8, Lang 'A', Name_Length u32, Full_Name ptr, ...}
+        exc = set()
+        if rt and fmt == "elf":
+            mp = _exec_map(d) if d[18] in (3, 62) or d[19] in (3, 62) else None
+            vsec = [(va, off, size) for nm, va, off, size, _ in (mp[1] if mp else []) if size]
+            b64 = d[4] == 2
+            for nm, va, off, size, _x in (mp[1] if mp else []):
+                if nm not in (".data", ".rodata", ".data.rel.ro") or size > 32 << 20:
+                    continue
+                for mm in re.finditer(rb"[\0\1]A", d[off:off + size]):
+                    q = off + mm.start()
+                    if (q - off) % (8 if b64 else 4) or q + (16 if b64 else 12) > off + size:
+                        continue
+                    nl = struct.unpack_from(e + "I", d, q + 4)[0] if b64 else struct.unpack_from(e + "I", d, q + 4)[0]
+                    ptr = struct.unpack_from(e + ("Q" if b64 else "I"), d, q + (8 if b64 else 8))[0]
+                    if not 2 <= nl <= 256:
+                        continue
+                    po = next((o + ptr - v for v, o, z in vsec if v <= ptr < v + z), None)
+                    if po is None:
+                        continue
+                    s = d[po:po + nl]
+                    if s[-1:] == b"\0" and re.fullmatch(rb"[A-Z_][A-Z0-9_]*(\.[A-Z_][A-Z0-9_]*)*", s[:-1]):
+                        exc.add(s[:-1].decode())
+        out["ada_exceptions"] = sorted(exc)
+        out["user_exceptions"] = sorted(x for x in exc if "." in x and not x.startswith(_ADA_EXC_SYS))
+        out["standard_exceptions"] = sorted(n for n in _ADA_STD_EXC if n in dfn) if rt else []
+        # decoder routine (the function whose code references the stored HCFG blob)
+        df = None
+        if rt and decoder:
+            hit = hit or hcfg_find(d, deadline=time.time() + 0.3)
+            df = decoder_facts(d, hit=hit) if hit is not None else None
+        fn = (df or {}).get("function", "none")
+        out["decoder_function"] = fn
+        out["decoder_function_ada"] = _ada_name(fn) if fn != "none" else "none"
+        out["decoder_function_va"] = hex(df["function_va"]) if df else "none"
+        out["decoder_algorithm"] = (df or {}).get("algorithm", "none")
+        k = (df or {}).get("key", "none")
+        out["decoder_key"] = hex(k) if isinstance(k, int) else "none"
+        out["decoder_key_equals_header"] = (df or {}).get("key_equals_header", "none")
+        hk = (df or {}).get("header_key", "none")
+        out["header_key"] = hex(hk) if isinstance(hk, int) else "none"
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def gnat_field(data, name):
+    """One gnat_facts value; "none" when the input is no executable image or the field is unknown (never raises)."""
+    try:
+        return (gnat_facts(data, decoder=name.startswith(("decoder_", "header_key"))) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+# --- gfortran_facts: Fortran / GNU Fortran identity + entity facts (next-day candidate after Ada) ---------------------
+# gfortran mangling: module entity `__<mod>_MOD_<name>` (module procedure / module variable), COMMON block and external
+# procedure `<name>_` (lowercase + one trailing underscore), blank COMMON `__BLNK__`, main program `MAIN__` (+ a libc
+# `main` stub calling _gfortran_set_args/_gfortran_set_options), SAVE'd / DATA locals `<name>.<N>`, BLOCK DATA unit
+# `<name>_` (8-byte .bss marker, absent from DWARF). Runtime: DT_NEEDED libgfortran.so.N, `_gfortran_*` imports.
+_DW_LANG_F = {**_DW_LANG, 0x08: "Fortran77", 0x09: "Fortran90", 0x0e: "Fortran95", 0x22: "Fortran03",
+              0x23: "Fortran08", 0x2d: "Fortran18", 0x30: "Fortran23"}
+_DW_FORTRAN = (0x08, 0x09, 0x0e, 0x22, 0x23, 0x2d, 0x30)
+_GF_EXT = re.compile(r"^[a-z][a-z0-9_$]{0,62}_$")
+
+
+def _gf_elf(d):
+    """([(name, sh_type, addr, offset, size)], [(name, type, bind, shndx, value, size)]) of an ELF (raw structs)."""
+    b64, e = d[4] == 2, "<" if d[5] == 1 else ">"
+    shoff = struct.unpack_from(e + ("Q" if b64 else "I"), d, 40 if b64 else 32)[0]
+    shes, shn, shstr = struct.unpack_from(e + "HHH", d, 58 if b64 else 46)
+    if not shoff or shes < (64 if b64 else 40) or shoff + shn * shes > len(d):
+        return [], []
+    f = (e + "II8xQQQI4x8xQ") if b64 else (e + "II4xIIII4x4xI")   # name type [flags] addr off size link .. entsize
+    raw = [struct.unpack_from(f, d, shoff + k * shes) for k in range(min(shn, 65535))]
+    so = raw[shstr][3] if shstr < len(raw) else 0
+
+    def nm(base, lim, o):
+        z = d.find(b"\0", base + o, lim)
+        return bytes(d[base + o:z if z >= 0 else lim]).decode("latin-1")
+    secs = [(nm(so, len(d), r[0]) if so else "", r[1], r[2], r[3], r[4]) for r in raw]
+    syms = []
+    for _, ty, _, off, size, link, ent in raw:
+        if ty not in (2, 11) or not 0 <= link < len(raw) or off + size > len(d):
+            continue
+        sb, sz = raw[link][3], raw[link][4]
+        ent = ent or (24 if b64 else 16)
+        for k in range(min(size // ent, 400_000 - len(syms))):
+            o = off + k * ent
+            if b64:
+                n, info, shndx, val, ssz = struct.unpack_from(e + "IBxHQQ", d, o)
+            else:
+                n, val, ssz, info, shndx = struct.unpack_from(e + "IIIBxH", d, o)
+            if n and n < sz:
+                syms.append((nm(sb, sb + sz, n), info & 0xF, info >> 4, shndx, val, ssz))
+    return secs, syms
+
+
+def _gf_name(sym):
+    """gfortran symbol -> Fortran entity: `__m_MOD_x` -> m::x, `blk_` -> blk, `__BLNK__` -> blank, `buf.0` -> buf."""
+    if sym == "__BLNK__":
+        return "blank"
+    if sym.startswith("__") and "_MOD_" in sym:
+        mod, _, name = sym[2:].partition("_MOD_")
+        return f"{mod}::{name}"
+    if _GF_EXT.match(sym):
+        return sym[:-1]
+    return re.sub(r"\.\d+$", "", sym)
+
+
+def gfortran_facts(data, hcfg=True):
+    """Fortran / GNU Fortran facts of an ELF image (bytes only): format, architecture, has_gfortran_runtime (+ alias
+    has_fortran_runtime; DT_NEEDED libgfortran / `_gfortran_*` or MAIN__ symbols; raw-byte cues only count when the
+    image has no symbol table), has_libgfortran_needed, libgfortran_soname, needed, gfortran_imports (sorted
+    `_gfortran_*` names), has_main_program (MAIN__ defined), program_name (DWARF DW_AT_main_subprogram), main_source (CU
+    name); fortran_modules, module_procedures `mod::name` (+ _mangled `__mod_MOD_name`), module_variables (+ _mangled),
+    common_blocks (`name_` / blank, + _mangled), block_data, external_procedures (`name_` FUNCs, + _mangled),
+    save_variables (`name.N` locals); dwarf_producer ("GNU Fortran2008 15.2.0") + _full / _version, dwarf_language
+    ("DW_LANG_Fortran08") + _code, dwarf_languages; hcfg_symbol / hcfg_entity / hcfg_entity_kind (module_variable,
+    common_block, save_variable, symbol) / hcfg_section for the raw HCFG (hcfg=False skips the scan). Absent ->
+    "none" / "false" / []; not an ELF -> None."""
+    try:
+        d = bytes(data)
+        if not (d[:4] == b"\x7fELF" and len(d) >= 64 and d[4] in (1, 2) and d[5] in (1, 2)):
+            return None
+        tf = lambda b: "true" if b else "false"   # noqa: E731
+        e = "<" if d[5] == 1 else ">"
+        try:
+            secs, syms = _gf_elf(d)
+        except _PARSE_ERR:
+            secs, syms = [], []
+        try:
+            needed = list(_elf_pair_facts(d).get("needed") or [])
+        except Exception:   # noqa: BLE001
+            needed = []
+        out = {"format": "elf", "architecture": _arch_of(d) or "none", "needed": needed}
+        gfso = next((n for n in needed if n.startswith("libgfortran.so")), None)
+        out["has_libgfortran_needed"] = tf(gfso)
+        out["libgfortran_soname"] = gfso or "none"
+        names = {s[0] for s in syms}
+        imps = sorted({n.split("@")[0] for n in names if n.startswith("_gfortran_")})
+        out["gfortran_imports"] = imps
+        dfn = [s for s in syms if s[3] != 0]
+        out["has_main_program"] = tf(any(s[0] == "MAIN__" and s[1] == 2 for s in dfn))
+        rt = bool(gfso or imps or out["has_main_program"] == "true" or any("_MOD_" in s[0] for s in dfn))
+        if not syms and not rt:
+            rt = b"libgfortran.so" in d and b"_gfortran_" in d
+        out["has_gfortran_runtime"] = out["has_fortran_runtime"] = tf(rt)
+        sec_type = {k: s[1] for k, s in enumerate(secs)}
+        mods, mp, mpm, mv, mvm, cb, cbm, ext, extm, sav, bd = ({}, set(), set(), set(), set(), set(), set(), set(),
+                                                               set(), set(), set())
+        dstr = b""
+        if rt:
+            for s in secs:
+                if s[0] == ".debug_str" and s[1] != 8:
+                    dstr = d[s[3]:s[3] + s[4]]
+            cand = []
+            for n, ty, bind, shndx, val, sz in dfn:
+                if n.startswith("__") and "_MOD_" in n:
+                    mod, _, nm_ = n[2:].partition("_MOD_")
+                    if not mod or not nm_ or nm_.startswith("_"):   # __vtab_ / __def_init_ / __copy_ internals
+                        continue
+                    mods[mod] = mods.get(mod, 0) + 1
+                    if ty == 2:
+                        mp.add(f"{mod}::{nm_}")
+                        mpm.add(n)
+                    elif ty == 1:
+                        mv.add(f"{mod}::{nm_}")
+                        mvm.add(n)
+                elif n == "__BLNK__" and ty == 1:
+                    cb.add("blank")
+                    cbm.add(n)
+                elif _GF_EXT.match(n) and bind in (1, 2):
+                    if ty == 2:
+                        ext.add(n[:-1])
+                        extm.add(n)
+                    elif ty == 1:
+                        cand.append((n, shndx, sz))
+                elif ty == 1 and bind == 0 and re.match(r"^[a-z][a-z0-9_]*\.\d+$", n) and \
+                        not n.startswith(("options.", "completed.")):
+                    sav.add(n.split(".")[0])
+            # BLOCK DATA unit marker vs COMMON block: DWARF linkage names list the commons; else an 8-byte .bss
+            # object beside an initialised (PROGBITS) common is the BLOCK DATA marker
+            indw = [c for c in cand if b"\0" + c[0].encode() + b"\0" in dstr]
+            init = any(sec_type.get(c[1]) == 1 for c in cand)
+            for c in cand:
+                is_bd = (c not in indw) if indw else (init and sec_type.get(c[1]) == 8 and c[2] == (8 if d[4] == 2 else 4))
+                if is_bd:
+                    bd.add(c[0][:-1])
+                else:
+                    cb.add(c[0][:-1])
+                    cbm.add(c[0])
+        out["fortran_modules"] = sorted(mods)
+        out["module_procedures"], out["module_procedures_mangled"] = sorted(mp), sorted(mpm)
+        out["module_variables"], out["module_variables_mangled"] = sorted(mv), sorted(mvm)
+        out["common_blocks"], out["common_blocks_mangled"] = sorted(cb), sorted(cbm)
+        out["block_data"] = sorted(bd)
+        out["external_procedures"], out["external_procedures_mangled"] = sorted(ext), sorted(extm)
+        out["save_variables"] = sorted(sav)
+        # DWARF
+        lay = [(s[0], s[3], s[4]) for s in secs if s[1] != 8]
+        cus = _dwarf_top_dies(d, lay, e) if lay else []
+        langs = [c[1] for c in cus if c[1] is not None]
+        fcu = [c for c in cus if c[1] in _DW_FORTRAN]
+        pfull = next((c[0] for c in fcu if c[0]), None) or next((c[0] for c in cus if c[0]), None)
+        if not pfull and rt and dstr:
+            m = re.search(rb"GNU Fortran[0-9]* [0-9][^\0]{0,400}", dstr)
+            pfull = m.group(0).decode("latin-1") if m else None
+        out["dwarf_producer_full"] = pfull or "none"
+        pm = re.match(r"(.*?\d+(?:\.\d+)+)", pfull or "")
+        out["dwarf_producer"] = pm.group(1) if pm else (pfull or "none")
+        vm = re.search(r"(\d+(?:\.\d+)+)", pfull or "")
+        out["dwarf_producer_version"] = vm.group(1) if vm else "none"
+        lc = fcu[0][1] if fcu else (max(set(langs), key=langs.count) if langs else None)
+        out["dwarf_language_code"] = lc if lc is not None else "none"
+        out["dwarf_language"] = f"DW_LANG_{_DW_LANG_F.get(lc, hex(lc))}" if lc is not None else "none"
+        out["dwarf_languages"] = sorted({f"DW_LANG_{_DW_LANG_F.get(x, hex(x))}" for x in langs})
+        out["main_source"] = next((c[2] for c in fcu if c[2]), "none")
+        out["program_name"] = _gf_program(d) if fcu else "none"
+        # HCFG holder
+        hs = {"hcfg_symbol": "none", "hcfg_entity": "none", "hcfg_entity_kind": "none", "hcfg_section": "none"}
+        if hcfg:
+            hit = hcfg_find(d)
+            off = getattr(hit, "offset", None) if hit is not None else None
+            if isinstance(off, int) and d[off:off + 4] == HCFG_MAGIC:
+                k = next((k for k, s in enumerate(secs) if s[1] != 8 and s[2] and s[3] <= off < s[3] + s[4]), None)
+                if k is not None:
+                    hs["hcfg_section"] = secs[k][0] or "none"
+                    va = secs[k][2] + off - secs[k][3]
+                    best = [s for s in dfn if s[1] in (0, 1) and s[3] == k and s[4] <= va < s[4] + max(s[5], 1)
+                            and s[0] and not s[0].startswith(".")]
+                    if best:
+                        n = min(best, key=lambda s: (s[1] != 1, va - s[4]))[0]
+                        hs["hcfg_symbol"], hs["hcfg_entity"] = n, _gf_name(n)
+                        hs["hcfg_entity_kind"] = "module_variable" if "_MOD_" in n else (
+                            "common_block" if n in cbm else ("save_variable" if re.search(r"\.\d+$", n)
+                                                             else "symbol"))
+        out.update(hs)
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def _gf_program(d):
+    """Fortran main program name (DW_TAG_subprogram with DW_AT_main_subprogram) via pyelftools; "none" when absent
+    or .debug_info is larger than 4 MB (bounded)."""
+    try:
+        from elftools.elf.elffile import ELFFile
+        ef = ELFFile(io.BytesIO(d))
+        s = ef.get_section_by_name(".debug_info")
+        if s is None or s["sh_size"] > (4 << 20) or not ef.has_dwarf_info():
+            return "none"
+        for cu in ef.get_dwarf_info().iter_CUs():
+            top = cu.get_top_DIE()
+            lang = top.attributes.get("DW_AT_language")
+            if lang is None or lang.value not in _DW_FORTRAN:
+                continue
+            for die in top.iter_children():
+                if die.tag == "DW_TAG_subprogram" and "DW_AT_main_subprogram" in die.attributes:
+                    nm = die.attributes.get("DW_AT_name")
+                    if nm is not None:
+                        v = nm.value
+                        return v.decode("latin-1") if isinstance(v, bytes) else str(v)
+        return "none"
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+def gfortran_field(data, name):
+    """One gfortran_facts value; "none" when the input is no ELF or the field is unknown (never raises)."""
+    try:
+        return (gfortran_facts(data, hcfg=name.startswith("hcfg_")) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+# --- cobol_facts: GnuCOBOL (cobc) identity facts (next-day candidate) -------------------------------------------------
+# cobc emits one C module per PROGRAM-ID: cob_module.module_name -> "<PROGRAM-ID>\0" followed by the
+# module_formatted_date "Mmm dd yyyy hh:mm:ss\0" in .rodata (kept by strip), local symbols PID / PID_ /
+# PID_module_init, imports cob_init / cob_module_global_enter / cob_check_version ..., DT_NEEDED libcob.so.N.
+_COB_MOD = re.compile(rb"\0([A-Za-z0-9][A-Za-z0-9_-]{0,62})\0([A-Z][a-z]{2} [ 0-3]\d \d{4} \d\d:\d\d:\d\d)\0")
+_COB_SRC = re.compile(rb"\0([^\0/\\]{1,120}\.(?:cob|cbl|cobol|ccp|cpy|pco))\0", re.I)
+
+
+def cobol_facts(data):
+    """GnuCOBOL facts of an ELF image (bytes only): format, architecture, needed, has_libcob_needed, libcob_soname,
+    cob_imports (sorted `cob_*` dynamic symbols), has_cobol_runtime (+ alias has_gnucobol_runtime; libcob NEEDED or
+    cob_init / cob_module_* imports; raw-byte cues only when the image has no symbol table), program_id (first module
+    name of the .rodata module-name/compile-date pair, else the `<PID>_module_init` symbol), program_ids (all, file
+    order), compile_date ("Oct 18 2026 12:23:53"), source_file (cobc input name). HCFG: hcfg_scan (split-raw /
+    stack-built cover WORKING-STORAGE VALUE fields). Absent -> "none" / "false" / []; not an ELF -> None."""
+    try:
+        d = bytes(data)
+        if not (d[:4] == b"\x7fELF" and len(d) >= 64 and d[4] in (1, 2) and d[5] in (1, 2)):
+            return None
+        tf = lambda b: "true" if b else "false"   # noqa: E731
+        try:
+            secs, syms = _gf_elf(d)
+        except _PARSE_ERR:
+            secs, syms = [], []
+        try:
+            needed = list(_elf_pair_facts(d).get("needed") or [])
+        except Exception:   # noqa: BLE001
+            needed = []
+        out = {"format": "elf", "architecture": _arch_of(d) or "none", "needed": needed}
+        so = next((n for n in needed if n.startswith("libcob.so")), None)
+        out["has_libcob_needed"], out["libcob_soname"] = tf(so), so or "none"
+        imps = sorted({s[0].split("@")[0] for s in syms if s[3] == 0 and s[0].startswith("cob_")})
+        out["cob_imports"] = imps
+        rt = bool(so or any(n in ("cob_init", "cob_module_enter", "cob_module_global_enter", "cob_check_version")
+                            for n in imps))
+        if not syms and not rt:
+            rt = b"libcob.so" in d and b"cob_init\0" in d
+        out["has_cobol_runtime"] = out["has_gnucobol_runtime"] = tf(rt)
+        pids, date, src = [], "none", "none"
+        if rt:
+            ro = [(s[3], s[4]) for s in secs if s[0] == ".rodata" and s[1] == 1] or [(0, min(len(d), 64 << 20))]
+            for off, sz in ro:
+                blk = d[max(0, off - 1):off + sz]
+                for m in _COB_MOD.finditer(blk):
+                    if m.group(1).decode() not in pids:
+                        pids.append(m.group(1).decode())
+                    date = m.group(2).decode() if date == "none" else date
+                ms = _COB_SRC.search(blk)
+                if ms and src == "none":
+                    src = ms.group(1).decode("latin-1")
+            if not pids:
+                pids = [s[0][:-12] for s in syms if s[0].endswith("_module_init") and s[3] != 0 and len(s[0]) > 12]
+        out["program_id"] = pids[0] if pids else "none"
+        out["program_ids"] = pids
+        out["compile_date"], out["source_file"] = date, src
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def cobol_field(data, name):
+    """One cobol_facts value; "none" when the input is no ELF or the field is unknown (never raises)."""
+    try:
+        return (cobol_facts(data) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+# --- ghc_facts: Haskell / GHC identity + z-encoded closure facts (next-day candidate) ---------------------------------
+# GHC symbol = [<unit>_]<Module>_<name>_<kind>, every part z-encoded (zi '.', zm '-', zd '$', ZC ':', zu '_', zh '#',
+# z<hex>U code point, Z<n>T tuple ...); the `main` unit drops the prefix (Main_main_closure; ZCMain_main_closure is
+# the :Main.main wrapper). Kinds: closure, info, con_info, entry, bytes (Addr# / ByteString literal: the HCFG holder),
+# srt, ... rts: hs_main, hs_init_ghc, stg_* ; `+RTS --info` pairs ("GHC version", "<ver>"), ("RTS way", "rts_thr").
+# Info tables keep con_desc strings "<unit>:<Module>.<Con>" even in strip'd images.
+_Z_UP = {"L": "(", "R": ")", "M": "[", "N": "]", "C": ":", "Z": "Z"}
+_Z_LO = {"z": "z", "a": "&", "b": "|", "c": "^", "d": "$", "e": "=", "g": ">", "h": "#", "i": ".", "l": "<", "m": "-",
+         "n": "!", "p": "+", "q": "'", "r": "\\", "s": "/", "t": "*", "u": "_", "v": "%"}
+_Z_TOK = re.compile(r"z([0-9a-f][0-9a-f]*)U|Z(\d+)([TH])|Z([LRMNCZ])|z([zabcdeghilmnpqrstuv])")
+_GHC_SYM = re.compile(r"^(?:([a-z][A-Za-z0-9]*)_)?([A-Z][A-Za-z0-9]*)_(\w+?)_(closure|info|con_info|con_entry|"
+                      r"static_info|entry|bytes|srt|slow|fast|str)$")
+_GHC_MOD = re.compile(r"^[A-Z][\w']*(?:\.[A-Z][\w']*)*$")
+_GHC_CONDESC = re.compile(rb":((?:[A-Z][\w']{0,80}\.){1,12})[^\0\s.][^\0\s]{0,63}\0")   # ':' prefix = fast search
+_GHC_UNIT = re.compile(rb"(?:^|[^\w.:-])([a-z][A-Za-z0-9._-]{0,80})$")
+_GHC_VER = re.compile(r"\d+\.\d+(?:\.\d+){0,2}")
+
+
+def ghc_zdecode(s):
+    """GHC z-decoding (compiler/GHC/Utils/Encoding.hs): 'ghczmprim' -> 'ghc-prim', 'GHCziBase' -> 'GHC.Base',
+    'zdwmain' -> '$wmain', 'Z3T' -> '(,,)', 'z2192U' -> U+2192. Unknown escapes are kept verbatim."""
+    def rep(m):
+        if m.group(1):
+            try:
+                return chr(int(m.group(1), 16))
+            except (ValueError, OverflowError):
+                return m.group(0)
+        if m.group(2):
+            n = int(m.group(2))
+            if m.group(3) == "T":
+                return "(" + "," * max(n - 1, 0) + ")"
+            return "(# #)" if n == 1 else "(#" + "," * (n - 1) + "#)"
+        if m.group(4):
+            return _Z_UP[m.group(4)]
+        return _Z_LO[m.group(5)]
+    return _Z_TOK.sub(rep, s)
+
+
+def _ghc_sym(n):
+    """(unit|None, Module, name, kind) of a z-encoded GHC closure symbol, else None."""
+    m = _GHC_SYM.match(n)
+    if not m:
+        return None
+    mod = ghc_zdecode(m.group(2))
+    if not _GHC_MOD.match(mod):
+        return None
+    return (ghc_zdecode(m.group(1)) if m.group(1) else None), mod, ghc_zdecode(m.group(3)), m.group(4)
+
+
+def ghc_facts(data, hcfg=True):
+    """Haskell / GHC facts of an ELF image (bytes only): format, architecture, has_ghc_runtime (+ alias
+    has_haskell_runtime; rts / z-encoded closure symbols in .symtab/.dynsym, or -- only when the image has no .symtab
+    -- 2+ raw rts cues), has_hs_main, ghc_version (DWARF "Glorious Glasgow Haskell Compilation System <v>", the
+    rts --info ("GHC version", "<v>") pair, a "GHC <v>" banner, a ghc-<v> libdir), rts_way ("rts_thr"...) +
+    has_threaded_rts, haskell_modules (z-decoded, symbols + con_desc strings), user_modules (the `main` unit),
+    haskell_packages (z-decoded unit ids, `main` excluded), main_module ("Main" when Main.main / :Main.main exist),
+    closure_count, bytes_literals (z-decoded `<Mod>.<name>` of *_bytes literals); hcfg_symbol / hcfg_closure
+    ("Config.hcfgBlob1") / hcfg_module / hcfg_unit / hcfg_kind / hcfg_section for the hcfg_find hit (hcfg=False skips
+    the scan). Absent -> "none" / "false" / []; not an ELF -> None."""
+    try:
+        d = bytes(data)
+        if not (d[:4] == b"\x7fELF" and len(d) >= 64 and d[4] in (1, 2) and d[5] in (1, 2)):
+            return None
+        tf = lambda b: "true" if b else "false"   # noqa: E731
+        try:
+            secs, syms = _gf_elf(d)
+        except _PARSE_ERR:
+            secs, syms = [], []
+        out = {"format": "elf", "architecture": _arch_of(d) or "none"}
+        names = {s[0] for s in syms}
+        dfn = [s for s in syms if s[3] != 0]
+        parsed = {}
+        for s in syms:
+            if s[0] not in parsed:
+                p = _ghc_sym(s[0])
+                if p:
+                    parsed[s[0]] = p
+        rts = names & {"hs_main", "hs_init_ghc", "hs_init", "hs_exit", "rts_evalLazyIO", "stg_ap_0_fast",
+                       "stg_upd_frame_info", "ZCMain_main_closure"}
+        wired = any(p[0] in ("ghc-prim", "base", "ghc-internal", "ghc-bignum") for p in parsed.values())
+        rt = bool(rts or wired)
+        if not rt and not any(s[1] == 2 for s in secs):   # strip'd (.dynsym holds libc imports only): raw cues
+            cues = (b"GHC RTS\0", b"+RTS", b"ghc-prim:GHC.", b"Glasgow Haskell", b"base:GHC.", b"GHC version\0")
+            rt = sum(c in d for c in cues) >= 2
+        out["has_ghc_runtime"] = out["has_haskell_runtime"] = tf(rt)
+        out["has_hs_main"] = tf(any(s[0] == "hs_main" for s in dfn))
+        mods, user, pkgs, lits = set(), set(), set(), set()
+        ver = way = None
+        if rt:
+            for unit, mod, nm_, kind in parsed.values():
+                mods.add(mod)
+                if unit is None or unit == "main":
+                    user.add(mod)
+                else:
+                    pkgs.add(unit)
+                if kind == "bytes":
+                    lits.add(f"{mod}.{nm_}")
+            ro = [(s[3], s[4]) for s in secs if s[1] == 1 and s[4] and s[0] not in (".text", ".plt", ".init", ".fini")]
+            area = [d[o:o + n] for o, n in ro] if ro else [d]
+            budget = 96 << 20
+            for blk in area:
+                blk = blk[:budget]
+                budget -= len(blk)
+                for m in _GHC_CONDESC.finditer(blk):
+                    u = _GHC_UNIT.search(blk, max(0, m.start() - 82), m.start())
+                    if not u:
+                        continue
+                    unit, mod = u.group(1).decode("latin-1"), m.group(1)[:-1].decode("latin-1")
+                    mods.add(mod)
+                    if unit == "main":
+                        user.add(mod)
+                    else:
+                        pkgs.add(unit)
+                if ver is None:
+                    m = re.search(rb"Glorious Glasgow Haskell Compilation System,? (?:[Vv]ersion )?(\d+\.\d+[\d.]*)", blk)
+                    m = m or re.search(rb"GHC version\0{1,64}(\d+\.\d+(?:\.\d+){0,2})\0", blk)
+                    for rx in (rb"GHC (\d+\.\d+\.\d+(?:\.\d+)?)(?![\w.])", rb"ghc-(\d+\.\d+\.\d+(?:\.\d+)?)(?![\w.])"):
+                        m = m or next((x for x in re.finditer(rx, blk)
+                                       if not x.start() or blk[x.start() - 1:x.start()] not in b".-_" and
+                                       not blk[x.start() - 1:x.start()].isalnum()), None)
+                    if m:
+                        ver = m.group(1).decode("latin-1").rstrip(".")
+                if way is None:
+                    m = re.search(rb"RTS way\0{1,64}(rts[A-Za-z0-9_]{0,24})\0", blk)
+                    way = m.group(1).decode("latin-1") if m else None
+                if budget <= 0:
+                    break
+        out["ghc_version"] = ver or "none"
+        out["rts_way"] = way or "none"
+        out["has_threaded_rts"] = tf(way and "thr" in way)
+        out["haskell_modules"] = sorted(mods)
+        out["user_modules"] = sorted(user)
+        out["haskell_packages"] = sorted(pkgs)
+        out["main_module"] = "Main" if rt and names & {"ZCMain_main_closure", "Main_main_closure", "Main_main_info"} \
+            else "none"
+        out["closure_count"] = sum(1 for p in parsed.values() if p[3] == "closure") if rt else 0
+        out["bytes_literals"] = sorted(lits)
+        hs = {"hcfg_symbol": "none", "hcfg_closure": "none", "hcfg_module": "none", "hcfg_unit": "none",
+              "hcfg_kind": "none", "hcfg_section": "none"}
+        if hcfg:
+            hit = hcfg_find(d)
+            off = getattr(hit, "offset", None) if hit is not None else None
+            if isinstance(off, int) and 0 <= off < len(d):
+                k = next((k for k, s in enumerate(secs) if s[1] != 8 and s[2] and s[3] <= off < s[3] + s[4]), None)
+                if k is not None:
+                    hs["hcfg_section"] = secs[k][0] or "none"
+                    va = secs[k][2] + off - secs[k][3]
+                    cand = [s for s in dfn if s[1] in (0, 1) and s[3] == k and s[0] and not s[0].startswith(".")
+                            and (s[4] <= va < s[4] + s[5] or (not s[5] and 0 <= va - s[4] < 4096))]
+                    if cand:
+                        n = min(cand, key=lambda s: (not s[5], s[0] not in parsed, va - s[4]))[0]
+                        hs["hcfg_symbol"] = n
+                        p = parsed.get(n)
+                        if p:
+                            hs["hcfg_closure"], hs["hcfg_module"] = f"{p[1]}.{p[2]}", p[1]
+                            hs["hcfg_unit"], hs["hcfg_kind"] = p[0] or "main", p[3]
+        out.update(hs)
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def ghc_field(data, name):
+    """One ghc_facts value; "none" when the input is no ELF or the field is unknown (never raises)."""
+    try:
+        return (ghc_facts(data, hcfg=name.startswith("hcfg_")) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+# --- ocaml_facts: OCaml native (ocamlopt) identity + module / string-block facts (next-day candidate) -----------------
+# Module M links caml<M><sep>{entry,code_begin,code_end,data_begin,data_end,frametable,gc_roots} + caml<M> (the module
+# block) + functions caml<M><sep><fn>_<stamp>; sep is "__" up to 5.0, "." from 5.1 ("$" on targets without '.').
+# dune executables wrap every module as Dune__exe__<M>; the stdlib is Stdlib / Stdlib__<M> / Camlinternal*.
+# Runtime: caml_startup, caml_main, caml_program, caml_start_program; OCAMLRUNPARAM / CAMLRUNPARAM strings.
+# Structured string constants are blocks: header word (wosize<<10 | color<<8 | 252 String_tag) then the payload; the
+# data label (caml<M><sep><n>) sits AT the payload, whose last byte is the pad count (wosize*W-1-len, zero-filled).
+# HCFG offset convention: the payload start (the 'H'), never the header word.
+_OCAML_MODSYM = re.compile(r"^caml([A-Z][A-Za-z0-9_']*?)(__|\.|\$)(entry|code_begin|code_end|data_begin|data_end|"
+                           r"frametable|gc_roots)$")
+_OCAML_RT = {"caml_startup", "caml_main", "caml_program", "caml_start_program", "caml_startup_exn",
+             "caml_startup_pooled", "caml_init_gc", "caml_alloc_shr", "caml_raise_exn", "caml_call_gc"}
+_OCAML_VER = re.compile(rb"(?:\.opam/|/ocaml/|/ocaml-|ocaml-base-compiler\.|ocaml-variants\.|OCaml version |"
+                        rb"The OCaml [a-z]+, version )(\d+\.\d{1,2}\.\d{1,2})(?![\d])")
+
+
+def ocaml_string_block(d, off, word=8, little=True):
+    """(header_offset, wosize, color, tag, pad) when `off` is the payload of a well-formed OCaml String_tag block
+    (header word right before it, tag 252, last payload byte = pad count < word with zero padding before it), else None."""
+    try:
+        if off < word or off > len(d):
+            return None
+        hdr = int.from_bytes(d[off - word:off], "little" if little else "big")
+        wo, tag = hdr >> 10, hdr & 0xFF
+        if tag != 252 or not 0 < wo <= (len(d) - off) // word:
+            return None
+        end = off + wo * word
+        pad = d[end - 1]
+        if pad >= word or any(d[end - 1 - pad:end - 1]):
+            return None
+        return off - word, wo, (hdr >> 8) & 3, tag, pad
+    except _PARSE_ERR:
+        return None
+
+
+def ocaml_facts(data, hcfg=True):
+    """OCaml native (ocamlopt) facts of an ELF image (bytes only): format, architecture, has_ocaml_runtime (runtime /
+    caml<M><sep>entry-family symbols in .symtab/.dynsym, or -- only without .symtab -- 2+ raw runtime cues),
+    has_caml_main, ocaml_version (opam switch / libdir path), symbol_separator ("__" / "." / "$"), ocaml_modules (raw
+    linked module names: Dune__exe__Main, Stdlib__Printf, ...), user_modules (no Stdlib / Camlinternal / Std_exit,
+    Dune__exe__ prefix dropped), stdlib_modules, entry_symbols (caml<M><sep>entry), has_dune_exe, main_module ("Main"
+    when linked, else the only user module), function_count; hcfg_symbol / hcfg_module / hcfg_section for the hcfg_find
+    hit and its String_tag block (hcfg_in_ocaml_block, hcfg_block_header_offset = offset - word, hcfg_block_wosize,
+    hcfg_block_tag, hcfg_block_pad; hcfg=False skips the scan). Absent -> "none" / "false" / [] / 0; not ELF -> None."""
+    try:
+        d = bytes(data)
+        if not (d[:4] == b"\x7fELF" and len(d) >= 64 and d[4] in (1, 2) and d[5] in (1, 2)):
+            return None
+        tf = lambda b: "true" if b else "false"   # noqa: E731
+        try:
+            secs, syms = _gf_elf(d)
+        except _PARSE_ERR:
+            secs, syms = [], []
+        out = {"format": "elf", "architecture": _arch_of(d) or "none"}
+        dfn = [s for s in syms if s[3] != 0]
+        names = {s[0] for s in dfn}
+        mods, seps, entries = set(), [], set()
+        for n in names:
+            m = _OCAML_MODSYM.match(n) if n.startswith("caml") else None
+            if m:
+                mods.add(m.group(1))
+                seps.append(m.group(2))
+                if m.group(3) == "entry":
+                    entries.add(n)
+        rt = bool(names & _OCAML_RT) or len(mods) >= 2
+        if not rt and not any(s[1] == 2 for s in secs):   # strip'd: raw runtime cues
+            cues = (b"OCAMLRUNPARAM\0", b"CAMLRUNPARAM\0", b"Fatal error: exception ", b"caml_startup",
+                    b"Stdlib.Exit", b"Out of memory\0")
+            rt = sum(c in d for c in cues) >= 2
+        if not rt:
+            mods, seps, entries = set(), [], set()
+        out["has_ocaml_runtime"] = tf(rt)
+        out["has_caml_main"] = tf(rt and "caml_main" in names)
+        ver = None
+        if rt:
+            ro = [(s[3], s[4]) for s in secs if s[1] == 1 and s[4] and s[0] not in (".text", ".plt", ".init", ".fini")]
+            budget = 96 << 20
+            for o, n in (ro or [(0, len(d))]):
+                m = _OCAML_VER.search(d, o, o + min(n, max(budget, 0)))
+                budget -= n
+                if m:
+                    ver = m.group(1).decode("latin-1")
+                    break
+        out["ocaml_version"] = ver or "none"
+        out["symbol_separator"] = max(set(seps), key=seps.count) if seps else "none"
+        std = {m for m in mods if m == "Stdlib" or m.startswith(("Stdlib__", "Camlinternal", "Std_exit"))}
+        user = {m[11:] if m.startswith("Dune__exe__") else m for m in mods - std}
+        out["ocaml_modules"] = sorted(mods)
+        out["user_modules"] = sorted(user)
+        out["stdlib_modules"] = sorted(std)
+        out["entry_symbols"] = sorted(entries)
+        out["has_dune_exe"] = tf(any(m.startswith("Dune__exe__") for m in mods))
+        out["main_module"] = "Main" if "Main" in user else (next(iter(user)) if len(user) == 1 else "none")
+        fn = 0
+        if mods:
+            pre = {"caml" + m + s for m in mods for s in set(seps)}
+            fn = sum(1 for s in dfn if s[1] == 2 and s[0][:4] == "caml" and _OCAML_MODSYM.match(s[0]) is None
+                     and re.search(r"_\d+$", s[0]) and any(s[0].startswith(p) for p in pre))
+        out["function_count"] = fn
+        hs = {"hcfg_symbol": "none", "hcfg_module": "none", "hcfg_section": "none", "hcfg_in_ocaml_block": "false",
+              "hcfg_block_header_offset": "none", "hcfg_block_wosize": "none", "hcfg_block_tag": "none",
+              "hcfg_block_pad": "none"}
+        if hcfg:
+            hit = hcfg_find(d)
+            off = getattr(hit, "offset", None) if hit is not None else None
+            if isinstance(off, int) and 0 <= off < len(d):
+                blk = ocaml_string_block(d, off, 8 if d[4] == 2 else 4, d[5] == 1) if rt else None
+                if blk:
+                    hs["hcfg_in_ocaml_block"] = "true"
+                    hs["hcfg_block_header_offset"], hs["hcfg_block_wosize"] = blk[0], blk[1]
+                    hs["hcfg_block_tag"], hs["hcfg_block_pad"] = blk[3], blk[4]
+                k = next((k for k, s in enumerate(secs) if s[1] != 8 and s[2] and s[3] <= off < s[3] + s[4]), None)
+                if k is not None:
+                    hs["hcfg_section"] = secs[k][0] or "none"
+                    va = secs[k][2] + off - secs[k][3]
+                    cand = [s for s in dfn if s[1] in (0, 1) and s[0] and not s[0].startswith(".")
+                            and (s[3] == k or s[3] == 0xFFF1) and (s[4] == va or s[4] < va < s[4] + s[5])]
+                    if cand:
+                        n = min(cand, key=lambda s: (s[4] != va, not s[0].startswith("caml"), va - s[4]))[0]
+                        hs["hcfg_symbol"] = n
+                        ms = [m for m in mods if any(n.startswith("caml" + m + sp) for sp in ("__", ".", "$"))]
+                        if ms:
+                            hs["hcfg_module"] = max(ms, key=len)
+        out.update(hs)
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def ocaml_field(data, name):
+    """One ocaml_facts value; "none" when the input is no ELF or the field is unknown (never raises)."""
+    try:
+        return (ocaml_facts(data, hcfg=name.startswith("hcfg_")) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+# --- dart_facts: Dart AOT (`dart compile exe`) snapshot identity + HCFG placement (next-day candidate) ---------------
+# The AOT snapshot is an ELF whose .dynsym exports _kDartVmSnapshotData/Instructions, _kDartIsolateSnapshotData/
+# Instructions (+ _kDart*SnapshotBss, _kDartSnapshotBuildId). Packaging: dart2native appends it to dartaotruntime
+# (PE/ELF/Mach-O): runtime ++ pad to 4096 ++ snapshot ELF ++ uint64 LE snapshot offset ++ dc dc f6 f6 00 00 00 00; or
+# the snapshot symbols sit in the image's own ELF (standalone). Each *SnapshotData opens with runtime/vm/snapshot.h's
+# header: int32 magic 0xdcdcf5f5, int64 length, int64 kind (0 full, 1 full-core, 2 full-jit, 3 full-aot), the 32-char
+# version hash, then the NUL-terminated features string ("product ... x64 compressed-pointers null-safety").
+# String literals are OneByteString objects (latin-1 payload after a tags word + Smi length) -> hcfg_find's raw /
+# base64 scan sees them; HCFG offset stays the payload start. Runtime cues: Dart_* API names, "<ver> (<channel>) (...)
+# on \"<os>_<arch>\"". The version hash ties the image to an SDK build (provenance).
+_DART_TRAILER = b"\xdc\xdc\xf6\xf6\0\0\0\0"
+_DART_SNAP_MAGIC = b"\xf5\xf5\xdc\xdc"
+_DART_SYMS = ("_kDartVmSnapshotData", "_kDartVmSnapshotInstructions", "_kDartIsolateSnapshotData",
+              "_kDartIsolateSnapshotInstructions")
+_DART_KIND = {0: "full", 1: "full-core", 2: "full-jit", 3: "full-aot"}
+_DART_ARCH = ("x64", "ia32", "arm64", "arm", "riscv64", "riscv32", "simarm", "simarm64")
+_DART_VER = re.compile(rb"(\d+\.\d+\.\d+(?:-[\w.]+)?) \((stable|beta|dev|main|be)\) \([^)]{0,80}\) on \"(\w{1,40})\"")
+
+
+def _dart_snap_elf(d, base):
+    """(symbols {name: file offset in d}, secs, syms, base) of an ELF at d[base:] exporting _kDart* symbols, else None."""
+    sub = d[base:] if base else d
+    if sub[:4] != b"\x7fELF" or len(sub) < 64 or sub[4] not in (1, 2) or sub[5] not in (1, 2):
+        return None
+    try:
+        secs, syms = _gf_elf(sub)
+    except _PARSE_ERR:
+        return None
+    out = {}
+    for n, _ty, _b, shndx, val, _sz in syms:
+        if n.startswith("_kDart") and n not in out and 0 < shndx < len(secs):
+            s = secs[shndx]
+            out[n] = base + s[3] + val - s[2] if s[1] != 8 and s[2] <= val <= s[2] + s[4] else None
+    return (out, secs, syms, base) if any(k in out for k in _DART_SYMS) else None
+
+
+def _dart_header(d, off):
+    """(length, kind, hash, features) of a snapshot header at d[off], else None."""
+    if not isinstance(off, int) or off < 0 or d[off:off + 4] != _DART_SNAP_MAGIC:
+        return None
+    ln, kind = struct.unpack_from("<qq", d, off + 4)
+    h = bytes(d[off + 20:off + 52])
+    if not re.fullmatch(rb"[0-9a-f]{32}", h):
+        return None
+    z = d.find(b"\0", off + 52, off + 52 + 2048)
+    feat = bytes(d[off + 52:z]).decode("latin-1") if z > 0 else ""
+    return ln, kind, h.decode(), feat if all(32 <= ord(c) < 127 for c in feat) else ""
+
+
+def dart_facts(data, hcfg=True):
+    """Dart AOT facts of an executable (bytes only): format, architecture, has_dart_runtime (Dart_* API strings or
+    snapshot symbols), is_dart_aot (snapshot ELF exporting _kDart* found), packaging ("appended" dart2native trailer /
+    "standalone" own .dynsym / "embedded" ELF inside / "none"), snapshot_offset + snapshot_size (embedded ELF; 0 +
+    file size standalone), snapshot_symbols (sorted _kDart*), vm/isolate_snapshot_data/instructions_offset (file
+    offsets), snapshot_build_id (GNU build-id note of the snapshot ELF, hex), snapshot_hash (32-hex version hash of the
+    isolate -- else vm -- data header), snapshot_kind ("full-aot"), snapshot_features, snapshot_arch,
+    compressed_pointers, null_safety, product_mode, dart_version / dart_channel / dart_target ("3.5.4" "stable"
+    "linux_x64"); hcfg_symbol (_kDart* region holding the hcfg_find hit) / hcfg_section (snapshot ELF section) /
+    hcfg_in_snapshot (hcfg=False skips the scan). Absent -> "none" / "false" / []; not PE/ELF/Mach-O -> None."""
+    try:
+        d = bytes(data)
+        fmt = ("elf" if d[:4] == b"\x7fELF" else "pe" if d[:2] == b"MZ" else
+               "macho" if d[:4] in (b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe", b"\xca\xfe\xba\xbe") else None)
+        if fmt is None or len(d) < 64:
+            return None
+        tf = lambda b: "true" if b else "false"   # noqa: E731
+        out = {"format": fmt, "architecture": _arch_of(d) or "none"}
+        snap, pack, size = None, "none", "none"
+        if d[-8:] == _DART_TRAILER and len(d) >= 80:
+            off = struct.unpack_from("<Q", d, len(d) - 16)[0]
+            if 0 < off < len(d) - 16:
+                snap = _dart_snap_elf(d[:len(d) - 16], off)
+                if snap:
+                    pack, size = "appended", len(d) - 16 - off
+        if snap is None and fmt == "elf":
+            snap = _dart_snap_elf(d, 0)
+            if snap:
+                pack, size = "standalone", len(d)
+        if snap is None and b"_kDartIsolateSnapshotData" in d:
+            p, tries = d.find(b"\x7fELF", 1), 0
+            while 0 < p and tries < 64:
+                tries += 1
+                if p % 16 == 0:
+                    snap = _dart_snap_elf(d, p)
+                    if snap:
+                        pack, size = "embedded", len(d) - p
+                        break
+                p = d.find(b"\x7fELF", p + 1)
+        syms, secs, base = (snap[0], snap[1], snap[3]) if snap else ({}, [], 0)
+        api = len(set(re.findall(rb"\bDart_(?:Initialize|CreateIsolateGroup\w*|RunLoop|ShutdownIsolate|Cleanup|"
+                                 rb"IsolateMakeRunnable|InvokeMain\w*|NewStringFromCString|SetVMFlags)\b", d[:96 << 20])))
+        out["is_dart_aot"] = tf(snap)
+        out["packaging"] = pack
+        out["snapshot_offset"] = base if snap else "none"
+        out["snapshot_size"] = size
+        out["snapshot_symbols"] = sorted(syms)
+        for k, n in (("vm_snapshot_data_offset", "_kDartVmSnapshotData"),
+                     ("vm_snapshot_instructions_offset", "_kDartVmSnapshotInstructions"),
+                     ("isolate_snapshot_data_offset", "_kDartIsolateSnapshotData"),
+                     ("isolate_snapshot_instructions_offset", "_kDartIsolateSnapshotInstructions")):
+            out[k] = syms[n] if isinstance(syms.get(n), int) else "none"
+        bid = "none"
+        for nm_, ty, _a, so, sz in secs:
+            if ty == 7 and nm_ == ".note.gnu.build-id" and sz >= 16:
+                o = base + so
+                nsz, dsz, nty = struct.unpack_from("<III", d, o)
+                if nty == 3 and 0 < dsz <= 64:
+                    bid = d[o + 12 + ((nsz + 3) & ~3):][:dsz].hex()
+        out["snapshot_build_id"] = bid
+        hdr = (_dart_header(d, out["isolate_snapshot_data_offset"]) or
+               _dart_header(d, out["vm_snapshot_data_offset"]))
+        if hdr is None and snap is None and api >= 2:   # symbols lost: one bounded header scan
+            p, tries = d.find(_DART_SNAP_MAGIC), 0
+            while p >= 0 and hdr is None and tries < 256:
+                tries += 1
+                hdr = _dart_header(d, p)
+                p = d.find(_DART_SNAP_MAGIC, p + 1)
+        out["has_dart_runtime"] = tf(snap or hdr)   # Dart_* strings alone (a literal) never decide
+        out = {k: out[k] for k in ("format", "architecture", "has_dart_runtime")} | out
+        feats = hdr[3].split() if hdr else []
+        out["snapshot_hash"] = hdr[2] if hdr else "none"
+        out["snapshot_kind"] = _DART_KIND.get(hdr[1], str(hdr[1])) if hdr else "none"
+        out["snapshot_features"] = hdr[3] if hdr and hdr[3] else "none"
+        out["snapshot_arch"] = next((t for t in feats if t in _DART_ARCH), "none")
+        out["compressed_pointers"] = ("true" if "compressed-pointers" in feats else "false") if feats else "none"
+        out["null_safety"] = ("true" if "null-safety" in feats else "false" if "no-null-safety" in feats else "none") \
+            if feats else "none"
+        out["product_mode"] = tf("product" in feats) if feats else "none"
+        m = _DART_VER.search(d, 0, base if snap and base else min(len(d), 96 << 20)) if out["has_dart_runtime"] == \
+            "true" else None
+        out["dart_version"] = m.group(1).decode() if m else "none"
+        out["dart_channel"] = m.group(2).decode() if m else "none"
+        out["dart_target"] = m.group(3).decode() if m else "none"
+        hs = {"hcfg_symbol": "none", "hcfg_section": "none", "hcfg_in_snapshot": "none"}
+        if hcfg:
+            hit = hcfg_find(d)
+            off = getattr(hit, "offset", None) if hit is not None else None
+            if isinstance(off, int) and 0 <= off < len(d):
+                inside = bool(snap) and base <= off < base + (size if isinstance(size, int) else 0)
+                hs["hcfg_in_snapshot"] = tf(inside)
+                if inside:
+                    rel = off - base
+                    k = next((k for k, s in enumerate(secs) if s[1] != 8 and s[4] and s[3] <= rel < s[3] + s[4]), None)
+                    if k is not None:
+                        hs["hcfg_section"] = secs[k][0] or "none"
+                        own = [(o, n) for n, o in syms.items() if isinstance(o, int) and o <= off and
+                               any(s[0] == n and s[3] == k for s in snap[2])]
+                        if own:
+                            hs["hcfg_symbol"] = max(own)[1]
+        out.update(hs)
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def dart_field(data, name):
+    """One dart_facts value; "none" when the input is no executable or the field is unknown (never raises)."""
+    try:
+        return (dart_facts(data, hcfg=name.startswith("hcfg_")) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+# --- kotlin_native_facts: Kotlin/Native (konanc) identity + kfun / KString facts (next-day candidate) -----------------
+# konanc symbols: kfun:<owner>#<name>(<params>){}<ret> (owner = package or package.Class, "" at the root:
+# kfun:#main(){}), kclass:<fq>, ktype:<fq> (TypeInfo), kvar:/kobjref:. Runtime: Konan_main / Konan_start /
+# Kotlin_initRuntimeIfNeeded. String literals are static KString arrays: ArrayHeader {TypeInfo* (low bits = tags),
+# uint32 count} (16 bytes on 64-bit, 8 on 32-bit) then count UTF-16 code units, no terminator -> an HCFG stored as text
+# sits in a utf16le-* hit whose offset (= first stored byte) is the KString payload.
+_KN_RT = {"Konan_main", "Konan_start", "Konan_run_start", "Kotlin_initRuntimeIfNeeded", "Kotlin_initRuntime",
+          "Kotlin_deinitRuntimeIfNeeded", "Kotlin_main"}
+_KN_CUES = (b"kotlin.native.internal", b"Kotlin_initRuntimeIfNeeded", b"Konan_main", b"Konan_start",
+            b"kotlin.native.concurrent", b"kfun:")
+_KN_STD = ("kotlin.", "kotlinx.", "kotlin#", "kotlinx#")
+
+
+def _kn_fun(n):
+    """'kfun:com.x.Cfg#decode(kotlin.String){}kotlin.Int' -> ('com.x.Cfg', 'decode') or None."""
+    owner, sep, rest = n[5:].partition("#")
+    name = re.match(r"[^(]*", rest).group(0) if sep else ""
+    return (owner, name) if name else None
+
+
+def kotlin_native_facts(data, hcfg=True):
+    """Kotlin/Native (konanc) facts of an ELF image (bytes only): format, architecture, has_kotlin_native_runtime
+    (Konan_main / Kotlin_initRuntimeIfNeeded / kfun:/kclass:/ktype: symbols in .symtab/.dynsym, or -- only without
+    .symtab -- 2+ raw runtime cues, ASCII or UTF-16LE), has_konan_main, kfun_symbols (defined kfun: names, raw),
+    user_kfun_symbols (no kotlin./kotlinx. owner), kotlin_functions (user owner.name, root -> name), kfun_owners,
+    kclass_names / ktype_names (user, prefix dropped), main_function (the root `main` kfun symbol), function_count
+    (user kfuns), stdlib_function_count; hcfg_encoding / hcfg_symbol / hcfg_section for the hcfg_find hit and its
+    KString (hcfg_in_kstring when the uint32 count before the payload covers the UTF-16 text, hcfg_kstring_header_offset
+    = offset - 16 (64-bit) / - 8, hcfg_kstring_length = count, hcfg_kstring_type = symbol the TypeInfo pointer & ~3
+    names; hcfg=False skips the scan). Absent -> "none" / "false" / [] / 0; not ELF -> None."""
+    try:
+        d = bytes(data)
+        if not (d[:4] == b"\x7fELF" and len(d) >= 64 and d[4] in (1, 2) and d[5] in (1, 2)):
+            return None
+        tf = lambda b: "true" if b else "false"   # noqa: E731
+        try:
+            secs, syms = _gf_elf(d)
+        except _PARSE_ERR:
+            secs, syms = [], []
+        out = {"format": "elf", "architecture": _arch_of(d) or "none"}
+        dfn = [s for s in syms if s[3] != 0]
+        names = {s[0] for s in dfn}
+        kfun = sorted(n for n in names if n.startswith("kfun:"))
+        kcls = {n for n in names if n.startswith(("kclass:", "ktype:"))}
+        rt = bool(names & _KN_RT) or bool(kfun) and bool(kcls or len(kfun) >= 2)
+        if not rt and not any(s[1] == 2 for s in secs):   # strip'd: raw runtime cues (TypeInfo names are KStrings)
+            rt = sum(c in d or _widen(c) in d for c in _KN_CUES) >= 2
+        if not rt:
+            kfun, kcls = [], set()
+        out["has_kotlin_native_runtime"] = tf(rt)
+        out["has_konan_main"] = tf(rt and "Konan_main" in names)
+        user = [n for n in kfun if not n[5:].startswith(_KN_STD)]
+        parsed = [p for p in map(_kn_fun, user) if p]
+        out["kfun_symbols"], out["user_kfun_symbols"] = kfun, user
+        out["kotlin_functions"] = sorted({f"{o}.{m}" if o else m for o, m in parsed})
+        out["kfun_owners"] = sorted({o for o, _ in parsed if o})
+        for pre, key in (("kclass:", "kclass_names"), ("ktype:", "ktype_names")):
+            out[key] = sorted(n[len(pre):] for n in kcls if n.startswith(pre) and not n[len(pre):].startswith(_KN_STD))
+        out["main_function"] = next((n for n in user if n.startswith("kfun:#main(")), "none")
+        out["function_count"], out["stdlib_function_count"] = len(user), len(kfun) - len(user)
+        hs = {"hcfg_encoding": "none", "hcfg_symbol": "none", "hcfg_section": "none", "hcfg_in_kstring": "false",
+              "hcfg_kstring_header_offset": "none", "hcfg_kstring_length": "none", "hcfg_kstring_type": "none"}
+        if hcfg:
+            hit = hcfg_find(d)
+            off = getattr(hit, "offset", None) if hit is not None else None
+            if isinstance(off, int) and 0 <= off < len(d):
+                hs["hcfg_encoding"] = hit.encoding
+                w, e = (8, "<Q") if d[4] == 2 else (4, "<I")
+                e = e if d[5] == 1 else ">" + e[1]
+                ue = "<I" if d[5] == 1 else ">I"
+                run = re.match(rb"(?:[\x09-\x7e]\x00)*", d[off:off + (2 << 20)]).group(0)
+                # sizeof(ArrayHeader) = 2 words (count, then pad on 64-bit); packed 12-byte header as fallback
+                for ho, co in ((off - 2 * w, off - w), (off - 12, off - 4)) if w == 8 else ((off - 8, off - 4),):
+                    if not (rt and hit.encoding.startswith("utf16le-") and ho >= 0):
+                        break
+                    cnt = struct.unpack_from(ue, d, co)[0]
+                    if 0 < cnt <= len(run) // 2 and not any(d[co + 4:off]):
+                        hs["hcfg_in_kstring"] = "true"
+                        hs["hcfg_kstring_header_offset"], hs["hcfg_kstring_length"] = ho, cnt
+                        ti = struct.unpack_from(e, d, ho)[0] & ~3
+                        tn = [s[0] for s in dfn if s[4] == ti and ti and s[1] in (0, 1) and s[0].startswith("ktype:")]
+                        hs["hcfg_kstring_type"] = tn[0] if tn else "none"
+                        break
+                k = next((k for k, s in enumerate(secs) if s[1] != 8 and s[2] and s[3] <= off < s[3] + s[4]), None)
+                if k is not None:
+                    hs["hcfg_section"] = secs[k][0] or "none"
+                    va = secs[k][2] + off - secs[k][3]
+                    cand = [s for s in dfn if s[1] in (0, 1) and s[0] and not s[0].startswith(".")
+                            and (s[3] == k or s[3] == 0xFFF1) and (s[4] == va or s[4] < va < s[4] + s[5])]
+                    if cand:
+                        hs["hcfg_symbol"] = min(cand, key=lambda s: (s[4] != va, va - s[4]))[0]
+        out.update(hs)
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def kotlin_native_field(data, name):
+    """One kotlin_native_facts value; "none" when the input is no ELF or the field is unknown (never raises)."""
+    try:
+        return (kotlin_native_facts(data, hcfg=name.startswith("hcfg_")) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+# --- language_of: ONE consistent source-language / toolchain token per image (17 seen D1-D17 + next candidates) ----
+# Seen (expected = the day's theme): d01/d15 c, d02 cpp, d03 csharp (.NET dll), d04 go, d05 rust, d06 java, d07 kotlin,
+# d08 swift, d09 nim, d10 zig, d11 d, d12 pascal, d13 crystal, d14 objc, d16 wasm, d17 ada.
+LANG_TOKEN = {"gnat": "ada", "fpc": "pascal"}            # lang_facts runtime keys -> language_of tokens
+LANG_ALIASES = {"c": ["c"], "cpp": ["cpp", "c++"], "csharp": ["csharp", "c#", "dotnet", ".net"],
+                "fsharp": ["fsharp", "f#", "dotnet"], "vbnet": ["vbnet", "vb.net", "dotnet"], "go": ["go", "golang"],
+                "rust": ["rust"], "java": ["java", "jvm"], "kotlin": ["kotlin", "jvm"], "scala": ["scala", "jvm"],
+                "groovy": ["groovy", "jvm"], "clojure": ["clojure", "jvm"], "swift": ["swift"], "nim": ["nim"],
+                "zig": ["zig"], "d": ["d", "dlang"], "pascal": ["pascal", "fpc", "freepascal", "delphi", "objectpascal"],
+                "crystal": ["crystal"], "objc": ["objc", "objective-c"], "wasm": ["wasm", "wat", "webassembly"],
+                "ada": ["ada", "gnat"], "haskell": ["haskell", "ghc"], "ocaml": ["ocaml"], "fortran": ["fortran"],
+                "cobol": ["cobol"], "odin": ["odin"], "v": ["v", "vlang"], "dart": ["dart"], "julia": ["julia"],
+                "kotlin-native": ["kotlin-native", "kotlin", "konan"], "python": ["python"], "vb6": ["vb6", "visualbasic"],
+                "autoit": ["autoit"]}
+# candidate runtimes lang_facts does not know: (token, toolchain, kind, cues). kind "sym" = a symbol-name cue: it only
+# decides when found in .strtab/.dynstr (or the image has no symbol table); a hit elsewhere in the bytes (string
+# literal) is logged under `ambiguous`. kind "str" = a runtime string / magic that is decisive anywhere.
+_LANG_CUES = (
+    ("kotlin-native", "konan", "sym", (b"kfun:", b"Konan_main", b"Kotlin_initRuntime")),
+    ("haskell", "ghc", "sym", (b"ghczmprim_GHC", b"base_GHCziTopHandler", b"hs_init_ghc", b"stg_ap_0_fast")),
+    ("ocaml", "ocamlopt", "sym", (b"caml_startup", b"caml_main", b"camlStdlib", b"caml_program")),
+    ("fortran", "gfortran", "sym", (b"_gfortran_set_args", b"_gfortran_st_write", b"_gfortran_set_options")),
+    ("cobol", "gnucobol", "sym", (b"cob_init", b"cob_module_enter", b"cob_resolve")),
+    ("julia", "julia", "sym", (b"jl_init_with_image", b"jl_atexit_hook", b"libjulia")),
+    ("dart", "dart", "sym", (b"_kDartVmSnapshotData", b"_kDartIsolateSnapshotInstructions")),
+    ("odin", "odin", "sym", (b"__$startup_runtime", b"__$cleanup_runtime", b"runtime.default_allocator_proc")),
+    ("v", "v", "sym", (b"_vinit", b"_vcleanup", b"builtin__panic")),
+    ("python", "pyinstaller", "str", (b"MEI\x0c\x0b\x0a\x0b\x0e", b"_MEIPASS2", b"pyi-runtime-tmpdir")),
+    ("python", "nuitka", "str", (b"__nuitka_", b"NUITKA_ONEFILE", b"nuitka-version")),
+    ("python", "py2exe", "str", (b"PYTHONSCRIPT\0",)),
+    ("csharp", "nativeaot", "sym", (b"S_P_CoreLib_System_", b"__managed__Main")),
+    ("vb6", "msvbvm", "str", (b"MSVBVM60.DLL", b"MSVBVM50.DLL")),
+    ("autoit", "autoit", "str", (b"AU3!EA06", b">>>AUTOIT SCRIPT<<<")),
+    ("pascal", "delphi", "str", (b"Embarcadero Delphi", b"Borland Delphi", b"SOFTWARE\\Borland\\Delphi\\RTL")),
+)
+_TC_NATIVE = {"go": "gc", "rust": "rustc", "swift": "swiftc", "nim": "nim", "zig": "zig", "pascal": "fpc",
+              "crystal": "crystal", "ada": "gnat"}
+_WASM_PRODUCERS = ((b"rustc", "rustc", "rust"), (b"Emscripten", "emscripten", "c"), (b"TinyGo", "tinygo", "go"),
+                   (b"AssemblyScript", "assemblyscript", "assemblyscript"), (b"clang", "clang", "c"),
+                   (b"wit-component", "wit-component", "none"))
+
+
+def _jvm_lang(names, read):
+    """(language, evidence) for a jar's entry names / class-bytes reader (None, []) when no JVM content."""
+    cls = [n for n in names if n.endswith(".class")]
+    if not cls:
+        return None, []
+    for tok, pre in (("kotlin", "kotlin/"), ("scala", "scala/"), ("clojure", "clojure/"), ("groovy", "groovy/")):
+        if any(n.startswith(pre) for n in names):
+            return tok, [f"jar entries {pre}*"]
+    if any(n.endswith(".kotlin_module") for n in names):
+        return "kotlin", ["META-INF/*.kotlin_module"]
+    for n in cls[:64]:
+        b = read(n)
+        for tok, cue in (("kotlin", b"Lkotlin/Metadata;"), ("scala", b"Lscala/reflect/ScalaSignature;"),
+                         ("groovy", b"groovy/lang/GroovyObject"), ("clojure", b"clojure/lang/")):
+            if cue in b:
+                return tok, [f"{n}: {cue.decode()}"]
+    return "java", [f"{len(cls)} .class entries, no kotlin/scala/groovy/clojure marker"]
+
+
+def language_of(data):
+    """Source language + toolchain of a compiled member, with evidence (bytes only, no subprocess).
+    -> {format, language, toolchain, aliases, evidence [..], candidates [every language with a cue], ambiguous
+    "true"/"false", ambiguous_with [..], source_language (wasm producers / .NET flavour, else "none")}.
+    language tokens: c cpp csharp fsharp vbnet go rust java kotlin scala groovy clojure swift nim zig d pascal crystal
+    objc wasm ada + candidates haskell ocaml fortran cobol odin v dart julia kotlin-native python vb6 autoit.
+    Native images: lang_facts runtime hit (gnat->ada, fpc->pascal) wins; a candidate cue table refines c/cpp
+    (C-runtime languages). .NET PE (CLI header + BSJB) -> csharp unless FSharp.Core / Microsoft.VisualBasic.
+    jar / bare .class -> java unless kotlin/scala/groovy/clojure markers. wasm stays "wasm" (D16), its producers
+    section only fills toolchain/source_language. None for anything that is not an executable image / jar / class."""
+    try:
+        d = bytes(data)
+        ev, cands = [], []
+        out = {"format": "none", "language": "none", "toolchain": "none", "source_language": "none"}
+        if d[:4] == b"\xca\xfe\xba\xbe" and len(d) >= 10 and int.from_bytes(d[6:8], "big") >= 45 \
+                and int.from_bytes(d[4:8], "big") >= 45:
+            out["format"] = "class"
+            lang, ev = _jvm_lang(["x.class"], lambda n: d)
+        elif d[:2] == b"PK":
+            import zipfile
+            try:
+                z = zipfile.ZipFile(io.BytesIO(d))
+                names = z.namelist()
+            except (zipfile.BadZipFile, OSError, EOFError, RuntimeError, ValueError, struct.error):
+                return None
+
+            def read(n):
+                try:
+                    zi = z.getinfo(n)
+                    return z.read(n) if zi.file_size < (4 << 20) else b""
+                except Exception:   # noqa: BLE001 -- encrypted / broken entry
+                    return b""
+            lang, ev = _jvm_lang(names, read)
+            if lang is None:
+                return None
+            out["format"] = "jar"
+        else:
+            lang = None
+            lay = _pe_layout(d) if d[:2] == b"MZ" else None
+            if lay and len(lay[2]) > 14 and lay[2][14][0] and b"BSJB" in d:
+                out["format"] = "pe"
+                lang = "fsharp" if b"FSharp.Core" in d else ("vbnet" if b"Microsoft.VisualBasic" in d else "csharp")
+                ev = ["PE CLI header (data dir 14) + BSJB metadata"] + \
+                     ([f"assembly ref {'FSharp.Core' if lang == 'fsharp' else 'Microsoft.VisualBasic'}"]
+                      if lang != "csharp" else [])
+                out["toolchain"] = "dotnet"
+                if b"<CrtImplementationDetails>" in d:
+                    lang, ev = "cpp", ev + ["C++/CLI <CrtImplementationDetails>"]
+                    out["toolchain"] = "msvc"
+                out["source_language"] = lang
+        if lang is not None:
+            out["toolchain"] = out["toolchain"] if out["toolchain"] != "none" else \
+                {"kotlin": "kotlinc", "scala": "scalac", "groovy": "groovyc", "clojure": "clojure"}.get(lang, "javac")
+            cands = [lang]
+        else:
+            f = lang_facts(d)
+            if not f:
+                return None
+            fmt = out["format"] = f["format"]
+            hits = [LANG_TOKEN.get(k, k) for k in LANG_ORDER if f.get(f"has_{k}_runtime") == "true"]
+            ev = [f"has_{k}_runtime" for k in LANG_ORDER if f.get(f"has_{k}_runtime") == "true"]
+            ev += [k for k in ("has_cpp_mangled_symbol",) if f.get(k) == "true" and not hits]
+            lang, cands = f["language"], list(hits)
+            lang = LANG_TOKEN.get(lang, lang)
+            # symbol-string region (where a "sym" cue is decisive) + .comment banner
+            symtxt, comment, has_symtab = d, b"", fmt != "elf"
+            if fmt == "elf":
+                lay = _elf_layout(d)
+                parts = []
+                for nm, o, n in (lay[1] if lay else []):
+                    if nm in (".strtab", ".dynstr"):
+                        parts.append(d[o:o + n])
+                        has_symtab = has_symtab or nm == ".strtab"
+                    elif nm == ".comment":
+                        comment = d[o:o + min(n, 4096)]
+                symtxt = b"\0".join(parts)
+            weak = []
+            for tok, tc, kind, cues in (_LANG_CUES if lang in ("c", "cpp") else ()):   # C-runtime languages only
+                hay = symtxt if kind == "sym" and has_symtab else d
+                if tok == "dart" and d[-8:] == _DART_TRAILER:   # dart2native: the cue is the appended snapshot's .dynstr
+                    hay = d
+                cue = next((c for c in cues if c in hay), None)
+                strong = cue is not None
+                if cue is None and hay is not d and len(d) <= (8 << 20):   # bounded string-literal (decoy) pass
+                    cue = next((c for c in cues if c in d), None)
+                if cue is None:
+                    continue
+                (cands if strong else weak).append(tok)
+                ev.append(f"{tok}: {cue.decode('latin-1')!r}" + ("" if strong else " (string literal only)"))
+                if strong and lang in ("c", "cpp") and (lang == "c" or tok != "pascal"):
+                    lang, out["toolchain"] = tok, tc
+            if fmt == "wasm":
+                sec = d.find(b"\x09producers")
+                body = d[sec:sec + 512] if sec >= 0 else b""
+                for cue, tc, src in _WASM_PRODUCERS:
+                    if cue in body:
+                        out["toolchain"], out["source_language"] = tc, src
+                        ev.append(f"producers section: {cue.decode()}")
+                        break
+            elif out["toolchain"] == "none":
+                low = comment.lower()
+                if lang in _TC_NATIVE:
+                    out["toolchain"] = _TC_NATIVE[lang]
+                elif lang == "d":
+                    out["toolchain"] = "ldc" if b"ldc" in low or b"_D3ldc" in d else ("gdc" if b"gdc" in low else "dmd")
+                elif b"clang" in low:
+                    out["toolchain"] = "clang"
+                elif b"gcc:" in low:
+                    out["toolchain"] = "gcc"
+                elif fmt == "pe" and b"Rich" in d[:0x400]:
+                    out["toolchain"] = "msvc"
+                elif fmt == "pe" and b"GCC: (" in d:
+                    out["toolchain"] = "mingw"
+                if comment:
+                    ev.append(".comment " + comment.split(b"\0")[0][:60].decode("latin-1"))
+            for t in weak:
+                if t not in cands and t != lang:
+                    out.setdefault("_weak", []).append(t)
+            if lang not in cands:
+                cands.insert(0, lang)
+        amb = sorted({c for c in cands if c != lang} | set(out.pop("_weak", [])))
+        out.update(language=lang, aliases=LANG_ALIASES.get(lang, [lang]), evidence=ev, candidates=cands,
+                   ambiguous="true" if amb else "false", ambiguous_with=amb)
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def language_field(data, name="language"):
+    """One language_of value; "none" when the input is no executable image / jar / class or the field is unknown."""
+    try:
+        return (language_of(data) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+# --- build provenance (who/what/when built it): GNU build-id, .comment banners, DWARF CU producer/language/comp_dir,
+# PE TimeDateStamp / CodeView RSDS pdb / Rich header / linker version, Go + Rust toolchain versions.
+_GO_BUILDINF = re.compile(rb"\xff Go buildinf:.{8,24}?(go1\.\d+(?:\.\d+)?(?:[a-z]+\d*)?)", re.S)
+_RUSTC_PATH = re.compile(rb"/rustc/([0-9a-f]{40})/")
+_VER = re.compile(r"(\d+\.\d+(?:\.\d+)?)")
+
+
+def _elf_notes(data, e, secs_raw):
+    """[(name, type, desc)] from SHT_NOTE sections (else PT_NOTE segments) of an ELF; bounded."""
+    out = []
+    for o, n in secs_raw:
+        p, end = o, min(o + n, len(data), o + 65536)
+        while p + 12 <= end:
+            nsz, dsz, typ = struct.unpack_from(e + "III", data, p)
+            q = p + 12 + ((nsz + 3) & ~3)
+            if q + dsz > end or nsz > 256:
+                break
+            out.append((bytes(data[p + 12:p + 12 + nsz]).rstrip(b"\0"), typ, bytes(data[q:q + dsz])))
+            p = q + ((dsz + 3) & ~3)
+    return out
+
+
+def _elf_prov(d, out):
+    e = "<" if d[5] == 1 else ">"
+    lay = _elf_layout(d)
+    secs = lay[1] if lay else []
+    if d[4] == 1:
+        phoff, shoff = struct.unpack_from(e + "II", d, 28)
+        _, phes, phn, shes, shn, _ = struct.unpack_from(e + "6H", d, 40)
+        shf, phf = (e + "4xI8xII"), (e + "II8xI")   # sh_type .. sh_offset, sh_size ; p_type, p_offset, p_filesz
+    else:
+        phoff, shoff = struct.unpack_from(e + "QQ", d, 32)
+        _, phes, phn, shes, shn, _ = struct.unpack_from(e + "6H", d, 52)
+        shf, phf = (e + "4xI16xQQ"), (e + "I4xQ16xQ")
+    notes = [(o, n) for t, o, n in (struct.unpack_from(shf, d, shoff + k * shes) for k in range(min(shn, 4096)))
+             if t == 7] if shn and shoff + shn * shes <= len(d) else []
+    if not notes and phn and phoff + phn * phes <= len(d):
+        notes = [(o, n) for t, o, n in (struct.unpack_from(phf, d, phoff + k * phes) for k in range(min(phn, 256)))
+                 if t == 4]
+    bid = gid = "none"
+    for nm, typ, desc in _elf_notes(d, e, notes):
+        if nm == b"GNU" and typ == 3 and bid == "none" and desc:
+            bid = desc.hex()
+        elif nm == b"Go" and typ == 4 and gid == "none" and desc:
+            gid = desc.decode("latin-1")
+    out["build_id"], out["go_build_id"] = bid, gid
+    names = {nm: (o, n) for nm, o, n in secs}
+    cm = []
+    if ".comment" in names:
+        o, n = names[".comment"]
+        for s in bytes(d[o:o + min(n, 65536)]).split(b"\0"):
+            s = s.decode("utf-8", "replace").strip()
+            if s and s not in cm:
+                cm.append(s)
+    out["compiler"] = cm[0] if cm else "none"
+    out["comment_strings"] = cm
+    has_dwarf = ".debug_info" in names and names[".debug_info"][1] > 0
+    out["has_dwarf"] = "true" if has_dwarf else "false"
+    if has_dwarf:
+        _dwarf_prov(d, out)
+
+
+def _dwarf_prov(d, out, max_cus=4000, budget=0.6):
+    """First-CU DW_AT_producer / language / comp_dir / name (+ the distinct producers / languages over <= max_cus
+    CUs) via pyelftools. A DWARF the library cannot walk leaves the first-CU fields "none"."""
+    try:
+        from elftools.elf.elffile import ELFFile
+        from elftools.dwarf.enums import ENUM_DW_LANG
+    except ImportError:
+        return
+    lang_name = {v: k for k, v in ENUM_DW_LANG.items()}
+    prods, langs, t0 = [], [], time.time()
+    try:
+        dw = ELFFile(io.BytesIO(d)).get_dwarf_info(relocate_dwarf_sections=False)
+        for i, cu in enumerate(dw.iter_CUs()):
+            if i >= max_cus or time.time() - t0 > budget:
+                break
+            at = cu.get_top_DIE().attributes
+            g = lambda k: at[k].value if k in at else None   # noqa: E731
+            s = lambda v: v.decode("utf-8", "replace") if isinstance(v, bytes) else \
+                ("none" if v is None else str(v))  # noqa: E731
+            pr, ln = s(g("DW_AT_producer")), g("DW_AT_language")
+            ln = lang_name.get(ln, f"0x{ln:x}") if isinstance(ln, int) else "none"
+            if i == 0:
+                out["dwarf_producer"], out["dwarf_language"] = pr, ln
+                out["dwarf_language_num"] = str(ENUM_DW_LANG.get(ln, "none")) if ln != "none" else "none"
+                out["dwarf_language_short"] = ln[len("DW_LANG_"):] if ln.startswith("DW_LANG_") else ln
+                out["dwarf_comp_dir"], out["dwarf_name"] = s(g("DW_AT_comp_dir")), s(g("DW_AT_name"))
+                m = _VER.search(pr)
+                out["dwarf_producer_version"] = m.group(1) if m else "none"
+                out["dwarf_version"] = str(cu.header.get("version", "none"))
+            if pr != "none" and pr not in prods:
+                prods.append(pr)
+            if ln != "none" and ln not in langs:
+                langs.append(ln)
+    except Exception:   # noqa: BLE001 -- odd / truncated DWARF: keep what the first CUs gave
+        pass
+    out["dwarf_producers"], out["dwarf_languages"] = prods, langs
+
+
+def _pe_prov(d, out):
+    lay = _pe_layout(d)
+    pe = int.from_bytes(d[0x3c:0x40], "little")
+    ts = struct.unpack_from("<I", d, pe + 8)[0]
+    out["timestamp"], out["timestamp_hex"] = str(ts), f"0x{ts:08x}"
+    out["timestamp_iso"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts))
+    out["timestamp_utc"] = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(ts))
+    opt = pe + 24
+    out["linker_version"] = f"{d[opt + 2]}.{d[opt + 3]:02d}"
+    pdb = {"pdb_path": "none", "pdb_name": "none", "pdb_guid": "none", "pdb_age": "none", "pdb_signature": "none"}
+    if lay and len(lay[2]) > 6 and lay[2][6][0] and lay[2][6][1]:
+        rva, size = lay[2][6]
+        base = _pe_rva(lay[1], rva)
+        for k in range(min(size // 28, 64) if base is not None else 0):
+            typ, _, _, ptr = struct.unpack_from("<IIII", d, base + 28 * k + 12)
+            if typ == 2 and d[ptr:ptr + 4] == b"RSDS":
+                g = d[ptr + 4:ptr + 20]
+                a, b, c = struct.unpack_from("<IHH", g)
+                guid = f"{a:08x}-{b:04x}-{c:04x}-{g[8:10].hex()}-{g[10:16].hex()}"
+                age = struct.unpack_from("<I", d, ptr + 20)[0]
+                path = bytes(d[ptr + 24:ptr + 24 + 1024]).split(b"\0")[0].decode("utf-8", "replace")
+                pdb = {"pdb_path": path, "pdb_name": re.split(r"[\\/]", path)[-1] or "none", "pdb_guid": guid,
+                       "pdb_age": str(age), "pdb_signature": guid.replace("-", "").upper() + f"{age:X}"}
+                break
+    out.update(pdb)
+    rich = []
+    r = bytes(d[0x40:pe]).find(b"Rich")
+    if r >= 0 and r % 4 == 0:
+        r += 0x40
+        key = struct.unpack_from("<I", d, r + 4)[0]
+        p = r - 4
+        while p >= 0x40 and struct.unpack_from("<I", d, p)[0] ^ key != 0x536e6144:   # "DanS"
+            p -= 4
+        if p >= 0x40:
+            for q in range(p + 16, r, 8):
+                cid, cnt = struct.unpack_from("<II", d, q)
+                cid, cnt = cid ^ key, cnt ^ key
+                rich.append([cid >> 16, cid & 0xffff, cnt])
+            out["rich_xor_key"] = f"0x{key:08x}"
+    out["has_rich"] = "true" if rich else "false"
+    out.setdefault("rich_xor_key", "none")
+    out["rich_entries"], out["rich_count"] = rich, str(len(rich))   # [prod_id, build, count] in header order
+
+
+def provenance_facts(data):
+    """Build-provenance facts of an ELF or PE image (bytes only; pyelftools for DWARF). Values are strings / lists;
+    an absent field is "none" (not an ELF/PE at all -> None).
+    ELF: build_id (lowercase hex of the NT_GNU_BUILD_ID desc, no 0x), go_build_id (Go note), compiler (first `.comment`
+    string) + comment_strings, has_dwarf; first DWARF CU: dwarf_producer, dwarf_language (DW_LANG_* name),
+    dwarf_language_short (C99/Ada95/..), dwarf_language_num, dwarf_comp_dir, dwarf_name, dwarf_version,
+    dwarf_producer_version (first x.y[.z] of the producer), plus
+    dwarf_producers / dwarf_languages (distinct, CU order).
+    PE: timestamp (TimeDateStamp decimal) / timestamp_hex / timestamp_iso (UTC ...Z) / timestamp_utc, linker_version,
+    CodeView RSDS pdb_path / pdb_name / pdb_guid / pdb_age / pdb_signature (symstore GUIDAGE), has_rich,
+    rich_xor_key, rich_entries [[prod_id, build, count]], rich_count.
+    Both: gcc_version, clang_version, rustc_version (+ rustc_commit from /rustc/<sha>/ paths), go_version
+    (buildinfo), toolchain_version (go > rustc > clang > gcc > DWARF producer version)."""
+    try:
+        d = bytes(data) if not isinstance(data, (bytes, bytearray)) else data
+        out = {}
+        if d[:4] == b"\x7fELF" and len(d) >= 64 and d[4] in (1, 2) and d[5] in (1, 2):
+            out["format"] = "elf"
+            _elf_prov(d, out)
+        elif d[:2] == b"MZ" and len(d) >= 0x40 and d[int.from_bytes(d[0x3c:0x40], "little"):][:4] == b"PE\0\0":
+            out["format"] = "pe"
+            _pe_prov(d, out)
+        else:
+            return None
+        cm = out.get("comment_strings", [])
+        gcc = next((s for s in cm if s.startswith("GCC:")), "")
+        m = _VER.findall(gcc.rpartition(")")[2] or gcc)
+        out["gcc_version"] = m[-1] if m else "none"
+        m = next((_VER.search(s[s.find("clang version"):]) for s in cm if "clang version" in s), None)
+        out["clang_version"] = m.group(1) if m else "none"
+        m = next((_VER.search(s[s.find("rustc version"):]) for s in cm if "rustc version" in s), None)
+        out["rustc_version"] = m.group(1) if m else "none"
+        m = _RUSTC_PATH.search(d)
+        out["rustc_commit"] = m.group(1).decode() if m else "none"
+        m = _GO_BUILDINF.search(d)
+        if not m and out.get("go_build_id", "none") != "none":
+            m = re.search(rb"(go1\.\d+(?:\.\d+)?)", d)
+        out["go_version"] = m.group(1).decode() if m else "none"
+        out["toolchain_version"] = next((out[k] for k in ("go_version", "rustc_version", "clang_version",
+                                                          "gcc_version", "dwarf_producer_version")
+                                         if out.get(k, "none") != "none"), "none")
+        for k in ("build_id", "go_build_id", "compiler", "dwarf_producer", "dwarf_language", "dwarf_language_short",
+                  "dwarf_language_num", "dwarf_comp_dir", "dwarf_name", "dwarf_version", "dwarf_producer_version",
+                  "timestamp", "timestamp_hex", "timestamp_iso", "timestamp_utc", "linker_version", "pdb_path",
+                  "pdb_name", "pdb_guid", "pdb_age", "pdb_signature", "has_rich", "rich_xor_key", "rich_count",
+                  "has_dwarf"):
+            out.setdefault(k, "none")
+        for k in ("comment_strings", "dwarf_producers", "dwarf_languages", "rich_entries"):
+            out.setdefault(k, [])
+        return out
+    except Exception:   # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+_PROV_ALIASES = {"buildid": "build_id", "gnu_build_id": "build_id", "producer": "dwarf_producer",
+                 "language": "dwarf_language", "comp_dir": "dwarf_comp_dir", "pdb": "pdb_path",
+                 "time_date_stamp": "timestamp", "timedatestamp": "timestamp", "compile_time": "timestamp_iso",
+                 "comment": "compiler", "rust_version": "rustc_version"}
+
+
+def provenance_field(data, name):
+    """One provenance_facts value; "none" when the input is no ELF/PE or the field is unknown (a decoy never raises)."""
+    try:
+        return (provenance_facts(data) or {}).get(_PROV_ALIASES.get(name, name), "none")
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+# --- config DECODER locator (D17 "recover the reversible decoder"; speculative facts): from the HCFG hit's file offset
+# -> blob VA -> code xrefs (RIP-relative disp32 / absolute imm32 to [VA, VA+stored len)) -> containing function (FUNC
+# symbol, else the nearest endbr64 / push rbp;mov rbp,rsp) -> its loops (backward jcc) -> the data op between the
+# loop's first byte load and its byte store: xor/add/sub/rol/ror imm (key), xor reg,reg + add imm (rolling-xor, key =
+# start), xor reg,reg beside a 256-bound loop (rc4). loop_length = the cmp bound (+1 under jle/jbe). x86 / x86-64 only.
+
+def _exec_map(data):
+    """(bits, [(name, va, file_off, size, executable)], pie) for an x86/x86-64 ELF or PE, else None."""
+    if data[:4] == b"\x7fELF" and data[5] == 1:
+        b64 = data[4] == 2
+        mach = struct.unpack_from("<H", data, 18)[0]
+        if mach not in (3, 62):
+            return None
+        shoff = struct.unpack_from("<Q" if b64 else "<I", data, 40 if b64 else 32)[0]
+        shes, shn, shstr = struct.unpack_from("<HHH", data, 58 if b64 else 46)
+        fmt = "<IIQQQQ" if b64 else "<IIIIII"
+        raw = [struct.unpack_from(fmt, data, shoff + k * shes) for k in range(min(shn, 4096))]
+        names = b""
+        if shstr < len(raw):
+            names = data[raw[shstr][4]:raw[shstr][4] + raw[shstr][5]]
+        secs = [(names[nm:names.find(b"\0", nm)].decode("latin-1"), va, off, size if ty != 8 else 0, bool(fl & 4))
+                for nm, ty, fl, va, off, size in raw if va]
+        return (64 if b64 else 32), secs, struct.unpack_from("<H", data, 16)[0] == 3
+    pe = _pe_layout(data)
+    if not pe:
+        return None
+    p = int.from_bytes(data[0x3c:0x40], "little")
+    mach, opt = struct.unpack_from("<H", data, p + 4)[0], p + 24
+    if mach not in (0x14c, 0x8664):
+        return None
+    b64 = struct.unpack_from("<H", data, opt)[0] == 0x20b
+    base = struct.unpack_from("<Q", data, opt + 24)[0] if b64 else struct.unpack_from("<I", data, opt + 28)[0]
+    nsec, optsz = struct.unpack_from("<H12xH", data, p + 6)
+    secs = []
+    for k, (n, va, vs, rp, rs) in enumerate(pe[1]):
+        ch = struct.unpack_from("<I", data, opt + optsz + 40 * k + 36)[0]
+        secs.append((n, base + va, rp, min(vs or rs, rs), bool(ch & 0x20000000)))
+    return (64 if b64 else 32), secs, False
+
+
+def _elf_funcs(data):
+    """[(value, size, name)] FUNC symbols (symtab + dynsym), sorted; [] when stripped / not ELF."""
+    if data[:4] != b"\x7fELF" or data[5] != 1:
+        return []
+    b64 = data[4] == 2
+    shoff = struct.unpack_from("<Q" if b64 else "<I", data, 40 if b64 else 32)[0]
+    shes, shn = struct.unpack_from("<HH", data, 58 if b64 else 46)
+    sh = "<4xI8x8xQQIi8xQ" if b64 else "<4xI4x4xIIIi4xI"
+    secs = [struct.unpack_from(sh, data, shoff + k * shes) for k in range(min(shn, 4096))]
+    out = []
+    for ty, off, size, link, _, ent in secs:
+        if ty not in (2, 11) or not 0 <= link < len(secs):
+            continue
+        so, sn = secs[link][1], secs[link][2]
+        ent = ent or (24 if b64 else 16)
+        for k in range(min(size // ent, 400_000)):
+            o = off + k * ent
+            if b64:
+                nm, info, val, sz = struct.unpack_from("<IB3xQQ", data, o)
+            else:
+                nm, val, sz, info = struct.unpack_from("<IIIB", data, o)
+            if info & 0xF == 2 and val and nm < sn:
+                z = data.find(b"\0", so + nm, so + sn)
+                out.append((val, sz, bytes(data[so + nm:z if z >= 0 else so + sn]).decode("latin-1")))
+    return sorted(set(out))
+
+
+_JCC_LEN = {"jle": 1, "jbe": 1, "jng": 1, "jna": 1}   # bound + 1 (inclusive compare)
+
+
+def _decoder_xrefs(data, bits, secs, pie, lo, hi, chunk=65536, cap=4096):
+    """Code VAs (approximate instruction starts) whose RIP-relative disp32 (last in the instruction, mod=00 rm=101) /
+    absolute imm32 lands in [lo, hi). Inside a 64 KB window of .text the disp's top 16 bits take 1-2 values, so the scan
+    is a few bytes.find per window (no per-instruction Python loop over 15+ MB of code); capstone re-checks each."""
+    out = []
+    for _, va, off, size, ex in secs:
+        if not ex or not size:
+            continue
+        end = min(off + size, len(data))
+        if bits == 64:
+            for a in range(off + 2, end - 4, chunk):
+                b = min(a + chunk, end - 4)                 # disp starts p in [a, b)
+                ea = va + (a - off) + 4                     # next-insn VA for a disp at file offset a
+                dmin, dmax = lo - (ea + (b - a)), hi - 1 - ea
+                for h in range(dmin >> 16, (dmax >> 16) + 1):
+                    pat = (h & 0xFFFF).to_bytes(2, "little")
+                    i = data.find(pat, a + 2, b + 2)
+                    while i >= 0:
+                        p = i - 2
+                        if data[p - 1] & 0xC7 == 5:
+                            t = va + (p - off) + 4 + int.from_bytes(data[p:p + 4], "little", signed=True)
+                            if lo <= t < hi:
+                                out.append(va + (p - off) - 3)
+                        i = data.find(pat, i + 1, b + 2)
+                if len(out) > cap:
+                    break
+        if not pie:
+            for h in range(lo >> 8, ((hi - 1) >> 8) + 1):
+                pat = (h & 0xFFFFFF).to_bytes(3, "little")
+                i = data.find(pat, off + 1, end)
+                while i >= 0 and len(out) < cap:
+                    if lo <= int.from_bytes(data[i - 1:i + 3], "little") < hi:
+                        out.append(va + i - 1 - off)
+                    i = data.find(pat, i + 1, end)
+    return sorted(set(out))
+
+
+def _va_off(secs, va):
+    for _, sva, off, size, _ in secs:
+        if sva <= va < sva + size:
+            return va - sva + off
+    return None
+
+
+def _guess_start(data, secs, va):
+    """Nearest function prologue at/before code VA `va` (endbr64, else push rbp; mov rbp,rsp / push ebp; mov ebp,esp)."""
+    o = _va_off(secs, va)
+    if o is None:
+        return None
+    lo = max(0, o - 0x4000)
+    win = data[lo:o + 1]
+    cands = [win.rfind(b"\xf3\x0f\x1e\xfa"), win.rfind(b"\xf3\x0f\x1e\xfb"), win.rfind(b"\x55\x48\x89\xe5"),
+             win.rfind(b"\x55\x89\xe5")]
+    best = max(cands)
+    if best < 0:
+        return None
+    if best >= 4 and win[best - 4:best] == b"\xf3\x0f\x1e\xfa":   # endbr64 heads the push rbp frame
+        best -= 4
+    return va - (o - (lo + best))
+
+
+def _rfam(name):
+    """x86 register family: al/ax/eax/rax -> ax, sil/esi/rsi -> si, r8b/r8d/r8 -> r8 ("" for none)."""
+    name = name or ""
+    if name[:1] == "r" and name[1:2].isdigit():
+        return name.rstrip("bwd")
+    n = name[1:] if len(name) == 3 and name[0] in "re" else name
+    return {"al": "ax", "ah": "ax", "bl": "bx", "bh": "bx", "cl": "cx", "ch": "cx", "dl": "dx", "dh": "dx",
+            "sil": "si", "dil": "di", "bpl": "bp", "spl": "sp"}.get(n, n)
+
+
+def _decoder_loop(insns, start, end, refs):
+    """(algorithm, key, immediates, loop_length) from the function's loops; None when no loop does a byte op."""
+    import capstone
+    import capstone.x86 as X
+    byaddr = [i.address for i in insns]
+    loops = []
+    for k, i in enumerate(insns):
+        if i.group(capstone.CS_GRP_JUMP) and i.operands and i.operands[0].type == X.X86_OP_IMM:
+            t = i.operands[0].imm
+            if start <= t <= i.address and i.mnemonic != "jmp":
+                loops.append((t, k, i))
+    bound256 = False
+    best = None
+    rank = {"rol": 0, "ror": 0, "xor": 1, "rolling-xor": 2, "add": 3, "sub": 3, "not": 4}
+    for t, kj, jcc in loops:
+        body = insns[bisect.bisect_left(byaddr, t):kj + 1]
+        cmp_imm = None
+        for i in body:   # the cmp/test feeding the backward jcc (an earlier `cmp x, 0xff` is no bound)
+            if i.mnemonic in ("cmp", "test"):
+                cmp_imm = i.operands[1].imm if i.mnemonic == "cmp" and len(i.operands) == 2 and \
+                    i.operands[1].type == X.X86_OP_IMM else None
+        if cmp_imm is not None and cmp_imm + _JCC_LEN.get(jcc.mnemonic, 0) == 256 and \
+                jcc.mnemonic in ("jne", "jnz", "jb", "jl", "jbe", "jle", "jna", "jng") and \
+                sum(len(i.operands) == 2 and i.operands[0].type == X.X86_OP_MEM and i.operands[0].size == 1
+                    for i in body if i.mnemonic == "mov") >= 2:   # the KSA swap stores S[i] and S[j]
+            bound256 = True
+        # the data window: first byte-sized memory load .. the next byte-sized memory store
+        win, st = [], None
+        for i in body:
+            ops = i.operands
+            if st is None:
+                if len(ops) == 2 and ops[1].type == X.X86_OP_MEM and ops[1].size == 1 and \
+                        i.mnemonic in ("movzx", "movsx", "mov"):
+                    st = i
+                continue
+            if len(ops) == 2 and ops[0].type == X.X86_OP_MEM and ops[0].size == 1 and i.mnemonic == "mov":
+                break
+            win.append(i)
+        if st is None:
+            continue
+        found, imms = None, []
+        xvar = add = kadd = None
+        data_r = {_rfam(st.reg_name(st.operands[0].reg))}   # registers holding the loaded byte (simple data flow)
+        for i in win:
+            ops, m = i.operands, i.mnemonic
+            d0 = _rfam(i.reg_name(ops[0].reg)) if ops and ops[0].type == X.X86_OP_REG else None
+            r1 = _rfam(i.reg_name(ops[1].reg)) if len(ops) == 2 and ops[1].type == X.X86_OP_REG else None
+            if d0 is None:
+                continue
+            if m in ("mov", "movzx", "movsx", "lea") and len(ops) == 2:
+                if r1 in data_r or (m == "lea" and _rfam(i.reg_name(ops[1].mem.base)) in data_r):
+                    data_r.add(d0)
+                else:
+                    data_r.discard(d0)
+            if d0 not in data_r:
+                if m in ("add", "sub") and len(ops) == 2 and ops[1].type == X.X86_OP_IMM:
+                    kadd = kadd or (m, ops[1].imm)   # key-register update (rolling key start)
+                continue
+            if m in ("rol", "ror") and len(ops) == 2 and ops[1].type == X.X86_OP_IMM:
+                found = found or (m, ops[1].imm & 7)
+                imms.append(ops[1].imm)
+            elif m == "xor" and len(ops) == 2 and ops[1].type == X.X86_OP_IMM and ops[1].imm & 0xFF:
+                found = found if found and rank[found[0]] <= 1 else ("xor", ops[1].imm & 0xFF)
+                imms.append(ops[1].imm & 0xFFFFFFFF)
+            elif m == "xor" and len(ops) == 2 and ops[1].type in (X.X86_OP_REG, X.X86_OP_MEM) and r1 != d0:
+                xvar = True
+                if kadd:
+                    imms.append(kadd[1] & 0xFFFFFFFF)
+            elif m in ("add", "sub") and len(ops) == 2 and ops[1].type == X.X86_OP_IMM:
+                add = add or (m, ops[1].imm)
+                imms.append(ops[1].imm & 0xFFFFFFFF)
+            elif m == "lea" and ops[1].type == X.X86_OP_MEM and ops[1].mem.index == 0 and ops[1].mem.disp and \
+                    _rfam(i.reg_name(ops[1].mem.base)) in data_r:
+                d = ops[1].mem.disp
+                add = add or (("sub", -d) if d < 0 else ("add", d))
+                imms.append(abs(d))
+            elif m == "not":
+                found = found or ("not", 0xFF)
+        if not found and xvar:
+            found = ("rolling-xor", kadd[1] & 0xFF) if kadd else ("xor-var", None)
+        if not found and add:
+            found = (add[0], add[1] & 0xFF)
+        if not found:
+            continue
+        n = None
+        if cmp_imm is not None and 0 < cmp_imm < 1 << 24:
+            n = cmp_imm + _JCC_LEN.get(jcc.mnemonic, 0)
+        cand = (rank.get(found[0], 5), found[0], found[1], imms, n)
+        if best is None or cand[0] < best[0]:
+            best = cand
+    if best is None:
+        return None
+    alg = best[1]
+    if alg == "xor-var":   # xor with a register / memory key (the header key byte, a key table): `xor` speculative
+        alg = "rc4" if bound256 else "xor"
+    return alg, best[2], best[3], best[4]
+
+
+def decoder_facts(data, offset=None, hit=None):
+    """Speculative facts about the routine that decodes the stored HCFG blob: {blob_va, xrefs (code VAs), function
+    (FUNC symbol, "none" when stripped), function_va, algorithm (xor/add/sub/rol/ror/not/rolling-xor/rc4 or
+    "none" = referenced but no decode loop), key (the loop's immediate), immediates, loop_length, header_key,
+    key_equals_header ("true"/"false"/"none")}. `hit` (an HcfgHit) or `offset` (file offset of the stored blob) --
+    default hcfg_find(data). None when not an x86 ELF/PE, no blob, or no code reference."""
+    try:
+        import capstone
+        import capstone.x86 as X
+        data = bytes(data)
+        mp = _exec_map(data)
+        if not mp:
+            return None
+        bits, secs, pie = mp
+        if hit is None and offset is None:
+            hit = hcfg_find(data)
+        if hit is not None:
+            offset = hit.offset
+        if offset is None:
+            return None
+        bva = next((va + offset - off for _, va, off, size, _ in secs if off <= offset < off + size and size), None)
+        if bva is None:
+            return None
+        hi = bva + (12 + hit.length if hit is not None else 64)
+        lo = bva - 32   # Swift large-string objects point 0x20 before the bytes (lea rsi,[blob-0x10] + flags)
+        md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64 if bits == 64 else capstone.CS_MODE_32)
+        md.detail = True
+        funcs = _elf_funcs(data)
+        fstarts = [f[0] for f in funcs]
+        seen, refs, out = set(), [], None
+        for xva in _decoder_xrefs(data, bits, secs, pie, lo, hi):
+            k = bisect.bisect_right(fstarts, xva) - 1
+            if k >= 0 and funcs[k][0] <= xva < funcs[k][0] + max(funcs[k][1], 1):
+                start, size, name = funcs[k]
+            else:
+                start, size, name = _guess_start(data, secs, xva), 0x2000, "none"
+                if start is None:
+                    continue
+            if start in seen:
+                continue
+            o = _va_off(secs, start)
+            if o is None:
+                continue
+            insns, real, fwd = [], [], start
+            for i in md.disasm(data[o:o + min(size, 0x4000)], start):
+                insns.append(i)
+                for op in i.operands:
+                    t = None
+                    if op.type == X.X86_OP_MEM:
+                        t = op.mem.disp + (i.address + i.size if op.mem.base == X.X86_REG_RIP else 0)
+                    elif op.type == X.X86_OP_IMM:
+                        t = op.imm
+                        if i.group(capstone.CS_GRP_JUMP) and t > fwd:
+                            fwd = t
+                    if t is not None and lo <= t < hi and not i.group(capstone.CS_GRP_JUMP):
+                        real.append(i.address)
+                if name == "none" and i.mnemonic in ("ret", "jmp") and i.address >= max(xva, fwd) and \
+                        (i.mnemonic == "ret" or i.operands[0].type != X.X86_OP_IMM or
+                         not start <= i.operands[0].imm < i.address):
+                    break
+                if len(insns) > 8000:
+                    break
+            if not real:
+                continue
+            seen.add(start)
+            refs += real
+            lp = _decoder_loop(insns, start, insns[-1].address + 1, real) if out is None or \
+                out["algorithm"] == "none" else None
+            if out is None or lp:
+                out = {"blob_va": bva, "function": name, "function_va": start, "algorithm": "none", "key": "none",
+                       "immediates": [], "loop_length": "none"}
+                if lp:
+                    out.update(algorithm=lp[0], key=lp[1] if lp[1] is not None else "none", immediates=lp[2],
+                               loop_length=lp[3] if lp[3] is not None else "none")
+            if len(seen) > 64:
+                break
+        if out is None:
+            return None
+        out["xrefs"] = sorted(set(refs))
+        out["header_key"] = hit.key if hit is not None else "none"
+        out["key_equals_header"] = ("true" if out["key"] == hit.key else "false") \
+            if hit is not None and isinstance(out["key"], int) else "none"
+        out["speculative"] = True
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def decoder_field(data, name, **kw):
+    """One decoder_facts value as an answer string (VAs / key as 0x-hex, loop_length decimal); "none" when absent."""
+    try:
+        f = decoder_facts(data, **kw)
+        v = (f or {}).get(name, "none")
+        if isinstance(v, bool):
+            return str(v).lower()
+        if isinstance(v, int) and name != "loop_length":
+            return hex(v)
+        return v if isinstance(v, (str, list)) else str(v)
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+# --- API HASHING resolver (speculative facts): imports resolved by a 32-bit name hash instead of by name. Precomputed
+# tables of common libc / kernel32 / ntdll / user32 / advapi32 / ws2_32 / wininet export names under the usual shellcode
+# / loader algorithms; hits are imm32s in executable sections (x86: capstone-confirmed instruction immediates, any
+# other arch: raw LE dwords) plus 4-aligned dwords of the read-only / data sections (hash tables). The algorithm is the
+# variant with the most distinct names hit; resolved_apis = its names in file (code) order, first occurrence.
+
+_APIH_NAMES = (
+    # libc
+    "getenv setenv putenv printf fprintf sprintf snprintf vprintf puts fputs fgets gets scanf sscanf fopen fclose "
+    "fread fwrite fseek ftell fflush open close read write lseek stat fstat unlink rename mkdir rmdir chdir getcwd "
+    "malloc calloc realloc free memcpy memmove memset memcmp strlen strcpy strncpy strcat strcmp strncmp strchr strrchr "
+    "strstr strdup strtok strtol strtoul atoi atol exit _exit abort atexit system popen pclose fork vfork execve execv "
+    "execvp execl execlp waitpid wait kill signal sigaction raise getpid getppid getuid geteuid getgid setuid setgid "
+    "sleep usleep nanosleep time gettimeofday clock_gettime localtime gmtime strftime rand srand random srandom "
+    "socket connect bind listen accept send recv sendto recvfrom setsockopt getsockopt shutdown gethostbyname "
+    "getaddrinfo freeaddrinfo inet_addr inet_pton inet_ntoa inet_ntop htons htonl ntohs ntohl select poll ioctl fcntl "
+    "mmap munmap mprotect ptrace prctl dup dup2 pipe opendir readdir closedir dlopen dlsym dlclose dlerror "
+    "pthread_create pthread_join pthread_mutex_lock pthread_mutex_unlock syscall uname chmod chown access readlink "
+    "isatty getline perror strerror qsort bsearch toupper tolower "
+    # kernel32 / kernelbase
+    "LoadLibraryA LoadLibraryW LoadLibraryExA LoadLibraryExW GetProcAddress GetModuleHandleA GetModuleHandleW "
+    "GetModuleFileNameA GetModuleFileNameW FreeLibrary ExitProcess ExitThread TerminateProcess WinExec CreateProcessA "
+    "CreateProcessW OpenProcess GetCurrentProcess GetCurrentProcessId GetCurrentThread GetCurrentThreadId "
+    "VirtualAlloc VirtualAllocEx VirtualFree VirtualProtect VirtualProtectEx VirtualQuery WriteProcessMemory "
+    "ReadProcessMemory CreateRemoteThread CreateThread ResumeThread SuspendThread OpenThread GetThreadContext "
+    "SetThreadContext QueueUserAPC WaitForSingleObject WaitForMultipleObjects Sleep SleepEx CloseHandle CreateFileA "
+    "CreateFileW ReadFile WriteFile DeleteFileA DeleteFileW CopyFileA CopyFileW MoveFileA MoveFileW GetFileSize "
+    "SetFilePointer FindFirstFileA FindFirstFileW FindNextFileA FindNextFileW FindClose CreateDirectoryA "
+    "CreateDirectoryW GetTempPathA GetTempPathW GetTempFileNameA GetWindowsDirectoryA GetSystemDirectoryA "
+    "CreateFileMappingA CreateFileMappingW MapViewOfFile UnmapViewOfFile HeapAlloc HeapFree HeapCreate GetProcessHeap "
+    "LocalAlloc LocalFree GlobalAlloc GlobalFree CreateMutexA CreateMutexW OpenMutexA ReleaseMutex CreateEventA "
+    "SetEvent GetLastError SetLastError GetTickCount GetTickCount64 QueryPerformanceCounter GetSystemTime "
+    "GetLocalTime GetSystemInfo GetVersionExA GetComputerNameA GetComputerNameW GetEnvironmentVariableA "
+    "GetEnvironmentVariableW ExpandEnvironmentStringsA GetCommandLineA GetCommandLineW IsDebuggerPresent "
+    "CheckRemoteDebuggerPresent OutputDebugStringA CreateToolhelp32Snapshot Process32First Process32FirstW "
+    "Process32Next Process32NextW Module32First Module32Next Thread32First Thread32Next lstrlenA lstrlenW lstrcpyA "
+    "lstrcmpA lstrcmpiA MultiByteToWideChar WideCharToMultiByte FindResourceA LoadResource LockResource "
+    "SizeofResource DeviceIoControl CreatePipe PeekNamedPipe CreateNamedPipeA ConnectNamedPipe SetHandleInformation "
+    "GetStartupInfoA FlushInstructionCache AddVectoredExceptionHandler SetUnhandledExceptionFilter "
+    "GetNativeSystemInfo IsWow64Process Wow64DisableWow64FsRedirection VirtualAllocExNuma "
+    # ntdll
+    "NtAllocateVirtualMemory NtProtectVirtualMemory NtWriteVirtualMemory NtReadVirtualMemory NtFreeVirtualMemory "
+    "NtCreateThreadEx NtCreateThread NtQueueApcThread NtResumeThread NtOpenProcess NtClose NtCreateSection "
+    "NtMapViewOfSection NtUnmapViewOfSection NtQueryInformationProcess NtQuerySystemInformation NtSetInformationThread "
+    "NtDelayExecution NtWaitForSingleObject NtCreateFile NtReadFile NtWriteFile NtTerminateProcess NtContinue "
+    "NtTestAlert NtGetContextThread NtSetContextThread NtQueryVirtualMemory NtOpenThread NtSuspendThread "
+    "ZwAllocateVirtualMemory ZwProtectVirtualMemory ZwWriteVirtualMemory ZwCreateThreadEx ZwMapViewOfSection "
+    "ZwUnmapViewOfSection ZwQueryInformationProcess RtlMoveMemory RtlCopyMemory RtlZeroMemory RtlFillMemory "
+    "RtlCreateUserThread RtlExitUserThread RtlGetVersion RtlInitUnicodeString RtlAdjustPrivilege "
+    "RtlDecompressBuffer LdrLoadDll LdrGetProcedureAddress LdrGetDllHandle EtwEventWrite "
+    # user32 / advapi32 / shell32 / ws2_32 / wininet / urlmon / msvcrt
+    "MessageBoxA MessageBoxW GetAsyncKeyState GetKeyState SetWindowsHookExA SetWindowsHookExW UnhookWindowsHookEx "
+    "CallNextHookEx GetForegroundWindow GetWindowTextA FindWindowA ShowWindow GetDC EnumWindows "
+    "RegOpenKeyExA RegOpenKeyExW RegSetValueExA RegSetValueExW RegQueryValueExA RegCreateKeyExA RegCloseKey "
+    "RegDeleteValueA OpenProcessToken AdjustTokenPrivileges LookupPrivilegeValueA GetUserNameA GetUserNameW "
+    "CryptAcquireContextA CryptCreateHash CryptHashData CryptDeriveKey CryptDecrypt CryptEncrypt CryptReleaseContext "
+    "OpenSCManagerA CreateServiceA StartServiceA ShellExecuteA ShellExecuteW ShellExecuteExA "
+    "WSAStartup WSACleanup WSASocketA WSASocketW WSAConnect WSAGetLastError closesocket ioctlsocket "
+    "InternetOpenA InternetOpenW InternetOpenUrlA InternetOpenUrlW InternetConnectA HttpOpenRequestA "
+    "HttpSendRequestA InternetReadFile InternetCloseHandle URLDownloadToFileA URLDownloadToFileW "
+    "CoInitialize CoInitializeEx CoCreateInstance"
+).split()
+_APIH_MODULES = ("kernel32.dll", "ntdll.dll", "kernelbase.dll", "user32.dll", "advapi32.dll", "ws2_32.dll",
+                 "wininet.dll", "shell32.dll", "msvcrt.dll", "urlmon.dll")
+_M32 = 0xFFFFFFFF
+
+
+def _ror32(v, r):
+    return ((v >> r) | (v << (32 - r))) & _M32
+
+
+def _h_ror13(s):
+    h = 0
+    for c in s:
+        h = (_ror32(h, 13) + c) & _M32
+    return h
+
+
+def _h_djb2(s, seed=5381):
+    h = seed
+    for c in s:
+        h = (h * 33 + c) & _M32
+    return h
+
+
+def _h_djb2x(s, seed=5381):
+    h = seed
+    for c in s:
+        h = ((h * 33) ^ c) & _M32
+    return h
+
+
+def _h_sdbm(s):
+    h = 0
+    for c in s:
+        h = (c + (h << 6) + (h << 16) - h) & _M32
+    return h
+
+
+def _h_fnv1a(s, seed=0x811C9DC5):
+    h = seed
+    for c in s:
+        h = ((h ^ c) * 0x01000193) & _M32
+    return h
+
+
+def _h_fnv1(s, seed=0x811C9DC5):
+    h = seed
+    for c in s:
+        h = ((h * 0x01000193) ^ c) & _M32
+    return h
+
+
+def _h_joaat(s):
+    h = 0
+    for c in s:
+        h = (h + c) & _M32
+        h = (h + (h << 10)) & _M32
+        h ^= h >> 6
+    h = (h + (h << 3)) & _M32
+    h ^= h >> 11
+    return (h + (h << 15)) & _M32
+
+
+def _h_murmur3(s, seed=0):
+    h, n = seed, len(s)
+    for k in range(0, n - n % 4, 4):
+        x = (int.from_bytes(s[k:k + 4], "little") * 0xCC9E2D51) & _M32
+        h ^= (_ror32(x, 17) * 0x1B873593) & _M32
+        h = (_ror32(h, 19) * 5 + 0xE6546B64) & _M32
+    t = s[n - n % 4:]
+    if t:
+        x = (int.from_bytes(t, "little") * 0xCC9E2D51) & _M32
+        h ^= (_ror32(x, 17) * 0x1B873593) & _M32
+    h ^= n
+    h ^= h >> 16
+    h = (h * 0x85EBCA6B) & _M32
+    h ^= h >> 13
+    h = (h * 0xC2B2AE35) & _M32
+    return h ^ (h >> 16)
+
+
+def _msf_mod(m):
+    """Metasploit block_api module hash: ror13 over the UTF-16LE module name (bytes upper-cased) + its null wchar."""
+    return _h_ror13(m.upper().encode("utf-16-le") + b"\0\0")
+
+
+# (algorithm token, seed, variant, fn(name bytes) -> hash). variant: "" plain name, "null" incl. the terminator,
+# "lower"/"upper" case-folded name, "msf_block_api" module hash + ror13(name incl null) (handled in _apih_table).
+_APIH_ALGOS = (
+    ("ror13", 0, "", _h_ror13), ("ror13", 0, "null", lambda s: _h_ror13(s + b"\0")),
+    ("ror13", 0, "upper", lambda s: _h_ror13(s.upper())), ("ror13", 0, "lower", lambda s: _h_ror13(s.lower())),
+    ("djb2", 5381, "", _h_djb2), ("djb2", 5381, "lower", lambda s: _h_djb2(s.lower())),
+    ("djb2", 5381, "upper", lambda s: _h_djb2(s.upper())), ("djb2a", 5381, "", _h_djb2x),
+    ("sdbm", 0, "", _h_sdbm), ("fnv1a", 0x811C9DC5, "", _h_fnv1a),
+    ("fnv1a", 0x811C9DC5, "lower", lambda s: _h_fnv1a(s.lower())), ("fnv1", 0x811C9DC5, "", _h_fnv1),
+    ("crc32", 0xFFFFFFFF, "", zlib.crc32), ("crc32", 0xFFFFFFFF, "lower", lambda s: zlib.crc32(s.lower())),
+    ("crc32", 0xFFFFFFFF, "noxor", lambda s: zlib.crc32(s) ^ _M32),
+    ("murmur3", 0, "", _h_murmur3), ("jenkins_oaat", 0, "", _h_joaat),
+)
+# implementation constants: corroborate the algorithm even when no table name hits
+_APIH_CONSTS = {5381: "djb2", 0x811C9DC5: "fnv1a", 0x01000193: "fnv1a", 0xEDB88320: "crc32", 0x04C11DB7: "crc32",
+                0xCC9E2D51: "murmur3", 0x1B873593: "murmur3", 0xE6546B64: "murmur3", 0x85EBCA6B: "murmur3"}
+_APIH_TABLE = None
+_BIG_HOST = struct.pack("=I", 1) != struct.pack("<I", 1)
+_APIH_SKIP = re.compile(r"^\.(gnu\.hash|hash|dynsym|dynstr|symtab|strtab|shstrtab|rela?\b.*|eh_frame.*|gcc_except"
+                        r"|note.*|debug.*|gnu\.version.*|interp|dynamic|got.*|plt.*|reloc|pdata|xdata|idata|edata)",
+                        re.I)
+HCFG_APIH_MAX = int(os.environ.get("HCTF_APIH_MAX", str(12 << 20)))   # bytes scanned (~40 ms / MiB of code)
+
+
+def _apih_table():
+    """{hash: [(algo, seed, variant, api)]} over every name x algorithm (+ msf module+function sums); built once."""
+    global _APIH_TABLE
+    if _APIH_TABLE is None:
+        t = {}
+        names = [n.encode() for n in _APIH_NAMES]
+        for algo, seed, var, fn in _APIH_ALGOS:
+            for n in names:
+                t.setdefault(fn(n), []).append((algo, seed, var, n.decode()))
+        mods = [(m, _msf_mod(m)) for m in _APIH_MODULES]
+        for n in names:
+            fh = _h_ror13(n + b"\0")
+            for m, mh in mods:
+                t.setdefault((mh + fh) & _M32, []).append(("ror13", 0, "msf_block_api", m + "!" + n.decode()))
+        t.pop(0, None)
+        _APIH_TABLE = t
+    return _APIH_TABLE
+
+
+def _apih_regions(data):
+    """[(file_off, size, executable, va, bits_or_None)] to scan: x86 ELF/PE sections via _exec_map, other ELF/PE/Mach-O
+    via lief-free fallbacks (whole file as data) -- None when the input is not a native image."""
+    em = _exec_map(data)
+    if em:
+        bits, secs, _pie = em
+        out = [(off, size, ex, va, bits) for name, va, off, size, ex in secs
+               if size and off and off + size <= len(data) and not _APIH_SKIP.match(name or "")]
+        return out
+    if data[:4] == b"\x7fELF" or data[:2] == b"MZ" or data[:4] in _MO_MAGIC or data[:4] == b"\xca\xfe\xba\xbe":
+        return [(0, len(data), False, 0, None)]
+    return None
+
+
+def _apih_imm_ok(md, data, p, val, lo):
+    """Does an x86 instruction ending at p+4 (or with its imm32 at p) carry `val` as an immediate operand?"""
+    for back in range(1, 11):
+        s = p - back
+        if s < lo:
+            break
+        try:
+            for ins in md.disasm(bytes(data[s:p + 8]), 0, 1):
+                if ins.size >= back + 4 and any(op.type == 2 and op.imm & _M32 == val for op in ins.operands):
+                    return True
+        except Exception:  # noqa: BLE001
+            pass
+    return False
+
+
+def api_hash_facts(data, max_bytes=None):
+    """Hash-resolved imports: {"algorithm", "variant", "seed", "seed_hex", "resolved_apis", "hashes", "hash_count",
+    "api_count", "offsets", "candidates", "algorithm_constants", "speculative"}; resolved_apis / hashes in file (code)
+    order, first occurrence. {"algorithm": "none", ...} when a native image carries no known hash; None when the input
+    is not a native image."""
+    try:
+        regs = _apih_regions(data)
+        if regs is None:
+            return None
+        table = _apih_table()
+        keys = set(table)
+        budget = HCFG_APIH_MAX if max_bytes is None else max_bytes
+        mv = memoryview(data)
+        hits, consts = [], set()   # (file_off, value, in_code)
+        for off, size, ex, va, bits in sorted(regs, key=lambda r: not r[2]):
+            size = min(size, budget)
+            if size < 4:
+                continue
+            budget -= size
+            buf = bytes(mv[off:off + size])
+            for a in (range(4) if ex else (0,)):
+                n = (size - a) // 4
+                arr = array.array("I", buf[a:a + 4 * n])
+                if _BIG_HOST:
+                    arr.byteswap()
+                for v in keys.intersection(arr):
+                    pv = struct.pack("<I", v)
+                    q = buf.find(pv)
+                    while q >= 0:
+                        if ex or q % 4 == 0:
+                            hits.append((off + q, v, ex))
+                        q = buf.find(pv, q + 1)
+                if ex:
+                    consts.update(_APIH_CONSTS[c] for c in set(_APIH_CONSTS).intersection(arr))
+            if budget <= 0:
+                break
+        md = None
+        if hits and regs and regs[0][4] in (32, 64):
+            from capstone import CS_ARCH_X86, CS_MODE_32, CS_MODE_64, Cs
+            md = Cs(CS_ARCH_X86, CS_MODE_64 if regs[0][4] == 64 else CS_MODE_32)
+            md.detail = True
+        good = []
+        for p, v, ex in sorted(set(hits)):
+            if ex and md is not None:
+                lo = next((o for o, s, e, _, _ in regs if o <= p < o + s), 0)
+                if not _apih_imm_ok(md, mv, p, v, lo):
+                    continue
+            good.append((p, v))
+        score = {}
+        for p, v in good:
+            for algo, seed, var, api in table[v]:
+                score.setdefault((algo, seed, var), {}).setdefault(api, (p, v))
+        out = {"algorithm": "none", "variant": "none", "seed": "none", "seed_hex": "none", "resolved_apis": [],
+               "hashes": [], "hash_count": 0, "api_count": 0, "offsets": [], "candidates": [],
+               "algorithm_constants": sorted(consts), "speculative": True}
+        order = [(a, s, vr) for a, s, vr, _ in _APIH_ALGOS] + [("ror13", 0, "msf_block_api")]
+
+        def cluster(apis):   # most distinct names (A/W siblings count once) within one 64 KiB span
+            first = {}
+            for api, (p, _) in apis.items():
+                base = api[:-1] if api[-1:] in "AW" and api[-2:-1].islower() else api
+                first[base] = min(p, first.get(base, p))
+            ps = sorted(first.values())
+            return max(bisect.bisect_right(ps, p + 0xFFFF) - k for k, p in enumerate(ps))
+
+        ranked = sorted(score.items(), key=lambda kv: (-cluster(kv[1]), -len(kv[1]), -(kv[0][0] in consts),
+                                                       order.index(kv[0]) if kv[0] in order else 99))
+        if not ranked:
+            return out
+        (algo, seed, var), apis = ranked[0]
+        # a lone dword is noise (seen: 1-hit fnv1a/crc32 in Qt / Go images); big images need a bigger cluster, one
+        # fewer when the algorithm's own constants corroborate it, one more for the 10x msf key space
+        need = 2 if len(data) <= (8 << 20) else 3
+        if algo in consts:
+            need = 2
+        if var == "msf_block_api" and len(data) >= (1 << 20):
+            need += 1
+        if cluster(apis) < need:
+            return out
+        seq = sorted(apis.items(), key=lambda kv: kv[1][0])
+        out.update(algorithm=algo, variant=var or "plain", seed=str(seed), seed_hex=hex(seed),
+                   resolved_apis=[a for a, _ in seq], hashes=[f"0x{v:08x}" for _, (_, v) in seq],
+                   offsets=[p for _, (p, _) in seq], hash_count=len({v for _, (_, v) in seq}), api_count=len(seq),
+                   candidates=[f"{a}/{vr or 'plain'}:{len(x)}" for (a, _, vr), x in ranked[:5]])
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def api_hash_field(data, name):
+    """One api_hash_facts value as an answer string (lists comma-joined); "none" when absent / not a native image."""
+    try:
+        f = api_hash_facts(data)
+        v = (f or {}).get(name, "none")
+        if isinstance(v, list):
+            return ",".join(str(x) for x in v) if v else "none"
+        return str(v)
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+# --- per-string encryption (D17+ escalation of "encoded configuration"): every string xor/add'ed on its own and
+# decoded by one shared routine dstr(ptr, len, key); the ciphertext lives in .rodata or is built on the stack.
+STRDEC_MAX_S = float(os.environ.get("HCTF_STRDEC_MAX_S", "0.6"))   # linear-sweep budget (disasm_lite, x86-64 only)
+_SD_ARGS = ("di", "si", "dx", "cx", "r8", "r9")                  # SysV + Win64 integer argument registers
+_SD_VOLATILE = ("ax", "cx", "dx", "si", "di", "r8", "r9", "r10", "r11")
+_SD_MEM = re.compile(r"(?:(byte|word|dword|qword|xmmword) ptr )?\[(\w+)(?: ([+-]) (0x[0-9a-f]+|\d+))?\]$")
+_SD_W = {"byte": 1, "word": 2, "dword": 4, "qword": 8, "xmmword": 16}
+_SD_OPS = {"xor": lambda c, k: c ^ k, "sub": lambda c, k: (c - k) & 255, "add": lambda c, k: (c + k) & 255}
+_SD_PRINT = frozenset(range(0x20, 0x7f))
+_SD_SCORE = [(1.0 if chr(c).isalnum() else 0.5 if chr(c) in " ./:\\-_()@;,%" else 0.0) if c in _SD_PRINT else -5.0
+             for c in range(256)]   # text-likeness: a decode must read more like a config string than its ciphertext
+
+
+def _sd_int(s):
+    try:
+        return int(s, 0)
+    except ValueError:
+        return None
+
+
+def _sd_calls(data, secs, deadline):
+    """[(call_va, target_va, {argreg: value})] from a register/stack-tracking linear sweep of the executable sections.
+    value: ("imm", n) | ("ptr", va) | ("buf", bytes captured from the tracked stack slot the register points at)."""
+    import capstone
+    md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
+    out = []
+
+    def rd(va, n):
+        o = _va_off(secs, va)
+        return data[o:o + n] if o is not None and n > 0 else b""
+
+    for _, va, off, size, ex in secs:
+        if not ex or not size:
+            continue
+        regs, stk = {}, {}
+        for a, sz, mn, ops in md.disasm_lite(data[off:min(off + size, len(data))], va):
+            if time.time() > deadline:
+                return out
+            if mn in ("ret", "jmp", "hlt", "endbr64", "ud2", "int3"):
+                regs, stk = {}, {}
+                continue
+            dst, _, src = ops.partition(", ")
+            if mn == "call":
+                t = _sd_int(dst)
+                if t is not None:
+                    args = {}
+                    for r in _SD_ARGS:
+                        v = regs.get(r)
+                        if v and v[0] == "stk":
+                            m = stk.get(v[1], {})
+                            buf = bytearray()
+                            while len(buf) < 1024 and v[2] + len(buf) in m:
+                                buf.append(m[v[2] + len(buf)])
+                            v = ("buf", bytes(buf))
+                        if v:
+                            args[r] = v
+                    out.append((a, t, args))
+                for r in _SD_VOLATILE:
+                    regs.pop(r, None)
+                continue
+            d = _rfam(dst)
+            mm = _SD_MEM.match(src) if src else None
+            if mn == "lea" and mm:
+                base, disp = mm.group(2), _sd_int(mm.group(4) or "0") or 0
+                disp = -disp if mm.group(3) == "-" else disp
+                if base == "rip":
+                    regs[d] = ("ptr", a + sz + disp)
+                elif base in ("rsp", "rbp"):
+                    regs[d] = ("stk", base, disp)
+                else:
+                    regs.pop(d, None)
+                continue
+            dm = _SD_MEM.match(dst)
+            if dm and mn in ("mov", "movaps", "movups", "movdqa", "movdqu"):
+                base, disp = dm.group(2), _sd_int(dm.group(4) or "0") or 0
+                disp = -disp if dm.group(3) == "-" else disp
+                w = _SD_W.get(dm.group(1) or "qword", 8)
+                v = _sd_int(src)
+                if v is not None:
+                    raw = (v & ((1 << 8 * w) - 1)).to_bytes(w, "little")
+                else:
+                    rv = regs.get(_rfam(src))
+                    raw = rv[1][:w] if rv and rv[0] == "bytes" else \
+                        (rv[1] & ((1 << 8 * w) - 1)).to_bytes(w, "little") if rv and rv[0] == "imm" else None
+                if base in ("rsp", "rbp"):
+                    m = stk.setdefault(base, {})
+                    for k in range(w):
+                        if raw is not None and k < len(raw):
+                            m[disp + k] = raw[k]
+                        else:
+                            m.pop(disp + k, None)
+                continue
+            if mn in ("mov", "movabs"):
+                v = _sd_int(src)
+                if v is not None:
+                    regs[d] = ("imm", v)
+                elif mm and mm.group(2) == "rip" and mm.group(1) in ("qword", "dword"):
+                    w = _SD_W[mm.group(1)]
+                    b = rd(a + sz + (_sd_int(mm.group(4) or "0") or 0) * (-1 if mm.group(3) == "-" else 1), w)
+                    regs[d] = ("imm", int.from_bytes(b, "little")) if len(b) == w else None
+                elif _rfam(src) in regs and not mm:
+                    regs[d] = regs[_rfam(src)]
+                else:
+                    regs.pop(d, None)
+                continue
+            if mn in ("movdqa", "movdqu", "movaps", "movups") and mm and mm.group(2) == "rip":
+                b = rd(a + sz + (_sd_int(mm.group(4) or "0") or 0) * (-1 if mm.group(3) == "-" else 1), 16)
+                regs[d] = ("bytes", b) if len(b) == 16 else None
+                continue
+            if mn == "xor" and dst == src:
+                regs[d] = ("imm", 0)
+                continue
+            if dst and not dm:
+                regs.pop(d, None)
+    return out
+
+
+def string_decrypt_facts(data):
+    """Speculative: strings encrypted ONE BY ONE and decoded by a shared routine called as f(ptr, len, key) (ptr into
+    .rodata/.data or a stack-built array; any SysV/Win64 argument order). The routine's (ptr,len,key) triples are read
+    off its call sites by a register/stack-tracking capstone sweep; the decode op (xor / sub / add of the 1-byte key)
+    is the one turning every non-printable ciphertext into printable text. {decoder_va, decoder, algorithm, strings,
+    keys, lengths, call_sites, storage, count} plus regex buckets (urls, domains, ips, mutexes, campaign_ids,
+    registry_keys, paths, user_agents). None when not an x86-64 ELF/PE or no such routine."""
+    try:
+        data = bytes(data)
+        mp = _exec_map(data)
+        if not mp or mp[0] != 64:
+            return None
+        _, secs, _ = mp
+        calls = _sd_calls(data, secs, time.time() + STRDEC_MAX_S)
+        by = {}
+        for c in calls:
+            by.setdefault(c[1], []).append(c)
+        best = None
+        for t, cs in by.items():
+            if len(cs) < 2:
+                continue
+            regs = [r for r in _SD_ARGS if sum(r in c[2] for c in cs) * 2 > len(cs)]
+            for pr in regs:
+                for lr in regs + [None]:
+                    for kr in regs:
+                        if len({pr, lr, kr}) < (3 if lr else 2):
+                            continue
+                        for opn, op in _SD_OPS.items():
+                            rows = []
+                            for a, _, ar in cs:
+                                p, n, k = ar.get(pr), ar.get(lr) if lr else ("imm", None), ar.get(kr)
+                                if not p or not n or not k or p[0] not in ("ptr", "buf") or n[0] != "imm" or \
+                                        k[0] != "imm" or not 0 < k[1] < 256:
+                                    continue
+                                n = n[1]
+                                if n is not None and not 2 < n <= 4096:
+                                    continue
+                                if p[0] == "ptr":
+                                    o = _va_off(secs, p[1])
+                                    if o is None:
+                                        continue
+                                    ct = data[o:o + (n or 4096)]
+                                else:
+                                    ct = p[1][:n or 1024]
+                                if n is None:
+                                    ct = ct.split(b"\0", 1)[0]
+                                if len(ct) < 3 or (n is not None and len(ct) != n):
+                                    continue
+                                pt = bytes(op(c, k[1]) for c in ct)
+                                gain = sum(_SD_SCORE[c] for c in pt) - sum(_SD_SCORE[c] for c in ct)
+                                if not set(pt) <= _SD_PRINT or gain < 0:
+                                    continue
+                                rows.append((a, pt.decode("latin-1"), k[1], len(ct),
+                                             "rodata" if p[0] == "ptr" else "stack", gain))
+                            win = sum(r[5] > 0 for r in rows)
+                            score = (len(rows), sum(r[5] for r in rows))
+                            if win >= 2 and len(rows) * 5 >= len(cs) * 3 and score[1] > 0 and \
+                                    (best is None or score > best[3]):
+                                best = (rows, t, opn, score)
+        if best is None:
+            return None
+        rows, t, opn, _ = best
+        rows.sort()
+        name = next((nm for v, _, nm in _elf_funcs(data) if v == t), "none")
+        ss = [r[1] for r in rows]
+        out = {"decoder_va": t, "decoder": name, "algorithm": opn, "strings": ss, "count": len(ss),
+               "keys": [r[2] for r in rows], "lengths": [r[3] for r in rows], "call_sites": [r[0] for r in rows],
+               "storage": [r[4] for r in rows]}
+        url = re.compile(r"\b[a-z][a-z0-9+.-]*://[^\s\"'<>]+", re.I)
+        host = re.compile(r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b", re.I)
+        ip = re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b")
+        uniq = lambda xs: list(dict.fromkeys(xs))   # noqa: E731
+        out["urls"] = uniq(m for s in ss for m in url.findall(s))
+        out["domains"] = uniq(m.lower() for s in ss for m in host.findall(s)
+                              if not re.fullmatch(r"[\d.]+", m) and not re.search(r"\.(exe|dll|php|sys|bat|ps1|txt|"
+                                                                                   r"dat|bin|js|vbs|html?)$", m, re.I))
+        out["ips"] = uniq(m.group(0) for s in ss for m in ip.finditer(s))
+        out["mutexes"] = [s for s in ss if re.match(r"(?:Global|Local|Session\\\d+)\\", s)]
+        out["campaign_ids"] = uniq(m for s in ss for m in re.findall(r"\b[A-Z]{2,6}-[0-9A-F]{2,}(?:-[0-9A-Z]+)*\b", s)
+                                   if not s.startswith(("Global\\", "Local\\")))
+        out["registry_keys"] = [s for s in ss if re.match(r"(?:HK(?:LM|CU|CR|U|EY_\w+)|SOFTWARE|SYSTEM)\\", s, re.I)]
+        out["paths"] = [s for s in ss if re.match(r"(?:[A-Za-z]:\\|%\w+%\\|/(?:tmp|etc|var|usr|home|dev|opt)/)", s)]
+        out["user_agents"] = [s for s in ss if s.startswith("Mozilla/")]
+        out["speculative"] = True
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def string_decrypt_field(data, name):
+    """One string_decrypt_facts value as an answer string: lists comma-joined, VAs/keys 0x-hex; "none" when absent."""
+    try:
+        f = string_decrypt_facts(data)
+        if f is None:
+            return "none"
+        v = f.get(name, "none")
+        if name in ("decoder_va",) and isinstance(v, int):
+            return hex(v)
+        if name in ("keys", "call_sites"):
+            v = [hex(x) for x in v]
+        if isinstance(v, list):
+            return ",".join(str(x) for x in v) if v else "none"
+        return str(v)
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
+# ------------------------------------------------------------------------------------------------ contract rule text
+# D17: the organizers re-issued the contract mid-day; d12/d14 `hcfg_storage` went exact_text -> kind enum with
+# `accepted_values` and "Apply these mutually exclusive rules in order: <tok> when <cond>; ...; otherwise <tok> ...".
+# These helpers read that text, expose accepted_values, refuse off-list tokens, and diff two contract snapshots.
+QRULE_REFUSED = []          # (id, value, accepted) for every token qrule_enforce refused (inspect after a run)
+_QRULE_HEAD = re.compile(r"\b(?:apply|use)?\s*(?:these|the\s+following)?\s*(?:mutually\s+exclusive\s+)?rules?"
+                         r"(?:\s+in\s+(?:this\s+)?order)?\s*:", re.I)
+_QRULE_TOK = r"[A-Za-z0-9][A-Za-z0-9_.\-]*"
+_QRULE_DEFAULT = re.compile(r"(?:^|[,;]?\s+)(?:otherwise|else|default)[,:]?\s+(?:use\s+|answer\s+|submit\s+)?"
+                            r"[`'\"]?(" + _QRULE_TOK + r")[`'\"]?\b", re.I)
+_QRULE_STOP = re.compile(r"\.\s+(?=(?:Submit|Answer|Report|Return|Respond|Use\s+the\s+literal|Do\s+not)\b)")
+
+
+def _qr_questions(contract):
+    """[question dict] from a contract / start / status body (dict with "questions", or a bare list)."""
+    if isinstance(contract, (bytes, str)):
+        try:
+            contract = json.loads(contract)
+        except ValueError:
+            return []
+    if isinstance(contract, dict):
+        if isinstance(contract.get("questions"), list):
+            return [q for q in contract["questions"] if isinstance(q, dict) and q.get("id")]
+        for k in ("body", "contract", "attempt", "data"):
+            if isinstance(contract.get(k), (dict, list)):
+                r = _qr_questions(contract[k])
+                if r:
+                    return r
+        return []
+    return [q for q in contract if isinstance(q, dict) and q.get("id")] if isinstance(contract, list) else []
+
+
+def qrule_accepted(q):
+    """The question's `answer_format.accepted_values` as a list of strings, or None (free-form answer)."""
+    af = q.get("answer_format") if isinstance(q, dict) else None
+    av = af.get("accepted_values") if isinstance(af, dict) else None
+    if isinstance(av, list) and av:
+        return [str(v) for v in av]
+    return None
+
+
+def contract_accepted(contract):
+    """{answer_id: [accepted token]} for every id whose answer_format lists accepted_values."""
+    return {q["id"]: av for q in _qr_questions(contract) if (av := qrule_accepted(q))}
+
+
+def qrule_rules(q, accepted=None):
+    """[(token, condition)] in the question's stated order, parsed from 'rules in order: A when x; B when y; ...;
+    otherwise C ...'. The default rule's condition starts with "otherwise". `q` is a question dict (its
+    accepted_values anchor the tokens) or the bare text. [] when the text states no rule list. Never raises."""
+    try:
+        text = q.get("question", "") if isinstance(q, dict) else str(q or "")
+        if accepted is None and isinstance(q, dict):
+            accepted = qrule_accepted(q)
+        acc = set(accepted or ())
+        m = _QRULE_HEAD.search(text)
+        if not m:
+            return []
+        body = text[m.end():]
+        st = _QRULE_STOP.search(body)
+        body = (body[:st.start()] if st else body).strip().rstrip(".").strip()
+        tok_ok = (lambda t: t in acc) if acc else (lambda t: True)
+        start = re.compile(r"^(?:use\s+|answer\s+)?[`'\"]?(" + _QRULE_TOK + r")[`'\"]?\s+(?:when|if|whenever)\b\s*(.*)$",
+                           re.I | re.S)
+        rules, default = [], None
+        for seg in re.split(r"\s*;\s*", body):
+            if not seg:
+                continue
+            d = re.match(r"^(?:otherwise|else|default)[,:]?\s+(?:use\s+|answer\s+|submit\s+)?[`'\"]?(" + _QRULE_TOK +
+                         r")[`'\"]?\b\s*(.*)$", seg, re.I | re.S)
+            if d and tok_ok(d.group(1)):
+                default = (d.group(1), ("otherwise " + d.group(2).strip()).strip())
+                continue
+            s = start.match(seg)
+            if s and tok_ok(s.group(1)) and default is None:
+                rules.append([s.group(1), s.group(2).strip()])
+            elif rules and default is None:
+                rules[-1][1] += "; " + seg          # a ';' inside one condition (D17 raw_const_array)
+        if rules and default is None:               # "... when x, otherwise C" inside the last segment
+            d = _QRULE_DEFAULT.search(rules[-1][1])
+            if d and tok_ok(d.group(1)):
+                default = (d.group(1), ("otherwise " + rules[-1][1][d.end():].strip()).strip())
+                rules[-1][1] = rules[-1][1][:d.start()].strip()
+        out = [(t, c.strip()) for t, c in rules]
+        return out + [default] if default else out
+    except Exception:  # noqa: BLE001 -- untrusted contract text: no rules
+        return []
+
+
+def contract_rules(contract):
+    """{answer_id: [(token, condition)]} for every question that states an ordered rule list."""
+    return {q["id"]: r for q in _qr_questions(contract) if (r := qrule_rules(q))}
+
+
+def qrule_pick(rules, holds):
+    """First token whose condition holds (`holds` = {token: bool} or callable(token, condition) -> bool), else
+    the "otherwise" token, else None. Encodes 'mutually exclusive rules in order'."""
+    for tok, cond in rules or ():
+        if cond.startswith("otherwise"):
+            return tok
+        try:
+            ok = holds(tok, cond) if callable(holds) else bool(holds.get(tok))
+        except Exception:  # noqa: BLE001
+            ok = False
+        if ok:
+            return tok
+    return None
+
+
+def qrule_enforce(q, value, log=None):
+    """`value` if the question accepts it, else "" (and the refusal is logged): never emit a token outside
+    accepted_values. Free-form questions pass through. Surrounding whitespace is trimmed only when that makes it
+    an accepted token; case is folded only when the stated normalization is not "exact"."""
+    av = qrule_accepted(q)
+    if av is None or value is None:
+        return value
+    v = str(value)
+    if v in av:
+        return v
+    if v.strip() in av:
+        return v.strip()
+    if str(q.get("normalization", "exact")).lower() not in ("exact", "", "none"):
+        hit = [a for a in av if a.casefold() == v.strip().casefold()]
+        if len(hit) == 1:
+            return hit[0]
+    rec = (q.get("id"), v, list(av))
+    QRULE_REFUSED.append(rec)
+    if callable(log):
+        try:
+            log(f"qrule: refused {v!r} for {rec[0]} (accepted: {', '.join(av)})")
+        except Exception:  # noqa: BLE001
+            pass
+    return ""
+
+
+def contract_enforce(contract, answers, log=None):
+    """{id: value} with every enum id passed through qrule_enforce (ids not in the contract pass unchanged)."""
+    qs = {q["id"]: q for q in _qr_questions(contract)}
+    return {k: (qrule_enforce(qs[k], v, log) if k in qs else v) for k, v in (answers or {}).items()}
+
+
+_QR_DIFF_KEYS = ("question", "answer_format", "normalization", "artifact")
+
+
+def contract_diff(old, new):
+    """Per-id revision between two contract snapshots: {id: {"changed": [keys], "old": {...}, "new": {...}}} for
+    every id whose question/answer_format/normalization/artifact differs, plus "_added"/"_removed" id lists when
+    any. Order-insensitive (ids keyed); {} when nothing changed."""
+    a = {q["id"]: q for q in _qr_questions(old)}
+    b = {q["id"]: q for q in _qr_questions(new)}
+    out = {}
+    for k, qb in b.items():
+        qa = a.get(k)
+        if qa is None:
+            continue
+        ch = [f for f in _QR_DIFF_KEYS if qa.get(f) != qb.get(f)]
+        if ch:
+            out[k] = {"changed": ch, "old": {f: qa.get(f) for f in ch}, "new": {f: qb.get(f) for f in ch}}
+    added, removed = [k for k in b if k not in a], [k for k in a if k not in b]
+    if added:
+        out["_added"] = added
+    if removed:
+        out["_removed"] = removed
+    return out
+
+
+def contract_revision_lines(old, new):
+    """One human line per revised id (what a stuck worker needs to see first)."""
+    d = contract_diff(old, new)
+    b = {q["id"]: q for q in _qr_questions(new)}
+    lines = []
+    for k, v in d.items():
+        if k.startswith("_"):
+            lines.append(f"{k[1:]}: {', '.join(v)}")
+            continue
+        parts = []
+        if "answer_format" in v["changed"]:
+            ok = (v["old"]["answer_format"] or {}).get("kind") if isinstance(v["old"]["answer_format"], dict) else None
+            nk = (v["new"]["answer_format"] or {}).get("kind") if isinstance(v["new"]["answer_format"], dict) else None
+            av = qrule_accepted(b.get(k, {}))
+            parts.append(f"answer_format {ok}->{nk}" + (f" accepted={av}" if av else ""))
+        if "question" in v["changed"]:
+            r = qrule_rules(b.get(k, {}))
+            parts.append("question text changed" + (f"; rules in order: {' > '.join(t for t, _ in r)}" if r else ""))
+        parts += [f"{f} changed" for f in v["changed"] if f in ("normalization", "artifact")]
+        lines.append(f"{k}: " + "; ".join(parts))
+    return lines

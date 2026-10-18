@@ -1,0 +1,21 @@
+{
+ "kind": "provenance_facts",
+ "decoy": true,
+ "expected": {
+  "format": "elf",
+  "build_id": "none",
+  "compiler": "none",
+  "comment_strings": [],
+  "gcc_version": "none",
+  "rustc_version": "none",
+  "go_version": "none",
+  "has_dwarf": "false",
+  "dwarf_producer": "none",
+  "dwarf_language_num": "none",
+  "dwarf_comp_dir": "none",
+  "dwarf_name": "none"
+ },
+ "generator_cmd": "sh tests/data/binary_fixtures/prov_gen.sh tests/data/binary_fixtures   # gcc 15.2 -g/-s + ld --build-id=sha1/md5/none, objcopy --remove-section .comment, rustc 1.93.1, setuptools cli-64.exe (MSVC), dotnet build (rsrc_pe_overlay), head -c 64",
+ "oracle_cmd": "bash tests/data/binary_fixtures/prov_oracle.sh tests/data/binary_fixtures/prov_decoy_truncated_elf.bin   # readelf -nW / -p .comment / --debug-dump=info --dwarf-depth=1, go version; pefile for PE",
+ "note": "ELF header only (64 bytes, section table cut off) -> every field none"
+}

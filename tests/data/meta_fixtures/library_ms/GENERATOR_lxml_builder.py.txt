@@ -1,0 +1,43 @@
+# Writes .library-ms / .searchConnector-ms fixtures with the lxml.etree WRITER. usage: python -I THIS OUTDIR
+import sys
+from lxml import etree
+out = sys.argv[1]
+LIB, SC = "http://schemas.microsoft.com/windows/2009/library", "http://schemas.microsoft.com/windows/2009/searchConnector"
+def sub(p, ns, tag, text=None, **attr):
+    e = etree.SubElement(p, "{%s}%s" % (ns, tag), **attr)
+    if text is not None:
+        e.text = text
+    return e
+def save(root, name, enc="UTF-8", bom=b""):
+    data = etree.tostring(root, xml_declaration=True, encoding=enc, pretty_print=True)
+    open(f"{out}/{name}", "wb").write(bom + data if bom else data)
+# 1. library with two locations (known folder + WebDAV lure), UTF-8, default namespace
+r = etree.Element("{%s}libraryDescription" % LIB, nsmap={None: LIB})
+sub(r, LIB, "name", "@shell32.dll,-34575")
+sub(r, LIB, "ownerSID", "S-1-5-21-3623811015-3361044348-30300820-1013")
+sub(r, LIB, "version", "11")
+sub(r, LIB, "isLibraryPinned", "true")
+sub(r, LIB, "iconReference", "imageres.dll,-1002")
+sub(sub(r, LIB, "templateInfo"), LIB, "folderType", "{7d49d726-3c21-4f05-99aa-fdc2c9474656}")
+lst = sub(r, LIB, "searchConnectorDescriptionList")
+for url, dflt in (("knownfolder:{FDD39AD0-238F-46AF-ADB4-6C85480369C7}", "true"),
+                  (r"\\files.example-cdn.net@SSL\DavWWWRoot\shared", None)):
+    c = sub(lst, LIB, "searchConnectorDescription", publisher="Microsoft", product="Windows")
+    if dflt:
+        sub(c, LIB, "isDefaultSaveLocation", dflt)
+    sub(sub(c, LIB, "simpleLocation"), LIB, "url", url)
+save(r, "library_two_locations.bin")
+# 2. searchConnector-ms phishing lure, prefixed namespace, UTF-16 with BOM (lxml emits the BOM itself)
+r = etree.Element("{%s}searchConnectorDescription" % SC, nsmap={"sc": SC})
+sub(r, SC, "description", "Shared Invoices")
+sub(r, SC, "isSearchOnlyItem", "false")
+sub(r, SC, "includeInStartMenuScope", "true")
+sub(sub(r, SC, "templateInfo"), SC, "folderType", "{91475FE5-586B-4EBA-8D75-D17434B8CDF6}")
+sub(sub(r, SC, "simpleLocation"), SC, "url", "https://203.0.113.44/webdav/invoices")
+save(r, "searchconnector_utf16.bin", enc="UTF-16")
+# 3. decoy: an app.config that also carries simpleLocation/url, ownerSID, version elements (not a library)
+r = etree.Element("configuration")
+sub(r, "", "ownerSID", "S-1-5-18").tag = "ownerSID"
+v = etree.SubElement(r, "version"); v.text = "4"
+sl = etree.SubElement(etree.SubElement(r, "simpleLocation"), "url"); sl.text = "https://decoy.example.com/"
+save(r, "decoy_appconfig.bin")

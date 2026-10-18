@@ -1,0 +1,8 @@
+{
+ "entry": "nested_scan",
+ "expected": null,
+ "_why": "encrypted asset dex/jar for DexClassLoader (rows 42, 44): openssl enc -aes-128-cbc under 'Wq8!rT3#mZ6@pK1$' which is NOT in the APK; the dex holds the near-miss key 'Hx7#qL2!vR9@tZ4$'",
+ "generator_cmd": "python3 tests/data/android_fixtures/acd_src/gen_acd.py decoy_wrong_key tests/data/android_fixtures/acd_decoy_wrong_key.apk  # javac+d2j-jar2dex inner/outer dex; cipher: openssl enc -aes-128-cbc under 'Wq8!rT3#mZ6@pK1$' which is NOT in the APK; the dex holds the near-miss key 'Hx7#qL2!vR9@tZ4$'",
+ "oracle_cmd": "unzip -p acd_decoy_wrong_key.apk assets/plugin.bin | tail -c +17 | openssl enc -d -aes-128-cbc -K $(printf 'Hx7#qL2!vR9@tZ4$' | xxd -p) -iv a1b2c3d4e5f60718293a4b5c6d7e8f90  # -> 'bad decrypt', no token; unzip -p acd_decoy_wrong_key.apk classes.dex | strings | grep -c ANS- -> 0",
+ "decoy": true
+}

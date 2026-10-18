@@ -89,6 +89,50 @@ DOTNET_FORMAT_REJECTED = [
 # (elf / x86-64 / decimal e_machine "62"; the stripped twin still carries the same HCFG config).
 BINARY_MEMBER_QUALIFIERS = {"stripped": False, "symbolized": True, "unstripped": True}   # -> has .symtab
 
+# Day 17 "Decoder Ring" (binary, d01..d14 re-asked as dNN_analysis_<field>; single 2d90be2a, TT 3d130172, Mastery 1c0c07be
+# 5 sets): NEW field `hcfg_storage` = HOW the HCFG config is stored, a closed GM enum keyed by the blob's form + home:
+# base64 'SENGR..' text (d08 Swift / d09 Nim / d11 D / d13 Crystal) -> "base64"; RAW 'HCFG' magic inside a section NAMED
+# .hcfg (d14 GNUstep ObjC) -> "raw_hcfg_section"; RAW 'HCFG' magic in an ordinary data section (d12 FPC .data constant)
+# -> "raw_const_array". Bare/one-word forms (raw, section, hcfg, .hcfg, data, rodata, const_array, hcfg_section, ...)
+# were ALL rejected (single grouptest). `recover_code` (D1 imm of `mov eax, imm; ret`): "8100" with the symbol; a
+# STRIPPED d01 (no recover_code FUNC symbol) -> literal "none" (TT + Mastery 5/5) -- the leaf's constant 8114 REJECTED.
+# The GM later PUBLISHED the full enum + ordered rules (contract rewritten in place 10-18 ~01:00, same attempt):
+#   base64            the winning HCFG appears only after decoding a printable Base64 carrier
+#   raw_hcfg_section  literal HCFG begins in a native section named exactly .hcfg (section header alone suffices)
+#   wasm_data_segment literal HCFG inside a WebAssembly data segment
+#   raw_const_array   literal HCFG begins in a native data section other than .hcfg (e.g. writable .data), a raw
+#                     in-image byte array addressed by the decoder (no source-level const needed)
+#   raw               otherwise, any other literal HCFG carrier
+HCFG_STORAGE = {"base64": "base64", "raw_hcfg_section": "raw_hcfg_section", "raw_const_array": "raw_const_array",
+                "wasm_data_segment": "wasm_data_segment", "raw": "raw"}
+# Rejected while the question was open-vocab. `raw` is NOT here: it was wrong for d12/d14 only (their carriers have a
+# better rule above) and is the enum's fallback for other carriers.
+HCFG_STORAGE_REJECTED = [
+    "section", "hcfg", ".hcfg", "elf", "data", "rodata", "byte_array", "bytes", "binary", "array", "blob", "xor",
+    "plain", "plaintext", "embedded", "inline", "literal", "const", "const_array", "raw_const", "raw_array", "raw_bytes",
+    "raw_data", "raw_hcfg", "raw_rodata", "raw_section", "hcfg_section", "section_hcfg", "custom_section", "none",
+]
+HCFG_CODE_SECTIONS = {".text", ".init", ".fini", ".plt", ".plt.got", ".plt.sec"}
+RECOVER_CODE_ABSENT = "none"
+RECOVER_CODE_REJECTED = ["8114"]
+
+
+def hcfg_storage(encoding, section=None, wasm=False):
+    """GM `hcfg_storage` for a decoded HCFG hit, by the GM's published ordered rules: encoding "base64" (SENGR text) or
+    "raw" ('HCFG' magic); section = the native section holding the blob (None when it is in no section); wasm = the
+    blob sits in a WebAssembly data segment. None for an encoding the GM has not labelled (hex text, zlib, ...)."""
+    if encoding == "base64":
+        return HCFG_STORAGE["base64"]
+    if encoding != "raw":
+        return None
+    if section and section == ".hcfg":
+        return HCFG_STORAGE["raw_hcfg_section"]
+    if wasm:
+        return HCFG_STORAGE["wasm_data_segment"]
+    if section and section not in HCFG_CODE_SECTIONS:
+        return HCFG_STORAGE["raw_const_array"]
+    return HCFG_STORAGE["raw"]
+
 # Day 4 "Picture This" (metadata-forensics), confirmed 2026-10-04: jpeg.sof_dimensions_pixels is the SOFn frame
 # header size as '<width>x<height>' (X then Y, lowercase 'x', no spaces), e.g. "257x146" — not EXIF/filename dims.
 JPEG_DIMENSIONS_FMT = "{width}x{height}"

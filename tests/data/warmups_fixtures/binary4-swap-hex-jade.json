@@ -1,0 +1,9 @@
+{
+ "codec": "binary4-swap(hex)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-88",
+ "encoded": "1110 0100 1001 0110 0011 0110 0101 0110 0000 0010 0111 0111 1111 0110 0010 0111 1011 0110 0000 0010 0100 0110 0101 0110 0011 0110 1111 0110 0100 0110 1001 0110 1110 0110 0111 0110 0000 0010 0100 0111 1000 0110 1001 0110 0011 0111 0000 0010 0111 0111 0001 0110 0010 0111 1101 0110 0101 0111 0000 0111 0001 0010 0000 0010 0100 0101 1111 0110 0000 0010 0011 0111 1111 0110 1100 0110 0110 0111 0101 0110 1100 0010 0000 0010 0011 0111 0101 0111 0010 0110 1101 0110 1001 0110 0100 0111 0000 0010 0100 0111 1000 0110 1001 0110 0011 0111 0000 0010 0101 0110 1000 0111 0001 0110 0011 0110 0100 0111 0000 0010 0001 0110 1110 0110 0011 0111 0111 0111 0101 0110 0010 0111 0000 0010 0100 0111 1111 0110 0000 0010 0100 0111 1000 0110 0101 0110 0000 0010 0111 0100 0001 0110 1101 0110 0101 0110 0000 0010 1101 0100 0001 0110 0011 0111 0100 0111 0101 0110 0010 0111 1010 0011 0000 0010 1010 0110 0001 0110 0100 0110 0101 0110 1101 0010 1000 0110 0101 0110 0010 0111 1111 0110 1110 0110 1101 0010 1000 0011 1000 0011",
+ "generator_cmd": "perl -e '($s,$sep,$fmt)=@ARGV; print join $sep, map { sprintf \"%04b\", hex } split //, unpack($fmt, $s)' \"$plain\" ' ' 'h*'  # perl unpack 'h*' = UTF-8 hex digits low nibble first, each as a 4-bit group",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/bin4_cyberchef.mjs Space rol4  # CyberChef 'From Binary' (Byte Length=4) -> 'From Hex' -> 'Rotate left' 4 bits (nibble swap)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-88",
+ "expected": "match"
+}

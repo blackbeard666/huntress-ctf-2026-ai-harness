@@ -1,0 +1,32 @@
+{
+ "kind": "jvm_facts",
+ "decoy": false,
+ "member": null,
+ "expected": {
+  "main_class": "com.acme.Main",
+  "class_count": "2",
+  "entry_count": "6",
+  "minor_version": "0",
+  "major_version": "55",
+  "constant_pool_count": "68",
+  "access_flags": "49",
+  "access_flags_hex": "0x0031",
+  "this_class": "com/acme/Main",
+  "super_class": "java/lang/Object",
+  "interface_count": "2",
+  "field_count": "4",
+  "method_count": "6",
+  "attribute_count": "1",
+  "fields": "[\"KEY\",\"counter\",\"stamp\",\"ratio\"]",
+  "field_descriptors": "[\"Ljava/lang/String;\",\"I\",\"J\",\"D\"]",
+  "methods": "[\"<init>\",\"run\",\"decodeConfig\",\"evaluate\",\"main\",\"<clinit>\"]",
+  "method_descriptors": "[\"()V\",\"()V\",\"(Ljava/lang/String;)Ljava/lang/String;\",\"(IJ)I\",\"([Ljava/lang/String;)V\",\"()V\"]",
+  "source_file": "Main.java",
+  "signature": "none",
+  "attributes": "[\"SourceFile\"]",
+  "has_kotlin_metadata": "false"
+ },
+ "generator_cmd": "bash jvm_gen.sh   # javac (OpenJDK 21) + jar --create --manifest; decoy Mach-O header via python3 struct",
+ "oracle_cmd": "python3 jvm_oracle.py jvm_jar_java_main.bin   # javap -v -p (OpenJDK 21) text + unzip -Z1 / unzip -p META-INF/MANIFEST.MF",
+ "note": "javac --release 11 jar with Manifest Main-Class com.acme.Main: <init>/<clinit> in table order, 2 interfaces, 4 fields, access_flags 49 (public final super) like D6/D17"
+}

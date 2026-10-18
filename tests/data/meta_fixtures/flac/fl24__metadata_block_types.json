@@ -1,0 +1,8 @@
+{
+ "field": "flac.metadata_block_types",
+ "expected": "[\"STREAMINFO\",\"VORBIS_COMMENT\",\"PADDING\"]",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -loglevel error -f lavfi -i sine=f=300:d=0.3:r=96000 -ac 1 -c:a flac -sample_fmt s32 -bits_per_raw_sample 24 -metadata title=x fl24.flac (ffmpeg 7.0.2 static)",
+ "oracle_cmd": ".venv/bin/python -I -c \"import mutagen.flac as f; print([b.code for b in f.FLAC('fl24.flac').metadata_blocks])\" -> [0, 4, 1] (FLAC spec block types STREAMINFO, VORBIS_COMMENT, PADDING)",
+ "decoy": false,
+ "member": "fl24.flac"
+}

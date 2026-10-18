@@ -1,0 +1,32 @@
+[
+  {
+    "Id": 1,
+    "ProviderName": "Microsoft-Windows-Sysmon",
+    "LevelDisplayName": "Information",
+    "Message": "Process Create:\r\nImage: C:\\Windows\\System32\\cmd.exe\r\nCommandLine: cmd /c whoami\r\n"
+  },
+  {
+    "Id": 22,
+    "ProviderName": "Microsoft-Windows-Sysmon",
+    "LevelDisplayName": "Information",
+    "Message": "Dns query:\r\nImage: C:\\Users\\bob\\AppData\\Roaming\\upd.exe\r\nQueryName: cdn.stage-two.example\r\nQueryResults: type:  5 edge.cdnhost.example;::ffff:203.0.113.70;\r\nQueryStatus: 0\r\n"
+  },
+  {
+    "Id": 3,
+    "ProviderName": "Microsoft-Windows-Sysmon",
+    "LevelDisplayName": "Information",
+    "Message": "Network connection detected:\r\nImage: C:\\Users\\bob\\AppData\\Roaming\\upd.exe\r\nProtocol: tcp\r\nSourceIp: 10.0.0.5\r\nDestinationIsIpv6: false\r\nDestinationIp: 203.0.113.77\r\nDestinationHostname: -\r\nDestinationPort: 443\r\n"
+  },
+  {
+    "Id": 3,
+    "ProviderName": "Microsoft-Windows-Sysmon",
+    "LevelDisplayName": "Information",
+    "Message": "Network connection detected:\r\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\r\nProtocol: tcp\r\nSourceIp: 10.0.0.5\r\nDestinationIp: 198.51.100.9\r\nDestinationHostname: pay.loader-x.example\r\nDestinationPort: 8080\r\n"
+  },
+  {
+    "Id": 3,
+    "ProviderName": "Microsoft-Windows-Sysmon",
+    "LevelDisplayName": "Information",
+    "Message": "Network connection detected:\r\nImage: C:\\Windows\\System32\\mshta.exe\r\nProtocol: tcp\r\nSourceIp: 10.0.0.5\r\nDestinationIp: 192.0.2.44\r\nDestinationHostname: \r\nDestinationPort: 80\r\n"
+  }
+]

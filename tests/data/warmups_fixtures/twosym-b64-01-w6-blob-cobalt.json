@@ -1,0 +1,10 @@
+{
+ "codec": "twosym base64-index (Sixty-Four 0/1 sextets, one run)",
+ "decoder": "lib.warmups_codecs.twosym_index_dec (also twosym_dec)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-58",
+ "encoded": "010011100110100101100011011001010010000001110111011011110111001001101011001000000110010001100101011000110110111101100100011010010110111001100111001000000111010001101000011010010111001100100000011101110110000101110010011011010111010101110000001000010010000001010100011011110010000001110011011011110110110001110110011001010010110000100000011100110111010101100010011011010110100101110100001000000111010001101000011010010111001100100000011001010111100001100001011000110111010000100000011000010110111001110011011101110110010101110010001000000111010001101111001000000111010001101000011001010010000001000111011000010110110101100101001000000100110101100001011100110111010001100101011100100011101000100000011000110110111101100010011000010110110001110100001011010110111101110100011101000110010101110010001011010011010100111000",
+ "generator_cmd": "printf %s \"$plain\" | {base32 -w0 | base64 -w0 | basenc --base64url -w0 | od -An -v -to1} | tr -d \"= \\n\" | awk -v al=\"b64\" -v w=6 -v sep=\"\" \"{for(i=1;i<=length(\\$0);i++){v=index(al,substr(\\$0,i,1))-1;b=\\\"\\\";for(j=0;j<w;j++){b=(v%2)b;v=int(v/2)};printf \\\"%s%s\\\",(i>1?sep:\\\"\\\"),b}}\" | tr 01 01  # coreutils encoder -> awk alphabet index -> fixed-width binary -> symbols   [source plain: 'Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-58']",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/twosym_index_cyberchef.mjs 0 1 6 b64  # CyberChef From Binary (Byte Length=6) -> alphabet index -> From Base32/From Base64/From Octal",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-58",
+ "expected": "match"
+}

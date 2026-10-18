@@ -1,0 +1,8 @@
+{
+ "field": "library_ms.is_library_pinned",
+ "expected": "true",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/GENERATOR_lxml_builder.py.txt OUTDIR  -> library_two_locations.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/library_ms/ORACLE_lxml_xpath.py.txt tests/data/meta_fixtures/library_ms/library_two_locations__is_library_pinned.bin is_library_pinned -> true",
+ "decoy": false,
+ "member": "Documents.library-ms"
+}

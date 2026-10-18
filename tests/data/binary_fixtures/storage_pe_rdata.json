@@ -1,0 +1,13 @@
+{
+ "case": "pe_rdata",
+ "expected_storage": "raw_const_array",
+ "expected_config": {
+  "campaign": "ST-9",
+  "domain": "node-9.storage.example.invalid",
+  "mutex": "Global\\HSTOR9"
+ },
+ "key": 77,
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/storage_gen.sh storage_pe_rdata.bin pe_rdata '{\"campaign\":\"ST-9\",\"domain\":\"node-9.storage.example.invalid\",\"mutex\":\"Global\\\\HSTOR9\"}' 77",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/storage_oracle.py storage_pe_rdata.bin"
+}

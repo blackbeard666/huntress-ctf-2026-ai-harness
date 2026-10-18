@@ -1,0 +1,9 @@
+{
+ "codec": "iching (Mastery fragment, cut mid-word)",
+ "plain": "Master: cobalt-ot",
+ "encoded": "䷓䷖䷅䷳䷝䷆䷕䷲䷎䷢䷁䷣䷛䷶䷉䷡䷛䷇䷐䷭䷛䷷䷐",
+ "generator_cmd": "printf %s \"$plain\" | base64 -w0 | perl -CS -ne '$a=\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\"; for $c (split //) { print chr(0x4DC0+index($a,$c)) unless $c eq \"=\" }'",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys,base64,unicodedata as u;t=sys.stdin.read().strip();assert all(u.name(c).startswith(\"HEXAGRAM FOR\") for c in t);a=\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\";b=\"\".join(a[ord(c)-0x4DC0] for c in t);print(base64.b64decode(b+\"=\"*(-len(b)%4)).decode())'",
+ "oracle_plain": "Master: cobalt-ot",
+ "expected": "match"
+}

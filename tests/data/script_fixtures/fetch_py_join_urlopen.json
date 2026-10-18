@@ -1,0 +1,15 @@
+{
+ "expected_plain": "v=3|language=python|role=downloader|verdict=malicious|attack=T1105|stage_count=1|campaign_id=PY-5a1c09e2|file_path=/tmp/.cache/s1.bin",
+ "decoy": false,
+ "expected_fetch_sites": [
+  {
+   "api": "urllib.urlopen",
+   "url": "https://py-5a1c09e2.example.invalid/s1.bin",
+   "method": "GET",
+   "line": 8
+  }
+ ],
+ "note": "plan has no url; the code joins ''.join([...]) + concat + str.format into the urlopen target",
+ "generator_cmd": "P='<plan>'; printf %s \"$P\" | gzip -9n | base64 -w0  -> descriptor_<id> literal; cradle written by hand (see sibling source)",
+ "oracle_cmd": "python3 -I -c \"import sys,runpy,urllib.request as r; r.urlopen=lambda u,*a,**k: sys.exit(print('GET', u)); runpy.run_path(sys.argv[1])\" fetch_py_join_urlopen.py   # fetch_sites oracle (real interpreter, network mocked); plan: grep -o 'descriptor_[0-9a-f]* = \"[^\"]*\"' fetch_py_join_urlopen.py | cut -d'\"' -f2 | base64 -d | gunzip"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "stack:swapcase(base64)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-otter-42",
+ "encoded": "tMLJzsb3B3jRigrLy29KAw5NihrOAxmGD2fYBxvWisbuBYbZB2X2zsWGC3vIBwL0ihrOAxmGzxHHy3qGyw5ZD2vYihrVihrOzsbhyw1Lie1HC3rLCJOGyw1IzxiTB3r0zxiTndi=",
+ "generator_cmd": "printf %s \"$plain\" | base64 -w0 | tr 'A-Za-z' 'a-zA-Z'  # coreutils base64 + tr case swap",
+ "oracle_cmd": "python3 -I -c \"import sys,base64;print(base64.b64decode(sys.argv[1].swapcase()).decode())\" \"$encoded\"  # stdlib str.swapcase + b64decode",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-otter-42",
+ "expected": "match"
+}

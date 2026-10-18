@@ -1,0 +1,13 @@
+{
+ "case": "elf_b64",
+ "expected_storage": "base64",
+ "expected_config": {
+  "campaign": "ST-5",
+  "domain": "node-5.storage.example.invalid",
+  "mutex": "Global\\HSTOR5"
+ },
+ "key": 185,
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/storage_gen.sh storage_elf_b64.bin elf_b64 '{\"campaign\":\"ST-5\",\"domain\":\"node-5.storage.example.invalid\",\"mutex\":\"Global\\\\HSTOR5\"}' 185",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/storage_oracle.py storage_elf_b64.bin"
+}

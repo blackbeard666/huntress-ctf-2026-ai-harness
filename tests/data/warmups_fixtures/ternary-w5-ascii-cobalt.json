@@ -1,0 +1,9 @@
+{
+ "codec": "ternary-012-w5-ascii",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "encoded": "02220 10220 10200 10202 01012 11102 11010 11020 10222 01012 10201 10202 10200 11010 10201 10220 11002 10211 01012 11022 10212 10220 11021 01012 11102 10121 11020 11001 11100 11011 01020 01012 10010 11010 01012 11021 11010 11000 11101 10202 01122 01012 11021 11100 10122 11001 10220 11022 01012 11022 10212 10220 11021 01012 10202 11110 10121 10200 11022 01012 10121 11002 11021 11102 10202 11020 01012 11022 11010 01012 11022 10212 10202 01012 02122 10121 11001 10202 01012 02212 10121 11021 11022 10202 11020 02011 01012 10200 11010 10122 10121 11000 11022 01200 10212 10202 11020 11010 11002 01200 01211 02001",
+ "generator_cmd": "printf %s \"$plain\" | python3 -c \"import sys,numpy; print(\\\" \\\".join(numpy.base_repr(b,3).zfill(5) for b in sys.stdin.buffer.read()), end=\\\"\\\")\"  # numpy.base_repr writer: each byte as 5 ternary digits",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -ne 'my $s=\"\"; for my $g (split /\\s+/) { my $v=0; $v=$v*3+$_ for split //, $g; $s.=chr $v } print $s'  # independent Perl base-3 reader",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "expected": "match"
+}

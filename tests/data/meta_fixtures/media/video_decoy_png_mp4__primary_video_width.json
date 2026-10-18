@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_width",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=64x64 -frames:v 1 decoy.png && cp decoy.png decoy_png.mp4 (PNG renamed .mp4)",
+ "oracle_cmd": "file -b decoy_png.mp4 -> 'PNG image data, 64 x 64' (not an MP4)",
+ "decoy": true,
+ "member": "decoy_png.mp4"
+}

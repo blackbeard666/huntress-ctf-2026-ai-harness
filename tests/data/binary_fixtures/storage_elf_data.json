@@ -1,0 +1,13 @@
+{
+ "case": "elf_data",
+ "expected_storage": "raw_const_array",
+ "expected_config": {
+  "campaign": "ST-2",
+  "domain": "node-2.storage.example.invalid",
+  "mutex": "Global\\HSTOR2"
+ },
+ "key": 74,
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/storage_gen.sh storage_elf_data.bin elf_data '{\"campaign\":\"ST-2\",\"domain\":\"node-2.storage.example.invalid\",\"mutex\":\"Global\\\\HSTOR2\"}' 74",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/storage_oracle.py storage_elf_data.bin"
+}

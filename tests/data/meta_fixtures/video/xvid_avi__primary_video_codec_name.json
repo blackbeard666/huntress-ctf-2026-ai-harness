@@ -1,0 +1,8 @@
+{
+ "field": "video.primary_video_codec_name",
+ "expected": "mpeg4",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=352x288:rate=15 -t 0.4 -c:v libxvid -vtag XVID xvid.avi",
+ "oracle_cmd": "mediainfo --Output=JSON xvid.avi -> Video Format 'MPEG-4 Visual' (CodecID XVID) -> ffprobe codec_name mpeg4; ffmpeg -i: 'mpeg4 (Simple Profile) (XVID / 0x44495658)'",
+ "decoy": false,
+ "member": "xvid.avi"
+}

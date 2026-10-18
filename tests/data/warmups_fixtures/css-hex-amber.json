@@ -1,0 +1,9 @@
+{
+ "codec": "css-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "#4e6963 #652077 #6f726b #206465 #636f64 #696e67 #207468 #697320 #776172 #6d7570 #212054 #6f2073 #6f6c76 #652c20 #737562 #6d6974 #207468 #697320 #657861 #637420 #616e73 #776572 #20746f #207468 #652047 #616d65 #204d61 #737465 #723a20 #616d62 #65722d #66616c #636f6e #2d3432",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c3 | awk '{while(length($0)<6)$0=$0\"00\";printf \"%s#%s\",(NR>1?\" \":\"\"),$0}'  # xxd 3-byte rows + awk 00-pad",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys,re;from PIL import ImageColor as C;t=re.findall(r\\\"#[0-9a-fA-F]{6}|rgb\\\\([^)]*\\\\)\\\",sys.stdin.read());sys.stdout.buffer.write(bytes(v for x in t for v in C.getrgb(x)).rstrip(b\\\"\\\\0\\\"))\"  # Pillow ImageColor.getrgb per token",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

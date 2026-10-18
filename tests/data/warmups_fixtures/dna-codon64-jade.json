@@ -1,0 +1,9 @@
+{
+ "codec": "codon64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-31",
+ "encoded": "GCTAGAAAGACATTGCCGATGCACAGGTTGAATACAAAGATGAATAGAATCACGTTGCATACTAGACAGTTGCCGAAACACATACCAATT!TTGGTCATGTTGCAGATGAGTCCCACA,TTGCAGCCAAACATAAGACATTTGCATACTAGACAGTTGACACCTAAAAAGCATTTGAAAATCCAGCCGACACACTTGCATATGTTGCATACTACATTGGAAAAAATAACATTGGCGAAACAGCATACACAC:TTGAGCAAAAATACA-ACTACACACATGATC-TCGTCA",
+ "generator_cmd": "perl -e 'my @c = glob(\"{A,C,G,T}{A,C,G,T}{A,C,G,T}\"); my @t = split //, join \"\", \"a\"..\"z\", \"A\"..\"Z\", \"1234567890 .\"; my %m; @m{@t} = @c; print join \"\", map { exists $m{$_} ? $m{$_} : $_ } split //, $ARGV[0]' \"$plain\"  # perl glob = 64 codons AAA..TTT, table a-z A-Z 1234567890 space . ; other chars pass through",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -c \"import sys, re, itertools, string; t = string.ascii_lowercase + string.ascii_uppercase + \\\"1234567890 .\\\"; m = dict(zip((\\\"\\\".join(p) for p in itertools.product(\\\"ACGT\\\", repeat=3)), t)); print(re.sub(\\\"[ACGT]{3}\\\", lambda g: m[g.group()], sys.stdin.read()))\"  # python itertools.product codon table, re.sub per codon",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-31",
+ "expected": "match"
+}

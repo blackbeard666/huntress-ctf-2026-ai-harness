@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-7c41e09b3d5f2a86",
+ "generator_cmd": "tests/data/android_fixtures/gen_zip_structure.sh <outdir> -- step 1: python3 zipfile WRITER writestr('assets/huntress_puzzle.json') twice: real {codec:base64} first, decoy shadow last",
+ "oracle_cmd": "unzip -p zipanom_dup_shadow.apk assets/huntress_puzzle.json | jq -rs '.[0].data' | base64 -d"
+}

@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "docker",
+ "generator_cmd": "printf 'apk update && echo nightly cache warmed for inventory build' | gzip -9n | base64 -w0 | fold -w 56  (same RUN echo \\ | base64 -d | gunzip | sh shape, benign payload; ENV DESCRIPTOR_0D0D0D0D legacy benign word)",
+ "oracle_cmd": "sed -e :a -e '/\\\\$/{N;s/\\\\\\n//;ba}' tests/data/script_fixtures/bh_docker_decoy_benign.Dockerfile | sed -n 's/^RUN //p' | sed 's/| sh$//' | bash  -> 'apk update && echo nightly cache warmed ...' (no v=3 plan)"
+}

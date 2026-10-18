@@ -1,0 +1,9 @@
+{
+ "codec": "regional-keycap (Mastery-style fragment)",
+ "plain": "Master: cobalt-quail-80",
+ "encoded": "🇲🇦🇸🇹🇪🇷: 🇨🇴🇧🇦🇱🇹-🇶🇺🇦🇮🇱-8️⃣0️⃣",
+ "generator_cmd": "perl -CSA tests/data/warmups_fixtures/unistyle_perl.pl regional \"$(printf %s \"$plain\" | tr a-z A-Z | sed \"s/[0-9]/:keycap_&:/g\")\" | python3 -I -c 'import sys,emoji;print(emoji.emojize(sys.stdin.read(),language=\"alias\"),end=\"\")'  # Perl charnames letters + PyPI emoji 2.15.0 emojize(:keycap_N:) digits (N U+FE0F U+20E3)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys,re,emoji,unicodedata as u;t=\"\".join(u.name(c)[-1] if u.name(c,\"\").startswith(\"REGIONAL INDICATOR SYMBOL LETTER \") else c for c in sys.stdin.read());t=emoji.demojize(t,language=\"alias\");print(re.sub(\":(zero|one|two|three|four|five|six|seven|eight|nine):\",lambda m:str(\"zero one two three four five six seven eight nine\".split().index(m[1])),t))'  # Unicode character names for RI letters (named first: emoji.demojize alone reads RI pairs as country flags), then PyPI emoji demojize(alias) for keycaps",
+ "oracle_plain": "MASTER: COBALT-QUAIL-80",
+ "expected": "match_ci"
+}

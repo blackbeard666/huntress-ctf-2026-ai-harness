@@ -1,0 +1,9 @@
+{
+ "codec": "stack:rot47(base32)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-marten-88",
+ "encoded": "y+&(v+yp~d))ta+p|#$(vbbt}u)v~xs&}q&)vxs)|u+vad{\"tt\"uxb+p~})(*d%uu\"\"wvd{r}'&)xxs&}q&)vxsu!q\"(vdqp|u)wvdbu~x\"wxb+p~#&vzxrw|u((zxr}|u+)x+{$wx\"vvbbr|u(wx{{}|u+wx+{~u&cs\"lll",
+ "generator_cmd": "printf %s \"$plain\" | base32 -w0 | tr '!-~' 'P-~!-O'  # coreutils base32 + tr rot47",
+ "oracle_cmd": "python3 -I -c \"import sys,base64;print(base64.b32decode(''.join(chr(33+(ord(c)+14)%94) for c in sys.argv[1])).decode())\" \"$encoded\"  # stdlib rot47 arithmetic + b32decode",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-marten-88",
+ "expected": "match"
+}

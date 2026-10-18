@@ -1,0 +1,7 @@
+{
+ "field": "media.bext_origination_date",
+ "expected": "2026-10-17",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/media/gen_wav_deep.py <out> (stdlib wave + struct BWF/INFO/cue/iXML writer)",
+ "oracle_cmd": "python3 -W ignore -c 'stdlib chunk module: bext body[320:330], [330:338]' bwf.bin -> b'2026-10-17' b'14:05:33'",
+ "decoy": false
+}

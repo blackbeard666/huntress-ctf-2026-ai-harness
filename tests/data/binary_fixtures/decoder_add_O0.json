@@ -1,0 +1,18 @@
+{
+ "family": "decoder_facts",
+ "expected_fields": {
+  "function": "cfg_unwrap_add",
+  "function_va": "0x1149",
+  "xrefs": [
+   "0x115f"
+  ],
+  "algorithm": "sub",
+  "key": "0x21",
+  "loop_length": "68",
+  "key_equals_header": "false"
+ },
+ "decoy": false,
+ "generator_cmd": "sh decoder_gen.sh   # gcc 15.2 x86-64 from decoder_src/add.c, stored blob from decoder_src/gen_blob.py (stdlib)",
+ "oracle_cmd": "sh decoder_oracle.sh decoder_add_O0.bin decoder_add_O0.bin 68   # binutils nm + objdump -d -M intel: xref '# <va>', FUNC symbol of the twin, backward jcc loop body (cmp bound, byte op between byte load and byte store)",
+ "note": "stored add-raw (add=0x21); loop 0x115a..0x1184: lea ecx,[rax-0x21]; cmp DWORD PTR [rbp-0x4],0x43; jle -> 68"
+}

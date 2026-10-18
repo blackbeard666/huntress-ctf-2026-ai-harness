@@ -1,0 +1,8 @@
+{
+ "field": "media.odd_stream_index",
+ "expected": "3",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -hide_banner (ffmpeg 7.0.2 static, imageio-ffmpeg wheel) -f lavfi -i testsrc=s=64x48:d=0.5:r=10 -f lavfi -i sine x3 (d=0.5 r=48000) -map 0..3 -c:v mpeg4 -c:a aac -metadata creation_time=2026-10-01T08:00:00Z mp4_ctime.mp4; then python3 struct.pack_into('>I') of the 4th mdhd creation_time := 2025-03-14T09:26:53Z (seconds since 1904)",
+ "oracle_cmd": "ffmpeg-7.0.2 -hide_banner -i mp4_ctime_odd.mp4 (stream lines) -> only #0:3 creation_time differs",
+ "decoy": false,
+ "member": "mp4_ctime_odd.mp4"
+}
