@@ -129,7 +129,7 @@ def sibling_labels(aid, without=()):
 # Field families whose values are generator VOCABULARY (small, closed-ish label sets worth caching in
 # vocab.json), as opposed to per-variant derived values (symbol/disassembly/campaign/url/path/adapter/note),
 # which must NEVER be cached — the in-attempt corrector reads vocab.json and would try them on other variants.
-CACHEABLE_FAMILIES = {"control", "expansion", "format", "representation", "transform",
+CACHEABLE_FAMILIES = {"control", "expansion", "format", "representation", "transform", "storage",
                       "endianness", "machine", "class", "type"}
 
 
@@ -179,13 +179,15 @@ def judged_wrong(cid, aid):
     """Values already judged incorrect for this field in any attempt of this challenge mode."""
     p = cli.cdir(cid) / "submissions.jsonl"
     bad = set()
+    cut = str((cli.load(cid, "drift.json") or {}).get(aid, ""))   # the GM rewrote this question at `cut` (contract_drift)
     if p.exists():
         for line in p.read_text().splitlines():
             try:
                 h = json.loads(line)
             except ValueError:
                 continue
-            if h.get("kind") == "incorrect" and len(h.get("answers", {})) == 1 and aid in h["answers"]:
+            if h.get("kind") == "incorrect" and len(h.get("answers", {})) == 1 and aid in h["answers"] \
+                    and not (cut and str(h.get("ts", "")) < cut):
                 bad.add(str(h["answers"][aid]))
     return bad
 
@@ -388,3 +390,210 @@ def resolve_parallel(cid, wrong, harness="label", conc=None, log=None, extra=Non
         log(f"[{cid}] label resolve: {len(won)}/{len(plan)} field(s) resolved in {time.time() - t0:.1f}s "
             f"({len(tasks)} candidate(s)): " + ", ".join(f"{a.rsplit('.', 1)[-1]}={v}" for a, v in won.items()))
     return won
+
+
+# ------------------------------------------------------------------------------------- under-specification report
+# D17 binary: two open-vocab `hcfg_storage` fields resisted ~11k probes while the four sibling fields of the same family
+# were accepted (`base64`); the GM's question was under-specified and the organizers rewrote it ~4 h later. A human who
+# had been told "these questions look broken" could have asked for that fix hours earlier.
+UNDERSPEC_MIN_WRONG = int(os.environ.get("HCTF_UNDERSPEC_MIN_WRONG", str(cli.MAX_WRONG_PER_ATTEMPT)))
+
+
+def underspecified(cid, min_wrong=UNDERSPEC_MIN_WRONG):
+    """Unresolved fields of cid's current attempt that look UNDER-SPECIFIED: open vocabulary (no accepted_values),
+    >= min_wrong single-field rejections, and >= 1 field of the same family accepted. [] when none."""
+    start = cli.load(cid, "start.json") or {}
+    conf = cli.confirmed_answers(cid)
+    out = []
+    for aid in start.get("answer_ids") or []:
+        if aid in conf:
+            continue
+        q = _question(cid, aid)
+        af = q.get("answer_format") if isinstance(q.get("answer_format"), dict) else {}
+        if af.get("accepted_values") or af.get("kind") == "enum":
+            continue
+        wrong = judged_wrong(cid, aid)
+        if len(wrong) < min_wrong:
+            continue
+        sib = {k: v for k, v in conf.items() if k != aid and ending(k) == ending(aid)}
+        if sib:
+            out.append({"id": aid, "question": q.get("question", ""), "answer_format": af, "wrong": len(wrong),
+                        "wrong_sample": sorted(wrong)[:12], "siblings": sib})
+    return out
+
+
+def underspec_report(cid, fields, path):
+    """Write the human-facing report (what to ask the organizers) for underspecified() fields. Returns the path."""
+    help_md = cli.cdir(cid) / "HELP.md"
+    seen = help_md.read_text(errors="replace")[:1500] if help_md.exists() else ""
+    lines = [f"# Possibly under-specified question(s): {cid}", "",
+             f"Generated {time.strftime('%Y-%m-%d %H:%M')}. The harness could not find an accepted value for the "
+             "field(s) below after many principled probes, while sibling fields of the same family WERE accepted. "
+             "Before more guessing, consider asking the organizers to check the question wording. "
+             "The drift watcher re-checks the contract and resumes automatically if the GM rewrites it.", ""]
+    for f in fields:
+        lines += [f"## {f['id']}", "", f"- Question: {f['question']}",
+                  f"- Answer format: `{json.dumps(f['answer_format'])}`",
+                  "- Accepted siblings (same family): " + "; ".join(f"`{k}` = `{v}`" for k, v in
+                                                                   sorted(f["siblings"].items())),
+                  f"- Rejected so far: {f['wrong']} values, e.g. " + ", ".join(f"`{v}`" for v in f["wrong_sample"]), ""]
+    if seen:
+        lines += ["## What the worker observed in the bytes (HELP.md)", "", seen, ""]
+    Path(path).write_text("\n".join(lines))
+    return path
+
+
+# ------------------------------------------------------------------------------------- compositional search (depth 3)
+# D17 binary: the GM's `hcfg_storage` labels were 3-token compounds <form>_<home>_<kind> (raw_hcfg_section,
+# raw_const_array, wasm_data_segment). ~11k flat probes tried every 1-2 token PIECE (raw_hcfg, hcfg_section, raw_const,
+# const_array) and never the compound: candidates() composes at most two terms. compose() fills ordered slots from the
+# evidence the worker wrote down (HELP.md / solver NOTES.md), dotted section names, the field id, sibling labels and a
+# per-lane concept lexicon, best rank-sum first. Concept words need NOT occur in the artifact (playbook NAMING_LAWS).
+COMPOSE_N = int(os.environ.get("HCTF_COMPOSE_N", "400"))            # candidates per field (D17 replay: d14 #20, d12 #82)
+COMPOSE_PENALTY = int(os.environ.get("HCTF_COMPOSE_PENALTY", "2"))  # rank cost of each extra token
+LEXICON = {
+    "binary-reverse-engineering": {
+        "form": ("raw", "plain", "literal", "encoded", "xor", "base64", "hex", "packed", "compressed", "encrypted"),
+        "home": ("const", "data", "rodata", "static", "global", "custom", "named", "dedicated", "writable", "readonly",
+                 "init", "text", "bss", "wasm", "symbol", "resource", "overlay", "heap", "stack", "embedded"),
+        "kind": ("section", "array", "segment", "blob", "table", "string", "struct", "record", "buffer", "literal",
+                 "constant", "symbol", "resource", "overlay", "field", "variable", "slot"),
+    },
+    "_default": {
+        "form": ("raw", "plain", "literal", "encoded", "base64", "hex", "compressed", "encrypted", "obfuscated"),
+        "home": ("const", "data", "static", "global", "embedded", "inline", "local", "remote", "header", "body",
+                 "metadata", "resource", "config"),
+        "kind": ("section", "array", "segment", "blob", "table", "string", "record", "field", "file", "list", "value",
+                 "block", "entry", "chunk"),
+    },
+}
+_EXT = {"py", "md", "json", "jsonl", "txt", "zip", "so", "dll", "exe", "log", "csv", "html", "xml", "yaml", "yml",
+        "cfg", "sh", "elf", "jar", "apk", "class", "o", "c", "h", "cpp", "m", "nim", "d", "cr", "pas"}
+_FIELD_STOP = {"analysis", "artifact", "value", "set"}
+
+
+_NEG_LINE = re.compile(r"^\s*(?:#|rejected|untried|needs|tried|refused|local per-field)", re.I)
+
+
+def field_evidence(cid, aid):
+    """(strong words, section names) about aid from the worker's HELP.md / solver NOTES.md + the question. STRONG = the
+    text right after the field's own slot token (`d14 (ObjC, RAW HCFG in its own .hcfg section ...`), never a
+    Rejected/Untried/Needs line (those list WRONG values) nor the header naming the ids. Lowercase, first-seen order;
+    '.hcfg' -> 'hcfg' (file extensions dropped). The question text counts when no window is found."""
+    texts = []
+    for p in (cli.cdir(cid) / "HELP.md", cli.cdir(cid).parent / "solver" / "NOTES.md"):
+        try:
+            texts.append(p.read_text(errors="replace")[:20000])
+        except OSError:
+            pass
+    last = aid.rsplit(".", 1)[-1]
+    m = re.match(r"([A-Za-z]+\d+)[-_]", last)
+    windows = []
+    if m:
+        tok = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(m.group(1)) + r"(?![A-Za-z0-9_])", re.I)
+        other = re.compile(r"(?<![A-Za-z0-9_])(?!" + re.escape(m.group(1)) + r")[A-Za-z]+\d+(?![A-Za-z0-9_])")
+        for t in texts:
+            # sentences, not lines: a wrapped fact ("in its own\n`.hcfg` section") stays whole, and an indented
+            # continuation of a Rejected/Untried list stays inside the (skipped) list sentence
+            flat = re.sub(r"\s*\n\s*", " ", t)
+            for sent in re.split(r"(?<=[.!?])\s+(?=[A-Z#])|\s(?=#+\s)", flat):
+                if _NEG_LINE.match(sent):
+                    continue
+                for hit in tok.finditer(sent):
+                    w = sent[hit.end():hit.end() + 200]
+                    nxt = other.search(w)
+                    windows.append(w[:nxt.start()] if nxt else w)
+    ctx = "\n".join(windows) or str(_question(cid, aid).get("question", ""))
+    words = [w.lower() for w in re.findall(r"[A-Za-z][A-Za-z0-9]{1,23}", ctx)]
+    secs = [x.lower() for x in re.findall(r"(?<![A-Za-z0-9_/])\.([A-Za-z_][A-Za-z0-9_]{1,15})\b", ctx)]
+    return list(dict.fromkeys(words)), [x for x in dict.fromkeys(secs) if x not in _EXT]
+
+
+def compose(cid, aid, lane=None, limit=COMPOSE_N, words=None, sections=None, siblings=None):
+    """Ranked 1-3 token compounds <form>[_<home>][_<kind>] for an open-vocab label field (see the block comment).
+    Slot order: the field's own evidence, then (home) its section names + id tokens, then the lane lexicon. A sibling
+    label's form goes last when the field's evidence names a different form (siblings `base64`, this one RAW)."""
+    lane = lane or lane_of(cid)
+    lex = LEXICON.get(lane) or LEXICON["_default"]
+    if words is None:
+        words, sections = field_evidence(cid, aid)
+    sections = sections or []
+    sib = sibling_labels(aid) if siblings is None else list(siblings)
+    seps = Counter(m for v in sib for m in re.findall(r"[-_]", v))
+    sep = seps.most_common(1)[0][0] if seps else "_"
+    fid = [t for t in re.split(r"[-_.]", aid.rsplit(".", 1)[-1].lower())
+           if t and t != ending(aid) and t not in _FIELD_STOP and not re.fullmatch(r"[a-z]?\d+", t)]
+
+    def rank(lexw, first=(), last=()):
+        ev = [w for w in words if w in lexw]
+        return [w for w in dict.fromkeys(list(first) + ev + [w for w in lexw if w not in last] + list(last)) if w]
+    ev_forms = [w for w in words if w in lex["form"]]
+    sib_forms = [re.split(r"[-_]", v)[0] for v in sib if v]
+    form = rank(lex["form"], last=[f for f in sib_forms if ev_forms and f not in ev_forms])
+    home = rank(lex["home"], first=list(sections) + [w for w in words if w in lex["home"]] + fid)
+    kind = rank(lex["kind"])
+    bad = judged_wrong(cid, aid)
+    if playbook is not None and lane:
+        bad |= set(playbook.rejected(lane, aid))
+    P = COMPOSE_PENALTY
+    scored = [(i, (f,)) for i, f in enumerate(form)]
+    for i, f in enumerate(form):
+        scored += [(i + k + P, (f, x)) for k, x in enumerate(kind)]
+        scored += [(i + j + P, (f, h)) for j, h in enumerate(home)]
+    for j, h in enumerate(home):
+        scored += [(j + k + P, (h, x)) for k, x in enumerate(kind)]
+    for i, f in enumerate(form):
+        for j, h in enumerate(home):
+            scored += [(i + j + k + 2 * P, (f, h, x)) for k, x in enumerate(kind)]
+    out = []
+    for _s, toks in sorted(scored, key=lambda t: (t[0], len(t[1]))):
+        if len(set(toks)) < len(toks):
+            continue
+        v = sep.join(toks)
+        if v not in bad and v not in out:
+            out.append(v)
+            if len(out) >= limit:
+                break
+    return out
+
+
+def label_like(cid, aid, lane=None):
+    """Is aid an open-vocab LABEL field worth composing for? exact_text without accepted_values, not a flag, and its
+    family is label vocabulary: a playbook entry, a cacheable family, or label-shaped values accepted for siblings."""
+    q = _question(cid, aid)
+    af = q.get("answer_format") if isinstance(q.get("answer_format"), dict) else {}
+    if af.get("accepted_values") or af.get("kind") not in (None, "exact_text") or FLAG_HINT.search(json.dumps(af)):
+        return False
+    lane = lane or lane_of(cid)
+    if playbook is not None and lane and playbook.entry_for(lane, aid):
+        return True
+    if ending(aid) in CACHEABLE_FAMILIES:
+        return True
+    conf = cli.confirmed_answers(cid)
+    sib = [str(v) for k, v in conf.items() if k != aid and ending(k) == ending(aid)]
+    return bool(sib) and all(re.fullmatch(r"[a-z][a-z0-9]*(?:[_-][a-z0-9]+){0,4}", v) and len(v) <= 40 for v in sib)
+
+
+def probe_first(cid, aid, cands, conc=None, harness="label", log=None):
+    """Probe cands for aid in parallel waves of `conc` one-field submits; the first accepted value, or None. Harness
+    probes never count against a worker's per-field cap (cli.submit harness=)."""
+    from concurrent.futures import ThreadPoolExecutor
+    from . import grouptest
+    conc = max(1, conc or grouptest.CONC)
+    for i in range(0, len(cands), conc):
+        wave = cands[i:i + conc]
+
+        def one(v):
+            try:
+                return v, cli.submit(cid, {aid: v}, force=True, probe=True, harness=harness)[0]
+            except Exception:  # noqa: BLE001 - an unjudged probe resolves nothing
+                return v, None
+        with ThreadPoolExecutor(max_workers=len(wave)) as ex:
+            for v, kind in ex.map(one, wave):
+                if kind in ("correct", "accepted"):
+                    try:
+                        record_values(cid, {aid: v})
+                    except Exception:  # noqa: BLE001 - caching only
+                        pass
+                    return v
+    return None

@@ -116,9 +116,15 @@ class Feed:
             return out + self._post_line(tag, msg)
         if tag in ("homebase", "coord", "hof", "capture", "effort"):
             return out
+        if tag == "drift":   # contract watcher launched / a rewritten contract resumed (driftwatch)
+            return out + [f"{self._t()} 🔁 {msg[:200]}"]
         base, mode = _split(tag)
         lane = lane_of(base)
         ms = MODE_SHORT.get(mode, mode)
+        if "UNDER-SPECIFIED?" in msg:
+            return out + [f"{self._t()} ❓ {lane} {ms} {msg[msg.index('UNDER-SPECIFIED?'):][:220]}"]
+        if msg.startswith("GM REWROTE"):
+            return out + [f"{self._t()} 🔁 {lane} {ms} {msg[:200]}"]
         if msg.startswith("timed: {"):
             try:
                 d = json.loads(msg[len("timed: "):])

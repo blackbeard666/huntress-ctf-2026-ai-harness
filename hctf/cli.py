@@ -275,7 +275,9 @@ def contract_drift(cid):
     in place -- D17 binary: two open-vocab hcfg_storage fields became enums ~4 h after the drop, same attempt/sha/ids --
     are saved into start.json + contract.json and stamped in drift.json, so the submit guards forget their earlier
     (old-question) rejections. Returns the changed/added answer ids; [] when nothing changed or the GM is unreachable."""
-    old = load(cid, "start.json") or {}
+    started = load(cid, "start.json") or {}
+    # a never-started TT / Mastery: its status-time contract.json is what the next start is compared with
+    old = started if started.get("questions") else (load(cid, "contract.json") or {})
     if not old.get("questions"):
         return []
     try:
@@ -294,7 +296,8 @@ def contract_drift(cid):
     old["questions"] = [qn.get(q.get("id"), q) for q in old["questions"] if isinstance(q, dict)] + [qn[i] for i in added]
     if added:
         old["answer_ids"] = list(dict.fromkeys(list(old.get("answer_ids") or []) + added))
-    save(cid, "start.json", old)
+    if started.get("questions"):
+        save(cid, "start.json", old)
     save(cid, "contract.json", old)
     drift = load(cid, "drift.json") or {}
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
@@ -1229,25 +1232,22 @@ def c_why(a):
 
 
 def c_drift(a):
-    """Re-fetch every UNSOLVED mode's contract (optionally one --day) and report questions the GM rewrote in place.
-    Changed questions are saved (contract_drift) so a resumed run / worker sees them and the guards forget the old
-    rejections. D17: the binary storage fix landed ~4 h after the drop with no notice; this finds such a fix at once."""
-    daytag = f"day{int(a.day):02d}" if getattr(a, "day", None) else None
-    found = 0
-    for p in sorted(paths.CHALLENGES.glob("day*/*/meta.json")):
-        if daytag and p.parent.parent.name != daytag:
-            continue
-        ids = (load_json(p) or {}).get("ids") or {}
-        for mode in paths.MODES:
-            cid = ids.get(mode)
-            if not cid or not load(cid, "start.json") or gm_solved(cid):
-                continue
-            changed = contract_drift(cid)
-            if changed:
-                found += 1
-                print(f"  DRIFT {cid}: {len(changed)} question(s) rewritten by the GM: {changed[:6]}")
-    print(f"drift: {found} mode(s) with rewritten questions"
-          + (" -> resume with `hctf run --day N --only <id>`" if found else ""))
+    """Re-fetch every UNSOLVED mode's contract of --day and report questions the GM rewrote in place (saved, so a
+    resumed run / worker sees them and the guards forget the old rejections). --resume re-runs a changed chain;
+    --watch keeps checking every --interval s until --until (what the run starts by itself when a mode is left
+    unsolved). D17: the binary storage fix landed ~4 h after the drop with no notice."""
+    from . import driftwatch
+    if not getattr(a, "day", None):
+        print("refused:\n  give --day N", file=sys.stderr)
+        return EXIT["refused"]
+    if a.watch:
+        return driftwatch.watch(int(a.day), interval=a.interval, until=a.until)
+    found = driftwatch.check_once(int(a.day), do_resume=a.resume, log=print)
+    st = driftwatch.status(int(a.day))
+    print(f"drift: {len(found)} mode(s) with rewritten questions"
+          + (" -> resume with `hctf drift --day N --resume` (or `hctf run --day N --only <id>`)"
+             if found and not a.resume else "")
+          + f"; watcher {'running' if st['alive'] else 'not running'}")
     return 0
 
 
@@ -1445,6 +1445,21 @@ def c_openapi(a):
 
 def c_labels(a):
     from . import labels
+    if a.compose:
+        # depth-3 <form>_<home>_<kind> compounds from HELP.md/NOTES.md evidence + --term words + the lane lexicon,
+        # probed in parallel waves (off the worker's per-field cap). Write what you observed into HELP.md/NOTES.md
+        # first: the field's own slot sentence ("d14 (ObjC, RAW HCFG in its own .hcfg section)") ranks the slots.
+        words, secs = labels.field_evidence(a.id, a.answer_id)
+        terms = [t.lower() for t in a.term]
+        cands = labels.compose(a.id, a.answer_id, limit=a.budget if a.budget != 25 else labels.COMPOSE_N,
+                               words=list(dict.fromkeys(terms + words)), sections=secs)
+        if a.dry_run:
+            emit({"answer_id": a.answer_id, "evidence": words[:20], "sections": secs, "candidates": cands[:60],
+                  "total": len(cands)})
+            return 0
+        v = labels.probe_first(a.id, a.answer_id, cands)
+        emit({"answer_id": a.answer_id, "accepted": v, "tried_up_to": len(cands)})
+        return 0 if v else EXIT["incorrect"]
     cands = labels.candidates(a.id, a.answer_id, terms=a.term, solver_value=a.solver_value)
     if a.dry_run:
         emit({"answer_id": a.answer_id, "candidates": cands[:max(a.budget, 40)]})
@@ -1559,6 +1574,10 @@ def main(argv=None):
     prc.add_argument("--day")
     pdr = sub.add_parser("drift", help="re-fetch unsolved modes' contracts; report + save questions the GM rewrote in place")
     pdr.add_argument("--day")
+    pdr.add_argument("--resume", action="store_true", help="re-run a chain whose contract changed (no post-run)")
+    pdr.add_argument("--watch", action="store_true", help="keep checking until --until (the run starts this itself)")
+    pdr.add_argument("--interval", type=float, default=600.0)
+    pdr.add_argument("--until", default="20:15", help="local HH:MM (next occurrence >= 30 min away)")
     ptl = sub.add_parser("timeline", help="per-chain T+ per mode, attempts, generalize cycles, LLM vs overhead")
     ptl.add_argument("--day", type=int)
     ptl.add_argument("--log", help="a dayNN.log path (default .run/dayNN.log)")
@@ -1595,6 +1614,7 @@ def main(argv=None):
     pl2.add_argument("--budget", type=int, default=25, help="max candidates to submit (default 25)")
     pl2.add_argument("--delay", type=float, default=1.0, help="seconds between submits (rate limit)")
     pl2.add_argument("--dry-run", action="store_true", help="only print the ranked candidates")
+    pl2.add_argument("--compose", action="store_true", help="depth-3 <form>_<home>_<kind> compounds from HELP.md/NOTES.md evidence + the lane lexicon, probed in parallel (open-vocab label fields)")
     a = p.parse_args(argv)
     fn = {"hb": c_hb, "list": c_list, "status": c_status, "start": c_start, "retry": c_retry,
           "artifact": c_artifact, "submit": c_submit, "openapi": c_openapi, "solver-test": c_solver_test, "compound-check": c_compound_check, "train": c_train, "postrun": c_postrun, "effort-report": c_effort_report, "tool-wait": c_tool_wait, "speed-harden": c_speed_harden, "prebuild": c_prebuild, "tool-gaps": c_tool_gaps,

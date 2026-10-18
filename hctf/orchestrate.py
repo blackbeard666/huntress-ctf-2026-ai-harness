@@ -185,6 +185,8 @@ NEWID_WAIT = float(os.environ.get("HCTF_NEWID_WAIT", "2.0"))     # at CORRECT: w
 LOCAL_RERUN_SLOW = os.environ.get("HCTF_LOCAL_RERUN_SLOW", "1") == "1"   # no-clock solve too slow on slow VM -> local
 NEWID_SYNC_MAX = float(os.environ.get("HCTF_NEWID_SYNC_MAX", "12"))  # at CORRECT, no background run: sync dry run cap
 CONTRACT_DRIFT = os.environ.get("HCTF_CONTRACT_DRIFT", "1") == "1"   # blocked single -> re-fetch + diff its questions
+COMPOSE_ESCALATE = os.environ.get("HCTF_COMPOSE_ESCALATE", "1") == "1"   # open label fields -> depth-3 composed search
+COMPOSE_MAX_FIELDS = int(os.environ.get("HCTF_COMPOSE_MAX_FIELDS", "4"))  # fields per single (x HCTF_COMPOSE_N probes)
 UNTIMED_SKIP_PREGEN = os.environ.get("HCTF_UNTIMED_SKIP_PREGEN", "1") == "1"   # no pre-Mastery generalize on an untimed pool
 
 
@@ -2721,6 +2723,28 @@ class Chain:
             say(f"[{cid}] auto-labels {aid}: {r.get('accepted') or 'not resolved'} ({len(r.get('tried', []))} tried)")
         return cli.is_complete(cid)
 
+    def compose_labels(self, cid):
+        """Escalation after auto_labels: every still-open LABEL field (open vocab, label-shaped family -- labels.label_like)
+        gets a depth-3 compositional search (labels.compose, from the worker's HELP/NOTES evidence + the lane lexicon)
+        probed in parallel waves on the untimed single, off the worker's per-field cap. D17 binary: the GM's labels were
+        3-token compounds (raw_hcfg_section, raw_const_array) every flat 1-2 token probe missed; a replay with only the
+        pre-fix evidence ranks them #20 and #82. Returns cli.is_complete(cid)."""
+        from . import labels
+        if not COMPOSE_ESCALATE:
+            return False
+        contract = cli.load(cid, "start.json") or {}
+        if not contract or contract.get("deadline"):
+            return False
+        conf = cli.confirmed_answers(cid)
+        todo = [a for a in contract.get("answer_ids") or [] if a not in conf and labels.label_like(cid, a, self.lane)]
+        for aid in todo[:COMPOSE_MAX_FIELDS]:
+            cands = labels.compose(cid, aid, lane=self.lane)
+            t0 = time.time()
+            v = labels.probe_first(cid, aid, cands)
+            say(f"[{cid}] compose-labels {aid}: {v or 'not resolved'} ({len(cands)} composed candidate(s), "
+                f"{time.time() - t0:.0f}s)")
+        return cli.is_complete(cid)
+
     def _record_labels(self, cid):
         # Cache the Single Solve's confirmed closed-vocab labels into vocab.json NOW (untimed), so the timed
         # modes enter with those spellings already confirmed and never carry an unconfirmed label onto a clock.
@@ -2814,6 +2838,7 @@ class Chain:
             say(f"[{cid}] contract drift check note: {ex}")
             return False
         if not changed:
+            self._underspec_alarm(cid)
             return False
         say(f"[{cid}] GM REWROTE {len(changed)} question(s) in place ({', '.join(changed[:4])}): "
             "re-running the single on the corrected contract")
@@ -2821,6 +2846,23 @@ class Chain:
         if help_md.exists():
             help_md.replace(cli.cdir(cid) / "HELP.prev.md")
         return self._single()
+
+    def _underspec_alarm(self, cid):
+        """Blocked single, contract unchanged: name the open-vocab fields that resisted many principled probes while
+        siblings of their family were accepted, and write what to ask the organizers (D17 binary: they rewrote the
+        question ~4 h later; the drift watcher started at "all chains finished" picks such a rewrite up)."""
+        try:
+            from . import labels
+            fields = labels.underspecified(cid)
+            if not fields:
+                return
+            path = ROOT / ".run" / f"{self.sdir.parent.parent.name}-underspec-{self.sdir.parent.name}.md"
+            labels.underspec_report(cid, fields, path)
+            say(f"[{cid}] UNDER-SPECIFIED? {len(fields)} open-vocab field(s) ({', '.join(f['id'] for f in fields[:3])}) "
+                f"resisted {min(f['wrong'] for f in fields)}+ probes each while their siblings were accepted -> "
+                f"{_rel(path)} (ask the organizers); contract drift is watched after the run")
+        except Exception as e:  # noqa: BLE001 - an alarm, never a failure
+            say(f"[{cid}] under-spec check note: {e}")
 
     def _single(self):
         e = self.entries.get("single_solve")
@@ -3093,6 +3135,8 @@ class Chain:
             done = cli.is_complete(cid)
             if not done and not welcome:
                 done = self.auto_labels(cid)
+            if not done and not welcome:
+                done = self.compose_labels(cid)
             ok, res = (True, None) if welcome else ensure_case_and_test(cid, self.sdir)
             shadow = getattr(self, "_shadow", None)
             if done and not ok and shadow is not None and shadow.snap is not None:
@@ -4771,6 +4815,12 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
         elif keep_homebase:
             say("[homebase] left running (--keep-homebase); power it off with `hctf hb off` when done")
     say("all chains finished")
+    if day is not None:
+        try:   # unsolved modes: watch their contracts for an in-place GM rewrite and resume (D17 binary, ~4 h later)
+            from . import driftwatch
+            driftwatch.start_watch(day, log=say)
+        except Exception as e:  # noqa: BLE001 - best-effort
+            say(f"[drift] watch not launched ({e})")
     if RATCHET and day is not None:
         from . import postrun
         ratchet(day)
