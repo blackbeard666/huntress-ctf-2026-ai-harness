@@ -934,11 +934,14 @@ def live_overlay(cid, attempt=None):
 LIVE_OVERLAY_MAX = int(os.environ.get("HCTF_LIVE_OVERLAY_MAX", "200"))
 
 
-def run_timed(solver_dir, cid, op="start", timeout=60):
+def run_timed(solver_dir, cid, op="start", timeout=60, budget=None):
     """Run the clock-critical timed attempt LOCALLY against the public GM (pairing token).
-    No VM, no SSH — the whole start->download->solve->submit path runs here. Returns hb_timed's JSON dict."""
+    No VM, no SSH — the whole start->download->solve->submit path runs here. Returns hb_timed's JSON dict.
+    budget: solver seconds on a no-clock attempt (HCTF_UNTIMED_BUDGET for this run only)."""
     rel = solver_dir.relative_to(ROOT)
     env = dict(os.environ, PYTHONPATH=f"{ROOT}:{os.environ.get('PYTHONPATH', '')}", **timed_env(cid))
+    if budget:
+        env["HCTF_UNTIMED_BUDGET"] = f"{budget:g}"
     if os.environ.get("HCTF_TIMED_GM_URL"):
         # Clock-critical calls straight to this GM (e.g. the real one while a replay proxy fronts everything else: the
         # proxy opens a fresh TLS connection per call, ~0.5-1 s each inside a 6-7 s window).
@@ -1034,13 +1037,14 @@ def _bench_vm(log=print, again=True):
         loc = subprocess.run([sys.executable, "-c", BENCH_PY], capture_output=True, text=True, timeout=60)
         t_loc = float(loc.stdout.strip().splitlines()[-1])
         r = remote.ssh(f"python3 -c {shlex.quote(BENCH_PY)}; python3 -c {shlex.quote(BENCH_PY)}; "
-                       "awk '/^MemTotal/{print int($2/1024)}' /proc/meminfo; awk '{print int($1)}' /proc/uptime",
+                       "awk '/^MemTotal/{print int($2/1024)}' /proc/meminfo; awk '{print int($1)}' /proc/uptime; nproc",
                        timeout=150, check=False)
         lines = r.stdout.strip().splitlines()
         t_vm = min(float(lines[0]), float(lines[1]))
         mem = int(lines[2]) if len(lines) > 2 else None
         up = int(lines[3]) if len(lines) > 3 else None
-        _hb.update(cpu_ratio=round(t_vm / max(t_loc, 1e-3), 2), mem_mb=mem)
+        cores = int(lines[4]) if len(lines) > 4 and lines[4].strip().isdigit() else None
+        _hb.update(cpu_ratio=round(t_vm / max(t_loc, 1e-3), 2), mem_mb=mem, **({"vm_cores": cores} if cores else {}))
         slow = _hb["cpu_ratio"] >= SLOW_VM_RATIO
         log(f"[homebase] CPU benchmark: VM {t_vm:.2f}s vs local {t_loc:.2f}s (x{_hb['cpu_ratio']:g}), {mem} MB RAM"
             + (f", VM up {up // 60} min" if up is not None else "")
@@ -1065,39 +1069,64 @@ LOCAL_RTT = float(os.environ.get("HCTF_LOCAL_GM_RTT", "1.8"))      # public GM s
 HB_RTT = float(os.environ.get("HCTF_HB_GM_RTT", "0.4"))            # next to the GM (daemon), incl. the ssh hop
 
 
-def _solve_estimate(cid):
-    """Seconds this mode's solver takes locally: its last attempt's solve phase, else the single's stamp scaled by the
-    contract size, else 2 s."""
+ROUTE_FAIL_WEIGHT = float(os.environ.get("HCTF_ROUTE_FAIL_WEIGHT", "0.3"))   # expected share of a per-set breakdown
+VM_CORES = int(os.environ.get("HCTF_HB_CORES", "2"))     # t3.small; _bench_vm measures it (nproc) -> _hb["vm_cores"]
+
+
+def _phase_solve_local(c):
+    """The solve phase of mode c's last attempt in LOCAL seconds (a Homebase-run phase divided by the VM ratio)."""
     from . import cli
+    try:
+        lt = json.loads((cli.cdir(c) / "last_timed.json").read_text())
+        s = float((lt.get("phases") or {}).get("solve") or 0)
+    except (OSError, ValueError, AttributeError, TypeError):
+        return None
+    if not s:
+        return None
+    return s / float(_hb.get("cpu_ratio") or 1.0) if str(lt.get("routed", "")).startswith("homebase") else s
+
+
+def _solve_estimate(cid):
+    """(local seconds, per_set) for this mode's solver: its own last attempt's solve phase (the whole mode), else a
+    ONE-SET measurement -- the Time Trial's solve phase, or the single's stamp scaled to one set's size -- that
+    route_costs multiplies by the solve waves. (2.0, True) when nothing is known."""
+    from . import cli
+    own = _phase_solve_local(cid)
+    if own:
+        return own, False
     est = []
-    for c in (cid, f"{paths.base_id(cid)}/time_trial"):
-        try:
-            ph = json.loads((cli.cdir(c) / "last_timed.json").read_text()).get("phases") or {}
-            if ph.get("solve"):
-                est.append(float(ph["solve"]))
-                break
-        except (OSError, ValueError, AttributeError):
-            pass
+    tt = f"{paths.base_id(cid)}/time_trial"
+    if tt != cid:
+        s = _phase_solve_local(tt)
+        if s:
+            est.append(s)
     try:
         st = json.loads((cli.cdir(paths.base_id(cid)) / ".solver_stamp.json").read_text())
         n1 = max(1, len(st.get("answers") or {}))
         n, _, nsets = _contract_shape(cid)
-        # sets solve in parallel (the skeleton's per-set pool): scale by the per-set size, not the total
-        est.append(float(st.get("seconds") or 2.0) * max(1.0, n / max(1, nsets) / n1))
+        est.append(float(st.get("seconds") or 2.0) * max(1.0, n / max(1, nsets) / n1))   # one set's share
     except (OSError, ValueError, AttributeError):
         pass
-    return min(est) if est else 2.0   # the fastest measurement: a contended one (D16 load 27) overstates it
+    return (min(est) if est else 2.0), True   # the fastest measurement: a contended one (D16 load 27) overstates it
 
 
 def route_costs(cid):
-    """(local s, homebase s) estimates for one attempt of this mode."""
+    """(local s, homebase s) estimates for one attempt of this mode.
+    Calls: the runner's fast path is ONE submit of every answer (+ start); a per-set breakdown follows only an incorrect
+    full submit -- weighted by ROUTE_FAIL_WEIGHT and capped. D17 warmups Mastery (83 one-field sets): the old
+    "3 + nsets" put local at 155 s against a measured 1.24 s submit phase. Solve: a per-set estimate runs in WAVES of
+    the host's CPU count (local cores vs the VM's, usually 2) times the VM's per-core ratio."""
     n, nb, nsets = _contract_shape(cid)
-    calls = 3 + nsets + n / 1000          # start + full/per-set submits (+ large-body transfer)
-    solve = _solve_estimate(cid)
+    calls = 3 + n / 1000 + ROUTE_FAIL_WEIGHT * min(max(nsets, 1), 6)
+    solve, per_set = _solve_estimate(cid)
     ratio = float(_hb.get("cpu_ratio") or 1.0)
+    waves_loc = waves_hb = 1
+    if per_set and nsets > 1:
+        waves_loc = -(-nsets // max(1, os.cpu_count() or 1))
+        waves_hb = -(-nsets // max(1, int(_hb.get("vm_cores") or VM_CORES)))
     per_stream = nb / max(1, nsets)       # the deliveries download in parallel, one stream per set
-    return (per_stream / LOCAL_DL_BPS + calls * LOCAL_RTT + solve,
-            per_stream / HB_DL_BPS + calls * HB_RTT + solve * ratio)
+    return (per_stream / LOCAL_DL_BPS + calls * LOCAL_RTT + solve * waves_loc,
+            per_stream / HB_DL_BPS + calls * HB_RTT + solve * ratio * waves_hb)
 
 
 def homebase_cheaper(cid, log=None):
@@ -1185,13 +1214,23 @@ def power_off_homebase_if_ours(log=print):
             log(f"[homebase] power-off failed, switch it off manually (`hctf hb off`): {e}")
 
 
-def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=None):
+UNTIMED_LOCAL_BUDGET = float(os.environ.get("HCTF_UNTIMED_LOCAL_BUDGET", "150"))   # solver s, forced local no-clock rerun
+
+
+def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=None, force_local=False):
     """Dispatch a timed attempt. HOMEBASE-FIRST (user policy): every window <= HCTF_TIGHT_WINDOW seconds (default: all),
     or one not yet known, runs next to the GM on Homebase (prewarmed at run start). Local over the pairing token is the
     fallback (Homebase unavailable / remote exec failure); set HCTF_TIGHT_WINDOW=8 to bring back local-first for
     known-roomy windows (Day 7: that sent an 11s script TT local, 9.53s in-window vs ~2s on Homebase). The old "local first, Homebase only
     after a local expiry" rule burned one attempt per tight mode, and the rehearsal copy run showed local fits a 7s
-    462-field Mastery only by ~0.9s (GM origin ~1.3-1.5s/call from here). HCTF_GM_TRANSPORT=ssh forces Homebase."""
+    462-field Mastery only by ~0.9s (GM origin ~1.3-1.5s/call from here). HCTF_GM_TRANSPORT=ssh forces Homebase.
+    force_local: a no-clock re-run of a live attempt HERE with UNTIMED_LOCAL_BUDGET solver seconds (the orchestrator's
+    answer to a CPU-bound solve that ran out of its budget on a slow VM)."""
+    if force_local:
+        res = run_timed(solver_dir, cid, op=op, timeout=max(timeout, untimed_plan(cid)[0] + UNTIMED_LOCAL_BUDGET),
+                        budget=UNTIMED_LOCAL_BUDGET)
+        res.setdefault("routed", "local (forced no-clock rerun)")
+        return res
     if op in ("untimed", "resume"):
         # resume = reconnecting to a live attempt that holds banked ids (mostly an untimed one). No clock, but the
         # attempt's GM calls still dominate: rehearsal D13 replay, a script retry took 115 s locally (~25 localize submits at

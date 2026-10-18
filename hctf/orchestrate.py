@@ -182,6 +182,9 @@ NEWID_HOLD = float(os.environ.get("HCTF_NEWID_HOLD", "45"))     # 0 = off
 NEWID_STABLE = float(os.environ.get("HCTF_NEWID_STABLE", "1.0"))
 NEWID_MAX = int(os.environ.get("HCTF_NEWID_MAX", "6"))           # background dry runs per single
 NEWID_WAIT = float(os.environ.get("HCTF_NEWID_WAIT", "2.0"))     # at CORRECT: wait this long for a running dry run
+LOCAL_RERUN_SLOW = os.environ.get("HCTF_LOCAL_RERUN_SLOW", "1") == "1"   # no-clock solve too slow on slow VM -> local
+NEWID_SYNC_MAX = float(os.environ.get("HCTF_NEWID_SYNC_MAX", "12"))  # at CORRECT, no background run: sync dry run cap
+CONTRACT_DRIFT = os.environ.get("HCTF_CONTRACT_DRIFT", "1") == "1"   # blocked single -> re-fetch + diff its questions
 UNTIMED_SKIP_PREGEN = os.environ.get("HCTF_UNTIMED_SKIP_PREGEN", "1") == "1"   # no pre-Mastery generalize on an untimed pool
 
 
@@ -2730,7 +2733,10 @@ class Chain:
     # -- stages
     def single(self):
         try:
-            return self._single()
+            ok = self._single()
+            if not ok and CONTRACT_DRIFT:
+                ok = self._single_after_drift()
+            return ok
         finally:
             ev = getattr(self, "_shadow_done", None)
             if ev is not None:
@@ -2793,6 +2799,28 @@ class Chain:
         threading.Thread(target=hbshadow.run_beside, name=f"shadow-{self.base}", daemon=True,
                          args=(self, cid, prompt, lambda: (getattr(self, "_cur_ready", None), self._ready_lock),
                                self._shadow_done, say)).start()
+
+    def _single_after_drift(self):
+        """The single ended blocked/HELP: re-fetch its contract once. When the GM rewrote questions in place (D17 binary:
+        two unanswerable open-vocab fields became enums hours later, same attempt), re-run the single on the new
+        contract -- cli.contract_drift already made the submit guards forget the old-question rejections."""
+        e = self.entries.get("single_solve")
+        if not e:
+            return False
+        cid = e["id"]
+        try:
+            changed = cli.contract_drift(cid)
+        except Exception as ex:  # noqa: BLE001 - a check, never a failure
+            say(f"[{cid}] contract drift check note: {ex}")
+            return False
+        if not changed:
+            return False
+        say(f"[{cid}] GM REWROTE {len(changed)} question(s) in place ({', '.join(changed[:4])}): "
+            "re-running the single on the corrected contract")
+        help_md = cli.cdir(cid) / "HELP.md"
+        if help_md.exists():
+            help_md.replace(cli.cdir(cid) / "HELP.prev.md")
+        return self._single()
 
     def _single(self):
         e = self.entries.get("single_solve")
@@ -3694,17 +3722,50 @@ class Chain:
             gaps += [a for a in new if got.get(a) in (None, "")]
         return list(dict.fromkeys(gaps))
 
+    def _newid_ids(self):
+        """Timed-contract answer ids whose shape is NEW to this lane (no earlier day, not today's single) -- contract
+        metadata only, no solver run. [] when there are none."""
+        dm = re.match(r"day(\d+)", self.sdir.parent.parent.name)
+        if not dm:
+            return []
+        single = cli.load(self.base, "start.json") or cli.load(self.base, "contract.json") or {}
+        known = lane_known_shapes(self.lane, int(dm.group(1))) | {field_shape(a) for a in _contract_ids(single)}
+        out = []
+        for m in ("time_trial", "mastery"):
+            tc = cli.load(f"{self.base}/{m}", "contract.json") or {}
+            out += [a for a in dict.fromkeys(_contract_ids(tc)) if field_shape(a) not in known]
+        return out
+
     def _newid_result(self, snap):
-        """The dry-run gaps for the snapshot's code (computed in the background; waits <= NEWID_WAIT s), or None."""
+        """The dry-run gaps for the snapshot's code: the background run's (waits <= NEWID_WAIT s); else, when the timed
+        contracts ask ids NEW to the lane at all, a dry run of the snapshot NOW (<= NEWID_SYNC_MAX s). D17 metadata:
+        the worker submitted < 1 s after its last edit, so no background run existed for that code; the hold was
+        skipped silently and the TT then Mastery each lost ~40 s to the one new field."""
         key = self._newid_key({p.name: p.stat().st_mtime for p in Path(snap).iterdir()
                                if p.is_file() and p.suffix == ".py"})
         fut = getattr(self, "_newid", {}).get(key)
-        if fut is None:
-            return None
+        if fut is not None:
+            try:
+                return fut.result(timeout=NEWID_WAIT)
+            except Exception:  # noqa: BLE001 - still running / failed: fall through to the synchronous check
+                pass
         try:
-            return fut.result(timeout=NEWID_WAIT)
-        except Exception:  # noqa: BLE001 - still running / failed: no hold
+            new = self._newid_ids()
+        except Exception:  # noqa: BLE001
+            new = []
+        if not new or NEWID_SYNC_MAX <= 0:
             return None
+        t0 = time.time()
+        fut = ThreadPoolExecutor(max_workers=1).submit(self._newid_gaps, self.base, str(snap))
+        try:
+            gaps = fut.result(timeout=NEWID_SYNC_MAX)
+        except Exception as e:  # noqa: BLE001 - too slow / failed: hand over as before, but say so
+            say(f"[{self.base}] new-id check: {len(new)} new timed id(s), dry run unfinished after "
+                f"{time.time() - t0:.1f}s ({type(e).__name__}) -> no hold")
+            return None
+        say(f"[{self.base}] new-id check: {len(new)} new timed id(s), synchronous dry run {time.time() - t0:.1f}s -> "
+            f"{len(gaps)} left empty")
+        return gaps
 
     def _newid_hold(self, cid, snap, ready, done):
         """Single CORRECT + verified snapshot. When the timed contracts ask ids NEW to the lane the solver leaves empty,
@@ -3903,6 +3964,15 @@ class Chain:
             res = timed.run(cid, self.sdir, log=say, **op, **self._early_kw(cid, untimed))
             if res == "error:exec" and self._gm_passed(cid):
                 res = "correct"
+            if res == "blocked" and LOCAL_RERUN_SLOW and self._slow_vm_no_clock(cid):
+                # No clock + a CPU-bound solve that ran out of its budget on the slow VM: the attempt is still live, so
+                # re-run it HERE (12 cores, x5-11 per core) before a speed generalize. D17 warmups Mastery: 60 s cap on
+                # a 2-vCPU VM -> 71 s generalize; the same solver fits locally.
+                say(f"[{cid}] solver ran out of its no-clock budget on the slow VM (x{workers._hb.get('cpu_ratio')}): "
+                    f"re-running the live attempt locally ({workers.UNTIMED_LOCAL_BUDGET:g}s budget)")
+                res = timed.run(cid, self.sdir, log=say, op="start", force_local=True)
+                if res == "error:exec" and self._gm_passed(cid):
+                    res = "correct"
             say(f"[{cid}] result: {res}{' (untimed)' if untimed else ''}")
             set_state(self.base, **{f"{mode}_result": res})
             if self._early_join(cid) and res in ("expired", "blocked"):
@@ -4289,6 +4359,15 @@ class Chain:
         say(f"[{cid}] label scouting: {n} round(s) in {time.time() - t0:.0f}s, {len(s.get('fixed') or {})} label(s) "
             f"GM-corrected, {len(wrong)} field(s) for the generalize")
         return False
+
+    @staticmethod
+    def _slow_vm_no_clock(cid):
+        """The last attempt of cid ran out of its solver budget on a slow Homebase VM with NO clock (deadline None):
+        a local re-run of the same live attempt is cheaper than a speed generalize."""
+        last = timed.last_result(cid) or {}
+        return bool(last.get("solver_too_slow") and str(last.get("routed", "")).startswith("homebase")
+                    and last.get("deadline") is None and (last.get("no_clock") or last.get("run_for_time") is False)
+                    and workers.slow_vm())
 
     @staticmethod
     def _gm_passed(cid):
