@@ -27,9 +27,10 @@ from . import cli, paths, solvers, timed, workers
 
 ROOT = paths.ROOT
 ENABLED = os.environ.get("HCTF_DUEL", "1") != "0"
-# binary is out by default: Ghidra + a 230 MB solver corpus per copy on a 7 GB WSL box
+# binary is out by default: Ghidra + a 230 MB solver corpus per copy on a 7 GB WSL box. web in from its first day
+# (D19, user 2026-10-18): no prior solvers -> no reuse race, the single is a cold LLM solve -- best-of-2's case.
 LANES = {x.strip() for x in os.environ.get(
-    "HCTF_DUEL_LANES", "warmups,metadata-forensics,script-analysis,mobile-android").split(",") if x.strip()}
+    "HCTF_DUEL_LANES", "warmups,metadata-forensics,script-analysis,mobile-android,web").split(",") if x.strip()}
 MAX_CONCURRENT = int(os.environ.get("HCTF_DUEL_MAX", "3"))
 MODEL = os.environ.get("HCTF_DUEL_MODEL", "")            # "" = the lane's normal worker model
 # medium (user, 2026-10-16): diversity + speed beside the chain's high-effort worker -- on D16 the medium duel won all

@@ -112,4 +112,8 @@ finally:
 assert workers._worker_cmd("single", "warmups", "p", stdin_prompt=True)[2] == "--dangerously-skip-permissions"
 assert "--input-format" in workers._worker_cmd("single", "warmups")            # warm worker: stream-json as before
 print("ok  workers: 200 KB prompt -> stdin (no E2BIG), short prompt -> argv, warm worker still stream-json")
+from hctf import duel  # noqa: E402
+assert duel.eligible("web")[0] or "duels already running" in duel.eligible("web")[1], duel.eligible("web")
+assert "web" in duel.LANES and "binary-reverse-engineering" not in duel.LANES, duel.LANES
+print("ok  duel: web lane eligible by default (binary still out)")
 print("all Day 18 fix checks passed")
