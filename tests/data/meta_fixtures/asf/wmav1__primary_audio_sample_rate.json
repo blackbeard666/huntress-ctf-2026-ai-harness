@@ -1,0 +1,8 @@
+{
+ "field": "asf.primary_audio_sample_rate",
+ "expected": "22050",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i sine=f=300:d=0.3:r=22050 -ac 1 -c:a wmav1 b.asf  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i b.asf -> 'Stream #0:0: Audio: wmav1 ([96][1][0][0] / 0x0160), 22050 Hz, mono, fltp, 128 kb/s'",
+ "decoy": false,
+ "member": "b.asf"
+}

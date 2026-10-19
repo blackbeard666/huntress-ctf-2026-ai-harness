@@ -1,0 +1,8 @@
+{
+ "field": "vmdk.create_type",
+ "expected": "monolithicSparse",
+ "generator_cmd": "qemu-img create -f vmdk -o adapter_type=lsilogic,hwversion=6 sp.vmdk 5M (qemu-img 10.2.1)",
+ "oracle_cmd": "qemu-img info --output=json sp.vmdk -> format-specific.create-type monolithicSparse; 7z: Method = \"monolithicSparse\"",
+ "decoy": false,
+ "member": "sp.vmdk"
+}

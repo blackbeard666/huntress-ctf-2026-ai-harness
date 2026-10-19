@@ -1,0 +1,8 @@
+{
+ "field": "aiff.primary_audio_codec_name",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i sine=f=440:d=0.3:r=32000 -ac 1 -c:a wmav2 -metadata creation_time=2026-03-04T05:06:07Z -metadata title=\"Night Shift\" j.wma  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel); renamed to take.aiff",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i j.wma -> 'Input #0, asf, from '.run/tmp/asf/j.wma':'",
+ "decoy": true,
+ "member": "take.aiff"
+}

@@ -1,0 +1,26 @@
+{
+ "_doc": "static-process-tree (lib.codec.declared_spawns / code_spawns). Gate checks expected_plain via find_codecs; expected_spawns is the declared tree (subset match on the listed keys) proven by spawn_oracle_cmd.",
+ "expected_plain": "v=3|language=python|role=dropper|verdict=suspicious|attack=T1140|adapter=file_writer|host_profile=standalone|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=PY-0c4be2f9|file_path=C:\\Users\\Public\\run_0c4b.cmd",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | base64 -w0 -> Material_0c4b with Codec_0c4b='base64|identity|'; spawn site hand-written: subprocess.Popen([\"cmd.exe\", \"/c\", STAGE])",
+ "oracle_cmd": "python3 -I -c 'import sys,re,base64; print(base64.b64decode(re.search(r\"Material_0c4b = \\\"([^\\\"]+)\", open(sys.argv[1]).read()).group(1)).decode())' ptspawn_py_subprocess.py",
+ "oracle_output": "v=3|language=python|role=dropper|verdict=suspicious|attack=T1140|adapter=file_writer|host_profile=standalone|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=PY-0c4be2f9|file_path=C:\\Users\\Public\\run_0c4b.cmd",
+ "spawn_oracle_cmd": "python3 -I -c 'import sys,subprocess; subprocess.Popen=lambda a,*k,**kw: print(\"POPEN:\"+\" \".join(a)); exec(compile(open(sys.argv[1]).read(),\"f\",\"exec\"),{})' ptspawn_py_subprocess.py",
+ "spawn_oracle_output": "POPEN:cmd.exe /c C:\\Users\\Public\\run_0c4b.cmd",
+ "expected_spawns": [
+  {
+   "parent_image": "python.exe",
+   "child_image": "cmd.exe",
+   "source": "plan",
+   "api": "dispatch_process"
+  },
+  {
+   "parent_image": "python.exe",
+   "child_image": "cmd.exe",
+   "source": "code",
+   "api": "subprocess",
+   "line": 6,
+   "cmdline": "cmd.exe /c C:\\Users\\Public\\run_0c4b.cmd"
+  }
+ ]
+}

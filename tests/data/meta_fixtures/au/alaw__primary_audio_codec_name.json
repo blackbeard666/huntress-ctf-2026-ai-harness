@@ -1,0 +1,8 @@
+{
+ "field": "au.primary_audio_codec_name",
+ "expected": "pcm_alaw",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i sine=f=440:d=0.2:r=11025 -ac 1 -c:a pcm_alaw -f au h.au  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i h.au -> 'Stream #0:0: Audio: pcm_alaw ([27][0][0][0] / 0x001B), 11025 Hz, mono, s16, 88 kb/s'",
+ "decoy": false,
+ "member": "h.au"
+}

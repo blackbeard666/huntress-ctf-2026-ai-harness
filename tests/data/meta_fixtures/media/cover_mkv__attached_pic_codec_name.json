@@ -1,0 +1,8 @@
+{
+ "field": "media.attached_pic_codec_name",
+ "expected": "png",
+ "generator_cmd": "ffmpeg -i a.wav -c:a libopus -attach cover.png -metadata:s:t mimetype=image/png -metadata:s:t filename=cover.png cover_mkv.mkv  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "oracle_cmd": "ffprobe -v error -show_streams -show_format -show_chapters -of json cover_mkv.mkv -> attached_pic stream codec_name  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "decoy": false,
+ "member": "cover_mkv.mkv"
+}

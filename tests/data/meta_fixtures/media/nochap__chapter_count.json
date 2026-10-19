@@ -1,0 +1,8 @@
+{
+ "field": "media.chapter_count",
+ "expected": "0",
+ "generator_cmd": "ffmpeg -i a.wav -c:a aac nochap.m4a  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "oracle_cmd": "ffprobe -v error -show_streams -show_format -show_chapters -of json nochap.m4a -> len(chapters)  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "decoy": false,
+ "member": "nochap.m4a"
+}

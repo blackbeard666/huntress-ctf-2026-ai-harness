@@ -1,0 +1,8 @@
+{
+ "entry": "string_obfuscator_scan",
+ "expected": "ANS-5d0e8a3c71b94f26",
+ "decoy": false,
+ "_why": "StringFog v1-3 call site StringFog.decrypt(\"<b64>\", \"Hx7#qLp2\") -> xor(base64(data), key utf-8); impl class com/github/megatronking/stringfog/xor/StringFogImpl",
+ "generator_cmd": "python3 tests/data/android_fixtures/sobf_src/gen_sobf.py stringfog_b64 tests/data/android_fixtures/sobf_stringfog_b64.apk  # javac --release 8 + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/sobf_src/oracle.sh tests/data/android_fixtures/sobf_stringfog_b64.apk  # d2j-dex2jar back to classes, RUN Main.show(PrintStream) on the JVM (obfuscator's own runtime) -> prints ANS-5d0e8a3c71b94f26"
+}

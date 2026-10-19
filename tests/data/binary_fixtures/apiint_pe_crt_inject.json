@@ -1,0 +1,41 @@
+{
+ "family": "api_intent",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "api_intents": {
+   "OpenProcess": "process_access",
+   "VirtualAllocEx": "injection",
+   "WriteProcessMemory": "injection",
+   "CreateRemoteThread": "injection",
+   "LoadLibraryA": "dynamic_load",
+   "GetProcAddress": "dynamic_load",
+   "CloseHandle": "other",
+   "printf": "output",
+   "getenv": "env_query"
+  },
+  "has_injection": "true",
+  "injection_apis": [
+   "VirtualAllocEx",
+   "WriteProcessMemory",
+   "CreateRemoteThread"
+  ],
+  "process_access_apis": [
+   "OpenProcess"
+  ],
+  "network_apis": "none",
+  "ptrace_requests": "none",
+  "mitre_technique": "T1055.001",
+  "mitre_techniques": [
+   "T1055.001"
+  ],
+  "effects": "process_access_and_injection",
+  "trace_effects": "none"
+ },
+ "generator_cmd": "bash apiint_gen.sh   # python3 apiint_pe_gen.py (stdlib struct PE32+ import table: kernel32 OpenProcess/VirtualAllocEx/WriteProcessMemory/CreateRemoteThread/LoadLibraryA/GetProcAddress/CloseHandle + msvcrt printf/getenv)",
+ "oracle_cmd": "python3 apiint_oracle.py apiint_pe_crt_inject.bin   # readelf --dyn-syms UND / objdump -p imports, objdump -d ptrace request, strings; own intent table",
+ "file_b": "PE32+ executable for MS Windows 6.00 (console), x86-64",
+ "decoy": false,
+ "note": "lib.binary.api_intent_field(data, key) per expected_facts key; intent/effects vocabulary SPECULATIVE (GM label not seen); decoys: every key 'none'"
+}

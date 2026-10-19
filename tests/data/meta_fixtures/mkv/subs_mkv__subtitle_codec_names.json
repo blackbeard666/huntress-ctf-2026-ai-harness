@@ -1,0 +1,8 @@
+{
+ "field": "mkv.subtitle_codec_names",
+ "expected": "[\"subrip\",\"ass\",\"webvtt\"]",
+ "generator_cmd": "ffmpeg -i s.srt s.ass; ffmpeg -i a.wav -i s.srt -i s.ass -i s.vtt -map 0 -map 1 -map 2 -map 3 -c:a libopus -c:s:0 srt -c:s:1 ass -c:s:2 webvtt -metadata:s:s:0 language=ger -metadata:s:s:2 language=spa subs_mkv.mkv  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "oracle_cmd": "ffprobe -v error -show_streams -show_format -show_chapters -of json subs_mkv.mkv -> codec_name of codec_type==subtitle streams (index order)  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "decoy": false,
+ "member": "subs_mkv.mkv"
+}

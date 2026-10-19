@@ -1,0 +1,40 @@
+{
+ "expected_plain": "v=3|language=powershell|role=stager|verdict=malicious|attack=T1105|adapter=process_telemetry|stage_count=1|steps=fetch_stage|campaign_id=PT-3e7b0d41|url=https://pt-3e7b0d41.example.invalid/g",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ptree_gen.py tests/data/script_fixtures (stdlib writers: xml.sax.saxutils.escape with wevtutil's &quot; rendering for Security 4688/4689 XML, json.dumps for Sysmon EID 1/5 NDJSON; plan.encode() XOR 0x5a -> hex in `$Material_<id>` + `$Codec_<id> = \"hex_compact|xor_5a|\"` inside the powershell CommandLine; tree_expected = the tree the generator built (TRUTH_*), not lib/codec.py output)",
+ "oracle_cmd": "jq -r 'select(.EventID==1 and (.CommandLine|test(\"Material_\"))).CommandLine' ptree_sysmon_guid.ndjson | perl -ne 'if(/Material_\\w+ = \"([0-9a-f]+)\"/){$b=pack(\"H*\",$1);$b^=chr(0x5a)x length $b;print $b}'",
+ "tree_oracle_cmd": "jq -r '[.EventID,.UtcTime,.ProcessId,.ParentProcessId,.ProcessGuid,.ParentProcessGuid,(.Image|split(\"\\\\\")|last)]|@tsv' ptree_sysmon_guid.ndjson",
+ "tree_expected": {
+  "nodes": 6,
+  "roots": [
+   "services.exe",
+   "taskhostw.exe"
+  ],
+  "orphans": {
+   "services.exe": "missing",
+   "taskhostw.exe": "missing"
+  },
+  "parent_of": {
+   "whoami.exe": "cmd.exe",
+   "powershell.exe": "svchost.exe",
+   "svchost.exe": "services.exe"
+  },
+  "children_of": {
+   "services.exe": [
+    "cmd.exe",
+    "svchost.exe"
+   ],
+   "cmd.exe": "whoami.exe"
+  },
+  "depth_of": {
+   "PowerShell.exe": "2"
+  },
+  "max_depth": "2",
+  "chain_powershell": [
+   "services.exe",
+   "svchost.exe",
+   "PowerShell.exe"
+  ]
+ },
+ "note": "Sysmon EID 1/5 flat NDJSON: pid 4242 reused by two ProcessGuids (cmd.exe then svchost.exe) -> two nodes, edges by ParentProcessGuid; taskhostw's parent guid never logged -> orphan 'missing'; PowerShell.exe answered in its logged spelling"
+}

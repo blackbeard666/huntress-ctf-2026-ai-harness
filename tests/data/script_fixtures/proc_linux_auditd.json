@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=bash|role=loader|verdict=malicious|attack=T1059.004|adapter=auditd_execve|stage_count=2|steps=spawn_child,decode_stage|campaign_id=PL-3a91c0d4|url=https://pl-3a91c0d4.example.invalid/a",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/proc_linux_gen.py tests/data/script_fixtures (auditd raw record syntax: EXECVE argv with spaces/quotes as bytes.hex().upper(), PROCTITLE = NUL-joined argv hex, grouped by msg=audit(ts:serial))",
+ "oracle_cmd": "perl -ne 'print pack(\"H*\",$1) if /type=EXECVE .* a2=([0-9A-F]+)/' proc_linux_auditd.log | perl -ne 'if(/Material_\\w+ ?= ?\\\\?\"([0-9a-f]{40,})\\\\?\"/){$b=pack(\"H*\",$1);$b^=chr(0x5a)x length $b;print $b;exit}'",
+ "note": "2 execve groups (serial 901 pid 4100 ppid 4000, serial 902 pid 4242 ppid 4100) + an openat SYSCALL; the descriptor is only in hex argv -> lib/codec.py _pl_auditd via _proc_codecs"
+}

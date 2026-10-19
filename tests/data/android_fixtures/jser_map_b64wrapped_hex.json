@@ -1,0 +1,7 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-3f8a2d6e10b9c475",
+ "_why": "base64-wrapped (rO0AB...) serialized LinkedHashMap in res/raw/state.txt; entry secret = hex(token), values live in the writeObject block-data annotation",
+ "generator_cmd": "sh tests/data/android_fixtures/jser_src/gen_jser.sh map ANS-3f8a2d6e10b9c475 tests/data/android_fixtures/jser_map_b64wrapped_hex.apk  # JDK ObjectOutputStream (jser_src/Gen.java) + javac/d2j-jar2dex + zip -X",
+ "oracle_cmd": "javac --release 11 -d /tmp/jr jser_src/Read.java jser_src/com/example/vault/Session.java && unzip -p jser_map_b64wrapped_hex.apk res/raw/state.txt | java -cp /tmp/jr Read b64 | grep '^secret=' | cut -d= -f2 | xxd -r -p"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "xmp.derived_from_document_id",
+ "expected": "xmp.did:0c9e7f21-4b3a-d84f-a6e2-13579bdf2468",
+ "generator_cmd": "lineage.xmp = hand-written Photoshop-style XMP packet (xmp.did:/xmp.iid:/adobe:docid: IDs, 5-event stEvt History Seq mixing attribute + parseType=Resource events, dc:title Alt fr-FR before x-default); sibling.xmp = same with DocumentID uuid:7D3C2B1A-..., dc:format image/png",
+ "oracle_cmd": "exiftool -j -struct -XMP:DerivedFrom lineage.xmp -> DerivedFrom.DocumentID",
+ "decoy": false,
+ "member": "lineage.xmp"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "vhd.disk_type",
+ "expected": "none",
+ "generator_cmd": "qemu-img create -f qcow2 -o cluster_size=4096 -b base.qcow2 -F qcow2 child.qcow2 (renamed .vhd)",
+ "oracle_cmd": "file -b -> QEMU QCOW Image (v3) -- not a VHD",
+ "decoy": true,
+ "member": "child.vhd"
+}

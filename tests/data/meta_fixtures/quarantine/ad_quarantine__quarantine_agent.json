@@ -1,0 +1,8 @@
+{
+ "field": "quarantine.quarantine_agent",
+ "expected": "Google Chrome",
+ "generator_cmd": "python3 -I mkad.py ad_quarantine.bin  (stdlib struct + plistlib AppleDouble writer: header 00051607/00020000 'Mac OS X', entries 9 FinderInfo 'TEXTttxt' + ATTR block [com.apple.quarantine='0081;670a1b2c;Google Chrome;4E1F2D3C-5B6A-4798-8A9B-0C1D2E3F4A5B', com.apple.metadata:kMDItemWhereFroms=bplist, com.apple.TextEncoding='utf-8;134217984'], 2 resource fork len 0 -- ditto layout)",
+ "oracle_cmd": "exiftool -j -XAttrQuarantine ad_quarantine.bin -> 'Flags=0081 set at 2024:10:12 06:46:04 by Google Chrome 4E1F2D3C-...'",
+ "decoy": false,
+ "member": "__MACOSX/._payload.dmg"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "qcow2.crypt_method",
+ "expected": "2",
+ "generator_cmd": "qemu-img create -f qcow2 --object secret,id=s0,data=pw -o encrypt.format=luks,encrypt.key-secret=s0,cluster_size=4096 enc.qcow2 1M; fixture = head -c 4096 (header cluster)",
+ "oracle_cmd": "qemu-img info --output=json enc.qcow2 (full) -> format-specific.data.encrypt.format luks, encrypted true (qcow2.txt: crypt_method 2 = LUKS)",
+ "decoy": false,
+ "member": "enc.qcow2"
+}

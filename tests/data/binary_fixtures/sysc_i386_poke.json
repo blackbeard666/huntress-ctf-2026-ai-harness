@@ -1,0 +1,55 @@
+{
+ "family": "direct_syscall",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "arch": "i386",
+  "syscall_sites": "3",
+  "syscall_numbers": [
+   "20",
+   "26",
+   "1"
+  ],
+  "syscalls": [
+   "getpid",
+   "ptrace",
+   "exit"
+  ],
+  "syscalls_csv": "getpid,ptrace,exit",
+  "syscall_count": "3",
+  "ptrace_requests": [
+   "PTRACE_POKEDATA"
+  ]
+ },
+ "expected_api_intent": {
+  "injection_apis": [
+   "ptrace"
+  ],
+  "process_access_apis": "none",
+  "has_injection": "true",
+  "injection_verdict": "injection",
+  "ptrace_requests": [
+   "PTRACE_POKEDATA"
+  ],
+  "mitre_techniques": [
+   "T1055.008"
+  ],
+  "effects": "injection"
+ },
+ "generator_cmd": "bash sysc_gen.sh   # gcc -m32 -O1 -nostdlib -static (inline asm int $0x80: getpid(20), ptrace(26, PTRACE_POKEDATA=5), exit(1))",
+ "oracle_cmd": "python3 sysc_oracle.py sysc_i386_poke.bin   # file -b + objdump -d (aarch64-linux-gnu-objdump) last mov imm -> eax/x8 before syscall/int $0x80/svc #0x0 (and edi before call syscall@plt), names from kernel uapi asm/unistd_64.h / unistd_32.h / asm-generic/unistd.h; verdicts = api_intent rules applied by hand",
+ "oracle_raw": {
+  "arch": "i386",
+  "syscall_sites": "3",
+  "syscall_numbers": "20,26,1",
+  "syscalls": "getpid,ptrace,exit",
+  "ptrace_args": [
+   5
+  ],
+  "libc_syscall_wrapper": "none"
+ },
+ "file_b": "ELF 32-bit LSB executable, Intel i386, version 1 (SYSV), statically linked",
+ "decoy": false,
+ "note": "lib.binary.syscall_field(data, k) per expected_facts key, api_intent_field(data, k) per expected_api_intent key; field names / verdict vocabulary SPECULATIVE (GM label not seen); no HCFG blob"
+}

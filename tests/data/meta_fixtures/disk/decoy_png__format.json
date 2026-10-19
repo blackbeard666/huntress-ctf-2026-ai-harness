@@ -1,0 +1,8 @@
+{
+ "field": "disk.format",
+ "expected": "none",
+ "generator_cmd": "PNG-magic impostor renamed .vhd",
+ "oracle_cmd": "file -b -> data (PNG signature only; no conectix / vhdxfile / KDMV / QFI magic)",
+ "decoy": true,
+ "member": "fake.vhd"
+}

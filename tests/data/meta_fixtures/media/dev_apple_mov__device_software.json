@@ -1,0 +1,8 @@
+{
+ "field": "media.device_software",
+ "expected": "17.1",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i testsrc=size=160x120:rate=10 -frames:v 3 -c:v libx264 -preset ultrafast -pix_fmt yuv420p base.mp4 && tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -i base.mp4 -c copy -movflags use_metadata_tags -metadata com.apple.quicktime.make=Apple -metadata com.apple.quicktime.model='iPhone 15 Pro' -metadata com.apple.quicktime.software=17.1 -metadata com.apple.quicktime.location.ISO6709='+40.7128-074.0060+010.000/' -metadata:s:v handler_name='Core Media Video' apple.mov",
+ "oracle_cmd": "exiftool -j -a -G4 -Keys:all -UserData:Make -UserData:Model -HandlerDescription -CompressorName apple.mov -> Keys Software 17.1",
+ "decoy": false,
+ "member": "apple.mov"
+}

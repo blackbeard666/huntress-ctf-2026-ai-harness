@@ -1,0 +1,10 @@
+{
+ "codec": "word-transposition",
+ "key": "word-reverse+each-rev+slug-intact",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lynx-63",
+ "encoded": "clover-lynx-63 :retsaM emaG eht ot rewsna tcaxe siht timbus ,evlos oT !pumraw siht gnidoced krow eciN",
+ "generator_cmd": "printf '%s\\n' \"$plain\" | tr ' ' '\\n' | /usr/bin/tac | perl -lne 'print /-\\d+$/ ? $_ : scalar reverse $_' | paste -sd' '  # coreutils tac reverses word order, perl reverses every non-slug word",
+ "oracle_cmd": "printf '%s\\n' \"$encoded\" | tr ' ' '\\n' | perl -lne 'print /-\\d+$/ ? $_ : scalar reverse $_' | /usr/bin/tac | paste -sd' '",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lynx-63",
+ "expected": "match"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_sample_aspect_ratio",
+ "expected": "none",
+ "generator_cmd": "printf 'just some text pretending to be a movie\\n' > decoy_text.mp4 (plain text renamed .mp4)",
+ "oracle_cmd": "file decoy_text.mp4 -> ASCII text; ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i decoy_text.mp4 -> Invalid data found (no stream)",
+ "decoy": true,
+ "member": "decoy_text.mp4"
+}

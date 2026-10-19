@@ -1,0 +1,17 @@
+<Project>
+  <!-- HUNTRESS_ANALYSIS_V1:SPLIT -->
+  <ItemGroup>
+    <Chunk Include="B64-dj0zfGxhbmd1YWdlPWpzY3JpcHR8cm9sZT1sYXVuY2hlcnx2" />
+    <Chunk Include="ZXJkaWN0PXN1c3BpY2lvdXN8YXR0YWNrPVQxMDU5fGFkYXB0" />
+    <Chunk Include="ZXI9cHJvY2Vzc19idWlsZGVyfGhvc3RfcHJvZmlsZT1zY3Rf" />
+    <Chunk Include="c2NyaXB0bGV0fG9iZnVzY2F0aW9uX3Byb2ZpbGU9aGV4X2Jh" />
+    <Chunk Include="c2U2NHxzdGFnZV9wcm9maWxlPXRocmVlX3N0YWdlX2RlY29k" />
+    <Chunk Include="ZV93cml0ZV9sYXVuY2h8bmV4dF9sYW5ndWFnZT1qc2NyaXB0" />
+    <Chunk Include="fHN0YWdlX2NvdW50PTN8c3RlcHM9ZGVjb2RlX2VtYmVkZGVk" />
+    <Chunk Include="LHdyaXRlX2ZpbGUsZGlzcGF0Y2hfcHJvY2Vzc3xjYW1wYWln" />
+    <Chunk Include="bl9pZD1KU0NSSVBULTVhOTNhZDAxfHVybD1odHRwczovL2pz" />
+    <Chunk Include="Y3JpcHQtNWE5M2FkMDEzMS5leGFtcGxlLmludmFsaWQvc3Rh" />
+    <Chunk Include="Z2V8ZmlsZV9wYXRoPS90bXAvaHVudHJlc3MtanNjcmlwdC8u" />
+    <Chunk Include="NWE5M2FkMDEzMTZkM2ZlNy5zdGFnZQ==" />
+  </ItemGroup>
+</Project>

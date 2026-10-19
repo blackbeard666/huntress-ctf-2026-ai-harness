@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I -c 'csv.writer(QUOTE_ALL) Process Create notepad.exe todo.txt'",
+ "oracle_cmd": "python3 -I -c \"import csv,sys;print([r['Detail'] for r in csv.DictReader(open(sys.argv[1]))])\" proc_linux_procmon_decoy.csv  # benign notepad"
+}

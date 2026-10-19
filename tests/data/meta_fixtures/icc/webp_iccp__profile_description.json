@@ -1,0 +1,8 @@
+{
+ "field": "icc.profile_description",
+ "expected": "sRGB built-in",
+ "generator_cmd": "see tests/data/meta_fixtures/webp/vp8x_icc_exif__chunk_ids.json",
+ "oracle_cmd": "exiftool -j -ProfileDescription vp8x_icc_exif.webp -> 'sRGB built-in'",
+ "decoy": false,
+ "member": "vp8x_icc_exif.webp"
+}

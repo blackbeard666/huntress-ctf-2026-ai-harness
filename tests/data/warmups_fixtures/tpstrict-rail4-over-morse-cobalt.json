@@ -1,0 +1,11 @@
+{
+ "codec": "tpstrict",
+ "key": "rail4(morse, '/' word gap)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-17",
+ "encoded": "--/- ..-.-... -..-.- .- . - ..-/ ---.- -..-/-.. --..--. ...--.--.---  . - .. /--.-  ---/ /.- ..  .-..-.-./ .../.- .-....-..--../---/- .   -.- -.. ---.    -...--. .- -  -./  .--. ..-. ..-.- .-- .---.-...--./.. .-.-.....- -- --.   / / ....-. -.-..-...-- -. ..---..-. - ...-.-. .-/.. ...-- -.-.-  .  .. ..--   . -.- ...-  --.",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs enc '-/.' Space 'Forward slash' | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs enc 4 0  # CyberChef To Morse Code (word delim '/'), CyberChef Rail Fence Encode(4, 0)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs dec 4 0 | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs dec Space 'Forward slash'  # CyberChef Rail Fence Decode(4, 0), From Morse Code (case lost: upper)",
+ "oracle_plain": "NICE WORK DECODING THIS WARMUP! TO SOLVE, SUBMIT THIS EXACT ANSWER TO THE GAME MASTER: COBALT-OTTER-17",
+ "note": "Morse is case-free: the solver recases the template, expected = plain",
+ "expected": "match"
+}

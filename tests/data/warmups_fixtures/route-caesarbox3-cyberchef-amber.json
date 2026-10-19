@@ -1,0 +1,11 @@
+{
+ "codec": "transposition",
+ "key": "caesarbox3 (CyberChef Caesar Box Cipher, height 3)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "NeredgiauToeuihecneoemaeaefc-iwkcitsrpol,btixtsrtGesrmrao4codonhwm!svsmtsaawthaMt:b-ln2",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/caesarbox_cyberchef.mjs 3  # CyberChef Caesar Box Cipher(3): spaces deleted, column read of a 3-row box",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/caesarbox_cyberchef.mjs 29  # CyberChef Caesar Box Cipher(29) inverts the full 3x29 box (space-free sentence; template spaces restored by the decoder)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "oracle_raw": "Niceworkdecodingthiswarmup!Tosolve,submitthisexactanswertotheGameMaster:amber-falcon-42",
+ "expected": "match"
+}

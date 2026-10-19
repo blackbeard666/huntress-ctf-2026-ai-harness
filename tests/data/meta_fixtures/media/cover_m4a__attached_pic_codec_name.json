@@ -1,0 +1,8 @@
+{
+ "field": "media.attached_pic_codec_name",
+ "expected": "png",
+ "generator_cmd": "ffmpeg -f lavfi -i color=c=blue:s=32x24:d=1 -frames:v 1 cover.png; ffmpeg -i a.wav -i cover.png -map 0 -map 1 -c:a aac -c:v copy -disposition:v attached_pic cover_m4a.m4a  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "oracle_cmd": "ffprobe -v error -show_streams -show_format -show_chapters -of json cover_m4a.m4a -> attached_pic stream codec_name  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "decoy": false,
+ "member": "cover_m4a.m4a"
+}

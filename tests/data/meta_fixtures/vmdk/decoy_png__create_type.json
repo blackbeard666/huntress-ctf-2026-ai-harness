@@ -1,0 +1,8 @@
+{
+ "field": "vmdk.create_type",
+ "expected": "none",
+ "generator_cmd": "PNG-magic impostor (printf PNG sig + urandom) renamed .vmdk",
+ "oracle_cmd": "file -b -> data (PNG signature only, no KDMV / descriptor); qemu-img info -f vmdk -> not a VMDK",
+ "decoy": true,
+ "member": "fake.vmdk"
+}

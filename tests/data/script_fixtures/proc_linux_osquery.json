@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=python|role=stager|verdict=malicious|attack=T1105|adapter=osquery_process_events|stage_count=1|steps=fetch_stage|campaign_id=PL-6e02b7f1|url=https://pl-6e02b7f1.example.invalid/o",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/proc_linux_gen.py tests/data/script_fixtures (json.dumps osquery results-log NDJSON, process_events columns pid/parent/path/cmdline)",
+ "oracle_cmd": "jq -r '.columns.cmdline' proc_linux_osquery.ndjson | perl -ne 'if(/Material_\\w+ ?= ?\\\\?\"([0-9a-f]{40,})\\\\?\"/){$b=pack(\"H*\",$1);$b^=chr(0x5a)x length $b;print $b;exit}'",
+ "note": "pid 5150 parent 5100 (jq -r '.columns|.pid+\" \"+.parent')"
+}

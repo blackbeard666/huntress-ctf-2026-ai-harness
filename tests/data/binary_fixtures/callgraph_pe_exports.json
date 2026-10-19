@@ -1,0 +1,66 @@
+{
+ "family": "call_graph",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "named_edges": [
+   [
+    "op_log",
+    "sub_140001e40",
+    "direct"
+   ],
+   [
+    "dispatch",
+    "op_add",
+    "indirect"
+   ],
+   [
+    "dispatch",
+    "op_mul",
+    "indirect"
+   ],
+   [
+    "dispatch",
+    "op_neg",
+    "indirect"
+   ],
+   [
+    "via_reg",
+    "op_mul",
+    "indirect"
+   ],
+   [
+    "via_reg",
+    "puts",
+    "plt"
+   ],
+   [
+    "via_global",
+    "op_log",
+    "indirect"
+   ],
+   [
+    "unused_helper",
+    "puts",
+    "plt"
+   ]
+  ],
+  "indirect_targets": [
+   "op_add",
+   "op_mul",
+   "op_neg",
+   "op_log"
+  ],
+  "named_indirect_calls_by_function": {
+   "dispatch": 1,
+   "via_reg": 1,
+   "via_global": 1
+  }
+ },
+ "generator_cmd": "bash callgraph_gen.sh   # gcc/strip/zig cc from callgraph_src.c (see script)",
+ "oracle_cmd": "python3 callgraph_oracle_pe.py callgraph_pe_exports.bin   # objdump -p (exports, IAT slots, .pdata) + objdump -h + objdump -d",
+ "file_b": "PE32+ executable for MS Windows 6.00 (console), x86-64, 7 se",
+ "decoy": false,
+ "note": "lib.binary.call_graph_field(data, key) per expected_facts key; edges [[caller, callee, kind]] unique in call-site order, kind direct|plt|indirect; GM vocabulary SPECULATIVE"
+}

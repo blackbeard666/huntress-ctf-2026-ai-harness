@@ -1,0 +1,7 @@
+{
+ "entry": "proof_flow_scan",
+ "expected": "ANS-3a6f92d0e1b4c578",
+ "_why": "row 68: R8-style field overload a:Ljava/lang/String; (decoy ANS-71e0c3b5a2d49f08) + a:Ljava/lang/Object; in one class; builder appends sget-object a:Ljava/lang/Object;",
+ "generator_cmd": "python3 tests/data/android_fixtures/idcol_src/gen_idcol.py field_overload tests/data/android_fixtures/idcol_field_overload.apk  # smali text assembled by dex2jar d2j-smali + zipfile",
+ "oracle_cmd": "tools/dex2jar/d2j-baksmali.sh -f -o o tests/data/android_fixtures/idcol_field_overload.apk; python3 -I tests/data/android_fixtures/idcol_src/oracle.py o  # regex over baksmali text: the append after proof= resolved by FULL descriptor -> ANS-3a6f92d0e1b4c578"
+}

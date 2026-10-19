@@ -1,0 +1,8 @@
+{
+ "field": "asf.primary_audio_codec_name",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i sine=f=440:d=0.3:r=48000 -ac 2 -c:a pcm_s24le -f caf c.caf  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel); renamed to voice.wma",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i c.caf -> 'Input #0, caf, from '.run/tmp/asf/c.caf':'",
+ "decoy": true,
+ "member": "voice.wma"
+}

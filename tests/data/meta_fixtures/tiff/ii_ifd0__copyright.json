@@ -1,0 +1,8 @@
+{
+ "field": "tiff.copyright",
+ "expected": "none",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import Image, TiffImagePlugin as T; t=Image.new('RGB',(321,54),(5,6,7)); i=T.ImageFileDirectory_v2(); i[0x10F]='TiffMake'; i[0x110]='TiffModel X'; i[0x131]='HuntressWriter 1.0'; i[0x13B]='Jane Analyst'; i[0x132]='2026:10:18 12:34:56'; t.save('ii.tiff',tiffinfo=i); f=[Image.new('L',(30,20),k*50) for k in range(3)]; f[0].save('multi.tiff',save_all=True,append_images=f[1:])\" ; convert ii.tiff -define tiff:endian=msb mm.tiff  (Pillow + ImageMagick 7 writers)",
+ "oracle_cmd": "exiftool -j -Copyright ii.tiff -> (absent)",
+ "decoy": false,
+ "member": "ii.tiff"
+}

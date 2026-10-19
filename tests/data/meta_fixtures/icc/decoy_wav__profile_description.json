@@ -1,0 +1,8 @@
+{
+ "field": "icc.profile_description",
+ "expected": "none",
+ "generator_cmd": ".venv/bin/python -I -c \"import wave; w=wave.open('tone.wav','wb'); w.setnchannels(1); w.setsampwidth(2); w.setframerate(8000); w.writeframes(bytes(200)); w.close()\"",
+ "oracle_cmd": "file -b tone.wav -> 'WAVE audio' (no acsp header, no embedded profile)",
+ "decoy": true,
+ "member": "tone.wav"
+}

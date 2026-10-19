@@ -995,3 +995,38 @@ assert "hcfg_section" in _pb17.rejected(_pb17.BINARY, "set2.d14_analysis_hcfg_st
 assert "8114" in _pb17.rejected(_pb17.BINARY, "d01_analysis_recover_code") and _K17.RECOVER_CODE_ABSENT == "none"
 assert {"raw_hcfg_section", "raw_const_array"} <= set(_json.load(open(os.path.join(os.path.dirname(_K17.__file__), "vocab.json")))["storage"])
 print("ok  knowledge/playbook: D17 hcfg_storage enum + stripped recover_code none")
+
+# Day 18 "Off the Rails" ("Three rails. One very zigzag commute."): classic 3-rail fence (offset 0, spaces are ciphertext)
+# -- lib.warmups_codecs.DAYS day 18 exact encoder, a 6th confirmed free-text codec (lib.decode.FREE_CODECS 'rail') and a
+# whole-blob decode_chunk branch; GM-confirmed D18 single bytes + slug.
+_s18 = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: dapper-summit-brook-29"
+_r18 = "N kcnhwuTo,b saaeoemararm-o9iewr eoigti amp osle umtti xc nwrt h aeMse:dpe-umtbok2codd sr! vsihets tG t psir-"
+assert _wc.day_codec(18)[1](_s18) == _r18 and _wc.day_codec(18)[2](_r18) == _s18 and _wc.day_codec(18)[3] is True
+assert _dc(_r18) == _s18 and ("rail", 18) in [(n, d) for n, d, _f in _dec15._FREE]
+_l18 = [_wc.day_codec(k)[1](p) for k, p in enumerate([_s18[i:i + 6] for i in range(0, 102, 6)], 1)]
+_b18 = "".join(f"{k:02d}\t{p}\n" for k, p in enumerate(_l18 + [_wc.day_codec(18)[1](_s18[102:])], 1))
+assert _dch(_b18) == _s18, _dch(_b18)
+print("ok  decode: rail fence 3 (D18) exact encoder + free codec + whole-blob decode_chunk branch")
+
+# Day 18 "Frame of Reference": media.primary_video_dimensions verified (coded WxH of the first video stream, MP4 stsd
+# visual entry; prebuilt media_video.video_value promoted, GM-confirmed 320x180).
+def _bx18(t, body):
+    return _st17.pack(">I", 8 + len(body)) + t + body
+_stsd18 = _bx18(b"stsd", b"\0" * 4 + _st17.pack(">I", 1) + _bx18(b"avc1", b"\0" * 6 + b"\0\1" + b"\0" * 16
+                                                                    + _st17.pack(">HH", 320, 180) + b"\0" * 50))
+_mp418 = _bx18(b"ftyp", b"isom\0\0\2\0isom") + _bx18(b"moov", _bx18(b"trak", _bx18(b"mdia", _bx18(
+    b"hdlr", b"\0" * 8 + b"vide" + b"\0" * 13) + _bx18(b"minf", _bx18(b"stbl", _stsd18)))))
+assert _meta14.lookup("media", "primary_video_dimensions")[0].tier == _meta14.VERIFIED
+assert _meta14.answer("d18-video-001-media-primary-video-dimensions",
+                      {"question": "Determine media.primary_video_dimensions for video-001.mp4."}, _mp418) \
+    == ("320x180", _meta14.VERIFIED)
+print("ok  lib.meta: media.primary_video_dimensions registered (verified D18)")
+
+# Day 18 "Orphan Process" (Google Apps Script v=3): bare `// HUNTRESS_ANALYSIS_V1:SPLIT` marker + the material as a
+# literal array `["<TAG>-chunk", "chunk", ..].join("")` -> lib.codec.find_codecs / v3_plan read it (35/35 D18 members).
+_p18 = "v=3|language=google_apps_script|role=downloader|attack=T1105|campaign_id=GOOGLE_APPS_SCRIPT-0123abcd"
+_h18 = "HEX-" + _p18.encode().hex()
+_g18 = ("// HUNTRESS_ANALYSIS_V1:SPLIT\nconst HUNTRESS_ANALYSIS_V1_SPLIT_0123abcd = [\n"
+        + ",\n".join(f'    "{_h18[i:i + 40]}"' for i in range(0, len(_h18), 40)) + '\n].join("");\n')
+assert _codec.v3_plan(_g18) == _p18 and _codec.is_v3(_g18.encode())
+print("ok  codec: D18 SPLIT marker + literal-array material (Google Apps Script v=3)")

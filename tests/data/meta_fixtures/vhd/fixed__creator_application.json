@@ -1,0 +1,8 @@
+{
+ "field": "vhd.creator_application",
+ "expected": "qem2",
+ "generator_cmd": "qemu-img create -f vpc -o subformat=fixed,force_size=on fixed.vhd 64K  (qemu-img 10.2.1)",
+ "oracle_cmd": "7z l -slt fixed.vhd -> 'Creator Application = qem2 5.3' (qemu force_size marker)",
+ "decoy": false,
+ "member": "fixed.vhd"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "synthesis.creation_time_order",
+ "expected": "[\"mail.eml\",\"photo.jpg\",\"report.pdf\",\"clip-d.mp4\"]",
+ "generator_cmd": "python3 tests/data/meta_fixtures/synthesis/gen_order_siblings.py $T  (ffmpeg 7.0.2 lavfi sine/testsrc -> pcm WAV / libmp3lame / flac / libx264 MP4 creation_time; Pillow JPEG+EXIF DateTimeOriginal, Pillow PNG renamed .jpg; pypdf PdfWriter /CreationDate; RFC 5322 .eml; zip renamed .pdf; stdlib zipfile ZipInfo DOS times) -> $T/dated.zip",
+ "oracle_cmd": "python3 tests/data/meta_fixtures/synthesis/oracle_order_siblings.py $T/dated.zip  (zipinfo -T -l sizes + DOS times, unzip -p + md5sum/sha1sum/sha512sum, file --mime-type, exiftool -j -d %s DateTimeOriginal/CreateDate, date -d on the Date header, ffmpeg -i Duration/stream codec; key 'creation_time_order')",
+ "decoy": false,
+ "member": "evidence-note.txt"
+}

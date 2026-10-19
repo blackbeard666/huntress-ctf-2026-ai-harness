@@ -1,0 +1,8 @@
+{
+ "entry": "string_obfuscator_scan",
+ "expected": "ANS-71e3b0a9c4d6f258",
+ "decoy": false,
+ "_why": "obfuscapk EncryptStrings: DecryptString.decryptString(\"<hex>\"), AES-ECB/PKCS5 under the 32-char const secret (AES-256 raw bytes)",
+ "generator_cmd": "python3 tests/data/android_fixtures/sobf_src/gen_sobf.py obfuscapk_aes tests/data/android_fixtures/sobf_obfuscapk_aes.apk  # javac --release 8 + dex2jar d2j-jar2dex + zipfile; ciphertext via openssl enc -aes-256-ecb",
+ "oracle_cmd": "sh tests/data/android_fixtures/sobf_src/oracle.sh tests/data/android_fixtures/sobf_obfuscapk_aes.apk  # d2j-dex2jar back to classes, RUN Main.show(PrintStream) on the JVM (obfuscator's own runtime) -> prints ANS-71e3b0a9c4d6f258"
+}

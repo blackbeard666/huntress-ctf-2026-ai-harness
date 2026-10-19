@@ -1,0 +1,7 @@
+{
+ "entry": "proof_flow_scan",
+ "expected": "ANS-c4f1a09e7d2b3368",
+ "_why": "row 68 Name Collapse: \"proof=\" + a.a((Object) dev); a.a(String) (shorty LL too) returns decoy ANS-5e0d1c2b3a49f876, case-twin class A holds another decoy; only the (Ljava/lang/Object;)Ljava/lang/String; overload is the target",
+ "generator_cmd": "python3 tests/data/android_fixtures/idcol_src/gen_idcol.py overload_param tests/data/android_fixtures/idcol_overload_param.apk  # javac --release 8 + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "tools/dex2jar/d2j-baksmali.sh -f -o o tests/data/android_fixtures/idcol_overload_param.apk; python3 -I tests/data/android_fixtures/idcol_src/oracle.py o  # regex over baksmali text: the append after proof= resolved by FULL descriptor -> ANS-c4f1a09e7d2b3368"
+}

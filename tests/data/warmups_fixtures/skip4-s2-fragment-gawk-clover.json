@@ -1,0 +1,11 @@
+{
+ "codec": "skip",
+ "key": "skip4-s2",
+ "plain": "decoding this warmup",
+ "encoded": "cnhwuogiapd srdit me",
+ "generator_cmd": "gawk -v t=\"$plain\" -v k=4 -v s=2 -f tests/data/warmups_fixtures/skip_dcode.awk  # independent gawk port of dCode Skip Cipher (step k from 0-based start s, wrap mod L, collision -> next unread)",
+ "oracle_cmd": "perl tests/data/warmups_fixtures/skip_dcode_inv.pl \"$encoded\" 4 2  # independent perl inverse: replay the visit order, cipher char i -> i-th visited position",
+ "oracle_plain": "decoding this warmup",
+ "expected": "match",
+ "mode": "fragment"
+}

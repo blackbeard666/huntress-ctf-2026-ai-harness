@@ -1,0 +1,8 @@
+{
+ "field": "vmdk.parent_cid",
+ "expected": "36d658a5",
+ "generator_cmd": "qemu-img create -f vmdk -b sp.vmdk -F vmdk diff.vmdk (qemu-img 10.2.1)",
+ "oracle_cmd": "qemu-img info --output=json diff.vmdk -> parent-cid 920017061 = 0x36d658a5, backing-filename sp.vmdk",
+ "decoy": false,
+ "member": "diff.vmdk"
+}

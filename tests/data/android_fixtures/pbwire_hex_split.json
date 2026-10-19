@@ -1,0 +1,7 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-19d4f7a2c6b08e35",
+ "_why": "row 75: assets/session.hex = hex text of a protobuf message; token split over sibling strings 3.3.5 + 3.3.6",
+ "generator_cmd": "python3 tests/data/android_fixtures/pbwire_src/gen.py $TMPDIR/pbw && (cd $TMPDIR/pbw/pbwire_hex_split && zip -q -X -r pbwire_hex_split.apk AndroidManifest.xml assets)  # google.protobuf (dynamic descriptor hx.Config{1 app,2 version,3 Section{1 id,2 ts fixed64,3 Secret{1 label,2 blob,3 data bytes,4 key,5 head,6 tail}},4 ratio float}) SerializeToString + Info-ZIP zip",
+ "oracle_cmd": "unzip -p pbwire_hex_split.apk assets/session.hex > s.hex && python3 tests/data/android_fixtures/pbwire_src/oracle.py s.hex hex | grep -E '^3.3.(5|6)'  # concatenate"
+}

@@ -1,0 +1,2 @@
+{"name":"pack_fim_file_events","hostIdentifier":"lnx-07","unixTime":1760785200,"columns":{"target_path":"/etc/hosts","action":"UPDATED","md5":"d41d8cd98f00b204e9800998ecf8427e","uid":"0"},"action":"added"}
+{"name":"pack_proc_processes","columns":{"pid":"900","parent":"1","path":"/usr/bin/vim","cmdline":"vim /home/alice/notes.txt"},"action":"added"}

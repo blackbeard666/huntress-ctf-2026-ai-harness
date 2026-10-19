@@ -1,0 +1,19 @@
+{
+  "attempt": "a8668763-47b7-4fcb-98c9-fbee2525a29f",
+  "pid": 2779,
+  "done": true,
+  "ended": 1792328449.3239887,
+  "wrong": [
+    "host-google-docs-sidebar-google-apps-script-attack",
+    "polyglot-google_apps_script-downloader-attack",
+    "polyglot-google_apps_script-launcher-attack",
+    "polyglot-google_apps_script-staged-chain-attack"
+  ],
+  "resolved": {
+    "host-google-docs-sidebar-google-apps-script-role": "staged_chain",
+    "polyglot-google_apps_script-staged-chain-role": "staged_chain",
+    "polyglot-google_apps_script-downloader-role": "downloader",
+    "polyglot-google_apps_script-launcher-role": "launcher"
+  },
+  "complete": false
+}

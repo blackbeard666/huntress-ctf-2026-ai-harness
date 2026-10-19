@@ -1,0 +1,11 @@
+{
+ "codec": "transposition",
+ "key": "rail3-off1(fragment)",
+ "plain": "this ex",
+ "encoded": "sti xhe",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs enc 3 1  # CyberChef Rail Fence Cipher Encode(3, 1)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs dec 3 1  # CyberChef Rail Fence Cipher Decode(3, 1)",
+ "oracle_plain": "this ex",
+ "expected": "match",
+ "mode": "fragment"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "vmdk.ddb_virtual_hw_version",
+ "expected": "6",
+ "generator_cmd": "qemu-img create -f vmdk -o adapter_type=lsilogic,hwversion=6 sp.vmdk 5M (qemu-img 10.2.1)",
+ "oracle_cmd": "7z l -slt sp.vmdk Comment -> ddb.virtualHWVersion = \"6\"",
+ "decoy": false,
+ "member": "sp.vmdk"
+}

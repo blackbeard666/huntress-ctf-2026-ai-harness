@@ -1,0 +1,8 @@
+{
+ "field": "synthesis.document_id_groups",
+ "expected": "none",
+ "generator_cmd": "stdlib zipfile ZIP_DEFLATED of plain.jpg plain.png",
+ "oracle_cmd": "exiftool -j -XMP:all plain.jpg plain.png -> no XMP tags",
+ "decoy": true,
+ "member": "noxmp.zip"
+}

@@ -1,0 +1,21 @@
+{
+ "family": "call_graph",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "indirect_targets": [
+   "sub_11c9",
+   "sub_11d1",
+   "sub_11d9",
+   "sub_11e2"
+  ],
+  "main": "main",
+  "stripped": true
+ },
+ "generator_cmd": "bash callgraph_gen.sh   # gcc/strip/zig cc from callgraph_src.c (see script)",
+ "oracle_cmd": "python3 callgraph_oracle.py callgraph_c_pie_stripped.bin --names-from callgraph_c_pie.bin   # objdump -d of the stripped file, twin nm addresses -> sub_<hex>",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dyn",
+ "decoy": false,
+ "note": "lib.binary.call_graph_field(data, key) per expected_facts key; edges [[caller, callee, kind]] unique in call-site order, kind direct|plt|indirect; GM vocabulary SPECULATIVE"
+}

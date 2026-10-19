@@ -1,0 +1,8 @@
+{
+ "field": "xmp.create_date",
+ "expected": "2026-03-14T09:26:53-05:00",
+ "generator_cmd": "lineage.xmp = hand-written Photoshop-style XMP packet (xmp.did:/xmp.iid:/adobe:docid: IDs, 5-event stEvt History Seq mixing attribute + parseType=Resource events, dc:title Alt fr-FR before x-default); sibling.xmp = same with DocumentID uuid:7D3C2B1A-..., dc:format image/png",
+ "oracle_cmd": "exiftool -b -XMP lineage.xmp | grep -o 'xmp:CreateDate=\"[^\"]*\"' (raw stored text; exiftool -j renders 2026:03:14 09:26:53-05:00)",
+ "decoy": false,
+ "member": "lineage.xmp"
+}

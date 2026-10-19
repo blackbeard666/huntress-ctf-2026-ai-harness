@@ -1,0 +1,11 @@
+{
+ "codec": "tpstrict",
+ "key": "reverse(hex)(fragment)",
+ "plain": "this exact answer",
+ "encoded": "27567737e6160247361687560237968647",
+ "mode": "fragment",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p | tr -d '\\n' | rev  # xxd hex, util-linux rev",
+ "oracle_cmd": "printf %s \"$encoded\" | rev | xxd -r -p",
+ "expected": "match",
+ "oracle_plain": "this exact answer"
+}

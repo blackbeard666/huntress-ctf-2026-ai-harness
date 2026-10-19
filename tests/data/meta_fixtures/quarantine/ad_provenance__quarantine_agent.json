@@ -1,0 +1,8 @@
+{
+ "field": "quarantine.quarantine_agent",
+ "expected": "none",
+ "generator_cmd": "cp __MACOSX/._Linkliar.ipa ad_provenance.bin  (REAL AppleDouble written by macOS Archive Utility/ditto, from a CTF zip's __MACOSX folder)",
+ "oracle_cmd": "exiftool -j ad_provenance.bin -> only MacOS:XAttrProvenance (no XAttrQuarantine)",
+ "decoy": true,
+ "member": "__MACOSX/._Linkliar.ipa"
+}

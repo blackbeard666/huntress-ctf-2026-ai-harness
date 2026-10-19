@@ -1,0 +1,8 @@
+{
+ "field": "tar.member_names",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import zipfile;z=zipfile.ZipFile('decoy.tar','w');z.writestr('x.txt','hi');z.close()\"  (zip renamed .tar impostor)",
+ "oracle_cmd": "file -b decoy.tar -> Zip archive data (not tar); tar tf decoy.tar -> 'This does not look like a tar archive'",
+ "decoy": true,
+ "member": "decoy_zip.tar"
+}

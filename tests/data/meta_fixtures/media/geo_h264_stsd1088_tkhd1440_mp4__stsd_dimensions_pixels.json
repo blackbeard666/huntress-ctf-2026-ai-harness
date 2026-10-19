@@ -1,0 +1,8 @@
+{
+ "field": "media.stsd_dimensions_pixels",
+ "expected": "1920x1088",
+ "generator_cmd": "h264_1080.mp4 (above) + python3 -I patch_geo.py h264_1080.mp4 h264_stsd1088_tkhd1440.mp4 1920 1088 1440 1080 (stdlib struct: stsd avc1 VisualSampleEntry width/height -> 1920x1088, tkhd 16.16 size -> 1440x1080; SPS untouched = 1920x1088 MBs, crop_bottom 8 px)",
+ "oracle_cmd": "exiftool -s -SourceImageWidth -SourceImageHeight h264_stsd1088_tkhd1440.mp4 -> 1920 / 1088",
+ "decoy": false,
+ "member": "h264_stsd1088_tkhd1440.mp4"
+}

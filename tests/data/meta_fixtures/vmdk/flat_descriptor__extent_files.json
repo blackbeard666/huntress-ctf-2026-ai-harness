@@ -1,0 +1,8 @@
+{
+ "field": "vmdk.extent_files",
+ "expected": "[\"flat-flat.vmdk\"]",
+ "generator_cmd": "qemu-img create -f vmdk -o subformat=monolithicFlat,adapter_type=buslogic flat.vmdk 1M -> descriptor flat.vmdk (+ flat-flat.vmdk extent)",
+ "oracle_cmd": "qemu-img info --output=json flat.vmdk -> extents[].filename ['flat-flat.vmdk'] (format FLAT)",
+ "decoy": false,
+ "member": "flat.vmdk"
+}

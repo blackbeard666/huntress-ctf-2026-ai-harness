@@ -1,0 +1,8 @@
+{
+ "field": "media.chapter_titles",
+ "expected": "[\"Intro\",\"Middle Part\",\"Outro\"]",
+ "generator_cmd": "ffmpeg -i a.wav -i ch.txt -map_metadata 1 -map_chapters 1 -c:a libopus chap_mkv.mkv  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "oracle_cmd": "ffprobe -v error -show_streams -show_format -show_chapters -of json chap_mkv.mkv -> chapters[].tags.title  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "decoy": false,
+ "member": "chap_mkv.mkv"
+}

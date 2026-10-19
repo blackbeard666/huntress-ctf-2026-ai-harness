@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.dimension_order",
+ "expected": "none",
+ "generator_cmd": "python3 tests/data/meta_fixtures/synthesis/gen_video_geometry.py $T  (ffmpeg 7.0.2 lavfi testsrc + libx264, crop filter, -metadata title/com.apple.quicktime.make|model/com.android.*, -display_rotation 90; Pillow JPEG+EXIF Make/Model; stdlib zipfile) -> $T/nomedia.zip",
+ "oracle_cmd": "unzip -l geom_nomedia_decoy.bin; ffmpeg -i on each member -> no Video stream (text only) -> field absent",
+ "decoy": true
+}

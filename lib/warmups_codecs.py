@@ -95,6 +95,9 @@ DAYS = [
     (17, "bacon-hex", lambda s: " ".join(f"{int(c, 16):05b}".replace("0", "a").replace("1", "b") for c in _u(s).hex()),
      lambda t: _t(bytes.fromhex("".join("%x" % int(g.replace("a", "0").replace("b", "1"), 2) for g in t.split()))),
      False),
+    # D18 "Off the Rails" ("Three rails. One very zigzag commute."): classic 3-rail fence, offset 0, spaces are ciphertext
+    # (byte-exact on the Single, TT 813eb166 and 88/88 Mastery 8adb440d line 18)
+    (18, "rail3", lambda s: rail_enc(s, 3), lambda t: rail_dec(t, 3), True),
 ]
 
 try:   # fair runs (HCTF_CODEC_MAX_DAY=<N-1>, as lib/codec.py): only codecs GM-confirmed before day N
@@ -1148,6 +1151,355 @@ def rail_solve(blob):
     except Exception:  # noqa: BLE001
         pass
     return None
+
+
+# Redefence (ACA): the rail fence's zigzag (any offset), but the rails are emitted in a key order instead of top to
+# bottom. order[k] = the rail (0 = top) read k-th. Keyless solve: each rail's crib characters pin where its slice can
+# start in the ciphertext, so the read order is a short DFS over cumulative slice starts (rails 2-8 x every offset, no
+# n! brute). A prompt key ('3-1-2', 'THREE') gives the order directly: _redef_hint_orders.
+_REDEF_MAX = 8
+
+
+def redefence_enc(s, order, offset=0):
+    n = len(order)
+    rows = _rail_rows(len(s), n, offset)
+    rank = {r: k for k, r in enumerate(order)}
+    return "".join(s[i] for i in sorted(range(len(s)), key=lambda i: (rank[rows[i]], i)))
+
+
+def redefence_dec(t, order, offset=0):
+    n = len(order)
+    if sorted(order) != list(range(n)):
+        return None
+    rows = _rail_rows(len(t), n, offset)
+    rank = {r: k for k, r in enumerate(order)}
+    out = [""] * len(t)
+    for c, i in zip(t, sorted(range(len(t)), key=lambda i: (rank[rows[i]], i))):
+        out[i] = c
+    return "".join(out)
+
+
+def _redef_name(order, o):
+    return f"redefence{len(order)}-" + "".join(map(str, order)) + (f"-off{o}" if o else "")
+
+
+def _redef_orders(t, crib, n, o):
+    """Rail read orders (not top-to-bottom) under which t (rails n, offset o) decodes with `crib` as its prefix."""
+    L = len(t)
+    rows = _rail_rows(L, n, o)
+    pos = [[] for _ in range(n)]
+    for i, r in enumerate(rows):
+        pos[r].append(i)
+    starts = []
+    for r in range(n):
+        ln = len(pos[r])
+        need = [(j, crib[i]) for j, i in enumerate(pos[r]) if i < len(crib)]
+        starts.append({s for s in range(L - ln + 1) if all(t[s + j] == ch for j, ch in need)})
+    out = []
+
+    def dfs(cum, used, acc):
+        if len(acc) == n:
+            if tuple(acc) != tuple(range(n)):
+                out.append(tuple(acc))
+            return
+        for r in range(n):
+            if r not in used and cum in starts[r]:
+                used.add(r)
+                acc.append(r)
+                dfs(cum + len(pos[r]), used, acc)
+                acc.pop()
+                used.discard(r)
+                if len(out) > 8:
+                    return
+    dfs(0, set(), [])
+    return out
+
+
+def _redef_hint_orders(hints, nmax=_REDEF_MAX):
+    """Candidate read orders from the prompt / title: a digit key ('3-1-2', '312', '3,1,2'; 0- or 1-based) or a word
+    key (letters ranked alphabetically, ties left to right: 'THREE' -> 4,2,3,0,1). Each key is taken both ways: as the
+    rail read sequence and as each rail's read rank."""
+    keys = []
+    for h in hints or ():
+        h = unicodedata.normalize("NFKD", str(h)).encode("ascii", "ignore").decode()
+        for m in re.findall(r"\d(?:\s*[-,/ ]\s*\d)+|\b\d{2,8}\b", h):
+            d = [int(x) for x in re.findall(r"\d", m)]
+            if 2 <= len(d) <= nmax and len(set(d)) == len(d):
+                lo = min(d)
+                if lo in (0, 1) and sorted(x - lo for x in d) == list(range(len(d))):
+                    keys.append(tuple(x - lo for x in d))
+        for w in re.findall(r"[A-Za-z]{2,}", h):
+            w = w.lower()
+            if 2 <= len(w) <= nmax:
+                srt = sorted(range(len(w)), key=lambda i: (w[i], i))
+                rank = [0] * len(w)
+                for k, i in enumerate(srt):
+                    rank[i] = k
+                keys.append(tuple(rank))
+    out = []
+    for k in keys:
+        inv = [0] * len(k)
+        for i, r in enumerate(k):
+            inv[r] = i
+        for o in (k, tuple(inv)):
+            if o not in out and o != tuple(range(len(o))):
+                out.append(o)
+    return out[:40]
+
+
+def redefence_solve(blob, hints=()):
+    """(name, sentence, enc) when the blob is the warmups sentence under a redefence of 2-8 rails at any offset (rail
+    slices emitted in a key order), else None. Anagram gate like rail_solve; hinted orders first, then the crib-pinned
+    DFS. Accepts only crib + slug. Never raises."""
+    try:
+        t = _t(blob).strip("\r\n")
+        L = len(t)
+        if L <= len(_CRIB) + 4 or L > 400 or "\n" in t:
+            return None
+        rest = collections.Counter(t)
+        rest.subtract(_CRIB)
+        if min(rest.values()) < 0 or any(not (ch.islower() or ch.isdigit() or ch == "-") for ch, v in rest.items() if v):
+            return None
+
+        def ok(c):   # a mirrored order can equal a plain rail fence (rail3 = redefence3-210-off2): rail_solve's
+            return (c and c.startswith(_CRIB) and SLUG.fullmatch(c[len(_CRIB):])
+                    and not any(rail_enc(c, m, oo) == t for m, oo in rail_keys(L, _REDEF_MAX)))
+        for order in _redef_hint_orders(hints):
+            for o in range(2 * len(order) - 2):
+                c = redefence_dec(t, order, o)
+                if ok(c):
+                    return _redef_name(order, o), c, (lambda k, o: lambda s: redefence_enc(s, k, o))(order, o)
+        for n in range(2, min(_REDEF_MAX, L - 1) + 1):
+            for o in range(2 * n - 2):
+                for order in _redef_orders(t, _CRIB, n, o):
+                    c = redefence_dec(t, order, o)
+                    if ok(c):
+                        return _redef_name(order, o), c, (lambda k, o: lambda s: redefence_enc(s, k, o))(order, o)
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def redefence_crib_dec(t):
+    r = redefence_solve(t)
+    return r[1] if r else None
+
+
+# Perfect riffle (faro) shuffle, speculative ('deck' / 'shuffle' / 'cards' pun): cut the text in half and interleave,
+# repeated k times. Out-shuffle keeps the top card on top (top half first, = rail2 DECODE: one un-shuffle is rail2's
+# encoder); in-shuffle deals the second half first. Odd length: the half dealt first is the longer one (ceil). Keyless
+# solve walks k = 1 .. order-1 of each shuffle (order <= ~L) undoing one shuffle per step, crib + slug gated.
+def riffle_enc(s, k=1, inn=False):
+    step = _tp_riffle(len(s), inn)
+    for _ in range(k):
+        s = "".join(map(s.__getitem__, step))
+    return s
+
+
+def _riffle_undo(t, step):
+    out = [""] * len(t)
+    for j, i in enumerate(step):
+        out[i] = t[j]
+    return "".join(out)
+
+
+def riffle_dec(t, k=1, inn=False):
+    step = _tp_riffle(len(t), inn)
+    for _ in range(k):
+        t = _riffle_undo(t, step)
+    return t
+
+
+def _riffle_walk(t, inn):
+    """[(k, reading)] for k = 1 .. order-1: t with k shuffles undone (stops when the cycle closes)."""
+    step, out, c = _tp_riffle(len(t), inn), [], t
+    for k in range(1, 2 * len(t) + 2):
+        c = _riffle_undo(c, step)
+        if c == t:
+            break
+        out.append((k, c))
+    return out
+
+
+def riffle_solve(blob):
+    """(name 'riffle-out3' / 'riffle-in1', sentence, enc) when the blob is the warmups sentence under k perfect
+    out/in-shuffles (smallest k wins; out before in), else None. Anagram gate like rail_solve. Never raises."""
+    try:
+        t = _t(blob).strip("\r\n")
+        if len(t) <= len(_CRIB) + 4 or len(t) > 2000:
+            return None
+        rest = collections.Counter(t)
+        rest.subtract(_CRIB)
+        if min(rest.values()) < 0 or any(not (ch.islower() or ch.isdigit() or ch == "-") for ch, v in rest.items() if v):
+            return None
+        for inn in (False, True):
+            for k, c in _riffle_walk(t, inn):
+                if c.startswith(_CRIB) and SLUG.fullmatch(c[len(_CRIB):]):
+                    return (f"riffle-{'in' if inn else 'out'}{k}", c,
+                            (lambda k, inn: lambda s: riffle_enc(s, k, inn))(k, inn))
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def riffle_crib_dec(t):
+    r = riffle_solve(t)
+    return r[1] if r else None
+
+
+def riffle_free(p, k=3):
+    """Mastery fragment: a line under k in/out shuffles (k restarting per line) -> readings that are a crib piece
+    (_crib_piece), best k by (crib chars confirmed, bigram). Raw and lead-stripped line both tried. Never raises."""
+    try:
+        from lib.decode import _bigram
+        lead = p[:len(p) - len(p.lstrip())]
+        hits, seen = {}, set()
+        for pre, t in ((lead, p[len(lead):].rstrip("\r\n")), ("", p.rstrip("\r\n")))[:2 if lead else 1]:
+            if len(t) < 4 or len(t) > 400:
+                continue
+            seen.add(t)
+            for inn in (False, True):
+                for _k, c in _riffle_walk(t, inn):
+                    if c in seen:
+                        continue
+                    seen.add(c)
+                    n = _crib_piece(c)
+                    if n:
+                        hits.setdefault(pre + c, (n, _bigram(c)))
+        return [c for c, _s in sorted(hits.items(), key=lambda kv: kv[1], reverse=True)[:k]]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+# Bifid / Trifid (Delastelle) over a STANDARD keyless square: Bifid = A-Z sans J (5x5, J->I), Trifid = A-Z + '.'
+# (3x3x3, secretpy's default). Each period block writes its row coords, then its col (/ layer) coords, and re-reads them
+# as tuples. period 0 = the whole letter run (CyberChef Bifid, secretpy key 0). Layouts: keep = letters ciphered in
+# place, case kept, everything else kept (CyberChef; keep-cc = CyberChef's literal lowercase j); upper / lower =
+# letter stream only (pycipher / secretpy); groups5 = upper stream in 5-letter groups.
+_FRAC = {"bifid": ("ABCDEFGHIKLMNOPQRSTUVWXYZ", 5, 2), "trifid": ("ABCDEFGHIJKLMNOPQRSTUVWXYZ.", 3, 3)}
+_FRAC_PERIODS = (0, 5, 6, 7, 8, 9, 10)
+_FRAC_LAYOUTS = {"bifid": ("keep", "keep-cc", "upper", "lower", "groups5"), "trifid": ("keep", "upper", "lower")}
+
+
+def _frac_block(idx, base, n, d):
+    if d > 0:
+        rows = [[i // base ** (n - 1 - k) % base for i in idx] for k in range(n)]
+        flat = [x for r in rows for x in r]
+        tup = [flat[j:j + n] for j in range(0, len(flat), n)]
+    else:
+        flat = [i // base ** (n - 1 - k) % base for i in idx for k in range(n)]
+        tup = list(zip(*[flat[k * len(idx):(k + 1) * len(idx)] for k in range(n)]))
+    return [sum(x * base ** (n - 1 - k) for k, x in enumerate(t)) for t in tup]
+
+
+def _frac_run(idx, fam, period, d):
+    _ab, base, n = _FRAC[fam]
+    p = period or len(idx) or 1
+    return [x for i in range(0, len(idx), p) for x in _frac_block(idx[i:i + p], base, n, d)]
+
+
+def frac_enc(s, fam="bifid", period=0, layout="keep"):
+    ab = _FRAC[fam][0]
+    s = _u(s).decode() if isinstance(s, bytes) else s
+    if layout.startswith("keep"):
+        cc = layout == "keep-cc"
+        if fam == "bifid":
+            s = s.replace("J", "I", 1) if cc else s.replace("J", "I").replace("j", "i")
+        pos = [k for k, c in enumerate(s) if c.upper() in ab and not (cc and c == "j")]
+        out = _frac_run([ab.index(s[k].upper()) for k in pos], fam, period, 1)
+        r = list(s)
+        for k, i in zip(pos, out):
+            r[k] = ab[i] if s[k].isupper() or not s[k].isalpha() else ab[i].lower()
+        return "".join(r)
+    letters = [c for c in s.upper().replace("J", "I" if fam == "bifid" else "J") if c in ab and c != "."]
+    ct = "".join(ab[i] for i in _frac_run([ab.index(c) for c in letters], fam, period, 1))
+    if layout == "lower":
+        return ct.lower()
+    return " ".join(ct[i:i + 5] for i in range(0, len(ct), 5)) if layout == "groups5" else ct
+
+
+def frac_dec(t, fam="bifid", period=0):
+    """Inverse of frac_enc for one family/period, any layout: in-place letters (case kept), others kept; a 'j' (never
+    in a Bifid square) passes through like CyberChef's. None when the text holds no square letter. Never raises."""
+    try:
+        ab = _FRAC[fam][0]
+        t = _t(t)
+        pos = [k for k, c in enumerate(t) if c.upper() in ab]
+        if not pos:
+            return None
+        out = _frac_run([ab.index(t[k].upper()) for k in pos], fam, period, -1)
+        r = list(t)
+        for k, i in zip(pos, out):
+            r[k] = ab[i].lower() if t[k].islower() else ab[i]
+        return "".join(r)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _frac_fold(s):
+    return re.sub(r"[^a-z]", "", s.lower().replace("j", "i"))
+
+
+def frac_solve(blob, periods=(0,) + tuple(range(2, 16))):
+    """(name 'bifid-p7-keep', reading, enc) when the blob is the warmups sentence under Bifid/Trifid with a standard
+    square at some period: the reading's letters (I=J folded) start with the crib's. In-place layouts give the full
+    sentence back; a letter stream gives its lowercase letters (digits and spacing are gone). Never raises."""
+    try:
+        t = _t(blob).strip()
+        crib = _frac_fold(SENTENCE.split("{slug}")[0])
+        if not t or len(t) > 2000 or len(_frac_fold(t)) < len(crib):
+            return None
+        for fam in ("bifid", "trifid"):
+            for per in periods:
+                c = frac_dec(t, fam, per)
+                if not c or not _frac_fold(c).startswith(crib):
+                    continue
+                if re.search(r"[^A-Za-z ]", t) or " " in t and not re.fullmatch(r"[A-Z]{5}( [A-Z]{1,5})*", t):
+                    return f"{fam}-p{per}-keep", c, (lambda f, p: lambda s: frac_enc(s, f, p, "keep"))(fam, per)
+                lay = "groups5" if " " in t else "lower" if t.islower() else "upper"
+                return (f"{fam}-p{per}-{lay}", c.replace(" ", "").lower(),
+                        (lambda f, p, ly: lambda s: frac_enc(s, f, p, ly))(fam, per, lay))
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def frac_crib_dec(t):
+    r = frac_solve(t)
+    return r[1] if r else None
+
+
+def frac_free(p, k=2):
+    """Mastery fragment: a line under Bifid/Trifid (standard square, period full / 2-15, restarting per line), in-place
+    layout -> readings that are a crib piece (_crib_piece), best by (crib chars confirmed, bigram). Never raises."""
+    try:
+        from lib.decode import _bigram
+        lead = p[:len(p) - len(p.lstrip())]
+        t = p[len(lead):].rstrip("\r\n")
+        if len(t) < 4 or len(t) > 400:
+            return []
+        hits = {}
+        for fam in ("bifid", "trifid"):
+            for per in (0,) + tuple(range(2, 16)):
+                c = frac_dec(t, fam, per)
+                if c and c != t:
+                    n = _crib_piece(c)
+                    if n:
+                        hits.setdefault(lead + c, (n, _bigram(c)))
+        return [c for c, _s in sorted(hits.items(), key=lambda kv: kv[1], reverse=True)[:k]]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _frac_cands():
+    """(name, enc, dec) for Bifid/Trifid x layout x period; the crib-gated any-period decoder rides the first only."""
+    out = []
+    for fam, lays in _FRAC_LAYOUTS.items():
+        for lay in lays:
+            for per in _FRAC_PERIODS:
+                out.append((f"{fam}-p{per}-{lay}", (lambda f, p, ly: lambda s: frac_enc(s, f, p, ly))(fam, per, lay),
+                            None if out else frac_crib_dec))
+    return out
 
 
 _AFFINE_A = (3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25)
@@ -4361,6 +4713,822 @@ def col_solve(t, hints=()):
         return None
 
 
+# ------------------------------------- double columnar / Myszkowski, keyed by title / prompt words (speculative)
+# tgt:columnar covers one pass under one key. Here: Myszkowski (repeated key letters = one column group, read row by
+# row left to right -- secretpy MyszkowskiTransposition), the same key twice, two different keys (either order, any mix
+# of plain columnar and Myszkowski), keys = every word / number of the title + prompt, each hint run together, and the
+# case-sensitive (ASCII) ranking when it differs; numbers are also scytale widths. Keyless extra: scytale w twice.
+# A pass is a permutation (cipher[j] = plain[P[j]]); two passes compose, the crib is checked on the composed inverse
+# before any string is built. Accepts only crib + slug (trailing 'x' pad allowed); 0.5 s cap. Never raises.
+def mysz_order(key):
+    """Myszkowski column groups: [[cols], ...] in key-rank order, columns of a repeated letter grouped left to right.
+    A str key ranks lower-cased letters; an int n = n singleton groups (scytale)."""
+    if isinstance(key, int):
+        return [[c] for c in range(key)]
+    k = key.lower()
+    return [[i for i, ch in enumerate(k) if ch == u] for u in sorted(set(k))]
+
+
+def _dcol_perm(L, groups, m):
+    """[plain index] in cipher order for one pass over L chars, m columns, read group by group (row-major inside)."""
+    out = []
+    for g in groups:
+        if len(g) == 1:
+            out.extend(range(g[0], L, m))
+        else:
+            for r in range(0, L, m):
+                out.extend(r + c for c in g if r + c < L)
+    return out
+
+
+def mysz_enc(s, key, pad=None):
+    groups = mysz_order(key)
+    m = sum(len(g) for g in groups)
+    if pad and len(s) % m:
+        s += pad * (m - len(s) % m)
+    return "".join(s[i] for i in _dcol_perm(len(s), groups, m))
+
+
+def mysz_dec(t, key):
+    groups = mysz_order(key)
+    out = [""] * len(t)
+    for j, i in enumerate(_dcol_perm(len(t), groups, sum(len(g) for g in groups))):
+        out[i] = t[j]
+    return "".join(out)
+
+
+def _dcol_pass_enc(s, kind, key, pad=None):
+    return mysz_enc(s, key, pad) if kind == "mysz" else col_enc(s, key, pad)
+
+
+def dcol_enc(s, passes, pad=None):
+    """Apply [(kind, key), ...] in order (kind 'col' = stable-rank columnar, 'mysz' = Myszkowski)."""
+    for kind, key in passes:
+        s = _dcol_pass_enc(s, kind, key, pad)
+    return s
+
+
+def _dcol_keys(hints):
+    """[(label, key)] from the hints: words / numbers, each hint run together (and its letters only), case-sensitive
+    ranking where it differs; numbers also as an int width. Keys of 2-24 chars, at most 96."""
+    out, seen = [], set()
+
+    def add(label, key):
+        kk = key
+        if (isinstance(kk, int) and 2 <= kk <= 24) or (isinstance(kk, str) and 2 <= len(kk) <= 24):
+            sig = (type(kk).__name__, kk if isinstance(kk, int) else kk.lower())
+            if sig not in seen:
+                seen.add(sig)
+                out.append((label, kk))
+    for h in hints or ():
+        h = unicodedata.normalize("NFKD", str(h)).encode("ascii", "ignore").decode()
+        words = re.findall(r"[A-Za-z0-9]+", h)
+        for w in words + ["".join(words), "".join(re.findall(r"[A-Za-z]", h))]:
+            if not w:
+                continue
+            add(w.lower(), w)
+            if w.isdigit():
+                add(w, int(w))
+    return out[:96]
+
+
+def _dcol_variants(L, keys):
+    """[(name, kind, key, inv)] distinct single passes: columnar + Myszkowski (+ ASCII-case ranking) of every key;
+    inv[i] = cipher index of plain i."""
+    out, seen = [], set()
+    for label, key in keys:
+        forms = [("col", key), ("mysz", key)]
+        if isinstance(key, str) and key != key.lower() and key != key.upper():
+            forms.append(("col", tuple(sorted(range(len(key)), key=lambda i: (key[i], i)))))
+        for kind, k in forms:
+            m = len(k) if not isinstance(k, int) else k
+            if m >= L:
+                continue
+            groups = mysz_order(k) if kind == "mysz" else [[c] for c in col_order(k)]
+            P = _dcol_perm(L, groups, m)
+            sig = tuple(P)
+            if sig in seen:
+                continue
+            seen.add(sig)
+            inv = [0] * L
+            for j, i in enumerate(P):
+                inv[i] = j
+            out.append((f"{kind}:{label}" + ("-ascii" if isinstance(k, tuple) else ""), kind, k, inv))
+    return out
+
+
+def dcol_solve(blob, hints=(), budget=0.5):
+    """(name, sentence, enc) for the warmups sentence under Myszkowski / double columnar keyed by title / prompt words
+    (or scytale w twice), else None."""
+    import time
+    try:
+        t0 = time.monotonic()
+        t = _t(blob).strip("\r\n")
+        L = len(t)
+        if L <= len(_CRIB) + 4 or L > 600 or "\n" in t:
+            return None
+        rest = collections.Counter(t)
+        rest.subtract(_CRIB)
+        if min(rest.values()) < 0 or any(not (ch.islower() or ch.isdigit() or ch == "-") for ch, v in rest.items() if v):
+            return None
+        cr, n = _CRIB, len(_CRIB)
+        V = _dcol_variants(L, _dcol_keys(hints))
+        W = _dcol_variants(L, [(str(w), w) for w in range(2, min(21, L))])
+
+        def accept(passes):   # passes in encoding order: plain[i] = t[inv_last[...inv_first[i]]]
+            idx = passes[0][3]
+            for v in passes[1:]:
+                idx = [v[3][i] for i in idx]
+            c = "".join(t[i] for i in idx)
+            tail = c[n:].rstrip("x")
+            if not (c.startswith(cr) and SLUG.fullmatch(tail)):
+                return None
+            ps = [(v[1], v[2]) for v in passes]
+            pad = "x" if n + len(tail) < L else None
+            c = c[:n + len(tail)]
+            if pad and dcol_enc(c, ps, pad) != t:   # the padded encoding must reproduce the blob exactly
+                return None
+            name = "+".join(v[0] for v in passes) + ("-x" if pad else "")
+            return ("dcol:" if len(passes) > 1 else "") + name, c, (lambda ps, pd: lambda s: dcol_enc(s, ps, pd))(ps, pad)
+
+        for v in V:   # one Myszkowski pass (one columnar pass under a hint word = _hint_cands' columnar:<k>)
+            if v[1] == "mysz" and all(t[v[3][i]] == cr[i] for i in range(n)):
+                got = accept([v])
+                if got:
+                    return got
+        pairs = [(v1, v2) for v1 in V for v2 in V] + [(w, w) for w in W]
+        for k, (v1, v2) in enumerate(pairs):
+            i1, i2 = v1[3], v2[3]
+            if all(t[i2[i1[i]]] == cr[i] for i in range(n)):
+                got = accept([v1, v2])
+                if got:
+                    return got
+            if not k & 255 and time.monotonic() - t0 > budget:
+                return None
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def dcol_crib_dec(t, hints=()):
+    """Decoder view of dcol_solve (the sentence or None)."""
+    got = dcol_solve(t, hints)
+    return got[1] if got else None
+
+
+# Keyless transposition sweep (D18 opened the family with rail 3). Every family is a permutation P of positions
+# (cipher[j] = plain[P[j]]) built per length L, tried as P and as its inverse, each bare and composed with reversal
+# (before or after). Spaces are ciphertext; only CR/LF are stripped.
+#   reverse | rail n x offset | redefence (rail rows read in a key order) | columnar 2-5 every order, scytale 2-20
+#   (and reversed) | route (spiral cw/ccw from each corner, row/column snake; grid filled by rows or by columns)
+#   | skip k (every k-th char, gcd(k, L) = 1) | riffle (in/out perfect shuffle x1-6) | word order / per-word reversal
+#   | diagonal zigzag route (JPEG scan, first step right or down, each corner). A box padded to w x h with 'x' / ' ' /
+#   '_' / NUL reads the same permutations on the full grid: the pad is stripped from the reading's ends. CyberChef
+#   'Caesar Box Cipher' (spaces deleted, then scytale-h) is read against the crib with its spaces removed.
+def _tp_word_perm(L, s, each):
+    """Positions of a text with spaces at the same places as `s`: words in reverse order (each=False) or each word
+    reversed in place (each=True)."""
+    spans = [m.span() for m in re.finditer(r"[^ ]+| +", s)]
+    if each:
+        return [i for a, b in spans for i in range(b - 1, a - 1, -1)]
+    return [i for a, b in reversed(spans) for i in range(a, b)]
+
+
+def _tp_route(L, C, path, corner, colfill):
+    """Route read of an R x C grid (filled by rows, or by columns when colfill: then C = rows) over positions < L."""
+    R = -(-L // C)
+    if colfill:
+        R, C = C, -(-L // C)
+    idx = (lambda r, c: c * R + r) if colfill else (lambda r, c: r * C + c)
+    cells = []
+    if path == "spiral":
+        top, bot, lef, rig = 0, R - 1, 0, C - 1
+        while top <= bot and lef <= rig:
+            ring = ([(top, c) for c in range(lef, rig + 1)] + [(r, rig) for r in range(top + 1, bot + 1)]
+                    + ([(bot, c) for c in range(rig - 1, lef - 1, -1)] if bot > top else [])
+                    + ([(r, lef) for r in range(bot - 1, top, -1)] if rig > lef else []))
+            cells += ring
+            top, bot, lef, rig = top + 1, bot - 1, lef + 1, rig - 1
+    elif path in ("diag", "diagdown"):   # JPEG zigzag over anti-diagonals: first step right (diag) or down
+        flip = path == "diagdown"
+        cells = sorted(((r, c) for r in range(R) for c in range(C)),
+                       key=lambda rc: (rc[0] + rc[1], rc[0] if (rc[0] + rc[1]) % 2 != flip else -rc[0]))
+    elif path == "colsnake":
+        cells = [(r if c % 2 == 0 else R - 1 - r, c) for c in range(C) for r in range(R)]
+    else:   # rowsnake
+        cells = [(r, c if r % 2 == 0 else C - 1 - c) for r in range(R) for c in range(C)]
+    if corner & 1:
+        cells = [(r, C - 1 - c) for r, c in cells]
+    if corner & 2:
+        cells = [(R - 1 - r, c) for r, c in cells]
+    p = [idx(r, c) for r, c in cells]
+    return [i for i in p if i < L]
+
+
+def _tp_spiral_ccw(L, C, corner, colfill):
+    """Counter-clockwise spiral = the clockwise one with the grid transposed (any shape): walk an C x R spiral and map
+    each cell back."""
+    R = -(-L // C)
+    if colfill:
+        R, C = C, -(-L // C)
+    idx = (lambda r, c: c * R + r) if colfill else (lambda r, c: r * C + c)
+    top, bot, lef, rig, cells = 0, C - 1, 0, R - 1, []
+    while top <= bot and lef <= rig:
+        cells += ([(top, c) for c in range(lef, rig + 1)] + [(r, rig) for r in range(top + 1, bot + 1)]
+                  + ([(bot, c) for c in range(rig - 1, lef - 1, -1)] if bot > top else [])
+                  + ([(r, lef) for r in range(bot - 1, top, -1)] if rig > lef else []))
+        top, bot, lef, rig = top + 1, bot - 1, lef + 1, rig - 1
+    cells = [(c, r) for r, c in cells]
+    if corner & 1:
+        cells = [(r, C - 1 - c) for r, c in cells]
+    if corner & 2:
+        cells = [(R - 1 - r, c) for r, c in cells]
+    return [i for i in (idx(r, c) for r, c in cells) if i < L]
+
+
+def _tp_riffle(L, inn):
+    h = (L + (0 if inn else 1)) // 2
+    a, b = (range(h, L), range(h)) if inn else (range(h), range(h, L))
+    a, b = list(a), list(b)
+    return [x for pair in itertools.zip_longest(a, b) for x in pair if x is not None]
+
+
+_TP_RAIL_REDEF = 5   # redefence: every rail read order for 3-5 rails (offset 0 and every offset)
+
+
+def _tp_families(L):
+    """[(tier, name, P)] for length L, most plausible first; P = None entries skipped. Tier: 0 reverse / rail offset 0
+    / scytale / word order, 1 rail offsets / columnar / route, 2 redefence / skip / riffle."""
+    out = [(0, "reverse", list(range(L))[::-1])]
+    rows_cache = {}
+    for n, o in rail_keys(L):
+        rows = rows_cache[(n, o)] = _rail_rows(L, n, o)
+        out.append((0 if o == 0 else 1, f"rail{n}" + (f"-off{o}" if o else ""),
+                    sorted(range(L), key=rows.__getitem__)))
+    for m in range(2, min(20, L - 1) + 1):
+        out.append((0, f"scytale{m}", [i for c in range(m) for i in range(c, L, m)]))
+        out.append((1, f"scytale{m}-revcols", [i for c in reversed(range(m)) for i in range(c, L, m)]))
+    for m in range(3, min(_COL_PERM_MAX, L - 1) + 1):
+        for order in itertools.permutations(range(m)):
+            if order != tuple(range(m)) and order != tuple(range(m))[::-1]:
+                out.append((1, "columnar-" + "".join(map(str, order)), [i for c in order for i in range(c, L, m)]))
+    for C in range(2, min(20, L - 1) + 1):
+        for colfill in (False, True):
+            f = "c" if colfill else "r"
+            for corner in range(4):
+                out.append((1, f"route-spiral-cw{corner}-{f}{C}", _tp_route(L, C, "spiral", corner, colfill)))
+                out.append((1, f"route-spiral-ccw{corner}-{f}{C}", _tp_spiral_ccw(L, C, corner, colfill)))
+            for corner in range(4):
+                out.append((1, f"route-colsnake{corner}-{f}{C}", _tp_route(L, C, "colsnake", corner, colfill)))
+                out.append((1, f"route-rowsnake{corner}-{f}{C}", _tp_route(L, C, "rowsnake", corner, colfill)))
+    for n in range(3, min(_TP_RAIL_REDEF, L - 1) + 1):
+        for o in range(2 * n - 2):
+            rows = rows_cache.get((n, o)) or _rail_rows(L, n, o)
+            for order in itertools.permutations(range(n)):
+                if order != tuple(range(n)):
+                    rank = {r: k for k, r in enumerate(order)}
+                    out.append((2, f"redefence{n}-" + "".join(map(str, order)) + (f"-off{o}" if o else ""),
+                                sorted(range(L), key=lambda i: (rank[rows[i]], i))))
+    for k in range(2, L - 1):
+        if math.gcd(k, L) == 1:
+            out.append((2, f"skip{k}", [(i * k) % L for i in range(L)]))
+    for inn in (False, True):
+        p = list(range(L))
+        step = _tp_riffle(L, inn)
+        for times in range(1, 7):
+            p = [p[i] for i in step]
+            out.append((2, f"riffle-{'in' if inn else 'out'}{times}", p))
+    for C in range(2, min(20, L - 1) + 1):   # diagonal zigzag route (JPEG scan) of the w x h box, from each corner
+        for colfill in (False, True):
+            for corner in range(4):
+                for path in ("diag", "diagdown"):
+                    out.append((2, f"route-{path}{corner}-{'c' if colfill else 'r'}{C}",
+                                _tp_route(L, C, path, corner, colfill)))
+    return [(tier, name, P) for tier, name, P in out if P and len(P) == L]
+
+
+@functools.lru_cache(maxsize=64)
+def _tp_keys(L):
+    """[(tier, name, P, Q)] deduplicated by P (Q = inverse of P), cached per length."""
+    seen, out = set(), []
+    for tier, name, P in _tp_families(L):
+        k = tuple(P)
+        if k in seen or k == tuple(range(L)):
+            continue
+        seen.add(k)
+        Q = [0] * L
+        for j, i in enumerate(P):
+            Q[i] = j
+        out.append((tier, name, P, Q))
+    return out
+
+
+def _tp_apply(s, P):
+    return "".join(map(s.__getitem__, P))
+
+
+def _tp_variants(t, P, Q):
+    """(suffix, plain) for every composition: the family's encoder (decode with Q) and its inverse (decode with P),
+    each bare, with the ciphertext reversed (+rev-out) and after reversing the plaintext (+rev-in)."""
+    tr = t[::-1]
+    for sfx, X in (("", Q), ("-inv", P)):
+        c = _tp_apply(t, X)
+        yield sfx, c
+        yield sfx + "+rev-out", _tp_apply(tr, X)
+        yield sfx + "+rev-in", c[::-1]
+
+
+def _tp_word_keys(t):
+    return [(0, "wordorder", _tp_word_perm(len(t), t, False)), (0, "wordrev", _tp_word_perm(len(t), t, True))]
+
+
+def _tp_encoder(name, sfx):
+    """Encoder for a solved (family name, composition) on any text: rebuild the family's permutation for len(s)."""
+    def enc(s):
+        L = len(s)
+        if "+rev-in" in sfx:
+            s = s[::-1]
+        if name in ("wordorder", "wordrev"):   # involutions on the text's own spacing: -inv is the same map
+            P = _tp_word_perm(L, s, name == "wordrev")
+        else:
+            P = next((P for _t, n, P in _tp_families(L) if n == name), None)
+            if P is None:
+                return None
+            if "-inv" in sfx:
+                Q = [0] * L
+                for j, i in enumerate(P):
+                    Q[i] = j
+                P = Q
+        c = _tp_apply(s, P)
+        return c[::-1] if "+rev-out" in sfx else c
+    return enc
+
+
+_TP_HEAD = "Nice work"
+_TP_TAIL = re.compile(r" ([a-z]+(?:-[a-z]+)+-\d{2,})$")
+_TP_PAD = " x_\x00"   # route / box pad chars: never end the sentence (it starts 'N', ends in slug digits)
+_CRIB_NS = _CRIB.replace(" ", "")
+_TP_TAIL_NS = re.compile(r"[a-z]+(?:-[a-z]+)+-\d{2,}$")
+_CRIB_NS_POS = [i for i, ch in enumerate(_CRIB) if ch != " "]
+
+
+def _tp_dim(name, L):
+    """Grid width a padded box of family `name` fills to (scytale m / columnar key length / route C), else L."""
+    if name.startswith("columnar-"):
+        return len(name.split("-")[1])
+    m = re.search(r"(?:^scytale|-[rc])(\d+)(?:-revcols)?$", name)
+    return int(m.group(1)) if m else L
+
+
+def _tp_box_encoder(name, sfx, c, nosp, L):
+    """Encoder for a reading c (pad kept) of a length-L ciphertext: drop spaces (Caesar box), pad like c did up to a
+    full box, then the family's permutation."""
+    base = _tp_encoder(name, sfx)
+    lead = c[:len(c) - len(c.lstrip(_TP_PAD))] if not c.startswith(_TP_HEAD.replace(" ", "")) else ""
+    trail = c[len(c.rstrip(_TP_PAD)):]
+
+    def enc(s):
+        if nosp:
+            s = s.replace(" ", "")
+        if lead or trail:
+            k = _tp_dim(name, L)
+            need = (-len(s)) % k if k < L else L - len(s)
+            s = s + trail[:1] * need if trail else lead[:1] * need + s
+        return base(s)
+    return enc
+
+
+_TP_RIFFLE_ALIAS = {"rail2": "riffle-out1", "rail2-off1": "riffle-in1"}   # rail2(-off1) inverse = one out/in-shuffle
+
+
+def transposition_solve(blob, budget=0.5):
+    """(name, sentence, enc) when the blob is the warmups sentence under any keyless transposition family above (each
+    also inverted and composed with reversal), else None. Cheap reject first: the character multiset must be the
+    crib's plus slug characters [a-z0-9-] and pad chars (or, if the template drifted, hold 'Nice work' plus a slug's
+    hyphens and digits). Accepts only a reading that STARTS 'Nice work' and ends in a ' words-words-NN' slug once box
+    padding (_TP_PAD) is stripped from its ends (rotated rail offsets show the slug too, mid-text); the full crib wins
+    over the loose head. A space-free blob (CyberChef Caesar Box deletes spaces) is matched against the space-free
+    crib and answered with the template's spaces restored. Never raises; <= `budget` seconds."""
+    import time
+    try:
+        t0 = time.monotonic()
+        t = _t(blob).strip("\r\n")
+        L = len(t)
+        if L < len(_TP_HEAD) + 8 or L > 400 or "\n" in t:
+            return None
+        nosp = " " not in t
+        crib, head = (_CRIB_NS, _TP_HEAD.replace(" ", "")) if nosp else (_CRIB, _TP_HEAD)
+        cnt = collections.Counter(t)
+        rest = cnt.copy()
+        rest.subtract(crib)
+        strict = min(rest.values()) >= 0 and all(
+            ch.islower() or ch.isdigit() or ch in "-" + _TP_PAD for ch, v in rest.items() if v)
+        if not strict:
+            h = cnt.copy()
+            h.subtract(head)
+            if min(h.values()) < 0 or cnt["-"] < 2 or sum(cnt[d] for d in string.digits) < 2:
+                return None
+        loose = None
+        keys = ([] if nosp else [(tier, name, P, None) for tier, name, P in _tp_word_keys(t)]) + _tp_keys(L)
+        for tier, name, P, Q in keys:
+            if time.monotonic() - t0 > budget:
+                break
+            if Q is None:
+                Q = P   # word permutations are involutions
+            for sfx, c in _tp_variants(t, P, Q):
+                cc = c.strip(_TP_PAD)
+                if not cc.startswith(head):
+                    continue
+                m = (_TP_TAIL_NS if nosp else _TP_TAIL).search(cc)
+                if not m:
+                    continue
+                nm, sx = name, sfx
+                if sx.startswith("-inv") and nm in _TP_RIFFLE_ALIAS:   # same P, deck name: undo = one un-shuffle
+                    nm, sx = _TP_RIFFLE_ALIAS[nm], sx[4:]
+                if cc.startswith(crib) and SLUG.fullmatch(cc[len(crib):]):
+                    return nm + sx, _CRIB + cc[len(crib):], _tp_box_encoder(nm, sx, c, nosp, L)
+                loose = loose or (nm + sx, cc, _tp_box_encoder(nm, sx, c, nosp, L))
+        return loose
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _ns_piece(c):
+    """A space-free reading c (Caesar box line) as the sentence piece it spells, template spaces restored, else None:
+    the whole crib + slug, a crib substring (>= 6 chars), or a crib tail + the start of a slug."""
+    if c.startswith(_CRIB_NS) and SLUG.fullmatch(c[len(_CRIB_NS):]):
+        return _CRIB + c[len(_CRIB_NS):]
+    i = _CRIB_NS.find(c) if len(c) >= 6 else -1
+    if i >= 0:
+        return _CRIB[_CRIB_NS_POS[i]:_CRIB_NS_POS[i + len(c) - 1] + 1]
+    m = _SLUG_TAIL.search(c)
+    hd, tail = c[:m.start()], m.group()
+    if len(hd) >= 3 and _CRIB_NS.endswith(hd) and tail[:1].isalpha() and _SLUG_PIECE.fullmatch(tail):
+        return _CRIB[_CRIB_NS_POS[len(_CRIB_NS) - len(hd)]:] + tail
+    return None
+
+
+def transposition_dec(t):
+    r = transposition_solve(t)
+    return r[1] if r else None
+
+
+def transposition_free(p, k=3, budget=0.1):
+    """Mastery fragment mode: every family's key restarts on each line, so each line (CR/LF stripped, spaces kept;
+    a leading space may be ciphertext: raw and stripped both tried) is read under every permutation and kept only when
+    it is a contiguous piece of the sentence or a crib tail + slug start (_crib_piece). Best k by (crib chars
+    confirmed, family plausibility, bigram). Never raises."""
+    import time
+    try:
+        from lib.decode import _bigram
+        t0 = time.monotonic()
+        lead = p[:len(p) - len(p.lstrip())]
+        hits, seen = {}, set()
+        for pre, t in ((lead, p[len(lead):].rstrip("\r\n")), ("", p.rstrip("\r\n")))[:2 if lead else 1]:
+            L = len(t)
+            if L < 3 or L > 200:
+                continue
+            seen.add(t)
+            nosp = " " not in t and L >= 6
+            keys = [(tier, name, P, P) for tier, name, P in _tp_word_keys(t)] + _tp_keys(L)
+            for tier, name, P, Q in keys:
+                if time.monotonic() - t0 > budget:
+                    break
+                for sfx, c in _tp_variants(t, P, Q):
+                    if c in seen:
+                        continue
+                    seen.add(c)
+                    n = _crib_piece(c)
+                    if not n:   # padded box: strip one pad char's run from the ends (longest reading first)
+                        cs = next((x for x in sorted({c.strip(ch) for ch in _TP_PAD} - {c}, key=len, reverse=True)
+                                   if _crib_piece(x)), None)
+                        if cs:
+                            n, c = _crib_piece(cs), cs
+                    if not n and nosp:
+                        c = _ns_piece(c) or c
+                        n = _crib_piece(c) if " " in c else 0
+                    if n:
+                        rank = tier + (1 if sfx else 0)
+                        hits.setdefault(pre + c, (n, -rank, _bigram(c)))
+        return [c for c, _s in sorted(hits.items(), key=lambda kv: kv[1], reverse=True)[:k]]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def register_transposition(day=None, name="transposition", dec=None):
+    """One call to put a (new day's) transposition into lib.decode's joint free-line search: `dec(line)` (the day's
+    exact keyed decoder, key restarting per line) is tried first, then the keyless sweep. day=None = speculative."""
+    from lib import decode
+
+    def cands(p):
+        out = []
+        if dec is not None:
+            got = safe(dec, p.rstrip("\r\n"))
+            if got:
+                out.append(got)
+        return out + [c for c in transposition_free(p) if c not in out]
+    decode.register_free(name, day, cands)
+    return cands
+
+
+# ------------------------------------------------ word-level transposition (speculative, coverage atlas target)
+# Whole space-split tokens permuted (rail n x offset / scytale / columnar / route / skip / riffle on the 17 token
+# positions, or any keyed shuffle), and/or each word's letters rail-fenced / scytale'd / reversed on their own (the
+# slug token anagrammed with the same map, or left intact). Crib-gated: after undoing the inner map every token is a
+# crib word (16) or the slug, so the plaintext is the crib in template order; the family is only named for the encoder.
+_WTP_WORDS = _CRIB.split()
+
+
+def _wtp_inner():
+    """[(name, enc, dec)] per-word letter maps, identity first."""
+    out = [("", lambda w: w, lambda w: w), ("rev", lambda w: w[::-1], lambda w: w[::-1])]
+    for n in range(2, 9):
+        for o in range(2 * n - 2):
+            sfx = f"-off{o}" if o else ""
+            out.append((f"rail{n}{sfx}", (lambda n, o: lambda w: rail_enc(w, n, o))(n, o),
+                        (lambda n, o: lambda w: rail_dec(w, n, o))(n, o)))
+    for m in range(2, 9):
+        out.append((f"scytale{m}", (lambda m: lambda w: col_enc(w, m))(m), (lambda m: lambda w: col_dec(w, m))(m)))
+    out += [(f"{nm}-inv", d, e) for nm, e, d in out[2:]]
+    out += [(f"{nm}+rev", (lambda e: lambda w: e(w)[::-1])(e), (lambda d: lambda w: d(w[::-1]))(d))
+            for nm, e, d in out[2:]]
+    return out
+
+
+_WTP_INNER = _wtp_inner()
+
+
+def _wtp_slug(tok, dec):
+    """The slug a token spells: the inner map undone, else the token left intact."""
+    got = dec(tok)
+    return got if SLUG.fullmatch(got) else tok if SLUG.fullmatch(tok) else None
+
+
+def _wtp_order(cipher, plain):
+    """(name, P) of a positional family with cipher[j] == plain[P[j]] (each family and its inverse, bare and composed
+    with reversal), else ("shuffle", explicit P)."""
+    L = len(plain)
+    if cipher == plain:
+        return "", list(range(L))
+    if cipher == plain[::-1]:
+        return "reverse", list(range(L))[::-1]
+    for _tier, name, P, Q in _tp_keys(L):
+        for sfx, X in (("", P), ("-inv", Q)):
+            if all(cipher[j] == plain[X[j]] for j in range(L)):
+                return name + sfx, list(X)
+            if all(cipher[L - 1 - j] == plain[X[j]] for j in range(L)):
+                return name + sfx + "+rev-out", [X[L - 1 - j] for j in range(L)]
+    used, P = set(), []
+    for c in cipher:
+        i = next(i for i, w in enumerate(plain) if w == c and i not in used)
+        used.add(i)
+        P.append(i)
+    return "shuffle", P
+
+
+def wordtp_solve(blob):
+    """(name, sentence, enc) when the blob is the warmups sentence with its words transposed and/or each word's letters
+    transposed (see above), else None. Identity (plain text) and the cases transposition_solve already reads exactly
+    (pure word order / per-word reversal keep working there) are still answered. Never raises."""
+    try:
+        t = _t(blob).strip()
+        toks = t.split()
+        n = len(_WTP_WORDS) + 1
+        if len(toks) != n or "\n" in t:
+            return None
+        want = collections.Counter(_WTP_WORDS)
+        for iname, ienc, idec in _WTP_INNER:
+            got, slug = [], None
+            for tok in toks:
+                w = idec(tok)
+                if want[w] and got.count(w) < want[w]:
+                    got.append(w)
+                elif slug is None and _wtp_slug(tok, idec):
+                    slug = _wtp_slug(tok, idec)
+                    got.append(slug)
+                else:
+                    break
+            if len(got) != n or slug is None:
+                continue
+            plain = _WTP_WORDS + [slug]
+            keep = slug in toks and ienc(slug) != slug   # slug left intact while the words were anagrammed
+            ctoks = [ienc(w) for w in _WTP_WORDS] + [slug if keep else ienc(slug)]
+            oname, P = _wtp_order(toks, ctoks)
+            name = "word-" + "+".join(x for x in (oname, iname and f"each-{iname}", keep and "slug-intact") if x)
+
+            def enc(s, P=P, oname=oname, ienc=ienc, keep=keep):
+                ws = s.split(" ")
+                if len(ws) != len(P):
+                    if oname == "shuffle":
+                        return None
+                    Pn = next((X for _t2, nm, X in _tp_families(len(ws)) if nm == oname.split("-inv")[0]
+                               .split("+rev-out")[0]), None) if oname != "reverse" else list(range(len(ws)))[::-1]
+                    if Pn is None or "-inv" in oname or "+rev-out" in oname:
+                        return None
+                    P2 = Pn
+                else:
+                    P2 = P
+                cs = [w if keep and SLUG.fullmatch(w) else ienc(w) for w in ws]
+                return " ".join(cs[i] for i in P2)
+            return name, " ".join(plain), enc
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _wtp_words(s, fam, n):
+    """Whole words of s rail-fenced (n rails) or scytale'd (n columns), single-space joined."""
+    ws = s.split(" ")
+    L = len(ws)
+    P = (sorted(range(L), key=_rail_rows(L, n).__getitem__) if fam == "rail"
+         else [i for c in range(n) for i in range(c, L, n)])
+    return " ".join(ws[i] for i in P)
+
+
+def wordtp_dec(t):
+    r = wordtp_solve(t)
+    return r[1] if r else None
+
+
+def wordtp_free(p, k=3):
+    """Mastery fragment: the line's tokens (>= 2) are a contiguous run of the sentence's words (the run may end in the
+    slug or a slug piece) once one inner per-word map is undone, in any order -> that run in template order. Only a
+    reading that differs from the line is returned. Never raises."""
+    try:
+        lead = p[:len(p) - len(p.lstrip())]
+        toks = p.strip().split()
+        if not 2 <= len(toks) <= len(_WTP_WORDS) + 1:
+            return []
+        out = []
+        for _iname, _ienc, idec in _WTP_INNER:
+            ws = [idec(x) for x in toks]
+            plain_set = collections.Counter(ws)
+            for i in range(len(_WTP_WORDS) + 2 - len(toks)):
+                win = _WTP_WORDS[i:i + len(toks)]
+                if len(win) == len(toks):
+                    if collections.Counter(win) == plain_set:
+                        out.append(" ".join(win))
+                    continue
+                rest = plain_set.copy()
+                rest.subtract(win)
+                left = [w for w, v in rest.items() if v > 0 for _ in range(v)]
+                if min(rest.values()) >= 0 and len(left) == 1:   # crib tail + one slug(-piece) token
+                    raw = toks[ws.index(left[0])]
+                    sl = left[0] if _SLUG_PIECE.fullmatch(left[0]) else raw if _SLUG_PIECE.fullmatch(raw) else None
+                    if sl and re.search(r"[a-z]", sl):
+                        out.append(" ".join(win + [sl]))
+            if len(out) >= k:
+                break
+        seen = []
+        for o in out:
+            if o != p.strip() and lead + o not in seen:
+                seen.append(lead + o)
+        return seen[:k]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+# Skip cipher / decimation (dCode 'Skip Cipher'): read every k-th character from start s, wrapping mod L; a position
+# already read moves on to the next unread one, so gcd(k, L) = d > 1 still reads all L: lap r (of d laps, L/d reads
+# each) starts at s + r, i.e. cipher[r*m + q] = plain[(s + r + q*k) % L] with m = L/d. gcd 1 = one lap. The
+# transposition sweep above covers s = 0, gcd 1 only.
+def skip_order(L, k, s=0):
+    """Plain positions in cipher order for the skip cipher (k, start s) on a length-L text (dCode next-unread rule)."""
+    out, used, pos = [], bytearray(L), s % L if L else 0
+    for _ in range(L):
+        while used[pos]:
+            pos = (pos + 1) % L
+        out.append(pos)
+        used[pos] = 1
+        pos = (pos + k) % L
+    return out
+
+
+def skip_enc(s, k, start=0):
+    return "".join(s[i] for i in skip_order(len(s), k, start))
+
+
+def skip_dec(t, k, start=0):
+    out = [""] * len(t)
+    for c, i in zip(t, skip_order(len(t), k, start)):
+        out[i] = c
+    return "".join(out)
+
+
+def _skip_idx(L, k, s):
+    """j -> cipher index holding plain[j] (closed form of skip_order's inverse), or None when k % L == 0."""
+    d = math.gcd(k, L)
+    m = L // d
+    if m < 2:
+        return None
+    kinv = pow(k // d, -1, m)
+
+    def idx(j):
+        r = (j - s) % d
+        return r * m + ((j - s - r) // d) * kinv % m
+    return idx
+
+
+_SKIP_HEAD = len(_TP_HEAD)
+
+
+def _skip_reads(t, kmax=None):
+    """(name, reading) for every (k, s) skip whose reading of t starts 'Nice work' (enc direction: plain = skip_dec;
+    -inv: plain = skip_enc(t)), the 9-char head checked before the rest is built."""
+    L = len(t)
+    head = _TP_HEAD
+    for k in range(1, min(kmax or L, L)):
+        d = math.gcd(k, L)
+        m = L // d
+        if m < 2:
+            continue
+        kinv = pow(k // d, -1, m)
+        for s in range(L):
+            if k == 1 and s == 0:
+                continue
+            # decode: plain[j] = t[idx(j)]
+            if all(t[(((j - s) % d) * m + ((j - s - (j - s) % d) // d) * kinv % m)] == head[j] for j in range(_SKIP_HEAD)):
+                yield f"skip{k}-s{s}", skip_dec(t, k, s)
+            # inverse direction: plain[j] = t[order[j]], order[r*m + q] = (s + r + q*k) % L
+            if all(t[(s + j // m + (j % m) * k) % L] == head[j] for j in range(_SKIP_HEAD)):
+                yield f"skip{k}-s{s}-inv", skip_enc(t, k, s)
+
+
+def skip_solve(blob, budget=0.5):
+    """(name, sentence, enc) when the blob is the warmups sentence under a skip cipher (any k, any start, coprime or
+    not; also the inverse direction), else None. Gated on the crib's character multiset (+ slug chars [a-z0-9-]);
+    accepts a reading that is crib + slug (strict) or 'Nice work' ... ' words-words-NN' (loose). ~L^2 cheap head
+    checks (L ~ 110: ~24k). Never raises."""
+    import time
+    try:
+        t0 = time.monotonic()
+        t = _t(blob).strip("\r\n")
+        L = len(t)
+        if L < len(_TP_HEAD) + 8 or L > 400 or "\n" in t:
+            return None
+        cnt = collections.Counter(t)
+        rest = cnt.copy()
+        rest.subtract(_CRIB)
+        if not (min(rest.values()) >= 0 and all(ch.islower() or ch.isdigit() or ch == "-"
+                                                for ch, v in rest.items() if v)):
+            h = cnt.copy()
+            h.subtract(_TP_HEAD)
+            if min(h.values()) < 0 or cnt["-"] < 2 or sum(cnt[x] for x in string.digits) < 2:
+                return None
+        loose = None
+        for name, c in _skip_reads(t):
+            if time.monotonic() - t0 > budget:
+                break
+            k, s = (int(x) for x in re.match(r"skip(\d+)-s(\d+)", name).groups())
+            enc = ((lambda k, s: lambda x: skip_dec(x, k, s))(k, s) if name.endswith("-inv")
+                   else (lambda k, s: lambda x: skip_enc(x, k, s))(k, s))
+            if c.startswith(_CRIB) and SLUG.fullmatch(c[len(_CRIB):]):
+                return name, c, enc
+            if not loose and _TP_TAIL.search(c):
+                loose = (name, c, enc)
+        return loose
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def skip_dec_any(t):
+    r = skip_solve(t)
+    return r[1] if r else None
+
+
+def skip_free(p, k=3, budget=0.1):
+    """Mastery fragment mode: a line under skip (k, start) with the key restarting per line; every k x start, both
+    directions, kept only when the reading is a contiguous sentence piece (_crib_piece). Best k by (crib chars, bigram).
+    Lines over 80 chars are left to skip_solve. Never raises."""
+    import time
+    try:
+        from lib.decode import _bigram
+        t0 = time.monotonic()
+        t = p.rstrip("\r\n")
+        L = len(t)
+        if L < 4 or L > 80:
+            return []
+        hits, seen = {}, {t}
+        for kk in range(1, L):
+            if time.monotonic() - t0 > budget:
+                break
+            if L // math.gcd(kk, L) < 2:
+                continue
+            for s in range(L):
+                if kk == 1 and s == 0:
+                    continue
+                for c in (skip_dec(t, kk, s), skip_enc(t, kk, s)):
+                    if c in seen:
+                        continue
+                    seen.add(c)
+                    n = _crib_piece(c)
+                    if n:
+                        hits[c] = (n, _bigram(c))
+        return [c for c, _s in sorted(hits.items(), key=lambda kv: kv[1], reverse=True)[:k]]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def wordrev(s):
     return " ".join(w[::-1] for w in s.split(" "))
 
@@ -5707,11 +6875,24 @@ def _cands():
                              ("zodiac", ((2, "ascii"), (2, "hex"))), ("suits8", ((3, "ascii"), (2, "hex"))),
                              ("suits4", ((4, "ascii"), (2, "hex"))), ("mahjong", ((2, "ascii"), (1, "hex"))))
             for w, inner in ws for sp in (" ", "")]
+    # perfect riffle shuffle k = 1-6 (out = scytale-rows2 at k=1: listed first so the deck pun keeps its name), then
+    # any k via the crib-gated keyless walk (infer returns the solved k's encoder; this entry's enc never matches)
+    out += [(f"riffle-{'in' if inn else 'out'}{k}", (lambda k, inn: lambda s: riffle_enc(s, k, inn))(k, inn),
+             (lambda k, inn: lambda t: riffle_dec(t, k, inn))(k, inn)) for inn in (False, True) for k in range(1, 7)]
+    out += [("riffle", lambda s: None, riffle_crib_dec)]
+    # Bifid / Trifid over the standard keyless square, period full / 5-10 x layout (any period 2-15: frac_crib_dec)
+    out += _frac_cands()
     # columnar / scytale transposition, keyless: identity order = scytale with n columns (col-read and row-read)
     out += [(f"scytale{n}", (lambda n: lambda s: col_enc(s, n))(n), (lambda n: lambda t: col_dec(t, n))(n))
             for n in range(2, 9)]
     out += [(f"scytale-rows{n}", (lambda n: lambda s: col_dec(s, n))(n), (lambda n: lambda t: col_enc(t, n))(n))
             for n in range(2, 9)]
+    # word-level transposition (speculative): whole words rail-fenced / scytale'd, or each word's letters rail-fenced;
+    # one crib-gated decoder (wordtp_solve) reads every token order x per-word map
+    out += [(f"word-rail{n}", (lambda n: lambda s: _wtp_words(s, "rail", n))(n), wordtp_dec) for n in (2, 3, 4)]
+    out += [(f"word-scytale{m}", (lambda m: lambda s: _wtp_words(s, "scytale", m))(m), wordtp_dec) for m in (2, 3)]
+    out += [(f"word-each-rail{n}", (lambda n: lambda s: " ".join(rail_enc(w, n) for w in s.split(" ")))(n), wordtp_dec)
+            for n in (2, 3)]
     # keyed polyalphabetic, key = a pun on the codec's name (any other key: the crib -> crib_solve, or _hint_cands)
     for k in _PF_PUN:
         out += _pf_cands(k)
@@ -5728,6 +6909,12 @@ def _cands():
     # rail fence 7-20 rails, and 2-20 rails at every offset (CyberChef Rail Fence Cipher "Offset")
     out += [(f"rail{n}" + (f"-off{o}" if o else ""), (lambda n, o: lambda s: rail_enc(s, n, o))(n, o),
              (lambda n, o: lambda t: rail_dec(t, n, o))(n, o)) for n, o in rail_keys(10 ** 6) if n > 6 or o]
+    # redefence 2-8 rails x offset, any rail read order: keyless crib-pinned decoder (infer returns the solved key's
+    # encoder; this entry's enc never matches)
+    out += [("redefence", lambda s: None, redefence_crib_dec)]
+    # skip cipher (dCode): every k-th char from start 0 / 1, next unread position on a collision (any gcd(k, L))
+    out += [(f"skip{k}-s{st}", (lambda k, st: lambda s: skip_enc(s, k, st))(k, st),
+             (lambda k, st: lambda t: skip_dec(t, k, st))(k, st)) for k in range(2, 13) for st in (0, 1)]
     out += [(f"affine{a},{b}", (lambda a, b: lambda s: affine(s, a, b))(a, b),
              (lambda a, b: lambda t: affine_inv(t, a, b))(a, b)) for a in _AFFINE_A for b in range(26)]
     out += [(f"xor{k:#04x}-hex", (lambda k: lambda s: _xor(s, k).hex())(k),
@@ -5788,6 +6975,9 @@ def _hint_cands(hints):
             out.append((f"columnar-x:{k}", (lambda k: lambda s: col_enc(s, k, "x"))(k),
                         (lambda k: lambda t: col_dec(t, k, "x"))(k)))
             out.append((f"columnar-letters:{k}", (lambda k: lambda s: col_letters_enc(s, k))(k), None))
+    for k in _redef_hint_orders(hints):   # redefence keyed by a prompt digit / word key, every offset
+        out += [(_redef_name(k, o), (lambda k, o: lambda s: redefence_enc(s, k, o))(k, o),
+                 (lambda k, o: lambda t: redefence_dec(t, k, o))(k, o)) for o in range(2 * len(k) - 2)]
     return out
 
 
@@ -5824,6 +7014,317 @@ def _fit_subst(plain, blob):
     return m
 
 
+# ------------------------------------------- transposition over a strict encoding (speculative, D16-18 stack cue)
+# D16-17 stacked two layers, D18 introduced the rail fence: the next day may transpose a strict encoding or encode a
+# transposed sentence. (A) outer transposition: a base64 / base32 / hex / Morse(-hex) string that refuses to decode
+# (or decodes to junk): every keyless transposition (reverse, rails 2-20 x offset, scytale, columnar, route, ...; each
+# inverted and composed with reversal) is undone on the string, gated on the first 12 chars equalling the strict
+# encoding of the crib, then the strict decode must read crib + slug. (B) inner transposition: a strict decode that
+# yields an anagram of the sentence -> rail / redefence / transposition / skip solvers (each anagram-gated).
+def _tps_mhex_enc(s):
+    return " ".join(_MORSE[c.upper()] for c in _u(s).hex())
+
+
+def _tps_mhex_dec(t):
+    if not re.fullmatch(r"[.\- ]+", t.strip()):
+        raise ValueError("not morse-hex")
+    return _t(bytes.fromhex("".join(_UNMORSE[x] for x in t.split())))
+
+
+def _tps_morse_tight(s):
+    return "/".join(" ".join(_MORSE.get(c.upper(), "") for c in w if c.upper() in _MORSE) for w in s.split(" "))
+
+
+_B64A = frozenset(string.ascii_letters + string.digits + "+/=")
+_TPS_STRICT = (   # (name, enc, dec, alphabet, fold for the prefix compare)
+    ("base64", lambda s: base64.b64encode(_u(s)).decode(),
+     lambda t: _t(base64.b64decode(_b64pad(t), validate=True)), _B64A, None),
+    ("base64url", lambda s: base64.urlsafe_b64encode(_u(s)).decode().rstrip("="),
+     lambda t: _t(base64.urlsafe_b64decode(_b64pad(t.rstrip("=")))), frozenset(string.ascii_letters + string.digits
+                                                                               + "-_="), None),
+    ("base32", lambda s: base64.b32encode(_u(s)).decode(), lambda t: _t(base64.b32decode(t.upper())),
+     frozenset(string.ascii_letters + "234567="), str.upper),
+    ("hex", lambda s: _u(s).hex(), lambda t: _t(bytes.fromhex(t)), frozenset(string.hexdigits), str.lower),
+    ("morse-hex", _tps_mhex_enc, _tps_mhex_dec, frozenset(".- "), None),
+    ("morse", morse_enc, morse_text_dec, frozenset(".-/ "), None),
+)
+_TPS_INNER = (   # strict decoders tried before an anagram-gated transposition solve: (name, enc, dec)
+    [(n, e, d) for n, e, d, _a, _f in _TPS_STRICT if n != "morse"]
+    + [("binary8", lambda s: " ".join(f"{b:08b}" for b in _u(s)), lambda t: _t(bytes(int(x, 2) for x in _toks(t)))),
+       ("decimal", lambda s: " ".join(str(b) for b in _u(s)), lambda t: _t(bytes(int(x) for x in _toks(t))))])
+
+
+@functools.lru_cache(maxsize=None)
+def _tps_pre(i):
+    _n, enc, _d, _a, fold = _TPS_STRICT[i]
+    x = enc(_CRIB)[:12]
+    return fold(x) if fold else x
+
+
+def _tps_cheap(L):
+    """[(tier, name, P, Q)] reverse / rails / scytale only (long Morse strings: the full family list costs ~0.5 s)."""
+    out = [(0, "reverse", list(range(L))[::-1])]
+    for n, o in rail_keys(L):
+        rows = _rail_rows(L, n, o)
+        out.append((0, f"rail{n}" + (f"-off{o}" if o else ""), sorted(range(L), key=rows.__getitem__)))
+    for m in range(2, min(20, L - 1) + 1):
+        out.append((0, f"scytale{m}", [i for c in range(m) for i in range(c, L, m)]))
+    res = []
+    for tier, name, P in out:
+        Q = [0] * L
+        for j, i in enumerate(P):
+            Q[i] = j
+        res.append((tier, name, P, Q))
+    return res
+
+
+_tps_cheap_c = functools.lru_cache(maxsize=16)(_tps_cheap)
+
+
+def _tps_perm(name, L):
+    for _tier, n, P, _Q in _tps_cheap_c(L):
+        if n == name:
+            return P
+    return next((P for _t, n, P in _tp_families(L) if n == name), None)
+
+
+def _tps_tenc(name, sfx):
+    """Encoder of a solved (transposition family, composition) on any string (cheap families rebuilt directly)."""
+    def enc(s):
+        L = len(s)
+        if "+rev-in" in sfx:
+            s = s[::-1]
+        P = _tps_perm(name, L)
+        if P is None:
+            return None
+        if "-inv" in sfx:
+            Q = [0] * L
+            for j, i in enumerate(P):
+                Q[i] = j
+            P = Q
+        c = _tp_apply(s, P)
+        return c[::-1] if "+rev-out" in sfx else c
+    return enc
+
+
+def _tps_read(i, c):
+    """The sentence when strict decoder i reads c as crib + slug, else None (Morse: case-free, template recased)."""
+    name, _e, dec, _a, _f = _TPS_STRICT[i]
+    x = safe(dec, c.strip() if name != "morse" else c)
+    if not x:
+        return None
+    x = x.strip()
+    crib = _CRIB.lower() if name == "morse" else _CRIB
+    if x.startswith(crib) and SLUG.fullmatch(x[len(crib):]):
+        return _CRIB + x[len(crib):]
+    return None
+
+
+def _tps_outer(t, t0, budget):
+    import time
+    L = len(t)
+    chars = set(t)
+    encs = [i for i, (_n, _e, _d, a, _f) in enumerate(_TPS_STRICT) if chars <= a and L > 12]
+    if not encs:
+        return None
+    pres = [(i, _tps_pre(i), _TPS_STRICT[i][4]) for i in encs]
+    tr = t[::-1]
+    keys = _tp_keys(L) if L <= 400 else _tps_cheap_c(L)
+    for _tier, name, P, Q in keys:
+        if time.monotonic() - t0 > budget:
+            return None
+        for sfx, X in (("", Q), ("-inv", P)):
+            heads = (("", "".join([t[j] for j in X[:12]])), ("+rev-out", "".join([tr[j] for j in X[:12]])),
+                     ("+rev-in", "".join([t[X[L - 1 - k]] for k in range(12)])))
+            for s2, h in heads:
+                for i, pre, fold in pres:
+                    if (fold(h) if fold else h) != pre:
+                        continue
+                    c = _tp_apply(tr if s2 == "+rev-out" else t, X)
+                    c = c[::-1] if s2 == "+rev-in" else c
+                    got = _tps_read(i, c)
+                    if got:
+                        sname, senc = _TPS_STRICT[i][0], _TPS_STRICT[i][1]
+                        if sname == "morse":   # word gap ' / ' or bare '/' (CyberChef): the one keeping t's multiset
+                            senc = next((e for e in (morse_enc, _tps_morse_tight) if sorted(e(got)) == sorted(t)),
+                                        senc)
+                        tenc = _tps_tenc(name, sfx + s2)
+                        return (f"{name}{sfx}{s2}({sname})", got, (lambda tenc, senc: lambda s: tenc(senc(s)))(tenc, senc))
+    return None
+
+
+def _tps_inner(t, t0, budget):
+    import time
+    for name, enc, dec in _TPS_INNER:
+        if time.monotonic() - t0 > budget:
+            return None
+        x = safe(dec, t)
+        if not x or len(x) < len(_TP_HEAD) + 8 or x.startswith(_CRIB):
+            continue
+        left = max(0.05, budget - (time.monotonic() - t0))
+        r = rail_solve(x) or redefence_solve(x) or riffle_solve(x) or transposition_solve(x, left) or skip_solve(x, left)
+        if r and r[1].startswith(_CRIB):
+            return (f"{name}({r[0]})", r[1], (lambda enc, tenc: lambda s: enc(tenc(s)))(enc, r[2]))
+    return None
+
+
+def tpstrict_solve(blob, budget=0.6):
+    """(name, sentence, enc) when the blob is the warmups sentence under a keyless transposition of a strict encoding
+    (name 'rail5-off2(base64)') or a strict encoding of a transposed sentence ('hex(rail5-off2)'), else None. Both
+    gates need the strict decode to read the crib + a slug. Never raises; <= `budget` seconds."""
+    import time
+    try:
+        t0 = time.monotonic()
+        t = _t(blob).strip("\r\n")
+        if "\n" in t.strip() or len(t) < 16:
+            return None
+        return _tps_inner(t.strip(), t0, budget / 2) or _tps_outer(t, t0, budget)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def tpstrict_dec(t):
+    r = tpstrict_solve(t)
+    return r[1] if r else None
+
+
+def _tps_frag_read(name, dec, c):
+    x = safe(dec, c if name == "morse" else c.strip())
+    if not x or not x.strip() or not x.isascii():
+        return None
+    if name == "morse":
+        x = _recase(x) or ""
+    return x if _crib_piece(x.strip()) >= 4 else None
+
+
+def tpstrict_free(p, k=3, budget=0.1):
+    """Mastery fragment mode: a line = reverse / rail / scytale of a strict encoding of a sentence piece. Kept only
+    when the strict decode is a crib piece of >= 4 confirmed characters (_crib_piece). Never raises."""
+    import time
+    try:
+        t0 = time.monotonic()
+        t = p.rstrip("\r\n")
+        st = t.strip()
+        L = len(st)
+        encs = [(n, d) for n, _e, d, a, _f in _TPS_STRICT if set(st) <= a]
+        if L < 8 or L > 600 or not encs:
+            return []
+        hits = []
+        for src in dict.fromkeys((st, t)):
+            Ls = len(src)
+            sr = src[::-1]
+            for _tier, _name, P, Q in _tps_cheap_c(Ls):
+                if time.monotonic() - t0 > budget:
+                    break
+                for X in (Q, P):
+                    c = _tp_apply(src, X)
+                    for cc in (c, _tp_apply(sr, X), c[::-1]):
+                        if cc == src:
+                            continue
+                        for n, d in encs:
+                            x = _tps_frag_read(n, d, cc)
+                            if x and x not in hits:
+                                hits.append(x)
+                if len(hits) >= k:
+                    break
+        return sorted(hits, key=lambda x: -_crib_piece(x.strip()))[:k]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+# --------------------------------------- transposition stacked with a letter map (speculative, coverage atlas target)
+# rail3(rot13), atbash(rail5-off2), rot47(scytale4), caesar7(rail3), ...: a per-character letter map commutes with any
+# transposition, so the order is irrelevant to decoding. Cue: the crib multiset test fails on the blob but passes once a
+# map is undone -> undo that map, then the keyless transposition solvers. Only the map that restores 'Nice work' plus a
+# slug's hyphens and digits is tried; the plain (untransposed) map is left to the DAYS / caesarN entries.
+def _maptp_maps():
+    """[(name, enc, dec)] letter maps, the FREE_CODECS ones first, then every other Caesar shift."""
+    out = [("rot13", lambda s: rot(s, 13), lambda t: rot(t, 13)), ("atbash", atbash, atbash),
+           ("caesar7", lambda s: rot(s, 7), lambda t: rot(t, -7)), ("rot47", rot47, rot47)]
+    out += [(f"caesar{n}", (lambda n: lambda s: rot(s, n))(n), (lambda n: lambda t: rot(t, -n))(n))
+            for n in range(1, 26) if n not in (7, 13)]
+    return out
+
+
+_MAPTP_MAPS = _maptp_maps()
+_MAPTP_HEAD = collections.Counter(_TP_HEAD.replace(" ", ""))
+
+
+def _maptp_gate(x):
+    """Necessary for any transposition of the sentence: 'Nice work' letters, 2+ hyphens and 2+ digits (slug)."""
+    c = collections.Counter(x)
+    return (all(c[ch] >= v for ch, v in _MAPTP_HEAD.items()) and c["-"] >= 2
+            and sum(c[d] for d in string.digits) >= 2)
+
+
+def maptp_solve(blob, budget=0.6):
+    """(name, sentence, enc) when the blob is the warmups sentence under a letter map (rot13 / atbash / rot47 / any
+    Caesar shift) stacked with a keyless transposition (rail / redefence / box / skip families), in either order; name
+    'map(transposition)', e.g. 'rot13(rail3)'. Only the reading that starts with the full crib and ends in a slug is
+    accepted. Never raises; <= `budget` seconds."""
+    import time
+    try:
+        t0 = time.monotonic()
+        t = _t(blob).strip("\r\n")
+        if "\n" in t or len(t) < len(_TP_HEAD) + 8 or len(t) > 400:
+            return None
+        rest = collections.Counter(t)
+        rest.subtract(_CRIB if " " in t else _CRIB_NS)
+        if min(rest.values()) >= 0:
+            return None   # the blob already holds the crib's multiset: a bare transposition, not this family
+        for mname, menc, mdec in _MAPTP_MAPS:
+            if time.monotonic() - t0 > budget:
+                return None
+            x = mdec(t)
+            if not _maptp_gate(x) or x.strip().startswith(_CRIB):
+                continue
+            left = max(0.05, budget - (time.monotonic() - t0))
+            r = rail_solve(x) or redefence_solve(x) or riffle_solve(x) or transposition_solve(x, left) or skip_solve(x, left)
+            if r and r[1].startswith(_CRIB) and SLUG.fullmatch(r[1][len(_CRIB):].strip()):
+                return (f"{mname}({r[0]})", r[1], (lambda menc, tenc: lambda s: menc(tenc(s)))(menc, r[2]))
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def maptp_dec(t):
+    r = maptp_solve(t)
+    return r[1] if r else None
+
+
+# keyless crib-gated decoder (infer returns the solved map + transposition's encoder; this entry's enc never matches)
+CANDIDATES.append(("map-transposition", lambda s: None, maptp_dec))
+
+
+_MAPTP_CRIB = collections.Counter(_CRIB)
+
+
+def maptp_free(p, k=3, budget=0.08):
+    """Mastery fragment mode: a line = a FREE_CODECS letter map (rot13 / atbash / caesar7 / rot47) over a rail fence /
+    keyless transposition of a sentence piece. A map is tried only when its reading's characters fit the sentence's
+    (crib counts, plus slug chars [a-z0-9-]); kept only as a crib piece (rail_free / transposition_free). Never raises."""
+    import time
+    try:
+        t0 = time.monotonic()
+        t = p.rstrip("\r\n")
+        if len(t.strip()) < 4:
+            return []
+        hits = []
+        for _mname, _menc, mdec in _MAPTP_MAPS[:4]:
+            if time.monotonic() - t0 > budget:
+                break
+            x = mdec(t)
+            if x == t or any(v > _MAPTP_CRIB[ch] and not (ch.islower() or ch.isdigit() or ch == "-")
+                             for ch, v in collections.Counter(x.strip()).items()):
+                continue
+            for c in rail_free(x) + transposition_free(x, k, max(0.01, budget - (time.monotonic() - t0))):
+                if c not in hits and _crib_piece(c.strip()) >= 4:
+                    hits.append(c)
+        return sorted(hits, key=lambda c: -_crib_piece(c.strip()))[:k]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def infer(plain, blob, hints=()):
     """Today's codec from the Single: (name, enc) of the first encoder E with E(plain) == blob.strip() (exact GM bytes),
     else of the first decoder D with D(blob) == plain, else a fitted affine / learned substitution map. None = no
@@ -5848,6 +7349,21 @@ def infer(plain, blob, hints=()):
             if dec is crib_tok_dec:   # the demo alphabet can't re-encode: hand back the recovered map's encoder
                 ct = crib_tok_solve(want)
                 return ct[0], ct[2]
+            if dec is wordtp_dec:   # one decoder reads every word family: hand back the solved family's encoder
+                wt = wordtp_solve(want)
+                return wt[0], wt[2]
+            if dec is redefence_crib_dec:
+                rd = redefence_solve(want, hints)
+                return rd[0], rd[2]
+            if dec is riffle_crib_dec:
+                rf = riffle_solve(want)
+                return rf[0], rf[2]
+            if dec is frac_crib_dec:
+                fs = frac_solve(want)
+                return fs[0], fs[2]
+            if dec is maptp_dec:
+                mt = maptp_solve(want)
+                return mt[0], mt[2]
             return name, enc
     st = stack_fit(p, want)
     if st:
@@ -5868,6 +7384,24 @@ def infer(plain, blob, hints=()):
     ss = subst_solve(want) if p.startswith(_CRIB) else None
     if ss and ss[1] == p:
         return ss[0], ss[2]
+    ts = transposition_solve(want) if p.startswith(_TP_HEAD) else None
+    if ts and ts[1] == p:
+        return ts[0], ts[2]
+    sk = skip_solve(want) if p.startswith(_TP_HEAD) else None
+    if sk and sk[1] == p:
+        return sk[0], sk[2]
+    wt = wordtp_solve(want) if p.startswith(_CRIB) else None
+    if wt and wt[1] == p:
+        return wt[0], wt[2]
+    tps = tpstrict_solve(want) if p.startswith(_CRIB) else None
+    if tps and tps[1] == p:
+        return tps[0], tps[2]
+    mt = maptp_solve(blob) if p.startswith(_CRIB) else None   # unstripped: a rail may start with a space
+    if mt and mt[1] == p:
+        return mt[0], mt[2]
+    dc = dcol_solve(blob, hints) if p.startswith(_CRIB) else None
+    if dc and dc[1] == p:
+        return dc[0], dc[2]
     sub = _fit_subst(p, want)
     if sub:
         return "subst", lambda s: "".join(sub.get(c, c) for c in s)
@@ -5888,9 +7422,22 @@ def plaintext(blob, slug, deadline=None, hints=()):
     if d and slug in d:
         u7 = utf7_dec(d.strip())   # UTF-7 keeps the slug readable: `warmup+ACE To` only reads as the template decoded
         return u7.strip() if u7 and _TPL in u7 and _TPL not in d and slug in u7 else d.strip()
-    rs = rail_solve(text)   # strict (crib + slug, anagram-gated): before the loose `slug in` decoders below
+    # strict (crib + slug, anagram-gated): before the loose `slug in` decoders below
+    rs = rail_solve(text) or redefence_solve(text, hints) or riffle_solve(text) or transposition_solve(text) or skip_solve(text)
     if rs and slug in rs[1]:
         return rs[1]
+    wt = wordtp_solve(text)
+    if wt and slug in wt[1]:
+        return wt[1]
+    tps = tpstrict_solve(text)   # a transposed strict encoding / a strict encoding of a transposed sentence
+    if tps and slug in tps[1]:
+        return tps[1]
+    mt = maptp_solve(text)   # a letter map (rot13 / atbash / rot47 / Caesar) stacked with a transposition
+    if mt and slug in mt[1]:
+        return mt[1]
+    dc = dcol_solve(text, hints)   # Myszkowski / double columnar keyed by title / prompt words
+    if dc and slug in dc[1]:
+        return dc[1]
     for _l, _i, x in inner_reads(text):   # strict (printable ASCII, not a UTF-8 read): before the slow peel
         if slug in x:
             return x.strip()
@@ -6097,8 +7644,15 @@ SPECULATIVE_FREE = (
     ("qwerty", lambda p: _top(p, [qwerty_shift(p, 1), qwerty_shift(p, -1)], 2)),
     ("keyboard", kbd_free),
     ("rail", rail_free),
+    ("riffle", riffle_free),
+    ("bifid", frac_free),
     ("affine", lambda p: _top(p, [affine_inv(p, a, b) for a in _AFFINE_A for b in range(26)])),
     ("columnar", lambda p: [b for b in (col_solve(p),) if b]),
+    ("transposition", transposition_free),
+    ("word-transposition", wordtp_free),
+    ("skip", skip_free),
+    ("tp-strict", tpstrict_free),
+    ("map-transposition", maptp_free),
     ("punycode", lambda p: [p[:len(p) - len(p.lstrip())] + puny_dec(p)]),
     ("braille", lambda p: [b for b in (braille_dec(p),) if b]),
     ("braille-hex", lambda p: braille_hex_reads(p) or [b for b in (braille_ascii_hex_dec(p),) if b]),

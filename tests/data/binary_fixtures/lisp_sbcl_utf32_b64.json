@@ -1,0 +1,26 @@
+{
+ "family": "lisp_facts",
+ "encoding": "stride4-base64",
+ "expected_offset": 2129936,
+ "expected_config": {
+  "flag": "HCFG{sbcl_core_string}",
+  "day": 19,
+  "lang": "common-lisp"
+ },
+ "expected_facts": {
+  "lisp_runtime": "sbcl",
+  "lisp_language": "common-lisp",
+  "has_sbcl_runtime": "true",
+  "has_chicken_runtime": "false",
+  "has_sbcl_core": "true",
+  "sbcl_core_offset": 491520,
+  "sbcl_build_id": "hostname-id-1767033038",
+  "sbcl_version": "2.6.0.debian",
+  "chicken_soname": "none",
+  "hcfg_section": "sbcl_core"
+ },
+ "decoy": false,
+ "generator_cmd": "bash lisp_gen.sh   # real sbcl 2.6.0 save-lisp-and-die :executable t (cropped: head -c 2228224) / chicken 5.3.0 + gcc -lchicken; blob python3 zlib.crc32+struct, coreutils base64",
+ "oracle_cmd": "bash lisp_oracle.sh lisp_sbcl_utf32_b64.bin   # file -b, readelf -d NEEDED, nm/nm -D, grep -obUaP LCBS magic at page boundary + dd|strings build-id, strings -B1 'SBCL %s' version, grep -obUaP raw HCFG, strings -t d [-e L] | base64 -d",
+ "note": "SBCL plain string literal = (simple-array character): base64 stored UTF-32LE inside the appended core (strings -e L); stripped runtime, core header kept, trailer cropped"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "vmdk.parent_file_name_hint",
+ "expected": "sp.vmdk",
+ "generator_cmd": "qemu-img create -f vmdk -b sp.vmdk -F vmdk diff.vmdk (qemu-img 10.2.1)",
+ "oracle_cmd": "qemu-img info diff.vmdk -> backing file: sp.vmdk (descriptor parentFileNameHint)",
+ "decoy": false,
+ "member": "diff.vmdk"
+}

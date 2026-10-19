@@ -1,0 +1,8 @@
+{
+ "field": "appledouble.xattr_names",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"from PIL import Image; Image.new('RGB',(3,3)).save('decoy_png.bin','PNG')\"  (PNG renamed ._x)",
+ "oracle_cmd": "file -b decoy_png.bin -> 'PNG image data, 3 x 3' (no 00051607 magic)",
+ "decoy": true,
+ "member": "__MACOSX/._photo.png"
+}

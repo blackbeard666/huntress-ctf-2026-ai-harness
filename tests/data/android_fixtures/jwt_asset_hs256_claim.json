@@ -1,0 +1,7 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-3f9a0c7e12b4d865",
+ "_why": "HS256 JWT in assets/config/auth.json, claim lic = base64(token); HMAC secret is a dex const-string (jwt_tokens key = Zk9wLx7-qRt2mVb8eYs4)",
+ "generator_cmd": "sh tests/data/android_fixtures/jwt_src/gen_jwt.sh asset ANS-3f9a0c7e12b4d865 tests/data/android_fixtures/jwt_asset_hs256_claim.apk  # PyJWT jwt.encode / cryptography AESGCM + javac/d2j-jar2dex + zip -X",
+ "oracle_cmd": "unzip -p jwt_asset_hs256_claim.apk assets/config/auth.json | jq -r .bearer | python3 -c 'import jwt,sys,base64; print(base64.b64decode(jwt.decode(sys.stdin.read().strip(), \"Zk9wLx7-qRt2mVb8eYs4\", algorithms=[\"HS256\"])[\"lic\"]).decode())'  # PyJWT verify+decode  # -> ANS-3f9a0c7e12b4d865"
+}

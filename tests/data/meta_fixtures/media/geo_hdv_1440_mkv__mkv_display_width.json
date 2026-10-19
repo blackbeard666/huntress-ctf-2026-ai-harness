@@ -1,0 +1,8 @@
+{
+ "field": "media.mkv_display_width",
+ "expected": "16",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=1440x1080:rate=25 -frames:v 2 -vf setsar=4/3 -c:v libx264 -preset ultrafast -pix_fmt yuv420p hdv_1440.mkv (Matroska DisplayWidth 16 / DisplayHeight 9 / DisplayUnit 3)",
+ "oracle_cmd": "exiftool -a -G1 -s hdv_1440.mkv -> DisplayWidth 16, DisplayHeight 9, DisplayUnit Display Aspect Ratio",
+ "decoy": false,
+ "member": "hdv_1440.mkv"
+}

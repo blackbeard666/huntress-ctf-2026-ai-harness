@@ -1,0 +1,10 @@
+{
+ "codec": "skip",
+ "plain": null,
+ "encoded": "aflgndten saeagtynoa gahasl nrlei.krya yelwiio l rTs ilt;  evntceeeh pnoo rare hhnnl",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "gawk -v t=\"$prose\" -v k=5 -v s=2 -f tests/data/warmups_fixtures/skip_dcode.awk  # independent gawk port of dCode Skip Cipher (step k from 0-based start s, wrap mod L, collision -> next unread) on a prose sentence without the warmups crib/slug",
+ "oracle_cmd": "perl tests/data/warmups_fixtures/skip_dcode_inv.pl \"$encoded\" 5 2  # independent perl inverse: replay the visit order, cipher char i -> i-th visited position  -> 'Thanks for playing along today; the real answer lives in another challenge entirely.': no crib, no slug -> none",
+ "oracle_plain": null
+}

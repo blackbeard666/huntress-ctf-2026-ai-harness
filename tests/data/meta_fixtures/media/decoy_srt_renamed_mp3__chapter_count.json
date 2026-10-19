@@ -1,0 +1,8 @@
+{
+ "field": "media.chapter_count",
+ "expected": "none",
+ "generator_cmd": "cp s.srt (ffmpeg-made s.srt) -> renamed impostor renamed.mp3",
+ "oracle_cmd": "file -b s.srt -> 'SubRip, ASCII text' (not a Matroska/MP4/MP3/FLAC container: no streams to account)",
+ "decoy": true,
+ "member": "srt.mp3"
+}

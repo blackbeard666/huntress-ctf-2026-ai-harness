@@ -1,0 +1,8 @@
+{
+ "entry": "proof_flow_scan",
+ "expected": "ANS-b4d07e2f913c6a58",
+ "decoy": false,
+ "_why": "row 72 opaque predicate / dead decoy: <clinit>: if ((z|~z) == -1) t=real else t=decoy ANS-3c9e1a70f5b2d846 (sput last in bytecode); last-write-wins resolution picked the decoy before row 72",
+ "generator_cmd": "python3 tests/data/android_fixtures/opq_src/gen_opq.py field_orn tests/data/android_fixtures/opq_field_orn.apk  # javac --release 8 + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/opq_src/oracle.sh tests/data/android_fixtures/opq_field_orn.apk  # d2j-dex2jar back to classes, RUN buildRequest(host, dev) on the JVM over 12 inputs -> ANS-b4d07e2f913c6a58"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "transposition",
+ "key": "scytale13 +rev-in",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-summit-88",
+ "encoded": "8omwhlwe8lasto d-cGn ss t  at iki:e iohrmrhtmTtometcb  wut au!g ssoxspne-ate uicrM  ,mdie rseroNveeivac",
+ "generator_cmd": "printf %s \"$plain\" | rev | python3 -I -c \"import sys;sys.path.insert(0,'tools/pyciphers');from secretpy import Scytale as S;print(S().encrypt(sys.stdin.read(),13),end='')\"  # util-linux rev, then secretpy 0.12.0 Scytale.encrypt(text, 13)",
+ "oracle_cmd": "python3 -I -c \"import sys;sys.path.insert(0,'tools/pyciphers');from pycipher import ColTrans as C;c=C('abcdefghijklm');c.remove_punctuation=lambda t,**k:t;print(c.decipher(sys.argv[1]),end='')\" \"$encoded\" | rev  # pycipher ColTrans('abcdefghijklm').decipher (identity order = scytale 13), then rev",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-summit-88",
+ "expected": "match"
+}

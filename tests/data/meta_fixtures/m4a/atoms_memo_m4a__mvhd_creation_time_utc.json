@@ -1,0 +1,8 @@
+{
+ "field": "m4a.mvhd_creation_time_utc",
+ "expected": "2024-03-05T10:20:30Z",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i sine=frequency=440:duration=1.5 -c:a aac -metadata title='Voice Memo 42' -metadata creation_time=2024-03-05T10:20:30Z -metadata:s:a:0 language=fra memo.m4a",
+ "oracle_cmd": "exiftool -j -n -G1 -a memo.m4a -> QuickTime:CreateDate '2024:03:05 10:20:30' (UTC)",
+ "decoy": false,
+ "member": "memo.m4a"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-7c1e09a4b3d25f68",
+ "_why": "Java serialization stream asset (row 73): assets/session.ser = ObjectOutputStream(Session), String field token = base64(token), nested Session parent, char[]/int[] fields",
+ "generator_cmd": "sh tests/data/android_fixtures/jser_src/gen_jser.sh session ANS-7c1e09a4b3d25f68 tests/data/android_fixtures/jser_session_b64field.apk  # JDK ObjectOutputStream (jser_src/Gen.java) + javac/d2j-jar2dex + zip -X",
+ "oracle_cmd": "javac --release 11 -d /tmp/jr jser_src/Read.java jser_src/com/example/vault/Session.java && unzip -p jser_session_b64field.apk assets/session.ser | java -cp /tmp/jr Read | grep '^.token=' | cut -d= -f2- | base64 -d"
+}

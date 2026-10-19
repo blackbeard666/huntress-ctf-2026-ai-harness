@@ -1,0 +1,14 @@
+{
+ "codec": "mysz:tomato",
+ "key": "tomato",
+ "hints": [
+  "Tomato Ledger",
+  "Repeated letters stand together."
+ ],
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-summit-63",
+ "encoded": "e iimoemicw asc-tckdhrTvbhasoGa riiwreogt ap sl utt x nrth eMe:oeum6N odcn swu! o,si setae tem trlvsm-3",
+ "generator_cmd": "python3 -I -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from secretpy import MyszkowskiTransposition as M;s=sys.argv[1]\nfor k in sys.argv[2:]:s=M().encrypt(s,k)\nprint(s,end=\"\")' \"$plain\" tomato  # pycipher 0.5.2 ColTrans / secretpy 0.12.0 MyszkowskiTransposition .encipher/.encrypt applied once per key (punctuation kept)",
+ "oracle_cmd": "python3 -I -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from secretpy import MyszkowskiTransposition as M;s=sys.argv[1]\nfor k in reversed(sys.argv[2:]):s=M().decrypt(s,k)\nprint(s,end=\"\")' \"$encoded\" tomato  # secretpy 0.12.0 ColumnarTransposition / MyszkowskiTransposition .decrypt, keys undone last-first",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-summit-63",
+ "expected": "match"
+}

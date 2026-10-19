@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_coded_dimensions",
+ "expected": "1920x1088",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=1920x1080:rate=25 -frames:v 2 -c:v libx264 -preset ultrafast -pix_fmt yuv420p h264_1080.mp4 (x264 codes 120x68 MBs = 1920x1088, frame_crop_bottom_offset 4)",
+ "oracle_cmd": "mediainfo --Output=JSON h264_1080.mp4 -> Width 1920, Height 1080, Stored_Height 1088 (coded = MB-aligned)",
+ "decoy": false,
+ "member": "h264_1080.mp4"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "pdf.xmp_document_id",
+ "expected": "adobe:docid:photoshop:5f1c2a9e-0b7d-4c3e-9a11-7e2d4b6c8f01",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import Image; Image.new('RGB',(40,30),(200,30,60)).save('plain.jpg',quality=90); Image.new('RGB',(40,30),(20,130,60)).save('plain.png'); Image.new('RGB',(40,30),(20,30,160)).save('plain.tif'); Image.new('RGB',(40,30),(90,90,90)).save('plain.pdf')\" (Pillow 12.3.0); exiftool 13.59 '-xmp<=lineage.xmp' -o lineage.pdf plain.pdf  (lineage.xmp = hand-written Photoshop-style XMP packet (xmp.did:/xmp.iid:/adobe:docid: IDs, 5-event stEvt History Seq mixing attribute + parseType=Resource events, dc:title Alt fr-FR before x-default); sibling.xmp = same with DocumentID uuid:7D3C2B1A-..., dc:format image/png)",
+ "oracle_cmd": "exiftool -j -XMP:DocumentID lineage.pdf",
+ "decoy": false,
+ "member": "lineage.pdf"
+}

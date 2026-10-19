@@ -1,0 +1,8 @@
+{
+ "field": "archive.member_names",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import zipfile;z=zipfile.ZipFile('decoy.iso','w');z.writestr('x.txt','hi');z.close()\" (zip renamed .iso impostor)",
+ "oracle_cmd": "file -b decoy.iso -> Zip archive data (no CD001 at 0x8001)  [archive.* = the tar/iso value of the same bytes, routed by magic]",
+ "decoy": true,
+ "member": "decoy_zip.iso"
+}

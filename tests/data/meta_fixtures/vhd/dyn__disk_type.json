@@ -1,0 +1,8 @@
+{
+ "field": "vhd.disk_type",
+ "expected": "3",
+ "generator_cmd": "qemu-img create -f vpc -o subformat=dynamic dyn.vhd 10M  (qemu-img 10.2.1)",
+ "oracle_cmd": "7z l -slt dyn.vhd -> 'Method = Dynamic' (spec: 3 = dynamic); xxd @60 = 0000 0003",
+ "decoy": false,
+ "member": "dyn.vhd"
+}

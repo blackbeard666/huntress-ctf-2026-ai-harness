@@ -1,0 +1,35 @@
+{
+ "family": "dynamic_trace",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "trace_schema": "huntress.binary.dynamic_trace.v1",
+  "trace_family": "synthetic_fixture_trace",
+  "trace_effects": "synthetic_decode_only",
+  "trace_network": "none",
+  "trace_keys": [
+   "schema",
+   "branch",
+   "event_count",
+   "campaign",
+   "family",
+   "effects",
+   "probe_score",
+   "network"
+  ],
+  "host_model_env": "HUNTRESS_HOST_MODEL",
+  "host_models": [
+   "analysis",
+   "sandbox",
+   "workstation"
+  ],
+  "branch_for_analysis": "decoy",
+  "branch_for_sandbox": "failure",
+  "branch_for_workstation": "success"
+ },
+ "generator_cmd": "sh dtrace_gen.sh   # gcc -O1 -s dtrace_src/dtrace_c.c (strcmp chain on HUNTRESS_HOST_MODEL, printf template)",
+ "oracle_cmd": "python3 dtrace_oracle.py dtrace_c_strcmp.bin   # bwrap --unshare-all --unshare-net --clearenv run per HUNTRESS_HOST_MODEL, json.loads of the trace line; strings -n 4 for env/models",
+ "decoy": false,
+ "note": "lib.binary.dynamic_trace_field(data, key) per expected_facts key; trace JSON keys are the GM-free template facts; branch_for_<model> = observed runtime branch (event counts are NOT modeled statically); oracle event_count by model {'analysis': 14, 'sandbox': 23, 'workstation': 19}"
+}

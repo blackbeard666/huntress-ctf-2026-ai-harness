@@ -1,0 +1,8 @@
+{
+ "field": "qcow2.version",
+ "expected": "3",
+ "generator_cmd": "qemu-img create -f qcow2 base.qcow2 4M; qemu-img create -f qcow2 -o cluster_size=4096 -b base.qcow2 -F qcow2 child.qcow2 (qemu-img 10.2.1)",
+ "oracle_cmd": "file -b child.qcow2 -> QEMU QCOW Image (v3); qemu-img compat 1.1",
+ "decoy": false,
+ "member": "child.qcow2"
+}

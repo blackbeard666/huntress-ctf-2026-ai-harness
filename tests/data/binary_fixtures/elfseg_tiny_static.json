@@ -1,0 +1,48 @@
+{
+ "encoding": "none",
+ "decoy": false,
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_elf_segment_facts": {
+  "e_flags": "0x0",
+  "os_abi": "ELFOSABI_SYSV",
+  "os_abi_label": "UNIX - System V",
+  "abi_version": "0",
+  "e_phnum": 7,
+  "e_shnum": 10,
+  "e_shstrndx": 9,
+  "segments": [
+   "PT_LOAD",
+   "PT_LOAD",
+   "PT_LOAD",
+   "PT_NOTE",
+   "PT_NOTE",
+   "PT_GNU_PROPERTY",
+   "PT_GNU_STACK"
+  ],
+  "segments_short": [
+   "LOAD",
+   "LOAD",
+   "LOAD",
+   "NOTE",
+   "NOTE",
+   "GNU_PROPERTY",
+   "GNU_STACK"
+  ],
+  "segment_count": 7,
+  "interpreter": "none",
+  "needed": [],
+  "bind_now": "false",
+  "has_gnu_stack": "true",
+  "has_nx": "true",
+  "execstack": "false",
+  "relro": "none",
+  "is_pie": "false",
+  "is_static": "true",
+  "has_relro": "false"
+ },
+ "generator_cmd": "sh elfseg_gen.sh   # gcc -Os -static -nostdlib -o elfseg_tiny_static.bin elfseg_src_t.c -Wl,-z,noexecstack",
+ "oracle_cmd": "python3 elfseg_oracle.py elfseg_tiny_static.bin   # GNU readelf -hlWd (Flags/OS/ABI/ABI Version/counts/Program Headers types/interpreter/NEEDED/BIND_NOW/GNU_STACK flags/GNU_RELRO) + file -b (pie executable / statically|static-pie linked) + pyelftools (EI_OSABI ELFOSABI_*, p_type PT_*)",
+ "oracle_output": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, BuildID[sha1]=8b4a7589114089d7915a3ea82d90a21fd508c983, not stripped | {\"e_flags\": \"0x0\", \"os_abi\": \"ELFOSABI_SYSV\", \"os_abi_label\": \"UNIX - System V\", \"abi_version\": \"0\", \"e_phnum\": 7, \"e_shnum\": 10, \"e_shstrndx\": 9, \"segments\": [\"PT_LOAD\", \"PT_LOAD\", \"PT_LOAD\", \"PT_NOTE\", \"PT_NOTE\", \"PT_GNU_PROPERTY\", \"PT_GNU_STACK\"], \"segments_short\": [\"LOAD\", \"LOAD\", \"LOAD\", \"NOTE\", \"NOTE\", \"GNU_PROPERTY\", \"GNU_STACK\"], \"segment_count\": 7, \"interpreter\": \"none\", \"needed\": [], \"bind_now\": \"false\", \"has_gnu_stack\": \"true\", \"has_nx\": \"true\", \"execstack\": \"false\", \"relro\": \"none\", \"is_pie\": \"false\", \"is_static\": \"true\", \"has_relro\": \"false\"}",
+ "note": "lib.binary.elf_header_facts program-header/ABI extension. Field names beyond the confirmed elf_class/elf_type/endianness/entry_point/section_names/symbols/has_symtab are SPECULATIVE spellings: e_flags lowercase hex, os_abi ELFOSABI_* (+ os_abi_label readelf, os_abi_num), segments PT_* (+ segments_short readelf), relro full/partial/none (checksec rules), is_pie per file(1), is_static = no interpreter and no DT_NEEDED (static-pie counts). Decoys -> elf_header_field(...) == 'none'."
+}

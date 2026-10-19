@@ -1,0 +1,9 @@
+{
+ "material": "   \t ",
+ "rep": "cmdline",
+ "transform": "canon",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "printf '   \\t '",
+ "oracle_cmd": "python3 -c 'import shlex; print(shlex.split(\"   \\t \"))' -> [] (no command)"
+}

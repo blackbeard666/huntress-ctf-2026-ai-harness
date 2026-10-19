@@ -1,0 +1,8 @@
+{
+ "field": "appledouble.xattr_names",
+ "expected": "[\"com.apple.provenance\"]",
+ "generator_cmd": "cp __MACOSX/._Linkliar.ipa ad_provenance.bin  (REAL AppleDouble written by macOS Archive Utility/ditto, from a CTF zip's __MACOSX folder)",
+ "oracle_cmd": "exiftool -j ad_provenance.bin -> MacOS:XAttrProvenance only; file -b -> 'AppleDouble encoded Macintosh file'",
+ "decoy": false,
+ "member": "__MACOSX/._Linkliar.ipa"
+}

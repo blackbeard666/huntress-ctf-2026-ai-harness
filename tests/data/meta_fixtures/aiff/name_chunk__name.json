@@ -1,0 +1,8 @@
+{
+ "field": "aiff.name",
+ "expected": "Lobby Mic",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i sine=f=440:d=0.2:r=22050 -ac 2 -c:a pcm_s16be -metadata title=\"Lobby Mic\" -metadata author=\"Ops Desk\" -metadata comment=\"call 7\" g.aiff  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel)",
+ "oracle_cmd": "bin/exiftool -j -Name g.aiff -> \"Name\": \"Lobby Mic\"",
+ "decoy": false,
+ "member": "g.aiff"
+}

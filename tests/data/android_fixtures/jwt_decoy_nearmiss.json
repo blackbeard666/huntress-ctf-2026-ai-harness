@@ -1,0 +1,8 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": null,
+ "_why": "DECOY: same layout as jwt_asset_hs256_claim, claim lic = base64 of a near-miss (non-hex 'h') -> no valid ANS token",
+ "generator_cmd": "sh tests/data/android_fixtures/jwt_src/gen_jwt.sh decoy ANS-7b1d4e9c0a2f53h8 tests/data/android_fixtures/jwt_decoy_nearmiss.apk  # PyJWT jwt.encode / cryptography AESGCM + javac/d2j-jar2dex + zip -X",
+ "oracle_cmd": "unzip -p jwt_decoy_nearmiss.apk assets/config/auth.json | jq -r .bearer | python3 -c 'import jwt,sys,base64; print(base64.b64decode(jwt.decode(sys.stdin.read().strip(), \"Zk9wLx7-qRt2mVb8eYs4\", algorithms=[\"HS256\"])[\"lic\"]).decode())'  # PyJWT verify+decode  # -> ANS-7b1d4e9c0a2f53h8 (not 16 hex)",
+ "decoy": true
+}

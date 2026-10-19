@@ -1,0 +1,8 @@
+{
+ "field": "media.attached_pic_present",
+ "expected": "true",
+ "generator_cmd": "ffmpeg -f lavfi -i color=c=red:s=64x48:d=1 -frames:v 1 cover.jpg; ffmpeg -f lavfi -i sine=d=2 -ac 1 -ar 22050 a.wav; ffmpeg -i a.wav -i cover.jpg -map 0 -map 1 -c:a libmp3lame -c:v copy -id3v2_version 3 -disposition:v attached_pic cover_mp3.mp3  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "oracle_cmd": "ffprobe -v error -show_streams -show_format -show_chapters -of json cover_mp3.mp3 -> any stream with disposition.attached_pic==1  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "decoy": false,
+ "member": "cover_mp3.mp3"
+}

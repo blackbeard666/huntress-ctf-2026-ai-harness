@@ -1,0 +1,8 @@
+{
+ "field": "vhd.unique_id_guid",
+ "expected": "5d91d8ba-1ee1-47b5-8b8a-9236d8d5f059",
+ "generator_cmd": "qemu-img create -f vpc -o subformat=fixed,force_size=on fixed.vhd 64K  (qemu-img 10.2.1)",
+ "oracle_cmd": "7z l -slt fixed.vhd -> 'ID = 5D91D8BA1EE147B58B8A9236D8D5F059'",
+ "decoy": false,
+ "member": "fixed.vhd"
+}

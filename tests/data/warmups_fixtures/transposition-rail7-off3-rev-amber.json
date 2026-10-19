@@ -1,0 +1,10 @@
+{
+ "codec": "transposition",
+ "key": "rail7-off3+rev-out",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "-aawiemie4nm mGessh,vurnd c2ob:e rn t lpagowicer e ae so!w coNlreMht xtus  tera-tatotaib Tshdkfs cmoi ",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs enc 7 3 | rev  # CyberChef Rail Fence Cipher Encode(key 7, offset 3), then util-linux rev",
+ "oracle_cmd": "printf %s \"$encoded\" | rev | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs dec 7 3  # util-linux rev, then CyberChef Rail Fence Cipher Decode(7, 3)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

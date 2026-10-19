@@ -1,0 +1,8 @@
+{
+ "field": "jpeg.xmp_document_id",
+ "expected": "none",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import Image; Image.new('RGB',(40,30),(200,30,60)).save('plain.jpg',quality=90); Image.new('RGB',(40,30),(20,130,60)).save('plain.png'); Image.new('RGB',(40,30),(20,30,160)).save('plain.tif'); Image.new('RGB',(40,30),(90,90,90)).save('plain.pdf')\" (Pillow 12.3.0)",
+ "oracle_cmd": "exiftool -j -XMP:all plain.jpg -> no XMP tags",
+ "decoy": true,
+ "member": "plain.jpg"
+}

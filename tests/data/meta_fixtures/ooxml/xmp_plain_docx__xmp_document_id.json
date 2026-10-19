@@ -1,0 +1,8 @@
+{
+ "field": "ooxml.xmp_document_id",
+ "expected": "none",
+ "generator_cmd": "stdlib zipfile ZIP_DEFLATED docx with word/media/image1.jpeg = plain.jpg (no XMP)",
+ "oracle_cmd": "unzip -p plain.docx word/media/image1.jpeg | exiftool -j -XMP:all - -> no XMP tags",
+ "decoy": true,
+ "member": "plain.docx"
+}

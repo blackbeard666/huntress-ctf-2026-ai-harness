@@ -1,0 +1,8 @@
+{
+ "field": "heic.major_brand",
+ "expected": "none",
+ "generator_cmd": "existing MP4 fixture atoms_clip_mp4__ftyp_compatible_brands.bin",
+ "oracle_cmd": "file -b -> 'ISO Media, MP4 ...' (a movie, not a HEIF still)",
+ "decoy": true,
+ "member": "atoms_clip_mp4__ftyp_compatible_brands.bin"
+}

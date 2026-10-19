@@ -1,0 +1,12 @@
+{
+ "codec": "transposition",
+ "key": "caesarbox3(fragment)",
+ "plain": "submit this exact answer",
+ "encoded": "smtsaawuihecnebtixtsr",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/caesarbox_cyberchef.mjs 3  # CyberChef Caesar Box Cipher(3): spaces deleted, column read of a 3-row box",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/caesarbox_cyberchef.mjs 7  # CyberChef Caesar Box Cipher(29) inverts the full 3x7 box (space-free sentence; template spaces restored by the decoder)",
+ "oracle_plain": "submit this exact answer",
+ "oracle_raw": "submitthisexactanswer",
+ "expected": "match",
+ "mode": "fragment"
+}

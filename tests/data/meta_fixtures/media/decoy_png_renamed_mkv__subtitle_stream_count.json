@@ -1,0 +1,8 @@
+{
+ "field": "media.subtitle_stream_count",
+ "expected": "none",
+ "generator_cmd": "cp cover.png (ffmpeg-made cover.png) -> renamed impostor renamed.mkv",
+ "oracle_cmd": "file -b cover.png -> 'PNG image data, 32 x 24, 8-bit/color RGB, non-interlaced' (not a Matroska/MP4/MP3/FLAC container: no streams to account)",
+ "decoy": true,
+ "member": "png.mkv"
+}

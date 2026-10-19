@@ -1,0 +1,38 @@
+{
+ "expected_plain": "v=3|language=powershell|role=stager|verdict=malicious|attack=T1134.004|adapter=process_telemetry|stage_count=1|steps=spoof_parent|campaign_id=PR-b83d2f15|url=https://pr-b83d2f15.example.invalid/c",
+ "decoy": false,
+ "declared": [
+  [
+   "explorer.exe",
+   "wscript.exe",
+   null
+  ],
+  [
+   "wscript.exe",
+   "powershell.exe",
+   null
+  ]
+ ],
+ "reconcile_expected": {
+  "parent_mismatch": [
+   {
+    "child": "powershell.exe",
+    "declared_parent": "wscript.exe",
+    "recorded_parent": "svchost.exe",
+    "real_parent_if_known": "wscript.exe",
+    "pid": "4400",
+    "guid": "7a20c3e1-bb02-6712-000f-000000004200"
+   }
+  ],
+  "matched": [
+   "wscript.exe",
+   "powershell.exe"
+  ],
+  "declared_only": [],
+  "attack": "T1134.004"
+ },
+ "oracle_cmd": "perl -ne 'if(/Material_\\w+ = (?:\\\\?\"|&quot;)([0-9a-f]+)/){$b=pack(\"H*\",$1);$b^=chr(0x5a)x length $b;print $b;exit}' ptrec_creator_field.ndjson",
+ "tree_oracle_cmd": "python3 -I -c \"import json,sys;[print(r['ProcessId'],r['Image'].split(chr(92))[-1],'parent',r['ParentProcessId'],r['ParentImage'].split(chr(92))[-1],'creator',r.get('CreatorProcessId')) for r in map(json.loads,open(sys.argv[1]))]\" ptrec_creator_field.ndjson",
+ "note": "flat Sysmon NDJSON: powershell.exe 4400 ParentProcessId 812 (svchost.exe) but CreatorProcessId 3300 = wscript.exe (declared parent) -> PPID spoofing T1134.004 (lib/codec.py _pe_creator + reconcile_processes)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ptrec_gen.py tests/data/script_fixtures (stdlib writers: xml.sax.saxutils.escape with wevtutil's &quot; rendering for Sysmon EID 1 + Security 4688 XML, json.dumps for flat Sysmon NDJSON with a CreatorProcessId field; plan.encode() XOR 0x5a -> hex in `$Material_<id>` + `$Codec_<id> = \"hex_compact|xor_5a|\"` inside the powershell CommandLine; reconcile_expected = the spoof the generator wrote (TRUTH_*), not lib/codec.py output)"
+}

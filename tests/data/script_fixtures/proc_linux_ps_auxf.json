@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=bash|role=dropper|verdict=malicious|attack=T1059.004|adapter=ps_forest|stage_count=1|steps=decode_stage|campaign_id=PL-91aa4b3c|url=https://pl-91aa4b3c.example.invalid/f",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/proc_linux_gen.py tests/data/script_fixtures (real procps-ng 4.0.4 `ps uf -p <subtree>` of bash -c \"sh -c '<descriptor>; sleep 30'\")",
+ "oracle_cmd": "grep -m1 'sh -c Codec' proc_linux_ps_auxf.txt | perl -ne 'if(/Material_\\w+ ?= ?\\\\?\"([0-9a-f]{40,})\\\\?\"/){$b=pack(\"H*\",$1);$b^=chr(0x5a)x length $b;print $b;exit}'",
+ "note": "forest: \\_ indentation = parent (no PPID column); real ppids equal the PPID column of proc_linux_ps_eo.txt from the same run"
+}

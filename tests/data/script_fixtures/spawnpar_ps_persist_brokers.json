@@ -1,0 +1,40 @@
+{
+ "_doc": "spawn-api-parent-table (lib.codec.spawn_parent_candidates / spawn_proxies / ppid_spoof / spawn_parent_answer; code_spawns broker edges). Gate checks expected_plain via find_codecs; expected_parent / expected_attack = spawn_parent_answer(text, 'parent'|'attack') proven by proxy_oracle_cmd (line cues) and the generator truth.",
+ "expected_plain": "v=3|language=powershell|role=persistence|verdict=malicious|attack=T1053.005|adapter=task_scheduler|stage_count=3|steps=register_task,create_service,run_key,wmi_consumer|campaign_id=PS-93ce0b5a",
+ "decoy": false,
+ "expected_parent": [
+  "svchost.exe",
+  "taskeng.exe",
+  "services.exe",
+  "explorer.exe",
+  "userinit.exe",
+  "WmiPrvSE.exe"
+ ],
+ "expected_attack": [
+  "T1053.005",
+  "T1543.003",
+  "T1547.001",
+  "T1546.003"
+ ],
+ "generator_cmd": "python3 -I tests/data/script_fixtures/spawnpar_gen.py tests/data/script_fixtures (stdlib writers: base64.b64encode / bytes.hex of the plan into $Material_/var Material_ + Codec '<rep>|identity|'; spawn / PPID-spoof code hand-written; TRUTH_* printed by the generator = the broker parent it wrote per Microsoft docs, not read by lib/codec.py)",
+ "oracle_cmd": "grep -oP \"Material_\\w+ = '\\K[^']+\" spawnpar_ps_persist_brokers.ps1 | base64 -d",
+ "proxy_oracle_cmd": "grep -nE 'New-ScheduledTaskAction|Register-ScheduledTask|sc.exe create|CurrentVersion.Run|CommandLineEventConsumer' spawnpar_ps_persist_brokers.ps1",
+ "note": "task action -> svchost.exe (Schedule; taskeng.exe pre-Win8), sc create binPath= -> services.exe, HKCU Run -> explorer.exe/userinit.exe at logon, CommandLineEventConsumer template -> WmiPrvSE.exe (ActiveScriptEventConsumer would be scrcons.exe)",
+ "expected_spawns": [
+  {
+   "parent_image": "svchost.exe",
+   "child_cmd_head": "C:\\Users\\Public\\ps93.exe",
+   "line": 4
+  },
+  {
+   "parent_image": "services.exe",
+   "child_cmd_head": "C:\\Users\\Public\\svc93.exe",
+   "line": 6
+  },
+  {
+   "parent_image": "WmiPrvSE.exe",
+   "child_cmd_head": "C:\\Users\\Public\\wmi93.exe",
+   "line": 8
+  }
+ ]
+}

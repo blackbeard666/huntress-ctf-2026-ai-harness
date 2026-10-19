@@ -1,0 +1,8 @@
+{
+ "field": "quarantine.quarantine_agent",
+ "expected": "none",
+ "generator_cmd": "printf '[ZoneTransfer]\\r\\nZoneId=3\\r\\nReferrerUrl=https://mail.example.org/inbox/msg-4471\\r\\nHostUrl=https://cdn.example.net/files/Invoice_0915.iso\\r\\n' > edge_utf8.bin  (Chromium/Edge-style MotW stream)",
+ "oracle_cmd": "file -b edge_utf8.bin -> ASCII text; configparser -> a [ZoneTransfer] INI, no flags;hex_time;agent value",
+ "decoy": true,
+ "member": "Invoice_0915.iso:Zone.Identifier"
+}

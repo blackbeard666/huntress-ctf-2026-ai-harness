@@ -1,0 +1,8 @@
+{
+ "field": "media.clean_aperture_dimensions",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=1920x1080:rate=25 -frames:v 2 -c:v libx264 -preset ultrafast -pix_fmt yuv420p h264_1080.mp4 (x264 codes 120x68 MBs = 1920x1088, frame_crop_bottom_offset 4)",
+ "oracle_cmd": "exiftool -a -G1 -s h264_1080.mp4 | grep -i aperture -> nothing (ffmpeg writes no clap box: field absent)",
+ "decoy": true,
+ "member": "h264_1080.mp4"
+}

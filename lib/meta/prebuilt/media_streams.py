@@ -644,9 +644,25 @@ def channel_counts(data, ctx):
     return [s.get("channels") for s in ss if s["codec_type"] == "audio"]
 
 
+def _still_or_audio(data):
+    """(video streams list) for a still image (ffprobe: one video stream), [] for audio-only media, else None."""
+    from .media_video import _audio_only, _still
+    b = bytes(data)
+    try:
+        st = _still(b)
+    except (ValueError, IndexError, struct.error, OverflowError):
+        st = None
+    if st:
+        return st
+    return [] if _audio_only(b) else None
+
+
 def video_codec(data, ctx):
     ss, f = _get(data, ctx)
     if ss is None or ss == "none":
+        alt = _still_or_audio(data) if data else None
+        if alt is not None:
+            return alt[0]["codec_name"] if alt else "none"
         return ss
     v = [s["codec_name"] for s in ss if s["codec_type"] == "video"]
     return (v[0] or None) if v else "none"
@@ -655,7 +671,8 @@ def video_codec(data, ctx):
 def video_count(data, ctx):
     ss, f = _get(data, ctx)
     if ss is None or ss == "none":
-        return ss
+        alt = _still_or_audio(data) if data else None
+        return len(alt) if alt is not None else ss
     return sum(s["codec_type"] == "video" for s in ss)
 
 

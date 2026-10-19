@@ -1,0 +1,8 @@
+{
+ "field": "ooxml.xmp_document_id",
+ "expected": "adobe:docid:photoshop:5f1c2a9e-0b7d-4c3e-9a11-7e2d4b6c8f01",
+ "generator_cmd": "stdlib zipfile ZIP_DEFLATED: [Content_Types].xml + word/document.xml + word/media/image1.jpeg (= lineage.jpg, XMP inside a deflated member)",
+ "oracle_cmd": "unzip -p lineage.docx word/media/image1.jpeg | exiftool -j -XMP:DocumentID -",
+ "decoy": false,
+ "member": "lineage.docx"
+}

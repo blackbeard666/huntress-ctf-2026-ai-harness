@@ -1,0 +1,10 @@
+{
+ "codec": "tpstrict",
+ "plain": null,
+ "encoded": "TbYIdIbcIbYZm33l2nHg2wSz2g30GpmgWvG=lBJR95RMFVBBxwVl5hcQxRF=jSrGkWoXyXUy2SiWvGgXsH5gZIaabbZbdYIL",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup! To solve, submit nothing at all today.' | base64 -w0 | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs enc 5 0  # real stack, no slug",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs dec 5 0 | base64 -d  # -> sentence without a slug: tpstrict_solve must return None",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit nothing at all today."
+}

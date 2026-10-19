@@ -1,0 +1,8 @@
+{
+ "field": "media.attached_pic_dimensions_pixels",
+ "expected": "64x48",
+ "generator_cmd": "ffmpeg -i a.wav -i cover.jpg -map 0 -map 1 -c:a flac -c:v copy -disposition:v attached_pic cover_flac.flac  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "oracle_cmd": "ffprobe -v error -show_streams -show_format -show_chapters -of json cover_flac.flac -> attached_pic stream width x height  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "decoy": false,
+ "member": "cover_flac.flac"
+}

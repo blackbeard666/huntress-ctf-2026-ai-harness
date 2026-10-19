@@ -1,0 +1,8 @@
+{
+ "field": "webp.dimensions_pixels",
+ "expected": "none",
+ "generator_cmd": ".venv/bin/python -I -c \"import wave; w=wave.open('tone.wav','wb'); w.setnchannels(1); w.setsampwidth(2); w.setframerate(8000); w.writeframes(bytes(200)); w.close()\"  (stdlib wave writer -- RIFF but WAVE, a WebP decoy)",
+ "oracle_cmd": "file -b tone.wav -> 'RIFF (little-endian) data, WAVE audio' (not WEBP)",
+ "decoy": true,
+ "member": "tone.wav"
+}

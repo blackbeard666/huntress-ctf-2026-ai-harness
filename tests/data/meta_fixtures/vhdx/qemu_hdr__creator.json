@@ -1,0 +1,8 @@
+{
+ "field": "vhdx.creator",
+ "expected": "QEMU v10.2.1",
+ "generator_cmd": "qemu-img create -f vhdx vd.vhdx 8M (qemu-img 10.2.1); fixture = head -c 262144 (file identifier + both headers + region table)",
+ "oracle_cmd": "file -b on the 256 KiB prefix -> 'Microsoft Disk Image eXtended, by QEMU v10.2.1'; 7z l -slt vd.vhdx -> Creator Application = QEMU v10.2.1",
+ "decoy": false,
+ "member": "vd.vhdx"
+}

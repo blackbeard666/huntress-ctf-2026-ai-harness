@@ -1,0 +1,8 @@
+{
+ "field": "vhd.creator_version",
+ "expected": "5.3",
+ "generator_cmd": "qemu-img create -f vpc -o subformat=dynamic dyn.vhd 10M  (qemu-img 10.2.1)",
+ "oracle_cmd": "7z l -slt dyn.vhd -> 'Creator Application = qemu 5.3'",
+ "decoy": false,
+ "member": "dyn.vhd"
+}

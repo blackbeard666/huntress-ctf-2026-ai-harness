@@ -1,0 +1,8 @@
+{
+ "field": "iso.udf_present",
+ "expected": "true",
+ "generator_cmd": "pycdlib.PyCdlib().new(vol_ident='UDFVOL', udf='2.60', app_ident_str='MKUDF'); add_fp A.BIN;1 udf_path=/a.bin; write('udf.iso')  (pycdlib writer)",
+ "oracle_cmd": "(same pycdlib reader on udf.iso) -> system_identifier all spaces, UDFVOL, has_joliet False, has_udf True; file -b -> ISO 9660 CD-ROM filesystem data 'UDFVOL' + UDF filesystem data",
+ "decoy": false,
+ "member": "udf.iso"
+}

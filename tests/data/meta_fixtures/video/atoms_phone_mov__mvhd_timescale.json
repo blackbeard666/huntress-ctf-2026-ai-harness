@@ -1,0 +1,8 @@
+{
+ "field": "video.mvhd_timescale",
+ "expected": "1000",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i testsrc=size=64x48:rate=10 -frames:v 5 -c:v mpeg4 -metadata location='+48.8577+002.2950/' -metadata title='Phone clip' -f mov phone.mov",
+ "oracle_cmd": "exiftool -j -n -G1 -a phone.mov -> QuickTime:TimeScale 1000",
+ "decoy": false,
+ "member": "phone.mov"
+}

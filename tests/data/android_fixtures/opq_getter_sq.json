@@ -1,0 +1,8 @@
+{
+ "entry": "proof_flow_scan",
+ "expected": "ANS-0e8c4b27d1f9a356",
+ "decoy": false,
+ "_why": "row 72 opaque predicate / dead decoy: K.a(x,y): if (7*y*y-1 != x*x) return real; if ((x*x)%4 > 1) return ANS-1111...; return decoy ANS-a7350d9e2bc1f048 -- both later returns are unreachable",
+ "generator_cmd": "python3 tests/data/android_fixtures/opq_src/gen_opq.py getter_sq tests/data/android_fixtures/opq_getter_sq.apk  # javac --release 8 + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/opq_src/oracle.sh tests/data/android_fixtures/opq_getter_sq.apk  # d2j-dex2jar back to classes, RUN buildRequest(host, dev) on the JVM over 12 inputs -> ANS-0e8c4b27d1f9a356"
+}

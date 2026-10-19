@@ -1,0 +1,9 @@
+{
+ "codec": "bifid-p7-upper",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-74",
+ "encoded": "MAXSSWRFALKUOTMRIXIOMDOOLGZTSPDSQEPCIRGITOQVDCXCQOVTNMWTRBCDPFKLTDBCUHLCRDFDPSMS",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemastercobaltheron",
+ "generator_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import pycipher as P; ct=P.Bifid('ABCDEFGHIKLMNOPQRSTUVWXYZ', 7).encipher(plain)\"  # pycipher drops non-letters, uppercases, J->I",
+ "oracle_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import secretpy as S; print(S.Bifid().decrypt(encoded.replace(' ','').lower(), 7))\"  # secretpy, default ENGLISH_SQUARE_IJ square, key = period",
+ "expected": "match"
+}

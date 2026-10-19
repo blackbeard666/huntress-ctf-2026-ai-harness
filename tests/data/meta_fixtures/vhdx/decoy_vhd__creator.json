@@ -1,0 +1,8 @@
+{
+ "field": "vhdx.creator",
+ "expected": "none",
+ "generator_cmd": "qemu-img create -f vpc -o subformat=dynamic dyn.vhd 10M  (qemu-img 10.2.1) (VHD renamed .vhdx)",
+ "oracle_cmd": "file -b -> Microsoft Disk Image, Virtual Server or Virtual PC (VHD v1, no 'vhdxfile' signature)",
+ "decoy": true,
+ "member": "dyn.vhdx"
+}

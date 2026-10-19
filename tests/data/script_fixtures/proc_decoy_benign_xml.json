@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=powershell|role=loader|verdict=malicious|attack=T1059.001|adapter=process_telemetry|stage_count=2|steps=spawn_child,decode_stage|campaign_id=PT-7c41aa02|url=https://pt-7c41aa02.example.invalid/s",
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/proc_tel_gen.py tests/data/script_fixtures (stdlib writers: xml.sax.saxutils.escape with wevtutil's &quot; rendering / json.dumps winlogbeat NDJSON / Splunk k=v with \\\" escaping; plan.encode() XOR 0x5a -> hex in `$Material_<id> = \"..\"` + `$Codec_<id> = \"hex_compact|xor_5a|\"` inside the powershell CommandLine)",
+ "oracle_cmd": "python3 -I -c \"import xml.dom.minidom as m,sys;print([d.firstChild.data for d in m.parse(sys.argv[1]).getElementsByTagName('Data') if d.getAttribute('Name')=='CommandLine'][0])\" proc_decoy_benign_xml.xml | perl -ne 'if(/Material_\\w+ = \\\\?\"([0-9a-f]+)\\\\?\"/){$b=pack(\"H*\",$1);$b^=chr(0x5a)x length $b;print $b}'  -> 'theme=dark|font=Consolas|...' config, no v=3 plan",
+ "note": "DECOY: same Sysmon EID 1 shape, escaped descriptor decodes to a benign config; must not yield the proc_sysmon1_xml plan (or any plan)"
+}

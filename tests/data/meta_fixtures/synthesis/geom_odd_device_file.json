@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.odd_device_file",
+ "expected": "c_odd.mp4",
+ "generator_cmd": "python3 tests/data/meta_fixtures/synthesis/gen_video_geometry.py $T  (ffmpeg 7.0.2 lavfi testsrc + libx264, crop filter, -metadata title/com.apple.quicktime.make|model/com.android.*, -display_rotation 90; Pillow JPEG+EXIF Make/Model; stdlib zipfile) -> $T/geo.zip",
+ "oracle_cmd": "python3 tests/data/meta_fixtures/synthesis/oracle_video_geometry.py $T/geo.zip  (ffmpeg -i stream WxH/DAR/displaymatrix rotation/Duration + ffmpeg -f null decoded frame count + exiftool -j Make/Model/AndroidModel/Title; key 'odd_device_file')",
+ "decoy": false
+}

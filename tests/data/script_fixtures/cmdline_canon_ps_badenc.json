@@ -1,0 +1,8 @@
+{
+ "material": "powershell -enc notbase64!!",
+ "rep": "cmdline",
+ "transform": "canon",
+ "expected": "powershell -encodedcommand notbase64!!",
+ "generator_cmd": "hand-written: powershell -enc notbase64!!",
+ "oracle_cmd": "pwsh -c \"[Convert]::FromBase64String('notbase64!!')\" -> FormatException (not decodable, so the value stays)"
+}

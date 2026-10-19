@@ -1,0 +1,10 @@
+{
+ "codec": "bifid",
+ "decoy": true,
+ "plain": null,
+ "encoded": "Fractionate the square, then transpose the rows: nothing to see here!",
+ "oracle_plain": null,
+ "expected": "none",
+ "generator_cmd": "hand-written prose (not Bifid/Trifid ciphertext of the sentence)",
+ "oracle_cmd": "python3 -I -c \"import sys;sys.path.insert(0,'tools/pyciphers');import re,secretpy as S;t=sys.argv[1];L=[c for c in t if c.isalpha() and c.upper()!='J'];d=S.Bifid().decrypt(''.join(L).lower(),0);it=iter(d);print(''.join((next(it) if c.islower() else next(it).upper()) if c.isalpha() and c.upper()!='J' else c for c in t))\" \"$encoded\"  # secretpy Bifid decrypt (key 0 = whole text) of the letters, put back in place  # garbage under every period, no crib"
+}

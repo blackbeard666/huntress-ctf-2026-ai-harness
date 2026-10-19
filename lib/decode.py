@@ -313,6 +313,13 @@ def decode_chunk(p, _nested=False):
     # into digits/punctuation, so no rot-N reads it; kept only when the whole decoded line ends in a 3-word slug.
     if _max_day() >= 15 and _SLUG3_END.search(_rot47(t)) and _wordy(_rot47(t)) >= 0.85:
         return _rot47(t)
+    # RAIL FENCE (warmups Day 18 "Off the Rails": whole blob 'N kcnhwuTo,b saaeoema...', 3 rails, offset 0): a
+    # transposition of the sentence, kept only when the whole decoded line ends in a 3-word slug.
+    if _max_day() >= 18 and len(p.strip("\r\n")) > 20:
+        from lib import warmups_codecs as _wc
+        r3 = _wc.rail_dec(p.strip("\r\n"), 3)
+        if _SLUG3_END.search(r3) and _wordy(r3) >= 0.85:
+            return r3
     # An encoding none of the classes above names (a new line encoding on a new day): try the other text encodings
     # lib knows -- reversed text of a strict class, \\u/\\x escapes, HTML entities, Morse, base58, quoted-printable,
     # base85 -- and keep one only if it reads more like English than the best rot-N of the raw line.
@@ -373,7 +380,8 @@ def _generic_chunk(t):
 # by how English the result reads, which per-line guessing gets wrong on short fragments (D13: Atbash put on '-tliuq-d').
 # Each is used ONCE per blob -> (name, day introduced); a blob of k lines can only contain codecs of days <= k.
 FREE_CODECS = (("rot", 2), ("rev", 12), ("atb", 13), ("caesar7", 14),   # D14: fixed Caesar +7 (decode rot-7)
-               ("rot47", 15))   # D15: ROT47 over printable ASCII 33-126 (self-inverse)
+               ("rot47", 15),   # D15: ROT47 over printable ASCII 33-126 (self-inverse)
+               ("rail", 18))    # D18: 3-rail fence (offset 0) first, then lib.warmups_codecs.rail_free's other fences
 _SLUG_END = re.compile(r"[a-z]+(?:-[a-z]+)+-\d{2,}\s*$")
 _D2 = re.compile(r"\d\d")
 # The GM's slug is adj-noun-noun-NN: a 3-word slug end outranks a 2-word one (D14 Mastery set22: rev/atb swapped on
@@ -406,6 +414,12 @@ def _rot_cands(p):
     return [best] + ([_rot(p, 13)] if _rot(p, 13) != best else [])
 
 
+def _rail_cands(p):
+    from lib import warmups_codecs as _wc
+    r3 = _wc.rail_dec(p.rstrip("\r\n"), 3)
+    return [r3] + [c for c in _wc.rail_free(p) if c != r3]
+
+
 def _max_day():
     """HCTF_CODEC_MAX_DAY=<N-1> (fair runs, as in lib/codec.py): hide codecs first GM-confirmed on a later day."""
     try:
@@ -417,7 +431,7 @@ def _max_day():
 for _n, _d in [(n, d) for n, d in FREE_CODECS if d <= _max_day()]:
     register_free(_n, _d, {"rot": _rot_cands, "atb": lambda p: [_atbash(p)],
                            "rev": lambda p: [p.strip()[::-1] if p.strip() == p else p[::-1]],
-                           "caesar7": lambda p: [_rot(p, -7)], "rot47": lambda p: [_rot47(p)]}[_n])
+                           "caesar7": lambda p: [_rot(p, -7)], "rot47": lambda p: [_rot47(p)], "rail": _rail_cands}[_n])
 
 
 def _free_line(p):

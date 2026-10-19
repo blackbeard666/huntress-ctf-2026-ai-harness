@@ -1,0 +1,48 @@
+{
+ "encoding": "none",
+ "decoy": false,
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_elf_segment_facts": {
+  "e_flags": "0x5000200",
+  "os_abi": "ELFOSABI_LINUX",
+  "os_abi_label": "UNIX - GNU",
+  "abi_version": "1",
+  "e_phnum": 7,
+  "e_shnum": 10,
+  "e_shstrndx": 9,
+  "segments": [
+   "PT_LOAD",
+   "PT_LOAD",
+   "PT_LOAD",
+   "PT_NOTE",
+   "PT_NOTE",
+   "PT_GNU_PROPERTY",
+   "PT_GNU_STACK"
+  ],
+  "segments_short": [
+   "LOAD",
+   "LOAD",
+   "LOAD",
+   "NOTE",
+   "NOTE",
+   "GNU_PROPERTY",
+   "GNU_STACK"
+  ],
+  "segment_count": 7,
+  "interpreter": "none",
+  "needed": [],
+  "bind_now": "false",
+  "has_gnu_stack": "true",
+  "has_nx": "true",
+  "execstack": "false",
+  "relro": "none",
+  "is_pie": "false",
+  "is_static": "true",
+  "has_relro": "false"
+ },
+ "generator_cmd": "sh elfseg_gen.sh   # ../../../.venv/bin/python -c \"import lief; b = lief.ELF.parse('elfseg_tiny_static.bin'); h = b.header; h.processor_flag = 0x5000200; h.identity_os_abi = lief.ELF.Header.OS_ABI.LINUX; h.identity_abi_version = 1; b.write('elfseg_tiny_gnuabi.bin')\"",
+ "oracle_cmd": "python3 elfseg_oracle.py elfseg_tiny_gnuabi.bin   # GNU readelf -hlWd (Flags/OS/ABI/ABI Version/counts/Program Headers types/interpreter/NEEDED/BIND_NOW/GNU_STACK flags/GNU_RELRO) + file -b (pie executable / statically|static-pie linked) + pyelftools (EI_OSABI ELFOSABI_*, p_type PT_*)",
+ "oracle_output": "ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux), statically linked, BuildID[sha1]=8b4a7589114089d7915a3ea82d90a21fd508c983, not stripped | {\"e_flags\": \"0x5000200\", \"os_abi\": \"ELFOSABI_LINUX\", \"os_abi_label\": \"UNIX - GNU\", \"abi_version\": \"1\", \"e_phnum\": 7, \"e_shnum\": 10, \"e_shstrndx\": 9, \"segments\": [\"PT_LOAD\", \"PT_LOAD\", \"PT_LOAD\", \"PT_NOTE\", \"PT_NOTE\", \"PT_GNU_PROPERTY\", \"PT_GNU_STACK\"], \"segments_short\": [\"LOAD\", \"LOAD\", \"LOAD\", \"NOTE\", \"NOTE\", \"GNU_PROPERTY\", \"GNU_STACK\"], \"segment_count\": 7, \"interpreter\": \"none\", \"needed\": [], \"bind_now\": \"false\", \"has_gnu_stack\": \"true\", \"has_nx\": \"true\", \"execstack\": \"false\", \"relro\": \"none\", \"is_pie\": \"false\", \"is_static\": \"true\", \"has_relro\": \"false\"}",
+ "note": "lib.binary.elf_header_facts program-header/ABI extension. Field names beyond the confirmed elf_class/elf_type/endianness/entry_point/section_names/symbols/has_symtab are SPECULATIVE spellings: e_flags lowercase hex, os_abi ELFOSABI_* (+ os_abi_label readelf, os_abi_num), segments PT_* (+ segments_short readelf), relro full/partial/none (checksec rules), is_pie per file(1), is_static = no interpreter and no DT_NEEDED (static-pie counts). Decoys -> elf_header_field(...) == 'none'."
+}

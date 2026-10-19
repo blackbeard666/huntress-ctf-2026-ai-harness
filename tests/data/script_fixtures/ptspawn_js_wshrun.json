@@ -1,0 +1,26 @@
+{
+ "_doc": "static-process-tree (lib.codec.declared_spawns / code_spawns). Gate checks expected_plain via find_codecs; expected_spawns is the declared tree (subset match on the listed keys) proven by spawn_oracle_cmd.",
+ "expected_plain": "v=3|language=jscript|role=downloader|verdict=suspicious|attack=T1105|adapter=http_client|host_profile=standalone|next_language=powershell|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=PS-5e1d77a0|next_stage=C:\\Users\\Public\\s5e1d.ps1",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | xxd -p | tr -d '\\n' -> Material_5e1d with Codec_5e1d='hex|identity|'; spawn site hand-written: WScript.Shell Run(cmd) with cmd built by '=' + '+=' literal concat",
+ "oracle_cmd": "perl -ne 'print pack(\"H*\",$1),\"\\n\" if /Material_5e1d = \"([0-9a-f]+)\"/' ptspawn_js_wshrun.js",
+ "oracle_output": "v=3|language=jscript|role=downloader|verdict=suspicious|attack=T1105|adapter=http_client|host_profile=standalone|next_language=powershell|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=PS-5e1d77a0|next_stage=C:\\Users\\Public\\s5e1d.ps1",
+ "spawn_oracle_cmd": "node -e 'global.ActiveXObject=function(){return {Run:function(c){console.log(\"RUN:\"+c)}}};eval(require(\"fs\").readFileSync(process.argv[1],\"utf8\"))' ptspawn_js_wshrun.js",
+ "spawn_oracle_output": "RUN:powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\Public\\s5e1d.ps1",
+ "expected_spawns": [
+  {
+   "parent_image": "wscript.exe",
+   "child_image": "powershell.exe",
+   "source": "plan",
+   "api": "dispatch_process"
+  },
+  {
+   "parent_image": "wscript.exe",
+   "child_image": "powershell.exe",
+   "source": "code",
+   "api": "WScript.Shell.Run",
+   "line": 8,
+   "cmdline": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\Public\\s5e1d.ps1"
+  }
+ ]
+}

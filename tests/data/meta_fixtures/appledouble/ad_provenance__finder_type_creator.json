@@ -1,0 +1,8 @@
+{
+ "field": "appledouble.finder_type_creator",
+ "expected": "none",
+ "generator_cmd": "cp __MACOSX/._Linkliar.ipa ad_provenance.bin  (REAL AppleDouble written by macOS Archive Utility/ditto, from a CTF zip's __MACOSX folder)",
+ "oracle_cmd": "xxd -s 0x32 -l 32 ad_provenance.bin -> all zero FInfo (no type/creator); exiftool shows none",
+ "decoy": true,
+ "member": "__MACOSX/._Linkliar.ipa"
+}

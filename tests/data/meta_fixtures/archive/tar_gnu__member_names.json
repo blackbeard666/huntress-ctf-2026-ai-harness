@@ -1,0 +1,8 @@
+{
+ "field": "archive.member_names",
+ "expected": "[\"docs/\",\"docs/readme.txt\",\"payload.bin\"]",
+ "generator_cmd": "tar --no-recursion --format=gnu --owner=alice:1001 --group=staff:50 --mtime='2024-03-15 08:30:45 UTC' -cf gnu.tar -C src docs docs/readme.txt payload.bin  (GNU tar 1.35; readme.txt 0640 6 B, payload.bin 0755 1500 B)",
+ "oracle_cmd": "TZ=UTC tar tvf gnu.tar --full-time; xxd -s 257 -l 8 gnu.tar -> 'ustar  \\0'; file -b -> POSIX tar archive (GNU)  [archive.* = the tar/iso value of the same bytes, routed by magic]",
+ "decoy": false,
+ "member": "gnu.tar"
+}

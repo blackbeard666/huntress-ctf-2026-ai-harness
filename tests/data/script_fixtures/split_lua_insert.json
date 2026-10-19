@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=javascript|role=downloader|verdict=suspicious|attack=T1105|adapter=http_client|host_profile=hta_jscript|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=JAVASCRIPT-8dbe7f0d|url=https://javascript-8dbe7f0d9b.example.invalid/stage|file_path=/tmp/huntress-javascript/.8dbe7f0d9b417a84.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/split_array_gen.py  (lua_insert: stdlib GZB64 of D17 plan #0, 48-char chunks, first tagged GZB64-)",
+ "oracle_cmd": "cd tests/data/script_fixtures && grep -o \"[\\\"'][A-Za-z0-9+/=_-]\\{2,\\}[\\\"']\" split_lua_insert.lua | tr -d \"\\\"'\"  | tr -d '\\n' | sed 's/^[A-Za-z0-9_]*-//' | base64 -d | gunzip"
+}

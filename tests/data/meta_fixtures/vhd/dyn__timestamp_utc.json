@@ -1,0 +1,8 @@
+{
+ "field": "vhd.timestamp_utc",
+ "expected": "2026-10-18T15:53:52Z",
+ "generator_cmd": "qemu-img create -f vpc -o subformat=dynamic dyn.vhd 10M  (qemu-img 10.2.1)",
+ "oracle_cmd": "7z l -slt dyn.vhd -> 'Created = 2026-10-18 15:53:52.0000000' (UTC)",
+ "decoy": false,
+ "member": "dyn.vhd"
+}

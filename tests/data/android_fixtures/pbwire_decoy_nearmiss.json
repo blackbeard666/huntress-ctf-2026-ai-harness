@@ -1,0 +1,8 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": null,
+ "_why": "DECOY: same layout as pbwire_nested_b64, base64 of a 15-hex near-miss ANS-7c1e9a04b3d256f",
+ "generator_cmd": "python3 tests/data/android_fixtures/pbwire_src/gen.py $TMPDIR/pbw && (cd $TMPDIR/pbw/pbwire_decoy_nearmiss && zip -q -X -r pbwire_decoy_nearmiss.apk AndroidManifest.xml assets)  # google.protobuf (dynamic descriptor hx.Config{1 app,2 version,3 Section{1 id,2 ts fixed64,3 Secret{1 label,2 blob,3 data bytes,4 key,5 head,6 tail}},4 ratio float}) SerializeToString + Info-ZIP zip",
+ "oracle_cmd": "unzip -p pbwire_decoy_nearmiss.apk assets/config.pb > c.pb && python3 tests/data/android_fixtures/pbwire_src/oracle.py c.pb | grep '^3.3.2' | awk '{print $3}' | sed \"s/^b'//;s/'$//\" | base64 -d  # 15 hex digits",
+ "decoy": true
+}

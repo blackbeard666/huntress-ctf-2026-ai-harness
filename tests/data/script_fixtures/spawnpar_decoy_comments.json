@@ -1,0 +1,11 @@
+{
+ "_doc": "spawn-api-parent-table (lib.codec.spawn_parent_candidates / spawn_proxies / ppid_spoof / spawn_parent_answer; code_spawns broker edges). Gate checks expected_plain via find_codecs; expected_parent / expected_attack = spawn_parent_answer(text, 'parent'|'attack') proven by proxy_oracle_cmd (line cues) and the generator truth.",
+ "expected_plain": null,
+ "decoy": true,
+ "expected_parent": "none",
+ "expected_attack": "none",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/spawnpar_gen.py tests/data/script_fixtures (stdlib writers: base64.b64encode / bytes.hex of the plan into $Material_/var Material_ + Codec '<rep>|identity|'; spawn / PPID-spoof code hand-written; TRUTH_* printed by the generator = the broker parent it wrote per Microsoft docs, not read by lib/codec.py)",
+ "oracle_cmd": "grep -oP \"Material_\\w+ = '\\K[^']+\" spawnpar_decoy_comments.ps1 | base64 -d",
+ "proxy_oracle_cmd": "grep -vE '^\\s*#|Write-Host' spawnpar_decoy_comments.ps1 | grep -cE 'UpdateProcThreadAttribute|schtasks|Win32_Process|MMC20'  (0: every cue sits in a comment or a Write-Host line)",
+ "note": "DECOY: all spawn / spoof cues only in comments and a Write-Host string; the material is a benign settings string, not a v=3 plan"
+}

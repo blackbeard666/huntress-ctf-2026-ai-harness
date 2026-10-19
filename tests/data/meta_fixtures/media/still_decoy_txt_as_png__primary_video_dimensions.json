@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_dimensions",
+ "expected": "none",
+ "generator_cmd": "printf 'panel notes: not an image\\n' > notes.png (text renamed .png)",
+ "oracle_cmd": "file -b notes.png -> 'ASCII text' (ffmpeg -i: Invalid data found when processing input)",
+ "decoy": true,
+ "member": "notes.png"
+}

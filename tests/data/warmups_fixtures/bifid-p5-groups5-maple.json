@@ -1,0 +1,9 @@
+{
+ "codec": "bifid-p5-groups5",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-19",
+ "encoded": "MAXSW OFDKU CBNTS IGRSS VSRBK OOPTO PDQEP CIRIT GQXSX AQLOC UDSKI OFISW CCAKF TDNUG CLLVY TDTW",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemastermapleotter",
+ "generator_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import pycipher as P; ct=P.Bifid('ABCDEFGHIKLMNOPQRSTUVWXYZ', 5).encipher(plain)\"  # pycipher drops non-letters, uppercases, J->I; then 5-letter groups joined by spaces",
+ "oracle_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import secretpy as S; print(S.Bifid().decrypt(encoded.replace(' ','').lower(), 5))\"  # secretpy, default ENGLISH_SQUARE_IJ square, key = period",
+ "expected": "match"
+}

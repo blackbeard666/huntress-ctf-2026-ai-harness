@@ -1,0 +1,52 @@
+{
+ "family": "switch_tables",
+ "encoding": "raw",
+ "expected_offset": 8512,
+ "expected_config": {
+  "campaign": "BR18-000",
+  "domain": "node-000.day18.example.invalid",
+  "ipv4": "198.51.100.90",
+  "url": "https://node-000.day18.example.invalid/api/BR18-000",
+  "mutex": "Global\\HuntressBR18_000",
+  "windows_path": "C:\\ProgramData\\HuntressLab\\day18\\BR18-000.dat",
+  "linux_path": "/var/tmp/huntress-lab/day18/BR18-000.dat",
+  "service": "HuntressLab-Day18-000",
+  "host_model": "workstation"
+ },
+ "expected_kind": "select_string",
+ "expected_facts": {
+  "case_count": 3,
+  "cases": [
+   {
+    "case": "analysis",
+    "target": 1,
+    "symbol": "event_decoy",
+    "callee": "event_decoy"
+   },
+   {
+    "case": "sandbox",
+    "target": 2,
+    "symbol": "event_sandbox",
+    "callee": "event_sandbox"
+   },
+   {
+    "case": "workstation",
+    "target": 3,
+    "symbol": "event_success",
+    "callee": "event_success"
+   }
+  ],
+  "case_callees": {
+   "analysis": "event_decoy",
+   "sandbox": "event_sandbox",
+   "workstation": "event_success"
+  },
+  "default_symbol": "event_failure"
+ },
+ "generator_cmd": "bash switch_gen.sh   # copy of gfortran_d18_flow_v000.bin (D18 gfortran SELECT CASE)",
+ "oracle_cmd": "python3 switch_oracle.py switch_d18_fortran.bin   # objdump -d -M intel / aarch64-linux-gnu-objdump -d text + pyelftools table bytes + symtab; gfortran_d18_oracle.py for the select_string array",
+ "file_b": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 3.2.0, not stripped",
+ "decoy": false,
+ "note": "lib.binary.switch_field(data, key) per expected_facts key (json round-trip: int case keys -> str); expected_facts null = not an ELF/PE image (switch_field -> None)",
+ "has_hcfg": true
+}

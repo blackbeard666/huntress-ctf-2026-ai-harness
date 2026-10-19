@@ -1,0 +1,8 @@
+{
+ "field": "vmdk.adapter_type",
+ "expected": "lsilogic",
+ "generator_cmd": "qemu-img create -f vmdk -o adapter_type=lsilogic,hwversion=6 sp.vmdk 5M (qemu-img 10.2.1)",
+ "oracle_cmd": "7z l -slt sp.vmdk Comment -> ddb.adapterType = \"lsilogic\"",
+ "decoy": false,
+ "member": "sp.vmdk"
+}

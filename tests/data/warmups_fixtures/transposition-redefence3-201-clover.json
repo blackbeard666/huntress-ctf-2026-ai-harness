@@ -1,0 +1,10 @@
+{
+ "codec": "transposition",
+ "key": "redefence3 rows 2,0,1",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-summit-88",
+ "encoded": "codd sr! vsihets tG t vsi8N kcnhwuTo,b saaeoemarlrm-iewr eoigti amp osle umtti xc nwrt h aeMse:coe-umt8",
+ "generator_cmd": "python3 -I -c \"import sys;s=sys.argv[1];R=[[] for _ in range(3)];r,d=0,1\nfor ch in s:\n R[r].append(ch);d=-d if r+d in(-1,3) else d;r+=d\nprint(''.join(''.join(R[k]) for k in (2,0,1)),end='')\" \"$plain\"  # stdlib zigzag walk, rails read in order 2,0,1 (redefence)",
+ "oracle_cmd": "python3 -I -c \"import sys;sys.path.insert(0,'tools/pyciphers');from secretpy import Zigzag;c=sys.argv[1];L=len(c);tag=Zigzag().encrypt(''.join(chr(0xE000+i) for i in range(L)),3);n=[0]*3;r,d=0,1\nfor i in range(L):\n n[r]+=1;d=-d if r+d in(-1,3) else d;r+=d\nrows={};p=0\nfor k in (2,0,1):rows[k]=c[p:p+n[k]];p+=n[k]\nfence=rows[0]+rows[1]+rows[2];out=[None]*L\nfor ch,t in zip(fence,tag):out[ord(t)-0xE000]=ch\nprint(''.join(out),end='')\" \"$encoded\"  # rail lengths, re-ordered to the 0,1,2 fence, placed by secretpy 0.12.0 Zigzag on position tags",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-summit-88",
+ "expected": "match"
+}

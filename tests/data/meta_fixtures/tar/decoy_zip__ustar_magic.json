@@ -1,0 +1,8 @@
+{
+ "field": "tar.ustar_magic",
+ "expected": "none",
+ "generator_cmd": "(same zip impostor)",
+ "oracle_cmd": "file -b decoy.tar -> Zip archive data",
+ "decoy": true,
+ "member": "decoy_zip.tar"
+}

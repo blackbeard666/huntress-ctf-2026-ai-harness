@@ -1,0 +1,1 @@
+ELF? not an ELF:  ̀ mov eax,310; syscall; process_vm_writev ptrace memfd_create

@@ -1,0 +1,36 @@
+{
+ "_doc": "spawn-api-parent-table (lib.codec.spawn_parent_candidates / spawn_proxies / ppid_spoof / spawn_parent_answer; code_spawns broker edges). Gate checks expected_plain via find_codecs; expected_parent / expected_attack = spawn_parent_answer(text, 'parent'|'attack') proven by proxy_oracle_cmd (line cues) and the generator truth.",
+ "expected_plain": "v=3|language=jscript|role=lateral|verdict=malicious|attack=T1021.003|adapter=dcom|host_profile=standalone|stage_count=2|steps=dcom_mmc20,dcom_shellwindows,wmi_create|campaign_id=DC-41a9be07",
+ "decoy": false,
+ "expected_parent": [
+  "mmc.exe",
+  "explorer.exe",
+  "WmiPrvSE.exe"
+ ],
+ "expected_attack": [
+  "T1021.003",
+  "T1559.001",
+  "T1047"
+ ],
+ "generator_cmd": "python3 -I tests/data/script_fixtures/spawnpar_gen.py tests/data/script_fixtures (stdlib writers: base64.b64encode / bytes.hex of the plan into $Material_/var Material_ + Codec '<rep>|identity|'; spawn / PPID-spoof code hand-written; TRUTH_* printed by the generator = the broker parent it wrote per Microsoft docs, not read by lib/codec.py)",
+ "oracle_cmd": "perl -ne 'print pack(\"H*\",$1),\"\\n\" if /Material_41a9 = \"([0-9a-f]+)\"/' spawnpar_js_dcom_wmi.js",
+ "proxy_oracle_cmd": "grep -nE '49B2791A|ExecuteShellCommand|9BA05972|ShellExecute|Win32_Process|\\.Create\\(' spawnpar_js_dcom_wmi.js",
+ "note": "MMC20.Application (CLSID 49B2791A..) ExecuteShellCommand child -> mmc.exe; ShellWindows (CLSID 9BA05972..) ShellExecute child -> explorer.exe; Win32_Process.Create child -> WmiPrvSE.exe (T1021.003/T1559.001, T1047)",
+ "expected_spawns": [
+  {
+   "parent_image": "mmc.exe",
+   "child_cmd_head": "cmd.exe",
+   "line": 5
+  },
+  {
+   "parent_image": "explorer.exe",
+   "child_cmd_head": "rundll32.exe",
+   "line": 7
+  },
+  {
+   "parent_image": "WmiPrvSE.exe",
+   "child_cmd_head": "powershell.exe",
+   "line": 9
+  }
+ ]
+}

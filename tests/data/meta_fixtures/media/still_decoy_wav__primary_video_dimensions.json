@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_dimensions",
+ "expected": "none",
+ "generator_cmd": "D18 TT kit evidence.zip -> audio-001.wav (audio-only WAV: no video stream)",
+ "oracle_cmd": "ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i audio-001.wav 2>&1 | grep Stream  (bundled tools/imageio_ffmpeg_pkg; stream #0:0 video codec, pix_fmt, WxH) -> Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 16000 Hz, mono, s16, 256 kb/s",
+ "decoy": true,
+ "member": "audio-001.wav"
+}

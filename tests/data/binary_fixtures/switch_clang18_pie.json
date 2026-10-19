@@ -1,0 +1,69 @@
+{
+ "family": "switch_tables",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_kind": "rel32",
+ "expected_facts": {
+  "case_count": 7,
+  "cases": [
+   {
+    "case": 3,
+    "target": "0x1269",
+    "symbol": "dispatch+0x19",
+    "callee": "op_add"
+   },
+   {
+    "case": 4,
+    "target": "0x1284",
+    "symbol": "dispatch+0x34",
+    "callee": "op_sub"
+   },
+   {
+    "case": 5,
+    "target": "0x1296",
+    "symbol": "dispatch+0x46",
+    "callee": "op_mul"
+   },
+   {
+    "case": 6,
+    "target": "0x129f",
+    "symbol": "dispatch+0x4f",
+    "callee": "op_div"
+   },
+   {
+    "case": 8,
+    "target": "0x12a8",
+    "symbol": "dispatch+0x58",
+    "callee": "op_xor"
+   },
+   {
+    "case": 9,
+    "target": "0x127b",
+    "symbol": "dispatch+0x2b",
+    "callee": "op_shl"
+   },
+   {
+    "case": 10,
+    "target": "0x128d",
+    "symbol": "dispatch+0x3d",
+    "callee": "op_neg"
+   }
+  ],
+  "case_callees": {
+   "3": "op_add",
+   "4": "op_sub",
+   "5": "op_mul",
+   "6": "op_div",
+   "8": "op_xor",
+   "9": "op_shl",
+   "10": "op_neg"
+  },
+  "default_symbol": "op_bad"
+ },
+ "generator_cmd": "bash switch_gen.sh   # clang-18 -O2 (add edi,-3 bias, jmp rcx)",
+ "oracle_cmd": "python3 switch_oracle.py switch_clang18_pie.bin   # objdump -d -M intel / aarch64-linux-gnu-objdump -d text + pyelftools table bytes + symtab",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=f0cd78bf9cbfdf8bf77a3ad2aa95730d79d1b76a, for GNU/Linux 3.2.0, not stripped",
+ "decoy": false,
+ "note": "lib.binary.switch_field(data, key) per expected_facts key (json round-trip: int case keys -> str); expected_facts null = not an ELF/PE image (switch_field -> None)"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-b40e7d19a6c3528f",
+ "_why": "serialized Session kept as a dex static final byte[] Holder.BLOB (fill-array-data); token field = base64(reversed token)",
+ "generator_cmd": "sh tests/data/android_fixtures/jser_src/gen_jser.sh array ANS-b40e7d19a6c3528f tests/data/android_fixtures/jser_dex_array_reversed.apk  # JDK ObjectOutputStream (jser_src/Gen.java) + javac/d2j-jar2dex + zip -X",
+ "oracle_cmd": "javac --release 11 -d /tmp/jr jser_src/Read.java jser_src/com/example/vault/Session.java && unzip -p jser_dex_array_reversed.apk classes.dex > /tmp/jr/c.dex && ../../../tools/dex2jar/d2j-dex2jar.sh -f -o /tmp/jr/c.jar /tmp/jr/c.dex && java -cp /tmp/jr/c.jar:/tmp/jr Read field com.example.vault.Holder </dev/null | grep '^.token=' | cut -d= -f2- | base64 -d | rev"
+}

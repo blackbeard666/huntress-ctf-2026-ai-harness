@@ -1,0 +1,11 @@
+{
+ "codec": "word-transposition",
+ "key": "word-shuffle(random.Random('frag'))(fragment)",
+ "plain": "this exact answer to the",
+ "encoded": "the this answer exact to",
+ "mode": "fragment",
+ "generator_cmd": "python3 -I -c \"import sys,random;w=sys.argv[1].split(' ');random.Random('frag').shuffle(w);print(' '.join(w),end='')\" \"$plain\"  # stdlib keyed word shuffle",
+ "oracle_cmd": "python3 -I -c '<invert random.Random(\"frag\").shuffle of the index list>' \"$encoded\"",
+ "oracle_plain": "this exact answer to the",
+ "expected": "match"
+}

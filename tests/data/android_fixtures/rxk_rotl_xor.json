@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-7C41D09E5B3A2F86",
+ "decoy": false,
+ "description": "puzzle b64 data, c = rotl(p, 3) ^ key 0xA7 under codec 'xor' (declared xor mismatch)",
+ "generator_cmd": "python3 tests/data/android_fixtures/rxk_src/gen_rxk.py rotl_xor tests/data/android_fixtures/rxk_rotl_xor.apk ANS-7C41D09E5B3A2F86  # Enc.java on the JVM (java.util.Random / family encrypt) + zipfile; repkey_i: javac --release 8 + d2j-jar2dex",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/rxk_rotl_xor.apk assets/huntress_puzzle.json | python3 -c \"import json,sys,base64;c=base64.b64decode(json.load(sys.stdin)['data']);print(bytes((((b^0xA7)>>3)|((b^0xA7)<<5))&255 for b in c).decode())\""
+}

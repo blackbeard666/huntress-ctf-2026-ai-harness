@@ -1,0 +1,10 @@
+{
+ "codec": "transposition",
+ "key": "skip7",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-meadow-63",
+ "encoded": "Nrdiusstawter-- e aTei atGsadikispouhceh :m6wctro,tenoatdoc n !lbitreM e3oohm   xs meewedgw vms   aja",
+ "generator_cmd": "python3 -I -c \"import sys;s=sys.argv[1];L=len(s);print(''.join(s[i*7%L] for i in range(L)),end='')\" \"$plain\"  # stdlib: every 7th char mod L (skip cipher, start 0)",
+ "oracle_cmd": "python3 -I -c \"import sys;c=sys.argv[1];L=len(c);inv=pow(7,-1,L);print(''.join(c[j*inv%L] for j in range(L)),end='')\" \"$encoded\"  # stdlib: plain[j] = c[j * 7^-1 mod L]",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-meadow-63",
+ "expected": "match"
+}

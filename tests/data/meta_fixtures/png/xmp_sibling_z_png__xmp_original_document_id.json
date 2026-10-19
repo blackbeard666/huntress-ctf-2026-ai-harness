@@ -1,0 +1,8 @@
+{
+ "field": "png.xmp_original_document_id",
+ "expected": "xmp.did:0c9e7f21-4b3a-d84f-a6e2-13579bdf2468",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import Image, PngImagePlugin; i=PngImagePlugin.PngInfo(); i.add_itxt('XML:com.adobe.xmp', open('sibling.xmp').read(), zip=True); Image.new('RGB',(40,30),(20,130,60)).save('sibling_z.png', pnginfo=i)\" (Pillow compressed iTXt)",
+ "oracle_cmd": "exiftool -j -XMP:OriginalDocumentID sibling_z.png (compressed iTXt)",
+ "decoy": false,
+ "member": "sibling_z.png"
+}

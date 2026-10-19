@@ -511,6 +511,9 @@ def tag_value(data, ctx):
         v = _find(r, key)
         if v is None and "_" in key:
             v = _find(r, key.replace("_", "-")) or _find(r, key.replace("_", " "))
+        if v is None:                       # QuickTime mdta keys (com.apple.quicktime.make ...) -- media_device.py
+            from .media_device import tag_fallback
+            v = tag_fallback(data, key)
         if v is None:
             return "none"
         v = v.strip()
@@ -526,6 +529,9 @@ def encoder(data, ctx):
         if not isinstance(r, tuple):
             return r
         v = _find(r, "encoder")
+        if v is None:                       # ffmpeg -movflags use_metadata_tags stores it as an mdta key
+            from .media_device import tag_fallback
+            v = tag_fallback(data, "encoder")
         return v.strip() if v is not None else "none"
     except Exception:  # noqa: BLE001
         return None

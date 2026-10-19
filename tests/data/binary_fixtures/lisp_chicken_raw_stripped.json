@@ -1,0 +1,27 @@
+{
+ "family": "lisp_facts",
+ "encoding": "raw",
+ "expected_offset": 8288,
+ "expected_config": {
+  "flag": "HCFG{chicken_u8vector_raw}",
+  "day": 19
+ },
+ "expected_facts": {
+  "lisp_runtime": "chicken",
+  "lisp_language": "scheme",
+  "has_sbcl_runtime": "false",
+  "has_chicken_runtime": "true",
+  "has_libchicken_needed": "true",
+  "chicken_soname": "libchicken.so.11",
+  "has_c_toplevel": "false",
+  "has_sbcl_core": "false",
+  "sbcl_core_offset": "none",
+  "sbcl_build_id": "none",
+  "sbcl_version": "none",
+  "hcfg_section": ".rodata"
+ },
+ "decoy": false,
+ "generator_cmd": "bash lisp_gen.sh   # real sbcl 2.6.0 save-lisp-and-die :executable t (cropped: head -c 2228224) / chicken 5.3.0 + gcc -lchicken; blob python3 zlib.crc32+struct, coreutils base64",
+ "oracle_cmd": "bash lisp_oracle.sh lisp_chicken_raw_stripped.bin   # file -b, readelf -d NEEDED, nm/nm -D, grep -obUaP LCBS magic at page boundary + dd|strings build-id, strings -B1 'SBCL %s' version, grep -obUaP raw HCFG, strings -t d [-e L] | base64 -d",
+ "note": "#u8 bytevector literal, strip -s: runtime from DT_NEEDED libchicken.so.11 only (C_toplevel gone with .symtab)"
+}

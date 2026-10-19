@@ -1,0 +1,17 @@
+{
+ "family": "api_intent",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "has_injection": "none",
+  "injection_apis": "none",
+  "process_access_apis": "none",
+  "effects": "none"
+ },
+ "generator_cmd": "bash apiint_gen.sh   # printf 'MZ not really a PE: ptrace ... WriteProcessMemory ...' (text impostor with MZ prefix)",
+ "oracle_cmd": "python3 apiint_oracle.py apiint_decoy_text.bin   # readelf --dyn-syms UND / objdump -p imports, objdump -d ptrace request, strings; own intent table",
+ "file_b": "ASCII text",
+ "decoy": true,
+ "note": "lib.binary.api_intent_field(data, key) per expected_facts key; intent/effects vocabulary SPECULATIVE (GM label not seen); decoys: every key 'none'"
+}

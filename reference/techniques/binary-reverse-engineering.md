@@ -1,4 +1,4 @@
-# binary-reverse-engineering — technique log (days 1-17; updated after every day)
+# binary-reverse-engineering — technique log (days 1-18; updated after every day)
 
 How this lane has looked so far (OBSERVATIONS, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -7,14 +7,16 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   past day, plus ONE new container/language per day: D1 C ELF, D2 C++ (ELF or MinGW PE32+), D3 .NET dll, D4 static stripped Go,
   D5 static Rust, D6 Java .jar, D7 Kotlin fat .jar, D8 Swift ELF (67 MB), D9 Nim, D10 Zig (PE `.exe` in Mastery), D11 D (DMD),
   D12 Free Pascal, D13 Crystal, D14 Objective-C (GNUstep), D15 a PAIR of C ELFs (`-stripped`/`-symbolized`), D16 a PAIR of WASM
-  modules (`-compact`/`-direct`), D17 Ada ELF (1.4 MB, GNAT 14.2, dynamic, not stripped, DWARF) -- back to ONE member.
+  modules (`-compact`/`-direct`), D17 Ada ELF (1.4 MB, GNAT 14.2, dynamic, not stripped, DWARF) -- back to ONE member, D18
+  Fortran ELF (16 KB gfortran, dynamic `libgfortran.so.5`, not stripped, `MAIN__` + `variant-000.f90`).
   Answer ids `dNN_artifact_sha256_K` / `dNN_analysis_<field>`; a multi-member group adds a member qualifier:
   `dNN_analysis_<qualifier>_<field>` (D15 `stripped_`/`symbolized_`, D16 `compact_`/`direct_`).
 - From Day 2 on, every new-day member carries the same embedded **HCFG** config blob: `'HCFG' | u8 ver | u8 xor_key | u16 len (LE) |
   u32 crc32 | xor'd JSON` (JSON at offset 12; crc32 is over the decoded plaintext). Only its storage location changes
   (`.hcfg` section on D2/D10/D14, .NET FieldRVA array, Go/Rust rodata, base64'd in a Java/Kotlin constant pool, base64 Swift/Nim/D/
   Crystal String literal on D8/D9/D11/D13, RAW in FPC `.data` on D12, RAW in WASM data segment 0 on D16, RAW in Ada `.rodata` on
-  D17). Scan raw bytes for `HCFG` AND its base64 form `SENGR...` (raw `HCFG` can be a false hit inside code: check crc).
+  D17, RAW in gfortran `.rodata` symbol `encoded_config.N` on D18). Scan raw bytes for `HCFG` AND its base64 form `SENGR...`
+  (raw `HCFG` can be a false hit inside code: check crc).
   The JSON carries never-asked keys too (ipv4, windows_path, linux_path, service, host_model): parse the whole dict.
 - The analysis is easy (headers, symbols, one config blob). The hard part is the GM's exact label for `exact_text` fields
   (format, machine, symbol, D17 `hcfg_storage`). **The organizers RE-ISSUE the contract mid-day** when a label is unguessable:
@@ -23,19 +25,26 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   to `kind: pattern`; keep emitting the GM-confirmed spellings.) Question count: 80 on D8, +10/day to 160 on D16, **D17 = 204**: 2nd
   BACKFILL (like D8): every old group padded to 11 ids, re-asking EARLIER DAYS' single-solve facts (D1 marker/recover_code, D2
   mangled symbols, D4/D5 runtime-identity booleans + section_names, D6/D7 class-file facts) plus NEW `hcfg_storage`.
-- **The NEW day's prompt theme is still never asked** (D5-D17: Rust panics, Kotlin coroutines, Swift protocols, ..., D16 wasm
-  "doors", D17 "recover the reversible decoder" -- only the standard header + HCFG ids). BUT the D17 backfill showed a day's theme
-  CAN be asked later, against that day's old group (D2 C++ symbols, D6/D7 class layout, D7 coroutines). New group ids: sha256,
-  format, architecture, machine, config_campaign/domain/mutex/url/crc32_hex + hcfg_offset/hcfg_version/xor_key_hex (D17: all 11).
-- Time Trial ≈ 6-16 s early; Mastery = `setN.` prefixed copies (2 sets D2-D7, 5 D8-D9, 3 D10-D14, 5 D15-D17; D17 contract 5 x 204
-  = 1020 ids); artifacts are named `delivery N: evidence.zip`. D17 timed windows: TT 5 s, Mastery 14 s end to end.
+- **The NEW day's prompt theme is still never asked** (D5-D18: Rust panics, Kotlin coroutines, Swift protocols, ..., D16 wasm
+  "doors", D17 "recover the reversible decoder", D18 "reconstruct the call graph, API intent, no injection" -- only the standard
+  header + HCFG ids). BUT the D17 backfill showed a day's theme CAN be asked later, against that day's old group (D2 C++ symbols,
+  D6/D7 class layout, D7 coroutines). New group ids: sha256, format, architecture, machine, config_campaign/domain/mutex/url/
+  crc32_hex + hcfg_offset/hcfg_version/xor_key_hex (D17 and D18: all 11).
+- **Every member since D2 also embeds a "dynamic trace" template** (unasked so far): `{"schema":"huntress.binary.dynamic_trace.v1",
+  "branch":"<b>","event_count":<n>,"campaign":...,"family":"<lang>_<theme>_trace","effects":"...","network":"none"}`, printed per
+  host model read from env `HUNTRESS_HOST_MODEL` (`analysis`/`sandbox`/`workstation`). family/effects name the day's theme
+  (D17 `ada_encoded_config_trace`; D18 `fortran_indirect_flow_trace`, effects `modeled_process_access_no_injection`).
+- Time Trial ≈ 6-16 s early; Mastery = `setN.` prefixed copies (2 sets D2-D7, 5 D8-D9, 3 D10-D14, 5 D15-D17, **4 on D18**: 4 x 216
+  = 864 ids); artifacts are named `delivery N: evidence.zip`. Timed end to end: D17 TT 5 s / Mastery 14 s; D18 TT 8 s / Mastery 14 s.
+  Question count D18 = **216** = 204 + the 12-id d18 group (no backfill on D18).
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
 - **HCFG location / encoding** -- same blob, different storage per container (`.hcfg` section, .NET FieldRVA, Go/Rust rodata,
   base64 in a Java/Kotlin constant pool, base64 Swift/Nim/D/Crystal string literal, raw FPC `.data`, RAW first payload byte of WASM
   active data segment 0, RAW Ada `.rodata` (D17 file 207432)): scan raw bytes for `HCFG` and for `SENGR[A-Za-z0-9+/_-]*=*`,
   decode, accept only if crc32(plain) matches AND the JSON parses -- keep scanning past a failing hit (D9 Nim had two raw decoys);
-  never a fixed offset. Storage did NOT change across a day's variants on any day so far.
+  never a fixed offset. Storage did NOT change across a day's variants on any day so far (D18: offset 8512 in the single, TT and
+  all 4 Mastery sets while key 0x31/0x34/0x36/0x37 and BR18-00V re-rolled -- the blob length is constant, so layout is stable).
 - **Location-as-answer (`hcfg_offset`, D9/D11-D14, D17 on every group)** -- base-10 FILE offset of the first byte of the stored
   blob: base64 form -> the `S` of `SENGR...` (D9 30696, D11 368272, D13 560188 -- the text, not a String header before it); RAW
   form -> the `H` of `HCFG` (D12 82928, D14 4000, D17 207432; D8 Swift 18366768). Record `m.start()` of whichever scan hit validated
@@ -67,7 +76,8 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
 - **Variant index per group** -- `dNN--variant-XXX` re-rolls per group and mode; TT often == Mastery set1 bytes but not always
   (D15 TT BR15-005; D16 TT == the single); a carry-over d01 can differ (D9 Mastery `mov eax, 8104`; D15-D16 Mastery set1 d01
   STRIPPED -> symbols/disassembly `[]`, has_symtab `false`). D17 CONFIRMED: TT d01 and all 5 Mastery d01s stripped ->
-  `recover_code` = `none` although `kind: integer` (the leaf heuristic's 8114/8106 were rejected). Pair by sha256, never index.
+  `recover_code` = `none` although `kind: integer` (the leaf heuristic's 8114/8106 were rejected). D18: TT + all 4 Mastery d01
+  NOT stripped (`8100`) -- stripping is a per-attempt re-roll, not a trend; keep both paths. Pair by sha256, never index.
 - **Contract wording per fetch (D17)** -- the SAME id's question text/answer_format changed between the morning and the revised
   contract (exact_text -> enum for hcfg_storage; section_names now "leading \"\" optional"; compression_methods codes OR names;
   format/machine "bitness-qualified labels accepted"). Rule: the solver reads `answer_format` per id at run time
@@ -105,6 +115,7 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
 | Nim / D / Crystal ELF (`NimMain`; `_D4core`,`DMDH`; `Crystal:H`,`GC_malloc`) | Plain ELF; base64 `SENGR...` literal (Nim: two raw `HCFG` decoys -> crc-gate); offset = the `S` |
 | Free Pascal ELF (`FPC 3.2.2`, `.fpcdata`, static stripped) | Plain ELF; HCFG RAW in `.data` -- `grep -abo HCFG`, crc-gate, offset = the magic |
 | Objective-C ELF (`__objc_selectors`/`__objc_classes`, `objc_msg_lookup`, `._OBJC_CLASS_<Name>`) | Plain ELF; HCFG RAW in its own `.hcfg` section (symbol `huntress_config`); `has_hcfg_section` = `true` |
+| Fortran ELF (`libgfortran.so.5` NEEDED, `_gfortran_*` imports, `MAIN__`, `*.f90` FILE symbol, internal procs `name.N`, `jumptable.N.M` = `_gfortran_select_string` case table) | Plain ELF: carried-over solver answers it (`elf`/`x86-64`/`62`). HCFG RAW in `.rodata` (symbol `encoded_config.N`; `grep -abo HCFG`, crc-gate, offset = the `H`). SELECT CASE on `HUNTRESS_HOST_MODEL` -> `mov eax, <event_fn>; call rax` (indirect calls) -- the "flow" theme, unasked |
 | Ada ELF (`GNAT Version: 14.2.0`, `ada__*`/`system__*`/`__gnat_*` symbols, `ADA.STRINGS.*_ERROR` names, `.gcc_except_table`, debug_info) | Plain ELF: header ids as usual (`elf`/`x86-64`/`62`). HCFG RAW in `.rodata` (`grep -abo HCFG`, crc-gate, offset = the `H`). The "decoder ring" (reversible xor decoder) was NOT asked; the trace marker JSON (`family":"ada_encoded_config_trace"`) is flavour |
 | Two members differing by a name tag (`-stripped`/`-symbolized`, `-compact`/`-direct`), ids `dNN_analysis_<tag>_<field>` | Route each id to the member whose file name carries `<tag>`; same HCFG in both |
 | `00 61 73 6d 01 00 00 00` (`\0asm`), `.wasm` | `lib.binary.wasm_layout(data)` or `wasm-objdump -x f.wasm`; format `wasm`, architecture `wasm32`; HCFG RAW in data segment 0 |
@@ -123,21 +134,25 @@ ids/group; integer elf_class/machine. **D9 "Nimble"** (86 s): raw decoys, NEW `h
 Up"** (91 s, 0 wrong, TT+Mastery first try): compact/direct wasm pair; labels `wasm`/`wasm32` first try thanks to the prebuilt
 `wasm_layout`; HCFG RAW in data segment 0; "doors" theme unasked.
 
-**D17 "Decoder Ring"** (slug `encoded-configuration-recovery`; 204 Qs; CORRECT at **T+4:03**; TT CORRECT 2nd try, Mastery
-CORRECT after 5 per-set fixes). Prompt: "Recover the reversible decoder and read what it was hiding." New group = ONE Ada ELF
-(1.39 MB, GNAT 14.2.0, dynamic glibc, not stripped, DWARF); HCFG RAW in `.rodata` (ver 1, key 0x73) -- the usual 1-byte-xor
-HCFG, no new encoding, decoder never asked.
-- d17 group (12 ids) + 176 carry-over ids banked at **T+18 s** by the carried-over solver -- zero code for the new language.
-- Backfill #2 (32 new ids on old groups): 22 already covered by the generic facts dict; 10 needed code, all accepted in ONE POST
-  at T+2:40 (d01 marker/recover_code, d02 mangled_score_symbol/typeinfo_symbol, d04 has_go_runtime, d05 has_rust_mangled_symbol,
-  d06 methods/access_flags, d07 method_count/has_coroutine_runtime -- spellings in the conventions table).
-- `hcfg_storage`: `base64` (d08/d09/d11/d13) banked by T+4:13. The 2 raw ids (d12, d14) then burned **~10.9k single-id rejected
-  POSTs** (~117 by the worker + automated label grouptests, ~3.5 h) until the organizers re-issued the contract with an enum:
-  `raw_hcfg_section` (d14) / `raw_const_array` (d12) -> CORRECT within a minute of the revision being pulled.
-- TT: 1st submit wrong only on `d01_analysis_recover_code` -- TT d01 was STRIPPED and the D17 `recover_code` code fell back to the
-  leaf `mov eax, imm; ret` scan (8114); `none` -> CORRECT (TT phases: solve 1.0 s, total 5 s). Mastery: same bug on all 5 sets
-  (8106) -> `none` per set -> CORRECT (14 s total, solve 5.1 s). Time lost: the label tail; the d01 bug had been PREDICTED in the
-  Variant axes (D15-D16 Mastery d01 stripped) but the new field's code did not apply the family's absence rule.
+**D17 "Decoder Ring"** (204 Qs; CORRECT T+4:03; TT 2nd try, Mastery after 5 per-set fixes): ONE Ada ELF (GNAT 14.2), HCFG RAW
+in `.rodata`; decoder never asked. Carry-over + d17 ids banked at T+18 s with zero new code. Backfill #2 (32 ids on old groups,
+10 needed code, all accepted in ONE POST). `hcfg_storage` raw ids (d12/d14) burned ~10.9k rejected POSTs / 3.5 h until the
+organizers revised the contract to an enum (`raw_const_array` / `raw_hcfg_section`). TT/Mastery d01 stripped -> `recover_code`
+`none` (the leaf heuristic 8114/8106 was rejected: a re-asked field must inherit its family's absence rule).
+
+**D18 "Flow State"** (slug `control-flow-reconstruction`; 216 Qs; **CORRECT at T+11 s**, 0 wrong; TT and Mastery CORRECT first
+try). Prompt: "Follow the calls ... Reconstruct the call graph, read the API intent at each edge, and prove no injection hides in
+the flow." New group = ONE Fortran ELF (16.5 KB, gfortran, dynamic `libgfortran.so.5`/libm/libgcc_s, not stripped): `main` ->
+`MAIN__` -> `_gfortran_get_environment_variable_i4("HUNTRESS_HOST_MODEL")` -> `_gfortran_select_string` over the case table
+`jumptable.0.5` (default + `analysis`/`sandbox`/`workstation`) -> `mov eax, <event_decoy|sandbox|failure|success>; call rax`
+(indirect calls to the internal procedures `event_*.N`) -> xor-sum guard over `encoded_config.4` vs 9999 (`unreachable`) ->
+`_gfortran_st_write` of the trace JSON (`fortran_indirect_flow_trace`, `modeled_process_access_no_injection`). HCFG RAW at
+`.rodata` file offset 8512 (= symbol `encoded_config.4`), ver 1, key 0x31.
+- Contract = the D17 204 ids unchanged + 12 d18 ids (sha256, architecture, format, machine, config_*, crc32_hex, hcfg_offset,
+  hcfg_version, xor_key_hex) -- no backfill, no new field name, call-graph/API/injection theme unasked.
+- The race harness (answer-first) POSTed the carried-over solver's full 216-answer set at T+11 s: zero code, zero lookups. The
+  `fortran-gfortran-member` prebuild (built the night before from the D17 forecast) had already put the cues in place.
+- TT window 80 s, done in 8 s (download 4 s, solve 0.9 s); Mastery (4 sets) window 265 s, done in 14 s (download 7.5 s, solve 1.4 s).
 
 ## GM answer conventions learned
 | Field family | Accepted form | Rejected (never resubmit) |
@@ -157,7 +172,7 @@ HCFG, no new encoding, decoder never asked.
 | format (native) | lowercase container: `elf`, `pe` (`macho` presumed) | ELF, ELF64, elf64-x86-64, HCFG, json, exe, pe32+, coff, mz |
 | format (.NET) | `pe_cli` | ~50 synonyms — lib/knowledge.py DOTNET_FORMAT_REJECTED |
 | format (Java/Kotlin jar) | `jar` | jar_jvm |
-| format / architecture (any compiled language ELF, D8-D17 incl. Ada) | `elf` / `x86-64` (language never changes the label) | — |
+| format / architecture (any compiled language ELF, D8-D18 incl. Ada, Fortran) | `elf` / `x86-64` (language never changes the label) | — |
 | format / architecture (WebAssembly, D16) | `wasm` / `wasm32` | — |
 | C++ symbols (ELF) incl. `mangled_score_symbol`, `typeinfo_symbol` (D17) | bare Itanium mangled name (`_ZNK15DiscoveryEngine5scoreEPKc`, `_ZTI15DiscoveryEngine`) | the demangled form |
 | C++ symbols (PE/MinGW) | COMDAT section name `.text$<mangled>` / `.rdata$<mangled>` | bare mangled name |
@@ -172,7 +187,7 @@ HCFG, no new encoding, decoder never asked.
 | hcfg_version / xor_key_hex | header byte 4 decimal / header byte 5 as `0x%02x` | — |
 | has_hcfg_section (enum) | `true` when a section is literally named `.hcfg` | — |
 | hcfg_offset (integer) | decimal FILE offset: base64 text start (`S`), RAW = the `HCFG` magic | — |
-| hcfg_storage (enum, D17 revised contract) | `base64` (SENGR literal), `raw_hcfg_section` (in a `.hcfg` section), `raw_const_array` (other native data section, e.g. FPC `.data`), `wasm_data_segment`, `raw` (else) | every free-text spelling for raw-stored (raw, raw_data, section, .hcfg, bytes, blob, ... ~10.9k probes) -- the token set is closed |
+| hcfg_storage (enum, D17 revised contract; re-confirmed D18 single/TT/Mastery) | `base64` (SENGR literal), `raw_hcfg_section` (in a `.hcfg` section), `raw_const_array` (other native data section, e.g. FPC `.data`), `wasm_data_segment`, `raw` (else) | every free-text spelling for raw-stored (raw, raw_data, section, .hcfg, bytes, blob, ... ~10.9k probes) -- the token set is closed |
 | compression_methods (jar, json) | sorted distinct ZIP method ids, compact: `[0,8]` (D17 text: Stored/Deflate names, any order also accepted) | — |
 Naming law (from playbook.py): native format = container only; a managed .NET binary = container_runtime (pe+cli).
 Java broke the compound law (`jar`), so when a label is new, try the plain container name AND the compound, one per POST.
@@ -182,31 +197,27 @@ Java broke the compound law (`jar`), so when a label is new, try the plain conta
   NEVER guessed -- solved only by the organizers' contract revision to an enum): stop after ~10 single-id probes plus one `hctf
   labels` run, write HELP.md, then RE-PULL THE CONTRACT periodically and diff each id's question/answer_format. Never put the
   unknown id into a batch with other open ids; mass automated grouptests on an exact_text label are wasted POSTs.
-- **A re-asked field must inherit its family's absence rule** (D17 TT/Mastery): new `recover_code` code fell back to a leaf
-  heuristic on a stripped d01 although `disassembly` had learnt `[]` on D8. Absent symbol => `none`/`[]`/`false`, always.
+- **Absence rule, always** (D1 TT, D2 Mastery set2, D8/D15-D17 Mastery d01 stripped/renamed): answer what the question defines for
+  absence (`[]`, `none`, `false`); a re-asked field inherits it (D17 `recover_code` leaf heuristic 8114/8106 was rejected).
 - **A multi-field POST is all-or-nothing.** One wrong field fails the set and hides which field was wrong (D2). Submit
   unconfirmed/new fields ALONE; batch only the known ones (D17: 10 new derivable fields in one POST was fine -- all bytes-derived).
-- **Chasing the prompt's theme** (D5-D17): the NEW day's flavour has never been asked; read the contract ids first. But keep
-  the facts you learn about each language: a later backfill re-asks old days' facts (D17 re-asked D1/D2/D4-D7).
-- **Shell/JSON quoting** of `Global\Huntress...` mutexes: build the submit JSON with python/jq, not by hand in a shell string.
-- **capstone `ret` has an empty op_str**: `f"{m} {o}"` gives `"ret "`. Strip it, and convert immediates to decimal.
+- **Chasing the prompt's theme** (D5-D18): the NEW day's flavour has never been asked (D18's call graph / "prove no injection"
+  included); read the contract ids first. But keep the facts you learn about each language/theme: a later backfill re-asks old
+  days' facts (D17 re-asked D1/D2/D4-D7), so record the theme facts in NOTES.md for the backfill day.
+- **Formatting**: build submit JSON with python/jq (`Global\Huntress...` mutex = ONE backslash); capstone `ret` has an empty
+  op_str (`"ret "` -> strip), immediates in decimal.
 - **Cumulative zip**: old groups' answers carry over when their sha256 match; POST the known ids first (they bank as
-  `accepted`), then the new/unknown ids alone (D15: 140 banked at T+17 s; D17: 188 at T+18 s).
-- **A new id shape on an old field** (D15 `analysis_stripped_machine`): peel a member qualifier off the front before declaring
-  the field unknown; never answer it from the "first" member of the group.
-- **Recursive unzip** destroys nested containers (.jar/.apk) and their `dNN--` prefix; keep them whole.
-- **Same field name, different `kind`** (D8 elf_class/machine): read `answer_format.kind` per id.
+  `accepted`), then the new/unknown ids alone (D15: 140 banked at T+17 s; D17: 188 at T+18 s; D18 all 216 at T+11 s).
+- **Id shape / kind**: peel a member qualifier off the front before declaring a field unknown (D15 `analysis_stripped_machine`);
+  the same field name can change `kind` (D8 elf_class/machine integer) -- read `answer_format.kind` per id.
+- **Archives**: never unzip recursively (nested .jar/.apk lose their `dNN--` prefix); jar members are deflated, so `grep HCFG
+  file.jar` finds nothing -- inflate the class and read constant-pool strings.
 - **Huge members** (D8: 67 MB Swift): no per-key xor brute force or per-field re-parse; cheap encodings first, crc-gate every hit,
   parse each member once.
 - **Decoy magics** (D9 Nim): code that CHECKS the magic embeds `"HCFG"` literals; len 0 => crc32(b"")==0 passes! Require non-empty
   JSON that parses, keep scanning, then try the base64 form.
-- **Location fields per scan path** (D12): a decoder with raw AND base64 branches must return the hit offset (and, since D17, the
-  hit's encoding for `hcfg_storage`) from BOTH. Assert no `none` where a config was decoded.
-- **`strings -t d` offsets on Nim/Swift literals** can be off by 1: use `grep -abo` / `re.finditer(...).start()`.
-- **Jar members are deflated**: `grep HCFG file.jar` finds nothing. Inflate the class, read constant-pool strings.
-- **Stripped builds / renamed functions** in variants (D1 TT, D2 Mastery set2, D8/D15/D16 Mastery d01): answer what the question
-  defines for absence (`[]`, `none`, `false`); never substitute a heuristic constant.
-- **Tool parity**: ilspycmd, dotnet, rustfilt, GoReSym, rabin2, swift-demangle are in `bin/`; monodis/de4dot/gnat are not.
+- **Location fields per scan path** (D12): a decoder with raw AND base64 branches must return the hit offset (and the hit's
+  encoding for `hcfg_storage`) from BOTH; take offsets from `grep -abo` / `re.finditer().start()`, not `strings -t d` (off by 1).
 - **Timed windows**: download dominates (D16 TT 52 s of 64 s on the 32 MB bundle). After editing hctf/*.py, restart the
   orchestrator (D1/D2 ran stale modules).
 - **WASM parsing**: section sizes are 5-byte PADDED LEB128; read LEB128 generically (`lib.binary.wasm_layout`).

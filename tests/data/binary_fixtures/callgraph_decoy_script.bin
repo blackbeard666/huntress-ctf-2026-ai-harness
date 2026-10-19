@@ -1,0 +1,3 @@
+#!/bin/sh
+# not a program: call main() then exit
+echo call main

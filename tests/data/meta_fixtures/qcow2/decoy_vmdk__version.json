@@ -1,0 +1,8 @@
+{
+ "field": "qcow2.version",
+ "expected": "none",
+ "generator_cmd": "qemu-img create -f vmdk -o adapter_type=lsilogic,hwversion=6 sp.vmdk 5M (qemu-img 10.2.1) (renamed .qcow2)",
+ "oracle_cmd": "file -b -> VMware4 disk image (no QFI\\xfb magic)",
+ "decoy": true,
+ "member": "sp.qcow2"
+}

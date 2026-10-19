@@ -1,0 +1,10 @@
+{
+ "codec": "word-transposition",
+ "key": "word-columnar TIGER (shuffle family)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-77",
+ "encoded": "this this Game decoding submit the work solve, to warmup! exact Master: Nice To answer cobalt-otter-77",
+ "generator_cmd": "python3 -I gen.py coltrans TIGER \"$plain\"  # pycipher.Railfence/ColTrans .encipher on a token->letter string (word i = letter A+i), letters mapped back to words: gen.py = import sys,string,pycipher; ws=plain.split(\" \"); sym=string.ascii_uppercase[:len(ws)]; c=pycipher.ColTrans('TIGER').encipher(sym); print(\" \".join(ws[sym.index(ch)] for ch in c))",
+ "oracle_cmd": "python3 -I oracle.py coltrans TIGER \"$encoded\"  # pycipher .decipher on the token->letter string, mapped back",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-77",
+ "expected": "match"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "tpstrict",
+ "key": "rail4-off2(hex)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-17",
+ "encoded": "676666627757726762627766466626777393072b45f4e7483012500403c6c0529448308140e3524f4807d5d145a0f2c4f4521746626726666627677667226266627766276767676676272762662477736666267623e5f039097d1ff53d095317005103231d4d",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p | tr -d '\\n' | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs enc 4 2  # xxd hex, then CyberChef Rail Fence Cipher Encode(4, 2)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs dec 4 2 | xxd -r -p  # CyberChef Rail Fence Cipher Decode(4, 2), then xxd -r -p",
+ "expected": "match",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-17"
+}

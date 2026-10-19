@@ -1,0 +1,8 @@
+{
+ "material": "\"C:/PROGRA~1/Common Files/Svc.EXE\"  -k  \"c:\\windows\\SYSTEM32\\drivers\\etc\\hosts\"   $env:SystemRoot/Temp/X.dat",
+ "rep": "cmdline",
+ "transform": "canon",
+ "expected": "svc -k C:\\Windows\\System32\\drivers\\etc\\hosts C:\\Windows\\Temp\\X.dat",
+ "generator_cmd": "hand-written: \"C:/PROGRA~1/Common Files/Svc.EXE\"  -k  \"c:\\windows\\SYSTEM32\\drivers\\etc\\hosts\"   $env:SystemRoot/Temp/X.dat",
+ "oracle_cmd": "pwsh -c \"[IO.Path]::GetFileNameWithoutExtension('C:/PROGRA~1/Common Files/Svc.EXE').ToLower()\" -> svc; system prefixes per the canon table (C:\\Windows\\System32\\, $env:SystemRoot = C:\\WINDOWS -> C:\\Windows), / -> \\, arg case kept"
+}

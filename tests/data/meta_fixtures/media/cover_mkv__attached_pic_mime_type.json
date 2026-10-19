@@ -1,0 +1,8 @@
+{
+ "field": "media.attached_pic_mime_type",
+ "expected": "image/png",
+ "generator_cmd": "ffmpeg -i a.wav -c:a libopus -attach cover.png -metadata:s:t mimetype=image/png -metadata:s:t filename=cover.png cover_mkv.mkv  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "oracle_cmd": "exiftool -j -PictureMIMEType -AttachedFileMIMEType cover_mkv.mkv  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "decoy": false,
+ "member": "cover_mkv.mkv"
+}

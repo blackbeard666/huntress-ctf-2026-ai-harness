@@ -1,0 +1,10 @@
+{
+ "codec": "bifid",
+ "decoy": true,
+ "plain": null,
+ "encoded": "Nsyn fbgn hfwtttbq suoh nsweec! Et habbs, uumbhe liva zhxtg lmawbo ah ubb Pteg Ygsrol: nfuflz-idlrg-74",
+ "oracle_plain": "Moul vqpp gcehiimm hlhb vfurqr! St afrct, pqwlrh pooq pwgey bwdndw st hlc Cbfd Krlsvu: zmiaih-ldwmb-74",
+ "expected": "none",
+ "generator_cmd": "printf %s \"$plain\" | CC=tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node cc.mjs enc HUNTRESS  # CyberChef BifidCipherEncode, keyword '' (standard square A-Z sans J), whole-text period, letters in place, case + non-letters kept; cc.mjs = 5-line ESM wrapper importing src/core/operations/BifidCipherEncode.mjs  # KEYED square (keyword HUNTRESS): not the standard square",
+ "oracle_cmd": "python3 -I -c \"import sys;sys.path.insert(0,'tools/pyciphers');import re,secretpy as S;t=sys.argv[1];L=[c for c in t if c.isalpha() and c.upper()!='J'];d=S.Bifid().decrypt(''.join(L).lower(),0);it=iter(d);print(''.join((next(it) if c.islower() else next(it).upper()) if c.isalpha() and c.upper()!='J' else c for c in t))\" \"$encoded\"  # secretpy Bifid decrypt (key 0 = whole text) of the letters, put back in place  # standard-square read of a keyed-square ciphertext: garbage, no crib"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-e05b4c92a7d13f61",
+ "_why": "row 75: res/raw/state.txt = base64 text of a protobuf message; token xor'd into bytes field 3.3.3 with sibling string 3.3.4 'vaultkey'",
+ "generator_cmd": "python3 tests/data/android_fixtures/pbwire_src/gen.py $TMPDIR/pbw && (cd $TMPDIR/pbw/pbwire_b64blob_xorkey && zip -q -X -r pbwire_b64blob_xorkey.apk AndroidManifest.xml res)  # google.protobuf (dynamic descriptor hx.Config{1 app,2 version,3 Section{1 id,2 ts fixed64,3 Secret{1 label,2 blob,3 data bytes,4 key,5 head,6 tail}},4 ratio float}) SerializeToString + Info-ZIP zip",
+ "oracle_cmd": "unzip -p pbwire_b64blob_xorkey.apk res/raw/state.txt > s.txt && python3 tests/data/android_fixtures/pbwire_src/oracle.py s.txt b64  # -> 3.3.3 data, 3.3.4 key; python3 -c 'bytes(d[i]^k[i%len(k)] ...)'"
+}

@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "_doc": "DECOY: a benign .osts (ExcelScript main writing a short hex cell) -- no plan; sibling .osts",
+ "generator_cmd": "jq -n '{version:\"0.3.0\",body:\"function main(workbook: ExcelScript.Workbook) {...setValue(\\\"763d337c6c616e6775616765\\\");}\",noCodeMetadata:\"\"}' > saas_decoy_osts_benign.osts",
+ "oracle_cmd": "jq -r .body saas_decoy_osts_benign.osts | grep -c HUNTRESS  # 0: no marker / descriptor, the hex cell is 'v=3|language' only (not a plan)"
+}

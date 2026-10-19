@@ -1,0 +1,8 @@
+{
+ "field": "icc.color_space",
+ "expected": "CMYK",
+ "generator_cmd": "cp /usr/share/color/icc/ghostscript/default_cmyk.icc gs_cmyk.icc  (Ghostscript-shipped profile)",
+ "oracle_cmd": "exiftool -j -ColorSpaceData gs_cmyk.icc -> 'CMYK'",
+ "decoy": false,
+ "member": "gs_cmyk.icc"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "vhd.current_size_bytes",
+ "expected": "65536",
+ "generator_cmd": "qemu-img create -f vpc -o subformat=fixed,force_size=on fixed.vhd 64K  (qemu-img 10.2.1)",
+ "oracle_cmd": "qemu-img info -f vpc fixed.vhd -> virtual size: 64 KiB (65536 bytes)",
+ "decoy": false,
+ "member": "fixed.vhd"
+}

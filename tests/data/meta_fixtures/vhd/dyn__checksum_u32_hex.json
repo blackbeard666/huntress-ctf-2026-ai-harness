@@ -1,0 +1,8 @@
+{
+ "field": "vhd.checksum_u32_hex",
+ "expected": "0xffffee3f",
+ "generator_cmd": "qemu-img create -f vpc -o subformat=dynamic dyn.vhd 10M  (qemu-img 10.2.1)",
+ "oracle_cmd": "xxd -s -512 -l 88 dyn.vhd -> bytes @64 = ffff ee3f (qemu-img opens it: checksum accepted)",
+ "decoy": false,
+ "member": "dyn.vhd"
+}

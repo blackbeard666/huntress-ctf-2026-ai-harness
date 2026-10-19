@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/proc_linux_gen.py tests/data/script_fixtures (real psmisc `pstree -p <root pid>`: names + pids only)",
+ "oracle_cmd": "cat proc_linux_pstree.txt  # no argv -> no plan; tree bash -+- sh --- sleep, `- sleep (process_events reads the edges)"
+}

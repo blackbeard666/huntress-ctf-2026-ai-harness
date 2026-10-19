@@ -1,0 +1,9 @@
+{
+ "material": "\"\"",
+ "rep": "cmdline",
+ "transform": "canon",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "printf '\"\"'  (empty quoted image)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib python3 -c 'import mslex; print(mslex.split(\"\\\"\\\"\", like_cmd=False, check=False, ucrt=False))' -> [''] (no image)"
+}

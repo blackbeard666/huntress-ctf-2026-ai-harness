@@ -1,0 +1,14 @@
+{
+ "codec": "dcol:mysz:balloon+mysz:balloon",
+ "key": "balloon balloon",
+ "hints": [
+  "Balloon Columns",
+  "BALLOON, and BALLOON once more."
+ ],
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-orbit-28",
+ "encoded": "kcNt- mer ltiobih2segb o e ,tpisehrdawcew!is M8o xt art Gaiu-srnvrmmmcenapo :iute d lt a ohs weToeast",
+ "generator_cmd": "python3 -I -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from secretpy import MyszkowskiTransposition as M;s=sys.argv[1]\nfor k in sys.argv[2:]:s=M().encrypt(s,k)\nprint(s,end=\"\")' \"$plain\" balloon balloon  # pycipher 0.5.2 ColTrans / secretpy 0.12.0 MyszkowskiTransposition .encipher/.encrypt applied once per key (punctuation kept)",
+ "oracle_cmd": "python3 -I -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from secretpy import MyszkowskiTransposition as M;s=sys.argv[1]\nfor k in reversed(sys.argv[2:]):s=M().decrypt(s,k)\nprint(s,end=\"\")' \"$encoded\" balloon balloon  # secretpy 0.12.0 ColumnarTransposition / MyszkowskiTransposition .decrypt, keys undone last-first",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-orbit-28",
+ "expected": "match"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "skip",
+ "plain": null,
+ "encoded": "eeitetta  -lsmu t sd ie :cimsjitooGbutdxeoo6dnTdMnmesrg wesN r,paa -e!a rktih hmwsoe vwce aao war3 hc",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import sys,random;x=list(sys.argv[1]);random.Random(11).shuffle(x);print(''.join(x),end='')\" \"$plain\"  # stdlib random shuffle (seed 11): crib multiset, no skip structure",
+ "oracle_cmd": "no reader exists for a random shuffle: no skip (k, start) in either direction reads 'Nice work ... <slug>' -> none",
+ "oracle_plain": null
+}

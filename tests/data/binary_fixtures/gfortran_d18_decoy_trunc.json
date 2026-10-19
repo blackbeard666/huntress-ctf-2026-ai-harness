@@ -1,0 +1,29 @@
+{
+ "family": "gfortran_facts",
+ "encoding": "none",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_facts": {
+  "source_file": "none",
+  "main_program": "none",
+  "procedures": [],
+  "procedures_mangled": [],
+  "procedures_by_address": [],
+  "procedures_by_address_mangled": [],
+  "case_table": [],
+  "case_values": [],
+  "case_map": {},
+  "case_procedures": {},
+  "default_procedure": "none",
+  "env_var": "none",
+  "needed": [],
+  "imports": [],
+  "compiler_banner": "none",
+  "hcfg_symbol": "none",
+  "hcfg_entity": "none"
+ },
+ "decoy": true,
+ "generator_cmd": "head -c 4096 gfortran_d18_flow_v000.bin > gfortran_d18_decoy_trunc.bin",
+ "oracle_cmd": "python3 gfortran_d18_oracle.py gfortran_d18_decoy_trunc.bin   # readelf -sW/-dW/-p .comment, nm -D --undefined-only, objdump -d -M intel walk, pyelftools segment bytes; HCFG: bytes.find + header xor key decode + readelf -sW covering OBJECT",
+ "note": "first 4096 bytes: section headers/table/strings cut off -> every flow field absent (none / [])"
+}

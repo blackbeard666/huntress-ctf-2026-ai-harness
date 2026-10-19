@@ -1,0 +1,9 @@
+{
+ "codec": "bifid-p0-keep-cc",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-quarry-58",
+ "encoded": "Maxr acbm rivssssp dqmt gqvdcu! Ds rbccd, qqatdu opik uotms sfgzto ax wit Oplo Cmwtsw: jbwc-ufuebi-58",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-quarry-58",
+ "generator_cmd": "printf %s \"$plain\" | CC=tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node cc.mjs enc ''  # CyberChef BifidCipherEncode, keyword '' (standard square A-Z sans J), whole-text period, letters in place, case + non-letters kept; cc.mjs = 5-line ESM wrapper importing src/core/operations/BifidCipherEncode.mjs",
+ "oracle_cmd": "python3 -I -c \"import sys;sys.path.insert(0,'tools/pyciphers');import re,secretpy as S;t=sys.argv[1];L=[c for c in t if c.isalpha() and c.upper()!='J'];d=S.Bifid().decrypt(''.join(L).lower(),0);it=iter(d);print(''.join((next(it) if c.islower() else next(it).upper()) if c.isalpha() and c.upper()!='J' else c for c in t))\" \"$encoded\"  # secretpy Bifid decrypt (key 0 = whole text) of the letters, put back in place",
+ "expected": "match"
+}

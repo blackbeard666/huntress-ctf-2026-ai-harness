@@ -1,0 +1,103 @@
+{
+ "family": "gfortran_facts",
+ "encoding": "raw",
+ "expected_offset": 8512,
+ "expected_config": {
+  "campaign": "BR18-003",
+  "domain": "node-003.day18.example.invalid",
+  "ipv4": "198.51.100.93",
+  "url": "https://node-003.day18.example.invalid/api/BR18-003",
+  "mutex": "Global\\HuntressBR18_003",
+  "windows_path": "C:\\ProgramData\\HuntressLab\\day18\\BR18-003.dat",
+  "linux_path": "/var/tmp/huntress-lab/day18/BR18-003.dat",
+  "service": "HuntressLab-Day18-003",
+  "host_model": "workstation"
+ },
+ "expected_facts": {
+  "source_file": "variant-003.f90",
+  "main_program": "MAIN__",
+  "procedures": [
+   "event_failure",
+   "event_sandbox",
+   "event_decoy",
+   "event_success"
+  ],
+  "procedures_mangled": [
+   "event_failure.0",
+   "event_sandbox.1",
+   "event_decoy.2",
+   "event_success.3"
+  ],
+  "procedures_by_address": [
+   "event_failure",
+   "event_sandbox",
+   "event_decoy",
+   "event_success"
+  ],
+  "procedures_by_address_mangled": [
+   "event_failure.0",
+   "event_sandbox.1",
+   "event_decoy.2",
+   "event_success.3"
+  ],
+  "case_table": [
+   [
+    "default",
+    0
+   ],
+   [
+    "analysis",
+    1
+   ],
+   [
+    "sandbox",
+    2
+   ],
+   [
+    "workstation",
+    3
+   ]
+  ],
+  "case_values": [
+   "analysis",
+   "sandbox",
+   "workstation"
+  ],
+  "case_map": {
+   "analysis": 1,
+   "sandbox": 2,
+   "workstation": 3
+  },
+  "case_procedures": {
+   "analysis": "event_decoy",
+   "sandbox": "event_sandbox",
+   "workstation": "event_success"
+  },
+  "default_procedure": "event_failure",
+  "env_var": "HUNTRESS_HOST_MODEL",
+  "needed": [
+   "libgfortran.so.5",
+   "libm.so.6",
+   "libgcc_s.so.1",
+   "libc.so.6"
+  ],
+  "imports": [
+   "_gfortran_get_environment_variable_i4",
+   "_gfortran_select_string",
+   "_gfortran_set_args",
+   "_gfortran_set_options",
+   "_gfortran_st_write",
+   "_gfortran_st_write_done",
+   "_gfortran_string_len_trim",
+   "_gfortran_transfer_character_write",
+   "_gfortran_transfer_integer_write"
+  ],
+  "compiler_banner": "none",
+  "hcfg_symbol": "encoded_config.4",
+  "hcfg_entity": "encoded_config"
+ },
+ "decoy": false,
+ "generator_cmd": "cp <d18 cache>/d18--variant-003.elf (same source as v000)",
+ "oracle_cmd": "python3 gfortran_d18_oracle.py gfortran_d18_flow_v003.bin   # readelf -sW/-dW/-p .comment, nm -D --undefined-only, objdump -d -M intel walk, pyelftools segment bytes; HCFG: bytes.find + header xor key decode + readelf -sW covering OBJECT",
+ "note": "D18 variant-003 (different HCFG campaign, same flow shape)"
+}

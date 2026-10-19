@@ -1,0 +1,39 @@
+{
+ "family": "flattening",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "flattened": "true",
+  "state_sequence": [
+   448586012,
+   1340716105,
+   697291311,
+   949928766,
+   1593353560,
+   1842058859,
+   2094696314
+  ],
+  "block_order": [
+   "0x140001093",
+   "0x140001104",
+   "0x1400010c6",
+   "0x1400010dd",
+   "0x140001118",
+   "0x140001129",
+   "0x140001158"
+  ],
+  "return_value": 34609,
+  "state_count": 7,
+  "dispatch_count": 7,
+  "initial_state": "0x1abce11c",
+  "final_state": "0x7cda877a",
+  "function": "flow_state",
+  "opaque_predicates": 2
+ },
+ "generator_cmd": "bash flow_gen.sh   # gcc -O0 PIE + zig cc musl static dense/jump-table (ELF), zig cc -target x86_64-windows-gnu (PE) of flow_src.c / flow_plain.c",
+ "oracle_cmd": "python3 flow_oracle.py flow_pe_o0.bin <-DTRACE twin>   # run trace build natively + objdump --dwarf=decodedline/-t/-p + file -b",
+ "file_b": "PE32+ executable for MS Windows 6.00 (console), x86-64, 11 s",
+ "decoy": false,
+ "note": "lib.binary.flattening_field(data, key) per expected_facts key; vocabulary SPECULATIVE (GM label not seen)"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "transposition",
+ "key": "route-spiral-cw0-r11 (pad _)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-summit-88",
+ "encoded": "Nice work diTuermci_______88-tle xbosecoding th s ea mmus-revo tam  warmup! swG:retsaMocisolve,is eht tt thna ",
+ "generator_cmd": "python3 -I -c \"import sys,numpy as np;s=sys.argv[1];C=11;R=-(-len(s)//C);sp=lambda m:list(m[0])+sp(np.rot90(m[1:])) if m.size else [];print(''.join(sp(np.array(list(s.ljust(R*C,'_'))).reshape(R,C))),end='')\" \"$plain\"  # numpy rot90 peel: clockwise spiral inwards from the top-left of the 11-col box written by rows, padded with _",
+ "oracle_cmd": "python3 -I -c \"import sys,numpy as np;e=sys.argv[1];C=11;R=len(e)//C;sp=lambda m:list(m[0])+sp(np.rot90(m[1:])) if m.size else [];o=['']*len(e)\nfor j,i in enumerate(sp(np.arange(R*C).reshape(R,C))): o[i]=e[j]\nprint(''.join(o).rstrip('_'),end='')\" \"$encoded\"  # numpy rot90 peel of the index grid, inverted; _ pad stripped",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-summit-88",
+ "expected": "match"
+}

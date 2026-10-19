@@ -1,0 +1,15 @@
+{
+ "codec": "mysz",
+ "key": "tomato",
+ "hints": [
+  "Tomato Ledger",
+  "Repeated letters stand together."
+ ],
+ "plain": null,
+ "encoded": "ersrhetreel haf-meditr ascao  -noohwretl tantewu tna ,nrbr:brlo2S t o neya  oh mpne tl cieemeac4",
+ "generator_cmd": "python3 -I -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from secretpy import MyszkowskiTransposition as M;s=sys.argv[1]\nfor k in sys.argv[2:]:s=M().encrypt(s,k)\nprint(s,end=\"\")' \"$plain\" tomato  # pycipher 0.5.2 ColTrans / secretpy 0.12.0 MyszkowskiTransposition .encipher/.encrypt applied once per key (punctuation kept)",
+ "oracle_cmd": "python3 -I -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from secretpy import MyszkowskiTransposition as M;s=sys.argv[1]\nfor k in reversed(sys.argv[2:]):s=M().decrypt(s,k)\nprint(s,end=\"\")' \"$encoded\" tomato  # secretpy 0.12.0 ColumnarTransposition / MyszkowskiTransposition .decrypt, keys undone last-first",
+ "oracle_plain": "Some other words entirely that are not the warmup sentence at all, no crib here: amber-falcon-42",
+ "decoy": true,
+ "expected": "none"
+}

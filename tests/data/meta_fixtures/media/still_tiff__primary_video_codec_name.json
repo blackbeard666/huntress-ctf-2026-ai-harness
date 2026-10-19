@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_codec_name",
+ "expected": "tiff",
+ "generator_cmd": "python3 -c \"from PIL import Image; Image.new('RGB',(37,23)).save('t.tiff')\"",
+ "oracle_cmd": "ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i t.tiff 2>&1 | grep Stream  (bundled tools/imageio_ffmpeg_pkg; stream #0:0 video codec, pix_fmt, WxH) -> Stream #0:0: Video: tiff, rgb24, 37x23, 25 fps, 25 tbr, 25 tbn",
+ "decoy": false,
+ "member": "t.tiff"
+}

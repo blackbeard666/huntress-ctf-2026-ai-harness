@@ -1,0 +1,34 @@
+{
+ "family": "anti_analysis",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "anti_debug": "true",
+  "anti_vm": "false",
+  "anti_debug_techniques": [
+   "ptrace_traceme",
+   "tracerpid",
+   "timing"
+  ],
+  "anti_vm_techniques": "none",
+  "vm_strings": "none",
+  "dmi_paths": "none",
+  "env_gates": [
+   "HUNTRESS_HOST_MODEL"
+  ],
+  "env_gate_values": [
+   "analysis"
+  ],
+  "decoy_functions": [
+   "event_decoy"
+  ],
+  "mitre_technique": "T1622",
+  "uses:tracerpid": "true"
+ },
+ "generator_cmd": "bash antiana_gen.sh   # gcc -O0 -no-pie dbg.c: ptrace(PTRACE_TRACEME) + /proc/self/status TracerPid + __rdtsc timing + getenv(HUNTRESS_HOST_MODEL)=='analysis' -> event_decoy; compiled, never run",
+ "oracle_cmd": "python3 antiana_oracle.py antiana_elf_debug.bin   # objdump -d -Mintel / objdump -s .rodata / readelf -sW / strings -a",
+ "file_b": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamic",
+ "decoy": false,
+ "note": "lib.binary.anti_analysis_field(data, key) per expected_facts key; technique/key vocabulary SPECULATIVE (GM label not seen)"
+}

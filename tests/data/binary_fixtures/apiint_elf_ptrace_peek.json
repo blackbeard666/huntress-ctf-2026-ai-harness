@@ -1,0 +1,43 @@
+{
+ "family": "api_intent",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "api_intents": {
+   "getenv": "env_query",
+   "__libc_start_main": "runtime",
+   "puts": "output",
+   "__stack_chk_fail": "runtime",
+   "printf": "output",
+   "snprintf": "other",
+   "process_vm_readv": "process_access",
+   "strcmp": "string",
+   "__gmon_start__": "runtime",
+   "ptrace": "process_access",
+   "atoi": "other"
+  },
+  "has_injection": "false",
+  "injection_apis": "none",
+  "process_access_apis": [
+   "process_vm_readv",
+   "ptrace",
+   "/proc/<pid>/mem"
+  ],
+  "network_apis": "none",
+  "ptrace_requests": [
+   "PTRACE_ATTACH",
+   "PTRACE_PEEKDATA",
+   "PTRACE_DETACH"
+  ],
+  "mitre_technique": "none",
+  "mitre_techniques": "none",
+  "effects": "modeled_process_access_no_injection",
+  "trace_effects": "none"
+ },
+ "generator_cmd": "bash apiint_gen.sh   # gcc -O0 -no-pie peek.c (ptrace ATTACH/PEEKDATA/DETACH + process_vm_readv + snprintf \"/proc/%d/mem\"; compiled, never run)",
+ "oracle_cmd": "python3 apiint_oracle.py apiint_elf_ptrace_peek.bin   # readelf --dyn-syms UND / objdump -p imports, objdump -d ptrace request, strings; own intent table",
+ "file_b": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamic",
+ "decoy": false,
+ "note": "lib.binary.api_intent_field(data, key) per expected_facts key; intent/effects vocabulary SPECULATIVE (GM label not seen); decoys: every key 'none'"
+}

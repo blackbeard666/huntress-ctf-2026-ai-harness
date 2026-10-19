@@ -1,0 +1,69 @@
+{
+ "family": "switch_tables",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_kind": "rel32",
+ "expected_facts": {
+  "case_count": 7,
+  "cases": [
+   {
+    "case": 3,
+    "target": "0x401a30",
+    "symbol": "dispatch+0x40",
+    "callee": "op_add"
+   },
+   {
+    "case": 4,
+    "target": "0x401a40",
+    "symbol": "dispatch+0x50",
+    "callee": "op_sub"
+   },
+   {
+    "case": 5,
+    "target": "0x401a50",
+    "symbol": "dispatch+0x60",
+    "callee": "op_mul"
+   },
+   {
+    "case": 6,
+    "target": "0x401a60",
+    "symbol": "dispatch+0x70",
+    "callee": "op_div"
+   },
+   {
+    "case": 8,
+    "target": "0x401a70",
+    "symbol": "dispatch+0x80",
+    "callee": "op_xor"
+   },
+   {
+    "case": 9,
+    "target": "0x401a80",
+    "symbol": "dispatch+0x90",
+    "callee": "op_shl"
+   },
+   {
+    "case": 10,
+    "target": "0x401a18",
+    "symbol": "dispatch+0x28",
+    "callee": "op_neg"
+   }
+  ],
+  "case_callees": {
+   "3": "op_add",
+   "4": "op_sub",
+   "5": "op_mul",
+   "6": "op_div",
+   "8": "op_xor",
+   "9": "op_shl",
+   "10": "op_neg"
+  },
+  "default_symbol": "op_bad"
+ },
+ "generator_cmd": "bash switch_gen.sh   # gcc -O2 -static -no-pie (libc switches too; primary = dispatch)",
+ "oracle_cmd": "python3 switch_oracle.py switch_gcc_static.bin   # objdump -d -M intel / aarch64-linux-gnu-objdump -d text + pyelftools table bytes + symtab",
+ "file_b": "ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux), statically linked, BuildID[sha1]=58a238e8957aaec8b734affca1f69d73c68fa375, for GNU/Linux 3.2.0, not stripped",
+ "decoy": false,
+ "note": "lib.binary.switch_field(data, key) per expected_facts key (json round-trip: int case keys -> str); expected_facts null = not an ELF/PE image (switch_field -> None)"
+}

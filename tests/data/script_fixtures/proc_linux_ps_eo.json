@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=bash|role=dropper|verdict=malicious|attack=T1059.004|adapter=ps_forest|stage_count=1|steps=decode_stage|campaign_id=PL-91aa4b3c|url=https://pl-91aa4b3c.example.invalid/f",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/proc_linux_gen.py tests/data/script_fixtures (real `ps -o pid,ppid,user,cmd --forest -p <subtree>`)",
+ "oracle_cmd": "awk 'NR>1{print $2}' proc_linux_ps_eo.txt; grep -m1 'sh -c Codec' proc_linux_ps_eo.txt | perl -ne 'if(/Material_\\w+ ?= ?\\\\?\"([0-9a-f]{40,})\\\\?\"/){$b=pack(\"H*\",$1);$b^=chr(0x5a)x length $b;print $b;exit}'"
+}

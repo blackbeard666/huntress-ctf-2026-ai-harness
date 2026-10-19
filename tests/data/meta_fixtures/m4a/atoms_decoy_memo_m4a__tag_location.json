@@ -1,0 +1,8 @@
+{
+ "field": "m4a.tag_location",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i sine=frequency=440:duration=1.5 -c:a aac -metadata title='Voice Memo 42' -metadata creation_time=2024-03-05T10:20:30Z -metadata:s:a:0 language=fra memo.m4a",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i memo.m4a (libavformat mov demuxer, format Metadata) -> no location tag; exiftool shows no GPSCoordinates (field absent)",
+ "decoy": true,
+ "member": "memo.m4a"
+}

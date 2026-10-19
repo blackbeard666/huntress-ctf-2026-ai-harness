@@ -1,0 +1,8 @@
+{
+ "field": "synthesis.document_id_groups",
+ "expected": "{\"adobe:docid:photoshop:5f1c2a9e-0b7d-4c3e-9a11-7e2d4b6c8f01\":[\"lineage.jpg\",\"lineage.tif\"],\"uuid:7D3C2B1A-9F8E-4D6C-B5A4-0123456789AB\":[\"sibling.png\"]}",
+ "generator_cmd": "stdlib zipfile ZIP_DEFLATED of lineage.jpg sibling.png lineage.tif plain.png",
+ "oracle_cmd": "exiftool -j -XMP:DocumentID lineage.jpg sibling.png lineage.tif plain.png",
+ "decoy": false,
+ "member": "siblings.zip"
+}

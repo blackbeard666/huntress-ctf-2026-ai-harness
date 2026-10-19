@@ -1,0 +1,42 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "declared": [
+  [
+   "WINWORD.EXE",
+   "powershell.exe",
+   "powershell.exe -NoP -W Hidden -Command ..."
+  ],
+  [
+   "powershell.exe",
+   "rundll32.exe",
+   "rundll32.exe C:\\Users\\Public\\x.dll,Run"
+  ],
+  [
+   "powershell.exe",
+   "schtasks.exe",
+   "schtasks.exe /create /tn upd /tr C:\\Users\\Public\\u.exe"
+  ]
+ ],
+ "reconcile_expected": {
+  "parent_mismatch": [],
+  "matched": [
+   "powershell.exe",
+   "rundll32.exe"
+  ],
+  "declared_only": [
+   "schtasks.exe"
+  ],
+  "observed_only": [
+   "notepad.exe"
+  ],
+  "orphans": [
+   "explorer.exe"
+  ],
+  "attack": "none"
+ },
+ "oracle_cmd": "perl -ne 'if(/Material_\\w+ = (?:\\\\?\"|&quot;)([0-9a-f]+)/){$b=pack(\"H*\",$1);$b^=chr(0x5a)x length $b;print $b;exit}' ptrec_decoy_consistent.xml | grep -c 'v=3' || true",
+ "tree_oracle_cmd": "python3 -I -c \"import xml.dom.minidom as m,sys;[print(e.getElementsByTagName('EventID')[0].firstChild.data,*[x.getAttribute('Name')+'='+x.firstChild.data.split(chr(92))[-1] for x in e.getElementsByTagName('Data') if x.getAttribute('Name') in ('ProcessId','NewProcessId','ParentProcessId','Image','NewProcessName','ParentImage','ParentProcessName')]) for e in m.parse(sys.argv[1]).getElementsByTagName('Event')]\" ptrec_decoy_consistent.xml",
+ "note": "same tree, no spoof: every Sysmon ParentProcessId equals its 4688 creator and the declared parent -> parent_mismatch [], attack none; CommandLine material is a benign settings string (no v=3 plan)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ptrec_gen.py tests/data/script_fixtures (stdlib writers: xml.sax.saxutils.escape with wevtutil's &quot; rendering for Sysmon EID 1 + Security 4688 XML, json.dumps for flat Sysmon NDJSON with a CreatorProcessId field; plan.encode() XOR 0x5a -> hex in `$Material_<id>` + `$Codec_<id> = \"hex_compact|xor_5a|\"` inside the powershell CommandLine; reconcile_expected = the spoof the generator wrote (TRUTH_*), not lib/codec.py output)"
+}

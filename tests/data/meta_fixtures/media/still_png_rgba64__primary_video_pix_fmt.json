@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_pix_fmt",
+ "expected": "rgba64be",
+ "generator_cmd": "python3 stdlib struct+zlib writer: IHDR 10x7 bit_depth 16 colour_type 6, one zero IDAT",
+ "oracle_cmd": "ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i rgba64.png 2>&1 | grep Stream  (bundled tools/imageio_ffmpeg_pkg; stream #0:0 video codec, pix_fmt, WxH) -> Stream #0:0: Video: png, rgba64be(pc, gbr/unknown/unknown), 10x7, 25 fps, 25 tbr, 25 tbn",
+ "decoy": false,
+ "member": "rgba64.png"
+}

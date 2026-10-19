@@ -1,0 +1,8 @@
+{
+ "entry": "proof_flow_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "row 72 opaque predicate / dead decoy: mulpar layout, but the live arm holds a 15-hex near-miss; the only valid ANS (ANS-f19b3c7e0a2d5864) sits in the opaque-dead arm -> no proof= answer",
+ "generator_cmd": "python3 tests/data/android_fixtures/opq_src/gen_opq.py decoy_nearmiss tests/data/android_fixtures/opq_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/opq_src/oracle.sh tests/data/android_fixtures/opq_decoy_nearmiss.apk  # d2j-dex2jar back to classes, RUN buildRequest(host, dev) on the JVM over 12 inputs -> None"
+}

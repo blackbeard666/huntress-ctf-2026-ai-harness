@@ -1,0 +1,8 @@
+{
+ "field": "disk.format",
+ "expected": "vhd",
+ "generator_cmd": "qemu-img create -f vpc -o subformat=dynamic dyn.vhd 10M  (qemu-img 10.2.1)",
+ "oracle_cmd": "file -b dyn.vhd -> Microsoft Disk Image, Virtual Server or Virtual PC (qemu-img: file format vpc)",
+ "decoy": false,
+ "member": "dyn.vhd"
+}

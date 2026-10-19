@@ -1,0 +1,8 @@
+{
+ "field": "media.subtitle_codec_names",
+ "expected": "[\"mov_text\"]",
+ "generator_cmd": "chap_mp4.m4a with the tref/chap reference type bytes overwritten to 'xxxx' (Nero chpl alone drives chapters; the orphan text track becomes a mov_text subtitle)  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "oracle_cmd": "ffprobe -v error -show_streams -show_format -show_chapters -of json chpl_only.m4a -> codec_name of codec_type==subtitle streams (index order)  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "decoy": false,
+ "member": "chpl_only.m4a"
+}

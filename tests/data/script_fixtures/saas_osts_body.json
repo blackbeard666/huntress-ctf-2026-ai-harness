@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=google_apps_script|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=google_docs_sidebar|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=jscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=GOOGLE_APPS_SCRIPT-29193ae3|url=https://google_apps_script-29193ae3e0.example.invalid/stage|file_path=/tmp/huntress-google_apps_script/.29193ae3e00f4e98.stage",
+ "decoy": false,
+ "_doc": "Office Scripts .osts: JSON whose `body` string holds the (JSON-escaped) D18 Apps Script SPLIT-array source; sibling .osts",
+ "generator_cmd": "jq -n --rawfile b host-google-docs-sidebar-google-apps-script.gs '{version:\"0.3.0\",body:$b,description:\"\",noCodeMetadata:\"\",parameterInfo:\"{\\\"version\\\":1}\",apiInfo:\"{\\\"variant\\\":\\\"api\\\",\\\"variantVersion\\\":2}\"}' > saas_osts_body.osts  # D18 evidence host-google-docs-sidebar-google-apps-script.gs (scripting-orphan-process single_solve evidence.zip)",
+ "oracle_cmd": "jq -r .body saas_osts_body.osts | python3 -I -c \"import re,sys;t=sys.stdin.read();a=t[:t.index(\\\"].join\\\")];print(bytes.fromhex(\\\"\\\".join(re.findall(r\\\"\\\\\\\"([0-9a-fA-F.FRAG-]+)\\\\\\\"\\\",a)).replace(\\\"FRAG-\\\",\\\"\\\").replace(\\\".\\\",\\\"\\\")).decode())\""
+}

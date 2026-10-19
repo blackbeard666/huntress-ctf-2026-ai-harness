@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_sample_aspect_ratio",
+ "expected": "4:3",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=1440x1080:rate=25 -frames:v 2 -vf setsar=4/3 -c:v libx264 -preset ultrafast -pix_fmt yuv420p hdv_1440.mp4 (pasp 4:3, tkhd 1920x1080, stsd 1440x1080)",
+ "oracle_cmd": "ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i hdv_1440.mp4 -> 1440x1080 [SAR 4:3 DAR 16:9]; exiftool -PixelAspectRatio -> 4:3",
+ "decoy": false,
+ "member": "hdv_1440.mp4"
+}

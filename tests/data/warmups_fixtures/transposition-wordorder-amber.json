@@ -1,0 +1,10 @@
+{
+ "codec": "transposition",
+ "key": "wordorder",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "amber-falcon-42 Master: Game the to answer exact this submit solve, To warmup! this decoding work Nice",
+ "generator_cmd": "printf '%s\\n' \"$plain\" | tr ' ' '\\n' | tac | paste -sd' ' | tr -d '\\n'  # coreutils tr/tac/paste: words in reverse order",
+ "oracle_cmd": "printf '%s\\n' \"$encoded\" | awk '{for(i=NF;i>0;i--)printf \"%s%s\",$i,(i>1?\" \":\"\")}'  # awk reverse field order",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

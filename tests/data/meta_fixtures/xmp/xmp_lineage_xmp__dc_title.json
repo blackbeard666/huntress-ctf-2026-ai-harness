@@ -1,0 +1,8 @@
+{
+ "field": "xmp.dc_title",
+ "expected": "Quarterly Report Q1",
+ "generator_cmd": "lineage.xmp = hand-written Photoshop-style XMP packet (xmp.did:/xmp.iid:/adobe:docid: IDs, 5-event stEvt History Seq mixing attribute + parseType=Resource events, dc:title Alt fr-FR before x-default); sibling.xmp = same with DocumentID uuid:7D3C2B1A-..., dc:format image/png",
+ "oracle_cmd": "exiftool -j -XMP:Title lineage.xmp (x-default; Title-fr-FR is the other Alt item)",
+ "decoy": false,
+ "member": "lineage.xmp"
+}

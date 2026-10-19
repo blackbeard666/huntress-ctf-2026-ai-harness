@@ -1,0 +1,7 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": "ANS-5c2e8d0f7a9b1346",
+ "_why": "dir/A256GCM JWE (5 parts) in UTF-16LE res/raw/session.txt, token in the protected header kid",
+ "generator_cmd": "sh tests/data/android_fixtures/jwt_src/gen_jwt.sh jwe16 ANS-5c2e8d0f7a9b1346 tests/data/android_fixtures/jwt_jwe_utf16_kid.apk  # PyJWT jwt.encode / cryptography AESGCM + javac/d2j-jar2dex + zip -X",
+ "oracle_cmd": "unzip -p jwt_jwe_utf16_kid.apk res/raw/session.txt | iconv -f UTF-16LE -t UTF-8 | cut -d= -f2 | cut -d. -f1 | tr '_-' '/+' | base64 -d | jq -r .kid  # -> ANS-5c2e8d0f7a9b1346"
+}

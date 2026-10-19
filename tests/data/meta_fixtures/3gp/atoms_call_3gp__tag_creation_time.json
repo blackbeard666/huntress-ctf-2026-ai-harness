@@ -1,0 +1,8 @@
+{
+ "field": "3gp.tag_creation_time",
+ "expected": "2023-07-14T21:05:00.000000Z",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i sine=duration=2 -ar 8000 -c:a aac -metadata title='Call rec' -metadata creation_time=2023-07-14T21:05:00Z -f 3gp call.3gp",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i call.3gp (libavformat mov demuxer, format Metadata) -> creation_time: 2023-07-14T21:05:00.000000Z",
+ "decoy": false,
+ "member": "call.3gp"
+}

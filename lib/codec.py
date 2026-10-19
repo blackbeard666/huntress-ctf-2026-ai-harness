@@ -452,6 +452,10 @@ def decode(material, rep, transform, key=None):
     `_fallback()` (a name-agnostic reading of the literal itself); None if that finds no plan either."""
     if not material or not rep:
         return None
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("cmdline", "commandline"):   # cmdline-canon (no plan reading)
+        got = _cl_decode(material, rep, transform)
+        if got is not None:
+            return got
     transform, key = _spec(rep, transform, key)
     if known(rep, transform):
         for data in _rep_candidates(rep, material):
@@ -1107,12 +1111,21 @@ def find_codecs(src, _depth=0):
         x = [c for c in _build_host_codecs(src) if any(c["plain"] != p and c["plain"].startswith(p)
                                                        for p in (o.get("plain") for o in out) if p)]
         out = x + out
+    if _depth < 2 and not any(c.get("plain") for c in out):
+        out = out + _saas_host_codecs(src, raw, _depth)     # SaaS / add-in host: JSON-escaped script, zip / CRX package
     if _depth < 1 and not any(c.get("plain") for c in out):
         norm = normalize(raw if raw is not None else src)     # whole-leaf UTF-16 / gzip / base64: rescan the source
         if norm:
             out = out + [dict(c, id=f"{c['id']}@leaf") for c in find_codecs(norm, _depth + 1) if c.get("plain")]
     if _depth < 1 and not any(c.get("plain") for c in out):
         out = out + _reg_inf_codecs(normalize(raw if raw is not None else src) or src, _depth)
+    if _depth < 1 and not any(c.get("plain") for c in out):
+        mat, plain = _split_array_plain(src, budget=0.5)          # split chunk-list carrier without the SPLIT marker
+        if plain:
+            out = out + [{"id": "split", "rep": "split_array", "transform": "identity", "key": "", "material": mat,
+                          "plain": plain}]
+    if _depth < 1 and not any(c.get("plain") for c in out):
+        out = out + _proc_codecs(src, raw, _depth)   # process-telemetry log: codecs inside escaped command lines
     return out
 
 
@@ -1167,7 +1180,12 @@ def _find_codecs_text(src):
         out.append({"id": dm.group(1) if dm else "analysis", "rep": rep, "transform": "identity", "key": "",
                     "material": am.group("mat"), "plain": plain})
     elif not out:
-        for ident, lit in _ahk_literals(src):                     # AHK v1 continuation section / `.=` appends
+        if _SPLIT_MARK_RE.search(src or ""):                     # D18 bare SPLIT marker + literal-array material
+            mat, plain = _split_array_plain(src)
+            if plain:
+                out.append({"id": "analysis", "rep": "split_array", "transform": "identity", "key": "",
+                            "material": mat, "plain": plain})
+        for ident, lit in ([] if out else _ahk_literals(src)):   # AHK v1 continuation section / `.=` appends
             plain = _peel_ext([(ident, lit)])[1]
             if plain:
                 out.append({"id": ident, "rep": "descriptor", "transform": "identity", "key": "", "material": lit,
@@ -1530,6 +1548,94 @@ def _marker_continued(src, am):
         parts.append(m.group(1))
         variants.append("".join(parts))
     return variants[::-1][:4]
+
+# D18 Google Apps Script v=3 fixtures: a bare `// HUNTRESS_ANALYSIS_V1:SPLIT` marker (no `-<material>`) and the material
+# as an array of string-literal chunks, `const X = ["<TAG>-chunk", "chunk", ..].join("")` (TAG = B64/HEX/HB64/FRAG),
+# plus an untagged copy. The same split carrier in the other host syntaxes reads through three name-agnostic shapes:
+#  - separator runs: quoted literals (r/b/u/@/$ prefixes, Lua [[..]]) joined by `,` `;` `+` `&` `..` `.` whitespace or a
+#    line continuation (`_` / backtick / `\`) -- JS/AHK/Python `[..]`, tuples, PS `@(..)` / `"a","b"`, Lua `{..}`, Perl
+#    `(..)`, VBS `Array(..)`, AutoIt `[..]`, AppleScript `{..}`, implicit/explicit concatenation;
+#  - word lists: Perl `qw(..)`, Ruby `%w[..]`;
+#  - line runs: consecutive lines holding one value each -- `x += "c"` / `push @a, "c"` / `table.insert(t, "c")` /
+#    `$a[1] = "c"` / `set end of L to "c"`, batch `set c1=..` / `set "c1=.."` / `set x=%x%..`, XML `<Chunk>..</Chunk>`
+#    and `<Chunk Include=".." />` (MSBuild).
+# A joined run is peeled from its first chunk and from every `<TAG>-` chunk (tag stripped, and kept); only a plan counts.
+_SPLIT_MARK_RE = re.compile(r"HUNTRESS_ANALYSIS_V\d+:SPLIT\b")
+_SPLIT_LIT = re.compile(r"""(?<![\w"'`])[rRbBuU@$]{0,2}(?:"([^"\r\n]*)"|'([^'\r\n]*)'|`([^`$\r\n]*)`)|\[\[([^\]\r\n]*)\]\]""")
+_SPLIT_SEP = re.compile(r"""(?:\s|[,;+&.]|_[ \t]*\r?\n|`[ \t]*\r?\n|\\[ \t]*\r?\n)*""")
+_SPLIT_VAL = re.compile(r"[A-Za-z0-9+/=_\-.%~:]+")
+_SPLIT_TAG = re.compile(r"([A-Za-z0-9_]{1,12})-(.+)$", re.S)
+_SPLIT_WORDS = re.compile(r"(?:\bqw|%[wW])\s*([\[({</|!])")
+_SPLIT_CLOSE = {"[": "]", "(": ")", "{": "}", "<": ">"}
+_SPLIT_BAT = re.compile(r"""^[ \t]*@?set[ \t]+"?(?P<n>[^=\s"/][^=\s"]*)=(?P<v>[^"\r\n]*?)"?[ \t]*$""", re.I)
+_SPLIT_XML = re.compile(r"<(?P<t>[A-Za-z_][\w.:-]*)\b[^<>]*>(?P<v>[^<>\r\n]+)</(?P=t)\s*>")
+
+
+def _split_runs(src):
+    """Joined chunk lists (list of value lists) of a source, in the three shapes above."""
+    runs, cur, prev = [], [], None
+    for m in _SPLIT_LIT.finditer(src):                                   # separator runs
+        v = next((g for g in m.groups() if g is not None), "")
+        if prev is not None and (m.start() - prev > 400 or not _SPLIT_SEP.fullmatch(src, prev, m.start())):
+            if len(cur) > 1:
+                runs.append(cur)
+            cur = []
+        cur.append(v)
+        prev = m.end()
+    if len(cur) > 1:
+        runs.append(cur)
+    for m in _SPLIT_WORDS.finditer(src):                                 # qw(..) / %w[..]
+        close = _SPLIT_CLOSE.get(m.group(1), m.group(1))
+        j = src.find(close, m.end())
+        if 0 < j - m.end() < (1 << 16):
+            runs.append(src[m.end():j].split())
+    cur = []                                                              # one value per line
+    for line in src.splitlines() + [""]:
+        v = None
+        bm = _SPLIT_BAT.match(line)
+        if bm:
+            v = re.sub(r"%" + re.escape(bm.group("n")) + r"%|!" + re.escape(bm.group("n")) + "!", "", bm.group("v"))
+            v = None if re.search(r"%[A-Za-z_][\w.$#@-]*%|![A-Za-z_][\w.$#@-]*!", v) else v   # `set p=%c1%%c2%`: the join
+        else:
+            xm = list(_SPLIT_XML.finditer(line))
+            lm = list(_SPLIT_LIT.finditer(line))
+            if len(xm) == 1:
+                v = xm[0].group("v").strip()
+            elif len(lm) == 1:
+                v = next((g for g in lm[0].groups() if g is not None), "")
+        if v and _SPLIT_VAL.fullmatch(v):
+            cur.append(v)
+        else:
+            if len(cur) > 1:
+                runs.append(cur)
+            cur = []
+    return runs
+
+
+def _split_array_plain(src, budget=0.8):
+    """(material, plan) of the first chunk run that joins to `[<TAG>-]<material>` and peels to a plan, else
+    (None, None). Bounded by `budget` seconds; never raises."""
+    try:
+        end, seen = time.time() + budget, set()
+        for run in _split_runs((src or "")[:1 << 20]):
+            run = [v.strip() for v in run if v.strip()]
+            starts = [0] + [i for i, v in enumerate(run) if i and _SPLIT_TAG.match(v)]
+            for i in starts[:6]:
+                j = "".join(run[i:])
+                if len(j) < 16 or not _SPLIT_VAL.fullmatch(j):
+                    continue
+                tm = _SPLIT_TAG.match(j)
+                for tag, mat in ([(tm.group(1), tm.group(2))] if tm else []) + [("", j)]:
+                    if mat in seen or time.time() > end:
+                        continue
+                    seen.add(mat)
+                    plain = peel_plan(mat, tag, budget=min(0.25, max(0.02, end - time.time())))
+                    if plain:
+                        return mat, plain
+    except Exception:  # noqa: BLE001 - a decoy / truncated carrier reads as nothing
+        return None, None
+    return None, None
+
 
 def _utf16(b):
     """UTF-16 text (BOM'd, or LE/BE with every other byte NUL) re-encoded as UTF-8, else None."""
@@ -2945,6 +3051,148 @@ def _carrier_codecs(src, raw, depth=0):
                 if plain:
                     return [{"id": f"carrier@{name}", "rep": "carrier", "transform": "identity", "key": "",
                              "material": tok, "plain": plain}]
+    except Exception:  # noqa: BLE001 - unknown -> nothing, never an exception
+        return []
+    return []
+
+
+# ------------------------------------------------------------------------------------------------ SaaS / add-in hosts
+# D18 opened SaaS script hosts (Apps Script google_docs_sidebar). Siblings ship the same plan inside a host container:
+# a JSON document whose string holds the script (Office Scripts .osts `body`, Apps Script project `files[].source`,
+# Power Automate / Logic Apps definitions, VS Code package.json), or a zip / CRX package whose manifest names the script
+# members (appsscript.json, Chrome MV3 manifest.json, Office add-in manifest.xml, VSIX). saas_host() unwraps the
+# container into script texts; _saas_host_codecs() runs the normal readers over each.
+
+_SAAS_STR = re.compile(r'"((?:[^"\\\r\n]|\\.){48,})"')
+_SAAS_REF = re.compile(r'"(?:service_worker|main|browser|scripts|js|file|path|scriptFile)"\s*:\s*(\[[^\]]{0,2000}\]|"[^"]{1,300}")'
+                       r'|(?:DefaultValue|src|href)\s*=\s*"([^"]{1,300})"')
+_SAAS_PROFILES = (
+    ("office_script", re.compile(r"ExcelScript\.Workbook|\"noCodeMetadata\"|\.osts$")),
+    ("apps_script", re.compile(r"appsscript\.json|\.gs$|\"SERVER_JS\"|\b(?:DocumentApp|SpreadsheetApp|GmailApp|"
+                               r"HtmlService|ScriptApp|CardService)\.|function do(?:Get|Post)\s*\(")),
+    ("office_addin", re.compile(r"<OfficeApp\b|Office\.onReady|Office\.initialize")),
+    ("browser_extension", re.compile(r"\"manifest_version\"|\"service_worker\"|\"content_scripts\"|^Cr24|\.crx$")),
+    ("power_automate", re.compile(r"Microsoft\.Logic|\"definition\"\s*:\s*\{|\"triggers\"\s*:|\"actions\"\s*:")),
+    ("vscode_extension", re.compile(r"\"activationEvents\"|\"engines\"\s*:\s*\{\s*\"vscode\"|extension\.vsixmanifest")),
+    ("salesforce_apex", re.compile(r"\.cls$|@AuraEnabled|\b(?:public|global)\s+(?:with sharing\s+)?class\s+\w+")),
+)
+
+
+def _saas_json_strings(text, limit=24):
+    """Code-bearing JSON string values of `text`, longest first: a full parse when it is JSON, else every long quoted
+    literal json-unescaped (JSONC / truncated / JSON embedded in another file)."""
+    import json
+    vals = []
+    s = (text or "").lstrip("﻿ \t\r\n")
+    if s[:1] in "{[" and len(s) < (4 << 20):
+        try:
+            stack, n = [json.loads(s)], 0
+            while stack and n < 20000:
+                v, n = stack.pop(), n + 1
+                if isinstance(v, dict):
+                    stack.extend(v.values())
+                elif isinstance(v, list):
+                    stack.extend(v)
+                elif isinstance(v, str) and len(v) >= 48:
+                    vals.append(v)
+        except (ValueError, RecursionError):
+            vals = []
+    if not vals:
+        for m in _SAAS_STR.finditer((text or "")[:4 << 20]):
+            if "\\" in m.group(1):
+                try:
+                    vals.append(json.loads('"' + m.group(1) + '"'))
+                except ValueError:
+                    continue
+    vals = [v for v in dict.fromkeys(vals) if "\n" in v or "(" in v or "=" in v]
+    return sorted(vals, key=len, reverse=True)[:limit]
+
+
+def _saas_zip(raw):
+    """The zip inside a package: a plain zip / VSIX / .xpi, or a Chrome CRX2/CRX3 (`Cr24` header then the zip)."""
+    if raw[:4] == b"PK\x03\x04":
+        return raw
+    if raw[:4] == b"Cr24" and len(raw) > 16:
+        ver = int.from_bytes(raw[4:8], "little")
+        off = 12 + int.from_bytes(raw[8:12], "little") if ver == 3 else \
+            16 + int.from_bytes(raw[8:12], "little") + int.from_bytes(raw[12:16], "little")
+        if raw[off:off + 4] != b"PK\x03\x04":
+            off = raw.find(b"PK\x03\x04", 12, 1 << 16)
+        return raw[off:] if off > 0 else None
+    return None
+
+
+def saas_host(name, src):
+    """Unwrap a cloud/SaaS/add-in script host. `src` = bytes or text of the file (`name` its file name, may be "").
+    -> {"profile": guess or None, "scripts": [(member, text)]} -- manifest-referenced members first; [] when it is
+    not a host container. Never raises."""
+    import io
+    import time
+    out = {"profile": None, "scripts": []}
+    try:
+        end = time.time() + 0.4
+        raw = bytes(src) if isinstance(src, (bytes, bytearray)) else None
+        if raw is None and src:
+            try:
+                raw = src.encode("latin-1") if max(src) < "Ā" else None
+            except (UnicodeEncodeError, ValueError):
+                raw = None
+        text = src if isinstance(src, str) else (raw or b"").decode("utf-8", "ignore")
+        z = _saas_zip(raw) if raw else None
+        scripts, sig = [], [name or "", text[:1 << 16] if z is None else "Cr24" if raw[:4] == b"Cr24" else ""]
+        if z is not None:
+            import zipfile
+            zf = zipfile.ZipFile(io.BytesIO(z))
+            mem = {}
+            for zi in zf.infolist()[:200]:
+                if zi.is_dir() or zi.flag_bits & 1 or zi.file_size > (4 << 20) or time.time() > end:
+                    continue
+                try:
+                    mem[zi.filename] = zf.read(zi).decode("utf-8", "ignore").lstrip("﻿")
+                except Exception:  # noqa: BLE001 - one bad member, keep walking
+                    continue
+            refs = set()
+            for fn, t in mem.items():
+                base = fn.rsplit("/", 1)[-1].lower()
+                if base in ("manifest.json", "appsscript.json", "package.json", "manifest.xml",
+                            "extension.vsixmanifest") or base.endswith((".html", ".htm", ".xml")):
+                    sig.append(fn + "\n" + t[:1 << 14])
+                    for m in _SAAS_REF.finditer(t[:1 << 18]):
+                        for r in re.findall(r'[^"\[\],\s]+', m.group(1) or m.group(2) or ""):
+                            refs.add(r.split("?")[0].rstrip("/").rsplit("/", 1)[-1].lower())
+                elif base.endswith((".gs", ".osts", ".cls", ".trigger")):
+                    sig.append(fn)
+            order = sorted(mem, key=lambda fn: (fn.rsplit("/", 1)[-1].lower() not in refs,
+                                                not fn.lower().endswith((".gs", ".js", ".ts", ".osts", ".cls",
+                                                                         ".html", ".htm", ".json")), fn))
+            for fn in order:
+                scripts.append((fn, mem[fn]))
+                if fn.lower().endswith((".json", ".osts")):
+                    scripts.extend((f"{fn}#str", v) for v in _saas_json_strings(mem[fn], 8))
+        elif text.lstrip("﻿ \t\r\n")[:1] in "{[" or "\\n" in text[:1 << 16]:
+            scripts = [("#str", v) for v in _saas_json_strings(text)]
+        for pool in (sig, [t[:1 << 14] for _, t in scripts[:6]]):     # the container's own signals win
+            out["profile"] = next((p for p, rx in _SAAS_PROFILES if any(rx.search(s) for s in pool)), None)
+            if out["profile"]:
+                break
+        out["scripts"] = scripts
+    except Exception:  # noqa: BLE001 - truncated / impostor container: what was read so far
+        pass
+    return out
+
+
+def _saas_host_codecs(src, raw, depth=0, name=""):
+    import time
+    try:
+        host = saas_host(name, raw if raw is not None else src)
+        end = time.time() + 0.8
+        for member, text in host["scripts"]:
+            if time.time() > end:
+                break
+            for c in find_codecs(text, depth + 1):
+                if c.get("plain"):
+                    tag = f"saas:{host['profile'] or 'host'}:{member}"
+                    return [dict(c, id=f"{c['id']}@{tag}")]
     except Exception:  # noqa: BLE001 - unknown -> nothing, never an exception
         return []
     return []
@@ -5433,6 +5681,872 @@ def fetch_processes(observed):
     return out
 
 
+# Target process-telemetry-windows (D18 'native telemetry keeps its own record of events'): process start / end
+# records from Sysmon EID 1 / 5 and Security 4688 / 4689, read from EVTX, exported XML, JSON (flat, xmltodict,
+# winlogbeat / ECS, EvtxECmd Payload, Get-WinEvent Message) or Splunk-style key=value / rendered 'Key: value' text.
+_PE_EIDS = {"1": "start", "4688": "start", "5": "end", "4689": "end"}
+_PE_ECS = ("process", "user", "event", "host", "agent", "ecs", "winlog", "log", "@timestamp", "_source")
+_PE_DATA = ("eventdata", "event_data", "system", "userdata", "payload", "data", "eventdatafields", "properties")
+_PE_HINT = re.compile(r"(?im)<EventID[^>]*>\s*(?:1|5|4688|4689)\s*<|\bEvent(?:ID|Code|_id)\W{0,4}(?:1|5|4688|4689)\b|"
+                      r"\bevent\.code\W{0,4}(?:1|5|4688|4689)\b|process\.(?:pid|command_line|entity_id)|"
+                      r"\"command_line\"|New[ _]Process[ _](?:ID|Name)|Creator[ _]Process[ _]ID|NewProcessId\b|"
+                      r"ParentProcess(?:Guid|Id)\b|ProcessGuid\b|^\s*Process Create:|ProcessName\b")
+
+
+def _pe_int(v):
+    s = str(v if v is not None else "").strip()
+    try:
+        return int(s, 16) if re.fullmatch(r"0[xX][0-9a-fA-F]+", s) else int(s) if re.fullmatch(r"\d+", s) else None
+    except ValueError:
+        return None
+
+
+def _pe_norm(k):
+    return re.sub(r"[^a-z]", "", str(k).lower())
+
+
+def _pe_build(d, flat):
+    """One record from `d` (event-data names, letters-only lowercase keys) + `flat` (dotted ECS paths), else None."""
+    g = lambda *ks: next((d[k] for k in ks if d.get(k) not in (None, "", "-")), None)  # noqa: E731
+    f = lambda *ks: next((flat[k] for k in ks if flat.get(k) not in (None, "", "-")), None)  # noqa: E731
+    eid = str(g("eventid", "eventcode", "id") or f("winlog.event_id", "event.code") or "").strip()
+    if eid not in _PE_EIDS:
+        eid = "4688" if g("newprocessid") else "1" if g("parentprocessguid", "parentprocessid") else ""
+    sec = eid in ("4688", "4689")
+    if eid == "4688":
+        pid, ppid = g("newprocessid"), g("processid", "creatorprocessid")
+        image, pimage = g("newprocessname"), g("parentprocessname", "creatorprocessname")
+        cmd = g("commandline", "processcommandline")
+    elif eid == "4689":
+        pid, ppid, image, pimage, cmd = g("processid"), None, g("processname"), None, None
+    else:
+        pid, ppid, image, pimage = g("processid"), g("parentprocessid"), g("image"), g("parentimage")
+        cmd = g("commandline")
+    ev = _PE_EIDS.get(eid)
+    if not ev:
+        typ = " ".join(str(x) for x in (f("event.type"), f("event.action")) if x).lower()
+        ev = "start" if re.search(r"start|creat|exec|spawn", typ) else "end" if re.search(r"end|stop|termin|exit",
+                                                                                          typ) else None
+        ev = ev or ("start" if not typ and f("process.pid") and f("process.parent.pid") else None)
+    if not ev:
+        return None
+    pid = pid if pid is not None else f("process.pid")
+    if ppid is None and ev == "start":
+        ppid = f("process.parent.pid", "process.ppid")
+    if pid is None and not image:
+        return None
+    user = g("user") if not sec else None
+    if sec and not user:
+        un = g("subjectusername", "accountname")
+        dom = g("subjectdomainname", "accountdomain")
+        user = f"{dom}\\{un}" if un and dom else un
+    hashes = g("hashes") or ",".join(f"{k.split('.')[-1].upper()}={v}" for k, v in flat.items()
+                                     if k.startswith("process.hash.") and v not in (None, "")) or None
+    return {"ts": g("utctime", "systemtime", "timecreated", "time") or f("@timestamp", "event.created", "timestamp"),
+            "pid": _pe_int(pid), "ppid": _pe_int(ppid), "pid_raw": None if pid is None else str(pid),
+            "ppid_raw": None if ppid is None else str(ppid),
+            "image": image or f("process.executable"), "cmdline": cmd or f("process.command_line"),
+            "parent_image": pimage or f("process.parent.executable"),
+            "parent_cmdline": g("parentcommandline") or f("process.parent.command_line"),
+            "guid": g("processguid") or f("process.entity_id"),
+            "parent_guid": g("parentprocessguid") or f("process.parent.entity_id"),
+            "user": user or f("user.name"), "integrity": g("integritylevel", "mandatorylabel"),
+            "hashes": hashes, "event": ev, "eid": int(eid) if eid else None,
+            "src": "security" if sec else "sysmon" if eid else "ecs", **_pe_creator(g, sec)}
+
+
+def _pe_creator(g, sec):
+    """Explicit real-creator fields on a non-4688 record (CreatorProcessId / CreatorProcessGuid / RealParent..):
+    {creator_pid, creator_pid_raw, creator_guid, creator_image}, only the keys present ({} for ordinary records)."""
+    if sec:
+        return {}
+    out = {}
+    c = g("creatorprocessid", "realparentprocessid", "actualparentprocessid", "trueparentprocessid",
+          "callerprocessid", "creatorpid")
+    if c is not None and _pe_int(c) is not None:
+        out["creator_pid"], out["creator_pid_raw"] = _pe_int(c), str(c)
+    c = g("creatorprocessguid", "realparentprocessguid", "actualparentprocessguid")
+    if c:
+        out["creator_guid"] = c
+    c = g("creatorprocessname", "creatorimage", "realparentimage", "actualparentimage", "realparentprocessname")
+    if c:
+        out["creator_image"] = c
+    return out
+
+
+def _pe_xml(xml):
+    import html
+    out = []
+    for e in re.findall(r"(?s)<Event[\s>].*?</Event>", xml)[:50000]:
+        mm = re.search(r"<EventID[^>]*>\s*(\d+)\s*<", e)
+        if not mm or mm.group(1) not in _PE_EIDS:
+            continue
+        d = {_pe_norm(k): html.unescape(a or b) for k, a, b in
+             re.findall(r"<Data Name=['\"](\w+)['\"]\s*(?:/>()|>([^<]*)</Data>)", e)}
+        d["eventid"] = mm.group(1)
+        t = re.search(r"<TimeCreated[^>]*SystemTime=['\"]([^'\"]+)", e)
+        if t:
+            d["systemtime"] = t.group(1)
+        r = _pe_build(d, {})
+        if r:
+            out.append(r)
+    return out
+
+
+def _pe_json_row(row):
+    if isinstance(row.get("_source"), dict):
+        row = row["_source"]
+    d, flat = {}, {}
+
+    def walk(x, path, keep, depth=0):
+        if depth > 10:
+            return
+        if isinstance(x, dict):
+            nm = next((x[k] for k in ("@Name", "Name", "name", "@name") if isinstance(x.get(k), str)), None)
+            vv = next((x[k] for k in ("#text", "text", "value", "Value", "$") if k in x), None)
+            if nm and isinstance(vv, (str, int)) and not isinstance(vv, bool):
+                d.setdefault(_pe_norm(nm), str(vv))
+            for k, v in x.items():
+                p = f"{path}.{k}" if path else str(k)
+                if k in ("#text", "$") and isinstance(v, (str, int)) and path:
+                    flat.setdefault(path.lower(), v)
+                    if keep:
+                        d.setdefault(_pe_norm(path.split(".")[-1]), str(v))
+                    continue
+                kp = keep or not path and str(k).split(".")[0].lower() not in _PE_ECS or k.lower() in _PE_DATA
+                if isinstance(v, str) and k.lower() == "message" and re.search(
+                        r"(?m)^\s*(?:Image|CommandLine|New Process ID|Process ID|ProcessId):", v):
+                    for mk, mv in re.findall(r"(?m)^\s*([A-Za-z][\w ]*?):[ \t]*(.*?)\s*$", v[:65536]):
+                        if mv:
+                            d.setdefault(_pe_norm(mk), mv)
+                if k.lower() == "payload" and isinstance(v, str) and v.lstrip()[:1] == "{":
+                    try:   # EvtxECmd: the event XML as a JSON string
+                        import json
+                        walk(json.loads(v), p, True, depth + 1)
+                    except ValueError:
+                        pass
+                elif isinstance(v, (str, int)) and not isinstance(v, bool):
+                    flat.setdefault(p.lower(), v)
+                    if kp:
+                        d.setdefault(_pe_norm(k), str(v))
+                elif isinstance(v, (dict, list)):
+                    walk(v, p, kp, depth + 1)
+        elif isinstance(x, list):
+            for v in x[:256]:
+                walk(v, path, keep, depth + 1)
+    walk(row, "", False)
+    return _pe_build(d, flat)
+
+
+def _pe_kv(text):
+    """Splunk-style `k=v` / `k="v"` events and rendered 'Key: value' blocks: a new record at each EventCode/EventID."""
+    recs, cur = [], {}
+    kv = re.compile(r"""(?<![\w.])([A-Za-z_][\w.]*)=(?:"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+))""")
+    for ln in text.splitlines()[:200000]:
+        pairs = [(k, a if a or b or c else "", b, c) for k, a, b, c in kv.findall(ln)]
+        dt = None if pairs else \
+            re.match(r"^\s*(\d{1,4}[/-]\d{1,2}[/-]\d{1,4}[ T]\d{1,2}:\d{2}:\d{2}(?:\.\d+)?(?: ?[AP]M)?)\s*$", ln)
+        if dt:                          # Splunk classic WinEventLog header line: a new event starts here
+            if cur.get("eventid"):
+                recs.append(cur)
+            cur = {"time": dt.group(1)}
+            continue
+        rend = None if pairs else re.match(r"^\s*([A-Za-z][\w ]*?):[ \t]+(\S.*?)\s*$", ln)
+        items = [(k, (a.replace('\\"', '"') if a else b or c)) for k, a, b, c in pairs] if pairs else \
+            [(rend.group(1), rend.group(2))] if rend else []
+        if pairs and cur.get("eventid") and any(_pe_norm(k) in ("eventcode", "eventid") for k, *_ in pairs):
+            recs.append(cur)    # one k=v event per line: `_time=.. host=..` before EventCode belong to this one
+            cur = {}
+        for k, v in items:
+            nk = _pe_norm(k)
+            if nk in ("eventcode", "eventid") and cur.get("eventid"):
+                recs.append(cur)
+                cur = {}
+            if nk in ("eventcode", "eventid"):
+                nk = "eventid"
+            cur.setdefault(nk, v)
+    if cur:
+        recs.append(cur)
+    out = []
+    for d in recs:
+        r = _pe_build(d, {}) if d.get("eventid") in _PE_EIDS else None
+        if r:
+            out.append(r)
+    return out
+
+
+def _pe_evtx(data, budget=2.0):
+    try:
+        from Evtx.Evtx import FileHeader
+        fh, xs, t0 = FileHeader(data, 0), [], time.time()
+        for ch in fh.chunks():
+            for rec in ch.records():
+                try:
+                    x = rec.xml()
+                except Exception:  # noqa: BLE001 - one damaged record
+                    continue
+                if re.search(r"<EventID[^>]*>\s*(?:1|5|4688|4689)\s*<", x):
+                    xs.append(x)
+            if time.time() - t0 > budget:
+                break
+        return _pe_xml("\n".join(xs))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+# Target process-telemetry-linux-text: the same record shape from Linux-side process telemetry -- auditd (SYSCALL
+# execve + EXECVE argv (hex-encoded when quoted args would break) + PROCTITLE (hex, NUL-joined) grouped by
+# msg=audit(ts:serial)), `ps -ef` / `ps -eo pid,ppid,cmd` / `ps auxf` (`\_` forest indentation = parent), `pstree -p`
+# / `pstree -ap`, osquery process_events / processes JSON and Procmon CSV `Process Create` / `Process Start` rows.
+# (Sysmon-for-Linux XML is the Windows EID 1 / 5 shape and reads through _pe_xml.)
+_PL_HINT = re.compile(r"(?im)\btype=(?:SYSCALL|EXECVE|PROCTITLE|130[09]|1327)\s+(?:msg=)?audit\(|"
+                      r"^\s*(?:(?:UID|USER)\s+)?PID\s+(?:PPID|%CPU)\s|^\s*PID\s+PPID\b|"
+                      r"\w\(\d+(?:,\w+)?\)(?:---|-\+-|───|─┬─)|^\s*\S+?,\d+(?:\s|$)|"
+                      r"\"parent\"\s*:\s*\"?-?\d+|\"Process (?:Create|Start)\"\s*,")
+_PL_AU_TYPES = {"1300": "SYSCALL", "1309": "EXECVE", "1327": "PROCTITLE", "1307": "CWD", "1302": "PATH"}
+_PL_EXEC_NR = {"59", "322", "11", "358", "221", "281", "execve", "execveat"}
+
+
+def _pl_rec(**kw):
+    pid, ppid = kw.pop("pid", None), kw.pop("ppid", None)
+    r = {"ts": None, "pid": _pe_int(pid), "ppid": _pe_int(ppid), "pid_raw": None if pid is None else str(pid),
+         "ppid_raw": None if ppid is None else str(ppid), "image": None, "cmdline": None, "parent_image": None,
+         "parent_cmdline": None, "guid": None, "parent_guid": None, "user": None, "integrity": None, "hashes": None,
+         "event": "start", "eid": None, "src": None}
+    r.update(kw)
+    return r
+
+
+def _pl_auval(v, interp):
+    """auditd field value: "quoted" -> as is; raw-mode unquoted even-length hex -> its bytes (NULs -> spaces)."""
+    if v[:1] == '"' and v[-1:] == '"' and len(v) >= 2:
+        return v[1:-1]
+    if not interp and re.fullmatch(r"(?:[0-9A-Fa-f]{2})+", v or ""):
+        return bytes.fromhex(v).decode("utf-8", "replace")
+    return None if v == "(null)" else v
+
+
+def _pl_auditd(txt):
+    kv = re.compile(r"""([\w\[\]]+)=("[^"]*"|'[^']*'|\S+)""")
+    grp, order = {}, []
+    for ln in txt.splitlines()[:400000]:
+        m = re.search(r"\btype=(\w+)\s+(?:msg=)?audit\(([^)]*)\)\s*:?\s*(.*)", ln.split("\x1d")[0])
+        if not m:
+            continue
+        typ = _PL_AU_TYPES.get(m.group(1), m.group(1).upper())
+        if typ not in ("SYSCALL", "EXECVE", "PROCTITLE", "CWD", "PATH"):
+            continue
+        stamp = m.group(2)
+        g = grp.get(stamp)
+        if g is None:
+            g = grp[stamp] = {"interp": bool(re.search(r"[/ ]", stamp)) or ") : " in ln}
+            order.append(stamp)
+        f = {}
+        for k, v in kv.findall(m.group(3)):
+            f.setdefault(k, v)
+        if typ == "PATH" and f.get("item") not in (None, "0"):
+            continue
+        g.setdefault(typ, f)
+    out = []
+    for stamp in order[:100000]:
+        g, ip = grp[stamp], grp[stamp]["interp"]
+        sc, ex = g.get("SYSCALL") or {}, g.get("EXECVE")
+        if not ex and str(sc.get("syscall", "")).lower() not in _PL_EXEC_NR:
+            continue
+        if sc.get("success") == "no":
+            continue
+        args = []
+        if ex:
+            n = _pe_int(ex.get("argc")) or 0
+            for i in range(min(n or 4096, 4096)):
+                if f"a{i}" in ex:
+                    args.append(_pl_auval(ex[f"a{i}"], ip) or "")
+                elif f"a{i}[0]" in ex:   # long argument: a2_len=N a2[0]=hex a2[1]=hex ...
+                    parts, j = [], 0
+                    while f"a{i}[{j}]" in ex:
+                        parts.append(ex[f"a{i}[{j}]"].strip('"'))
+                        j += 1
+                    s = "".join(parts)
+                    args.append(bytes.fromhex(s).decode("utf-8", "replace")
+                                if not ip and re.fullmatch(r"(?:[0-9A-Fa-f]{2})+", s) else s)
+                elif not n:
+                    break
+        cmd = " ".join(args) if args else None
+        pt = (g.get("PROCTITLE") or {}).get("proctitle")
+        if not cmd and pt:
+            cmd = pt.strip('"') if pt[:1] == '"' or ip else \
+                bytes.fromhex(pt).replace(b"\x00", b" ").decode("utf-8", "replace").strip() \
+                if re.fullmatch(r"(?:[0-9A-Fa-f]{2})+", pt) else pt
+        image = _pl_auval(sc["exe"], ip) if sc.get("exe") else None
+        if not image and g.get("PATH", {}).get("name"):
+            image = _pl_auval(g["PATH"]["name"], ip)
+        ts = stamp.rsplit(":", 1)[0]
+        cwd = _pl_auval(g["CWD"]["cwd"], ip) if g.get("CWD", {}).get("cwd") else None
+        out.append(_pl_rec(pid=sc.get("pid"), ppid=sc.get("ppid"), ts=ts, image=image or (args[0] if args else None),
+                           cmdline=cmd, user=sc.get("UID", "").strip('"') or sc.get("uid"), src="auditd",
+                           args=args, cwd=cwd, serial=stamp.rsplit(":", 1)[-1], auid=sc.get("auid"),
+                           comm=_pl_auval(sc["comm"], ip) if sc.get("comm") else None))
+    return out
+
+
+def _pl_ps(txt):
+    lines = txt.splitlines()[:400000]
+    hi = next((i for i, ln in enumerate(lines[:2000]) if re.match(r"^\s*(?:[A-Z%]+\s+)*PID\s+(?:[A-Z%]+\s+)*"
+                                                                 r"(?:CMD|COMMAND|ARGS|COMM)\s*$", ln)), None)
+    if hi is None:
+        return []
+    cols = lines[hi].split()
+    n, last = len(cols), cols[-1]
+    ix = {c: i for i, c in enumerate(cols)}
+    row = re.compile(r"^(\s*\S+(?:\s+\S+){%d})(.*)$" % (n - 2)) if n >= 2 else None
+    out, stack = [], []
+    for ln in lines[hi + 1:]:
+        if not ln.strip():
+            continue
+        m = row.match(ln) if row else None
+        if not m:
+            if out and re.match(r"^\s*(?:[A-Z%]+\s+)*PID\s", ln):
+                continue
+            break
+        fs, rest = m.group(1).split(), m.group(2)
+        if _pe_int(fs[ix["PID"]]) is None:
+            break
+        fm = re.match(r"^(\s*(?:[|│]\s*)*)\\_\s?", rest)
+        cmd = rest[fm.end():].strip() if fm else rest.strip()
+        ind = len(m.group(1)) + fm.end() if fm else -1
+        while stack and stack[-1][0] >= ind:
+            stack.pop()
+        ppid = fs[ix["PPID"]] if "PPID" in ix else (stack[-1][1] if stack and fm else None)
+        stack.append((ind, fs[ix["PID"]]))
+        user = fs[ix["UID"]] if "UID" in ix else fs[ix["USER"]] if "USER" in ix else None
+        tok = cmd.split()[0] if cmd.split() else None
+        ts = fs[ix[k]] if (k := next((k for k in ("STIME", "START", "STARTED") if k in ix), None)) else None
+        out.append(_pl_rec(pid=fs[ix["PID"]], ppid=ppid, ts=ts, image=tok if last != "COMM" else cmd,
+                           cmdline=cmd if last != "COMM" else None, user=user, src="ps"))
+    return out
+
+
+_PL_TREE_NODE = re.compile(r"(\{[^{}()\n]*\}|[^\s()|`+\-─┬┴├└│{}][^\s()]*?)\((\d+)(?:,([\w.\-]+))?\)")
+
+
+def _pl_pstree(txt):
+    out, branch = [], {}
+    lines = txt.splitlines()[:200000]
+    if not any(_PL_TREE_NODE.search(ln) for ln in lines[:50]):
+        return _pl_pstree_a(lines)
+    for ln in lines:
+        prev, pend = None, 0
+        for m in _PL_TREE_NODE.finditer(ln):
+            gap = ln[pend:m.start()]
+            if prev is not None and re.search(r"[-─+┬]", gap):
+                parent = prev
+            else:
+                bc = max(ln.rfind(c, 0, m.start()) for c in "|`├└│")
+                parent = branch.get(bc) if bc >= 0 else None
+                if prev is not None and parent is None:
+                    break
+            if prev is None and gap.strip() and not re.fullmatch(r"[\s|`\-─├└│+┬]*", gap):
+                break
+            nm = m.group(1)
+            out.append(_pl_rec(pid=m.group(2), ppid=parent, image=nm, user=m.group(3), src="pstree"))
+            nxt = ln[m.end():m.end() + 3]
+            for c in ("+", "┬"):
+                if c in nxt:
+                    branch[m.end() + nxt.index(c)] = m.group(2)
+            prev, pend = m.group(2), m.end()
+    return out
+
+
+def _pl_pstree_a(lines):
+    """`pstree -ap`: one `name,pid args` per line, indentation = depth."""
+    out, stack = [], []
+    for ln in lines:
+        m = re.match(r"^([\s|`│├└\-─]*)(\{?[^\s,(){}]+\}?),(\d+)(?:,[\w.\-]+)?(?:\s+(.*))?$", ln)
+        if not m:
+            continue
+        ind = len(m.group(1))
+        while stack and stack[-1][0] >= ind:
+            stack.pop()
+        out.append(_pl_rec(pid=m.group(3), ppid=stack[-1][1] if stack else None, image=m.group(2),
+                           cmdline=(m.group(2) + " " + m.group(4)) if m.group(4) else m.group(2), src="pstree"))
+        stack.append((ind, m.group(3)))
+    return out if len(out) >= 2 else []
+
+
+def _pl_osq_row(x):
+    c = x.get("columns") if isinstance(x.get("columns"), dict) else x
+    if not isinstance(c, dict) or "pid" not in c or not ({"parent", "ppid"} & set(c)) or \
+            not ({"cmdline", "path", "name"} & set(c)):
+        return None
+    act = str(x.get("action") or "added").lower()
+    ts = c.get("time") or x.get("unixTime") or x.get("calendarTime")
+    return _pl_rec(pid=c.get("pid"), ppid=c.get("parent", c.get("ppid")), ts=None if ts is None else str(ts),
+                   image=c.get("path") or c.get("name"), cmdline=c.get("cmdline") or None,
+                   user=c.get("username") or (None if c.get("uid") is None else str(c.get("uid"))),
+                   event="end" if act == "removed" else "start", src="osquery", cwd=c.get("cwd"))
+
+
+def _pl_osquery(txt):
+    import json
+    try:
+        j = json.loads(txt)
+        rows = j if isinstance(j, list) else [j]
+    except ValueError:
+        rows = []
+        for ln in txt.splitlines()[:200000]:
+            try:
+                rows.append(json.loads(ln))
+            except ValueError:
+                continue
+    flat = []
+    for x in rows[:200000]:
+        if isinstance(x, dict) and isinstance(x.get("snapshot"), list):
+            flat += [dict(y, unixTime=x.get("unixTime")) for y in x["snapshot"] if isinstance(y, dict)]
+        elif isinstance(x, dict) and isinstance(x.get("diffResults"), dict):
+            for a in ("added", "removed"):
+                flat += [{"columns": y, "action": a} for y in x["diffResults"].get(a) or [] if isinstance(y, dict)]
+        elif isinstance(x, dict):
+            flat.append(x)
+    return [r for r in (_pl_osq_row(x) for x in flat) if r]
+
+
+_PL_CSV_FIELD = re.compile(r'\s*(?:"((?:[^"]|"")*)"|([^,]*))\s*(,|$)')
+
+
+def _pl_csv_split(ln):
+    out, pos = [], 0
+    while pos <= len(ln):
+        m = _PL_CSV_FIELD.match(ln, pos)
+        if not m:
+            return out
+        out.append(m.group(1).replace('""', '"') if m.group(1) is not None else m.group(2))
+        if not m.group(3):
+            break
+        pos = m.end()
+    return out
+
+
+def _pl_procmon(txt):
+    lines = txt.lstrip("﻿").splitlines()[:400000]
+    hdr = _pl_csv_split(lines[0]) if lines else []
+    ix = {_pe_norm(h): i for i, h in enumerate(hdr)}
+    if not {"operation", "pid", "detail"} <= set(ix):
+        return []
+    col = lambda r, k: r[ix[k]] if k in ix and ix[k] < len(r) else None  # noqa: E731
+    creates, starts, ends = [], {}, []
+    for ln in lines[1:]:
+        r = _pl_csv_split(ln)
+        op, det = (col(r, "operation") or "").strip(), col(r, "detail") or ""
+        ts = col(r, "timeofday") or col(r, "datetime") or col(r, "time")
+        if op == "Process Create":
+            m = re.match(r"\s*PID:\s*(\d+),\s*Command line:\s?(.*)$", det, re.S)
+            if m:
+                creates.append(_pl_rec(pid=m.group(1), ppid=col(r, "pid"), ts=ts, image=col(r, "path"),
+                                       cmdline=m.group(2) or None, parent_image=col(r, "imagepath") or
+                                       col(r, "processname"), user=None, src="procmon"))
+        elif op == "Process Start":
+            m = re.match(r"\s*Parent PID:\s*(\d+)(?:,\s*Command line:\s?(.*?))?(?:,\s*Current directory:.*)?$",
+                         det, re.S)
+            if m:
+                starts.setdefault(col(r, "pid"), _pl_rec(
+                    pid=col(r, "pid"), ppid=m.group(1), ts=ts, image=col(r, "imagepath") or col(r, "processname"),
+                    cmdline=m.group(2) or col(r, "commandline") or None, user=col(r, "user"), src="procmon"))
+        elif op == "Process Exit":
+            ends.append(_pl_rec(pid=col(r, "pid"), ts=ts, image=col(r, "imagepath") or col(r, "processname"),
+                                event="end", src="procmon"))
+    seen = {r["pid_raw"] for r in creates}
+    return creates + [r for k, r in starts.items() if k not in seen] + ends
+
+
+def _pl_events(txt):
+    """Linux-side / Procmon process telemetry text -> process_events() records (+ src auditd|ps|pstree|osquery|
+    procmon; auditd adds args / cwd / serial / auid / comm). [] when nothing reads."""
+    head = txt[:1 << 20]
+    if not _PL_HINT.search(head):
+        return []
+    out = []
+    if re.search(r"\btype=(?:SYSCALL|EXECVE|PROCTITLE|130[09]|1327)\s+(?:msg=)?audit\(", head):
+        out = _pl_auditd(txt)
+    if not out and head.lstrip()[:1] in "[{":
+        out = _pl_osquery(txt)
+    if not out and re.search(r"\"?Operation\"?\s*,", head[:4096]):
+        out = _pl_procmon(txt)
+    if not out and re.search(r"(?m)^\s*(?:[A-Z%]+\s+)*PID\s", head):
+        out = _pl_ps(txt)
+    if not out:
+        out = _pl_pstree(txt)
+    by = {}
+    for r in out:   # parent image / command line from the latest earlier start of the parent pid
+        if r["event"] == "start" and r["ppid"] is not None and r["ppid"] in by:
+            p = by[r["ppid"]]
+            r["parent_image"] = r["parent_image"] or p["image"]
+            r["parent_cmdline"] = r["parent_cmdline"] or p["cmdline"]
+        if r["event"] == "start" and r["pid"] is not None:
+            by[r["pid"]] = r
+    return out
+
+
+def process_events(data, name=""):
+    """Process telemetry -> [{ts, pid, ppid, pid_raw, ppid_raw, image, cmdline, parent_image, parent_cmdline, guid,
+    parent_guid, user, integrity, hashes, event: start|end, eid, src: sysmon|security|ecs}] in record order.
+    Sysmon EID 1 (ProcessId / ParentProcessId / ProcessGuid / ParentProcessGuid / Image / ParentImage / CommandLine /
+    ParentCommandLine / User / IntegrityLevel / Hashes / UtcTime), EID 5 (terminate); Security 4688 (NewProcessId =
+    the new pid, ProcessId = the CREATOR pid, both hex; NewProcessName, ParentProcessName, CommandLine,
+    MandatoryLabel) and 4689 (ProcessId, ProcessName). Inputs: EVTX bytes, exported XML, JSON / NDJSON (flat,
+    xmltodict, winlogbeat winlog.event_data, ECS process.pid / process.parent.pid / process.entity_id, EvtxECmd
+    Payload, Get-WinEvent Message), Splunk k=v or rendered 'Key: value' text. Hex pids ('0x1a2c') -> int in pid /
+    ppid, the original spelling kept in pid_raw / ppid_raw (answer with that). [] when nothing process-shaped."""
+    try:
+        if isinstance(data, (bytearray, memoryview)):
+            data = bytes(data)
+        if isinstance(data, bytes):
+            data = data[:1 << 26]
+            if data[:8] == b"ElfFile\x00":
+                return _pe_evtx(data)
+            if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
+                txt = data.decode("utf-16", "replace")
+            elif len(data) > 4 and data[1:4:2] == b"\x00\x00" and data[0]:
+                txt = data.decode("utf-16-le", "replace")
+            else:
+                txt = data.decode("utf-8", "replace")
+        elif isinstance(data, str):
+            txt = data
+        else:
+            return []
+        st = txt.lstrip("﻿").strip()
+        return _pe_text(st) or _pl_events(st)
+    except Exception:  # noqa: BLE001 - impostor / truncated log: nothing, never an exception
+        return []
+
+
+def _pe_text(st):
+    try:
+        if not _PE_HINT.search(st[:1 << 20]):
+            return []
+        if re.search(r"<EventID[^>]*>", st[:1 << 20]):
+            return _pe_xml(st)
+        if st[:1] in "[{":
+            import json
+            try:
+                j = json.loads(st)
+                rows = j if isinstance(j, list) else [j]
+                if len(rows) == 1 and isinstance(rows[0], dict) and not _pe_json_row(rows[0]):
+                    inner = next((v for v in rows[0].values() if isinstance(v, list) and v and isinstance(v[0], dict)),
+                                 None)
+                    if inner is None and isinstance((rows[0].get("hits") or {}).get("hits"), list):
+                        inner = rows[0]["hits"]["hits"]
+                    rows = inner or rows
+            except ValueError:
+                rows = []
+                for ln in st.splitlines()[:200000]:
+                    try:
+                        x = json.loads(ln)
+                    except ValueError:
+                        continue
+                    rows.append(x)
+            return [r for r in (_pe_json_row(x) for x in rows[:50000] if isinstance(x, dict)) if r]
+        return _pe_kv(st)
+    except Exception:  # noqa: BLE001 - impostor / truncated log: nothing, never an exception
+        return []
+
+
+def process_tree(events, pid=None):
+    """Observed process tree from process_events() records (or the raw log). With `pid` (int or '0x..'): the legacy
+    ancestry list [record, parent, ...]. Without: {nodes: {key: node}, edges: [(parent_key, child_key)], roots,
+    orphans, leaves, children: {key: [child keys]}, parent: {key: parent_key|None}, depth: {key: int, root = 0},
+    max_depth, chains: {leaf: [root..leaf]}, order: [keys by start]}. Key = ProcessGuid (braces stripped, lower) when
+    present, else (pid, start ts) so pid reuse never merges two processes. Parent = the ParentProcessGuid node, else
+    the node with pid == ppid (4688: the CREATOR ProcessId) alive at the child's start (started before, not ended
+    before). Orphan ('Orphan Process') = a parent reference that resolves to nothing: node['orphan'] = 'missing'
+    (pid/guid never seen) | 'exited' (that pid/guid had exited before the child started). An empty tree on junk."""
+    try:
+        if isinstance(events, (bytes, bytearray, memoryview, str)):
+            events = process_events(events)
+        if pid is not None:
+            starts = [e for e in events if e.get("event") == "start"]
+            want, out, seen = _pe_int(pid) if not isinstance(pid, int) else pid, [], set()
+            while want is not None and want not in seen and len(out) < 64:
+                seen.add(want)
+                r = next((e for e in reversed(starts) if e.get("pid") == want), None)
+                if not r:
+                    break
+                out.append(r)
+                want = r.get("ppid")
+            return out
+        return _pt_build(list(events or [])[:200000])
+    except Exception:  # noqa: BLE001
+        return [] if pid is not None else {}
+
+
+def _pt_ts(v):
+    """Event time -> epoch seconds (ISO 8601 with 7-digit fractions / Z / offset, 'M/D/YYYY h:mm:ss PM', epoch)."""
+    import datetime as _dt
+    s = str(v or "").strip()
+    if not s:
+        return None
+    if re.fullmatch(r"\d{9,13}(?:\.\d+)?", s):
+        f = float(s)
+        return f / 1000 if f > 1e11 else f
+    m = re.match(r"(\d{4})-(\d\d)-(\d\d)[T ](\d\d):(\d\d):(\d\d)(?:[.,](\d+))?\s*(Z|[+-]\d\d:?\d\d)?", s)
+    try:
+        if m:
+            y, mo, d, h, mi, se, fr, tz = m.groups()
+            t = _dt.datetime(int(y), int(mo), int(d), int(h), int(mi), int(se), int((fr or "0")[:6].ljust(6, "0")),
+                             tzinfo=_dt.timezone.utc).timestamp()
+            if tz and tz != "Z":
+                z = tz.replace(":", "")
+                t -= (1 if z[0] == "+" else -1) * (int(z[1:3]) * 3600 + int(z[3:5]) * 60)
+            return t
+        m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})[ T](\d{1,2}):(\d\d):(\d\d)(?:\.(\d+))?\s*([AaPp][Mm])?", s)
+        if m:
+            mo, d, y, h, mi, se, fr, ap = m.groups()
+            h = int(h) % 12 + (12 if ap and ap.upper() == "PM" else 0) if ap else int(h)
+            return _dt.datetime(int(y), int(mo), int(d), h, int(mi), int(se), int((fr or "0")[:6].ljust(6, "0")),
+                                tzinfo=_dt.timezone.utc).timestamp()
+    except ValueError:
+        return None
+    return None
+
+
+def _pt_guid(g):
+    s = str(g or "").strip().strip("{}").lower()
+    return s if s and s.strip("0-") else None
+
+
+def _pt_build(events):
+    evs = [e for e in events if isinstance(e, dict) and e.get("event") in ("start", "end")]
+    tss = [_pt_ts(e.get("ts")) for e in evs]
+    timed = bool(evs) and all(t is not None for t in tss)
+    order = sorted(range(len(evs)), key=lambda i: (tss[i], i) if timed else (i,))
+    nodes, by_guid, by_pid, keys, ended_guid = {}, {}, {}, [], {}
+    for i in order:
+        e, t = evs[i], (tss[i] if timed else i)
+        g = _pt_guid(e.get("guid"))
+        if e["event"] == "end":
+            n = nodes.get(by_guid.get(g)) if g else None
+            if n is None and e.get("pid") is not None:
+                n = next((nodes[k] for k in reversed(by_pid.get(e["pid"], [])) if nodes[k]["end"] is None), None)
+            if n is not None and n["end"] is None:
+                n["end"] = t
+            elif g:
+                ended_guid[g] = t
+            continue
+        key = g if g and g not in by_guid else (e.get("pid"), e.get("ts") if e.get("ts") is not None else i)
+        while key in nodes:
+            key = (key, i)
+        nodes[key] = {"key": key, "pid": e.get("pid"), "pid_raw": e.get("pid_raw"), "ppid": e.get("ppid"),
+                      "ppid_raw": e.get("ppid_raw"), "image": e.get("image"), "cmdline": e.get("cmdline"),
+                      "parent_image": e.get("parent_image"), "guid": g, "parent_guid": _pt_guid(e.get("parent_guid")),
+                      "user": e.get("user"), "ts": e.get("ts"), "start": t, "end": None, "parent": None,
+                      "orphan": None, "rec": e}
+        keys.append(key)
+        if g:
+            by_guid.setdefault(g, key)
+        if e.get("pid") is not None:
+            by_pid.setdefault(e["pid"], []).append(key)
+    children = {k: [] for k in keys}
+    edges = []
+    for k in keys:
+        n = nodes[k]
+        par, why = None, None
+        pg = n["parent_guid"]
+        if pg:
+            pk = by_guid.get(pg)
+            if pk is not None and pk != k and nodes[pk]["start"] <= n["start"]:
+                par = pk
+            else:
+                why = "exited" if pg in ended_guid and ended_guid[pg] <= n["start"] else "missing"
+        if par is None and not (pg and why) and n["ppid"] is not None:
+            cands = [c for c in by_pid.get(n["ppid"], []) if c != k and nodes[c]["start"] <= n["start"]]
+            alive = [c for c in cands if nodes[c]["end"] is None or nodes[c]["end"] >= n["start"]]
+            if alive:
+                par = alive[-1]
+            else:
+                why = "exited" if cands else "missing"
+        n["parent"], n["orphan"] = par, (why if par is None else None)
+        if par is not None:
+            children[par].append(k)
+            edges.append((par, k))
+    parent = {k: nodes[k]["parent"] for k in keys}
+    depth, chains = {}, {}
+    for k in keys:
+        ch, seen, c = [], set(), k
+        while c is not None and c not in seen and len(ch) < 512:
+            seen.add(c)
+            ch.append(c)
+            c = parent[c]
+        depth[k] = len(ch) - 1
+        if not children[k]:
+            chains[k] = ch[::-1]
+    roots = [k for k in keys if parent[k] is None]
+    return {"nodes": nodes, "edges": edges, "roots": roots, "orphans": [k for k in keys if nodes[k]["orphan"]],
+            "leaves": [k for k in keys if not children[k]], "children": children, "parent": parent, "depth": depth,
+            "max_depth": max(depth.values()) if depth else 0, "chains": chains, "order": keys}
+
+
+def process_chain(tree, node):
+    """[root .. node] keys for any node (key, pid, guid or image basename resolving to one node)."""
+    try:
+        ks = _pt_find(tree, node)
+        if len(ks) != 1:
+            return []
+        ch, c = [], ks[0]
+        while c is not None and c not in ch and len(ch) < 512:
+            ch.append(c)
+            c = tree["parent"].get(c)
+        return ch[::-1]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _pt_base(img):
+    return re.split(r"[\\/]", str(img or "").rstrip("\\/"))[-1]
+
+
+def _pt_find(tree, what):
+    """Node keys matching `what`: a node key, guid, pid (int / '0x..' / decimal text), image basename or full path
+    (case-insensitive); several matches in start order."""
+    nodes = tree.get("nodes") or {}
+    if what in nodes:
+        return [what]
+    if isinstance(what, dict) and what.get("key") in nodes:
+        return [what["key"]]
+    s = str(what if what is not None else "").strip()
+    if not s:
+        return []
+    order = tree.get("order") or list(nodes)
+    g = _pt_guid(s)
+    hit = [k for k in order if g and nodes[k]["guid"] == g]
+    if hit:
+        return hit
+    p = what if isinstance(what, int) else _pe_int(s)
+    if p is not None:
+        hit = [k for k in order if nodes[k]["pid"] == p]
+        if hit:
+            return hit
+    low = s.lower()
+    hit = [k for k in order if str(nodes[k]["image"] or "").lower() == low]
+    return hit or [k for k in order if _pt_base(nodes[k]["image"]).lower() == _pt_base(s).lower()]
+
+
+def _pt_repr(n, accepted=None):
+    """A node in the answer's spelling: the accepted value it matches (basename / path / pid / guid, case-insensitive)
+    or, with no accepted list, its image basename as logged (pid_raw when the image is unknown)."""
+    if accepted:
+        forms = {str(n.get("image") or "").lower(), _pt_base(n.get("image")).lower(), str(n.get("guid") or ""),
+                 str(n.get("pid_raw") or "").lower(), str(n.get("pid") if n.get("pid") is not None else "")}
+        if n.get("pid") is not None:
+            forms.add(hex(n["pid"]))
+        forms.discard("")
+        for a in accepted:
+            al = str(a).strip().lower()
+            if al in forms or _pt_guid(al) in forms or (_pe_int(al) is not None and _pe_int(al) == n.get("pid")):
+                return a
+        return None
+    return _pt_base(n.get("image")) or n.get("pid_raw") or (str(n["pid"]) if n.get("pid") is not None else None)
+
+
+def process_tree_answer(tree, kind, accepted_values=None, what=None):
+    """Answer a process-tree question. kind: root | leaf | parent(-of) | children(-of) | child-count | depth |
+    max-depth | count | orphan | orphan-parent | chain | ancestor(s). `what` names the node (pid, guid, image
+    basename or path; case-insensitive). Images compared case-insensitively, answered in the log's spelling (or the
+    matching accepted value). One value -> str, several -> list in start order; chain -> [root..node]. 'none' when
+    the field is absent (parent of a root, children of a leaf, no orphan), None when it cannot answer (unknown /
+    ambiguous node, empty tree)."""
+    try:
+        if isinstance(tree, (bytes, bytearray, memoryview, str)) or isinstance(tree, list):
+            tree = process_tree(tree)
+        nodes = (tree or {}).get("nodes")
+        if not nodes:
+            return None
+        acc = [a for a in (accepted_values or []) if str(a).strip()] or None
+        kd = re.sub(r"[^a-z]", "", str(kind or "").lower()).replace("of", "") if kind else ""
+        kd = {"parents": "parent", "child": "children", "kids": "children", "roots": "root", "leaves": "leaf",
+              "leafs": "leaf", "orphans": "orphan", "ancestors": "chain", "ancestor": "chain", "ancestry": "chain",
+              "lineage": "chain", "depthtree": "maxdepth", "treedepth": "maxdepth", "numchildren": "childcount",
+              "childrencount": "childcount", "orphanparents": "orphanparent"}.get(kd, kd)
+
+        def rep(keys):
+            vals = []
+            for k in keys:
+                v = _pt_repr(nodes[k], acc)
+                if v is not None and v not in vals:
+                    vals.append(v)
+            return vals
+
+        def one(vals, absent="none"):
+            return absent if not vals else vals[0] if len(vals) == 1 else vals
+
+        def target():   # same image twice: answerable only when every match gives the same answer (below)
+            return _pt_find(tree, what)
+        if kd in ("root", "leaf", "orphan"):
+            base = tree["roots"] if kd == "root" else tree["leaves"] if kd == "leaf" else tree["orphans"]
+            if what is not None and kd == "root":
+                ch = {process_chain(tree, k)[0] for k in target() if process_chain(tree, k)}
+                base = [k for k in tree["order"] if k in ch]
+            if kd == "orphan" and len(base) > 1 and not acc:
+                ex = [k for k in base if nodes[k]["orphan"] == "exited"]
+                base = ex or base
+            return one(rep(base))
+        if kd == "orphanparent":
+            return one([v for v in dict.fromkeys(_pt_base(nodes[k]["parent_image"]) or nodes[k]["ppid_raw"]
+                                                 for k in tree["orphans"]) if v])
+        if kd == "count":
+            w = str(what or "").lower()
+            if not w or w in ("nodes", "processes", "process", "all"):
+                return str(len(nodes))
+            if w in ("roots", "orphans", "leaves", "edges"):
+                return str(len(tree[w]))
+            return str(len(_pt_find(tree, what)))
+        if kd == "maxdepth" or (kd == "depth" and what is None):
+            return str(tree["max_depth"])
+        ks = target()
+        if not ks:
+            return None
+        res = []
+        for k in ks:
+            if kd == "parent":
+                p = tree["parent"][k]
+                r = tuple(rep([p])) if p is not None else ("none",)
+            elif kd == "children":
+                r = tuple(rep(tree["children"][k])) or ("none",)
+            elif kd == "childcount":
+                r = (str(len(tree["children"][k])),)
+            elif kd == "depth":
+                r = (str(tree["depth"][k]),)
+            elif kd == "chain":
+                r = tuple(rep(process_chain(tree, k)))
+            else:
+                return None
+            if r not in res:
+                res.append(r)
+        if len(res) != 1:
+            return None
+        r = list(res[0])
+        if kd == "chain":
+            return r
+        return r[0] if len(r) == 1 else r
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _proc_codecs(src, raw, _depth):
+    """Codecs inside process-telemetry command lines (Sysmon 1 / 4688 XML, JSON, k=v): the log escapes the script's
+    quotes (`&quot;`, `\\"`), so the descriptor only reads after process_events() unescapes each command line."""
+    if not (_PE_HINT.search((src or "")[:1 << 20]) or _PL_HINT.search((src or "")[:1 << 20])):
+        return []
+    out, seen, t0 = [], set(), time.time()
+    for e in process_events(raw if raw is not None else src):
+        for c in (e.get("cmdline"), e.get("parent_cmdline")):
+            if not c or len(c) < 16 or c in seen or time.time() - t0 > 1.0:
+                continue
+            seen.add(c)
+            out += [dict(x, id=f"{x.get('id')}@proc") for x in find_codecs(c, _depth + 1) if x.get("plain")]
+        if out:
+            break
+    return out
+
+
 _RC_KINDS = ("ips", "user_agents", "file_names", "ports")
 _RC_UA_FIELDS = re.compile(r"(?i)(?:^|_)(?:user_?agent|ua|agent)$")
 _RC_PORT_FIELDS = re.compile(r"(?i)(?:^|_)(?:port|[lr]port|dst_?port|dest_?port|c2_?port)$")
@@ -6147,3 +7261,1223 @@ def download_graph_answer(report, kind, what="chain", accepted_values=None, sep=
         return vals[0] if len(vals) == 1 else None
     except Exception:  # noqa: BLE001
         return None
+
+
+# --- declared (static) process tree: who the source says spawns whom ------------------------------------------------
+# parent = the member's host interpreter (host_profile first, then language, then file extension); plan edges come from
+# next_language when the steps dispatch a process / language / script; code edges from the spawn call sites in the
+# member's own CODE, with arguments rebuilt by the fetch_sites literal folder (_fs_env / _fs_eval).
+PT_LANG_IMAGE = {
+    "jscript": "wscript.exe", "vbscript": "wscript.exe", "wsf": "wscript.exe", "jse": "wscript.exe",
+    "vbe": "wscript.exe", "wsh": "wscript.exe", "hta": "mshta.exe", "batch": "cmd.exe", "cmd": "cmd.exe",
+    "bat": "cmd.exe", "powershell": "powershell.exe", "pwsh": "pwsh.exe", "python": "python.exe",
+    "javascript": "node.exe", "node": "node.exe", "nodejs": "node.exe", "typescript": "node.exe", "perl": "perl.exe",
+    "ruby": "ruby.exe", "lua": "lua.exe", "php": "php.exe", "auto_hotkey": "AutoHotkey64.exe",
+    "autohotkey": "AutoHotkey64.exe", "ahk": "AutoHotkey64.exe", "autoit": "AutoIt3.exe", "au3": "AutoIt3.exe",
+    "applescript": "osascript", "msbuild_xml": "MSBuild.exe", "msbuild": "MSBuild.exe", "sct": "regsvr32.exe",
+    "scriptlet": "regsvr32.exe", "wmi_mof": "scrcons.exe", "mof": "scrcons.exe", "bash": "bash", "sh": "sh",
+    "zsh": "zsh", "tcl": "tclsh", "google_apps_script": "apps_script", "xsl": "msxsl.exe", "xslt": "msxsl.exe",
+}
+PT_EXT_LANG = {
+    "js": "jscript", "jse": "jscript", "vbs": "vbscript", "vbe": "vbscript", "wsf": "wsf", "hta": "hta",
+    "bat": "batch", "cmd": "batch", "ps1": "powershell", "psm1": "powershell", "psd1": "powershell", "py": "python",
+    "pyw": "python", "mjs": "javascript", "cjs": "javascript", "ts": "typescript", "pl": "perl", "pm": "perl",
+    "rb": "ruby", "lua": "lua", "php": "php", "ahk": "auto_hotkey", "au3": "autoit", "applescript": "applescript",
+    "scpt": "applescript", "proj": "msbuild_xml", "csproj": "msbuild_xml", "targets": "msbuild_xml", "sct": "sct",
+    "mof": "wmi_mof", "sh": "bash", "bash": "bash", "zsh": "zsh", "gs": "google_apps_script", "tcl": "tcl",
+    "xsl": "xsl", "exe": None,
+}
+PT_HOST_IMAGE = (   # host_profile (prefix / pattern) -> the process that hosts the member
+    (r"^wsf|^wsh|^wscript", "wscript.exe"), (r"^cscript", "cscript.exe"), (r"^hta|mshta", "mshta.exe"),
+    (r"^sct|scriptlet|regsvr32", "regsvr32.exe"), (r"php[_-]?(?:webshell|cgi|fpm)", "php-cgi.exe"),
+    (r"perl[_-]?cgi", "perl.exe"), (r"ruby[_-]?rack", "ruby.exe"), (r"openresty|nginx", "nginx.exe"),
+    (r"google|apps?_?script|sidebar", "apps_script"), (r"msbuild", "MSBuild.exe"),
+    (r"wmi|mof", "scrcons.exe"), (r"office|vba|macro|word|excel", "winword.exe"),
+)
+_PT_DISPATCH = re.compile(r"(?i)^(?:dispatch_(?:process|language|next_stage|script)|handoff_\w+|launch_\w+|"
+                          r"execute_(?:process|stage|file)|spawn_\w+|run_(?:process|stage|file))$")
+_PT_EXE = re.compile(r"""(?i)^\s*["']?((?:[A-Za-z]:)?[^\s"'|&;<>]*?([^\\/\s"'|&;<>]+))["']?(?:\s|$)""")
+_PT_SITES = (   # (api, regex, kind, source gate) kind: call (first arg = cmdline), se (file + args), cmd (rest of line)
+    ("WScript.Shell.Run", re.compile(r"(?i)\.Run\s*\(?"), "call", "wscript.shell"),
+    ("WScript.Shell.Exec", re.compile(r"(?i)\.Exec\s*\(?"), "call", "wscript.shell"),
+    ("ShellExecute", re.compile(r"(?i)\bShellExecute(?:Wait)?\s*\(?"), "se", ""),
+    ("Win32_Process.Create", re.compile(r"(?i)\.Create\s*\("), "call", "win32_process"),
+    ("Start-Process", re.compile(r"(?i)(?:^|(?<=[\s;|({]))(?:Start-Process|saps)\b"), "ps", ""),
+    ("child_process", re.compile(r"\b(?:spawnSync|spawn|execFileSync|execFile|execSync|exec|fork)\s*\("), "call",
+     "child_process"),
+    ("subprocess", re.compile(r"\bsubprocess\.(?:run|call|Popen|check_call|check_output|getoutput)\s*\("), "call", ""),
+    ("os.system", re.compile(r"\bos\.(?:system|popen|startfile|exec[lv]p?e?|spawn[lv]p?e?)\s*\("), "call", ""),
+    ("os.execute", re.compile(r"\b(?:os\.execute|io\.popen)\s*\("), "call", ""),
+    ("system", re.compile(r"(?<![\w.$>:])(?:system|exec|shell_exec|passthru|popen|proc_open|spawn|IO\.popen|"
+                          r"Open3\.\w+)\s*\(?(?=\s*[\"'(\[$@%])"), "call", ""),
+    ("qx", re.compile(r"(?<![\w$@%])(?:qx|%x)\s*([{(\[<|/!])"), "qx", ""),
+    ("backticks", re.compile(r"(?<![\w\\])`(?=[^`\n]*\b(?:cmd|powershell|pwsh|cscript|wscript|mshta|python|node|perl|"
+                             r"ruby|bash|sh|curl|wget)\b)"), "bt", ""),
+    ("Run", re.compile(r"(?im)^\s*(?:\w+\s*:?=\s*)?Run(?:Wait)?\b\s*[,(]?"), "call", ""),
+    ("do shell script", re.compile(r"(?i)\bdo\s+shell\s+script\s+"), "call", ""),
+    ("MSBuild.Exec", re.compile(r"""(?i)<Exec\b[^>]*?\bCommand\s*=\s*(?=["'])"""), "call", ""),
+    ("cmd /c", re.compile(r"(?i)(?:^|(?<=[\s(;&|@]))cmd(?:\.exe)?\s+(?=/[ckCK]\b)"), "cmd", ""),
+    ("start", re.compile(r"(?im)^\s*@?start\s+"), "cmd", ""),
+    ("schtasks /create", re.compile(r"(?i)\bschtasks(?:\.exe)?\s+(?=/create\b)"), "cmd", ""),
+    ("wmic process call create", re.compile(r"(?i)\bwmic(?:\.exe)?\s+(?=process\s+call\s+create\b)"), "cmd", ""),
+)
+_PT_INTERP_LINE = re.compile(r"(?im)^\s*@?(?:call\s+)?(?P<img>(?:[\w.\\:/-]*[\\/])?(?:powershell|pwsh|cscript|wscript|"
+                             r"mshta|rundll32|regsvr32|msbuild|python3?|node|perl|ruby|lua|php|osascript|bash|sh)"
+                             r"(?:\.exe)?)\s+(?=\S)")
+
+
+_PT_SHELLWIN = re.compile(r"(?i)\bShell(?:Windows|BrowserWindow)\b|9BA05972-F6A8-11CF-A442-00A0C90A8F39|"
+                          r"C08AFD90-F2A1-11D1-8455-00A0C91F3880")
+_PT_PROXY_GATE = re.compile(r"(?i)ExecuteShellCommand|\bsc(?:\.exe)?\s+(?:\\\\\S+\s+)?create\b|New-Service|"
+                            r"New-ScheduledTaskAction|CommandLineTemplate")
+
+
+def pt_image(language=None, host_profile=None, member=""):
+    """Host process image for a member: host_profile pattern, else language, else the file extension; None unknown."""
+    hp = str(host_profile or "").strip().lower()
+    if hp and hp not in ("standalone", "none", "native", "local", "default"):
+        for rx, img in PT_HOST_IMAGE:
+            if re.search(rx, hp):
+                return img
+        for tok in re.split(r"[_\-\s]+", hp):
+            if tok in PT_LANG_IMAGE and tok not in ("javascript", "jscript", "vbscript", "mixed"):
+                return PT_LANG_IMAGE[tok]
+    lang = re.sub(r"[^0-9a-z]+", "_", str(language or "").strip().lower()).strip("_")
+    if lang in PT_LANG_IMAGE:
+        return PT_LANG_IMAGE[lang]
+    ext = str(member or "").rsplit(".", 1)[-1].lower() if "." in str(member or "") else ""
+    lang = PT_EXT_LANG.get(ext)
+    return PT_LANG_IMAGE.get(lang) if lang else None
+
+
+def _pt_child(cmdline):
+    """First program of a command line -> its image (a script path maps to its host interpreter)."""
+    m = _PT_EXE.match(cmdline or "")
+    if not m:
+        return None
+    base = m.group(2).strip().rstrip(",)")
+    if not base or not re.search(r"[A-Za-z]", base):
+        return None
+    ext = base.rsplit(".", 1)[-1].lower() if "." in base else ""
+    if ext in PT_EXT_LANG and ext != "exe" and PT_EXT_LANG[ext]:
+        return PT_LANG_IMAGE.get(PT_EXT_LANG[ext])
+    low = base.lower()
+    if not ext and low in ("powershell", "pwsh", "cscript", "wscript", "mshta", "cmd", "rundll32", "regsvr32",
+                           "msbuild", "schtasks", "wmic", "msiexec", "certutil", "bitsadmin", "python", "node"):
+        return low + ".exe"
+    return base
+
+
+def _pt_in_string(line, col):
+    """True when column `col` of `line` sits inside a quoted literal (crude, per line)."""
+    q = None
+    i = 0
+    while i < col and i < len(line):
+        c = line[i]
+        if q:
+            if c == "\\" and q != "'":
+                i += 1
+            elif c == q:
+                q = None
+        elif c in "\"'":
+            q = c
+        i += 1
+    return q is not None
+
+
+def _pt_value(expr, env, text):
+    """Rebuild one argument: the full folded literal, else the head literal of the variable's first assignment."""
+    expr = (expr or "").strip()
+    v = _fs_eval(expr, env)
+    if v is not None:
+        return v, True
+    head = re.match(r"[$@%]?\{?([A-Za-z_]\w*)", expr)
+    if head:
+        am = re.search(r"(?m)(?:^|[\s;(,])[$]?" + re.escape(head.group(1)) + r"\s*(?::=|=)(?!=)\s*", text)
+        if am:
+            lm = _FS_LIT.match(text, am.end())
+            if lm:
+                lit = lm.group("d") if lm.group("d") is not None else lm.group("s") if lm.group("s") is not None \
+                    else lm.group("t")
+                return _fs_unescape(lit or ""), False
+    lm = _FS_LIT.match(expr)
+    if lm:
+        lit = lm.group("d") if lm.group("d") is not None else lm.group("s") if lm.group("s") is not None \
+            else lm.group("t")
+        return _fs_unescape(lit or ""), False
+    return None, False
+
+
+def _pt_ps_args(args, env, text):
+    """Start-Process [-FilePath] X [-ArgumentList] Y -> 'X Y'."""
+    toks = _fs_split(args, re.compile(r"\s+")) or []
+    named, pos, i = {}, [], 0
+    while i < len(toks):
+        t = toks[i]
+        if t.startswith("-") and re.fullmatch(r"-\w+", t):
+            n = t[1:].lower()
+            if n in ("wait", "nonewwindow", "passthru", "usenewenvironment") or i + 1 >= len(toks):
+                i += 1
+                continue
+            named[n] = toks[i + 1]
+            i += 2
+            continue
+        pos.append(t)
+        i += 1
+    fp = next((named[k] for k in named if "filepath".startswith(k) or k in ("path", "fp")), pos[0] if pos else None)
+    al = next((named[k] for k in named if "argumentlist".startswith(k) or k == "args"), pos[1] if len(pos) > 1 else None)
+    f, ok = _pt_value(fp, env, text) if fp else (None, False)
+    if f is None:
+        return None, False
+    if al:
+        if "," in al and al.strip()[:2] != "@(":
+            parts = [_pt_value(p, env, text) for p in (_fs_split(al, _FS_COMMA) or [al])]
+            a = " ".join(p for p, _ in parts if p is not None)
+            ok = ok and all(o for _, o in parts)
+        else:
+            a, o = _pt_value(re.sub(r"^@\((.*)\)$", r"\1", al.strip(), flags=re.S), env, text)
+            ok = ok and o
+        return f + (" " + a if a else ""), ok
+    return f, ok
+
+
+def code_spawns(src, name="", parent=None):
+    """Process-creation call sites in a script's CODE -> [{api, parent_image, child_image, cmdline, line, folded}] in
+    source order. `cmdline` is rebuilt from the file's own literals (None when runtime data); `folded` False when only
+    the head literal was recovered. Comment / echo lines and call heads inside string literals are skipped; a
+    Win32_Process.Create / wmic / schtasks /tr child is parented to WmiPrvSE.exe / svchost.exe (plus the member ->
+    wmic.exe / schtasks.exe edge). [] for unreadable input."""
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            b = bytes(src)
+            src = (b.decode("utf-16", "replace") if b[:2] in (b"\xff\xfe", b"\xfe\xff") else
+                   b.decode("utf-8-sig", "replace"))
+        text = _fs_flat(str(src or "")[:1_000_000])
+        low = text.lower()
+        if not parent and re.search(r"\brequire\s*\(|\bchild_process\b|^\s*import\s.+\bfrom\s", text, re.M) and \
+                str(name or "").lower().endswith((".js", ".mjs", ".cjs", ".ts")):
+            parent = "node.exe"
+        parent = parent or pt_image(member=name)
+        env = _fs_env(text)
+        lines = text.split("\n")
+        starts = [0]
+        for ln in lines:
+            starts.append(starts[-1] + len(ln) + 1)
+        import bisect
+        ext = str(name or "").rsplit(".", 1)[-1].lower()
+        out, seen = [], set()
+
+        def add(api, par, cmd, lno, folded, child=None):
+            child = child or _pt_child(cmd)
+            if not child:
+                return
+            key = (lno, child.lower(), api)
+            if key in seen:
+                return
+            seen.add(key)
+            out.append({"api": api, "parent_image": par, "child_image": child,
+                        "cmdline": cmd.strip() if cmd and folded else None, "line": lno, "folded": bool(folded)})
+
+        sites = list(_PT_SITES)
+        if ext in ("bat", "cmd") or parent == "cmd.exe":
+            sites.append(("direct", _PT_INTERP_LINE, "cmd", ""))
+        for api, rx, kind, gate in sites:
+            if gate and gate not in low:
+                continue
+            for m in rx.finditer(text):
+                if len(out) > 200:
+                    break
+                lno = bisect.bisect_right(starts, m.start())
+                line = lines[lno - 1]
+                col = m.start() - starts[lno - 1]
+                if _FS_COMMENT.match(line) or _FS_ECHO.match(line) and kind != "cmd":
+                    continue
+                if kind not in ("qx", "bt") and _pt_in_string(line, col) and not (
+                        kind == "cmd" and ext in ("bat", "cmd")):
+                    continue
+                if api == "Run" and not (ext in ("ahk", "au3") or "autoit" in low or "#requires autohotkey" in low):
+                    continue
+                if api == "system" and ext in ("js", "mjs", "cjs", "ts", "ps1", "vbs") and "child_process" not in low:
+                    continue
+                cmd, folded = None, False
+                if kind == "qx":
+                    close = {"{": "}", "(": ")", "[": "]", "<": ">"}.get(m.group(1), m.group(1))
+                    j = text.find(close, m.end())
+                    if j < 0 or "\n" in text[m.end():j]:
+                        continue
+                    cmd, folded = text[m.end():j], True
+                elif kind == "bt":
+                    j = text.find("`", m.end())
+                    if j < 0:
+                        continue
+                    cmd, folded = text[m.end():j], True
+                elif kind == "cmd":
+                    rest = line[col + (m.end() - m.start()):]
+                    rest = re.sub(r"%(\w+)%|!(\w+)!", lambda mm: _fs_lookup(mm.group(1) or mm.group(2), env)
+                                  or mm.group(0), rest).strip()
+                    if api == "direct":
+                        cmd, folded = m.group("img") + " " + rest, True
+                        add(api, parent, cmd, lno, folded)
+                        continue
+                    if api == "cmd /c":
+                        add(api, parent, "cmd.exe " + rest, lno, True, child="cmd.exe")
+                        continue
+                    if api == "start":
+                        rest = re.sub(r'^(?:"[^"]*"\s+)?(?:/\w+\s+)*', "", rest)
+                        add(api, parent, rest, lno, True)
+                        continue
+                    if api == "schtasks /create":
+                        add(api, parent, "schtasks.exe " + rest, lno, True, child="schtasks.exe")
+                        tm = re.search(r"""(?i)/tr\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+))""", rest)
+                        if tm:
+                            tr = (tm.group(1) or tm.group(2) or tm.group(3) or "").replace('\\"', '"')
+                            add("schtasks /tr", "svchost.exe", tr, lno, True)
+                        continue
+                    if api == "wmic process call create":
+                        add(api, parent, "wmic.exe " + rest, lno, True, child="wmic.exe")
+                        cm = re.search(r"""(?i)\bcreate\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+))""", rest)
+                        if cm:
+                            add("Win32_Process.Create", "WmiPrvSE.exe", cm.group(1) or cm.group(2) or cm.group(3),
+                                lno, True)
+                        continue
+                    continue
+                else:
+                    args = _fs_args(text, m.end())
+                    if args is None:
+                        continue
+                    if kind == "ps":
+                        cmd, folded = _pt_ps_args(args, env, text)
+                    else:
+                        items = _fs_split(args, _FS_COMMA) or [args]
+                        if api == "child_process" and items and items[0].strip()[:1] in "[":
+                            items = [items[0].strip()[1:]]
+                        if api in ("subprocess", "system", "os.system") and items and items[0].strip()[:1] == "[":
+                            inner = items[0].strip()[1:].rsplit("]", 1)[0]
+                            parts = [_pt_value(p, env, text) for p in (_fs_split(inner, _FS_COMMA) or [inner])]
+                            if parts and parts[0][0] is not None:
+                                cmd = " ".join(p for p, _ in parts if p is not None)
+                                folded = all(o for _, o in parts)
+                        if cmd is None and items:
+                            cmd, folded = _pt_value(items[0], env, text)
+                        if api == "child_process" and cmd is not None and len(items) > 1 and \
+                                items[1].strip()[:1] == "[":
+                            inner = items[1].strip()[1:].rsplit("]", 1)[0]
+                            parts = [_pt_value(p, env, text) for p in (_fs_split(inner, _FS_COMMA) or [inner])]
+                            cmd += "".join(" " + p for p, _ in parts if p is not None)
+                            folded = folded and all(o for _, o in parts)
+                        if kind == "se" and cmd is not None and len(items) > 1:
+                            a, o = _pt_value(items[1], env, text)
+                            if a:
+                                cmd, folded = cmd + " " + a, folded and o
+                if cmd is None:
+                    continue
+                if api == "child_process" and re.search(r"\bfork\s*\($", text[m.start():m.end()]):
+                    add(api, parent, "node.exe " + cmd, lno, folded, child="node.exe")
+                    continue
+                if api == "Win32_Process.Create":
+                    add(api, "WmiPrvSE.exe", cmd, lno, folded)
+                    continue
+                if api == "ShellExecute" and _PT_SHELLWIN.search(text):
+                    add("ShellWindows.ShellExecute", "explorer.exe", cmd, lno, folded)
+                    continue
+                add(api, parent, cmd, lno, folded)
+        if _PT_PROXY_GATE.search(text):
+            _pt_proxy_edges(text, lines, starts, add)
+        out.sort(key=lambda d: d["line"])
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def declared_spawns(plans_by_member, sources=None):
+    """Static process tree from plans + sources -> [{member, parent_image, child_image, cmdline, api, line, source}].
+      plan edges   (source 'plan', line None): host image (pt_image(language, host_profile, member)) -> the
+                   next_language interpreter when the plan's steps dispatch (dispatch_process / dispatch_language /
+                   handoff_script / dispatch_next_stage ...); cmdline = next_stage / file_path when the plan names one;
+                   api = the dispatching step
+      code edges   (source 'code'): code_spawns(sources[member]) with the member's host image as parent
+    plans_by_member {member: plan dict / 'k=v|..' / JSON}; sources {member: text/bytes} (optional; members with a
+    source but no plan still get their code edges). [] when nothing declares a spawn."""
+    try:
+        out = []
+        plans_by_member = plans_by_member or {}
+        sources = sources or {}
+        for m in sorted(set(plans_by_member) | set(sources)):
+            d = {}
+            if m in plans_by_member:
+                try:
+                    d = {_rc_field(k): v for k, v in _rc_dict(plans_by_member[m]).items()}
+                except Exception:  # noqa: BLE001
+                    d = {}
+            steps = d.get("steps") or ""
+            steps = [str(s) for s in steps] if isinstance(steps, (list, tuple)) else \
+                [s for s in re.split(r"[\s,;>|]+", str(steps)) if s]
+            parent = pt_image(d.get("language"), d.get("host_profile"), m)
+            nl = str(d.get("next_language") or "").strip()
+            disp = [s for s in steps if _PT_DISPATCH.match(s)]
+            if nl and disp and nl.lower() not in ("none", "null", "n/a"):
+                child = pt_image(nl) or nl
+                tgt = next((str(d[k]) for k in ("next_stage", "file_path", "path", "drop_path") if d.get(k)), None)
+                out.append({"member": m, "parent_image": parent, "child_image": child,
+                            "cmdline": f"{child} {tgt}" if tgt else None, "api": disp[-1], "line": None,
+                            "source": "plan"})
+            if m in sources:
+                for s in code_spawns(sources[m], m, parent):
+                    out.append({"member": m, "parent_image": s["parent_image"], "child_image": s["child_image"],
+                                "cmdline": s["cmdline"], "api": s["api"], "line": s["line"], "source": "code"})
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+# --- spawn-API proxy parents: the parent telemetry records for a spawn API is the OS broker, not the caller ----------
+PT_SPAWN_PARENTS = (  # (key, api aliases (alnum, lower), code cue, recorded parent images in order, ATT&CK candidates)
+    ("wmi_process_create", ("win32processcreate", "wmicprocesscallcreate", "wmic", "invokewmimethod",
+                            "invokecimmethod", "win32process", "wmiprocess"),
+     r"Win32_Process\b|\bwmic(?:\.exe)?\b[^\n]{0,80}?\bprocess\s+call\s+create|Invoke-(?:Wmi|Cim)Method\b",
+     ("WmiPrvSE.exe",), ("T1047",)),
+    ("wmi_script_consumer", ("activescripteventconsumer", "scrcons"), r"ActiveScriptEventConsumer\b",
+     ("scrcons.exe",), ("T1546.003",)),
+    ("wmi_cmdline_consumer", ("commandlineeventconsumer", "commandlinetemplate"), r"CommandLineEventConsumer\b",
+     ("WmiPrvSE.exe",), ("T1546.003",)),
+    ("wmi_event_subscription", ("eventconsumer", "eventfilter", "filtertoconsumerbinding", "wmievent",
+                                "wmisubscription", "wmipersistence"),
+     r"__EventFilter\b|__FilterToConsumerBinding\b", ("scrcons.exe", "WmiPrvSE.exe"), ("T1546.003",)),
+    ("scheduled_task", ("schtasks", "scheduledtask", "newscheduledtaskaction", "schedulesservice", "itaskservice",
+                        "taskscheduler", "schtr"),
+     r"\bschtasks(?:\.exe)?\b[^\n]{0,60}?/create\b|\b(?:Register|New)-ScheduledTask(?:Action)?\b|"
+     r"\bSchedule\.Service\b|\bITaskService\b", ("svchost.exe", "taskeng.exe"), ("T1053.005",)),
+    ("mmc20", ("mmc20", "executeshellcommand", "mmc"),
+     r"\bMMC20\.Application\b|49B2791A-B1AE-4C90-9B8E-E860BA07F889|\.ExecuteShellCommand\b",
+     ("mmc.exe",), ("T1021.003", "T1559.001")),
+    ("shell_windows", ("shellwindows", "shellbrowserwindow"),
+     r"\bShell(?:Windows|BrowserWindow)\b|9BA05972-F6A8-11CF-A442-00A0C90A8F39|C08AFD90-F2A1-11D1-8455-00A0C91F3880",
+     ("explorer.exe",), ("T1021.003", "T1559.001")),
+    ("service", ("sccreate", "newservice", "createservice", "servicecreate", "servicesexe", "binpath"),
+     r"\bsc(?:\.exe)?\s+(?:\\\\\S+\s+)?create\b|\bNew-Service\b|\bCreateService[AW]?\b|\bWin32_Service\b[^\n]{0,80}"
+     r"\bCreate\b", ("services.exe",), ("T1543.003",)),
+    ("winlogon", ("winlogon", "userinit", "winlogonshell"),
+     r"\\Winlogon\b[^\n]{0,120}?\b(?:Userinit|Shell)\b", ("userinit.exe", "winlogon.exe"), ("T1547.004",)),
+    ("run_key", ("runkey", "currentversionrun", "runonce", "registryrun", "autorun"),
+     r"\\CurrentVersion\\+Run(?:Once)?(?:Ex)?\b", ("explorer.exe", "userinit.exe"), ("T1547.001",)),
+    ("office_macro", ("macro", "vba", "office", "winword", "excel", "outlook", "powerpnt", "autoopen",
+                      "documentopen", "workbookopen"),
+     r"\b(?:Auto_?Open|AutoExec|Document_Open|Workbook_Open|Application_Startup|Application_NewMail(?:Ex)?)\b|"
+     r"\b(?:Word|Excel|Outlook|PowerPoint)\.Application\b",
+     ("WINWORD.EXE", "EXCEL.EXE", "OUTLOOK.EXE", "POWERPNT.EXE"), ("T1204.002",)),
+    # LOLBin hosts: only a hosting cue (the script runs INSIDE it), not a plain launch of the binary
+    ("mshta", ("mshta", "hta"), r"<HTA:APPLICATION\b|\bmshta(?:\.exe)?\s+(?:vbscript|javascript):",
+     ("mshta.exe",), ("T1218.005",)),
+    ("regsvr32", ("regsvr32", "sct", "scriptlet", "scrobj"),
+     r"<scriptlet\b|\bregsvr32(?:\.exe)?\b[^\n]{0,80}?\bscrobj\.dll\b", ("regsvr32.exe",), ("T1218.010",)),
+    ("rundll32", ("rundll32",), r"\brundll32(?:\.exe)?\b[^\n]{0,80}?\b(?:javascript:|RunHTMLApplication\b)",
+     ("rundll32.exe",), ("T1218.011",)),
+    ("cloud_script", ("appsscript", "googleappsscript", "cloud", "urlfetchapp", "serverless", "lambda"),
+     r"\b(?:UrlFetchApp|SpreadsheetApp|DriveApp|GmailApp|ScriptApp|PropertiesService)\.", (), ()),
+)
+_PT_SPAWN_RX = [(k, re.compile("(?i)" + cue)) for k, _, cue, _, _ in PT_SPAWN_PARENTS]
+_PT_OFFICE_HINT = (("excel", "EXCEL.EXE"), ("workbook", "EXCEL.EXE"), ("outlook", "OUTLOOK.EXE"),
+                   ("application_newmail", "OUTLOOK.EXE"), ("application_startup", "OUTLOOK.EXE"),
+                   ("powerpoint", "POWERPNT.EXE"), ("word", "WINWORD.EXE"), ("document_open", "WINWORD.EXE"))
+# PPID spoofing (T1134.004): CreateProcess with a parent handle via STARTUPINFOEX + PROC_THREAD_ATTRIBUTE_PARENT_PROCESS
+_PPID_CUES = (
+    ("UpdateProcThreadAttribute", r"\bUpdateProcThreadAttribute\b"),
+    ("PROC_THREAD_ATTRIBUTE_PARENT_PROCESS", r"\bPROC_THREAD_ATTRIBUTE_PARENT_PROCESS\b|"
+                                             r"\bUpdateProcThreadAttribute\b[^\n]{0,160}?\b0x0*20000\b|"
+                                             r"(?<![\w.])(?:0x0*20000|131072)\b(?![\w.])"),
+    ("InitializeProcThreadAttributeList", r"\bInitializeProcThreadAttributeList\b"),
+    ("STARTUPINFOEX", r"\bSTARTUPINFOEX[AW]?\b|\bStartupInfoEx\b|\blpAttributeList\b"),
+    ("EXTENDED_STARTUPINFO_PRESENT", r"\bEXTENDED_STARTUPINFO_PRESENT\b|(?<![\w.])(?:0x0*80000|524288)\b(?![\w.])"),
+    ("PROCESS_CREATE_PROCESS", r"\bPROCESS_CREATE_PROCESS\b|\bOpenProcess\s*\(\s*(?:0x0*80|128)\s*,"),
+    ("OpenProcess", r"\bOpenProcess\b"),
+    ("CreateProcess", r"\bCreateProcess(?:AsUser)?[AW]?\b"),
+)
+_PPID_RX = [(n, re.compile("(?i)" + r)) for n, r in _PPID_CUES]
+_PPID_TARGET = re.compile(r"""(?i)(?:\bGet-Process\s+(?:-Name\s+)?|\bGetProcessesByName\s*\(\s*|\bgps\s+|"""
+                          r"""\bProcessName\s*(?:-eq|==|=)\s*)["']?([A-Za-z][\w.-]{1,40}?)(?:\.exe)?["')\s|;]|"""
+                          r"""["']((?:explorer|svchost|lsass|winlogon|services|spoolsv|sihost|taskhostw|dllhost|"""
+                          r"""RuntimeBroker|WmiPrvSE|OUTLOOK|WINWORD|EXCEL)\.exe)["']""")
+
+
+def _pt_key(s):
+    return re.sub(r"[^0-9a-z]+", "", str(s or "").lower())
+
+
+def spawn_parent_candidates(api):
+    """Spawn API / launcher name (code_spawns api, 'wmic process call create', 'Register-ScheduledTask',
+    'MMC20.Application', 'sc create', 'Run key', 'macro', 'Apps Script' ...) -> the parent images telemetry records
+    for its child, most likely first ([] = no local process: cloud script). None when the API is not a proxy (the
+    calling script itself is the parent)."""
+    try:
+        k = _pt_key(api)
+        if not k:
+            return None
+        for key, names, _cue, parents, _att in PT_SPAWN_PARENTS:
+            if k == key.replace("_", "") or any(n in k for n in names):
+                if key == "office_macro":
+                    hint = next((img for h, img in _PT_OFFICE_HINT if h.replace("_", "") in k), None)
+                    return ([hint] if hint else []) + [p for p in parents if p != hint]
+                return list(parents)
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def spawn_proxies(src):
+    """Proxy-launch cues in a script's code -> [{key, cue, line, parents, attack}] in source order (first hit per
+    family): the process the telemetry will record as the parent of what this script launches through WMI, the
+    Task Scheduler, DCOM (MMC20 / ShellWindows), the SCM, Run keys, Office macros, LOLBin hosts, or [] parents for
+    cloud scripts. Comment lines are skipped. [] when nothing proxies."""
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            b = bytes(src)
+            src = (b.decode("utf-16", "replace") if b[:2] in (b"\xff\xfe", b"\xfe\xff") else
+                   b.decode("utf-8-sig", "replace"))
+        text = _fs_flat(str(src or "")[:1_000_000])
+        lines = text.split("\n")
+        hits = {}
+        for key, rx in _PT_SPAWN_RX:
+            for lno, ln in enumerate(lines[:50000], 1):
+                if len(ln) > 20000 or _FS_COMMENT.match(ln):
+                    continue
+                m = rx.search(ln)
+                if m:
+                    hits[key] = (lno, m.start(), m.group(0).strip())
+                    break
+        if "wmi_event_subscription" in hits and ("wmi_script_consumer" in hits or "wmi_cmdline_consumer" in hits):
+            hits.pop("wmi_event_subscription")
+        out = []
+        for key, names, _cue, parents, att in PT_SPAWN_PARENTS:
+            if key not in hits:
+                continue
+            lno, col, cue = hits[key]
+            ps = list(parents)
+            if key == "office_macro":
+                hint = next((img for h, img in _PT_OFFICE_HINT if h in cue.lower()), None)
+                ps = ([hint] if hint else []) + [p for p in parents if p != hint]
+            out.append({"key": key, "cue": cue, "line": lno, "parents": ps, "attack": list(att), "_col": col})
+        out.sort(key=lambda d: (d["line"], d.pop("_col")))
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def ppid_spoof(src):
+    """PPID-spoofing code cues (T1134.004) -> {cues: [names in source order], spoofed_parent: image | None,
+    attack: 'T1134.004' | 'none'}. Spoofing = the parent-process attribute (UpdateProcThreadAttribute +
+    PROC_THREAD_ATTRIBUTE_PARENT_PROCESS / 0x00020000) or STARTUPINFOEX + EXTENDED_STARTUPINFO_PRESENT (0x00080000)
+    with an OpenProcess(PROCESS_CREATE_PROCESS 0x0080) handle. spoofed_parent = the process whose handle is opened
+    (Get-Process explorer / GetProcessesByName("svchost") / a quoted '<name>.exe'). {} for unreadable input."""
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            b = bytes(src)
+            src = (b.decode("utf-16", "replace") if b[:2] in (b"\xff\xfe", b"\xfe\xff") else
+                   b.decode("utf-8-sig", "replace"))
+        text = str(src or "")[:1_000_000]
+        code = "\n".join(ln for ln in text.split("\n") if not _FS_COMMENT.match(ln))
+        found = []
+        for name, rx in _PPID_RX:
+            m = rx.search(code)
+            if m:
+                found.append((m.start(), name))
+        names = {n for _, n in found}
+        attr = "UpdateProcThreadAttribute" in names and "PROC_THREAD_ATTRIBUTE_PARENT_PROCESS" in names
+        ext = "STARTUPINFOEX" in names and "EXTENDED_STARTUPINFO_PRESENT" in names and \
+            ("PROCESS_CREATE_PROCESS" in names or "UpdateProcThreadAttribute" in names)
+        spoof = (attr or ext) and ("CreateProcess" in names or "STARTUPINFOEX" in names)
+        par = None
+        if spoof:
+            for m in _PPID_TARGET.finditer(code):
+                v = m.group(1) or m.group(2)
+                if v and v.lower() not in ("id", "name", "handle", "process", "processname"):
+                    par = v if v.lower().endswith(".exe") else v + ".exe"
+                    break
+        return {"cues": [n for _, n in sorted(found)], "spoofed_parent": par,
+                "attack": "T1134.004" if spoof else "none"}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def spawn_parent_answer(src, kind="parent", plan=None, accepted_values=None):
+    """Answer 'which process will the telemetry record as the parent' / 'which technique' for a script.
+    kind: parent (expected recorded parent: the spoofed parent, else the proxy parents in order) | attack (plan
+    attack= wins; else T1134.004 when the code spoofs its PPID, else the proxy family's techniques) | family.
+    Candidates in order (a list when several); the matching accepted value when given. 'none' when the code has no
+    proxy / spoof cue (or a cloud script runs no local process), None on error."""
+    try:
+        kd = _pt_key(kind)
+        acc = [a for a in (accepted_values or []) if str(a).strip()] or None
+        sp = ppid_spoof(src) or {}
+        px = spawn_proxies(src)
+        if any(a in kd for a in ("attack", "technique", "mitre", "ttp")):
+            pa = None
+            if plan is not None:
+                try:
+                    pa = str({_rc_field(k): v for k, v in _rc_dict(plan).items()}.get("attack") or "").strip()
+                except Exception:  # noqa: BLE001
+                    pa = None
+            vals = [pa.upper()] if pa and pa.lower() not in ("none", "null", "n/a") else []
+            if sp.get("attack") == "T1134.004":
+                vals.append("T1134.004")
+            for p in px:
+                vals += p["attack"]
+        elif "famil" in kd or "key" in kd or "method" in kd:
+            vals = [p["key"] for p in px]
+        else:
+            vals = [sp["spoofed_parent"]] if sp.get("spoofed_parent") else []
+            for p in px:
+                vals += p["parents"]
+        seen = []
+        for v in vals:
+            if v and v.lower() not in [s.lower() for s in seen]:
+                seen.append(v)
+        if acc:
+            seen = [next(a for a in acc if str(a).strip().lower() == v.lower() or
+                         _rcp_base(a) == _rcp_base(v)) for v in seen
+                    if any(str(a).strip().lower() == v.lower() or _rcp_base(a) == _rcp_base(v) for a in acc)]
+        if not seen:
+            return "none"
+        return seen[0] if len(seen) == 1 else seen
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _pt_proxy_edges(text, lines, starts, add):
+    """Code sites whose child the OS parents to a broker: MMC20 ExecuteShellCommand -> mmc.exe, sc create binPath= /
+    New-Service -BinaryPathName -> services.exe, New-ScheduledTaskAction -Execute -> svchost.exe, a WMI
+    CommandLineEventConsumer CommandLineTemplate -> WmiPrvSE.exe."""
+    import bisect
+    env = None
+    lit = r"""(?:"((?:[^"\\]|\\.)*)"|'([^']*)'|([^\s;,)}]+))"""
+    for api, rx, par in _PT_PROXY_SITES:
+        for m in rx.finditer(text):
+            lno = bisect.bisect_right(starts, m.start())
+            line = lines[lno - 1]
+            if _FS_COMMENT.match(line) or _FS_ECHO.match(line):
+                continue
+            if api == "MMC20.ExecuteShellCommand":
+                args = _fs_args(text, m.end())
+                items = _fs_split(args or "", _FS_COMMA) or []
+                if not items:
+                    continue
+                env = env if env is not None else _fs_env(text)
+                c, ok = _pt_value(items[0], env, text)
+                if c is None:
+                    continue
+                if len(items) > 2:
+                    a, o = _pt_value(items[2], env, text)
+                    c, ok = (c + " " + a, ok and o) if a else (c, ok)
+                add(api, par, c, lno, ok)
+                continue
+            rest = text[m.end():starts[lno] if lno < len(starts) else len(text)]
+            if api == "New-ScheduledTaskAction":
+                em = re.search(r"(?i)-Execute\s+" + lit, rest)
+                if not em:
+                    continue
+                am = re.search(r"(?i)-Argument\s+" + lit, rest)
+                pick = lambda mm: next(g for g in mm.groups() if g is not None)  # noqa: E731
+                c = pick(em).replace('\\"', '"') + (" " + pick(am).replace('\\"', '"') if am else "")
+                add(api, par, c, lno, True)
+                continue
+            lm = re.match(lit, rest)
+            if not lm:
+                continue
+            c = next(g for g in lm.groups() if g is not None)
+            c = c.replace('\\"', '"').replace("\\\\", "\\") if lm.group(1) is not None else c
+            add(api, par, c, lno, True)
+
+
+_PT_PROXY_SITES = (
+    ("MMC20.ExecuteShellCommand", re.compile(r"(?i)\.ExecuteShellCommand\s*\(?"), "mmc.exe"),
+    ("sc create", re.compile(r"(?i)\bsc(?:\.exe)?\s+(?:\\\\\S+\s+)?create\s+\S+[^\n]*?\bbinpath=\s*"), "services.exe"),
+    ("New-Service", re.compile(r"(?i)\bNew-Service\b[^\n]*?-BinaryPathName\s+"), "services.exe"),
+    ("New-ScheduledTaskAction", re.compile(r"(?i)\bNew-ScheduledTaskAction\b"), "svchost.exe"),
+    ("CommandLineEventConsumer", re.compile(r"(?i)\bCommandLineTemplate\s*[=:]\s*"), "WmiPrvSE.exe"),
+)
+
+
+# --- process-tree-reconcile: declared (static) vs observed process tree; PPID spoofing (T1134.004) ---------------------
+def _rcp_base(img):
+    """Image -> comparable basename: last path part, lower, quotes / trailing '.exe' dropped ('' when unknown)."""
+    b = _pt_base(str(img or "").strip().strip("\"'")).lower()
+    return b[:-4] if b.endswith(".exe") else b
+
+
+def _rcp_canon(cmd):
+    """Command line -> matching form: first token reduced to its image basename, cmd carets / doubled quotes gone,
+    quotes stripped, whitespace collapsed, lower-case ('' when absent)."""
+    s = str(cmd or "").strip().replace("^", "").replace('""', '"')
+    m = re.match(r'\s*(?:"([^"]+)"|(\S+))(.*)$', s, re.S)
+    if not m:
+        return ""
+    head = _rcp_base(m.group(1) or m.group(2))
+    return re.sub(r"\s+", " ", (head + " " + m.group(3).replace('"', "").replace("'", "")).strip().lower())
+
+
+def _rcp_procs(observed):
+    """process_events() starts merged per real process: a Sysmon EID 1 and a Security 4688 record of the same pid +
+    image (within 5 s) are one process; the 4688 creator ProcessId then rides along as the creator."""
+    evs = observed if isinstance(observed, list) else process_events(observed)
+    starts = [e for e in evs if isinstance(e, dict) and e.get("event") == "start"][:50000]
+    ends = [e for e in evs if isinstance(e, dict) and e.get("event") == "end"][:50000]
+    procs = []
+    for i, e in enumerate(starts):
+        t = _pt_ts(e.get("ts"))
+        hit = None
+        for p in procs:
+            if p["pid"] is not None and p["pid"] == e.get("pid") and \
+                    _rcp_base(p["image"]) == _rcp_base(e.get("image")) and \
+                    (p["t"] is None or t is None or abs(p["t"] - t) <= 5) and e.get("src") not in p["srcs"]:
+                hit = p
+                break
+        if hit is None:
+            hit = {"pid": e.get("pid"), "pid_raw": e.get("pid_raw"), "image": e.get("image"), "t": t, "i": i,
+                   "cmdline": e.get("cmdline"), "guid": _pt_guid(e.get("guid")), "srcs": [], "rec_ppid": None,
+                   "rec_ppid_raw": None, "rec_pimage": None, "rec_pguid": None, "creator": None, "creator_raw": None,
+                   "creator_guid": None, "creator_image": None, "end": None}
+            procs.append(hit)
+        hit["srcs"].append(e.get("src"))
+        hit["cmdline"] = hit["cmdline"] or e.get("cmdline")
+        hit["guid"] = hit["guid"] or _pt_guid(e.get("guid"))
+        if e.get("src") == "security" and len(hit["srcs"]) > 1:      # 4688 next to a Sysmon record: the creator
+            hit["creator"], hit["creator_raw"] = e.get("ppid"), e.get("ppid_raw")
+            hit["creator_image"] = hit["creator_image"] or e.get("parent_image")
+            continue
+        if e.get("src") != "security" and hit["rec_ppid"] is not None and hit["srcs"][0] == "security":
+            hit["creator"], hit["creator_raw"] = hit["rec_ppid"], hit["rec_ppid_raw"]  # 4688 came first
+            hit["creator_image"] = hit["creator_image"] or hit["rec_pimage"]
+            hit["rec_ppid"] = hit["rec_pimage"] = None
+        if hit["rec_ppid"] is None:
+            hit["rec_ppid"], hit["rec_ppid_raw"] = e.get("ppid"), e.get("ppid_raw")
+            hit["rec_pimage"], hit["rec_pguid"] = e.get("parent_image"), _pt_guid(e.get("parent_guid"))
+        if e.get("creator_pid") is not None:
+            hit["creator"], hit["creator_raw"] = e["creator_pid"], e.get("creator_pid_raw")
+        hit["creator_guid"] = hit["creator_guid"] or _pt_guid(e.get("creator_guid"))
+        hit["creator_image"] = hit["creator_image"] or e.get("creator_image")
+    for e in ends:
+        t, g = _pt_ts(e.get("ts")), _pt_guid(e.get("guid"))
+        for p in reversed(procs):
+            if p["end"] is None and ((g and p["guid"] == g) or (not g and p["pid"] == e.get("pid"))) and \
+                    (t is None or p["t"] is None or p["t"] <= t):
+                p["end"] = t
+                break
+    return procs
+
+
+def _rcp_resolve(procs, me, pid=None, guid=None):
+    """The process a parent reference names at `me`'s start: guid first, else the pid alive then. None unknown."""
+    if guid:
+        hit = next((p for p in procs if p is not me and p["guid"] == guid), None)
+        if hit:
+            return hit
+    if pid is None:
+        return None
+    t = me["t"]
+    cands = [p for p in procs if p is not me and p["pid"] == pid and
+             (t is None or p["t"] is None or p["t"] <= t) and (t is None or p["end"] is None or p["end"] >= t)]
+    return cands[-1] if cands else None
+
+
+def _rcp_proxy_ok(d, rec):
+    """A declared row launched through a broker API (its `api` / `proxy_parents`) whose recorded parent is that
+    broker (WmiPrvSE.exe for Win32_Process.Create, svchost.exe / taskeng.exe for a task ...) is not a mismatch."""
+    src = d.get("src") or {}
+    cands = src.get("proxy_parents") or spawn_parent_candidates(src.get("api")) or []
+    return _rcp_base(rec) in {_rcp_base(c) for c in cands}
+
+
+def _rcp_declared(declared):
+    """declared_spawns() rows / {child: parent} / (parent, child[, cmdline]) tuples -> [{parent, child, cmdline}]."""
+    out = []
+    if isinstance(declared, dict):
+        declared = [{"parent_image": v, "child_image": k} for k, v in declared.items()]
+    for d in list(declared or [])[:5000]:
+        if isinstance(d, dict):
+            c = d.get("child_image") or d.get("child") or d.get("image")
+            p = d.get("parent_image") or d.get("parent")
+            cl = d.get("cmdline")
+        elif isinstance(d, (list, tuple)) and len(d) >= 2:
+            p, c, cl = d[0], d[1], (d[2] if len(d) > 2 else None)
+        else:
+            continue
+        if c:
+            out.append({"parent": p, "child": c, "cmdline": cl, "src": d if isinstance(d, dict) else None})
+    return out
+
+
+def reconcile_processes(declared, observed):
+    """Declared process tree vs observed telemetry ("the child claiming a parent it never had").
+    declared: declared_spawns() rows, {child: parent}, or (parent, child[, cmdline]) tuples (None: telemetry only).
+    observed: the raw log (bytes / text; anything process_events() reads) or its record list.
+    -> {matched: [{child, declared_parent, recorded_parent, pid, guid, cmdline}],
+        parent_mismatch: [{child, declared_parent, recorded_parent, real_parent_if_known, pid, guid, reasons}],
+        declared_only (declared spawns that never ran), observed_only (unexpected processes: unmatched and not the
+        parent of a matched one), orphans (recorded parent never seen / exited), spoofed (bool), attack}.
+    A child is matched by image basename, then canonical cmdline, then recorded parent == declared parent, then time
+    order. reasons: 'declared' (recorded parent != declared parent), 'creator' (the real creator -- 4688 ProcessId
+    next to a Sysmon EID 1 of the same process, or a CreatorProcessId / CreatorProcessGuid field -- differs from
+    the recorded ParentProcessId / ParentImage), 'parent_image' (ParentImage disagrees with the process that
+    ParentProcessId / ParentProcessGuid resolves to). Images are answered in the log's spelling (basename).
+    {} when the log has no process records."""
+    try:
+        procs = _rcp_procs(observed)
+        if not procs:
+            return {}
+        img = lambda p: _pt_base(p["image"]) if p and p.get("image") else None  # noqa: E731
+        info = []
+        for p in procs:
+            rp = _rcp_resolve(procs, p, p["rec_ppid"], p["rec_pguid"])
+            rec = _pt_base(p["rec_pimage"]) if p["rec_pimage"] else img(rp)
+            real, reasons = None, []
+            if p["creator"] is not None or p["creator_guid"]:
+                cp = _rcp_resolve(procs, p, p["creator"], p["creator_guid"])
+                real = img(cp) or (_pt_base(p["creator_image"]) if p["creator_image"] else None)
+                if (p["creator"] is not None and p["rec_ppid"] is not None and p["creator"] != p["rec_ppid"]) or \
+                        (p["creator_guid"] and p["rec_pguid"] and p["creator_guid"] != p["rec_pguid"]) or \
+                        (real and rec and _rcp_base(real) != _rcp_base(rec)):
+                    reasons.append("creator")
+            elif p["creator_image"]:
+                real = _pt_base(p["creator_image"])
+                if rec and _rcp_base(real) != _rcp_base(rec):
+                    reasons.append("creator")
+            if p["rec_pimage"] and rp is not None and rp.get("image") and \
+                    _rcp_base(p["rec_pimage"]) != _rcp_base(rp["image"]):
+                reasons.append("parent_image")
+            orphan = None
+            if rp is None and (p["rec_ppid"] is not None or p["rec_pguid"]):
+                gone = [q for q in procs if q is not p and ((p["rec_pguid"] and q["guid"] == p["rec_pguid"]) or
+                                                             (p["rec_ppid"] is not None and q["pid"] == p["rec_ppid"]))]
+                orphan = "exited" if gone else "missing"
+            info.append({"p": p, "rp": rp, "rec": rec, "real": real, "reasons": reasons, "orphan": orphan})
+
+        def row(x, dp=None):
+            p = x["p"]
+            return {"child": img(p) or p["pid_raw"], "declared_parent": _pt_base(dp) if dp else None,
+                    "recorded_parent": x["rec"], "real_parent_if_known": x["real"], "pid": p["pid_raw"],
+                    "guid": p["guid"], "cmdline": p["cmdline"], "reasons": list(x["reasons"])}
+
+        decl = _rcp_declared(declared)
+        used, matched, mism, dec_only = set(), [], [], []
+        for d in decl:
+            cb, cc, pb = _rcp_base(d["child"]), _rcp_canon(d["cmdline"]), _rcp_base(d["parent"])
+            best = None
+            for j, x in enumerate(info):
+                if j in used or _rcp_base(x["p"]["image"]) != cb:
+                    continue
+                oc = _rcp_canon(x["p"]["cmdline"])
+                sc = (4 if cc and oc == cc else 2 if cc and oc and (cc in oc or oc in cc) else 0) + \
+                    (1 if pb and pb in (_rcp_base(x["rec"]), _rcp_base(x["real"])) else 0)
+                if best is None or sc > best[0]:
+                    best = (sc, j)
+            if best is None:
+                dec_only.append({"child": _pt_base(d["child"]), "declared_parent": _pt_base(d["parent"]) if d["parent"]
+                                 else None, "cmdline": d["cmdline"]})
+                continue
+            used.add(best[1])
+            x = info[best[1]]
+            r = row(x, d["parent"])
+            matched.append({k: r[k] for k in ("child", "declared_parent", "recorded_parent", "pid", "guid", "cmdline")})
+            if pb and x["rec"] and _rcp_base(x["rec"]) != pb and not _rcp_proxy_ok(d, x["rec"]):
+                r["reasons"].insert(0, "declared")
+            if r["reasons"]:
+                mism.append(r)
+        for j, x in enumerate(info):
+            if j not in used and x["reasons"]:
+                mism.append(row(x))
+        mism.sort(key=lambda r: next(i for i, x in enumerate(info) if x["p"]["pid_raw"] == r["pid"] and
+                                     (img(x["p"]) or x["p"]["pid_raw"]) == r["child"]))
+        parents, byp = set(), {id(x["p"]): x for x in info}
+        todo = [info[j]["p"] for j in used]
+        while todo and len(parents) < 50000:     # every ancestor (recorded or real) of a matched child is expected
+            p = todo.pop()
+            for q in (byp[id(p)]["rp"], _rcp_resolve(procs, p, p["creator"], p["creator_guid"])):
+                if q is not None and id(q) not in parents:
+                    parents.add(id(q))
+                    todo.append(q)
+        obs_only = [row(x) for j, x in enumerate(info) if decl and j not in used and id(x["p"]) not in parents]
+        orphans = [dict(row(x), orphan=x["orphan"]) for x in info if x["orphan"]]
+        spoof = any(set(r["reasons"]) & {"creator", "declared", "parent_image"} for r in mism)
+        return {"matched": matched, "parent_mismatch": mism, "declared_only": dec_only, "observed_only": obs_only,
+                "orphans": orphans, "spoofed": spoof, "attack": "T1134.004" if spoof else "none",
+                "processes": len(procs)}
+    except Exception:  # noqa: BLE001 - impostor / truncated input: nothing, never an exception
+        return {}
+
+
+def reconcile_processes_answer(r, kind, accepted_values=None, what=None, declared=None):
+    """Answer a declared-vs-observed question from reconcile_processes() (or the raw log, with `declared`).
+    kind: child (spoofed child image) | pid | guid | claimed-parent (recorded / fake parent) | true-parent (real
+    creator, else the declared parent) | declared-parent | count (what: mismatch (default) | matched | declared_only
+    | observed_only | orphans | processes) | declared-only (never ran) | observed-only (unexpected) | orphan | attack
+    (T1134.004 when a parent was spoofed). `what` narrows to one child (image basename / path / pid). Values in the
+    log's spelling or the matching accepted value; several -> list. 'none' when the field is absent (no mismatch),
+    None when it cannot answer."""
+    try:
+        if not isinstance(r, dict) or "parent_mismatch" not in r:
+            r = reconcile_processes(declared, r)
+        if not r:
+            return None
+        acc = [a for a in (accepted_values or []) if str(a).strip()] or None
+        kd = re.sub(r"[^a-z]", "", str(kind or "").lower())
+        alias = [("attack", ("attack", "technique", "mitre", "ttp", "attck")),
+                 ("count", ("count", "number", "howmany", "total")),
+                 ("declaredonly", ("declaredonly", "neverran", "notobserved", "missing", "didnotrun", "notrun")),
+                 ("observedonly", ("observedonly", "unexpected", "undeclared", "extra")),
+                 ("orphan", ("orphan",)),
+                 ("trueparent", ("trueparent", "realparent", "actualparent", "creator", "spawnedby", "realcreator")),
+                 ("declaredparent", ("declaredparent", "expectedparent", "staticparent", "intendedparent")),
+                 ("claimedparent", ("claimed", "recorded", "fake", "spoofedparent", "reportedparent", "loggedparent",
+                                    "fakeparent", "parent")),
+                 ("guid", ("guid",)), ("pid", ("pid", "processid", "id")),
+                 ("child", ("child", "image", "process", "spoofed", "name"))]
+        kd = next((k for k, al in alias if any(a in kd for a in al)), kd)
+        if kd == "attack":
+            v = r.get("attack") or "none"
+            if acc and v != "none":
+                return next((a for a in acc if str(a).strip().upper() == v), v)
+            return v
+        if kd == "count":
+            w = re.sub(r"[^a-z]", "", str(what or "mismatch").lower())
+            key = next((k for k in ("matched", "declared_only", "observed_only", "orphans", "processes")
+                        if k.replace("_", "") in w or (k == "orphans" and "orphan" in w)), "parent_mismatch")
+            v = r.get(key)
+            return str(v if isinstance(v, int) else len(v or []))
+        rows = r.get({"declaredonly": "declared_only", "observedonly": "observed_only", "orphan": "orphans"}
+                     .get(kd, "parent_mismatch")) or []
+        if what is not None:
+            w = str(what).strip()
+            wp = _pe_int(w)
+            rows = [x for x in rows if _rcp_base(x.get("child")) == _rcp_base(w) or
+                    (wp is not None and _pe_int(x.get("pid")) == wp)]
+        field = {"pid": "pid", "guid": "guid", "claimedparent": "recorded_parent", "declaredparent": "declared_parent",
+                 "trueparent": "real_parent_if_known"}.get(kd, "child")
+        vals = []
+        for x in rows:
+            v = x.get(field)
+            if kd == "trueparent" and not v:
+                v = x.get("declared_parent")
+            if v is None or v == "":
+                continue
+            if acc:
+                vb, vp = _rcp_base(v), _pe_int(v)
+                v = next((a for a in acc if _rcp_base(a) == vb or str(a).strip().lower() == str(v).lower() or
+                          (vp is not None and _pe_int(str(a).strip()) == vp)), None)
+                if v is None:
+                    continue
+            if v not in vals:
+                vals.append(v)
+        if not vals:
+            return "none" if not rows or kd != "trueparent" else None
+        return vals[0] if len(vals) == 1 else vals
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# --- cmdline-canon: canonical command lines for matching declared vs observed spawns (process-tree / fetch-site) -------
+# split_cmdline(s) follows CommandLineToArgvW (argv[0] up to the closing quote, 2n / 2n+1 backslashes before '"', a '""'
+# run inside quotes yields '"' and leaves quote mode -- Wine's shell32 algorithm); posix=True reads sh quoting ('..',
+# "..", \x) without shlex. canon_cmdline(s): outer quotes off, %VAR% / $env:VAR / ${env:VAR} via _PS_ENV, cmd carets
+# and in-word '""' gone, image -> lower basename without .exe, cmd switches lower-case and the /c /k payload canonised
+# recursively, powershell parameters -> full lower names (-enc/-e/-ec -> -command <UTF-16LE text>), system path
+# prefixes (any case, / or \, PROGRA~1) -> one spelling, whitespace collapsed. Args keep their case. Never raises;
+# None for a non-string / empty line. Reachable from decode(material, rep="cmdline", transform="canon"|"argv"|
+# "argv_posix") so declared-codec fixtures exercise it; existing callers (_rcp_canon) are unchanged.
+_CL_ENV = re.compile(r"%([A-Za-z_][\w()]*)%|\$\{env:([A-Za-z_]\w*)\}|\$env:([A-Za-z_]\w*)", re.I)
+_CL_PATHS = ((r"[a-z]:[\\/]+windows[\\/]+system32[\\/]+", "C:\\Windows\\System32\\"),
+             (r"[a-z]:[\\/]+windows[\\/]+syswow64[\\/]+", "C:\\Windows\\SysWOW64\\"),
+             (r"[a-z]:[\\/]+windows[\\/]+sysnative[\\/]+", "C:\\Windows\\System32\\"),
+             (r"[a-z]:[\\/]+windows(?=[\\/]|$)", "C:\\Windows"),
+             (r"[a-z]:[\\/]+(?:program files \(x86\)|progra~2)(?=[\\/]|$)", "C:\\Program Files (x86)"),
+             (r"[a-z]:[\\/]+(?:program files|progra~1)(?=[\\/]|$)", "C:\\Program Files"),
+             (r"[a-z]:[\\/]+(?:programdata|progra~3)(?=[\\/]|$)", "C:\\ProgramData"),
+             (r"[a-z]:[\\/]+users(?=[\\/]|$)", "C:\\Users"))
+_CL_PATHS = tuple((re.compile(p, re.I), r) for p, r in _CL_PATHS)
+_CL_PS = ("command", "encodedcommand", "executionpolicy", "file", "noprofile", "noninteractive", "nologo", "noexit",
+          "windowstyle", "sta", "mta", "version", "inputformat", "outputformat", "configurationname", "workingdirectory",
+          "commandwithargs", "settingsfile", "login", "interactive", "help")
+_CL_PS_ALIAS = {"e": "encodedcommand", "ec": "encodedcommand", "enc": "encodedcommand", "c": "command",
+                "f": "file", "ep": "executionpolicy", "ex": "executionpolicy", "w": "windowstyle", "nop": "noprofile",
+                "noni": "noninteractive", "nol": "nologo", "noe": "noexit", "v": "version", "wd": "workingdirectory"}
+_CL_PS_VAL = {"executionpolicy", "file", "windowstyle", "version", "inputformat", "outputformat", "configurationname",
+              "workingdirectory", "settingsfile"}
+
+
+def split_cmdline(s, posix=False):
+    """Command line -> argv list (Windows CommandLineToArgvW rules, or POSIX sh quoting with posix=True); None for a
+    non-string. Pure python, linear, never raises."""
+    if not isinstance(s, str):
+        return None
+    try:
+        return _cl_split_posix(s) if posix else _cl_split_win(s)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _cl_split_win(s):
+    out, i, n = [], 0, len(s)
+    while i < n and s[i] in " \t":
+        i += 1
+    if i >= n:
+        return out
+    if s[i] == '"':                                      # argv[0]: no backslash / doubled-quote processing
+        j = s.find('"', i + 1)
+        j = n if j < 0 else j
+        out.append(s[i + 1:j])
+        i = j + 1
+    else:
+        j = i
+        while j < n and s[j] not in " \t":
+            j += 1
+        out.append(s[i:j])
+        i = j
+    cur, have, qcount, bs = [], False, 0, 0
+    while i < n:
+        c = s[i]
+        if c in " \t" and not qcount % 2:
+            cur.extend("\\" * bs)
+            bs = 0
+            if have:
+                out.append("".join(cur))
+                cur, have = [], False
+            i += 1
+            continue
+        if c == "\\":
+            bs += 1
+            have = True
+            i += 1
+            continue
+        if c == '"':
+            cur.extend("\\" * (bs // 2))
+            have = True
+            if bs % 2:
+                cur.append('"')
+                bs = 0
+                i += 1
+                continue
+            bs = 0
+            qcount += 1
+            i += 1
+            while i < n and s[i] == '"':                 # Wine shell32: count the run of quotes
+                qcount += 1
+                if qcount == 3:
+                    cur.append('"')
+                    qcount = 0
+                i += 1
+            if qcount == 2:
+                qcount = 0
+            continue
+        cur.extend("\\" * bs)
+        bs = 0
+        cur.append(c)
+        have = True
+        i += 1
+    cur.extend("\\" * bs)
+    if have:
+        out.append("".join(cur))
+    return out
+
+
+def _cl_split_posix(s):
+    out, cur, have, i, n = [], [], False, 0, len(s)
+    while i < n:
+        c = s[i]
+        if c in " \t\r\n":
+            if have:
+                out.append("".join(cur))
+                cur, have = [], False
+        elif c == "'":
+            j = s.find("'", i + 1)
+            j = n if j < 0 else j
+            cur.append(s[i + 1:j])
+            have, i = True, j
+        elif c == '"':
+            i += 1
+            while i < n and s[i] != '"':
+                if s[i] == "\\" and i + 1 < n and s[i + 1] in '$`"\\\n':
+                    i += 1
+                    if s[i] != "\n":
+                        cur.append(s[i])
+                else:
+                    cur.append(s[i])
+                i += 1
+            have = True
+        elif c == "\\":
+            if i + 1 < n and s[i + 1] != "\n":
+                cur.append(s[i + 1])
+                have = True
+            i += 1
+        else:
+            cur.append(c)
+            have = True
+        i += 1
+    if have:
+        out.append("".join(cur))
+    return out
+
+
+def _cl_env(s):
+    def sub(m):
+        v = _PS_ENV.get((m.group(1) or m.group(2) or m.group(3) or "").lower())
+        return v if v is not None else m.group(0)
+    return _CL_ENV.sub(sub, s)
+
+
+def _cl_cmd_unescape(s):
+    """cmd.exe reading: '^x' -> 'x' outside double quotes; '""' glued inside a word dropped (`po""wer`)."""
+    s = re.sub(r'(?<=[^\s"])""(?=[^\s"])', "", s)
+    out, q, i, n = [], False, 0, len(s)
+    while i < n:
+        c = s[i]
+        if c == '"':
+            q = not q
+        elif c == "^" and not q:
+            if i + 1 < n:
+                out.append(s[i + 1])
+            i += 2
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def _cl_path(a):
+    for rx, rep in _CL_PATHS:
+        m = rx.match(a)
+        if m:
+            a = rep + a[m.end():]
+            break
+    if re.match(r"[A-Za-z]:[\\/]|\\\\", a):
+        a = a[:2] + re.sub(r"[\\/]+", r"\\", a[2:])
+        a = a[0].upper() + a[1:] if a[1] == ":" else a
+    return a
+
+
+def _cl_quote(a):
+    return '"' + a + '"' if not a or re.search(r"\s", a) else a
+
+
+def _cl_image(a):
+    b = re.split(r"[\\/]", a.strip().strip("\"'"))[-1].lower()
+    return b[:-4] if b.endswith(".exe") else b
+
+
+def _cl_tail(s, k):
+    """Raw remainder of `s` after its first k Windows-split tokens (for cmd /c and powershell -command)."""
+    i, n = 0, len(s)
+    for _ in range(k):
+        while i < n and s[i] in " \t":
+            i += 1
+        q = False
+        while i < n and (q or s[i] not in " \t"):
+            if s[i] == '"':
+                q = not q
+            i += 1
+    return s[i:].strip()
+
+
+def _cl_ws(s):
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _cl_ps_param(a):
+    if not a or a[0] not in "-/" or len(a) < 2:
+        return None
+    p = a[1:].lower().rstrip(":")
+    if p in _CL_PS_ALIAS:
+        return _CL_PS_ALIAS[p]
+    hits = [x for x in _CL_PS if x.startswith(p)]
+    return hits[0] if len(hits) == 1 or p in _CL_PS else None
+
+
+def _cl_b64_utf16(v):
+    try:
+        b = base64.b64decode(re.sub(r"\s+", "", v) + "=" * (-len(re.sub(r"\s+", "", v)) % 4), validate=True)
+        if len(b) < 2 or len(b) % 2:
+            return None
+        t = b.decode("utf-16-le").lstrip("\ufeff")
+        return t if t and all(ch.isprintable() or ch in "\r\n\t" for ch in t) else None
+    except (binascii.Error, ValueError, UnicodeDecodeError):
+        return None
+
+
+def canon_cmdline(s, _depth=0):
+    """Declared / observed command line -> one canonical string (see the block comment above); None when unreadable."""
+    try:
+        if not isinstance(s, str):
+            return None
+        s = s.replace("\x00", "").lstrip("\ufeff").strip()
+        for q in ('"', "'"):                              # outer quotes around the WHOLE line
+            if len(s) > 1 and s[0] == q and s[-1] == q and q not in s[1:-1] and re.search(r"\s", s):
+                s = s[1:-1].strip()
+        s = _cl_cmd_unescape(_cl_env(s))
+        argv = _cl_split_win(s)
+        if not argv or not argv[0].strip():
+            return None
+        img = _cl_image(argv[0])
+        out = [img]
+        if img == "cmd":
+            for k in range(1, len(argv)):
+                a = argv[k]
+                if re.fullmatch(r"/[A-Za-z](?::\w+)?", a):
+                    out.append(a.lower())
+                    if a.lower() in ("/c", "/k", "/r"):
+                        rest = _cl_tail(s, k + 1)
+                        if len(rest) > 1 and rest[0] == '"' and rest[-1] == '"':
+                            rest = rest[1:-1]
+                        inner = canon_cmdline(rest, _depth + 1) if _depth < 4 and rest else None
+                        if inner or rest:
+                            out.append(inner or _cl_ws(rest))
+                        break
+                else:
+                    out.append(_cl_quote(_cl_path(a)))
+            return _cl_ws(" ".join(out))
+        if img in ("powershell", "pwsh", "powershell_ise"):
+            k = 1
+            while k < len(argv):
+                a, p = argv[k], _cl_ps_param(argv[k])
+                if p == "encodedcommand" and k + 1 < len(argv):
+                    t = _cl_b64_utf16(argv[k + 1])
+                    if t is not None:
+                        out += ["-command", _cl_ws(t)]
+                        k += 2
+                        continue
+                    out += ["-encodedcommand", argv[k + 1]]
+                    k += 2
+                    continue
+                if p == "command":
+                    rest = _cl_tail(s, k + 1)
+                    if len(rest) > 1 and rest[0] == '"' and rest[-1] == '"' and '"' not in rest[1:-1]:
+                        rest = rest[1:-1]
+                    out += ["-command", _cl_ws(rest)] if rest else ["-command"]
+                    break
+                if p is None and a[:1] not in "-/":              # bare script text = implicit -command
+                    out += ["-command", _cl_ws(_cl_tail(s, k))]
+                    break
+                if p is None:
+                    out.append(a)
+                    k += 1
+                    continue
+                out.append("-" + p)
+                if p in _CL_PS_VAL and k + 1 < len(argv):
+                    v = argv[k + 1]
+                    out.append(_cl_quote(_cl_path(v)) if p in ("file", "workingdirectory", "settingsfile")
+                               else _cl_quote(v.lower()))
+                    k += 1
+                k += 1
+            return _cl_ws(" ".join(out))
+        out += [_cl_quote(_cl_path(a)) for a in argv[1:]]
+        return _cl_ws(" ".join(out))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _cl_decode(material, rep, transform):
+    """decode() hook for rep 'cmdline': transform canon -> canon_cmdline, argv / argv_posix -> JSON argv list."""
+    import json
+    t = re.sub(r"[^a-z]", "", (transform or "").lower())
+    if t in ("canon", "canonical", "canonicalize", "normalize"):
+        return canon_cmdline(material)
+    if t in ("argv", "split", "argvwin", "splitwin", "argvposix", "splitposix"):
+        a = split_cmdline(material, posix=t.endswith("posix"))
+        return None if a is None else json.dumps(a, ensure_ascii=False)
+    return None

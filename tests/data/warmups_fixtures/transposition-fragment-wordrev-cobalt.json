@@ -1,0 +1,11 @@
+{
+ "codec": "transposition",
+ "key": "wordrev(fragment)",
+ "plain": "the Game",
+ "encoded": "eht emaG",
+ "generator_cmd": "printf '%s\\n' \"$plain\" | perl -lpe '$_=join q( ),map{scalar reverse}split/ /,$_,-1' | tr -d '\\n'  # perl: each space-separated word reversed",
+ "oracle_cmd": "printf '%s\\n' \"$encoded\" | python3 -I -c \"import sys;print(' '.join(w[::-1] for w in sys.stdin.read().rstrip('\\n').split(' ')),end='')\"  # stdlib per-word reversal",
+ "oracle_plain": "the Game",
+ "expected": "match",
+ "mode": "fragment"
+}

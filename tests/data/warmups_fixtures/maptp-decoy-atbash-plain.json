@@ -1,0 +1,11 @@
+{
+ "codec": "maptp",
+ "key": "atbash only, no transposition",
+ "plain": null,
+ "encoded": "Mrxv dlip wvxlwrmt gsrh dzinfk! Gl hloev, hfynrg gsrh vczxg zmhdvi gl gsv Tznv Nzhgvi: znyvi-uzoxlm-42",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$plain\" | tr 'A-Za-z' 'ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba'  # coreutils tr Atbash, NO transposition: maptp_solve must leave it to the DAYS atbash entry",
+ "oracle_cmd": "printf %s \"$encoded\" | tr 'A-Za-z' 'ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba'  # tr Atbash (self-inverse) -> the sentence in order",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42"
+}

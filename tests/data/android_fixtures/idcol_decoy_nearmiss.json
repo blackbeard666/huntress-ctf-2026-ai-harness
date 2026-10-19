@@ -1,0 +1,8 @@
+{
+ "entry": "proof_flow_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same layout as overload_param but the proof-reached a(Object) returns a 15-hex near-miss; the valid ANS sits only in the unreached a(String) overload, which name-only resolution would wrongly pick",
+ "generator_cmd": "python3 tests/data/android_fixtures/idcol_src/gen_idcol.py decoy_nearmiss tests/data/android_fixtures/idcol_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "tools/dex2jar/d2j-baksmali.sh -f -o o tests/data/android_fixtures/idcol_decoy_nearmiss.apk; python3 -I tests/data/android_fixtures/idcol_src/oracle.py o  # regex over baksmali text: the append after proof= resolved by FULL descriptor -> None"
+}

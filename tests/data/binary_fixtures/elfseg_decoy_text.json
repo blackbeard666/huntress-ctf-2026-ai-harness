@@ -1,0 +1,11 @@
+{
+ "encoding": "none",
+ "decoy": true,
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_elf_segment_facts": "none",
+ "generator_cmd": "sh elfseg_gen.sh   # cp elfseg_src_h.c elfseg_decoy_text.bin",
+ "oracle_cmd": "python3 elfseg_oracle.py elfseg_decoy_text.bin   # GNU readelf -hlWd (Flags/OS/ABI/ABI Version/counts/Program Headers types/interpreter/NEEDED/BIND_NOW/GNU_STACK flags/GNU_RELRO) + file -b (pie executable / statically|static-pie linked) + pyelftools (EI_OSABI ELFOSABI_*, p_type PT_*)",
+ "oracle_output": "C source, ASCII text | {\"_all\": \"none\", \"file\": \"C source, ASCII text\", \"readelf_err\": \"readelf: Error: Not an ELF file - it has the wrong magic bytes at the start\"}",
+ "note": "lib.binary.elf_header_facts program-header/ABI extension. Field names beyond the confirmed elf_class/elf_type/endianness/entry_point/section_names/symbols/has_symtab are SPECULATIVE spellings: e_flags lowercase hex, os_abi ELFOSABI_* (+ os_abi_label readelf, os_abi_num), segments PT_* (+ segments_short readelf), relro full/partial/none (checksec rules), is_pie per file(1), is_static = no interpreter and no DT_NEEDED (static-pie counts). Decoys -> elf_header_field(...) == 'none'."
+}

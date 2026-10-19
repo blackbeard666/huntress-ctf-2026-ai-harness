@@ -1,0 +1,8 @@
+{
+ "field": "media.subtitle_stream_count",
+ "expected": "0",
+ "generator_cmd": "ffmpeg -i a.wav -i ch.txt -map_metadata 1 -map_chapters 1 -c:a aac chap_mp4.m4a  (ch.txt = FFMETADATA1 chapters Intro 0-700ms / 'Middle Part' 700-1500 / Outro 1500-2000)  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "oracle_cmd": "ffprobe -v error -show_streams -show_format -show_chapters -of json chap_mp4.m4a -> count codec_type==subtitle  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "decoy": false,
+ "member": "chap_mp4.m4a"
+}

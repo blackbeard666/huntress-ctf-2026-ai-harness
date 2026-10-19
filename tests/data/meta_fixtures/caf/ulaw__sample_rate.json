@@ -1,0 +1,8 @@
+{
+ "field": "caf.sample_rate",
+ "expected": "8000",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i sine=f=440:d=0.3:r=8000 -ac 1 -c:a pcm_mulaw e.caf  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i e.caf -> 'Stream #0:0: Audio: pcm_mulaw (ulaw / 0x77616C75), 8000 Hz, mono, s16, 64 kb/s'",
+ "decoy": false,
+ "member": "e.caf"
+}

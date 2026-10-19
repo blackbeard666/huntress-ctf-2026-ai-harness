@@ -1,0 +1,8 @@
+{
+ "field": "vhdx.sequence_number",
+ "expected": "2636244613",
+ "generator_cmd": "qemu-img create -f vhdx vd.vhdx 8M (qemu-img 10.2.1); fixture = head -c 262144",
+ "oracle_cmd": "7z l -slt vd.vhdx -> SequenceNumber: 2636244613 (file -b: sequence 0x9d21e684)",
+ "decoy": false,
+ "member": "vd.vhdx"
+}

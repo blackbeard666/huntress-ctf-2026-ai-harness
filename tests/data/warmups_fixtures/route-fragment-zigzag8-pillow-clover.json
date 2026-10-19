@@ -1,0 +1,11 @@
+{
+ "codec": "transposition",
+ "key": "route-diag0-r8 (JPEG zigzag 8x8, fragment)",
+ "plain": "decoding this warmup! To solve, submit this exact answer to the ",
+ "encoded": "de rtcohm ssuidispouhtibl! ngw vms  ta ieTao,teno sx  tawthecre ",
+ "generator_cmd": "python3 -I -c \"import sys;from PIL.JpegImagePlugin import zigzag_index as z;s=sys.argv[1];o=['']*64\nfor k in range(64): o[z[k]]=s[k]\nprint(''.join(o),end='')\" \"$plain\"  # Pillow JpegImagePlugin.zigzag_index: JPEG zigzag scan of the 8x8 box (64-char Mastery line)",
+ "oracle_cmd": "python3 -I -c \"import sys;from PIL.JpegImagePlugin import zigzag_index as z;e=sys.argv[1];print(''.join(e[z[k]] for k in range(64)),end='')\" \"$encoded\"  # Pillow zigzag_index inverse",
+ "oracle_plain": "decoding this warmup! To solve, submit this exact answer to the ",
+ "expected": "match",
+ "mode": "fragment"
+}

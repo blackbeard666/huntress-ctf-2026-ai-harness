@@ -1,0 +1,8 @@
+{
+ "field": "ads.zone_name",
+ "expected": "none",
+ "generator_cmd": "printf '[InternetShortcut]\\r\\nURL=https://cdn.example.net/files/Invoice_0915.iso\\r\\nIconIndex=0\\r\\n' > decoy_url_renamed.bin  (a .url renamed x_Zone.Identifier)",
+ "oracle_cmd": "python3 -I -c \"import configparser; c=configparser.ConfigParser(interpolation=None); c.optionxform=str; c.read_string(open('decoy_url_renamed.bin',encoding='utf-8').read()); print(c.has_section('ZoneTransfer'))\" -> False (no [ZoneTransfer] -> no ZoneId -> no zone name); file -b -> 'MS Windows 95 Internet shortcut text'",
+ "decoy": true,
+ "member": "Invoice_0915.iso_Zone.Identifier"
+}

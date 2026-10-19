@@ -1,0 +1,10 @@
+{
+ "codec": "redefence",
+ "key": "rails read in order 2,0,3,1, offset 0",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "c kddnhsruT v,bihsatseotGmat m-an4Noc w!os ea e rece iimoemicw asaf-iwreogt ap sl utt x nrth eMe:brlo2",
+ "generator_cmd": "python3 -I -c \"import sys;s=sys.argv[1];K=[int(x) for x in sys.argv[2].split(',')];n=len(K);o=int(sys.argv[3]);R=[[] for _ in range(n)];r,d=0,1\nfor _ in range(o):\n d=-d if r+d in(-1,n) else d;r+=d\nfor ch in s:\n R[r].append(ch);d=-d if r+d in(-1,n) else d;r+=d\nprint(''.join(''.join(R[k]) for k in K),end='')\" \"$plain\" \"2,0,3,1\" 0  # stdlib zigzag walk (phase-shifted by off steps), rails emitted in key order",
+ "oracle_cmd": "python3 -I -c \"import sys;sys.path.insert(0,'tools/pyciphers');from secretpy import Zigzag;c=sys.argv[1];K=[int(x) for x in sys.argv[2].split(',')];n=len(K);o=int(sys.argv[3]);L=len(c);P=chr(0xF000);tag=Zigzag().encrypt(P*o+''.join(chr(0xE000+i) for i in range(L)),n).replace(P,'');m=[0]*n;r,d=0,1\nfor i in range(o+L):\n m[r]+=i>=o;d=-d if r+d in(-1,n) else d;r+=d\nrows={};p=0\nfor k in K:rows[k]=c[p:p+m[k]];p+=m[k]\nfence=''.join(rows[k] for k in range(n));out=[None]*L\nfor ch,t in zip(fence,tag):out[ord(t)-0xE000]=ch\nprint(''.join(out),end='')\" \"$encoded\" \"2,0,3,1\" 0  # rail lengths from a walk, slices re-ordered to the top-down fence, placed by secretpy 0.12.0 Zigzag on position tags (off pad tags dropped)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

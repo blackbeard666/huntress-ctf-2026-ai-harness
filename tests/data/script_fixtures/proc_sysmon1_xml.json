@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=powershell|role=loader|verdict=malicious|attack=T1059.001|adapter=process_telemetry|stage_count=2|steps=spawn_child,decode_stage|campaign_id=PT-7c41aa02|url=https://pt-7c41aa02.example.invalid/s",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/proc_tel_gen.py tests/data/script_fixtures (stdlib writers: xml.sax.saxutils.escape with wevtutil's &quot; rendering / json.dumps winlogbeat NDJSON / Splunk k=v with \\\" escaping; plan.encode() XOR 0x5a -> hex in `$Material_<id> = \"..\"` + `$Codec_<id> = \"hex_compact|xor_5a|\"` inside the powershell CommandLine)",
+ "oracle_cmd": "python3 -I -c \"import xml.dom.minidom as m,sys;print([d.firstChild.data for e in m.parse(sys.argv[1]).getElementsByTagName('Event') if e.getElementsByTagName('EventID')[0].firstChild.data=='1' for d in e.getElementsByTagName('Data') if d.getAttribute('Name')=='CommandLine'][1])\" proc_sysmon1_xml.xml | perl -ne 'if(/Material_\\w+ = \\\\?\"([0-9a-f]+)\\\\?\"/){$b=pack(\"H*\",$1);$b^=chr(0x5a)x length $b;print $b}'",
+ "note": "Sysmon EID 1 x2 + EID 5 + EID 3 noise, wevtutil-style XML; the descriptor's quotes are &quot; so it reads only through process_events() (lib/codec.py _proc_codecs). process_events: [(1,'6700','4120'),(1,'7012','6700'),(5,'7012',None)] (minidom ProcessId/ParentProcessId)"
+}

@@ -1,0 +1,46 @@
+{
+ "expected_plain": "v=3|language=powershell|role=loader|verdict=malicious|attack=T1059.001|adapter=security_4688|stage_count=2|steps=spawn_child,decode_stage|campaign_id=PT-9a13e5c2|url=https://pt-9a13e5c2.example.invalid/t",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ptree_gen.py tests/data/script_fixtures (stdlib writers: xml.sax.saxutils.escape with wevtutil's &quot; rendering for Security 4688/4689 XML, json.dumps for Sysmon EID 1/5 NDJSON; plan.encode() XOR 0x5a -> hex in `$Material_<id>` + `$Codec_<id> = \"hex_compact|xor_5a|\"` inside the powershell CommandLine; tree_expected = the tree the generator built (TRUTH_*), not lib/codec.py output)",
+ "oracle_cmd": "python3 -I -c \"import xml.dom.minidom as m,sys;print([d.firstChild.data for e in m.parse(sys.argv[1]).getElementsByTagName('Event') for d in e.getElementsByTagName('Data') if d.getAttribute('Name')=='CommandLine' and 'Material_' in d.firstChild.data][0])\" ptree_4688_pidreuse.xml | perl -ne 'if(/Material_\\w+ = \"([0-9a-f]+)\"/){$b=pack(\"H*\",$1);$b^=chr(0x5a)x length $b;print $b}'",
+ "tree_oracle_cmd": "python3 -I -c \"import xml.dom.minidom as m,sys;[print(e.getElementsByTagName('EventID')[0].firstChild.data,e.getElementsByTagName('TimeCreated')[0].getAttribute('SystemTime'),*[x.firstChild.data.split(chr(92))[-1] for x in e.getElementsByTagName('Data') if x.getAttribute('Name') in ('NewProcessId','ProcessId','NewProcessName','ProcessName')]) for e in m.parse(sys.argv[1]).getElementsByTagName('Event')]\" ptree_4688_pidreuse.xml",
+ "tree_expected": {
+  "nodes": 7,
+  "roots": [
+   "explorer.exe",
+   "rundll32.exe"
+  ],
+  "orphans": {
+   "explorer.exe": "missing",
+   "rundll32.exe": "exited"
+  },
+  "parent_of": {
+   "powershell.exe": "WINWORD.EXE",
+   "conhost.exe": "powershell.exe",
+   "WINWORD.EXE": "explorer.exe",
+   "cmd.exe": "explorer.exe",
+   "explorer.exe": "none",
+   "rundll32.exe": "none"
+  },
+  "children_of": {
+   "explorer.exe": [
+    "wscript.exe",
+    "cmd.exe",
+    "WINWORD.EXE"
+   ],
+   "conhost.exe": "none"
+  },
+  "depth_of": {
+   "conhost.exe": "3",
+   "explorer.exe": "0"
+  },
+  "max_depth": "3",
+  "chain_conhost": [
+   "explorer.exe",
+   "WINWORD.EXE",
+   "powershell.exe",
+   "conhost.exe"
+  ]
+ },
+ "note": "Security 4688/4689 only (no ProcessGuid): pid 0x1a2c reused (cmd.exe exits 08:00:15, WINWORD.EXE gets 0x1a2c 08:01:00), so powershell's creator 0x1a2c = WINWORD.EXE (lib/codec.py process_tree / process_tree_answer, keyed (pid, ts)); rundll32's creator 0xbb8 (wscript.exe) exited before it started -> orphan 'exited'"
+}

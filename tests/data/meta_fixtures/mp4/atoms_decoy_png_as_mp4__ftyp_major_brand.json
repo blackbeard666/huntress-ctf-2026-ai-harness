@@ -1,0 +1,8 @@
+{
+ "field": "mp4.ftyp_major_brand",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"from PIL import Image; Image.new('RGB',(8,8),(1,2,3)).save('still.png')\" && cp still.png fake.mp4",
+ "oracle_cmd": "file still.png -> PNG image data, 8 x 8 (renamed fake.mp4: no ftyp box)",
+ "decoy": true,
+ "member": "fake.mp4"
+}

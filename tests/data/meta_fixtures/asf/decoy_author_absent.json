@@ -1,0 +1,8 @@
+{
+ "field": "asf.author",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i sine=f=300:d=0.3:r=22050 -ac 1 -c:a wmav1 b.asf  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel)",
+ "oracle_cmd": "bin/exiftool -j -Author b.asf -> no Author tag (field absent)",
+ "decoy": true,
+ "member": "b.asf"
+}

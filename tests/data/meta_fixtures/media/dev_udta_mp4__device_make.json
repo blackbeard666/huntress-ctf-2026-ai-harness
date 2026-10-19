@@ -1,0 +1,8 @@
+{
+ "field": "media.device_make",
+ "expected": "GoPro",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i testsrc=size=160x120:rate=10 -frames:v 3 -c:v libx264 -preset ultrafast -pix_fmt yuv420p base.mp4 && exiftool -UserData:Make=GoPro -UserData:Model='HERO12 Black' -o udta.mp4 base.mp4",
+ "oracle_cmd": "exiftool -j -a -G4 -Keys:all -UserData:Make -UserData:Model -HandlerDescription -CompressorName udta.mp4 -> UserData Make (\\xa9mak) 'GoPro'",
+ "decoy": false,
+ "member": "udta.mp4"
+}

@@ -1,0 +1,18 @@
+{
+ "family": "anti_analysis",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "anti_debug": null,
+  "anti_vm": null,
+  "env_gates": null,
+  "decoy_functions": null,
+  "uses:tracerpid": null
+ },
+ "generator_cmd": "bash antiana_gen.sh   # head -c 300 antiana_elf_debug.bin: truncated ELF (no section headers) -> None; compiled, never run",
+ "oracle_cmd": "python3 antiana_oracle.py antiana_decoy_trunc.bin   # objdump -d -Mintel / objdump -s .rodata / readelf -sW / strings -a",
+ "file_b": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), can't r",
+ "decoy": true,
+ "note": "lib.binary.anti_analysis_field(data, key) per expected_facts key; technique/key vocabulary SPECULATIVE (GM label not seen)"
+}

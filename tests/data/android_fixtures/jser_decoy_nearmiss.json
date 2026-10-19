@@ -1,0 +1,8 @@
+{
+ "entry": "raw_entry_scan",
+ "expected": null,
+ "_why": "DECOY: same session.ser layout, token = base64 of a near-miss (non-hex 'g', 'ANS-9d2c4e7a1b0f36g5') -> no valid ANS token",
+ "generator_cmd": "sh tests/data/android_fixtures/jser_src/gen_jser.sh decoy ANS-9d2c4e7a1b0f36g5 tests/data/android_fixtures/jser_decoy_nearmiss.apk  # JDK ObjectOutputStream (jser_src/Gen.java) + javac/d2j-jar2dex + zip -X",
+ "oracle_cmd": "javac --release 11 -d /tmp/jr jser_src/Read.java jser_src/com/example/vault/Session.java && unzip -p jser_decoy_nearmiss.apk assets/session.ser | java -cp /tmp/jr Read | grep '^.token=' | cut -d= -f2- | base64 -d  # -> ANS-9d2c4e7a1b0f36g5 (not 16 hex)",
+ "decoy": true
+}

@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-18-encrypted-strings",
+  "lane": "mobile-android",
+  "name": "📱 Encrypted Strings",
+  "ids": {
+    "single_solve": "mobile-android-day-18-encrypted-strings",
+    "time_trial": "mobile-android-day-18-encrypted-strings/time_trial",
+    "mastery": "mobile-android-day-18-encrypted-strings/mastery"
+  }
+}

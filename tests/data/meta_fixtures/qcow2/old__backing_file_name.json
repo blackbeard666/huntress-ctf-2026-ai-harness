@@ -1,0 +1,8 @@
+{
+ "field": "qcow2.backing_file_name",
+ "expected": "none",
+ "generator_cmd": "qemu-img create -f qcow2 -o compat=0.10 old.qcow2 2M (qemu-img 10.2.1); fixture = head -c 65536 (header cluster)",
+ "oracle_cmd": "qemu-img info --output=json old.qcow2 -> no backing-filename",
+ "decoy": false,
+ "member": "old.qcow2"
+}

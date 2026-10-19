@@ -1,0 +1,8 @@
+{
+ "field": "synthesis.original_document_id_groups",
+ "expected": "{\"xmp.did:0c9e7f21-4b3a-d84f-a6e2-13579bdf2468\":[\"lineage.jpg\",\"lineage.tif\",\"sibling.png\"]}",
+ "generator_cmd": "stdlib zipfile ZIP_DEFLATED of lineage.jpg sibling.png lineage.tif plain.png",
+ "oracle_cmd": "exiftool -j -XMP:OriginalDocumentID lineage.jpg sibling.png lineage.tif plain.png (3 share xmp.did:0c9e...; plain.png has none)",
+ "decoy": false,
+ "member": "siblings.zip"
+}

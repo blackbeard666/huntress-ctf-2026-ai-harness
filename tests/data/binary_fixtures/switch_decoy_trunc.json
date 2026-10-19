@@ -1,0 +1,18 @@
+{
+ "family": "switch_tables",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_kind": "none",
+ "expected_facts": {
+  "case_count": "none",
+  "cases": "none",
+  "case_callees": "none",
+  "default_symbol": "none"
+ },
+ "generator_cmd": "bash switch_gen.sh   # head -c 4000 of switch_gcc_pie.bin: header ok, code cut",
+ "oracle_cmd": "python3 switch_oracle.py switch_decoy_trunc.bin   # objdump -d -M intel / aarch64-linux-gnu-objdump -d text + pyelftools table bytes + symtab",
+ "file_b": "ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, missing section headers at 16216",
+ "decoy": true,
+ "note": "lib.binary.switch_field(data, key) per expected_facts key (json round-trip: int case keys -> str); expected_facts null = not an ELF/PE image (switch_field -> None)"
+}

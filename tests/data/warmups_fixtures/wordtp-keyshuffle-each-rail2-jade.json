@@ -1,0 +1,10 @@
+{
+ "codec": "word-transposition",
+ "key": "word-shuffle(random.Random('huntress'))+each-rail2",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-19",
+ "encoded": "teh wrok jd-eo-9aehrn1 asenwr dcdneoig eatxc tihs To sleov, Ncie Mse:atr to Gmae sbiumt wru!amp tihs",
+ "generator_cmd": "python3 -I -c \"import sys,random;w=sys.argv[1].split(' ');random.Random('huntress').shuffle(w);print(' '.join(w),end='')\" \"$plain\" | perl -ne 'print join q( ), map { my @c=split //; join(q(), @c[grep {$_%2==0} 0..$#c], @c[grep {$_%2==1} 0..$#c]) } split / /'  # stdlib keyed word shuffle, then perl per-word 2-rail fence (even-index chars, then odd)",
+ "oracle_cmd": "printf '%s' \"$encoded\" | perl -ne '<per-word 2-rail decipher: even slots from first half, odd from second>' | python3 -I -c '<invert random.Random(\"huntress\").shuffle of index list>'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-19",
+ "expected": "match"
+}

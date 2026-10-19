@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=powershell|role=launcher|verdict=malicious|attack=T1059.001|adapter=procmon_csv|stage_count=2|steps=spawn_child,decode_stage|campaign_id=PL-0c5d2e88|url=https://pl-0c5d2e88.example.invalid/p",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/proc_linux_gen.py tests/data/script_fixtures (csv.writer QUOTE_ALL: Procmon 'Process Create' Detail 'PID: 6812, Command line: ..' with doubled quotes)",
+ "oracle_cmd": "python3 -I -c \"import csv,sys;print([r['Detail'] for r in csv.DictReader(open(sys.argv[1])) if r['Operation']=='Process Create'][0])\" proc_linux_procmon.csv | perl -ne 'if(/Material_\\w+ ?= ?\\\\?\"([0-9a-f]{40,})\\\\?\"/){$b=pack(\"H*\",$1);$b^=chr(0x5a)x length $b;print $b;exit}'",
+ "note": "Process Create: child pid 6812 (Detail), parent WINWORD.EXE pid 3120 (PID column)"
+}

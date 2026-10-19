@@ -1,0 +1,10 @@
+{
+ "codec": "transposition",
+ "plain": null,
+ "encoded": "oa2 anilrisNnawtrb stcivd dTncr s e4 fcphb a oweammst a,othtussee :lgwmo- M-uiereta!k xe merGico oeht ",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import sys,random;x=list(sys.argv[1]);random.Random(7).shuffle(x);print(''.join(x),end='')\" \"$plain\"  # stdlib random shuffle (seed 7): same multiset, no structured permutation",
+ "oracle_cmd": "no reader exists for a random shuffle: no family (rail/redefence/columnar/route/skip/riffle/word order x reversal) reads 'Nice work ... <slug>' -> none",
+ "oracle_plain": null
+}

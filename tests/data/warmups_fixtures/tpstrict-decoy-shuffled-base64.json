@@ -1,0 +1,9 @@
+{
+ "codec": "tpstrict",
+ "plain": null,
+ "encoded": "XrtGmls22kuWTnySR3boFz9g2X312lRzR5x39iwaHWlWbhLydMRWHVlIRHIUgbYaZ3YibymWbHQR1XSIjcvBVo2hjMgIaIJZZSFcIlZo2ZhXgyZHTXIo1SBgBY50IVYwEBYc3QYd",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$plain_amber\" | base64 -w0 | fold -w1 | shuf --random-source=<(yes) | tr -d '\\n'  # random (keyed) shuffle, not a keyless transposition",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d  # junk bytes; no keyless transposition restores it"
+}

@@ -574,7 +574,8 @@ _SAMPLE_FMT = {"pcm_u8": "u8", "pcm_s8": "u8", "pcm_s16le": "s16", "pcm_s16be": 
                "pcm_s24be": "s32", "pcm_s32le": "s32", "pcm_s32be": "s32", "pcm_f32le": "flt", "pcm_f32be": "flt",
                "pcm_f64le": "dbl", "pcm_f64be": "dbl", "pcm_alaw": "s16", "pcm_mulaw": "s16", "adpcm_ms": "s16",
                "adpcm_ima_wav": "s16p", "mp3": "fltp", "mp2": "fltp", "aac": "fltp", "vorbis": "fltp",
-               "opus": "fltp", "amr_nb": "flt", "amr_wb": "flt", "alac": "s16p"}
+               "opus": "fltp", "amr_nb": "flt", "amr_wb": "flt", "alac": "s16p",
+               "wmav1": "fltp", "wmav2": "fltp", "wmapro": "fltp", "wmavoice": "flt", "adpcm_ima_qt": "s16p"}
 
 
 def _container(b):
@@ -634,10 +635,35 @@ def codec_name(data, ctx):
     if not data:
         return None
     from ..media import primary_audio_codec_name
-    v = primary_audio_codec_name(bytes(data), ctx)
+    alt = _alt(bytes(data))   # ASF / CAF first: the D17 reader's MPEG-sync fallback misreads CAF payload bytes
+    v = alt["codec"] if alt.get("codec") else primary_audio_codec_name(bytes(data), ctx)
     if v is None and _non_media(bytes(data)):
         return "none"
     return v
+
+
+def _alt(b):
+    """{codec, sample_rate, channels, format_name} of an ASF/WMA or CAF member (containers lib/meta/media.py does not
+    walk) via the prebuilt asf / caf parsers, else {}."""
+    try:
+        if b[:4] == b"caff":
+            from .caf import codec_of, parse
+            p = parse(b)
+            d = p and p["desc"]
+            if not d:
+                return {"format_name": "caf"}
+            return {"codec": codec_of(d), "sample_rate": int(d["rate"]), "channels": d["channels"],
+                    "format_name": "caf"}
+        if b[:16] == b"\x30\x26\xb2\x75\x8e\x66\xcf\x11\xa6\xd9\x00\xaa\x00\x62\xce\x6c":
+            from .asf import codec_of, parse
+            p = parse(b)
+            a = next((x for x in (p or {}).get("streams", ()) if "tag" in x), None)
+            if a is None:
+                return {"format_name": "asf"}
+            return {"codec": codec_of(a), "sample_rate": a["rate"], "channels": a["channels"], "format_name": "asf"}
+    except (struct.error, IndexError, ValueError, TypeError):
+        return {}
+    return {}
 
 
 def _f80(x):
@@ -731,10 +757,11 @@ def stream_value(data, ctx):
     try:
         b = bytes(data)
         from ..media import _audio_codec
-        codec = _audio_codec(b)
+        s = _alt(b) or None   # ASF / CAF first (see codec_name)
+        codec = s.get("codec") if s else _audio_codec(b)
         if codec is None:
             return "none" if _non_media(b) else None
-        s = _stream(b, codec)
+        s = s or _stream(b, codec)
         f = (ctx or {}).get("field") or ""
         if "sample_fmt" in f or "sample_format" in f:
             return _SAMPLE_FMT.get(codec)
@@ -769,6 +796,8 @@ def format_name(data, ctx):
         for (m1, o1), (m2, o2), name in _FORMAT_NAMES:
             if b[o1:o1 + len(m1)] == m1 and b[o2:o2 + len(m2)] == m2:
                 return name
+        if _alt(b):
+            return _alt(b).get("format_name")
         if _non_media(b):
             return "none"
         from ..media import _audio_codec
@@ -957,6 +986,14 @@ def stream_info(data, ctx):
             return _FORMAT_LONG.get(n, n if n == "none" else None)
         pr = _probe(b)
         if pr is None:
+            if "streams" in f or f.endswith("stream_count"):   # ffprobe opens a still image as one video stream
+                from .media_video import _still
+                try:
+                    st = _still(b)
+                except (ValueError, IndexError, struct.error, OverflowError):
+                    st = None
+                if st:
+                    return 0 if ("audio" in f) else len(st)
             return "none" if _non_media(b) else None
         codec, tag = pr["codec"], pr["codec_tag"]
         if "long_name" in f:

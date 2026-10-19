@@ -1,0 +1,8 @@
+{
+ "field": "iso.joliet_present",
+ "expected": "none",
+ "generator_cmd": "(same zip impostor)",
+ "oracle_cmd": "file -b decoy.iso -> Zip archive data",
+ "decoy": true,
+ "member": "decoy_zip.iso"
+}

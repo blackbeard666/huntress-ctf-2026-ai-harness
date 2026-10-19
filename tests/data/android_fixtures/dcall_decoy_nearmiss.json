@@ -1,0 +1,8 @@
+{
+ "entry": "decrypt_call_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same layout as str_int, the decrypted value has only 15 hex digits",
+ "generator_cmd": "python3 tests/data/android_fixtures/dcall_src/gen_dcall.py decoy_nearmiss tests/data/android_fixtures/dcall_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/dcall_src/oracle.sh tests/data/android_fixtures/dcall_decoy_nearmiss.apk  # d2j-dex2jar back to classes, RUN show(PrintStream) on the JVM -> prints a 15-hex near-miss only"
+}

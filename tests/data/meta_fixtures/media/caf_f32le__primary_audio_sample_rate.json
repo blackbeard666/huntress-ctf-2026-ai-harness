@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_audio_sample_rate",
+ "expected": "44100",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i sine=f=440:d=0.3:r=44100 -ac 2 -c:a pcm_f32le -metadata title=\"Ledger\" -metadata artist=\"R. Roe\" k.caf  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i k.caf -> 'Stream #0:0: Audio: pcm_f32le (lpcm / 0x6D63706C), 44100 Hz, stereo, flt, 2822 kb/s'",
+ "decoy": false,
+ "member": "k.caf"
+}

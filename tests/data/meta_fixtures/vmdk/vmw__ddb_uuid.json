@@ -1,0 +1,8 @@
+{
+ "field": "vmdk.ddb_uuid",
+ "expected": "60 00 C2 9b 41 7a 3e 52-8d 0c 51 9e 6f 2a 11 b4",
+ "generator_cmd": "qemu-img create -f vmdk -o adapter_type=lsilogic,hwversion=6 sp.vmdk 5M (qemu-img 10.2.1); python3 patch of the embedded descriptor (sector 1): ddb.toolsVersion=12352 + ddb.uuid + ddb.longContentID lines (VMware Workstation-style DDB)",
+ "oracle_cmd": "7z l -slt vmw.vmdk Comment -> ddb.uuid = \"60 00 C2 9b 41 7a 3e 52-8d 0c 51 9e 6f 2a 11 b4\"",
+ "decoy": false,
+ "member": "vmw.vmdk"
+}

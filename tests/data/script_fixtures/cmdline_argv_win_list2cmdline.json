@@ -1,0 +1,8 @@
+{
+ "material": "\"C:\\Program Files\\App\\x.exe\" \"say \\\"hi\\\"\" \"C:\\dir with space\\\\\" a\\\\b \"\" tail\\",
+ "rep": "cmdline",
+ "transform": "argv",
+ "expected": "[\"C:\\\\Program Files\\\\App\\\\x.exe\", \"say \\\"hi\\\"\", \"C:\\\\dir with space\\\\\", \"a\\\\\\\\b\", \"\", \"tail\\\\\"]",
+ "generator_cmd": "python3 -c 'import subprocess; print(subprocess.list2cmdline(['C:\\\\Program Files\\\\App\\\\x.exe', 'say \"hi\"', 'C:\\\\dir with space\\\\', 'a\\\\\\\\b', '', 'tail\\\\']))'",
+ "oracle_cmd": "PYTHONPATH=tools/pylib python3 -c 'import mslex,json,sys; s=sys.argv[1]; print(json.dumps(mslex.split(s, like_cmd=False, check=False, ucrt=False)  # legacy runtime = CommandLineToArgvW rules))' \"$S\""
+}

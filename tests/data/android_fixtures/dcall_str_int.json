@@ -1,0 +1,8 @@
+{
+ "entry": "decrypt_call_scan",
+ "expected": "ANS-3b9e07d1c45af862",
+ "decoy": false,
+ "_why": "renamed instance helper A.a(String,int) (xor (k+3i)&0xff, StringBuilder) called from a void show(PrintStream) as a(\"<cipher>\", 0x4d); dex_eval_scan runs a(\"\",0) -> nothing",
+ "generator_cmd": "python3 tests/data/android_fixtures/dcall_src/gen_dcall.py str_int tests/data/android_fixtures/dcall_str_int.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/dcall_src/oracle.sh tests/data/android_fixtures/dcall_str_int.apk  # d2j-dex2jar back to classes, RUN show(PrintStream) on the JVM -> prints ANS-3b9e07d1c45af862"
+}

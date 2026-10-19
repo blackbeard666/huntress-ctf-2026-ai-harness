@@ -1,0 +1,2 @@
+"Time of Day","Process Name","PID","Operation","Path","Result","Detail"
+"9:15:00.0000000 AM","explorer.exe","2200","Process Create","C:\Windows\System32\notepad.exe","SUCCESS","PID: 4400, Command line: ""C:\Windows\System32\notepad.exe"" C:\Users\bob\todo.txt"

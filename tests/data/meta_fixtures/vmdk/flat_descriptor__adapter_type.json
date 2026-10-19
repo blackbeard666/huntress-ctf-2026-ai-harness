@@ -1,0 +1,8 @@
+{
+ "field": "vmdk.adapter_type",
+ "expected": "buslogic",
+ "generator_cmd": "qemu-img create -f vmdk -o subformat=monolithicFlat,adapter_type=buslogic flat.vmdk 1M -> descriptor flat.vmdk (+ flat-flat.vmdk extent)",
+ "oracle_cmd": "cat flat.vmdk -> ddb.adapterType = \"buslogic\" (text descriptor)",
+ "decoy": false,
+ "member": "flat.vmdk"
+}

@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "printf '%s\\n' <file_events row> <processes row 'vim notes.txt'> > proc_linux_osquery_decoy.ndjson",
+ "oracle_cmd": "jq -r '.columns.cmdline // empty' proc_linux_osquery_decoy.ndjson  # vim /home/alice/notes.txt, no descriptor"
+}

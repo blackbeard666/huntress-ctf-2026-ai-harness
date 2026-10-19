@@ -1,0 +1,10 @@
+{
+ "codec": "tpstrict",
+ "key": "rail3+rev-out(base32)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-33",
+ "encoded": "=ZLSLSDQLZCWCUZQ3XBQDUDULQTXZQLZDUDX3SZXJU==TUSZGFCLXZP3GISZXFNIWFHIGRA3HIF5HFA5WBFIXBUIXVC5HQF5WNA3FEQ5GFXIXBUIGFE3WRA2X5AZWZGFOMEOGHIMKMKOIOGMGPGNINGFYOIE2MGNONGMEOGJ",
+ "generator_cmd": "printf %s \"$plain\" | base32 -w0 | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs enc 3 0 | rev  # coreutils base32, CyberChef Rail Fence Encode(3, 0), util-linux rev",
+ "oracle_cmd": "printf %s \"$encoded\" | rev | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs dec 3 0 | base32 -d  # util-linux rev, CyberChef Rail Fence Decode(3, 0), coreutils base32 -d",
+ "expected": "match",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-33"
+}

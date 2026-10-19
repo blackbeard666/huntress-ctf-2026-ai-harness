@@ -1,0 +1,18 @@
+{
+ "family": "flattening",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "flattened": "false",
+  "state_sequence": "none",
+  "block_order": "none",
+  "return_value": "none",
+  "dispatcher": "none"
+ },
+ "generator_cmd": "bash flow_gen.sh   # gcc -O0 PIE + zig cc musl static dense/jump-table (ELF), zig cc -target x86_64-windows-gnu (PE) of flow_src.c / flow_plain.c",
+ "oracle_cmd": "python3 flow_oracle.py flow_decoy_plain.bin <-DTRACE twin>   # run trace build natively + objdump --dwarf=decodedline/-t/-p + file -b",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dyn",
+ "decoy": true,
+ "note": "lib.binary.flattening_field(data, key) per expected_facts key; vocabulary SPECULATIVE (GM label not seen)"
+}

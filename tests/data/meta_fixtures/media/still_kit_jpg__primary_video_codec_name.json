@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_codec_name",
+ "expected": "mjpeg",
+ "generator_cmd": "D18 TT kit evidence.zip -> camera-001.jpg (GM-built JPEG)",
+ "oracle_cmd": "ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i camera-001.jpg 2>&1 | grep Stream  (bundled tools/imageio_ffmpeg_pkg; stream #0:0 video codec, pix_fmt, WxH) -> Stream #0:0: Video: mjpeg (Baseline), yuvj420p(pc, bt470bg/unknown/unknown), 485x377, 25 fps, 25 tbr, 25 tbn",
+ "decoy": false,
+ "member": "camera-001.jpg"
+}

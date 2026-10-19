@@ -1,8 +1,11 @@
 """`media` primary VIDEO stream geometry fields (aliases `video`, `av`) -- prebuilt, SPECULATIVE.
 
 Spelling follows ffprobe -show_streams on the FIRST video stream (container stream order):
-  - width / height: coded size from the container (MP4 stsd visual entry, Matroska Video/PixelWidth|PixelHeight,
-    AVI strf BITMAPINFOHEADER biWidth/|biHeight|), NOT rotated (ffprobe keeps the coded size; rotation is side data).
+  - width / height: the DECODER output size, NOT rotated (rotation is side data). ffprobe's find_stream_info replaces
+    the container size with the decoder's, so when an H.264 SPS (avcC / Annex-B) or HEVC SPS (hvcC) parses, its
+    frame_cropping / conf_win-cropped size wins (1920x1088 MBs + crop_bottom -> 1920x1080, even if stsd says 1088);
+    otherwise the container size: MP4 stsd visual entry, Matroska Video/PixelWidth|PixelHeight, AVI strf
+    BITMAPINFOHEADER biWidth/|biHeight|. The raw container values stay in stsd_w/stsd_h (media_geometry.py).
   - frame_rate: ffprobe r_frame_rate "num/den" reduced. MP4 = mdhd timescale / dominant stts delta; Matroska =
     1e9 / DefaultDuration snapped to the NTSC/integer rates ffprobe guesses (59.94006 -> 60000/1001); AVI = strh
     dwRate/dwScale.
@@ -16,7 +19,8 @@ Spelling follows ffprobe -show_streams on the FIRST video stream (container stre
     (exiftool / mediainfo Rotation: 0..359, same matrix -> 90).
   - codec_tag_string / codec_tag: the stsd fourcc / AVI biCompression, ffprobe hex "0x31637661"; Matroska has none
     ("[0][0][0][0]" / 0x00000000 in ffprobe).
-A member that is not audio/video -> "none"; audio-only media -> "none"; unreadable media -> None."""
+A still image (JPEG/PNG/GIF/BMP/WebP/TIFF) is ffprobe's single video stream (see _still); audio-only media (WAV/MP3/
+FLAC/Ogg/...) -> "none" (absent stream); other non-media -> "none"; unreadable media -> None."""
 import math
 import struct
 
@@ -34,7 +38,6 @@ FIELDS = {
     ("media", "first_video_height"): "video_value",
     ("media", "video_stream_height"): "video_value",
     ("media", "primary_video_dimensions_pixels"): "video_value",
-    ("media", "primary_video_dimensions"): "video_value",
     ("media", "video_dimensions_pixels"): "video_value",
     ("media", "video_dimensions"): "video_value",
     ("media", "video_stream_dimensions_pixels"): "video_value",
@@ -180,8 +183,77 @@ def _rbsp(nal):
     return nal.replace(b"\x00\x00\x03", b"\x00\x00")
 
 
+_SAR_IDC = {1: (1, 1), 2: (12, 11), 3: (10, 11), 4: (16, 11), 5: (40, 33), 6: (24, 11), 7: (20, 11), 8: (32, 11),
+            9: (80, 33), 10: (18, 11), 11: (15, 11), 12: (64, 33), 13: (160, 99), 14: (4, 3), 15: (3, 2), 16: (2, 1)}
+
+
+def _se(r):
+    k = r.ue()
+    return (k + 1) // 2 if k & 1 else -(k // 2)
+
+
+def _h264_geometry(r, prof):
+    """Bit reader positioned after level_idc -> {chroma, depth, coded_w, coded_h, crop(l,r,t,b px), sps_w, sps_h,
+    sar}. ffprobe width/height = the decoder output = coded size minus frame_cropping (CropUnitX/Y in px)."""
+    g = {}
+    r.ue()                                               # seq_parameter_set_id
+    cf, sep = 1, 0
+    if prof in (100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135):
+        cf = r.ue()
+        if cf == 3:
+            sep = r.u(1)
+        g["depth"] = r.ue() + 8
+        r.ue()
+        r.u(1)
+        if r.u(1):                                       # seq_scaling_matrix_present_flag
+            for i in range(8 if cf != 3 else 12):
+                if r.u(1):
+                    last = nxt = 8
+                    for _ in range(16 if i < 6 else 64):
+                        if nxt:
+                            nxt = (last + _se(r) + 256) % 256
+                        last = nxt or last
+    g["chroma"] = cf
+    r.ue()                                               # log2_max_frame_num_minus4
+    poc = r.ue()
+    if poc == 0:
+        r.ue()
+    elif poc == 1:
+        r.u(1)
+        _se(r)
+        _se(r)
+        for _ in range(min(r.ue(), 255)):
+            _se(r)
+    r.ue()                                               # max_num_ref_frames
+    r.u(1)
+    mbw, mbh = r.ue() + 1, r.ue() + 1
+    fmo = r.u(1)
+    if not fmo:
+        r.u(1)
+    r.u(1)                                               # direct_8x8_inference_flag
+    cw, ch = mbw * 16, (2 - fmo) * mbh * 16
+    g["coded_w"], g["coded_h"] = cw, ch
+    crop = (0, 0, 0, 0)
+    if r.u(1):
+        cat = 0 if sep else cf
+        ux = 1 if cat in (0, 3) else 2
+        uy = (1 if cat in (0, 2, 3) else 2) * (2 - fmo)
+        l_, r_, t_, b_ = r.ue(), r.ue(), r.ue(), r.ue()
+        crop = (l_ * ux, r_ * ux, t_ * uy, b_ * uy)
+    g["crop"] = crop
+    g["sps_w"], g["sps_h"] = cw - crop[0] - crop[1], ch - crop[2] - crop[3]
+    try:
+        if r.u(1) and r.u(1):                            # vui_parameters_present, aspect_ratio_info_present
+            idc = r.u(8)
+            g["sar"] = (r.u(16), r.u(16)) if idc == 255 else _SAR_IDC.get(idc)
+    except ValueError:
+        pass
+    return g
+
+
 def _h264_sps(sps):
-    """SPS NAL (with header byte) -> {profile, level, pix_fmt}."""
+    """SPS NAL (with header byte) -> {profile, level, pix_fmt} + geometry (width/height = cropped SPS size, as the
+    ffprobe decoder reports it; coded_width/height = MB-aligned; sps_crop; sps_sar)."""
     if len(sps) < 4 or sps[0] & 0x1F != 7:
         return {}
     prof, cons, lvl = sps[1], sps[2], sps[3]
@@ -191,18 +263,49 @@ def _h264_sps(sps):
     elif prof in (110, 122, 244) and cons & 0x10:
         name = name + " Intra"
     out = {"profile": name, "level": lvl, "pix_fmt": "yuv420p"}
-    if prof in (100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135):
-        try:
-            r = _Bits(_rbsp(sps[4:]))
-            r.ue()
-            cf = r.ue()
-            if cf == 3:
-                r.u(1)
-            depth = r.ue() + 8
-            out["pix_fmt"] = _pix(cf, depth)
-        except ValueError:
-            pass
+    try:
+        g = _h264_geometry(_Bits(_rbsp(sps[4:])), prof)
+    except ValueError:
+        g = None
+    if g and "depth" in g:
+        out["pix_fmt"] = _pix(g["chroma"], g["depth"])
+    if g and "sps_w" in g and 0 < g["sps_w"] <= 16384 and 0 < g["sps_h"] <= 16384:
+        out.update(width=g["sps_w"], height=g["sps_h"], coded_width=g["coded_w"], coded_height=g["coded_h"],
+                   sps_crop=g["crop"], sps_sar=g.get("sar"))
     return out
+
+
+def _hevc_sps(nal):
+    """HEVC SPS NAL (2-byte header) -> {width, height (conformance-window cropped), coded_width/height, sps_crop}."""
+    r = _Bits(_rbsp(nal[2:]))
+    r.u(4)
+    msl = r.u(3)
+    r.u(1)
+    r.u(88)
+    r.u(8)                                               # general profile/tier/level
+    flags = [(r.u(1), r.u(1)) for _ in range(msl)]
+    if msl:
+        r.u(2 * (8 - msl))
+    for pp, lp in flags:
+        if pp:
+            r.u(88)
+        if lp:
+            r.u(8)
+    r.ue()
+    cf = r.ue()
+    if cf == 3:
+        r.u(1)
+    cw, ch = r.ue(), r.ue()
+    crop = (0, 0, 0, 0)
+    if r.u(1):
+        ux = 2 if cf in (1, 2) else 1
+        uy = 2 if cf == 1 else 1
+        l_, r_, t_, b_ = r.ue(), r.ue(), r.ue(), r.ue()
+        crop = (l_ * ux, r_ * ux, t_ * uy, b_ * uy)
+    w, h = cw - crop[0] - crop[1], ch - crop[2] - crop[3]
+    if not (0 < w <= 16384 and 0 < h <= 16384):
+        return {}
+    return {"width": w, "height": h, "coded_width": cw, "coded_height": ch, "sps_crop": crop}
 
 
 def _avcc(c):
@@ -233,7 +336,20 @@ def _hvcc(c):
     if len(c) < 23:
         return {}
     prof = c[1] & 0x1F
-    return {"profile": _HEVC_PROF.get(prof), "level": c[12], "pix_fmt": _pix(c[16] & 3, (c[17] & 7) + 8)}
+    out = {"profile": _HEVC_PROF.get(prof), "level": c[12], "pix_fmt": _pix(c[16] & 3, (c[17] & 7) + 8)}
+    try:                                                 # NAL arrays: the first SPS (type 33) carries the geometry
+        p = 23
+        for _ in range(c[22]):
+            typ, n = c[p] & 0x3F, struct.unpack_from(">H", c, p + 1)[0]
+            p += 3
+            for _ in range(n):
+                ln, = struct.unpack_from(">H", c, p)
+                if typ == 33 and "width" not in out:
+                    out.update(_hevc_sps(c[p + 2:p + 2 + ln]))
+                p += 2 + ln
+    except (ValueError, IndexError, struct.error):
+        pass
+    return out
 
 
 def _vpcc(c, full_box):
@@ -482,6 +598,7 @@ def _mp4(b):
                                                           if fourcc.isalnum() else None)
                 if es + 36 <= ee:
                     st["width"], st["height"] = struct.unpack_from(">HH", b, es + 32)
+                    st["stsd_w"], st["stsd_h"] = st["width"], st["height"]
                 kids = {}
                 if es + 86 <= ee:
                     for kt, ks, ke in _boxes(b, es + 86, ee):
@@ -689,13 +806,181 @@ def _avi(b):
     return vids
 
 
+# ---------------------------------------------------------------- still images (ffmpeg image2 pipe demuxers)
+# ffprobe opens a still as ONE video stream (jpeg_pipe/png_pipe/bmp_pipe/webp_pipe/tiff_pipe/gif). Spellings checked
+# with the bundled ffmpeg 7.0.2 `-i` on Pillow-written stills (tests/data/meta_fixtures/media/still_*):
+#   JPEG mjpeg, SOF size, yuvj420p/422p/444p (gray for 1 component), profile Baseline/Progressive;
+#   PNG png, IHDR size, pix_fmt from bit depth + colour type; GIF gif, logical screen size, bgra;
+#   BMP bmp, |biWidth|x|biHeight|, bgr24 / bgr0 (32-bit BI_RGB) / bgra (alpha mask) / pal8 / gray (8-bit grey ramp);
+#   WebP webp, VP8/VP8L/VP8X size, yuv420p (lossy) / yuva420p (lossy + ALPH) / argb (VP8L); TIFF tiff, IFD0 size.
+# The image pipes report codec_tag 0 and r_frame_rate 25/1 (image2 default); GIF reports no fixed rate.
+
+_PNG_PIX = {(0, 1): "monob", (0, 2): "gray", (0, 4): "gray", (0, 8): "gray", (0, 16): "gray16be",
+            (2, 8): "rgb24", (2, 16): "rgb48be", (3, 1): "pal8", (3, 2): "pal8", (3, 4): "pal8", (3, 8): "pal8",
+            (4, 8): "ya8", (4, 16): "ya16be", (6, 8): "rgba", (6, 16): "rgba64be"}
+
+
+def _still_jpeg(b):
+    p = 2
+    while p + 4 <= len(b):
+        if b[p] != 0xFF:
+            return None
+        m = b[p + 1]
+        if m == 0xFF:
+            p += 1
+            continue
+        if m in (0xD8, 0x01) or 0xD0 <= m <= 0xD7:
+            p += 2
+            continue
+        ln, = struct.unpack_from(">H", b, p + 2)
+        if 0xC0 <= m <= 0xCF and m not in (0xC4, 0xC8, 0xCC):
+            h, w = struct.unpack_from(">HH", b, p + 5)
+            px = _jpeg_pix(b"\xff\xd8" + b[p:p + 2 + ln])
+            prof = {0xC0: "Baseline", 0xC1: "Sequential", 0xC2: "Progressive", 0xC3: "Lossless"}.get(m)
+            return {"codec_name": "mjpeg", "width": w, "height": h, "pix_fmt": px.get("pix_fmt"), "profile": prof,
+                    "frame_rate": "25/1"}
+        if m == 0xDA or ln < 2:
+            return None
+        p += 2 + ln
+    return None
+
+
+def _still_png(b):
+    if b[12:16] != b"IHDR" or len(b) < 29:
+        return None
+    w, h, bd, ct = struct.unpack_from(">IIBB", b, 16)
+    return {"codec_name": "png", "width": w, "height": h, "pix_fmt": _PNG_PIX.get((ct, bd)), "frame_rate": "25/1"}
+
+
+def _still_gif(b):
+    w, h = struct.unpack_from("<HH", b, 6)
+    return {"codec_name": "gif", "width": w, "height": h, "pix_fmt": "bgra"}
+
+
+def _still_bmp(b):
+    hs, = struct.unpack_from("<I", b, 14)
+    if hs == 12:
+        w, h, _, bpp = struct.unpack_from("<hhHH", b, 18)
+        comp, ncol = 0, 0
+    elif hs >= 40:
+        w, h, _, bpp, comp = struct.unpack_from("<iiHHI", b, 18)
+        ncol, = struct.unpack_from("<I", b, 46)
+    else:
+        return None
+    pix = None
+    if bpp == 24:
+        pix = "bgr24"
+    elif bpp == 32:
+        amask = struct.unpack_from("<I", b, 66)[0] if comp == 3 and hs >= 56 and len(b) >= 70 else 0
+        pix = "bgra" if amask else "bgr0"
+    elif bpp == 16:
+        pix = "rgb555le" if comp == 0 else None
+    elif bpp in (1, 4):
+        pix = "pal8"
+    elif bpp == 8:
+        off, = struct.unpack_from("<I", b, 10)
+        pal = b[14 + hs:off]
+        n = len(pal) // 4
+        pix = "gray" if n == 0 or (n >= 256 and all(pal[4 * i:4 * i + 3] == bytes((i, i, i)) for i in range(256))) \
+            else "pal8"
+    return {"codec_name": "bmp", "width": abs(w), "height": abs(h), "pix_fmt": pix, "frame_rate": "25/1"}
+
+
+def _still_webp(b):
+    p, out, alpha = 12, None, False
+    while p + 8 <= len(b):
+        cid, sz = b[p:p + 4], struct.unpack_from("<I", b, p + 4)[0]
+        d = b[p + 8:p + 8 + sz]
+        if cid == b"VP8X" and len(d) >= 10:
+            out = {"width": 1 + int.from_bytes(d[4:7], "little"), "height": 1 + int.from_bytes(d[7:10], "little")}
+            alpha = bool(d[0] & 0x10)
+        elif cid == b"VP8 " and len(d) >= 10 and d[3:6] == b"\x9d\x01\x2a":
+            w, h = struct.unpack_from("<HH", d, 6)
+            out = out or {"width": w & 0x3FFF, "height": h & 0x3FFF}
+            out["pix_fmt"] = "yuva420p" if alpha else "yuv420p"
+            break
+        elif cid == b"VP8L" and len(d) >= 5 and d[0] == 0x2F:
+            v, = struct.unpack_from("<I", d, 1)
+            out = out or {"width": (v & 0x3FFF) + 1, "height": ((v >> 14) & 0x3FFF) + 1}
+            out["pix_fmt"] = "argb"
+            break
+        elif cid == b"ALPH":
+            alpha = True
+        p += 8 + sz + (sz & 1)
+    if not out:
+        return None
+    return dict(out, codec_name="webp", frame_rate="25/1")
+
+
+def _still_tiff(b):
+    e = "<" if b[:2] == b"II" else ">"
+    off, = struct.unpack_from(e + "I", b, 4)
+    n, = struct.unpack_from(e + "H", b, off)
+    tags = {}
+    for i in range(min(n, 512)):
+        t, typ, cnt = struct.unpack_from(e + "HHI", b, off + 2 + 12 * i)
+        vo = off + 2 + 12 * i + 8
+        if typ == 3:
+            vals = [struct.unpack_from(e + "H", b, (vo if cnt <= 2 else struct.unpack_from(e + "I", b, vo)[0]) + 2 * k)[0]
+                    for k in range(min(cnt, 4))]
+        elif typ == 4:
+            vals = [struct.unpack_from(e + "I", b, vo)[0]] if cnt == 1 else []
+        else:
+            vals = []
+        tags[t] = vals
+    w, h = (tags.get(256) or [None])[0], (tags.get(257) or [None])[0]
+    if not w or not h:
+        return None
+    bps, spp, ph = (tags.get(258) or [1])[0], (tags.get(277) or [1])[0], (tags.get(262) or [None])[0]
+    pix = None
+    if bps == 8:
+        pix = {1: "gray", 3: "rgb24", 4: "rgba"}.get(spp) if ph in (0, 1, 2) else ("pal8" if ph == 3 else None)
+    elif bps == 16 and ph in (1, 2):
+        pix = {1: "gray16", 3: "rgb48", 4: "rgba64"}.get(spp)
+        pix = pix and pix + ("le" if e == "<" else "be")
+    return {"codec_name": "tiff", "width": w, "height": h, "pix_fmt": pix, "frame_rate": "25/1"}
+
+
+def _still(b):
+    """A still image as ffprobe's single video stream [{codec_name, width, height, pix_fmt, ...}], else None."""
+    if b[:3] == b"\xff\xd8\xff":
+        fn = _still_jpeg
+    elif b[:8] == b"\x89PNG\r\n\x1a\n":
+        fn = _still_png
+    elif b[:6] in (b"GIF87a", b"GIF89a"):
+        fn = _still_gif
+    elif b[:2] == b"BM" and len(b) >= 26 and b[6:10] == b"\0\0\0\0":
+        fn = _still_bmp
+    elif b[:4] == b"RIFF" and b[8:12] == b"WEBP":
+        fn = _still_webp
+    elif b[:4] in (b"II*\0", b"MM\0*"):
+        fn = _still_tiff
+    else:
+        return None
+    t = fn(b)
+    if not t or not t.get("width") or not t.get("height"):
+        return None
+    t.setdefault("rotation", None)
+    t.setdefault("tag", b"\0\0\0\0")
+    return [t]
+
+
+def _audio_only(b):
+    """True when the bytes are an audio file ffprobe would open with no video stream (WAV/MP3/FLAC/Ogg/AIFF/...)."""
+    try:
+        from .media import _non_media, _probe
+        return not _non_media(b) and _probe(b) is not None
+    except Exception:  # noqa: BLE001 -- defensive: any parse error means "cannot say"
+        return False
+
+
 # ---------------------------------------------------------------- dispatch
 
 def video_streams(data):
     """[{codec_name, width, height, frame_rate, pix_fmt, profile, level, rotation, tag, nb_frames}] (all video
     streams, container order) or None when the bytes are not a parsable MP4/MOV, Matroska/WebM or AVI."""
     b = bytes(data)
-    for fn in (_mp4, _mkv, _avi):
+    for fn in (_mp4, _mkv, _avi, _still):
         try:
             r = fn(b)
         except (ValueError, IndexError, struct.error, OverflowError, UnicodeDecodeError):
@@ -729,6 +1014,8 @@ def video_value(data, ctx):
         return None
     vs = video_streams(data)
     if vs is None:
+        if _audio_only(bytes(data)):
+            return 0 if k == "count" else "none"
         head = bytes(data[:512])
         text = all(32 <= c < 127 or c in (9, 10, 13) for c in head)
         return "none" if head.startswith(_NON_MEDIA) or text else None

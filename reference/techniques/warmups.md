@@ -1,4 +1,4 @@
-# warmups — technique log (days 1-17; updated after every day)
+# warmups — technique log (days 1-18; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -12,11 +12,15 @@ How this lane has looked so far (observations, not guarantees):
   the HEX nibbles of the text (Bacon outer, hex inner). D1-D15 single_solves were ONE layer; D16 and D17 are stacked, the
   pun naming BOTH layers ("sixteen" = hex both days; "dot dot dot" = Morse, "a's and b's"/"Bacon" = Baconian). Read every
   number/word in the prompt as a possible layer; "Sixteen" has meant a hex INNER layer twice running.
-- Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, ..., 73, 78). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, html-entity, `"\uXXXX"`, base32, unpadded base64url, plain reversed text, Atbash, Caesar+7, ROT47, Morse-over-hex, Bacon-over-hex, in that order so far). The last line has no trailing newline. The fragments join verbatim (split mid-word) into the same sentence.
+  "Three rails. One very zigzag commute."/"Off the Rails" -> RAIL FENCE, 3 rails, offset 0 (D18, back to ONE layer, the
+  first true TRANSPOSITION after D12's reversal: same characters, new order). The prompt's number was the KEY (rails).
+  Families run in streaks (D12-D15 free-text letter maps, D16-D17 carriers over hex), so expect more transpositions.
+- Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, ..., 83, 88). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, html-entity, `"\uXXXX"`, base32, unpadded base64url, plain reversed text, Atbash, Caesar+7, ROT47, Morse-over-hex, Bacon-over-hex, rail-fence-3, in that order so far). The last line has no trailing newline. The fragments join verbatim (split mid-word) into the same sentence.
 - Clocks: TT about 5-8 s from day 2 on (30 s on day 1 and again on day 12), mastery about 5-9 s (30 s on day 12; the window does not reliably grow with the set count). Only a deterministic solver survives these windows. The single_solve is untimed.
 - D16 GM regime change: TT/Mastery are "regular scored challenges by default" (contract `deadline: null`, no window);
   `run_for_time: true` on start/retry requests a timed Hall of Fame attempt. The HARNESS still kills solve.py after 60 s
   (D17 Mastery: `exec_error`, `solver_too_slow`, nothing submitted) -- keep every set well under 1 s.
+  D18 the clocks were back: TT start returned a 30 s deadline, Mastery a 105 s window (88 sets).
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
 - **Encoding per line** -- Mastery line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, `&#NNN;`
@@ -66,8 +70,17 @@ How this lane has looked so far (observations, not guarantees):
   BACON-HEX branch (`[ab]{5}` groups, gated `_max_day() >= 17`), a `warmups_codecs.DAYS` D17 encoder, and the generic
   `warmups_codecs.twosym_dec` (any 2 symbols, widths 4-8, both polarities; also `bin4_dec`, `aphex_dec`, `tern_dec`,
   `radix_dec`, `chuck_dec`, `dna_dec` for the sibling carriers). The D17 solver also has `register_free("baconhex", 17, ...)`.
+- **Order / transposition (D18)** -- same character multiset, new order. Single/TT: the whole 109-110 B sentence
+  rail-fenced, 3 rails, offset 0 (`N kcnhwuTo,b saae...` = rail 0 then 1 then 2; one `!` `,` `:`, slug digits intact but
+  scattered). Mastery line 18: the 6-8 char slug-tail fragment rail-fenced ON ITS OWN (key restarts per line):
+  `p-pr5e6` -> `pper-56` (rail0 = chars 0,4; rail1 = 1,3,5; rail2 = 2,6). A 7-char rail-3 fragment still "looks like"
+  slug text, so no strict class claims it and best-rot/reversal would return garbage. Parse rule: for an anagram of the
+  crib (or a fragment no strict branch takes), try `warmups_codecs.rail_dec(t, r, off)` for r=3 first, then r 2..11 x
+  every offset, accept only a crib/slug hit (`Master:\s*[a-z]+-[a-z]+-[a-z]+-\d{2}$`); in Mastery try rail on each
+  unclaimed line inside the slug-gated joint search (lib `rail_solve`/`rail_free`, `register_free` with day 18). Any
+  future keyless permutation (columnar width, route, skip) is the same rule: enumerate the keys, gate on the crib/slug.
 - **Line wrapper** -- `NN<TAB>fragment` numbering; fragments split mid-word and join verbatim in number order.
-- **Set count** -- grows by 5 per day, 5N-2 (33 on day 7, ..., 73 on day 15, 78 on day 16, 83 x 17 lines on day 17); the solver must loop over whatever the contract lists, and its cost grows with sets x lines.
+- **Set count** -- grows by 5 per day, 5N-2 (33 on day 7, ..., 78 on day 16, 83 x 17 lines on day 17, 88 x 18 on day 18); the solver must loop over whatever the contract lists, and its cost grows with sets x lines.
 - **Delivery shape** -- mastery bytes arrive as ONE zip saved under the first member's name (`blob-01.txt`; the contract has NO
   `artifacts[]`, only a top-level `sha256` = the zip; same on days 7-9). Set 1's question names that same file: read the MEMBER, never decode the whole bundle.
 - **Payload only** -- TT/single differ only in the slug and length (day 7: 318 vs 333 bytes; day 8: 620 vs 621; day 9: 644 vs 650); same sentence and encoding.
@@ -93,6 +106,7 @@ How this lane has looked so far (observations, not guarantees):
 | `[A-Za-z0-9_-]`, NO trailing `=`, length %4 != 0 (prompt: "URL-friendly") | unpadded base64url: `python3 -c "import base64,sys;t=open(sys.argv[1]).read().strip();print(base64.urlsafe_b64decode(t+'='*(-len(t)%4)).decode())" blob.txt` (`base64 -d` errors on it); `lib.decode.decode_chunk` handles it |
 | Only `a`/`b` (or `A`/`B`, `0`/`1`) in 5-groups, every group starting `a` (prompt "a's and b's", "Bacon", "five", "sixteen") | Bacon over hex: `python3 -c "import sys;v=[int(w.replace('a','0').replace('b','1'),2) for w in open(sys.argv[1]).read().split()];print(bytes.fromhex(''.join('%x'%x for x in v)).decode())" blob.txt`. Groups up to `bbabb` -> plain Bacon letters (`lib.warmups_codecs.bacon_dec`); other symbol pairs/widths -> `warmups_codecs.twosym_dec` |
 | Only `.` `-` and single spaces, symbols up to 5 long, all digits/`.`/`.-`/`-...`/`-.-.`/`-..`/`..-.` (prompt "dot dot dot", "Dot Com", "sixteen") | Morse -> hex: `python3 -c "from lib import warmups_codecs as w,sys;print(bytes.fromhex(w.morse_dec(open(sys.argv[1]).read()).replace(' ','')).decode())" blob.txt`; `decode_chunk` does both layers since D16. Plain-text Morse (with `/` gaps, `-....-` hyphens) -> just `morse_dec` |
+| Readable letters in the wrong order, ~110 B, exactly one `!` `,` `:`, spaces scattered (`N kcnhwuTo,b saae`); prompt names rails/zigzag/fence/a number | rail fence: `python3 -c "from lib import warmups_codecs as w,sys;print(w.rail_solve(open(sys.argv[1]).read()))" blob.txt` (or `w.rail_dec(t,3,0)`; brute r 2-11 x offsets). Other anagram shapes -> `w.col_solve` (columnar/scytale), then route/skip |
 | Magic `PK\x03\x04` even if named `.txt` (mastery `blob-01.txt`) | `unzip -l`. It is a bundle of all sets `blob-01..NN.txt` |
 | Lines `01<TAB>...`, `02<TAB>...` | Strip the `NN\t` prefix. Decode EACH line with its own encoding and concatenate without separators. Keep leading/trailing spaces |
 | Magic `1f8b`/`78`/`BZh`/`fd377a58` | gunzip / zlib / bzip2 / xz (in the toolbox. Not seen in the GM bytes yet) |
@@ -120,29 +134,31 @@ generic fallback, then 11/58 sets where rot-N "decoded" the reversed line 12 (`6
 of Atbash text (`ovisx-tviskr-fbvecw-31`, rejected: gibberish words); Mastery 39/63 until free lines were assigned
 JOINTLY (`lib.decode._joint_free`, `FREE_CODECS`; each transform used once per blob).
 
-**Days 14-16** (Caesar +7; ROT47; Morse over hex): CORRECT in 4.5-39 s, first submit each day.
-Lessons that still matter: D14 the carried-over solver answered in the race (best rot-N); Mastery set22 went MISSING when a
-rev/Atbash swap ended in a 2-word slug -> `caesar7` in `FREE_CODECS`, 3-word slug ranked first. D15 ROT47 (`tr '!-~'
-'P-~!-O'`) is beyond rot-N/Atbash/reversal; `register_free("rot47", 15, ...)`; Mastery solve 3.46 s with 5 free lines.
-D16 Morse whose symbols are only `0-9A-F` -> `fromhex` (first two-layer warmup); `decode_chunk`'s Morse branch now
-returns the hex-decoded text; Mastery 78/78 first try.
+**Days 14-17** (Caesar +7; ROT47; Morse over hex; Bacon a/b 5-groups over hex): CORRECT in 4.5-39 s, first submit each day.
+Lessons that still matter: D14 Mastery set22 went MISSING when a rev/Atbash swap ended in a 2-word slug -> `caesar7` in
+`FREE_CODECS`, 3-word slug ranked first. D15 ROT47 (`tr '!-~' 'P-~!-O'`) is beyond rot-N/Atbash/reversal;
+`register_free("rot47", 15, ...)`. D16 Morse whose symbols are only `0-9A-F` -> `fromhex` (first two-layer warmup). D17
+Bacon groups `aaaaa`-`abbbb` = nibbles; the answer-first worker read Bacon-26 letters (`a`-`p` only) then `ord-97` ->
+`fromhex` (~25 s). D17 Mastery (83 x 17) first run hit the harness's 60 s budget -- `answer()` ran the joint free-codec
+ranker on every set even after `decode_chunked` had the slug; return-early fix -> 83 sets in 1.35 s.
 
-**Day 17: Bacon Bits** ("Sixteen guests. Five little a's and b's apiece." -- Baconian a/b groups carrying HEX nibbles).
-- 1295-byte blob, no newline: `aabaa abbba aabba abaab ...` -> a=0 b=1 -> 4 E 6 9 ... -> `4E69...` -> "Nice work ... Game
-  Master: tidy-rocket-harbor-20". Only values 0-15 occur. Triage's "riddle -> hex (base 16)" hint was right again (it
-  also mislabelled the blob "looks base64"; ignore that, the alphabet is 2 letters + space).
-- The answer-first worker won with TWO python one-liners (Bacon-26 letters -> `eogjgd...` a-p; then `ord-97` nibbles ->
-  `bytes.fromhex`) and a direct `hctf submit`. Start 13:00:09Z -> CORRECT 13:00:33.7Z (~25 s, first submit).
-- TT CORRECT (solve 0.05 s). Mastery 83 sets x 17 lines (line 17 = 14 a/b groups): attempt f9ac3fc4 first run
-  `exec_error` -- solve.py hit the harness's 60 s budget, NOTHING submitted. cProfile (`mastery/profile.txt`): `answer()`
-  always called `decode.decode_candidates` -> `_joint_ranked` -> `_best_rot` over every free-line assignment, even when
-  `decode_chunked` had already produced the slug (profile cut at 10 s still inside ONE set's `_joint_ranked`, 9.3 s). Generalize fix: return at once when
-  `_slug(decode.decode_chunked(text))` hits, keep `decode_candidates` as the fallback -> 83 sets in 1.35 s; CORRECT
-  13:03:18Z, 83/83 (in_window 1.95 s, solve 0.44 s). Two generalize workers (local + duel) for one cheap ordering bug.
+**Day 18: Off the Rails** ("Three rails. One very zigzag commute." -- rail fence, 3 rails, offset 0).
+- 109-byte blob, no newline, printable ASCII: `N kcnhwuTo,b saaeoemararm-o9iewr eoigti amp ...` = the crib sentence's
+  characters (one `!` `,` `:`) in a new order; triage preview alone shows it is an anagram. Rail 0 holds chars 0,4,8,...
+- Answer-first worker: one `python3 -I -c` that rail-decodes for r in 2..N x every offset and prints the reads; (3,0) gave
+  the sentence (offsets 2/3 give rotated copies `29Nice work...` -- reject those, the slug must END the text). Direct
+  `hctf submit`: start 13:00:09Z -> CORRECT 13:00:24Z (~15 s, first submit). lib already had `warmups_codecs.rail_solve`
+  (the atlas had listed rail fence as "high: Off the Rails transposition"), but the carried D17 solver never called it:
+  the prior-solver dry run answered 0/1. The duel worker's solve.py was verified at +41 s.
+- TT: the TT `start` at +19 s opened a 30 s clock (deadline 13:00:55Z) before any solver was verified; the timed run at
+  +47 s got `retry_variants_unavailable` -> untimed fallback, CORRECT (solve 0.17 s), no Hall of Fame.
+- Mastery 88 sets x 18 lines, window 105 s: the today-probe (`compound-today-d18-edge`, rail3 on the last line) caught that
+  `decode_chunked` misses line 18, so `_rail_lines` (each line in turn rail-decoded at (3,0),(2,0),(3,1..3), slug-gated)
+  was added before the attempt; 88/88 first try (solve 0.7 s, in_window 5.77 s).
 
 ## GM answer conventions learned
 - Submit the slug ONLY, exactly as decoded (lowercase, hyphens, 2-digit number). Not the whole sentence and not "Game Master: ...". `trim` normalization only.
-- No correctly decoded warmups answer has been rejected (days 1-17; day 8's 40 and day 9's 45 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
+- No correctly decoded warmups answer has been rejected (days 1-18; day 8's 40 and day 9's 45 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
 - Mastery ids are per set (`setN.message` style). Each question names `blob-0N.txt`, but the bytes may arrive as a zip member, as same-named `blob.txt` downloads, or de-duplicated (`blob_2.txt`). Map set -> file by sha256 from `contract["artifacts"]` when present. When it is absent (day 7), open the zip and read member `blob-0N.txt`.
 - No GM-side label grammar in this lane: the answer is a derived VALUE, never a synthetic label.
 
@@ -185,5 +201,13 @@ returns the hex-decoded text; Mastery 78/78 first try.
   real Mastery case (`hctf solver-test`) after every new free codec -- the cost grows with sets x lines x codecs.
 - A carrier decode that "works" can still be a middle layer: Bacon-26 letters of D17 came out as `a`-`p` only. An output
   alphabet of exactly 16 symbols (0-9A-F, a-p, 16 words) = hex nibbles; decode again.
+- TRANSPOSITIONS (D18 rail fence): spaces are ciphertext -- a rail can start or end with a space, so strip only `\r\n`,
+  never `.strip()`. Wrong offsets give ROTATED readings that still contain the slug (`29Nice work ... dapper-summit-brook-`):
+  accept only a read that STARTS with `Nice work` / ends in a full `adj-noun-noun-NN`. Charset tells you nothing (it is
+  the plaintext's), the cue is "readable letters, wrong order, exactly one `!` `,` `:`".
+- A prebuilt lib codec is useless if the carried solver never routes to it (D18: `rail_solve` existed, prior solver 0/1).
+  First move on a new day: run lib's whole-blob candidates (`decode_chunk` + `warmups_codecs.CANDIDATES`/`*_solve`).
+- Mastery fragments of a keyed/transposition codec restart the key PER LINE and are short (6-8 chars on D18); only a
+  slug/crib gate over the joined text can confirm them. Test today's codec on the last Mastery line (compound-today probe).
 - Don't over-read the prompt: "Again" (day 6) was flavour, not a second layer. Decode what the bytes show.
 - Don't contact anything beyond the GM. The decoded sentence states the answer outright.

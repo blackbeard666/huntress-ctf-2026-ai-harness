@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "ps -o pid,ppid,user,cmd -p 1 > proc_linux_ps_decoy.txt",
+ "oracle_cmd": "cat proc_linux_ps_decoy.txt  # init only, no descriptor"
+}

@@ -1,0 +1,104 @@
+{
+ "family": "switch_tables",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_kind": "a64_ldrb_sxtb",
+ "expected_facts": {
+  "case_count": 12,
+  "cases": [
+   {
+    "case": 2,
+    "target": "0xb44",
+    "symbol": "dispatch+0x64",
+    "callee": "op_add"
+   },
+   {
+    "case": 3,
+    "target": "0xb54",
+    "symbol": "dispatch+0x74",
+    "callee": "op_sub"
+   },
+   {
+    "case": 4,
+    "target": "0xb64",
+    "symbol": "dispatch+0x84",
+    "callee": "op_mul"
+   },
+   {
+    "case": 5,
+    "target": "0xb74",
+    "symbol": "dispatch+0x94",
+    "callee": "op_div"
+   },
+   {
+    "case": 6,
+    "target": "0xb84",
+    "symbol": "dispatch+0xa4",
+    "callee": "op_xor"
+   },
+   {
+    "case": 7,
+    "target": "0xb94",
+    "symbol": "dispatch+0xb4",
+    "callee": "op_shl"
+   },
+   {
+    "case": 8,
+    "target": "0xba4",
+    "symbol": "dispatch+0xc4",
+    "callee": "op_neg"
+   },
+   {
+    "case": 9,
+    "target": "0xbb4",
+    "symbol": "dispatch+0xd4",
+    "callee": "op_rol"
+   },
+   {
+    "case": 10,
+    "target": "0xbc4",
+    "symbol": "dispatch+0xe4",
+    "callee": "op_inc"
+   },
+   {
+    "case": 11,
+    "target": "0xbd4",
+    "symbol": "dispatch+0xf4",
+    "callee": "op_dec"
+   },
+   {
+    "case": 12,
+    "target": "0xb24",
+    "symbol": "dispatch+0x44",
+    "callee": "op_not"
+   },
+   {
+    "case": 13,
+    "target": "0xb34",
+    "symbol": "dispatch+0x54",
+    "callee": "op_sqr"
+   }
+  ],
+  "case_callees": {
+   "2": "op_add",
+   "3": "op_sub",
+   "4": "op_mul",
+   "5": "op_div",
+   "6": "op_xor",
+   "7": "op_shl",
+   "8": "op_neg",
+   "9": "op_rol",
+   "10": "op_inc",
+   "11": "op_dec",
+   "12": "op_not",
+   "13": "op_sqr"
+  },
+  "default_symbol": "op_bad"
+ },
+ "generator_cmd": "bash switch_gen.sh   # aarch64-linux-gnu-gcc -O2 sw2.c (ldrb + adr + add sxtb #2 + br x3)",
+ "oracle_cmd": "python3 switch_oracle.py switch_a64_gcc.bin   # objdump -d -M intel / aarch64-linux-gnu-objdump -d text + pyelftools table bytes + symtab",
+ "file_b": "ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=152b18e9e8a33c0a65e207aa5867513a9bdaabf4, for GNU/Linux 3.7.0, not stripped",
+ "decoy": false,
+ "note": "lib.binary.switch_field(data, key) per expected_facts key (json round-trip: int case keys -> str); expected_facts null = not an ELF/PE image (switch_field -> None)"
+}

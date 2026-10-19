@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=google_apps_script|role=downloader|verdict=suspicious|attack=T1105|adapter=http_client|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=jscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=GOOGLE_APPS_SCRIPT-f5a5483d|url=https://google_apps_script-f5a5483ddd.example.invalid/stage|file_path=/tmp/huntress-google_apps_script/.f5a5483ddd7fd918.stage",
+ "decoy": false,
+ "_doc": "Apps Script project JSON (Drive export / clasp): files[] with appsscript manifest + SERVER_JS `source` holding the D18 downloader .gs; sibling .gsproj",
+ "generator_cmd": "jq -n --rawfile b polyglot-google_apps_script-downloader.gs '{files:[{name:\"appsscript\",type:\"JSON\",source:\"{\\\"timeZone\\\":\\\"Etc/UTC\\\",\\\"runtimeVersion\\\":\\\"V8\\\"}\"},{name:\"Code\",type:\"SERVER_JS\",source:$b}]}' > saas_gas_project.gsproj",
+ "oracle_cmd": "jq -r '.files[]|select(.type==\"SERVER_JS\").source' saas_gas_project.gsproj | python3 -I -c \"import re,sys;t=sys.stdin.read();a=t[:t.index(\\\"].join\\\")];print(bytes.fromhex(\\\"\\\".join(re.findall(r\\\"\\\\\\\"([0-9a-fA-F.FRAG-]+)\\\\\\\"\\\",a)).replace(\\\"FRAG-\\\",\\\"\\\").replace(\\\".\\\",\\\"\\\")).decode())\""
+}

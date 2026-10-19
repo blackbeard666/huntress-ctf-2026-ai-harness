@@ -1,0 +1,10 @@
+{
+ "codec": "maptp",
+ "key": "rail3(rot47)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-quiet-heron-08",
+ "encoded": "} <4?9HF%@[3 D226@6>2C2BEC_:6HC 6@:8E: 2>A @D=6 F>EE: I4 ?HCE 9 26|D6i;5\\F6\\6@\\g4@55 DCP GD:96ED Ev E 6:9?",
+ "generator_cmd": "printf %s \"$plain\" | tr '!-~' 'P-~!-O' | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs enc 3 0  # coreutils tr letter map + CyberChef Rail Fence Cipher Encode(3, 0)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs dec 3 0 | tr 'P-~!-O' '!-~'  # inverse tr map + CyberChef Rail Fence Cipher Decode(3, 0)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-quiet-heron-08",
+ "expected": "match"
+}

@@ -1,0 +1,11 @@
+{
+ "codec": "tpstrict",
+ "key": "rail3(base64)(fragment)",
+ "plain": "decoding this",
+ "encoded": "ZbbdcGj2pmgGpw=VRch=",
+ "mode": "fragment",
+ "generator_cmd": "printf %s \"$plain\" | base64 -w0 | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs enc 3 0  # coreutils base64, CyberChef Rail Fence Encode(3, 0)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs dec 3 0 | base64 -d",
+ "expected": "match",
+ "oracle_plain": "decoding this"
+}

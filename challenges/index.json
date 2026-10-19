@@ -101,6 +101,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Decoder Ring"
   },
+  "binary-reverse-engineering-day-18-control-flow-reconstruction": {
+    "day": 18,
+    "dir": "day18/binary-flow-state",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Flow State"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -203,6 +209,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Hear Me Out"
   },
+  "metadata-forensics-day-18-frame-of-reference": {
+    "day": 18,
+    "dir": "day18/metadata-frame-of-reference",
+    "lane": "metadata-forensics",
+    "name": "🔎 Frame of Reference"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -304,6 +316,12 @@
     "dir": "day17/mobile-name-collapse",
     "lane": "mobile-android",
     "name": "📱 Name Collapse"
+  },
+  "mobile-android-day-18-encrypted-strings": {
+    "day": 18,
+    "dir": "day18/mobile-encrypted-strings",
+    "lane": "mobile-android",
+    "name": "📱 Encrypted Strings"
   },
   "read-the-rules": {
     "day": 1,
@@ -413,6 +431,12 @@
     "lane": "script-analysis",
     "name": "📜 Fetch Quest"
   },
+  "script-analysis-day-18-process-story": {
+    "day": 18,
+    "dir": "day18/scripting-orphan-process",
+    "lane": "script-analysis",
+    "name": "📜 Orphan Process"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -514,6 +538,12 @@
     "dir": "day17/warmups-bacon-bits",
     "lane": "warmups",
     "name": "👶 Bacon Bits"
+  },
+  "warmups-day-18": {
+    "day": 18,
+    "dir": "day18/warmups-off-the-rails",
+    "lane": "warmups",
+    "name": "👶 Off the Rails"
   },
   "welcome-robots": {
     "day": 1,

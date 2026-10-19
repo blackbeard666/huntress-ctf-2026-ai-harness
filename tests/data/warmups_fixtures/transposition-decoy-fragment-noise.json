@@ -1,0 +1,11 @@
+{
+ "codec": "transposition",
+ "plain": null,
+ "encoded": "qxzvkjwy",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s qxzvkjwy  # hand-written noise fragment",
+ "oracle_cmd": "no permutation of 'qxzvkjwy' is a piece of the sentence (letters q x z v k j y absent from the crib) -> none",
+ "oracle_plain": null,
+ "mode": "fragment"
+}

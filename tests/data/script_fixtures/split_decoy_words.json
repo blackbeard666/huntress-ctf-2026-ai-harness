@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/split_array_gen.py  (benign word list behind the SPLIT marker)",
+ "oracle_cmd": "cd tests/data/script_fixtures && grep -o '\"[a-z-]*\"' split_decoy_words.lua | tr -d '\"\\n' | grep -c 'v=3'  # 0: no plan"
+}

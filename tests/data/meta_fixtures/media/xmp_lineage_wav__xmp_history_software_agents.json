@@ -1,0 +1,8 @@
+{
+ "field": "media.xmp_history_software_agents",
+ "expected": "[\"Adobe Photoshop 26.0 (Windows)\",\"Adobe Photoshop 26.1 (Windows)\",\"Adobe Photoshop 26.1 (Windows)\"]",
+ "generator_cmd": "stdlib wave writer (8 kHz mono s16, 800 frames) + struct-appended RIFF '_PMX' chunk holding lineage.xmp, RIFF size patched",
+ "oracle_cmd": "exiftool -j -XMP:HistorySoftwareAgent lineage.wav",
+ "decoy": false,
+ "member": "lineage.wav"
+}

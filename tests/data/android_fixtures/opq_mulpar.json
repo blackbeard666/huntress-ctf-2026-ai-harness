@@ -1,0 +1,8 @@
+{
+ "entry": "proof_flow_scan",
+ "expected": "ANS-6d2a91f0c7e43b85",
+ "decoy": false,
+ "_why": "row 72 opaque predicate / dead decoy: pick(x): if (x*(x+1)%2==0) v=real else v=decoy ANS-f19b3c7e0a2d5864; the decoy arm is dead (consecutive-product parity) and is flagged dead_only in proof_flow_candidates",
+ "generator_cmd": "python3 tests/data/android_fixtures/opq_src/gen_opq.py mulpar tests/data/android_fixtures/opq_mulpar.apk  # javac --release 8 + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/opq_src/oracle.sh tests/data/android_fixtures/opq_mulpar.apk  # d2j-dex2jar back to classes, RUN buildRequest(host, dev) on the JVM over 12 inputs -> ANS-6d2a91f0c7e43b85"
+}

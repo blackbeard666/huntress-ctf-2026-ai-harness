@@ -1,0 +1,10 @@
+{
+ "codec": "word-transposition",
+ "plain": null,
+ "encoded": "Nice warmup! this the work this To submit exact to Game amber-falcon-42 decoding solve, answex Master:",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -I gen.py rail 3 \"$plain\"  # pycipher.Railfence/ColTrans .encipher on a token->letter string (word i = letter A+i), letters mapped back to words: gen.py = import sys,string,pycipher; ws=plain.split(\" \"); sym=string.ascii_uppercase[:len(ws)]; c=pycipher.Railfence(3).encipher(sym); print(\" \".join(ws[sym.index(ch)] for ch in c)) | sed 's/answer/answex/'  # one crib word corrupted (not an anagram of 'answer')",
+ "oracle_cmd": "'answex' is no crib word / anagram of one -> none",
+ "oracle_plain": null
+}

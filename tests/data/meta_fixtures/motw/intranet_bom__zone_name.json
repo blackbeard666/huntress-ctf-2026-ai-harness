@@ -1,0 +1,8 @@
+{
+ "field": "motw.zone_name",
+ "expected": "Intranet",
+ "generator_cmd": "printf '\\xef\\xbb\\xbf[ZoneTransfer]\\r\\nZoneId=1\\r\\n' > intranet_bom.bin",
+ "oracle_cmd": "python3 -I -c \"import configparser; c=configparser.ConfigParser(interpolation=None); c.optionxform=str; c.read_string(open('intranet_bom.bin',encoding='utf-8-sig').read()); print(dict(c['ZoneTransfer']))\" -> ZoneId '1'; URLZONE_INTRANET = 1",
+ "decoy": false,
+ "member": "report.docx:Zone.Identifier"
+}

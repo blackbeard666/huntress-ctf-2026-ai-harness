@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/split_array_gen.py  (SPLIT marker + HEX chunks of a benign k=v report config, no v= plan)",
+ "oracle_cmd": "cd tests/data/script_fixtures && grep -o '\"[^\"]*\"' split_decoy_benign_hex.js | tr -d '\"\\n' | sed 's/^HEX-//' | xxd -r -p | grep -c '^v='  # 0: decodes, but to no plan"
+}

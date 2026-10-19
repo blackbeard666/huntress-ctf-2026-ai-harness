@@ -1,0 +1,45 @@
+{
+ "family": "api_intent",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "api_intents": {
+   "getenv": "env_query",
+   "__libc_start_main": "runtime",
+   "_ITM_deregisterTMCloneTable": "runtime",
+   "puts": "output",
+   "__stack_chk_fail": "runtime",
+   "__gmon_start__": "runtime",
+   "__isoc23_strtol": "other",
+   "ptrace": "injection",
+   "process_vm_writev": "injection",
+   "_ITM_registerTMCloneTable": "runtime",
+   "__cxa_finalize": "runtime"
+  },
+  "has_injection": "true",
+  "injection_apis": [
+   "ptrace",
+   "process_vm_writev"
+  ],
+  "process_access_apis": "none",
+  "network_apis": "none",
+  "ptrace_requests": [
+   "PTRACE_ATTACH",
+   "PTRACE_POKETEXT",
+   "PTRACE_DETACH"
+  ],
+  "mitre_technique": "T1055.008",
+  "mitre_techniques": [
+   "T1055.008",
+   "T1055.009"
+  ],
+  "effects": "injection",
+  "trace_effects": "none"
+ },
+ "generator_cmd": "bash apiint_gen.sh   # gcc -O2 inj.c (ptrace ATTACH/POKETEXT/DETACH + process_vm_writev + getenv/printf; compiled, never run)",
+ "oracle_cmd": "python3 apiint_oracle.py apiint_elf_ptrace_poke.bin   # readelf --dyn-syms UND / objdump -p imports, objdump -d ptrace request, strings; own intent table",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dyn",
+ "decoy": false,
+ "note": "lib.binary.api_intent_field(data, key) per expected_facts key; intent/effects vocabulary SPECULATIVE (GM label not seen); decoys: every key 'none'"
+}

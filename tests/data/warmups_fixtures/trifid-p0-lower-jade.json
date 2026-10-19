@@ -1,0 +1,9 @@
+{
+ "codec": "trifid-p0-lower",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-08",
+ "encoded": "jhmbbgiexqpylsucftxadltjftpntkquthgkeapieadodxejfbmfrovrhetgtuthhofhdoqmbaoaqo",
+ "oracle_plain": "niceworkdecodingthiswarmuptosolvesubmitthisexactanswertothegamemasterjadeotter",
+ "generator_cmd": "PYTHONPATH=tools/pyciphers python3 -c \"import re,secretpy as S; ct=S.Trifid().encrypt(re.sub('[^a-z]','',plain.lower()), 0)\"  # secretpy Trifid, default alphabet a-z + '.', key = period (0 = whole text)",
+ "oracle_cmd": "PYTHONPATH=tools/pyciphers python3 -c ...  # pycipher.delastelle.Delastelle('ABCDEFGHIJKLMNOPQRSTUVWXYZ.') chars='012' L2IND table to layer/row/col digits, per period block of L letters: digits d -> triplets (d[k], d[L+k], d[2L+k]) -> IND2L (its decipher() has a NameError bug, so the tables are used directly); period whole text",
+ "expected": "match"
+}

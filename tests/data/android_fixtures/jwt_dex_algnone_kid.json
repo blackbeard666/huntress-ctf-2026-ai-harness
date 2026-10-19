@@ -1,0 +1,7 @@
+{
+ "entry": "jwt_scan",
+ "expected": "ANS-a1e07b94c2d35f68",
+ "_why": "alg none JWT (empty signature) as a dex const-string, token in the header kid",
+ "generator_cmd": "sh tests/data/android_fixtures/jwt_src/gen_jwt.sh dexnone ANS-a1e07b94c2d35f68 tests/data/android_fixtures/jwt_dex_algnone_kid.apk  # PyJWT jwt.encode / cryptography AESGCM + javac/d2j-jar2dex + zip -X",
+ "oracle_cmd": "unzip -p jwt_dex_algnone_kid.apk classes.dex | strings | grep -o 'eyJ[A-Za-z0-9_.-]*' | python3 -c 'import jwt,sys; print(jwt.get_unverified_header(sys.stdin.read().strip())[\"kid\"])'  # -> ANS-a1e07b94c2d35f68"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "string_obfuscator_scan",
+ "expected": "ANS-08ad5f3e6c2b9174",
+ "decoy": false,
+ "_why": "Allatori demo ALLATORIxDEMO(String): chars xor 0x2E / 0x51 alternating from the end of the string",
+ "generator_cmd": "python3 tests/data/android_fixtures/sobf_src/gen_sobf.py allatori tests/data/android_fixtures/sobf_allatori.apk  # javac --release 8 + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/sobf_src/oracle.sh tests/data/android_fixtures/sobf_allatori.apk  # d2j-dex2jar back to classes, RUN Main.show(PrintStream) on the JVM (obfuscator's own runtime) -> prints ANS-08ad5f3e6c2b9174"
+}

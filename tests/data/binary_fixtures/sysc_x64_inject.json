@@ -1,0 +1,61 @@
+{
+ "family": "direct_syscall",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "arch": "x86_64",
+  "syscall_sites": "4",
+  "syscall_numbers": [
+   "101",
+   "311",
+   "1",
+   "60"
+  ],
+  "syscalls": [
+   "ptrace",
+   "process_vm_writev",
+   "write",
+   "exit"
+  ],
+  "syscalls_csv": "ptrace,process_vm_writev,write,exit",
+  "syscall_count": "4",
+  "ptrace_requests": [
+   "PTRACE_ATTACH"
+  ],
+  "intent:process_vm_writev": "injection",
+  "intent:write": "output"
+ },
+ "expected_api_intent": {
+  "injection_apis": [
+   "process_vm_writev"
+  ],
+  "process_access_apis": [
+   "ptrace"
+  ],
+  "has_injection": "true",
+  "injection_verdict": "injection",
+  "ptrace_requests": [
+   "PTRACE_ATTACH"
+  ],
+  "mitre_techniques": [
+   "T1055.009"
+  ],
+  "effects": "process_access_and_injection"
+ },
+ "generator_cmd": "bash sysc_gen.sh   # gcc -O1 -nostdlib -static -fno-pie -no-pie (inline asm syscall: ptrace(101, PTRACE_ATTACH), process_vm_writev(311), write(1), exit(60))",
+ "oracle_cmd": "python3 sysc_oracle.py sysc_x64_inject.bin   # file -b + objdump -d (aarch64-linux-gnu-objdump) last mov imm -> eax/x8 before syscall/int $0x80/svc #0x0 (and edi before call syscall@plt), names from kernel uapi asm/unistd_64.h / unistd_32.h / asm-generic/unistd.h; verdicts = api_intent rules applied by hand",
+ "oracle_raw": {
+  "arch": "x86_64",
+  "syscall_sites": "4",
+  "syscall_numbers": "101,311,1,60",
+  "syscalls": "ptrace,process_vm_writev,write,exit",
+  "ptrace_args": [
+   16
+  ],
+  "libc_syscall_wrapper": "none"
+ },
+ "file_b": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked",
+ "decoy": false,
+ "note": "lib.binary.syscall_field(data, k) per expected_facts key, api_intent_field(data, k) per expected_api_intent key; field names / verdict vocabulary SPECULATIVE (GM label not seen); no HCFG blob"
+}

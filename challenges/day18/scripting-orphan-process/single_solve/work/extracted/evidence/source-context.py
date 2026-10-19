@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+if True:
+    # Huntress Script Triage -- inert static-analysis fixture (cpython3)
+    import base64
+    import io
+    import os
+
+    MATERIAL_e9bc81b1 = b"\x95\xde\xd1\x9f\x90\x97\x86\x93\x90\xde\x87\x86\x80\x8c\x87\x86\xbc\x80\x8c\x8d\x85\x8a\x84\x96\x91\x82\x97\x8a\x8c\x8d\xcf\x91\x86\x97\x96\x91\x8d\xbc\x80\x8c\x8d\x85\x8a\x84\x96\x91\x82\x97\x8a\x8c\x8d\x9f\x82\x87\x82\x93\x97\x86\x91\xde\x82\x91\x84\x93\x82\x91\x90\x86\xbc\x8d\x82\x8e\x86\x90\x93\x82\x80\x86\x9f\x90\x97\x82\x84\x86\xbc\x80\x8c\x96\x8d\x97\xde\xd2\x9f\x90\x9a\x8d\x97\x82\x9b\xde\x93\x8f\x82\x8a\x8d\xbc\x85\x96\x8d\x80\x97\x8a\x8c\x8d\x90\x9f\x8c\x81\x85\x96\x90\x80\x82\x97\x8a\x8c\x8d\xde\x97\x91\x82\x8d\x90\x85\x8c\x91\x8e\xbc\x8c\x8d\x8f\x9a\x9f\x80\x82\x91\x91\x8a\x86\x91\xde\x91\x82\x94\xbc\x90\x8c\x96\x91\x80\x86\x9f\x94\x8a\x8d\x87\x8c\x94\x90\xbc\x80\x8b\x82\x8a\x8d\xde\x87\x8a\x91\x86\x80\x97\xbc\x93\x9a\x97\x8b\x8c\x8d\xbc\x86\x9b\x86\x9f\x80\x82\x8e\x93\x82\x8a\x84\x8d\xbc\x8a\x87\xde\x80\x82\x8e\x93\x82\x8a\x84\x8d\xce\x87\xda\x80\x80\x87\x82\xd4\xd6\xd6\x82\x9f\x8b\x8c\x90\x97\xbc\x8a\x87\xde\x8b\x8c\x90\x97\xce\x87\xda\x80\x80\x87\x82\xd4\xd6\xd6\x82"
+    CODEC_e9bc81b1 = "hex_escape|single_byte_xor|e3"
+
+    def load_e9bc81b1():
+        return bytes(MATERIAL_e9bc81b1)
+
+    def decode_e9bc81b1(EnCoDeD_Bytes):
+        return bytes(value ^ 227 for value in EnCoDeD_Bytes)
+
+    def recover_e9bc81b1():
+        NeUtRaL = ":".join(("north", "south"))
+        StAtE = "decode"
+        while StAtE != "done":
+            if StAtE == "decode":
+                DeCoDeD_Bytes = decode_e9bc81b1(load_e9bc81b1())
+                StAtE = "done"
+        DeScRiPtOr_Text = DeCoDeD_Bytes.decode("ascii", "strict")
+        return DeScRiPtOr_Text
+
+    def inspect_e9bc81b1():
+        return recover_e9bc81b1()
+
+    def surface_e9bc81b1():
+        return ("plain_functions", "transform_only", "raw_source", "direct_python_exe")
+
+    def obfuscation_e9bc81b1():
+        return "transform_only"
+
+    def plan_e9bc81b1():
+        fields = dict(item.split("=", 1) for item in inspect_e9bc81b1().split("|"))
+        analysis_surface = surface_e9bc81b1()
+        obfuscation_surface = obfuscation_e9bc81b1()
+        operation_plan = ("report", fields.get("host_id", ""))
+        return operation_plan + (analysis_surface, obfuscation_surface)
+
+    if os.environ.get("HUNTRESS_INSPECT_ONLY") == "1":
+        print(inspect_e9bc81b1())

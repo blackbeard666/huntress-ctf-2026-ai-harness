@@ -1,0 +1,26 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "813eb166-966e-4e27-b875-fb299ae4480f",
+  "window": null,
+  "elapsed": 2.1,
+  "in_window": 1.28,
+  "phases": {
+    "start": 0.83,
+    "download": 0.22,
+    "solve": 0.17,
+    "submit": 0.88
+  },
+  "routed": "homebase (untimed)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "handy-pillow-juniper-48"
+  },
+  "attempts_remaining": 0,
+  "hall_of_fame_eligible": false,
+  "untimed": true,
+  "no_clock": true,
+  "practice": true,
+  "gm_remaining": 1
+}

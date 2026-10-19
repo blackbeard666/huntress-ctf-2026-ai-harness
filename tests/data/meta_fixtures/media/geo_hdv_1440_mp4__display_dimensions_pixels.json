@@ -1,0 +1,8 @@
+{
+ "field": "media.display_dimensions_pixels",
+ "expected": "1920x1080",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=1440x1080:rate=25 -frames:v 2 -vf setsar=4/3 -c:v libx264 -preset ultrafast -pix_fmt yuv420p hdv_1440.mp4 (pasp 4:3, tkhd 1920x1080, stsd 1440x1080)",
+ "oracle_cmd": "exiftool -s -ImageWidth -ImageHeight hdv_1440.mp4 -> 1920 / 1080 (tkhd, rotation 0); SourceImageWidth 1440",
+ "decoy": false,
+ "member": "hdv_1440.mp4"
+}

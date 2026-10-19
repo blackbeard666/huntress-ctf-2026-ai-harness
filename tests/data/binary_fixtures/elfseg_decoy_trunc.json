@@ -1,0 +1,11 @@
+{
+ "encoding": "none",
+ "decoy": true,
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_elf_segment_facts": "none",
+ "generator_cmd": "sh elfseg_gen.sh   # head -c 40 elfseg_pie_full.bin > elfseg_decoy_trunc.bin",
+ "oracle_cmd": "python3 elfseg_oracle.py elfseg_decoy_trunc.bin   # GNU readelf -hlWd (Flags/OS/ABI/ABI Version/counts/Program Headers types/interpreter/NEEDED/BIND_NOW/GNU_STACK flags/GNU_RELRO) + file -b (pie executable / statically|static-pie linked) + pyelftools (EI_OSABI ELFOSABI_*, p_type PT_*)",
+ "oracle_output": "ELF 64-bit LSB shared object, x86-64, version 1 (SYSV) | {\"_all\": \"none\", \"file\": \"ELF 64-bit LSB shared object, x86-64, version 1 (SYSV)\", \"readelf_err\": \"readelf: Error: elfseg_decoy_trunc.bin: Failed to read file header\"}",
+ "note": "lib.binary.elf_header_facts program-header/ABI extension. Field names beyond the confirmed elf_class/elf_type/endianness/entry_point/section_names/symbols/has_symtab are SPECULATIVE spellings: e_flags lowercase hex, os_abi ELFOSABI_* (+ os_abi_label readelf, os_abi_num), segments PT_* (+ segments_short readelf), relro full/partial/none (checksec rules), is_pie per file(1), is_static = no interpreter and no DT_NEEDED (static-pie counts). Decoys -> elf_header_field(...) == 'none'."
+}

@@ -1,0 +1,15 @@
+{
+ "family": "call_graph",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "edges": "none",
+  "indirect_call_count": "none"
+ },
+ "generator_cmd": "bash callgraph_gen.sh   # gcc/strip/zig cc from callgraph_src.c (see script)",
+ "oracle_cmd": "file -b callgraph_decoy_aarch64.bin   # non-x86 / not an ELF-PE -> field absent",
+ "file_b": "ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), dy",
+ "decoy": true,
+ "note": "lib.binary.call_graph_field(data, key) per expected_facts key; edges [[caller, callee, kind]] unique in call-site order, kind direct|plt|indirect; GM vocabulary SPECULATIVE"
+}

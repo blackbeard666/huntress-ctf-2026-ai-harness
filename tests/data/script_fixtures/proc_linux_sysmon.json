@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=bash|role=loader|verdict=malicious|attack=T1059.004|adapter=sysmon_linux|stage_count=2|steps=spawn_child,decode_stage|campaign_id=PL-4d7e2a10|url=https://pl-4d7e2a10.example.invalid/x",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/proc_linux_gen.py tests/data/script_fixtures (Sysmon for Linux EID 1 XML in syslog lines, xml.sax.saxutils.escape &quot;)",
+ "oracle_cmd": "sed 's/^.*sysmon: //' proc_linux_sysmon.log | python3 -I -c \"import sys,xml.etree.ElementTree as E;[print(d.text) for l in sys.stdin for d in E.fromstring(l).iter('Data') if d.get('Name')=='CommandLine']\" | perl -ne 'if(/Material_\\w+ ?= ?\\\\?\"([0-9a-f]{40,})\\\\?\"/){$b=pack(\"H*\",$1);$b^=chr(0x5a)x length $b;print $b}'",
+ "note": "EID 1 x2: 7300<-7200, 7342<-7300 (reads through the Windows _pe_xml path)"
+}

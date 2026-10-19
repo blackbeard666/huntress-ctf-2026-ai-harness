@@ -1,0 +1,10 @@
+{
+ "codec": "transposition",
+ "plain": null,
+ "encoded": "Tioxstzwtnynnrhcwjohyhhdsogeeknuvediepot--qbfmelolblnhh9uroprageaa:ie9",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"The quick brown fox jumps over the lazy dog while the band plays on: nothing-here-99\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/caesarbox_cyberchef.mjs 5  # CyberChef Caesar Box Cipher(5) of prose that is not the warmups sentence",
+ "oracle_cmd": "CyberChef Caesar Box Cipher(17) reads the prose back; it never starts 'Nice work' -> none",
+ "oracle_plain": null
+}

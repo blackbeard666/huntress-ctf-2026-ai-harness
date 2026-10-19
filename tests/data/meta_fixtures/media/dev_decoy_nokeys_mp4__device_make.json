@@ -1,0 +1,8 @@
+{
+ "field": "media.device_make",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i testsrc=size=160x120:rate=10 -frames:v 3 -c:v libx264 -preset ultrafast -pix_fmt yuv420p base.mp4",
+ "oracle_cmd": "exiftool -j -a -G4 -Keys:all -UserData:Make -UserData:Model -HandlerDescription -CompressorName base.mp4 -> no Keys/UserData Make at all (plain Lavf output)",
+ "decoy": true,
+ "member": "base.mp4"
+}

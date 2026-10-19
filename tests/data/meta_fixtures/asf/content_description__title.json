@@ -1,0 +1,8 @@
+{
+ "field": "asf.title",
+ "expected": "Quarterly Sync",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i sine=f=440:d=0.3:r=44100 -ac 2 -c:a wmav2 -b:a 64k -metadata title=\"Quarterly Sync\" -metadata author=\"J. Doe\" -metadata copyright=\"(c) Acme 2026\" -metadata comment=\"board call\" a.wma  (ffmpeg 7.0.2 static, imageio-ffmpeg wheel)",
+ "oracle_cmd": "bin/exiftool -j -Title a.wma -> \"Title\": \"Quarterly Sync\"",
+ "decoy": false,
+ "member": "a.wma"
+}

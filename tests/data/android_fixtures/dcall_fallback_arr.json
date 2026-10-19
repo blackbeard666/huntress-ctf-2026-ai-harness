@@ -1,0 +1,8 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-90c4e2a7b16fd358",
+ "decoy": false,
+ "_why": "deobf(T[out.hashCode()&1]): the arg is runtime-indexed, so only the per-const-string fallback (every helper over every literal) decodes it; entry dex_strings proves the chain wiring",
+ "generator_cmd": "python3 tests/data/android_fixtures/dcall_src/gen_dcall.py fallback_arr tests/data/android_fixtures/dcall_fallback_arr.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/dcall_src/oracle.sh tests/data/android_fixtures/dcall_fallback_arr.apk  # d2j-dex2jar back to classes, RUN show(PrintStream) on the JVM -> prints ANS-90c4e2a7b16fd358"
+}

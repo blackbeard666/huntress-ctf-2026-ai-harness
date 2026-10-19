@@ -1,0 +1,15 @@
+@echo off
+rem HUNTRESS_ANALYSIS_V1:SPLIT
+set "p="
+set "p=%p%B64-dj0zfGxhbmd1YWdlPXBocHxyb2xlPXN0YWdlZF9jaGFpbnx2"
+set "p=%p%ZXJkaWN0PXN1c3BpY2lvdXN8YXR0YWNrPVQxMDU5fGFkYXB0"
+set "p=%p%ZXI9b3BlcmF0aW9uX2dyYXBofGhvc3RfcHJvZmlsZT1waHBf"
+set "p=%p%d2Vic2hlbGx8b2JmdXNjYXRpb25fcHJvZmlsZT1wbGFpbl9o"
+set "p=%p%ZXh8c3RhZ2VfcHJvZmlsZT1zaW5nbGVfZGVzY3JpcHRvcnxu"
+set "p=%p%ZXh0X2xhbmd1YWdlPXB5dGhvbnxzdGFnZV9jb3VudD0yfHN0"
+set "p=%p%ZXBzPWRlY29kZV9jb25maWd1cmF0aW9uLHJldHVybl9jb25m"
+set "p=%p%aWd1cmF0aW9ufGNhbXBhaWduX2lkPVBIUC0yNWJlNDRhM3x1"
+set "p=%p%cmw9aHR0cHM6Ly9waHAtMjViZTQ0YTNlZS5leGFtcGxlLmlu"
+set "p=%p%dmFsaWQvc3RhZ2V8ZmlsZV9wYXRoPS90bXAvaHVudHJlc3Mt"
+set "p=%p%cGhwLy4yNWJlNDRhM2VlM2YzMWMyLnN0YWdl"
+echo %p%

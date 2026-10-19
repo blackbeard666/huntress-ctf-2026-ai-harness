@@ -1,0 +1,104 @@
+{
+ "family": "switch_tables",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_kind": "rel32",
+ "expected_facts": {
+  "case_count": 12,
+  "cases": [
+   {
+    "case": 2,
+    "target": "0x1380",
+    "symbol": "none",
+    "callee": "sub_11a0"
+   },
+   {
+    "case": 3,
+    "target": "0x1390",
+    "symbol": "none",
+    "callee": "sub_11c0"
+   },
+   {
+    "case": 4,
+    "target": "0x13a0",
+    "symbol": "none",
+    "callee": "sub_11e0"
+   },
+   {
+    "case": 5,
+    "target": "0x13b0",
+    "symbol": "none",
+    "callee": "sub_1200"
+   },
+   {
+    "case": 6,
+    "target": "0x13c0",
+    "symbol": "none",
+    "callee": "sub_1220"
+   },
+   {
+    "case": 7,
+    "target": "0x13d0",
+    "symbol": "none",
+    "callee": "sub_1240"
+   },
+   {
+    "case": 8,
+    "target": "0x13e0",
+    "symbol": "none",
+    "callee": "sub_1260"
+   },
+   {
+    "case": 9,
+    "target": "0x13f0",
+    "symbol": "none",
+    "callee": "sub_1280"
+   },
+   {
+    "case": 10,
+    "target": "0x1400",
+    "symbol": "none",
+    "callee": "sub_12a0"
+   },
+   {
+    "case": 11,
+    "target": "0x1410",
+    "symbol": "none",
+    "callee": "sub_12c0"
+   },
+   {
+    "case": 12,
+    "target": "0x1420",
+    "symbol": "none",
+    "callee": "sub_12e0"
+   },
+   {
+    "case": 13,
+    "target": "0x1368",
+    "symbol": "none",
+    "callee": "sub_1300"
+   }
+  ],
+  "case_callees": {
+   "2": "sub_11a0",
+   "3": "sub_11c0",
+   "4": "sub_11e0",
+   "5": "sub_1200",
+   "6": "sub_1220",
+   "7": "sub_1240",
+   "8": "sub_1260",
+   "9": "sub_1280",
+   "10": "sub_12a0",
+   "11": "sub_12c0",
+   "12": "sub_12e0",
+   "13": "sub_1300"
+  },
+  "default_symbol": "sub_1320"
+ },
+ "generator_cmd": "bash switch_gen.sh   # gcc -O2 sw2.c + strip -s (callees by address sub_<hex>)",
+ "oracle_cmd": "python3 switch_oracle.py switch_gcc_stripped.bin   # objdump -d -M intel / aarch64-linux-gnu-objdump -d text + pyelftools table bytes + symtab",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=9ee13288ebf3388b77331ccc3e7b965cc20f159a, for GNU/Linux 3.2.0, stripped",
+ "decoy": false,
+ "note": "lib.binary.switch_field(data, key) per expected_facts key (json round-trip: int case keys -> str); expected_facts null = not an ELF/PE image (switch_field -> None)"
+}

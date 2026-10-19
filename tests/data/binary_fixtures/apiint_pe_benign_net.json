@@ -1,0 +1,36 @@
+{
+ "family": "api_intent",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "api_intents": {
+   "GetEnvironmentVariableA": "env_query",
+   "ExitProcess": "runtime",
+   "lstrcmpA": "string",
+   "WSAStartup": "network",
+   "socket": "network",
+   "connect": "network",
+   "printf": "output",
+   "strcmp": "string"
+  },
+  "has_injection": "false",
+  "injection_apis": "none",
+  "process_access_apis": "none",
+  "network_apis": [
+   "WSAStartup",
+   "socket",
+   "connect"
+  ],
+  "ptrace_requests": "none",
+  "mitre_technique": "none",
+  "mitre_techniques": "none",
+  "effects": "no_process_access_no_injection",
+  "trace_effects": "none"
+ },
+ "generator_cmd": "bash apiint_gen.sh   # python3 apiint_pe_gen.py (stdlib struct PE32+: kernel32 GetEnvironmentVariableA/ExitProcess/lstrcmpA + ws2_32 WSAStartup/socket/connect + msvcrt printf/strcmp)",
+ "oracle_cmd": "python3 apiint_oracle.py apiint_pe_benign_net.bin   # readelf --dyn-syms UND / objdump -p imports, objdump -d ptrace request, strings; own intent table",
+ "file_b": "PE32+ executable for MS Windows 6.00 (console), x86-64",
+ "decoy": false,
+ "note": "lib.binary.api_intent_field(data, key) per expected_facts key; intent/effects vocabulary SPECULATIVE (GM label not seen); decoys: every key 'none'"
+}

@@ -42,7 +42,7 @@ def _s(fn):
     return Extractor(f"lib.meta.{fn}", SPECULATIVE, ())
 
 
-# Every GM-verified field family D1-D17 (+ the never-asked extras the day solvers already carried, speculative).
+# Every GM-verified field family D1-D18 (+ the never-asked extras the day solvers already carried, speculative).
 _BUILTIN = {
     ("file", "filename"): _v("identity:filename", 1),
     ("file", "size_bytes"): _v("identity:size_bytes", 1),
@@ -79,6 +79,9 @@ _BUILTIN = {
     ("email", "message_id"): _v("eml:message_id", 16),
     # D17: ffprobe codec_name of the first audio stream from the container header (WAV 16-bit PCM -> pcm_s16le)
     ("media", "primary_audio_codec_name"): _v("media:primary_audio_codec_name", 17),
+    # D18: coded width x height of the first video stream (MP4 stsd visual entry; ffprobe, not rotated) -- prebuilt
+    # media_video.video_value promoted via media.py (320x180 on the Single, TT and all 5 Mastery sets)
+    ("media", "primary_video_dimensions"): _v("media:primary_video_dimensions", 18),
 }
 
 PREBUILT_DIR = Path(__file__).resolve().parent / "prebuilt"

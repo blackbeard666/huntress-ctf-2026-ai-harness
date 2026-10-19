@@ -1,0 +1,14 @@
+{
+ "codec": "dcol:col:31425+col:31425",
+ "key": "31425 31425",
+ "hints": [
+  "Two Passes",
+  "Lock code 31425, applied two times."
+ ],
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lantern-905",
+ "encoded": "o aseu  Naha9stertb nn  -ovwadsa:rTct peMirim0   nhmttgstldeedeon kotew!xacmse5wtG-iihe uoai,reclsj   r",
+ "generator_cmd": "python3 -I -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from pycipher import ColTrans as C;s=sys.argv[1]\nfor k in sys.argv[2:]:\n c=C(k);c.remove_punctuation=lambda t,**kw:t;s=c.encipher(s)\nprint(s,end=\"\")' \"$plain\" 31425 31425  # pycipher 0.5.2 ColTrans / secretpy 0.12.0 MyszkowskiTransposition .encipher/.encrypt applied once per key (punctuation kept)",
+ "oracle_cmd": "python3 -I -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from secretpy import ColumnarTransposition as C;s=sys.argv[1]\nfor k in reversed(sys.argv[2:]):s=C().decrypt(s,k,\"0123456789abcdefghijklmnopqrstuvwxyz\")\nprint(s,end=\"\")' \"$encoded\" 31425 31425  # secretpy 0.12.0 ColumnarTransposition / MyszkowskiTransposition .decrypt, keys undone last-first",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lantern-905",
+ "expected": "match"
+}

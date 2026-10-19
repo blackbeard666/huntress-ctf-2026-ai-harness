@@ -1,0 +1,8 @@
+{
+ "material": "rundll32.exe \"a\"\"b c\" d\\\\\\\"e \"f\\\\\" g",
+ "rep": "cmdline",
+ "transform": "argv",
+ "expected": "[\"rundll32.exe\", \"a\\\"b\", \"c d\\\\\\\"e f\\\\ g\"]",
+ "generator_cmd": "hand-written CommandLineToArgvW edge line: rundll32.exe \"a\"\"b c\" d\\\\\\\"e \"f\\\\\" g",
+ "oracle_cmd": "PYTHONPATH=tools/pylib python3 -c 'import mslex,json,sys; s=sys.argv[1]; print(json.dumps(mslex.split(s, like_cmd=False, check=False, ucrt=False)  # legacy runtime = CommandLineToArgvW rules))' \"$S\""
+}

@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_dimensions",
+ "expected": "1920x1080",
+ "generator_cmd": "h264_1080.mp4 (above) + python3 -I patch_geo.py h264_1080.mp4 h264_stsd1088_tkhd1440.mp4 1920 1088 1440 1080 (stdlib struct: stsd avc1 VisualSampleEntry width/height -> 1920x1088, tkhd 16.16 size -> 1440x1080; SPS untouched = 1920x1088 MBs, crop_bottom 8 px)",
+ "oracle_cmd": "ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i h264_stsd1088_tkhd1440.mp4 -> Stream #0:0: Video: h264 ..., 1920x1080 [SAR 1:1 DAR 16:9] (the DECODER size from the SPS crop wins over stsd 1920x1088)",
+ "decoy": false,
+ "member": "h264_stsd1088_tkhd1440.mp4"
+}

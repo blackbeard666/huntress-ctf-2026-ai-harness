@@ -1,0 +1,8 @@
+{
+ "field": "vhd.disk_type",
+ "expected": "2",
+ "generator_cmd": "qemu-img create -f vpc -o subformat=fixed,force_size=on fixed.vhd 64K  (qemu-img 10.2.1)",
+ "oracle_cmd": "7z l -slt fixed.vhd -> 'Method = Fixed' (spec: 2 = fixed); xxd -s -512 @60 = 0000 0002",
+ "decoy": false,
+ "member": "fixed.vhd"
+}

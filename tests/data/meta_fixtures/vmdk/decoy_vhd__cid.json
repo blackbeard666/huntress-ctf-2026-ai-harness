@@ -1,0 +1,8 @@
+{
+ "field": "vmdk.cid",
+ "expected": "none",
+ "generator_cmd": "qemu-img create -f vpc -o subformat=dynamic dyn.vhd 10M  (qemu-img 10.2.1) (renamed .vmdk)",
+ "oracle_cmd": "file -b -> Microsoft Disk Image (VHD), no KDMV / descriptor",
+ "decoy": true,
+ "member": "dyn.vmdk"
+}

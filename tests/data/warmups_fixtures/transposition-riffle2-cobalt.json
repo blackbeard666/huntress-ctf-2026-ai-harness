@@ -1,0 +1,10 @@
+{
+ "codec": "transposition",
+ "key": "riffle-out2",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-river-17",
+ "encoded": "Nmiriesmc  ueMep ax!wsa otcTretokr   :asd noecslcowvobeedar,il  nttsg-ou r btitmhvhiieetsr   -Gtw1aha7",
+ "generator_cmd": "python3 -I -c \"import sys,itertools as it;s=sys.argv[1]\nfor _ in range(2):h=(len(s)+1)//2;s=''.join(a+b for a,b in it.zip_longest(s[:h],s[h:],fillvalue=''))\nprint(s,end='')\" \"$plain\"  # stdlib: perfect out-riffle (interleave halves) twice",
+ "oracle_cmd": "python3 -I -c \"import sys;c=sys.argv[1]\nfor _ in range(2):c=c[0::2]+c[1::2]\nprint(c,end='')\" \"$encoded\"  # stdlib: un-riffle (evens then odds) twice",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-river-17",
+ "expected": "match"
+}

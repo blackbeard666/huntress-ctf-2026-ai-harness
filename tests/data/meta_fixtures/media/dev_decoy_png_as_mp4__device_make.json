@@ -1,0 +1,8 @@
+{
+ "field": "media.device_make",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"from PIL import Image; Image.new('RGB',(8,8),(200,10,10)).save('still.png')\" (renamed clip.mp4)",
+ "oracle_cmd": "file still.png -> PNG image data, 8 x 8 (renamed clip.mp4: not a video)",
+ "decoy": true,
+ "member": "clip.mp4"
+}

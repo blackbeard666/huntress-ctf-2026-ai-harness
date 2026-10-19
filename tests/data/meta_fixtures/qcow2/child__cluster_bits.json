@@ -1,0 +1,8 @@
+{
+ "field": "qcow2.cluster_bits",
+ "expected": "12",
+ "generator_cmd": "qemu-img create -f qcow2 base.qcow2 4M; qemu-img create -f qcow2 -o cluster_size=4096 -b base.qcow2 -F qcow2 child.qcow2 (qemu-img 10.2.1)",
+ "oracle_cmd": "qemu-img info --output=json child.qcow2 -> cluster-size 4096 = 2^12",
+ "decoy": false,
+ "member": "child.qcow2"
+}

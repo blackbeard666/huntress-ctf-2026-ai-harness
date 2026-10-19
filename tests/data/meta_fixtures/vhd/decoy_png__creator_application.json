@@ -1,0 +1,8 @@
+{
+ "field": "vhd.creator_application",
+ "expected": "none",
+ "generator_cmd": "printf '\\x89PNG\\r\\n\\x1a\\n' > fake.vhd; head -c 3000 /dev/urandom >> fake.vhd  (PNG-magic impostor renamed .vhd)",
+ "oracle_cmd": "file -b fake.vhd -> data (PNG signature only, no 'conectix' footer); 7z l fake.vhd -> cannot open as archive",
+ "decoy": true,
+ "member": "fake.vhd"
+}

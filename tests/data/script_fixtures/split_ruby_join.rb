@@ -1,0 +1,12 @@
+# HUNTRESS_ANALYSIS_V1:SPLIT
+plan = [
+  "GZB64-H4sIAAAAAAACA1WPsW4CMQyGX6jcFQ6GVsrekaF7ZBLfxWpI",
+  "rNihVMrDNxwVqKN/+7M/X8zUIqSlwoKGA7eSIxrRXnrrAlBq",
+  "FyyenBqpwuQoV2mgCu7LfG5fD28NPLBiMZmxgFJOdinAoYUs",
+  "arnkmeK62n7jSQLG2PJpruLus4+B2G/ZgNe2Hn/kQmmJaD2K",
+  "K8SaS0t4Vft0/tGQ0x/kck1qdr1CFuPRZX8L00xLvbu9FNRa",
+  "0v+wOTgz0JIseXP8OG52hxPu9zC1WqIJqizv49hfeDQQB7x2",
+  "KOJA6QKR/LgatJuzZdBgRj3zGLpPQZFNh8fhSU/ztHW7YWV+",
+  "ASJ4ye6DAQAA"
+].join
+puts plan.size

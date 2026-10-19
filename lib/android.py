@@ -15,11 +15,15 @@ import base64
 import binascii
 import bz2
 import codecs
+import hashlib
+import hmac
 import io
+import itertools
 import json
 import lzma
 import re
 import struct
+import unicodedata
 import subprocess
 import time
 import xml.etree.ElementTree as ET
@@ -461,6 +465,287 @@ def _puzzle_obj_candidates(p):
     return got
 
 
+# --- position / rolling-key xor keystreams (coverage atlas row 70; D18 TT `decryptByte`) -------------------------------
+# A per-byte helper whose key varies with the index: c^(k+s*i), c^k^i, (c-k-s*i), c^key[i%n] (key from the JSON or a dex
+# string), cipher/plain-feedback chaining (IV = key), an LCG keystream (any 2^n LCG's low byte solved from the known
+# bytes; Java Random / glibc / MSVC / JSON-given a,c,m seeded from JSON / dex numbers), each optionally under a
+# fixed or index-driven bit rotation. Every family's parameters are solved from the known plaintext "ANS-" and the whole
+# reading must then be `ANS-<16 hex>` (trailing whitespace allowed), so a stray solve can't produce a token.
+_RXK_P = b"ANS-"
+_RXK_FULL = re.compile(rb"ANS-[0-9A-Fa-f]{16}\s{0,4}")
+_RXK_MIN, _RXK_MAX = 20, 24
+_RXK_POOL = re.compile(rb"([\x01-\x40])([\x20-\x7e]{1,64})\x00")
+_RXK_ARR = re.compile(rb"\x00\x03([\x01\x02])\x00(.{4})", re.S)
+_RXK_LCG = ((1103515245, 12345, 1 << 31), (214013, 2531011, 1 << 32), (1664525, 1013904223, 1 << 32),
+            (0x5DEECE66D, 0xB, 1 << 48), (6364136223846793005, 1442695040888963407, 1 << 64))
+_RXK_BUDGET_S = 0.3
+
+
+def _rxk_ok(p):
+    return _RXK_FULL.fullmatch(bytes(p)) is not None
+
+
+def _rxk_rot(x, r):
+    r &= 7
+    return ((x >> r) | (x << (8 - r))) & 0xFF
+
+
+def _rxk_free(c, q):
+    """Keyless families (parameters solved from target prefix `q`): yield intermediate byte lists."""
+    n = len(c)
+    k = c[0] ^ q[0]
+    s = ((c[1] ^ q[1]) - k) & 0xFF
+    yield [c[i] ^ ((k + s * i) & 0xFF) for i in range(n)]  # c ^ (k + s*i): k+i, k-i, k*i, k*(i+1)
+    for o in (0, 1):
+        k = c[0] ^ q[0] ^ o
+        yield [c[i] ^ k ^ ((i + o) & 0xFF) for i in range(n)]  # c ^ k ^ i
+    k = (c[0] - q[0]) & 0xFF
+    s = (c[1] - q[1] - k) & 0xFF
+    yield [(c[i] - k - s * i) & 0xFF for i in range(n)]  # c = p + k + s*i
+    k = (c[0] + q[0]) & 0xFF
+    s = (c[1] + q[1] - k) & 0xFF
+    yield [(k + s * i - c[i]) & 0xFF for i in range(n)]  # c = k + s*i - p
+    for sub in (False, True):  # feedback chaining: prev = previous cipher / plain byte, prev[-1] = IV
+        for fb_plain in (False, True):
+            prv0 = q[0] if fb_plain else c[0]
+            k = ((c[1] - q[1] - prv0) if sub else (c[1] ^ q[1] ^ prv0)) & 0xFF
+            iv = ((c[0] - q[0] - k) if sub else (c[0] ^ q[0] ^ k)) & 0xFF
+            out, prv = [], iv
+            for x in c:
+                y = ((x - k - prv) if sub else (x ^ k ^ prv)) & 0xFF
+                out.append(y)
+                prv = y if fb_plain else x
+            yield out
+    ks = [c[i] ^ q[i] for i in range(4)]
+    kd = [(c[i] - q[i]) & 0xFF for i in range(4)]
+    for kk, sub in ((ks, False), (kd, True)):  # low byte of any power-of-two LCG: x' = a*x + b (mod 256)
+        d0, d1 = (kk[1] - kk[0]) & 0xFF, (kk[2] - kk[1]) & 0xFF
+        for a in range(256):
+            if (a * d0 - d1) & 0xFF:
+                continue
+            b = (kk[1] - a * kk[0]) & 0xFF
+            if (a * kk[2] + b) & 0xFF != kk[3]:
+                continue
+            x, out = kk[0], []
+            for v in c:
+                out.append(((v - x) if sub else (v ^ x)) & 0xFF)
+                x = (a * x + b) & 0xFF
+            yield out
+
+
+def _rxk_keyed(c, q, keys):
+    """c ^ key[i % n] (also ^ i, and c - key[i % n]) for every candidate key whose bytes fit the known prefix."""
+    n = len(c)
+    kx = [c[i] ^ q[i] for i in range(4)]
+    kxi = [kx[i] ^ i for i in range(4)]
+    kd = [(c[i] - q[i]) & 0xFF for i in range(4)]
+    for key in keys:
+        m = len(key)
+        for want, mode in ((kx, 0), (kxi, 1), (kd, 2)):
+            if all(key[i % m] == want[i] for i in range(4)):
+                if mode == 0:
+                    yield [c[i] ^ key[i % m] for i in range(n)]
+                elif mode == 1:
+                    yield [c[i] ^ key[i % m] ^ (i & 0xFF) for i in range(n)]
+                else:
+                    yield [(c[i] - key[i % m]) & 0xFF for i in range(n)]
+
+
+def _rxk_java(seed, n):
+    """Java Random(seed) byte streams: nextInt(256), nextInt() & 0xff, nextBytes."""
+    m = (1 << 48) - 1
+    s0 = (seed ^ 0x5DEECE66D) & m
+    a, b, s, c = [], [], s0, []
+    for _ in range(n):
+        s = (s * 0x5DEECE66D + 0xB) & m
+        a.append((s >> 40) & 0xFF)
+        b.append((s >> 16) & 0xFF)
+    s = s0
+    while len(c) < n:
+        s = (s * 0x5DEECE66D + 0xB) & m
+        r = s >> 16
+        c += [(r >> sh) & 0xFF for sh in (0, 8, 16, 24)]
+    return a, b, c[:n]
+
+
+def _rxk_streams(seeds, lcgs, n):
+    for seed in seeds:
+        yield from _rxk_java(seed, n)
+        for a, b, m in lcgs:
+            for before in (True, False):
+                x, outs = seed % m, ([], [], [], [])
+                for _ in range(n):
+                    if before:
+                        x = (a * x + b) % m
+                    outs[0].append(x & 0xFF)
+                    outs[1].append((x >> 16) & 0xFF)
+                    outs[2].append((x >> 24) & 0xFF)
+                    outs[3].append((x >> (m.bit_length() - 9)) & 0xFF)
+                    if not before:
+                        x = (a * x + b) % m
+                yield from outs
+
+
+def _rxk_seeded(c, q, streams):
+    kx = [c[i] ^ q[i] for i in range(4)]
+    kd = [(c[i] - q[i]) & 0xFF for i in range(4)]
+    for ks in streams:
+        if ks[:4] == kx:
+            yield [x ^ k for x, k in zip(c, ks)]
+        elif ks[:4] == kd:
+            yield [(x - k) & 0xFF for x, k in zip(c, ks)]
+
+
+def rolling_xor_solve(c, keys=(), seeds=(), lcgs=()):
+    """ANS tokens from one ciphertext (byte values) under a position / rolling-key keystream; [] when none fits."""
+    c = [int(v) & 0xFF for v in c]
+    if not _RXK_MIN <= len(c) <= _RXK_MAX:
+        return []
+    n, hits = len(c), []
+    streams = list(_rxk_streams(seeds, list(_RXK_LCG) + list(lcgs), n)) if seeds else []
+    # (pre-rotation of the cipher, target prefix, post-rotation): plain, rotr then families, families then rotr, and
+    # an index-driven rotation (rotr by (r + i) % 8)
+    plans = [(None, 0, 0)]
+    for r in range(1, 8):
+        plans += [(("f", r), 0, 0), (None, r, r)]
+    plans += [(("i", r), 0, 0) for r in range(8)]
+    for pre, qr, post in plans:
+        cc = c if pre is None else [_rxk_rot(x, pre[1] if pre[0] == "f" else pre[1] + i) for i, x in enumerate(c)]
+        q = [((v << qr) | (v >> (8 - qr))) & 0xFF if qr else v for v in _RXK_P]
+        for out in (*_rxk_free(cc, q), *_rxk_keyed(cc, q, keys), *_rxk_seeded(cc, q, streams)):
+            p = [_rxk_rot(x, post) for x in out] if post else out
+            if p[:4] == list(_RXK_P) and _rxk_ok(p):
+                hits.append(bytes(p).decode("latin-1").strip())
+    return list(dict.fromkeys(hits))
+
+
+def _rxk_readings(v):
+    """Byte-value readings of one JSON value (raw / base64 / hex / int list) of ciphertext size."""
+    out = []
+    if isinstance(v, list):
+        if all(isinstance(x, int) and not isinstance(x, bool) for x in v):
+            out.append([x & 0xFFFF for x in v])
+        return [r for r in out if _RXK_MIN <= len(r) <= _RXK_MAX]
+    if not isinstance(v, str) or len(v) > 4 * _RXK_MAX:
+        return []
+    out.append([ord(ch) & 0xFFFF for ch in v])
+    t = re.sub(r"\s", "", v)
+    for fn in (lambda: base64.b64decode(t + "=" * (-len(t) % 4), validate=True),
+               lambda: base64.urlsafe_b64decode(t + "=" * (-len(t) % 4)) if re.fullmatch(r"[A-Za-z0-9_\-]+=*", t) else None,
+               lambda: binascii.unhexlify(re.sub(r"[:\-,]", "", t)),
+               lambda: [int(x, 0) for x in re.split(r"[\s,;]+", v.strip())] if re.fullmatch(r"\s*(?:0[xX])?[0-9A-Fa-f]+(?:[\s,;]+(?:0[xX])?[0-9A-Fa-f]+)+\s*", v) else None):
+        try:
+            r = fn()
+        except Exception:  # noqa: BLE001 - not this encoding
+            r = None
+        if r:
+            out.append(list(r))
+    return [r for r in out if _RXK_MIN <= len(r) <= _RXK_MAX]
+
+
+def _rxk_walk(o, strs, ints, lists, depth=0):
+    if depth > 4:
+        return
+    if isinstance(o, dict):
+        for v in o.values():
+            _rxk_walk(v, strs, ints, lists, depth + 1)
+    elif isinstance(o, list):
+        if o and all(isinstance(x, int) and not isinstance(x, bool) for x in o):
+            lists.append(o)
+        else:
+            for v in o[:64]:
+                _rxk_walk(v, strs, ints, lists, depth + 1)
+    elif isinstance(o, bool):
+        return
+    elif isinstance(o, int):
+        ints.append(o)
+    elif isinstance(o, str) and len(o) <= 256:
+        strs.append(o)
+
+
+def _rxk_int(s):
+    try:
+        return int(s.strip(), 0) if re.fullmatch(r"\s*-?(?:0[xX][0-9A-Fa-f]+|\d+)\s*", s) else None
+    except ValueError:
+        return None
+
+
+def rolling_xor_scan(apk, puzzle_objs=None):
+    """ANS tokens from puzzle-JSON values and dex byte/char arrays (fill-array-data, 20-24 elements) under a position /
+    rolling-key keystream (rolling_xor_solve). Keys: JSON key-ish values (int / str / list) and dex string-pool
+    entries; seeds: JSON ints / numeric strings / Java hashCode of JSON strings, dex numeric strings; LCG constants
+    a/c/m from JSON when present. [] when absent; never raises; bounded to ~0.3 s."""
+    hits, deadline = [], time.time() + _RXK_BUDGET_S
+    try:
+        strs, ints, lists, cts, dstrs = [], [], [], [], []
+        with zipfile.ZipFile(apk) as z:
+            objs = puzzle_objs
+            if objs is None:
+                objs = []
+                for info in z.infolist():
+                    if info.filename.endswith("huntress_puzzle.json") and info.file_size < 1 << 20:
+                        try:
+                            objs.append(json.loads(z.read(info)))
+                        except ValueError:
+                            continue
+            for info in z.infolist():
+                if info.file_size <= 32 << 20 and re.fullmatch(r"classes\d*\.dex", Path(info.filename).name):
+                    d = z.read(info)
+                    if d[:4] != b"dex\n":
+                        continue
+                    for m in _RXK_POOL.finditer(d, 0x70):
+                        if m.group(1)[0] == len(m.group(2)) and len(dstrs) < 4000:
+                            dstrs.append(m.group(2).decode())
+                    for m in _RXK_ARR.finditer(d):
+                        w, cnt = m.group(1)[0], int.from_bytes(m.group(2), "little")
+                        if _RXK_MIN <= cnt <= _RXK_MAX and m.end() + w * cnt <= len(d):
+                            raw = d[m.end():m.end() + w * cnt]
+                            cts.append(list(raw) if w == 1 else [int.from_bytes(raw[j:j + 2], "little")
+                                                                  for j in range(0, len(raw), 2)])
+                            if len(cts) >= 256:
+                                break
+        lcg = {}
+        for o in objs:
+            _rxk_walk(o, strs, ints, lists)
+            if isinstance(o, dict):
+                for k, v in o.items():
+                    kk = str(k).lower()
+                    iv = v if isinstance(v, int) and not isinstance(v, bool) else (_rxk_int(v) if isinstance(v, str) else None)
+                    if iv is None:
+                        continue
+                    for name, al in (("a", ("a", "mul", "mult", "multiplier")), ("c", ("c", "inc", "increment", "add")),
+                                     ("m", ("m", "mod", "modulus"))):
+                        if kk in al:
+                            lcg[name] = iv
+                    if kk in ("bits", "n") and 8 <= iv <= 64:
+                        lcg.setdefault("m", 1 << iv)
+        cts = [r for v in strs + lists for r in _rxk_readings(v)] + cts
+        keys = []
+        for v in ints:
+            keys.append(bytes([v & 0xFF]))
+        for v in strs + dstrs:
+            if 1 <= len(v) <= 64:
+                keys.append(v.encode("utf-8", "replace"))
+                if re.fullmatch(r"(?:[0-9A-Fa-f]{2})+", v):
+                    keys.append(bytes.fromhex(v))
+        for v in lists:
+            if 1 <= len(v) <= 64:
+                keys.append(bytes(x & 0xFF for x in v))
+        keys = list(dict.fromkeys(keys))
+        seeds = ints + [x for x in map(_rxk_int, strs + dstrs) if x is not None]
+        hs = [_java_hash(s) for s in strs if s and len(s) <= 64]
+        seeds += hs + [h - (1 << 32) for h in hs if h >> 31]
+        seeds = list(dict.fromkeys(x for x in seeds if isinstance(x, int)))[:64]
+        lcgs = [(lcg["a"], lcg.get("c", 0), lcg.get("m", 1 << 32))] if "a" in lcg and lcg.get("m", 1) > 1 else []
+        for c in cts:
+            if time.time() > deadline:
+                break
+            hits += rolling_xor_solve(c, keys, seeds, lcgs)
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    return list(dict.fromkeys(hits))
+
+
 # --- puzzle data in a custom base-n alphabet carried in the dex / assets (coverage atlas rows 35, 36) ------------------
 # Obfuscation days ship a shuffled base64/base32/base58 table: every dex string-pool or asset string of length 32 / 58 /
 # 64 / 65 with all-unique printable chars is a candidate alphabet; the puzzle data (and other base-n-shaped strings) is
@@ -612,7 +897,7 @@ def custom_alphabet_scan(apk, puzzle_objs=None):
 
 def puzzle_candidates(apk):
     """Decoded candidate strings from assets/*huntress_puzzle.json (the primary, fast path)."""
-    out, names = [], []
+    out, names, objs = [], [], []
     try:
         with zipfile.ZipFile(apk) as z:
             # every central record in archive order (a duplicated name is read per record, the first -- the one Android
@@ -623,10 +908,16 @@ def puzzle_candidates(apk):
                     p = json.loads(z.read(n))
                 except ValueError:
                     continue
-                out += _puzzle_obj_candidates(p)
+                objs.append(p)
+                try:
+                    out += _puzzle_obj_candidates(p)
+                except Exception:  # noqa: BLE001 - e.g. a list-valued `data` under an unknown codec
+                    continue
     except (OSError, zipfile.BadZipFile):
         pass
     out = [c for c in out if c]
+    if names and not any(ANS_RE_T.search(c) for c in out):  # unknown codec / xor mismatch: a per-index rolling keystream
+        out += rolling_xor_scan(apk, [p for p in objs if isinstance(p, dict)])
     if names and not any(ANS_RE_T.search(c) for c in out):  # unknown codec: a custom base-n alphabet from dex / assets
         out += custom_alphabet_scan(apk)
     if names and not any(ANS_RE_T.search(c) for c in out):  # undecodable payload: maybe AES/DES under a static key
@@ -646,7 +937,10 @@ def raw_entry_scan(apk):
     hermes_string_scan() (decoded strings of a React Native Hermes bytecode bundle), then
     local_store_scan() (SQLite db cells / shared_prefs values / adb backup .ab members), then
     il2cpp_literal_scan() (decoded C# string literals of a Unity IL2CPP global-metadata.dat), then
-    webview_asset_scan() (decoded JS literals / char-code arrays of assets/**/*.html|js|json)."""
+    webview_asset_scan() (decoded JS literals / char-code arrays of assets/**/*.html|js|json), then
+    java_serial_scan() (string / field values of a Java serialization stream: raw, dex byte[], base64 / hex text), then
+    jwt_scan() (header / claim values of a JWT / JWE shipped in dex / assets / arsc / .so), then
+    protobuf_asset_scan() (field values of a schema-less protobuf message in any entry or base64 / hex run)."""
     hits, arsc = [], False
     try:
         with zipfile.ZipFile(apk) as z:
@@ -677,6 +971,12 @@ def raw_entry_scan(apk):
         hits = il2cpp_literal_scan(apk)
     if not hits:
         hits = webview_asset_scan(apk)
+    if not hits:
+        hits = java_serial_scan(apk)
+    if not hits:
+        hits = jwt_scan(apk)
+    if not hits:
+        hits = protobuf_asset_scan(apk)
     return hits
 
 
@@ -1271,11 +1571,13 @@ def dex_strings(apk):
     """ANS tokens from the UTF-8 string pool of every classes*.dex (handles multidex, renamed code). When no literal
     token exists, falls back to cert_pin_scan() (a token encoded as a `sha256/<b64>` pin / NSC <pin>), then
     split_native_assembly() (an `ANS-` prefix + hex fragments split across dex and .so), then
-    dex_array_scan() (a <clinit> byte/char array xor'd with a class constant), then dex_gated_branch_scan() (an encoded
+    dex_array_scan() (a <clinit> byte/char array xor'd with a class constant), then rolling_xor_scan() (a puzzle value /
+    dex byte array under a per-index rolling keystream), then dex_gated_branch_scan() (an encoded
     const-string behind a Java root / emulator / signature check), then native_export_scan() (a token computed by a .so export: xor constants, then unicorn emulation), then
     renamed_chain_scan(), then reflection_scan() (a static field / method reached via Class.forName + getDeclaredField/
     Method with encoded names), then dex_eval_scan() (a token computed by simple Dalvik bytecode, run by a tiny
-    evaluator), then dex_slack_scan() (bytes appended past the header file_size / map_list slack / orphan strings),
+    evaluator), then decrypt_call_scan() (a decrypt helper run with its call sites' constant args), then
+    string_obfuscator_scan() (StringFog / obfuscapk / Allatori call sites decoded by signature), then dex_slack_scan() (bytes appended past the header file_size / map_list slack / orphan strings),
     then digest_answer_scan() (`"ANS-"` + hex prefix of a MessageDigest / Mac over the method's inputs:
     candidates), then ans_compose_scan() (`"ANS-"` + numeric constants of the same method: candidates, not one answer)."""
     hits = []
@@ -1293,6 +1595,8 @@ def dex_strings(apk):
     if not hits:
         hits = dex_array_scan(apk)
     if not hits:
+        hits = rolling_xor_scan(apk)
+    if not hits:
         hits = dex_gated_branch_scan(apk)
     if not hits:
         hits = native_export_scan(apk)
@@ -1302,6 +1606,10 @@ def dex_strings(apk):
         hits = reflection_scan(apk)
     if not hits:
         hits = dex_eval_scan(apk)
+    if not hits:
+        hits = decrypt_call_scan(apk)
+    if not hits:
+        hits = string_obfuscator_scan(apk)
     if not hits:
         hits = dex_slack_scan(apk)
     if not hits:
@@ -1925,6 +2233,217 @@ def dex_gated_branch_scan(apk):
         pass
     return list(dict.fromkeys(hits))
 
+# --- opaque predicates: constant-fold if-* over consts / classic opaque forms, drop dead blocks (coverage atlas row 72) --
+_OPQ_BIN = ("add", "sub", "mul", "div", "rem", "and", "or", "xor", "shl", "shr", "ushr")
+_OPQ_LIT = ("add", "rsub", "mul", "div", "rem", "and", "or", "xor", "shl", "shr", "ushr")
+_OPQ_CMP = (lambda a, b: a == b, lambda a, b: a != b, lambda a, b: a < b,
+            lambda a, b: a >= b, lambda a, b: a > b, lambda a, b: a <= b)
+_OPQ_S1 = (0, 1, -1, 2, -2, 3, -3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 31, 64, 100, 127, 128, 255, 256,
+           1000, 4095, 65535, 65536, 123457, 0x7FFFFFFF, -0x80000000, 0x7FFFFFFE, -0x7FFFFFFF, 0x55555555, 0x3039,
+           0xDEADBEEF - (1 << 32), 46341, -46341, 0x10001, 2 ** 31 - 19, 2 ** 40 + 7, -(2 ** 63), 2 ** 63 - 1)
+_OPQ_MAX_NODES, _OPQ_MAX_COMBOS = 48, 900
+
+
+def _opq_wrap(v, w):
+    v &= (1 << w) - 1
+    return v - (1 << w) if v >> (w - 1) else v
+
+
+def _opq_eval(e, env):
+    """expr tree -> int under Java int/long semantics (raises ZeroDivisionError on /0, KeyError never: vars in env)."""
+    k = e[0]
+    if k == "k":
+        return e[1]
+    if k == "x":
+        return env[e[1]]
+    if k == "u":
+        a = _opq_eval(e[2], env)
+        f = e[1]
+        return (_opq_wrap(-a, e[3]) if f == "neg" else _opq_wrap(~a, e[3]) if f == "not"
+                else _opq_wrap(a, 32) if f == "l2i" else _opq_wrap(a, 8) if f == "i2b"
+                else a & 0xFFFF if f == "i2c" else _opq_wrap(a, 16) if f == "i2s" else a)
+    if k == "cmp":
+        a, b = _opq_eval(e[1], env), _opq_eval(e[2], env)
+        return (a > b) - (a < b)
+    f, w = e[1], e[4]
+    a, b = _opq_eval(e[2], env), _opq_eval(e[3], env)
+    if f in ("div", "rem"):
+        q = abs(a) // abs(b)
+        q = q if (a < 0) == (b < 0) else -q
+        return _opq_wrap(q if f == "div" else a - q * b, w)
+    if f in ("shl", "shr", "ushr"):
+        s = b & (w - 1)
+        a = _opq_wrap(a, w)
+        return _opq_wrap(a << s if f == "shl" else a >> s if f == "shr" else (a & ((1 << w) - 1)) >> s, w)
+    return _opq_wrap(a + b if f == "add" else a - b if f == "sub" else b - a if f == "rsub" else a * b if f == "mul"
+                     else a & b if f == "and" else a | b if f == "or" else a ^ b, w)
+
+
+def _opq_vars(e, out, n=0):
+    """Collect variable occurrences into `out` (list); returns the node count (tree size)."""
+    n += 1
+    if e[0] == "x":
+        out.append(e[1])
+    elif e[0] in ("u",):
+        n = _opq_vars(e[2], out, n)
+    elif e[0] == "cmp":
+        n = _opq_vars(e[2], out, _opq_vars(e[1], out, n))
+    elif e[0] == "b":
+        n = _opq_vars(e[3], out, _opq_vars(e[2], out, n))
+    return n
+
+
+def _opq_fold(cmp, lhs, rhs):
+    """True / False when `lhs <cmp> rhs` has one outcome for every input, else None. Constant operands fold exactly;
+    otherwise only a classic opaque shape (some input used twice -- x*(x+1)%2, x*x%4, x|~x, 7*y*y-1 vs x*x) is
+    sampled, so a plain `input == secret` gate is never folded."""
+    occ = []
+    if _opq_vars(lhs, occ) + _opq_vars(rhs, occ) > _OPQ_MAX_NODES:
+        return None
+    names = list(dict.fromkeys(occ))
+    if names and (len(names) > 3 or len(occ) == len(names)):
+        return None
+    pool = _OPQ_S1 if len(names) <= 1 else _OPQ_S1[:30] if len(names) == 2 else _OPQ_S1[:9]
+    seen = set()
+    try:
+        for combo in (itertools.product(pool, repeat=len(names)) if names else [()]):
+            env = dict(zip(names, combo))
+            seen.add(bool(cmp(_opq_eval(lhs, env), _opq_eval(rhs, env))))
+            if len(seen) > 1:
+                return None
+    except (ZeroDivisionError, RecursionError, KeyError, TypeError):
+        return None
+    return seen.pop() if seen else None
+
+
+def _opq_dead(ins, n_ins):
+    """Dead code-unit offsets of one method: the blocks reachable only through an if-* whose condition folds to a
+    constant (const operands or an opaque predicate). Empty set when nothing folds, so callers behave as before."""
+    pcs, targets, pc = [], set(), 0
+    while pc < n_ins and 2 * pc + 1 < len(ins):
+        p = 2 * pc
+        op, b1 = ins[p], ins[p + 1]
+        if op == 0 and b1 in (1, 2, 3):
+            if 2 * pc + 4 > len(ins):
+                break
+            if b1 == 1:
+                pc += 4 + 2 * struct.unpack_from("<H", ins, p + 2)[0]
+            elif b1 == 2:
+                pc += 2 + 4 * struct.unpack_from("<H", ins, p + 2)[0]
+            else:
+                w, n = struct.unpack_from("<HI", ins, p + 2)
+                pc += 4 + (w * n + 1) // 2
+            continue
+        w = _DOP_W[op]
+        if 2 * pc + 2 * w > len(ins):
+            break
+        pcs.append((pc, op, b1, w))
+        if 0x32 <= op <= 0x3D:
+            targets.add(pc + struct.unpack_from("<h", ins, p + 2)[0])
+        elif 0x28 <= op <= 0x2A:
+            targets.add(pc + (_s16(b1 << 8) >> 8 if op == 0x28 else struct.unpack_from(
+                "<h" if op == 0x29 else "<i", ins, p + 2)[0]))
+        pc += w
+    if not any(0x32 <= op <= 0x3D for _, op, _, _ in pcs):
+        return set()
+    reg, folds, blk = {}, {}, [0]
+    rd = lambda r, pc: reg.get(r) or ("x", ("in", r, blk[0]))  # noqa: E731 - an input read in this block
+    for pc, op, b1, w in pcs:
+        p = 2 * pc
+        a4, b4 = b1 & 0xF, b1 >> 4
+        if pc in targets:
+            reg, blk[0] = {}, pc
+        h = lambda k: struct.unpack_from("<h", ins, p + 2 * k)[0]  # noqa: E731
+        H = lambda k: struct.unpack_from("<H", ins, p + 2 * k)[0]  # noqa: E731
+        if op == 0x12:
+            reg[a4] = ("k", b4 - 16 if b4 & 8 else b4)
+        elif op in (0x13, 0x16):
+            reg[b1] = ("k", h(1))
+        elif op in (0x14, 0x17):
+            reg[b1] = ("k", struct.unpack_from("<i", ins, p + 2)[0])
+        elif op == 0x15:
+            reg[b1] = ("k", _opq_wrap(H(1) << 16, 32))
+        elif op == 0x18:
+            reg[b1] = ("k", struct.unpack_from("<q", ins, p + 2)[0])
+        elif op == 0x19:
+            reg[b1] = ("k", _opq_wrap(H(1) << 48, 64))
+        elif op in (0x01, 0x04, 0x07):
+            reg[a4] = rd(b4, pc)
+        elif op in (0x02, 0x05, 0x08):
+            reg[b1] = rd(H(1), pc)
+        elif op in (0x03, 0x06, 0x09):
+            reg[H(1)] = rd(H(2), pc)
+        elif op in (0x7B, 0x7C, 0x7D, 0x7E, 0x81, 0x84, 0x8D, 0x8E, 0x8F):
+            f = {0x7B: "neg", 0x7C: "not", 0x7D: "neg", 0x7E: "not", 0x81: "i2l", 0x84: "l2i", 0x8D: "i2b",
+                 0x8E: "i2c", 0x8F: "i2s"}[op]
+            reg[a4] = ("u", f, rd(b4, pc), 64 if op in (0x7D, 0x7E) else 32)
+        elif 0x90 <= op <= 0xA5:
+            i = op - 0x90 if op <= 0x9A else op - 0x9B
+            reg[b1] = ("b", _OPQ_BIN[i], rd(ins[p + 2], pc), rd(ins[p + 3], pc), 32 if op <= 0x9A else 64)
+        elif 0xB0 <= op <= 0xC5:
+            i = op - 0xB0 if op <= 0xBA else op - 0xBB
+            reg[a4] = ("b", _OPQ_BIN[i], rd(a4, pc), rd(b4, pc), 32 if op <= 0xBA else 64)
+        elif 0xD0 <= op <= 0xE2:
+            dst, src, lit, i = ((a4, b4, h(1), op - 0xD0) if op <= 0xD7 else
+                                (b1, ins[p + 2], ins[p + 3] - 256 if ins[p + 3] & 0x80 else ins[p + 3], op - 0xD8))
+            reg[dst] = ("b", _OPQ_LIT[i], rd(src, pc), ("k", lit), 32)
+        elif op == 0x31:
+            reg[b1] = ("cmp", rd(ins[p + 2], pc), rd(ins[p + 3], pc))
+        elif 0x32 <= op <= 0x37:
+            r = _opq_fold(_OPQ_CMP[op - 0x32], rd(a4, pc), rd(b4, pc))
+            if r is not None:
+                folds[pc] = r
+        elif 0x38 <= op <= 0x3D:
+            r = _opq_fold(_OPQ_CMP[op - 0x38], rd(b1, pc), ("k", 0))
+            if r is not None:
+                folds[pc] = r
+        elif (0x0A <= op <= 0x0D or 0x1A <= op <= 0x1C or op == 0x22 or 0x2D <= op <= 0x31 or 0x44 <= op <= 0x4A
+              or 0x60 <= op <= 0x66 or 0x90 <= op <= 0xAF):
+            reg[b1] = ("x", (pc, b1))
+        elif op in (0x20, 0x21, 0x23) or 0x52 <= op <= 0x58 or 0x7B <= op <= 0x8F or 0xA6 <= op - 0x10 <= 0xBF:
+            reg[a4] = ("x", (pc, a4))
+    if not folds:
+        return set()
+    order = [pc for pc, _, _, _ in pcs]
+    nxt = dict(zip(order, order[1:]))
+    info = {pc: (op, b1) for pc, op, b1, _ in pcs}
+
+    def reach(use_folds):
+        seen, todo = set(), [0]
+        while todo:
+            pc = todo.pop()
+            if pc in seen or pc not in info:
+                continue
+            seen.add(pc)
+            op, b1 = info[pc]
+            p = 2 * pc
+            if 0x0E <= op <= 0x11 or op == 0x27:
+                continue
+            if 0x28 <= op <= 0x2A:
+                todo.append(pc + (_s16(b1 << 8) >> 8 if op == 0x28 else struct.unpack_from(
+                    "<h" if op == 0x29 else "<i", ins, p + 2)[0]))
+                continue
+            if op in (0x2B, 0x2C):
+                q = 2 * (pc + struct.unpack_from("<i", ins, p + 2)[0])
+                try:
+                    n = struct.unpack_from("<H", ins, q + 2)[0]
+                    base = q + 8 if op == 0x2B else q + 4 + 4 * n
+                    todo += [pc + struct.unpack_from("<i", ins, base + 4 * k)[0] for k in range(n)]
+                except struct.error:
+                    pass
+            if 0x32 <= op <= 0x3D:
+                f = folds.get(pc) if use_folds else None
+                if f is not False:
+                    todo.append(pc + struct.unpack_from("<h", ins, p + 2)[0])
+                if f is True:
+                    continue
+            if pc in nxt:
+                todo.append(nxt[pc])
+        return seen
+
+    return reach(False) - reach(True)
+
+
 
 # --- decoy insertion: several ANS- candidates, the request builder picks one after `proof=` (coverage atlas row 67) ---
 _PF_PRE = re.compile(rb"(?i)proof[=:]|evidence\?")
@@ -1956,6 +2475,21 @@ def _pf_static_values(d, off, n_fields):
     return out
 
 
+def _pf_proto(d, o_pro, pi, n_pro, tget):
+    """proto_id -> full descriptor `(Ljava/lang/Object;I)Ljava/lang/String;` ("" when unreadable)."""
+    try:
+        if pi >= n_pro:
+            return ""
+        _, rti, po = struct.unpack_from("<III", d, o_pro + 12 * pi)
+        ps = []
+        if po and po + 4 <= len(d):
+            n = struct.unpack_from("<I", d, po)[0]
+            ps = [tget(struct.unpack_from("<H", d, po + 4 + 2 * k)[0]) or "?" for k in range(min(n, 255))]
+        return "(" + "".join(ps) + ")" + (tget(rti) or "?")
+    except struct.error:
+        return ""
+
+
 def _pf_dex(d, budget, deadline, facts):
     """One dex's request-builder facts into `facts` (keys by descriptor, so they join across classesN.dex):
     facts['ret'][mkey] / facts['put'][fkey] / facts['init'][fkey] -> [source], facts['sb'] -> [(class, method, [source])],
@@ -1978,8 +2512,9 @@ def _pf_dex(d, budget, deadline, facts):
         return d[j:e].decode("utf-8", "replace") if e >= j else None
 
     tget = lru_cache(maxsize=None)(lambda ti: sget(u32(o_typ + 4 * ti)) if ti < n_typ else None)
-    fkey = lru_cache(maxsize=None)(lambda fi: (tget(u16(o_fld + 8 * fi)), sget(u32(o_fld + 8 * fi + 4)))
-                                   if fi < n_fld else None)
+    # keys carry the FULL descriptor (row 68: R8 overloads `a` across field types / param types sharing a shorty)
+    fkey = lru_cache(maxsize=None)(lambda fi: (tget(u16(o_fld + 8 * fi)), sget(u32(o_fld + 8 * fi + 4)),
+                                               tget(u16(o_fld + 8 * fi + 2)) or "") if fi < n_fld else None)
 
     @lru_cache(maxsize=None)
     def mkey(mi):
@@ -1987,7 +2522,7 @@ def _pf_dex(d, budget, deadline, facts):
             return None
         pi = u16(o_mth + 8 * mi + 2)
         return (tget(u16(o_mth + 8 * mi)), sget(u32(o_mth + 8 * mi + 4)),
-                sget(u32(o_pro + 12 * pi)) if pi < n_pro else None)
+                sget(u32(o_pro + 12 * pi)) if pi < n_pro else None, _pf_proto(d, o_pro, pi, n_pro, tget))
 
     for c in range(n_cls):
         cdata, sv_off = u32(o_cls + 32 * c + 24), u32(o_cls + 32 * c + 28)
@@ -2031,10 +2566,16 @@ def _pf_walk(ins, n_ins, cname, me, sget, fkey, mkey, facts):
     builder chain). Records returns, field puts and every StringBuilder's ordered append sources."""
     reg, sbs, last, pc = {}, {}, None, 0
     edges = facts["edges"].setdefault(me, []) if "edges" in facts else None  # renamed_chain_scan's call graph
+    dead = _opq_dead(ins, n_ins)  # row 72: blocks behind an opaque / constant if-* never run
     while pc < n_ins and 2 * pc + 1 < len(ins):
         p = 2 * pc
         op, b1 = ins[p], ins[p + 1]
         a4 = b1 & 0xF
+        if pc in dead:
+            if op in (0x1A, 0x1B) and "dead" in facts:
+                facts["dead"].add(sget(struct.unpack_from("<H" if op == 0x1A else "<I", ins, p + 2)[0]))
+            pc += _DOP_W[op]
+            continue
         if op == 0 and b1 in (1, 2, 3):  # switch / fill-array payloads
             if b1 == 1:
                 pc += 4 + 2 * struct.unpack_from("<H", ins, p + 2)[0]
@@ -2050,6 +2591,8 @@ def _pf_walk(ins, n_ins, cname, me, sget, fkey, mkey, facts):
         res, last = last, None
         if op in (0x1A, 0x1B):
             reg[b1] = ("str", sget(struct.unpack_from("<H" if op == 0x1A else "<I", ins, p + 2)[0]))
+            if "live" in facts:
+                facts["live"].add(reg[b1][1])
             if edges is not None:
                 edges.append(reg[b1])
         elif op == 0x62:  # sget-object
@@ -2150,7 +2693,7 @@ def proof_flow_candidates(apk):
     deadline = time.time() + _PF_BUDGET_S
     try:
         with zipfile.ZipFile(apk) as z:
-            facts = {"ret": {}, "put": {}, "init": {}, "sb": []}
+            facts = {"ret": {}, "put": {}, "init": {}, "sb": [], "dead": set(), "live": set()}
             budget, pool_tok = [_PF_UNITS], []
             for info in z.infolist():
                 if info.file_size > _PF_MAX_DEX or info.is_dir():
@@ -2170,10 +2713,12 @@ def proof_flow_candidates(apk):
                     reached.append({"value": m.group(0), "source": f"proof:{cname}->{me and me[1]}",
                                     "reached_by_proof": True})
             seen = {c["value"] for c in reached}
+            dead = {m.group(0) for s in facts["dead"] - facts["live"] if s for m in ANS_RE_T.finditer(s)}
             for tok, where in pool_tok:
                 if tok not in seen:
                     seen.add(tok)
-                    rest.append({"value": tok, "source": where, "reached_by_proof": False})
+                    rest.append({"value": tok, "source": where, "reached_by_proof": False, "dead_only": tok in dead})
+            rest.sort(key=lambda c: c["dead_only"])  # row 72: decoys only behind an opaque predicate rank last
     except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
         pass
     return list({c["value"]: c for c in reached}.values()) + rest
@@ -2182,6 +2727,95 @@ def proof_flow_candidates(apk):
 def proof_flow_scan(apk):
     """Only the ANS values the request builder appends after `proof=` (see proof_flow_candidates). [] when absent."""
     return [c["value"] for c in proof_flow_candidates(apk) if c["reached_by_proof"]]
+
+
+# --- identifier collisions: case / homoglyph / zero-width twins and descriptor-only overloads (coverage atlas row 68) ---
+_IDC_ZW = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u200e\u200f\u2060\u2061\u2062\u2063\u2064\ufeff\u00ad\u180e"))
+_IDC_CONF = str.maketrans("\u0430\u0435\u043e\u0440\u0441\u0443\u0445\u0456\u0458\u0455\u04cf\u0410\u0412\u0415"
+                          "\u041a\u041c\u041d\u041e\u0420\u0421\u0422\u0425\u0391\u0392\u0395\u0396\u0397\u0399"
+                          "\u039a\u039c\u039d\u039f\u03a1\u03a4\u03a5\u03a7\u03bf\u03b9\u0131\u2010\u2011",
+                          "aeopcyxijslABEKMHOPCTXABEZHIKMNOPTYXoii--")
+_IDC_MAX_DEX = 32 << 20
+
+
+def _idc_forms(n):
+    """name -> {form: normalized} for casefold / NFKC / zero-width-stripped / confusable skeleton."""
+    zw = n.translate(_IDC_ZW)
+    nf = unicodedata.normalize("NFKC", n)
+    skel = unicodedata.normalize("NFKC", zw).translate(_IDC_CONF).casefold().replace("l", "1").replace("0", "o")
+    return {"casefold": n.casefold(), "nfkc": nf, "zero_width": zw, "skeleton": skel}
+
+
+def _idc_groups(names, kind, where, out):
+    names = sorted(set(n for n in names if n))
+    for form in ("casefold", "nfkc", "zero_width", "skeleton"):
+        bucket = {}
+        for n in names:
+            bucket.setdefault(_idc_forms(n)[form], []).append(n)
+        for k, grp in bucket.items():
+            if len(grp) > 1:
+                out.append({"kind": kind, "form": form, "where": where, "names": grp})
+
+
+def identifier_collisions(apk):
+    """Row 68 ("Name Collapse"): names the decompiled tree silently merges. From every classesN.dex (never the jadx /
+    apktool tree -- a case-insensitive FS overwrites `a.java` with `A.java`):
+      "classes":   class descriptors equal after casefold / NFKC / zero-width strip / confusable skeleton,
+      "members":   fields / methods of one class colliding the same way,
+      "overloads": one class + one raw name carried by several descriptors (R8 `a:I` + `a:Ljava/lang/String;`,
+                   `a(Ljava/lang/Object;)` + `a(Ljava/lang/String;)`) -- resolve each invoke / sget by FULL descriptor.
+    -> {"classes": [...], "members": [...], "overloads": [...]} (lists of dicts); empty lists when absent; never raises."""
+    out = {"classes": [], "members": [], "overloads": []}
+    try:
+        with zipfile.ZipFile(apk) as z:
+            descs, members = set(), {}
+            for n in z.namelist():
+                if not re.fullmatch(r"classes\d*\.dex", Path(n).name) or z.getinfo(n).file_size > _IDC_MAX_DEX:
+                    continue
+                d = z.read(n)
+                if d[:4] != b"dex\n" or len(d) < 0x70:
+                    continue
+                u32 = lambda o: struct.unpack_from("<I", d, o)[0]  # noqa: E731
+                u16 = lambda o: struct.unpack_from("<H", d, o)[0]  # noqa: E731
+                n_str, o_str, n_typ, o_typ, n_pro, o_pro, n_fld, o_fld, n_mth, o_mth, n_cls, o_cls = (
+                    u32(o) for o in range(0x38, 0x68, 4))
+                if (n_str > 1 << 22 or o_str + 4 * n_str > len(d) or o_typ + 4 * n_typ > len(d)
+                        or o_pro + 12 * n_pro > len(d) or o_fld + 8 * n_fld > len(d) or o_mth + 8 * n_mth > len(d)
+                        or o_cls + 32 * n_cls > len(d)):
+                    continue
+
+                @lru_cache(maxsize=None)
+                def sget(si, d=d, n_str=n_str, o_str=o_str):
+                    if si >= n_str:
+                        return None
+                    _, j = _uleb(d, struct.unpack_from("<I", d, o_str + 4 * si)[0])
+                    e = d.find(b"\0", j, j + 65536)
+                    return d[j:e].decode("utf-8", "replace") if e >= j else None
+
+                tget = lru_cache(maxsize=None)(lambda ti: sget(u32(o_typ + 4 * ti)) if ti < n_typ else None)
+                for c in range(n_cls):
+                    descs.add(tget(u16(o_cls + 32 * c)))
+                for fi in range(n_fld):
+                    o = o_fld + 8 * fi
+                    members.setdefault(tget(u16(o)), set()).add(("field", sget(u32(o + 4)), tget(u16(o + 2)) or ""))
+                for mi in range(n_mth):
+                    o = o_mth + 8 * mi
+                    members.setdefault(tget(u16(o)), set()).add(
+                        ("method", sget(u32(o + 4)), _pf_proto(d, o_pro, u16(o + 2), n_pro, tget)))
+            descs.discard(None)
+            _idc_groups(descs, "class", "", out["classes"])
+            for cls in sorted(c for c in members if c in descs):
+                ms = members[cls]
+                _idc_groups([m[1] for m in ms], "member", cls, out["members"])
+                by = {}
+                for kind, name, desc in ms:
+                    by.setdefault((kind, name), []).append(desc)
+                for (kind, name), ds in sorted(by.items(), key=lambda t: (t[0][0], t[0][1] or "")):
+                    if len(ds) > 1:
+                        out["overloads"].append({"class": cls, "kind": kind, "name": name, "descriptors": sorted(ds)})
+    except Exception:  # noqa: BLE001 - truncated / impostor APK
+        pass
+    return out
 
 
 # --- R8-renamed class chain: the answer moved from the asset into 1-2 letter classes (coverage atlas row 45) ----------
@@ -4298,13 +4932,82 @@ def _ls_rows(name, b, deadline, depth=2):
     return []
 
 
+# SQLCipher-encrypted db (coverage atlas row 76): (kdf iterations, hmac/kdf digest, page size, reserved bytes) of the
+# v4 / v3 / v2 defaults. Page 1 starts with the 16-byte KDF salt; each page is AES-256-CBC over [salt..page - reserve)
+# with the IV in the first 16 reserved bytes (then the HMAC).
+_SQLC_PROFILES = ((256000, "sha512", 4096, 80), (64000, "sha1", 1024, 48), (4000, "sha1", 1024, 48))
+_SQLC_NAME = re.compile(r"\.(db|sqlite3?|sqlcipher|dat|bin|enc)$|(^|/)databases/", re.I)
+_SQLC_MAX_DBS, _SQLC_MAX_PW, _SQLC_BUDGET = 4, 20, 0.9
+_SQLC_RAWKEY = re.compile(r"x'([0-9a-fA-F]{64})(?:[0-9a-fA-F]{32})?'")
+
+
+def _sqlc_passwords(z, dexes):
+    """Passphrase candidates for an encrypted db: printable dex string-pool entries and resources.arsc strings (4-64
+    chars, not a type / path / message), key-like first (_skc_rank), at most _SQLC_MAX_PW."""
+    strs = []
+    for d in dexes:
+        if d[:4] == b"dex\n":
+            for m in _SKC_POOL.finditer(d, 0x70):
+                if m.group(1)[0] == len(m.group(2)):
+                    t = m.group(2).decode()
+                    if not _SKC_BAD.search(t) and "sqlcipher" not in t.lower():
+                        strs.append(t)
+    try:
+        strs += [t for t in _pool_strings(z.read("resources.arsc")) if 4 <= len(t) <= 64 and t.isprintable()]
+    except (KeyError, OSError, zipfile.BadZipFile, RuntimeError, ValueError):
+        pass
+    return sorted(dict.fromkeys(strs), key=_skc_rank)[:_SQLC_MAX_PW]
+
+
+def _sqlc_decrypt(b, passwords, deadline):
+    """A plain `SQLite format 3` image of SQLCipher db bytes `b` under the first (password, v4/v3/v2 profile) whose
+    page-1 header decrypts to sane values (page size, file format 1/2, 64/32/32 payload fractions); None when none does.
+    A passphrase `x'<64 hex>'` is the raw key (no KDF)."""
+    from Crypto.Cipher import AES
+    salt = b[:16]
+    for pw in passwords:
+        raw = _SQLC_RAWKEY.fullmatch(pw)
+        for iters, dg, ps, rs in _SQLC_PROFILES:
+            if time.time() > deadline:
+                return None
+            if len(b) < ps or len(b) % ps:
+                continue
+            key = bytes.fromhex(raw.group(1)) if raw else hashlib.pbkdf2_hmac(dg, pw.encode(), salt, iters, 32)
+            p1 = AES.new(key, AES.MODE_CBC, b[ps - rs:ps - rs + 16]).decrypt(b[16:32])
+            if int.from_bytes(p1[:2], "big") != ps or p1[2:4] not in (b"\1\1", b"\2\2") or p1[5:8] != b"\x40\x20\x20":
+                continue
+            out = bytearray()
+            for o in range(0, len(b), ps):
+                pg = b[o:o + ps]
+                body = AES.new(key, AES.MODE_CBC, pg[ps - rs:ps - rs + 16]).decrypt(pg[16 if o == 0 else 0:ps - rs])
+                out += (_LS_SQLITE if o == 0 else b"") + body + bytes(rs)
+            out[20] = max(out[20], rs)  # the btree never reads the IV/HMAC tail (v3-compat dbs may record a larger one)
+            return bytes(out)
+    return None
+
+
+def _sqlc_rows(z, enc, deadline):
+    """Rows of every encrypted-db candidate `enc` [(name, bytes)] when the app ships SQLCipher (`sqlcipher` in a dex /
+    an entry name such as lib/*/libsqlcipher.so) and a dex / arsc string opens it."""
+    dexes = [z.read(n) for n in z.namelist() if re.fullmatch(r"classes\d*\.dex", Path(n).name)]
+    if not (any("sqlcipher" in n.lower() for n in z.namelist()) or any(b"sqlcipher" in d for d in dexes)):
+        return []
+    pws, rows = _sqlc_passwords(z, dexes), []
+    for _name, b in enc:
+        img = _sqlc_decrypt(b, pws, deadline)
+        if img:
+            rows += _ls_sqlite_rows(img, deadline + 0.3)
+    return rows
+
+
 def local_store_scan(apk):
     """ANS tokens stored the way an app keeps local data, shipped inside the APK (or handed out alone): a SQLite db
     (`SQLite format 3\\0` magic, any entry name; every table's cells), a SharedPreferences xml (<string>/value= of a
-    <map>), an unencrypted adb backup `.ab` (zlib -> tar -> those again). Each cell is read directly, then through
+    <map>), an unencrypted adb backup `.ab` (zlib -> tar -> those again), a SQLCipher v2/v3/v4 db (no magic, app ships
+    sqlcipher; passphrase = a dex / arsc string, _sqlc_rows) when no plain store exists. Each cell is read directly, then through
     decode_payload when its row looks like a puzzle record ({codec, data|payload, key}), then decode_any with the
     row's key-ish column as the key. [] when absent; never raises."""
-    hits, rows = [], []
+    hits, rows, enc = [], [], []
     deadline = time.time() + 1.0
     try:
         try:
@@ -4316,10 +5019,19 @@ def local_store_scan(apk):
                         with z.open(info) as f:
                             head = f.read(16)
                         if not (head.startswith((_LS_SQLITE, _LS_AB)) or head.lstrip().startswith((b"<?xml", b"<map"))):
+                            if (_SQLC_NAME.search(info.filename) and info.file_size >= 1024 and not info.file_size % 1024
+                                    and len(enc) < _SQLC_MAX_DBS and not info.filename.endswith(".dex")):
+                                enc.append((info.filename, z.read(info)))
                             continue
                         rows += _ls_rows(info.filename, z.read(info), deadline)
                     except (OSError, RuntimeError, zipfile.BadZipFile, EOFError, ValueError):
                         continue
+                if enc and not rows:  # no plain store: try SQLCipher-encrypted dbs (row 76)
+                    try:
+                        rows += _sqlc_rows(z, enc, time.time() + _SQLC_BUDGET)
+                    except Exception:  # noqa: BLE001 - impostor / truncated db: no rows
+                        pass
+                    deadline = max(deadline, time.time() + 0.3)
         except zipfile.BadZipFile:  # a bare .db / .ab / prefs xml delivered on its own
             if hasattr(apk, "seek"):
                 apk.seek(0)
@@ -6253,7 +6965,11 @@ class _DxDex:
             try:
                 r = raw.decode("utf-8")
             except UnicodeDecodeError:  # MUTF-8: surrogate pairs / embedded NUL as 2-3 byte sequences
-                r = raw.decode("utf-8", "surrogatepass").encode("utf-16", "surrogatepass").decode("utf-16", "replace")
+                try:
+                    r = raw.replace(b"\xc0\x80", b"\0").decode("utf-8", "surrogatepass").encode(
+                        "utf-16", "surrogatepass").decode("utf-16", "replace")
+                except UnicodeError:
+                    r = raw.decode("utf-8", "replace")
             self._s[i] = r
         return r
 
@@ -6684,6 +7400,433 @@ def dex_eval_scan(apk):
     except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
         pass
     return list(dict.fromkeys(hits))
+
+
+# --- decrypt helper evaluated with each call site's constant arguments (coverage atlas rows 35, 70) --------------------
+_DCS_NAME = re.compile(r"decr|deobf|decod|unmask|unxor|xor|reveal|unscr", re.I)
+_DCS_XOR = frozenset((0x97, 0xA2, 0xB7, 0xC2, 0xDF, 0xD7))
+_DCS_RET = (")Ljava/lang/String;", ")[B", ")[C")
+_DCS_BUDGET_S, _DCS_MAX_FALLBACK = 0.8, 600
+
+
+def _dcs_helpers(dx):
+    """In-dex methods with params that look like string decrypters: String/[B/[C return, a decrypt-ish name, or a short
+    (renamed) name with xor in the body."""
+    out = {}
+    for ref, (nreg, nin, ins, acc) in dx.code.items():
+        ct, rest = ref.split("->", 1)
+        name = rest[:rest.index("(")]
+        ps = _dxe_params(ref)
+        if _DXE_LIB.match(ct) or not ps or len(ps) > 4 or nin > nreg or name.startswith("<"):
+            continue
+        xor = not _DCS_XOR.isdisjoint(ins[0::2])
+        if ref.endswith(_DCS_RET) or _DCS_NAME.search(name) or (len(name) <= 2 and xor):
+            out[ref] = (ps, bool(acc & 0x8))
+    return out
+
+
+def _dcs_copy(v):
+    if isinstance(v, _DxArr):
+        c = _DxArr(v)
+        c.t = getattr(v, "t", "B")
+        return c
+    return v
+
+
+def _dcs_sites(dx, helpers, svm, deadline):
+    """Linear constant tracking over every app method: (helper ref, raw register args) for each call whose parameter
+    registers hold constants (const / const-string / new-array + fill-array-data / aput / filled-new-array / sget of a
+    <clinit>-initialised static / the result of a nested helper call)."""
+    sites = []
+    for ref, (nreg, nin, ins, acc) in dx.code.items():
+        if time.time() > deadline:
+            break
+        if _DXE_LIB.match(ref.split("->")[0]):
+            continue
+        n_ins, pc, r, last = len(ins) // 2, 0, {}, None
+        u16 = lambda p: struct.unpack_from("<H", ins, p)[0]  # noqa: E731
+        while pc < n_ins:
+            p = 2 * pc
+            op, b1 = ins[p], ins[p + 1]
+            A, B, w = b1 & 0xF, b1 >> 4, _DOP_W[op]
+            if op == 0x00 and b1:  # payload pseudo-instruction: skip it whole
+                if b1 == 1:
+                    w = 4 + 2 * u16(p + 2)
+                elif b1 == 2:
+                    w = 2 + 4 * u16(p + 2)
+                elif b1 == 3:
+                    w = 4 + (u16(p + 2) * struct.unpack_from("<I", ins, p + 4)[0] + 1) // 2
+            nl = None
+            if op in (0x01, 0x04, 0x07):
+                r[A] = r.get(B)
+            elif op in (0x02, 0x05, 0x08):
+                r[b1] = r.get(u16(p + 2))
+            elif op in (0x03, 0x06, 0x09):
+                r[u16(p + 2)] = r.get(u16(p + 4))
+            elif op in (0x0A, 0x0B, 0x0C):
+                r[b1] = last
+            elif op == 0x12:
+                r[A] = (B ^ 8) - 8
+            elif op in (0x13, 0x16):
+                r[b1] = struct.unpack_from("<h", ins, p + 2)[0]
+            elif op in (0x14, 0x17):
+                r[b1] = struct.unpack_from("<i", ins, p + 2)[0]
+            elif op == 0x15:
+                r[b1] = _dxe_w32(u16(p + 2) << 16)
+            elif op == 0x18:
+                r[b1] = struct.unpack_from("<q", ins, p + 2)[0]
+            elif op == 0x19:
+                r[b1] = _dxe_w64(struct.unpack_from("<h", ins, p + 2)[0] << 48)
+            elif op == 0x1A:
+                r[b1] = dx.s(u16(p + 2))
+            elif op == 0x1B:
+                r[b1] = dx.s(struct.unpack_from("<I", ins, p + 2)[0])
+            elif op == 0x23:
+                n, t = r.get(B), dx.typ(u16(p + 2))
+                if isinstance(n, int) and 0 <= n <= _DXE_MAX_ARR and len(t) == 2:
+                    a_ = _DxArr([0] * n)
+                    a_.t = t[1:]
+                    r[A] = a_
+                else:
+                    r[A] = None
+            elif op in (0x24, 0x25):
+                cnt = B if op == 0x24 else b1
+                g = u16(p + 4)
+                regs = [g & 0xF, (g >> 4) & 0xF, (g >> 8) & 0xF, g >> 12, A][:cnt] if op == 0x24 else range(g, g + cnt)
+                vals = [r.get(x) for x in regs]
+                if all(isinstance(v, (int, str)) for v in vals):
+                    nl = _DxArr(vals)
+                    nl.t = dx.typ(u16(p + 2))[1:]
+            elif op == 0x26:
+                q = 2 * (pc + struct.unpack_from("<i", ins, p + 2)[0])
+                a_ = r.get(b1)
+                if isinstance(a_, _DxArr) and 0 <= q and ins[q:q + 2] == b"\x00\x03":
+                    ew, n = struct.unpack_from("<HI", ins, q + 2)
+                    if ew in (1, 2, 4, 8) and n <= len(a_) and q + 8 + ew * n <= len(ins):
+                        sg = a_.t != "C"
+                        for k in range(n):
+                            a_[k] = int.from_bytes(ins[q + 8 + ew * k:q + 8 + ew * (k + 1)], "little", signed=sg)
+            elif 0x44 <= op <= 0x4A:
+                a_, ix = r.get(ins[p + 2]), r.get(ins[p + 3])
+                r[b1] = a_[ix] if isinstance(a_, list) and isinstance(ix, int) and 0 <= ix < len(a_) else None
+            elif 0x4B <= op <= 0x51:
+                a_, ix, v = r.get(ins[p + 2]), r.get(ins[p + 3]), r.get(b1)
+                if isinstance(a_, list) and isinstance(ix, int) and 0 <= ix < len(a_):
+                    a_[ix] = v
+            elif 0x60 <= op <= 0x66:
+                ct, fk, _ = dx.fref(u16(p + 2))
+                if fk not in svm.statics and ct in dx.sfields:
+                    svm.init_class(ct)
+                r[b1] = svm.statics.get(fk, _DXE_SFIELDS.get(fk))
+            elif 0x6E <= op <= 0x78 and op != 0x73:
+                ref2 = dx.mref(u16(p + 2))
+                if op <= 0x72:
+                    g = u16(p + 4)
+                    regs = [g & 0xF, (g >> 4) & 0xF, (g >> 8) & 0xF, g >> 12, A][:B]
+                else:
+                    regs = range(u16(p + 4), u16(p + 4) + b1)
+                h = helpers.get(ref2)
+                if h is not None:
+                    raw = [r.get(x) for x in regs]
+                    ps, static = h
+                    if not static and raw:
+                        raw[0] = _DxObj(ref2.split("->")[0])
+                    i, ok = (0 if static else 1), True
+                    for pt in ps:
+                        v = raw[i] if i < len(raw) else None
+                        ok = ok and (isinstance(v, int) if pt in "ZBSCIJ" else v is not None)
+                        i += 2 if pt in "JD" else 1
+                    if ok:
+                        nl = (ref2, raw)
+                        sites.append(nl)
+            elif op not in (0x0E, 0x0F, 0x10, 0x11, 0x1D, 0x1E, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C) \
+                    and not 0x32 <= op <= 0x3D and not 0x67 <= op <= 0x6D and not 0x59 <= op <= 0x5F:
+                # any other op writes vA (4-bit form) or vAA: forget both readings of the destination
+                r.pop(A, None)
+                r.pop(b1, None)
+                r.pop(b1 + 1, None)
+            last = nl
+            pc += max(w, 1)
+    return sites
+
+
+def decrypt_call_candidates(apk):
+    """Decrypted strings of every in-dex decrypt helper (String/[B/[C return, decrypt/deobf/decode/xor name, or a
+    renamed 1-2 letter method with xor in its body) run by the dex_eval_scan interpreter with the CONSTANT arguments of
+    each of its call sites (`a("<cipher>", 0x4d)`, `decode(new byte[]{..}, Codec.K)`, nested helper(helper(..)) calls),
+    then -- as a fallback -- run over every const-string / array literal of the dex (other params from the call
+    sites, else 0). Returns the decoded strings (ANS-bearing first); [] when absent; never raises; < 1 s."""
+    out = []
+    deadline = time.time() + _DCS_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            dexes = [z.read(i) for i in z.infolist() if i.file_size <= _DXE_MAX_DEX
+                     and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+        for d in dexes:
+            if d[:4] != b"dex\n" or len(d) < 0x70 or time.time() > deadline:
+                continue
+            try:
+                dx = _DxDex(d)
+                helpers = _dcs_helpers(dx)
+            except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+                continue
+            if not helpers:
+                continue
+            svm = _DxVM(dx, deadline)
+            sites = _dcs_sites(dx, helpers, svm, deadline - _DCS_BUDGET_S / 3)
+
+            def call(ref, raw, src=None):
+                vm = _DxVM(dx, deadline)
+                vm.statics, vm.inited = dict(svm.statics), set(svm.inited)
+                res = None
+                try:
+                    res = vm.invoke(ref, [_dcs_copy(v) for v in raw], 0)
+                except (_DxAbort, IndexError, KeyError, TypeError, ValueError, AttributeError, OverflowError,
+                        RecursionError, struct.error):
+                    pass
+                vals = vm.seen + ([res] if res is not None else [])
+                for v in vals:
+                    if isinstance(v, list) and v and all(isinstance(x, int) for x in v):
+                        v = (_dxe_bytes(v).decode("utf-8", "replace") if getattr(v, "t", "B") in "BZ"
+                             else "".join(chr(x & 0xFFFF) for x in v))
+                    if isinstance(v, str) and v and (src is None or src not in v):  # fallback: echoed input = no decrypt
+                        out.append(v)
+                return res
+
+            done = {}
+            for site in sites:  # nested helper(helper(..)) args resolve from earlier sites, in call order
+                if time.time() > deadline:
+                    break
+                ref, raw = site
+                raw = [done.get(id(v), v) if isinstance(v, tuple) else v for v in raw]
+                if any(isinstance(v, tuple) or v is None for v in raw[1:]) and any(isinstance(v, tuple) for v in site[1]):
+                    continue
+                done[id(site)] = call(ref, raw)
+            if any(ANS_RE_T.search(s) for s in out):
+                continue
+            # fallback: every helper over every const-string / array literal of the dex
+            ints = {}
+            for ref, raw in sites:
+                ints.setdefault(ref, raw)
+            lits = [dx.s(i) for i in range(min(dx.n_str, 20000))]
+            lits = [s for s in lits if s and 8 <= len(s) <= 512 and not re.fullmatch(r"\[*L[\w/$]+;|[\w$<>]+", s)]
+            lits = lits[:_DCS_MAX_FALLBACK]
+            for ref, (ps, static) in helpers.items():
+                kinds = [k for k, pt in enumerate(ps) if pt in ("Ljava/lang/String;", "[B", "[C",
+                                                                 "Ljava/lang/CharSequence;")]
+                if not kinds or time.time() > deadline:
+                    continue
+                k0 = kinds[0]
+                for s in lits:
+                    if time.time() > deadline:
+                        break
+                    v = s if ps[k0] in ("Ljava/lang/String;", "Ljava/lang/CharSequence;") else (
+                        _dxe_barr(s.encode("utf-8", "replace")) if ps[k0] == "[B" else _dxe_carr(s))
+                    tmpl = ints.get(ref)
+                    raw = [] if static else [_DxObj(ref.split("->")[0])]
+                    for k, pt in enumerate(ps):
+                        dflt = _dxe_default(pt)
+                        if tmpl is not None:
+                            j = (0 if static else 1) + sum(2 if q in "JD" else 1 for q in ps[:k])
+                            if j < len(tmpl) and tmpl[j] is not None and not isinstance(tmpl[j], tuple):
+                                dflt = tmpl[j]
+                        raw += [v if k == k0 else dflt] + ([None] if pt in "JD" else [])
+                    if any(x is _DXE_UNK for x in raw):
+                        continue
+                    call(ref, raw, s)
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    out = list(dict.fromkeys(out))
+    return sorted(out, key=lambda s: not ANS_RE_T.search(s))
+
+
+def decrypt_call_scan(apk):
+    """ANS tokens among decrypt_call_candidates(apk) (plus one decode_any layer on base64-ish results). [] when
+    absent; never raises."""
+    hits = []
+    for s in decrypt_call_candidates(apk):
+        hits += ANS_RE_T.findall(s)
+        if not hits and re.fullmatch(r"[A-Za-z0-9+/=_-]{24,}", s):
+            hits += ANS_RE_T.findall(decode_any(s.encode(), depth=1, cap=40, chain=False) or "")
+    return list(dict.fromkeys(hits))
+
+# --- known open-source string obfuscators, decoded statically by signature (coverage atlas row 71) --------------------
+# StringFog (com/github/megatronking/stringfog): call sites `StringFog.decrypt("<b64>", "<key>")` (v1-3: xor of
+#   base64(data) with the key's UTF-8 bytes; the Base64 / AES impls take the same pair) or `decrypt(byte[] data,
+#   byte[] key)` (v4+: fill-array-data pair, plain xor).
+# obfuscapk EncryptStrings: `DecryptString.decryptString("<hex>")`, AES-ECB/PKCS5 under a const key in the dex (the
+#   32-char secret as raw bytes -> AES-256, or 32 hex -> AES-128).
+# Allatori-style: a (String)String helper (ALLATORIxDEMO or renamed) xor'ing chars with 1-2 literals, alternating from
+#   the END of the string. Paranoid's getString(long) keystream is not modelled.
+_SOB_BUDGET_S, _SOB_MAX_DEX, _SOB_MAX_SITES, _SOB_MAX_KEYS = 0.8, 32 << 20, 2000, 64
+_SOB_SIGS = {"(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;": "ss", "([B[B)Ljava/lang/String;": "bb",
+             "(Ljava/lang/String;)Ljava/lang/String;": "s"}
+
+
+def _sob_text(b):
+    try:
+        t = b.decode("utf-8")
+    except (UnicodeDecodeError, AttributeError):
+        return None
+    return t if t and t.isprintable() else None
+
+
+def _sob_unpad(b):
+    n = b[-1] if b else 0
+    return b[:-n] if 0 < n <= 16 and b.endswith(bytes([n]) * n) else None
+
+
+def _sob_xor(d, k):
+    return bytes(c ^ k[i % len(k)] for i, c in enumerate(d)) if k else None
+
+
+def _sob_sites(dx, deadline):
+    """[(callee ref, [arg values])] for every invoke of a String-decrypt-shaped method with constant args (const-string
+    -> str, new-array + fill-array-data -> bytes), plus {callee ref: [int literals of its own code]}."""
+    sites, lits = [], {}
+    for me, (nreg, nin, ins, acc) in dx.code.items():
+        if time.time() > deadline or len(sites) > _SOB_MAX_SITES:
+            break
+        n_ins, reg, pc, own = len(ins) // 2, {}, 0, []
+        while pc < n_ins:
+            p = 2 * pc
+            op, b1 = ins[p], ins[p + 1]
+            if op == 0 and b1 in (1, 2, 3):
+                if b1 == 1:
+                    pc += 4 + 2 * struct.unpack_from("<H", ins, p + 2)[0]
+                elif b1 == 2:
+                    pc += 2 + 4 * struct.unpack_from("<H", ins, p + 2)[0]
+                else:
+                    w, n = struct.unpack_from("<HI", ins, p + 2)
+                    pc += 4 + (w * n + 1) // 2
+                continue
+            w = _DOP_W[op]
+            if p + 2 * w > len(ins):
+                break
+            if op in (0x1A, 0x1B):
+                reg[b1] = dx.s(struct.unpack_from("<H" if op == 0x1A else "<I", ins, p + 2)[0])
+            elif op == 0x12:
+                v = b1 >> 4
+                reg[b1 & 0xF] = v - 16 if v > 7 else v
+                own.append(reg[b1 & 0xF])
+            elif op in (0x13, 0x14):
+                reg[b1] = struct.unpack_from("<h" if op == 0x13 else "<i", ins, p + 2)[0]
+                own.append(reg[b1])
+            elif op == 0xD7 or 0xD0 <= op <= 0xE2:  # binop/lit16, binop/lit8: keep the literal
+                own.append(struct.unpack_from("<h", ins, p + 2)[0] if op <= 0xD7 else struct.unpack_from("<b", ins, p + 3)[0])
+                reg.pop(b1 & 0xF if op <= 0xD7 else b1, None)
+            elif op == 0x26:  # fill-array-data vAA, payload
+                off = 2 * (pc + struct.unpack_from("<i", ins, p + 2)[0])
+                if 0 <= off and off + 8 <= len(ins) and ins[off:off + 2] == b"\x00\x03":
+                    ew, n = struct.unpack_from("<HI", ins, off + 2)
+                    if ew == 1 and off + 8 + n <= len(ins):
+                        reg[b1] = bytes(ins[off + 8:off + 8 + n])
+            elif op in (0x6E, 0x6F, 0x70, 0x71, 0x72, 0x74, 0x75, 0x76, 0x77, 0x78):
+                ref = dx.mref(struct.unpack_from("<H", ins, p + 2)[0])
+                sig = ref[ref.index("("):]
+                if sig in _SOB_SIGS:
+                    if op < 0x74:
+                        g = struct.unpack_from("<H", ins, p + 4)[0]
+                        rs = [g & 0xF, g >> 4 & 0xF, g >> 8 & 0xF, g >> 12, b1 & 0xF][:b1 >> 4]
+                    else:
+                        f = struct.unpack_from("<H", ins, p + 4)[0]
+                        rs = list(range(f, f + b1))
+                    if op not in (0x71, 0x77):
+                        rs = rs[1:]  # receiver
+                    args = [reg.get(r) for r in rs]
+                    if args and all(isinstance(a, (str, bytes)) for a in args):
+                        sites.append((ref, args))
+            elif op in (0x0C, 0x0A, 0x0B, 0x22, 0x23, 0x1F, 0x01, 0x07, 0x08) or 0x44 <= op <= 0x4A or 0x52 <= op <= 0x58 \
+                    or 0x60 <= op <= 0x66 or 0x7B <= op <= 0xCF:
+                reg.pop(b1 if op in (0x0C, 0x0A, 0x0B, 0x22, 0x08) or 0x44 <= op <= 0x4A or 0x60 <= op <= 0x66
+                        or 0x90 <= op <= 0xAF else b1 & 0xF, None)
+            pc += w
+        lits[me] = own
+    return sites, lits
+
+
+def string_obfuscator_candidates(apk):
+    """Strings decoded from the call sites of known open-source Android string obfuscators (StringFog xor / base64 /
+    AES pairs, obfuscapk EncryptStrings AES-ECB hex, Allatori-style alternating char xor) found by their dex
+    signatures; ANS-bearing ones first. [] when absent; never raises."""
+    out = []
+    deadline = time.time() + _SOB_BUDGET_S
+    try:
+        from Crypto.Cipher import AES
+        with zipfile.ZipFile(apk) as z:
+            dexes = [z.read(i) for i in z.infolist() if i.file_size <= _SOB_MAX_DEX
+                     and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+        for d in dexes:
+            if d[:4] != b"dex\n" or len(d) < 0x70 or time.time() > deadline:
+                continue
+            try:
+                dx = _DxDex(d)
+            except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+                continue
+            fog = re.search(rb"(?i)stringfog", d) is not None
+            sites, lits = _sob_sites(dx, deadline)
+            keys = None
+            for ref, args in sites:
+                if time.time() > deadline:
+                    break
+                cls, _, rest = ref.partition("->")
+                name, kind = rest[:rest.index("(")], _SOB_SIGS[rest[rest.index("("):]]
+                got = []
+                if kind in ("ss", "bb") and (fog or re.search(r"(?i)fog|decrypt", ref)):
+                    data, key = args
+                    kb = key.encode("utf-8") if isinstance(key, str) else key
+                    raws = [data] if isinstance(data, bytes) else []
+                    if isinstance(data, str) and re.fullmatch(r"[A-Za-z0-9+/=_-]{4,}", data):
+                        try:
+                            raws.append(base64.b64decode(data + "=" * (-len(data) % 4), altchars=b"-_"
+                                                         if re.search("[-_]", data) else None))
+                        except (binascii.Error, ValueError):
+                            pass
+                    for raw in raws:
+                        got += [_sob_xor(raw, kb), raw]
+                        if len(kb) in (16, 24, 32) and raw and len(raw) % 16 == 0:
+                            for c in (AES.new(kb, AES.MODE_ECB), AES.new(kb, AES.MODE_CBC, kb[:16]),
+                                      AES.new(kb, AES.MODE_CBC, bytes(16))):
+                                got.append(_sob_unpad(c.decrypt(raw)))
+                elif kind == "s" and isinstance(args[0], str):
+                    s = args[0]
+                    if re.fullmatch(r"(?:[0-9A-Fa-f]{32})+", s) and (fog or "decryptstring" in ref.lower()
+                                                                     or "decryptstring" in cls.lower()):
+                        if keys is None:
+                            ks = [dx.s(i) for i in range(min(dx.n_str, 50000))]
+                            keys = [k.encode() for k in ks if len(k) in (16, 24, 32) and k.isprintable()]
+                            keys += [bytes.fromhex(k) for k in ks if re.fullmatch(r"[0-9A-Fa-f]{32}|[0-9A-Fa-f]{64}", k)]
+                            keys = list(dict.fromkeys(keys))[:_SOB_MAX_KEYS]
+                        ct = bytes.fromhex(s)
+                        for k in keys:
+                            got.append(_sob_unpad(AES.new(k, AES.MODE_ECB).decrypt(ct)))
+                    elif fog and re.fullmatch(r"[A-Za-z0-9+/=]{4,}", s):  # StringFog Base64 impl
+                        try:
+                            got.append(base64.b64decode(s + "=" * (-len(s) % 4)))
+                        except (binascii.Error, ValueError):
+                            pass
+                    if ref in lits and (name.startswith("ALLATORI") or not _DXE_LIB.match(cls)):
+                        ks = list(dict.fromkeys(v & 0xFFFF for v in lits[ref] if v and -0x8000 <= v <= 0xFFFF))[:12]
+                        cs = [ord(c) for c in s]
+                        for k1 in ks:
+                            for k2 in ks:  # Allatori: last char ^ k1, the one before ^ k2, alternating from the end
+                                t = "".join(chr((c ^ (k1 if (len(cs) - 1 - i) % 2 == 0 else k2)) & 0xFFFF)
+                                            for i, c in enumerate(cs))
+                                if t.isascii() and t.isprintable():
+                                    out.append(t)
+                for g in got:
+                    t = _sob_text(g) if isinstance(g, bytes) else None
+                    if t:
+                        out.append(t)
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    out = list(dict.fromkeys(out))
+    return sorted(out, key=lambda s: not ANS_RE_T.search(s))
+
+
+def string_obfuscator_scan(apk):
+    """ANS tokens among string_obfuscator_candidates(apk). [] when absent; never raises."""
+    return list(dict.fromkeys(m for s in string_obfuscator_candidates(apk) for m in ANS_RE_T.findall(s)))
 
 
 # --- reflection with encoded names: Class.forName / getDeclaredField / getDeclaredMethod (coverage atlas row 43) -------
@@ -7473,3 +8616,699 @@ def dex_slack_scan(apk, depth=2):
     except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
         pass
     return list(dict.fromkeys(h for h in hits if ANS_RE_T.fullmatch(h)))
+
+
+# --- Java serialization streams (coverage atlas row 73) --------------------------------------------------------------
+# An ObjectOutputStream blob (magic AC ED 00 05) in an asset / res/raw entry, a dex byte[] literal (fill-array-data
+# keeps it verbatim inside classes.dex) or wrapped as base64 ("rO0AB...") / hex ("aced0005...") text anywhere. Minimal
+# pure-Python ObjectInputStream grammar (TC_OBJECT / CLASSDESC / PROXYCLASSDESC / STRING / LONGSTRING / ARRAY / ENUM /
+# CLASS / REFERENCE / BLOCKDATA[LONG] / RESET / EXCEPTION, field descriptors, primitive values, class hierarchies,
+# writeObject annotations) emitting every string and field (name, value); a truncated or non-default stream keeps what
+# parsed and falls back to a scan of TC_STRING records (0x74 + u16 len). Values go through a literal scan then
+# decode_any (keyed by a key/secret/seed-named field when one exists).
+_JSR_MAGIC = b"\xac\xed\x00\x05"
+_JSR_B64 = re.compile(rb"rO0AB[A-Za-z0-9+/_\-]{12,}={0,2}")
+_JSR_HEX = re.compile(rb"(?i)aced0005(?:[0-9a-f]{2}){8,}")
+_JSR_MAX_ENTRY, _JSR_MAX_BLOBS, _JSR_MAX_ITEMS, _JSR_DEPTH = 32 << 20, 32, 20_000, 64
+_JSR_BUDGET_S, _JSR_DECODE_BUDGET = 1.0, 200
+_JSR_PRIM = {"B": (">b", 1), "C": (">H", 2), "D": (">d", 8), "F": (">f", 4), "I": (">i", 4), "J": (">q", 8),
+             "S": (">h", 2), "Z": ("?", 1)}
+_JSR_KEYISH = re.compile(r"(?i)key|secret|pass|seed|salt")
+
+
+class _JsrStop(Exception):
+    pass
+
+
+class _JsrReader:
+    """Recursive-descent ObjectInputStream reader. `out` collects (name, value) pairs: field values by
+    "Class.field", other strings / block data by kind. Raises _JsrStop at the first malformed / unsupported byte."""
+
+    def __init__(self, b, i):
+        self.b, self.i, self.h, self.out, self.n = b, i, [], [], 0
+
+    def take(self, k):
+        if k < 0 or self.i + k > len(self.b):
+            raise _JsrStop("eof")
+        v = self.b[self.i:self.i + k]
+        self.i += k
+        return v
+
+    def u(self, fmt, k):
+        return struct.unpack(fmt, self.take(k))[0]
+
+    def utf(self, wide=False):
+        n = self.u(">Q", 8) if wide else self.u(">H", 2)
+        if n > len(self.b):
+            raise _JsrStop("len")
+        return self.take(n).decode("utf-8", "replace")
+
+    def emit(self, name, v):
+        self.n += 1
+        if self.n > _JSR_MAX_ITEMS:
+            raise _JsrStop("items")
+        self.out.append((name, v))
+
+    def handle(self, v):
+        self.h.append(v)
+        return len(self.h) - 1
+
+    def content(self, d=0, name="value"):
+        if d > _JSR_DEPTH:
+            raise _JsrStop("depth")
+        tc = self.u("B", 1)
+        if tc == 0x70:  # TC_NULL
+            return None
+        if tc == 0x71:  # TC_REFERENCE
+            k = self.u(">I", 4) - 0x7E0000
+            if not 0 <= k < len(self.h):
+                raise _JsrStop("ref")
+            return self.h[k]
+        if tc in (0x74, 0x7C):  # TC_STRING / TC_LONGSTRING
+            s = self.utf(tc == 0x7C)
+            self.handle(s)
+            self.emit(name, s)
+            return s
+        if tc in (0x72, 0x7D):
+            self.i -= 1
+            return self.classdesc(d)
+        if tc == 0x73:  # TC_OBJECT
+            return self.obj(d)
+        if tc == 0x75:  # TC_ARRAY
+            return self.array(d, name)
+        if tc == 0x76:  # TC_CLASS
+            cd = self.classdesc(d + 1)
+            self.handle(cd)
+            return cd
+        if tc == 0x7E:  # TC_ENUM
+            cd = self.classdesc(d + 1)
+            k = self.handle(None)
+            v = self.content(d + 1, (cd or {}).get("name", "enum"))
+            self.h[k] = v
+            return v
+        if tc in (0x77, 0x7A):  # TC_BLOCKDATA / TC_BLOCKDATALONG
+            blk = self.take(self.u("B", 1) if tc == 0x77 else self.u(">I", 4))
+            self.emit("blockdata", blk)
+            return blk
+        if tc == 0x79:  # TC_RESET
+            self.h = []
+            return None
+        if tc == 0x7B:  # TC_EXCEPTION
+            self.h = []
+            v = self.content(d + 1, "exception")
+            self.h = []
+            return v
+        raise _JsrStop(f"tc {tc:#x}")
+
+    def annotation(self, d):
+        while True:
+            if self.i < len(self.b) and self.b[self.i] == 0x78:  # TC_ENDBLOCKDATA
+                self.i += 1
+                return
+            self.content(d + 1, "annotation")
+
+    def classdesc(self, d):
+        tc = self.u("B", 1)
+        if tc == 0x70:
+            return None
+        if tc == 0x71:
+            self.i -= 1
+            v = self.content(d)
+            if v is not None and not isinstance(v, dict):
+                raise _JsrStop("ref not a class")
+            return v
+        if tc == 0x7D:  # TC_PROXYCLASSDESC
+            cd = {"name": "$Proxy", "flags": 0x02, "fields": [], "super": None}
+            self.handle(cd)
+            for _ in range(min(self.u(">I", 4), 256)):
+                self.emit("interface", self.utf())
+            self.annotation(d)
+            cd["super"] = self.classdesc(d + 1)
+            return cd
+        if tc != 0x72:
+            raise _JsrStop("classdesc")
+        cd = {"name": self.utf(), "fields": [], "super": None}
+        self.take(8)  # serialVersionUID
+        self.handle(cd)
+        cd["flags"] = self.u("B", 1)
+        for _ in range(self.u(">H", 2)):
+            t = chr(self.u("B", 1))
+            fname = self.utf()
+            if t in "[L":
+                self.content(d + 1, "classname")
+            elif t not in _JSR_PRIM:
+                raise _JsrStop("field type")
+            cd["fields"].append((t, fname))
+        self.annotation(d)
+        cd["super"] = self.classdesc(d + 1)
+        return cd
+
+    def value(self, t, d, name):
+        if t in _JSR_PRIM:
+            fmt, k = _JSR_PRIM[t]
+            v = self.u(fmt, k)
+            return chr(v) if t == "C" else v
+        return self.content(d + 1, name)
+
+    def obj(self, d):
+        cd = self.classdesc(d + 1)
+        o = {"class": (cd or {}).get("name")}
+        self.handle(o)
+        chain = []
+        while cd is not None and len(chain) < 64:
+            chain.append(cd)
+            cd = cd.get("super")
+        for c in reversed(chain):
+            fl = c.get("flags", 0)
+            if fl & 0x04:  # externalizable: only the block-data (protocol 2) form is readable
+                if not fl & 0x08:
+                    raise _JsrStop("externalizable v1")
+                self.annotation(d)
+                continue
+            for t, fname in c["fields"]:
+                key = f"{c['name']}.{fname}"
+                v = self.value(t, d, key)
+                o[fname] = v
+                if t in _JSR_PRIM:
+                    self.emit(key, v)
+            if fl & 0x01:  # SC_WRITE_METHOD: custom writeObject data follows
+                self.annotation(d)
+        return o
+
+    def array(self, d, name):
+        cd = self.classdesc(d + 1)
+        cname = (cd or {}).get("name") or "[L"
+        k = self.handle(None)
+        n = self.u(">i", 4)
+        if n < 0 or n > len(self.b):
+            raise _JsrStop("array len")
+        t = cname[1:2]
+        if t == "B":
+            v = self.take(n)
+        elif t in _JSR_PRIM:
+            fmt, w = _JSR_PRIM[t]
+            raw = self.take(n * w)
+            v = [struct.unpack_from(fmt, raw, j * w)[0] for j in range(n)]
+            if t == "C":
+                v = "".join(map(chr, v))
+        else:
+            v = [self.content(d + 1, name) for _ in range(n)]
+        self.h[k] = v
+        if t in _JSR_PRIM:
+            self.emit(name, v)
+        return v
+
+
+def _jsr_strings_fallback(b, start):
+    """(name, value) of every plausible TC_STRING record (0x74 + u16 len + printable UTF-8) from `start`."""
+    out, i = [], b.find(b"\x74", start)
+    while 0 <= i < len(b) - 3 and len(out) < _JSR_MAX_ITEMS:
+        n = int.from_bytes(b[i + 1:i + 3], "big")
+        s = b[i + 3:i + 3 + n]
+        if n >= 4 and len(s) == n:
+            try:
+                t = s.decode("utf-8")
+            except UnicodeDecodeError:
+                t = ""
+            if t.isprintable():
+                out.append(("string", t))
+                i = b.find(b"\x74", i + 3 + n)
+                continue
+        i = b.find(b"\x74", i + 1)
+    return out
+
+
+def java_serial_parse(b, start=0):
+    """[(name, value)] of a Java serialization stream at b[start:] (magic AC ED 00 05): every string, block-data
+    chunk, primitive / primitive-array value, field values keyed "Class.field". Consecutive top-level objects are read
+    until the data ends; a malformed / truncated / unsupported tail keeps what parsed and appends the TC_STRING scan of
+    the rest. [] when the magic is absent; never raises."""
+    try:
+        b = bytes(b)
+        if b[start:start + 4] != _JSR_MAGIC:
+            return []
+        r, done = _JsrReader(b, start + 4), 0
+        try:
+            while r.i < len(b):
+                r.content()
+                done += 1
+            return r.out
+        except _JsrStop:  # after a complete top-level object the tail is the host's bytes (a dex past its byte[])
+            return r.out if done else r.out + _jsr_strings_fallback(b, r.i)
+        except RecursionError:
+            return r.out
+    except Exception:  # noqa: BLE001 - impostor bytes: nothing
+        return []
+
+
+def _jsr_blobs(b):
+    """Serialization streams inside one entry's bytes: raw magic occurrences (an asset, a dex byte[] literal),
+    base64 "rO0AB..." and hex "aced0005..." runs (also a whole entry of base64 text with line breaks)."""
+    out = []
+    i = b.find(_JSR_MAGIC)
+    while i >= 0 and len(out) < _JSR_MAX_BLOBS:
+        out.append((b, i))
+        i = b.find(_JSR_MAGIC, i + 4)
+    if b"rO0AB" in b:
+        cands = [m.group(0) for m in _JSR_B64.finditer(b)]
+        if b.lstrip()[:5] == b"rO0AB":
+            cands.insert(0, re.sub(rb"\s+", b"", b))
+        for m in cands[:_JSR_MAX_BLOBS]:
+            for alt in (False, True):
+                try:
+                    s = m.translate(bytes.maketrans(b"-_", b"+/")) if alt else m
+                    raw = base64.b64decode(s + b"=" * (-len(s) % 4))
+                except (binascii.Error, ValueError):
+                    continue
+                if raw[:4] == _JSR_MAGIC:
+                    out.append((raw, 0))
+                    break
+    for m in list(_JSR_HEX.finditer(b))[:_JSR_MAX_BLOBS]:
+        out.append((bytes.fromhex(m.group(0).decode()), 0))
+    seen, uniq = set(), []
+    for blob, off in out:
+        if (id(blob), off) in seen or (off == 0 and blob in seen):
+            continue
+        seen.update(((id(blob), off), blob) if off == 0 else ((id(blob), off),))
+        uniq.append((blob, off))
+    return uniq[:_JSR_MAX_BLOBS * 2]
+
+
+def java_serial_records(apk):
+    """[{"entry", "offset", "items": [(name, value)]}] for every Java serialization stream in the APK's entries
+    (assets / res/raw / dex byte[] literals / base64- or hex-wrapped text). [] when absent; never raises."""
+    recs = []
+    deadline = time.time() + _JSR_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            for info in z.infolist():
+                if info.is_dir() or info.file_size > _JSR_MAX_ENTRY or time.time() > deadline:
+                    continue
+                try:
+                    b = z.read(info)
+                except (OSError, RuntimeError, zipfile.BadZipFile, zlib.error):
+                    continue
+                if _JSR_MAGIC not in b and b"rO0AB" not in b and not re.search(rb"(?i)aced0005", b):
+                    continue
+                for blob, off in _jsr_blobs(b):
+                    items = java_serial_parse(blob, off)
+                    if items:
+                        recs.append({"entry": info.filename, "offset": off, "items": items})
+    except Exception:  # noqa: BLE001 - truncated / impostor APK
+        pass
+    return recs
+
+
+def java_serial_scan(apk):
+    """ANS tokens carried by a Java serialization stream (row 73): every string / char[] / byte[] / block-data value
+    and "field=value" of java_serial_records(), read literally, then through decode_any (keyed by a key/secret/seed/
+    salt-named field's value when present). [] when absent; never raises; < 1 s."""
+    hits = []
+    deadline = time.time() + _JSR_BUDGET_S
+    try:
+        for rec in java_serial_records(apk):
+            vals, keys = [], []
+            for name, v in rec["items"]:
+                if isinstance(v, list) and v and all(isinstance(x, int) and 0 <= x < 256 for x in v):
+                    v = bytes(v)
+                if not isinstance(v, (str, bytes)) or not v:
+                    continue
+                vals.append(v)
+                if _JSR_KEYISH.search(str(name).rsplit(".", 1)[-1]) and len(v) <= 64:
+                    keys.append(v)
+            for v in vals:
+                hits += ANS_RE_T.findall(v if isinstance(v, str) else v.decode("latin-1"))
+            if hits:
+                continue
+            budget = _JSR_DECODE_BUDGET
+            for v in vals:
+                if hits or budget <= 0 or time.time() > deadline:
+                    break
+                if not 8 <= len(v) <= 4096:
+                    continue
+                for k in [None, *keys[:4]]:
+                    budget -= 1
+                    r = decode_any(v, key=k, chain=False, cap=600)
+                    if r:
+                        hits += ANS_RE_T.findall(r)
+                        break
+    except Exception:  # noqa: BLE001 - never raise past the scan
+        pass
+    return list(dict.fromkeys(hits))
+
+
+# --- JWT / JWE bearer tokens shipped in the app (coverage atlas row 74, MASVS-AUTH) ----------------------------------
+# A hardcoded `eyJ...` token in a dex const-string, an asset / res/raw config, a resources.arsc string (UTF-8 or
+# UTF-16) or .so rodata. Header + payload are base64url JSON: the answer may be a claim value (or the header's kid),
+# read literally then through decode_any. Facts for the worker: alg "none" / empty signature, and which app string
+# (dex / asset / arsc / .so, raw or its b64 / hex bytes, <= 2000) signs an HS256/384/512 token. JWE (5 parts): header
+# only. Pure Python hmac / hashlib; every value is a candidate the GM judges.
+_JWT_RE = re.compile(rb"eyJ[A-Za-z0-9_-]{4,16384}(?:\.[A-Za-z0-9_-]{0,65536}){2,4}")
+_JWT_RE16 = re.compile(rb"e\x00y\x00J\x00(?:[A-Za-z0-9_.-]\x00){16,32768}")
+_JWT_MAX_ENTRY, _JWT_MAX_TOKENS, _JWT_MAX_KEYS, _JWT_BUDGET_S, _JWT_DECODE_BUDGET = 32 << 20, 64, 2000, 1.0, 64
+_JWT_HS = {"HS256": hashlib.sha256, "HS384": hashlib.sha384, "HS512": hashlib.sha512}
+_JWT_DEXSTR = re.compile(rb"([\x01-\x7f])([\x20-\x7e]{1,127})\x00")
+_JWT_CSTR = re.compile(rb"[\x20-\x7e]{4,256}(?=\x00)")
+_JWT_QUOTED = re.compile(rb"[\"'`]([\x20-\x7e]{1,256}?)[\"'`]")
+_JWT_PIECE = re.compile(rb"[^\s\"'`=:,;{}<>\[\]()]{4,256}")
+_JWT_B64K = re.compile(r"[A-Za-z0-9+/_-]{16,}={0,2}")
+_JWT_HEXK = re.compile(r"(?:[0-9a-fA-F]{2}){16,}")
+
+
+def _jwt_b64(s):
+    try:
+        return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+    except (binascii.Error, ValueError):
+        return None
+
+
+def _jwt_obj(s):
+    raw = _jwt_b64(s)
+    try:
+        return json.loads(raw.decode("utf-8")) if raw else None
+    except (UnicodeDecodeError, ValueError):
+        return None
+
+
+def _jwt_parse(tok, entry):
+    """One JWS (3 parts) / JWE (5 parts) record, or None when the header is not a JOSE JSON object."""
+    parts = tok.split(".")
+    for n in (3, 5) if len(parts) not in (3, 5) else (len(parts),):
+        if len(parts) < n:
+            continue
+        ps = parts[:n]
+        hdr = _jwt_obj(ps[0])
+        if not isinstance(hdr, dict) or not ({"alg", "typ", "enc", "kid", "cty"} & set(hdr)):
+            continue
+        alg = str(hdr.get("alg", ""))
+        rec = {"entry": entry, "token": ".".join(ps), "kind": "jwe" if n == 5 else "jws", "header": hdr,
+               "payload": None, "alg": alg, "alg_none": alg.lower() == "none", "key": None}
+        if n == 3:
+            body = _jwt_b64(ps[1])
+            rec["payload"] = _jwt_obj(ps[1])
+            if rec["payload"] is None and body:
+                rec["payload"] = body.decode("latin-1")
+            rec["signature_empty"] = ps[2] == ""
+        return rec
+    return None
+
+
+def _jwt_key_strs(name, b, out):
+    """Candidate HMAC secrets from one entry's bytes (dex pool records, quoted / delimited text, NUL-terminated
+    rodata, arsc pool strings), appended to `out` (a dict used as an ordered set)."""
+    if b[:4] == b"dex\n":
+        for m in _JWT_DEXSTR.finditer(b, 0x70):
+            if m.group(1)[0] == len(m.group(2)):
+                out.setdefault(m.group(2), None)
+    elif name == "resources.arsc" or name.endswith(".xml") and b[:2] == b"\x03\x00":
+        for s in _pool_strings(b)[:20000]:
+            if 1 <= len(s) <= 256:
+                out.setdefault(s.encode("utf-8", "ignore"), None)
+    elif b[:4] == b"\x7fELF":
+        for m in _JWT_CSTR.finditer(b):
+            out.setdefault(m.group(0), None)
+    else:
+        head = b[:4096]
+        if sum(32 <= c < 127 or c in (9, 10, 13) for c in head) < 0.9 * len(head):
+            return
+        for line in b.splitlines()[:20000]:
+            s = line.strip()
+            if 1 <= len(s) <= 256:
+                out.setdefault(s, None)
+            for m in _JWT_QUOTED.finditer(s):
+                out.setdefault(m.group(1), None)
+            for m in _JWT_PIECE.finditer(s):
+                out.setdefault(m.group(0), None)
+
+
+def _jwt_key_variants(k):
+    """(label prefix, key bytes): the string itself, then its hex / base64(url) decoding when it has that shape."""
+    yield "", k
+    try:
+        t = k.decode("ascii")
+    except UnicodeDecodeError:
+        return
+    if _JWT_HEXK.fullmatch(t):
+        yield "hex:", bytes.fromhex(t)
+    if _JWT_B64K.fullmatch(t):
+        raw = _jwt_b64(t.rstrip("=").translate(str.maketrans("+/", "-_")))
+        if raw:
+            yield "b64:", raw
+
+
+def jwt_tokens(apk):
+    """[{"entry", "token", "kind": jws|jwe, "header", "payload" (claims dict / text; None for JWE), "alg", "alg_none",
+    "signature_empty", "key"}] for every JWT / JWE in the APK's entries (ASCII and UTF-16LE). "key" = the app string
+    whose HMAC verifies an HS256/384/512 signature (str, or "hex:" / "b64:" + the string when its decoded bytes sign),
+    tried over <= 2000 dex / asset / arsc / .so strings. [] when absent; never raises; < 1 s."""
+    recs, seen = [], set()
+    deadline = time.time() + _JWT_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            infos = [i for i in z.infolist() if not i.is_dir() and i.file_size <= _JWT_MAX_ENTRY]
+            for info in infos:
+                if len(recs) >= _JWT_MAX_TOKENS or time.time() > deadline:
+                    break
+                try:
+                    b = z.read(info)
+                except (OSError, RuntimeError, zipfile.BadZipFile, zlib.error):
+                    continue
+                toks = [m.group(0).decode() for m in _JWT_RE.finditer(b)] if b"eyJ" in b else []
+                if b"e\x00y\x00J\x00" in b:
+                    toks += [m.group(0).decode("utf-16-le") for m in _JWT_RE16.finditer(b)]
+                for t in toks:
+                    rec = _jwt_parse(t, info.filename)
+                    if rec and rec["token"] not in seen and len(recs) < _JWT_MAX_TOKENS:
+                        seen.add(rec["token"])
+                        recs.append(rec)
+            hs = [r for r in recs if r["kind"] == "jws" and r["alg"].upper() in _JWT_HS and not r["signature_empty"]]
+            if not hs:
+                return recs
+            keys = {b"": None}
+            for info in infos:
+                if len(keys) > 4 * _JWT_MAX_KEYS or time.time() > deadline:
+                    break
+                try:
+                    _jwt_key_strs(info.filename, z.read(info), keys)
+                except (OSError, RuntimeError, zipfile.BadZipFile, zlib.error):
+                    continue
+        for r in hs:
+            head, _, sig = r["token"].rpartition(".")
+            want, fn = _jwt_b64(sig), _JWT_HS[r["alg"].upper()]
+            if not want:
+                continue
+            for k in itertools.islice(keys, _JWT_MAX_KEYS):
+                if r["key"] is not None or time.time() > deadline:
+                    break
+                for label, kb in _jwt_key_variants(k):
+                    if hmac.compare_digest(hmac.new(kb, head.encode(), fn).digest(), want):
+                        r["key"] = label + k.decode("utf-8", "replace")
+                        break
+    except Exception:  # noqa: BLE001 - truncated / impostor APK
+        pass
+    return recs
+
+
+def _jwt_values(o, out, depth=0):
+    if depth > 8 or len(out) > 256:
+        return
+    if isinstance(o, dict):
+        for k, v in o.items():
+            out.append(str(k))
+            _jwt_values(v, out, depth + 1)
+    elif isinstance(o, list):
+        for v in o:
+            _jwt_values(v, out, depth + 1)
+    elif o is not None:
+        out.append(str(o))
+
+
+def jwt_scan(apk):
+    """ANS tokens carried by a JWT / JWE shipped in the APK (row 74): header + claim values of jwt_tokens() read
+    literally, then each string claim through decode_any (keyed by the verified HMAC secret when one signs it).
+    [] when absent; never raises; < 1 s."""
+    hits = []
+    deadline = time.time() + _JWT_BUDGET_S
+    try:
+        recs = jwt_tokens(apk)
+        vals = []
+        for r in recs:
+            vs = []
+            _jwt_values(r["header"], vs)
+            _jwt_values(r["payload"], vs)
+            vals.append((r, vs))
+            for v in vs:
+                hits += ANS_RE_T.findall(v)
+        if hits:
+            return list(dict.fromkeys(hits))
+        budget = _JWT_DECODE_BUDGET
+        for r, vs in vals:
+            key = r["key"].split(":", 1)[-1] if r["key"] and r["key"][:4] in ("hex:", "b64:") else r["key"]
+            for v in vs:
+                if budget <= 0 or time.time() > deadline:
+                    break
+                if not 8 <= len(v) <= 4096:
+                    continue
+                for k in (None, key) if key else (None,):
+                    budget -= 1
+                    got = decode_any(v, key=k, chain=False, cap=600)
+                    if got:
+                        hits += ANS_RE_T.findall(got)
+                        break
+    except Exception:  # noqa: BLE001 - never raise past the scan
+        pass
+    return list(dict.fromkeys(hits))
+
+
+# --- schema-less protobuf assets (coverage atlas row 75) -------------------------------------------------------------
+# An app keeps its config / state as a serialized protobuf message (assets/*.pb|bin, res/raw/, or a base64 / hex text
+# blob of one) read through GeneratedMessageLite, so the token sits in a LEN field of a message nobody has the .proto
+# for. Generic wire walk over the aapt2 reader's _pb_fields: a blob counts only when it is consumed exactly (no
+# trailing bytes, sane field numbers, wire types 0/1/2/5), each LEN value is tried as a nested message first (depth
+# <= 8), and is ALSO kept as a UTF-8 string when it reads as text, else as bytes. Leaves go to the ANS regex, the
+# concatenation of a message's sibling strings (split token), then decode_any keyed by a sibling string (xor key field).
+_PBA_MAX_ENTRY, _PBA_DEPTH, _PBA_LEAVES, _PBA_BUDGET_S, _PBA_DECODE_BUDGET = 4 << 20, 8, 4096, 1.0, 64
+_PBA_SKIP = re.compile(r"(?:classes\d*\.dex|resources\.arsc|AndroidManifest\.xml|META-INF/.*|.*\.(?:so|png|jpe?g|webp|"
+                       r"gif|ogg|mp3|ttf|otf|kotlin_builtins|kotlin_module|version|properties))$", re.I)
+_PBA_TEXT = re.compile(r"[^\x00-\x08\x0b\x0c\x0e-\x1f\x7f]*")
+_PBA_BLOB = re.compile(rb"[A-Za-z0-9+/_\-]{16,}={0,2}|(?:[0-9a-fA-F]{2}){8,}")
+
+
+def _pba_msg(b):
+    """Fields of `b` when it is one complete, plausible protobuf message; else None."""
+    if not b or len(b) > _PBA_MAX_ENTRY:
+        return None
+    try:
+        fs = _pb_fields(b)
+    except (ValueError, IndexError):
+        return None
+    if not fs or any(fn > 0x1FFFFFFF or (fn > 4096 and len(fs) < 4) for fn, _, _ in fs):
+        return None
+    return fs
+
+
+def _pba_text(v):
+    try:
+        s = v.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    return s if s and _PBA_TEXT.fullmatch(s) and sum(c.isprintable() or c.isspace() for c in s) == len(s) else None
+
+
+def _pba_walk(fs, path, depth, out, groups):
+    sibs = []
+    for fn, wt, v in fs:
+        p = f"{path}.{fn}" if path else str(fn)
+        if len(out) >= _PBA_LEAVES:
+            return
+        if wt != 2:
+            out.append((p, v if isinstance(v, int) else int.from_bytes(v, "little")))
+            continue
+        s = _pba_text(v)
+        sub = _pba_msg(v) if depth < _PBA_DEPTH and len(v) >= 2 else None
+        if sub is not None and not (s is not None and len(sub) == 1 and sub[0][1] != 2):
+            _pba_walk(sub, p, depth + 1, out, groups)
+        if s is not None:
+            out.append((p, s))
+            sibs.append(s)
+        elif sub is None:
+            out.append((p, bytes(v)))
+    if len(sibs) >= 2:
+        groups.append(sibs)
+
+
+def protobuf_fields(data):
+    """Schema-less decode of one serialized protobuf message: [(field path "1.3.2", value)] where value is a str (LEN
+    field that reads as UTF-8 text), bytes (other LEN leaves) or int (varint / fixed32 / fixed64, little-endian). LEN
+    fields that parse as a complete nested message are walked (depth <= 8) and, when also text, kept as the string.
+    None unless `data` is consumed exactly as wire format. Never raises."""
+    try:
+        fs = _pba_msg(bytes(data))
+        if fs is None:
+            return None
+        out = []
+        _pba_walk(fs, "", 1, out, [])
+        return out
+    except Exception:  # noqa: BLE001 - not a protobuf message
+        return None
+
+
+def _pba_blobs(name, b):
+    """(label, candidate message bytes) of an entry: the bytes themselves, then base64 / hex text runs inside it."""
+    yield name, b
+    for m in _PBA_BLOB.finditer(b[:1 << 20]):
+        t = m.group(0)
+        for fn in (lambda x: binascii.unhexlify(x) if re.fullmatch(rb"(?:[0-9a-fA-F]{2})+", x) else None,
+                   _b64ish, lambda x: _b64ish(x, True)):
+            try:
+                r = fn(t)
+            except (binascii.Error, ValueError):
+                r = None
+            if r and len(r) >= 4:
+                yield f"{name}@{m.start()}", r
+
+
+def protobuf_asset_scan(apk):
+    """ANS tokens inside schema-less protobuf messages shipped in the APK (row 75): every non-code entry (assets/,
+    res/raw/, any path), and every base64 / hex run inside one, that parses completely as wire format (two or more
+    fields, or one LEN field) is walked by protobuf_fields; string / bytes leaves are read for a literal token, then a
+    message's sibling strings joined (split token), then each leaf through decode_any (unkeyed, then keyed by each
+    sibling string). [] when absent; never raises; < 1 s."""
+    hits, leaves, seen = [], [], set()
+    deadline = time.time() + _PBA_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            for info in z.infolist():
+                if time.time() > deadline:
+                    break
+                if info.is_dir() or info.file_size > _PBA_MAX_ENTRY or _PBA_SKIP.fullmatch(info.filename):
+                    continue
+                try:
+                    b = z.read(info)
+                except (OSError, RuntimeError, zipfile.BadZipFile, zlib.error, NotImplementedError):
+                    continue
+                for label, blob in _pba_blobs(info.filename, b):
+                    if time.time() > deadline:
+                        break
+                    if blob in seen:
+                        continue
+                    seen.add(blob)
+                    fs = _pba_msg(blob)
+                    if fs is None or (len(fs) < 2 and fs[0][1] != 2):
+                        continue
+                    out, groups = [], []
+                    _pba_walk(fs, "", 1, out, groups)
+                    if not any(isinstance(v, (str, bytes)) for _, v in out):
+                        continue
+                    leaves.append((label, out, groups))
+        for _label, out, groups in leaves:
+            for _p, v in out:
+                if isinstance(v, (str, bytes)):
+                    t = v if isinstance(v, str) else v.decode("latin-1")
+                    hits += [x for x in ANS_RE_T.findall(t) if x not in hits]
+            for g in groups:
+                hits += [x for x in ANS_RE_T.findall("".join(g)) if x not in hits]
+        if hits:
+            return hits
+        budget = _PBA_DECODE_BUDGET
+        for _label, out, groups in leaves:
+            strs = [v for _, v in out if isinstance(v, str) and 4 <= len(v) <= 256]
+            keys = list(dict.fromkeys(s for s in strs if len(s) <= 64))[:6]
+            for _p, v in out:
+                if budget <= 0 or time.time() > deadline:
+                    break
+                if isinstance(v, int) or not 8 <= len(v) <= 4096:
+                    continue
+                for k in [None] + [x for x in keys if x != v]:
+                    if budget <= 0 or time.time() > deadline:
+                        break
+                    budget -= 1
+                    got = decode_any(v, key=k, depth=2 if k else 3, cap=400, chain=False)
+                    if got:
+                        hits += [x for x in ANS_RE_T.findall(got) if x not in hits]
+                        break
+                if hits:
+                    return hits
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    return hits

@@ -1,0 +1,11 @@
+{
+ "_doc": "static-process-tree (lib.codec.declared_spawns / code_spawns). Gate checks expected_plain via find_codecs; expected_spawns is the declared tree (subset match on the listed keys) proven by spawn_oracle_cmd.",
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "printf %s '<benign plan, steps=decode_configuration,return_configuration>' | xxd -p -> $Material_77aa; 'Start-Process' only inside a string, a comment and a Write-Host line (inert precursor, like D18 invoke-python-stage.ps1)",
+ "oracle_cmd": "perl -ne 'print pack(\"H*\",$1),\"\\n\" if /Material_77aa = .([0-9a-f]+)/' ptspawn_decoy_inert.ps1",
+ "oracle_output": "v=3|language=powershell|role=benign_utility|verdict=benign|attack=none|adapter=local_parser|host_profile=standalone|next_language=python|stage_count=1|steps=decode_configuration,return_configuration|campaign_id=BN-77aa01c3",
+ "spawn_oracle_cmd": "grep -nE '^[^#]*\\bStart-Process\\b' ptspawn_decoy_inert.ps1 | grep -vE \"'[^']*Start-Process|Write-Host\"  (no output: no live spawn site); plan steps carry no dispatch_*",
+ "spawn_oracle_output": "",
+ "expected_spawns": []
+}

@@ -1,0 +1,8 @@
+{
+ "field": "vhd.current_size_bytes",
+ "expected": "10514432",
+ "generator_cmd": "qemu-img create -f vpc -o subformat=dynamic dyn.vhd 10M  (qemu-img 10.2.1)",
+ "oracle_cmd": "qemu-img info --output=json dyn.vhd -> virtual-size 10514432; file -b: '10514432 bytes'",
+ "decoy": false,
+ "member": "dyn.vhd"
+}

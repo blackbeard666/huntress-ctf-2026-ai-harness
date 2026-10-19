@@ -1,0 +1,8 @@
+{
+ "field": "ads.zone_id",
+ "expected": "3",
+ "generator_cmd": "printf '[ZoneTransfer]\\r\\nZoneId=3\\r\\nLastWriterPackageFamilyName=Microsoft.MicrosoftEdge_8wekyb3d8bbwe\\r\\nAppZoneId=4\\r\\n' | iconv -f UTF-8 -t UTF-16 > uwp_utf16.bin  (glibc iconv: FF FE BOM + UTF-16LE)",
+ "oracle_cmd": "python3 -I -c \"import configparser; c=configparser.ConfigParser(interpolation=None); c.optionxform=str; c.read_string(open('uwp_utf16.bin',encoding='utf-16').read()); print(dict(c['ZoneTransfer']))\" -> ZoneId '3'",
+ "decoy": false,
+ "member": "setup.exe:Zone.Identifier"
+}

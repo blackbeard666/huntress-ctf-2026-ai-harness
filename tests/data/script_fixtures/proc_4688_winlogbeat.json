@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=batch|role=launcher|verdict=malicious|attack=T1059.003|adapter=security_4688|stage_count=2|steps=spawn_cmd,decode_stage|campaign_id=PT-2d9e1b70|url=https://pt-2d9e1b70.example.invalid/c",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/proc_tel_gen.py tests/data/script_fixtures (stdlib writers: xml.sax.saxutils.escape with wevtutil's &quot; rendering / json.dumps winlogbeat NDJSON / Splunk k=v with \\\" escaping; plan.encode() XOR 0x5a -> hex in `$Material_<id> = \"..\"` + `$Codec_<id> = \"hex_compact|xor_5a|\"` inside the powershell CommandLine)",
+ "oracle_cmd": "jq -r 'select(.winlog.event_id==\"4688\").winlog.event_data.CommandLine' proc_4688_winlogbeat.ndjson | perl -ne 'if(/Material_\\w+ = \\\\?\"([0-9a-f]+)\\\\?\"/){$b=pack(\"H*\",$1);$b^=chr(0x5a)x length $b;print $b}'",
+ "note": "Security 4688 + 4689 via winlogbeat (ECS process.pid 6700 / process.parent.pid 1008 + winlog.event_data NewProcessId 0x1a2c, creator ProcessId 0x3f0; jq -c '[.winlog.event_data.NewProcessId,.winlog.event_data.ProcessId,.process.pid,.process.parent.pid]'); JSON escapes the descriptor quotes as \\\""
+}

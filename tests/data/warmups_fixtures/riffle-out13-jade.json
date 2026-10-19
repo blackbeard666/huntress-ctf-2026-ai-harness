@@ -1,0 +1,10 @@
+{
+ "codec": "riffle-out13",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-08",
+ "encoded": "Ne-jeMahtw xitues m tiere0te t Gt stehisv !rs ddoc-td:se  rnc tm lopaigo wiroarameoeaas b,oTuwhnck 8",
+ "generator_cmd": "perl -e '($s,$k,$in)=@ARGV; for(1..$k){$n=length $s; if($in){$h=int($n/2); @a=split//,substr($s,$h); @b=split//,substr($s,0,$h)} else {$h=int(($n+1)/2); @a=split//,substr($s,0,$h); @b=split//,substr($s,$h)} $o=\"\"; for $i(0..$#a){$o.=$a[$i]; $o.=$b[$i] if $i<=$#b} $s=$o} print $s' \"$plain\" 13 0  # perl faro shuffle: cut (first half = ceil for out, second half dealt first for in), interleave, x13",
+ "oracle_cmd": "python3 -I -c ... \"$encoded\" 13 0  # numpy un-shuffle: t[0::2]+t[1::2] (out) / t[1::2]+t[0::2] (in), x13; full: python3 -I -c \"import sys,numpy as np;t,k,inn=sys.argv[1],int(sys.argv[2]),sys.argv[3]=='1';a=np.array(list(t))\nfor _ in range(k): a=np.concatenate([a[1::2],a[0::2]] if inn else [a[0::2],a[1::2]])\nprint(''.join(a))\" ",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-08",
+ "expected": "match",
+ "len": 100
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "riffle",
+ "plain": null,
+ "encoded": "N kcnhwuTo,b saaeoemara-g3iewr eoigti amp osle umtti xc nwrt h aeMse:mpebde-3codd sr! vsihets tG t lar",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "perl -e '($s)=@ARGV;@r=(\"\",\"\",\"\");$p=0;$d=1;for $c(split//,$s){$r[$p].=$c;$d=-1 if $p==2;$d=1 if $p==0;$p+=$d}print join(\"\",@r)' \"$plain\"  # 3-rail fence (renamed impostor: an anagram that is NOT a riffle)",
+ "oracle_cmd": "numpy un-shuffle loop above for every k up to the cycle order, in and out: no reading starts with the crib -> not a riffle",
+ "oracle_plain": null
+}

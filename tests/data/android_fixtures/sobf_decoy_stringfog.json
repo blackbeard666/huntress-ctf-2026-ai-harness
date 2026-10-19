@@ -1,0 +1,8 @@
+{
+ "entry": "string_obfuscator_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same StringFog b64 layout, near-miss token (15 hex) -> no ANS",
+ "generator_cmd": "python3 tests/data/android_fixtures/sobf_src/gen_sobf.py decoy_stringfog tests/data/android_fixtures/sobf_decoy_stringfog.apk  # javac --release 8 + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/sobf_src/oracle.sh tests/data/android_fixtures/sobf_decoy_stringfog.apk  # d2j-dex2jar back to classes, RUN Main.show(PrintStream) on the JVM (obfuscator's own runtime) -> prints only a 15-hex near-miss"
+}

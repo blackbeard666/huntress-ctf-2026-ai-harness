@@ -1,0 +1,8 @@
+{
+ "material": "%COMSPEC% /C \"p^ow\"\"ers^hell.exe -e UwB0AGEAcgB0AC0AUAByAG8AYwBlAHMAcwAgAG4AbwB0AGUAcABhAGQA\"",
+ "rep": "cmdline",
+ "transform": "canon",
+ "expected": "cmd /c powershell -command Start-Process notepad",
+ "generator_cmd": "pwsh -c \"[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes('Start-Process notepad'))\" -> %COMSPEC% /C \"p^ow\"\"ers^hell.exe -e UwB0AGEAcgB0AC0AUAByAG8AYwBlAHMAcwAgAG4AbwB0AGUAcABhAGQA\"",
+ "oracle_cmd": "pwsh -c \"[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('UwB0AGEAcgB0AC0AUAByAG8AYwBlAHMAcwAgAG4AbwB0AGUAcABhAGQA'))\"; %COMSPEC% = cmd.exe, cmd removes ^ outside quotes and po\"\"wer -> power, /C -> /c, payload quotes stripped"
+}

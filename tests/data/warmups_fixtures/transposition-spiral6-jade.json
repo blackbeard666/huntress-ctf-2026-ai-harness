@@ -1,0 +1,10 @@
+{
+ "codec": "transposition",
+ "key": "route spiral (secretpy Spiral key 6)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-meadow-63",
+ "encoded": "ow-63ddeehr  t sp gew eciNoc w!os ea e re-meaatmtetsi, usnd krota lutxnt M: jsa wcimeomiidhrTvbhasoGa",
+ "generator_cmd": "python3 -I -c \"import sys;sys.path.insert(0,'tools/pyciphers');from secretpy import Spiral;print(Spiral().encrypt(sys.argv[1],6),end='')\" \"$plain\"  # secretpy 0.12.0 Spiral.encrypt(text, 6): route cipher, spiral inwards clockwise from the top right",
+ "oracle_cmd": "python3 -I -c \"import sys;sys.path.insert(0,'tools/pyciphers');from secretpy import Spiral;print(Spiral().decrypt(sys.argv[1],6),end='')\" \"$encoded\"  # secretpy Spiral.decrypt(text, 6)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-meadow-63",
+ "expected": "match"
+}

@@ -1,0 +1,14 @@
+{
+ "codec": "dcol:col:quartz+col:ember",
+ "key": "quartz ember",
+ "hints": [
+  "Shuffle Twice",
+  "The ledger was reshuffled by column under QUARTZ, then again under EMBER."
+ ],
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-harbor-17",
+ "encoded": "dbGN!aaima  ehttMe h1cTst   eow-sstrltbp bhhaoo riisd,t-ax:gtekvoower e rutoou wsrara cse7mccnimi nl  e",
+ "generator_cmd": "python3 -I -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from pycipher import ColTrans as C;s=sys.argv[1]\nfor k in sys.argv[2:]:\n c=C(k);c.remove_punctuation=lambda t,**kw:t;s=c.encipher(s)\nprint(s,end=\"\")' \"$plain\" quartz ember  # pycipher 0.5.2 ColTrans / secretpy 0.12.0 MyszkowskiTransposition .encipher/.encrypt applied once per key (punctuation kept)",
+ "oracle_cmd": "python3 -I -c 'import sys;sys.path.insert(0,\"tools/pyciphers\");from secretpy import ColumnarTransposition as C;s=sys.argv[1]\nfor k in reversed(sys.argv[2:]):s=C().decrypt(s,k,\"0123456789abcdefghijklmnopqrstuvwxyz\")\nprint(s,end=\"\")' \"$encoded\" quartz ember  # secretpy 0.12.0 ColumnarTransposition / MyszkowskiTransposition .decrypt, keys undone last-first",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-harbor-17",
+ "expected": "match"
+}

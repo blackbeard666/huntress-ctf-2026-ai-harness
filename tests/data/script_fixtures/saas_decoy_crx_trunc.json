@@ -1,0 +1,8 @@
+{
+ "text": "Cr24\u0003\u0000\u0000\u0000\b\u0000\u0000\u0000\u0012\u0006\n\u0004\u0000\u0000\u0000\u0000PK\u0003\u0004\u0014\u0000\u0000\u0000\b\u0000\u0089\u00b1R]\u00ccU%TN\u0000\u0000\u0000W\u0000\u0000\u0000\r\u0000\u0000\u0000manifest.json=\u00caA\n\u0080 \u0010F\u00e1\u00bb\u00fck\t\u00a2\u009d\u0097\t\u00b3)L\u001ca\u00a64\u0010\u00ef\u009e\u00ab\u0096\u00ef\u00e35$\u00c7\u00e1 \u00bd\u00d7B\u00a2!3\u00ecb\u00c0.\u0011,^\u0018\u00fc\u008cy\u00d4\u00e6|<%?\u00bc\u00c36(I\t\u009e\u00d6\u009a%\u0092\u008cE\u00ebt)z\u00ff\u0000PK\u0003\u0004\n\u0000\u0000\u0000\u0000\u0000\u0089\u00b1R]li\u009fj\u0010\u0000\u0000\u0000\u0010\u0000\u0000\u0000\b\u0000\u0000\u0000popup.jsconsole.log(1);\nPK\u0003\u0004\u0014",
+ "expected_plain": null,
+ "decoy": true,
+ "_doc": "DECOY: the CRX3 above truncated to 200 bytes (Cr24 magic, no central directory)",
+ "generator_cmd": "head -c 200 saas_crx3_mv3.crx > saas_decoy_crx_trunc.crx",
+ "oracle_cmd": "unzip -l saas_decoy_crx_trunc.crx  # cannot find zipfile directory"
+}

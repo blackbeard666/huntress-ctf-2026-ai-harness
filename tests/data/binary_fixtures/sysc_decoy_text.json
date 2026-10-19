@@ -1,0 +1,23 @@
+{
+ "family": "direct_syscall",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "arch": "none",
+  "syscalls": "none",
+  "syscall_numbers": "none",
+  "syscalls_csv": "none",
+  "intent:ptrace": "none"
+ },
+ "expected_api_intent": null,
+ "generator_cmd": "bash sysc_gen.sh   # printf '\\x7fELF? not an ELF: \\x0f\\x05 \\xcd\\x80 mov eax,310; syscall; ...' (ELF-magic text impostor, invalid EI_CLASS)",
+ "oracle_cmd": "python3 sysc_oracle.py sysc_decoy_text.bin   # file -b + objdump -d (aarch64-linux-gnu-objdump) last mov imm -> eax/x8 before syscall/int $0x80/svc #0x0 (and edi before call syscall@plt), names from kernel uapi asm/unistd_64.h / unistd_32.h / asm-generic/unistd.h; verdicts = api_intent rules applied by hand",
+ "oracle_raw": {
+  "arch": "none",
+  "syscalls": "none"
+ },
+ "file_b": "ELF, unknown class 63",
+ "decoy": true,
+ "note": "lib.binary.syscall_field(data, k) per expected_facts key, api_intent_field(data, k) per expected_api_intent key; field names / verdict vocabulary SPECULATIVE (GM label not seen); no HCFG blob"
+}

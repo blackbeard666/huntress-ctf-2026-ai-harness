@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/proc_linux_gen.py tests/data/script_fixtures (connect syscall=42 + SOCKADDR + benign PROCTITLE; no execve)",
+ "oracle_cmd": "grep -c 'syscall=59\\|type=EXECVE' proc_linux_auditd_decoy.log  # 0 -> no process start"
+}

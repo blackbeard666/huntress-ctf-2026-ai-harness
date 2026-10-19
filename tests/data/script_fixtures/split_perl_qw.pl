@@ -1,0 +1,16 @@
+# HUNTRESS_ANALYSIS_V1:SPLIT
+my @p = qw(
+    B64-dj0zfGxhbmd1YWdlPWpzY3JpcHR8cm9sZT1zdGFnZWRfY2hh
+    aW58dmVyZGljdD1zdXNwaWNpb3VzfGF0dGFjaz1UMTA1OXxh
+    ZGFwdGVyPW9wZXJhdGlvbl9ncmFwaHxob3N0X3Byb2ZpbGU9
+    d3NmX2pzY3JpcHR8b2JmdXNjYXRpb25fcHJvZmlsZT1iYXNl
+    NjR8c3RhZ2VfcHJvZmlsZT10d29fc3RhZ2VfZG93bmxvYWRf
+    ZXhlY3V0ZXxuZXh0X2xhbmd1YWdlPWpzY3JpcHR8c3RhZ2Vf
+    Y291bnQ9MnxzdGVwcz1hY3F1aXJlX3JlbW90ZSxkaXNwYXRj
+    aF9wcm9jZXNzfGNhbXBhaWduX2lkPUpTQ1JJUFQtM2QyZDNk
+    MGR8dXJsPWh0dHBzOi8vanNjcmlwdC0zZDJkM2QwZGIwLmV4
+    YW1wbGUuaW52YWxpZC9zdGFnZXxmaWxlX3BhdGg9L3RtcC9o
+    dW50cmVzcy1qc2NyaXB0Ly4zZDJkM2QwZGIwMDExOWI1LnN0
+    YWdl
+);
+my $plan = join '', @p;

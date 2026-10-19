@@ -1,0 +1,5 @@
+{
+  "version": "0.3.0",
+  "body": "function main(workbook: ExcelScript.Workbook) {\n  let s = workbook.getActiveWorksheet();\n  s.getRange(\"A1\").setValue(\"763d337c6c616e6775616765\");\n}\n",
+  "noCodeMetadata": ""
+}

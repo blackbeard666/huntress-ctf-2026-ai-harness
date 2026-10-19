@@ -1,0 +1,8 @@
+{
+ "field": "qcow2.version",
+ "expected": "2",
+ "generator_cmd": "qemu-img create -f qcow2 -o compat=0.10 old.qcow2 2M (qemu-img 10.2.1); fixture = head -c 65536 (header cluster)",
+ "oracle_cmd": "file -b old.qcow2 -> QEMU QCOW Image (v2); qemu-img compat 0.10",
+ "decoy": false,
+ "member": "old.qcow2"
+}

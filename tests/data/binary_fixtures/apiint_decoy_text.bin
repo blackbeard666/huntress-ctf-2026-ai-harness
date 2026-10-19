@@ -1,0 +1,1 @@
+MZ not really a PE: ptrace PTRACE_POKETEXT WriteProcessMemory CreateRemoteThread

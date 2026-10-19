@@ -1,0 +1,10 @@
+{
+ "codec": "word-transposition",
+ "key": "word-rail3",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "Nice warmup! this the work this To submit exact to Game amber-falcon-42 decoding solve, answer Master:",
+ "generator_cmd": "python3 -I gen.py rail 3 \"$plain\"  # pycipher.Railfence/ColTrans .encipher on a token->letter string (word i = letter A+i), letters mapped back to words: gen.py = import sys,string,pycipher; ws=plain.split(\" \"); sym=string.ascii_uppercase[:len(ws)]; c=pycipher.Railfence(3).encipher(sym); print(\" \".join(ws[sym.index(ch)] for ch in c))",
+ "oracle_cmd": "python3 -I oracle.py rail 3 \"$encoded\"  # pycipher .decipher on the token->letter string, mapped back",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

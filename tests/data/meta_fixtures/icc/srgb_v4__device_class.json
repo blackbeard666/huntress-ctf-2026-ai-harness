@@ -1,0 +1,8 @@
+{
+ "field": "icc.device_class",
+ "expected": "mntr",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import ImageCms; open('lab.icc','wb').write(ImageCms.ImageCmsProfile(ImageCms.createProfile('LAB')).tobytes()); open('srgb.icc','wb').write(ImageCms.ImageCmsProfile(ImageCms.createProfile('sRGB')).tobytes())\"  (Pillow ImageCms / lcms2 writer)",
+ "oracle_cmd": "exiftool -j -n -ProfileClass srgb.icc -> 'mntr'",
+ "decoy": false,
+ "member": "srgb.icc"
+}

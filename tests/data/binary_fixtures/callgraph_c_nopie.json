@@ -1,0 +1,144 @@
+{
+ "family": "call_graph",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "edges": [
+   [
+    "_init",
+    "__gmon_start__",
+    "plt"
+   ],
+   [
+    "_start",
+    "__libc_start_main",
+    "plt"
+   ],
+   [
+    "__do_global_dtors_aux",
+    "deregister_tm_clones",
+    "direct"
+   ],
+   [
+    "op_log",
+    "__printf_chk",
+    "plt"
+   ],
+   [
+    "dispatch",
+    "op_add",
+    "indirect"
+   ],
+   [
+    "dispatch",
+    "op_mul",
+    "indirect"
+   ],
+   [
+    "dispatch",
+    "op_neg",
+    "indirect"
+   ],
+   [
+    "via_reg",
+    "op_mul",
+    "indirect"
+   ],
+   [
+    "via_reg",
+    "puts",
+    "plt"
+   ],
+   [
+    "via_global",
+    "op_log",
+    "indirect"
+   ],
+   [
+    "unused_helper",
+    "puts",
+    "plt"
+   ],
+   [
+    "main",
+    "dispatch",
+    "direct"
+   ],
+   [
+    "main",
+    "via_reg",
+    "direct"
+   ],
+   [
+    "main",
+    "via_global",
+    "direct"
+   ],
+   [
+    "main",
+    "strlen",
+    "plt"
+   ],
+   [
+    "main",
+    "__printf_chk",
+    "plt"
+   ],
+   [
+    "main",
+    "__isoc23_strtol",
+    "plt"
+   ],
+   [
+    "main",
+    "exit",
+    "plt"
+   ]
+  ],
+  "indirect_targets": [
+   "op_add",
+   "op_mul",
+   "op_neg",
+   "op_log"
+  ],
+  "imports_called": [
+   "__gmon_start__",
+   "__libc_start_main",
+   "__printf_chk",
+   "puts",
+   "strlen",
+   "__isoc23_strtol",
+   "exit"
+  ],
+  "indirect_calls_by_function": {
+   "_init": 1,
+   "dispatch": 1,
+   "via_reg": 1,
+   "via_global": 1
+  },
+  "main_callees": [
+   "dispatch",
+   "via_reg",
+   "via_global",
+   "strlen",
+   "__printf_chk",
+   "__isoc23_strtol",
+   "exit"
+  ],
+  "reached_from_main": [
+   "op_add",
+   "op_mul",
+   "op_neg",
+   "op_log",
+   "dispatch",
+   "via_reg",
+   "via_global"
+  ]
+ },
+ "generator_cmd": "bash callgraph_gen.sh   # gcc/strip/zig cc from callgraph_src.c (see script)",
+ "oracle_cmd": "python3 callgraph_oracle.py callgraph_c_nopie.bin   # objdump -d text + nm + pyelftools relocations/section bytes",
+ "file_b": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamic",
+ "decoy": false,
+ "note": "lib.binary.call_graph_field(data, key) per expected_facts key; edges [[caller, callee, kind]] unique in call-site order, kind direct|plt|indirect; GM vocabulary SPECULATIVE"
+}

@@ -1,0 +1,11 @@
+{
+ "codec": "transposition",
+ "key": "scytale3+rev-out(fragment)",
+ "plain": "decoding",
+ "encoded": "icgdenod",
+ "generator_cmd": "python3 -I -c \"import sys;sys.path.insert(0,'tools/pyciphers');from secretpy import Scytale as S;print(S().encrypt(sys.argv[1],3),end='')\" \"$plain\" | rev  # secretpy Scytale.encrypt(text, 3), then rev",
+ "oracle_cmd": "printf %s \"$encoded\" | rev | python3 -I -c \"import sys;sys.path.insert(0,'tools/pyciphers');from pycipher import ColTrans as C;c=C('abc');c.remove_punctuation=lambda t,**k:t;print(c.decipher(sys.stdin.read()),end='')\"  # rev, then pycipher ColTrans('abc').decipher",
+ "oracle_plain": "decoding",
+ "expected": "match",
+ "mode": "fragment"
+}

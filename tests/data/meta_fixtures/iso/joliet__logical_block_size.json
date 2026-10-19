@@ -1,0 +1,8 @@
+{
+ "field": "iso.logical_block_size",
+ "expected": "2048",
+ "generator_cmd": "pycdlib.PyCdlib().new(interchange_level=1, sys_ident='LINUX', vol_ident='EVIDENCE_Q3', vol_set_ident='CASE-4471', pub_ident_str='ACME FORENSICS', app_ident_str='PYCDLIB BUILD 7', joliet=3); add_directory('/LOGS'); add_fp README.TXT;1 (12 B), AUTORUN.INF;1 (3000 B); write('joliet.iso')  (pycdlib 1.x writer, host TZ +08:00)",
+ "oracle_cmd": "python -I -c \"import pycdlib;i=pycdlib.PyCdlib();i.open('joliet.iso');p=i.pvd;print(p.system_identifier,p.volume_identifier,p.volume_set_identifier,p.publisher_identifier.text,p.application_identifier.text,p.space_size,p.log_block_size,p.volume_creation_date.record(),i.has_joliet(),i.has_udf(),[c.file_identifier() for c in i.list_children(iso_path='/')])\" -> LINUX EVIDENCE_Q3 CASE-4471 'ACME FORENSICS' 'PYCDLIB BUILD 7' 35 2048 b'2026101823423600 ' (offset byte 0x20 = +32x15min = +08:00 -> 15:42:36Z) True False [.,..,AUTORUN.INF;1,LOGS,README.TXT;1]; file -b -> ISO 9660 CD-ROM filesystem data 'EVIDENCE_Q3'",
+ "decoy": false,
+ "member": "joliet.iso"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_pix_fmt",
+ "expected": "yuvj422p",
+ "generator_cmd": "python3 -c \"from PIL import Image; Image.new('RGB',(37,23)).save('j422.jpg',subsampling=1)\"",
+ "oracle_cmd": "ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i j422.jpg 2>&1 | grep Stream  (bundled tools/imageio_ffmpeg_pkg; stream #0:0 video codec, pix_fmt, WxH) -> Stream #0:0: Video: mjpeg (Baseline), yuvj422p(pc, bt470bg/unknown/unknown), 37x23 [SAR 1:1 DAR 37:23], 25 fps, 25 tbr, 25 tbn",
+ "decoy": false,
+ "member": "j422.jpg"
+}

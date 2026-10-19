@@ -1,0 +1,7 @@
+{
+ "entry": "local_store_scan",
+ "expected": "ANS-6d1e83b0f4a92c57",
+ "_why": "SQLCipher 4 defaults (PBKDF2-HMAC-SHA512 256000, 4096-byte pages, reserve 80) assets/vault.db; passphrase = dex const DB_PASS; dex names net.sqlcipher.database.SQLiteDatabase",
+ "generator_cmd": "PYTHONPATH=tools/pysqlcipher3 python3 tests/data/android_fixtures/sqlc_src/gen_sqlc.py v4_dex tests/data/android_fixtures/sqlc_v4_dex.apk  # sqlcipher3-binary 0.6.0 (pip --target tools/pysqlcipher3, SQLCipher 4.12) writes the db; javac + d2j-jar2dex the dex",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/sqlc_v4_dex.apk assets/vault.db > /tmp/v.db; for pw in $(unzip -p tests/data/android_fixtures/sqlc_v4_dex.apk classes.dex | strings -n 8); do PYTHONPATH=tools/pysqlcipher3 python3 -c \"import sys,sqlcipher3,base64; c=sqlcipher3.connect('/tmp/v.db'); c.execute('PRAGMA key=\\\"'+sys.argv[1]+'\\\"'); print([base64.b64decode(r[0]).decode() if 0 else r[0] for r in c.execute('select body from notes where title=\\\"flag\\\"')][0])\" \"$pw\" 2>/dev/null; done   # real SQLCipher (sqlcipher3) opens the db with each `strings -n 8` dex string"
+}

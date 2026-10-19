@@ -1,0 +1,28 @@
+{
+ "family": "lisp_facts",
+ "encoding": "none",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_facts": {
+  "lisp_runtime": "none",
+  "lisp_language": "none",
+  "has_sbcl_runtime": "false",
+  "has_chicken_runtime": "false",
+  "has_ecl_runtime": "false",
+  "has_racket_runtime": "false",
+  "has_libchicken_needed": "false",
+  "chicken_soname": "none",
+  "has_c_toplevel": "false",
+  "ecl_soname": "none",
+  "has_rackboot_section": "false",
+  "has_sbcl_core": "false",
+  "sbcl_core_offset": "none",
+  "sbcl_build_id": "none",
+  "sbcl_version": "none",
+  "hcfg_section": "none"
+ },
+ "decoy": true,
+ "generator_cmd": "bash lisp_gen.sh   # real sbcl 2.6.0 save-lisp-and-die :executable t (cropped: head -c 2228224) / chicken 5.3.0 + gcc -lchicken; blob python3 zlib.crc32+struct, coreutils base64",
+ "oracle_cmd": "bash lisp_oracle.sh lisp_decoy_cstrings.bin   # file -b, readelf -d NEEDED, nm/nm -D, grep -obUaP LCBS magic at page boundary + dd|strings build-id, strings -B1 'SBCL %s' version, grep -obUaP raw HCFG, strings -t d [-e L] | base64 -d",
+ "note": "plain C with .symtab, every Lisp cue only as string literals; HCFG base64 whose crc32 LSB was overwritten by dd (oracle decodes it, crc invalid) -> no hit"
+}

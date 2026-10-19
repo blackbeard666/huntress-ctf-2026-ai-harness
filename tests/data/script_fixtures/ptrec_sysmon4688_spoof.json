@@ -1,0 +1,51 @@
+{
+ "expected_plain": "v=3|language=powershell|role=loader|verdict=malicious|attack=T1134.004|adapter=sysmon_4688|stage_count=2|steps=spawn_child,spoof_parent|campaign_id=PR-4c1e9a07|url=https://pr-4c1e9a07.example.invalid/s",
+ "decoy": false,
+ "declared": [
+  [
+   "WINWORD.EXE",
+   "powershell.exe",
+   "powershell.exe -NoP -W Hidden -Command ..."
+  ],
+  [
+   "powershell.exe",
+   "rundll32.exe",
+   "rundll32.exe C:\\Users\\Public\\x.dll,Run"
+  ],
+  [
+   "powershell.exe",
+   "schtasks.exe",
+   "schtasks.exe /create /tn upd /tr C:\\Users\\Public\\u.exe"
+  ]
+ ],
+ "reconcile_expected": {
+  "parent_mismatch": [
+   {
+    "child": "rundll32.exe",
+    "declared_parent": "powershell.exe",
+    "recorded_parent": "explorer.exe",
+    "real_parent_if_known": "powershell.exe",
+    "pid": "5200",
+    "guid": "7a20c3e1-bb02-6712-0004-000000004200"
+   }
+  ],
+  "matched": [
+   "powershell.exe",
+   "rundll32.exe"
+  ],
+  "declared_only": [
+   "schtasks.exe"
+  ],
+  "observed_only": [
+   "notepad.exe"
+  ],
+  "orphans": [
+   "explorer.exe"
+  ],
+  "attack": "T1134.004"
+ },
+ "oracle_cmd": "perl -ne 'if(/Material_\\w+ = (?:\\\\?\"|&quot;)([0-9a-f]+)/){$b=pack(\"H*\",$1);$b^=chr(0x5a)x length $b;print $b;exit}' ptrec_sysmon4688_spoof.xml",
+ "tree_oracle_cmd": "python3 -I -c \"import xml.dom.minidom as m,sys;[print(e.getElementsByTagName('EventID')[0].firstChild.data,*[x.getAttribute('Name')+'='+x.firstChild.data.split(chr(92))[-1] for x in e.getElementsByTagName('Data') if x.getAttribute('Name') in ('ProcessId','NewProcessId','ParentProcessId','Image','NewProcessName','ParentImage','ParentProcessName')]) for e in m.parse(sys.argv[1]).getElementsByTagName('Event')]\" ptrec_sysmon4688_spoof.xml",
+ "note": "Sysmon EID 1 + Security 4688 per process; rundll32.exe 5200: Sysmon ParentProcessId 2000 / ParentImage explorer.exe (spoofed), its 4688 creator ProcessId 0x1004 = powershell.exe (declared parent) -> lib/codec.py reconcile_processes parent_mismatch reasons [declared, creator], attack T1134.004; schtasks.exe declared never ran; notepad.exe undeclared",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ptrec_gen.py tests/data/script_fixtures (stdlib writers: xml.sax.saxutils.escape with wevtutil's &quot; rendering for Sysmon EID 1 + Security 4688 XML, json.dumps for flat Sysmon NDJSON with a CreatorProcessId field; plan.encode() XOR 0x5a -> hex in `$Material_<id>` + `$Codec_<id> = \"hex_compact|xor_5a|\"` inside the powershell CommandLine; reconcile_expected = the spoof the generator wrote (TRUTH_*), not lib/codec.py output)"
+}

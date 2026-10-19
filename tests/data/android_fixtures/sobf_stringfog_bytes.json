@@ -1,0 +1,8 @@
+{
+ "entry": "string_obfuscator_scan",
+ "expected": "ANS-c2f7104e9ba36d85",
+ "decoy": false,
+ "_why": "StringFog v4+ call site StringFog.decrypt(new byte[]{..}, new byte[]{..}) (two fill-array-data payloads), plain xor",
+ "generator_cmd": "python3 tests/data/android_fixtures/sobf_src/gen_sobf.py stringfog_bytes tests/data/android_fixtures/sobf_stringfog_bytes.apk  # javac --release 8 + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/sobf_src/oracle.sh tests/data/android_fixtures/sobf_stringfog_bytes.apk  # d2j-dex2jar back to classes, RUN Main.show(PrintStream) on the JVM (obfuscator's own runtime) -> prints ANS-c2f7104e9ba36d85"
+}

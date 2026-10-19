@@ -1,0 +1,10 @@
+{
+ "codec": "transposition",
+ "key": "route-diag0-r12 (JPEG zigzag, 9x12 box, pad x)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-meadow-63",
+ "encoded": "Nicwocedao lri wnmvtaenheugor p,is ro:Gws !tk h s ea w-jmreuTidesobx ea63d tam  sicoMexx-a tt tsmxxetheaxxdx",
+ "generator_cmd": "python3 -I -c \"import sys,numpy as np;s=sys.argv[1];R,C=9,12;g=np.array(list(s.ljust(R*C,'x'))).reshape(R,C);f=np.fliplr(g);print(''.join(''.join(f.diagonal(C-1-d)[::(-1 if d%2==0 else 1)]) for d in range(R+C-1)),end='')\" \"$plain\"  # numpy 2.5 fliplr().diagonal(): JPEG zigzag (first step right) of a 9-row x 12-col box written by rows, padded with x",
+ "oracle_cmd": "python3 -I -c \"import sys;e=sys.argv[1];R,C=9,12;o=sorted(((r,c) for r in range(R) for c in range(C)),key=lambda q:(q[0]+q[1],q[0] if (q[0]+q[1])%2 else -q[0]));g={rc:e[j] for j,rc in enumerate(o)};print(''.join(g[r,c] for r in range(R) for c in range(C)).rstrip('x'),end='')\" \"$encoded\"  # stdlib sort by anti-diagonal (alternating direction), rows read, x pad stripped",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-meadow-63",
+ "expected": "match"
+}

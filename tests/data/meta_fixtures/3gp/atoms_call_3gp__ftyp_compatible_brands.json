@@ -1,0 +1,8 @@
+{
+ "field": "3gp.ftyp_compatible_brands",
+ "expected": "[\"3gp4\",\"isom\",\"iso2\"]",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i sine=duration=2 -ar 8000 -c:a aac -metadata title='Call rec' -metadata creation_time=2023-07-14T21:05:00Z -f 3gp call.3gp",
+ "oracle_cmd": "exiftool -j -n -G1 -a call.3gp -> QuickTime:CompatibleBrands ['3gp4','isom','iso2']",
+ "decoy": false,
+ "member": "call.3gp"
+}

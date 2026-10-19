@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/proc_tel_gen.py tests/data/script_fixtures (stdlib writers: xml.sax.saxutils.escape with wevtutil's &quot; rendering / json.dumps winlogbeat NDJSON / Splunk k=v with \\\" escaping; plan.encode() XOR 0x5a -> hex in `$Material_<id> = \"..\"` + `$Codec_<id> = \"hex_compact|xor_5a|\"` inside the powershell CommandLine)",
+ "oracle_cmd": "python3 -I -c \"import xml.dom.minidom as m,sys;print([e.getElementsByTagName('EventID')[0].firstChild.data for e in m.parse(sys.argv[1]).getElementsByTagName('Event')])\" proc_decoy_netonly.xml  -> ['3', '22'] (no process create/terminate events, no descriptor)",
+ "note": "DECOY: Sysmon network telemetry only; process_events -> [], no plan"
+}

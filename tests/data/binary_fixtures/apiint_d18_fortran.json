@@ -1,0 +1,36 @@
+{
+ "family": "api_intent",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "api_intents": {
+   "_gfortran_string_len_trim": "string",
+   "__gmon_start__": "runtime",
+   "_gfortran_transfer_integer_write": "output",
+   "_gfortran_transfer_character_write": "output",
+   "_gfortran_get_environment_variable_i4": "env_query",
+   "_gfortran_select_string": "string",
+   "_gfortran_st_write_done": "output",
+   "_gfortran_set_options": "runtime",
+   "_gfortran_set_args": "runtime",
+   "_gfortran_st_write": "output",
+   "__libc_start_main": "runtime"
+  },
+  "has_injection": "false",
+  "injection_apis": "none",
+  "process_access_apis": "none",
+  "network_apis": "none",
+  "ptrace_requests": "none",
+  "mitre_technique": "none",
+  "mitre_techniques": "none",
+  "effects": "no_process_access_no_injection",
+  "trace_effects": "modeled_process_access_no_injection"
+ },
+ "generator_cmd": "bash apiint_gen.sh   # cp gfortran_d18_flow_v000.bin (D18 flow-state variant, gfortran; embedded trace effects modeled_process_access_no_injection)",
+ "oracle_cmd": "python3 apiint_oracle.py apiint_d18_fortran.bin   # readelf --dyn-syms UND / objdump -p imports, objdump -d ptrace request, strings; own intent table",
+ "file_b": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamic",
+ "decoy": false,
+ "note": "lib.binary.api_intent_field(data, key) per expected_facts key; intent/effects vocabulary SPECULATIVE (GM label not seen); decoys: every key 'none'; carries the D18 raw HCFG (offset 8512) -- hcfg_scan hit expected, unchanged",
+ "has_hcfg": true
+}

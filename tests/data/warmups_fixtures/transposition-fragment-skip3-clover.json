@@ -1,0 +1,11 @@
+{
+ "codec": "transposition",
+ "key": "skip3(fragment)",
+ "plain": "Master: ",
+ "encoded": "Mt:ae sr",
+ "generator_cmd": "python3 -I -c \"import sys;s=sys.argv[1];L=len(s);print(''.join(s[i*3%L] for i in range(L)),end='')\" \"$plain\"  # stdlib skip cipher k=3",
+ "oracle_cmd": "python3 -I -c \"import sys;c=sys.argv[1];L=len(c);inv=pow(3,-1,L);print(''.join(c[j*inv%L] for j in range(L)),end='')\" \"$encoded\"  # stdlib modular inverse read",
+ "oracle_plain": "Master: ",
+ "expected": "match",
+ "mode": "fragment"
+}

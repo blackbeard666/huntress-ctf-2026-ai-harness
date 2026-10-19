@@ -1,0 +1,8 @@
+{
+ "entry": "decrypt_call_scan",
+ "expected": "ANS-e15c0a9d7f2b4368",
+ "decoy": false,
+ "_why": "static byte[] Codec.decode(byte[],String) called with new byte[]{..} (fill-array-data) and sget Codec.K set in <clinit> (\"q7\"+\"#Lm\")",
+ "generator_cmd": "python3 tests/data/android_fixtures/dcall_src/gen_dcall.py bytes_sget tests/data/android_fixtures/dcall_bytes_sget.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/dcall_src/oracle.sh tests/data/android_fixtures/dcall_bytes_sget.apk  # d2j-dex2jar back to classes, RUN show(PrintStream) on the JVM -> prints ANS-e15c0a9d7f2b4368"
+}

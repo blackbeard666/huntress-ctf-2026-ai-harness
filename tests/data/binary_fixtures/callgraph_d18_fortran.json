@@ -1,0 +1,114 @@
+{
+ "family": "call_graph",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "edges": [
+   [
+    "_init",
+    "__gmon_start__",
+    "plt"
+   ],
+   [
+    "main",
+    "_gfortran_set_args",
+    "plt"
+   ],
+   [
+    "main",
+    "_gfortran_set_options",
+    "plt"
+   ],
+   [
+    "main",
+    "MAIN__",
+    "direct"
+   ],
+   [
+    "_start",
+    "__libc_start_main",
+    "plt"
+   ],
+   [
+    "__do_global_dtors_aux",
+    "deregister_tm_clones",
+    "direct"
+   ],
+   [
+    "MAIN__",
+    "_gfortran_get_environment_variable_i4",
+    "plt"
+   ],
+   [
+    "MAIN__",
+    "_gfortran_string_len_trim",
+    "plt"
+   ],
+   [
+    "MAIN__",
+    "_gfortran_select_string",
+    "plt"
+   ],
+   [
+    "MAIN__",
+    "event_decoy.2",
+    "indirect"
+   ],
+   [
+    "MAIN__",
+    "_gfortran_st_write",
+    "plt"
+   ],
+   [
+    "MAIN__",
+    "_gfortran_transfer_character_write",
+    "plt"
+   ],
+   [
+    "MAIN__",
+    "_gfortran_transfer_integer_write",
+    "plt"
+   ],
+   [
+    "MAIN__",
+    "_gfortran_st_write_done",
+    "plt"
+   ]
+  ],
+  "indirect_targets": [
+   "event_decoy.2"
+  ],
+  "imports_called": [
+   "__gmon_start__",
+   "_gfortran_set_args",
+   "_gfortran_set_options",
+   "__libc_start_main",
+   "_gfortran_get_environment_variable_i4",
+   "_gfortran_string_len_trim",
+   "_gfortran_select_string",
+   "_gfortran_st_write",
+   "_gfortran_transfer_character_write",
+   "_gfortran_transfer_integer_write",
+   "_gfortran_st_write_done"
+  ],
+  "indirect_calls_by_function": {
+   "_init": 1,
+   "MAIN__": 1
+  },
+  "main_callees": [
+   "_gfortran_set_args",
+   "_gfortran_set_options",
+   "MAIN__"
+  ],
+  "reached_from_main": [
+   "event_decoy.2",
+   "MAIN__"
+  ]
+ },
+ "generator_cmd": "cp gfortran_d18_flow_v000.bin (D18 flow-state variant, gfortran build; see gfortran_d18_*.json)",
+ "oracle_cmd": "python3 callgraph_oracle.py callgraph_d18_fortran.bin   # objdump -d text + nm + pyelftools relocations/section bytes",
+ "file_b": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamic",
+ "decoy": false,
+ "note": "lib.binary.call_graph_field(data, key) per expected_facts key; edges [[caller, callee, kind]] unique in call-site order, kind direct|plt|indirect; GM vocabulary SPECULATIVE"
+}

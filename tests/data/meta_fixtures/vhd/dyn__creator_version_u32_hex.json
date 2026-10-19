@@ -1,0 +1,8 @@
+{
+ "field": "vhd.creator_version_u32_hex",
+ "expected": "0x00050003",
+ "generator_cmd": "qemu-img create -f vpc -o subformat=dynamic dyn.vhd 10M  (qemu-img 10.2.1)",
+ "oracle_cmd": "xxd -s -512 -l 88 dyn.vhd -> bytes @32 = 0005 0003",
+ "decoy": false,
+ "member": "dyn.vhd"
+}

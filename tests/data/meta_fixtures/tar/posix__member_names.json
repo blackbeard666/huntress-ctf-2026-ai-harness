@@ -1,0 +1,8 @@
+{
+ "field": "tar.member_names",
+ "expected": "[\"payload.bin\",\"docs/readme.txt\"]",
+ "generator_cmd": "tar --no-recursion --format=posix --pax-option=delete=atime,delete=ctime --owner=bob:1002 --group=wheel:0 --mtime='2023-11-02 17:04:05 UTC' -cf posix.tar -C src payload.bin docs/readme.txt  (GNU tar 1.35)",
+ "oracle_cmd": "TZ=UTC tar tvf posix.tar --full-time; xxd -s 257 -l 8 posix.tar -> 'ustar\\0' '00'; file -b -> POSIX tar archive",
+ "decoy": false,
+ "member": "posix.tar"
+}

@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-18-frame-of-reference",
+  "lane": "metadata-forensics",
+  "name": "🔎 Frame of Reference",
+  "ids": {
+    "single_solve": "metadata-forensics-day-18-frame-of-reference",
+    "time_trial": "metadata-forensics-day-18-frame-of-reference/time_trial",
+    "mastery": "metadata-forensics-day-18-frame-of-reference/mastery"
+  }
+}

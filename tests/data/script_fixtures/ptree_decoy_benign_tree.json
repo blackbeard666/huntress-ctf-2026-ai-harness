@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ptree_gen.py tests/data/script_fixtures (stdlib writers: xml.sax.saxutils.escape with wevtutil's &quot; rendering for Security 4688/4689 XML, json.dumps for Sysmon EID 1/5 NDJSON; plan.encode() XOR 0x5a -> hex in `$Material_<id>` + `$Codec_<id> = \"hex_compact|xor_5a|\"` inside the powershell CommandLine; tree_expected = the tree the generator built (TRUTH_*), not lib/codec.py output)",
+ "oracle_cmd": "python3 -I -c \"import xml.dom.minidom as m,sys;print([d.firstChild.data for e in m.parse(sys.argv[1]).getElementsByTagName('Event') for d in e.getElementsByTagName('Data') if d.getAttribute('Name')=='CommandLine' and 'Material_' in d.firstChild.data][0])\" ptree_decoy_benign_tree.xml | perl -ne 'if(/Material_\\w+ = \"([0-9a-f]+)\"/){$b=pack(\"H*\",$1);$b^=chr(0x5a)x length $b;print $b}'   # -> theme=dark|font=Consolas|... (no v=3 plan)",
+ "note": "DECOY: the same 4688 pid-reuse tree, the powershell descriptor carries a benign config, no plan"
+}

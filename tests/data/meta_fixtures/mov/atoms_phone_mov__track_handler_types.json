@@ -1,0 +1,8 @@
+{
+ "field": "mov.track_handler_types",
+ "expected": "[\"vide\"]",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -f lavfi -i testsrc=size=64x48:rate=10 -frames:v 5 -c:v mpeg4 -metadata location='+48.8577+002.2950/' -metadata title='Phone clip' -f mov phone.mov",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i phone.mov (libavformat mov demuxer, format Metadata) -> one Stream #0:0 Video (mdia/hdlr subtype vide; exiftool Track1 shows the later dhlr 'url ')",
+ "decoy": false,
+ "member": "phone.mov"
+}

@@ -1,0 +1,28 @@
+import struct, plistlib, sys
+xattrs = [("com.apple.quarantine", b"0081;670a1b2c;Google Chrome;4E1F2D3C-5B6A-4798-8A9B-0C1D2E3F4A5B"),
+          ("com.apple.metadata:kMDItemWhereFroms",
+           plistlib.dumps(["https://dl.example.com/payload.dmg", "https://example.com/"], fmt=plistlib.FMT_BINARY)),
+          ("com.apple.TextEncoding", b"utf-8;134217984")]
+fi_off = 0x32
+attr_off = fi_off + 32 + 2
+ents = b""
+p = attr_off + 36
+heads = []
+for n, v in xattrs:
+    nb = n.encode() + b"\0"
+    ln = 11 + len(nb); ln = (ln + 3) & ~3
+    heads.append((nb, ln)); p += ln
+data_start = p
+blob, offs = b"", []
+for (n, v) in xattrs:
+    offs.append(data_start + len(blob)); blob += v
+for (nb, ln), (n, v), o in zip(heads, xattrs, offs):
+    e = struct.pack(">IIHB", o, len(v), 0, len(nb)) + nb
+    ents += e + b"\0" * (ln - len(e))
+total = data_start + len(blob)
+attr = b"ATTR" + struct.pack(">IIIIIIIHH", 0, total, data_start, len(blob), 0, 0, 0, 0, len(xattrs))
+finfo = b"TEXTttxt" + b"\0" * 24 + b"\0\0" + attr + ents + blob
+hdr = struct.pack(">II", 0x00051607, 0x00020000) + b"Mac OS X        " + struct.pack(">H", 2)
+hdr += struct.pack(">III", 9, fi_off, len(finfo)) + struct.pack(">III", 2, fi_off + len(finfo), 0)
+assert len(hdr) == fi_off
+open(sys.argv[1], "wb").write(hdr + finfo)

@@ -1,0 +1,79 @@
+{
+ "family": "gfortran_facts",
+ "encoding": "raw",
+ "expected_offset": 8512,
+ "expected_config": {
+  "campaign": "BR18-000",
+  "domain": "node-000.day18.example.invalid",
+  "ipv4": "198.51.100.90",
+  "url": "https://node-000.day18.example.invalid/api/BR18-000",
+  "mutex": "Global\\HuntressBR18_000",
+  "windows_path": "C:\\ProgramData\\HuntressLab\\day18\\BR18-000.dat",
+  "linux_path": "/var/tmp/huntress-lab/day18/BR18-000.dat",
+  "service": "HuntressLab-Day18-000",
+  "host_model": "workstation"
+ },
+ "expected_facts": {
+  "source_file": "none",
+  "main_program": "none",
+  "procedures": [],
+  "procedures_mangled": [],
+  "procedures_by_address": [],
+  "procedures_by_address_mangled": [],
+  "case_table": [
+   [
+    "default",
+    0
+   ],
+   [
+    "analysis",
+    1
+   ],
+   [
+    "sandbox",
+    2
+   ],
+   [
+    "workstation",
+    3
+   ]
+  ],
+  "case_values": [
+   "analysis",
+   "sandbox",
+   "workstation"
+  ],
+  "case_map": {
+   "analysis": 1,
+   "sandbox": 2,
+   "workstation": 3
+  },
+  "case_procedures": {},
+  "default_procedure": "none",
+  "env_var": "HUNTRESS_HOST_MODEL",
+  "needed": [
+   "libgfortran.so.5",
+   "libm.so.6",
+   "libgcc_s.so.1",
+   "libc.so.6"
+  ],
+  "imports": [
+   "_gfortran_get_environment_variable_i4",
+   "_gfortran_select_string",
+   "_gfortran_set_args",
+   "_gfortran_set_options",
+   "_gfortran_st_write",
+   "_gfortran_st_write_done",
+   "_gfortran_string_len_trim",
+   "_gfortran_transfer_character_write",
+   "_gfortran_transfer_integer_write"
+  ],
+  "compiler_banner": "none",
+  "hcfg_symbol": "none",
+  "hcfg_entity": "none"
+ },
+ "decoy": false,
+ "generator_cmd": "strip -s -o gfortran_d18_flow_stripped.bin gfortran_d18_flow_v000.bin   # GNU binutils strip",
+ "oracle_cmd": "python3 gfortran_d18_oracle.py gfortran_d18_flow_stripped.bin   # readelf -sW/-dW/-p .comment, nm -D --undefined-only, objdump -d -M intel walk, pyelftools segment bytes; HCFG: bytes.find + header xor key decode + readelf -sW covering OBJECT",
+ "note": "strip -s: no .symtab -> source_file/procedures/MAIN__/case_procedures absent; env_var + case table still from the call sites (PLT stubs via .rela.plt)"
+}

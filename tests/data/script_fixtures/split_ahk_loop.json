@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=jscript|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=sct_scriptlet|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=jscript|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=JSCRIPT-5a93ad01|url=https://jscript-5a93ad0131.example.invalid/stage|file_path=/tmp/huntress-jscript/.5a93ad01316d3fe7.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/split_array_gen.py  (ahk_loop: stdlib GZB64 of D17 plan #1, 48-char chunks, first tagged GZB64-)",
+ "oracle_cmd": "cd tests/data/script_fixtures && grep -o \"[\\\"'][A-Za-z0-9+/=_-]\\{2,\\}[\\\"']\" split_ahk_loop.ahk | tr -d \"\\\"'\"  | tr -d '\\n' | sed 's/^[A-Za-z0-9_]*-//' | base64 -d | gunzip"
+}

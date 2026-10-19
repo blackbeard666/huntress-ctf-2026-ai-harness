@@ -1,0 +1,8 @@
+{
+ "field": "media.subtitle_languages",
+ "expected": "[\"eng\",\"fre\"]",
+ "generator_cmd": "ffmpeg -i a.wav -i s.srt -i s.srt -map 0 -map 1 -map 2 -c:a aac -c:s mov_text -metadata:s:s:0 language=eng -metadata:s:s:1 language=fre subs_mp4.mp4  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "oracle_cmd": "ffprobe -v error -show_streams -show_format -show_chapters -of json subs_mp4.mp4 -> tags.language of subtitle streams (absent -> und)  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "decoy": false,
+ "member": "subs_mp4.mp4"
+}

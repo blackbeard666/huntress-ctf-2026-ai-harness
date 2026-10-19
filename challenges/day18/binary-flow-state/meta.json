@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-18-control-flow-reconstruction",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Flow State",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-18-control-flow-reconstruction",
+    "time_trial": "binary-reverse-engineering-day-18-control-flow-reconstruction/time_trial",
+    "mastery": "binary-reverse-engineering-day-18-control-flow-reconstruction/mastery"
+  }
+}

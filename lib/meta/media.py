@@ -115,3 +115,10 @@ def primary_audio_codec_name(data, ctx):
         return _audio_codec(data)
     except (struct.error, IndexError, ValueError):
         return None
+
+
+def primary_video_dimensions(data, ctx):
+    """D18: coded width x height of the first video stream as Dims (MP4 stsd visual entry / Matroska PixelWidth|Height /
+    AVI biWidth|biHeight, ffprobe -- not rotated), parsed by lib.meta.prebuilt.media_video (verified 320x180)."""
+    from .prebuilt.media_video import video_value
+    return video_value(data, dict(ctx or {}, field="primary_video_dimensions"))

@@ -1,0 +1,8 @@
+{
+ "field": "heic.has_exif",
+ "expected": "false",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import Image, ImageCms; icc=ImageCms.ImageCmsProfile(ImageCms.createProfile('sRGB')).tobytes(); ex=Image.Exif(); ex[0x10F]='AvifMake'; Image.new('RGB',(96,64),(9,99,199)).save('exif.avif',exif=ex.tobytes(),icc_profile=icc); Image.new('RGB',(50,30)).save('plain.avif')\"; convert -size 70x33 xc:red magick.avif  (Pillow libavif + ImageMagick/libheif writers)",
+ "oracle_cmd": "exiftool -v2 plain.avif -> 1 infe (av01 only)",
+ "decoy": false,
+ "member": "plain.avif"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "riffle",
+ "plain": null,
+ "encoded": "Shuffle the deck, then deal the cards: no flag here!",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written prose (not an anagram of the crib)",
+ "oracle_cmd": "multiset check: lacks the crib's letters -> not a transposition of the sentence",
+ "oracle_plain": null
+}

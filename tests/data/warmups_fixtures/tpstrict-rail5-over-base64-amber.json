@@ -1,0 +1,10 @@
+{
+ "codec": "tpstrict",
+ "key": "rail5(base64)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "TbYIdIbcIZYIZIcZYm33l2nHg2wSz2g30HgXgWyHoSlEljiXs2ylBJR95RMFVBBxwVlRMhQ5VRRB11Ro1IF9QjSrGkWoXyXUy2SiWoXh3z2vHHWh3gWtmuTZIaabbZbaYdIYcYZL",
+ "generator_cmd": "printf %s \"$plain\" | base64 -w0 | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs enc 5 0  # coreutils base64, then CyberChef Rail Fence Cipher Encode(5, 0)",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs dec 5 0 | base64 -d  # CyberChef Rail Fence Cipher Decode(5, 0), then coreutils base64 -d",
+ "expected": "match",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42"
+}

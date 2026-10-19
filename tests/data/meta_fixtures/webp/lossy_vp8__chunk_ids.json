@@ -1,0 +1,8 @@
+{
+ "field": "webp.chunk_ids",
+ "expected": "[\"VP8 \"]",
+ "generator_cmd": ".venv/bin/python -I -c \"from PIL import Image, ImageCms; icc=ImageCms.ImageCmsProfile(ImageCms.createProfile('sRGB')).tobytes(); im=Image.new('RGB',(123,45),(10,200,30)); im.save('lossy.webp',quality=80); Image.new('RGBA',(77,19),(1,2,3,128)).save('lossless.webp',lossless=True); ex=Image.Exif(); ex[0x010F]='HuntressCam'; ex[0x0110]='HX-9'; im.save('vp8x_icc_exif.webp',quality=70,icc_profile=icc,exif=ex.tobytes()); fr=[Image.new('RGB',(64,40),(40*i,90,255-40*i)) for i in range(3)]; fr[0].save('anim.webp',save_all=True,append_images=fr[1:],duration=100,loop=2); im.save('icc.jpg',icc_profile=icc); im.save('icc.png',icc_profile=icc); Image.new('RGB',(41,17)).save('pic.bmp'); Image.new('P',(29,13)).save('pic.gif')\"  (Pillow writer, libwebp 1.5 / lcms2)",
+ "oracle_cmd": "exiftool -v lossy.webp -> RIFF 'VP8 ' chunk (only chunk)",
+ "decoy": false,
+ "member": "lossy.webp"
+}

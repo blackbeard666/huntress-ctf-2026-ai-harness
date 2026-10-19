@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_coded_dimensions_pixels",
+ "expected": "1280x720",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -y -f lavfi -i testsrc=size=1278x718:rate=25 -frames:v 2 -c:v libx265 -preset ultrafast -pix_fmt yuv420p hevc_odd.mp4 (x265 pads to 1280x720, conf_win right/bottom 1 unit = 2 px)",
+ "oracle_cmd": "mediainfo --Output=JSON hevc_odd.mp4 -> Width 1278 Height 718 Stored_Width 1280 Stored_Height 720",
+ "decoy": false,
+ "member": "hevc_odd.mp4"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "tpstrict",
+ "plain": null,
+ "encoded": "dHJzZW10aS0gZWhhdTIgZW9vdWMsNFRvdGFNdm1nYW9iY2Fpd2ggbnQgIGZvdGFkcnRzd3NtY05sbmxld2NlIGhkIGVzcnRHICBpOnNzbSByIC0gaWFwaWVyICEga2VuZXggYmFv",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$plain_amber\" | fold -w1 | shuf --random-source=<(yes) | tr -d '\\n' | base64 -w0  # anagram of the sentence by a random shuffle",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d  # an anagram no keyless transposition un-shuffles"
+}

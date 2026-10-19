@@ -1,0 +1,8 @@
+{
+ "field": "media.attached_pic_present",
+ "expected": "false",
+ "generator_cmd": "ffmpeg -i a.wav -c:a libmp3lame nocover.mp3  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "oracle_cmd": "ffprobe -v error -show_streams -show_format -show_chapters -of json nocover.mp3 -> any stream with disposition.attached_pic==1  (ffmpeg/ffprobe 8.0 static (pip static-ffmpeg))",
+ "decoy": false,
+ "member": "nocover.mp3"
+}
