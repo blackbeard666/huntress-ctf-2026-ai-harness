@@ -90,7 +90,7 @@ ok, why = orchestrate.answer_first_eligible("metadata-forensics", 2)
 check("eligible: metadata single with 2 fields", ok, why)
 ok, why = orchestrate.answer_first_eligible("metadata-forensics", orchestrate.ANSWER_FIRST_MAX_FIELDS + 1)
 check("not eligible above the field cap", not ok and "cap" in why, why)
-ok, why = orchestrate.answer_first_eligible("web", 1)
+ok, why = orchestrate.answer_first_eligible("welcome", 1)
 check("not eligible outside HCTF_ANSWER_FIRST_LANES", not ok, why)
 with orchestrate._af_lock:
     orchestrate._af_live.update({"a", "b", "c"})
