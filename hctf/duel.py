@@ -37,7 +37,7 @@ ENABLED = os.environ.get("HCTF_DUEL", "1") != "0"
 # (D19, user 2026-10-18): no prior solvers -> no reuse race, the single is a cold LLM solve -- best-of-2's case.
 LANES = {x.strip() for x in os.environ.get(
     "HCTF_DUEL_LANES", "warmups,metadata-forensics,script-analysis,mobile-android,web").split(",") if x.strip()}
-MAX_CONCURRENT = int(os.environ.get("HCTF_DUEL_MAX", "3"))
+MAX_CONCURRENT = int(os.environ.get("HCTF_DUEL_MAX", "4"))   # 4 since D19: six lanes (web), binary duel on
 MODEL = os.environ.get("HCTF_DUEL_MODEL", "")            # "" = the lane's normal worker model
 # medium (user, 2026-10-16): diversity + speed beside the chain's high-effort worker -- on D16 the medium duel won all
 # three singles it ran (warmups, metadata, script). HCTF_DUEL_EFFORT="" = the lane's worker effort.
@@ -73,9 +73,10 @@ def eligible(lane, key=None):
     return True, ""
 
 
-# binary duel only with this much MemAvailable (GB) at the decision; 0 = never (default until measured on a rehearsal copy: two
-# Ghidra JVMs on the 7 GB box). D15: binary single +89 s by the lone worker, no duel.
-BINARY_MIN_AVAIL_GB = float(os.environ.get("HCTF_DUEL_BINARY_MIN_AVAIL_GB", "0"))
+# binary duel only with this much MemAvailable (GB) at the decision; 0 = never. D15: binary single +89 s by the lone
+# worker; D19: +2:30 (the critical path: 8 overlay fields after the reuse race) -> ON at 2.5 GB (D19 web runs still had
+# 3.5 GB free with 21 claude workers alive; cases/ are hardlinked, so a copy costs no disk).
+BINARY_MIN_AVAIL_GB = float(os.environ.get("HCTF_DUEL_BINARY_MIN_AVAIL_GB", "2.5"))
 
 
 def _mem_avail_gb():

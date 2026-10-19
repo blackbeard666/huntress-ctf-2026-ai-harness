@@ -206,6 +206,40 @@ def _cut_short(last):
     return bool(wrong) and all(a in (last.get("fixed") or {}) for a in wrong)
 
 
+def live_method_text(log, limit=1500):
+    """How a live-answer worker derived its fields, from its stream-json log: its final `result` text when it wrote one,
+    else (ended by the harness at CORRECT, D19: no last words) its derivation commands + what it submitted."""
+    cmds, texts = [], []
+    try:
+        for ln in open(log, errors="replace"):
+            if '"result"' in ln and '"type":"result"' in ln.replace(" ", ""):
+                try:
+                    r = str(json.loads(ln).get("result") or "")
+                    if r.strip():
+                        return r[:limit]
+                except ValueError:
+                    pass
+            if '"assistant"' not in ln:
+                continue
+            try:
+                content = json.loads(ln)["message"].get("content") or []
+            except (ValueError, KeyError, TypeError, AttributeError):
+                continue
+            for c in content:
+                if c.get("type") == "text" and c.get("text", "").strip():
+                    texts.append(c["text"].strip())
+                elif c.get("type") == "tool_use":
+                    cmd = str((c.get("input") or {}).get("command") or "")
+                    if cmd and not re.match(r"\s*(ls|cat|head|cd [^&;]*$)", cmd):
+                        cmds.append(cmd)
+    except OSError:
+        return ""
+    sub = [c for c in cmds if "hctf submit" in c]
+    work = [c for c in cmds if "hctf submit" not in c][-2:]
+    out = ("\n".join(texts[-1:]) + "\n" if texts else "") + "\n---\n".join(work + sub[-1:])
+    return out[-limit:] if out.strip() else ""
+
+
 def _live_fields(last, wrong, fixed):
     """Answer ids still unresolved on a failed UNTIMED attempt (wrong and not fixed in-window, or missing), else []."""
     if last.get("deadline") is not None or not (last.get("untimed") or last.get("no_clock")
@@ -251,8 +285,15 @@ class LiveAnswer:
                          + (f" | REJECTED: {sorted(rejected[a])[:6]}" if rejected.get(a) else ""))
         self._need = {os.path.basename(str((qmap.get(a) or {}).get("artifact") or "").split("->")[0].strip())
                       for a in fields} - {""}
+        # D19 metadata: Mastery's live answer re-derived `synthesis-sha256-order` (5 sets, 21 s) that the TT's live answer
+        # had worked out 30 s earlier -> hand it the earlier worker's own account of how
+        self._shapes = {field_shape(a) for a in fields}
+        prior = [t for sh, t in getattr(chain, "_live_methods", []) if sh & self._shapes]
+        prior_method = ("\nA live-answer worker ALREADY derived field(s) of the same shape on this chain's earlier mode "
+                        "(GM-accepted); reuse its method on these bytes:\n> " + "\n> ".join(prior[-1].splitlines())
+                        + "\n") if prior else ""
         self._render = dict(
-            persona=workers.lane_persona(chain.lane), cid=cid, attempt=str(self.attempt)[:8],
+            persona=workers.lane_persona(chain.lane), cid=cid, attempt=str(self.attempt)[:8], prior_method=prior_method,
             accepted=len(last.get("verified") or {}), n=len(fields), fields="\n".join(lines),
             contract=(tdir / "contract.json").relative_to(ROOT) if (tdir / "contract.json").exists() else
             cli.cdir(cid).relative_to(ROOT) / "start.json",
@@ -302,6 +343,20 @@ class LiveAnswer:
             say(f"[{self.cid}] live-answer worker failed: {str(e)[:200]}")
         finally:
             self.done.set()
+            self._keep_method()
+
+    def _keep_method(self):
+        """A passing live answer's own last words (how it derived the fields) -> the chain, for the next mode's live answer."""
+        try:
+            passed, accepted = self._state()
+            if not (passed or accepted):
+                return
+            logs = sorted(cli.cdir(self.cid).glob("worker-live-*.log"), key=lambda p: p.stat().st_mtime)
+            text = live_method_text(logs[-1]) if logs else ""
+            if text:
+                self.chain._live_methods = getattr(self.chain, "_live_methods", []) + [(self._shapes, text[:1500])]
+        except Exception:  # noqa: BLE001 - a hint only
+            pass
 
     def _state(self):
         ov = workers.live_overlay(self.cid, self.attempt) or {}
@@ -749,6 +804,30 @@ def prior_case_shapes(prior):
 def _contract_ids(contract):
     return [a for a in list((contract or {}).get("answer_ids") or [])
             + [q.get("id") or "" for q in (contract or {}).get("questions") or []] if a]
+
+
+def open_questions_text(contract, ids, limit=12, per_q=600, total=4000):
+    """The open fields' own questions (+ artifact, answer format) as prompt lines, so a worker reads the spec before it
+    explores the bytes. '' when more than `limit` fields are open (then the families summary is the better note)."""
+    if not ids or len(ids) > limit:
+        return ""
+    qmap = {q.get("id"): q for q in (contract or {}).get("questions") or [] if isinstance(q, dict)}
+    qs = [(a, qmap[a]) for a in ids if a in qmap]
+    # D19 binary: 6 of the 8 questions = one ~900-char shared unpacking spec + a different last sentence each -> every
+    # sentence asked by 2+ questions goes ONCE into a shared block, each field keeps only its own sentences
+    sents = [re.split(r"(?<=[.;:])\s+", (q.get("question") or "").strip()) for _, q in qs]
+    seen = Counter(s for ss in sents for s in dict.fromkeys(ss))
+    shared = list(dict.fromkeys(s for ss in sents for s in ss if seen[s] > 1)) if len(qs) > 1 else []
+    lines = [("Shared spec of these questions: " + " ".join(shared))[:total // 2]] if shared else []
+    for (a, q), ss in zip(qs, sents):
+        fmt = q.get("answer_format") or {}
+        fmt = fmt.get("syntax") or fmt.get("kind") or "" if isinstance(fmt, dict) else str(fmt)
+        own = " ".join(s for s in ss if s not in shared) or "(the shared spec)"
+        line = f"- `{a}` [{q.get('artifact') or ''}]: {own}"
+        if fmt:
+            line += f" (answer: {fmt})"
+        lines.append(line[:per_q])
+    return "\n".join(lines)[:total]
 
 
 def _contract_shape(contract):
@@ -2548,6 +2627,12 @@ class Chain:
         if judged:
             note += " GM-REJECTED values (never resubmit): " + json.dumps(
                 {a: [str(x)[:60] for x in v] for a, v in list(judged.items())[:10]}, ensure_ascii=False)
+        qtext = open_questions_text(cli.load(cid, "start.json") or cli.load(cid, "contract.json"), rest)
+        if qtext:
+            # D19 binary: the 8 open overlay questions spelled out the unpacking stub (key offsets, ror8, packed length);
+            # the worker spent ~10 tool calls / ~80 s on readelf/xxd/strings before reading them in contract.json.
+            note += ("\nREAD THESE FIRST -- the open questions often state the format/algorithm outright (offsets, keys, "
+                     "transforms, magic): implement what they say before exploring the bytes.\n" + qtext)
         return note
 
     def _deliver_note(self, cid, note, key):

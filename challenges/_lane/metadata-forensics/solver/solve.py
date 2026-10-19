@@ -30,6 +30,7 @@ FAST_INDEX = os.environ.get("HCTF_META_FAST_INDEX", "1") != "0"   # per-process 
 
 _cache = {}
 _index = {}
+_ROOT = None   # artifacts dir of the running _solve_pairs (synthesis fields read sibling members)
 
 
 def _once(load):
@@ -141,8 +142,25 @@ def local_answer(answer_id, question, data, contract):
     return None
 
 
+def synthesis_answer(answer_id, question, contract):
+    """D15-D19 TT/Mastery `metadata-day-NN-synthesis-<algo>-order` (GM-confirmed every day; lib.knowledge
+    METADATA_SYNTHESIS_DIGEST_ORDER): the question's `Files: [...]` siblings of the artifact's own container ordered by
+    full-file digest. Lives HERE, not in lib.meta.answer: it needs the sibling members, which the per-field call lacks
+    (D19: the seed won the single, then the TT and Mastery each blocked on this one field -> two live answers, ~60 s)."""
+    sm = re.search(r"synthesis-(md5|sha1|sha256|sha512)-order$", answer_id.lower())
+    if not sm or _ROOT is None:
+        return None
+    from lib.meta.synthesis import digest_order
+    container = ((question or {}).get("artifact") or "").partition("->")[0].strip()
+    return digest_order(question, lambda n: artifact_bytes(
+        _ROOT, contract, f"{container} -> {n}" if container else n, n), sm.group(1))
+
+
 def answer(answer_id, question, data, contract):
     v = local_answer(answer_id, question, data, contract)
+    if v is not None:
+        return v
+    v = synthesis_answer(answer_id, question, contract)
     if v is not None:
         return v
     v, _tier = meta.answer(answer_id, question, data)
@@ -160,6 +178,8 @@ def _past_deadline():
 def _solve_pairs(job):
     """Answer one group of (answer_id, question) pairs -- a whole Mastery set, or the whole contract."""
     root, contract, pairs = job
+    global _ROOT
+    _ROOT = root
     out = {}
     for aid, q in pairs:
         if _past_deadline():

@@ -451,6 +451,7 @@ def _extract_all(files, dest, depth=2):
 
 
 RECON_WAIT = float(os.environ.get("HCTF_TRIAGE_RECON_WAIT", "5"))   # s the go text waits for recon
+TOOLCHAIN_WAIT = float(os.environ.get("HCTF_TRIAGE_TOOLCHAIN_WAIT", "1.0"))   # s the go text waits for the toolchain scan
 
 
 def triage(cid, defer_recon=None, log=None):
@@ -503,20 +504,33 @@ def triage(cid, defer_recon=None, log=None):
     out += _extract_all(files, mdir / "work" / "extracted")
     tm["extract"] = _time.time()
     from concurrent.futures import ThreadPoolExecutor
-    pool = ThreadPoolExecutor(max_workers=1)
+    pool = ThreadPoolExecutor(max_workers=2)
     recon_fut = pool.submit(_recon, cid, mdir / "work" / "extracted")   # beside the toolchain check
-    pool.shutdown(wait=False)
-    try:
+
+    def toolchain_check():
         # Which toolchain built each member and is its preferred standard tool installed? Missing ones with a recipe
         # start installing NOW in the background (user policy: install the right tool rather than settle for a weaker
         # fallback); the worker is told, and `hctf tool-wait <tool>` blocks until it lands.
-        from . import toolchain
-        ex = mdir / "work" / "extracted"
-        members = toolchain.scan_order(ex)
-        out += toolchain.check(files + members, cid=cid, text=toolchain.challenge_text(contract))
-    except Exception as e:  # noqa: BLE001 - best-effort
-        out += ["", f"_toolchain check skipped: {e}_"]
-    tm["toolchain"] = _time.time()
+        try:
+            from . import toolchain
+            ex = mdir / "work" / "extracted"
+            members = toolchain.scan_order(ex)
+            return toolchain.check(files + members, cid=cid, text=toolchain.challenge_text(contract))
+        except Exception as e:  # noqa: BLE001 - best-effort
+            return ["", f"_toolchain check skipped: {e}_"]
+        finally:
+            tm["toolchain"] = _time.time()
+    tc_fut = pool.submit(toolchain_check)
+    pool.shutdown(wait=False)
+    # D19 binary: the toolchain scan of a 32 MB ELF corpus took 4.3 s on the go-text path; it is grounding, not the
+    # task -> wait TOOLCHAIN_WAIT s, then let its section land in triage.md in the background like recon
+    try:
+        tc_lines = tc_fut.result(timeout=TOOLCHAIN_WAIT)
+    except Exception:  # noqa: BLE001 - still scanning: deferred
+        tc_lines = None
+    tm.setdefault("toolchain", _time.time())
+    tc_note = ["", "## Toolchain", "", f"_Still scanning in the background: it replaces this note in "
+               f"`{mdir / 'triage.md'}` within seconds (installs a missing preferred tool itself)._"]
 
     def timing(recon):
         # D16 binary: go text at +64 s with no breakdown (3 s uncontended); the next slow triage says where it went
@@ -543,24 +557,30 @@ def triage(cid, defer_recon=None, log=None):
             recon_fut.result(timeout=RECON_WAIT)
         except Exception:  # noqa: BLE001 - timeout or recon error: defer (recon_lines reports the error)
             deferred = not recon_fut.done()
-    if not deferred:
+    if not deferred and tc_lines is not None:
         t_r = _time.time()
         lines = recon_lines()
         timing(f"{_time.time() - t_r:.1f}s (inline)")
-        path.write_text("\n".join(out + lines + tail), encoding="utf-8")
+        path.write_text("\n".join(out + tc_lines + lines + tail), encoding="utf-8")
         return path
-    timing("deferred")
-    path.write_text("\n".join(out + ["", "## Recon (standard tools, pre-run for you -- facts, not answers)", "",
-                                      f"_Still running in the background: it replaces this note in `{path}` within "
-                                      "seconds. Re-read this section there only if you need it._"] + tail),
+    timing("deferred" if deferred else "inline" if tc_lines is not None else "pending")
+    recon_now = None if deferred else recon_lines()
+    path.write_text("\n".join(out + (tc_lines if tc_lines is not None else tc_note)
+                              + (recon_now if recon_now is not None else
+                                 ["", "## Recon (standard tools, pre-run for you -- facts, not answers)", "",
+                                  f"_Still running in the background: it replaces this note in `{path}` within "
+                                  "seconds. Re-read this section there only if you need it._"]) + tail),
                     encoding="utf-8")
 
     def finish():
-        lines = recon_lines()
+        tcl = tc_lines if tc_lines is not None else tc_fut.result()
+        lines = recon_now if recon_now is not None else recon_lines()
         try:
-            path.write_text("\n".join(out + lines + tail), encoding="utf-8")
+            path.write_text("\n".join(out + tcl + lines + tail), encoding="utf-8")
             if log:
-                log(f"[{cid}] triage recon landed (deferred) in {path.name}")
+                what = [n for n, pending in (("toolchain", tc_lines is None), ("recon", recon_now is None)) if pending]
+                log(f"[{cid}] triage {' + '.join(what)} landed (deferred) in {path.name} "
+                    f"(toolchain {tm['toolchain'] - tm['extract']:.1f}s)")
         except OSError:
             pass
     import threading

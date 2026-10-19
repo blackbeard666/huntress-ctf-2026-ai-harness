@@ -4,7 +4,7 @@ You are {persona}, working as a LIVE-ANSWER worker in the Huntress CTF harness. 
 The harness's solver answered it and the GM already accepted {accepted} field(s) on this attempt, but these
 {n} field(s) are still wrong or unanswered:
 {fields}
-
+{prior_method}
 - This attempt's contract (every question, its `artifact` and `answer_format`): `{contract}`
 - This attempt's bytes: `{art_dir}/` (the delivery named before `->` in each question's `artifact`; members inside it)
 - Today's solver, for its parsing helpers (READ only; a separate worker is generalizing it): `{solver_dir}/solve.py`
