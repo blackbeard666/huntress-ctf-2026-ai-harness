@@ -1248,6 +1248,13 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=
                         budget=UNTIMED_LOCAL_BUDGET)
         res.setdefault("routed", "local (forced no-clock rerun)")
         return res
+    from . import webtarget
+    if webtarget.is_live_cid(cid):
+        # web: no bytes to move, no clock by default, and the runner may first wait out a `preparing` target (up to
+        # HCTF_WEB_PREPARE_WAIT s) + revive a `cleaned` one via the arena (public origin only) -> always HERE
+        res = run_timed(solver_dir, cid, op=op, timeout=max(timeout, untimed_plan(cid)[0]) + webtarget.WAIT + 30)
+        res.setdefault("routed", "local (web live target)")
+        return res
     if op in ("untimed", "resume"):
         # resume = reconnecting to a live attempt that holds banked ids (mostly an untimed one). No clock, but the
         # attempt's GM calls still dominate: rehearsal D13 replay, a script retry took 115 s locally (~25 localize submits at

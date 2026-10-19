@@ -10,7 +10,7 @@ import re
 import time
 from pathlib import Path
 
-from . import cli, remote, solvers
+from . import cli, remote, solvers, webtarget
 
 SUBMIT_MARGIN = 8          # seconds kept in reserve for the final submit round-trip (~1-3s over ssh)
 MAX_WRONG_TIMED = 6        # incorrect submissions allowed per timed attempt (several sets per bundle)
@@ -163,6 +163,8 @@ MAX_AUTO_CASES = int(__import__("os").environ.get("HCTF_MAX_AUTO_CASES", "40"))
 def present_only(contract, art_dir, answers):
     """Keep only answers whose question's container file is actually in art_dir. A Mastery case saved without
     evidence-02.zip once made the solver 'answer' set 2 from set 1's bytes and froze worker guesses as expected."""
+    if webtarget.is_live_body(contract):
+        return dict(answers)    # web: a question's `artifact` is a live target ("Target 1"), never a file
     skip = {"manifest.json", "contract.json", "result.json"}
     have = ({p.name for p in Path(art_dir).iterdir() if p.is_file() and p.name not in skip}
             if art_dir and Path(art_dir).exists() else set())
@@ -334,11 +336,21 @@ def artifacts_for(cid, contract):
     return art if m and m.exists() and json.loads(m.read_text()).get("attempt") == aid else None
 
 
-def ensure_started(cid):
+def _say(msg):
+    print(time.strftime("%H:%M:%S"), msg, flush=True)
+
+
+def ensure_started(cid, log=None):
     """Start (or resume: start is idempotent while the clock runs) and download the variant."""
     with cli.chal_lock(cid):
         env = cli.call(cid, "start", cid)
     body = env["body"] or {}
+    if env["http"] == 200 and webtarget.needs_wait(body):
+        # web: `preparing` (no clock, no ids/targets yet) for up to ~2.5 min, or a dead `cleaned` attempt -> wait for
+        # the live target (status polls; arena revive) instead of handing a worker a body with nothing to attack
+        body = webtarget.wait_ready(cid, body, log=log or _say)
+        if webtarget.ready(body):
+            cli.save(cid, "status.json", body)
     if env["http"] != 200 or body.get("error"):
         return None, body
     if not cli.attempt_id(body):
@@ -352,6 +364,9 @@ def ensure_started(cid):
         return None, body
     cli.save(cid, "start.json", body)
     cli.save(cid, "contract.json", body)
+    if webtarget.is_live_body(body):
+        webtarget.empty_artifacts(cli.cdir(cid), cli.attempt_id(body))   # no bytes to fetch: `artifact` is a 400
+        return body, None
     art = latest_artifacts(cid)
     manifest = json.loads((art / "manifest.json").read_text()) if art and (art / "manifest.json").exists() else {}
     if manifest.get("attempt") != cli.attempt_id(body):  # fetch this attempt's artifacts if we don't have them
