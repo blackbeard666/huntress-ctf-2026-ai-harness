@@ -92,6 +92,15 @@ def register(challenges):
     for c in challenges:
         b = base_id(c["id"])
         if b in idx:
+            # Known id: its folder never moves (the solver + cases stay where they are). A GM relabel of its day (D19:
+            # the web chains were listed under days 1-3 at the drop, day 19 from 21:48) only updates the recorded day.
+            try:
+                d = int(c.get("day") or 0)
+            except (TypeError, ValueError):
+                d = 0
+            if d and idx[b].get("day") != d:
+                idx[b]["day"] = d
+                changed = True
             continue
         day = int(c.get("day") or 0)
         lane = LANE_SHORT.get(c.get("lane", ""), slugify(c.get("lane", "misc")))
