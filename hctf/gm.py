@@ -20,6 +20,7 @@ Usage:
   gm.py submit ID ANSWERS_JSON
   gm.py artifact ID OUTDIR [--delivery N]
   gm.py download CAPABILITY OUTDIR
+  gm.py arena start|stop|status|retry ID [--run-for-time]   (the browser arena's /arena/api: web live targets)
 """
 import argparse
 import hashlib
@@ -331,6 +332,40 @@ def cmd_download(cap, outdir, name=None):
     return _envelope(status, headers, raw, [_save_bytes(outdir, fname, raw)])
 
 
+# The browser arena's endpoint (GET /arena serves the page): same bearer, JSON {op, challenge[, run_for_time]}. Web live
+# targets only (2026-10-19): its `start` revived a `cleaned` web attempt (the public API's start/retry kept handing back
+# the dead attempt) and it has `stop` ("Stopping containers") that the public OpenAPI lacks. Always the PUBLIC origin
+# (the inside proxy serves the API only) unless HCTF_ARENA_URL says otherwise (tests / a replay stand-in).
+ARENA_PATH = "/arena/api"
+ARENA_UA = "Mozilla/5.0 (X11; Linux x86_64) hctf-arena"
+
+
+def arena_url():
+    if os.environ.get("HCTF_ARENA_URL"):
+        return os.environ["HCTF_ARENA_URL"]
+    base = GM if any(h in GM for h in ("127.0.0.1", "localhost")) else "https://2026.huntress.ctf.games"
+    return base.rstrip("/") + ARENA_PATH
+
+
+def cmd_arena(op, cid, run_for_time=None, token=None, timeout=None):
+    """POST {op, challenge} to the arena endpoint -> the usual envelope (the token never enters it)."""
+    payload = {"op": op, "challenge": cid}
+    if run_for_time is not None:
+        payload["run_for_time"] = bool(run_for_time)
+    headers = {"Content-Type": "application/json", "User-Agent": ARENA_UA}
+    tok = token or _token()
+    if tok:
+        headers["Authorization"] = "Bearer " + tok
+    req = urllib.request.Request(arena_url(), data=json.dumps(payload).encode(), method="POST", headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout or TIMEOUT) as r:
+            return _envelope(r.status, dict(r.headers), r.read())
+    except urllib.error.HTTPError as e:
+        return _envelope(e.code, dict(e.headers or {}), e.read())
+    except (urllib.error.URLError, OSError) as e:
+        return _envelope(0, {}, json.dumps({"error": "unreachable", "detail": str(e)}).encode())
+
+
 def main(argv=None):
     p = _parser()
     a = p.parse_args(argv)
@@ -362,6 +397,10 @@ def _parser():
     pd.add_argument("capability")
     pd.add_argument("outdir")
     pd.add_argument("--name")
+    par = sub.add_parser("arena")
+    par.add_argument("op", choices=["start", "stop", "status", "retry"])
+    par.add_argument("id")
+    par.add_argument("--run-for-time", action="store_true")
     return p
 
 
@@ -396,6 +435,8 @@ def _dispatch(a):
         env = _envelope(*_request("POST", payload={"op": "submit", "challenge": a.id, "answers": answers}))
     elif a.cmd == "artifact":
         env = cmd_artifact(a.id, a.outdir, a.delivery)
+    elif a.cmd == "arena":
+        env = cmd_arena(a.op, a.id, run_for_time=True if a.run_for_time else (False if a.op in ("start", "retry") else None))
     else:
         env = cmd_download(a.capability, a.outdir, a.name)
     env["elapsed"] = round(time.time() - t0, 3)          # request time incl. any 429 backoff (not process startup)

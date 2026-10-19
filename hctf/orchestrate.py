@@ -402,7 +402,7 @@ ANSWER_FIRST = os.environ.get("HCTF_ANSWER_FIRST", "1") != "0"
 ANSWER_FIRST_MAX_FIELDS = int(os.environ.get("HCTF_ANSWER_FIRST_MAX_FIELDS", "80"))
 ANSWER_FIRST_LANES = {x.strip() for x in os.environ.get(
     "HCTF_ANSWER_FIRST_LANES",
-    "warmups,metadata-forensics,mobile-android,binary-reverse-engineering,script-analysis").split(",") if x.strip()}
+    "warmups,metadata-forensics,mobile-android,binary-reverse-engineering,script-analysis,web").split(",") if x.strip()}
 ANSWER_FIRST_EFFORT = os.environ.get("HCTF_ANSWER_FIRST_EFFORT", "medium")
 ANSWER_FIRST_TIMEOUT = float(os.environ.get("HCTF_ANSWER_FIRST_TIMEOUT", "420"))
 ANSWER_FIRST_MAX = int(os.environ.get("HCTF_ANSWER_FIRST_MAX", "3"))          # concurrent answer-first workers
@@ -459,6 +459,17 @@ class AnswerFirst:
             else (cdir / "contract.json").relative_to(ROOT),
             art_dir=Path(art).relative_to(ROOT), triage=triage_summary(cid, cap=6000),
             chal_dir=cdir.relative_to(ROOT), solver_dir=chain.sdir.relative_to(ROOT))
+        from . import webtarget
+        if webtarget.is_live_lane(chain.lane):
+            urls = webtarget.target_urls(contract)
+            self.prompt += (
+                "\n\nLIVE TARGET (web lane): there are NO bytes -- the artifacts dir is empty on purpose. Each question's "
+                "`artifact` (\"Target N\") is a live site from the contract's `targets[]`: "
+                + (", ".join(f"`{u}`" for u in urls) if urls else "(see `targets` in the contract)")
+                + ". It is OUR assigned target, already up: never `hctf start`/`retry` anything. Use `curl -sS -A "
+                "'Mozilla/5.0'` (Cloudflare 403s default library user agents); read the page, its JS and robots.txt first, "
+                "then send only the few targeted requests that evidence points to -- no wordlist scanning, fuzzing or "
+                "brute force.")
         self.stop_evt, self.done, self.started = threading.Event(), threading.Event(), threading.Event()
         self.rc = None
         self.seen = set()
@@ -552,8 +563,8 @@ REUSE_PROBE_BUDGET = int(os.environ.get("HCTF_REUSE_PROBE_BUDGET", "20"))  # mer
 # come from the backtest (.run/backtest_reuse.sh: confident-value precision per lane); at most RACE_PROBES submits.
 REUSE_RACE = os.environ.get("HCTF_REUSE_RACE", "1") != "0"
 REUSE_RACE_LANES = {x.strip() for x in os.environ.get(
-    "HCTF_REUSE_RACE_LANES", "script-analysis,binary-reverse-engineering,mobile-android,metadata-forensics,warmups"
-).split(",") if x.strip()}
+    "HCTF_REUSE_RACE_LANES", "script-analysis,binary-reverse-engineering,mobile-android,metadata-forensics,warmups,web"
+).split(",") if x.strip()}   # web: the prior solvers run against TODAY's own live target (start.json targets[])
 REUSE_RACE_PROBES = int(os.environ.get("HCTF_REUSE_RACE_PROBES", "3"))
 REUSE_RACE_SOLVERS = int(os.environ.get("HCTF_REUSE_RACE_SOLVERS", "3"))   # newest N same-lane solvers
 REUSE_RACE_TIMEOUT = float(os.environ.get("HCTF_REUSE_RACE_TIMEOUT", "20"))
@@ -1125,8 +1136,9 @@ def ensure_case_and_test(cid, sdir, full=True):
     contract = cli.load(cid, "start.json")
     art = timed.latest_artifacts(cid)
     conf = cli.confirmed_answers(cid)
-    if contract and art and conf and (sdir / "solve.py").exists():
-        solvers.add_case(sdir, "single_solve", contract, art, conf)
+    from . import webtarget
+    if contract and (art or webtarget.is_live_body(contract)) and conf and (sdir / "solve.py").exists():
+        solvers.add_case(sdir, "single_solve", contract, art, conf)   # web: no bytes; marked live_target
     if not (sdir / "solve.py").exists():
         return False, "no solve.py"
     if not full:
@@ -3223,6 +3235,8 @@ class Chain:
             if not done and not welcome:
                 done = self.compose_labels(cid)
             ok, res = (True, None) if welcome else ensure_case_and_test(cid, self.sdir)
+            if done and not ok and self._live_target_accept(cid, res):
+                ok = True
             shadow = getattr(self, "_shadow", None)
             if done and not ok and shadow is not None and shadow.snap is not None:
                 # The local worker ended without a passing solver, but the Homebase shadow verified one: take it.
@@ -3253,6 +3267,24 @@ class Chain:
                 return False
         set_state(self.base, stage="single:blocked")
         return False
+
+    def _live_target_accept(self, cid, res):
+        """Web single gate: the GM judged it CORRECT but its case can't be replayed (target 410 once solved; D19: chain
+        stopped at single:help, TT/Mastery never ran). Accept the solver on the GM's verdict and say so."""
+        from . import webtarget
+        if not webtarget.is_live_lane(self.lane) or not (self.sdir / "solve.py").exists():
+            return False
+        if not (cli.is_complete(cid) or cli.gm_solved(cid)):
+            return False
+        bad = [r.get("case") for r in res or [] if isinstance(r, dict) and not r.get("ok")]
+        say(f"[{cid}] live-target lane: single CORRECT on the GM, solver accepted without a replayable case"
+            + (f" (failing live case(s) ignored: {bad[:4]})" if bad else ""))
+        try:
+            (self.sdir / "live_target.json").write_text(json.dumps({"single": cid, "case_replayable": False,
+                                                                     "accepted": time.strftime("%Y-%m-%dT%H:%M:%S")}))
+        except OSError:
+            pass
+        return True
 
     def _join_prior_cases(self, cid):
         """Wait for the background prior cases/ copy (stage_prior_cases) before anything reads cases/."""
@@ -3529,6 +3561,9 @@ class Chain:
         tt = self.entries.get("time_trial")
         if not (PREFETCH_TT and tt and self._expect_untimed()) or getattr(self, "_prefetch_started", False):
             return
+        from . import webtarget
+        if webtarget.is_live_lane(self.lane):
+            return   # web: a TT start beside the single's live target = a 2nd target for the team (D19 wedge)
         self._prefetch_started = True
         mcid = tt["id"]
 
@@ -4553,11 +4588,31 @@ class Chain:
                     say(f"[{cid}] prerequisite re-pass completed by the live-answer worker")
         return cli.gm_latest_correct(cid)
 
+    def _web_slot(self, mode, fn, *args):
+        """Web (live target): ONE live target per TEAM -- hold the process/host-wide web slot (hctf/webtarget.slot) from
+        this stage's first start until its mode is CORRECT or the stage gives up; other lanes run `fn` as is."""
+        from . import webtarget
+        e = self.entries.get(mode)
+        if not (e and webtarget.is_live_lane(self.lane)) or cli.is_complete(e["id"]) or (
+                cli.cdir(e["id"]) / "solved_once").exists():
+            return fn(*args)
+        set_state(self.base, stage=f"{'single' if mode == 'single_solve' else mode}:web-slot")
+        with webtarget.slot(e["id"], log=say):
+            ok = fn(*args)
+            try:
+                webtarget.after_stage(e["id"], ok, log=say)
+            except Exception as ex:  # noqa: BLE001 - advisory
+                say(f"[{e['id']}] web slot release note: {ex}")
+        return ok
+
     def scout_stage(self):
         """Between a passed Time Trial and Mastery: run Time Trial scout rounds (new variant each) so unseen
         constructs get their GM label on the cheap clock; generalize offline on fields the in-window corrector
         couldn't fix; finally leave the latest Time Trial attempt CORRECT. Advisory: Mastery runs regardless."""
         tt, ms = self.entries.get("time_trial"), self.entries.get("mastery")
+        from . import webtarget
+        if webtarget.is_live_lane(self.lane):
+            return   # web: every scout round = a new live target (one per team); labels are not its problem
         if not SCOUT_ROUNDS or not tt or not ms or cli.gm_solved(ms["id"]):
             return
         from . import scout
@@ -4607,12 +4662,12 @@ class Chain:
         set_state(self.base, stage="queued", name=self.name, lane=self.lane, worker=None)
         self.recover_interrupted_generalize()
         modes = self.only_modes or ["single_solve", "time_trial", "mastery"]
-        if "single_solve" in modes and not self.single():
+        if "single_solve" in modes and not self._web_slot("single_solve", self.single):
             return
         for mode in ("time_trial", "mastery"):
             if mode == "mastery" and mode in modes:
                 self.scout_stage()   # no-op unless SCOUT_ROUNDS > 0
-            if mode in modes and mode in self.entries and not self.timed_stage(mode):
+            if mode in modes and mode in self.entries and not self._web_slot(mode, self.timed_stage, mode):
                 return
         self._bg_gen_take(self.base, "chain complete")
         set_state(self.base, stage="done")
@@ -4679,16 +4734,33 @@ def _probe_ids(day):
     return [f"warmups-day-{int(day):02d}"]
 
 
+# Web lane (GM `web-exploitation`, filter name `web`): one chain a day from Day 19 through Day 31 (organizers). Its
+# first chains were filed under GM days 1-3 (a GM label error, relabelled to 19 at 21:48), so yesterday's index entries
+# alone never named it: a 5-lane union won the D19 race without web.
+WEB_FIRST_DAY = int(os.environ.get("HCTF_WEB_FIRST_DAY", "19"))
+WEB_LANE_FILTER = os.environ.get("HCTF_WEB_LANE_FILTER", "web")   # the list `lane` enum name (accepts web-exploitation too)
+
+
+def _web_expected(day):
+    try:
+        return int(day) >= WEB_FIRST_DAY
+    except (TypeError, ValueError):
+        return False
+
+
 def _lanes_for(day):
     """The GM `lane` names of the previous day (challenges/index.json), else the five known lanes: the per-lane lists
-    raced against the full list at the drop."""
+    raced against the full list at the drop. From WEB_FIRST_DAY on the web lane is always one of them."""
     lanes = []
     try:
         idx = paths._load_index()
         lanes = sorted({v.get("lane") for v in idx.values() if v.get("day") == int(day) - 1 and v.get("lane")})
     except Exception:  # noqa: BLE001 - the known lanes cover it
         lanes = []
-    return lanes or ["warmups", "metadata-forensics", "script-analysis", "binary-reverse-engineering", "mobile-android"]
+    lanes = lanes or ["warmups", "metadata-forensics", "script-analysis", "binary-reverse-engineering", "mobile-android"]
+    if _web_expected(day):
+        lanes = [ln for ln in lanes if paths.canonical_lane(ln) != "web"] + [WEB_LANE_FILTER]
+    return lanes
 
 
 def _released_fast(day, timeout=8):
@@ -4705,12 +4777,14 @@ def _released_fast(day, timeout=8):
 
 def _expected_modes(day):
     """How many challenge modes the day's list should hold: 3 per base id of the previous day (index.json), else 15."""
+    web = _web_expected(day)
     try:
         idx = paths._load_index()
-        n = 3 * sum(1 for v in idx.values() if v.get("day") == int(day) - 1 and v.get("lane") != "welcome")
+        n = 3 * sum(1 for v in idx.values() if v.get("day") == int(day) - 1 and v.get("lane") != "welcome"
+                    and not (web and paths.canonical_lane(v.get("lane")) == "web"))
     except Exception:  # noqa: BLE001
         n = 0
-    return n or 15
+    return (n or 15) + (3 if web else 0)    # web: ONE chain a day (D19's three were a one-off backfill)
 
 
 def _list_race(day, lanes, log=None, timeout=40, expected=None):
@@ -4782,6 +4856,32 @@ def _list_race(day, lanes, log=None, timeout=40, expected=None):
         paths.register(out)
     log(f"[wait] list race: {how} list first ({len(out)} modes in {time.time() - t0:.1f}s; "
         f"lane lists back: {len(by_lane)}/{len(lanes)})")
+    return out
+
+
+WEB_ANYDAY = os.environ.get("HCTF_WEB_ANYDAY", "1") != "0"
+
+
+def _web_unlisted(day, have, only=None, skip=()):
+    """{base: entries} of web chains the GM lists under ANOTHER day that this harness has never registered (D19: the
+    day's web chains came as days 1-3). Unseen ids only -- an old, known web id is never pulled into today's run.
+    Registered under `day` (their folder: challenges/dayNN/web-*), the GM's label kept as `gm_day`."""
+    known = set(paths._load_index())
+    env = remote.gm("list", "--lane", WEB_LANE_FILTER, timeout=40)
+    body = env.get("body") if isinstance(env.get("body"), dict) else {}
+    out = {}
+    for c in body.get("challenges") or []:
+        if not (isinstance(c, dict) and c.get("id")):
+            continue
+        b = solvers.base_id(c["id"])
+        if b in have or b in known or c["id"] in set(skip or ()) or (only and not any(o in b for o in only)):
+            continue
+        c = dict(c, gm_day=c.get("day"), day=int(day))
+        if c.get("lane") and paths.canonical_lane(c["lane"]) != c["lane"]:
+            c["gm_lane"], c["lane"] = c["lane"], paths.canonical_lane(c["lane"])
+        out.setdefault(b, []).append(c)
+    if out:
+        paths.register([c for v in out.values() for c in v])
     return out
 
 
@@ -4887,6 +4987,12 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
     if skip:   # e.g. a replay sparing a mode whose variant pool is nearly used up
         groups = {b: [c for c in v if c["id"] not in skip] for b, v in groups.items()}
         say(f"skipping (HCTF_SKIP_IDS): {sorted(skip)}")
+    web_late = None
+    if (day is not None and _web_expected(day) and WEB_ANYDAY and remote._public_gm()
+            and not any(paths.canonical_lane(v[0].get("lane")) == "web" for v in groups.values())):
+        # the day's list has no web chain: D19 the GM filed it under another day -> look up unseen web ids beside the
+        # chain launches (never on the critical path of the other lanes)
+        web_late = ThreadPoolExecutor(max_workers=1).submit(_web_unlisted, day, set(groups), only, skip)
     say(f"{len(groups)} chains ({sum(map(len, groups.values()))} challenge modes), "
         f"slots local={local_slots} homebase={hb_slots}, credits={gov.credits()}")
     coord_stop = threading.Event()
@@ -4897,9 +5003,20 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
         except Exception as e:  # noqa: BLE001 - advisory component
             say(f"[coord] not started ({e})")
     try:
-        with ThreadPoolExecutor(max_workers=max(1, len(groups))) as ex:
+        with ThreadPoolExecutor(max_workers=max(1, len(groups)) + (4 if web_late is not None else 0)) as ex:
             for base, entries in sorted(groups.items()):
                 ex.submit(Chain(base, entries, pools, gov, modes).run)
+            if web_late is not None:
+                try:
+                    late = web_late.result(timeout=120)
+                except Exception as e:  # noqa: BLE001 - best-effort
+                    late = {}
+                    say(f"[web] unlisted web lookup note: {str(e)[:160]}")
+                for base, entries in sorted(late.items()):
+                    say(f"[web] {base}: listed by the GM under day {entries[0].get('gm_day')} (not {day}) -- running it "
+                        "with this day's chains")
+                    groups[base] = entries
+                    ex.submit(Chain(base, entries, pools, gov, modes).run)
         if HOF_RACE and timed_in_scope:
             try:
                 hof_race(groups)   # off the critical path: every chain is done; Homebase still warm
@@ -4987,6 +5104,9 @@ def hof_race(groups):
     def one(base, entries):
         ids = {e["mode"]: e["id"] for e in entries}
         sdir = paths.solver_dir(base)
+        from . import webtarget
+        if any(webtarget.is_live_lane(e.get("lane")) for e in entries):
+            return   # web: each race = a fresh live target (one per team) for a board we don't play
         if "mastery" in ids and not cli.gm_solved(ids["mastery"]):
             return
         for mode in ("mastery", "time_trial"):

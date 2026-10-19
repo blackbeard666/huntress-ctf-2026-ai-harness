@@ -33,9 +33,13 @@ def _tag(day):
 
 def unsolved(day):
     """[(chain base id, mode id)] of every mode of `day` with a saved contract that the GM has not marked solved."""
+    from . import webtarget
     out = []
     for p in sorted(paths.CHALLENGES.glob(f"{_tag(day)}/*/meta.json")):
-        ids = (cli.load_json(p) or {}).get("ids") or {}
+        meta = cli.load_json(p) or {}
+        if webtarget.is_live_lane(meta.get("lane")):
+            continue   # web: a resume = a new live target behind a serial driver's back (one per team) -- never
+        ids = meta.get("ids") or {}
         base = ids.get("single_solve") or next((paths.base_id(v) for v in ids.values() if v), None)
         for mode in paths.MODES:
             cid = ids.get(mode)

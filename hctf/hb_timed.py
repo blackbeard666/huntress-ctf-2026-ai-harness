@@ -435,6 +435,8 @@ def _post_untimed(cid):
     submit still completes the mode + unlocks the next (`"practice": true`)."""
     body = _post_once({"op": "retry", "challenge": cid})
     err = body.get("error") if isinstance(body, dict) else None
+    if _WT is not None and _WT.is_live_body(body):
+        return body     # web: untimed by default; a `preparing` retry is awaited by the caller, never `practice`d
     if err or body.get("deadline") or not body.get("answer_ids"):
         # still timed (legacy route with fresh variants left -- callers only come here after an exhausted verdict) or
         # refused: the practice continuation is the untimed path on these routes
@@ -661,6 +663,48 @@ except ImportError:
         from hctf import grouptest as _GT     # imported as hctf.hb_timed
     except ImportError:  # pragma: no cover - an old Homebase copy: the sequential bisect below
         _GT = None
+
+
+try:
+    import webtarget as _WT          # hctf/ is this file's directory (synced whole to Homebase)
+except ImportError:
+    try:
+        from hctf import webtarget as _WT     # imported as hctf.hb_timed
+    except ImportError:  # pragma: no cover - an old Homebase copy: no live-target wait
+        _WT = None
+
+
+def _status_body(cid):
+    import urllib.parse
+    try:
+        raw = _open("GET", "?" + urllib.parse.urlencode({"op": "status", "challenge": cid}), headers=_auth())
+        b = json.loads(raw)
+        return b if isinstance(b, dict) else {}
+    except Exception:  # noqa: BLE001 - one failed poll
+        return {}
+
+
+def _arena_start(cid):
+    """The browser arena's `start` (hctf/gm.py cmd_arena): revives a `cleaned` web attempt."""
+    try:
+        import gm as _gm
+    except ImportError:
+        from hctf import gm as _gm
+    env = _gm.cmd_arena("start", cid, run_for_time=False, token=_token())
+    return env.get("body") if isinstance(env.get("body"), dict) else {}
+
+
+def _await_live(cid, body, out):
+    """Web (live target): a start/retry that answers `preparing` has no ids/targets and NO clock yet -- poll status until
+    the target is up (a `cleaned` attempt is revived via the arena), instead of reading it as a failed start (D19: 5
+    `no_answer_ids` tries in 30 s, chain stopped). Non-web bodies pass through untouched."""
+    if _WT is None or not _WT.needs_wait(body):
+        return body
+    t = time.time()
+    body = _WT.await_target(cid, body, _status_body, revive=_arena_start,
+                            log=lambda m: print(m, file=sys.stderr), wait=float(_opt("HCTF_WEB_PREPARE_WAIT", _WT.WAIT)))
+    out["web_wait"] = round(out.get("web_wait", 0) + time.time() - t, 1)
+    return body
 
 
 def _localize(cid, answers, groups, per_set, body, out):
@@ -1187,6 +1231,7 @@ def _attempt(a):
     if (a.op == "retry" and body.get("error")
             and not any(x in str(body.get("error")) for x in ("rate_limited", "exhausted", *EXHAUSTED))):
         body = _post_start({"op": "start", "challenge": a.cid})  # retry refused (no finished attempt to re-roll): plain start
+    body = _await_live(a.cid, body, out)   # web: `preparing` / `cleaned` -> wait for the live target (no clock yet)
     # fresh clock if this attempt is already expired / past its deadline
     left = _deadline_left(body)
     # ...and a fresh clock when `start` hands back a FINISHED attempt (result CORRECT/INCORRECT, no deadline, no
@@ -1205,8 +1250,9 @@ def _attempt(a):
                    deadline=body.get("deadline"), no_clock=not body.get("deadline"))
         _write_progress(a.cid, out)
         return out
-    if not untimed and (body.get("result") == "expired" or finished or (left is not None and left <= 0.5)):
-        body = _post_start({"op": "retry", "challenge": a.cid})
+    if not untimed and not body.get("_web_wait") and (body.get("result") == "expired" or finished
+                                                       or (left is not None and left <= 0.5)):
+        body = _await_live(a.cid, _post_start({"op": "retry", "challenge": a.cid}), out)
         left = _deadline_left(body)
     # ...and never run on a RESUMED attempt that is nearly out of clock (Day 8 script Mastery: `start` resumed an
     # attempt with ~3.5 s left -> 2 s solver budget -> misread as "solver too slow" -> 143 s generalize). Wait it out
@@ -1239,6 +1285,14 @@ def _attempt(a):
             out[k] = body.get(k)          # which pool this attempt came from (Day 8 dual-pool routes)
     if untimed:
         out["untimed"] = True
+    if _WT is not None and _WT.is_live_body(body) and not _WT.ready(body) and not body.get("error") and not (
+            str(body.get("result", "")).upper() == "CORRECT"):
+        # web target never came up (still preparing / dead after the revives): a start refusal, never the solver's
+        # fault -> the orchestrator backs off and retries (error:start), no generalize
+        out["result"] = f"web_target_{str(body.get('result') or 'unavailable').lower()}"
+        out["detail"] = {k: v for k, v in body.items() if k not in ("questions", "prompt", "guidance")}
+        out["start_refused"] = True
+        return out
     if body.get("error") or not ids:
         out["result"] = body.get("error") or "no_answer_ids"
         out["detail"] = body

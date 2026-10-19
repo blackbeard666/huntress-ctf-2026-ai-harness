@@ -320,11 +320,16 @@ def add_case(sdir, name, contract, artifacts, expected):
     if case.exists():
         shutil.rmtree(case)
     (case / "artifacts").mkdir(parents=True)
-    for f in Path(artifacts).iterdir():
+    for f in (Path(artifacts).iterdir() if artifacts else ()):   # a live-target (web) attempt has no bytes
         if f.is_file() and f.name not in ("manifest.json", "contract.json", "result.json"):
             shutil.copy2(f, case / "artifacts" / f.name)
     (case / "contract.json").write_text(json.dumps(contract, indent=2, ensure_ascii=False))
     (case / "expected.json").write_text(json.dumps(expected, indent=2, ensure_ascii=False))
+    from . import webtarget
+    if webtarget.is_live_body(contract):
+        # replayable only while its attempt's target is up (hctf/webtarget.case_stale): test_solver skips it after
+        (case / "live_target.json").write_text(json.dumps({"attempt": contract.get("attempt_id"),
+                                                           "targets": webtarget.target_urls(contract)}))
     return case
 
 
@@ -382,9 +387,19 @@ def test_solver(sdir, timeout=120, parallel=None, cases=None):
     `hctf solver-test --case` test the target cases first instead of the whole corpus on every edit."""
     from . import procgov
 
+    from . import webtarget
+    lane = _lane_of(sdir)
+
     def one(case):
         contract = json.loads((case / "contract.json").read_text())
         expected = json.loads((case / "expected.json").read_text()) if (case / "expected.json").exists() else {}
+        if webtarget.case_stale(case, sdir, lane):
+            # a FINISHED live-target (web) attempt: its target answers 410 now -- nothing to replay. Counted as
+            # passing (it can't break) and marked, so no gate fails a GM-confirmed web solver on it.
+            ids = contract.get("answer_ids") or [q.get("id") for q in contract.get("questions") or [] if q.get("id")]
+            return {"case": case.name, "ok": True, "seconds": 0.0, "error": None, "diff": {}, "unverified": not expected,
+                    "answered": len(ids), "total": len(ids), "verified_n": len(expected), "rejected_hits": 0,
+                    "rejected_got": {}, "fully_verified": False, "skipped": "live_target_finished"}
         got, err, dt = run_solver(Path(sdir), contract, case / "artifacts", timeout)
         diff = {k: {"expected": v, "got": got.get(k)} for k, v in expected.items() if got.get(k) != v}
         ids = contract.get("answer_ids") or [q.get("id") for q in contract.get("questions") or [] if q.get("id")]

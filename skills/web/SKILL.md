@@ -4,13 +4,19 @@ description: Huntress web lane - web application / web-traffic analysis of the G
 ---
 
 **Installed: curl, jq, js-beautify, node, python3 (`requests`, `lxml`, `bs4`, `jwt`, `dpkt` in .venv), tshark, 7z/unzip, rg.**
-New lane (no released day yet): expect the generic contract (questions[] aligned with answer_ids, each naming its
-artifact + answer_format). Record what the first day really looks like in `reference/techniques/web.md`.
+
+# Live targets (what the lane really is, since D19)
+GM lane `web-exploitation`. There is NO downloadable artifact (the artifacts dir is empty on purpose): the started
+attempt's contract (`start.json`) carries `targets: [{"id": "Target 1", "url": "https://<hash>.2026.huntress.ctf.games/"}]`
+and each question's `artifact` names one ("Target 1"). The harness already waited for the target to come up
+(`preparing` -> `active`; `hctf start` reconnects and waits too) -- never `hctf retry`: the team gets ONE live web
+target at a time, and a solved attempt's target answers HTTP 410 afterwards. Reach it directly from here with
+`curl -sS -A 'Mozilla/5.0' --max-time 10 <url>` (Cloudflare 403s default library user agents; no `hctf hb exec`
+needed). `solve.py` reads `contract["targets"]`, matches the question's `artifact`, and fetches with a browser UA.
 
 # Scope
 Only the Game Master's artifact and the target the CONTRACT names are in scope. Never scan, fuzz, brute-force or
-load-test anything; send only the few requests the evidence says the app itself makes. A challenge-owned target is
-usually reachable only inside the CTF network: `hctf hb exec -- curl -sS --max-time 10 ...` (runs on Homebase).
+load-test anything; send only the few targeted requests the evidence (page, JS, robots.txt, links) points to.
 
 # First moves (by what the artifact is)
 - **App source bundle** (zip of .php/.js/.py/.java/templates): `rg -n` for routes, auth checks, secrets, `eval|exec|
@@ -29,7 +35,7 @@ usually reachable only inside the CTF network: `hctf hb exec -- curl -sS --max-t
 - **Tokens / cookies**: JWT = 3 base64url parts (`python -c 'import jwt; print(jwt.get_unverified_header(t),
   jwt.decode(t, options={"verify_signature": False}))'`); Flask/Express session cookies are base64(json) + signature.
 - **Live target named in the contract**: GET the page and its JS first, map the endpoints the JS calls, then reproduce
-  exactly the request the question is about (headers, cookie, parameter) through `hctf hb exec`.
+  exactly the request the question is about (headers, cookie, parameter).
 
 # Reading the questions
 Each question names its artifact and an answer_format: enum labels follow the GM label grammar in the playbook;

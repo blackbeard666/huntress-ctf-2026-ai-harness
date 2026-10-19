@@ -266,6 +266,12 @@ def c_status(a):
             # The questions contract comes back even before a start (409 start_required), so solvers
             # can be written for Time Trial / Mastery without starting a clock.
             save(a.id, "contract.json", env["body"])
+        from . import webtarget
+        if (paths.mode_of(a.id) == "single_solve" and webtarget.ready(env["body"]) and attempt_id(env["body"])
+                and attempt_id(load(a.id, "start.json")) != attempt_id(env["body"])):
+            # web single: the target came up after a `preparing` start (which saved no start.json): this is the contract
+            save(a.id, "start.json", env["body"])
+            webtarget.empty_artifacts(cdir(a.id), attempt_id(env["body"]))
     emit(env["body"] if env["body"] is not None else env)
     return http_exit(env) if env["http"] != 409 else EXIT["error"]
 
@@ -309,13 +315,34 @@ def contract_drift(cid):
 def c_start(a, op="start"):
     with chal_lock(a.id):
         env = call(a.id, op, a.id)
+    from . import webtarget
+    if env["http"] == 200 and webtarget.needs_wait(env["body"]):
+        # web: the target is still `preparing` (no clock yet) / the attempt was `cleaned`: wait for it here (bounded --
+        # a worker's Bash call times out at ~2 min) instead of the worker polling `hctf status` by hand
+        body = webtarget.await_target(a.id, env["body"], webtarget.gm_status, revive=webtarget.arena_start,
+                                      log=lambda m: print(m, file=sys.stderr), wait=webtarget.CLI_WAIT)
+        env = dict(env, body=body)
+        if not webtarget.ready(body):
+            print("note: the web target is not up yet (one live web target per team; no clock while it prepares) -- "
+                  "run `hctf start` again in a minute", file=sys.stderr)
     # An after-deadline start answers 200 {"result": "expired"} with no attempt_id/answer_ids; saving that would
     # clobber the last real contract (lost the Mastery 6279ad62 case and broke solver-run).
     if env["body"] is not None and env["http"] == 200 and attempt_id(env["body"]):
         save(a.id, "start.json", env["body"])
         save(a.id, "contract.json", env["body"])
+        if webtarget.ready(env["body"]):
+            webtarget.empty_artifacts(cdir(a.id), attempt_id(env["body"]))
     emit(env["body"] if env["body"] is not None else env)
     return http_exit(env)
+
+
+def c_arena(a):
+    """`hctf arena start|stop|status <id>` (operators; workers never need it: `hctf start` waits/revives itself)."""
+    from . import webtarget
+    a.id = paths.resolve_id(a.id)
+    body = webtarget.arena(a.id, a.op)
+    emit(slim_body(body))
+    return 0 if not body.get("error") else EXIT["error"]
 
 
 def c_retry(a):
@@ -1487,6 +1514,10 @@ def main(argv=None):
     pr = sub.add_parser("retry")
     pr.add_argument("id")
     pr.add_argument("--force", action="store_true")
+    par = sub.add_parser("arena", help="web live targets via the browser arena endpoint: start (revives a `cleaned` "
+                                       "attempt) | stop (frees the team's one live web target) | status")
+    par.add_argument("op", choices=["start", "stop", "status"])
+    par.add_argument("id")
     pa = sub.add_parser("artifact")
     pa.add_argument("id")
     pa.add_argument("--delivery")
@@ -1621,7 +1652,8 @@ def main(argv=None):
           "solver-run": c_solver_run, "timed": c_timed, "run": c_run, "dash": c_dash, "why": c_why,
           "reconcile": c_reconcile, "drift": c_drift, "solutions": c_solutions,
           "triage": c_triage, "watch": c_watch, "tail": c_tail, "labels": c_labels, "scout": c_scout,
-          "timeline": c_timeline, "cost": c_cost, "hof": c_hof, "feed": c_feed, "kpi": c_kpi}[a.cmd]
+          "timeline": c_timeline, "cost": c_cost, "hof": c_hof, "feed": c_feed, "kpi": c_kpi,
+          "arena": c_arena}[a.cmd]
     try:
         return fn(a)
     except remote.Unreachable as e:
