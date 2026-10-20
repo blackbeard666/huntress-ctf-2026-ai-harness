@@ -1,5 +1,6 @@
 """Per-day KPI row -- the numbers reference/PLAN_SUB2MIN.md judges a day (and every post-run change) by:
-T+ to 14/15 and 15/15 from the release, release detection lag, reuse-race wins, timed modes passed first try,
+T+ to 14/15 and 15/15 from the release (the five regular lanes; web from D19 is its own column: one live target per
+team + GM target provisioning make it a different clock), release detection lag, reuse-race wins, timed modes passed first try,
 generalizes (count / seconds / on the critical path), live-answer and in-attempt passes, untimed fallbacks, `!!!`
 alerts, worker cost (live vs post-run).
 
@@ -12,7 +13,7 @@ import json
 import re
 from pathlib import Path
 
-from . import timeline, workers
+from . import paths, timeline, workers
 from .paths import ROOT
 
 CTF_DAY1 = datetime.date(2026, 10, 1)   # day N is released 21:00 Asia/Manila on Oct N (D14 = 2026-10-14)
@@ -37,7 +38,7 @@ def compute(day=None, log=None):
     lines = path.read_text(errors="replace").splitlines()
     t0, chains = timeline.parse(lines)
     chains = {b: c for b, c in chains.items() if b not in NON_CHAIN}
-    rel = run0 = None
+    rel = run0 = announced = None
     n_modes = None
     race, live, inatt, untimed_fb, duel, gen_rej = set(), set(), set(), set(), set(), 0
     bang = 0
@@ -54,6 +55,9 @@ def compute(day=None, log=None):
         msg = m.group(4)
         if msg.startswith("[wait] day") and " released (" in msg:
             rel = t
+        am = re.search(r"announced by the GM \(status probe, ([+-][\d.]+)s from the drop\)", msg)
+        if am:
+            announced = float(am.group(1))   # sub-second detection lag; `released` is that + the list fetch
         cm = re.match(r"(\d+) chains \((\d+) challenge modes\)", msg)
         if cm:
             run0, n_modes = t, int(cm.group(2))
@@ -68,9 +72,6 @@ def compute(day=None, log=None):
             race.add(base)
         if body.startswith("passed by the live-answer worker"):
             live.add((base, mode))
-            # timeline.parse counts only `result: correct` lines; a live-answer pass returns from timed_stage without one
-            if base in chains and mode not in chains[base]["done"]:
-                chains[base]["done"][mode] = t
         if body.startswith("timed: {") and '"resubmit_fixed"' in body and '"result": "correct"' in body:
             inatt.add((base, mode))
         if "passed on an UNTIMED attempt" in body:
@@ -83,14 +84,26 @@ def compute(day=None, log=None):
     from .prebuild import DROP_LOCAL
     hh, mm = (int(x) for x in DROP_LOCAL.split(":"))
     drop_s = hh * 3600 + mm * 60
-    lag = (rel - drop_s) if rel is not None and 0 <= rel - drop_s <= 1800 else None
-    done = sorted(c["done"][m] - start for c in chains.values() for m in c["done"])
-    n = n_modes or 15
+    launch_lag = (rel - drop_s) if rel is not None and 0 <= rel - drop_s <= 1800 else None
+    lag = announced if announced is not None else launch_lag
+    # web (D19+) is reported apart: one live target per team, chains serialized, ~5 min GM provisioning per timed
+    # target -- folded into "15/15" it read D20 (5 lanes done T+1:29) as "15/15 never, 14/15 at 14:52"
+    web = {b for b in chains if _is_web(b)}
+    n_web = 3 * len(web)
+    reg = {b: c for b, c in chains.items() if b not in web}
+    done = sorted(c["done"][m] - start for c in reg.values() for m in c["done"])
+    n = (n_modes - n_web) if n_modes else 15
     t_all = done[n - 1] if len(done) >= n else None
     t_but1 = done[n - 2] if len(done) >= n - 1 else None
-    ends = {b: max(c["done"].values()) for b, c in chains.items() if len(c["done"]) == len(timeline.MODES)}
+    wdone = sorted(chains[b]["done"][m] - start for b in web for m in chains[b]["done"])
+    t_web = wdone[-1] if web and len(wdone) == n_web else None
+    ends = {b: max(c["done"].values()) for b, c in reg.items() if len(c["done"]) == len(timeline.MODES)}
     crit = max(ends, key=ends.get) if ends else None
-    gens = [(b, bb - a) for b, c in chains.items() for (_m, st, a, bb) in c["workers"] if st == "generalize"]
+    # live-run generalizes only: the post-run speed-harden generalizes log under the same chain tag (D20: binary's 173 s
+    # speed pass at T+24 showed as "on the critical path")
+    last = {b: max(c["done"].values()) for b, c in chains.items() if len(c["done"]) == len(timeline.MODES)}
+    gens = [(b, bb - a) for b, c in chains.items() for (_m, st, a, bb) in c["workers"]
+            if st == "generalize" and (b not in last or a <= last[b])]
     crit_gen = sum(s for b, s in gens if b == crit)
     timed_modes = [(b, m) for b, c in chains.items() for m in ("time_trial", "mastery") if m in c["done"]]
     first_try = sum(1 for b, m in timed_modes if chains[b]["attempts"][m] <= 1)
@@ -101,6 +114,7 @@ def compute(day=None, log=None):
     return {
         "day": int(day) if day else None, "date": str(CTF_DAY1 + datetime.timedelta(days=int(day) - 1)) if day else "",
         "modes_solved": len(done), "modes": n, "t_all": t_all, "t_but1": t_but1, "release_lag": lag,
+        "launch_lag": launch_lag, "web_solved": len(wdone), "web_modes": n_web, "t_web": t_web,
         "race_wins": sorted(lanes.get(b, b) for b in race), "duel_wins": sorted(lanes.get(b, b) for b in duel),
         "timed_first_try": first_try, "timed_modes": len(timed_modes),
         "generalizes": len(gens), "generalize_s": sum(s for _b, s in gens), "generalize_rejected": gen_rej,
@@ -110,10 +124,29 @@ def compute(day=None, log=None):
     }
 
 
+def _is_web(base):
+    return paths.canonical_lane(base.split("-day-")[0]) == "web"
+
+
+def _lag(k):
+    s = ("%+.1fs" % k["release_lag"]) if k.get("release_lag") is not None else "-"
+    if k.get("launch_lag") is not None and k["launch_lag"] != k.get("release_lag"):
+        s += " (launch %+ds)" % k["launch_lag"]
+    return s
+
+
+def _web(k):
+    if not k.get("web_modes"):
+        return "-"
+    return f"{_fmt(k['t_web'])} ({k['web_solved']}/{k['web_modes']})"
+
+
 def render(k):
     out = [f"KPI day {k['day']} ({k['date']})  --  {k['log']}",
-           f"  solved            {k['modes_solved']}/{k['modes']}   15/15 at T+{_fmt(k['t_all'])}   14/15 at T+{_fmt(k['t_but1'])}"
-           f"   release seen {('+%ds' % k['release_lag']) if k['release_lag'] is not None else '-'} after the drop",
+           f"  solved            {k['modes_solved']}/{k['modes']}   {k['modes']}/{k['modes']} at T+{_fmt(k['t_all'])}   "
+           f"{k['modes'] - 1}/{k['modes']} at T+{_fmt(k['t_but1'])}   release seen {_lag(k)} after the drop",
+           *([f"  web               {k['web_solved']}/{k['web_modes']}   all at T+{_fmt(k['t_web'])} "
+              "(serial: one live target per team)"] if k.get("web_modes") else []),
            f"  singles           reuse race won: {', '.join(k['race_wins']) or 'none'}"
            + (f"; duel won: {', '.join(k['duel_wins'])}" if k['duel_wins'] else ""),
            f"  timed             first try {k['timed_first_try']}/{k['timed_modes']}; live-answer passes {k['live_passes']}; "
@@ -126,17 +159,17 @@ def render(k):
 
 
 HEADER = ("| day | date | 15/15 | 14/15 | release lag | race wins | timed first try | generalizes (n / s / crit s) | "
-          "live / in-attempt / untimed | !!! | live $ | post-run $ |\n"
-          "|---|---|---|---|---|---|---|---|---|---|---|---|\n")
+          "live / in-attempt / untimed | !!! | live $ | post-run $ | web (all) |\n"
+          "|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
 
 
 def row(k):
     return (f"| D{k['day']:02d} | {k['date']} | {_fmt(k['t_all'])} ({k['modes_solved']}/{k['modes']}) | {_fmt(k['t_but1'])} | "
-            f"{('%ds' % k['release_lag']) if k['release_lag'] is not None else '-'} | "
+            f"{_lag(k)} | "
             f"{len(k['race_wins'])}/5 ({', '.join(x[:6] for x in k['race_wins'])}) | {k['timed_first_try']}/{k['timed_modes']} | "
             f"{k['generalizes']} / {k['generalize_s']} / {k['critical_generalize_s']} ({k['critical_chain'] or '-'}) | "
             f"{k['live_passes']} / {k['in_attempt_passes']} / {k['untimed_fallbacks']} | {k['alerts']} | "
-            f"{k['live_cost']:.2f} | {k['post_cost']:.2f} |\n")
+            f"{k['live_cost']:.2f} | {k['post_cost']:.2f} | {_web(k)} |\n")
 
 
 def record(k, path=None):
@@ -145,6 +178,11 @@ def record(k, path=None):
                                                     "15/15 <= 2:00 on 4 of 5 days, 14/15 <= 1:00 median, 0 manual steps.\n\n"
                                                     + HEADER)
     lines = [ln for ln in text.splitlines(keepends=True) if not ln.startswith(f"| D{k['day']:02d} |")]
+    # upgrade a pre-web header in place (older rows just leave the new last cell empty)
+    old_head = [i for i, ln in enumerate(lines) if ln.startswith("| day | date |") and "web (all)" not in ln]
+    if old_head:
+        i = old_head[0]
+        lines[i:i + 2] = HEADER.splitlines(keepends=True)
     lines.append(row(k))
     path.write_text("".join(lines))
     return path

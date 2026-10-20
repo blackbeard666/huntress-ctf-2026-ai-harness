@@ -13,6 +13,7 @@ Run:  source bin/env.sh && python3 tests/test_web_lane.py      (exit 0 = all pas
 """
 import json
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -379,6 +380,29 @@ try:
     check("9 web chain holds the slot across single -> TT -> Mastery (no interleave)",
           len(order) == 6 and firsts in (["1"] * 3 + ["2"] * 3, ["2"] * 3 + ["1"] * 3), order)
     cli.is_complete = _saved["is_complete"]
+
+    # 10. early handoff on a web single: the single's target is spent at CORRECT, so the replay can't verify the solver
+    #     (D20 LFI: TT target active at 21:01:06, the TT waited until the workers exited at 21:01:47) -- hand the solver
+    #     over once it is quiet WEB_SPEC_STABLE s, without a replay; never for other lanes or before the CORRECT
+    hc = orchestrate.Chain.__new__(orchestrate.Chain)
+    hc.base, hc.lane, hc.sdir, hc.root = CID, "web", sdir, paths.challenge_root(CID)
+    cli.is_complete = lambda c: True
+    os.utime(sdir / "solve.py", None)
+    check("10 web handoff: waits while the solver is still being edited", hc._spec_snapshot(CID) is None)
+    old = time.time() - orchestrate.WEB_SPEC_STABLE - 2
+    os.utime(sdir / "solve.py", (old, old))
+    snap = hc._spec_snapshot(CID)
+    check("10 ... then hands over the quiet solver with no replay (this solve.py exits 3: any replay would fail)",
+          snap is not None and (Path(snap) / "solve.py").exists(), snap)
+    hn = orchestrate.Chain.__new__(orchestrate.Chain)
+    hn.base, hn.lane, hn.sdir, hn.root = CID, "warmups", sdir, paths.challenge_root(CID)
+    check("10 ... other lanes still need the replay", hn._spec_snapshot(CID) is None)
+    cli.is_complete = lambda c: False
+    hc._spec_rejected = None
+    check("10 ... and web needs the single's CORRECT first", hc._spec_snapshot(CID) is None)
+    cli.is_complete = _saved["is_complete"]
+    if snap:
+        shutil.rmtree(Path(snap).parent, ignore_errors=True)
 finally:
     for k, v in _saved.items():
         if k == "call":

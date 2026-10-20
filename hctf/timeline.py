@@ -10,6 +10,16 @@ from .paths import ROOT
 
 LINE = re.compile(r"^(\d\d):(\d\d):(\d\d) \[([^\]]+)\] (.*)$")
 MODES = ("single_solve", "time_trial", "mastery")
+# Log lines that mean the Single Solve is CORRECT without the word CORRECT in them (feed + timeline + kpi share these).
+# D20: an answer-first CORRECT ("single complete -> ending the answer-first worker") was missing here -> kpi said 20/21.
+SINGLE_SOLVED = ("single complete -> ending the answer-first worker", "after worker: stopped at CORRECT",
+                 "solved via GM issued_flag", "single CORRECT + solver verified", "after worker: complete=True",
+                 "live-target lane: single CORRECT")
+
+
+def single_solved(msg, mode):
+    return mode == "single_solve" and ("CORRECT" in msg or "reuse race WON" in msg or msg.startswith(SINGLE_SOLVED)
+                                       or msg.startswith("already solved"))
 
 
 def _split(cid):
@@ -38,10 +48,11 @@ def parse(lines):
         base, mode = _split(tag)
         c = chains.setdefault(base, {"done": {}, "attempts": dict.fromkeys(MODES, 0), "workers": [], "open": {},
                                      "harvested": 0, "harvest_refused": 0})
-        if mode == "single_solve" and "CORRECT" in msg and "single_solve" not in c["done"]:
+        if single_solved(msg, mode) and "single_solve" not in c["done"]:
             c["done"]["single_solve"] = t
-        if msg.startswith("result: correct") and mode not in c["done"]:
-            c["done"][mode] = t
+        if (msg.startswith("result: correct") or msg.startswith("passed by the live-answer worker")) \
+                and mode not in c["done"]:
+            c["done"][mode] = t   # a live-answer pass returns from timed_stage without a `result: correct` line
         if msg.startswith("timed: "):
             c["attempts"][mode] += 1
         w = re.match(r"(\w+) worker -> (\S+)", msg)

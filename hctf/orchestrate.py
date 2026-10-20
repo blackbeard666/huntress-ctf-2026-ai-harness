@@ -598,6 +598,7 @@ COORDINATOR = os.environ.get("HCTF_COORDINATOR", "1") != "0"
 GO_EARLY = os.environ.get("HCTF_GO_EARLY", "1") != "0"
 STOP_WHEN_READY = os.environ.get("HCTF_STOP_WHEN_READY", "1") != "0"  # end the single worker at CORRECT + verified solver
 SPEC_STABLE = float(os.environ.get("HCTF_SPEC_STABLE", "0.75"))  # solver files untouched this long before a snapshot
+WEB_SPEC_STABLE = float(os.environ.get("HCTF_WEB_SPEC_STABLE", "8"))  # web: no replay can verify it
 # (was 2 s: _spec_snapshot re-checks the mtimes after its copy, so a mid-edit copy is caught anyway; D13 metadata
 # spent 8 s between CORRECT and the handoff)
 SPEC_POLL = float(os.environ.get("HCTF_SPEC_POLL", "0.25"))  # D9: single CORRECT -> ready took up to 1 s of poll
@@ -3317,14 +3318,23 @@ class Chain:
         """Copy the worker's in-progress solver (minus cases) to `.run/spec-dayNN/<chal>/solver` -- the same depth as
         challenges/dayNN/<chal>/solver, since solvers locate the project root via parents[N] -- if its files have been
         stable for SPEC_STABLE s and it reproduces the GM-confirmed Single Solve answers. Returns the dir or None."""
+        from . import webtarget
         m0 = self._solver_mtimes()
         stamp = self._submit_stamp(cid, m0)
         if "solve.py" not in m0 or (not stamp and time.time() - max(m0.values()) < SPEC_STABLE):
             return None
+        # web: the single's target is spent at CORRECT (410 / stopped / replaced by the TT target _web_tt_kick
+        # requested), so a replay can never reproduce its proof. D20 LFI: 3 snapshots "not ready (proof-1 differs)" and
+        # the TT waited 41 s on an active target for the workers to exit. The post-worker gate already accepts on the
+        # GM's verdict (_live_target_accept); do the same here once the code has been quiet WEB_SPEC_STABLE s (no replay
+        # backs it: answer-first can win while the solver worker is mid-edit).
+        live = webtarget.is_live_lane(self.lane) and cli.is_complete(cid)
+        if live and not stamp and time.time() - max(m0.values()) < WEB_SPEC_STABLE:
+            return None
         if m0 == getattr(self, "_spec_rejected", None):
             return None  # this exact solver already failed verification; wait for the worker to change it
         contract, art, conf = cli.load(cid, "start.json"), timed.latest_artifacts(cid), cli.confirmed_answers(cid)
-        if not (contract and art and conf):
+        if not (live or (contract and art and conf)):
             return None
         rel = self.sdir.relative_to(paths.CHALLENGES).parts  # (dayNN, <chal>, solver)
         if len(rel) != 3:
@@ -3340,6 +3350,10 @@ class Chain:
         if stamp and all(stamp["answers"].get(k) == v for k, v in conf.items()):
             # `hctf submit --from-solver` just ran this exact code and it produced every confirmed answer: no re-run.
             self._note_single_speed(cid, stamp.get("seconds"))
+            return snap
+        if live and not _is_skeleton(snap):
+            say(f"[{cid}] live-target lane: single CORRECT on the GM, solver quiet "
+                f"{time.time() - max(m0.values()):.0f}s handed over without a replay")
             return snap
         got, err, dt = solvers.run_solver(snap, contract, art)
         bad = sorted(k for k, v in conf.items() if got.get(k) != v)
