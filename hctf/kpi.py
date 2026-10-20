@@ -146,7 +146,7 @@ def render(k):
            f"  solved            {k['modes_solved']}/{k['modes']}   {k['modes']}/{k['modes']} at T+{_fmt(k['t_all'])}   "
            f"{k['modes'] - 1}/{k['modes']} at T+{_fmt(k['t_but1'])}   release seen {_lag(k)} after the drop",
            *([f"  web               {k['web_solved']}/{k['web_modes']}   all at T+{_fmt(k['t_web'])} "
-              "(serial: one live target per team)"] if k.get("web_modes") else []),
+              "(live targets: GM provisioning + the chains' own serial modes)"] if k.get("web_modes") else []),
            f"  singles           reuse race won: {', '.join(k['race_wins']) or 'none'}"
            + (f"; duel won: {', '.join(k['duel_wins'])}" if k['duel_wins'] else ""),
            f"  timed             first try {k['timed_first_try']}/{k['timed_modes']}; live-answer passes {k['live_passes']}; "
