@@ -317,6 +317,68 @@ try:
     cli.gm_solved = _saved["gm_solved"]
     check("7 answer-first + reuse race cover web", "web" in orchestrate.ANSWER_FIRST_LANES
           and "web" in orchestrate.REUSE_RACE_LANES)
+
+    # 8. web TT target requested at the single's CORRECT (rehearsal blind D19: the chain waited 34-52 s for the solver
+    #    worker before even asking; timed targets then sat ~5 min in `preparing`) -- once, TT only, web only
+    calls = []
+    cli.call = lambda cid, *a, **k: (calls.append((cid,) + a), {"http": 200, "body": {"result": "preparing"}})[1]
+    cli.is_complete = lambda cid: False
+    kw = orchestrate.Chain.__new__(orchestrate.Chain)
+    kw.base, kw.lane = CID, "web"
+    kw.entries = {"time_trial": {"id": CID + "/time_trial"}, "mastery": {"id": CID + "/mastery"}}
+    kw._web_tt_kick()
+    kw._web_tt_kick()
+    for t in threading.enumerate():
+        if t.name.startswith("web-tt-kick-"):
+            t.join(5)
+    check("8 web: TT start requested once at the single's CORRECT", calls == [(CID + "/time_trial", "start",
+                                                                              CID + "/time_trial")], calls)
+    calls.clear()
+    nw = orchestrate.Chain.__new__(orchestrate.Chain)
+    nw.base, nw.lane, nw.entries = "warmups-day-20", "warmups", {"time_trial": {"id": "warmups-day-20/time_trial"}}
+    nw._web_tt_kick()
+    os.environ["HCTF_RUN_FOR_TIME"] = "1"
+    rt = orchestrate.Chain.__new__(orchestrate.Chain)
+    rt.base, rt.lane, rt.entries = CID, "web", {"time_trial": {"id": CID + "/time_trial"}}
+    rt._web_tt_kick()
+    os.environ.pop("HCTF_RUN_FOR_TIME", None)
+    time.sleep(0.2)
+    check("8 ... never for other lanes, never for a clocked (run_for_time) pool", calls == [], calls)
+    cli.call = _saved["call"]
+
+    # 9. the slot is held for the WHOLE web chain: a 2nd chain's single never starts between chain 1's stages (the TT
+    #    requested at the single's CORRECT is already preparing then)
+    order, olock = [], threading.Lock()
+
+    def mk(i):
+        c = orchestrate.Chain.__new__(orchestrate.Chain)
+        c.base, c.lane, c.name, c.only_modes = f"web-exploitation-day-3{i}-x", "web", "x", None
+        c.entries = {m: {"id": f"web-exploitation-day-3{i}-x" + ("" if m == "single_solve" else "/" + m)}
+                     for m in ("single_solve", "time_trial", "mastery")}
+        c.recover_interrupted_generalize = lambda: None
+        c._bg_gen_take = lambda *a: None
+        c.scout_stage = lambda: None
+
+        def stage(name):
+            with olock:
+                order.append(f"{i}:{name}")
+            time.sleep(0.05)
+            return True
+        c.single = lambda: stage("single")
+        c.timed_stage = lambda m: stage(m)
+        return c
+    _ss = orchestrate.set_state
+    orchestrate.set_state = lambda *a, **k: None
+    webtarget.after_stage = lambda *a, **k: None
+    ts = [threading.Thread(target=mk(i)._run) for i in (1, 2)]
+    [t.start() for t in ts]
+    [t.join(10) for t in ts]
+    orchestrate.set_state = _ss
+    webtarget.after_stage = _saved["after_stage"]
+    firsts = [o.split(":")[0] for o in order]
+    check("9 web chain holds the slot across single -> TT -> Mastery (no interleave)",
+          len(order) == 6 and firsts in (["1"] * 3 + ["2"] * 3, ["2"] * 3 + ["1"] * 3), order)
+    cli.is_complete = _saved["is_complete"]
 finally:
     for k, v in _saved.items():
         if k == "call":

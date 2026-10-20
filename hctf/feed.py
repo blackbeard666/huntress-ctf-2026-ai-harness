@@ -148,8 +148,14 @@ class Feed:
             out.append(f"{self._t()} ↻ {lane} {ms} reconnecting to finish in-attempt")
         elif "reuse race WON" in msg:
             out += self._solve(base, "single_solve", " (reuse race)")
+        elif msg.startswith("single complete -> ending the answer-first worker"):
+            out += self._solve(base, "single_solve", " (answer-first)")
         elif msg.startswith("after worker: stopped at CORRECT") or msg.startswith("solved via GM issued_flag") or \
-                (msg.startswith("already solved") and mode == "single_solve"):
+                (msg.startswith("already solved") and mode == "single_solve") or \
+                msg.startswith("single CORRECT + solver verified") or msg.startswith("after worker: complete=True") or \
+                msg.startswith("live-target lane: single CORRECT"):
+            # rehearsal blind D19: the plain worker path (`after worker: complete=True`) and the answer-first CORRECT were
+            # not markers -> the feed ended at 22/24 while the GM had 24/24, and metadata's single showed ~2 min late
             out += self._solve(base, "single_solve")
         elif msg.startswith("single worker ->"):
             self.activity[base] = ("single (LLM)", "single_solve", self.now)

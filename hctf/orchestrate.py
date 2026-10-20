@@ -3546,6 +3546,30 @@ class Chain:
                 return True
         return False
 
+    def _web_tt_kick(self):
+        """Web: request the Time Trial's live target the moment the single is CORRECT on the GM (once, background). Its
+        target needs ~20 s-5:20 in `preparing` (rehearsal blind D19: 4 of 6 timed targets ~5:15); the chain used to wait for
+        the solver worker's verified handoff first (34-52 s per chain). Safe under the one-target rule: the single's
+        target is spent at CORRECT and this chain holds the team slot (_run). The timed stage's own start reconnects
+        to this attempt and waits out `preparing` (hb_timed._await_live). No clock: web TT is regular untimed play."""
+        from . import webtarget
+        tt = self.entries.get("time_trial")
+        if not (WEB_TT_KICK and tt and webtarget.is_live_lane(self.lane)) or getattr(self, "_web_kicked", False):
+            return
+        self._web_kicked = True
+        if cli.is_complete(tt["id"]) or os.environ.get("HCTF_RUN_FOR_TIME", "auto") == "1":
+            return
+        mcid = tt["id"]
+
+        def run():
+            t0 = time.time()
+            with cli.quiet():
+                env = cli.call(mcid, "start", mcid, timeout=60)
+            body = env.get("body") or {}
+            say(f"[{mcid}] web TT target requested at the single's CORRECT: "
+                f"{body.get('result') or body.get('error') or env.get('http')} ({time.time() - t0:.1f}s)")
+        threading.Thread(target=lambda: _quiet_errors(run, mcid), daemon=True, name=f"web-tt-kick-{self.base}").start()
+
     def _prefetch_tt(self):
         """Never raises: callers sit right before ready.set() at a handoff."""
         try:
@@ -3814,6 +3838,7 @@ class Chain:
                             early, spec_n = m, spec_n + (not stamped)
                             self._prepush_verified(cid, self.sdir, warm=stamped)
                 if cli.is_complete(cid):
+                    self._web_tt_kick()
                     if ready.is_set():
                         return   # the Homebase shadow handed over first
                     snap = self._spec_snapshot(cid) or getattr(self, "_race_snap", None)
@@ -4662,6 +4687,16 @@ class Chain:
         set_state(self.base, stage="queued", name=self.name, lane=self.lane, worker=None)
         self.recover_interrupted_generalize()
         modes = self.only_modes or ["single_solve", "time_trial", "mastery"]
+        from . import webtarget
+        if webtarget.is_live_lane(self.lane) and any(
+                m in self.entries and not cli.is_complete(self.entries[m]["id"]) for m in modes):
+            # web: hold the team's ONE target slot for the whole chain (re-entrant: each stage's _web_slot nests in it),
+            # so the Time Trial requested at the single's CORRECT (_web_tt_kick) can't overlap another chain's target
+            with webtarget.slot(self.base, log=say):
+                return self._run_modes(modes)
+        return self._run_modes(modes)
+
+    def _run_modes(self, modes):
         if "single_solve" in modes and not self._web_slot("single_solve", self.single):
             return
         for mode in ("time_trial", "mastery"):
@@ -5375,6 +5410,7 @@ def _quiet_errors(fn, tag):
         say(f"[{tag}] background note: {str(e)[:160]}")
 
 
+WEB_TT_KICK = os.environ.get("HCTF_WEB_TT_KICK", "1") != "0"   # web: TT start at the single's CORRECT
 PREFETCH_TT = os.environ.get("HCTF_PREFETCH_TT", "1") != "0"
 
 
