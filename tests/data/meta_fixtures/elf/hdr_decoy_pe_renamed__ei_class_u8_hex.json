@@ -1,0 +1,8 @@
+{
+ "field": "elf.ei_class_u8_hex",
+ "expected": "none",
+ "generator_cmd": "cp setuptools/cli-32.exe decoy_pe.so   (a PE32 renamed .so: wrong magic)  (run in $TMPDIR/elfid)",
+ "oracle_cmd": "readelf -hW hdr_decoy_pe_renamed__ei_class_u8_hex.bin  -> 'Not an ELF file' (file -b: PE32 executable)",
+ "decoy": true,
+ "member": "decoy_pe.so"
+}

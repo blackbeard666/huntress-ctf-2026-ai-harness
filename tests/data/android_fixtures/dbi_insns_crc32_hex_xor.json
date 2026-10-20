@@ -1,0 +1,7 @@
+{
+ "entry": "dex_integrity_gate_scan",
+ "expected": "ANS-d3086af1c75e294b",
+ "generator_cmd": "sh tests/data/android_fixtures/gen_dex_integrity_gate.sh tests/data/android_fixtures  # data = hex(token xor the 8-hex text of CRC32 over MainActivity.onCreate's insns only, offset/size from androguard)",
+ "oracle_cmd": "cd tests/data/android_fixtures; unzip -p dbi_insns_crc32_hex_xor.apk classes.dex > /tmp/o3.dex; K=$(python3 -I -c 'import sys,zlib\nfrom loguru import logger; logger.remove()\nfrom androguard.core.dex import DEX\nb=open(sys.argv[1],\"rb\").read();m=[m for c in DEX(b).get_classes() if c.get_name().endswith(\"MainActivity;\") for m in c.get_methods() if m.get_name()==\"onCreate\"][0];o=m.get_code_off();print(\"%08x\"%zlib.crc32(b[o+16:o+16+2*m.get_code().get_insns_size()]))' /tmp/o3.dex); unzip -p dbi_insns_crc32_hex_xor.apk assets/huntress_puzzle.json | python3 -I -c 'import sys,json;k=sys.argv[1].encode();d=bytes.fromhex(json.load(sys.stdin)[\"data\"]);print(bytes(c^k[i%len(k)] for i,c in enumerate(d)).decode())' $K",
+ "decoy": false
+}

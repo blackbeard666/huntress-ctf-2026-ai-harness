@@ -1,0 +1,18 @@
+{
+ "plans": {
+  "x.ps1": "v=3|language=powershell|next_language=python|steps=dispatch_process",
+  "y.py": "v=3|language=python|next_language=vbscript|steps=dispatch_process",
+  "polyglot-vbscript-9c.txt": "v=3|next_language=powershell|steps=dispatch_language"
+ },
+ "expected": {
+  "cycle": "polyglot-vbscript-9c.txt>x.ps1>y.py",
+  "cycles": "1",
+  "chain": null,
+  "terminal_language": null,
+  "roots": "0"
+ },
+ "decoy": false,
+ "oracle_cmd": "printf 'powershell python\\npython vbscript\\nvbscript powershell\\n' | tsort -> 'tsort: -: input contains a loop' (powershell python vbscript): one cycle of 3 members, no root",
+ "entry": "handoff_graph",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/handoff_graph/hg_gen.py tests/data/script_fixtures/handoff_graph (hg_cycle)"
+}

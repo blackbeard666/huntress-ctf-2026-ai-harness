@@ -1,0 +1,16 @@
+{
+ "entry": "overlay_spec+overlay_spec_unpack",
+ "encoding": "lz4block",
+ "question": "Find the final RS20 overlay. Read the key u8 at +5, packed length u32le at +8, the 32-byte unpacked SHA-256 at +12, and packed bytes at +44. For each packed byte compute byte XOR key; then LZ4-block-decompress, verify the unpacked SHA-256 and use the HCFG record at unpacked offset 0.",
+ "expected_offset": 2048,
+ "expected_size": 145,
+ "expected_config": {
+  "c2": "192.0.2.77:53",
+  "campaign": "lz4-blk",
+  "flag": "flag{lz4_n0_fr4m3}",
+  "pad": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+ },
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/binary_fixtures/pkd_gen.py   # writer: python-lz4 lz4.block.compress(store_size=False)",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/pkd_oracle.py pkd_lz4block_overlay"
+}

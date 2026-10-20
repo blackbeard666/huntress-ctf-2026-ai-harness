@@ -1,0 +1,8 @@
+{
+ "field": "elf.abi_tag_kernel",
+ "expected": "3.2.0",
+ "generator_cmd": "cp challenges/day19/metadata-little-endian-on-the-prairie/single_solve/work/extracted/metadata-day-19-evidence/collector-001.elf .  (the D19 GM artifact: x86-64 ET_EXEC, stripped, GCC 13.3.0 Ubuntu)  (run in $TMPDIR/elfdyn)",
+ "oracle_cmd": "readelf -a -W dyn_collector_001_elf__abi_tag_kernel.bin | grep 'OS: .*ABI:'",
+ "decoy": false,
+ "member": "collector-001.elf"
+}

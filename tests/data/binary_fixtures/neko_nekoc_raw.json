@@ -1,0 +1,23 @@
+{
+ "encoding": "raw",
+ "expected_format": "neko_bytecode",
+ "expected_machine": "none",
+ "expected_has_neko_runtime": "false",
+ "expected_bytecode_offset": "0",
+ "file_b": "NekoVM bytecode (6 global symbols, 2 global fields, 54 bytecode ops)",
+ "neko_run": "98 neko-fixture exit 0",
+ "expected_offset": 19,
+ "expected_config": {
+  "c2": "192.0.2.31:7001",
+  "campaign": "nekovm",
+  "sleep": 17,
+  "flag": "flag{neko_raw_lit}"
+ },
+ "expected_globals_count": "6",
+ "expected_fields_count": "2",
+ "expected_code_size": "54",
+ "generator_cmd": "bash neko_gen.sh neko_nekoc_raw.bin nekoc '{\"c2\":\"192.0.2.31:7001\",\"campaign\":\"nekovm\",\"sleep\":17,\"flag\":\"flag{neko_raw_lit}\"}' 0 raw",
+ "oracle_cmd": "bash neko_oracle.sh neko_nekoc_raw.bin   # file -b, the neko 2.4.1 VM (load+run), od boot trailer, grep -obUa, coreutils base64 + perl unpack/xor, gzip trailer crc32",
+ "oracle_output": "NekoVM bytecode (6 global symbols, 2 global fields, 54 bytecode ops) | 98 neko-fixture exit 0 | none | 19 | HCFG 1 0 83 1825637278 1825637278 | {\"c2\":\"192.0.2.31:7001\",\"campaign\":\"nekovm\",\"sleep\":17,\"flag\":\"flag{neko_raw_lit}\"}",
+ "note": "format label SPECULATIVE: 'neko_bytecode' (GM format enum d12-d19); VM machine 'none' (candidates neko/nekovm/none in neko_facts()['machine_candidates']); booted exe = host format/machine + has_neko_runtime true; expected_offset = first stored byte ('H' raw / 'S' base64) per the OFFSET LAW (grep -obUa)"
+}

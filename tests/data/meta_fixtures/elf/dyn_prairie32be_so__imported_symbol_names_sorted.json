@@ -1,0 +1,8 @@
+{
+ "field": "elf.imported_symbol_names_sorted",
+ "expected": "[\"puts\"]",
+ "generator_cmd": "python3 -I mk_elf32_msb.py prairie32be.so  (stdlib struct WRITER, source saved as tests/data/meta_fixtures/elf/dyn_prairie32be_writer.py.txt: ELFCLASS32 ELFDATA2MSB EM_PPC ET_DYN)  (run in $TMPDIR/elfdyn)",
+ "oracle_cmd": "readelf -a -W dyn_prairie32be_so__imported_symbol_names_sorted.bin | .dynsym rows with Ndx UND, Name sorted",
+ "decoy": false,
+ "member": "prairie32be.so"
+}

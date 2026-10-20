@@ -1,0 +1,8 @@
+{
+ "field": "bplist.object_count",
+ "expected": "none",
+ "generator_cmd": "printf 'bplist00\\x01\\x02garbage'  (bplist magic, no trailer/offset table)",
+ "oracle_cmd": "file -b -> 'Apple binary property list' (magic only); exiftool -j -> no PLIST tags; 17 bytes < 8+32 trailer",
+ "decoy": true,
+ "member": "Info.plist"
+}

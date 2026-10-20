@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_is_variable_frame_rate",
+ "expected": "true",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i testsrc=s=64x36:r=10:d=1 -vf \"setpts='N*N/(10*TB)'\" -fps_mode passthrough -c:v libx264 -bf 0 -pix_fmt yuv420p vfr.mp4",
+ "oracle_cmd": "mediainfo --Inform='Video;%FrameRate_Mode%' vfr.mp4 -> VFR",
+ "decoy": false,
+ "member": "vfr.mp4"
+}

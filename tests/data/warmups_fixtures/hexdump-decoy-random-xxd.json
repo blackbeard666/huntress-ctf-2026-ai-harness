@@ -1,0 +1,10 @@
+{
+ "codec": "hexdump-*",
+ "plain": null,
+ "encoded": "00000000: e7ee e761 5ef3 5f30 e49b 482e 15ca e750  ...a^._0..H....P\n00000010: 0720 1e12 617b 0fed a7e1 6477 96ff 022b  . ..a{....dw...+\n00000020: ea8e d02a 82a1 7593 0f23 37cd 3794 c522  ...*..u..#7.7..\"\n00000030: 0800 6d6b 1af0 c0cb d625 658a ac2c 9faa  ..mk.....%e..,..\n00000040: 07d1 3c44 7e33 051e eef9 5a60 e561 43d6  ..<D~3....Z`.aC.\n00000050: c43b cad7 6c00 8a9b 0a6b 5fc9 3315 4a6d  .;..l....k_.3.Jm",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import random,sys; r=random.Random(11); sys.stdout.buffer.write(bytes(r.randrange(256) for _ in range(96)))\" | xxd  # 96 seeded random bytes",
+ "oracle_cmd": "printf \"%s\\n\" \"$encoded\" | xxd -r | iconv -f utf-8 -t utf-8  # -> iconv: illegal input sequence: not text",
+ "oracle_plain": ""
+}

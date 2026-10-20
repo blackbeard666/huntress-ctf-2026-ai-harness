@@ -1,0 +1,8 @@
+{
+ "field": "pyc.magic_u32_hex",
+ "expected": "0x0a0d0dcb",
+ "generator_cmd": "touch -d '2026-03-14 09:26:53 UTC' tool.py; .venv/bin/python3.12 -I -c \"py_compile.compile('tool.py','tool.pyc')\" (timestamp-based)",
+ "oracle_cmd": "xxd -l 4 tool.pyc -> cb0d 0d0a; .venv/bin/python3.12 -c 'importlib.util.MAGIC_NUMBER' -> b'\\xcb\\r\\r\\n'",
+ "decoy": false,
+ "member": "tool.cpython-312.pyc"
+}

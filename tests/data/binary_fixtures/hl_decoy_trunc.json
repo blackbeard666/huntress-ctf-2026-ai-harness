@@ -1,0 +1,13 @@
+{
+ "encoding": "none",
+ "expected_format": "none",
+ "expected_machine": "none",
+ "file_b": "data",
+ "expected_offset": null,
+ "expected_config": null,
+ "decoy": true,
+ "generator_cmd": "bash hl_gen.sh hl_decoy_trunc.bin trunc '{\"flag\":\"x\"}' 0 b64",
+ "oracle_cmd": "perl hl_oracle.pl hl_decoy_trunc.bin   # file -b, perl port of hashlink src/code.c hl_code_read (header varints + int/float/string tables), grep -obUa, MIME::Base64 / Encode UTF-8 decode, gzip trailer crc32",
+ "oracle_output": "data | truncated | none | none | none |",
+ "note": "format label SPECULATIVE: 'hashlink_bytecode' (candidates hashlink/hl/hl_bytecode/hlb in format_candidates); machine 'none'; expected_offset = first stored byte ('H' utf8-raw / 'S' base64) per the OFFSET LAW (grep -obUa)"
+}

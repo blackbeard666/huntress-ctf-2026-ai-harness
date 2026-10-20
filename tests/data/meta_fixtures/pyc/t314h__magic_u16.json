@@ -1,0 +1,8 @@
+{
+ "field": "pyc.magic_u16",
+ "expected": "3627",
+ "generator_cmd": "python3.14 -I -c \"py_compile.compile('tool.py','tool.pyc',invalidation_mode=PycInvalidationMode.CHECKED_HASH)\"",
+ "oracle_cmd": "python3.14 -I -c \"importlib.util.MAGIC_NUMBER.hex()\" -> 2b0e0d0a (3627); xxd -s 4 -l 4 -> 0300 0000",
+ "decoy": false,
+ "member": "tool.cpython-314.pyc"
+}

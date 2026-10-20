@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_has_b_frames",
+ "expected": "0",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i testsrc=s=64x36:r=10:d=1 -c:v libx264 -profile:v baseline -pix_fmt yuv420p -color_range tv -colorspace bt709 -color_primaries bt709 -color_trc bt709 bt709_tv_base.mp4",
+ "oracle_cmd": "PYTHONPATH=tools/pyav python3 -c 'import av; c=av.open(F); s=c.streams.video[0]; cc=s.codec_context; print(cc.reorder_depth)' -> 0",
+ "decoy": false,
+ "member": "bt709_tv_base.mp4"
+}

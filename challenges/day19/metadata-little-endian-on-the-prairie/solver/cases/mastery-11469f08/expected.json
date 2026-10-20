@@ -1,0 +1,7 @@
+{
+  "set1.metadata-day-19-synthesis-sha256-order": "[\"document-001.pdf\",\"collector-001.elf\",\"shortcut-001.lnk\",\"evidence-note.txt\"]",
+  "set2.metadata-day-19-synthesis-sha256-order": "[\"document-001.pdf\",\"collector-001.elf\",\"shortcut-001.lnk\",\"evidence-note.txt\"]",
+  "set3.metadata-day-19-synthesis-sha256-order": "[\"document-001.pdf\",\"collector-001.elf\",\"shortcut-001.lnk\",\"evidence-note.txt\"]",
+  "set4.metadata-day-19-synthesis-sha256-order": "[\"collector-001.elf\",\"shortcut-001.lnk\",\"document-001.pdf\",\"evidence-note.txt\"]",
+  "set5.metadata-day-19-synthesis-sha256-order": "[\"document-001.pdf\",\"collector-001.elf\",\"shortcut-001.lnk\",\"evidence-note.txt\"]"
+}

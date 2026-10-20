@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.count_i386",
+ "expected": "3",
+ "generator_cmd": "(cd $T/gen && gcc -c f.c -o x64.o && gcc -m32 -c f.c -o i386.o && aarch64-linux-gnu-gcc -O2 -c f.c -o a64le.o && aarch64-linux-gnu-gcc -O2 -mbig-endian -c f.c -o a64be.o); python3 tests/data/meta_fixtures/synthesis/gen_arch_kit.py <D19 TT evidence.zip extracted> $T/gen $T  (f.c = 'int f(int x){return x*3+1;}')",
+ "oracle_cmd": "python3 tests/data/meta_fixtures/synthesis/oracle_arch.py <case>.bin  (pyelftools + readelf -h, pefile, macholib, file -b; key 'count_i386')",
+ "decoy": false
+}

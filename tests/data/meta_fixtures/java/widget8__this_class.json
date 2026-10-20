@@ -1,0 +1,8 @@
+{
+ "field": "java.this_class",
+ "expected": "com/example/Widget",
+ "generator_cmd": "javac --release 8 -d o8 com/example/Widget.java Plain.java (Widget: public final class extends AbstractList<String> implements Serializable, static final long + double field)",
+ "oracle_cmd": "javap -v Widget.class -> this_class: #10 // com/example/Widget",
+ "decoy": false,
+ "member": "Widget.class"
+}

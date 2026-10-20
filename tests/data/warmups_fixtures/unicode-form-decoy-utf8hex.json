@@ -1,0 +1,11 @@
+{
+ "codec": "hex(utf-16le-bom)",
+ "plain": null,
+ "encoded": "4e69636520776f726b206465636f64696e672074686973207761726d757021",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup!' | xxd -p | tr -d '\\n'  # plain UTF-8 hex: no BOM, no NUL rhythm",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | file -  # file: ASCII text (not UTF-16/32 Unicode text)",
+ "oracle_plain": null,
+ "oracle_output": "/dev/stdin: ASCII text, with no line terminators"
+}

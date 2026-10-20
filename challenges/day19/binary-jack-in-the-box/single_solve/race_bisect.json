@@ -1,0 +1,16 @@
+{
+  "attempt": "a1654f1f-8036-4613-8c5d-eaf6135d6ca6",
+  "pid": 2880,
+  "done": true,
+  "ended": 1792414844.896512,
+  "wrong": [
+    "d19_analysis_config_campaign",
+    "d19_analysis_config_crc32_hex",
+    "d19_analysis_config_domain",
+    "d19_analysis_config_mutex",
+    "d19_analysis_config_url",
+    "d19_analysis_hcfg_version"
+  ],
+  "resolved": {},
+  "complete": false
+}

@@ -1,0 +1,6 @@
+- status "preparing" ~90 s before target provisioned | contract targets[] {id:"Target 1",url} + routes[] (route path 404s) | waited
+- GET / (cookie case_session, user Morgan) -> own cases /briefs/<id>; page fetches /api/briefs/<id>; /api/history lists case 17089 owner=executive visibility=reference_only
+- IDOR: GET /api/briefs/17089 -> note "proof_<32hex>" | CORRECT (other worker submitted first, same value)
+- target returns 410 {"state":"completed"} after CORRECT -> live solver not re-testable post-solve
+- duel solve.py: targets[] by artifact id -> crawl / -> /api/* feeds -> foreign case ids -> fetch template from case page -> regex proof_
+- solver-test single_solve: unreplayable (target 410 completed); HELP.md written

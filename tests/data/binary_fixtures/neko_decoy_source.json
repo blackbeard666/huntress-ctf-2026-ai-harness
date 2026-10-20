@@ -1,0 +1,16 @@
+{
+ "encoding": "none",
+ "expected_format": "none",
+ "expected_machine": "none",
+ "expected_has_neko_runtime": "none",
+ "expected_bytecode_offset": "none",
+ "file_b": "ASCII text",
+ "neko_run": "Uncaught exception - load.c(398) : Invalid module : m.n exit 1",
+ "expected_offset": null,
+ "expected_config": null,
+ "generator_cmd": "printf 'var cfg = \"SENGRwEAUAAAAA\"; // NEKO source text, not bytecode\\n$print(cfg);\\n' > neko_decoy_source.bin   # .neko source, truncated base64 HCFG header",
+ "oracle_cmd": "bash neko_oracle.sh neko_decoy_source.bin   # file -b, the neko 2.4.1 VM (load+run), od boot trailer, grep -obUa, coreutils base64 + perl unpack/xor, gzip trailer crc32",
+ "oracle_output": "ASCII text | Uncaught exception - load.c(398) : Invalid module : m.n exit 1 | none | 11 | none none |",
+ "decoy": true,
+ "note": "format label SPECULATIVE: 'neko_bytecode' (GM format enum d12-d19); VM machine 'none' (candidates neko/nekovm/none in neko_facts()['machine_candidates']); booted exe = host format/machine + has_neko_runtime true; expected_offset = first stored byte ('H' raw / 'S' base64) per the OFFSET LAW (grep -obUa); decoy: Neko SOURCE text whose string is a truncated base64 HCFG header (no crc-valid blob)"
+}

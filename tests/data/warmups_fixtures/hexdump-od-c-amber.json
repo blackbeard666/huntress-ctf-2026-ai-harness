@@ -1,0 +1,9 @@
+{
+ "codec": "hexdump-od-c",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-bison-12",
+ "encoded": "0000000   N   i   c   e       w   o   r   k       d   e   c   o   d   i\n0000020   n   g       t   h   i   s       w   a   r   m   u   p   !    \n0000040   T   o       s   o   l   v   e   ,       s   u   b   m   i   t\n0000060       t   h   i   s       e   x   a   c   t       a   n   s   w\n0000100   e   r       t   o       t   h   e       G   a   m   e       M\n0000120   a   s   t   e   r   :       a   m   b   e   r   -   b   i   s\n0000140   o   n   -   1   2\n0000145",
+ "generator_cmd": "printf %s \"$plain\" | od -c",
+ "oracle_cmd": "printf \"%s\\n\" \"$encoded\" | perl -ne 'chomp; s/^\\d+//; for (/(.{1,4})/g) { s/^ +//; print $_ eq \"\" ? \" \" : /^\\d{3}$/ ? chr oct : $_ eq \"\\\\n\" ? \"\\n\" : $_ } '  # perl: 4-wide od -c cells",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-bison-12",
+ "expected": "match"
+}

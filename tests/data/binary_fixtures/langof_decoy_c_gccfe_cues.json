@@ -1,0 +1,13 @@
+{
+ "family": "language_of",
+ "expected_language": "c",
+ "expected_toolchain": "gcc",
+ "expected_source_language": "none",
+ "decoy": true,
+ "generator_cmd": "bash langof_gccfe_gen.sh   # gcc -O2 d.c whose puts() literal names m2pim_M2RTS_ConstructModules/libm2pim.so.20/__gg__init_program_state/libgcobol.so.1",
+ "oracle_cmd": "bash langof_gccfe_oracle.sh langof_decoy_c_gccfe_cues.bin   # NEEDED libc.so.6 only, nm -D: 0 M2RTS / 0 __gg__ symbols -> still C (cues only logged under ambiguous_with)",
+ "expected_ambiguous_with": [
+  "cobol",
+  "modula2"
+ ]
+}

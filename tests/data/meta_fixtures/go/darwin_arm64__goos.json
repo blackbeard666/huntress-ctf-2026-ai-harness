@@ -1,0 +1,8 @@
+{
+ "field": "go.goos",
+ "expected": "darwin",
+ "generator_cmd": "cd $TMPDIR/gofx/app && git init && git commit; export GOPROXY=off GOTOOLCHAIN=local; go1.26.0: GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -buildvcs=true -tags fxtag -ldflags='-s -w' -o go_darwin_arm64 .",
+ "oracle_cmd": "go version -m darwin_arm64__goos.bin | grep GOOS",
+ "decoy": false,
+ "member": "go_darwin_arm64"
+}

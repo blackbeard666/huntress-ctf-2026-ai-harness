@@ -1,0 +1,8 @@
+{
+ "field": "deb.member_names",
+ "expected": "[\"debian-binary\",\"control.tar.zst\",\"data.tar.zst\"]",
+ "generator_cmd": "Ubuntu archive build (apt cache: wireguard_1.0.20250521-1ubuntu1_all.deb, control.tar.zst)",
+ "oracle_cmd": "ar t wireguard.deb | python3 -c \"import json,sys;print(json.dumps(sys.stdin.read().split(),separators=(\\\",\\\",\\\":\\\")))\"",
+ "decoy": false,
+ "member": "wireguard_1.0.20250521-1ubuntu1_all.deb"
+}

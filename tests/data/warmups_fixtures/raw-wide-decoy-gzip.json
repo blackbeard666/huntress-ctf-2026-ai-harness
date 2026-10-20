@@ -1,0 +1,12 @@
+{
+ "codec": "raw-file",
+ "plain": null,
+ "encoded_file": "raw-wide-decoy-gzip.bin",
+ "encoded_hex": "1f8b080000000000020325c9311282400c05d0ab7c7a69182a2f6085951708cb577760374c125c8eaf33b6efdd73229ada8a8549975c5f88777634b1",
+ "decoy": true,
+ "expected": "none",
+ "expected_form": "utf-8-replace",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | head -c 60 > raw-wide-decoy-gzip.bin  # GNU gzip, truncated",
+ "oracle_cmd": "file -b raw-wide-decoy-gzip.bin  # binary gzip bytes, not a text encoding -> none",
+ "oracle_output": "gzip compressed data, max compression, from Unix, original size modulo 2^32 2973005431 gzip compressed data, unknown method, ASCII, has comment, encrypted, from FAT filesystem (MS-DOS, OS/2, NT), original size modulo 2^32 2973005431"
+}

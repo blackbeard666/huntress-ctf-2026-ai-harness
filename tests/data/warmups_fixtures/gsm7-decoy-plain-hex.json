@@ -1,0 +1,10 @@
+{
+ "codec": "gsm7",
+ "plain": null,
+ "encoded": "636f62616c742d6f747465722d3137",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p | tr -d \"\\n\"  # plain=cobalt-otter-17: PLAIN hex (xxd -p), bytes are printable text -> owned by hex, not septets",
+ "oracle_cmd": "python3 -I -c \"import sys;sys.path.insert(0,\\\"tools/pylib-gsm\\\");from gsmmodem.pdu import unpackSeptets,decodeGsm7;print(decodeGsm7(unpackSeptets(bytes.fromhex(sys.argv[1].replace(\\\" \\\",\\\"\\\")))))\" \"$encoded\"  # gsmmodem unpacks it to junk (not the text); xxd -r -p reads cobalt-otter-17 directly",
+ "oracle_plain": "cÜÇØF\nÑΠohQ+&.KΣ7"
+}

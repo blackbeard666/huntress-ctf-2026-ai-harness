@@ -1,0 +1,16 @@
+{
+ "entry": "overlay_spec+overlay_spec_unpack",
+ "question": "In evidence.zip, Use all d19-- members in ZIP central-directory order. Find the final PK19 overlay. Read k1 at +5, k2 at +6, packed length u32le at +8, the 32-byte unpacked SHA-256 at +12, and packed bytes at +44. For each packed byte compute ror8(byte XOR k2,3) XOR k1; verify the unpacked SHA-256 and use the HCFG record at unpacked offset 0. Locate the unique CRC32-valid HCFG record: bytes 0..3 are ASCII HCFG, byte 4 is version, byte 5 is the XOR key, bytes 6..7 are the little-endian payload length, bytes 8..11 are the little-endian CRC32 of the decoded payload, and the payload begins at byte 12. XOR every payload byte with the one-byte key, verify CRC32, then parse the decoded UTF-8 JSON.",
+ "expected_offset": 10808,
+ "expected_size": 424,
+ "expected_config": {
+  "campaign": "BR19-000",
+  "domain": "node-000.day19.example.invalid",
+  "mutex": "Global\\HuntressBR19_000",
+  "url": "https://node-000.day19.example.invalid/api/BR19-000"
+ },
+ "decoy": false,
+ "note": "GM-confirmed D19 answers (config_* + overlay_offset 10808 / size 424)",
+ "generator_cmd": "python3 tests/data/binary_fixtures/ovspec_gen.py <d19 single.elf> <d19 set2.elf>  (d19--variant-000.elf from the cached D19 evidence.zip, AES-zip member)",
+ "oracle_cmd": "GM CORRECT (challenges/day19/binary-jack-in-the-box confirmed.json / case expected.json) + python3 tests/data/binary_fixtures/ovspec_oracle.py ovspec_d19_single"
+}

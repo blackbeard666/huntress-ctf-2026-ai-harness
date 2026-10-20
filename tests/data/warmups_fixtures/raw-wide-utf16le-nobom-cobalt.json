@@ -1,0 +1,11 @@
+{
+ "codec": "raw-file(utf-16le)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded_file": "raw-wide-utf16le-nobom-cobalt.bin",
+ "encoded_hex": "4e00690063006500200077006f0072006b0020006400650063006f00640069006e0067002000740068006900730020007700610072006d00750070002100200054006f00200073006f006c00760065002c0020007300750062006d006900740020007400680069007300200065007800610063007400200061006e007300770065007200200074006f0020007400680065002000470061006d00650020004d00610073007400650072003a00200061006d006200650072002d00660061006c0063006f006e002d0034003200",
+ "expected_form": "utf-16le",
+ "generator_cmd": "printf %s \"$plain\" | iconv -f UTF-8 -t UTF-16LE > raw-wide-utf16le-nobom-cobalt.bin  # glibc iconv writer, raw bytes (no hex layer)",
+ "oracle_cmd": "iconv -f UTF-16LE -t UTF-8 raw-wide-utf16le-nobom-cobalt.bin  # glibc iconv reader; `file -b`: data",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

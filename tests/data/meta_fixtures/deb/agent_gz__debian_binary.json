@@ -1,0 +1,8 @@
+{
+ "field": "deb.debian_binary",
+ "expected": "2.0",
+ "generator_cmd": "dpkg-deb --root-owner-group -Zgzip --build pkg agent_gz.deb (DEBIAN/control: Package deploy-agent, Version 3.4.1-2, Architecture arm64, folded Depends)",
+ "oracle_cmd": "ar p agent_gz.deb debian-binary",
+ "decoy": false,
+ "member": "deploy-agent_3.4.1-2_arm64.deb"
+}

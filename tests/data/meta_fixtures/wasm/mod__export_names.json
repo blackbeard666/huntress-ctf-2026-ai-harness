@@ -1,0 +1,8 @@
+{
+ "field": "wasm.export_names",
+ "expected": "[\"add\",\"counter\",\"run\"]",
+ "generator_cmd": "wat2wasm 1.0.36 --debug-names mod.wat -o mod.wasm (2 imports env.log/env.mem, exports add/counter/run, data segment)",
+ "oracle_cmd": "wasm-objdump -x -j Export mod.wasm -> \"add\", \"counter\", \"run\"",
+ "decoy": false,
+ "member": "app.wasm"
+}

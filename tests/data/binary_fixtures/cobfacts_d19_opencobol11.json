@@ -1,0 +1,40 @@
+{
+ "family": "cobol_facts",
+ "expected_facts": {
+  "has_cobol_runtime": "true",
+  "cobol_runtime_version": "1.5.2",
+  "source_file": "variant-000.cob",
+  "program_id": "BR19",
+  "needed": [
+   "libcob.so.1",
+   "libm.so.6",
+   "libvbisam.so.1",
+   "libgmp.so.10",
+   "libncurses.so.5",
+   "libtinfo.so.5",
+   "libdl.so.2",
+   "libc.so.6"
+  ],
+  "imports": [
+   "cob_call_params",
+   "cob_check_version",
+   "cob_cmp",
+   "cob_current_module",
+   "cob_display",
+   "cob_fatal_error",
+   "cob_get_environment",
+   "cob_init",
+   "cob_initialized",
+   "cob_push_call_stack_list",
+   "cob_save_call_params",
+   "cob_set_programid",
+   "cob_stop_run",
+   "cob_unifunc"
+  ],
+  "libcob_soname": "libcob.so.1"
+ },
+ "decoy": false,
+ "generator_cmd": "sh cobfacts_gen.sh   # D19 member byte copy; real GnuCOBOL 3.2 cobc -x -O2 (tools/gnucobol/root from apt-get download gnucobol3 libcob4-dev libcob4t64 + dpkg-deb -x); gcc C string decoy",
+ "oracle_cmd": "python3 cobfacts_oracle.py cobfacts_d19_opencobol11.bin   # readelf -dW, nm -D, objdump -d -M intel arg loads + pyelftools string read; program_id = oracle program_id_set_programid (mov esi, imm32 before call cob_set_programid@plt)",
+ "note": "cached D19 binary-jack-in-the-box member: stripped non-PIE OpenCOBOL 1.1-style image, libcob.so.1, no module-name/date pair; copy-reloc'd cob_* data symbols count as imports; its packed HCFG overlay (lib.binary.hcfg_find: overlay-stub @10852) is NOT asserted here (facts-only fixture)"
+}

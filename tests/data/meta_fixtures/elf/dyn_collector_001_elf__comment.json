@@ -1,0 +1,8 @@
+{
+ "field": "elf.comment",
+ "expected": "GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+ "generator_cmd": "cp challenges/day19/metadata-little-endian-on-the-prairie/single_solve/work/extracted/metadata-day-19-evidence/collector-001.elf .  (the D19 GM artifact: x86-64 ET_EXEC, stripped, GCC 13.3.0 Ubuntu)  (run in $TMPDIR/elfdyn)",
+ "oracle_cmd": "readelf -p .comment dyn_collector_001_elf__comment.bin",
+ "decoy": false,
+ "member": "collector-001.elf"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "squashfs.compression",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"import zipfile; z=zipfile.ZipFile('rootfs.sqfs','w'); z.writestr('usr/bin/app','a'); z.close()\" (zip renamed .sqfs; no hsqs magic)",
+ "oracle_cmd": "TZ=UTC unsquashfs -s rootfs.sqfs >/dev/null 2>&1 || echo none",
+ "decoy": true,
+ "member": "rootfs.sqfs"
+}

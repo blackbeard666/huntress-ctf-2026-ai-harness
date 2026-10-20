@@ -1,0 +1,8 @@
+{
+ "field": "macho.cdhash",
+ "expected": "6b0926c1b7a7d01ff017099a20b0a748c04e0a8e",
+ "generator_cmd": "zig cc (pip ziglang 0.17.0: python -m ziglang cc) -Os -s -target aarch64-macos.13.0 -shared -o libwrap.dylib l.c -L. -Wl,-install_name,/usr/local/lib/libwrap.1.dylib -Wl,-weak-lfoo -Wl,-rpath,@loader_path/../lib -Wl,-current_version,4.5.6 (zig ad-hoc linker-signs); then python -c \"import lief; b=lief.MachO.parse('libwrap.dylib').at(0); b.add(lief.MachO.DylibCommand.reexport_dylib('/usr/lib/libz.1.dylib',0,0x10203,0x10000)); b.source_version.version=[621,1,15,2,3]; b.write('libwrap2.dylib')\"  (run in $TMPDIR/mcs)",
+ "oracle_cmd": "tools/rcodesign/rcodesign (apple-codesign 0.29.0) print-signature-info libwrap_reexport__cdhash.bin | grep -A4 'slot: CodeDirectory' (sha256, first 20 bytes)",
+ "decoy": false,
+ "member": "libwrap.1.dylib"
+}

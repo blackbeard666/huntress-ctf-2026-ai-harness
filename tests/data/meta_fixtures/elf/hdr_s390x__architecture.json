@@ -1,0 +1,8 @@
+{
+ "field": "elf.architecture",
+ "expected": "s390x",
+ "generator_cmd": "printf hello > blob; objcopy -I binary -O elf64-big blob s390x.o; printf '\\x00\\x16' | dd of=s390x.o bs=1 seek=18 conv=notrunc  (e_machine = EM_S390)  (run in $TMPDIR/elfid)",
+ "oracle_cmd": "readelf -hW hdr_s390x__architecture.bin | grep -E 'Machine|Class' (S/390 + ELF64 -> uname s390x)",
+ "decoy": false,
+ "member": "s390x.o"
+}

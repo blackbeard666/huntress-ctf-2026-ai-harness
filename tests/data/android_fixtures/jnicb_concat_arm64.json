@@ -1,0 +1,8 @@
+{
+ "entry": "jni_callback_scan",
+ "expected": "ANS-6d04a9e2b81fc357",
+ "_why": "arm64-only: lib/arm64-v8a/libcbk.so FindClass(.../u) + GetStaticMethodID(m, (String,String)String) + NewStringUTF(\"ANS-\"), NewStringUTF(\"h7Kq!zP2\") -> u.m(prefix, seed) = prefix + xor(table, seed); siblings n / o decoys",
+ "generator_cmd": "python3 tests/data/android_fixtures/jnicb_src/gen_jnicb.py concat_arm64 tests/data/android_fixtures/jnicb_concat_arm64.apk  # javac --release 8 + dex2jar d2j-jar2dex + aarch64-linux-gnu-gcc -shared -fPIC -O2 -s jnicb_src/cbk.c (FindClass/GetStaticMethodID/NewStringUTF/CallStaticObjectMethod) + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/jnicb_src/oracle.sh tests/data/android_fixtures/jnicb_concat_arm64.apk '-DCB_CLASS=\"com/huntress/mobile/d21/u\"' '-DCB_NAME=\"m\"' '-DCB_SIG=\"(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;\"' '-DCB_ARG1=\"ANS-\"' '-DCB_ARG2=\"h7Kq!zP2\"'  # d2j-dex2jar back to classes, RUN Bridge.nativeAnswer() on the real JVM with REAL JNI loading the x86_64 gcc build of the same cbk.c + defines (readelf -p .rodata on the shipped arm64 .so lists the same 5 strings) -> ANS-6d04a9e2b81fc357",
+ "decoy": false
+}

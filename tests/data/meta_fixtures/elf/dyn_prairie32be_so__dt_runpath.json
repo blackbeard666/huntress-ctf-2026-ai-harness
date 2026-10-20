@@ -1,0 +1,8 @@
+{
+ "field": "elf.dt_runpath",
+ "expected": "none",
+ "generator_cmd": "python3 -I mk_elf32_msb.py prairie32be.so  (stdlib struct WRITER, source saved as tests/data/meta_fixtures/elf/dyn_prairie32be_writer.py.txt: ELFCLASS32 ELFDATA2MSB EM_PPC ET_DYN)  (run in $TMPDIR/elfdyn)",
+ "oracle_cmd": "readelf -a -W dyn_prairie32be_so__dt_runpath.bin | grep 'Library runpath'",
+ "decoy": true,
+ "member": "prairie32be.so"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "elf.relro",
+ "expected": "none",
+ "generator_cmd": "gcc -O0 -no-pie -fno-stack-protector -U_FORTIFY_SOURCE -z execstack -Wl,-z,norelro -o soft_none t.c",
+ "oracle_cmd": "readelf -lW hard_soft__relro.bin | grep -q GNU_RELRO || { echo none; exit; }; readelf -dW hard_soft__relro.bin | grep -qE \"BIND_NOW|Flags:.* NOW\" && echo full || echo partial",
+ "decoy": false,
+ "member": "soft_none"
+}

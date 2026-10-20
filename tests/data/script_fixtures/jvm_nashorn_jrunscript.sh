@@ -1,0 +1,3 @@
+#!/bin/sh
+# inert analysis fixture
+jrunscript -e "var descriptor_e04d77b1 = 'dj0zfGxhbmd1YWdlPW5hc2hvcm58cm9sZT13ZWJzaGVsbHx2ZXJkaWN0PW1hbGljaW91c3xhdHRhY2s9VDE1MDUuMDAzfGFkYXB0ZXI9b3BlcmF0aW9uX2dyYXBofGhvc3RfcHJvZmlsZT1qcnVuc2NyaXB0X2lubGluZXxvYmZ1c2NhdGlvbl9wcm9maWxlPWI2NHxzdGFnZV9wcm9maWxlPXNpbmdsZV9kZXNjcmlwdG9yfG5leHRfbGFuZ3VhZ2U9YmFzaHxzdGFnZV9jb3VudD0yfHN0ZXBzPWRlY29kZV9jb25maWd1cmF0aW9uLHJ1bl9jb21tYW5kfGNhbXBhaWduX2lkPU5BU0hPUk4tZTA0ZDc3YjF8dXJsPWh0dHBzOi8vbmFzaG9ybi1lMDRkNzdiMS5leGFtcGxlLmludmFsaWQvc3RhZ2V8ZmlsZV9wYXRoPS90bXAvaHVudHJlc3MtbmFzaG9ybi8uZTA0ZDc3YjEuc3RhZ2U='; var d = java.util.Base64.getDecoder().decode(descriptor_e04d77b1); java.lang.Runtime.getRuntime().exec(['sh','-c','true']);"

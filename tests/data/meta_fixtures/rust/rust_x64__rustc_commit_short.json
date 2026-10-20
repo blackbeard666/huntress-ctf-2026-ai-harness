@@ -1,0 +1,8 @@
+{
+ "field": "rust.rustc_commit_short",
+ "expected": "01f6ddf75",
+ "generator_cmd": "rustc 1.93.1 (distro, built from source tarball) -O r.rs -o rust_x64 && strip -o rust_x64s rust_x64",
+ "oracle_cmd": "readelf -p .comment rust_x64__rustc_commit_short.bin | grep rustc  (hash inside the parentheses)",
+ "decoy": false,
+ "member": "rust_x64s"
+}

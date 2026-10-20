@@ -1,0 +1,8 @@
+{
+ "field": "go.ldflags",
+ "expected": "-s -w",
+ "generator_cmd": "cd $TMPDIR/gofx/app && git init && git commit; export GOPROXY=off GOTOOLCHAIN=local; go1.26.0: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -buildvcs=false -ldflags='-s -w' -o go_win_amd64.exe .",
+ "oracle_cmd": "go version -m win_amd64__ldflags.bin | grep -- -ldflags  (strconv-quoted \"-s -w\" -> raw value)",
+ "decoy": false,
+ "member": "go_win_amd64.exe"
+}

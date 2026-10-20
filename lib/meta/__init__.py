@@ -42,7 +42,7 @@ def _s(fn):
     return Extractor(f"lib.meta.{fn}", SPECULATIVE, ())
 
 
-# Every GM-verified field family D1-D18 (+ the never-asked extras the day solvers already carried, speculative).
+# Every GM-verified field family D1-D19 (+ the never-asked extras the day solvers already carried, speculative).
 _BUILTIN = {
     ("file", "filename"): _v("identity:filename", 1),
     ("file", "size_bytes"): _v("identity:size_bytes", 1),
@@ -63,7 +63,8 @@ _BUILTIN = {
     ("pe", "version_*"): _s("pe:version_string"),
     ("pe", "image_base_hex"): _s("pe:image_base"),
     ("pe", "optional_header_magic_u16_hex"): _s("pe:optional_header_magic"),
-    ("elf", "e_machine_u16_hex"): _s("pe:elf_machine"),
+    # D19: ELF header e_machine (u16 @0x12, byte order from EI_DATA) -- x86-64 -> "0x003e" (raced first try, GM-confirmed)
+    ("elf", "e_machine_u16_hex"): _v("pe:elf_machine", 19),
     ("elf", "e_entry_hex"): _s("pe:elf_entry"),
     ("elf", "entry_point_hex"): _s("pe:elf_entry"),
     ("dotnet", "mvid_guid"): _v("dotnet:mvid", 12),

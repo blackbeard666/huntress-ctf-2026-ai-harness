@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I dnlang_gen.py challenges/day19/scripting-sharp-practice/single_solve/work/extracted/evidence/polyglot-csharp_script-benign-utility.csx jsn_decoy dnlang_jsn_decoy.js  (D19 csx v=3 plan decoded with binascii/base64, language renamed, re-encoded under its B64 tag, emitted in this syntax)",
+ "oracle_cmd": "{ echo 'const print=s=>process.stdout.write(s), Hashtable=Object;'; sed -E -e '/^import /d' -e 's/ : (String|Hashtable|byte\\[\\])//g' -e 's/Encoding\\.ASCII\\.GetBytes/Buffer.from/' dnlang_jsn_decoy.js; } > j.cjs && node j.cjs | base64 -d   (node v24.21.0 after stripping JScript.NET type annotations / imports (no jsc on Linux); coreutils xxd/base64/tr)",
+ "note": "benign config (theme/font/hotkey) in the same syntax: the oracle decodes it to no v=3 plan"
+}

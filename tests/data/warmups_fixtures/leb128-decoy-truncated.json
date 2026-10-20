@@ -1,0 +1,10 @@
+{
+ "codec": "leb128",
+ "plain": null,
+ "encoded": "9c 01 d2 01 c6 01 ca 01 40 ee 01 de 01 e4 01 d6 01 40 c8 01 ca 01 c6 01 de 01 c8 01 d2 01 dc 01 ce",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding' | govarint varint cp hex-space | sed 's/ ..$//'  # Go AppendVarint stream with its last byte cut (dangling continuation byte 0xce)  # govarint = go build of tests/data/warmups_fixtures/leb128_govarint.go",
+ "oracle_cmd": "python3 -I -c \"import sys;from google.protobuf.internal.decoder import _DecodeVarint as D;from google.protobuf.internal.wire_format import ZigZagDecode as Z;b=bytes.fromhex(sys.argv[1].replace(' ',''));v=[];p=0\\nwhile p<len(b): x,p=D(b,p); v.append(x)\\nzz=sys.argv[2]=='zigzag';v=[Z(x) if zz else x for x in v];print(b''.join(x.to_bytes(2,'little') for x in v).decode('utf-16-le'))\" \"$encoded\" zigzag  # protobuf 7.36.2 internal varint decoder (+ ZigZagDecode), code units read as UTF-16LE  -> protobuf _DecodeVarint raises IndexError (truncated varint)",
+ "oracle_plain": null
+}

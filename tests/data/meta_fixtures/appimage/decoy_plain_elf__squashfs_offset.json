@@ -1,0 +1,8 @@
+{
+ "field": "appimage.squashfs_offset",
+ "expected": "none",
+ "generator_cmd": "gcc -Os -s rt.c -o rt; cp rt plain.elf; cat gz.sqfs >> plain.elf (no AI magic at e_ident[8])",
+ "oracle_cmd": "head -c 10 plain.elf | tail -c 2 | grep -q AI && echo yes || echo none",
+ "decoy": true,
+ "member": "Tool-x86_64.AppImage"
+}

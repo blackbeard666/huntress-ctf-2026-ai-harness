@@ -1,0 +1,30 @@
+{
+ "plans": {
+  "loader.js": "v=3|language=jscript|role=downloader|next_language=powershell|steps=acquire_remote,write_file,dispatch_process",
+  "polyglot-powershell-7f3a.txt": "v=3|role=stager|next_language=python|steps=decode_layer,dispatch_language",
+  "run.py": "v=3|role=launcher|next_language=bash|steps=dispatch_process",
+  "final.sh": "v=3|language=bash|role=collector|steps=enumerate_host",
+  "notes.txt": "v=3|role=benign|steps=recognize_syntax"
+ },
+ "expected": {
+  "chain": "loader.js>polyglot-powershell-7f3a.txt>run.py>final.sh",
+  "terminal_language": "bash",
+  "terminal": "final.sh",
+  "chain_length": "4",
+  "resolves:loader.js": "polyglot-powershell-7f3a.txt",
+  "cycles": "0",
+  "mismatch": "none"
+ },
+ "accepted": {
+  "terminal_language": [
+   "powershell",
+   "python",
+   "bash",
+   "jscript"
+  ]
+ },
+ "decoy": false,
+ "oracle_cmd": "printf 'jscript powershell\\npowershell python\\npython bash\\n' | tsort -> jscript powershell python bash (member families: loader.js=.js->jscript, polyglot-powershell-*, run.py=.py, final.sh=.sh); wc -l -> chain 4; grep -c next_language= final.sh plan -> 0 (terminal)",
+ "entry": "handoff_graph",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/handoff_graph/hg_gen.py tests/data/script_fixtures/handoff_graph (hg_family_chain)"
+}

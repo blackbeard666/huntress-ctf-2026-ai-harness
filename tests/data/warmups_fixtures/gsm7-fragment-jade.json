@@ -1,0 +1,9 @@
+{
+ "codec": "gsm7",
+ "plain": "jade-ki",
+ "encoded": "ea30b9dc5aa701",
+ "generator_cmd": "perl -e 'print unpack(\"H*\", pack(\"b*\", join \"\", map { scalar reverse sprintf \"%07b\", ord } split //, $ARGV[0]))' \"$plain\"  # perl pack 'b*' of each char's 7 bits reversed (LSB-first): 7 chars = 49 bits -> 7 octets with 7 zero fill bits",
+ "oracle_cmd": "python3 -I -c \"import sys;sys.path.insert(0,\\\"tools/pylib-gsm\\\");from gsmmodem.pdu import unpackSeptets,decodeGsm7;print(decodeGsm7(unpackSeptets(bytes.fromhex(sys.argv[1].replace(\\\" \\\",\\\"\\\")))))\" \"$encoded\"  # python-gsmmodem-new 0.13 unpackSeptets + decodeGsm7 (the 8th all-zero fill septet reads as GSM '@' = padding)",
+ "oracle_plain": "jade-ki",
+ "expected": "match"
+}

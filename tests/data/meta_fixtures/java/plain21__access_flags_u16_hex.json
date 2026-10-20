@@ -1,0 +1,8 @@
+{
+ "field": "java.access_flags_u16_hex",
+ "expected": "0x0420",
+ "generator_cmd": "javac --release 21 -d o21 com/example/Widget.java Plain.java (javac 21.0.12)",
+ "oracle_cmd": "javap -v Plain.class -> flags: (0x0420) ACC_SUPER, ACC_ABSTRACT",
+ "decoy": false,
+ "member": "Plain.class"
+}

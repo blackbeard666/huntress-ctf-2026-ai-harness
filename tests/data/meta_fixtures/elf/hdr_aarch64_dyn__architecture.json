@@ -1,0 +1,8 @@
+{
+ "field": "elf.architecture",
+ "expected": "aarch64",
+ "generator_cmd": "aarch64-linux-gnu-gcc -Wl,--build-id=md5 -Wl,-z,max-page-size=4096 -o a64_dyn m.c  (run in $TMPDIR/elfid)",
+ "oracle_cmd": "readelf -hW hdr_aarch64_dyn__architecture.bin | grep -E 'Machine: AArch64|Data' (LE -> uname aarch64)",
+ "decoy": false,
+ "member": "a64_dyn"
+}

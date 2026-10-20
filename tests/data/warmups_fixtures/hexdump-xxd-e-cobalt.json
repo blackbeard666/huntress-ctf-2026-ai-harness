@@ -1,0 +1,9 @@
+{
+ "codec": "hexdump-xxd-e",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "encoded": "00000000: 6563694e 726f7720 6564206b 69646f63  Nice work decodi\n00000010: 7420676e 20736968 6d726177 20217075  ng this warmup! \n00000020: 73206f54 65766c6f 7573202c 74696d62  To solve, submit\n00000030: 69687420 78652073 20746361 77736e61   this exact answ\n00000040: 74207265 6874206f 61472065 4d20656d  er to the Game M\n00000050: 65747361 63203a72 6c61626f 65682d74  aster: cobalt-he\n00000060: 2d6e6f72     3737                    ron-77",
+ "generator_cmd": "printf %s \"$plain\" | xxd -e",
+ "oracle_cmd": "printf \"%s\\n\" \"$encoded\" | perl -ne 'print map { scalar reverse pack(\"H*\", $_) } split \" \", substr($_, 10, 35)'  # perl: the fixed 35-column hex area, each LE word byte-reversed",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "expected": "match"
+}

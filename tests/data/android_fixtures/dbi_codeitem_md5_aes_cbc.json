@@ -1,0 +1,7 @@
+{
+ "entry": "dex_integrity_gate_scan",
+ "expected": "ANS-47e2b9d05c18fa63",
+ "generator_cmd": "sh tests/data/android_fixtures/gen_dex_integrity_gate.sh tests/data/android_fixtures  # assets/gate.bin = IV || openssl enc -aes-128-cbc, key = md5sum of ChallengeActivity.onCreate's whole code_item (offset/size from androguard)",
+ "oracle_cmd": "cd tests/data/android_fixtures; unzip -p dbi_codeitem_md5_aes_cbc.apk classes.dex > /tmp/o2.dex; K=$(python3 -I -c 'import sys,hashlib\nfrom loguru import logger; logger.remove()\nfrom androguard.core.dex import DEX\nb=open(sys.argv[1],\"rb\").read();m=[m for c in DEX(b).get_classes() if c.get_name().endswith(\"ChallengeActivity;\") for m in c.get_methods() if m.get_name()==\"onCreate\"][0];o=m.get_code_off();print(hashlib.md5(b[o:o+16+2*m.get_code().get_insns_size()]).hexdigest())' /tmp/o2.dex); unzip -p dbi_codeitem_md5_aes_cbc.apk assets/gate.bin > /tmp/o2.bin; openssl enc -d -aes-128-cbc -K $K -iv $(xxd -l 16 -p /tmp/o2.bin) -in <(tail -c +17 /tmp/o2.bin)",
+ "decoy": false
+}

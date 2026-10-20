@@ -1,0 +1,10 @@
+{
+ "family": "language_of",
+ "expected_language": "cobol",
+ "expected_toolchain": "gcobol",
+ "expected_source_language": "none",
+ "decoy": false,
+ "generator_cmd": "bash langof_gccfe_gen.sh   # x86_64-linux-gnu-gcobol-15 -O0 hello.cob + strip -s",
+ "oracle_cmd": "bash langof_gccfe_oracle.sh langof_gcobol_stripped.bin   # stripped, NEEDED libgcobol.so.1, nm -D: 27 __gg__* symbols -> COBOL built by gcobol",
+ "expected_ambiguous_with": []
+}

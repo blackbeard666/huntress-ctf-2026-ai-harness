@@ -1,0 +1,11 @@
+{
+ "codec": "z85(utf-16le-bom)",
+ "plain": null,
+ "encoded": "phaiHaA}:AyANe0v@C)(zF78lxLzJgCvtJeB-nGDrbS[2z!%PdefG1RvR]?3",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup! To solve, submit' | basenc --z85 -w0  # UTF-8 impostor (48 bytes), no BOM / NUL rhythm",
+ "oracle_cmd": "printf %s \"$encoded\" | basenc --z85 -d | od -An -tx1 | tr -s ' ' '\\n' | grep -c '^00$'  # 0 NUL bytes -> none",
+ "oracle_plain": null,
+ "oracle_nul_bytes": 0
+}

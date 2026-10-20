@@ -1,0 +1,8 @@
+{
+ "entry": "jni_callback_scan",
+ "expected": "ANS-3b9e0c17f5a2d846",
+ "_why": "lib/x86_64/libcbk.so Java_..._Bridge_nativeAnswer: FindClass(com/huntress/mobile/d21/k) + GetStaticMethodID(q, (Ljava/lang/String;)Ljava/lang/String;) + NewStringUTF(\"h7Kq!zP2\") -> k.q xors a char table with the seed; siblings p / r (same sig) give decoy tokens",
+ "generator_cmd": "python3 tests/data/android_fixtures/jnicb_src/gen_jnicb.py xor_x86_64 tests/data/android_fixtures/jnicb_xor_x86_64.apk  # javac --release 8 + dex2jar d2j-jar2dex + gcc -shared -fPIC -O2 -s jnicb_src/cbk.c (FindClass/GetStaticMethodID/NewStringUTF/CallStaticObjectMethod) + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/jnicb_src/oracle.sh tests/data/android_fixtures/jnicb_xor_x86_64.apk  # d2j-dex2jar back to classes, RUN Bridge.nativeAnswer() on the real JVM with REAL JNI loading the apk's lib/x86_64/libcbk.so -> ANS-3b9e0c17f5a2d846",
+ "decoy": false
+}

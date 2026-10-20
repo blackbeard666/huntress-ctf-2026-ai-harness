@@ -1,0 +1,8 @@
+{
+ "field": "elf.elf_class",
+ "expected": "ELF64",
+ "generator_cmd": "unzip metadata-day-19-evidence.zip collector-001.elf  (the GM-built D19 artifact, single_solve; GM-verified e_machine 0x003e)  (run in $TMPDIR/elfid)",
+ "oracle_cmd": "readelf -hW hdr_d19_collector__elf_class.bin | grep Class:",
+ "decoy": false,
+ "member": "collector-001.elf"
+}

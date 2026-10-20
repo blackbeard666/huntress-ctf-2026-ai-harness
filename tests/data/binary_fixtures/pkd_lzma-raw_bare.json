@@ -1,0 +1,16 @@
+{
+ "entry": "packer_hcfg",
+ "encoding": "lzma-raw",
+ "stream_offset": 1216,
+ "stream_length": 105,
+ "expected_offset": 0,
+ "expected_config": {
+  "c2": "198.51.100.3:4444",
+  "campaign": "raw-lzma1",
+  "flag": "flag{lzm4_r4w_lc3}",
+  "pad": "qwerqwerqwerqwerqwerqwer"
+ },
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/binary_fixtures/pkd_gen.py   # writer: xz --format=raw --lzma1=lc=3,lp=0,pb=2,dict=64KiB",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/pkd_oracle.py pkd_lzma-raw_bare"
+}

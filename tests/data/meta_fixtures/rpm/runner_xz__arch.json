@@ -1,0 +1,8 @@
+{
+ "field": "rpm.arch",
+ "expected": "x86_64",
+ "generator_cmd": "rpmbuild 6.0.1 -bb --target x86_64 --define '_binary_payload w6.xzdio' --define '_rpmformat 4' runner.spec (Name group-b-runner, Version 0.9.0, Release 1)",
+ "oracle_cmd": "LD_LIBRARY_PATH=tools/rpm/root/usr/lib/x86_64-linux-gnu tools/rpm/root/usr/bin/rpm --rcfile tools/rpm/root/usr/lib/rpm/rpmrc --dbpath $TMPDIR/rpmdb -qp --qf '%{ARCH}' /home/testpwn/huntress-2026/.run/tmp/rpmgen/runner.rpm",
+ "decoy": false,
+ "member": "group-b-runner-0.9.0-1.x86_64.rpm"
+}

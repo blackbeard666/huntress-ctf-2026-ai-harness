@@ -107,6 +107,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Flow State"
   },
+  "binary-reverse-engineering-day-19-static-unpacking": {
+    "day": 19,
+    "dir": "day19/binary-jack-in-the-box",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Jack in the Box"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -215,6 +221,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Frame of Reference"
   },
+  "metadata-forensics-day-19-little-endian-on-the-prairie": {
+    "day": 19,
+    "dir": "day19/metadata-little-endian-on-the-prairie",
+    "lane": "metadata-forensics",
+    "name": "🔎 Little Endian on the Prairie"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -322,6 +334,12 @@
     "dir": "day18/mobile-encrypted-strings",
     "lane": "mobile-android",
     "name": "📱 Encrypted Strings"
+  },
+  "mobile-android-day-19-reflection-maze": {
+    "day": 19,
+    "dir": "day19/mobile-reflection-maze",
+    "lane": "mobile-android",
+    "name": "📱 Reflection Maze"
   },
   "read-the-rules": {
     "day": 1,
@@ -437,6 +455,12 @@
     "lane": "script-analysis",
     "name": "📜 Orphan Process"
   },
+  "script-analysis-day-19-managed-assembly-bridge": {
+    "day": 19,
+    "dir": "day19/scripting-sharp-practice",
+    "lane": "script-analysis",
+    "name": "📜 Sharp Practice"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -544,6 +568,30 @@
     "dir": "day18/warmups-off-the-rails",
     "lane": "warmups",
     "name": "👶 Off the Rails"
+  },
+  "warmups-day-19": {
+    "day": 19,
+    "dir": "day19/warmups-little-things",
+    "lane": "warmups",
+    "name": "👶 Little Things"
+  },
+  "web-exploitation-day-01-backup-exposure": {
+    "day": 19,
+    "dir": "day01/web-back-up-a-minute",
+    "lane": "web",
+    "name": "🌐 Back Up a Minute"
+  },
+  "web-exploitation-day-02-idor": {
+    "day": 19,
+    "dir": "day02/web-permission-to-slip",
+    "lane": "web",
+    "name": "🌐 Permission to Slip"
+  },
+  "web-exploitation-day-03-sqli": {
+    "day": 19,
+    "dir": "day03/web-query-me-this",
+    "lane": "web",
+    "name": "🌐 Query Me This"
   },
   "welcome-robots": {
     "day": 1,

@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-19-little-endian-on-the-prairie",
+  "lane": "metadata-forensics",
+  "name": "🔎 Little Endian on the Prairie",
+  "ids": {
+    "single_solve": "metadata-forensics-day-19-little-endian-on-the-prairie",
+    "time_trial": "metadata-forensics-day-19-little-endian-on-the-prairie/time_trial",
+    "mastery": "metadata-forensics-day-19-little-endian-on-the-prairie/mastery"
+  }
+}

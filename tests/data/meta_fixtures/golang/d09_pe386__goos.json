@@ -1,0 +1,8 @@
+{
+ "field": "golang.goos",
+ "expected": "windows",
+ "generator_cmd": "organizer artifact: Huntress D09 metadata-built-different evidence telemetry-agent-001.exe (Go 1.22.2 windows/386 PE)",
+ "oracle_cmd": "go version -m d09_pe386__goos.bin | grep GOOS",
+ "decoy": false,
+ "member": "telemetry-agent-001.exe"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "wswap4-words",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "encoded": "6563694e 726f7720 6564206b 69646f63 7420676e 20736968 6d726177 20217075 73206f54 65766c6f 7573202c 74696d62 69687420 78652073 20746361 77736e61 74207265 6874206f 61472065 4d20656d 65747361 63203a72 6c61626f 65682d74 2d6e6f72 00003737",
+ "generator_cmd": "printf %s \"$plain\" | od -An -v -tx4 | tr -s ' \\n' ' '  # GNU od on x86: 32-bit LE words printed as numbers, tail NUL-padded",
+ "oracle_cmd": "python3 -I -c 'import array,sys; a=array.array(\"I\", bytes.fromhex(sys.argv[1].replace(\" \",\"\"))); a.byteswap(); print(a.tobytes().rstrip(b\"\\0\").decode())' \"$encoded\"  # stdlib array.byteswap",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "expected": "match"
+}

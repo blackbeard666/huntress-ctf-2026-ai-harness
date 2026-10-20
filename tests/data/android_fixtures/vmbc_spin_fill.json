@@ -1,0 +1,7 @@
+{
+ "entry": "bytecode_vm_scan",
+ "expected": "ANS-3b9e07d1f4a6c582",
+ "_why": "Vault.token() -> new Machine().run(CODE): <clinit> byte[] CODE (fill-array-data) is a stack-VM program run by a while/packed-switch interpreter (push/xor/add/sub/rol/load/store/emit/loop/halt); a 3000-turn key-spin loop pushes it past dex_eval_scan's 50k-step budget",
+ "generator_cmd": "python3 tests/data/android_fixtures/vmbc_src/gen_vmbc.py spin_fill tests/data/android_fixtures/vmbc_spin_fill.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/vmbc_src/oracle.sh tests/data/android_fixtures/vmbc_spin_fill.apk  # d2j-dex2jar back to classes, RUN Vault.token()/Gate.show() on the JVM -> ANS-3b9e07d1f4a6c582"
+}

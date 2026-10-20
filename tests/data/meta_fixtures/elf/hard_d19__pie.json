@@ -1,0 +1,8 @@
+{
+ "field": "elf.pie",
+ "expected": "false",
+ "generator_cmd": "cp challenges/day19/metadata-little-endian-on-the-prairie/single_solve/work/extracted/metadata-day-19-evidence/collector-001.elf .  (D19 GM artifact: x86-64 ET_EXEC, GCC 13.3.0)",
+ "oracle_cmd": "readelf -hW hard_d19__pie.bin | grep -q \"Type: *EXEC\" && echo false || (readelf -lW hard_d19__pie.bin | grep -q INTERP && echo true || echo none)",
+ "decoy": false,
+ "member": "collector-001.elf"
+}

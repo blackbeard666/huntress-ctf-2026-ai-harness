@@ -1,0 +1,9 @@
+{
+ "codec": "base64(utf-16be-bom)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "encoded": "/v8ATgBpAGMAZQAgAHcAbwByAGsAIABkAGUAYwBvAGQAaQBuAGcAIAB0AGgAaQBzACAAdwBhAHIAbQB1AHAAIQAgAFQAbwAgAHMAbwBsAHYAZQAsACAAcwB1AGIAbQBpAHQAIAB0AGgAaQBzACAAZQB4AGEAYwB0ACAAYQBuAHMAdwBlAHIAIAB0AG8AIAB0AGgAZQAgAEcAYQBtAGUAIABNAGEAcwB0AGUAcgA6ACAAYwBvAGIAYQBsAHQALQBoAGUAcgBvAG4ALQAxADc=",
+ "generator_cmd": "{ printf '\\376\\377'; printf %s \"$plain\" | iconv -f UTF-8 -t UTF-16BE; } | base64 -w0  # BOM feff + glibc iconv UTF-16BE, coreutils base64",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys,binascii;print(binascii.a2b_base64(sys.stdin.read()).decode('utf-16'),end='')\"  # CPython binascii + codecs utf-16",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "expected": "match"
+}

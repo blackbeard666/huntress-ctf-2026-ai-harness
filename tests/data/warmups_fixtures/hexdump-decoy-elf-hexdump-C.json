@@ -1,0 +1,10 @@
+{
+ "codec": "hexdump-*",
+ "plain": null,
+ "encoded": "00000000  7f 45 4c 46 02 01 01 00  00 00 00 00 00 00 00 00  |.ELF............|\n00000010  03 00 3e 00 01 00 00 00  e0 7f 10 00 00 00 00 00  |..>.............|\n00000020  40 00 00 00 00 00 00 00  a0 30 ad 00 00 00 00 00  |@........0......|\n00000030  00 00 00 00 40 00 38 00  0f 00 40 00 22 00 21 00  |....@.8...@.\".!.|\n00000040  06 00 00 00 04 00 00 00  40 00 00 00 00 00 00 00  |........@.......|\n00000050  40 00 00 00 00 00 00 00  40 00 00 00 00 00 00 00  |@.......@.......|\n00000060  48 03 00 00 00 00 00 00  48 03 00 00 00 00 00 00  |H.......H.......|\n00000070  08 00 00 00 00 00 00 00  03 00 00 00 04 00 00 00  |................|\n00000080",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "head -c 128 /bin/ls | hexdump -C  # an ELF header, not text",
+ "oracle_cmd": "printf \"%s\\n\" \"$encoded\" | perl -ne 's/\\|.*$//; @F = split; shift @F; print pack(\"H*\", join \"\", @F)' | file -  # -> ELF 64-bit ... (binary, not a sentence)",
+ "oracle_plain": "/dev/stdin: ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), can't read elf program headers at 120, missing secti"
+}

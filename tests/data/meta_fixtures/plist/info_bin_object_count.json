@@ -1,0 +1,8 @@
+{
+ "field": "plist.object_count",
+ "expected": "20",
+ "generator_cmd": "python3 -I -c 'import plistlib,datetime; plistlib.dumps({CFBundleName,CFBundleIdentifier,CFBundleExecutable,CFBundleShortVersionString,CFBundleVersion,LSMinimumSystemVersion,LSUIElement,NSAppTransportSecurity:{NSAllowsArbitraryLoads},BuildDate}, fmt=FMT_BINARY, sort_keys=False)'  (stdlib plistlib WRITER)",
+ "oracle_cmd": "tail -c 32 info_bin.bin | xxd -> offset_int_size 02, ref_size 01, num_objects 0x0000000000000014 = 20, top 0, table @0x12f",
+ "decoy": false,
+ "member": "info_bin.bin"
+}

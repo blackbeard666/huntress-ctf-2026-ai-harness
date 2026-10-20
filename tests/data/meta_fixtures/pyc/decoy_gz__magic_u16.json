@@ -1,0 +1,8 @@
+{
+ "field": "pyc.magic_u16",
+ "expected": "none",
+ "generator_cmd": "printf 'print(1)\\n' | gzip -n > fake.pyc (gzip renamed .pyc impostor)",
+ "oracle_cmd": "file fake.pyc -> gzip compressed data (not a pyc)",
+ "decoy": true,
+ "member": "fake.pyc"
+}

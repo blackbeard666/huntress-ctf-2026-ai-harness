@@ -1,0 +1,13 @@
+{
+ "entry": "packer_hcfg+overlay_spec_unpack",
+ "encoding": "aplib",
+ "question": "Find the final RS20 overlay. Read the key u8 at +5, packed length u32le at +8, the 32-byte unpacked SHA-256 at +12, and packed bytes at +44. For each packed byte compute byte XOR key; then aPLib-decompress, verify the unpacked SHA-256 and use the HCFG record at unpacked offset 0.",
+ "stream_offset": 2048,
+ "stream_length": 147,
+ "expected_offset": null,
+ "expected_config": "none",
+ "decoy": true,
+ "detail": "HCFG crc forced to 0xdeadbeef + overlay sha256 of other bytes",
+ "generator_cmd": "python3 tests/data/binary_fixtures/pkd_gen.py   # writer: pkd_aplib_pack.pack (own spec-derived packer)",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/pkd_oracle.py pkd_aplib_decoy"
+}

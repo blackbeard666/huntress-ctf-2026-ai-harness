@@ -1,0 +1,9 @@
+{
+ "codec": "base64(utf-32be)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-gecko-24",
+ "encoded": "AAAATgAAAGkAAABjAAAAZQAAACAAAAB3AAAAbwAAAHIAAABrAAAAIAAAAGQAAABlAAAAYwAAAG8AAABkAAAAaQAAAG4AAABnAAAAIAAAAHQAAABoAAAAaQAAAHMAAAAgAAAAdwAAAGEAAAByAAAAbQAAAHUAAABwAAAAIQAAACAAAABUAAAAbwAAACAAAABzAAAAbwAAAGwAAAB2AAAAZQAAACwAAAAgAAAAcwAAAHUAAABiAAAAbQAAAGkAAAB0AAAAIAAAAHQAAABoAAAAaQAAAHMAAAAgAAAAZQAAAHgAAABhAAAAYwAAAHQAAAAgAAAAYQAAAG4AAABzAAAAdwAAAGUAAAByAAAAIAAAAHQAAABvAAAAIAAAAHQAAABoAAAAZQAAACAAAABHAAAAYQAAAG0AAABlAAAAIAAAAE0AAABhAAAAcwAAAHQAAABlAAAAcgAAADoAAAAgAAAAbQAAAGEAAABwAAAAbAAAAGUAAAAtAAAAZwAAAGUAAABjAAAAawAAAG8AAAAtAAAAMgAAADQ=",
+ "generator_cmd": "printf %s \"$plain\" | iconv -f UTF-8 -t UTF-32BE | base64 -w0  # glibc iconv UTF-32BE (no BOM), coreutils base64",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys,binascii;print(binascii.a2b_base64(sys.stdin.read()).decode('utf-32-be'),end='')\"  # CPython codecs utf-32-be",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-gecko-24",
+ "expected": "match"
+}

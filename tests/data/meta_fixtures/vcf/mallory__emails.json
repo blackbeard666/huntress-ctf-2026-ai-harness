@@ -1,0 +1,8 @@
+{
+ "field": "vcf.emails",
+ "expected": "[\"mallory@evil.example\",\"mq@backup.example\"]",
+ "generator_cmd": "python3 -I gen.py <site-pkgs> <out>  (icalendar 6 Calendar/Event.to_ical writer for .ics; vobject vCard().serialize() writer for .vcf; script kept in fixture notes)",
+ "oracle_cmd": "python3 -I oracle.py: vobject.readOne(text) -> [e.value for e in card.contents[\"email\"]] (compact JSON)",
+ "decoy": false,
+ "member": "mallory.vcf"
+}

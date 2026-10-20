@@ -1,0 +1,8 @@
+{
+ "field": "wasm.custom_section_names",
+ "expected": "[\"name\"]",
+ "generator_cmd": "wat2wasm 1.0.36 --debug-names mod.wat -o mod.wasm (2 imports env.log/env.mem, exports add/counter/run, data segment)",
+ "oracle_cmd": "wasm-objdump -h mod.wasm -> Type Import Function Global Export Code Data Custom \"name\"",
+ "decoy": false,
+ "member": "app.wasm"
+}

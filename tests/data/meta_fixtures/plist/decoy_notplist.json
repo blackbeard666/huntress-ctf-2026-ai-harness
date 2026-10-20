@@ -1,0 +1,8 @@
+{
+ "field": "plist.cf_bundle_identifier",
+ "expected": "none",
+ "generator_cmd": "printf '<?xml version=\"1.0\"?>\\n<config><CFBundleIdentifier>com.fake.decoy</CFBundleIdentifier></config>\\n'  (XML impostor, no <plist> root)",
+ "oracle_cmd": "exiftool -j decoy_notplist.bin -> FileType XML (not PLIST); file -b -> 'XML 1.0 document'",
+ "decoy": true,
+ "member": "Info.plist"
+}

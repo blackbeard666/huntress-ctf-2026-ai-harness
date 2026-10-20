@@ -1,0 +1,8 @@
+{
+ "field": "elf.dt_needed",
+ "expected": "[\"libc.so.6\"]",
+ "generator_cmd": "aarch64-linux-gnu-gcc -mbranch-protection=standard -o a64pie m.c  (run in $TMPDIR/elfdyn)",
+ "oracle_cmd": "readelf -a -W dyn_a64pie__dt_needed.bin | grep 'Shared library'",
+ "decoy": false,
+ "member": "a64pie"
+}

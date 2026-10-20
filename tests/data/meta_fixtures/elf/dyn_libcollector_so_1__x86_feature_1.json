@@ -1,0 +1,8 @@
+{
+ "field": "elf.x86_feature_1",
+ "expected": "IBT, SHSTK",
+ "generator_cmd": "gcc -shared -fPIC -fcf-protection=full -Wl,--no-as-needed -Wl,-soname,libcollector.so.1 -Wl,-rpath,'$ORIGIN/../lib:/opt/collector/lib' -o libcollector.so.1 lib.c -lm  (lib.c: 2 constructors + sqrt/cos/printf)  (run in $TMPDIR/elfdyn)",
+ "oracle_cmd": "readelf -a -W dyn_libcollector_so_1__x86_feature_1.bin | grep 'x86 feature:'",
+ "decoy": false,
+ "member": "libcollector.so.1"
+}

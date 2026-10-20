@@ -1,0 +1,32 @@
+{
+ "family": "cobol_facts",
+ "encoding": "none",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_facts": {
+  "has_cobol_runtime": "true",
+  "cobol_runtime_version": "3.2",
+  "source_file": "jackbox-v7.cob",
+  "program_id": "JACKBOX7",
+  "needed": [
+   "libcob.so.4",
+   "libc.so.6"
+  ],
+  "imports": [
+   "cob_check_version",
+   "cob_cmp",
+   "cob_display",
+   "cob_fatal_error",
+   "cob_get_environment",
+   "cob_init",
+   "cob_module_global_enter",
+   "cob_set_cancel",
+   "cob_stop_run"
+  ],
+  "libcob_soname": "libcob.so.4"
+ },
+ "decoy": false,
+ "generator_cmd": "sh cobfacts_gen.sh   # D19 member byte copy; real GnuCOBOL 3.2 cobc -x -O2 (tools/gnucobol/root from apt-get download gnucobol3 libcob4-dev libcob4t64 + dpkg-deb -x); gcc C string decoy",
+ "oracle_cmd": "python3 cobfacts_oracle.py cobfacts_gnucobol32_O2.bin   # readelf -dW, nm -D, objdump -d -M intel arg loads + pyelftools string read; program_id = the PROGRAM-ID written by cobfacts_gen.sh (strings -a shows JACKBOX7 + its compile date)",
+ "note": "real GnuCOBOL 3.2 -O2 (stripped PIE): cob_check_version args via lea rsi/rdi,[rip+d] then a tail-call jmp to the PLT"
+}

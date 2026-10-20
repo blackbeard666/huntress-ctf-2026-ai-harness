@@ -1,0 +1,33 @@
+{
+ "plans": {
+  "a.js": "v=3|language=jscript|next_language=batch|steps=write_file,dispatch_process",
+  "b.cmd": "v=3|language=batch|next_language=powershell|steps=dispatch_process",
+  "c.ps1": "v=3|language=powershell|next_language=python|steps=dispatch_process",
+  "d.py": "v=3|language=python|steps=collect_files"
+ },
+ "sources": {
+  "a.js": "var sh = new ActiveXObject(\"WScript.Shell\");\nvar p = \"C:\\\\Users\\\\Public\\\\b.cmd\";\nsh.Run(\"cmd.exe /c \" + p, 0);\n",
+  "b.cmd": "@echo off\npowershell.exe -NoProfile -File C:\\Users\\Public\\c.ps1\n",
+  "c.ps1": "$t = 'C:\\Users\\Public\\a.vbs'\nSet-Content -Path 'C:\\Users\\Public\\a.vbs' -Value $body\nStart-Process -FilePath \"wscript.exe\" -ArgumentList $t\n"
+ },
+ "expected": {
+  "mismatch": "c.ps1",
+  "mismatch_code": "vbscript",
+  "mismatch_declared": "python",
+  "chain": "a.js>b.cmd>c.ps1>d.py",
+  "terminal_language": "python",
+  "mismatches": "1"
+ },
+ "accepted": {
+  "mismatch": [
+   "a.js",
+   "b.cmd",
+   "c.ps1",
+   "d.py"
+  ]
+ },
+ "decoy": false,
+ "oracle_cmd": "for f in a.js b.cmd c.ps1; do grep -oiE '\\.(cmd|bat|ps1|py|vbs|js)\\b' $f | sort -u; done -> a.js: .cmd (batch, declared batch), b.cmd: .ps1 (powershell, declared powershell), c.ps1: .vbs (vbscript, declared python => mismatch); printf 'jscript batch\\nbatch powershell\\npowershell python\\n' | tsort -> jscript batch powershell python",
+ "entry": "handoff_graph",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/handoff_graph/hg_gen.py tests/data/script_fixtures/handoff_graph (hg_code_mismatch)"
+}

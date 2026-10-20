@@ -1,0 +1,23 @@
+{
+ "encoding": "base64",
+ "expected_format": "neko_bytecode",
+ "expected_machine": "none",
+ "expected_has_neko_runtime": "false",
+ "expected_bytecode_offset": "0",
+ "file_b": "NekoVM bytecode (205 global symbols, 170 global fields, 9177 bytecode ops)",
+ "neko_run": "132 exit 0",
+ "expected_offset": 1568,
+ "expected_config": {
+  "c2": "192.0.2.32:7002",
+  "campaign": "haxeneko",
+  "sleep": 23,
+  "flag": "flag{haxe_neko_b64}"
+ },
+ "expected_globals_count": "205",
+ "expected_fields_count": "170",
+ "expected_code_size": "9177",
+ "generator_cmd": "bash neko_gen.sh neko_haxe_b64.bin haxe '{\"c2\":\"192.0.2.32:7002\",\"campaign\":\"haxeneko\",\"sleep\":23,\"flag\":\"flag{haxe_neko_b64}\"}' 0 b64",
+ "oracle_cmd": "bash neko_oracle.sh neko_haxe_b64.bin   # file -b, the neko 2.4.1 VM (load+run), od boot trailer, grep -obUa, coreutils base64 + perl unpack/xor, gzip trailer crc32",
+ "oracle_output": "NekoVM bytecode (205 global symbols, 170 global fields, 9177 bytecode ops) | 132 exit 0 | none | 1568 | HCFG 1 0 86 4110194257 4110194257 | {\"c2\":\"192.0.2.32:7002\",\"campaign\":\"haxeneko\",\"sleep\":23,\"flag\":\"flag{haxe_neko_b64}\"}",
+ "note": "format label SPECULATIVE: 'neko_bytecode' (GM format enum d12-d19); VM machine 'none' (candidates neko/nekovm/none in neko_facts()['machine_candidates']); booted exe = host format/machine + has_neko_runtime true; expected_offset = first stored byte ('H' raw / 'S' base64) per the OFFSET LAW (grep -obUa)"
+}

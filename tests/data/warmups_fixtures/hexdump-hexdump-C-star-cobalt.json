@@ -1,0 +1,9 @@
+{
+ "codec": "hexdump-C",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-moose-64",
+ "encoded": "00000000  4e 69 63 65 20 77 6f 72  6b 20 64 65 63 6f 64 69  |Nice work decodi|\n00000010  6e 67 20 74 68 69 73 20  77 61 72 6d 75 70 21 20  |ng this warmup! |\n00000020  54 6f 20 73 6f 6c 76 65  2c 20 73 75 62 6d 69 74  |To solve, submit|\n00000030  20 74 68 69 73 20 65 78  61 63 74 20 61 6e 73 77  | this exact answ|\n00000040  65 72 20 74 6f 20 74 68  65 20 47 61 6d 65 20 4d  |er to the Game M|\n00000050  61 73 74 65 72 3a 20 63  6f 62 61 6c 74 2d 6d 6f  |aster: cobalt-mo|\n00000060  6f 73 65 2d 36 34 00 00  00 00 00 00 00 00 00 00  |ose-64..........|\n00000070  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|\n*\n000000a0  00 00 00 00 00 00                                 |......|\n000000a6",
+ "generator_cmd": "{ printf %s \"$plain\"; head -c 64 /dev/zero; } | hexdump -C  # 64 NUL tail -> `*` folded rows",
+ "oracle_cmd": "printf \"%s\\n\" \"$encoded\" | perl -ne 'next if /^\\*/; s/\\|.*$//; @F = split; shift @F; print pack(\"H*\", join \"\", @F)' | tr -d \"\\000\"  # perl: hexdump -C bytes (the folded rows are NUL)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-moose-64",
+ "expected": "match"
+}

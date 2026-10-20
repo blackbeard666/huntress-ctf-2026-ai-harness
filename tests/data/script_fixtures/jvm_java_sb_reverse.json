@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=java|role=webshell|verdict=malicious|attack=T1505.003|adapter=operation_graph|host_profile=java_single_file|obfuscation_profile=b64_reverse_sb|stage_profile=single_descriptor|next_language=bash|stage_count=2|steps=decode_configuration,run_command|campaign_id=JAVA-9d0c41e7|url=https://java-9d0c41e7.example.invalid/stage|file_path=/tmp/huntress-java/.9d0c41e7.stage",
+ "decoy": false,
+ "host": "jvm",
+ "what": "Java StringBuilder.append x N + reverse() + Base64.getDecoder()",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/jvm_host_gen.py tests/data/script_fixtures  (stdlib base64/bytes.hex writer; Java StringBuilder.append x N + reverse() + Base64.getDecoder())",
+ "oracle_cmd": "java tests/data/script_fixtures/jvm_java_sb_reverse.java  (OpenJDK 25 source-launch runs the program; it prints the decoded descriptor)"
+}

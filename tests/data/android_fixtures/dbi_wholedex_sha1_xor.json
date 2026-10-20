@@ -1,0 +1,7 @@
+{
+ "entry": "dex_integrity_gate_scan",
+ "expected": "ANS-9c41e07b2d5af386",
+ "generator_cmd": "sh tests/data/android_fixtures/gen_dex_integrity_gate.sh tests/data/android_fixtures  # zip -X of a real d8 classes.dex + assets/huntress_puzzle.json; data = base64(token xor the 20 raw bytes of sha1sum over the whole classes.dex)",
+ "oracle_cmd": "cd tests/data/android_fixtures; K=$(unzip -p dbi_wholedex_sha1_xor.apk classes.dex | sha1sum | cut -c1-40); unzip -p dbi_wholedex_sha1_xor.apk assets/huntress_puzzle.json | python3 -I -c 'import sys,json,base64;k=bytes.fromhex(sys.argv[1]);d=base64.b64decode(json.load(sys.stdin)[\"data\"]);print(bytes(c^k[i%len(k)] for i,c in enumerate(d)).decode())' $K",
+ "decoy": false
+}

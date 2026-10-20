@@ -1,0 +1,19 @@
+{
+ "entry": "overlay_chain(data)",
+ "encoding": "pk19-overlay-chain",
+ "expected": {
+  "layer_count": 0,
+  "decoy_offsets": [
+   8196
+  ],
+  "decoy_count": 1,
+  "overlay_offset": "none",
+  "final_overlay_offset": "none",
+  "payload_kind": "none",
+  "config": "none"
+ },
+ "decoy": true,
+ "note": "decoy: only the .rodata 'PK19' string, no overlay",
+ "generator_cmd": "bash tests/data/binary_fixtures/ovchain_gen.sh   # gcc -Os -s hosts + perl pack/Digest::SHA/Compress::Zlib PK19 + HCFG writer",
+ "oracle_cmd": "python3 -I tests/data/binary_fixtures/ovchain_oracle.py tests/data/binary_fixtures/ovchain_decoy_rodata_only.bin   # pyelftools image end, re.finditer hits, hashlib, zlib; cross-checked with grep -obaF PK19 / readelf -SW"
+}

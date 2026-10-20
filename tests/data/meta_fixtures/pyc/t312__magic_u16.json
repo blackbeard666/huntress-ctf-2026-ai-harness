@@ -1,0 +1,8 @@
+{
+ "field": "pyc.magic_u16",
+ "expected": "3531",
+ "generator_cmd": "touch -d '2026-03-14 09:26:53 UTC' tool.py; .venv/bin/python3.12 -I -c \"py_compile.compile('tool.py','tool.pyc')\" (timestamp-based)",
+ "oracle_cmd": "file tool.pyc -> Byte-compiled Python module for CPython 3.12 (magic: 3531), timestamp-based, .py timestamp: Sat Mar 14 09:26:53 2026 UTC, .py size: 46 bytes",
+ "decoy": false,
+ "member": "tool.cpython-312.pyc"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "elf.executable_stack",
+ "expected": "true",
+ "generator_cmd": "gcc -O0 -no-pie -fno-stack-protector -U_FORTIFY_SOURCE -z execstack -Wl,-z,norelro -o soft_none t.c",
+ "oracle_cmd": "readelf -lW hard_soft__executable_stack.bin | grep GNU_STACK | grep -q \"E *0x\" && echo true || echo false",
+ "decoy": false,
+ "member": "soft_none"
+}

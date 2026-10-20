@@ -1,0 +1,8 @@
+{
+ "field": "elf.endianness",
+ "expected": "big",
+ "generator_cmd": "printf hello > blob; objcopy -I binary -O elf32-big blob mips32be.o; printf '\\x00\\x08' | dd of=mips32be.o bs=1 seek=18 conv=notrunc  (e_machine = EM_MIPS)  (run in $TMPDIR/elfid)",
+ "oracle_cmd": "readelf -hW hdr_mips32be__endianness.bin | grep 'Data: 2.s complement, big endian'",
+ "decoy": false,
+ "member": "mips32be.o"
+}

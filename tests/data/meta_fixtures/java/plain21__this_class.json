@@ -1,0 +1,8 @@
+{
+ "field": "java.this_class",
+ "expected": "Plain",
+ "generator_cmd": "javac --release 21 -d o21 com/example/Widget.java Plain.java (javac 21.0.12)",
+ "oracle_cmd": "javap -v Plain.class -> this_class: #7 // Plain",
+ "decoy": false,
+ "member": "Plain.class"
+}

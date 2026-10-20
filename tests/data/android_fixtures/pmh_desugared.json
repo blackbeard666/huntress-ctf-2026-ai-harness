@@ -1,0 +1,7 @@
+{
+ "entry": "method_handle_scan",
+ "expected": "ANS-e4c07a3b912d6f85",
+ "_why": "Gate.reveal(): new Gate$$ExternalSyntheticLambda0(0x2c).get() (D8-style desugared lambda class) -> Gate.lambda$reveal$0(key) -> k.q",
+ "generator_cmd": "python3 tests/data/android_fixtures/pmh_src/gen_pmh.py desugared tests/data/android_fixtures/pmh_desugared.apk  # javac --release 8 + Android dx --min-sdk-version=26 (dex 038) + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/pmh_src/oracle.sh tests/data/android_fixtures/pmh_desugared.apk  # d2j-baksmali opcode listing + d2j-dex2jar back to classes, RUN Gate.reveal() on the JVM -> reveal -> ANS-e4c07a3b912d6f85"
+}

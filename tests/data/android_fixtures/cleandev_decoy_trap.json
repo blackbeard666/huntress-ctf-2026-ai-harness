@@ -1,0 +1,8 @@
+{
+ "entry": "clean_device_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same layout as cleandev_score_xor but the byte[] is keyed for a ROOTED build (Build.TAGS test-keys): the token only appears on the trap path; a clean device shows garbage",
+ "generator_cmd": "python3 tests/data/android_fixtures/cleandev_src/gen_cleandev.py decoy_trap tests/data/android_fixtures/cleandev_decoy_trap.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d19.envq.Probe -> Vault.reveal() on clean stubs prints non-ANS bytes ('\\xf4d\\xcd)\\x85N...'), i.e. no token on the clean path"
+}

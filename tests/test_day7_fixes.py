@@ -1030,3 +1030,32 @@ _g18 = ("// HUNTRESS_ANALYSIS_V1:SPLIT\nconst HUNTRESS_ANALYSIS_V1_SPLIT_0123abc
         + ",\n".join(f'    "{_h18[i:i + 40]}"' for i in range(0, len(_h18), 40)) + '\n].join("");\n')
 assert _codec.v3_plan(_g18) == _p18 and _codec.is_v3(_g18.encode())
 print("ok  codec: D18 SPLIT marker + literal-array material (Google Apps Script v=3)")
+
+# Day 19 "Little Things" ("Two bytes walk into a bar. The little one goes first."): lowercase hex of BOM fffe + UTF-16LE
+# -- lib.warmups_codecs.DAYS day 19 exact encoder + decode_chunk's hex-of-UTF-16 branch; GM-confirmed D19 single slug.
+_s19 = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jaunty-raven-glade-73"
+_u19 = _wc.day_codec(19)[1](_s19)
+assert _u19.startswith("fffe4e0069006300") and _wc.day_codec(19)[2](_u19) == _s19 and _wc.day_codec(19)[3] is False
+assert _dc(_u19) == _s19 and _dc(_s19.encode("utf-16-be").hex()) == _s19 and _dc("4e696365") == "Nice"
+print("ok  decode: hex of UTF-16LE (D19) exact encoder + decode_chunk branch")
+
+# Day 19 "Little Endian on the Prairie": elf.e_machine_u16_hex verified (e_machine u16 @0x12 in EI_DATA byte order,
+# speculative pe.elf_machine promoted; GM-confirmed x86-64 -> 0x003e).
+_elf19 = b"\x7fELF\x02\x01\x01" + b"\0" * 9 + _st17.pack("<HH", 2, 0x3e) + b"\0" * 44
+assert _meta14.lookup("elf", "e_machine_u16_hex")[0].tier == _meta14.VERIFIED
+assert _meta14.answer("d19-elf-001-elf-e-machine-u16-hex",
+                      {"question": "Determine elf.e_machine_u16_hex for collector-001.elf."}, _elf19) \
+    == ("0x003e", _meta14.VERIFIED)
+print("ok  lib.meta: elf.e_machine_u16_hex registered (verified D19)")
+
+# Day 19 "Jack in the Box": final PK19 overlay (+5 k1, +6 k2, +8 u32 len, +12 sha256, +44 packed), unpacked[i] =
+# ror8(packed[i] ^ k2, 3) ^ k1 = an HCFG record (lib.binary.overlay_unpack; GM-confirmed config + crc on Single/TT/Mastery).
+import hashlib as _hl19  # noqa: E402
+_pl19 = _json.dumps({"campaign": "BR19-000"}).encode()
+_hc19 = b"HCFG" + _st17.pack("<BBHI", 1, 0, len(_pl19), _bin27.zlib.crc32(_pl19)) + _pl19
+_pk19 = bytes(((((b ^ 0x21) << 3) | ((b ^ 0x21) >> 5)) & 255) ^ 0x5a for b in _hc19)   # rol3(b ^ k1) ^ k2
+_ov19 = b"\x7fELF" + b"\0" * 60 + b"PK19\0" + bytes([0x21, 0x5a, 0]) + _st17.pack("<I", len(_pk19)) \
+    + _hl19.sha256(_hc19).digest() + _pk19
+assert _bin27.overlay_unpack(_ov19, "PK19") == _hc19 and _bin27._parse_blob(_hc19)[5]
+assert _bin27.overlay_unpack(_ov19, "RS20") is None
+print("ok  binary: D19 PK19 packed overlay -> HCFG (overlay_unpack)")

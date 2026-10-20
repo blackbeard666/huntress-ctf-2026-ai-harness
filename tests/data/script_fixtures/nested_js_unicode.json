@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=csharp_script|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=vbscript|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=CSHARP_SCRIPT-1d27f436|url=https://csharp_script-1d27f4363c.example.invalid/stage|file_path=/tmp/huntress-csharp_script/.1d27f4363ca06251.stage",
+ "decoy": false,
+ "generator_cmd": "bash tests/data/script_fixtures/nested_carrier_gen.sh  # step 1: node JSON.stringify(inner .csx) + every ASCII char as \\uXXXX in a JS const",
+ "oracle_cmd": "node -e 'process.stdout.write(require(\"./nested_js_unicode.js\"))' | python3 -I -c 'import sys,re,base64;t=sys.stdin.read();g,x=re.search(r\"HUNTRESS_ANALYSIS_V1:(HEX|B64|HB64)-([0-9A-Za-z+/=]+)\",t).groups();print((bytes.fromhex(x) if g==\"HEX\" else base64.b64decode(bytes.fromhex(x) if g==\"HB64\" else x)).decode())'"
+}

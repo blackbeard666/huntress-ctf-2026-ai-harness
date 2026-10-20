@@ -1,0 +1,11 @@
+{
+ "codec": "hex(utf-16le-bom)",
+ "plain": null,
+ "encoded": "fffe4e69636520776f726b206465636f64696e672074686973207761726d75702121",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "{ printf '\\377\\376'; printf %s 'Nice work decoding this warmup!!'; } | xxd -p | tr -d '\\n'  # impostor fffe BOM over UTF-8 bytes",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;s=bytes.fromhex(sys.stdin.read()).decode('utf-16');print(s if s.isascii() else 'none')\"  # CPython: reads CJK, not ASCII -> none",
+ "oracle_plain": null,
+ "oracle_output": "none"
+}

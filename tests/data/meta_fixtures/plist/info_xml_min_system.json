@@ -1,0 +1,8 @@
+{
+ "field": "plist.ls_minimum_system_version",
+ "expected": "11.0",
+ "generator_cmd": "python3 -I -c 'import plistlib,datetime; plistlib.dumps({CFBundleName,CFBundleIdentifier,CFBundleExecutable,CFBundleShortVersionString,CFBundleVersion,LSMinimumSystemVersion,LSUIElement,NSAppTransportSecurity:{NSAllowsArbitraryLoads},BuildDate}, fmt=FMT_XML, sort_keys=False)'  (stdlib plistlib WRITER)",
+ "oracle_cmd": "grep -A1 LSMinimumSystemVersion info_xml.bin -> <string>11.0</string> (exiftool -j prints the number 11.0)",
+ "decoy": false,
+ "member": "Contents/Info.plist"
+}

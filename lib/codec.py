@@ -1072,7 +1072,23 @@ def _build_host_codecs(src, budget=0.6):
     return []
 
 
+_FC_CACHE = {}
+
+
 def find_codecs(src, _depth=0):
+    """Every declared codec in a source text (see _find_codecs_uncached). Nested readings (_depth >= 1) of one inner
+    text are memoised: the SaaS JSON-string reader and the nested string-carrier reader can unescape the same text."""
+    if _depth < 1 or not isinstance(src, str) or len(src) > (1 << 20):
+        return _find_codecs_uncached(src, _depth)
+    hit = _FC_CACHE.get((src, _depth))
+    if hit is None:
+        if len(_FC_CACHE) > 64:
+            _FC_CACHE.clear()
+        hit = _FC_CACHE[(src, _depth)] = _find_codecs_uncached(src, _depth)
+    return [dict(c) for c in hit]
+
+
+def _find_codecs_uncached(src, _depth=0):
     """Every declared codec in a source text: [{id, rep, transform, key, material, plain}] (plain = decode() or None).
     Batch `HUNTRESS-CODEC:` has no id -- its material is the `HUNTRESS-MATERIAL:` line.
     `src` may also be raw bytes (or latin-1 text) of a container carrier: see _carrier_codecs, tried only when the
@@ -1113,6 +1129,23 @@ def find_codecs(src, _depth=0):
         out = x + out
     if _depth < 2 and not any(c.get("plain") for c in out):
         out = out + _saas_host_codecs(src, raw, _depth)     # SaaS / add-in host: JSON-escaped script, zip / CRX package
+    if _depth < 2 and not any(c.get("plain") for c in out) and _MH_CUE.search((src or "")[:1 << 20]):
+        out = out + _managed_host_codecs(src, raw, _depth)  # .NET-hosted inner C# / VB / JScript (Add-Type, ASP, csc)
+    elif _depth < 2 and _MH_CUE.search((src or "")[:1 << 20]):
+        # a `"a" & _` / `"a" +` continued descriptor inside the host reads as its first piece only: the full plan first
+        x = [c for c in _managed_host_codecs(src, raw, _depth) if any(c["plain"] != p and c["plain"].startswith(p)
+                                                                       for p in (o.get("plain") for o in out) if p)]
+        out = x + out
+    if _depth < 2 and not any(c.get("plain") for c in out):
+        out = out + _cs_fold_codecs(src)                      # C# / VB / F# descriptor assembled at runtime
+    elif _depth < 2 and _CS_CUE.search((src or "")[:1 << 18]) and _CS_DESC_NAME.search((src or "")[:1 << 18]):
+        # a `"a" + (char)0x76 + ..` descriptor reads as its literal pieces only: the folded full plan goes first
+        x = [c for c in _cs_fold_codecs(src, 0.3) if any(c["plain"] != p and c["plain"].startswith(p)
+                                                          for p in (o.get("plain") for o in out) if p)]
+        out = x + out
+    if _depth < 2 and not any(c.get("plain") for c in out) and (_DN_CARRIER.search((src or "")[:8 << 20]) or
+                                                                (raw or b"")[:2] == b"MZ"):
+        out = out + _dotnet_codecs(src, raw, _depth)          # managed assembly bytes carried by the script
     if _depth < 1 and not any(c.get("plain") for c in out):
         norm = normalize(raw if raw is not None else src)     # whole-leaf UTF-16 / gzip / base64: rescan the source
         if norm:
@@ -1126,6 +1159,13 @@ def find_codecs(src, _depth=0):
                           "plain": plain}]
     if _depth < 1 and not any(c.get("plain") for c in out):
         out = out + _proc_codecs(src, raw, _depth)   # process-telemetry log: codecs inside escaped command lines
+    if _depth < 1 and not any(c.get("plain") for c in out):
+        out = out + _nested_codecs(src)              # inner script carried as an escaped / encoded host string literal
+    elif _depth < 1 and _NS_LOSSY.search((src or "")[:1 << 20]):
+        # a marker whose material runs into a `\uXXXX` / `&#x..;` / backtick escape reads truncated: full plan first
+        x = [c for c in _nested_codecs(src, 0.3) if any(c["plain"] != p and c["plain"].startswith(p)
+                                                        for p in (o.get("plain") for o in out) if p)]
+        out = x + out
     return out
 
 
@@ -1425,6 +1465,10 @@ def _descriptor_literals_ext(src, limit=24):
                 not re.search(r"\bset\s*$", src[max(0, m.start() - 12):m.start()], re.I) and op is None:
             continue                                                 # `descriptor_x {` that is not a Tcl `set`
         lit, end = _read_literal(src, i, op)
+        if lit is None and op == "=":                                # F# offside `let x =` + literal on the next line
+            nl = re.match(r"""(?:[ \t]*\r?\n)+[ \t]+(?=["'])""", src[i:i + 400])
+            if nl:
+                lit, end = _read_literal(src, i + nl.end(), op)
         if lit is None and op is None:
             lit = _yaml_sibling_value(src, m.start())
             if lit:
@@ -1433,8 +1477,8 @@ def _descriptor_literals_ext(src, limit=24):
         if lit is None:
             continue
         pieces = [lit]
-        while len(pieces) < 64:                                      # "a" + "b" / . / .. / & / ~ / ||, `& _` lines
-            c = re.match(r"""\s*(?:\+|\.\.?|&|~|\|\||<>)\s*(?:_[ \t]*\r?\n\s*)?(?=["'`])""", src[end:end + 200])
+        while len(pieces) < 64:                                      # "a" + "b" / . / .. / & / ~ / || / F# ^, `& _` lines
+            c = re.match(r"""\s*(?:\+|\.\.?|&|~|\|\||<>|\^)\s*(?:_[ \t]*\r?\n\s*)?(?=["'`])""", src[end:end + 200])
             if not c:
                 break
             nxt, e2 = _read_literal(src, end + c.end(), None)
@@ -1443,6 +1487,8 @@ def _descriptor_literals_ext(src, limit=24):
             pieces.append(nxt)
             end = e2
         out.append((m.group("id"), "".join(pieces)))
+        if "\\\n" in out[-1][1] or "\\\r\n" in out[-1][1]:      # F# "aa\<newline>   bb": backslash-newline + indent dropped
+            out.append((m.group("id"), re.sub(r"\\\r?\n[ \t]*", "", out[-1][1])))
         jm = _YAML_JINJA.fullmatch(out[-1][1])                       # Ansible "{{ 'blob' | b64decode }}"
         if jm:
             out.append((m.group("id"), jm.group(2)))
@@ -7630,6 +7676,298 @@ def declared_spawns(plans_by_member, sources=None):
         return []
 
 
+# --- handoff graph: where each static handoff (next_language / next_stage) actually leads across the corpus ----------
+# next_language -> the member(s) of that language (plan language=, else the file family: polyglot-<lang>-*, extension,
+# a language token in the name); code side = the language the member's own code spawns / writes (code_spawns + script
+# file literals on write lines); a member whose declared next_language is not among its code targets is a mismatch.
+_HG_ALIAS = {
+    "powershell": ("powershell", "pwsh", "ps", "ps1", "psm1", "posh", "powershell_exe"),
+    "batch": ("batch", "bat", "cmd", "cmd_exe", "batchfile"), "jscript": ("jscript", "js", "jse", "wsh_jscript"),
+    "vbscript": ("vbscript", "vbs", "vbe", "wsh_vbscript"), "python": ("python", "py", "python3", "pyw", "python_exe"),
+    "bash": ("bash", "sh", "shell", "posix_sh", "bin_sh"), "javascript": ("javascript", "node", "nodejs", "mjs", "cjs"),
+    "typescript": ("typescript", "ts"), "perl": ("perl", "pl"), "ruby": ("ruby", "rb"), "lua": ("lua",),
+    "php": ("php",), "autoit": ("autoit", "au3"), "auto_hotkey": ("auto_hotkey", "autohotkey", "ahk"),
+    "applescript": ("applescript", "scpt", "osascript"), "msbuild_xml": ("msbuild_xml", "msbuild", "csproj", "proj"),
+    "hta": ("hta", "mshta"), "wsf": ("wsf",), "wmi_mof": ("wmi_mof", "mof"), "tcl": ("tcl", "tclsh"), "zsh": ("zsh",),
+    "sct": ("sct", "scriptlet"), "google_apps_script": ("google_apps_script", "apps_script", "gs"),
+}
+_HG_CANON = {a: k for k, al in _HG_ALIAS.items() for a in al}
+_HG_LOOSE = {"jscript": "js", "javascript": "js", "typescript": "js", "bash": "sh", "zsh": "sh"}
+_HG_IMG = {"powershell.exe": ("powershell",), "pwsh.exe": ("powershell",), "cmd.exe": ("batch",),
+           "python.exe": ("python",), "pythonw.exe": ("python",), "py.exe": ("python",), "node.exe": ("javascript",),
+           "wscript.exe": ("jscript", "vbscript", "wsf"), "cscript.exe": ("jscript", "vbscript", "wsf"),
+           "mshta.exe": ("hta",), "perl.exe": ("perl",), "ruby.exe": ("ruby",), "lua.exe": ("lua",), "php.exe": ("php",),
+           "autoit3.exe": ("autoit",), "autohotkey64.exe": ("auto_hotkey",), "autohotkey.exe": ("auto_hotkey",),
+           "osascript": ("applescript",), "msbuild.exe": ("msbuild_xml",), "bash": ("bash",), "sh": ("bash",),
+           "zsh": ("zsh",), "tclsh": ("tcl",), "regsvr32.exe": ("sct",)}
+_HG_SCRIPT_LIT = re.compile(r"""(?i)["']([^"'\r\n]{0,240}?\.(ps1|psm1|bat|cmd|vbs|vbe|js|jse|mjs|cjs|py|pyw|sh|"""
+                            r"""hta|wsf|pl|rb|lua|php|au3|ahk|ts|scpt|applescript|sct|tcl))["']""")
+_HG_WRITE = re.compile(r"(?i)Out-File|Set-Content|Add-Content|WriteAllText|WriteAllBytes|SaveToFile|CreateTextFile|"
+                       r"OpenTextFile|writeFile(?:Sync)?|createWriteStream|\bopen\s*\([^)]*,\s*[\"'][wa]|write_text|"
+                       r"write_bytes|\becho\b[^\n]*>|\bcopy\b|Copy-Item|Move-Item|\bcp\s|\bmv\s|\btee\b|>\s*[\"']?\S+\.\w")
+_HG_NONE = ("", "none", "null", "n/a", "na", "-", "terminal", "end", "same_language")
+
+
+def hg_lang(x):
+    """Language name / alias / extension / interpreter image -> canonical family key (None unknown)."""
+    k = re.sub(r"[^0-9a-z]+", "_", str(x or "").strip().lower()).strip("_")
+    if not k:
+        return None
+    if k in _HG_CANON:
+        return _HG_CANON[k]
+    k2 = re.sub(r"_exe$", "", k)
+    return _HG_CANON.get(k2) or (k if k in PT_LANG_IMAGE else None)
+
+
+def _hg_member_lang(m):
+    """File family of a member name: polyglot-<lang>-*, the extension, else one language token in the stem."""
+    base = str(m or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
+    mm = re.match(r"(?:polyglot|host|stage|legacy)[-_]([a-z0-9_]+?)[-_.]", base)
+    if mm and hg_lang(mm.group(1)):
+        return hg_lang(mm.group(1))
+    ext = base.rsplit(".", 1)[-1] if "." in base else ""
+    if ext in ("js",):
+        return "jscript"
+    if ext and ext not in ("txt", "dat", "bin", "json", "log", "exe", "dll") and hg_lang(PT_EXT_LANG.get(ext) or ext):
+        return hg_lang(PT_EXT_LANG.get(ext) or ext)
+    toks = {hg_lang(t) for t in re.split(r"[-_.]+", base.rsplit(".", 1)[0]) if len(t) > 2 and hg_lang(t)}
+    return next(iter(toks)) if len(toks) == 1 else None
+
+
+def _hg_code_targets(src, member, parent):
+    """Languages the member's own code hands off to: spawn cmdlines (script file / inner interpreter first, else the
+    child image) + script-file literals on write lines. [(lang, evidence)]"""
+    out = []
+    try:
+        for s in code_spawns(src, member, parent):
+            cmd = str(s.get("cmdline") or "")
+            langs = [PT_EXT_LANG.get(e.lower()) for e in re.findall(
+                r"(?i)\.(ps1|psm1|bat|cmd|vbs|vbe|js|jse|mjs|cjs|py|pyw|sh|hta|wsf|pl|rb|lua|php|au3|ahk|ts|scpt)\b", cmd)]
+            langs = [hg_lang(x) for x in langs if x]
+            if not langs:
+                toks = [t.strip("\"'").replace("\\", "/").rsplit("/", 1)[-1].lower() for t in cmd.split()]
+                inner = [_HG_IMG.get(t if t.endswith(".exe") or t in _HG_IMG else t + ".exe") for t in toks]
+                inner = [i for i in inner if i and len(i) == 1]
+                langs = [inner[-1][0]] if inner else list(_HG_IMG.get(str(s.get("child_image") or "").lower(), ()))
+            for lg in langs:
+                out.append((lg, "spawn:" + str(s.get("api"))))
+        text = src.decode("utf-8", "replace") if isinstance(src, (bytes, bytearray)) else str(src or "")
+        for ln in text[:1_000_000].split("\n")[:50000]:
+            if len(ln) > 20000 or _FS_COMMENT.match(ln) or not _HG_WRITE.search(ln):
+                continue
+            for mm in _HG_SCRIPT_LIT.finditer(ln):
+                lg = hg_lang(PT_EXT_LANG.get(mm.group(2).lower()) or mm.group(2))
+                if lg:
+                    out.append((lg, "write:" + mm.group(1)))
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def handoff_graph(plans_by_member, sources=None):
+    """Corpus-level handoff graph: where each member's static handoff actually leads.
+    plans_by_member {member: plan dict / 'k=v|..' / JSON}; sources {member: text/bytes} (optional, code side).
+      members     {member: {language, next_language, next_stage, code_targets:[lang], resolved:[member]}}
+      edges       [(member, next_language, resolved_members)] -- next_stage naming a member wins; else the other
+                  members of the next_language (plan language=, file family; loose jscript~javascript, bash~zsh as a
+                  fallback; several -> narrowed by the code-side target); [] = leads outside the corpus / self
+      chains      [[member..]] from each root (no incoming edge) along single resolved edges to a terminal / cycle
+      terminals   [member] (no handoff, external, self-handoff); ambiguous: [member] whose handoff resolves to
+                  several members (a chain ending there has no answer); terminal_languages: [lang] of the terminals
+                  reached from a root (the bridge's end languages)
+      cycles      [[member..]] (rotation starting at the smallest name)
+      mismatches  [{member, declared, code}] -- declared next_language not among the code-side spawn/write languages
+      counts      members, edges, resolved_edges, chains, terminals, cycles, mismatches, longest_chain
+    None when no member declares a handoff."""
+    try:
+        plans_by_member = plans_by_member or {}
+        sources = sources or {}
+        mem = {}
+        for m in sorted(set(plans_by_member) | set(sources)):
+            d = {}
+            if m in plans_by_member:
+                try:
+                    d = {_rc_field(k): v for k, v in _rc_dict(plans_by_member[m]).items()}
+                except Exception:  # noqa: BLE001
+                    d = {}
+            nl = str(d.get("next_language") or "").strip()
+            ns = str(d.get("next_stage") or "").strip()
+            lang = hg_lang(d.get("language")) or _hg_member_lang(m)
+            parent = pt_image(d.get("language"), d.get("host_profile"), m)
+            ct = _hg_code_targets(sources[m], m, parent) if m in sources else []
+            mem[m] = {"language": lang, "language_raw": str(d.get("language") or "") or None,
+                      "next_language": None if nl.lower() in _HG_NONE else nl,
+                      "next_stage": None if ns.lower() in _HG_NONE else ns,
+                      "code_targets": list(dict.fromkeys(lg for lg, _ in ct)),
+                      "code_evidence": [e for _, e in ct][:12], "resolved": []}
+        if not any(g["next_language"] or g["next_stage"] for g in mem.values()):
+            return None
+        stem = lambda s: re.sub(r"\.[A-Za-z0-9_]+$", "", str(s).replace("\\", "/").rsplit("/", 1)[-1]).lower()
+        by_name = {}
+        for m in mem:
+            for k in {m.lower(), m.replace("\\", "/").rsplit("/", 1)[-1].lower(), stem(m)}:
+                by_name.setdefault(k, set()).add(m)
+        edges = []
+        for m, g in mem.items():
+            res = []
+            if g["next_stage"]:
+                ns = g["next_stage"].replace("\\", "/").rsplit("/", 1)[-1].lower()
+                for k in (ns, stem(ns)):
+                    if len(by_name.get(k, ())) == 1:
+                        res = sorted(by_name[k] - {m})
+                        break
+            nlc = hg_lang(g["next_language"]) if g["next_language"] else None
+            if not res and nlc:
+                res = sorted(o for o, h in mem.items() if o != m and h["language"] == nlc)
+                if not res and nlc in _HG_LOOSE:
+                    res = sorted(o for o, h in mem.items() if o != m and h["language"] and
+                                 _HG_LOOSE.get(h["language"]) == _HG_LOOSE[nlc])
+                if len(res) > 1 and sources.get(m) is not None:   # the code's own written / spawned file name
+                    text = sources[m].decode("utf-8", "replace") if isinstance(sources[m], (bytes, bytearray)) \
+                        else str(sources[m])
+                    lit = {stem(x.group(1)) for x in _HG_SCRIPT_LIT.finditer(text[:1_000_000])}
+                    hit = [o for o in res if stem(o) in lit]
+                    if len(hit) == 1:
+                        res = hit
+            if g["next_language"] or g["next_stage"]:
+                edges.append((m, g["next_language"] or g["next_stage"], res))
+            g["resolved"] = res
+        nxt = {m: g["resolved"][0] for m, g in mem.items() if len(g["resolved"]) == 1}
+        has_in = {o for g in mem.values() for o in g["resolved"]}
+        # cycles over the single-successor map
+        cycles, seen = [], set()
+        for s in mem:
+            path, n = [], s
+            while n is not None and n not in path and n not in seen:
+                path.append(n)
+                n = nxt.get(n)
+            if n is not None and n in path:
+                cyc = path[path.index(n):]
+                i = cyc.index(min(cyc))
+                cycles.append(cyc[i:] + cyc[:i])
+            seen.update(path)
+        cycles = sorted({tuple(c) for c in cycles})
+        cycles = [list(c) for c in cycles]
+        roots = [m for m, g in mem.items() if m not in has_in and (g["next_language"] or g["next_stage"])]
+        chains = []
+        for r in roots:
+            path, n = [], r
+            while n is not None and n not in path:
+                path.append(n)
+                n = nxt.get(n)
+            chains.append(path)
+        ambiguous = sorted(m for m, g in mem.items() if len(g["resolved"]) > 1)
+        terminals = sorted(m for m in mem if m not in nxt and m not in ambiguous and
+                           (m in has_in or mem[m]["next_language"] or mem[m]["next_stage"]))
+        ends = [c[-1] for c in chains if c[-1] in terminals]
+        tlang = list(dict.fromkeys(mem[e]["language"] for e in ends if mem[e]["language"]))
+        mism = []
+        for m, g in mem.items():
+            nlc = hg_lang(g["next_language"]) if g["next_language"] else None
+            if not nlc or not g["code_targets"]:
+                continue
+            ct = [c for c in g["code_targets"] if c != g["language"]] or g["code_targets"]
+            loose = {_HG_LOOSE.get(c, c) for c in ct}
+            if nlc not in ct and _HG_LOOSE.get(nlc, nlc) not in loose:
+                mism.append({"member": m, "declared": g["next_language"], "code": ct[0], "code_all": ct})
+        rep = {"members": mem, "edges": edges, "chains": chains, "roots": roots, "terminals": terminals,
+               "ambiguous": ambiguous,
+               "terminal_languages": tlang, "cycles": cycles, "mismatches": mism}
+        rep["counts"] = {"members": len(mem), "edges": len(edges),
+                         "resolved_edges": sum(1 for e in edges if e[2]), "chains": len(chains),
+                         "terminals": len(terminals), "cycles": len(cycles), "mismatches": len(mism),
+                         "longest_chain": max((len(c) for c in chains), default=0),
+                         "roots": len(roots)}
+        return rep
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def handoff_answer(g, kind, accepted_values=None, what="terminal_language", sep=">"):
+    """One GM answer from a handoff_graph() report.
+      what  'terminal' / 'terminal_language' / 'root' / 'root_language' (of the single chain, else the longest unique
+            one), 'chain' (members) / 'language_chain', 'chain_length' (members in it), 'resolves:<member>' (the
+            member its handoff leads to), 'resolves_language:<member>', 'mismatch' (member whose declared
+            next_language disagrees with its code), 'mismatch_declared' / 'mismatch_code', 'cycle' (members, sep),
+            'cycle_member' (one-member answer when one cycle), or a counts key ('cycles', 'mismatches', 'edges', ...)
+      kind  enum (matched to accepted_values by name / stem / language alias), exact_text, integer, ordered_tokens,
+            list (comma-joined)
+    'none' when the asked-for thing is absent (no cycle / no mismatch); None when unanswerable or ambiguous."""
+    try:
+        if not g:
+            return None
+        stem = lambda s: re.sub(r"\.[A-Za-z0-9_]+$", "", str(s).replace("\\", "/").rsplit("/", 1)[-1]).lower()
+
+        def pick(v):
+            if v is None:
+                return None
+            for a in accepted_values or ():
+                if str(a) == str(v) or str(a).lower() == str(v).lower() or stem(a) == stem(v):
+                    return a
+            for a in accepted_values or ():
+                if hg_lang(a) and hg_lang(a) == hg_lang(v):
+                    return a
+            return None if accepted_values else v
+
+        def out(vals):
+            if kind in ("ordered_tokens", "list", "set"):
+                return (sep if kind == "ordered_tokens" else ",").join(str(x) for x in vals) if vals else None
+            if kind == "integer":
+                return str(len(vals))
+            return pick(vals[0]) if len(vals) == 1 else None
+        mem = g["members"]
+        chains = g["chains"]
+        if len(chains) == 1:
+            ch = chains[0]
+        else:
+            ln = sorted((len(c) for c in chains), reverse=True)
+            ch = next((c for c in chains if len(c) == ln[0]), None) if ln and (len(ln) == 1 or ln[0] > ln[1]) else None
+        if ch and ch[-1] in g.get("ambiguous", ()):
+            ch = None
+        w, _, arg = str(what).partition(":")
+        lng = lambda m: mem[m]["language_raw"] or mem[m]["language"]
+        if w in ("chain", "member_chain"):
+            return out(ch) if ch else None
+        if w == "language_chain":
+            return out([lng(m) for m in ch]) if ch and all(lng(m) for m in ch) else None
+        if w == "chain_length":
+            return str(len(ch)) if ch else None
+        if w in ("terminal", "terminal_language", "leaf", "leaf_language"):
+            if not ch or ch[-1] not in g["terminals"]:
+                return None
+            return out([lng(ch[-1]) if w.endswith("language") else ch[-1]])
+        if w in ("root", "root_language"):
+            return out([lng(ch[0]) if w.endswith("language") else ch[0]]) if ch else None
+        if w in ("resolves", "resolves_language"):
+            m = next((x for x in mem if x == arg or x.lower() == arg.lower() or stem(x) == stem(arg)), None)
+            if not m or not (mem[m]["next_language"] or mem[m]["next_stage"]):
+                return None
+            r = mem[m]["resolved"]
+            if not r:
+                return "none"
+            return out([lng(x) for x in r] if w.endswith("language") else r)
+        if w.startswith("mismatch") and w != "mismatches":
+            mm = g["mismatches"]
+            if not mm:
+                return "none"
+            if len(mm) > 1 and kind not in ("list", "set", "integer"):
+                return None
+            key = {"mismatch": "member", "mismatch_declared": "declared", "mismatch_code": "code"}.get(w, "member")
+            return out([x[key] for x in mm])
+        if w in ("cycle", "cycle_member"):
+            if not g["cycles"]:
+                return "none"
+            if len(g["cycles"]) != 1:
+                return None
+            c = g["cycles"][0]
+            return out(c) if w == "cycle" and kind != "enum" else (out(c) if len(c) == 1 or kind != "enum" else None)
+        if w in g["counts"]:
+            return str(g["counts"][w])
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 # --- spawn-API proxy parents: the parent telemetry records for a spawn API is the OS broker, not the caller ----------
 PT_SPAWN_PARENTS = (  # (key, api aliases (alnum, lower), code cue, recorded parent images in order, ATT&CK candidates)
     ("wmi_process_create", ("win32processcreate", "wmicprocesscallcreate", "wmic", "invokewmimethod",
@@ -8481,3 +8819,1956 @@ def _cl_decode(material, rep, transform):
         a = split_cmdline(material, posix=t.endswith("posix"))
         return None if a is None else json.dumps(a, ensure_ascii=False)
     return None
+
+
+# ------------------------------------------------------------------------------------------------ nested string carrier
+# Target nested-string-carrier-unescape (D19 ASPX `private static readonly string EmbeddedCsx_<id> = "// HUNTRESS..\n
+# #nullable enable\n..string descriptor_<id> = \"..\";\n";`): the inner script rides as an escaped string literal of
+# its host. inner_scripts() lexes the host's string literals in every host string syntax (C-family backslash escapes,
+# C# verbatim / raw / interpolated, VB `""` + `& vbCrLf & _` concatenation, PS here-strings + backtick escapes,
+# Python triple / raw / implicit concatenation, JS template literals, PHP heredoc / nowdoc, Perl q{}/qq{}, Ruby %q()
+# / heredoc `<<~`), plus whole-text unwraps (XML entities + CDATA, Java pre-lex `\uXXXX`, base64 / hex of a whole
+# inner file), recursing to depth 3. _nested_codecs() runs the normal readings on every unescaped text that names a
+# marker / descriptor / codec. find_codecs() consults it only when nothing else produced a plan (or when a nested
+# reading strictly extends a truncated outer plan), so every earlier reading is unchanged. Bounded, never raises.
+_NS_OPEN = re.compile(r"""<<<|<<[~-]?(?=["'A-Za-z_])|\$@"|@\$"|\$"{3,}|"{3,}|'{3}|@"|@'|\$"|(?<![\w$])[rRbBuUfF]{1,2}(?=["'])|"|'|`|"""
+                      r"""(?<![\w$])%[qQwW]?[({\[<|!]|(?<![\w$>:-])qq?\s*[({\[<|!/]|\[=*\[|//|/\*|(?:^|(?<=\s))#|^[ \t]*(?i:rem)\b""", re.M)
+_NS_C_ESC = re.compile(r"""\\(u\{[0-9a-fA-F]{1,6}\}|x\{[0-9a-fA-F]{1,6}\}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|x[0-9a-fA-F]{1,4}|"""
+                       r"""[0-7]{1,3}|\r?\n|.)""", re.S)
+_NS_C_SIMPLE = {"n": "\n", "r": "\r", "t": "\t", "a": "\a", "b": "\b", "f": "\f", "v": "\v", "e": "\x1b", "0": "\0",
+                "\\": "\\", '"': '"', "'": "'", "`": "`", "$": "$", "/": "/", "?": "?", "{": "{", "}": "}", "@": "@"}
+_NS_PS_ESC = {"n": "\n", "r": "\r", "t": "\t", "0": "\0", "a": "\a", "b": "\b", "f": "\f", "v": "\v", "e": "\x1b"}
+_NS_CONST = re.compile(r"""(?i:vbCrLf|vbNewLine|vbLf|vbCr|vbTab|vbNullString|vbNullChar|PHP_EOL|Environment\.NewLine|"""
+                       r"""os\.linesep|\$\(?\[(?:Environment|System\.Environment)\]::NewLine\)?)\b|"""
+                       r"""(?i:chrw?\$?|chr|char)\s*\(\s*(?P<n>\d{1,7}|&H[0-9a-fA-F]{1,6})\s*\)|\[char\]\s*(?P<p>\d{1,7})|"""
+                       r"""String\.fromCharCode\s*\(\s*(?P<j>\d{1,7})\s*\)""")
+_NS_CONST_V = {"vbcrlf": "\r\n", "vbnewline": "\r\n", "vblf": "\n", "vbcr": "\r", "vbtab": "\t", "vbnullstring": "",
+               "vbnullchar": "\0", "php_eol": "\n", "environment.newline": "\r\n", "os.linesep": "\n"}
+_NS_CONCAT = re.compile(r"""(?:[ \t]*(?:&|\+|\.\.?(?![\w.])|<<)?[ \t]*(?:(?<=\s)_[ \t]*\r?\n|`[ \t]*\r?\n|\\[ \t]*\r?\n)?\s*)""")
+_NS_LOSSY = re.compile(r"HUNTRESS_ANALYSIS_V\d+:\w+-[^\s\"'<]*(?:\\[uUx0-7]|&#|`)")
+_NS_HINT = re.compile(r"HUNTRESS_ANALYSIS|descriptor[_-]|\b(?:Codec|CODEC)_|HUNTRESS-CODEC", re.I)
+_NS_B64 = re.compile(r"[A-Za-z0-9+/\-_\s]{32,}={0,2}")
+_NS_HEXRE = re.compile(r"(?:[0-9a-fA-F]{2}[\s:,]?){16,}")
+_NS_VB_CUE = re.compile(r"""(?im)\bvbCrLf\b|^[ \t]*(?:Dim|Set|Sub|Function|End\s+(?:Sub|Function))\b|&[ \t]*_[ \t]*\r?$|"""
+                        r"""Language\s*=\s*["']?(?:VB|VBScript)\b|CreateObject\(""")
+_NS_PS_CUE = re.compile(r"""(?im)^[ \t]*\$[\w:]+\s*=|@['"][ \t]*\r?$|\b(?:Write-Host|Write-Output|Set-Content|Invoke-Expression|"""
+                        r"""param\s*\(|function\s+[\w-]+\s*\{|-join\b)""")
+_NS_LANG_VB = re.compile(r"""(?is)<%@[^>]*Language\s*=\s*["']?(?:VB|VBScript)|<script\b[^>]*language\s*=\s*["']?(?:VB|VBScript)""")
+
+
+def _ns_surr(s):
+    try:
+        return s.encode("utf-16-le", "surrogatepass").decode("utf-16-le", "replace")
+    except Exception:  # noqa: BLE001
+        return s
+
+
+def _ns_cesc(body, csx=False, interp=False):
+    """C-family backslash unescape (C#/Java/JS/JSON/Python/PHP/Perl/Ruby). csx: C# `\\xH{1,4}` (else 2 hex digits)."""
+    def rep(m):
+        e = m.group(1)
+        c = e[0]
+        try:
+            if c in "uU" and len(e) > 1:
+                return chr(int(e[2:-1] if e[1] == "{" else e[1:], 16))
+            if c == "x" and len(e) > 1:
+                if e[1] == "{":
+                    return chr(int(e[2:-1], 16))
+                h = e[1:] if csx else e[1:3]
+                return chr(int(h, 16)) + ("" if csx else e[3:])
+            if c in "01234567" and (len(e) > 1 or c != "0"):
+                return chr(int(e, 8))
+        except (ValueError, OverflowError):
+            return m.group(0)
+        if e in ("\n", "\r\n"):
+            return ""
+        return _NS_C_SIMPLE.get(e, "\\" + e)
+    out = _ns_surr(_NS_C_ESC.sub(rep, body))
+    return out.replace("{{", "{").replace("}}", "}") if interp else out
+
+
+def _ns_psesc(body):
+    def rep(m):
+        e = m.group(1)
+        if e.startswith("u{"):
+            try:
+                return chr(int(e[2:-1], 16))
+            except (ValueError, OverflowError):
+                return m.group(0)
+        return _NS_PS_ESC.get(e, e)
+    return re.sub(r"`(u\{[0-9a-fA-F]{1,6}\}|.)", rep, body.replace('""', '"'), flags=re.S)
+
+
+def _ns_dedent(body, closing_ws=None):
+    lines = body.split("\n")
+    if closing_ws is None:
+        ind = [len(x) - len(x.lstrip(" \t")) for x in lines if x.strip()]
+        n = min(ind) if ind else 0
+    else:
+        n = len(closing_ws)
+    return "\n".join(x[n:] if x[:n].strip() == "" else x.lstrip(" \t") for x in lines)
+
+
+def _ns_quoted(s, i, q, esc, double, multiline=True):
+    """End index (after the closing quote) and raw body of a q-quoted literal opened at s[i] == q, else (None, None)."""
+    j, n, lim = i + 1, len(s), min(len(s), i + (1 << 20))
+    while j < lim:
+        c = s[j]
+        if esc and c == esc:
+            j += 2
+            continue
+        if c == q:
+            if double and j + 1 < n and s[j + 1] == q:
+                j += 2
+                continue
+            return j + 1, s[i + 1:j]
+        if c == "\n" and not multiline:
+            return None, None
+        j += 1
+    return None, None
+
+
+def _ns_heredoc(s, i, m):
+    """PHP `<<<TAG` / `<<<'TAG'`, Ruby/Perl/sh `<<~TAG` `<<-TAG` `<<'TAG'`: (end, [(value, syntax)]) or (None, [])."""
+    php = m == "<<<"
+    hm = re.compile(r"""[ \t]*(["']?)([A-Za-z_]\w*)\1""").match(s, i + len(m))
+    if not hm:
+        return None, []
+    tag, quote = hm.group(2), hm.group(1)
+    nl = s.find("\n", hm.end())
+    if nl < 0:
+        return None, []
+    cm = re.compile(r"^([ \t]*)" + re.escape(tag) + r"\b", re.M).search(s, nl + 1)
+    if not cm:
+        return None, []
+    body = s[nl + 1:max(nl + 1, cm.start() - 1)]
+    if body.endswith("\r"):
+        body = body[:-1]
+    if php:
+        body = _ns_dedent(body, cm.group(1))
+        syn = "php_nowdoc" if quote == "'" else "php_heredoc"
+    else:
+        if m.endswith("~"):
+            body = _ns_dedent(body)
+        syn = "heredoc_raw" if quote == "'" else "heredoc"
+    val = body if quote == "'" else _ns_cesc(body)
+    return cm.end(), [(val, syn)] + ([(body, syn + "_raw")] if val != body else [])
+
+
+_NS_PAIR = {"(": ")", "{": "}", "[": "]", "<": ">"}
+
+
+def _ns_balanced(s, i, op):
+    cl = _NS_PAIR.get(op, op)
+    depth, j, lim = 1, i, min(len(s), i + (1 << 20))
+    while j < lim:
+        c = s[j]
+        if c == "\\":
+            j += 2
+            continue
+        if c == cl and op != cl or (c == cl and op == cl):
+            depth -= 1
+            if depth == 0:
+                return j + 1, s[i:j]
+        elif c == op and op != cl:
+            depth += 1
+        j += 1
+    return None, None
+
+
+def _ns_literal(s, i, m, dialect):
+    """Parse the literal whose opener `m` sits at s[i]: (end, [(value, syntax), ..]); (None, []) when it is none.
+    Comments return (end, [])."""
+    if m in ("//", "#") or m.lower().lstrip(" \t") == "rem":
+        if m == "#" and dialect == "vb":
+            return None, []
+        e = s.find("\n", i)
+        return (len(s) if e < 0 else e), []
+    if m == "/*":
+        e = s.find("*/", i + 2)
+        return (len(s) if e < 0 else e + 2), []
+    if m.startswith("<<"):
+        return _ns_heredoc(s, i, m)
+    if m.startswith("[") and m.endswith("["):                                    # Lua long bracket
+        close = "]" + "=" * (len(m) - 2) + "]"
+        e = s.find(close, i + len(m))
+        if e < 0:
+            return None, []
+        body = s[i + len(m):e]
+        return e + len(close), [(body[1:] if body.startswith("\n") else body, "lua_long")]
+    if m.startswith("%") or m.lstrip("q").strip() != m.strip() or m[:1] == "q":
+        op = m[-1]
+        e, body = _ns_balanced(s, i + len(m), op)
+        if e is None:
+            return None, []
+        raw = m[:2] in ("%q", "%w") or (m[0] == "q" and m[:2] != "qq")
+        if raw:
+            return e, [(re.sub(r"\\([\\" + re.escape(op + _NS_PAIR.get(op, op)) + "])", r"\1", body), "q_literal")]
+        return e, [(_ns_cesc(body), "qq_literal")]
+    if dialect == "ps" and m in ('@"', "@'"):                                  # PS here-string
+        q = m[1]
+        hm = re.compile(r"[ \t]*\r?\n").match(s, i + 2)
+        if hm:
+            cm = re.compile(r"\r?\n" + q + "@").search(s, hm.end())
+            if cm:
+                body = s[hm.end():cm.start()]
+                return cm.end(), [(_ns_psesc(body) if q == '"' else body, "ps_here_" + ("dq" if q == '"' else "sq"))]
+        return None, []
+    if m in ('@"', '$@"', '@$"'):                                               # C# verbatim (interpolated)
+        e, body = _ns_quoted(s, i + len(m) - 1, '"', None, True)
+        if e is None:
+            return None, []
+        v = body.replace('""', '"')
+        return e, [(v.replace("{{", "{").replace("}}", "}") if "$" in m else v, "cs_verbatim")]
+    if m.lstrip("$").startswith('"""') or m == "'''":                           # C# raw / Python triple / Java block
+        k = len(m.lstrip("$"))
+        q = m[-1] * k
+        e = s.find(q, i + len(m))
+        if e < 0:
+            return None, []
+        while e + k < len(s) and s[e + k] == q[0]:
+            e += 1
+        body = s[i + len(m):e]
+        outs = []
+        if body.lstrip(" \t").startswith(("\n", "\r\n")):                       # C# raw / Java text block: dedent
+            last = body.rsplit("\n", 1)
+            cws = last[1] if len(last) == 2 and not last[1].strip() else None
+            core = body.split("\n", 1)[1] if "\n" in body else body
+            if cws is not None:
+                core = core[:len(core) - len(cws)] if core.endswith(cws) else core
+                core = core[:-2] if core.endswith("\r\n") else core[:-1] if core.endswith("\n") else core
+            outs.append((_ns_dedent(core, cws), "cs_raw"))
+        outs.append((_ns_cesc(body), "py_triple"))
+        outs.append((body, "raw_triple"))
+        return e + k, outs
+    if m[-1:] in "\"'" and m[:-1] and m[:-1].isalpha():                          # Python prefixes r b u f / C# $"
+        pass
+    if len(m) in (1, 2) and m.isalpha():                                         # r'..' b"..": prefix + quote
+        q = s[i + len(m)] if i + len(m) < len(s) else ""
+        if q not in "\"'":
+            return None, []
+        if s.startswith(q * 3, i + len(m)):
+            e, outs = _ns_literal(s, i + len(m), q * 3, dialect)
+            if e is None:
+                return None, []
+            return e, ([(o[0], "py_raw_triple") for o in outs if o[1] == "raw_triple"]
+                       if "r" in m.lower() else [o for o in outs if o[1] == "py_triple"])
+        e, body = _ns_quoted(s, i + len(m), q, "\\", False, multiline=False)
+        if e is None:
+            return None, []
+        if "r" in m.lower():
+            return e, [(body, "py_raw")]
+        return e, [(_ns_cesc(body, interp="f" in m.lower()), "py_prefixed")]
+    if m == '$"':                                                                # C# interpolated regular
+        e, body = _ns_quoted(s, i + 1, '"', "\\", False, multiline=False)
+        if e is None:
+            return None, []
+        return e, [(_ns_cesc(body, csx=True, interp=True), "cs_interpolated")]
+    if m == "`":
+        if dialect == "ps":
+            return None, []
+        e, body = _ns_quoted(s, i, "`", "\\", False)
+        if e is None:
+            return None, []
+        return e, [(_ns_cesc(body), "js_template")]
+    if m in ('"', "'", '@"', "@'"):
+        q = m[-1]
+        if dialect == "vb":
+            if q == "'":                                                         # VB comment
+                e = s.find("\n", i)
+                return (len(s) if e < 0 else e), []
+            e, body = _ns_quoted(s, i, '"', None, True, multiline=False)
+            return (e, [(body.replace('""', '"'), "vb")]) if e is not None else (None, [])
+        if dialect == "ps":
+            e, body = _ns_quoted(s, i, q, "`" if q == '"' else None, True)
+            if e is None:
+                return None, []
+            return e, [(_ns_psesc(body), "ps_dq") if q == '"' else (body.replace("''", "'"), "ps_sq")]
+        e, body = _ns_quoted(s, i, q, "\\", False, multiline=(q == '"'))
+        if e is None:
+            return None, []
+        v = _ns_cesc(body)
+        outs = [(v, "c_escaped")]
+        vx = _ns_cesc(body, csx=True)
+        if vx != v:
+            outs.append((vx, "cs_regular"))
+        if q == "'":
+            vp = re.sub(r"\\([\\'])", r"\1", body)
+            if vp != v:
+                outs.append((vp, "php_single"))
+        return e, outs
+    return None, []
+
+
+def _ns_atom_const(s, i):
+    m = _NS_CONST.match(s, i)
+    if not m:
+        return None, None
+    n = m.group("n") or m.group("p") or m.group("j")
+    if n is not None:
+        try:
+            v = int(n[2:], 16) if n[:2].lower() == "&h" else int(n)
+            return m.end(), chr(v)
+        except (ValueError, OverflowError):
+            return None, None
+    return m.end(), _NS_CONST_V.get(m.group(0).lower(), "\r\n" if "newline" in m.group(0).lower() else "\n")
+
+
+def _ns_literals(s, dialect, limit=600):
+    """[(host_var, value, syntax)] of every string literal (and its concatenation run) in s, lexed in `dialect`."""
+    out, i, n, cnt = [], 0, len(s), 0
+    while i < n and cnt < limit:
+        m = _NS_OPEN.search(s, i)
+        if not m:
+            break
+        tok = m.group(0)
+        st = m.start() + (len(tok) - len(tok.lstrip(" \t")) if tok.lower().strip().startswith("rem") else 0)
+        if dialect != "vb" and tok.strip().lower() == "rem" or (dialect == "vb" and tok in ("//", "/*", "`")):
+            i = m.end()
+            continue
+        if dialect == "ps" and tok in ("//", "/*"):
+            i = m.end()
+            continue
+        if dialect != "ps" and tok in ("#",) and s[m.end():m.end() + 1] in ("{", "["):
+            i = m.end()
+            continue
+        e, vals = _ns_literal(s, st, tok.strip() if tok.strip().lower() == "rem" else tok, dialect)
+        if e is None:
+            i = m.end()
+            continue
+        if not vals:
+            i = max(e, m.end())
+            continue
+        cnt += 1
+        pre = s[max(0, st - 120):st]
+        vm = re.search(r"([A-Za-z_$@][\w.$:]*)\s*(?:\]|\))?\s*(?::=|=>|\.=|\+=|=|:|\(|,)\s*(?:\(\s*)?$", pre)
+        var = vm.group(1) if vm else ""
+        run, j = [vals[0][0]], e
+        while j < n and len(run) < 4096:                            # concatenation / implicit adjacency run
+            cm = _NS_CONCAT.match(s, j)
+            k = cm.end() if cm else j
+            if k == j and not s.startswith(("&", "+"), j):
+                break
+            sep = s[j:k]
+            if not sep.strip() and "\n" in sep and dialect in ("vb", "ps"):
+                break
+            if not sep.strip() and "\n" in sep and not re.search(r"\(\s*$", pre[-40:]):
+                break
+            ce, cv = _ns_atom_const(s, k)
+            if ce is not None:
+                run.append(cv)
+                j = ce
+                continue
+            om = _NS_OPEN.match(s, k)
+            if not om or om.group(0) in ("//", "/*", "#", "<<<") or om.group(0).startswith("<<"):
+                break
+            le, lv = _ns_literal(s, k, om.group(0), dialect)
+            if le is None or not lv:
+                break
+            run.append(lv[0][0])
+            j = le
+        for v, syn in vals:
+            out.append((var, v, syn))
+        if len(run) > 1:
+            out.append((var, "".join(run), vals[0][1] + "+concat"))
+        i = max(j, m.end())
+    return out
+
+
+def _ns_whole(s):
+    """Whole-text unwraps: XML (CDATA + entities), Java pre-lex unicode escapes. [(syntax, text)]."""
+    out = []
+    if "<![CDATA[" in s or re.search(r"&(?:#x?[0-9a-fA-F]{1,6}|lt|gt|amp|quot|apos);", s):
+        import html
+        parts = re.split(r"<!\[CDATA\[(.*?)\]\]>", s, flags=re.S)
+        t = "".join(p if k % 2 else html.unescape(p) for k, p in enumerate(parts))
+        if t != s:
+            out.append(("xml", t))
+        out += [("cdata", p) for p in parts[1::2][:64] if len(p.strip()) >= 16]
+    if re.search(r"(?<!\\)(?:\\\\)*\\u+[0-9a-fA-F]{4}", s):
+        t = _ns_surr(re.sub(r"(?<!\\)((?:\\\\)*)\\u+([0-9a-fA-F]{4})", lambda m: m.group(1) + chr(int(m.group(2), 16)), s))
+        if t != s:
+            out.append(("java_unicode", t))
+    return out
+
+
+def _ns_blob(v):
+    """A literal holding base64 / hex of a whole inner file: [(syntax, text)]."""
+    out = []
+    w = v.strip()
+    if len(w) < 32 or len(w) > (1 << 21):
+        return out
+    if _NS_HEXRE.fullmatch(w) or re.fullmatch(r"(?:\\x[0-9a-fA-F]{2}){16,}", w):
+        h = re.sub(r"\\x|[\s:,]", "", w)
+        try:
+            t = _leaf_text(bytes.fromhex(h)) if len(h) % 2 == 0 else None
+        except ValueError:
+            t = None
+        if t and t != w:
+            out.append(("hex", t))
+    if not out and _NS_B64.fullmatch(w):
+        t = normalize(w)
+        if t and t != w:
+            out.append(("base64", t))
+    return out
+
+
+def inner_scripts(src, depth=3, budget=0.4, limit=200):
+    """Every inner script carried as an (escaped / encoded) string literal of its host, recursively to `depth`:
+    [(host_var, unescaped_text, syntax)]. Only texts that differ from their raw host bytes and look like more than a
+    word (a newline, or 16+ chars). Never raises."""
+    res = []
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            src = bytes(src).decode("utf-8", "ignore")
+        end = time.time() + budget
+        seen = {src}
+        frontier = [("", src or "", "host")]
+        for _ in range(depth):
+            nxt = []
+            for _var, text, _syn in frontier:
+                if time.time() > end or len(res) >= limit:
+                    break
+                text = text[:1 << 20]
+                dialects = ["c"]
+                if _NS_LANG_VB.search(text[:4096]) or _NS_VB_CUE.search(text):
+                    dialects.insert(0, "vb")
+                if _NS_PS_CUE.search(text):
+                    dialects.append("ps")
+                cands = [("", t, syn) for syn, t in _ns_whole(text)]
+                for d in dialects:
+                    if time.time() > end:
+                        break
+                    cands += _ns_literals(text, d)
+                for var, v, syn in list(cands):
+                    if len(v) >= 32:
+                        cands += [(var, t, syn + ">" + bs) for bs, t in _ns_blob(v)]
+                for var, v, syn in cands:
+                    if v in seen or len(v) < 16:
+                        continue
+                    seen.add(v)
+                    item = (var, v, syn)
+                    res.append(item)
+                    nxt.append(item)
+                    if len(res) >= limit:
+                        break
+            frontier = nxt
+            if not frontier:
+                break
+    except Exception:  # noqa: BLE001
+        return res
+    return res
+
+
+def _ns_names_only(text):
+    """_find_codecs_text with declared names only (no name-agnostic fallback): the host-level readers already ran
+    the fallbacks over the raw document, a junk decoy codec must not cost them twice."""
+    global FALLBACK
+    old, FALLBACK = FALLBACK, False
+    try:
+        return _find_codecs_text(text)
+    finally:
+        FALLBACK = old
+
+
+def _nested_codecs(src, budget=0.6):
+    """find_codecs readings of every inner script that names a marker / descriptor / codec (deduped by plan)."""
+    out, seen = [], set()
+    try:
+        end = time.time() + budget
+        for var, text, syn in inner_scripts(src, budget=budget * 0.5):
+            if time.time() > end:
+                break
+            if not _NS_HINT.search(text):
+                continue
+            # a whole-document unwrap (XML / Java pre-lex) is the host again: the core marker / descriptor readers only
+            # (its literals are lexed again at the next depth); a big one is cut to its marker-bearing lines
+            whole = syn in ("xml", "java_unicode") or len(text) > (1 << 15)
+            if whole and len(text) > 4096:
+                text = "\n".join(ln for ln in text.splitlines() if _NS_HINT.search(ln))[:1 << 16]
+            for c in (_ns_names_only(text) if whole else find_codecs(text, 1)):
+                p = c.get("plain")
+                if p and p not in seen:
+                    seen.add(p)
+                    out.append(dict(c, id=f"{c.get('id')}@{var or syn}"))
+    except Exception:  # noqa: BLE001
+        return out
+    return out
+
+
+# ------------------------------------------------------------------------------------------------ .NET assembly carriers
+# Target dotnet-assembly-strings (escalation of D19 managed-assembly-bridge): a script carries real managed bytes --
+# PS `[Reflection.Assembly]::Load([Convert]::FromBase64String('TVqQ..'))`, C# `Assembly.Load(new byte[]{77,90,144,..})`,
+# hex `4d5a90..`, gzip `H4sI..` / `31,139,8,..` of an MZ -- and hides the plan in the assembly's metadata: a `#US` user
+# string (ldstr literal, compressed-length-prefixed UTF-16LE), a ManifestResource (raw blob or a `.resources` container,
+# magic 0xBEEFCACE), or a Costura `costura.*.dll.compressed` (raw deflate of a nested assembly). dotnet_strings() walks
+# the BSJB metadata root (pure Python, so a bare metadata blob reads too; dnfile only for the tables of a PE);
+# _dotnet_codecs() finds the carriers in a script and peels every user string / resource. Only consulted when nothing
+# else produced a plan. Bounded, never raises.
+
+_DN_CARRIER = re.compile(r"(?:TV[pq]QAA|H4sI)[A-Za-z0-9+/]{40,}={0,2}|(?i:4d5a90|1f8b08)[0-9a-fA-F]{80,}"
+                         r"|\b(?:77|0x4[dD])\s*,\s*(?:90|0x5[aA])\s*,\s*(?:144|80|0x90|0x50)\s*,[\s\d,xXa-fA-F]{60,}"
+                         r"|\b(?:31|0x1[fF])\s*,\s*(?:139|0x8[bB])\s*,\s*(?:8|0x08|0x8)\s*,[\s\d,xXa-fA-F]{60,}")
+
+
+def _dn_cuint(b, i):
+    """ECMA-335 II.23.2 compressed unsigned int at b[i] -> (value, next index)."""
+    x = b[i]
+    if x < 0x80:
+        return x, i + 1
+    if x < 0xC0:
+        return ((x & 0x3F) << 8) | b[i + 1], i + 2
+    return ((x & 0x1F) << 24) | (b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3], i + 4
+
+
+def _dn_streams(b, root):
+    """{name: bytes} of the metadata streams under the BSJB root at b[root]."""
+    vlen = int.from_bytes(b[root + 12:root + 16], "little")
+    i = root + 16 + vlen
+    n = int.from_bytes(b[i + 2:i + 4], "little")
+    i += 4
+    out = {}
+    for _ in range(min(n, 16)):
+        off, size = int.from_bytes(b[i:i + 4], "little"), int.from_bytes(b[i + 4:i + 8], "little")
+        j = b.index(b"\x00", i + 8, i + 8 + 32)
+        name = b[i + 8:j].decode("ascii", "replace")
+        i = (j + 4) & ~3
+        if root + off + size <= len(b):
+            out.setdefault(name, b[root + off:root + off + size])
+    return out
+
+
+def _dn_7bit(b, i):
+    v = s = 0
+    while s < 35:
+        x = b[i]
+        i += 1
+        v |= (x & 0x7F) << s
+        s += 7
+        if x < 0x80:
+            break
+    return v, i
+
+
+def _dn_resources_container(b):
+    """{name: bytes|str} of a System.Resources `.resources` blob (ResourceReader, magic 0xBEEFCACE)."""
+    out = {}
+    if b[:4] != b"\xce\xca\xef\xbe":
+        return out
+    i = 12 + int.from_bytes(b[8:12], "little")
+    n, ntypes = int.from_bytes(b[i + 4:i + 8], "little"), int.from_bytes(b[i + 8:i + 12], "little")
+    i += 12
+    types = []
+    for _ in range(min(ntypes, 256)):
+        ln, i = _dn_7bit(b, i)
+        types.append(b[i:i + ln].decode("utf-8", "replace"))
+        i += ln
+    while i % 8 and b[i:i + 1] in (b"P", b"A", b"D"):     # 'PAD' padding to 8-byte alignment
+        i += 1
+    n = min(n, 4096)
+    i += 8 * n                                              # name hashes + name positions
+    data_off = int.from_bytes(b[i:i + 4], "little")
+    names_at = i + 4
+    for k in range(n):
+        pos = int.from_bytes(b[i - 4 * n + 4 * k:i - 4 * n + 4 * k + 4], "little")
+        j = names_at + pos
+        ln, j = _dn_7bit(b, j)
+        name = b[j:j + ln].decode("utf-16-le", "replace")
+        d = data_off + int.from_bytes(b[j + ln:j + ln + 4], "little")
+        tc, d = _dn_7bit(b, d)
+        if tc == 1 or (ntypes and tc >= 0x40 and "String" in (types[tc - 0x40] if tc - 0x40 < len(types) else "")):
+            ln2, d = _dn_7bit(b, d)
+            out[name] = b[d:d + ln2].decode("utf-8", "replace")
+        elif tc in (0x20, 0x21):
+            ln2 = int.from_bytes(b[d:d + 4], "little")
+            out[name] = b[d + 4:d + 4 + ln2]
+    return out
+
+
+def dotnet_strings(data, _depth=0):
+    """Managed metadata of a .NET PE or a bare BSJB metadata blob: {us: [user strings], strings: [#Strings],
+    resources: {name: bytes|str}, typedefs: [ns.name], methods: [names]}; None when it is not managed code."""
+    import zlib
+    try:
+        b = bytes(data or b"")
+        if b[:2] == b"MZ":
+            import pefile
+            pe = pefile.PE(data=b, fast_load=True)
+            dd = pe.OPTIONAL_HEADER.DATA_DIRECTORY
+            if len(dd) <= 14 or not dd[14].VirtualAddress:
+                return None
+            cli = pe.get_data(dd[14].VirtualAddress, 72)
+            md_rva, md_size = int.from_bytes(cli[8:12], "little"), int.from_bytes(cli[12:16], "little")
+            res_rva, res_size = int.from_bytes(cli[24:28], "little"), int.from_bytes(cli[28:32], "little")
+            md = pe.get_data(md_rva, md_size)
+        else:
+            pe, res_rva, res_size = None, 0, 0
+            i = b.find(b"BSJB")
+            md = b[i:] if i >= 0 else b""
+        if md[:4] != b"BSJB":
+            return None
+        st = _dn_streams(md, 0)
+        us, h = [], st.get("#US", b"")
+        i = 1
+        while i < len(h) and len(us) < 20000:
+            ln, i = _dn_cuint(h, i)
+            if ln > 1:
+                us.append(h[i:i + ln - 1].decode("utf-16-le", "replace"))
+            i += ln
+        strs = [s.decode("utf-8", "replace") for s in st.get("#Strings", b"").split(b"\x00") if s][:20000]
+        out = {"us": us, "strings": strs, "resources": {}, "typedefs": [], "methods": []}
+        if pe is not None:
+            import dnfile
+            dn = dnfile.dnPE(data=b)
+            t = dn.net.mdtables if dn.net else None
+            for r in (getattr(t, "TypeDef", None) or [])[:4096]:
+                out["typedefs"].append(".".join(x for x in (str(r.TypeNamespace or ""), str(r.TypeName or "")) if x))
+            out["methods"] = [str(m.Name) for m in (getattr(t, "MethodDef", None) or [])[:8192]]
+            for r in (getattr(t, "ManifestResource", None) or [])[:256]:
+                if r.Implementation and getattr(r.Implementation, "row_index", 0):
+                    continue                                     # lives in another file / assembly
+                blob = pe.get_data(res_rva + r.Offset, min(res_size, 4))
+                ln = int.from_bytes(blob, "little")
+                if 0 < ln <= min(res_size, 32 << 20):
+                    out["resources"][str(r.Name)] = pe.get_data(res_rva + r.Offset + 4, ln)
+            for name, v in list(out["resources"].items()):
+                if isinstance(v, bytes) and v[:4] == b"\xce\xca\xef\xbe":
+                    try:
+                        out["resources"].update({f"{name}/{k}": x for k, x in _dn_resources_container(v).items()})
+                    except Exception:  # noqa: BLE001 - malformed container: keep the raw blob
+                        pass
+                if _depth < 1 and isinstance(v, bytes) and name.lower().startswith("costura.") and \
+                        name.lower().endswith(".compressed"):
+                    inner = dotnet_strings(zlib.decompressobj(-15).decompress(v, 32 << 20), _depth + 1)
+                    if inner:
+                        out["us"] += inner["us"]
+                        out["resources"].update({f"{name}/{k}": x for k, x in inner["resources"].items()})
+        return out
+    except Exception:  # noqa: BLE001 - truncated / impostor: not managed code
+        return None
+
+
+def _dn_payload(tok):
+    """The managed bytes (MZ / BSJB) behind one carrier token, or None."""
+    import zlib
+    t = tok.strip()
+    try:
+        if t[:1].isdigit() and "," in t or t[:2].lower() == "0x":
+            b = bytes(int(x, 16 if x[:2].lower() == "0x" else 10) & 0xFF for x in re.split(r"[\s,]+", t) if x)
+        elif re.fullmatch(r"[0-9a-fA-F]+", t):
+            b = bytes.fromhex(t[:len(t) & ~1])
+        else:
+            b = base64.b64decode(t + "=" * (-len(t) % 4))
+        if b[:2] == b"\x1f\x8b":
+            b = zlib.decompressobj(31).decompress(b, 32 << 20)
+    except Exception:  # noqa: BLE001
+        return None
+    return b if b[:2] == b"MZ" or b[:4] == b"BSJB" else None
+
+
+def _dotnet_codecs(src, raw=None, depth=0, budget=1.0):
+    """Plans hidden in .NET assemblies a script carries (see dotnet_strings)."""
+    out = []
+    try:
+        end = time.time() + budget
+        blobs = [raw] if raw and raw[:2] == b"MZ" else []
+        blobs += [p for p in (_dn_payload(m.group(0)) for m in _DN_CARRIER.finditer((src or "")[:8 << 20]))
+                  if p][:8]
+        for k, b in enumerate(blobs):
+            info = dotnet_strings(b)
+            if not info:
+                continue
+            texts = [("us", s) for s in info["us"]]
+            for name, v in info["resources"].items():
+                if isinstance(v, bytes):
+                    u = _utf16(v) if v[:2] in (b"\xff\xfe", b"\xfe\xff") else None
+                    v = (u or v).decode("utf-8", "ignore")
+                texts.append((f"res:{name}", v))
+            for name, text in texts:
+                if time.time() > end:
+                    break
+                plain = peel_plan(text, budget=min(0.15, max(0.02, end - time.time()))) if len(text) >= 8 else None
+                if plain:
+                    return [{"id": f"dotnet@{name}", "rep": "dotnet_assembly", "transform": "identity", "key": "",
+                             "material": text, "plain": plain}]
+            joined = "\n".join(t for _, t in texts)
+            if depth < 1 and joined.strip() and time.time() < end:
+                for c in find_codecs(joined, depth + 1):
+                    if c.get("plain"):
+                        return [dict(c, id=f"{c.get('id')}@dotnet")]
+    except Exception:  # noqa: BLE001
+        return out
+    return out
+
+
+# ------------------------------------------------------------------------------------------------ managed bridge hosts
+# Target managed-bridge-hosts (sibling of the D19 `aspx_inline_csharp` host, the D14 MSBuild inline task and the D8
+# php_webshell): a .NET-hosted script surface carries its C# / VB / JScript as an inner text -- PS `Add-Type
+# -TypeDefinition @"..."@` / `-MemberDefinition` / `CompileAssemblyFromSource(` / `[ScriptBlock]::Create(`, `.ashx` /
+# `.asmx` `<%@ WebHandler|WebService Language="C#" Class=..%>` + code, Razor `.cshtml` `@{ .. }` / `@functions { .. }`,
+# classic ASP `<%@ Language=VBScript %>` `<% .. %>` / `<script language="JScript" runat="server">`, InstallUtil
+# `[RunInstaller(true)]` / RegAsm-RegSvcs `[ComRegisterFunction]` sources, Workflow Compiler XOML `<x:Code><![CDATA[..]]>`,
+# and `csc.exe` fed by a batch `echo .. >> x.cs` file (carets / `%%` unescaped, the file rebuilt line by line).
+# managed_host() names the host profile (`<container>_<inline>_<lang>`, the D19 spelling) and returns the inner texts;
+# _managed_host_codecs() reads them through find_codecs. Only consulted when nothing else produced a plan.
+
+_MH_LANG = (("csharp", r"c#|cs|csharp|c\s*sharp"), ("vbnet", r"vb|vb\.?net|visualbasic"), ("jscript", r"jscript|js|javascript"),
+            ("vbscript", r"vbscript|vbs"), ("perlscript", r"perlscript"))
+_MH_CUE = re.compile(r"""(?is)<%|@(?:functions|code)\s*\{|(?m:^[ \t]*@\{)|@(?:model|page)\b|\bAdd-Type\b|CompileAssemblyFromSource|\[ScriptBlock\]::Create|"""
+                     r"""\[(?:System\.ComponentModel\.)?RunInstaller|\[(?:System\.Runtime\.InteropServices\.)?ComRegisterFunction|"""
+                     r"""\bServicedComponent\b|x:Code\b|\b(?:csc|vbc|jsc)(?:\.exe)?\b|runat\s*=\s*["']?server|<jsp:(?:declaration|scriptlet|expression)\b""")
+# JSP (target jvm-script-host-route): `<%@ page language="java" import=.. %>` / `pageEncoding=` / JSPX `<jsp:..>` elements
+_MH_JSP = re.compile(r"""(?is)<%@\s*page\b[^%]*?\b(?:language\s*=\s*["']?java\b|import\s*=|pageEncoding\s*=)|"""
+                     r"""<%@\s*(?:taglib|tag|include)\b|<jsp:(?:root|declaration|scriptlet|expression|directive)\b""")
+_MH_DIRECTIVE = re.compile(r"""(?is)<%@\s*(Page|WebHandler|WebService|Control|Master|Application|Language)\b([^%]*)%>""")
+_MH_ATTR_LANG = re.compile(r"""(?i)\bLanguage\s*=\s*["']?([\w#.\s]+?)["'\s%>]""")
+
+
+_MH_FOLD = re.compile(r'(?<=[^"\s])"[ \t]*[&+][ \t]*(?:_[ \t]*)?(?:\r?\n[ \t]*)?"(?=[^"\s])')
+
+
+def _mh_lang(s, default=None):
+    v = (s or "").strip().lower()
+    for name, rx in _MH_LANG:
+        if re.fullmatch(rx, v):
+            return name
+    return default
+
+
+def _mh_balanced(s, i):
+    """Body of the `{ .. }` opening at s[i] (string / char / comment aware enough for C#), or None."""
+    depth, j, n = 0, i, min(len(s), i + (1 << 20))
+    while j < n:
+        c = s[j]
+        if c == '"' or c == "'":
+            k = j + 1
+            while k < n and s[k] != c and s[k] != "\n":
+                k += 2 if s[k] == "\\" else 1
+            j = k
+        elif s.startswith("//", j):
+            k = s.find("\n", j)
+            j = n if k < 0 else k
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return s[i + 1:j]
+        j += 1
+    return None
+
+
+def _mh_ps_arg(s, i, end=None):
+    """PowerShell argument at s[i:]: a here-string / quoted literal (unescaped) or `$var` (its last literal value)."""
+    m = re.compile(r"""\s*(@"\r?\n(.*?)\r?\n[ \t]*"@|@'\r?\n(.*?)\r?\n[ \t]*'@|"((?:[^"`]|`.|"")*)"|'((?:[^']|'')*)'|"""
+                   r"""\$\{?([\w:]+)\}?)""", re.S).match(s, i)
+    if not m:
+        return None
+    if m.group(2) is not None:
+        return _ns_psesc(m.group(2).replace('""', '\0')).replace("\0", '""')
+    if m.group(3) is not None:
+        return m.group(3)
+    if m.group(4) is not None:
+        return _ns_psesc(m.group(4))
+    if m.group(5) is not None:
+        return m.group(5).replace("''", "'")
+    var = re.escape(m.group(6).split(":")[-1])
+    last = None
+    for a in re.finditer(r"(?im)\$(?:\w+:)?" + var + r"\s*=\s*", s[:m.start()]):
+        last = a.end()
+    return _mh_ps_arg(s, last) if last is not None and last != i else None
+
+
+def _mh_batch_files(s):
+    """{target file: text} rebuilt from batch `echo .. >> f` / `>>f echo ..` / `(echo ..) > f` lines."""
+    files = {}
+    def unb(t):
+        t = re.sub(r"\^(.)", r"\1", t.replace("%%", "\0")).replace("\0", "%")
+        return t[:-1] if t.endswith(" ") else t
+    lines = s.replace("\r\n", "\n").split("\n")
+    k = 0
+    while k < len(lines) and k < 20000:
+        ln = lines[k].strip()
+        k += 1
+        m = re.match(r"(?i)^@?\(\s*$", ln)
+        if m:                                           # ( echo a & echo b ...\n ) > file
+            body = []
+            while k < len(lines) and not re.match(r"^\s*\)", lines[k]):
+                body.append(lines[k].strip())
+                k += 1
+            tail = lines[k] if k < len(lines) else ""
+            k += 1
+            t = re.match(r"""^\s*\)\s*(>>?)\s*"?([^"\s]+)""", tail)
+            if t:
+                for b in body:
+                    e = re.match(r"(?i)^@?echo(?:[ .(:;,=]|$)(.*)", b)
+                    if e:
+                        files.setdefault(t.group(2).lower(), []).append(unb(e.group(1)))
+            continue
+        m = (re.match(r"""(?i)^@?echo[ .(:;,=](.*?)\s*(?<!\^)(>>?)\s*"?([^"\s>]+)"?\s*$""", ln) or
+             re.match(r"""(?i)^(>>?)\s*"?([^"\s]+)"?\s+@?echo[ .(:;,=](.*)$""", ln))
+        if not m:
+            continue
+        if m.group(1) in (">", ">>"):
+            op, fn, txt = m.group(1), m.group(2), m.group(3)
+        else:
+            txt, op, fn = m.group(1), m.group(2), m.group(3)
+        fn = fn.lower()
+        if op == ">" or fn not in files:
+            files[fn] = []
+        files[fn].append(unb(txt))
+    return {fn: "\n".join(v) for fn, v in files.items()}
+
+
+def managed_host(name, src):
+    """Classify a .NET-hosted script surface and extract its inner code. `src` = text or bytes, `name` its file name.
+    -> {"profile_guess": `<container>_<inline>_<lang>` or None, "lang": inner language or None,
+        "inner_texts": [(where, text)]}. Not a managed host -> profile_guess None, inner_texts []. Never raises."""
+    out = {"profile_guess": None, "lang": None, "inner_texts": []}
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            src = bytes(src).decode("utf-8", "ignore")
+        s = (src or "")[:1 << 21].lstrip("﻿")
+        ext = (name or "").rsplit(".", 1)[-1].lower() if "." in (name or "") else ""
+        if not _MH_CUE.search(s):
+            return out
+        texts, prof, lang = [], None, None
+        d = _MH_DIRECTIVE.search(s[:1 << 16])
+        # 0. JSP pages: <%! declarations %> / <% scriptlets %> / <%= expressions %> (+ JSPX elements), Java inside
+        if ext in ("jsp", "jspx", "jspf") or _MH_JSP.search(s[:1 << 16]):
+            import html
+            for bm in re.finditer(r"(?s)<%(?![@-])[!=]?(.*?)%>", s):
+                if bm.group(1).strip():
+                    texts.append(("jsp_" + {"!": "declaration", "=": "expression"}.get(s[bm.start() + 2], "scriptlet"),
+                                  bm.group(1)))
+            for xm in re.finditer(r"(?is)<jsp:(declaration|scriptlet|expression)\b[^>]*>(.*?)</jsp:\1\s*>", s):
+                cd = re.findall(r"(?s)<!\[CDATA\[(.*?)\]\]>", xm.group(2))
+                texts.append(("jspx_" + xm.group(1).lower(), "\n".join(cd) if cd else html.unescape(xm.group(2))))
+            if texts:
+                out.update(profile_guess="jsp_scriptlet", lang="java",
+                           inner_texts=[(w, t) for w, t in texts if t and t.strip()][:64])
+                return out
+        # 1. ASP.NET / classic ASP pages: directive + <script runat=server> + <% %> blocks
+        if d or ext in ("aspx", "ashx", "asmx", "ascx", "master", "asax", "asp", "asa"):
+            kind = (d.group(1).lower() if d else "")
+            la = _MH_ATTR_LANG.search(d.group(0) + " ") if d else None
+            lang = _mh_lang(la.group(1) if la else "", None)
+            for sm in re.finditer(r"""(?is)<script\b([^>]*\brunat\s*=\s*["']?server[^>]*)>(.*?)</script\s*>""", s):
+                sl = _MH_ATTR_LANG.search(sm.group(1) + " ")
+                lang = lang or _mh_lang(sl.group(1) if sl else "", None)
+                texts.append(("script_runat", sm.group(2)))
+            for bm in re.finditer(r"(?s)<%(?![@-])=?(.*?)%>", s):
+                if bm.group(1).strip():
+                    texts.append(("asp_block", bm.group(1)))
+            if d and kind in ("webhandler", "webservice"):
+                texts.append((kind, s[d.end():]))
+            classic = kind == "language" or ext in ("asp", "asa") or (
+                not d and not re.search(r"(?i)\bpage\b|\.aspx", s[:4096]))
+            if classic:
+                lang = lang or "vbscript"
+                prof = f"asp_inline_{'jscript' if lang in ('jscript', 'csharp') else lang}"
+            else:
+                cont = {"webhandler": "ashx", "webservice": "asmx", "control": "ascx", "master": "master",
+                        "application": "asax"}.get(kind, ext if ext in ("ashx", "asmx", "ascx") else "aspx")
+                lang = lang or "csharp"
+                prof = f"{cont}_inline_{lang}"
+        # 2. Razor
+        elif ext in ("cshtml", "vbhtml", "razor") or re.search(r"(?m)^\s*@(?:functions|code)\s*\{|^\s*@\{|@model\b|@page\b", s):
+            for m in re.finditer(r"@(?:functions|code)?\s*\{", s):
+                b = _mh_balanced(s, m.end() - 1)
+                if b and b.strip():
+                    texts.append(("razor_block", b.replace("@@", "@")))
+            if texts:
+                lang = "vbnet" if ext == "vbhtml" else "csharp"
+                prof = f"{'razor' if ext == 'razor' else 'cshtml'}_inline_{lang}"
+        # 3. Workflow Compiler XOML
+        if not prof and (ext == "xoml" or re.search(r"(?i)<x:Code\b|\.xoml\b|Microsoft\.Workflow\.Compiler", s)):
+            import html
+            for m in re.finditer(r"(?is)<x:Code\b[^>]*>(.*?)</x:Code\s*>", s):
+                b = m.group(1)
+                cd = re.findall(r"(?s)<!\[CDATA\[(.*?)\]\]>", b)
+                texts.append(("xoml_code", "\n".join(cd) if cd else html.unescape(b)))
+            if texts:
+                lang = "vbnet" if re.search(r"(?i)\bVisualBasic\b|Language\s*=\s*\"?VB", s[:1 << 14]) else "csharp"
+                prof = f"xoml_inline_{lang}"
+        # 4. PowerShell compile bridges
+        if not prof and re.search(r"(?i)\bAdd-Type\b|CompileAssemblyFromSource|\[ScriptBlock\]::Create", s):
+            for m in re.finditer(r"(?i)-(TypeDefinition|MemberDefinition)\b\s*:?|CompileAssemblyFromSource\s*\([^,]*,"
+                                 r"|\[ScriptBlock\]::Create\s*\(|(?:(?<=Add-Type)|(?<=Add-Type\s))\s+(?=[@\"'$])", s):
+                v = _mh_ps_arg(s, m.end())
+                if v and len(v.strip()) >= 8:
+                    kind = (m.group(1) or "").lower() or ("scriptblock" if "Create" in m.group(0) else "source")
+                    texts.append((kind, v))
+            if texts:
+                la = re.search(r"(?i)-Language\s+['\"]?(\w+)", s)
+                lang = _mh_lang(la.group(1) if la else "", "csharp")
+                if all(k == "scriptblock" for k, _ in texts):
+                    lang = "powershell"
+                hit = re.search(r"(?i)CompileAssemblyFromSource|\[ScriptBlock\]::Create|-MemberDefinition", s)
+                via = {"compileassemblyfromsource": "codedom", "[scriptblock]::create": "scriptblock",
+                       "-memberdefinition": "member"}.get(re.sub(r"\s", "", hit.group(0)).lower() if hit else "", "add_type")
+                prof = f"powershell_{via}_{lang}"
+        # 5. csc / vbc / jsc fed from a batch echo-redirected source file
+        if not prof and re.search(r"(?i)\b(?:csc|vbc|jsc)(?:\.exe)?\b", s) and re.search(r"(?im)^\s*@?\(?\s*echo\b|>>?\s*\S+\s+echo\b", s):
+            files = _mh_batch_files(s)
+            for fn, t in files.items():
+                if fn.endswith((".cs", ".vb", ".js", ".tmp", ".txt")) or re.search(r"(?i)\b(?:class|using|Imports)\b", t):
+                    texts.append((fn, t))
+            if texts:
+                comp = re.search(r"(?i)\b(csc|vbc|jsc)(?:\.exe)?\b", s).group(1).lower()
+                lang = {"csc": "csharp", "vbc": "vbnet", "jsc": "jscript"}[comp]
+                prof = f"batch_{comp}_{lang}"
+        # 6. InstallUtil / RegAsm / RegSvcs bypass sources (the source is the inner text)
+        if not prof:
+            for rx, p in ((r"\[\s*(?:System\.ComponentModel\.)?RunInstaller\s*\(\s*true\s*\)", "installutil_installer"),
+                          (r"\[\s*(?:System\.Runtime\.InteropServices\.)?ComRegisterFunction", "regasm_comregister"),
+                          (r":\s*(?:System\.EnterpriseServices\.)?ServicedComponent\b", "regsvcs_serviced")):
+                if re.search(rx, s):
+                    lang = "vbnet" if re.search(r"(?im)^\s*Imports\s+System|<RunInstaller\(True\)>", s) else "csharp"
+                    prof = f"{p}_{lang}"
+                    texts.append((p.split("_")[0], s))
+                    break
+        out.update(profile_guess=prof, lang=lang if prof else None,
+                   inner_texts=[(w, t) for w, t in texts if t and t.strip()][:64])
+    except Exception:  # noqa: BLE001 - impostor / truncated: nothing
+        return {"profile_guess": None, "lang": None, "inner_texts": []}
+    return out
+
+
+def _managed_host_codecs(src, raw=None, depth=0, name="", budget=0.6):
+    """find_codecs readings of a managed host's inner texts (first plan wins; tagged `@managed:<profile>:<where>`)."""
+    try:
+        end = time.time() + budget
+        host = managed_host(name, raw if raw is not None else src)
+        for where, text in host["inner_texts"]:
+            if time.time() > end:
+                break
+            if text == src:
+                continue
+            folded = _MH_FOLD.sub("", text)        # `"a" & _ / "a" +` continued literals: one literal
+            for c in (find_codecs(folded, depth + 1) if folded != text else []) + find_codecs(text, depth + 1):
+                if c.get("plain"):
+                    return [dict(c, id=f"{c.get('id')}@managed:{host['profile_guess']}:{where}")]
+    except Exception:  # noqa: BLE001
+        return []
+    return []
+
+
+# ------------------------------------------------------------------------------------------------ .NET literal folding
+# C# / VB.NET / F# descriptors assembled at runtime instead of written as one literal (target csharp-literal-fold):
+# `string.Concat(..)`, `string.Join("", new[] {..})`, `new string(new char[] {'v','=',..})`, `(char)0x76`,
+# `Encoding.UTF8.GetString(new byte[] {..})`, `Convert.FromBase64String` / `FromHexString`, `BitConverter.ToString`,
+# `new StringBuilder().Append(..)` chains, `$"{a}{b}"` over const locals, `.Reverse()` / `Array.Reverse`,
+# `ToCharArray()` + `^ key` loops / `.Select(c => ..)` with literal keys, `v`, verbatim / raw strings; VB
+# `ChrW(118) & ..`, `StrReverse`, `For i = .. To ..`; F# `String.concat "" [..]`, `char 118`, `[| 'v'; .. |]`.
+# A bounded tokenizer + Pratt evaluator over literals and const locals (no compiler); anything it cannot fold is skipped.
+
+class _CsCh(int):
+    """A C# `char` (int arithmetic, string concatenation as its character)."""
+
+
+class _CsSB:
+    def __init__(self, s=""):
+        self.s = s
+
+
+class _CsFn:
+    def __init__(self, params, start, ev):
+        self.params, self.start, self.ev = params, start, ev
+
+    def __call__(self, *args):
+        return self.ev.apply(self, args)
+
+
+class _CsStop(Exception):
+    pass
+
+
+_CS_CUE = re.compile(r"""string\.Concat|String\.Join|string\.Join|new\s+string\s*\(|\(char\)|\bGetString\s*\(|FromBase64String|"""
+                     r"""FromHexString|BitConverter\.|StringBuilder|\$@?"|@\$"|\.Reverse\s*\(|ToCharArray|\bChrW?\s*\(|"""
+                     r"""String\.concat|\\u00[2-7][0-9a-fA-F]|\bchar\s+\d|\[\|\s*'|"{3}|StrReverse|\bNew\s+String\("""
+                     r"""|\bnew\s+String\s*\(|\.append\s*\(|\bget(?:Mime|Url)?Decoder\s*\(|\bString\.(?:join|valueOf)\s*\(|parseHex\s*\(""")
+_CS_DESC_NAME = re.compile(r"descriptor", re.I)
+_CS_ESC = {"n": "\n", "r": "\r", "t": "\t", "0": "\0", "a": "\a", "b": "\b", "f": "\f", "v": "\v", "e": "\x1b",
+           "\\": "\\", "'": "'", '"': '"'}
+_CS_TOK = re.compile(r"""(?P<ws>\s+)|(?P<cm>//[^\n]*|/\*.*?\*/|\(\*.*?\*\))|"""
+                     r"""(?P<raw>\$*"{3,})|(?P<vs>\$?@\$?"(?:[^"]|"")*")|(?P<is>\$"(?:[^"\\\n]|\\.)*")|"""
+                     r"""(?P<s>"(?:[^"\\\n]|\\.)*"[cB]?)|(?P<ch>'(?:\\(?:u[0-9a-fA-F]{4}|x[0-9a-fA-F]{1,4}|U[0-9a-fA-F]{8}|\d{3}|.)|[^'\\\n])')|"""
+                     r"""(?P<hx>0[xX][0-9a-fA-F_]+|&[hH][0-9a-fA-F]+|0[bB][01_]+)[uUlLyYsSnN%&]*|(?P<num>\d[\d_]*)(?:[uUlLyYsSnN%]{1,2}\b)?|"""
+                     r"""(?P<id>@?[A-Za-z_]\w*)|"""
+                     r"""(?P<p>\^\^\^|&&&|\|\|\||<<<|>>>|=>|->|<-|==|!=|<=|>=|&&|\|\||\^=|\+=|-=|&=|\|=|\+\+|--|::|\[\||\|\]|\.\.|\|>|\?\?|\S)""",
+                     re.S)
+_CS_VB_STR = re.compile(r'"((?:[^"]|"")*)"(c\b)?', re.I)
+
+
+def _cs_unesc(body):
+    out, i = [], 0
+    while i < len(body):
+        c = body[i]
+        if c != "\\" or i + 1 >= len(body):
+            out.append(c)
+            i += 1
+            continue
+        n = body[i + 1]
+        m = re.match(r"u([0-9a-fA-F]{4})|U([0-9a-fA-F]{8})|x([0-9a-fA-F]{1,4})|(\d{3})", body[i + 1:i + 10])
+        if m and n in "uUx":
+            out.append(chr(int(m.group(1) or m.group(2) or m.group(3), 16) % 0x110000))
+            i += 1 + m.end()
+        elif m and m.group(4) and not m.group(4).startswith("0"):
+            out.append(chr(int(m.group(4)) & 0xFFFF))                # F# trigraph \DDD
+            i += 4
+        else:
+            out.append(_CS_ESC.get(n, n))
+            i += 2
+    return "".join(out)
+
+
+def _cs_tokens(src, vb, limit=60000):
+    """[(kind, value)]: s (str), ch (_CsCh), n (int), is (interpolated parts), id, p (punct)."""
+    toks, i, n = [], 0, len(src)
+    while i < n and len(toks) < limit:
+        if vb and src[i] == "'":                                    # VB comment
+            j = src.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        if vb and src[i] == '"':
+            m = _CS_VB_STR.match(src, i)
+            if not m:
+                break
+            v = m.group(1).replace('""', '"')
+            toks.append(("ch", _CsCh(ord(v[0]))) if m.group(2) and v else ("s", v))
+            i = m.end()
+            continue
+        m = _CS_TOK.match(src, i)
+        if not m:
+            break
+        k = m.lastgroup
+        g = m.group(0)
+        i = m.end()
+        if k in ("ws", "cm"):
+            continue
+        if k == "raw":
+            dollars = len(g) - len(g.lstrip("$"))
+            q = g[dollars:]
+            j = src.find(q, i)
+            if j < 0:
+                break
+            body = src[i:j]
+            i = j + len(q)
+            if "\n" in body:                                         # multi-line raw: dedent by the closing line
+                lines = body.split("\n")
+                ind = lines[-1] if not lines[-1].strip() else ""
+                body = "\n".join(x[len(ind):] if x.startswith(ind) else x for x in lines[1:-1 if ind or not lines[-1].strip() else None])
+            elif len(q) == 3 and not dollars and q == '"""':        # F# triple-quoted single line
+                pass
+            toks.append(("is", _cs_interp(body, False, max(1, dollars))) if dollars else ("s", body))
+        elif k == "vs":
+            body = g[g.index('"') + 1:-1].replace('""', '"')
+            toks.append(("is", _cs_interp(body, False)) if "$" in g[:3] else ("s", body))
+        elif k == "is":
+            toks.append(("is", _cs_interp(g[2:-1], True)))
+        elif k == "s":
+            suf = g[-1] if g[-1] in "cB" else ""
+            v = _cs_unesc(g[1:len(g) - 1 - len(suf)])
+            if suf == "c" and v:
+                toks.append(("ch", _CsCh(ord(v[0]))))
+            elif suf == "B":
+                toks.append(("arr", [b & 0xFF for b in v.encode("latin-1", "replace")]))
+            else:
+                toks.append(("s", v))
+        elif k == "ch":
+            v = _cs_unesc(g[1:-1])
+            toks.append(("ch", _CsCh(ord(v[0]) if v else 0)))
+        elif k == "hx":
+            h = m.group("hx").replace("_", "")
+            toks.append(("n", int(h[2:], 2) if h[1] in "bB" else int(h[2:], 16)))
+        elif k == "num":
+            toks.append(("n", int(m.group("num").replace("_", ""))))
+        elif k == "id":
+            if g == "_" and vb:
+                continue                                             # VB line continuation
+            toks.append(("id", g.lstrip("@")))
+        else:
+            toks.append(("p", g))
+    toks.append(("eof", None))
+    return toks
+
+
+def _cs_interp(body, esc, braces=1):
+    """Parts of an interpolated string: str pieces and ("expr", text) holes (format / alignment dropped)."""
+    parts, buf, i = [], [], 0
+    op, cl = "{" * braces, "}" * braces
+    while i < len(body):
+        if body.startswith(op, i) and not (braces == 1 and body.startswith("{{", i)):
+            depth, j = 0, i + braces
+            k = j
+            while k < len(body):
+                if body[k] == "{":
+                    depth += 1
+                elif body[k] == "}":
+                    if depth == 0:
+                        break
+                    depth -= 1
+                k += 1
+            expr = re.split(r"[:,](?=[^\"']*$)", body[j:k])[0] if '"' not in body[j:k] else body[j:k]
+            parts.append("".join(buf))
+            parts.append(("expr", expr))
+            buf = []
+            i = k + braces
+            continue
+        if braces == 1 and body.startswith(("{{", "}}"), i):
+            buf.append(body[i])
+            i += 2
+            continue
+        buf.append(body[i])
+        i += 1
+    parts.append("".join(buf))
+    text = "".join(parts[0::2]) if len(parts) == 1 else None
+    if esc:
+        parts = [_cs_unesc(p) if isinstance(p, str) else p for p in parts]
+    return parts if text is None else parts
+
+
+def _cs_str(v):
+    if isinstance(v, str):
+        return v
+    if isinstance(v, _CsCh):
+        return chr(v % 0x110000)
+    if isinstance(v, bool):
+        return "True" if v else "False"
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, _CsSB):
+        return v.s
+    if isinstance(v, list):
+        if all(isinstance(x, _CsCh) for x in v):
+            return "".join(chr(x % 0x110000) for x in v)
+        return "System." + ("Byte[]" if all(isinstance(x, int) for x in v) else "Object[]")
+    raise _CsStop("str")
+
+
+def _cs_chars(v):
+    if isinstance(v, str):
+        return [_CsCh(ord(c)) for c in v]
+    if isinstance(v, list):
+        return list(v)
+    raise _CsStop("seq")
+
+
+def _cs_bytes(v):
+    if isinstance(v, list):
+        return bytes(int(x) & 0xFF for x in v)
+    raise _CsStop("bytes")
+
+
+_CS_ENC = {"utf8": "utf-8", "ascii": "ascii", "unicode": "utf-16-le", "bigendianunicode": "utf-16-be",
+           "utf32": "utf-32-le", "latin1": "latin-1", "default": "utf-8", "utf7": "utf-7"}
+_CS_CASTS = {"char": lambda x: _CsCh(int(x) & 0xFFFF), "byte": lambda x: int(x) & 0xFF, "sbyte": lambda x: int(x) & 0xFF,
+             "int": int, "uint": lambda x: int(x) & 0xFFFFFFFF, "short": int, "ushort": lambda x: int(x) & 0xFFFF,
+             "long": int, "ulong": int, "string": _cs_str, "Char": lambda x: _CsCh(int(x) & 0xFFFF),
+             "Byte": lambda x: int(x) & 0xFF, "Int32": int, "String": _cs_str}
+
+
+class _CsEval:
+    """Pratt evaluator of a .NET expression subset over a token list (pos-based, re-entrant for lambdas)."""
+
+    def __init__(self, toks, env, vb, fs, deadline):
+        self.t, self.env, self.vb, self.fs, self.deadline, self.pos = toks, env, vb, fs, deadline, 0
+
+    def peek(self, k=0):
+        return self.t[min(self.pos + k, len(self.t) - 1)]
+
+    def take(self):
+        tk = self.t[self.pos]
+        self.pos = min(self.pos + 1, len(self.t) - 1)
+        return tk
+
+    def isp(self, v, k=0):
+        tk = self.peek(k)
+        return tk[0] == "p" and tk[1] == v
+
+    def isid(self, v, k=0):
+        tk = self.peek(k)
+        return tk[0] == "id" and (tk[1] == v if not self.vb else tk[1].lower() == v.lower())
+
+    def expect(self, v):
+        if not self.isp(v):
+            raise _CsStop(v)
+        self.take()
+
+    # binary levels, lowest first: VB `&` concat sits below `+`
+    def expr(self):
+        if time.time() > self.deadline:
+            raise _CsStop("time")
+        if self.peek()[0] == "id" and self.isp("=>", 1):
+            return self.lam([self.take()[1]], "=>")
+        if self.isid("fun") and self.fs:
+            self.take()
+            ps = []
+            while self.peek()[0] == "id":
+                ps.append(self.take()[1])
+            return self.lam(ps, "->")
+        if self.isid("Function") and self.vb and self.isp("(", 1):
+            self.take()
+            self.take()
+            ps = []
+            while self.peek()[0] == "id":
+                ps.append(self.take()[1])
+                if self.isid("As"):
+                    self.take()
+                    self.take()
+                if self.isp(","):
+                    self.take()
+            self.expect(")")
+            return self.lam(ps, None)
+        if self.isp("(") and self.peek(1)[0] == "id" and self.isp(")", 2) and self.isp("=>", 3):
+            self.take()
+            p = self.take()[1]
+            self.take()
+            return self.lam([p], "=>")
+        v = self.binary(0)
+        while self.isp("|>") and self.fs:
+            self.take()
+            f = self.binary(0)
+            v = f(v) if callable(f) else _cs_fail()
+        return v
+
+    def lam(self, params, arrow):
+        if arrow:
+            self.expect(arrow)
+        fn = _CsFn(params, self.pos, self)
+        saved = dict(self.env)
+        for p in params:
+            self.env[p] = _CsCh(65)
+        try:
+            self.binary(0)
+        finally:
+            self.env.clear()
+            self.env.update(saved)
+        return fn
+
+    def apply(self, fn, args):
+        pos, saved = self.pos, dict(self.env)
+        try:
+            for p, a in zip(fn.params, args):
+                self.env[p] = a
+            self.pos = fn.start
+            return self.binary(0)
+        finally:
+            self.pos = pos
+            self.env.clear()
+            self.env.update(saved)
+
+    _LEVELS = (("||", "OrElse"), ("&&", "AndAlso"), ("|", "|||", "Or"), ("^", "^^^", "Xor"), ("&", "&&&", "And"),
+               ("==", "!=", "=", "<>"), ("<<", ">>", "<<<", ">>>"), ("+", "-"), ("*", "/", "%", "Mod"))
+
+    def binop(self, lvl):
+        tk = self.peek()
+        ops = self._LEVELS[lvl]
+        if tk[0] == "p" and tk[1] in ops:
+            if tk[1] == "=" and not self.vb:
+                return None
+            if tk[1] == "&" and self.vb:
+                return None
+            return tk[1]
+        if tk[0] == "id" and self.vb and tk[1].capitalize() in ops or tk[0] == "id" and tk[1] in ("Xor", "Mod", "Or", "And") and tk[1] in ops:
+            return tk[1].capitalize()
+        return None
+
+    def binary(self, lvl):
+        if lvl == 3.5:
+            pass
+        if self.vb and lvl == 6:                                     # VB `&` concat: between shifts and `+`
+            v = self.binary(7)
+            while self.isp("&"):
+                self.take()
+                v = _cs_str(v) + _cs_str(self.binary(7))
+            return v
+        if lvl >= len(self._LEVELS):
+            return self.unary()
+        v = self.binary(lvl + 1)
+        while True:
+            op = self.binop(lvl)
+            if op is None:
+                return v
+            self.take()
+            r = self.binary(lvl + 1)
+            v = _cs_binop(op, v, r, self.fs)
+
+    def unary(self):
+        tk = self.peek()
+        if tk[0] == "p" and tk[1] in ("-", "~", "!", "+"):
+            self.take()
+            v = self.unary()
+            return {"-": lambda x: -x, "~": lambda x: ~x, "!": lambda x: not x, "+": lambda x: x}[tk[1]](int(v))
+        if tk[0] == "id" and self.vb and tk[1].lower() == "not":
+            self.take()
+            return ~int(self.unary())
+        if self.isp("(") and self.peek(1)[0] == "id" and self.peek(1)[1] in _CS_CASTS and self.isp(")", 2) and \
+                self.peek(3)[0] in ("id", "n", "ch", "s", "p") and not (self.peek(3)[0] == "p" and self.peek(3)[1] not in "(-~"):
+            self.pos += 3
+            return _CS_CASTS[self.peek(-2)[1]](self.unary())
+        if self.isp("(") and self.isid("char", 1) and self.isp("[", 2) and self.isp("]", 3) and self.isp(")", 4):
+            self.pos += 5
+            return _cs_chars(self.unary())
+        return self.postfix(self.primary())
+
+    def args(self, close=")"):
+        out = []
+        if self.isp(close):
+            self.take()
+            return out
+        while True:
+            if self.peek()[0] == "id" and self.isp(":", 1) and not self.fs:
+                self.pos += 2                                        # named argument
+            out.append(self.expr())
+            if self.isp(","):
+                self.take()
+                continue
+            self.expect(close)
+            return out
+
+    def items(self, close, seps=(",", ";")):
+        out = []
+        while not self.isp(close):
+            if self.peek()[0] == "eof":
+                raise _CsStop("eof")
+            out.append(self.expr())
+            if self.peek()[0] == "p" and self.peek()[1] in seps:
+                self.take()
+        self.take()
+        return out
+
+    def postfix(self, v):
+        while True:
+            if self.isp(".") and self.peek(1)[0] == "id":
+                self.take()
+                name = self.take()[1]
+                a = self.args() if self.isp("(") and self.take() else None
+                v = _cs_method(v, name, a, self)
+            elif self.isp(".") and self.isp("[", 1) and self.fs:
+                self.pos += 2
+                i = self.expr()
+                self.expect("]")
+                v = _cs_index(v, i)
+            elif self.isp("[") and not self.fs:
+                self.take()
+                i = self.expr()
+                self.expect("]")
+                v = _cs_index(v, i)
+            elif self.isp("(") and isinstance(v, (list, str)) and self.vb:
+                self.take()
+                a = self.args()
+                v = _cs_index(v, a[0]) if len(a) == 1 else _cs_fail()
+            elif self.isp("(") and callable(v) and not self.fs:
+                self.take()
+                v = v(*self.args())
+            elif callable(v) and self.fs and self.peek()[0] in ("s", "ch", "n", "id", "is", "arr") or \
+                    callable(v) and self.fs and self.peek()[0] == "p" and self.peek()[1] in ("(", "[", "[|"):
+                v = v(self.fs_atom())
+            else:
+                return v
+
+    def fs_atom(self):
+        return self.postfix_nocall(self.primary())
+
+    def postfix_nocall(self, v):
+        while self.isp(".") and (self.peek(1)[0] == "id" or self.isp("[", 1)):
+            if self.isp("[", 1):
+                self.pos += 2
+                i = self.expr()
+                self.expect("]")
+                v = _cs_index(v, i)
+                continue
+            self.take()
+            name = self.take()[1]
+            a = self.args() if self.isp("(") and self.take() else None
+            v = _cs_method(v, name, a, self)
+        return v
+
+    def primary(self):
+        k, val = self.take()
+        if k == "s":
+            return val
+        if k in ("ch", "n"):
+            return val
+        if k == "arr":
+            return list(val)
+        if k == "is":
+            out = []
+            for p in val:
+                if isinstance(p, str):
+                    out.append(p)
+                else:
+                    sub = _CsEval(_cs_tokens(p[1], self.vb), self.env, self.vb, self.fs, self.deadline)
+                    out.append(_cs_str(sub.expr()))
+            return "".join(out)
+        if k == "p":
+            if val == "(":
+                v = self.expr()
+                if self.isp(","):                                    # tuple: keep the first (F# (a, b) args)
+                    self.take()
+                    rest = self.items(")")
+                    return [v] + rest
+                self.expect(")")
+                return v
+            if val in ("[|", "[") or (val == "{" and True):
+                return self.items({"[|": "|]", "[": "]", "{": "}"}[val])
+            raise _CsStop(val)
+        if k != "id":
+            raise _CsStop(k)
+        low = val.lower() if self.vb else val
+        if low in ("new", "New"):
+            return self.new()
+        if low == "nameof":
+            self.expect("(")
+            n = self.take()[1]
+            self.expect(")")
+            return n
+        if val in self.env:
+            return self.env[val]
+        if val == "global" and self.isp("::"):
+            self.take()
+            val = self.take()[1]
+        parts = [val]
+        while self.isp(".") and self.peek(1)[0] == "id" and _cs_func(".".join(parts + [self.peek(1)[1]]), self.vb, True):
+            self.take()
+            parts.append(self.take()[1])
+        f = _cs_func(".".join(parts), self.vb)
+        if f is None:
+            raise _CsStop(".".join(parts))
+        if not callable(f) or isinstance(f, _CsCh):
+            return f
+        if self.fs and not self.isp("("):
+            return f
+        return f
+
+    def new(self):
+        typ = []
+        while self.peek()[0] == "id" or self.isp(".") or self.isp("[") and self.isp("]", 1) or self.isp("<"):
+            if self.isp("["):
+                self.pos += 2
+                typ.append("[]")
+            elif self.isp("<"):
+                while not self.isp(">") and self.peek()[0] != "eof":
+                    self.take()
+                self.take()
+            else:
+                typ.append(self.take()[1])
+        if self.isp("[") and not typ or self.isp("[") and typ:      # new[] / new byte[n]
+            self.take()
+            if self.isp("]"):
+                self.take()
+            else:
+                self.expr()
+                self.expect("]")
+            typ.append("[]")
+        name = "".join(typ).split(".")[-1].lower()
+        if self.isp("("):
+            self.take()
+            a = self.args()
+            if name.startswith("stringbuilder"):
+                return _CsSB(_cs_str(a[0]) if a and not isinstance(a[0], int) or a and isinstance(a[0], _CsCh) else "")
+            if name.startswith("string"):
+                if len(a) == 2 and isinstance(a[0], _CsCh):
+                    return chr(a[0]) * int(a[1])
+                if a and isinstance(a[0], list) and a[0] and not any(isinstance(x, _CsCh) for x in a[0]):
+                    return _cs_bytes(a[0]).decode(_jv_charset(a[1]) if len(a) == 2 else "utf-8")  # Java new String(byte[])
+                return "".join(chr(int(x) % 0x110000) for x in _cs_chars(a[0])) if a else ""
+            if name.startswith("list"):
+                v = list(_cs_chars(a[0])) if a else []
+                return self.items("}") if self.isp("{") and self.take() else v
+            if self.isp("{"):
+                self.take()
+                return self.items("}")
+            raise _CsStop(name)
+        if self.isp("{"):
+            self.take()
+            v = self.items("}")
+            if name.startswith("char"):
+                return [_CsCh(int(x) & 0xFFFF) for x in v]
+            if name.startswith("byte"):
+                return [int(x) & 0xFF for x in v]
+            return v
+        if name.startswith("stringbuilder"):
+            return _CsSB()
+        raise _CsStop(name)
+
+
+def _cs_fail(*a):
+    raise _CsStop("fail")
+
+
+def _cs_binop(op, a, b, fs):
+    if op == "+":
+        if isinstance(a, (str, _CsSB)) or isinstance(b, (str, _CsSB)):
+            return _cs_str(a) + _cs_str(b)
+        if isinstance(a, list) or isinstance(b, list):
+            raise _CsStop("+")
+        return int(a) + int(b)
+    if op == "^" and (isinstance(a, str) or isinstance(b, str)):
+        return _cs_str(a) + _cs_str(b)                               # F# `^` string concatenation
+    if isinstance(a, (str, list, _CsSB)) or isinstance(b, (str, list, _CsSB)):
+        if op in ("==", "="):
+            return a == b
+        if op in ("!=", "<>"):
+            return a != b
+        raise _CsStop(op)
+    a, b = int(a), int(b)
+    return {"-": lambda: a - b, "*": lambda: a * b, "/": lambda: int(a / b) if b else _cs_fail(), "%": lambda: a % b if b else _cs_fail(),
+            "Mod": lambda: a % b if b else _cs_fail(), "^": lambda: a ^ b, "^^^": lambda: a ^ b, "Xor": lambda: a ^ b,
+            "&": lambda: a & b, "&&&": lambda: a & b, "And": lambda: a & b, "|": lambda: a | b, "|||": lambda: a | b,
+            "Or": lambda: a | b, "<<": lambda: a << b, "<<<": lambda: a << b, ">>": lambda: a >> b, ">>>": lambda: a >> b,
+            "==": lambda: a == b, "=": lambda: a == b, "!=": lambda: a != b, "<>": lambda: a != b,
+            "&&": lambda: a and b, "AndAlso": lambda: a and b, "||": lambda: a or b, "OrElse": lambda: a or b}[op]()
+
+
+def _cs_index(v, i):
+    if isinstance(v, str):
+        return _CsCh(ord(v[int(i)]))
+    if isinstance(v, list):
+        return v[int(i)]
+    raise _CsStop("idx")
+
+
+def _cs_join(sep, items):
+    if len(items) == 1 and isinstance(items[0], list):
+        items = items[0]
+    return _cs_str(sep).join(_cs_str(x) for x in items)
+
+
+def _cs_concat(*items):
+    if len(items) == 1 and isinstance(items[0], list):
+        items = items[0]
+    return "".join(_cs_str(x) for x in items)
+
+
+def _cs_reverse_inplace(a, *rng):
+    if not isinstance(a, list):
+        raise _CsStop("rev")
+    s, n = (int(rng[0]), int(rng[1])) if len(rng) == 2 else (0, len(a))
+    a[s:s + n] = a[s:s + n][::-1]
+    return None
+
+
+def _cs_tochar(x, *base):
+    return _CsCh(int(x, int(base[0])) if base else (ord(x[0]) if isinstance(x, str) else int(x)))
+
+
+def _cs_toint(x, *base):
+    return int(x, int(base[0])) if base else (int(x) if not isinstance(x, str) else int(x.strip()))
+
+
+def _cs_func(name, vb, prefix=False):
+    """A known .NET / VB / F# static (callable or value) by dotted name; prefix=True: is `name` a prefix of one."""
+    n = re.sub(r"^(?:global::)?(?:System\.)?(?:Text\.)?(?:Linq\.)?(?:Microsoft\.VisualBasic\.)?(?:Strings\.)?", "", name)
+    n = re.sub(r"^java\.(?:util|lang|nio\.charset)\.", "", n)
+    if n.startswith("FSharp.Core."):
+        n = n[12:]
+    table = _CS_FUNCS
+    if prefix:
+        return any(k == n or k.startswith(n + ".") for k in table) or n in ("System", "Text", "Linq", "Microsoft",
+                                                                              "VisualBasic", "Strings", "Encoding",
+                                                                              "java", "java.util", "java.lang", "java.nio",
+                                                                              "java.nio.charset") \
+            or bool(re.fullmatch(r"Encoding\.\w+(?:\.Get(?:String|Bytes))?", n))
+    key = n if n in table else (n.lower() if vb else None)
+    if key in table:
+        return table[key]
+    if vb:
+        for k in table:
+            if k.lower() == n.lower():
+                return table[k]
+    m = re.fullmatch(r"Encoding\.(\w+)\.(GetString|GetBytes)", n)
+    if m and m.group(1).lower() in _CS_ENC:
+        enc = _CS_ENC[m.group(1).lower()]
+        if m.group(2) == "GetString":
+            return lambda b, *r: _cs_bytes(b)[int(r[0]):int(r[0]) + int(r[1])].decode(enc) if r else _cs_bytes(b).decode(enc)
+        return lambda s: list(_cs_str(s).encode(enc))
+    return None
+
+
+def _cs_b64(s):
+    return list(base64.b64decode(re.sub(r"\s+", "", _cs_str(s)), validate=True))
+
+
+_CS_FUNCS = {
+    "string.Concat": _cs_concat, "String.Concat": _cs_concat, "string.Join": _cs_join, "String.Join": _cs_join,
+    "string.Empty": "", "String.Empty": "", "Environment.NewLine": "\r\n",
+    "string.Format": lambda f, *a: re.sub(r"\{(\d+)(?:[,:][^}]*)?\}", lambda m: _cs_str(a[int(m.group(1))]), _cs_str(f)),
+    "String.Format": lambda f, *a: re.sub(r"\{(\d+)(?:[,:][^}]*)?\}", lambda m: _cs_str(a[int(m.group(1))]), _cs_str(f)),
+    "Convert.FromBase64String": _cs_b64, "Convert.ToBase64String": lambda b: base64.b64encode(_cs_bytes(b)).decode(),
+    "Convert.FromHexString": lambda s: list(bytes.fromhex(_cs_str(s))),
+    "Convert.ToHexString": lambda b: _cs_bytes(b).hex().upper(), "Convert.ToChar": _cs_tochar,
+    "Convert.ToByte": lambda x, *b: _cs_toint(x, *b) & 0xFF, "Convert.ToInt32": _cs_toint, "Convert.ToString": _cs_str,
+    "BitConverter.ToString": lambda b, *r: "-".join("%02X" % x for x in _cs_bytes(b)),
+    "char.ConvertFromUtf32": lambda x: chr(int(x)), "Char.ConvertFromUtf32": lambda x: chr(int(x)),
+    "Array.Reverse": _cs_reverse_inplace, "Enumerable.Reverse": lambda s: _cs_chars(s)[::-1],
+    "ChrW": lambda x: _CsCh(int(x) & 0xFFFF), "Chr": lambda x: _CsCh(int(x) & 0xFF), "AscW": lambda c: ord(_cs_str(c)[0]),
+    "Asc": lambda c: ord(_cs_str(c)[0]), "CStr": _cs_str, "CChar": lambda c: _CsCh(ord(_cs_str(c)[0])),
+    "CInt": int, "CByte": lambda x: int(x) & 0xFF, "StrReverse": lambda s: _cs_str(s)[::-1],
+    "Join": lambda a, sep=" ": _cs_join(sep, [a]), "Mid": lambda s, a, n=None: _cs_str(s)[int(a) - 1:None if n is None else int(a) - 1 + int(n)],
+    # F#
+    "String.concat": lambda sep: (lambda items: _cs_join(sep, [list(items)])), "char": lambda x: _CsCh(ord(x[0]) if isinstance(x, str) else int(x) & 0xFFFF),
+    "string": _cs_str, "int": lambda x: int(x), "byte": lambda x: int(x) & 0xFF,
+    "Array.rev": lambda a: list(a)[::-1], "List.rev": lambda a: list(a)[::-1], "Seq.rev": lambda a: _cs_chars(a)[::-1],
+    "String.Concat.": _cs_concat, "System.String": lambda a: "".join(chr(int(x)) for x in _cs_chars(a)),
+    "String": lambda a: "".join(chr(int(x)) for x in _cs_chars(a)),
+    "Array.map": lambda f: (lambda a: [f(x) for x in a]), "List.map": lambda f: (lambda a: [f(x) for x in a]),
+    "Seq.map": lambda f: (lambda a: [f(x) for x in _cs_chars(a)]), "String.map": lambda f: (lambda s: _cs_str([f(x) for x in _cs_chars(s)])),
+    "Array.ofSeq": list, "List.ofSeq": list, "Seq.toArray": list, "String.Join.": _cs_join,
+    # Java (target jvm-script-host-route: JSP / single-file Java descriptors assembled at runtime)
+    "Base64.getDecoder": lambda: _JvObj("b64"), "Base64.getMimeDecoder": lambda: _JvObj("b64mime"),
+    "Base64.getUrlDecoder": lambda: _JvObj("b64url"), "HexFormat.of": lambda: _JvObj("hex"),
+    "String.join": lambda sep, *xs: _cs_join(sep, list(xs)), "String.valueOf": _cs_str, "String.copyValueOf": _cs_str,
+    "Character.toString": lambda x: chr(int(x) % 0x110000), "Integer.parseInt": _cs_toint, "Integer.valueOf": _cs_toint,
+    "StandardCharsets.UTF_8": "UTF-8", "StandardCharsets.US_ASCII": "US-ASCII", "StandardCharsets.ISO_8859_1": "ISO-8859-1",
+    "StandardCharsets.UTF_16LE": "UTF-16LE", "StandardCharsets.UTF_16BE": "UTF-16BE",
+}
+
+
+class _JvObj:
+    """A Java helper object (`Base64.getDecoder()`, `HexFormat.of()`)."""
+    def __init__(self, kind):
+        self.kind = kind
+
+
+def _jv_charset(cs):
+    v = _cs_str(cs).strip().lower().replace("_", "-")
+    if v not in ("utf-8", "utf8", "us-ascii", "ascii", "iso-8859-1", "latin1", "utf-16le", "utf-16be", "utf-16"):
+        raise _CsStop("charset")
+    return v
+
+
+# Java method spellings with C# semantics (camelCase never collides with the PascalCase .NET names)
+_JV_METHOD = {"append": "Append", "toString": "ToString", "insert": "Insert", "length": "Length", "trim": "Trim",
+              "toCharArray": "ToCharArray", "toUpperCase": "ToUpper", "toLowerCase": "ToLower"}
+
+
+def _jv_method(v, name, a):
+    """Java-only methods (Groovy `.reverse()` / `.decodeBase64()` / `.decodeHex()` too). NotImplemented: not one."""
+    if isinstance(v, _JvObj):
+        if name == "decode" and a and v.kind.startswith("b64"):
+            t = _cs_bytes(a[0]) if isinstance(a[0], list) else _cs_str(a[0]).encode("latin-1")
+            t = re.sub(rb"\s+", b"", t) if v.kind == "b64mime" else t
+            t = t.translate(bytes.maketrans(b"-_", b"+/")) if v.kind == "b64url" else t
+            return list(base64.b64decode(t + b"=" * (-len(t) % 4) if v.kind != "b64" else t, validate=True))
+        if name == "parseHex" and a:
+            return list(bytes.fromhex(_cs_str(a[0])))
+        raise _CsStop(name)
+    if isinstance(v, _CsSB) and name == "reverse" and not a:
+        v.s = v.s[::-1]
+        return v
+    if isinstance(v, (str, list)) and name == "reverse" and not a:      # Groovy String / List .reverse()
+        return v[::-1]
+    if isinstance(v, str) and name == "decodeBase64" and not a:          # Groovy
+        return list(base64.b64decode(re.sub(r"\s+", "", v), validate=True))
+    if isinstance(v, str) and name == "decodeHex" and not a:             # Groovy
+        return list(bytes.fromhex(v))
+    if name == "getBytes" and isinstance(v, (str, _CsSB)):
+        return list(_cs_str(v).encode(_jv_charset(a[0]) if a else "utf-8"))
+    if isinstance(v, (str, _CsSB)) and name == "substring" and a:         # Java: (begin[, end])
+        s = _cs_str(v)
+        return s[int(a[0]):] if len(a) == 1 else s[int(a[0]):int(a[1])]
+    if isinstance(v, (str, _CsSB)) and name == "charAt" and a and len(a) == 1:
+        return _CsCh(ord(_cs_str(v)[int(a[0])]))
+    if isinstance(v, str) and name == "concat" and a and len(a) == 1:
+        return v + _cs_str(a[0])
+    if isinstance(v, str) and name == "replace" and a and len(a) == 2:
+        return v.replace(_cs_str(a[0]), _cs_str(a[1]))
+    return NotImplemented
+
+
+def _cs_method(v, name, a, ev):
+    if name[:1].islower() and not ev.fs and not ev.vb:
+        r = _jv_method(v, name, a)
+        if r is not NotImplemented:
+            return r
+        name = _JV_METHOD.get(name, name)
+    if isinstance(v, _CsSB):
+        if name in ("Append", "AppendLine") and a is not None:
+            v.s += (_cs_str(a[0]) * (int(a[1]) if len(a) == 2 and isinstance(a[0], _CsCh) else 1) if a else "") + \
+                ("\r\n" if name == "AppendLine" else "")
+            return v
+        if name == "Insert" and a:
+            i = int(a[0])
+            v.s = v.s[:i] + _cs_str(a[1]) + v.s[i:]
+            return v
+        if name == "ToString":
+            return v.s
+        if name == "Length":
+            return len(v.s)
+        if name == "Clear":
+            v.s = ""
+            return v
+        if name == "Replace" and a:
+            v.s = v.s.replace(_cs_str(a[0]), _cs_str(a[1]))
+            return v
+        raise _CsStop(name)
+    if callable(v) and not isinstance(v, (str, list)):
+        raise _CsStop(name)
+    a = a or []
+    if name in ("ToString", "ToArray", "ToList", "AsEnumerable", "Trim") and not a:
+        if name == "ToString":
+            return _cs_str(v)
+        if name == "Trim":
+            return _cs_str(v).strip()
+        return list(_cs_chars(v)) if isinstance(v, str) else list(v)
+    if name == "ToCharArray":
+        return _cs_chars(v)
+    if name == "Reverse":
+        return _cs_chars(v)[::-1]
+    if name in ("Length", "Count", "LongLength"):
+        return len(v)
+    if name in ("Select", "Map") and a and callable(a[0]):
+        f = a[0]
+        if len(f.params) == 2:
+            return [f(x, _CsCh(i) if False else i) for i, x in enumerate(_cs_chars(v))]
+        return [f(x) for x in _cs_chars(v)]
+    if name == "Substring" and a:
+        s = _cs_str(v)
+        return s[int(a[0]):] if len(a) == 1 else s[int(a[0]):int(a[0]) + int(a[1])]
+    if name == "Replace" and len(a) == 2:
+        return _cs_str(v).replace(_cs_str(a[0]), _cs_str(a[1]))
+    if name in ("ToUpper", "ToUpperInvariant"):
+        return _cs_str(v).upper()
+    if name in ("ToLower", "ToLowerInvariant"):
+        return _cs_str(v).lower()
+    if name == "Concat" and a:
+        return (_cs_chars(v) if isinstance(v, str) else list(v)) + _cs_chars(a[0])
+    if name in ("Skip", "Take") and a:
+        s = _cs_chars(v)
+        return s[int(a[0]):] if name == "Skip" else s[:int(a[0])]
+    raise _CsStop(name)
+
+
+def _cs_skip_stmt(t, i):
+    """Index after the statement starting at i (C#: next `;` at depth 0)."""
+    depth = 0
+    while t[i][0] != "eof":
+        if t[i][0] == "p" and t[i][1] in "([{":
+            depth += 1
+        elif t[i][0] == "p" and t[i][1] in ")]}":
+            depth -= 1
+            if depth < 0:
+                return i
+        elif t[i][0] == "p" and t[i][1] == ";" and depth == 0:
+            return i + 1
+        i += 1
+    return i
+
+
+def _cs_exec(ev, a, b, cands, depth=0, loops=None):
+    """Run the statements in t[a:b): const-local assignments, appends, element writes, loops, returns."""
+    t, env, vb = ev.t, ev.env, ev.vb
+    i = a
+    loops = loops if loops is not None else [0]
+
+    def eval_at(j):
+        ev.pos = j
+        v = ev.expr()
+        return v, ev.pos
+
+    while i < b and t[i][0] != "eof":
+        if time.time() > ev.deadline:
+            raise _CsStop("time")
+        k, v = t[i]
+        nk, nv = t[i + 1] if i + 1 < len(t) else ("eof", None)
+        prev = t[i - 1] if i > 0 else ("p", ";")
+        try:
+            # C# for (init; i < N; i++) body
+            if k == "id" and v == "for" and nk == "p" and nv == "(" and not vb:
+                h0 = i + 2
+                h1 = _cs_skip_stmt(t, h0)
+                h2 = _cs_skip_stmt(t, h1)
+                j = h0 + (1 if t[h0][0] == "id" and t[h0 + 1][0] == "id" else 0)
+                var = t[j][1]
+                start, _ = eval_at(j + 2)
+                if not (t[h1][1] == var and t[h1 + 1][1] in ("<", "<=")):
+                    raise _CsStop("for")
+                lim, _ = eval_at(h1 + 2)
+                lim = int(lim) + (1 if t[h1 + 1][1] == "<=" else 0)
+                close = h2
+                depth_p = 0
+                while t[close][0] != "eof":                          # the header's `)`
+                    if t[close][1] == "(":
+                        depth_p += 1
+                    elif t[close][1] == ")":
+                        if depth_p == 0:
+                            break
+                        depth_p -= 1
+                    close += 1
+                body_a = close + 1
+                if t[body_a] == ("p", "{"):
+                    body_b = _cs_match(t, body_a)
+                    body_a, after = body_a + 1, body_b + 1
+                else:
+                    body_b = after = _cs_skip_stmt(t, body_a)
+                for idx in range(int(start), lim):
+                    loops[0] += 1
+                    if loops[0] > 1 << 17:
+                        raise _CsStop("loop")
+                    env[var] = idx
+                    _cs_exec(ev, body_a, body_b, cands, depth + 1, loops)
+                i = after
+                continue
+            # VB For i = a To b [Step 1] ... Next
+            if vb and k == "id" and v.lower() == "for" and nk == "id" and nv.lower() != "each":
+                var = nv
+                j = i + 2
+                if t[j][0] == "id" and t[j][1].lower() == "as":
+                    j += 2
+                start, j = eval_at(j + 1)
+                if not (t[j][0] == "id" and t[j][1].lower() == "to"):
+                    raise _CsStop("For")
+                lim, j = eval_at(j + 1)
+                e = j
+                nest = 0
+                while t[e][0] != "eof":
+                    if t[e][0] == "id" and t[e][1].lower() == "for":
+                        nest += 1
+                    if t[e][0] == "id" and t[e][1].lower() == "next":
+                        if nest == 0:
+                            break
+                        nest -= 1
+                    e += 1
+                for idx in range(int(start), int(lim) + 1):
+                    loops[0] += 1
+                    if loops[0] > 1 << 17:
+                        raise _CsStop("loop")
+                    env[var] = idx
+                    _cs_exec(ev, j, e, cands, depth + 1, loops)
+                i = e + 1 + (1 if t[e + 1][0] == "id" and t[e + 1][1] == var else 0)
+                continue
+            # element write: x[i] = e / x[i] ^= e / VB x(i) = e / F# x.[i] <- e
+            if k == "id" and v in env and isinstance(env[v], list) and (nk == "p" and nv in ("[", "(") or
+                                                                       nv == "." and t[i + 2][1] == "["):
+                j = i + (3 if nv == "." else 2)
+                idx, j = eval_at(j)
+                if t[j][1] not in ("]", ")"):
+                    raise _CsStop("idx")
+                op = t[j + 1][1]
+                if op in ("=", "<-", "^=", "+=", "-=", "|=", "&="):
+                    val, e = eval_at(j + 2)
+                    cur = env[v][int(idx)]
+                    if op in ("^=", "+=", "-=", "|=", "&="):
+                        val = _cs_binop(op[0], cur, val, ev.fs)
+                    if isinstance(cur, _CsCh):
+                        val = _CsCh(int(val) & 0xFFFF)
+                    env[v][int(idx)] = val
+                    i = e
+                    continue
+            # assignment / compound append
+            if k == "id" and nk == "p" and nv in ("=", "+=", "&=", "<-", ":=") and prev[1] not in (".", "[", "(", ",") \
+                    and not (prev[0] == "id" and prev[1] in ("for", "foreach")):
+                val, e = eval_at(i + 2)
+                if nv in ("+=", "&="):
+                    val = _cs_str(env.get(v, "")) + _cs_str(val) if not isinstance(env.get(v), int) or nv == "&=" \
+                        else env[v] + int(val)
+                env[v] = val
+                if isinstance(v, str) and _CS_DESC_NAME.search(v):
+                    cands.append((v, val))
+                i = e
+                continue
+            # VB `Dim x As T = e` / `Dim sb As New StringBuilder` ; F# / TS `let x : T = e`
+            if k == "id" and ((vb and nk == "id" and nv.lower() == "as") or (nk == "p" and nv == ":" and ev.fs)):
+                j = i + 2
+                if vb and t[j][0] == "id" and t[j][1].lower() == "new":
+                    val, e = eval_at(j)
+                    env[v] = val
+                    i = e
+                    continue
+                while j < i + 12 and not (t[j][0] == "p" and t[j][1] in ("=", ";", ")", ",")):
+                    j += 1
+                if t[j] == ("p", "="):
+                    val, e = eval_at(j + 1)
+                    env[v] = val
+                    if _CS_DESC_NAME.search(v):
+                        cands.append((v, val))
+                    i = e
+                    continue
+            # side-effect statement: sb.Append(..)..; Array.Reverse(x); list.Reverse();
+            if k == "id" and (v in env or v in ("Array", "System")) and nk == "p" and nv == "." and \
+                    prev[1] not in (".", "=", "(", ","):
+                if v in env and isinstance(env[v], list) and t[i + 2] == ("id", "Reverse") and t[i + 3][1] == "(" \
+                        and t[i + 4][1] == ")":
+                    env[v].reverse()
+                    i += 5
+                    continue
+                _, e = eval_at(i)
+                i = e
+                continue
+            # dictionary entry ["descriptor"] = e / {"descriptor", e}, return e, => e
+            if k == "p" and v == "[" and nk == "s" and _CS_DESC_NAME.search(nv) and t[i + 2][1] == "]" and t[i + 3][1] == "=":
+                val, e = eval_at(i + 4)
+                cands.append((nv, val))
+                i = e
+                continue
+            if (k == "id" and v in ("return", "Return")) or (k == "p" and v == "=>"):
+                val, e = eval_at(i + 1)
+                cands.append(("", val))
+                i = e
+                continue
+        except (_CsStop, ValueError, TypeError, IndexError, KeyError, ZeroDivisionError, OverflowError,
+                UnicodeError, binascii.Error, RecursionError, AttributeError):
+            if time.time() > ev.deadline:
+                raise _CsStop("time")
+        i += 1
+
+
+def _cs_match(t, i):
+    depth = 0
+    while t[i][0] != "eof":
+        if t[i][0] == "p" and t[i][1] in ("{", "(", "["):
+            depth += 1
+        elif t[i][0] == "p" and t[i][1] in ("}", ")", "]"):
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return i
+
+
+def cs_fold(src, budget=0.5):
+    """[(name, folded descriptor string)] of a C# / VB.NET / F# source whose descriptor is assembled at runtime."""
+    try:
+        src = src if isinstance(src, str) else bytes(src).decode("utf-8", "ignore")
+        src = src[:1 << 18]
+        vb = bool(re.search(r"(?im)^\s*(?:(?:Public|Private|Friend|Shared)\s+)*(?:Dim|Const|Imports|Module|Sub|Function)\s+\w", src)
+                  and re.search(r"(?i)\bAs\s+(?:New\s+)?\w|\bEnd\s+(?:Sub|Module|Function|Class)\b|&\s*Chr", src))
+        fs = not vb and bool(re.search(r"(?m)^\s*let\s+(?:mutable\s+)?\w", src))
+        toks = _cs_tokens(src, vb)
+        env, cands = {}, []
+        ev = _CsEval(toks, env, vb, fs, time.time() + budget)
+        try:
+            _cs_exec(ev, 0, len(toks) - 1, cands)
+        except (_CsStop, RecursionError):
+            pass
+        out, seen = [], set()
+        for name, val in [(n, v) for n, v in env.items() if _CS_DESC_NAME.search(n)] + cands:
+            try:
+                s = _cs_str(val)
+            except _CsStop:
+                continue
+            if s and s not in seen:
+                seen.add(s)
+                out.append((name, s))
+        return out
+    except Exception:  # noqa: BLE001 - hostile / truncated source: nothing folds
+        return []
+
+
+def _cs_fold_codecs(src, budget=0.5):
+    """find_codecs readings of runtime-assembled .NET descriptors (first plan wins)."""
+    if not isinstance(src, str) or not _CS_CUE.search(src[:1 << 18]) or not _CS_DESC_NAME.search(src[:1 << 18]):
+        return []
+    end = time.time() + budget
+    for name, s in cs_fold(src, budget * 0.6):
+        if time.time() > end:
+            break
+        plain = peel_plan(s, budget=min(0.3, max(0.05, end - time.time())))
+        if plain:
+            ident = re.sub(r"^descriptor[_-]?", "", name, flags=re.I) or "descriptor"
+            return [{"id": ident, "rep": "descriptor_folded", "transform": "identity", "key": "", "material": s,
+                     "plain": plain}]
+    return []

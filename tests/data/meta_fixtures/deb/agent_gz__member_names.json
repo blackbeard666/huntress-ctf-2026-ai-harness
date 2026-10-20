@@ -1,0 +1,8 @@
+{
+ "field": "deb.member_names",
+ "expected": "[\"debian-binary\",\"control.tar.gz\",\"data.tar.gz\"]",
+ "generator_cmd": "dpkg-deb --root-owner-group -Zgzip --build pkg agent_gz.deb (DEBIAN/control: Package deploy-agent, Version 3.4.1-2, Architecture arm64, folded Depends)",
+ "oracle_cmd": "ar t agent_gz.deb | python3 -c \"import json,sys;print(json.dumps(sys.stdin.read().split(),separators=(\\\",\\\",\\\":\\\")))\"",
+ "decoy": false,
+ "member": "deploy-agent_3.4.1-2_arm64.deb"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "elf.dt_runpath",
+ "expected": "none",
+ "generator_cmd": "gcc -shared -fPIC -Wl,--no-as-needed -Wl,--disable-new-dtags -Wl,-soname,libagent.so -Wl,-rpath,/usr/local/agent/lib -o libagent.so lib.c -lm -ldl  (run in $TMPDIR/elfdyn)",
+ "oracle_cmd": "readelf -a -W dyn_libagent_so__dt_runpath.bin | grep 'Library runpath'",
+ "decoy": true,
+ "member": "libagent.so"
+}

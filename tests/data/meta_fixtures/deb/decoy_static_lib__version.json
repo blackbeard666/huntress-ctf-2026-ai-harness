@@ -1,0 +1,8 @@
+{
+ "field": "deb.version",
+ "expected": "none",
+ "generator_cmd": "gcc -c f.c -o f.o && ar rc libf.a f.o (GNU ar static library, no debian-binary) (renamed .deb)",
+ "oracle_cmd": "dpkg-deb -f libf.a Version 2>/dev/null || echo none",
+ "decoy": true,
+ "member": "libdeploy.deb"
+}

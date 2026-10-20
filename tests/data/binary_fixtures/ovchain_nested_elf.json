@@ -1,0 +1,25 @@
+{
+ "entry": "overlay_chain(data)",
+ "encoding": "pk19-overlay-chain",
+ "expected": {
+  "layer_count": 2,
+  "decoy_offsets": [],
+  "decoy_count": 0,
+  "overlay_offset": 14328,
+  "overlay_size": 14480,
+  "final_overlay_offset": 14328,
+  "final_overlay_depth": 1,
+  "final_overlay_magic": "PK19",
+  "payload_kind": "overlay>elf>overlay",
+  "hcfg_offset": 0,
+  "config": {
+   "campaign": "OC-C",
+   "c2": "inner-elf.example.invalid"
+  },
+  "unpacked_sha256": "367a6da9e14833b704524780f016e02cc03d227121da45683aab8f7889035c13"
+ },
+ "decoy": false,
+ "note": "(c) PK19 payload = a tiny ELF whose own PK19 overlay holds the HCFG",
+ "generator_cmd": "bash tests/data/binary_fixtures/ovchain_gen.sh   # gcc -Os -s hosts + perl pack/Digest::SHA/Compress::Zlib PK19 + HCFG writer",
+ "oracle_cmd": "python3 -I tests/data/binary_fixtures/ovchain_oracle.py tests/data/binary_fixtures/ovchain_nested_elf.bin   # pyelftools image end, re.finditer hits, hashlib, zlib; cross-checked with grep -obaF PK19 / readelf -SW"
+}

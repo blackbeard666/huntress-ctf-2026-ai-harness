@@ -1,0 +1,8 @@
+{
+ "field": "plist.cf_bundle_identifier",
+ "expected": "com.acme.updater.helper",
+ "generator_cmd": "python3 -I -c 'import plistlib,datetime; plistlib.dumps({CFBundleName,CFBundleIdentifier,CFBundleExecutable,CFBundleShortVersionString,CFBundleVersion,LSMinimumSystemVersion,LSUIElement,NSAppTransportSecurity:{NSAllowsArbitraryLoads},BuildDate}, fmt=FMT_BINARY, sort_keys=False)'  (stdlib plistlib WRITER)",
+ "oracle_cmd": "exiftool -j info_bin.bin -> CFBundleIdentifier 'com.acme.updater.helper'; file -b -> 'Apple binary property list'",
+ "decoy": false,
+ "member": "info_bin.bin"
+}

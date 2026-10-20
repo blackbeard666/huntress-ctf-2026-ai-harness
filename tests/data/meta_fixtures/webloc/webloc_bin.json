@@ -1,0 +1,8 @@
+{
+ "field": "plist.url",
+ "expected": "http://198.51.100.7/stage2.dmg",
+ "generator_cmd": "python3 -I -c 'import plistlib; plistlib.dumps({\"URL\": ...}, fmt=plistlib.FMT_BINARY)'  (.webloc as Safari writes it: a one-key plist)",
+ "oracle_cmd": "exiftool -j webloc_bin.bin -> URL 'http://198.51.100.7/stage2.dmg'",
+ "decoy": false,
+ "member": "stage2.webloc"
+}

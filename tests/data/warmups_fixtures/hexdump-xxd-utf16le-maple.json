@@ -1,0 +1,9 @@
+{
+ "codec": "hexdump-xxd",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-71",
+ "encoded": "00000000: 4e00 6900 6300 6500 2000 7700 6f00 7200  N.i.c.e. .w.o.r.\n00000010: 6b00 2000 6400 6500 6300 6f00 6400 6900  k. .d.e.c.o.d.i.\n00000020: 6e00 6700 2000 7400 6800 6900 7300 2000  n.g. .t.h.i.s. .\n00000030: 7700 6100 7200 6d00 7500 7000 2100 2000  w.a.r.m.u.p.!. .\n00000040: 5400 6f00 2000 7300 6f00 6c00 7600 6500  T.o. .s.o.l.v.e.\n00000050: 2c00 2000 7300 7500 6200 6d00 6900 7400  ,. .s.u.b.m.i.t.\n00000060: 2000 7400 6800 6900 7300 2000 6500 7800   .t.h.i.s. .e.x.\n00000070: 6100 6300 7400 2000 6100 6e00 7300 7700  a.c.t. .a.n.s.w.\n00000080: 6500 7200 2000 7400 6f00 2000 7400 6800  e.r. .t.o. .t.h.\n00000090: 6500 2000 4700 6100 6d00 6500 2000 4d00  e. .G.a.m.e. .M.\n000000a0: 6100 7300 7400 6500 7200 3a00 2000 6d00  a.s.t.e.r.:. .m.\n000000b0: 6100 7000 6c00 6500 2d00 6f00 7400 7400  a.p.l.e.-.o.t.t.\n000000c0: 6500 7200 2d00 3700 3100                 e.r.-.7.1.",
+ "generator_cmd": "printf %s \"$plain\" | iconv -t UTF-16LE | xxd",
+ "oracle_cmd": "printf \"%s\\n\" \"$encoded\" | xxd -r | iconv -f UTF-16LE -t UTF-8  # xxd -r + iconv",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-71",
+ "expected": "match"
+}

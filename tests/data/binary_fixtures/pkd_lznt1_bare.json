@@ -1,0 +1,17 @@
+{
+ "entry": "packer_hcfg",
+ "encoding": "lznt1",
+ "stream_offset": 1088,
+ "stream_length": 123,
+ "expected_offset": 0,
+ "expected_config": {
+  "c2": "203.0.113.91:8080",
+  "campaign": "nt-chunks",
+  "sleep": 30,
+  "flag": "flag{lznt1_rtl_buf}",
+  "pad": "xyzxyzxyzxyzxyzxyzxyzxyzxyz"
+ },
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/binary_fixtures/pkd_gen.py   # writer: pip lznt1.compress",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/pkd_oracle.py pkd_lznt1_bare"
+}

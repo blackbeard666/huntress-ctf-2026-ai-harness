@@ -1,0 +1,8 @@
+{
+ "field": "java.magic_u32_hex",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"struct.pack('>II',0xcafebabe,2)+2 fat_arch (x86, x86_64) + zero pad\" (Mach-O fat impostor sharing the 0xcafebabe magic)",
+ "oracle_cmd": "file fat.bin -> Mach-O universal binary with 2 architectures: [i386] [x86_64] (not a Java class)",
+ "decoy": true,
+ "member": "Widget.class"
+}

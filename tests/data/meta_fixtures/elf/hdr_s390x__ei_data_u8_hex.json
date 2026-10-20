@@ -1,0 +1,8 @@
+{
+ "field": "elf.ei_data_u8_hex",
+ "expected": "0x02",
+ "generator_cmd": "printf hello > blob; objcopy -I binary -O elf64-big blob s390x.o; printf '\\x00\\x16' | dd of=s390x.o bs=1 seek=18 conv=notrunc  (e_machine = EM_S390)  (run in $TMPDIR/elfid)",
+ "oracle_cmd": "readelf -hW hdr_s390x__ei_data_u8_hex.bin | grep Magic: (byte 5 = 02 ELFDATA2MSB)",
+ "decoy": false,
+ "member": "s390x.o"
+}

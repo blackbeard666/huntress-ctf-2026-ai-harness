@@ -1,0 +1,1 @@
+class Main { static var CFG = "hello hashlink"; static var GREET = "hl-fixture"; static function main() { Sys.println(CFG.length + " " + GREET); } }

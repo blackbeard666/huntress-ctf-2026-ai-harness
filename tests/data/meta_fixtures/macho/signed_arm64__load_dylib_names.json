@@ -1,0 +1,8 @@
+{
+ "field": "macho.load_dylib_names",
+ "expected": "[\"/usr/lib/libSystem.B.dylib\",\"@rpath/libfoo.dylib\"]",
+ "generator_cmd": "zig cc (pip ziglang 0.17.0: python -m ziglang cc) -Os -s -target aarch64-macos.13.0 -o prog_arm64 m.c -L. -lfoo -Wl,-rpath,@executable_path/../Frameworks -Wl,-rpath,/opt/lib; tools/rcodesign/rcodesign (apple-codesign 0.29.0) generate-self-signed-certificate --person-name 'Huntress Test' --team-id QX7ZK3P9LM --pem-unified-file cert.pem; tools/rcodesign/rcodesign (apple-codesign 0.29.0) sign --pem-file cert.pem --timestamp-url none --binary-identifier com.huntress.implant --team-name QX7ZK3P9LM --entitlements-xml-file ent.plist (4 keys) --code-signature-flags runtime signed_arm64  (run in $TMPDIR/mcs)",
+ "oracle_cmd": "llvm-otool-18 -L signed_arm64__load_dylib_names.bin (minus the LC_ID_DYLIB first line of a dylib)",
+ "decoy": false,
+ "member": "implant"
+}

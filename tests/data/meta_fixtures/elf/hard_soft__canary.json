@@ -1,0 +1,8 @@
+{
+ "field": "elf.canary",
+ "expected": "false",
+ "generator_cmd": "gcc -O0 -no-pie -fno-stack-protector -U_FORTIFY_SOURCE -z execstack -Wl,-z,norelro -o soft_none t.c",
+ "oracle_cmd": "readelf --dyn-syms -W hard_soft__canary.bin | grep -q __stack_chk_fail && echo true || echo false",
+ "decoy": false,
+ "member": "soft_none"
+}

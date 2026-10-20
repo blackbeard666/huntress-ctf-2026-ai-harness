@@ -1,0 +1,8 @@
+{
+ "field": "elf.e_entry_u64_hex",
+ "expected": "none",
+ "generator_cmd": "head -c 20 collector-001.elf > trunc20.elf  (ELF magic, header truncated)  (run in $TMPDIR/elfid)",
+ "oracle_cmd": "readelf -hW hdr_decoy_trunc20__e_entry_u64_hex.bin  -> 'readelf: Error: Failed to read file header' (truncated)",
+ "decoy": true,
+ "member": "trunc20.elf"
+}

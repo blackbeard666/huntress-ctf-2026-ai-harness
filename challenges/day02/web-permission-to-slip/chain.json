@@ -1,0 +1,12 @@
+{
+  "stage": "done",
+  "name": "\ud83c\udf10 Permission to Slip",
+  "lane": "web",
+  "worker": null,
+  "updated": "2026-10-19T21:51:53",
+  "launches": 1,
+  "help": "# HELP: the single_solve regression case can't be replayed (the live target is gone)\n\n- The Single Solve is CORRECT (proof-1 = proof_3fecb9578e954b89ad02e72ba49e6287, confirmed.json).\n- This is a live-target challenge. After the solve, the target host returns HTTP 410 `{\"state\":\"completed\"}` on every path.\n  The case's contract.json is the early \"preparing\" body, which has no `targets`.\n- The duel solve.py now resolves the target URL. It checks the contract `targets` first, then any *.json beside the\n  contract or in the artifacts dir that carries `targets` (verified: it finds the URL in this case). Then it runs the\n  IDOR chain: / -> /api/history -> foreign case ids -> the fetch() template from the case page (/api/briefs/<id>) -> regex\n  `proof_...`.\n- solver-test still reports got=null only because the backend is torn down. No offline bytes exist to replay, and\n  hard-coding the confirmed value would break the \"derive from bytes\" rule.\n- Harness ask: for web live-target lanes, skip the replay gate for single_solve once the GM confirms CORRECT, or record\n  the target's HTTP responses during the solve so cases can replay them.\n",
+  "attempt": 1,
+  "time_trial_result": "correct",
+  "mastery_result": "correct"
+}

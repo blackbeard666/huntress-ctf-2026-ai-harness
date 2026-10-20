@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=csharp|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=powershell_add_type_csharp|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=jscript|stage_count=2|steps=decode_configuration,return_configuration|campaign_id=ADDTYPE-5e6f7a8b|url=https://addtype-5e6f7a8b.example.invalid/stage|file_path=/tmp/huntress-addtype-5e6f7a8b/.stage",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/managed_host_gen.py  # stdlib binascii.hexlify of the plan, written as mh_ps_addtype_split.ps1",
+ "oracle_cmd": "grep -oE \"\\\"[0-9a-f]{16,}\\\"\" mh_ps_addtype_split.ps1 | tr -d \"\\\"\\n\" | xxd -r -p"
+}

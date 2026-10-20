@@ -1,0 +1,8 @@
+{
+ "field": "wasm.export_names",
+ "expected": "[\"_start\"]",
+ "generator_cmd": "wat2wasm 1.0.36 min.wat (module (func (export \"_start\")))",
+ "oracle_cmd": "wasm-objdump -x -j Export min.wasm -> func[0] -> \"_start\"",
+ "decoy": false,
+ "member": "min.wasm"
+}

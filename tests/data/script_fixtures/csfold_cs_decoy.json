@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I csfold_gen.py challenges/day19/scripting-sharp-practice/single_solve/work/extracted/evidence/polyglot-csharp_script-launcher.csx cs_decoy csfold_cs_decoy.csx  (D19 csx descriptor literal re-assembled at runtime; marker line dropped)",
+ "oracle_cmd": "cp csfold_cs_decoy.csx t.cs && echo 'Console.Write(descriptor_<id>);' >> t.cs && dotnet run t.cs | tail -1 | base64 -d   (.NET SDK 10.0.112 C# compiler evaluates the assembled descriptor)",
+ "note": "oracle output decodes to benign config text 'theme=dark|font=Consolas|hotkey=ctrl+alt+t|window=', no v=3 plan"
+}

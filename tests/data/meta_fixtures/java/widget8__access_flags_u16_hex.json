@@ -1,0 +1,8 @@
+{
+ "field": "java.access_flags_u16_hex",
+ "expected": "0x0031",
+ "generator_cmd": "javac --release 8 -d o8 com/example/Widget.java Plain.java (Widget: public final class extends AbstractList<String> implements Serializable, static final long + double field)",
+ "oracle_cmd": "javap -v Widget.class -> flags: (0x0031) ACC_PUBLIC, ACC_FINAL, ACC_SUPER",
+ "decoy": false,
+ "member": "Widget.class"
+}

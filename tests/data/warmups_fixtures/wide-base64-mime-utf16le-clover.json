@@ -1,0 +1,9 @@
+{
+ "codec": "base64-mime(utf-16le)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-77",
+ "encoded": "TgBpAGMAZQAgAHcAbwByAGsAIABkAGUAYwBvAGQAaQBuAGcAIAB0AGgAaQBzACAAdwBhAHIAbQB1\nAHAAIQAgAFQAbwAgAHMAbwBsAHYAZQAsACAAcwB1AGIAbQBpAHQAIAB0AGgAaQBzACAAZQB4AGEA\nYwB0ACAAYQBuAHMAdwBlAHIAIAB0AG8AIAB0AGgAZQAgAEcAYQBtAGUAIABNAGEAcwB0AGUAcgA6\nACAAYwBsAG8AdgBlAHIALQBoAGUAcgBvAG4ALQA3ADcA",
+ "generator_cmd": "printf %s \"$plain\" | iconv -f UTF-8 -t UTF-16LE | base64 -w76  # coreutils default MIME wrap, trailing newline stripped",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | iconv -f UTF-16LE -t UTF-8",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-77",
+ "expected": "match"
+}

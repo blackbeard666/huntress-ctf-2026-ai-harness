@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=csharp_script|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=vbscript|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=CSHARP_SCRIPT-1d27f436|url=https://csharp_script-1d27f4363c.example.invalid/stage|file_path=/tmp/huntress-csharp_script/.1d27f4363ca06251.stage",
+ "decoy": true,
+ "generator_cmd": "bash tests/data/script_fixtures/nested_carrier_gen.sh  # step 8: node writer, inner .csx with every 64+ hex run replaced by od -tx1 of /dev/urandom, then \\uXXXX escaped",
+ "oracle_cmd": "node vm.runInNewContext(file+';this.v=EmbeddedCsx_79a211db') | grep -o 'HB64-[0-9a-f]*' -> bytes.fromhex = random bytes, no plan"
+}

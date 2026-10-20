@@ -98,6 +98,10 @@ DAYS = [
     # D18 "Off the Rails" ("Three rails. One very zigzag commute."): classic 3-rail fence, offset 0, spaces are ciphertext
     # (byte-exact on the Single, TT 813eb166 and 88/88 Mastery 8adb440d line 18)
     (18, "rail3", lambda s: rail_enc(s, 3), lambda t: rail_dec(t, 3), True),
+    # D19 "Little Things" ("Two bytes walk into a bar. The little one goes first."): lowercase hex of BOM fffe + UTF-16LE,
+    # no separators (byte-exact on the Single, TT dc4763da and 93/93 Mastery 9ca30408 line 19)
+    (19, "utf16le-hex", lambda s: (b"\xff\xfe" + s.encode("utf-16-le")).hex(),
+     lambda t: bytes.fromhex(re.sub(r"\s+", "", t)).decode("utf-16"), False),
 ]
 
 try:   # fair runs (HCTF_CODEC_MAX_DAY=<N-1>, as lib/codec.py): only codecs GM-confirmed before day N
@@ -3172,6 +3176,65 @@ def gray_free(p):
     return [x for x in gray_reads(p) if _texty(x) >= 0.9]
 
 
+# Binary LSB-first per byte (`basenc --base2lsbf`, Perl unpack "b8"): every [01]{8} group bit-reversed, so ASCII groups
+# END in 0 and the MSB-first read is junk; also 7-bit LSB-first groups, and the whole bit stream reversed (`basenc
+# --base2msbf | rev` = text reversed + LSB-first). Decode int(g[::-1], 2); whole: reverse the stream, read MSB-first.
+def lsb_enc(s, bits=8, sep=" ", whole=False):
+    if whole:
+        return sep.join(format(b, f"0{bits}b") for b in _u(s))[::-1]
+    return sep.join(format(b, f"0{bits}b")[::-1] for b in _u(s))
+
+
+def _bits_txt(gs):
+    try:
+        out = bytes(int(x, 2) for x in gs).decode("utf-8")
+    except ValueError:
+        return None
+    return out if out and all(c.isprintable() or c in "\t\n\r" for c in out) else None
+
+
+def lsb_reads(t):
+    """[(mode, text)] for mode in lsb8 / rev8 / lsb7 / rev7 whose reading is printable while the plain MSB-first read
+    of the same groups is not text (that is binary8 / binary7)."""
+    try:
+        if not isinstance(t, str) or len(t) > 262144:
+            return []
+        t = t.strip().strip("\"'[]()")
+        toks = [x for x in re.split(r"[\s,;|:/_-]+", t) if x]
+        if not toks or any(set(x) - {"0", "1"} for x in toks):
+            return []
+        reads = []
+        for bits in (8, 7):
+            tk = toks
+            if len(toks) == 1:
+                if len(t) < bits * 2 or len(t) % bits:
+                    continue
+                tk = [t[i:i + bits] for i in range(0, len(t), bits)]
+            elif any(len(x) != bits for x in tk):
+                continue
+            plain = _bits_txt(tk)
+            if plain and _texty(plain) >= 0.9:
+                continue
+            for mode, gs in ((f"lsb{bits}", tk), (f"rev{bits}", tk[::-1])):
+                out = _bits_txt([x[::-1] for x in gs])
+                if out and _texty(out) >= 0.9 and all(out != o for _m, o in reads):
+                    reads.append((mode, out))
+        return reads
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def lsb_dec(t, whole=False):
+    """The LSB-first (whole=False) / whole-stream-reversed (whole=True) reading, else None."""
+    pre = "rev" if whole else "lsb"
+    return next((o for m, o in lsb_reads(t) if m.startswith(pre)), None)
+
+
+def lsb_free(p):
+    from lib.decode import _bigram
+    return sorted((o for _m, o in lsb_reads(p)), key=_bigram, reverse=True)[:2]
+
+
 # Roman-numeral char codes (`LXXVIII CV XCIX` = "Nic"): each char's decimal code point as a Roman numeral (1-3999), one
 # token per char (space / comma / dash / dot / pipe separated), any case, Unicode numeral forms (U+2160..) via NFKC.
 # Words may also be split by " / " or 2+ spaces (each group decoded, joined by a space). Nibble variant: hex nibbles
@@ -6228,7 +6291,15 @@ def _ebcdic_score(x):
 def inner_enc(s, inner, outer="hex"):
     """Text -> `outer` text of its `inner`-encoded bytes (outer: hex, HEX, hex-spaced, base64, base64-nopad, base32,
     binary8, decimal)."""
-    b = utf7_enc(s).encode() if inner == "utf-7" else s.encode(inner)
+    return _bytes_out(utf7_enc(s).encode() if inner == "utf-7" else s.encode(inner), outer)
+
+
+def _bytes_out(b, outer):
+    """bytes -> `outer` text (hex, HEX, hex-spaced, base64, base64-nopad, base32, binary8, decimal, base85, ascii85)."""
+    if outer == "base85":
+        return base64.b85encode(b).decode()
+    if outer == "ascii85":
+        return base64.a85encode(b).decode()
     if outer == "hex":
         return b.hex()
     if outer == "HEX":
@@ -6256,6 +6327,9 @@ def inner_reads(t, inner=None):
             got = inner_bytes_dec(b, enc)
             if got is not None:
                 out.append((layer, enc, got))
+    if not inner:   # + the Unicode-form sniffer: odd fragments, UTF-8 BOM, a BOM per fragment, base85/ascii85 outers
+        seen = {x for _l, _i, x in out}
+        out += [r for r in unicode_form_reads(t) if r[2] not in seen]
     return out
 
 
@@ -6276,6 +6350,252 @@ def inner_free(p):
     if u7:
         outs.append(u7)
     return [lead + x for x in _top(p, outs, 4)] if outs else []
+
+
+# ------------------------------------------------- Unicode encoding-form sniffer for ANY decoded byte layer
+# D19 "Little Things" = hex of BOM fffe + UTF-16LE, and Mastery line 19 carries its OWN BOM per fragment. The same
+# family under another outer (base64 / base32 / base85 / binary / decimal) or another form (UTF-16BE, UTF-32LE/BE, UTF-8
+# BOM, BOM-less UCS-2) is one sniff: BOM table longest first (fffe0000 / 0000feff before fffe / feff), else the NUL
+# rhythm (00 at every odd index -> LE, every even -> BE; 3 of 4 -> UTF-32). Printable-ASCII gate; never a latin-1 or
+# BOM-less UTF-8 read (plain text is the strict decoders' job). A short Mastery line cut mid code unit (odd byte count)
+# is read under both alignments: a trailing orphan low byte keeps its char (00 pad), a leading orphan 00 is dropped.
+_UBOMS = ((b"\xff\xfe\x00\x00", "utf-32-le"), (b"\x00\x00\xfe\xff", "utf-32-be"), (b"\xef\xbb\xbf", "utf-8"),
+          (b"\xff\xfe", "utf-16-le"), (b"\xfe\xff", "utf-16-be"))
+_UFORMS = {"utf-16le-bom": (b"\xff\xfe", "utf-16-le"), "utf-16be-bom": (b"\xfe\xff", "utf-16-be"),
+           "utf-32le-bom": (b"\xff\xfe\x00\x00", "utf-32-le"), "utf-32be-bom": (b"\x00\x00\xfe\xff", "utf-32-be"),
+           "utf-8-bom": (b"\xef\xbb\xbf", "utf-8"), "utf-16le": (b"", "utf-16-le"), "utf-16be": (b"", "utf-16-be"),
+           "utf-32le": (b"", "utf-32-le"), "utf-32be": (b"", "utf-32-be")}
+
+
+def _uform_text(b, enc):
+    try:
+        s = b.decode(enc).replace("\ufeff", "")
+    except (UnicodeError, ValueError):
+        return None
+    return s if s and s.isascii() and all(c.isprintable() or c in "\t\r\n" for c in s) else None
+
+
+def _uform_rhythm(b):
+    """[(bytes, enc)] the NUL rhythm allows (aligned reads first; odd UTF-16 fragments under both alignments)."""
+    n, z = len(b), lambda v: not any(v)
+    if n % 4 == 0 and n >= 4:
+        if z(b[1::4]) and z(b[2::4]) and z(b[3::4]):
+            return [(b, "utf-32-le")]
+        if z(b[0::4]) and z(b[1::4]) and z(b[2::4]):
+            return [(b, "utf-32-be")]
+    if n % 2 == 0:
+        return [(b, "utf-16-le")] if z(b[1::2]) else [(b, "utf-16-be")] if z(b[0::2]) else []
+    out = []
+    if z(b[1::2]):
+        out.append((b + b"\x00", "utf-16-le"))   # LE cut after a low byte (== BE missing its leading 00)
+    if b[0] == 0 and z(b[2::2]):
+        out.append((b[1:], "utf-16-le"))           # LE starting on the previous unit's 00 high byte
+    if b[-1] == 0 and z(b[0::2]):
+        out.append((b[:-1], "utf-16-be"))          # BE cut after a 00 high byte
+    return out
+
+
+def unicode_form(b):
+    """(form, text) for bytes in a Unicode encoding form (BOM'd UTF-8/16/32, BOM-less UTF-16/32 by NUL rhythm), else
+    None. Text is printable ASCII, every U+FEFF (one BOM per joined fragment) dropped. Never raises."""
+    try:
+        if not isinstance(b, (bytes, bytearray)) or len(b) < 2:
+            return None
+        b = bytes(b)
+        for bom, enc in _UBOMS:
+            if b.startswith(bom):
+                body = b[len(bom):]
+                if "16" in enc and len(body) % 2:
+                    tries = [(x, e) for x, e in _uform_rhythm(body) if e == enc] if body else []
+                else:
+                    tries = [(body, enc)]
+                for x, e in tries:
+                    got = _uform_text(x, e)
+                    if got is not None:
+                        return e.replace("-le", "le").replace("-be", "be") + "-bom", got
+        if 0 not in b:
+            return None
+        for x, e in _uform_rhythm(b):
+            got = _uform_text(x, e)
+            if got is not None:
+                return e.replace("-le", "le").replace("-be", "be"), got
+    except Exception:  # noqa: BLE001 - malformed input reads as nothing
+        return None
+    return None
+
+
+def unicode_form_dec(b):
+    """bytes -> text under the sniffed Unicode encoding form, else None."""
+    r = unicode_form(b)
+    return r[1] if r else None
+
+
+def unicode_form_enc(s, form="utf-16le-bom", outer="hex"):
+    """Text -> `outer` text of BOM + `form` bytes (form: a _UFORMS key)."""
+    bom, enc = _UFORMS[form]
+    return _bytes_out(bom + s.encode(enc), outer)
+
+
+def unicode_form_reads(t):
+    """[(layer, form, text)] for every byte layer (hex, base64, base32, binary8, decimal, octal3, %xx, base85, ascii85)
+    of `t` whose bytes sniff as a Unicode encoding form. Never raises."""
+    t = _t(t)
+    if not isinstance(t, str) or not t.strip():
+        return []
+    layers = _bytes_reads(t)
+    flat = re.sub(r"\s+", "", t)
+    if 5 <= len(flat) <= 400000:
+        if re.fullmatch(r"[0-9A-Za-z!#$%&()*+\-;<=>?@^_`{|}~]+", flat):
+            try:
+                layers.append(("base85", base64.b85decode(flat)))
+            except (ValueError, TypeError):
+                pass
+        a = flat[2:-2] if flat.startswith("<~") and flat.endswith("~>") else flat
+        if re.fullmatch(r"[!-uz]+", a):
+            try:
+                layers.append(("ascii85", base64.a85decode(a)))
+            except (ValueError, TypeError):
+                pass
+    out = []
+    for layer, b in layers:
+        r = unicode_form(b)
+        if r:
+            out.append((layer, r[0], r[1]))
+    return out
+
+
+def unicode_form_text_dec(t, form=None):
+    """The first byte-layer Unicode-form reading of `t` (only `form` if given), else None."""
+    for _l, f, x in unicode_form_reads(t):
+        if form is None or f == form:
+            return x
+    return None
+
+
+# ------------------------------------------------- raw wide artifact: the blob FILE in UTF-16/32 / EBCDIC bytes
+# No hex layer: `file` says "Unicode text, UTF-16, little-endian" and a UTF-8 reader raises or returns NUL-laced text.
+# blob_text(bytes) reads BYTES: BOM / NUL rhythm (unicode_form) first, then strict UTF-8 (U+FEFF dropped), then EBCDIC
+# (cp037/cp500) when 0x40 spaces and c1-e9 / 81-a9 letters dominate, else UTF-8 with replacement. A reader that already
+# did decode("utf-8", "replace") keeps the NULs and ASCII: wide_text_dec recovers that (a mangled BOM = 2 U+FFFD).
+# A raw UTF-7 file is plain ASCII: the existing utf7_dec / inner_free path reads it. Mastery zips: blob_members.
+_EBC_TEXT = set(range(0x81, 0x8a)) | set(range(0x91, 0x9a)) | set(range(0xa2, 0xaa)) | set(range(0xc1, 0xca)) | \
+    set(range(0xd1, 0xda)) | set(range(0xe2, 0xea)) | set(range(0xf0, 0xfa)) | {0x40, 0x4b, 0x6b, 0x5a, 0x4f, 0x7a,
+                                                                                 0x5e, 0x60, 0x61, 0x6d, 0x6f, 0x7d,
+                                                                                 0x05, 0x0d, 0x15, 0x25}
+
+
+def _ebcdic_text(b):
+    """cp037/cp500 text of raw EBCDIC bytes (NEL 0x15 -> newline), None unless spaces + letters dominate."""
+    n = len(b)
+    if n < 4 or max(b) < 0x80 or b.count(0x40) * 25 < n or sum(x in _EBC_TEXT for x in b) * 20 < n * 19:
+        return None
+    best = None
+    for cp in ("cp037", "cp500"):
+        try:
+            s = b.decode(cp).replace("\x85", "\n")
+        except (UnicodeError, LookupError):
+            continue
+        if s.isascii() and all(c.isprintable() or c in "\t\r\n" for c in s) and (
+                best is None or _ebcdic_score(s) > _ebcdic_score(best[1])):
+            best = (cp, s)
+    return best
+
+
+def blob_form(b):
+    """(form, text) for a raw artifact: str -> ("text", s); bytes -> ("utf-16le-bom" / "utf-32be" / ... via
+    unicode_form, "utf-8", "cp037" / "cp500", or "utf-8-replace"). Never raises."""
+    if isinstance(b, str):
+        return "text", b
+    try:
+        b = bytes(b)
+        if not b:
+            return "utf-8", ""
+        r = unicode_form(b)
+        if r:
+            return r
+        if 0 not in b:
+            try:
+                return "utf-8", b.decode("utf-8").lstrip("﻿")
+            except UnicodeError:
+                pass
+            e = _ebcdic_text(b)
+            if e:
+                return e
+        return "utf-8-replace", b.decode("utf-8", "replace")
+    except Exception:  # noqa: BLE001 - malformed input reads as nothing
+        return "utf-8-replace", ""
+
+
+def blob_text(b):
+    """Raw artifact bytes (or text) -> text, whatever its wide/EBCDIC encoding (see blob_form)."""
+    return blob_form(b)[1]
+
+
+def blob_members(b, limit=64, maxsize=4 << 20):
+    """[(name, form, text)] for every file member of a zip (each member sniffed on its own: members may each be wide),
+    else [("", form, text)] for the blob itself. Never raises."""
+    import io
+    import zipfile
+    try:
+        if isinstance(b, (bytes, bytearray)) and bytes(b[:4]) == b"PK\x03\x04":
+            out = []
+            with zipfile.ZipFile(io.BytesIO(bytes(b))) as z:
+                for zi in z.infolist()[:limit]:
+                    if zi.is_dir() or zi.file_size > maxsize:
+                        continue
+                    try:
+                        out.append((zi.filename, *blob_form(z.read(zi))))
+                    except Exception:  # noqa: BLE001 - encrypted / corrupt member
+                        continue
+            return out
+    except Exception:  # noqa: BLE001
+        pass
+    return [("", *blob_form(b))]
+
+
+def wide_text_dec(t):
+    """Text a UTF-8-replace (or latin-1) reader made of a raw UTF-16/32 file -> the real text, else None. The BOM became
+    U+FFFD U+FFFD (or 'ÿþ' / 'þÿ'); ASCII + NULs survive. Needs a NUL in the text."""
+    if isinstance(t, (bytes, bytearray)):
+        f, s = blob_form(t)
+        return s if f not in ("utf-8", "utf-8-replace", "text") and s else None
+    if not isinstance(t, str) or "\x00" not in t or len(t) > 1600000:
+        return None
+    body = t.replace("﻿", "")
+    heads = [b""]
+    for mangled in ("��", "\xff\xfe", "\xfe\xff"):
+        for k in (0, 2):   # utf-32-be BOM 00 00 fe ff: the mangled pair after two NULs
+            if body[k:k + 2] == mangled and (k == 0 or body[:2] == "\x00\x00"):
+                body = body[:k] + body[k + 2:]
+                heads = [body[:k].encode("latin-1") + bom for bom in (b"\xff\xfe", b"\xfe\xff")]
+                body = body[k:]
+                break
+        if heads != [b""]:
+            break
+    if not body.isascii():
+        return None
+    raw = body.encode("ascii")
+    for h in heads:
+        got = unicode_form_dec(h + raw)
+        if got:
+            return got
+    return None
+
+
+def reader_text(blob):
+    """Any warmups reader's input -> text: bytes via blob_text, NUL-laced text (a raw wide file read as UTF-8) via
+    wide_text_dec, other text as is."""
+    if isinstance(blob, (bytes, bytearray)):
+        return blob_text(blob)
+    if isinstance(blob, str) and "\x00" in blob:
+        return wide_text_dec(blob) or blob
+    return blob
+
+
+def raw_wide_enc(s, form="utf-16le-bom"):
+    """Text -> what a UTF-8-replace reader shows for a raw `form` file (a _UFORMS key)."""
+    bom, enc = _UFORMS[form]
+    return (bom + s.encode(enc)).decode("utf-8", "replace")
 
 
 def _xor(s, k):
@@ -6583,6 +6903,10 @@ def _cands():
         # Gray-coded binary per byte (8-bit / 7-bit, spaced or run together)
         ("gray8", gray_enc, gray_dec), ("gray8-nospace", lambda s: gray_enc(s, sep=""), gray_dec),
         ("gray7", lambda s: gray_enc(s, 7), gray_dec),
+        ("binary8-lsb", lsb_enc, lsb_dec), ("binary8-lsb-nospace", lambda s: lsb_enc(s, sep=""), lsb_dec),
+        ("binary7-lsb", lambda s: lsb_enc(s, 7), lsb_dec),
+        ("binary8-bitrev", lambda s: lsb_enc(s, whole=True), lambda t: lsb_dec(t, True)),
+        ("binary8-bitrev-nospace", lambda s: lsb_enc(s, sep="", whole=True), lambda t: lsb_dec(t, True)),
         # Roman-numeral char codes (any separator / case; " / " words; hex-nibble variant with N = 0)
         *[(f"roman{tag}", (lambda kw: lambda s: roman_enc(s, **kw))(kw), roman_dec)
           for tag, kw in (("", {}), ("-lower", {"lower": True}), ("-comma", {"sep": ", "}), ("-dash", {"sep": "-"}),
@@ -6830,6 +7154,14 @@ def _cands():
              (lambda i: lambda t: inner_dec(t, i))(inner))
             for inner in _BYTE_INNERS + ("utf-7",)
             for outer in ("hex", "HEX", "hex-spaced", "base64", "base64-nopad", "base32", "binary8", "decimal")]
+    # Unicode encoding forms the _BYTE_INNERS grid lacks: BOM'd UTF-16BE / UTF-32 / UTF-8 and the base85 outers
+    out += [(f"{outer}({form})", (lambda f, o: lambda s: unicode_form_enc(s, f, o))(form, outer),
+             (lambda f: lambda t: unicode_form_text_dec(t, f))(form))
+            for form in ("utf-16be-bom", "utf-32le-bom", "utf-32be-bom", "utf-8-bom")
+            for outer in ("hex", "HEX", "hex-spaced", "base64", "base32", "binary8", "decimal", "base85")]
+    out += [(f"{outer}({form})", (lambda f, o: lambda s: unicode_form_enc(s, f, o))(form, outer),
+             (lambda f: lambda t: unicode_form_text_dec(t, f))(form))
+            for form in ("utf-16le-bom", "utf-16le", "utf-16be") for outer in ("base85", "ascii85")]
     out += [(name, (lambda kw: lambda s: pig_enc(s, **kw))(kw), (lambda kw: lambda t: pig_dec(t, **kw))(kw))
             for name, kw in _PIG_VARIANTS.items()]
     out += [(f"math-{st}", (lambda st: lambda s: unistyle_enc(s, st))(st), unistyle_dec) for st in _MATH_LATIN]
@@ -6944,6 +7276,101 @@ def _cands():
 
 
 CANDIDATES = _cands()
+
+
+# ------------------------------------------- wide text (PowerShell -EncodedCommand style) under the other byte outers
+# base64 of UTF-16LE = `TgBpAGMAZQAg...` (an `A` every 4th char, `//5O` with a BOM), ~2.67x the text. plaintext() already
+# reads every outer below (decode_chunk + unicode_form_reads); these are the EXACT encoders infer() needs to name the
+# GM's bytes (base64url +/- pad, BOM'd base64-nopad, MIME-wrapped, base32 nopad / lowercase / base32hex, Z85) -- before
+# them a base64url blob of UTF-16LE inferred as "hex(utf-16le)" (decoder pass), which re-encodes to the wrong bytes.
+_WIDE_FORMS = ("utf-16le", "utf-16le-bom", "utf-16be", "utf-16be-bom")
+_WIDE_OUTERS = ("base64url", "base64url-nopad", "base64-nopad", "base64-mime", "base32-nopad", "base32-lower",
+                "base32-lower-nopad", "base32hex", "base32hex-nopad", "z85")
+_B32HEX = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567", "0123456789ABCDEFGHIJKLMNOPQRSTUV")
+_UNB32HEX = str.maketrans("0123456789ABCDEFGHIJKLMNOPQRSTUV", "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
+
+
+def _wide_out(b, outer):
+    """bytes -> `outer` text (one of _WIDE_OUTERS)."""
+    if outer.startswith("base64"):
+        x = base64.b64encode(b).decode()
+        if outer == "base64-mime":
+            return "\n".join(x[i:i + 76] for i in range(0, len(x), 76))
+        if outer.startswith("base64url"):
+            x = x.replace("+", "-").replace("/", "_")
+    elif outer.startswith("base32"):
+        x = base64.b32encode(b).decode()
+        x = x.lower() if "lower" in outer else x.translate(_B32HEX) if "hex" in outer else x
+    elif outer == "z85":
+        if len(b) % 4:
+            raise ValueError("z85 needs whole 4-byte frames")
+        return "".join(_Z85[int.from_bytes(b[i:i + 4], "big") // 85 ** k % 85]
+                       for i in range(0, len(b), 4) for k in (4, 3, 2, 1, 0))
+    else:
+        raise ValueError(outer)
+    return x.rstrip("=") if outer.endswith("nopad") else x
+
+
+def wide_enc(s, form="utf-16le", outer="base64url"):
+    bom, enc = _UFORMS[form]
+    return _wide_out(bom + s.encode(enc), outer)
+
+
+def wide_reads(t):
+    """[(outer, bytes)] for the base64 (std / url, any padding, wrapped), base32 (any case / padding), base32hex and
+    Z85 byte layers `t` strictly parses as. Z85 keeps trailing NULs (a UTF-16LE tail is `xx 00`). Never raises."""
+    if isinstance(t, (bytes, bytearray)):
+        t = bytes(t).decode("ascii", "replace")
+    if not isinstance(t, str):
+        return []
+    flat = re.sub(r"\s+", "", t)
+    if not 4 <= len(flat) <= 400000:
+        return []
+    out = []
+    core = flat.rstrip("=")
+    if re.fullmatch(r"[A-Za-z0-9+/\-_]+", core) and len(core) % 4 != 1:
+        try:
+            out.append(("base64", base64.b64decode(_b64pad(core.replace("-", "+").replace("_", "/")), validate=True)))
+        except (ValueError, TypeError):
+            pass
+    up = core.upper()
+    if len(up) % 8 in (0, 2, 4, 5, 7):
+        for name, ok, tr in (("base32", r"[A-Z2-7]+", None), ("base32hex", r"[0-9A-V]+", _UNB32HEX)):
+            if re.fullmatch(ok, up):
+                try:
+                    out.append((name, base64.b32decode((up.translate(tr) if tr else up) + "=" * (-len(up) % 8))))
+                except (ValueError, TypeError):
+                    pass
+    if len(flat) % 5 == 0 and all(c in _UNZ85 for c in flat):
+        z = bytearray()
+        for i in range(0, len(flat), 5):
+            v = 0
+            for c in flat[i:i + 5]:
+                v = v * 85 + _UNZ85[c]
+            if v > 0xFFFFFFFF:
+                z = None
+                break
+            z += v.to_bytes(4, "big")
+        if z:
+            out.append(("z85", bytes(z)))
+    return out
+
+
+def wide_dec(t, form=None):
+    """Text under a wide-outer layer of UTF-16 (or any unicode_form) bytes -> the printable-ASCII text, else None.
+    The NUL-rhythm / BOM sniff is the gate (a UTF-8 base64 blob never reads); form: accept only that sniffed form."""
+    for _o, b in wide_reads(t):
+        r = unicode_form(b)
+        if r and (form is None or r[0] == form):
+            return r[1]
+    return None
+
+
+_have = {c[0] for c in CANDIDATES}
+CANDIDATES += [(f"{outer}({form})", (lambda f, o: lambda s: wide_enc(s, f, o))(form, outer),
+                (lambda f: lambda t: wide_dec(t, f))(form))
+               for form in _WIDE_FORMS for outer in _WIDE_OUTERS if f"{outer}({form})" not in _have]
+del _have
 
 
 def _hint_keys(hints):
@@ -7331,7 +7758,7 @@ def infer(plain, blob, hints=()):
     candidate explains the blob (the today-probe then reports "unidentified" and builds no case)."""
     if not plain or blob is None:
         return None
-    blob = _t(blob)
+    blob = reader_text(blob)
     want = blob.strip()
     p = plain.strip()
     cands = CANDIDATES + _hint_cands(hints)
@@ -7412,7 +7839,7 @@ def plaintext(blob, slug, deadline=None, hints=()):
     """The Single's decoded sentence holding `slug`: lib.decode.decode_chunk -> peel -> every candidate decoder -> the
     fixed warmups sentence (identical D1-D13, so an unknown codec can still be fitted against it)."""
     from lib import decode
-    text = _t(blob)
+    text = reader_text(blob)
     if not slug:
         return None
     try:
@@ -7487,7 +7914,7 @@ def infer_case(case_dir, hints=()):
         if len(files) != 1:
             return None
         art = files[0]
-    blob = art.read_bytes().decode("utf-8", "replace")
+    blob = blob_text(art.read_bytes())
     hints = tuple(hints) + tuple(str(contract.get(k) or "") for k in ("name", "prompt"))
     plain = plaintext(blob, slug, hints=hints)
     if not plain:
@@ -7634,6 +8061,933 @@ def _top(p, outs, k=3):
     return sorted(seen, key=_bigram, reverse=True)[:k]
 
 
+# ------------------------------------------------- endian word swap (byte order flipped, no BOM)
+# "The little one goes first" generalised: the UTF-8 bytes cut into w-byte words (w = 2/4/8) and every word
+# byte-reversed = a little-endian dump of big-endian words (`od -tx4` on x86, `dd conv=swab`, objcopy --reverse-bytes,
+# perl pack("V*", unpack("N*"))), then hex ('Nice' -> '694e6563' at w=2, '6563694e' at w=4). Tail: NUL-padded to a
+# whole word (od / most writers), or the short tail word reversed on its own (a naive per-chunk [::-1]). The whole
+# buffer reversed is the DAYS chains hex(reverse) / reverse(hex) in CANDIDATES; the free decoder reads those too.
+_WSWAP = (2, 4, 8)
+
+
+def wordswap(b, w):
+    """b with every w-byte word byte-reversed; a short tail word is reversed on its own."""
+    return b"".join(b[i:i + w][::-1] for i in range(0, len(b), w))
+
+
+def wordswap_enc(s, w, fmt="hex", pad=True):
+    """Text -> its UTF-8 bytes word-swapped (NUL-padded to whole words when pad) as fmt: hex / hex-upper / words
+    (od -tx<w> style: one lowercase hex word per token) / base64."""
+    b = _u(s)
+    if pad and len(b) % w:
+        b += b"\0" * (w - len(b) % w)
+    x = wordswap(b, w)
+    if fmt == "words":
+        return " ".join(x[i:i + w].hex() for i in range(0, len(x), w))
+    if fmt == "base64":
+        return base64.b64encode(x).decode()
+    return x.hex().upper() if fmt == "hex-upper" else x.hex()
+
+
+def _wsw_bytes(t):
+    """The bytes under a hex blob (whitespace / 0x / : , - separators), else under strict base64, else None."""
+    if not isinstance(t, str):
+        return None
+    x = re.sub(r"0[xX]|[\s:,-]", "", t)
+    if len(x) >= 4 and not len(x) % 2 and re.fullmatch(r"[0-9a-fA-F]+", x):
+        return bytes.fromhex(x)
+    x = re.sub(r"\s", "", t)
+    if len(x) >= 8 and not len(x) % 4 and re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", x):
+        try:
+            return base64.b64decode(x, validate=True)
+        except ValueError:
+            return None
+    return None
+
+
+def _wsw_text(b):
+    """Printable UTF-8 text of b (pad NULs stripped at both ends), else None."""
+    b = b.strip(b"\0")
+    try:
+        s = b.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    return s if s and all(c.isprintable() or c in "\n\t" for c in s) and _texty(s) >= 0.85 else None
+
+
+def wordswap_dec(t, w, pad=True):
+    """Undo wordswap_enc(., w, *, pad) for any of its formats -> text, else None. Gated: the bytes must not already
+    read as better English unswapped (a plain hex line is not a word-swapped one)."""
+    try:
+        b = _wsw_bytes(t)
+        if b is None or (pad and len(b) % w):
+            return None
+        s = _wsw_text(wordswap(b, w))
+        if s is None:
+            return None
+        from lib.decode import _bigram
+        raw = _wsw_text(b)
+        return s if raw is None or _bigram(s) > _bigram(raw) else None
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return None
+
+
+def wordswap_reads(t):
+    """[(variant, text)] for a hex/base64 blob under a byte-order flip, most English first: w-byte word swaps
+    (w = 2/4/8; NUL pad or short reversed tail; a fragment cut mid-word re-aligned at every offset, the partial head /
+    tail words dropped), the reversed byte buffer, and the reversed hex text (nibble + byte reversal)."""
+    from lib.decode import _bigram
+    b = _wsw_bytes(t)
+    if b is None or len(b) < 3:
+        return []
+    raw = _wsw_text(b)
+    base = _bigram(raw) if raw is not None else -99.0
+    reads = []
+    for w in _WSWAP:
+        if len(b) < w:
+            continue
+        for o in range(w):
+            body = b[o:]
+            if o:
+                body = body[:len(body) - len(body) % w]
+            s = _wsw_text(wordswap(body, w))
+            if s:
+                reads.append((f"wswap{w}" + (f"@{o}" if o else ""), s))
+    s = _wsw_text(b[::-1])
+    if s:
+        reads.append(("revbytes", s))
+    x = re.sub(r"0[xX]|[\s:,-]", "", t)
+    if re.fullmatch(r"(?:[0-9a-fA-F]{2})+", x):
+        s = _wsw_text(bytes.fromhex(x[::-1]))
+        if s:
+            reads.append(("revhex", s))
+    def crib(s):   # crib characters the read confirms (a whole crib substring, or a crib tail + slug piece)
+        return len(s) if len(s) >= 4 and s in SENTENCE.replace("{slug}", "") else _crib_piece(s)
+    reads = [(v, s, crib(s)) for v, s in reads if s != raw]
+    reads = [(v, s) for v, s, k in sorted(reads, key=lambda r: (r[2], round(_texty(r[1]), 2), _bigram(r[1])),
+                                          reverse=True) if k or _bigram(s) > base]
+    return reads
+
+
+def wordswap_free(p):
+    """Speculative Mastery-line decoder: the byte-order-flip readings of a hex/base64 line (the slug/template picks)."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + s for s in list(dict.fromkeys(s for _v, s in wordswap_reads(p.strip())))[:4]]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+_have = {n for n, _e, _d in CANDIDATES}
+CANDIDATES += [(f"wswap{w}-{fmt}" + ("" if pad else "-rawtail"),
+                (lambda w, f, p: lambda s: wordswap_enc(s, w, f, p))(w, fmt, pad),
+                (lambda w, p: lambda t: wordswap_dec(t, w, p))(w, pad))
+               for w in _WSWAP for fmt, pad in (("hex", True), ("hex", False), ("hex-upper", True), ("words", True),
+                                                ("base64", True))
+               if f"wswap{w}-{fmt}" not in _have]
+del _have
+
+
+
+# ------------------------------------------------- nibble-swapped hex (each byte's two hex digits exchanged)
+# 'Nice' = 4e 69 63 65 -> e4 96 36 56 (perl unpack "h*", CyberChef "Rotate left 4" + To Hex, ((b & 15) << 4) | b >> 4).
+# Cue: ASCII text puts 2/6/7 in the LOW nibble (space = 02, a-o = x6, p-z = x7). Byte order is kept; the reversed hex
+# text (nibbles swapped AND bytes reversed) is the reverse(hex) candidate / wordswap revhex -- the free decoder offers
+# both, crib/English ranked. Tokens: one run, or split by whitespace : , - with optional 0x / \x prefixes.
+_NIBSWAP_FMT = {
+    "hex": lambda h: "".join(h),
+    "hex-upper": lambda h: "".join(h).upper(),
+    "hex-spaced": lambda h: " ".join(h),
+    "hex-spaced-upper": lambda h: " ".join(h).upper(),
+    "hex-colon": lambda h: ":".join(h),
+    "0x": lambda h: " ".join("0x" + x for x in h),
+    "escaped": lambda h: "".join("\\x" + x for x in h),
+}
+
+
+def nibswap(b):
+    return bytes(((x & 15) << 4) | (x >> 4) for x in b)
+
+
+def nibswap_enc(s, fmt="hex"):
+    return _NIBSWAP_FMT[fmt]([f"{x:02x}" for x in nibswap(_u(s))])
+
+
+def _nibswap_bytes(t):
+    """The raw bytes of a hex line (one run or 2-digit tokens, 0x / \\x prefixes), else None."""
+    if not isinstance(t, str):
+        return None
+    t = t.strip().strip("\"'[]()")
+    x = re.sub(r"0[xX]|\\x|[\s:,-]", "", t)
+    toks = [y for y in re.split(r"[\s:,-]+", re.sub(r"0[xX]|\\x", " ", t)) if y]
+    if len(x) < 8 or len(x) % 2 or not re.fullmatch(r"[0-9a-fA-F]+", x):
+        return None
+    if len(toks) > 1 and any(len(y) % 2 for y in toks):
+        return None
+    return bytes.fromhex(x)
+
+
+def _nibswap_text(b):
+    try:
+        out = b.decode("utf-8")
+    except (UnicodeDecodeError, AttributeError):
+        return None
+    if not out or any(unicodedata.category(c) in ("Cc", "Cn", "Co", "Cs") and c not in "\t\n\r" for c in out):
+        return None
+    return out
+
+
+def nibswap_dec(t):
+    """The text under nibble-swapped hex, else None (not hex, odd digits, non-UTF-8 / control-char read)."""
+    try:
+        b = _nibswap_bytes(t)
+        return None if b is None else _nibswap_text(nibswap(b))
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return None
+
+
+def nibswap_reads(t):
+    """[(variant, text)] for a hex line read nibble-swapped ("nibswap") and as reversed hex text ("revhex": nibbles
+    swapped + byte order reversed), crib pieces first then English-looking; reads the plain hex already explains
+    (a printable plain-hex reading that scores better) are dropped."""
+    from lib.decode import _bigram
+    b = _nibswap_bytes(t)
+    if b is None:
+        return []
+    raw = _nibswap_text(b)
+    base = _bigram(raw) if raw is not None and _texty(raw) >= 0.9 else -99.0
+    reads = [(v, s) for v, s in (("nibswap", _nibswap_text(nibswap(b))), ("revhex", _nibswap_text(nibswap(b)[::-1])))
+             if s and s != raw]
+
+    def crib(s):
+        return len(s) if len(s) >= 4 and s in SENTENCE.replace("{slug}", "") else _crib_piece(s)
+    reads = [(v, s, crib(s)) for v, s in reads]
+    return [(v, s) for v, s, k in sorted(reads, key=lambda r: (r[2], round(_texty(r[1]), 2), _bigram(r[1])),
+                                         reverse=True) if k or (_texty(s) >= 0.9 and _bigram(s) > base)]
+
+
+def nibswap_free(p):
+    """Speculative Mastery-line decoder: the nibble-swapped / reversed-hex readings of a hex line."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + s for _v, s in nibswap_reads(p.strip())][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+_have = {n for n, _e, _d in CANDIDATES}
+CANDIDATES += [(f"nibswap-{fmt}", (lambda f: lambda s: nibswap_enc(s, f))(fmt), nibswap_dec)
+               for fmt in _NIBSWAP_FMT if f"nibswap-{fmt}" not in _have]
+del _have
+
+
+# ------------------------------------------------- wide-int char codes (2-4 chars packed per 16/32/64-bit integer)
+# "Two bytes as numbers": the UTF-8 bytes cut into w-byte words (w = 2/4; NUL-padded tail) and each word written as ONE
+# integer, little- or big-endian -- decimal ('Ni' = 26958 LE / 20073 BE; `od -tu2`, struct.unpack('<H')), a 0x C-array
+# (`0x6563694e, ...` = uint32 LE; also u64), or 8w-bit binary groups. Width from the tokens (0x digits / binary group
+# length / the largest value); a decimal line of byte-sized values only is plain char codes, never this. The last word
+# loses its NUL pad (either end: an unpadded short BE tail is `\0x`); a NUL anywhere else, a non-UTF-8 or unprintable
+# read is rejected. Bare no-0x hex words are the wswap family above.
+_WINT_W = (2, 4)
+_WINT_FMTS = ("dec", "dec-comma", "c-array", "c-array-space", "c-array-upper", "bin")
+_WINT_TOK = re.compile(r"[\s,;]+")
+
+
+def wint_enc(s, w=2, order="little", fmt="dec"):
+    """Text -> its UTF-8 bytes (NUL-padded to whole w-byte words) as one integer per word in `fmt`."""
+    b = _u(s)
+    b += b"\0" * (-len(b) % w)
+    vs = [int.from_bytes(b[i:i + w], order) for i in range(0, len(b), w)]
+    if fmt == "bin":
+        return " ".join(format(v, f"0{8 * w}b") for v in vs)
+    if fmt.startswith("c-array"):
+        xs = [f"0x{v:0{2 * w}X}" if fmt.endswith("upper") else f"0x{v:0{2 * w}x}" for v in vs]
+        return (" " if fmt.endswith("space") else ", ").join(xs)
+    return (", " if fmt == "dec-comma" else " ").join(map(str, vs))
+
+
+def _wint_parse(t):
+    """(kind, width, [ints]) for a token line of 0x hex / 16-64-bit binary / multi-byte decimal ints, else None.
+    A `{...}` / `[...]` C or JSON array body is unwrapped; C integer suffixes (u, U, L) are dropped."""
+    if not isinstance(t, str):
+        return None
+    t = t.strip()
+    m = re.search(r"[{\[]([^{}\[\]]*)[}\]]", t)
+    if m and ("{" in t or t.startswith("[")):
+        t = m.group(1)
+    toks = [x for x in _WINT_TOK.split(t.strip()) if x]
+    if not toks or len(toks) > 20000:
+        return None
+    if all(re.fullmatch(r"0[xX][0-9a-fA-F]{1,16}[uUlL]{0,3}", x) for x in toks):
+        hx = [x[2:].rstrip("uUlL") for x in toks]
+        vs = [int(h, 16) for h in hx]
+        dig = max(map(len, hx))
+        w = next((k for k in (2, 4, 8) if dig <= 2 * k), None)
+        return ("hex", w, vs) if w and (dig > 2 or max(vs) > 255) else None
+    if all(re.fullmatch(r"[01]+", x) for x in toks):
+        n = {len(x) for x in toks}
+        return ("bin", len(toks[0]) // 8, [int(x, 2) for x in toks]) if len(n) == 1 and n & {16, 32, 64} else None
+    if all(re.fullmatch(r"\d{1,20}", x) for x in toks):
+        vs = [int(x) for x in toks]
+        mx = max(vs)
+        if mx <= 255:
+            return None   # byte-sized char codes: the decimal codec, not packed words
+        w = next((k for k in (2, 4, 8) if mx < 256 ** k), None)
+        return ("dec", w, vs) if w else None
+    return None
+
+
+def _wint_text(vs, w, order):
+    """The text under ints vs as w-byte words in `order`; pad NULs of the last word stripped, else None."""
+    if any(v >= 256 ** w for v in vs):
+        return None
+    words = [v.to_bytes(w, order) for v in vs]
+    words[-1] = words[-1].strip(b"\0")
+    b = b"".join(words)
+    if not b or b"\0" in b:
+        return None
+    try:
+        s = b.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    return s if all(c.isprintable() or c in "\n\t" for c in s) and _texty(s) >= 0.85 else None
+
+
+def wint_reads(t):
+    """[(variant, text)] for a packed-int char-code line, both byte orders, crib / most English read first.
+    variant = u{8w}{le|be}-{dec|hex|bin}."""
+    try:
+        got = _wint_parse(t)
+        if not got:
+            return []
+        kind, w, vs = got
+        reads = []
+        for order in ("little", "big"):
+            s = _wint_text(vs, w, order)
+            if s:
+                reads.append((f"u{8 * w}{'le' if order == 'little' else 'be'}-{kind}", s))
+        if len(reads) > 1:
+            from lib.decode import _bigram
+            reads.sort(key=lambda r: (_crib_piece(r[1]), _bigram(r[1])), reverse=True)
+        return reads
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+
+
+def wint_dec(t, w=None, order=None):
+    """Undo wint_enc (any fmt) -> text, else None; w / order ('little' / 'big') pin the variant."""
+    tag = None if w is None else f"u{8 * w}" + ("" if order is None else "le" if order == "little" else "be")
+    for v, s in wint_reads(t):
+        if tag is None or v.startswith(tag):
+            return s
+    return None
+
+
+def wint_free(p):
+    """Speculative Mastery-line decoder: the packed-int readings of a line (both byte orders, best first)."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + s for _v, s in wint_reads(p)][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+_have = {n for n, _e, _d in CANDIDATES}
+CANDIDATES += [(f"u{8 * w}{'le' if o == 'little' else 'be'}-{fmt}",
+                (lambda w, o, f: lambda s: wint_enc(s, w, o, f))(w, o, fmt),
+                (lambda w, o: lambda t: wint_dec(t, w, o))(w, o))
+               for w in _WINT_W for o in ("little", "big") for fmt in _WINT_FMTS
+               if f"u{8 * w}{'le' if o == 'little' else 'be'}-{fmt}" not in _have]
+del _have
+
+# ------------------------------------------------- hexdump tool output (xxd / od / hexdump rows)
+# The artifact is a dump tool's text, one row per line: `xxd` (`00000000: 4e69 6365 ...  Nice work decodi`; -e = 32-bit
+# LE words, a short tail word right-aligned; -b = 8-bit binary, 6 bytes a row; -i = a `0x4e, ` C array), `od` (7-digit
+# octal offsets, no gutter: -x / -tx4 = native LE 16/32-bit words, -o / -d = LE 16-bit octal / decimal words, -b / -tu1
+# = bytes, -c / -a = 4-wide char cells with `\n` / `303` escapes / named controls; a closing total-length offset row)
+# and `hexdump` (default = od -x with hex offsets, -C = bytes + `|...|` gutter, -c = cells). `*` = the previous row
+# repeated up to the next offset. The gutter prints '.' for every non-printable byte: the hex is authoritative, the
+# gutter only picks between readings (xxd -g4 vs -e). Offsets fix the radix (16/8/10) and cut the padding (od -x NUL
+# tail word, hexdump -c blank cells). Bytes -> UTF-8 text, else unicode_form_dec (UTF-16/32, BOM or not).
+_HD_ROW = re.compile(r"\s*([0-9a-fA-F]{4,16})(:?)(?=\s|$)")
+_HD_NAMES = {n: i for i, n in enumerate("nul soh stx etx eot enq ack bel bs ht nl vt ff cr so si dle dc1 dc2 dc3 dc4 "
+                                        "nak syn etb can em sub esc fs gs rs us".split())}
+_HD_NAMES.update(sp=32, de=127)
+_HD_NAMES["del"] = 127
+_HD_ESC = {"\\0": 0, "\\a": 7, "\\b": 8, "\\t": 9, "\\n": 10, "\\v": 11, "\\f": 12, "\\r": 13, "\\\\": 92}
+_HD_FMTS = ("xxd", "xxd-e", "xxd-b", "xxd-i", "hexdump-C", "hexdump", "hexdump-c", "od-x", "od-tx4", "od-c", "od-b",
+            "od-o", "od-d", "od-tu1")
+
+
+def _hd_gut(b):
+    return "".join(chr(c) if 32 <= c < 127 else "." for c in b)
+
+
+def hexdump_enc(s, fmt="xxd"):
+    """Text -> its UTF-8 bytes as the dump tool `fmt` prints them (a _HD_FMTS name; GNU/uutils od, util-linux
+    hexdump, vim xxd on x86; no `*` row folding)."""
+    b = _u(s)
+    rows = []
+    if fmt == "xxd-i":
+        return ",\n".join("  " + ", ".join(f"0x{c:02x}" for c in b[i:i + 12]) for i in range(0, len(b), 12))
+    if fmt.startswith("xxd"):
+        n, g = (6, 1) if fmt == "xxd-b" else (16, 4) if fmt == "xxd-e" else (16, 2)
+        for o in range(0, len(b), n):
+            r = b[o:o + n]
+            if fmt == "xxd-b":
+                cells = [f"{c:08b}" for c in r]
+            elif fmt == "xxd-e":
+                cells = [r[i:i + g][::-1].hex().rjust(2 * g) for i in range(0, len(r), g)]
+            else:
+                cells = [r[i:i + g].hex() for i in range(0, len(r), g)]
+            width = (8 if fmt == "xxd-b" else 2 * g) * (n // g) + n // g - 1
+            rows.append(f"{o:08x}: " + " ".join(cells).ljust(width) + "  " + _hd_gut(r))
+        return "\n".join(rows)
+    hexoff = fmt.startswith("hexdump")
+    for o in range(0, len(b), 16):
+        r = b[o:o + 16]
+        if fmt == "hexdump-C":
+            area = "".join((f"{r[i]:02x} " if i < len(r) else "   ") + (" " if i == 7 else "") for i in range(16))
+            rows.append(f"{o:08x}  {area} |{_hd_gut(r)}|")
+            continue
+        if fmt in ("od-c", "hexdump-c"):
+            cells = []
+            for c in r:
+                e = {0: "\\0", 7: "\\a", 8: "\\b", 9: "\\t", 10: "\\n", 11: "\\v", 12: "\\f", 13: "\\r"}.get(c)
+                cells.append((e or (chr(c) if 32 <= c < 127 else f"{c:03o}")).rjust(4))
+            if fmt == "hexdump-c":
+                cells += ["    "] * (16 - len(r))
+            rows.append((f"{o:07x}" if hexoff else f"{o:07o}") + "".join(cells))
+            continue
+        w = {"od-tx4": 4, "od-b": 1, "od-tu1": 1}.get(fmt, 2)
+        r += b"\0" * (-len(r) % w)
+        vs = [int.from_bytes(r[i:i + w], "little") for i in range(0, len(r), w)]
+        spec = {"od-tx4": "08x", "od-b": "03o", "od-tu1": "3d", "od-o": "06o", "od-d": "5d"}.get(fmt, "04x")
+        line = "".join(" " + format(v, spec) for v in vs)
+        rows.append((f"{o:07x}" + line.ljust(40)) if hexoff else f"{o:07o}" + line)
+    rows.append(f"{len(b):08x}" if fmt == "hexdump-C" else f"{len(b):07x}" if hexoff else f"{len(b):07o}")
+    return "\n".join(rows)
+
+
+def _hd_split(body):
+    """xxd row body -> (hex part, gutter|None): the first run of 2+ spaces after which exactly n gutter chars follow
+    (n = the bytes the hex part holds, as hex digit pairs or as 8-bit binary groups)."""
+    for m in re.finditer(r" {2,}", body):
+        head, tail = body[:m.start()], body[m.start() + 2:]
+        toks = head.split()
+        if not toks or not all(re.fullmatch(r"[0-9a-fA-F]+", x) for x in toks):
+            continue
+        ns = [sum(len(x) // 2 for x in toks)]
+        if all(re.fullmatch(r"[01]{8}", x) for x in toks):
+            ns.insert(0, len(toks))
+        for n in ns:
+            if 0 < n <= len(tail) and not tail[:-n].strip(" "):
+                return head, tail[-n:]
+    return body, None
+
+
+def _hd_rows(t):
+    """['*' | (offset, colon, body, gutter|None)] for every non-blank line of t, else None (a non-dump line)."""
+    rows = []
+    for ln in t.splitlines():
+        if not ln.strip():
+            continue
+        if ln.strip() == "*":
+            rows.append("*")
+            continue
+        m = _HD_ROW.match(ln)
+        if not m:
+            return None
+        body, gut = ln[m.end():], None
+        if m.group(2):
+            body, gut = _hd_split(body)
+        else:
+            for a, z in ("|", "|"), (">", "<"):   # hexdump -C / od -tx1z gutter
+                if a in body and body.rstrip().endswith(z):
+                    i = body.index(a)
+                    body, gut = body[:i], body[i + 1:body.rstrip().rfind(z)]
+                    break
+        rows.append((m.group(1), bool(m.group(2)), body, gut))
+    return rows if any(r != "*" and r[2].strip() for r in rows) else None
+
+
+def _hd_cells(body):
+    """od -c / -a / hexdump -c body -> bytes (4-wide right-aligned cells), else None."""
+    body = body.ljust(-(-len(body) // 4) * 4)
+    out = bytearray()
+    for i in range(0, len(body), 4):
+        cell = body[i:i + 4]
+        c = cell.strip(" ")
+        if cell[0] != " " and cell.strip():
+            return None
+        if not c:
+            out.append(32)
+        elif c in _HD_ESC:
+            out.append(_HD_ESC[c])
+        elif re.fullmatch(r"[0-3][0-7]{2}", c):
+            out.append(int(c, 8))
+        elif len(c) == 1:
+            out += c.encode("utf-8")
+        elif c in _HD_NAMES:
+            out.append(_HD_NAMES[c])
+        else:
+            return None
+    return bytes(out)
+
+
+def _hd_modes(toks, colon):
+    """[(mode, token -> bytes, pad byte)] the token shapes of a dump allow, the tool's default reading first."""
+    if not toks:
+        return []
+    modes = []
+    if all(re.fullmatch(r"[01]{8}", x) for x in toks) and colon:
+        modes.append(("bits", lambda x: bytes([int(x, 2)]), 0))
+    if all(re.fullmatch(r"[0-9a-fA-F]+", x) and not len(x) % 2 for x in toks):
+        L = max(map(len, toks))
+        be = ("hex", lambda x: bytes.fromhex(x), 0)
+        if L == 2:
+            modes.append(be)
+        elif L in (4, 8, 16):
+            le = ("hex-le", lambda x: bytes.fromhex(x)[::-1], 0)
+            modes += [be, le] if colon else [le, be]
+    if all(re.fullmatch(r"[0-3][0-7]{2}", x) for x in toks):
+        modes.append(("oct1", lambda x: bytes([int(x, 8)]), 0))
+    for k, w in ((6, 2), (11, 4)):
+        if all(re.fullmatch(r"[0-7]{%d}" % k, x) for x in toks) and max(int(x, 8) for x in toks) < 256 ** w:
+            modes.append((f"oct{w}-le", (lambda w: lambda x: int(x, 8).to_bytes(w, "little"))(w), 0))
+    if all(re.fullmatch(r"-?\d{1,5}", x) for x in toks):
+        vs = [int(x) for x in toks]
+        if all(-128 <= v <= 255 for v in vs):
+            modes.append(("dec1", lambda x: bytes([int(x) % 256]), 0))
+        if all(-32768 <= v <= 65535 for v in vs) and any(v > 255 or v < -128 for v in vs):
+            modes.append(("dec2-le", lambda x: (int(x) % 65536).to_bytes(2, "little"), 0))
+    return modes
+
+
+def _hd_join(rows, datas, radix, pad):
+    """Rows' bytes stitched by their offsets in `radix` (`*` repeats filled, a padded tail cut), else None."""
+    out, prev, star, base = bytearray(), b"", False, None
+    for r, d in zip(rows, datas):
+        if r == "*":
+            star = True
+            continue
+        if radix:
+            try:
+                o = int(r[0], radix)
+            except ValueError:
+                return None
+            base = o if base is None else base
+            want = o - base
+            if want < 0 or want > 1 << 22:
+                return None
+            if star and prev:
+                while len(out) + len(prev) <= want:
+                    out += prev
+            star = False
+            if len(out) > want:
+                if any(c != pad for c in out[want:]):
+                    return None
+                del out[want:]
+            elif len(out) < want:
+                if pad != 32 or want - len(out) > 3:
+                    return None
+                out += b" " * (want - len(out))   # a trailing space cell lost to rstrip
+        out += d
+        prev = d or prev
+    return bytes(out)
+
+
+def _hd_text(b):
+    """Printable text of dump bytes: UTF-8 (pad NULs off, one trailing newline off), else a sniffed Unicode form."""
+    if not b:
+        return None
+    s = _wsw_text(b) or unicode_form_dec(b) or unicode_form_dec(b.rstrip(b"\0"))
+    return s.rstrip("\r\n") or None if s else None
+
+
+def _hd_carray(t):
+    """xxd -i C array (`unsigned char x[] = { 0x4e, ... }; unsigned int x_len = N;` or the bare stdin body) -> bytes."""
+    m = re.search(r"\{([^{}]*)\}", t)
+    body, ln = (m.group(1), None) if m else (t, None)
+    if m:
+        k = re.fullmatch(r"\s*(?:(?:static\s+)?(?:const\s+)?unsigned\s+char\s+\w+\s*\[\s*\d*\s*\]\s*=\s*)?;?\s*"
+                         r"(?:(?:static\s+)?(?:const\s+)?unsigned\s+int\s+\w+\s*=\s*(\d+)\s*;\s*)?",
+                         t[:m.start()] + t[m.end():])
+        if not k:
+            return None
+        ln = k.group(1)
+    toks = [x for x in re.split(r"[\s,]+", body) if x]
+    if len(toks) < 2 or "," not in body or not all(re.fullmatch(r"0[xX][0-9a-fA-F]{2}", x) for x in toks):
+        return None
+    b = bytes(int(x, 16) for x in toks)
+    return b if ln is None or int(ln) == len(b) else None
+
+
+def hexdump_reads(t):
+    """[(mode, text)] for a dump tool's output (any of _HD_FMTS, a lone row or a `*`-folded dump), best first: the
+    gutter-consistent reading, then the crib, then the tool's default byte order, then the most English. Never raises."""
+    try:
+        t = _t(t)
+        if not isinstance(t, str) or not t.strip() or len(t) > 2000000:
+            return []
+        if "0x" in t or "0X" in t:
+            b = _hd_carray(t)
+            s = _hd_text(b) if b else None
+            return [("c-array", s)] if s else []
+        rows = _hd_rows(t)
+        if not rows:
+            return []
+        data = [r for r in rows if r != "*"]
+        colon = any(r[1] for r in data)
+        guts = [r[3] for r in data]
+        toks = [x for r in data for x in r[2].split()]
+        modes = [(m, f, p, False) for m, f, p in _hd_modes(toks, colon)]
+        if not colon and all(g is None for g in guts):
+            modes.append(("cells", None, 32, True))
+        radixes = [16] if colon or any(g is not None for g in guts) else [16, 8, 10]
+        if len(data) == 1:
+            radixes = [None]
+        from lib.decode import _bigram
+        reads = []
+        for pri, (mode, f, pad, cells) in enumerate(modes):
+            datas = []
+            for r in rows:
+                if r == "*":
+                    datas.append(b"")
+                    continue
+                d = _hd_cells(r[2]) if cells else b"".join(f(x) for x in r[2].split())
+                if d is None:
+                    break
+                datas.append(d)
+            else:
+                for radix in radixes:
+                    b = _hd_join(rows, datas, radix, pad)
+                    if b is None:
+                        continue
+                    s = _hd_text(b)
+                    if s is None:
+                        break
+                    rd = [d for r, d in zip(rows, datas) if r != "*"]
+                    gok = all(g is None or g == _hd_gut(d) for g, d in zip(guts, rd))
+                    reads.append(((gok, _crib_piece(s), -pri, _bigram(s)), mode, s))
+                    break
+        reads.sort(key=lambda r: r[0], reverse=True)
+        return [(m, s) for _k, m, s in reads]
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+
+
+def hexdump_dec(t):
+    """The text under a dump tool's output (xxd / od / hexdump, any _HD_FMTS layout), else None."""
+    r = hexdump_reads(t)
+    return r[0][1] if r else None
+
+
+def hexdump_free(p):
+    """Speculative Mastery-line decoder: the readings of one dump row (offset + words/bytes/cells + gutter)."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        return [s for _m, s in hexdump_reads(p)][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+_have = {n for n, _e, _d in CANDIDATES}
+CANDIDATES += [(f"hexdump-{fmt}" if not fmt.startswith("hexdump") else fmt,
+                (lambda f: lambda s: hexdump_enc(s, f))(fmt), hexdump_dec)
+               for fmt in _HD_FMTS if fmt not in _have and f"hexdump-{fmt}" not in _have]
+del _have
+
+# raw wide artifact read by a UTF-8-replace reader (NULs + ASCII survive): decoder-only use (infer() reads BYTES first)
+CANDIDATES += [(f"raw-{form}", (lambda f: lambda s: raw_wide_enc(s, f))(form), wide_text_dec)
+               for form in ("utf-16le-bom", "utf-16le", "utf-16be-bom", "utf-16be", "utf-32le-bom", "utf-32be-bom")]
+
+# ------------------------------------------------- LEB128 / protobuf varint char codes ("Little-Endian Base 128")
+# Each char code as one varint: 7 value bits a byte, low group first, high bit set on every non-final byte, written as
+# hex. Value = the code point (UTF-32), each UTF-16 code unit (astral = surrogate pair) or each UTF-8 byte; as unsigned
+# uLEB128 / protobuf uint32 (Go binary.AppendUvarint), protobuf sint32 zigzag (2v; Go binary.AppendVarint -- every char
+# >= '@' takes 2 bytes) or DWARF/wasm signed sLEB128 (chars 0x40-0x7f take 2 bytes). ASCII uLEB is byte-for-byte plain
+# hex, so a read needs >= 1 multi-byte value AND bytes that are not themselves printable UTF-8 (plain hex owns those).
+# Hex as one run, byte tokens (space , : - separated, optional 0x / \x per byte) in either case.
+_LEB_KINDS = ("zigzag", "uleb", "sleb")
+_LEB_UNITS = ("cp", "utf16", "utf8")
+
+
+def _leb_vals(s, unit):
+    if unit == "utf8":
+        return list(_u(s))
+    if unit == "utf16":
+        b = s.encode("utf-16-le")
+        return [int.from_bytes(b[i:i + 2], "little") for i in range(0, len(b), 2)]
+    return [ord(c) for c in s]
+
+
+def _leb_one(v, kind):
+    if kind == "zigzag":
+        v = 2 * v if v >= 0 else -2 * v - 1
+    out = bytearray()
+    while True:
+        b = v & 0x7f
+        v >>= 7
+        if kind == "sleb":
+            if (v == 0 and not b & 0x40) or (v == -1 and b & 0x40):
+                return bytes(out + bytes([b]))
+        elif not v:
+            return bytes(out + bytes([b]))
+        out.append(b | 0x80)
+
+
+def leb_enc(s, kind="zigzag", unit="cp", fmt="hex"):
+    """Text -> one LEB128 varint per char code, hex: fmt hex (one run) / hex-space / HEX-space (upper tokens)."""
+    b = b"".join(_leb_one(v, kind) for v in _leb_vals(s, unit))
+    if fmt == "hex":
+        return b.hex()
+    return " ".join(f"{x:02X}" if fmt.startswith("HEX") else f"{x:02x}" for x in b)
+
+
+def _leb_bytes(t):
+    """The bytes of a hex line (one run / byte tokens, optional 0x or \\x per byte), else None."""
+    if not isinstance(t, str):
+        return None
+    t = t.strip()
+    if not t or len(t) > 60000:
+        return None
+    t = re.sub(r"\\x|0[xX](?=[0-9a-fA-F]{2})", " ", t)
+    toks = [x for x in re.split(r"[\s,:;\-]+", t) if x]
+    if not toks or not all(re.fullmatch(r"(?:[0-9a-fA-F]{2})+", x) for x in toks):
+        return None
+    if len(toks) > 1 and any(len(x) != 2 for x in toks):
+        return None
+    return bytes.fromhex("".join(toks))
+
+
+def _leb_stream(b, kind):
+    """[values] of a whole varint stream (no dangling continuation byte, <= 5 bytes a value), multi-byte flag."""
+    from lib.binary import _leb
+    vs, p, multi = [], 0, False
+    while p < len(b):
+        v, q = _leb(b, p, signed=kind == "sleb", cap=5)
+        multi |= q - p > 1
+        if kind == "zigzag":
+            v = (v >> 1) ^ -(v & 1)
+        vs.append(v)
+        p = q
+    return vs, multi
+
+
+def _leb_text(vs, unit):
+    if any(v < 0 for v in vs):
+        return None
+    try:
+        if unit == "utf8":
+            s = bytes(vs).decode("utf-8")
+        elif unit == "utf16":
+            s = b"".join(v.to_bytes(2, "little") for v in vs).decode("utf-16-le")
+        else:
+            s = "".join(map(chr, vs))
+            s.encode("utf-8")
+    except (ValueError, OverflowError):
+        return None
+    if not s.strip() or not all(c.isprintable() or c in "\n\t" for c in s):
+        return None
+    return s if _crib_piece(s) or _texty(s) >= 0.85 else None
+
+
+def leb_reads(t):
+    """[(variant, text)] for a hex line of LEB128 varint char codes, crib / most English read first.
+    variant = leb128-{zigzag|uleb|sleb}-{cp|utf16|utf8}."""
+    try:
+        b = _leb_bytes(t)
+        if not b:
+            return []
+        try:
+            plain = b.decode("utf-8")
+            if all(c.isprintable() or c in "\n\t" for c in plain):
+                return []   # printable UTF-8 as it stands: the plain hex codec's line
+        except UnicodeDecodeError:
+            pass
+        reads, seen = [], set()
+        for kind in _LEB_KINDS:
+            try:
+                vs, multi = _leb_stream(b, kind)
+            except (IndexError, ValueError):
+                continue
+            if not multi:
+                continue
+            for unit in _LEB_UNITS:
+                s = _leb_text(vs, unit)
+                if s and (kind, s) not in seen:
+                    seen.add((kind, s))
+                    reads.append((f"leb128-{kind}-{unit}", s))
+        if len(reads) > 1:
+            from lib.decode import _bigram
+            reads.sort(key=lambda r: (_crib_piece(r[1]), _bigram(r[1])), reverse=True)
+        return reads
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+
+
+def leb_dec(t, kind=None):
+    """Undo leb_enc (any kind/unit/fmt) -> text, else None; kind pins zigzag / uleb / sleb."""
+    for v, s in leb_reads(t):
+        if kind is None or v.split("-")[1] == kind:
+            return s
+    return None
+
+
+def leb_free(p):
+    """Speculative Mastery-line decoder: the LEB128 varint readings of a hex line (best first)."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + s for _v, s in leb_reads(p)][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+CANDIDATES += [(f"leb128-{k}" + ("" if u == "cp" else f"-{u}") + ("" if f == "hex" else f"-{f}"),
+                (lambda k, u, f: lambda s: leb_enc(s, k, u, f))(k, u, f),
+                (lambda k: lambda t: leb_dec(t, k))(k))
+               for k in ("zigzag", "sleb", "uleb") for u in ("cp", "utf16")
+               for f in ("hex", "hex-space", "HEX-space") if not (k == "uleb" and u == "utf16")]
+
+
+# ------------------------------------------------- GSM 03.38 7-bit packed septets (SMS PDU user data) / generic 7-bit
+# Each char as a 7-bit septet, 8 septets per 7 octets. GSM order (3GPP TS 23.038 6.1.2.1.1): bit stream LSB-first per
+# octet, septet n at bit 7n, GSM default alphabet (ASCII positions for letters/digits/space and ! " # % & ' ( ) * + , - .
+# / : ; < = > ?; '@' = 0x00, ESC 0x1B -> extension table). Generic MSB-first packing: the 7-bit ASCII codes run together
+# big-endian, zero-padded to whole octets. Cue: hex ~7/8 the plain-hex length whose bytes are not printable text. A
+# trailing all-zero / CR (GSM fill) septet in exactly 7 spare bits is padding. Hex: one run or byte tokens.
+_GSM7 = ("@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞ\x1bÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?"
+         "¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà")
+_GSM7_EXT = {0x0A: "\f", 0x14: "^", 0x28: "{", 0x29: "}", 0x2F: "\\", 0x3C: "[", 0x3D: "~", 0x3E: "]", 0x40: "|",
+             0x65: "€"}
+_GSM7_IDX = {c: i for i, c in enumerate(_GSM7) if i != 0x1B}
+_GSM7_XIDX = {c: i for i, c in _GSM7_EXT.items()}
+_GSM7_FMTS = ("hex", "HEX", "hex-space", "HEX-space")
+_GSM7_SPLIT = re.compile(r"[ .,!?:'-]+")
+_GSM7_WORD = re.compile(r"[A-Za-z]?[a-z]*|\d+")   # a short (Mastery fragment) read must be word-shaped
+
+
+def _gsm7_septets(s, order):
+    out = []
+    for c in s:
+        if order == "msb":
+            if ord(c) > 0x7F:
+                return None
+            out.append(ord(c))
+        elif c in _GSM7_IDX:
+            out.append(_GSM7_IDX[c])
+        elif c in _GSM7_XIDX:
+            out += [0x1B, _GSM7_XIDX[c]]
+        else:
+            return None
+    return out
+
+
+def gsm7_enc(s, order="lsb", fmt="hex"):
+    """order lsb = GSM 03.38 SMS packing (GSM alphabet), msb = generic big-endian 7-bit ASCII packing."""
+    v = _gsm7_septets(s, order)
+    if v is None:
+        return None
+    if order == "msb":
+        bits = "".join(f"{x:07b}" for x in v)
+        bits += "0" * (-len(bits) % 8)
+        b = int(bits, 2).to_bytes(len(bits) // 8, "big") if bits else b""
+    else:
+        acc = n = 0
+        b = bytearray()
+        for x in v:
+            acc |= x << n
+            n += 7
+            while n >= 8:
+                b.append(acc & 0xFF)
+                acc >>= 8
+                n -= 8
+        if n:
+            b.append(acc)
+        b = bytes(b)
+    h = b.hex().upper() if fmt.startswith("HEX") else b.hex()
+    return " ".join(h[i:i + 2] for i in range(0, len(h), 2)) if fmt.endswith("space") else h
+
+
+def _gsm7_unpack(b, order):
+    if order == "msb":
+        bits = bin(int.from_bytes(b, "big"))[2:].zfill(8 * len(b))
+        v = [int(bits[i:i + 7], 2) for i in range(0, len(bits) - 6, 7)]
+    else:
+        acc = int.from_bytes(b, "little")
+        v = [(acc >> (7 * i)) & 0x7F for i in range(len(b) * 8 // 7)]
+    if len(b) * 8 % 7 == 0 and v and v[-1] in (0, 0x0D):
+        v.pop()   # 7 spare bits: zero / CR fill, not a char
+    if order == "msb":
+        return "".join(map(chr, v))
+    out, i = [], 0
+    while i < len(v):
+        if v[i] == 0x1B:
+            if i + 1 >= len(v) or v[i + 1] not in _GSM7_EXT:
+                return None
+            out.append(_GSM7_EXT[v[i + 1]])
+            i += 2
+        else:
+            out.append(_GSM7[v[i]])
+            i += 1
+    return "".join(out)
+
+
+def gsm7_reads(t):
+    """[(order, text)] readings of a packed-septet line (GSM LSB-first, then MSB-first ASCII), else []."""
+    try:
+        if not isinstance(t, str) or len(t) > 60000:
+            return []
+        b = _leb_bytes(t)
+        if not b or len(b) < 2:
+            return []
+        try:   # bytes that are themselves printable text belong to plain hex
+            if all(c.isprintable() or c in "\t\n\r" for c in b.decode("utf-8")):
+                return []
+        except UnicodeDecodeError:
+            pass
+        out = []
+        for order in ("lsb", "msb"):
+            s = _gsm7_unpack(b, order)
+            if s and len(s) >= 4 and all(" " <= c <= "~" for c in s) and _texty(s) >= 0.9 and (
+                    len(s) >= 16 or all(_GSM7_WORD.fullmatch(w) for w in _GSM7_SPLIT.split(s))):
+                out.append((order, s))   # GM text is ASCII: a GSM-only glyph (£ é Δ ...) = a wrong read
+        return out
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def gsm7_dec(t, order=None):
+    """Undo gsm7_enc (any fmt) -> text, else None; order pins lsb (GSM) / msb (generic)."""
+    for o, s in gsm7_reads(t):
+        if order is None or o == order:
+            return s
+    return None
+
+
+def gsm7_free(p):
+    """Speculative Mastery-line decoder: the packed-septet readings of a hex line."""
+    if not isinstance(p, str) or not p.strip():
+        return []
+    lead = p[:len(p) - len(p.lstrip())]
+    return [lead + s for _o, s in gsm7_reads(p)][:2]
+
+
+CANDIDATES += [(("gsm7" if o == "lsb" else "pack7-msb") + ("" if f == "hex" else f"-{f}"),
+                (lambda o, f: lambda s: gsm7_enc(s, o, f))(o, f), (lambda o: lambda t: gsm7_dec(t, o))(o))
+               for o in ("lsb", "msb") for f in _GSM7_FMTS]
+
+
 SPECULATIVE_FREE = (
     ("rot47", lambda p: [rot47(p)]),
     ("rot8000", lambda p: [b for b in (rot8000_dec(p),) if b]),
@@ -7689,6 +9043,7 @@ SPECULATIVE_FREE = (
     ("bcd", bcd_free),
     ("address", addr_free),
     ("gray", gray_free),
+    ("binary-lsb", lsb_free),
     ("roman", roman_free),
     ("chuck-unary", chuck_free),
     ("aphex", aphex_free),
@@ -7698,6 +9053,13 @@ SPECULATIVE_FREE = (
     ("polyalpha", crib_fragment),
     ("subst", subst_fragment),
     ("xorkey", xorkey_fragment),
+    ("wordswap", wordswap_free),
+    ("nibswap-hex", nibswap_free),
+    ("wide-int", wint_free),
+    ("leb128", leb_free),
+    ("hexdump", hexdump_free),
+    ("gsm7", gsm7_free),
+    ("raw-wide", lambda p: [b for b in (wide_text_dec(p),) if b]),
 )
 
 

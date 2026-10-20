@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_duration",
+ "expected": "0.500000",
+ "generator_cmd": "GM artifact D18 metadata-day-18-evidence.zip -> video-001.mp4 (H.264 High, 320x180, 5 frames)",
+ "oracle_cmd": "PYTHONPATH=tools/pyav python3 -c 'import av; c=av.open(F); s=c.streams.video[0]; cc=s.codec_context; print(s.duration*s.time_base)' -> 1/2 (5000 * 1/10000)",
+ "decoy": false,
+ "member": "video-001.mp4"
+}

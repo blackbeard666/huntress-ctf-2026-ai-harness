@@ -1,0 +1,2 @@
+- target = Pocket SOC (IDOR). /api/history leaks reference_only case 17089 (owner executive); /api/briefs/17089 returns note=proof_<hex> with no owner check. CORRECT.
+- solver-test fails only because the solved instance returns 410; see HELP.md.

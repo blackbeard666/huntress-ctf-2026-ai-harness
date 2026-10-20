@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=nashorn|role=webshell|verdict=malicious|attack=T1505.003|adapter=operation_graph|host_profile=jrunscript_inline|obfuscation_profile=b64|stage_profile=single_descriptor|next_language=bash|stage_count=2|steps=decode_configuration,run_command|campaign_id=NASHORN-e04d77b1|url=https://nashorn-e04d77b1.example.invalid/stage|file_path=/tmp/huntress-nashorn/.e04d77b1.stage",
+ "decoy": false,
+ "host": "jvm",
+ "what": "Nashorn jrunscript -e JS one-liner",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/jvm_host_gen.py tests/data/script_fixtures  (stdlib base64/bytes.hex writer; Nashorn jrunscript -e JS one-liner)",
+ "oracle_cmd": "grep -o \"descriptor_e04d77b1 = '[^']*'\" tests/data/script_fixtures/jvm_nashorn_jrunscript.sh | cut -d\"'\" -f2 | base64 -d"
+}

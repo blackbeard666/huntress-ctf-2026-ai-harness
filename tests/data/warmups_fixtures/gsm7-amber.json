@@ -1,0 +1,9 @@
+{
+ "codec": "gsm7-HEX",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-23",
+ "encoded": "CEF4B80CBABFE56B10B93C7E93D3EE33888E4ECF41F7B0BC5D878740D43768FE66DBCB2CD0BC2E6EA7E9203A3A3D0795F1E1311D1476CFEF653988FE06D1D165D031DC2E839AE139BD2CD781C26D7159DE3287D9E3B7BB259B01",
+ "generator_cmd": "python3 -I -c \"import sys;sys.path.insert(0,\\\"tools/pylib-gsm\\\");from gsmmodem.pdu import encodeGsm7,packSeptets;print(packSeptets(encodeGsm7(sys.argv[1])).hex().upper())\" \"$plain\"  # python-gsmmodem-new 0.13 pdu.packSeptets(encodeGsm7) (3GPP 23.038 SMS packing), uppercase hex",
+ "oracle_cmd": "perl -e 'my $b=unpack(\"b*\", pack(\"H*\", $ARGV[0])); print join \"\", map { chr oct(\"0b\".reverse $_) } ($b =~ /(.{7})/g)' \"$encoded\"  # perl pack/unpack 'b*' (LSB-first bit string) split into 7-bit groups, each group read LSB-first as a char code",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-23",
+ "expected": "match"
+}

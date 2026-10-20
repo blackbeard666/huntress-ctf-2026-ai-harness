@@ -1,0 +1,9 @@
+{
+ "codec": "hexdump-od-x",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-raven-90",
+ "encoded": "0000000 694e 6563 7720 726f 206b 6564 6f63 6964\n0000020 676e 7420 6968 2073 6177 6d72 7075 2021\n0000040 6f54 7320 6c6f 6576 202c 7573 6d62 7469\n0000060 7420 6968 2073 7865 6361 2074 6e61 7773\n0000100 7265 7420 206f 6874 2065 6147 656d 4d20\n0000120 7361 6574 3a72 6d20 7061 656c 722d 7661\n0000140 6e65 392d 0030\n0000145",
+ "generator_cmd": "printf %s \"$plain\" | od -x",
+ "oracle_cmd": "printf \"%s\\n\" \"$encoded\" | perl -ane 'shift @F; print pack(\"v*\", map { hex } @F)' | tr -d \"\\000\"  # perl pack v* = LE 16-bit words",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-raven-90",
+ "expected": "match"
+}

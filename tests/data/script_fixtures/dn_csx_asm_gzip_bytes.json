@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=csharp_script|role=dropper|verdict=malicious|attack=T1027.009|adapter=embedded_assembly|stage_count=3|steps=gunzip_bytes,load_assembly,write_file|campaign_id=NET-19d03b5f|file_path=C:\\ProgramData\\.19d03b5f.bin",
+ "decoy": false,
+ "generator_cmd": "H=$(printf %s '<plan>' | xxd -p | tr -d '\\n'); dn_gen_Drop.cs = instance method `return \"$H\";`; pwsh -NoProfile -c \"Add-Type -TypeDefinition (Get-Content -Raw ./dn_gen_Drop.cs) -OutputAssembly ./Drop.dll -OutputType Library\"; gzip -9n -c Drop.dll | od -An -v -tu1 | tr -s ' \\n' ' ' | sed 's/ /, /g' | fold -s -w 96 -> C# `byte[] gz = new byte[] {31, 139, 8, ...}` + GZipStream + Assembly.Load",
+ "oracle_cmd": "python3 -I -c \"import re,sys,gzip;open(sys.argv[2],'wb').write(gzip.decompress(bytes(int(x) for x in re.search(r'\\{([\\d,\\s]+)\\}',open(sys.argv[1]).read()).group(1).replace(',',' ').split())))\" dn_csx_asm_gzip_bytes.csx b.dll && ilspycmd b.dll | grep -o 'return \"763d[^\"]*\"' | cut -d'\"' -f2 | xxd -r -p",
+ "note": "gzip int-array carrier of an MZ; plan = hex #US user string"
+}

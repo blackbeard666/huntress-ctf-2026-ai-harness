@@ -1,0 +1,8 @@
+{
+ "field": "java.source_file",
+ "expected": "Widget.java",
+ "generator_cmd": "javac --release 21 -d o21 com/example/Widget.java Plain.java (javac 21.0.12)",
+ "oracle_cmd": "javap -v Widget.class -> Compiled from \"Widget.java\"",
+ "decoy": false,
+ "member": "Widget.class"
+}

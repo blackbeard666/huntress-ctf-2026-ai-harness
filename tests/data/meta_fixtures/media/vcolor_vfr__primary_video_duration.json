@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_duration",
+ "expected": "8.100000",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i testsrc=s=64x36:r=10:d=1 -vf \"setpts='N*N/(10*TB)'\" -fps_mode passthrough -c:v libx264 -bf 0 -pix_fmt yuv420p vfr.mp4",
+ "oracle_cmd": "PYTHONPATH=tools/pyav python3 -c 'import av; c=av.open(F); s=c.streams.video[0]; cc=s.codec_context; print(s.duration*s.time_base)' -> 81/10 (82944/10240)",
+ "decoy": false,
+ "member": "vfr.mp4"
+}

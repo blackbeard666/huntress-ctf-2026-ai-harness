@@ -1,0 +1,11 @@
+{
+ "codec": "raw-file(utf-16le-bom) mastery lines",
+ "plain": "01\tTmljZSB3b3Jr\n02\tAvpr jbex\n",
+ "encoded_file": "raw-wide-utf16-bom-mastery-lines.bin",
+ "encoded_hex": "fffe30003100090054006d006c006a005a00530042003300620033004a0072000a00300032000900410076007000720020006a006200650078000a00",
+ "expected_form": "utf-16le-bom",
+ "generator_cmd": "printf '01\\tTmljZSB3b3Jr\\n02\\tAvpr jbex\\n' | iconv -f UTF-8 -t UTF-16 > raw-wide-utf16-bom-mastery-lines.bin  # glibc iconv",
+ "oracle_cmd": "iconv -f UTF-16 -t UTF-8 raw-wide-utf16-bom-mastery-lines.bin  # glibc iconv",
+ "oracle_plain": "01\tTmljZSB3b3Jr\n02\tAvpr jbex\n",
+ "expected": "match"
+}

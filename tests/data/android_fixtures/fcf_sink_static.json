@@ -1,0 +1,8 @@
+{
+ "entry": "flattened_cfg_scan",
+ "expected": "ANS-e05b9d1c74a3f826",
+ "decoy": false,
+ "_why": "void G.show(PrintStream): packed-switch dispatcher printing String/char pieces to out behind an opaque out.hashCode() predicate: the run aborts, the static unflattener (case order from the initial state) joins the pieces",
+ "generator_cmd": "python3 tests/data/android_fixtures/fcf_src/gen_fcf.py sink_static tests/data/android_fixtures/fcf_sink_static.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/fcf_src/oracle.sh tests/data/android_fixtures/fcf_sink_static.apk  # d2j-dex2jar back to classes, RUN show(PrintStream) on the JVM -> prints ANS-e05b9d1c74a3f826"
+}

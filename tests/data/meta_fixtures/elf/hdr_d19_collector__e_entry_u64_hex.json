@@ -1,0 +1,8 @@
+{
+ "field": "elf.e_entry_u64_hex",
+ "expected": "0x0000000000401080",
+ "generator_cmd": "unzip metadata-day-19-evidence.zip collector-001.elf  (the GM-built D19 artifact, single_solve; GM-verified e_machine 0x003e)  (run in $TMPDIR/elfid)",
+ "oracle_cmd": "readelf -hW hdr_d19_collector__e_entry_u64_hex.bin | grep 'Entry point address: 0x401080' (u64 -> 16 digits)",
+ "decoy": false,
+ "member": "collector-001.elf"
+}

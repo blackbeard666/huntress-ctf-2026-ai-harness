@@ -1,0 +1,8 @@
+{
+ "field": "elf.machine_name",
+ "expected": "MIPS R3000",
+ "generator_cmd": "printf hello > blob; objcopy -I binary -O elf32-big blob mips32be.o; printf '\\x00\\x08' | dd of=mips32be.o bs=1 seek=18 conv=notrunc  (e_machine = EM_MIPS)  (run in $TMPDIR/elfid)",
+ "oracle_cmd": "readelf -hW hdr_mips32be__machine_name.bin | grep Machine:",
+ "decoy": false,
+ "member": "mips32be.o"
+}

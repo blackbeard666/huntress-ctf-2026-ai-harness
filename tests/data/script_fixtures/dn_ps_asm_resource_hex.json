@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=csharp|role=chain|verdict=malicious|attack=T1027.009|adapter=manifest_resource|stage_count=2|steps=read_resource,load_assembly|campaign_id=NET-a83e6d14|next_stage=stage2.ps1",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | base64 -w0 > dn_gen_cfg.txt; dotnet /usr/lib/dotnet/sdk/10.0.112/Roslyn/bincore/csc.dll -target:library -nostdlib -r:System.Runtime.dll -r:System.Private.CoreLib.dll -resource:dn_gen_cfg.txt,HuntressRes.cfg.txt -out:Res.dll dn_gen_Res.cs; xxd -p Res.dll | tr -d '\\n' -> `$h = '4d5a90...'` + Assembly.Load + GetManifestResourceStream",
+ "oracle_cmd": "python3 -I -c \"import re,sys;open(sys.argv[2],'wb').write(bytes.fromhex(re.search(r\\\"h = '([0-9a-f]+)'\\\",open(sys.argv[1]).read()).group(1)))\" dn_ps_asm_resource_hex.ps1 c.dll && ilspycmd c.dll --resource HuntressRes.cfg.txt -o res && base64 -d res/HuntressRes.cfg.txt",
+ "note": "hex carrier; plan = base64 text of an embedded ManifestResource (csc -resource), not a user string"
+}

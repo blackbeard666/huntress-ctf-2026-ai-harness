@@ -1,0 +1,9 @@
+{
+ "codec": "hex(utf-16le-bom) fragment, odd byte count",
+ "plain": "amber-ly",
+ "encoded": "fffe61006d006200650072002d006c0079",
+ "generator_cmd": "{ printf '\\377\\376'; printf %s 'amber-lynx' | iconv -f UTF-8 -t UTF-16LE; } | head -c 17 | xxd -p | tr -d '\\n'  # Mastery fragment with its own BOM, cut after the low byte of 'y'",
+ "oracle_cmd": "{ printf %s \"$encoded\" | xxd -r -p; printf '\\0'; } | iconv -f UTF-16 -t UTF-8  # glibc iconv, the cut unit's 00 high byte restored",
+ "oracle_plain": "amber-ly",
+ "expected": "match"
+}

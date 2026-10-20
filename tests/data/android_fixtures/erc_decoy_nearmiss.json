@@ -1,0 +1,8 @@
+{
+ "entry": "entry_reachable_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same five valid-token twins g0..g4, all unreachable; the wired class g5 returns a 15-hex near-miss -> no valid token reachable",
+ "generator_cmd": "python3 tests/data/android_fixtures/erc_src/gen_erc.py decoy_nearmiss tests/data/android_fixtures/erc_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/erc_src/oracle.sh tests/data/android_fixtures/erc_decoy_nearmiss.apk  # d2j-dex2jar back to classes, RUN ChallengeActivity.onCreate on the JVM -> url ...proof=ANS-6d0c8b2fa7e4193 (15 hex: no valid token)"
+}

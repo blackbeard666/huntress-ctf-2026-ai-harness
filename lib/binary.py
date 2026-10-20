@@ -606,6 +606,1234 @@ def upx_hcfg(data, **kw):
     img = upx_unpack(data, deadline=kw.get("deadline"))
     return (img, hcfg_find(img, **kw)) if img else (None, None)
 
+
+def _ror8(b, r):
+    return ((b >> r) | (b << (8 - r))) & 255
+
+
+def overlay_unpack(data, magic):
+    """Day 19 packed overlay (GM-confirmed on the Single, TT and Mastery): the LAST `magic` ('PK19'; the D19 question
+    already names 'RS20' for Day 20) in the file; +5 k1, +6 k2, +8 u32le packed length, +12 sha256(unpacked), +44 packed
+    bytes; unpacked[i] = ror8(packed[i] ^ k2, 3) ^ k1, the HCFG record at unpacked offset 0. A mutated rotation/key
+    falls back to the (xor, rot, xor) that yields b'HCFG' at 0 and matches the stored sha256. Bytes or None.
+    overlay_offset = data.rfind(magic), overlay_size = len(data) - that offset (both GM-confirmed D19)."""
+    import hashlib
+    if isinstance(magic, dict):   # an overlay_spec(question): the question-driven unpacker (tuple or None)
+        return overlay_spec_unpack(data, magic)
+    o = data.rfind(magic.encode() if isinstance(magic, str) else magic) if magic else -1
+    if o < 0 or o + 44 > len(data):
+        return None
+    k1, k2 = data[o + 5], data[o + 6]
+    n, = struct.unpack_from("<I", data, o + 8)
+    sha = data[o + 12:o + 44]
+    pk = data[o + 44:o + 44 + n] if n else data[o + 44:]
+    out = bytes(_ror8(b ^ k2, 3) ^ k1 for b in pk)
+    if hashlib.sha256(out).digest() == sha or out[:4] == HCFG_MAGIC:
+        return out
+    if len(pk) < 4:
+        return None
+    for r in range(8):
+        for a in range(256):
+            c = _ror8(pk[0] ^ a, r) ^ HCFG_MAGIC[0]
+            if all(_ror8(pk[i] ^ a, r) ^ c == HCFG_MAGIC[i] for i in range(1, 4)):
+                out = bytes(_ror8(b ^ a, r) ^ c for b in pk)
+                if hashlib.sha256(out).digest() == sha:
+                    return out
+    return None
+
+
+OVERLAY_MAGICS = ("PK19", "RS20")   # D19 GM-confirmed; RS20 named by the D19 overlay_offset question for Day 20
+
+
+def overlay_header_facts(data, magic=None):
+    """Header facts of the packed overlay (D19 PK19 layout: magic +0..3, version u8 +4, k1 +5, k2 +6, pad +7, packed
+    length u32le +8, sha256(unpacked) +12..+44, packed bytes +44) at the LAST `magic` (str/bytes; an overlay_spec dict
+    unpacks with the question's transform; None = the last of OVERLAY_MAGICS present). Keys: has_overlay / image_end
+    (overlay_info: bytes past every header-described region), overlay_magic, overlay_offset, overlay_size,
+    overlay_at_image_end, overlay_version, k1/k2 (int) + k1_hex/k2_hex ('0x%02x' like xor_key_hex), pad, packed_length,
+    unpacked_sha256 (64 lowercase hex, no prefix), packed_sha256, overlay_entropy / packed_entropy (bits/byte, 4 dp),
+    unpacked_length/unpacked_size (len of the hash-verified unpack), unpacked_sha256_ok, hcfg_storage. The overlay
+    keys are "none" when no magic lies past the image end with a packed length that fits the file (has_overlay /
+    image_end still answer); unpacked_* None when the stored hash
+    does not verify. hcfg_storage "raw" is SPECULATIVE (the D17 rule list's catch-all: no section holds a packed
+    overlay). None for non-bytes input."""
+    try:
+        data = bytes(data)
+        spec = magic if isinstance(magic, dict) else None
+        if spec:
+            magic = spec.get("magic")
+        if isinstance(magic, str):
+            magic = magic.encode("latin-1")
+        ov = overlay_info(data)
+        facts = {"has_overlay": bool(ov and ov["has_overlay"]),
+                 "image_end": (ov["overlay_offset"] if ov["has_overlay"] else len(data)) if ov else "none"}
+        cands = [magic] if magic else [m.encode() for m in OVERLAY_MAGICS]
+        o, mg = max((data.rfind(m), m) for m in cands if m)
+        keys = ("overlay_magic", "overlay_offset", "overlay_size", "overlay_at_image_end", "overlay_version", "k1", "k2",
+                "k1_hex", "k2_hex", "pad", "packed_length", "unpacked_sha256", "packed_sha256", "overlay_entropy",
+                "packed_entropy", "unpacked_length", "unpacked_size", "unpacked_sha256_ok", "hcfg_storage")
+        n = struct.unpack_from("<I", data, o + 8)[0] if 0 <= o and o + 44 <= len(data) else -1
+        if n < 0 or o + 44 + n > len(data) or (ov and o < facts["image_end"]):   # a string in .rodata is no overlay
+            facts.update(dict.fromkeys(keys, "none"))
+            return facts
+        import hashlib
+        pk = data[o + 44:o + 44 + n] if n else data[o + 44:]
+        if spec:
+            r = overlay_spec_unpack(data, spec)
+            out = r[3] if r and r[0] == o and r[4] else None
+        else:
+            out = overlay_unpack(data, mg)
+            out = out if out is not None and hashlib.sha256(out).digest() == data[o + 12:o + 44] else None
+        facts.update({
+            "overlay_magic": mg.decode("latin-1"), "overlay_offset": o, "overlay_size": len(data) - o,
+            "overlay_at_image_end": bool(ov) and o == facts["image_end"],
+            "overlay_version": data[o + 4], "k1": data[o + 5], "k2": data[o + 6],
+            "k1_hex": "0x%02x" % data[o + 5], "k2_hex": "0x%02x" % data[o + 6], "pad": data[o + 7],
+            "packed_length": n, "unpacked_sha256": data[o + 12:o + 44].hex(),
+            "packed_sha256": hashlib.sha256(pk).hexdigest(),
+            "overlay_entropy": round(entropy(data[o:]), 4), "packed_entropy": round(entropy(pk), 4),
+            "unpacked_length": len(out) if out is not None else None,
+            "unpacked_size": len(out) if out is not None else None,
+            "unpacked_sha256_ok": out is not None,
+            "hcfg_storage": "raw" if out is not None and out[:4] == HCFG_MAGIC else None})
+        return facts
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def overlay_header_field(data, name, magic=None):
+    """One overlay_header_facts value: "none" when absent (no overlay magic / unknown field), None when unanswerable."""
+    f = overlay_header_facts(data, magic)
+    return None if f is None else f.get(name, "none")
+
+
+# --- multi-layer / decoy overlay chain ('Find the FINAL PK19 overlay') ------------------------------------------------
+# Rule set (SPECULATIVE beyond D19's single PK19): every magic hit is a candidate; in an ELF/PE container a hit before the
+# image end (a .rodata string) is no overlay; of the rest the LAST whose D19 header unpacks hash-verified wins (an
+# earlier / later bad-hash block is a decoy). The unpacked payload recurses while it starts with a known container:
+# PK19/RS20 at 0 (overlay inside the overlay), an ELF/PE (its own overlay), zlib/gzip (inflate) -- depth <= 4.
+OVERLAY_CHAIN_DEPTH = 4
+
+
+def _pk19_at(data, o, budget=None):
+    """D19-layout unpack of the overlay at offset `o` (overlay_unpack's transform + fallback): (out, packed_length,
+    hash_ok) or None when the header does not fit / the packed length exceeds budget[0] (bytes left, decremented)."""
+    import hashlib
+    if o < 0 or o + 44 > len(data):
+        return None
+    n, = struct.unpack_from("<I", data, o + 8)
+    if o + 44 + n > len(data):
+        return None
+    m = n or len(data) - o - 44
+    if budget is not None:
+        if m > budget[0]:
+            return None
+        budget[0] -= m
+    pk = data[o + 44:o + 44 + m]
+    k1, k2, sha = data[o + 5], data[o + 6], data[o + 12:o + 44]
+    out = pk.translate(bytes(_ror8(b ^ k2, 3) ^ k1 for b in range(256)))
+    if hashlib.sha256(out).digest() == sha:
+        return out, n, True
+    if len(pk) >= 4:
+        for r in range(8):
+            for a in range(256):
+                c = _ror8(pk[0] ^ a, r) ^ HCFG_MAGIC[0]
+                if all(_ror8(pk[i] ^ a, r) ^ c == HCFG_MAGIC[i] for i in range(1, 4)):
+                    if budget is not None:
+                        if m > budget[0]:
+                            return out, n, False
+                        budget[0] -= m
+                    o2 = pk.translate(bytes(_ror8(b ^ a, r) ^ c for b in range(256)))
+                    if hashlib.sha256(o2).digest() == sha:
+                        return o2, n, True
+    return out, n, False
+
+
+def _chain_inflate(buf):
+    """zlib / gzip payload -> inflated bytes (capped), else None."""
+    try:
+        if buf[:2] == b"\x1f\x8b":
+            d = zlib.decompressobj(31)
+        elif len(buf) >= 2 and buf[0] & 15 == 8 and (buf[0] << 8 | buf[1]) % 31 == 0:
+            d = zlib.decompressobj()
+        else:
+            return None
+        out = d.decompress(buf, 1 << 24)
+        return out if out and d.eof else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def overlay_chain(data, magic=None, max_depth=OVERLAY_CHAIN_DEPTH):
+    """Walk nested / decoy overlays (see the rule set above). `magic` str/bytes or None (= OVERLAY_MAGICS). Keys:
+    layer_count (hash-verified overlay layers unpacked), layers [{depth, kind ('overlay'|'zlib'|'gzip'),
+    magic, offset (in its container), file_offset (outer file offset; None below depth 0), packed_length,
+    unpacked_size}], overlay_offset / overlay_size (OUTERMOST layer, outer-file offset -- same as overlay_header_facts
+    when its last magic verifies), final_overlay_offset (offset of the innermost overlay in ITS container),
+    final_overlay_depth, final_overlay_magic, decoy_offsets / decoy_count (outer-file hits rejected: bad hash or before
+    the image end), magic_hits, payload_kind (innermost payload's container chain, e.g. 'overlay>elf>overlay'),
+    hcfg_offset (in the innermost payload), config, unpacked_sha256 (innermost). Absent fields are "none"; None for
+    non-bytes / unexpected failure. Never raises."""
+    try:
+        import hashlib
+        data = bytes(data)
+        mags = [magic.encode("latin-1") if isinstance(magic, str) else bytes(magic)] if magic else \
+            [m.encode() for m in OVERLAY_MAGICS]
+        layers, decoys, hits0 = [], [], []
+        buf, depth, kinds, final, budget = data, 0, [], None, [96 << 20]   # bytes transformed+hashed over all hits
+        while depth <= max_depth and buf:
+            if buf[:4] in mags and depth and layers:   # overlay inside the overlay: the record IS the payload
+                ov_end = 0
+            else:
+                info = overlay_info(buf) if buf[:4] in (b"\x7fELF", b"MZ\x90\0") or buf[:2] == b"MZ" else None
+                ov_end = info["overlay_offset"] if info and info["has_overlay"] else (len(buf) if info else 0)
+            hits = sorted(o for m in mags for o in _find_all(buf, m))
+            if depth == 0:
+                hits0 = hits
+            best = None
+            for o in reversed(hits):
+                r = _pk19_at(buf, o, budget) if o >= ov_end else None
+                if r and r[2]:
+                    best = (o, r)
+                    break
+            if depth == 0:
+                decoys = [o for o in hits if not best or o != best[0]]
+            if not best:
+                z = _chain_inflate(buf) if layers else None
+                if z is None:
+                    break
+                kinds.append("gzip" if buf[:2] == b"\x1f\x8b" else "zlib")
+                layers.append({"depth": depth, "kind": kinds[-1], "magic": None, "offset": 0, "file_offset": None,
+                               "packed_length": len(buf), "unpacked_size": len(z)})
+                buf, depth = z, depth + 1
+                continue
+            o, (out, n, _) = best
+            if depth and buf[:4] not in mags:
+                kinds.append("elf" if buf[:4] == b"\x7fELF" else "pe" if buf[:2] == b"MZ" else "blob")
+            kinds.append("overlay")
+            layers.append({"depth": depth, "kind": "overlay", "magic": buf[o:o + 4].decode("latin-1"), "offset": o,
+                           "file_offset": o if depth == 0 else None, "packed_length": n, "unpacked_size": len(out)})
+            final = (o, depth, buf[o:o + 4].decode("latin-1"), out)
+            buf, depth = out, depth + 1
+        ovl = [L for L in layers if L["kind"] == "overlay"]
+        none = "none"
+        res = {"layer_count": len(ovl), "layers": layers, "magic_hits": hits0, "decoy_offsets": decoys,
+               "decoy_count": len(decoys), "overlay_offset": none, "overlay_size": none, "final_overlay_offset": none,
+               "final_overlay_depth": none, "final_overlay_magic": none, "payload_kind": none, "hcfg_offset": none,
+               "config": none, "unpacked_sha256": none}
+        if not ovl:
+            return res
+        res.update({"overlay_offset": ovl[0]["offset"], "overlay_size": len(data) - ovl[0]["offset"],
+                    "final_overlay_offset": final[0], "final_overlay_depth": final[1], "final_overlay_magic": final[2],
+                    "payload_kind": ">".join(kinds), "unpacked_sha256": hashlib.sha256(buf).hexdigest()})
+        pb = _parse_blob(buf)
+        if pb and pb[5] and isinstance(pb[6], dict):
+            res.update({"hcfg_offset": 0, "config": pb[6]})
+        elif len(buf) <= 1 << 22:
+            h = hcfg_find(buf)
+            if h:
+                res.update({"hcfg_offset": h.offset, "config": h.config})
+        return res
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _find_all(buf, m, limit=256):
+    out, i = [], buf.find(m)
+    while i >= 0 and len(out) < limit:
+        out.append(i)
+        i = buf.find(m, i + 1)
+    return out
+
+
+def overlay_chain_field(data, name, magic=None):
+    """One overlay_chain value: "none" when absent / unknown field, None when unanswerable."""
+    f = overlay_chain(data, magic)
+    return None if f is None else f.get(name, "none")
+
+# --- question-driven overlay unpacker (D19 PK19, D20 RS20 ...) -------------------------------------------------------
+# overlay_spec(question) reads the overlay layout the QUESTION states (magic, `<name> [fmt] at +N` header fields, packed
+# bytes offset, stored hash, per-byte transform expression, optional decompressor); overlay_spec_unpack(data, spec)
+# applies it and returns only a hash-verified result. Remaining prose ambiguities (reversal side, prev seed, LCG output
+# byte, RLE pair order) are resolved ONLY by the stored hash (or HCFG at 0 when the question names no hash).
+_OVS_FMT = {"u8": ("<B", 1), "byte": ("<B", 1), "u16le": ("<H", 2), "u16be": (">H", 2), "u16": ("<H", 2),
+            "u32le": ("<I", 4), "u32be": (">I", 4), "u32": ("<I", 4), "u64le": ("<Q", 8), "u64be": (">Q", 8),
+            "u64": ("<Q", 8)}
+_OVS_HASH = (("sha-256", "sha256"), ("sha256", "sha256"), ("sha-1", "sha1"), ("sha1", "sha1"), ("md5", "md5"),
+             ("crc-32", "crc32"), ("crc32", "crc32"))
+_OVS_STOP = {"read", "the", "a", "an", "and", "then", "byte", "bytes", "value", "field", "stored", "header", "offset",
+             "key", "at", "is", "unpacked", "packed", "little", "big", "endian", "little-endian", "big-endian", "with"}
+
+
+def _ovs_num(s):
+    return int(s, 16) if s.lower().startswith("0x") else int(s)
+
+
+def overlay_spec(question):
+    """Parse an overlay-unpack question into {"magic", "which" ('last'|'first'|'any'), "fields" {name: (off, fmt)},
+    "data_off", "length" (field name|None), "hash" (algo, field, over) | None, "expr" (AST)|None, "steps" [...],
+    "decompress" [names], "reverse" ('in'|'out'|'?'|None), "text"}. fmt: u8/u16le/u16be/u32le/u32be/u64le/u64be/
+    bytes[n]. Offsets are relative to the magic. None when the question names no overlay magic / layout."""
+    try:
+        return _overlay_spec(question)
+    except Exception:  # noqa: BLE001 - untrusted prose: unparseable -> no spec
+        return None
+
+
+def _overlay_spec(q):
+    q = (q or {}).get("question", "") if isinstance(q, dict) else str(q or "")
+    t = re.split(r"\b(?:Locate the unique|bytes 0\.\.3 are)", q)[0]
+    m = (re.search(r"\b(?:final|last|first|the)\s+[`'\"]?([A-Z][A-Z0-9]{3})[`'\"]?\s+(?:overlay|trailer|blob|stub|"
+                   r"record|header|section)", t)
+         or re.search(r"\bmagic\s+(?:bytes\s+)?[`'\"]?([A-Z][A-Z0-9_]{3,7})[`'\"]?", t)
+         or re.search(r"\b([A-Z]{2}\d{2})\b", t))
+    if not m:
+        return None
+    magic = m.group(1)
+    head = t[max(0, m.start() - 20):m.end() + 5].lower()
+    which = "last" if re.search(r"\b(final|last)\b", head) else "first" if "first" in head else "any"
+    fields, data_off, length, hsh = {}, None, None, None
+    fmtre = r"(u8|u16le|u16be|u32le|u32be|u64le|u64be|u16|u32|u64)"
+    for fm in re.finditer(r"([^,;.:]*?)\s+(?:is\s+)?(?:at|@)\s+(?:offset\s+|byte\s+)?\+\s*(0x[0-9a-fA-F]+|\d+)", t):
+        desc, off = fm.group(1).strip(), _ovs_num(fm.group(2))
+        dl = desc.lower()
+        dl = re.sub(r"little[- ]endian\s+(u\d+|uint\d+|dword|word)", lambda x: x.group(1) + "le", dl)
+        dl = re.sub(r"big[- ]endian\s+(u\d+|uint\d+|dword|word)", lambda x: x.group(1) + "be", dl)
+        dl = re.sub(r"uint(\d+)", r"u\1", dl).replace("dword", "u32").replace("word", "u16")
+        fmt = None
+        f2 = re.search(r"\b" + fmtre + r"(le|be)?\b", dl)
+        if f2:
+            fmt = f2.group(1) + ("" if f2.group(1) in ("u8",) or f2.group(1)[-2:] in ("le", "be") else
+                                 (f2.group(2) or "le"))
+        nb = re.search(r"\b(\d+)-byte\b", dl)
+        algo = next((a for k, a in _OVS_HASH if k in dl), None)
+        if algo and not re.search(r"\b(length|size)\b", dl):
+            n = {"sha256": 32, "sha1": 20, "md5": 16, "crc32": 4}[algo]
+            if algo == "crc32" and fmt is None:
+                fmt = "u32be" if "big" in dl else "u32le"
+            fields["hash"] = (off, fmt or "bytes[%d]" % (int(nb.group(1)) if nb else n))
+            over = "packed" if re.search(r"\b(packed|encrypted|encoded|cipher\w*|compressed)\b", dl) and \
+                not re.search(r"\b(unpacked|decrypted|decoded|decompressed|plain\w*|original)\b", dl) else "out"
+            hsh = (algo, "hash", over)
+            continue
+        if re.search(r"\b(packed|encrypted|encoded|cipher|compressed)?\s*(bytes|data|payload|ciphertext|body|blob|"
+                     r"stream)\b", dl) and not re.search(r"\b(length|size|count|key)\b", dl) and fmt is None and not nb:
+            data_off = off
+            continue
+        if re.search(r"\b(block|segment|chunk)", dl):   # 'block size u8 at +5' (a shuffle width, not the length)
+            fields["block"] = (off, fmt or "u8")
+            continue
+        if re.search(r"\b(length|size|count)\b", dl):
+            nm = "unpacked_length" if re.search(r"\b(unpacked|decompressed|original|plain)\b", dl) else "length"
+            fields[nm] = (off, fmt or "u32le")
+            if nm == "length":
+                length = nm
+            continue
+        words = [w for w in re.findall(r"[a-z_][a-z0-9_]*", dl) if w not in _OVS_STOP and not re.fullmatch(fmtre, w)
+                 and not re.fullmatch(r"(le|be|\d+)", w)]
+        name = words[-1] if words else ("key" if "key" in dl else None)
+        if not name:
+            continue
+        fields[name] = (off, "bytes[%d]" % int(nb.group(1)) if nb and fmt is None else fmt or "u8")
+    expr, steps = None, []
+    em = re.search(r"(?:compute|computes?|=|becomes|is)\s+((?:ro[rl]8?|rot[lr]|swap\w*|nib\w*|not|~|\(|[a-z_]\w*\s*"
+                   r"(?:xor|\^|\+|-|add|sub|plus|minus|\[))[^;]*?)(?:;|\.\s|\.$|,\s*(?:then\s+)?(?:verify|check|"
+                   r"decompress|inflate|use|and\s+verify)|,\s*(?:where|with|using|starting)\b)", t, re.I)
+    if em:   # drop prose asides: '(the first byte uses iv)'
+        expr = _ovs_parse(re.sub(r"\s*\((?:the|with|where|starting|initial|first|seeded|i\.e\.)\b[^)]*\)", "",
+                                 em.group(1), flags=re.I))
+    if expr is None:
+        sm = re.search(r"for each (?:packed |encrypted |encoded )?byte[^,]*,\s*(.*?)(?:;|\.\s|\.$|,\s*(?:then\s+)?"
+                       r"(?:verify|check|use))", t, re.I)
+        if sm:
+            steps = _ovs_steps(sm.group(1))
+            expr = _ovs_from_steps(steps) if steps else None
+    if expr is None and re.search(r"\b(?:rc4|arc4)\b", t, re.I):   # 'RC4-decrypt the packed bytes with the key at +8'
+        kf = next((k for k, (_, fmt) in fields.items() if fmt.startswith("bytes[") and k != "hash"), None)
+        expr = ("^", ("v", "byte"), ("f", "rc4", [("v", kf)])) if kf else None
+    tl = t.lower()
+    dec = [d for d, k in (("zlib", r"\bzlib\b|\binflate\b"), ("deflate", r"raw deflate|\bdeflate\b"),
+                          ("gzip", r"\bgzip\b"), ("lzma", r"\blzma\b|\bxz\b"), ("bz2", r"\bbz(?:ip)?2\b"),
+                          ("rle", r"\brle\b|run[- ]length"), ("lz4", r"\blz4\b"), ("zstd", r"\bzstd\b|zstandard"))
+           if re.search(k, tl)]
+    if re.search(r"pack\s?bits", tl):
+        dec.append("packbits")
+    dec += [d for d, k in (("aplib", r"\bap-?lib\b"), ("lznt1", r"\blznt1?\b"), ("lzss", r"\blzss\b|\blz77\b"),
+                           ("lzma-raw", r"raw lzma|lzma1?[- ]raw|headerless lzma|lzma86|lzma1\b"))
+            if re.search(k, tl)]
+    # rolling key: 'key = (key * mul + inc) mod 256 after each byte' / 'key ^= previous packed byte'
+    upd, init = None, None
+    um = re.search(r"\b(key|k|state|st|s|r|kk|rk|x)\s*(\^|\+|-|\*|xor\s*)?(?:=|:=|becomes|is updated to|is set to)"
+                   r"\s*(?!=)(.+?)(?=\s*(?:after (?:each|every)|per byte|for (?:each|the next)|before (?:each|the next)|"
+                   r"each byte|;|,|\.\s|\.$))", t, re.I)
+    if um and (em is None or um.start() > em.end()):
+        rhs = _ovs_parse(re.sub(r"\s*\((?:the|with|where|i\.e\.)\b[^)]*\)", "", um.group(3), flags=re.I))
+        if rhs is not None:
+            op = (um.group(2) or "").strip().lower()
+            vn = um.group(1).lower()
+            upd = (vn, (_OVS_WORDOP.get(op, op), ("v", vn), rhs) if op else rhs)
+            im = re.search(r"\b(?:starts?|starting|begins?|beginning|initiali[sz]ed|initially|seeded)\s+(?:at|as|with|"
+                           r"to|from|by)?\s*(?:the\s+)?(?:value\s+)?(0x[0-9a-fA-F]+|\d+|[a-z_]\w*)", t, re.I)
+            if im:
+                init = _ovs_num(im.group(1)) if re.fullmatch(r"0x[0-9a-fA-F]+|\d+", im.group(1)) else im.group(1).lower()
+    blocks = None   # 'reverse each 16-byte block' / 'block size u8 at +5 ... reverse each block'
+    bm = re.search(r"revers\w*\s+(?:the\s+bytes\s+(?:of|in|within)\s+)?each\s+(?:(\d+)-byte\s+)?(?:block|segment|chunk)"
+                   r"|(?:each|every)\s+(?:(\d+)-byte\s+)?(?:block|segment|chunk)\w*\s+(?:is\s+)?revers", tl)
+    if bm:
+        bn = bm.group(1) or bm.group(2) or (re.search(r"(\d+)-byte\s+(?:block|segment|chunk)", tl) or [None, None])[1]
+        blocks = int(bn) if bn else "block" if "block" in fields else None
+    rev = None
+    if blocks is None and re.search(r"\brevers", tl):
+        rev = "in" if re.search(r"revers\w*[^.;]{0,40}\b(packed|encrypted|input|cipher)", tl) else \
+            "out" if re.search(r"revers\w*[^.;]{0,40}\b(unpacked|output|result|decoded|plain)", tl) else "?"
+    return {"magic": magic, "which": which, "fields": fields, "data_off": data_off, "length": length, "hash": hsh,
+            "expr": expr, "steps": steps, "decompress": dec, "reverse": rev, "update": upd, "init": init, "blocks": blocks, "text": t}
+
+
+_OVS_TOK = re.compile(r"\s*(0x[0-9a-fA-F]+|\d+|<<|>>|\*\*|[A-Za-z_][A-Za-z0-9_]*|[-+*/%^&|~()\[\],])")
+_OVS_WORDOP = {"xor": "^", "add": "+", "plus": "+", "sub": "-", "minus": "-", "mod": "%", "and": "&", "or": "|",
+               "times": "*", "shl": "<<", "shr": ">>", "not": "~"}
+
+
+def _ovs_parse(s):
+    """Tiny precedence-climbing parser for the question's byte expression -> nested tuples. None on any doubt."""
+    s = re.sub(r"(?i)previous\s+(packed|encrypted|cipher\w*|input)\s+byte", "prev_cipher", s)
+    s = re.sub(r"(?i)previous\s+(unpacked|decrypted|plain\w*|output|decoded)\s+byte", "prev_plain", s)
+    s = re.sub(r"(?i)previous\s+byte", "prev", s)
+    s = re.sub(r"(?i)\blen\s*\(\s*(\w+)\s*\)", r"len_\1", s)
+    toks, pos = [], 0
+    s = s.strip().rstrip(".")
+    while pos < len(s):
+        mt = _OVS_TOK.match(s, pos)
+        if not mt:
+            return None
+        tk = mt.group(1)
+        toks.append(_OVS_WORDOP.get(tk.lower(), tk) if re.fullmatch(r"[A-Za-z]+", tk) else tk)
+        pos = mt.end()
+    prec = {"|": 1, "^": 2, "&": 3, "<<": 4, ">>": 4, "+": 5, "-": 5, "*": 6, "%": 6, "/": 6}
+    i = [0]
+
+    def peek():
+        return toks[i[0]] if i[0] < len(toks) else None
+
+    def take():
+        i[0] += 1
+        return toks[i[0] - 1]
+
+    def atom():
+        tk = take()
+        if tk == "(":
+            v = expr(0)
+            if take() != ")":
+                raise ValueError
+            return v
+        if tk == "~":
+            return ("~", atom())
+        if tk == "-":
+            return ("neg", atom())
+        if re.fullmatch(r"0x[0-9a-fA-F]+|\d+", tk):
+            return ("n", _ovs_num(tk))
+        if re.fullmatch(r"[A-Za-z_]\w*", tk):
+            nm = tk.lower()
+            if peek() == "(":
+                take()
+                args = []
+                while peek() != ")":
+                    args.append(expr(0))
+                    if peek() == ",":
+                        take()
+                take()
+                return ("f", nm, args)
+            if peek() == "[":
+                take()
+                ix = expr(0)
+                if take() != "]":
+                    raise ValueError
+                return ("idx", nm, ix)
+            return ("v", nm)
+        raise ValueError(tk)
+
+    def expr(mp):
+        lhs = atom()
+        while peek() in prec and prec[peek()] >= mp:
+            op = take()
+            lhs = (op, lhs, expr(prec[op] + 1))
+        return lhs
+
+    try:
+        v = expr(0)
+        return v if i[0] == len(toks) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _ovs_steps(s):
+    """Sequential prose steps ('XOR with k1, rotate right by 3, then subtract k2') -> [(op, operand-AST)]."""
+    out = []
+    for part in re.split(r",\s*(?:and\s+)?(?:then\s+)?|\bthen\b|;", s):
+        p = part.strip().lower()
+        if not p:
+            continue
+        m = re.match(r"(xor|add|subtract|sub|plus|minus)\s+(?:it\s+)?(?:with\s+|by\s+|from\s+)?(.+)$", p)
+        if m:
+            op = {"xor": "^", "add": "+", "plus": "+"}.get(m.group(1), "-")
+            a = _ovs_parse(m.group(2))
+            if a is None:
+                return []
+            out.append((op, a))
+            continue
+        m = re.match(r"rotate\s+(?:it\s+)?(left|right)\s+(?:by\s+)?(.+)$", p) or \
+            re.match(r"(ror|rol)8?\s+(?:by\s+)?(.+)$", p)
+        if m:
+            a = _ovs_parse(re.sub(r"\s*bits?$", "", m.group(2)))
+            if a is None:
+                return []
+            out.append(("ror8" if m.group(1) in ("right", "ror") else "rol8", a))
+            continue
+        if re.match(r"(swap (the )?nibbles|nibble[- ]swap)", p):
+            out.append(("swap", None))
+            continue
+        if re.match(r"(not|invert|bitwise not|complement)", p):
+            out.append(("~", None))
+            continue
+        return []
+    return out
+
+
+def _ovs_from_steps(steps):
+    x = ("v", "byte")
+    for op, a in steps:
+        x = ("f", op, [x, a]) if op in ("ror8", "rol8") else ("f", "swap", [x]) if op == "swap" else \
+            ("~", x) if op == "~" else (op, x, a)
+    return x
+
+
+def _ovs_rc4(key, n):
+    S, j = list(range(256)), 0
+    key = key or b"\0"
+    for k in range(256):
+        j = (j + S[k] + key[k % len(key)]) & 255
+        S[k], S[j] = S[j], S[k]
+    out, a, b = bytearray(n), 0, 0
+    for k in range(n):
+        a = (a + 1) & 255
+        b = (b + S[a]) & 255
+        S[a], S[b] = S[b], S[a]
+        out[k] = S[(S[a] + S[b]) & 255]
+    return bytes(out)
+
+
+def _ovs_lcg(seed, a, c, n, mod, shift, pre):
+    st, out = seed % mod, [0] * n
+    for k in range(n):
+        if pre:
+            st = (a * st + c) % mod
+        out[k] = st if shift is None else (st >> shift) & 255
+        if not pre:
+            st = (a * st + c) % mod
+    return out
+
+
+def _ovs_vars(node, acc):
+    if not isinstance(node, tuple):
+        return acc
+    if node[0] == "v":
+        acc.add(node[1])
+    elif node[0] == "f":
+        acc.add("f:" + node[1])
+        for a in node[2]:
+            _ovs_vars(a, acc)
+    elif node[0] == "idx":
+        acc.update({node[1], "idx"})
+        _ovs_vars(node[2], acc)
+    else:
+        for a in node[1:]:
+            _ovs_vars(a, acc)
+    return acc
+
+
+_OVS_BYTE = {"byte", "b", "x", "c", "p", "packed", "in", "cipher", "input", "enc", "ch", "packed_byte", "data"}
+_OVS_IDX = {"i", "idx", "index", "pos", "n", "j"}
+
+
+def _ovs_eval(node, env):
+    k = node[0]
+    if k == "n":
+        return node[1]
+    if k == "v":
+        return env[node[1]]
+    if k == "~":
+        return ~_ovs_eval(node[1], env) & 255
+    if k == "neg":
+        return -_ovs_eval(node[1], env)
+    if k == "idx":
+        seq = env[node[1]]
+        seq = seq if isinstance(seq, (bytes, bytearray, list)) else bytes([seq & 255])
+        return seq[_ovs_eval(node[2], env) % len(seq)]
+    if k == "f":
+        nm, a = node[1], node[2]
+        if nm in ("ror8", "ror", "rotr", "rotr8", "rol8", "rol", "rotl", "rotl8"):
+            x, r = _ovs_eval(a[0], env) & 255, _ovs_eval(a[1], env) & 7
+            return _ror8(x, r) if "r" == nm[2] or nm.startswith("rotr") else _ror8(x, (8 - r) & 7)
+        if nm in ("swap", "nibswap", "swap_nibbles", "nibble_swap", "swapnib", "nswap"):
+            x = _ovs_eval(a[0], env) & 255
+            return ((x << 4) | (x >> 4)) & 255
+        if nm == "not":
+            return ~_ovs_eval(a[0], env) & 255
+        if nm in ("rc4", "lcg", "ks", "keystream"):
+            return env["_ks:" + repr(node)][env["i"]]
+        if nm in ("u8", "byte", "low8", "lo8"):
+            return _ovs_eval(a[0], env) & 255
+        raise KeyError(nm)
+    x, y = _ovs_eval(node[1], env), _ovs_eval(node[2], env)
+    if k == "^":
+        return x ^ y
+    if k == "+":
+        return x + y
+    if k == "-":
+        return x - y
+    if k == "*":
+        return x * y
+    if k == "%":
+        return x % y if y else 0
+    if k == "/":
+        return x // y if y else 0
+    if k == "&":
+        return x & y
+    if k == "|":
+        return x | y
+    if k == "<<":
+        return x << (y & 63)
+    if k == ">>":
+        return x >> (y & 63)
+    raise KeyError(k)
+
+
+def _ovs_ks_nodes(node, acc, parent=None):
+    if isinstance(node, tuple):
+        if node[0] == "f" and node[1] in ("rc4", "lcg", "ks", "keystream"):
+            acc.append((node, parent))
+        for a in (node[2] if node[0] == "f" else node[1:]):
+            _ovs_ks_nodes(a, acc, node)
+    return acc
+
+
+def _ovs_rle(b, swap):
+    out = bytearray()
+    if len(b) % 2:
+        return None
+    for k in range(0, len(b), 2):
+        cnt, v = (b[k + 1], b[k]) if swap else (b[k], b[k + 1])
+        out += bytes([v]) * cnt
+        if len(out) > 1 << 24:
+            return None
+    return bytes(out)
+
+
+def _ovs_packbits(b):
+    """Apple/TIFF PackBits: n in 0..127 -> copy n+1 literals, 129..255 -> repeat the next byte 257-n times, 128 nop."""
+    out, k = bytearray(), 0
+    while k < len(b):
+        n = b[k]
+        k += 1
+        if n < 128:
+            if k + n + 1 > len(b):
+                return None
+            out += b[k:k + n + 1]
+            k += n + 1
+        elif n > 128:
+            if k >= len(b):
+                return None
+            out += bytes([b[k]]) * (257 - n)
+            k += 1
+        if len(out) > 1 << 24:
+            return None
+    return bytes(out)
+
+
+def _ovs_decomp(name, b):
+    import lzma, bz2
+    try:
+        if name == "zlib":
+            return [zlib.decompress(b)]
+        if name == "deflate":
+            return [zlib.decompress(b, -15)]
+        if name == "gzip":
+            return [zlib.decompress(b, 31)]
+        if name == "lzma":
+            return [x for x in (_lzma_any(b), lzma86_decompress(b), lzma_raw_decompress(b)) if x][:1]
+        if name == "bz2":
+            return [bz2.decompress(b)]
+        if name == "rle":
+            return [x for x in (_ovs_rle(b, False), _ovs_rle(b, True), _ovs_packbits(b)) if x]
+        if name == "packbits":
+            return [x for x in (_ovs_packbits(b),) if x]
+        if name == "lz4":
+            return [x for x in (_lz4_frame(b), lz4_block_decompress(b)) if x]
+        if name in ("lzma-raw", "lzma86"):
+            return [x for x in (lzma86_decompress(b), lzma_raw_decompress(b)) if x]
+        if name in PACKER_DECODERS:
+            return [x for x in (PACKER_DECODERS[name](b),) if x]
+        if name == "zstd":
+            import zstandard
+            return [zstandard.ZstdDecompressor().decompress(b, max_output_size=1 << 24)]
+    except Exception:  # noqa: BLE001
+        pass
+    return []
+
+
+# --- packer decompressors (aPLib / LZNT1 / LZSS / LZ4 block / raw LZMA / LZMA86) -------------------------------------
+# Pure-Python decoders for the compressors real packers put in front of (or behind) an overlay's byte transform. Each
+# takes bytes and returns bytes (capped at `cap`) or None on a malformed / truncated stream -- never raises.
+# packer_decompress(data) tries them in magic order (AP32 header / LZNT1 chunk signature / xz / LZMA-alone / LZMA86 /
+# lz4 frame first, then the headerless ones); packer_hcfg(data) keeps the first output holding a crc-valid HCFG.
+PACKER_CAP = 1 << 24
+
+
+def aplib_depack(b, cap=PACKER_CAP):
+    """aPLib depack (Joergen Ibsen's depack.c); an 'AP32' safe header (24 B: tag, hdr size, packed size/crc, orig
+    size/crc) is skipped and its packed size honoured."""
+    try:
+        b = bytes(b)
+        if b[:4] == b"AP32" and len(b) >= 24:
+            hs, ps = struct.unpack_from("<II", b, 4)
+            b = b[hs:hs + ps] if 24 <= hs <= len(b) else b[24:]
+        out = bytearray(b[:1])
+        if not b:
+            return None
+        st = [1, 0, 0]   # src index, tag, bits left
+
+        def bit():
+            if not st[2]:
+                st[1], st[0], st[2] = b[st[0]], st[0] + 1, 8
+            st[2] -= 1
+            return (st[1] >> st[2]) & 1
+
+        def gamma():
+            v = 1
+            while True:
+                v = (v << 1) + bit()
+                if not bit():
+                    return v
+
+        def copy(off, n):
+            if not 0 < off <= len(out) or len(out) + n > cap:
+                raise ValueError
+            for _ in range(n):
+                out.append(out[-off])
+
+        r0, lwm = 0, 0
+        while True:
+            if not bit():
+                out.append(b[st[0]])
+                st[0] += 1
+                lwm = 0
+            elif not bit():
+                off = gamma()
+                if not lwm and off == 2:
+                    copy(r0, gamma())
+                else:
+                    off = ((off - (2 if lwm else 3)) << 8) + b[st[0]]
+                    st[0] += 1
+                    n = gamma() + (off >= 32000) + (off >= 1280) + (2 if off < 128 else 0)
+                    copy(off, n)
+                    r0 = off
+                lwm = 1
+            elif not bit():
+                c = b[st[0]]
+                st[0] += 1
+                if not c >> 1:
+                    return bytes(out)
+                copy(c >> 1, 2 + (c & 1))
+                r0, lwm = c >> 1, 1
+            else:
+                off = 0
+                for _ in range(4):
+                    off = (off << 1) + bit()
+                if off:
+                    copy(off, 1)
+                else:
+                    out.append(0)
+                lwm = 0
+            if len(out) > cap:
+                return None
+    except Exception:  # noqa: BLE001 - truncated / not aPLib
+        return None
+
+
+def lznt1_decompress(b, cap=PACKER_CAP):
+    """Windows LZNT1 (RtlDecompressBuffer COMPRESSION_FORMAT_LZNT1): 4 KiB chunks behind a u16 header
+    (size-1 in bits 0-11, signature 3 in bits 12-14, compressed flag bit 15); a 0 header ends the stream."""
+    try:
+        b, out, i = bytes(b), bytearray(), 0
+        while i + 2 <= len(b):
+            h = b[i] | b[i + 1] << 8
+            i += 2
+            if not h:
+                break
+            if (h >> 12) & 7 != 3:
+                return None
+            ch = b[i:i + (h & 0xFFF) + 1]
+            i += (h & 0xFFF) + 1
+            if not h & 0x8000:
+                out += ch
+                continue
+            cs, j = len(out), 0
+            while j < len(ch):
+                fl = ch[j]
+                j += 1
+                for _ in range(8):
+                    if j >= len(ch):
+                        break
+                    if not fl & 1:
+                        out.append(ch[j])
+                        j += 1
+                    else:
+                        tok = ch[j] | ch[j + 1] << 8
+                        j += 2
+                        p, sh = len(out) - cs - 1, 12
+                        while p >= 0x10:
+                            p >>= 1
+                            sh -= 1
+                        off, n = (tok >> sh) + 1, (tok & ((1 << sh) - 1)) + 3
+                        if off > len(out) - cs:
+                            return None
+                        for _ in range(n):
+                            out.append(out[-off])
+                    fl >>= 1
+            if len(out) > cap:
+                return None
+        return bytes(out) if out else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def lzss_decompress(b, cap=PACKER_CAP, n=4096, f=18, threshold=2, fill=0x20):
+    """Okumura LZSS (lzss.c): 4096-byte ring pre-filled with `fill` (0x20), r = N-F; flag byte LSB first, bit 1 =
+    literal, bit 0 = 2-byte ref (pos = b0 | (b1 & 0xF0) << 4, len = (b1 & 0x0F) + threshold + 1)."""
+    try:
+        b, out, ring, r, i = bytes(b), bytearray(), bytearray([fill]) * n, n - f, 0
+        while i < len(b):
+            fl = b[i]
+            i += 1
+            for _ in range(8):
+                if i >= len(b):
+                    break
+                if fl & 1:
+                    c = b[i]
+                    i += 1
+                    out.append(c)
+                    ring[r] = c
+                    r = (r + 1) & (n - 1)
+                else:
+                    if i + 1 >= len(b):
+                        break
+                    p, k = b[i] | (b[i + 1] & 0xF0) << 4, (b[i + 1] & 0x0F) + threshold + 1
+                    i += 2
+                    for x in range(k):
+                        c = ring[(p + x) & (n - 1)]
+                        out.append(c)
+                        ring[r] = c
+                        r = (r + 1) & (n - 1)
+                fl >>= 1
+            if len(out) > cap:
+                return None
+        return bytes(out) if out else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def lz4_block_decompress(b, cap=PACKER_CAP):
+    """LZ4 block format (no frame): token hi nibble = literal count, lo = match len - 4 (15 -> +255-run bytes),
+    u16le offset; the last sequence is literals only."""
+    try:
+        b, out, i = bytes(b), bytearray(), 0
+        if b[:4] == b"\x04\x22\x4d\x18":
+            return None
+        while i < len(b):
+            t = b[i]
+            i += 1
+            n = t >> 4
+            if n == 15:
+                while True:
+                    n += b[i]
+                    i += 1
+                    if b[i - 1] != 255:
+                        break
+            if i + n > len(b):
+                return None
+            out += b[i:i + n]
+            i += n
+            if i >= len(b):
+                break
+            off = b[i] | b[i + 1] << 8
+            i += 2
+            m = (t & 15) + 4
+            if (t & 15) == 15:
+                while True:
+                    m += b[i]
+                    i += 1
+                    if b[i - 1] != 255:
+                        break
+            if not 0 < off <= len(out) or len(out) + m > cap:
+                return None
+            if off >= m:
+                out += out[-off:len(out) - off + m]
+            else:
+                for _ in range(m):
+                    out.append(out[-off])
+        return bytes(out) if out else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def lzma_raw_decompress(b, cap=PACKER_CAP, lc=3, lp=0, pb=2, dict_size=1 << 16):
+    """Headerless LZMA1 (FORMAT_RAW, lc3/lp0/pb2, 64 KiB dictionary by default); the stream may lack an end marker."""
+    import lzma
+    try:
+        d = lzma.LZMADecompressor(lzma.FORMAT_RAW, filters=[{"id": lzma.FILTER_LZMA1, "lc": lc, "lp": lp, "pb": pb,
+                                                              "dict_size": dict_size}])
+        out = d.decompress(bytes(b), cap)
+        return out or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def lzma86_decompress(b, cap=PACKER_CAP):
+    """LZMA86 (7-Zip's Lzma86Enc): u8 filter flag (0 none / 1 BCJ x86) | 5 props | u64le unpacked size | LZMA1."""
+    import lzma
+    try:
+        b = bytes(b)
+        if len(b) < 14 or b[0] > 1 or b[1] >= 225:
+            return None
+        size = struct.unpack_from("<Q", b, 6)[0]
+        if size > cap and size != (1 << 64) - 1:
+            return None
+        lz = lzma._decode_filter_properties(lzma.FILTER_LZMA1, b[1:6])
+        filters = ([{"id": lzma.FILTER_X86}] if b[0] else []) + [lz]
+        out = lzma.LZMADecompressor(lzma.FORMAT_RAW, filters=filters).decompress(b[14:], min(size, cap))
+        return out if out and (size == (1 << 64) - 1 or len(out) == size) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _lzma_any(b, cap=PACKER_CAP):
+    import lzma
+    try:
+        d = lzma.LZMADecompressor()
+        return d.decompress(bytes(b), cap) or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _lz4_frame(b, cap=PACKER_CAP):
+    try:
+        import lz4.frame
+        out = lz4.frame.decompress(bytes(b))
+        return out if len(out) <= cap else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+PACKER_DECODERS = {"aplib": aplib_depack, "lznt1": lznt1_decompress, "lzss": lzss_decompress,
+                   "lz4block": lz4_block_decompress, "lz4": _lz4_frame, "lzma": _lzma_any, "lzma-raw": lzma_raw_decompress,
+                   "lzma86": lzma86_decompress, "packbits": lambda b, cap=PACKER_CAP: _ovs_packbits(bytes(b))}
+
+
+def packer_order(b):
+    """Decoder names for `b`, most likely first: magic-identified formats, then the headerless ones."""
+    b = bytes(b[:16])
+    first = []
+    if b[:4] == b"AP32":
+        first.append("aplib")
+    if b[:4] == b"\x04\x22\x4d\x18":
+        first.append("lz4")
+    if b[:6] == b"\xfd7zXZ\0" or (b[:1] == b"\x5d" and len(b) >= 13):
+        first.append("lzma")
+    if len(b) >= 14 and b[0] <= 1 and b[1] == 0x5d:
+        first.append("lzma86")
+    if len(b) >= 2 and (b[1] >> 4) & 7 == 3:
+        first.append("lznt1")
+    if b[:1] == b"H":   # aPLib copies the first byte verbatim: an HCFG record starts with 'H'
+        first.append("aplib")
+    if b[:1] == b"\x5d":
+        first.append("lzma-raw")
+    rest = ["lz4block", "aplib", "lzss", "lzma-raw", "lznt1", "packbits"]
+    return list(dict.fromkeys(first + rest))
+
+
+def packer_decompress(data, name=None, cap=PACKER_CAP):
+    """[(decoder name, output)] for every decoder (or just `name`) that decodes `data`, in packer_order. Never raises."""
+    try:
+        names = [name] if name else packer_order(data)
+        res = []
+        for nm in names:
+            fn = PACKER_DECODERS.get(nm)
+            out = fn(data, cap) if fn else None
+            if out:
+                res.append((nm, out))
+        return res
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def packer_hcfg(data, name=None):
+    """(decoder name, decompressed bytes, HcfgHit) for the first decoder whose output holds a crc-valid HCFG record
+    (hcfg_find on outputs up to 4 MiB that contain the magic), else None."""
+    try:
+        for nm, out in packer_decompress(data, name):
+            if out.find(HCFG_MAGIC) >= 0 and len(out) <= 1 << 22:
+                h = hcfg_find(out)
+                if h:
+                    return nm, out, h
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def overlay_spec_unpack(data, spec, *, max_bytes=1 << 22):
+    """Apply an overlay_spec() to `data`: (offset, size, header {name: value}, out, hash_ok) for the first magic
+    occurrence (per spec['which'], newest first for 'any') whose output verifies the stored hash (or, when the question
+    names no hash, starts with b'HCFG'); size = len(data) - offset. None when nothing verifies -- never a guess."""
+    try:
+        return _overlay_spec_unpack(data, spec, max_bytes)
+    except Exception:  # noqa: BLE001 - truncated / hostile input
+        return None
+
+
+def _ovs_read(data, o, fmt):
+    if fmt.startswith("bytes["):
+        n = int(fmt[6:-1])
+        if o + n > len(data):
+            raise ValueError
+        return data[o:o + n]
+    st, n = _OVS_FMT[fmt]
+    return struct.unpack_from(st, data, o)[0]
+
+
+def _overlay_spec_unpack(data, spec, max_bytes):
+    import hashlib
+    if not spec or not spec.get("magic") or (spec.get("expr") is None and not spec.get("decompress")):
+        return None
+    mg = spec["magic"].encode()
+    occ, o = [], data.rfind(mg)
+    while o >= 0 and len(occ) < 64:
+        occ.append(o)
+        o = data.rfind(mg, 0, o)
+    if spec.get("which") == "last":
+        occ = occ[:1]
+    elif spec.get("which") == "first":
+        f = data.find(mg)
+        occ = [f] if f >= 0 else []
+    for o in occ:
+        r = _ovs_try(data, o, spec, max_bytes, hashlib)
+        if r:
+            return r
+    return None
+
+
+def _ovs_try(data, o, spec, max_bytes, hashlib):
+    try:
+        hdr = {k: _ovs_read(data, o + off, fmt) for k, (off, fmt) in spec["fields"].items()}
+    except Exception:  # noqa: BLE001 - header past EOF
+        return None
+    ends = [off + (int(fmt[6:-1]) if fmt.startswith("bytes[") else _OVS_FMT[fmt][1])
+            for off, fmt in spec["fields"].values()]
+    d0 = o + (spec["data_off"] if spec.get("data_off") is not None else max(ends + [len(spec["magic"])]))
+    n = hdr.get(spec["length"]) if spec.get("length") else None
+    if n is not None and (n > max_bytes or d0 + n > len(data)):
+        return None
+    pk = data[d0:d0 + n] if n is not None else data[d0:d0 + max_bytes]
+    hs = spec.get("hash")
+    want = hdr.get("hash") if hs else None
+
+    def ok(b):
+        if hs is None:
+            return b[:4] == HCFG_MAGIC
+        a = hs[0]
+        if a == "crc32":
+            return (zlib.crc32(b) & 0xFFFFFFFF) == (want if isinstance(want, int) else int.from_bytes(want, "little"))
+        return getattr(hashlib, a)(b).digest() == want
+
+    if hs and hs[2] == "packed" and not ok(pk):
+        return None
+    for out in _ovs_candidates(pk, hdr, spec):
+        dec = [d for nm in spec.get("decompress") or () for d in _ovs_decomp(nm, out)]
+        if hs and hs[2] == "packed":    # the hash vouches for the packed bytes only: the record must sit at 0
+            fin = next((f for f in dec + [out] if f[:4] == HCFG_MAGIC), None)
+        elif dec and ok(out):           # hash over the transformed (still compressed) bytes
+            fin = dec[0]
+        else:
+            fin = next((f for f in dec + [out] if ok(f)), None)
+        if fin is not None:
+            return (o, len(data) - o, hdr, fin, True if hs else None)
+    return None
+
+
+def _ovs_candidates(pk, hdr, spec):
+    """Every hash-gated reading of the spec's transform over the packed bytes (generator; bounded). A per-block
+    reversal ('reverse each 16-byte block') is undone either before or after the byte transform."""
+    bl = spec.get("blocks")
+    bs = (hdr.get(bl) if isinstance(bl, str) else bl) if bl else None
+    if not isinstance(bs, int) or not 1 < bs <= 1 << 16:
+        yield from _ovs_cands(pk, hdr, spec)
+        return
+
+    def rb(b):
+        return b"".join(b[k:k + bs][::-1] for k in range(0, len(b), bs))
+    yield from _ovs_cands(rb(pk), hdr, spec)
+    for out in _ovs_cands(pk, hdr, spec):
+        yield rb(out)
+
+
+_OVS_OUT = {"plain", "out", "unpacked", "result", "dec", "decoded", "o", "plain_byte", "out_byte"}
+_OVS_PFX = {"zlib": lambda b: len(b) > 1 and b[0] & 15 == 8 and ((b[0] << 8) | b[1]) % 31 == 0,
+            "gzip": lambda b: b[:2] == b"\x1f\x8b", "lzma": lambda b: b[:1] == b"\x5d" or b[:6] == b"\xfd7zXZ\0",
+            "bz2": lambda b: b[:3] == b"BZh", "zstd": lambda b: b[:4] == b"\x28\xb5\x2f\xfd",
+            "lz4": lambda b: b[:4] == b"\x04\x22\x4d\x18", "aplib": lambda b: b[:1] == b"H" or b[:4] == b"AP32",
+            "lznt1": lambda b: len(b) > 1 and (b[1] >> 4) & 7 == 3, "lzma-raw": lambda b: b[:1] in (b"\0", b"\1")}
+
+
+def _ovs_cands(pk, hdr, spec):
+    expr = spec.get("expr")
+    revs = {None: [False], "in": ["in"], "out": ["out"], "?": [False, "in", "out"]}[spec.get("reverse")]
+    if expr is None:
+        for rv in revs:
+            yield pk[::-1] if rv else pk
+        return
+    upd = spec.get("update")
+    stv = upd[0] if upd else None
+    vs = _ovs_vars(expr, set()) | (_ovs_vars(upd[1], set()) if upd else set())
+    env0 = {}
+    for k, v in hdr.items():
+        env0[k] = v
+        if isinstance(v, (bytes, bytearray)):
+            env0["len_" + k] = len(v)
+    keyf = next((k for k, v in hdr.items() if isinstance(v, (bytes, bytearray)) and k != "hash"), None)
+    for nm in ("len", "keylen", "klen", "key_len", "key_length"):
+        env0.setdefault(nm, len(hdr[keyf]) if keyf else 1)
+    if "key" not in env0 and keyf and stv != "key":
+        env0["key"] = hdr[keyf]
+    unknown = {v for v in vs if not v.startswith("f:") and v != "idx" and v not in env0 and v not in _OVS_BYTE
+               and v not in _OVS_IDX and not v.startswith("prev") and v != stv and v not in _OVS_OUT}
+    # known-plaintext fallback: ONE unstated byte value (a key/seed the question names but no header field holds,
+    # or a rolling key's unstated start) is recovered from out[:4] == b'HCFG', ver 1 -- the hash still gates it.
+    inits = [None]
+    guess = None
+    if stv:
+        ini = spec.get("init")
+        iv = ini if isinstance(ini, int) else env0.get(ini) if ini else env0.get(stv)
+        if isinstance(iv, int):
+            inits = [iv]
+        else:
+            inits = list(dict.fromkeys([v for v in hdr.values() if isinstance(v, int)] + list(range(256))))
+            guess = stv
+    if unknown:
+        if len(unknown) > 1 or guess:
+            return
+        guess = unknown.pop()
+    if guess and len(pk) > 1 << 16:
+        return
+    ksn = _ovs_ks_nodes(expr, [])
+    chain = any(v.startswith("prev") for v in vs)
+    simple = not ksn and not chain and not (vs & _OVS_IDX) and "idx" not in vs and not stv
+    # keystream variants (LCG output byte is the only prose ambiguity; RC4 is fixed)
+    ksv = [{}]
+    for node, parent in ksn:
+        try:
+            args = [_ovs_eval(a, env0) for a in node[2]]
+        except KeyError:
+            return
+        nn = len(pk)
+        if node[1] == "rc4" or (node[1] in ("ks", "keystream") and args and isinstance(args[0], bytes)):
+            key = args[0] if isinstance(args[0], (bytes, bytearray)) else int(args[0]).to_bytes(
+                max(1, (int(args[0]).bit_length() + 7) // 8), "little")
+            alts = [_ovs_rc4(bytes(key), nn)]
+        elif node[1] == "lcg" and len(args) >= 3:
+            seed, a, c = (int(x) for x in args[:3])
+            mod = int(args[3]) if len(args) > 3 else 1 << 32
+            raw = parent is not None and parent[0] in (">>", "&", "%")
+            alts = [_ovs_lcg(seed, a, c, nn, mod, None, pre) for pre in (True, False)] if raw else \
+                [_ovs_lcg(seed, a, c, nn, mod, sh, pre) for sh in (24, 16, 0, 8) for pre in (True, False)
+                 if sh < mod.bit_length()]
+        else:
+            return
+        ksv = [dict(d, **{"_ks:" + repr(node): s}) for d in ksv for s in alts][:16]
+    prevs = [None]
+    if chain:
+        prevs = list(dict.fromkeys([hdr[k] & 255 for k in ("iv", "init", "prev", "seed") if isinstance(
+            hdr.get(k), int)] + [0] + [v & 255 for v in hdr.values() if isinstance(v, int)]))[:6]
+    if len(pk) > (1 << 22 if simple else 1 << 18):
+        return
+    masks = [None] if not upd or upd[1][0] in ("%", "&") else [255, 0xFFFFFFFF]
+    pfx = [_OVS_PFX[d] for d in spec.get("decompress") or () if d in _OVS_PFX]
+    hcfg_len = not spec.get("decompress")
+
+    def plausible(b, full):
+        if pfx:
+            return any(f(b) for f in pfx)
+        if spec.get("decompress"):
+            return True
+        return b[:4] == HCFG_MAGIC and b[4:5] == b"\x01" and (
+            not full or not hcfg_len or struct.unpack_from("<H", b, 6)[0] == len(b) - 12)
+
+    def run(src, env, pv, st, mask, cprev, lim):
+        out = bytearray(min(len(src), lim))
+        pc = pp = pv if pv is not None else 0
+        for i in range(len(out)):
+            b = src[i]
+            for nm in _OVS_BYTE:
+                env[nm] = b
+            for nm in _OVS_IDX:
+                env[nm] = i
+            if cprev:
+                env["prev"] = env["prev_cipher"] = pc
+                env["prev_plain"] = env["prev_out"] = 0
+            else:
+                env["prev_cipher"] = env["prev_in"] = env["prev_packed"] = env["prev_enc"] = pc
+                env["prev_plain"] = env["prev_out"] = env["prev"] = pp
+            if stv:
+                env[stv] = st
+            out[i] = _ovs_eval(expr, env) & 255
+            pc, pp = b, out[i]
+            if stv:   # the rolling key steps AFTER the byte; 'previous' there is the byte just processed
+                for nm in _OVS_OUT:
+                    env[nm] = pp
+                env["prev_cipher"] = env["prev_in"] = env["prev_packed"] = env["prev_enc"] = pc
+                env["prev_plain"] = env["prev_out"] = env["prev"] = pc if cprev else pp
+                st = _ovs_eval(upd[1], env)
+                st = st & mask if mask else st & ((1 << 64) - 1)
+        return bytes(out)
+
+    gvals = range(256) if guess and guess != stv else [None]
+    for rv in revs:
+        src = pk[::-1] if rv == "in" else pk
+        for gv in gvals:
+            e0 = dict(env0, **({guess: gv} if gv is not None else {}))
+            if simple:
+                if gv is not None and not plausible(run(src, dict(e0), None, None, None, False, 12), False):
+                    continue
+                env = dict(e0)
+                tab = bytearray(256)
+                for b in range(256):
+                    for nm in _OVS_BYTE:
+                        env[nm] = b
+                    tab[b] = _ovs_eval(expr, env) & 255
+                out = src.translate(bytes(tab))
+                yield out[::-1] if rv == "out" else out
+                continue
+            for ks in ksv:
+                for pv in prevs:
+                    for cprev in ([False, True] if "prev" in vs else [False]):
+                        for st0 in inits:
+                            for mask in masks:
+                                if (guess and rv != "out" and not plausible(run(src, dict(e0, **ks), pv, st0, mask,
+                                                                                 cprev, 12), False)):
+                                    continue
+                                out = run(src, dict(e0, **ks), pv, st0, mask, cprev, len(src))
+                                yield out[::-1] if rv == "out" else out
+
+
 # --- Go / Rust symbol recovery -------------------------------------------------------------------
 def go_buildinfo(data):
     """Go version string from the `\\xff Go buildinf:` blob (present even when stripped), or None."""
@@ -3310,6 +4538,7 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False, _depth=0):
     mv = memoryview(data)
     u16_runs, zbudget = set(), [16 << 20]   # zbudget: total inflate output for streams that merely CONTAIN the blob
     ibudget = [256]   # int-array / word-swap candidates decoded
+    u8budget = [64]   # utf8-raw re-decodes of crc-failing raw anchors (<= 128 KiB each)
     for m in _ANCHORS.finditer(data):
         i, a = m.start(), m.group(0)
         kind = _ANCHOR_KIND.get(a, "hex")
@@ -3322,6 +4551,10 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False, _depth=0):
                 be = _be_raw_at(data, i)
                 if be:
                     emit(i, "raw-be", be)
+                u8budget[0] -= 1
+                u8 = u8budget[0] >= 0 and _utf8_raw_at(data, i)   # HashLink-style UTF-8 string of a latin-1 blob
+                if u8 and (_parse_blob(u8) or (0,) * 6)[5]:   # crc-valid only: never a new decoy hit
+                    emit(i, "utf8-raw", u8)
         elif kind == "hex":
             _hex_at(data, i, emit)
         elif kind == "text":
@@ -3574,10 +4807,345 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False, _depth=0):
     if not valid() and not late():
         # decoded at load time by an ELF .init_array constructor: emulate the constructors (see _ctor_scan)
         _ctor_scan(data, emit, late)
+    if not valid() and not late() and _depth == 0:
+        # D19-layout packed overlay whose transform the question does not spell: the decoder stub's loop replayed, else
+        # the hash-gated transform-family search (see overlay_stub_unpack); offset = first packed byte of the blob
+        try:
+            r = overlay_stub_unpack(data)
+        except Exception:   # noqa: BLE001 -- hostile bytes never raise past the scan
+            r = None
+        if r:
+            j = r["out"].find(HCFG_MAGIC)
+            if j >= 0:
+                emit(r["packed_offset"] + j, "overlay-stub", r["out"][j:],
+                     f"overlay@{r['overlay_offset']} {r['method']} {r['transform']}" + (f" unpacked+{j}" if j else ""))
     return _rank(hits)
 
 
-HCFG_STRIDE_MAX = int(os.environ.get("HCTF_HCFG_STRIDE_MAX", str(96 << 20)))   # strided passes (~0.2 s / 70 MB)
+# --- decoder-stub emulation (D19 'Find the stub, watch it work ... statically'; prep for a question that only says
+# 'unpack the overlay') ------------------------------------------------------------------------------------------------
+# Header = the D19 PK19 layout (version +4, k1 +5, k2 +6, pad +7, packed length u32le +8, sha256(unpacked) +12, packed
+# +44); the 4-byte magic may be mutated, so headers are found by structure (`[A-Z]{2}NN` / known magics / the image end
+# with a packed length that fits). Transform, in order: (1) the stub -- capstone over the x86 code around each 8-bit
+# rotate-by-immediate / cmp of the magic imm32: the loop that loads a byte, applies xor/add/sub/ror/rol/not/neg with
+# immediates or header bytes ([reg+5] / a register loaded from one) and stores it, replayed in Python; (2) known
+# plaintext (out[0:4]=='HCFG', u16 out[6:8]==packed_len-12) over {xor|add a, rot r, xor|add c} in both orders plus
+# index-dependent keys (a +/- i, ^ i) -- GnuCOBOL / -O0 stubs whose arithmetic the op walk cannot read. EVERY result is
+# accepted only when sha256(out) == the stored hash.
+OVSTUB_TAIL = 1 << 20      # overlay header candidates: the last 1 MiB of the file
+OVSTUB_ANCHORS = 48        # code anchors disassembled
+_OVSTUB_MAGIC = re.compile(rb"[A-Z]{2}[0-9]{2}")
+_OVSTUB_ROT = re.compile(rb"[\xc0\xd0][\xc0-\xcf]")   # rol/ror r8, imm8 | 1 (register direct)
+
+
+def _ovstub_headers(data):
+    """[(offset, packed_length)] D19-layout overlay header candidates, last first."""
+    ov = overlay_info(data)
+    lo = ov["overlay_offset"] if ov and ov["has_overlay"] else (len(data) if ov else 0)
+    offs = {m.start() for m in _OVSTUB_MAGIC.finditer(data, max(lo, len(data) - OVSTUB_TAIL))}
+    for mg in OVERLAY_MAGICS:
+        o = data.rfind(mg.encode())
+        if o >= lo:
+            offs.add(o)
+    if ov and ov["has_overlay"]:
+        offs.add(lo)
+    out = []
+    for o in sorted(offs, reverse=True):
+        if o + 44 > len(data):
+            continue
+        n, = struct.unpack_from("<I", data, o + 8)
+        if 12 <= n <= len(data) - o - 44:
+            out.append((o, n))
+    return out[:16]
+
+
+def _ovstub_exec(data):
+    """[(file_off, size, vaddr)] executable ranges of an x86 ELF / PE and the capstone mode, or ([], None)."""
+    try:
+        if data[:4] == b"\x7fELF" and data[5] == 1:
+            c64 = data[4] == 2
+            mach, = struct.unpack_from("<H", data, 18)
+            if mach not in (3, 62):
+                return [], None
+            if c64:
+                phoff, = struct.unpack_from("<Q", data, 32)
+                phes, phn = struct.unpack_from("<HH", data, 54)
+            else:
+                phoff, = struct.unpack_from("<I", data, 28)
+                phes, phn = struct.unpack_from("<HH", data, 42)
+            rs = []
+            for k in range(min(phn, 64)):
+                p = phoff + k * phes
+                if c64:
+                    typ, fl, off, va, _, fsz = struct.unpack_from("<IIQQQQ", data, p)
+                else:
+                    typ, off, va, _, fsz, _, fl = struct.unpack_from("<IIIIIII", data, p)
+                if typ == 1 and fl & 1 and fsz:
+                    rs.append((off, min(fsz, len(data) - off), va))
+            return rs, 64 if c64 else 32
+        if data[:2] == b"MZ":
+            pe, = struct.unpack_from("<I", data, 0x3c)
+            if data[pe:pe + 4] != b"PE\0\0":
+                return [], None
+            mach, nsec = struct.unpack_from("<HH", data, pe + 4)
+            opt, = struct.unpack_from("<H", data, pe + 20)
+            if mach not in (0x14c, 0x8664):
+                return [], None
+            base = struct.unpack_from("<Q" if mach == 0x8664 else "<I", data, pe + 24 + (24 if mach == 0x8664 else 28))[0]
+            rs = []
+            for k in range(min(nsec, 96)):
+                s = pe + 24 + opt + 40 * k
+                va, rsz, rptr = struct.unpack_from("<III", data, s + 12)
+                ch, = struct.unpack_from("<I", data, s + 36)
+                if ch & 0x20000000 and rsz:
+                    rs.append((rptr, min(rsz, len(data) - rptr), base + va))
+            return rs, 64 if mach == 0x8664 else 32
+    except struct.error:
+        pass
+    return [], None
+
+
+def _ovstub_fam(n):
+    """x86 register family: rax/eax/ax/al -> 'ax', r9d/r9b -> 'r9', sil -> 'si'."""
+    m = re.match(r"r\d+", n)
+    if m:
+        return m.group(0)
+    if n in ("sil", "dil", "bpl", "spl"):
+        return n[:2]
+    if len(n) == 3 and n[0] in "re":
+        n = n[1:]
+    return n[0] + "x" if len(n) == 2 and n[1] in "lh" else n
+
+
+def _ovstub_walk(insns, loop_start, magic_imm):
+    """Abstract-interpret one decoder loop: [(op, arg)] arg = int | ('hdr', disp), or None when unreadable."""
+    from capstone import x86 as X
+    env, last = {}, None
+
+    def mem_key(op):
+        m = op.mem
+        return ("m", m.base, m.index, m.scale, m.disp)
+
+    def val(ins, op, in_loop):
+        if op.type == X.X86_OP_IMM:
+            return ("imm", op.imm & 0xff)
+        if op.type == X.X86_OP_REG:
+            return env.get(_ovstub_fam(ins.reg_name(op.reg)))
+        if op.type == X.X86_OP_MEM:
+            k = mem_key(op)
+            if k in env:
+                return env[k]
+            if op.size == 1 and in_loop and (op.mem.index or not op.mem.disp):
+                return ("data", ())
+            if op.size == 1 and not op.mem.index and op.mem.disp:
+                return ("hdr", op.mem.disp, ())   # header byte: +disp of the header, else resolved over hdr[4..7]
+        return None
+
+    def put(ins, op, v):
+        k = _ovstub_fam(ins.reg_name(op.reg)) if op.type == X.X86_OP_REG else mem_key(op)
+        if v is None:
+            env.pop(k, None)
+        else:
+            env[k] = v
+
+    for ins in insns:
+        in_loop = ins.address >= loop_start
+        ops, mn = ins.operands, ins.mnemonic
+        if mn in ("movzx", "mov", "movsx") and len(ops) == 2:
+            v = val(ins, ops[1], in_loop)
+            if ops[0].type == X.X86_OP_MEM and v and v[0] == "data" and ops[0].size == 1:
+                last = v[1]
+            put(ins, ops[0], v)
+        elif mn in ("xor", "add", "sub") and len(ops) == 2:
+            d, s = val(ins, ops[0], in_loop), val(ins, ops[1], in_loop)
+            if ops[0].type == X.X86_OP_REG and ops[1].type == X.X86_OP_REG and ops[0].reg == ops[1].reg and mn != "add":
+                put(ins, ops[0], ("imm", 0))
+            elif d and d[0] == "data" and s and s[0] in ("imm", "hdr"):
+                put(ins, ops[0], ("data", d[1] + ((mn, s[1] if s[0] == "imm" else s),)))
+            elif d and d[0] == "hdr" and s and s[0] == "imm":   # key byte folded with a constant before the loop
+                put(ins, ops[0], ("hdr", d[1], d[2] + ((mn, s[1]),)))
+            elif d and d[0] == "imm" and s and s[0] == "imm":
+                put(ins, ops[0], ("imm", {"xor": d[1] ^ s[1], "add": d[1] + s[1], "sub": d[1] - s[1]}[mn] & 0xff))
+            elif d and d[0] == "data" and s is None and ops[1].type == X.X86_OP_REG:   # key loaded out of the window
+                put(ins, ops[0], ("data", d[1] + ((mn, ("hdr", "reg:" + _ovstub_fam(ins.reg_name(ops[1].reg)), ())),)))
+            elif d and d[0] == "data":
+                return None   # data op with an unreadable operand (index-dependent / second stream)
+            elif ops[0].type in (X.X86_OP_REG, X.X86_OP_MEM):
+                put(ins, ops[0], None)
+        elif mn in ("ror", "rol") and len(ops) == 2:
+            d = val(ins, ops[0], in_loop)
+            if d and d[0] == "data":
+                if ops[0].size != 1 or ops[1].type != X.X86_OP_IMM:
+                    return None
+                r = ops[1].imm & 7
+                put(ins, ops[0], ("data", d[1] + (("ror", r if mn == "ror" else (8 - r) & 7),)))
+        elif mn in ("not", "neg") and len(ops) == 1:
+            d = val(ins, ops[0], in_loop)
+            if d and d[0] == "data":
+                put(ins, ops[0], ("data", d[1] + ((mn, 0),)))
+        elif mn == "and" and len(ops) == 2 and ops[1].type == X.X86_OP_IMM and ops[1].imm & 0xff == 0xff:
+            pass
+        elif ops and ops[0].type == X.X86_OP_REG and mn not in ("cmp", "test", "push") and not mn.startswith("j"):
+            d = env.get(_ovstub_fam(ins.reg_name(ops[0].reg)))
+            if d and d[0] == "data" and in_loop and mn != "lea" and not mn.startswith(("set", "cmov", "pop")) \
+                    and last is None:
+                return None   # shl/shr/or/imul on the byte before its store: not a readable op sequence
+            put(ins, ops[0], None)
+    return list(last) if last else None
+
+
+def _ovstub_code_ops(data, magics=()):
+    """Op lists of the decoder loops near each 8-bit rotate / magic-imm32 reference in the x86 code (deduplicated)."""
+    import capstone as C
+    rs, bits = _ovstub_exec(data)
+    if not rs:
+        return []
+    mode = C.CS_MODE_64 if bits == 64 else C.CS_MODE_32
+    md, lite = C.Cs(C.CS_ARCH_X86, mode), C.Cs(C.CS_ARCH_X86, mode)
+    md.detail = True
+    anchors = []
+    for off, size, va in rs:
+        for pat in [_OVSTUB_ROT] + [re.compile(re.escape(m)) for m in magics]:
+            for m in pat.finditer(data, off, off + size):
+                anchors.append((m.start(), off, size, va))
+                if len(anchors) >= OVSTUB_ANCHORS * 4:
+                    break
+    found, seen_loops = [], set()
+    for a, off, size, va in anchors[:OVSTUB_ANCHORS * 4]:
+        if len(seen_loops) >= OVSTUB_ANCHORS:
+            break
+        av, e = va + a - off, min(off + size, a + 192)
+        for back in range(24):   # sync the decode: an instruction must START at the anchor (or its REX/66 prefix)
+            s = max(off, a - 160 + back)
+            st = [q for q, _, _, _ in lite.disasm_lite(data[s:e], va + s - off)]
+            if av in st or av - 1 in st:
+                break
+        else:
+            continue
+        insns = list(md.disasm(data[s:e], va + s - off))
+        for k, ins in enumerate(insns):   # first backward branch at/after the anchor whose target precedes it
+            if ins.address >= av and ins.mnemonic.startswith("j") and ins.operands and \
+                    ins.operands[0].type == C.x86.X86_OP_IMM and ins.operands[0].imm <= av:
+                t = ins.operands[0].imm
+                if t < insns[0].address or (t, ins.address) in seen_loops:
+                    break
+                seen_loops.add((t, ins.address))
+                if not any(i.address == t for i in insns):
+                    break
+                ops = _ovstub_walk([i for i in insns[:k + 1]], t, None)
+                if ops and ops not in found:
+                    found.append(ops)
+                break
+    return found
+
+
+def _ovstub_apply(ops, hdr):
+    """256-entry translate table for a byte op list (header bytes resolved from `hdr`: {disp: value} or the bytes)."""
+    tbl = bytearray(256)
+    for b in range(256):
+        x = b
+        for op, arg in ops:
+            v = arg
+            if isinstance(arg, tuple):
+                v = hdr[arg[1]]
+                for o2, c2 in arg[2]:
+                    v = (v ^ c2 if o2 == "xor" else v + c2 if o2 == "add" else v - c2) & 255
+            x = (x ^ v if op == "xor" else x + v if op == "add" else x - v if op == "sub" else _ror8(x & 255, v)
+                 if op == "ror" else ~x if op == "not" else -x) & 255
+        tbl[b] = x
+    return bytes(tbl)
+
+
+def _ovstub_desc(ops):
+    s = "x"
+    for op, arg in ops:
+        a = f"{arg:#04x}" if isinstance(arg, int) else ""
+        if isinstance(arg, tuple):
+            a = f"hdr[{arg[1]}]" + "".join(f"{ {'xor': '^', 'add': '+', 'sub': '-'}[o2] }{c2:#04x}" for o2, c2 in arg[2])
+        s = (f"{op}({s})" if op in ("not", "neg") else f"ror8({s},{arg})" if op == "ror" else
+             f"({s}{ {'xor': '^', 'add': '+', 'sub': '-'}[op] }{a})")
+    return s
+
+
+def _ovstub_families(pk, n, sha):
+    """Known-plaintext transform search (header-checked, sha256-gated): (out, description) or None."""
+    import hashlib
+    want = {0: 72, 1: 67, 2: 70, 3: 71, 6: (n - 12) & 255, 7: ((n - 12) >> 8) & 255}
+    idx = [i for i in want if i < len(pk)]
+    if len(idx) < 6:
+        return None
+    rol = lambda x, r: _ror8(x & 255, (8 - r) & 7)   # noqa: E731
+    # inner g(b, a, r) then outer c (xor | add): rot = ror8 by r (r=0: none)
+    inner = (("ror8(x^a,r)", lambda b, a, r: _ror8(b ^ a, r)), ("ror8(x+a,r)", lambda b, a, r: _ror8((b + a) & 255, r)),
+             ("ror8(x,r)^a", lambda b, a, r: _ror8(b, r) ^ a), ("ror8(x,r)+a", lambda b, a, r: (_ror8(b, r) + a) & 255))
+    for r in range(8):
+        for name, g in inner:
+            for a in range(256):
+                g0 = g(pk[0], a, r)
+                for outer in ("^", "+"):
+                    c = 72 ^ g0 if outer == "^" else (72 - g0) & 255
+                    if all(((g(pk[i], a, r) ^ c) if outer == "^" else (g(pk[i], a, r) + c) & 255) == want[i]
+                           for i in idx[1:]):
+                        tbl = bytes(((g(b, a, r) ^ c) if outer == "^" else (g(b, a, r) + c) & 255) for b in range(256))
+                        out = pk.translate(tbl)
+                        if hashlib.sha256(out).digest() == sha:
+                            return out, f"({name}){outer}c a={a:#04x} r={r} c={c:#04x}"
+    # index-dependent key k_i = (a + s*i) & 255 (s = +1/-1) or a ^ (i & 255), before / after the rotation
+    keys = (("a+i", lambda a, i: (a + i) & 255), ("a-i", lambda a, i: (a - i) & 255), ("a^i", lambda a, i: a ^ (i & 255)))
+    forms = (("ror8(x^k,r)", lambda b, k, r: _ror8(b ^ k, r), lambda p, b, r: rol(p, r) ^ b),
+             ("ror8(x,r)^k", lambda b, k, r: _ror8(b, r) ^ k, lambda p, b, r: _ror8(b, r) ^ p),
+             ("ror8(x-k,r)", lambda b, k, r: _ror8((b - k) & 255, r), lambda p, b, r: (b - rol(p, r)) & 255),
+             ("ror8(x,r)-k", lambda b, k, r: (_ror8(b, r) - k) & 255, lambda p, b, r: (_ror8(b, r) - p) & 255))
+    for r in range(8):
+        for fname, f, solve in forms:
+            k0 = solve(72, pk[0], r)   # the key byte at i=0 = a
+            for kname, kf in keys:
+                if all(f(pk[i], kf(k0, i), r) == want[i] for i in idx[1:]):
+                    out = bytes(f(b, kf(k0, i), r) for i, b in enumerate(pk))
+                    if hashlib.sha256(out).digest() == sha:
+                        return out, f"{fname} k={kname} a={k0:#04x} r={r}"
+    return None
+
+
+def overlay_stub_unpack(data, *, families=True):
+    """Unpack the D19-layout overlay WITHOUT a stated transform (see the block comment above): {"overlay_offset",
+    "overlay_magic", "packed_offset", "packed_length", "out", "method" ('stub' | 'family' | 'd19'), "transform"} for
+    the last header whose unpack matches its stored sha256, else None (no header / no verified transform)."""
+    import hashlib
+    import itertools
+    try:
+        data = bytes(data)
+        heads = _ovstub_headers(data)
+        if not heads:
+            return None
+        code = None
+        for o, n in heads:
+            hdr, pk, sha = data[o:o + 44], data[o + 44:o + 44 + n], data[o + 12:o + 44]
+            res = {"overlay_offset": o, "overlay_magic": data[o:o + 4].decode("latin-1"), "packed_offset": o + 44,
+                   "packed_length": n}
+            d19 = (("xor", ("hdr", 6, ())), ("ror", 3), ("xor", ("hdr", 5, ())))
+            if code is None:
+                code = _ovstub_code_ops(data, {data[q:q + 4] for q, _ in heads})
+            for method, ops in [("stub", c) for c in code] + [("d19", list(d19))]:
+                disps = sorted({a[1] for _, a in ops if isinstance(a, tuple)}, key=str)
+                maps = [{d: hdr[d] if isinstance(d, int) and d < 44 else 0 for d in disps}]
+                if 0 < len(disps) <= 2:   # header read into a stack/heap struct: +disp is not header-relative
+                    maps += [dict(zip(disps, vs)) for vs in itertools.product(hdr[4:8], repeat=len(disps))]
+                for mp in maps:
+                    out = pk.translate(_ovstub_apply(ops, mp))
+                    if hashlib.sha256(out).digest() == sha:
+                        return dict(res, out=out, method=method, transform=_ovstub_desc(ops),
+                                    header_bytes={d: v for d, v in mp.items()})
+            if families:
+                r = _ovstub_families(pk, n, sha)
+                if r:
+                    return dict(res, out=r[0], method="family", transform=r[1])
+        return None
+    except Exception:   # noqa: BLE001 -- hostile bytes: never raise past the caller
+        return None
+
+
+HCFG_STRIDE_MAX =int(os.environ.get("HCTF_HCFG_STRIDE_MAX", str(96 << 20)))   # strided passes (~0.2 s / 70 MB)
 # blob byte (or base64 char) every k-th byte, ANY filler between ('H?C?F?G'): zero-filled strides are already the
 # u32/u64-array and UTF-16/32 anchors; this is the junk-filled / odd-stride / interleaved-halves form
 _STRIDES = (2, 4, 3, 8)
@@ -3720,7 +5288,8 @@ PYC_MAGIC_VERSION = {3379: "3.6", 3394: "3.7", 3413: "3.8", 3425: "3.9", 3439: "
                      3571: "3.13", 3627: "3.14"}
 _BYTECODE_CANDIDATES = {"llvm_bitcode": ["llvm_bitcode", "bitcode", "llvm-bc", "bc"], "pyc": ["pyc", "python_bytecode"],
                         "luac": ["luac", "lua", "lua_bytecode"], "class": ["class", "java_class", "jvm"],
-                        "dex": ["dex", "dalvik"]}
+                        "dex": ["dex", "dalvik"], "neko_bytecode": ["neko_bytecode", "neko", "nekovm", "n"],
+                        "hashlink_bytecode": ["hashlink_bytecode", "hashlink", "hl", "hl_bytecode", "hlb"]}
 
 
 def bytecode_facts(data):
@@ -3760,6 +5329,16 @@ def bytecode_facts(data):
                                                                                         b"\x12\x34\x56\x78"):
             out = {"format": "dex", "dex_version": d[4:7].decode(),
                    "endian": "little" if d[0x28] == 0x78 else "big"}
+        elif d[:4] == NEKO_MAGIC:
+            nk = neko_parse(data)
+            if nk:
+                out = {"format": "neko_bytecode", "globals_count": str(nk["nglobals"]),
+                       "fields_count": str(nk["nfields"]), "code_size": str(nk["codesize"])}
+        elif d[:3] == HLB_MAGIC:
+            hb = hashlink_parse(data)
+            if hb:
+                out = {"format": "hashlink_bytecode", "hl_version": str(hb["version"]),
+                       "strings_count": str(hb["nstrings"]), "functions_count": str(hb["nfunctions"])}
         if out is None:
             return None
         base = {"format_candidates": _BYTECODE_CANDIDATES[out["format"]], "machine": "none", "machine_num": "none",
@@ -3768,6 +5347,276 @@ def bytecode_facts(data):
         return base
     except (IndexError, ValueError, TypeError, struct.error):
         return None
+
+
+# Neko VM bytecode (.n, `nekoc` / `haxe -neko`; neko/vm/load.c neko_read_module): 'NEKO' u32le nglobals, nfields,
+# codesize (opcode count), then globals (type byte: 1 var name\0 | 2 function u32 pos|nargs<<24 | 3 string u16le len +
+# bytes | 4 float text\0 | 5 debug infos | 6 version u8), nfields NUL-terminated field names, packed code. A
+# `nekotools boot` exe = the neko VM (ELF/PE) + module + 'NEKO' + u32le module offset (= VM size) as the last 8 bytes.
+# Labels SPECULATIVE: format "neko_bytecode" (GM format enum d12-d19); a VM has no machine -> machine "none"
+# (machine_candidates neko/nekovm/none -- read the question). hcfg_offset = first byte of the 'H' (raw) / 'S' (base64)
+# inside the string global = file offset per the OFFSET LAW.
+NEKO_MAGIC = b"NEKO"
+NEKO_GLOBAL_KIND = {1: "var", 2: "function", 3: "string", 4: "float", 5: "debug", 6: "version"}
+
+
+def _neko_cstr(data, p, cap=4096):
+    e = data.find(b"\0", p, p + cap)
+    if e < 0:
+        raise ValueError("neko: unterminated string")
+    return data[p:e].decode("latin-1"), e + 1
+
+
+def neko_parse(data, base=0):
+    """Parse the Neko module at data[base:] -> {nglobals, nfields, codesize, globals [{index, kind, offset (file offset
+    of the payload), value}], fields [names], version, debug_files, code_offset, end}; None when the header / globals /
+    fields / code stream are inconsistent (bare magic, truncation, wrong format)."""
+    try:
+        data = bytes(data) if not isinstance(data, bytes) else data
+        if data[base:base + 4] != NEKO_MAGIC:
+            return None
+        ng, nf, cs = struct.unpack_from("<III", data, base + 4)
+        if ng >= 0xFFFF or nf >= 0xFFFF or cs >= 0xFFFFFF or cs == 0:
+            return None
+        p, n = base + 16, len(data)
+        gl, version, files = [], "none", []
+        for i in range(ng):
+            t = data[p]
+            p += 1
+            if t in (1, 4):
+                v, q = _neko_cstr(data, p)
+            elif t == 2:
+                w = struct.unpack_from("<I", data, p)[0]
+                v, q = {"pos": w & 0xFFFFFF, "nargs": w >> 24}, p + 4
+            elif t == 3:
+                ln = struct.unpack_from("<H", data, p)[0]
+                if p + 2 + ln > n:
+                    return None
+                p += 2
+                v, q = data[p:p + ln], p + ln
+            elif t == 6:
+                v, q = data[p], p + 1
+                version = str(v)
+            elif t == 5:
+                c = data[p]
+                p += 1
+                nfi = c
+                if c & 0x80:
+                    nfi, p = ((c & 0x7F) << 8) | data[p], p + 1
+                if not nfi:
+                    return None
+                for _ in range(nfi):
+                    f, p = _neko_cstr(data, p)
+                    files.append(f)
+                if struct.unpack_from("<I", data, p)[0] != cs:
+                    return None
+                p, k = p + 4, 0
+                while k < cs:   # line-delta stream: one entry per opcode
+                    c = data[p]
+                    p += 1
+                    if c & 1:
+                        p += nfi >= 0x80
+                    elif c & 2:
+                        k += (c >> 2) & 15
+                    elif c & 4:
+                        k += 1
+                    else:
+                        p, k = p + 2, k + 1
+                if k != cs:
+                    return None
+                v, q = files, p
+            else:
+                return None
+            gl.append({"index": i, "kind": NEKO_GLOBAL_KIND[t], "offset": p, "value": v})
+            p = q
+        fields = []
+        for _ in range(nf):
+            f, p = _neko_cstr(data, p, 256)
+            fields.append(f)
+        code, k = p, 0
+        while k < cs:   # packed opcodes: low 2 bits 0 = op, 1 = op + 1-bit param, 2 = op + u8, 3 = op + u32;
+            c = data[p]     # byte 0x02 = extended opcode (>= 64) in the next byte (haxe -neko output ends EOF-exact)
+            if c == 2:
+                p, k = p + 2, k + 1
+                continue
+            p, k = p + (1, 1, 2, 5)[c & 3], k + (1 if c & 3 == 0 else 2)
+        if p > n or k != cs:
+            return None
+        return {"nglobals": ng, "nfields": nf, "codesize": cs, "globals": gl, "fields": fields, "version": version,
+                "debug_files": files, "code_offset": code, "end": p, "base": base}
+    except (IndexError, ValueError, TypeError, struct.error):
+        return None
+
+
+def neko_boot_offset(data):
+    """File offset of the Neko module a `nekotools boot` executable appends (trailer 'NEKO' + u32le offset), else None."""
+    try:
+        if len(data) >= 24 and data[-8:-4] == NEKO_MAGIC and data[:4] in (b"\x7fELF", b"MZ\x90\0") or \
+                data[-8:-4] == NEKO_MAGIC and data[:2] == b"MZ":
+            o = struct.unpack_from("<I", data, len(data) - 4)[0]
+            if 0 < o < len(data) - 24 and data[o:o + 4] == NEKO_MAGIC:
+                return o
+    except (IndexError, TypeError, struct.error):
+        pass
+    return None
+
+
+def neko_facts(data):
+    """Neko facts for a raw .n module or a `nekotools boot` exe; None for anything else. Keys (str/"none"/lists):
+    format ("neko_bytecode" | the host "elf"/"pe" when booted), format_candidates, machine "none", machine_candidates,
+    has_neko_runtime, bytecode_offset, globals_count, fields_count, code_size, fields, strings (latin-1), string_count,
+    function_count, var_names, version, debug_files, hcfg_offset / hcfg_global_index / hcfg_encoding (raw|base64)."""
+    try:
+        data = bytes(data) if not isinstance(data, bytes) else data
+        boot = None if data[:4] == NEKO_MAGIC else neko_boot_offset(data)
+        nk = neko_parse(data, boot or 0)
+        if not nk:
+            return None
+        strs = [g for g in nk["globals"] if g["kind"] == "string"]
+        out = {"format": "neko_bytecode" if boot is None else ("pe" if data[:2] == b"MZ" else "elf"),
+               "format_candidates": _BYTECODE_CANDIDATES["neko_bytecode"], "machine": "none", "machine_num": "none",
+               "machine_candidates": ["neko", "nekovm", "none"], "bits": "none", "endian": "little",
+               "has_neko_runtime": "true" if boot is not None else "false", "bytecode_offset": str(boot or 0),
+               "bytecode_size": str(nk["end"] - nk["base"]),
+               "globals_count": str(nk["nglobals"]), "fields_count": str(nk["nfields"]), "code_size": str(nk["codesize"]),
+               "fields": nk["fields"], "strings": [g["value"].decode("latin-1") for g in strs],
+               "string_count": str(len(strs)),
+               "function_count": str(sum(g["kind"] == "function" for g in nk["globals"])),
+               "var_names": [g["value"] for g in nk["globals"] if g["kind"] == "var"],
+               "version": nk["version"], "debug_files": nk["debug_files"] or "none",
+               "hcfg_offset": "none", "hcfg_global_index": "none", "hcfg_encoding": "none"}
+        if boot is not None:   # the host VM executable keeps its real machine
+            mf = machine_facts(data) or {}
+            out.update({k: mf[k] for k in ("machine", "machine_num", "bits", "endian") if k in mf})
+        for g in strs:
+            for tok, enc in ((HCFG_MAGIC, "raw"), (b"SENGR", "base64")):
+                i = g["value"].find(tok)
+                if i >= 0:
+                    out.update(hcfg_offset=str(g["offset"] + i), hcfg_global_index=str(g["index"]), hcfg_encoding=enc)
+                    return out
+        return out
+    except (IndexError, ValueError, TypeError, KeyError, struct.error):
+        return None
+
+
+def neko_field(data, name):
+    """One neko_facts field ("none" when absent / not a Neko module)."""
+    f = neko_facts(data)
+    return "none" if not f else f.get(name, "none")
+
+
+# HashLink bytecode (.hl, `haxe -main Main -hl out.hl`; hashlink src/code.c hl_code_read): 'HLB' u8 version (Haxe 4.3.7
+# writes 4), UINDEX flags (bit 0 = debug info), UINDEX nints nfloats nstrings [nbytes v>=5] ntypes nglobals nnatives
+# nfunctions [nconstants v>=4] entrypoint; i32 ints; f64 floats; strings = i32le size + NUL-separated UTF-8 block +
+# one UINDEX length each; [v>=5 bytes = i32le size + block + UINDEX positions]; [debug: UINDEX n + strings (files)].
+# Haxe strings are UTF-8 there: a "\u00NN"-escaped raw HCFG blob is stored C2/C3-mangled (hcfg_scan "utf8-raw").
+# Labels SPECULATIVE: format "hashlink_bytecode" (candidates in _BYTECODE_CANDIDATES), machine "none".
+HLB_MAGIC = b"HLB"
+_HLB_HDR = ("nints", "nfloats", "nstrings", "nbytes", "ntypes", "nglobals", "nnatives", "nfunctions", "nconstants",
+            "entrypoint")
+
+
+def _hl_index(data, p):
+    """hl_read_index: (value, next offset)."""
+    b = data[p]
+    if not b & 0x80:
+        return b & 0x7f, p + 1
+    if not b & 0x40:
+        v = data[p + 1] | (b & 31) << 8
+        return (-v if b & 0x20 else v), p + 2
+    v = (b & 31) << 24 | data[p + 1] << 16 | data[p + 2] << 8 | data[p + 3]
+    return (-v if b & 0x20 else v), p + 4
+
+
+def _hl_strings(data, p, n):
+    """read_strings: ([(file offset, bytes)], next offset); ValueError on an inconsistent table."""
+    size = int.from_bytes(data[p:p + 4], "little")
+    blk, p = p + 4, p + 4 + size
+    if p > len(data) or n > size + 1:
+        raise ValueError("hl: strings block")
+    out, q = [], blk
+    for _ in range(n):
+        ln, p = _hl_index(data, p)
+        if ln < 0 or q + ln >= blk + size or data[q + ln] != 0:
+            raise ValueError("hl: string length")
+        out.append((q, data[q:q + ln]))
+        q += ln + 1
+    return out, p
+
+
+def hashlink_parse(data):
+    """Parse the HashLink header + int/float/string(/bytes/debug-file) tables -> {version, flags, debug, n* counts,
+    strings_offset (the i32 size field), strings [(offset, bytes)], debug_files, end (first type byte)}; None if
+    `data` is no consistent HLB module (bad magic/version, truncated, negative count, broken string table)."""
+    try:
+        data = bytes(data) if not isinstance(data, bytes) else data
+        if data[:3] != HLB_MAGIC or not 1 <= data[3] <= 8:
+            return None
+        ver = data[3]
+        flags, p = _hl_index(data, 4)
+        hb = {"version": ver, "flags": flags, "debug": bool(flags & 1), "nbytes": 0, "nconstants": 0}
+        for k in _HLB_HDR:
+            if (k == "nbytes" and ver < 5) or (k == "nconstants" and ver < 4):
+                continue
+            hb[k], p = _hl_index(data, p)
+            if hb[k] < 0 or (k != "entrypoint" and hb[k] > len(data)):
+                return None
+        if not hb["nfunctions"] or hb["entrypoint"] >= hb["nfunctions"] + hb["nnatives"]:
+            return None
+        p += 4 * hb["nints"] + 8 * hb["nfloats"]
+        hb["strings_offset"] = p
+        hb["strings"], p = _hl_strings(data, p, hb["nstrings"])
+        if ver >= 5:
+            size = int.from_bytes(data[p:p + 4], "little")
+            p += 4 + size
+            for _ in range(hb["nbytes"]):
+                _, p = _hl_index(data, p)
+        hb["debug_files"] = []
+        if hb["debug"]:
+            nd, p = _hl_index(data, p)
+            if nd < 0:
+                return None
+            hb["debug_files"] = [b.decode("utf-8", "replace") for _, b in _hl_strings(data, p, nd)[0]]
+            p = _hl_strings(data, p, nd)[1]
+        if p >= len(data):
+            return None
+        hb["end"] = p
+        return hb
+    except (IndexError, ValueError, TypeError):
+        return None
+
+
+def hashlink_facts(data):
+    """HashLink facts for a .hl module; None for anything else. Keys (str/"none"/lists): format "hashlink_bytecode",
+    format_candidates, machine "none", machine_candidates, hl_version, debug, flags, the header counts (ints_count,
+    floats_count, strings_count, bytes_count, types_count, globals_count, natives_count, functions_count,
+    constants_count, entrypoint), strings_offset, strings (UTF-8), debug_files, hcfg_offset / hcfg_string_index /
+    hcfg_encoding (utf8-raw|base64; offset = first stored byte of the string table entry, the OFFSET LAW)."""
+    hb = hashlink_parse(data)
+    if not hb:
+        return None
+    out = {"format": "hashlink_bytecode", "format_candidates": _BYTECODE_CANDIDATES["hashlink_bytecode"],
+           "machine": "none", "machine_num": "none", "machine_candidates": ["hashlink", "hl", "none"],
+           "bits": "none", "endian": "little", "hl_version": str(hb["version"]), "flags": str(hb["flags"]),
+           "debug": "true" if hb["debug"] else "false", "strings_offset": str(hb["strings_offset"]),
+           "strings": [b.decode("utf-8", "replace") for _, b in hb["strings"]],
+           "debug_files": hb["debug_files"] or "none",
+           "hcfg_offset": "none", "hcfg_string_index": "none", "hcfg_encoding": "none"}
+    for k in _HLB_HDR:
+        out[k if k == "entrypoint" else k[1:] + "_count"] = str(hb[k])
+    for n, (o, b) in enumerate(hb["strings"]):
+        for tok, enc in ((HCFG_MAGIC, "utf8-raw"), (b"SENGR", "base64")):
+            i = b.find(tok)
+            if i >= 0:
+                out.update(hcfg_offset=str(o + i), hcfg_string_index=str(n), hcfg_encoding=enc)
+                return out
+    return out
+
+
+def hashlink_field(data, name):
+    """One hashlink_facts field ("none" when absent / not a HashLink module)."""
+    f = hashlink_facts(data)
+    return "none" if not f else f.get(name, "none")
 
 
 ELF_TYPE_NAME = {0: "ET_NONE", 1: "ET_REL", 2: "ET_EXEC", 3: "ET_DYN", 4: "ET_CORE"}
@@ -5017,6 +6866,28 @@ def anti_analysis_field(data, name):
         return f.get(k, "none")
     except Exception:  # noqa: BLE001
         return None
+
+
+def _u8prefix(b):
+    try:
+        return b.decode("utf-8")
+    except UnicodeDecodeError as e:
+        return b[:e.start].decode("utf-8")
+
+
+def _utf8_raw_at(data, i):
+    """Raw blob at i stored as the UTF-8 text of its latin-1 bytes (Haxe "\\u00NN" literal in a HashLink string table:
+    bytes >= 0x80 -> C2/C3 xx): the decoded blob bytes, or None (not mangled / not latin-1 / truncated)."""
+    h = _u8prefix(data[i:i + 24])[:12]
+    if len(h) < 12 or max(map(ord, h)) > 255:
+        return None
+    n = 12 + int.from_bytes(h[6:8].encode("latin-1"), "little")
+    s = _u8prefix(data[i:i + 2 * n])[:n]
+    try:
+        blob = s.encode("latin-1")
+    except UnicodeEncodeError:
+        return None
+    return blob if len(blob) == n and blob != data[i:i + n] else None
 
 
 def _be_raw_at(data, i):
@@ -7687,7 +9558,10 @@ def cobol_facts(data):
     cob_imports (sorted `cob_*` dynamic symbols), has_cobol_runtime (+ alias has_gnucobol_runtime; libcob NEEDED or
     cob_init / cob_module_* imports; raw-byte cues only when the image has no symbol table), program_id (first module
     name of the .rodata module-name/compile-date pair, else the `<PID>_module_init` symbol), program_ids (all, file
-    order), compile_date ("Oct 18 2026 12:23:53"), source_file (cobc input name). HCFG: hcfg_scan (split-raw /
+    order; + the cob_set_programid(module, "PID") argument of OpenCOBOL 1.1 images), compile_date ("Oct 18 2026
+    12:23:53"), source_file (cob_check_version arg 1, else the cobc input name string), cobol_runtime_version (+ alias
+    libcob_version; cob_check_version arg 2: "3.2", "1.5.2"), imports (every cob_* .dynsym name incl. copy-reloc'd
+    data cob_initialized / cob_current_module, sorted). HCFG: hcfg_scan (split-raw /
     stack-built cover WORKING-STORAGE VALUE fields). Absent -> "none" / "false" / []; not an ELF -> None."""
     try:
         d = bytes(data)
@@ -7726,12 +9600,124 @@ def cobol_facts(data):
                     src = ms.group(1).decode("latin-1")
             if not pids:
                 pids = [s[0][:-12] for s in syms if s[0].endswith("_module_init") and s[3] != 0 and len(s[0]) > 12]
+        try:
+            dimps, args = _cob_dyn_args(d, secs) if rt else ([], {})
+        except Exception:   # noqa: BLE001  (malformed dynsym / relocs: keep the struct facts)
+            dimps, args = [], {}
+        out["imports"] = dimps if rt else []   # every cob_* dynsym name, incl. copy-reloc'd data (cob_initialized ..)
+        cv = next((a for a in args.get("cob_check_version", []) if a[1]), None)   # (source, version, patchlevel)
+        out["cobol_runtime_version"] = out["libcob_version"] = cv[1] if cv else "none"
+        src = cv[0] if cv and cv[0] else src
+        sp = [a[1] for a in args.get("cob_set_programid", []) if a[1]]   # OpenCOBOL 1.1: cob_set_programid(mod, "PID")
+        for v in sp:
+            if v not in pids:
+                pids.append(v)
         out["program_id"] = pids[0] if pids else "none"
         out["program_ids"] = pids
         out["compile_date"], out["source_file"] = date, src
         return out
     except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
         return None
+
+
+_COB_ARGS = ("cob_check_version", "cob_set_programid")
+
+
+def _cob_dyn_args(d, secs):
+    """(sorted cob_* .dynsym names, {import: [(rdi, rsi, rdx) C strings at each call site]}) of an x86-64 ELF64 LE
+    image: call/jmp rel32 -> PLT stub / call/jmp [rip+GOT] (-fno-plt) to cob_check_version / cob_set_programid; the argument
+    registers are tracked over the <= 96 bytes before the call (capstone, synced to land on the call): mov r32, imm32
+    (non-PIE), lea r64, [rip+d] (PIE), mov r64, r64 copies (-O0 `lea rax; mov rdi, rax`). Strings must be printable."""
+    dsym = next((s for s in secs if s[0] == ".dynsym" and s[1] == 11), None)
+    dstr = next((s for s in secs if s[0] == ".dynstr" and s[1] == 3), None)
+    if not dsym or not dstr or d[4] != 2 or d[5] != 1:
+        return [], {}
+    dn = []
+    for k in range(min(dsym[4] // 24, 20000)):
+        n = struct.unpack_from("<I", d, dsym[3] + 24 * k)[0]
+        z = d.find(b"\0", dstr[3] + n, dstr[3] + dstr[4]) if n < dstr[4] else -1
+        dn.append(d[dstr[3] + n:z].decode("latin-1").split("@")[0] if z >= 0 else "")
+    imps = sorted({n for n in dn if n.startswith("cob_")})
+    args = {}
+    if struct.unpack_from("<H", d, 18)[0] != 62 or not any(n in dn for n in _COB_ARGS):
+        return imps, args
+    got = {}
+    for s in secs:
+        if s[1] == 4 and s[0].startswith(".rela") and s[4] < (1 << 20):
+            for k in range(s[4] // 24):
+                r_off, r_info = struct.unpack_from("<QQ", d, s[3] + 24 * k)
+                if 0 < r_info >> 32 < len(dn) and dn[r_info >> 32] in _COB_ARGS:
+                    got[r_off] = dn[r_info >> 32]
+    stubs = {}
+    for s in secs:
+        if s[0] in (".plt", ".plt.sec", ".plt.got") and s[1] == 1 and s[4] < (1 << 20):
+            blk = d[s[3]:s[3] + s[4]]
+            for m in re.finditer(rb"\xff\x25", blk):
+                if m.start() + 6 <= len(blk):
+                    slot = s[2] + m.start() + 6 + struct.unpack_from("<i", blk, m.start() + 2)[0]
+                    if slot in got:
+                        st = m.start() - (1 if m.start() and blk[m.start() - 1] == 0xF2 else 0)
+                        st -= 4 if st >= 4 and blk[st - 4:st] == b"\xf3\x0f\x1e\xfa" else 0
+                        stubs[s[2] + st] = got[slot]
+    text = next((s for s in secs if s[0] == ".text" and s[1] == 1), None)
+    if not (stubs or got) or not text:
+        return imps, args
+    load = [(s[2], s[3], s[4]) for s in secs if s[1] != 8 and s[2] and s[4]]
+
+    def cstr(va):
+        for a, o, sz in load if va else ():
+            if a <= va < a + sz:
+                z = d.find(b"\0", o + va - a, o + sz)
+                v = d[o + va - a:z] if 0 <= z - (o + va - a) <= 256 else b""
+                return v.decode("latin-1") if v and all(32 <= c < 127 for c in v) else None
+        return None
+    try:
+        import capstone
+        md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
+    except Exception:  # noqa: BLE001
+        return imps, args
+    fam = lambda r: re.sub(r"[dwb]$", "", r) if r[1:2].isdigit() else r[-2:]   # noqa: E731  esi/rsi -> si, r8d -> r8
+    to, ta = text[3], text[2]
+    code = d[to:to + min(text[4], 8 << 20)]
+    for m in re.finditer(rb"[\xe8\xe9]|\xff[\x15\x25]", code):   # call / tail-call jmp (gcc -O2)
+        k = m.start()
+        if k + 5 + (len(m.group()) == 2) > len(code):
+            continue
+        if len(m.group()) == 1:
+            name, end = stubs.get(ta + k + 5 + struct.unpack_from("<i", code, k + 1)[0]), k + 5
+        else:
+            name, end = got.get(ta + k + 6 + struct.unpack_from("<i", code, k + 2)[0]), k + 6
+        if not name or len(args.get(name, ())) >= 8:
+            continue
+        ins = None
+        for st in range(max(0, k - 96), k):   # first start whose linear decode lands exactly on the call
+            ii = list(md.disasm(code[st:k], ta + st))
+            if ii and ii[-1].address + ii[-1].size == ta + k:
+                ins = ii
+                break
+        reg = {}
+        for i in ins or ():
+            ops = [o.strip() for o in i.op_str.split(",", 1)]
+            if i.mnemonic.startswith("call") or not ops[0]:
+                reg.clear()
+                continue
+            dst = fam(ops[0]) if re.fullmatch(r"[a-z0-9]+", ops[0]) else None
+            if dst is None:
+                continue
+            src = ops[1] if len(ops) > 1 else ""
+            v = None
+            mm = re.fullmatch(r"\[rip ([+-]) (0x[0-9a-f]+|\d+)\]", src)
+            if i.mnemonic == "lea" and mm:
+                v = i.address + i.size + int(mm.group(2), 0) * (1 if mm.group(1) == "+" else -1)
+            elif i.mnemonic == "mov" and re.fullmatch(r"0x[0-9a-f]+|\d+", src):
+                v = int(src, 0)
+            elif i.mnemonic == "mov" and re.fullmatch(r"[a-z0-9]+", src):
+                v = reg.get(fam(src))
+            elif i.mnemonic == "xor" and src == ops[0]:
+                v = 0
+            reg[dst] = v
+        args.setdefault(name, []).append(tuple(cstr(reg.get(r)) for r in ("di", "si")) + (reg.get("dx"),))
+    return imps, args
 
 
 def cobol_field(data, name):
@@ -8454,7 +10440,7 @@ LANG_ALIASES = {"c": ["c"], "cpp": ["cpp", "c++"], "csharp": ["csharp", "c#", "d
                 "ada": ["ada", "gnat"], "haskell": ["haskell", "ghc"], "ocaml": ["ocaml"], "fortran": ["fortran"],
                 "cobol": ["cobol"], "odin": ["odin"], "v": ["v", "vlang"], "dart": ["dart"], "julia": ["julia"],
                 "kotlin-native": ["kotlin-native", "kotlin", "konan"], "python": ["python"], "vb6": ["vb6", "visualbasic"],
-                "autoit": ["autoit"]}
+                "autoit": ["autoit"], "modula2": ["modula2", "modula-2", "m2", "gm2"]}
 # candidate runtimes lang_facts does not know: (token, toolchain, kind, cues). kind "sym" = a symbol-name cue: it only
 # decides when found in .strtab/.dynstr (or the image has no symbol table); a hit elsewhere in the bytes (string
 # literal) is logged under `ambiguous`. kind "str" = a runtime string / magic that is decisive anywhere.
@@ -8463,6 +10449,9 @@ _LANG_CUES = (
     ("haskell", "ghc", "sym", (b"ghczmprim_GHC", b"base_GHCziTopHandler", b"hs_init_ghc", b"stg_ap_0_fast")),
     ("ocaml", "ocamlopt", "sym", (b"caml_startup", b"caml_main", b"camlStdlib", b"caml_program")),
     ("fortran", "gfortran", "sym", (b"_gfortran_set_args", b"_gfortran_st_write", b"_gfortran_set_options")),
+    # GCC front ends (plain dynamic ELF, gcc .comment): gm2 links libm2pim/libm2iso (+ libstdc++), gcobol libgcobol
+    ("modula2", "gm2", "sym", (b"_M2RTS_ConstructModules", b"_M2RTS_RegisterModule", b"libm2pim.so", b"libm2iso.so")),
+    ("cobol", "gcobol", "sym", (b"__gg__init_program_state", b"__gg__module_name_push", b"libgcobol.so")),
     ("cobol", "gnucobol", "sym", (b"cob_init", b"cob_module_enter", b"cob_resolve")),
     ("julia", "julia", "sym", (b"jl_init_with_image", b"jl_atexit_hook", b"libjulia")),
     ("dart", "dart", "sym", (b"_kDartVmSnapshotData", b"_kDartIsolateSnapshotInstructions")),
@@ -8507,7 +10496,7 @@ def language_of(data):
     -> {format, language, toolchain, aliases, evidence [..], candidates [every language with a cue], ambiguous
     "true"/"false", ambiguous_with [..], source_language (wasm producers / .NET flavour, else "none")}.
     language tokens: c cpp csharp fsharp vbnet go rust java kotlin scala groovy clojure swift nim zig d pascal crystal
-    objc wasm ada + candidates haskell ocaml fortran cobol odin v dart julia kotlin-native python vb6 autoit.
+    objc wasm ada + candidates haskell ocaml fortran cobol odin v dart julia kotlin-native python vb6 autoit modula2.
     Native images: lang_facts runtime hit (gnat->ada, fpc->pascal) wins; a candidate cue table refines c/cpp
     (C-runtime languages). .NET PE (CLI header + BSJB) -> csharp unless FSharp.Core / Microsoft.VisualBasic.
     jar / bare .class -> java unless kotlin/scala/groovy/clojure markers. wasm stays "wasm" (D16), its producers

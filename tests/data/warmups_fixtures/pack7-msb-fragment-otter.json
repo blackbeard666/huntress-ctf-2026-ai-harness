@@ -1,0 +1,9 @@
+{
+ "codec": "pack7-msb",
+ "plain": "otter-17",
+ "encoded": "dfd3a65e4b58b7",
+ "generator_cmd": "perl -e 'my $b=join \"\", map { sprintf \"%07b\", ord } split //, $ARGV[0]; $b.=\"0\" x (-length($b) % 8); print unpack(\"H*\", pack(\"B*\", $b))' \"$plain\"  # perl pack 'B*' of %07b ASCII codes (8 chars = 7 octets)",
+ "oracle_cmd": "python3 -I -c \"import sys;h=sys.argv[1].replace(\\\" \\\",\\\"\\\");n=len(h)*4;b=format(int(h,16),\\\"0%db\\\"%n);print(\\\"\\\".join(chr(int(b[i:i+7],2)) for i in range(0,n-6,7)).rstrip(\\\"\\\\0\\\"))\" \"$encoded\"  # python3 int(hex,16) bit string 7-bit groups",
+ "oracle_plain": "otter-17",
+ "expected": "match"
+}

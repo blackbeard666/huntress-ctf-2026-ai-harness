@@ -1,0 +1,8 @@
+{
+ "field": "ics.uid",
+ "expected": "evt-7f3a2c19-4b0e@fixture.example",
+ "generator_cmd": "python3 -I gen.py <site-pkgs> <out>  (icalendar 6 Calendar/Event.to_ical writer for .ics; vobject vCard().serialize() writer for .vcf; script kept in fixture notes)",
+ "oracle_cmd": "python3 -I oracle.py: vobject.readOne(text) -> vevent.uid.value",
+ "decoy": false,
+ "member": "meeting.ics"
+}

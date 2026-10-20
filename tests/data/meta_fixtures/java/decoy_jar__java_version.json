@@ -1,0 +1,8 @@
+{
+ "field": "java.java_version",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"zipfile.ZipFile('x','w').writestr('META-INF/MANIFEST.MF',...)\" (jar renamed .class impostor)",
+ "oracle_cmd": "file jar.bin -> Zip archive data (not a Java class)",
+ "decoy": true,
+ "member": "Widget.class"
+}

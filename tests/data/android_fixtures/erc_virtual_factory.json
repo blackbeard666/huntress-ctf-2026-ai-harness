@@ -1,0 +1,7 @@
+{
+ "entry": "entry_reachable_scan",
+ "expected": "ANS-b4e20f9d7c1a3856",
+ "_why": "abstract Node with five subclasses n0..n4 (same v() shape); onCreate: Factory.make() instantiates only n1, n.v() appended after proof= (virtual dispatch, RTA)",
+ "generator_cmd": "python3 tests/data/android_fixtures/erc_src/gen_erc.py virtual_factory tests/data/android_fixtures/erc_virtual_factory.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/erc_src/oracle.sh tests/data/android_fixtures/erc_virtual_factory.apk  # d2j-dex2jar back to classes, RUN ChallengeActivity.onCreate on the JVM -> url ...proof=ANS-b4e20f9d7c1a3856"
+}

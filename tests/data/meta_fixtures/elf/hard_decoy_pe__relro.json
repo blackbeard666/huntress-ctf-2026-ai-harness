@@ -1,0 +1,8 @@
+{
+ "field": "elf.relro",
+ "expected": "none",
+ "generator_cmd": "cp tests/data/meta_fixtures/elf/decoy_pe_renamed__interpreter.bin .  (a PE renamed .elf; MZ magic)",
+ "oracle_cmd": "readelf -hW hard_decoy_pe__relro.bin >/dev/null 2>&1 && echo ELF || echo none",
+ "decoy": true,
+ "member": "decoy_pe_renamed.bin"
+}

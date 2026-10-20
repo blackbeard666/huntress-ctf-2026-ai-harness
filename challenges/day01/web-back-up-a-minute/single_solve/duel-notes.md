@@ -1,0 +1,2 @@
+- target live (contract.targets[].url); / -> HTML comment "review crawler policy" -> robots.txt Disallow /snapshots-XXXX/ -> dir listing -> environment-copy-*.json.bak {"support_note":"proof_<32hex>"} | CORRECT (proof-1, shared confirm)
+- target returns 410 after solve; duel solver = bounded same-host crawl (robots/links/listing) + proof_ token regex, archives opened in-memory

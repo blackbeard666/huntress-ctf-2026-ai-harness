@@ -1,0 +1,8 @@
+{
+ "field": "pyc.source_mtime_unix",
+ "expected": "1773480413",
+ "generator_cmd": "touch -d '2026-03-14 09:26:53 UTC' tool.py; .venv/bin/python3.12 -I -c \"py_compile.compile('tool.py','tool.pyc')\" (timestamp-based)",
+ "oracle_cmd": "stat -c %Y tool.py -> 1773480413",
+ "decoy": false,
+ "member": "tool.cpython-312.pyc"
+}

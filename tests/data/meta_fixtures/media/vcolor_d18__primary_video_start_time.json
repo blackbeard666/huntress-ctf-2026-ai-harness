@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_start_time",
+ "expected": "0.000000",
+ "generator_cmd": "GM artifact D18 metadata-day-18-evidence.zip -> video-001.mp4 (H.264 High, 320x180, 5 frames)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i F -> 'Duration: 00:00:00.50, start: 0.000000'; PyAV stream.start_time 0",
+ "decoy": false,
+ "member": "video-001.mp4"
+}

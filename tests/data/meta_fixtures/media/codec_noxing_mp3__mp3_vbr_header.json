@@ -1,0 +1,8 @@
+{
+ "field": "media.mp3_vbr_header",
+ "expected": "none",
+ "generator_cmd": ".venv/lib/python3.12/site-packages/static_ffmpeg/bin/linux/ffmpeg -f lavfi -i sine=f=440:d=1:r=44100 -c:a libmp3lame -b:a 64k -write_xing 0 noxing.mp3",
+ "oracle_cmd": "exiftool lame/xing tags absent (no VBRFrames/Encoder); mutagen MP3(f).info.encoder_info == ''",
+ "decoy": true,
+ "member": "noxing.mp3"
+}

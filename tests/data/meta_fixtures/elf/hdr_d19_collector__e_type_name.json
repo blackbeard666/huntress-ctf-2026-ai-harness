@@ -1,0 +1,8 @@
+{
+ "field": "elf.e_type_name",
+ "expected": "ET_EXEC",
+ "generator_cmd": "unzip metadata-day-19-evidence.zip collector-001.elf  (the GM-built D19 artifact, single_solve; GM-verified e_machine 0x003e)  (run in $TMPDIR/elfid)",
+ "oracle_cmd": "readelf -hW hdr_d19_collector__e_type_name.bin | grep 'Type: EXEC (Executable file)' (gABI ET_EXEC)",
+ "decoy": false,
+ "member": "collector-001.elf"
+}

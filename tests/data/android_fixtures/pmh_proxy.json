@@ -1,0 +1,7 @@
+{
+ "entry": "method_handle_scan",
+ "expected": "ANS-6d1f2a9e0b7c3458",
+ "_why": "Gate.reveal(): (Api) Proxy.newProxyInstance(loader, {Api.class}, new H()).token(); H.invoke switches on m.getName(): 'token' -> k.q(0x2c), anything else -> decoy k.z()",
+ "generator_cmd": "python3 tests/data/android_fixtures/pmh_src/gen_pmh.py proxy tests/data/android_fixtures/pmh_proxy.apk  # javac --release 8 + Android dx --min-sdk-version=26 (dex 038) + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/pmh_src/oracle.sh tests/data/android_fixtures/pmh_proxy.apk  # d2j-baksmali opcode listing + d2j-dex2jar back to classes, RUN Gate.reveal() on the JVM -> reveal -> ANS-6d1f2a9e0b7c3458"
+}

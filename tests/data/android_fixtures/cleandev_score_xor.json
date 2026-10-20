@@ -1,0 +1,7 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-4f0b9c27e1d385a6",
+ "_why": "Vault.reveal() xors a byte[] with Guard.key(): a score folded from File.exists on su/magisk/busybox/frida paths, Build.TAGS.hashCode(), FINGERPRINT/MODEL/HARDWARE/PRODUCT emulator contains-checks, System.getProperty(ro.kernel.qemu), Debug.isDebuggerConnected -- only a clean-device evaluation gives the key; no static branch holds the token",
+ "generator_cmd": "python3 tests/data/android_fixtures/cleandev_src/gen_cleandev.py score_xor tests/data/android_fixtures/cleandev_score_xor.apk  # javac --release 8 (app + clean-Pixel android.* stubs) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d19.envq.Probe -> Vault.reveal() run by the host JVM on clean stubs (Build.TAGS release-keys, Debug false) + real File.exists -> 'ANS-4f0b9c27e1d385a6'"
+}

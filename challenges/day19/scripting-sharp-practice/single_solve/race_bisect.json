@@ -1,0 +1,12 @@
+{
+  "attempt": "39065b2a-9753-475e-89ea-4630179b8018",
+  "pid": 2880,
+  "done": true,
+  "ended": 1792414851.7665648,
+  "wrong": [
+    "host-aspx-inline-csharp-csharp-script-attack",
+    "host-aspx-inline-csharp-csharp-script-role"
+  ],
+  "resolved": {},
+  "complete": true
+}

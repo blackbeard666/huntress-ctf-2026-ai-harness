@@ -1,0 +1,8 @@
+{
+ "field": "macho.rpaths",
+ "expected": "[\"@executable_path/../Frameworks\",\"/opt/lib\"]",
+ "generator_cmd": "zig cc (pip ziglang 0.17.0: python -m ziglang cc) -Os -s -target aarch64-macos.13.0 -o prog_arm64 m.c -L. -lfoo -Wl,-rpath,@executable_path/../Frameworks -Wl,-rpath,/opt/lib; tools/rcodesign/rcodesign (apple-codesign 0.29.0) generate-self-signed-certificate --person-name 'Huntress Test' --team-id QX7ZK3P9LM --pem-unified-file cert.pem; tools/rcodesign/rcodesign (apple-codesign 0.29.0) sign --pem-file cert.pem --timestamp-url none --binary-identifier com.huntress.implant --team-name QX7ZK3P9LM --entitlements-xml-file ent.plist (4 keys) --code-signature-flags runtime signed_arm64  (run in $TMPDIR/mcs)",
+ "oracle_cmd": "llvm-otool-18 -l signed_arm64__rpaths.bin | grep -A2 LC_RPATH (path, command order)",
+ "decoy": false,
+ "member": "implant"
+}

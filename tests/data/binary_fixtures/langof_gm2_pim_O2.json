@@ -1,0 +1,10 @@
+{
+ "family": "language_of",
+ "expected_language": "modula2",
+ "expected_toolchain": "gm2",
+ "expected_source_language": "none",
+ "decoy": false,
+ "generator_cmd": "bash langof_gccfe_gen.sh   # x86_64-linux-gnu-gm2-15 -O2 hello.mod (PIM StrIO)",
+ "oracle_cmd": "bash langof_gccfe_oracle.sh langof_gm2_pim_O2.bin   # NEEDED libm2pim.so.20+libm2iso.so.20+libstdc++, nm -D: 4 m2pim_M2RTS_* symbols, .comment GCC 15.2.0 -> Modula-2 built by gm2",
+ "expected_ambiguous_with": []
+}

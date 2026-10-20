@@ -1,0 +1,8 @@
+{
+ "field": "plist.top_level_keys",
+ "expected": "[\"CFBundleName\",\"CFBundleIdentifier\",\"CFBundleExecutable\",\"CFBundleShortVersionString\",\"CFBundleVersion\",\"LSMinimumSystemVersion\",\"LSUIElement\",\"NSAppTransportSecurity\",\"BuildDate\"]",
+ "generator_cmd": "python3 -I -c 'import plistlib,datetime; plistlib.dumps({CFBundleName,CFBundleIdentifier,CFBundleExecutable,CFBundleShortVersionString,CFBundleVersion,LSMinimumSystemVersion,LSUIElement,NSAppTransportSecurity:{NSAllowsArbitraryLoads},BuildDate}, fmt=FMT_BINARY, sort_keys=False)'  (stdlib plistlib WRITER)",
+ "oracle_cmd": "exiftool -j info_bin.bin -> tags in stored order CFBundleName..LSUIElement, NSAppTransportSecurity* (nested dict, flattened), BuildDate",
+ "decoy": false,
+ "member": "info_bin.bin"
+}

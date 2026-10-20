@@ -1,0 +1,26 @@
+{
+ "entry": "overlay_header_facts(data, 'PK19')",
+ "magic": "PK19",
+ "expected": {
+  "has_overlay": true,
+  "image_end": 14328,
+  "overlay_magic": "PK19",
+  "overlay_offset": 14328,
+  "overlay_size": 106,
+  "overlay_at_image_end": true,
+  "overlay_version": 1,
+  "k1_hex": "0x5a",
+  "k2_hex": "0xc3",
+  "pad": 0,
+  "packed_length": 62,
+  "unpacked_sha256": "6d83856bfb015aecf183f21da322012cc064c3ca3c6f7828791a8362471320dc",
+  "packed_sha256": "dace79208e438f82bd20631f5f7763f880281e72b283e84ccc7f6ccf64868660",
+  "unpacked_length": 62,
+  "unpacked_sha256_ok": true
+ },
+ "decoy": false,
+ "note": "synthetic PK19 overlay appended at the ELF image end",
+ "generator_cmd": "bash tests/data/binary_fixtures/ovhdr_gen.sh   # gcc -Os -s host + perl pack/Digest::SHA PK19 writer (HCFG crc32 in pure perl)",
+ "oracle_cmd": "bash tests/data/binary_fixtures/ovhdr_oracle.sh tests/data/binary_fixtures/ovhdr_pk19_synth.bin PK19   # readelf -hW, grep -obaF, od, dd|sha256sum; + lief Binary.has_overlay",
+ "unpacked_length_oracle": "PK19 transform is byte-for-byte: unpacked length = packed_length = 12 + len(json payload) written by the generator"
+}

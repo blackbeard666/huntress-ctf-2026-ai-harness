@@ -1,0 +1,8 @@
+{
+ "field": "plist.value_ns_app_transport_security_ns_allows_arbitrary_loads",
+ "expected": "true",
+ "generator_cmd": "python3 -I -c 'import plistlib,datetime; plistlib.dumps({CFBundleName,CFBundleIdentifier,CFBundleExecutable,CFBundleShortVersionString,CFBundleVersion,LSMinimumSystemVersion,LSUIElement,NSAppTransportSecurity:{NSAllowsArbitraryLoads},BuildDate}, fmt=FMT_XML, sort_keys=False)'  (stdlib plistlib WRITER)",
+ "oracle_cmd": "exiftool -j info_xml.bin -> NSAppTransportSecurityNSAllowsArbitraryLoads true",
+ "decoy": false,
+ "member": "Contents/Info.plist"
+}

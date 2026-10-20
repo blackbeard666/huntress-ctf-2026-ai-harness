@@ -1,0 +1,8 @@
+{
+ "field": "rust.rustc_version",
+ "expected": "none",
+ "generator_cmd": "echo 'int main(){return 0;}' | gcc -O2 -x c - -o c_x64  (gcc 15.2.0 Ubuntu)",
+ "oracle_cmd": "readelf -p .comment decoy_c_elf__rustc_version.bin  (only 'GCC: (Ubuntu 15.2.0-16ubuntu1) 15.2.0')",
+ "decoy": true,
+ "member": "c_x64"
+}

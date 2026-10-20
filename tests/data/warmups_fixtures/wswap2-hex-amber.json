@@ -1,0 +1,9 @@
+{
+ "codec": "wswap2-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "694e65637720726f206b65646f636964676e74206968207361776d72707520216f5473206c6f6576202c75736d6274697420696820737865636120746e61777372657420206f687420656147656d4d20736165743a726120626d7265662d6c616f632d6e3234",
+ "generator_cmd": "printf %s \"$plain\" | dd conv=swab status=none | xxd -p | tr -d '\\n'  # coreutils dd swaps every byte pair (16-bit words)",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -e 'print pack(\"v*\", unpack(\"n*\", pack(\"H*\", <STDIN>)))'  # perl: read BE u16, write LE u16",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

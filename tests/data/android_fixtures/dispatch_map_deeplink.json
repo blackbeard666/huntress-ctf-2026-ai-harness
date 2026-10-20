@@ -1,0 +1,7 @@
+{
+ "entry": "dispatch_key_scan",
+ "expected": "ANS-d4c19b07e3a6f285",
+ "_why": "Router.ROUTES HashMap<String,Class> built in <clinit> (alpha/beta/gamma/delta); dispatch(key) -> Class.newInstance() -> Handler.run(); manifest intent-filter pathPrefix /route/gamma supplies the key; alpha/beta handlers return decoy tokens",
+ "generator_cmd": "python3 tests/data/android_fixtures/dispatch_src/gen_dispatch.py map_deeplink tests/data/android_fixtures/dispatch_map_deeplink.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh; manifest by apktool-bundled aapt2 link -I android-framework.jar; python zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/dispatch_src/oracle.sh tests/data/android_fixtures/dispatch_map_deeplink.apk  # key from `aapt dump xmltree` pathPrefix / python json; d2j-dex2jar back to classes and RUN the real dispatcher on the JVM -> Router.dispatch(gamma) -> ANS-d4c19b07e3a6f285"
+}

@@ -1,0 +1,11 @@
+{
+ "codec": "base64url-nopad(utf-16le)",
+ "plain": null,
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwISBUbyBzb2x2ZSwgc3VibWl0IHRoaXM",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup! To solve, submit this' | basenc --base64url -w0 | tr -d =  # UTF-8 impostor, no NUL rhythm",
+ "oracle_cmd": "s=\"$encoded\"; while [ $(( ${#s} % 4 )) -ne 0 ]; do s=\"$s=\"; done; printf %s \"$s\" | basenc --base64url -d | od -An -tx1 | tr -s ' ' '\\n' | grep -c '^00$'  # 0 NUL bytes -> not UTF-16 -> none",
+ "oracle_plain": null,
+ "oracle_nul_bytes": 0
+}

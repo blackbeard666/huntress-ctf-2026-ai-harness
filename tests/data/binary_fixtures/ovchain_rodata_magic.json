@@ -1,0 +1,27 @@
+{
+ "entry": "overlay_chain(data)",
+ "encoding": "pk19-overlay-chain",
+ "expected": {
+  "layer_count": 1,
+  "decoy_offsets": [
+   8196
+  ],
+  "decoy_count": 1,
+  "overlay_offset": 14464,
+  "overlay_size": 97,
+  "final_overlay_offset": 14464,
+  "final_overlay_depth": 0,
+  "final_overlay_magic": "PK19",
+  "payload_kind": "overlay",
+  "hcfg_offset": 0,
+  "config": {
+   "campaign": "OC-B",
+   "mutex": "Global\\OCB"
+  },
+  "unpacked_sha256": "99c376dab56626ddc194ab5d5e91180285e5d2b01ed200d44cf1aa4677a89dde"
+ },
+ "decoy": false,
+ "note": "(b) 'PK19' string in .rodata (memcmp target) before the real overlay",
+ "generator_cmd": "bash tests/data/binary_fixtures/ovchain_gen.sh   # gcc -Os -s hosts + perl pack/Digest::SHA/Compress::Zlib PK19 + HCFG writer",
+ "oracle_cmd": "python3 -I tests/data/binary_fixtures/ovchain_oracle.py tests/data/binary_fixtures/ovchain_rodata_magic.bin   # pyelftools image end, re.finditer hits, hashlib, zlib; cross-checked with grep -obaF PK19 / readelf -SW"
+}

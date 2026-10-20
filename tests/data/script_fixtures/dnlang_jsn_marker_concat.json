@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=jscript_net|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=vbscript|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=JSCRIPT_NET-1d27f436|url=https://jscript_net-1d27f4363c.example.invalid/stage|file_path=/tmp/huntress-jscript_net/.1d27f4363ca06251.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I dnlang_gen.py challenges/day19/scripting-sharp-practice/single_solve/work/extracted/evidence/polyglot-csharp_script-staged-chain.csx jsn_marker_concat dnlang_jsn_marker_concat.js  (D19 csx v=3 plan decoded with binascii/base64, language renamed, re-encoded under its HB64 tag, emitted in this syntax)",
+ "oracle_cmd": "{ echo 'const print=s=>process.stdout.write(s), Hashtable=Object;'; sed -E -e '/^import /d' -e 's/ : (String|Hashtable|byte\\[\\])//g' -e 's/Encoding\\.ASCII\\.GetBytes/Buffer.from/' dnlang_jsn_marker_concat.js; } > j.cjs && node j.cjs | xxd -r -p | base64 -d   (node v24.21.0 after stripping JScript.NET type annotations / imports (no jsc on Linux); coreutils xxd/base64/tr)",
+ "note": "expected = the compiler/interpreter-evaluated descriptor through its tag's layers, not lib.codec"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "bytecode_vm_scan",
+ "expected": "ANS-e1c470b9d28f6a35",
+ "_why": "Gate.show() logs via java.util.logging (unknown invoke: the caller cannot be evaluated) then new Machine().exec(PROGRAM): PROGRAM is a base64 const-string, opcode numbering permuted, Base64-decoded inside the VM method",
+ "generator_cmd": "python3 tests/data/android_fixtures/vmbc_src/gen_vmbc.py b64_param tests/data/android_fixtures/vmbc_b64_param.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/vmbc_src/oracle.sh tests/data/android_fixtures/vmbc_b64_param.apk  # d2j-dex2jar back to classes, RUN Vault.token()/Gate.show() on the JVM -> ANS-e1c470b9d28f6a35"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "u32le-c-array",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-15",
+ "encoded": "0x6563694e, 0x726f7720, 0x6564206b, 0x69646f63, 0x7420676e, 0x20736968, 0x6d726177, 0x20217075, 0x73206f54, 0x65766c6f, 0x7573202c, 0x74696d62, 0x69687420, 0x78652073, 0x20746361, 0x77736e61, 0x74207265, 0x6874206f, 0x61472065, 0x4d20656d, 0x65747361, 0x6a203a72, 0x2d656461, 0x6574746f, 0x35312d72",
+ "generator_cmd": "printf %s \"$plain\" | od -An -v -tx4 --endian=little | tr -s ' \\n' ' ' | sed 's/^ //;s/ $//;s/\\([0-9a-f]\\{8\\}\\)/0x\\1,/g;s/,$//'  # GNU od uint32 LE hex words, sed adds the 0x / ', ' C-array form",
+ "oracle_cmd": "perl -e 'print pack(\"V*\", map { hex } split /,\\s*/, $ARGV[0])' \"$encoded\" | tr -d '\\0'  # perl pack V* (uint32 LE)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-15",
+ "expected": "match"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "flattened_cfg_scan",
+ "expected": "ANS-7c3e91f0a2d845b6",
+ "decoy": false,
+ "_why": "static F.build(int seed): sparse-switch flattened StringBuilder appends, xor state updates, a 16000-iteration junk-loop case (96k Dalvik steps > dex_eval_scan's 50k); seed only from the call site show(): build(2819). dex_eval_scan -> []",
+ "generator_cmd": "python3 tests/data/android_fixtures/fcf_src/gen_fcf.py param_seed tests/data/android_fixtures/fcf_param_seed.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/fcf_src/oracle.sh tests/data/android_fixtures/fcf_param_seed.apk  # d2j-dex2jar back to classes, RUN show(PrintStream) on the JVM -> prints ANS-7c3e91f0a2d845b6"
+}

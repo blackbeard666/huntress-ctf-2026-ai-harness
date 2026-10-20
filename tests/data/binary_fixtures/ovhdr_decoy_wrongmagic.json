@@ -1,0 +1,18 @@
+{
+ "entry": "overlay_header_facts(data, 'PK19')",
+ "magic": "PK19",
+ "expected": {
+  "has_overlay": true,
+  "image_end": 14328,
+  "overlay_magic": "none",
+  "overlay_offset": "none",
+  "k1_hex": "none",
+  "packed_length": "none",
+  "unpacked_sha256": "none"
+ },
+ "decoy": true,
+ "note": "PK18 overlay (wrong magic): has_overlay true, PK19 fields none",
+ "generator_cmd": "bash tests/data/binary_fixtures/ovhdr_gen.sh   # gcc -Os -s host + perl pack/Digest::SHA PK19 writer (HCFG crc32 in pure perl)",
+ "oracle_cmd": "bash tests/data/binary_fixtures/ovhdr_oracle.sh tests/data/binary_fixtures/ovhdr_decoy_wrongmagic.bin PK19   # readelf -hW, grep -obaF, od, dd|sha256sum; + lief Binary.has_overlay",
+ "unpacked_length_oracle": "PK19 transform is byte-for-byte: unpacked length = packed_length = 12 + len(json payload) written by the generator"
+}

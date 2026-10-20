@@ -1,0 +1,8 @@
+{
+ "entry": "flattened_cfg_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "param_seed layout, token one hex digit short (ANS-7c3e91f0a2d845b): no valid token",
+ "generator_cmd": "python3 tests/data/android_fixtures/fcf_src/gen_fcf.py decoy_nearmiss tests/data/android_fixtures/fcf_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/fcf_src/oracle.sh tests/data/android_fixtures/fcf_decoy_nearmiss.apk  # d2j-dex2jar back to classes, RUN show(PrintStream) on the JVM -> prints ANS-7c3e91f0a2d845b (15 hex: near miss)"
+}

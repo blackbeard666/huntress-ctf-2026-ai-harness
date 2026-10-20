@@ -1,0 +1,8 @@
+{
+ "field": "go.vcs_revision",
+ "expected": "7c1e443ef4657588d34984a116cb4768e10c2e45",
+ "generator_cmd": "cd $TMPDIR/gofx/app && git init && git commit; export GOPROXY=off GOTOOLCHAIN=local; go1.26.0: GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -buildvcs=true -trimpath -ldflags='-s -w -X main.version=1.4.2' -o go_linux_arm64 .  (module huntress.generated/collector, replace dep => ../dep)",
+ "oracle_cmd": "go version -m linux_arm64__vcs_revision.bin | grep vcs.revision",
+ "decoy": false,
+ "member": "go_linux_arm64"
+}

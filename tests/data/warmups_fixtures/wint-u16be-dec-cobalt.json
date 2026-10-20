@@ -1,0 +1,9 @@
+{
+ "codec": "u16be-dec",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "encoded": "20073 25445 8311 28530 27424 25701 25455 25705 28263 8308 26729 29472 30561 29293 30064 8480 21615 8307 28524 30309 11296 29557 25197 26996 8308 26729 29472 25976 24931 29728 24942 29559 25970 8308 28448 29800 25888 18273 28005 8269 24947 29797 29242 8291 28514 24940 29741 26725 29295 28205 14135",
+ "generator_cmd": "printf %s \"$plain\" | od -An -v -tu2 --endian=big | tr -s ' \\n' ' ' | sed 's/^ //;s/ $//'  # GNU coreutils od: unsigned 16-bit big-endian words as decimal",
+ "oracle_cmd": "python3 -I -c 'import struct,sys; v=sys.argv[1].split(); print(struct.pack(\">%dH\"%len(v),*map(int,v)).rstrip(b\"\\0\").decode())' \"$encoded\"  # stdlib struct.pack '>H'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "expected": "match"
+}

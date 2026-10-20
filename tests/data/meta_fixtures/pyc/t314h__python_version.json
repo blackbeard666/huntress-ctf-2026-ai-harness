@@ -1,0 +1,8 @@
+{
+ "field": "pyc.python_version",
+ "expected": "3.14",
+ "generator_cmd": "python3.14 -I -c \"py_compile.compile('tool.py','tool.pyc',invalidation_mode=PycInvalidationMode.CHECKED_HASH)\"",
+ "oracle_cmd": "python3.14 -I -c \"importlib.util.MAGIC_NUMBER.hex()\" -> 2b0e0d0a (3627); xxd -s 4 -l 4 -> 0300 0000 (python3.14 wrote it)",
+ "decoy": false,
+ "member": "tool.cpython-314.pyc"
+}

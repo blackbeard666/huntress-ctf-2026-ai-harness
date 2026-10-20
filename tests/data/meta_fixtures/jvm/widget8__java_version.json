@@ -1,0 +1,8 @@
+{
+ "field": "jvm.java_version",
+ "expected": "8",
+ "generator_cmd": "javac --release 8 -d o8 com/example/Widget.java Plain.java (Widget: public final class extends AbstractList<String> implements Serializable, static final long + double field)",
+ "oracle_cmd": "file Widget.class -> version 52.0 (Java 1.8)",
+ "decoy": false,
+ "member": "Widget.class"
+}

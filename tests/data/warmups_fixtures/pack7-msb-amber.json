@@ -1,0 +1,9 @@
+{
+ "codec": "pack7-msb",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-23",
+ "encoded": "9da71e541df7f2d683265c7bf269dd9d074d1a79a0ef8796debc10a0a9bd073dfb3b6558839f5c5b74f441d3469e6832f8c38fa20c3bb9f7cbc9074de83a68ca823e1db9504dc3cfa65e4e9061db8b2f25b9b0ecc7bf72d64cc0",
+ "generator_cmd": "perl -e 'my $b=join \"\", map { sprintf \"%07b\", ord } split //, $ARGV[0]; $b.=\"0\" x (-length($b) % 8); print unpack(\"H*\", pack(\"B*\", $b))' \"$plain\"  # perl pack 'B*' of %07b ASCII codes run together big-endian, zero-padded to whole octets",
+ "oracle_cmd": "python3 -I -c \"import sys;h=sys.argv[1].replace(\\\" \\\",\\\"\\\");n=len(h)*4;b=format(int(h,16),\\\"0%db\\\"%n);print(\\\"\\\".join(chr(int(b[i:i+7],2)) for i in range(0,n-6,7)).rstrip(\\\"\\\\0\\\"))\" \"$encoded\"  # python3 int(hex,16) -> zero-filled bit string -> 7-bit groups -> chr, trailing NUL fill stripped",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-23",
+ "expected": "match"
+}

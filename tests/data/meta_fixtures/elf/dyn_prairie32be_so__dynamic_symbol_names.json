@@ -1,0 +1,8 @@
+{
+ "field": "elf.dynamic_symbol_names",
+ "expected": "[\"puts\",\"collector_init\"]",
+ "generator_cmd": "python3 -I mk_elf32_msb.py prairie32be.so  (stdlib struct WRITER, source saved as tests/data/meta_fixtures/elf/dyn_prairie32be_writer.py.txt: ELFCLASS32 ELFDATA2MSB EM_PPC ET_DYN)  (run in $TMPDIR/elfdyn)",
+ "oracle_cmd": "readelf -a -W dyn_prairie32be_so__dynamic_symbol_names.bin | sed -n \"/Symbol table '.dynsym'/,/^$/p\"  (Name col, @VERSION dropped)",
+ "decoy": false,
+ "member": "prairie32be.so"
+}

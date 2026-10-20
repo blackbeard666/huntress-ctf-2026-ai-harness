@@ -1,0 +1,8 @@
+{
+ "field": "macho.cs_identifier",
+ "expected": "com.huntress.implant",
+ "generator_cmd": "llvm-lipo-18 -create prog_x86 signed_arm64 -output fat_signed (slices: x86_64 unsigned @4096, arm64 rcodesign-signed @32768)  (run in $TMPDIR/mcs)",
+ "oracle_cmd": "tools/rcodesign/rcodesign (apple-codesign 0.29.0) print-signature-info lipo_fat_x86_signedarm64__cs_identifier.bin (macho-index:1 = arm64, the only signed slice)",
+ "decoy": false,
+ "member": "universal_tool"
+}

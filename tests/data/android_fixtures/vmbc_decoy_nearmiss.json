@@ -1,0 +1,8 @@
+{
+ "entry": "bytecode_vm_scan",
+ "expected": null,
+ "_why": "same VM + fill-array program as vmbc_spin_fill, but the emitted value has only 15 hex digits (ANS-3b9e07d1f4a6c58)",
+ "generator_cmd": "python3 tests/data/android_fixtures/vmbc_src/gen_vmbc.py decoy_nearmiss tests/data/android_fixtures/vmbc_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/vmbc_src/oracle.sh tests/data/android_fixtures/vmbc_decoy_nearmiss.apk  # d2j-dex2jar back to classes, RUN Vault.token()/Gate.show() on the JVM -> ANS-3b9e07d1f4a6c58 (15 hex: no valid token)",
+ "decoy": true
+}

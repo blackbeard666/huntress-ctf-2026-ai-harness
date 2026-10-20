@@ -1,0 +1,17 @@
+{
+ "plans": {
+  "a.ps1": "v=3|language=powershell|next_language=python|steps=dispatch_process",
+  "b.py": "v=3|language=python|next_language=bash|steps=dispatch_process",
+  "c.py": "v=3|language=python|steps=collect_files",
+  "d.sh": "v=3|language=bash|steps=collect_files"
+ },
+ "expected": {
+  "resolves:a.ps1": null,
+  "terminal_language": null,
+  "chain": null
+ },
+ "decoy": true,
+ "oracle_cmd": "awk -F'|' '/language=python/' plans | wc -l -> 2 python members: a.ps1's handoff is ambiguous (no single chain/terminal)",
+ "entry": "handoff_graph",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/handoff_graph/hg_gen.py tests/data/script_fixtures/handoff_graph (hg_decoy_branch)"
+}

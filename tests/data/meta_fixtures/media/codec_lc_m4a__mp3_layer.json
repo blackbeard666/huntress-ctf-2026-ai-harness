@@ -1,0 +1,8 @@
+{
+ "field": "media.mp3_layer",
+ "expected": "none",
+ "generator_cmd": ".venv/lib/python3.12/site-packages/static_ffmpeg/bin/linux/ffmpeg -f lavfi -i sine=f=440:d=1:r=48000 -ac 2 -c:a aac -b:a 96k lc.m4a  (static_ffmpeg wheel, native aac encoder)",
+ "oracle_cmd": "exiftool -j -MPEG:AudioLayer lc.m4a -> no MPEG audio group (an MP4/AAC impostor)",
+ "decoy": true,
+ "member": "lc.m4a"
+}

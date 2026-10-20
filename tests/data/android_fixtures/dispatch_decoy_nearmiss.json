@@ -1,0 +1,8 @@
+{
+ "entry": "dispatch_key_scan",
+ "expected": null,
+ "_why": "map_deeplink layout but pathPrefix /route/delta selects Hd, which returns the 15-hex near-miss ANS-5c2e9a07d1b3f48; the unselected alpha/beta/gamma handlers hold valid-looking tokens that must NOT be reported",
+ "generator_cmd": "python3 tests/data/android_fixtures/dispatch_src/gen_dispatch.py decoy_nearmiss tests/data/android_fixtures/dispatch_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh; manifest by apktool-bundled aapt2 link -I android-framework.jar; python zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/dispatch_src/oracle.sh tests/data/android_fixtures/dispatch_decoy_nearmiss.apk  # key from `aapt dump xmltree` pathPrefix / python json; d2j-dex2jar back to classes and RUN the real dispatcher on the JVM -> Router.dispatch(delta) -> ANS-5c2e9a07d1b3f48 (15 hex: no valid token)",
+ "decoy": true
+}

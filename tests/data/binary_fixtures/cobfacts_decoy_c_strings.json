@@ -1,0 +1,21 @@
+{
+ "family": "cobol_facts",
+ "encoding": "none",
+ "expected_offset": "none",
+ "expected_config": "none",
+ "expected_facts": {
+  "has_cobol_runtime": "false",
+  "cobol_runtime_version": "none",
+  "source_file": "none",
+  "program_id": "none",
+  "needed": [
+   "libc.so.6"
+  ],
+  "imports": [],
+  "libcob_soname": "none"
+ },
+ "decoy": true,
+ "generator_cmd": "sh cobfacts_gen.sh   # D19 member byte copy; real GnuCOBOL 3.2 cobc -x -O2 (tools/gnucobol/root from apt-get download gnucobol3 libcob4-dev libcob4t64 + dpkg-deb -x); gcc C string decoy",
+ "oracle_cmd": "python3 cobfacts_oracle.py cobfacts_decoy_c_strings.bin   # readelf -dW, nm -D, objdump -d -M intel arg loads + pyelftools string read",
+ "note": "plain gcc C image with libcob.so.1 / cob_set_programid / 1.5.2 / variant-000.cob / BR19 only as string data -> no COBOL runtime, every field absent"
+}

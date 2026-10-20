@@ -1,0 +1,8 @@
+{
+ "field": "info_plist.cf_bundle_identifier",
+ "expected": "com.example.SyncAgent",
+ "generator_cmd": "python3 -I -c 'import plistlib,datetime; plistlib.dumps({CFBundleName,CFBundleIdentifier,CFBundleExecutable,CFBundleShortVersionString,CFBundleVersion,LSMinimumSystemVersion,LSUIElement,NSAppTransportSecurity:{NSAllowsArbitraryLoads},BuildDate}, fmt=FMT_XML, sort_keys=False)'  (stdlib plistlib WRITER)",
+ "oracle_cmd": "exiftool -j info_xml_bundle_id.bin -> CFBundleIdentifier 'com.example.SyncAgent'",
+ "decoy": false,
+ "member": "Contents/Info.plist"
+}

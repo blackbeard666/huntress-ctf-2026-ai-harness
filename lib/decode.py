@@ -262,6 +262,16 @@ def decode_chunk(p, _nested=False):
             cands.append((_ascii(bytes(int(x) for x in toks)), 3 if padded else 1))
     if _HEXS.match(t):
         cands.append((_ascii(binascii.unhexlify(t)), 4))
+        b = binascii.unhexlify(t)
+        if _max_day() >= 19 and len(b) % 2 == 0 and (b[:2] in (b"\xff\xfe", b"\xfe\xff") or b[1::2].count(0) == len(b) // 2
+                                                       or b[0::2].count(0) == len(b) // 2):
+            # HEX OF UTF-16 (warmups Day 19 "Little Things", "the little one goes first": 'fffe4e006900...' = BOM +
+            # UTF-16LE of the sentence, lowercase, no separators); BOM-less LE/BE by the NUL half
+            enc = "utf-16" if b[:2] in (b"\xff\xfe", b"\xfe\xff") else "utf-16-le" if b[1::2].count(0) else "utf-16-be"
+            try:
+                cands.append((_ascii(b.decode(enc).encode("utf-8")), 0))
+            except (UnicodeDecodeError, UnicodeEncodeError):
+                pass
     if _B32S.match(t) and len(t) % 8 == 0:
         try:
             cands.append((_ascii(base64.b32decode(t)), 5))

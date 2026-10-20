@@ -1,0 +1,2 @@
+var cfg = "SENGRwEAUAAAAA"; // NEKO source text, not bytecode
+$print(cfg);

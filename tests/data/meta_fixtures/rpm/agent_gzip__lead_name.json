@@ -1,0 +1,8 @@
+{
+ "field": "rpm.lead_name",
+ "expected": "deploy-agent-3.4.1-2.el9",
+ "generator_cmd": "rpmbuild 6.0.1 -bb --define '_binary_payload w9.gzdio' agent.spec (Name deploy-agent, Version 3.4.1, Release 2.el9, BuildArch noarch; rpm debs unpacked under tools/rpm)",
+ "oracle_cmd": "dd if=/home/testpwn/huntress-2026/.run/tmp/rpmgen/agent.rpm bs=1 skip=10 count=66 2>/dev/null | tr -d '\\0'",
+ "decoy": false,
+ "member": "deploy-agent-3.4.1-2.el9.noarch.rpm"
+}

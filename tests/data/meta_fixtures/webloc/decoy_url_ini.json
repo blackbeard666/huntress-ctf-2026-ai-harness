@@ -1,0 +1,8 @@
+{
+ "field": "webloc.url",
+ "expected": "none",
+ "generator_cmd": "printf '[InternetShortcut]\\r\\nURL=https://evil.example/payload.exe\\r\\n'  (Windows .url INI renamed .webloc)",
+ "oracle_cmd": "file -b -> 'MS Windows 95 Internet shortcut text'; exiftool -j -> no PLIST FileType / URL tag",
+ "decoy": true,
+ "member": "payload.webloc"
+}

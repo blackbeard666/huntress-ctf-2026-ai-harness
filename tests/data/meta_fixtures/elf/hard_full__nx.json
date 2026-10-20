@@ -1,0 +1,8 @@
+{
+ "field": "elf.nx",
+ "expected": "true",
+ "generator_cmd": "gcc -O2 -fPIE -pie -fstack-protector-strong -D_FORTIFY_SOURCE=2 -Wl,-z,relro,-z,now -o hard_full t.c  (t.c: strcpy into char buf[64] + printf; gcc 13 Ubuntu)",
+ "oracle_cmd": "readelf -lW hard_full__nx.bin | grep GNU_STACK | grep -qv \"E *0x\" && echo true || echo false",
+ "decoy": false,
+ "member": "hard_full"
+}

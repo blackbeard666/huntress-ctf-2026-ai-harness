@@ -1,0 +1,9 @@
+{
+ "codec": "z85(utf-16le-bom)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-heron-42",
+ "encoded": "%nC:[x-ISywDi?MCk#KYASx>Paok{LwDliuzVBqFx-J2Jx8<4OBo2$Ox-JhOaolP=ve$rFz2!XUz#.3YaokvvzVy)WA@ZaUyYFRUwDjmYaolD.BPt>Jz2!nIBo0A-Bo2$Ox-JhOaok%MCMqdLv/QPJaok*Izua.TCk#gOASviZBo3jVaolG-xAhPzaoj[ive$cAwDi?Mo-OP4A@ZpZwDl-JiSHo5x-JqRzVB!TC(Pz@xAhPzASy1Tzu8l*gYPoh",
+ "generator_cmd": "{ printf '\\xff\\xfe'; printf %s \"$plain\" | iconv -f UTF-8 -t UTF-16LE; } | basenc --z85 -w0  # coreutils basenc Z85 (plain chosen so BOM+UTF-16 is whole 4-byte frames)",
+ "oracle_cmd": "printf %s \"$encoded\" | basenc --z85 -d | iconv -f UTF-16 -t UTF-8",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-heron-42",
+ "expected": "match"
+}

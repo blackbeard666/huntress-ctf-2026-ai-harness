@@ -1,0 +1,8 @@
+{
+ "field": "squashfs.compression",
+ "expected": "xz",
+ "generator_cmd": "mksquashfs root xz.sqfs -comp xz -b 262144 -mkfs-time 1767225600 -all-root -noappend (squashfs-tools 4.7.5)",
+ "oracle_cmd": "TZ=UTC unsquashfs -s xz.sqfs | sed -n 's/^Compression //p'",
+ "decoy": false,
+ "member": "group-b.sqfs"
+}

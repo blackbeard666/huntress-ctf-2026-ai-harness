@@ -1,0 +1,8 @@
+{
+ "field": "wasm.custom_section_names",
+ "expected": "[]",
+ "generator_cmd": "wat2wasm 1.0.36 min.wat (module (func (export \"_start\")))",
+ "oracle_cmd": "wasm-objdump -h min.wasm -> Type Function Export Code (no Custom)",
+ "decoy": false,
+ "member": "min.wasm"
+}

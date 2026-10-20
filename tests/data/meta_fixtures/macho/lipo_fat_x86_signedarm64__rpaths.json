@@ -1,0 +1,8 @@
+{
+ "field": "macho.rpaths",
+ "expected": "[\"@loader_path\"]",
+ "generator_cmd": "llvm-lipo-18 -create prog_x86 signed_arm64 -output fat_signed (slices: x86_64 unsigned @4096, arm64 rcodesign-signed @32768)  (run in $TMPDIR/mcs)",
+ "oracle_cmd": "llvm-otool-18 -arch x86_64 -l lipo_fat_x86_signedarm64__rpaths.bin | grep -A2 LC_RPATH (first slice per llvm-otool-18 -f)",
+ "decoy": false,
+ "member": "universal_tool"
+}

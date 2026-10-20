@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-01-backup-exposure",
+  "lane": "web",
+  "name": "🌐 Back Up a Minute",
+  "ids": {
+    "single_solve": "web-exploitation-day-01-backup-exposure",
+    "time_trial": "web-exploitation-day-01-backup-exposure/time_trial",
+    "mastery": "web-exploitation-day-01-backup-exposure/mastery"
+  }
+}

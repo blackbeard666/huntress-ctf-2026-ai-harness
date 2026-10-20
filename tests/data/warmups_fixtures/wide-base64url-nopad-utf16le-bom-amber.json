@@ -1,0 +1,9 @@
+{
+ "codec": "base64url-nopad(utf-16le-bom)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-31",
+ "encoded": "__5OAGkAYwBlACAAdwBvAHIAawAgAGQAZQBjAG8AZABpAG4AZwAgAHQAaABpAHMAIAB3AGEAcgBtAHUAcAAhACAAVABvACAAcwBvAGwAdgBlACwAIABzAHUAYgBtAGkAdAAgAHQAaABpAHMAIABlAHgAYQBjAHQAIABhAG4AcwB3AGUAcgAgAHQAbwAgAHQAaABlACAARwBhAG0AZQAgAE0AYQBzAHQAZQByADoAIABhAG0AYgBlAHIALQBmAGEAbABjAG8AbgAtADMAMQA",
+ "generator_cmd": "{ printf '\\xff\\xfe'; printf %s \"$plain\" | iconv -f UTF-8 -t UTF-16LE; } | basenc --base64url -w0 | tr -d =  # glibc iconv + coreutils basenc",
+ "oracle_cmd": "s=\"$encoded\"; while [ $(( ${#s} % 4 )) -ne 0 ]; do s=\"$s=\"; done; printf %s \"$s\" | basenc --base64url -d | iconv -f UTF-16 -t UTF-8  # basenc decode + iconv BOM sniff",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-31",
+ "expected": "match"
+}

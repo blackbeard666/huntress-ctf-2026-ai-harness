@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=csharp_script|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=vbscript|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=CSHARP_SCRIPT-1d27f436|url=https://csharp_script-1d27f4363c.example.invalid/stage|file_path=/tmp/huntress-csharp_script/.1d27f4363ca06251.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I csfold_gen.py challenges/day19/scripting-sharp-practice/single_solve/work/extracted/evidence/polyglot-csharp_script-staged-chain.csx fs_concat csfold_fs_concat.fsx  (D19 csx descriptor literal re-assembled at runtime; marker line dropped)",
+ "oracle_cmd": "dotnet fsi csfold_fs_concat.fsx | xxd -r -p | base64 -d   (.NET SDK 10.0.112 F# Interactive)",
+ "note": "expected = compiler-evaluated descriptor through the specimen's own layers (coreutils base64 / xxd), not lib.codec"
+}

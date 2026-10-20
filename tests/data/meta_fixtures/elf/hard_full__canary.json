@@ -1,0 +1,8 @@
+{
+ "field": "elf.canary",
+ "expected": "true",
+ "generator_cmd": "gcc -O2 -fPIE -pie -fstack-protector-strong -D_FORTIFY_SOURCE=2 -Wl,-z,relro,-z,now -o hard_full t.c  (t.c: strcpy into char buf[64] + printf; gcc 13 Ubuntu)",
+ "oracle_cmd": "readelf --dyn-syms -W hard_full__canary.bin | grep -q __stack_chk_fail && echo true || echo false",
+ "decoy": false,
+ "member": "hard_full"
+}

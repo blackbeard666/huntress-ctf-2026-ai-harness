@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I dnlang_gen.py challenges/day19/scripting-sharp-practice/single_solve/work/extracted/evidence/polyglot-csharp_script-benign-utility.csx vb_decoy dnlang_vb_decoy.vb  (D19 csx v=3 plan decoded with binascii/base64, language renamed, re-encoded under its B64 tag, emitted in this syntax)",
+ "oracle_cmd": "dotnet new console -lang VB -o p && cp dnlang_vb_decoy.vb p/Program.vb && dotnet run --project p | base64 -d   (.NET SDK 10.0.112 VB compiler; coreutils xxd/base64/tr)",
+ "note": "benign config (theme/font/hotkey) in the same syntax: the oracle decodes it to no v=3 plan"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "u16*-dec",
+ "plain": null,
+ "encoded": "78 105 99 101 32 119 111 114 107 32 100 101 99 111 100 105 110 103 32 116 104 105 115 32 119 97 114 109 117 112 33",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup!' | od -An -v -tu1 | tr -s ' \\n' ' '  # byte-sized decimal char codes (the plain decimal codec, not packed words)",
+ "oracle_cmd": "python3 -I -c 'import sys; print(max(map(int, sys.argv[1].split())))' \"$encoded\"  # -> 119 <= 255: every token fits one byte, no 16-bit word",
+ "oracle_plain": null
+}

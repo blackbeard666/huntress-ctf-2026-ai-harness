@@ -1,0 +1,8 @@
+{
+ "field": "media.mp3_frame_count",
+ "expected": "40",
+ "generator_cmd": ".venv/lib/python3.12/site-packages/static_ffmpeg/bin/linux/ffmpeg -f lavfi -i sine=f=440:d=1:r=44100 -c:a libmp3lame -b:a 128k cbr.mp3 (CBR -> 'Info' tag); then python3 stdlib byte patch b'Lavc62.11' -> b'LAME3.100'",
+ "oracle_cmd": "mutagen XingHeader(f).frames -> 40",
+ "decoy": false,
+ "member": "lame_info.mp3"
+}

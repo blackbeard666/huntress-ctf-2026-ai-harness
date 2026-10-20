@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "pwsh -NoProfile -c \"Add-Type -TypeDefinition (Get-Content -Raw ./dn_gen_Benign.cs) -OutputAssembly ./Benign.dll -OutputType Library\"; base64 -w0 Benign.dll -> [System.Reflection.Assembly]::Load([Convert]::FromBase64String('...'))",
+ "oracle_cmd": "python3 -I -c \"import re,sys,base64;open(sys.argv[2],'wb').write(base64.b64decode(re.search(r\\\"FromBase64String\\('([^']+)'\\\",open(sys.argv[1]).read()).group(1)))\" dn_ps_asm_decoy_benign.ps1 d.dll && ilspycmd d.dll | grep -o 'return \"[^\"]*\"'; ilspycmd --list-resources d.dll  # two benign literals, no resources, no plan",
+ "note": "DECOY: a real managed assembly with only benign user strings -> no plan"
+}

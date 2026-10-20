@@ -1,0 +1,8 @@
+{
+ "field": "rpm.name",
+ "expected": "none",
+ "generator_cmd": "dpkg-deb --root-owner-group -Zgzip --build pkg agent_gz.deb, renamed .rpm",
+ "oracle_cmd": "LD_LIBRARY_PATH=tools/rpm/root/usr/lib/x86_64-linux-gnu tools/rpm/root/usr/bin/rpm --rcfile tools/rpm/root/usr/lib/rpm/rpmrc --dbpath $TMPDIR/rpmdb -qp --qf '%{NAME}' /home/testpwn/huntress-2026/.run/tmp/rpmgen/decoy.rpm || echo none",
+ "decoy": true,
+ "member": "deploy-agent.rpm"
+}

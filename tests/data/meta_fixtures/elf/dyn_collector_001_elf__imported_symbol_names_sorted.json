@@ -1,0 +1,8 @@
+{
+ "field": "elf.imported_symbol_names_sorted",
+ "expected": "[\"__gmon_start__\",\"__libc_start_main\",\"fwrite\"]",
+ "generator_cmd": "cp challenges/day19/metadata-little-endian-on-the-prairie/single_solve/work/extracted/metadata-day-19-evidence/collector-001.elf .  (the D19 GM artifact: x86-64 ET_EXEC, stripped, GCC 13.3.0 Ubuntu)  (run in $TMPDIR/elfdyn)",
+ "oracle_cmd": "readelf -a -W dyn_collector_001_elf__imported_symbol_names_sorted.bin | .dynsym rows with Ndx UND, Name sorted",
+ "decoy": false,
+ "member": "collector-001.elf"
+}

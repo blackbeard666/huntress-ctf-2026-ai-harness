@@ -1,0 +1,8 @@
+{
+ "field": "java.super_class",
+ "expected": "java/util/AbstractList",
+ "generator_cmd": "javac --release 21 -d o21 com/example/Widget.java Plain.java (javac 21.0.12)",
+ "oracle_cmd": "javap -v Widget.class -> super_class: #2 // java/util/AbstractList",
+ "decoy": false,
+ "member": "Widget.class"
+}

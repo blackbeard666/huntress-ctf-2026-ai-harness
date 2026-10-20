@@ -1,0 +1,16 @@
+{
+ "entry": "overlay_spec+overlay_spec_unpack",
+ "question": "In evidence.zip, Use all d20-- members in ZIP central-directory order. Find the final RS20 overlay. Read k1 at +5, packed length u32le at +8, the 32-byte unpacked SHA-256 at +12, and packed bytes at +44. For each packed byte compute ror8(byte, i % 8) XOR k1; verify the unpacked SHA-256 and use the HCFG record at unpacked offset 0. Locate the unique CRC32-valid HCFG record: bytes 0..3 are ASCII HCFG, byte 4 is version, byte 5 is the XOR key, bytes 6..7 are the little-endian payload length, bytes 8..11 are the little-endian CRC32 of the decoded payload, and the payload begins at byte 12. XOR every payload byte with the one-byte key, verify CRC32, then parse the decoded UTF-8 JSON.",
+ "expected_offset": 14464,
+ "expected_size": 212,
+ "expected_config": {
+  "campaign": "BR20-026",
+  "domain": "rs-026.day20.example.invalid",
+  "mutex": "Global\\HuntressRS20_026",
+  "url": "https://rs-026.day20.example.invalid/api/BR20-026"
+ },
+ "decoy": false,
+ "note": "",
+ "generator_cmd": "gcc -Os -s -o tests/data/binary_fixtures/rs20_host.elf tests/data/binary_fixtures/rs20_host.c && python3 tests/data/binary_fixtures/rs20_gen.py",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/rs20_oracle.py ovspec_rs20_ror_idx"
+}

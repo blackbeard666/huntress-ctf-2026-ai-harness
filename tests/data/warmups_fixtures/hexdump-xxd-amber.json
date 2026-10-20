@@ -1,0 +1,9 @@
+{
+ "codec": "hexdump-xxd",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-23",
+ "encoded": "00000000: 4e69 6365 2077 6f72 6b20 6465 636f 6469  Nice work decodi\n00000010: 6e67 2074 6869 7320 7761 726d 7570 2120  ng this warmup! \n00000020: 546f 2073 6f6c 7665 2c20 7375 626d 6974  To solve, submit\n00000030: 2074 6869 7320 6578 6163 7420 616e 7377   this exact answ\n00000040: 6572 2074 6f20 7468 6520 4761 6d65 204d  er to the Game M\n00000050: 6173 7465 723a 2061 6d62 6572 2d66 616c  aster: amber-fal\n00000060: 636f 6e2d 3233                           con-23",
+ "generator_cmd": "printf %s \"$plain\" | xxd",
+ "oracle_cmd": "printf \"%s\\n\" \"$encoded\" | xxd -r  # vim xxd reverter",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-23",
+ "expected": "match"
+}

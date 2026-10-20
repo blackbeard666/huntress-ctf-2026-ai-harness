@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_has_b_frames",
+ "expected": "2",
+ "generator_cmd": "GM artifact D18 metadata-day-18-evidence.zip -> video-001.mp4 (H.264 High, 320x180, 5 frames)",
+ "oracle_cmd": "PYTHONPATH=tools/pyav python3 -c 'import av; c=av.open(F); s=c.streams.video[0]; cc=s.codec_context; print(cc.reorder_depth)' -> 2 (avctx->has_b_frames)",
+ "decoy": false,
+ "member": "video-001.mp4"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "gsm7-HEX",
+ "plain": "cobalt-o",
+ "encoded": "E3B738CCA6B7DE",
+ "generator_cmd": "python3 -I -c \"import sys;sys.path.insert(0,\\\"tools/pylib-gsm\\\");from gsmmodem.pdu import encodeGsm7,packSeptets;print(packSeptets(encodeGsm7(sys.argv[1])).hex().upper())\" \"$plain\"  # python-gsmmodem-new 0.13 packSeptets: 8-char Mastery fragment = 7 octets, no spare bits",
+ "oracle_cmd": "perl -e 'my $b=unpack(\"b*\", pack(\"H*\", $ARGV[0])); print join \"\", map { chr oct(\"0b\".reverse $_) } ($b =~ /(.{7})/g)' \"$encoded\"  # perl unpack 'b*' 7-bit groups",
+ "oracle_plain": "cobalt-o",
+ "expected": "match"
+}

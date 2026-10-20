@@ -1,0 +1,8 @@
+{
+ "field": "dex.version",
+ "expected": "039",
+ "generator_cmd": "day05 mobile-backup-spill classes.dex with header version bytes patched to '039' (python3 -I stdlib: b[4:7]=b'039', sha1/adler32 recomputed via hashlib/zlib)",
+ "oracle_cmd": ".venv/bin/python -I -c \"androguard DEX(b).header\" -> magic dex\\n039\\0, checksum 0x5321df50, type_ids_size 18, method_ids_size 22; file -> Dalvik dex file version 039",
+ "decoy": false,
+ "member": "classes.dex"
+}

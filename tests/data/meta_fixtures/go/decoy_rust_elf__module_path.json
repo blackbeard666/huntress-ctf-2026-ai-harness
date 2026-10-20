@@ -1,0 +1,8 @@
+{
+ "field": "go.module_path",
+ "expected": "none",
+ "generator_cmd": "rustc 1.93.1 (distro, built from source tarball) -O r.rs -o rust_x64 && strip -o rust_x64s rust_x64",
+ "oracle_cmd": "go version -m decoy_rust_elf__module_path.bin  (-> 'not a Go executable')",
+ "decoy": true,
+ "member": "rust_x64s"
+}

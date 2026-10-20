@@ -1,0 +1,16 @@
+{
+ "entry": "overlay_spec+overlay_spec_unpack",
+ "encoding": "lzma-raw",
+ "question": "Find the final RS20 overlay. Read the key u8 at +5, packed length u32le at +8, the 32-byte unpacked SHA-256 at +12, and packed bytes at +44. For each packed byte compute byte XOR key; then raw LZMA-decompress (lc=3, lp=0, pb=2, 64 KiB dictionary), verify the unpacked SHA-256 and use the HCFG record at unpacked offset 0.",
+ "expected_offset": 2048,
+ "expected_size": 149,
+ "expected_config": {
+  "c2": "198.51.100.3:4444",
+  "campaign": "raw-lzma1",
+  "flag": "flag{lzm4_r4w_lc3}",
+  "pad": "qwerqwerqwerqwerqwerqwer"
+ },
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/binary_fixtures/pkd_gen.py   # writer: xz --format=raw --lzma1=lc=3,lp=0,pb=2,dict=64KiB",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/pkd_oracle.py pkd_lzma-raw_overlay"
+}

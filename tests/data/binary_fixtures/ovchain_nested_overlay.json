@@ -1,0 +1,25 @@
+{
+ "entry": "overlay_chain(data)",
+ "encoding": "pk19-overlay-chain",
+ "expected": {
+  "layer_count": 2,
+  "decoy_offsets": [],
+  "decoy_count": 0,
+  "overlay_offset": 14328,
+  "overlay_size": 147,
+  "final_overlay_offset": 0,
+  "final_overlay_depth": 1,
+  "final_overlay_magic": "PK19",
+  "payload_kind": "overlay>overlay",
+  "hcfg_offset": 0,
+  "config": {
+   "campaign": "OC-D",
+   "c2": "nest.example.invalid"
+  },
+  "unpacked_sha256": "9217d84b23d8008e73c3fb5a854c9aa47e19f86c9b74c5333653818b49f367c9"
+ },
+ "decoy": false,
+ "note": "(d) PK19 payload = another PK19 record (overlay inside the overlay)",
+ "generator_cmd": "bash tests/data/binary_fixtures/ovchain_gen.sh   # gcc -Os -s hosts + perl pack/Digest::SHA/Compress::Zlib PK19 + HCFG writer",
+ "oracle_cmd": "python3 -I tests/data/binary_fixtures/ovchain_oracle.py tests/data/binary_fixtures/ovchain_nested_overlay.bin   # pyelftools image end, re.finditer hits, hashlib, zlib; cross-checked with grep -obaF PK19 / readelf -SW"
+}

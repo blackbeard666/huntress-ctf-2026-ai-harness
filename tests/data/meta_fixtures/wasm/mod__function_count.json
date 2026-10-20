@@ -1,0 +1,8 @@
+{
+ "field": "wasm.function_count",
+ "expected": "2",
+ "generator_cmd": "wat2wasm 1.0.36 --debug-names mod.wat -o mod.wasm (2 imports env.log/env.mem, exports add/counter/run, data segment)",
+ "oracle_cmd": "wasm-objdump -h mod.wasm -> Function ... count: 2",
+ "decoy": false,
+ "member": "app.wasm"
+}

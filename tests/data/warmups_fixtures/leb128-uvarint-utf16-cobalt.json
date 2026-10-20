@@ -1,0 +1,9 @@
+{
+ "codec": "leb128-uleb-utf16-hex-space",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17 — ✓ 🎉",
+ "encoded": "4e 69 63 65 20 77 6f 72 6b 20 64 65 63 6f 64 69 6e 67 20 74 68 69 73 20 77 61 72 6d 75 70 21 20 54 6f 20 73 6f 6c 76 65 2c 20 73 75 62 6d 69 74 20 74 68 69 73 20 65 78 61 63 74 20 61 6e 73 77 65 72 20 74 6f 20 74 68 65 20 47 61 6d 65 20 4d 61 73 74 65 72 3a 20 63 6f 62 61 6c 74 2d 68 65 72 6f 6e 2d 31 37 20 94 40 20 93 4e 20 bc b0 03 89 bf 03",
+ "generator_cmd": "printf %s \"$plain\" | govarint uvarint utf16 hex-space  # Go 1.x stdlib encoding/binary.AppendUvarint per utf16.Encode code unit, hex.EncodeToString / %02x tokens (source: tests/data/warmups_fixtures/leb128_govarint.go; go build -o govarint)",
+ "oracle_cmd": "python3 -I -c \"import sys;from google.protobuf.internal.decoder import _DecodeVarint as D;from google.protobuf.internal.wire_format import ZigZagDecode as Z;b=bytes.fromhex(sys.argv[1].replace(' ',''));v=[];p=0\\nwhile p<len(b): x,p=D(b,p); v.append(x)\\nzz=sys.argv[2]=='zigzag';v=[Z(x) if zz else x for x in v];print(b''.join(x.to_bytes(2,'little') for x in v).decode('utf-16-le'))\" \"$encoded\" uleb  # protobuf 7.36.2 internal varint decoder (+ ZigZagDecode), code units read as UTF-16LE",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17 — ✓ 🎉",
+ "expected": "match"
+}

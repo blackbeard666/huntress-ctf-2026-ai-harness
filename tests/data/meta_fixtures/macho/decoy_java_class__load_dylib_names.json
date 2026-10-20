@@ -1,0 +1,8 @@
+{
+ "field": "macho.load_dylib_names",
+ "expected": "none",
+ "generator_cmd": "copied from tests/data/meta_fixtures/macho/decoy_java_class__uuid.bin (javac .class, 0xcafebabe impostor)  (run in $TMPDIR/mcs)",
+ "oracle_cmd": "file decoy_java_class__load_dylib_names.bin -> 'compiled Java class data' (not Mach-O)",
+ "decoy": true,
+ "member": "Payload.class"
+}

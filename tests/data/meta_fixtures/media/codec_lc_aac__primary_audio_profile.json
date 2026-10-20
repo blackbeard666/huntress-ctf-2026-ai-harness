@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_audio_profile",
+ "expected": "LC",
+ "generator_cmd": ".venv/lib/python3.12/site-packages/static_ffmpeg/bin/linux/ffmpeg -f lavfi -i sine=f=440:d=1:r=44100 -c:a aac -f adts lc.aac",
+ "oracle_cmd": ".venv/lib/python3.12/site-packages/static_ffmpeg/bin/linux/ffprobe -v error -select_streams a:0 -show_entries stream=profile -of json lc.aac -> \"profile\": \"LC\"",
+ "decoy": false,
+ "member": "lc.aac"
+}

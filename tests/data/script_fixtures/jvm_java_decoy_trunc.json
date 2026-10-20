@@ -1,0 +1,8 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "jvm",
+ "what": "DECOY: truncated reversed base64",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/jvm_host_gen.py tests/data/script_fixtures  (stdlib base64/bytes.hex writer; DECOY: truncated reversed base64)",
+ "oracle_cmd": "java tests/data/script_fixtures/jvm_java_decoy_trunc.java  (prints a 2-byte fragment, no plan)"
+}

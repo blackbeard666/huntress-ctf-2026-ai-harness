@@ -1,0 +1,8 @@
+{
+ "field": "java.constant_pool_count",
+ "expected": "55",
+ "generator_cmd": "javac --release 8 -d o8 com/example/Widget.java Plain.java (Widget: public final class extends AbstractList<String> implements Serializable, static final long + double field)",
+ "oracle_cmd": "javap -v Widget.class -> last constant '#54 = Utf8 Widget.java' => count 55 (pool has Long #27 / Double #7 two-slot entries)",
+ "decoy": false,
+ "member": "Widget.class"
+}

@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=php|role=dropper|verdict=suspicious|attack=T1140|adapter=file_writer|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=PHP-8c925453|url=https://php-8c92545388.example.invalid/stage|file_path=/tmp/huntress-php/.8c92545388b76e20.stage",
+ "decoy": false,
+ "generator_cmd": "bash tests/data/script_fixtures/nested_carrier_gen.sh  # step 2: perl writer: VBS `\"\"`-doubled lines, 70-char chunks joined by `\" & _` continuations and `& vbCrLf & _`",
+ "oracle_cmd": "perl -e '/=\\s*(\".*?)\\nWScript/s; fold `\" & _\\n \"`, `\" & vbCrLf & _\\n \"`->\\n, `\"\"`->`\"`' nested_vbs_concat.vbs | python3 -I -c 'import sys,re,base64;t=sys.stdin.read();g,x=re.search(r\"HUNTRESS_ANALYSIS_V1:(HEX|B64|HB64)-([0-9A-Za-z+/=]+)\",t).groups();print((bytes.fromhex(x) if g==\"HEX\" else base64.b64decode(bytes.fromhex(x) if g==\"HB64\" else x)).decode())'"
+}

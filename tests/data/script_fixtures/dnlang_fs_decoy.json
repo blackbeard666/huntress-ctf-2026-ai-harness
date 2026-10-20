@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I dnlang_gen.py challenges/day19/scripting-sharp-practice/single_solve/work/extracted/evidence/polyglot-csharp_script-benign-utility.csx fs_decoy dnlang_fs_decoy.fsx  (D19 csx v=3 plan decoded with binascii/base64, language renamed, re-encoded under its B64 tag, emitted in this syntax)",
+ "oracle_cmd": "dotnet fsi --nowarn:62 dnlang_fs_decoy.fsx | base64 -d   (.NET SDK 10.0.112 F# Interactive; coreutils xxd/base64/tr)",
+ "note": "benign config (theme/font/hotkey) in the same syntax: the oracle decodes it to no v=3 plan"
+}

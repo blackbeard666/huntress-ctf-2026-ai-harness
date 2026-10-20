@@ -1,0 +1,8 @@
+{
+ "field": "media.field_order",
+ "expected": "tt",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i testsrc=s=64x36:r=10:d=1 -c:v libx264 -pix_fmt yuv420p -flags +ildct+ilme -x264-params interlaced=1:tff=1 -field_order tt interlaced_tt.mp4",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i F -> 'yuv420p(top first)'; PyAV cc.field_order 2 (AV_FIELD_TT)",
+ "decoy": false,
+ "member": "interlaced_tt.mp4"
+}

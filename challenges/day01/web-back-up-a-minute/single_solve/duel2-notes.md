@@ -1,0 +1,1 @@
+- start/status/start (x5, ~13:02-13:10Z) | GM returns result=preparing, no target URL/host/artifact in body; `hctf artifact` -> invalid_delivery | blocked: no target to request

@@ -1,0 +1,10 @@
+{
+ "codec": "nibswap-hex*",
+ "plain": null,
+ "encoded": "74686520717569636b2062726f776e20666f78206a756d7073206f76657220746865206c617a7920646f67",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'the quick brown fox jumps over the lazy dog' | xxd -p | tr -d '\\n'  # PLAIN hex, not nibble-swapped",
+ "oracle_cmd": "printf %s \"$encoded\" | sed 's/\\(.\\)\\(.\\)/\\2\\1/g' | xxd -r -p | iconv -f utf-8 -t utf-8  # -> iconv: illegal input sequence at position 1: the swapped read is not UTF-8",
+ "oracle_plain": null
+}

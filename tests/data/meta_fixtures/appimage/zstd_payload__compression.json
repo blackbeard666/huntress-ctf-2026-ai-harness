@@ -1,0 +1,8 @@
+{
+ "field": "appimage.compression",
+ "expected": "zstd",
+ "generator_cmd": "gcc -Os -s rt.c -o rt; cp rt app.AppImage; printf 'AI\\\\x02' | dd of=app.AppImage bs=1 seek=8 conv=notrunc; mksquashfs root zst.sqfs -comp zstd -b 131072 -mkfs-time 1600000000 -all-root -noappend; cat zst.sqfs >> app.AppImage",
+ "oracle_cmd": "TZ=UTC unsquashfs -s -o $(readelf -h app.AppImage | awk -F: '/Start of section headers/{o=$2+0} /Size of section headers/{s=$2+0} /Number of section headers/{n=$2+0} END{print o+s*n}') app.AppImage | sed -n 's/^Compression //p'",
+ "decoy": false,
+ "member": "Deployer-x86_64.AppImage"
+}

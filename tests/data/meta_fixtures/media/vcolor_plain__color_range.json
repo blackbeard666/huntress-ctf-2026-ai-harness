@@ -1,0 +1,8 @@
+{
+ "field": "media.color_range",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i testsrc=s=64x36:r=10:d=1 -c:v libx264 -pix_fmt yuv420p plain.mp4",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i F -> 'yuv420p(progressive)' (no range/colour signalled; ffprobe json omits color_range); PyAV cc.color_range 0",
+ "decoy": true,
+ "member": "plain.mp4"
+}

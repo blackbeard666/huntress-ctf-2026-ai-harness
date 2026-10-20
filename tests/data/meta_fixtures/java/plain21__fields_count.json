@@ -1,0 +1,8 @@
+{
+ "field": "java.fields_count",
+ "expected": "1",
+ "generator_cmd": "javac --release 21 -d o21 com/example/Widget.java Plain.java (javac 21.0.12)",
+ "oracle_cmd": "javap -v Plain.class -> interfaces: 0, fields: 1, methods: 2, attributes: 1",
+ "decoy": false,
+ "member": "Plain.class"
+}

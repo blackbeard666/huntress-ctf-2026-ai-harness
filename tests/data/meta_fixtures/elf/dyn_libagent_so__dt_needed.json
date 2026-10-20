@@ -1,0 +1,8 @@
+{
+ "field": "elf.dt_needed",
+ "expected": "[\"libm.so.6\",\"libc.so.6\"]",
+ "generator_cmd": "gcc -shared -fPIC -Wl,--no-as-needed -Wl,--disable-new-dtags -Wl,-soname,libagent.so -Wl,-rpath,/usr/local/agent/lib -o libagent.so lib.c -lm -ldl  (run in $TMPDIR/elfdyn)",
+ "oracle_cmd": "readelf -a -W dyn_libagent_so__dt_needed.bin | grep 'Shared library'",
+ "decoy": false,
+ "member": "libagent.so"
+}

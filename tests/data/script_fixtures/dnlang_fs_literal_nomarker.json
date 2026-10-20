@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=fsharp_script|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=vbscript|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=FSHARP_SCRIPT-1d27f436|url=https://fsharp_script-1d27f4363c.example.invalid/stage|file_path=/tmp/huntress-fsharp_script/.1d27f4363ca06251.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I dnlang_gen.py challenges/day19/scripting-sharp-practice/single_solve/work/extracted/evidence/polyglot-csharp_script-staged-chain.csx fs_literal_nomarker dnlang_fs_literal_nomarker.fsx  (D19 csx v=3 plan decoded with binascii/base64, language renamed, re-encoded under its HB64 tag, emitted in this syntax)",
+ "oracle_cmd": "dotnet fsi --nowarn:62 dnlang_fs_literal_nomarker.fsx | xxd -r -p | base64 -d   (.NET SDK 10.0.112 F# Interactive; coreutils xxd/base64/tr)",
+ "note": "expected = the compiler/interpreter-evaluated descriptor through its tag's layers, not lib.codec"
+}

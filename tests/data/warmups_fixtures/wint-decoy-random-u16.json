@@ -1,0 +1,10 @@
+{
+ "codec": "u16*-dec",
+ "plain": null,
+ "encoded": "30647 57737 37685 57155 61569 52197 31516 30611 34281 57036 39494 13445 13101 53684 34548 32179 42279 41236 52968 13201 7168 30267 20883 10292",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -I -c 'import random; r=random.Random(11); print(\" \".join(str(r.randrange(1000, 65536)) for _ in range(24)))'  # 24 seeded random 16-bit numbers",
+ "oracle_cmd": "perl -e 'print pack(\"v*\", split / /, $ARGV[0])' \"$encoded\" | iconv -f utf-8 -t ascii  # -> illegal input sequence (and pack 'n*' likewise): not text in either byte order",
+ "oracle_plain": null
+}

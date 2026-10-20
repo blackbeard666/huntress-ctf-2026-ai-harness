@@ -1,0 +1,8 @@
+{
+ "field": "dex.checksum_u32_hex",
+ "expected": "0x3365f1fc",
+ "generator_cmd": "D8-built classes.dex extracted from the day02 mobile-deep-link-drift GM APK (unzip app.apk classes.dex)",
+ "oracle_cmd": ".venv/bin/python -I -c \"androguard.core.dex.DEX(b).header\" -> checksum 0x3365f1fc, signature 4f8e9951..., file_size 2628, string_ids_size 50, class_defs_size 3, method_ids_size 22; zlib.adler32(b[12:]) == checksum; file -> Dalvik dex file version 035",
+ "decoy": false,
+ "member": "classes.dex"
+}

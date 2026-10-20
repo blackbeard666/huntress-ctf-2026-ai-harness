@@ -1,0 +1,8 @@
+{
+ "field": "deb.version",
+ "expected": "1.0.20250521-1ubuntu1",
+ "generator_cmd": "Ubuntu archive build (apt cache: wireguard_1.0.20250521-1ubuntu1_all.deb, control.tar.zst)",
+ "oracle_cmd": "dpkg-deb -f wireguard.deb Version",
+ "decoy": false,
+ "member": "wireguard_1.0.20250521-1ubuntu1_all.deb"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "elf.bitness",
+ "expected": "64",
+ "generator_cmd": "unzip metadata-day-19-evidence.zip collector-001.elf  (the GM-built D19 artifact, single_solve; GM-verified e_machine 0x003e)  (run in $TMPDIR/elfid)",
+ "oracle_cmd": "readelf -hW hdr_d19_collector__bitness.bin | grep 'Class: ELF64'; file -b: 'ELF 64-bit LSB'",
+ "decoy": false,
+ "member": "collector-001.elf"
+}

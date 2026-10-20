@@ -1,0 +1,8 @@
+{
+ "field": "go.go_build_id",
+ "expected": "hk2b1c9X2f95rpL5X7_9/0Yp2bYgZ68dBrHKY8sep/ZsxUB8_40-ZpF5luYFDr/J-N_OtbQTsHYjE3xqpFO",
+ "generator_cmd": "cd $TMPDIR/gofx/app && git init && git commit; export GOPROXY=off GOTOOLCHAIN=local; go1.26.0: GOOS=linux GOARCH=386 CGO_ENABLED=0 go build -buildvcs=false -ldflags=-w -o go_linux_386 .",
+ "oracle_cmd": "go tool buildid linux_386__go_build_id.bin  (ELF .note.go.buildid)",
+ "decoy": false,
+ "member": "go_linux_386"
+}

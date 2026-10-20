@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "bash tests/data/script_fixtures/nested_carrier_gen.sh  # step 9: printf VBS host carrying a benign escaped JS (descriptor_00 = plain words, no marker)",
+ "oracle_cmd": "cat nested_decoy_benign.vbs  # no HUNTRESS marker / codec; descriptor literal is plain English"
+}

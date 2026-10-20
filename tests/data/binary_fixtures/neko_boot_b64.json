@@ -1,0 +1,20 @@
+{
+ "encoding": "base64",
+ "expected_format": "elf",
+ "expected_machine": "x86-64",
+ "expected_has_neko_runtime": "true",
+ "expected_bytecode_offset": "22904",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=20fc02610d49997a0d9ca86fabd17af3ec1cf5bf, for GNU/Linux 3.2.0, stripped",
+ "neko_run": "135 neko-fixture exit 0",
+ "expected_offset": 22923,
+ "expected_config": {
+  "c2": "192.0.2.33:7003",
+  "campaign": "nekoboot",
+  "sleep": 29,
+  "flag": "flag{neko_boot_ovl}"
+ },
+ "generator_cmd": "bash neko_gen.sh neko_boot_b64.bin boot '{\"c2\":\"192.0.2.33:7003\",\"campaign\":\"nekoboot\",\"sleep\":29,\"flag\":\"flag{neko_boot_ovl}\"}' 0x5a b64",
+ "oracle_cmd": "bash neko_oracle.sh neko_boot_b64.bin   # file -b, the neko 2.4.1 VM (load+run), od boot trailer, grep -obUa, coreutils base64 + perl unpack/xor, gzip trailer crc32",
+ "oracle_output": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=20fc02610d49997a0d9ca86fabd17af3ec1cf5bf, for GNU/Linux 3.2.0, stripped | 135 neko-fixture exit 0 | NEKO 22904 | 22923 | HCFG 1 90 86 3182613481 3182613481 | {\"c2\":\"192.0.2.33:7003\",\"campaign\":\"nekoboot\",\"sleep\":29,\"flag\":\"flag{neko_boot_ovl}\"}",
+ "note": "format label SPECULATIVE: 'neko_bytecode' (GM format enum d12-d19); VM machine 'none' (candidates neko/nekovm/none in neko_facts()['machine_candidates']); booted exe = host format/machine + has_neko_runtime true; expected_offset = first stored byte ('H' raw / 'S' base64) per the OFFSET LAW (grep -obUa)"
+}

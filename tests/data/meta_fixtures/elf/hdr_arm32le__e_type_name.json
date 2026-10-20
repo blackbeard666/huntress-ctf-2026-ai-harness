@@ -1,0 +1,8 @@
+{
+ "field": "elf.e_type_name",
+ "expected": "ET_EXEC",
+ "generator_cmd": "printf hello > blob; objcopy -I binary -O elf32-little blob arm32le.o; dd-patch @16 '\\x02\\x00\\x28\\x00' (ET_EXEC, EM_ARM), @24 '\\x74\\x00\\x01\\x00' (e_entry 0x10074), @36 '\\x00\\x04\\x00\\x05' (e_flags 0x05000400)  (run in $TMPDIR/elfid)",
+ "oracle_cmd": "readelf -hW hdr_arm32le__e_type_name.bin | grep 'Type: EXEC (Executable file)'",
+ "decoy": false,
+ "member": "arm32le.o"
+}

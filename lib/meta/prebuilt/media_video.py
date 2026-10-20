@@ -1024,6 +1024,11 @@ def video_value(data, ctx):
     if not vs:
         return "none"
     v = vs[0]
+    if "avg_frame_rate" in ((ctx or {}).get("field") or ""):
+        from .media_color import color_value         # MP4: stts-weighted avg (VFR "100/81"), not r_frame_rate
+        avg = color_value(data, {"field": "avg_frame_rate"})
+        if avg not in (None, "none", "0/0"):
+            return avg
     if k == "dims":
         return Dims(v["width"], v["height"]) if v.get("width") and v.get("height") else None
     if k == "rotate":

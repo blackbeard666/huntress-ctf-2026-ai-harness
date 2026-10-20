@@ -1,0 +1,10 @@
+{
+ "family": "language_of",
+ "expected_language": "modula2",
+ "expected_toolchain": "gm2",
+ "expected_source_language": "none",
+ "decoy": false,
+ "generator_cmd": "bash langof_gccfe_gen.sh   # x86_64-linux-gnu-gm2-15 -fiso -O0 cfg.mod (ISO STextIO) + strip -s",
+ "oracle_cmd": "bash langof_gccfe_oracle.sh langof_gm2_iso_stripped.bin   # stripped (no .symtab), NEEDED libm2iso.so.20+libm2pim.so.20, nm -D: 5 *_M2RTS_* symbols -> Modula-2 built by gm2",
+ "expected_ambiguous_with": []
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "base32hex(utf-16le)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-lynx-42",
+ "encoded": "9O06I03301IG0800ES06U03I01LG0800CG06A03301NG0P00D406S03700G00T00D006I03J00G00TO0C407403D01QG0S004402002K01NG0800EC06U03C01R00P805G02003J01QG0OG0DK06I03K00G00T00D006I03J00G00P80F006203301Q00800C406S03J01RG0P80E802003K01NG0800EG06G03500G00HO0C406Q03500G00J80C407603K01IG0SG07802003D01GG0S00DG06A01D01M00U80DO07G01D00Q00CG0",
+ "generator_cmd": "printf %s \"$plain\" | iconv -f UTF-8 -t UTF-16LE | basenc --base32hex -w0",
+ "oracle_cmd": "printf %s \"$encoded\" | basenc --base32hex -d | iconv -f UTF-16LE -t UTF-8",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-lynx-42",
+ "expected": "match"
+}

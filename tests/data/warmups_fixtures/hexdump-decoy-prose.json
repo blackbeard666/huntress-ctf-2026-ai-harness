@@ -1,0 +1,10 @@
+{
+ "codec": "hexdump-*",
+ "plain": null,
+ "encoded": "The offset column 00000000: is where the dump begins, see the gutter.",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"The offset column 00000000: is where the dump begins, see the gutter.\"  # prose mentioning a dump",
+ "oracle_cmd": "printf \"%s\" \"$encoded\" | file -  # -> ASCII text: prose, no dump rows",
+ "oracle_plain": "/dev/stdin: ASCII text, with no line terminators"
+}

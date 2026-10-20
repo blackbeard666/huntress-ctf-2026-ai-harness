@@ -1,0 +1,7 @@
+{
+ "entry": "dex_integrity_gate_scan",
+ "expected": null,
+ "generator_cmd": "sh tests/data/android_fixtures/gen_dex_integrity_gate.sh tests/data/android_fixtures  # DECOY: near-miss token (last char Z) under this dex's whole sha1 + a valid token keyed by an UNRELATED dex's sha1",
+ "oracle_cmd": "cd tests/data/android_fixtures; K=$(unzip -p dbi_decoy_nearmiss.apk classes.dex | sha1sum | cut -c1-40); unzip -p dbi_decoy_nearmiss.apk assets/huntress_puzzle.json | python3 -I -c 'import sys,json,base64;k=bytes.fromhex(sys.argv[1]);j=json.load(sys.stdin);[print(f, bytes(c^k[i%len(k)] for i,c in enumerate(base64.b64decode(j[f]))).decode(\"latin-1\")) for f in (\"data\",\"blob\")]' $K",
+ "decoy": true
+}

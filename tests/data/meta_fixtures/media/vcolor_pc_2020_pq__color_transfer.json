@@ -1,0 +1,8 @@
+{
+ "field": "media.color_transfer",
+ "expected": "smpte2084",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i testsrc=s=64x36:r=10:d=1 -c:v libx264 -pix_fmt yuv420p -color_range pc -colorspace bt2020nc -color_primaries bt2020 -color_trc smpte2084 pc_2020_pq_high.mp4",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i F -> 'yuvj420p(pc, bt2020nc/bt2020/smpte2084, progressive)'; PyAV cc.color_trc 16",
+ "decoy": false,
+ "member": "pc_2020_pq_high.mp4"
+}

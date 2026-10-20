@@ -1,0 +1,7 @@
+{
+ "entry": "entry_reachable_scan",
+ "expected": "ANS-f17a5e3b09c2d846",
+ "_why": "five look-alike classes g0..g4 with the same t() shape; ChallengeActivity.onCreate -> Router.route(): Class.forName(reversed 'com...g3').getDeclaredMethod(\"t\").invoke -> appended after evidence?proof=; g0/g1/g2/g4 are unreachable twins",
+ "generator_cmd": "python3 tests/data/android_fixtures/erc_src/gen_erc.py reflect_rev tests/data/android_fixtures/erc_reflect_rev.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/erc_src/oracle.sh tests/data/android_fixtures/erc_reflect_rev.apk  # d2j-dex2jar back to classes, RUN ChallengeActivity.onCreate on the JVM -> url ...proof=ANS-f17a5e3b09c2d846"
+}

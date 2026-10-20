@@ -1,0 +1,10 @@
+{
+ "codec": "wswap*",
+ "plain": null,
+ "encoded": "4d656574206d6520627920746865206f6c64206d696c6c206174206461776e2c206272696e6720746865206d6170",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Meet me by the old mill at dawn, bring the map' | xxd -p | tr -d '\\n'  # plain big-endian hex, no swap",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p  # reads as English UNswapped; the 2/4/8 swaps read worse -> not a word-swap line",
+ "oracle_plain": "Meet me by the old mill at dawn, bring the map"
+}

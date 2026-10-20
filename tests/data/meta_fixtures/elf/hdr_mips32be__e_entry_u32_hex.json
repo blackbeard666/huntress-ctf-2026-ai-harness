@@ -1,0 +1,8 @@
+{
+ "field": "elf.e_entry_u32_hex",
+ "expected": "0x00000000",
+ "generator_cmd": "printf hello > blob; objcopy -I binary -O elf32-big blob mips32be.o; printf '\\x00\\x08' | dd of=mips32be.o bs=1 seek=18 conv=notrunc  (e_machine = EM_MIPS)  (run in $TMPDIR/elfid)",
+ "oracle_cmd": "readelf -hW hdr_mips32be__e_entry_u32_hex.bin | grep 'Entry point address: 0x0' (u32)",
+ "decoy": false,
+ "member": "mips32be.o"
+}

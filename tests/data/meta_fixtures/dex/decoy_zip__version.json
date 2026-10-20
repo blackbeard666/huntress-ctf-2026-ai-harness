@@ -1,0 +1,8 @@
+{
+ "field": "dex.version",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"zipfile...writestr('META-INF/MANIFEST.MF',...)\" (zip renamed .dex impostor)",
+ "oracle_cmd": "file -> Zip archive data (not dex)",
+ "decoy": true,
+ "member": "classes.dex"
+}

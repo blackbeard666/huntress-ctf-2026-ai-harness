@@ -1,0 +1,22 @@
+{
+ "codec": "zip of raw-wide members",
+ "encoded_file": "raw-wide-zip-members.zip",
+ "members": {
+  "l01.txt": [
+   "utf-16le-bom",
+   "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42"
+  ],
+  "l02.txt": [
+   "utf-32be",
+   "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42"
+  ],
+  "l03.txt": [
+   "utf-8",
+   "TmljZSB3b3Jr"
+  ]
+ },
+ "generator_cmd": "cp raw-wide-utf16-bom-amber.bin l01.txt; cp raw-wide-utf32be-nobom-maple.bin l02.txt; printf TmljZSB3b3Jr > l03.txt; zip -qX m.zip l01.txt l02.txt l03.txt  # Info-ZIP zip",
+ "oracle_cmd": "python3 -I -c \"import zipfile,sys;z=zipfile.ZipFile(sys.argv[1]);[print(n, repr(z.read(n).decode({'l01.txt':'utf-16','l02.txt':'utf-32-be','l03.txt':'ascii'}[n]))) for n in z.namelist()]\" raw-wide-zip-members.zip  # CPython zipfile + codecs with the per-member encoding named by `file -b` (Info-ZIP unzip -l lists the 3 members)",
+ "oracle_output": "l01.txt 'Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42'\nl02.txt 'Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42'\nl03.txt 'TmljZSB3b3Jr'\n",
+ "expected": "match"
+}

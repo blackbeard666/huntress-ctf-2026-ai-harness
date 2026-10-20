@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-03-sqli",
+  "lane": "web",
+  "name": "🌐 Query Me This",
+  "ids": {
+    "single_solve": "web-exploitation-day-03-sqli",
+    "time_trial": "web-exploitation-day-03-sqli/time_trial",
+    "mastery": "web-exploitation-day-03-sqli/mastery"
+  }
+}

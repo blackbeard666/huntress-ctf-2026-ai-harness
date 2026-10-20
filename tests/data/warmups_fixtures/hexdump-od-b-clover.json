@@ -1,0 +1,9 @@
+{
+ "codec": "hexdump-od-b",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-09",
+ "encoded": "0000000 116 151 143 145 040 167 157 162 153 040 144 145 143 157 144 151\n0000020 156 147 040 164 150 151 163 040 167 141 162 155 165 160 041 040\n0000040 124 157 040 163 157 154 166 145 054 040 163 165 142 155 151 164\n0000060 040 164 150 151 163 040 145 170 141 143 164 040 141 156 163 167\n0000100 145 162 040 164 157 040 164 150 145 040 107 141 155 145 040 115\n0000120 141 163 164 145 162 072 040 143 154 157 166 145 162 055 150 145\n0000140 162 157 156 055 060 071\n0000146",
+ "generator_cmd": "printf %s \"$plain\" | od -b",
+ "oracle_cmd": "printf \"%s\\n\" \"$encoded\" | perl -ane 'shift @F; print map { chr oct } @F'  # perl: octal bytes",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-09",
+ "expected": "match"
+}

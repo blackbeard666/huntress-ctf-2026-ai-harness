@@ -1,0 +1,8 @@
+{
+ "field": "appimage.type",
+ "expected": "2",
+ "generator_cmd": "gcc -Os -s rt.c -o rt; cp rt app.AppImage; printf 'AI\\\\x02' | dd of=app.AppImage bs=1 seek=8 conv=notrunc; mksquashfs root zst.sqfs -comp zstd -b 131072 -mkfs-time 1600000000 -all-root -noappend; cat zst.sqfs >> app.AppImage",
+ "oracle_cmd": "head -c 11 app.AppImage | tail -c 3 | od -An -tu1 | awk '$1==65&&$2==73{print $3}'",
+ "decoy": false,
+ "member": "Deployer-x86_64.AppImage"
+}

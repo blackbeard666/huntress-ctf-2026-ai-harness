@@ -1,0 +1,8 @@
+{
+ "entry": "coroutine_state_scan",
+ "expected": "ANS-c4e19a075f3bd826",
+ "decoy": false,
+ "note": "SuspendLambda a.b: switch(label) cases written out of label order, StringBuilder spilled in L$0, running xor key in I$0, delay() suspends between cases",
+ "generator_cmd": "python3 tests/data/android_fixtures/kcoro_src/gen_kcoro.py lambda_shuffled tests/data/android_fixtures/kcoro_lambda_shuffled.apk  # javac --release 8 against kotlin/kotlinx stubs (not dexed) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/kcoro_src/oracle.sh lambda_shuffled  # the same javac classes run on the JVM (java), a driver resumes invokeSuspend until it stops returning COROUTINE_SUSPENDED and prints the value"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "clean_device_scan",
+ "expected": "ANS-b81e6d0f3a52c947",
+ "_why": "Vault extends Guard extends Activity; reveal() decodes with key(): PackageManager.getPackageInfo(magisk / xposed installer) in try/catch NameNotFound, ApplicationInfo.flags & FLAG_DEBUGGABLE, /proc/self/status TracerPid parsed, /proc/self/maps frida/XposedBridge, Socket 127.0.0.1:27042, Class.forName(XposedBridge) -- catch handlers and inherited key() must be followed",
+ "generator_cmd": "python3 tests/data/android_fixtures/cleandev_src/gen_cleandev.py pm_proc_socket tests/data/android_fixtures/cleandev_pm_proc_socket.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d19.envq.Probe -> new Vault().reveal() on the host JVM (real untraced /proc/self/status + maps, refused :27042, CNFE; stub PackageManager throws NameNotFound) -> 'flag{ANS-b81e6d0f3a52c947}'"
+}

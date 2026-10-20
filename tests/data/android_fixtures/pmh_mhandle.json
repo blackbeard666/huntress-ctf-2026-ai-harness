@@ -1,0 +1,7 @@
+{
+ "entry": "method_handle_scan",
+ "expected": "ANS-a09c4e2d71f53b86",
+ "_why": "Gate.reveal(): MethodHandles.lookup().findStatic(k.class, reversed 'tfihs', methodType(String.class, int.class)).invokeExact(0x2c) -> invoke-polymorphic; the shift(long) overload (decoy token) must lose on the MethodType descriptor",
+ "generator_cmd": "python3 tests/data/android_fixtures/pmh_src/gen_pmh.py mhandle tests/data/android_fixtures/pmh_mhandle.apk  # javac --release 8 + Android dx --min-sdk-version=26 (dex 038) + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/pmh_src/oracle.sh tests/data/android_fixtures/pmh_mhandle.apk  # d2j-baksmali opcode listing + d2j-dex2jar back to classes, RUN Gate.reveal() on the JVM -> reveal -> ANS-a09c4e2d71f53b86"
+}

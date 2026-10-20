@@ -1,0 +1,17 @@
+{
+ "entry": "packer_hcfg",
+ "encoding": "aplib",
+ "stream_offset": 1024,
+ "stream_length": 171,
+ "expected_offset": 0,
+ "expected_config": {
+  "c2": "198.51.100.40:443",
+  "campaign": "ap-squeeze",
+  "mutex": "Global\\APL_0001",
+  "flag": "flag{ap_l1b_d3p4ck}",
+  "pad": "ABABABABABABABABABABABAB0000000000"
+ },
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/binary_fixtures/pkd_gen.py   # writer: pkd_aplib_pack.pack_ap32",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/pkd_oracle.py pkd_aplib_bare"
+}

@@ -1,0 +1,17 @@
+{
+ "entry": "overlay_header_facts(data, 'RS20')",
+ "magic": "RS20",
+ "expected": {
+  "has_overlay": false,
+  "image_end": 14464,
+  "overlay_magic": "none",
+  "overlay_offset": "none",
+  "k1_hex": "none",
+  "packed_length": "none",
+  "unpacked_sha256": "none"
+ },
+ "decoy": true,
+ "note": "RS20 only as the 'RS20 stub v1' string inside .rodata (0x2000+0x28 holds offset 8208); packed length 829825122 overruns the 14464-byte file; no overlay",
+ "generator_cmd": "cp ovspec_rs20_decoy_noverlay.bin (gcc -Os -s rs20_host.c, see ovspec_rs20_decoy_noverlay.json)",
+ "oracle_cmd": "bash tests/data/binary_fixtures/ovhdr_oracle.sh tests/data/binary_fixtures/ovhdr_decoy_rs20_rodata.bin RS20 (offset 8208 < image_end 14464, packed_length 829825122 > size) + readelf -SW (.rodata 0x2000 size 0x28) + lief has_overlay False"
+}

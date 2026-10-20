@@ -1,0 +1,8 @@
+{
+ "entry": "jni_callback_scan",
+ "expected": null,
+ "_why": "same layout as xor_x86_64; the called-back k.q yields a 15-hex near miss while unreferenced siblings p / r (same signature, same seed) yield full tokens -> must yield none",
+ "generator_cmd": "python3 tests/data/android_fixtures/jnicb_src/gen_jnicb.py decoy_nearmiss tests/data/android_fixtures/jnicb_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex + gcc -shared -fPIC -O2 -s jnicb_src/cbk.c (FindClass/GetStaticMethodID/NewStringUTF/CallStaticObjectMethod) + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/jnicb_src/oracle.sh tests/data/android_fixtures/jnicb_decoy_nearmiss.apk  # d2j-dex2jar back to classes, RUN Bridge.nativeAnswer() on the real JVM with REAL JNI loading the apk's lib/x86_64/libcbk.so -> ANS-3b9e0c17f5a2d84 (15 hex: no token)",
+ "decoy": true
+}

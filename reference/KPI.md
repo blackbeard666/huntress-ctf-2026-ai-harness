@@ -17,3 +17,4 @@ Targets (PLAN_SUB2MIN.md): 15/15 <= 2:00 on 4 of 5 days, 14/15 <= 1:00 median, 0
 | D16 | 2026-10-16 | - (14/15) | 4:52 | 14s | 1/5 (mobile) | 9/9 | 4 / 303 / 109 (metadata-forensics) | 2 / 0 / 0 | 0 | 5.24 | 9.86 |
 | D17 | 2026-10-17 | - (12/15) | - | 8s | 1/5 (script) | 7/8 | 4 / 251 / 63 (warmups) | 2 / 0 / 0 | 0 | 8.78 | 8.92 |
 | D18 | 2026-10-18 | 1:43 (15/15) | 1:18 | 7s | 3/5 (binary, metada, mobile) | 9/10 | 0 / 0 / 0 (script-analysis) | 0 / 0 / 1 | 0 | 2.94 | 0.00 |
+| D19 | 2026-10-19 | 2:49 (15/15) | 2:35 | 5s | 3/5 (metada, mobile, script) | 10/10 | 2 / 41 / 0 (binary-reverse-engineering) | 2 / 0 / 0 | 0 | 4.92 | 11.05 |

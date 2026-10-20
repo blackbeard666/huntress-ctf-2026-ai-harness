@@ -1,0 +1,8 @@
+{
+ "field": "pyc.source_hash_hex",
+ "expected": "039cf1075de8ddd9",
+ "generator_cmd": "python3.14 -I -c \"py_compile.compile('tool.py','tool.pyc',invalidation_mode=PycInvalidationMode.CHECKED_HASH)\"",
+ "oracle_cmd": "python3.14 -I -c \"importlib.util.source_hash(open('tool.py','rb').read()).hex()\" -> 039cf1075de8ddd9",
+ "decoy": false,
+ "member": "tool.cpython-314.pyc"
+}

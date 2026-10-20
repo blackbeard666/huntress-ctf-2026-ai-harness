@@ -1,0 +1,17 @@
+{
+ "entry": "overlay_spec+overlay_spec_unpack",
+ "encoding": "aplib",
+ "question": "Find the final RS20 overlay. Read the key u8 at +5, packed length u32le at +8, the 32-byte unpacked SHA-256 at +12, and packed bytes at +44. For each packed byte compute byte XOR key; then aPLib-decompress, verify the unpacked SHA-256 and use the HCFG record at unpacked offset 0.",
+ "expected_offset": 2048,
+ "expected_size": 191,
+ "expected_config": {
+  "c2": "198.51.100.40:443",
+  "campaign": "ap-squeeze",
+  "mutex": "Global\\APL_0001",
+  "flag": "flag{ap_l1b_d3p4ck}",
+  "pad": "ABABABABABABABABABABABAB0000000000"
+ },
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/binary_fixtures/pkd_gen.py   # writer: pkd_aplib_pack.pack (own spec-derived packer)",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/pkd_oracle.py pkd_aplib_overlay"
+}

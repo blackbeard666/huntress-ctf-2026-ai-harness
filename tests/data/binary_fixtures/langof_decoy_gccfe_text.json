@@ -1,0 +1,7 @@
+{
+ "family": "language_of",
+ "expected_language": null,
+ "decoy": true,
+ "generator_cmd": "bash langof_gccfe_gen.sh   # printf of the cue strings into a plain text file",
+ "oracle_cmd": "bash langof_gccfe_oracle.sh langof_decoy_gccfe_text.bin   # file: ASCII text, not an executable image -> None / \"none\""
+}

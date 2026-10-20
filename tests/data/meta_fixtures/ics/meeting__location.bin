@@ -1,0 +1,17 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Huntress Fixture//icalendar writer//EN
+METHOD:REQUEST
+BEGIN:VEVENT
+SUMMARY:Quarterly review\; budget\, headcount and a very long title that m
+ ust be folded across lines by the writer
+DTSTART:20261020T140000Z
+DTEND:20261020T153000Z
+UID:evt-7f3a2c19-4b0e@fixture.example
+ATTENDEE;CN="Doe, Bob: Ops";ROLE=REQ-PARTICIPANT:mailto:bob@corp.example
+ATTENDEE;CN=Carol;ROLE=REQ-PARTICIPANT:mailto:carol@corp.example
+ATTENDEE;CN=Dave;ROLE=REQ-PARTICIPANT:mailto:dave@partner.example
+LOCATION:Room 4B\, Building 2
+ORGANIZER;CN="Alice A.":mailto:alice@corp.example
+END:VEVENT
+END:VCALENDAR

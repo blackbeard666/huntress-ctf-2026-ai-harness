@@ -1,0 +1,8 @@
+{
+ "field": "elf.goarch",
+ "expected": "mips",
+ "generator_cmd": "printf hello > blob; objcopy -I binary -O elf32-big blob mips32be.o; printf '\\x00\\x08' | dd of=mips32be.o bs=1 seek=18 conv=notrunc  (e_machine = EM_MIPS)  (run in $TMPDIR/elfid)",
+ "oracle_cmd": "readelf -hW hdr_mips32be__goarch.bin | grep -E 'Machine|Class|Data' (MIPS32 big endian -> GOARCH mips)",
+ "decoy": false,
+ "member": "mips32be.o"
+}

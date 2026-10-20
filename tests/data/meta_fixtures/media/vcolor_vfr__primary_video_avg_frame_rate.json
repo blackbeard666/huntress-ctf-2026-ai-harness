@@ -1,0 +1,8 @@
+{
+ "field": "media.primary_video_avg_frame_rate",
+ "expected": "100/81",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i testsrc=s=64x36:r=10:d=1 -vf \"setpts='N*N/(10*TB)'\" -fps_mode passthrough -c:v libx264 -bf 0 -pix_fmt yuv420p vfr.mp4",
+ "oracle_cmd": "PYTHONPATH=tools/pyav python3 -c 'import av; c=av.open(F); s=c.streams.video[0]; cc=s.codec_context; print(s.average_rate)' -> 100/81; ffmpeg CLI 1.23 fps, 10 tbr",
+ "decoy": false,
+ "member": "vfr.mp4"
+}

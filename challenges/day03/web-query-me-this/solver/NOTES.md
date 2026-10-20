@@ -1,0 +1,2 @@
+## Proposed lib additions
+- reference/techniques/web.md: D3 "Query Me This" = live target (contract.targets[{id:"Target N",url}]), search form GET /lookup?q=, SQLi needs paren close: `zz') OR 1=1 --`; proof is `proof_[0-9a-f]{32}` in a hidden 'restricted' card. Target returns 410 {"state":"completed"} once the attempt is solved. Mastery set2 = Day 1 "back up a minute" (exposed backup archive) target.

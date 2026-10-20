@@ -1,0 +1,8 @@
+{
+ "field": "elf.e_shoff_u64_hex",
+ "expected": "0x0000000000003148",
+ "generator_cmd": "unzip metadata-day-19-evidence.zip collector-001.elf  (the GM-built D19 artifact, single_solve; GM-verified e_machine 0x003e)  (run in $TMPDIR/elfid)",
+ "oracle_cmd": "readelf -hW hdr_d19_collector__e_shoff_u64_hex.bin | grep 'Start of section headers: 12616' (=0x3148, u64)",
+ "decoy": false,
+ "member": "collector-001.elf"
+}

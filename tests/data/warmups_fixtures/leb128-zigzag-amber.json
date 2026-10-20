@@ -1,0 +1,9 @@
+{
+ "codec": "leb128-zigzag",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "9c01d201c601ca0140ee01de01e401d60140c801ca01c601de01c801d201dc01ce0140e801d001d201e60140ee01c201e401da01ea01e0014240a801de0140e601de01d801ec01ca015840e601ea01c401da01d201e80140e801d001d201e60140ca01f001c201c601e80140c201dc01e601ee01ca01e40140e801de0140e801d001ca01408e01c201da01ca01409a01c201e601e801ca01e4017440c201da01c401ca01e4015acc01c201d801c601de01dc015a6864",
+ "generator_cmd": "printf %s \"$plain\" | govarint varint cp hex  # Go 1.x stdlib encoding/binary.AppendVarint (zigzag) per rune, hex.EncodeToString / %02x tokens (source: tests/data/warmups_fixtures/leb128_govarint.go; go build -o govarint)",
+ "oracle_cmd": "python3 -I -c \"import sys;from google.protobuf.internal.decoder import _DecodeVarint as D;from google.protobuf.internal.wire_format import ZigZagDecode as Z;b=bytes.fromhex(sys.argv[1].replace(' ',''));v=[];p=0\\nwhile p<len(b): x,p=D(b,p); v.append(x)\\nzz=sys.argv[2]=='zigzag';v=[Z(x) if zz else x for x in v];print(b''.join(x.to_bytes(2,'little') for x in v).decode('utf-16-le'))\" \"$encoded\" zigzag  # protobuf 7.36.2 internal varint decoder (+ ZigZagDecode), code units read as UTF-16LE",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

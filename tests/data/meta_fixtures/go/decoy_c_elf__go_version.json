@@ -1,0 +1,8 @@
+{
+ "field": "go.go_version",
+ "expected": "none",
+ "generator_cmd": "echo 'int main(){return 0;}' | gcc -O2 -x c - -o c_x64  (gcc 15.2.0 Ubuntu)",
+ "oracle_cmd": "go version -m decoy_c_elf__go_version.bin  (-> 'not a Go executable')",
+ "decoy": true,
+ "member": "c_x64"
+}

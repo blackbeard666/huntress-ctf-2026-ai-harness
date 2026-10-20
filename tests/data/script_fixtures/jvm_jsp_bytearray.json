@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=java_jsp|role=webshell|verdict=malicious|attack=T1505.003|adapter=operation_graph|host_profile=jsp_scriptlet|obfuscation_profile=byte_array|stage_profile=single_descriptor|next_language=bash|stage_count=2|steps=decode_configuration,run_command|campaign_id=JAVA_JSP-c3f15a08|url=https://java_jsp-c3f15a08.example.invalid/stage|file_path=/tmp/huntress-java_jsp/.c3f15a08.stage",
+ "decoy": false,
+ "host": "jvm",
+ "what": "JSP <%! %> declaration new String(new byte[]{..}, UTF_8)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/jvm_host_gen.py tests/data/script_fixtures  (stdlib base64/bytes.hex writer; JSP <%! %> declaration new String(new byte[]{..}, UTF_8))",
+ "oracle_cmd": "python3 -I -c 'import re,sys;t=open(sys.argv[1]).read();print(bytes(int(x) for x in re.findall(r\"-?\\d+\",re.search(r\"new byte\\[\\]\\s*\\{(.*?)\\}\",t,re.S).group(1))).decode(),end=\"\")' tests/data/script_fixtures/jvm_jsp_bytearray.jsp"
+}

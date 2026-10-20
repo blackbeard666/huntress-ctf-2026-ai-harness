@@ -1,0 +1,11 @@
+{
+ "codec": "raw-file(cp037)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded_file": "raw-wide-ebcdic-cp037-ivory.bin",
+ "encoded_hex": "d589838540a696999240848583968489958740a38889a240a6819994a4975a40e39640a29693a5856b40a2a4829489a340a38889a24085a78183a3408195a2a6859940a39640a3888540c781948540d481a2a385997a4081948285996086819383969560f4f2",
+ "expected_form": "cp037",
+ "generator_cmd": "printf %s \"$plain\" | iconv -f UTF-8 -t IBM037 > raw-wide-ebcdic-cp037-ivory.bin  # glibc iconv writer, raw bytes (no hex layer)",
+ "oracle_cmd": "iconv -f IBM037 -t UTF-8 raw-wide-ebcdic-cp037-ivory.bin  # glibc iconv reader; `file -b`: Non-ISO extended-ASCII text, with NEL line terminators",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

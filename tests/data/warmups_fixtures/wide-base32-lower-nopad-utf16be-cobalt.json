@@ -1,0 +1,9 @@
+{
+ "codec": "base32-lower-nopad(utf-16be)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-badger-58",
+ "encoded": "abhaa2iammagkabaab3qa3yaoiagwabaabsaaziammag6adeabuqa3qam4acaaduabuaa2iaomacaadxabqqa4qanuahkadqaaqqaiaakqag6abaabzqa3yanqahmadfaawaaiaaomahkadcabwqa2iaoqacaaduabuaa2iaomacaadfab4aayiammahiabaabqqa3qaomahoadfabzaaiaaoqag6abaab2aa2aamuacaachabqqa3iamuacaacnabqqa4yaoqagkadsaa5aaiaammag6adcabqqa3aaoqac2adcabqqazaam4agkadsaawqaniaha",
+ "generator_cmd": "printf %s \"$plain\" | iconv -f UTF-8 -t UTF-16BE | base32 -w0 | tr -d = | tr A-Z a-z  # glibc iconv + coreutils base32",
+ "oracle_cmd": "s=$(printf %s \"$encoded\" | tr a-z A-Z); while [ $(( ${#s} % 8 )) -ne 0 ]; do s=\"$s=\"; done; printf %s \"$s\" | base32 -d | iconv -f UTF-16BE -t UTF-8",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-badger-58",
+ "expected": "match"
+}

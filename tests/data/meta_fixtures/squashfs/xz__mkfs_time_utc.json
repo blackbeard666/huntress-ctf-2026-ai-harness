@@ -1,0 +1,8 @@
+{
+ "field": "squashfs.mkfs_time_utc",
+ "expected": "2026-01-01T00:00:00Z",
+ "generator_cmd": "mksquashfs root xz.sqfs -comp xz -b 262144 -mkfs-time 1767225600 -all-root -noappend (squashfs-tools 4.7.5)",
+ "oracle_cmd": "date -u -d \"$(TZ=UTC unsquashfs -s xz.sqfs | sed -n 's/^Creation or last append time //p')\" +%Y-%m-%dT%H:%M:%SZ",
+ "decoy": false,
+ "member": "group-b.sqfs"
+}

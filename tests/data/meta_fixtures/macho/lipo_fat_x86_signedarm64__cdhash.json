@@ -1,0 +1,8 @@
+{
+ "field": "macho.cdhash",
+ "expected": "65d0365a859aefeb1ae05a87a76e9e46a98b83ef",
+ "generator_cmd": "llvm-lipo-18 -create prog_x86 signed_arm64 -output fat_signed (slices: x86_64 unsigned @4096, arm64 rcodesign-signed @32768)  (run in $TMPDIR/mcs)",
+ "oracle_cmd": "tools/rcodesign/rcodesign (apple-codesign 0.29.0) print-signature-info lipo_fat_x86_signedarm64__cdhash.bin (macho-index:1 CodeDirectory sha256, first 20 bytes)",
+ "decoy": false,
+ "member": "universal_tool"
+}

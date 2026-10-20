@@ -1,0 +1,8 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "jvm",
+ "what": "DECOY: benign byte array, no plan",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/jvm_host_gen.py tests/data/script_fixtures  (stdlib base64/bytes.hex writer; DECOY: benign byte array, no plan)",
+ "oracle_cmd": "python3 -I -c 'import re,sys;t=open(sys.argv[1]).read();print(bytes(int(x) for x in re.findall(r\"\\d+\",re.search(r\"new byte\\[\\]\\{(.*?)\\}\",t,re.S).group(1))).decode())' tests/data/script_fixtures/jvm_jsp_decoy_benign.jsp"
+}

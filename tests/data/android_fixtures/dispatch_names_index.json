@@ -1,0 +1,7 @@
+{
+ "entry": "dispatch_key_scan",
+ "expected": "ANS-b7f04e19c2d86a53",
+ "_why": "Picker.pick(int): Class.forName(NAMES[i]).newInstance() over a String[] of class names; puzzle json {entry: 2} supplies the index; slots 0/1/3 are decoys",
+ "generator_cmd": "python3 tests/data/android_fixtures/dispatch_src/gen_dispatch.py names_index tests/data/android_fixtures/dispatch_names_index.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh; manifest by apktool-bundled aapt2 link -I android-framework.jar; python zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/dispatch_src/oracle.sh tests/data/android_fixtures/dispatch_names_index.apk  # key from `aapt dump xmltree` pathPrefix / python json; d2j-dex2jar back to classes and RUN the real dispatcher on the JVM -> Picker.pick(2) -> ANS-b7f04e19c2d86a53"
+}

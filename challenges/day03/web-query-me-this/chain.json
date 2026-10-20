@@ -1,0 +1,12 @@
+{
+  "stage": "done",
+  "name": "\ud83c\udf10 Query Me This",
+  "lane": "web",
+  "worker": null,
+  "updated": "2026-10-19T21:54:10",
+  "launches": 1,
+  "help": "# web-query-me-this single_solve: solved, solver-test cannot replay\n\nThe Single Solve is CORRECT (GM status, confirmed.json: proof-1 = proof_40d939b9461649d78485c4bb732fddc6). The chain worker got there at 13:03:28; I derived the same value independently.\n\n`hctf solver-test` fails only because the case is a live target:\n- The target now returns HTTP 410 `{\"state\":\"completed\"}`.\n- contract.json was overwritten with the post-solve status, which has no `targets`/`routes`, so solve.py has nothing to fetch.\n\nHard-coding the proof would break the rule that answers come from the bytes, so solve.py does not.\n\nHow solve.py gets the answer, live (it reads `contract[\"targets\"][*].url`, matched by question artifact `Target N`):\n- GET `<target>/lookup?q=zzz') OR 1=1-- -` with a curl User-Agent (Cloudflare 403s urllib's default UA).\n- The unlisted `restricted` row (\"Private escalation\") carries `proof_...` in its `<p>`.\n- Fallbacks: other quote/paren payload variants, then any `<p>proof_...</p>`.\n- Verified by hand with curl through `hctf hb exec` before the target closed.\n",
+  "attempt": 1,
+  "time_trial_result": "correct",
+  "mastery_result": "correct"
+}

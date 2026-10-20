@@ -1,0 +1,8 @@
+{
+ "field": "webloc.url",
+ "expected": "https://cdn-files.example.net/invoice_2026.pkg",
+ "generator_cmd": "python3 -I -c 'import plistlib; plistlib.dumps({\"URL\": ...}, fmt=plistlib.FMT_XML)'  (.webloc as Safari writes it: a one-key plist)",
+ "oracle_cmd": "exiftool -j webloc_xml.bin -> URL 'https://cdn-files.example.net/invoice_2026.pkg'",
+ "decoy": false,
+ "member": "invoice.webloc"
+}

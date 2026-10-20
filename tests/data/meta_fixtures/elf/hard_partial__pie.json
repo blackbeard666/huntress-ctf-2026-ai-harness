@@ -1,0 +1,8 @@
+{
+ "field": "elf.pie",
+ "expected": "true",
+ "generator_cmd": "gcc -O0 -fPIE -pie -fno-stack-protector -U_FORTIFY_SOURCE -Wl,-z,relro,-z,lazy -o pie_partial t.c",
+ "oracle_cmd": "readelf -hW hard_partial__pie.bin | grep -q \"Type: *EXEC\" && echo false || (readelf -lW hard_partial__pie.bin | grep -q INTERP && echo true || echo none)",
+ "decoy": false,
+ "member": "pie_partial"
+}

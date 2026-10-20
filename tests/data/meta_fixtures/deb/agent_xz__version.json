@@ -1,0 +1,8 @@
+{
+ "field": "deb.version",
+ "expected": "1:0.9~rc1",
+ "generator_cmd": "dpkg-deb --root-owner-group -Zxz --build pkg agent_xz.deb (same control, Version 1:0.9~rc1, Architecture amd64, no Depends)",
+ "oracle_cmd": "dpkg-deb -f agent_xz.deb Version",
+ "decoy": false,
+ "member": "deploy-agent_0.9_amd64.deb"
+}

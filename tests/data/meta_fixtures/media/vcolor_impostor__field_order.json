@@ -1,0 +1,8 @@
+{
+ "field": "media.field_order",
+ "expected": "none",
+ "generator_cmd": "printf 'just a text file renamed to clip.mp4\\n' > impostor.mp4",
+ "oracle_cmd": "file impostor.mp4 -> 'ASCII text' (not media)",
+ "decoy": true,
+ "member": "clip.mp4"
+}

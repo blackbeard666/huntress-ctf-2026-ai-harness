@@ -1,0 +1,9 @@
+{
+ "codec": "nibswap-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "e49636560277f627b602465636f64696e676024786963702771627d65707120245f60237f6c66756c202375726d6964702478696370256871636470216e6377756270247f602478656027416d65602d41637475627a30216d6265627d26616c636f6e6d24323",
+ "generator_cmd": "perl -e 'print unpack(\"h*\", $ARGV[0])' \"$plain\"  # perl unpack h* = hex, low nibble first",
+ "oracle_cmd": "printf %s \"$encoded\" | sed 's/\\(.\\)\\(.\\)/\\2\\1/g' | xxd -r -p  # GNU sed swaps each digit pair + vim xxd reverse",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

@@ -1,0 +1,16 @@
+{
+ "entry": "packer_hcfg",
+ "encoding": "lz4block",
+ "stream_offset": 1152,
+ "stream_length": 101,
+ "expected_offset": 0,
+ "expected_config": {
+  "c2": "192.0.2.77:53",
+  "campaign": "lz4-blk",
+  "flag": "flag{lz4_n0_fr4m3}",
+  "pad": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+ },
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/binary_fixtures/pkd_gen.py   # writer: python-lz4 lz4.block.compress(store_size=False)",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/pkd_oracle.py pkd_lz4block_bare"
+}

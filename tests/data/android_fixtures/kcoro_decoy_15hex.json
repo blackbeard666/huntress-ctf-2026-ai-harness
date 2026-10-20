@@ -1,0 +1,8 @@
+{
+ "entry": "coroutine_state_scan",
+ "expected": null,
+ "decoy": true,
+ "note": "same SuspendLambda layout, near-miss: last toHexString group drops its leading zero -> ANS- + 15 hex (JVM prints ANS-c4e19a075f3bd26)",
+ "generator_cmd": "python3 tests/data/android_fixtures/kcoro_src/gen_kcoro.py decoy_15hex tests/data/android_fixtures/kcoro_decoy_15hex.apk  # javac --release 8 against kotlin/kotlinx stubs (not dexed) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/kcoro_src/oracle.sh decoy_15hex  # the same javac classes run on the JVM (java), a driver resumes invokeSuspend until it stops returning COROUTINE_SUSPENDED and prints the value"
+}

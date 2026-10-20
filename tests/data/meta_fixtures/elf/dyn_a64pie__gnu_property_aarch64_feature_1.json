@@ -1,0 +1,8 @@
+{
+ "field": "elf.gnu_property_aarch64_feature_1",
+ "expected": "BTI, PAC, GCS",
+ "generator_cmd": "aarch64-linux-gnu-gcc -mbranch-protection=standard -o a64pie m.c  (run in $TMPDIR/elfdyn)",
+ "oracle_cmd": "readelf -a -W dyn_a64pie__gnu_property_aarch64_feature_1.bin | grep 'AArch64 feature'",
+ "decoy": false,
+ "member": "a64pie"
+}

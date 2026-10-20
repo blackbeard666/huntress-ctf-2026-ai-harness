@@ -1,0 +1,27 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "dc4763da-d4b2-4ba2-9afe-0b22c5adf5a7",
+  "window": null,
+  "elapsed": 3.74,
+  "in_window": 2.19,
+  "phases": {
+    "start": 1.54,
+    "download": 0.44,
+    "solve": 0.21,
+    "submit": 1.55
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "calm-chimney-nugget-38"
+  },
+  "attempts_remaining": 256,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 256,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-19-static-unpacking",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Jack in the Box",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-19-static-unpacking",
+    "time_trial": "binary-reverse-engineering-day-19-static-unpacking/time_trial",
+    "mastery": "binary-reverse-engineering-day-19-static-unpacking/mastery"
+  }
+}

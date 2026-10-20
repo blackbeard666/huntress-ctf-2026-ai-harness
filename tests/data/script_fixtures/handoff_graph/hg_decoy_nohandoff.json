@@ -1,0 +1,13 @@
+{
+ "plans": {
+  "a.ps1": "v=3|language=powershell|url=https://cdn.example.invalid/x.bin|steps=acquire_remote",
+  "b.py": "v=3|language=python|role=benign|next_language=none|steps=recognize_syntax"
+ },
+ "expected": {
+  "graph": null
+ },
+ "decoy": true,
+ "oracle_cmd": "grep -oE 'next_(language|stage)=[^|]+' plans | grep -v '=none' | wc -l -> 0 (no handoff: report None)",
+ "entry": "handoff_graph",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/handoff_graph/hg_gen.py tests/data/script_fixtures/handoff_graph (hg_decoy_nohandoff)"
+}

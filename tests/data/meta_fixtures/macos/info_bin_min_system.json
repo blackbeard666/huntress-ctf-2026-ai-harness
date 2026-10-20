@@ -1,0 +1,8 @@
+{
+ "field": "macos.ls_minimum_system_version",
+ "expected": "10.15",
+ "generator_cmd": "python3 -I -c 'import plistlib,datetime; plistlib.dumps({CFBundleName,CFBundleIdentifier,CFBundleExecutable,CFBundleShortVersionString,CFBundleVersion,LSMinimumSystemVersion,LSUIElement,NSAppTransportSecurity:{NSAllowsArbitraryLoads},BuildDate}, fmt=FMT_BINARY, sort_keys=False)'  (stdlib plistlib WRITER)",
+ "oracle_cmd": "exiftool -j info_bin.bin -> LSMinimumSystemVersion 10.15 (stored as the string '10.15')",
+ "decoy": false,
+ "member": "Updater.app/Contents/Info.plist"
+}

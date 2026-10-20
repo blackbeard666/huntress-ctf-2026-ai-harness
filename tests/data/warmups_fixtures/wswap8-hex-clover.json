@@ -1,0 +1,9 @@
+{
+ "codec": "wswap8-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-otter-19",
+ "encoded": "726f77206563694e69646f636564206b207369687420676e202170756d72617765766c6f73206f5474696d627573202c786520736968742077736e61207463616874206f742072654d20656d6147206563203a7265747361746f2d7265766f6c000039312d726574",
+ "generator_cmd": "printf %s \"$plain\" | od -An -v -tx8 | tr -d ' \\n'  # GNU od on x86: 64-bit LE words, tail NUL-padded",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -e 'print pack(\"Q<*\", unpack(\"Q>*\", pack(\"H*\", <STDIN>)))' | tr -d '\\\\0'  # perl Q> -> Q<",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-otter-19",
+ "expected": "match"
+}

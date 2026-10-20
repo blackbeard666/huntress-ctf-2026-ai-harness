@@ -1,0 +1,9 @@
+{
+ "codec": "wswap4-hex",
+ "plain": "submit this exact answer",
+ "encoded": "6d6275737420746920736968636178656e61207472657773",
+ "generator_cmd": "printf %s \"$plain\" | od -An -v -tx4 | tr -d ' \\n'  # Mastery-line fragment, 24 bytes = 6 whole words",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -e 'print pack(\"V*\", unpack(\"N*\", pack(\"H*\", <STDIN>)))'",
+ "oracle_plain": "submit this exact answer",
+ "expected": "match"
+}

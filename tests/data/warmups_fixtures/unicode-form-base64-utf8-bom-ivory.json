@@ -1,0 +1,9 @@
+{
+ "codec": "base64(utf-8-bom)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-lemur-70",
+ "encoded": "77u/TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwISBUbyBzb2x2ZSwgc3VibWl0IHRoaXMgZXhhY3QgYW5zd2VyIHRvIHRoZSBHYW1lIE1hc3RlcjogaXZvcnktbGVtdXItNzA=",
+ "generator_cmd": "{ printf '\\357\\273\\277'; printf %s \"$plain\"; } | base64 -w0  # UTF-8 BOM efbbbf + text, coreutils base64",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys,binascii;print(binascii.a2b_base64(sys.stdin.read()).decode('utf-8-sig'),end='')\"  # CPython codecs utf-8-sig",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-lemur-70",
+ "expected": "match"
+}

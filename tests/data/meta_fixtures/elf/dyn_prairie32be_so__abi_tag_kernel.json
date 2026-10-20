@@ -1,0 +1,8 @@
+{
+ "field": "elf.abi_tag_kernel",
+ "expected": "2.6.32",
+ "generator_cmd": "python3 -I mk_elf32_msb.py prairie32be.so  (stdlib struct WRITER, source saved as tests/data/meta_fixtures/elf/dyn_prairie32be_writer.py.txt: ELFCLASS32 ELFDATA2MSB EM_PPC ET_DYN)  (run in $TMPDIR/elfdyn)",
+ "oracle_cmd": "readelf -a -W dyn_prairie32be_so__abi_tag_kernel.bin | grep 'OS: .*ABI:'",
+ "decoy": false,
+ "member": "prairie32be.so"
+}

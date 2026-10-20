@@ -1,0 +1,10 @@
+{
+ "codec": "leb128",
+ "plain": null,
+ "encoded": "4e69636520776f726b2064c3a9636f64696e672074686973207761726d757021",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work décoding this warmup!' | xxd -p  # plain UTF-8 hex (é = c3 a9): the hex codec's line, not varints",
+ "oracle_cmd": "python3 -I -c \"import sys;from google.protobuf.internal.decoder import _DecodeVarint as D;from google.protobuf.internal.wire_format import ZigZagDecode as Z;b=bytes.fromhex(sys.argv[1].replace(' ',''));v=[];p=0\\nwhile p<len(b): x,p=D(b,p); v.append(x)\\nzz=sys.argv[2]=='zigzag';v=[Z(x) if zz else x for x in v];print(b''.join(x.to_bytes(2,'little') for x in v).decode('utf-16-le'))\" \"$encoded\" uleb  # protobuf 7.36.2 internal varint decoder (+ ZigZagDecode), code units read as UTF-16LE  -> c3 a9 reads as one varint U+14C3 (mojibake); the plain hex read is the real one",
+ "oracle_plain": null
+}

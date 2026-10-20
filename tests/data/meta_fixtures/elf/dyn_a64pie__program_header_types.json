@@ -1,0 +1,8 @@
+{
+ "field": "elf.program_header_types",
+ "expected": "[\"PT_PHDR\",\"PT_INTERP\",\"PT_LOAD\",\"PT_LOAD\",\"PT_DYNAMIC\",\"PT_NOTE\",\"PT_NOTE\",\"PT_NOTE\",\"PT_GNU_PROPERTY\",\"PT_GNU_EH_FRAME\",\"PT_GNU_STACK\",\"PT_GNU_RELRO\"]",
+ "generator_cmd": "aarch64-linux-gnu-gcc -mbranch-protection=standard -o a64pie m.c  (run in $TMPDIR/elfdyn)",
+ "oracle_cmd": "readelf -a -W dyn_a64pie__program_header_types.bin | Program Headers Type column in order, PT_ prefixed",
+ "decoy": false,
+ "member": "a64pie"
+}

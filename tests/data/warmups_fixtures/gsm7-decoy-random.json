@@ -1,0 +1,11 @@
+{
+ "codec": "gsm7",
+ "plain": null,
+ "encoded": "af864e39fe353a27e2f9e5501a55d26b",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s gsm7-decoy | sha256sum | cut -c1-32  # 16 high-entropy bytes (sha256 prefix), no packed text",
+ "oracle_cmd": "python3 -I -c \"import sys;sys.path.insert(0,\\\"tools/pylib-gsm\\\");from gsmmodem.pdu import unpackSeptets,decodeGsm7;print(decodeGsm7(unpackSeptets(bytes.fromhex(sys.argv[1].replace(\\\" \\\",\\\"\\\")))))\" \"$encoded\"  # gsmmodem GSM read = non-text junk; MSB 7-bit read (python3 bit string) likewise",
+ "oracle_plain": "/\n:Jc?\næ'Dg/ÅJF*RW",
+ "oracle_plain_msb": "WaIcOxj:\u0013x_\u001e*@4Ui\u001a"
+}

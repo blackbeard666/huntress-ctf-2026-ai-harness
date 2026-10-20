@@ -1,0 +1,8 @@
+{
+ "field": "elf.fortify",
+ "expected": "true",
+ "generator_cmd": "gcc -O2 -fPIE -pie -fstack-protector-strong -D_FORTIFY_SOURCE=2 -Wl,-z,relro,-z,now -o hard_full t.c  (t.c: strcpy into char buf[64] + printf; gcc 13 Ubuntu)",
+ "oracle_cmd": "readelf --dyn-syms -W hard_full__fortify.bin | grep -E \" UND \" | grep -oE \"__[a-z0-9_]+_chk\" | grep -v stack_chk | grep -q . && echo true || echo false",
+ "decoy": false,
+ "member": "hard_full"
+}

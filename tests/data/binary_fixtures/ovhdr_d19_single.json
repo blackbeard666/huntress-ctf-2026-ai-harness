@@ -1,0 +1,26 @@
+{
+ "entry": "overlay_header_facts(data, 'PK19')",
+ "magic": "PK19",
+ "expected": {
+  "has_overlay": true,
+  "image_end": 10808,
+  "overlay_magic": "PK19",
+  "overlay_offset": 10808,
+  "overlay_size": 424,
+  "overlay_at_image_end": true,
+  "overlay_version": 1,
+  "k1_hex": "0x21",
+  "k2_hex": "0xa4",
+  "pad": 0,
+  "packed_length": 380,
+  "unpacked_sha256": "2fffe680ae36c9b367a0ab229d640be38b1be761db0ea080bddce1527b4198c5",
+  "packed_sha256": "bc58c89adf9e719def69414b35e5f6df9cdfec093f509c3d252f56ec1af0e527",
+  "unpacked_length": 380,
+  "unpacked_sha256_ok": true
+ },
+ "decoy": false,
+ "note": "cached D19 member d19--variant-000.elf (GM-confirmed overlay_offset 10808 / overlay_size 424)",
+ "generator_cmd": "cp ovspec_d19_single.bin (cached D19 evidence.zip member, see ovspec_d19_single.json)",
+ "oracle_cmd": "bash tests/data/binary_fixtures/ovhdr_oracle.sh tests/data/binary_fixtures/ovhdr_d19_single.bin PK19   # readelf -hW, grep -obaF, od, dd|sha256sum; + lief Binary.has_overlay",
+ "unpacked_length_oracle": "PK19 transform is byte-for-byte: unpacked length = packed_length = 12 + len(json payload) written by the generator"
+}

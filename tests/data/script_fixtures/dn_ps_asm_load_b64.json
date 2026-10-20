@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=csharp|role=stager|verdict=malicious|attack=T1620|adapter=assembly_load|stage_count=2|steps=load_assembly,invoke_member|campaign_id=NET-7c41a9e2|url=https://net-7c41a9e2.example.invalid/bridge",
+ "decoy": false,
+ "generator_cmd": "M=$(printf %s '<plan>' | gzip -9n | base64 -w0); dn_gen_Bridge.cs = static method `return \"$M\";` (ldstr -> #US); pwsh -NoProfile -c \"Add-Type -TypeDefinition (Get-Content -Raw ./dn_gen_Bridge.cs) -OutputAssembly ./Bridge.dll -OutputType Library\" (pwsh 7 / Roslyn); base64 -w0 Bridge.dll -> `$asmB64 = '...'` + [Reflection.Assembly]::Load([Convert]::FromBase64String(..))",
+ "oracle_cmd": "python3 -I -c \"import re,sys,base64;open(sys.argv[2],'wb').write(base64.b64decode(re.search(r\\\"asmB64 = '([^']+)'\\\",open(sys.argv[1]).read()).group(1)))\" dn_ps_asm_load_b64.ps1 a.dll && ilspycmd a.dll | grep -o 'return \"H4sI[^\"]*\"' | cut -d'\"' -f2 | base64 -d | gunzip",
+ "note": "real Roslyn-compiled PE32 .NET DLL (file: Mono/.Net assembly); plan = gzip+base64 #US user string; ilspycmd decompiles, not lib.codec"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "method_handle_scan",
+ "expected": "ANS-3b8e0f71c2d94a65",
+ "_why": "Gate.reveal(): Supplier lambda `() -> k.q(key)` capturing key 0x2c + IntFunction method ref k::q, both invoke-custom call sites (dex 038 call_site_ids -> LambdaMetafactory -> impl method handle); k.q xors a char[]; k.shift(J)/z() hold a decoy token",
+ "generator_cmd": "python3 tests/data/android_fixtures/pmh_src/gen_pmh.py lambda tests/data/android_fixtures/pmh_lambda.apk  # javac --release 8 + Android dx --min-sdk-version=26 (dex 038) + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/pmh_src/oracle.sh tests/data/android_fixtures/pmh_lambda.apk  # d2j-baksmali opcode listing + d2j-dex2jar back to classes, RUN Gate.reveal() on the JVM -> reveal -> ANS-3b8e0f71c2d94a65"
+}

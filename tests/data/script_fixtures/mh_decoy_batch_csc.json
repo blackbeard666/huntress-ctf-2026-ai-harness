@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 tests/data/script_fixtures/managed_host_gen.py  # stdlib binascii.hexlify of the plan, written as mh_decoy_batch_csc.bat",
+ "oracle_cmd": "grep -oE \"\\\"[0-9a-f]{16,}\\\"\" mh_decoy_batch_csc.bat | tr -d \"\\\"\\n\" | xxd -r -p  # decoy: no v=3 plan"
+}

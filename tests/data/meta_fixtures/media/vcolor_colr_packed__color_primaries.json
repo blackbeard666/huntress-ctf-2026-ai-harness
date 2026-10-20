@@ -1,0 +1,8 @@
+{
+ "field": "media.color_primaries",
+ "expected": "bt709",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i testsrc=s=64x36:r=10:d=1 -c:v libx264 -pix_fmt yuv420p plain.mp4; then a hand-packed 19-byte colr nclx box (prim 1, trc 1, matrix 1, full_range bit set) appended inside the stsd avc1 entry with python struct, enclosing box sizes fixed up (moov after mdat, stco unaffected)",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i F -> 'yuvj420p(pc, bt709, progressive)' (all three bt709 collapse to one name)",
+ "decoy": false,
+ "member": "colr_packed.mp4"
+}

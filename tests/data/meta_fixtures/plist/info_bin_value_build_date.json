@@ -1,0 +1,8 @@
+{
+ "field": "plist.value_build_date",
+ "expected": "2026-03-04T05:06:07Z",
+ "generator_cmd": "python3 -I -c 'import plistlib,datetime; plistlib.dumps({CFBundleName,CFBundleIdentifier,CFBundleExecutable,CFBundleShortVersionString,CFBundleVersion,LSMinimumSystemVersion,LSUIElement,NSAppTransportSecurity:{NSAllowsArbitraryLoads},BuildDate}, fmt=FMT_BINARY, sort_keys=False)'  (stdlib plistlib WRITER)",
+ "oracle_cmd": "exiftool -j info_bin.bin -> BuildDate '2026:03:04 13:06:07+08:00' (= 05:06:07Z; bplist date = f64 seconds since 2001-01-01 UTC)",
+ "decoy": false,
+ "member": "Contents/Info.plist"
+}

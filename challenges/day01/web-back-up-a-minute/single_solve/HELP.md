@@ -1,0 +1,3 @@
+# Blocked: Target 1 never became available
+The GM returns only `{"result":"preparing", questions[...]}` for `hctf start` / `hctf status` (repeated several times). The body carries no target URL, host or artifact, and `hctf artifact` returns `invalid_delivery`. The contract names only "Target 1" (an old backup archive left exposed on a site). Without a target address I can't fetch the archive or recover the proof. Homebase is running (10.1.50.243).
+Next step: re-run `hctf status web-exploitation-day-01-backup-exposure` until `result` changes from `preparing`, then look for the target base URL, fetch common backup paths named by the app itself (robots.txt / page links), and read the proof from the archive.

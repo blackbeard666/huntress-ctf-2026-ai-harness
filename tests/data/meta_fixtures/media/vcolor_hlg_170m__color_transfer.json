@@ -1,0 +1,8 @@
+{
+ "field": "media.color_transfer",
+ "expected": "arib-std-b67",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i testsrc=s=64x36:r=10:d=1 -c:v libx264 -pix_fmt yuv420p -colorspace smpte170m -color_primaries smpte170m -color_trc arib-std-b67 -movflags +write_colr hlg_170m.mp4",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i F -> 'yuv420p(tv, smpte170m/smpte170m/arib-std-b67, progressive)'; PyAV cc.color_trc 18",
+ "decoy": false,
+ "member": "hlg_170m.mp4"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "method_handle_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same layout as pmh_lambda but the lambda yields a 15-hex near-miss ANS-3b8e0f71c2d94a6 -> no valid token",
+ "generator_cmd": "python3 tests/data/android_fixtures/pmh_src/gen_pmh.py decoy_nearmiss tests/data/android_fixtures/pmh_decoy_nearmiss.apk  # javac --release 8 + Android dx --min-sdk-version=26 (dex 038) + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/pmh_src/oracle.sh tests/data/android_fixtures/pmh_decoy_nearmiss.apk  # d2j-baksmali opcode listing + d2j-dex2jar back to classes, RUN Gate.reveal() on the JVM -> reveal -> ANS-3b8e0f71c2d94a6 (15 hex: near-miss)"
+}

@@ -1,0 +1,48 @@
+"""Stdlib writer: a 32-bit big-endian (ELFDATA2MSB) PowerPC ET_DYN with DT_NEEDED x2, SONAME, RPATH, ABI tag,
+.init_array (2), .comment (2 strings), .dynsym + .symtab. vaddr == file offset (one PT_LOAD at 0)."""
+import struct, sys
+E = ">"
+buf = bytearray(52 + 6 * 32)
+def align(n):
+    while len(buf) % n: buf.append(0)
+def put(b, al=1):
+    align(al); off = len(buf); buf.extend(b); return off
+secs = []  # (name, type, flags, off, size, link, info, align, entsize)
+interp = put(b"/lib/ld.so.1\0"); secs.append([".interp", 1, 2, interp, 13, 0, 0, 1, 0])
+note = struct.pack(E + "III", 4, 16, 1) + b"GNU\0" + struct.pack(E + "IIII", 0, 2, 6, 32)
+noff = put(note, 4); secs.append([".note.ABI-tag", 7, 2, noff, len(note), 0, 0, 4, 0])
+dstr = b"\0libz.so.1\0libc.so.6\0libprairie.so.2\0/opt/prairie/lib:$ORIGIN\0collector_init\0puts\0"
+ix = lambda s: dstr.index(s.encode() + b"\0")
+dsoff = put(dstr); secs.append([".dynstr", 3, 2, dsoff, len(dstr), 0, 0, 1, 0])
+text_off = None
+def sym(name_ix, value, size, info, shndx): return struct.pack(E + "IIIBBH", name_ix, value, size, info, 0, shndx)
+# section indices: 1 interp, 2 note, 3 dynstr, 4 dynsym, 5 text, 6 init_array, 7 dynamic, 8 comment, 9 symtab, 10 strtab, 11 shstrtab
+align(4); text_off = len(buf) + 3 * 16
+dsym = sym(0, 0, 0, 0, 0) + sym(ix("puts"), 0, 0, 0x12, 0) + sym(ix("collector_init"), text_off, 8, 0x12, 5)
+dsymoff = put(dsym, 4); secs.append([".dynsym", 11, 2, dsymoff, len(dsym), 3, 1, 4, 16])
+toff = put(b"\x60\x00\x00\x00\x4e\x80\x00\x20", 4); assert toff == text_off; secs.append([".text", 1, 6, toff, 8, 0, 0, 4, 0])
+ia = struct.pack(E + "II", toff, toff + 4); iaoff = put(ia, 4); secs.append([".init_array", 14, 3, iaoff, 8, 0, 0, 4, 4])
+dyn = [(1, ix("libz.so.1")), (1, ix("libc.so.6")), (14, ix("libprairie.so.2")), (15, ix("/opt/prairie/lib:$ORIGIN")),
+       (5, dsoff), (10, len(dstr)), (6, dsymoff), (11, 16), (25, iaoff), (27, 8), (0, 0)]
+db = b"".join(struct.pack(E + "iI", t, v) for t, v in dyn); doff = put(db, 4); secs.append([".dynamic", 6, 3, doff, len(db), 3, 0, 4, 8])
+cm = b"GCC: (GNU) 12.2.0\0Linker: LLD 17.0.6\0"; coff = put(cm); secs.append([".comment", 1, 0x30, coff, len(cm), 0, 0, 1, 1])
+sstr = b"\0collector_init\0puts\0"
+st = sym(0, 0, 0, 0, 0) + sym(sstr.index(b"collector_init"), toff, 8, 0x12, 5) + sym(sstr.index(b"puts"), 0, 0, 0x12, 0)
+stoff = put(st, 4); secs.append([".symtab", 2, 0, stoff, len(st), 10, 1, 4, 16])
+ssoff = put(sstr); secs.append([".strtab", 3, 0, ssoff, len(sstr), 0, 0, 1, 0])
+names = b"\0" + b"".join(s[0].encode() + b"\0" for s in secs) + b".shstrtab\0"
+shoff_ = put(names); secs.append([".shstrtab", 3, 0, shoff_, len(names), 0, 0, 1, 0])
+align(4); shoff = len(buf)
+buf.extend(b"\0" * 40)
+for s in secs:
+    buf.extend(struct.pack(E + "IIIIIIIIII", names.index(s[0].encode() + b"\0"), s[1], s[2], s[3] if s[2] & 2 else 0,
+                           s[3], s[4], s[5], s[6], s[7], s[8]))
+total = len(buf)
+ph = [(6, 52, 52, 52, 192, 192, 4, 4), (3, interp, interp, interp, 13, 13, 4, 1), (1, 0, 0, 0, total, total, 7, 0x10000),
+      (2, doff, doff, doff, len(db), len(db), 6, 4), (4, noff, noff, noff, len(note), len(note), 4, 4),
+      (0x6474E551, 0, 0, 0, 0, 0, 6, 16)]
+for i, p in enumerate(ph):
+    struct.pack_into(E + "IIIIIIII", buf, 52 + 32 * i, *p)
+ident = b"\x7fELF" + bytes([1, 2, 1, 0]) + b"\0" * 8
+struct.pack_into(E + "16sHHIIIIIHHHHHH", buf, 0, ident, 3, 20, 1, toff, 52, shoff, 0, 52, 32, len(ph), 40, len(secs) + 1, len(secs))
+open(sys.argv[1], "wb").write(buf)

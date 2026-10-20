@@ -1,0 +1,8 @@
+{
+ "field": "wasm.magic_u32_hex",
+ "expected": "0x6d736100",
+ "generator_cmd": "wat2wasm 1.0.36 --debug-names mod.wat -o mod.wasm (2 imports env.log/env.mem, exports add/counter/run, data segment)",
+ "oracle_cmd": "xxd -l 4 mod.wasm -> 0061 736d (\\0asm, read as LE u32)",
+ "decoy": false,
+ "member": "app.wasm"
+}

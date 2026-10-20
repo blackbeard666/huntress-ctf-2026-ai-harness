@@ -1,0 +1,8 @@
+{
+ "field": "squashfs.compression",
+ "expected": "gzip",
+ "generator_cmd": "mksquashfs root gz.sqfs -comp gzip -b 65536 -mkfs-time 1700000000 -all-root -noappend (squashfs-tools 4.7.5)",
+ "oracle_cmd": "TZ=UTC unsquashfs -s gz.sqfs | sed -n 's/^Compression //p'",
+ "decoy": false,
+ "member": "deploy-rootfs.squashfs"
+}

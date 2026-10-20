@@ -1,0 +1,29 @@
+{
+ "encoding": "base64",
+ "expected_format": "hashlink_bytecode",
+ "expected_machine": "none",
+ "file_b": "data",
+ "expected_hl_version": "4",
+ "expected_flags": "0",
+ "expected_ints_count": "46",
+ "expected_floats_count": "1",
+ "expected_strings_count": "369",
+ "expected_types_count": "412",
+ "expected_globals_count": "88",
+ "expected_natives_count": "52",
+ "expected_functions_count": "331",
+ "expected_constants_count": "46",
+ "expected_entrypoint": "382",
+ "expected_strings_offset": "210",
+ "expected_offset": 4139,
+ "expected_config": {
+  "c2": "203.0.113.9:8080",
+  "campaign": "hlnodbg",
+  "sleep": 5,
+  "flag": "flag{hl_nodebug}"
+ },
+ "generator_cmd": "bash hl_gen.sh hl_nodebug_b64.bin nodebug '{\"c2\":\"203.0.113.9:8080\",\"campaign\":\"hlnodbg\",\"sleep\":5,\"flag\":\"flag{hl_nodebug}\"}' 0x3c b64",
+ "oracle_cmd": "perl hl_oracle.pl hl_nodebug_b64.bin   # file -b, perl port of hashlink src/code.c hl_code_read (header varints + int/float/string tables), grep -obUa, MIME::Base64 / Encode UTF-8 decode, gzip trailer crc32",
+ "oracle_output": "data | HLB 4 0 46 1 369 412 88 52 331 46 382 | 210 | 4139 | HCFG 1 60 82 350436536 350436536 | {\"c2\":\"203.0.113.9:8080\",\"campaign\":\"hlnodbg\",\"sleep\":5,\"flag\":\"flag{hl_nodebug}\"}",
+ "note": "format label SPECULATIVE: 'hashlink_bytecode' (candidates hashlink/hl/hl_bytecode/hlb in format_candidates); machine 'none'; expected_offset = first stored byte ('H' utf8-raw / 'S' base64) per the OFFSET LAW (grep -obUa)"
+}

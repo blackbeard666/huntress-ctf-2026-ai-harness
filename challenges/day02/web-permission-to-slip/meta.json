@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-02-idor",
+  "lane": "web",
+  "name": "🌐 Permission to Slip",
+  "ids": {
+    "single_solve": "web-exploitation-day-02-idor",
+    "time_trial": "web-exploitation-day-02-idor/time_trial",
+    "mastery": "web-exploitation-day-02-idor/mastery"
+  }
+}

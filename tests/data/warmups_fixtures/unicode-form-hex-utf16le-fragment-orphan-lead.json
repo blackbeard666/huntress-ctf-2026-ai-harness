@@ -1,0 +1,9 @@
+{
+ "codec": "hex(utf-16le) fragment starting on an orphan 00",
+ "plain": "-lynx-63",
+ "encoded": "002d006c0079006e0078002d0036003300",
+ "generator_cmd": "printf %s 'amber-lynx-63' | iconv -f UTF-8 -t UTF-16LE | tail -c +10 | xxd -p | tr -d '\\n'  # starts on the 00 high byte of 'r'",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | tail -c +2 | iconv -f UTF-16LE -t UTF-8  # glibc iconv after dropping the orphan byte",
+ "oracle_plain": "-lynx-63",
+ "expected": "match"
+}

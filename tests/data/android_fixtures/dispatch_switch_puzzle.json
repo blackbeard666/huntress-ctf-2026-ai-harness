@@ -1,0 +1,7 @@
+{
+ "entry": "dispatch_key_scan",
+ "expected": "ANS-3e9d0c4a7b21f856",
+ "_why": "Dispatcher.handle(route): javac string switch (hashCode -> sparse-switch -> equals) -> instance LinkedHashMap<String,Handler> built in <init>; puzzle json {dispatch: {route: east}} supplies the key; north/south/west are decoys",
+ "generator_cmd": "python3 tests/data/android_fixtures/dispatch_src/gen_dispatch.py switch_puzzle tests/data/android_fixtures/dispatch_switch_puzzle.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh; manifest by apktool-bundled aapt2 link -I android-framework.jar; python zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/dispatch_src/oracle.sh tests/data/android_fixtures/dispatch_switch_puzzle.apk  # key from `aapt dump xmltree` pathPrefix / python json; d2j-dex2jar back to classes and RUN the real dispatcher on the JVM -> Dispatcher.handle(east) -> ANS-3e9d0c4a7b21f856"
+}

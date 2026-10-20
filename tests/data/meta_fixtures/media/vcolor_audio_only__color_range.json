@@ -1,0 +1,8 @@
+{
+ "field": "media.color_range",
+ "expected": "none",
+ "generator_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -y -f lavfi -i sine=d=0.3 -c:a aac audio_only.m4a",
+ "oracle_cmd": "tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2 -hide_banner -i F -> only 'Audio: aac (LC)', no video stream",
+ "decoy": true,
+ "member": "audio_only.m4a"
+}
