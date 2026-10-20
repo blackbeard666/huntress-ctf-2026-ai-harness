@@ -6,9 +6,12 @@ GM facts (observed on the first web day):
   `contract["targets"][*].url`, matched by each question's `artifact: "Target N"`.
 - `start` answers `{"result": "preparing"}` (no attempt_id / answer_ids / targets, no deadline) for ~20 s .. ~2.5 min,
   then `status` shows `result: "active"` with targets. There is no clock while preparing.
-- ONE live web target per TEAM: extra starts sit in `preparing`; three parallel Time Trial starts all went
+- D19: ONE live web target per TEAM: extra starts sat in `preparing`; three parallel Time Trial starts all went
   preparing -> `cleaned` (`routes: []`) and wedged (start/retry kept returning the dead attempt). The browser arena's
   endpoint (`POST /arena/api {"op": "start", ...}`, hctf/gm.py cmd_arena) revived a cleaned attempt.
+- 2026-10-20 the organizers raised it: five targets live at once (probe), so web chains run in parallel up to SLOTS.
+  The OpenAPI's `switch_target: true` (start, web only) stops the team's least recently used UNTIMED target on another
+  challenge when the team limit is full -- never sent by the harness (it could stop another chain's working target).
 - After a CORRECT the target answers HTTP 410 {"state": "completed"} and the team slot frees -- so a regression case
   of a FINISHED web attempt can never be replayed (its target is gone); one of the LIVE attempt still can.
 
@@ -32,6 +35,10 @@ REVIVE_EVERY = float(os.environ.get("HCTF_WEB_REVIVE_EVERY", "30"))
 MAX_REVIVES = int(os.environ.get("HCTF_WEB_MAX_REVIVES", "6"))
 CLI_WAIT = float(os.environ.get("HCTF_WEB_CLI_WAIT", "90"))       # `hctf start` by a worker (its Bash call caps ~120 s)
 SLOT = os.environ.get("HCTF_WEB_SLOT", "1") != "0"
+# Live web targets the team may hold at once. D19: ONE (a 2nd start clobbered the 1st). Probed 2026-10-20 22:16: five
+# TT targets active together (every web challenge released so far), Mastery (2 targets) up in 12-17 s beside them; the GM
+# OpenAPI now has `switch_target` for "if a team limit is full". 5 = what was measured, not the GM's cap.
+SLOTS = max(1, int(os.environ.get("HCTF_WEB_SLOTS", "5")))
 STOP_AFTER_CORRECT = os.environ.get("HCTF_WEB_STOP_AFTER_CORRECT", "1") != "0"
 
 
@@ -118,7 +125,7 @@ def await_target(cid, body, status, revive=None, log=print, wait=None, poll=None
             return body
         if st != last_state:
             log(f"[{cid}] web target {st} (+{clock() - t0:.0f}s): waiting for it (no clock while it prepares; "
-                "one live web target per team)")
+                "web chains are capped at SLOTS live targets)")
             last_state = st
         if dead(body) and revive is not None and revives < max_revives and (
                 last_revive is None or clock() - last_revive >= revive_every):
@@ -204,7 +211,7 @@ def empty_artifacts(mode_dir, attempt):
     return d
 
 
-# ------------------------------------------------------------------ one live web target per team
+# ------------------------------------------------------------------ the team's live web target slots
 
 _held = threading.local()
 
@@ -215,9 +222,11 @@ def _lock_path():
 
 
 @contextlib.contextmanager
-def slot(key, log=print, path=None, poll=2.0, note_every=60.0):
-    """Hold THE team's web target slot (flock: serializes every thread of this process AND every other hctf process).
-    Re-entrant per thread. Held by a chain from its stage's first start until that mode is CORRECT or abandoned."""
+def slot(key, log=print, path=None, poll=2.0, note_every=60.0, n=None):
+    """Hold ONE of the team's `n` (default SLOTS) web target slots: flock on lock files <path>, <path>.1 .. <path>.n-1,
+    shared by every thread of this process AND every other hctf process. Re-entrant per thread. A web chain holds one
+    for its whole run (Chain._run), so at most n chains have live targets at once."""
+    n = SLOTS if n is None else max(1, int(n))
     if not SLOT:
         yield
         return
@@ -229,24 +238,31 @@ def slot(key, log=print, path=None, poll=2.0, note_every=60.0):
             _held.n -= 1
         return
     import fcntl
-    p = Path(path) if path else _lock_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    f = open(p, "a+")
+    base = Path(path) if path else _lock_path()
+    base.parent.mkdir(parents=True, exist_ok=True)
+    files = [open(base if i == 0 else base.with_name(f"{base.name}.{i}"), "a+") for i in range(n)]
+    f = None
     t0, noted = time.time(), 0.0
     try:
-        while True:
-            try:
-                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
+        while f is None:
+            for cand in files:
+                try:
+                    fcntl.flock(cand, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    f = cand
+                    break
+                except BlockingIOError:
+                    continue
+            if f is None:
                 if time.time() - noted >= note_every:
                     noted = time.time()
-                    try:
-                        holder = Path(p).read_text().strip()[:160]
-                    except OSError:
-                        holder = "?"
-                    log(f"[{key}] waiting for the team's one live web target (held by {holder or '?'}; "
-                        f"+{time.time() - t0:.0f}s)")
+                    holders = []
+                    for cand in files:
+                        try:
+                            holders.append(json.loads(Path(cand.name).read_text() or "{}").get("key") or "?")
+                        except (OSError, ValueError):
+                            holders.append("?")
+                    log(f"[{key}] waiting for one of the team's {n} live web target slot(s) (held by "
+                        f"{', '.join(holders)}; +{time.time() - t0:.0f}s)")
                 time.sleep(poll)
         f.seek(0)
         f.truncate()
@@ -268,7 +284,8 @@ def slot(key, log=print, path=None, poll=2.0, note_every=60.0):
                 pass
             fcntl.flock(f, fcntl.LOCK_UN)
     finally:
-        f.close()
+        for cand in files:
+            cand.close()
 
 
 def after_stage(cid, ok, log=print):
@@ -287,8 +304,8 @@ def after_stage(cid, ok, log=print):
     if ok and STOP_AFTER_CORRECT and att and att in cli._correct_attempts(cli.cdir(cid) / "submissions.jsonl"):
         arena(cid, "stop", log=log)   # ours, and judged CORRECT: only frees the slot
     elif not ok:
-        log(f"!!! [{cid}] web attempt {str(att)[:8]} is still ACTIVE and unsolved: it holds the team's ONE live web "
-            f"target (the next web start sits in `preparing`); free it with `hctf arena stop {cid}` once given up")
+        log(f"!!! [{cid}] web attempt {str(att)[:8]} is still ACTIVE and unsolved: it holds one of the team's live web "
+            f"target slots; free it with `hctf arena stop {cid}` once given up")
 
 
 # ------------------------------------------------------------------ regression cases

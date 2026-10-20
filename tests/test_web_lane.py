@@ -254,12 +254,12 @@ try:
           (list(late), reg))
     remote.gm, orchestrate.released_challenges = _saved["gm"], _saved["released"]
 
-    # -------------------------------------------------------------- 7. one live web target per team
+    # -------------------------------------------------------------- 7. the team's live web target slots
     spans, lock_path = [], tmp / "locks" / "w.lock"
 
-    def holder(i):
-        with webtarget.slot(f"c{i}", log=quiet, path=lock_path, poll=0.01):
-            with webtarget.slot(f"c{i}-nested", log=quiet, path=lock_path):   # re-entrant in the holding thread
+    def holder(i, n=1, path=lock_path):
+        with webtarget.slot(f"c{i}", log=quiet, path=path, poll=0.01, n=n):
+            with webtarget.slot(f"c{i}-nested", log=quiet, path=path, n=n):   # re-entrant in the holding thread
                 t0 = time.time()
                 time.sleep(0.15)
                 spans.append((t0, time.time()))
@@ -267,8 +267,21 @@ try:
     [t.start() for t in ts]
     [t.join(10) for t in ts]
     spans.sort()
-    check("7 slot: three holders never overlap (and nesting does not deadlock)",
+    check("7 slot n=1: three holders never overlap (and nesting does not deadlock)",
           len(spans) == 3 and all(a[1] <= b[0] + 1e-3 for a, b in zip(spans, spans[1:])), spans)
+    # 2026-10-20: the GM held five live targets at once -> n slots: n holders together, the (n+1)th waits
+    spans.clear()
+    ts = [threading.Thread(target=holder, args=(i, 2, tmp / "locks" / "w2.lock")) for i in range(3)]
+    [t.start() for t in ts]
+    [t.join(10) for t in ts]
+    spans.sort()
+    overlap = [sum(1 for b in spans if b[0] < a[1] - 1e-3 and a[0] < b[1] - 1e-3) for a in spans]
+    check("7 slot n=2: two holders at once, the third waits for a free slot",
+          len(spans) == 3 and max(overlap) == 2 and spans[2][0] >= min(spans[0][1], spans[1][1]) - 1e-3,
+          (spans, overlap))
+    check("7 default slot count = the probed limit (5)", webtarget.SLOTS == 5, webtarget.SLOTS)
+    _slots = webtarget.SLOTS
+    webtarget.SLOTS = 1     # sections 7 (chains) and 9 below check the serialized mode
 
     orchestrate.set_state = lambda *a, **k: None
     webtarget.after_stage = lambda *a, **k: None
@@ -379,6 +392,20 @@ try:
     firsts = [o.split(":")[0] for o in order]
     check("9 web chain holds the slot across single -> TT -> Mastery (no interleave)",
           len(order) == 6 and firsts in (["1"] * 3 + ["2"] * 3, ["2"] * 3 + ["1"] * 3), order)
+    # ... and with 2 slots the two web chains run side by side (D20: Admin waited 484 s for LFI)
+    webtarget.SLOTS = 2
+    order.clear()
+    orchestrate.set_state = lambda *a, **k: None
+    webtarget.after_stage = lambda *a, **k: None
+    ts = [threading.Thread(target=mk(i)._run) for i in (3, 4)]
+    [t.start() for t in ts]
+    [t.join(10) for t in ts]
+    orchestrate.set_state = _ss
+    webtarget.after_stage = _saved["after_stage"]
+    firsts = [o.split(":")[0] for o in order]
+    check("9 two slots: two web chains interleave (both run at once)",
+          len(order) == 6 and firsts not in (["3"] * 3 + ["4"] * 3, ["4"] * 3 + ["3"] * 3), order)
+    webtarget.SLOTS = _slots
     cli.is_complete = _saved["is_complete"]
 
     # 10. early handoff on a web single: the single's target is spent at CORRECT, so the replay can't verify the solver

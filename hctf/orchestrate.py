@@ -4628,7 +4628,7 @@ class Chain:
         return cli.gm_latest_correct(cid)
 
     def _web_slot(self, mode, fn, *args):
-        """Web (live target): ONE live target per TEAM -- hold the process/host-wide web slot (hctf/webtarget.slot) from
+        """Web (live target): the team's live targets are capped -- hold a process/host-wide web slot (hctf/webtarget.slot) from
         this stage's first start until its mode is CORRECT or the stage gives up; other lanes run `fn` as is."""
         from . import webtarget
         e = self.entries.get(mode)
@@ -4704,8 +4704,8 @@ class Chain:
         from . import webtarget
         if webtarget.is_live_lane(self.lane) and any(
                 m in self.entries and not cli.is_complete(self.entries[m]["id"]) for m in modes):
-            # web: hold the team's ONE target slot for the whole chain (re-entrant: each stage's _web_slot nests in it),
-            # so the Time Trial requested at the single's CORRECT (_web_tt_kick) can't overlap another chain's target
+            # web: hold one of the team's target slots for the whole chain (re-entrant: each stage's _web_slot nests in
+            # it), so the Time Trial requested at the single's CORRECT (_web_tt_kick) never pushes the team past SLOTS
             with webtarget.slot(self.base, log=say):
                 return self._run_modes(modes)
         return self._run_modes(modes)

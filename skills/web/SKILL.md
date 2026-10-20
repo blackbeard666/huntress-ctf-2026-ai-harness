@@ -9,8 +9,8 @@ description: Huntress web lane - web application / web-traffic analysis of the G
 GM lane `web-exploitation`. There is NO downloadable artifact (the artifacts dir is empty on purpose): the started
 attempt's contract (`start.json`) carries `targets: [{"id": "Target 1", "url": "https://<hash>.2026.huntress.ctf.games/"}]`
 and each question's `artifact` names one ("Target 1"). The harness already waited for the target to come up
-(`preparing` -> `active`; `hctf start` reconnects and waits too) -- never `hctf retry`: the team gets ONE live web
-target at a time, and a solved attempt's target answers HTTP 410 afterwards. Reach it directly from here with
+(`preparing` -> `active`; `hctf start` reconnects and waits too) -- never `hctf retry` (it re-rolls the attempt and
+the target you are working on), and a solved attempt's target answers HTTP 410 afterwards. Reach it directly from here with
 `curl -sS -A 'Mozilla/5.0' --max-time 10 <url>` (Cloudflare 403s default library user agents; no `hctf hb exec`
 needed). `solve.py` reads `contract["targets"]`, matches the question's `artifact`, and fetches with a browser UA.
 
