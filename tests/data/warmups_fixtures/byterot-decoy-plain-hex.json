@@ -1,0 +1,10 @@
+{
+ "codec": "byterot*",
+ "plain": null,
+ "encoded": "74686520717569636b2062726f776e20666f78206a756d7073206f76657220746865206c617a7920646f67",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'the quick brown fox jumps over the lazy dog' | xxd -p | tr -d '\\n'  # PLAIN hex, no rotation",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p  # reads as text already: identity, not a rotation",
+ "oracle_plain": null
+}

@@ -1,0 +1,8 @@
+{
+ "field": "war.class_major_version_set",
+ "expected": "[55]",
+ "generator_cmd": "javac --release 11 -d war/WEB-INF/classes W.java; printf 'Manifest-Version: 1.0\\r\\nCreated-By: Apache Maven 3.9.6\\r\\nBuild-Jdk-Spec: 11\\r\\n...' > war/META-INF/MANIFEST.MF; (cd war && zip -qrX ../portal.war META-INF WEB-INF)",
+ "oracle_cmd": "java Oracle.java portal.war (java.util.jar.JarFile: getManifest().getMainAttributes(), isMultiRelease(), DataInputStream u16 major @6 of each *.class entry, META-INF/*.(SF|RSA|DSA|EC) names) -> majors=[55]",
+ "decoy": false,
+ "member": "portal.war"
+}

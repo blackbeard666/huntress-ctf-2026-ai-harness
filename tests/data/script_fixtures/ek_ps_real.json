@@ -1,0 +1,11 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "expected_kind": {
+  "kind": "ps_listing",
+  "reader": "process_events"
+ },
+ "generator_cmd": "ps -o pid,ppid,user,comm -p 1 > ek_ps_real.txt (procps)",
+ "oracle_cmd": "head -1 ek_ps_real.txt | awk '{print $1,$2}'  # PID PPID",
+ "note": "evidence-magic-classifier: lib.codec.evidence_kind(name, data) must return expected_kind; as a script fixture the evidence holds no plan, so find_codecs must not invent one"
+}

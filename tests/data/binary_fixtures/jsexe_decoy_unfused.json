@@ -1,0 +1,16 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "runtime": "none",
+  "entry_name": "none",
+  "embedded_source_offset": "none",
+  "sea_fuse": "0",
+  "sea_fuse_offset": "8224"
+ },
+ "generator_cmd": "bash jsexe_gen.sh   # step 3 (gcc host, fuse ':0', no SEA note)",
+ "oracle_cmd": "readelf -n -W (no NODE_SEA_BLOB) ; strings -a -t d | grep NODE_SEA_FUSE (:0)",
+ "decoy": true,
+ "note": "decoy: unflipped fuse, no blob"
+}

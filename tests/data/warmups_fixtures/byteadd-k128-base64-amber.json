@@ -1,0 +1,9 @@
+{
+ "codec": "byteadd128-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-meadow-31",
+ "encoded": "zunj5aD37/LroOTl4+/k6e7noPTo6fOg9+Hy7fXwoaDU76Dz7+z25ayg8/Xi7en0oPTo6fOg5fjh4/Sg4e7z9+XyoPTvoPTo5aDH4e3loM3h8/Tl8rqg4e3i5fKt7eXh5O/3rbOx",
+ "generator_cmd": "printf '%s' \"$plain\" | perl -0777 -ne 'print join q(), map { chr((ord($_)+128)%256) } split //' | base64 -w0",
+ "oracle_cmd": "python3 -c \"import os,base64;e=os.environ['encoded'];d=base64.b64decode(e);b=d.translate(bytes.maketrans(bytes(range(256)),bytes((i-128)%256 for i in range(256))));print(b.decode())\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-meadow-31",
+ "expected": "match"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "keyed-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-osprey-47",
+ "encoded": "JmljZIU3b3MrASGlX29kaQ5nAWGoaVYgd2EybVOwAIULbyUzb2x2ZIwgc3OibQl0AWGoaVYgZVhhX3FgXQ5zd2OyAWGvAWGoZIUWXQ1lAR1hc3GlcjogamEkZI1vc3UyZVktBTc=",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/altbase_cyberchef.mjs b64 'HUNTRESWAMPKYBCDFGIJLOQVXZabcdefghijklmnopqrstuvwxyz0123456789+/='  # CyberChef 'To Base64', keyword alphabet dedup('HUNTRESSWARMUPKEY'+std)",
+ "oracle_cmd": "printf %s \"$encoded\" | AB=$PWD/tools/npm-altbase tools/node/bin/node tests/data/warmups_fixtures/altbase_oracle.mjs 'HUNTRESWAMPKYBCDFGIJLOQVXZabcdefghijklmnopqrstuvwxyz0123456789+/' '='  # npm rfc4648 codec.parse over the keyword alphabet",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-osprey-47",
+ "expected": "match"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "xamarin_assembly_scan",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "bash tests/data/android_fixtures/xam_src/gen.sh  (DLLs: tools/pwsh/pwsh -File xam_src/mk.ps1 = Roslyn Add-Type; XALZ of a dll whose literal is the near-miss ANS-3f9c1a7be04d2cZZ + `head -c 600` truncated XABA impostor)",
+ "oracle_cmd": "unzip -p xam_decoy_nearmiss.apk assemblies/HuntressGate.dll > d.bin; python3 -I -c \"import sys,lz4.block,dnfile;b=open(sys.argv[1],'rb').read();i=b.find(b'XALZ');d=lz4.block.decompress(b[i+12:],uncompressed_size=int.from_bytes(b[i+8:i+12],'little'));print(dnfile.dnPE(data=d).net.user_strings.get(1).value)\" d.bin   # -> ANS-3f9c1a7be04d2cZZ (non-hex: no valid token)"
+}

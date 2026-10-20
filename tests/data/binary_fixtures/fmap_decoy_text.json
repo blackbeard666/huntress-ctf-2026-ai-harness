@@ -1,0 +1,9 @@
+{
+ "case": "decoy_text",
+ "field_family": "file_map (lib.binary.file_map_field)",
+ "expected": null,
+ "expected_config": null,
+ "decoy": true,
+ "generator_cmd": "tests/data/binary_fixtures/fmap_gen.sh fmap_decoy_text.bin decoy_text '{\"campaign\":\"FM-8\",\"domain\":\"cave-8.fmap.example.invalid\",\"mutex\":\"Global\\\\HFMAP8\"}' 232",
+ "oracle_cmd": "python3 -I tests/data/binary_fixtures/fmap_oracle.py fmap_decoy_text.bin"
+}

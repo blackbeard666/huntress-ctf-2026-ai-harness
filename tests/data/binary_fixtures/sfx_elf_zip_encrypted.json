@@ -1,0 +1,28 @@
+{
+ "entry": "appended_archive_facts",
+ "bin": "sfx_elf_zip_encrypted.bin",
+ "password": null,
+ "expected": {
+  "archive_format": "zip",
+  "archive_offset": 14328,
+  "stub_size": 14328,
+  "image_end": 14328,
+  "archive_at_image_end": true,
+  "member_count": 2,
+  "member_names": [
+   "HCFG.json",
+   "README.txt"
+  ],
+  "member_sha256": {
+   "HCFG.json": null,
+   "README.txt": null
+  },
+  "first_member": "HCFG.json",
+  "hcfg_member": "HCFG.json",
+  "hcfg_member_sha256": null
+ },
+ "decoy": false,
+ "note": "ZipCrypto members, no password given -> member sha256 none",
+ "generator_cmd": "bash tests/data/binary_fixtures/sfx_gen.sh   # gcc ELF stub + zip -X / zip -A / zip -P / tar --format=ustar / mksquashfs -comp gzip|xz / 7z a, concatenated with cat",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/sfx_oracle.py tests/data/binary_fixtures/sfx_elf_zip_encrypted.bin   # 7z l -slt / 7z e -so | sha256 / readelf -hW"
+}

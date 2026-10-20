@@ -1,0 +1,32 @@
+{
+ "entry": "appended_archive_facts",
+ "bin": "sfx_elf_squashfs_xz.bin",
+ "password": null,
+ "expected": {
+  "archive_format": "squashfs",
+  "archive_offset": 14328,
+  "stub_size": 14328,
+  "image_end": 14328,
+  "archive_at_image_end": true,
+  "member_count": 4,
+  "member_names": [
+   "HCFG.json",
+   "README.txt",
+   "bin/blob.dat",
+   "conf/app.ini"
+  ],
+  "member_sha256": {
+   "HCFG.json": "2b9324e6e22a5a24d69fd4cd6987c28199b375e258c93ed5993bcd2e2dbe5fd0",
+   "README.txt": "44d965b16a2616bf5b13ab1603f92b12847da6a878dcad39258d7b4645e7645d",
+   "bin/blob.dat": "78bd367073786b59cfed044eb4c372b1a19427d5c910d02668d3f07ab474bb7b",
+   "conf/app.ini": "d5c5f09b69f25bf5059606bc891a4bdaac96e4ba058fc001cab9a8a4b9ee7c39"
+  },
+  "first_member": "HCFG.json",
+  "hcfg_member": "HCFG.json",
+  "hcfg_member_sha256": "2b9324e6e22a5a24d69fd4cd6987c28199b375e258c93ed5993bcd2e2dbe5fd0"
+ },
+ "decoy": false,
+ "note": "AppImage-style runtime + squashfs xz",
+ "generator_cmd": "bash tests/data/binary_fixtures/sfx_gen.sh   # gcc ELF stub + zip -X / zip -A / zip -P / tar --format=ustar / mksquashfs -comp gzip|xz / 7z a, concatenated with cat",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/sfx_oracle.py tests/data/binary_fixtures/sfx_elf_squashfs_xz.bin   # 7z l -slt / 7z e -so | sha256 / readelf -hW"
+}

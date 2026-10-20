@@ -1,0 +1,24 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "runtime": "node_sea",
+  "entry_name": "n1/greeter.js",
+  "embedded_source_offset": "12408",
+  "embedded_source_size": "117",
+  "embedded_source_sha256": "50b873013c8ea1ac133aa0264cabad794ed7d3cef27301126c9904d9e12f02a6",
+  "sea_fuse": "1",
+  "sea_fuse_offset": "8224",
+  "sea_container": "elf_note",
+  "sea_blob_offset": "12370",
+  "sea_blob_size": "155",
+  "sea_flags": "1",
+  "asset_count": "0",
+  "hcfg_offset": "none"
+ },
+ "generator_cmd": "bash jsexe_gen.sh   # step 1 (node v24 --experimental-sea-config main=n1/greeter.js -> objcopy .note.node_sea + fuse flip)",
+ "oracle_cmd": "readelf -S -W (.note.node_sea @0x3036; desc = +12 hdr +16 name = 12370) ; readelf -n -W (NODE_SEA_BLOB data size 0x9b) ; strings -a -t d | grep NODE_SEA_FUSE ; grep -obUaP '// sea greeter' ; wc -c / sha256sum n1/greeter.js ; sea-config main",
+ "decoy": false,
+ "note": "real node v24 SEA blob (exec-argv-extension byte present); flags 1 = disableExperimentalSEAWarning"
+}

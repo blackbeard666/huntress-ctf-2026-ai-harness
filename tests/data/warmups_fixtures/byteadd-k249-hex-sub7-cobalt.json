@@ -1,0 +1,9 @@
+{
+ "codec": "byteadd249-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-ember-64",
+ "encoded": "47625c5e1970686b64195d5e5c685d626760196d61626c19705a6b666e691a194d68196c68656f5e25196c6e5b66626d196d61626c195e715a5c6d195a676c705e6b196d68196d615e19405a665e19465a6c6d5e6b33195c685b5a656d265e665b5e6b262f2d",
+ "generator_cmd": "printf '%s' \"$plain\" | perl -0777 -ne 'print join q(), map { chr((ord($_)+249)%256) } split //' | xxd -p | tr -d '\\n'",
+ "oracle_cmd": "python3 -c \"import os,base64;e=os.environ['encoded'];d=bytes.fromhex(e);b=d.translate(bytes.maketrans(bytes(range(256)),bytes((i-249)%256 for i in range(256))));print(b.decode())\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-ember-64",
+ "expected": "match"
+}

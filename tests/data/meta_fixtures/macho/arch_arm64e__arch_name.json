@@ -1,0 +1,7 @@
+{
+ "field": "macho.arch_name",
+ "expected": "arm64e",
+ "generator_cmd": "echo 'int f(int x){return x*3+1;}' > a.c; clang-18 -target arm64e-apple-ios14.0 -c a.c -o arm64e-apple-ios14.0.o",
+ "oracle_cmd": "llvm-lipo-18 -archs arm64e-apple-ios14.0.o",
+ "decoy": false
+}

@@ -1,0 +1,28 @@
+{
+ "family": "elf_note",
+ "encoding": "raw",
+ "expected_offset": 24,
+ "expected_config": {
+  "c2": "10.13.37.7:8443",
+  "sleep": 30,
+  "id": "note-sec"
+ },
+ "expected_facts": {
+  "note_owners": "none",
+  "note_types": "none",
+  "note_count": "none",
+  "hcfg_note_offset": "none",
+  "hcfg_note_owner": "none",
+  "hcfg_note_type": "none",
+  "hcfg_note_section": "none",
+  "has_hcfg_note": "none",
+  "has_huntress_note": "none",
+  "has_htrs_note": "none",
+  "has_gnu_note": "none"
+ },
+ "generator_cmd": "sh elfnote_gen.sh   # renamed impostor: the bare .note.huntress record (no ELF) -> note facts 'none' (hcfg_scan still sees the raw blob)",
+ "oracle_cmd": "python3 elfnote_oracle.py elfnote_decoy_rawnote.bin Huntress HTRS GNU   # readelf -nW / -SW + file position of readelf's printed description data",
+ "file_b": "Excel 2 BIFF 2",
+ "decoy": true,
+ "note": "lib.binary.elf_note_field(data, key) per expected_facts key; hcfg offset = the 'H' of HCFG in the note desc; field names SPECULATIVE (GM label not seen)"
+}

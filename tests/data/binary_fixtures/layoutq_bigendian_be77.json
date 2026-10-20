@@ -1,0 +1,41 @@
+{
+ "entry": "layout_from_question+layout_field",
+ "question": "Find the last BE77 trailer. Read k1 at +5, k2 at +6, entry count u8 at +7, payload length u32be at +8, footer length u16be at +12, and the 32-byte payload SHA-256 at +16. The payload bytes begin at +48 and the footer is immediately after the payload. Verify exact end bounds. Locate the unique CRC32-valid HCFG record: bytes 0..3 are ASCII HCFG, byte 4 is version, byte 5 is the XOR key.",
+ "oracle_args": "BE77 m k1:5:u8 k2:6:u8 entry_count:7:u8 payload_length:8:u32be footer_length:12:u16be payload_sha256:16:32 payload:48:payload_length footer:after:footer_length",
+ "decoy": false,
+ "note": "BE ints, 'immediately after'",
+ "expected": {
+  "overlay_offset": 2222,
+  "overlay_size": 138,
+  "k1": 65,
+  "k2": 153,
+  "entry_count": 2,
+  "payload_length": 66,
+  "footer_length": 24,
+  "payload_sha256": "40206fe172f2a650a11829a9d4ba8fe65dc5f8702470c4403f3f1afa7c61f8c0",
+  "payload_offset": 48,
+  "payload_start": 2270,
+  "payload_end": 2336,
+  "payload_body_size": 66,
+  "payload_sha256_actual": "40206fe172f2a650a11829a9d4ba8fe65dc5f8702470c4403f3f1afa7c61f8c0",
+  "footer_offset": 114,
+  "footer_start": 2336,
+  "footer_end": 2360,
+  "footer_body_size": 24,
+  "footer_sha256_actual": "2342afe52e1052ad225ce72245d82f59a65095b2cabe6a6049be59c6967cf8b1",
+  "end_bounds_ok": "true"
+ },
+ "ids": {
+  "payload_size": 66,
+  "footer_size": 24,
+  "entry_count": 2,
+  "count": 2,
+  "k1": 65,
+  "footer_offset": 114,
+  "payload_sha256": "40206fe172f2a650a11829a9d4ba8fe65dc5f8702470c4403f3f1afa7c61f8c0",
+  "footer_sha256": "2342afe52e1052ad225ce72245d82f59a65095b2cabe6a6049be59c6967cf8b1",
+  "overlay_size": 138
+ },
+ "generator_cmd": "python3 tests/data/binary_fixtures/layoutq_gen.py  (stdlib struct/hashlib writer)",
+ "oracle_cmd": "bash tests/data/binary_fixtures/layoutq_oracle.sh layoutq_bigendian_be77.bin \"$(jq -r .oracle_args layoutq_bigendian_be77.json)\"  (grep -obaF / od / dd|sha256sum / stat)"
+}

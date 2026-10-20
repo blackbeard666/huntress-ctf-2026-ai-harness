@@ -1,0 +1,8 @@
+{
+ "field": "app.executable_cpu_type_set",
+ "expected": "none",
+ "generator_cmd": "mkdir -p Fake.app/Contents/MacOS; printf 'CFBundleIdentifier=com.fake.app\\n' > Fake.app/Contents/Info.plist (text, not a plist); cp macho/decoy_elf (ELF x86-64) Fake.app/Contents/MacOS/Fake; zip -X -r fake_app.zip Fake.app",
+ "oracle_cmd": "file Fake.app/Contents/MacOS/Fake -> 'ELF 64-bit LSB pie executable' (not Mach-O; Info.plist unparsable)",
+ "decoy": true,
+ "member": "fake_app.zip"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "byterol6-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-badger-29",
+ "encoded": "935ad85908dddb9cda081959d8db195a9bd9081d1a5adc08dd589c5b5d1c480815db08dcdb1b9d590b08dc5d985b5a1d081d1a5adc08591e58d81d08589bdcdd599c081ddb081d1a5908d1585b59085358dc1d599c8e085b581c1b594b985819d9599c4b8c4e",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/byterot_cyberchef.mjs right 2 text hex  # CyberChef \"Rotate right\" amount 2 (per byte, Carry through off) = ROL 6, node Buffer -> hex",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/byterot_cyberchef.mjs left 2 hex text  # CyberChef \"Rotate left\" amount 2 undoes it",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-badger-29",
+ "expected": "match"
+}

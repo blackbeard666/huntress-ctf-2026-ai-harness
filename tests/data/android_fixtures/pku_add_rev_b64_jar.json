@@ -1,0 +1,7 @@
+{
+ "entry": "payload_unwrap_scan",
+ "expected": "ANS-0f6b2c9e83d1a547",
+ "_why": "wrapped secondary payload, wrapper recovered from the file magic (payload-magic-known-plaintext-unwrap): `zip` jar of a d2j dex, byte add 0x5a, reversed, coreutils base64 text",
+ "generator_cmd": "python3 tests/data/android_fixtures/pku_src/gen_pku.py add_rev_b64_jar tests/data/android_fixtures/pku_add_rev_b64_jar.apk  # `zip` jar of a d2j dex, byte add 0x5a, reversed, coreutils base64 text",
+ "oracle_cmd": "unzip -p pku_add_rev_b64_jar.apk assets/update.txt | base64 -d | python3 -c \"import sys;b=sys.stdin.buffer.read()[::-1];sys.stdout.buffer.write(bytes((x-0x5a)&255 for x in b))\" > u.jar && unzip -p u.jar classes.dex | strings | grep -oE 'ANS-[0-9a-f]{16}'"
+}

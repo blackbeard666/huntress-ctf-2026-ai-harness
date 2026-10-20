@@ -1,0 +1,61 @@
+{
+ "case": "elf_preshoff",
+ "field_family": "file_map (lib.binary.file_map_field)",
+ "expected": {
+  "gap_count": 9,
+  "slack_count": 0,
+  "total_gap_bytes": 9805,
+  "image_end": 15864,
+  "gaps_offsets_sizes": [
+   [
+    948,
+    4
+   ],
+   [
+    1244,
+    4
+   ],
+   [
+    1488,
+    2608
+   ],
+   [
+    4123,
+    5
+   ],
+   [
+    4403,
+    1
+   ],
+   [
+    4417,
+    3775
+   ],
+   [
+    8456,
+    3304
+   ],
+   [
+    12342,
+    2
+   ],
+   [
+    13906,
+    102
+   ]
+  ],
+  "cave_offset": 13906,
+  "cave_size": 102,
+  "cave_segment": "none",
+  "hcfg_gap_offset": 13912,
+  "gap_hcfg_storage": "raw"
+ },
+ "expected_config": {
+  "campaign": "FM-3",
+  "domain": "cave-3.fmap.example.invalid",
+  "mutex": "Global\\HFMAP3"
+ },
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/fmap_gen.sh fmap_elf_preshoff.bin elf_preshoff '{\"campaign\":\"FM-3\",\"domain\":\"cave-3.fmap.example.invalid\",\"mutex\":\"Global\\\\HFMAP3\"}' 87",
+ "oracle_cmd": "python3 -I tests/data/binary_fixtures/fmap_oracle.py fmap_elf_preshoff.bin"
+}

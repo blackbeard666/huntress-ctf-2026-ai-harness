@@ -1,0 +1,8 @@
+{
+ "field": "dmg.xml_plist_partition_names",
+ "expected": "none",
+ "generator_cmd": "libarchive xar writer (mkxar.py.txt a) renamed .dmg",
+ "oracle_cmd": "7z l -slt FILE -> Type = Xar; tail -c 512 FILE | grep -c koly -> 0",
+ "decoy": true,
+ "member": "decoy_pkg_renamed.dmg"
+}

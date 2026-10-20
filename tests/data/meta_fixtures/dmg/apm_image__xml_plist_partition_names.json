@@ -1,0 +1,8 @@
+{
+ "field": "dmg.xml_plist_partition_names",
+ "expected": "[\"Driver Descriptor Map (DDM : 0)\",\"Apple (Apple_partition_map : 1)\",\"Macintosh (Apple_HFS : 2)\"]",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/dmg/mkdmg.py.txt out.dmg b  (stdlib UDIF writer: zlib blkx chunks + plistlib resource-fork + 512-byte koly trailer)",
+ "oracle_cmd": "7z l -slt -tdmg FILE | sed -n 's/^Comment = //p' (per-item blkx Name, plist order)",
+ "decoy": false,
+ "member": "apm_image.dmg"
+}

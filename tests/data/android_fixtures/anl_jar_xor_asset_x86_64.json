@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": "ANS-2b8e41d07c9fa6e3",
+ "decoy": false,
+ "generator_cmd": "tests/data/android_fixtures/gen_asset_native.sh tests/data/android_fixtures  # gcc -shared -fPIC -O0 native_src/jni_xor.c -> perl xor with key 13,37,c0,de -> res/raw/guard.enc zipped (zip -qX) into assets/payload.jar; zip -qX -r <name>.apk assets",
+ "oracle_cmd": "gcc -o h native_src/harness.c -ldl && unzip -p anl_jar_xor_asset_x86_64.apk assets/payload.jar > p.jar && unzip -p p.jar res/raw/guard.enc | perl -e 'local $/; $d=<STDIN>; @k=map hex, split /,/, $ARGV[0]; $i=0; print join \"\", map { chr(ord($_) ^ $k[$i++ % @k]) } split //, $d' 13,37,c0,de > g.so && ./h ./g.so Java_com_huntress_arena_NativeLib_getSecret  # 'NewStringUTF ANS-2b8e41d07c9fa6e3'"
+}

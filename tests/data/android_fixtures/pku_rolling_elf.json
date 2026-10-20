@@ -1,0 +1,7 @@
+{
+ "entry": "payload_unwrap_scan",
+ "expected": "ANS-c41f8a2d6e09b375",
+ "_why": "wrapped secondary payload, wrapper recovered from the file magic (payload-magic-known-plaintext-unwrap): gcc -shared .so, rolling xor c = p ^ ((0x37+i) & 255) in res/raw",
+ "generator_cmd": "python3 tests/data/android_fixtures/pku_src/gen_pku.py rolling_elf tests/data/android_fixtures/pku_rolling_elf.apk  # gcc -shared .so, rolling xor c = p ^ ((0x37+i) & 255) in res/raw",
+ "oracle_cmd": "unzip -p pku_rolling_elf.apk res/raw/blob.bin | python3 -c \"import sys;b=sys.stdin.buffer.read();sys.stdout.buffer.write(bytes(x^((0x37+i)&255) for i,x in enumerate(b)))\" > l.so && readelf -p .rodata l.so | grep -oE 'ANS-[0-9a-f]{16}'"
+}

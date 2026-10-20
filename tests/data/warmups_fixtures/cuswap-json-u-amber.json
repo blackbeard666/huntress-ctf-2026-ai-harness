@@ -1,0 +1,10 @@
+{
+ "codec": "cuswap",
+ "decoder": "cuswap_dec(encoded, swap=True)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "\"\\u4e00\\u6900\\u6300\\u6500\\u2000\\u7700\\u6f00\\u7200\\u6b00\\u2000\\u6400\\u6500\\u6300\\u6f00\\u6400\\u6900\\u6e00\\u6700\\u2000\\u7400\\u6800\\u6900\\u7300\\u2000\\u7700\\u6100\\u7200\\u6d00\\u7500\\u7000\\u2100\\u2000\\u5400\\u6f00\\u2000\\u7300\\u6f00\\u6c00\\u7600\\u6500\\u2c00\\u2000\\u7300\\u7500\\u6200\\u6d00\\u6900\\u7400\\u2000\\u7400\\u6800\\u6900\\u7300\\u2000\\u6500\\u7800\\u6100\\u6300\\u7400\\u2000\\u6100\\u6e00\\u7300\\u7700\\u6500\\u7200\\u2000\\u7400\\u6f00\\u2000\\u7400\\u6800\\u6500\\u2000\\u4700\\u6100\\u6d00\\u6500\\u2000\\u4d00\\u6100\\u7300\\u7400\\u6500\\u7200\\u3a00\\u2000\\u6100\\u6d00\\u6200\\u6500\\u7200\\u2d00\\u6600\\u6100\\u6c00\\u6300\\u6f00\\u6e00\\u2d00\\u3400\\u3200\"",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c \"import sys;sys.stdout.write(sys.stdin.read().encode('utf-16-le').decode('utf-16-be'))\" | python3 -I -c \"import sys,json;sys.stdout.write(json.dumps(sys.stdin.read()))\"  # json.dumps of the byte-swapped string (D9 quoted lowercase \\u form)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys,json;sys.stdout.write(json.loads(sys.stdin.read()))\" | python3 -I -c \"import sys;sys.stdout.write(sys.stdin.read().encode('utf-16-be').decode('utf-16-le'))\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

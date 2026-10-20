@@ -1,0 +1,13 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "runtime": "none",
+  "entry_name": "none"
+ },
+ "generator_cmd": "bash jsexe_gen.sh   # step 8 (gcc: d3n0l4nd as a .rodata string)",
+ "oracle_cmd": "strings -a ; tail -c 24 | od (no trailer at EOF)",
+ "decoy": true,
+ "note": "decoy"
+}

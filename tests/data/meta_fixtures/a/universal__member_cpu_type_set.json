@@ -1,0 +1,8 @@
+{
+ "field": "a.member_cpu_type_set",
+ "expected": "[\"0x01000007\",\"0x0100000c\"]",
+ "generator_cmd": "zig cc -target {x86_64,aarch64}-macos -c util.c net.c; llvm-ar-18 --format=darwin rcsU libmac_{x86,arm64}.a ...; llvm-lipo-18 -create libmac_x86.a libmac_arm64.a -output libuniversal.a",
+ "oracle_cmd": "llvm-otool-18 -f libuniversal.a (cputype 16777223, 16777228)",
+ "decoy": false,
+ "member": "libuniversal.a"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "macos.cpu_type_set",
+ "expected": "[\"0x01000007\",\"0x0100000c\"]",
+ "generator_cmd": "llvm-lipo-18 -create prog_x86 prog_arm64 -output fat_prog",
+ "oracle_cmd": "/usr/lib/llvm-18/bin/llvm-otool -f fat_x86_arm64__macos_cpu_type_set.bin: cputype 16777223, 16777228",
+ "decoy": false,
+ "member": "fat_prog"
+}

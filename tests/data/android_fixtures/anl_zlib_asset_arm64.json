@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": "ANS-71d4c0a9e8b3f25c",
+ "decoy": false,
+ "generator_cmd": "tests/data/android_fixtures/gen_asset_native.sh tests/data/android_fixtures  # perl-encoded blob (+13i+7) -> aarch64-linux-gnu-gcc -shared -fPIC -O2 native_src/noarg_add.c -> python3 zlib.compress(.., 9) -> assets/core.dat (no lib/ dir); zip -qX -r <name>.apk assets",
+ "oracle_cmd": "aarch64-linux-gnu-gcc -o ha native_src/harness.c -ldl && unzip -p anl_zlib_asset_arm64.apk assets/core.dat | python3 -c 'import sys,zlib; sys.stdout.buffer.write(zlib.decompress(sys.stdin.buffer.read()))' > c.so && qemu-aarch64 -L /usr/aarch64-linux-gnu ./ha ./c.so huntress_secret  # 'huntress_secret -> ANS-71d4c0a9e8b3f25c'"
+}

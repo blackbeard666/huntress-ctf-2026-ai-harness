@@ -1,0 +1,9 @@
+{
+ "codec": "crypt64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-wren-29",
+ "encoded": "HaZXNG/rPr7f64FZMqxYOKtb65FcOLAURq3mPLJk6G/IPm/nPqlqNGkUQrJWPKZo65FcOLAUNLVVMrEUMKtnRqJm65Fj65FcNG/5MKpZ62pVQrFZQXcUMqxWMKlo9LRmNKshAXY",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/altbase_cyberchef.mjs b64 './0-9A-Za-z'  # CyberChef 'To Base64' preset 'UNIX crypt' (no pad)",
+ "oracle_cmd": "printf %s \"$encoded\" | .venv/bin/python -I -c \"import sys;from passlib.utils.binary import h64big;print(h64big.decode_bytes(sys.stdin.read().strip().encode()).decode(),end='')\"  # passlib 1.7.4 h64big (big-endian ./0-9A-Za-z)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-wren-29",
+ "expected": "match"
+}

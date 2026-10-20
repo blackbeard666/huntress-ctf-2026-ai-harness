@@ -1,0 +1,7 @@
+{
+ "entry": "pinned_payload_scan",
+ "expected": "ANS-c4e82b7f19d0a365",
+ "_why": "modules/m1.bin + m2.bin (dex renamed .bin), no host pin; module.sig = openssl RSA-2048 PKCS#1 v1.5 sha256 signature of m2.bin, module_pub.pem shipped -> m2",
+ "generator_cmd": "python3 tests/data/android_fixtures/pinsel_src/gen_pinsel.py rsa_sig tests/data/android_fixtures/pinsel_rsa_sig.apk  # javac --release 8 + dex2jar d2j-jar2dex per payload, openssl dgst/genpkey/dgst -sign, zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/pinsel_src/oracle.sh tests/data/android_fixtures/pinsel_rsa_sig.apk  # unzip + openssl dgst -sha256 (hex/base64) vs strings host dex, openssl dgst -verify, MANIFEST.MF SHA-256-Digest compare, strings payload | grep ANS-"
+}

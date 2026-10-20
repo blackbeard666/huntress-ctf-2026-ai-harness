@@ -1,0 +1,11 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "expected_kind": {
+  "kind": "script",
+  "reader": "find_codecs"
+ },
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ek_gen.py tests/data/script_fixtures (plain text renamed .pcap)",
+ "oracle_cmd": "file -b ek_decoy_renamed.pcap  # ASCII text (no pcap magic)",
+ "note": "evidence-magic-classifier: lib.codec.evidence_kind(name, data) must return expected_kind; as a script fixture the evidence holds no plan, so find_codecs must not invent one"
+}

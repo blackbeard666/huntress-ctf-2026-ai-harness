@@ -1,0 +1,92 @@
+{
+ "family": "ghc_facts+resource_overlay_facts",
+ "decoy": false,
+ "note": "cached GM d20 member (GHC 9.12.2 + RS20 resource overlay)",
+ "encoding": "rs20-resource-raw",
+ "expected_offset": 1200936,
+ "expected_config": null,
+ "expected_facts": {
+  "ghc_version": "9.12.2",
+  "has_ghc_link_info": "true",
+  "hs_libs": [
+   "-lHSbase-4.21.0.0-8bb5",
+   "-lHSghc-internal-9.1202.0-a87f",
+   "-lHSghc-bignum-1.3-02fc",
+   "-lHSghc-prim-0.13.0-cb0f",
+   "-lHSrts-1.0.2",
+   "-lCffi"
+  ],
+  "extra_libs": [
+   "-lgmp",
+   "-lc",
+   "-lm",
+   "-lc",
+   "-lm",
+   "-lrt",
+   "-ldl"
+  ],
+  "base_version": "4.21.0.0",
+  "ghc_internal_version": "9.1202.0",
+  "rts_version": "1.0.2",
+  "rts_opts_enabled": "RtsOptsSafeOnly",
+  "needed": [
+   "libm.so.6",
+   "libgmp.so.10",
+   "libc.so.6"
+  ],
+  "gold_version": "gold 1.16",
+  "linker": "gold",
+  "symbol_count": 4900,
+  "closure_symbol_count": 1301,
+  "info_symbol_count": 1074,
+  "main_symbols": [
+   "Main_main7_bytes",
+   "Main_main3_bytes",
+   "Main_main5_bytes",
+   "Main_zdtrModule2_bytes",
+   "Main_zdtrModule4_bytes",
+   "Main_zdtrModule3_closure",
+   "Main_zdtrModule1_closure",
+   "Main_zdtrModule_closure",
+   "Main_main4_info",
+   "Main_main4_closure",
+   "Main_main2_closure",
+   "Main_main6_closure",
+   "Main_main1_info",
+   "Main_main1_closure",
+   "Main_main_info",
+   "Main_main_closure",
+   "Main_main8_info",
+   "Main_main8_closure",
+   "ZCMain_main_info",
+   "ZCMain_main_closure"
+  ],
+  "main_closures": [
+   "Main_zdtrModule3_closure",
+   "Main_zdtrModule1_closure",
+   "Main_zdtrModule_closure",
+   "Main_main4_closure",
+   "Main_main2_closure",
+   "Main_main6_closure",
+   "Main_main1_closure",
+   "Main_main_closure",
+   "Main_main8_closure",
+   "ZCMain_main_closure"
+  ],
+  "trace_family": "haskell_resource_overlay_trace",
+  "trace_effects": "private_scratch_hash_only"
+ },
+ "expected_rs20": {
+  "image_end": 1200888,
+  "overlay_offset": 1200888,
+  "overlay_size": 463,
+  "overlay_version": 1,
+  "hcfg_resource_size": 380,
+  "scratch_size": 35,
+  "scratch_sha256": "90209a4ce5bea9d64a04375829587a4db7c75f42d21248ac3dc7dfc38ba81bab",
+  "scratch_text": "private-scratch:BR20-000:inert-only",
+  "end_bounds_ok": "true"
+ },
+ "generator_cmd": "bash tests/data/binary_fixtures/ghcrs20_gen.sh   # 7z e -pinfected of the cached GM evidence.zip d20 members; decoys: dd conv=notrunc byte flip / head -c",
+ "oracle_cmd": "bash tests/data/binary_fixtures/ghcrs20_oracle.sh tests/data/binary_fixtures/ghcrs20_d20_single_v000.bin   # readelf -p .debug-ghc-link-info/-dW/-nW/-sW/-hW, strings -a, grep -obUa RS20, od -tu4/-tu2/-x1, tail -c | sha256sum; expected_offset = grep -obUa HCFG | tail -1"
+}

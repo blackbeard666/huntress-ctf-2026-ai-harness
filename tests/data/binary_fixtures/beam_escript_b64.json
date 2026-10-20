@@ -1,0 +1,17 @@
+{
+ "encoding": "zip-beam-base64",
+ "expected_format": "escript",
+ "decoy": false,
+ "expected_module": "cfgmod",
+ "expected_offset": 388,
+ "expected_config": {
+  "c2": "198.51.100.9:8443",
+  "campaign": "escr",
+  "sleep": 12,
+  "flag": "flag{escr1pt_z1p_b34m}"
+ },
+ "generator_cmd": "bash beam_gen.sh beam_escript_b64.bin escript '{\"c2\":\"198.51.100.9:8443\",\"campaign\":\"escr\",\"sleep\":12,\"flag\":\"flag{escr1pt_z1p_b34m}\"}' 0x5a b64",
+ "oracle_cmd": "bash beam_oracle.sh beam_escript_b64.bin   # file -b + OTP 27 beam_lib:chunks/escript:extract/zip:extract/zlib:uncompress/base64:decode/erlang:crc32",
+ "oracle_output": "a /usr/bin/env escript script executable (Zip archive) | 388 | cfgmod | base64 | HCFG 1 90 87 3853581391 3853581391 | {\"c2\":\"198.51.100.9:8443\",\"campaign\":\"escr\",\"sleep\":12,\"flag\":\"flag{escr1pt_z1p_b34m}\"}",
+ "note": "format label SPECULATIVE (not in the GM enum: 'beam'/'escript'); escript = shebang/%%/%%! lines + deflated zip; offset = LitT stream start INSIDE the inflated cfgmod.beam (zip-<enc> convention)"
+}

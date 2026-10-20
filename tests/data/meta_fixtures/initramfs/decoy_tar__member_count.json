@@ -1,0 +1,8 @@
+{
+ "field": "initramfs.member_count",
+ "expected": "none",
+ "generator_cmd": "tar -cf decoy.tar bin_le.cpio",
+ "oracle_cmd": "file -b decoy.tar -> POSIX tar archive (GNU)",
+ "decoy": true,
+ "member": "decoy.tar"
+}

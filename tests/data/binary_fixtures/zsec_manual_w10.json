@@ -1,0 +1,27 @@
+{
+ "encoding": "elf-zlib",
+ "expected_offset": 12366,
+ "expected_config": {
+  "c2": "203.0.113.200:9001",
+  "campaign": "chdr-w10",
+  "jitter": 2,
+  "flag": "flag{h4nd_wr1tten_chdr}"
+ },
+ "decoy": false,
+ "section": ".hcfg",
+ "expected_facts": {
+  "section": ".hcfg",
+  "ch_type": "1",
+  "compression": "zlib",
+  "ch_type_name": "ELFCOMPRESS_ZLIB",
+  "compressed_size": "383",
+  "uncompressed_size": "1720",
+  "ch_addralign": "8",
+  "stream_offset": "12366",
+  "count": "1",
+  "shf_compressed": "true"
+ },
+ "generator_cmd": "bash zsec_gen.sh .   # gcc -O0 -s + GNU objcopy 2.46 + python3 stdlib (blob header/crc32, manual Chdr). python3 stdlib: struct.pack('<IIQQ',1,0,ch_size,8) + zlib.compressobj(9,DEFLATED,10) (CMF 0x28, dynamic Huffman) -> objcopy --add-section .junk=<1.3 MB urandom> --add-section .hcfg=<that> ; struct patch sh_flags|=0x800, sh_addralign=8",
+ "oracle_cmd": "bash zsec_oracle.sh zsec_manual_w10.bin .hcfg   # GNU readelf -S -W -t (flags/ZLIB|ZSTD/ch_size/ch_addralign/sh_size/sh_offset), xxd u64be for .zdebug, readelf -z -x decompressed blob; stream_offset = sh_offset + 24 (Elf64_Chdr) / + 12 ('ZLIB'+u64be)",
+ "oracle_output": "[26] .hcfg PROGBITS 0000000000000000 003036 00017f 00 0 0 8 [0000000000000800]: COMPRESSED ZLIB, 00000000000006b8, 8 \nsh_offset=12342\nat+0 crc_ok {\"c2\":\"203.0.113.200:9001\",\"campaign\":\"chdr-w10\",\"jitter\":2,\"flag\":\"flag{h4nd_wr1tten_chdr}\"}"
+}

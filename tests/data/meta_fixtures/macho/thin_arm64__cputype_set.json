@@ -1,0 +1,8 @@
+{
+ "field": "macho.cputype_set",
+ "expected": "[\"0x0100000c\"]",
+ "generator_cmd": "zig cc -target aarch64-macos (pip ziglang 0.17.0) -o prog_arm64 p.c (input reused from zig_arm64_exe fixture)",
+ "oracle_cmd": "/usr/lib/llvm-18/bin/llvm-otool -h thin_arm64__cputype_set.bin: cputype 16777228 -> 0x0100000c",
+ "decoy": false,
+ "member": "prog_arm64"
+}

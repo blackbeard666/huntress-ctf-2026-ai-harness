@@ -1,0 +1,9 @@
+{
+ "codec": "byteadd128-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lantern-55",
+ "encoded": "cee9e3e5a0f7eff2eba0e4e5e3efe4e9eee7a0f4e8e9f3a0f7e1f2edf5f0a1a0d4efa0f3efecf6e5aca0f3f5e2ede9f4a0f4e8e9f3a0e5f8e1e3f4a0e1eef3f7e5f2a0f4efa0f4e8e5a0c7e1ede5a0cde1f3f4e5f2baa0e3eceff6e5f2adece1eef4e5f2eeadb5b5",
+ "generator_cmd": "printf '%s' \"$plain\" | perl -0777 -ne 'print join q(), map { chr((ord($_)+128)%256) } split //' | xxd -p | tr -d '\\n'",
+ "oracle_cmd": "python3 -c \"import os,base64;e=os.environ['encoded'];d=bytes.fromhex(e);b=d.translate(bytes.maketrans(bytes(range(256)),bytes((i-128)%256 for i in range(256))));print(b.decode())\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lantern-55",
+ "expected": "match"
+}

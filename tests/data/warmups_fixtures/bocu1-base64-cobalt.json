@@ -1,0 +1,9 @@
+{
+ "codec": "bocu1",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "encoded": "nrmztSDHv8K7ILS1s7+0ub63IMS4ucMgx7HCvcXAcSCkvyDDv7zGtXwgw8WyvbnEIMS4ucMgtcixs8Qgsb7Dx7XCIMS/IMS4tSCXsb21IJ2xw8S1woogs7+ysbzEfbi1wr++fYGH",
+ "generator_cmd": "printf %s \"$plain\" | uconv -f utf-8 -t BOCU-1 | base64 -w0",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | uconv -f BOCU-1 -t utf-8",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "expected": "match"
+}

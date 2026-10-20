@@ -275,17 +275,79 @@ def classfile_facts(cls):
                 for k, v in ev.items():
                     f[f"kotlin_{k}"] = _jv(v) if isinstance(v, list) else str(v)
     f["is_suspend_lambda"] = _jv(any(m["name"] == "invokeSuspend" for m in p["methods"]))
+    f.update(_jvm_lang_facts(p, ca, f))
     return f
 
 
-def jar_jvm_facts(data, member=None):
+# D26 leak "the primary classfile named by that unit": Scala / Clojure / Groovy builds. Markers (javap -v): Scala
+# companion class carries ScalaSig attr + @scala.reflect.ScalaSignature, its `X$` module class only ScalaInlineInfo +
+# a static MODULE$ field; Clojure AOT emits `<ns>__init.class` (+ `<ns>$fn.class`) calling clojure/lang/RT; groovyc
+# classes implement groovy/lang/GroovyObject and define $getStaticMetaClass.
+_SCALA_ANN = ("Lscala/reflect/ScalaSignature;", "Lscala/reflect/ScalaLongSignature;")
+
+
+def _jvm_lang_facts(p, ca, f):
+    u, this = p["_u"], p["this"] or ""
+    utf = {e[1] for e in p["cp"] if e and e[0] == 1}
+    meths = {m["name"] for m in p["methods"]}
+    scala_sig = "ScalaSig" in ca or any(a in utf for a in _SCALA_ANN)
+    module = this.endswith("$") and any(m["name"] == "MODULE$" and m["access"] & 0x0008 for m in p["fields"])
+    scala = scala_sig or "ScalaInlineInfo" in ca or (module and any(x.startswith("scala/") for x in utf))
+    groovy = "groovy/lang/GroovyObject" in p["interfaces"] or "$getStaticMetaClass" in meths
+    clj_init = this.endswith("__init") and "clojure/lang/RT" in utf
+    clojure = clj_init or any(x.startswith("clojure/lang/") for x in utf)
+    lang = ("kotlin" if f.get("has_kotlin_metadata") == "true" else "scala" if scala else "groovy" if groovy
+            else "clojure" if clojure else "java")
+    return {"jvm_language": lang, "has_scala_signature": _jv(scala_sig), "has_scala_sig_attribute":
+            _jv("ScalaSig" in ca), "is_scala_module": _jv(bool(scala and module)),
+            "scala_companion_of": this[:-1] if scala and module else "none",
+            "is_groovy_object": _jv("groovy/lang/GroovyObject" in p["interfaces"]),
+            "has_groovy_metaclass": _jv("$getStaticMetaClass" in meths),
+            "clojure_namespace": _clj_ns(this[:-6]) if clj_init else "none"}
+
+
+def _clj_ns(internal):
+    """Clojure munged class path -> namespace (hello/my_app -> hello.my-app; Compiler.munge maps - to _)."""
+    return internal.replace("/", ".").replace("_", "-")
+
+
+def jvm_member_from_question(question, names):
+    """The classfile entry a question names ("... the primary classfile acme/Beacon$.class", "class com.acme.Main",
+    "Clojure namespace hello.core init class"): explicit *.class / slash paths first, then dotted class names, in
+    question order; an unambiguous basename also matches. None when nothing in `names` is named (-> Main-Class)."""
+    if not question or not names:
+        return None
+    cls = [n for n in names if n.endswith(".class")]
+    base = {}
+    for n in cls:
+        base.setdefault(n.rsplit("/", 1)[-1], []).append(n)
+    toks = re.findall(r"[\w$./-]+\.class\b", question)
+    toks += [t + ".class" for t in re.findall(r"\b[A-Za-z_$][\w$]*(?:/[A-Za-z_$][\w$-]*)+\b\$*", question)]
+    for t in re.findall(r"(?<![\w$./-])[A-Za-z_$][\w$-]*(?:\.[A-Za-z_$][\w$-]*)+\$*", question):
+        if not re.search(r"\.(?:class|jar|zip|war|ear|apk|exe|dll|elf|bin|json|clj|scala|groovy|kt|java)$", t):
+            path = t.replace(".", "/")
+            pair = [path + ".class", path.replace("-", "_") + "__init.class"]
+            toks += pair[::-1] if re.search(r"__init|\binit(?:iali[sz]er)?\b", question, re.I) else pair
+    for t in toks:
+        t = t.lstrip("./")
+        if t in cls:
+            return t
+        hit = [n for n in cls if n.endswith("/" + t)] or ([] if "/" in t else base.get(t, []))
+        if len(hit) == 1:
+            return hit[0]
+    return None
+
+
+def jar_jvm_facts(data, member=None, question=None):
     """{field: answer string} for a jar (or a bare .class): jar-level main_class (Manifest Main-Class, dotted as
     written), created_by, class_count (.class entries), entry_count (all zip entries incl directories), plus
-    classfile_facts of `member` (entry name or dotted class name) or else of the Main-Class. None if neither."""
+    classfile_facts of `member` (entry name or dotted class name), else of the class `question` names
+    (jvm_member_from_question), else of the Main-Class. None if neither."""
     import zipfile
     b = bytes(data)
     if b[:4] == b"\xca\xfe\xba\xbe":
-        return classfile_facts(b)
+        cf = classfile_facts(b)
+        return {**cf, "container_format": "class"} if cf else None
     try:
         z = zipfile.ZipFile(io.BytesIO(b))
         names = z.namelist()
@@ -302,7 +364,16 @@ def jar_jvm_facts(data, member=None):
            "has_kotlin_runtime": _jv(any(n.startswith("kotlin/") for n in names)),
            "has_coroutine_runtime": _jv(any(n.startswith(("kotlin/coroutines/", "kotlinx/coroutines/"))
                                              for n in names))}   # D7/D17: stdlib kotlin/coroutines/ counts (GM true)
-    target = member or (out["main_class"] if out["main_class"] != "none" else None)
+    inits = [n[:-12] for n in names if n.endswith("__init.class") and not n.startswith(("clojure/", "META-INF/"))]
+    lang = ("scala" if any(n.startswith("scala/") for n in names) else
+            "clojure" if inits or any(n.startswith("clojure/lang/") for n in names) else
+            "groovy" if any(n.startswith("groovy/lang/") for n in names) else
+            "kotlin" if out["has_kotlin_runtime"] == "true" else "none")
+    out.update(container_format="jar", jar_language=lang, clojure_namespaces=_jv([_clj_ns(n) for n in inits]),
+               jvm_language=lang)
+    target = member or jvm_member_from_question(question, names) or \
+        (out["main_class"] if out["main_class"] != "none" else None)
+    out["jvm_member"] = "none"
     if target:
         ent = target if target.endswith(".class") else target.replace(".", "/") + ".class"
         try:
@@ -310,15 +381,15 @@ def jar_jvm_facts(data, member=None):
         except (zipfile.BadZipFile, OSError, EOFError, RuntimeError, ValueError):
             cf = None
         if cf:
-            out = {**cf, **out}
+            out = {**cf, **out, "jvm_member": ent, "jvm_language": cf["jvm_language"]}
     return out
 
 
-def jvm_field(data, field, member=None):
+def jvm_field(data, field, member=None, question=None):
     """One JVM fact as an answer string; "none" when the container parses but the field is absent, None when the
-    bytes are neither a jar nor a class file. Never raises."""
+    bytes are neither a jar nor a class file. `question` may name the classfile (see jar_jvm_facts). Never raises."""
     try:
-        f = jar_jvm_facts(data, member)
+        f = jar_jvm_facts(data, member, question)
     except Exception:  # noqa: BLE001
         return None
     if f is None:
@@ -623,6 +694,9 @@ def overlay_unpack(data, magic):
     o = data.rfind(magic.encode() if isinstance(magic, str) else magic) if magic else -1
     if o < 0 or o + 44 > len(data):
         return None
+    rs = resource_overlay(data, magic)
+    if rs and rs["offset"] == o:   # D20 RS20 resource layout (hash-verified): the HCFG resource itself
+        return rs["hcfg"]
     k1, k2 = data[o + 5], data[o + 6]
     n, = struct.unpack_from("<I", data, o + 8)
     sha = data[o + 12:o + 44]
@@ -643,6 +717,29 @@ def overlay_unpack(data, magic):
 
 
 OVERLAY_MAGICS = ("PK19", "RS20")   # D19 GM-confirmed; RS20 named by the D19 overlay_offset question for Day 20
+
+
+def resource_overlay(data, magic="RS20"):
+    """Day 20 RS20 resource overlay (GM-confirmed on the Single, TT and 5 Mastery sets): the LAST `magic`; +8 u32le
+    HCFG resource length, +12 u16le scratch length, +16..+47 sha256(scratch), HCFG resource at +48, scratch right after
+    it, ending exactly at EOF. {offset, hcfg_resource_size, scratch_size, scratch_sha256, hcfg (bytes), scratch} only
+    when the end bounds and the scratch sha256 verify, else None. hcfg_resource_size = the +8 field (380 on D20)."""
+    import hashlib
+    try:
+        data = bytes(data)
+        mg = magic.encode("latin-1") if isinstance(magic, str) else magic
+        o = data.rfind(mg) if mg else -1
+        if o < 0 or o + 48 > len(data):
+            return None
+        n, s = struct.unpack_from("<IH", data, o + 8)
+        sha, hcfg = data[o + 16:o + 48], data[o + 48:o + 48 + n]
+        scratch = data[o + 48 + n:o + 48 + n + s]
+        if o + 48 + n + s != len(data) or hashlib.sha256(scratch).digest() != sha:
+            return None
+        return {"offset": o, "hcfg_resource_size": n, "scratch_size": s, "scratch_sha256": sha.hex(), "hcfg": hcfg,
+                "scratch": scratch}
+    except (struct.error, TypeError, ValueError):
+        return None
 
 
 def overlay_header_facts(data, magic=None):
@@ -4619,6 +4716,10 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False, _depth=0):
     if not valid() and not late() and _depth == 0 and _BC_MAGIC in data:
         # LLVM bitcode (.bc / wrapper / embedded .llvmbc): string constants are bit-packed, never verbatim in the file
         _bitcode_scan(data, emit, deadline, _depth)
+    if not valid() and not late() and _depth < 2 and b"BEAM" in data:
+        # Erlang/Elixir .beam (alone / embedded / an escript's zip entry): the LitT chunk is u32be size + zlib of the
+        # literal table; a TEXT form in a binary literal is hidden by the zlib (a raw blob = the 'zlib' anchor hit)
+        _beam_scan(data, hits, deadline, late, _depth)
     if not valid() and not late() and _depth < 2 and b"PK\x05\x06" in data[-65600:]:
         # jar/zip/apk: a compressed NON-class entry (config.bin, assets/...) the deflate anchors/brute miss (dynamic
         # Huffman in a > 1 MiB jar, or a text form inside) -> inflate it and look inside (offsets: OFFSET LAW)
@@ -4637,6 +4738,10 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False, _depth=0):
                 i, n = data.find(needle, i + 1), n + 1
             if valid() or late():
                 break
+    if not valid() and not late() and data[:4] == b"\x7fELF":
+        # SHF_COMPRESSED (Chdr zlib/zstd) / legacy .zdebug section, decoded by its header (a zlib window / zstd frame
+        # the anchor + zpack passes miss)
+        _zsec_scan(data, emit, late)
     if not valid() and not late():
         # ROT13 / case-swapped base64, optionally reversed per line: one bytes.find per transformed 'SENGR' (kept out
         # of the anchor regex -- first bytes e/r/s/f made that pass ~33% slower)
@@ -5334,6 +5439,8 @@ def bytecode_facts(data):
             if nk:
                 out = {"format": "neko_bytecode", "globals_count": str(nk["nglobals"]),
                        "fields_count": str(nk["nfields"]), "code_size": str(nk["codesize"])}
+        elif d[:4] == b"FOR1" and d[8:12] == b"BEAM" or d[:2] == b"#!":
+            return beam_facts(data)
         elif d[:3] == HLB_MAGIC:
             hb = hashlink_parse(data)
             if hb:
@@ -7529,6 +7636,131 @@ def _zip_scan(data, emit, hits, deadline, late, depth):
                     h.encoding, h.detail = "zip-" + h.encoding, f"{tag} data@{dstart} {h.detail}".strip()
                     hits.append(h)
                     return
+
+
+# Erlang/Elixir BEAM (erts beam_file.c / beam_lib): 'FOR1' u32be size 'BEAM', then IFF chunks = 4-byte id, u32be size,
+# data padded to 4. AtU8/Atom: u32be count (negative in OTP 28+ AtU8 = 16-bit-length atoms) + len-prefixed atoms
+# (atom 1 = module name); ExpT/ImpT/LocT: u32be count + 3 x u32be each; LitT: u32be uncompressed size + zlib of
+# [u32be count, (u32be len, external term format '\x83...')*] (size 0 = stored uncompressed); StrT: raw bytes.
+def beam_chunks(data, base=0):
+    """[(id str, data offset, size)] of the BEAM module at data[base:], or None (no FOR1/BEAM, chunk past end)."""
+    try:
+        if data[base:base + 4] != b"FOR1" or data[base + 8:base + 12] != b"BEAM":
+            return None
+        end = min(len(data), base + 8 + int.from_bytes(data[base + 4:base + 8], "big"))
+        p, out = base + 12, []
+        while p + 8 <= end and len(out) < 256:
+            cid, n = bytes(data[p:p + 4]), int.from_bytes(data[p + 4:p + 8], "big")
+            if not re.fullmatch(rb"[ -~]{4}", cid) or p + 8 + n > end:
+                return out or None
+            out.append((cid.decode(), p + 8, n))
+            p += 8 + ((n + 3) & ~3)
+        return out or None
+    except _PARSE_ERR:
+        return None
+
+
+def beam_atoms(data, chunks=None, limit=100000):
+    """Atom table of a BEAM module (atom 1 first = the module name), [] if absent/garbled."""
+    chunks = chunks or beam_chunks(data) or []
+    for cid, o, n in chunks:
+        if cid in ("AtU8", "Atom"):
+            try:
+                cnt = int.from_bytes(data[o:o + 4], "big", signed=True)
+                wide, cnt = cnt < 0, min(abs(cnt), limit)
+                p, out = o + 4, []
+                for _ in range(cnt):
+                    ln = int.from_bytes(data[p:p + 2], "big") if wide else data[p]
+                    p += 2 if wide else 1
+                    if p + ln > o + n:
+                        break
+                    out.append(bytes(data[p:p + ln]).decode("utf-8", "replace"))
+                    p += ln
+                return out
+            except _PARSE_ERR:
+                return []
+    return []
+
+
+def beam_literals(data, chunks=None, cap=8 << 20):
+    """(LitT data offset, decoded literal table bytes, compressed?) of a BEAM module, None without a LitT chunk."""
+    for cid, o, n in chunks or beam_chunks(data) or []:
+        if cid == "LitT" and n >= 4:
+            usize = int.from_bytes(data[o:o + 4], "big")
+            if usize == 0:
+                return o, bytes(data[o + 4:o + n]), False
+            try:
+                d = zlib.decompressobj()
+                return o, d.decompress(bytes(data[o + 4:o + n]), min(usize, cap)), True
+            except zlib.error:
+                return None
+    return None
+
+
+def beam_facts(data):
+    """{format "beam", module, language erlang/elixir, atom_count, chunks, exports_count, imports_count,
+    literals_count} for a BEAM module; escript (shebang + %%/%%! lines + zip/beam): {format "escript",
+    archive_offset, emu_args, members}. None otherwise. Labels SPECULATIVE (not in the GM format enum yet)."""
+    try:
+        if data[:2] == b"#!" and b"escript" in bytes(data[:256]).split(b"\n", 1)[0]:
+            p, emu = 0, "none"
+            for _ in range(4):   # escript header: shebang, optional %% comment, optional %%! emu args
+                q = data.find(b"\n", p)
+                if q < 0:
+                    return None
+                line = bytes(data[p:q])
+                if line.startswith(b"%%!"):
+                    emu = line[3:].decode("utf-8", "replace").strip()
+                p = q + 1
+                if data[p:p + 4] in (b"PK\x03\x04", b"FOR1") or data[p:p + 1] not in (b"%", b"#"):
+                    break
+            kind = {b"PK\x03\x04": "zip", b"FOR1": "beam"}.get(bytes(data[p:p + 4]), "source")
+            mem = []
+            if kind == "zip":
+                with zipfile.ZipFile(io.BytesIO(bytes(data))) as zf:
+                    mem = [z.filename for z in zf.infolist()[:2000]]
+            return {"format": "escript", "format_candidates": ["escript", "erlang_escript", "erlang"],
+                    "machine": "none", "machine_num": "none", "endian": "none", "bits": "none",
+                    "archive_kind": kind, "archive_offset": str(p), "emu_args": emu, "members": mem}
+        ch = beam_chunks(data)
+        if not ch:
+            return None
+        ids = {c[0]: c for c in ch}
+        atoms = beam_atoms(data, ch)
+        if not atoms:
+            return None
+        lit = beam_literals(data, ch)
+        cnt = lambda k: str(int.from_bytes(data[ids[k][1]:ids[k][1] + 4], "big")) if k in ids else "none"
+        return {"format": "beam", "format_candidates": ["beam", "erlang_beam", "erlang", "elixir"], "machine": "none",
+                "machine_num": "none", "endian": "big", "bits": "none", "module": atoms[0],
+                "language": "elixir" if atoms[0].startswith("Elixir.") or "ExCk" in ids or "Docs" in ids else "erlang",
+                "atom_count": str(len(atoms)), "atoms": atoms[:5000], "chunks": [c[0] for c in ch],
+                "exports_count": cnt("ExpT"), "imports_count": cnt("ImpT"), "locals_count": cnt("LocT"),
+                "literals_count": str(int.from_bytes(lit[1][:4], "big")) if lit and len(lit[1]) >= 4 else "none",
+                "litt_compressed": ("true" if lit[2] else "false") if lit else "none",
+                "has_strt": "true" if "StrT" in ids else "false"}
+    except (zipfile.BadZipFile, *_PARSE_ERR):
+        return None
+
+
+def _beam_scan(data, hits, deadline, late, depth):
+    """Re-scan the inflated LitT literal table of every BEAM module in `data` (whole file or embedded) with the full
+    hcfg_scan; a non-raw hit is reported as beam-<enc> at the LitT zlib stream start (first stored byte, OFFSET LAW),
+    detail "litt+<offset in the inflated table> module=<name>". Stored (size 0) tables are plain bytes: already seen."""
+    i, n = data.find(b"BEAM", 8), 0
+    while i >= 8 and n < 64 and not late():
+        n += 1
+        ch = beam_chunks(data, i - 8)
+        lit = beam_literals(data, ch) if ch else None
+        if lit and lit[2] and len(lit[1]) >= 12:
+            mod = (beam_atoms(data, ch) or ["?"])[0]
+            for h in hcfg_scan(lit[1], deadline=deadline, stop_on_valid=True, _depth=depth + 1):
+                if h.valid and h.encoding != "raw":
+                    h.detail = f"litt+{h.offset} module={mod} {h.detail}".strip()
+                    h.encoding, h.offset = "beam-" + h.encoding, lit[0] + 4
+                    hits.append(h)
+                    return
+        i = data.find(b"BEAM", i + 1)
 
 
 # .NET single-file bundle (`dotnet publish -p:PublishSingleFile=true`): an apphost (ELF / PE / Mach-O) whose data holds
@@ -9816,6 +10048,7 @@ def ghc_facts(data, hcfg=True):
         out["has_hs_main"] = tf(any(s[0] == "hs_main" for s in dfn))
         mods, user, pkgs, lits = set(), set(), set(), set()
         ver = way = None
+        vers = {}
         if rt:
             for unit, mod, nm_, kind in parsed.values():
                 mods.add(mod)
@@ -9841,20 +10074,25 @@ def ghc_facts(data, hcfg=True):
                         user.add(mod)
                     else:
                         pkgs.add(unit)
-                if ver is None:
-                    m = re.search(rb"Glorious Glasgow Haskell Compilation System,? (?:[Vv]ersion )?(\d+\.\d+[\d.]*)", blk)
-                    m = m or re.search(rb"GHC version\0{1,64}(\d+\.\d+(?:\.\d+){0,2})\0", blk)
-                    for rx in (rb"GHC (\d+\.\d+\.\d+(?:\.\d+)?)(?![\w.])", rb"ghc-(\d+\.\d+\.\d+(?:\.\d+)?)(?![\w.])"):
-                        m = m or next((x for x in re.finditer(rx, blk)
-                                       if not x.start() or blk[x.start() - 1:x.start()] not in b".-_" and
-                                       not blk[x.start() - 1:x.start()].isalnum()), None)
+                # version sources by trust, across ALL blocks (D20: an rts message "disallowed in GHC 6.10.2 and
+                # later" sits before the real "9.12.2\0    (GHC version %s for %s)" banner operand)
+                for k, rx in enumerate(_GHC_VER_RX):
+                    if k in vers or (k == 3 and 2 in vers):
+                        continue
+                    m = next((x for x in re.finditer(rx, blk) if k < 2 or k == 2 or not x.start() or
+                              (blk[x.start() - 1:x.start()] not in b".-_" and not blk[x.start() - 1:x.start()].isalnum()
+                               and not _GHC_VER_LATER.match(blk, x.end()))), None)
                     if m:
-                        ver = m.group(1).decode("latin-1").rstrip(".")
+                        vers[k] = m.group(1).decode("latin-1").rstrip(".")
                 if way is None:
                     m = re.search(rb"RTS way\0{1,64}(rts[A-Za-z0-9_]{0,24})\0", blk)
                     way = m.group(1).decode("latin-1") if m else None
                 if budget <= 0:
                     break
+        link = _ghc_link_facts(d, secs, syms, parsed, rt)
+        ver = min(vers.items())[1] if vers and min(vers) < 3 else None
+        ver = ver or link.pop("_ghc_version_link", None) or (vers.get(3) or vers.get(4))
+        link.pop("_ghc_version_link", None)
         out["ghc_version"] = ver or "none"
         out["rts_way"] = way or "none"
         out["has_threaded_rts"] = tf(way and "thr" in way)
@@ -9885,9 +10123,182 @@ def ghc_facts(data, hcfg=True):
                             hs["hcfg_closure"], hs["hcfg_module"] = f"{p[1]}.{p[2]}", p[1]
                             hs["hcfg_unit"], hs["hcfg_kind"] = p[0] or "main", p[3]
         out.update(hs)
+        out.update(link)
         return out
     except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
         return None
+
+
+_GHC_VER_RX = (rb"Glorious Glasgow Haskell Compilation System,? (?:[Vv]ersion )?(\d+\.\d+[\d.]*)",
+               rb"GHC version\0{1,64}(\d+\.\d+(?:\.\d+){0,2})\0",
+               rb"\0(\d+\.\d+\.\d+(?:\.\d+)?)\0{1,16}[ \t]*\(GHC version %s for %s\)",   # rts errorBelch banner
+               rb"GHC (\d+\.\d+\.\d+(?:\.\d+)?)(?![\w.])", rb"ghc-(\d+\.\d+\.\d+(?:\.\d+)?)(?![\w.])")
+_GHC_VER_LATER = re.compile(rb" (?:and|or) (?:later|earlier|newer|above|below)")
+_GHC_LINK_HDR = b"(UnitLinkOpts {hsLibs = ["
+_GHC_HSLIB = re.compile(r"^-lHS(.+?)-(\d+(?:\.\d+)*)(?:-[0-9a-f]{4,64})?$")
+
+
+def _ghc_link_facts(d, secs, syms, parsed, rt):
+    """GHC link-time facts (D20 group: GHC 9.12.2, gold): the `.debug-ghc-link-info` note GHC writes on every link
+    (desc = show (UnitLinkOpts {hsLibs, extraLibs, otherFlags}, frameworks, -with-rtsopts Maybe, RtsOptsEnabled,
+    no_hs_main, extra_ld_inputs, ldflags)) -> has_ghc_link_info / has_debug_ghc_link_info, hs_libs (as stored,
+    "-lHSbase-4.21.0.0-8bb5"), extra_libs (as stored, duplicates kept), other_flags_count, haskell_package_versions
+    {unit: version}, base_version, ghc_internal_version ("9.1202.0"), ghc_prim_version, ghc_bignum_version,
+    rts_version, rts_opts / rts_opts_enabled ("RtsOptsSafeOnly"), with_rtsopts ("none" for Nothing), no_hs_main,
+    link_ld_flags; ghc_version fallback from ghc-internal (<maj>.<min*100+patch>.0 -> "9.12.2"). Also needed
+    (DT_NEEDED order), linker "gold" + gold_version ("gold 1.16") from .note.gnu.gold-version, symbol_count /
+    closure_symbol_count / info_symbol_count (.symtab+.dynsym names ending _closure / _info), main_symbols
+    (Main_* / ZCMain_* in table order) + main_closures, trace_family / trace_effects (dynamic_trace_facts).
+    Absent -> "none" / "false" / [] / 0."""
+    tf = lambda b: "true" if b else "false"   # noqa: E731
+    out = {"has_ghc_link_info": "false", "hs_libs": [], "extra_libs": [], "other_flags_count": 0,
+           "haskell_package_versions": {}, "base_version": "none", "ghc_internal_version": "none",
+           "ghc_prim_version": "none", "ghc_bignum_version": "none", "rts_version": "none", "rts_opts": "none",
+           "rts_opts_enabled": "none", "with_rtsopts": "none", "no_hs_main": "none", "link_ld_flags": []}
+    sec = next((s for s in secs if s[0] == ".debug-ghc-link-info" and s[1] != 8), None)
+    blob = d[sec[3]:sec[3] + sec[4]] if sec and sec[3] + sec[4] <= len(d) else b""
+    i = blob.find(_GHC_LINK_HDR)
+    if i < 0 and not sec:
+        j = d.find(b"GHC link info\0")
+        if j >= 0:
+            blob = d[j:j + (1 << 20)]
+            i = blob.find(_GHC_LINK_HDR)
+    if i >= 0:
+        txt = blob[i:].split(b"\0", 1)[0].decode("latin-1")
+        lists, depth, cur, q, esc, rest = {}, 0, None, False, False, None
+        sm = re.compile(r'"((?:[^"\\]|\\.)*)"')
+        for key in ("hsLibs", "extraLibs", "otherFlags"):
+            m = re.search(key + r" = \[((?:\s*\"(?:[^\"\\]|\\.)*\"\s*,?)*)\]", txt)
+            lists[key] = sm.findall(m.group(1)) if m else []
+        e = txt.find("]}")
+        if e >= 0:   # top-level tuple tail after the UnitLinkOpts record, split on depth-0 commas
+            parts, cur = [], ""
+            for ch in txt[e + 3:]:
+                if esc:
+                    esc = False
+                elif q and ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    q = not q
+                elif not q and ch in "[(":
+                    depth += 1
+                elif not q and ch in "])":
+                    if depth == 0:
+                        parts.append(cur.strip())
+                        break
+                    depth -= 1
+                if not q and depth == 0 and ch == ",":
+                    parts.append(cur.strip())
+                    cur = ""
+                    continue
+                cur += ch
+            rest = parts
+        hl = lists["hsLibs"]
+        vers = {}
+        for lib_ in hl:
+            m = _GHC_HSLIB.match(lib_)
+            if m:
+                vers[m.group(1)] = m.group(2)
+        out.update({"has_ghc_link_info": "true", "hs_libs": hl, "extra_libs": lists["extraLibs"],
+                    "other_flags_count": len(lists["otherFlags"]), "haskell_package_versions": vers,
+                    "base_version": vers.get("base", "none"), "ghc_internal_version": vers.get("ghc-internal", "none"),
+                    "ghc_prim_version": vers.get("ghc-prim", "none"),
+                    "ghc_bignum_version": vers.get("ghc-bignum", "none"), "rts_version": vers.get("rts", "none")})
+        if rest and len(rest) >= 6:
+            w = rest[1]
+            out["with_rtsopts"] = "none" if w == "Nothing" else (sm.findall(w) or [w])[0]
+            out["rts_opts"] = out["rts_opts_enabled"] = rest[2] if re.match(r"^RtsOpts\w+$", rest[2]) else "none"
+            out["no_hs_main"] = rest[3].lower() if rest[3] in ("True", "False") else "none"
+            out["link_ld_flags"] = sm.findall(rest[5])
+        gi = re.match(r"^(\d+)\.(\d+?)(\d\d)\.\d+$", out["ghc_internal_version"])
+        if gi:
+            out["_ghc_version_link"] = f"{gi.group(1)}.{int(gi.group(2))}.{int(gi.group(3))}"
+    out["has_debug_ghc_link_info"] = out["has_ghc_link_info"]
+    try:
+        out["needed"] = (elf_header_facts(d, hcfg=False) or {}).get("needed") or []
+    except Exception:  # noqa: BLE001
+        out["needed"] = []
+    gv = "none"
+    g = next((s for s in secs if s[0] == ".note.gnu.gold-version" and s[1] == 7), None)
+    if g and g[3] + g[4] <= len(d) and g[4] >= 12:
+        nsz, dsz, _ = struct.unpack_from("<III" if d[5] == 1 else ">III", d, g[3])
+        o = g[3] + 12 + ((nsz + 3) & ~3)
+        v = d[o:o + dsz].split(b"\0", 1)[0].decode("latin-1")
+        gv = v if v.startswith("gold") else "none"
+    out["has_gold_version_note"] = tf(gv != "none")
+    out["gold_version"] = gv
+    out["linker"] = "gold" if gv != "none" else "none"
+    names = [s[0] for s in syms]
+    out["symbol_count"] = len(names)
+    out["closure_symbol_count"] = sum(1 for n in names if n.endswith("_closure"))
+    out["info_symbol_count"] = sum(1 for n in names if n.endswith("_info"))
+    ms = [n for n in names if n.startswith(("Main_", "ZCMain_"))] if rt else []
+    out["main_symbols"] = ms
+    out["main_closures"] = [n for n in ms if n.endswith("_closure")]
+    out["main_symbol_count"] = len(ms)
+    out["has_main_main_closure"] = tf("Main_main_closure" in ms)
+    tr = {}
+    if rt:
+        try:
+            tr = dynamic_trace_facts(d) or {}
+        except Exception:  # noqa: BLE001
+            tr = {}
+    for k in ("family", "effects", "campaign"):
+        v = tr.get("trace_" + k, "none")
+        if v == "none" and tr.get("trace_schema", "none") != "none":
+            # GHC splits the template: the `,"campaign":..,"family":..}` tail is its own literal near the schema
+            i = d.find(DTRACE_SCHEMA)
+            m = re.search(rb'"%s"\s*:\s*"([A-Za-z0-9_.:-]{1,80})"' % k.encode(), d[max(0, i - 4096):i + 4096])
+            v = m.group(1).decode() if m else "none"
+        out["trace_" + k] = v
+    return out
+
+
+def resource_overlay_facts(data, magic="RS20"):
+    """Header facts of the D20 RS20 resource overlay (resource_overlay layout: magic +0..3, version u8 +4, pad +5..7,
+    HCFG resource length u32le +8, scratch length u16le +12, pad +14..15, sha256(scratch) +16..47, resource +48,
+    scratch after it, ending at EOF): overlay_magic, overlay_offset, overlay_size (EOF - offset), image_end /
+    has_overlay (overlay_info), overlay_at_image_end, overlay_version / rs20_version, hcfg_resource_size (+ aliases
+    hcfg_resource_length, resource_size, res_len), hcfg_resource_offset (48, relative) / hcfg_resource_start (file),
+    hcfg_resource_sha256, scratch_size (+ scratch_length, scratch_len), scratch_offset (relative) / scratch_start,
+    scratch_sha256 (stored = verified), scratch_text (latin-1), end_bounds_ok. "none" values when no hash-verified
+    RS20 overlay; None for non-bytes."""
+    import hashlib
+    try:
+        d = bytes(data)
+    except (TypeError, ValueError):
+        return None
+    try:
+        ov = overlay_info(d)
+    except Exception:  # noqa: BLE001
+        ov = None
+    out = {"has_overlay": bool(ov and ov["has_overlay"]),
+           "image_end": (ov["overlay_offset"] if ov["has_overlay"] else len(d)) if ov else "none"}
+    keys = ("overlay_magic", "overlay_offset", "overlay_size", "overlay_at_image_end", "overlay_version",
+            "rs20_version", "hcfg_resource_size", "hcfg_resource_length", "resource_size", "res_len",
+            "hcfg_resource_offset", "hcfg_resource_start", "hcfg_resource_sha256", "scratch_size", "scratch_length",
+            "scratch_len", "scratch_offset", "scratch_start", "scratch_sha256", "scratch_text", "end_bounds_ok")
+    rs = resource_overlay(d, magic)
+    if not rs:
+        out.update(dict.fromkeys(keys, "none"))
+        return out
+    o, n, s = rs["offset"], rs["hcfg_resource_size"], rs["scratch_size"]
+    out.update({"overlay_magic": magic if isinstance(magic, str) else bytes(magic).decode("latin-1"),
+                "overlay_offset": o, "overlay_size": len(d) - o,
+                "overlay_at_image_end": bool(ov) and o == out["image_end"], "overlay_version": d[o + 4],
+                "rs20_version": d[o + 4], "hcfg_resource_size": n, "hcfg_resource_length": n, "resource_size": n,
+                "res_len": n, "hcfg_resource_offset": 48, "hcfg_resource_start": o + 48,
+                "hcfg_resource_sha256": hashlib.sha256(rs["hcfg"]).hexdigest(), "scratch_size": s,
+                "scratch_length": s, "scratch_len": s, "scratch_offset": 48 + n, "scratch_start": o + 48 + n,
+                "scratch_sha256": rs["scratch_sha256"], "scratch_text": rs["scratch"].decode("latin-1"),
+                "end_bounds_ok": "true"})
+    return out
+
+
+def resource_overlay_field(data, name, magic="RS20"):
+    """One resource_overlay_facts value: "none" when absent / unknown field, None when unanswerable."""
+    f = resource_overlay_facts(data, magic)
+    return None if f is None else f.get(name, "none")
 
 
 def ghc_field(data, name):
@@ -10838,6 +11249,117 @@ def provenance_field(data, name):
     except Exception:  # noqa: BLE001
         return "none"
 
+
+
+# --- custom ELF notes (HCFG in a `.note.<vendor>` SHT_NOTE section / PT_NOTE segment). Raw walker, not pyelftools:
+# iter_notes always pads name/desc to 4, but an 8-aligned note (sh_addralign / p_align 8, readelf's rule) pads
+# 12 + namesz and the desc to 8 -- an owner of namesz 5 puts the desc at +24, not +20.
+_STD_NOTE_OWNERS = {"GNU", "Go", "FreeBSD", "NetBSD", "NetBSD-CORE", "NetBSD-PaX", "OpenBSD", "Android", "stapsdt",
+                    "LINUX", "CORE", "Xen", "FDO", "SUNW Solaris", "LLVMOMPOFFLOAD", "AMD", "AMDGPU", "QNX", "Crashpad"}
+
+
+def _note_walk(d, e, o, n, align, src, out, cap=4096):
+    al = 8 if align == 8 else 4
+    p, end = o, min(o + n, len(d))
+    while p + 12 <= end and len(out) < cap:
+        nsz, dsz, typ = struct.unpack_from(e + "III", d, p)
+        q = p + ((12 + nsz + al - 1) & -al)
+        if nsz > 4096 or q + dsz > end:
+            break
+        out.append({"owner": bytes(d[p + 12:p + 12 + nsz]).split(b"\0")[0].decode("latin-1"), "type": typ,
+                    "section": src, "offset": p, "desc_offset": q, "desc_size": dsz})
+        p = (q + dsz + al - 1) & -al
+
+
+def elf_notes(data):
+    """[{owner, type, section, offset, desc_offset, desc_size}] of every ELF note in section-table order (SHT_NOTE
+    sections; PT_NOTE segments only when there is no SHT_NOTE section -- section "none"), or None (not an ELF)."""
+    d = data
+    if d[:4] != b"\x7fELF" or len(d) < 52 or d[4] not in (1, 2) or d[5] not in (1, 2):
+        return None
+    e = "<" if d[5] == 1 else ">"
+    if d[4] == 1:
+        phoff, shoff = struct.unpack_from(e + "II", d, 28)
+        _, phes, phn, shes, shn, shstr = struct.unpack_from(e + "6H", d, 40)
+        shf, phf = e + "II8xIIIII", e + "II12xI4xI"   # name type . off size link info align ; type off . filesz . align
+    else:
+        if len(d) < 64:
+            return None
+        phoff, shoff = struct.unpack_from(e + "QQ", d, 32)
+        _, phes, phn, shes, shn, shstr = struct.unpack_from(e + "6H", d, 52)
+        shf, phf = e + "II16xQQIIQ", e + "I4xQ16xQ8xQ"
+    out, secs = [], []
+    if shn and shes >= struct.calcsize(shf) and shoff + shn * shes <= len(d):
+        secs = [struct.unpack_from(shf, d, shoff + k * shes) for k in range(min(shn, 65535))]
+    names = b""
+    if secs and shstr < len(secs):
+        names = d[secs[shstr][2]:secs[shstr][2] + secs[shstr][3]]
+    for s in secs:
+        if s[1] == 7:
+            nm = names[s[0]:names.find(b"\0", s[0])].decode("latin-1") if s[0] < len(names) else ""
+            _note_walk(d, e, s[2], s[3], s[6], nm or "none", out)
+    if not any(s[1] == 7 for s in secs) and phn and phes >= struct.calcsize(phf) and phoff + phn * phes <= len(d):
+        for k in range(min(phn, 4096)):
+            t, o, n, al = struct.unpack_from(phf, d, phoff + k * phes)
+            if t == 4:
+                _note_walk(d, e, o, n, al, "none", out)
+    return out
+
+
+def elf_note_facts(data):
+    """Note-table facts of an ELF (None: not an ELF). Values are strings / lists; absent -> "none".
+    notes [{owner, type, section}] / note_owners / note_types (ints) / note_types_hex / note_sections (table order),
+    note_count, custom_note_owners (owners outside the standard GNU/Go/BSD/Android/stapsdt/... set), and for the
+    first note whose desc holds the HCFG magic: hcfg_note_offset (file offset of the `H`; decimal) +
+    hcfg_note_offset_hex, hcfg_note_owner, hcfg_note_type (decimal) + hcfg_note_type_hex, hcfg_note_section,
+    hcfg_note_desc_size. has_<owner>_note via elf_note_field (owner lowercased, non-alnum -> '_')."""
+    d = bytes(data)
+    ns = elf_notes(d)
+    if ns is None:
+        return None
+    out = {"notes": [{"owner": x["owner"], "type": x["type"], "section": x["section"]} for x in ns],
+           "note_owners": [x["owner"] for x in ns], "note_types": [x["type"] for x in ns],
+           "note_types_hex": [hex(x["type"]) for x in ns], "note_count": str(len(ns))}
+    out["note_sections"] = [s for i, s in enumerate(x["section"] for x in ns)
+                            if s != "none" and s not in [y["section"] for y in ns[:i]]] or "none"
+    cust = []
+    for x in ns:
+        if x["owner"] not in _STD_NOTE_OWNERS and x["owner"] not in cust:
+            cust.append(x["owner"])
+    out["custom_note_owners"] = cust or "none"
+    for k in ("offset", "offset_hex", "owner", "type", "type_hex", "section", "desc_size"):
+        out["hcfg_note_" + k] = "none"
+    for x in ns:
+        i = d.find(HCFG_MAGIC, x["desc_offset"], x["desc_offset"] + x["desc_size"])
+        if i >= 0:
+            out.update(hcfg_note_offset=str(i), hcfg_note_offset_hex=hex(i), hcfg_note_owner=x["owner"],
+                       hcfg_note_type=str(x["type"]), hcfg_note_type_hex=hex(x["type"]),
+                       hcfg_note_section=x["section"], hcfg_note_desc_size=str(x["desc_size"]))
+            break
+    out["has_hcfg_note"] = "true" if out["hcfg_note_offset"] != "none" else "false"
+    return out
+
+
+def _owner_key(s):
+    return re.sub(r"[^0-9a-z]+", "_", s.lower()).strip("_")
+
+
+def elf_note_field(data, name):
+    """One elf_note_facts value; has_<owner>_note -> "true"/"false" (owner matched case-insensitively, non-alnum as
+    '_'). "none" for a non-ELF / unknown field (never raises)."""
+    try:
+        f = elf_note_facts(data)
+        if f is None:
+            return "none"
+        name = name.strip().lower()
+        m = re.fullmatch(r"has_(.+)_note", name)
+        if m and name != "has_hcfg_note":
+            return "true" if _owner_key(m.group(1)) in {_owner_key(o) for o in f["note_owners"]} else "false"
+        name = {"owners": "note_owners", "types": "note_types", "hcfg_offset": "hcfg_note_offset",
+                "hcfg_desc_offset": "hcfg_note_offset", "note_owner": "hcfg_note_owner"}.get(name, name)
+        return f.get(name, "none")
+    except Exception:  # noqa: BLE001
+        return "none"
 
 # --- config DECODER locator (D17 "recover the reversible decoder"; speculative facts): from the HCFG hit's file offset
 # -> blob VA -> code xrefs (RIP-relative disp32 / absolute imm32 to [VA, VA+stored len)) -> containing function (FUNC
@@ -13228,3 +13750,1726 @@ def flattening_field(data, name, symbol=None):
         return None
     v = r.get(name)
     return "none" if v is None or v == [] else v
+
+
+# --- question-driven header layout ('Read X length u32le at +8 ...; bytes +16..+47 are the Y SHA-256') ---------------
+# D19 PK19 / D20 RS20 questions spell the overlay header out in prose; TT/Mastery mutate the order, the integer widths /
+# endianness, the magic and the padding. layout_from_question turns that prose into fields; layout_facts reads them at
+# the LAST magic (or file offset 0 for 'relative to the file') and layout_field answers any `<name>_size/_length/
+# _offset/_sha256/_version/_count` id by fuzzy name (resource_size == hcfg resource length). SPECULATIVE beyond D19/D20.
+_LQ_TYPES = r"(u8|u16le|u16be|u32le|u32be|u64le|u64be|i8|i16le|i16be|i32le|i32be|i64le|i64be)"
+_LQ_STOP = {"read", "the", "a", "an", "and", "then", "is", "are", "its", "stored", "field", "value", "at", "offset",
+            "header", "of", "as", "which", "holds", "hold", "contains", "contain", "store", "stores", "also", "with",
+            "relative", "to", "from", "overlay", "while", "where", "next", "little", "big", "endian", "unsigned",
+            "integer", "int", "number"}
+_LQ_HASH = (("sha-256", "sha256"), ("sha256", "sha256"), ("sha-1", "sha1"), ("sha1", "sha1"), ("md5", "md5"),
+            ("crc-32", "crc32"), ("crc32", "crc32"))
+_LQ_SYN = {"size": "length", "len": "length", "sz": "length", "off": "offset", "pos": "offset", "position": "offset", "sha": "sha256", "ver": "version", "num": "count",
+           "bytes": "", "data": ""}
+
+
+def _lq_type(dl):
+    dl = re.sub(r"(?:little[- ]endian|\ble\b)\s+(u\d+|uint\d+|dword|word|qword)", lambda x: x.group(1) + "le", dl)
+    dl = re.sub(r"(?:big[- ]endian|\bbe\b)\s+(u\d+|uint\d+|dword|word|qword)", lambda x: x.group(1) + "be", dl)
+    dl = re.sub(r"\b(u\d+|uint\d+)\s+(le|be|little[- ]endian|big[- ]endian)\b",
+                lambda x: x.group(1) + ("be" if x.group(2).startswith("b") else "le"), dl)
+    dl = re.sub(r"\buint(\d+)", r"u\1", dl)
+    dl = re.sub(r"\bqword\b", "u64", re.sub(r"\bdword\b", "u32", re.sub(r"\bword\b", "u16", dl)))
+    dl = re.sub(r"\bbyte-sized\b|\bone[- ]byte\b|\bsingle byte\b", "u8", dl)
+    m = re.search(r"\b([ui](?:8|16|32|64))(le|be)?\b", dl)
+    if not m:
+        return dl, None
+    t = m.group(1) + ("" if m.group(1)[1:] == "8" else (m.group(2) or "le"))
+    return dl[:m.start()] + " " + dl[m.end():], t
+
+
+def _lq_name(dl):
+    dl = re.sub(r"sha-(\d+)", r"sha\1", dl).replace("crc-32", "crc32")
+    w = [x for x in re.findall(r"[a-z_][a-z0-9_]*", re.sub(r"\b\d+-byte\b", " ", dl))
+         if x not in _LQ_STOP and not re.fullmatch(_LQ_TYPES, x)]
+    return "_".join(w)
+
+
+def layout_from_question(text):
+    """Header layout named by the question prose -> [(name, offset, type)], declaration order. type: u8/u16le/u16be/
+    u32le/u32be/u64le/u64be (i* signed), 'bytes[N]' (a fixed field: 'the 32-byte unpacked SHA-256 at +12', 'bytes
+    +16..+47 are the scratch SHA-256'), or 'region' (a variable body: 'packed bytes at +44', 'the HCFG resource starts at
+    +48'); a region placed by 'scratch follows it' / 'X immediately after Y' gets offset 'after:<region>'. Names are
+    snake_case of the description ('HCFG resource length' -> hcfg_resource_length). [] on unparseable prose."""
+    try:
+        return _lq_parse(text)[0]
+    except Exception:  # noqa: BLE001 - untrusted prose
+        return []
+
+
+def _lq_parse(text):
+    q = (text or {}).get("question", "") if isinstance(text, dict) else str(text or "")
+    t = re.split(r"\b(?:Locate the unique|bytes 0\.\.3 are|[Bb]ytes 0-3 are)", q)[0]
+    out, used = [], set()
+
+    def add(name, off, typ):
+        if name and name not in used:
+            used.add(name)
+            out.append((name, off, typ))
+    # fixed ranges first: 'bytes +16..+47 are the scratch SHA-256' (inclusive), '+16..+48' / '+16 to +47'
+    rr = r"(?:bytes?\s+)?\+\s*(0x[0-9a-fA-F]+|\d+)\s*(?:\.\.|-|to|through)\s*\+?\s*(0x[0-9a-fA-F]+|\d+)\s+" \
+         r"(?:are|is|hold|holds|contain|contains|store|stores)\s+(?:the\s+)?([^,;:]+?)(?=[,;:]|\.\s|\.$|\s+and\s|$)"
+    for m in re.finditer(rr, t, re.I):
+        a, b = _ovs_num(m.group(1)), _ovs_num(m.group(2))
+        if b >= a:
+            add(_lq_name(m.group(3).lower()), a, "bytes[%d]" % (b - a + 1))
+    t2 = re.sub(rr, " ; ", t, flags=re.I)
+    for m in re.finditer(r"([^,;:]*?)\s+(?:is\s+|are\s+|lives\s+|sits\s+)?(?:at|@|(?:starts?|begins?|starting|beginning)\s+at|"
+                         r"from)\s+(?:offset\s+|byte\s+)?\+\s*(0x[0-9a-fA-F]+|\d+)", t2, re.I):
+        desc = re.split(r"\.\s|\.$", m.group(1))[-1]
+        dl, typ = _lq_type(desc.lower())
+        off = _ovs_num(m.group(2))
+        nb = re.search(r"\b(\d+)-byte\b", dl)
+        algo = next((a for k, a in _LQ_HASH if k in dl), None)
+        nm = _lq_name(dl)
+        if typ:
+            add(nm, off, typ)
+        elif nb:
+            add(nm, off, "bytes[%d]" % int(nb.group(1)))
+        elif algo and not re.search(r"\b(length|size|count)\b", dl):
+            add(nm, off, "u32le" if algo == "crc32" else "bytes[%d]" % {"sha256": 32, "sha1": 20, "md5": 16}[algo])
+        elif re.search(r"\b(length|size|count|len|key|k\d|version|flags?|id)\b", dl) and \
+                not re.search(r"\b(starts?|begins?|bytes|data|payload|body|blob)\b", dl):
+            add(nm, off, "u32le" if re.search(r"\b(length|size|len)\b", dl) else "u8")
+        else:   # 'packed bytes at +44', 'the HCFG resource starts at +48'
+            add(re.sub(r"_(?:starts?|begins?|bytes|data)$", "", nm) or "data", off, "region")
+    # chained regions: 'scratch follows it', 'the trailer immediately follows the body', 'X is immediately after Y'
+    for m in re.finditer(r"(?:^|[,;.]\s*|\band\s+)(?:the\s+)?([a-z][\w -]*?)\s+(?:immediately\s+)?(?:follows|comes\s+after|"
+                         r"(?:is|are|starts|begins|sits)\s+(?:immediately\s+|right\s+|directly\s+)?after)\s+(?:the\s+)?"
+                         r"(it|them|that|[a-z][\w -]*?)(?=[,;:]|\.\s|\.$|\s+and\s|$)", t2, re.I):
+        nm = re.sub(r"_(?:bytes|data)$", "", _lq_name(m.group(1).lower()))
+        ref = m.group(2).lower()
+        regs = [n for n, _, ty in out if ty == "region"]
+        prev = regs[-1] if ref in ("it", "them", "that") and regs else re.sub(r"_(?:bytes|data)$", "", _lq_name(ref))
+        if nm and prev and nm != prev:
+            add(nm, "after:" + prev, "region")
+    tl = t.lower()
+    mode = {"base": "file" if re.search(r"relative to (?:the )?(?:start of the )?file|absolute (?:file )?offsets?|"
+                                        r"from (?:the )?(?:start of the )?file", tl) else "magic",
+            "end_check": bool(re.search(r"end bounds?|ends? exactly|exact(?:ly)? (?:at )?(?:eof|end)|end of (?:the )?file",
+                                        tl))}
+    return out, mode, t
+
+
+def _lq_magic(t):
+    m = (re.search(r"\b(?:final|last|first|the)\s+[`'\"]?([A-Z][A-Z0-9]{3,7})[`'\"]?\s+(?:overlay|trailer|blob|stub|"
+                   r"record|header|section|footer|resource|container)", t)
+         or re.search(r"\bmagic\s+(?:bytes\s+)?[`'\"]?([A-Z][A-Z0-9_]{3,7})[`'\"]?", t)
+         or re.search(r"\b([A-Z]{2}\d{2})\b", t))
+    if not m:
+        return None, "last"
+    head = t[max(0, m.start() - 20):m.end()].lower()
+    return m.group(1), "first" if re.search(r"\bfirst\b", head) else "last"
+
+
+def _lq_read(data, p, typ):
+    if typ.startswith("bytes["):
+        n = int(typ[6:-1])
+        return data[p:p + n].hex() if 0 <= p and p + n <= len(data) else None
+    w = int(re.search(r"\d+", typ).group()) // 8
+    if p < 0 or p + w > len(data):
+        return None
+    return int.from_bytes(data[p:p + w], "big" if typ.endswith("be") else "little", signed=typ[0] == "i")
+
+
+def layout_facts(data, question, magic=None):
+    """Facts of the question's header layout read from `data`: {magic, overlay_offset, overlay_size, base, <field>
+    (int / lowercase hex), <field>_offset (declared, relative), <region>_offset/_start/_end/_body_size/_sha256/_md5/
+    _crc32 (computed over the body; _offset relative, _start/_end absolute, end exclusive; _body_size "none" past EOF;
+    <region>_length only when no length field is declared -- a declared one answers <region>_size), <stored hash>_ok,
+    end_bounds_ok, hash_ok, valid}. A region's length is the field named '<region>_length/_size/_len' (else up to the
+    next region / EOF). A stored hash field '<region>_sha256' (also md5/sha1/crc32) is checked against the region body
+    (kept as the stored value; the recomputed one goes to <region>_sha256_computed). 'version' = byte +4 when the
+    layout leaves +4 undeclared (SPECULATIVE: the D19 header). {} when the magic is absent (every id -> "none");
+    None on non-bytes input or no layout."""
+    import hashlib
+    try:
+        data = bytes(data)
+        fields, mode, t = _lq_parse(question)
+        if not fields:
+            return None
+        mg, which = (magic, "last") if magic else _lq_magic(t)
+        mgb = mg.encode("latin-1") if isinstance(mg, str) else mg
+        if mgb:
+            o = data.rfind(mgb) if which == "last" else data.find(mgb)
+        else:
+            o = 0 if mode["base"] == "file" else -1
+        if o < 0:
+            return {}
+        base = 0 if mode["base"] == "file" else o
+        fx = {"magic": mgb.decode("latin-1") if mgb else "none", "overlay_offset": o, "overlay_size": len(data) - o,
+              "base": mode["base"]}
+        scal = {}
+        for n, off, ty in fields:
+            if ty != "region":
+                v = _lq_read(data, base + off, ty)
+                fx[n] = v if v is not None else "none"
+                fx[n + "_offset"] = off
+                scal[n] = v
+        covered = {base + off + i for n, off, ty in fields if ty != "region" for i in
+                   range(int(ty[6:-1]) if ty.startswith("bytes[") else int(re.search(r"\d+", ty).group()) // 8)}
+        if mgb and len(mgb) == 4 and o + 4 not in covered and "version" not in fx and o + 4 < len(data):
+            fx["version"] = data[o + 4]
+        regs = [(n, off) for n, off, ty in fields if ty == "region"]
+        ends, starts, ok_all, last_end = {}, {}, True, None
+        fixed = sorted(base + off for _, off in regs if isinstance(off, int))
+        for n, off in regs:
+            if isinstance(off, int):
+                s = base + off
+            else:
+                s = ends.get(off[6:])
+                if s is None:
+                    for k in ("_offset", "_start", "_end", "_body_size", "_sha256"):
+                        fx.setdefault(n + k, "none")
+                    ok_all = False
+                    continue
+            ln = next((scal[k] for k in (n + "_length", n + "_size", n + "_len", n + "_count") if k in scal), None)
+            if ln is None:   # 'hcfg resource' <- 'hcfg_resource_length'; 'packed' <- 'packed_length'
+                ln = next((v for k, v in scal.items() if isinstance(v, int) and re.fullmatch(
+                    r"(?:\w+_)?%s_(?:length|size|len)" % re.escape(n), k)), None)
+            if ln is None and n.startswith(tuple(k[:-len("_length")] + "_" for k in scal if k.endswith("_length"))):
+                ln = next(v for k, v in scal.items() if k.endswith("_length") and n.startswith(k[:-7] + "_"))
+            if ln is None:
+                nxt = [x for x in fixed if x > s]
+                e = nxt[0] if nxt else len(data)
+            else:
+                e = s + ln
+            starts[n], ends[n] = s, e
+            fx.update({n + "_offset": s - base, n + "_start": s, n + "_end": e})
+            last_end = e if last_end is None else max(last_end, e)
+            if s > len(data) or e > len(data) or e < s:
+                for k in ("_body_size", "_sha256"):
+                    fx.setdefault(n + k, "none")
+                ok_all = False
+                continue
+            body = data[s:e]
+            fx[n + "_body_size"] = e - s
+            if ln is None:   # a declared length field answers <region>_size/_length itself (D20 hcfg_resource_size)
+                fx[n + "_length"] = e - s
+            dig = {"sha256": hashlib.sha256(body).hexdigest(), "sha1": hashlib.sha1(body).hexdigest(),
+                   "md5": hashlib.md5(body).hexdigest(), "crc32": zlib.crc32(body)} if e - s <= 1 << 24 else {}
+            for a, v in dig.items():
+                st = fx.get(n + "_" + a)
+                if st is None:
+                    fx[n + "_" + a] = v if a != "crc32" else "0x%08x" % v
+                else:
+                    fx[n + "_" + a + "_computed"] = v if a != "crc32" else "0x%08x" % v
+                    fx[n + "_" + a + "_ok"] = st == v
+                    ok_all &= st == v
+        if last_end is not None:
+            fx["end_bounds_ok"] = fx["end_ok"] = last_end == len(data)
+            fx["layout_end"] = last_end
+            if mode["end_check"]:
+                ok_all &= last_end == len(data)
+        fx["hash_ok"] = all(v for k, v in fx.items() if k.endswith("_ok") and k not in ("end_bounds_ok", "end_ok"))
+        fx["valid"] = bool(ok_all)
+        return fx
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _lq_toks(s):
+    s = re.sub(r"^(?:set\d+\.)?(?:d\d+_)?(?:analysis_)?", "", str(s).lower())
+    s = re.sub(r"sha_?(\d+)", r"sha\1", s.replace("-", "_"))
+    w = [_LQ_SYN.get(x, x) for x in s.split("_") if x]
+    return tuple(x for x in w if x)
+
+
+def layout_field(data, question, field, magic=None):
+    """One layout_facts value for an answer id, fuzzy by name: prefixes setN./dNN_/analysis_ dropped, size==length==len,
+    start==offset; exact tokens, then the unique key whose tokens end with / contain the id's ('resource_size' ->
+    hcfg_resource_length). Ints as base-10 str, bools 'true'/'false'. "none" when the magic / field is absent, None
+    when the question has no layout or the input is not bytes."""
+    fx = layout_facts(data, question, magic)
+    if fx is None:
+        return None
+    if not fx:
+        return "none"
+    want = _lq_toks(field)
+    keys = {}
+    for k in fx:
+        keys.setdefault(_lq_toks(k), k)
+    k = keys.get(want)
+    if k is None and want and want[0] == "overlay":
+        k = keys.get(want[1:])
+    if k is None:
+        for test in (lambda kt: kt[-len(want):] == want, lambda kt: len(want) > 1 and kt[:len(want)] == want,
+                     lambda kt: set(want) <= set(kt), lambda kt: len(kt) > 1 and kt == want[-len(kt):]):
+            hit = [kk for kt, kk in keys.items() if want and test(kt)]
+            if len(hit) == 1:
+                k = hit[0]
+                break
+            if hit:   # prefer the declared field (scalar) over derived keys, then the shortest name
+                hit.sort(key=lambda x: (x.endswith(("_computed", "_ok", "_start", "_end")), len(x)))
+                k = hit[0]
+                break
+    if k is None:
+        return "none"
+    v = fx[k]
+    return "true" if v is True else "false" if v is False else str(v)
+
+
+# --- multi-entry resource table overlay (magic + count + N fixed-size entries + data; 'select the HCFG entry') ------
+# SPECULATIVE escalation of D20's single-resource RS20: entries {name (8-byte NUL-padded / u8-length-prefixed) or type
+# id, offset u32le (relative to the overlay or the file), size u32le, sha256 / md5 / crc32 of the data}. The layout is
+# inferred, not assumed: every (offset, size) u32 pair in the table area whose data's digest is stored next to it
+# anchors an entry; the entry stride is the gap between anchors, so a decoy entry with a bad hash still gets a slot.
+_RT_DIG = (("sha256", 32), ("md5", 16), ("crc32", 4))
+
+
+def _rt_digests(body):
+    import hashlib
+    c = zlib.crc32(body)
+    return {"sha256": hashlib.sha256(body).digest(), "md5": hashlib.md5(body).digest(),
+            "crc32": c.to_bytes(4, "little"), "crc32be": c.to_bytes(4, "big")}
+
+
+def _rt_name(ent):
+    """(name, kind) from the entry's first bytes: 8-byte NUL-padded printable, or u8 length + printable, else None."""
+    pr = lambda b: bool(b) and all(32 <= c < 127 for c in b)   # noqa: E731
+    if len(ent) >= 2 and 1 <= ent[0] < len(ent) and pr(ent[1:1 + ent[0]]) and not pr(ent[:2]):
+        return ent[1:1 + ent[0]].decode(), "pascal"
+    for w in (8, 16, 4):
+        f = ent[:w]
+        s = f.split(b"\0", 1)[0]
+        if len(f) == w and pr(s) and f[len(s):] == b"\0" * (w - len(s)):
+            return s.decode(), "nulpad%d" % w
+    return None
+
+
+def _rt_magic_cands(data, magic, question):
+    if question:
+        try:
+            mg = _lq_magic(_lq_parse(question)[2])[0]
+            magic = magic or mg
+        except Exception:  # noqa: BLE001
+            pass
+    if magic:
+        mg = magic.encode("latin-1") if isinstance(magic, str) else bytes(magic)
+        o = data.rfind(mg)
+        return [o] if o >= 0 else []
+    ov = overlay_info(data)
+    first = [ov["overlay_offset"]] if ov and ov.get("has_overlay") else []
+    tail, cands = data[-(1 << 20):], []
+    for m in re.finditer(rb"[A-Z][A-Z0-9]{3}", tail):
+        o = len(data) - len(tail) + m.start()
+        if m.group() != HCFG_MAGIC and any(0 < int.from_bytes(data[p:p + w], "little") <= 64
+                                           for w in (1, 2, 4) for p in range(o + 4, o + 13)):
+            cands.append(o)
+    return first, cands[-24:][::-1]
+
+
+def _rt_at(data, o, base_hint=None):
+    """The table at overlay offset o: {stride, entries [...], ...} when >= 1 entry's stored digest verifies, else None."""
+    area = data[o:o + 2048]
+    n = len(data)
+    anchors = []   # (p_abs, rel_size, rel_hash, alg, base, off, size)
+    bases = [b for b in ((0,) if base_hint == "file" else (o,) if base_hint == "magic" else (o, 0))]
+    for p in range(4, max(4, len(area) - 7)):
+        off = int.from_bytes(area[p:p + 4], "little")
+        if off >= n:
+            continue
+        for dq in (4, -4, 8):
+            q = p + dq
+            if q < 4 or q + 4 > len(area):
+                continue
+            sz = int.from_bytes(area[q:q + 4], "little")
+            if not 0 < sz <= min(n, 1 << 24):
+                continue
+            for b in bases:
+                s = b + off
+                if s < o + 8 or s + sz > n:
+                    continue
+                dg = _rt_digests(data[s:s + sz])
+                win0 = max(4, min(p, q) - 40)
+                win = area[win0:max(p, q) + 48]
+                for alg, d in dg.items():
+                    h = win.find(d)
+                    if h >= 0 and not (win0 + h <= p < win0 + h + len(d)):
+                        anchors.append((o + p, dq, win0 + h - p, alg, b, off, sz))
+    if not anchors:
+        return None
+    from collections import Counter
+    sig = Counter((dq, rh, alg, b) for _, dq, rh, alg, b, _, _ in anchors).most_common(1)[0][0]
+    ps = sorted({a[0] for a in anchors if a[1:5] == sig})
+    stride = min((y - x for x, y in zip(ps, ps[1:]) if y > x), default=None)
+    dq, rh, alg, b = sig
+    hl = 4 if alg.startswith("crc32") else dict(_RT_DIG)[alg]
+    lo, hi = min(0, dq, rh), max(4, dq + 4, rh + hl)   # field span relative to the offset field
+    if stride is None:   # one entry: the stride is the field span plus a leading name if one parses
+        stride = hi - lo
+
+    def slot(p):
+        if p - o < 4 or p + max(hi, 4) > n:
+            return None
+        off = int.from_bytes(data[p:p + 4], "little")
+        sz = int.from_bytes(data[p + dq:p + dq + 4], "little")
+        s = b + off
+        return (off, sz, s) if 0 < sz <= 1 << 24 and o + 4 <= s and s + sz <= n else None
+    slots = [ps[0]]
+    while slot(slots[0] - stride) and slots[0] - stride + lo > o + 4:
+        slots.insert(0, slots[0] - stride)
+    while slot(slots[-1] + stride):
+        slots.append(slots[-1] + stride)
+    cnt = len(slots)
+    # entry start: the earliest shift (within one stride, covering the fields) where every entry's name parses
+    best = None
+    for x in range(stride - lo if stride > hi - lo else -lo, -lo - 1, -1):
+        t0 = slots[0] - x
+        if t0 < o + 5 or x + hi > stride:
+            continue
+        nm = [_rt_name(data[s - x:s - x + stride]) for s in slots]
+        sc = sum(1 for v in nm if v and v[0])
+        if best is None or sc > best[0]:
+            best = (sc, x, nm)
+    x, nm = (best[1], best[2]) if best else (-lo, [None] * cnt)
+    t0 = slots[0] - x
+    # count field: a u8/u16/u32 header value == cnt before the table (else the slot count)
+    cf = next(((p - o, w) for w in (4, 2, 1) for p in range(o + 4, t0 - w + 1)
+               if int.from_bytes(data[p:p + w], "little") == cnt), None)
+    ents = []
+    for i, sp in enumerate(slots):
+        off, sz, s = slot(sp)
+        body = data[s:s + sz]
+        st = data[sp + rh:sp + rh + hl]
+        dg = _rt_digests(body)
+        e0 = sp - x
+        rec = _parse_blob(body)
+        nmk = nm[i] if i < len(nm) else None
+        name = nmk[0] if nmk else "none"
+        nend = (e0 + (1 + len(name) if nmk and nmk[1] == "pascal" else int(nmk[1][6:]))) if nmk else e0
+        fixed = {sp + k for k in range(4)} | {sp + dq + k for k in range(4)} | {sp + rh + k for k in range(hl)}
+        typ = next((int.from_bytes(data[p:p + w], "little") for w in (4, 2) for p in range(nend, e0 + stride - w + 1)
+                    if not fixed & set(range(p, p + w))), None)   # first free u32/u16 after the name (SPECULATIVE)
+        ents.append({"index": i, "name": name, "type": typ, "entry_offset": e0, "offset": off, "size": sz,
+                     "start": s, "end": s + sz, "stored_hash": st.hex(), "hash_alg": alg.replace("be", ""),
+                     "hash_ok": st == dg[alg], "sha256": dg["sha256"].hex(), "md5": dg["md5"].hex(),
+                     "crc32": "0x%08x" % zlib.crc32(body), "is_hcfg": body[:4] == HCFG_MAGIC,
+                     "hcfg_crc_ok": bool(rec and rec[5])})
+    return {"overlay_offset": o, "overlay_size": n - o, "magic": data[o:o + 4].decode("latin-1"),
+            "count_field_offset": cf[0] if cf else "none", "count_field_width": cf[1] if cf else "none",
+            "table_offset": t0 - o, "table_start": t0, "table_end": t0 + cnt * stride, "entry_size": stride,
+            "base": "file" if b == 0 else "overlay", "hash_alg": alg.replace("be", ""), "entries": ents}
+
+
+_RT_MEMO = {}
+
+
+def resource_table_facts(data, question=None, magic=None):
+    key = (len(data), hash(bytes(data)), str(question), str(magic)) if isinstance(data, (bytes, bytearray)) else None
+    if key is not None and key in _RT_MEMO:
+        return _RT_MEMO[key]
+    r = _resource_table_facts(data, question, magic)
+    if key is not None:
+        if len(_RT_MEMO) > 8:
+            _RT_MEMO.clear()
+        _RT_MEMO[key] = r
+    return r
+
+
+def _resource_table_facts(data, question=None, magic=None):
+    """Multi-entry resource-table overlay facts (SPECULATIVE family): the magic (question's / given / ELF-PE overlay
+    start / an ASCII tag near EOF) whose table has >= 1 hash-verified (offset, size, digest) entry. Keys: resource_count,
+    resource_names (compact JSON, table order), resource_types, selected_index (0-based: the HCFG-named -- else
+    HCFG-magic -- entry whose table digest verifies, preferring a CRC-valid HCFG record), selected_* (offset stored,
+    size, start/end absolute, sha256), boundaries (JSON [[start,end],...] absolute, end exclusive, table order),
+    overlay_offset/size, table_offset/start/end, entry_size, base ('overlay'/'file'), hash_alg, entries (list of
+    dicts). The question (layout_from_question prose) only supplies the magic and 'relative to the file'. {} when no
+    table verifies; None on non-bytes input."""
+    try:
+        data = bytes(data)
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        hint = None
+        if question:
+            try:
+                hint = _lq_parse(question)[1]["base"]
+                hint = "file" if hint == "file" else None
+            except Exception:  # noqa: BLE001
+                hint = None
+        first, rest = _rt_magic_cands(data, magic, question) if not magic and not question else \
+            (_rt_magic_cands(data, magic, question), [])
+        r = next((x for x in (_rt_at(data, o, hint) for o in first) if x), None)
+        if r is None:   # ASCII tags near EOF: the one whose table spans the most entries (a tag inside it sees fewer)
+            rs = [x for x in (_rt_at(data, o, hint) for o in rest) if x]
+            r = max(rs, key=lambda x: (len(x["entries"]), x["overlay_offset"])) if rs else None
+        for _ in [r] if r else []:
+            es = r["entries"]
+            named = [e for e in es if e["name"].upper().startswith("HCFG")] or [e for e in es if e["is_hcfg"]]
+            named.sort(key=lambda e: (not e["hash_ok"], not e["hcfg_crc_ok"], e["index"]))
+            sel = named[0] if named and named[0]["hash_ok"] else None
+            js = lambda xs: json.dumps(xs, separators=(",", ":"))   # noqa: E731
+            r.update({"resource_count": len(es), "resource_names": js([e["name"] for e in es]),
+                      "resource_types": js([e["type"] for e in es]),
+                      "boundaries": js([[e["start"], e["end"]] for e in es]),
+                      "valid_count": sum(e["hash_ok"] for e in es),
+                      "selected_index": sel["index"] if sel else "none"})
+            for k in ("name", "type", "offset", "size", "start", "end", "sha256", "md5", "crc32", "stored_hash"):
+                r["selected_" + k] = sel[k] if sel else "none"
+            return r
+        return {}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+_RT_ALIAS = {"count": "resource_count", "entry_count": "resource_count", "num_resources": "resource_count",
+             "num_entries": "resource_count", "names": "resource_names", "entry_names": "resource_names",
+             "types": "resource_types", "boundary": "boundaries", "boundaries": "boundaries",
+             "entry_size": "entry_size", "record_size": "entry_size", "table_entry_size": "entry_size"}
+
+
+def resource_table_field(data, field, question=None, magic=None):
+    """One resource_table_facts value by answer id (setN./dNN_/analysis_ dropped): resource_count / resource_names /
+    boundaries / selected_index (also hcfg_index, selected_entry_index, hcfg_resource_index), selected_/hcfg_(entry_|
+    resource_)<k>, resource|entry<i>_<k> (0-based i; k = name/type/offset/size/start/end/sha256/md5/crc32/hash_ok/
+    stored_hash), <name>_<k> (first entry with that name, verified preferred), table_*/overlay_*. Ints base-10 str,
+    bools 'true'/'false'. "none" when absent, None when not bytes."""
+    fx = resource_table_facts(data, question, magic)
+    if fx is None:
+        return None
+    if not fx:
+        return "none"
+    f = re.sub(r"^(?:set\d+\.)?(?:d\d+_)?(?:analysis_)?", "", str(field).lower().replace("-", "_"))
+    f = re.sub(r"_(?:length|len)$", "_size", f)
+    out = lambda v: "none" if v is None else "true" if v is True else "false" if v is False else str(v)   # noqa: E731
+    k = _RT_ALIAS.get(re.sub(r"^(?:resource|entry|table)_", "", f), _RT_ALIAS.get(f, f))
+    if k in fx and k != "entries":
+        return out(fx[k])
+    if re.fullmatch(r"(?:selected|hcfg)_(?:entry_|resource_)?(?:index|idx)|selected_entry|hcfg_entry", f):
+        return out(fx["selected_index"])
+    m = re.fullmatch(r"(?:selected|hcfg)_(?:entry_|resource_)?(\w+)", f)
+    if m and "selected_" + m.group(1) in fx:
+        return out(fx["selected_" + m.group(1)])
+    m = re.fullmatch(r"(?:resource|entry|res)_?(\d+)_(\w+)", f)
+    es = fx["entries"]
+    if m:
+        i = int(m.group(1))
+        return out(es[i].get(m.group(2))) if i < len(es) else "none"
+    m = re.fullmatch(r"([a-z0-9]+)_(\w+)", f)
+    if m:
+        hit = sorted((e for e in es if e["name"].lower() == m.group(1)), key=lambda e: not e["hash_ok"])
+        if hit and m.group(2) in hit[0]:
+            return out(hit[0][m.group(2)])
+    return "none"
+
+
+# --- file map: every header-described range of an ELF / PE and the UNCOVERED gaps between them ----------------------
+# D20 prompt shape: 'bytes past the end of the sections ... map every boundary'. Covered = ELF header, program header
+# table, each non-NOBITS/non-NULL section's file bytes, section header table (PE: headers through the section table,
+# each section's raw data, the certificate table). A gap = file bytes inside the image end (overlay_info) that no
+# covered range holds: inter-section alignment padding, a code cave inside a PT_LOAD, the gap before e_shoff, PE header
+# padding before the first PointerToRawData / between raw ends. PE also lists `slack` (raw bytes past VirtualSize inside
+# a section). Offsets/sizes are file offsets; "cave" = the gap with the most nonzero bytes (largest on ties) -- the
+# planted-data heuristic, SPECULATIVE until a GM confirms the field. hcfg_storage of an HCFG starting in a gap = "raw"
+# (the D17 rule list's catch-all: no section holds it), SPECULATIVE.
+
+def _fmap_entropy(b):
+    n = len(b)
+    if not n:
+        return 0.0
+    return round(-sum((c / n) * math.log2(c / n) for c in (b.count(i) for i in range(256)) if c), 4) + 0.0
+
+
+def _fmap_gaps(data, cov, image_end, segs):
+    """Uncovered [start, end) runs of [0, image_end) given covered (start, end, name) ranges."""
+    gaps, cur, prev = [], 0, None
+    for s, e, nm in sorted(cov, key=lambda c: (c[0], c[1])):
+        if s > cur and cur < image_end:
+            gaps.append((cur, min(s, image_end), prev, nm))
+        if e > cur:
+            cur, prev = e, nm
+    if cur < image_end:
+        gaps.append((cur, image_end, prev, None))
+    out = []
+    for s, e, a, b in gaps:
+        g = data[s:e]
+        seg = next((sg for sg in segs if sg[1] <= s < sg[1] + sg[2]), None)
+        out.append({"kind": "gap", "name": None, "start": s, "end": e, "size": e - s, "entropy": _fmap_entropy(g),
+                    "nonzero": len(g) - g.count(0), "after": a, "before": b,
+                    "segment": seg[0] if seg else None, "segment_flags": seg[3] if seg else None})
+    return out
+
+
+def _fmap_flags(f):
+    return "".join(c if f & m else " " for c, m in (("R", 4), ("W", 2), ("E", 1))).replace("  ", " ").strip() or "-"
+
+
+def elf_file_map(data):
+    """Ordered list (by start) of an ELF's covered ranges {kind elf_header|program_headers|section|section_headers|
+    overlay, name, start, end, size} and uncovered gaps {kind 'gap', start, end, size, entropy (bits/byte, 4 dp),
+    nonzero, after/before (neighbouring covered names), segment ('LOAD[i]' = i-th PT_LOAD in phdr order whose file
+    bytes hold the gap start; None outside every PT_LOAD), segment_flags ('R E')}. The image end also counts every
+    segment's file bytes (= overlay_info). Ranges
+    are clipped to the file. None for a non-ELF / unparseable header."""
+    try:
+        data = bytes(data)
+        if data[:4] != b"\x7fELF" or data[4] not in (1, 2) or data[5] not in (1, 2):
+            return None
+        e, b64, L = ("<" if data[5] == 1 else ">"), data[4] == 2, len(data)
+        if b64:
+            phoff, shoff = struct.unpack_from(e + "QQ", data, 32)
+            ehsize, phes, phn, shes, shn, shstr = struct.unpack_from(e + "6H", data, 52)
+        else:
+            phoff, shoff = struct.unpack_from(e + "II", data, 28)
+            ehsize, phes, phn, shes, shn, shstr = struct.unpack_from(e + "6H", data, 40)
+        cov = [(0, min(ehsize or (64 if b64 else 52), L), "elf_header")]
+        ext = [cov[0][1]]
+        segs, nload = [], 0
+        if phoff and phn and phes:
+            cov.append((phoff, min(phoff + phn * phes, L), "program_headers"))
+            for k in range(min(phn, 4096)):
+                b = phoff + k * phes
+                if b + (56 if b64 else 32) > L:
+                    break
+                if b64:
+                    t, fl, o = struct.unpack_from(e + "IIQ", data, b)
+                    n = struct.unpack_from(e + "Q", data, b + 32)[0]
+                else:
+                    t, o = struct.unpack_from(e + "II", data, b)
+                    n, fl = struct.unpack_from(e + "I4xI", data, b + 16)
+                if t == 1:
+                    if n:
+                        segs.append(("LOAD[%d]" % nload, o, n, _fmap_flags(fl)))
+                    nload += 1
+                ext.append(min(o + n, L))
+        raw = []
+        if shoff and shn and shes:
+            cov.append((shoff, min(shoff + shn * shes, L), "section_headers"))
+            fmt = e + ("IIQQQQ" if b64 else "IIIIII")
+            for k in range(min(shn, 65535)):
+                b = shoff + k * shes
+                if b + struct.calcsize(fmt) > L:
+                    break
+                nm, t, _, _, o, n = struct.unpack_from(fmt, data, b)
+                raw.append((nm, t, o, n))
+        names = b""
+        if shstr < len(raw):
+            names = data[raw[shstr][2]:raw[shstr][2] + raw[shstr][3]]
+        for nm, t, o, n in raw:
+            if t in (0, 8) or not n or o >= L:   # SHT_NULL / SHT_NOBITS hold no file bytes
+                continue
+            name = names[nm:names.find(b"\0", nm)].decode("latin-1") if nm < len(names) else ""
+            cov.append((o, min(o + n, L), name))
+        ext += [c[1] for c in cov]
+        image_end = min(max(ext), L)
+        out = [{"kind": {"elf_header": "elf_header", "program_headers": "program_headers",
+                         "section_headers": "section_headers"}.get(nm, "section"), "name": nm, "start": s, "end": t,
+                "size": t - s} for s, t, nm in cov if t > s]
+        out += _fmap_gaps(data, cov, image_end, segs)
+        if image_end < L:
+            out.append({"kind": "overlay", "name": "overlay", "start": image_end, "end": L, "size": L - image_end})
+        return sorted(out, key=lambda r: (r["start"], r["kind"] != "gap", -r["end"]))
+    except _PARSE_ERR:
+        return None
+
+
+def pe_file_map(data):
+    """PE counterpart of elf_file_map: covered {kind headers (0 .. end of the section table), section (raw data,
+    PointerToRawData .. +SizeOfRawData), certificate, overlay} + gaps (segment = None, after/before names) + `slack`
+    entries {kind 'slack', name = section, start = PointerToRawData + VirtualSize, end = raw end, entropy, nonzero} for
+    raw bytes past a section's VirtualSize. None for a non-PE."""
+    try:
+        data = bytes(data)
+        lay = _pe_layout(data)
+        if not lay:
+            return None
+        hdr_end, secs, dirs = lay
+        L = len(data)
+        cov = [(0, min(hdr_end + 40 * len(secs), L), "headers")]
+        slack = []
+        for name, _, vsize, rptr, rsize in secs:
+            if rsize and rptr < L:
+                cov.append((rptr, min(rptr + rsize, L), name))
+                if 0 < vsize < rsize and rptr + vsize < L:
+                    s, t = rptr + vsize, min(rptr + rsize, L)
+                    g = data[s:t]
+                    slack.append({"kind": "slack", "name": name, "start": s, "end": t, "size": t - s,
+                                  "entropy": _fmap_entropy(g), "nonzero": len(g) - g.count(0), "after": name,
+                                  "before": None, "segment": name, "segment_flags": None})
+        if len(dirs) > 4 and dirs[4][0] and dirs[4][1]:
+            cov.append((dirs[4][0], min(dirs[4][0] + dirs[4][1], L), "certificate"))
+        ov = overlay_info(data)
+        image_end = ov["overlay_offset"] if ov and ov["has_overlay"] else L
+        if len(dirs) > 4 and dirs[4][0] and dirs[4][0] + dirs[4][1] <= L:   # a signature past the overlay start
+            image_end = max(image_end, dirs[4][0] + dirs[4][1])
+        out = [{"kind": "headers" if nm == "headers" else "certificate" if nm == "certificate" else "section",
+                "name": nm, "start": s, "end": t, "size": t - s} for s, t, nm in cov if t > s]
+        out += _fmap_gaps(data, cov, image_end, []) + slack
+        if image_end < L:
+            out.append({"kind": "overlay", "name": "overlay", "start": image_end, "end": L, "size": L - image_end})
+        return sorted(out, key=lambda r: (r["start"], r["kind"] not in ("gap", "slack"), -r["end"]))
+    except _PARSE_ERR:
+        return None
+
+
+def file_map(data):
+    """elf_file_map / pe_file_map by magic; None for anything else."""
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        return None
+    data = bytes(data)
+    return elf_file_map(data) if data[:4] == b"\x7fELF" else pe_file_map(data) if data[:2] == b"MZ" else None
+
+
+def file_map_facts(data):
+    """Field dict over file_map: covered_count, gap_count, gaps (JSON [{offset, size, entropy, nonzero, segment}]
+    of kind gap, then slack), total_gap_bytes, nonzero_gap_count, largest_gap_offset/size, slack_count, image_end,
+    overlay_offset/size ("none" without one), cave_offset/size/end/entropy/nonzero/segment/segment_flags/after/before/
+    kind/in_segment (the gap or slack with the most nonzero bytes, largest on ties; "none" when every gap is zero),
+    cave_data_offset/size (first..last nonzero byte of the cave), hcfg_gap_offset (crc-valid HCFG starting in a
+    gap/slack), gap_hcfg_storage ("raw" for that, else "none"), hcfg_storage "raw" only for a gap HCFG
+    (file_map_field falls back to lib hcfg_storage otherwise). None when not ELF/PE."""
+    m = file_map(data)
+    if m is None:
+        return None
+    data = bytes(data)
+    gaps = [r for r in m if r["kind"] == "gap"] + [r for r in m if r["kind"] == "slack"]
+    ov = next((r for r in m if r["kind"] == "overlay"), None)
+    big = max(gaps, key=lambda g: (g["size"], -g["start"]), default=None)
+    nz = [g for g in gaps if g["nonzero"]]
+    cave = max(nz, key=lambda g: (g["nonzero"], g["size"], -g["start"]), default=None)
+    hoff = "none"
+    for g in sorted(gaps, key=lambda g: g["start"]):
+        o = data.find(HCFG_MAGIC, g["start"], g["end"])
+        while o >= 0:
+            p = _parse_blob(data[o:o + 12 + 65536])
+            if p and p[5]:
+                hoff = o
+                break
+            o = data.find(HCFG_MAGIC, o + 1, g["end"])
+        if hoff != "none":
+            break
+    f = {"container": "elf" if data[:1] == b"\x7f" else "pe", "covered_count": sum(r["kind"] not in
+         ("gap", "slack", "overlay") for r in m), "gap_count": sum(g["kind"] == "gap" for g in gaps),
+         "slack_count": sum(g["kind"] == "slack" for g in gaps),
+         "gaps": json.dumps([{"offset": g["start"], "size": g["size"], "entropy": g["entropy"], "nonzero": g["nonzero"],
+                              "segment": g["segment"]} for g in gaps], separators=(",", ":")),
+         "total_gap_bytes": sum(g["size"] for g in gaps), "nonzero_gap_count": len(nz),
+         "largest_gap_offset": big["start"] if big else "none", "largest_gap_size": big["size"] if big else "none",
+         "image_end": ov["start"] if ov else len(data), "overlay_offset": ov["start"] if ov else "none",
+         "overlay_size": ov["size"] if ov else "none", "hcfg_gap_offset": hoff,
+         "gap_hcfg_storage": "raw" if hoff != "none" else "none"}
+    for k in ("offset", "size", "end", "entropy", "nonzero", "segment", "segment_flags", "after", "before", "kind"):
+        src = {"offset": "start"}.get(k, k)
+        f["cave_" + k] = "none" if cave is None or cave.get(src) is None else cave[src]
+    f["cave_in_segment"] = "none" if cave is None else cave["segment"] is not None
+    if cave:
+        g = data[cave["start"]:cave["end"]]
+        a = next(i for i, b in enumerate(g) if b)
+        z = len(g) - next(i for i, b in enumerate(reversed(g)) if b)
+        f["cave_data_offset"], f["cave_data_size"] = cave["start"] + a, z - a
+    else:
+        f["cave_data_offset"] = f["cave_data_size"] = "none"
+    if hoff != "none":
+        f["hcfg_storage"] = "raw"
+    return f
+
+
+_FMAP_ALIAS = {"code_cave_offset": "cave_offset", "code_cave_size": "cave_size", "cave_start": "cave_offset",
+               "gap_list": "gaps", "gap_list_json": "gaps", "gaps_json": "gaps", "number_of_gaps": "gap_count",
+               "num_gaps": "gap_count", "gap_bytes": "total_gap_bytes", "hcfg_offset": "hcfg_gap_offset",
+               "cave_length": "cave_size", "slack_bytes": "total_gap_bytes"}
+
+
+def file_map_field(data, name):
+    """One file_map_facts value as a str ('true'/'false' bools, base-10 ints; also gap<i>_<k> / slack<i>_<k> with k =
+    offset/start/end/size/entropy/nonzero/segment/after/before, 0-based in file order). "none" when absent, None when
+    the input is not an ELF/PE."""
+    try:
+        fx = file_map_facts(data)
+    except _PARSE_ERR:
+        return None
+    if fx is None:
+        return None
+    f = re.sub(r"^(?:set\d+\.)?(?:d\d+_)?(?:analysis_)?", "", str(name).lower().replace("-", "_"))
+    f = _FMAP_ALIAS.get(f, f)
+    out = lambda v: "none" if v is None else "true" if v is True else "false" if v is False else str(v)   # noqa: E731
+    if f in fx:
+        return out(fx[f])
+    if f == "hcfg_storage":   # no HCFG in a gap: the section rule list (full scan, only when asked)
+        return out(hcfg_storage(data))
+    mm = re.fullmatch(r"(gap|slack)_?(\d+)_(\w+)", f)
+    if mm:
+        rs = [r for r in file_map(data) if r["kind"] == mm.group(1)]
+        i, k = int(mm.group(2)), {"offset": "start"}.get(mm.group(3), mm.group(3))
+        return out(rs[i].get(k)) if i < len(rs) else "none"
+    return "none"
+
+
+# Appended archive / SFX (ELF/PE stub + archive): `cat stub a.zip` (escript, SWI-Prolog saved state, zipapp, zip SFX),
+# tar (ustar at +257), cpio newc/crc, squashfs (AppImage runtime + 'hsqs' at the ELF image end), 7z signature header.
+# archive_offset = file offset of the archive's first byte; zip member offsets in the central directory are relative
+# to it unless `zip -A` rewrote them (zip_offsets_adjusted). Members in archive order (zip: central-directory order,
+# tar/cpio: stream order, squashfs: directory-table order, depth-first, 'dir/name' paths).
+_SQFS_COMP = {1: "gzip", 2: "lzma", 3: "lzo", 4: "xz", 5: "lz4", 6: "zstd"}
+_AR_MEMBER_CAP = 4096
+_AR_DATA_CAP = 64 << 20
+
+
+def _ar_zip(data, password=None):
+    e = data.rfind(b"PK\x05\x06", max(0, len(data) - 65600))
+    if e < 0 or e + 22 > len(data):
+        return None
+    _, _, _, n, cd_size, cd_off, clen = struct.unpack_from("<4HIIH", data, e + 4)
+    concat = e - cd_size - cd_off
+    z64 = data.rfind(b"PK\x06\x06", max(0, e - 76), e)
+    if z64 >= 0 and (cd_off == 0xFFFFFFFF or n == 0xFFFF):
+        cd_size, cd_off = struct.unpack_from("<QQ", data, z64 + 40)
+        concat = z64 - cd_size - cd_off
+    if concat < 0:
+        return None
+    zf = zipfile.ZipFile(io.BytesIO(data))
+    infos = zf.infolist()[:_AR_MEMBER_CAP]
+    # zipfile adds `concat` to each header_offset already
+    start = min([zi.header_offset for zi in infos] or [concat])
+    if data[start:start + 4] not in (b"PK\x03\x04", b"PK\x05\x06"):
+        return None
+    if password is not None:
+        try:
+            import pyzipper
+            zf = pyzipper.AESZipFile(io.BytesIO(data))
+            zf.setpassword(password.encode() if isinstance(password, str) else password)
+        except Exception:  # noqa: BLE001 - pyzipper missing / unreadable
+            pass
+    mem = []
+    for zi in infos:
+        enc = bool(zi.flag_bits & 1)
+        rd = None
+        if not zi.is_dir() and zi.file_size <= _AR_DATA_CAP and (not enc or password is not None):
+            try:
+                rd = zf.read(zi.filename)
+            except Exception:  # noqa: BLE001 - encrypted / unsupported method / corrupt
+                rd = None
+        mem.append({"name": zi.filename, "size": zi.file_size, "compressed_size": zi.compress_size,
+                    "method": zi.compress_type, "encrypted": enc, "offset": zi.header_offset, "data": rd})
+    return {"archive_format": "zip", "archive_offset": start, "archive_size": e + 22 + clen - start,
+            "zip_cd_offset": cd_off, "zip_cd_size": cd_size, "zip_eocd_offset": e,
+            "zip_offsets_adjusted": start > 0 and concat == 0, "members": mem}
+
+
+def _ar_tar(data, lo):
+    import tarfile
+    i = data.find(b"ustar", lo + 257)
+    n = 0
+    while i >= 0 and n < 256:
+        o = i - 257
+        h = data[o:o + 512]
+        if len(h) == 512 and data[i + 5:i + 6] in (b"\0", b" "):
+            try:
+                ck = int(h[148:156].split(b"\0")[0].strip() or b"x", 8)
+            except ValueError:
+                ck = -1
+            if ck == sum(h[:148]) + 256 + sum(h[156:]):
+                mem = []
+                try:
+                    with tarfile.open(fileobj=io.BytesIO(data[o:]), mode="r:") as tf:
+                        for ti in tf:
+                            if len(mem) >= _AR_MEMBER_CAP:
+                                break
+                            rd = None
+                            if ti.isfile() and ti.size <= _AR_DATA_CAP:
+                                f = tf.extractfile(ti)
+                                rd = f.read() if f else None
+                            mem.append({"name": ti.name, "size": ti.size, "offset": o + ti.offset, "data": rd,
+                                        "dir": ti.isdir()})
+                        end = o + tf.offset
+                except tarfile.TarError:
+                    end = None
+                if mem:
+                    return {"archive_format": "tar", "archive_offset": o,
+                            "archive_size": (end - o) if end else None, "members": mem}
+        i, n = data.find(b"ustar", i + 1), n + 1
+    return None
+
+
+def _ar_cpio(data, lo):
+    for mg in (b"070701", b"070702"):
+        i, n = data.find(mg, lo), 0
+        while i >= 0 and n < 256:
+            o, p, mem = i, i, []
+            try:
+                while len(mem) < _AR_MEMBER_CAP and data[p:p + 6] == mg:
+                    f = [int(data[p + 6 + 8 * k:p + 14 + 8 * k], 16) for k in range(13)]
+                    fsz, nsz = f[6], f[11]
+                    name = data[p + 110:p + 110 + nsz].rstrip(b"\0").decode("utf-8", "replace")
+                    d0 = (p + 110 + nsz + 3) & ~3
+                    if name == "TRAILER!!!":
+                        return {"archive_format": "cpio", "archive_offset": o, "archive_size": d0 - o,
+                                "members": mem}
+                    if nsz == 0 or d0 + fsz > len(data):
+                        break
+                    isreg = (f[1] & 0o170000) == 0o100000
+                    mem.append({"name": name, "size": fsz, "offset": p, "data": data[d0:d0 + fsz] if isreg else None})
+                    p = (d0 + fsz + 3) & ~3
+            except ValueError:
+                pass
+            i, n = data.find(mg, i + 1), n + 1
+    return None
+
+
+def _sqfs_decomp(comp, b, cap):
+    if comp == 1:
+        return zlib.decompressobj().decompress(b, cap)
+    if comp in (2, 4):
+        import lzma
+        return lzma.LZMADecompressor().decompress(b, cap)
+    if comp == 6:
+        import zstandard
+        return zstandard.ZstdDecompressor().decompressobj().decompress(b)[:cap]
+    if comp == 5:
+        import lz4.block
+        return lz4.block.decompress(b, uncompressed_size=cap)
+    raise ValueError("squashfs compressor %d" % comp)
+
+
+def _ar_squashfs(data, lo):
+    i, n = data.find(b"hsqs", lo), 0
+    while i >= 0 and n < 64:
+        r = None
+        try:
+            r = _sqfs_read(data, i)
+        except (*_PARSE_ERR, KeyError, zlib.error, RecursionError, EOFError, LookupError) as e:  # noqa: F841
+            r = None
+        except Exception:  # noqa: BLE001 - lzma/zstd/lz4 errors
+            r = None
+        if r:
+            return r
+        i, n = data.find(b"hsqs", i + 1), n + 1
+    return None
+
+
+def _sqfs_read(data, o):
+    (ninodes, mtime, bsize, nfrag, comp, blog, flags, nids, vmaj, vmin, root, used, idt, xat, inot, dirt, fragt,
+     expt) = struct.unpack_from("<4I6H8Q", data, o + 4)
+    if vmaj != 4 or comp not in _SQFS_COMP or bsize != 1 << blog or not (4096 <= bsize <= 1 << 20) \
+            or o + used > len(data) or not (96 <= inot <= dirt < used):
+        return None
+    sq = data[o:o + used]
+    cache = {}
+
+    def mblock(pos):
+        if pos not in cache:
+            h = struct.unpack_from("<H", sq, pos)[0]
+            ln = h & 0x7FFF
+            raw = sq[pos + 2:pos + 2 + ln]
+            cache[pos] = (raw if h & 0x8000 else _sqfs_decomp(comp, raw, 8192), pos + 2 + ln)
+        return cache[pos]
+
+    def mread(base, blk, off, ln):
+        out, pos = b"", base + blk
+        while len(out) < off + ln:
+            b, nxt = mblock(pos)
+            if not b:
+                raise ValueError("metadata eof")
+            out += b
+            pos = nxt
+        return out[off:off + ln]
+
+    def frag(idx):
+        loc = struct.unpack_from("<Q", sq, fragt + 8 * (idx // 512))[0]
+        st, sz, _ = struct.unpack_from("<QII", mread(loc, 0, 16 * (idx % 512), 16))
+        raw = sq[st:st + (sz & 0xFFFFFF)]
+        return raw if sz & (1 << 24) else _sqfs_decomp(comp, raw, bsize)
+
+    def inode(ref):
+        blk, off = ref >> 16, ref & 0xFFFF
+        typ = struct.unpack_from("<H", mread(inot, blk, off, 2))[0]
+        if typ == 1:
+            v = struct.unpack("<IIHHI", mread(inot, blk, off + 16, 16))
+            return typ, {"start": v[0], "size": v[2], "offset": v[3]}
+        if typ == 8:
+            v = struct.unpack("<IIIIHHI", mread(inot, blk, off + 16, 24))
+            return typ, {"size": v[1], "start": v[2], "offset": v[5]}
+        if typ in (2, 9):
+            if typ == 2:
+                bstart, fidx, foff, fsz = struct.unpack("<IIII", mread(inot, blk, off + 16, 16))
+                hdr = 32
+            else:
+                bstart, fsz, _, _, fidx, foff, _ = struct.unpack("<QQQIIII", mread(inot, blk, off + 16, 40))
+                hdr = 56
+            nb = fsz // bsize if fidx != 0xFFFFFFFF else -(-fsz // bsize)
+            if fsz > _AR_DATA_CAP:
+                return typ, {"size": fsz, "data": None}
+            sizes = struct.unpack("<%dI" % nb, mread(inot, blk, off + hdr, 4 * nb))
+            out, p = [], bstart
+            for s in sizes:
+                ln = s & 0xFFFFFF
+                if ln == 0:
+                    out.append(b"\0" * bsize)
+                    continue
+                raw = sq[p:p + ln]
+                out.append(raw if s & (1 << 24) else _sqfs_decomp(comp, raw, bsize))
+                p += ln
+            if fidx != 0xFFFFFFFF:
+                out.append(frag(fidx)[foff:foff + fsz % bsize])
+            return typ, {"size": fsz, "data": b"".join(out)[:fsz]}
+        return typ, {}
+
+    mem = []
+
+    def walk(d, prefix, depth):
+        rem, blk, off = d["size"] - 3, d["start"], d["offset"]
+        listing = mread(dirt, blk, off, max(rem, 0))
+        p = 0
+        while p + 12 <= len(listing) and len(mem) < _AR_MEMBER_CAP:
+            cnt, istart, _ = struct.unpack_from("<IIi", listing, p)
+            p += 12
+            for _ in range(cnt + 1):
+                ioff, _, _, nsz = struct.unpack_from("<HhHH", listing, p)
+                name = listing[p + 8:p + 9 + nsz].decode("utf-8", "replace")
+                p += 9 + nsz
+                typ, info = inode((istart << 16) | ioff)
+                path = prefix + name
+                if typ in (1, 8):
+                    mem.append({"name": path + "/", "size": 0, "data": None, "dir": True})
+                    if depth < 32:
+                        walk(info, path + "/", depth + 1)
+                else:
+                    mem.append({"name": path, "size": info.get("size", 0), "data": info.get("data")})
+
+    rt, rinfo = inode(root)
+    if rt not in (1, 8):
+        return None
+    walk(rinfo, "", 0)
+    return {"archive_format": "squashfs", "archive_offset": o, "archive_size": used, "squashfs_version": "4.0",
+            "squashfs_compression": _SQFS_COMP[comp], "squashfs_block_size": bsize, "squashfs_inode_count": ninodes,
+            "squashfs_mtime": mtime, "members": mem}
+
+
+def _ar_7z(data, lo):
+    i = data.find(b"7z\xbc\xaf\x27\x1c", lo)
+    while i >= 0:
+        h = data[i:i + 32]
+        if len(h) == 32 and zlib.crc32(h[12:32]) == struct.unpack_from("<I", h, 8)[0]:
+            nho, nhs, _ = struct.unpack_from("<QQI", h, 12)
+            if i + 32 + nho + nhs <= len(data):
+                return {"archive_format": "7z", "archive_offset": i, "archive_size": 32 + nho + nhs,
+                        "7z_version": "%d.%d" % (h[6], h[7]), "7z_next_header_offset": nho,
+                        "7z_next_header_size": nhs, "members": None}
+        i = data.find(b"7z\xbc\xaf\x27\x1c", i + 1)
+    return None
+
+
+def appended_archive_facts(data, password=None):
+    """The archive appended to an executable stub (or a bare archive at 0): archive_format (zip/tar/cpio/squashfs/7z),
+    archive_offset (file offset of its first byte; zip: first local header = EOCD - cd_size - cd_offset when the
+    central directory is archive-relative), archive_size, stub_size (= archive_offset), image_end (ELF/PE header-
+    described end, overlay_info) + archive_at_image_end, member_count, member_names (archive order, list),
+    member_sha256 (name -> 64 hex of the stored content; None if encrypted/unread), first_member, hcfg_member (name
+    containing 'hcfg' or content starting 'HCFG'), hcfg_member_sha256/size, hcfg_json (parsed JSON content when it
+    parses), plus per-format extras (zip_cd_offset/zip_eocd_offset/zip_offsets_adjusted, squashfs_compression/
+    block_size/inode_count, 7z_version/next_header_*; 7z members are not decoded). `password` (AES/ZipCrypto zip, e.g.
+    the GM's 'infected') only when the question says so. None when no archive is found or input is not bytes."""
+    import hashlib
+    try:
+        data = bytes(data)
+    except (TypeError, ValueError):
+        return None
+    try:
+        ov = overlay_info(data)
+    except Exception:  # noqa: BLE001 - not an ELF/PE stub
+        ov = None
+    img = (ov["overlay_offset"] if ov.get("has_overlay") else len(data)) if ov else None
+    lo = 0
+    cands = []
+    for fn in (lambda: _ar_zip(data, password), lambda: _ar_squashfs(data, lo), lambda: _ar_tar(data, lo),
+               lambda: _ar_cpio(data, lo), lambda: _ar_7z(data, lo)):
+        try:
+            c = fn()
+        except Exception:  # noqa: BLE001 - hostile / truncated archive
+            c = None
+        if c:
+            cands.append(c)
+    if not cands:
+        return None
+    # the outer archive: the one at the stub's image end, else the earliest (a zip stored inside a tar ends near EOF)
+    r = min(cands, key=lambda c: (c["archive_offset"] != img, c["archive_offset"]))
+    mem = r.pop("members")
+    r["stub_size"] = r["archive_offset"]
+    r["image_end"] = img if img is not None else "none"
+    r["archive_at_image_end"] = img is not None and r["archive_offset"] == img
+    if mem is None:
+        return r
+    files = [m for m in mem if not m.get("dir") and not m["name"].endswith("/")]
+    sha = {m["name"]: (hashlib.sha256(m["data"]).hexdigest() if m.get("data") is not None else None) for m in files}
+    r.update(member_count=len(files), member_names=[m["name"] for m in files], member_sha256=sha,
+             first_member=files[0]["name"] if files else None)
+    hm = next((m for m in files if "hcfg" in m["name"].lower()), None) or \
+        next((m for m in files if (m.get("data") or b"")[:4] == b"HCFG"), None)
+    r["hcfg_member"] = hm["name"] if hm else None
+    r["hcfg_member_sha256"] = sha.get(hm["name"]) if hm else None
+    r["hcfg_member_size"] = hm["size"] if hm else None
+    r["hcfg_json"] = None
+    if hm and hm.get("data"):
+        try:
+            r["hcfg_json"] = json.loads(hm["data"].decode("utf-8-sig"))
+        except ValueError:
+            pass
+    return r
+
+
+_AR_ALIAS = {"archive_start": "archive_offset", "zip_offset": "archive_offset", "payload_offset": "archive_offset",
+             "sfx_offset": "archive_offset", "squashfs_offset": "archive_offset", "format": "archive_format",
+             "archive_type": "archive_format", "members": "member_names", "member_list": "member_names",
+             "file_count": "member_count", "num_members": "member_count", "entry_count": "member_count",
+             "stub_length": "stub_size", "runtime_size": "stub_size", "config_member": "hcfg_member"}
+
+
+def appended_archive_field(data, name, password=None):
+    """One appended_archive_facts value as a str: ints base-10, bools true/false, member_names as a JSON list
+    (also member<i>_name / member<i>_sha256, 0-based, and sha256:<member name> / <member name>_sha256). "none" when
+    the archive or field is absent, None when the input is not bytes."""
+    try:
+        fx = appended_archive_facts(data, password)
+    except Exception:  # noqa: BLE001 - never raise to the solver
+        return None
+    if fx is None:
+        return "none"
+    raw = str(name)
+    f = re.sub(r"^(?:set\d+\.)?(?:d\d+_)?", "", raw.lower().replace("-", "_"))
+    f = _AR_ALIAS.get(f, f)
+
+    def out(v):
+        if v is None:
+            return "none"
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        if isinstance(v, (list, dict)):
+            return json.dumps(v, separators=(",", ":"))
+        return str(v)
+    if f in fx and f != "member_sha256":
+        return out(fx[f])
+    names, sha = fx.get("member_names") or [], fx.get("member_sha256") or {}
+    mm = re.fullmatch(r"member_?(\d+)_(name|sha256)", f)
+    if mm:
+        i = int(mm.group(1))
+        if i >= len(names):
+            return "none"
+        return names[i] if mm.group(2) == "name" else out(sha.get(names[i]))
+    m2 = re.fullmatch(r"(?:sha256[:_ ]+(.+)|(.+?)[:_ ]sha256)", raw)
+    if m2:
+        nm = m2.group(1) or m2.group(2)
+        hit = next((n for n in names if n == nm or n.rsplit("/", 1)[-1] == nm), None)
+        return out(sha.get(hit)) if hit else "none"
+    if f in ("hcfg_config", "hcfg_json_compact"):
+        return out(fx.get("hcfg_json"))
+    if f.startswith("hcfg_") and isinstance(fx.get("hcfg_json"), dict) and f[5:] in fx["hcfg_json"]:
+        return out(fx["hcfg_json"][f[5:]])
+    return "none"
+
+
+# --- compressed ELF sections: gABI SHF_COMPRESSED (0x800) + Elf32/64_Chdr {ch_type 1 zlib / 2 zstd, ch_size,
+# ch_addralign} (objcopy --compress-debug-sections=zlib|zstd, ld --compress-debug-sections, gcc -gz) and legacy GNU
+# .zdebug_* ('ZLIB' + u64 BIG-endian uncompressed size + zlib stream; =zlib-gnu). Sizes are what `readelf -S -W -t`
+# prints: compressed_size = sh_size (Chdr included), uncompressed_size = ch_size; stream_size = sh_size - header.
+# The HCFG branch in hcfg_scan decodes these by HEADER (any zlib window / a zstd frame the anchor passes missed); its
+# offset is the first byte of the compressed stream like the zlib anchor (SPECULATIVE), detail "section=<n> chdr@<o>".
+ZSEC_CAP = 1 << 20   # decompressed bytes per section (HCFG blobs are < 64 KiB)
+_ZSEC_NAMES = {1: "ELFCOMPRESS_ZLIB", 2: "ELFCOMPRESS_ZSTD"}
+
+
+def _zsec_inflate(kind, stream, cap=ZSEC_CAP):
+    try:
+        if kind == "zlib":
+            return zlib.decompressobj(15).decompress(bytes(stream), cap)
+        if kind == "zstd":
+            import zstandard
+            return zstandard.ZstdDecompressor().stream_reader(io.BytesIO(bytes(stream)),
+                                                              read_across_frames=False).read(cap)
+    except Exception:   # noqa: BLE001 - zlib.error / ZstdError / ImportError on a fake or truncated stream
+        return None
+    return None
+
+
+def elf_compressed_sections(data, inflate=True):
+    """[{section, index, format 'gabi'|'gnu', ch_type (int, None for gnu), compression 'zlib'|'zstd'|'unknown',
+    ch_type_name, compressed_size, stream_size, uncompressed_size, ch_addralign (None for gnu), sh_offset,
+    stream_offset, holds_hcfg}] for every SHF_COMPRESSED / '.zdebug*' section in file order; [] for an ELF without
+    one, None for a non-ELF / unparsable header. Never raises."""
+    try:
+        data = bytes(data)
+        if data[:4] != b"\x7fELF" or data[4] not in (1, 2) or data[5] not in (1, 2):
+            return None
+        e, b64 = ("<" if data[5] == 1 else ">"), data[4] == 2
+        shoff = struct.unpack_from(e + ("Q" if b64 else "I"), data, 40 if b64 else 32)[0]
+        shes, shn, shstr = struct.unpack_from(e + "3H", data, 58 if b64 else 46)
+        if not shoff or shes < (64 if b64 else 40) or shoff + shn * shes > len(data):
+            return []
+        fmt = e + ("IIQQQQ" if b64 else "IIIIII")   # name, type, flags, addr, offset, size
+        secs = [struct.unpack_from(fmt, data, shoff + k * shes) for k in range(min(shn, 65535))]
+        names = data[secs[shstr][4]:secs[shstr][4] + secs[shstr][5]] if shstr < len(secs) else b""
+        out, left = [], [16 << 20]
+        for k, (nm, t, fl, _, o, n) in enumerate(secs):
+            name = names[nm:names.find(b"\0", nm)].decode("latin-1") if nm < len(names) else ""
+            if t in (0, 8) or not n or o + n > len(data) or not (fl & 0x800 or name.startswith(".zdebug")):
+                continue
+            body = data[o:o + n]
+            if fl & 0x800:
+                hs = 24 if b64 else 12
+                if n < hs:
+                    continue
+                ct, cs, ca = (struct.unpack_from(e + "IxxxxQQ", body) if b64 else struct.unpack_from(e + "III", body))
+                rec = {"format": "gabi", "ch_type": ct, "compression": {1: "zlib", 2: "zstd"}.get(ct, "unknown"),
+                       "ch_type_name": _ZSEC_NAMES.get(ct, "unknown"), "uncompressed_size": cs, "ch_addralign": ca}
+            elif body[:4] == b"ZLIB" and n >= 12:
+                hs = 12
+                rec = {"format": "gnu", "ch_type": None, "compression": "zlib", "ch_type_name": None,
+                       "uncompressed_size": int.from_bytes(body[4:12], "big"), "ch_addralign": None}
+            else:
+                continue   # '.zdebug' name without the ZLIB header: an impostor, not compressed
+            rec.update(section=name, index=k, compressed_size=n, stream_size=n - hs, sh_offset=o, stream_offset=o + hs,
+                       holds_hcfg=False)
+            if inflate and left[0] > 0 and rec["compression"] != "unknown":
+                plain = _zsec_inflate(rec["compression"], body[hs:])
+                if plain:
+                    left[0] -= len(plain)
+                    rec["holds_hcfg"] = HCFG_MAGIC in plain
+            out.append(rec)
+            if len(out) >= 256:
+                break
+        return out
+    except _PARSE_ERR:
+        return None
+
+
+def _zsec_scan(data, emit, late=lambda: False):
+    """hcfg_scan branch: HCFG inside a compressed ELF section, decoded by its Chdr / ZLIB header. Bounded: 16 MiB of
+    output in all (a -gz debug build has dozens of compressed .debug_* sections), .hcfg-named sections first."""
+    left = 16 << 20
+    secs = elf_compressed_sections(data, inflate=False) or ()
+    for r in sorted(secs, key=lambda r: "hcfg" not in r["section"].lower()):
+        if r["compression"] == "unknown":
+            continue
+        if left <= 0 or late():
+            break
+        left -= min(r["uncompressed_size"], ZSEC_CAP)
+        o, hs = r["sh_offset"], r["stream_offset"] - r["sh_offset"]
+        plain = _zsec_inflate(r["compression"], data[o + hs:o + r["compressed_size"]])
+        at = plain.find(HCFG_MAGIC) if plain else -1
+        if at >= 0:
+            enc = ("zdebug-" if r["format"] == "gnu" else "elf-") + r["compression"]
+            emit(o + hs, enc, plain[at:at + 70000],
+                 f"section={r['section']} chdr@{o}" + (f" at+{at}" if at else ""))
+
+
+_ZSEC_ALIAS = {"ch_type_label": "compression", "compression_type": "compression", "algorithm": "compression",
+               "compression_algorithm": "compression", "ch_size": "uncompressed_size",
+               "decompressed_size": "uncompressed_size", "sh_size": "compressed_size", "size": "compressed_size",
+               "compressed_stream_size": "stream_size", "addralign": "ch_addralign", "alignment": "ch_addralign",
+               "name": "section", "compressed_section": "section", "section_name": "section",
+               "chdr_offset": "sh_offset", "section_offset": "sh_offset", "data_offset": "stream_offset"}
+
+
+def elf_compressed_field(data, name, section=None):
+    """One compressed-section fact as an answer string (decimal ints, labels zlib/zstd, ELFCOMPRESS_*). The section is
+    `section` (name; '.hcfg' matches '.zdebug_hcfg'/'.debug_hcfg' too), else the one whose plain bytes hold the HCFG,
+    else the first. count / shf_compressed (true/false) are file-wide. "none" = field absent (no compressed section,
+    a gnu .zdebug has no ch_type/ch_addralign); None = not an ELF / cannot answer."""
+    secs = elf_compressed_sections(data)
+    if secs is None:
+        return None
+    f = re.sub(r"^(?:set\d+\.)?(?:d\d+_)?", "", str(name).strip().lower().replace("-", "_").replace(" ", "_"))
+    f = _ZSEC_ALIAS.get(f, f)
+    if f in ("count", "compressed_section_count", "compressed_sections"):
+        return str(len(secs))
+    if f in ("shf_compressed", "is_compressed", "compressed", "has_compressed_section"):
+        return "true" if secs else "false"
+    if section:
+        want = "." + str(section).lstrip(".")
+        base = lambda s: re.sub(r"^\.(?:z?debug_)?", ".", s)
+        pick = [r for r in secs if r["section"] == want] or [r for r in secs if base(r["section"]) == base(want)]
+    else:
+        pick = [r for r in secs if r["holds_hcfg"]] or secs
+    if not pick:
+        return "none"
+    v = pick[0].get(f, KeyError)
+    if v is KeyError:
+        return None
+    if v is None:
+        return "none"
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    return str(v)
+
+
+# --- PE certificate table (Authenticode WIN_CERTIFICATE) vs overlay -------------------------------------------------
+# IMAGE_DIRECTORY_ENTRY_SECURITY (dir 4) holds a FILE offset (not an RVA) + size; it normally sits in the file tail,
+# so overlay_offset (pefile get_overlay_data_start_offset: the cert dir is skipped) usually == certificate_offset. An
+# HCFG may follow the table (after_certificate) or hide inside a WIN_CERTIFICATE past its PKCS#7 DER
+# (certificate_padding). checksum_computed = the PE CheckSum algorithm (16-bit end-around-carry word sum, CheckSum
+# field zeroed, + file length) via int.from_bytes(...) % 0xffff -- O(n) in C, no per-word Python loop.
+_PECERT_TYPES = {1: "WIN_CERT_TYPE_X509", 2: "WIN_CERT_TYPE_PKCS_SIGNED_DATA", 3: "WIN_CERT_TYPE_RESERVED_1",
+                 4: "WIN_CERT_TYPE_TS_STACK_SIGNED"}
+_PECERT_ALIAS = {"cert_offset": "certificate_offset", "security_dir_offset": "certificate_offset",
+                 "security_directory_offset": "certificate_offset", "certificate_table_offset": "certificate_offset",
+                 "signature_offset": "certificate_offset", "cert_size": "certificate_size",
+                 "security_dir_size": "certificate_size", "security_directory_size": "certificate_size",
+                 "certificate_table_size": "certificate_size", "signature_size": "certificate_size",
+                 "cert_end": "certificate_end", "dwlength": "cert_length", "certificate_length": "cert_length",
+                 "wrevision": "cert_revision", "revision": "cert_revision", "wcertificatetype": "cert_type",
+                 "certificate_type": "cert_type", "certificate_type_name": "cert_type_name",
+                 "pkcs7_length": "pkcs7_size", "der_size": "pkcs7_size", "padding_size": "cert_padding_size",
+                 "is_signed": "has_certificate", "signed": "has_certificate", "has_signature": "has_certificate",
+                 "checksum_ok": "checksum_valid", "valid_checksum": "checksum_valid", "pe_checksum": "checksum",
+                 "stored_checksum": "checksum", "computed_checksum": "checksum_computed",
+                 "overlay_start": "overlay_offset", "hcfg_storage_location": "hcfg_location"}
+
+
+def _pe_checksum(data, field_off):
+    """PE CheckSum: words summed with end-around carry == sum mod 0xffff (65536 = 1 mod 0xffff), 0xffff for a nonzero
+    multiple; the CheckSum field counts as zero; + file length."""
+    t = int.from_bytes(data[:field_off] + b"\0\0\0\0" + data[field_off + 4:], "little")
+    x = t % 0xffff or (0xffff if t else 0)
+    return (x + len(data)) & 0xffffffff
+
+
+def _der_len(b):
+    if len(b) < 2 or b[0] != 0x30:
+        return None
+    if b[1] < 0x80:
+        return 2 + b[1]
+    k = b[1] & 0x7f
+    if not 1 <= k <= 4 or len(b) < 2 + k:
+        return None
+    return 2 + k + int.from_bytes(b[2:2 + k], "big")
+
+
+def pe_cert_facts(data):
+    """Certificate-table / overlay / checksum facts of a PE (answer strings: decimal ints, 'true'/'false', hex
+    checksums like pe_header_facts). Keys: has_certificate, certificate_offset/size/end (Security dir, a FILE offset),
+    cert_length (dwLength), cert_revision ('0x0200'), cert_type (2) / cert_type_name, certificate_count (8-aligned
+    WIN_CERTIFICATE walk), pkcs7_size (DER length of the first bCertificate), cert_padding_size (dir bytes past header
+    + DER), cert_in_overlay, data_after_certificate_offset/size, overlay_offset/size (pefile semantics, overlay_info),
+    checksum / checksum_computed / checksum_valid, hcfg_offset + hcfg_location (after_certificate |
+    certificate_padding | certificate | overlay | image) of the first crc-valid raw HCFG. Cert keys are "none" when the
+    dir is empty or points outside the file. None for a non-PE / unparseable input."""
+    try:
+        if not isinstance(data, (bytes, bytearray, memoryview)):
+            return None
+        data = bytes(data)
+        lay = _pe_layout(data)
+        if not lay:
+            return None
+        _, _, dirs = lay
+        pe = int.from_bytes(data[0x3c:0x40], "little")
+        csum_off = pe + 24 + 64
+        if csum_off + 4 > len(data):
+            return None
+        N = "none"
+        L = len(data)
+        stored = struct.unpack_from("<I", data, csum_off)[0]
+        comp = _pe_checksum(data, csum_off)
+        ov = overlay_info(data) or {}
+        oo = ov.get("overlay_offset")
+        f = {"overlay_offset": str(oo) if oo is not None else N, "overlay_size": str(L - oo) if oo is not None else N,
+             "checksum": hex(stored), "checksum_computed": hex(comp), "checksum_valid": "true" if stored == comp else
+             "false", "has_certificate": "false"}
+        for k in ("certificate_offset", "certificate_size", "certificate_end", "cert_length", "cert_revision",
+                  "cert_type", "cert_type_name", "certificate_count", "pkcs7_size", "cert_padding_size",
+                  "cert_in_overlay", "data_after_certificate_offset", "data_after_certificate_size"):
+            f[k] = N
+        o, n = dirs[4] if len(dirs) > 4 else (0, 0)
+        der = None
+        if o and n >= 8 and o + n <= L:
+            ln, rev, typ = struct.unpack_from("<IHH", data, o)
+            cnt, q = 0, o
+            while q + 8 <= o + n and cnt < 64:
+                m = struct.unpack_from("<I", data, q)[0]
+                if m < 8:
+                    break
+                cnt, q = cnt + 1, q + (m + 7) // 8 * 8
+            der = _der_len(data[o + 8:o + min(ln, n)]) if ln >= 8 else None
+            if der is not None and 8 + der > n:
+                der = None
+            f.update(has_certificate="true", certificate_offset=str(o), certificate_size=str(n),
+                     certificate_end=str(o + n), cert_length=str(ln), cert_revision="0x%04x" % rev, cert_type=str(typ),
+                     cert_type_name=_PECERT_TYPES.get(typ, N), certificate_count=str(cnt),
+                     pkcs7_size=str(der) if der is not None else N,
+                     cert_padding_size=str(n - 8 - der) if der is not None else N,
+                     cert_in_overlay="true" if oo is not None and o >= oo else "false",
+                     data_after_certificate_offset=str(o + n) if o + n < L else N,
+                     data_after_certificate_size=str(L - o - n) if o + n < L else N)
+        h, loc = -1, N
+        tail = min(x for x in (oo, o if f["has_certificate"] == "true" else None, L) if x is not None)
+        for a, b in ((tail, L), (0, tail)):   # the file tail first, then the image
+            s = data.find(HCFG_MAGIC, a, b)
+            while s >= 0 and h < 0:
+                p = _parse_blob(data[s:s + 12 + 65536])
+                if p and p[5]:
+                    h = s
+                s = data.find(HCFG_MAGIC, s + 1, b)
+            if h >= 0:
+                break
+        if h >= 0:
+            if f["has_certificate"] == "true" and o <= h < o + n:
+                loc = "certificate_padding" if der is not None and h >= o + 8 + der else "certificate"
+            elif f["has_certificate"] == "true" and h >= o + n:
+                loc = "after_certificate"
+            else:
+                loc = "overlay" if oo is not None and h >= oo else "image"
+        f["hcfg_offset"], f["hcfg_location"] = (str(h) if h >= 0 else N), loc
+        return f
+    except _PARSE_ERR:
+        return None
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def pe_cert_field(data, name):
+    """One pe_cert_facts value: "none" for an unknown field / absent certificate, None when not a PE."""
+    f = pe_cert_facts(data)
+    if f is None:
+        return None
+    k = re.sub(r"^(?:set\d+\.)?(?:d\d+_)?", "", str(name).strip().lower().replace("-", "_").replace(" ", "_"))
+    return f.get(_PECERT_ALIAS.get(k, k), "none")
+
+
+# JS-runtime single executables (Node SEA / Bun --compile / Deno compile): the embedded entry script located by its
+# container -- Node: postject resource NODE_SEA_BLOB (ELF note / PE RCDATA / Mach-O __NODE_SEA) holding the SEA blob
+# (u32 magic 0x0143da20, u32 flags, [u8 exec-argv-extension, Node >= 24], size_t-prefixed code_path + main code, then
+# code cache / assets per flags) + the sentinel fuse string; Bun: "\n---- Bun! ----\n" trailer preceded by the Offsets
+# struct {u64 byte_count, StringPointer modules, u32 entry_point_id[, StringPointer exec_argv, u32 flags]} (+ u64 file
+# size after it on Linux); Deno (1.x): "d3n0l4nd" + big-endian u64 positions at EOF.
+_SEA_MAGIC = b"\x20\xda\x43\x01"
+_SEA_FUSE = b"NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2:"
+_SEA_FLAGS = ((1, "disable_experimental_sea_warning"), (2, "use_snapshot"), (4, "use_code_cache"),
+              (8, "include_assets"), (16, "include_exec_argv"))
+_BUN_TRAILER = b"\n---- Bun! ----\n"
+_DENO_TRAILER = b"d3n0l4nd"
+
+
+def _sea_str(d, p, w):
+    """size_t-prefixed string at p (w = 8 / 4) -> (start, size, next) or None."""
+    if p + w > len(d):
+        return None
+    n = int.from_bytes(d[p:p + w], "little")
+    return (p + w, n, p + w + n) if p + w + n <= len(d) else None
+
+
+def _sea_parse(d, o, end):
+    """The SEA blob at d[o:end] -> facts dict or None."""
+    b = d[o:end]
+    if len(b) < 16 or b[:4] != _SEA_MAGIC:
+        return None
+    flags = int.from_bytes(b[4:8], "little")
+    for ext, w in ((9, 8), (8, 8), (8, 4), (9, 4)):   # Node >= 24 (exec-argv-extension byte) first, then 20-22; 32-bit
+        cp = _sea_str(b, ext, w)
+        if not cp or not 0 < cp[1] <= 4096:
+            continue
+        path = b[cp[0]:cp[2]]
+        if not all(32 <= c < 127 or c >= 128 for c in path):
+            continue
+        mc = _sea_str(b, cp[2], w)
+        if not mc:
+            continue
+        out = {"sea_flags": str(flags), "sea_flags_hex": hex(flags),
+               "sea_flag_names": [n for v, n in _SEA_FLAGS if flags & v] or "none",
+               "sea_exec_argv_extension": str(b[8]) if ext == 9 else "none",
+               "entry_name": path.decode("utf-8", "replace"), "embedded_source_offset": o + mc[0],
+               "embedded_source_size": mc[1], "embedded_source_kind": "snapshot" if flags & 2 else "js",
+               "asset_names": "none", "asset_count": "0"}
+        p = mc[2]
+        if flags & 4:
+            cc = _sea_str(b, p, w)
+            p = cc[2] if cc else len(b) + 1
+            out["code_cache_size"] = str(cc[1]) if cc else "none"
+        if flags & 8 and p + w <= len(b):
+            n, p, names = int.from_bytes(b[p:p + w], "little"), p + w, []
+            for _ in range(min(n, 4096)):
+                k = _sea_str(b, p, w)
+                v = k and _sea_str(b, k[2], w)
+                if not v:
+                    break
+                names.append(b[k[0]:k[2]].decode("utf-8", "replace"))
+                p = v[2]
+            if len(names) == n:
+                out["asset_names"], out["asset_count"] = names or "none", str(n)
+        return out
+    return None
+
+
+def _bun_parse(d, t):
+    """Offsets + module graph ending at the Bun trailer at d[t] -> facts dict or None."""
+    for osz in (32, 24):   # Offsets with compile_exec_argv_ptr + flags (Bun >= 1.1.x) / without
+        op = t - osz
+        if op < 0:
+            continue
+        cnt, moff, mlen, eid = struct.unpack_from("<QIII", d, op)
+        base = op - cnt
+        if base < 0 or not 0 < mlen <= cnt or moff + mlen > cnt:
+            continue
+        for stride in (36, 28, 32, 40, 44, 48, 52):
+            if mlen % stride or eid >= mlen // stride:
+                continue
+            mods = []
+            for k in range(mlen // stride):
+                q = base + moff + k * stride
+                no, nl, co, cl = struct.unpack_from("<IIII", d, q)
+                if no + nl > cnt or co + cl > cnt or not 0 < nl <= 4096:
+                    break
+                name = d[base + no:base + no + nl]
+                if not name.startswith((b"/$bunfs/", b"B:/~BUN/", b"B:\\~BUN\\", b"/")):
+                    break
+                mods.append((name.decode("utf-8", "replace"), base + co, cl))
+            else:
+                ent = mods[eid]
+                return {"entry_name": ent[0], "embedded_source_offset": ent[1], "embedded_source_size": ent[2],
+                        "embedded_source_kind": "js", "module_names": [m[0] for m in mods],
+                        "module_count": str(len(mods)), "bun_entry_point_id": str(eid), "payload_offset": base,
+                        "payload_size": cnt, "bun_offsets_size": str(osz), "bun_module_stride": str(stride)}
+    return None
+
+
+def _deno_parse(d, t):
+    """'d3n0l4nd' + big-endian u64 positions (bundle/eszip, metadata[, npm vfs, npm files ...]) at EOF."""
+    k = (len(d) - t - 8) // 8
+    if k < 2 or len(d) - t - 8 != 8 * k:
+        return None
+    pos = [int.from_bytes(d[t + 8 + 8 * i:t + 16 + 8 * i], "big") for i in range(k)]
+    if not all(a <= b for a, b in zip(pos, pos[1:] + [t])) or pos[0] >= pos[1]:
+        return None
+    src, meta = d[pos[0]:pos[1]], d[pos[1]:pos[2] if k > 2 else t]
+    ent = "none"
+    try:
+        mj = json.loads(meta)
+        ent = str(mj.get("entrypoint") or mj.get("entrypoint_key") or "none") if isinstance(mj, dict) else "none"
+    except ValueError:
+        pass
+    return {"entry_name": ent, "embedded_source_offset": pos[0], "embedded_source_size": len(src),
+            "embedded_source_kind": "eszip" if src[:5] == b"ESZIP" else "js", "deno_positions": [str(p) for p in pos],
+            "deno_metadata_offset": pos[1], "deno_metadata_size": len(meta)}
+
+
+def js_single_exe_facts(data):
+    """Facts of a JS-runtime single executable: runtime ("node_sea" / "bun" / "deno" / "none"), entry_name (SEA
+    code_path / Bun $bunfs entry module / Deno metadata entrypoint), embedded_source_offset / _size (file offset +
+    length of the entry script bytes) / _kind ("js", "snapshot", "eszip") / _sha256 / embedded_source (UTF-8 text);
+    Node: sea_fuse ("1" / "0" / "none") + sea_fuse_offset, sea_blob_offset / _size, sea_container ("elf_note" / "blob"),
+    sea_flags(_hex/_names), asset_names / asset_count; Bun: module_names / module_count, payload_offset / _size;
+    hcfg_offset / hcfg_encoding / hcfg_config from hcfg_scan on the embedded source (offset = file offset). Absent ->
+    "none"; None only for an empty input. Never raises."""
+    import hashlib
+    try:
+        d = bytes(data)
+        if len(d) < 16:
+            return None
+        out = {"runtime": "none", "entry_name": "none", "embedded_source_offset": "none", "embedded_source_size": "none",
+               "embedded_source_kind": "none", "embedded_source_sha256": "none", "embedded_source": "none",
+               "sea_fuse": "none", "sea_fuse_offset": "none", "sea_blob_offset": "none", "sea_blob_size": "none",
+               "sea_container": "none", "hcfg_offset": "none", "hcfg_encoding": "none", "hcfg_config": "none"}
+        fi = d.find(_SEA_FUSE)
+        if fi >= 0 and d[fi + len(_SEA_FUSE):fi + len(_SEA_FUSE) + 1] in (b"0", b"1"):
+            out["sea_fuse"], out["sea_fuse_offset"] = chr(d[fi + len(_SEA_FUSE)]), str(fi)
+        got = None
+        notes = (elf_notes(d) or []) if d[:4] == b"\x7fELF" else []
+        for x in notes:
+            if x["owner"] == "NODE_SEA_BLOB":
+                got = _sea_parse(d, x["desc_offset"], x["desc_offset"] + x["desc_size"])
+                if got:
+                    got.update(sea_container="elf_note", sea_blob_offset=str(x["desc_offset"]),
+                               sea_blob_size=str(x["desc_size"]))
+                    break
+        if not got and out["sea_fuse"] == "1":   # PE resource / Mach-O section / raw blob: anchor on the magic
+            i, n = d.find(_SEA_MAGIC), 0
+            while i >= 0 and n < 64 and not got:
+                got = _sea_parse(d, i, len(d))
+                if got:
+                    got.update(sea_container="blob", sea_blob_offset=str(i), sea_blob_size="none")
+                i, n = d.find(_SEA_MAGIC, i + 1), n + 1
+        if got:
+            got["runtime"] = "node_sea"
+        if not got:
+            t = d.rfind(_BUN_TRAILER, max(0, len(d) - 4096))
+            t = t if t >= 0 else d.rfind(_BUN_TRAILER)
+            if t >= 0:
+                got = _bun_parse(d, t)
+                if got:
+                    got["runtime"] = "bun"
+        if not got:
+            t = d.rfind(_DENO_TRAILER, max(0, len(d) - 128))
+            if t >= 0:
+                got = _deno_parse(d, t)
+                if got:
+                    got["runtime"] = "deno"
+        if not got:
+            return out
+        out.update(got)
+        so, sn = out["embedded_source_offset"], out["embedded_source_size"]
+        src = d[so:so + sn]
+        out["embedded_source_sha256"] = hashlib.sha256(src).hexdigest()
+        if out["embedded_source_kind"] in ("js", "eszip"):
+            out["embedded_source"] = src.decode("utf-8", "replace")
+        hit = next((h for h in hcfg_scan(src, stop_on_valid=True) if h.valid), None) if sn <= 32 << 20 else None
+        if hit:
+            out.update(hcfg_offset=str(so + hit.offset), hcfg_encoding=hit.encoding,
+                       hcfg_config=json.dumps(hit.config, separators=(",", ":")))
+        for k in ("embedded_source_offset", "embedded_source_size", "payload_offset", "payload_size",
+                  "deno_metadata_offset", "deno_metadata_size"):
+            if isinstance(out.get(k), int):
+                out[k] = str(out[k])
+        out["embedded_source_offset_hex"] = hex(so)
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+_JSX_ALIAS = {"entry": "entry_name", "entry_point": "entry_name", "entrypoint": "entry_name", "main": "entry_name",
+              "code_path": "entry_name", "source_offset": "embedded_source_offset", "source_size":
+              "embedded_source_size", "script_offset": "embedded_source_offset", "script_size": "embedded_source_size",
+              "fuse": "sea_fuse", "sea_fuse_state": "sea_fuse", "packager": "runtime", "bundler": "runtime",
+              "assets": "asset_names", "modules": "module_names"}
+
+
+def js_single_exe_field(data, name):
+    """One js_single_exe_facts value ("none" for an unknown field); None when the input cannot be read."""
+    f = js_single_exe_facts(data)
+    if f is None:
+        return None
+    k = str(name).strip().lower().replace("-", "_").replace(" ", "_")
+    return f.get(_JSX_ALIAS.get(k, k), "none")
+
+
+# --- heavy AOT images that embed resources: GraalVM native-image (image heap section `.svm_heap` / Mach-O `__svm_heap`,
+# `__svm_*` + IsolateEnterStub_* symbols) and Julia sysimages / PackageCompiler apps (`jl_system_image_data` exported
+# from sys.so, launcher NEEDs libjulia). Resources (-H:IncludeResources) live as byte[] in the heap, so the HCFG is
+# looked for in the heap / image-data section first, then (only if absent there) in the whole file.
+_GRAAL_SYMS = ("__svm_vm_target", "__svm_version_info", "__svm_heap_begin", "__svm_heap_end", "__svm_text_begin",
+               "graal_create_isolate", "graal_attach_thread")
+_JULIA_SYMS = ("jl_system_image_data", "jl_system_image_size", "jl_image_pointers", "jl_init_with_image",
+               "jl_init_with_image_file", "jl_atexit_hook", "jl_get_sysimage_path")
+_GRAAL_VER = re.compile(rb"GraalVM (?:CE |EE )?(\d+(?:\.\d+)+(?:\+\d+(?:\.\d+)*)?)")
+_JULIA_VER = re.compile(rb"Julia Version (\d+\.\d+\.\d+(?:-[A-Za-z0-9.]+)?)|libjulia(?:-internal)?\.so\.(\d+\.\d+\.\d+)")
+
+
+def _aot_elf(d):
+    """([(name, type, offset, size)] by section index, {symbol name: (value, shndx)} of symtab+dynsym, [DT_NEEDED])."""
+    b64, e = d[4] == 2, "<" if d[5] == 1 else ">"
+    shoff = struct.unpack_from(e + ("Q" if b64 else "I"), d, 40 if b64 else 32)[0]
+    shes, shn, shstr = struct.unpack_from(e + "3H", d, 58 if b64 else 46)
+    if not shoff or shes < (64 if b64 else 40) or shoff + shn * shes > len(d):
+        return [], {}, []
+    fmt = e + ("IIQQQQIIQQ" if b64 else "IIIIIIIIII")   # name type flags addr offset size link info align entsize
+    raw = [struct.unpack_from(fmt, d, shoff + k * shes) for k in range(min(shn, 65535))]
+    names = d[raw[shstr][4]:raw[shstr][4] + raw[shstr][5]] if shstr < len(raw) else b""
+    secs = [((names[s[0]:names.find(b"\0", s[0])].decode("latin-1") if s[0] < len(names) else ""), s[1], s[4], s[5])
+            for s in raw]
+    syms, needed = {}, []
+    ent_fmt = e + ("IBBHQ" if b64 else "IIIBBH")
+    for s in raw:
+        if s[1] not in (2, 11) or not 0 <= s[6] < len(raw) or s[4] + s[5] > len(d):
+            continue
+        so, sn = raw[s[6]][4], raw[s[6]][5]
+        ent = s[9] or (24 if b64 else 16)
+        for k in range(min(s[5] // ent, 400_000)):
+            v = struct.unpack_from(ent_fmt, d, s[4] + k * ent)
+            nm, val, shndx = (v[0], v[4], v[3]) if b64 else (v[0], v[1], v[5])
+            if 0 < nm < sn:
+                z = d.find(b"\0", so + nm, so + sn)
+                syms.setdefault(d[so + nm:z if z >= 0 else so + sn].decode("latin-1"), (val, shndx))
+    for s in raw:
+        if s[1] == 6 and s[4] + s[5] <= len(d) and 0 <= s[6] < len(raw):   # SHT_DYNAMIC -> DT_NEEDED via its strtab
+            so, sn = raw[s[6]][4], raw[s[6]][5]
+            w = 16 if b64 else 8
+            for k in range(min(s[5] // w, 4096)):
+                tag, val = struct.unpack_from(e + ("qQ" if b64 else "iI"), d, s[4] + k * w)
+                if tag == 0:
+                    break
+                if tag == 1 and val < sn:
+                    z = d.find(b"\0", so + val, so + sn)
+                    needed.append(d[so + val:z if z >= 0 else so + sn].decode("latin-1"))
+    return secs, syms, needed
+
+
+def aot_image_facts(data, hcfg=True):
+    """Facts of a GraalVM native-image or Julia sysimage/app (ELF; PE/Mach-O by section names only): runtime
+    ("graalvm" / "julia" / "none"), has_graalvm / has_julia ("true"/"false"), cues (the section/symbol/needed names
+    that decided it), graalvm_version / julia_version (version string in the bytes, "none"), image_section (GraalVM
+    heap section / the section holding jl_system_image_data) + image_section_offset / _size, needed (DT_NEEDED),
+    hcfg_section (section holding the first crc-valid HCFG), hcfg_offset / hcfg_encoding / hcfg_config, hcfg_in_image
+    ("true"/"false"). Decided only by a real section or a symtab/dynsym/DT_NEEDED entry -- cue strings in .rodata
+    alone are no runtime. Absent -> "none"; None for an empty / unreadable input. Never raises."""
+    try:
+        d = bytes(data)
+        if len(d) < 64:
+            return None
+        out = {"runtime": "none", "has_graalvm": "false", "has_julia": "false", "cues": "none",
+               "graalvm_version": "none", "julia_version": "none", "image_section": "none",
+               "image_section_offset": "none", "image_section_size": "none", "needed": "none", "hcfg_section": "none",
+               "hcfg_offset": "none", "hcfg_encoding": "none", "hcfg_config": "none", "hcfg_in_image": "none"}
+        secs, syms, needed = [], {}, []   # secs: (name, offset, size)
+        if d[:4] == b"\x7fELF" and d[4] in (1, 2) and d[5] in (1, 2):
+            es, syms, needed = _aot_elf(d)
+            secs = [(n, o, s) if t not in (0, 8) else (n, 0, 0) for n, t, o, s in es]
+        elif _pe_layout(d):
+            secs = [(n, rp, rs) for n, _, _, rp, rs in _pe_layout(d)[1]]
+        else:
+            mo = macho_layout(d)
+            secs = [(x["section"], x["offset"], x["size"]) for s in (mo or {}).get("slices", ()) for x in s["sections"]]
+        if not secs:
+            return out
+        g_cues = [n for n, _, _ in secs if n.lstrip("._").lower().startswith("svm_hea")]
+        g_cues += [n for n in _GRAAL_SYMS if n in syms]
+        g_cues += sorted(n for n in syms if n.startswith("IsolateEnterStub_"))[:1]
+        j_cues = [n for n in _JULIA_SYMS if n in syms] + [n for n in needed if n.startswith("libjulia")]
+        out["has_graalvm"], out["has_julia"] = ("true" if g_cues else "false"), ("true" if j_cues else "false")
+        if needed:
+            out["needed"] = needed
+        if not g_cues and not j_cues:
+            return out
+        rt = "graalvm" if len(g_cues) >= len(j_cues) else "julia"
+        out["runtime"], out["cues"] = rt, (g_cues if rt == "graalvm" else j_cues)
+        m = _GRAAL_VER.search(d) if rt == "graalvm" else _JULIA_VER.search(d)
+        if m:
+            out[rt + "_version"] = (m.group(1) or m.group(m.lastindex)).decode("latin-1")
+        img = None
+        if rt == "graalvm":
+            img = next(((n, o, s) for n, o, s in secs if n.lstrip("._").lower().startswith("svm_hea") and s), None)
+        elif "jl_system_image_data" in syms:
+            ndx = syms["jl_system_image_data"][1]
+            if 0 < ndx < len(secs) and secs[ndx][2]:
+                img = secs[ndx]
+        if img:
+            out.update(image_section=img[0], image_section_offset=str(img[1]), image_section_size=str(img[2]))
+        if not hcfg:
+            return out
+        hit, base = None, 0
+        if img and img[1] + img[2] <= len(d):
+            hit = next((h for h in hcfg_scan(d[img[1]:img[1] + img[2]], stop_on_valid=True) if h.valid), None)
+            base = img[1]
+        if hit is None:
+            hit, base = next((h for h in hcfg_scan(d, stop_on_valid=True) if h.valid), None), 0
+        if hit:
+            off = base + hit.offset
+            where = next((n for n, o, s in secs if s and o <= off < o + s), "none")
+            out.update(hcfg_section=where or "none", hcfg_offset=str(off), hcfg_encoding=hit.encoding,
+                       hcfg_config=json.dumps(hit.config, separators=(",", ":")),
+                       hcfg_in_image="true" if img and img[1] <= off < img[1] + img[2] else "false")
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+_AOT_ALIAS = {"has_graal": "has_graalvm", "has_native_image": "has_graalvm", "has_svm": "has_graalvm",
+              "is_graalvm": "has_graalvm", "is_julia": "has_julia", "has_sysimage": "has_julia",
+              "heap_section": "image_section", "svm_heap_section": "image_section", "sysimage_section": "image_section",
+              "image_heap_section": "image_section", "config_section": "hcfg_section", "blob_section": "hcfg_section",
+              "section": "hcfg_section", "native_image_version": "graalvm_version", "version": None,
+              "toolchain": "runtime", "aot_runtime": "runtime"}
+
+
+def aot_image_field(data, name):
+    """One aot_image_facts value ("none" for an unknown field); None when the input cannot be read. hcfg_scan runs only
+    for hcfg_* fields; `version` = the detected runtime's version."""
+    k = str(name).strip().lower().replace("-", "_").replace(" ", "_")
+    k = _AOT_ALIAS.get(k, k)
+    f = aot_image_facts(data, hcfg=k is not None and k.startswith("hcfg"))
+    if f is None:
+        return None
+    if k is None:
+        return f.get(f["runtime"] + "_version", "none")
+    return f.get(k, "none")

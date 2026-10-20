@@ -1,0 +1,8 @@
+{
+ "field": "core.pr_fname",
+ "expected": "none",
+ "generator_cmd": "gcc -c p.c -o plain.ko (ET_REL object, not a core)",
+ "oracle_cmd": "readelf -h plain.ko -> \"Type: REL (Relocatable file)\"; readelf -n plain.ko -> no NT_PRPSINFO",
+ "decoy": true,
+ "member": "crash.core"
+}

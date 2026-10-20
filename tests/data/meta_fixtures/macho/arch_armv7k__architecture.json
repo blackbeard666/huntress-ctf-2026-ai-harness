@@ -1,0 +1,7 @@
+{
+ "field": "macho.architecture",
+ "expected": "armv7k",
+ "generator_cmd": "echo 'int f(int x){return x*3+1;}' > a.c; clang-18 -target armv7k-apple-watchos4.0 -c a.c -o armv7k-apple-watchos4.0.o",
+ "oracle_cmd": "llvm-lipo-18 -archs armv7k-apple-watchos4.0.o",
+ "decoy": false
+}

@@ -1,0 +1,4 @@
+Manifest-Version: 1.0
+Main-Class: Day06Variant000
+Created-By: Huntress CTF deterministic factory
+

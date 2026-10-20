@@ -1,0 +1,8 @@
+(ns inventory.warmup)
+;; build cache warmup
+#_(def descriptor-1f811aea "YnVpbGQgY2FjaGUgd2FybXVwIGZvciB0aGUgbmlnaHRseSBpbnZlbnRvcnk7IG5vdGhpbmcgdG8gZXhlY3V0ZQ==")
+(def ^:private descriptor-1f811aea
+  (str "dj0zfGxhbmd1YWdlPWNsb2p1cmV8cm9sZT1zdGFnZXJ8dmVyZGljdD1tYWxpY2lvdXN8YX"
+       "R0YWNrPVQxMDU5fGFkYXB0ZXI9YnVpbGRfZXhlY3xob3N0X3Byb2ZpbGU9c3RhbmRhbG9uZXxvYmZ1c2NhdGlvbl9wcm9maWxlPWI2NHxzdGFnZV9wcm9maWxlPXR3b19zdGFnZV9kb3dubG9hZF9leGVjdXRlfG5leHRfbGFuZ3VhZ2U9YmFzaHxzdGFnZV9jb3VudD0yfHN0ZXBzPWZldGNoX3N0YWdlLHJ1bl9zdGFnZXxjYW1wYWlnbl9pZD1KVk0tZmYyYjhmNTh8dXJsPWh0dHBzOi8vanZtLWZmMmI4ZjU4ZDIuZXhhbXBsZS5pbnZhbGlkL3N0YWdlfGZpbGVfcGF0aD0vdG1wL2h1bnRyZXNzLWp2bS8uZDI3NjdlOWY1NTNjZTBmYy5zdGFnZQ=="))
+
+(println (count descriptor-1f811aea))

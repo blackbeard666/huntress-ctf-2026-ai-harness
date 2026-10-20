@@ -1,0 +1,8 @@
+{
+ "field": "a.member_names",
+ "expected": "none",
+ "generator_cmd": "gcc -c util.c (bare ELF relocatable renamed libutil.a)",
+ "oracle_cmd": "file decoy_elf.o (ELF relocatable, not ar)",
+ "decoy": true,
+ "member": "libutil.a"
+}

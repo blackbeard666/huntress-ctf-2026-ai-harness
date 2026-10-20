@@ -1,0 +1,8 @@
+{
+ "field": "msix.identity_version",
+ "expected": "11.2307.4.0",
+ "generator_cmd": "zip -qrX calc_x64.msix AppxManifest.xml AppxBlockMap.xml '[Content_Types].xml' AppxSignature.p7x CalculatorApp.exe (hand-written win10 foundation manifest: Identity x64, 2 TargetDeviceFamily, Capability/rescap:Capability/DeviceCapability; random-bytes AppxSignature.p7x)",
+ "oracle_cmd": "unzip -p calc_x64.msix 'AppxManifest.xml' | python3 -I -c 'import sys,json,lxml.etree as E;r=E.fromstring(sys.stdin.buffer.read());v=r.xpath(sys.argv[1]);print(v if isinstance(v,str) else json.dumps([str(x) for x in v],separators=(\",\",\":\")))' 'string(/*/*[local-name()=\"Identity\"]/@Version)'",
+ "decoy": false,
+ "member": "calc_x64.msix"
+}

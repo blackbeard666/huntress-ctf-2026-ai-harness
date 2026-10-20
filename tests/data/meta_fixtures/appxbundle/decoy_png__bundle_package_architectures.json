@@ -1,0 +1,8 @@
+{
+ "field": "appxbundle.bundle_package_architectures",
+ "expected": "none",
+ "generator_cmd": "printf '\\x89PNG\\r\\n\\x1a\\nnot-a-bundle' > decoy_png.appxbundle (not a zip)",
+ "oracle_cmd": "unzip -Z1 decoy_png.appxbundle >/dev/null 2>&1 && echo HAS || echo none",
+ "decoy": true,
+ "member": "decoy_png.appxbundle"
+}

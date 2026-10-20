@@ -1,0 +1,24 @@
+{
+ "kind": "jvm_facts",
+ "decoy": true,
+ "member": null,
+ "question": "For Day 26 use the primary classfile acme/Beacon.class named by that unit. Submit method_count.",
+ "expected": {
+  "main_class": "none",
+  "class_count": "1",
+  "entry_count": "4",
+  "methods": "none",
+  "method_count": "none",
+  "access_flags": "none",
+  "major_version": "none",
+  "this_class": "none",
+  "jvm_language": "none",
+  "clojure_namespace": "none",
+  "is_scala_module": "none",
+  "container_format": "jar",
+  "clojure_namespaces": "[]"
+ },
+ "generator_cmd": "bash jvm_lang_gen.sh   # scalac 2.11.12 / clojure.lang.Compile 1.12 / groovyc 4.0.12 FileSystemCompiler / jar (JDK 21); decoy: jar --create over a python3-struct Mach-O fat header named acme/Beacon.class",
+ "oracle_cmd": "python3 jvm_lang_oracle.py jvm_lang_decoy_impostor_jar.bin acme/Beacon.class   # javap -v -p (OpenJDK 21) + unzip -Z1/-p via jvm_oracle.py; language markers from the javap text",
+ "note": "DECOY: jar entry acme/Beacon.class is a Mach-O fat header (javap prints Error: invalid index #0) -> class-level fields none"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "dmg.sector_count",
+ "expected": "264",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/dmg/mkdmg.py.txt out.dmg b  (stdlib UDIF writer: zlib blkx chunks + plistlib resource-fork + 512-byte koly trailer)",
+ "oracle_cmd": "7z l -slt -tdmg FILE | grep 'unpack-size:' (koly SectorCount*512) / 512",
+ "decoy": false,
+ "member": "apm_image.dmg"
+}

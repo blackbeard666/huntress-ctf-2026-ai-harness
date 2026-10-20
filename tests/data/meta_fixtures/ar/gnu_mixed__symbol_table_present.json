@@ -1,0 +1,8 @@
+{
+ "field": "ar.symbol_table_present",
+ "expected": "true",
+ "generator_cmd": "gcc -c util.c; aarch64-linux-gnu-gcc -c net.c; gcc -c crypto_backend_long_name.c; touch -d <dates UTC>; chmod 644/600/755; ar rcsU libgnu_mixed.a util.o net.o crypto_backend_long_name.o",
+ "oracle_cmd": "nm -s libgnu_mixed.a (Archive index present)",
+ "decoy": false,
+ "member": "libgnu_mixed.a"
+}

@@ -1,0 +1,7 @@
+{
+ "field": "pe.coff_machine_name",
+ "expected": "none",
+ "generator_cmd": "(reused pe/decoy_elf.bin fixture input)",
+ "oracle_cmd": "python3 -c 'import pefile;pefile.PE(\"decoy_elf.bin\")' -> PEFormatError: DOS Header magic not found",
+ "decoy": true
+}

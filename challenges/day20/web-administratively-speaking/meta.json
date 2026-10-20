@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-05-administratively-speaking",
+  "lane": "web",
+  "name": "🌐 Administratively Speaking",
+  "ids": {
+    "single_solve": "web-exploitation-day-05-administratively-speaking",
+    "time_trial": "web-exploitation-day-05-administratively-speaking/time_trial",
+    "mastery": "web-exploitation-day-05-administratively-speaking/mastery"
+  }
+}

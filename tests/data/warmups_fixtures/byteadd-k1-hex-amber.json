@@ -1,0 +1,9 @@
+{
+ "codec": "byteadd1-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "4f6a6466217870736c2165666470656a6f682175696a74217862736e7671222155702174706d77662d217476636e6a752175696a7421667962647521626f74786673217570217569662148626e66214e62747566733b21626e6366732e67626d64706f2e3533",
+ "generator_cmd": "printf '%s' \"$plain\" | perl -0777 -ne 'print join q(), map { chr((ord($_)+1)%256) } split //' | xxd -p | tr -d '\\n'",
+ "oracle_cmd": "python3 -c \"import os,base64;e=os.environ['encoded'];d=bytes.fromhex(e);b=d.translate(bytes.maketrans(bytes(range(256)),bytes((i-1)%256 for i in range(256))));print(b.decode())\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "xar.xar_version",
+ "expected": "1",
+ "generator_cmd": "PYTHONPATH=tools/pylib-libarchive .venv/bin/python tests/data/meta_fixtures/pkg/mkxar.py.txt out.pkg bzip2 md5 b  (PYTHONPATH=tools/pylib-libarchive; libarchive xar writer, compression=bzip2 toc-checksum=md5; Distribution arm64 min=13.5; helper.pkg + daemon.pkg PackageInfo)",
+ "oracle_cmd": "xxd -s 6 -l 2 -p FILE (BE u16 version) -> decimal",
+ "decoy": false,
+ "member": "two_component.pkg"
+}

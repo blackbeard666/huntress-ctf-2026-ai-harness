@@ -1,0 +1,24 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "runtime": "node_sea",
+  "entry_name": "n2/main.js",
+  "embedded_source_offset": "12405",
+  "embedded_source_size": "105",
+  "embedded_source_sha256": "3bd865e3acb97299b053fb1fce9a7e70bf1f9dab1eb7ab0c6cbe69ec9c44b75c",
+  "sea_fuse": "1",
+  "sea_blob_size": "220",
+  "sea_flags": "8",
+  "asset_count": "2",
+  "asset_names": [
+   "app.cfg",
+   "motd.txt"
+  ]
+ },
+ "generator_cmd": "bash jsexe_gen.sh   # step 2 (node v24 SEA with assets motd.txt + app.cfg)",
+ "oracle_cmd": "readelf -n -W (NODE_SEA_BLOB 0xdc) ; grep -obUaP 'module.exports = 1;' ; wc -c / sha256sum n2/main.js ; sea-config assets (node writes them key-sorted: xxd blob)",
+ "decoy": false,
+ "note": "flags 8 = includeAssets (warning left enabled)"
+}

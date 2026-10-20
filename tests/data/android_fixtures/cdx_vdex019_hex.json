@@ -1,0 +1,7 @@
+{
+ "entry": "compact_dex_scan",
+ "expected": "ANS-c05f2e9a8b13d746",
+ "_why": "hex pool string of a cdex inside a vdex 019 whose string data lives in the shared data section",
+ "generator_cmd": "python3 tests/data/android_fixtures/cdx_src/gen_cdx.py vdex019_hex tests/data/android_fixtures/cdx_vdex019_hex.apk  # javac --release 8 + dex2jar d2j-jar2dex dex, coreutils base64/base32/xxd encoding, struct vdex/cdex writer (ART layouts), gcc -shared .incbin for the OAT, zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/cdx_src/oracle.sh tests/data/android_fixtures/cdx_vdex019_hex.apk  # od magic + strings + xxd -r -p"
+}

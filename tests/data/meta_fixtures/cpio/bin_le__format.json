@@ -1,0 +1,8 @@
+{
+ "field": "cpio.format",
+ "expected": "bin",
+ "generator_cmd": "PYTHONPATH=$TMPDIR/cpiofx/pylib python3 gen.py (libarchive-c 5 / libarchive 3.8.5 file_writer, format cpio_bin; cpio_bin/cpio_odc via archive_write_set_format_cpio_bin/_odc)",
+ "oracle_cmd": "file -b bin_le.cpio -> 'cpio archive; device 0, inode 0, mode 40755 ...' (binary, c7 71 = little-endian)",
+ "decoy": false,
+ "member": "bin_le.cpio"
+}

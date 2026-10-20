@@ -1,0 +1,9 @@
+{
+ "codec": "crockford32-pad",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-17",
+ "encoded": "9SMP6S90EXQQ4TS0CHJP6VV4D5Q6E83MD1MQ683QC5S6TXBG44G58VS0EDQPRXK55GG76XB2DNMQ883MD1MQ6835F1GP6X10C5Q76XV5E8G78VS0EHM6A827C5PPA82DC5SQ8SBJ78G66VV2C5P78BBFEHT6AWHD64VG====",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/altbase_cyberchef.mjs b32 '0-9A-HJKMNP-TV-Z='  # CyberChef 'To Base32' custom alphabet, '=' padded",
+ "oracle_cmd": "printf %s \"$encoded\" | AB=$PWD/tools/npm-altbase tools/node/bin/node tests/data/warmups_fixtures/altbase_oracle.mjs crockford  # npm base32-decode 'Crockford' (oracle strips trailing =)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-17",
+ "expected": "match"
+}

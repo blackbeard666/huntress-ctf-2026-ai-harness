@@ -1,0 +1,7 @@
+{
+ "entry": "jwt_scan",
+ "expected": "ANS-b71e04c9d25a8f30",
+ "decoy": false,
+ "generator_cmd": "PYTHONPATH=tools/pylib python3 tests/data/android_fixtures/att_src/gen.py tests/data/android_fixtures (jwcrypto JWS ES256/RS256 + x5c, JWE A256KW+A256GCM / dir+A128CBC-HS256+zip=DEF, zipfile APK)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib python3 tests/data/android_fixtures/att_src/oracle.py tests/data/android_fixtures/att_safetynet_dir_cbc.apk (jwcrypto decrypt + x5c verify, base64-decoded claims) -> ANS-b71e04c9d25a8f30"
+}

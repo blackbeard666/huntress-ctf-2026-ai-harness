@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 tests/data/script_fixtures/json_carrier_gen.py  # python3 json.dumps(nbformat-4), gzip|base64 truncated to 60 chars, written as jcar_decoy_ipynb_truncgz.ipynb",
+ "oracle_cmd": "python3 -c \"import json,re,base64,zlib;s=''.join(json.load(open('jcar_decoy_ipynb_truncgz.ipynb'))['cells'][0]['source']);print(zlib.decompressobj(31).decompress(base64.b64decode(re.search(r'\\\"([A-Za-z0-9+/=]{20,})\\\"',s).group(1)+'==')))\"  # -> partial/none"
+}

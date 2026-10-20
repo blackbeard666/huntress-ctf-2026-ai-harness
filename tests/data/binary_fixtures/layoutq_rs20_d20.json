@@ -1,0 +1,41 @@
+{
+ "entry": "layout_from_question+layout_field",
+ "question": "In delivery 1: evidence.zip, Use all d20-- members in ZIP central-directory order. Find the final RS20 overlay. Read HCFG resource length u32le at +8 and scratch length u16le at +12; bytes +16..+47 are the scratch SHA-256, the HCFG resource starts at +48, and scratch follows it. Verify exact end bounds and scratch SHA-256, then use the HCFG resource at offset 0. Locate the unique CRC32-valid HCFG record: bytes 0..3 are ASCII HCFG, byte 4 is version, byte 5 is the XOR key.",
+ "oracle_args": "RS20 m hcfg_resource_length:8:u32le scratch_length:12:u16le scratch_sha256:16:32 hcfg_resource:48:hcfg_resource_length scratch:after:scratch_length",
+ "decoy": false,
+ "note": "D20 question text verbatim",
+ "expected": {
+  "overlay_offset": 3527,
+  "overlay_size": 151,
+  "hcfg_resource_length": 66,
+  "scratch_length": 37,
+  "scratch_sha256": "9a5afb1d1bf53e93a23bde16e7fc9758f60bd4fcca0db2dea133e2d099068fda",
+  "hcfg_resource_offset": 48,
+  "hcfg_resource_start": 3575,
+  "hcfg_resource_end": 3641,
+  "hcfg_resource_body_size": 66,
+  "hcfg_resource_sha256_actual": "07a81e18273d7160dda37926190c4688a8cf2a445a86e9e7064c29e42d3741b4",
+  "scratch_offset": 114,
+  "scratch_start": 3641,
+  "scratch_end": 3678,
+  "scratch_body_size": 37,
+  "scratch_sha256_actual": "9a5afb1d1bf53e93a23bde16e7fc9758f60bd4fcca0db2dea133e2d099068fda",
+  "end_bounds_ok": "true"
+ },
+ "ids": {
+  "hcfg_resource_size": 66,
+  "resource_size": 66,
+  "d20_analysis_hcfg_resource_size": 66,
+  "set2.d20_analysis_scratch_size": 37,
+  "resource_length": 66,
+  "scratch_sha256": "9a5afb1d1bf53e93a23bde16e7fc9758f60bd4fcca0db2dea133e2d099068fda",
+  "hcfg_resource_offset": 48,
+  "scratch_offset": 114,
+  "overlay_offset": 3527,
+  "overlay_size": 151,
+  "hcfg_resource_sha256": "07a81e18273d7160dda37926190c4688a8cf2a445a86e9e7064c29e42d3741b4",
+  "end_bounds_ok": "true"
+ },
+ "generator_cmd": "python3 tests/data/binary_fixtures/layoutq_gen.py  (stdlib struct/hashlib writer)",
+ "oracle_cmd": "bash tests/data/binary_fixtures/layoutq_oracle.sh layoutq_rs20_d20.bin \"$(jq -r .oracle_args layoutq_rs20_d20.json)\"  (grep -obaF / od / dd|sha256sum / stat)"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "macho.fat_slice_mismatch",
+ "expected": "true",
+ "generator_cmd": "llvm-lipo-18 -create prog_x86 prog_arm64 -output fat_prog ; python3 -c \"b=bytearray(open('fat_prog','rb').read()); b[0x1c:0x20]=(0x01000007).to_bytes(4,'big'); open('fat_mismatch','wb').write(b)\"  (fat_arch[1].cputype arm64 -> x86_64; slice header untouched)",
+ "oracle_cmd": "/usr/lib/llvm-18/bin/llvm-otool -f fat_mismatch__fat_slice_mismatch.bin: arch1 cputype 16777223; python -I -c 'from macholib.MachO import MachO; import sys; m=MachO(sys.argv[1]); print(m.fat and hex(m.fat.magic), [(hex(h.header.cputype), hex(h.header.cpusubtype), h.header.filetype, h.offset) for h in m.headers])' fat_mismatch__fat_slice_mismatch.bin: slice@32768 header cputype 0x100000c",
+ "decoy": false,
+ "member": "fat_mismatch"
+}

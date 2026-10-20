@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<component>
+<registration progid="Inert.Benign" version="1.00"/>
+<script language="VBScript"><![CDATA[
+Dim descriptor_00000000 : descriptor_00000000 = "aGVsbG8gZnJvbSBhIGJlbmlnbiBjb21wb25lbnQsIG5vdGhpbmcgdG8gc2VlIGhlcmU="
+]]></script>
+</component>

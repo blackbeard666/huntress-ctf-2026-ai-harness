@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "profile_guess": "scheduled_task_xml",
+ "generator_cmd": "python3 tests/data/script_fixtures/prior_host_gen.py  # python3 utf-16-le base64 of `Get-Date | Out-Null`, XML written UTF-16LE with BOM, written as pho_decoy_task_xml_benign.xml",
+ "oracle_cmd": "iconv -f UTF-16 -t UTF-8 pho_decoy_task_xml_benign.xml | grep -oP '(?<=-enc )[A-Za-z0-9+/=]+' | base64 -d | iconv -f UTF-16LE -t UTF-8"
+}

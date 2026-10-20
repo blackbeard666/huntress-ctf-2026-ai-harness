@@ -1,0 +1,10 @@
+{
+ "codec": "byteadd",
+ "plain": null,
+ "encoded": "4e69636520776f726b206465636f64696e672074686973207761726d75702120546f20736f6c76652c207375626d6974207468697320657861637420616e7377657220746f207468652047616d65204d61737465723a206a6164652d66616c636f6e2d3430",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf '%s' \"$plain\" | xxd -p | tr -d '\\n'  # bare hex = k 0, another codec",
+ "oracle_cmd": "python3 -c \"import os,base64;e=os.environ['encoded'];c=bytes.fromhex(e) if all(x in '0123456789abcdef' for x in e) else base64.b64decode(e);p=b'Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ';print(len({(a-b)%256 for a,b in zip(c,p)})==1 and c[0]!=p[0])\"  # False = (c - crib) mod 256 is not one nonzero constant",
+ "oracle_plain": "False"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep(morse-hex)",
+ "day": 16,
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-crane-56",
+ "encoded": "----. - .---- ....- .---- ---.. .---- ----- --... ..... ..--- ..--- .---- --.- ..--- --... .---- .--- --... ..... .---- ----. .---- ----- .---- ---.. .---- --.- .---- ----. .---- ....- .---- - .---- ..--- --... ..... ..--- ----. .---- ...-- .---- ....- ..--- ---.. --... ..... ..--- ..--- .---- -.... ..--- --... .---- .-- ..--- ----- ..--- ..... --... -.... --... ..... ----- ----. .---- --.- --... ..... ..--- ---.. .---- --.- .---- .-.- ..--- .---- .---- ----- --... .-.- --... ..... ..--- ---.. ..--- ----- .---- --... .---- .-- .---- ....- ..--- ----. --... ..... ..--- ----. .---- ...-- .---- ....- ..--- ---.. --... ..... .---- ----- ..--- ...-- .---- -.... .---- ---.. ..--- ----. --... ..... .---- -.... .---- - ..--- ---.. ..--- ..--- .---- ----- ..--- --... --... ..... ..--- ----. .---- --.- --... ..... ..--- ----. .---- ...-- .---- ----- --... ..... ----. ..--- .---- -.... .---- .-- .---- ----- --... ..... ----. .-- .---- -.... ..--- ---.. ..--- ----. .---- ----- ..--- --... ---.. -. --... ..... .---- -.... .---- .-- .---- --... .---- ----- ..--- --... --... .-- .---- ---.. ..--- --... .---- -.... .---- - .---- ----- --... .-- ---.. ----- ---.. .----",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c0 | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs enc '-/.' 'Space' 'Line feed' | tr '.-' '-.'  # knob: dot/dash swapped",
+ "oracle_cmd": "printf %s \"$encoded\" | tr '.-' '-.' | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/morse_cyberchef.mjs dec 'Space' 'Line feed' | xxd -r -p",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-crane-56",
+ "expected": "match"
+}

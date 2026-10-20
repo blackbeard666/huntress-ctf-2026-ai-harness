@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep(hex)",
+ "day": 3,
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-43",
+ "encoded": "4E:69:63:65:20:77:6F:72:6B:20:64:65:63:6F:64:69:6E:67:20:74:68:69:73:20:77:61:72:6D:75:70:21:20:54:6F:20:73:6F:6C:76:65:2C:20:73:75:62:6D:69:74:20:74:68:69:73:20:65:78:61:63:74:20:61:6E:73:77:65:72:20:74:6F:20:74:68:65:20:47:61:6D:65:20:4D:61:73:74:65:72:3A:20:6A:61:64:65:2D:68:65:72:6F:6E:2D:34:33",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -u -c0 | sed 's/../&:/g;s/:$//'  # knob: uppercase hex, colon separators",
+ "oracle_cmd": "printf %s \"$encoded\" | tr -d : | xxd -r -p",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-43",
+ "expected": "match"
+}

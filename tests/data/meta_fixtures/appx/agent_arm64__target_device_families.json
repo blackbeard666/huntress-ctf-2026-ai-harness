@@ -1,0 +1,8 @@
+{
+ "field": "appx.target_device_families",
+ "expected": "[\"Windows.Desktop 10.0.22000.0\"]",
+ "generator_cmd": "zip -qrX agent_arm64.appx AppxManifest.xml AppxBlockMap.xml '[Content_Types].xml' bin/ (manifest: Identity arm64, 2 Applications, rescap caps; BlockMap HashMethod xmldsig-more#sha384; unsigned)",
+ "oracle_cmd": "unzip -p agent_arm64.appx AppxManifest.xml | python3 -I -c 'import sys,json,lxml.etree as E;r=E.fromstring(sys.stdin.buffer.read());print(json.dumps([e.get(\"Name\")+\" \"+e.get(\"MinVersion\") for e in r.xpath(sys.argv[1])],separators=(\",\",\":\")))' '//*[local-name()=\"TargetDeviceFamily\"]'",
+ "decoy": false,
+ "member": "agent_arm64.appx"
+}

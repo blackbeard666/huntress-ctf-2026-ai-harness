@@ -1,0 +1,8 @@
+{
+ "field": "static_lib.member_names",
+ "expected": "none",
+ "generator_cmd": "tar cf decoy.tar util.c net.c (renamed .a)",
+ "oracle_cmd": "file decoy.tar (POSIX tar archive, not ar)",
+ "decoy": true,
+ "member": "libcore.a"
+}

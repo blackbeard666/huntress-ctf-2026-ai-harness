@@ -1,0 +1,8 @@
+{
+ "field": "app.bundle_short_version",
+ "expected": "2.0.1",
+ "generator_cmd": "mkdir -p Universal.app/Contents/MacOS; cp macho/lipo_fat_x86_arm64__min_os_version.bin (llvm-lipo-18 -create x86_64+arm64) Universal.app/Contents/MacOS/Universal; python3 -I -c 'plistlib.dumps({CFBundleIdentifier:com.huntress.universal,CFBundleShortVersionString:2.0.1,LSMinimumSystemVersion:10.13,LSArchitecturePriority:[x86_64,arm64],LSRequiresNativeExecution:False,CFBundleSupportedPlatforms:[MacOSX]}, fmt=FMT_BINARY)' > Universal.app/Contents/Info.plist; zip -X -r universal_app.zip Universal.app",
+ "oracle_cmd": "exiftool -j Universal.app/Contents/Info.plist -> CFBundleShortVersionString '2.0.1'; file -> 'Apple binary property list'",
+ "decoy": false,
+ "member": "universal_app.zip"
+}

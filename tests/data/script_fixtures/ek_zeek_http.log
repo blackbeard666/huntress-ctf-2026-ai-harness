@@ -1,0 +1,6 @@
+#separator \x09
+#set_separator	,
+#path	http
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	method	host	uri
+#types	time	string	addr	port	addr	port	string	string	string
+1792300000.000000	Ck1	10.0.0.5	50000	10.0.0.80	80	GET	ek-5d1e0b7a.example.invalid	/s

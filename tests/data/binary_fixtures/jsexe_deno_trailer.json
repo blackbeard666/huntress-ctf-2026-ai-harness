@@ -1,0 +1,17 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "runtime": "deno",
+  "entry_name": "file:///work/main.ts",
+  "embedded_source_offset": "14464",
+  "embedded_source_size": "44",
+  "embedded_source_kind": "js",
+  "deno_metadata_offset": "14508"
+ },
+ "generator_cmd": "bash jsexe_gen.sh   # step 7 (SYNTHETIC deno 1.x layout via python3 struct)",
+ "oracle_cmd": "tail -c 24 | od -An -tx1 (d3n0l4nd 0x3880 0x38ac) ; grep -obUa 'console.log(\"deno' / '{\"argv\"'",
+ "decoy": false,
+ "note": "SYNTHETIC (no deno writer offline): layout per Deno 1.x cli/standalone.rs, unverified against a real deno compile"
+}

@@ -1,0 +1,24 @@
+{
+ "encoding": "raw",
+ "expected_offset": 8268,
+ "expected_config": {
+  "c2": "graal-heap.example",
+  "port": 8443,
+  "id": "svm-01"
+ },
+ "expected_facts": {
+  "runtime": "graalvm",
+  "has_graalvm": "true",
+  "has_julia": "false",
+  "image_section": ".svm_heap",
+  "hcfg_offset": "8268",
+  "hcfg_encoding": "raw",
+  "hcfg_config": "{\"c2\":\"graal-heap.example\",\"port\":8443,\"id\":\"svm-01\"}",
+  "hcfg_section": ".svm_heap",
+  "graalvm_version": "21.0.2+13.1"
+ },
+ "generator_cmd": "bash aotimg_gen.sh   # step 1 (gcc 15; blob by python3 stdlib struct/zlib/base64)",
+ "oracle_cmd": "python3 -I aotimg_oracle.py   # readelf -SW / nm / nm -D / readelf -d / grep -obUa / strings -a + stdlib xor-crc decode",
+ "decoy": false,
+ "note": "step 1: gcc -no-pie, .svm_heap byte[] + raw blob, __svm_* / IsolateEnterStub_ syms"
+}

@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=kotlin_script|role=stager|verdict=malicious|attack=T1059|adapter=build_exec|host_profile=standalone|obfuscation_profile=b64|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=fetch_stage,run_stage|campaign_id=JVM-7890de01|url=https://jvm-7890de0161.example.invalid/stage|file_path=/tmp/huntress-jvm/.61c825fa42f134c9.stage",
+ "decoy": false,
+ "host": "kts",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/jvm2_gen.py  (plan -> descriptor)",
+ "oracle_cmd": "perl -ne 'print $1 if /^val p\\d = \"(.*)\"$/' tests/data/script_fixtures/jvm2_kts_template.kts | tr -d ' \\n\\r|' | base64 -d"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep(octal3)",
+ "day": 6,
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-gecko-46",
+ "encoded": "\\116\\151\\143\\145\\40\\167\\157\\162\\153\\40\\144\\145\\143\\157\\144\\151\\156\\147\\40\\164\\150\\151\\163\\40\\167\\141\\162\\155\\165\\160\\41\\40\\124\\157\\40\\163\\157\\154\\166\\145\\54\\40\\163\\165\\142\\155\\151\\164\\40\\164\\150\\151\\163\\40\\145\\170\\141\\143\\164\\40\\141\\156\\163\\167\\145\\162\\40\\164\\157\\40\\164\\150\\145\\40\\107\\141\\155\\145\\40\\115\\141\\163\\164\\145\\162\\72\\40\\141\\155\\142\\145\\162\\55\\147\\145\\143\\153\\157\\55\\64\\66",
+ "generator_cmd": "printf %s \"$plain\" | perl -ne 'print join \"\", map { sprintf \"\\\\%o\", ord } split //'  # knob: unpadded octal with backslash escapes",
+ "oracle_cmd": "printf \"$(printf %s \"$encoded\")\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-gecko-46",
+ "expected": "match"
+}

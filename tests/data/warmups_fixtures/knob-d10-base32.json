@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep(base32)",
+ "day": 10,
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-shark-50",
+ "encoded": "9PKM6P90ETNN4QP0CHIM6RR4D5N6E83KD1KN683NC5P6QTBG44G58RP0EDNMOTJ55GG76TB2DLKN883KD1KN6835F1GM6T10C5N76TR5E8G78RP0EHK6A827C5MMA82DC5PN8PBI78G66R3FEPIN4BBJD1GN4QPD6KO0====",
+ "generator_cmd": "printf %s \"$plain\" | basenc --base32hex -w0  # knob: base32hex alphabet",
+ "oracle_cmd": "printf %s \"$encoded\" | basenc --base32hex -d",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-shark-50",
+ "expected": "match"
+}

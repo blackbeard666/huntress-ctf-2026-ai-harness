@@ -1,0 +1,7 @@
+{
+ "entry": "classloader_shadow_scan",
+ "expected": "ANS-7e4c19a0d2b85f36",
+ "_why": "Gate defined in classes.dex (ANS-11aa22bb33cc44dd) and assets/modules/gate.dex; host ChildFirstLoader overrides loadClass -> payload copy runs, host copy demoted",
+ "generator_cmd": "python3 tests/data/android_fixtures/clshadow_src/gen_clshadow.py childfirst tests/data/android_fixtures/clshadow_childfirst.apk  # javac --release 8 (compile-only DexClassLoader stub) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/clshadow_src/oracle.sh tests/data/android_fixtures/clshadow_childfirst.apk  # d2j-dex2jar host + payload, run host Main.run() on the JVM with a URLClassLoader-backed DexClassLoader: real delegation picks Gate -> ANS-7e4c19a0d2b85f36"
+}

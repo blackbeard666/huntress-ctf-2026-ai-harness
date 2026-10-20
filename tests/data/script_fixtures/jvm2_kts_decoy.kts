@@ -1,0 +1,2 @@
+const val DESCRIPTOR_01CDC151 = "YnVpbGQgY2FjaGUgd2FybXVwIGZvciB0aGUgbmlnaHRseSBpbnZlbnRvcnk7IG5vdGhpbmcgdG8gZXhlY3V0ZQ=="
+println(DESCRIPTOR_01CDC151.length)

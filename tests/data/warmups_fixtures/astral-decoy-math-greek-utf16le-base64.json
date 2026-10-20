@@ -1,0 +1,11 @@
+{
+ "codec": "astral",
+ "plain": null,
+ "encoded": "NdjC3jXYw9412MTeIAA12MXeNdjG3g==",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "perl -CSA -e 'print \"\\x{1D6C2}\\x{1D6C3}\\x{1D6C4} \\x{1D6C5}\\x{1D6C6}\"' | iconv -f UTF-8 -t UTF-16LE | base64 -w0  # math italic Greek: surrogate pairs that NFKC folds to non-ASCII",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | iconv -f UTF-16LE -t UTF-8 | uconv -x '::NFKC;'",
+ "oracle_plain": null,
+ "oracle_output": "αβγ δε"
+}

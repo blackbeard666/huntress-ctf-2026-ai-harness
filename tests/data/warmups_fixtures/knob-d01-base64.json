@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep(base64)",
+ "day": 1,
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-41",
+ "encoded": "TgBpAGMAZQAgAHcAbwByAGsAIABkAGUAYwBvAGQAaQBuAGcAIAB0AGgAaQBzACAAdwBhAHIAbQB1AHAAIQAgAFQAbwAgAHMAbwBsAHYAZQAsACAAcwB1AGIAbQBpAHQAIAB0AGgAaQBzACAAZQB4AGEAYwB0ACAAYQBuAHMAdwBlAHIAIAB0AG8AIAB0AGgAZQAgAEcAYQBtAGUAIABNAGEAcwB0AGUAcgA6ACAAYQBtAGIAZQByAC0AZgBhAGwAYwBvAG4ALQA0ADEA",
+ "generator_cmd": "printf %s \"$plain\" | iconv -f UTF-8 -t UTF-16LE | base64 -w0  # knob: UTF-16LE text width before base64",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | iconv -f UTF-16LE -t UTF-8",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-41",
+ "expected": "match"
+}

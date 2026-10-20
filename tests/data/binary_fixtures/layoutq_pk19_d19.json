@@ -1,0 +1,36 @@
+{
+ "entry": "layout_from_question+layout_field",
+ "question": "In delivery 1: evidence.zip, Use all d19-- members in ZIP central-directory order. Find the final PK19 overlay. Read k1 at +5, k2 at +6, packed length u32le at +8, the 32-byte unpacked SHA-256 at +12, and packed bytes at +44. For each packed byte compute ror8(byte XOR k2,3) XOR k1; verify the unpacked SHA-256 and use the HCFG record at unpacked offset 0. Locate the unique CRC32-valid HCFG record: bytes 0..3 are ASCII HCFG, byte 4 is version, byte 5 is the XOR key.",
+ "oracle_args": "PK19 m version:4:u8 k1:5:u8 k2:6:u8 packed_length:8:u32le unpacked_sha256:12:32 packed:44:packed_length",
+ "decoy": false,
+ "note": "D19 question text verbatim",
+ "expected": {
+  "overlay_offset": 5000,
+  "overlay_size": 255,
+  "version": 1,
+  "k1": 55,
+  "k2": 107,
+  "packed_length": 211,
+  "unpacked_sha256": "83055ac700349169ca7c30f7e3a30edd88a3c031d4c1f975a23f7b9129f1dda8",
+  "packed_offset": 44,
+  "packed_start": 5044,
+  "packed_end": 5255,
+  "packed_body_size": 211,
+  "packed_sha256_actual": "29b59c3d91632e6738c368bae83d5c4f9aec0d556a22cfdc9acd2ad38ce5404d",
+  "end_bounds_ok": "true"
+ },
+ "ids": {
+  "packed_size": 211,
+  "packed_length": 211,
+  "unpacked_sha256": "83055ac700349169ca7c30f7e3a30edd88a3c031d4c1f975a23f7b9129f1dda8",
+  "k1": 55,
+  "k2": 107,
+  "overlay_version": 1,
+  "version": 1,
+  "packed_offset": 44,
+  "packed_sha256": "29b59c3d91632e6738c368bae83d5c4f9aec0d556a22cfdc9acd2ad38ce5404d",
+  "overlay_offset": 5000
+ },
+ "generator_cmd": "python3 tests/data/binary_fixtures/layoutq_gen.py  (stdlib struct/hashlib writer)",
+ "oracle_cmd": "bash tests/data/binary_fixtures/layoutq_oracle.sh layoutq_pk19_d19.bin \"$(jq -r .oracle_args layoutq_pk19_d19.json)\"  (grep -obaF / od / dd|sha256sum / stat)"
+}

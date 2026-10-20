@@ -1,0 +1,7 @@
+{
+ "field": "macho.arch_names",
+ "expected": "none",
+ "generator_cmd": "javac --release 8 Hello.java (CAFEBABE magic, major 52 as nfat_arch)",
+ "oracle_cmd": "llvm-lipo-18 -archs Hello.class -> error: not a Mach-O/universal file",
+ "decoy": true
+}

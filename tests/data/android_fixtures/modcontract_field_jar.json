@@ -1,0 +1,7 @@
+{
+ "entry": "module_contract_answer",
+ "expected": "ANS-b5d2e8f10a7c4396",
+ "_why": "pointer assets/plugins/module.jar:com.huntress.arena.ext.Plugin (jar holding classes.dex); Plugin.CONTRACT (static_values) beats Plugin.banner() and the un-named class Old.token()",
+ "generator_cmd": "python3 tests/data/android_fixtures/modcontract_src/gen_modcontract.py field_jar tests/data/android_fixtures/modcontract_field_jar.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh (host/payload split) + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/modcontract_src/oracle.sh tests/data/android_fixtures/modcontract_field_jar.apk  # strings host dex -> pointer, unzip payload, d2j-dex2jar, JVM reflection: CONTRACT = ANS-b5d2e8f10a7c4396"
+}

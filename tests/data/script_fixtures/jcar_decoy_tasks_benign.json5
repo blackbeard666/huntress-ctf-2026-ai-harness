@@ -1,0 +1,10 @@
+{
+  // benign
+  "version": "2.0.0",
+  "tasks": [{
+    "label": "build", "type": "shell",
+    "command": "bash",
+    "args": ["-c", "descriptor_00aa11bb='anVzdCBhIGJ1aWxkIGJhbm5lciwgbm90aGluZyB0byBzZWUgaGVyZSBhdCBhbGw7IGluZXJ0IHRleHQgb25seS4='; make all",],
+    "runOptions": {"runOn": "folderOpen",},
+  },],
+}

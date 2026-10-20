@@ -1,0 +1,7 @@
+{
+ "entry": "classloader_shadow_scan",
+ "expected": "ANS-5d81e2f4a6c09b37",
+ "_why": "Gate in classes2.dex (multidex) and assets/update.dex (ANS-9f9f0000aaaa5555); plain DexClassLoader with the app loader as parent is parent-first -> host copy runs, payload token demoted",
+ "generator_cmd": "python3 tests/data/android_fixtures/clshadow_src/gen_clshadow.py parentfirst tests/data/android_fixtures/clshadow_parentfirst.apk  # javac --release 8 (compile-only DexClassLoader stub) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/clshadow_src/oracle.sh tests/data/android_fixtures/clshadow_parentfirst.apk  # d2j-dex2jar host + payload, run host Main.run() on the JVM with a URLClassLoader-backed DexClassLoader: real delegation picks Gate -> ANS-5d81e2f4a6c09b37"
+}

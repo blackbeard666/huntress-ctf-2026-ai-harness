@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep(rail3)",
+ "day": 18,
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-eagle-58",
+ "encoded": "codd sr! vsihets tG t eg5iewr eoigti amp osle umtti xc nwrt h aeMse:jd-al-8N kcnhwuTo,b saaeoemaraee",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs enc 3 2  # knob: rail offset 2",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/rail_cyberchef.mjs dec 3 2",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-eagle-58",
+ "expected": "match"
+}

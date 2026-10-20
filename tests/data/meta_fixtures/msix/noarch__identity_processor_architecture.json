@@ -1,0 +1,8 @@
+{
+ "field": "msix.identity_processor_architecture",
+ "expected": "none",
+ "generator_cmd": "zip -qrX noarch.msix AppxManifest.xml AppxBlockMap.xml '[Content_Types].xml' (manifest Identity WITHOUT ProcessorArchitecture)",
+ "oracle_cmd": "unzip -p noarch.msix 'AppxManifest.xml' | python3 -I -c 'import sys,json,lxml.etree as E;r=E.fromstring(sys.stdin.buffer.read());v=r.xpath(sys.argv[1]);print(v if isinstance(v,str) else json.dumps([str(x) for x in v],separators=(\",\",\":\")))' 'string(/*/*[local-name()=\"Identity\"]/@ProcessorArchitecture)' | sed 's/^$/none/'",
+ "decoy": true,
+ "member": "noarch.msix"
+}

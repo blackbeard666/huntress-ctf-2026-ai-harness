@@ -1,0 +1,9 @@
+{
+ "codec": "crypt64-le",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-ibis-56",
+ "encoded": "CZqMZ/mRj7rOUEKNXx4NdtqNUE5OdB56r3aQhJ5QV.0Jj/mQjlaRZl06nJbMhZ4RUE5OdB56ZVLMXF56VtqQrJaQUErPUE5OZ/mFVpKNUoIMnFLNmd16XlqPqJaQhYaMdBL9pM1",
+ "generator_cmd": "printf %s \"$plain\" | .venv/bin/python -I -c \"import sys;from passlib.utils.binary import h64;print(h64.encode_bytes(sys.stdin.read().encode()).decode(),end='')\"  # passlib h64.encode_bytes (md5crypt/phpass little-endian)",
+ "oracle_cmd": "printf %s \"$encoded\" | .venv/bin/python -I -c \"import sys;from passlib.utils.binary import h64;print(h64.decode_bytes(sys.stdin.read().strip().encode()).decode(),end='')\"  # passlib h64.decode_bytes (same library: round-trip only)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-ibis-56",
+ "expected": "match"
+}

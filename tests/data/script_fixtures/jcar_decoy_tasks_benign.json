@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 tests/data/script_fixtures/json_carrier_gen.py  # hand-written JSONC, stdlib base64 of a banner (no plan), written as jcar_decoy_tasks_benign.json5",
+ "oracle_cmd": "python3 -c \"import re,base64;s=open('jcar_decoy_tasks_benign.json5').read();print(base64.b64decode(re.search(r\\\"'([A-Za-z0-9+/=]{20,})'\\\",s).group(1)))\"  # -> banner, not v=3"
+}

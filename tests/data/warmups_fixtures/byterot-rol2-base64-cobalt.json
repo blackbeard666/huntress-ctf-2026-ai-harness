@@ -1,0 +1,9 @@
+{
+ "codec": "byterol2-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "encoded": "OaWNlYDdvcmtgJGVjb2RpbmdgNGhpc2A3YXJtdXBhIBRvYDNvbHZlbCAzdWJtaXRgNGhpc2AleGFjdGAhbnN3ZXJgNG9gNGhlYAdhbWVgDWFzdGVyeiAjb2JhbHRtKGVyb25tMTc",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/byterot_cyberchef.mjs left 2 text base64  # CyberChef \"Rotate left\" amount 2 (per byte, Carry through off) = ROL 2, node Buffer -> base64",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/byterot_cyberchef.mjs right 2 base64 text  # CyberChef \"Rotate right\" amount 2 undoes it",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "expected": "match"
+}

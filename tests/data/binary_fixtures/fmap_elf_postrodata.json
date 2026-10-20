@@ -1,0 +1,61 @@
+{
+ "case": "elf_postrodata",
+ "field_family": "file_map (lib.binary.file_map_field)",
+ "expected": {
+  "gap_count": 9,
+  "slack_count": 0,
+  "total_gap_bytes": 9709,
+  "image_end": 15768,
+  "gaps_offsets_sizes": [
+   [
+    948,
+    4
+   ],
+   [
+    1244,
+    4
+   ],
+   [
+    1488,
+    2608
+   ],
+   [
+    4123,
+    5
+   ],
+   [
+    4403,
+    1
+   ],
+   [
+    4417,
+    3775
+   ],
+   [
+    8456,
+    3304
+   ],
+   [
+    12342,
+    2
+   ],
+   [
+    13906,
+    6
+   ]
+  ],
+  "cave_offset": 8456,
+  "cave_size": 3304,
+  "cave_segment": "none",
+  "hcfg_gap_offset": 8456,
+  "gap_hcfg_storage": "raw"
+ },
+ "expected_config": {
+  "campaign": "FM-2",
+  "domain": "cave-2.fmap.example.invalid",
+  "mutex": "Global\\HFMAP2"
+ },
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/fmap_gen.sh fmap_elf_postrodata.bin elf_postrodata '{\"campaign\":\"FM-2\",\"domain\":\"cave-2.fmap.example.invalid\",\"mutex\":\"Global\\\\HFMAP2\"}' 58",
+ "oracle_cmd": "python3 -I tests/data/binary_fixtures/fmap_oracle.py fmap_elf_postrodata.bin"
+}

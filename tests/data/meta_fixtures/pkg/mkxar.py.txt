@@ -1,0 +1,37 @@
+"""Write a flat .pkg (xar) with libarchive's xar writer. argv: out.bin compression toc_checksum variant"""
+import sys, libarchive
+out, comp, ck, var = sys.argv[1:5]
+if var == "a":
+    dist = b'''<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>Acme Agent</title>
+    <options customize="never" require-scripts="false" hostArchitectures="x86_64,arm64"/>
+    <allowed-os-versions><os-version min="11.0"/></allowed-os-versions>
+    <choices-outline><line choice="default"><line choice="com.acme.agent"/></line></choices-outline>
+    <choice id="com.acme.agent" visible="false"><pkg-ref id="com.acme.agent"/></choice>
+    <pkg-ref id="com.acme.agent" version="4.2.1" onConclusion="none">agent.pkg</pkg-ref>
+</installer-gui-script>
+'''
+    files = [("Distribution", dist),
+             ("agent.pkg/PackageInfo", b'<?xml version="1.0" encoding="utf-8"?>\n<pkg-info overwrite-permissions="true" relocatable="false" identifier="com.acme.agent" postinstall-action="none" version="4.2.1" format-version="2" generator-version="InstallCmds-807" install-location="/" auth="root">\n    <payload numberOfFiles="3" installKBytes="12"/>\n</pkg-info>\n'),
+             ("agent.pkg/Bom", b"BOMStore" + bytes(64)),
+             ("agent.pkg/Payload", b"\x1f\x8b" + bytes(40)),
+             ("agent.pkg/Scripts", b"\x1f\x8b" + bytes(20))]
+else:
+    dist = b'''<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<installer-script minSpecVersion="1.000000">
+    <options hostArchitectures="arm64"/>
+    <volume-check><allowed-os-versions><os-version min="13.5"/></allowed-os-versions></volume-check>
+    <pkg-ref id="org.example.helper">#helper.pkg</pkg-ref>
+    <pkg-ref id="org.example.daemon">#daemon.pkg</pkg-ref>
+</installer-script>
+'''
+    files = [("Distribution", dist),
+             ("helper.pkg/PackageInfo", b'<pkg-info format-version="2" identifier="org.example.helper" version="1.0.3" install-location="/Applications" auth="root"/>\n'),
+             ("helper.pkg/Payload", b"payload-a"),
+             ("daemon.pkg/PackageInfo", b'<pkg-info format-version="2" identifier="org.example.daemon" version="2.7" install-location="/" auth="root"/>\n'),
+             ("daemon.pkg/Payload", b"payload-b")]
+opts = "xar:compression=%s,xar:toc-checksum=%s" % (comp, ck)
+with libarchive.file_writer(out, "xar", options=opts) as w:
+    for name, data in files:
+        w.add_file_from_memory(name, len(data), data, mtime=1760000000)

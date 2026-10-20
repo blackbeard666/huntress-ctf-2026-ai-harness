@@ -1,0 +1,8 @@
+{
+ "field": "cpio.member_names",
+ "expected": "[\"bin\",\"bin/busybox\",\"init\",\"etc/motd\"]",
+ "generator_cmd": "PYTHONPATH=$TMPDIR/cpiofx/pylib python3 gen.py (libarchive-c 5 / libarchive 3.8.5 file_writer, format cpio_newc; cpio_bin/cpio_odc via archive_write_set_format_cpio_bin/_odc)",
+ "oracle_cmd": "TZ=UTC 7z l -slt newc_initrd.cpio -> Path lines (archive order)",
+ "decoy": false,
+ "member": "newc_initrd.cpio"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "cuswap",
+ "decoder": "cuswap_dec(encoded, swap=True)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-08",
+ "encoded": "U+4E00U+6900U+6300U+6500U+2000U+7700U+6F00U+7200U+6B00U+2000U+6400U+6500U+6300U+6F00U+6400U+6900U+6E00U+6700U+2000U+7400U+6800U+6900U+7300U+2000U+7700U+6100U+7200U+6D00U+7500U+7000U+2100U+2000U+5400U+6F00U+2000U+7300U+6F00U+6C00U+7600U+6500U+2C00U+2000U+7300U+7500U+6200U+6D00U+6900U+7400U+2000U+7400U+6800U+6900U+7300U+2000U+6500U+7800U+6100U+6300U+7400U+2000U+6100U+6E00U+7300U+7700U+6500U+7200U+2000U+7400U+6F00U+2000U+7400U+6800U+6500U+2000U+4700U+6100U+6D00U+6500U+2000U+4D00U+6100U+7300U+7400U+6500U+7200U+3A00U+2000U+6300U+6C00U+6F00U+7600U+6500U+7200U+2D00U+6200U+6100U+6400U+6700U+6500U+7200U+2D00U+3000U+3800",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c \"import sys;sys.stdout.write(sys.stdin.read().encode('utf-16-le').decode('utf-16-be'))\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/ucp_cyberchef.mjs enc 'U+'  # CyberChef Escape Unicode Characters U+",
+ "oracle_cmd": "printf %s \"$encoded\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/ucp_cyberchef.mjs dec 'U+' | python3 -I -c \"import sys;sys.stdout.write(sys.stdin.read().encode('utf-16-be').decode('utf-16-le'))\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-08",
+ "expected": "match"
+}

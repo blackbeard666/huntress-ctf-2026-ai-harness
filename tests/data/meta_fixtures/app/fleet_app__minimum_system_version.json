@@ -1,0 +1,8 @@
+{
+ "field": "app.minimum_system_version",
+ "expected": "11.0",
+ "generator_cmd": "mkdir -p Fleet.app/Contents/MacOS; cp macho/zig_x86_64_exe_vmin__min_os_version.bin Fleet.app/Contents/MacOS/Fleet; cat > Fleet.app/Contents/Info.plist <<EOF (hand-written XML plist: CFBundleIdentifier com.huntress.fleet.agent, LSMinimumSystemVersion 11.0, LSArchitecturePriority [arm64,x86_64], LSRequiresNativeExecution <true/>, CFBundleSupportedPlatforms [MacOSX]); zip -X -r fleet_app.zip Fleet.app",
+ "oracle_cmd": "unzip -p fleet_app.zip Fleet.app/Contents/Info.plist | grep -A1 LSMinimumSystemVersion -> <string>11.0</string> (exiftool -j prints numeric 11.0)",
+ "decoy": false,
+ "member": "fleet_app.zip"
+}

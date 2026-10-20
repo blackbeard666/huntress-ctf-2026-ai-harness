@@ -1,0 +1,8 @@
+{
+ "field": "initramfs.member_names",
+ "expected": "[\"bin\",\"bin/busybox\",\"init\",\"etc/motd\"]",
+ "generator_cmd": "PYTHONPATH=$TMPDIR/cpiofx/pylib python3 gen.py (libarchive-c 5 / libarchive 3.8.5 file_writer, format cpio_newc; cpio_bin/cpio_odc via archive_write_set_format_cpio_bin/_odc) | gzip -9 -n > initrd.img",
+ "oracle_cmd": "gzip -dc initrd.img | 7z l -slt -si -tcpio -> Path lines (== newc_initrd.cpio)",
+ "decoy": false,
+ "member": "initrd.img"
+}

@@ -1,0 +1,21 @@
+{
+  "entry": "resource_table_field",
+  "oracle_args": "none",
+  "decoy": true,
+  "note": "every stored sha256 wrong: not a verified table -> every field 'none'",
+  "family": "resource_table",
+  "encoding": "none",
+  "expected_offset": null,
+  "expected_config": null,
+  "expected": {
+    "resource_count": "none",
+    "resource_names": "none",
+    "boundaries": "none",
+    "selected_index": "none",
+    "hcfg_entry_offset": "none",
+    "resource_0_sha256": "none"
+  },
+  "file_b": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dyn",
+  "generator_cmd": "python3 tests/data/binary_fixtures/rtab_gen.py  (gcc -O2 -s ELF + stdlib struct/hashlib/zlib table writer)",
+  "oracle_cmd": "bash tests/data/binary_fixtures/rtab_oracle.sh rtab_decoy_badhash.bin \"$(jq -r .oracle_args ...)\"  (grep -obaF / od / dd | sha256sum / md5sum / gzip-trailer crc32 / perl xor)"
+}

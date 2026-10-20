@@ -1,0 +1,7 @@
+{
+ "decoy": false,
+ "expected_plain": "v=1|steps=acquire_remote,write_file,dispatch_process|adapter=curl|stage_count=2|campaign_id=campaign-5be2a1c903|url=https://5be2a1c903.example.invalid/stage.sh|file_path=/tmp/.cache/stage-5be2a1c903",
+ "note": "pipeline-step-inner-scripts: bash plan carrier in a CI step body (lib.codec.pipeline_steps / _pipeline_codecs)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ci_pipe_gen.py tests/data/script_fixtures  (stdlib base64 + XOR 0x5a, wrapped in Jenkinsfile/GitLab/GHA/Azure step bodies)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/ci_pipe_oracle.py tests/data/script_fixtures/ci_gha_env_expr.yml  (PyYAML safe_load / Groovy string regex + stdlib base64/XOR)"
+}

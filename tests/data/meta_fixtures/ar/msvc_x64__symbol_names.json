@@ -1,0 +1,8 @@
+{
+ "field": "ar.symbol_names",
+ "expected": "[\"util_add\",\"util_mul\"]",
+ "generator_cmd": "zig cc -target x86_64-windows-msvc -c util.c -o util_x64.obj; llvm-lib-18 /out:win_x64.lib util_x64.obj",
+ "oracle_cmd": "llvm-nm-18 --print-armap win_x64.lib (Archive map)",
+ "decoy": false,
+ "member": "win_x64.lib"
+}

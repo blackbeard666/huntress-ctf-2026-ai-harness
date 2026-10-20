@@ -1,0 +1,8 @@
+{
+ "field": "xar.file_names",
+ "expected": "none",
+ "generator_cmd": "python3 -I mkdmg.py a.dmg a (UDIF image renamed .pkg)",
+ "oracle_cmd": "file -b FILE / xxd -l 4 FILE -> no 'xar!' magic; 7z l -slt FILE -> Type = Dmg",
+ "decoy": true,
+ "member": "decoy_dmg_renamed.pkg"
+}

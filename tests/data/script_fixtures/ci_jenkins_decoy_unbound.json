@@ -1,0 +1,7 @@
+{
+ "decoy": true,
+ "expected_plain": null,
+ "note": "pipeline-step-inner-scripts: bash plan carrier in a CI step body (lib.codec.pipeline_steps / _pipeline_codecs)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ci_pipe_gen.py tests/data/script_fixtures  (stdlib base64 + XOR 0x5a, wrapped in Jenkinsfile/GitLab/GHA/Azure step bodies)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/ci_pipe_oracle.py tests/data/script_fixtures/ci_jenkins_decoy_unbound.groovy  (PyYAML safe_load / Groovy string regex + stdlib base64/XOR)"
+}

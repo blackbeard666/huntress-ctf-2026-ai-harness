@@ -1,0 +1,8 @@
+{
+ "field": "appx.identity_processor_architecture",
+ "expected": "none",
+ "generator_cmd": "cp decoy_nupkg.msix decoy_nupkg.appx (plain zip renamed .appx)",
+ "oracle_cmd": "unzip -Z1 decoy_nupkg.appx | grep -qix AppxManifest.xml && echo HAS || echo none",
+ "decoy": true,
+ "member": "decoy_nupkg.appx"
+}

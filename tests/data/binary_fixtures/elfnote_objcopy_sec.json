@@ -1,0 +1,38 @@
+{
+ "family": "elf_note",
+ "encoding": "raw",
+ "expected_offset": 16408,
+ "expected_config": {
+  "c2": "10.13.37.7:8443",
+  "sleep": 30,
+  "id": "note-sec"
+ },
+ "expected_facts": {
+  "note_owners": [
+   "GNU",
+   "GNU",
+   "GNU",
+   "Huntress"
+  ],
+  "note_types": [
+   3,
+   5,
+   1,
+   1212368455
+  ],
+  "note_count": "4",
+  "hcfg_note_offset": "16408",
+  "hcfg_note_owner": "Huntress",
+  "hcfg_note_type": "1212368455",
+  "hcfg_note_section": ".note.huntress",
+  "has_hcfg_note": "true",
+  "has_huntress_note": "true",
+  "has_htrs_note": "false",
+  "has_gnu_note": "true"
+ },
+ "generator_cmd": "sh elfnote_gen.sh   # gcc -O1 m.c + objcopy --add-section .note.huntress=note.bin --set-section-flags .note.huntress=alloc,readonly; note/HCFG records via python3 struct/zlib (owner Huntress, type 0x48434647, key 0x5a)",
+ "oracle_cmd": "python3 elfnote_oracle.py elfnote_objcopy_sec.bin Huntress HTRS GNU   # readelf -nW / -SW + file position of readelf's printed description data",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, int",
+ "decoy": false,
+ "note": "lib.binary.elf_note_field(data, key) per expected_facts key; hcfg offset = the 'H' of HCFG in the note desc; field names SPECULATIVE (GM label not seen)"
+}

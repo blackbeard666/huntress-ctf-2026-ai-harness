@@ -1,0 +1,17 @@
+{
+ "encoding": "beam-base64",
+ "expected_format": "beam",
+ "decoy": false,
+ "expected_module": "cfgmod",
+ "expected_offset": 388,
+ "expected_config": {
+  "c2": "203.0.113.27:4444",
+  "campaign": "otp",
+  "sleep": 30,
+  "flag": "flag{b34m_l1tt_b64}"
+ },
+ "generator_cmd": "bash beam_gen.sh beam_litt_str_b64.bin strbeam '{\"c2\":\"203.0.113.27:4444\",\"campaign\":\"otp\",\"sleep\":30,\"flag\":\"flag{b34m_l1tt_b64}\"}' 0x11 b64",
+ "oracle_cmd": "bash beam_oracle.sh beam_litt_str_b64.bin   # file -b + OTP 27 beam_lib:chunks/escript:extract/zip:extract/zlib:uncompress/base64:decode/erlang:crc32",
+ "oracle_output": "Erlang BEAM file | 388 | cfgmod | base64 | HCFG 1 17 83 4089021271 4089021271 | {\"c2\":\"203.0.113.27:4444\",\"campaign\":\"otp\",\"sleep\":30,\"flag\":\"flag{b34m_l1tt_b64}\"}",
+ "note": "format label SPECULATIVE (not in the GM enum: 'beam'/'escript'); list-string literal (ETF STRING_EXT 'k')"
+}

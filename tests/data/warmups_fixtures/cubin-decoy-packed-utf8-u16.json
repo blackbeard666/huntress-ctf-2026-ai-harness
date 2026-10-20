@@ -1,0 +1,10 @@
+{
+ "codec": "cubin*",
+ "plain": null,
+ "encoded": "0100111001101001 0110001101100101 0010000001110111 0110111101110010 0110101100100000 0110010001100101 0110001101101111 0110010001101001 0110111001100111 0010000001110100 0110100001101001 0111001100100000 0111011101100001 0111001001101101 0111010101110000 0010000100100000 0101010001101111 0010000001110011 0110111101101100 0111011001100101 0011101000100000 0110110101100001 0111000001101100 0110010100101101 0111001001100001 0111011001100101 0110111000101101 0011100100110001",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup! To solve: maple-raven-91' | perl -e 'local $/; print join(\" \", map { sprintf \"%016b\", $_ } unpack(\"n*\", <STDIN>))'  # UTF-8 bytes packed two per 16-bit group (the wint family): no all-zero halves",
+ "oracle_cmd": "perl -e 'print pack(\"n*\", map { oct(\"0b$_\") } split / /, $ARGV[0])' \"$encoded\" | iconv -f UTF-16BE -t UTF-8 | iconv -f UTF-8 -t ASCII  # CJK, not ASCII text: iconv rejects",
+ "oracle_plain": null,
+ "expected": "none",
+ "decoy": true
+}

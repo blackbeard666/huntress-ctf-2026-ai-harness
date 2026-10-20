@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=node|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=npm_lifecycle|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=powershell|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=NPM-6a7b8c9d|url=https://npm-6a7b8c9d.example.invalid/stage|file_path=/tmp/huntress-npm-6a7b8c9d/.stage",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/json_carrier_gen.py  # python3 json.dumps(package.json) with node -e \"..\" (shell-escaped inner quotes), stdlib base64, written as jcar_npm_postinstall.json5",
+ "oracle_cmd": "python3 -c \"import json,re,base64;s=json.load(open('jcar_npm_postinstall.json5'))['scripts']['postinstall'];print(base64.b64decode(re.search(r'([A-Za-z0-9+/=]{40,})',s).group(1)).decode(),end='')\""
+}

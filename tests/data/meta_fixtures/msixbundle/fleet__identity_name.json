@@ -1,0 +1,8 @@
+{
+ "field": "msixbundle.identity_name",
+ "expected": "Contoso.FleetAgent",
+ "generator_cmd": "zip -qrX -0 fleet.msixbundle AppxMetadata/AppxBundleManifest.xml AppxBlockMap.xml '[Content_Types].xml' AppxSignature.p7x *.msix (bundle 2018 schema: x64, arm64, x86 application packages + scale-200 resource package without Architecture)",
+ "oracle_cmd": "unzip -p fleet.msixbundle 'AppxMetadata/AppxBundleManifest.xml' | python3 -I -c 'import sys,json,lxml.etree as E;r=E.fromstring(sys.stdin.buffer.read());v=r.xpath(sys.argv[1]);print(v if isinstance(v,str) else json.dumps([str(x) for x in v],separators=(\",\",\":\")))' 'string(/*/*[local-name()=\"Identity\"]/@Name)'",
+ "decoy": false,
+ "member": "fleet.msixbundle"
+}

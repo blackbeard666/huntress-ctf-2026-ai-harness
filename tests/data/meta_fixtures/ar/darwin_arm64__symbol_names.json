@@ -1,0 +1,8 @@
+{
+ "field": "ar.symbol_names",
+ "expected": "[\"_util_add\",\"_util_mul\",\"_net_open\"]",
+ "generator_cmd": "zig cc -target aarch64-macos -c util.c net.c; llvm-ar-18 --format=darwin rcsU libmac_arm64.a util_aarch64-macos.o net_aarch64-macos.o",
+ "oracle_cmd": "llvm-nm-18 --print-armap libmac_arm64.a (Archive map)",
+ "decoy": false,
+ "member": "libmac_arm64.a"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "compact_dex_scan",
+ "expected": null,
+ "_why": "DECOY: same vdex 006 layout, the base64 decodes to a 15-hex near miss",
+ "generator_cmd": "python3 tests/data/android_fixtures/cdx_src/gen_cdx.py decoy_vdex006_nearmiss tests/data/android_fixtures/cdx_decoy_vdex006_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex dex, coreutils base64/base32/xxd encoding, struct vdex/cdex writer (ART layouts), gcc -shared .incbin for the OAT, zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/cdx_src/oracle.sh tests/data/android_fixtures/cdx_decoy_vdex006_nearmiss.apk  # lief.VDEX string list + base64 -d (no 16-hex token)",
+ "decoy": true
+}

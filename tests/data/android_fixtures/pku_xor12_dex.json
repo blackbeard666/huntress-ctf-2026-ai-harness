@@ -1,0 +1,7 @@
+{
+ "entry": "nested_scan",
+ "expected": "ANS-7d3e91b0c5a2f468",
+ "_why": "wrapped secondary payload, wrapper recovered from the file magic (payload-magic-known-plaintext-unwrap): javac+d2j-jar2dex dex, repeating xor with a 12-byte key (no key / loader in the APK)",
+ "generator_cmd": "python3 tests/data/android_fixtures/pku_src/gen_pku.py xor12_dex tests/data/android_fixtures/pku_xor12_dex.apk  # javac+d2j-jar2dex dex, repeating xor with a 12-byte key (no key / loader in the APK)",
+ "oracle_cmd": "unzip -p pku_xor12_dex.apk assets/core.dat | python3 -c \"import sys;k=bytes.fromhex('5ac3197e02f4b8d16e9a3c27');b=sys.stdin.buffer.read();sys.stdout.buffer.write(bytes(x^k[i%12] for i,x in enumerate(b)))\" | strings | grep -oE 'ANS-[0-9a-f]{16}'"
+}

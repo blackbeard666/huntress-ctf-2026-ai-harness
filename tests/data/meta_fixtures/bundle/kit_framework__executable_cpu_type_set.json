@@ -1,0 +1,8 @@
+{
+ "field": "bundle.executable_cpu_type_set",
+ "expected": "[\"0x0100000c\"]",
+ "generator_cmd": "Kit.framework/Versions/A/{Kit = cp macho/thin_arm64 (arm64), Resources/Info.plist = plistlib XML {CFBundleIdentifier com.huntress.kit, CFBundleExecutable Kit, LSArchitecturePriority [arm64e]}}; ln -s A Versions/Current; ln -s Versions/Current/Kit Kit; ln -s Versions/Current/Resources Resources; zip -X -r -y kit_framework.zip Kit.framework  (symlinks stored as S_IFLNK members)",
+ "oracle_cmd": "zipinfo kit_framework.zip -> lrwx Kit.framework/Kit, Versions/Current; unzip; llvm-otool-18 -h Kit.framework/Kit -> cputype 16777228 = 0x0100000c",
+ "decoy": false,
+ "member": "kit_framework.zip"
+}

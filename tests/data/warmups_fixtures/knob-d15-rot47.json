@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep(rot47)",
+ "day": 15,
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-bison-55",
+ "encoded": "[vpr &|!x qrp|qv{t #uv\" &n!z$}. a| \"|y%r9 \"$ozv# #uv\" r'np# n{\"&r! #| #ur Tnzr Zn\"#r!G py|%r!:ov\"|{:BB",
+ "generator_cmd": "printf %s \"$plain\" | tr '!-~' '.-~!--'  # knob: rot-N over the 94 printables with N=13",
+ "oracle_cmd": "printf %s \"$encoded\" | tr '.-~!--' '!-~'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-bison-55",
+ "expected": "match"
+}

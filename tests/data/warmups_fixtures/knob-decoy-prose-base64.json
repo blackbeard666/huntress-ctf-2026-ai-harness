@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep",
+ "plain": null,
+ "encoded": "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZyB3aGlsZSB0aGUga2V0dGxlIGJvaWxzIGF3YXku",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'The quick brown fox jumps over the lazy dog while the kettle boils away.' | base64 -w0  # base64 of unrelated prose: decodes, but no crib/slug",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d",
+ "oracle_plain": "The quick brown fox jumps over the lazy dog while the kettle boils away."
+}

@@ -1,0 +1,11 @@
+{
+ "material": "pipeline {\n  agent none\n  stages {\n    stage('Build') {\n      agent { label 'linux-build' }\n      steps {\n        sh 'make all'\n        script {\n          def cfg = new File('/var/lib/jenkins/secrets/master.key').text\n          writeFile file: 'out.txt', text: cfg\n        }\n      }\n    }\n    stage('Package') {\n      agent { docker { image 'alpine:3.20' } }\n      steps {\n        sh \"tar czf app.tgz build/\"\n        readFile 'app.tgz'\n      }\n    }\n    stage('Notify') {\n      steps {\n        script { \"curl -s https://x.example.invalid/n\".execute() }\n      }\n    }\n  }\n}\n@NonCPS\ndef parse(String s) { return s.split(',') }\n",
+ "rep": "pipeline_locus",
+ "transform": "misplaced",
+ "key": null,
+ "expected": "new File",
+ "decoy": false,
+ "note": "pipeline-execution-locus: lib.codec.execution_locus/locus_answer via decode(rep='pipeline_locus', transform=<what>)",
+ "generator_cmd": "cat > t1.groovy <<'EOF' (hand-authored synthetic Jenkinsfile (declarative, agent none + stage agents), heredoc; no lib code)",
+ "oracle_cmd": "grep -nE 'new File|\\.execute\\(\\)|Jenkins\\.instance' t1.groovy | head -1 | grep -oE 'new File'   (first controller-only Groovy construct, lexically inside stage Build's agent { label 'linux-build' } script{} block)"
+}

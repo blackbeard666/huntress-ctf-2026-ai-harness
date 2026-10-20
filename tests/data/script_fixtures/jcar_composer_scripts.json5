@@ -1,0 +1,10 @@
+{
+    "name": "inert/fixture",
+    "require": {},
+    "scripts": {
+        "post-install-cmd": [
+            "@php -r \"$descriptor_5b6c7d8e = 'dj0zfGxhbmd1YWdlPXBocHxyb2xlPXN0YWdlZF9jaGFpbnx2ZXJkaWN0PXN1c3BpY2lvdXN8YXR0YWNrPVQxMDU5fGFkYXB0ZXI9b3BlcmF0aW9uX2dyYXBofGhvc3RfcHJvZmlsZT1jb21wb3Nlcl9zY3JpcHRzfG9iZnVzY2F0aW9uX3Byb2ZpbGU9YmFzZTY0fHN0YWdlX3Byb2ZpbGU9dHdvX3N0YWdlX2Rvd25sb2FkX2V4ZWN1dGV8bmV4dF9sYW5ndWFnZT1wb3dlcnNoZWxsfHN0YWdlX2NvdW50PTJ8c3RlcHM9YWNxdWlyZV9yZW1vdGUsZGlzcGF0Y2hfcHJvY2Vzc3xjYW1wYWlnbl9pZD1DT01QLTViNmM3ZDhlfHVybD1odHRwczovL2NvbXAtNWI2YzdkOGUuZXhhbXBsZS5pbnZhbGlkL3N0YWdlfGZpbGVfcGF0aD0vdG1wL2h1bnRyZXNzLWNvbXAtNWI2YzdkOGUvLnN0YWdl'; base64_decode($descriptor_5b6c7d8e);\"",
+            "echo done"
+        ]
+    }
+}

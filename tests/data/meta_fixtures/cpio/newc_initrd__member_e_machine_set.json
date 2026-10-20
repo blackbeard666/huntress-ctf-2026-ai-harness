@@ -1,0 +1,8 @@
+{
+ "field": "cpio.member_e_machine_set",
+ "expected": "[\"0x003e\"]",
+ "generator_cmd": "PYTHONPATH=$TMPDIR/cpiofx/pylib python3 gen.py (libarchive-c 5 / libarchive 3.8.5 file_writer, format cpio_newc; cpio_bin/cpio_odc via archive_write_set_format_cpio_bin/_odc) (bin/busybox = /bin/true x86-64)",
+ "oracle_cmd": "7z x newc_initrd.cpio; readelf -h bin/busybox -> Machine Advanced Micro Devices X86-64 (EM_X86_64 = 62 = 0x3e); others not ELF",
+ "decoy": false,
+ "member": "newc_initrd.cpio"
+}

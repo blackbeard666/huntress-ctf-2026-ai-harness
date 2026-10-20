@@ -1,0 +1,8 @@
+{
+ "field": "msixbundle.bundle_package_architectures",
+ "expected": "none",
+ "generator_cmd": "cp calc_x64.msix single_as.msixbundle (a single package renamed .msixbundle: no AppxBundleManifest.xml)",
+ "oracle_cmd": "unzip -Z1 single_as.msixbundle | grep -qix AppxMetadata/AppxBundleManifest.xml && echo HAS || echo none",
+ "decoy": true,
+ "member": "single_as.msixbundle"
+}

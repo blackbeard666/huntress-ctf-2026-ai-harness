@@ -1,0 +1,10 @@
+{
+ "codec": "byterot*",
+ "plain": null,
+ "encoded": "Uu+KYnr3WHLF69TZjxxNHqHF2sQhpoVj9/3En9qLYeVfhTItIx+mVSQVZXXgo4/a",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "head -c 48 /dev/urandom | base64 -w0  # random bytes: no rotation reads as text",
+ "oracle_cmd": "for r in 1 2 3 4 5 6 7; do printf %s \"$encoded\" | <CyberChef Rotate right $r base64 text> | iconv -f ascii -t ascii; done  # every amount -> non-ASCII / control bytes",
+ "oracle_plain": null
+}

@@ -1,0 +1,8 @@
+{
+ "field": "app.executable_cpu_type_set",
+ "expected": "[\"0x01000007\"]",
+ "generator_cmd": "mkdir -p Fleet.app/Contents/MacOS; cp macho/zig_x86_64_exe_vmin__min_os_version.bin Fleet.app/Contents/MacOS/Fleet; cat > Fleet.app/Contents/Info.plist <<EOF (hand-written XML plist: CFBundleIdentifier com.huntress.fleet.agent, LSMinimumSystemVersion 11.0, LSArchitecturePriority [arm64,x86_64], LSRequiresNativeExecution <true/>, CFBundleSupportedPlatforms [MacOSX]); zip -X -r fleet_app.zip Fleet.app",
+ "oracle_cmd": "llvm-otool-18 -h Fleet.app/Contents/MacOS/Fleet -> cputype 16777223 = 0x01000007; file -> 'Mach-O 64-bit x86_64 executable'",
+ "decoy": false,
+ "member": "fleet_app.zip"
+}

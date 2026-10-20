@@ -1,0 +1,8 @@
+{
+ "field": "jar.manifest_version",
+ "expected": "1.0",
+ "generator_cmd": "javac --release 8 -d o8 Main.java Util.java; javac --release 17 -d o17 Util.java; jar --create --file ledger.jar --manifest mf.txt -C o8 . --release 17 -C o17 . (long Implementation-Vendor/Class-Path -> 72-byte continuation lines); keytool -genkeypair -alias acme -keystore ks.p12 ...; jarsigner -keystore ks.p12 ledger-signed.jar acme",
+ "oracle_cmd": "java Oracle.java ledger-signed.jar (java.util.jar.JarFile: getManifest().getMainAttributes(), isMultiRelease(), DataInputStream u16 major @6 of each *.class entry, META-INF/*.(SF|RSA|DSA|EC) names) -> Manifest-Version=1.0",
+ "decoy": false,
+ "member": "ledger-signed.jar"
+}

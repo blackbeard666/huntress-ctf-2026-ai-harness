@@ -1,0 +1,11 @@
+{
+ "codec": "astral",
+ "plain": null,
+ "encoded": "4e69636520776f726b206465636f64696e672074686973207761726d75702120546f20736f6c76652c207375626d6974207468697320657861637420616e7377657220746f207468652047616d65204d61737465723a20636f62616c742d6865726f6e2d3137",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17' | xxd -p | tr -d '\\n'  # plain UTF-8 hex: no surrogate / overlong / astral bytes",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | file -",
+ "oracle_plain": null,
+ "oracle_output": "/dev/stdin: ASCII text, with no line terminators"
+}

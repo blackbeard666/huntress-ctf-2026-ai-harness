@@ -1,0 +1,10 @@
+{
+ "codec": "bignum",
+ "plain": null,
+ "encoded": "314159265358979323846264338327950288419716939937510582097494459230781640628620896",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "BC_LINE_LENGTH=0 bc -l <<< 'scale=80; 4*a(1)' | tr -d '.'  # 81 digits of pi: a digit run that is not text",
+ "oracle_cmd": "printf %s \"$encoded\" | .venv/bin/python -I -c \"import sys;from Crypto.Util.number import long_to_bytes;print(long_to_bytes(int(sys.stdin.read().strip())).decode())\"  # long_to_bytes -> non-UTF-8 bytes (UnicodeDecodeError) -> not text",
+ "oracle_plain": null
+}

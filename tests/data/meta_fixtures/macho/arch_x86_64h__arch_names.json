@@ -1,0 +1,7 @@
+{
+ "field": "macho.arch_names",
+ "expected": "[\"x86_64h\"]",
+ "generator_cmd": "echo 'int f(int x){return x*3+1;}' > a.c; clang-18 -target x86_64h-apple-macos10.15 -c a.c -o x86_64h-apple-macos10.15.o",
+ "oracle_cmd": "llvm-lipo-18 -archs x86_64h-apple-macos10.15.o  (split on whitespace -> compact JSON list)",
+ "decoy": false
+}

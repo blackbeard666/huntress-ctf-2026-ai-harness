@@ -1,0 +1,7 @@
+{
+ "entry": "pinned_payload_scan",
+ "expected": "ANS-c4e82b7f19d0a365",
+ "_why": "payload_a.dex + payload_b.dex both hold an ANS ANSWER; host Loader.PINNED holds payload_b.dex's lowercase sha256 hex -> payload_b",
+ "generator_cmd": "python3 tests/data/android_fixtures/pinsel_src/gen_pinsel.py host_sha256 tests/data/android_fixtures/pinsel_host_sha256.apk  # javac --release 8 + dex2jar d2j-jar2dex per payload, openssl dgst/genpkey/dgst -sign, zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/pinsel_src/oracle.sh tests/data/android_fixtures/pinsel_host_sha256.apk  # unzip + openssl dgst -sha256 (hex/base64) vs strings host dex, openssl dgst -verify, MANIFEST.MF SHA-256-Digest compare, strings payload | grep ANS-"
+}

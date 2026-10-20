@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-04-lfi",
+  "lane": "web",
+  "name": "🌐 Stay in Your Directory",
+  "ids": {
+    "single_solve": "web-exploitation-day-04-lfi",
+    "time_trial": "web-exploitation-day-04-lfi/time_trial",
+    "mastery": "web-exploitation-day-04-lfi/mastery"
+  }
+}

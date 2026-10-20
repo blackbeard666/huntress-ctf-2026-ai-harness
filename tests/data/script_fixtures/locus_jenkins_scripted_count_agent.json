@@ -1,0 +1,11 @@
+{
+ "material": "@Library('ops-shared') _\nnode('windows-agent') {\n    stage('Recon') {\n        bat 'whoami /all'\n        def who = \"id\".execute().text\n        powershell(script: 'Get-Process', returnStdout: true)\n    }\n    stage('Stage') {\n        writeFile file: 'run.ps1', text: 'Write-Host hi'\n        def jk = Jenkins.instance.getItemByFullName('prod')\n        pwsh 'pwsh -File run.ps1'\n    }\n}\n",
+ "rep": "pipeline_locus",
+ "transform": "count_agent",
+ "key": null,
+ "expected": "4",
+ "decoy": false,
+ "note": "pipeline-execution-locus: lib.codec.execution_locus/locus_answer via decode(rep='pipeline_locus', transform=<what>)",
+ "generator_cmd": "cat > t2.groovy <<'EOF' (hand-authored synthetic scripted Jenkinsfile, heredoc; no lib code)",
+ "oracle_cmd": "grep -cE '^\\s*(sh|bat|powershell|pwsh|readFile|writeFile)\\b' t2.groovy   (durable-task + workspace file steps inside node('windows-agent'); no container blocks)"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "bignum",
+ "plain": "e Game Master: clover-otter-19",
+ "encoded": "3440014200055000710003120016400072000336000550007100031200166000674003300014300020000164001620006240035000163000604002320004000062400332001410004340010000145",
+ "generator_cmd": "printf %s \"$plain\" | iconv -f UTF-8 -t UTF-16LE | xxd -p -c1 | tac | tr -d '\\n' | tr a-f A-F | awk '{print \"obase=8; ibase=16; \" $0}' | BC_LINE_LENGTH=0 bc  # iconv UTF-16LE, bytes reversed (int.from_bytes little), GNU bc -> octal",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;n=int(sys.stdin.read().strip(),8);print(n.to_bytes((n.bit_length()+15)//16*2,'little').decode('utf-16-le'))\"  # stdlib int.to_bytes little, padded to whole UTF-16 units, + UTF-16LE",
+ "oracle_plain": "e Game Master: clover-otter-19",
+ "expected": "match"
+}

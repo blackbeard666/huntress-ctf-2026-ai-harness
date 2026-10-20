@@ -1,0 +1,8 @@
+{
+ "field": "pbzx.pbzx_chunk_count",
+ "expected": "1",
+ "generator_cmd": "gen.py: libarchive cpio_odc + python3 lzma.compress(FORMAT_XZ) wrapped b'pbzx'+u64BE 0x1000000+u64BE usize+u64BE csize+xz",
+ "oracle_cmd": "xxd -s 12 -l 16 Payload.pbzx -> usize 99855 csize 1104; 12+16+1104 == stat size 1132 -> 1 chunk",
+ "decoy": false,
+ "member": "Payload.pbzx"
+}

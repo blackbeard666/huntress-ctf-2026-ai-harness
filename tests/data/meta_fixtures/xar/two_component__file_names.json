@@ -1,0 +1,8 @@
+{
+ "field": "xar.file_names",
+ "expected": "[\"Distribution\",\"helper.pkg\",\"helper.pkg/PackageInfo\",\"helper.pkg/Payload\",\"daemon.pkg\",\"daemon.pkg/PackageInfo\",\"daemon.pkg/Payload\"]",
+ "generator_cmd": "PYTHONPATH=tools/pylib-libarchive .venv/bin/python tests/data/meta_fixtures/pkg/mkxar.py.txt out.pkg bzip2 md5 b  (PYTHONPATH=tools/pylib-libarchive; libarchive xar writer, compression=bzip2 toc-checksum=md5; Distribution arm64 min=13.5; helper.pkg + daemon.pkg PackageInfo)",
+ "oracle_cmd": "7z l -slt FILE | sed -n 's/^Path = //p' | tail -n +2 | grep -v '^\\[TOC\\].xml$'  (7-Zip 26.00 Xar handler, TOC order) -> JSON list",
+ "decoy": false,
+ "member": "two_component.pkg"
+}

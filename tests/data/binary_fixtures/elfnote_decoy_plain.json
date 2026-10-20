@@ -1,0 +1,32 @@
+{
+ "family": "elf_note",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "note_owners": [
+   "GNU",
+   "GNU",
+   "GNU"
+  ],
+  "note_types": [
+   3,
+   5,
+   1
+  ],
+  "note_count": "3",
+  "hcfg_note_offset": "none",
+  "hcfg_note_owner": "none",
+  "hcfg_note_type": "none",
+  "hcfg_note_section": "none",
+  "has_hcfg_note": "false",
+  "has_huntress_note": "false",
+  "has_htrs_note": "false",
+  "has_gnu_note": "true"
+ },
+ "generator_cmd": "sh elfnote_gen.sh   # plain gcc -O1 ELF: GNU notes only, no custom note",
+ "oracle_cmd": "python3 elfnote_oracle.py elfnote_decoy_plain.bin Huntress HTRS GNU   # readelf -nW / -SW + file position of readelf's printed description data",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, int",
+ "decoy": true,
+ "note": "lib.binary.elf_note_field(data, key) per expected_facts key; hcfg offset = the 'H' of HCFG in the note desc; field names SPECULATIVE (GM label not seen)"
+}

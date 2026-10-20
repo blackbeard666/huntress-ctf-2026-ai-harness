@@ -1,0 +1,8 @@
+{
+ "field": "plist.architecture_priority",
+ "expected": "[\"arm64\",\"x86_64\"]",
+ "generator_cmd": "hand-written XML plist (see app/fleet_app__* generator)",
+ "oracle_cmd": "exiftool -j Info.plist -> LSArchitecturePriority [\"arm64\",\"x86_64\"]",
+ "decoy": false,
+ "member": "Info.plist"
+}

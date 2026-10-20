@@ -1,0 +1,9 @@
+{
+ "codec": "atom128",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-yak-33",
+ "encoded": "fx64LD1m+mQ=PIA6Klc5MiuyPoAzMjSW0lhs+jHqPD1g+s1t+lrlLDqWnmHY+i6JPoAzMjSWLjXXKmbWKiut0lHsPoAaPoAzLD1oKik6PGkXnmA6n4zWKlcYKirJOj6XMsJtSqCC",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/altbase_cyberchef.mjs b64 '/128GhIoPQROSTeUbADfgHijKLM+n0pFWXY456xyzB7=39VaqrstJklmNuZvwcdEC'  # CyberChef preset Atom128 (pad 'C')",
+ "oracle_cmd": "printf %s \"$encoded\" | AB=$PWD/tools/npm-altbase tools/node/bin/node tests/data/warmups_fixtures/altbase_oracle.mjs '/128GhIoPQROSTeUbADfgHijKLM+n0pFWXY456xyzB7=39VaqrstJklmNuZvwcdE' C  # npm rfc4648",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-yak-33",
+ "expected": "match"
+}

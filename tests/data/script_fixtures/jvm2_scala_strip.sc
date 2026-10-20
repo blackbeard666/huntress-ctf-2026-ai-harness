@@ -1,0 +1,10 @@
+val descriptor_27439e75 = """|dj0zfGxhbmd1YWdlPXNjYWxhfHJvbGU9c3RhZ2VyfHZlcmRpY3Q9bWFsaWNpb3Vz
+  |fGF0dGFjaz1UMTA1OXxhZGFwdGVyPWJ1aWxkX2V4ZWN8aG9zdF9wcm9maWxlPXN0
+  |YW5kYWxvbmV8b2JmdXNjYXRpb25fcHJvZmlsZT1iNjR8c3RhZ2VfcHJvZmlsZT10
+  |d29fc3RhZ2VfZG93bmxvYWRfZXhlY3V0ZXxuZXh0X2xhbmd1YWdlPWJhc2h8c3Rh
+  |Z2VfY291bnQ9MnxzdGVwcz1mZXRjaF9zdGFnZSxydW5fc3RhZ2V8Y2FtcGFpZ25f
+  |aWQ9SlZNLTk1ODNmMzg1fHVybD1odHRwczovL2p2bS05NTgzZjM4NTQ5LmV4YW1w
+  |bGUuaW52YWxpZC9zdGFnZXxmaWxlX3BhdGg9L3RtcC9odW50cmVzcy1qdm0vLjQ5
+  |NjM5MDkzMWZmMTk5YjAuc3RhZ2U=
+  |""".stripMargin.replace("\n", "")
+println(descriptor_27439e75.length)

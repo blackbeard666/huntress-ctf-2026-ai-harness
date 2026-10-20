@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep(json\\u)",
+ "day": 9,
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-raven-49",
+ "encoded": "\\u{4E}\\u{69}\\u{63}\\u{65}\\u{20}\\u{77}\\u{6F}\\u{72}\\u{6B}\\u{20}\\u{64}\\u{65}\\u{63}\\u{6F}\\u{64}\\u{69}\\u{6E}\\u{67}\\u{20}\\u{74}\\u{68}\\u{69}\\u{73}\\u{20}\\u{77}\\u{61}\\u{72}\\u{6D}\\u{75}\\u{70}\\u{21}\\u{20}\\u{54}\\u{6F}\\u{20}\\u{73}\\u{6F}\\u{6C}\\u{76}\\u{65}\\u{2C}\\u{20}\\u{73}\\u{75}\\u{62}\\u{6D}\\u{69}\\u{74}\\u{20}\\u{74}\\u{68}\\u{69}\\u{73}\\u{20}\\u{65}\\u{78}\\u{61}\\u{63}\\u{74}\\u{20}\\u{61}\\u{6E}\\u{73}\\u{77}\\u{65}\\u{72}\\u{20}\\u{74}\\u{6F}\\u{20}\\u{74}\\u{68}\\u{65}\\u{20}\\u{47}\\u{61}\\u{6D}\\u{65}\\u{20}\\u{4D}\\u{61}\\u{73}\\u{74}\\u{65}\\u{72}\\u{3A}\\u{20}\\u{6D}\\u{61}\\u{70}\\u{6C}\\u{65}\\u{2D}\\u{72}\\u{61}\\u{76}\\u{65}\\u{6E}\\u{2D}\\u{34}\\u{39}",
+ "generator_cmd": "printf %s \"$plain\" | perl -pe 's/(.)/sprintf(\"\\\\u{%X}\",ord $1)/ge'  # knob: ES6 \\u{XX} braces, uppercase, unpadded",
+ "oracle_cmd": "printf %s \"$encoded\" | tools/node/bin/node -e 'let d=\"\";process.stdin.on(\"data\",c=>d+=c).on(\"end\",()=>process.stdout.write(eval(\"`\"+d+\"`\")))'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-raven-49",
+ "expected": "match"
+}

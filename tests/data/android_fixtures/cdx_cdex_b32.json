@@ -1,0 +1,7 @@
+{
+ "entry": "compact_dex_scan",
+ "expected": "ANS-91b4d7e02c6af358",
+ "_why": "base32 pool string in a standalone CompactDex cdex001 (string_data_off relative to data_off)",
+ "generator_cmd": "python3 tests/data/android_fixtures/cdx_src/gen_cdx.py cdex_b32 tests/data/android_fixtures/cdx_cdex_b32.apk  # javac --release 8 + dex2jar d2j-jar2dex dex, coreutils base64/base32/xxd encoding, struct vdex/cdex writer (ART layouts), gcc -shared .incbin for the OAT, zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/cdx_src/oracle.sh tests/data/android_fixtures/cdx_cdex_b32.apk  # od magic + strings + base32 -d"
+}

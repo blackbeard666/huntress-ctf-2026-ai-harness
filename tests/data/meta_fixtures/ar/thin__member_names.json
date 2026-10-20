@@ -1,0 +1,8 @@
+{
+ "field": "ar.member_names",
+ "expected": "[\"util.o\",\"net.o\"]",
+ "generator_cmd": "gcc -c util.c; aarch64-linux-gnu-gcc -c net.c; ar rcsT libthin.a util.o net.o",
+ "oracle_cmd": "ar t libthin.a; file libthin.a (thin archive)",
+ "decoy": false,
+ "member": "libthin.a"
+}

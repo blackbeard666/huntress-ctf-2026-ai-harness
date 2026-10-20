@@ -1,0 +1,8 @@
+{
+ "field": "cpio.format",
+ "expected": "newc",
+ "generator_cmd": "PYTHONPATH=$TMPDIR/cpiofx/pylib python3 gen.py (libarchive-c 5 / libarchive 3.8.5 file_writer, format cpio_newc; cpio_bin/cpio_odc via archive_write_set_format_cpio_bin/_odc)",
+ "oracle_cmd": "file -b newc_initrd.cpio -> 'ASCII cpio archive (SVR4 with no CRC)' = newc 070701",
+ "decoy": false,
+ "member": "newc_initrd.cpio"
+}

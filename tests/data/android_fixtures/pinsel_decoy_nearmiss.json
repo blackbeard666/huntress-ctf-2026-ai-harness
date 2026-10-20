@@ -1,0 +1,8 @@
+{
+ "entry": "pinned_payload_scan",
+ "expected": null,
+ "_why": "same as host_sha256 but the pin's last hex digit is flipped: no payload is pinned -> pinned_payload_scan yields nothing",
+ "generator_cmd": "python3 tests/data/android_fixtures/pinsel_src/gen_pinsel.py decoy_nearmiss tests/data/android_fixtures/pinsel_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex per payload, openssl dgst/genpkey/dgst -sign, zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/pinsel_src/oracle.sh tests/data/android_fixtures/pinsel_decoy_nearmiss.apk  # unzip + openssl dgst -sha256 (hex/base64) vs strings host dex, openssl dgst -verify, MANIFEST.MF SHA-256-Digest compare, strings payload | grep ANS-",
+ "decoy": true
+}

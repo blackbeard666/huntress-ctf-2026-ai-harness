@@ -1,0 +1,35 @@
+{
+ "entry": "layout_from_question+layout_field",
+ "question": "The container begins with magic HX64; offsets are relative to the file. Read config length u64le at +8 and pad length u64le at +16; the 16-byte config MD5 at +24. The config starts at +104, and the pad follows it. Verify exact end bounds. Locate the unique CRC32-valid HCFG record: bytes 0..3 are ASCII HCFG, byte 4 is version, byte 5 is the XOR key.",
+ "oracle_args": "HX64 f config_length:8:u64le pad_length:16:u64le config_md5:24:16 config:104:config_length pad:after:pad_length",
+ "decoy": false,
+ "note": "u64le + relative to the file",
+ "expected": {
+  "overlay_offset": 0,
+  "overlay_size": 177,
+  "config_length": 66,
+  "pad_length": 7,
+  "config_md5": "c18ab154c7fa80eb6fccbd6edf151d80",
+  "config_offset": 104,
+  "config_start": 104,
+  "config_end": 170,
+  "config_body_size": 66,
+  "config_sha256_actual": "220dd09d32f68b1fb70a8b1ee4e602d9c161f43bb4e8ef99941b01aeef118fef",
+  "pad_offset": 170,
+  "pad_start": 170,
+  "pad_end": 177,
+  "pad_body_size": 7,
+  "pad_sha256_actual": "837885c8f8091aeaeb9ec3c3f85a6ff470a415e610b8ba3e49f9b33c9cf9d619",
+  "end_bounds_ok": "true"
+ },
+ "ids": {
+  "config_size": 66,
+  "pad_size": 7,
+  "config_md5": "c18ab154c7fa80eb6fccbd6edf151d80",
+  "config_offset": 104,
+  "pad_offset": 170,
+  "config_sha256": "220dd09d32f68b1fb70a8b1ee4e602d9c161f43bb4e8ef99941b01aeef118fef"
+ },
+ "generator_cmd": "python3 tests/data/binary_fixtures/layoutq_gen.py  (stdlib struct/hashlib writer)",
+ "oracle_cmd": "bash tests/data/binary_fixtures/layoutq_oracle.sh layoutq_u64_filerel_hx64.bin \"$(jq -r .oracle_args layoutq_u64_filerel_hx64.json)\"  (grep -obaF / od / dd|sha256sum / stat)"
+}

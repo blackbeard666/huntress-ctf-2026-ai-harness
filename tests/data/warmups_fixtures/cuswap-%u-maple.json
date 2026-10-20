@@ -1,0 +1,10 @@
+{
+ "codec": "cuswap",
+ "decoder": "cuswap_dec(encoded, swap=True)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-lynx-29",
+ "encoded": "%u4E00%u6900%u6300%u6500%u2000%u7700%u6F00%u7200%u6B00%u2000%u6400%u6500%u6300%u6F00%u6400%u6900%u6E00%u6700%u2000%u7400%u6800%u6900%u7300%u2000%u7700%u6100%u7200%u6D00%u7500%u7000%u2100%u2000%u5400%u6F00%u2000%u7300%u6F00%u6C00%u7600%u6500%u2C00%u2000%u7300%u7500%u6200%u6D00%u6900%u7400%u2000%u7400%u6800%u6900%u7300%u2000%u6500%u7800%u6100%u6300%u7400%u2000%u6100%u6E00%u7300%u7700%u6500%u7200%u2000%u7400%u6F00%u2000%u7400%u6800%u6500%u2000%u4700%u6100%u6D00%u6500%u2000%u4D00%u6100%u7300%u7400%u6500%u7200%u3A00%u2000%u6D00%u6100%u7000%u6C00%u6500%u2D00%u6C00%u7900%u6E00%u7800%u2D00%u3200%u3900",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c \"import sys;sys.stdout.write(sys.stdin.read().encode('utf-16-le').decode('utf-16-be'))\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/ucp_cyberchef.mjs enc '%u'  # CyberChef Escape Unicode Characters %u; oracle JS unescape()",
+ "oracle_cmd": "printf %s \"$encoded\" | tools/node/bin/node -e 'process.stdout.write(unescape(require(\"fs\").readFileSync(0,\"utf8\")))' | python3 -I -c \"import sys;sys.stdout.write(sys.stdin.read().encode('utf-16-be').decode('utf-16-le'))\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-lynx-29",
+ "expected": "match"
+}

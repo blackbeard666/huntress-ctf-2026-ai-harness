@@ -1,0 +1,57 @@
+{
+ "case": "elf_clean",
+ "field_family": "file_map (lib.binary.file_map_field)",
+ "expected": {
+  "gap_count": 9,
+  "slack_count": 0,
+  "total_gap_bytes": 9709,
+  "image_end": 15768,
+  "gaps_offsets_sizes": [
+   [
+    948,
+    4
+   ],
+   [
+    1244,
+    4
+   ],
+   [
+    1488,
+    2608
+   ],
+   [
+    4123,
+    5
+   ],
+   [
+    4403,
+    1
+   ],
+   [
+    4417,
+    3775
+   ],
+   [
+    8456,
+    3304
+   ],
+   [
+    12342,
+    2
+   ],
+   [
+    13906,
+    6
+   ]
+  ],
+  "cave_offset": "none",
+  "cave_size": "none",
+  "cave_segment": "none",
+  "hcfg_gap_offset": "none",
+  "gap_hcfg_storage": "none"
+ },
+ "expected_config": null,
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/fmap_gen.sh fmap_elf_clean.bin elf_clean '{\"campaign\":\"FM-4\",\"domain\":\"cave-4.fmap.example.invalid\",\"mutex\":\"Global\\\\HFMAP4\"}' 116",
+ "oracle_cmd": "python3 -I tests/data/binary_fixtures/fmap_oracle.py fmap_elf_clean.bin"
+}

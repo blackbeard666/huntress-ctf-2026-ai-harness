@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-20-resources-and-overlays",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Resourceful",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-20-resources-and-overlays",
+    "time_trial": "binary-reverse-engineering-day-20-resources-and-overlays/time_trial",
+    "mastery": "binary-reverse-engineering-day-20-resources-and-overlays/mastery"
+  }
+}

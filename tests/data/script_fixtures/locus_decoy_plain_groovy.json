@@ -1,0 +1,11 @@
+{
+ "material": "// plain Groovy utility, not a Jenkins pipeline\nclass Greeter {\n    String greet(String who) { return \"hello \" + who }\n}\nprintln new Greeter().greet('world')\n",
+ "rep": "pipeline_locus",
+ "transform": "count_agent",
+ "key": null,
+ "expected": null,
+ "decoy": true,
+ "note": "pipeline-execution-locus decoy: plain Groovy class, no pipeline/node/stage",
+ "generator_cmd": "cat > t4.groovy <<'EOF' (hand-authored synthetic non-pipeline decoy, heredoc; no lib code)",
+ "oracle_cmd": "grep -cE '\\bpipeline\\s*\\{|\\bnode\\s*[({]|^jobs:' t4.groovy   (0 -> no pipeline to place steps in)"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "classloader_shadow_scan",
+ "expected": null,
+ "_why": "DECOY: parent-first, so the host Gate runs and it holds only a 15-hex near-miss; the valid ANS sits in the SHADOWED payload copy and must not be returned",
+ "generator_cmd": "python3 tests/data/android_fixtures/clshadow_src/gen_clshadow.py decoy_parentfirst tests/data/android_fixtures/clshadow_decoy_parentfirst.apk  # javac --release 8 (compile-only DexClassLoader stub) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/clshadow_src/oracle.sh tests/data/android_fixtures/clshadow_decoy_parentfirst.apk  # d2j-dex2jar host + payload, run host Main.run() on the JVM with a URLClassLoader-backed DexClassLoader: real delegation picks Gate -> ANS-5d81e2f4a6c09b3 (near-miss)",
+ "decoy": true
+}

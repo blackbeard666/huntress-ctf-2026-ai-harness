@@ -1,0 +1,5 @@
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-10-20 10:00:00
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port c-ip cs(User-Agent) cs-host sc-status
+2026-10-20 10:00:00 10.0.0.80 GET /s - 80 10.0.0.5 curl/8.5 ek-5d1e0b7a.example.invalid 200

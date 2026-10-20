@@ -1,0 +1,8 @@
+{
+ "field": "payload.member_names",
+ "expected": "[\".\",\"./Applications/Tool.app/Contents/MacOS/Tool\",\"./usr/local/bin/helper\",\"./usr/local/share/readme.txt\"]",
+ "generator_cmd": "PYTHONPATH=$TMPDIR/cpiofx/pylib python3 gen.py (libarchive-c 5 / libarchive 3.8.5 file_writer, format cpio_odc; cpio_bin/cpio_odc via archive_write_set_format_cpio_bin/_odc) then python3 lzma.compress(FORMAT_XZ) wrapped as b'pbzx'+u64BE flags+u64BE usize+u64BE csize+xz",
+ "oracle_cmd": "tail -c +29 Payload.pbzx | xz -dc > p.cpio; TZ=UTC 7z l -slt p.cpio -> Path lines",
+ "decoy": false,
+ "member": "Payload.pbzx"
+}

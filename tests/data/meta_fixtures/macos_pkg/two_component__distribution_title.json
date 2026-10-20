@@ -1,0 +1,8 @@
+{
+ "field": "macos_pkg.distribution_title",
+ "expected": "none",
+ "generator_cmd": "PYTHONPATH=tools/pylib-libarchive .venv/bin/python tests/data/meta_fixtures/pkg/mkxar.py.txt out.pkg bzip2 md5 b  (PYTHONPATH=tools/pylib-libarchive; libarchive xar writer, compression=bzip2 toc-checksum=md5; Distribution arm64 min=13.5; helper.pkg + daemon.pkg PackageInfo)",
+ "oracle_cmd": "7z x -so FILE Distribution | grep -c '<title>' -> 0 (field absent)",
+ "decoy": true,
+ "member": "two_component.pkg"
+}

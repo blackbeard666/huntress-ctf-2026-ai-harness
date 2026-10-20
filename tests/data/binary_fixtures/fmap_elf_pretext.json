@@ -1,0 +1,65 @@
+{
+ "case": "elf_pretext",
+ "field_family": "file_map (lib.binary.file_map_field)",
+ "expected": {
+  "gap_count": 10,
+  "slack_count": 0,
+  "total_gap_bytes": 1606,
+  "image_end": 7576,
+  "gaps_offsets_sizes": [
+   [
+    836,
+    4
+   ],
+   [
+    1132,
+    4
+   ],
+   [
+    1403,
+    5
+   ],
+   [
+    1440,
+    96
+   ],
+   [
+    1802,
+    2
+   ],
+   [
+    1817,
+    3
+   ],
+   [
+    1868,
+    4
+   ],
+   [
+    2088,
+    1480
+   ],
+   [
+    4150,
+    2
+   ],
+   [
+    5714,
+    6
+   ]
+  ],
+  "cave_offset": 1440,
+  "cave_size": 96,
+  "cave_segment": "LOAD[0]",
+  "hcfg_gap_offset": 1440,
+  "gap_hcfg_storage": "raw"
+ },
+ "expected_config": {
+  "campaign": "FM-1",
+  "domain": "cave-1.fmap.example.invalid",
+  "mutex": "Global\\HFMAP1"
+ },
+ "decoy": false,
+ "generator_cmd": "tests/data/binary_fixtures/fmap_gen.sh fmap_elf_pretext.bin elf_pretext '{\"campaign\":\"FM-1\",\"domain\":\"cave-1.fmap.example.invalid\",\"mutex\":\"Global\\\\HFMAP1\"}' 29",
+ "oracle_cmd": "python3 -I tests/data/binary_fixtures/fmap_oracle.py fmap_elf_pretext.bin"
+}

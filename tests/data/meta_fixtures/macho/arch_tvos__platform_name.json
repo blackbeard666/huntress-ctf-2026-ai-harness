@@ -1,0 +1,7 @@
+{
+ "field": "macho.platform_name",
+ "expected": "tvos",
+ "generator_cmd": "echo 'int f(int x){return x*3+1;}' > a.c; clang-18 -target arm64-apple-tvos15.0 -c a.c -o arm64-apple-tvos15.0.o",
+ "oracle_cmd": "python3 -I -c \"import lief,sys;fat=lief.MachO.parse(sys.argv[1]);b=fat.at(0);print({'cpu':'CPU_TYPE_'+b.header.cpu_type.name,'ft':'MH_'+b.header.file_type.name,'pl':(b.build_version.platform.name.lower() if b.has_build_version else 'none')}[sys.argv[2]])\" <bin> pl  (also llvm-otool-18 -hv / -l: cputype, filetype, 'platform N')",
+ "decoy": false
+}

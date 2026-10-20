@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "kotlin",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/gv_fold_gen.py  (D20 plans -> Groovy/Kotlin runtime assembly)",
+ "oracle_cmd": "python3 -I -c \"import re,sys; s=open(sys.argv[1]).read(); ...\" (stdlib inverse of the generator: concat literals, bytes(byteArrayOf), chr(b ^ 0x2A)); no kotlinc on the build host  -> the descriptor is not a v=3 plan (unbound env / truncated b64 / benign text)"
+}

@@ -1,0 +1,11 @@
+{
+ "codec": "bocu1",
+ "plain": null,
+ "encoded": "004e00690063006500200077006f0072006b0020006400650063006f00640069006e0067002000740068006900730020007700610072006d00750070002100200054006f00200073006f006c00760065002c0020007300750062006d006900740020007400680069007300200065007800610063007400200061006e007300770065007200200074006f0020007400680065002000470061006d00650020004d00610073007400650072003a00200063006c006f007600650072002d00660069006e00630068002d00390031",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$plain\" | iconv -f utf-8 -t UTF-16BE | xxd -p | tr -d '\\n'  # UTF-16BE impostor, not BOCU-1",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | uconv -f BOCU-1 -t utf-8 --callback stop",
+ "oracle_plain": null,
+ "oracle_output": "Conversion to Unicode from codepage failed at input byte position 1. Bytes: 4e 00 Error: Illegal character found\n\u0000rc=1\n"
+}

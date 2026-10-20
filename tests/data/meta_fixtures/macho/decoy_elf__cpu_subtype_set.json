@@ -1,0 +1,8 @@
+{
+ "field": "macho.cpu_subtype_set",
+ "expected": "none",
+ "generator_cmd": "gcc ELF x86-64 executable (input reused from decoy_elf_renamed fixture)",
+ "oracle_cmd": "file decoy_elf__cpu_subtype_set.bin: ELF 64-bit LSB pie executable -> not Mach-O -> none",
+ "decoy": true,
+ "member": "elf_decoy"
+}

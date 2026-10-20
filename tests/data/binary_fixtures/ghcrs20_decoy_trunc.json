@@ -1,0 +1,40 @@
+{
+ "family": "ghc_facts+resource_overlay_facts",
+ "decoy": true,
+ "note": "head -c 600000: section headers / link-info / gold note / overlay cut off -> GHC link facts + RS20 'none'",
+ "encoding": "none",
+ "expected_offset": "none",
+ "expected_config": null,
+ "expected_facts": {
+  "ghc_version": "none",
+  "has_ghc_link_info": "false",
+  "hs_libs": [],
+  "extra_libs": [],
+  "base_version": "none",
+  "ghc_internal_version": "none",
+  "rts_version": "none",
+  "rts_opts_enabled": "none",
+  "needed": [],
+  "gold_version": "none",
+  "linker": "none",
+  "symbol_count": 0,
+  "closure_symbol_count": 0,
+  "info_symbol_count": 0,
+  "main_symbols": [],
+  "main_closures": [],
+  "trace_family": "none",
+  "trace_effects": "none"
+ },
+ "expected_rs20": {
+  "overlay_offset": "none",
+  "overlay_size": "none",
+  "overlay_version": "none",
+  "hcfg_resource_size": "none",
+  "scratch_size": "none",
+  "scratch_sha256": "none",
+  "scratch_text": "none",
+  "end_bounds_ok": "none"
+ },
+ "generator_cmd": "bash tests/data/binary_fixtures/ghcrs20_gen.sh   # 7z e -pinfected of the cached GM evidence.zip d20 members; decoys: dd conv=notrunc byte flip / head -c",
+ "oracle_cmd": "bash tests/data/binary_fixtures/ghcrs20_oracle.sh tests/data/binary_fixtures/ghcrs20_decoy_trunc.bin   # readelf -p .debug-ghc-link-info/-dW/-nW/-sW/-hW, strings -a, grep -obUa RS20, od -tu4/-tu2/-x1, tail -c | sha256sum; expected_offset = grep -obUa HCFG | tail -1"
+}

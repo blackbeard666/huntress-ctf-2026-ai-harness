@@ -1,0 +1,9 @@
+{
+ "codec": "zbase32",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-88",
+ "encoded": "j3wsg3jyq7zzr43yct1sg55rpfzgqedwpbwzgedzcf3g47morrofe53yqpzsa7uffoo8g7mnpiwzeedwpbwzgedfxbosg7bycfz8g75fqeo8e53yqtwgken8cfsskenpcf3ze3m18eogwamrcwsso3m1p7zn4qba",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/altbase_cyberchef.mjs b32 'ybndrfg8ejkmcpqxot1uwisza345h769=' nopad  # CyberChef 'To Base32' z-base-32 alphabet, pad stripped",
+ "oracle_cmd": "printf %s \"$encoded\" | AB=$PWD/tools/npm-altbase tools/node/bin/node tests/data/warmups_fixtures/altbase_oracle.mjs ybndrfg8ejkmcpqxot1uwisza345h769  # npm rfc4648 codec.parse custom chars",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-88",
+ "expected": "match"
+}

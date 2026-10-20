@@ -1,0 +1,8 @@
+{
+ "field": "ar.member_e_machine_set",
+ "expected": "[\"0x003e\",\"0x00b7\"]",
+ "generator_cmd": "gcc -c util.c; aarch64-linux-gnu-gcc -c net.c; gcc -c crypto_backend_long_name.c; touch -d <dates UTC>; chmod 644/600/755; ar rcsU libgnu_mixed.a util.o net.o crypto_backend_long_name.o",
+ "oracle_cmd": "ar x libgnu_mixed.a; readelf -h util.o net.o crypto_backend_long_name.o | grep Machine (X86-64=62, AArch64=183; archive order, dedupe)",
+ "decoy": false,
+ "member": "libgnu_mixed.a"
+}

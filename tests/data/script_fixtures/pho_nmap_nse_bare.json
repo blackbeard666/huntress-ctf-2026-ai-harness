@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=lua|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=nmap_nse|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=powershell|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=NSE-8a9b0c1d|url=https://nse-8a9b0c1d.example.invalid/stage|file_path=/tmp/huntress-nse-8a9b0c1d/.stage",
+ "decoy": false,
+ "profile_guess": "nmap_nse",
+ "generator_cmd": "python3 tests/data/script_fixtures/prior_host_gen.py  # stdlib binascii.hexlify, written as pho_nmap_nse_bare.nse",
+ "oracle_cmd": "grep -oE '[0-9a-f]{40,}' pho_nmap_nse_bare.nse | xxd -r -p"
+}

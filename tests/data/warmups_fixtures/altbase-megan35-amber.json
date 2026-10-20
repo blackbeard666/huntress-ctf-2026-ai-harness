@@ -1,0 +1,9 @@
+{
+ "codec": "megan35",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-bison-90",
+ "encoded": "d21ZjcGxlxO7NL=1iwD/kgz+NM=4khRWnwKslhfqNcGelsGtlwrwjcqWmxfYlg1uNM=4khRWjhXXixbWigztnwfsNM=aNM=4jcGMigv1NJvXmx=1mZ4WigvYjhN9i21tlwy9Td35",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/altbase_cyberchef.mjs b64 '3GHIJKLMNOPQRSTUb=cdefghijklmnopWXYZ/12+406789VaqrstuvwxyzABCDEF5'  # CyberChef 'To Base64' preset Megan35 (pad '5')",
+ "oracle_cmd": "printf %s \"$encoded\" | AB=$PWD/tools/npm-altbase tools/node/bin/node tests/data/warmups_fixtures/altbase_oracle.mjs '3GHIJKLMNOPQRSTUb=cdefghijklmnopWXYZ/12+406789VaqrstuvwxyzABCDEF' 5  # npm rfc4648",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-bison-90",
+ "expected": "match"
+}

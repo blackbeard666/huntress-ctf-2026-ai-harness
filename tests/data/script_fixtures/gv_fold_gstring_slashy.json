@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=groovy|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=GROOVY-6ffc2963|url=https://groovy-6ffc296364.example.invalid/stage|file_path=/tmp/huntress-groovy/.6ffc29636451e5a.stage",
+ "decoy": false,
+ "host": "groovy",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/gv_fold_gen.py  (D20 plans -> Groovy/Kotlin runtime assembly)",
+ "oracle_cmd": "(grep -v ^pipeline tests/data/script_fixtures/gv_fold_gstring_slashy.groovy; echo 'println descriptor_6ffc2963') > $TMPDIR/o.groovy && /usr/lib/jvm/java-21-openjdk-amd64/bin/java -cp tools/ghidra/Ghidra/Features/GhidraServer/data/yajsw-stable-13.18/lib/extended/groovy/groovy-4.0.12.jar groovy.ui.GroovyMain $TMPDIR/o.groovy"
+}

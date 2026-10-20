@@ -1,0 +1,8 @@
+{
+ "field": "macos_pkg.package_versions",
+ "expected": "[\"1.0.3\",\"2.7\"]",
+ "generator_cmd": "PYTHONPATH=tools/pylib-libarchive .venv/bin/python tests/data/meta_fixtures/pkg/mkxar.py.txt out.pkg bzip2 md5 b  (PYTHONPATH=tools/pylib-libarchive; libarchive xar writer, compression=bzip2 toc-checksum=md5; Distribution arm64 min=13.5; helper.pkg + daemon.pkg PackageInfo)",
+ "oracle_cmd": "for p in $(7z l -slt FILE | sed -n 's/^Path = \\(.*PackageInfo\\)$/\\1/p'); do 7z x -so FILE $p | grep -o '<pkg-info[^>]*' | grep -o ' version=\"[^\"]*\"'; done -> JSON list",
+ "decoy": false,
+ "member": "two_component.pkg"
+}

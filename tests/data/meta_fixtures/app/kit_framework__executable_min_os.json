@@ -1,0 +1,8 @@
+{
+ "field": "app.executable_min_os",
+ "expected": "13.2.1",
+ "generator_cmd": "Kit.framework/Versions/A/{Kit = cp macho/thin_arm64 (arm64), Resources/Info.plist = plistlib XML {CFBundleIdentifier com.huntress.kit, CFBundleExecutable Kit, LSArchitecturePriority [arm64e]}}; ln -s A Versions/Current; ln -s Versions/Current/Kit Kit; ln -s Versions/Current/Resources Resources; zip -X -r -y kit_framework.zip Kit.framework  (symlinks stored as S_IFLNK members)",
+ "oracle_cmd": "llvm-otool-18 -l Kit.framework/Versions/A/Kit | grep minos -> minos 13.2.1",
+ "decoy": false,
+ "member": "kit_framework.zip"
+}

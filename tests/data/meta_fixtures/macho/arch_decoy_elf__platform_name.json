@@ -1,0 +1,7 @@
+{
+ "field": "macho.platform_name",
+ "expected": "none",
+ "generator_cmd": "(reused decoy_elf_renamed fixture input: an ELF renamed .dylib)",
+ "oracle_cmd": "file <bin> -> ELF; llvm-otool-18 -l <bin> -> not a Mach-O file",
+ "decoy": true
+}

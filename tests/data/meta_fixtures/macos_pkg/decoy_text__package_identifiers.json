@@ -1,0 +1,8 @@
+{
+ "field": "macos_pkg.package_identifiers",
+ "expected": "none",
+ "generator_cmd": "printf 'xar is not here, just text\\n' > decoy.txt",
+ "oracle_cmd": "file -b FILE -> ASCII text (no xar! magic)",
+ "decoy": true,
+ "member": "decoy_text.pkg"
+}

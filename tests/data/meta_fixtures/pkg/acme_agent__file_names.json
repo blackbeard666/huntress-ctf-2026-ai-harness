@@ -1,0 +1,8 @@
+{
+ "field": "pkg.file_names",
+ "expected": "[\"Distribution\",\"agent.pkg\",\"agent.pkg/PackageInfo\",\"agent.pkg/Bom\",\"agent.pkg/Payload\",\"agent.pkg/Scripts\"]",
+ "generator_cmd": "PYTHONPATH=tools/pylib-libarchive .venv/bin/python tests/data/meta_fixtures/pkg/mkxar.py.txt out.pkg gzip sha1 a  (libarchive 3.x xar writer via libarchive-c in tools/pylib-libarchive: Distribution hostArchitectures=x86_64,arm64 min=11.0 + agent.pkg/{PackageInfo com.acme.agent 4.2.1,Bom,Payload,Scripts})",
+ "oracle_cmd": "7z l -slt FILE | sed -n 's/^Path = //p' | tail -n +2 | grep -v '^\\[TOC\\].xml$'  (7-Zip 26.00 Xar handler, TOC order) -> JSON list",
+ "decoy": false,
+ "member": "acme_agent.pkg"
+}

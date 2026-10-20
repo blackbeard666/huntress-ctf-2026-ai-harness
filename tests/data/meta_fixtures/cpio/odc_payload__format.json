@@ -1,0 +1,8 @@
+{
+ "field": "cpio.format",
+ "expected": "odc",
+ "generator_cmd": "PYTHONPATH=$TMPDIR/cpiofx/pylib python3 gen.py (libarchive-c 5 / libarchive 3.8.5 file_writer, format cpio_odc; cpio_bin/cpio_odc via archive_write_set_format_cpio_bin/_odc)",
+ "oracle_cmd": "file -b odc_payload.cpio -> 'ASCII cpio archive (pre-SVR4 or odc)'",
+ "decoy": false,
+ "member": "odc_payload.cpio"
+}

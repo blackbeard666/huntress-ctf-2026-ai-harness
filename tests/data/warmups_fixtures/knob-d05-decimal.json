@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep(decimal)",
+ "day": 5,
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-45",
+ "encoded": "26958 25955 30496 29295 8299 25956 28515 26980 26478 29728 26984 8307 24951 28018 28789 8225 28500 29472 27759 25974 8236 30067 28002 29801 29728 26984 8307 30821 25441 8308 28257 30579 29285 29728 8303 26740 8293 24903 25965 19744 29537 25972 14962 25376 28524 25974 11634 24930 26468 29285 13357 53",
+ "generator_cmd": "printf %s \"$plain\" | od -An -tu2 -v | tr -s ' \\n' ' ' | sed 's/^ //;s/ $//'  # knob: width 16 (od little-endian u16 words, decimal)",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -ne 'print pack \"v*\", split / /' | tr -d '\\0'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-45",
+ "expected": "match"
+}

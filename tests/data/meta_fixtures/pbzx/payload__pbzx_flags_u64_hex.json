@@ -1,0 +1,8 @@
+{
+ "field": "pbzx.pbzx_flags_u64_hex",
+ "expected": "0x0000000001000000",
+ "generator_cmd": "gen.py: libarchive cpio_odc + python3 lzma.compress(FORMAT_XZ) wrapped b'pbzx'+u64BE 0x1000000+u64BE usize+u64BE csize+xz",
+ "oracle_cmd": "xxd -l 12 Payload.pbzx -> 70627a78 0000000001000000",
+ "decoy": false,
+ "member": "Payload.pbzx"
+}

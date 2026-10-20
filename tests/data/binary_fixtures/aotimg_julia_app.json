@@ -1,0 +1,18 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "runtime": "julia",
+  "has_graalvm": "false",
+  "has_julia": "true",
+  "image_section": "none",
+  "hcfg_offset": "none",
+  "hcfg_section": "none",
+  "julia_version": "none"
+ },
+ "generator_cmd": "bash aotimg_gen.sh   # step 4 (gcc 15; blob by python3 stdlib struct/zlib/base64)",
+ "oracle_cmd": "python3 -I aotimg_oracle.py   # readelf -SW / nm / nm -D / readelf -d / grep -obUa / strings -a + stdlib xor-crc decode",
+ "decoy": false,
+ "note": "step 4: launcher NEEDing libjulia.so.1 (jl_init_with_image), no blob"
+}

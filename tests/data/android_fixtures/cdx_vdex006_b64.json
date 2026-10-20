@@ -1,0 +1,7 @@
+{
+ "entry": "compact_dex_scan",
+ "expected": "ANS-3e8a17c0f94d2b65",
+ "_why": "base64 pool string of a real dex wrapped in an Android 8 vdex 006 (assets/oat/arm64/base.vdex)",
+ "generator_cmd": "python3 tests/data/android_fixtures/cdx_src/gen_cdx.py vdex006_b64 tests/data/android_fixtures/cdx_vdex006_b64.apk  # javac --release 8 + dex2jar d2j-jar2dex dex, coreutils base64/base32/xxd encoding, struct vdex/cdex writer (ART layouts), gcc -shared .incbin for the OAT, zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/cdx_src/oracle.sh tests/data/android_fixtures/cdx_vdex006_b64.apk  # lief.VDEX string list + base64 -d"
+}

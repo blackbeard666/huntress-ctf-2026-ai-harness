@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep",
+ "plain": null,
+ "encoded": "9304f395d7ee1b888e65152a206a2d1bd954fed1f7e2642dee7c65256383128ff298c6f448380aeca7a2a9d55de37a22c519808f8d4f266644aeeeafb36680a6ef011815745a9fa2d009f1af27a106943640c693d88889b18ba8791220feb452",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "head -c 96 /dev/urandom | xxd -p -c0  # random bytes as hex: no codec knob yields the sentence",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1 && echo utf8 || echo not-utf8  # raw bytes are not text",
+ "oracle_plain": "not-utf8"
+}

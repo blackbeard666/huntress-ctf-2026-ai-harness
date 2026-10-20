@@ -36,7 +36,7 @@ if cls:
         body = t.split("\n{\n", 1)[1].rsplit("\n}\n", 1)[0]
         mem = re.findall(r"^  (\S.*?);\n    descriptor: (\S+)\n    flags: \(0x([0-9a-f]+)\)", body, re.M)
         def mname(decl):
-            if decl in ("static {}",):
+            if decl == "static {}" or decl.endswith(" static {}"):   # Clojure AOT: "public static {}"
                 return "<clinit>"
             nm = re.search(r"(\S+)\(", decl)
             if nm:
@@ -56,7 +56,8 @@ if cls:
                    methods=j([n for n, _ in meths]), method_descriptors=j([d for _, d in meths]),
                    source_file=(re.search(r'^SourceFile: "(.*)"', tail, re.M) or [None, "none"])[1],
                    signature=(re.search(r"^Signature: #\d+\s+// (\S+)", tail, re.M) or [None, "none"])[1],
-                   attributes=j(re.findall(r"^(\w+):", tail, re.M)))
+                   attributes=j([a or b for a, b in   # unknown attrs (ScalaSig, ScalaInlineInfo) print indented
+                                re.findall(r"^(\w+):|^  (\w+): length = 0x", tail, re.M)]))
         km = re.search(r"kotlin\.Metadata\(\n(.*?)\n\s*\)", tail, re.S)
         out["has_kotlin_metadata"] = "true" if km else "false"
         if km:

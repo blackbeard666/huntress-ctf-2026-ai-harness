@@ -1,0 +1,9 @@
+{
+ "codec": "byteadd4660-u16le-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-cipher-77",
+ "encoded": "82129d12971299125412ab12a312a6129f125412981299129712a31298129d12a2129b125412a8129c129d12a7125412ab129512a612a112a912a412551254128812a3125412a712a312a012aa12991260125412a712a9129612a1129d12a8125412a8129c129d12a71254129912ac1295129712a81254129512a212a712ab129912a6125412a812a3125412a8129c12991254127b129512a1129912541281129512a712a8129912a6126e125412a1129512a412a0129912611297129d12a4129c129912a61261126b126b12",
+ "generator_cmd": "printf '%s' \"$plain\" | iconv -f UTF-8 -t UTF-16LE | perl -0777 -ne 'print pack(q(v*), map { ($_+4660)%65536 } unpack(q(v*), $_))' | xxd -p | tr -d '\\n'",
+ "oracle_cmd": "python3 -c \"import os,base64;e=os.environ['encoded'];d=bytes.fromhex(e);import struct;n=len(d)//2;u=struct.unpack('<%dH'%n,d);print(struct.pack('<%dH'%n,*[(x-4660)%65536 for x in u]).decode('utf-16-le'))\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-cipher-77",
+ "expected": "match"
+}

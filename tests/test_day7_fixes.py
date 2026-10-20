@@ -1039,6 +1039,26 @@ assert _u19.startswith("fffe4e0069006300") and _wc.day_codec(19)[2](_u19) == _s1
 assert _dc(_u19) == _s19 and _dc(_s19.encode("utf-16-be").hex()) == _s19 and _dc("4e696365") == "Nice"
 print("ok  decode: hex of UTF-16LE (D19) exact encoder + decode_chunk branch")
 
+# Day 20 "Big Entrance" ("Same bar. This time the big one goes first."): lowercase hex of BOM feff + UTF-16BE
+# -- lib.warmups_codecs.DAYS day 20 exact encoder; decode_chunk's D19 hex-of-UTF-16 branch reads the BE BOM too.
+_s20 = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: deft-blanket-clover-43"
+_u20 = _wc.day_codec(20)[1](_s20)
+assert _u20.startswith("feff004e0069") and _wc.day_codec(20)[2](_u20) == _s20 and _wc.day_codec(20)[3] is False
+assert _dc(_u20) == _s20
+print("ok  decode: hex of UTF-16BE (D20) exact encoder + decode_chunk branch")
+
+# Day 20 "Universal Appeal": macho.cpu_type_set verified (cputype "0x%08x" per slice, fat_arch order, thin = header;
+# GM-confirmed thin arm64 -> ["0x0100000c"], the arch-name list ["arm64"] REJECTED).
+_mo20 = b"\xcf\xfa\xed\xfe" + _st17.pack("<II", 0x0100000c, 0) + b"\0" * 20
+_fat20 = b"\xca\xfe\xba\xbe" + _st17.pack(">I", 2) + _st17.pack(">5I", 0x01000007, 3, 4096, 32, 12) \
+    + _st17.pack(">5I", 0x0100000c, 0, 8192, 32, 14)
+assert _meta14.lookup("macho", "cpu_type_set")[0].tier == _meta14.VERIFIED
+assert _meta14.answer("d20-macho-001-macho-cpu-type-set",
+                      {"question": "Determine macho.cpu_type_set for macos-001.bin."}, _mo20) \
+    == ('["0x0100000c"]', _meta14.VERIFIED)
+assert _meta14.answer("d20-macho-001-macho-cpu-type-set", {}, _fat20)[0] == '["0x01000007","0x0100000c"]'
+print("ok  lib.meta: macho.cpu_type_set registered (verified D20)")
+
 # Day 19 "Little Endian on the Prairie": elf.e_machine_u16_hex verified (e_machine u16 @0x12 in EI_DATA byte order,
 # speculative pe.elf_machine promoted; GM-confirmed x86-64 -> 0x003e).
 _elf19 = b"\x7fELF\x02\x01\x01" + b"\0" * 9 + _st17.pack("<HH", 2, 0x3e) + b"\0" * 44
@@ -1059,3 +1079,15 @@ _ov19 = b"\x7fELF" + b"\0" * 60 + b"PK19\0" + bytes([0x21, 0x5a, 0]) + _st17.pac
 assert _bin27.overlay_unpack(_ov19, "PK19") == _hc19 and _bin27._parse_blob(_hc19)[5]
 assert _bin27.overlay_unpack(_ov19, "RS20") is None
 print("ok  binary: D19 PK19 packed overlay -> HCFG (overlay_unpack)")
+
+# Day 20 "Resourceful": final RS20 resource overlay (+8 u32le HCFG len, +12 u16le scratch len, +16 sha256(scratch),
+# +48 HCFG resource, scratch after it, exact EOF) -> lib.binary.resource_overlay / overlay_unpack(data, "RS20")
+# (GM-confirmed config + hcfg_resource_size 380 on Single/TT/Mastery).
+_sc20 = b"scratch-bytes"
+_rs20 = b"\x7fELF" + b"\0" * 60 + b"RS20" + b"\1\0\0\0" + _st17.pack("<IH", len(_hc19), len(_sc20)) + b"\0\0" \
+    + _hl19.sha256(_sc20).digest() + _hc19 + _sc20
+_ro20 = _bin27.resource_overlay(_rs20)
+assert _ro20["offset"] == 64 and _ro20["hcfg_resource_size"] == len(_hc19) and _ro20["scratch_size"] == len(_sc20)
+assert _bin27.overlay_unpack(_rs20, "RS20") == _hc19 and _bin27.resource_overlay(_rs20 + b"x") is None
+assert _bin27.resource_overlay(_ov19) is None and _bin27.overlay_unpack(_ov19, "PK19") == _hc19
+print("ok  binary: D20 RS20 resource overlay -> HCFG (resource_overlay)")

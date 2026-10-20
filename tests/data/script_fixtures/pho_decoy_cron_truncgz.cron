@@ -1,0 +1,1 @@
+0 * * * * bash -c "descriptor_deadbeef=\"H4sIAAAAAAACA1WPzU7EMAyEX4jd8i+BlBN3kBD3\"; true"

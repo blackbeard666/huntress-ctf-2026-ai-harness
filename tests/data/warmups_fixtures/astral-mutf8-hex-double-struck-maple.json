@@ -1,0 +1,9 @@
+{
+ "codec": "astral-mutf8-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-raven-08",
+ "encoded": "e28495eda0b5edb59aeda0b5edb594eda0b5edb59620eda0b5edb5a8eda0b5edb5a0eda0b5edb5a3eda0b5edb59c20eda0b5edb595eda0b5edb596eda0b5edb594eda0b5edb5a0eda0b5edb595eda0b5edb59aeda0b5edb59feda0b5edb59820eda0b5edb5a5eda0b5edb599eda0b5edb59aeda0b5edb5a420eda0b5edb5a8eda0b5edb592eda0b5edb5a3eda0b5edb59eeda0b5edb5a6eda0b5edb5a12120eda0b5edb58beda0b5edb5a020eda0b5edb5a4eda0b5edb5a0eda0b5edb59deda0b5edb5a7eda0b5edb5962c20eda0b5edb5a4eda0b5edb5a6eda0b5edb593eda0b5edb59eeda0b5edb59aeda0b5edb5a520eda0b5edb5a5eda0b5edb599eda0b5edb59aeda0b5edb5a420eda0b5edb596eda0b5edb5a9eda0b5edb592eda0b5edb594eda0b5edb5a520eda0b5edb592eda0b5edb59feda0b5edb5a4eda0b5edb5a8eda0b5edb596eda0b5edb5a320eda0b5edb5a5eda0b5edb5a020eda0b5edb5a5eda0b5edb599eda0b5edb59620eda0b5edb4beeda0b5edb592eda0b5edb59eeda0b5edb59620eda0b5edb584eda0b5edb592eda0b5edb5a4eda0b5edb5a5eda0b5edb596eda0b5edb5a33a20eda0b5edb59eeda0b5edb592eda0b5edb5a1eda0b5edb59deda0b5edb5962deda0b5edb5a3eda0b5edb592eda0b5edb5a7eda0b5edb596eda0b5edb59f2deda0b5edbf98eda0b5edbfa0",
+ "generator_cmd": "java tests/data/warmups_fixtures/MUtf8.java enc \"$(perl -CSA tests/data/warmups_fixtures/unistyle_perl.pl DOUBLE-STRUCK \"$plain\")\"  # JDK DataOutputStream.writeUTF (Modified UTF-8; BMP holes like U+2115 stay 3-byte)",
+ "oracle_cmd": "printf %s \"$encoded\" | java tests/data/warmups_fixtures/MUtf8.java dec | uconv -x '::NFKC;'  # JDK DataInputStream.readUTF + ICU NFKC",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-raven-08",
+ "expected": "match"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep(rot13)",
+ "day": 2,
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-42",
+ "encoded": "Snhj btwp ijhtinsl ymnx bfwrzu! Yt xtqaj, xzgrny ymnx jcfhy fsxbjw yt ymj Lfrj Rfxyjw: htgfqy-tyyjw-42",
+ "generator_cmd": "printf %s \"$plain\" | tr 'A-Za-z' 'F-ZA-Ef-za-e'  # knob: rot k=5 instead of 13",
+ "oracle_cmd": "printf %s \"$encoded\" | tr 'F-ZA-Ef-za-e' 'A-Za-z'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-42",
+ "expected": "match"
+}

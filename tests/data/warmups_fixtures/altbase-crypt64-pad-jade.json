@@ -1,0 +1,9 @@
+{
+ "codec": "crypt64-pad",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-marten-74",
+ "encoded": "HaZXNG/rPr7f64FZMqxYOKtb65FcOLAURq3mPLJk6G/IPm/nPqlqNGkUQrJWPKZo65FcOLAUNLVVMrEUMKtnRqJm65Fj65FcNG/5MKpZ62pVQrFZQXcUOa3YNGphML7oNKshBnE=",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/altbase_cyberchef.mjs b64 './0-9A-Za-z='  # CyberChef 'To Base64' preset 'itoa64' ('=' padded)",
+ "oracle_cmd": "printf %s \"$encoded\" | AB=$PWD/tools/npm-altbase tools/node/bin/node tests/data/warmups_fixtures/altbase_oracle.mjs ./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz '='  # npm rfc4648",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-marten-74",
+ "expected": "match"
+}

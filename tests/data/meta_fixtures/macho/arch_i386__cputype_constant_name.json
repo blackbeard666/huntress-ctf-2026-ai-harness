@@ -1,0 +1,7 @@
+{
+ "field": "macho.cputype_constant_name",
+ "expected": "CPU_TYPE_X86",
+ "generator_cmd": "echo 'int f(int x){return x*3+1;}' > a.c; clang-18 -target i386-apple-macos10.6 -c a.c -o i386-apple-macos10.6.o",
+ "oracle_cmd": "python3 -I -c \"import lief,sys;fat=lief.MachO.parse(sys.argv[1]);b=fat.at(0);print({'cpu':'CPU_TYPE_'+b.header.cpu_type.name,'ft':'MH_'+b.header.file_type.name,'pl':(b.build_version.platform.name.lower() if b.has_build_version else 'none')}[sys.argv[2]])\" <bin> cpu  (also llvm-otool-18 -hv / -l: cputype, filetype, 'platform N')",
+ "decoy": false
+}

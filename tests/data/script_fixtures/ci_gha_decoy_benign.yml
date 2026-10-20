@@ -1,0 +1,13 @@
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      STAGE_MATERIAL: not-a-plan
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests
+        run: |
+          readonly Codec_5be2a1c9='base64|single_byte_xor|5a'
+          readonly Material_5be2a1c9='${{ env.STAGE_MATERIAL }}'
+          make test

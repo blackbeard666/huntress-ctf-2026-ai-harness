@@ -1,0 +1,9 @@
+{
+ "codec": "bocu1",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-otter-42",
+ "encoded": "9eb9b3b520c7bfc2bb20b4b5b3bfb4b9beb720c4b8b9c320c7b1c2bdc5c07120a4bf20c3bfbcc6b57c20c3c5b2bdb9c420c4b8b9c320b5c8b1b3c420b1bec3c7b5c220c4bf20c4b8b52097b1bdb5209db1c3c4b5c28a20b1bdb2b5c27dbfc4c4b5c27d8482",
+ "generator_cmd": "printf %s \"$plain\" | uconv -f utf-8 -t BOCU-1 | xxd -p | tr -d '\\n'",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | uconv -f BOCU-1 -t utf-8",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-otter-42",
+ "expected": "match"
+}

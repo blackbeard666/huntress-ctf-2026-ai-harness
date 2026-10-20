@@ -14,8 +14,8 @@ for fj in sorted(pathlib.Path(__file__).parent.glob("jvm_*.json")):
         probe = ("methods", "access_flags", "method_count", "major_version", "main_class", "constant_pool_count")
         diff = {k: B.jvm_field(data, k) for k in probe if B.jvm_field(data, k) not in (None, "none")}
     else:
-        diff = {k: (B.jvm_field(data, k, f.get("member")), v) for k, v in exp.items()
-                if B.jvm_field(data, k, f.get("member")) != v}
+        got = {k: B.jvm_field(data, k, f.get("member"), f.get("question")) for k in exp}   # question names the class
+        diff = {k: (got[k], v) for k, v in exp.items() if got[k] != v}
     ms = (time.time() - t) * 1e3
     bad += bool(diff) or ms > 1000
     print(("ok  " if not diff else "BAD ") + f"{fj.stem}: {len(exp)} fields ({ms:.1f} ms) {diff or ''}")

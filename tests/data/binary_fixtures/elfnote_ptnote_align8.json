@@ -1,0 +1,33 @@
+{
+ "family": "elf_note",
+ "encoding": "raw",
+ "expected_offset": 240,
+ "expected_config": {
+  "c2": "https://cfg.example/x",
+  "jitter": 7
+ },
+ "expected_facts": {
+  "note_owners": [
+   "GNU",
+   "HTRS"
+  ],
+  "note_types": [
+   4660,
+   7
+  ],
+  "note_count": "2",
+  "hcfg_note_offset": "240",
+  "hcfg_note_owner": "HTRS",
+  "hcfg_note_type": "7",
+  "hcfg_note_section": ".note.htrs",
+  "has_hcfg_note": "true",
+  "has_huntress_note": "false",
+  "has_htrs_note": "true",
+  "has_gnu_note": "true"
+ },
+ "generator_cmd": "sh elfnote_gen.sh   # gas .section .note.htrs,\"a\",@note .balign 8 (GNU 0x1234 note, then owner HTRS namesz 5 -> desc at +24) + GNU ld linker script PHDRS { hnote PT_NOTE }",
+ "oracle_cmd": "python3 elfnote_oracle.py elfnote_ptnote_align8.bin Huntress HTRS GNU   # readelf -nW / -SW + file position of readelf's printed description data",
+ "file_b": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, not stri",
+ "decoy": false,
+ "note": "lib.binary.elf_note_field(data, key) per expected_facts key; hcfg offset = the 'H' of HCFG in the note desc; field names SPECULATIVE (GM label not seen)"
+}

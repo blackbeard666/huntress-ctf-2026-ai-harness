@@ -1,0 +1,8 @@
+{
+ "field": "app.architecture_priority",
+ "expected": "none",
+ "generator_cmd": "mkdir -p Plain.app/Contents/MacOS; plistlib XML {CFBundleIdentifier com.huntress.plain, CFBundleExecutable Plain} (no LSArchitecturePriority) > Plain.app/Contents/Info.plist; cp macho/decoy_elf_renamed (ELF) Plain.app/Contents/MacOS/Plain; zip -X -r plain_app.zip Plain.app",
+ "oracle_cmd": "exiftool -j Plain.app/Contents/Info.plist -> only CFBundleIdentifier, CFBundleExecutable (no LSArchitecturePriority)",
+ "decoy": true,
+ "member": "plain_app.zip"
+}

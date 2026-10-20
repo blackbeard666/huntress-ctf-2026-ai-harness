@@ -1,0 +1,8 @@
+{
+ "field": "cpio.member_count",
+ "expected": "4",
+ "generator_cmd": "PYTHONPATH=$TMPDIR/cpiofx/pylib python3 gen.py (libarchive-c 5 / libarchive 3.8.5 file_writer, format cpio_odc; cpio_bin/cpio_odc via archive_write_set_format_cpio_bin/_odc)",
+ "oracle_cmd": "TZ=UTC 7z l -slt odc_payload.cpio -> 4 Path entries",
+ "decoy": false,
+ "member": "odc_payload.cpio"
+}

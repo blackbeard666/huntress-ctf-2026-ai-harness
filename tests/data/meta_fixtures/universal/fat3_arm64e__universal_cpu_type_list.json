@@ -1,0 +1,8 @@
+{
+ "field": "universal.cpu_type_list",
+ "expected": "[\"0x01000007\",\"0x0100000c\",\"0x0100000c\"]",
+ "generator_cmd": "clang-18 -target {x86_64,arm64,arm64e}-apple-macos11 -c a.c; patch a_arm64e.o cpusubtype (LE u32 @8) 2 -> 0x80000002 (CPU_SUBTYPE_PTRAUTH_ABI); llvm-lipo-18 -create a_x86.o a_arm64e_caps.o a_arm64.o -output fat3_caps",
+ "oracle_cmd": "/usr/lib/llvm-18/bin/llvm-otool -f fat3_arm64e__universal_cpu_type_list.bin: cputype 16777223, 16777228, 16777228",
+ "decoy": false,
+ "member": "fat3_caps"
+}

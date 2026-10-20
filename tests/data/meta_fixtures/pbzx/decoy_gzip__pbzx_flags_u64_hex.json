@@ -1,0 +1,8 @@
+{
+ "field": "pbzx.pbzx_flags_u64_hex",
+ "expected": "none",
+ "generator_cmd": "gen.py cpio_newc | gzip -9 -n > initrd.img",
+ "oracle_cmd": "file -b initrd.img -> gzip compressed data (no pbzx magic)",
+ "decoy": true,
+ "member": "initrd.img"
+}

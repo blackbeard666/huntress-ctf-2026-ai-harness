@@ -1,0 +1,7 @@
+{
+ "field": "macho.architectures",
+ "expected": "[\"arm64_32\"]",
+ "generator_cmd": "echo 'int f(int x){return x*3+1;}' > a.c; clang-18 -target arm64_32-apple-watchos5.0 -c a.c -o arm64_32-apple-watchos5.0.o",
+ "oracle_cmd": "llvm-lipo-18 -archs arm64_32-apple-watchos5.0.o  (split on whitespace -> compact JSON list)",
+ "decoy": false
+}

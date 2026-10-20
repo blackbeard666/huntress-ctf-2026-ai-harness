@@ -1,0 +1,7 @@
+{
+ "entry": "module_contract_answer",
+ "expected": "ANS-3c9e07a1f4b2d865",
+ "_why": "host dex names assets/payload.dex:com.huntress.arena.payload.Module + moduleContract; payload holds 3 ANS candidates (LEGACY literal, stale() concat, ANSWER built in <clinit> by xor 0x21 + sput); the host-named moduleContract() -> ANSWER decides",
+ "generator_cmd": "python3 tests/data/android_fixtures/modcontract_src/gen_modcontract.py method tests/data/android_fixtures/modcontract_method.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh (host/payload split) + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/modcontract_src/oracle.sh tests/data/android_fixtures/modcontract_method.apk  # strings host dex -> pointer, unzip payload, d2j-dex2jar, JVM reflection: moduleContract() -> ANS-3c9e07a1f4b2d865"
+}

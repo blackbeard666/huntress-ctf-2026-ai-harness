@@ -1,0 +1,8 @@
+{
+ "field": "ar.member_coff_machine_set",
+ "expected": "[\"0x8664\",\"0x014c\"]",
+ "generator_cmd": "zig cc -target x86_64-windows-msvc -c util.c -o util_x64.obj; zig cc -target x86-windows-msvc -c net.c -o net_x86.obj; ar rcs winmixed.lib util_x64.obj net_x86.obj",
+ "oracle_cmd": "llvm-readobj-18 --file-headers winmixed.lib | grep Machine (AMD64 0x8664, I386 0x14C)",
+ "decoy": false,
+ "member": "winmixed.lib"
+}

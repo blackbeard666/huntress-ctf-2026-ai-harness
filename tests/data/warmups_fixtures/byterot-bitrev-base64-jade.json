@@ -1,0 +1,9 @@
+{
+ "codec": "bytebitrev-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-marten-63",
+ "encoded": "cpbGpgTu9k7WBCamxvYmlnbmBC4Wls4E7oZOtq4OhAQq9gTO9jZupjQEzq5GtpYuBC4Wls4Eph6Gxi4EhnbO7qZOBC72BC4WpgTihramBLKGzi6mTlwEVoYmprS2hk4upna0bMw=",
+ "generator_cmd": "perl -e 'print pack(\"b*\", unpack(\"B*\", $ARGV[0]))' \"$plain\" | base64 -w0  # perl unpack B* (MSB-first bits) -> pack b* (LSB-first) mirrors each byte's bits; xxd / coreutils base64",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | basenc -w0 --base2lsbf | basenc --base2msbf -d  # GNU basenc: LSB-first bit dump re-read MSB-first = per-byte bit reversal",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-marten-63",
+ "expected": "match"
+}

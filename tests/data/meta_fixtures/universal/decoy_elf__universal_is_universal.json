@@ -1,0 +1,8 @@
+{
+ "field": "universal.is_universal",
+ "expected": "none",
+ "generator_cmd": "gcc ELF x86-64 executable (input reused from decoy_elf_renamed fixture)",
+ "oracle_cmd": "file decoy_elf__universal_is_universal.bin: ELF 64-bit LSB pie executable -> not Mach-O -> none",
+ "decoy": true,
+ "member": "elf_decoy"
+}

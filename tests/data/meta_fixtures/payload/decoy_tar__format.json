@@ -1,0 +1,8 @@
+{
+ "field": "payload.format",
+ "expected": "none",
+ "generator_cmd": "tar -cf decoy.tar bin_le.cpio",
+ "oracle_cmd": "file -b decoy.tar -> POSIX tar archive (GNU): no pbzx/cpio magic",
+ "decoy": true,
+ "member": "decoy.tar"
+}

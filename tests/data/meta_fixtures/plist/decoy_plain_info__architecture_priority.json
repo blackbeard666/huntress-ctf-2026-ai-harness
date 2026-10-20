@@ -1,0 +1,8 @@
+{
+ "field": "plist.architecture_priority",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c 'plistlib.dumps({CFBundleIdentifier:com.huntress.plain,CFBundleExecutable:Plain})'",
+ "oracle_cmd": "exiftool -j Info.plist -> no LSArchitecturePriority tag",
+ "decoy": true,
+ "member": "Info.plist"
+}

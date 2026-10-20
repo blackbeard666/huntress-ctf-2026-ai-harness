@@ -1,0 +1,7 @@
+{
+ "entry": "pinned_payload_scan",
+ "expected": "ANS-c4e82b7f19d0a365",
+ "_why": "host pins base64 sha256 of BOTH payloads, but MANIFEST.MF holds the digest of the original payload_a (swapped after signing) -> tampered decoy rejected, payload_b",
+ "generator_cmd": "python3 tests/data/android_fixtures/pinsel_src/gen_pinsel.py manifest_b64 tests/data/android_fixtures/pinsel_manifest_b64.apk  # javac --release 8 + dex2jar d2j-jar2dex per payload, openssl dgst/genpkey/dgst -sign, zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/pinsel_src/oracle.sh tests/data/android_fixtures/pinsel_manifest_b64.apk  # unzip + openssl dgst -sha256 (hex/base64) vs strings host dex, openssl dgst -verify, MANIFEST.MF SHA-256-Digest compare, strings payload | grep ANS-"
+}

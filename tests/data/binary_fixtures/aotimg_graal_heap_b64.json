@@ -1,0 +1,23 @@
+{
+ "encoding": "base64",
+ "expected_offset": 8236,
+ "expected_config": {
+  "beacon": "https://svm.example/b",
+  "sleep": 30
+ },
+ "expected_facts": {
+  "runtime": "graalvm",
+  "has_graalvm": "true",
+  "has_julia": "false",
+  "image_section": ".svm_heap",
+  "hcfg_offset": "8236",
+  "hcfg_encoding": "base64",
+  "hcfg_config": "{\"beacon\":\"https://svm.example/b\",\"sleep\":30}",
+  "hcfg_section": ".svm_heap",
+  "graalvm_version": "none"
+ },
+ "generator_cmd": "bash aotimg_gen.sh   # step 2 (gcc 15; blob by python3 stdlib struct/zlib/base64)",
+ "oracle_cmd": "python3 -I aotimg_oracle.py   # readelf -SW / nm / nm -D / readelf -d / grep -obUa / strings -a + stdlib xor-crc decode",
+ "decoy": false,
+ "note": "step 2: gcc PIE, .svm_heap Latin-1 String with base64 blob"
+}

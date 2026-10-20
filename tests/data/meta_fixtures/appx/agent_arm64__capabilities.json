@@ -1,0 +1,8 @@
+{
+ "field": "appx.capabilities",
+ "expected": "[\"runFullTrust\",\"allowElevation\",\"privateNetworkClientServer\"]",
+ "generator_cmd": "zip -qrX agent_arm64.appx AppxManifest.xml AppxBlockMap.xml '[Content_Types].xml' bin/ (manifest: Identity arm64, 2 Applications, rescap caps; BlockMap HashMethod xmldsig-more#sha384; unsigned)",
+ "oracle_cmd": "unzip -p agent_arm64.appx 'AppxManifest.xml' | python3 -I -c 'import sys,json,lxml.etree as E;r=E.fromstring(sys.stdin.buffer.read());v=r.xpath(sys.argv[1]);print(v if isinstance(v,str) else json.dumps([str(x) for x in v],separators=(\",\",\":\")))' '/*/*[local-name()=\"Capabilities\"]/*/@Name'",
+ "decoy": false,
+ "member": "agent_arm64.appx"
+}

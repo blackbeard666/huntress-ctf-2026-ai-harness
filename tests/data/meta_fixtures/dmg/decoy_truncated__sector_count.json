@@ -1,0 +1,8 @@
+{
+ "field": "dmg.sector_count",
+ "expected": "none",
+ "generator_cmd": "head -c -512 gpt_image.dmg > trunc.dmg (koly trailer cut off)",
+ "oracle_cmd": "7z l -tdmg FILE -> 'Cannot open the file as [Dmg] archive'; tail -c 512 FILE | grep -c koly -> 0",
+ "decoy": true,
+ "member": "decoy_truncated.dmg"
+}

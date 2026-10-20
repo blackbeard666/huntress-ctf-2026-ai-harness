@@ -1,0 +1,9 @@
+{
+ "codec": "astral-cesu8-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-42",
+ "encoded": "7aC17bCN7aC17bCi7aC17bCc7aC17bCeIO2gte2wsO2gte2wqO2gte2wq+2gte2wpCDtoLXtsJ3toLXtsJ7toLXtsJztoLXtsKjtoLXtsJ3toLXtsKLtoLXtsKftoLXtsKAg7aC17bCt7aC17bCh7aC17bCi7aC17bCsIO2gte2wsO2gte2wmu2gte2wq+2gte2wpu2gte2wru2gte2wqSEg7aC17bCT7aC17bCoIO2gte2wrO2gte2wqO2gte2wpe2gte2wr+2gte2wniwg7aC17bCs7aC17bCu7aC17bCb7aC17bCm7aC17bCi7aC17bCtIO2gte2wre2gte2woe2gte2wou2gte2wrCDtoLXtsJ7toLXtsLHtoLXtsJrtoLXtsJztoLXtsK0g7aC17bCa7aC17bCn7aC17bCs7aC17bCw7aC17bCe7aC17bCrIO2gte2wre2gte2wqCDtoLXtsK3toLXtsKHtoLXtsJ4g7aC17bCG7aC17bCa7aC17bCm7aC17bCeIO2gte2wjO2gte2wmu2gte2wrO2gte2wre2gte2wnu2gte2wqzog7aC17bCj7aC17bCa7aC17bCd7aC17bCeLe2gte2wqO2gte2wre2gte2wre2gte2wnu2gte2wqy3toLXtv5LtoLXtv5A=",
+ "generator_cmd": "perl -CSA tests/data/warmups_fixtures/unistyle_perl.pl BOLD \"$plain\" | uconv -f UTF-8 -t CESU-8 | base64 -w0  # ICU CESU-8: ed a0 b5 ed b0 xx per letter",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | uconv -f CESU-8 -t UTF-8 | uconv -x '::NFKC;'  # ICU CESU-8 reader + NFKC",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-42",
+ "expected": "match"
+}

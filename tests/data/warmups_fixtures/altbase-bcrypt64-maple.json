@@ -1,0 +1,9 @@
+{
+ "codec": "bcrypt64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-gecko-12",
+ "encoded": "RkjhXQ/1Z1HpGEPjW07iYU3lGFPmYVKeb0DwZVTuGQ/SZw/xZ0v0XQuea1TgZUjyGFPmYVKeXVffW1OeWU3xb0TwGFPtGFPmXQ/FWUzjGCzfa1PjahmeZUDuZESrX0ThY06rKRG",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/altbase_cyberchef.mjs b64 './A-Za-z0-9'  # CyberChef 'To Base64' bcrypt alphabet (no pad)",
+ "oracle_cmd": "printf %s \"$encoded\" | .venv/bin/python -I -c \"import sys;from passlib.utils.binary import bcrypt64;print(bcrypt64.decode_bytes(sys.stdin.read().strip().encode()).decode(),end='')\"  # passlib 1.7.4 bcrypt64.decode_bytes",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-gecko-12",
+ "expected": "match"
+}

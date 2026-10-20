@@ -1,0 +1,33 @@
+{
+ "family": "pe_certificate",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "decoy": true,
+ "expected_facts": {
+  "overlay_offset": "73216",
+  "overlay_size": "64",
+  "checksum": "0x1234",
+  "checksum_computed": "0x1d215",
+  "checksum_valid": "false",
+  "has_certificate": "false",
+  "certificate_offset": "none",
+  "certificate_size": "none",
+  "certificate_end": "none",
+  "cert_length": "none",
+  "cert_revision": "none",
+  "cert_type": "none",
+  "cert_type_name": "none",
+  "certificate_count": "none",
+  "pkcs7_size": "none",
+  "cert_padding_size": "none",
+  "cert_in_overlay": "none",
+  "data_after_certificate_offset": "none",
+  "data_after_certificate_size": "none",
+  "hcfg_offset": "none",
+  "hcfg_location": "none"
+ },
+ "generator_cmd": "bash pecert_gen.sh   # zig cc -target x86_64-windows-gnu (MinGW PE32+) of pecert_src.c; openssl req -x509 + openssl cms -sign -outform DER (detached PKCS#7 SignedData); pecert_asm.py = pefile writer (Security dir VirtualAddress = FILE offset, CheckSum = generate_checksum or stale 0x1234)",
+ "oracle_cmd": ".venv/bin/python pecert_oracle.py pecert_decoy_badptr.bin   # pefile get_overlay_data_start_offset / DATA_DIRECTORY[SECURITY] / generate_checksum+verify_checksum, openssl asn1parse (DER len), struct WIN_CERTIFICATE walk; config = stdlib struct+crc32+json of the blob",
+ "note": "lib.binary.pe_cert_field(data, key) per expected_facts key; hcfg_scan raw hit at expected_offset (decoy: no cert fields; badptr: no HCFG at all)"
+}

@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "profile_guess": "wsc_component",
+ "generator_cmd": "python3 tests/data/script_fixtures/prior_host_gen.py  # stdlib base64 of a benign sentence, written as pho_decoy_wsc_benign.wsc",
+ "oracle_cmd": "grep -oE '\"[A-Za-z0-9+/=]{20,}\"' pho_decoy_wsc_benign.wsc | tr -d '\"' | base64 -d | grep -c '^v=3' || true"
+}

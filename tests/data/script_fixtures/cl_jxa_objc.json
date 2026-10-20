@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=jxa|role=persistence|verdict=malicious|attack=T1059.007|adapter=system_events|host_profile=standalone|obfuscation_profile=objc|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=register_login_item,run_stage|campaign_id=JXA-968c44d8|url=https://jxa-968c44d8d9.example.invalid/stage|file_path=/tmp/huntress-jxa/.d9c65c6546b486a8.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/cl_gen.py  (stdlib base64/bytes.hex; jxa template)",
+ "oracle_cmd": "node -e \"const s=require('fs').readFileSync(process.argv[1],'utf8');const m=s.match(/descriptor_\\w+ = ([^;]*);/);process.stdout.write(eval(m[1]))\" tests/data/script_fixtures/cl_jxa_objc.js | base64 -d"
+}

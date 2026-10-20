@@ -1,0 +1,11 @@
+{
+ "material": "H4sIAAAAAAAAA+3TWQqDMBQF0Hx3Fa5Ao2b4EffikFqLjaKRuvwqrVBLR9BK6T0/D5JAXrh5sdJ5ph2yJNqTkg/VlZxe1xFxuSe4kIJxQajr+cwjFl+0q4u2MVFtWcSoxlRH/fDcq/0fFZ/z12X/vqV+wef5+0wi/6+Y5F+rKD0o23Rm1juGgIVgT/IXN/lz1h+36KxdPPDn+e9UUZSbtbuAtUzmPyn1Ns/s7lDMesfL+ffvzD/F/H9DUNXlXiUmDOI2L1JVN04YOOPi2t0BAAAAAAAAAAAAAAAAAMC7Tnh4BkUAKAAA",
+ "transform": "deploy-creds",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "mkdir -p benign/notes; printf 'hello\\n' > benign/notes/readme.txt; printf '<project><builders/></project>' > benign/notes/config.xml; tar -czf benign.tgz benign; base64 -w0 benign.tgz",
+ "oracle_cmd": "tar -tzf benign.tgz  # no secrets/master.key, no credentials.xml, no build steps -> nothing to answer",
+ "rep": "jenkins_home",
+ "key": null,
+ "note": "jenkins-artifact-secrets: JENKINS_HOME tgz (base64); decode(material,'jenkins_home',what) -> lib.codec.jenkins_answer(jenkins_secrets(files), what)"
+}

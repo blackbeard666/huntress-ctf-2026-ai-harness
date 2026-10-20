@@ -1,0 +1,8 @@
+{
+ "field": "uimage.image_name",
+ "expected": "none",
+ "generator_cmd": "printf \"hello firmware\\n\" | gzip -n -9 > payload.gz; renamed firmware.uimg",
+ "oracle_cmd": "file payload.gz -> \"gzip compressed data, max compression, from Unix\" (no u-boot magic 27051956)",
+ "decoy": true,
+ "member": "firmware.uimg"
+}

@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=lua|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=redis_eval|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=powershell|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=REDIS-0c1d2e3f|url=https://redis-0c1d2e3f.example.invalid/stage|file_path=/tmp/huntress-redis-0c1d2e3f/.stage",
+ "decoy": false,
+ "profile_guess": "redis_eval",
+ "generator_cmd": "python3 tests/data/script_fixtures/prior_host_gen.py  # stdlib base64.b64encode, written as pho_redis_eval.redis",
+ "oracle_cmd": "grep -oE '[A-Za-z0-9+/=]{60,}' pho_redis_eval.redis | base64 -d"
+}

@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=dart|role=collector|verdict=malicious|attack=T1005|adapter=file_walk|host_profile=standalone|obfuscation_profile=adjacent|stage_profile=two_stage_download_execute|next_language=python|stage_count=2|steps=enumerate_files,stage_archive|campaign_id=DAR-3541fa69|url=https://dart-3541fa6940.example.invalid/stage|file_path=/tmp/huntress-dart/.4037b7eac7ec0d7c.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/cl_gen.py  (stdlib base64/bytes.hex; dart template)",
+ "oracle_cmd": "perl -0ne 'print join \"\", /\\x27([^\\x27]*)\\x27/g if /(final descriptor_\\w+ = .*?;)/s && ($_=$1)' tests/data/script_fixtures/cl_dart_adjacent.dart | base64 -d"
+}

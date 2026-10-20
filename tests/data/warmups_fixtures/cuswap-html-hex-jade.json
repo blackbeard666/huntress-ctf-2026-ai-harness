@@ -1,0 +1,10 @@
+{
+ "codec": "cuswap",
+ "decoder": "cuswap_dec(encoded, swap=True)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-13",
+ "encoded": "&#x4e00;&#x6900;&#x6300;&#x6500;&#x2000;&#x7700;&#x6f00;&#x7200;&#x6b00;&#x2000;&#x6400;&#x6500;&#x6300;&#x6f00;&#x6400;&#x6900;&#x6e00;&#x6700;&#x2000;&#x7400;&#x6800;&#x6900;&#x7300;&#x2000;&#x7700;&#x6100;&#x7200;&#x6d00;&#x7500;&#x7000;&#x2100;&#x2000;&#x5400;&#x6f00;&#x2000;&#x7300;&#x6f00;&#x6c00;&#x7600;&#x6500;&#x2c00;&#x2000;&#x7300;&#x7500;&#x6200;&#x6d00;&#x6900;&#x7400;&#x2000;&#x7400;&#x6800;&#x6900;&#x7300;&#x2000;&#x6500;&#x7800;&#x6100;&#x6300;&#x7400;&#x2000;&#x6100;&#x6e00;&#x7300;&#x7700;&#x6500;&#x7200;&#x2000;&#x7400;&#x6f00;&#x2000;&#x7400;&#x6800;&#x6500;&#x2000;&#x4700;&#x6100;&#x6d00;&#x6500;&#x2000;&#x4d00;&#x6100;&#x7300;&#x7400;&#x6500;&#x7200;&#x3a00;&#x2000;&#x6a00;&#x6100;&#x6400;&#x6500;&#x2d00;&#x6f00;&#x7400;&#x7400;&#x6500;&#x7200;&#x2d00;&#x3100;&#x3300;",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c \"import sys;sys.stdout.write(sys.stdin.read().encode('utf-16-le').decode('utf-16-be'))\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef NODE_NO_WARNINGS=1 tools/node/bin/node tests/data/warmups_fixtures/cuswap_htmlent.mjs  # CyberChef To HTML Entity, hex",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys,html;sys.stdout.write(html.unescape(sys.stdin.read()))\" | python3 -I -c \"import sys;sys.stdout.write(sys.stdin.read().encode('utf-16-be').decode('utf-16-le'))\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-13",
+ "expected": "match"
+}

@@ -1,0 +1,7 @@
+{
+ "field": "macho.platform_name",
+ "expected": "iossimulator",
+ "generator_cmd": "echo 'int f(int x){return x*3+1;}' > a.c; clang-18 -target arm64-apple-ios15.0-simulator -c a.c -o arm64-apple-ios15.0-simulator.o",
+ "oracle_cmd": "llvm-readobj-18 --macho-version-min arm64-apple-ios15.0-simulator.o | grep Platform  (text lowercased; = <mach-o/loader.h> PLATFORM_* name lowercased; LIEF spells it ios_simulator/mac_catalyst)",
+ "decoy": false
+}

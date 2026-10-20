@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=nim|role=stager|verdict=malicious|attack=T1106|adapter=os_exec|host_profile=standalone|obfuscation_profile=raw_export|stage_profile=two_stage_download_execute|next_language=powershell|stage_count=2|steps=build_cmd,spawn_process|campaign_id=NIM-fc6bd311|url=https://nim-fc6bd311ac.example.invalid/stage|file_path=/tmp/huntress-nim/.ac8dfe1dd7e3f566.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/cl_gen.py  (stdlib base64/bytes.hex; nim template)",
+ "oracle_cmd": "sed -n 's/.*= r\"\\(.*\\)\"/\\1/p' tests/data/script_fixtures/cl_nim_export_raw.nim | base64 -d"
+}

@@ -1,4 +1,4 @@
-# binary-reverse-engineering — technique log (days 1-19; updated after every day)
+# binary-reverse-engineering — technique log (days 1-20; updated after every day)
 
 How this lane has looked so far (OBSERVATIONS, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -7,51 +7,59 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   past day, plus ONE new container/language per day: D1 C ELF, D2 C++ (ELF or MinGW PE32+), D3 .NET dll, D4 static stripped Go,
   D5 static Rust, D6 Java .jar, D7 Kotlin fat .jar, D8 Swift ELF (67 MB), D9 Nim, D10 Zig (PE `.exe` in Mastery), D11 D (DMD),
   D12 Free Pascal, D13 Crystal, D14 Objective-C (GNUstep), D15 a PAIR of C ELFs (`-stripped`/`-symbolized`), D16 a PAIR of WASM
-  modules (`-compact`/`-direct`), D17 Ada ELF (GNAT 14.2), D18 Fortran ELF (gfortran), **D19 GnuCOBOL ELF** (11 KB, dynamic
-  `libcob.so.1` + libvbisam/libgmp/libncurses, stripped, `variant-000.cob`) **with a packed `PK19` overlay appended**.
+  modules (`-compact`/`-direct`), D17 Ada ELF (GNAT 14.2), D18 Fortran ELF (gfortran), D19 GnuCOBOL ELF + packed `PK19`
+  overlay, **D20 Haskell GHC 9.12.2 ELF** (1.2 MB, dynamic libgmp/libm/libc, not stripped, `.debug-ghc-link-info` section)
+  **with an `RS20` resource overlay** (plain HCFG resource + private "scratch" bytes + sha256). D19-D20 = a "hidden storage"
+  arc (prompt D20: "attics: resources, overlays, bytes past the end of the sections ... map every boundary").
   Answer ids `dNN_artifact_sha256_K` / `dNN_analysis_<field>`; a multi-member group adds a member qualifier:
   `dNN_analysis_<qualifier>_<field>` (D15 `stripped_`/`symbolized_`, D16 `compact_`/`direct_`).
 - From Day 2 on, every new-day member carries the same embedded **HCFG** config blob: `'HCFG' | u8 ver | u8 xor_key | u16 len (LE) |
   u32 crc32 | xor'd JSON` (JSON at offset 12; crc32 is over the decoded plaintext). Only its storage changes (`.hcfg` section
   D2/D10/D14, .NET FieldRVA, Go/Rust rodata, base64 in a Java/Kotlin constant pool, base64 Swift/Nim/D/Crystal literal, RAW in FPC
-  `.data`, WASM data segment 0, Ada/Fortran `.rodata`) -- **D19: NOT byte-visible at all**: the HCFG is the unpacked payload of
-  the appended PK19 overlay. Scan raw bytes for `HCFG` AND its base64 form `SENGR...` (crc-gate every hit); when both miss, look
+  `.data`, WASM data segment 0, Ada/Fortran `.rodata`) -- D19: NOT byte-visible (unpacked payload of the appended PK19
+  overlay); D20: RAW again, at +48 inside the appended RS20 overlay (a plain `HCFG` scan finds it). Scan raw bytes for `HCFG` AND its base64 form `SENGR...` (crc-gate every hit); when both miss, look
   for an overlay past the ELF image and read the question text -- it spells the unpacker.
   The JSON carries never-asked keys too (ipv4, windows_path, linux_path, service, host_model): parse the whole dict.
 - The analysis is easy (headers, symbols, one config blob). The hard part is the GM's exact label for `exact_text` fields
   (format, machine, symbol, D17 `hcfg_storage`). **The organizers RE-ISSUE the contract mid-day** when a label is unguessable
   (D17 `hcfg_storage` -> `kind: enum` + ordered rule list). Since D17 the question texts are SPECS: D19's config questions give
   the whole unpacking algorithm byte by byte. `format` is now `kind: enum` on d12-d19: `elf, pe, pe_cli, jar, wasm, neko_bytecode`.
-- **The contract LEAKS future days**: D19's `format` enum already lists `neko_bytecode` (never seen -> a Neko VM member is coming)
-  and `overlay_offset` says "the final overlay magic named by this unit (PK19 for Day 19 or RS20 for Day 20)". Grep every new
-  contract for tokens / day numbers that are not today's.
-- **D19 broke the "theme never asked" streak**: D5-D18 never asked the new day's prompt theme (Rust panics, coroutines, wasm doors,
-  D17 decoder, D18 call graph), but D19's theme ("decoder stub ... catch what's inside -- statically") IS the d19 group: config_*
-  only after unpacking + NEW `overlay_offset` / `overlay_size`. The D17 backfill also re-asked old days' themes on their groups.
+- **The contract LEAKS future days**: D19's `format` enum listed `neko_bytecode` (still unseen on D20 -> a Neko VM member is
+  coming) and `overlay_offset` named "RS20 for Day 20" (it came true). D19+D20 `d07_analysis_method_count` also says "for Day 26
+  use the primary classfile named by that unit" (=> a JVM classfile member on D26, primary class NOT the Main-Class). Grep every
+  new contract for `[A-Z]{2}\d\d` tokens, `Day NN` and enum values not seen yet.
+- **Since D19 the theme IS asked on its own group**: D5-D18 never asked the day's prompt theme, D19 (unpacking: `overlay_offset`
+  / `overlay_size`) and D20 (resources: `overlay_offset` + NEW `hcfg_resource_size`) did. The D17 backfill also re-asked old
+  days' themes on their groups.
 - **Every member since D2 also embeds a "dynamic trace" template** (unasked so far): `{"schema":"huntress.binary.dynamic_trace.v1",
   "branch":"<b>","event_count":<n>,"campaign":...,"family":"<lang>_<theme>_trace","effects":"...","network":"none"}` gated on env
   `HUNTRESS_HOST_MODEL` (`analysis`/`sandbox`/`workstation`). D18 `fortran_indirect_flow_trace`; D19 `cobol_static_unpack_trace`,
-  effects `memory_only_inert_payload_hash`.
+  effects `memory_only_inert_payload_hash`; D20 `haskell_resource_overlay_trace` / `private_scratch_hash_only`.
 - Question count: 80 on D8, +10/day to 160 on D16, D17 = 204 (backfill #2: every old group padded to 11 ids), then +12/day:
-  D18 216, **D19 228**, no backfill on D18/D19. Mastery = `setN.` prefixed copies (2 sets D2-D7, 5 D8-D9, 3 D10-D14, 5 D15-D17,
-  4 D18, **5 on D19** = 1140 ids); artifacts named `delivery N: evidence.zip`. Timed end to end: D18 TT 8 s / Mastery 14 s; D19 TT
-  4.2 s / Mastery 10 s.
+  D18 216, D19 228, **D20 240**, no backfill D18-D20. Mastery = `setN.` prefixed copies (2 sets D2-D7, 5 D8-D9, 3 D10-D14,
+  5 D15-D17, 4 D18, 5 D19-D20 = 1200 ids on D20); artifacts named `delivery N: evidence.zip`. Timed end to end: D19 TT 4.2 s /
+  Mastery 10 s; D20 TT 4.8 s / Mastery 9.3 s (solve 5.5 s).
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
 - **HCFG location / encoding** -- same blob, different storage per container (`.hcfg` section, .NET FieldRVA, Go/Rust rodata,
   base64 in a constant pool / string literal, raw FPC `.data`, WASM data segment 0, Ada/Fortran `.rodata`, D19 packed overlay):
   scan raw bytes for `HCFG` and `SENGR[A-Za-z0-9+/_-]*=*`, decode, accept only if crc32(plain) matches AND the JSON parses -- keep
   scanning past a failing hit (D9 Nim had two raw decoys); never a fixed offset. Storage did NOT change across a day's variants on
-  any day (D18 offset 8512, D19 overlay 10808/424 in single, TT and all Mastery sets while key/campaign/crc re-rolled).
-- **Packed overlay (NEW D19)** -- `'PK19' | u8 ver(1) | u8 k1 | u8 k2 | u8 pad | u32le packed_len | sha256(unpacked)[32] | packed`
-  (header 44 bytes) appended right after the ELF section-header table (= end of the image). Unpack: `out[i] = ror8(packed[i] ^ k2, 3)
-  ^ k1`; verify sha256(out); HCFG record at out[0] (then the normal xor/crc/JSON). Rule: take `data.rfind(magic)` ("final"
-  overlay), implement the transform the QUESTION states, verify the stated hash; fallback for a mutated transform = known-plaintext
-  `HCFG` at out[0] over (xor a, rotate r, xor c) -- the solver does both. The magic is per day (`PK19`, `RS20` named for Day 20):
-  pick the `<2 caps><NN>` token whose digits = the group's day (the `overlay_size` question names no magic).
+  any day (D18 offset 8512, D19 overlay 10808/424, D20 overlay 1200888 / resource 380 in single, TT and all 5 Mastery sets
+  while key/campaign/crc re-rolled).
+- **Overlay layout per day (D19 PK19, D20 RS20)** -- both appended exactly at the end of the section-header table
+  (`e_shoff + e_shnum*e_shentsize`), magic `<2 caps><day>`, a fixed header the QUESTION spells field by field:
+  PK19 = `magic | u8 ver | u8 k1 | u8 k2 | pad | u32le packed_len @8 | sha256(unpacked) @12 | packed @44`, unpack
+  `ror8(b ^ k2, 3) ^ k1`, verify sha256, HCFG at out[0]. RS20 = `magic | u8 ver(1) @4 | pad | u32le resource_len @8 | u16le
+  scratch_len @12 | pad | sha256(scratch) @16 | HCFG resource @48 (raw, NOT packed) | scratch` (`private-scratch:<campaign>:inert-only`,
+  35 B); verify `48+res+scratch == len - o` ("exact end bounds") and sha256(scratch). Rule: `o = data.rfind(magic)` ("final"),
+  read the header widths the question lists, verify bounds + hash, then the normal HCFG xor/crc/JSON at the stated offset;
+  fallback for an unspecified transform = known-plaintext `HCFG` over (xor, rotate, xor). Magic for a field whose question names
+  none (`overlay_size`, `hcfg_resource_size`): the `<2 caps><NN>` token whose digits = the group's day.
 - **Location-as-answer** -- `hcfg_offset` (D9/D11-D14, D17-D18): base-10 FILE offset of the stored blob: base64 -> the `S` of
   `SENGR...`, RAW -> the `H`. `overlay_offset` (D19): offset of the overlay MAGIC (`P` of PK19); `overlay_size` = file length -
-  that offset (header included: 424 = 44 + 380). Record `m.start()` of the validated hit on every scan path.
+  that offset (header included: 424 = 44 + 380). D20 `hcfg_resource_size`: the u32le header field at magic+8 (380 = HCFG 12 +
+  368 JSON), NOT the overlay size (463). Record `m.start()` of the validated hit on every scan path.
 - **Storage-as-answer (`hcfg_storage`, D17, enum)** -- rules IN ORDER: `base64` if the crc-valid HCFG appears only after decoding a
   printable base64 carrier -> `raw_hcfg_section` if literal `HCFG` starts in a section named exactly `.hcfg` -> `wasm_data_segment`
   -> `raw_const_array` if in any other native data section -> else `raw`. Map offset -> section header; jars = base64. Unknown
@@ -102,7 +110,8 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
 | Nim / D / Crystal ELF (`NimMain`; `_D4core`,`DMDH`; `Crystal:H`,`GC_malloc`) | Plain ELF; base64 `SENGR...` literal (Nim: two raw `HCFG` decoys -> crc-gate); offset = the `S` |
 | Free Pascal / Objective-C / Ada / Fortran ELF (`FPC 3.2.2`; `__objc_*`; `GNAT Version`; `libgfortran.so.5`, `MAIN__`) | Plain ELF, carried-over solver answers it (`elf`/`x86-64`/`62`); HCFG RAW (`grep -abo HCFG`, crc-gate, offset = the `H`): FPC `.data`, ObjC own `.hcfg` section, Ada/Fortran `.rodata` |
 | GnuCOBOL ELF (`libcob.so.1` NEEDED, `cob_init`/`cob_set_programid`/`cob_display`/`cob_get_environment` imports, `variant-000.cob`, libvbisam/libgmp/libncurses) | Plain ELF for the header ids; config is NOT in the image: look past the end of the section-header table (D19) |
-| No crc-valid `HCFG`/`SENGR` anywhere + file size > `e_shoff + e_shnum*e_shentsize` (or > max section end) | Appended OVERLAY: `xxd -s <image_end> F`; magic like `PK19` (D19) / `RS20` (D20 named); parse the header fields the question lists, run its byte transform, check the stated sha256, then HCFG at out[0] |
+| Haskell GHC ELF (`Main_main*_closure`/`_info` symbols, z-encoded `ghczminternal_GHCziInternalzi...`, `GHC 9.x` / `UnitLinkOpts {hsLibs = [-lHSbase...` strings, `.debug-ghc-link-info` section, NEEDED libgmp) | Plain ELF for header ids (`elf`/`x86-64`); D20 config sat in the RS20 overlay, not in the image -- check the file tail first |
+| File size > `e_shoff + e_shnum*e_shentsize` (or > max section end), with or without a crc-valid HCFG | Appended OVERLAY: `xxd -s <image_end> F`; magic `<2 caps><day>` (`PK19` D19, `RS20` D20); parse the header fields the question lists, verify its bounds/sha256, run its transform if any, HCFG at the stated offset. A raw HCFG hit INSIDE the overlay (D20) still needs the header fields (`hcfg_resource_size`, offsets) |
 | Two members differing by a name tag, ids `dNN_analysis_<tag>_<field>` | Route each id to the member whose file name carries `<tag>`; same HCFG in both |
 | `00 61 73 6d 01 00 00 00` (`\0asm`), `.wasm` | `lib.binary.wasm_layout(data)` or `wasm-objdump -x f.wasm`; format `wasm`, architecture `wasm32`; HCFG RAW in data segment 0 |
 | `NEKO` magic / `.n` file (format enum lists `neko_bytecode` since D19) | Neko VM bytecode (Haxe/nekoc): `neko`/`haxe` are apt-installable; globals table holds the string constants -> HCFG scan; format `neko_bytecode` |
@@ -120,28 +129,28 @@ ids/group; integer elf_class/machine. **D9 "Nimble"** (86 s): raw decoys, NEW `h
 `has_hcfg_section`. **D11 "D-Day"** (36 s). **D12 "Pascal's Wager"** (54 s): HCFG RAW. **D13 "Crystal Clear"** (14 s). **D14
 "Selective Memory"** (9 s): ObjC, `.hcfg`. **D15 "Stripped"** (74 s): stripped/symbolized pair, `<qualifier>_` ids. **D16 "Wasm
 Up"** (91 s): compact/direct wasm pair, `wasm`/`wasm32` first try via the prebuilt `wasm_layout`.
-**D17 "Decoder Ring"** (204 Qs; CORRECT T+4:03): ONE Ada ELF, HCFG RAW `.rodata`; backfill #2 (32 ids on old groups, all accepted in
-ONE POST); `hcfg_storage` raw ids burned ~10.9k rejected POSTs / 3.5 h until the organizers revised the contract to an enum.
-TT/Mastery d01 stripped -> `recover_code` `none`. **D18 "Flow State"** (216 Qs; CORRECT T+11 s, 0 wrong; TT/Mastery first try):
-ONE Fortran ELF (gfortran), HCFG RAW `.rodata` (`encoded_config.4`, 8512); call-graph/API/"no injection" theme unasked; the
-race harness POSTed the carried-over solver's answers with zero new code.
+**D17 "Decoder Ring"** (204 Qs; T+4:03): Ada ELF, HCFG RAW `.rodata`; backfill #2 (32 old-group ids, one POST); `hcfg_storage`
+burned ~10.9k rejected POSTs / 3.5 h until the organizers revised it to an enum; stripped d01 -> `recover_code` `none`.
+**D18 "Flow State"** (216 Qs; T+11 s, 0 wrong): Fortran ELF, HCFG RAW `.rodata` (8512); call-graph theme unasked; zero new code.
+**D19 "Jack in the Box"** (static-unpacking; 228 Qs; T+2:25; TT 4.2 s / Mastery 10 s first try): stripped GnuCOBOL ELF (11 KB,
+libcob.so.1), no HCFG in the image; 424-B `PK19` overlay at e_shoff+e_shnum*64 (10808). NEW `overlay_offset`/`overlay_size`;
+config questions spelled the stub (k1 +5, k2 +6, len +8, sha256 +12, data +44, `ror8(b^k2,3)^k1`). Lost ~1 min guessing the
+transform from bytes before reading the question; race harness `none` placeholders for hidden config were rejected.
 
-**D19 "Jack in the Box"** (slug `static-unpacking`; 228 Qs; **CORRECT at T+2:25**; TT and Mastery CORRECT first try). Prompt:
-"There's a payload hiding inside this binary, and a little decoder stub wound up to pop it out. Find the stub, watch it work, and
-catch what's inside -- statically." New group = ONE GnuCOBOL ELF (11232 B, dynamic: libcob.so.1, libvbisam.so.1, libgmp.so.10,
-libncurses.so.5, libdl, libm; stripped; old-GCC layout with `.jcr`; `cob_check_version` string `1.5.2`, source `variant-000.cob`,
-host models + trace JSON `cobol_static_unpack_trace` / `memory_only_inert_payload_hash` in `.rodata`). No HCFG/SENGR anywhere in
-the image; a 424-byte `PK19` overlay starts at 10808 = e_shoff 0x2378 + 27*64 (end of the section-header table).
-- Contract = the 216 D18 ids unchanged + 12 d19 ids: sha256, architecture, format (enum incl. `neko_bytecode`), machine,
-  config_campaign/domain/mutex/url/crc32_hex, hcfg_version (all "after unpacking"), NEW `overlay_offset`, `overlay_size`.
-  The config questions spell the whole stub: k1 +5, k2 +6, u32le packed length +8, 32-byte unpacked SHA-256 +12, packed bytes
-  +44, `ror8(byte XOR k2, 3) XOR k1`, verify sha256, HCFG at unpacked offset 0 (k1 0x21, k2 0xa4, len 380 = 12 + 368 JSON).
-- Timeline: race harness banked the 216 carried-over ids at T+26 s; its 9 `none` placeholders for the d19 config/version ids
-  were rejected (harmless probes). The worker first guessed the transform from bytes (xor k1 then ror 3 -> garbage / a spurious
-  partial HCFG at +28) for ~1 min before reading the question text; then implemented it literally + an `overlay_magic()` helper
-  (question-named magic, or the `<2 caps><day>` token for `overlay_size`) -> the 8 open ids accepted in one POST.
-- TT: 4.2 s end to end (download 0.8, solve 1.0); Mastery 5 sets / 1140 ids: 10 s (solve 5.5 s). Overlay 10808/424 identical in
-  every variant; campaign BR19-00V / crc re-rolled; TT d01 stripped again.
+**D20 "Resourceful"** (slug `resources-and-overlays`; 240 Qs; **CORRECT at T+49 s, 0 wrong**; TT 4.8 s and Mastery 9.3 s CORRECT
+first try). Prompt: "Binaries have attics: resources, overlays, bytes past the end of the sections. Rummage through this one's
+hidden storage and map every boundary." New group = ONE Haskell ELF (GHC 9.12.2, gold-linked, 1201351 B, dynamic libgmp/libm/libc,
+not stripped; trace family `haskell_resource_overlay_trace`). A 463-byte `RS20` overlay starts at 1200888 = e_shoff 1198776 +
+33*64; inside it the HCFG resource (380 B) is stored RAW at +48, followed by 35 B of scratch (`private-scratch:BR20-000:inert-only`)
+whose sha256 sits at +16.
+- Contract = the 228 D19 ids unchanged + 12 d20 ids: sha256, architecture, format, machine, config_* x5 + hcfg_version (question =
+  full RS20 layout spec + "verify exact end bounds and scratch SHA-256"), `overlay_offset` (same text as d19: magic offset), NEW
+  `hcfg_resource_size` (u32le at RS20+8). No `overlay_size` on d20.
+- Timeline: the race harness POSTed carried-over + prebuilt answers at T+26-27 s: 228 old ids + 11 d20 ids accepted (the prebuilt
+  `rs20-overlay-candidates` / question-spec unpacker + plain HCFG scan covered config and overlay_offset). Only
+  `hcfg_resource_size` was unknown; the worker added a field branch (`struct.unpack_from('<I', blob, rfind(magic)+8)`; also
+  `scratch_size` = u16le @12 pre-emptively) -> CORRECT in one POST. Overlay offset/resource size identical in TT and all Mastery
+  sets; campaign BR20-00V re-rolled; Mastery set1 d01 stripped again (`none`/`[]` accepted).
 
 ## GM answer conventions learned
 | Field family | Accepted form | Rejected (never resubmit) |
@@ -172,7 +181,8 @@ the image; a 424-byte `PK19` overlay starts at 10808 = e_shoff 0x2378 + 27*64 (e
 | hcfg_version / xor_key_hex | header byte 4 decimal / header byte 5 as `0x%02x` | — |
 | has_hcfg_section (enum) | `true` when a section is literally named `.hcfg` | — |
 | hcfg_offset (integer) | decimal FILE offset: base64 text start (`S`), RAW = the `HCFG` magic | — |
-| overlay_offset / overlay_size (integer, D19) | offset of the LAST occurrence of the day's overlay magic (`PK19`) / file length - that offset (header included) | — |
+| overlay_offset / overlay_size (integer, D19-D20) | offset of the LAST occurrence of the day's overlay magic (`PK19`, `RS20`) / file length - that offset (header included) | — |
+| hcfg_resource_size (integer, D20) | the overlay header's u32le resource-length field (RS20+8) in base 10 = the HCFG record length (12 + payload) | overlay size, payload-only length (not tried, but distinct values) |
 | hcfg_storage (enum, D17) | `base64`, `raw_hcfg_section`, `raw_const_array`, `wasm_data_segment`, `raw` | every free-text spelling (~10.9k probes) -- closed token set |
 | compression_methods (jar, json) | sorted distinct ZIP method ids, compact: `[0,8]` (names also accepted) | — |
 Naming law (from playbook.py): native format = container only; a managed .NET binary = container_runtime (pe+cli).
@@ -184,6 +194,8 @@ Java broke the compound law (`jar`); bytecode VMs get `<vm>_bytecode` (`neko_byt
   then RE-PULL THE CONTRACT periodically and diff each id's question/answer_format. Never mass-probe an exact_text label.
 - **Reversing what the question already specifies** (D19, ~1 min): the config questions gave offsets, transform and hash check;
   guessing the transform from bytes produced a spurious partial HCFG. Read the longest question of each new family FIRST.
+- **Size fields name a specific header field** (D20): `hcfg_resource_size` = the length field at +8, not the overlay length, not
+  the JSON length. For every `*_size`/`*_length` id, map it to the exact header field the config question's layout names.
 - **Absence vs hidden**: `none`/`[]`/`false` is right when the thing is ABSENT (stripped d01, D1 TT, D2 Mastery set2; a re-asked
   field inherits it), wrong when it is merely HIDDEN (D19 config: packed, the race harness's `none` placeholders were rejected).
 - **A multi-field POST is all-or-nothing.** One wrong field fails the set and hides which one (D2). Submit unconfirmed/new fields

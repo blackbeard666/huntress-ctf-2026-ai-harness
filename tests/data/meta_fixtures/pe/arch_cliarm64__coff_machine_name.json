@@ -1,0 +1,7 @@
+{
+ "field": "pe.coff_machine_name",
+ "expected": "ARM64",
+ "generator_cmd": "cp setuptools/cli-arm64.exe (MSVC-built launcher, unmodified)",
+ "oracle_cmd": "python3 -I -c \"import pefile,sys;p=pefile.PE(sys.argv[1]);c=pefile.MACHINE_TYPE[p.FILE_HEADER.Machine];print(c if sys.argv[2]=='const' else {'IMAGE_FILE_MACHINE_I386':'x86','IMAGE_FILE_MACHINE_AMD64':'x64','IMAGE_FILE_MACHINE_ARM64':'ARM64'}[c])\" <bin> name  (short = dumpbin /headers 'machine (x86|x64|ARM64)' vocabulary)",
+ "decoy": false
+}

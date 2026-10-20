@@ -1,0 +1,12 @@
+{
+ "entry": "appended_archive_facts",
+ "bin": "sfx_decoy_magic_strings.bin",
+ "password": null,
+ "expected": {
+  "archive_offset": "none"
+ },
+ "decoy": true,
+ "note": "DECOY: 'ustar'/'hsqs'/'7z'/'PK' strings in .rodata, no archive",
+ "generator_cmd": "bash tests/data/binary_fixtures/sfx_gen.sh   # gcc ELF stub + zip -X / zip -A / zip -P / tar --format=ustar / mksquashfs -comp gzip|xz / 7z a, concatenated with cat",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/sfx_oracle.py tests/data/binary_fixtures/sfx_decoy_magic_strings.bin   # 7z l -slt / 7z e -so | sha256 / readelf -hW"
+}

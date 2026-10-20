@@ -1,0 +1,8 @@
+{
+ "field": "jar.manifest_main_class",
+ "expected": "none",
+ "generator_cmd": "echo hello > readme.txt; zip -qX notajar.zip readme.txt (plain zip, no META-INF/MANIFEST.MF)",
+ "oracle_cmd": "java Oracle.java notajar.zip -> NO MANIFEST; file notajar.zip -> Zip archive data (not a jar)",
+ "decoy": true,
+ "member": "app.jar"
+}

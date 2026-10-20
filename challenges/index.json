@@ -113,6 +113,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Jack in the Box"
   },
+  "binary-reverse-engineering-day-20-resources-and-overlays": {
+    "day": 20,
+    "dir": "day20/binary-resourceful",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Resourceful"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -227,6 +233,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Little Endian on the Prairie"
   },
+  "metadata-forensics-day-20-universal-appeal": {
+    "day": 20,
+    "dir": "day20/metadata-universal-appeal",
+    "lane": "metadata-forensics",
+    "name": "🔎 Universal Appeal"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -340,6 +352,12 @@
     "dir": "day19/mobile-reflection-maze",
     "lane": "mobile-android",
     "name": "📱 Reflection Maze"
+  },
+  "mobile-android-day-20-loaded-later": {
+    "day": 20,
+    "dir": "day20/mobile-loaded-later",
+    "lane": "mobile-android",
+    "name": "📱 Loaded Later"
   },
   "read-the-rules": {
     "day": 1,
@@ -461,6 +479,12 @@
     "lane": "script-analysis",
     "name": "📜 Sharp Practice"
   },
+  "script-analysis-day-20-jenkins-pipeline-intrusion": {
+    "day": 20,
+    "dir": "day20/scripting-the-butler-did-it",
+    "lane": "script-analysis",
+    "name": "📜 The Butler Did It"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -575,6 +599,12 @@
     "lane": "warmups",
     "name": "👶 Little Things"
   },
+  "warmups-day-20": {
+    "day": 20,
+    "dir": "day20/warmups-big-entrance",
+    "lane": "warmups",
+    "name": "👶 Big Entrance"
+  },
   "web-exploitation-day-01-backup-exposure": {
     "day": 19,
     "dir": "day01/web-back-up-a-minute",
@@ -592,6 +622,18 @@
     "dir": "day03/web-query-me-this",
     "lane": "web",
     "name": "🌐 Query Me This"
+  },
+  "web-exploitation-day-04-lfi": {
+    "day": 20,
+    "dir": "day20/web-stay-in-your-directory",
+    "lane": "web",
+    "name": "🌐 Stay in Your Directory"
+  },
+  "web-exploitation-day-05-administratively-speaking": {
+    "day": 20,
+    "dir": "day20/web-administratively-speaking",
+    "lane": "web",
+    "name": "🌐 Administratively Speaking"
   },
   "welcome-robots": {
     "day": 1,

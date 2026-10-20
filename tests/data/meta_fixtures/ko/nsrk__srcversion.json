@@ -1,0 +1,8 @@
+{
+ "field": "ko.srcversion",
+ "expected": "3F2A9C1D0B7E66A1C2D4E58",
+ "generator_cmd": "gcc 13 -c -O2 m.c -o nsrk.ko  (m.c = MODULE_INFO-style `static const char __mod_X[] __attribute__((used, section(\".modinfo\"))) = \"key=value\"` for version/license/author/description/srcversion/depends/retpoline/name/vermagic=\"6.8.0-45-generic SMP preempt mod_unload modversions \")",
+ "oracle_cmd": "modinfo -F srcversion nsrk.ko -> 3F2A9C1D0B7E66A1C2D4E58",
+ "decoy": false,
+ "member": "nsrk.ko"
+}

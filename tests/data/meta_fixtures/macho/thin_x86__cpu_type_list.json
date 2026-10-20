@@ -1,0 +1,8 @@
+{
+ "field": "macho.cpu_type_list",
+ "expected": "[\"0x01000007\"]",
+ "generator_cmd": "zig cc -target x86_64-macos.10.13 -o prog_x86 p.c (input reused from zig_x86_64_exe_vmin fixture)",
+ "oracle_cmd": "/usr/lib/llvm-18/bin/llvm-otool -h thin_x86__cpu_type_list.bin: cputype 16777223 -> 0x01000007",
+ "decoy": false,
+ "member": "prog_x86"
+}

@@ -223,6 +223,14 @@ METADATA_SYNTHESIS_DIGEST_ORDER = "sorted(Files, key=hexdigest(member bytes)) as
 EMAIL_MESSAGE_ID = "Message-ID header verbatim, <> kept"
 EMAIL_MESSAGE_ID_REJECTED = ["artifact-assembly-line@example.test", "none"]
 
+# Day 20 "Universal Appeal" (metadata-forensics), confirmed 2026-10-20 (single 7d6300e9, TT, Mastery 5 sets): id
+# d20-macho-NNN-macho-cpu-type-set ("Determine macho.cpu_type_set for macos-NNN.bin.") = the cputype u32 of every slice
+# as lowercase "0x%08x" in a compact JSON list -- fat_arch order for a universal file, the header's cputype for a thin
+# one. Every variant was thin arm64 -> ["0x0100000c"]; the arch-name list ["arm64"] was REJECTED on the single. Fat order
+# and dedupe are unverified. lib.meta.macho.cpu_type_set.
+MACHO_CPU_TYPE_SET = 'json(["0x%08x" % cputype for each fat_arch slice, else the thin header])'
+MACHO_CPU_TYPE_SET_REJECTED = ['["arm64"]']
+
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {
     "resource_hijacking": "T1496",     # crypto-mining / resource hijacking

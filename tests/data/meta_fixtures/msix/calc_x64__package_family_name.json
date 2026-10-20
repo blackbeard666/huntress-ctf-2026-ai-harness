@@ -1,0 +1,8 @@
+{
+ "field": "msix.package_family_name",
+ "expected": "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+ "generator_cmd": "zip -qrX calc_x64.msix AppxManifest.xml AppxBlockMap.xml '[Content_Types].xml' AppxSignature.p7x CalculatorApp.exe (hand-written win10 foundation manifest: Identity x64, 2 TargetDeviceFamily, Capability/rescap:Capability/DeviceCapability; random-bytes AppxSignature.p7x)",
+ "oracle_cmd": "echo Microsoft.WindowsCalculator_8wekyb3d8bbwe  # documented PackageFamilyName (Get-AppxPackage Microsoft.WindowsCalculator) for this Name + Publisher",
+ "decoy": false,
+ "member": "calc_x64.msix"
+}

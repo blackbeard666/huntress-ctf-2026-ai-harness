@@ -1,0 +1,8 @@
+{
+ "field": "cpio.member_names",
+ "expected": "none",
+ "generator_cmd": "tar -cf decoy.tar bin_le.cpio (GNU tar renamed as a cpio member)",
+ "oracle_cmd": "file -b decoy.tar -> 'POSIX tar archive (GNU)': not cpio",
+ "decoy": true,
+ "member": "decoy.tar"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "multi_stage_scan",
+ "expected": "ANS-4d7c19e3a05b82f6",
+ "_why": "row 85 multi-stage loader: outer dex KEY '0uterStage1Key!!' -> assets/stage1.bin AES-128-CBC (IV prefix) = stage-1 dex naming 'assets/core.dat' + byte[] K2 (fill-array-data) -> RC4(K2) stage-2 dex with the token",
+ "generator_cmd": "python3 tests/data/android_fixtures/msl_src/gen_msl.py aes_rc4 tests/data/android_fixtures/msl_aes_rc4.apk  # javac+d2j-jar2dex dexes; ciphers: openssl enc (aes-128-cbc iv-prefixed / aes-128-ecb / rc4 legacy provider); jar via `zip`",
+ "oracle_cmd": "unzip -p msl_aes_rc4.apk assets/stage1.bin > s1; dd if=s1 bs=16 skip=1 | openssl enc -d -aes-128-cbc -K $(printf '0uterStage1Key!!' | xxd -p) -iv $(head -c16 s1 | xxd -p) | strings | grep core.dat; unzip -p msl_aes_rc4.apk assets/core.dat | openssl enc -d -rc4 -provider legacy -provider default -K 9f3c61e2a7b04d58c19e2f7a63b8d045 | strings | grep -oE 'ANS-[0-9a-f]{16}'"
+}

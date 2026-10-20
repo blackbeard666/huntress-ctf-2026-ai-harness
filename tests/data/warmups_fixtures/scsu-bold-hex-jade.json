@@ -1,0 +1,9 @@
+{
+ "codec": "scsu",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-falcon-63",
+ "encoded": "0be1a88da29c9e20b0a8aba4209d9e9ca89da2a7a020ada1a2ac20b09aaba6aea9212093a820aca8a5af9e2c20acae9ba6a2ad20ada1a2ac209eb19a9cad209aa7acb09eab20ada820ada19e20869aa69e208c9aacad9eab3a20a39a9d9e2d9f9aa59ca8a72d0b01afd4d1",
+ "generator_cmd": "printf %s \"$plain\" | python3 -c 'import sys,unicodedata as u;print(\"\".join(u.lookup((\"MATHEMATICAL BOLD \"+(\"CAPITAL \" if c.isupper() else \"SMALL \")+c.upper()) if c.isalpha() else \"MATHEMATICAL BOLD DIGIT \"+u.name(c).split()[-1]) if c.isalnum() else c for c in sys.stdin.read()),end=\"\")' | uconv -f utf-8 -t SCSU | xxd -p | tr -d '\\n'",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | uconv -f SCSU -t utf-8 | python3 -c 'import sys,unicodedata;print(unicodedata.normalize(\"NFKC\",sys.stdin.read()),end=\"\")'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-falcon-63",
+ "expected": "match"
+}

@@ -1,8 +1,9 @@
 """`archive.<field>`: the format-neutral alias for the tar / iso prebuilt modules (prebuilt, SPECULATIVE).
 
 The GM may name the family instead of the container ("Determine archive.member_names ..."). Route by MAGIC, never by
-the member's extension: ISO 9660 = "CD001" @0x8001 -> iso.py; tar = a header that tarfile accepts (checksum-verified)
+the member's extension: ar ("!<arch>"/"!<thin>" or a fat wrapper of ar slices) -> ar.py; ISO 9660 = "CD001" @0x8001 -> iso.py; tar = a header that tarfile accepts (checksum-verified)
 -> tar.py. Field spelling and rendering are exactly those modules' (see their docstrings). Neither -> "none"."""
+from . import ar as _ar
 from . import iso as _iso
 from . import tar as _tar
 
@@ -57,6 +58,11 @@ def archive_value(data, ctx):
         if data is None:
             return None
         f = (ctx or {}).get("field") or ""
+        if _ar.archives(data):
+            ok = f in ("member_names", "member_count", "entry_count", "member_sizes", "member_sizes_bytes",
+                        "member_mtimes_utc", "member_mtimes", "member_mtimes_unix", "member_modes",
+                        "member_modes_octal", "member_uids", "member_gids")
+            return _ar.ar_value(data, dict(ctx or {}, field=f)) if ok else "none"
         if len(data) >= 0x8006 and bytes(data[0x8001:0x8006]) == b"CD001":
             if f in ("member_names",):
                 f = "root_member_names"

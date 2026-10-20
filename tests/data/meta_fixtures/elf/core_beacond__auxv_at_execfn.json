@@ -1,0 +1,8 @@
+{
+ "field": "elf.auxv_at_execfn",
+ "expected": "./beacond",
+ "generator_cmd": "gcc -static -O2 s.c -o beacond -lpthread (main + 2 pthreads, 16 KiB stacks, abort()); (ulimit -c unlimited; sh -c \"echo 1 > /proc/$$/coredump_filter; exec ./beacond --mode stealth -c /etc/x.conf\") -> kernel 6.6 WSL2 core dump",
+ "oracle_cmd": "python3 -c \"from elftools.elf.elffile import ELFFile ...\" (pyelftools 0.31 iter_notes: NT_PRPSINFO pr_fname=b\\\"beacond\\\", pr_psargs=b\\\"./beacond --mode stealth -c /etc/x.conf \\\", NT_FILE num_map_entries=5 filename=[5 x .../beacond], 3 x NT_PRSTATUS); readelf -n (3 NT_PRSTATUS); gdb -batch -c core -ex \"info auxv\" -> AT_EXECFN \"./beacond\", AT_PLATFORM \"x86_64\"; file -> from './beacond --mode stealth -c /etc/x.conf', execfn: './beacond'",
+ "decoy": false,
+ "member": "beacond.core"
+}

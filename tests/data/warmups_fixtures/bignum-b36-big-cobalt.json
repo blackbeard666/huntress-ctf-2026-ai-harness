@@ -1,0 +1,9 @@
+{
+ "codec": "bignum",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "encoded": "64ic6atz6g4s1qhymzm9l4a9qfnbcqorj1wm19a7umplqyyu0ex58qqm29shbei2n2ixf1d7wdikayfan2hv2vwn83gq0vnykdpwvvnwhn8icrcwm5voqcp4jakq3x4o67iikjnfsbn98rhry9mig1bkhwzebb",
+ "generator_cmd": "printf %s \"$plain\" | .venv/bin/python -I -c \"import sys,numpy;from Crypto.Util.number import bytes_to_long;print(numpy.base_repr(bytes_to_long(sys.stdin.buffer.read()),36).lower())\"  # pycryptodome bytes_to_long + numpy.base_repr radix 36",
+ "oracle_cmd": "printf %s \"$encoded\" | .venv/bin/python -I -c \"import sys;from Crypto.Util.number import long_to_bytes;print(long_to_bytes(int(sys.stdin.read().strip(),36)).decode())\"  # pycryptodome long_to_bytes (RSA style, big-endian)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "expected": "match"
+}

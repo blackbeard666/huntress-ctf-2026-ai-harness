@@ -1,0 +1,9 @@
+{
+ "codec": "bytebitrev-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "7296c6a604eef64ed60426a6c6f6269676e6042e1696ce04ee864eb6ae0e84042af604cef6366ea63404ceae46b6962e042e1696ce04a61e86c62e048676ceeea64e042ef6042e16a604e286b6a604b286ce2ea64e5c0486b646a64eb4668636c6f676b42c4c",
+ "generator_cmd": "perl -e 'print pack(\"b*\", unpack(\"B*\", $ARGV[0]))' \"$plain\" | xxd -p | tr -d '\\n'  # perl unpack B* (MSB-first bits) -> pack b* (LSB-first) mirrors each byte's bits; xxd / coreutils base64",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | basenc -w0 --base2lsbf | basenc --base2msbf -d  # GNU basenc: LSB-first bit dump re-read MSB-first = per-byte bit reversal",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

@@ -1,0 +1,23 @@
+{
+ "encoding": "raw",
+ "expected_offset": 8196,
+ "expected_config": {
+  "c2": "jl.example:9000",
+  "mode": "sysimg"
+ },
+ "expected_facts": {
+  "runtime": "julia",
+  "has_graalvm": "false",
+  "has_julia": "true",
+  "image_section": ".rodata",
+  "hcfg_offset": "8196",
+  "hcfg_encoding": "raw",
+  "hcfg_config": "{\"c2\":\"jl.example:9000\",\"mode\":\"sysimg\"}",
+  "hcfg_section": ".rodata",
+  "julia_version": "1.10.4"
+ },
+ "generator_cmd": "bash aotimg_gen.sh   # step 3 (gcc 15; blob by python3 stdlib struct/zlib/base64)",
+ "oracle_cmd": "python3 -I aotimg_oracle.py   # readelf -SW / nm / nm -D / readelf -d / grep -obUa / strings -a + stdlib xor-crc decode",
+ "decoy": false,
+ "note": "step 3: gcc -shared sys.so exporting jl_system_image_data (.rodata) + raw blob"
+}

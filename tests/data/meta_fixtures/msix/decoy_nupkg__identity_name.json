@@ -1,0 +1,8 @@
+{
+ "field": "msix.identity_name",
+ "expected": "none",
+ "generator_cmd": "zip -qrX decoy_nupkg.msix readme.txt Contoso.FleetAgent.nuspec (a plain zip / nupkg renamed .msix: no AppxManifest.xml)",
+ "oracle_cmd": "unzip -Z1 decoy_nupkg.msix | grep -qix AppxManifest.xml && echo HAS || echo none",
+ "decoy": true,
+ "member": "decoy_nupkg.msix"
+}

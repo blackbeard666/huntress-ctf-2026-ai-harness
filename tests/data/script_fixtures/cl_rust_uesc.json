@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=rust|role=loader|verdict=malicious|attack=T1105|adapter=http_get|host_profile=standalone|obfuscation_profile=uesc|stage_profile=two_stage_download_execute|next_language=powershell|stage_count=2|steps=fetch_stage,run_stage|campaign_id=RUS-dbd47104|url=https://rust-dbd47104e6.example.invalid/stage|file_path=/tmp/huntress-rust/.e6f8f577b920405d.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/cl_gen.py  (stdlib base64/bytes.hex; rs template)",
+ "oracle_cmd": "rustc -o $TMPDIR/clu tests/data/script_fixtures/cl_rust_uesc.rs && $TMPDIR/clu | base64 -d"
+}

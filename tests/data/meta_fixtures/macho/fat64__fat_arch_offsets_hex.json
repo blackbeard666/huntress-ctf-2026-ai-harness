@@ -1,0 +1,8 @@
+{
+ "field": "macho.fat_arch_offsets_hex",
+ "expected": "[\"0x0000000000001000\",\"0x0000000000008000\"]",
+ "generator_cmd": "llvm-lipo-18 -create -fat64 prog_x86 prog_arm64 -output fat64_prog",
+ "oracle_cmd": "python -I -c 'from macholib.MachO import MachO; import sys; m=MachO(sys.argv[1]); print(m.fat and hex(m.fat.magic), [(hex(h.header.cputype), hex(h.header.cpusubtype), h.header.filetype, h.offset) for h in m.headers])' fat64__fat_arch_offsets_hex.bin: slice offsets 4096, 32768 (fat_arch_64 u64 -> 16 hex digits)",
+ "decoy": false,
+ "member": "fat64_prog"
+}

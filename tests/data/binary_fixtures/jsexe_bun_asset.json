@@ -1,0 +1,21 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "runtime": "bun",
+  "entry_name": "/$bunfs/root/b2.exe",
+  "embedded_source_offset": "18276",
+  "embedded_source_size": "108",
+  "embedded_source_sha256": "e6ac39a78daf5dbb160ed2200cab1493379de2f76dfcd17c49ee4f918d2f79b4",
+  "module_count": "2",
+  "module_names": [
+   "/$bunfs/root/b2.exe",
+   "/$bunfs/root/banner-4b27gr6r.txt"
+  ]
+ },
+ "generator_cmd": "bash jsexe_gen.sh   # step 5 (bun 1.2.23 build --compile --minify b2/cli.ts with a type:file asset)",
+ "oracle_cmd": "grep -obUa '// @bun' (18276) ; grep -obUaP 'text\\(\\)\\);\\n\\x00/\\$bunfs' (end 18384 -> 108) ; dd skip=18276 count=108 | sha256sum ; strings -a | grep '^/$bunfs'",
+ "decoy": false,
+ "note": "two-module graph: entry + embedded file asset"
+}

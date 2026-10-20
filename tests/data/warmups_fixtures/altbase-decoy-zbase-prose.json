@@ -1,0 +1,10 @@
+{
+ "codec": "zbase32",
+ "plain": null,
+ "encoded": "the quick brown fox jumps over",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "literal English prose",
+ "oracle_cmd": "printf %s \"$encoded\" | AB=$PWD/tools/npm-altbase tools/node/bin/node tests/data/warmups_fixtures/altbase_oracle.mjs ybndrfg8ejkmcpqxot1uwisza345h769  # rfc4648 parse: spaces / 'v'/'l' -> error",
+ "oracle_plain": null
+}

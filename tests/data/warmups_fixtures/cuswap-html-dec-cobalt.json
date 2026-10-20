@@ -1,0 +1,10 @@
+{
+ "codec": "cuswap",
+ "decoder": "cuswap_dec(encoded, swap=True)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "encoded": "&#19968;&#26880;&#25344;&#25856;&#8192;&#30464;&#28416;&#29184;&#27392;&#8192;&#25600;&#25856;&#25344;&#28416;&#25600;&#26880;&#28160;&#26368;&#8192;&#29696;&#26624;&#26880;&#29440;&#8192;&#30464;&#24832;&#29184;&#27904;&#29952;&#28672;&#8448;&#8192;&#21504;&#28416;&#8192;&#29440;&#28416;&#27648;&#30208;&#25856;&#11264;&#8192;&#29440;&#29952;&#25088;&#27904;&#26880;&#29696;&#8192;&#29696;&#26624;&#26880;&#29440;&#8192;&#25856;&#30720;&#24832;&#25344;&#29696;&#8192;&#24832;&#28160;&#29440;&#30464;&#25856;&#29184;&#8192;&#29696;&#28416;&#8192;&#29696;&#26624;&#25856;&#8192;&#18176;&#24832;&#27904;&#25856;&#8192;&#19712;&#24832;&#29440;&#29696;&#25856;&#29184;&#14848;&#8192;&#25344;&#28416;&#25088;&#24832;&#27648;&#29696;&#11520;&#26624;&#25856;&#29184;&#28416;&#28160;&#11520;&#14080;&#14080;",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c \"import sys;sys.stdout.write(sys.stdin.read().encode('utf-16-le').decode('utf-16-be'))\" | python3 -I -c \"import sys;sys.stdout.write(sys.stdin.read().encode('ascii','xmlcharrefreplace').decode())\"  # xmlcharrefreplace decimal &#NNNNN;",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys,html;sys.stdout.write(html.unescape(sys.stdin.read()))\" | python3 -I -c \"import sys;sys.stdout.write(sys.stdin.read().encode('utf-16-be').decode('utf-16-le'))\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "expected": "match"
+}

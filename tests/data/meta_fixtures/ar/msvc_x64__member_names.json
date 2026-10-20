@@ -1,0 +1,8 @@
+{
+ "field": "ar.member_names",
+ "expected": "[\"util_x64.obj\"]",
+ "generator_cmd": "zig cc -target x86_64-windows-msvc -c util.c -o util_x64.obj; llvm-lib-18 /out:win_x64.lib util_x64.obj",
+ "oracle_cmd": "ar t win_x64.lib",
+ "decoy": false,
+ "member": "win_x64.lib"
+}

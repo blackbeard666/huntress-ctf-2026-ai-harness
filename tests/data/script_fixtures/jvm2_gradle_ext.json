@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=gradle_groovy|role=stager|verdict=malicious|attack=T1059|adapter=build_exec|host_profile=standalone|obfuscation_profile=b64|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=fetch_stage,run_stage|campaign_id=JVM-a681b148|url=https://jvm-a681b1488c.example.invalid/stage|file_path=/tmp/huntress-jvm/.8c4fee0cec9a294e.stage",
+ "decoy": false,
+ "host": "gradle",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/jvm2_gen.py  (plan -> descriptor)",
+ "oracle_cmd": "perl -0ne \"print \\$1.\\$2 if /ext\\.descriptor_489dde44 = '(.*?)' \\+\\s+'(.*?)'/s\" tests/data/script_fixtures/jvm2_gradle_ext.gradle | tr -d ' \\n\\r|' | base64 -d"
+}

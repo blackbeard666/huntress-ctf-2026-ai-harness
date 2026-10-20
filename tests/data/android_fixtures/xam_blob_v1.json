@@ -1,0 +1,7 @@
+{
+ "entry": "xamarin_assembly_scan",
+ "expected": "ANS-a1b2c3d4e5f60718",
+ "generator_cmd": "bash tests/data/android_fixtures/xam_src/gen.sh  (DLLs: tools/pwsh/pwsh -File xam_src/mk.ps1 = Roslyn Add-Type; `pyxamstore pack -c assemblies.json` -> assemblies.blob v1 + manifest, HuntressGate2 lz4, zip -X)",
+ "oracle_cmd": "unzip -j xam_blob_v1.apk 'assemblies/*' -d v1 && cd v1 && pyxamstore unpack -d . && python3 -c \"import dnfile;print(dnfile.dnPE('out/HuntressGate2.dll').net.user_strings.get(1).value)\"",
+ "decoy": false
+}

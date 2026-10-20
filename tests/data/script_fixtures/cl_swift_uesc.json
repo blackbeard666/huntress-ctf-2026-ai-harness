@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=swift|role=launcher|verdict=malicious|attack=T1059.002|adapter=nstask|host_profile=standalone|obfuscation_profile=uesc|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=build_cmd,spawn_process|campaign_id=SWI-3a9c085e|url=https://swift-3a9c085e05.example.invalid/stage|file_path=/tmp/huntress-swift/.05148c8e3c911dd0.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/cl_gen.py  (stdlib base64/bytes.hex; swift template)",
+ "oracle_cmd": "perl -ne 'print $1 if /= \"(.*)\"/' tests/data/script_fixtures/cl_swift_uesc.swift | perl -pe 's/\\\\u\\{([0-9a-f]+)\\}/chr hex $1/ge' | base64 -d"
+}

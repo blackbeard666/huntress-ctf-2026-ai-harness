@@ -1,0 +1,7 @@
+{
+ "entry": "multi_stage_candidates",
+ "expected": "ANS-a83f5e0217c9d64b",
+ "_why": "row 85, 3 stages + nested container: outer KEY 'l0ader-Outer-K3y' RC4 -> stage-1 jar (classes.dex + assets/next.enc); stage-1 const 'Inner#Key-2026$q' AES-128-ECB -> stage-2 dex naming 'assets/final.bin' (outer APK) + byte[] key -> RC4 stage-3 dex",
+ "generator_cmd": "python3 tests/data/android_fixtures/msl_src/gen_msl.py jar_aes_rc4 tests/data/android_fixtures/msl_jar_aes_rc4.apk  # javac+d2j-jar2dex dexes; ciphers: openssl enc (aes-128-cbc iv-prefixed / aes-128-ecb / rc4 legacy provider); jar via `zip`",
+ "oracle_cmd": "unzip -p msl_jar_aes_rc4.apk assets/stage1.bin | openssl enc -d -rc4 -provider legacy -provider default -K $(printf 'l0ader-Outer-K3y' | xxd -p) > s1.jar; unzip -p s1.jar assets/next.enc | openssl enc -d -aes-128-ecb -K $(printf 'Inner#Key-2026$q' | xxd -p) | strings | grep final.bin; unzip -p msl_jar_aes_rc4.apk assets/final.bin | openssl enc -d -rc4 -provider legacy -provider default -K 5ac31e77902be4d1086fa93c27b5e04d | strings | grep -oE 'ANS-[0-9a-f]{16}'"
+}

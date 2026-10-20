@@ -1,0 +1,9 @@
+{
+ "codec": "geohash32",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-05",
+ "encoded": "9tnq6t90fxrr4ut0djkq6vv4e5r6f83ne1nr683rd5t6uxch44h58vt0ferqsxm55hh76xc2epnr883ne1nr6835g1hq6x10d5r76xv5f8h78vt0fjn6b827d5qqb82ed5tr8tck78h66v3gftkr4cc2d5k6ftck5ns3b",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/altbase_cyberchef.mjs b32 '0-9b-hjkmnp-z=' nopad  # CyberChef 'To Base32' Geohash alphabet",
+ "oracle_cmd": "printf %s \"$encoded\" | AB=$PWD/tools/npm-altbase tools/node/bin/node tests/data/warmups_fixtures/altbase_oracle.mjs 0123456789bcdefghjkmnpqrstuvwxyz  # npm rfc4648 codec.parse custom chars",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-05",
+ "expected": "match"
+}

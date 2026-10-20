@@ -1,0 +1,17 @@
+{
+ "encoding": "zlib",
+ "expected_format": "beam",
+ "decoy": false,
+ "expected_module": "cfgmod",
+ "expected_offset": 388,
+ "expected_config": {
+  "c2": "192.0.2.77:53",
+  "campaign": "rawz",
+  "sleep": 7,
+  "flag": "flag{b34m_r4w_zl1b}"
+ },
+ "generator_cmd": "bash beam_gen.sh beam_litt_raw.bin beam '{\"c2\":\"192.0.2.77:53\",\"campaign\":\"rawz\",\"sleep\":7,\"flag\":\"flag{b34m_r4w_zl1b}\"}' 0x21 raw",
+ "oracle_cmd": "bash beam_oracle.sh beam_litt_raw.bin   # file -b + OTP 27 beam_lib:chunks/escript:extract/zip:extract/zlib:uncompress/base64:decode/erlang:crc32",
+ "oracle_output": "Erlang BEAM file | 388 | cfgmod | raw-in-zlib | HCFG 1 33 79 4177053549 4177053549 | {\"c2\":\"192.0.2.77:53\",\"campaign\":\"rawz\",\"sleep\":7,\"flag\":\"flag{b34m_r4w_zl1b}\"}",
+ "note": "format label SPECULATIVE (not in the GM enum: 'beam'/'escript'); raw blob in LitT = the EXISTING zlib anchor hit (encoding unchanged, detail at+14)"
+}

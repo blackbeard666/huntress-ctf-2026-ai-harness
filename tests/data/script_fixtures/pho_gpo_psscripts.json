@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=powershell|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=gpo_scripts_ini|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=powershell|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=GPO-9d0e1f2a|url=https://gpo-9d0e1f2a.example.invalid/stage|file_path=/tmp/huntress-gpo-9d0e1f2a/.stage",
+ "decoy": false,
+ "profile_guess": "gpo_scripts_ini",
+ "generator_cmd": "python3 tests/data/script_fixtures/prior_host_gen.py  # python3 str.encode('utf-16-le') | base64 (-enc), ini written UTF-16LE with BOM, written as pho_gpo_psscripts.ini",
+ "oracle_cmd": "iconv -f UTF-16 -t UTF-8 pho_gpo_psscripts.ini | grep -oP '(?<=-enc )[A-Za-z0-9+/=]+' | base64 -d | iconv -f UTF-16LE -t UTF-8 | grep -oE '[A-Za-z0-9+/=]{40,}' | base64 -d"
+}

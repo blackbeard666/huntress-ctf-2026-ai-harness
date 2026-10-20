@@ -1,0 +1,11 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "expected_kind": {
+  "kind": "notebook",
+  "reader": "json_scripts"
+ },
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ek_gen.py tests/data/script_fixtures (nbformat 4 JSON via stdlib json)",
+ "oracle_cmd": "jq -e '.nbformat' ek_notebook_plain.ipynb  # 4",
+ "note": "evidence-magic-classifier: lib.codec.evidence_kind(name, data) must return expected_kind; as a script fixture the evidence holds no plan, so find_codecs must not invent one"
+}

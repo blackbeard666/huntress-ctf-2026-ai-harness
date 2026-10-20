@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep(caesar+7)",
+ "day": 14,
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-zebra-54",
+ "encoded": "Gbvx phkd wxvhwbgz mabl ptkfni! Mh lheox, lnufbm mabl xqtvm tglpxk mh max Ztfx Ftlmxk: ftiex-sxukt-54",
+ "generator_cmd": "printf %s \"$plain\" | tr 'A-Za-z' 'T-ZA-St-za-s'  # knob: direction flipped (caesar -7)",
+ "oracle_cmd": "printf %s \"$encoded\" | tr 'T-ZA-St-za-s' 'A-Za-z'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-zebra-54",
+ "expected": "match"
+}

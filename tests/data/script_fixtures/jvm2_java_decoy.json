@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "java",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/jvm2_gen.py  (benign base64 descriptor, no plan)",
+ "oracle_cmd": "cp tests/data/script_fixtures/jvm2_java_decoy.java $TMPDIR/Warmup.java && java $TMPDIR/Warmup.java | tr -d ' \\n\\r|' | base64 -d   # -> benign text, not a v=3 plan"
+}

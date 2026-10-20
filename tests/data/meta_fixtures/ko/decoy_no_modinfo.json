@@ -1,0 +1,8 @@
+{
+ "field": "ko.license",
+ "expected": "none",
+ "generator_cmd": "echo \"int f(void){return 1;}\" > p.c; gcc -c p.c -o plain.ko (no .modinfo section)",
+ "oracle_cmd": "modinfo plain.ko -> 'ERROR: could not get modinfo from plain: No data available'; readelf -S plain.ko (no .modinfo)",
+ "decoy": true,
+ "member": "helper.ko"
+}

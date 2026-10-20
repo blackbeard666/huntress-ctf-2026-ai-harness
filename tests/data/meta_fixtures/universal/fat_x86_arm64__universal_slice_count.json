@@ -1,0 +1,8 @@
+{
+ "field": "universal.slice_count",
+ "expected": "2",
+ "generator_cmd": "llvm-lipo-18 -create prog_x86 prog_arm64 -output fat_prog",
+ "oracle_cmd": "/usr/lib/llvm-18/bin/llvm-otool -f fat_x86_arm64__universal_slice_count.bin: nfat_arch 2",
+ "decoy": false,
+ "member": "fat_prog"
+}

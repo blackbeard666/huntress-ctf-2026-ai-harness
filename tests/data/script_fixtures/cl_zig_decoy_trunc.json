@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/cl_gen.py  (stdlib base64/bytes.hex; zig template)",
+ "oracle_cmd": "sed -n 's/^ *\\\\\\\\//p' tests/data/script_fixtures/cl_zig_decoy_trunc.zig | tr -d '\\n' | base64 -d | gzip -dc   # truncated gzip: unexpected end of file, no plan"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "macho.fat_arch_offsets_hex",
+ "expected": "[\"0x00001000\",\"0x00008000\"]",
+ "generator_cmd": "llvm-lipo-18 -create prog_x86 prog_arm64 -output fat_prog",
+ "oracle_cmd": "/usr/lib/llvm-18/bin/llvm-otool -f fat_x86_arm64__fat_arch_offsets_hex.bin: offset 4096, 32768",
+ "decoy": false,
+ "member": "fat_prog"
+}

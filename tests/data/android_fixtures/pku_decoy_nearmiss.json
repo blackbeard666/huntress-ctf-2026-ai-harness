@@ -1,0 +1,8 @@
+{
+ "entry": "nested_scan",
+ "expected": null,
+ "_why": "wrapped secondary payload, wrapper recovered from the file magic (payload-magic-known-plaintext-unwrap): DECOY: d2j dex xor'd with a 7-byte key whose token is a near-miss (non-hex 'g') + a random blob",
+ "generator_cmd": "python3 tests/data/android_fixtures/pku_src/gen_pku.py decoy_nearmiss tests/data/android_fixtures/pku_decoy_nearmiss.apk  # DECOY: d2j dex xor'd with a 7-byte key whose token is a near-miss (non-hex 'g') + a random blob",
+ "oracle_cmd": "unzip -p pku_decoy_nearmiss.apk assets/core.dat | python3 -c \"import sys;k=bytes.fromhex('e1724bc93d0a58');b=sys.stdin.buffer.read();sys.stdout.buffer.write(bytes(x^k[i%7] for i,x in enumerate(b)))\" | strings | grep -oE 'ANS-[0-9a-z]{16}'  # -> ANS-5e8b1d4c27a0f9g3 (not hex): no valid token",
+ "decoy": true
+}

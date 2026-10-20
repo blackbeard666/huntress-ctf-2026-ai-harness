@@ -1,0 +1,12 @@
+{
+ "encoding": "none",
+ "expected_format": "beam",
+ "decoy": true,
+ "expected_module": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "generator_cmd": "head -c 400 beam_litt_b64.bin > beam_decoy_trunc.bin",
+ "oracle_cmd": "bash beam_oracle.sh beam_decoy_trunc.bin   # file -b + OTP 27 beam_lib:chunks/escript:extract/zip:extract/zlib:uncompress/base64:decode/erlang:crc32",
+ "oracle_output": "Erlang BEAM file | none | none | none",
+ "note": "format label SPECULATIVE (not in the GM enum: 'beam'/'escript'); first 400 bytes of beam_litt_b64.bin (head -c 400): truncated LitT, chunks past FOR1 end; format 'beam' per file -b (magic), beam_lib:chunks fails -> no HCFG (expected none)"
+}

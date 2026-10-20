@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep(base64url-nopad)",
+ "day": 11,
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-tiger-51",
+ "encoded": "MTUtcmVnaXQtcmVibWEgOnJldHNhTSBlbWFHIGVodCBvdCByZXdzbmEgdGNheGUgc2lodCB0aW1idXMgLGV2bG9zIG9UICFwdW1yYXcgc2lodCBnbmlkb2NlZCBrcm93IGVjaU4",
+ "generator_cmd": "printf %s \"$plain\" | rev | base64 -w0 | tr '+/' '-_' | tr -d =  # knob: byte order reversed before encoding",
+ "oracle_cmd": "printf %s \"$encoded\" | tr -- '-_' '+/' | perl -pe '$_ .= \"=\" x (-length($_) % 4)' | base64 -d | rev",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-tiger-51",
+ "expected": "match"
+}

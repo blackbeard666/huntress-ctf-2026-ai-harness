@@ -1,0 +1,8 @@
+{
+ "field": "dmg.koly_version",
+ "expected": "4",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/dmg/mkdmg.py.txt out.dmg b  (stdlib UDIF writer: zlib blkx chunks + plistlib resource-fork + 512-byte koly trailer)",
+ "oracle_cmd": "tail -c 512 FILE | xxd -s 4 -l 4 -p (BE u32 after 'koly') -> decimal",
+ "decoy": false,
+ "member": "apm_image.dmg"
+}

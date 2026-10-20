@@ -1,0 +1,8 @@
+{
+ "entry": "module_contract_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same layout as modcontract_method, every candidate has only 15 hex digits",
+ "generator_cmd": "python3 tests/data/android_fixtures/modcontract_src/gen_modcontract.py decoy_nearmiss tests/data/android_fixtures/modcontract_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh (host/payload split) + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/modcontract_src/oracle.sh tests/data/android_fixtures/modcontract_decoy_nearmiss.apk  # strings host dex -> pointer, unzip payload, d2j-dex2jar, JVM reflection: moduleContract() -> ANS-3c9e07a1f4b2d86 (15 hex, not a token)"
+}

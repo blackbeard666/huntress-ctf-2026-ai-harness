@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep",
+ "plain": null,
+ "encoded": "Meet me by the old harbour at noon; bring the charts and two spare lanterns.",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Meet me by the old harbour at noon; bring the charts and two spare lanterns.'  # plain English, no crib or slug under any knob",
+ "oracle_cmd": "printf %s \"$encoded\"",
+ "oracle_plain": "Meet me by the old harbour at noon; bring the charts and two spare lanterns."
+}

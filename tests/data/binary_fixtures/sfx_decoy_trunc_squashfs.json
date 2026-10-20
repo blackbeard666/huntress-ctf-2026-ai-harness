@@ -1,0 +1,12 @@
+{
+ "entry": "appended_archive_facts",
+ "bin": "sfx_decoy_trunc_squashfs.bin",
+ "password": null,
+ "expected": {
+  "archive_offset": "none"
+ },
+ "decoy": true,
+ "note": "DECOY: squashfs superblock cut after 200 bytes (bytes_used past EOF)",
+ "generator_cmd": "bash tests/data/binary_fixtures/sfx_gen.sh   # gcc ELF stub + zip -X / zip -A / zip -P / tar --format=ustar / mksquashfs -comp gzip|xz / 7z a, concatenated with cat",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/sfx_oracle.py tests/data/binary_fixtures/sfx_decoy_trunc_squashfs.bin   # 7z l -slt / 7z e -so | sha256 / readelf -hW"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "ar.member_names",
+ "expected": "[\"util_x86_64-macos.o\",\"net_x86_64-macos.o\",\"util_aarch64-macos.o\",\"net_aarch64-macos.o\"]",
+ "generator_cmd": "zig cc -target {x86_64,aarch64}-macos -c util.c net.c; llvm-ar-18 --format=darwin rcsU libmac_{x86,arm64}.a ...; llvm-lipo-18 -create libmac_x86.a libmac_arm64.a -output libuniversal.a",
+ "oracle_cmd": "llvm-lipo-18 -thin x86_64/arm64 libuniversal.a; llvm-ar-18 t <slice> (fat_arch order)",
+ "decoy": false,
+ "member": "libuniversal.a"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep(bacon-hex)",
+ "day": 17,
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-dingo-57",
+ "encoded": "bbabb baaab bbaab babba bbaab bbbaa bbaab bbaba bbbab bbbbb bbaaa bbaaa bbaab baaaa bbaaa bbbab bbaab babaa bbbab bbbbb bbaab bbabb bbaab bbaba bbaab bbbaa bbaab baaaa bbaab bbabb bbaab babba bbaab baaab bbaab bbaaa bbbab bbbbb bbaaa bbabb bbaab babbb bbaab babba bbaaa bbbaa bbbab bbbbb bbaaa bbaaa bbaab bbbba bbaaa bbbab bbaab baaba bbaaa bbaba bbaaa bbbbb bbbab bbbba bbbab bbbbb bbaba bbabb bbaab baaaa bbbab bbbbb bbaaa bbbaa bbaab baaaa bbaab baabb bbaaa bbaab bbaab bbaba bbbab baabb bbbab bbbbb bbaaa bbbaa bbaaa bbaba bbaab bbbab bbaab baaba bbaab babba bbaaa bbabb bbbab bbbbb bbaaa bbabb bbaab babbb bbaab babba bbaaa bbbaa bbbab bbbbb bbaab bbaba bbaaa babbb bbaab bbbba bbaab bbbaa bbaaa bbabb bbbab bbbbb bbaab bbbba bbaab baaab bbaaa bbbaa bbaaa bbaaa bbaab bbaba bbaaa bbbab bbbab bbbbb bbaaa bbabb bbaab baaaa bbbab bbbbb bbaaa bbabb bbaab babbb bbaab bbaba bbbab bbbbb bbabb bbaaa bbaab bbbba bbaab baaba bbaab bbaba bbbab bbbbb bbabb baaba bbaab bbbba bbaaa bbbaa bbaaa bbabb bbaab bbaba bbaaa bbbab bbbaa babab bbbab bbbbb bbaab bbbaa bbaab baaaa bbaab bbbab bbaab bbbba bbaab baabb bbaaa bbabb bbbab baaba bbaab bbabb bbaab babba bbaab baaab bbaab bbaaa bbaab baaaa bbbab baaba bbbaa bbaba bbbaa bbaaa",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c0 | perl -ne 'chomp; print join \" \", map { my $b = sprintf \"%05b\", hex $_; $b =~ tr/01/ba/; $b } split //'  # knob: Bacon polarity flipped (a=1, b=0)",
+ "oracle_cmd": "printf %s \"$encoded\" | tr ab 10 | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/twosym_cyberchef.mjs 0 1 5 hex",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-dingo-57",
+ "expected": "match"
+}

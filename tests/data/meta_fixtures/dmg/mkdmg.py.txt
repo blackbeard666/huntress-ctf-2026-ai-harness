@@ -1,0 +1,35 @@
+"""Stdlib UDIF writer (zlib + plistlib + struct): argv out.dmg variant"""
+import sys, zlib, struct, plistlib
+out, var = sys.argv[1:3]
+SECT = 512
+if var == "a":
+    parts = [("Protective Master Boot Record (MBR : 0)", 1, b"\x55\xaa".rjust(512, b"\0")),
+             ("GPT Header (Primary GPT Header : 1)", 1, b"EFI PART".ljust(512, b"\0")),
+             ("disk image (Apple_HFS : 2)", 40, (b"H+" + b"hello volume " * 300).ljust(40 * 512, b"\0")[:40 * 512]),
+             ("GPT Header (Backup GPT Header : 3)", 1, b"EFI PART".ljust(512, b"\0"))]
+    variant = 1
+else:
+    parts = [("Driver Descriptor Map (DDM : 0)", 1, b"ER".ljust(512, b"\0")),
+             ("Apple (Apple_partition_map : 1)", 63, bytes(63 * 512)),
+             ("Macintosh (Apple_HFS : 2)", 200, (b"H+" * 1000).ljust(200 * 512, b"\0"))]
+    variant = 2
+data = b""
+blkx = []
+first = 0
+for i, (name, nsec, content) in enumerate(parts):
+    comp = zlib.compress(content)
+    off = len(data)
+    data += comp
+    chunks = struct.pack(">IIQQQQ", 0x80000005, 0, 0, nsec, off, len(comp)) + \
+             struct.pack(">IIQQQQ", 0xFFFFFFFF, 0, nsec, 0, off + len(comp), 0)
+    mish = struct.pack(">4sIQQQII", b"mish", 1, first, nsec, 0, 0x208, 2) + bytes(24) + \
+           struct.pack(">II", 2, 32) + bytes(128) + struct.pack(">I", 2) + chunks
+    blkx.append({"Attributes": "0x0050", "CFName": name, "Data": mish, "ID": str(i - 1), "Name": name})
+    first += nsec
+xml = plistlib.dumps({"resource-fork": {"blkx": blkx}})
+xo = len(data)
+k = struct.pack(">4sIIIQQQQQII16sII128sQQ", b"koly", 4, 512, 1, 0, 0, len(data), 0, 0, 1, 1, b"\x11" * 16,
+                2, 32, bytes(128), xo, len(xml))
+k = k.ljust(0x1E8, b"\0") + struct.pack(">IQ", variant, first)
+k = k.ljust(512, b"\0")
+open(out, "wb").write(data + xml + k)

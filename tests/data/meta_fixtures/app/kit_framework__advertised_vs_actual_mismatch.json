@@ -1,0 +1,8 @@
+{
+ "field": "app.advertised_vs_actual_mismatch",
+ "expected": "true",
+ "generator_cmd": "Kit.framework/Versions/A/{Kit = cp macho/thin_arm64 (arm64), Resources/Info.plist = plistlib XML {CFBundleIdentifier com.huntress.kit, CFBundleExecutable Kit, LSArchitecturePriority [arm64e]}}; ln -s A Versions/Current; ln -s Versions/Current/Kit Kit; ln -s Versions/Current/Resources Resources; zip -X -r -y kit_framework.zip Kit.framework  (symlinks stored as S_IFLNK members)",
+ "oracle_cmd": "exiftool Kit.framework/Resources/Info.plist -> LSArchitecturePriority arm64e; llvm-otool-18 -hv Kit -> ARM64 cpusubtype ALL (0), not ARM64E (2) => mismatch",
+ "decoy": false,
+ "member": "kit_framework.zip"
+}

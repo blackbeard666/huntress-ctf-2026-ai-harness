@@ -1,0 +1,8 @@
+{
+ "field": "ar.member_cpu_type_set",
+ "expected": "[\"0x0100000c\"]",
+ "generator_cmd": "zig cc -target aarch64-macos -c util.c net.c; llvm-ar-18 --format=darwin rcsU libmac_arm64.a util_aarch64-macos.o net_aarch64-macos.o",
+ "oracle_cmd": "llvm-readobj-18 --file-headers libmac_arm64.a | grep CpuType (Arm64 0x100000C)",
+ "decoy": false,
+ "member": "libmac_arm64.a"
+}

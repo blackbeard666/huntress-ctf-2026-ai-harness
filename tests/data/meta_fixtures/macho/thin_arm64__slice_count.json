@@ -1,0 +1,8 @@
+{
+ "field": "macho.slice_count",
+ "expected": "1",
+ "generator_cmd": "zig cc -target aarch64-macos (pip ziglang 0.17.0) -o prog_arm64 p.c (input reused from zig_arm64_exe fixture)",
+ "oracle_cmd": "file thin_arm64__slice_count.bin: Mach-O 64-bit arm64 executable (thin, no fat header) -> 1 slice",
+ "decoy": false,
+ "member": "prog_arm64"
+}

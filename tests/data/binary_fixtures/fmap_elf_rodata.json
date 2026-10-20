@@ -1,0 +1,65 @@
+{
+ "case": "elf_rodata",
+ "field_family": "file_map (lib.binary.file_map_field)",
+ "expected": {
+  "gap_count": 11,
+  "slack_count": 0,
+  "total_gap_bytes": 9582,
+  "image_end": 15792,
+  "gaps_offsets_sizes": [
+   [
+    948,
+    4
+   ],
+   [
+    1244,
+    4
+   ],
+   [
+    1488,
+    2608
+   ],
+   [
+    4123,
+    5
+   ],
+   [
+    4403,
+    1
+   ],
+   [
+    4417,
+    3775
+   ],
+   [
+    8319,
+    1
+   ],
+   [
+    8364,
+    4
+   ],
+   [
+    8584,
+    3176
+   ],
+   [
+    12342,
+    2
+   ],
+   [
+    13934,
+    2
+   ]
+  ],
+  "cave_offset": "none",
+  "cave_size": "none",
+  "cave_segment": "none",
+  "hcfg_gap_offset": "none",
+  "gap_hcfg_storage": "none"
+ },
+ "expected_config": null,
+ "decoy": true,
+ "generator_cmd": "tests/data/binary_fixtures/fmap_gen.sh fmap_elf_rodata.bin elf_rodata '{\"campaign\":\"FM-5\",\"domain\":\"cave-5.fmap.example.invalid\",\"mutex\":\"Global\\\\HFMAP5\"}' 145",
+ "oracle_cmd": "python3 -I tests/data/binary_fixtures/fmap_oracle.py fmap_elf_rodata.bin"
+}

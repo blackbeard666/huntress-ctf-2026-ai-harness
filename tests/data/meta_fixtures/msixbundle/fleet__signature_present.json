@@ -1,0 +1,8 @@
+{
+ "field": "msixbundle.signature_present",
+ "expected": "true",
+ "generator_cmd": "zip -qrX -0 fleet.msixbundle AppxMetadata/AppxBundleManifest.xml AppxBlockMap.xml '[Content_Types].xml' AppxSignature.p7x *.msix (bundle 2018 schema: x64, arm64, x86 application packages + scale-200 resource package without Architecture)",
+ "oracle_cmd": "unzip -Z1 fleet.msixbundle | grep -qx AppxSignature.p7x && echo true || echo false",
+ "decoy": false,
+ "member": "fleet.msixbundle"
+}

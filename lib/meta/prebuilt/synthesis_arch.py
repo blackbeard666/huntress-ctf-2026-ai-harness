@@ -22,7 +22,8 @@ Values: *_groups = compact JSON list of lists, members in Files order, groups or
 *_group_map / *_by_arch = {arch: [names]} (first-appearance key order); elf_members / non_elf_members / *_members =
 names in Files order; machine_order = names sorted by (raw machine value, name), "descending" reverses the key;
 odd_architecture_member = the lone member of the only singleton group (other groups must hold >= 2), else "none";
-count_<arch|elf|pe|macho|data> = int. Nothing classifiable -> "none" from a zip artifact, else None."""
+count_<arch|elf|pe|macho|data> = int (arm64/x86_64/i386 aliases: members SUPPORTING it, fat slices and archive
+objects included -- synthesis_fleet.count_supporting). Nothing classifiable -> "none" from a zip artifact, else None."""
 import re
 import struct
 
@@ -191,6 +192,9 @@ def arch_value_of(names, get_bytes, field, text="", param=None):
         p = (param if param is not None else f[len("count_"):]).lower().replace("-", "_")
         if p in ("elf", "pe", "macho", "data"):
             return sum(1 for _, c in rows if c["format"].split("-")[0] == p)
+        from .synthesis_fleet import COUNT_ALIASES, count_supporting
+        if p in COUNT_ALIASES:   # macho-fleet: fat slices / ar + zip object members count toward the arch they cover
+            return count_supporting([n for n, _ in (elf if scope is elf else rows)], get_bytes, p)
         return sum(1 for _, c in scope if c["arch"] == p)
     if not scope:
         return "none"

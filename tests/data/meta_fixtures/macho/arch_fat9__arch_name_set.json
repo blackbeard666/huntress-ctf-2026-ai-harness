@@ -1,0 +1,7 @@
+{
+ "field": "macho.arch_name_set",
+ "expected": "[\"i386\",\"x86_64\",\"x86_64h\",\"armv7\",\"armv7s\",\"armv7k\",\"arm64_32\",\"arm64\",\"arm64e\"]",
+ "generator_cmd": "for t in i386-apple-macos10.6 x86_64-apple-macos10.15 x86_64h-apple-macos10.15 armv7-apple-ios9.0 armv7s-apple-ios9.0 armv7k-apple-watchos4.0 arm64-apple-ios14.0 arm64e-apple-ios14.0 arm64_32-apple-watchos5.0; do clang-18 -target $t -c a.c -o $t.o; done; llvm-lipo-18 -create <those 9 .o> -output fat9.o",
+ "oracle_cmd": "llvm-lipo-18 -archs fat9.o  (split on whitespace -> compact JSON list)",
+ "decoy": false
+}

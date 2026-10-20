@@ -1,0 +1,8 @@
+{
+ "field": "pbzx.format",
+ "expected": "odc",
+ "generator_cmd": "gen.py: libarchive cpio_odc + python3 lzma.compress(FORMAT_XZ) wrapped b'pbzx'+u64BE 0x1000000+u64BE usize+u64BE csize+xz",
+ "oracle_cmd": "tail -c +29 Payload.pbzx | xz -dc | file - -> ASCII cpio archive (pre-SVR4 or odc)",
+ "decoy": false,
+ "member": "Payload.pbzx"
+}

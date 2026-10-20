@@ -1,0 +1,8 @@
+{
+ "field": "dmg.xml_offset",
+ "expected": "125",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/dmg/mkdmg.py.txt out.dmg a  (stdlib UDIF writer: zlib blkx chunks + plistlib resource-fork + 512-byte koly trailer)",
+ "oracle_cmd": "7z l -slt -tdmg FILE | grep 'xml-offset:'",
+ "decoy": false,
+ "member": "gpt_image.dmg"
+}

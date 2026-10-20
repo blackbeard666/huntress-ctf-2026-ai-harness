@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": "ANS-2b8e41d07c9fa6e3",
+ "decoy": false,
+ "generator_cmd": "tests/data/android_fixtures/gen_asset_native.sh tests/data/android_fixtures  # perl-encoded blob (^0x5a) -> gcc -shared -fPIC -O0 native_src/jni_xor.c -> copied to assets/guard.bin (no lib/ dir; System.load after extraction); zip -qX -r <name>.apk assets",
+ "oracle_cmd": "gcc -o h native_src/harness.c -ldl && unzip -p anl_plain_asset_x86_64.apk assets/guard.bin > g.so && ./h ./g.so Java_com_huntress_arena_NativeLib_getSecret  # real .so dlopen()ed with a fake JNIEnv: 'NewStringUTF ANS-2b8e41d07c9fa6e3'"
+}

@@ -1,0 +1,38 @@
+{
+ "family": "pe_certificate",
+ "encoding": "raw",
+ "expected_offset": 74688,
+ "expected_config": {
+  "c2": "198.51.100.40:8443",
+  "campaign": "cert-tail",
+  "sleep": 45,
+  "flag": "flag{p4st_th3_s1gn4tur3}"
+ },
+ "decoy": false,
+ "expected_facts": {
+  "overlay_offset": "73216",
+  "overlay_size": "1579",
+  "checksum": "0x1bb5e",
+  "checksum_computed": "0x1bb5e",
+  "checksum_valid": "true",
+  "has_certificate": "true",
+  "certificate_offset": "73216",
+  "certificate_size": "1472",
+  "certificate_end": "74688",
+  "cert_length": "1465",
+  "cert_revision": "0x0200",
+  "cert_type": "2",
+  "cert_type_name": "WIN_CERT_TYPE_PKCS_SIGNED_DATA",
+  "certificate_count": "1",
+  "pkcs7_size": "1457",
+  "cert_padding_size": "7",
+  "cert_in_overlay": "true",
+  "data_after_certificate_offset": "74688",
+  "data_after_certificate_size": "107",
+  "hcfg_offset": "74688",
+  "hcfg_location": "after_certificate"
+ },
+ "generator_cmd": "bash pecert_gen.sh   # zig cc -target x86_64-windows-gnu (MinGW PE32+) of pecert_src.c; openssl req -x509 + openssl cms -sign -outform DER (detached PKCS#7 SignedData); pecert_asm.py = pefile writer (Security dir VirtualAddress = FILE offset, CheckSum = generate_checksum or stale 0x1234)",
+ "oracle_cmd": ".venv/bin/python pecert_oracle.py pecert_after_cert.bin   # pefile get_overlay_data_start_offset / DATA_DIRECTORY[SECURITY] / generate_checksum+verify_checksum, openssl asn1parse (DER len), struct WIN_CERTIFICATE walk; config = stdlib struct+crc32+json of the blob",
+ "note": "lib.binary.pe_cert_field(data, key) per expected_facts key; hcfg_scan raw hit at expected_offset (decoy: no cert fields; badptr: no HCFG at all)"
+}

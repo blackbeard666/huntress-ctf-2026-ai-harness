@@ -1,0 +1,10 @@
+{
+  "name": "inert-fixture",
+  "version": "1.0.0",
+  "description": "inert analysis fixture",
+  "scripts": {
+    "test": "echo ok",
+    "postinstall": "node -e \"const descriptor_6a7b8c9d = \\\"dj0zfGxhbmd1YWdlPW5vZGV8cm9sZT1zdGFnZWRfY2hhaW58dmVyZGljdD1zdXNwaWNpb3VzfGF0dGFjaz1UMTA1OXxhZGFwdGVyPW9wZXJhdGlvbl9ncmFwaHxob3N0X3Byb2ZpbGU9bnBtX2xpZmVjeWNsZXxvYmZ1c2NhdGlvbl9wcm9maWxlPWJhc2U2NHxzdGFnZV9wcm9maWxlPXR3b19zdGFnZV9kb3dubG9hZF9leGVjdXRlfG5leHRfbGFuZ3VhZ2U9cG93ZXJzaGVsbHxzdGFnZV9jb3VudD0yfHN0ZXBzPWFjcXVpcmVfcmVtb3RlLGRpc3BhdGNoX3Byb2Nlc3N8Y2FtcGFpZ25faWQ9TlBNLTZhN2I4YzlkfHVybD1odHRwczovL25wbS02YTdiOGM5ZC5leGFtcGxlLmludmFsaWQvc3RhZ2V8ZmlsZV9wYXRoPS90bXAvaHVudHJlc3MtbnBtLTZhN2I4YzlkLy5zdGFnZQ==\\\"; const s = Buffer.from(descriptor_6a7b8c9d, 'base64').toString(); void s;\""
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "pkg.distribution_host_architectures",
+ "expected": "[\"x86_64\",\"arm64\"]",
+ "generator_cmd": "PYTHONPATH=tools/pylib-libarchive .venv/bin/python tests/data/meta_fixtures/pkg/mkxar.py.txt out.pkg gzip sha1 a  (libarchive 3.x xar writer via libarchive-c in tools/pylib-libarchive: Distribution hostArchitectures=x86_64,arm64 min=11.0 + agent.pkg/{PackageInfo com.acme.agent 4.2.1,Bom,Payload,Scripts})",
+ "oracle_cmd": "7z x -so FILE Distribution | grep -o 'hostArchitectures=\"[^\"]*\"' -> split ','",
+ "decoy": false,
+ "member": "acme_agent.pkg"
+}

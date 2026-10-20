@@ -1,0 +1,8 @@
+{
+ "field": "elf.modinfo_author",
+ "expected": "Night Shift Ops <ops@example.invalid>",
+ "generator_cmd": "gcc 13 -c -O2 m.c -o nsrk.ko  (m.c = MODULE_INFO-style `static const char __mod_X[] __attribute__((used, section(\".modinfo\"))) = \"key=value\"` for version/license/author/description/srcversion/depends/retpoline/name/vermagic=\"6.8.0-45-generic SMP preempt mod_unload modversions \")",
+ "oracle_cmd": "modinfo -F author nsrk.ko -> Night Shift Ops <ops@example.invalid>",
+ "decoy": false,
+ "member": "nsrk.ko"
+}

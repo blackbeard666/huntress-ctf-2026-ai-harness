@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "groovy",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/gv_fold_gen.py  (D20 plans -> Groovy/Kotlin runtime assembly)",
+ "oracle_cmd": "(grep -v ^pipeline tests/data/script_fixtures/gv_fold_decoy_unbound.groovy; echo 'println descriptor_decoy') > $TMPDIR/o.groovy && /usr/lib/jvm/java-21-openjdk-amd64/bin/java -cp tools/ghidra/Ghidra/Features/GhidraServer/data/yajsw-stable-13.18/lib/extended/groovy/groovy-4.0.12.jar groovy.ui.GroovyMain $TMPDIR/o.groovy  -> the descriptor is not a v=3 plan (unbound env / truncated b64 / benign text)"
+}

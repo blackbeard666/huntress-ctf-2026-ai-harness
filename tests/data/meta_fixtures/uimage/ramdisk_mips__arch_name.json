@@ -1,0 +1,8 @@
+{
+ "field": "uimage.arch_name",
+ "expected": "mips",
+ "generator_cmd": "SOURCE_DATE_EPOCH=1700000000 tools/u-boot-tools/usr/bin/mkimage -A mips -O linux -T ramdisk -C none -a 0x81000000 -e 0x81000000 -n \"rootfs-ramdisk-v2\" -d payload rd.uimg  (mkimage 2025.10; payload = 300 random bytes)",
+ "oracle_cmd": "file rd.uimg -> \"u-boot legacy uImage, rootfs-ramdisk-v2, Linux/MIPS, RAMDisk Image (Not compressed), 300 bytes, Tue Nov 14 22:13:20 2023, Load Address: 0X81000000, Entry Point: 0X81000000, Header CRC: 0XEBA0C744, Data CRC: 0XF99C50BD\"; tools/u-boot-tools/usr/bin/dumpimage -l rd.uimg -> \"Image Type: MIPS Linux RAMDisk Image (uncompressed)\"",
+ "decoy": false,
+ "member": "rd.uimg"
+}

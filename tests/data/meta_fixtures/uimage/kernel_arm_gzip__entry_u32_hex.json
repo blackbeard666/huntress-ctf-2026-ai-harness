@@ -1,0 +1,8 @@
+{
+ "field": "uimage.entry_u32_hex",
+ "expected": "0x80008040",
+ "generator_cmd": "SOURCE_DATE_EPOCH=1767225600 tools/u-boot-tools/usr/bin/mkimage -A arm -O linux -T kernel -C gzip -a 0x80008000 -e 0x80008040 -n \"Linux-6.1.55-ctf\" -d payload.gz zImage.uimg  (mkimage 2025.10, u-boot-tools deb; payload.gz = printf \"hello firmware\\n\" | gzip -n -9)",
+ "oracle_cmd": "file zImage.uimg -> \"u-boot legacy uImage, Linux-6.1.55-ctf, Linux/ARM, OS Kernel Image (gzip), 35 bytes, Thu Jan  1 00:00:00 2026, Load Address: 0X80008000, Entry Point: 0X80008040, Header CRC: 0XAE101721, Data CRC: 0XBEE0F97E\"",
+ "decoy": false,
+ "member": "zImage.uimg"
+}

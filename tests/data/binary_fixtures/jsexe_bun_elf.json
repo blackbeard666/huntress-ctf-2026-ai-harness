@@ -1,0 +1,20 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "runtime": "bun",
+  "entry_name": "/$bunfs/root/b1.exe",
+  "embedded_source_offset": "18362",
+  "embedded_source_size": "104",
+  "embedded_source_sha256": "501c04fd96c67825f921a84b8b89a2466188d4c679a0714617f5ca3c404eba67",
+  "module_count": "1",
+  "module_names": [
+   "/$bunfs/root/b1.exe"
+  ]
+ },
+ "generator_cmd": "bash jsexe_gen.sh   # step 4 (bun 1.2.23 build --compile b1/app.js; host ELF + last 4096 bytes)",
+ "oracle_cmd": "grep -obUa '// @bun' ; strings -a | grep '^/$bunfs' ; bun build --target=bun b1/app.js --outfile o1.js (no --compile) -> wc -c 104 / sha256sum identical",
+ "decoy": false,
+ "note": "real Bun payload; the trailing u64 (original file size) no longer equals this spliced file's size; host carries the (unflipped) SEA fuse string"
+}

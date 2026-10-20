@@ -456,6 +456,10 @@ def decode(material, rep, transform, key=None):
         got = _cl_decode(material, rep, transform)
         if got is not None:
             return got
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("pipelinelocus", "executionlocus", "locus"):   # pipeline-execution-locus
+        return _locus_decode(material, transform)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("jenkinshome", "jenkinssecrets", "jenkinsartifacts"):   # jenkins-artifact-secrets
+        return _jenkins_decode(material, transform)
     transform, key = _spec(rep, transform, key)
     if known(rep, transform):
         for data in _rep_candidates(rep, material):
@@ -1129,6 +1133,13 @@ def _find_codecs_uncached(src, _depth=0):
         out = x + out
     if _depth < 2 and not any(c.get("plain") for c in out):
         out = out + _saas_host_codecs(src, raw, _depth)     # SaaS / add-in host: JSON-escaped script, zip / CRX package
+    if _depth < 2 and _JC_CUE.search((src or "")[:1 << 16]) and (src or "").lstrip("\ufeff \t\r\n")[:1] in "{[/":
+        # script carried in a JSON document (ipynb / tasks.json / package.json / devcontainer): a gap, or the full plan
+        # when what was read so far is its prefix (a `"a"\<nl>"b"` bash cell reads as the first piece)
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _json_carrier_codecs(src, raw, _depth) if not have or
+             any(c["plain"] != p and c["plain"].startswith(p) for p in have)]
+        out = x + out
     if _depth < 2 and not any(c.get("plain") for c in out) and _MH_CUE.search((src or "")[:1 << 20]):
         out = out + _managed_host_codecs(src, raw, _depth)  # .NET-hosted inner C# / VB / JScript (Add-Type, ASP, csc)
     elif _depth < 2 and _MH_CUE.search((src or "")[:1 << 20]):
@@ -1136,11 +1147,25 @@ def _find_codecs_uncached(src, _depth=0):
         x = [c for c in _managed_host_codecs(src, raw, _depth) if any(c["plain"] != p and c["plain"].startswith(p)
                                                                        for p in (o.get("plain") for o in out) if p)]
         out = x + out
+    if _depth < 2 and not any(c.get("plain") for c in out) and _PH_CUE.search((src or "")[:1 << 20]):
+        out = out + _prior_host_codecs(src, raw, _depth)    # host wrapping an older language (WSC, ipynb, unit, cron)
+    elif _depth < 2 and _PH_CUE.search((src or "")[:1 << 20]) and re.search(r"(?i)<component\b|<scriptlet\b", (src or "")[:1 << 16]):
+        # a WSC `"a" & _` continued descriptor reads as its first piece only: the full plan goes first
+        x = [c for c in _prior_host_codecs(src, raw, _depth) if any(c["plain"] != p and c["plain"].startswith(p)
+                                                                     for p in (o.get("plain") for o in out) if p)]
+        out = x + out
     if _depth < 2 and not any(c.get("plain") for c in out):
         out = out + _cs_fold_codecs(src)                      # C# / VB / F# descriptor assembled at runtime
     elif _depth < 2 and _CS_CUE.search((src or "")[:1 << 18]) and _CS_DESC_NAME.search((src or "")[:1 << 18]):
         # a `"a" + (char)0x76 + ..` descriptor reads as its literal pieces only: the folded full plan goes first
         x = [c for c in _cs_fold_codecs(src, 0.3) if any(c["plain"] != p and c["plain"].startswith(p)
+                                                          for p in (o.get("plain") for o in out) if p)]
+        out = x + out
+    if _depth < 2 and not any(c.get("plain") for c in out):
+        out = out + _gv_fold_codecs(src)                      # Groovy / Kotlin descriptor assembled at runtime
+    elif _depth < 2 and _GV_CUE.search((src or "")[:1 << 18]) and _CS_DESC_NAME.search((src or "")[:1 << 18]):
+        # a `new String(x1) + ..` / `[x1, x2].join()` descriptor reads as one plan-shaped piece only: full plan first
+        x = [c for c in _gv_fold_codecs(src, 0.3) if any(c["plain"] != p and c["plain"].startswith(p)
                                                           for p in (o.get("plain") for o in out) if p)]
         out = x + out
     if _depth < 2 and not any(c.get("plain") for c in out) and (_DN_CARRIER.search((src or "")[:8 << 20]) or
@@ -1159,12 +1184,24 @@ def _find_codecs_uncached(src, _depth=0):
                           "plain": plain}]
     if _depth < 1 and not any(c.get("plain") for c in out):
         out = out + _proc_codecs(src, raw, _depth)   # process-telemetry log: codecs inside escaped command lines
+    if _depth < 1 and isinstance(src, str) and _CI_CUE.search(src[:1 << 16]):
+        # CI pipeline step bodies (Groovy / YAML string semantics): a host-escaped body goes first, else fills a gap
+        have = {c.get("plain") for c in out if c.get("plain")}
+        x = [(c, ck) for c, ck in _pipeline_codecs(src) if c["plain"] not in have]
+        out = [c for c, ck in x if ck] + out + ([c for c, ck in x if not ck] if not have else [])
     if _depth < 1 and not any(c.get("plain") for c in out):
         out = out + _nested_codecs(src)              # inner script carried as an escaped / encoded host string literal
     elif _depth < 1 and _NS_LOSSY.search((src or "")[:1 << 20]):
         # a marker whose material runs into a `\uXXXX` / `&#x..;` / backtick escape reads truncated: full plan first
         x = [c for c in _nested_codecs(src, 0.3) if any(c["plain"] != p and c["plain"].startswith(p)
                                                         for p in (o.get("plain") for o in out) if p)]
+        out = x + out
+    if _depth < 2 and isinstance(src, str) and re.search(r"(?i)descriptor[_-]", src[:1 << 20]):
+        # Rust / Swift / Nim / Zig / Dart raw, `\\` multi-line, `\u{..}` and adjacent literals (_cl_literals): a gap,
+        # or the full plan ahead of a first-piece reading it extends (printable tail only)
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _cl_codecs(src, extend_only=bool(have)) if not have or
+             any(c["plain"] != p and c["plain"].startswith(p) and c["plain"][len(p):].isprintable() for p in have)]
         out = x + out
     return out
 
@@ -1453,6 +1490,31 @@ def _read_literal(src, i, op, _depth=0):
     return None, i
 
 
+# JVM script readings (target jvm-dsl-script-route): Scala `"""|..|..""".stripMargin` (margin bars dropped) and Scala/
+# Kotlin/Groovy `$name` / `${name}` templates resolved from plain `val|var|def|String name = ".."` literals in the
+# same file. Appended after the literal's own reading, so every earlier reading keeps its place.
+_JVM_TPL = re.compile(r"\$\{\s*([A-Za-z_]\w*)\s*\}|\$([A-Za-z_]\w*)")
+
+
+def _jvm_readings(src, ident, lit, end, out):
+    if re.match(r"\s*\.stripMargin\b", src[end:end + 40]):
+        out.append((ident, re.sub(r"(?m)^[ \t]*\|", "", lit)))
+    if "$" in lit and len(lit) < 1 << 16:
+        bad = []
+
+        def one(t):
+            n = t.group(1) or t.group(2)
+            v = re.search(r"(?:\bva[lr]|\bdef|\bString|\bfinal)[ \t]+" + re.escape(n) +
+                          r"""[ \t]*(?::[ \t]*String[ \t]*)?=[ \t]*"([^"\\\r\n$]*)"(?=[ \t]*;?[ \t]*\r?\n|$)""", src)
+            if not v:
+                bad.append(n)
+                return t.group(0)
+            return v.group(1)
+        r = _JVM_TPL.sub(one, lit)
+        if not bad and r != lit:
+            out.append((ident, r))
+
+
 def _descriptor_literals_ext(src, limit=24):
     """(id, literal) of descriptor assignments in the wider syntax set above; concatenated pieces joined."""
     out = []
@@ -1469,6 +1531,11 @@ def _descriptor_literals_ext(src, limit=24):
             nl = re.match(r"""(?:[ \t]*\r?\n)+[ \t]+(?=["'])""", src[i:i + 400])
             if nl:
                 lit, end = _read_literal(src, i + nl.end(), op)
+        pm = None
+        if lit is None and op in ("=", ":="):                         # Scala/Kotlin interpolator s".." f".." raw"""..."""
+            pm = re.match(r"""(?:s|f|raw)(?=["'])""", src[i:i + 4])
+            if pm:
+                lit, end = _read_literal(src, i + pm.end(), None)
         if lit is None and op is None:
             lit = _yaml_sibling_value(src, m.start())
             if lit:
@@ -1492,6 +1559,7 @@ def _descriptor_literals_ext(src, limit=24):
         jm = _YAML_JINJA.fullmatch(out[-1][1])                       # Ansible "{{ 'blob' | b64decode }}"
         if jm:
             out.append((m.group("id"), jm.group(2)))
+        _jvm_readings(src, m.group("id"), out[-1][1], end, out)
     for rx in _XML_DESC_RES:
         for m in rx.finditer(src or ""):
             if len(out) >= 2 * limit:
@@ -1557,6 +1625,141 @@ def _ahk_literals(src, limit=16):
         else:
             vals[ident] = val
     return [(k, v) for k, v in vals.items() if k in special and v][:limit]
+
+
+# Compiled-language descriptor literals (target compiled-lang-source-route): Rust `r#".."#` / `br".."`, Swift `#".."#` /
+# `#"""..."""#`, Nim / Dart `r".."` / `r'''..'''`, Zig `\\` multi-line strings, `\u{..}` / `\xNN` escapes (Rust/Swift),
+# binders the wider set misses (Zig `: []const u8 =`, Nim `descriptor_x* =`, Dart `const String x =`) and Dart / C
+# adjacent-literal concatenation `'a'\n 'b';`. Read only as a gap (no plan elsewhere) or, when an escape / adjacency
+# reading extends an existing plan, ahead of that lossy prefix reading. Pure regex, bounded, never raises.
+_CL_DESC = re.compile(r"""descriptor[_-](?P<id>\w+)[ \t]*\*?[ \t]*(?::[ \t]*(?:&'[A-Za-z_]\w*|[^=\r\n;{}()"'`]){1,48}?[ \t]*)?(?::=|=)[ \t]*""", re.I)
+_CL_ESC = re.compile(r"""\\(u\{[0-9A-Fa-f]{1,6}\}|u[0-9A-Fa-f]{4}|x[0-9A-Fa-f]{2}|\r?\n[ \t]*|.)""", re.S)
+_CL_SIMPLE = {"n": "\n", "t": "\t", "r": "\r", "0": "\0", "\\": "\\", '"': '"', "'": "'", "`": "`", "$": "$"}
+
+
+def _cl_unescape(s):
+    def one(m):
+        e = m.group(1)
+        if e[0] in "ux" and len(e) > 1:
+            return chr(int(e.strip("u{}x") if e[0] == "u" else e[1:], 16))
+        if e[0] in "\r\n":                                     # Rust / Swift `\`-newline: next line's indent dropped
+            return ""
+        return _CL_SIMPLE.get(e, "\\" + e)
+    return _CL_ESC.sub(one, s)
+
+
+def _cl_literal(src, i):
+    """(text, end, novel) of one compiled-language string literal at src[i], else (None, i, False)."""
+    lim = 1 << 16
+    m = re.match(r"""(?:b?r(#*)|(#+))(\"\"\"|'''|"|')""", src[i:i + 80])   # raw: Rust r#"..# / Swift #".."# / r'..'
+    if m:
+        hashes, q = m.group(1) or m.group(2) or "", m.group(3)
+        j = src.find(q + hashes, i + m.end(), i + lim)
+        if j < 0:
+            return None, i, False
+        body = src[i + m.end():j]
+        if m.group(2) and len(q) == 3:
+            body = _cl_dedent(body)
+        return body, j + len(q) + len(hashes), True
+    m = re.match(r"(?:[ \t]*\r?\n)*[ \t]*\\\\", src[i:i + 400])                 # Zig `\\line` multi-line string
+    if m:
+        lines, j = [], i
+        for z in re.finditer(r"[ \t]*\\\\([^\r\n]*)\r?\n?", src[i:i + lim]):
+            if z.start() != j - i and not re.fullmatch(r"\s*", src[j:i + z.start()]):
+                break
+            lines.append(z.group(1))
+            j = i + z.end()
+        return ("\n".join(lines), j, True) if lines else (None, i, False)
+    t = src[i:i + 3]
+    if t in ('"""', "'''"):
+        j = src.find(t, i + 3, i + lim)
+        if j < 0:
+            return None, i, False
+        body = _cl_dedent(src[i + 3:j])
+        u = _cl_unescape(body)
+        return u, j + 3, u != body
+    c = src[i:i + 1]
+    if c in "\"'":
+        j = i + 1
+        while j < len(src) and j < i + lim and src[j] not in "\r\n" + c:
+            j += 2 if src[j] == "\\" else 1
+        if j >= len(src) or src[j] != c:
+            if j < len(src) and src[j] in "\r\n" and src[j - 1] == "\\":    # `"aa\` + newline continuation
+                k = src.find(c, j, i + lim)
+                while k > 0 and src[k - 1] == "\\":
+                    k = src.find(c, k + 1, i + lim)
+                if k > 0:
+                    body = src[i + 1:k]
+                    return _cl_unescape(body), k + 1, True
+            return None, i, False
+        body = src[i + 1:j]
+        u = _cl_unescape(body)
+        return u, j + 1, u != body
+    return None, i, False
+
+
+def _cl_dedent(body):
+    """Swift / Dart multi-line literal: drop the opening newline and the closing delimiter's indentation."""
+    body = re.sub(r"^[ \t]*\r?\n", "", body)
+    ind = re.search(r"\n([ \t]*)$", body)
+    if ind:
+        body = body[:ind.start()]
+        body = re.sub(r"(?m)^" + re.escape(ind.group(1)), "", body) if ind.group(1) else body
+    return body
+
+
+def _cl_literals(src, limit=24):
+    """[(id, text, extends)] of compiled-language descriptor literals; `extends` = an escape / adjacency / continuation
+    reading that may complete a lossy first-piece reading."""
+    out = []
+    if not src or not re.search(r"(?i)descriptor[_-]", src):
+        return out
+    for m in _CL_DESC.finditer(src[:1 << 20]):
+        if len(out) >= limit:
+            break
+        lit, end, novel = _cl_literal(src, m.end())
+        if lit is None:
+            continue
+        pieces, ext = [lit], novel
+        while len(pieces) < 64:                    # "a" + "b" / ++ / & / .. / ~, Dart/C adjacent 'a' 'b' (then ; or ))
+            c = re.match(r"""\s*(\+\+|\+|&|\.\.|~)?\s*(?=b?r#*["']|#+["']|["']|[ \t]*\\\\)""", src[end:end + 200])
+            if not c:
+                break
+            nxt, e2, nv = _cl_literal(src, end + c.end())
+            if nxt is None:
+                break
+            if not c.group(1):
+                k = e2
+                while True:
+                    s2 = re.match(r"\s*(?=[\"'])", src[k:k + 200])
+                    nn = _cl_literal(src, k + s2.end()) if s2 else (None, k, False)
+                    if nn[0] is None:
+                        break
+                    k = nn[1]
+                if not re.match(r"\s*[;),]", src[k:k + 200]):
+                    break
+                ext = True
+            pieces.append(nxt)
+            end, ext = e2, ext or nv
+        out.append((m.group("id"), "".join(pieces), ext))
+    return out
+
+
+def _cl_codecs(src, extend_only=False, budget=0.5):
+    """Plan codecs of compiled-language descriptor literals (see _cl_literals); [] when none reads to a plan."""
+    try:
+        end, out = time.time() + budget, []
+        am = _ANALYSIS_RE.search(src or "")
+        for ident, lit, ext in _cl_literals(src):
+            if time.time() > end or (extend_only and not ext):
+                continue
+            plain = _peel_ext([(ident, lit)], am.group("tag") if am else "", budget=max(0.05, end - time.time()))[1]
+            if plain:
+                out.append({"id": ident, "rep": "descriptor", "transform": "identity", "key": "", "material": lit,
+                            "plain": plain})
+        return out
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def _peel_ext(lits, tag="", tried=(), budget=1.5):
@@ -3240,6 +3443,208 @@ def _saas_host_codecs(src, raw, depth=0, name=""):
                     tag = f"saas:{host['profile'] or 'host'}:{member}"
                     return [dict(c, id=f"{c['id']}@{tag}")]
     except Exception:  # noqa: BLE001 - unknown -> nothing, never an exception
+        return []
+    return []
+
+
+# ------------------------------------------------------------------------------------------------ JSON script carriers
+# Target notebook-manifest-json-carrier: a script carried inside a JSON document -- Jupyter `.ipynb` (`source` = list of
+# lines, `%%bash` / `%%powershell` cell magics, `!cmd` shell escapes, outputs), VS Code `tasks.json` / `launch.json`
+# (`command` + `args`, `runOptions.runOn: folderOpen` auto-run), package.json / composer.json `scripts`,
+# `.devcontainer.json` `postCreateCommand` (string / argv / named map), Logic App `definition.actions.*.inputs`.
+# JSONC (comments, trailing commas) is cleaned first. json_scripts() lists the carried texts; _json_carrier_codecs()
+# reads them (shell `-c` / `node -e` bodies unquoted, bash `"a"\<nl>"b"` folded, `!echo` chunk lists) through
+# find_codecs. Consulted when nothing produced a plan, or when the plan read so far is a prefix (lossy) of its reading.
+
+_JC_CUE = re.compile(r'"(?:cells|nbformat|scripts|tasks|configurations|command|args|(?:postCreate|postStart|postAttach|'
+                     r'onCreate|updateContent|initialize)Command|definition|actions|inputs|preLaunchTask)"\s*:')
+_JC_TOKS = re.compile(r'"(?:[^"\\]|\\.)*"|//[^\n]*|/\*.*?\*/|,(?=(?:\s|//[^\n]*|/\*.*?\*/)*[}\]])', re.S)
+_JC_DEVC = ("initializeCommand", "onCreateCommand", "updateContentCommand", "postCreateCommand", "postStartCommand",
+            "postAttachCommand")
+_JC_SCRIPT_KEYS = ("preinstall", "install", "postinstall", "prepare", "prepublish", "prepublishOnly", "preuninstall",
+                   "postuninstall", "pretest", "test", "start", "build")
+_JC_MAGIC = {"bash": "bash", "sh": "bash", "zsh": "bash", "script": None, "powershell": "powershell", "pwsh": "powershell",
+             "javascript": "javascript", "js": "javascript", "node": "javascript", "perl": "perl", "ruby": "ruby",
+             "python": "python", "python3": "python", "python2": "python", "pypy": "python", "cmd": "batch",
+             "html": "html", "writefile": None, "file": None}
+_JC_INTERP = re.compile(r"""(?:^|[\s;&|(])(?:[\w./\\-]*[\\/])?(?:node|nodejs|deno|python[\d.]*|py|php|perl|ruby|lua|"""
+                        r"""powershell|pwsh|cmd)(?:\.exe)?[ \t]+(?:-[\w-]+[ \t]+)*?(?:-e|-c|-r|--eval|-Command|-command|"""
+                        r"""/c|/k|/C|/K)[ \t]+""")
+
+
+def _jc_load(text):
+    """JSON / JSONC (comments, trailing commas) -> object, or None."""
+    import json
+    s = (text or "").lstrip("﻿ \t\r\n")
+    if not s or len(s) > (4 << 20):
+        return None
+    try:
+        return json.loads(s)
+    except (ValueError, RecursionError):
+        pass
+    try:
+        t = _JC_TOKS.sub(lambda m: m.group(0) if m.group(0)[:1] == '"' else "", s)
+        return json.loads(t)
+    except (ValueError, RecursionError):
+        return None
+
+
+def _jc_lang(cmd):
+    w = re.split(r"[\s\"']+", (cmd or "").strip().strip("\"'"), 1)[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
+    w = re.sub(r"\.exe$", "", w)
+    return {"sh": "bash", "bash": "bash", "zsh": "bash", "pwsh": "powershell", "powershell": "powershell",
+            "node": "javascript", "npx": "javascript", "deno": "javascript", "php": "php", "@php": "php", "perl": "perl",
+            "ruby": "ruby", "cmd": "batch", "lua": "lua"}.get(w) or ("python" if w.startswith(("python", "py")) else None)
+
+
+def _jc_argv(v):
+    """A VS Code / devcontainer argv item: str, or {"value": .., "quoting": ..}."""
+    if isinstance(v, dict):
+        v = v.get("value")
+    if isinstance(v, list):
+        return " ".join(str(x) for x in v if isinstance(x, (str, int, float)))
+    return v if isinstance(v, str) else None
+
+
+def _jc_notebook(nb, out):
+    cells = nb.get("cells") or [c for w in nb.get("worksheets") or [] if isinstance(w, dict)
+                                for c in w.get("cells") or []]
+    md = nb.get("metadata") if isinstance(nb.get("metadata"), dict) else {}
+    kl = str((md.get("kernelspec") or {}).get("language") or (md.get("language_info") or {}).get("name")
+             or "python").lower()
+    bang = []
+    for i, c in enumerate(cells[:4096]):
+        if not isinstance(c, dict):
+            continue
+        s = c.get("source", c.get("input", ""))
+        t = "".join(str(x) for x in s) if isinstance(s, list) else str(s or "")
+        if not t.strip():
+            pass
+        elif c.get("cell_type") not in (None, "code"):
+            out.append({"path": f"cells[{i}]", "lang": str(c.get("cell_type")), "text": t})
+        else:
+            first, _, rest = t.lstrip().partition("\n")
+            m = re.match(r"%%(\w+)[ \t]*(\S*)", first)
+            if m and m.group(1).lower() in _JC_MAGIC:
+                lang = _JC_MAGIC[m.group(1).lower()] or _jc_lang(m.group(2)) or \
+                    {"ps1": "powershell", "sh": "bash", "js": "javascript", "py": "python", "bat": "batch",
+                     "cmd": "batch", "vbs": "vbscript"}.get(m.group(2).rsplit(".", 1)[-1].lower()) or m.group(2) or kl
+                out.append({"path": f"cells[{i}]%%{m.group(1)}", "lang": lang, "text": rest})
+            else:
+                out.append({"path": f"cells[{i}]", "lang": kl, "text": t})
+                b = [re.sub(r"^[ \t]*(?:\w+[ \t]*=[ \t]*)?(?:!|%(?:sx|system)[ \t]+)", "", ln)
+                     for ln in t.splitlines() if re.match(r"[ \t]*(?:\w+[ \t]*=[ \t]*)?(?:!|%(?:sx|system)[ \t])", ln)]
+                if b:
+                    bang.extend(b)
+                    out.append({"path": f"cells[{i}]!", "lang": "bash", "text": "\n".join(b)})
+        for j, o in enumerate((c.get("outputs") or [])[:64]):
+            if not isinstance(o, dict):
+                continue
+            parts = [o.get("text")] + [v for k, v in (o.get("data") or {}).items()
+                                       if k.startswith(("text/", "application/javascript", "application/json"))]
+            for v in parts:
+                v = "".join(str(x) for x in v) if isinstance(v, list) else v
+                if isinstance(v, str) and v.strip():
+                    out.append({"path": f"cells[{i}].outputs[{j}]", "lang": "output", "text": v})
+    if bang and len(out) > 1:
+        out.append({"path": "cells[*]!", "lang": "bash", "text": "\n".join(bang)})
+
+
+def json_scripts(name, data):
+    """Scripts carried inside a JSON / JSONC document -> [{path, lang, text}] (carrier-specific fields first, then every
+    other string value); [] when it is not JSON. `data` = text or bytes. Never raises."""
+    out = []
+    try:
+        if isinstance(data, (bytes, bytearray)):
+            b = bytes(data)[:4 << 20]
+            data = (_utf16(b) or b).decode("utf-8", "ignore") if b[:2] in (b"\xff\xfe", b"\xfe\xff") else \
+                b.decode("utf-8", "ignore")
+        doc = _jc_load(data)
+        if not isinstance(doc, (dict, list)):
+            return []
+        if isinstance(doc, dict) and (isinstance(doc.get("cells"), list) or "nbformat" in doc or
+                                      isinstance(doc.get("worksheets"), list)):
+            _jc_notebook(doc, out)
+        rest, stack, n = [], [("$", doc)], 0
+        while stack and n < 20000:
+            path, v = stack.pop()
+            n += 1
+            if isinstance(v, dict):
+                cmd = v.get("command") if isinstance(v.get("command"), str) else None
+                if cmd is not None or isinstance(v.get("args"), list):
+                    args = [a for a in (_jc_argv(x) for x in (v.get("args") or [])[:256]) if a is not None]
+                    auto = ((v.get("runOptions") or {}).get("runOn") == "folderOpen") if isinstance(v.get("runOptions"), dict) else False
+                    out.append({"path": path + (".command[folderOpen]" if auto else ".command"),
+                                "lang": _jc_lang(cmd or (args[:1] or [""])[0]),
+                                "text": " ".join([cmd or ""] + args).strip()})
+                for k in _JC_DEVC:
+                    c = v.get(k)
+                    for kk, cv in (c.items() if isinstance(c, dict) else [("", c)]):
+                        t = _jc_argv(cv)
+                        if t:
+                            out.append({"path": f"{path}.{k}{'.' + kk if kk else ''}", "lang": _jc_lang(t), "text": t})
+                if isinstance(v.get("scripts"), dict):
+                    sc = v["scripts"]
+                    for k in sorted(sc, key=lambda k: k not in _JC_SCRIPT_KEYS and not k.startswith(("pre", "post"))):
+                        for t in (sc[k] if isinstance(sc[k], list) else [sc[k]])[:64]:
+                            if isinstance(t, str) and t.strip():
+                                out.append({"path": f"{path}.scripts.{k}", "lang": _jc_lang(t) or "bash", "text": t})
+                stack.extend((f"{path}.{k}", x) for k, x in reversed(list(v.items())))
+            elif isinstance(v, list):
+                stack.extend((f"{path}[{i}]", x) for i, x in reversed(list(enumerate(v[:4096]))))
+            elif isinstance(v, str) and len(v) >= 16:
+                rest.append({"path": path, "lang": None, "text": v})
+        seen, res = set(), []
+        for d in out + rest:
+            if d["text"] not in seen:
+                seen.add(d["text"])
+                res.append(d)
+        return res[:512]
+    except Exception:  # noqa: BLE001 - truncated / impostor: what was read so far
+        return out[:512]
+
+
+def _jc_variants(d):
+    """Readable forms of one carried text: itself, its shell / interpreter `-c` / `-e` bodies, bash continuation fold."""
+    t = d["text"]
+    vs = [t]
+    for m in list(_PH_SHC.finditer(t)) + list(_JC_INTERP.finditer(t)):
+        b = _ph_shell_word(t, m.end())
+        if b and b.strip() and len(b) >= 16:
+            vs.append(b)
+    if d.get("lang") == "bash" or "\\\n" in t:
+        for b in list(vs):
+            f = re.sub(r"""(["'])[ \t]*\\\r?\n[ \t]*\1""", "", b)          # "a"\<nl>"b" -> "ab"
+            f = re.sub(r"""(["'])\1(?=[A-Za-z0-9+/=_\-.%~:])""", "", f)   # "a""b" -> "ab"
+            if f != b:
+                vs.append(f)
+    return list(dict.fromkeys(vs))
+
+
+def _json_carrier_codecs(src, raw=None, depth=0, name="", budget=0.6):
+    """find_codecs readings of the scripts a JSON document carries (first plan wins; `@json:<path>`)."""
+    try:
+        end = time.time() + budget
+        items = json_scripts(name, raw if raw is not None else src)
+        if not items:
+            return []
+        for d in items[:256]:
+            if time.time() > end:
+                break
+            hits = []
+            for t in _jc_variants(d):
+                if t != src:
+                    hits.extend(c for c in find_codecs(t, depth + 1)[:8] if c.get("plain"))
+            if hits:      # a continued literal reads as its first piece raw: the variant that extends it wins
+                best = max(hits, key=lambda c: sum(o["plain"] != c["plain"] and c["plain"].startswith(o["plain"])
+                                                   for o in hits))
+                return [dict(best, id=f"{best.get('id')}@json:{d['path']}")]
+            if d["path"].endswith("!"):           # `!echo -n '<chunk>' >> f` lines: a chunk-list carrier
+                mat, plain = _split_array_plain(d["text"], budget=0.2)
+                if plain:
+                    return [{"id": f"split@json:{d['path']}", "rep": "split_array", "transform": "identity",
+                             "key": "", "material": mat, "plain": plain}]
+    except Exception:  # noqa: BLE001
         return []
     return []
 
@@ -7690,6 +8095,9 @@ _HG_ALIAS = {
     "applescript": ("applescript", "scpt", "osascript"), "msbuild_xml": ("msbuild_xml", "msbuild", "csproj", "proj"),
     "hta": ("hta", "mshta"), "wsf": ("wsf",), "wmi_mof": ("wmi_mof", "mof"), "tcl": ("tcl", "tclsh"), "zsh": ("zsh",),
     "sct": ("sct", "scriptlet"), "google_apps_script": ("google_apps_script", "apps_script", "gs"),
+    # compiled-lang-source-route families (polyglot-go-* / -rust- / -swift- / -jxa- / -nim- / -zig- / -dart-)
+    "go": ("go", "golang"), "rust": ("rust", "rs"), "swift": ("swift",), "nim": ("nim",), "zig": ("zig",),
+    "dart": ("dart",), "jxa": ("jxa", "javascript_for_automation", "osascript_js"),
 }
 _HG_CANON = {a: k for k, al in _HG_ALIAS.items() for a in al}
 _HG_LOOSE = {"jscript": "js", "javascript": "js", "typescript": "js", "bash": "sh", "zsh": "sh"}
@@ -9296,6 +9704,522 @@ def _nested_codecs(src, budget=0.6):
     return out
 
 
+# ------------------------------------------------------------------------------------------------ CI pipeline step bodies
+# Target pipeline-step-inner-scripts (D20 "trace the modeled build into its prior-language stages"): a Jenkinsfile
+# (declarative / scripted Groovy: `sh '''..'''`, `sh(script: "..", returnStdout: true)`, bat / powershell / pwsh,
+# `script { .. }`, `node('label')`, `agent { label 'x' }` / `docker { image 'x' }`) or a CI YAML (GitHub Actions
+# `run:` + `shell:` / `actions/github-script` `script:`, GitLab `script:` lists, Azure `- bash:` / `- powershell:` /
+# task inputs, CircleCI `run: command:`, Bitbucket `script:`, Drone `commands:`) carries prior-language scripts in its
+# step bodies. pipeline_steps() reads them with the host's own string semantics (Groovy escapes + GString `${x}` from
+# literal environment / def bindings, YAML block / folded / quoted scalars); _pipeline_codecs() runs find_codecs on
+# every body. Readings are only prepended when the host escape changed the body (the raw-host readers read it lossy)
+# or nothing else found a plan. Pure Python, bounded, never raises.
+
+_CI_CUE = re.compile(r"\bpipeline\s*\{|\bnode\s*\(|\bstage\s*\(\s*['\"]|^[ \t]*-?[ \t]*(?:jobs|steps|stages|script|"
+                     r"before_script|after_script|commands|run|bash|powershell|pwsh|runs-on|pipelines)[ \t]*:", re.M)
+_CI_LANG = {"sh": "bash", "bash": "bash", "zsh": "bash", "dash": "bash", "ash": "bash", "bat": "batch", "cmd": "batch",
+            "powershell": "powershell", "pwsh": "powershell", "ps": "powershell", "python": "python",
+            "python3": "python", "py": "python", "node": "node", "github-script": "node", "groovy": "groovy",
+            "perl": "perl", "ruby": "ruby"}
+_CI_TASK = {"bash": "bash", "shellscript": "bash", "powershell": "powershell", "azurepowershell": "powershell",
+            "cmdline": "cmd", "pythonscript": "python", "azurecli": "bash"}
+_CI_GSTEPS = ("sh", "bat", "powershell", "pwsh")
+_CI_GESC = re.compile(r"\\(u[0-9a-fA-F]{4}|[0-3][0-7]{0,2}|\r?\n|.)", re.S)
+_CI_GVAR = re.compile(r"(?<!\\)((?:\\\\)*)\$(?:\{\s*([A-Za-z_][\w.]*)\s*\}|([A-Za-z_][\w]*(?:\.[A-Za-z_]\w*)*))")
+_CI_GBIND = re.compile(r"""(?m)^[ \t]*(?:(?:def|final|String|static|private)[ \t]+)*(?:env\.)?([A-Za-z_]\w*)[ \t]*=[ \t]*"""
+                       r"""('(?:[^'\\\n]|\\.)*'|"(?:[^"\\$\n]|\\.)*")[ \t]*;?[ \t]*$""")
+_CI_YBODY = {"run": "run", "script": "script", "before_script": "script", "after_script": "script",
+             "commands": "script", "command": "run", "bash": "bash", "powershell": "powershell", "pwsh": "pwsh",
+             "inlinescript": "script", "inline": "script", "cmd": "cmd"}
+_CI_YLINE = re.compile(r"( *)(?:(-)(?: +|$))?")
+_CI_YKEY = re.compile(r"""("[^"\n]*"|'[^'\n]*'|[^\s:#'"\[\]{},&*!|>-][^:#\n]*?)[ \t]*:(?=[ \t]|$)[ \t]*(.*)$""")
+_CI_YDQ = {"n": "\n", "t": "\t", "r": "\r", "0": "\0", "\\": "\\", '"': '"', "/": "/", " ": " ", "e": "\x1b",
+           "a": "\a", "b": "\b", "v": "\v", "f": "\f", "N": "\x85", "_": "\xa0", "L": "\u2028", "P": "\u2029"}
+
+
+def _ci_lang(shell, default="bash"):
+    w = re.split(r"[\s{]", (shell or "").strip().lower(), 1)[0].rsplit("/", 1)[-1]
+    w = re.sub(r"(?:\.exe|@\d+)$", "", w)
+    return _CI_LANG.get(w) or _CI_LANG.get(re.sub(r"[\d.]+$", "", w)) or (default if not w else w)
+
+
+def _ci_gstr(s, i):
+    """(inner, quote, end) of the Groovy string literal at s[i], or None."""
+    for q in ("'''", '"""'):
+        if s.startswith(q, i):
+            j = i + 3
+            while j < len(s):
+                if s[j] == "\\":
+                    j += 2
+                    continue
+                if s.startswith(q, j):
+                    return s[i + 3:j], q, j + 3
+                j += 1
+            return None
+    c = s[i:i + 1]
+    if c in ("'", '"'):
+        j = i + 1
+        while j < len(s) and s[j] != "\n":
+            if s[j] == "\\":
+                j += 2
+                continue
+            if s[j] == c:
+                return s[i + 1:j], c, j + 1
+            j += 1
+        return None
+    if s.startswith("$/", i):
+        k = s.find("/$", i + 2)
+        return (s[i + 2:k], "$/", k + 2) if k > 0 else None
+    return None
+
+
+def _ci_gunescape(t, q, env):
+    """Groovy string semantics: GString `${x}` / `$x` from literal bindings (else kept), then backslash escapes."""
+    if q == "$/":
+        return t.replace("$$", "$").replace("$/", "/")
+    if q in ('"', '"""'):
+        def sub(m):
+            name = m.group(2) or m.group(3)
+            v = env.get(re.sub(r"^(?:env|params)\.", "", name))
+            return m.group(1) + v if v is not None else m.group(0)
+        t = _CI_GVAR.sub(sub, t)
+
+    def esc(m):
+        x = m.group(1)
+        if x[0] == "u":
+            return chr(int(x[1:], 16))
+        if x[0] in "0123":
+            return chr(int(x, 8))
+        if x[0] in "\r\n":
+            return ""
+        return {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "s": " "}.get(x, x)
+    return _CI_GESC.sub(esc, t)
+
+
+def _ci_glits(s, i, env, stop):
+    """Value at s[i]: one Groovy literal or a `'a' + "b"` concatenation -> (text, raw, end) or (None, None, i)."""
+    parts, raws, j = [], [], i
+    while j < len(s):
+        r = _ci_gstr(s, j)
+        if not r:
+            break
+        parts.append(_ci_gunescape(r[0], r[1], env))
+        raws.append(r[0])
+        m = re.compile(r"[ \t\r\n]*\+[ \t\r\n]*").match(s, r[2])
+        if not m:
+            j = r[2]
+            break
+        j = m.end()
+    return ("".join(parts), "".join(raws), j) if parts else (None, None, i)
+
+
+def _ci_jenkins(src):
+    env = {}
+    for m in _CI_GBIND.finditer(src[:1 << 18]):
+        r = _ci_gstr(m.group(2), 0)
+        if r:
+            env.setdefault(m.group(1), _ci_gunescape(r[0], r[1] if r[1] == "'" else "'", {}))
+    out, stack, pend, i, n = [], [{"stage": None, "agent": None}], {}, 0, len(src)
+    ident = re.compile(r"[A-Za-z_]\w*")
+    while i < n and len(out) < 128:
+        c = src[i]
+        if src.startswith("//", i):
+            k = src.find("\n", i)
+            i = n if k < 0 else k
+            continue
+        if src.startswith("/*", i):
+            k = src.find("*/", i + 2)
+            i = n if k < 0 else k + 2
+            continue
+        if c in "'\"" or src.startswith("$/", i):
+            r = _ci_gstr(src, i)
+            i = r[2] if r else i + 1
+            continue
+        if c == "{":
+            fr = dict(stack[-1])
+            fr.update(pend)
+            pend = {}
+            stack.append(fr)
+            i += 1
+            continue
+        if c == "}":
+            if len(stack) > 1:
+                stack.pop()
+            i += 1
+            continue
+        if (c.isalpha() or c == "_") and not (i and (src[i - 1].isalnum() or src[i - 1] in "_.$")):
+            w = ident.match(src, i)
+            word, j = w.group(0), w.end()
+            if word == "stage":
+                m = re.compile(r"\s*\(\s*(?:name\s*:\s*)?").match(src, j)
+                r = _ci_gstr(src, m.end()) if m else None
+                if r:
+                    pend["stage"] = _ci_gunescape(r[0], r[1], env)
+                    j = r[2]
+            elif word == "node":
+                m = re.compile(r"\s*(\()?\s*").match(src, j)
+                r = _ci_gstr(src, m.end())
+                if r:
+                    pend["agent"], j = _ci_gunescape(r[0], r[1], env), r[2]
+                elif m.group(1) or src[m.end():m.end() + 1] == "{":
+                    pend["agent"] = "any"
+            elif word == "agent":
+                seg = src[j:j + 600]
+                m = re.match(r"\s+(any|none)\b", seg) or re.match(
+                    r"""\s*\{\s*(?:(?:docker|node|dockerfile|kubernetes)\s*\{[^{}]*?)?(?:label|image|filename)\s*"""
+                    r""":?\s*['"]([^'"\n]*)['"]""", seg) or re.match(r"""\s*\{\s*(docker|any|none)\b(?:\s*['"]([^'"\n]*)['"])?""", seg)
+                if m:
+                    stack[-1]["agent"] = m.group(m.lastindex)
+            elif word in _CI_GSTEPS:
+                m = re.compile(r"[ \t]*(\()?\s*").match(src, j)
+                k, body, raw = m.end(), None, None
+                paren = bool(m.group(1))
+                if not paren and not (src[k:k + 1] in "'\"$" or re.match(r"script\s*:", src[k:k + 12])):
+                    i = j
+                    continue
+                for _ in range(8):
+                    km = re.compile(r"([A-Za-z_]\w*)\s*:\s*").match(src, k)
+                    name = km.group(1) if km else None
+                    v, rv, e = _ci_glits(src, km.end() if km else k, env, None)
+                    if v is None:
+                        e2 = re.compile(r"[^,)\n]*").match(src, km.end() if km else k).end()
+                        e = e2 if e2 > k else k + 1
+                    elif name in (None, "script") and body is None:
+                        body, raw = v, rv
+                    sep = re.compile(r"\s*,\s*" if paren else r"[ \t]*,\s*").match(src, e)
+                    if not sep:
+                        k = e
+                        break
+                    k = sep.end()
+                if body is not None:
+                    fr = stack[-1]
+                    she = re.match(r"#!\s*(?:/usr)?/bin/(?:env\s+)?(\S+)", body.lstrip())
+                    out.append({"stage": pend.get("stage", fr["stage"]), "step_kind": word, "shell": word,
+                                "lang": _ci_lang(she.group(1) if she else word), "body": body,
+                                "agent_label": pend.get("agent", fr["agent"]), "cooked": body != raw})
+                i = max(k, j)
+                continue
+            elif word == "script" and src[j:j + 40].lstrip().startswith("{"):
+                b0 = src.index("{", j)
+                d, e = 0, b0
+                while e < n:
+                    r = _ci_gstr(src, e) if src[e] in "'\"" else None
+                    if r:
+                        e = r[2]
+                        continue
+                    d += {"{": 1, "}": -1}.get(src[e], 0)
+                    if d == 0:
+                        break
+                    e += 1
+                fr = stack[-1]
+                out.append({"stage": fr["stage"], "step_kind": "script", "shell": "groovy", "lang": "groovy",
+                            "body": src[b0 + 1:e], "agent_label": fr["agent"], "cooked": False})
+            i = j
+            continue
+        i += 1
+    return out
+
+
+def _ci_ydq(t):
+    """YAML double-quoted scalar body: line folding + escapes."""
+    t = re.sub(r"[ \t]*\\\r?\n[ \t]*", "", t)
+    t = re.sub(r"[ \t]*\r?\n[ \t]*", lambda m: "\n", t)
+    t = re.sub(r"\n(\n*)", lambda m: m.group(1) or " ", t)
+
+    def esc(m):
+        x = m.group(1)
+        if x[0] in "xuU":
+            return chr(int(x[1:], 16))
+        return _CI_YDQ.get(x, "\\" + x)
+    return re.sub(r"\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|.)", esc, t)
+
+
+def _ci_yscalar(lines, i, rest, base):
+    """(value, cooked, next_line) of the YAML value `rest` on lines[i] whose node sits at column `base`."""
+    r = rest.strip()
+    r = _YAML_PROPS.sub("", r, 1) if r[:1] in "!&" else r
+    m = re.match(r"([|>])([1-9]?)([+-]?)([1-9]?)[ \t]*(?:#.*)?$", r)
+    if m:
+        j, body = i + 1, []
+        while j < len(lines) and (not lines[j].strip() or len(lines[j]) - len(lines[j].lstrip(" ")) > base):
+            body.append(lines[j])
+            j += 1
+        while body and not body[-1].strip():
+            body.pop()
+            j -= 1
+        explicit = m.group(2) or m.group(4)
+        ind = base + int(explicit) if explicit else min((len(x) - len(x.lstrip(" ")) for x in body if x.strip()),
+                                                        default=0)
+        txt = [x[ind:] if x.strip() else "" for x in body]
+        if m.group(1) == ">":
+            folded, prev = "", None
+            for ln in txt:
+                if prev is None:
+                    folded = ln
+                elif not ln or ln[:1] in " \t" or not prev or prev[:1] in " \t":
+                    folded += "\n" + ln
+                else:
+                    folded += " " + ln
+                prev = ln
+            txt = [folded]
+        v = "\n".join(txt)
+        v = v + ("" if m.group(3) == "-" else "\n") if v else v
+        return v, m.group(1) == ">", j
+    if r[:1] in ("'", '"'):
+        q, buf, j = r[0], r[1:], i
+        while True:
+            k = 0
+            while True:
+                k = buf.find(q, k)
+                if k < 0:
+                    break
+                if q == "'" and buf.startswith("''", k):
+                    k += 2
+                    continue
+                if q == '"' and (len(buf[:k]) - len(buf[:k].rstrip("\\"))) % 2:
+                    k += 1
+                    continue
+                break
+            if k >= 0 or j + 1 >= len(lines) or j - i > 512:
+                break
+            j += 1
+            buf += "\n" + lines[j]
+        if k < 0:
+            return None, False, i + 1
+        buf = buf[:k]
+        if q == "'":
+            v = re.sub(r"\n(\n*)", lambda mm: mm.group(1) or " ", re.sub(r"[ \t]*\n[ \t]*", "\n", buf)).replace("''", "'")
+            return v, "\n" in buf, j + 1
+        return _ci_ydq(buf), "\\" in buf or "\n" in buf, j + 1
+    if r[:1] == "[":
+        e = r.rfind("]")
+        items = [a or b or c for a, b, c in _YAML_FLOW_ITEM.findall(r[1:e if e > 0 else len(r)])]
+        return "\n".join(items), False, i + 1
+    if not r or r.startswith("#"):
+        return None, False, i + 1
+    v, j = re.sub(r"[ \t]+#.*$", "", r), i + 1
+    while j < len(lines) and lines[j].strip() and len(lines[j]) - len(lines[j].lstrip(" ")) > base and \
+            not _CI_YKEY.match(lines[j].strip()) and not lines[j].strip().startswith(("- ", "#")):
+        v += " " + lines[j].strip()
+        j += 1
+    return v, j > i + 1, j
+
+
+def _ci_yentries(src):
+    lines = src.replace("\t", "  ").splitlines()[:20000]
+    ents, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        s = line.strip()
+        if not s or s.startswith("#") or s in ("---", "..."):
+            i += 1
+            continue
+        m = _CI_YLINE.match(line)
+        col, dcol = m.end(), (len(m.group(1)) if m.group(2) else None)
+        km = _CI_YKEY.match(line, col)
+        if km:
+            key = km.group(1).strip("'\"")
+            val, cooked, nxt = _ci_yscalar(lines, i, km.group(2), col)
+        elif dcol is not None:
+            key = None
+            val, cooked, nxt = _ci_yscalar(lines, i, line[col:], dcol)
+        else:
+            i += 1
+            continue
+        ents.append({"i": i, "col": col, "dcol": dcol, "key": key, "val": val, "cooked": cooked})
+        i = max(nxt, i + 1)
+    return ents
+
+
+def _ci_ymap(ents, x):
+    """(head index, {key: entry}) of the mapping holding ents[x]."""
+    e, head, sib = ents[x], x, {}
+    if e["dcol"] is None:
+        for y in range(x - 1, max(-1, x - 400), -1):
+            f = ents[y]
+            if f["col"] > e["col"]:
+                continue
+            if f["col"] < e["col"]:
+                break
+            if f["key"]:
+                sib.setdefault(f["key"], y)
+            head = y
+            if f["dcol"] is not None:
+                break
+    for y in range(head + 1, min(len(ents), head + 400)):
+        f = ents[y]
+        if f["col"] > e["col"]:
+            continue
+        if f["col"] < e["col"] or f["dcol"] is not None:
+            break
+        if f["key"]:
+            sib.setdefault(f["key"], y)
+    if ents[head]["key"]:
+        sib.setdefault(ents[head]["key"], head)
+    sib.setdefault(e["key"], x) if e["key"] else None
+    return head, sib
+
+
+def _ci_ykids(ents, x):
+    e, kids = ents[x], []
+    for y in range(x + 1, min(len(ents), x + 2000)):
+        f = ents[y]
+        if f["col"] <= e["col"] and not (f["dcol"] is not None and f["dcol"] >= (e["dcol"] if e["dcol"] is not None
+                                                                                  else e["col"]) and
+                                          e["key"] and f["col"] > e["col"] - 0):
+            break
+        kids.append(y)
+    if not kids:
+        return []
+    c0 = min(ents[y]["col"] for y in kids)
+    return [y for y in kids if ents[y]["col"] == c0]
+
+
+def _ci_yparent(ents, head):
+    h = ents[head]
+    ind = h["dcol"] if h["dcol"] is not None else h["col"]
+    for y in range(head - 1, max(-1, head - 4000), -1):
+        f = ents[y]
+        if f["col"] > ind or (h["dcol"] is not None and f["dcol"] == h["dcol"]) or not f["key"]:
+            continue
+        if f["col"] < ind or (h["dcol"] is not None and f["col"] <= ind):
+            return y
+    return None
+
+
+def _ci_yval(ents, y):
+    """Scalar of ents[y], else its block-sequence items / `name|vmImage|image|label` child."""
+    v = ents[y]["val"]
+    if v is not None:
+        return v
+    ks = _ci_ykids(ents, y)
+    items = [ents[k]["val"] for k in ks if ents[k]["dcol"] is not None and not ents[k]["key"] and ents[k]["val"]]
+    if items:
+        return ",".join(items)
+    for k in ks:
+        if ents[k]["key"] in ("vmImage", "name", "image", "label", "labels", "group") and ents[k]["val"]:
+            return ents[k]["val"]
+    return None
+
+
+def _ci_yaml(src):
+    ents, out, envmap = _ci_yentries(src), [], {}
+    for x, e in enumerate(ents):
+        if (e["key"] or "").lower() in ("env", "variables") and e["val"] is None:
+            for k in _ci_ykids(ents, x):
+                if ents[k]["key"] and ents[k]["val"] is not None:
+                    envmap.setdefault(ents[k]["key"], ents[k]["val"])
+
+    def expand(m):
+        v = envmap.get(m.group(1) or m.group(2))
+        return m.group(0) if v is None else v
+    for x, e in enumerate(ents):
+        kind = _CI_YBODY.get((e["key"] or "").lower())
+        if not kind or len(out) >= 128:
+            continue
+        body, cooked = e["val"], e["cooked"]
+        _head, sib = _ci_ymap(ents, x)
+        if body is None:
+            ks = _ci_ykids(ents, x)
+            if ks and ents[ks[0]]["dcol"] is not None and not ents[ks[0]]["key"]:
+                vals = [ents[k] for k in ks if not ents[k]["key"] and ents[k]["val"] is not None]
+                body = "\n".join(v["val"].rstrip("\n") for v in vals) + "\n" if vals else None
+                cooked = any(v["cooked"] for v in vals)
+            elif ks:
+                sub = {ents[k]["key"]: k for k in ks if ents[k]["key"]}
+                k = next((sub[n] for n in ("command", "script", "inlineScript", "inline") if n in sub), None)
+                if k is None or ents[k]["val"] is None:
+                    continue
+                body, cooked = ents[k]["val"], ents[k]["cooked"]
+                if "shell" in sub:
+                    sib = dict(sib, shell=sub["shell"])
+        if not body or not body.strip():
+            continue
+        if envmap and ("${{" in body or "$(" in body):
+            b2 = re.sub(r"\$\{\{\s*(?:env|vars)\.([\w-]+)\s*\}\}|\$\(([\w.]+)\)", expand, body)
+            body, cooked = b2, cooked or b2 != body
+        chain, path, h, seen = [sib], [], _head, 0
+        while h is not None and seen < 16:
+            p = _ci_yparent(ents, h)
+            if p is None:
+                break
+            path.append(ents[p]["key"])
+            h, s = _ci_ymap(ents, p)
+            chain.append(s)
+            seen += 1
+        get = lambda m, k: _ci_yval(ents, m[k]) if k in m else None  # noqa: E731
+        agent = next((get(m, k) for m in chain for k in ("runs-on", "image", "pool", "tags", "agent", "docker",
+                                                         "executor", "machine", "container") if get(m, k)), None)
+        stage = next((get(m, k) for m in chain[:2] for k in ("name", "displayName", "step", "stage") if get(m, k)), None)
+        if stage is None:
+            stage = next((k for k in path if k and k.lower() not in (
+                "steps", "script", "jobs", "stages", "pipelines", "pipeline", "default", "branches", "with", "inputs",
+                "run", "commands", "before_script", "after_script", "workflows", "parallel", "step", "custom",
+                "pull-requests", "tags", "defaults")), None)
+        win = "windows" in (agent or "").lower() or "win" in re.split(r"[\W_]+", (agent or "").lower())
+        shell, uses, task = get(sib, "shell"), get(sib, "uses") or "", ""
+        for m in chain:
+            if "task" in m:
+                task = get(m, "task") or ""
+                break
+        if shell is None and "run" in path[:1] and "shell" in chain[1:2][0] if len(chain) > 1 else False:
+            shell = get(chain[1], "shell")
+        if "github-script" in uses or "github-script" in (get(chain[1], "uses") or "" if len(chain) > 1 else ""):
+            shell = "github-script"
+        elif shell is None and task:
+            shell = _CI_TASK.get(re.sub(r"@\d+$", "", task.strip().lower()))
+        if shell is None:
+            shell = kind if kind in ("bash", "powershell", "pwsh", "cmd") else (
+                ("cmd" if kind == "script" and "steps" in path[:1] else "pwsh") if win else "bash")
+        out.append({"stage": stage, "step_kind": e["key"], "shell": shell, "lang": _ci_lang(shell), "body": body,
+                    "agent_label": agent, "cooked": cooked})
+    return out
+
+
+def pipeline_steps(name, src):
+    """CI/build pipeline step bodies: [{stage, step_kind, shell, lang, body, agent_label}] of a Jenkinsfile (Groovy)
+    or a GitHub Actions / GitLab / Azure / CircleCI / Bitbucket / Drone YAML. [] when it is none. Never raises."""
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            src = bytes(src).decode("utf-8", "ignore")
+        src = (src or "")[:1 << 20].lstrip("\ufeff")
+        nm = (name or "").lower()
+        groovy = nm.endswith((".groovy", ".jenkinsfile", ".gvy")) or "jenkinsfile" in nm or bool(
+            re.search(r"\bpipeline\s*\{|\bnode\s*(?:\(|\{)|\bstage\s*\(\s*['\"]", src[:1 << 16]))
+        yaml_ = nm.endswith((".yml", ".yaml")) or bool(re.search(r"(?m)^[ \t]*-?[ \t]*[\w.-]+[ \t]*:[ \t]*(?:[|>][-+]?)?[ \t]*$",
+                                                                 src[:1 << 16]))
+        steps = (_ci_jenkins(src) if groovy else []) or (_ci_yaml(src) if yaml_ and not groovy else [])
+        return [{k: v for k, v in s.items() if k != "cooked"} for s in steps] if steps else []
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _pipeline_steps_raw(src):
+    try:
+        if re.search(r"\bpipeline\s*\{|\bnode\s*(?:\(|\{)|\bstage\s*\(\s*['\"]", src[:1 << 16]):
+            return _ci_jenkins(src)
+        return _ci_yaml(src)
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _pipeline_codecs(src, budget=0.5):
+    """find_codecs readings of every prior-language pipeline step body: [(codec, cooked)]."""
+    out, seen = [], set()
+    end = time.time() + budget
+    for s in _pipeline_steps_raw(src):
+        if time.time() > end:
+            break
+        if s["lang"] == "groovy" or not _NS_HINT.search(s["body"]):
+            continue
+        for c in find_codecs(s["body"], 1):
+            p = c.get("plain")
+            if p and p not in seen:
+                seen.add(p)
+                out.append((dict(c, id=f"{c.get('id')}@{s['stage'] or ''}/{s['step_kind']}"), s["cooked"]))
+    return out
+
+
 # ------------------------------------------------------------------------------------------------ .NET assembly carriers
 # Target dotnet-assembly-strings (escalation of D19 managed-assembly-bridge): a script carries real managed bytes --
 # PS `[Reflection.Assembly]::Load([Convert]::FromBase64String('TVqQ..'))`, C# `Assembly.Load(new byte[]{77,90,144,..})`,
@@ -9749,6 +10673,180 @@ def _managed_host_codecs(src, raw=None, depth=0, name="", budget=0.6):
             for c in (find_codecs(folded, depth + 1) if folded != text else []) + find_codecs(text, depth + 1):
                 if c.get("plain"):
                     return [dict(c, id=f"{c.get('id')}@managed:{host['profile_guess']}:{where}")]
+    except Exception:  # noqa: BLE001
+        return []
+    return []
+
+
+# ------------------------------------------------------------------------------------------------ prior-language hosts
+# Target prior-language-host-battery (sibling of the D20 `host-classic-asp-vbscript.vbs`, the first host for an OLD
+# language): a host file wraps a D1-D20 language -- classic ASP (`<%@ Language=VBScript|JScript %>` / `<script
+# language=.. runat=server>`), Windows Script Component `.wsc` (`<component><registration progid=..><script
+# language=..><![CDATA[..]]>`), Jupyter `.ipynb` (JSON-escaped Python cell sources), systemd `ExecStart=/bin/bash -c '..'`
+# (`%%` escape), crontab `* * * * * bash -c ".."`, `.desktop` `Exec=sh -c`, Electron `preload.js` (contextBridge),
+# Nmap NSE (`description = [[..]]`), Redis `EVAL ".."`, Task Scheduler XML `<Exec><Command>..<Arguments>`, GPO
+# `scripts.ini` / `psscripts.ini` `NCmdLine=` / `NParameters=`. prior_host() names the container (the D20 spelling
+# `classic_asp`, ...) and returns the inner texts; _prior_host_codecs() reads them through find_codecs. Consulted only
+# when nothing else produced a plan, or (WSC / ASP `"a" & _` continuation) when a plan-shaped piece reads lossy.
+
+_PH_CUE = re.compile(r"""(?ism)<%|runat\s*=\s*["']?server|<component\b|<scriptlet\b|"nbformat"\s*:|"cell_type"\s*:|"""
+                     r"""^[ \t]*Exec(?:Start(?:Pre|Post)?|Stop(?:Post)?|Reload|Condition)?[ \t]*=|^[ \t]*\[(?:Service|Unit|"""
+                     r"""Desktop Entry|Startup|Shutdown|Logon|Logoff)\]|^[ \t]*(?:@(?:reboot|hourly|daily|weekly|monthly|"""
+                     r"""yearly|annually|midnight)|(?:[\d*/,-]+[ \t]+){4}[\d*/,a-z-]+)[ \t]+\S|contextBridge|ipcRenderer|"""
+                     r"""\brequire\s*\(\s*['"]electron['"]|^[ \t]*description[ \t]*=[ \t]*\[=*\[|\bportrule\b|"""
+                     r"""^[ \t]*EVAL(?:SHA)?[ \t]|<Task\b[^>]*task|<Exec>|^[ \t]*\d+(?:CmdLine|Parameters)[ \t]*=""")
+_PH_CRON = re.compile(r"(?m)^[ \t]*(?:@(?:reboot|hourly|daily|weekly|monthly|yearly|annually|midnight)|"
+                      r"(?:[\d*/,-]+[ \t]+){4}[\d*/,a-zA-Z-]+)[ \t]+(?:(?!bash|sh\b|/)[a-z_][\w-]*[ \t]+(?=\S))?(?P<cmd>\S.*)$")
+_PH_SHC = re.compile(r"""(?:^|[\s;&|(])(?:/(?:usr/)?bin/)?(?:env[ \t]+)?(?:ba|z|da|k)?sh[ \t]+(?:-\w+[ \t]+)*-\w*c[ \t]+""")
+
+
+def _ph_shell_word(s, i):
+    """The shell word at s[i:] ('..' / ".." with backslash escapes / bare), unquoted; None if absent."""
+    m = re.compile(r"""\s*(?:'([^']*)'|"((?:[^"\\]|\\.)*)"|((?:[^\s"'\\]|\\.)+))""", re.S).match(s, i)
+    if not m:
+        return None
+    if m.group(1) is not None:
+        return m.group(1)
+    if m.group(2) is not None:
+        return re.sub(r'\\([$`"\\\n])', r"\1", m.group(2))
+    return re.sub(r"\\(.)", r"\1", m.group(3))
+
+
+def _ph_shell_bodies(cmd):
+    """[cmd] + the `sh|bash -c '<body>'` bodies of a host command line (unquoted)."""
+    out = [cmd]
+    for m in _PH_SHC.finditer(cmd):
+        b = _ph_shell_word(cmd, m.end())
+        if b and b.strip():
+            out.append(b)
+    return out
+
+
+def prior_host(name, src):
+    """Classify a host file wrapping an older script language and extract its inner code. `src` = text or bytes.
+    -> {"profile_guess": container name (`classic_asp`, `wsc_component`, `jupyter_notebook`, `systemd_unit`,
+        `cron_entry`, `desktop_entry`, `electron_preload`, `nmap_nse`, `redis_eval`, `scheduled_task_xml`,
+        `gpo_scripts_ini`) or None, "lang": inner language or None, "profile_lang": `<container>_<lang>` or None,
+        "inner_texts": [(where, text)]}. Not such a host -> profile_guess None, inner_texts []. Never raises."""
+    out = {"profile_guess": None, "lang": None, "profile_lang": None, "inner_texts": []}
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            b = bytes(src)[:1 << 22]
+            u = _utf16(b) if (b[:2] in (b"\xff\xfe", b"\xfe\xff") or b[1:64:2].count(0) > 20) else None
+            src = (u or b).decode("utf-8", "ignore")
+        s = (src or "")[:1 << 21].lstrip("﻿")
+        ext = (name or "").rsplit(".", 1)[-1].lower() if "." in (name or "") else ""
+        if not _PH_CUE.search(s[:1 << 20]):
+            return out
+        import html
+        import json
+        texts, prof, lang = [], None, None
+        head = s[:1 << 16]
+        # 1. Windows Script Component / scriptlet: <script language=..> bodies (CDATA or XML-escaped)
+        if ext in ("wsc", "sct") or re.search(r"(?is)<component\b.*?<(?:registration|public|script)\b|<scriptlet\b", head):
+            for m in re.finditer(r"(?is)<script\b([^>]*)>(.*?)</script\s*>", s):
+                la = re.search(r"""(?i)\blanguage\s*=\s*["']?([\w.]+)""", m.group(1))
+                lang = lang or _mh_lang(la.group(1) if la else "", None)
+                cd = re.findall(r"(?s)<!\[CDATA\[(.*?)\]\]>", m.group(2))
+                texts.append(("wsc_script", "\n".join(cd) if cd else html.unescape(m.group(2))))
+            prof = "wsc_component" if texts else None
+            lang = lang or ("jscript" if prof else None)
+        # 2. Jupyter notebook: cell sources (list of lines or one string), code cells joined as well
+        if not prof and (ext == "ipynb" or re.search(r'"nbformat"\s*:|"cell_type"\s*:', head)):
+            nb = json.loads(s)
+            cells = nb.get("cells") or [c for w in nb.get("worksheets") or [] for c in w.get("cells") or []]
+            code = []
+            for c in cells[:4096]:
+                src_ = c.get("source", c.get("input", ""))
+                t = "".join(src_) if isinstance(src_, list) else str(src_ or "")
+                if t.strip():
+                    texts.append(("ipynb_" + str(c.get("cell_type") or "cell"), t))
+                    if c.get("cell_type") == "code":
+                        code.append(t)
+            if len(code) > 1:
+                texts.append(("ipynb_code", "\n".join(code)))
+            md = nb.get("metadata") or {}
+            lang = str((md.get("language_info") or {}).get("name") or (md.get("kernelspec") or {}).get("language")
+                       or "python").lower()
+            prof = "jupyter_notebook"
+        # 3. classic ASP (not ASP.NET): reuse the managed-host page reader
+        if not prof and (ext in ("asp", "asa") or re.search(r"(?is)<%@\s*Language\s*=|<script\b[^>]*runat\s*=", head)):
+            mh = managed_host(name, s)
+            if (mh["profile_guess"] or "").startswith("asp_inline_"):
+                texts, lang, prof = list(mh["inner_texts"]), mh["lang"], "classic_asp"
+        # 4. Task Scheduler XML: <Exec><Command>..</Command><Arguments>..</Arguments>
+        if not prof and re.search(r"(?is)<Task\b[^>]*windows/2004/02/mit/task|<Actions\b.*?<Exec>", head):
+            for m in re.finditer(r"(?is)<Exec>(.*?)</Exec\s*>", s):
+                cm = re.search(r"(?is)<Command>(.*?)</Command\s*>", m.group(1))
+                am = re.search(r"(?is)<Arguments>(.*?)</Arguments\s*>", m.group(1))
+                cmd = html.unescape(((cm.group(1) if cm else "") + " " + (am.group(1) if am else "")).strip())
+                texts.extend(("task_exec", t) for t in _ph_shell_bodies(cmd))
+                lang = lang or (re.sub(r"(?i)\.exe$", "", re.split(r"[\\/]", cm.group(1).strip())[-1]).lower()
+                                if cm and cm.group(1).strip() else None)
+            prof = "scheduled_task_xml" if texts else None
+        # 5. GPO scripts.ini / psscripts.ini: NCmdLine= + NParameters=
+        if not prof and re.search(r"(?im)^[ \t]*\d+(?:CmdLine|Parameters)[ \t]*=", s):
+            kv = {}
+            for m in re.finditer(r"(?im)^[ \t]*(\d+)(CmdLine|Parameters)[ \t]*=[ \t]*(.*?)[ \t]*\r?$", s):
+                kv.setdefault(m.group(1), {})[m.group(2).lower()] = m.group(3)
+            for k, v in kv.items():
+                cmd = (v.get("cmdline", "") + " " + v.get("parameters", "")).strip()
+                texts.extend(("gpo_script", t) for t in _ph_shell_bodies(cmd))
+            ps = ext == "ini" and re.search(r"(?i)psscripts|powershell|pwsh|\.ps1", s)
+            lang = "powershell" if ps else "batch"
+            prof = "gpo_scripts_ini" if texts else None
+        # 6. systemd unit / .desktop entry: Exec*= values (systemd `%%` / `-@:+!` prefixes)
+        if not prof and re.search(r"(?im)^[ \t]*\[(?:Service|Unit|Timer|Socket|Desktop Entry)\][ \t]*\r?$", head):
+            desk = bool(re.search(r"(?im)^[ \t]*\[Desktop Entry\]", head)) or ext == "desktop"
+            for m in re.finditer(r"(?im)^[ \t]*(Exec\w*)[ \t]*=[ \t]*[-@:+!]*(.*?)[ \t]*\r?$", s):
+                cmd = m.group(2).replace("%%", "%")
+                texts.extend((m.group(1).lower(), t) for t in _ph_shell_bodies(cmd))
+            prof = ("desktop_entry" if desk else "systemd_unit") if texts else None
+        # 7. crontab lines
+        if not prof and (ext in ("cron", "crontab") or re.search(r"(?m)^[ \t]*(?:@reboot|(?:[\d*/,-]+[ \t]+){5}\S)", s)):
+            for m in _PH_CRON.finditer(s):
+                texts.extend(("cron_cmd", t) for t in _ph_shell_bodies(m.group("cmd").replace("\\%", "%")))
+            prof = "cron_entry" if texts else None
+        # 8. Redis EVAL "<lua>" numkeys ..
+        if not prof and re.search(r"(?im)^[ \t]*EVAL(?:_RO)?[ \t]", s):
+            for m in re.finditer(r"(?im)^[ \t]*EVAL(?:_RO)?[ \t]+", s):
+                b = _ph_shell_word(s, m.end())
+                if b and b.strip():
+                    texts.append(("redis_eval", b))
+            prof, lang = ("redis_eval", "lua") if texts else (None, None)
+        # 9. Nmap NSE / Electron preload: the file itself is the inner language
+        if not prof and (ext == "nse" or re.search(r"(?m)^[ \t]*description[ \t]*=[ \t]*\[=*\[", head)
+                         and re.search(r"\b(?:portrule|hostrule|prerule|postrule|action)[ \t]*=", s)):
+            prof, lang = "nmap_nse", "lua"
+            texts.append(("nse", s))
+        if not prof and re.search(r"""contextBridge|ipcRenderer|\brequire\s*\(\s*['"]electron['"]""", head):
+            prof, lang = ("electron_preload" if re.search(r"contextBridge|preload", head) or "preload" in (name or "")
+                          else "electron_main"), "node"
+            texts.append(("electron", s))
+        if prof:
+            if lang in (None, "sh", "bash") and prof in ("systemd_unit", "cron_entry", "desktop_entry"):
+                lang = "sh" if prof == "desktop_entry" else "bash"
+            out.update(profile_guess=prof, lang=lang, profile_lang=f"{prof}_{lang}" if lang else prof,
+                       inner_texts=[(w, t) for w, t in texts if t and t.strip()][:64])
+    except Exception:  # noqa: BLE001 - impostor / truncated: nothing
+        return {"profile_guess": None, "lang": None, "profile_lang": None, "inner_texts": []}
+    return out
+
+
+def _prior_host_codecs(src, raw=None, depth=0, name="", budget=0.6):
+    """find_codecs readings of a prior-language host's inner texts (first plan wins; `@host:<profile>:<where>`)."""
+    try:
+        end = time.time() + budget
+        host = prior_host(name, raw if raw is not None else src)
+        for where, text in host["inner_texts"]:
+            if time.time() > end:
+                break
+            if text == src:
+                continue
+            folded = _MH_FOLD.sub("", text)        # `"a" & _ / "a" +` continued literals: one literal
+            for c in (find_codecs(folded, depth + 1) if folded != text else []) + find_codecs(text, depth + 1):
+                if c.get("plain"):
+                    return [dict(c, id=f"{c.get('id')}@host:{host['profile_guess']}:{where}")]
     except Exception:  # noqa: BLE001
         return []
     return []
@@ -10772,3 +11870,1594 @@ def _cs_fold_codecs(src, budget=0.5):
             return [{"id": ident, "rep": "descriptor_folded", "transform": "identity", "key": "", "material": s,
                      "plain": plain}]
     return []
+
+
+# Groovy / Kotlin descriptor folding (target groovy-literal-fold): a descriptor assembled at runtime from literals --
+# GString `"${a}${b}"`, `'..' + '..'`, `[..].join()`, `.reverse()`, `.decodeBase64()` / `.decodeHex()`,
+# `Base64.getDecoder().decode(..)`, `[..] as byte[]` / `as char[]`, `.collect { it as char }`, `(char) 0x76`,
+# `String.format`, `.tr(..)`, slashy `/../` / dollar-slashy `$/../$`, `'''..'''` / `"""..."""` (`\` continuations),
+# `.stripIndent()`, Kotlin `buildString { append(..) }`, `listOf(..).joinToString("")`, `String(byteArrayOf(..))`,
+# `.toByteArray().map { (it.toInt() xor k).toChar() }`. A bounded scannerless const-evaluator over the literals.
+_GV_CUE = re.compile(r"""\bdef\s+\w+\s*=|\b(?:val|var)\s+\w+\s*(?::\s*[\w.<>?]+\s*)?=|\.decodeBase64\s*\(|\.decodeHex\s*\(|"""
+                     r"""\bas\s+(?:byte|char)\b|\bbuildString\b|\bjoinToString\b|\b(?:byte|char|int)ArrayOf\b|\blistOf\s*\(|"""
+                     r"""\.collect\s*\{|\$/|\.stripIndent\s*\(|\.trimIndent\s*\(|\bpipeline\s*\{|\bfun\s+\w|\.tr\s*\(""")
+_GV_STMT = re.compile(r"""(?m)(?:^|[;{])[ \t]*(?:(?:@\w+(?:\([^)\n]*\))?|def|final|static|private|public|protected|const|val|var|"""
+                      r"""lateinit|String|CharSequence|Object|byte\[\]|char\[\]|int\[\]|ByteArray|CharArray|List(?:<[\w<>, ]*>)?)[ \t]+)*"""
+                      r"""(?:(?P<name>[A-Za-z_]\w*)[ \t]*(?::[ \t]*[\w.<>?, \[\]]+[ \t]*)?(?P<op>\+?=)(?!=)|"""
+                      r"""fun[ \t]+(?P<fn>[A-Za-z_]\w*)[ \t]*\([ \t]*\)[ \t]*(?::[ \t]*[\w.<>?]+[ \t]*)?=(?!=)|"""
+                      r"""(?P<recv>[A-Za-z_]\w*)(?=[ \t]*(?:\.[ \t]*(?:append|insert|reverse|setLength)\b|<<)))|"""
+                      r"""\breturn[ \t]+(?=\S)|\b(?P<key>descriptor\w*)[ \t]*:[ \t]*(?=[^\s:])""")
+_GV_ESC = {"b": "\b", "t": "\t", "n": "\n", "f": "\f", "r": "\r", "s": " ", "\\": "\\", "'": "'", '"': '"', "$": "$", "/": "/"}
+_GV_TYPES = ("byte[]", "char[]", "int[]", "Byte[]", "Character[]", "Integer[]", "String[]", "char", "Character", "byte",
+             "Byte", "int", "Integer", "long", "Long", "short", "String", "List", "ArrayList", "Object", "CharSequence")
+
+
+class _GvStop(Exception):
+    pass
+
+
+class _GvCh(int):
+    """A Groovy/Kotlin char (an int that joins / concatenates as its character)."""
+
+
+class _GvSB:
+    def __init__(self, s=""):
+        self.s = s
+
+
+class _GvFn:
+    def __init__(self, params, a, b):
+        self.params, self.a, self.b = params, a, b
+
+
+def _gv_str(v):
+    if isinstance(v, str):
+        return v
+    if isinstance(v, _GvCh):
+        return chr(v % 0x110000)
+    if isinstance(v, _GvSB):
+        return v.s
+    if isinstance(v, bool) or v is None:
+        raise _GvStop("str")
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, list):
+        return "[" + ", ".join(_gv_str(x) for x in v) + "]"
+    raise _GvStop("str")
+
+
+def _gv_bytes(v):
+    if isinstance(v, list) and all(isinstance(x, int) and not isinstance(x, (_GvCh, bool)) for x in v):
+        return bytes(x & 0xFF for x in v)
+    raise _GvStop("bytes")
+
+
+def _gv_text(v, cs=None):
+    """`new String(x[, cs])` / Kotlin `String(x)` / `.decodeToString()`."""
+    if isinstance(v, list) and v and all(isinstance(x, _GvCh) for x in v):
+        return "".join(chr(x) for x in v)
+    if isinstance(v, (str, _GvSB)):
+        return _gv_str(v)
+    enc = (_gv_str(cs).strip().lower().replace("_", "-") if cs is not None else "utf-8")
+    enc = {"utf8": "utf-8", "us-ascii": "ascii", "iso-8859-1": "latin-1", "iso8859-1": "latin-1"}.get(enc, enc)
+    if enc not in ("utf-8", "ascii", "latin-1", "utf-16le", "utf-16be", "utf-16"):
+        raise _GvStop("charset")
+    try:
+        return _gv_bytes(v).decode(enc)
+    except UnicodeDecodeError:
+        raise _GvStop("decode")
+
+
+def _gv_tr_set(s):
+    out, i = [], 0
+    while i < len(s):
+        if i + 2 < len(s) and s[i + 1] == "-":
+            out.extend(chr(c) for c in range(ord(s[i]), ord(s[i + 2]) + 1))
+            i += 3
+        else:
+            out.append(s[i])
+            i += 1
+    return out
+
+
+def _gv_tr(s, a, b):
+    a, b = _gv_tr_set(_gv_str(a)), _gv_tr_set(_gv_str(b))
+    if not a or not b:
+        raise _GvStop("tr")
+    m = {}
+    for i, c in enumerate(a):
+        m[c] = b[i] if i < len(b) else b[-1]
+    return "".join(m.get(c, c) for c in s)
+
+
+def _gv_format(fmt, args):
+    args, k = list(args), [0]
+
+    def one(m):
+        conv = m.group(4)
+        if conv == "%":
+            return "%"
+        if conv == "n":
+            return "\n"
+        if m.group(1):
+            i = int(m.group(1)[:-1]) - 1
+        else:
+            i, k[0] = k[0], k[0] + 1
+        if i >= len(args):
+            raise _GvStop("format")
+        v, spec = args[i], "%" + (m.group(2) or "") + (m.group(3) or "")
+        if conv in "sS":
+            r = (spec + "s") % _gv_str(v)
+            return r.upper() if conv == "S" else r
+        if conv == "c":
+            return (spec + "s") % (_gv_str(v) if isinstance(v, str) else chr(int(v) % 0x110000))
+        if conv in "dxXo":
+            if isinstance(v, str) or isinstance(v, list):
+                raise _GvStop("format")
+            return (spec + conv) % int(v)
+        raise _GvStop("format")
+    return re.sub(r"%(\d+\$)?([-#+ 0,(]*\d*)(\.\d+)?([a-zA-Z%])", one, _gv_str(fmt))
+
+
+def _gv_dedent(s, kotlin=False):
+    lines = s.split("\n")
+    if kotlin:                                         # trimIndent: blank first / last line dropped
+        if lines and not lines[0].strip():
+            lines = lines[1:]
+        if lines and not lines[-1].strip():
+            lines = lines[:-1]
+    ind = [len(x) - len(x.lstrip(" \t")) for x in lines if x.strip()]
+    n = min(ind) if ind else 0
+    return "\n".join(x[n:] if x.strip() else ("" if kotlin else x[n:]) for x in lines)
+
+
+class _GvEval:
+    def __init__(self, src, env, kotlin, deadline):
+        self.s, self.env, self.kt, self.dl, self.recv, self.steps = src, env, kotlin, deadline, None, 0
+
+    # -- lexical helpers ----------------------------------------------------------------------------------------------
+    def ws(self, i, nl=True):
+        s = self.s
+        while i < len(s):
+            c = s[i]
+            if c in " \t\r" or (nl and c == "\n"):
+                i += 1
+            elif s.startswith("//", i) and not s.startswith("///", i):
+                j = s.find("\n", i)
+                i = len(s) if j < 0 else j
+            elif s.startswith("/*", i):
+                j = s.find("*/", i + 2)
+                i = len(s) if j < 0 else j + 2
+            elif c == "\\" and s.startswith("\n", i + 1) and not nl:
+                i += 2
+            else:
+                break
+        return i
+
+    def tick(self):
+        self.steps += 1
+        if self.steps > 200000 or (self.steps & 255 == 0 and time.time() > self.dl):
+            raise _GvStop("budget")
+
+    def ident(self, i):
+        m = re.compile(r"[A-Za-z_]\w*").match(self.s, i)
+        if not m:
+            raise _GvStop("ident")
+        return m.group(0), m.end()
+
+    def skip_braces(self, i):
+        """index after the `}` matching the `{` at s[i] (string literals skipped)."""
+        s, depth = self.s, 0
+        while i < len(s):
+            self.tick()
+            c = s[i]
+            if c in "\"'":
+                q = s[i:i + 3] if s[i:i + 3] in ('"""', "'''") else c
+                j = i + len(q)
+                while j < len(s) and not s.startswith(q, j):
+                    j += 2 if s[j] == "\\" and not (self.kt and len(q) == 3) else 1
+                i = j + len(q)
+                continue
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    return i + 1
+            i += 1
+        raise _GvStop("brace")
+
+    # -- string literals ----------------------------------------------------------------------------------------------
+    def interp(self, body, esc):
+        """GString / Kotlin template body -> text. esc: 'g' Groovy escapes, 'k' Kotlin, 'raw' none, '/' slashy, '$/'."""
+        out, i, n = [], 0, len(body)
+        while i < n:
+            self.tick()
+            c = body[i]
+            if c == "\\" and esc in ("g", "k") and i + 1 < n:
+                d = body[i + 1]
+                if d == "\n":
+                    i += 2
+                elif d == "u" and re.match(r"u+[0-9a-fA-F]{4}", body[i + 1:i + 10]):
+                    m = re.match(r"u+([0-9a-fA-F]{4})", body[i + 1:])
+                    out.append(chr(int(m.group(1), 16)))
+                    i += 1 + m.end()
+                elif esc == "g" and d in "01234567":
+                    m = re.match(r"[0-3]?[0-7]{1,2}", body[i + 1:])
+                    out.append(chr(int(m.group(0), 8)))
+                    i += 1 + m.end()
+                elif d in _GV_ESC and not (esc == "k" and d in "sf/"):
+                    out.append(_GV_ESC[d])
+                    i += 2
+                else:
+                    raise _GvStop("escape")
+            elif c == "\\" and esc == "/" and body.startswith("/", i + 1):
+                out.append("/")
+                i += 2
+            elif c == "$" and esc == "$/" and i + 1 < n and body[i + 1] in "$/":
+                out.append(body[i + 1])
+                i += 2
+            elif c == "$" and body.startswith("{", i + 1):
+                depth, j = 0, i + 1
+                while j < n:
+                    depth += {"{": 1, "}": -1}.get(body[j], 0)
+                    if depth == 0:
+                        break
+                    j += 1
+                if j >= n:
+                    raise _GvStop("gstring")
+                sub = _GvEval(body[i + 2:j], self.env, self.kt, self.dl)
+                sub.steps = self.steps
+                k = sub.ws(0)
+                v, k = sub.expr(k)
+                if sub.ws(k) != len(sub.s):
+                    raise _GvStop("gstring")
+                self.steps = sub.steps
+                out.append(_gv_str(v))
+                i = j + 1
+            elif c == "$" and re.match(r"[A-Za-z_]", body[i + 1:i + 2]):
+                m = re.match(r"[A-Za-z_]\w*", body[i + 1:])
+                if m.group(0) not in self.env:
+                    raise _GvStop("unbound")
+                out.append(_gv_str(self.env[m.group(0)]))
+                i += 1 + m.end()
+            else:
+                out.append(c)
+                i += 1
+        return "".join(out)
+
+    def string(self, i):
+        """(value, end) of the string literal at s[i], or None."""
+        s = self.s
+        for q, esc, gs in (('"""', "raw" if self.kt else "g", True), ("'''", "g", False)):
+            if s.startswith(q, i):
+                j = i + 3
+                while True:
+                    k = s.find(q, j)
+                    if k < 0:
+                        raise _GvStop("string")
+                    if esc == "raw" or (len(s[j:k]) - len(s[j:k].rstrip("\\"))) % 2 == 0:
+                        break
+                    j = k + 1
+                while s.startswith(q[0], k + 3) and esc == "raw":     # Kotlin `""""a""""`: trailing quotes are content
+                    k += 1
+                body = s[i + 3:k]
+                return (self.interp(body, esc) if gs else self.interp(body.replace("$", "\\$"), esc)), k + 3
+        if s.startswith("$/", i):
+            j = i + 2
+            while True:
+                k = s.find("/$", j)
+                if k < 0:
+                    raise _GvStop("string")
+                if s[k - 1] != "$" or s[k - 2:k] == "$$":
+                    break
+                j = k + 1
+            return self.interp(s[i + 2:k], "$/"), k + 2
+        c = s[i:i + 1]
+        if c in ("'", '"'):
+            m = re.compile(c + r"((?:[^" + c + r"\\\n]|\\.|\\\n)*)" + c).match(s, i)
+            if not m and c == '"':
+                m = self._dq_nested(i)
+            if not m:
+                raise _GvStop("string")
+            body, end = (m.group(1), m.end()) if not isinstance(m, tuple) else m
+            if c == "'" and self.kt:
+                t = self.interp(body, "k")
+                if len(t) != 1:
+                    raise _GvStop("char")
+                return _GvCh(ord(t)), end
+            return self.interp(body if c == '"' else body.replace("$", "\\$"), "k" if self.kt else "g"), end
+        if c == "/" and not s.startswith(("//", "/*"), i):
+            m = re.compile(r"/((?:[^/\\\n]|\\.)+)/").match(s, i)
+            if not m:
+                raise _GvStop("slashy")
+            return self.interp(m.group(1), "/"), m.end()
+        return None
+
+    def _dq_nested(self, i):
+        """A `"..${ "x" }.."` double-quoted string whose template holds quotes: (body, end) or None."""
+        s, j, depth = self.s, i + 1, 0
+        while j < len(s) and s[j] != "\n":
+            if s[j] == "\\":
+                j += 2
+                continue
+            if s.startswith("${", j):
+                depth += 1
+                j += 2
+                continue
+            if s[j] == "}" and depth:
+                depth -= 1
+            elif s[j] == '"' and not depth:
+                return s[i + 1:j], j + 1
+            elif s[j] == '"':
+                k = s.find('"', j + 1)
+                if k < 0:
+                    return None
+                j = k
+            j += 1
+        return None
+
+    # -- expressions --------------------------------------------------------------------------------------------------
+    _BIN = ((("|", "or"),), (("^", "xor"),), (("&", "and"),), (("<<", "shl"), (">>", "shr"), ("ushr", "ushr")),
+            (("+",), ("-",)), (("*",), ("%",)))
+
+    def expr(self, i, lvl=0):
+        if lvl >= len(self._BIN):
+            return self.unary(i)
+        a, i = self.expr(i, lvl + 1)
+        while True:
+            self.tick()
+            j = self.ws(i, nl=False)
+            op = None
+            for group in self._BIN[lvl]:
+                for t in group:
+                    if t.isalpha():
+                        if re.compile(t + r"\b").match(self.s, j):
+                            op = group[0]
+                    elif self.s.startswith(t, j) and not self.s.startswith(t + "=", j) and \
+                            not (t in "|&<>" and self.s.startswith(t * 2, j) and len(t) == 1) and \
+                            not (t in ("+", "-") and self.s.startswith(t * 2, j)) and not (t == "*" and self.s.startswith("*.", j)):
+                        op = group[0]
+                    if op:
+                        j += len(t)
+                        break
+                if op:
+                    break
+            if not op:
+                return a, i
+            b, i = self.expr(self.ws(j), lvl + 1)
+            a = self.binop(op, a, b)
+
+    def binop(self, op, a, b):
+        if op == "<<" and isinstance(a, (_GvSB, str, list)):
+            if isinstance(a, _GvSB):
+                a.s += _gv_str(b)
+                return a
+            return (a + [b]) if isinstance(a, list) else _GvSB(a + _gv_str(b))
+        if op == "+":
+            if isinstance(a, (str, _GvSB)) or isinstance(b, (str, _GvSB)) and not isinstance(a, list):
+                return _gv_str(a) + _gv_str(b)
+            if isinstance(a, list):
+                return a + (b if isinstance(b, list) else [b])
+            if isinstance(a, _GvCh) and self.kt and not isinstance(b, _GvCh):
+                return _GvCh(a + b)
+        if op == "*" and isinstance(a, str) and isinstance(b, int) and 0 <= b < 4096:
+            return a * b
+        if op == "-" and isinstance(a, str) and isinstance(b, str):
+            return a.replace(b, "", 1)
+        if not (isinstance(a, int) and isinstance(b, int)) or isinstance(a, bool) or isinstance(b, bool):
+            raise _GvStop("binop")
+        a, b = int(a), int(b)
+        r = {"|": lambda: a | b, "^": lambda: a ^ b, "&": lambda: a & b, "<<": lambda: a << (b & 63),
+             ">>": lambda: a >> (b & 63), "ushr": lambda: (a & 0xFFFFFFFF) >> (b & 31), "+": lambda: a + b,
+             "-": lambda: a - b, "*": lambda: a * b, "%": lambda: a % b if b else _gv_fail()}[op]()
+        if abs(r) > 1 << 64:
+            raise _GvStop("big")
+        return r
+
+    def unary(self, i):
+        s = self.s
+        self.tick()
+        if s.startswith("-", i) and not s.startswith("--", i):
+            v, i = self.unary(self.ws(i + 1))
+            if not isinstance(v, int):
+                raise _GvStop("neg")
+            return -v, i
+        m = re.compile(r"\(\s*(char|byte|int|short|long|String|Character|Integer)\s*\)\s*").match(s, i)
+        if m:
+            v, i = self.unary(m.end())
+            return self.cast(v, m.group(1)), i
+        v, i = self.primary(i)
+        return self.postfix(v, i)
+
+    def cast(self, v, t):
+        if t in ("char", "Character"):
+            if isinstance(v, str) and len(v) == 1:
+                return _GvCh(ord(v))
+            if isinstance(v, int):
+                return _GvCh(int(v) & 0xFFFF)
+        if t in ("byte", "Byte") and isinstance(v, int):
+            return int(v) & 0xFF
+        if t in ("int", "Integer", "short", "long", "Long") and isinstance(v, int):
+            return int(v)
+        if t in ("int", "Integer") and isinstance(v, str) and not self.kt:
+            return int(v) if v.strip().lstrip("-").isdigit() else _gv_fail()
+        if t in ("String", "CharSequence", "Object"):
+            return _gv_str(v) if not isinstance(v, list) else v if t == "Object" else _gv_text(v)
+        if t.endswith("[]") or t in ("List", "ArrayList"):
+            items = list(v) if isinstance(v, str) else v
+            if not isinstance(items, list):
+                raise _GvStop("cast")
+            if t.startswith(("char", "Character")):
+                return [self.cast(x, "char") for x in items]
+            if t.startswith(("byte", "Byte")):
+                return [self.cast(x, "byte") for x in items]
+            if t.startswith(("int", "Integer")):
+                return [int(x) if isinstance(x, int) else _gv_fail() for x in items]
+            return list(items)
+        raise _GvStop("cast")
+
+    def args(self, i, close=")"):
+        """(positional, named, end) of an argument list starting after `(`."""
+        pos, named = [], {}
+        i = self.ws(i)
+        if self.s.startswith(close, i):
+            return pos, named, i + 1
+        while True:
+            m = re.compile(r"([A-Za-z_]\w*)\s*[:=](?![:=])\s*").match(self.s, i)
+            if m and m.group(1) not in self.env and m.group(1) != "it":
+                v, i = self.expr(self.ws(m.end()))
+                named[m.group(1)] = v
+            else:
+                v, i = self.expr(i)
+                pos.append(v)
+            i = self.ws(i)
+            if self.s.startswith(",", i):
+                i = self.ws(i + 1)
+                if self.s.startswith(close, i):
+                    return pos, named, i + 1
+                continue
+            if self.s.startswith(close, i):
+                return pos, named, i + 1
+            raise _GvStop("args")
+
+    def closure(self, i):
+        """_GvFn of the `{ [a, b ->] body }` at s[i] and its end."""
+        end = self.skip_braces(i)
+        m = re.compile(r"\{\s*(?:([A-Za-z_]\w*(?:\s*:\s*\w+)?(?:\s*,\s*[A-Za-z_]\w*(?:\s*:\s*\w+)?)*)?\s*->)?").match(self.s, i)
+        params = [p.split(":")[0].strip() for p in (m.group(1) or "").split(",") if p.strip()] if "->" in m.group(0) else ["it"]
+        return _GvFn(params, m.end(), end - 1), end
+
+    def call(self, fn, *vals):
+        saved = dict(self.env)
+        try:
+            for p, v in zip(fn.params, vals):
+                self.env[p] = v
+            return self.block(fn.a, fn.b)
+        finally:
+            self.env.clear()
+            self.env.update(saved)
+
+    def block(self, a, b):
+        """value of the last expression statement in s[a:b]."""
+        v, i = None, self.ws(a)
+        while i < b:
+            self.tick()
+            m = re.compile(r"(?:val|var|def)\s+([A-Za-z_]\w*)\s*(?::\s*[\w.<>?]+\s*)?=(?!=)\s*").match(self.s, i)
+            if m:
+                v, i = self.expr(self.ws(m.end()))
+                self.env[m.group(1)] = v
+            else:
+                v, i = self.expr(i)
+            k = self.ws(i, nl=False)
+            if k < b and self.s[k] not in ";\n":
+                raise _GvStop("stmt")
+            i = k
+            while i < b and self.s[i] in ";\n \t\r":
+                i = self.ws(i + 1)
+        if i > b:
+            raise _GvStop("block")
+        return v
+
+    def primary(self, i):
+        s = self.s
+        self.tick()
+        if i >= len(s):
+            raise _GvStop("eof")
+        st = self.string(i)
+        if st is not None:
+            return st
+        c = s[i]
+        m = re.compile(r"0[xX]([0-9a-fA-F_]+)|0[bB]([01_]+)|(\d[\d_]*)(?![\w.]\d)").match(s, i)
+        if m:
+            g = m.group(1) or m.group(2) or m.group(3)
+            v = int(g.replace("_", ""), 16 if m.group(1) else 2 if m.group(2) else 10)
+            e = m.end()
+            if s[e:e + 1] in ("L", "l", "G", "g", "u", "U", "I", "i") and not re.match(r"\w", s[e + 1:e + 2]):
+                e += 1
+            return v, e
+        if c == "(":
+            v, j = self.expr(self.ws(i + 1))
+            j = self.ws(j)
+            if not s.startswith(")", j):
+                raise _GvStop("paren")
+            return v, j + 1
+        if c == "[":
+            pos, named, j = self.args(i + 1, "]")
+            if named:
+                if "descriptor" in named and len(named) == 1:
+                    return named["descriptor"], j
+                raise _GvStop("map")
+            return pos, j
+        if s.startswith("new", i) and re.compile(r"new\s+").match(s, i):
+            m = re.compile(r"new\s+((?:java\.lang\.)?String|(?:java\.lang\.)?StringBuilder|StringBuffer)\s*\(").match(s, i)
+            if not m:
+                raise _GvStop("new")
+            pos, named, j = self.args(m.end())
+            if m.group(1).endswith("String"):
+                if not pos:
+                    return "", j
+                return _gv_text(pos[0], pos[1] if len(pos) > 1 else None) if len(pos) <= 2 else _gv_fail(), j
+            return _GvSB(_gv_str(pos[0]) if pos and not isinstance(pos[0], int) else ""), j
+        name, j = self.ident(i)
+        while True:                                         # qualified names: java.util.Base64.getDecoder ...
+            m = re.compile(r"\s*\.\s*([A-Za-z_]\w*)").match(s, j)
+            if not m or name in self.env:
+                break
+            name, j = name + "." + m.group(1), m.end()
+        name = re.sub(r"^(?:java\.(?:util|lang|nio\.charset)|kotlin(?:\.text|\.io\.encoding)?)\.", "", name)
+        if name in self.env:
+            return self.env[name], j
+        head = name.split(".")[0]
+        if head in self.env:
+            v = self.env[head]
+            for part in name.split(".")[1:]:
+                v = self.method(v, part, [], {}, None)
+            return v, j
+        k = self.ws(j, nl=False)
+        if name in ("StandardCharsets.UTF_8", "Charsets.UTF_8"):
+            return "UTF-8", j
+        if name in ("StandardCharsets.US_ASCII", "Charsets.US_ASCII"):
+            return "US-ASCII", j
+        if name in ("StandardCharsets.ISO_8859_1", "Charsets.ISO_8859_1"):
+            return "ISO-8859-1", j
+        if name == "buildString" and s.startswith("{", k):
+            fn, e = self.closure(k)
+            saved, self.recv = self.recv, _GvSB()
+            try:
+                self.call(fn)
+                return self.recv.s, e
+            finally:
+                self.recv = saved
+        if not s.startswith("(", k):
+            raise _GvStop("unbound " + name)
+        pos, named, e = self.args(k + 1)
+        if name == "append" and self.recv is not None:
+            self.recv.s += "".join(_gv_str(x) for x in pos)
+            return self.recv, e
+        if name in ("listOf", "arrayOf", "mutableListOf", "arrayListOf", "intArrayOf", "listOfNotNull"):
+            return list(pos), e
+        if name == "byteArrayOf":
+            return [int(x) & 0xFF if isinstance(x, int) else _gv_fail() for x in pos], e
+        if name == "charArrayOf":
+            return [self.cast(x, "char") for x in pos], e
+        if name == "String" and pos:
+            return _gv_text(pos[0], pos[1] if len(pos) > 1 else None), e
+        if name in ("String.format", "format") and pos:
+            return _gv_format(pos[0], pos[1:]), e
+        if name in ("String.join",) and pos:
+            items = pos[1] if len(pos) == 2 and isinstance(pos[1], list) else pos[1:]
+            return _gv_str(pos[0]).join(_gv_str(x) for x in items), e
+        if name in ("String.valueOf", "String.copyValueOf") and len(pos) == 1:
+            return _gv_text(pos[0]) if isinstance(pos[0], list) else _gv_str(pos[0]), e
+        if name in ("Character.toString", "Character.valueOf", "Character.toChars") and len(pos) == 1:
+            return chr(int(pos[0]) % 0x110000) if name != "Character.valueOf" else self.cast(pos[0], "char"), e
+        if name in ("Integer.parseInt", "Integer.valueOf", "Long.parseLong") and pos:
+            return int(_gv_str(pos[0]), int(pos[1]) if len(pos) > 1 else 10), e
+        if name in ("Base64.getDecoder", "Base64.getMimeDecoder", "Base64.getUrlDecoder", "HexFormat.of", "Base64.Default"):
+            return ("b64:" + name, ), e
+        raise _GvStop("call " + name)
+
+    def postfix(self, v, i):
+        s = self.s
+        while True:
+            self.tick()
+            j = self.ws(i, nl=False)
+            jn = self.ws(i)
+            m = re.compile(r"(\?|\*)?\.(?!\.)\s*([A-Za-z_]\w*)").match(s, jn)
+            if m:
+                name, k = m.group(2), self.ws(m.end(), nl=False)
+                pos, named, fn = [], {}, None
+                if s.startswith("(", k):
+                    pos, named, k = self.args(k + 1)
+                    kk = self.ws(k, nl=False)
+                    if s.startswith("{", kk):
+                        fn, k = self.closure(kk)
+                elif s.startswith("{", k):
+                    fn, k = self.closure(k)
+                else:
+                    name = "@" + name                         # property access
+                if m.group(1) == "*":
+                    v = [self.method(x, name, pos, named, fn) for x in (v if isinstance(v, list) else _gv_fail())]
+                else:
+                    v = self.method(v, name, pos, named, fn)
+                i = k
+                continue
+            if s.startswith("[", j) and not isinstance(v, int):
+                idx, k = self.expr(self.ws(j + 1))
+                k = self.ws(k)
+                if not s.startswith("]", k) or not isinstance(idx, int):
+                    raise _GvStop("index")
+                seq = _gv_str(v) if isinstance(v, (str, _GvSB)) else v
+                v = seq[idx] if isinstance(seq, (str, list)) and -len(seq) <= idx < len(seq) else _gv_fail()
+                i = k + 1
+                continue
+            m = re.compile(r"as\s+(" + "|".join(re.escape(t) for t in _GV_TYPES) + r")(?![\w\[])").match(s, j)
+            if m:
+                v, i = self.cast(v, m.group(1)), m.end()
+                continue
+            return v, i
+
+    def method(self, v, name, a, kw, fn):
+        prop = name.startswith("@")
+        name = name.lstrip("@")
+        if prop:
+            name = {"bytes": "getBytes", "length": "length", "size": "size", "code": "code", "indices": "?"}.get(name, name)
+        if isinstance(v, tuple):                              # Base64 decoder / HexFormat helper objects
+            if name in ("decode", "parseHex") and a:
+                t = _gv_str(a[0]) if not isinstance(a[0], list) else _gv_bytes(a[0]).decode("latin-1")
+                if name == "parseHex":
+                    return list(bytes.fromhex(t))
+                if "Url" in v[0]:
+                    t = t.translate(str.maketrans("-_", "+/"))
+                t = re.sub(r"\s+", "", t) if "Mime" in v[0] else t
+                try:
+                    return list(base64.b64decode(t + "=" * (-len(t) % 4) if "Mime" in v[0] or "Url" in v[0] else t,
+                                                 validate=True))
+                except (binascii.Error, ValueError):
+                    raise _GvStop("b64")
+            raise _GvStop("helper")
+        if isinstance(v, _GvSB):
+            if name in ("append", "leftShift", "plus") and len(a) == 1:
+                v.s += _gv_str(a[0])
+                return v
+            if name == "insert" and len(a) == 2:
+                v.s = v.s[:int(a[0])] + _gv_str(a[1]) + v.s[int(a[0]):]
+                return v
+            if name == "reverse" and not a:
+                v.s = v.s[::-1]
+                return v
+            if name in ("toString", "toStr"):
+                return v.s
+            v = v.s
+        if isinstance(v, _GvCh):
+            if name in ("code", "toInt", "toLong", "toByte", "toShort") and not a:
+                return int(v) & 0xFF if name == "toByte" else int(v)
+            if name in ("toChar", "toCharacter") and not a:
+                return v
+            if name in ("toString", "toStr") and not a:
+                return chr(v)
+            v = chr(v)
+        if isinstance(v, int) and not isinstance(v, bool):
+            if name in ("toChar", "asChar") and not a:
+                return _GvCh(int(v) & 0xFFFF)
+            if name in ("toByte",) and not a:
+                b = int(v) & 0xFF
+                return b - 256 if b > 127 else b
+            if name in ("toInt", "toLong", "toShort", "toInteger", "intValue") and not a:
+                return int(v)
+            if name in ("xor", "and", "or") and len(a) == 1 and isinstance(a[0], int):
+                return self.binop({"xor": "^", "and": "&", "or": "|"}[name], v, a[0])
+            if name in ("toString",) and len(a) <= 1:
+                return format(int(v), {16: "x", 2: "b", 8: "o"}.get(int(a[0]) if a else 10, "d"))
+            raise _GvStop("int." + name)
+        if fn is not None:
+            items = v if isinstance(v, list) else ([_GvCh(ord(c)) for c in v] if self.kt else list(v)) \
+                if isinstance(v, str) else _gv_fail()
+            if name in ("collect", "map"):
+                return [self.call(fn, x) for x in items]
+            if name in ("mapIndexed", "collectWithIndex"):
+                return [self.call(fn, k, x) for k, x in enumerate(items)]
+            if name in ("findAll", "filter"):
+                return [x for x in items if self.call(fn, x)]
+            if name in ("joinToString",):
+                sep = _gv_str(a[0]) if a else _gv_str(kw.get("separator", ", "))
+                return sep.join(_gv_str(self.call(fn, x)) for x in items)
+            if name in ("sum",) and not self.kt:
+                return "".join(_gv_str(self.call(fn, x)) for x in items)
+            raise _GvStop("closure." + name)
+        if isinstance(v, list):
+            if name == "join":
+                return (_gv_str(a[0]) if a else "").join(_gv_str(x) for x in v)
+            if name == "joinToString":
+                sep = _gv_str(a[0]) if a else _gv_str(kw.get("separator", ", "))
+                return _gv_str(kw.get("prefix", "")) + sep.join(_gv_str(x) for x in v) + _gv_str(kw.get("postfix", ""))
+            if name in ("reverse", "reversed", "asReversed") and not a:
+                return v[::-1]
+            if name in ("toByteArray", "toList", "toMutableList", "asList", "toTypedArray") and not a:
+                return list(v)
+            if name in ("toCharArray",) and not a:
+                return [self.cast(x, "char") for x in v]
+            if name in ("decodeToString",) and not a:
+                return _gv_text(v)
+            if name in ("size", "length") and not a:
+                return len(v)
+            if name in ("flatten",) and not a:
+                return [y for x in v for y in (x if isinstance(x, list) else [x])]
+            if name in ("plus",) and len(a) == 1:
+                return v + (a[0] if isinstance(a[0], list) else [a[0]])
+            if name in ("get", "getAt") and len(a) == 1 and isinstance(a[0], int):
+                return v[a[0]]
+            if name in ("take", "drop") and len(a) == 1:
+                return v[:a[0]] if name == "take" else v[a[0]:]
+            if name == "sum" and not a and v and all(isinstance(x, str) for x in v):
+                return "".join(v)
+            if name == "encodeBase64" and not a:
+                return base64.b64encode(_gv_bytes(v)).decode()
+            raise _GvStop("list." + name)
+        if not isinstance(v, str):
+            raise _GvStop("method")
+        if name in ("reverse", "reversed") and not a:
+            return v[::-1]
+        if name == "decodeBase64" and not a:
+            try:
+                return list(base64.b64decode(re.sub(r"\s+", "", v), validate=True))
+            except (binascii.Error, ValueError):
+                raise _GvStop("b64")
+        if name == "decodeHex" and not a:
+            try:
+                return list(bytes.fromhex(v))
+            except ValueError:
+                raise _GvStop("hex")
+        if name == "encodeBase64" and not a:
+            return base64.b64encode(v.encode()).decode()
+        if name == "tr" and len(a) == 2:
+            return _gv_tr(v, a[0], a[1])
+        if name in ("stripIndent", "trimIndent") and not a:
+            return _gv_dedent(v, kotlin=(name == "trimIndent"))
+        if name in ("stripMargin", "trimMargin") and len(a) <= 1:
+            mc = _gv_str(a[0]) if a else "|"
+            lines = v.split("\n")
+            if name == "trimMargin":
+                lines = lines[1:] if lines and not lines[0].strip() else lines
+                lines = lines[:-1] if lines and not lines[-1].strip() else lines
+            return "\n".join(x.lstrip(" \t")[len(mc):] if x.lstrip(" \t").startswith(mc) else x for x in lines)
+        if name in ("trim", "strip") and not a:
+            return v.strip()
+        if name in ("toUpperCase", "uppercase", "toUpperCase") and not a:
+            return v.upper()
+        if name in ("toLowerCase", "lowercase") and not a:
+            return v.lower()
+        if name in ("replace",) and len(a) == 2:
+            return v.replace(_gv_str(a[0]), _gv_str(a[1]))
+        if name in ("replaceAll", "replaceFirst") and len(a) == 2 and isinstance(a[1], str):
+            rep = re.sub(r"\$(\d)", r"\\\1", a[1].replace("\\", "\\\\"))
+            return re.sub(_gv_str(a[0]), rep, v, count=1 if name == "replaceFirst" else 0)
+        if name in ("substring",) and 1 <= len(a) <= 2:
+            return v[int(a[0]):] if len(a) == 1 else v[int(a[0]):int(a[1])]
+        if name in ("take", "drop", "takeLast", "dropLast") and len(a) == 1:
+            n = int(a[0])
+            return {"take": v[:n], "drop": v[n:], "takeLast": v[-n:] if n else "", "dropLast": v[:-n] if n else v}[name]
+        if name in ("getBytes", "toByteArray", "encodeToByteArray") and len(a) <= 1:
+            enc = _gv_str(a[0]).strip().upper().replace("_", "-") if a else "UTF-8"
+            enc = {"UTF-8": "utf-8", "UTF8": "utf-8", "US-ASCII": "ascii", "ISO-8859-1": "latin-1"}.get(enc)
+            return list(v.encode(enc)) if enc else _gv_fail()
+        if name in ("toCharArray", "chars", "toList") and not a:
+            return [_GvCh(ord(c)) for c in v] if (self.kt or name == "toCharArray") else list(v)
+        if name in ("split", "tokenize") and len(a) == 1:
+            parts = re.split(_gv_str(a[0]) if name == "split" else "[" + re.escape(_gv_str(a[0])) + "]", v)
+            if name == "tokenize" or not self.kt:
+                parts = [p for p in parts if p] if name == "tokenize" else parts
+                while parts and not parts[-1] and name == "split":
+                    parts.pop()
+            return parts
+        if name == "chunked" and len(a) == 1 and int(a[0]) > 0:
+            return [v[k:k + int(a[0])] for k in range(0, len(v), int(a[0]))]
+        if name in ("multiply", "repeat") and len(a) == 1 and 0 <= int(a[0]) < 4096:
+            return v * int(a[0])
+        if name in ("plus", "concat") and len(a) == 1:
+            return v + _gv_str(a[0])
+        if name == "format":
+            return _gv_format(v, a)
+        if name in ("length", "size") and not a:
+            return len(v)
+        if name in ("toInteger", "toInt", "toLong", "parseInt") and len(a) <= 1:
+            try:
+                return int(v, int(a[0]) if a else 10)
+            except ValueError:
+                raise _GvStop("int")
+        if name in ("charAt", "get", "getAt") and len(a) == 1:
+            return _GvCh(ord(v[int(a[0])])) if name != "getAt" else v[int(a[0])]
+        if name in ("toString", "toStr", "intern", "toCharSequence") and not a:
+            return v
+        if name in ("decodeToString",) and not a:
+            return v
+        if name in ("padStart", "padLeft") and 1 <= len(a) <= 2:
+            return v.rjust(int(a[0]), _gv_str(a[1]) if len(a) > 1 else " ")
+        if name in ("center",):
+            raise _GvStop("center")
+        raise _GvStop("str." + name)
+
+
+def _gv_fail(*a):
+    raise _GvStop("fail")
+
+
+def gv_fold(src, budget=0.5):
+    """[(name, folded descriptor text)] of a Groovy / Kotlin source whose descriptor is assembled at runtime."""
+    try:
+        src = src if isinstance(src, str) else bytes(src).decode("utf-8", "ignore")
+        src = src[:1 << 18].replace("\r\n", "\n")
+        kotlin = bool(re.search(r"(?m)^\s*(?:(?:private|const|internal)\s+)*(?:val|fun)\s+\w", src)) and \
+            not re.search(r"(?m)^\s*def\s+\w", src)
+        env, cands = {}, []
+        ev = _GvEval(src, env, kotlin, time.time() + budget)
+        for m in _GV_STMT.finditer(src):
+            if time.time() > ev.dl:
+                break
+            try:
+                if m.group("recv"):
+                    if m.group("recv") in env:
+                        ev.expr(m.start("recv"))
+                    continue
+                v, _ = ev.expr(ev.ws(m.end()))
+            except (_GvStop, RecursionError, ValueError, IndexError, TypeError, OverflowError, KeyError,
+                    ZeroDivisionError):
+                continue
+            name = m.group("name") or m.group("fn") or m.group("key") or "return"
+            if m.group("op") == "+=" and name in env:
+                try:
+                    v = ev.binop("+", env[name], v)
+                except _GvStop:
+                    continue
+            if m.group("name") or m.group("fn"):
+                env[name] = v
+            if not (m.group("name") or m.group("fn")) or m.group("op") == "+=":
+                cands.append((name, v))
+        out, seen = [], set()
+        named = [(n, v) for n, v in env.items() if _CS_DESC_NAME.search(n)]
+        rest = [(n, v) for n, v in reversed(list(env.items()) + cands) if not _CS_DESC_NAME.search(n)]
+        for name, val in named + [c for c in cands if _CS_DESC_NAME.search(c[0])] + rest:
+            try:
+                s = _gv_text(val) if isinstance(val, list) else _gv_str(val)
+            except (_GvStop, ValueError, TypeError):
+                continue
+            if len(s) >= 8 and s not in seen:
+                seen.add(s)
+                out.append((name, s))
+        return out
+    except Exception:  # noqa: BLE001 - hostile / truncated source: nothing folds
+        return []
+
+
+def _gv_fold_codecs(src, budget=0.5):
+    """find_codecs readings of runtime-assembled Groovy / Kotlin descriptors (first plan wins)."""
+    if not isinstance(src, str) or not _GV_CUE.search(src[:1 << 18]):
+        return []
+    end = time.time() + budget
+    for name, s in gv_fold(src, budget * 0.6)[:24]:
+        if time.time() > end:
+            break
+        plain = peel_plan(s, budget=min(0.3, max(0.05, end - time.time())))
+        if plain:
+            ident = re.sub(r"^descriptor[_-]?", "", name, flags=re.I) or "descriptor"
+            return [{"id": ident, "rep": "descriptor_folded", "transform": "identity", "key": "", "material": s,
+                     "plain": plain}]
+    return []
+
+
+# ------------------------------------------------------------------------------------------- pipeline execution locus
+# Target pipeline-execution-locus (D20 "separate controller semantics from agent semantics, not every step runs where
+# it appears to"). Jenkins: the Pipeline's Groovy (CPS) runs on the CONTROLLER even inside node{} / agent{} / script{}:
+# `new File(..)`, `"cmd".execute()`, Runtime.exec / ProcessBuilder, Jenkins.instance, System.getenv, @NonCPS methods,
+# load / evaluate / GroovyShell, @Grab / @Library, echo / httpRequest / libraryResource / readTrusted. Only durable-task
+# steps (sh, bat, powershell, pwsh) run on the agent -- in the container under container('x') / docker.image().inside /
+# agent { docker | kubernetes } -- and workspace FILE steps (readFile, writeFile, dir, stash, ..) act on the agent's
+# workspace FilePath (never the container: they are not launcher-decorated). A durable step with no node in scope has
+# no executor (locus "none"). GHA: run steps execute on the job's runner (agent: hosted / self-hosted) or in its
+# `container:`; `uses: docker://` steps in their own container. execution_locus(src) -> [{stage, step, locus, appears,
+# context, evidence, text}]; locus_answer(rows, what, accepted_values) answers 'which step runs on the controller',
+# 'count of agent steps', 'the step that only appears to run on the agent'. Bounded, never raises.
+_LX_DURABLE = ("sh", "bat", "powershell", "pwsh")
+_LX_FILE = ("readFile", "writeFile", "fileExists", "dir", "deleteDir", "stash", "unstash", "archiveArtifacts",
+            "findFiles", "readJSON", "readYaml", "readProperties", "readCSV", "writeJSON", "writeYaml", "writeCSV",
+            "checkout", "git", "junit", "zip", "unzip", "touch", "tar", "untar", "pwd", "ws")
+_LX_CTRL = ("echo", "load", "evaluate", "httpRequest", "libraryResource", "readTrusted", "input", "error", "build",
+            "emailext", "mail")
+_LX_NEWF = re.compile(r"\s+(?:java\.io\.)?(File|FileWriter|FileReader|FileInputStream|FileOutputStream|PrintWriter|"
+                      r"URL|GroovyShell|ProcessBuilder|Socket)\s*\(")
+_LX_AGENT = re.compile(r"""\s+(any|none)\b|\s*\{\s*(?:(docker|dockerfile|kubernetes)\s*\{[^{}]*?(?:image|filename|"""
+                       r"""yaml|label)\s*:?\s*['"]([^'"\n]*)['"]|(docker)\s*['"]([^'"\n]*)['"]|label\s*:?\s*['"]([^'"\n]*)['"]|"""
+                       r"""node\s*\{[^{}]*?label\s*:?\s*['"]([^'"\n]*)['"]|(any|none)\b)""")
+
+
+def _lx_line(src, i):
+    a = src.rfind("\n", 0, i) + 1
+    b = src.find("\n", i)
+    return src[a:b if b >= 0 else len(src)].strip()[:200]
+
+
+def _lx_jenkins(src):
+    out, n, i = [], len(src), 0
+    top = {"stage": None, "agent": None, "container": None, "noncps": None, "lex": None}
+    stack, pend = [top], {}
+    ident = re.compile(r"[A-Za-z_]\w*")
+
+    def add(i, step, locus, evidence, fr=None):
+        fr = fr or stack[-1]
+        appears = "container" if fr["container"] else "agent" if fr["agent"] not in (None, "none") else "controller"
+        if fr["noncps"]:
+            locus, evidence = "controller", evidence + "; inside @NonCPS method " + fr["noncps"]
+        out.append({"stage": pend.get("stage", fr["stage"]), "step": step, "locus": locus, "appears": appears,
+                    "context": fr["container"] or fr["agent"], "evidence": evidence, "text": _lx_line(src, i)})
+    while i < n and len(out) < 256:
+        c = src[i]
+        if src.startswith("//", i) or src.startswith("/*", i):
+            k = src.find("\n" if c == "/" and src[i + 1] == "/" else "*/", i + 2)
+            i = n if k < 0 else k + (0 if src[i + 1] == "/" else 2)
+            continue
+        if c in "'\"" or src.startswith("$/", i):
+            r = _ci_gstr(src, i)
+            i = r[2] if r else i + 1
+            continue
+        if c == "{":
+            fr = dict(stack[-1])
+            fr.update(pend)
+            pend = {}
+            stack.append(fr)
+            i += 1
+            continue
+        if c == "}":
+            if len(stack) > 1:
+                stack.pop()
+            i += 1
+            continue
+        if c == "@":
+            m = re.compile(r"@(NonCPS|Grab|Grapes|Library|GrabResolver)\b").match(src, i)
+            if m:
+                if m.group(1) == "NonCPS":
+                    d = re.compile(r"@NonCPS\s+(?:(?:static|private|public|def|void|String|Object|[A-Z]\w*(?:<[^>]*>)?)"
+                                   r"\s+)*([A-Za-z_]\w*)\s*\(").match(src, i)
+                    if d:
+                        pend["noncps"] = d.group(1)
+                        add(i, "@NonCPS " + d.group(1), "controller", "@NonCPS method: plain Groovy in the controller JVM")
+                        i = d.end()
+                        continue
+                else:
+                    add(i, "@" + m.group(1), "controller", "@%s resolved by the controller at compile time" % m.group(1))
+                i = m.end()
+                continue
+        if c == "." and src.startswith(".execute", i) and re.compile(r"\.execute\s*\(").match(src, i):
+            add(i, "execute()", "controller", "String/List.execute() forks a process on the controller, not the agent")
+            i += 8
+            continue
+        if (c.isalpha() or c == "_") and not (i and (src[i - 1].isalnum() or src[i - 1] in "_.$")):
+            w = ident.match(src, i)
+            word, j = w.group(0), w.end()
+            fr = stack[-1]
+            if word == "stage":
+                m = re.compile(r"\s*\(\s*(?:name\s*:\s*)?").match(src, j)
+                r = _ci_gstr(src, m.end()) if m else None
+                if r:
+                    pend["stage"] = _ci_gunescape(r[0], r[1], {})
+                    j = r[2]
+            elif word == "node":
+                m = re.compile(r"\s*(\()?\s*").match(src, j)
+                r = _ci_gstr(src, m.end())
+                if r:
+                    pend["agent"], j = _ci_gunescape(r[0], r[1], {}) or "any", r[2]
+                elif m.group(1) or src[m.end():m.end() + 1] == "{":
+                    pend["agent"] = "any"
+            elif word == "agent" and not re.match(r"\s*[:=(]", src[j:j + 4]):
+                m = _LX_AGENT.match(src[j:j + 600])
+                if m:
+                    g = m.groups()
+                    if g[0] or g[7]:
+                        fr["agent"] = (g[0] or g[7])
+                        fr["container"] = None
+                    elif g[1] or g[3]:
+                        fr["agent"] = "docker-host" if g[1] != "kubernetes" else "kubernetes-pod"
+                        fr["container"] = (g[2] if g[1] else g[4]) or g[1]
+                    else:
+                        fr["agent"], fr["container"] = g[5] or g[6], None
+            elif word == "container" or word == "withDockerContainer":
+                m = re.compile(r"\s*\(\s*(?:name\s*:\s*|image\s*:\s*)?").match(src, j)
+                r = _ci_gstr(src, m.end()) if m else None
+                if r:
+                    pend["container"], j = r[0] or word, r[2]
+            elif word == "docker":
+                m = re.compile(r"""\.(?:image|build)\s*\(\s*(['"])([^'"\n]*)\1[^{}\n]*?\.inside\b[^{\n]*""").match(src, j)
+                if m:
+                    pend["container"], j = m.group(2), m.end()
+            elif word == "script" and src[j:j + 40].lstrip().startswith("{"):
+                add(i, "script", "controller", "script{} block: Groovy evaluated by the CPS VM on the controller")
+            elif word in _LX_DURABLE:
+                m = re.compile(r"[ \t]*(\()?\s*").match(src, j)
+                k = m.end()
+                if m.group(1) or src[k:k + 1] in "'\"$" or re.match(r"(?:script|returnStdout|label)\s*:", src[k:k + 14]):
+                    if fr["container"]:
+                        add(i, word, "container", "durable-task step decorated into container '%s'" % fr["container"])
+                    elif fr["agent"] not in (None, "none"):
+                        add(i, word, "agent", "durable-task step on agent '%s'" % fr["agent"])
+                    else:
+                        add(i, word, "none", "durable-task step with no node/agent in scope (no executor)")
+            elif word in _LX_FILE and re.match(r"[ \t]*(?:\(|['\"]|[A-Za-z_]\w*\s*:)", src[j:j + 40]):
+                if word == "dir" and not re.match(r"[ \t]*\(?\s*['\"]", src[j:j + 40]):
+                    pass
+                else:
+                    loc = "agent" if fr["agent"] not in (None, "none") or fr["container"] else "none"
+                    add(i, word, loc, "workspace file step on the agent's FilePath" + (
+                        " (not inside container '%s')" % fr["container"] if fr["container"] else ""))
+            elif word in _LX_CTRL and re.match(r"[ \t]*(?:\(|['\"]|[A-Za-z_]\w*\s*:)", src[j:j + 40]):
+                add(i, word, "controller", "%s runs in the controller's CPS VM" % word)
+            elif word == "new":
+                m = _LX_NEWF.match(src, j)
+                if m:
+                    add(i, "new " + m.group(1), "controller", "java %s is opened by the controller JVM" % m.group(1))
+                    j = m.end() - 1
+            elif word in ("Jenkins", "Hudson") and re.match(r"\s*\.\s*(?:instance|get\s*\(|getInstance\s*\()", src[j:j + 20]):
+                add(i, word + ".instance", "controller", "Jenkins singleton exists only on the controller")
+            elif word == "Runtime" and re.match(r"\s*\.\s*(?:getRuntime\s*\(\s*\)|runtime)\s*\.\s*exec", src[j:j + 40]):
+                add(i, "Runtime.exec", "controller", "Runtime.exec forks on the controller")
+            elif word == "System" and re.match(r"\s*\.\s*(?:getenv|getProperty)\b", src[j:j + 20]):
+                add(i, "System.getenv", "controller", "System env/properties of the controller JVM")
+            i = j
+            continue
+        i += 1
+    return out
+
+
+def _lx_gha(src):
+    ents, out = _ci_yentries(src), []
+    trig = "pull_request_target" in src
+    get = lambda m, k: _ci_yval(ents, m[k]) if k in m else None  # noqa: E731
+    for x, e in enumerate(ents):
+        key = (e["key"] or "").lower()
+        if key not in ("run", "uses") or len(out) >= 128:
+            continue
+        h, sib = _ci_ymap(ents, x)
+        job, jobid = None, None
+        for _ in range(8):
+            p = _ci_yparent(ents, h) if h is not None else None
+            if p is None:
+                break
+            h, m = _ci_ymap(ents, p)
+            if "runs-on" in m or "container" in m:
+                q = _ci_yparent(ents, h) if h is not None else None
+                job, jobid = m, ents[q]["key"] if q is not None else None
+                break
+        if job is None:
+            continue
+        runs = str(get(job, "runs-on") or "")
+        if not runs and "runs-on" in job:
+            runs = " ".join(str(ents[k]["val"]) for k in _ci_ykids(ents, job["runs-on"]) if ents[k]["val"])
+        cont = get(job, "container")
+        if not cont and "container" in job:
+            cont = next((ents[k]["val"] for k in _ci_ykids(ents, job["container"]) if ents[k]["key"] == "image"), None)
+        val = str(get(sib, key) or "")
+        runs = ", ".join(re.findall(r"[^\s,\[\]'\"]+", runs))
+        hosting = "self-hosted" if "self-hosted" in runs.lower() else "hosted"
+        if key == "uses" and val.startswith("docker://"):
+            loc, ctx, ev = "container", val[9:], "docker:// action runs in its own container"
+        elif cont:
+            loc, ctx, ev = "container", cont, "job container: step runs inside '%s' on a %s runner" % (cont, hosting)
+        else:
+            loc, ctx, ev = "agent", hosting, "%s runner (runs-on: %s)" % (hosting, runs.strip())
+        if trig and key == "uses" and "checkout" in val and "with" in sib and re.search(
+                r"pull_request\.head\.(?:sha|ref)|github\.head_ref|refs/pull/",
+                " ".join(str(ents[k]["val"]) for k in _ci_ykids(ents, sib["with"]))):
+            ev += "; pull_request_target checks out the untrusted PR head with base-repo secrets"
+        name = get(sib, "name") or get(sib, "id") or (val.splitlines()[0][:80] if val else key)
+        out.append({"stage": jobid, "step": name, "locus": loc, "appears": loc, "context": ctx, "evidence": ev,
+                    "text": val[:200], "hosting": hosting})
+    return out
+
+
+def execution_locus(src, name=""):
+    """[{stage, step, locus: controller|agent|container|none, appears, context, evidence, text}] of a Jenkinsfile or a
+    GitHub Actions workflow; [] when it is neither. Never raises."""
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            src = bytes(src).decode("utf-8", "ignore")
+        src = (src or "")[:1 << 19].lstrip("﻿")
+        nm = (name or "").lower()
+        if nm.endswith((".groovy", ".jenkinsfile", ".gvy")) or "jenkinsfile" in nm or re.search(
+                r"\bpipeline\s*\{|\bnode\s*(?:\(|\{)|\bstage\s*\(\s*['\"]", src[:1 << 16]):
+            return _lx_jenkins(src)
+        if re.search(r"(?m)^jobs\s*:", src) and re.search(r"(?m)^\s+runs-on\s*:", src):
+            return _lx_gha(src)
+    except Exception:  # noqa: BLE001
+        pass
+    return []
+
+
+def locus_answer(rows, what="controller", accepted_values=None):
+    """Answer a locus question from execution_locus() rows. what: 'controller' / 'agent' / 'container' (the first such
+    step), 'count_<locus>' (int as str), 'misplaced' (the step that only appears to run on the agent / in the
+    container), 'stages_<locus>' (','-joined stages), 'table'. With accepted_values the answer is the accepted value
+    naming the step / stage / locus. None when it cannot answer."""
+    try:
+        if isinstance(rows, (str, bytes, bytearray)):
+            rows = execution_locus(rows)
+        if not rows:
+            return None
+        w = re.sub(r"[^a-z_]", "", (what or "").lower().replace("-", "_").replace(" ", "_"))
+        loc = next((x for x in ("controller", "container", "agent", "none") if x in w), None)
+        if w == "table":
+            return "\n".join("%s|%s|%s" % (r["stage"] or "", r["step"], r["locus"]) for r in rows)
+        if w.startswith("count"):
+            steps = [r for r in rows if r["step"] != "script"]
+            return str(sum(1 for r in steps if r["locus"] == loc)) if loc else str(len(steps))
+        if w.startswith("stage"):
+            got = []
+            for r in rows:
+                if r["locus"] == loc and r["stage"] and r["stage"] not in got:
+                    got.append(r["stage"])
+            return ",".join(got) or "none"
+        if w in ("misplaced", "appears", "apparent", "deceptive", "only_appears"):
+            pick = [r for r in rows if r["appears"] != r["locus"] and r["step"] != "script" and r["locus"] != "none"]
+        else:
+            pick = sorted([r for r in rows if r["locus"] == loc and r["step"] not in ("script", "echo")],
+                          key=lambda r: r["stage"] is None) or [r for r in rows if r["locus"] == loc]
+        if not pick:
+            return "none"
+        if accepted_values:
+            norm = lambda s: re.sub(r"[^a-z0-9]", "", str(s).lower())  # noqa: E731
+            for r in pick:
+                for v in accepted_values:
+                    nv = norm(v)
+                    if nv and any(nv == norm(r.get(k)) for k in ("step", "stage", "text")):
+                        return v
+            for r in pick:
+                for v in accepted_values:
+                    nv = norm(v)
+                    if len(nv) > 2 and (nv in norm(r.get("text")) or norm(r["step"]) in nv):
+                        return v
+            return None
+        return pick[0]["step"]
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _locus_decode(material, transform):
+    """decode() hook for rep 'pipeline_locus': transform = locus_answer's `what` (default 'table')."""
+    return locus_answer(execution_locus(material), (transform or "table").strip() or "table")
+
+
+# Target jenkins-artifact-secrets (coverage atlas): a JENKINS_HOME bundle -- secrets/master.key +
+# secrets/hudson.util.Secret, credentials.xml, jobs/*/config.xml, jobs/*/builds/N/{build.xml,log}. Crypto (Jenkins
+# core): KEK = sha256(master.key text)[:16]; hudson.util.Secret = AES-128-ECB(KEK, key || "::::MAGIC::::") PKCS5, the
+# Secret key is its first 16 bytes. New Secret `{base64}` = 0x01 | u32be ivlen | u32be datalen | iv | AES-128-CBC
+# PKCS7(data); old (pre-2.x) Secret = base64 AES-128-ECB(key, plain || "::::MAGIC::::").
+_JK_MAGIC = b"::::MAGIC::::"
+_JK_NEW = re.compile(r"\{([A-Za-z0-9+/]{20,}={0,2})\}")
+_JK_OLD = re.compile(r"[A-Za-z0-9+/]{22,}={0,2}")
+_JK_CMD_TAGS = {"hudson.tasks.Shell": "shell", "hudson.tasks.BatchFile": "batch",
+                "hudson.plugins.powershell.PowerShell": "powershell", "hudson.plugins.groovy.SystemGroovy": "groovy",
+                "hudson.plugins.groovy.Groovy": "groovy"}
+_JK_SECRET_TAGS = ("password", "secret", "passphrase", "privatekey", "token", "apitoken", "secretbytes", "value",
+                   "defaultvalue", "key", "credentials")
+
+
+def _jk_aes(key, data, mode, iv=None):
+    try:
+        from Crypto.Cipher import AES
+        c = AES.new(key, AES.MODE_ECB) if mode == "ecb" else AES.new(key, AES.MODE_CBC, iv)
+        return c.decrypt(data)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _jk_unpad(b):
+    if b and 1 <= b[-1] <= 16 and b.endswith(bytes([b[-1]]) * b[-1]):
+        return b[:-b[-1]]
+    return None
+
+
+def jenkins_key(master_key, hudson_secret):
+    """The 16-byte hudson.util.Secret AES key from secrets/master.key (+ secrets/hudson.util.Secret), or None."""
+    try:
+        mk = master_key.encode() if isinstance(master_key, str) else bytes(master_key or b"")
+        hs = bytes(hudson_secret or b"")
+        if not mk or not hs or len(hs) % 16:
+            return None
+        for m in dict.fromkeys((mk, mk.strip(), mk.rstrip(b"\r\n"))):
+            import hashlib
+            k = _jk_aes(hashlib.sha256(m).digest()[:16], hs, "ecb")
+            if k and _JK_MAGIC in k:
+                return k[:16]
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def jenkins_decrypt(value, key):
+    """Plaintext (str) of a Jenkins Secret (`{AQAAABAAAA..}` new format or a bare base64 old-format value) under the
+    16-byte hudson.util.Secret key, or None when it is not one / does not decrypt."""
+    try:
+        if not key or not value:
+            return None
+        s = value.strip() if isinstance(value, str) else bytes(value).decode("ascii", "ignore").strip()
+        m = re.fullmatch(_JK_NEW.pattern, s)
+        if m:
+            raw = base64.b64decode(m.group(1))
+            if len(raw) < 9 or raw[0] != 1:
+                return None
+            ivl, dl = int.from_bytes(raw[1:5], "big"), int.from_bytes(raw[5:9], "big")
+            iv, data = raw[9:9 + ivl], raw[9 + ivl:9 + ivl + dl]
+            if ivl != 16 or not data or len(data) != dl or len(data) % 16:
+                return None
+            p = _jk_unpad(_jk_aes(key, data, "cbc", iv) or b"")
+            return None if p is None else p.decode("utf-8")
+        if re.fullmatch(_JK_OLD.pattern, s):
+            raw = base64.b64decode(s + "=" * (-len(s) % 4))
+            if not raw or len(raw) % 16:
+                return None
+            p = _jk_aes(key, raw, "ecb") or b""
+            q = _jk_unpad(p)
+            for x in (q, p):
+                if x and x.endswith(_JK_MAGIC):
+                    return x[:-len(_JK_MAGIC)].decode("utf-8")
+                if x and _JK_MAGIC in x:
+                    return x[:x.rfind(_JK_MAGIC)].decode("utf-8")
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _jk_xml(b):
+    import xml.etree.ElementTree as ET
+    t = b.decode("utf-8", "replace") if isinstance(b, (bytes, bytearray)) else str(b)
+    t = re.sub(r"^﻿?\s*<\?xml[^>]*\?>", "", t.lstrip("﻿"))
+    t = re.sub(r"<!DOCTYPE[^>]*(?:\[.*?\])?\s*>", "", t, flags=re.S)
+    try:
+        return ET.fromstring(t)
+    except ET.ParseError:
+        return None
+
+
+def _jk_local(tag):
+    return str(tag).rsplit("}", 1)[-1]
+
+
+def _jk_bundle(material):
+    """decode() material -> {name: bytes}: base64/raw of a tar(.gz) / zip, or JSON {name: text|base64}."""
+    import io
+    import json
+    blobs = []
+    if isinstance(material, (bytes, bytearray)):
+        blobs.append(bytes(material))
+    else:
+        s = str(material).strip()
+        if s.startswith("{"):
+            try:
+                d = json.loads(s)
+                if isinstance(d, dict):
+                    out = {}
+                    for k, v in d.items():
+                        v = str(v)
+                        try:
+                            vb = base64.b64decode(v, validate=True) if re.fullmatch(r"[A-Za-z0-9+/=\s]{8,}", v) and \
+                                not k.endswith("master.key") else None
+                        except (binascii.Error, ValueError):
+                            vb = None
+                        out[str(k)] = vb if vb is not None and not k.endswith(".xml") else v.encode()
+                    return out
+            except ValueError:
+                pass
+        try:
+            blobs.append(base64.b64decode(re.sub(r"\s+", "", s) + "=" * (-len(re.sub(r"\s+", "", s)) % 4)))
+        except (binascii.Error, ValueError):
+            pass
+    for b in blobs:
+        try:
+            if b[:2] == b"PK":
+                import zipfile
+                z = zipfile.ZipFile(io.BytesIO(b))
+                return {i.filename: z.read(i)[:1 << 22] for i in z.infolist()[:2000]
+                        if not i.is_dir() and i.file_size < 1 << 22}
+            import tarfile
+            with tarfile.open(fileobj=io.BytesIO(b), mode="r:*") as tf:
+                out = {}
+                for m in tf.getmembers()[:2000]:
+                    if m.isfile() and m.size < 1 << 22:
+                        f = tf.extractfile(m)
+                        if f:
+                            out[m.name] = f.read()
+                return out
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
+def jenkins_secrets(files):
+    """[{id, kind, value, path, encrypted}] of a JENKINS_HOME bundle ({name: bytes}): credentials.xml entries
+    (password / secret / privateKey / passphrase / username, decrypted with master.key + hudson.util.Secret when both
+    are present, else the raw ciphertext with encrypted=True), job config.xml build steps (shell / batch / powershell
+    `<command>`, CpsFlowDefinition `<script>` = Jenkinsfile -> kind 'pipeline' plus one 'pipeline_step' per inner
+    step body), build.xml parameter values and Secret tokens found in build logs. [] on anything else. Never raises."""
+    out = []
+    try:
+        files = {str(k).replace("\\", "/"): (v if isinstance(v, (bytes, bytearray)) else str(v).encode())
+                 for k, v in (files or {}).items()}
+
+        def find(suffix):
+            for k in files:
+                if k == suffix or k.endswith("/" + suffix):
+                    return files[k]
+            return None
+        key = jenkins_key(find("secrets/master.key") or find("master.key") or b"",
+                          find("secrets/hudson.util.Secret") or find("hudson.util.Secret") or b"")
+
+        def add(ident, kind, value, path, cipher=False):
+            if value is None:
+                return
+            plain = jenkins_decrypt(value, key) if cipher else None
+            cipher = cipher and plain is None and bool(_JK_NEW.fullmatch(value.strip()) or (
+                len(value.strip()) % 4 == 0 and _JK_OLD.fullmatch(value.strip())))
+            out.append({"id": ident, "kind": kind, "value": plain if plain is not None else value, "path": path,
+                        "encrypted": bool(cipher)})
+
+        def job_of(path):
+            m = re.search(r"(?:^|/)jobs/(.+?)/(?:config\.xml|builds/)", path)
+            return re.sub(r"/jobs/", "/", m.group(1)) if m else None
+
+        for path in sorted(files)[:2000]:
+            low = path.lower()
+            data = files[path]
+            base = low.rsplit("/", 1)[-1]
+            if base.endswith(".xml") and base != "build.xml":
+                root = _jk_xml(data)
+                if root is None:
+                    continue
+                job = job_of(path)
+                if job is None or base != "config.xml":
+                    # credentials.xml (or any other XML holding Credentials impls): one record per credential element
+                    for cred in root.iter():
+                        ide = next((c for c in cred if _jk_local(c.tag) == "id"), None)
+                        if ide is None or not (ide.text or "").strip():
+                            continue
+                        cid = ide.text.strip()
+                        for el in cred.iter():
+                            t = _jk_local(el.tag)
+                            tl = t.lower()
+                            txt = (el.text or "").strip()
+                            if el is cred or el is ide or not txt or len(el):
+                                continue
+                            if tl in _JK_SECRET_TAGS or _JK_NEW.fullmatch(txt):
+                                add(cid, t, txt, path, True)
+                            elif tl in ("username", "description", "filename", "scope"):
+                                add(cid, t, txt, path)
+                    if job is None and not any(r["path"] == path for r in out):
+                        for el in root.iter():
+                            txt = (el.text or "").strip()
+                            if not len(el) and _JK_NEW.fullmatch(txt):
+                                add(_jk_local(el.tag), _jk_local(el.tag), txt, path, True)
+                    continue
+                n = 0
+                for el in root.iter():
+                    t = _jk_local(el.tag)
+                    kind = _JK_CMD_TAGS.get(t)
+                    cls = el.get("class") or ""
+                    if kind:
+                        c = next((x for x in el if _jk_local(x.tag) == "command"), None)
+                        if c is not None and c.text:
+                            n += 1
+                            add("%s:%s:%d" % (job, kind, n), kind, c.text, path)
+                    elif t == "definition" and "CpsFlowDefinition" in cls:
+                        s = next((x for x in el if _jk_local(x.tag) == "script"), None)
+                        if s is not None and s.text:
+                            add("%s:pipeline" % job, "pipeline", s.text, path)
+                            for i, st in enumerate(pipeline_steps("Jenkinsfile", s.text)[:64], 1):
+                                add("%s:%s:%d" % (job, st.get("stage") or "step", i), "pipeline_step",
+                                    st.get("body"), path)
+                    elif t in ("hudson.model.PasswordParameterDefinition", "hudson.model.StringParameterDefinition"):
+                        nm = next((x.text for x in el if _jk_local(x.tag) == "name"), None)
+                        dv = next((x.text for x in el if _jk_local(x.tag) == "defaultValue"), None)
+                        if nm and dv:
+                            add("%s:%s" % (job, nm.strip()), "parameter", dv.strip(), path, "Password" in t)
+                    elif not len(el) and _JK_NEW.fullmatch((el.text or "").strip()):
+                        add("%s:%s" % (job, t), t, el.text.strip(), path, True)
+            elif base == "build.xml":
+                root = _jk_xml(data)
+                m = re.search(r"/builds/([^/]+)/build\.xml$", path)
+                bid = "%s#%s" % (job_of(path), m.group(1) if m else "?")
+                if root is None:
+                    continue
+                for el in root.iter():
+                    t = _jk_local(el.tag)
+                    if t.endswith("ParameterValue"):
+                        nm = next((x.text for x in el if _jk_local(x.tag) == "name"), None)
+                        v = next((x.text for x in el if _jk_local(x.tag) == "value"), None)
+                        if nm and v is not None:
+                            add("%s:%s" % (bid, nm.strip()), "parameter", v.strip(), path, "Password" in t)
+                    elif not len(el) and _JK_NEW.fullmatch((el.text or "").strip()):
+                        add("%s:%s" % (bid, t), t, el.text.strip(), path, True)
+            elif base == "log" and "/builds/" in low:
+                m = re.search(r"/builds/([^/]+)/log$", path)
+                bid = "%s#%s" % (job_of(path), m.group(1) if m else "?")
+                txt = data[:1 << 20].decode("utf-8", "replace")
+                for i, mm in enumerate(_JK_NEW.finditer(txt), 1):
+                    add("%s:log:%d" % (bid, i), "log_secret", mm.group(0), path, True)
+                for i, mm in enumerate(re.finditer(r"(?m)^\++ (.+?)\r?$", txt), 1):
+                    if i > 256:
+                        break
+                    add("%s:cmd:%d" % (bid, i), "log_command", mm.group(1), path)
+        return out
+    except Exception:  # noqa: BLE001
+        return out
+
+
+def jenkins_answer(rows, what="table"):
+    """One value out of jenkins_secrets(): `table` -> `id|kind|value` lines; a credential/job id (or `id:kind`) ->
+    its secret value (password/secret/privateKey first); a kind (`shell`, `pipeline`, `privateKey`...) -> the first
+    such value; `count[:kind]` -> how many. 'none' when nothing matches."""
+    w = (what or "table").strip()
+    if not rows:
+        return "none"
+    if w.lower() == "table":
+        return "\n".join("%s|%s|%s" % (r["id"], r["kind"], r["value"]) for r in rows)
+    if w.lower().startswith("count"):
+        k = w.split(":", 1)[1].lower() if ":" in w else None
+        return str(sum(1 for r in rows if k is None or r["kind"].lower() == k))
+    ident, _, kind = w.partition(":") if w.count(":") == 1 and not any(r["id"] == w for r in rows) else (w, "", "")
+    pri = ("password", "secret", "privatekey", "secretbytes", "token", "apitoken", "passphrase", "parameter", "value")
+
+    def rank(r):
+        k = r["kind"].lower()
+        return (pri.index(k) if k in pri else len(pri), r["encrypted"])
+    hits = [r for r in rows if r["id"] == ident and (not kind or r["kind"].lower() == kind.lower())] or \
+        [r for r in rows if r["id"].lower() == ident.lower() and (not kind or r["kind"].lower() == kind.lower())]
+    hits = sorted(hits, key=rank) or [r for r in rows if r["kind"].lower() == w.lower()]
+    if not hits:
+        return "none"
+    return None if hits[0]["encrypted"] else hits[0]["value"]   # ciphertext we cannot open: cannot answer
+
+
+def _jenkins_decode(material, transform):
+    """decode() hook for rep 'jenkins_home': material = base64 tar/zip (or JSON) of JENKINS_HOME files, transform =
+    jenkins_answer's `what`."""
+    try:
+        files = _jk_bundle(material)
+        if not files:
+            return None
+        rows = jenkins_secrets(files)
+        return jenkins_answer(rows, transform or "table") if rows else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# --- evidence-magic-classifier: which existing reader a non-script member goes to --------------------------------------
+# Classifier ONLY (no new readers): magic bytes first, then the first non-blank line's shape, then a bounded head scan.
+# reader = the lib.codec function that already reads the kind (readers = every applicable one, primary first).
+_EK_PCAP = (b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\xc3\xd4", b"\x4d\x3c\xb2\xa1", b"\xa1\xb2\x3c\x4d")
+_EK_NET = re.compile(r"DestinationIp|DestinationHostname|QueryName|QueryResults|\bid\.orig_h\b|\"(?:url|uri|host|"
+                     r"query|server_name|dest_ip|destination\.ip|dns\.question\.name)\"\s*:|\bEvent(?:ID|Code|_id)\W{0,4}"
+                     r"(?:3|22)\b|<EventID[^>]*>\s*(?:3|22)\s*<")
+_EK_EVTX_NET = tuple(s.encode("utf-16-le") for s in ("DestinationIp", "DestinationHostname", "QueryName"))
+_EK_EVTX_PROC = tuple(s.encode("utf-16-le") for s in ("ParentProcessId", "NewProcessId", "ProcessGuid", "CommandLine"))
+_EK_W3C = re.compile(r"#(?:Software:\s*Microsoft|Version:\s*\d|Fields:\s*\S)")
+_EK_AUDIT = re.compile(r"type=(?:SYSCALL|EXECVE|PROCTITLE|CWD|PATH|USER_\w+|130[09]|1327)\s+(?:msg=)?audit\(\d")
+_EK_PS = re.compile(r"(?:(?:USER|UID|UNAME|F|S)\s+)*PID\s+(?:PPID|%CPU|TTY|USER|PGID|[A-Z%]+\s+PPID)\b|"
+                    r"PID\s+PPID\b|(?:USER|UID)\s+PID\b")
+_EK_PSTREE = re.compile(r"[\w.@:-]+(?:\(\d+\)|,\d+)(?:\s|$)?.*?(?:[─┬├└│]|[-+]+[\w.]|$)")
+_EK_PROCMON = re.compile(r"\"?Time of Day\"?\s*,.*\"?Process Name\"?\s*,.*\"?Operation\"?|"
+                         r"\"?Process Name\"?\s*,\s*\"?PID\"?\s*,\s*\"?Operation\"?")
+_EK_SQUID = re.compile(r"\d{9,10}\.\d{1,3}\s+-?\d+\s+\S+\s+[A-Z_]+/\d{3}\s+\d+\s+[A-Z]+\s+\S+")
+_EK_ACCESS = re.compile(r"(?:\S+\s+)?\S+\s+\S+\s+\S+\s+\[\d{1,2}/\w{3}/\d{4}:\d\d:\d\d:\d\d [+-]\d{4}\]\s+\"[A-Z]+ ")
+_EK_EVTXT = re.compile(r"(?im)\bEventCode=\d+|^\s*Process Create:|^\s*Network connection detected:|"
+                       r"^\s*Dns query:|^\s*EventID\s*[:=]\s*\d+\s*$|^\s*A new process has been created\.")
+_EK_JSON_EV = re.compile(r"\"(?:EventID|EventId|event_id|EventCode|winlog|@timestamp|ProcessId|ParentProcessId|"
+                         r"process|_path|id\.orig_h|uid|ts|cmdline|parent|pid|ppid|event|ProviderName|"
+                         r"TimeCreated|RecordId|LevelDisplayName)\"\s*:")
+_EK_JENKINS = re.compile(r"<(?:com\.cloudbees\.[\w.]+|hudson(?:\.[\w.]+)?|jenkins\.[\w.]+|org\.jenkinsci\.[\w.]+|"
+                         r"flow-definition|project|maven2-moduleset|matrix-project|com\.michelin\.[\w.]+)[\s>/]")
+
+
+def _ek(kind, *readers):
+    return {"kind": kind, "reader": readers[0] if readers else None, "readers": list(readers)}
+
+
+def _ek_split(head, evtx=False):
+    """process_events / network_indicators order for event logs: by which fields the head carries."""
+    if evtx:
+        net = any(s in head for s in _EK_EVTX_NET)
+        proc = any(s in head for s in _EK_EVTX_PROC)
+    else:
+        net = bool(_EK_NET.search(head))
+        proc = bool(_PE_HINT.search(head))
+    if net and not proc:
+        return ("network_indicators", "process_events")
+    return ("process_events", "network_indicators")
+
+
+def evidence_kind(name, data):
+    """Member -> {kind, reader, readers}: kind in script | pcap | pcapng | har | zeek | evtx | sysmon_xml | json_lines |
+    auditd | ps_listing | procmon_csv | w3c | squid | access_log | event_text | jenkins_xml | notebook | unknown; reader is
+    the existing lib.codec function that reads it (network_indicators, process_events, json_scripts, jenkins_secrets,
+    find_codecs for scripts; None for unknown). Sniffed by magic / first-line shape, never by `name` (a renamed pcap is
+    a pcap); anything text-shaped that is no known log is a `script`. Never raises."""
+    try:
+        if isinstance(data, str):
+            data = data.encode("utf-8", "surrogatepass")
+        elif isinstance(data, (bytearray, memoryview)):
+            data = bytes(data)
+        if not isinstance(data, bytes) or not data:
+            return _ek("unknown")
+        if data[:4] in _EK_PCAP:
+            return _ek("pcap", "network_indicators")
+        if data[:4] == b"\x0a\x0d\x0d\x0a":
+            return _ek("pcapng", "network_indicators")
+        if data[:8] == b"ElfFile\x00":
+            return _ek("evtx", *_ek_split(data[:1 << 21], evtx=True))
+        raw = data[:1 << 16]
+        if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+            head = raw.decode("utf-16", "replace")
+        elif raw[:3] == b"\xef\xbb\xbf":
+            head = raw[3:].decode("utf-8", "replace")
+        elif len(raw) > 4 and raw[1:4:2] == b"\x00\x00" and raw[0]:
+            head = raw.decode("utf-16-le", "replace")
+        elif len(raw) > 4 and raw[0:3:2] == b"\x00\x00" and raw[1]:
+            head = raw.decode("utf-16-be", "replace")
+        else:
+            head = raw.decode("utf-8", "replace")
+        head = head.lstrip("\ufeff")
+        bad = head.count("\ufffd") + sum(1 for c in head[:4096] if c < " " and c not in "\t\r\n\f\v\x1a")
+        if bad > max(16, len(head) // 20):
+            return _ek("unknown")
+        lines = [ln for ln in head.splitlines()[:40] if ln.strip()]
+        if not lines:
+            return _ek("unknown")
+        first = lines[0].strip()
+        if first.startswith("#separator") or any(ln.startswith("#fields\t") for ln in lines[:12]):
+            return _ek("zeek", "network_indicators")
+        if _EK_W3C.match(first) and any(ln.startswith("#Fields:") for ln in lines[:12]):
+            return _ek("w3c", "network_indicators")
+        if _EK_AUDIT.match(first):
+            return _ek("auditd", "process_events")
+        if _EK_PROCMON.match(first):
+            return _ek("procmon_csv", "process_events")
+        if _EK_PS.match(first) and len(lines) > 1 and re.match(r"\s*\S+\s+\d+\s", lines[1] + " ") or \
+                re.match(r"\s*PID\s+PPID\b", first):
+            return _ek("ps_listing", "process_events")
+        if re.match(r"[\w.@:-]+(?:\(\d+\)|,\d+)", first) and (
+                re.search(r"[─┬├└│]", head[:4096]) or
+                (len(lines) > 1 and all(re.match(r"\s*(?:\|\s+)*[|`]-|\s+[|`]?-?[\w.@:-]+(?:\(\d+\)|,\d+)", ln)
+                                        for ln in lines[1:6]))):
+            return _ek("ps_listing", "process_events")
+        if re.match(r"[^<\n]{0,160}?<Event(?:\s+xmlns=[^>]*)?>\s*<System>", first):   # syslog-wrapped Sysmon (Linux)
+            return _ek("sysmon_xml", *_ek_split(head))
+        if _EK_SQUID.match(first):
+            return _ek("squid", "network_indicators")
+        if _EK_ACCESS.match(first) and len(lines) == sum(1 for ln in lines if _EK_ACCESS.match(ln)):
+            return _ek("access_log", "network_indicators")
+        st = head.lstrip()
+        if st[:1] in "{[":
+            if re.match(r"\{\s*\"log\"\s*:\s*\{", st) and re.search(r"\"entries\"\s*:\s*\[", head):
+                return _ek("har", "network_indicators")
+            if re.search(r"\"nbformat\"\s*:\s*\d", head) or re.search(r"\"cell_type\"\s*:", head[:8192]):
+                return _ek("notebook", "json_scripts")
+            obj = [ln.strip() for ln in lines[:8]]
+            if len(obj) >= 1 and all(ln.startswith("{") and ln.endswith("}") for ln in obj) and \
+                    _EK_JSON_EV.search(head):
+                if re.search(r"\"(?:_path|id\.orig_h)\"\s*:", head) and not _PE_HINT.search(head):
+                    return _ek("zeek", "network_indicators")
+                return _ek("json_lines", *_ek_split(head))
+            if st[:1] == "[" and re.match(r"\[\s*\{", st) and _EK_JSON_EV.search(head[:8192]) and \
+                    (_PE_HINT.search(head) or _EK_NET.search(head) or
+                     re.search(r"\"ProviderName\"\s*:\s*\"Microsoft-Windows-", head[:8192])):
+                return _ek("json_lines", *_ek_split(head))
+        if st[:1] == "<":
+            body = re.sub(r"^(?:<\?xml[^>]*\?>\s*|<!--.*?-->\s*)+", "", st, flags=re.S)
+            if re.match(r"<(?:Events|Event)[\s>]", body) and \
+                    re.search(r"schemas\.microsoft\.com/win/2004/08/events/event|<EventID\b", head):
+                return _ek("sysmon_xml", *_ek_split(head))
+            if _EK_JENKINS.match(body):
+                return _ek("jenkins_xml", "jenkins_secrets")
+        if _EK_EVTXT.search(first) or (_EK_EVTXT.search(head[:4096]) and _PE_HINT.search(head[:4096]) and
+                                       not re.match(r"#!|<\?php|@?echo\b|<%|<script|(?:import|from|function|"
+                                                    r"param|Dim|Set|var|const|let)\b", first, re.I)):
+            return _ek("event_text", *_ek_split(head))
+        return _ek("script", "find_codecs")
+    except Exception:  # noqa: BLE001 - impostor / truncated member: unknown, never an exception
+        return _ek("unknown")

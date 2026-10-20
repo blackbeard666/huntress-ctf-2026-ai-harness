@@ -1,0 +1,28 @@
+{
+ "entry": "layout_from_question+layout_field",
+ "question": "Find the final RS20 overlay. Read HCFG resource length u32le at +8 and scratch length u16le at +12; bytes +16..+47 are the scratch SHA-256, the HCFG resource starts at +48, and scratch follows it. Verify exact end bounds and scratch SHA-256. Locate the unique CRC32-valid HCFG record: bytes 0..3 are ASCII HCFG, byte 4 is version, byte 5 is the XOR key.",
+ "oracle_args": "RS20 m hcfg_resource_length:8:u32le scratch_length:12:u16le scratch_sha256:16:32 hcfg_resource:48:hcfg_resource_length",
+ "decoy": true,
+ "note": "truncated: declared resource runs past EOF",
+ "expected": {
+  "overlay_offset": 3000,
+  "overlay_size": 114,
+  "hcfg_resource_length": 966,
+  "scratch_length": 64,
+  "scratch_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "hcfg_resource_offset": 48,
+  "hcfg_resource_start": 3048,
+  "hcfg_resource_end": 4014,
+  "hcfg_resource_body_size": "none",
+  "end_bounds_ok": "false"
+ },
+ "ids": {
+  "hcfg_resource_size": 966,
+  "resource_size": 966,
+  "scratch_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "hcfg_resource_body_size": "none",
+  "end_bounds_ok": "false"
+ },
+ "generator_cmd": "python3 tests/data/binary_fixtures/layoutq_gen.py  (stdlib struct/hashlib writer)",
+ "oracle_cmd": "bash tests/data/binary_fixtures/layoutq_oracle.sh layoutq_decoy_truncated.bin \"$(jq -r .oracle_args layoutq_decoy_truncated.json)\"  (grep -obaF / od / dd|sha256sum / stat)"
+}

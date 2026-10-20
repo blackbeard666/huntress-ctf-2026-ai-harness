@@ -30,6 +30,7 @@ import quopri
 import os
 import re
 import string
+import time
 import unicodedata
 import urllib.parse
 
@@ -101,6 +102,10 @@ DAYS = [
     # D19 "Little Things" ("Two bytes walk into a bar. The little one goes first."): lowercase hex of BOM fffe + UTF-16LE,
     # no separators (byte-exact on the Single, TT dc4763da and 93/93 Mastery 9ca30408 line 19)
     (19, "utf16le-hex", lambda s: (b"\xff\xfe" + s.encode("utf-16-le")).hex(),
+     lambda t: bytes.fromhex(re.sub(r"\s+", "", t)).decode("utf-16"), False),
+    # D20 "Big Entrance" ("Same bar. This time the big one goes first."): lowercase hex of BOM feff + UTF-16BE, no
+    # separators (byte-exact on the Single, TT de73f228 and 98/98 Mastery 91bb3658 line 20)
+    (20, "utf16be-hex", lambda s: (b"\xfe\xff" + s.encode("utf-16-be")).hex(),
      lambda t: bytes.fromhex(re.sub(r"\s+", "", t)).decode("utf-16"), False),
 ]
 
@@ -7788,9 +7793,18 @@ def infer(plain, blob, hints=()):
             if dec is frac_crib_dec:
                 fs = frac_solve(want)
                 return fs[0], fs[2]
+            if dec is byteadd_dec:
+                ba = byteadd_solve(want)
+                return ba[0], ba[2]
+            if dec is byterot_dec:
+                br = byterot_solve(want)
+                return br[0], br[2]
             if dec is maptp_dec:
                 mt = maptp_solve(want)
                 return mt[0], mt[2]
+            if dec is keyb64_dec:
+                kb = keyb64_solve(want)
+                return kb[0], kb[2]
             return name, enc
     st = stack_fit(p, want)
     if st:
@@ -7805,6 +7819,9 @@ def infer(plain, blob, hints=()):
     xk = xorkey_solve(want, hints) if p.startswith(_CRIB) else None
     if xk and xk[1] == p:
         return xk[0], xk[2]
+    ba = byteadd_solve(want) if p.startswith(_CRIB) else None
+    if ba and ba[1] == p:
+        return ba[0], ba[2]
     pf = playfair_solve(want, hints) if p.startswith(_CRIB) else None
     if pf and pf[1] == p:
         return pf[0], pf[2]
@@ -7849,6 +7866,9 @@ def plaintext(blob, slug, deadline=None, hints=()):
     if d and slug in d:
         u7 = utf7_dec(d.strip())   # UTF-7 keeps the slug readable: `warmup+ACE To` only reads as the template decoded
         return u7.strip() if u7 and _TPL in u7 and _TPL not in d and slug in u7 else d.strip()
+    cu = cuswap_dec(text.strip())   # byte-swapped code-unit escapes: decode_chunk reads them as CJK
+    if cu and slug in cu:
+        return cu.strip()
     # strict (crib + slug, anagram-gated): before the loose `slug in` decoders below
     rs = rail_solve(text) or redefence_solve(text, hints) or riffle_solve(text) or transposition_solve(text) or skip_solve(text)
     if rs and slug in rs[1]:
@@ -7894,6 +7914,9 @@ def plaintext(blob, slug, deadline=None, hints=()):
     ss = subst_solve(text)
     if ss and slug in ss[1]:
         return ss[1]
+    ks = knob_sweep(text)   # a seen day's codec with one knob turned (byte order, radix, polarity, ...)
+    if ks and slug in ks[1]:
+        return ks[1]
     return SENTENCE.format(slug=slug)
 
 
@@ -8988,6 +9011,1429 @@ CANDIDATES += [(("gsm7" if o == "lsb" else "pack7-msb") + ("" if f == "hex" else
                for o in ("lsb", "msb") for f in _GSM7_FMTS]
 
 
+# ------------------------------------------------- knob sweep: a seen day's codec with ONE knob turned
+# D20 "Big Entrance" = D19's UTF-16 hex with the byte order flipped ("Same bar. This time the big one goes first."): the
+# GM re-runs an earlier codec with one parameter changed. knob_sweep(t) walks every DAYS family's knobs, cheapest first,
+# and returns the first read the template crib / slug confirms:
+#   letters  rot/Caesar k (both directions), rot47-style shift k over the 94 printables, atbash+k, reversal at
+#            char / word / per-word level, rail fences 2-12 x every offset
+#   numbers  any 0x / \x / % / &#x / &# / \u / U+ / 0b / 0o prefix, any separator, radix 2-36 per token, fixed-width
+#            runs (binary 5/7/8/16 either bit order, octal/decimal 3, hex 2/4/8), values > 255 = code points
+#   base32   RFC 4648 / base32hex / Crockford / z-base-32, any case, padded or not; base64 std / url / reversed
+#   2-symbol Bacon / binary polarity, bit order and width 4/5/7/8/16 (5-bit groups read as letters 26/24 or hex nibbles)
+#   Morse    dot/dash swapped, then text or hex digits
+#   bytes    every parse x {identity, reversed, nibble-swapped, reversed hex, bit-reversed, 2/4/8-byte word swap} x
+#            {UTF-8, UTF-16 BOM/LE/BE, UTF-32 BOM/LE/BE}
+# The blob text reversed is tried last (reversal at the char level of a byte encoding). Budget ~0.2 s, never raises.
+_KS_CRIBS = ("nice work decoding", "decoding this warmup", "submit this exact", "answer to the game master")
+_KS_CRIBS_EXACT = ("Nice work decoding", "decoding this warmup", "submit this exact", "answer to the Game Master")
+_KS_ENCS = ("utf-8", "utf-16", "utf-16-le", "utf-16-be", "utf-32", "utf-32-le", "utf-32-be")
+_KS_B32 = {"rfc4648": "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567", "base32hex": "0123456789ABCDEFGHIJKLMNOPQRSTUV",
+           "crockford": "0123456789ABCDEFGHJKMNPQRSTVWXYZ", "zbase32": "ybndrfg8ejkmcpqxot1uwisza345h769"}
+_KS_B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+_KS_PREFIX = re.compile(r"(?i)0x|\\x|&#x|&#|\\u\{?|\\U|%u|u\+|0b|0o|\\|%|[;}\"'\[\](){}<>]")
+_KS_SEP = re.compile(r"[\s,;:|/_.\-]+")
+_KS_DIG = "0123456789abcdefghijklmnopqrstuvwxyz"
+
+
+def _ks_ok(s):
+    """The read is the warmups sentence: a crib phrase (any case: Morse reads come back lowercase) in printable text."""
+    if not s or len(s) < 8:
+        return False
+    low = s.lower()
+    if s not in (low, s.upper()):   # mixed case must match exactly: a +32 printable shift only swaps letter case
+        return _texty(s) > 0.9 and any(c in s for c in _KS_CRIBS_EXACT)
+    return any(c in low for c in _KS_CRIBS) and _texty(s) > 0.9
+
+
+def _ks_texts(b):
+    """[(encoding, text)] of a byte string: every UTF width / order that reads as printable text."""
+    out = []
+    for e in _KS_ENCS:
+        if e.startswith("utf-16") and len(b) % 2 or e.startswith("utf-32") and len(b) % 4:
+            continue
+        try:
+            s = b.decode(e).rstrip("\x00")
+        except Exception:  # noqa: BLE001
+            continue
+        if s and (e != "utf-8" or not s.startswith("﻿")) and all(c.isprintable() or c in "\t\r\n" for c in s):
+            out.append((e, s.lstrip("﻿")))
+    return out
+
+
+def _ks_bytes_x(b):
+    """(knob, bytes) -- the byte-level knobs, identity first."""
+    yield "", b
+    yield "rev", b[::-1]
+    yield "nibswap", nibswap(b)
+    yield "revhex", nibswap(b[::-1])
+    yield "bitrev", bytes(int(f"{x:08b}"[::-1], 2) for x in b)
+    for w in (2, 4, 8):
+        if len(b) > w:
+            yield f"wswap{w}", wordswap(b + b"\x00" * (-len(b) % w), w)
+
+
+def _ks_vals(name, vals):
+    """(knob, bytes-or-text) reads of an integer list: bytes when all < 256, UTF-16 units / code points otherwise."""
+    if not vals:
+        return
+    if max(vals) < 256:
+        yield name, bytes(vals)
+    if max(vals) < 0x10000:
+        yield name + "-u16be", b"".join(v.to_bytes(2, "big") for v in vals)
+    if max(vals) < 0x110000 and min(vals) >= 0:
+        try:
+            yield name + "-cp", "".join(map(chr, vals))
+        except ValueError:
+            pass
+
+
+def _ks_int(tok, r):
+    try:
+        return int(tok, r)
+    except ValueError:
+        return None
+
+
+def _ks_two(t):
+    """(knob, values) of a two-symbol blob (binary / Bacon / any glyph pair): polarity x bit order x group width."""
+    body = re.sub(r"\s+", " ", t.strip())
+    syms = sorted(set(body.replace(" ", "")))
+    if len(syms) != 2:
+        return
+    groups = body.split(" ")
+    flat = body.replace(" ", "")
+    ws = {len(g) for g in groups}
+    for pol in (0, 1):
+        zero, one = syms[pol], syms[1 - pol]
+        bits = [g.replace(zero, "0").replace(one, "1") for g in groups]
+        fb = flat.replace(zero, "0").replace(one, "1")
+        chunks = [("tok", bits)] if len(ws) == 1 or len(groups) > 1 and len(ws) <= 3 else []
+        chunks += [(f"w{w}", [fb[i:i + w] for i in range(0, len(fb) - len(fb) % w, w)])
+                   for w in (8, 7, 16, 5, 4) if len(fb) % w == 0 and len(fb) >= 4 * w]
+        for wn, cs in chunks:
+            for order in ("msb", "lsb"):
+                vals = [int(c[::-1] if order == "lsb" else c, 2) for c in cs if c]
+                yield f"2sym-{syms[pol]}0-{wn}-{order}", vals, {len(c) for c in cs}
+
+
+def _ks_letters(t):
+    """Letter-level knobs (D2/D12/D13/D14/D15/D18 families): rot k, atbash+k, rot47-style shifts, reversals, rails."""
+    yield "reverse", t[::-1]
+    yield "wordrev", " ".join(t.split(" ")[::-1])
+    yield "perword", " ".join(w[::-1] for w in t.split(" "))
+    for k in range(1, 26):
+        yield f"rot{k}", rot(t, k)
+    for k in range(1, 26):
+        yield f"atbash+{k}", atbash(rot(t, k))
+        yield f"rot{k}-rev", rot(t, k)[::-1]
+    for k in range(1, 94):
+        yield f"rot94-{k}", "".join(chr((ord(c) - 33 + k) % 94 + 33) if 33 <= ord(c) <= 126 else c for c in t)
+    for k in range(1, 94):
+        yield f"rot94-{k}-rev", "".join(chr((ord(c) - 33 + k) % 94 + 33) if 33 <= ord(c) <= 126 else c
+                                        for c in t)[::-1]
+    for n in range(2, 13):
+        for o in range(2 * n - 2):
+            yield f"rail{n}@{o}", rail_dec(t, n, o)
+            yield f"rail{n}@{o}-rev", rail_dec(t[::-1], n, o)
+
+
+def _ks_parses(t):
+    """(knob, bytes|str) -- every numeric / base-N / two-symbol / Morse parse of the blob, cheapest first."""
+    s = t.strip()
+    compact = re.sub(r"\s+", "", s)
+    # hex: any prefix / separator / case
+    x = _KS_SEP.sub("", _KS_PREFIX.sub(" ", s))
+    if len(x) >= 8 and re.fullmatch(r"[0-9a-fA-F]+", x):
+        if len(x) % 2 == 0:
+            yield "hex", bytes.fromhex(x)
+        yield "hexrev", bytes.fromhex(x[::-1]) if len(x) % 2 == 0 else None
+    # base32 family (any case, padding optional)
+    u = compact.rstrip("=").upper()
+    if len(u) >= 8 and re.fullmatch(r"[0-9A-Z]+", u):
+        for an, alpha in _KS_B32.items():
+            a = alpha.upper()
+            if an == "crockford":
+                u2 = u.translate(str.maketrans("OIL", "011"))
+            else:
+                u2 = u
+            if set(u2) <= set(a):
+                n = 0
+                bits = 0
+                out = bytearray()
+                for c in u2:
+                    n = n << 5 | a.index(c)
+                    bits += 5
+                    if bits >= 8:
+                        bits -= 8
+                        out.append(n >> bits & 255)
+                yield f"b32-{an}", bytes(out)
+    # base64 std / url, padded or not
+    if len(compact) >= 8 and re.fullmatch(r"[A-Za-z0-9+/_\-]+=*", compact):
+        b = compact.rstrip("=").replace("-", "+").replace("_", "/")
+        try:
+            yield "b64", base64.b64decode(b + "=" * (-len(b) % 4))
+        except Exception:  # noqa: BLE001
+            pass
+    # Morse, dot/dash swapped (plain Morse is the confirmed D16 decoder's)
+    if len(s) >= 8 and set(compact) <= set(".-/|_*·•−–—"):
+        sw = s.translate({ord("."): "-", ord("-"): ".", ord("·"): "-", ord("•"): "-", ord("_"): ".", ord("−"): ".",
+                          ord("–"): ".", ord("—"): "."})
+        m = safe(morse_alt_dec, sw)
+        if m:
+            yield "morse-swap", m
+            h = re.sub(r"\s+", "", m)
+            if len(h) % 2 == 0 and re.fullmatch(r"[0-9a-fA-F]+", h):
+                yield "morse-swap-hex", bytes.fromhex(h)
+    # two-symbol (binary / Bacon): polarity x order x width
+    for name, vals, widths in _ks_two(s):
+        yield from _ks_vals(name, vals)
+        if widths == {5}:
+            if max(vals) < 26:
+                yield name + "-bacon26", "".join(chr(97 + v) for v in vals)
+            if max(vals) < 24:
+                yield name + "-bacon24", "".join("abcdefghiklmnopqrstuwxyz"[v] for v in vals)
+            if max(vals) < 16:
+                h = "".join("%x" % v for v in vals)
+                if len(h) % 2 == 0:
+                    yield name + "-hexnib", bytes.fromhex(h)
+        if widths == {4}:
+            h = "".join("%x" % v for v in vals)
+            if len(h) % 2 == 0:
+                yield name + "-nib", bytes.fromhex(h)
+    # tokens in any radix (octal / decimal / hex / ... width-free), then fixed-width digit runs
+    toks = [z for z in _KS_SEP.split(_KS_PREFIX.sub(" ", s).lower()) if z]
+    if len(toks) >= 4:
+        hi = max(_KS_DIG.index(c) for z in toks for c in z if c in _KS_DIG) if all(
+            set(z) <= set(_KS_DIG) for z in toks) else 99
+        for r in (8, 10, 16, 2, 4, 3, 5, 6, 7, 9, 12, 32, 36):
+            if hi < r:
+                vals = [_ks_int(z, r) for z in toks]
+                if None not in vals:
+                    yield from _ks_vals(f"radix{r}", vals)
+    if len(toks) == 1 and toks[0].isdigit():
+        d = toks[0]
+        for r, w in ((8, 3), (10, 3), (8, 4), (10, 5), (10, 2), (16, 4)):
+            if len(d) % w == 0 and max(d) < _KS_DIG[r]:
+                yield from _ks_vals(f"radix{r}w{w}", [int(d[i:i + w], r) for i in range(0, len(d), w)])
+
+
+def _ks_reads(t, deadline):
+    """(knob, text) reads, cheapest knobs first; stops at the deadline."""
+    for side, src in (("", t), ("blobrev-", t.strip()[::-1])):
+        for pn, got in _ks_parses(src):
+            if got is None:
+                continue
+            if isinstance(got, str):
+                yield side + pn, got
+                continue
+            for bn, b in _ks_bytes_x(got):
+                for e, s in _ks_texts(b):
+                    yield side + "-".join(z for z in (pn, bn, e) if z), s
+            if time.monotonic() > deadline:
+                return
+    for ln, s in _ks_letters(t.strip("\r\n")):
+        yield ln, s
+        if time.monotonic() > deadline:
+            return
+
+
+def knob_sweep(t, budget=0.18):
+    """(knob, sentence) -- the first crib/slug-confirmed read of t under a seen day's codec with one knob turned, else
+    None. Never raises."""
+    try:
+        t = reader_text(t)
+        if not isinstance(t, str) or len(t.strip()) < 8:
+            return None
+        deadline = time.monotonic() + budget
+        for name, s in _ks_reads(t, deadline):
+            if s and _ks_ok(s):
+                return name, s.strip()
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def knob_dec(t):
+    ks = knob_sweep(t)
+    return ks[1] if ks else None
+
+
+def knob_free(p, k=4, budget=0.1):
+    """Speculative Mastery-line decoder: knob-turned reads of a line cut mid-sentence, kept when the crib confirms them
+    (a crib substring / a crib tail + slug piece), most crib first."""
+    try:
+        if not isinstance(p, str) or len(p.strip()) < 4:
+            return []
+        deadline = time.monotonic() + budget
+        hits, seen = [], set()
+        for _n, s in _ks_reads(p.strip("\r\n"), deadline):   # spaces kept: a rail / reversal moves them
+            s = s.strip("\x00")
+            if s and s.strip() not in seen and all(c.isprintable() for c in s):
+                seen.add(s.strip())
+                c = _crib_piece(s)
+                if c >= 6 or _ks_ok(s):
+                    hits.append((c, s))
+                    if len(hits) >= 3 * k:
+                        break
+        hits.sort(key=lambda h: -h[0])
+        return [s for _c, s in hits[:k]]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+# ------------------------------------------------- big-integer text (RSA long_to_bytes / "Big" number family)
+# The WHOLE message (or, in Mastery, each fragment) as ONE integer: n = int.from_bytes(bytes, 'big' | 'little') written
+# in radix 10 / 8 / 2 / 36 / 62 (optional 0o / 0b / 0x prefix), no separators. Bytes = UTF-8, or UTF-16 (BOM / LE /
+# BE: then sniffed by unicode_form_dec). Decode: n = int(t, base); n.to_bytes((n.bit_length() + 7) // 8, order).
+# Cue: one unbroken digit run ~2.41 decimal digits per char (a 4+ digit token -- decimal char codes are <= 3 digits
+# and need separators, which lib.decode's _NUMS requires). Crib-gated: only printable, wordy text is returned.
+_BIGN_ALPHA = {10: string.digits, 8: "01234567", 2: "01", 36: string.digits + string.ascii_lowercase,
+               62: _B62, 16: string.hexdigits[:16]}
+_BIGN_FORMS = {"utf8": "utf-8", "utf16": "utf-16", "utf16le": "utf-16-le", "utf16be": "utf-16-be"}
+
+
+def bignum_enc(s, radix=10, order="big", form="utf8"):
+    b = _t(s).encode(_BIGN_FORMS[form])
+    n = int.from_bytes(b, order)
+    if radix in (10, 8, 2, 16):
+        return format(n, {10: "d", 8: "o", 2: "b", 16: "x"}[radix])
+    out, a = "", _BIGN_ALPHA[radix]
+    while n:
+        n, r = divmod(n, radix)
+        out = a[r] + out
+    return out or "0"
+
+
+def _bign_int(t, radix):
+    if radix == 62:
+        n = 0
+        for c in t:
+            n = n * 62 + _B62.index(c)
+        return n
+    return int(t, radix)
+
+
+def _bign_text(b):
+    """bytes -> text: UTF-8, else a sniffed UTF-16/32 form; printable + wordy, else None."""
+    x = None
+    if b[:2] in (b"\xff\xfe", b"\xfe\xff") or (len(b) >= 4 and b.count(0) * 3 >= len(b)):
+        x = unicode_form_dec(b)
+    if x is None:
+        try:
+            x = b.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+    x = x.lstrip("﻿")
+    from lib.decode import _bigram
+    if not x or not all(c.isprintable() for c in x) or _texty(x) < 0.9 or _bigram(x) < -8:
+        return None
+    return x
+
+
+def bignum_reads(t):
+    """[(radix, order, text)] for every big-integer reading of ONE token (prefix 0b/0o/0x honoured). Never raises."""
+    try:
+        from lib.decode import _bigram
+        t = _t(t).strip()
+        if not 4 <= len(t) <= 20000 or not t.isascii() or not t.isalnum():
+            return []
+        pre = t[:2].lower()
+        if pre in ("0b", "0o", "0x") and len(t) > 4:
+            radices = [{"0b": 2, "0o": 8, "0x": 16}[pre]]
+            t = t[2:]
+        elif t.isdigit():
+            radices = [r for r in (2, 8, 10) if set(t) <= set(_BIGN_ALPHA[r])]
+        else:
+            radices = [36, 62] if t.lower() == t or t.upper() == t else [62]   # base36 either case (numpy: upper)
+        out = []
+        for r in radices:
+            n = _bign_int(t.lower() if r == 36 else t, r)
+            if not n:
+                continue
+            for order in ("big", "little"):
+                L = (n.bit_length() + 7) // 8
+                for k in (L, L + 1) if L % 2 else (L,):   # UTF-16: the NUL high byte at the integer's top is dropped
+                    x = _bign_text(n.to_bytes(k, order))
+                    if x is not None and (r, x) not in [(q[0], q[2]) for q in out]:
+                        out.append((r, order, x))
+                        break
+        return sorted(out, key=lambda q: (-_bigram(q[2]) if len(q[2]) >= 12 else 0, q[1] != "big"))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def bignum_dec(t, radix=None, order=None):
+    """One big-integer token -> text, else None."""
+    try:
+        for r, o, x in bignum_reads(t):
+            if (radix is None or r == radix) and (order is None or o == order):
+                return x
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def bignum_free(p):
+    """Speculative Mastery-line decoder: the fragment as its own big integer (leading spaces kept)."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + x for _r, _o, x in bignum_reads(p.strip())][:3]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+_have = {n for n, _e, _d in CANDIDATES}
+CANDIDATES += [(f"bignum{r}-{o}" + ("" if f == "utf8" else f"-{f}"),
+                (lambda r, o, f: lambda s: bignum_enc(s, r, o, f))(r, o, f),
+                (lambda r, o: lambda t: bignum_dec(t, r, o))(r, o))
+               for r in (10, 8, 2, 36, 62) for o in ("big", "little") for f in _BIGN_FORMS
+               if f"bignum{r}-{o}" + ("" if f == "utf8" else f"-{f}") not in _have]
+del _have
+
+
+# ------------------------------------------- byte-swapped code-unit escapes (D9 \uXXXX with the UTF-16 byte order flipped)
+# `\u4e00\u6900\u6300` = "Nic": UTF-16LE bytes read as big-endian code units ((v & 255) << 8 | v >> 8), so json.loads /
+# html.unescape / unescape() read CJK U+2000-U+7Exx with every low byte 00 (space -> U+2000). Any escape form: \uXXXX,
+# &#xHHHH; / &#DDDDD;, U+XXXX, %uXXXX, 0xXXXX; astral = a swapped surrogate pair. Whole fragment only (one pair of quotes
+# or brackets); the cue gate (swapped read mostly ASCII, straight read not) keeps real CJK text and D9 lines out.
+_CU_TOK = re.compile(r"\\u([0-9A-Fa-f]{4})|&#[xX]([0-9A-Fa-f]{1,6});?|&#([0-9]{1,7});?|[Uu]\+([0-9A-Fa-f]{4,6})"
+                     r"|%[uU]([0-9A-Fa-f]{4})|0[xX]([0-9A-Fa-f]{4})(?![0-9A-Fa-f])")
+_CU_FULL = re.compile(r"(?:(?:" + _CU_TOK.pattern + r")|[\s,;])+")
+_CU_FMT = {"json\\u": ('"', "\\u{:04x}", "", '"'), "\\u": ("", "\\u{:04x}", "", ""), "\\U": ("", "\\u{:04X}", "", ""),
+           "&#x": ("", "&#x{:x};", "", ""), "&#X": ("", "&#x{:X};", "", ""), "&#": ("", "&#{:d};", "", ""),
+           "U+": ("", "U+{:04X}", "", ""), "U+-spaced": ("", "U+{:04X}", " ", ""), "%u": ("", "%u{:04X}", "", ""),
+           "%u-lower": ("", "%u{:04x}", "", ""), "0x": ("", "0x{:04x}", " ", ""), "0x-comma": ("", "0x{:04x}", ", ", "")}
+
+
+def _cu_swap(v):
+    return (v & 255) << 8 | v >> 8
+
+
+def cuswap_enc(s, fmt="json\\u", swap=True):
+    """Text -> code-unit escapes in `fmt` (a _CU_FMT key); swap=True writes each UTF-16 unit byte-swapped."""
+    pre, tok, sep, post = _CU_FMT[fmt]
+    b = s.encode("utf-16-le" if swap else "utf-16-be", "surrogatepass")
+    return pre + sep.join(tok.format(int.from_bytes(b[i:i + 2], "big")) for i in range(0, len(b), 2)) + post
+
+
+def _cu_vals(t):
+    """Whole-fragment code-unit escape values (whitespace gaps kept as literal spaces like ucp_dec), else None."""
+    if not isinstance(t, str):
+        return None
+    t = t.strip()
+    if len(t) >= 2 and (t[0] == t[-1] and t[0] in "\"'" or t[0] + t[-1] == "[]"):
+        t = t[1:-1].strip()
+    if not t or len(t) > 400000 or not _CU_FULL.fullmatch(t):
+        return None
+    toks = list(_CU_TOK.finditer(t))
+    if len(toks) < 2:
+        return None
+    vals = []
+    for m in toks:
+        i, g = next((i, g) for i, g in enumerate(m.groups()) if g)
+        vals.append(int(g, 10 if i == 2 else 16))
+    gaps = [t[a.end():b.start()] for a, b in zip(toks, toks[1:])]
+    if any(gaps) and not all(gaps) and not any(chr(min(v, 0x10FFFF)).isspace() or v == 0x2000 for v in vals):
+        out = []
+        for i, v in enumerate(vals):
+            out.append(v)
+            if i < len(gaps) and re.search(r"\s", gaps[i]):
+                out.append(-1)   # literal space: 0x20 straight, 0x2000 swapped
+        return out
+    return vals
+
+
+def _asciish(x):
+    return bool(x) and sum(32 <= ord(c) < 127 or c in "\t\n" for c in x) >= 0.9 * len(x)
+
+
+def cuswap_dec(t, swap=True):
+    """Byte-swapped code-unit escapes -> text, None unless the swapped read is printable, mostly ASCII and the straight
+    read is not (the cue). swap=None: that swapped read when cued, else the straight read; swap=False: straight only."""
+    try:
+        vals = _cu_vals(t)
+        if not vals:
+            return None
+        straight = _ucp_str([32 if v < 0 else v for v in vals])
+        if swap is False:
+            return straight
+        sw = None
+        if all(v <= 0xFFFF for v in vals):
+            sw = _ucp_str([32 if v < 0 else _cu_swap(v) for v in vals])
+        if sw and _asciish(sw) and not _asciish(straight or ""):
+            return sw
+        return straight if swap is None else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def cuswap_free(p):
+    d = cuswap_dec(p)
+    return [p[:len(p) - len(p.lstrip())] + d] if d else []
+
+
+_have = {c[0] for c in CANDIDATES}
+CANDIDATES += [(f"cuswap-{f}", (lambda f: lambda s: cuswap_enc(s, f))(f), cuswap_dec)
+               for f in _CU_FMT if f"cuswap-{f}" not in _have]
+del _have
+
+
+# ------------------------------------------------- binary code units (16/32-bit groups of UTF-16 / UTF-32 units)
+# D4's binary at the D19/D20 width/order knob: the text as UTF-16 (or UTF-32) code units, each unit one [01]{16} /
+# [01]{32} group = int(g, 2).to_bytes(w, 'big') -- BE (`0000000001001110` = N) or LE (halves swapped,
+# `0100111000000000`), an optional BOM group first (1111111011111111 = feff BE, 1111111111111110 LE), groups split by
+# whitespace , ; | or run together (len % 16 == 0). Cue: one 8-bit half of the units all zero; 8-bit groups (binary8)
+# and packed UTF-8 words (wint, no zero halves) are other families and read None here.
+_CUBIN_ENC = {(2, "big"): "utf-16-be", (2, "little"): "utf-16-le", (4, "big"): "utf-32-be", (4, "little"): "utf-32-le"}
+_CUBIN_BOM = {(2, "big"): b"\xfe\xff", (2, "little"): b"\xff\xfe", (4, "big"): b"\0\0\xfe\xff",
+              (4, "little"): b"\xff\xfe\0\0"}
+
+
+def cubin_enc(s, w=2, order="big", bom=False, sep=" "):
+    """Text -> its UTF-16 / UTF-32 (w = 2 / 4) code units in `order`, one 8w-bit binary group per unit."""
+    b = (_CUBIN_BOM[w, order] if bom else b"") + s.encode(_CUBIN_ENC[w, order], "surrogatepass")
+    return sep.join(format(int.from_bytes(b[i:i + w], "big"), f"0{8 * w}b") for i in range(0, len(b), w))
+
+
+def _cubin_groups(t):
+    """[(w, [ints])] candidate unit splits of a 0/1 line: equal 16/32-bit tokens, or one run cut every 16 / 32 bits."""
+    if not isinstance(t, str):
+        return []
+    toks = [x for x in re.split(r"[\s,;|]+", t.strip()) if x]
+    if not toks or len(toks) > 50000 or not all(re.fullmatch(r"[01]+", x) for x in toks):
+        return []
+    n = {len(x) for x in toks}
+    if len(toks) > 1:
+        k = len(toks[0])
+        return [(k // 8, [int(x, 2) for x in toks])] if len(n) == 1 and k in (16, 32) else []
+    flat = toks[0]
+    return [(w, [int(flat[i:i + 8 * w], 2) for i in range(0, len(flat), 8 * w)])
+            for w in (2, 4) if len(flat) % (8 * w) == 0 and len(flat) >= 16 * w]
+
+
+def cubin_reads(t):
+    """[(variant, text)]: the UTF-16 / UTF-32 BE / LE reads of a binary code-unit line. variant = cubin{16|32}{be|le}."""
+    out = []
+    try:
+        for w, vs in _cubin_groups(t):
+            b = b"".join(v.to_bytes(w, "big") for v in vs)
+            for order in ("big", "little"):
+                body = b[w:] if b[:w] == _CUBIN_BOM[w, order] else b
+                if not body:
+                    continue
+                units = [body[i:i + w] for i in range(0, len(body), w)]
+                hi = [u[:-1] if order == "big" else u[1:] for u in units]
+                if sum(not any(h) for h in hi) < 0.5 * len(units):
+                    continue   # the cue: most units carry an all-zero high half
+                try:
+                    s = body.decode(_CUBIN_ENC[w, order])
+                except UnicodeDecodeError:
+                    continue
+                if "\0" in s or not all(c.isprintable() or c in "\n\t" for c in s) or _texty(s) < 0.85:
+                    continue
+                out.append((f"cubin{8 * w}{'be' if order == 'big' else 'le'}", s))
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+    return out
+
+
+def cubin_dec(t, w=None, order=None):
+    """Undo cubin_enc (any width / order / BOM / separator) -> text, else None; w / order pin the variant."""
+    tag = "cubin" + ("" if w is None else str(8 * w)) + ("" if order is None else "be" if order == "big" else "le")
+    return next((s for v, s in cubin_reads(t) if v.startswith(tag)), None)
+
+
+def cubin_free(p):
+    """Speculative Mastery-line decoder: the code-unit binary reading of a line."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + s for _v, s in cubin_reads(p)][:1]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+_have = {c[0] for c in CANDIDATES}
+CANDIDATES += [(f"cubin{8 * w}{'be' if o == 'big' else 'le'}" + ("-bom" if bom else "") + ("-stream" if sep == "" else ""),
+                (lambda w, o, bom, sep: lambda s: cubin_enc(s, w, o, bom, sep))(w, o, bom, sep),
+                (lambda w, o: lambda t: cubin_dec(t, w, o))(w, o))
+               for w in (2, 4) for o in ("big", "little") for bom in (False, True) for sep in (" ", "")
+               if f"cubin{8 * w}{'be' if o == 'big' else 'le'}" + ("-bom" if bom else "")
+               + ("-stream" if sep == "" else "") not in _have]
+del _have
+
+
+# ------------------------------------------------- astral text under a byte layer: UTF-16 surrogates, CESU-8, MUTF-8
+# Non-BMP / non-ASCII "fancy" letters (Mathematical Bold N = U+1D40D) under hex / base64 bytes: UTF-16 (BE/LE, maybe a
+# BOM; astral chars as d835 dcxx surrogate pairs), CESU-8 (each surrogate half as its own 3-byte ed a0..bf / ed b0..bf
+# sequence), Modified UTF-8 (CESU-8 + NUL as c0 80) or overlong UTF-8 (c0 / c1 / e0 80.. / f0 80.. leads). Read with a
+# lenient UTF-8 decoder that pairs surrogate halves and keeps overlong values, or utf-16 (surrogatepass), then fold to
+# ASCII (unistyle_dec, else NFKC). The plain-ASCII UTF-8 / UTF-16 reads stay the strict decoders' / unicode_form's job.
+_ASTRAL_FORMS = ("utf16be", "utf16le", "utf16be-bom", "utf16le-bom", "cesu8", "mutf8", "overlong")
+
+
+def astral_enc(s, form="utf16be", outer="hex", style="bold"):
+    """Text -> `outer` text of its `style`d (unistyle, ASCII spaces kept; overlong: plain) bytes under `form`."""
+    x = s if form == "overlong" or not style else unistyle_enc(s, style, space=" ")
+    if form.startswith("utf16"):
+        e = "utf-16-be" if "be" in form else "utf-16-le"
+        b = (("﻿" if form.endswith("bom") else "") + x).encode(e)
+    elif form == "overlong":
+        b = b"".join(bytes((0xC0 | ord(c) >> 6, 0x80 | ord(c) & 63)) if ord(c) < 0x80 else c.encode() for c in x)
+    else:
+        u = x.encode("utf-16-be")
+        b = b"".join(b"\xc0\x80" if form == "mutf8" and v == 0 else chr(v).encode("utf-8", "surrogatepass")
+                     for v in (int.from_bytes(u[i:i + 2], "big") for i in range(0, len(u), 2)))
+    return _bytes_out(b, outer)
+
+
+def _lenient_utf8(b):
+    """(text, quirks) of bytes under a lenient UTF-8 reader: overlong forms keep their value, surrogate halves pair up
+    (CESU-8); quirks subset of {cesu8, mutf8, overlong}. None on a bad lead / continuation, lone surrogate, > U+10FFFF."""
+    cps, quirks, i, n = [], set(), 0, len(b)
+    while i < n:
+        x = b[i]
+        if x < 0x80:
+            cps.append(x)
+            i += 1
+            continue
+        k, cp = (1, x & 0x1F) if 0xC0 <= x < 0xE0 else (2, x & 0x0F) if 0xE0 <= x < 0xF0 else \
+            (3, x & 0x07) if 0xF0 <= x < 0xF8 else (0, 0)
+        if not k or i + k >= n:
+            return None
+        for c in b[i + 1:i + 1 + k]:
+            if c & 0xC0 != 0x80:
+                return None
+            cp = cp << 6 | c & 0x3F
+        if cp < (0x80, 0x800, 0x10000)[k - 1]:
+            quirks.add("mutf8" if cp == 0 and k == 1 else "overlong")
+        if cp > 0x10FFFF:
+            return None
+        if 0xD800 <= cp < 0xE000:
+            quirks.add("cesu8")
+        cps.append(cp)
+        i += k + 1
+    out, j = [], 0
+    while j < len(cps):
+        v = cps[j]
+        if 0xD800 <= v < 0xDC00 and j + 1 < len(cps) and 0xDC00 <= cps[j + 1] < 0xE000:
+            out.append(chr(0x10000 + ((v - 0xD800) << 10) + cps[j + 1] - 0xDC00))
+            j += 2
+            continue
+        if 0xD800 <= v < 0xE000:
+            return None
+        out.append(chr(v))
+        j += 1
+    return "".join(out), quirks
+
+
+def _astral_fold(s, quirky):
+    """Decoded text -> printable-ASCII sentence (styled letters folded), else None."""
+    s = s.replace("﻿", "")
+    if not s:
+        return None
+    if s.isascii():
+        out = s if quirky else None   # plain ASCII UTF-8 / UTF-16 is another family's read
+    else:
+        out = unistyle_dec(s)
+        if out is None:
+            n = unicodedata.normalize("NFKC", s)
+            out = n if n != s and n.isascii() else None
+    if not out or not all(c.isprintable() or c in "\t\r\n" for c in out) or _texty(out) < 0.85:
+        return None
+    return out
+
+
+def astral_reads(t):
+    """[(form, text)] for every byte-layer x (UTF-16 surrogates / CESU-8 / MUTF-8 / overlong / styled UTF-8) reading of
+    `t` that folds to printable ASCII. Never raises."""
+    out = []
+    try:
+        for _layer, b in _bytes_reads(_t(t)):
+            if not b:
+                continue
+            got = _lenient_utf8(b)
+            if got is not None:
+                s, q = got
+                f = _astral_fold(s, bool(q))
+                if f is not None:
+                    out.append(("overlong" if "overlong" in q else "mutf8" if "mutf8" in q else
+                                "cesu8" if "cesu8" in q else "utf8", f))
+            if len(b) % 2:
+                continue
+            boms = {b"\xfe\xff": "be", b"\xff\xfe": "le"}
+            orders = [boms[b[:2]]] if b[:2] in boms else ["be", "le"]
+            for o in orders:
+                try:
+                    s = b.decode("utf-16-" + o)
+                except UnicodeDecodeError:
+                    continue
+                f = _astral_fold(s, False)
+                if f is not None:
+                    out.append((f"utf16{o}" + ("-bom" if b[:2] in boms else ""), f))
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+    return out
+
+
+def astral_dec(t, form=None):
+    """Undo astral_enc (any style / outer) -> ASCII text, else None; form pins the byte form (cesu8 also accepts
+    mutf8 reads, utf16xx also its -bom)."""
+    ok = {"cesu8": ("cesu8", "mutf8"), "mutf8": ("mutf8", "cesu8")}.get(form, (form,))
+    return next((s for f, s in astral_reads(t) if form is None or f in ok or f.startswith(form)), None)
+
+
+def astral_free(p):
+    """Speculative Mastery-line decoder: the astral / CESU / overlong reading of a line."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + s for s in dict.fromkeys(s for _f, s in astral_reads(p))][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+_have = {c[0] for c in CANDIDATES}
+CANDIDATES += [(f"astral-{f}-{o}", (lambda f, o: lambda s: astral_enc(s, f, o))(f, o),
+                (lambda f: lambda t: astral_dec(t, f))(f))
+               for f in _ASTRAL_FORMS for o in ("hex", "base64") if f"astral-{f}-{o}" not in _have]
+del _have
+
+
+# ------------------------------------------------- SCSU / BOCU-1 compressed Unicode under a byte layer (hex / base64)
+# SCSU (UTS #6): ASCII passes through; 0x80-0xff index the active dynamic window (Latin-1 0x80 by default), 01-08 SQn
+# quote one char from window n, 10-17 SCn / 18-1f SDn select / define a window, 0b SDX an astral window (styled math
+# letters), 0e SQU / 0f SCU UTF-16 quote / Unicode mode (e0-f1 tags back). Pure ASCII SCSU = identity bytes, so only a
+# non-ASCII (styled / accented) read counts. BOCU-1 (UTN #6, ICU): each code point = signed diff from `prev` (0x40 for
+# ASCII); printable ASCII = byte + 0x50, space and controls <= 0x20 kept (controls reset prev), ff = reset. ICU
+# `uconv -t SCSU|BOCU-1` writes both. Readings must fold to printable ASCII (_astral_fold).
+_SCSU_STATIC = (0x0000, 0x0080, 0x0100, 0x0300, 0x2000, 0x2080, 0x2100, 0x3000)
+_SCSU_DYN = (0x0080, 0x00C0, 0x0400, 0x0600, 0x0900, 0x3040, 0x30A0, 0xFF00)
+_SCSU_SPECIAL = {0xF9: 0x00C0, 0xFA: 0x0250, 0xFB: 0x0370, 0xFC: 0x0530, 0xFD: 0x3040, 0xFE: 0x30A0, 0xFF: 0xFF60}
+
+
+def _scsu_off(x):
+    if 0x01 <= x <= 0x67:
+        return x * 0x80
+    if 0x68 <= x <= 0xA7:
+        return x * 0x80 + 0xAC00
+    if x in _SCSU_SPECIAL:
+        return _SCSU_SPECIAL[x]
+    raise ValueError("reserved SCSU window offset")
+
+
+def scsu_decode(b):
+    """SCSU bytes -> str (UTS #6 decoder; surrogate halves paired), else None."""
+    try:
+        dyn, win, uni, i, n, cu = list(_SCSU_DYN), 0, False, 0, len(b), []
+        while i < n:
+            x = b[i]
+            i += 1
+            if uni:
+                if 0xE0 <= x <= 0xE7:
+                    win, uni = x - 0xE0, False
+                elif 0xE8 <= x <= 0xEF:
+                    win, uni, dyn[x - 0xE8] = x - 0xE8, False, _scsu_off(b[i])
+                    i += 1
+                elif x == 0xF1:
+                    h, lo = b[i], b[i + 1]
+                    win, uni, dyn[h >> 5] = h >> 5, False, 0x10000 + 0x80 * ((h & 0x1F) << 8 | lo)
+                    i += 2
+                elif x == 0xF2:
+                    return None
+                else:
+                    if x == 0xF0:
+                        x = b[i]
+                        i += 1
+                    cu.append(x << 8 | b[i])
+                    i += 1
+            elif x in (0x00, 0x09, 0x0A, 0x0D) or 0x20 <= x < 0x80:
+                cu.append(x)
+            elif x >= 0x80:
+                cu.append(dyn[win] + x - 0x80)
+            elif 0x01 <= x <= 0x08:
+                y = b[i]
+                i += 1
+                cu.append(_SCSU_STATIC[x - 1] + y if y < 0x80 else dyn[x - 1] + y - 0x80)
+            elif 0x10 <= x <= 0x17:
+                win = x - 0x10
+            elif 0x18 <= x <= 0x1F:
+                win, dyn[x - 0x18] = x - 0x18, _scsu_off(b[i])
+                i += 1
+            elif x == 0x0B:
+                h, lo = b[i], b[i + 1]
+                win, dyn[h >> 5] = h >> 5, 0x10000 + 0x80 * ((h & 0x1F) << 8 | lo)
+                i += 2
+            elif x == 0x0E:
+                cu.append(b[i] << 8 | b[i + 1])
+                i += 2
+            elif x == 0x0F:
+                uni = True
+            else:
+                return None
+        out, j = [], 0
+        while j < len(cu):
+            v = cu[j]
+            if 0xD800 <= v < 0xDC00 and j + 1 < len(cu) and 0xDC00 <= cu[j + 1] < 0xE000:
+                out.append(chr(0x10000 + ((v - 0xD800) << 10) + cu[j + 1] - 0xDC00))
+                j += 2
+                continue
+            if 0xD800 <= v < 0xE000 or v > 0x10FFFF:
+                return None
+            out.append(chr(v))
+            j += 1
+        return "".join(out)
+    except (IndexError, ValueError):
+        return None
+
+
+def scsu_encode(s):
+    """str -> SCSU bytes (simple writer: ASCII as is, Latin-1 via window 0, an astral 128-block via SDX, else SQU)."""
+    out, cur = bytearray(), 0x80
+    for c in s:
+        v = ord(c)
+        if v in (0x00, 0x09, 0x0A, 0x0D) or 0x20 <= v < 0x80:
+            out.append(v)
+        elif 0x80 <= v < 0x100 and cur == 0x80:
+            out.append(v)
+        elif v >= 0x10000:
+            blk = (v - 0x10000) >> 7
+            if cur != 0x10000 + (blk << 7):
+                cur = 0x10000 + (blk << 7)
+                out += bytes((0x0B, blk >> 8, blk & 0xFF))   # window 0
+            out.append(0x80 + (v & 0x7F))
+        else:
+            out += b"\x0e" + v.to_bytes(2, "big")
+    return bytes(out)
+
+
+_BOCU_TC = 243     # trail count: 0x21..0xff + 20 control trail bytes
+_BOCU_R1P, _BOCU_R1N = 63, -64
+_BOCU_R2P, _BOCU_R2N = 63 + 43 * 243, -64 - 43 * 243
+_BOCU_R3P, _BOCU_R3N = _BOCU_R2P + 3 * 243 ** 2, _BOCU_R2N - 3 * 243 ** 2
+_BOCU_CTRL = (1, 2, 3, 4, 5, 6, *range(0x10, 0x1A), 0x1C, 0x1D, 0x1E, 0x1F)
+_BOCU_B2T = {b: t for t, b in enumerate(_BOCU_CTRL)}
+
+
+def _bocu_prev(c):
+    if 0x3040 <= c <= 0x309F:
+        return 0x3070
+    if 0x4E00 <= c <= 0x9FA5:
+        return 0x4E00 - _BOCU_R2N
+    if 0xAC00 <= c <= 0xD7A3:
+        return (0xD7A3 + 0xAC00) // 2
+    return (c & ~0x7F) + 0x40
+
+
+def bocu1_encode(s):
+    """str -> BOCU-1 bytes (ICU ucnvbocu.cpp packDiff)."""
+    out, prev = bytearray(), 0x40
+    for ch in s:
+        c = ord(ch)
+        if c <= 0x20:
+            prev = prev if c == 0x20 else 0x40
+            out.append(c)
+            continue
+        d, prev = c - prev, _bocu_prev(c)
+        if _BOCU_R1N <= d <= _BOCU_R1P:
+            out.append(0x90 + d)
+            continue
+        if d > 0:
+            lead, k, d = ((0xD0, 1, d - _BOCU_R1P - 1) if d <= _BOCU_R2P else (0xFB, 2, d - _BOCU_R2P - 1)
+                          if d <= _BOCU_R3P else (0xFE, 3, d - _BOCU_R3P - 1))
+        else:
+            lead, k, d = ((0x50, 1, d - _BOCU_R1N) if d >= _BOCU_R2N else (0x25, 2, d - _BOCU_R2N)
+                          if d >= _BOCU_R3N else (0x22, 3, d - _BOCU_R3N))
+        tr = []
+        for _ in range(k):
+            d, m = divmod(d, _BOCU_TC)
+            tr.append(_BOCU_CTRL[m] if m < 20 else m + 13)
+        out += bytes([lead + d] + tr[::-1])
+    return bytes(out)
+
+
+def bocu1_decode(b):
+    """BOCU-1 bytes -> str, else None (illegal trail / out-of-range code point / truncated)."""
+    try:
+        out, prev, i, n = [], 0x40, 0, len(b)
+        while i < n:
+            x = b[i]
+            i += 1
+            if x <= 0x20:
+                prev = prev if x == 0x20 else 0x40
+                out.append(chr(x))
+                continue
+            if x == 0xFF:
+                prev = 0x40
+                continue
+            if 0x50 <= x < 0xD0:
+                d, k = x - 0x90, 0
+            elif x >= 0xD0:
+                d, k = ((x - 0xD0) * _BOCU_TC + _BOCU_R1P + 1, 1) if x < 0xFB else \
+                    ((x - 0xFB) * _BOCU_TC ** 2 + _BOCU_R2P + 1, 2) if x < 0xFE else (_BOCU_R3P + 1, 3)
+            else:
+                d, k = ((x - 0x50) * _BOCU_TC + _BOCU_R1N, 1) if x >= 0x25 else \
+                    ((x - 0x25) * _BOCU_TC ** 2 + _BOCU_R2N, 2) if x > 0x21 else (-_BOCU_TC ** 3 + _BOCU_R3N, 3)
+            t = 0
+            for y in b[i:i + k] if i + k <= n else None:
+                t = t * _BOCU_TC + (y - 13 if y >= 0x21 else _BOCU_B2T[y])
+            i += k
+            c = prev + d + t
+            if not 0 <= c <= 0x10FFFF or 0xD800 <= c < 0xE000:
+                return None
+            out.append(chr(c))
+            prev = _bocu_prev(c)
+        return "".join(out)
+    except (KeyError, TypeError):
+        return None
+
+
+_COMPRESSED_FORMS = {"scsu": (scsu_encode, scsu_decode), "bocu1": (bocu1_encode, bocu1_decode)}
+
+
+def compressed_enc(s, form="bocu1", outer="hex", style=None):
+    """Text -> `outer` text of its (`style`d, unistyle) SCSU / BOCU-1 bytes."""
+    x = unistyle_enc(s, style, space=" ") if style else s
+    return _bytes_out(_COMPRESSED_FORMS[form][0](x), outer)
+
+
+def compressed_reads(t):
+    """[(form, text)] for every byte layer x SCSU / BOCU-1 reading of `t` folding to printable ASCII. SCSU must use a
+    window / quote tag or a high byte (pure ASCII = identity = plain text, not this family). Never raises."""
+    out = []
+    try:
+        for _layer, b in _bytes_reads(_t(t)):
+            if not b:
+                continue
+            for form, (_e, dec) in _COMPRESSED_FORMS.items():
+                if form == "scsu" and max(b) < 0x80 and not any(1 <= x <= 0x1F and x not in (9, 10, 13) for x in b):
+                    continue
+                s = dec(b)
+                if s is None:
+                    continue
+                f = _astral_fold(s, form == "bocu1")
+                if f is not None and not (form == "scsu" and _lenient_utf8(b) is not None):
+                    out.append((form, f))
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+    return out
+
+
+def compressed_dec(t, form=None):
+    """Undo compressed_enc (any style / outer) -> ASCII text, else None; form pins scsu / bocu1."""
+    return next((s for f, s in compressed_reads(t) if form is None or f == form), None)
+
+
+def compressed_free(p):
+    """Speculative Mastery-line decoder: the SCSU / BOCU-1 reading of a line."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + s for s in dict.fromkeys(s for _f, s in compressed_reads(p))][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+_have = {c[0] for c in CANDIDATES}
+CANDIDATES += [(f"{f}-{o}" + (f"-{st}" if st else ""), (lambda f, o, st: lambda s: compressed_enc(s, f, o, st))(f, o, st),
+                (lambda f: lambda t: compressed_dec(t, f))(f))
+               for f, st in (("bocu1", None), ("scsu", "bold"), ("bocu1", "bold")) for o in ("hex", "base64")
+               if f"{f}-{o}" + (f"-{st}" if st else "") not in _have]
+del _have
+
+
+# ------------------------------------------------- byte-add (Caesar on bytes): c = (p + k) mod 256, hex / base64 / binary
+# Not XOR: the decoded bytes are non-printable, c ^ crib has no period, but (c - crib) mod 256 is ONE constant k over
+# the whole "Nice work ..." crib (k = (c0 - 0x4e) % 256, every crib byte verified). "Subtract k" = add 256 - k, so one
+# family covers both directions (named by the additive k). Wide variant: the text's UTF-16LE/BE code units + k mod
+# 65536 (k = unit0 - 'N'), same outers. k = 0 is the bare hex / base64 codec; k = 128 is byte-identical to xor0x80.
+def byteadd(b, k, width=1, order="big"):
+    if width == 1:
+        return bytes((x + k) & 255 for x in b)
+    us = [int.from_bytes(b[i:i + 2], order) for i in range(0, len(b) - 1, 2)]
+    return b"".join(((u + k) & 0xFFFF).to_bytes(2, order) for u in us)
+
+
+_BA_WIDE = {"": (1, "big", "utf-8"), "u16le": (2, "little", "utf-16-le"), "u16be": (2, "big", "utf-16-be")}
+
+
+def _ba_out(b, rep):
+    if rep in ("hex", "HEX", "hex-spaced"):
+        h = b.hex().upper() if rep == "HEX" else b.hex()
+        return " ".join(h[i:i + 2] for i in range(0, len(h), 2)) if rep == "hex-spaced" else h
+    if rep in ("binary8", "binary8-nospace"):
+        return ("" if rep.endswith("nospace") else " ").join(f"{x:08b}" for x in b)
+    if rep == "decimal":
+        return " ".join(str(x) for x in b)
+    t = (base64.urlsafe_b64encode(b) if rep.startswith("base64url") else base64.b64encode(b)).decode()
+    return t.rstrip("=") if rep.endswith("-nopad") else t
+
+
+def byteadd_enc(s, k, rep="hex", wide=""):
+    width, order, enc = _BA_WIDE[wide]
+    return _ba_out(byteadd(s.encode(enc), k % (256 if width == 1 else 65536), width, order), rep)
+
+
+def _ba_reads(t):
+    """[(rep, bytes)]: hex / HEX / hex-spaced / base64(url)(-nopad) / binary8(-nospace) / decimal readings."""
+    out = []
+    t = _t(t) if not isinstance(t, str) else t
+    s = t.strip()
+    for rep, b in _xor_reads(s):
+        if rep in ("hex", "HEX") and re.search(r"[0-9a-fA-F]{2}\s+[0-9a-fA-F]{2}", s) and not re.search(
+                r"[0-9a-fA-F]{3}", s):
+            rep = "hex-spaced"
+        out.append((rep, b))
+    for rep, b in _bytes_reads(s):
+        if rep == "binary8":
+            out.append(("binary8" if re.search(r"\s", s) else "binary8-nospace", b))
+        elif rep == "decimal":
+            out.append((rep, b))
+    return out
+
+
+def _ba_text(b, enc):
+    try:
+        x = b.decode(enc)
+    except (UnicodeDecodeError, ValueError):
+        return None
+    return x if x and x.isprintable() and x.isascii() else None
+
+
+def byteadd_solve(blob, hints=()):
+    """(name, sentence, enc) when the blob is a byte layer of the warmups sentence with k added to every byte (or to
+    every UTF-16 code unit), k derived from the crib's first unit and verified over the whole crib, else None."""
+    try:
+        for rep, data in _ba_reads(blob):
+            for wide, (width, order, enc) in _BA_WIDE.items():
+                crib = _CRIB.encode(enc)
+                if len(data) <= len(crib) or len(data) % width:
+                    continue
+                mod = 256 if width == 1 else 65536
+                c0, p0 = int.from_bytes(data[:width], order), int.from_bytes(crib[:width], order)
+                k = (c0 - p0) % mod
+                if not k or byteadd(crib, k, width, order) != data[:len(crib)]:
+                    continue
+                got = _ba_text(byteadd(data, -k % mod, width, order), enc)
+                if got and got.startswith(_CRIB) and SLUG.fullmatch(got[len(_CRIB):]):
+                    name = f"byteadd{k}" + (f"-{wide}" if wide else "") + f"-{rep}"
+                    return name, got, (lambda k, rep, wide: lambda s: byteadd_enc(s, k, rep, wide))(k, rep, wide)
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def byteadd_dec(t):
+    r = byteadd_solve(t)
+    return r[1] if r else None
+
+
+_BA_SLUGPART = re.compile(r"[a-z]+(?:-[a-z]+)*(?:-\d*)?")
+
+
+def _ba_piece(x):
+    """True when x is a contiguous piece of crib + slug (>= 6 chars): inside the crib, crib tail + slug head, or a
+    whole slug."""
+    if len(x) < 6:
+        return False
+    for j in range(len(_CRIB)):
+        head = _CRIB[j:]
+        if head.startswith(x):
+            return True
+        if x.startswith(head) and _BA_SLUGPART.fullmatch(x[len(head):]):
+            return True
+    return bool(SLUG.fullmatch(x))
+
+
+def byteadd_free(p):
+    """Mastery free-text fragment under byte-add (any k 1..255) or UTF-16 unit-add (k from a crib alignment): every
+    reading that decodes to a contiguous piece of the sentence."""
+    out = []
+    try:
+        lead = p[:len(p) - len(p.lstrip())]
+        for _rep, data in _ba_reads(p):
+            if len(data) < 6:
+                continue
+            for k in range(1, 256):
+                x = _ba_text(byteadd(data, -k & 255), "utf-8")
+                if x and _ba_piece(x):
+                    out.append(lead + x)
+            if len(data) % 2:
+                continue
+            for wide in ("u16le", "u16be"):
+                width, order, enc = _BA_WIDE[wide]
+                u0 = int.from_bytes(data[:2], order)
+                for k in {(u0 - ord(c)) & 0xFFFF for c in set(_CRIB) | set("abcdefghijklmnopqrstuvwxyz-0123456789")}:
+                    if not k:
+                        continue
+                    x = _ba_text(byteadd(data, -k & 0xFFFF, 2, order), enc)
+                    if x and _ba_piece(x):
+                        out.append(lead + x)
+    except Exception:  # noqa: BLE001
+        return []
+    return list(dict.fromkeys(out))
+
+
+CANDIDATES.append(("byteadd", lambda s: None, byteadd_dec))
+
+
+# ------------------------------------------------- byte bit-rotation: each byte ROL r (r = 1..7) or bit-reversed, hex/base64
+# CyberChef "Rotate left/right" (Carry through off), x86 rol/ror per byte. Cue: no decoded byte is printable but every
+# byte's popcount equals an ASCII letter's (a rotation keeps the 1-bits). ROR r = ROL 8-r (named by the left amount);
+# ROL 4 = nibble swap (nibswap-* above, matched first); "bitrev" = each byte's 8 bits mirrored (binary-lsb at byte
+# level). Same outer reps as byteadd (hex / HEX / hex-spaced / base64(url)(-nopad) / binary8 / decimal).
+def _rolb8(x, r):
+    return ((x << r) | (x >> (8 - r))) & 255 if r & 7 else x
+
+
+_BR_MAPS = {f"rol{r}": bytes(_rolb8(x, r) for x in range(256)) for r in range(1, 8)}
+_BR_MAPS["bitrev"] = bytes(int(f"{x:08b}"[::-1], 2) for x in range(256))
+_BR_INV = {n: bytes(m.index(x) for x in range(256)) for n, m in _BR_MAPS.items()}
+_BR_REVCRIB = ("warmup", "submit", "answer", "Master", "exact")
+
+
+def byterot_enc(s, op="rol1", rep="hex"):
+    return _ba_out(_u(s).translate(_BR_MAPS[op]), rep)
+
+
+def byterot_solve(blob, hints=()):
+    """(name, sentence, enc) when the blob's bytes are the text with every byte rotated (ROL 1-7) or bit-reversed:
+    the warmups crib + slug first, else the one op whose read is printable text, else None."""
+    try:
+        loose = []
+        for rep, data in _ba_reads(blob):
+            if len(data) < 6 or _ba_text(data, "utf-8"):
+                continue
+            for op, inv in _BR_INV.items():
+                got = _ba_text(data.translate(inv), "utf-8")
+                if not got:
+                    continue
+                enc = (lambda o, r: lambda s: byterot_enc(s, o, r))(op, rep)
+                if got.startswith(_CRIB) and SLUG.fullmatch(got[len(_CRIB):]):
+                    return f"byte{op}-{rep}", got, enc
+                back = got[::-1]   # a reversed sentence is a byte-order codec (bit stream reversed), not this one
+                if _texty(got) >= 0.9 and not (_ba_piece(back.strip()) or any(c in back for c in _BR_REVCRIB)):
+                    loose.append((f"byte{op}-{rep}", got, enc))
+        if len({g for _n, g, _e in loose}) == 1:
+            return loose[0]
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def byterot_dec(t):
+    r = byterot_solve(t)
+    return r[1] if r else None
+
+
+def byterot_free(p):
+    """Mastery free-text fragment under a per-byte rotation / bit reversal: every op whose read is a contiguous
+    piece of the warmups sentence."""
+    out = []
+    try:
+        lead = p[:len(p) - len(p.lstrip())]
+        for _rep, data in _ba_reads(p):
+            if len(data) < 6 or _ba_text(data, "utf-8"):
+                continue
+            for inv in _BR_INV.values():
+                x = _ba_text(data.translate(inv), "utf-8")
+                if x and (_ba_piece(x) or x.startswith(_CRIB)):
+                    out.append(lead + x)
+    except Exception:  # noqa: BLE001
+        return []
+    return list(dict.fromkeys(out))
+
+
+CANDIDATES.append(("byterot", lambda s: None, byterot_dec))
+
+
+# ------------------------------------------------- alternate base-N alphabets: Crockford / z-base-32 / Geohash, crypt / bcrypt / keyed base64
+# Same bit stream as RFC 4648 (MSB first, left-aligned), only the alphabet differs -> str.translate to the RFC alphabet,
+# then the std decoder. base32: Crockford (0-9A-Z minus I L O U, decoder folds O->0, I/L->1, drops '-'), z-base-32
+# (ybndrfg8ejkmcpqxot1uwisza345h769), Geohash (0-9 b-z minus i l o), unpadded or '='-padded. base64: CyberChef's preset
+# alphabets (itoa64/crypt ./0-9A-Za-z, bcrypt ./A-Za-z0-9, z64, Radix-64, XML, y64, filename-safe, ROT13, and the
+# keyed CTF classics Atom128 / Megan35 / Zong22 / Hazz15 whose 65th char is the pad), crypt64-le = passlib h64
+# (md5crypt / phpass: 3 bytes little-endian -> 4 chars LSB first). Any other shuffled / keyword alphabet: keyb64_solve
+# recovers char -> sextet from the fixed 87-char sentence crib (exactly 116 chars), the rest by keyword order.
+_RFC32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+_RFC64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+_ALT32 = {"crockford32": "0123456789ABCDEFGHJKMNPQRSTVWXYZ", "zbase32": "ybndrfg8ejkmcpqxot1uwisza345h769",
+          "geohash32": "0123456789bcdefghjkmnpqrstuvwxyz"}
+_ALT64 = {"crypt64": "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+          "bcrypt64": "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
+          "z64": "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/=",
+          "radix64": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+/=",
+          "xml64": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.",
+          "y64": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-",
+          "fname64": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-=",
+          "rot13-64": "NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm0123456789+/=",
+          "atom128": "/128GhIoPQROSTeUbADfgHijKLM+n0pFWXY456xyzB7=39VaqrstJklmNuZvwcdEC",
+          "megan35": "3GHIJKLMNOPQRSTUb=cdefghijklmnopWXYZ/12+406789VaqrstuvwxyzABCDEF5",
+          "zong22": "ZKj9n+yf0wDVX1s/5YbdxSo=ILaUpPBCHg8uvNO4klm6iJGhQ7eFrWczAMEq3RTt2",
+          "hazz15": "HNO4klm6ij9n+J2hyf0gzA8uvwDEq3X1Q7ZKeFrWcVTts/MRGYbdxSo=ILaUpPBC5"}
+
+
+def _alt_text(b):
+    """Strict text read of decoded bytes: UTF-8, printable, mostly alphanumeric (a wrong alphabet reads as junk)."""
+    try:
+        s = bytes(b).decode("utf-8")
+    except Exception:  # noqa: BLE001
+        return None
+    return s if s and all(c.isprintable() or c in "\t\r\n" for c in s) and _texty(s) > 0.8 else None
+
+
+def alt32_enc(s, name, pad=False, lower=False):
+    t = base64.b32encode(_u(s)).decode().rstrip("=").translate(str.maketrans(_RFC32, _ALT32[name]))
+    t = t.lower() if lower else t
+    return t + "=" * (-len(t) % 8) if pad else t
+
+
+def alt32_bytes(t, name):
+    a = _ALT32[name]
+    s = re.sub(r"\s+", "", t or "").rstrip("=")
+    if name == "crockford32":
+        s = s.replace("-", "").upper().translate(str.maketrans("OIL", "011"))
+    else:
+        s = s.lower()
+    if len(s) < 2 or set(s) - set(a) or len(s) % 8 in (1, 3, 6):
+        return None
+    return base64.b32decode(s.translate(str.maketrans(a, _RFC32)) + "=" * (-len(s) % 8))
+
+
+def alt32_dec(t, name):
+    try:
+        b = alt32_bytes(t, name)
+    except Exception:  # noqa: BLE001
+        return None
+    return _alt_text(b) if b else None
+
+
+def alt64_enc(s, name, pad=False):
+    if name == "crypt64-le":
+        return h64_enc(s)
+    a = _ALT64[name]
+    t = base64.b64encode(_u(s)).decode().rstrip("=").translate(str.maketrans(_RFC64, a[:64]))
+    return t + (a[64] if len(a) > 64 else "=") * (-len(t) % 4) if pad else t
+
+
+def alt64_bytes(t, name, alpha=None):
+    a = alpha or _ALT64[name]
+    s = re.sub(r"\s+", "", t or "")
+    p = a[64] if len(a) > 64 else "="
+    if p not in a[:64]:
+        s = s.rstrip(p)
+    if len(s) < 2 or set(s) - set(a[:64]) or len(s) % 4 == 1:
+        return None
+    return base64.b64decode(s.translate(str.maketrans(a[:64], _RFC64)) + "=" * (-len(s) % 4))
+
+
+def alt64_dec(t, name):
+    try:
+        b = h64_bytes(t) if name == "crypt64-le" else alt64_bytes(t, name)
+    except Exception:  # noqa: BLE001
+        return None
+    return _alt_text(b) if b else None
+
+
+def h64_enc(s):
+    """passlib h64.encode_bytes: each 3-byte group little-endian, 6 bits at a time LSB first, over ./0-9A-Za-z."""
+    a, b, out = _ALT64["crypt64"], _u(s), []
+    for i in range(0, len(b), 3):
+        g = b[i:i + 3]
+        v = int.from_bytes(g, "little")
+        out += [a[v >> 6 * k & 63] for k in range(len(g) + 1)]
+    return "".join(out)
+
+
+def h64_bytes(t):
+    a = _ALT64["crypt64"]
+    s = re.sub(r"\s+", "", t or "")
+    if len(s) < 2 or set(s) - set(a) or len(s) % 4 == 1:
+        return None
+    out = bytearray()
+    for i in range(0, len(s), 4):
+        g = s[i:i + 4]
+        v = sum(a.index(c) << 6 * k for k, c in enumerate(g))
+        n = len(g) - 1
+        if v >> 8 * n:   # bits past the last byte must be zero (passlib rejects them)
+            return None
+        out += v.to_bytes(n, "little")
+    return bytes(out)
+
+
+_KB64_HEAD = base64.b64encode(_u(_CRIB)).decode() if len(_u(_CRIB)) % 3 == 0 else None
+
+
+_KB64_SLUGB = frozenset(b"abcdefghijklmnopqrstuvwxyz0123456789-")
+
+
+def _kb64_keyword(m, inv, want=""):
+    """Keyword alphabets (dedup(keyword) + the rest of the std / url alphabet in std order). Low sextets (the keyword's
+    slots) never occur in ASCII's base64, so read the keyword set K off the tail instead: for a keyword length k, the
+    crib-placed chars at positions >= k keep std order and each gap between two of them holds exactly as many tail
+    chars as their position difference says -- every unplaced char of a gap is all-tail or all-keyword. K's unplaced
+    chars fill the prefix holes (<= 10; only the ones in `want` permuted). Yields char -> sextet maps, None after each k
+    (a longer k only adds freedom: the shortest k that reads is the keyword)."""
+    pos = {c: _RFC64.index(x) for c, x in m.items()}
+    for base in (_RFC64, _RFC64[:62] + "-_"):
+        bi = {c: i for i, c in enumerate(base)}
+        if any(c not in bi for c in m):
+            continue
+        for k in range(1, 33):
+            tail = sorted((c for c in m if pos[c] >= k), key=bi.get)
+            ranks = [pos[c] - k for c in tail]
+            if any(b <= a for a, b in zip(ranks, ranks[1:])):
+                continue
+            kw0 = {c for c in m if pos[c] < k}
+            holes = [i for i in range(k) if _RFC64[i] not in inv]
+            bounds = [(-1, -1)] + [(bi[c], r) for c, r in zip(tail, ranks)] + [(len(base), 64 - k)]
+            opts, n = [], 1
+            for (j1, r1), (j2, r2) in zip(bounds, bounds[1:]):
+                unpl = [c for c in base[j1 + 1:j2] if c not in m]
+                extra = len(unpl) - (r2 - r1 - 1)   # how many of the gap's unplaced chars are keyword chars
+                if extra < 0 or extra > len(holes):
+                    n = 0
+                    break
+                opts.append(list(itertools.combinations(unpl, extra)))
+                n *= len(opts[-1])
+            if not n or n > 256 or len(holes) > 10:
+                continue
+            for pick in itertools.product(*opts):
+                unk = [c for g in pick for c in g]
+                if len(unk) != len(holes):
+                    continue
+                kw = kw0 | set(unk)
+                rest = [c for c in base if c not in kw]
+                used = [c for c in unk if c in want]   # only the slug's unknown chars need every slot
+                idle = [c for c in unk if c not in want]
+                for hs in itertools.permutations(holes, len(used)):
+                    fill = dict(zip(hs, used))
+                    fill.update(zip([h for h in holes if h not in fill], idle))
+                    alpha = [fill.get(i) or inv[_RFC64[i]] for i in range(k)] + rest
+                    if all(alpha[pos[c]] == c for c in m):
+                        yield {c: _RFC64[i] for i, c in enumerate(alpha)}
+            yield None   # end of keyword length k: the caller keeps the shortest k that reads
+
+
+def _kb64_csp(rest, m, limit=2, budget=200000):
+    """Random shuffles: the slug's 4-char groups after the crib, each unknown char given a free sextet so every
+    decoded byte is a slug byte. Yields the assignment only when it is the unique one (<= `budget` tries)."""
+    free = [x for x in _RFC64 if x not in set(m.values())]
+    groups = [rest[i:i + 4] for i in range(0, len(rest), 4)]
+    sols, tries = [], [0]
+
+    def rec(gi, asg, used):
+        if len(sols) >= limit or tries[0] > budget:
+            return
+        if gi == len(groups):
+            sols.append(dict(asg))
+            return
+        g = groups[gi]
+        unk = [c for c in dict.fromkeys(g) if c not in m and c not in asg]
+        for q in itertools.permutations([x for x in free if x not in used], len(unk)):
+            tries[0] += 1
+            a2 = {**asg, **dict(zip(unk, q))}
+            std = "".join(m.get(c) or a2[c] for c in g)
+            try:
+                b = base64.b64decode(std + "=" * (-len(std) % 4))
+            except Exception:  # noqa: BLE001
+                continue
+            if b and all(x in _KB64_SLUGB for x in b):
+                rec(gi + 1, a2, used | set(q))
+
+    if len(rest) % 4 != 1:
+        rec(0, {}, frozenset())
+    if len(sols) == 1 and tries[0] <= budget:
+        yield {**m, **sols[0]}
+
+
+def keyb64_solve(blob):
+    """(name, sentence, enc) when the blob is the warmups sentence base64'd over a shuffled / keyword alphabet: the
+    87-byte crib fixes the first 116 chars' sextets (char -> value, must be a bijection); chars the crib never used are
+    placed by keyword order (dedup(keyword) + the std rest), else by the unique assignment whose slug bytes are all
+    [a-z0-9-]. None otherwise (an ambiguous random shuffle: the GM must judge, not a guess)."""
+    try:
+        s = re.sub(r"\s+", "", reader_text(blob) or "")
+        head = _KB64_HEAD
+        if not head or len(s) < len(head) + 4 or s.startswith(head):
+            return None
+        m = {}
+        for c, x in zip(s, head):
+            if m.setdefault(c, x) != x:
+                return None
+        if len(set(m.values())) != len(m):
+            return None
+        last = s[-1]
+        tails = [s.rstrip(last), s] if last not in m else [s]   # a pad char the crib never used: drop its run
+        inv = {x: c for c, x in m.items()}
+        for tail in tails:
+            if len(tail) % 4 == 1:
+                continue
+            for gen in (_kb64_keyword(m, inv, set(tail[len(head):])), _kb64_csp(tail[len(head):], m)):
+                hits = {}
+                for mm in itertools.islice(gen, 4096):
+                    if mm is None:
+                        if hits:
+                            break
+                        continue
+                    std = "".join(mm.get(c, "") for c in tail)
+                    if len(std) != len(tail):
+                        continue
+                    try:
+                        got = base64.b64decode(std + "=" * (-len(std) % 4)).decode("utf-8")
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if got.startswith(_CRIB) and SLUG.fullmatch(got[len(_CRIB):]):
+                        hits.setdefault(got, mm)
+                if len(hits) != 1:   # none, or an ambiguous fill: never guess
+                    continue
+                got, mm = next(iter(hits.items()))
+                iv = {x: c for c, x in mm.items()}
+                alpha = "".join(iv.get(x, "?") for x in _RFC64)
+                pad = s[len(tail):len(tail) + 1]
+                enc = (lambda a, p: lambda x: (lambda t: t + p * (-len(t) % 4) if p else t)(
+                    base64.b64encode(_u(x)).decode().rstrip("=").translate(str.maketrans(_RFC64, a))))(alpha, pad)
+                return f"keyb64:{alpha}" + (f"|pad{pad}" if pad else ""), got, enc
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def keyb64_dec(t):
+    r = keyb64_solve(t)
+    return r[1] if r else None
+
+
+def altbase_free(p):
+    """Mastery free-text fragment under an alternate base32 / base64 alphabet: every alphabet whose read is text."""
+    out = []
+    lead = p[:len(p) - len(p.lstrip())]
+    for n in _ALT32:
+        x = alt32_dec(p, n)
+        if x:
+            out.append(lead + x)
+    for n in list(_ALT64) + ["crypt64-le"]:
+        x = alt64_dec(p, n)
+        if x:
+            out.append(lead + x)
+    return list(dict.fromkeys(out))
+
+
+CANDIDATES += [(n + ("-lower" if lo else "") + ("-pad" if pad else ""),
+                (lambda n, pad, lo: lambda s: alt32_enc(s, n, pad, lo))(n, pad, lo), (lambda n: lambda t: alt32_dec(t, n))(n))
+               for n in _ALT32 for pad in (False, True) for lo in ((False, True) if n == "crockford32" else (False,))]
+CANDIDATES += [(n + ("-pad" if pad else ""), (lambda n, pad: lambda s: alt64_enc(s, n, pad))(n, pad),
+                (lambda n: lambda t: alt64_dec(t, n))(n))
+               for n in list(_ALT64) + ["crypt64-le"] for pad in (False, True) if not (pad and n == "crypt64-le")]
+CANDIDATES.append(("keyed-base64", lambda s: None, keyb64_dec))
+
+
 SPECULATIVE_FREE = (
     ("rot47", lambda p: [rot47(p)]),
     ("rot8000", lambda p: [b for b in (rot8000_dec(p),) if b]),
@@ -9032,6 +10478,8 @@ SPECULATIVE_FREE = (
     ("regional", regional_free),
     ("unistyle", lambda p: [p[:len(p) - len(p.lstrip())] + b for b in (unistyle_dec(p),) if b]),
     ("codepoint", ucp_free),
+    ("cuswap", cuswap_free),
+    ("cubin", cubin_free),
     ("inner-bytes", inner_free),
     ("zerowidth", zw_cands),
     ("whitespace", ws_cands),
@@ -9060,6 +10508,13 @@ SPECULATIVE_FREE = (
     ("hexdump", hexdump_free),
     ("gsm7", gsm7_free),
     ("raw-wide", lambda p: [b for b in (wide_text_dec(p),) if b]),
+    ("knob-sweep", knob_free),
+    ("bignum", bignum_free),
+    ("astral", astral_free),
+    ("scsu-bocu", compressed_free),
+    ("byteadd", byteadd_free),
+    ("byterot", byterot_free),
+    ("altbase", altbase_free),
 )
 
 

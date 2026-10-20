@@ -1,0 +1,8 @@
+{
+ "field": "payload.member_cpu_type_set",
+ "expected": "[\"0x0100000c\",\"0x00000007\",\"0x01000007\",\"0x0000000c\",\"0x0200000c\"]",
+ "generator_cmd": "PYTHONPATH=$TMPDIR/cpiofx/pylib python3 gen.py (libarchive-c 5 / libarchive 3.8.5 file_writer, format cpio_odc; cpio_bin/cpio_odc via archive_write_set_format_cpio_bin/_odc) (Tool = thin arm64e obj, helper = 9-slice fat) + pbzx wrapper",
+ "oracle_cmd": "tail -c +29 Payload.pbzx | xz -dc | 7z x -si -tcpio; macholib.MachO(...).headers cputype per slice: Tool 0x0100000c; helper 0x7,0x01000007,0x01000007,0xc,0xc,0xc,0x0200000c,0x0100000c,0x0100000c -> deduped first-occurrence",
+ "decoy": false,
+ "member": "Payload.pbzx"
+}

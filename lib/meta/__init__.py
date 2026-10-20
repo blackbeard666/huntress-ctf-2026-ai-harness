@@ -42,7 +42,7 @@ def _s(fn):
     return Extractor(f"lib.meta.{fn}", SPECULATIVE, ())
 
 
-# Every GM-verified field family D1-D19 (+ the never-asked extras the day solvers already carried, speculative).
+# Every GM-verified field family D1-D20 (+ the never-asked extras the day solvers already carried, speculative).
 _BUILTIN = {
     ("file", "filename"): _v("identity:filename", 1),
     ("file", "size_bytes"): _v("identity:size_bytes", 1),
@@ -83,6 +83,9 @@ _BUILTIN = {
     # D18: coded width x height of the first video stream (MP4 stsd visual entry; ffprobe, not rotated) -- prebuilt
     # media_video.video_value promoted via media.py (320x180 on the Single, TT and all 5 Mastery sets)
     ("media", "primary_video_dimensions"): _v("media:primary_video_dimensions", 18),
+    # D20: cputype of every slice, fat_arch order (thin = header), "0x%08x" in a compact JSON list -- thin arm64 ->
+    # ["0x0100000c"] (single, TT, all 5 Mastery sets; the arch-name list ["arm64"] was REJECTED)
+    ("macho", "cpu_type_set"): _v("macho:cpu_type_set", 20),
 }
 
 PREBUILT_DIR = Path(__file__).resolve().parent / "prebuilt"

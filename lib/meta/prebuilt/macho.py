@@ -188,8 +188,9 @@ def _value(b, ctx):
         return fat is not None if (fat is not None or h is not None) else "none"
     if h is None:
         return "none"
-    if f in ("fat_nfat_arch", "nfat_arch", "fat_arch_count", "arch_count", "slice_count", "fat_magic_u32_hex",
-             "fat_arch_cputypes", "fat_cputypes"):
+    if f in ("slice_count", "arch_count"):    # a thin file is one slice (macho_sets.py convention)
+        return 1
+    if f in ("fat_nfat_arch", "nfat_arch", "fat_arch_count", "fat_magic_u32_hex", "fat_arch_cputypes", "fat_cputypes"):
         return "none"
     if f.endswith("magic_u32_hex"):
         return Hex(h["magic"], 8)

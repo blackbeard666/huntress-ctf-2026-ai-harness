@@ -1,0 +1,9 @@
+{
+ "codec": "bocu1",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-lynx-28",
+ "encoded": "/NuWcmxuIIB4e3QgbW5seG1yd3AgfXFyfCCAant2fnkjMSUg/NuceCB8eHV/biMxMCD827V+a3ZyfSB9cXJ8IG6Bamx9IGp3fIBueyB9eCB9cW4gVmp2biBcanx9bnsjMT4g/Nuvanl1biMxMfzbroJ3gSMxMfzfjaY=",
+ "generator_cmd": "printf %s \"$plain\" | python3 -c 'import sys,unicodedata as u;print(\"\".join(u.lookup((\"MATHEMATICAL BOLD \"+(\"CAPITAL \" if c.isupper() else \"SMALL \")+c.upper()) if c.isalpha() else \"MATHEMATICAL BOLD DIGIT \"+u.name(c).split()[-1]) if c.isalnum() else c for c in sys.stdin.read()),end=\"\")' | uconv -f utf-8 -t BOCU-1 | base64 -w0",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | uconv -f BOCU-1 -t utf-8 | python3 -c 'import sys,unicodedata;print(unicodedata.normalize(\"NFKC\",sys.stdin.read()),end=\"\")'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-lynx-28",
+ "expected": "match"
+}

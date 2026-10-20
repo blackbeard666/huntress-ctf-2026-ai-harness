@@ -1,0 +1,8 @@
+{
+ "field": "pkg.package_identifiers",
+ "expected": "[\"com.acme.agent\"]",
+ "generator_cmd": "PYTHONPATH=tools/pylib-libarchive .venv/bin/python tests/data/meta_fixtures/pkg/mkxar.py.txt out.pkg gzip sha1 a  (libarchive 3.x xar writer via libarchive-c in tools/pylib-libarchive: Distribution hostArchitectures=x86_64,arm64 min=11.0 + agent.pkg/{PackageInfo com.acme.agent 4.2.1,Bom,Payload,Scripts})",
+ "oracle_cmd": "for p in $(7z l -slt FILE | sed -n 's/^Path = \\(.*PackageInfo\\)$/\\1/p'); do 7z x -so FILE $p | grep -o '<pkg-info[^>]*' | grep -o ' identifier=\"[^\"]*\"'; done -> JSON list",
+ "decoy": false,
+ "member": "acme_agent.pkg"
+}

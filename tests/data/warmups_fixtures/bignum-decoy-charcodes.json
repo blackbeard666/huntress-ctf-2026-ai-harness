@@ -1,0 +1,10 @@
+{
+ "codec": "bignum",
+ "plain": null,
+ "encoded": "78 105 99 101 32 119 111 114 107 32 100 101 99 111 100 105 110 103",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Nice work decoding' | od -An -v -tu1 | tr -s ' \\n' ' '  # separated decimal CHAR CODES (<=3 digits each), not one integer",
+ "oracle_cmd": "printf %s \"$encoded\" | .venv/bin/python -I -c \"import sys;from Crypto.Util.number import long_to_bytes;t=sys.stdin.read().strip();print(long_to_bytes(int(t)).decode())\"  # int() rejects the separated tokens (ValueError) -> not one big integer",
+ "oracle_plain": null
+}

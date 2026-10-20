@@ -1,0 +1,9 @@
+{
+ "codec": "byteadd300-u16be-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-signal-29",
+ "encoded": "AXoBlQGPAZEBTAGjAZsBngGXAUwBkAGRAY8BmwGQAZUBmgGTAUwBoAGUAZUBnwFMAaMBjQGeAZkBoQGcAU0BTAGAAZsBTAGfAZsBmAGiAZEBWAFMAZ8BoQGOAZkBlQGgAUwBoAGUAZUBnwFMAZEBpAGNAY8BoAFMAY0BmgGfAaMBkQGeAUwBoAGbAUwBoAGUAZEBTAFzAY0BmQGRAUwBeQGNAZ8BoAGRAZ4BZgFMAY8BmAGbAaIBkQGeAVkBnwGVAZMBmgGNAZgBWQFeAWU=",
+ "generator_cmd": "printf '%s' \"$plain\" | iconv -f UTF-8 -t UTF-16BE | perl -0777 -ne 'print pack(q(n*), map { ($_+300)%65536 } unpack(q(n*), $_))' | base64 -w0",
+ "oracle_cmd": "python3 -c \"import os,base64;e=os.environ['encoded'];d=base64.b64decode(e);import struct;n=len(d)//2;u=struct.unpack('>%dH'%n,d);print(struct.pack('>%dH'%n,*[(x-300)%65536 for x in u]).decode('utf-16-be'))\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-signal-29",
+ "expected": "match"
+}

@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=powershell|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=vscode_tasks|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=powershell|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=VSCT-2c3d4e5f|url=https://vsct-2c3d4e5f.example.invalid/stage|file_path=/tmp/huntress-vsct-2c3d4e5f/.stage",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/json_carrier_gen.py  # hand-written JSONC (comments + trailing commas) around python3 gzip.compress(mtime=0)|base64, split over 2 args, written as jcar_vscode_tasks_jsonc.json5",
+ "oracle_cmd": "python3 -c \"import re,base64,gzip;s=open('jcar_vscode_tasks_jsonc.json5').read();print(gzip.decompress(base64.b64decode(''.join(re.findall(r\\\"'([A-Za-z0-9+/=]{20,})'\\\",s)))).decode(),end='')\""
+}

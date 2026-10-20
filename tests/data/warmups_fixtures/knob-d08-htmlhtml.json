@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep(html&#n;)",
+ "day": 8,
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-walrus-48",
+ "encoded": "&#78; &#105; &#99; &#101; &#32; &#119; &#111; &#114; &#107; &#32; &#100; &#101; &#99; &#111; &#100; &#105; &#110; &#103; &#32; &#116; &#104; &#105; &#115; &#32; &#119; &#97; &#114; &#109; &#117; &#112; &#33; &#32; &#84; &#111; &#32; &#115; &#111; &#108; &#118; &#101; &#44; &#32; &#115; &#117; &#98; &#109; &#105; &#116; &#32; &#116; &#104; &#105; &#115; &#32; &#101; &#120; &#97; &#99; &#116; &#32; &#97; &#110; &#115; &#119; &#101; &#114; &#32; &#116; &#111; &#32; &#116; &#104; &#101; &#32; &#71; &#97; &#109; &#101; &#32; &#77; &#97; &#115; &#116; &#101; &#114; &#58; &#32; &#106; &#97; &#100; &#101; &#45; &#119; &#97; &#108; &#114; &#117; &#115; &#45; &#52; &#56;",
+ "generator_cmd": "printf %s \"$plain\" | perl -ne 'print join \" \", map { sprintf \"&#%d;\", ord } split //'  # knob: space separators between entities",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys,html;sys.stdout.write(\"\".join(html.unescape(e) for e in sys.stdin.read().split(\" \")))'  # html.unescape per space-split entity",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-walrus-48",
+ "expected": "match"
+}

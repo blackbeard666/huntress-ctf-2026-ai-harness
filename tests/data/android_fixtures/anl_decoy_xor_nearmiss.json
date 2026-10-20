@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "tests/data/android_fixtures/gen_asset_native.sh tests/data/android_fixtures  # DECOY: as anl_plain but the blob is the near-miss 'ANS-2b8e41d07c9fa6eZ' (15 hex + Z) and the .so is perl-xor'd with 0x41 at assets/guard.bin",
+ "oracle_cmd": "gcc -o h native_src/harness.c -ldl && unzip -p anl_decoy_xor_nearmiss.apk assets/guard.bin | perl -e 'local $/; $d=<STDIN>; @k=map hex, split /,/, $ARGV[0]; $i=0; print join \"\", map { chr(ord($_) ^ $k[$i++ % @k]) } split //, $d' 41 > d.so && ./h ./d.so Java_com_huntress_arena_NativeLib_getSecret  # 'NewStringUTF ANS-2b8e41d07c9fa6eZ': no valid ANS-<16 hex>"
+}

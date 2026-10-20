@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.universal_files",
+ "expected": "none",
+ "generator_cmd": "(cd $T && echo 'int f(int x){return x*3+1;}' > f.c && clang-18 -target arm64-apple-macos11 -c f.c -o m_arm64.o && clang-18 -target x86_64-apple-macos11 -c f.c -o m_x64.o && clang-18 -target i386-apple-macos10.6 -c f.c -o m_i386.o && llvm-lipo-18 -create m_arm64.o m_x64.o -output fat2.o && llvm-lipo-18 -create m_x64.o -output fat1.o && gcc -c f.c -o e_x64.o && aarch64-linux-gnu-gcc -c f.c -o e_a64.o && ar rcs libmix.a e_x64.o e_a64.o && llvm-ar-18 rcs --format=darwin libm.a m_arm64.o && cp tests/data/meta_fixtures/pe/cli32_characteristics.bin pe_i386.exe); python3 tests/data/meta_fixtures/synthesis/gen_fleet_kit.py $T $T -> fleet_kit_decoy.zip",
+ "oracle_cmd": "python3 tests/data/meta_fixtures/synthesis/oracle_fleet.py <case>.bin  (macholib thin+fat, pyelftools e_machine, pefile Machine, `ar t`/`ar p`, zipfile; key 'universal_files')",
+ "decoy": true
+}

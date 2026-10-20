@@ -1,0 +1,8 @@
+{
+ "field": "appx.signature_present",
+ "expected": "false",
+ "generator_cmd": "zip -qrX agent_arm64.appx AppxManifest.xml AppxBlockMap.xml '[Content_Types].xml' bin/ (manifest: Identity arm64, 2 Applications, rescap caps; BlockMap HashMethod xmldsig-more#sha384; unsigned)",
+ "oracle_cmd": "unzip -Z1 agent_arm64.appx | grep -qx AppxSignature.p7x && echo true || echo false",
+ "decoy": false,
+ "member": "agent_arm64.appx"
+}

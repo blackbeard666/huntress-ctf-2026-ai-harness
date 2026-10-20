@@ -1,0 +1,7 @@
+{
+ "entry": "compact_dex_scan",
+ "expected": "ANS-6d2a90f1e7c43b58",
+ "_why": "base64 pool string of a dex embedded in an OAT ELF (.so exporting oatdata)",
+ "generator_cmd": "python3 tests/data/android_fixtures/cdx_src/gen_cdx.py oat_b64 tests/data/android_fixtures/cdx_oat_b64.apk  # javac --release 8 + dex2jar d2j-jar2dex dex, coreutils base64/base32/xxd encoding, struct vdex/cdex writer (ART layouts), gcc -shared .incbin for the OAT, zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/cdx_src/oracle.sh tests/data/android_fixtures/cdx_oat_b64.apk  # readelf --dyn-syms oatdata + strings + base64 -d"
+}

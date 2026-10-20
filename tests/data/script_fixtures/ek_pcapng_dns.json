@@ -1,0 +1,11 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "expected_kind": {
+  "kind": "pcapng",
+  "reader": "network_indicators"
+ },
+ "generator_cmd": "editcap -F pcapng ek_pcap_dns.pcap ek_pcapng_dns.pcapng (Wireshark editcap)",
+ "oracle_cmd": "file -b ek_pcapng_dns.pcapng  # pcapng capture file - version 1.0; capinfos -t -> pcapng",
+ "note": "evidence-magic-classifier: lib.codec.evidence_kind(name, data) must return expected_kind; as a script fixture the evidence holds no plan, so find_codecs must not invent one"
+}

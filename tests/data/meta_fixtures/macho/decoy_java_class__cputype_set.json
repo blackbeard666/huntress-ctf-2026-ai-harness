@@ -1,0 +1,8 @@
+{
+ "field": "macho.cputype_set",
+ "expected": "none",
+ "generator_cmd": "javac --release 8 Hello.java (CAFEBABE, u32@4 = 0x00000034 major 52)",
+ "oracle_cmd": "file decoy_java_class__cputype_set.bin: compiled Java class data, version 52.0 -> not Mach-O -> none",
+ "decoy": true,
+ "member": "Hello.class"
+}

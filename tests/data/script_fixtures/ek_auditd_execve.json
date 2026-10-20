@@ -1,0 +1,11 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "expected_kind": {
+  "kind": "auditd",
+  "reader": "process_events"
+ },
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ek_gen.py tests/data/script_fixtures (auditd SYSCALL/EXECVE/PROCTITLE record syntax)",
+ "oracle_cmd": "grep -o '^type=[A-Z]*' ek_auditd_execve.log | sort -u  # PROCTITLE EXECVE SYSCALL",
+ "note": "evidence-magic-classifier: lib.codec.evidence_kind(name, data) must return expected_kind; as a script fixture the evidence holds no plan, so find_codecs must not invent one"
+}

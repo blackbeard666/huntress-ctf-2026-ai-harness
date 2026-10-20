@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/cl_gen.py  (stdlib base64/bytes.hex; rs template)",
+ "oracle_cmd": "rustc -o $TMPDIR/cld tests/data/script_fixtures/cl_rust_decoy_benign.rs && $TMPDIR/cld   # prints a benign Windows path, no v=3 plan"
+}

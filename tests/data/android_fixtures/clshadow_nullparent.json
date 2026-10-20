@@ -1,0 +1,7 @@
+{
+ "entry": "classloader_shadow_scan",
+ "expected": "ANS-c3f0a9e1b7d24856",
+ "_why": "Gate in classes.dex (ANS-0badc0de0badc0de) and assets/plugin.jar!classes.dex; new DexClassLoader(..., null) (const/4 null parent = boot) -> payload copy runs",
+ "generator_cmd": "python3 tests/data/android_fixtures/clshadow_src/gen_clshadow.py nullparent tests/data/android_fixtures/clshadow_nullparent.apk  # javac --release 8 (compile-only DexClassLoader stub) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/clshadow_src/oracle.sh tests/data/android_fixtures/clshadow_nullparent.apk  # d2j-dex2jar host + payload, run host Main.run() on the JVM with a URLClassLoader-backed DexClassLoader: real delegation picks Gate -> ANS-c3f0a9e1b7d24856"
+}

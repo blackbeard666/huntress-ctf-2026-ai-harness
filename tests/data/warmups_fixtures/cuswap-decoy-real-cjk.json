@@ -1,0 +1,12 @@
+{
+ "codec": "cuswap",
+ "decoder": "cuswap_dec(encoded, swap=True)",
+ "plain": null,
+ "encoded": "\"\\u4e2d\\u6587\\u6d4b\\u8bd5\\u6587\\u672c\\u4e00\\u4e8c\\u4e09\"",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c \"import sys,json;sys.stdout.write(json.dumps(sys.stdin.read()))\"  # DECOY: genuine Chinese text escaped by json.dumps (low bytes not 00)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys,json;sys.stdout.write(json.loads(sys.stdin.read()))\"",
+ "oracle_plain": "中文测试文本一二三",
+ "expected": "none",
+ "decoy": true,
+ "source_plain": "中文测试文本一二三"
+}

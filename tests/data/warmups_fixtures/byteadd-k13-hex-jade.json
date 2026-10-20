@@ -1,0 +1,9 @@
+{
+ "codec": "byteadd13-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-harbor-93",
+ "encoded": "5b7670722d847c7f782d7172707c71767b742d817576802d846e7f7a827d2e2d617c2d807c798372392d80826f7a76812d817576802d72856e70812d6e7b8084727f2d817c2d8175722d546e7a722d5a6e8081727f472d776e71723a756e7f6f7c7f3a4640",
+ "generator_cmd": "printf '%s' \"$plain\" | perl -0777 -ne 'print join q(), map { chr((ord($_)+13)%256) } split //' | xxd -p | tr -d '\\n'",
+ "oracle_cmd": "python3 -c \"import os,base64;e=os.environ['encoded'];d=bytes.fromhex(e);b=d.translate(bytes.maketrans(bytes(range(256)),bytes((i-13)%256 for i in range(256))));print(b.decode())\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-harbor-93",
+ "expected": "match"
+}

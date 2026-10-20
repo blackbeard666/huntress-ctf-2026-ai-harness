@@ -1,0 +1,36 @@
+{
+ "entry": "layout_from_question+layout_field",
+ "question": "Find the final QX21 overlay. Bytes +8..+39 are the scratch SHA-256, read scratch length u16le at +40 and HCFG resource length u32le at +44; the HCFG resource starts at +56, and scratch follows it. Verify exact end bounds and scratch SHA-256. Locate the unique CRC32-valid HCFG record: bytes 0..3 are ASCII HCFG, byte 4 is version, byte 5 is the XOR key.",
+ "oracle_args": "QX21 m scratch_sha256:8:32 scratch_length:40:u16le hcfg_resource_length:44:u32le hcfg_resource:56:hcfg_resource_length scratch:after:scratch_length",
+ "decoy": false,
+ "note": "permuted + padding",
+ "expected": {
+  "overlay_offset": 4096,
+  "overlay_size": 212,
+  "scratch_sha256": "0c5cc9a6b6e7871e347b12b1a2d700a534c350a685163507f0adb1127322a39a",
+  "scratch_length": 90,
+  "hcfg_resource_length": 66,
+  "hcfg_resource_offset": 56,
+  "hcfg_resource_start": 4152,
+  "hcfg_resource_end": 4218,
+  "hcfg_resource_body_size": 66,
+  "hcfg_resource_sha256_actual": "5565a2f7faeee724cca07e7dfee83bce4d37703b97fccfa7b7e4bab60bb7c24d",
+  "scratch_offset": 122,
+  "scratch_start": 4218,
+  "scratch_end": 4308,
+  "scratch_body_size": 90,
+  "scratch_sha256_actual": "0c5cc9a6b6e7871e347b12b1a2d700a534c350a685163507f0adb1127322a39a",
+  "end_bounds_ok": "true"
+ },
+ "ids": {
+  "hcfg_resource_size": 66,
+  "resource_size": 66,
+  "scratch_size": 90,
+  "scratch_sha256": "0c5cc9a6b6e7871e347b12b1a2d700a534c350a685163507f0adb1127322a39a",
+  "hcfg_resource_offset": 56,
+  "scratch_offset": 122,
+  "end_bounds_ok": "true"
+ },
+ "generator_cmd": "python3 tests/data/binary_fixtures/layoutq_gen.py  (stdlib struct/hashlib writer)",
+ "oracle_cmd": "bash tests/data/binary_fixtures/layoutq_oracle.sh layoutq_permuted_qx21.bin \"$(jq -r .oracle_args layoutq_permuted_qx21.json)\"  (grep -obaF / od / dd|sha256sum / stat)"
+}

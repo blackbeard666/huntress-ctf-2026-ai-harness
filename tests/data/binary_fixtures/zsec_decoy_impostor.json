@@ -1,0 +1,22 @@
+{
+ "encoding": null,
+ "expected_offset": null,
+ "expected_config": null,
+ "decoy": true,
+ "section": ".hcfg",
+ "expected_facts": {
+  "section": "none",
+  "ch_type": "none",
+  "compression": "none",
+  "ch_type_name": "none",
+  "compressed_size": "none",
+  "uncompressed_size": "none",
+  "ch_addralign": "none",
+  "stream_offset": "none",
+  "count": "0",
+  "shf_compressed": "false"
+ },
+ "generator_cmd": "bash zsec_gen.sh .   # gcc -O0 -s + GNU objcopy 2.46 + python3 stdlib (blob header/crc32, manual Chdr). objcopy --add-section .zdebug_hcfg=<300 B urandom, no ZLIB magic> --add-section .hcfg=<Elf64_Chdr-looking bytes + zlib of a BAD-crc blob, SHF_COMPRESSED clear>",
+ "oracle_cmd": "bash zsec_oracle.sh zsec_decoy_impostor.bin .hcfg   # GNU readelf -S -W -t (flags/ZLIB|ZSTD/ch_size/ch_addralign/sh_size/sh_offset), xxd u64be for .zdebug, readelf -z -x decompressed blob; stream_offset = sh_offset + 24 (Elf64_Chdr) / + 12 ('ZLIB'+u64be)",
+ "oracle_output": "[26] .hcfg PROGBITS 0000000000000000 003036 000088 00 0 0 1 [0000000000000000]: [27] .zdebug_hcfg \nsh_offset=12342\nat+-1 crc_BAD"
+}

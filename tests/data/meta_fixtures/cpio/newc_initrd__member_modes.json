@@ -1,0 +1,8 @@
+{
+ "field": "cpio.member_modes",
+ "expected": "[\"040755\",\"0100755\",\"0100700\",\"0100644\"]",
+ "generator_cmd": "PYTHONPATH=$TMPDIR/cpiofx/pylib python3 gen.py (libarchive-c 5 / libarchive 3.8.5 file_writer, format cpio_newc; cpio_bin/cpio_odc via archive_write_set_format_cpio_bin/_odc)",
+ "oracle_cmd": "PYTHONPATH=pylib python3 -c 'import libarchive; [print(e.pathname, \"0%o\" % e.mode, e.size, e.mtime) for e in libarchive.file_reader(\"newc_initrd.cpio\")]' ; 7z l -slt Mode drwxr-xr-x/-rwxr-xr-x/-rwx------/-rw-r--r--",
+ "decoy": false,
+ "member": "newc_initrd.cpio"
+}

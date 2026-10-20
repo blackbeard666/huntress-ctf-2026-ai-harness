@@ -1,0 +1,8 @@
+{
+ "field": "pkg.package_identifiers",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"import zipfile; z=zipfile.ZipFile('decoy.zip','w'); z.writestr('Distribution',...); z.writestr('x.pkg/PackageInfo',...)\"  (zip renamed to .pkg)",
+ "oracle_cmd": "file -b FILE -> 'Zip archive data' (no xar! magic); 7z l -slt FILE | grep '^Type = zip'",
+ "decoy": true,
+ "member": "decoy_zip_renamed.pkg"
+}

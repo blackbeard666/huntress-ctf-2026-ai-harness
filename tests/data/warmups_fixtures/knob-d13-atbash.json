@@ -1,0 +1,10 @@
+{
+ "codec": "knob-sweep(atbash)",
+ "day": 13,
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-yak-53",
+ "encoded": "Puay gols zyaozupw jvuk gclqin! Jo korhy, kibquj jvuk yfcaj cpkgyl jo jvy Wcqy Qckjyl: tczy-ecs-53",
+ "generator_cmd": "printf %s \"$plain\" | tr 'A-Za-z' 'ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba' | tr 'A-Za-z' 'D-ZA-Cd-za-c'  # knob: atbash then +3",
+ "oracle_cmd": "printf %s \"$encoded\" | tr 'D-ZA-Cd-za-c' 'A-Za-z' | tr 'A-Za-z' 'ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-yak-53",
+ "expected": "match"
+}

@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-20-universal-appeal",
+  "lane": "metadata-forensics",
+  "name": "🔎 Universal Appeal",
+  "ids": {
+    "single_solve": "metadata-forensics-day-20-universal-appeal",
+    "time_trial": "metadata-forensics-day-20-universal-appeal/time_trial",
+    "mastery": "metadata-forensics-day-20-universal-appeal/mastery"
+  }
+}

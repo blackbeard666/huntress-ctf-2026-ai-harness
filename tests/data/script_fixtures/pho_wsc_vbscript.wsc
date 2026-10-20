@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<component>
+<registration description="Inert" progid="Inert.Fixture" version="1.00" classid="{AAAA1111-0000-0000-0000-0000FEEDACDC}">
+</registration>
+<public><method name="Exec"/></public>
+<script language="VBScript">
+<![CDATA[
+Dim descriptor_0a1b2c3d
+descriptor_0a1b2c3d = "dj0zfGxhbmd1YWdlPXZic2NyaXB0fHJvbGU9c3RhZ2VkX2NoYWlufHZlcmRpY3Q9c3VzcGljaW91c3xhdHRhY2s9VDEwNTl8YWRhcHRlcj1vcGVyYXRpb25fZ3JhcGh8aG9zdF9wcm9maWxlPXdzY19jb21wb25lbnR8b2JmdXN" & _
+    "jYXRpb25fcHJvZmlsZT1iYXNlNjR8c3RhZ2VfcHJvZmlsZT10d29fc3RhZ2VfZG93bmxvYWRfZXhlY3V0ZXxuZXh0X2xhbmd1YWdlPXBvd2Vyc2hlbGx8c3RhZ2VfY291bnQ9MnxzdGVwcz1hY3F1aXJlX3JlbW90ZSxkaXNwYX" & _
+    "RjaF9wcm9jZXNzfGNhbXBhaWduX2lkPVdTQy0wYTFiMmMzZHx1cmw9aHR0cHM6Ly93c2MtMGExYjJjM2QuZXhhbXBsZS5pbnZhbGlkL3N0YWdlfGZpbGVfcGF0aD0vdG1wL2h1bnRyZXNzLXdzYy0wYTFiMmMzZC8uc3RhZ2U="
+Function Exec()
+  Exec = descriptor_0a1b2c3d
+End Function
+]]>
+</script>
+</component>

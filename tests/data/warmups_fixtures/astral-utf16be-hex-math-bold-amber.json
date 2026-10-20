@@ -1,0 +1,9 @@
+{
+ "codec": "astral-utf16be-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-lynx-63",
+ "encoded": "d835dc0dd835dc22d835dc1cd835dc1e0020d835dc30d835dc28d835dc2bd835dc240020d835dc1dd835dc1ed835dc1cd835dc28d835dc1dd835dc22d835dc27d835dc200020d835dc2dd835dc21d835dc22d835dc2c0020d835dc30d835dc1ad835dc2bd835dc26d835dc2ed835dc2900210020d835dc13d835dc280020d835dc2cd835dc28d835dc25d835dc2fd835dc1e002c0020d835dc2cd835dc2ed835dc1bd835dc26d835dc22d835dc2d0020d835dc2dd835dc21d835dc22d835dc2c0020d835dc1ed835dc31d835dc1ad835dc1cd835dc2d0020d835dc1ad835dc27d835dc2cd835dc30d835dc1ed835dc2b0020d835dc2dd835dc280020d835dc2dd835dc21d835dc1e0020d835dc06d835dc1ad835dc26d835dc1e0020d835dc0cd835dc1ad835dc2cd835dc2dd835dc1ed835dc2b003a0020d835dc1ad835dc26d835dc1bd835dc1ed835dc2b002dd835dc25d835dc32d835dc27d835dc31002dd835dfd4d835dfd1",
+ "generator_cmd": "perl -CSA tests/data/warmups_fixtures/unistyle_perl.pl BOLD \"$plain\" | iconv -f UTF-8 -t UTF-16BE | xxd -p | tr -d '\\n'  # Perl charnames + glibc iconv: d835 dcxx surrogate pairs",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | iconv -f UTF-16BE -t UTF-8 | uconv -x '::NFKC;'  # glibc iconv + ICU NFKC",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-lynx-63",
+ "expected": "match"
+}

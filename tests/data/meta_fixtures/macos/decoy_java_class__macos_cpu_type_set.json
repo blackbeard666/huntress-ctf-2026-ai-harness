@@ -1,0 +1,8 @@
+{
+ "field": "macos.cpu_type_set",
+ "expected": "none",
+ "generator_cmd": "javac --release 8 Hello.java (CAFEBABE, u32@4 = 0x00000034 major 52)",
+ "oracle_cmd": "file decoy_java_class__macos_cpu_type_set.bin: compiled Java class data, version 52.0 -> none",
+ "decoy": true,
+ "member": "Hello.class"
+}

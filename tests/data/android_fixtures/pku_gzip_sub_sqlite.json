@@ -1,0 +1,7 @@
+{
+ "entry": "payload_unwrap_scan",
+ "expected": "ANS-92a5e0d71c3b8f46",
+ "_why": "wrapped secondary payload, wrapper recovered from the file magic (payload-magic-known-plaintext-unwrap): sqlite3 CLI db, byte sub with a 5-byte key, then gzip -n",
+ "generator_cmd": "python3 tests/data/android_fixtures/pku_src/gen_pku.py gzip_sub_sqlite tests/data/android_fixtures/pku_gzip_sub_sqlite.apk  # sqlite3 CLI db, byte sub with a 5-byte key, then gzip -n",
+ "oracle_cmd": "unzip -p pku_gzip_sub_sqlite.apk assets/store.bin.gz | gunzip | python3 -c \"import sys;k=bytes.fromhex('13a7c45e9b');b=sys.stdin.buffer.read();sys.stdout.buffer.write(bytes((x+k[i%5])&255 for i,x in enumerate(b)))\" > s.db && sqlite3 s.db 'select value from secrets'"
+}

@@ -1,0 +1,27 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "de73f228-9202-45c0-a6b6-11760e353e1e",
+  "window": null,
+  "elapsed": 1.33,
+  "in_window": 1.22,
+  "phases": {
+    "start": 0.1,
+    "download": 0.23,
+    "solve": 0.06,
+    "submit": 0.93
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "crisp-compass-coral-68"
+  },
+  "attempts_remaining": 256,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 256,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

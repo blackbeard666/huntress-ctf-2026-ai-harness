@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "profile_guess": "cron_entry",
+ "generator_cmd": "python3 tests/data/script_fixtures/prior_host_gen.py  # python3 gzip+base64 of a plan, truncated to 40 chars (no complete stream), written as pho_decoy_cron_truncgz.cron",
+ "oracle_cmd": "grep -oE 'H4sI[A-Za-z0-9+/=]+' pho_decoy_cron_truncgz.cron | base64 -d 2>/dev/null | gunzip 2>&1 | grep -c '^v=3' || true"
+}

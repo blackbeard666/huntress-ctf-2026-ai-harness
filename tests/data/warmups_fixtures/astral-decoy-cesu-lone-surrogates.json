@@ -1,0 +1,10 @@
+{
+ "codec": "astral",
+ "plain": null,
+ "encoded": "eda0b5eda0b5",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf '\\xed\\xa0\\xb5\\xed\\xa0\\xb5' | xxd -p  # two high surrogates, no low half",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | uconv -f CESU-8 -t UTF-8  # ICU: Conversion from codepage to Unicode failed (illegal sequence)",
+ "oracle_plain": null
+}

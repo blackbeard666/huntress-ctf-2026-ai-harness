@@ -1,0 +1,8 @@
+{
+ "field": "pkg.signer_cert_cn",
+ "expected": "Developer ID Installer: Acme Corp (ABCDE12345)",
+ "generator_cmd": "PYTHONPATH=tools/pylib-libarchive .venv/bin/python tests/data/meta_fixtures/pkg/mkxar.py.txt out.pkg gzip sha1 a  (libarchive 3.x xar writer via libarchive-c in tools/pylib-libarchive: Distribution hostArchitectures=x86_64,arm64 min=11.0 + agent.pkg/{PackageInfo com.acme.agent 4.2.1,Bom,Payload,Scripts}); openssl req -x509 -newkey rsa:2048 -nodes -subj '/CN=Developer ID Installer: Acme Corp (ABCDE12345)/O=Acme Corp' ...; rcodesign sign --pem-file kc.pem a.pkg a_signed.pkg (apple-codesign xar signer)",
+ "oracle_cmd": "7z x -so FILE '[TOC].xml' | grep -o first <X509Certificate> | base64 -d | openssl x509 -inform DER -noout -subject -nameopt multiline | commonName",
+ "decoy": false,
+ "member": "acme_signed.pkg"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "bignum",
+ "plain": " this w",
+ "encoded": "9135191049314423",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c0 | tr a-f A-F | sed 's/^/ibase=16; /' | BC_LINE_LENGTH=0 bc  # Mastery fragment as its own decimal integer (17 digits)",
+ "oracle_cmd": "printf %s \"$encoded\" | .venv/bin/python -I -c \"import sys;from Crypto.Util.number import long_to_bytes;print(long_to_bytes(int(sys.stdin.read().strip(),10)).decode())\"  # pycryptodome long_to_bytes (RSA style, big-endian)",
+ "oracle_plain": " this w",
+ "expected": "match"
+}

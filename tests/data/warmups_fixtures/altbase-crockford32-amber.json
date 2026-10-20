@@ -1,0 +1,9 @@
+{
+ "codec": "crockford32",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "9SMP6S90EXQQ4TS0CHJP6VV4D5Q6E83MD1MQ683QC5S6TXBG44G58VS0EDQPRXK55GG76XB2DNMQ883MD1MQ6835F1GP6X10C5Q76XV5E8G78VS0EHM6A827C5PPA82DC5SQ8SBJ78G62VB2CNS2TSK1DHHPYVHD6GS0",
+ "generator_cmd": "printf %s \"$plain\" | AB=$PWD/tools/npm-altbase tools/node/bin/node --input-type=module -e \"const e=(await import(process.env.AB+'/node_modules/base32-encode/index.js')).default;let d='';process.stdin.on('data',c=>d+=c).on('end',()=>process.stdout.write(e(Buffer.from(d),'Crockford')))\"  # npm base32-encode 2.0.0 variant 'Crockford' (unpadded)",
+ "oracle_cmd": "printf %s \"$encoded\" | AB=$PWD/tools/npm-altbase tools/node/bin/node tests/data/warmups_fixtures/altbase_oracle.mjs crockford  # npm base32-decode 'Crockford'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

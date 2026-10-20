@@ -2,8 +2,8 @@
 
 Targets (PLAN_SUB2MIN.md): 15/15 <= 2:00 on 4 of 5 days, 14/15 <= 1:00 median, 0 manual steps.
 
-| day | date | 15/15 | 14/15 | release lag | race wins | timed first try | generalizes (n / s / crit s) | live / in-attempt / untimed | !!! | live $ | post-run $ |
-|---|---|---|---|---|---|---|---|---|---|---|---|
+| day | date | 15/15 | 14/15 | release lag | race wins | timed first try | generalizes (n / s / crit s) | live / in-attempt / untimed | !!! | live $ | post-run $ | web (all) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | D06 | 2026-10-06 | - (0/15) | - | - | 0/5 () | 0/0 | 0 / 0 / 0 (-) | 0 / 0 / 0 | 0 | 0.00 | 0.00 |
 | D07 | 2026-10-07 | - (14/15) | 6:14 | - | 0/5 () | 8/9 | 2 / 216 / 216 (script-analysis) | 0 / 0 / 0 | 0 | 0.00 | 0.00 |
 | D08 | 2026-10-08 | 20:21 (15/15) | 8:53 | - | 0/5 () | 5/10 | 7 / 493 / 0 (binary-reverse-engineering) | 0 / 0 / 0 | 0 | 0.00 | 0.00 |
@@ -18,3 +18,4 @@ Targets (PLAN_SUB2MIN.md): 15/15 <= 2:00 on 4 of 5 days, 14/15 <= 1:00 median, 0
 | D17 | 2026-10-17 | - (12/15) | - | 8s | 1/5 (script) | 7/8 | 4 / 251 / 63 (warmups) | 2 / 0 / 0 | 0 | 8.78 | 8.92 |
 | D18 | 2026-10-18 | 1:43 (15/15) | 1:18 | 7s | 3/5 (binary, metada, mobile) | 9/10 | 0 / 0 / 0 (script-analysis) | 0 / 0 / 1 | 0 | 2.94 | 0.00 |
 | D19 | 2026-10-19 | 2:49 (15/15) | 2:35 | 5s | 3/5 (metada, mobile, script) | 10/10 | 2 / 41 / 0 (binary-reverse-engineering) | 2 / 0 / 0 | 0 | 4.92 | 11.05 |
+| D20 | 2026-10-20 | 1:29 (15/15) | 1:28 | +2.8s (launch +9s) | 3/5 (mobile, script, warmup) | 14/14 | 1 / 24 / 0 (binary-reverse-engineering) | 1 / 0 / 0 | 0 | 8.51 | 12.69 | 14:52 (6/6) |

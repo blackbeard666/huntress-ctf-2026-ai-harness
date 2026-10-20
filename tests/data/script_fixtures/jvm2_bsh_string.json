@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=beanshell|role=stager|verdict=malicious|attack=T1059|adapter=build_exec|host_profile=standalone|obfuscation_profile=b64|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=fetch_stage,run_stage|campaign_id=JVM-8bb99100|url=https://jvm-8bb9910073.example.invalid/stage|file_path=/tmp/huntress-jvm/.7338333b113c417c.stage",
+ "decoy": false,
+ "host": "bsh",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/jvm2_gen.py  (plan -> descriptor)",
+ "oracle_cmd": "(echo 'class B { public static void main(String[] a) {'; sed '/^import/d; s/^print(.*$//' tests/data/script_fixtures/jvm2_bsh_string.bsh; echo 'System.out.print(descriptor_86bdc2a8); } }') > $TMPDIR/B.java && java $TMPDIR/B.java | tr -d ' \\n\\r|' | base64 -d"
+}

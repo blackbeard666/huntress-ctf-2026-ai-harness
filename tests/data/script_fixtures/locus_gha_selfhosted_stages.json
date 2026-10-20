@@ -1,0 +1,11 @@
+{
+ "material": "name: ci\non:\n  pull_request_target:\njobs:\n  build:\n    runs-on: [self-hosted, linux, x64]\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - name: Build\n        run: make build\n  test:\n    runs-on: ubuntu-latest\n    container:\n      image: node:20-alpine\n    steps:\n      - name: Unit tests\n        run: npm test\n      - name: Lint\n        run: npm run lint\n",
+ "rep": "pipeline_locus",
+ "transform": "stages_container",
+ "key": null,
+ "expected": "test",
+ "decoy": false,
+ "note": "pipeline-execution-locus: lib.codec.execution_locus/locus_answer via decode(rep='pipeline_locus', transform=<what>)",
+ "generator_cmd": "cat > t3.yml <<'EOF' (hand-authored synthetic GitHub Actions workflow, heredoc; no lib code)",
+ "oracle_cmd": "python3 -I -c \"import yaml,sys;d=yaml.safe_load(open(sys.argv[1]));print(','.join(k for k,j in d['jobs'].items() if 'container' in j))\" t3.yml"
+}
