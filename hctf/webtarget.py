@@ -110,11 +110,14 @@ def needs_wait(body):
 
 # ------------------------------------------------------------------ waiting for a target
 
+def _timed_cid(cid):
+    return bool(re.search(r"/(time_trial|mastery)$", str(cid or "")))
+
+
 def kick_plan(cid, n):
     """The n-th kick (0-based) of a start stuck in `preparing`: `retry` on even n, arena `start` on odd n; a Single Solve
     (no /time_trial|/mastery suffix) has no retry (GM 405) -> always the arena."""
-    timed = bool(re.search(r"/(time_trial|mastery)$", str(cid or "")))
-    return "retry" if timed and n % 2 == 0 else "arena"
+    return "retry" if _timed_cid(cid) and n % 2 == 0 else "arena"
 
 
 def _att(body):
@@ -220,7 +223,10 @@ def arena(cid, op="start", log=None):
     """The browser arena's op on `cid` (hctf/gm.py cmd_arena; always the local client: Homebase's inside proxy has no
     arena) -> its body. Logged into the mode's log.jsonl like any GM call."""
     from . import cli, remote
-    env = remote.gm_client().cmd_arena(op, cid, run_for_time=False if op in ("start", "retry") else None)
+    # run_for_time only on the timed (dual-pool) routes: a Single Solve answers 409 timed_intent_not_available to it
+    # (probe 2026-10-21), so a single's revive / kick never reached the target
+    rft = False if op in ("start", "retry") and _timed_cid(cid) else None
+    env = remote.gm_client().cmd_arena(op, cid, run_for_time=rft)
     try:
         cli.log(cid, f"arena-{op}", env)
     except Exception:  # noqa: BLE001 - logging only

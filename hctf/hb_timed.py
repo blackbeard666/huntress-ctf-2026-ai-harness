@@ -690,7 +690,9 @@ def _arena_start(cid):
         import gm as _gm
     except ImportError:
         from hctf import gm as _gm
-    env = _gm.cmd_arena("start", cid, run_for_time=False, token=_token())
+    # run_for_time only on timed routes: a Single Solve answers 409 timed_intent_not_available to it
+    env = _gm.cmd_arena("start", cid, run_for_time=False if re.search(r"/(time_trial|mastery)$", cid) else None,
+                        token=_token())
     return env.get("body") if isinstance(env.get("body"), dict) else {}
 
 

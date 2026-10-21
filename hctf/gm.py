@@ -436,7 +436,10 @@ def _dispatch(a):
     elif a.cmd == "artifact":
         env = cmd_artifact(a.id, a.outdir, a.delivery)
     elif a.cmd == "arena":
-        env = cmd_arena(a.op, a.id, run_for_time=True if a.run_for_time else (False if a.op in ("start", "retry") else None))
+        # run_for_time only on timed routes (a Single Solve answers 409 timed_intent_not_available to it)
+        timed = a.id.endswith(("/time_trial", "/mastery"))
+        env = cmd_arena(a.op, a.id, run_for_time=True if a.run_for_time else (
+            False if a.op in ("start", "retry") and timed else None))
     else:
         env = cmd_download(a.capability, a.outdir, a.name)
     env["elapsed"] = round(time.time() - t0, 3)          # request time incl. any 429 backoff (not process startup)

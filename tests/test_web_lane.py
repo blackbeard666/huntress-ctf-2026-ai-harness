@@ -133,6 +133,18 @@ check("1 kick: an error reply never replaces the body (the wait goes on and the 
 check("1 kick plan: a Single Solve has no retry (GM 405) -> arena only; timed modes alternate",
       [webtarget.kick_plan(CID, n) for n in range(3)] == ["arena"] * 3
       and [webtarget.kick_plan(CID + "/time_trial", n) for n in range(3)] == ["retry", "arena", "retry"])
+_gmc, sent_rft = remote.gm_client, []
+remote.gm_client = lambda: SimpleNamespace(cmd_arena=lambda op, c, run_for_time=None: sent_rft.append(
+    (c, op, run_for_time)) or {"http": 200, "body": {"result": "preparing"}})
+try:
+    webtarget.arena(CID, "start")
+    webtarget.arena(CID + "/mastery", "start")
+    webtarget.arena(CID + "/mastery", "status")
+finally:
+    remote.gm_client = _gmc
+check("1 arena: run_for_time only on timed routes (a single answers 409 timed_intent_not_available to it)",
+      sent_rft == [(CID, "start", None), (CID + "/mastery", "start", False), (CID + "/mastery", "status", None)],
+      sent_rft)
 clk[0] = 0.0
 kicks = []
 b = webtarget.await_target(CID + "/mastery", preparing(), seq(preparing()), log=quiet, poll=4, wait=200,
