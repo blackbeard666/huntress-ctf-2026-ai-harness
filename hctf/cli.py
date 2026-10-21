@@ -1405,12 +1405,17 @@ def c_kpi(a):
     if not days:
         print("give --day N or --all", file=sys.stderr)
         return 2
+    if a.log and len(days) != 1:
+        print("--log needs exactly one --day", file=sys.stderr)
+        return 2
     for d in days:
         try:
-            k = kpi.compute(day=d)
+            k = kpi.compute(day=d, log=a.log)
         except (OSError, ValueError) as e:
             print(f"day {d}: {e}")
             continue
+        if a.label:
+            k["label"] = a.label
         print(kpi.render(k) if not a.all else kpi.row(k).rstrip())
         if a.record:
             print(f"  -> {kpi.record(k).relative_to(ROOT)}")
@@ -1625,6 +1630,8 @@ def main(argv=None):
     pkp.add_argument("--day", type=int)
     pkp.add_argument("--all", action="store_true", help="one row per day with a .run/dayNN.log")
     pkp.add_argument("--record", action="store_true", help="append the row(s) to reference/KPI.md")
+    pkp.add_argument("--log", help="score this log instead of .run/dayNN.log (a replay's run.log)")
+    pkp.add_argument("--label", help="row label, e.g. replay-a (kept beside the real day's row)")
     phf = sub.add_parser("hof", help="Hall of Fame speed board: our rank/ms vs #1 per challenge + day sums (public)")
     phf.add_argument("--day", type=int)
     phf.add_argument("--save", action="store_true", help="also snapshot the board to reference/hof/")

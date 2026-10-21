@@ -7,6 +7,7 @@ alerts, worker cost (live vs post-run).
     hctf kpi --day 16            one day
     hctf kpi --all               every day with a .run/dayNN.log
     hctf kpi --day 16 --record   append the row to reference/KPI.md
+    hctf kpi --day 20 --log <replay run.log> --label replay-a --record   a replay's row (`D20 replay-a`) beside the day's
 """
 import datetime
 import json
@@ -142,7 +143,7 @@ def _web(k):
 
 
 def render(k):
-    out = [f"KPI day {k['day']} ({k['date']})  --  {k['log']}",
+    out = [f"KPI day {k['day']}{' ' + k['label'] if k.get('label') else ''} ({k['date']})  --  {k['log']}",
            f"  solved            {k['modes_solved']}/{k['modes']}   {k['modes']}/{k['modes']} at T+{_fmt(k['t_all'])}   "
            f"{k['modes'] - 1}/{k['modes']} at T+{_fmt(k['t_but1'])}   release seen {_lag(k)} after the drop",
            *([f"  web               {k['web_solved']}/{k['web_modes']}   all at T+{_fmt(k['t_web'])} "
@@ -163,8 +164,13 @@ HEADER = ("| day | date | 15/15 | 14/15 | release lag | race wins | timed first 
           "|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
 
 
+def _key(k):
+    """The row's first cell: `D20`, or `D20 <label>` for a replay / rehearsal of that day."""
+    return f"D{k['day']:02d}" + (f" {k['label']}" if k.get("label") else "")
+
+
 def row(k):
-    return (f"| D{k['day']:02d} | {k['date']} | {_fmt(k['t_all'])} ({k['modes_solved']}/{k['modes']}) | {_fmt(k['t_but1'])} | "
+    return (f"| {_key(k)} | {k['date']} | {_fmt(k['t_all'])} ({k['modes_solved']}/{k['modes']}) | {_fmt(k['t_but1'])} | "
             f"{_lag(k)} | "
             f"{len(k['race_wins'])}/5 ({', '.join(x[:6] for x in k['race_wins'])}) | {k['timed_first_try']}/{k['timed_modes']} | "
             f"{k['generalizes']} / {k['generalize_s']} / {k['critical_generalize_s']} ({k['critical_chain'] or '-'}) | "
@@ -177,7 +183,7 @@ def record(k, path=None):
     text = path.read_text() if path.exists() else ("# Daily KPI rows (hctf kpi --record)\n\nTargets (PLAN_SUB2MIN.md): "
                                                     "15/15 <= 2:00 on 4 of 5 days, 14/15 <= 1:00 median, 0 manual steps.\n\n"
                                                     + HEADER)
-    lines = [ln for ln in text.splitlines(keepends=True) if not ln.startswith(f"| D{k['day']:02d} |")]
+    lines = [ln for ln in text.splitlines(keepends=True) if not ln.startswith(f"| {_key(k)} |")]
     # upgrade a pre-web header in place (older rows just leave the new last cell empty)
     old_head = [i for i, ln in enumerate(lines) if ln.startswith("| day | date |") and "web (all)" not in ln]
     if old_head:

@@ -130,8 +130,10 @@ class Feed:
                 d = json.loads(msg[len("timed: "):])
             except ValueError:
                 d = {}
-            if str(d.get("result", "")).lower() == "correct" and d.get("resubmit_fixed"):
-                self.in_attempt.add((base, mode))
+            if str(d.get("result", "")).lower() == "correct":
+                # the GM's CORRECT is the solve; `result: correct` comes only after the variant case is saved (D20
+                # script Mastery: 24 s later)
+                return out + self._solve(base, mode, " (in-attempt fix)" if d.get("resubmit_fixed") else "")
             return out
         if msg.startswith("result: correct"):
             out += self._solve(base, mode, " (in-attempt fix)" if (base, mode) in self.in_attempt else "")

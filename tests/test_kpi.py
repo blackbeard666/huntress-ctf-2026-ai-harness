@@ -63,6 +63,39 @@ with tempfile.TemporaryDirectory() as d:
           t.count("web (all)") == 1 and sum(ln.startswith("|---") for ln in t.splitlines()) == 1
           and "| D20 | old |" not in t and "| D19 | x |" in t and t.splitlines()[3].count("|---") == 13, t)
 
+# a mode is solved at the GM's CORRECT (`timed: {"result": "correct"..}`), not at `result: correct`, which follows only
+# after the variant case is saved (D20 script Mastery: 24 s later)
+from hctf import feed as _feed, timeline as _tl  # noqa: E402
+late = ["21:00:09 [run] 1 chains (3 challenge modes)",
+        "21:00:20 [warmups-day-20] single CORRECT + solver verified -> ending the worker, timed modes start now",
+        "21:00:30 [warmups-day-20/time_trial] timed: {\"result\": \"correct\", \"elapsed\": 4}",
+        "21:00:31 [warmups-day-20/time_trial] result: correct",
+        "21:00:40 [warmups-day-20/mastery] timed: {\"result\": \"correct\", \"elapsed\": 9}",
+        "21:01:04 [warmups-day-20/mastery] result: correct"]
+_t0, ch = _tl.parse(late)
+check("timeline: Mastery solved at its timed CORRECT (21:00:40), not the later `result: correct`",
+      ch["warmups-day-20"]["done"]["mastery"] == 21 * 3600 + 40, ch["warmups-day-20"]["done"])
+fd = _feed.Feed() if hasattr(_feed, "Feed") else None
+if fd is not None:
+    msgs = [m for ln in late for m in fd.process(ln)]
+    solved = [m for m in msgs if "✅" in m]
+    check("feed: each mode reported once, at its timed CORRECT", len(solved) == 3
+          and any("Mastery solved" in m and "0:31" in m for m in solved), solved)
+
+# a replay's row is kept beside the real day's row (label in the first cell)
+with tempfile.TemporaryDirectory() as d:
+    md = Path(d) / "KPI.md"
+    lg = Path(d) / "run.log"
+    lg.write_text("\n".join(lines) + "\n")
+    kr = kpi.compute(20, log=lg)
+    kpi.record(kr, md)
+    kr2 = dict(kr, label="replay-a")
+    kpi.record(kr2, md)
+    kpi.record(kr2, md)
+    t = md.read_text()
+    check("replay row: `| D20 replay-a |` kept beside `| D20 |`, re-record replaces only itself",
+          t.count("| D20 |") == 1 and t.count("| D20 replay-a |") == 1, t)
+
 if failures:
     print(f"\n{len(failures)} FAILED: {failures}")
     sys.exit(1)

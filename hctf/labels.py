@@ -159,10 +159,15 @@ def record_values(cid, conf, log=None):
         return []
     existing = {k: set(v) for k, v in load_vocab().items()}
     added = []
+    # the contract once, as {answer_id: question}: _question() per field re-parsed start.json and scanned the id list
+    # each time -- D20 script Mastery (6645 answers) spent ~20 s here between its GM CORRECT and `result: correct`
+    start = cli.load(cid, "start.json") or cli.load(cid, "contract.json") or {}
+    ids = start.get("answer_ids") or [q.get("id") for q in start.get("questions", [])]
+    qmap = dict(zip(ids, start.get("questions") or []))
     for aid, val in conf.items():
         if ending(aid) not in CACHEABLE_FAMILIES or not _usable(val):
             continue
-        af = (_question(cid, aid).get("answer_format") or {})
+        af = (qmap.get(aid) or {}).get("answer_format") or {}
         if af.get("kind") in ("enum", "mitre_attack_id"):
             continue
         if str(val) in existing.get(ending(aid), set()):

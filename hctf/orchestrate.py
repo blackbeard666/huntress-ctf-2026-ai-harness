@@ -1733,6 +1733,15 @@ class Chain:
             return False
         return bool(d.get("total")) and not d.get("timed_out") and d["answered"] / d["total"] >= DEFER_RECON_RATIO
 
+    def _prelude_split(self):
+        """`; start+download Xs, pre-triage Ys, triage Zs, post-triage Ws` for the go text line (PLAN P2: binary's go
+        came at +14-25 s while triage's own parts summed to 5-7 s -- measure before restructuring the prelude)."""
+        pt, t0 = getattr(self, "_pre_t", None) or {}, getattr(self, "_chain_t0", None)
+        if not (t0 and {"dl", "tri0", "tri1"} <= set(pt)):
+            return ""
+        return (f"; start+download {pt['dl'] - t0:.1f}s, pre-triage {pt['tri0'] - pt['dl']:.1f}s, "
+                f"triage {pt['tri1'] - pt['tri0']:.1f}s, post-triage {time.time() - pt['tri1']:.1f}s")
+
     def _prior_dry_run_text(self, cid=None):
         fut = getattr(self, "_dry_fut", None)
         if fut is None:
@@ -3029,6 +3038,7 @@ class Chain:
         tpool.shutdown(wait=False)
         self._go_lock, self._go_sent, self._go_pending = threading.Lock(), False, []
         body, err = start_fut.result()
+        self._pre_t = {"dl": time.time()}   # prelude timing (go text line): where the single's first seconds go
         self._tool_prefetch(cid, (body or {}))   # the prompt + questions arrive with `start`: before any download
         self._start_prior_dry_run(cid)
         self._race_done = threading.Event()   # wakes the duel (hctf/duel.py) the moment the race has its answer
@@ -3075,11 +3085,13 @@ class Chain:
                 # per lane in the replays; mobile's single never handled Mastery naming -> a 2.5-min generalize).
                 self.sdir.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(ROOT / "hctf" / "templates" / "solve_skeleton.py", self.sdir / "solve.py")
+        self._pre_t["tri0"] = time.time()
         try:
             from . import triage as triage_mod
             triage_mod.triage(cid, defer_recon=self._recon_deferrable, log=say)  # grounding before the LLM worker
         except Exception as e:  # noqa: BLE001 - triage is best-effort
             say(f"[{cid}] triage note: {e}")
+        self._pre_t["tri1"] = time.time()
         if body is None:
             # e.g. read-the-rules: no artifact, but the contract still names the answer ids
             st = cli.call(cid, "status", cid)["body"] or {}
@@ -3167,7 +3179,7 @@ class Chain:
                 if self._go_pending:
                     extra += "\n" + "\n".join(self._go_pending)
                 self._go_pending, self._go_sent = [], True
-            say(f"[{cid}] go text ready at +{time.time() - self._chain_t0:.1f}s (launch {n + 1})"
+            say(f"[{cid}] go text ready at +{time.time() - self._chain_t0:.1f}s (launch {n + 1}){self._prelude_split()}"
                 if getattr(self, "_chain_t0", None) else f"[{cid}] go text ready (launch {n + 1})")
             prompt = workers.render("single", skill=workers.lane_skill(self.lane), triage=triage_summary(cid),
                                     lane_helpers=workers.lane_helpers(self.lane), prior_solver=prior_note,
@@ -3641,14 +3653,30 @@ class Chain:
         hold) and download its bytes into the timed runner's dir under the runner's own mode lock; hb_timed
         reuses them when its start reconnects to the same attempt. Rehearsal fair D16: the single -> TT gap was 10-29 s, ~4 s
         of it harness handoff (verify, stop the worker, probes) before the TT start + download even began."""
-        tt = self.entries.get("time_trial")
-        if not (PREFETCH_TT and tt and self._expect_untimed()) or getattr(self, "_prefetch_started", False):
+        if getattr(self, "_prefetch_started", False):
             return
+        if self._prefetch_mode_start("time_trial", "the single's CORRECT"):
+            self._prefetch_started = True
+
+    def _prefetch_mastery_start(self):
+        """The same pre-start for Mastery at the Time Trial's CORRECT (its prerequisite is banked then): the Mastery
+        start + download overlap the pre-Mastery block (probes, route estimate) instead of following it."""
+        if getattr(self, "_prefetch_m_started", False) or not PREFETCH_MASTERY:
+            return
+        if self._prefetch_mode_start("mastery", "the Time Trial's CORRECT"):
+            self._prefetch_m_started = True
+
+    def _prefetch_mode_start(self, mode, when):
+        """Background start + download of `mode`'s attempt into the timed runner's dir (untimed pools only; never web).
+        -> True when launched."""
+        e = self.entries.get(mode)
+        if not (PREFETCH_TT and e and self._expect_untimed()) or cli.is_complete(e["id"]):
+            return False
         from . import webtarget
-        if webtarget.is_live_lane(self.lane):
-            return   # web: a TT start beside the single's live target = a 2nd target for the team (D19 wedge)
-        self._prefetch_started = True
-        mcid = tt["id"]
+        if webtarget.is_live_lane(getattr(self, "lane", None)):
+            return False   # web: live targets have their own kicks (_web_tt_kick / _web_mastery_kick)
+        mcid = e["id"]
+        label = "TT" if mode == "time_trial" else "Mastery"
 
         def run():
             import fcntl
@@ -3669,7 +3697,7 @@ class Chain:
                 if env.get("http") != 200 or body.get("error") or not body.get("answer_ids") or body.get("deadline"):
                     why = body.get("error") or (f"clocked to {body['deadline']}: the runner reconnects to it"
                                                 if body.get("deadline") else "no ids")
-                    say(f"[{mcid}] TT pre-start skipped ({str(why)[:80]})")
+                    say(f"[{mcid}] {label} pre-start skipped ({str(why)[:80]})")
                     return
                 adir.mkdir(parents=True, exist_ok=True)
                 for f in adir.glob("*"):
@@ -3681,13 +3709,15 @@ class Chain:
                     envs = list(ex.map(lambda it: cli.call(mcid, "download", it[1], str(adir), "--name", it[0],
                                                            timeout=180), plan))
                 if not plan or not all(e.get("saved") for e in envs):
-                    say(f"[{mcid}] TT pre-start: download incomplete; the runner fetches the bytes itself")
+                    say(f"[{mcid}] {label} pre-start: download incomplete; the runner fetches the bytes itself")
                     return
                 (adir / ".prefetch.json").write_text(json.dumps({"attempt_id": att, "files": [n for n, _c in plan],
                                                                  "t": time.time()}))
-                say(f"[{mcid}] TT pre-started at the single's CORRECT: attempt {str(att)[:8]}, {len(plan)} file(s) "
+                say(f"[{mcid}] {label} pre-started at {when}: attempt {str(att)[:8]}, {len(plan)} file(s) "
                     f"in {time.time() - t0:.1f}s")
-        threading.Thread(target=lambda: _quiet_errors(run, mcid), daemon=True, name=f"tt-prefetch-{self.base}").start()
+        threading.Thread(target=lambda: _quiet_errors(run, mcid), daemon=True,
+                         name=f"{mode}-prefetch-{self.base}").start()
+        return True
 
     def _expect_untimed(self):
         """Will this chain's timed modes run without a clock? Known after a TT attempt; before one, hb_timed's default
@@ -4236,6 +4266,8 @@ class Chain:
             res = timed.run(cid, self.sdir, log=say, **op, **self._early_kw(cid, untimed))
             if res == "error:exec" and self._gm_passed(cid):
                 res = "correct"
+            if res == "correct" and mode == "time_trial":
+                self._prefetch_mastery_start()   # the Mastery start + bytes overlap the TT bookkeeping + pre-Mastery block
             if res == "blocked" and LOCAL_RERUN_SLOW and self._slow_vm_no_clock(cid):
                 # No clock + a CPU-bound solve that ran out of its budget on the slow VM: the attempt is still live, so
                 # re-run it HERE (12 cores, x5-11 per core) before a speed generalize. D17 warmups Mastery: 60 s cap on
@@ -5488,6 +5520,7 @@ def _quiet_errors(fn, tag):
 
 
 WEB_TT_KICK = os.environ.get("HCTF_WEB_TT_KICK", "1") != "0"   # web: TT start at the single's CORRECT
+PREFETCH_MASTERY = os.environ.get("HCTF_PREFETCH_MASTERY", "1") != "0"   # Mastery pre-start at the TT's CORRECT
 PREFETCH_TT = os.environ.get("HCTF_PREFETCH_TT", "1") != "0"
 
 

@@ -17,6 +17,11 @@ SINGLE_SOLVED = ("single complete -> ending the answer-first worker", "after wor
                  "live-target lane: single CORRECT")
 
 
+def timed_correct(msg):
+    """A `timed: {...}` line whose attempt the GM judged CORRECT (the moment the mode is solved)."""
+    return msg.startswith("timed: {") and '"result": "correct"' in msg[:120]
+
+
 def single_solved(msg, mode):
     return mode == "single_solve" and ("CORRECT" in msg or "reuse race WON" in msg or msg.startswith(SINGLE_SOLVED)
                                        or msg.startswith("already solved"))
@@ -55,6 +60,9 @@ def parse(lines):
             c["done"][mode] = t   # a live-answer pass returns from timed_stage without a `result: correct` line
         if msg.startswith("timed: "):
             c["attempts"][mode] += 1
+            if timed_correct(msg) and mode not in c["done"]:
+                c["done"][mode] = t   # the GM's CORRECT: `result: correct` follows only after the case is saved (D20
+                                      # script Mastery: 24 s later for its 6645-answer case)
         w = re.match(r"(\w+) worker -> (\S+)", msg)
         if w:
             c["open"][(mode, w.group(1))] = t

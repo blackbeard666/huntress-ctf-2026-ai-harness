@@ -212,3 +212,24 @@ Still open (next): P2 pre-drop warm workers (design: the warm worker's env/promp
 which exist only after the list -- needs a per-lane placeholder dir + a redirect the hooks honour; validate on an alt
 fair replay before a live day); P2 triage turn-1 audit (turns-to-first-submit per single worker into `hctf kpi`);
 P4 nightly blind-replay KPI + lane-split ratchet + prebuild hit rate; P5 feed warning for sequential GM loops.
+
+## 7. Implemented 2026-10-21 (before Day 21)
+D20 measured: the 15 regular modes were CORRECT on the GM by T+1:12; the feed/KPI said T+1:29.
+- **Measure at the GM's CORRECT:** timeline/kpi/feed count a timed mode at its `timed: {"result": "correct"}` line
+  (`result: correct` came 16-24 s later). D20 KPI row now 15/15 at T+1:12.
+- **TT -> Mastery handover:** `labels.record_values` re-parsed start.json per confirmed field (O(n^2): ~20 s on script's
+  6645-answer Mastery, 4 s on its TT, between the GM's CORRECT and the next mode) -> one question map, 0.05 s.
+  Mastery pre-start at the TT's CORRECT (`_prefetch_mastery_start`, HCTF_PREFETCH_MASTERY; untimed pools, not web):
+  start + download overlap the pre-Mastery block.
+- **P2 pre-drop warm workers: measured, not built.** Every lane's warm worker is READY ~3 s after chain start, but no
+  lane's go text came before +8 s (metadata +8, mobile +9, warmups +10, script +16, binary +25): the go text, not the
+  worker, is the floor, so a T-30 launch saves nothing. The prior-solver dry run already never holds the go
+  (GO_EARLY). Binary's go = start+download ~7 s + triage; triage's own parts sum to 5-7 s, the rest is unaccounted ->
+  the go text line now carries `start+download / pre-triage / triage / post-triage` seconds (D21 will say where).
+- **P4 nightly blind replay:** `bin/replay_rehearsal_day.sh start|stop <tag> <day> <pre>` (promoted from .run) records the
+  replay's KPI row in reference/KPI.md as `D<N> replay-<tag>` (`hctf kpi --day N --log <run.log> --label <tag>
+  --record`). Needs alt to have played the day for real (it serves the rehearsal copy's own singles); not scheduled automatically
+  (each replay costs LLM credit + ranked attempts).
+- **Web (see web-team-limit notes):** parallel web chains, preparing kicks + web_trace, live pre-Mastery compounding
+  check.
+

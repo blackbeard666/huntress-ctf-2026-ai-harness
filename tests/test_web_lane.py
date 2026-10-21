@@ -599,6 +599,23 @@ try:
     time.sleep(0.2)
     check("12 web Mastery target requested once before the pre-Mastery checks; never for other lanes",
           calls == [(CID + "/mastery", "start", CID + "/mastery")], calls)
+    # Mastery pre-start at the TT's CORRECT (regular lanes, untimed pool): once; never web (its own kick)
+    calls.clear()
+    rg = orchestrate.Chain.__new__(orchestrate.Chain)
+    rg.base, rg.lane = "warmups-day-20", "warmups"
+    rg.entries = {"mastery": {"id": "warmups-day-20/mastery"}, "time_trial": {"id": "warmups-day-20/time_trial"}}
+    rg._prefetch_mastery_start()
+    rg._prefetch_mastery_start()
+    wb = orchestrate.Chain.__new__(orchestrate.Chain)
+    wb.base, wb.lane, wb.entries = CID, "web", {"mastery": {"id": CID + "/mastery"}}
+    wb._prefetch_mastery_start()
+    for t in threading.enumerate():
+        if t.name.startswith("mastery-prefetch-"):
+            t.join(5)
+    check("12 Mastery pre-start at the TT's CORRECT: once for a regular lane, never for web",
+          [c for c in calls if c[1] == "start"] == [("warmups-day-20/mastery", "start", "warmups-day-20/mastery")]
+          and getattr(rg, "_prefetch_m_started", False) and not getattr(wb, "_prefetch_m_started", False), calls)
+    shutil.rmtree(timed.timed_dir("warmups-day-20/mastery"), ignore_errors=True)
     cli.call = _saved["call"]
     cli.is_complete = _saved["is_complete"]
 finally:
