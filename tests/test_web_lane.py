@@ -513,6 +513,94 @@ try:
     cli.is_complete = _saved["is_complete"]
     if snap:
         shutil.rmtree(Path(snap).parent, ignore_errors=True)
+
+    # 11. live compounding check (D20 rerun: D02/D03/D04 Mastery each missed Target 1 = an earlier day's bug): "Play
+    #     again" each earlier web TT, today's solver vs the earlier day's own solver on the fresh target
+    from hctf import compound
+    SOLVE = ("import json, sys\nc = json.load(open(sys.argv[sys.argv.index('--contract') + 1]))\n"
+             "u = (c.get('targets') or [{}])[0].get('url', '')\nprint(json.dumps({'proof-1': %s}))\n")
+
+    def chal(day, name, base, code):
+        d = paths.CHALLENGES / f"day{day:02d}" / name
+        (d / "solver").mkdir(parents=True, exist_ok=True)
+        (d / "solver" / "solve.py").write_text(SOLVE % code)
+        (d / "meta.json").write_text(json.dumps({"base": base, "lane": "web", "ids": {
+            "single_solve": base, "time_trial": base + "/time_trial", "mastery": base + "/mastery"}}))
+        return d / "solver"
+    chal(1, "web-old-a", "web-exploitation-day-01-a", "'proof_' + u[-3:]")            # earlier day A
+    chal(2, "web-old-b", "web-exploitation-day-02-b", "'proof_' + u[-3:]")            # earlier day B
+    today = chal(30, "web-today", "web-exploitation-day-30-t", "'proof_' + u[-3:] if 'a' in u else None")
+    gm_calls = []
+
+    def fake_gm(cid, op, *args, timeout=180):
+        gm_calls.append((cid, op) + tuple(args[1:]))
+        if op == "retry":
+            tag = "aaa" if "day-01" in cid else "bbb"
+            return {"http": 200, "body": dict(active("att-" + tag), targets=[{"id": "Target 1",
+                                                                             "url": "https://x/" + tag}])}
+        if op == "submit":
+            return {"http": 200, "body": {"result": "CORRECT"}}
+        return {"http": 200, "body": {}}
+    cli.call = fake_gm
+    res = [r for r in compound.web_live_check(today) if "-day-0" in r["cid"] and r["cid"].endswith(("-a/time_trial",
+                                                                                                  "-b/time_trial"))]
+    by = {r["cid"]: r for r in res}
+    hit, miss = by.get("web-exploitation-day-01-a/time_trial"), by.get("web-exploitation-day-02-b/time_trial")
+    check("11 live check: a fresh target of every earlier web TT, today's solver vs that day's own solver",
+          len(res) == 2 and hit and not hit["wrong"] and miss and miss["wrong"] and miss["answered"] == 0, res)
+    check("11 ... nothing is submitted during a check (a 2nd chain's check gets the same open attempt back)",
+          not any(c[1] == "submit" for c in gm_calls), gm_calls)
+    check("11 ... a web live miss is HARD even with nothing answered (same proof-N id every day)",
+          [r["cid"] for r in compound.hard_misses(res)] == ["web-exploitation-day-02-b/time_trial"])
+    n = compound.adopt(today, res)
+    lc = today / "cases" / f"compound-live-{Path(miss['path']).name}"
+    check("11 adopt: compound-live-* case with the live contract + the earlier solver's answer as expected",
+          n == 1 and json.loads((lc / "expected.json").read_text()) == {"proof-1": "proof_bbb"}
+          and (lc / "live_compound.json").exists())
+    check("11 ... replayable while its target is open (case_stale False)", not webtarget.case_stale(lc, today, "web"))
+    gm_calls.clear()
+    st_body = {"web-exploitation-day-01-a/time_trial": {"result": "CORRECT"},
+               "web-exploitation-day-02-b/time_trial": dict(active("att-bbb"), targets=[{"id": "Target 1",
+                                                                                        "url": "https://x/bbb"}])}
+
+    def fake_gm2(cid, op, *args, timeout=180):
+        gm_calls.append((cid, op) + tuple(args[1:]))
+        if op == "status":
+            return {"http": 200, "body": st_body.get(cid, {"result": "CORRECT"})}
+        return {"http": 200, "body": {"result": "CORRECT"}}
+    cli.call = fake_gm2
+    compound.web_live_restore()
+    check("11 restore (run end): every touched TT still open is re-solved by ITS OWN solver; CORRECT ones are left; "
+          "the live cases go stale",
+          [c for c in gm_calls if c[1] == "submit"] == [("web-exploitation-day-02-b/time_trial", "submit",
+                                                          json.dumps({"proof-1": "proof_bbb"}))]
+          and webtarget.case_stale(lc, today, "web"), gm_calls)
+    check("11 web_earlier: only EARLIER-day web challenges with a solver",
+          {"web-exploitation-day-01-a/time_trial", "web-exploitation-day-02-b/time_trial"}
+          <= {t for _, _, t in compound.web_earlier(today)}
+          and not any("day-30" in t for _, _, t in compound.web_earlier(today)))
+    cli.call = _saved["call"]
+    shutil.rmtree(ROOT / ".run" / "webcmp" / Path(miss["path"]).name, ignore_errors=True)
+
+    # 12. web Mastery target requested before the pre-Mastery checks (once, web only, never clocked)
+    calls = []
+    cli.call = lambda cid, *a, **k: (calls.append((cid,) + a), {"http": 200, "body": {"result": "preparing"}})[1]
+    cli.is_complete = lambda cid: False
+    mk = orchestrate.Chain.__new__(orchestrate.Chain)
+    mk.base, mk.lane, mk.entries = CID, "web", {"mastery": {"id": CID + "/mastery"}}
+    mk._web_mastery_kick()
+    mk._web_mastery_kick()
+    for t in threading.enumerate():
+        if t.name.startswith("web-m-kick-"):
+            t.join(5)
+    nw = orchestrate.Chain.__new__(orchestrate.Chain)
+    nw.base, nw.lane, nw.entries = "warmups-day-20", "warmups", {"mastery": {"id": "warmups-day-20/mastery"}}
+    nw._web_mastery_kick()
+    time.sleep(0.2)
+    check("12 web Mastery target requested once before the pre-Mastery checks; never for other lanes",
+          calls == [(CID + "/mastery", "start", CID + "/mastery")], calls)
+    cli.call = _saved["call"]
+    cli.is_complete = _saved["is_complete"]
 finally:
     for k, v in _saved.items():
         if k == "call":

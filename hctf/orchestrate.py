@@ -1384,6 +1384,12 @@ PREPUSH_STABLE = float(os.environ.get("HCTF_PREPUSH_STABLE", "1.0"))
 PREPUSH_SPEC_MAX = int(os.environ.get("HCTF_PREPUSH_SPEC_MAX", "12"))   # 12-140 KB tars, no warm: a bound, not a budget
 PRIOR_DRY_RUN_SECONDS = float(os.environ.get("HCTF_PRIOR_DRY_RUN_SECONDS", "15"))
 COMPOUND_PROBE_SECONDS = float(os.environ.get("HCTF_COMPOUND_PROBE_SECONDS", "45"))
+# Web: live compounding check (web_compound_probe) beside the Time Trial; before Mastery the Mastery target is requested
+# first (its provisioning can take ~5 min), then the check is awaited up to WEB_COMPOUND_WAIT s and a miss is generalized
+# BEFORE Mastery -- overlapping the target's provisioning instead of adding to it.
+WEB_LIVE_COMPOUND = os.environ.get("HCTF_WEB_LIVE_COMPOUND", "1") != "0"
+WEB_COMPOUND_SECONDS = float(os.environ.get("HCTF_WEB_COMPOUND_SECONDS", "30"))   # earlier challenges started by then
+WEB_COMPOUND_WAIT = float(os.environ.get("HCTF_WEB_COMPOUND_WAIT", "90"))
 # Mastery speed gate: estimated Mastery solve (mutation probe's 2-set mastery-shape run) vs the known TT window. Mastery
 # windows were 1-2.7x the TT window on D3-D8, so only an estimate over MASTERY_GATE_RATIO x TT window acts.
 MASTERY_GATE_RATIO = float(os.environ.get("HCTF_MASTERY_GATE_RATIO", "2.0"))
@@ -1411,6 +1417,17 @@ def compound_probe(sdir, seconds=None):
         res = compound.check(sdir, deadline=time.time() + (seconds or COMPOUND_PROBE_SECONDS))
     except Exception as e:  # noqa: BLE001 - advisory
         return f"(compound probe skipped: {str(e)[:120]})", [], []
+    return compound.summary(res), compound.hard_misses(res), res
+
+
+def web_compound_probe(sdir, seconds=None):
+    """compound_probe for the web lane: earlier days' web cases can't replay (target 410), so a LIVE check -- "Play
+    again" every earlier web Time Trial and run today's solver on the fresh target (hctf.compound.web_live_check)."""
+    from . import compound
+    try:
+        res = compound.web_live_check(sdir, deadline=time.time() + (seconds or WEB_COMPOUND_SECONDS), log=say)
+    except Exception as e:  # noqa: BLE001 - advisory
+        return f"(web live compound check skipped: {str(e)[:120]})", [], []
     return compound.summary(res), compound.hard_misses(res), res
 
 
@@ -3421,7 +3438,13 @@ class Chain:
         self._cmp_pre_fut = None
         if not COMPOUND_PROBE or not (self.sdir / "solve.py").exists():
             return
-        self._cmp_pre_fut = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(compound_probe, owner_tag=self.base), self.sdir)
+        from . import webtarget
+        probe = compound_probe
+        if webtarget.is_live_lane(getattr(self, "lane", None)):
+            if not WEB_LIVE_COMPOUND:
+                return
+            probe = web_compound_probe
+        self._cmp_pre_fut = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(probe, owner_tag=self.base), self.sdir)
 
     def _compound_pre_result(self, wait=True):
         if getattr(self, "_cmp_pre_fut", None) is None:
@@ -3583,6 +3606,28 @@ class Chain:
             say(f"[{mcid}] web TT target requested at the single's CORRECT: "
                 f"{body.get('result') or body.get('error') or env.get('http')} ({time.time() - t0:.1f}s)")
         threading.Thread(target=lambda: _quiet_errors(run, mcid), daemon=True, name=f"web-tt-kick-{self.base}").start()
+
+    def _web_mastery_kick(self):
+        """Web: request the Mastery's live target before the pre-Mastery checks (once, background) -- its provisioning
+        (D20: ~5:20 on first starts) then overlaps the live compound check / a pre-Mastery generalize. The timed stage's
+        own start reconnects to this attempt. Same rules as _web_tt_kick (the TT is banked here; no clock)."""
+        from . import webtarget
+        m = self.entries.get("mastery")
+        if not (WEB_TT_KICK and m and webtarget.is_live_lane(self.lane)) or getattr(self, "_web_m_kicked", False):
+            return
+        self._web_m_kicked = True
+        if cli.is_complete(m["id"]) or os.environ.get("HCTF_RUN_FOR_TIME", "auto") == "1":
+            return
+        mcid = m["id"]
+
+        def run():
+            t0 = time.time()
+            with cli.quiet():
+                env = cli.call(mcid, "start", mcid, timeout=60)
+            body = env.get("body") or {}
+            say(f"[{mcid}] web Mastery target requested before the pre-Mastery checks: "
+                f"{body.get('result') or body.get('error') or env.get('http')} ({time.time() - t0:.1f}s)")
+        threading.Thread(target=lambda: _quiet_errors(run, mcid), daemon=True, name=f"web-m-kick-{self.base}").start()
 
     def _prefetch_tt(self):
         """Never raises: callers sit right before ready.set() at a handoff."""
@@ -4105,20 +4150,32 @@ class Chain:
             # Mastery-failure generalize instead (timed_stage awaits all probes there). D9 + rehearsal: script's Mastery
             # sat 5.2-5.4 s on the codec-family probe (~10 s under 5-lane load); its only hits ever were D7 replays.
             untimed_m = mode == "mastery" and self._tt_pool_untimed()
-            # untimed pool: no clock, and the probes' misses are only HELD for a failure generalize -> never wait for
-            # them (rehearsal fair D16: binary Mastery sat 2 s on `probes still running`; warmups' codec wait is up to 30 s)
-            done = False if untimed_m else self._await_probes(LATE_PROBE_WAIT)
+            from . import webtarget
+            web_m = mode == "mastery" and WEB_LIVE_COMPOUND and webtarget.is_live_lane(getattr(self, "lane", None))
+            if web_m:
+                # web: the Mastery target first (its provisioning can take ~5 min), then the live compounding check;
+                # a miss is generalized now, while the target provisions (user 2026-10-21: before Mastery starts)
+                self._web_mastery_kick()
+                done = self._await_probes(WEB_COMPOUND_WAIT)
+            else:
+                # untimed pool: no clock, and the probes' misses are only HELD for a failure generalize -> never wait
+                # for them (rehearsal fair D16: binary Mastery sat 2 s on `probes still running`; warmups' codec wait is up
+                # to 30 s)
+                done = False if untimed_m else self._await_probes(LATE_PROBE_WAIT)
             late = self._late_probes(cid, wait=done, defer_compound=mode == "mastery")
             if not done and not untimed_m:
                 say(f"[{cid}] probes still running after {LATE_PROBE_WAIT:g}s: Mastery starts now (a failure "
                     "generalize takes their results)")
-            if late and mode == "mastery" and self._tt_pool_untimed():
+            elif not done and web_m:
+                say(f"[{cid}] web live compound check still running after {WEB_COMPOUND_WAIT:g}s: Mastery starts now")
+            if late and mode == "mastery" and self._tt_pool_untimed() and not web_m:
                 # misses are adopted as cases already; the failure generalize (if Mastery fails at all) gets the diag
                 self._late_held = late
                 say(f"[{cid}] probes found misses ({', '.join(sorted(late))}), but the pool is UNTIMED: Mastery now "
                     "(in-attempt localization / live answer fix them; a failure generalize gets the probe results)")
             elif late:
-                say(f"[{cid}] probes that ran beside the Time Trial found misses: generalizing BEFORE Mastery")
+                say(f"[{cid}] probes that ran beside the Time Trial found misses: generalizing BEFORE Mastery"
+                    + (" (its target is provisioning meanwhile)" if web_m else ""))
                 self.generalize(cid, wrong=None, fixed=None, diag=late)
                 if "compound_today" in late:
                     self._today_recheck(cid)
@@ -5078,6 +5135,12 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
         elif keep_homebase:
             say("[homebase] left running (--keep-homebase); power it off with `hctf hb off` when done")
     say("all chains finished")
+    try:   # earlier web Time Trials the live compound checks left open: re-solve them now that every web chain is done
+        from . import compound
+        if WEB_LIVE_COMPOUND and (compound.ROOT / ".run" / "webcmp" / "touched.jsonl").exists():
+            compound.web_live_restore(log=say)
+    except Exception as e:  # noqa: BLE001 - best-effort
+        say(f"[web] live compound restore note: {e}")
     if day is not None:
         try:   # unsolved modes: watch their contracts for an in-place GM rewrite and resume (D17 binary, ~4 h later)
             from . import driftwatch

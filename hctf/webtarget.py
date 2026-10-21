@@ -47,6 +47,7 @@ KICK = os.environ.get("HCTF_WEB_KICK", "1") != "0"
 KICK_AFTER = float(os.environ.get("HCTF_WEB_KICK_AFTER", "15"))
 KICK_EVERY = float(os.environ.get("HCTF_WEB_KICK_EVERY", "30"))
 MAX_KICKS = int(os.environ.get("HCTF_WEB_MAX_KICKS", "4"))
+LIVE_CASE_TTL = 25 * 60     # a live compounding case's target: an idle untimed web target stops after ~30 min
 
 
 # ------------------------------------------------------------------ predicates
@@ -439,6 +440,15 @@ def case_stale(case_dir, sdir, lane=None):
     generalized while its target is still up) is replayable -> False. Non-live cases -> False."""
     if not is_live_case(case_dir, lane):
         return False
+    mk = Path(case_dir) / "live_compound.json"
+    if mk.exists():
+        # a live compounding case (hctf.compound.web_live_check): an EARLIER challenge's open Time Trial attempt, kept
+        # open for the generalize -- stale once re-solved or past the idle-stop age of its target
+        try:
+            m = json.loads(mk.read_text())
+        except (OSError, ValueError):
+            return True
+        return bool(m.get("restored")) or time.time() - float(m.get("created") or 0) > LIVE_CASE_TTL
     c = _case_contract(case_dir) or {}
     from . import cli
     att = cli.attempt_id(c)

@@ -92,8 +92,9 @@ def misses(results):
 def hard_misses(results):
     """Misses worth a pre-attempt generalize: a crash, or verified fields the solver answers WRONG/empty while it does
     answer the case. A case it answers nothing for at all is soft: an earlier day's retired answer-id scheme (binary
-    D1/D2 ids before the D3 `d01_*` rename), not a lost concept."""
-    return [r for r in misses(results) if r["error"] or r["answered"] > 0]
+    D1/D2 ids before the D3 `d01_*` rename), not a lost concept. A web LIVE miss is always hard: a web target has the
+    same `proof-N` id every day, so an empty answer there IS the lost concept."""
+    return [r for r in misses(results) if r["error"] or r["answered"] > 0 or r.get("live")]
 
 
 def summary(results, limit=12):
@@ -119,11 +120,179 @@ def adopt(sdir, results, limit=6):
     n = 0
     for r in hard_misses(results)[:limit]:
         src = ROOT / r["path"]
-        dst = Path(sdir) / "cases" / f"compound-d{r['day']:02d}-{src.name}"
+        dst = Path(sdir) / "cases" / (f"compound-d{r['day']:02d}-{src.name}" if not r.get("live")
+                                      else f"compound-live-{src.name}")
         if dst.exists():
             shutil.rmtree(dst)
         shutil.copytree(src, dst)
         n += 1
+    return n
+
+
+# ------------------------------------------------------------------ web: live compounding check
+# A web case can't be replayed once its attempt is finished (target 410), so earlier days' web cases tell nothing.
+# Instead: "Play again" each earlier web challenge's Time Trial (GM retry -> a fresh single-bug target, ~18 s; probe
+# 2026-10-21: TT 5/5 by each day's own solver) and run today's solver on it. Expected = that day's OWN solver on the same
+# target. Nothing is submitted during a check: every touched attempt stays OPEN (a miss's target is replayed by the
+# generalize as a `compound-live-*` case marked live_compound.json; a second web chain's check of the same earlier TT
+# gets the same open attempt back from `retry` -- a submit there killed the first chain's miss case, 10-21 probe) and is
+# recorded in .run/webcmp/touched.jsonl; web_live_restore() re-solves them with each day's own solver once the run's
+# web chains are done. D20 rerun: D02/D03/D04 Mastery each missed Target 1 = an earlier day's bug (backup exposure,
+# IDOR) while their TT solvers were fine; the live check reproduced exactly those misses.
+
+
+def _empty(v):
+    """solvers.run_solver str()s every value: a solver's null comes back as 'None'."""
+    return v in (None, "", "None", "null")
+
+
+def web_earlier(sdir):
+    """[(day, chal_dir, time_trial id)] of every earlier web challenge with a solver (folder day < this solver's)."""
+    chal = Path(sdir).parent
+    lane, today = _lane(chal), _day(chal)
+    out = []
+    for other in sorted(paths.CHALLENGES.glob("day*/*/meta.json")):
+        od = other.parent
+        if od == chal or _day(od) >= today or _lane(od) != lane or not (od / "solver" / "solve.py").exists():
+            continue
+        try:
+            tt = (json.loads(other.read_text()).get("ids") or {}).get("time_trial")
+        except (OSError, ValueError):
+            tt = None
+        if tt:
+            out.append((_day(od), od, tt))
+    return out
+
+
+def _live_lock(tt):
+    """One live check per earlier Time Trial at a time (two web chains of a day probe the same earlier challenges; one's
+    submit would 410 the other's target)."""
+    import fcntl
+    p = paths.LOCKS / f"web-compound-{tt.replace('/', '_')}.lock"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    f = open(p, "a+")
+    fcntl.flock(f, fcntl.LOCK_EX)
+    return f
+
+
+def web_live_check(sdir, timeout=40, parallel=6, deadline=None, log=None):
+    """Today's web solver vs a fresh target of every earlier web challenge's Time Trial. Same result dicts as check()
+    (+ live=True, cid, attempt); a miss's `path` is a case dir under .run/webcmp/ (contract = the live attempt,
+    expected = the earlier day's own solver on it). Skips (no result) when the target never comes up, the earlier solver
+    answers nothing, or the GM refuses the re-roll."""
+    import tempfile
+    from . import cli, webtarget
+    sdir = Path(sdir)
+    log = log or (lambda m: None)
+    run_root = ROOT / ".run" / "webcmp"
+    run_root.mkdir(parents=True, exist_ok=True)
+
+    def one(item):
+        day, od, tt = item
+        if deadline and time.time() > deadline:
+            return None
+        lock = _live_lock(tt)
+        try:
+            with cli.quiet():
+                env = cli.call(tt, "retry", tt)
+            body = env.get("body") if isinstance(env.get("body"), dict) else {}
+            if not webtarget.ready(body):
+                body = webtarget.wait_ready(tt, body, log=lambda m: None, wait=120)
+            if not webtarget.ready(body):
+                log(f"web live check: {tt} target not up ({body.get('result') or body.get('error')}) -- skipped")
+                return None
+            empty = Path(tempfile.mkdtemp(prefix="webcmp-art-", dir=str(run_root)))
+            exp, err0, _ = solvers.run_solver(od / "solver", body, empty, timeout)
+            exp = {k: v for k, v in (exp or {}).items() if not _empty(v)}
+            if err0 or not exp:
+                log(f"web live check: {tt} own solver gave nothing ({err0 or 'empty'}) -- skipped")
+                return None
+            got, err, dt = solvers.run_solver(sdir, body, empty, timeout)
+            wrong = {k: {"expected": v, "got": got.get(k)} for k, v in exp.items() if got.get(k) != v}
+            ids = body.get("answer_ids") or list(exp)
+            att = cli.attempt_id(body)
+            res = {"day": day, "case": f"{od.name}-{str(att)[:8]}", "path": "", "expected": len(exp),
+                   "correct": len(exp) - len(wrong), "answered": sum(1 for i in ids if not _empty(got.get(i))),
+                   "total": len(ids), "wrong": wrong, "error": err, "seconds": round(dt, 2), "live": True, "cid": tt,
+                   "attempt": att}
+            _touched(tt, od, att)
+            if not wrong and not err:
+                return res
+            case = run_root / f"{od.name}-{str(att)[:8]}"
+            if case.exists():
+                import shutil
+                shutil.rmtree(case)
+            (case / "artifacts").mkdir(parents=True)
+            (case / "contract.json").write_text(json.dumps(body, indent=2))
+            (case / "expected.json").write_text(json.dumps(exp, indent=2))
+            (case / "live_compound.json").write_text(json.dumps({"cid": tt, "attempt": att, "day": day,
+                                                                  "created": time.time(), "restored": False}))
+            res["path"] = str(case.relative_to(ROOT))
+            return res
+        except Exception as e:  # noqa: BLE001 - one earlier challenge never sinks the probe
+            log(f"web live check: {tt} note: {str(e)[:160]}")
+            return None
+        finally:
+            lock.close()
+
+    items = web_earlier(sdir)
+    with _BgExecutor(max_workers=max(1, parallel)) as ex:
+        return [r for r in ex.map(one, items) if r]
+
+
+def _touched(tt, od, att):
+    """Record an earlier Time Trial attempt a live check left open (re-solved by web_live_restore)."""
+    with open(ROOT / ".run" / "webcmp" / "touched.jsonl", "a") as f:
+        f.write(json.dumps({"cid": tt, "dir": str(Path(od).relative_to(ROOT)), "attempt": att, "t": time.time()}) + "\n")
+
+
+def web_live_restore(log=None):
+    """Once the run's web chains are done: re-solve every earlier Time Trial a live check touched that is still open
+    (status not CORRECT and its target up) with that day's OWN solver on the CURRENT attempt, and mark every
+    `compound-live-*` case restored (stale for every later replay). Returns the number of Time Trials re-solved."""
+    import tempfile
+    from . import cli, webtarget
+    log = log or (lambda m: None)
+    reg = ROOT / ".run" / "webcmp" / "touched.jsonl"
+    seen, n = {}, 0
+    try:
+        for ln in reg.read_text().splitlines():
+            try:
+                r = json.loads(ln)
+                seen[r["cid"]] = r
+            except (ValueError, KeyError):
+                continue
+    except OSError:
+        pass
+    for tt, r in seen.items():
+        try:
+            with cli.quiet():
+                body = cli.call(tt, "status", tt).get("body") or {}
+            if str(body.get("result", "")).upper() == "CORRECT" or not webtarget.ready(body):
+                continue
+            empty = Path(tempfile.mkdtemp(prefix="webcmp-art-", dir=str(ROOT / ".run" / "webcmp")))
+            ans, err, _ = solvers.run_solver(ROOT / r["dir"] / "solver", body, empty, 40)
+            ans = {k: v for k, v in (ans or {}).items() if not _empty(v)}
+            if err or not ans:
+                log(f"web live check: {tt} left open (its own solver gave nothing)")
+                continue
+            with cli.quiet():
+                sub = cli.call(tt, "submit", tt, json.dumps(ans)).get("body") or {}
+            n += 1
+            log(f"web live check: re-solved {tt} ({sub.get('result') or sub.get('error')})")
+        except Exception as e:  # noqa: BLE001
+            log(f"web live check: restore note {tt}: {str(e)[:120]}")
+    try:
+        reg.write_text("")
+    except OSError:
+        pass
+    for marker in paths.CHALLENGES.glob("day*/*/solver/cases/compound-live-*/live_compound.json"):
+        try:
+            m = json.loads(marker.read_text())
+            m["restored"] = True
+            marker.write_text(json.dumps(m))
+        except (OSError, ValueError):
+            continue
     return n
 
 

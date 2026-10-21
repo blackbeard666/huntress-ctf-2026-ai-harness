@@ -150,17 +150,26 @@ def exposed(base, home):
         paths += re.findall(r"(?im)^\s*(?:dis)?allow:\s*(\S+)", b) + re.findall(r"<loc>([^<]+)</loc>", b)
     paths += re.findall(r"(?:href|src)=['\"]([^'\"#]+)['\"]", home.decode("utf-8", "replace"))
     paths += re.findall(r"<!--(.*?)-->", home.decode("utf-8", "replace"), re.S)
+    # BFS, depth 2: a disclosed path is usually a directory index whose LINKS are the backups (D01 robots -> index)
+    host = urllib.parse.urlsplit(base).netloc
+    queue = [(p.strip(), 0) for p in paths]
     seen = set()
-    for p in paths:
-        p = p.strip()
-        if not p or p in seen or p == "/" or p.startswith(("mailto:", "javascript:")) or "*" in p:
+    while queue and len(seen) < 40:
+        p, d = queue.pop(0)
+        if not p or p == "/" or p.startswith(("mailto:", "javascript:")) or "*" in p:
             continue
-        seen.add(p)
-        if len(seen) > 25:
-            break
-        v = find_proof(fetch(urllib.parse.urljoin(base, p)))
+        u = urllib.parse.urljoin(base, p)
+        if u in seen or urllib.parse.urlsplit(u).netloc != host or urllib.parse.urlsplit(u).path in ("", "/") \
+                or u.endswith((".css", ".svg", ".png", ".jpg", ".ico", ".woff2", ".js")):
+            continue
+        seen.add(u)
+        body = fetch(u)
+        v = find_proof(body)
         if v:
             return v
+        if d < 2 and body and b"<a " in body:
+            queue += [(h, d + 1) for h in re.findall(r"(?:href|src)=['\"]([^'\"#]+)['\"]",
+                                                     body.decode("utf-8", "replace"))]
     return None
 
 

