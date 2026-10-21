@@ -40,6 +40,13 @@ SLOT = os.environ.get("HCTF_WEB_SLOT", "1") != "0"
 # OpenAPI now has `switch_target` for "if a team limit is full". 5 = what was measured, not the GM's cap.
 SLOTS = max(1, int(os.environ.get("HCTF_WEB_SLOTS", "5")))
 STOP_AFTER_CORRECT = os.environ.get("HCTF_WEB_STOP_AFTER_CORRECT", "1") != "0"
+# Kick a start stuck in `preparing`: D20 both Mastery first starts sat 5:21 (alt Admin 5:17 off-peak) while every
+# `retry` came up in 11-18 s (10/10) -- and a retry on an unsolved attempt hands back the SAME attempt once it is live.
+# Kicks alternate public `retry` / arena `start` (a Single Solve has no retry: arena only); never `switch_target`.
+KICK = os.environ.get("HCTF_WEB_KICK", "1") != "0"
+KICK_AFTER = float(os.environ.get("HCTF_WEB_KICK_AFTER", "15"))
+KICK_EVERY = float(os.environ.get("HCTF_WEB_KICK_EVERY", "30"))
+MAX_KICKS = int(os.environ.get("HCTF_WEB_MAX_KICKS", "4"))
 
 
 # ------------------------------------------------------------------ predicates
@@ -103,27 +110,53 @@ def needs_wait(body):
 
 # ------------------------------------------------------------------ waiting for a target
 
+def kick_plan(cid, n):
+    """The n-th kick (0-based) of a start stuck in `preparing`: `retry` on even n, arena `start` on odd n; a Single Solve
+    (no /time_trial|/mastery suffix) has no retry (GM 405) -> always the arena."""
+    timed = bool(re.search(r"/(time_trial|mastery)$", str(cid or "")))
+    return "retry" if timed and n % 2 == 0 else "arena"
+
+
+def _att(body):
+    return str((body or {}).get("attempt_id") or "")[:8] if isinstance(body, dict) else ""
+
+
 def await_target(cid, body, status, revive=None, log=print, wait=None, poll=None, revive_every=None,
-                 max_revives=None, sleep=time.sleep, clock=time.time):
+                 max_revives=None, sleep=time.sleep, clock=time.time, kick=None, trace=None, kick_after=None,
+                 kick_every=None, max_kicks=None):
     """`body` = a start/retry reply. While it is `preparing` (no clock yet) poll `status(cid)` until the target is up;
-    when the attempt is `cleaned` (dead target), `revive(cid)` (the arena start) at most every `revive_every` s.
+    when the attempt is `cleaned` (dead target), `revive(cid)` (the arena start) at most every `revive_every` s; while it
+    stays `preparing` past `kick_after` s, `kick(cid, n)` (kick_plan: retry / arena start) at most every `kick_every` s,
+    `max_kicks` times. Every state change, revive and kick is appended to `trace` (a list) and logged.
     Returns the last body (ready, terminal, or still waiting with `_web_wait: "timeout"` after `wait` s). Never raises
-    on a failed poll: an empty/failed status keeps the previous body."""
+    on a failed poll: an empty/failed status keeps the previous body; an error reply to a kick never replaces it."""
     if not needs_wait(body):
         return body
     wait = WAIT if wait is None else wait
     poll = POLL if poll is None else poll
     revive_every = REVIVE_EVERY if revive_every is None else revive_every
     max_revives = MAX_REVIVES if max_revives is None else max_revives
+    kick_after = KICK_AFTER if kick_after is None else kick_after
+    kick_every = KICK_EVERY if kick_every is None else kick_every
+    max_kicks = (MAX_KICKS if KICK else 0) if max_kicks is None else max_kicks
     t0, revives, last_revive, last_state = clock(), 0, None, None
+    kicks, last_kick = 0, None
+
+    def note(ev, **kw):
+        if trace is not None:
+            trace.append({"t": round(clock() - t0, 1), "ev": ev, **kw})
+
     while True:
         st = _result(body) or str(body.get("error") or "?")
         if ready(body) or terminal(body):
             if last_state is not None:
+                note("state", state="ready" if ready(body) else st, att=_att(body))
                 log(f"[{cid}] web target {'up' if ready(body) else st} after {clock() - t0:.0f}s"
-                    + (f" ({len(target_urls(body))} target(s))" if ready(body) else ""))
+                    + (f" ({len(target_urls(body))} target(s))" if ready(body) else "")
+                    + (f" after {kicks} kick(s)" if kicks else ""))
             return body
         if st != last_state:
+            note("state", state=st, att=_att(body))
             log(f"[{cid}] web target {st} (+{clock() - t0:.0f}s): waiting for it (no clock while it prepares; "
                 "web chains are capped at SLOTS live targets)")
             last_state = st
@@ -135,15 +168,36 @@ def await_target(cid, body, status, revive=None, log=print, wait=None, poll=None
                 rb = revive(cid)
             except Exception as e:  # noqa: BLE001 - the poll goes on
                 rb = {"error": f"revive failed: {type(e).__name__}"}
+            note("revive", n=revives, result=_result(rb) or (rb or {}).get("error") or "?", att=_att(rb))
             log(f"[{cid}] web attempt {st}: arena start (revive {revives}/{max_revives}) -> "
                 f"{_result(rb) or (rb or {}).get('error') or '?'}")
             if ready(rb):
                 return rb
+        elif (st in PREPARING and kick is not None and kicks < max_kicks and clock() - t0 >= kick_after
+              and (last_kick is None or clock() - last_kick >= kick_every)):
+            how = kick_plan(cid, kicks)
+            kicks += 1
+            tk = clock()
+            try:
+                kb = kick(cid, kicks - 1)
+            except Exception as e:  # noqa: BLE001 - the poll goes on
+                kb = {"error": f"kick failed: {type(e).__name__}"}
+            last_kick = clock()
+            res = _result(kb) or (kb or {}).get("error") or "?" if isinstance(kb, dict) else "?"
+            note("kick", n=kicks, how=how, result=res, att=_att(kb), took=round(clock() - tk, 1))
+            log(f"[{cid}] web target preparing +{tk - t0:.0f}s: kick {kicks}/{max_kicks} {how} -> {res} "
+                f"({clock() - tk:.1f}s)")
+            if ready(kb):
+                note("state", state="ready", att=_att(kb), via=how)
+                return kb
+            if isinstance(kb, dict) and kb and not kb.get("error"):
+                body = kb
         if clock() - t0 >= wait:
             out = dict(body)
             out["_web_wait"] = "timeout"
-            log(f"[{cid}] web target still {st} after {wait:.0f}s: giving up this wait (another live web attempt of "
-                "the team may hold the one target slot; `hctf arena stop <id>` frees an active one)")
+            note("timeout", state=st)
+            log(f"[{cid}] web target still {st} after {wait:.0f}s: giving up this wait (`hctf arena status {cid}`; "
+                "a `cleaned` attempt is revived by `hctf arena start`)")
             return out
         sleep(poll)
         try:
@@ -185,9 +239,33 @@ def arena_stop(cid):
     return arena(cid, "stop")
 
 
+def kick(cid, n):
+    """Orchestrator-side kick of a `preparing` start (kick_plan): public `retry` or arena `start`."""
+    if kick_plan(cid, n) == "retry":
+        from . import cli
+        with cli.quiet():
+            return cli.call(cid, "retry", cid).get("body") or {}
+    return arena_start(cid)
+
+
+def log_trace(cid, trace):
+    """The wait's trace into the mode's log.jsonl (`web-trace`), when there was anything to wait for."""
+    if not trace:
+        return
+    try:
+        from . import cli
+        cli.log(cid, "web-trace", {"http": 200, "body": {"trace": trace}})
+    except Exception:  # noqa: BLE001 - logging only
+        pass
+
+
 def wait_ready(cid, body, log=print, wait=None):
-    """Orchestrator form of await_target: GM status polls + arena revive."""
-    return await_target(cid, body, gm_status, revive=arena_start, log=log, wait=wait)
+    """Orchestrator form of await_target: GM status polls + arena revive + kicks of a stuck `preparing`."""
+    trace = []
+    try:
+        return await_target(cid, body, gm_status, revive=arena_start, log=log, wait=wait, kick=kick, trace=trace)
+    finally:
+        log_trace(cid, trace)
 
 
 def empty_artifacts(mode_dir, attempt):

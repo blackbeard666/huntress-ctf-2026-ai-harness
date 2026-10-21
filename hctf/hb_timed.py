@@ -701,8 +701,16 @@ def _await_live(cid, body, out):
     if _WT is None or not _WT.needs_wait(body):
         return body
     t = time.time()
+
+    def kick(c, n):
+        # a start stuck in `preparing` (D20: both Mastery first starts 5:21; every retry 11-18 s): public `retry`
+        # (hands back the same unsolved attempt once live) / arena `start`, alternating -- webtarget.kick_plan
+        if _WT.kick_plan(c, n) == "retry":
+            return _post_once({"op": "retry", "challenge": c})   # plain retry: never the pool fallbacks of _post_start
+        return _arena_start(c)
     body = _WT.await_target(cid, body, _status_body, revive=_arena_start,
-                            log=lambda m: print(m, file=sys.stderr), wait=float(_opt("HCTF_WEB_PREPARE_WAIT", _WT.WAIT)))
+                            log=lambda m: print(m, file=sys.stderr), wait=float(_opt("HCTF_WEB_PREPARE_WAIT", _WT.WAIT)),
+                            kick=kick, trace=out.setdefault("web_trace", []))
     out["web_wait"] = round(out.get("web_wait", 0) + time.time() - t, 1)
     return body
 

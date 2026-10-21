@@ -86,8 +86,70 @@ check("1 non-web bodies pass through", webtarget.await_target(CID, {"answer_ids"
                                                               seq({}), log=quiet) == {"answer_ids": ["x"], "attempt_id": "a"})
 check("1 CORRECT is terminal", not webtarget.needs_wait({"result": "CORRECT", "routes": []}))
 
+# kicks of a start stuck in `preparing` (D20: Mastery first starts 5:21; every retry 11-18 s) on a fake clock
+clk = [0.0]
+
+
+def fake_sleep(s):
+    clk[0] += max(s, 1.0)
+
+
+def stuck(n):
+    return seq(*([preparing()] * n), active("att-k"))
+
+
+kicks, trace = [], []
+b = webtarget.await_target(CID + "/mastery", preparing(), seq(preparing()), log=quiet, poll=4, wait=600,
+                           sleep=fake_sleep, clock=lambda: clk[0], trace=trace, kick_after=15, kick_every=30,
+                           max_kicks=4, kick=lambda c, n: kicks.append((round(clk[0]), webtarget.kick_plan(c, n)))
+                           or preparing())
+check("1 kick: first at >= kick_after, then every kick_every, alternating retry / arena, at most max_kicks",
+      [h for _, h in kicks] == ["retry", "arena", "retry", "arena"] and kicks[0][0] >= 15
+      and all(b2[0] - a2[0] >= 30 for a2, b2 in zip(kicks, kicks[1:])), kicks)
+check("1 kick: trace has the states + each kick, and the timeout",
+      [e["ev"] for e in trace if e["ev"] == "kick"] == ["kick"] * 4 and trace[0]["state"] == "preparing"
+      and trace[-1]["ev"] == "timeout", trace)
+clk[0] = 0.0
+trace = []
+b = webtarget.await_target(CID + "/mastery", preparing(), seq(preparing()), log=quiet, poll=4, wait=600,
+                           sleep=fake_sleep, clock=lambda: clk[0], trace=trace, kick_after=15,
+                           kick=lambda c, n: active("att-kicked"))
+check("1 kick: a live body from the kick is returned at once (same attempt handed back)",
+      webtarget.ready(b) and b["attempt_id"] == "att-kicked" and clk[0] < 30
+      and any(e.get("via") == "retry" for e in trace), (b, trace))
+clk[0] = 0.0
+kicks = []
+b = webtarget.await_target(CID + "/mastery", preparing(), seq(preparing(), preparing(), active()), log=quiet, poll=4,
+                           wait=600, sleep=fake_sleep, clock=lambda: clk[0], kick_after=15,
+                           kick=lambda c, n: kicks.append(n) or preparing())
+check("1 kick: none when the target is up before kick_after", webtarget.ready(b) and not kicks, (b, kicks))
+clk[0] = 0.0
+kicks = []
+b = webtarget.await_target(CID + "/mastery", preparing(), stuck(12), log=quiet, poll=4, wait=600, sleep=fake_sleep,
+                           clock=lambda: clk[0], kick_after=15,
+                           kick=lambda c, n: kicks.append(n) or {"error": "retry_variants_unavailable"})
+check("1 kick: an error reply never replaces the body (the wait goes on and the target comes up)",
+      webtarget.ready(b) and b["attempt_id"] == "att-k" and kicks, (b, kicks))
+check("1 kick plan: a Single Solve has no retry (GM 405) -> arena only; timed modes alternate",
+      [webtarget.kick_plan(CID, n) for n in range(3)] == ["arena"] * 3
+      and [webtarget.kick_plan(CID + "/time_trial", n) for n in range(3)] == ["retry", "arena", "retry"])
+clk[0] = 0.0
+kicks = []
+b = webtarget.await_target(CID + "/mastery", preparing(), seq(preparing()), log=quiet, poll=4, wait=200,
+                           sleep=fake_sleep, clock=lambda: clk[0], kick_after=15, max_kicks=0,
+                           kick=lambda c, n: kicks.append(n) or preparing())
+check("1 kick: max_kicks=0 (HCTF_WEB_KICK=0) -> never", not kicks, kicks)
+clk[0] = 0.0
+kicks, revived = [], []
+b = webtarget.await_target(CID + "/mastery", cleaned(), seq(*([cleaned()] * 30), active("att-r")), log=quiet, poll=4,
+                           wait=600, sleep=fake_sleep, clock=lambda: clk[0], kick_after=15,
+                           revive=lambda c: revived.append(c) or cleaned(), kick=lambda c, n: kicks.append(n) or {})
+check("1 kick: a `cleaned` attempt keeps the revive path (no kick)", revived and not kicks and webtarget.ready(b),
+      (revived, kicks))
+
 # ------------------------------------------------------------------ 2. hb_timed
-_orig = {k: getattr(hb_timed, k) for k in ("_pool", "_post_start", "_run_solver", "_post", "_status_body", "_arena_start")}
+_orig = {k: getattr(hb_timed, k) for k in ("_pool", "_post_start", "_post_once", "_run_solver", "_post", "_status_body",
+                                          "_arena_start")}
 
 
 def attempt(start_body, statuses, arena=None):
@@ -102,6 +164,7 @@ def attempt(start_body, statuses, arena=None):
         return SimpleNamespace(stdout=json.dumps({"proof-1": "proof_abc123"}), stderr="", returncode=0)
     hb_timed._pool = lambda: object()
     hb_timed._post_start = start
+    hb_timed._post_once = start     # the kick's plain retry
     hb_timed._run_solver = run_solver
     hb_timed._post = lambda payload, timeout=None: {"result": "correct", "remaining": 0}
     hb_timed._status_body = seq(*statuses)
@@ -124,6 +187,14 @@ try:
           out["result"] == "web_target_preparing" and out.get("start_refused") and not solved and sent == ["start"],
           (out, sent))
     refused = dict(out)
+    # the timed runner kicks a stuck `preparing` with a public retry first, and keeps the trace in result.json
+    hb_timed._WT.KICK_AFTER, _ka = 0.0, hb_timed._WT.KICK_AFTER
+    out, sent, solved, ar = attempt(preparing(), [preparing()] * 3 + [active()])
+    hb_timed._WT.KICK_AFTER = _ka
+    check("2 hb_timed: stuck `preparing` -> kick = public retry, trace in the result, then solved",
+          out["result"] == "correct" and sent[:2] == ["start", "retry"]
+          and any(e.get("ev") == "kick" and e.get("how") == "retry" for e in out.get("web_trace") or []),
+          (out.get("web_trace"), sent))
 finally:
     for k, v in _orig.items():
         setattr(hb_timed, k, v)

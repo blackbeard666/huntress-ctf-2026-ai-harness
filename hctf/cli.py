@@ -319,12 +319,12 @@ def c_start(a, op="start"):
     if env["http"] == 200 and webtarget.needs_wait(env["body"]):
         # web: the target is still `preparing` (no clock yet) / the attempt was `cleaned`: wait for it here (bounded --
         # a worker's Bash call times out at ~2 min) instead of the worker polling `hctf status` by hand
-        body = webtarget.await_target(a.id, env["body"], webtarget.gm_status, revive=webtarget.arena_start,
-                                      log=lambda m: print(m, file=sys.stderr), wait=webtarget.CLI_WAIT)
+        body = webtarget.wait_ready(a.id, env["body"], log=lambda m: print(m, file=sys.stderr),
+                                    wait=webtarget.CLI_WAIT)
         env = dict(env, body=body)
         if not webtarget.ready(body):
-            print("note: the web target is not up yet (one live web target per team; no clock while it prepares) -- "
-                  "run `hctf start` again in a minute", file=sys.stderr)
+            print("note: the web target is not up yet (no clock while it prepares) -- run `hctf start` again in a "
+                  "minute", file=sys.stderr)
     # An after-deadline start answers 200 {"result": "expired"} with no attempt_id/answer_ids; saving that would
     # clobber the last real contract (lost the Mastery 6279ad62 case and broke solver-run).
     if env["body"] is not None and env["http"] == 200 and attempt_id(env["body"]):
