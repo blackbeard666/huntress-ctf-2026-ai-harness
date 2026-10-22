@@ -1827,8 +1827,12 @@ class Chain:
         pt, t0 = getattr(self, "_pre_t", None) or {}, getattr(self, "_chain_t0", None)
         if not (t0 and {"dl", "tri0", "tri1"} <= set(pt)):
             return ""
-        return (f"; start+download {pt['dl'] - t0:.1f}s, pre-triage {pt['tri0'] - pt['dl']:.1f}s, "
+        base = (f"; start+download {pt['dl'] - t0:.1f}s, pre-triage {pt['tri0'] - pt['dl']:.1f}s, "
                 f"triage {pt['tri1'] - pt['tri0']:.1f}s, post-triage {time.time() - pt['tri1']:.1f}s")
+        if {"retr", "tfetch"} <= set(pt):   # D22 pole #3: where the post-triage seconds actually go (web was ~11.5s)
+            base += (f" [retrieval {pt['retr'] - pt['tri1']:.1f}s, timed-prefetch {pt['tfetch'] - pt['retr']:.1f}s, "
+                     f"prompt-build {time.time() - pt['tfetch']:.1f}s]")
+        return base
 
     def _prior_dry_run_text(self, cid=None):
         fut = getattr(self, "_dry_fut", None)
@@ -3218,12 +3222,14 @@ class Chain:
             retrieved = retrieval.note_for(cli.cdir(cid), self.lane, self.root.name, k=RETRIEVAL_K)
             if retrieved:
                 say(f"[{cid}] retrieval: {retrieved.count(chr(10) + '- **')} similar past solve(s) in the prompt")
+        self._pre_t["retr"] = time.time()   # D22 pole #3: split post-triage (retrieval | timed-prefetch | prompt-build)
         timed_info = []
         for f in tfuts:
             try:
                 timed_info.append(f.result())
             except Exception as e:  # noqa: BLE001 - the prompt just lists fewer contracts
                 say(f"[{cid}] timed contract prefetch note: {e}")
+        self._pre_t["tfetch"] = time.time()
         for n in range(MAX_SINGLE_LAUNCHES):
             extra = ""
             notes = cli.cdir(cid) / "notes.md"

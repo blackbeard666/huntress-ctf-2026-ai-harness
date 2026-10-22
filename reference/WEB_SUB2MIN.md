@@ -21,33 +21,46 @@ standard board was T+1:35 but **web finished T+7:50** — the whole-board miss. 
    the proven blocked-path live-answer takes the open attempt at once (serial — no concurrent double-submit). Retries
    clear the cap. **Enable with `HCTF_WEB_TIMED_LIVE_FIRST=1`.** Est. web TT ~72s → ~39s. NOT YET VALIDATED (web is
    excluded from offline replays — validate on the rehearsal replay).
-3. **Single prep overhead ~11.5s post-triage (OPEN, daytime).** `GO_EARLY=1` already keeps the prior-solver dry-run off
-   the critical path, so the 11.5s is something else (prior-solver copy / compound-contract read / mastery_delta).
-   Pin it (compare web's 11.5s vs script's 4.4s post-triage) and trim for web. Modest (~11s).
+3. **Single prep overhead ~11.5s post-triage (INSTRUMENTED, trim after the rehearsal run).** `GO_EARLY=1` already keeps the
+   prior-solver dry-run off the critical path, and web is NOT a cumulative lane (`prior_solver_dir` returns None for web;
+   it seeds from `lib.web`, staged pre-triage) — so the 11.5s is post-triage: retrieval, the upcoming-timed-contract
+   prefetch wait (`tfuts` status calls — may be slow for web), or prompt-build (`mastery_delta`/`lane_known_shapes`).
+   Couldn't pin by inspection, so the post-triage timer is now split in the go-text line:
+   `post-triage Ws [retrieval As, timed-prefetch Bs, prompt-build Cs]` (orchestrate `_prelude_split`). The rehearsal run names
+   the culprit; then defer it off the go (the timed-contract list / compound note can follow via the inbox like the dry
+   run does). Modest (~11s).
 
-## Pole B (SCOPE — daytime, highest remaining value): re-author the web solver to re-exploit the live target
-**Why:** if the web single's `solve.py` performed the exploit *parametrically* (recon → exploit → read `proof` from the
-live target by URL), TT and Mastery would solve **first-try** with NO live-answer at all — removing the whole ~40s
-solver-then-live-answer per timed mode (and making "A" unnecessary). This is the real path to web under 2 min.
-**What to change:** the web single solver-authoring prompt / `solver-authoring` + `web` skills so the deliverable
-`solve.py` (a) takes the target URL/base from the contract's `targets`, (b) performs the exploit against *that* URL at
-run time (not cached answers), (c) extracts each `proof-*` from the live response. Today's solvers answer static fields
-only and defer `proof-*` to the single worker.
-**Risk:** solver-quality/variance across unseen web challenges; a live-exploiting solver can be fragile. Keep live-answer
-as the backstop (it already works). Validate on the rehearsal replay; measure first-try TT/Mastery rate.
-**Open question:** is the exploit deterministic enough per fresh target that one authored `solve.py` re-exploits every
-variant? If the proof is e.g. a per-target random flag obtained by a fixed exploit, yes; if it needs per-variant recon,
-the solver must recon too.
+## Pole B (DONE — prompt change in `skills/web/SKILL.md`, validate live): web solver must re-exploit
+**Why:** if the web single's `solve.py` performs the exploit *parametrically* (recon → exploit → read `proof` from the
+live target by URL), TT and Mastery solve **first-try** with NO live-answer — removing the whole ~40s
+solver-then-live-answer per timed mode. This is the real path to web under 2 min.
+**Root cause (not a missing instruction):** the web skill already said "fetch from the live target," but the single
+worker gets the proof by hand, writes a `solve.py` that only handles static fields, and the single's target dies (HTTP
+410) at CORRECT, so nothing catches the gap before TT hits a FRESH target.
+**Change (committed):** `skills/web/SKILL.md` adds a mandatory section "proof-* fields: solve.py MUST re-exploit":
+`exploit(base_url)->answer` re-runs end to end against `contract["targets"]`; and **before submitting the single, RUN
+solve.py against the still-live single target and confirm it reproduces EVERY field incl. proof** (the one lane where
+self-verifying against the live service is REQUIRED — it overrides single.md's generic "don't reach a backend to confirm"
+rule, which exists because the target is about to 410 and TT/Mastery get a fresh one).
+**Risk:** solver-quality/variance; keep live-answer + pole #2 "A" as the backstop. Measure first-try TT/Mastery rate on
+the rehearsal run. **Open question:** is the exploit replayable on a fresh target (fixed exploit → per-target flag = yes; needs
+per-variant recon = solver must recon too). The skill tells the worker to assume replayable until the live run disproves.
 
-## Validation plan (web is NOT in offline replays — `replay_main_self.sh` sets `web-*` aside)
-1. **Blind rehearsal replay** of a web day with the branch harness + flags:
-   - Baseline: flags off (current main behavior) — expect web ~T+7:50-shape.
-   - Pole #1 only (default): expect web Mastery ~T+2:30-3:30.
-   - Pole #1 + "A" (`HCTF_WEB_TIMED_LIVE_FIRST=1`): expect web TT/Mastery each ~35s faster.
-   - Tune `HCTF_WEB_LIVE_FIRST_BUDGET` (5s start) so the first attempt reliably returns `solver_incomplete` with
-     `missing` populated (NOT `solver_error` — a live-answer needs the field list).
-2. Record a KPI row per config; compare web finish T+ per mode (never rank on total — [[incomplete-runs-not-best]]).
-3. Merge `d22-web-critical-path` to master once the rehearsal replay confirms web improves with no regressions; sync alt.
+## Validation plan — ALT IS FRESH ON DAY 22, so web runs for real
+The "web excluded from replays" caveat only applies to a SELF-replay of an already-solved day (the solved web single is
+sticky-accepted, not freshly exploited; `replay_main_self.sh` sets `web-*` aside for that reason). **Alt has NOT solved
+Day 22**, so the validation is a plain LIVE run of Day 22 on a rehearsal copy against the real GM — web runs naturally with FRESH
+targets (single + TT + Mastery all genuinely exploited). No replay-GM/local-serve needed; no web-aside.
+1. Sync the branch harness (`hctf/`, `skills/web`) onto the rehearsal copy; run `hctf run --day 22 --local 5` on a rehearsal copy with:
+   - **Pole #1** on by default (`HCTF_WEB_PRE_MASTERY_HARDEN` unset) — expect web Mastery ~T+2:30-3:30 (was 7:50).
+   - **Pole #2 "A"**: `HCTF_WEB_TIMED_LIVE_FIRST=1` — expect web TT/Mastery each ~35s faster; watch the `routed`
+     line show `live-first Ns` and the first attempt return `solver_incomplete` with `missing` populated (NOT
+     `solver_error` — a live-answer needs the field list; tune `HCTF_WEB_LIVE_FIRST_BUDGET`, 5s start).
+   - **Pole B**: watch whether TT/Mastery now solve FIRST-TRY (solver produced proof, no live-answer) — the win that
+     makes "A" unnecessary. Read a web worker's go-text line for the pole #3 `[retrieval/timed-prefetch/prompt-build]`
+     split to name the single's ~11.5s.
+2. Record a KPI row; compare web finish T+ per mode (never rank on total — [[incomplete-runs-not-best]]).
+3. Merge `d22-web-critical-path` to master once alt confirms web improves with no regressions; sync both copies.
 
 ## Flags (all reversible)
 - `HCTF_WEB_PRE_MASTERY_HARDEN=1` — restore the old blocking pre-Mastery harden (pole #1 off).

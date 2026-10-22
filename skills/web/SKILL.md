@@ -51,3 +51,20 @@ Locate things by structure (route name, header, field) rather than by offset or 
 variants rename hosts, ids, paths and reorder entries. When an answer must be FETCHED from the live target, keep the
 request-building in `solve.py` with a short timeout and the base URL read from the contract, so each variant's answer
 is fetched, not stored.
+
+# proof-* fields: solve.py MUST re-exploit (this is the whole lane's speed)
+A `proof-*` (or any field you can only get by exploiting the target: an uploaded-file result, a forged/signed request,
+a dumped secret) is NOT solved by doing the exploit by hand in the shell and typing the answer. The timed modes run
+your `solve.py` against a BRAND-NEW target (this single's target dies with HTTP 410 the instant the single is CORRECT),
+so a `proof` you got by hand, hardcoded, or fetched once is EMPTY on that fresh target -> the harness falls back to a
+slow per-attempt live-answer worker (~40 s/mode) and the lane misses sub-2-min. Instead:
+- Put the FULL exploit in `solve.py` as a function `exploit(base_url) -> answer` that re-runs end to end against
+  `contract["targets"]` (recon the fresh target if the path/id/token is per-target, then upload / forge / trigger /
+  read), with short timeouts and a browser UA. No step may depend on state from your manual session.
+- **Before you submit the single, RUN your `solve.py` against THIS live target and confirm it reproduces EVERY field,
+  proof included** (`hctf submit --from-solver` or just run it). This is the one lane where reaching the live service to
+  self-verify is REQUIRED (it overrides the generic "don't reach a backend to confirm" rule) -- because the target is
+  about to disappear and TT/Mastery get a fresh one. A single that passed only because you typed the proof by hand, but
+  whose `solve.py` leaves it empty, is a FAIL you just can't see yet.
+- If the exploit is genuinely one-shot/non-replayable on a fresh target, say so in a comment -- the live-answer fallback
+  will handle it -- but assume it IS replayable until the live run proves otherwise; almost every web proof is.
