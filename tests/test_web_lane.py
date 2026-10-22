@@ -638,6 +638,41 @@ finally:
     for p in (ROOT / ".run" / "tmp-timed").glob("web_exploitation_day_20_test*"):
         shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink()
 
+# 13) D22 fix: _web_speed_gate no longer BLOCKS Mastery on a live web lane. Today the pre-Mastery speed harden
+#     serialized ~4.5 min of generalize ahead of a 14 s solve (web 7:50 vs a 1:35 standard board). Live web + a slow TT
+#     solver -> no pre-Mastery generalize (first attempt runs now; the blocked-path live-answer recovers a slow one).
+#     HCTF_WEB_PRE_MASTERY_HARDEN=1 restores the old blocking gate; a non-live (untimed) lane still hardens before Mastery.
+def _speed_gate_gens(lane, force_harden):
+    ch = orchestrate.Chain.__new__(orchestrate.Chain)
+    ch.lane = lane
+    ch.entries = {"time_trial": {"id": "x/time_trial"}}
+    ch._web_gate_done = False
+    gens = []
+    saved = {
+        (orchestrate, "say"): orchestrate.say,
+        (orchestrate.timed, "last_result"): orchestrate.timed.last_result,
+        (orchestrate.Chain, "generalize"): orchestrate.Chain.generalize,
+        (orchestrate, "WEB_PRE_MASTERY_HARDEN"): orchestrate.WEB_PRE_MASTERY_HARDEN,
+    }
+    try:
+        orchestrate.say = lambda *a, **k: None
+        orchestrate.timed.last_result = lambda cid: {"phases": {"solve": 40.0}}
+        orchestrate.Chain.generalize = lambda self, cid, wrong=None, fixed=None, diag=None: gens.append(diag)
+        orchestrate.WEB_PRE_MASTERY_HARDEN = force_harden
+        orchestrate.Chain._web_speed_gate(ch, "x/mastery")
+    finally:
+        for (mod, name), v in saved.items():
+            setattr(mod, name, v)
+    return gens
+
+
+check("13 web speed gate: live web + slow TT solver -> NO blocking pre-Mastery harden (default)",
+      _speed_gate_gens("web-exploitation", False) == [])
+check("13 web speed gate: HCTF_WEB_PRE_MASTERY_HARDEN=1 restores the old blocking harden",
+      len(_speed_gate_gens("web-exploitation", True)) == 1)
+check("13 web speed gate: non-live (untimed) lane still hardens before Mastery",
+      len(_speed_gate_gens("binary-reverse-engineering", False)) == 1)
+
 if failures:
     print(f"\n{len(failures)} FAILED: {failures}")
     sys.exit(1)

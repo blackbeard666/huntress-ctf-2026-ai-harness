@@ -614,6 +614,12 @@ SINGLE_SPEED_BUDGET = float(os.environ.get("HCTF_SINGLE_SPEED_BUDGET", "2.5"))
 # solver that took longer than this will trip the Mastery (web's 60 s untimed budget / live-target exit latency), so
 # harden it for speed BEFORE Mastery, overlapping the live target's provisioning (off the mastery clock).
 WEB_SPEED_GATE = float(os.environ.get("HCTF_WEB_SPEED_GATE", "15"))
+# D22: that pre-Mastery harden is a BLOCKING generalize. On a live web lane the target is ready in ~5 s and the Mastery
+# has no clock, so blocking in front of it just serialized ~4.5 min of generalize ahead of a 14 s solve (web 7:50 vs a
+# 1:35 standard board). Default OFF for live web lanes: the first Mastery attempt runs now and the blocked-path
+# live-answer+generalize race recovers a slow attempt (post-run speed-harden still banks the fast solver). Untimed
+# NON-web Mastery keeps the blocking harden (no live target to answer). Set =1 to restore the old blocking gate.
+WEB_PRE_MASTERY_HARDEN = os.environ.get("HCTF_WEB_PRE_MASTERY_HARDEN", "0") == "1"
 SINGLE_SPEED_RETIME = os.environ.get("HCTF_SINGLE_SPEED_RETIME", "1") != "0"   # re-time once alone before flagging
 # Time Trial scouting before Mastery (hctf/scout.py): extra TT attempts that harvest new variants and learn label
 # spellings on the cheap clock. 0 = off. `hctf run --scout N` overrides.
@@ -4006,6 +4012,16 @@ class Chain:
         except (TypeError, ValueError):
             return
         if solve_s > WEB_SPEED_GATE:
+            from . import webtarget
+            live_lane = webtarget.is_live_lane(getattr(self, "lane", None))
+            if live_lane and not WEB_PRE_MASTERY_HARDEN:
+                # D22: don't BLOCK Mastery on the harden. The live target is ready in ~5 s and the Mastery has no clock;
+                # the first attempt runs now, a slow-solver block is recovered by the blocked-path live-answer race
+                # (~100 s vs a ~4.5 min blocking generalize), and post-run speed-harden still banks the fast solver.
+                say(f"[{cid}] Time Trial solver took {solve_s:.1f}s (> {WEB_SPEED_GATE:g}s gate): NOT blocking Mastery "
+                    "on a speed harden (live target, no clock) -- first attempt runs now, blocked-path live-answer "
+                    "recovers a slow attempt; post-run speed-harden banks the fast solver")
+                return
             say(f"[{cid}] Time Trial solver took {solve_s:.1f}s (> {WEB_SPEED_GATE:g}s gate): hardening for speed "
                 "BEFORE Mastery (overlaps the live target's provisioning)")
             self.generalize(cid, wrong=None, fixed=None, diag={"solver_too_slow": True, "single_seconds": solve_s})
