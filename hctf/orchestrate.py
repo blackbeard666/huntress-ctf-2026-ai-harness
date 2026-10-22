@@ -27,6 +27,10 @@ CREDIT_SOFT = float(os.environ.get("HCTF_CREDIT_SOFT", "4"))   # below: no new H
 CREDIT_HARD = float(os.environ.get("HCTF_CREDIT_HARD", "1.5"))  # below: no new timed starts; VM kept for GM
 SINGLE_TIMEOUT = int(os.environ.get("HCTF_SINGLE_TIMEOUT", str(25 * 60)))
 GENERALIZE_TIMEOUT = int(os.environ.get("HCTF_GENERALIZE_TIMEOUT", str(12 * 60)))
+# Live-web Mastery generalize + its racers get a tighter cap than the global one. With the always-raced short-circuit
+# (A1/A3) the first ACCEPTABLE solver cancels the rest, so this only bites when NO participant has a valid fix yet; kept
+# above the observed racer completion (~5 min). Day 21: a solo local worker with no racer ran the full 12 min.
+WEB_MASTERY_GEN_TIMEOUT = int(os.environ.get("HCTF_WEB_MASTERY_GEN_TIMEOUT", "480"))
 MAX_SINGLE_LAUNCHES = 3
 MAX_TIMED_RETRIES = 5
 CLOCK_RETRIES = int(os.environ.get("HCTF_CLOCK_RETRIES", "12"))  # extra retries for pure clock expiries
@@ -606,6 +610,10 @@ SPEC_POLL = float(os.environ.get("HCTF_SPEC_POLL", "0.25"))  # D9: single CORREC
 # Homebase is ~1.5x slower and the 7-13 s window also pays GM start/download/submit (blind D7 replay: binary 5.9 s ->
 # Time Trial exec_error "too slow", one attempt + ~30 s burned before the speed fix even started). 0 disables.
 SINGLE_SPEED_BUDGET = float(os.environ.get("HCTF_SINGLE_SPEED_BUDGET", "2.5"))
+# A7: a web / untimed Mastery has no window to estimate from, so gate on the Time Trial's MEASURED solve seconds. A
+# solver that took longer than this will trip the Mastery (web's 60 s untimed budget / live-target exit latency), so
+# harden it for speed BEFORE Mastery, overlapping the live target's provisioning (off the mastery clock).
+WEB_SPEED_GATE = float(os.environ.get("HCTF_WEB_SPEED_GATE", "15"))
 SINGLE_SPEED_RETIME = os.environ.get("HCTF_SINGLE_SPEED_RETIME", "1") != "0"   # re-time once alone before flagging
 # Time Trial scouting before Mastery (hctf/scout.py): extra TT attempts that harvest new variants and learn label
 # spellings on the cheap clock. 0 = off. `hctf run --scout N` overrides.
@@ -983,6 +991,51 @@ def _link_or_copy(src, dst):
     return shutil.copy2(src, dst)
 
 
+def upgrade_solver_main(sdir):
+    """A cumulative/prior lane carries yesterday's solver forward; if its main() is the OLDER skeleton main() without
+    the partial-emit contract, a slow Mastery exec_errors (warmups Mastery, Day 21) instead of handing the untimed
+    runner a partial to finish in-attempt -> a needless generalize. Replace ONLY the main() function with the CURRENT
+    skeleton's (partial-emit via lib.solverrt) and add the import, keeping answer()/fallback()/helpers untouched.
+    No-op if already upgraded, not skeleton-shaped, or the result doesn't compile (safety net: never break a custom
+    solver). HCTF_UPGRADE_MAIN=0 disables."""
+    import ast as _ast
+    if os.environ.get("HCTF_UPGRADE_MAIN", "1") == "0":
+        return False
+    p = Path(sdir) / "solve.py"
+    try:
+        src = p.read_text()
+    except OSError:
+        return False
+    if "solverrt" in src or "def _solve_pairs" not in src or "json.dumps(out)" not in src:
+        return False   # already upgraded, or not a skeleton-shaped solver (e.g. the metadata/web seed)
+    try:
+        tree = _ast.parse(src)
+        main_node = next((n for n in tree.body if isinstance(n, _ast.FunctionDef) and n.name == "main"), None)
+        skel = (ROOT / "hctf" / "templates" / "solve_skeleton.py").read_text()
+        skel_main = next((n for n in _ast.parse(skel).body if isinstance(n, _ast.FunctionDef) and n.name == "main"), None)
+    except (OSError, SyntaxError):
+        return False
+    if not main_node or not skel_main:
+        return False
+    lines = src.splitlines(keepends=True)
+    new_main = "".join(skel.splitlines(keepends=True)[skel_main.lineno - 1:skel_main.end_lineno])
+    new_src = "".join(lines[:main_node.lineno - 1]) + new_main + "".join(lines[main_node.end_lineno:])
+    mm = re.search(r"\nfrom lib\.common import [^\n]*(?:\n[ \t]+[^\n]*)*\n", new_src)
+    if not mm:
+        return False
+    new_src = (new_src[:mm.end()]
+               + "from lib import solverrt  # noqa: E402  -- partial-emit on deadline (cumulative-lane upgrade)\n"
+               + new_src[mm.end():])
+    try:
+        fns = {n.name for n in _ast.parse(new_src).body if isinstance(n, _ast.FunctionDef)}
+    except SyntaxError:
+        return False
+    if "main" not in fns or "_solve_pairs" not in fns:
+        return False
+    p.write_text(new_src)
+    return True
+
+
 def stage_prior_solver(prior, sdir, cases=True):
     """Copy an earlier day's solver dir (__pycache__ and generalize scratch excluded; cases/ only when `cases`) into
     `sdir`, keeping anything already there. Returns `sdir`."""
@@ -990,18 +1043,29 @@ def stage_prior_solver(prior, sdir, cases=True):
     sdir.mkdir(parents=True, exist_ok=True)
     skip = ("__pycache__", ".generalize-*", "*.pyc") + (() if cases else ("cases",))
     shutil.copytree(prior, sdir, dirs_exist_ok=True, ignore=shutil.ignore_patterns(*skip), copy_function=_link_or_copy)
+    try:
+        if upgrade_solver_main(sdir):   # bring a carried-forward skeleton main() up to the partial-emit contract
+            say(f"[{Path(sdir).name}] upgraded carried-forward solve.py main() to the partial-emit contract")
+    except Exception as e:  # noqa: BLE001 - best-effort; a failure leaves the staged solver exactly as copied
+        say(f"[{Path(sdir).name}] solver main() upgrade skipped: {e}")
     return sdir
 
 
 # Lanes whose single starts from the LANE solver (challenges/_lane/<lane>/solver, a cumulative registry front-end)
 # instead of the bare skeleton. Off ("") = the skeleton, as before.
-LANE_SEED_LANES = {x.strip() for x in os.environ.get("HCTF_LANE_SEED_LANES", "metadata-forensics").split(",") if x.strip()}
+LANE_SEED_LANES = {x.strip() for x in os.environ.get("HCTF_LANE_SEED_LANES", "metadata-forensics,web").split(",") if x.strip()}
 
 
 def lane_seed_dir(lane):
     """The lane solver dir to seed a new day's solver from, or None (lane not seeded / no lane solver)."""
     if lane not in LANE_SEED_LANES:
         return None
+    from . import webtarget
+    if webtarget.is_live_lane(lane):
+        # web (B2): seed the GENERIC /api/clues-dispatch solver (challenges/_lane/web/solver). Resolved directly, NOT
+        # via lane_solver_dirs -- web has no bytes, so it is a SEED only, never a byte-reproduction race candidate.
+        d = paths.LANE_SOLVERS / lane / "solver"
+        return d if (d / "solve.py").exists() else None
     dirs = paths.lane_solver_dirs(lane)
     return dirs[0] if dirs else None
 
@@ -1021,6 +1085,17 @@ def lane_seed_note(seed, sdir):
             "with `.venv/bin/python` (LnkParse3, regipy, python-evtx, pefile, oletools live there, not in the system "
             "python3). Note any new field in `## Proposed lib additions` of solver/NOTES.md; the post-run ratchet "
             "folds it into lib/meta.")
+
+
+def web_seed_note(sdir):
+    return (f"The harness SEEDED `{Path(sdir).relative_to(ROOT)}/solve.py` from the GENERIC web solver (`lib.web`): "
+            "it reads GET /api/clues, dispatches on the single concept-specific KEY (never the value -- the documented "
+            "pitfall), races the matching class handler + every earlier web day's answer() + a general `default` ladder, "
+            "and returns the proof_<hex>. It already solves every KNOWN vuln class, so run it FIRST "
+            "(`.venv/bin/python solve.py --contract <contract.json> --artifacts <dir>`) and confirm. Do NOT rewrite it. "
+            "ONLY if /api/clues shows a brand-new clue key the dispatch does not recognise, add a handler in "
+            "`lib/web/handlers/` and map its key in `_KEY_MAP` (the `default` ladder makes a real attempt meanwhile); "
+            "note it under `## Proposed lib additions` in solver/NOTES.md and the post-run ratchet folds it in.")
 
 
 def stage_prior_cases(prior, sdir):
@@ -1383,6 +1458,11 @@ PREPUSH_AT_STAMP = os.environ.get("HCTF_PREPUSH_AT_STAMP", "1") != "0"   # start
 PREPUSH_STABLE = float(os.environ.get("HCTF_PREPUSH_STABLE", "1.0"))
 PREPUSH_SPEC_MAX = int(os.environ.get("HCTF_PREPUSH_SPEC_MAX", "12"))   # 12-140 KB tars, no warm: a bound, not a budget
 PRIOR_DRY_RUN_SECONDS = float(os.environ.get("HCTF_PRIOR_DRY_RUN_SECONDS", "15"))
+# E2: scale the dry-run budget with the contract size. Day 21 binary: a 252-field cumulative contract timed out at the
+# flat 15 s having answered 0/252, so the single went full-LLM (~66 s). GO_EARLY means the dry run never holds the go,
+# so a longer run only delivers a better seed note via the inbox -- pure upside. Flat restored with PER_FIELD=0.
+PRIOR_DRY_RUN_PER_FIELD = float(os.environ.get("HCTF_PRIOR_DRY_RUN_PER_FIELD", "0.15"))
+PRIOR_DRY_RUN_MAX = float(os.environ.get("HCTF_PRIOR_DRY_RUN_MAX", "60"))
 COMPOUND_PROBE_SECONDS = float(os.environ.get("HCTF_COMPOUND_PROBE_SECONDS", "45"))
 # Web: live compounding check (web_compound_probe) beside the Time Trial; before Mastery the Mastery target is requested
 # first (its provisioning can take ~5 min), then the check is awaited up to WEB_COMPOUND_WAIT s and a miss is generalized
@@ -1717,8 +1797,10 @@ class Chain:
         art = timed.latest_artifacts(cid)
         if not (PRIOR_DRY_RUN and prior and contract and art):
             return
+        ids = contract.get("answer_ids") or contract.get("questions") or []
+        secs = max(PRIOR_DRY_RUN_SECONDS, min(PRIOR_DRY_RUN_MAX, len(ids) * PRIOR_DRY_RUN_PER_FIELD))
         self._dry_fut = ThreadPoolExecutor(max_workers=1).submit(
-            lambda: solvers.dry_run_diagnostics(prior, contract, art, PRIOR_DRY_RUN_SECONDS,
+            lambda: solvers.dry_run_diagnostics(prior, contract, art, secs,
                                                 known=prior_case_shapes(prior), shape=field_shape))
 
     def _recon_deferrable(self):
@@ -1787,12 +1869,14 @@ class Chain:
             w.cancel()
 
     def run_worker(self, cid, stage, prompt, timeout, urgent=False, prefer_homebase=False, stop=None, warm=None,
-                   warm_task=None, env_extra=None):
+                   warm_task=None, env_extra=None, force_local=False):
         env = self._worker_env(cid, stage)
         if env_extra:
             env.update(env_extra)   # e.g. HCTF_X_EFFORT / HCTF_LOG_POOL for a second worker on the same challenge
         # A warm worker is already running locally: it takes no pool slot (and so must not release one).
-        acquired = not urgent and not (warm is not None and warm.alive())
+        # force_local (A2): pin to local so a `stop` event can actually cancel the worker -- run_homebase does NOT honor
+        # `stop`, so a Homebase-placed generalize would run to its full timeout even after a racer won (Day 21).
+        acquired = not urgent and not force_local and not (warm is not None and warm.alive())
         pool = self.pools.acquire(prefer_homebase) if acquired else "local"
         set_state(self.base, worker=f"{stage}@{pool}")
         say(f"[{cid}] {stage} worker -> {pool}{' (warm)' if warm is not None else ''} (timeout {timeout:.0f}s)")
@@ -2050,8 +2134,15 @@ class Chain:
             live.link(green)   # a live-answer pass ends this worker (its edits are still judged by _accept_or_restore)
         if harvest:
             harvesting.set()
+        from . import webtarget  # noqa: E402
+        # A1/A3 (web-scoped generalize short-circuit): a web Mastery generalize is ALWAYS raced (so a racer can cancel
+        # the local worker), and for web Mastery the "fast" win-bar is relaxed to the accept-bar -- Homebase / the live
+        # target runs the solver, so correctness (targets pass, no regression), not a local <2 s time, is what the
+        # re-attempt needs; requiring `fast` made a correct-but-slow racer lose to a 12-min local grind (Day 21).
+        web_m = webtarget.is_live_lane(self.lane) and mode == "mastery"
+        need_fast = bool(d.get("solver_too_slow")) and not web_m
         watch = threading.Thread(target=self._watch_green, daemon=True,
-                                 args=(targets, set(self._baseline), bool(d.get("solver_too_slow")), green, done, fill,
+                                 args=(targets, set(self._baseline), need_fast, green, done, fill,
                                        harvesting))
         if (targets or fill) and STOP_WHEN_READY:
             watch.start()
@@ -2066,11 +2157,16 @@ class Chain:
         gen_duel = None
         if not harvest and (targets or fill) and STOP_WHEN_READY:
             lab = label_only_failure(wrong)
-            gen_duel = self._maybe_start_gen_duel(cid, prompt, targets, fill, bool(d.get("solver_too_slow")), green,
-                                                  first=lab or bool(d.get("solver_too_slow")), quick=lab)
+            # E1b: an untimed Mastery generalize is the chain's LAST mode -- backgrounding it can't hide it (nothing
+            # else to do), so instead RACE it (like web) so a racer cancels the solo local worker (Day 21: warmups
+            # Mastery ran an 82 s solo generalize with no racer). Partial-emit (lib.solverrt) usually avoids it entirely.
+            um = mode == "mastery" and self._expect_untimed()
+            gen_duel = self._maybe_start_gen_duel(cid, prompt, targets, fill, need_fast, green,
+                                                  first=lab or need_fast or web_m or um, quick=lab)
         try:
             self._gen_prompt = prompt   # a background generalize after a live pass reuses it (_start_bg_gen)
-            self.run_worker(cid, "generalize", prompt, GENERALIZE_TIMEOUT, stop=green)
+            self.run_worker(cid, "generalize", prompt, WEB_MASTERY_GEN_TIMEOUT if web_m else GENERALIZE_TIMEOUT,
+                            stop=green, force_local=web_m)
         finally:
             self._restore_expected(cid, expected_before)
             done.set()
@@ -3076,9 +3172,11 @@ class Chain:
                 staged = ThreadPoolExecutor(max_workers=1).submit(stage_prior_solver, prior, self.sdir, False)
             elif seed:
                 # Lane solver seed (metadata): every verified family is already in lib/meta -> the worker adds only today's
-                # field in local_answer(), and the ratchet folds it in tonight.
+                # field in local_answer(), and the ratchet folds it in tonight. web (B2): the generic /api/clues solver.
                 stage_prior_solver(seed, self.sdir, cases=False)
-                self._lane_seed_note = lane_seed_note(seed, self.sdir)
+                from . import webtarget
+                self._lane_seed_note = (web_seed_note(self.sdir) if webtarget.is_live_lane(self.lane)
+                                        else lane_seed_note(seed, self.sdir))
             else:
                 # Nothing reusable: start the worker from the harness skeleton (contract I/O, per-set loop, sha256-paired
                 # artifact lookup incl. Mastery's 'delivery N: x.apk' names) instead of hunting for a template (10-15s
@@ -3881,6 +3979,28 @@ class Chain:
             self.generalize(cid, wrong=None, fixed=None, diag={"solver_too_slow": True, "mastery_estimate": est,
                                                                  "single_seconds": est})
 
+    def _web_speed_gate(self, cid):
+        """A7: for a web / untimed Mastery (no window to estimate from), gate on the Time Trial's MEASURED solve time.
+        A TT solver over WEB_SPEED_GATE will trip the Mastery (the 60 s untimed budget / live-target exit latency), so
+        harden it for speed BEFORE the first Mastery attempt -- which overlaps the Mastery target's provisioning, so the
+        speed generalize is off the mastery clock (A1/A3/A5 bound it). Idempotent per chain."""
+        if getattr(self, "_web_gate_done", False) or not WEB_SPEED_GATE:
+            return
+        self._web_gate_done = True
+        tt = self.entries.get("time_trial")
+        if not tt:
+            return
+        last = timed.last_result(tt["id"]) or {}
+        solve_s = (last.get("phases") or {}).get("solve") or last.get("elapsed")
+        try:
+            solve_s = float(solve_s)
+        except (TypeError, ValueError):
+            return
+        if solve_s > WEB_SPEED_GATE:
+            say(f"[{cid}] Time Trial solver took {solve_s:.1f}s (> {WEB_SPEED_GATE:g}s gate): hardening for speed "
+                "BEFORE Mastery (overlaps the live target's provisioning)")
+            self.generalize(cid, wrong=None, fixed=None, diag={"solver_too_slow": True, "single_seconds": solve_s})
+
     def _note_single_speed(self, cid, seconds, rerun=None):
         """Flag a single solver over SINGLE_SPEED_BUDGET for a speed generalize before the first timed attempt -- after
         re-timing it ONCE alone: the first timing is taken at the drop beside 5 lanes' races/probes (rehearsal fair D14:
@@ -4212,8 +4332,10 @@ class Chain:
         if mode == "mastery":
             if TT_FIX_GATE:
                 self._tt_fix_gate(cid)
-            if self._tt_pool_untimed():
-                say(f"[{cid}] untimed pool: no Mastery speed gate (no clock to beat)")
+            from . import webtarget
+            if webtarget.is_live_lane(getattr(self, "lane", None)) or self._tt_pool_untimed():
+                # A7: web/untimed have no clock to estimate against -> gate on the TT's measured solve time instead.
+                self._web_speed_gate(cid)
             else:
                 self._mastery_speed_gate(cid)
         clock_retries = 0

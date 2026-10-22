@@ -1155,6 +1155,15 @@ def c_run(a):
     orchestrate.run(day=a.day, only=a.only, local_slots=a.local, hb_slots=a.homebase, modes=a.modes,
                     prewarm_homebase=pre, keep_homebase=getattr(a, "keep_homebase", False),
                     scout_rounds=getattr(a, "scout", None), wait_release=getattr(a, "wait_release", False))
+    # Clean exit: the run spawns many ThreadPoolExecutors that are never shut down, so concurrent.futures' atexit
+    # handler joins their worker threads at interpreter exit -- a stuck background probe there HANGS the process after
+    # the run has already finished (observed on live runs: needed a manual reap). Results + post-run are done and
+    # driftwatch/prebuild are detached subprocesses, so flush and os._exit(0) to bypass that join.
+    # HCTF_RUN_CLEAN_EXIT=0 restores the normal return (debugging).
+    if os.environ.get("HCTF_RUN_CLEAN_EXIT", "1") != "0":
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)
     return 0
 
 

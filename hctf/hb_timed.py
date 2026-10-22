@@ -1559,7 +1559,16 @@ def _solve_budget(body, left_at_start):
     left = _deadline_left(body)
     if left is None:
         if body.get("deadline") is None and (body.get("practice") or body.get("run_for_time") is False):
-            return float(_opt("HCTF_UNTIMED_BUDGET", "60"))   # an untimed regular / practice attempt: no clock at all
+            # An untimed regular / practice attempt has NO clock; this cap only bounds a slow/hung solver. Scale it with
+            # the contract size: a large Mastery (many sets/fields) legitimately needs longer than a flat 60 s, and the
+            # solver now emits partials at the deadline (lib.solverrt.arm_deadline), so a generous cap just lets a slow-
+            # but-correct solver finish fully instead of handing a partial to in-attempt localize. D16: a 5475-id script
+            # Mastery was guillotined at 60 s. Flat behaviour restored by HCTF_UNTIMED_BUDGET_PER_FIELD=0.
+            base = float(_opt("HCTF_UNTIMED_BUDGET", "60"))
+            n = len(body.get("answer_ids") or body.get("questions") or [])
+            per = float(_opt("HCTF_UNTIMED_BUDGET_PER_FIELD", "0.05"))
+            cap = float(_opt("HCTF_UNTIMED_BUDGET_MAX", "300"))
+            return max(base, min(cap, base + n * per))
         left = left_at_start if left_at_start is not None else 30
     return max(2, left - 1.5)
 

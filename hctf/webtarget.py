@@ -44,8 +44,8 @@ STOP_AFTER_CORRECT = os.environ.get("HCTF_WEB_STOP_AFTER_CORRECT", "1") != "0"
 # `retry` came up in 11-18 s (10/10) -- and a retry on an unsolved attempt hands back the SAME attempt once it is live.
 # Kicks alternate public `retry` / arena `start` (a Single Solve has no retry: arena only); never `switch_target`.
 KICK = os.environ.get("HCTF_WEB_KICK", "1") != "0"
-KICK_AFTER = float(os.environ.get("HCTF_WEB_KICK_AFTER", "15"))
-KICK_EVERY = float(os.environ.get("HCTF_WEB_KICK_EVERY", "30"))
+KICK_AFTER = float(os.environ.get("HCTF_WEB_KICK_AFTER", "5"))    # C1: a fresh start can wedge minutes, but a retry
+KICK_EVERY = float(os.environ.get("HCTF_WEB_KICK_EVERY", "15"))   # returns the SAME attempt in 11-18 s -> kick EARLY
 MAX_KICKS = int(os.environ.get("HCTF_WEB_MAX_KICKS", "4"))
 LIVE_CASE_TTL = 25 * 60     # a live compounding case's target: an idle untimed web target stops after ~30 min
 
