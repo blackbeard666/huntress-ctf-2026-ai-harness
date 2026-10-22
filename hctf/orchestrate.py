@@ -3094,12 +3094,21 @@ class Chain:
         # A mode with no local trace at all (fresh drop: no start.json / submissions yet) can't be solved by us yet:
         # skip gm_solved's status round trip (~2s on every lane at the drop) -- `start` below answers it anyway.
         fresh = not any((cli.cdir(cid) / f).exists() for f in ("start.json", "submissions.jsonl", "solved_once"))
-        if cli.is_complete(cid) or (not fresh and cli.gm_solved(cid)):
+        from . import webtarget
+        web_live = webtarget.is_live_lane(self.lane)
+        if cli.is_complete(cid) or ((not fresh or web_live) and cli.gm_solved(cid)):
             # Solved: a solver that exists is good enough to proceed. Failing auto-* variant cases are the timed
             # stages' business (they feed the generalize worker); they must not relaunch the Single Solve worker.
-            if welcome or (self.sdir / "solve.py").exists() or all(
+            # web_live: a live-web single the GM already marks solved (resume/replay wipes local start.json, so
+            # is_complete lags) is ACCEPTED here -- a solved single is permanently CORRECT with NO fresh target to
+            # re-exploit, so running a live worker against a non-existent target only fails; the timed modes
+            # re-provision their own fresh targets (retry/start -> `active`). On a fresh day gm_solved is False, so
+            # this never fires and the normal live worker runs.
+            if welcome or web_live or (self.sdir / "solve.py").exists() or all(
                     cli.gm_solved(self.entries[m]["id"]) for m in ("time_trial", "mastery") if m in self.entries):
-                if not welcome:
+                if web_live:
+                    say(f"[{cid}] web single already solved (GM CORRECT) -- proceeding to the timed modes")
+                elif not welcome:
                     ok, _ = ensure_case_and_test(cid, self.sdir)
                     say(f"[{cid}] already solved (solver regression {'ok' if ok else 'has failing cases'})")
                 return True
