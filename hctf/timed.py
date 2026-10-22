@@ -392,7 +392,7 @@ def ensure_started(cid, log=None):
     return body, None
 
 
-def run(cid, solver_dir, fix=None, log=print, op="start", on_event=None, force_local=False):
+def run(cid, solver_dir, fix=None, log=print, op="start", on_event=None, force_local=False, budget=None):
     """Execute one timed attempt. The clock-critical start->download->solve->submit runs LOCALLY against
     the public GM (pairing token; direct HTTPS is fast enough for the ~6s windows), or on Homebase over SSH
     as a fallback. The solver must already be correct (built/generalised offline).
@@ -406,7 +406,7 @@ def run(cid, solver_dir, fix=None, log=print, op="start", on_event=None, force_l
     with _inflight_lock:
         _inflight += 1
     try:
-        res = workers.run_timed_auto(solver_dir, cid, op=op, log=log, force_local=force_local,
+        res = workers.run_timed_auto(solver_dir, cid, op=op, log=log, force_local=force_local, budget=budget,
                                      **({"on_event": on_event} if on_event else {}))
     finally:
         with _inflight_lock:

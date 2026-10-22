@@ -673,6 +673,37 @@ check("13 web speed gate: HCTF_WEB_PRE_MASTERY_HARDEN=1 restores the old blockin
 check("13 web speed gate: non-live (untimed) lane still hardens before Mastery",
       len(_speed_gate_gens("binary-reverse-engineering", False)) == 1)
 
+# 14) D22 pole #2 (live-first): run_timed_auto's web branch forwards a `budget` to run_timed (the capped first-attempt
+#     solver seconds); a non-web dispatch does not get the web branch. The orchestrate retry loop only sets that budget
+#     on attempt 0 of a live lane when HCTF_WEB_TIMED_LIVE_FIRST=1 (default off -> budget None -> full solver).
+from hctf import workers as _workers  # noqa: E402
+
+
+def _web_budget_forwarded(budget):
+    got = {}
+    saved = {
+        "run_timed": _workers.run_timed,
+        "is_live_cid": webtarget.is_live_cid,
+        "untimed_plan": _workers.untimed_plan,
+    }
+    try:
+        _workers.run_timed = lambda sd, cid, op="start", timeout=60, budget=None: got.update(budget=budget) or {"result": "x"}
+        webtarget.is_live_cid = lambda cid: True
+        _workers.untimed_plan = lambda cid: (10, 0, 0)
+        _workers.run_timed_auto(Path("/x"), "web-exploitation-day-20-test", budget=budget)
+    finally:
+        _workers.run_timed, webtarget.is_live_cid, _workers.untimed_plan = (
+            saved["run_timed"], saved["is_live_cid"], saved["untimed_plan"])
+    return got.get("budget")
+
+
+check("14 live-first: run_timed_auto web branch forwards the capped budget to run_timed",
+      _web_budget_forwarded(5) == 5)
+check("14 live-first: no budget (None) threads through unchanged (full solver / flag off)",
+      _web_budget_forwarded(None) is None)
+check("14 live-first: default flag is OFF (opt-in; validated on the rehearsal replay)",
+      _workers.WEB_TIMED_LIVE_FIRST is False)
+
 if failures:
     print(f"\n{len(failures)} FAILED: {failures}")
     sys.exit(1)

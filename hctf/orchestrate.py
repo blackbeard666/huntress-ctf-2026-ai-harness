@@ -4410,7 +4410,17 @@ class Chain:
                 op = {"op": "untimed"}
             else:
                 op = {"op": "retry"} if left is not None and left <= 0 else {}
-            res = timed.run(cid, self.sdir, log=say, **op, **self._early_kw(cid, untimed))
+            # D22 pole #2 (live-first): on the FIRST web live-lane attempt, cap the solver so it blocks fast and the
+            # blocked-path live-answer takes over at once (the web solver can't do the live `proof` field anyway).
+            # Retries (attempt > 0) and untimed/banked ops run the full solver. Default off (HCTF_WEB_TIMED_LIVE_FIRST).
+            lf = {}
+            from . import webtarget
+            if (workers.WEB_TIMED_LIVE_FIRST and attempt == 0 and not untimed and not live_banked
+                    and webtarget.is_live_lane(getattr(self, "lane", None))):
+                lf = {"budget": workers.WEB_LIVE_FIRST_BUDGET}
+                say(f"[{cid}] live-first: first web attempt capped to {workers.WEB_LIVE_FIRST_BUDGET:g}s solver -> "
+                    "blocks fast, live-answer takes the open attempt (retry runs the full solver)")
+            res = timed.run(cid, self.sdir, log=say, **op, **lf, **self._early_kw(cid, untimed))
             if res == "error:exec" and self._gm_passed(cid):
                 res = "correct"
             if res == "correct" and mode == "time_trial":
