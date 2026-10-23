@@ -174,6 +174,34 @@ Superseded: pole #2's blunt first-attempt budget cap (`HCTF_WEB_TIMED_LIVE_FIRST
 classes and #8 makes the class dispatchable. Pre-existing red test found (not from this work): `tests/test_day14_s3.py`
 §9 (lane seed staging vs `upgrade_solver_main`), already failing at f90a60b6.
 
+### Replay measurement (10-23 09:24, alt, KPI row `D22 replay-pm23c`)
+Setup: the branch harness; knowledge = main's lib as of 10-22 09:50 (`.run/replay-wb21b/kbackup`: D21 ratchet in,
+nothing D22 taught — web handlers know only `session_fixation`) + this work's lib code (`.run/build_pin_d22.sh`,
+directory pin); `HCTF_REROLL_CORRECT=1` so every TT/Mastery is a REAL fresh variant on the real GM (now forwarded to
+Homebase too — the first two replays short-circuited as "already passed" and were discarded); standard lanes only (a D22
+web replay can't work: a replayed single is a dead 410 target, a non-replayed one is already solved).
+
+| chain | replay single / TT / M (->TT, ->M) | main live D22 (from the drop) |
+|---|---|---|
+| mobile | 11 / 29 / 45 (18, 16) | 22 / 43 / 53 (21, 10) |
+| warmups | 24 / 38 / 50 (14, **12**) | 25 / 40 / 83 (15, **43**) |
+| metadata | 18 / 46 / 67 (28, 21) | 43 / 60 / 95 (17, 35) |
+| script | 21 / 44 / 77 (23, 33) | 47 / 63 / 105 (16, 42) |
+| binary | 47 / 59 / 89 (**12**, 30) | 62 / 83 / 103 (21, 20) |
+
+**Board 1:29 vs 1:45**, 10/10 timed first-try, 0 generalizes. Attributable: warmups Mastery 43 s → 12 s (#3: the
+108-set attempt solved locally in 1.76 s vs 15.9 s + 11.8 s submit on the VM live; 63.9 s on the shared VM); binary TT 12 s
+after a 9.8 s single solver that the old 2.5 s gate would have speed-generalized (#2 — alt live: 567 s); `[shapes]`
+warmed in 0.7 s before the singles (#10). NOT attributable: single times (judged by the local replay GM, no drop load).
+Not exercised: #6/#8 (no web), #12 (no generalize), #13 (the pre-start skips already-passed modes), #4/#11 (no VM
+cut-off, no carry gap — and no false holds). Regression found and fixed: #3 on a small fan-out (mobile's 6-set Mastery
+8.5 s locally vs 1.25 s on Homebase's warm daemon) → local only from 12 sets.
+
+Next leads (from the #14 breakdowns): (1) the reuse race's `seed verify` re-runs the seed the plan already ran —
+1-10 s, 10.0 s on binary, the last single; reuse the plan's output. (2) warmups' race: one submit took 17.7 s (live D22
+too: WON at +17.6 s) — find out why. (3) Mastery `start` for big artifacts (script: 12.4 s incl. the re-roll) — the
+pre-start hides it on a fresh day; confirm on D23.
+
 ### Main for Day 23
 Run D23 from branch `d22-web-critical-path` (everything above is on it, behind flags). Warm-up: `bash bin/preflight.sh`
 (new: the host-exclusivity section must be OK) then `bash bin/day.sh 23 --wait`. What to read in `.run/day23.log`:
