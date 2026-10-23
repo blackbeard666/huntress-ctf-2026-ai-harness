@@ -42,6 +42,37 @@ timed out (12 s) and it did nothing.
 | 4b | A reconnect to the same open attempt does not resubmit values the GM already rejected there (banked `rejected`); they still reach the orchestrator as `partial_wrong` | `hb_timed._bank_save`, `_bank_rejected` | `HCTF_BANK_OVERLAY` (1) |
 | 4c | Knowledge: ZIP CD names SORTED + Mach-O cpu set ascending (the D23 ratchet already wrote these); script batch `-style` triple's expansion `call_double` for `call set` over `%%frag%%`; per-set handoff ids | `lib/knowledge.py`, D23 solver | — |
 
+## Rehearsal fair D23 validation (10-24) and the fixes it led to
+
+`.run/setup_fair23.sh`: `fair_run.sh 23 ac4f216e` (main's new workflow, pre-D23 knowledge) + the whole `tests/` masked
++ a token-aware scrub of D23 notes from the rehearsal copy's `hctf/` comments/docstrings. 24/24 GM-CORRECT over three launches.
+
+- Run 1 (01:44): every LLM worker died from T+0:00 on "You've hit your session limit · resets 4:10am" (293 exits).
+  Deterministic paths alone: binary 1:04 / 1:28 / 1:58, metadata 0:26 / 1:14 / 2:07 (#3a list alternates passed TT +
+  Mastery with no LLM; main needed 6:42).
+- Run 2 (04:41, after the reset), T+ TT / Mastery: warmups 1:07 / 1:28, mobile 1:30 / 3:02, script 8:22 / 11:15 (main
+  16:10 / 28:55). Contract-ahead early generalize at T+1:16; the reconnect took 4.3 s (rejected values were not
+  resubmitted); composite labels skipped; a live answer within 1 s of every block.
+- Web `ask-again-later`: the worker found the proof, but `hctf submit` refused it locally (per-field cap) -> forced,
+  CORRECT; run 3 did its TT + Mastery.
+
+| # | Fix | Where | Flag (default) |
+|---|---|---|---|
+| 5 | Usage-limit gate: a limit that states its reset ("resets 4:10am (Asia/Manila)") closes a process-wide gate -- every worker launch and relaunch waits for it, uncounted against the stage timeout (was 3 x 20/60/180 s, then give up) | `workers.limit_reset_epoch`, `note_limit`, `wait_limit_gate`, `run_local` | `HCTF_LIMIT_WAIT_MAX` (21600), `HCTF_LIMIT_RESET_PAD` (60) |
+| 6 | `auto_labels` probed the web `proof-1` field with 32 earlier days' accepted proofs ("sibling labels") -- untagged, so they used up the worker's per-field cap: token-like values (hex runs, base64 tokens) are never sibling labels, live-target fields are skipped, resolver probes are tagged `harness="label"` | `labels.token_like`, `sibling_labels`, `probe`, `Chain.auto_labels` | — |
+| 7 | `bin/day.sh` keeps the previous run's `.run/dayNN.log` as `.run/dayNN-<mtime>.log` (a relaunch overwrote run 2's log) | `bin/day.sh` | — |
+
+Pre-existing failing suites fixed the same night: `test_meta_lane` (the ratchet's VERIFIED sqlite page size pointed into
+`lib/meta/prebuilt/`; promoted properly to `lib/meta/sqlite.py`; a stale fake chain; the per-case timing re-measures load
+at the re-time and keeps the best of 3 re-times), `test_day14_s2` (its "unknown codec" fixture became solvable by the
+D23 keyed-XOR codec -> a non-periodic keystream), `test_day14_s3` (the metadata lane solver's `main()` upgraded to the
+partial-emit contract in place, so a carry-forward is byte-identical), `test_day12_prep` + `test_web_lane` #11
+(`relative_to(ROOT)` on a solver / challenge dir outside the root -> safe display path), `test_web_lane` #12 (the #1g
+readiness poll), and the intermittent `test_day7_fixes` rc 134 (its test web servers were never shut down).
+
+Hazard (unchanged): `test_day14_s3` exercises `prebuild.stop()` on the real snapshot, whose `restore()` git-checkouts
+every code file that became dirty AFTER the test's snapshot -- never edit tracked files while the suite runs.
+
 ## Open / not changed
 
 - Drop-time contention: 25 LLM workers in the first ~2 min on a 7.8 GB WSL host inside a 6.5 GB MemoryHigh unit;

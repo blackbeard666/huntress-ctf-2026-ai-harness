@@ -77,13 +77,27 @@ print(f"ok  0) baseline: D10/D11/D12/D13 day solvers pass {len(base)} verified c
 SLOW_S = 1.0 * float(os.environ.get("HCTF_TEST_TIME_SLACK", "1"))
 # The ratchet gate runs suites in parallel (and other suites/solvers may share the box): scale the budget with the
 # 1-min load per core, so a loaded host can't fail -- and REVERT -- a good lib merge on timing alone (D16 post-mortem).
-SLOW_S *= max(1.0, os.getloadavg()[0] / max(1, (os.cpu_count() or 2) / 2))
+SLOW_BASE = SLOW_S
+
+
+def _load_scale():
+    return max(1.0, os.getloadavg()[0] / max(1, (os.cpu_count() or 2) / 2))
+
+
+SLOW_S = SLOW_BASE * _load_scale()
 # 1) every metadata case through the lane solver
 with ThreadPoolExecutor(max_workers=4) as ex:
     res = list(ex.map(lambda c: (c, run_case(LANE, c)), CASES))
 for i, (case, r) in enumerate(res):        # a case over budget under the 4-way load is re-timed alone
-    if r[4] > SLOW_S:
-        res[i] = (case, run_case(LANE, case))
+    for _ in range(3):                      # best of 3: one re-time under a parallel sweep is still noise (D23: a
+        if res[i][1][4] <= SLOW_S:          # 0.54 s case measured 2.30 s beside three other suites)
+            break
+        r2 = run_case(LANE, case)
+        if r2[4] < res[i][1][4]:
+            res[i] = (case, r2)
+# the budget is judged at the load of the RE-TIME, not the suite's start: the parallel sweep's load rises after this
+# file starts (D23: 1.8 s cases on a box whose load climbed past the start-time scale)
+SLOW_S = max(SLOW_S, SLOW_BASE * _load_scale())
 fails, gaps, slow, n_vals = [], [], [], 0
 for case, (contract, expected, got, err, dt) in res:
     rel = case.relative_to(paths.CHALLENGES)
@@ -257,7 +271,7 @@ existed = snapdir.exists()
 saved_conf = cli.confirmed_answers
 try:
     cli.confirmed_answers = lambda c, att=None: dict(exp13)
-    me = SimpleNamespace(sdir=chal / "solver", root=chal)
+    me = SimpleNamespace(sdir=chal / "solver", root=chal, _carry_gaps=lambda snap: [])   # D22 #11 carry check
     snap = orchestrate.Chain._race_snapshot(me, cid, LANE, contract13, case13 / "artifacts")
     assert snap == snapdir / "solver" and me._race_snap == snap, snap
     assert (snap / "solve.py").read_bytes() == (LANE / "solve.py").read_bytes() and (snap.parent / "meta.json").exists()

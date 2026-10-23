@@ -214,9 +214,13 @@ print(f"ok  D3 probe: {dt:.2f}s, D13 solver passes even cuts but misses 1 edge-c
 unk = fake_chal(14, name="unknown")
 (unk / "cases" / "single_solve" / "artifacts").mkdir(parents=True)
 slug = "brisk-otter-maple-14"
-_k = b"k3y!Zq9#Lm2@P"   # keyed Vigenere is no longer "unknown": the fixed sentence is a crib (crib-polyalpha-key, 10-16)
+# keyed Vigenere (crib-polyalpha-key, 10-16) and a periodic XOR key (D23 ratchet: xorkey via the sentence crib) are no
+# longer "unknown" -- a NON-periodic keystream (seeded PRNG, one byte per position) leaves no key for a crib to recover
+import random as _rnd  # noqa: E402
+_pt = W.SENTENCE.format(slug=slug).encode()
+_ks = _rnd.Random(14).randbytes(len(_pt))
 (unk / "cases" / "single_solve" / "artifacts" / "blob.txt").write_text(base64.b64encode(bytes(
-    b ^ _k[i % len(_k)] for i, b in enumerate(W.SENTENCE.format(slug=slug).encode()))).decode())
+    b ^ _ks[i] for i, b in enumerate(_pt))).decode())
 (unk / "cases" / "single_solve" / "contract.json").write_text(json.dumps(
     {"answer_ids": ["message"], "questions": [{"id": "message", "artifact": "blob.txt"}], "prompt": "Mystery"}))
 (unk / "cases" / "single_solve" / "expected.json").write_text(json.dumps({"message": slug}))
@@ -562,7 +566,12 @@ assert done_ev.is_set() and cl.pending == {} and cl.events == {} and got_ev and 
 ecv = fake_chal(13, name="early")
 gen_calls = []
 ch = bare_chain(sdir=ecv)
-ch.generalize = lambda cid, wrong=None, fixed=None, diag=None: (gen_calls.append((wrong, diag)), time.sleep(0.5))
+# the stub EDITS the solver: since D23 #1e an early generalize that left the code byte-identical joins as False (no
+# pointless re-run of the same attempt) -- test_d23_postmortem covers that side
+ch.generalize = lambda cid, wrong=None, fixed=None, diag=None: (
+    gen_calls.append((wrong, diag)), time.sleep(0.5),
+    (Path(ch.sdir) / "solve.py").write_text(((Path(ch.sdir) / "solve.py").read_text()
+                                             if (Path(ch.sdir) / "solve.py").exists() else "") + "\n# edited\n"))
 local = TMPD / "early-local"
 local.mkdir()
 shutil.copy2(ATT13 / "contract.json", local / "contract.json")
@@ -586,7 +595,7 @@ assert gen_calls and gen_calls[0][0] == [(a, None) for a in last13["missing"]] a
 assert len(json.loads((vcase / "expected.json").read_text())) == 39
 assert len(json.loads((vcase / "gm_feedback.json").read_text())["rejected"]) == 20
 assert ch._exp_before["variant-mastery-bd5589ea"] == (vcase / "expected.json").read_bytes()
-with mock.patch.object(workers, "EARLY_GENERALIZE", False):
+with mock.patch.object(workers, "EARLY_GENERALIZE", False), mock.patch.object(orch, "AUTO_EARLY", False):
     assert bare_chain()._early_kw("x") == {}
 # watcher: a fill case that turned verified mid-worker counts as a target (early on); off -> it stays fill-only
 turned = [{"case": "var", "ok": True, "unverified": False, "answered": 5, "total": 5, "seconds": 0.1},

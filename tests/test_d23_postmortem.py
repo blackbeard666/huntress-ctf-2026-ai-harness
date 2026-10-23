@@ -358,6 +358,77 @@ check("#4 resource sample has memory / pressure / worker fields",
       {"mem_avail_mb", "psi_mem_some", "claude", "cg_high"} <= set(s) and ressample.line(s, time.time()).startswith("[res] "),
       s)
 
+# ---------------------------------------------------------------- #5 (rehearsal D23 run 1) usage-limit gate
+import datetime as _dt  # noqa: E402
+_now = _dt.datetime(2026, 10, 24, 1, 45, 17).timestamp()
+_msg = "You've hit your session limit · resets 4:10am (Asia/Manila) 429 api_error"
+_t = workers.limit_reset_epoch(_msg, _now)
+check("#5 the stated reset is parsed (4:10am Asia/Manila -> 145 min after the 01:45 failure)",
+      _t is not None and round((_t - _now) / 60) == 145, _t and (_t - _now) / 60)
+check("#5 a 24 h clock reset parses; a limit with no stated reset does not (old backoff applies)",
+      workers.limit_reset_epoch("resets 16:00", _now) is not None and workers.limit_reset_epoch("usage limit", _now) is None)
+saved_gate = dict(workers._limit_gate)
+try:
+    with patched({(workers, "LIMIT_RESET_PAD"): 0.0, (workers, "limit_reset_epoch"): lambda d, now=None: time.time() + 0.6}):
+        closed = workers.note_limit("You've hit your session limit · resets soon")
+        t0 = time.time()
+        waited = workers.wait_limit_gate()
+    check("#5 a stated reset closes the gate and a launch waits for it (not a 20 s backoff that gives up)",
+          closed and 0.4 < waited < 3 and time.time() - t0 < 3, (closed, waited))
+    with patched({(workers, "limit_reset_epoch"): lambda d, now=None: time.time() + 10 ** 6}):
+        check("#5 a reset further than HCTF_LIMIT_WAIT_MAX never closes the gate", not workers.note_limit("resets x"))
+    workers._limit_gate.update(until=time.time() + 30)
+    stop_e = threading.Event()
+    threading.Timer(0.3, stop_e.set).start()
+    check("#5 a stop event ends the wait (-1)", workers.wait_limit_gate(stop_e) == -1)
+finally:
+    workers._limit_gate.clear()
+    workers._limit_gate.update(saved_gate)
+
+runs5 = []
+with patched({(workers, "_run_local_once"): lambda *a, **k: (runs5.append(time.time()), (1, TMP / "w.log"))[1],
+              (workers, "record_metrics"): lambda log, *a: (
+                  {"outcome": "limit", "detail": "You've hit your session limit · resets soon"} if len(runs5) == 1
+                  else {"outcome": "ok", "detail": ""}),
+              (workers, "limit_reset_epoch"): lambda d, now=None: time.time() + 0.5,
+              (workers, "LIMIT_RESET_PAD"): 0.0}):
+    (TMP / "w.log").parent.mkdir(parents=True, exist_ok=True)
+    rc5, _ = workers.run_local(TMP, "single", "p", {"HCTF_CHAL": "c"}, timeout=1.0)
+check("#5 run_local: a limit exit waits for the reset and relaunches even when the wait exceeds the stage timeout",
+      len(runs5) == 2 and runs5[1] - runs5[0] >= 0.4, runs5)
+workers._limit_gate.update(until=0.0, detail="")
+
+# ---------------------------------------------------------------- #6 (rehearsal D23 web) per-target secrets aren't labels
+check("#6 a web proof / hash / base64 token is token-like; real labels are not",
+      labels.token_like("proof_26795dfbe6834ca79f73123806703548") and labels.token_like("aGVsbG8gd29ybGQhIFRoaXMgaXM0")
+      and not any(labels.token_like(v) for v in ("if_guard", "call_double", "three_stage_decode_write_launch",
+                                                 "T1059.003", "base64_literal")))
+_sub_kw = {}
+with patched({(cli, "submit"): lambda cid, ans, **k: (_sub_kw.update(k), ("incorrect", {}, []))[1],
+              (cli, "load"): lambda cid, f: {}, (labels, "judged_wrong"): lambda cid, aid: set()}):
+    labels.probe("c", "f", ["x"], budget=1, delay=0, log=lambda *a: None)
+check("#6 resolver probes are tagged harness=label (never count against a worker's per-field cap)",
+      _sub_kw.get("harness") == "label", _sub_kw)
+probed6 = []
+ch6 = orchestrate.Chain.__new__(orchestrate.Chain)
+ch6.lane, ch6.sdir = "web", TMP / "web-solver"
+ch6.sdir.mkdir(parents=True, exist_ok=True)
+(ch6.sdir / "solve.py").write_text("print('{}')\n")
+_c6 = {"answer_ids": ["proof-1"], "questions": [{"id": "proof-1", "artifact": "Target 1", "question": "Recover the proof"}]}
+with patched({**QUIET, (cli, "load"): lambda cid, f: _c6, (timed, "latest_artifacts"): lambda cid: TMP,
+              (solvers, "solve_contract"): lambda *a, **k: ({}, None), (cli, "confirmed_answers"): lambda cid: {},
+              (cli, "is_complete"): lambda cid: False, (labels, "load_vocab"): lambda: {"1": ["x"]},
+              (labels, "probe"): lambda *a, **k: (probed6.append(a), {"tried": []})[1]}):
+    orchestrate.Chain.auto_labels(ch6, "web-x")
+check("#6 auto_labels never probes a live web target's proof field", not probed6, probed6)
+
+# ---------------------------------------------------------------- #7 day.sh keeps the previous run's log
+import subprocess  # noqa: E402
+_day = (ROOT / "bin" / "day.sh").read_text()
+check("#7 day.sh rotates an existing .run/dayNN.log before a relaunch writes a fresh one",
+      'KEEP=".run/${DAYTAG}-$(date -r "$LOG"' in _day and 'mv "$LOG" "$KEEP"' in _day
+      and subprocess.run(["bash", "-n", str(ROOT / "bin" / "day.sh")]).returncode == 0)
+
 shutil.rmtree(TMP, ignore_errors=True)
 if failures:
     print(f"\n{len(failures)} FAILED: {failures}")

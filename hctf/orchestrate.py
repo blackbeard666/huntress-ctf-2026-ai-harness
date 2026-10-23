@@ -3342,7 +3342,10 @@ class Chain:
             return False
         conf = cli.confirmed_answers(cid)
         vocab = labels.load_vocab()
+        qmap = {q.get("id"): q for q in contract.get("questions") or [] if isinstance(q, dict)}
         for aid in contract.get("answer_ids") or []:
+            if re.fullmatch(r"\s*Target \d+\s*", str((qmap.get(aid) or {}).get("artifact") or "")):
+                continue   # a live web target's proof is a per-target secret: no vocabulary to resolve (D23 alt)
             has_playbook = bool(labels.playbook and labels.playbook.entry_for(self.lane, aid))
             if aid in conf or (labels.ending(aid) not in vocab and not labels.sibling_labels(aid) and not has_playbook):
                 continue

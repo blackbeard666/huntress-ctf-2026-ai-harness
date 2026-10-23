@@ -240,10 +240,18 @@ def web_live_check(sdir, timeout=40, parallel=6, deadline=None, log=None):
         return [r for r in ex.map(one, items) if r]
 
 
+def _rel_root(p):
+    """`p` relative to the project root, else absolute (a challenges tree outside it: tests, replay copies)."""
+    try:
+        return str(Path(p).resolve().relative_to(ROOT.resolve()))
+    except ValueError:
+        return str(Path(p).resolve())
+
+
 def _touched(tt, od, att):
     """Record an earlier Time Trial attempt a live check left open (re-solved by web_live_restore)."""
     with open(ROOT / ".run" / "webcmp" / "touched.jsonl", "a") as f:
-        f.write(json.dumps({"cid": tt, "dir": str(Path(od).relative_to(ROOT)), "attempt": att, "t": time.time()}) + "\n")
+        f.write(json.dumps({"cid": tt, "dir": _rel_root(od), "attempt": att, "t": time.time()}) + "\n")
 
 
 def web_live_restore(log=None):

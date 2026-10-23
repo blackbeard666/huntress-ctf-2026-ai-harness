@@ -94,7 +94,7 @@ _BUILTIN = {
     ("jar", "main_class"): _v("jar:main_class", 22),
     # D23: SQLite header page size (u16 BE @16, 1 = 65536) as a base-10 int -- prebuilt sqlite.sqlite_value promoted:
     # 4096 single, 8192 TT, 512..65536 on all 7 Mastery sets (24/24 cases)
-    ("sqlite", "page_size_bytes"): _v("prebuilt.sqlite:sqlite_value", 23),
+    ("sqlite", "page_size_bytes"): _v("sqlite:page_size_bytes", 23),
 }
 
 PREBUILT_DIR = Path(__file__).resolve().parent / "prebuilt"

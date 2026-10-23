@@ -104,6 +104,19 @@ def lane_of(cid):
     return None
 
 
+def token_like(v):
+    """A per-instance SECRET, not a vocabulary label: a long hex / base64-ish run (web `proof_<32 hex>`, flags, hashes,
+    GUIDs). D23 alt: earlier days' accepted web proofs came back as `proof-1` "sibling labels" and auto_labels replayed
+    32 of them at a fresh target -- every one wrong, and they used up the worker's per-field cap."""
+    s = str(v)
+    if re.search(r"[0-9a-fA-F]{12,}", s):
+        return True
+    # a base64-ish run: no word separators, and the digit + upper + lower mix of random bytes (labels like
+    # `three_stage_decode_write_launch` / `command_substitution_pipeline` are words joined by `_`)
+    return any(re.search(r"\d", m) and re.search(r"[A-Z]", m) and re.search(r"[a-z]", m)
+               for m in re.findall(r"[A-Za-z0-9+/=]{24,}", s))
+
+
 def sibling_labels(aid, without=()):
     """Values the GM confirmed for fields with the same ending, across every challenge and day, most common first.
     (Includes the same field from earlier days: a label that recurs is the best first guess.)"""
@@ -118,7 +131,7 @@ def sibling_labels(aid, without=()):
             if not isinstance(answers, dict):
                 continue
             for k, v in answers.items():
-                if ending(k) == want and _usable(v):
+                if ending(k) == want and _usable(v) and not token_like(v):
                     seen[str(v)] += 1
     for key in (want, _suffix_key(aid)):
         for v in load_vocab().get(key or "", []):
@@ -263,7 +276,7 @@ def candidates(cid, aid, terms=(), solver_value=None, without=(), skip_judged=Tr
     return out
 
 
-def probe(cid, aid, cands, budget=25, delay=1.0, log=print):
+def probe(cid, aid, cands, budget=25, delay=1.0, log=print, harness="label"):
     """Submit candidates one at a time (sequential, rate-limited) until the GM accepts one. Returns a result dict."""
     start = cli.load(cid, "start.json") or {}
     qs = start.get("questions") or []
@@ -276,8 +289,10 @@ def probe(cid, aid, cands, budget=25, delay=1.0, log=print):
     prior = len(judged_wrong(cid, aid))
     tried = []
     for c in cands[:budget]:
+        # harness="label": a resolver probe never counts against a worker's per-field cap (D23 alt web: 32 untagged
+        # auto-label probes left the worker's correct proof refused locally)
         kind, body, problems = cli.submit(cid, {aid: c}, max_wrong=prior + budget + 1,
-                                          global_cap=cli.GLOBAL_WRONG_CAP + budget)
+                                          global_cap=cli.GLOBAL_WRONG_CAP + budget, harness=harness)
         if problems:
             tried.append({"value": c, "result": "refused", "why": problems[0]})
             continue

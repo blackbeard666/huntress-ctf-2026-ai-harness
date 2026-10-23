@@ -1213,9 +1213,15 @@ class _H22(_BH22):
         pass
 
 
-_b22 = {}
+class _QS22(_HS22):
+    def handle_error(self, request, client_address):
+        pass   # a client the parallel solve already abandoned (BrokenPipe): no traceback at interpreter shutdown
+
+
+_b22, _srv22 = {}, []
 for _kind22 in ("csrf", "up", "dead"):
-    _s22v = _HS22(("127.0.0.1", 0), _H22)
+    _s22v = _QS22(("127.0.0.1", 0), _H22)
+    _srv22.append(_s22v)
     _s22v.kind, _s22v.notes = _kind22, {}
     _th22.Thread(target=_s22v.serve_forever, daemon=True).start()
     _b22[_kind22] = f"http://127.0.0.1:{_s22v.server_address[1]}/"
@@ -1233,6 +1239,9 @@ _t022 = _tm22.time()
 assert _web22.solve_target({"artifact": "Target 3"}, _c22) is None and _tm22.time() - _t022 < 3
 _o22 = _web22.solve(_c22)
 assert _o22 == {"proof-1": "proof_" + "c5" * 16, "proof-2": "proof_" + "a7" * 16}, _o22
+for _s22v in _srv22:   # D23: left running, their handler threads printed to stderr during interpreter finalization
+    _s22v.shutdown()   # -> "Fatal Python error: _enter_buffered_busy" (rc 134) on some runs
+    _s22v.server_close()
 print("ok  lib.web: D22 csrf + upload handlers, parallel targets, dead target skipped")
 
 # Day 23 "Eighty-Five Alive": Adobe Ascii85 (<~ ~>) of the UTF-8 sentence -- GM-confirmed single slug, byte-exact

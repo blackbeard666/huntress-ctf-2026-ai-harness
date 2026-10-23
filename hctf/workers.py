@@ -366,6 +366,11 @@ def run_local(chal_dir, stage, prompt, env_extra, timeout, stop=None, warm=None,
     `warm` (WarmWorker, still alive): hand it `warm_task` instead of launching a new process.
     Every process gets a metrics row; an API-error exit is classified (worker_outcome): auth -> AUTH_RC at once,
     usage limit / overload -> back off and relaunch inside the same timeout (API_RELAUNCHES)."""
+    if _limit_gate["until"] > time.time() and (warm is None or not warm.alive()):
+        if wait_limit_gate(stop) < 0:      # the chain moved on while the account was out of usage
+            ph = Path(chal_dir) / f"worker-{stage}-limit-gated-{time.strftime('%Y%m%dT%H%M%S')}.log"
+            ph.write_text("(never launched: stopped while waiting for the Claude usage-limit reset)\n")
+            return STOPPED_RC, ph
     deadline = time.time() + timeout
     t0 = warm.started if warm is not None and warm.alive() else time.time()
     rc, log = _run_local_once(chal_dir, stage, prompt, env_extra, timeout, stop, warm, warm_task)
@@ -377,13 +382,21 @@ def run_local(chal_dir, stage, prompt, env_extra, timeout, stop=None, warm=None,
             print(f"!!! [{env_extra.get('HCTF_CHAL', '?')}] CLAUDE AUTH FAILED ({out['detail'][:160]}) -- run "
                   "`claude auth login` on the host; no more workers can start until then", file=sys.stderr, flush=True)
             return AUTH_RC, log
-        wait = API_BACKOFF[min(n, len(API_BACKOFF) - 1)]
-        if n == API_RELAUNCHES or deadline - time.time() - wait < API_MIN_LEFT:
-            return rc, log
-        print(f"[{env_extra.get('HCTF_CHAL', '?')}] {stage} worker ended on an API error ({out['outcome']}: "
-              f"{out['detail'][:120]}); relaunch {n + 1}/{API_RELAUNCHES} in {wait:.0f}s", file=sys.stderr, flush=True)
-        if (stop.wait(wait) if stop is not None else time.sleep(wait)):
-            return STOPPED_RC, log
+        if out["outcome"] == "limit" and note_limit(out["detail"]):
+            print(f"[{env_extra.get('HCTF_CHAL', '?')}] {stage} worker hit the usage limit: waiting for its reset, "
+                  f"then relaunch {n + 1}/{API_RELAUNCHES}", file=sys.stderr, flush=True)
+            waited = wait_limit_gate(stop)
+            if waited < 0:
+                return STOPPED_RC, log
+            deadline += waited     # waiting out the account's limit is not this stage's time
+        else:
+            wait = API_BACKOFF[min(n, len(API_BACKOFF) - 1)]
+            if n == API_RELAUNCHES or deadline - time.time() - wait < API_MIN_LEFT:
+                return rc, log
+            print(f"[{env_extra.get('HCTF_CHAL', '?')}] {stage} worker ended on an API error ({out['outcome']}: "
+                  f"{out['detail'][:120]}); relaunch {n + 1}/{API_RELAUNCHES} in {wait:.0f}s", file=sys.stderr, flush=True)
+            if (stop.wait(wait) if stop is not None else time.sleep(wait)):
+                return STOPPED_RC, log
         t0 = time.time()
         rc, log = _run_local_once(chal_dir, stage, prompt + RELAUNCH_NOTE.format(detail=out["detail"][:200]),
                                   env_extra, deadline - time.time(), stop, None, None)
@@ -561,6 +574,76 @@ def _kill_group(p, grace):
 API_RELAUNCHES = int(os.environ.get("HCTF_API_RELAUNCHES", "3"))
 API_BACKOFF = [float(x) for x in os.environ.get("HCTF_API_BACKOFF", "20,60,180").split(",")]
 API_MIN_LEFT = float(os.environ.get("HCTF_API_MIN_LEFT", "90"))   # don't relaunch with less stage time than this
+# D23 alt: "You've hit your session limit · resets 4:10am (Asia/Manila)" -- the 20/60/180 s relaunches above ran out in
+# minutes while the reset was 2.5 h away, and every worker of the run died (293 `limit` exits). A limit that STATES its
+# reset closes a process-wide gate: every worker launch and relaunch waits for it (that wait is not counted against
+# the stage timeout), then runs. A reset further away than HCTF_LIMIT_WAIT_MAX (or none stated) keeps the old backoff.
+LIMIT_WAIT_MAX = float(os.environ.get("HCTF_LIMIT_WAIT_MAX", "21600"))
+LIMIT_RESET_PAD = float(os.environ.get("HCTF_LIMIT_RESET_PAD", "60"))
+_RESET_RE = re.compile(r"resets\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\.?)?(?:\s*\(([^)]+)\))?", re.I)
+_limit_gate = {"until": 0.0, "detail": ""}
+_limit_lock = threading.Lock()
+
+
+def limit_reset_epoch(detail, now=None):
+    """Epoch of the reset a usage-limit message states ("resets 4:10am (Asia/Manila)", "resets 16:00"), or None."""
+    m = _RESET_RE.search(str(detail or ""))
+    if not m:
+        return None
+    import datetime as _dt
+    hh, mm, ampm, tzname = int(m.group(1)), int(m.group(2) or 0), (m.group(3) or "").lower().replace(".", ""), m.group(4)
+    if ampm:
+        if not 1 <= hh <= 12:
+            return None
+        hh = hh % 12 + (12 if ampm.startswith("p") else 0)
+    if not (0 <= hh <= 23 and 0 <= mm <= 59):
+        return None
+    tz = None
+    if tzname:
+        try:
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo(tzname.strip())
+        except Exception:  # noqa: BLE001 - unknown zone name: host local time
+            tz = None
+    now = time.time() if now is None else now
+    base = _dt.datetime.fromtimestamp(now, tz) if tz else _dt.datetime.fromtimestamp(now)
+    at = base.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    if at.timestamp() <= now:
+        at += _dt.timedelta(days=1)
+    return at.timestamp()
+
+
+def note_limit(detail):
+    """A usage-limit exit: close the gate until its stated reset (+pad). -> True when the gate is closed now."""
+    t = limit_reset_epoch(detail)
+    if t is None or t - time.time() > LIMIT_WAIT_MAX:
+        return False
+    until = t + LIMIT_RESET_PAD
+    with _limit_lock:
+        new = until > _limit_gate["until"] + 1
+        if new:
+            _limit_gate.update(until=until, detail=str(detail)[:160])
+    if new:
+        print(f"!!! Claude usage limit: every worker waits until the stated reset "
+              f"{time.strftime('%H:%M', time.localtime(until))} ({(until - time.time()) / 60:.0f} min) -- "
+              f"{str(detail)[:120]}", file=sys.stderr, flush=True)
+    return True
+
+
+def wait_limit_gate(stop=None):
+    """Block while the usage-limit gate is closed. -> seconds waited, or -1 if `stop` was set meanwhile."""
+    t0 = time.time()
+    while True:
+        left = _limit_gate["until"] - time.time()
+        if left <= 0:
+            return time.time() - t0
+        if stop is not None:
+            if stop.wait(min(30.0, left)):
+                return -1
+        else:
+            time.sleep(min(30.0, left))
+
+
 RELAUNCH_NOTE = ("\n\n---\nHARNESS: an earlier session on this exact task ended on an API error ({detail}) before it "
                  "finished. Its files are still on disk (solver/, notes, work/): read them first and continue from "
                  "where it stopped instead of starting over.")

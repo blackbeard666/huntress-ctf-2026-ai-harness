@@ -49,6 +49,12 @@ export HCTF_WORKER_EFFORT="$EFFORT"
 printf -v DAYTAG 'day%02d' "$DAY"
 LOG=".run/${DAYTAG}.log"
 mkdir -p .run
+# A relaunch of the same day keeps the previous run's log (D23 alt: run 3 overwrote run 2's -- its timeline had to be
+# rebuilt from submissions.jsonl): .run/dayNN.log -> .run/dayNN-<its mtime>.log, the new run writes a fresh one.
+if [ -s "$LOG" ]; then
+  KEEP=".run/${DAYTAG}-$(date -r "$LOG" +%Y%m%d-%H%M%S).log"
+  mv "$LOG" "$KEEP" && echo "[log] previous $LOG kept as $KEEP"
+fi
 
 echo "=== hctf $DAYTAG launcher ($(date '+%F %H:%M:%S %Z')) ==="
 

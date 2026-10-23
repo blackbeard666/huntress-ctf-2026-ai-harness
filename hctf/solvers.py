@@ -137,6 +137,14 @@ def run_solver(sdir, contract, artifacts, timeout=120, background=None):
         return {}, f"stdout is not JSON: {r.stdout[-500:]!r} stderr: {r.stderr[-800:]}", dt
 
 
+def _rel_root(p):
+    """`p` relative to the project root for display, else its absolute path (a prior solver copied under /tmp)."""
+    try:
+        return str(Path(p).resolve().relative_to(ROOT.resolve()))
+    except ValueError:
+        return str(Path(p).resolve())
+
+
 def dry_run_diagnostics(sdir, contract, artifacts, timeout=15, known=None, shape=None):
     """Run an EARLIER day's solver once on TODAY's contract + bytes and return DIAGNOSTICS ONLY -- never its values
     (user rule: old solvers are not an answer source). On a timeout it gets SIGINT first, so the traceback names the
@@ -195,7 +203,7 @@ def dry_run_diagnostics(sdir, contract, artifacts, timeout=15, known=None, shape
         new = [i for i in dict.fromkeys(ids) if shape(i) not in known]
         for i in new:
             new_by_art.setdefault(str((qs.get(i) or {}).get("artifact") or "?"), []).append(i)
-    return {"solver": str(Path(sdir).relative_to(ROOT)), "seconds": round(dt, 1), "timed_out": timed_out,
+    return {"solver": _rel_root(sdir), "seconds": round(dt, 1), "timed_out": timed_out,
             "rc": rc, "frames": frames, "error": last[:200] if (rc and not timed_out) else "",
             "warnings": warn[:8], "answered": len(ids) - len(empty), "total": len(ids), "empty": empty[:15],
             "empty_q": empty_q, "new": len(new), "new_by_art": new_by_art}

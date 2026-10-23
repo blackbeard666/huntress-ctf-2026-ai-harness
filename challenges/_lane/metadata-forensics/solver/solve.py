@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT))
 from lib import meta  # noqa: E402
 from lib.common import (_zip_open, _zip_read, container_by_sha, delivery_missing, find_artifact,  # noqa: E402
                         find_artifact_hinted, group_by_set, iter_files, load_contract, normalize, read_member)
+from lib import solverrt  # noqa: E402  -- partial-emit on deadline (cumulative-lane upgrade)
 
 FAST_INDEX = os.environ.get("HCTF_META_FAST_INDEX", "1") != "0"   # per-process member index (0 = find_artifact only)
 
@@ -202,22 +203,15 @@ def main():
     a = ap.parse_args()
     contract, pairs = load_contract(a.contract)
     groups = group_by_set(pairs)
-    out = {}
-    if len(groups) >= 2 and os.environ.get("HCTF_SOLVER_PARALLEL", "1") != "0":
-        # Mastery: every set runs inside ONE clock -- one forked process per set. Same results as the sequential loop.
-        import multiprocessing as mp
-        from concurrent.futures import ProcessPoolExecutor
-        try:
-            with ProcessPoolExecutor(max_workers=min(len(groups), os.cpu_count() or 2),
-                                     mp_context=mp.get_context("fork")) as ex:
-                for part in ex.map(_solve_pairs, [(a.artifacts, contract, g) for g in groups.values()]):
-                    out.update(part)
-        except Exception as e:  # noqa: BLE001 - never lose a solve to the pool: fall back to sequential
-            print(f"parallel sets failed ({e!r}); sequential", file=sys.stderr)
-            out = _solve_pairs((a.artifacts, contract, pairs))
-    else:
-        out = _solve_pairs((a.artifacts, contract, pairs))
-    print(json.dumps(out))
+    # out/pool are shared with the deadline watchdog: if the solve runs past HCTF_SOLVE_DEADLINE, whatever has been
+    # collected so far is printed (a partial the untimed runner finishes in-attempt) instead of being SIGKILLed with no
+    # output (which scores exec_error and forces a blocking generalize). run_sets merges each Mastery set as it finishes
+    # (one forked process per set), then emit_and_exit prints once, kills any lingering pool/probe child, and os._exit(0).
+    out, pool = {}, []
+    solverrt.arm_deadline(out, pool)
+    jobs = [(a.artifacts, contract, g) for g in groups.values()] if len(groups) >= 2 else [(a.artifacts, contract, pairs)]
+    solverrt.run_sets(jobs, _solve_pairs, out, pool)
+    solverrt.emit_and_exit(out, pool)
 
 
 if __name__ == "__main__":

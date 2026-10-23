@@ -588,17 +588,25 @@ try:
     cli.is_complete = lambda cid: False
     mk = orchestrate.Chain.__new__(orchestrate.Chain)
     mk.base, mk.lane, mk.entries = CID, "web", {"mastery": {"id": CID + "/mastery"}}
+    # D23 #1g: the kick then polls `status` while the target is `preparing` -- bounded here so the poller never
+    # outlives this section (it would reach the real GM once cli.call is restored)
+    _poll = (orchestrate.WEB_READY_POLL, orchestrate.WEB_READY_POLL_MAX)
+    orchestrate.WEB_READY_POLL, orchestrate.WEB_READY_POLL_MAX = 0.05, 0.3
     mk._web_mastery_kick()
     mk._web_mastery_kick()
     for t in threading.enumerate():
         if t.name.startswith("web-m-kick-"):
             t.join(5)
+    orchestrate.WEB_READY_POLL, orchestrate.WEB_READY_POLL_MAX = _poll
     nw = orchestrate.Chain.__new__(orchestrate.Chain)
     nw.base, nw.lane, nw.entries = "warmups-day-20", "warmups", {"mastery": {"id": "warmups-day-20/mastery"}}
     nw._web_mastery_kick()
     time.sleep(0.2)
     check("12 web Mastery target requested once before the pre-Mastery checks; never for other lanes",
-          calls == [(CID + "/mastery", "start", CID + "/mastery")], calls)
+          [c for c in calls if c[1] == "start"] == [(CID + "/mastery", "start", CID + "/mastery")]
+          and all(c == (CID + "/mastery", "status", CID + "/mastery") for c in calls if c[1] != "start"), calls)
+    check("12 ... and while it is `preparing` the kick polls status (ready -> Mastery stops waiting on the compound "
+          "check)", any(c[1] == "status" for c in calls) and not mk._web_m_ready.is_set(), calls)
     # Mastery pre-start at the TT's CORRECT (regular lanes, untimed pool): once; never web (its own kick)
     calls.clear()
     rg = orchestrate.Chain.__new__(orchestrate.Chain)
