@@ -5696,6 +5696,8 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
     skip = {x.strip() for x in os.environ.get("HCTF_SKIP_IDS", "").split(",") if x.strip()}
     if skip:   # e.g. a replay sparing a mode whose variant pool is nearly used up
         groups = {b: [c for c in v if c["id"] not in skip] for b, v in groups.items()}
+        groups = {b: v for b, v in groups.items() if v}   # every mode skipped: no chain (an empty one raised
+        #                                                    StopIteration in Chain.__init__ -- 10-23 replay)
         say(f"skipping (HCTF_SKIP_IDS): {sorted(skip)}")
     web_late = None
     if (day is not None and _web_expected(day) and WEB_ANYDAY and remote._public_gm()

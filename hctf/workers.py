@@ -825,7 +825,10 @@ def push_hot_files():
 
 
 TIMED_FWD = ("HCTF_PIPELINE_SETS", "HCTF_PIPELINE_MIN_MB", "HCTF_PIPELINE_DL", "HCTF_SOLVER_PARALLEL",
-             "HCTF_UNTIMED_BUDGET")
+             "HCTF_UNTIMED_BUDGET",
+             # a replay that must re-roll already-passed modes on the real GM (10-23: unforwarded, every Homebase-routed
+             # attempt short-circuited as "already passed" -- no phases, no measurement)
+             "HCTF_REROLL_CORRECT")
 UNTIMED_BUDGET = float(os.environ.get("HCTF_UNTIMED_BUDGET", "60"))   # solver seconds on an untimed (no-clock) attempt
 # D22 pole #2: a web timed solver can't produce the live-exploit `proof` fields (no handler), so it runs its full ~40 s
 # and still blocks -> live-answer. LIVE-FIRST caps the FIRST web timed attempt's solver seconds so it blocks fast and
@@ -1165,6 +1168,9 @@ def slow_vm():
 
 
 NO_CLOCK_MULTISET_LOCAL = os.environ.get("HCTF_NO_CLOCK_MULTISET_LOCAL", "1") != "0"
+# Only a big fan-out: the 10-23 replay ran mobile's 6-set Mastery locally in ~8.5 s vs 1.25 s on Homebase live (the
+# warm zygote daemon has the solver's imports preloaded); warmups' 108 sets is what blew up on the VM.
+NO_CLOCK_LOCAL_MIN_SETS = int(os.environ.get("HCTF_NO_CLOCK_LOCAL_MIN_SETS", "12"))
 
 
 def no_clock_local(cid, log=None):
@@ -1177,8 +1183,8 @@ def no_clock_local(cid, log=None):
     if not (NO_CLOCK_MULTISET_LOCAL and slow_vm()) or os.environ.get("HCTF_RUN_FOR_TIME", "auto") == "1":
         return False
     _n, _nb, nsets = _contract_shape(cid)
-    if nsets <= 1:
-        return False
+    if nsets < max(2, NO_CLOCK_LOCAL_MIN_SETS):
+        return False   # few sets: route_costs decides (Homebase's warm imports + shorter GM round trips can win)
     from . import timed
     if ((timed.last_result(cid) or {}).get("phases") or {}).get("solve") is not None:
         return False   # measured: route_costs decides

@@ -113,6 +113,9 @@ with patched(SHAPE108):
     check("#3 ... and says why", any("runs locally" in m for m in msgs), msgs)
 with patched({**SHAPE108, (workers, "_contract_shape"): lambda cid: (1, 0, 0)}):
     check("#3 single-set TT keeps Homebase (its GM round trips are cheaper)", workers.no_clock_local("w/tt") is False)
+with patched({**SHAPE108, (workers, "_contract_shape"): lambda cid: (6, 0, 6)}):
+    check("#3 a small fan-out (6-set Mastery) is left to route_costs (replay: mobile 8.5 s local vs 1.25 s Homebase)",
+          workers.no_clock_local("w/mastery") is False)
 with patched({**SHAPE108, (timed, "last_result"): lambda cid: {"phases": {"solve": 63.9}, "routed": "homebase"}}):
     check("#3 once measured, route_costs decides (no override)", workers.no_clock_local("w/mastery") is False)
 with patched({**SHAPE108, (workers, "slow_vm"): lambda: False}):

@@ -48,7 +48,7 @@ def parse(lines):
         if t0 is None:
             t0 = t
         tag, msg = m.group(4), m.group(5)
-        if tag in ("homebase", "ratchet", "attack-coverage", "warm", "run"):
+        if tag in ("homebase", "ratchet", "attack-coverage", "warm", "run", "shapes"):
             continue
         base, mode = _split(tag)
         c = chains.setdefault(base, {"done": {}, "attempts": dict.fromkeys(MODES, 0), "workers": [], "open": {},
