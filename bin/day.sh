@@ -58,13 +58,26 @@ if [ "${HCTF_PREBUILD_STOP:-1}" != 0 ] && { [ -e .run/prebuild.lock ] || [ -d .r
      || pgrep -f "hctf.cli prebuild|hctf prebuild" >/dev/null; }; then
   timeout 60 python3 -m hctf.cli prebuild --stop 2>&1 | sed 's/^/[prebuild] /'
 fi
+# 0b) ...and ANOTHER harness copy on this box (alt / a worktree / a replay copy) must not share the CPU either (10-22:
+#     an rehearsal validation run beside main's `prebuild --parallel` hit load 37-50; every timing invalid). The `prebuild
+#     --stop` above only reaches THIS copy (it keeps processes whose cwd is this root): stop the other copies' prebuilds
+#     inside THEIR roots (prebuild is always preemptible). Another copy's RUN is never stopped from here and never
+#     blocks a live launch: a loud WARNING only (and the pre-flight below runs with HCTF_SHARED_HOST=1 -> WARN, not FAIL).
+if [ -f "$ROOT/hctf/hostguard.py" ]; then
+  if [ "${HCTF_PREBUILD_STOP:-1}" != 0 ]; then
+    timeout 300 python3 -m hctf.hostguard stop-other-prebuilds --root "$ROOT" 2>&1 | sed 's/^/[hostguard] /'
+  fi
+  while IFS= read -r hg_line; do
+    echo "WARNING: another harness copy is busy on this host -- timings are invalid while two copies share the CPU: ${hg_line#OTHER }" >&2
+  done < <(timeout 30 python3 -m hctf.hostguard check --root "$ROOT" 2>/dev/null | grep '^OTHER ' || true)
+fi
 
 # 1) Pre-flight: abort only on a hard FAIL. SKIPPED when a passing pre-flight is fresh -- the checks belong at
 #    warm-up time, never between the drop and the launch (Day 6 lost ~75s re-running them at 21:00).
 pf_age=$(( $(date +%s) - $(cat .run/preflight.ok 2>/dev/null || echo 0) ))
 if [ "$FORCE_PF" -eq 0 ] && [ "$pf_age" -lt "${HCTF_PREFLIGHT_MAX_AGE:-21600}" ]; then
   echo "[preflight] passed $((pf_age/60)) min ago -- skipping (force with --preflight)."
-elif ! bash bin/preflight.sh; then
+elif ! HCTF_SHARED_HOST=1 bash bin/preflight.sh; then   # another copy busy = WARN here (0b warned): never block a launch
   echo "ABORT: pre-flight reported a FAIL. Fix it, then re-run." >&2
   exit 1
 fi

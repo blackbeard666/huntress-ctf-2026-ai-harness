@@ -617,8 +617,20 @@ def lock_holder():
     return pid if _pid_alive(pid) else None
 
 
+def _in_root(pid):
+    """Is the process's working directory this copy's ROOT or beneath it? Path components, never a string prefix:
+    ~/huntress-2026-rehearsal starts with ~/huntress-2026."""
+    try:
+        cwd = Path(os.readlink(f"/proc/{pid}/cwd")).resolve()
+    except OSError:
+        return False
+    root = ROOT.resolve()
+    return cwd == root or root in cwd.parents
+
+
 def _worker_pids():
-    """Processes started with HCTF_PREBUILD=1 in their environment (the prebuild's claude worker + children)."""
+    """THIS copy's processes started with HCTF_PREBUILD=1 in their environment (the prebuild's claude worker +
+    children). Host-wide matching let main's `prebuild --stop` kill the rehearsal copy's prebuild workers (D22 post-mortem)."""
     out = []
     for env in Path("/proc").glob("[0-9]*/environ"):
         try:
@@ -626,7 +638,22 @@ def _worker_pids():
                 out.append(int(env.parent.name))
         except (OSError, ValueError):
             continue
-    return [p for p in out if p != os.getpid()]
+    return [p for p in out if p != os.getpid() and _in_root(p)]
+
+
+_PREBUILD_SEG = re.compile(r"\S*python[\d.]*\s+-m\s+hctf\.cli\s+prebuild\b(?![^;&|]*--(?:stop|list|recover)\b)")
+
+
+def _shell_script(argv):
+    """The script of a `bash|sh [-l] -c|-lc <script>` argv, else None."""
+    if not argv or Path(argv[0]).name not in ("bash", "sh"):
+        return None
+    for i, a in enumerate(argv[1:], 1):
+        if not a.startswith("-"):
+            return None
+        if "c" in a[1:] and i + 1 < len(argv):
+            return argv[i + 1]
+    return None
 
 
 def stop(log=print, grace=15.0):
@@ -709,8 +736,11 @@ def _batch_pids():
             if not any(x in argv for x in ("--stop", "--list", "--recover")):
                 batches.append(pid)
             continue
-        if (Path(argv[0]).name in ("bash", "sh") and len(argv) >= 3 and argv[1] == "-c"
-                and re.match(r"\S*python[\d.]*\s+-m\s+hctf\.cli\s+prebuild\b", argv[2].lstrip())):
+        # a chain shell: one of its `;` / `&&` / `||` segments STARTS with the prebuild CLI (also the post-run /
+        # restart shape `bash -lc 'cd ROOT && source bin/env.sh; .venv/bin/python3 -m hctf.cli prebuild ...'`, which the
+        # old argv[1] == "-c" + script-starts-with match missed -- D22 post-mortem); a mention (grep, --stop) never is
+        script = _shell_script(argv)
+        if script and any(_PREBUILD_SEG.match(seg.strip()) for seg in re.split(r"&&|\|\||;", script)):
             shells.append(pid)
     return shells, batches
 

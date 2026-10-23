@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # hctf pre-flight: one command, run it before every daily drop.
 # Checks (in order of how badly they bite): pairing-token validity + days-to-expiry, GM reachability,
-# VPN tunnel, Homebase SSH + credits. Prints a PASS/WARN/FAIL line each and a final verdict.
+# VPN tunnel, host exclusivity (no other harness copy busy) + CPU load, Homebase SSH + credits. Prints a PASS/WARN/FAIL
+# line each and a final verdict.
 # Exit 0 = go (no FAILs), 1 = a FAIL that will block solving.
 #
 # Run: cd ~/huntress-2026 && source bin/env.sh && preflight.sh   (or: bash bin/preflight.sh)
@@ -236,6 +237,39 @@ elif [ "$mem_avail_mb" -lt "${HCTF_MEM_WARN_MB:-4000}" ]; then
   warn "${mem_avail_mb} MB of ${mem_total_mb} MB available (< ${HCTF_MEM_WARN_MB:-4000} MB): tight for 5 workers + solvers."
 else
   ok "${mem_avail_mb} MB of ${mem_total_mb} MB available."
+fi
+
+# 3c3b) Host exclusivity + CPU load: ONE harness copy busy per host. 10-22: an rehearsal validation run shared the 12 cores
+# with main's `prebuild --parallel` -- load 37-50, fake "solver too slow" speed generalizes, every timing invalid.
+# Another copy's (alt / worktree / replay) day run or prebuild = FAIL (HCTF_SHARED_HOST=1 -> WARN; bin/day.sh runs
+# this pre-flight with it, a live launch is never blocked). This copy's own prebuild is fine: day.sh step 0 stops it.
+hdr "Host exclusivity + CPU load"
+if [ ! -f hctf/hostguard.py ]; then
+  warn "hctf/hostguard.py missing in this copy: can't tell whether another harness copy is busy on this host (sync hctf/ from main)."
+else
+  hg_out="$(timeout 30 python3 -m hctf.hostguard check --root "$ROOT" 2>/dev/null)"; hg_rc=$?
+  if [ "$hg_rc" -eq 0 ]; then
+    ok "no other harness copy is running a day run or prebuild on this host."
+  elif [ "$hg_rc" -eq 1 ] && grep -q '^OTHER ' <<<"$hg_out"; then
+    busy="$(grep '^OTHER ' <<<"$hg_out" | sed -E 's/^OTHER ([a-z]+) pid=([0-9]+) root=([^ ]+).*/\1 (pid \2) in \3/' | paste -sd ';' | sed 's/;/; /g')"
+    if [ "${HCTF_SHARED_HOST:-0}" = 1 ]; then
+      warn "another harness copy is busy on this host: $busy -- HCTF_SHARED_HOST=1 allows it, but timings are invalid while two copies share the CPU"
+    else
+      fail "another harness copy is busy on this host: $busy -- stop it first; timings are invalid while two copies share the CPU (its prebuild: python3 -m hctf.hostguard stop-other-prebuilds; override: HCTF_SHARED_HOST=1)"
+    fi
+  else
+    warn "host-exclusivity check failed (rc=$hg_rc; python3 -m hctf.hostguard check): $(tail -1 <<<"$hg_out" | cut -c1-200)"
+  fi
+fi
+ld_out="$(timeout 10 python3 -m hctf.hostguard load 2>/dev/null)"
+l5="$(sed -nE 's/.*load5=([0-9.]+).*/\1/p' <<<"$ld_out")"; np="$(sed -nE 's/.*nproc=([0-9]+).*/\1/p' <<<"$ld_out")"
+[ -n "$l5" ] || l5="$(awk '{print $2}' /proc/loadavg)"
+[ -n "$np" ] || np="$(nproc)"
+ld_f="${HCTF_LOAD_WARN_FACTOR:-1.5}"
+if awk -v l="$l5" -v n="$np" -v f="$ld_f" 'BEGIN{exit !(l > f * n)}'; then
+  warn "5-min load ${l5} > ${ld_f} x nproc (${np}): the host is oversubscribed -- speed gates and timed windows will read slow (find the hog: top -o %CPU)."
+else
+  ok "5-min load ${l5} on ${np} CPUs."
 fi
 
 # 3c4) Fault-injection replay of the timed runner (tests/test_fault_replay.py, ~2 min, offline): the harness faults
