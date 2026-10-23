@@ -1,0 +1,9 @@
+{
+ "codec": "base58check-ripple",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-badger-73",
+ "encoded": "rWZ6a1Leb4rRcUScHg7Y6da84Yjgcbuf5jnBBJ5JiRYPq2bRzAAwAso8PUQYJvVLJPbjd43SvvAe5Hmu9pFu8phiBHh3CrtRrdjSSSxLWsUqNDqZ7UsTuehBX7NqigDJqQM1nVoxuZxD8TdQB4E",
+ "generator_cmd": "python3 -c \"import sys,base58;print(base58.b58encode_check(b\\\"\\\\0\\\"+sys.argv[1].encode(),alphabet=base58.RIPPLE_ALPHABET).decode())\" \"$plain\"  # pip base58 2.1.1 Ripple alphabet",
+ "oracle_cmd": "printf %s \"$encoded\" | NM=$PWD/tools/npm-bech32/node_modules tools/node/bin/node tests/data/warmups_fixtures/chkbase_oracle.mjs ripplecheck",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-badger-73",
+ "expected": "match"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "b85-free",
+ "plain": "ice work",
+ "encoded": "<~Bk(]sGAhM;~>",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c 'import base64,sys;sys.stdout.write(base64.a85encode(sys.stdin.buffer.read(),adobe=True).decode())'  # Mastery fragment with its own <~ ~> delimiters (D23 line 23 shape)",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl a85",
+ "oracle_plain": "ice work",
+ "expected": "match"
+}

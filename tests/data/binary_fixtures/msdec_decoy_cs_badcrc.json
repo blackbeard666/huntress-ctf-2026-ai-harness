@@ -1,0 +1,10 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "decoy": true,
+ "convention": "same program as msdec_cs_b64xor, HCFG crc zeroed (decoy: decrypts, never crc-valid); plain text = base64(HCFG blob); offset = first stored byte of the ciphertext operand",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/msdec_gen.sh tests/data/binary_fixtures   # dotnet 10 SDK (dotnet build C#/VB), javac; blob = printf header + crc32 from gzip trailer; ciphertext by perl; <name>.plain = the compiled program's own stdout (dotnet app.dll / java A)",
+ "oracle_cmd": "python3 -I tests/data/binary_fixtures/msdec_oracle.py tests/data/binary_fixtures decoy_cs_badcrc   # program stdout -> base64 -> struct + zlib.crc32 + json; offset = bytes.find of the re-enciphered operand (UTF-16LE #US / FieldRVA bytes / CONSTANT_Utf8)",
+ "oracle_crc_ok": false
+}

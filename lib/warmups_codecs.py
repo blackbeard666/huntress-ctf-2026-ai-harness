@@ -131,6 +131,11 @@ DAYS = [
     # stream (78 da), level 9 Z_FILTERED (byte-exact on the Single, TT 2a0bae7a and 108/108 Mastery 6bd39775 line 22)
     (22, "b64-zlib", lambda s: base64.b64encode(_zl9f(_u(s))).decode(),
      lambda t: _t(zlib.decompress(base64.b64decode(_b64pad(t)))), False),
+    # D23 "Eighty-Five Alive" ("The alphabet got bigger. Adobe might recognize the neighbors."): Adobe Ascii85 of the
+    # UTF-8 bytes, <~ ~> delimiters, no 'y', no wrap (byte-exact on the Single, TT 519a0e26 and 113/113 Mastery
+    # d271467d line 23)
+    (23, "ascii85-adobe", lambda s: base64.a85encode(_u(s), adobe=True).decode(),
+     lambda t: _t(base64.a85decode(re.sub(r"\s+", "", t), adobe=True)), False),
 ]
 
 try:   # fair runs (HCTF_CODEC_MAX_DAY=<N-1>, as lib/codec.py): only codecs GM-confirmed before day N
@@ -2025,6 +2030,81 @@ def b62_dec(t, alpha=_B62):
     return _t(n.to_bytes((n.bit_length() + 7) // 8, "big"))
 
 
+# base92 (thenoviceoof / py3base92 / chepy to_base92): 91-symbol alphabet '!' + '#'..'_' + 'a'..'}' (no '"', '`', '~').
+# Bits are taken MSB-first: each 13-bit group -> 2 chars (hi = v // 91, lo = v % 91), a trailing <= 6-bit group -> 1
+# char, a 7..12-bit tail -> 2 chars (zero-padded to 13). The lone string '~' is the empty input. Strict: any char
+# outside the alphabet, a pair > 8191 or a lone tail char > 63 rejects the line.
+_B92 = "!" + "".join(map(chr, range(35, 96))) + "".join(map(chr, range(97, 126)))
+_UNB92 = {c: i for i, c in enumerate(_B92)}
+
+
+def b92_enc(s):
+    b = _u(s)
+    if not b:
+        return "~"
+    bits = "".join(f"{x:08b}" for x in b)
+    out = []
+    for i in range(0, len(bits) - len(bits) % 13, 13):
+        v = int(bits[i:i + 13], 2)
+        out += [_B92[v // 91], _B92[v % 91]]
+    tail = bits[len(bits) - len(bits) % 13:]
+    if tail and len(tail) < 7:
+        out.append(_B92[int(tail.ljust(6, "0"), 2)])
+    elif tail:
+        v = int(tail.ljust(13, "0"), 2)
+        out += [_B92[v // 91], _B92[v % 91]]
+    return "".join(out)
+
+
+def b92_dec(t):
+    t = t.strip()
+    if t == "~":
+        return ""
+    if not t or len(t) > 8192:
+        raise ValueError("not base92")
+    d = [_UNB92[c] for c in t]
+    bits = []
+    for i in range(0, len(d) - 1, 2):
+        v = d[i] * 91 + d[i + 1]
+        if v > 8191:
+            raise ValueError("base92 pair out of range")
+        bits.append(f"{v:013b}")
+    if len(d) % 2:
+        if d[-1] > 63:
+            raise ValueError("base92 tail out of range")
+        bits.append(f"{d[-1]:06b}")
+    bits = "".join(bits)
+    return _t(bytes(int(bits[i:i + 8], 2) for i in range(0, len(bits) - 7, 8)))
+
+
+# base94 / base95 big-integer text: bytes as one big-endian integer written in radix 94 over '!'..'~' (all printable
+# ASCII but space) or radix 95 over ' '..'~' (with space), digit 0 = the lowest code point, leading zero bytes dropped.
+# The alphabets cover almost any printable line, so the decoder also demands printable ASCII back (else ValueError).
+_B94 = "".join(map(chr, range(33, 127)))
+_B95 = "".join(map(chr, range(32, 127)))
+
+
+def bigalpha_enc(s, alpha):
+    n, out, r = int.from_bytes(_u(s), "big"), [], len(alpha)
+    while n:
+        n, d = divmod(n, r)
+        out.append(alpha[d])
+    return "".join(reversed(out))
+
+
+def bigalpha_dec(t, alpha):
+    t = t.strip("\r\n") if " " in alpha else t.strip()
+    if not t or len(t) > 4096:
+        raise ValueError("not big-radix text")
+    n, r = 0, len(alpha)
+    for c in t:
+        n = n * r + alpha.index(c)
+    out = _t(n.to_bytes((n.bit_length() + 7) // 8, "big"))
+    if not out or not all(" " <= c <= "~" or c in "\t\r\n" for c in out):
+        raise ValueError("big-radix reading is not ASCII text")
+    return out
+
+
 # base45 (RFC 9285, EU DCC / CyberChef "To Base45" / chepy to_base45): each byte pair -> 3 chars (n = c + d*45 + e*2025,
 # little-endian digits), a trailing odd byte -> 2 chars. Alphabet 0-9A-Z plus " $%*+-./:" -- space is a DIGIT, so the
 # line is not stripped beyond its newline. Strict: a char outside the alphabet, length % 3 == 1 or a triple > 65535
@@ -2132,6 +2212,228 @@ def b100_free(p):
     """Speculative free-line base100: only an all-block line of >= 2 emoji that decodes to printable text."""
     got = safe(b100_dec, p) if len(p.strip()) >= 2 else None
     return [p[:len(p) - len(p.lstrip())] + got] if got and got.strip() else []
+
+
+# Dense Unicode base-N (qntm's base65536 / base32768 / base2048, npm v5/v3/v5; sublee's PyPI base65536; PyPI base2048):
+# the bits MSB-first in N-bit groups, each group = one char of a 2^N repertoire (the inclusive code-point ranges
+# below, in order); a final short group uses the second repertoire (N-8 bits) and must be the last char. base32768 /
+# base2048 pad the tail out with 1-bits (decoder: leftover bits all 1s); base65536 needs no padding (a lone tail byte
+# = one char of U+1500..U+15FF) and indexes its repertoire byte-swapped (char = block[b2] + b1). Cue: ~55 (2048: ~80)
+# dense CJK / Hangul-like / Indic glyphs for a 110-byte sentence, no spaces. Strict: no stray char, padding checked.
+_DENSE = {
+    "base65536": (16, "㐀䳿一黿ꄀꏿꔀꗿ\U00010600\U000106ff\U00012000\U000122ff"
+                      "\U00013000\U000133ff\U00014400\U000145ff\U00016800\U000169ff\U00020000\U000285ff",
+                  "ᔀᗿ"),
+    "base32768": (15, "ҠҿԀԟڀڿݠޟ߀ߟကဟႠႿᄀ"
+                      "ᅟᆀᆟᇠሿበቿዠዿጠጿᎠᏟᐠᙟ"
+                      "ᚠᛟកសᠠᡟᣀᣟᦀᦟ᧠᧿ᨠᨿᯀ"
+                      "ᯟᰀᰟᴀᴟ⇠⇿⋀⋟⍀⏟␀␟─❟"
+                      "➀➿⠀⥿⦠⦿⨠⩟⪀⪿⫠⭟ⰀⰟⲀ"
+                      "ⳟⴀⴟⵀⵟ⺠⻟㇀㇟㐀䶟䷀龿ꀀꑿ"
+                      "꒠꒿ꔀꗿꙀꙟꚠꛟ꜀ꝟꞀꞟꡀꡟ",
+                  "ƀƟɀʟ"),
+    "base2048": (11, "89AZaz\xc6\xc6\xd0\xd0\xd8\xd8\xde\xdf\xe6\xe6\xf0\xf0\xf8\xf8\xfe\xfeĐđĦħ"
+                     "ııĸĸŁłŊŋŒœŦŧƀƟƢ"
+                     "ƮƱǃǝǝǤǥǶǷȜȝȠȥȴʯ"
+                     "ͰͳͶͷͻͽͿͿΑΡΣΩαωϏ"
+                     "ϏϗϯϳϳϷϸϺϿЂЂЄІЈЋ"
+                     "ЏИКикяђђєіјћџѵѸ"
+                     "ҁҊӀӃӏӔӕӘәӠӡӨөӶӷ"
+                     "ӺԯԱՖաֆאתװײؠءاؿف"
+                     "ي٠٩ٮٯٱٴٹڿہہۃےەە"
+                     "ۮۼۿۿܐܐܒܯݍޥޱޱ߀ߪࠀ"
+                     "ࠕࡀࡘࡠࡪࢠࢴࢶࢽऄनपरलळ"
+                     "वहऽऽॐॐॠॡ०९ॲঀঅঌএ"
+                     "ঐওনপরললশহঽঽৎৎৠৡ"
+                     "০ৱ৴৹ৼৼਅਊਏਐਓਨਪਰਲ"
+                     "ਲਵਵਸਹੜੜ੦੯ੲੴઅઍએઑ"
+                     "ઓનપરલળવહઽઽૐૐૠૡ૦"
+                     "૯ૹૹଅଌଏଐଓନପରଲଳଵହ"
+                     "ଽଽୟୡ୦୯ୱ୷ஃஃஅஊஎஐஒ"
+                     "ஓககஙசஜஜஞடணதநபமஹ"
+                     "ௐௐ௦௲అఌఎఐఒనపహఽఽౘ"
+                     "ౚౠౡ౦౯౸౾ಀಀಅಌಎಐಒನ"
+                     "ಪಳವಹಽಽೞೞೠೡ೦೯ೱೲഅ"
+                     "ഌഎഐഒഺഽഽൎൎൔൖ൘ൡ൦൸"
+                     "ൺൿඅඖකනඳරලලවෆ෦෯ก"
+                     "ะาาเๅ๐๙ກຂຄຄງຈຊຊ"
+                     "ຍຍດທນຟມຣລລວວສຫອ"
+                     "ະາາຽຽເໄ໐໙ໞໟༀༀ༠༳"
+                     "ཀགངཇཉཌཎདནབམཛཝཨཪཬྈ"
+                     "ྌကဥဧဪဿ၉ၐၕ",
+                 "07"),
+}
+
+
+@functools.lru_cache(maxsize=None)
+def _dense_tables(name):
+    """(bits, [(first, last, base_index, nbits)] sorted by first, {nbits: [(base_index, first, last)]})."""
+    bits, main, tail = _DENSE[name]
+    ranges, enc = [], {}
+    for nb, rep in ((bits, main), (bits - 8, tail)):
+        idx = 0
+        for a, b in zip(rep[0::2], rep[1::2]):
+            ranges.append((ord(a), ord(b), idx, nb))
+            enc.setdefault(nb, []).append((idx, ord(a), ord(b)))
+            idx += ord(b) - ord(a) + 1
+        if idx != 1 << nb:
+            raise ValueError(f"{name} repertoire size {idx} != 2^{nb}")
+    ranges.sort()
+    return bits, ranges, enc
+
+
+def _dense_z(name, nb, z):
+    """Repertoire index for an nb-bit group z (base65536's 16-bit groups are stored byte-swapped)."""
+    return ((z & 0xFF) << 8 | z >> 8) if name == "base65536" and nb == 16 else z
+
+
+def dense_enc(s, name="base65536"):
+    bits, _r, enc = _dense_tables(name)
+    data = _u(s) if isinstance(s, str) else bytes(s)
+    acc, n, out = 0, 0, []
+
+    def put(nb, z):
+        i = _dense_z(name, nb, z)
+        for base, a, b in enc[nb]:
+            if i < base + b - a + 1:
+                out.append(chr(a + i - base))
+                return
+    for byte in data:
+        acc, n = acc << 8 | byte, n + 8
+        while n >= bits:
+            n -= bits
+            put(bits, acc >> n)
+            acc &= (1 << n) - 1
+    if n:
+        nb = bits if n > bits - 8 else bits - 8
+        put(nb, (acc << (nb - n)) | ((1 << (nb - n)) - 1))   # pad with 1-bits (none for base65536)
+    return "".join(out)
+
+
+def dense_dec(t, name="base65536", raw=False):
+    """Bytes under one dense base-N line (raw=True) or its UTF-8 text; ValueError on any stray char / bad tail."""
+    import bisect
+    bits, ranges, _e = _dense_tables(name)
+    t = t.strip()
+    if not t or len(t) > 65536:
+        raise ValueError(f"not {name}")
+    starts = [r[0] for r in ranges]
+    acc, n, out = 0, 0, bytearray()
+    for k, c in enumerate(t):
+        o = ord(c)
+        j = bisect.bisect_right(starts, o) - 1
+        if j < 0 or o > ranges[j][1]:
+            raise ValueError(f"not {name}: {c!r}")
+        a, _b, base, nb = ranges[j]
+        if nb != bits and k != len(t) - 1:
+            raise ValueError(f"{name}: short char before the end")
+        i = base + o - a
+        z = _dense_z(name, nb, i)
+        acc, n = acc << nb | z, n + nb
+        while n >= 8:
+            n -= 8
+            out.append(acc >> n)
+            acc &= (1 << n) - 1
+    if acc != (1 << n) - 1:
+        raise ValueError(f"{name}: padding mismatch")
+    return bytes(out) if raw else _t(bytes(out))
+
+
+def dense_free(p):
+    """Speculative free-line base65536 / base32768 / base2048: a line of >= 2 chars, >= 1 non-ASCII, that decodes
+    strictly to printable text under one of the three repertoires (the line's leading indent kept)."""
+    s = p.strip()
+    if len(s) < 2 or s.isascii():
+        return []
+    lead = p[:len(p) - len(p.lstrip())]
+    got = (safe(lambda x, nm=nm: dense_dec(x, nm), s) for nm in _DENSE)
+    return [lead + g for g in got if g and g.strip() and any(c.isalpha() for c in g)]
+
+
+# Base-122 (kevinAlbs/Base122 encode.js; PyPI base122 b122encode): the bytes MSB-first in 7-bit groups, the last one
+# zero-padded; a group is one 1-byte UTF-8 char unless it is one of the 6 "illegal" values (NUL \n \r " & \) -> then
+# it and the NEXT group share a 2-byte char 110sss1x 10xxxxxx (sss = illegal index, x = the next 7 bits); an illegal
+# LAST group is written "shortened" (sss = 7, x = the group itself). Cue: valid UTF-8 of ~1.14 x the byte length
+# mixing ASCII and C0 control chars (\t \x0b \x1c ...) with U+0080..U+07FF code points (lead bytes c2-df); no \n \r " &
+# \ at all. The artifact may be raw bytes (strip only CR/LF/BOM: \t \x0b \x0c \x1c-\x1f and space are data). Strict:
+# no illegal 1-byte char, every 2-byte char of the 110sss1x form with sss != 6, shortened only last, zero pad bits.
+_B122_ILL = (0, 10, 13, 34, 38, 92)
+
+
+def b122_enc(s, raw=False):
+    data = _u(s) if isinstance(s, str) else bytes(s)
+    nbits = len(data) * 8
+    val = int.from_bytes(data, "big") << (-nbits % 7)
+    g = [(val >> (7 * k)) & 127 for k in range(-(-nbits // 7) - 1, -1, -1)]
+    out, i = [], 0
+    while i < len(g):
+        b = g[i]
+        if b in _B122_ILL:
+            sss, nxt = (_B122_ILL.index(b), g[i + 1]) if i + 1 < len(g) else (7, b)
+            out.append(chr(0x80 | sss << 8 | nxt))
+            i += 2
+        else:
+            out.append(chr(b))
+            i += 1
+    t = "".join(out)
+    return _u(t) if raw else t
+
+
+def b122_dec(t, raw=False):
+    """Bytes under one Base-122 string / raw UTF-8 bytes (raw=True) or its UTF-8 text; ValueError when it isn't one."""
+    if isinstance(t, (bytes, bytearray)):
+        t = bytes(t).decode("utf-8")
+    t = t.strip("\r\n﻿")
+    if not t:
+        raise ValueError("empty")
+    if not raw and not any(ord(c) > 127 for c in t) and t.isprintable() and " " in t:
+        raise ValueError("plain prose, not base122")
+    try:
+        return _b122_core(t, raw)
+    except ValueError:   # a raw artifact read as Latin-1 ("Â\x80" mojibake): re-read its bytes as UTF-8
+        if not (any(0xC2 <= ord(c) <= 0xDF for c in t) and max(map(ord, t)) < 256):
+            raise
+        return _b122_core(t.encode("latin-1").decode("utf-8"), raw)
+
+
+def _b122_core(t, raw):
+    g = []
+    for k, c in enumerate(t):
+        o = ord(c)
+        if o < 128:
+            if o in _B122_ILL:
+                raise ValueError(f"base122: illegal 1-byte {c!r}")
+            g.append(o)
+            continue
+        sss = o >> 8
+        if o > 0x7FF or not o & 0x80 or sss == 6:
+            raise ValueError(f"base122: bad 2-byte char {c!r}")
+        if sss == 7:
+            if k != len(t) - 1 or (o & 127) not in _B122_ILL:
+                raise ValueError("base122: shortened char not last")
+        else:
+            g.append(_B122_ILL[sss])
+        g.append(o & 127)
+    n = len(g) * 7 // 8
+    if -(-n * 8 // 7) != len(g):
+        raise ValueError("base122: stray tail group")
+    val = 0
+    for x in g:
+        val = val << 7 | x
+    pad = len(g) * 7 - n * 8
+    if val & ((1 << pad) - 1):
+        raise ValueError("base122: nonzero pad bits")
+    out = (val >> pad).to_bytes(n, "big")
+    return out if raw else _t(out)
+
+
+def b122_free(p):
+    """Speculative free-line Base-122: a line with a 2-byte (U+0080..U+07FF) or C0-control char that decodes strictly
+    to printable text with letters."""
+    if not any(ord(c) > 127 or (ord(c) < 32 and c not in "\r\n") for c in p):
+        return []
+    got = safe(b122_dec, p)
+    return [got] if got and got.strip() and any(c.isalpha() for c in got) else []
 
 # CSS / HTML colour codes: the bytes in RGB triples, one colour token each -- '#4e6963' (CyberChef-style "hex colour"
 # strings, Pillow pixel dumps), the short '#RGB' (3 nibbles per token, the hex stream cut in threes), '#RRGGBBAA', or
@@ -7006,10 +7308,16 @@ def _cands():
         ("base36", b36_enc, b36_dec),
         ("base62", b62_enc, b62_dec),
         ("base62-inv", lambda s: b62_enc(s, _B62_INV), lambda t: b62_dec(t, _B62_INV)),
+        ("base92", b92_enc, b92_dec),
+        ("base94", lambda s: bigalpha_enc(s, _B94), lambda t: bigalpha_dec(t, _B94)),
+        ("base95", lambda s: bigalpha_enc(s, _B95), lambda t: bigalpha_dec(t, _B95)),
         ("base45", b45_enc, b45_dec),
         ("z85", z85_enc, z85_dec),
         ("z85-pad", lambda s: z85_enc(s, pad=True), z85_dec),
         ("base100", b100_enc, b100_dec),
+        *[(nm, (lambda nm: lambda s: dense_enc(s, nm))(nm), (lambda nm: lambda t: dense_dec(t, nm))(nm))
+          for nm in _DENSE],
+        ("base122", b122_enc, b122_dec),
         ("css-hex", css_hex_enc, css_hex_dec),
         ("css-hex-upper", lambda s: css_hex_enc(s, upper=True), css_hex_dec),
         ("css-hex-pad20", lambda s: css_hex_enc(s, pad=b" "), css_hex_dec),
@@ -9569,6 +9877,112 @@ CANDIDATES += [(f"bignum{r}-{o}" + ("" if f == "utf8" else f"-{f}"),
 del _have
 
 
+# --------------------------------------------- big-radix alphabets (the whole text as ONE integer, any printable radix)
+# Generic catch-all for "the alphabet got bigger" when no 4/5-char chunk codec fits: n = int.from_bytes(utf8, 'big' |
+# 'little') written in radix len(A) over A = base94 '!'..'~' / base95 ' '..'~' / RFC1924 b85 / Ascii85 '!'..'u' / Z85 /
+# basE91 / base64 / base62 (+ inverted) / base58 (bitcoin, flickr) -- or the line's own sorted charset. Digits most-
+# significant first ('big') or reversed ('little'). base58-style leading A[0] symbols = leading zero bytes (text has
+# none, so they are dropped). Capped at 2000 chars; crib-gated by _bign_text (printable, wordy UTF-8/UTF-16 only).
+_BIGR_ALPHAS = {
+    "b94": _B94, "b95": _B95, "a85": "".join(map(chr, range(33, 118))),
+    "b85": string.digits + string.ascii_uppercase + string.ascii_lowercase + "!#$%&()*+-;<=>?@^_`{|}~",
+    "z85": string.digits + string.ascii_lowercase + string.ascii_uppercase + ".-:+=^!/*?&<>()[]{}@%$#",
+    "b91": _B91, "b64": string.ascii_uppercase + string.ascii_lowercase + string.digits + "+/",
+    "b62": _B62, "b62inv": _B62_INV, "b58": _B58,
+    "b58flickr": "123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ",
+}
+
+
+def bigradix_enc(s, alpha, digits="big", order="big", lead0=False):
+    b = _u(s)
+    n, out, r = int.from_bytes(b, order), [], len(alpha)
+    while n:
+        n, d = divmod(n, r)
+        out.append(alpha[d])
+    if lead0:
+        out += [alpha[0]] * (len(b) - len(b.lstrip(b"\0")))
+    return "".join(out if digits == "little" else reversed(out))
+
+
+def bigradix_reads(t, alphas=None):
+    """[(alpha_name, digits, order, text)] for every big-radix reading of ONE line (alphas: names, or "sorted" = the
+    line's own sorted charset). Never raises."""
+    try:
+        t = _t(t)
+        t = t.strip("\r\n")
+        if not t.strip() or len(t) > 2000:
+            return []
+        cs = set(t)
+        names = list(_BIGR_ALPHAS) + ["sorted"] if alphas is None else list(alphas)
+        out, seen = [], set()
+        for name in names:
+            a = "".join(sorted(cs)) if name == "sorted" else _BIGR_ALPHAS.get(name)
+            if not a or len(a) < 3:
+                continue
+            u = t if " " in a else t.strip()
+            if not u or not set(u) <= set(a):
+                continue
+            ix = {c: i for i, c in enumerate(a)}
+            r = len(a)
+            for digits in ("big", "little"):
+                v = u if digits == "big" else u[::-1]
+                v = v.lstrip(a[0])          # base58-style leading zero symbols: zero bytes, absent from text
+                if not v:
+                    continue
+                n = 0
+                for c in v:
+                    n = n * r + ix[c]
+                L = (n.bit_length() + 7) // 8
+                for order in ("big", "little"):
+                    for k in (L, L + 1) if L % 2 else (L,):
+                        x = _bign_text(n.to_bytes(k, order))
+                        if x is not None and (len(x) < 4 or len(x) < 16 and not x.isascii()):
+                            x = None    # 2-3 char / short non-ASCII readings: chance hits of a wide alphabet
+                        if x is not None:
+                            if x not in seen:
+                                seen.add(x)
+                                out.append((name, digits, order, x))
+                            break
+        from lib.decode import _bigram
+        return sorted(out, key=lambda q: -_bigram(q[3]) if len(q[3]) >= 12 else 0)   # text before its reversal
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def bigradix_dec(t, alpha=None, digits=None, order=None):
+    """One line under a big-radix alphabet (name in _BIGR_ALPHAS or "sorted"; None = any) -> text, else None."""
+    try:
+        for name, d, o, x in bigradix_reads(t, None if alpha is None else (alpha,)):
+            if (digits is None or d == digits) and (order is None or o == order):
+                return x
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def bigradix_free(p):
+    """Speculative Mastery-line decoder: the fragment as one big-radix integer (leading spaces kept unless the
+    alphabet has a space)."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        outs = [lead + x for _a, _d, _o, x in bigradix_reads(p.strip())]
+        outs += [x for _a, _d, _o, x in bigradix_reads(p, ("b95",)) if lead and x not in outs]
+        return outs[:4]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+_have = {n for n, _e, _d in CANDIDATES}
+CANDIDATES += [(f"bigradix-{a}-{d}" + ("" if o == "big" else "-le"),
+                (lambda a, d, o: lambda s: bigradix_enc(s, _BIGR_ALPHAS[a], d, o))(a, d, o),
+                (lambda a, d, o: lambda t: bigradix_dec(t, a, d, o))(a, d, o))
+               for a in _BIGR_ALPHAS for d in ("big", "little") for o in ("big", "little")
+               if f"bigradix-{a}-{d}" + ("" if o == "big" else "-le") not in _have]
+del _have
+
+
 # ------------------------------------------- byte-swapped code-unit escapes (D9 \uXXXX with the UTF-16 byte order flipped)
 # `\u4e00\u6900\u6300` = "Nic": UTF-16LE bytes read as big-endian code units ((v & 255) << 8 | v >> 8), so json.loads /
 # html.unescape / unescape() read CJK U+2000-U+7Exx with every low byte 00 (space -> U+2000). Any escape form: \uXXXX,
@@ -10607,6 +11021,303 @@ CANDIDATES += [(n + ("-pad" if pad else ""), (lambda n, pad: lambda s: alt64_enc
                 (lambda n: lambda t: alt64_dec(t, n))(n))
                for n in list(_ALT64) + ["crypt64-le"] for pad in (False, True) if not (pad and n == "crypt64-le")]
 CANDIDATES.append(("keyed-base64", lambda s: None, keyb64_dec))
+
+
+# ------------------------------------- checksummed base-N (speculative, coverage atlas target bech32-base58check)
+# Crypto-address dress. bech32 / bech32m (BIP173 / BIP350): hrp + '1' + 5-bit symbols of 'qpzry9x8gf2tvdw0s3jn54khce6mua7l',
+# last 6 = BCH checksum (polymod const 1 / 0x2bc830a3), data regrouped 5->8 bits (pad bits < 5 and zero); a segwit
+# shape carries one witness-version symbol before the regrouped program. No 90-char limit (a sentence is ~160 chars).
+# base58check: base58 (bitcoin / Ripple / Flickr alphabet) of version + payload + sha256d(version + payload)[:4]; the
+# decoder verifies the checksum then strips 1 version byte (-nover: none). The checksum is the gate: a flipped symbol
+# or an unchecked base58 line reads as None.
+_BECH = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+_BECH_CONST = {"bech32": 1, "bech32m": 0x2bc830a3}
+_B58_RIPPLE = "rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm8oFqi1tuvAxyz"
+_B58_FLICKR = "123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
+_B58S = {"bitcoin": _B58, "ripple": _B58_RIPPLE, "flickr": _B58_FLICKR}
+
+
+def _bech_polymod(vals):
+    gen = (0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3)
+    chk = 1
+    for v in vals:
+        top = chk >> 25
+        chk = (chk & 0x1ffffff) << 5 ^ v
+        for i in range(5):
+            chk ^= gen[i] if (top >> i) & 1 else 0
+    return chk
+
+
+def _bech_hrp(h):
+    return [ord(c) >> 5 for c in h] + [0] + [ord(c) & 31 for c in h]
+
+
+def _regroup(data, frm, to, pad):
+    acc = bits = 0
+    out = []
+    for v in data:
+        acc = (acc << frm | v) & 0xffffff
+        bits += frm
+        while bits >= to:
+            bits -= to
+            out.append(acc >> bits & ((1 << to) - 1))
+    if pad:
+        if bits:
+            out.append(acc << (to - bits) & ((1 << to) - 1))
+    elif bits >= frm or acc << (to - bits) & ((1 << to) - 1):
+        return None
+    return out
+
+
+def bech32_enc(s, variant="bech32", hrp="ctf", witver=None):
+    d = ([witver] if witver is not None else []) + _regroup(_u(s), 8, 5, True)
+    chk = _bech_polymod(_bech_hrp(hrp) + d + [0] * 6) ^ _BECH_CONST[variant]
+    return hrp + "1" + "".join(_BECH[x] for x in d + [chk >> 5 * (5 - i) & 31 for i in range(6)])
+
+
+def bech32_parse(t):
+    """(variant, hrp, 5-bit data without checksum) of a checksum-valid bech32 / bech32m string, else None."""
+    t = t.strip() if isinstance(t, str) else ""
+    if not t or t != t.lower() and t != t.upper():
+        return None
+    t = t.lower()
+    pos = t.rfind("1")
+    if pos < 1 or pos + 7 > len(t) or any(not 33 <= ord(c) <= 126 for c in t[:pos]):
+        return None
+    data = [_BECH.find(c) for c in t[pos + 1:]]
+    if -1 in data:
+        return None
+    pm = _bech_polymod(_bech_hrp(t[:pos]) + data)
+    for v, k in _BECH_CONST.items():
+        if pm == k:
+            return v, t[:pos], data[:-6]
+    return None
+
+
+def _chk_text(x):
+    return bool(x) and all(c.isprintable() or c in "\t\r\n" for c in x)
+
+
+def bech32_dec(t, variant=None):
+    """The text of a checksum-valid bech32 / bech32m line (variant: only that constant), plain or segwit-shaped."""
+    try:
+        r = bech32_parse(t)
+        if not r or variant and r[0] != variant:
+            return None
+        for skip in (0, 1):
+            b = _regroup(r[2][skip:], 5, 8, False)
+            if b:
+                try:
+                    x = bytes(b).decode("utf-8")
+                except UnicodeDecodeError:
+                    continue
+                if _chk_text(x):
+                    return x
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def b58x_enc(b, alpha=_B58):
+    n = int.from_bytes(b, "big")
+    out = ""
+    while n:
+        n, r = divmod(n, 58)
+        out = alpha[r] + out
+    return alpha[0] * (len(b) - len(b.lstrip(b"\0"))) + out
+
+
+def b58x_dec(t, alpha=_B58):
+    """Bytes of a base58 string in `alpha` (leading alpha[0] = zero bytes), None on a foreign symbol."""
+    t = t.strip() if isinstance(t, str) else ""
+    n = 0
+    for c in t:
+        i = alpha.find(c)
+        if i < 0:
+            return None
+        n = n * 58 + i
+    if not t:
+        return None
+    return b"\0" * (len(t) - len(t.lstrip(alpha[0]))) + (n.to_bytes((n.bit_length() + 7) // 8, "big") if n else b"")
+
+
+def _sha256d4(b):
+    import hashlib
+    return hashlib.sha256(hashlib.sha256(b).digest()).digest()[:4]
+
+
+def b58check_enc(s, alpha="bitcoin", ver=b"\0"):
+    p = ver + _u(s)
+    return b58x_enc(p + _sha256d4(p), _B58S[alpha])
+
+
+def b58check_dec(t, alpha="bitcoin", ver=1):
+    """Payload text of a base58check string: checksum verified, `ver` leading version bytes stripped; else None."""
+    try:
+        b = b58x_dec(t, _B58S[alpha])
+        if not b or len(b) < 5 + ver or _sha256d4(b[:-4]) != b[-4:]:
+            return None
+        x = b[ver:-4].decode("utf-8")
+        return x if _chk_text(x) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def chkbase_free(p):
+    """Mastery free-text line under bech32 / bech32m / base58check (any alphabet): checksum-gated reads only."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        outs = [bech32_dec(p)] + [b58check_dec(p, a, v) for a in _B58S for v in (1, 0)]
+        return [lead + x for x in dict.fromkeys(o for o in outs if o)][:2]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+CANDIDATES += [(v + ("-segwit" if w is not None else ""),
+                (lambda v, w: lambda s: bech32_enc(s, v, witver=w))(v, w), (lambda v: lambda t: bech32_dec(t, v))(v))
+               for v in _BECH_CONST for w in (None, 0 if v == "bech32" else 1)]
+CANDIDATES += [(f"base58check-{a}" + ("" if ver else "-nover"),
+                (lambda a, ver: lambda s: b58check_enc(s, a, b"\0" * ver))(a, ver),
+                (lambda a, ver: lambda t: b58check_dec(t, a, ver))(a, ver))
+               for a in _B58S for ver in (1, 0)]
+CANDIDATES += [(f"base58-{a}", (lambda a: lambda s: b58x_enc(_u(s), _B58S[a]))(a),
+                (lambda a: lambda t: _t(b58x_dec(t, _B58S[a])))(a)) for a in ("ripple", "flickr")]
+
+
+# --------------------------------- 256-glyph byte maps (speculative, coverage atlas target base256-glyph-bytes)
+# "An alphabet as big as a byte": one glyph per byte. Offset blocks = chr(base + b) for one 256-wide window (Braille
+# U+2800+b, U+0100+b, any aligned block, or base = min - 0x20 when a space byte sets the low edge); base256emoji
+# (multiformats / py-multibase: a fixed 256-emoji table, optional multibase prefix 🚀 = table[0]); cp437 (codec, or
+# the graphic glyphs ☺☻♥.. for 0x00-0x1f / ⌂ 0x7f) and Latin-1 (ord < 256) renderings of an inner byte layer. Bytes ->
+# UTF-8 text, else the inner layer (decode_chunk of the text, or the compressor sweep over the raw bytes). Strict:
+# offset forms need every glyph non-ASCII (an ASCII space kept as 0x20 allowed); cp437 / Latin-1 need >= 1 non-ASCII
+# glyph and an inner layer that reads back; an unaligned (min - 0x20) base must read English. VS15/VS16 presentation selectors are dropped. Never raises.
+_B256E = "🚀🪐☄🛰🌌🌑🌒🌓🌔🌕🌖🌗🌘🌍🌏🌎🐉☀💻🖥💾💿😂❤😍🤣😊🙏💕😭😘👍😅👏😁🔥🥰💔💖💙😢🤔😆🙄💪😉☺👌🤗💜😔😎😇🌹🤦🎉💞✌✨🤷😱😌🌸🙌😋💗💚😏💛🙂💓🤩😄😀🖤😃💯🙈👇🎶😒🤭❣😜💋👀😪😑💥🙋😞😩😡🤪👊🥳😥🤤👉💃😳✋😚😝😴🌟😬🙃🍀🌷😻😓⭐✅🥺🌈😈🤘💦✔😣🏃💐☹🎊💘😠☝😕🌺🎂🌻😐🖕💝🙊😹🗣💫💀👑🎵🤞😛🔴😤🌼😫⚽🤙☕🏆🤫👈😮🙆🍻🍃🐶💁😲🌿🧡🎁⚡🌞🎈❌✊👋😰🤨😶🤝🚶💰🍓💢🤟🙁🚨💨🤬✈🎀🍺🤓😙💟🌱😖👶🥴▶➡❓💎💸⬇😨🌚🦋😷🕺⚠🙅😟😵👎🤲🤠🤧📌🔵💅🧐🐾🍒😗🤑🌊🤯🐷☎💧😯💆👆🎤🙇🍑❄🌴💣🐸💌📍🥀🤢👅💡💩👐📸👻🤐🤮🎼🥵🚩🍎🍊👼💍📣🥂"
+_B256E_IX = {c: i for i, c in enumerate(_B256E)}
+_CP437G = " ☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼"
+_CP437_IX = {c: i for i, c in enumerate(_CP437G) if i}
+_CP437_IX["⌂"] = 0x7F
+_GB_BASES = {"braille": 0x2800, "u0100": 0x100}
+
+
+def glyph_bytes_enc(s, form="braille"):
+    """One glyph per UTF-8 byte: form = braille / u0100 / a hex base ('0x3000') / base256emoji[-mb]."""
+    b = _u(s)
+    if form.startswith("base256emoji"):
+        return ("🚀" if form.endswith("-mb") else "") + "".join(_B256E[x] for x in b)
+    base = _GB_BASES.get(form)
+    return "".join(chr((int(form, 16) if base is None else base) + x) for x in b)
+
+
+def _gb_cp437(t):
+    try:
+        return t.encode("cp437")
+    except UnicodeEncodeError:
+        pass
+    out = bytearray()
+    for c in t:
+        v = _CP437_IX.get(c)
+        if v is None:
+            try:
+                v = c.encode("cp437")[0]
+            except UnicodeEncodeError:
+                return None
+        out.append(v)
+    return bytes(out)
+
+
+def glyph_bytes_reads(t):
+    """[(form, bytes)] for every 256-glyph byte-map reading of `t` (no text gate yet). Never raises."""
+    out = []
+    try:
+        if not isinstance(t, str):
+            return []
+        t = t.strip().replace("️", "").replace("︎", "")
+        if len(t) < 2 or len(t) > 50000 or t.isascii():
+            return []
+        if all(c in _B256E_IX for c in t):
+            b = bytes(_B256E_IX[c] for c in t)
+            if t[0] == "🚀":
+                out.append(("base256emoji-mb", b[1:]))
+            out.append(("base256emoji", b))
+        g = [ord(c) for c in t if c != " "]
+        if g and min(g) >= 0x80 and max(g) - min(g) < 256:
+            lo, hi = min(g), max(g)
+            for base in dict.fromkeys((lo & ~0xFF, lo & ~0x7F, lo - 0x20, hi & ~0xFF)):
+                if 0 < base <= lo and hi - base <= 255 and (" " not in t or base >= 0x100):
+                    b = bytes(0x20 if c == " " else ord(c) - base for c in t)
+                    out.append(({0x2800: "braille", 0x100: "u0100"}.get(base, f"0x{base:x}"), b))
+        if all(ord(c) < 256 for c in t):
+            out.append(("latin1", t.encode("latin-1")))
+        b = _gb_cp437(t)
+        if b is not None and (not out or out[-1][1] != b):
+            out.append(("cp437", b))
+    except Exception:   # noqa: BLE001
+        return []
+    return out
+
+
+def _gb_ascii(b):
+    s = _txt(b)
+    return s if s and s.isascii() and _texty(s) >= 0.7 else None
+
+
+def glyph_bytes_texts(t, form=None, inner=True):
+    """[(form, text)] readings: direct UTF-8 text, else (inner) decode_chunk of that text / the compressor sweep over
+    the raw bytes. Offset / emoji forms read direct; cp437 / Latin-1 only through an inner layer."""
+    out = []
+    try:
+        for f, b in glyph_bytes_reads(t):
+            if form and f != form:
+                continue
+            s = _gb_ascii(b) if f not in ("cp437", "latin1") else None
+            loose = f.startswith("0x") and int(f, 16) % 0x80   # min - 0x20 guess: English only, no inner layer
+            if s and loose and not (SLUG.search(s) or _kbd_score(s) >= _RD_OK):
+                continue
+            if s:
+                out.append((f, s))
+            if not inner or not b or loose:
+                continue
+            if s and not SLUG.search(s):
+                from lib.decode import decode_chunk
+                x = safe(decode_chunk, s)
+                if x and x != s and x.isascii() and (SLUG.search(x) or _kbd_score(x) > _kbd_score(s)):
+                    out.append((f + "+chunk", x))
+            if not s:
+                x = safe(decompress_dec, b)
+                if x:
+                    out.append((f + "+squeeze", x))
+    except Exception:   # noqa: BLE001
+        return []
+    return out
+
+
+def glyph_bytes_dec(t, form=None):
+    """The sentence under a 256-glyph byte map (slug-bearing reading first), else None."""
+    r = [s for _f, s in glyph_bytes_texts(t, form)]
+    return next((s for s in r if SLUG.search(s)), None) or max((s for s in r if _kbd_score(s) >= _RD_OK),
+                                                                key=_kbd_score, default=None)
+
+
+def glyph_bytes_free(p):
+    """Speculative Mastery-line decoder: the English direct 256-glyph byte-map readings of a fragment, best first."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        r = dict.fromkeys(s for f, s in glyph_bytes_texts(p, inner=False)   # named maps: any text; else English
+                          if f in ("braille", "u0100", "base256emoji", "base256emoji-mb") or _kbd_score(s) >= _RD_OK)
+        return [lead + s for s in sorted(r, key=_kbd_score, reverse=True)][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+CANDIDATES += [(f"glyph-bytes-{f}", (lambda f: lambda s: glyph_bytes_enc(s, f))(f),
+                (lambda f: lambda t: glyph_bytes_dec(t, f))(f))
+               for f in ("braille", "u0100", "base256emoji", "base256emoji-mb")]
+CANDIDATES.append(("glyph-bytes", lambda s: None, glyph_bytes_dec))
 
 
 # --------------------------------- compressor sweep (speculative, coverage atlas target compression-family-sweep)
@@ -14381,6 +15092,718 @@ CANDIDATES += [("yenc", yenc_enc, lambda t: yenc_dec(t, bare=False)),
                ("binhex4-lf", lambda s: binhex_enc(s, eol="\n"), binhex_dec)]
 
 
+# ------------------------------------------- base85 variant sweep (speculative, coverage atlas target base85-variant-sweep)
+# D23 = Adobe Ascii85 '<~...~>' ("The alphabet got bigger"). The lane turns one knob a day, so read every 85-char
+# family: Adobe with a lost / half delimiter, bare a85 ('z' = 4 NULs, 'y' = 4 spaces btoa-style), wrapped lines, btoa
+# ('xbtoa Begin' .. 'xbtoa End N <len> ...', whole zero-padded groups trimmed to N), RFC 1924 / git / Python b85, Z85
+# (translated index-for-index onto the b85 alphabet, partial last group ok, <= 3 NUL pad dropped), IPv6 RFC 1924 (one
+# 20-char token = a 128-bit big-endian integer -> 16 bytes; non-text -> the IPv6 address). Each byte reading is then
+# tried as text, a magic-sniffed squeeze (_dz_inflate), UTF-16, and decode_chunk (hex / base64 inner). Never raises.
+_BTOA = re.compile(r"xbtoa Begin[^\n]*\n(.*?)\n\s*xbtoa End(?:\s+N\s+(\d+))?", re.S)
+_A85_SET = frozenset(map(chr, range(33, 118))) | {"z", "y"}
+_B85_SET, _Z85_SET = frozenset(_B85_ABC), frozenset(_Z85_ABC)
+_UNB85 = {c: i for i, c in enumerate(_B85_ABC)}
+
+
+def ipv6_1924_dec(tok):
+    """RFC 1924 compact IPv6: 20 base-85 digits (b85 alphabet) of one 128-bit integer -> 16 bytes."""
+    if len(tok) != 20 or not all(c in _UNB85 for c in tok):
+        raise ValueError("not rfc1924")
+    v = 0
+    for c in tok:
+        v = v * 85 + _UNB85[c]
+    if v >> 128:
+        raise ValueError("rfc1924 out of range")
+    return v.to_bytes(16, "big")
+
+
+def btoa_enc(s, width=78):
+    """btoa 4.x: whole zero-padded groups ('z' / 'y'), 78-col lines, trailer with N and the E/S/R checksums."""
+    b = _u(s)
+    body = base64.a85encode(b + b"\0" * (-len(b) % 4), foldspaces=True).decode()
+    e = sm = r = 0
+    for c in b:
+        e ^= c
+        sm = (sm + c + 1) & 0xFFFFFFFF
+        r = ((r << 1 | r >> 31) + c) & 0xFFFFFFFF
+    lines = [body[i:i + width] for i in range(0, len(body), width)]
+    return "xbtoa Begin\n" + "\n".join(lines) + f"\nxbtoa End N {len(b)} {len(b):x} E {e:x} S {sm:x} R {r:x}\n"
+
+
+def b85_reads(t):
+    """[(name, bytes)] for every 85-char family `t` strictly parses as."""
+    if isinstance(t, (bytes, bytearray)):
+        try:
+            t = bytes(t).decode("ascii")
+        except UnicodeDecodeError:
+            return []
+    s = t.strip() if isinstance(t, str) else ""
+    if not s or len(s) > 400000:
+        return []
+    out = []
+
+    def add(name, fn):
+        try:
+            b = fn()
+        except (ValueError, TypeError, OverflowError):
+            return
+        if b:
+            out.append((name, b))
+    m = _BTOA.search(s)
+    if m:
+        body, n = re.sub(r"\s+", "", m.group(1)), m.group(2)
+        add("btoa", lambda: base64.a85decode(body, foldspaces=True)[:int(n) if n else None])
+        return out
+    flat = re.sub(r"\s+", "", s)
+    if flat.startswith("<~") or flat.endswith("~>"):
+        core = flat[2:] if flat.startswith("<~") else flat
+        core = core[:-2] if core.endswith("~>") else core
+        add("ascii85-adobe", lambda: base64.a85decode("<~" + core + "~>", adobe=True))
+        if "y" in core:
+            add("ascii85-adobe-y", lambda: base64.a85decode(core, foldspaces=True))
+        return out
+    if all(c in _A85_SET for c in flat) and len(flat.replace("z", "").replace("y", "")) % 5 != 1:
+        add("ascii85", lambda: base64.a85decode(flat))
+        if "y" in flat:
+            add("ascii85-y", lambda: base64.a85decode(flat, foldspaces=True))
+    if len(flat) == 20:
+        add("ipv6-rfc1924", lambda: ipv6_1924_dec(flat))
+    if all(c in _B85_SET for c in flat) and len(flat) % 5 != 1:
+        add("base85", lambda: base64.b85decode(flat))
+    if all(c in _Z85_SET for c in flat) and len(flat) % 5 != 1:
+        add("z85", lambda: base64.b85decode(flat.translate(_Z85_TO_B85)))
+    return out
+
+
+def _b85_texts(b):
+    """[(inner, text)] for one decoded byte string: printable text, a sniffed squeeze, UTF-16, then decode_chunk."""
+    k = len(b) - len(b.rstrip(b"\0"))
+    s = _txt(b[:len(b) - k] if 0 < k <= 3 else b)
+    out = [("", s)] if s else []
+    if not s and len(b) >= 6:
+        out += [(kind, x) for kind, data in _dz_inflate(b) for x in (_dz_text(data),) if x]
+    if not s and len(b) >= 4 and len(b) % 2 == 0:
+        enc = ("utf-16" if b[:2] in (b"\xff\xfe", b"\xfe\xff") else "utf-16-le" if not any(b[1::2]) else
+               "utf-16-be" if not any(b[0::2]) else None)
+        try:
+            x = b.decode(enc) if enc else None
+        except UnicodeDecodeError:
+            x = None
+        if x and x.isprintable():
+            out.append((enc, x))
+    from lib.decode import decode_chunk
+    for name, x in list(out):
+        if not SLUG.search(x) and (" " not in x.strip() or re.fullmatch(r"[0-9A-Fa-f\s]+", x)):
+            p = safe(decode_chunk, x)
+            if p and p != x and p.isprintable() and _texty(p) >= 0.85:
+                out.append((name + "+chunk", p))
+    return out
+
+
+def b85_any_reads(t):
+    """[(name, text)] for every 85-char family x inner-layer reading of `t`. Never raises."""
+    try:
+        reads = []
+        for n, b in b85_reads(t):
+            texts = _b85_texts(b)
+            reads += [(n + (f"[{i}]" if i else ""), x) for i, x in texts]
+            if not texts and n == "ipv6-rfc1924":
+                import ipaddress
+                reads.append((n, str(ipaddress.IPv6Address(b))))
+        return reads
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+
+
+def b85_any(t, gate=SLUG):
+    """The slug-gated (else the first texty / IPv6) reading of a whole blob under any 85-char family, else None."""
+    reads = b85_any_reads(t)
+    hit = next((x for _n, x in reads if gate is not None and gate.search(x)), None)
+    return hit or next((x for n, x in reads if _texty(x) >= 0.85 or n == "ipv6-rfc1924"), None)
+
+
+def b85_free(p):
+    """Speculative Mastery-line decoder: one 85-char token (own delimiters / btoa frame) that reads as a sentence piece."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead, s = p[:len(p) - len(p.lstrip())], p.strip()
+        if " " in s and not _BTOA.search(s):
+            return []
+        return list(dict.fromkeys(lead + x for _n, x in b85_any_reads(s) if _tc_piece(x)))[:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+CANDIDATES += [("base85-any", lambda s: None, b85_any),
+               ("ascii85-btoa", btoa_enc, b85_any),
+               ("ascii85-y", lambda s: base64.a85encode(_u(s), foldspaces=True).decode(), b85_any),
+               ("ascii85-adobe-wrap75", lambda s: base64.a85encode(_u(s), adobe=True, wrapcol=75).decode(), b85_any),
+               ("ascii85-adobe-open", lambda s: base64.a85encode(_u(s), adobe=True).decode()[:-2], b85_any),
+               ("ascii85-adobe-hex", lambda s: base64.a85encode(_u(s).hex().encode(), adobe=True).decode(), b85_any),
+               ("base85-hex", lambda s: base64.b85encode(_u(s).hex().encode()).decode(), b85_any),
+               ("ascii85-zlib", lambda s: base64.a85encode(zlib.compress(_u(s), 9)).decode(), b85_any)]
+
+
+# ---------------------------------- serialization wrappers (speculative, coverage atlas target serialization-wrappers)
+# "Wrapper / package / pickled / marshalled" read literally: the sentence is a string value inside a serialized object
+# -- Python pickle (protocol 0-5) and marshal, msgpack, CBOR, BSON, protobuf wire, PHP serialize() (raw text or under
+# base64 / hex) and Java ObjectOutputStream (aced0005). NEVER deserializes: tiny strict walkers pull the string /
+# bytes values out (a stream that doesn't parse to its exact end reads as nothing); Java is a magic-gated scan of its
+# TC_STRING / TC_LONGSTRING records. (.NET BinaryFormatter: no offline writer for a fixture -- not built.)
+# ser_strings(t) -> [(form, [bytes])]. Never raises.
+_SER_DEPTH = 48
+_PK_FIX = dict.fromkeys(b"(.012NRabd}el]ost)uQ\x81\x85\x86\x87\x88\x89\x8f\x90\x91\x92\x93\x94\x97\x98", 0)
+_PK_FIX.update(dict.fromkeys(b"\x80Khq\x82", 1))
+_PK_FIX.update(dict.fromkeys(b"M\x83", 2))
+_PK_FIX.update(dict.fromkeys(b"Jjr\x84", 4))
+_PK_FIX.update(dict.fromkeys(b"G\x95", 8))
+_PK_LEN = {0x55: (1, 1), 0x43: (1, 1), 0x8c: (1, 1), 0x8a: (1, 0), 0x54: (4, 1), 0x42: (4, 1), 0x58: (4, 1),
+           0x8b: (4, 0), 0x8d: (8, 1), 0x8e: (8, 1), 0x96: (8, 1)}   # opcode -> (length width, is a string value)
+
+
+def _ser_pickle(b):
+    """Pickle opcode walk (pickletools' arg table, nothing executed): string / bytes args up to STOP, else None."""
+    i, n, out = 0, len(b), []
+    while i < n:
+        op = b[i]
+        i += 1
+        if op in _PK_FIX:
+            if op == 0x2e:   # STOP
+                return out if not b[i:].strip(b"\x00\r\n") else None
+            i += _PK_FIX[op]
+        elif op in b"ILFSVgpPci":   # newline-terminated args (GLOBAL / INST: two lines)
+            for _ in range(2 if op in b"ci" else 1):
+                j = b.find(b"\n", i)
+                if j < 0:
+                    return None
+                arg, i = b[i:j], j + 1
+            if op == 0x56:   # UNICODE
+                out.append(arg.decode("raw_unicode_escape").encode("utf-8", "surrogatepass"))
+            elif op == 0x53:   # STRING: a repr
+                if len(arg) < 2 or arg[:1] not in b"'\"" or arg[-1:] != arg[:1]:
+                    return None
+                out.append(codecs.escape_decode(arg[1:-1])[0])
+        elif op in _PK_LEN:
+            w, keep = _PK_LEN[op]
+            if i + w > n:
+                return None
+            L = int.from_bytes(b[i:i + w], "little", signed=w == 4 and op in (0x54, 0x8b))
+            i += w
+            if L < 0 or i + L > n:
+                return None
+            if keep:
+                out.append(b[i:i + L])
+            i += L
+        else:
+            return None
+    return None
+
+
+def _ser_marshal(b):
+    """Python marshal walk of a non-code object tree; a code object / .pyc falls back to a scan of its string
+    records. Values only (dict keys skipped)."""
+    n, out, pos = len(b), [], [0]
+
+    def take(k):
+        j = pos[0]
+        if k < 0 or j + k > n:
+            raise ValueError
+        pos[0] = j + k
+        return b[j:j + k]
+
+    def u32():
+        return int.from_bytes(take(4), "little", signed=True)
+
+    def rd(d, keep=True):
+        if d > _SER_DEPTH:
+            raise ValueError
+        t = take(1)[0] & 0x7f
+        if t in b"NTFS.":
+            return
+        if t in b"ir":
+            take(4)
+        elif t == 0x6c:   # long: digit count, 15-bit digits
+            take(2 * abs(u32()))
+        elif t in b"gy":
+            take(8 if t == 0x67 else 16)
+        elif t in b"fx":
+            for _ in range(1 if t == 0x66 else 2):
+                take(take(1)[0])
+        elif t in b"zZ":
+            s = take(take(1)[0])
+            if keep:
+                out.append(s)
+        elif t in b"suatA":
+            s = take(u32())
+            if keep:
+                out.append(s)
+        elif t in b"([<>)":
+            for _ in range(take(1)[0] if t == 0x29 else u32()):
+                rd(d + 1)
+        elif t == 0x7b:
+            while True:
+                if pos[0] < n and b[pos[0]] == 0x30:
+                    pos[0] += 1
+                    break
+                rd(d + 1, False)
+                rd(d + 1)
+        else:
+            raise ValueError
+    try:
+        rd(0)
+        return out if pos[0] == n else None
+    except (ValueError, IndexError, RecursionError):
+        pass
+    if not (b[:1] in (b"c", b"\xe3") or b[2:4] == b"\r\n" and b[16:17] in (b"c", b"\xe3")):
+        return None
+    out, i = [], 0
+    while i < n - 1:
+        t = b[i] & 0x7f
+        L, h = (b[i + 1], 2) if t in b"zZ" else (int.from_bytes(b[i + 1:i + 5], "little"), 5) if t in b"uatA" else (0, 0)
+        s = b[i + h:i + h + L] if h and 0 < L <= n - i - h else None
+        if s is not None and _dz_text(s) is not None:
+            out.append(s)
+            i += h + L
+        else:
+            i += 1
+    return out or None
+
+
+def _ser_msgpack(b):
+    n, out = len(b), []
+
+    def rd(i, d, keep=True):
+        if d > _SER_DEPTH or i >= n:
+            raise ValueError
+        t = b[i]
+        i += 1
+        if t <= 0x7f or t >= 0xe0 or t in (0xc0, 0xc2, 0xc3):
+            return i
+        if t <= 0x9f:   # fixmap / fixarray
+            for k in range((t & 15) * 2 if t <= 0x8f else t & 15):
+                i = rd(i, d + 1, not (t <= 0x8f and k % 2 == 0))
+            return i
+        fix = {0xca: 4, 0xcb: 8, 0xcc: 1, 0xcd: 2, 0xce: 4, 0xcf: 8, 0xd0: 1, 0xd1: 2, 0xd2: 4, 0xd3: 8,
+               0xd4: 2, 0xd5: 3, 0xd6: 5, 0xd7: 9, 0xd8: 17}
+        if t in fix:
+            if i + fix[t] > n:
+                raise ValueError
+            return i + fix[t]
+        if t <= 0xbf or t in (0xc4, 0xc5, 0xc6, 0xd9, 0xda, 0xdb, 0xc7, 0xc8, 0xc9):
+            if t <= 0xbf:
+                L = t & 31
+            else:
+                w = {0xc4: 1, 0xd9: 1, 0xc7: 1, 0xc5: 2, 0xda: 2, 0xc8: 2}.get(t, 4)
+                L, i = int.from_bytes(b[i:i + w], "big"), i + w
+                i += t in (0xc7, 0xc8, 0xc9)   # ext type byte
+            if i + L > n:
+                raise ValueError
+            if keep and t not in (0xc7, 0xc8, 0xc9):
+                out.append(b[i:i + L])
+            return i + L
+        if t in (0xdc, 0xdd, 0xde, 0xdf):
+            w = 2 if t in (0xdc, 0xde) else 4
+            if i + w > n:
+                raise ValueError
+            c, i = int.from_bytes(b[i:i + w], "big"), i + w
+            if c > n:
+                raise ValueError
+            for k in range(c * 2 if t >= 0xde else c):
+                i = rd(i, d + 1, not (t >= 0xde and k % 2 == 0))
+            return i
+        raise ValueError   # 0xc1 never used
+    try:
+        return out if n > 1 and rd(0, 0) == n else None
+    except (ValueError, IndexError, RecursionError):
+        return None
+
+
+def _ser_cbor(b):
+    n, out = len(b), []
+
+    def arg(i, ai):
+        if ai < 24:
+            return ai, i
+        if ai > 27 or i + (1 << (ai - 24)) > n:
+            raise ValueError
+        w = 1 << (ai - 24)
+        return int.from_bytes(b[i:i + w], "big"), i + w
+
+    def rd(i, d, keep=True):
+        if d > _SER_DEPTH or i >= n:
+            raise ValueError
+        mt, ai = b[i] >> 5, b[i] & 31
+        i += 1
+        if ai == 31:   # indefinite length
+            if mt in (2, 3):
+                parts = []
+                while b[i] != 0xff:
+                    if b[i] >> 5 != mt or b[i] & 31 == 31:
+                        raise ValueError
+                    L, i = arg(i + 1, b[i] & 31)
+                    parts.append(b[i:i + L])
+                    i += L
+                if keep:
+                    out.append(b"".join(parts))
+                return i + 1
+            if mt in (4, 5):
+                k = 0
+                while b[i] != 0xff:
+                    i = rd(i, d + 1, not (mt == 5 and k % 2 == 0))
+                    k += 1
+                return i + 1
+            raise ValueError
+        v, i = arg(i, ai)
+        if mt in (0, 1, 7):
+            return i
+        if mt in (2, 3):
+            if i + v > n:
+                raise ValueError
+            if keep:
+                out.append(b[i:i + v])
+            return i + v
+        if mt in (4, 5):
+            if v > n:
+                raise ValueError
+            for k in range(v * 2 if mt == 5 else v):
+                i = rd(i, d + 1, not (mt == 5 and k % 2 == 0))
+            return i
+        return rd(i, d + 1, keep)   # tag
+    try:
+        b = b[3:] if b[:3] == b"\xd9\xd9\xf7" else b   # self-described CBOR tag 55799
+        return out if n > 1 and b[:1] != b"\xff" and rd(0, 0) == len(b) else None
+    except (ValueError, IndexError, RecursionError):
+        return None
+
+
+_BSON_FIX = {0x01: 8, 0x07: 12, 0x08: 1, 0x09: 8, 0x0c: 12, 0x10: 4, 0x11: 8, 0x12: 8, 0x13: 16}
+
+
+def _ser_bson(b):
+    n, out = len(b), []
+
+    def doc(i, d):
+        if d > _SER_DEPTH or i + 5 > n:
+            raise ValueError
+        L = int.from_bytes(b[i:i + 4], "little")
+        end = i + L
+        if L < 5 or end > n or b[end - 1] != 0:
+            raise ValueError
+        i += 4
+        while i < end - 1:
+            t = b[i]
+            j = b.index(b"\x00", i + 1)
+            i = j + 1
+            if t in (0x02, 0x0d, 0x0e):
+                k = int.from_bytes(b[i:i + 4], "little")
+                if k < 1 or i + 4 + k > end or b[i + 3 + k] != 0:
+                    raise ValueError
+                out.append(b[i + 4:i + 3 + k])
+                i += 4 + k
+            elif t in (0x03, 0x04):
+                i = doc(i, d + 1)
+            elif t == 0x05:
+                k = int.from_bytes(b[i:i + 4], "little")
+                out.append(b[i + 5:i + 5 + k])
+                i += 5 + k
+            elif t == 0x0b:
+                i = b.index(b"\x00", b.index(b"\x00", i) + 1) + 1
+            elif t == 0x0f:
+                i += int.from_bytes(b[i:i + 4], "little")
+            elif t in _BSON_FIX:
+                if t == 0x0c:   # DBPointer: string + ObjectId
+                    i += 4 + int.from_bytes(b[i:i + 4], "little")
+                i += _BSON_FIX[t]
+            elif t not in (0x06, 0x0a, 0xff, 0x7f):
+                raise ValueError
+        if i != end - 1:
+            raise ValueError
+        return end
+    try:
+        return out if doc(0, 0) == n else None
+    except (ValueError, IndexError, RecursionError):
+        return None
+
+
+def _ser_proto(b, d=0):
+    """Protobuf wire walk: a length-delimited field is printable text, else a nested message, else raw bytes."""
+    if d > 12:
+        return None
+    i, n, out = 0, len(b), []
+
+    def varint():
+        nonlocal i
+        v = s = 0
+        while True:
+            if i >= n or s > 63:
+                raise ValueError
+            c = b[i]
+            i += 1
+            v |= (c & 0x7f) << s
+            s += 7
+            if c < 0x80:
+                return v
+    try:
+        while i < n:
+            tag = varint()
+            wt = tag & 7
+            if tag >> 3 < 1 or tag >> 3 > 536870911:
+                return None
+            if wt == 0:
+                varint()
+            elif wt in (1, 5):
+                i += 8 if wt == 1 else 4
+            elif wt == 2:
+                L = varint()
+                if i + L > n:
+                    return None
+                p = b[i:i + L]
+                i += L
+                sub = None if not p or p[0] >= 0x20 and _dz_text(p) is not None else _ser_proto(p, d + 1)
+                out += sub if sub else [p]
+            else:
+                return None
+        return out if i == n and out else None
+    except (ValueError, IndexError):
+        return None
+
+
+def _ser_php(b):
+    """PHP serialize() walk: N; b:/i:/d:..; s:N:"N bytes"; a:N:{..} O:N:"C":M:{..} C:N:"C":M:{M bytes} E:/r:/R:."""
+    n, out = len(b), []
+
+    def num(i, end):
+        j = b.index(end, i)
+        return b[i:j], j + 1
+
+    def rd(i, d, keep=True):
+        if d > _SER_DEPTH:
+            raise ValueError
+        t, c = b[i:i + 1], b[i + 1:i + 2]
+        if t == b"N" and c == b";":
+            return i + 2
+        if c != b":":
+            raise ValueError
+        i += 2
+        if t in (b"b", b"i", b"d", b"r", b"R"):
+            v, i = num(i, b";")
+            if not re.fullmatch(rb"-?(?:\d+(?:\.\d*)?(?:E[+-]?\d+)?|INF|NAN)", v):
+                raise ValueError
+            return i
+        if t in (b"s", b"E", b"O", b"C"):
+            v, i = num(i, b":")
+            L = int(v)
+            if b[i:i + 1] != b'"' or b[i + 1 + L:i + 3 + L] not in (b'";', b'":'):
+                raise ValueError
+            s, i = b[i + 1:i + 1 + L], i + 2 + L
+            if t in (b"s", b"E"):
+                if b[i:i + 1] != b";":
+                    raise ValueError
+                if keep:
+                    out.append(s)
+                return i + 1
+            i += 1
+        elif t != b"a":
+            raise ValueError
+        v, i = num(i, b":")
+        k = int(v)
+        if b[i:i + 1] != b"{":
+            raise ValueError
+        i += 1
+        if t == b"C":
+            if keep:
+                out.append(b[i:i + k])
+            i += k
+        else:
+            for _ in range(k):
+                i = rd(rd(i, d + 1, False), d + 1, keep)
+        if b[i:i + 1] != b"}":
+            raise ValueError
+        return i + 1
+    try:
+        return out if b[:1] in b"NbidsaOCE" and n > 3 and rd(0, 0) == len(b.rstrip(b"\r\n")) else None
+    except (ValueError, IndexError, RecursionError):
+        return None
+
+
+def _ser_scan(b, magic, rec):
+    """Magic-gated scan: every printable length-prefixed string record (`rec`(b, i) -> (start, length) | None)."""
+    if not b.startswith(magic):
+        return None
+    out, i, n = [], len(magic), len(b)
+    while i < n:
+        r = rec(b, i)
+        s = b[r[0]:r[0] + r[1]] if r and 0 < r[1] <= n - r[0] else None
+        if s is not None and _dz_text(s) is not None:
+            out.append(s)
+            i = r[0] + r[1]
+        else:
+            i += 1
+    return out or None
+
+
+def _java_rec(b, i):
+    if b[i] == 0x74:
+        return i + 3, int.from_bytes(b[i + 1:i + 3], "big")
+    if b[i] == 0x7c:
+        return i + 9, int.from_bytes(b[i + 1:i + 9], "big")
+    return None
+
+
+_SER_FORMS = (
+    ("pickle", _ser_pickle),
+    ("java", lambda b: _ser_scan(b, b"\xac\xed\x00\x05", _java_rec)),
+    ("php", _ser_php),
+    ("bson", _ser_bson),
+    ("marshal", _ser_marshal),
+    ("msgpack", _ser_msgpack),
+    ("cbor", _ser_cbor),
+)
+
+
+def _ser_try(fn, b):
+    try:
+        return fn(b)
+    except Exception:   # noqa: BLE001 -- a walker that doesn't apply
+        return None
+
+
+def ser_strings(t):
+    """[(form, [bytes])] for every serialized reading of `t` (raw bytes / text, base64 / hex / ...; also after one
+    compressor): the string / bytes values in stream order. Protobuf only when no other format parses. Never raises."""
+    out = []
+    try:
+        ws = list(_dz_wrappers(t))
+        if isinstance(t, str) and t.strip():
+            ws.append(("text", t.strip().encode("utf-8")))
+        for wrapper, b in ws:
+            if len(b) < 4 or len(b) > _ARC_MAX:
+                continue
+            for pre, x in [("", b)] + [(f"{k}+", y) for k, y in _dz_inflate(b)]:
+                got = [(f"{pre}{form}-{wrapper}", v) for form, fn in _SER_FORMS for v in (_ser_try(fn, x),) if v]
+                if not got and wrapper != "text":
+                    got = [(f"{pre}protobuf-{wrapper}", v) for v in (_ser_try(_ser_proto, x),) if v]
+                out += got
+                if got:
+                    break
+    except Exception:   # noqa: BLE001
+        return out
+    return out
+
+
+def _ser_texts(vals, deadline):
+    """[candidate text]: each value (printable, inflated, nested codec), then the values joined."""
+    outs = []
+    for v in vals:
+        outs += _arc_member_text(v, deadline) if time.monotonic() < deadline else [x for x in (_dz_text(v),) if x]
+    texts = [x for x in (_dz_text(v) for v in vals) if x]
+    if len(texts) > 1:
+        outs += [" ".join(x.strip() for x in texts), "".join(texts)]
+    return list(dict.fromkeys(x for x in outs if x))
+
+
+def ser_solve(t):
+    """(form, sentence) for the first serialized reading holding the slug in English (one value, a nested decode of
+    a value, else the values joined); else None."""
+    try:
+        deadline = time.monotonic() + 0.6
+        for form, vals in ser_strings(t):
+            hits = [x for x in _ser_texts(vals, deadline) if SLUG.search(x) and _kbd_score(x) >= _RD_OK]
+            if hits:
+                return form, hits[0]
+            for x in [y for y in (_dz_text(v) for v in vals) if y]:
+                if time.monotonic() > deadline:
+                    break
+                rd = _rd_inner(x, 2, deadline)
+                if rd:
+                    return f"{form}[{rd[0]}]", rd[1]
+    except Exception:   # noqa: BLE001
+        return None
+    return None
+
+
+def ser_dec(t):
+    r = ser_solve(t)
+    return r[1] if r else None
+
+
+def ser_free(p):
+    """Speculative Mastery-line decoder: the English string value(s) of a one-line serialized blob."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        deadline = time.monotonic() + 0.3
+        outs = []
+        for _f, vals in ser_strings(p.strip()):
+            for x in _ser_texts(vals, deadline):
+                outs += [y for y in _rd_free(x) + [x] if _kbd_score(y) >= _RD_OK]
+        outs = sorted(dict.fromkeys(outs), key=_kbd_score, reverse=True)
+        return [lead + s for s in outs][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+CANDIDATES.append(("serialization-wrapper", lambda s: None, ser_dec))
+
+
+# Zalgo / combining-mark noise: base letters buried under stacked U+0300-036F (also U+0483-0489, U+1DC0.., U+20D0..)
+# combining marks, or the sentence NFD-decomposed with accents hung on its letters. Read: NFD, drop every combining
+# mark (unicodedata.combining() > 0 or category Mn/Me), keep the rest. The marks must sit in the blob AS combining
+# characters (NFC French/Spanish prose with precomposed accents stays None) and what remains must be printable ASCII
+# (Devanagari / Thai / pointed Hebrew, whose marks are part of the script, stay None).
+_ZALGO_UP = "".join(map(chr, (0x30D, 0x30E, 0x304, 0x305, 0x33F, 0x311, 0x306, 0x310, 0x352, 0x357, 0x351, 0x307)))
+_ZALGO_MID = "".join(map(chr, (0x315, 0x31B, 0x340, 0x341, 0x358, 0x321, 0x322, 0x327, 0x328, 0x334, 0x335, 0x336)))
+_ZALGO_DOWN = "".join(map(chr, (0x316, 0x317, 0x318, 0x319, 0x31C, 0x31D, 0x31E, 0x31F, 0x320, 0x324, 0x325, 0x326)))
+
+
+def zalgo_enc(s, n=3, space=False):
+    """Plain -> zalgo: after every non-space char (every char with space=True) n up + 1 mid + n down marks, picked
+    deterministically from the char's position (the generators are random: the decoder is what identifies)."""
+    out = []
+    for i, c in enumerate(s):
+        out.append(c)
+        if c.isspace() and not space:
+            continue
+        out += [_ZALGO_UP[(i + k) % len(_ZALGO_UP)] for k in range(n)]
+        out.append(_ZALGO_MID[i % len(_ZALGO_MID)])
+        out += [_ZALGO_DOWN[(i * 3 + k) % len(_ZALGO_DOWN)] for k in range(n)]
+    return "".join(out)
+
+
+def _zmark(c):
+    return unicodedata.combining(c) > 0 or unicodedata.category(c) in ("Mn", "Me")
+
+
+def zalgo_dec(t):
+    """Zalgo / NFD-decomposed text -> the base text, else None (no raw combining marks, < 3 of them, or a non-ASCII
+    remainder)."""
+    try:
+        if isinstance(t, (bytes, bytearray)):
+            t = bytes(t).decode("utf-8")
+        if not isinstance(t, str) or not t.strip() or len(t) > 200000:
+            return None
+        if sum(map(_zmark, t)) < 3:
+            return None
+        out = "".join(c for c in unicodedata.normalize("NFD", t) if not _zmark(c))
+        if not out.strip() or any(not (c.isascii() and (c.isprintable() or c in "\t\n\r")) for c in out):
+            return None
+        return out
+    except Exception:   # noqa: BLE001
+        return None
+
+
+def zalgo_free(p):
+    """Speculative Mastery-line decoder: the line with its combining-mark noise stripped."""
+    r = zalgo_dec(p) if isinstance(p, str) else None
+    return [r] if r else []
+
+
+CANDIDATES += [("zalgo", zalgo_enc, zalgo_dec), ("zalgo-mini", lambda s: zalgo_enc(s, 1), zalgo_dec),
+               ("zalgo-spaces", lambda s: zalgo_enc(s, space=True), zalgo_dec)]
+
+
 SPECULATIVE_FREE = (
     ("rot47", lambda p: [rot47(p)]),
     ("rot8000", lambda p: [b for b in (rot8000_dec(p),) if b]),
@@ -14413,6 +15836,8 @@ SPECULATIVE_FREE = (
     ("base45", b45_free),
     ("z85", z85_free),
     ("base100", b100_free),
+    ("dense-unicode", dense_free),
+    ("base122", b122_free),
     ("css-hex", css_hex_free),
     ("iching", iching_free),
     ("trigram-octal", trigram_free),
@@ -14458,15 +15883,19 @@ SPECULATIVE_FREE = (
     ("raw-wide", lambda p: [b for b in (wide_text_dec(p),) if b]),
     ("knob-sweep", knob_free),
     ("bignum", bignum_free),
+    ("bigradix", bigradix_free),
     ("astral", astral_free),
     ("scsu-bocu", compressed_free),
     ("byteadd", byteadd_free),
     ("byterot", byterot_free),
     ("altbase", altbase_free),
+    ("checksum-basen", chkbase_free),
+    ("glyph-bytes", glyph_bytes_free),
     ("compress-sweep", decompress_free),
     ("xor-compressed", xorz_free),
     ("text-armor", armor_free),
     ("archive-container", archive_free),
+    ("serialization-wrapper", ser_free),
     ("openssl-salted", openssl_free),
     ("lzstring", lzstring_free),
     ("jwt-jose", jwt_free),
@@ -14476,6 +15905,8 @@ SPECULATIVE_FREE = (
     ("inflate-container", container_free),
     ("text-compression", textcomp_free),
     ("yenc-binhex", retro_free),
+    ("base85-any", b85_free),
+    ("zalgo", zalgo_free),
 )
 
 

@@ -1,0 +1,8 @@
+{
+ "entry": "extract_answer",
+ "expected": null,
+ "decoy": true,
+ "_why": "DECOY: the same library-calling mixer seeded from SecureRandom.nextLong() ^ System.nanoTime(): no static token (the JVM prints a different one every run)",
+ "generator_cmd": "python3 tests/data/android_fixtures/intrlong_src/gen_intrlong.py decoy_runtime tests/data/android_fixtures/intrlong_decoy_runtime.apk  # javac --release 11 -XDstringConcat=inline + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "python3 tests/data/android_fixtures/intrlong_src/gen_intrlong.py decoy_runtime /dev/null --oracle  # host JVM RUNS the same compiled Proof.token() -> token -> a different random ANS- each run (e.g. ANS-2807A20AE439DDB9, ANS-CBA9E14E29F64CDF): no fixed answer"
+}

@@ -289,6 +289,13 @@ def decode_chunk(p, _nested=False):
                 except Exception:
                     pass
                 break
+    if _max_day() >= 23 and t.startswith("<~") and t.endswith("~>"):
+        # ADOBE ASCII85 (warmups Day 23 "Eighty-Five Alive", "The alphabet got bigger. Adobe might recognize the
+        # neighbors": '<~:2+3L+Eqa...~>' = a85 of the UTF-8 text inside <~ ~> delimiters), whole fragment
+        try:
+            cands.append((_ascii(base64.a85decode(re.sub(r"\s+", "", t), adobe=True)), 0))
+        except Exception:
+            pass
     if _B32S.match(t) and len(t) % 8 == 0:
         try:
             cands.append((_ascii(base64.b32decode(t)), 5))

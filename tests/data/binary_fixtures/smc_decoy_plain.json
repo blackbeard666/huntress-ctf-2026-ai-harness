@@ -1,0 +1,14 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "decrypted_offset": 12288,
+  "decrypted_size": 64,
+  "xor_key": "5a"
+ },
+ "decoy": true,
+ "generator_cmd": "bash smc_gen.sh decoy_plain   # gcc + python3 stdlib (struct/zlib) blob writer + python3 post-link xor patch (readelf -sW symbol range)",
+ "oracle_cmd": "bash smc_oracle.sh decoy_plain   # runs the program natively (it self-decrypts and prints the blob; python3 zlib.crc32/json check), readelf -SW / -sW / -lW + objdump -d of a python3-decrypted copy for offsets",
+ "note": "mprotect + in-place xor 0x5a of a 64-byte table in .cfgx, no HCFG anywhere (oracle: readelf -SW .cfgx offset, C source size/key)"
+}

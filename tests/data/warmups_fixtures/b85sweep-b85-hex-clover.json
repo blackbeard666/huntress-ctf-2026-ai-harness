@@ -1,0 +1,9 @@
+{
+ "codec": "base85-any",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-24",
+ "encoded": "G-Wn9HZwLgGB7tcHfA?6Hexa`HZ(RhHZwM6HZ(RlHf1(9GB7tZHaIppH#0IYH#ashH!?P4H#IjfGBGkRH8eJ6GB7tYHfA<sH#RmkGGj6@H#0XiHZnG3HaRymGB7tZHaIppH#0IYHZ?amHZe9cH#9OZHZeA3H#0XkHZ?agGB7tZHfAy~H#9alHZ?LZG&eReHe@z6GB7k`HZeCdH#9aiH!?F}GB7qXHe)tsH#RmkH!?D0HZnFbHZ(RjHZ?agGGsF{Gc*",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c0 | tr -d \"\\n\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/b85sweep_cyberchef.mjs ipv6  # CyberChef To Base85 'IPv6' (= RFC 1924 / git / Python b85) alphabet over the hex text",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl b85 | xxd -r -p",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-24",
+ "expected": "match"
+}

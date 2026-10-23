@@ -1,0 +1,9 @@
+{
+ "codec": "serialization-wrapper[pickle]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-otter-41",
+ "encoded": "gASVegAAAAAAAAB9lCiMBG5vdGWUjGVOaWNlIHdvcmsgZGVjb2RpbmcgdGhpcyB3YXJtdXAhIFRvIHNvbHZlLCBzdWJtaXQgdGhpcyBleGFjdCBhbnN3ZXIgdG8gdGhlIEdhbWUgTWFzdGVyOiBhbWJlci1vdHRlci00MZSMAW6USwN1Lg==",
+ "generator_cmd": "python3 -c 'import pickle,base64,os;print(base64.b64encode(pickle.dumps({\"note\":os.environ[\"plain\"],\"n\":3},protocol=4)).decode())'",
+ "oracle_cmd": "python3 -c 'import pickletools,base64,os;b=base64.b64decode(os.environ[\"encoded\"]);print([a for o,a,p in pickletools.genops(b) if isinstance(a,str) and a!=\"note\"][0])'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-otter-41",
+ "expected": "match"
+}

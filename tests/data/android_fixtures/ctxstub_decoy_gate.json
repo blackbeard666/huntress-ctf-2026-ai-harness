@@ -1,0 +1,8 @@
+{
+ "entry": "context_chain_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same chain, but gated: only a test-keys or debuggable build computes the token; the clean retail path returns 'release' (no ANS literal in the dex)",
+ "generator_cmd": "python3 tests/data/android_fixtures/ctxstub_src/gen_ctx.py decoy_gate tests/data/android_fixtures/ctxstub_decoy_gate.apk  # javac --release 8 (app + android.*/org.json stubs) + dex2jar d2j-jar2dex.sh + apktool's aapt2 compile/link (arsc, manifest, R ids) + zipfile (assets) + keytool RSA + apksigner sign v1+v2",
+ "oracle_cmd": "same generator, oracle stage: openssl pkcs7 -print_certs | openssl x509 -outform DER on META-INF/*.RSA (signer DER), aapt dump badging (package / versionCode / versionName / application-debuggable), aapt2 dump resources (ids + values), then java -Dctx.apk=<signed apk> ... -cp <javac out> <pkg>.Probe runs Release.code(new Context()) on the host JVM: assets read by the real java.util.zip.ZipFile, Build release-keys/user, ANDROID_ID 16 hex, SharedPreferences map -> 'release' (no token)"
+}

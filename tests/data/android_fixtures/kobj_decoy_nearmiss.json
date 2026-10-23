@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "decoy": true,
+ "_why": "DECOY: object_toplevel's chain but the code keeps only 15 of the 16 hex digits (substring(0,15)): 'ANS-3ECBAAE8DF3346C' is a near miss, no full token anywhere",
+ "generator_cmd": "python3 tests/data/android_fixtures/kobj_src/gen_kobj.py decoy_nearmiss tests/data/android_fixtures/kobj_decoy_nearmiss.apk  # hand-written kotlinc-shaped smali -> dex2jar d2j-smali -> zipfile (+ assets/huntress_puzzle.json codec: analysis)",
+ "oracle_cmd": "sh tests/data/android_fixtures/kobj_src/oracle_kobj.sh tests/data/android_fixtures/kobj_decoy_nearmiss.apk  # d2j-dex2jar -> real JVM (java) runs ReleaseKt.code(ctx) against javac stubs of Intrinsics/ULong/StringsKt/Function1/Context -> ANS-3ECBAAE8DF3346C (15 hex: no token)"
+}

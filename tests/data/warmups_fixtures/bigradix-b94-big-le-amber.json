@@ -1,0 +1,9 @@
+{
+ "codec": "bigradix-b94-big-le",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-lynx-08",
+ "encoded": ";,%*'pecWqg]jf'M$AL6Uj(iq1s*0N6>u[L/yk-Ai=0#eZKI`wc=%=p>EL{fcxPKL*bNTVWLTs2ew{}#S99BWpL?)8~oM}K~7HXUPui)E=~%h(v.m,J_fIyhl)",
+ "expected": "match",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c0 | { fold -w2 | tac | tr -d '\\n'; echo; } | tr a-f A-F | sed 's/^/obase=94; ibase=16; /' | BC_LINE_LENGTH=0 bc | awk '{A=ENVIRON[\"ALPHA\"]; for(i=1;i<=NF;i++) printf \"%s\", substr(A, $i+1, 1)}'  # GNU bc radix-94 digit groups -> ALPHA=\"!\\\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\" (bytes little-endian)",
+ "oracle_cmd": ".venv/bin/python -I -c \"import sys,base58;t=sys.stdin.read().rstrip('\\\\n');A=sys.argv[1];t=t[::-1] if sys.argv[2]=='little' else t;n=base58.b58decode_int(t.encode(),alphabet=A.encode());b=n.to_bytes((n.bit_length()+7)//8,sys.argv[3]);print(b.decode())\" \"!\\\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\" big little  # pip base58 2.1 b58decode_int(alphabet=A) over len(A) radix",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-lynx-08"
+}

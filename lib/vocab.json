@@ -1,6 +1,14 @@
 {
   "-class": [
-    "arena.evidence.ArtifactMain"
+    "arena.evidence.ArtifactMain",
+    "tools.Entry",
+    "agent.Dispatcher",
+    "batch.agent.service.Launcher",
+    "tools.tools.Application",
+    "batch.util.Launcher",
+    "util.app.service.Dispatcher",
+    "batch.client.Loader",
+    "agent.Loader"
   ],
   "-control": [
     "direct",
@@ -72,7 +80,15 @@
   "class": [
     "ELF64",
     "64",
-    "arena.evidence.ArtifactMain"
+    "arena.evidence.ArtifactMain",
+    "tools.Entry",
+    "agent.Dispatcher",
+    "batch.agent.service.Launcher",
+    "tools.tools.Application",
+    "batch.util.Launcher",
+    "util.app.service.Dispatcher",
+    "batch.client.Loader",
+    "agent.Loader"
   ],
   "control": [
     "direct",

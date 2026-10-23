@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-E4F679E90A7D1CAE",
+ "decoy": false,
+ "_why": "analysis-chain-obfuscation-hardening: token() as a while(true){switch(state)} int dispatcher (decoy sealHook30 state never reached) + code() as a String switch over a PLAN array (hashCode lookupswitch + equals) -- the D23 TT chain, run concretely by the deep evaluator",
+ "generator_cmd": "python3 tests/data/android_fixtures/obfv2_src/gen_obfv2.py flat tests/data/android_fixtures/obfv2_flat.apk  # javac --release 8 (app + android.content.Context stub) -> dex2jar d2j-jar2dex.sh -> zipfile (+ assets/huntress_puzzle.json codec: analysis, no data)",
+ "oracle_cmd": "same generator: the host JVM (java -cp <javac out> <pkg>.Oracle) runs Release.code(null) and prints 'oracle=ANS-E4F679E90A7D1CAE' (= the GM-confirmed D23 TT 2deb0b14 answer for the untransformed chain)"
+}

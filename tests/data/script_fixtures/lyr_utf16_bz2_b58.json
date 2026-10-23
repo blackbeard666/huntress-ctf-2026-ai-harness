@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=javascript|role=dropper|verdict=malicious|attack=T1105|adapter=lyr_tag|steps=peel_layers,fetch_stage|campaign_id=LYR-u16b58|url=https://lyr-gz.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | iconv -t UTF-16LE | bzip2 -9 | python3 -c 'import sys,base58;print(base58.b58encode(sys.stdin.buffer.read()).decode())' ; \"' HUNTRESS_ANALYSIS_V1:LYR-utf16_bz2_b58-<data>\" in a VBScript comment",
+ "oracle_cmd": "sed -n 's/.*LYR-utf16_bz2_b58-//p' lyr_utf16_bz2_b58.vbs | python3 -c 'import sys,base58;sys.stdout.buffer.write(base58.b58decode(sys.stdin.read().strip()))' | bunzip2 | iconv -f UTF-16LE -t UTF-8"
+}

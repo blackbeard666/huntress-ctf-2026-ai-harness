@@ -1,0 +1,12 @@
+{
+ "codec": "serialization-wrapper[java]",
+ "plain": null,
+ "encoded": "rO0ABnNyABdqYXZhLnV0aWwuTGlua2VkSGFzaE1hcDTATlwQbMD7AgABWgALYWNjZXNzT3JkZXJ4cgARamF2YS51dGlsLkhhc2hNYXAFB9rBwxZg0QMAAkYACmxvYWRGYWN0b3JJAAl0aHJlc2hvbGR4cD9AAAAAAAAMdwgAAAAQAAAAAnQAA21zZ3QAZ05pY2Ugd29yayBkZWNvZGluZyB0aGlzIHdhcm11cCEgVG8gc29sdmUsIHN1Ym1pdCB0aGlzIGV4YWN0IGFuc3dlciB0byB0aGUgR2FtZSBNYXN0ZXI6IGNsb3Zlci1qYWNrYWwtNTF0AAFuc3IAEWphdmEubGFuZy5JbnRlZ2VyEuKgpPeBhzgCAAFJAAV2YWx1ZXhyABBqYXZhLmxhbmcuTnVtYmVyhqyVHQuU4IsCAAB4cAAAAAd4AA==",
+ "generator_cmd": "serial-java-hashmap-clover bytes with STREAM_VERSION 5 -> 6, base64",
+ "oracle_cmd": "java tests/data/warmups_fixtures/SerialFix.java read",
+ "oracle_plain": null,
+ "oracle_rc": 1,
+ "oracle_err": "\tat SerialFix.main(SerialFix.java:17)",
+ "decoy": true,
+ "expected": "none"
+}

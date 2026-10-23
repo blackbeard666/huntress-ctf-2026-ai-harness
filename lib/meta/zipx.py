@@ -59,4 +59,7 @@ def cd_names(data):
 
 
 def central_directory_member_names(data, ctx):
-    return None if data is None else cd_names(data)
+    """D8 + D23: full stored paths SORTED (D23 TT: 12 shuffled CD entries, raw CD order REJECTED, sorted CORRECT; every
+    earlier verified list was already sorted)."""
+    names = None if data is None else cd_names(data)
+    return sorted(names) if names else names

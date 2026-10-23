@@ -1,0 +1,9 @@
+{
+ "codec": "base92",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-77",
+ "encoded": "=V1ZV66}yunA*n10I1S\\d:Td:km0iCdiJ7_HfbTb:y8mp>E'EVPIkDa>nKt_,79^JN&Kr=aO95gQY0dmJ.',e<6LQ78bo)Ga-B^SkD3o.R8ip>(bH.Q!eg6L@\\AkkB",
+ "expected": "match",
+ "generator_cmd": "PYTHONPATH=tools/pychepy .venv/bin/python -I -c \"import sys;from chepy.modules.internal.helpers import Base92;print(Base92.b92encode(sys.stdin.buffer.read()))\"  # chepy Base92 (py3base92 port of thenoviceoof base92)",
+ "oracle_cmd": "PYTHONPATH=tools/pychepy .venv/bin/python -I -c \"import sys;from chepy.modules.internal.helpers import Base92;print(Base92.b92decode(sys.stdin.read().strip()).decode())\"  # chepy Base92 decoder",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-77"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "b85-free",
+ "plain": "falcon-42",
+ "encoded": "AmoLcDf.-`1&",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/b85sweep_cyberchef.mjs std  # bare 9-byte slug fragment, no delimiters",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl a85",
+ "oracle_plain": "falcon-42",
+ "expected": "match"
+}

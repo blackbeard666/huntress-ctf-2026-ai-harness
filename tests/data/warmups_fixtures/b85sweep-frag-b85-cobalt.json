@@ -1,0 +1,9 @@
+{
+ "codec": "b85-free",
+ "plain": "Game Master",
+ "encoded": "M`3McAWdO&bY*e",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/b85sweep_cyberchef.mjs ipv6  # 11-byte fragment, b85 alphabet",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl b85",
+ "oracle_plain": "Game Master",
+ "expected": "match"
+}

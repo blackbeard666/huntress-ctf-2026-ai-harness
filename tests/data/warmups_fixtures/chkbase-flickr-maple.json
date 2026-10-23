@@ -1,0 +1,9 @@
+{
+ "codec": "base58-flickr",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-condor-86",
+ "encoded": "22nmJbn65z67PSp6d5eo2E7SEGwFYnjQcMfm6EaPHDEWHYobesJUk8PQSKifst2CtnzPKrbrPGx2mTiGfw1qs2YmoPCj5dDgWF1WsMrKS9Dh9wm6gk397FRLZGLrX1nAmyLk3kADmGt9",
+ "generator_cmd": "printf %s \"$plain\" | NM=$PWD/tools/npm-bech32/node_modules tools/node/bin/node -e 'const bx=require(process.env.NM+\"/base-x\");const s=require(\"fs\").readFileSync(0);process.stdout.write((bx.default||bx)(\"123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ\").encode(s))'  # npm base-x@4 Flickr alphabet",
+ "oracle_cmd": "python3 -c 'import sys,base58;print(base58.b58decode(sys.argv[1].encode(),alphabet=b\"123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ\").decode())' \"$encoded\"  # pip base58 2.1.1, Flickr alphabet",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-condor-86",
+ "expected": "match"
+}

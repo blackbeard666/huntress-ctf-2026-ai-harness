@@ -1,0 +1,56 @@
+{
+ "family": "anti_disassembly",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "has_anti_disassembly": "true",
+  "anti_disassembly_techniques": [
+   "junk_bytes",
+   "call_pop",
+   "push_ret"
+  ],
+  "technique": "junk_bytes",
+  "anti_disassembly_functions": [
+   "decode_it"
+  ],
+  "protected_function": "decode_it",
+  "disassembly": [
+   "call 0x5",
+   "pop rax",
+   "add rax, 0xd",
+   "push rax",
+   "ret",
+   "mov eax, 0xbeef",
+   "sub eax, 0xf",
+   "ret"
+  ],
+  "leaf_constant": "0xbee0",
+  "uses:opposite_jcc_pair": "false",
+  "recover_code:decode_it": [
+   "call 0x5",
+   "pop rax",
+   "add rax, 0xd",
+   "push rax",
+   "ret",
+   "mov eax, 0xbeef",
+   "sub eax, 0xf",
+   "ret"
+  ],
+  "instruction_count:decode_it": "8",
+  "leaf_constant:decode_it": "0xbee0",
+  "return_value:decode_it": "48864",
+  "junk_bytes:decode_it": "4",
+  "techniques:decode_it": [
+   "junk_bytes",
+   "call_pop",
+   "push_ret"
+  ],
+  "linear_sweep_desync:decode_it": "true"
+ },
+ "generator_cmd": "bash adis_gen.sh   # gcc -O1 -masm=intel -c (top-level asm: .byte junk, jz+jnz, eb ff c0, call $+5;pop;push;ret)",
+ "oracle_cmd": "python3 adis_oracle.py   # gdb -batch stepi trace of adis_exe_all.bin (executed instructions, address order, returned eax), nm rebase to .o offsets; techniques/junk counts from the asm source; rizin `aa; pdf` cross-check",
+ "file_b": "ELF 64-bit LSB relocatable, x86-64, version 1 (SYSV), not st",
+ "decoy": false,
+ "note": "lib.binary.anti_disasm_field(data, key) per expected_facts key ('key:<fn>' = per function); field vocabulary SPECULATIVE (GM label not seen). rizin pdf: agrees on get_flag, stops at the fake ret in decode_it, decodes the junk e8 of check_key as `call` -- the walker recovers the executed code instead"
+}

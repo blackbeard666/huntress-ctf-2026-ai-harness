@@ -1,0 +1,10 @@
+{
+ "codec": "glyph-bytes",
+ "plain": null,
+ "encoded": "⠝⠊⠉⠑⠀⠺⠕⠗⠅⠀⠙⠑⠉⠕⠙⠊⠝⠛⠀⠞⠓⠊⠎⠀⠺⠁⠗⠍⠥⠏⠮⠀⠞⠕⠀⠎⠕⠇⠧⠑⠠⠀⠎⠥⠃⠍⠊⠞⠀⠞⠓⠊⠎⠀⠑⠭⠁⠉⠞⠀⠁⠝⠎⠺⠑⠗⠀⠞⠕⠀⠞⠓⠑⠀⠛⠁⠍⠑⠀⠍⠁⠎⠞⠑⠗⠱⠀⠁⠍⠃⠑⠗⠤⠋⠁⠇⠉⠕⠝⠤⠲⠆",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$SENTENCE\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/braille_cyberchef.mjs enc  # CyberChef 'To Braille' (Braille ASCII, 6-dot U+2800-283F): letters, not bytes",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -c 'import sys;b=bytes(ord(c)-0x2800 for c in sys.stdin.read());print(b, b.isascii() and all(32<=x<127 for x in b))'  # cells - U+2800 = bytes 0x00-0x3f incl. controls -> not text (False)",
+ "oracle_plain": null
+}

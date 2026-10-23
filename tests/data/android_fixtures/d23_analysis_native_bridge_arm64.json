@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-1F4819F1FB4F4149",
+ "generator_cmd": "d23_analysis_native_bridge_arena.c.txt with NAME=nativeShare; aarch64-linux-gnu-gcc -O2 -shared -fPIC -nostdlib -o lib/arm64-v8a/libarena.so; classes.dex + AndroidManifest.xml + assets/huntress_puzzle.json copied from GM D23 Mastery 1d39aa76 set5 (codec: analysis, no data); zip -q -X -r out.apk AndroidManifest.xml classes.dex assets lib",
+ "oracle_cmd": "jadx -d j <apk> (Release/Core/Mix/Guard/Util/NativeLibrarySecrets .java) + stub android/content/Context.java + Main.java printing Release.code(null); javac -d out $(find . -name '*.java'); gcc -O2 -shared -fPIC -o libarena.so <same C source, host x86_64>; java -Djava.library.path=. -cp out Main  (harness validated: with set5's own lib/x86_64/libarena.so it prints the GM-confirmed ANS-FB40A37095232860) -> ANS-1F4819F1FB4F4149 proof=3b4db670ecf053e2"
+}

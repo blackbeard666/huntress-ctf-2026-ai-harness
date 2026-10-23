@@ -1,0 +1,7 @@
+{
+ "description": "DECOY: Godot 4 .tscn whose embedded GDScript is benign (no descriptor / marker)",
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/godot_gen.py  (stdlib struct/hashlib writer of the Godot format -> godot_decoy_benign.tscn)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/godot_oracle.py tests/data/script_fixtures/godot_decoy_benign.tscn  (stdlib struct/ast/hashlib reader, md5-checked; prints 'None'...)"
+}

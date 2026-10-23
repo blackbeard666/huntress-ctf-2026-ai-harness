@@ -1,0 +1,9 @@
+{
+ "codec": "base32768",
+ "plain": "jade-lynx",
+ "encoded": "宐罹䯭淶騧",
+ "expected": "match",
+ "generator_cmd": "printf %s \"$plain\" | tools/node/bin/node --input-type=module -e \"import {encode} from './tools/npm-base65536/node_modules/base32768/src/index.js';import fs from 'fs';process.stdout.write(encode(fs.readFileSync(0)))\"  # qntm reference npm base32768@5.0.1 encode",
+ "oracle_cmd": "printf %s \"$encoded\" | tools/node/bin/node --input-type=module -e \"import {decode} from './tools/npm-base65536/node_modules/base32768/src/index.js';import fs from 'fs';process.stdout.write(Buffer.from(decode(fs.readFileSync(0,'utf8'))).toString())\"  # qntm reference npm base32768@5.0.1 decode",
+ "oracle_plain": "jade-lynx"
+}

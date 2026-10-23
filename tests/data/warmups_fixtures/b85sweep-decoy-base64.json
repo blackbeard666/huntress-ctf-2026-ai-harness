@@ -1,0 +1,10 @@
+{
+ "codec": "base85-any",
+ "plain": null,
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwISBUbyBzb2x2ZSwgc3VibWl0IHRoaXMgZXhhY3QgYW5zd2VyIHRvIHRoZSBHYW1lIE1hc3RlcjogamFkZS1oZXJvbi0yNA==",
+ "generator_cmd": "printf %s \"Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-24\" | base64 -w0  # RFC 4648 base64: every char is in the b85 alphabet, bytes are not text",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl b85 | python3 -I -c \"import sys;sys.stdin.buffer.read().decode()\"",
+ "oracle_plain": null,
+ "expected": "none",
+ "decoy": true
+}

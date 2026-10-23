@@ -1,0 +1,12 @@
+{
+ "material": "Name: huntress-agent\nVersion: 1.0\nRelease: 1\nSummary: agent\nLicense: MIT\n\n%description\nagent\n\n%build\ndescriptor_2b3c4d5e=\"H4sIAAAAAAACAz2OTQvCMBBE/5C29suDsCfxLug9bJOlDW6TkGyKh/x4I4LHYd48ZoehMLol40IwY1pL9ExgXRJkplh2isZqgQ3ZautzKiiC+gXPbhrPzak7FzQYhCLEsKkUSKvgk5QqWEhpn51AXxOFBHO2bFTlDjG7H6ZxC2gXp6yBx/12PfbzoEczUcmRYRUJ6dK2X+2/aehdR0yNdXt9ZdrUfwBitN2sxwAAAA==\"\necho build only\n\n%files\n/opt/agent\n",
+ "rep": "rpm_spec",
+ "transform": null,
+ "key": "",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "same printf as pkg_spec_post but the descriptor sits in %build (runs at rpmbuild time, not a maintainer scriptlet) and there is no %pre/%post section",
+ "oracle_cmd": "sed -n '/^%\\(pre\\|post\\|preun\\|postun\\|pretrans\\|posttrans\\)\\b/,$p' pkg_spec_decoy_build_only.spec   (empty: no scriptlet)",
+ "source_file": "pkg_spec_decoy_build_only.spec",
+ "note": "linux-package-maintainer-scripts (T1546.016 / T1059.004): decode(rep=rpm_spec) -> pkg_scripts -> script body readers"
+}

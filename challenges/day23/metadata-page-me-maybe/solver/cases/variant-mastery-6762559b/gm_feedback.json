@@ -1,0 +1,43 @@
+{
+ "attempt": "6762559b-eaa4-4fdc-96f5-0405b028b318",
+ "rejected": {
+  "set2.d07-zip-001-zip-central-directory-member-names": [
+   "['box-10/part-4.log', 'cabinet-06/item-2.txt', 'cabinet-12/doc-1.csv', 'cabinet-21/entry-6.txt', 'drop-01/part-3.log', 'drop-14/entry-4.log', 'drop-25/entry-2.csv', 'room-07/item-8.txt', 'room-21/doc-9.log', 'room-32/part-5.md', 'tray-20/entry-4.csv', 'tray-26/part-9.log', 'tray-27/entry-5.md']"
+  ],
+  "set5.d07-zip-001-zip-central-directory-member-names": [
+   "['box-16/part-3.csv', 'box-26/item-9.txt', 'box-40/part-9.md', 'drop-06/entry-1.csv', 'drop-08/doc-2.csv', 'drop-21/entry-8.txt', 'room-27/doc-8.log']"
+  ],
+  "set5.d20-macho-001-macho-cpu-type-set": [
+   "[\"0x0100000c\",\"0x0000000c\",\"0x00000007\"]"
+  ],
+  "set3.d07-zip-001-zip-central-directory-member-names": [
+   "['box-12/doc-1.txt', 'box-33/doc-5.txt', 'cabinet-40/doc-7.txt', 'drop-03/item-9.txt', 'drop-30/part-9.md', 'room-08/doc-5.txt', 'room-34/item-3.txt', 'shelf-12/part-3.txt', 'tray-05/entry-7.txt', 'tray-12/doc-4.md', 'tray-21/entry-7.md', 'tray-27/doc-6.csv', 'tray-31/entry-8.md']"
+  ],
+  "set3.d20-macho-001-macho-cpu-type-set": [
+   "[\"0x01000012\",\"0x01000007\",\"0x0100000c\"]"
+  ],
+  "set6.d07-zip-001-zip-central-directory-member-names": [
+   "['box-04/part-7.txt', 'box-32/item-8.csv', 'drop-35/item-7.log', 'drop-37/entry-1.txt', 'room-22/part-5.txt', 'shelf-02/part-9.md', 'shelf-12/item-5.log', 'shelf-16/doc-1.csv', 'tray-25/part-6.md', 'tray-27/entry-9.md']"
+  ],
+  "set1.d07-zip-001-zip-central-directory-member-names": [
+   "['box-04/item-5.md', 'box-07/part-4.txt', 'box-33/item-8.txt', 'cabinet-03/item-2.txt', 'cabinet-20/doc-6.md', 'cabinet-22/part-1.log', 'cabinet-36/part-8.log', 'shelf-11/doc-9.md', 'shelf-29/doc-8.csv', 'tray-32/part-9.md', 'tray-36/doc-7.txt']"
+  ],
+  "set1.d20-macho-001-macho-cpu-type-set": [
+   "[\"0x00000012\",\"0x00000007\",\"0x0200000c\"]"
+  ],
+  "set4.d07-zip-001-zip-central-directory-member-names": [
+   "['box-18/part-5.txt', 'box-19/item-8.csv', 'box-39/item-9.txt', 'cabinet-03/doc-4.txt', 'room-27/doc-7.txt', 'room-32/part-4.txt', 'shelf-04/part-6.md', 'shelf-06/item-3.log', 'shelf-12/entry-8.txt', 'shelf-17/item-2.txt', 'tray-23/doc-3.md', 'tray-36/item-2.txt']"
+  ],
+  "set4.d20-macho-001-macho-cpu-type-set": [
+   "[\"0x00000012\",\"0x01000012\",\"0x0100000c\"]"
+  ],
+  "set7.d07-zip-001-zip-central-directory-member-names": [
+   "['box-07/part-3.txt', 'cabinet-21/entry-3.md', 'cabinet-36/doc-4.md', 'drop-37/part-6.txt', 'room-24/entry-9.log']"
+  ],
+  "set7.d20-macho-001-macho-cpu-type-set": [
+   "[\"0x0200000c\",\"0x0100000c\"]"
+  ]
+ },
+ "require_complete": true,
+ "verified": 184
+}

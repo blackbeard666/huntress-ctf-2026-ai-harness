@@ -1,0 +1,7 @@
+{
+ "description": "game-script-language-route (nut): hex(base64(plan))",
+ "expected_plain": "v=3|language=squirrel|role=staged_chain|verdict=suspicious|attack=T1105|adapter=operator_graph|host_profile=standalone|obfuscation_profile=hex_base64|stage_count=3|campaign_id=SQUIRREL-6f708192|url=https://squirrel-6f708192.example.invalid/stage|file_path=/tmp/huntress-squirrel/.6f708192.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/gsl_gen.py OUT  # stdlib base64/binascii/json writer; fixture gsl_squirrel_verbatim (hex(base64(plan)))",
+ "oracle_cmd": "grep -oP 'descriptor_\\w+ = @\"\\K[^\"]+' gsl_squirrel_verbatim.nut | xxd -r -p | base64 -d"
+}

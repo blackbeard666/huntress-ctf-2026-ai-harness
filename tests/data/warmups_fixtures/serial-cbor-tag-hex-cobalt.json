@@ -1,0 +1,9 @@
+{
+ "codec": "serialization-wrapper[cbor]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-raven-74",
+ "encoded": "d9d9f78258664e69636520776f726b206465636f64696e672074686973207761726d75702120546f20736f6c76652c207375626d6974207468697320657861637420616e7377657220746f207468652047616d65204d61737465723a20636f62616c742d726176656e2d3734f5",
+ "generator_cmd": "python3 -c 'import cbor2,os;print(cbor2.dumps(cbor2.CBORTag(55799,[os.environ[\"plain\"].encode(),True])).hex())'",
+ "oracle_cmd": "python3 -c 'import cbor2,os;x=cbor2.loads(bytes.fromhex(os.environ[\"encoded\"]));print(getattr(x,\"value\",x)[0].decode())'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-raven-74",
+ "expected": "match"
+}

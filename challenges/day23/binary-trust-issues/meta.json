@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-23-anti-analysis-recognition",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Trust Issues",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-23-anti-analysis-recognition",
+    "time_trial": "binary-reverse-engineering-day-23-anti-analysis-recognition/time_trial",
+    "mastery": "binary-reverse-engineering-day-23-anti-analysis-recognition/mastery"
+  }
+}

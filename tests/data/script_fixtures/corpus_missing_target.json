@@ -1,0 +1,21 @@
+{
+ "corpus": {
+  "relay-a.ps1": "# inert typed PowerShell-to-Python handoff precursor\n$HandoffId = 'PSPY-AAAA000011112222'\n$Interpreter = 'python.exe'\n$NextStage = 'stage-a.py'\n$ArgumentVector = @($NextStage, '--handoff-id', $HandoffId)\n$ExecutionPlan = [pscustomobject]@{\n    Adapter = 'Start-Process'\n    Interpreter = $Interpreter\n    Arguments = $ArgumentVector\n    HandoffId = $HandoffId\n    Executed = $false\n}\n",
+  "stage-a.py": "import base64\n# inert analyst fixture\nPLAN = base64.b64decode('dj0yfHN0ZXBzPWxvY2F0ZV9sb2NhbCxkaXNwYXRjaF9wcm9jZXNzfGFkYXB0ZXI9aW50ZXJwcmV0ZXJfYXJndnxzdGFnZV9jb3VudD0xfG5leHRfc3RhZ2U9c3RhZ2UtYi5weQ==').decode()\n",
+  "stage-b.py": "import base64\n# inert analyst fixture\nPLAN = base64.b64decode('dj0yfHN0ZXBzPWRlY29kZV9jb25maWd1cmF0aW9uLHJldHVybl9jb25maWd1cmF0aW9ufGFkYXB0ZXI9bm9uZXxzdGFnZV9jb3VudD0x').decode()\n",
+  "relay-z.ps1": "# inert typed PowerShell-to-Python handoff precursor\n$HandoffId = 'PSPY-ZZZZ999988887777'\n$Interpreter = 'python.exe'\n$NextStage = 'stage-77e55f4a64.py'\n$ArgumentVector = @($NextStage, '--handoff-id', $HandoffId)\n$ExecutionPlan = [pscustomobject]@{\n    Adapter = 'Start-Process'\n    Interpreter = $Interpreter\n    Arguments = $ArgumentVector\n    HandoffId = $HandoffId\n    Executed = $false\n}\n"
+ },
+ "text": "import base64\n# inert analyst fixture\nPLAN = base64.b64decode('dj0yfHN0ZXBzPWxvY2F0ZV9sb2NhbCxkaXNwYXRjaF9wcm9jZXNzfGFkYXB0ZXI9aW50ZXJwcmV0ZXJfYXJndnxzdGFnZV9jb3VudD0xfG5leHRfc3RhZ2U9c3RhZ2UtYi5weQ==').decode()\n",
+ "expected_plain": "v=2|steps=locate_local,dispatch_process|adapter=interpreter_argv|stage_count=1|next_stage=stage-b.py",
+ "expected_outlier": "relay-z.ps1",
+ "oracle_cmd": "for f in *.ps1; do t=$(awk -F\"'\" '/^\\$NextStage/{print $2}' $f); [ -e \"$t\" ] || echo $f; done",
+ "expected_link_values": [
+  {
+   "dst": "stage-a.py",
+   "key": "handoff_id",
+   "value": "PSPY-AAAA000011112222"
+  }
+ ],
+ "generator_cmd": "python3 tests/data/script_fixtures/corpus_gen.py $TMPDIR/cgen  (stdlib base64 + PowerShell-shaped precursor text)",
+ "checks": "lib.codec.corpus_links(corpus) / link_value(dst, key, corpus) / stage_outlier(plans of corpus, edges)"
+}

@@ -1,0 +1,7 @@
+{
+ "description": "DECOY: renamed impostor pack (magic GDPK) holding a benign main.gd",
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/godot_gen.py  (stdlib struct/hashlib writer of the Godot format -> godot_decoy_badmagic.pck)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/godot_oracle.py tests/data/script_fixtures/godot_decoy_badmagic.pck  (stdlib struct/ast/hashlib reader, md5-checked; prints 'none'...)"
+}

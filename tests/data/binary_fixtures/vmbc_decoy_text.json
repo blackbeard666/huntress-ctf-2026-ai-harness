@@ -1,0 +1,11 @@
+{
+ "family": "vm_bytecode",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "decoy": true,
+ "generator_cmd": "sh vmbc_gen.sh   # printf text impostor naming the opcodes",
+ "oracle_cmd": "file vmbc_decoy_text.bin   # ASCII text: not an ELF, nothing to emulate",
+ "oracle_output": "ASCII text",
+ "note": "not an ELF -> no vm hit"
+}

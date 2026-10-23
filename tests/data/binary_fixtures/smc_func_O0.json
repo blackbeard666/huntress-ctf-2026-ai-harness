@@ -1,0 +1,19 @@
+{
+ "encoding": "smc-stride4-raw",
+ "expected_offset": 4802,
+ "expected_config": {
+  "campaign": "smc-func",
+  "beacon": "https://c2.smc-one.example/gate",
+  "sleep": 41,
+  "id": "SMC-7F31"
+ },
+ "expected_facts": {
+  "decrypted_offset": 4762,
+  "decrypted_size": 542,
+  "xor_key": "a7"
+ },
+ "decoy": false,
+ "generator_cmd": "bash smc_gen.sh func_O0   # gcc + python3 stdlib (struct/zlib) blob writer + python3 post-link xor patch (readelf -sW symbol range)",
+ "oracle_cmd": "bash smc_oracle.sh func_O0 0xa7   # runs the program natively (it self-decrypts and prints the blob; python3 zlib.crc32/json check), readelf -SW / -sW / -lW + objdump -d of a python3-decrypted copy for offsets",
+ "note": "gcc -O0 -no-pie; build() = 105 volatile stack-byte stores (c6 45 xx imm8: 4-byte stride of the blob) xor 0xa7 post-link by python3; main: mprotect(RWX) libc import, xor loop, call. Inner encoding = what hcfg_scan reports on the decrypted copy (stride4-raw, offset = the 'H' imm8 byte)"
+}

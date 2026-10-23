@@ -1,0 +1,20 @@
+{
+ "family": "runtime_codegen",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "has_runtime_codegen": "true",
+  "codegen_kind": "dotnet_emit",
+  "emitted_opcodes": "[\"ldc.i4\", \"ret\"]",
+  "emitted_instructions": "[\"ldc.i4 4919\", \"ret\"]",
+  "emitted_constant": "4919",
+  "emitted_constant_hex": "0x1337",
+  "emitted_bytes": "none"
+ },
+ "generator_cmd": "bash rcg_gen.sh .   # dotnet build (C#, net10.0): DynamicMethod + il.Emit(OpCodes.Ldc_I4, 0x1337); il.Emit(OpCodes.Ret)",
+ "oracle_cmd": "python3 rcg_oracle.py rcg_cs_dynmethod.bin   # objdump -d/-s + objdump -D -b binary (native) / ilspycmd -il (.NET); no capstone, no dnfile",
+ "file_b": "PE32 executable for MS Windows 4.00 (console), Intel i386 Mono/.Net assembly, 3 ",
+ "decoy": false,
+ "note": "lib.binary.runtime_codegen_field(data, key) per expected_facts key; key vocabulary SPECULATIVE (GM label not seen)"
+}

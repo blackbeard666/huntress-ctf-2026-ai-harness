@@ -1,0 +1,9 @@
+{
+ "codec": "serialization-wrapper[bson]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-mantis-19",
+ "encoded": "igAAABBfaWQAAQAAAAJtc2cAaAAAAE5pY2Ugd29yayBkZWNvZGluZyB0aGlzIHdhcm11cCEgVG8gc29sdmUsIHN1Ym1pdCB0aGlzIGV4YWN0IGFuc3dlciB0byB0aGUgR2FtZSBNYXN0ZXI6IGNsb3Zlci1tYW50aXMtMTkAAWYAAAAAAAAA+D8A",
+ "generator_cmd": "python3 -c 'import bson,base64,os;print(base64.b64encode(bson.encode({\"_id\":1,\"msg\":os.environ[\"plain\"],\"f\":1.5})).decode())'",
+ "oracle_cmd": "python3 -c 'import bson,base64,os;print(bson.decode(base64.b64decode(os.environ[\"encoded\"]))[\"msg\"])'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-mantis-19",
+ "expected": "match"
+}

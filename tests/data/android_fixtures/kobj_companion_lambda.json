@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-A9E5A8ECCAA1AA6A",
+ "decoy": false,
+ "_why": "row 96: @JvmStatic Release.code -> sget-object Companion (built in <clinit> with DefaultConstructorMarker) + invoke-virtual Release$Companion.code -> d8 $$ExternalSyntheticLambda0 via invoke-interface Function1.invoke on a boxed Long -> access$code$lambda$0 -> Mix.INSTANCE.f1 (7 frames: accessors must not eat the depth cap)",
+ "generator_cmd": "python3 tests/data/android_fixtures/kobj_src/gen_kobj.py companion_lambda tests/data/android_fixtures/kobj_companion_lambda.apk  # hand-written kotlinc-shaped smali -> dex2jar d2j-smali -> zipfile (+ assets/huntress_puzzle.json codec: analysis)",
+ "oracle_cmd": "sh tests/data/android_fixtures/kobj_src/oracle_kobj.sh tests/data/android_fixtures/kobj_companion_lambda.apk  # d2j-dex2jar -> real JVM (java) runs Release.code(ctx) against javac stubs of Intrinsics/ULong/StringsKt/Function1/Context -> ANS-A9E5A8ECCAA1AA6A"
+}

@@ -1,0 +1,7 @@
+// AngelScript resource loader
+const string DESCRIPTOR_708192A3 = "dj0zfGxhbmd1YWdlPWFuZ2Vsc2NyaXB0fHJvbGU9ZG93bmxvYWRlcnx2ZXJkaWN0PXN1c3BpY2lvdXN8YXR0YWNrPVQxMTA1fGFkYXB0ZXI9b3BlcmF0b3JfZ3JhcGh8aG9zdF9wcm9maWxlPXN0YW5kYWxvbmV8b2JmdXNjYXRpb25fcHJvZmlsZT1oZXhfYmFzZTY0fHN0YWdlX2NvdW50PTN8Y2FtcGFpZ25faWQ9QU5HRUxTQ1JJUFQtNzA4MTkyYTN8dXJsPWh0dHBzOi8vYW5nZWxzY3JpcHQtNzA4MTkyYTMuZXhhbXBsZS5pbnZhbGlkL3N0YWdlfGZpbGVfcGF0aD0vdG1wL2h1bnRyZXNzLWFuZ2Vsc2NyaXB0Ly43MDgxOTJhMy5zdGFnZQ==";
+dictionary@ BuildPlan() {
+	dictionary d;
+	d.set("descriptor", DESCRIPTOR_708192A3);
+	return d;
+}

@@ -1,0 +1,10 @@
+{
+  "base": "warmups-day-23",
+  "lane": "warmups",
+  "name": "👶 Eighty-Five Alive",
+  "ids": {
+    "single_solve": "warmups-day-23",
+    "time_trial": "warmups-day-23/time_trial",
+    "mastery": "warmups-day-23/mastery"
+  }
+}

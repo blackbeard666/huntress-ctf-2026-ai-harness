@@ -1,0 +1,9 @@
+{
+ "codec": "bech32",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-kestrel-31",
+ "encoded": "ctf1fe5kxefqwahhy6eqv3jkxmmyd9hxwgr5dp5hxgrhv9ex6atsyys9gmeqwdhkcan99ss8xatzd45hggr5dp5hxgr90pskxapqv9h8xam9wgs8gmeqw35x2gz8v9kk2gzdv9ehgetj8gsxzmtzv4ez66m9wd68yetv95enz00l7pp",
+ "generator_cmd": "python3 -c \"import sys;sys.path.insert(0,\\\"tools/pip-bech32\\\");import bech32;print(bech32.bech32_encode(\\\"ctf\\\",bech32.convertbits(sys.argv[1].encode(),8,5)))\" \"$plain\"  # pip bech32 1.2.0 (BIP173 reference)",
+ "oracle_cmd": "printf %s \"$encoded\" | NM=$PWD/tools/npm-bech32/node_modules tools/node/bin/node tests/data/warmups_fixtures/chkbase_oracle.mjs bech32",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-kestrel-31",
+ "expected": "match"
+}

@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-13-posted-too-much",
+  "lane": "web",
+  "name": "🌐 Posted Too Much",
+  "ids": {
+    "single_solve": "web-exploitation-day-13-posted-too-much",
+    "time_trial": "web-exploitation-day-13-posted-too-much/time_trial",
+    "mastery": "web-exploitation-day-13-posted-too-much/mastery"
+  }
+}

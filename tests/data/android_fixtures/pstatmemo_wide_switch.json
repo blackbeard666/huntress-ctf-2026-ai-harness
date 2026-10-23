@@ -1,0 +1,7 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-82A1A934B91EC7B6",
+ "_why": "v2 analysis: pure Mix.f1 with a sparse-switch + Math.max, called in loops; 5 inverse searches near the 4096 bound",
+ "generator_cmd": "python3 tests/data/android_fixtures/pstatmemo_src/gen_pstatmemo.py wide_switch tests/data/android_fixtures/pstatmemo_wide_switch.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/pstatmemo_src/oracle.sh tests/data/android_fixtures/pstatmemo_wide_switch.apk  # d2j-dex2jar back to classes, RUN Release.code() twice on the JVM -> ANS-82A1A934B91EC7B6"
+}

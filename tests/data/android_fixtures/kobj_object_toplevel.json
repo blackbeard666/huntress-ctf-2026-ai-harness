@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-3ECBAAE8DF3346C1",
+ "decoy": false,
+ "_why": "row 96: top-level ReleaseKt.code(Context) (Intrinsics.checkNotNullParameter, ULong constructor-impl/box-impl/unbox-impl) -> `object Mix` via sget-object INSTANCE + invoke-virtual f1 -> private f2 through synthetic access$f2 with a `when` sparse-switch -> toHexString.padStart(16).uppercase(Locale.ROOT)",
+ "generator_cmd": "python3 tests/data/android_fixtures/kobj_src/gen_kobj.py object_toplevel tests/data/android_fixtures/kobj_object_toplevel.apk  # hand-written kotlinc-shaped smali -> dex2jar d2j-smali -> zipfile (+ assets/huntress_puzzle.json codec: analysis)",
+ "oracle_cmd": "sh tests/data/android_fixtures/kobj_src/oracle_kobj.sh tests/data/android_fixtures/kobj_object_toplevel.apk  # d2j-dex2jar -> real JVM (java) runs ReleaseKt.code(ctx) against javac stubs of Intrinsics/ULong/StringsKt/Function1/Context -> ANS-3ECBAAE8DF3346C1"
+}

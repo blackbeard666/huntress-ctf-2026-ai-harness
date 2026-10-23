@@ -1,0 +1,10 @@
+{
+ "attempt": "b604de80-f239-4689-a8f8-0e286de547af",
+ "rejected": {
+  "d07-zip-001-zip-central-directory-member-names": [
+   "['box-06/part-6.log', 'box-18/part-8.txt', 'cabinet-09/item-8.log', 'cabinet-10/entry-6.txt', 'drop-13/item-2.md', 'drop-18/item-7.csv', 'drop-27/item-5.csv', 'room-18/item-5.log', 'room-33/doc-6.log', 'room-37/entry-8.txt', 'shelf-20/doc-8.txt', 'tray-14/item-2.csv']"
+  ]
+ },
+ "require_complete": true,
+ "verified": 27
+}

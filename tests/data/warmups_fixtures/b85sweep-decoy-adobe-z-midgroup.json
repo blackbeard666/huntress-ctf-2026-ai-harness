@@ -1,0 +1,10 @@
+{
+ "codec": "base85-any",
+ "plain": null,
+ "encoded": "<~87cUzRD]i~>",
+ "generator_cmd": "printf %s '<~87cUzRD]i~>'  # 'z' inside a group is illegal Ascii85",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl a85",
+ "oracle_plain": null,
+ "expected": "none",
+ "decoy": true
+}

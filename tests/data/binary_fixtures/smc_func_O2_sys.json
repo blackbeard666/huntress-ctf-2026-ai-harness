@@ -1,0 +1,19 @@
+{
+ "encoding": "smc-stack-built",
+ "expected_offset": 4696,
+ "expected_config": {
+  "campaign": "smc-sys",
+  "beacon": "tcp://203.0.113.9:4444",
+  "jitter": 7,
+  "id": "SMC-55E0"
+ },
+ "expected_facts": {
+  "decrypted_offset": 4672,
+  "decrypted_size": 560,
+  "xor_key": "3d"
+ },
+ "decoy": false,
+ "generator_cmd": "bash smc_gen.sh func_O2_sys   # gcc + python3 stdlib (struct/zlib) blob writer + python3 post-link xor patch (readelf -sW symbol range)",
+ "oracle_cmd": "bash smc_oracle.sh func_O2_sys 0x3d   # runs the program natively (it self-decrypts and prints the blob; python3 zlib.crc32/json check), readelf -SW / -sW / -lW + objdump -d of a python3-decrypted copy for offsets",
+ "note": "gcc -O2 PIE, strip -s (main found from _start's lea rdi); inline `syscall` mprotect (rax=10), no libc mprotect import; build() xor 0x3d post-link; header key 0x5c; offset = first movb $0x48 instruction"
+}

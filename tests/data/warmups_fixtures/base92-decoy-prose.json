@@ -1,0 +1,10 @@
+{
+ "codec": "base92",
+ "plain": null,
+ "encoded": "She said \"decode `this` warmup\" twice",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written prose decoy containing '\"' and '`' (outside the base92 alphabet)",
+ "oracle_cmd": "PYTHONPATH=tools/pychepy .venv/bin/python -I -c \"import sys;from chepy.modules.internal.helpers import Base92;print(Base92.b92decode(sys.stdin.read().strip()).decode())\"  # chepy Base92 decoder",
+ "oracle_plain": null
+}

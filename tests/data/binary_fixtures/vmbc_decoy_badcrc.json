@@ -1,0 +1,12 @@
+{
+ "family": "vm_bytecode",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_program_size": null,
+ "generator_cmd": "sh vmbc_gen.sh   # vmbc_asm.py (stdlib) assembles the program, system python3 zlib.crc32 header, coreutils base64, gcc 15.2",
+ "oracle_cmd": "sh vmbc_oracle.sh vmbc_decoy_badcrc.bin   # -DORACLE twin run natively + nm -S/readelf -SW for prog",
+ "oracle_output": "none",
+ "note": "same VM (-O2 PIE), program stores a blob whose crc byte is flipped -> no crc-valid hit; lib.binary.hcfg_scan -> first valid hit (offset = bytecode blob start, SPECULATIVE)",
+ "decoy": true
+}

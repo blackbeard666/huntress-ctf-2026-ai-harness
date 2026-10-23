@@ -1,0 +1,7 @@
+{
+ "description": "game-script-language-route (luau): hex(base64(plan))",
+ "expected_plain": "v=3|language=luau|role=downloader|verdict=suspicious|attack=T1105|adapter=operator_graph|host_profile=standalone|obfuscation_profile=hex_base64|stage_count=3|campaign_id=LUAU-1a2b3c4d|url=https://luau-1a2b3c4d.example.invalid/stage|file_path=/tmp/huntress-luau/.1a2b3c4d.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/gsl_gen.py OUT  # stdlib base64/binascii/json writer; fixture gsl_luau_typed_local (hex(base64(plan)))",
+ "oracle_cmd": "grep -oP 'DESCRIPTOR_\\w+: string = \"\\K[0-9a-f]+' gsl_luau_typed_local.luau | xxd -r -p | base64 -d"
+}

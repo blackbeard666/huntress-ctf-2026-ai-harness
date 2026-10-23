@@ -1,0 +1,10 @@
+{
+ "codec": "b85-free",
+ "plain": null,
+ "encoded": "warmup!",
+ "generator_cmd": "printf %s 'warmup!'  # a plain 7-char word: b85-alphabet token whose bytes are not a sentence piece",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl b85 | python3 -I -c \"import sys;sys.stdin.buffer.read().decode()\"",
+ "oracle_plain": null,
+ "expected": "none",
+ "decoy": true
+}

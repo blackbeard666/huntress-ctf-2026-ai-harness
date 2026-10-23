@@ -1,0 +1,9 @@
+{
+ "codec": "base85-any",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-24",
+ "encoded": "<~:2+3L+EqaECER/!@rGmlDJ()6BPDN1G@>N/F`8KH<,Wn#DesT./0K\"V@Voh$+EV:2F!,%=@:OC%@;^.1ATAo8D]j.8AKXKOD.Oha@<6O%E]P=X@:Wq$BOu4&DCmV#",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c 'import base64,sys;sys.stdout.write(base64.a85encode(sys.stdin.buffer.read(),adobe=True).decode()[:-2])'  # stdlib writer, Adobe '<~' kept but closing '~>' lost",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl a85",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-24",
+ "expected": "match"
+}

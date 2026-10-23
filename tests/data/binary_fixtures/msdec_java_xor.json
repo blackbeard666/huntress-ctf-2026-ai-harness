@@ -1,0 +1,14 @@
+{
+ "encoding": "managed-base64",
+ "expected_offset": 224,
+ "expected_config": {
+  "c2": "203.0.113.201:9001",
+  "campaign": "managed-jvm",
+  "sleep": 40,
+  "flag": "flag{zkm_styl3_x0r_t4bl3}"
+ },
+ "decoy": false,
+ "convention": "javac --release 11: static String a(String) = toCharArray, c[i] ^ KEY[i % KEY.length] (static int[] in <clinit>), new String(char[]); plain text = base64(HCFG blob); offset = first stored byte of the ciphertext operand",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/msdec_gen.sh tests/data/binary_fixtures   # dotnet 10 SDK (dotnet build C#/VB), javac; blob = printf header + crc32 from gzip trailer; ciphertext by perl; <name>.plain = the compiled program's own stdout (dotnet app.dll / java A)",
+ "oracle_cmd": "python3 -I tests/data/binary_fixtures/msdec_oracle.py tests/data/binary_fixtures java_xor   # program stdout -> base64 -> struct + zlib.crc32 + json; offset = bytes.find of the re-enciphered operand (UTF-16LE #US / FieldRVA bytes / CONSTANT_Utf8)"
+}

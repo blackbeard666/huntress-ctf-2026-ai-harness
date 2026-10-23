@@ -1,0 +1,67 @@
+{
+ "family": "anti_disassembly",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "has_anti_disassembly": "true",
+  "anti_disassembly_techniques": [
+   "junk_bytes",
+   "opposite_jcc_pair"
+  ],
+  "technique": "junk_bytes",
+  "anti_disassembly_functions": [
+   "check_key",
+   "skip_junk"
+  ],
+  "protected_function": "check_key",
+  "disassembly": [
+   "mov eax, 0x7",
+   "or eax, 0x1",
+   "je 0xe",
+   "jne 0xe",
+   "mov eax, 0x1337",
+   "add eax, 0x11",
+   "ret"
+  ],
+  "leaf_constant": "0x1348",
+  "uses:opposite_jcc_pair": "true",
+  "recover_code:check_key": [
+   "mov eax, 0x7",
+   "or eax, 0x1",
+   "je 0xe",
+   "jne 0xe",
+   "mov eax, 0x1337",
+   "add eax, 0x11",
+   "ret"
+  ],
+  "instruction_count:check_key": "7",
+  "leaf_constant:check_key": "0x1348",
+  "return_value:check_key": "4936",
+  "junk_bytes:check_key": "2",
+  "techniques:check_key": [
+   "junk_bytes",
+   "opposite_jcc_pair"
+  ],
+  "linear_sweep_desync:check_key": "true",
+  "recover_code:skip_junk": [
+   "xor eax, eax",
+   "jmp 0x1e",
+   "mov eax, 0xc0de",
+   "ret"
+  ],
+  "instruction_count:skip_junk": "4",
+  "leaf_constant:skip_junk": "0xc0de",
+  "return_value:skip_junk": "49374",
+  "junk_bytes:skip_junk": "3",
+  "techniques:skip_junk": [
+   "junk_bytes"
+  ],
+  "linear_sweep_desync:skip_junk": "true"
+ },
+ "generator_cmd": "bash adis_gen.sh   # gcc -O1 -masm=intel -c (top-level asm: .byte junk, jz+jnz, eb ff c0, call $+5;pop;push;ret)",
+ "oracle_cmd": "python3 adis_oracle.py   # gdb -batch stepi trace of adis_exe_all.bin (executed instructions, address order, returned eax), nm rebase to .o offsets; techniques/junk counts from the asm source; rizin `aa; pdf` cross-check",
+ "file_b": "ELF 64-bit LSB relocatable, x86-64, version 1 (SYSV), not st",
+ "decoy": false,
+ "note": "lib.binary.anti_disasm_field(data, key) per expected_facts key ('key:<fn>' = per function); field vocabulary SPECULATIVE (GM label not seen). rizin pdf: agrees on get_flag, stops at the fake ret in decode_it, decodes the junk e8 of check_key as `call` -- the walker recovers the executed code instead"
+}

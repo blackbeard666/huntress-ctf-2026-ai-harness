@@ -5136,6 +5136,99 @@ def _rc4(key, buf):
 
 _RC4_KEY = re.compile(rb"\0([\x21-\x7e][\x20-\x7e]{3,63})(?=\0)")   # NUL-delimited 4-64 char C string (~0.1 s / 48 MiB)
 
+# --- environment-keyed config ('Force the truth out'): the blob (or only its body / header xor byte) is xor'd with a
+# key DERIVED from a literal the program compares the env value / host model / hostname against. Keyspace = the file's
+# OWN literals (NUL-delimited C strings, UTF-16 #US / wchar strings) x the KDFs below, each tried within +-16 KB of the
+# literal; accepted only crc-valid + JSON. Offset = first stored (encrypted) byte, like rc4.
+HCFG_ENVKEY_KEYS = 768       # distinct literals tried (~0.2 ms each; env-name neighbours first)
+HCFG_ENVKEY_WIN = 1 << 14     # +-16 KB: .rodata literal -> .data / FieldRVA blob of a small program
+_ENVKEY_C = re.compile(rb"\0([A-Za-z0-9][\x20-\x7e]{2,47})(?=\0)")
+_ENVKEY_W = re.compile(rb"(?:[A-Za-z0-9]\x00)(?:[\x20-\x7e]\x00){2,47}")
+_ENVKEY_NAME = re.compile(rb"[A-Z][A-Z0-9]*_[A-Z0-9_]+|COMPUTERNAME|HOSTNAME|USERDOMAIN|USERNAME")
+
+
+def _fnv1a32(b):
+    h = 0x811C9DC5
+    for c in b:
+        h = ((h ^ c) * 0x01000193) & 0xFFFFFFFF
+    return h
+
+
+def _envkey_kdfs(lit):
+    """[(name, repeating key bytes)] derived from one literal."""
+    import hashlib
+    s2, c, f = hashlib.sha256(lit).digest(), zlib.crc32(lit), _fnv1a32(lit)
+    return [("xor", lit), ("sha256", s2), ("sha256[:16]", s2[:16]), ("sha256[:8]", s2[:8]), ("sha256[:4]", s2[:4]),
+            ("md5", hashlib.md5(lit).digest()), ("sha1", hashlib.sha1(lit).digest()),
+            ("crc32le", c.to_bytes(4, "little")), ("crc32be", c.to_bytes(4, "big")),
+            ("fnv1a32le", f.to_bytes(4, "little")), ("fnv1a32be", f.to_bytes(4, "big"))]
+
+
+def _envkey_scan(data, hits, emit, late):
+    """Environment-keyed HCFG: whole blob ^ kdf(literal) ('envkey-xor'), plain header over a body ^ kdf(literal)
+    ('envkey-body'), or a plain blob whose header xor byte is stored ^ a literal-derived byte ('envkey-hdrkey')."""
+    lits, seen, envs = [], set(), []
+    for rx, wide in ((_ENVKEY_C, False), (_ENVKEY_W, True))[:2 if data[:2] == b"MZ" else 1]:   # wide: PE / .NET #US
+        for n, m in enumerate(rx.finditer(data)):
+            if n >= 1 << 15 or late():
+                break
+            s, at = (m.group(0)[::2], m.start()) if wide else (m.group(1), m.start(1))
+            if _ENVKEY_NAME.fullmatch(s):
+                envs.append(at)
+            if s not in seen:
+                seen.add(s)
+                lits.append((s, at))
+    # literals within 4 KB of an env-var-like name (HUNTRESS_HOST_MODEL, COMPUTERNAME) first, then file order
+    envs.sort()
+
+    def near(at):
+        j = bisect.bisect_left(envs, at)
+        return any(abs(envs[x] - at) <= 4096 for x in (j - 1, j) if 0 <= x < len(envs))
+    lits = sorted(lits, key=lambda la: not near(la[1]))[:HCFG_ENVKEY_KEYS]
+    bodies = [h for h in hits if h.encoding == "raw" and not h.crc_ok][:64]
+    for lit, at in lits:
+        if late():
+            return
+        lo, hi, sh = max(0, at - HCFG_ENVKEY_WIN), at + len(lit) + HCFG_ENVKEY_WIN, repr(lit.decode("latin-1"))
+        kdfs = _envkey_kdfs(lit)
+        for name, key in kdfs:
+            ks = (key * (12 // len(key) + 1))[:12]
+            t = data.find(bytes(a ^ b for a, b in zip(HCFG_MAGIC, ks)), lo, hi)
+            while t >= 0:
+                head = _xor_rep(data[t:t + 12], key)
+                blob = _xor_rep(data[t:t + _need(head)], key)
+                r = _parse_blob(blob)
+                if r and r[5] and isinstance(r[6], dict):
+                    emit(t, "envkey-xor", blob, f"kdf={name} key={sh} key@{at}")
+                    return
+                t = data.find(bytes(a ^ b for a, b in zip(HCFG_MAGIC, ks)), t + 1, hi)
+        for h in bodies:
+            if not lo <= h.offset < hi:
+                continue
+            head, body = data[h.offset:h.offset + 12], data[h.offset + 12:h.offset + 12 + h.length]
+            if len(body) != h.length:
+                continue
+            # (encoding, kdf, plain, header key byte to report): body ^ stream (header byte applied after / not at all)
+            cands = []
+            for name, key in kdfs:
+                dec = _xor_rep(body, key)
+                cands += [("envkey-body", name, dec, h.key), ("envkey-body", name, bytes(b ^ h.key for b in dec), h.key)]
+            for name, d in (("first", lit[0]), ("len", len(lit) & 255), ("sha256[0]", kdfs[1][1][0]),
+                            ("crc32", kdfs[7][1][0]), ("fnv1a32", kdfs[9][1][0])):
+                if d:
+                    cands.append(("envkey-hdrkey", name, bytes(b ^ h.key ^ d for b in body), h.key ^ d))
+            for enc, name, plain, k in cands:
+                if zlib.crc32(plain) != h.crc:
+                    continue
+                try:
+                    ok = isinstance(json.loads(plain.decode()), dict)
+                except (ValueError, UnicodeDecodeError):
+                    ok = False
+                if ok:
+                    blob = head[:5] + bytes([k]) + head[6:12] + bytes(b ^ k for b in plain)
+                    emit(h.offset, enc, blob, f"kdf={name} key={sh} key@{at}")
+                    return
+
 
 def _mxor_body(data, i):
     """(blob, key) for a plain HCFG header at data[i] whose body is JSON ^ a repeating 1-16 byte key (any header xor
@@ -5792,6 +5885,15 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False, _depth=0):
     if not valid() and not late() and _depth < 2 and _BUNDLE_SIG in data:
         # .NET single-file bundle with EnableCompressionInSingleFile: each entry (app dll, config) is raw deflate
         _bundle_scan(data, emit, hits, deadline, late, _depth)
+    if not valid() and not late() and _depth < 3 and (data[:4] == b"\xca\xfe\xba\xbe" or (
+            data[:2] == b"MZ" and b"BSJB" in data) or (data[:2] == b"PK" and b".class" in data)) and len(data) <= MSDEC_MAX:
+        # managed string decryptor (.NET IL / JVM bytecode) called in place of ldstr/ldc: evaluate it on every call
+        # site's constant arguments and scan the plain strings (encoding managed-<inner>, offset = stored ciphertext)
+        _msdec_scan(data, hits, deadline, _depth)
+    if not valid() and not late() and _depth == 0 and data[:2] == b"MZ" and b"BSJB" in data and b".cctor\0" in data \
+            and len(data) <= MSDEC_DOTNET_MAX:
+        # .NET anti-tamper: <Module>..cctor xors FieldRVA data / method bodies with an IL constant key at startup
+        _antitamper_scan(data, emit, late)
     if not valid() and not late():
         # base64/hex text of a zlib/gzip/xz/bz2/lzma stream, or an xz/bz2/lzma stream raw in the file (offset = first
         # stored byte of the text / stream; detail at+N when the blob sits further into the output)
@@ -5956,6 +6058,12 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False, _depth=0):
             if valid():
                 break
     if not valid() and not late():
+        # environment-keyed: xor stream derived from a compared literal (literal / sha256 / md5 / crc32 / fnv1a32)
+        try:
+            _envkey_scan(data, hits, emit, late)
+        except Exception:  # noqa: BLE001 - hostile bytes never raise past the scan
+            pass
+    if not valid() and not late():
         # AES ECB/CBC/CTR, ChaCha20/Salsa20, XTEA: only when the cipher's constants are in the file (see _block_scan)
         try:
             _block_scan(data, emit, late)
@@ -6003,6 +6111,25 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False, _depth=0):
                 h.detail = f"module={m['path']} {m['encoding']} data@{m['stored_offset']} {h.detail}".strip()
                 hits.append(h)
                 break
+    if ext and not valid() and not late() and _depth == 0 and data[:4] == b"\x7fELF":
+        # self-modifying: main() mprotects a function / data range RWX and decrypts it in place -> emulate main, scan
+        # the image with the rewritten bytes patched back (encoding smc-<inner>, offset in the file as stored)
+        r = smc_decrypt(data, budget=HCFG_SMC_SECS if end is None else max(0.05, min(HCFG_SMC_SECS, end - time.time())))
+        for h in hcfg_scan(r["image"], deadline=deadline, stop_on_valid=True, _depth=1) if r else ():
+            if h.valid:
+                rg = next((g for g in r["ranges"] if g[0] <= h.offset < g[0] + g[1]), r["ranges"][0])
+                h.encoding = "smc-" + h.encoding
+                h.detail = (f"smc main@{r['main']:#x} {r['stopped']} decrypted@{rg[0]}+{rg[1]}"
+                            + (f" key={r['keys'][r['ranges'].index(rg)].hex()}" if r["keys"][r["ranges"].index(rg)]
+                               else "") + " " + h.detail).strip()
+                hits.append(h)
+                break
+    if ext and not valid() and not late() and _depth == 0 and data[:4] == b"\x7fELF":
+        # a custom bytecode VM run by main() stores the blob: emulate main, scan what it wrote (see _vm_scan)
+        try:
+            _vm_scan(data, hits, emit, late)
+        except Exception:   # noqa: BLE001 -- hostile bytes never raise past the scan
+            pass
     return _rank(hits)
 
 
@@ -7797,6 +7924,608 @@ def dynamic_trace_field(data, name):
         return None
 
 
+# --- Static predicate/branch evaluator (D23 "Trust Issues": "spot every predicate and force the truth out"). Never a
+# real run: main() of a dynamically linked x86-64 ELF is emulated in unicorn with every libc import bound to a Python
+# model -- getenv(<gate>) returns each host-model literal (others NULL), ptrace -> 0, clocks advance 1 ms per call (and
+# by the requested amount over sleep/usleep/nanosleep), printf-family/puts/write captured -- and the printed trace record
+# (`"branch"`, `"event_count"`, `"analysis_detected"`) is read per model. Host models = literals the program compares
+# the env value against (strcmp/strncmp/memcmp/strcasecmp/strstr operands) plus the D10-D23 options.
+
+_PB_NONE = "none"
+
+
+def _pb_cstr(uc, a, cap=4096):
+    if not a:
+        return None
+    out = b""
+    try:
+        while len(out) < cap:
+            ch = bytes(uc.mem_read(a + len(out), 256))
+            z = ch.find(b"\0")
+            if z >= 0:
+                return out + ch[:z]
+            out += ch
+    except Exception:  # noqa: BLE001
+        k = len(out)
+        while k < cap:   # page edge: byte-wise
+            try:
+                c = bytes(uc.mem_read(a + k, 1))
+            except Exception:  # noqa: BLE001
+                return out
+            if c == b"\0":
+                return out
+            out += c
+            k += 1
+    return out
+
+
+def _pb_fmt(fmt, nxt_i, nxt_f, rd):
+    out = []
+    pat = re.compile(rb"%([-+ #0]*)(\*|\d+)?(?:\.(\*|\d+))?(hh|h|ll|l|z|j|t|L|q)?([diouxXcspfFgGeEn%])")
+    i = 0
+    while i < len(fmt):
+        m = pat.match(fmt, i) if fmt[i:i + 1] == b"%" else None
+        if not m:
+            out.append(fmt[i:i + 1])
+            i += 1
+            continue
+        i = m.end()
+        fl, wd, pr, ln, cv = m.groups()
+        if cv == b"%":
+            out.append(b"%")
+            continue
+        wd = nxt_i() & 0xffffffff if wd == b"*" else int(wd or 0)
+        pr = (nxt_i() & 0xffffffff) if pr == b"*" else (int(pr) if pr is not None else None)
+        if cv in b"fFgGeE":
+            s = (("%" + fl.decode() + (str(wd) if wd else "") + (("." + str(pr)) if pr is not None else "") +
+                  cv.decode()) % nxt_f()).encode()
+        elif cv == b"s":
+            s = rd(nxt_i()) or b"(null)"
+            s = s[:pr] if pr is not None else s
+        elif cv == b"c":
+            s = bytes([nxt_i() & 0xff])
+        elif cv == b"p":
+            s = b"0x%x" % nxt_i()
+        elif cv == b"n":
+            nxt_i()
+            s = b""
+        else:
+            v = nxt_i()
+            bits = 64 if ln in (b"l", b"ll", b"z", b"j", b"t", b"q") else (8 if ln == b"hh" else 16 if ln == b"h" else 32)
+            v &= (1 << bits) - 1
+            if cv in b"di" and v >> (bits - 1):
+                v -= 1 << bits
+            s = (("%" + fl.decode().replace("#", "#" if cv in b"xXo" else "") + (str(wd) if wd else "") +
+                  (("." + str(pr)) if pr is not None else "") + ("d" if cv in b"iu" else cv.decode())) % v).encode()
+        if wd and len(s) < wd and cv in b"sc":
+            s = s.ljust(wd) if b"-" in fl else s.rjust(wd)
+        out.append(s)
+    return b"".join(out)
+
+
+def _pb_image(data):
+    """-> dict(segs, base, main, stubs{got_va: name}, objs{got_va: name}, rel[(va, addend)], imports) or None."""
+    from elftools.elf.elffile import ELFFile
+    import capstone
+    elf = ELFFile(io.BytesIO(data))
+    if elf["e_machine"] != "EM_X86_64" or elf.elfclass != 64 or not elf.little_endian:
+        return None
+    base = 0x10000000 if elf["e_type"] == "ET_DYN" else 0
+    segs = []
+    for s in elf.iter_segments():
+        if s["p_type"] == "PT_LOAD" and s["p_memsz"]:
+            if s["p_memsz"] > 64 << 20:
+                return None
+            off, fsz = s["p_offset"], min(s["p_filesz"], max(0, len(data) - s["p_offset"]))
+            segs.append((s["p_vaddr"] + base, s["p_memsz"], data[off:off + fsz], s["p_flags"]))
+    if not segs:
+        return None
+    dsym = elf.get_section_by_name(".dynsym")
+    if dsym is None:
+        return None
+    names = [(sym.name, sym["st_info"]["type"]) for sym in dsym.iter_symbols()]
+    imports = {n for n, _ in names if n}
+    if not imports & {"getenv", "secure_getenv"}:
+        return {"imports": imports}
+    slots, rel = {}, []
+    for sec in elf.iter_sections():
+        if sec["sh_type"] != "SHT_RELA":
+            continue
+        raw = sec.data()
+        for off, info, add in struct.iter_unpack("<QQq", raw[:len(raw) // 24 * 24]):
+            t, si = info & 0xffffffff, info >> 32
+            if t == 8:
+                rel.append((off + base, add + base))
+            elif t in (6, 7, 1) and 0 < si < len(names) and names[si][0]:
+                slots[off + base] = (names[si][0], names[si][1] == "STT_OBJECT", add if t == 1 else 0)
+    main = None
+    sym = elf.get_section_by_name(".symtab")
+    if sym is not None:
+        for s in sym.iter_symbols():
+            if s.name == "main" and s["st_info"]["type"] == "STT_FUNC" and s["st_value"]:
+                main = s["st_value"] + base
+                break
+    if main is None:   # stripped: rdi at _start's call to __libc_start_main
+        ent = elf["e_entry"] + base
+        seg = next((g for g in segs if g[0] <= ent < g[0] + len(g[2])), None)
+        if seg is None:
+            return None
+        md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
+        for ins in md.disasm(seg[2][ent - seg[0]:ent - seg[0] + 96], ent):
+            o = ins.op_str.replace(" ", "")
+            if ins.mnemonic in ("lea", "mov") and o.startswith("rdi,"):
+                mm = re.fullmatch(r"rdi,(?:qwordptr)?\[rip([+-]0x[0-9a-f]+)\]", o)
+                if ins.mnemonic == "lea" and mm:
+                    main = ins.address + ins.size + int(mm.group(1), 16)
+                elif ins.mnemonic == "mov" and re.fullmatch(r"rdi,0x[0-9a-f]+", o):
+                    main = int(o[4:], 16) + base
+            elif ins.mnemonic in ("call", "hlt"):
+                break
+    if main is None:
+        return None
+    return {"segs": segs, "base": base, "main": main, "slots": slots, "rel": rel, "imports": imports}
+
+
+def _pb_run(img, model, gate=None, max_insns=3_000_000, timeout_ms=400):
+    """Emulate main with HUNTRESS_HOST_MODEL (or `gate`) = model (None = unset). -> (stdout bytes, getenv names,
+    compared literals vs the env value, unmodeled import names) or None if refused / did not finish."""
+    import unicorn as U
+    X = U.x86_const
+    uc = U.Uc(U.UC_ARCH_X86, U.UC_MODE_64)
+    pages = {}
+    for va, msz, _, fl in img["segs"]:
+        for p in range(va & ~0xfff, (va + msz + 0xfff) & ~0xfff, 0x1000):
+            pages[p] = pages.get(p, 0) | U.UC_PROT_READ | U.UC_PROT_WRITE | (U.UC_PROT_EXEC if fl & 1 else 0)
+    if len(pages) > 32768:
+        return None
+    run = []
+    for p in sorted(pages):
+        if run and p == run[-1][0] + run[-1][1] and pages[p] == run[-1][2]:
+            run[-1][1] += 0x1000
+        else:
+            run.append([p, 0x1000, pages[p]])
+    for p, n, prot in run:
+        uc.mem_map(p, n, prot)
+    for va, _, blob, _ in img["segs"]:
+        uc.mem_write(va, blob)
+    for off, add in img["rel"]:
+        try:
+            uc.mem_write(off, (add & (1 << 64) - 1).to_bytes(8, "little"))
+        except Exception:  # noqa: BLE001
+            pass
+    top = (max(pages) + 0x1100000) & ~0xfffff
+    STK, HEAP, STUB, TLS, SENT = top, top + 0x100000, top + 0x500000, top + 0x600000, top + 0x700000
+    uc.mem_map(STK, 0x100000)
+    uc.mem_map(HEAP, 0x400000)
+    uc.mem_map(STUB, 0x100000, U.UC_PROT_READ | U.UC_PROT_EXEC)
+    uc.mem_map(TLS, 0x10000)
+    uc.mem_map(SENT, 0x1000, U.UC_PROT_READ | U.UC_PROT_EXEC)
+    uc.mem_write(STUB, b"\xc3" * 0x100000)
+    uc.reg_write(X.UC_X86_REG_FS_BASE, TLS + 0x8000)
+    uc.mem_write(TLS + 0x8000, (TLS + 0x8000).to_bytes(8, "little"))
+    uc.mem_write(TLS + 0x8028, (0x2f8c4a1e9b3d0000).to_bytes(8, "little"))   # stack-protector canary
+    st = {"heap": HEAP + 0x1000, "objs": HEAP + 0x300000, "clk": 1_700_000_000_000_000, "out": [], "envs": [],
+          "cmp": [], "unk": [], "env": None, "stop": None, "fd": 3}
+    stub_name = {}
+    for slot, (nm, obj, add) in img["slots"].items():
+        if obj:
+            a = st["objs"]
+            st["objs"] += 0x400
+            uc.mem_write(a, a.to_bytes(8, "little"))   # e.g. stdout/stderr FILE*: self-pointing scratch
+        else:
+            a = STUB + 16 * len(stub_name)
+            stub_name[a] = nm
+        try:
+            uc.mem_write(slot, (a + add).to_bytes(8, "little"))
+        except Exception:  # noqa: BLE001
+            pass
+
+    def alloc(n):
+        a = st["heap"]
+        st["heap"] += (max(1, n) + 15) & ~15
+        if st["heap"] >= HEAP + 0x300000:
+            raise MemoryError
+        return a
+
+    def put(b):
+        a = alloc(len(b) + 1)
+        uc.mem_write(a, b + b"\0")
+        return a
+
+    rd = lambda a: _pb_cstr(uc, a)
+    R = [X.UC_X86_REG_RDI, X.UC_X86_REG_RSI, X.UC_X86_REG_RDX, X.UC_X86_REG_RCX, X.UC_X86_REG_R8, X.UC_X86_REG_R9]
+    XM = [getattr(X, f"UC_X86_REG_XMM{k}") for k in range(8)]
+
+    def args(start=0):
+        sp = uc.reg_read(X.UC_X86_REG_RSP)
+        st_i = [start, 0]
+        st_f = [0]
+
+        def ni():
+            k = st_i[0]
+            st_i[0] += 1
+            if k < 6:
+                return uc.reg_read(R[k])
+            v = int.from_bytes(uc.mem_read(sp + 8 + 8 * st_i[1], 8), "little")
+            st_i[1] += 1
+            return v
+
+        def nf():
+            k = st_f[0]
+            st_f[0] += 1
+            if k < 8:
+                return struct.unpack("<d", (uc.reg_read(XM[k]) & (1 << 64) - 1).to_bytes(8, "little"))[0]
+            v = struct.unpack("<d", bytes(uc.mem_read(sp + 8 + 8 * st_i[1], 8)))[0]
+            st_i[1] += 1
+            return v
+        return ni, nf
+
+    def in_env(a):
+        e = st["env"]
+        return e is not None and e[0] <= a < e[1]
+
+    def note_cmp(a, b, n=None):
+        for x, y in ((a, b), (b, a)):
+            if in_env(x) and not in_env(y):
+                s = rd(y)
+                if s is not None:
+                    st["cmp"].append(s[:n] if n is not None else s)
+
+    def tick(us=1000):
+        st["clk"] += us
+        return st["clk"]
+
+    def sgn(v):
+        return (v & (1 << 64) - 1)
+
+    def cmpres(x, y):
+        return sgn(-1 if x < y else 1 if x > y else 0)
+
+    def f_printf(ni, nf, fmt_arg_first=True):
+        return _pb_fmt(rd(ni()) or b"", ni, nf, rd)
+
+    def call(name):
+        a = [uc.reg_read(r) for r in R]
+        nm = name.split("@")[0]
+        if nm.startswith("__") and nm.endswith("_chk"):
+            nm = nm[2:-4]
+        if nm in ("getenv", "secure_getenv"):
+            k = rd(a[0]) or b""
+            st["envs"].append(k.decode("latin-1"))
+            want = gate if gate is not None else ("HOST" in k.decode("latin-1") or "MODEL" in k.decode("latin-1"))
+            if (k.decode("latin-1") == gate if gate is not None else want) and model is not None:
+                p = put(model.encode("latin-1"))
+                st["env"] = (p, p + len(model) + 1)
+                return p
+            return 0
+        if nm in ("strcmp", "strcasecmp", "strcoll"):
+            x, y = rd(a[0]) or b"", rd(a[1]) or b""
+            note_cmp(a[0], a[1])
+            if nm == "strcasecmp":
+                x, y = x.lower(), y.lower()
+            return cmpres(x, y)
+        if nm in ("strncmp", "strncasecmp"):
+            n = a[2] & 0xffffffff
+            x, y = (rd(a[0]) or b"")[:n], (rd(a[1]) or b"")[:n]
+            note_cmp(a[0], a[1], n)
+            if nm == "strncasecmp":
+                x, y = x.lower(), y.lower()
+            return cmpres(x, y)
+        if nm in ("memcmp", "bcmp"):
+            n = min(a[2], 1 << 20)
+            x, y = bytes(uc.mem_read(a[0], n)), bytes(uc.mem_read(a[1], n))
+            note_cmp(a[0], a[1], n)
+            return cmpres(x, y)
+        if nm in ("strstr", "strcasestr"):
+            h, n_ = rd(a[0]) or b"", rd(a[1]) or b""
+            note_cmp(a[0], a[1])
+            i = (h.lower().find(n_.lower()) if nm == "strcasestr" else h.find(n_))
+            return a[0] + i if i >= 0 else 0
+        if nm == "strlen":
+            return len(rd(a[0]) or b"")
+        if nm == "strnlen":
+            return min(len(rd(a[0]) or b""), a[1])
+        if nm in ("strchr", "strrchr"):
+            s = rd(a[0]) or b""
+            c = a[1] & 0xff
+            if c == 0:
+                return a[0] + len(s)
+            i = s.find(bytes([c])) if nm == "strchr" else s.rfind(bytes([c]))
+            return a[0] + i if i >= 0 else 0
+        if nm in ("memcpy", "memmove"):
+            uc.mem_write(a[0], bytes(uc.mem_read(a[1], min(a[2], 1 << 20))))
+            return a[0]
+        if nm == "memset":
+            uc.mem_write(a[0], bytes([a[1] & 0xff]) * min(a[2], 1 << 20))
+            return a[0]
+        if nm in ("strcpy", "stpcpy"):
+            s = rd(a[1]) or b""
+            uc.mem_write(a[0], s + b"\0")
+            return a[0] + (len(s) if nm == "stpcpy" else 0)
+        if nm == "strncpy":
+            s = (rd(a[1]) or b"")[:a[2]]
+            uc.mem_write(a[0], s.ljust(a[2], b"\0")[:a[2]])
+            return a[0]
+        if nm == "strcat":
+            d = rd(a[0]) or b""
+            uc.mem_write(a[0] + len(d), (rd(a[1]) or b"") + b"\0")
+            return a[0]
+        if nm in ("malloc", "calloc", "realloc"):
+            n = a[0] * a[1] if nm == "calloc" else (a[1] if nm == "realloc" else a[0])
+            p = alloc(min(n, 1 << 20))
+            if nm == "realloc" and a[0]:
+                uc.mem_write(p, bytes(uc.mem_read(a[0], min(n, 4096))))
+            return p
+        if nm in ("strdup", "strndup"):
+            s = rd(a[0]) or b""
+            return put(s[:a[1]] if nm == "strndup" else s)
+        if nm in ("atoi", "atol", "strtol", "strtoul", "strtoll", "strtoull"):
+            m = re.match(rb"\s*([+-]?\d+)", rd(a[0]) or b"")
+            return sgn(int(m.group(1)) if m else 0)
+        if nm in ("toupper", "tolower"):
+            c = a[0] & 0xff
+            return ord(chr(c).upper() if nm == "toupper" else chr(c).lower()) if c < 128 else c
+        if nm in ("printf", "vprintf_unsupported"):
+            ni, nf = args(1 if name.endswith("_chk") else 0)
+            st["out"].append(f_printf(ni, nf))
+            return len(st["out"][-1])
+        if nm in ("fprintf", "dprintf"):
+            ni, nf = args(2 if name.endswith("_chk") else 1)
+            st["out"].append(f_printf(ni, nf))
+            return len(st["out"][-1])
+        if nm in ("sprintf", "snprintf"):
+            if nm == "sprintf":
+                ni, nf = args(3 if name.endswith("_chk") else 1)
+                cap = 1 << 16
+            else:
+                ni, nf = args(4 if name.endswith("_chk") else 2)
+                cap = a[1]
+            s = f_printf(ni, nf)
+            if cap:
+                uc.mem_write(a[0], s[:cap - 1] + b"\0")
+            return len(s)
+        if nm in ("puts",):
+            st["out"].append((rd(a[0]) or b"") + b"\n")
+            return 1
+        if nm in ("fputs",):
+            st["out"].append(rd(a[0]) or b"")
+            return 1
+        if nm in ("putchar", "fputc", "putc", "_IO_putc"):
+            st["out"].append(bytes([a[0] & 0xff]))
+            return a[0] & 0xff
+        if nm in ("fwrite",):
+            n = min(a[1] * a[2], 1 << 20)
+            st["out"].append(bytes(uc.mem_read(a[0], n)))
+            return a[2]
+        if nm == "write":
+            n = min(a[2], 1 << 20)
+            if a[0] in (1, 2):
+                st["out"].append(bytes(uc.mem_read(a[1], n)))
+            return n
+        if nm in ("exit", "_exit", "_Exit", "abort", "stack_chk_fail", "__stack_chk_fail", "quick_exit"):
+            st["stop"] = nm
+            uc.emu_stop()
+            return 0
+        if nm in ("ptrace", "prctl", "fflush", "setvbuf", "free", "close", "fclose", "setlocale", "srand",
+                  "signal", "sigaction", "raise", "alarm", "pause", "atexit", "__cxa_atexit", "isatty",
+                  "__cxa_finalize", "personality", "mlock", "madvise"):
+            return 0
+        if nm == "time":
+            v = tick() // 1_000_000
+            if a[0]:
+                uc.mem_write(a[0], v.to_bytes(8, "little"))
+            return v
+        if nm in ("clock_gettime", "timespec_get"):
+            v = tick()
+            if nm == "timespec_get":
+                a = [0, a[0]]
+            uc.mem_write(a[1], struct.pack("<qq", v // 1_000_000, v % 1_000_000 * 1000))
+            return 0 if nm == "clock_gettime" else 1
+        if nm == "gettimeofday":
+            v = tick()
+            uc.mem_write(a[0], struct.pack("<qq", v // 1_000_000, v % 1_000_000))
+            return 0
+        if nm == "clock":
+            return (tick() - 1_700_000_000_000_000)
+        if nm == "sleep":
+            tick((a[0] & 0xffffffff) * 1_000_000)
+            return 0
+        if nm == "usleep":
+            tick(a[0] & 0xffffffff)
+            return 0
+        if nm in ("nanosleep", "clock_nanosleep"):
+            p = a[0] if nm == "nanosleep" else a[2]
+            s_, ns = struct.unpack("<qq", bytes(uc.mem_read(p, 16)))
+            tick(s_ * 1_000_000 + ns // 1000)
+            return 0
+        if nm in ("getpid", "gettid"):
+            return 4242
+        if nm == "getppid":
+            return 4241
+        if nm in ("getuid", "geteuid", "getgid", "getegid"):
+            return 1000
+        if nm in ("sysconf", "get_nprocs", "get_nprocs_conf"):
+            return 4
+        if nm in ("fopen", "fopen64", "opendir", "popen", "dlopen"):
+            return 0
+        if nm in ("open", "open64", "openat", "access", "stat", "lstat", "readlink"):
+            return sgn(-1)
+        st["unk"].append(nm)
+        return 0
+
+    def on_stub(uc_, addr, size, _):
+        nm = stub_name.get(addr)
+        if nm is None:
+            return
+        try:
+            uc.reg_write(X.UC_X86_REG_RAX, call(nm) & (1 << 64) - 1)
+        except Exception:  # noqa: BLE001
+            st["stop"] = "model:" + nm
+            uc.emu_stop()
+
+    def refuse(why):
+        def cb(uc_, *a_):
+            st["stop"] = why
+            uc.emu_stop()
+        return cb
+
+    sp = STK + 0xf0000
+    argv = HEAP + 0x200
+    uc.mem_write(HEAP + 0x100, b"/x\0")
+    uc.mem_write(argv, struct.pack("<QQQ", HEAP + 0x100, 0, 0))
+    sp -= 8
+    uc.mem_write(sp, SENT.to_bytes(8, "little"))
+    uc.reg_write(X.UC_X86_REG_RSP, sp)
+    uc.reg_write(X.UC_X86_REG_RDI, 1)
+    uc.reg_write(X.UC_X86_REG_RSI, argv)
+    uc.reg_write(X.UC_X86_REG_RDX, argv + 16)
+    uc.hook_add(U.UC_HOOK_CODE, on_stub, None, STUB, STUB + 16 * max(1, len(stub_name)))
+    uc.hook_add(U.UC_HOOK_INTR, refuse("int"))
+    uc.hook_add(U.UC_HOOK_INSN, refuse("syscall"), None, 1, 0, X.UC_X86_INS_SYSCALL)
+    uc.hook_add(U.UC_HOOK_MEM_INVALID, refuse("mem"))
+    try:
+        uc.emu_start(img["main"], SENT, timeout=timeout_ms * 1000, count=max_insns)
+    except Exception:  # noqa: BLE001
+        if st["stop"] is None:
+            st["stop"] = "fault"
+    pc = uc.reg_read(X.UC_X86_REG_RIP)
+    if st["stop"] not in (None, "exit", "_exit", "_Exit", "quick_exit") or (st["stop"] is None and pc != SENT):
+        return None
+    return b"".join(st["out"]), st["envs"], st["cmp"], st["unk"]
+
+
+def _pb_record(out):
+    for line in reversed(re.findall(rb"\{[^\n{}]*\"branch\"[^\n{}]*\}", out or b"")):
+        try:
+            j = json.loads(line.decode("utf-8", "replace"))
+        except ValueError:
+            continue
+        if isinstance(j, dict):
+            return j
+    return None
+
+
+def _pb_trio(j):
+    if not j:
+        return _PB_NONE, _PB_NONE, _PB_NONE
+    ad = j.get("analysis_detected", _PB_NONE)
+    ec = j.get("event_count", _PB_NONE)
+    return (str(j.get("branch", _PB_NONE)), ec if isinstance(ec, int) and not isinstance(ec, bool) else _PB_NONE,
+            ("true" if ad else "false") if isinstance(ad, bool) else (str(ad) if ad is not None else _PB_NONE))
+
+
+def predicate_branch_facts(data, deadline_s=0.8, models=()):
+    """Branch / event_count / analysis_detected per host model of a dynamically linked x86-64 ELF, by emulating main()
+    (unicorn) with libc imports modelled in Python -- never a real run. getenv(<gate>) returns the model literal (the
+    gate = the getenv name holding HOST/MODEL; others NULL), ptrace/prctl -> 0, clocks +1 ms per call (+ the requested
+    sleep), cpu count 4, file opens fail. Facts: host_model_env, host_models (sorted literals the env value is compared
+    against via strcmp/strncmp/memcmp/strcasecmp/strstr; host_models_csv), for every model in host_models + analysis/
+    sandbox/workstation + `models`: branch_for_<m>, event_count_for_<m> (int), analysis_detected_for_<m> ("true"/
+    "false"), trace_for_<m> (compact JSON record); *_unset for the env var absent; branch_map (JSON {model: branch}).
+    Not an ELF / no getenv import / not x86-64 -> every key "none"; unparseable ELF -> None."""
+    f = {"host_model_env": _PB_NONE, "host_models": _PB_NONE, "host_models_csv": _PB_NONE, "branch_map": _PB_NONE}
+    want = list(dict.fromkeys(list(DTRACE_MODELS) + [str(m) for m in models]))
+
+    def blank(m):
+        f.update({f"branch_for_{m}": _PB_NONE, f"event_count_for_{m}": _PB_NONE,
+                  f"analysis_detected_for_{m}": _PB_NONE, f"trace_for_{m}": _PB_NONE})
+    for m in want:
+        blank(m)
+    f.update({"branch_unset": _PB_NONE, "event_count_unset": _PB_NONE, "analysis_detected_unset": _PB_NONE,
+              "trace_unset": _PB_NONE})
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        return None
+    data = bytes(data)
+    if data[:4] != b"\x7fELF" or b"getenv\0" not in data or len(data) > 24 << 20:   # bounded: 64 MB Swift = no-op
+        return f
+    try:
+        img = _pb_image(data)
+    except Exception:  # noqa: BLE001 -- truncated / hostile ELF: nothing to evaluate
+        return f
+    if img is None or "main" not in img:
+        return f
+    t_end = time.time() + deadline_s
+    try:
+        probe = _pb_run(img, "zz-hb-probe-model")
+        if probe is None:
+            return f
+        envs = list(dict.fromkeys(probe[1]))
+        gate = next((e for e in envs if "HOST" in e or "MODEL" in e), None)
+        if gate is None:
+            return f
+        f["host_model_env"] = gate
+        found = list(dict.fromkeys(s.decode("latin-1") for s in probe[2] if s and all(0x20 < c < 0x7f for c in s)))
+        # length-gated dispatch (`strlen(m) == 8 && memcmp(...)`, Roslyn-style): probe each length of a lowercase
+        # rodata token so the compare is reached; only literals the program really compares are kept
+        lens = sorted({len(t) for t in re.findall(rb"(?<![\x21-\x7e])[a-z][a-z0-9_-]{2,23}(?=\x00)", data)})
+        for n in (lens[:24] if not found else ()):
+            if time.time() > t_end - deadline_s / 2:
+                break
+            r = _pb_run(img, "z" * n, gate)
+            for s in (r[2] if r else ()):
+                s = s.decode("latin-1")
+                if s and s not in found and all(0x20 < ord(c) < 0x7f for c in s):
+                    found.append(s)
+        rounds = 0
+        while rounds < 3 and time.time() < t_end:   # literals only reached after an earlier match (nested gates)
+            rounds += 1
+            new = []
+            for m in list(found):
+                r = _pb_run(img, m, gate)
+                for s in (r[2] if r else ()):
+                    s = s.decode("latin-1")
+                    if s and s not in found and s not in new and all(0x20 < ord(c) < 0x7f for c in s):
+                        new.append(s)
+            if not new:
+                break
+            found += new
+        base_rec = _pb_record(probe[0])
+        bmap = {}
+        for m in list(dict.fromkeys(want + sorted(found))) + [None]:
+            if time.time() > t_end:
+                break
+            r = _pb_run(img, m, gate)
+            j = _pb_record(r[0]) if r else None
+            b, n, ad = _pb_trio(j)
+            sfx = "unset" if m is None else f"for_{m}"
+            f.update({f"branch_{sfx}": b, f"event_count_{sfx}": n, f"analysis_detected_{sfx}": ad,
+                      f"trace_{sfx}": json.dumps(j, separators=(",", ":")) if j else _PB_NONE})
+            if m is not None and b != _PB_NONE:
+                bmap[m] = b
+            if m is not None and m not in found and j and j != base_rec:   # inlined compare (movabs/cmp qword)
+                found.append(m)
+        f["host_models"] = sorted(found) or _PB_NONE
+        f["host_models_csv"] = ",".join(f["host_models"]) if found else _PB_NONE
+        f["branch_map"] = json.dumps(bmap, separators=(",", ":"), sort_keys=True) if bmap else _PB_NONE
+        return f
+    except Exception:  # noqa: BLE001
+        return None
+
+
+_PB_MEMO = [None, None]
+
+
+def predicate_branch_field(data, name):
+    """One predicate_branch_facts value by key; `branch_for_<x>` / `event_count_for_<x>` / `analysis_detected_for_<x>` /
+    `trace_for_<x>` for any literal x (emulated on demand). "none" for an unknown key."""
+    try:
+        name = name.strip()
+        if _PB_MEMO[0] is data:
+            f = _PB_MEMO[1]
+        else:
+            f = predicate_branch_facts(data)
+            _PB_MEMO[:] = [data, f]
+        if not isinstance(f, dict):
+            return f
+        m = re.fullmatch(r"(?:branch|event_count|analysis_detected|trace)_for_(.+)", name)
+        if m and name not in f and f["host_model_env"] != _PB_NONE:
+            f.update({k: v for k, v in (predicate_branch_facts(data, models=(m.group(1),)) or {}).items()
+                      if k not in f})
+        return f.get(name, _PB_NONE)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 # --- Anti-analysis / sandbox gating facts (MITRE T1622 debugger evasion, T1497 virtualization/sandbox evasion; D18 had
 # event_sandbox/event_decoy branches keyed by HUNTRESS_HOST_MODEL). Static only: imports, strings, and capstone context
 # around rdtsc/cpuid opcodes and getenv/strcmp call sites. Vocabulary SPECULATIVE until the GM names it.
@@ -8050,6 +8779,310 @@ def anti_analysis_field(data, name):
             ts = [t for v in (f["anti_debug_techniques"], f["anti_vm_techniques"]) if isinstance(v, list) for t in v]
             return "true" if arg.strip().lower() in ts else "false"
         return f.get(k, "none")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+_AD_OPP = {"je": "jne", "jne": "je", "jb": "jae", "jae": "jb", "jbe": "ja", "ja": "jbe", "jl": "jge", "jge": "jl",
+           "jle": "jg", "jg": "jle", "js": "jns", "jns": "js", "jo": "jno", "jno": "jo", "jp": "jnp", "jnp": "jp"}
+AD_TECHNIQUES = ("junk_bytes", "opposite_jcc_pair", "constant_jcc", "jmp_into_instruction", "overlapping_instructions",
+                 "call_pop", "push_ret")
+_AD_MEMO = [None, None]
+
+
+def _ad_funcs(data):
+    """(bits, [(name, va, file_off, size, sec_va, sec_off, sec_size, reloc_vas)]) for the FUNC/NOTYPE symbols of an
+    x86 / x86-64 ELF (ET_REL: section-relative VAs, like objdump), or the exports + entry of a PE; None otherwise."""
+    if data[:4] == b"\x7fELF" and len(data) >= 64 and data[5] == 1:
+        b64 = data[4] == 2
+        et, mach = struct.unpack_from("<HH", data, 16)
+        if mach not in (3, 62):
+            return None
+        shoff = struct.unpack_from("<Q" if b64 else "<I", data, 40 if b64 else 32)[0]
+        shes, shn = struct.unpack_from("<HH", data, 58 if b64 else 46)
+        if not shoff or shn > 8192 or shes < (64 if b64 else 40) or shoff + shn * shes > len(data):
+            return None
+        fmt = "<IIQQQQIIQQ" if b64 else "<IIIIIIIIII"
+        secs = [struct.unpack_from(fmt, data, shoff + k * shes) for k in range(shn)]
+        relocs = {}
+        for nm, ty, fl, ad, of, sz, ln, inf, al, es in secs:
+            if ty in (4, 9) and inf < shn and of + sz <= len(data):   # SHT_RELA / SHT_REL applying to section inf
+                es = es or ((24 if ty == 4 else 16) if b64 else (12 if ty == 4 else 8))
+                rs = relocs.setdefault(inf, set())
+                for o in range(of, of + min(sz, es * 200_000), es):
+                    rs.add(struct.unpack_from("<Q" if b64 else "<I", data, o)[0])
+        fns = []
+        for nm, ty, fl, ad, of, sz, ln, inf, al, es in secs:
+            if ty not in (2, 11) or ln >= shn or of + sz > len(data):
+                continue
+            so = secs[ln][4]
+            es = es or (24 if b64 else 16)
+            for o in range(of, of + min(sz, es * 400_000) - es + 1, es):
+                if b64:
+                    n, info, oth, sx, val, ssz = struct.unpack_from("<IBBHQQ", data, o)
+                else:
+                    n, val, ssz, info, oth, sx = struct.unpack_from("<IIIBBH", data, o)
+                if info & 15 not in (0, 2) or not 0 < sx < shn or secs[sx][1] != 1 or not secs[sx][2] & 4:
+                    continue
+                e = data.find(b"\0", so + n, so + n + 512)
+                name = data[so + n:e].decode("latin-1") if e > 0 else ""
+                if not name or name.startswith((".L", "$")) or (info & 15 == 0 and info >> 4 == 0 and not ssz):
+                    continue
+                s = secs[sx]
+                va = val + (s[3] if et == 1 else 0)
+                if s[3] <= va < s[3] + s[5]:
+                    fns.append((name, va, s[4] + va - s[3], ssz, s[3], s[4], s[5], relocs.get(sx, ())))
+        out, seen = [], set()
+        for f in sorted(fns, key=lambda f: (f[1], -f[3])):
+            if f[1] not in seen:
+                seen.add(f[1])
+                out.append(f)
+        return 64 if b64 else 32, out
+    if data[:2] == b"MZ":
+        import pefile
+        pe = pefile.PE(data=bytes(data), fast_load=True)
+        pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_EXPORT"]])
+        b64 = pe.FILE_HEADER.Machine == 0x8664
+        if pe.FILE_HEADER.Machine not in (0x14c, 0x8664):
+            return None
+        ib = pe.OPTIONAL_HEADER.ImageBase
+        rv = [(e.name.decode("latin-1") if e.name else "ord_%d" % e.ordinal, e.address)
+              for e in getattr(getattr(pe, "DIRECTORY_ENTRY_EXPORT", None), "symbols", []) or [] if e.address]
+        if pe.OPTIONAL_HEADER.AddressOfEntryPoint:
+            rv.append(("entry", pe.OPTIONAL_HEADER.AddressOfEntryPoint))
+        out = []
+        for name, rva in rv:
+            s = pe.get_section_by_rva(rva)
+            if s is None or not s.Characteristics & 0x20000000:
+                continue
+            sz = min(s.SizeOfRawData, s.Misc_VirtualSize or s.SizeOfRawData)
+            out.append((name, ib + rva, s.PointerToRawData + rva - s.VirtualAddress, 0, ib + s.VirtualAddress,
+                        s.PointerToRawData, sz, ()))
+        return 64 if b64 else 32, sorted(out, key=lambda f: f[1])
+    return None
+
+
+def _ad_imm(op):
+    return int(op, 0) if re.fullmatch(r"-?(0x[0-9a-f]+|\d+)", op) else None
+
+
+def _ad_walk(md, code, lo, hi, relocs, limit=4000):
+    """Recursive descent over code (code[0] at VA lo, function bytes [lo, hi)): both jcc edges, an opposite-condition
+    jcc pair (or a jcc on a constant flag after `xor r, r`) as one unconditional jump, call $+5 + pop / push + ret
+    tracked as a computed jump, stop at ret / jmp / hlt / ud2. -> (ins {va: (size, text)}, techniques, resolved)."""
+    ins, tech, resolved = {}, set(), True
+    starts = []
+    work = [(lo, {}, [])]
+    zf = None   # constant ZF state at the current path point (after xor r, r: 1)
+
+    def dec(a):
+        if not lo <= a < hi:
+            return None
+        return next(md.disasm(code[a - lo:a - lo + 16], a, 1), None)
+    while work and len(ins) < limit:
+        a, regs, stack = work.pop()
+        zf = None
+        while lo <= a < hi and len(ins) < limit:
+            if a in ins:
+                break
+            k = bisect.bisect_right(starts, a) - 1
+            if k >= 0 and a < starts[k] + ins[starts[k]][0]:
+                tech.add("overlapping_instructions")
+            i = dec(a)
+            if i is None:
+                resolved = False
+                break
+            mn, op = i.mnemonic, i.op_str
+            nxt = a + i.size
+            if bisect.bisect_left(starts, nxt) > bisect.bisect_left(starts, a) or \
+                    (bisect.bisect_left(starts, a) < len(starts) and starts[bisect.bisect_left(starts, a)] < nxt):
+                tech.add("overlapping_instructions")
+            bisect.insort(starts, a)
+            ins[a] = (i.size, mn, op)
+            rel = any(r in relocs for r in range(a + 1, nxt))
+            dst, _, src = op.partition(", ")
+            if mn in ("ret", "retn"):
+                if stack and isinstance(stack[-1], int):
+                    tech.add("push_ret")
+                    a = stack.pop()
+                    continue
+                break
+            if mn in ("hlt", "ud2", "int3"):
+                break
+            if mn == "jmp":
+                t = _ad_imm(op)
+                if t is None or rel:
+                    resolved = resolved and rel
+                    break
+                if a < t < nxt:
+                    tech.add("jmp_into_instruction")
+                a = t
+                continue
+            if mn in _AD_OPP or mn in ("jcxz", "jecxz", "jrcxz", "loop", "loope", "loopne"):
+                t = _ad_imm(op)
+                if t is None:
+                    break
+                j = dec(nxt)
+                if mn in _AD_OPP and j is not None and j.mnemonic == _AD_OPP[mn] and _ad_imm(j.op_str) == t:
+                    tech.add("opposite_jcc_pair")
+                    if nxt not in ins:
+                        bisect.insort(starts, nxt)
+                        ins[nxt] = (j.size, j.mnemonic, j.op_str)
+                    a = t
+                    continue
+                if zf is not None and mn in ("je", "jne"):
+                    tech.add("constant_jcc")
+                    a = t if (mn == "je") == (zf == 1) else nxt
+                    continue
+                work.append((t, dict(regs), list(stack)))
+                a = nxt
+                continue
+            zf = None
+            if mn == "call":
+                t = _ad_imm(op)
+                j = dec(nxt) if t == nxt and not rel else None
+                if j is not None and j.mnemonic == "pop":
+                    tech.add("call_pop")
+                    stack.append(nxt)
+                a = nxt
+                continue
+            if mn == "xor" and dst == src and not dst.startswith(("x", "y", "z", "m")):
+                zf = 1
+            if mn == "push":
+                v = _ad_imm(op)
+                stack.append(v if v is not None else regs.get(op))
+            elif mn == "pop":
+                regs[op] = stack.pop() if stack else None
+            elif mn in ("add", "sub") and dst in regs and isinstance(regs[dst], int) and _ad_imm(src) is not None:
+                regs[dst] += _ad_imm(src) * (1 if mn == "add" else -1)
+            elif mn in ("add", "sub") and re.fullmatch(r"[dq]word ptr \[[er]sp\]", dst) and stack and \
+                    isinstance(stack[-1], int) and _ad_imm(src) is not None:
+                stack[-1] += _ad_imm(src) * (1 if mn == "add" else -1)
+            elif mn == "lea" and re.fullmatch(r"\[rip [+-] 0x[0-9a-f]+\]", src):
+                regs[dst] = nxt + int(src[5:-1].replace(" ", ""), 16)
+            elif mn == "mov" and _ad_imm(src) is not None:
+                regs[dst] = _ad_imm(src)
+            elif mn in ("leave",) or dst in ("rsp", "esp"):
+                stack = []
+            elif dst in regs:
+                regs[dst] = None
+            a = nxt
+    return ins, tech, resolved
+
+
+def _ad_text(mn, op):
+    """capstone text with bare single-digit immediates in 0x form (objdump / gdb / rizin-hex style)."""
+    op = ", ".join(("0x" + p if re.fullmatch(r"\d", p) else p) for p in op.split(", ")) if op else ""
+    return (mn + " " + op).strip()
+
+
+def anti_disasm_facts(data, deadline_s=0.6):
+    """Anti-disassembly constructs that break a linear sweep, per function of an x86 / x86-64 ELF (ET_REL objects
+    too: VAs are section offsets like objdump) or PE (exports + entry): junk bytes after an unconditional jump,
+    a jz+jnz (any opposite-condition) pair to one target, a jcc on a constant flag (xor r, r; jz), a jump into the
+    middle of an instruction (`eb ff c0`), overlapping instructions, call $+5; pop, a push + ret computed jump.
+    A recursive-descent capstone walk (both jcc edges, opposite pairs as unconditional, stop at ret / jmp) recovers
+    the real code. Facts: has_anti_disassembly true|false, anti_disassembly_techniques (order of AD_TECHNIQUES),
+    technique (first), anti_disassembly_functions (address order), protected_function (first); for the first
+    protected function (and per function via anti_disasm_field "key:<fn>"): disassembly / recover_code (["mnemonic
+    op"] address order), instruction_count, leaf_constant (eax at return by unicorn, "0x%x"), return_value (int32
+    decimal), junk_bytes (count of unreached non-padding bytes), linear_sweep_desync true|false, techniques (list).
+    Lists "none" when empty. Not ELF/PE -> every key "none"; unparseable x86 ELF/PE -> None."""
+    keys = ("has_anti_disassembly", "anti_disassembly_techniques", "technique", "anti_disassembly_functions",
+            "protected_function") + _AD_FN_KEYS
+    if not (data[:4] == b"\x7fELF" or data[:2] == b"MZ"):
+        return {k: "none" for k in keys}
+    try:
+        r = _ad_funcs(data)
+    except Exception:  # noqa: BLE001
+        r = None
+    if r is None:
+        return None
+    import capstone
+    bits, fns = r
+    md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64 if bits == 64 else capstone.CS_MODE_32)
+    t_end = time.time() + deadline_s
+    per, prot, allt = {}, [], set()
+    for k, (name, va, fo, sz, sva, so, ssz, rel) in enumerate(fns):
+        if time.time() > t_end:
+            break
+        nxt_va = next((f[1] for f in fns[k + 1:] if f[1] > va), sva + ssz)
+        end = min(va + sz if sz else nxt_va, sva + ssz, va + (1 << 16))
+        if end <= va or fo < 0 or fo + (end - va) > len(data):
+            continue
+        code = bytes(data[fo:fo + end - va])
+        ins, tech, ok = _ad_walk(md, code, va, end, rel)
+        cov = bytearray(end - va)
+        for a, (s, _, _) in ins.items():
+            cov[a - va:a - va + s] = b"\1" * min(s, end - a)
+        junk, p = 0, 0
+        while p < len(cov):   # unreached runs that desync a linear sweep (landing pads / padding tile cleanly)
+            if cov[p]:
+                p += 1
+                continue
+            q = p
+            while q < len(cov) and not cov[q]:
+                q += 1
+            if sum(x.size for x in md.disasm(code[p:q], 0)) != q - p:
+                junk += q - p
+            p = q
+        if junk and ok and (bits == 64 or tech):
+            tech.add("junk_bytes")
+        if "call_pop" in tech and bits == 32 and "push_ret" not in tech:
+            tech.discard("call_pop")   # i386 PIC: call 1f; 1: pop ebx is the compiler's own GOT idiom
+        lin = set()
+        for x in md.disasm(code, va):
+            lin.add(x.address)
+        desync = not set(ins) <= lin
+        t = [x for x in AD_TECHNIQUES if x in tech]
+        f = {"disassembly": [_ad_text(ins[a][1], ins[a][2]) for a in sorted(ins)], "instruction_count": str(len(ins)),
+             "junk_bytes": str(junk), "linear_sweep_desync": "true" if desync else "false", "techniques": t or "none",
+             "leaf_constant": "none", "return_value": "none", "address": "0x%x" % va}
+        f["recover_code"] = f["disassembly"]
+        if t:
+            prot.append(name)
+            allt.update(t)
+            if not any(ins[a][1] == "call" and not (a + ins[a][0] in ins and ins[a + ins[a][0]][1] == "pop")
+                       for a in ins):
+                e = _sc_emulate(code + bytes(16), "x86-64" if bits == 64 else "x86")
+                if e:
+                    f["leaf_constant"], f["return_value"] = "0x%x" % (e[0] & 0xffffffff), str(e[0])
+        per[name] = f
+    first = per[prot[0]] if prot else {}
+    out = {"has_anti_disassembly": "true" if prot else "false",
+           "anti_disassembly_techniques": [x for x in AD_TECHNIQUES if x in allt] or "none",
+           "anti_disassembly_functions": prot or "none", "protected_function": prot[0] if prot else "none"}
+    out["technique"] = out["anti_disassembly_techniques"][0] if prot else "none"
+    for k in _AD_FN_KEYS:
+        out[k] = first.get(k, "none")
+    out["functions"] = per
+    return out
+
+
+_AD_FN_KEYS = ("disassembly", "recover_code", "instruction_count", "leaf_constant", "return_value", "junk_bytes",
+               "linear_sweep_desync", "techniques")
+
+
+def anti_disasm_field(data, name):
+    """One anti_disasm_facts value; "key:<function>" picks a function's own value (disassembly, recover_code,
+    instruction_count, leaf_constant, return_value, junk_bytes, linear_sweep_desync, techniques, address);
+    `uses:<technique>` -> "true"/"false"; "none" for an unknown key / function; None when unparseable."""
+    try:
+        if _AD_MEMO[0] is data:
+            f = _AD_MEMO[1]
+        else:
+            f = anti_disasm_facts(data)
+            _AD_MEMO[:] = [data, f]
+        if not isinstance(f, dict):
+            return f
+        k, _, arg = name.strip().partition(":")
+        k, arg = k.strip(), arg.strip()
+        if k == "uses":
+            ts = f["anti_disassembly_techniques"]
+            return "none" if f["has_anti_disassembly"] == "none" else ("true" if arg in ts else "false")
+        if arg:
+            return f.get("functions", {}).get(arg, {}).get(k, "none")
+        return f.get(k, "none") if k != "functions" else "none"
     except Exception:  # noqa: BLE001
         return None
 
@@ -8563,7 +9596,7 @@ def _ctor_emu(info, fns, end, srcs=None):
     return None, []
 
 
-def _ctor_run(uc, U, R, a64, pc, stubs, heap, HEAP, DONE, SP, RET, ARGS, PC, end):
+def _ctor_run(uc, U, R, a64, pc, stubs, heap, HEAP, DONE, SP, RET, ARGS, PC, end, smc=False):
     """Run one constructor from pc to the DONE return address; a call into an import stub is served here (malloc/
     calloc bump heap, memcpy/memmove/memset, strlen/strcpy; anything else returns 0) and resumed at the caller."""
     left = 300000
@@ -8581,7 +9614,9 @@ def _ctor_run(uc, U, R, a64, pc, stubs, heap, HEAP, DONE, SP, RET, ARGS, PC, end
         a = [uc.reg_read(r) for r in ARGS]
         name, rv = stubs.get(cur & ~0xf, ""), 0
         try:
-            if name in ("malloc", "calloc"):
+            if smc and name in ("getpagesize", "sysconf"):   # smc_decrypt: page-align arithmetic before mprotect
+                rv = 4096
+            elif name in ("malloc", "calloc"):
                 n = (a[0] * (a[1] if name == "calloc" else 1) + 15) & ~15
                 if n < 0x80000 and heap[0] + n < HEAP + 0x100000:
                     rv, heap[0] = heap[0], heap[0] + n
@@ -8653,6 +9688,397 @@ def _ctor_scan(data, emit, late):
             best = (cur[1] - cur[0] + 1, cur[0])
     for blob in blobs:
         emit(best[1], "init-decoded", blob, f"{info[0]} init_array[{k}] fn@{info[6](fns[k])} src={best[0]}B")
+
+
+# --- self-modifying / runtime-decrypted code or data (mprotect RWX + xor loop over a function body or a data section,
+# then call): main() is emulated ONCE in the constructor-pass address space (_ctor_emu's mapping, imports -> stubs,
+# mprotect / pkey_mprotect (libc or inline syscall) -> 0, getpagesize / sysconf -> 4096), stopping the moment execution
+# enters a page main itself wrote (the decrypted function, before it runs / re-encrypts) or at main's return. Bytes of
+# the file-backed image that differ from the relocated load image are patched back at their FILE offsets, so every
+# static extractor (hcfg_scan, emulate_return_value, disassembly) runs on the decrypted copy with unchanged offsets.
+HCFG_SMC_SECS = float(os.environ.get("HCTF_HCFG_SMC_SECS", "0.4"))   # wall budget of the main() emulation
+SMC_MAX_PATCH = 1 << 20   # decrypted bytes patched back per image
+_SMC_PROTECT = ("mprotect", "pkey_mprotect", "__mprotect")
+_SMC_SYSCALL = re.compile(rb"(?:\xb8|\x48\xc7\xc0)(?:\x0a|\x49\x01)\x00\x00\x00")   # mov eax/rax, 10 (mprotect) / 329
+
+
+def _smc_main(data, info):
+    """vaddr of main(): FUNC symbol 'main' (symtab / dynsym), else the `lea rdi, [rip+d]` / `mov rdi, imm32` that
+    _start hands __libc_start_main (x86-64), else None."""
+    arch, _base, _loads, _tg, _rels, _syms, v2o = info[:7]
+    shoff, = struct.unpack_from("<Q", data, 40)
+    shentsz, shnum = struct.unpack_from("<HH", data, 58)
+    if shoff and shentsz == 64 and shoff + shnum * 64 <= len(data):
+        secs = [struct.unpack_from("<IIQQQQIIQQ", data, shoff + k * 64) for k in range(min(shnum, 4096))]
+        for s in secs:
+            if s[1] not in (2, 11) or s[9] != 24 or s[6] >= len(secs):
+                continue
+            st = secs[s[6]]
+            strs = data[st[4]:st[4] + st[5]]
+            j = strs.find(b"\0main\0")
+            if j < 0:
+                continue
+            for q in range(s[4], min(s[4] + s[5], len(data) - 23, s[4] + (24 << 18)), 24):
+                nm, inf, _o, _sh, va = struct.unpack_from("<IBBHQ", data, q)
+                if nm == j + 1 and inf & 15 == 2 and va:
+                    return va
+    if arch != "x86-64":
+        return None
+    ent, = struct.unpack_from("<Q", data, 24)
+    o = v2o(ent)
+    if o is None:
+        return None
+    win = data[o:o + 64]
+    m = re.search(rb"\x48\x8d\x3d(....)|\x48\xc7\xc7(....)", win, re.S)
+    if not m:
+        return None
+    if m.group(1):
+        return ent + m.end() + struct.unpack("<i", m.group(1))[0]
+    return struct.unpack("<I", m.group(2))[0]
+
+
+def smc_decrypt(data, *, budget=None):
+    """Runtime self-decryption replayed statically (x86-64 / AArch64 little-endian ELF64 with a cue: an mprotect /
+    pkey_mprotect import, an inline mprotect syscall, or a W+X PT_LOAD). -> {"image": file bytes with the decrypted
+    ranges patched in, "ranges": [(file_offset, size, vaddr)], "main": vaddr, "stopped": "exec-written" | "return",
+    "keys": [repeating xor key bytes per range or None]} when main() rewrote file-backed bytes, else None (no cue, no
+    main, nothing rewritten, refused). Never raises."""
+    try:
+        import unicorn as U
+        info = _elf_ctors(data)
+        if not info:
+            return None
+        arch, base, loads, _tg, rels, syms, v2o = info
+        names = set(syms.values())
+        if not (names & set(_SMC_PROTECT) or any(l[4] & 3 == 3 for l in loads)
+                or (arch == "x86-64" and b"\x0f\x05" in data and _SMC_SYSCALL.search(data))):
+            return None
+        main = _smc_main(data, info)
+        if main is None or v2o(main) is None:
+            return None
+        return _smc_emu(data, info + (data,), main, time.time() + (HCFG_SMC_SECS if budget is None else budget))
+    except Exception:   # noqa: BLE001 -- unicorn / hostile headers: never raise past the caller
+        return None
+
+
+def _smc_emu(data, info, main, end):
+    import unicorn as U
+    arch, base, loads, _tg, rels, syms, v2o, _d = info
+    a64 = arch == "aarch64"
+    uc = U.Uc(U.UC_ARCH_ARM64, U.UC_MODE_ARM) if a64 else U.Uc(U.UC_ARCH_X86, U.UC_MODE_64)
+    if a64:
+        R = U.arm64_const
+        SP, RET, ARGS, PC = R.UC_ARM64_REG_SP, R.UC_ARM64_REG_X0, (R.UC_ARM64_REG_X0, R.UC_ARM64_REG_X1,
+                                                                     R.UC_ARM64_REG_X2), R.UC_ARM64_REG_PC
+    else:
+        R = U.x86_const
+        SP, RET, ARGS, PC = R.UC_X86_REG_RSP, R.UC_X86_REG_RAX, (R.UC_X86_REG_RDI, R.UC_X86_REG_RSI,
+                                                                   R.UC_X86_REG_RDX), R.UC_X86_REG_RIP
+    pages = sorted({pg for va, off, fsz, msz, flg in loads
+                    for pg in range((base + va) & ~0xfff, (base + va + msz + 0xfff) & ~0xfff, 0x1000)})
+    if not pages or len(pages) > (96 << 20) >> 12:
+        return None
+    run = [pages[0]]
+    for pg in pages[1:] + [None]:
+        if pg is not None and pg == run[-1] + 0x1000:
+            run.append(pg)
+            continue
+        uc.mem_map(run[0], len(run) * 0x1000)
+        if pg is not None:
+            run = [pg]
+    for va, off, fsz, msz, flg in loads:
+        uc.mem_write(base + va, data[off:off + fsz])
+    STUB, STK, HEAP, DONE = 0x7e000000, 0x7f000000, 0x7c000000, 0x7dfff000
+    uc.mem_map(STK, 0x40000)
+    uc.mem_map(HEAP, 0x100000)
+    uc.mem_map(STUB, 0x10000, U.UC_PROT_READ)
+    uc.mem_map(DONE, 0x1000, U.UC_PROT_READ)
+    stubs = {}
+    rel_t, imp_t = _CTOR_ARCH[183 if a64 else 62][1:]
+    for ro, t, si, add in rels:
+        try:
+            if t == rel_t:
+                uc.mem_write(base + ro, struct.pack("<Q", base + add))
+            elif t in imp_t:
+                slot = STUB + 16 * (len(stubs) % 0x1000)
+                stubs[slot] = syms.get(si, "")
+                uc.mem_write(base + ro, struct.pack("<Q", slot))
+        except U.UcError:
+            pass
+    fb = [(base + va, fsz, off, flg) for va, off, fsz, msz, flg in loads if fsz]
+    before = [bytes(uc.mem_read(a, n)) for a, n, _o, _f in fb]   # relocated load image: the diff baseline
+    lo, hi = min(a for a, *_ in fb), max(a + n for a, n, *_ in fb)
+    xlo, xhi = min(a for a, n, o, f in fb if f & 1), max(a + n for a, n, o, f in fb if f & 1)
+    wrote, wpages, state = set(), set(), {"stop": "return", "extra": 0}
+
+    def unmapped(uc, access, addr, size, value, ud):
+        if access == U.UC_MEM_FETCH_UNMAPPED or state["extra"] >= 64:
+            return False
+        state["extra"] += 1
+        try:
+            uc.mem_map(addr & ~0xfff, 0x2000 if (addr & 0xfff) + size > 0x1000 else 0x1000)
+        except U.UcError:
+            return False
+        return True
+
+    def wr(uc, access, addr, size, value, ud):
+        if len(wrote) < 1 << 20:
+            wrote.update(range(addr, addr + size))
+            wpages.add(addr & ~0xfff)
+
+    def blk(uc, addr, size, ud):   # entering bytes main rewrote: the decrypted code, about to run
+        if (addr & ~0xfff in wpages or (addr + size - 1) & ~0xfff in wpages) and \
+                any(q in wrote for q in range(addr, addr + size)):
+            state["stop"] = "exec-written"
+            uc.emu_stop()
+
+    def sysc(uc, ud):
+        if uc.reg_read(R.UC_X86_REG_RAX) in (10, 329):   # mprotect / pkey_mprotect: granted
+            uc.reg_write(R.UC_X86_REG_RAX, 0)
+        else:
+            uc.emu_stop()
+    uc.hook_add(U.UC_HOOK_MEM_UNMAPPED, unmapped)
+    uc.hook_add(U.UC_HOOK_MEM_WRITE, wr, None, lo, hi)
+    uc.hook_add(U.UC_HOOK_BLOCK, blk, None, xlo, xhi)
+    uc.hook_add(U.UC_HOOK_INTR, lambda uc, n, ud: uc.emu_stop())
+    if not a64:
+        uc.hook_add(U.UC_HOOK_INSN, sysc, None, 1, 0, U.x86_const.UC_X86_INS_SYSCALL)
+        sp = STK + 0x30000 - 8
+        uc.mem_write(sp, struct.pack("<Q", DONE))
+    else:
+        sp = STK + 0x30000
+        uc.reg_write(R.UC_ARM64_REG_X30, DONE)
+    uc.reg_write(SP, sp)
+    _ctor_run(uc, U, R, a64, base + main, stubs, [HEAP], HEAP, DONE, SP, RET, ARGS, PC, end, smc=True)
+    img, ranges, keys, total = bytearray(data), [], [], 0
+    for (a, n, off, _f), old in zip(fb, before):
+        new = bytes(uc.mem_read(a, n))
+        if new == old:
+            continue
+        i = 0
+        while i < n and total < SMC_MAX_PATCH:
+            if new[i:i + 4096] == old[i:i + 4096]:
+                i += 4096
+                continue
+            if new[i] == old[i]:
+                i += 1
+                continue
+            j, gap = i, 0
+            while j < n and gap < 16:   # one range across gaps < 16 unchanged bytes
+                gap = gap + 1 if new[j] == old[j] else 0
+                j += 1
+            j -= gap
+            img[off + i:off + j] = new[i:j]
+            ranges.append((off + i, j - i, a + i - base))
+            d = bytes(p ^ q for p, q in zip(new[i:j], data[off + i:off + j]))
+            keys.append(next((d[:p] for p in range(1, 17)
+                              if len(d) >= 2 * p and d == (d[:p] * (len(d) // p + 1))[:len(d)]), None))
+            total += j - i
+            i = j
+    if not ranges:
+        return None
+    return {"image": bytes(img), "ranges": ranges, "main": main, "stopped": state["stop"], "keys": keys}
+
+
+# --- custom bytecode VM (VMProtect-lite: an interpreter loop + opcode handlers + a bytecode blob whose program STORES the
+# config) -----------------------------------------------------------------------------------------------------------
+# No handler semantics are guessed: main() is emulated (unicorn, the smc_decrypt / constructor plumbing: import stubs
+# malloc/memcpy/memset/strlen, others return 0) with every memory WRITE logged. The VM's output is recovered twice, from
+# (a) a shadow of all written bytes where a later zero never erases an earlier non-zero (a wipe loop / memset after
+# use), split into contiguous runs, and (b) the in-order log of single-byte stores (a buffer overwritten with junk).
+# Each is scanned for a crc-valid HCFG (raw -> "vm-raw", any other encoding the program emitted -> "vm-<inner>").
+# Cue (checked after the run): some basic block executed >= HCFG_VM_LOOP times (the dispatch loop) while main fetched a
+# run of >= 16 file bytes one BYTE at a time (gaps < 16) from a non-exec segment (the bytecode). Offset = the first file byte of the longest
+# such run (= the bytecode blob; SPECULATIVE), detail "vm program@<off>+<len> main@<va> loop=<max block hits>".
+# Not covered: a VM that never runs from main() (gated on argv / input / a predicate) -- the day's worker handles it.
+HCFG_VM_SECS = float(os.environ.get("HCTF_HCFG_VM_SECS", "0.3"))   # wall budget of the main() emulation
+HCFG_VM_LOOP = 32
+HCFG_VM_WRITES = 1 << 18   # logged write events per run
+
+
+def vm_trace(data, *, budget=None):
+    """Emulate main() of an x86-64 / AArch64 ELF64 and log what it stores. -> {"main", "program_offset",
+    "program_size", "loop", "buffers": [bytes], "log": bytes} or None (not an ELF, no main, refused). Never raises."""
+    try:
+        import unicorn   # noqa: F401
+        info = _elf_ctors(data)
+        if not info:
+            return None
+        main = _smc_main(data, info)
+        if main is None or info[6](main) is None:
+            return None
+        return _vm_emu(data, info, main, time.time() + (HCFG_VM_SECS if budget is None else budget))
+    except Exception:   # noqa: BLE001 -- unicorn / hostile headers: never raise past the caller
+        return None
+
+
+def _vm_emu(data, info, main, end):
+    import unicorn as U
+    arch, base, loads, _tg, rels, syms, v2o = info[:7]
+    a64 = arch == "aarch64"
+    uc = U.Uc(U.UC_ARCH_ARM64, U.UC_MODE_ARM) if a64 else U.Uc(U.UC_ARCH_X86, U.UC_MODE_64)
+    if a64:
+        R = U.arm64_const
+        SP, RET, ARGS, PC = R.UC_ARM64_REG_SP, R.UC_ARM64_REG_X0, (R.UC_ARM64_REG_X0, R.UC_ARM64_REG_X1,
+                                                                     R.UC_ARM64_REG_X2), R.UC_ARM64_REG_PC
+    else:
+        R = U.x86_const
+        SP, RET, ARGS, PC = R.UC_X86_REG_RSP, R.UC_X86_REG_RAX, (R.UC_X86_REG_RDI, R.UC_X86_REG_RSI,
+                                                                   R.UC_X86_REG_RDX), R.UC_X86_REG_RIP
+    pages = sorted({pg for va, off, fsz, msz, flg in loads
+                    for pg in range((base + va) & ~0xfff, (base + va + msz + 0xfff) & ~0xfff, 0x1000)})
+    if not pages or len(pages) > (96 << 20) >> 12:
+        return None
+    run = [pages[0]]
+    for pg in pages[1:] + [None]:
+        if pg is not None and pg == run[-1] + 0x1000:
+            run.append(pg)
+            continue
+        uc.mem_map(run[0], len(run) * 0x1000)
+        if pg is not None:
+            run = [pg]
+    for va, off, fsz, msz, flg in loads:
+        uc.mem_write(base + va, data[off:off + fsz])
+    STUB, STK, HEAP, DONE = 0x7e000000, 0x7f000000, 0x7c000000, 0x7dfff000
+    uc.mem_map(STK, 0x40000)
+    uc.mem_map(HEAP, 0x100000)
+    uc.mem_map(STUB, 0x10000, U.UC_PROT_READ)
+    uc.mem_map(DONE, 0x1000, U.UC_PROT_READ)
+    stubs = {}
+    rel_t, imp_t = _CTOR_ARCH[183 if a64 else 62][1:]
+    for ro, t, si, add in rels:
+        try:
+            if t == rel_t:
+                uc.mem_write(base + ro, struct.pack("<Q", base + add))
+            elif t in imp_t:
+                slot = STUB + 16 * (len(stubs) % 0x1000)
+                stubs[slot] = syms.get(si, "")
+                uc.mem_write(base + ro, struct.pack("<Q", slot))
+        except U.UcError:
+            pass
+    ro = [(base + va, fsz, off) for va, off, fsz, msz, flg in loads if fsz and not flg & 1]
+    xs = [(base + va, base + va + msz) for va, off, fsz, msz, flg in loads if flg & 1]
+    shadow, log, reads, blocks, st = {}, bytearray(), set(), {}, {"n": 0, "extra": 0}
+
+    def unmapped(uc, access, addr, size, value, ud):
+        if access == U.UC_MEM_FETCH_UNMAPPED or st["extra"] >= 64:
+            return False
+        st["extra"] += 1
+        try:
+            uc.mem_map(addr & ~0xfff, 0x2000 if (addr & 0xfff) + size > 0x1000 else 0x1000)
+        except U.UcError:
+            return False
+        return True
+
+    def wr(uc, access, addr, size, value, ud):
+        if st["n"] >= HCFG_VM_WRITES:
+            return
+        st["n"] += 1
+        if size == 1:
+            log.append(value & 0xff)
+        for i in range(min(size, 16)):
+            b = (value >> 8 * i) & 0xff
+            if b or addr + i not in shadow:
+                shadow[addr + i] = b
+
+    def rd(uc, access, addr, size, value, ud):   # byte fetches only: the opcode stream, not a jump table's slots
+        if size == 1 and len(reads) < 1 << 20:
+            reads.update(range(addr, addr + size))
+
+    def blk(uc, addr, size, ud):
+        blocks[addr] = blocks.get(addr, 0) + 1
+
+    uc.hook_add(U.UC_HOOK_MEM_UNMAPPED, unmapped)
+    uc.hook_add(U.UC_HOOK_MEM_WRITE, wr)
+    for a, n, _o in ro:
+        uc.hook_add(U.UC_HOOK_MEM_READ, rd, None, a, a + n - 1)
+    for lo, hi in xs:
+        uc.hook_add(U.UC_HOOK_BLOCK, blk, None, lo, hi - 1)
+    uc.hook_add(U.UC_HOOK_INTR, lambda uc, n, ud: uc.emu_stop())
+    if not a64:
+        uc.hook_add(U.UC_HOOK_INSN, lambda uc, ud: uc.emu_stop(), None, 1, 0, U.x86_const.UC_X86_INS_SYSCALL)
+        sp = STK + 0x30000 - 8
+        uc.mem_write(sp, struct.pack("<Q", DONE))
+    else:
+        sp = STK + 0x30000
+        uc.reg_write(R.UC_ARM64_REG_X30, DONE)
+    uc.reg_write(SP, sp)
+    _ctor_run(uc, U, R, a64, base + main, stubs, [HEAP], HEAP, DONE, SP, RET, ARGS, PC, end)
+    best, cur = (0, None), None
+    for a in sorted(reads):   # one run across gaps < 16 unread bytes (operands / junk the program jumps over)
+        cur = (cur[0], a) if cur and a - cur[1] <= 16 else (a, a)
+        if cur[1] - cur[0] + 1 > best[0]:
+            best = (cur[1] - cur[0] + 1, cur[0])
+    prog = next((o + best[1] - a for a, n, o in ro if best[1] is not None and a <= best[1] < a + n), None)
+    if prog is not None and 0 < prog & 15 <= 3 and all(data[prog & ~15:prog]):   # -O2 folded the first fetch(es) of
+        best, prog = (best[0] + (prog & 15), best[1]), prog & ~15                  # a 16/32-aligned const array
+    bufs, cur = [], None
+    for a in sorted(shadow):
+        if cur is not None and a == cur[0] + len(cur[1]):
+            cur[1].append(shadow[a])
+            continue
+        if cur and len(cur[1]) >= 16:
+            bufs.append(bytes(cur[1]))
+        cur = (a, bytearray([shadow[a]]))
+    if cur and len(cur[1]) >= 16:
+        bufs.append(bytes(cur[1]))
+    return {"main": main, "program_offset": prog, "program_size": best[0], "loop": max(blocks.values(), default=0),
+            "buffers": bufs, "log": bytes(log)}
+
+
+def _vm_scan(data, hits, emit, late):
+    """hcfg_scan branch: config stored by a bytecode VM run from main() (see vm_trace)."""
+    if data[:4] != b"\x7fELF" or late():
+        return
+    r = vm_trace(data)
+    if not r or r["loop"] < HCFG_VM_LOOP or r["program_offset"] is None or r["program_size"] < 16:
+        return
+    det = f"vm program@{r['program_offset']}+{r['program_size']} main@{r['main']:#x} loop={r['loop']}"
+    budget = 1 << 20
+    for buf in sorted(r["buffers"], key=len, reverse=True) + [r["log"]]:
+        if late() or budget <= 0:
+            break
+        budget -= len(buf)
+        i = buf.find(HCFG_MAGIC)
+        while i >= 0:
+            blob = buf[i:i + _need(buf[i:i + 12])]
+            if (_parse_blob(blob) or (0,) * 6)[5]:   # crc-valid only
+                return emit(r["program_offset"], "vm-raw", blob, det)
+            i = buf.find(HCFG_MAGIC, i + 1)
+        if len(buf) > 1 << 18:
+            continue
+        for h in hcfg_scan(buf, stop_on_valid=True, _depth=1):
+            if h.valid:
+                h.offset, h.encoding = r["program_offset"], "vm-" + h.encoding
+                h.detail = (det + " " + h.detail).strip()
+                hits.append(h)
+                return
+
+
+def smc_facts(data):
+    """Runtime-decryption facts (see smc_decrypt): decrypted_offset / decrypted_size / decrypted_vaddr (the largest
+    rewritten range; "0x%x" vaddr), range_count, xor_key (repeating key hex of that range, "none" if not a plain
+    repeating xor), stopped, main ("0x%x") -- all "none" when the image has no runtime self-decryption; None if not an
+    ELF."""
+    if data[:4] != b"\x7fELF":
+        return None
+    r = smc_decrypt(data)
+    keys = ("decrypted_offset", "decrypted_size", "decrypted_vaddr", "range_count", "xor_key", "stopped", "main")
+    if not r:
+        return dict.fromkeys(keys, "none")
+    k = max(range(len(r["ranges"])), key=lambda q: r["ranges"][q][1])
+    off, n, va = r["ranges"][k]
+    return {"decrypted_offset": off, "decrypted_size": n, "decrypted_vaddr": "0x%x" % va,
+            "range_count": len(r["ranges"]), "xor_key": r["keys"][k].hex() if r["keys"][k] else "none",
+            "stopped": r["stopped"], "main": "0x%x" % r["main"]}
+
+
+def smc_field(data, name):
+    try:
+        f = smc_facts(data)
+        return None if f is None else f.get(name.strip(), "none")
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _rank(hits):
@@ -8908,6 +10334,938 @@ def dotnet_bundle(data, limit=20000):
         return out
     except _PARSE_ERR:
         return None
+
+
+# ------------------------------------------------------------------ managed string decryptors (.NET IL / JVM bytecode)
+# A static decryptor (ConfuserEx-style <Module> method, Base64+XOR, xor'd char/byte arrays, VB ChrW/AscW arithmetic;
+# JVM static String a(String|int), ZKM-style xor tables) is called in place of ldstr/ldc, so the plain text (here: an
+# HCFG blob in any text form) never sits in the file. managed_decrypted_strings() finds every static method taking
+# string/int/byte[]/char[] and returning string, evaluates its body with a tiny bounded interpreter on each call site's
+# constant arguments (static key tables come from running the owner's .cctor/<clinit> the same way), and returns
+# [(stored offset, decryptor name, plain str)]; stored offset = the ciphertext's first stored byte (#US char data /
+# FieldRVA array / CONSTANT_Utf8 bytes; the call instruction's file offset for int-only arguments).
+MSDEC_MAX = 16 << 20        # input cap (class / jar: every app class is read before the sweep)
+MSDEC_DOTNET_MAX = 4 << 20  # .NET PE cap: dnfile's full metadata parse is ~0.5 s/MB (18 MB Roslyn dll: 9.6 s)
+MSDEC_TIME = 0.6            # wall-clock cap of one managed_decrypted_strings call (s)
+MSDEC_DECRYPTORS = 16       # candidate decryptors evaluated (most call sites first)
+MSDEC_STEPS = 400000        # interpreter steps over ALL call sites of one file
+MSDEC_CALL_STEPS = 120000   # steps per decryptor call
+
+
+class _MsArr(list):
+    """A managed array: element size (bytes) + signedness drive stelem/ldelem truncation."""
+    esz, sgn = 4, True
+
+
+class _MsCh(int):
+    """A char value (string concatenation renders it as the character, not its code)."""
+
+
+class _MsAbort(Exception):
+    pass
+
+
+def _ms_w(v, bits=32, signed=True):
+    v &= (1 << bits) - 1
+    return v - (1 << bits) if signed and v >> (bits - 1) else v
+
+
+def _ms_str(v):
+    if isinstance(v, str):
+        return v
+    if isinstance(v, _MsCh):
+        return chr(v)
+    if v is None:
+        return ""
+    if isinstance(v, bool):
+        return "True" if v else "False"
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, list) and v and isinstance(v[0], str):   # StringBuilder
+        return "".join(v)
+    raise _MsAbort("str")
+
+
+def _ms_copy(a):
+    if not isinstance(a, _MsArr):
+        return a
+    r = _MsArr(a)
+    r.esz, r.sgn = a.esz, a.sgn
+    return r
+
+
+def _ms_bytes(a):
+    return bytes(x & 0xFF for x in a)
+
+
+def _ms_chars(s):
+    return _MsArr(_MsCh(ord(c)) for c in s)
+
+
+_MS_ENC = {"get_UTF8": "utf-8", "get_ASCII": "ascii", "get_Unicode": "utf-16-le", "get_BigEndianUnicode": "utf-16-be",
+           "get_Default": "utf-8", "get_Latin1": "latin-1", "get_UTF32": "utf-32-le"}
+
+
+def _ms_extern(name, args, ptypes):
+    """Known BCL / VB runtime / JDK calls (args in call order, `this` first). Returns (value, has_result)."""
+    t, _, m = name.rpartition("::") if "::" in name else name.rpartition(".")
+    a0 = args[0] if args else None
+    if m in _MS_ENC and "Encoding" in t:
+        return ("enc", _MS_ENC[m]), True
+    if m == "GetString" and isinstance(a0, tuple):
+        b = _ms_bytes(args[1])
+        if len(args) == 4:
+            b = b[args[2]:args[2] + args[3]]
+        return b.decode(a0[1], "replace"), True
+    if m == "GetBytes" and isinstance(a0, tuple):
+        return _MsArr(_ms_str(args[1]).encode(a0[1], "replace")), True
+    if m in ("FromBase64String", "decode") and ("Convert" in t or "Base64" in t):
+        s = args[-1]
+        s = _ms_bytes(s) if isinstance(s, list) else _ms_str(s).encode("latin-1", "replace")
+        r = _MsArr(base64.b64decode(s + b"=" * (-len(s.rstrip(b"=")) % 4), validate=False))
+        r.esz, r.sgn = 1, "java" in t
+        return r, True
+    if m in ("getDecoder", "getMimeDecoder", "getUrlDecoder") and "Base64" in t:
+        return ("b64",), True
+    if m in ("get_Length", "length", "Len") and isinstance(a0, (str, list)):
+        return len(a0), True
+    if m in ("get_Chars", "charAt"):
+        return _MsCh(ord(_ms_str(a0)[args[1]])), True
+    if m in ("ToCharArray", "toCharArray"):
+        r = _ms_chars(_ms_str(a0))
+        r.esz, r.sgn = 2, False
+        return r, True
+    if m == "getBytes" and isinstance(a0, str):
+        r = _MsArr(a0.encode("utf-8"))
+        r.esz = 1
+        return r, True
+    if m in ("Substring", "substring"):
+        s = _ms_str(a0)
+        if len(args) == 2:
+            return s[args[1]:], True
+        return (s[args[1]:args[1] + args[2]] if m == "Substring" else s[args[1]:args[2]]), True
+    if m in ("ChrW", "Chr"):
+        return _MsCh(args[0] & 0xFFFF), True
+    if m in ("AscW", "Asc"):
+        v = a0
+        return (ord(v[0]) if isinstance(v, str) else int(v)), True
+    if m == "StrReverse":
+        return _ms_str(a0)[::-1], True
+    if m in ("ToString", "valueOf", "toString", "intern", "copyValueOf") or (m == "Concat" and len(args) == 1):
+        if isinstance(a0, list) and not (a0 and isinstance(a0[0], str)):
+            return "".join(chr(c & 0xFFFF) for c in a0), True   # String.valueOf(char[])
+        if ptypes and ptypes[0] in ("char", "C") and isinstance(a0, int):
+            return chr(a0 & 0xFFFF), True
+        return _ms_str(a0), True
+    if m in ("Concat", "concat"):
+        if len(args) == 1 and isinstance(a0, list):
+            return "".join(_ms_str(x) for x in a0), True
+        return "".join(chr(v & 0xFFFF) if p in ("char", "C") and isinstance(v, int) else _ms_str(v)
+                       for v, p in zip(args, list(ptypes) + [""] * len(args))), True
+    if m in ("Append", "append") and isinstance(a0, list):
+        v = args[1]
+        a0.append(chr(v & 0xFFFF) if ptypes and ptypes[0] in ("char", "C") and isinstance(v, int) else _ms_str(v))
+        return a0, True
+    if m in ("Reverse",) and isinstance(a0, list):
+        a0.reverse()
+        return None, False
+    if m in ("InitializeArray",):
+        arr, raw = args[0], args[1]
+        if not (isinstance(arr, _MsArr) and isinstance(raw, bytes)):
+            raise _MsAbort("initarr")
+        w = arr.esz
+        for i in range(min(len(arr), len(raw) // w)):
+            arr[i] = int.from_bytes(raw[i * w:i * w + w], "little", signed=arr.sgn)
+        return None, False
+    raise _MsAbort(name)
+
+
+class _MsVm:
+    """Shared step budget + static-field store for one file."""
+    def __init__(self, budget=MSDEC_STEPS, end=None):
+        self.left, self.statics, self.inited = budget, {}, set()
+        self.end = time.time() + MSDEC_TIME if end is None else end
+
+    def tick(self, n=1):
+        self.left -= n
+        if self.left < 0 or time.time() > self.end:
+            self.left = -1
+            raise _MsAbort("budget")
+
+
+# ----- .NET -----
+_MS_ETYPE = {0x01: "void", 0x02: "bool", 0x03: "char", 0x04: "sbyte", 0x05: "byte", 0x06: "short", 0x07: "ushort", 0x08: "int",
+             0x09: "uint", 0x0A: "long", 0x0B: "ulong", 0x0E: "string", 0x1C: "object", 0x18: "nint", 0x19: "nuint"}
+_MS_ESZ = {"System.Byte": (1, False), "System.SByte": (1, True), "System.Char": (2, False), "System.Int16": (2, True),
+           "System.UInt16": (2, False), "System.Int32": (4, True), "System.UInt32": (4, False),
+           "System.Int64": (8, True), "System.UInt64": (8, False), "System.Boolean": (1, False)}
+
+
+def _ms_sig_types(b):
+    """Method sig blob -> (hasthis, [param type names], ret type name); arrays 'T[]', other types '?'."""
+    p, cc = 1, b[0]
+    n, p = _ms_cu(b, p)
+
+    def one(p):
+        e = b[p]
+        if e == 0x1D:
+            t, p = one(p + 1)
+            return t + "[]", p
+        if e in _MS_ETYPE:
+            return _MS_ETYPE[e], p + 1
+        if e in (0x11, 0x12):
+            return "?", _ms_cu(b, p + 1)[1]
+        raise _MsAbort("sig")
+    ret, p = one(p)
+    ps = []
+    for _ in range(n):
+        t, p = one(p)
+        ps.append(t)
+    return bool(cc & 0x20), ps, ret
+
+
+def _ms_cu(b, p):
+    x = b[p]
+    if x < 0x80:
+        return x, p + 1
+    if x < 0xC0:
+        return (x & 0x3F) << 8 | b[p + 1], p + 2
+    return (x & 0x1F) << 24 | b[p + 1] << 16 | b[p + 2] << 8 | b[p + 3], p + 4
+
+
+_MS_DEC_PARAMS = {"string", "int", "uint", "byte[]", "char[]", "long", "int[]"}
+
+
+def _ms_dotnet(data, out, vm):
+    import dnfile
+    pe = dnfile.dnPE(data=data, fast_load=False)
+    net = pe.net
+    if net is None or net.mdtables is None:
+        return
+    t = net.mdtables
+    rows = lambda tab: list(getattr(t, tab, None) or ())   # noqa: E731
+    nm = lambda x: "" if x is None else str(x)   # noqa: E731
+    blob = lambda x: bytes(getattr(x, "value", x) or b"")   # noqa: E731
+    mds, tds, trs, flds, mrs = rows("MethodDef"), rows("TypeDef"), rows("TypeRef"), rows("Field"), rows("MemberRef")
+    mowner, fowner = {}, {}
+    for own, attr, total in ((mowner, "MethodList_Index", len(mds)), (fowner, "FieldList_Index", len(flds))):
+        st = [int(getattr(r.struct, attr)) for r in tds]
+        for k in range(len(tds)):
+            for i in range(st[k], min(st[k + 1] if k + 1 < len(st) else total + 1, total + 1)):
+                own[i] = k + 1
+
+    def tname(c, tag_bits):
+        tag, i = c & ((1 << tag_bits) - 1), c >> tag_bits
+        if tag == 0 and 0 < i <= len(tds):
+            r = tds[i - 1]
+        elif tag == 1 and 0 < i <= len(trs):
+            r = trs[i - 1]
+        else:
+            return "?"
+        return (nm(r.TypeNamespace) + "." if nm(r.TypeNamespace) else "") + nm(r.TypeName)
+    frva = {}
+    for r in rows("FieldRva"):
+        try:
+            frva[int(r.struct.Field_Index)] = int(r.struct.Rva)
+        except Exception:   # noqa: BLE001
+            continue
+    us = bytes(getattr(net.user_strings, "__data__", b"") or b"") if net.user_strings else b""
+    us_off = data.find(us) if us else -1
+    try:
+        sigs = {i + 1: _ms_sig_types(blob(r.Signature)) for i, r in enumerate(mds) if blob(r.Signature)}
+    except Exception:   # noqa: BLE001
+        sigs = {}
+    msig = {}
+
+    def callee(tok):
+        tab, i = tok >> 24, tok & 0xFFFFFF
+        if tab == 0x06 and 0 < i <= len(mds):
+            return ("md", i), sigs.get(i)
+        if tab == 0x0A and 0 < i <= len(mrs):
+            r = mrs[i - 1]
+            c = int(r.struct.Class_CodedIndex)
+            if c & 7 == 3:
+                return callee(0x06000000 | c >> 3)
+            if i not in msig:
+                try:
+                    msig[i] = _ms_sig_types(blob(r.Signature))
+                except Exception:   # noqa: BLE001
+                    msig[i] = None
+            return tname(c, 3) + "::" + nm(r.Name), msig[i]
+        return None, None
+
+    def us_str(tok):
+        i = tok & 0xFFFFFF
+        n, p = _ms_cu(us, i)
+        return us[p:p + (n & ~1)].decode("utf-16-le", "replace"), (us_off + p if us_off >= 0 else -1)
+
+    def fdata(fi, n):
+        rva = frva.get(fi)
+        if rva is None:
+            raise _MsAbort("fieldrva")
+        return bytes(pe.get_data(rva, n)), pe.get_offset_from_rva(rva)
+    bodies = {}
+
+    def body(i, pats=None):
+        if i not in bodies:
+            rva = int(mds[i - 1].struct.Rva or 0) if 0 < i <= len(mds) else 0
+            b = _il_body(pe, rva) if rva else None
+            if b and pats is not None and not any(x in b["code"] for x in pats):
+                return None   # sweep prefilter: no call to a candidate decryptor in this body
+            if b:
+                ins = il_decode(b["code"])
+                b["ins"], b["at"] = ins, {o: k for k, (o, _, _) in enumerate(ins)}
+                b["foff"] = pe.get_offset_from_rva(rva) + b["header_size"]
+            bodies[i] = b
+        return bodies[i]
+
+    def newarr(tok, n):
+        tab, i = tok >> 24, tok & 0xFFFFFF
+        nmx = tname(i << 2 | (0 if tab == 2 else 1), 2) if tab in (1, 2) else "?"
+        if not 0 <= n <= 1 << 20:
+            raise _MsAbort("newarr")
+        a = _MsArr([0] * n)
+        a.esz, a.sgn = _MS_ESZ.get(nmx, (4, True))
+        if nmx not in _MS_ESZ:
+            a[:] = [None] * n
+        return a
+
+    def cctor(fi):
+        k = fowner.get(fi)
+        if not k or k in vm.inited:
+            return
+        vm.inited.add(k)
+        for mi, own in mowner.items():
+            if own == k and nm(mds[mi - 1].Name) == ".cctor":
+                try:
+                    run(mi, [], 0)
+                except _MsAbort:
+                    pass
+
+    def run(mi, args, depth):
+        b = body(mi)
+        if not b or depth > 4:
+            raise _MsAbort("body")
+        ins, at = b["ins"], b["at"]
+        loc, st, k, steps = {}, [], 0, MSDEC_CALL_STEPS
+        args = list(args)
+        pop = st.pop
+        while True:
+            steps -= 1
+            if steps < 0 or k >= len(ins):
+                raise _MsAbort("steps")
+            if not steps & 255:
+                vm.tick(256)
+            o, op, arg = ins[k]
+            k += 1
+            if op == 0x00 or op in (0xFE16, 0xFE14):   # nop / constrained. / tail.
+                continue
+            if 0x02 <= op <= 0x05:
+                st.append(args[op - 2])
+            elif 0x06 <= op <= 0x09:
+                st.append(loc.get(op - 6))
+            elif 0x0A <= op <= 0x0D:
+                loc[op - 0x0A] = pop()
+            elif op in (0x0E, 0xFE09):
+                st.append(args[arg])
+            elif op in (0x10, 0xFE0B):
+                args[arg] = pop()
+            elif op in (0x11, 0xFE0C):
+                st.append(loc.get(arg))
+            elif op in (0x13, 0xFE0E):
+                loc[arg] = pop()
+            elif op == 0x14:
+                st.append(None)
+            elif 0x15 <= op <= 0x1E:
+                st.append(op - 0x16)
+            elif op in (0x1F, 0x20, 0x21):
+                st.append(arg)
+            elif op == 0x25:
+                st.append(st[-1])
+            elif op == 0x26:
+                pop()
+            elif op == 0x2A:
+                return pop() if st else None
+            elif 0x2B <= op <= 0x44:
+                s = op - 0x2B if op < 0x38 else op - 0x38
+                if s == 0:
+                    go = True
+                elif s in (1, 2):
+                    v = pop()
+                    go = bool(v) == (s == 2)
+                else:
+                    y, x = pop(), pop()
+                    if s in (3, 8):
+                        go = x == y if s == 3 else x != y
+                    else:
+                        if s >= 9:
+                            x, y = x & 0xFFFFFFFFFFFFFFFF, y & 0xFFFFFFFFFFFFFFFF
+                        go = {4: x >= y, 5: x > y, 6: x <= y, 7: x < y}[s - 5 if s >= 9 else s]
+                if go:
+                    tgt = ins[k][0] + arg if k < len(ins) else o + arg
+                    if tgt not in at:
+                        raise _MsAbort("branch")
+                    k = at[tgt]
+            elif op == 0x45:
+                v = pop()
+                if 0 <= v < len(arg):
+                    tgt = (ins[k][0] if k < len(ins) else o) + arg[v]
+                    k = at.get(tgt, -1)
+                    if k < 0:
+                        raise _MsAbort("switch")
+            elif 0x46 <= op <= 0x4C or op == 0x71:   # ldind.* / ldobj on an element reference
+                ref = pop()
+                if not (isinstance(ref, tuple) and ref[0] == "ref"):
+                    raise _MsAbort("ldind")
+                st.append(ref[1][ref[2]])
+            elif 0x52 <= op <= 0x55 or op == 0x81:   # stind.i1..i8 / stobj
+                v, ref = pop(), pop()
+                if not (isinstance(ref, tuple) and ref[0] == "ref"):
+                    raise _MsAbort("stind")
+                a = ref[1]
+                a[ref[2]] = _ms_w(v, 8 * a.esz, a.sgn) if isinstance(v, int) else v
+            elif 0x58 <= op <= 0x64 or 0xD6 <= op <= 0xDB:
+                y, x = pop(), pop()
+                if not (isinstance(x, int) and isinstance(y, int)):
+                    raise _MsAbort("arith")
+                b64 = abs(x) >= 1 << 32 or abs(y) >= 1 << 32
+                bits = 64 if b64 else 32
+                o2 = {0xD6: 0x58, 0xD7: 0x58, 0xD8: 0x5A, 0xD9: 0x5A, 0xDA: 0x59, 0xDB: 0x59}.get(op, op)
+                if o2 == 0x58:
+                    r = x + y
+                elif o2 == 0x59:
+                    r = x - y
+                elif o2 == 0x5A:
+                    r = x * y
+                elif o2 in (0x5B, 0x5D, 0x5C, 0x5E):
+                    if o2 in (0x5C, 0x5E):
+                        x, y = x & ((1 << bits) - 1), y & ((1 << bits) - 1)
+                    if y == 0:
+                        raise _MsAbort("div0")
+                    q = abs(x) // abs(y) * (1 if (x < 0) == (y < 0) else -1)
+                    r = q if o2 in (0x5B, 0x5C) else x - q * y
+                elif o2 == 0x5F:
+                    r = x & y
+                elif o2 == 0x60:
+                    r = x | y
+                elif o2 == 0x61:
+                    r = x ^ y
+                elif o2 == 0x62:
+                    r = x << (y & (bits - 1))
+                elif o2 == 0x63:
+                    r = _ms_w(x, bits) >> (y & (bits - 1))
+                else:
+                    r = (x & ((1 << bits) - 1)) >> (y & (bits - 1))
+                st.append(_ms_w(r, bits))
+            elif op in (0x65, 0x66):
+                x = pop()
+                st.append(_ms_w(-x if op == 0x65 else ~x, 32 if abs(x) < 1 << 31 else 64))
+            elif op in (0x67, 0x68, 0x69, 0x6A, 0x6D, 0x6E, 0xD1, 0xD2, 0xD3, 0xE0) or 0x82 <= op <= 0x8B or \
+                    0xB3 <= op <= 0xBA or op in (0xD4, 0xD5):
+                x = pop()
+                if not isinstance(x, int):
+                    raise _MsAbort("conv")
+                cv = {0x67: (8, 1), 0x68: (16, 1), 0x69: (32, 1), 0x6A: (64, 1), 0x6D: (32, 0), 0x6E: (64, 0),
+                      0xD1: (16, 0), 0xD2: (8, 0), 0xD3: (64, 1), 0xE0: (64, 0), 0xB3: (8, 1), 0xB4: (8, 0),
+                      0xB5: (16, 1), 0xB6: (16, 0), 0xB7: (32, 1), 0xB8: (32, 0), 0xB9: (64, 1), 0xBA: (64, 0),
+                      0x82: (8, 1), 0x83: (16, 1), 0x84: (32, 1), 0x85: (64, 1), 0x86: (8, 0), 0x87: (16, 0),
+                      0x88: (32, 0), 0x89: (64, 0), 0x8A: (64, 1), 0x8B: (64, 0), 0xD4: (64, 1), 0xD5: (64, 0)}[op]
+                st.append(_ms_w(x, cv[0], bool(cv[1])))
+            elif op in (0x28, 0x6F, 0x73):
+                c, sg = callee(arg)
+                if sg is None:
+                    raise _MsAbort("callsig")
+                hasthis, ps, ret = sg
+                n = len(ps) + (1 if hasthis and op != 0x73 else 0)
+                cargs = st[len(st) - n:] if n else []
+                del st[len(st) - n:]
+                if isinstance(c, tuple):
+                    v = run(c[1], cargs, depth + 1)
+                    if ret != "void" and op != 0x73:
+                        st.append(v)
+                    continue
+                if op == 0x73:
+                    if c.endswith("String::.ctor") and cargs:
+                        a = cargs[0]
+                        if isinstance(a, list):
+                            if len(cargs) == 3:
+                                a = a[cargs[1]:cargs[1] + cargs[2]]
+                            st.append("".join(chr(x & 0xFFFF) for x in a))
+                        else:
+                            st.append(chr(a & 0xFFFF) * cargs[1])
+                    elif c.endswith("StringBuilder::.ctor"):
+                        st.append([_ms_str(cargs[0])] if cargs and isinstance(cargs[0], str) else [])
+                    else:
+                        raise _MsAbort(c)
+                    continue
+                if c.endswith("::InitializeArray") and len(cargs) == 2 and isinstance(cargs[1], tuple):
+                    a = cargs[0]
+                    cargs = [a, fdata(cargs[1][1] & 0xFFFFFF, len(a) * a.esz)[0]]
+                v, has = _ms_extern(c, cargs, ps)
+                if ret == "char" and isinstance(v, int):
+                    v = _MsCh(v)
+                if has and ret != "void":
+                    st.append(v)
+            elif op == 0x72:
+                st.append(us_str(arg)[0])
+            elif op in (0x7E, 0x7F):
+                fi = arg & 0xFFFFFF
+                if fi not in vm.statics:
+                    cctor(fi)
+                if fi not in vm.statics:
+                    raise _MsAbort("static")
+                st.append(vm.statics[fi])
+            elif op == 0x80:
+                vm.statics[arg & 0xFFFFFF] = pop()
+            elif op == 0x8D:
+                st.append(newarr(arg, pop()))
+            elif op == 0x8E:
+                st.append(len(pop()))
+            elif 0x90 <= op <= 0x9A or op == 0xA3:
+                i, a = pop(), pop()
+                v = a[i]
+                if op in (0x91, 0x93, 0x95):
+                    v = _ms_w(v, (8, 16, 32)[(op - 0x91) // 2], False)
+                elif op in (0x90, 0x92, 0x94):
+                    v = _ms_w(v, (8, 16, 32)[(op - 0x90) // 2], True)
+                st.append(_MsCh(v) if op == 0x93 and a.esz == 2 and not a.sgn else v)
+            elif 0x9C <= op <= 0xA2 or op == 0xA4:
+                v, i, a = pop(), pop(), pop()
+                a[i] = _ms_w(v, 8 * a.esz, a.sgn) if isinstance(v, int) and isinstance(a, _MsArr) and a[i] is not None \
+                    else v
+            elif op == 0x8F:
+                i, a = pop(), pop()
+                st.append(("ref", a, i))
+            elif op == 0xD0:
+                st.append(("tok", arg))
+            elif op in (0x8C, 0xA5):   # box / unbox.any: values are untyped here
+                continue
+            elif 0xFE01 <= op <= 0xFE05:
+                y, x = pop(), pop()
+                if op in (0xFE03, 0xFE05) and isinstance(x, int) and isinstance(y, int):
+                    x, y = x & 0xFFFFFFFFFFFFFFFF, y & 0xFFFFFFFFFFFFFFFF
+                st.append(int(x == y if op == 0xFE01 else x > y if op in (0xFE02, 0xFE03) else x < y))
+            else:
+                raise _MsAbort(f"op {op:#x}")
+
+    decs = {i for i, sg in sigs.items() if sg and not sg[0] and sg[2] == "string" and 1 <= len(sg[1]) <= 3
+            and all(p in _MS_DEC_PARAMS for p in sg[1]) and int(mds[i - 1].struct.Rva or 0)}
+    calls = {i: data.count(b"\x28" + (0x06000000 | i).to_bytes(4, "little")) for i in sorted(decs)[:4096]}
+    decs = set(sorted((i for i in calls if calls[i]), key=lambda i: -calls[i])[:MSDEC_DECRYPTORS])
+    pats = [b"\x28" + (0x06000000 | i).to_bytes(4, "little") for i in decs]
+    if not decs:
+        return
+    for mi in range(1, len(mds) + 1):
+        if vm.left <= 0 or time.time() > vm.end:
+            break
+        try:
+            b = bodies[mi] if mi in bodies else body(mi, pats)
+        except Exception:   # noqa: BLE001
+            continue
+        if not b:
+            continue
+        cs = []   # [(value, stored offset)] of the constant-argument producers seen so far (straight line)
+        for o, op, arg in b["ins"]:
+            try:
+                if op == 0x72:
+                    cs.append(us_str(arg))
+                elif 0x15 <= op <= 0x1E or op in (0x1F, 0x20, 0x21):
+                    cs.append((op - 0x16 if op <= 0x1E else arg, b["foff"] + o))
+                elif op == 0x8D and cs and isinstance(cs[-1][0], int):
+                    cs[-1] = (newarr(arg, cs[-1][0]), cs[-1][1])
+                elif op == 0x25 and cs:
+                    cs.append(cs[-1])
+                elif op == 0xD0 and cs and isinstance(cs[-1][0], _MsArr):
+                    a = cs[-1][0]
+                    raw, foff = fdata(arg & 0xFFFFFF, len(a) * a.esz)
+                    for j in range(min(len(a), len(raw) // a.esz)):
+                        a[j] = int.from_bytes(raw[j * a.esz:j * a.esz + a.esz], "little", signed=a.sgn)
+                    cs = [(v, foff if v is a else f) for v, f in cs]   # the dup'd copies too
+                    cs.append(("tok", foff))
+                elif op == 0x28 and cs and cs[-1][0] == "tok":
+                    cs[-2:] = []   # InitializeArray(dup'd array, token): array filled above
+                elif 0x9C <= op <= 0xA2 and len(cs) >= 3 and isinstance(cs[-3][0], _MsArr):
+                    (v, _), (i, _) = cs.pop(), cs.pop()
+                    a = cs.pop()[0]
+                    a[i] = _ms_w(v, 8 * a.esz, a.sgn)
+                elif op == 0x28 and (arg >> 24 == 6 and (arg & 0xFFFFFF) in decs):
+                    n = len(sigs[arg & 0xFFFFFF][1])
+                    if len(cs) < n:
+                        cs = []
+                        continue
+                    args = [v for v, _ in cs[len(cs) - n:]]
+                    off = next((f for v, f in cs[len(cs) - n:] if not isinstance(v, int)), cs[-n][1])
+                    del cs[len(cs) - n:]
+                    r = run(arg & 0xFFFFFF, [_ms_copy(a) for a in args], 0)
+                    if isinstance(r, str) and r:
+                        out.append((off, nm(mds[(arg & 0xFFFFFF) - 1].Name), r))
+                        cs.append((r, off))
+                else:
+                    cs = []
+            except (_MsAbort, IndexError, KeyError, TypeError, ValueError, OverflowError, AttributeError):
+                cs = []
+
+
+# ----- JVM -----
+_MS_JDESC = re.compile(r"\[*(?:[BCDFIJSZV]|L[^;]+;)")
+
+
+def _ms_jtypes(desc):
+    """'(Ljava/lang/String;I)Ljava/lang/String;' -> (['String', 'I'], 'String')."""
+    i = desc.index(")")
+    nm = lambda t: t[t.rfind("/") + 1:-1] if t.startswith("L") else t   # noqa: E731
+    return [nm(t) for t in _MS_JDESC.findall(desc[1:i])], nm(desc[i + 1:])
+
+
+def _ms_jvm(data, cls, out, vm):
+    cp, u = cls["cp"], cls["_u"]
+    me = cls["this"]
+
+    def ref(i):   # Fieldref/Methodref/InterfaceMethodref -> (class, name, descriptor)
+        e = cp[i]
+        c, nt = e[1]
+        n, d = cp[nt][1]
+        return u(cp[c][1]), u(n), u(d)
+    meths = {}
+    for m in cls["methods"]:
+        code = next((b for n, b in m["attributes"] if n == "Code"), None)
+        if code and len(code) >= 8:
+            ln = struct.unpack_from(">I", code, 4)[0]
+            meths[(m["name"], m["descriptor"])] = (m["access"], code[8:8 + ln])
+
+    def const(i):
+        e = cp[i] if 0 < i < len(cp) else None
+        if not e:
+            raise _MsAbort("cp")
+        if e[0] == 8:
+            return u(e[1])
+        if e[0] in (3, 5):
+            return e[1]
+        raise _MsAbort("ldc")
+
+    def clinit():
+        if me in vm.inited:
+            return
+        vm.inited.add(me)
+        if ("<clinit>", "()V") in meths:
+            try:
+                run(("<clinit>", "()V"), [], 0)
+            except (_MsAbort, IndexError, KeyError, TypeError, ValueError, struct.error):
+                pass
+
+    def run(key, args, depth):
+        if depth > 4 or key not in meths:
+            raise _MsAbort("jbody")
+        code = meths[key][1]
+        loc = dict(enumerate(args))
+        st, pc, steps = [], 0, MSDEC_CALL_STEPS
+        pop = st.pop
+        while True:
+            steps -= 1
+            if steps < 0:
+                raise _MsAbort("steps")
+            if not steps & 255:
+                vm.tick(256)
+            at, op = pc, code[pc]
+            pc += 1
+            if op == 0x00:
+                continue
+            if op == 0x01:
+                st.append(None)
+            elif 0x02 <= op <= 0x08:
+                st.append(op - 3)
+            elif op in (0x09, 0x0A):
+                st.append(op - 9)
+            elif op == 0x10:
+                st.append(_ms_w(code[pc], 8))
+                pc += 1
+            elif op == 0x11:
+                st.append(_ms_w(code[pc] << 8 | code[pc + 1], 16))
+                pc += 2
+            elif op == 0x12:
+                st.append(const(code[pc]))
+                pc += 1
+            elif op in (0x13, 0x14):
+                st.append(const(code[pc] << 8 | code[pc + 1]))
+                pc += 2
+            elif 0x15 <= op <= 0x19:
+                st.append(loc.get(code[pc]))
+                pc += 1
+            elif 0x1A <= op <= 0x2D:
+                st.append(loc.get((op - 0x1A) % 4))
+            elif 0x2E <= op <= 0x35:
+                i, a = pop(), pop()
+                v = a[i]
+                st.append(_MsCh(v) if op == 0x34 else v)
+            elif 0x36 <= op <= 0x3A:
+                loc[code[pc]] = pop()
+                pc += 1
+            elif 0x3B <= op <= 0x4E:
+                loc[(op - 0x3B) % 4] = pop()
+            elif 0x4F <= op <= 0x56:
+                v, i, a = pop(), pop(), pop()
+                a[i] = _ms_w(v, 8 * a.esz, a.sgn) if isinstance(v, int) and isinstance(a, _MsArr) else v
+            elif op == 0x57:
+                pop()
+            elif op == 0x59:
+                st.append(st[-1])
+            elif op == 0x5C:
+                st.extend(st[-2:])
+            elif op == 0x5F:
+                st[-1], st[-2] = st[-2], st[-1]
+            elif 0x60 <= op <= 0x83 and op not in (0x74, 0x75, 0x76, 0x77):
+                y, x = pop(), pop()
+                bits = 64 if (op - 0x60) % 2 or (op >= 0x78 and (op - 0x78) % 2) else 32
+                g = (op - 0x60) // 4 if op < 0x74 else None
+                if g == 0:
+                    r = x + y
+                elif g == 1:
+                    r = x - y
+                elif g == 2:
+                    r = x * y
+                elif g in (3, 4):
+                    if y == 0:
+                        raise _MsAbort("div0")
+                    q = abs(x) // abs(y) * (1 if (x < 0) == (y < 0) else -1)
+                    r = q if g == 3 else x - q * y
+                elif op in (0x78, 0x79):
+                    r = x << (y & (bits - 1))
+                elif op in (0x7A, 0x7B):
+                    r = x >> (y & (bits - 1))
+                elif op in (0x7C, 0x7D):
+                    r = (x & ((1 << bits) - 1)) >> (y & (bits - 1))
+                elif op in (0x7E, 0x7F):
+                    r = x & y
+                elif op in (0x80, 0x81):
+                    r = x | y
+                else:
+                    r = x ^ y
+                st.append(_ms_w(r, bits))
+            elif op in (0x74, 0x75):
+                st.append(_ms_w(-pop(), 32 if op == 0x74 else 64))
+            elif op == 0x84:
+                loc[code[pc]] = _ms_w(loc.get(code[pc], 0) + _ms_w(code[pc + 1], 8))
+                pc += 2
+            elif op in (0x85, 0x88):   # i2l / l2i
+                st.append(_ms_w(pop(), 64 if op == 0x85 else 32))
+            elif 0x91 <= op <= 0x93:
+                v = pop()
+                st.append(_ms_w(v, 8) if op == 0x91 else _MsCh(v & 0xFFFF) if op == 0x92 else _ms_w(v, 16))
+            elif 0x99 <= op <= 0xA7 or op in (0xC6, 0xC7):
+                d = _ms_w(code[pc] << 8 | code[pc + 1], 16)
+                pc += 2
+                if op == 0xA7:
+                    go = True
+                elif op in (0xC6, 0xC7):
+                    go = (pop() is None) == (op == 0xC6)
+                elif op <= 0x9E:
+                    x = pop()
+                    go = [x == 0, x != 0, x < 0, x >= 0, x > 0, x <= 0][op - 0x99]
+                else:
+                    y, x = pop(), pop()
+                    go = [x == y, x != y, x < y, x >= y, x > y, x <= y, x is y, x is not y][op - 0x9F]
+                if go:
+                    pc = at + d
+            elif 0xAC <= op <= 0xB0:
+                return pop()
+            elif op == 0xB1:
+                return None
+            elif op in (0xB2, 0xB3):
+                c, n, d = ref(code[pc] << 8 | code[pc + 1])
+                pc += 2
+                k = (c, n)
+                if op == 0xB3:
+                    vm.statics[k] = pop()
+                else:
+                    if k not in vm.statics and c == me:
+                        clinit()
+                    if k not in vm.statics:
+                        raise _MsAbort("jstatic")
+                    st.append(vm.statics[k])
+            elif op in (0xB6, 0xB7, 0xB8, 0xB9):
+                c, n, d = ref(code[pc] << 8 | code[pc + 1])
+                pc += 4 if op == 0xB9 else 2
+                ps, ret = _ms_jtypes(d)
+                cnt = len(ps) + (op != 0xB8)
+                cargs = st[len(st) - cnt:] if cnt else []
+                del st[len(st) - cnt:]
+                if c == me and op == 0xB8 and (n, d) in meths:
+                    v = run((n, d), cargs, depth + 1)
+                elif n == "<init>":
+                    obj = cargs[0]
+                    if isinstance(obj, tuple) and obj[0] == "new":
+                        v = ("".join(chr(x & 0xFFFF) for x in cargs[1]) if c == "java/lang/String" and ps == ["[C"]
+                             else _ms_bytes(cargs[1]).decode("utf-8", "replace")
+                             if c == "java/lang/String" and ps[:1] == ["[B"]
+                             else [_ms_str(cargs[1])] if c == "java/lang/StringBuilder" and ps == ["String"]
+                             else [] if c == "java/lang/StringBuilder" and not ps else _MsAbort)
+                        if v is _MsAbort:
+                            raise _MsAbort(c)
+                        st[:] = [v if x is obj else x for x in st]
+                    continue
+                else:
+                    v, has = _ms_extern(c.replace("/", ".") + "::" + n, cargs, ps)
+                    if ret == "C" and isinstance(v, int):
+                        v = _MsCh(v)
+                if ret != "V":
+                    st.append(v)
+            elif op == 0xBB:
+                pc += 2
+                st.append(("new", at))
+            elif op == 0xBC:
+                n = pop()
+                if not 0 <= n <= 1 << 20:
+                    raise _MsAbort("newarray")
+                a = _MsArr([0] * n)
+                a.esz, a.sgn = {4: (1, False), 5: (2, False), 8: (1, True), 9: (2, True), 10: (4, True),
+                                11: (8, True)}.get(code[pc], (4, True))
+                pc += 1
+                st.append(a)
+            elif op == 0xBD:
+                pc += 2
+                n = pop()
+                if not 0 <= n <= 1 << 20:
+                    raise _MsAbort("anewarray")
+                st.append(_MsArr([None] * n))
+            elif op == 0xBE:
+                st.append(len(pop()))
+            elif op == 0xC0:   # checkcast
+                pc += 2
+            else:
+                raise _MsAbort(f"jop {op:#x}")
+
+    decs = {k for k, (acc, _) in meths.items() if acc & 0x8 and k[1].endswith(")Ljava/lang/String;")
+            and 1 <= len(_ms_jtypes(k[1])[0]) <= 3 and all(t in ("String", "I", "[B", "[C", "J", "[I")
+                                                           for t in _ms_jtypes(k[1])[0])}
+    if not decs:
+        return
+    for key, (acc, code) in meths.items():
+        if vm.left <= 0:
+            break
+        cs, pc = [], 0
+        try:
+            while pc < len(code) and vm.left > 0:
+                op = code[pc]
+                if op in (0x12, 0x13):
+                    i = code[pc + 1] if op == 0x12 else code[pc + 1] << 8 | code[pc + 2]
+                    v = const(i)
+                    raw = _jmutf8(v) if isinstance(v, str) else b""
+                    f = data.find(len(raw).to_bytes(2, "big") + raw) if raw else -1
+                    cs.append((v, f + 2 if f >= 0 else -1))
+                elif 0x02 <= op <= 0x08 or op in (0x10, 0x11):
+                    cs.append((op - 3 if op <= 8 else _ms_w(code[pc + 1], 8) if op == 0x10
+                               else _ms_w(code[pc + 1] << 8 | code[pc + 2], 16), -1))
+                elif op == 0xB8:
+                    c, n, d = ref(code[pc + 1] << 8 | code[pc + 2])
+                    if c == me and (n, d) in decs:
+                        k = len(_ms_jtypes(d)[0])
+                        if len(cs) >= k:
+                            args = [v for v, _ in cs[len(cs) - k:]]
+                            off = next((f for v, f in cs[len(cs) - k:] if f >= 0), -1)
+                            del cs[len(cs) - k:]
+                            try:
+                                r = run((n, d), args, 0)
+                            except (_MsAbort, IndexError, KeyError, TypeError, ValueError, AttributeError):
+                                r = None
+                            if isinstance(r, str) and r:
+                                out.append((off, n, r))
+                                cs.append((r, off))
+                        else:
+                            cs = []
+                    else:
+                        cs = []
+                else:
+                    cs = []
+                pc += _jop_len(code, pc)
+        except (_MsAbort, IndexError, KeyError, TypeError, ValueError, struct.error):
+            continue
+
+
+def _jmutf8(s):
+    """Modified UTF-8 (JVMS 4.4.7) of a str."""
+    out = bytearray()
+    for c in s:
+        o = ord(c)
+        units = [o] if o < 0x10000 else [0xD800 + ((o - 0x10000) >> 10), 0xDC00 + ((o - 0x10000) & 0x3FF)]
+        for x in units:
+            if 0 < x < 0x80:
+                out.append(x)
+            elif x < 0x800:
+                out += bytes((0xC0 | x >> 6, 0x80 | x & 0x3F))
+            else:
+                out += bytes((0xE0 | x >> 12, 0x80 | x >> 6 & 0x3F, 0x80 | x & 0x3F))
+    return bytes(out)
+
+
+_JOP_LEN = {**{o: 2 for o in (0x10, 0x12, 0x15, 0x16, 0x17, 0x18, 0x19, 0x36, 0x37, 0x38, 0x39, 0x3A, 0xA9, 0xBC)},
+            **{o: 3 for o in (0x11, 0x13, 0x14, 0x84, *range(0x99, 0xA9), 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8,
+                              0xBB, 0xBD, 0xC0, 0xC1, 0xC6, 0xC7)},
+            0xC5: 4, 0xB9: 5, 0xBA: 5, 0xC8: 5, 0xC9: 5}
+
+
+def _jop_len(code, pc):
+    op = code[pc]
+    if op in (0xAA, 0xAB):   # tableswitch / lookupswitch: 4-byte aligned
+        p = (pc + 4) & ~3
+        if op == 0xAA:
+            lo, hi = struct.unpack_from(">ii", code, p + 4)
+            return p + 12 + 4 * (hi - lo + 1) - pc
+        n = struct.unpack_from(">i", code, p + 4)[0]
+        return p + 8 + 8 * n - pc
+    if op == 0xC4:
+        return 6 if code[pc + 1] == 0x84 else 4
+    return _JOP_LEN.get(op, 1)
+
+
+def managed_decrypted_strings(data, *, budget=MSDEC_STEPS, deadline=None):
+    """[(stored offset, decryptor method name, plain str)] for every call of a static string decryptor in a .NET PE,
+    a .class or a jar's application classes (see the section comment). [] when none / not managed / unreadable."""
+    out = []
+    try:
+        data = bytes(data)
+        if len(data) > MSDEC_MAX:
+            return out
+        vm = _MsVm(budget)
+        if deadline is not None:
+            vm.end = min(vm.end, deadline)
+        if data[:4] == b"\xca\xfe\xba\xbe":
+            cls = classfile_parse(data)
+            if cls:
+                _ms_jvm(data, cls, out, vm)
+        elif data[:2] == b"MZ" and len(data) <= MSDEC_DOTNET_MAX and b"BSJB" in data:
+            _ms_dotnet(data, out, vm)
+        elif data[:2] == b"PK" and b".class" in data:
+            for name, cb in jar_app_classes(data)[:4096]:
+                if vm.left <= 0 or time.time() > vm.end:
+                    break
+                if b")Ljava/lang/String;" not in cb:
+                    continue
+                cls = classfile_parse(cb)
+                if cls:
+                    sub = []
+                    _ms_jvm(cb, cls, sub, vm)
+                    out += [(o, f"{name}:{n}", r) for o, n, r in sub]   # o: offset inside the class entry
+    except Exception:   # noqa: BLE001 -- hostile tables / truncated input: whatever decoded so far
+        pass
+    return out
+
+
+def _msdec_scan(data, hits, deadline, depth):
+    """hcfg_scan branch: HCFG text/raw forms inside the strings a managed decryptor returns (encoding 'managed-<inner>',
+    offset = the ciphertext's first stored byte, detail = 'decryptor=<method>')."""
+    for off, name, s in managed_decrypted_strings(data, deadline=_ends(deadline)):
+        try:
+            b = s.encode("latin-1")
+        except UnicodeEncodeError:
+            b = s.encode("utf-8")
+        if b"HCFG" not in b and len(b) < 16:
+            continue
+        for h in hcfg_scan(b, deadline=deadline, stop_on_valid=True, _depth=depth + 1):
+            h.offset, h.encoding = off, "managed-" + h.encoding
+            h.detail, h.speculative = (f"decryptor={name} " + h.detail).strip(), True
+            hits.append(h)
+            if h.valid:
+                return
 
 
 def _bundle_scan(data, emit, hits, deadline, late, depth):
@@ -9861,6 +12219,187 @@ def dotnet_com_field(data, name):
     except Exception:   # noqa: BLE001
         return None
     return "none" if not f else f.get(name, "none")
+
+# ------------------------------------------------------------------ .NET protector artefacts (dotnet-anti-tamper-obfuscation)
+# Marker attribute / injected type names -> protector family (de4dot-style detection; the attribute's first SerString arg
+# is the version banner, e.g. ConfusedBy("ConfuserEx v1.6.0+447341964f")). de4dot itself needs mono: not in the toolbox.
+_DN_PROTECTORS = {"ConfusedByAttribute": "ConfuserEx", "DotfuscatorAttribute": "Dotfuscator", "BabelAttribute": "Babel",
+                  "BabelObfuscatorAttribute": "Babel", "PoweredByAttribute": "SmartAssembly",
+                  "ObfuscatedByGoliath": "Goliath.NET", "YanoAttribute": "Yano", "ProcessedByXenocode": "Xenocode",
+                  "CryptoObfuscatorAttribute": "Crypto Obfuscator", "NETGuardAttribute": "NETGuard",
+                  "ObfuscatedByAgileDotNetAttribute": "Agile.NET", "NineRays.Obfuscator.Evaluation": "Spices.Net"}
+DN_ANTITAMPER_REGION = 1 << 16   # bytes xor'd per FieldRVA / encrypted-body region in the hcfg_scan branch
+
+
+def _il_len_ok(code):
+    """True when `code` is a complete, valid IL stream (every opcode known, the last operand ends exactly at the end)."""
+    if not code:
+        return False   # a real body has at least `ret`; zero-length IL = a body the cctor fills in
+    ins = il_decode(code)
+    if not ins:
+        return False
+    at, op, arg = ins[-1]
+    w = _IL_OPS2.get(op & 0xFF) if op > 0xFF else _IL_OPS.get(op)
+    end = at + (2 if op > 0xFF else 1) + (4 + 4 * len(arg) if w == -2 else 4 if w == -1 else w)
+    return end == len(code)
+
+
+def _dn_protector_meta(data):
+    """dnfile view shared by dotnet_protector_facts and the anti-tamper hcfg branch, or None when not a CLI PE."""
+    try:
+        import dnfile
+        pe = dnfile.dnPE(data=bytes(data), fast_load=False)
+        if pe.net is None or pe.net.mdtables is None:
+            return None
+    except Exception:   # noqa: BLE001 -- hostile/truncated PE: cannot answer
+        return None
+    t = pe.net.mdtables
+    rows = lambda tab: list(getattr(t, tab, None) or ())   # noqa: E731
+    tds, mds = rows("TypeDef"), rows("MethodDef")
+    starts = [int(r.struct.MethodList_Index) for r in tds]
+    owner = {}
+    for k in range(len(tds)):
+        for i in range(starts[k], min(starts[k + 1] if k + 1 < len(starts) else len(mds) + 1, len(mds) + 1)):
+            owner[i] = k + 1
+    bodies = {}   # MethodDef row -> (rva, body dict | None, valid)
+    for i, r in enumerate(mds, 1):
+        rva = int(r.struct.Rva or 0)
+        if not rva:
+            continue
+        try:
+            b = _il_body(pe, rva)
+        except Exception:   # noqa: BLE001
+            b = None
+        ok = bool(b) and len(b["code"]) == b["code_size"] and (b["header"] == "tiny" or (
+            b["header_size"] == 12 and b["local_sig"] >> 24 in (0, 0x11))) and _il_len_ok(b["code"])
+        bodies[i] = (rva, b, ok)
+    return pe, t, rows, tds, mds, owner, bodies
+
+
+def dotnet_protector_facts(data):
+    """.NET protector artefacts via dnfile: obfuscator (family from a marker attribute / injected type: ConfuserEx,
+    Dotfuscator, Babel, SmartAssembly, ...), obfuscator_marker (the marker attribute's SerString, e.g. 'ConfuserEx
+    v1.6.0+447341964f'; the family when it has no string), has_suppress_ildasm (SuppressIldasmAttribute applied),
+    renamed_types (TypeDefs but <Module> whose name has a char outside printable ASCII: unprintable / unicode renaming),
+    renamed_type_names (JSON), module_cctor (<Module>..cctor exists), encrypted_bodies (MethodDefs with an RVA whose
+    body is unparseable: bad header, overrun, zero-length or invalid IL), cctor_decrypts_bodies (<Module>..cctor +
+    encrypted bodies = runtime anti-tamper). "none" values when absent; None when not a CLI assembly."""
+    m = _dn_protector_meta(data)
+    if m is None:
+        return None
+    pe, t, rows, tds, mds, owner, bodies = m
+    nm = lambda x: "" if x is None else str(x)   # noqa: E731
+    trs, mrs = rows("TypeRef"), rows("MemberRef")
+
+    def ca_type(tc):
+        if tc & 7 == 3 and 0 < tc >> 3 <= len(mrs):
+            c = int(mrs[(tc >> 3) - 1].struct.Class_CodedIndex)
+            tab, i = (trs if c & 7 == 1 else tds if c & 7 == 0 else None), c >> 3
+            return nm(tab[i - 1].TypeName) if tab and 0 < i <= len(tab) else None
+        if tc & 7 == 2:
+            k = owner.get(tc >> 3)
+            return nm(tds[k - 1].TypeName) if k else None
+        return None
+    fam, marker, sup = "none", "none", False
+    for r in rows("CustomAttribute"):
+        try:
+            an = ca_type(int(r.struct.Type_CodedIndex))
+        except Exception:   # noqa: BLE001
+            continue
+        if an == "SuppressIldasmAttribute":
+            sup = True
+        elif an in _DN_PROTECTORS and fam == "none":
+            fam = _DN_PROTECTORS[an]
+            marker = _dn_serstr(bytes(getattr(r.Value, "value", r.Value) or b"")) or fam
+    if fam == "none":   # injected marker type never applied (or applied through a stripped CA row)
+        for r in tds + trs:
+            if nm(r.TypeName) in _DN_PROTECTORS:
+                fam = marker = _DN_PROTECTORS[nm(r.TypeName)]
+                break
+    renamed = [nm(r.TypeName) for k, r in enumerate(tds, 1)
+               if k > 1 and any(not 0x20 <= ord(c) <= 0x7E for c in nm(r.TypeName))]
+    cctor = any(owner.get(i) == 1 and nm(r.Name) == ".cctor" for i, r in enumerate(mds, 1))
+    enc = sum(1 for _, _, ok in bodies.values() if not ok)
+    return {"obfuscator": fam, "obfuscator_marker": marker, "has_suppress_ildasm": "true" if sup else "false",
+            "renamed_types": str(len(renamed)),
+            "renamed_type_names": json.dumps(renamed, separators=(",", ":"), ensure_ascii=False) if renamed else "none",
+            "module_cctor": "true" if cctor else "false", "encrypted_bodies": str(enc),
+            "cctor_decrypts_bodies": "true" if cctor and enc else "false"}
+
+
+_DN_PROT_ALIASES = {"protector": "obfuscator", "packer": "obfuscator", "obfuscator_name": "obfuscator",
+                    "marker": "obfuscator_marker", "obfuscator_version": "obfuscator_marker",
+                    "suppress_ildasm": "has_suppress_ildasm", "suppressildasm": "has_suppress_ildasm",
+                    "renamed": "renamed_types", "renamed_type_count": "renamed_types", "anti_tamper": "cctor_decrypts_bodies",
+                    "antitamper": "cctor_decrypts_bodies", "encrypted_methods": "encrypted_bodies"}
+
+
+def dotnet_protector_field(data, name):
+    """One dotnet_protector_facts value: "none" when the field is unknown or `data` is not a CLI assembly."""
+    try:
+        f = dotnet_protector_facts(data)
+    except Exception:   # noqa: BLE001
+        return None
+    if f is None:
+        return "none"
+    k = str(name).strip().lower()
+    return f.get(_DN_PROT_ALIASES.get(k, k), "none")
+
+
+def _antitamper_scan(data, emit, late):
+    """hcfg_scan branch: a protector's <Module>..cctor (or a method it calls: C# [ModuleInitializer]) xors FieldRVA data
+    / method bodies with a 32/64-bit constant at startup. Emulate it: every ldc.i4 (>= 0x100) / ldc.i8 constant of those
+    bodies is a repeating little-endian key, phase 0 at the start of each FieldRVA blob and each encrypted body (<= 64
+    KiB each); a magic in the xor'd bytes -> 'antitamper-raw' at the blob's first STORED byte, detail key=0x...."""
+    m = _dn_protector_meta(data)
+    if m is None:
+        return
+    pe, t, rows, tds, mds, owner, bodies = m
+    todo = [i for i, r in enumerate(mds, 1) if owner.get(i) == 1 and str(r.Name) == ".cctor"]
+    keys, done = [], set()
+    while todo and len(done) < 8:
+        i = todo.pop(0)
+        if i in done or i not in bodies or not bodies[i][1]:
+            continue
+        done.add(i)
+        for _, op, arg in il_decode(bodies[i][1]["code"]):
+            if op == 0x28 and isinstance(arg, int) and arg >> 24 == 0x06:
+                todo.append(arg & 0xFFFFFF)   # one call graph hop per callee: the module initializer
+            elif op == 0x20 and 0x100 <= arg & 0xFFFFFFFF != 0xFFFFFFFF:
+                keys.append((arg & 0xFFFFFFFF).to_bytes(4, "little"))
+            elif op == 0x21 and arg & 0xFFFFFFFFFFFFFFFF > 0xFFFFFFFF:
+                keys.append((arg & 0xFFFFFFFFFFFFFFFF).to_bytes(8, "little"))
+    keys = list(dict.fromkeys(keys))[:16]
+    if not keys:
+        return
+    starts = set()
+    for r in rows("FieldRva"):
+        try:
+            starts.add(pe.get_offset_from_rva(int(r.struct.Rva)))
+        except Exception:   # noqa: BLE001
+            continue
+    for rva, b, ok in bodies.values():
+        if not ok:
+            try:
+                starts.add(pe.get_offset_from_rva(rva))
+            except Exception:   # noqa: BLE001
+                continue
+    starts = sorted(o for o in starts if o is not None and 0 <= o < len(data))
+    for n, o in enumerate(starts):
+        e = min(len(data), o + DN_ANTITAMPER_REGION, starts[n + 1] if n + 1 < len(starts) else len(data))
+        reg = data[o:e]
+        if len(reg) < 12:
+            continue
+        for k in keys:
+            if late():
+                return
+            ks = (k * (len(reg) // len(k) + 1))[:len(reg)]
+            dec = (int.from_bytes(reg, "little") ^ int.from_bytes(ks, "little")).to_bytes(len(reg), "little")
+            j = dec.find(HCFG_MAGIC)
+            while 0 <= j and j + 12 <= len(dec):
+                emit(o + j, "antitamper-raw", dec[j:j + _need(dec[j:j + 8])], f"key=0x{k[::-1].hex()} cctor")
+                j = dec.find(HCFG_MAGIC, j + 1)
+
 
 # ------------------------------------------------------------------ .NET IL bodies: call sites, ldstr, array init blobs
 # ECMA-335 III opcode operand sizes: -1 = metadata token, -2 = switch table, n = n raw operand bytes; absent = invalid
@@ -20734,3 +23273,1208 @@ def jni_bridge_facts(jar_bytes, so_bytes=None, hcfg=True):
 def jni_bridge_field(jar_bytes, so_bytes, name):
     f = jni_bridge_facts(jar_bytes, so_bytes)
     return None if f is None else f.get(name, "none")
+
+
+# --- crypto / hash / checksum constant fingerprints (analyst "which cipher / hash does the decoder use" questions).
+# One bytes.find per signature over the whole input (no parsing): tables / byte strings are "strong" (one hit is
+# enough); single 32-bit constants that also show up as stray immediates are "weak" (an algorithm needs 2 distinct
+# weak constants).  Encodings: "bytes" (byte table / ASCII string), "le" / "be" (32/64-bit words, also .NET field-RVA
+# array blobs and ldc.i4 / dex const immediates, which are LE), "utf16le" (.NET #US strings), "jvm_cp" (a BE word
+# right after a CONSTANT_Integer (3) / CONSTANT_Long (5) tag in a .class constant pool).  Token names: aes, des,
+# blowfish, md5, sha1, sha256, sha512, crc32, tea (TEA / XTEA / XXTEA delta), chacha (ChaCha / Salsa sigma), fnv,
+# murmur2, murmur3, xxhash32, djb2 (x86 `mov r32, 5381` only), base64, base64url.  RC4 has no constant (KSA is code).
+CRYPTO_CONST_MAX = int(os.environ.get("HCTF_CRYPTO_CONST_MAX", str(64 << 20)))   # bytes scanned
+CRYPTO_CONST_WIN = 1 << 18   # full tables are searched within +-256 KB of an anchor hit
+
+
+def _cc_words(*ws):
+    return b"".join(w.to_bytes(4, "big") for w in ws)
+
+
+def _cc_table():
+    strong, weak = [], []   # (alg, pattern bytes, encoding)
+
+    def words(alg, ws, size=4, dst=strong, jvm=True):
+        """a sequence of size-byte words, LE and BE (+ the JVM constant-pool form of a single word)."""
+        be = b"".join(w.to_bytes(size, "big") for w in ws)
+        le = b"".join(w.to_bytes(size, "little") for w in ws)
+        dst += [(alg, le, "le"), (alg, be, "be")]
+        if jvm and len(ws) == 1:
+            dst.append((alg, (b"\x03" if size == 4 else b"\x05") + be, "jvm_cp"))
+
+    def text(alg, s):
+        strong.extend([(alg, s, "bytes"), (alg, s.decode("latin-1").encode("utf-16-le"), "utf16le")])
+
+    strong.append(("aes", bytes.fromhex("637c777bf26b6fc53001672bfed7ab76"), "bytes"))    # S-box
+    strong.append(("aes", bytes.fromhex("52096ad53036a538bf40a39e81f3d7fb"), "bytes"))    # inverse S-box
+    words("aes", (0xc66363a5, 0xf87c7c84))   # Te0
+    words("aes", (0x51f4a750, 0x7e416553))   # Td0
+    for w in (0xc66363a5, 0x51f4a750, 0xf87c7c84, 0x7e416553):   # Te0 / Td0 heads
+        words("aes", (w,), dst=weak)
+    strong.append(("des", bytes((57, 49, 41, 33, 25, 17, 9, 1, 58, 50, 42, 34)), "bytes"))   # PC-1
+    strong.append(("des", bytes((14, 4, 13, 1, 2, 15, 11, 8, 3, 10, 6, 12)), "bytes"))       # S1 row 0
+    words("blowfish", (0x243f6a88, 0x85a308d3))   # P-array (pi)
+    words("blowfish", (0xd1310ba6, 0x98dfb5ac))   # S-box 0
+    words("md5", (0xd76aa478, 0xe8c7b756))
+    for w in (0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee, 0xf57c0faf, 0x4787c62a, 0xeb86d391):
+        words("md5", (w,), dst=weak)
+    words("sha1", (0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0))
+    for w in (0xc3d2e1f0, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xca62c1d6):
+        words("sha1", (w,), dst=weak)
+    words("sha256", (0x428a2f98, 0x71374491))
+    words("sha256", (0x6a09e667, 0xbb67ae85))
+    for w in (0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+              0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5):
+        words("sha256", (w,), dst=weak)
+    for w in (0x6a09e667f3bcc908, 0xbb67ae8584caa73b, 0x428a2f98d728ae22, 0x7137449123ef65cd):
+        words("sha512", (w,), size=8)
+    words("crc32", (0x00000000, 0x77073096, 0xee0e612c))   # reflected table
+    words("crc32", (0x00000000, 0x04c11db7, 0x09823b6e))   # normal (MSB-first) table
+    words("crc32", (0xedb88320,))
+    words("tea", (0x9e3779b9,))
+    words("tea", (0x61c88647,))   # -delta (sum -= delta compiled as add)
+    words("tea", (0xc6ef3720,))   # delta * 32 (decrypt start sum)
+    text("chacha", b"expand 32-byte k")
+    text("chacha", b"expand 16-byte k")
+    for w in (0x61707865, 0x3320646e, 0x79622d32, 0x6b206574):   # sigma words as immediates (LE = "expa"...)
+        words("chacha", (w,), dst=weak)
+    words("fnv", (0x811c9dc5,))
+    words("fnv", (0xcbf29ce484222325,), size=8)
+    words("fnv", (0x100000001b3,), size=8)
+    words("murmur2", (0x5bd1e995,))
+    for w in (0xcc9e2d51, 0x1b873593, 0x85ebca6b, 0xc2b2ae35):
+        words("murmur3", (w,), dst=weak)
+    for w in (0x9e3779b1, 0x85ebca77, 0xc2b2ae3d, 0x27d4eb2f, 0x165667b1):
+        words("xxhash32", (w,), dst=weak)
+    for r in range(8):   # mov r32, 5381 (b8+r imm32); djb2's seed is too small to find as a bare word
+        strong.append(("djb2", bytes((0xb8 + r,)) + (5381).to_bytes(4, "little"), "x86_imm"))
+    az = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    text("base64", az + b"+/")
+    text("base64url", az + b"-_")
+    return strong, weak
+
+
+_CC_TABLE = None
+# a hit inside one of these 64-bit words belongs to the 64-bit algorithm (SHA-512 high halves = SHA-256 IV / K;
+# the 64-bit golden ratio 0x9e3779b97f4a7c15 (splitmix / Fibonacci hashing) contains the TEA delta).
+_CC_SHADOW = {"sha256": (0x6a09e667f3bcc908, 0xbb67ae8584caa73b, 0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
+                         0x510e527fade682d1, 0x9b05688c2b3e6c1f, 0x1f83d9abfb41bd6b, 0x5be0cd19137e2179,
+                         0x428a2f98d728ae22, 0x7137449123ef65cd, 0xb5c0fbcfec4d3b2f, 0xe9b5dba58189dbbc),
+              "tea": (0x9e3779b97f4a7c15,)}
+
+
+def _cc_shadowed(data, alg, p, enc, n):
+    for q in _CC_SHADOW.get(alg, ()):
+        if enc == "le" and n == 4 and p >= 4 and data[p - 4:p + 4] == q.to_bytes(8, "little"):
+            return True
+        if enc in ("be", "jvm_cp") and data[p + n - 4:p + n + 4] == q.to_bytes(8, "big"):
+            return True
+    return False
+
+
+def _cc_anchors():
+    """alg group -> patterns of which one is in every implementation; the group's full table is searched only after
+    an anchor hit (one bytes.find costs ~15 ms / 40 MB, the full table has ~190 patterns)."""
+    def w(*ws, size=4):
+        return [x for v in ws for x in (v.to_bytes(size, "little"), v.to_bytes(size, "big"))]
+    az = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    return {"aes": [bytes.fromhex("637c777bf26b6fc5")] + w(0xc66363a5, 0x51f4a750),
+            "des": [bytes((57, 49, 41, 33, 25, 17, 9, 1))], "blowfish": w(0x243f6a88),
+            "md5": w(0xd76aa478), "sha1": w(0xca62c1d6), "sha256": w(0x428a2f98), "sha512": w(0x428a2f98),
+            "crc32": w(0xedb88320, 0x04c11db7), "tea": w(0x9e3779b9, 0x61c88647), "chacha": [b"expa", b"e\0x\0p\0a\0"],
+            "fnv": w(0x811c9dc5) + w(0xcbf29ce484222325, size=8), "murmur2": w(0x5bd1e995),
+            "murmur3": w(0xcc9e2d51), "xxhash32": w(0x9e3779b1), "djb2": [b"\x05\x15\x00\x00"],
+            "base64": [az, az.decode().encode("utf-16-le")], "base64url": [az, az.decode().encode("utf-16-le")]}
+
+
+def crypto_const_scan(data, max_bytes=None):
+    """[(algorithm, offset, encoding)] sorted by offset: every constant-table hit of the algorithms whose constants are
+    in `data` (weak single words only for algorithms with >= 2 distinct weak words). [] when none; None on bad input."""
+    global _CC_TABLE
+    try:
+        if not isinstance(data, (bytes, bytearray, memoryview)):
+            return None
+        data = bytes(data[:max_bytes or CRYPTO_CONST_MAX])
+        if _CC_TABLE is None:
+            _CC_TABLE = (_cc_table(), _cc_anchors())
+        (strong, weak), anchors = _CC_TABLE
+        seen, live = {}, {}   # anchor -> first offsets; alg -> merged windows around its anchor hits
+        for alg, pats in anchors.items():
+            pos = []
+            for a in pats:
+                if a not in seen:
+                    seen[a], q = [], data.find(a)
+                    while q >= 0 and len(seen[a]) < 16:
+                        seen[a].append(q)
+                        q = data.find(a, q + 1)
+                pos += seen[a]
+            win = []
+            for q in sorted(pos):
+                lo, hi = max(q - CRYPTO_CONST_WIN, 0), q + CRYPTO_CONST_WIN
+                if win and lo <= win[-1][1]:
+                    win[-1][1] = hi
+                else:
+                    win.append([lo, hi])
+            if win:
+                live[alg] = win
+        jvm = data[:4] == b"\xca\xfe\xba\xbe"
+        hits, wk = [], {}
+
+        def find(alg, pat, enc, cap=64):
+            out = []
+            for lo, hi in live[alg]:
+                p = data.find(pat, lo, hi)
+                while p >= 0 and len(out) < cap:
+                    e = "jvm_cp" if (jvm and enc == "be" and len(pat) in (4, 8) and p
+                                     and data[p - 1] == (3 if len(pat) == 4 else 5)) else enc
+                    if not _cc_shadowed(data, alg, p, e, len(pat)):
+                        out.append((alg, p, e, len(pat)))
+                    p = data.find(pat, p + 1, hi)
+            return out
+
+        for alg, pat, enc in strong:
+            if alg in live and enc != "jvm_cp":
+                hits += find(alg, pat, enc)
+        for alg, pat, enc in weak:
+            if alg in live and enc != "jvm_cp":
+                h = find(alg, pat, enc)
+                if h:
+                    wk.setdefault(alg, {})[pat if enc == "le" else pat[::-1]] = h
+        span = {(a, q) for a, o, e, n in hits for q in range(o, o + n)}
+        for alg, d in wk.items():   # the ChaCha sigma words are ASCII ("expa" "nd 3" "2-by" "te k"): all 4 needed
+            if len(d) >= (4 if alg == "chacha" else 2) or any(a == alg for a, _, _, _ in hits):
+                hits += [x for h in d.values() for x in h if (alg, x[1]) not in span]
+        return sorted({h[:3] for h in hits}, key=lambda t: (t[1], t[0], t[2]))
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+CRYPTO_CONST_ALGS = ("aes", "des", "blowfish", "md5", "sha1", "sha256", "sha512", "crc32", "tea", "chacha", "fnv",
+                     "murmur2", "murmur3", "xxhash32", "djb2", "base64", "base64url")
+
+
+def crypto_const_facts(data, max_bytes=None):
+    """{"crypto_algorithms": sorted JSON list | "none", "crypto_algorithm_count", "crypto_constant_offsets": JSON
+    {alg: first offset} | "none", "crypto_constant_hits": JSON [[alg, offset, encoding], ...] | "none",
+    "has_<alg>_constants": "true"/"false", "<alg>_offset" / "<alg>_encoding" (first hit, "none" when absent)}.
+    None on bad input."""
+    hits = crypto_const_scan(data, max_bytes)
+    if hits is None:
+        return None
+    first = {}
+    for a, o, e in hits:
+        first.setdefault(a, (o, e))
+    algs = sorted(first)
+    f = {"crypto_algorithms": json.dumps(algs) if algs else "none", "crypto_algorithm_count": str(len(algs)),
+         "crypto_constant_offsets": json.dumps({a: first[a][0] for a in algs}, sort_keys=True) if algs else "none",
+         "crypto_constant_hits": json.dumps([list(h) for h in hits[:200]]) if hits else "none"}
+    for a in CRYPTO_CONST_ALGS:
+        f[f"has_{a}_constants"] = "true" if a in first else "false"
+        f[f"{a}_offset"] = str(first[a][0]) if a in first else "none"
+        f[f"{a}_encoding"] = first[a][1] if a in first else "none"
+    return f
+
+
+def crypto_const_field(data, name):
+    """One crypto_const_facts value as an answer string; "none" when absent, None when the input cannot be read."""
+    try:
+        f = crypto_const_facts(data)
+        return None if f is None else f.get(name, "none")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# ------------------------------------------------------------------ runtime code generation (Emit / Expression / JIT)
+_RCG_DN_TYPES = {"DynamicMethod", "ILGenerator", "AssemblyBuilder", "ModuleBuilder", "TypeBuilder", "MethodBuilder",
+                 "ConstructorBuilder", "Expression", "LambdaExpression"}
+_RCG_EXEC_APIS = {"mmap": 2, "mmap64": 2, "mprotect": 2, "pkey_mprotect": 2}   # name -> arg index of `prot`
+_RCG_COPY_APIS = {"memcpy", "memmove", "__memcpy_chk", "__memmove_chk"}
+_RCG_ARGS = ("di", "si", "dx", "cx", "r8", "r9")
+_RCG_MEMO = [None, None]
+
+
+def _rcg_reg(r):
+    """x86-64 GPR/xmm name -> family ('ax', 'r8', 'xmm0'); None for anything else."""
+    r = r.strip()
+    m = re.fullmatch(r"[re]?([abcd])[xlh]|([abcd])l", r)
+    if m:
+        return (m.group(1) or m.group(2)) + "x"
+    m = re.fullmatch(r"[re]?(si|di|bp|sp)l?", r)
+    if m:
+        return m.group(1)
+    m = re.fullmatch(r"(r\d+)[dwb]?", r)
+    if m:
+        return m.group(1)
+    return r if re.fullmatch(r"[xy]mm\d+", r) else None
+
+
+_RCG_W = {"byte": 1, "word": 2, "dword": 4, "qword": 8, "xmmword": 16}
+
+
+def runtime_codegen_facts(data):
+    """Runtime code generation: the code exists only as data the program feeds a code generator.
+    .NET (dnfile + il_decode): System.Reflection.Emit (DynamicMethod / AssemblyBuilder / TypeBuilder / MethodBuilder ->
+    ILGenerator.Emit) -- each `ldsfld OpCodes::<X>` + optional operand load + `ILGenerator::Emit` call site, IL order,
+    rebuilds the emitted body; System.Linq.Expressions Expression.Constant(<ldc>) + Compile.
+    Native ELF x86-64 (capstone): mmap/mprotect called with PROT_EXEC (prot & 4) and the opcode array copied into the
+    mapping (rip-relative loads stored through the mapping register, immediate stores, memcpy(dst, &array, n)); the
+    rebuilt buffer is disassembled from offset 0 up to the first ret.
+    Keys: has_runtime_codegen true|false, codegen_kind dotnet_emit|dotnet_expression|native_jit|none, codegen_apis
+    (JSON list), emitted_opcodes (JSON list of mnemonics: IL 'ldc.i4' / x86 'mov'), emitted_instructions (JSON list
+    with operands: 'ldc.i4 4919' / 'mov eax, 0x539'), emitted_instruction_count, emitted_constant (first integer
+    operand, decimal; a string operand verbatim), emitted_constant_hex ('0x..', two's complement for negatives),
+    emitted_bytes (native: hex of the rebuilt buffer up to ret). "none" when absent; None when unparseable."""
+    try:
+        data = bytes(data)
+        if data[:2] == b"MZ":
+            return _rcg_dotnet(data)
+        if data[:4] == b"\x7fELF":
+            return _rcg_native(data)
+        return {}   # neither a PE/.NET nor an ELF: every field absent
+    except Exception:   # noqa: BLE001 -- hostile/truncated container: cannot answer
+        return None
+
+
+def _rcg_out(kind, apis, ops, ins, const, raw=None):
+    f = {"has_runtime_codegen": "false" if kind == "none" else "true", "codegen_kind": kind,
+         "codegen_apis": json.dumps(apis) if apis else "none",
+         "emitted_opcodes": json.dumps(ops) if ops else "none",
+         "emitted_instructions": json.dumps(ins) if ins else "none",
+         "emitted_instruction_count": str(len(ins)) if ins else "0" if kind != "none" else "none",
+         "emitted_constant": "none", "emitted_constant_hex": "none",
+         "emitted_bytes": raw.hex() if raw else "none"}
+    if isinstance(const, int):
+        f["emitted_constant"] = str(const)
+        f["emitted_constant_hex"] = hex(const & (2 ** 64 - 1) if const < 0 else const)
+    elif isinstance(const, str):
+        f["emitted_constant"] = const
+    return f
+
+
+def _rcg_dotnet(data):
+    import dnfile
+    lay = _pe_layout(data)
+    if not lay or len(lay[2]) <= 14 or not lay[2][14][0]:
+        return {"has_runtime_codegen": "none"}   # native PE: VirtualAlloc JIT not modelled
+    if len(data) > MSDEC_DOTNET_MAX:
+        return None   # dnfile's full metadata parse is ~0.5 s/MB: cannot answer inside the clock
+    pe = dnfile.dnPE(data=data, fast_load=False)
+    if pe.net is None or pe.net.mdtables is None:
+        return {"has_runtime_codegen": "none"}
+    t = pe.net.mdtables
+    rows = lambda tab: list(getattr(t, tab, None) or ())   # noqa: E731
+    nm = lambda x: "" if x is None else str(x)   # noqa: E731
+    trs, mrs, mds = rows("TypeRef"), rows("MemberRef"), rows("MethodDef")
+    ref = {}   # MemberRef token -> (type name, member name); parent TypeRef only, TypeSpec parents -> ("", name)
+    for k, r in enumerate(mrs):
+        ci = int(getattr(r.struct, "Class_CodedIndex", 0) or 0)
+        tn = nm(trs[(ci >> 3) - 1].TypeName) if ci & 7 == 1 and 0 < ci >> 3 <= len(trs) else ""
+        tns = nm(trs[(ci >> 3) - 1].TypeNamespace) if ci & 7 == 1 and 0 < ci >> 3 <= len(trs) else ""
+        ref[0x0A000001 + k] = (tn, nm(r.Name), tns)
+    us = bytes(getattr(pe.net.user_strings, "__data__", b"") or b"") if pe.net.user_strings else b""
+
+    def ustr(tok):
+        p = tok & 0xFFFFFF
+        if not 0 < p < len(us):
+            return None
+        n, q = us[p], p + 1
+        if n & 0x80:
+            n, q = (((n & 0x3F) << 8) | us[p + 1], p + 2) if not n & 0x40 else \
+                (((n & 0x1F) << 24) | int.from_bytes(us[p + 1:p + 4], "big"), p + 4)
+        return us[q:q + max(n - 1, 0)].decode("utf-16-le", "replace")
+
+    apis, ops, ins, const, kind = [], [], [], None, "none"
+    for tn, mn, tns in ref.values():
+        if tn in _RCG_DN_TYPES and tns in ("System.Reflection.Emit", "System.Linq.Expressions") and \
+                f"{tn}.{mn}" not in apis and mn not in ("get_Type", "op_Equality", "op_Inequality"):
+            apis.append(f"{tn}.{mn}")
+    if not apis:
+        return _rcg_out("none", [], [], [], None)
+    compile_ = any(mn == "Compile" and (tn in ("", "Expression", "LambdaExpression")) for tn, mn, _ in ref.values())
+    for i, r in enumerate(mds, 1):
+        rva = int(r.struct.Rva or 0)
+        b = _il_body(pe, rva) if rva else None
+        if not b:
+            continue
+        code = il_decode(b["code"])
+        pend = None   # [opcode name, operand] since the last ldsfld OpCodes::X
+        for j, (at, op, arg) in enumerate(code):
+            if op == 0x7E and isinstance(arg, int) and ref.get(arg, ("",))[0] == "OpCodes":
+                pend = [ref[arg][1].lower().replace("_", "."), None]
+            elif pend is not None and op in (0x6F, 0x28) and ref.get(arg, ("", ""))[:2] == ("ILGenerator", "Emit"):
+                o, v = pend
+                ops.append(o)
+                ins.append(o if v is None else f"{o} {v}")
+                if const is None and v is not None and not isinstance(v, float):
+                    const = v
+                pend = None
+                kind = "dotnet_emit"
+            elif pend is not None:
+                v = _rcg_il_const(op, arg, ustr)
+                if v is not _RCG_NA:
+                    pend[1] = v
+            elif op in (0x28, 0x6F) and ref.get(arg, ("", ""))[:2] == ("Expression", "Constant") and j >= 1:
+                k = j - 1
+                if code[k][1] == 0x8C and k >= 1:   # box
+                    k -= 1
+                v = _rcg_il_const(code[k][1], code[k][2], ustr)
+                if v is not _RCG_NA and kind == "none" and compile_:
+                    kind = "dotnet_expression"
+                    const = v if const is None else const
+    if kind == "none" and compile_ and any(a.startswith(("Expression.", "LambdaExpression.")) for a in apis):
+        kind = "dotnet_expression"
+    if kind == "none" and any(a.startswith(("DynamicMethod.", "ILGenerator.", "AssemblyBuilder.", "TypeBuilder."))
+                              for a in apis):
+        kind = "dotnet_emit"
+    return _rcg_out(kind, apis, ops, ins, const)
+
+
+_RCG_NA = object()
+
+
+def _rcg_il_const(op, arg, ustr):
+    """Constant pushed by one IL instruction (int / float / str), or _RCG_NA."""
+    if 0x15 <= op <= 0x1E:      # ldc.i4.m1 .. ldc.i4.8
+        return op - 0x16
+    if op in (0x1F, 0x20, 0x21):   # ldc.i4.s / ldc.i4 / ldc.i8
+        return arg
+    if op in (0x22, 0x23):
+        return struct.unpack("<f" if op == 0x22 else "<d", arg.to_bytes(4 if op == 0x22 else 8, "little"))[0]
+    if op == 0x72:
+        return ustr(arg)
+    return _RCG_NA
+
+
+def _rcg_elf(data):
+    """_dl_elf's {segs, got, text, machine} without walking huge non-PLT relocation tables (libjvm .rela.dyn: 115k
+    RELATIVE entries, ~1.4 s in pyelftools): GOT slots from .rela.plt plus any other dynsym reloc table < 20k entries
+    (-fno-plt GLOB_DAT)."""
+    from elftools.elf.elffile import ELFFile
+    from elftools.elf.relocation import RelocationSection
+    e = ELFFile(io.BytesIO(data))
+    segs = [(s["p_vaddr"], s["p_offset"], s["p_filesz"]) for s in e.iter_segments() if s["p_type"] == "PT_LOAD"]
+    dyn, got = e.get_section_by_name(".dynsym"), {}
+    for sec in e.iter_sections():
+        if isinstance(sec, RelocationSection) and dyn is not None and sec["sh_link"] and \
+                e.get_section(sec["sh_link"]).name == ".dynsym" and \
+                (sec.name.endswith(".plt") or sec.num_relocations() < 20000):
+            for r in sec.iter_relocations():
+                if r["r_info_sym"]:
+                    got[r["r_offset"]] = _dl_symname(dyn, r["r_info_sym"])
+    text = [(s.name, s["sh_addr"], s["sh_offset"], s["sh_size"]) for s in e.iter_sections()
+            if s["sh_flags"] & 4 and s["sh_type"] == "SHT_PROGBITS"]
+    return {"segs": segs, "got": got, "text": text, "machine": e["e_machine"]}
+
+
+def _rcg_native(data, budget_s=0.5):
+    from capstone import Cs, CS_ARCH_X86, CS_MODE_64
+    deadline = time.time() + budget_s
+    if not any(n in data for n in (b"\0mmap\0", b"\0mmap64\0", b"\0mprotect\0", b"\0pkey_mprotect\0")):
+        return _rcg_out("none", [], [], [], None)   # no exec-mapping import name in .dynstr
+    E = _rcg_elf(data)
+    if E["machine"] != "EM_X86_64":
+        return {"has_runtime_codegen": "none"}
+    md = Cs(CS_ARCH_X86, CS_MODE_64)
+    want = set(_RCG_EXEC_APIS) | _RCG_COPY_APIS
+    gotw = {va: n for va, n in E["got"].items() if n in want}
+    if not any(n in _RCG_EXEC_APIS for n in gotw.values()):
+        return _rcg_out("none", [], [], [], None)
+    stub = {}
+    for name, va, off, size in E["text"]:
+        if not name.startswith(".plt"):
+            continue
+        start = va
+        for a, sz, mn, ops in md.disasm_lite(bytes(data[off:off + size]), va):
+            if a == start and (mn in ("nop", "int3") or mn.startswith("nop")):
+                start = a + sz
+            elif "jmp" in mn or ops.startswith("jmp"):
+                m = re.search(r"\[rip \+ 0x([0-9a-f]+)\]", ops)
+                if m and (a + sz + int(m.group(1), 16)) in gotw:
+                    stub[start] = stub[a] = gotw[a + sz + int(m.group(1), 16)]
+                start = a + sz
+    sites = []   # (va, api, section index, offset in section)
+    for si, (name, va, off, size) in enumerate(E["text"]):
+        if name.startswith(".plt") or name in (".init", ".fini"):
+            continue
+        sec = data[off:off + size]
+        for n, m in enumerate(re.finditer(rb"\xe8|\xff\x15", sec)):
+            if not n & 0xFFF and time.time() > deadline:
+                return None
+            i = m.start()
+            if m.group() == b"\xe8":
+                if i + 5 > len(sec):
+                    continue
+                api = stub.get((va + i + 5 + struct.unpack_from("<i", sec, i + 1)[0]) & (2 ** 64 - 1))
+            else:
+                api = gotw.get(va + i + 6 + struct.unpack_from("<i", sec, i + 2)[0]) if i + 6 <= len(sec) else None
+            if api in _RCG_EXEC_APIS:
+                sites.append((va + i, api, si, i))
+    for site, api, si, i in sites[:64]:
+        if time.time() > deadline:
+            return None   # out of budget before every exec-mapping site was tracked: cannot answer
+        name, va, off, size = E["text"][si]
+        sec = data[off:off + size]
+        lo = max(0, i - 1024)
+        ins = None
+        for back in range(i - lo, 0, -1):   # resync linear disassembly onto the call site
+            got = list(md.disasm_lite(bytes(sec[i - back:min(len(sec), i + 512)]), site - back))
+            if any(a == site for a, *_ in got):
+                ins = got
+                break
+        if ins is None:
+            continue
+        r = _rcg_track(data, E, ins, site, stub, gotw, md)
+        if r:
+            return r
+    return _rcg_out("none", [], [], [], None)
+
+
+def _rcg_track(data, E, ins, site, stub, gotw, md):
+    """Register/store tracking over one window around an exec-mapping call -> facts dict or None."""
+    regs, buf, apis, execd, base = {}, {}, [], False, None
+
+    def ea(op_s, a, sz):
+        m = re.fullmatch(r"(?:(\w+) ptr )?\[rip ([+-]) (0x[0-9a-f]+|\d+)\]", op_s)
+        if m:
+            return (m.group(1), a + sz + (int(m.group(3), 0) * (1 if m.group(2) == "+" else -1)))
+        return None
+
+    def put(disp, b):
+        for k, x in enumerate(b):
+            buf[disp + k] = x
+
+    for a, sz, mn, ops in ins:
+        if mn == "ret":
+            if a > site:
+                break
+            regs, buf = {}, {}
+            continue
+        dst, _, src = ops.partition(", ")
+        if mn == "call":
+            tgt = None
+            mm = re.fullmatch(r"0x([0-9a-f]+)", ops)
+            if mm:
+                tgt = stub.get(int(mm.group(1), 16))
+            else:
+                e = ea(ops, a, sz)
+                tgt = gotw.get(e[1]) if e else None
+            if tgt in _RCG_EXEC_APIS:
+                prot = regs.get("dx")
+                if isinstance(prot, int) and prot & 4:
+                    execd = True
+                    apis.append(tgt)
+                elif tgt.startswith("mmap"):
+                    apis.append(tgt)
+                    buf = {}
+                if tgt.startswith("mmap"):
+                    base = "ax"   # the mapping pointer comes back in rax
+                    regs = {"ax": ("map",)}
+                    continue
+            elif tgt in _RCG_COPY_APIS:
+                s, n = regs.get("si"), regs.get("dx")
+                if isinstance(s, tuple) and s[0] == "addr" and isinstance(n, int) and 0 < n <= 4096:
+                    o = _va_off(E["segs"], s[1])
+                    if o is not None:
+                        put(0, data[o:o + n])
+                        apis.append(tgt)
+            elif mm is None and _rcg_reg(ops) and regs.get(_rcg_reg(ops)) == ("map",) and buf:
+                if "call_reg" not in apis:
+                    apis.append("call_reg")
+            regs = {k: v for k, v in regs.items() if k in ("bx", "bp", "r12", "r13", "r14", "r15")}
+            continue
+        d = _rcg_reg(dst)
+        if mn in ("mov", "movzx", "movabs", "movdqa", "movdqu", "movups", "movaps", "movq", "movd", "lea", "xor"):
+            if d is not None:
+                if mn == "xor" and _rcg_reg(src) == d:
+                    regs[d] = 0
+                elif mn == "lea":
+                    e = ea(src, a, sz)
+                    regs[d] = ("addr", e[1]) if e else None
+                elif re.fullmatch(r"0x[0-9a-f]+|\d+", src):
+                    regs[d] = int(src, 0)
+                elif _rcg_reg(src):
+                    regs[d] = regs.get(_rcg_reg(src))
+                else:
+                    e = ea(src, a, sz)
+                    mm2 = re.match(r"(\w+) ptr \[(\w+)", src)
+                    if e and e[0] in _RCG_W:
+                        regs[d] = ("load", e[1], _RCG_W[e[0]])
+                    elif mm2 and regs.get(_rcg_reg(mm2.group(2))) == ("map",) and mn == "mov" and mm2.group(1) == "qword":
+                        regs[d] = None
+                    elif re.fullmatch(r"qword ptr \[r[bs]p [+-] (?:0x[0-9a-f]+|\d+)\]", src) and \
+                            regs.get(("stk", src)) == ("map",):
+                        regs[d] = ("map",)
+                    else:
+                        regs[d] = None
+                continue
+            mm = re.fullmatch(r"(\w+) ptr \[(\w+)(?: \+ (0x[0-9a-f]+|\d+))?\]", dst)
+            mst = re.fullmatch(r"qword ptr \[r[bs]p [+-] (?:0x[0-9a-f]+|\d+)\]", dst)
+            if mst and _rcg_reg(src) and regs.get(_rcg_reg(src)) == ("map",):
+                regs[("stk", dst)] = ("map",)
+                continue
+            if mm and mm.group(1) in _RCG_W and regs.get(_rcg_reg(mm.group(2))) == ("map",):
+                disp, w = int(mm.group(3) or "0", 0), _RCG_W[mm.group(1)]
+                v = regs.get(_rcg_reg(src)) if _rcg_reg(src) else int(src, 0) if re.fullmatch(r"0x[0-9a-f]+|\d+", src) \
+                    else None
+                if isinstance(v, int):
+                    put(disp, (v & ((1 << 8 * w) - 1)).to_bytes(w, "little"))
+                elif isinstance(v, tuple) and v[0] == "load":
+                    o = _va_off(E["segs"], v[1])
+                    if o is not None:
+                        put(disp, data[o:o + min(w, v[2]) if v[2] >= w else o + w])
+                continue
+        if d is not None and mn not in ("cmp", "test", "push", "bt") and not mn.startswith(("j", "nop", "cmov")):
+            regs[d] = None
+    if not execd or 0 not in buf:
+        return None
+    raw = bytearray()
+    while len(raw) in buf and len(raw) < 4096:
+        raw.append(buf[len(raw)])
+    ops_, txt, const, end = [], [], None, len(raw)
+    for a, sz, mn, op in md.disasm_lite(bytes(raw), 0):
+        ops_.append(mn)
+        txt.append(f"{mn} {op}".strip())
+        if const is None and mn in ("mov", "movabs", "push", "add", "sub", "xor") and \
+                re.search(r"(?:^|, )(0x[0-9a-f]+|\d+)$", op) and "[" not in op:
+            const = int(re.search(r"(0x[0-9a-f]+|\d+)$", op).group(1), 0)
+        if mn == "ret":
+            end = a + sz
+            break
+    if not ops_:
+        return None
+    return _rcg_out("native_jit", list(dict.fromkeys(apis)), ops_, txt, const, bytes(raw[:end]))
+
+
+def runtime_codegen_field(data, name):
+    """One runtime_codegen_facts value by key ("none" for an unknown key / absent field; None when unparseable)."""
+    try:
+        if _RCG_MEMO[0] is data:
+            f = _RCG_MEMO[1]
+        else:
+            f = runtime_codegen_facts(data)
+            _RCG_MEMO[:] = [data, f]
+        if not isinstance(f, dict):
+            return f
+        k = str(name).strip().lower()
+        return f.get({"emitted_opcode_list": "emitted_opcodes", "runtime_codegen": "has_runtime_codegen",
+                      "emitted_ops": "emitted_opcodes"}.get(k, k), "none")
+    except Exception:   # noqa: BLE001
+        return None
+
+
+# ---- exception / signal handler control flow (C++ LSDA landing pads, signal/sigaction, int3/ud2, PE VEH/SEH) ----
+_EH_MEMO = [None, None]
+_EH_SIGNUM = {1: "SIGHUP", 2: "SIGINT", 3: "SIGQUIT", 4: "SIGILL", 5: "SIGTRAP", 6: "SIGABRT", 7: "SIGBUS", 8: "SIGFPE",
+              9: "SIGKILL", 10: "SIGUSR1", 11: "SIGSEGV", 12: "SIGUSR2", 13: "SIGPIPE", 14: "SIGALRM", 15: "SIGTERM",
+              16: "SIGSTKFLT", 17: "SIGCHLD", 18: "SIGCONT", 19: "SIGSTOP", 20: "SIGTSTP", 21: "SIGTTIN", 22: "SIGTTOU",
+              23: "SIGURG", 24: "SIGXCPU", 25: "SIGXFSZ", 26: "SIGVTALRM", 27: "SIGPROF", 28: "SIGWINCH", 29: "SIGIO",
+              30: "SIGPWR", 31: "SIGSYS"}
+_EH_SIGFN = ("signal", "sigaction", "bsd_signal", "sysv_signal", "sigset", "__sysv_signal", "__sigaction")
+_EH_PE_APIS = ("AddVectoredExceptionHandler", "AddVectoredContinueHandler", "SetUnhandledExceptionFilter",
+               "RtlAddVectoredExceptionHandler", "RaiseException", "RtlAddFunctionTable", "RtlInstallFunctionTableCallback")
+_EH_BUILTIN = {"v": "void", "b": "bool", "c": "char", "a": "signed char", "h": "unsigned char", "s": "short",
+               "t": "unsigned short", "i": "int", "j": "unsigned int", "l": "long", "m": "unsigned long",
+               "x": "long long", "y": "unsigned long long", "f": "float", "d": "double", "e": "long double",
+               "w": "wchar_t"}
+
+
+def _eh_demangle_type(m):
+    """Small Itanium type demangler for typeinfo names (_ZTI<type>): builtins, P/K/R, St, N..E nested, <len>name."""
+    def name(p):
+        parts = []
+        if m.startswith("St", p):
+            parts.append("std")
+            p += 2
+        nested = m.startswith("N", p)
+        p += nested
+        if nested and m.startswith("St", p):
+            parts.append("std")
+            p += 2
+        while p < len(m) and m[p].isdigit():
+            q = p
+            while m[q].isdigit():
+                q += 1
+            n = int(m[p:q])
+            parts.append(m[q:q + n])
+            p = q + n
+            while m.startswith("B", p) and p + 1 < len(m) and m[p + 1].isdigit():   # abi_tag, e.g. B5cxx11
+                q = p + 1
+                while m[q].isdigit():
+                    q += 1
+                p = q + int(m[p + 1:q])
+            if not nested:
+                break
+        if nested and m.startswith("E", p):
+            p += 1
+        return "::".join(parts), p
+
+    def typ(p):
+        if p >= len(m):
+            raise ValueError
+        c = m[p]
+        if c in "PRK":
+            t, p2 = typ(p + 1)
+            return (t + " const" if c == "K" else t + ("*" if c == "P" else "&")), p2
+        if c in _EH_BUILTIN:
+            return _EH_BUILTIN[c], p + 1
+        if c == "S" and m.startswith("Ss", p):
+            return "std::string", p + 2
+        t, p2 = name(p)
+        if not t:
+            raise ValueError
+        return t, p2
+    try:
+        t, p = typ(0)
+        t = re.sub(r"(\w[\w:]*) const\*", r"const \1*", t)
+        return t if p == len(m) else m
+    except Exception:  # noqa: BLE001
+        return m
+
+
+def _eh_read_enc(data, p, enc, pcaddr, b64, e):
+    """DW_EH_PE-encoded pointer at file offset p (pcaddr = its vaddr); -> (value or None, new p)."""
+    if enc == 0xFF:
+        return None, p
+    f = enc & 0x0F
+    if f == 0x01:
+        v, p = _leb(data, p)
+    elif f == 0x09:
+        v, p = _leb(data, p, signed=True)
+    else:
+        fmt, n = {0x00: ("Q" if b64 else "I", 8 if b64 else 4), 0x02: ("H", 2), 0x03: ("I", 4), 0x04: ("Q", 8),
+                  0x0A: ("h", 2), 0x0B: ("i", 4), 0x0C: ("q", 8)}.get(f, (None, 0))
+        if not fmt or p + n > len(data):
+            return None, p + n
+        v = struct.unpack_from(e + fmt, data, p)[0]
+        p += n
+    if enc & 0x70 == 0x10:
+        v += pcaddr
+    return v & 0xFFFFFFFFFFFFFFFF, p
+
+
+def exception_handler_facts(data):
+    """Exception/signal-handler control flow of an ELF (C++ .eh_frame -> .gcc_except_table LSDAs; signal()/sigaction()
+    registrations; int3/ud2 trap sites) or PE (VEH/SEH APIs, .pdata/.xdata language handlers).
+    Keys: has_exception_handlers, personality, landing_pads (hex vaddrs), landing_pad_count, catch_landing_pads,
+    cleanup_landing_pads, eh_functions (functions with a landing pad), catch_functions (with a typed/catch-all
+    handler), catch_types (demangled; "..." = catch-all), catch_typeinfo (mangled _ZTI symbols), call_sites
+    ("0xstart-0xend->0xlp"), signals / signal_numbers / signal_handlers ("SIGTRAP:fn") / signal_handler_functions,
+    trap_instructions (int3/ud2 inside function bodies), trap_functions, int3_anti_debug ("true" when an int3 sits
+    in code and a SIGTRAP handler is registered), exception_apis (PE), veh_handlers (PE, best effort),
+    seh_handler_count (PE .pdata entries with UNW_FLAG_EHANDLER/UHANDLER). "none" for absent lists, None on garbage."""
+    if not isinstance(data, (bytes, bytearray)) or len(data) < 64:
+        return None
+    data = bytes(data)
+    if data[:4] == b"\x7fELF":
+        return _eh_elf(data)
+    if data[:2] == b"MZ":
+        return _eh_pe(data)
+    return {}   # not an ELF/PE: every field absent
+
+
+def _eh_out(f):
+    for k, v in list(f.items()):
+        if isinstance(v, list):
+            f[k] = v or "none"
+            f[k + "_csv"] = ",".join(map(str, v)) if v else "none"
+    return f
+
+
+def _eh_elf(data):
+    from elftools.elf.elffile import ELFFile
+    ef = ELFFile(io.BytesIO(data))
+    b64, e = ef.elfclass == 64, "<" if ef.little_endian else ">"
+    sl = list(ef.iter_sections())
+    secs = {s.name: s for s in sl}
+
+    def v2o(va):
+        for s in sl:
+            a, sz = s["sh_addr"], s["sh_size"]
+            if a and a <= va < a + sz and s["sh_type"] != "SHT_NOBITS":
+                return s["sh_offset"] + va - a
+        return None
+
+    def cstr(o):
+        z = data.find(b"\0", o, o + 4096)
+        return data[o:z].decode("latin-1") if z > o else ""
+
+    funcs, byaddr, symnames = [], {}, {}
+    sfmt, sesz = (e + "IBBHQQ", 24) if b64 else (e + "IIIBBH", 16)
+    for idx, s in enumerate(sl):
+        if s["sh_type"] not in ("SHT_SYMTAB", "SHT_DYNSYM") or not 0 < s["sh_size"] <= 64 << 20:
+            continue
+        st = sl[s["sh_link"]]["sh_offset"] if s["sh_link"] < len(sl) else 0
+        o, n = s["sh_offset"], min(s["sh_size"] // sesz, 300000)
+        names = symnames.setdefault(idx, {})
+        for k, t in enumerate(struct.iter_unpack(sfmt, data[o:o + n * sesz])):
+            if b64:
+                nm_o, info, _, shndx, v, sz = t
+            else:
+                nm_o, v, sz, info, _, shndx = t
+            if not nm_o:
+                continue
+            nm = cstr(st + nm_o)
+            names[k] = nm
+            ty = info & 0xF
+            if ty in (2, 10) and shndx:
+                funcs.append((v, sz, nm))
+            if ty in (1, 2) and v:   # undefined FUNC with a value = canonical PLT address (non-PIE)
+                byaddr.setdefault(v, nm)
+    funcs = sorted(set(funcs))
+    fstarts = [a for a, _, _ in funcs]
+
+    def fname(va):
+        i = bisect.bisect_right(fstarts, va) - 1
+        if i >= 0:
+            a, sz, nm = funcs[i]
+            if va < a + max(sz, 1):
+                return nm
+        return f"sub_{va:x}"
+
+    relsym = {}   # GOT/data slot vaddr -> symbol name (JUMP_SLOT / GLOB_DAT / R_X86_64_64 / COPY)
+    for s in sl:
+        if s["sh_type"] not in ("SHT_RELA", "SHT_REL") or s["sh_link"] not in symnames:
+            continue
+        names, rela = symnames[s["sh_link"]], s["sh_type"] == "SHT_RELA"
+        rsz = (24 if rela else 16) if b64 else (12 if rela else 8)
+        o, n = s["sh_offset"], min(s["sh_size"] // rsz, 400000)
+        for t in struct.iter_unpack(e + ("QQ" if b64 else "II") + ("8x" if rela and b64 else "4x" if rela else ""),
+                                    data[o:o + n * rsz]):
+            si = t[1] >> 32 if b64 else t[1] >> 8
+            if si and si in names:
+                relsym[t[0]] = names[si]
+
+    f = {"personality": [], "landing_pads": [], "catch_landing_pads": [], "cleanup_landing_pads": [],
+         "eh_functions": [], "catch_functions": [], "catch_types": [], "catch_typeinfo": [], "call_sites": []}
+    eh, gx = secs.get(".eh_frame"), secs.get(".gcc_except_table")
+    if eh is not None and eh["sh_type"] == "SHT_PROGBITS" and gx is not None and gx["sh_addr"]:
+        off, end, addr = eh["sh_offset"], eh["sh_offset"] + eh["sh_size"], eh["sh_addr"]
+        cies, p, nfde = {}, off, 0
+        gx_lo, gx_hi = gx["sh_addr"], gx["sh_addr"] + gx["sh_size"]
+        while p + 8 <= end and nfde < 400000:
+            ln = struct.unpack_from(e + "I", data, p)[0]
+            if ln == 0 or ln == 0xFFFFFFFF:
+                break
+            body, nxt = p + 4, p + 4 + ln
+            if nxt > end:
+                break
+            cid = struct.unpack_from(e + "I", data, body)[0]
+            if cid == 0:
+                q = body + 5
+                z = data.find(b"\0", q, nxt)
+                aug = data[q:z].decode("latin-1") if z > 0 else ""
+                q = z + 1
+                if data[body + 4] >= 4:
+                    q += 2
+                _, q = _leb(data, q)
+                _, q = _leb(data, q, signed=True)
+                q = q + 1 if data[body + 4] == 1 else _leb(data, q)[1]
+                c = {"R": 0, "L": 0xFF, "P": None}
+                if aug.startswith("z"):
+                    _, q = _leb(data, q)
+                    for ch in aug[1:]:
+                        if ch == "R":
+                            c["R"] = data[q]
+                            q += 1
+                        elif ch == "L":
+                            c["L"] = data[q]
+                            q += 1
+                        elif ch == "P":
+                            pe = data[q]
+                            v, q = _eh_read_enc(data, q + 1, pe & 0x7F, addr + q + 1 - off, b64, e)
+                            if v is not None and pe & 0x80:
+                                v = relsym.get(v) or (byaddr.get(struct.unpack_from(e + ("Q" if b64 else "I"), data,
+                                                                                    v2o(v))[0]) if v2o(v) else None)
+                            c["P"] = v if isinstance(v, str) else byaddr.get(v, hex(v) if v else None)
+                        else:
+                            break
+                cies[p] = c
+            else:
+                c = cies.get(body - cid)
+                if c is not None:
+                    nfde += 1
+                    q = body + 4
+                    pc0, q = _eh_read_enc(data, q, c["R"], addr + q - off, b64, e)
+                    rng, q = _eh_read_enc(data, q, c["R"] & 0x0F, 0, b64, e)
+                    if c["L"] != 0xFF:
+                        _, q = _leb(data, q)
+                        lsda, q = _eh_read_enc(data, q, c["L"], addr + q - off, b64, e)
+                        if lsda and gx_lo <= lsda < gx_hi and pc0 is not None:
+                            _eh_lsda(data, gx["sh_offset"] + lsda - gx_lo, lsda, pc0, rng or 0, c["P"], f,
+                                     b64, e, fname, relsym, byaddr, v2o)
+            p = nxt
+    for k in ("landing_pads", "catch_landing_pads", "cleanup_landing_pads"):
+        f[k] = [hex(x) for x in sorted(set(f[k]))]
+    for k in ("eh_functions", "catch_functions", "catch_types", "catch_typeinfo", "personality"):
+        f[k] = list(dict.fromkeys(f[k]))
+    f["landing_pad_count"] = str(len(f["landing_pads"]))
+    f["personality"] = f["personality"][0] if f["personality"] else "none"
+
+    # signal()/sigaction() registrations + int3/ud2 trap sites (x86/x86-64 code only)
+    sigs, traps, tfun = [], [], []
+    mach = ef["e_machine"]
+    if mach in ("EM_X86_64", "EM_386"):
+        import capstone
+        md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64 if mach == "EM_X86_64" else capstone.CS_MODE_32)
+        plt = {}
+        for nm in (".plt", ".plt.sec", ".plt.got"):
+            s = secs.get(nm)
+            if s is None or s["sh_size"] > 1 << 20:
+                continue
+            a0, raw = s["sh_addr"], data[s["sh_offset"]:s["sh_offset"] + s["sh_size"]]
+            for a, sz, mn, op in md.disasm_lite(raw, a0):
+                if mn in ("jmp", "bnd jmp") and "[" in op:
+                    m = re.search(r"\[rip ([+-]) (0x[0-9a-f]+)\]", op)
+                    m2 = re.search(r"\[(0x[0-9a-f]+)\]$", op)
+                    got = a + sz + int(m.group(2), 16) * (1 if m.group(1) == "+" else -1) if m else \
+                        int(m2.group(1), 16) if m2 else None
+                    if got in relsym:
+                        stub = a0 + (a - a0) // (8 if nm == ".plt.got" else 16) * (8 if nm == ".plt.got" else 16)
+                        plt[stub] = relsym[got].split("@")[0]
+        sigfn = {a: n for a, n in plt.items() if n in _EH_SIGFN}
+        sigfn.update({a: nm for a, _, nm in funcs if nm in _EH_SIGFN})
+        fset, hot = set(fstarts), set()
+        for s in sl:   # byte prefilter: functions holding a call to a signal API (rel32 / [rip+GOT]) or 0xcc / 0f 0b
+            if s["sh_type"] != "SHT_PROGBITS" or not s["sh_flags"] & 4 or s["sh_size"] > 96 << 20:
+                continue
+            a0, o0 = s["sh_addr"], s["sh_offset"]
+            raw = data[o0:o0 + s["sh_size"]]
+            pats = [rb"\xcc|\x0f\x0b|\x0f\xb9|\xcd\x03"]
+            if sigfn:
+                pats.append(rb"\xe8")
+            if sigfn or any(n2.split("@")[0] in _EH_SIGFN for n2 in relsym.values()):
+                pats.append(rb"\xff\x15")
+            got = {k for k, v in relsym.items() if v.split("@")[0] in _EH_SIGFN}
+            for m in re.finditer(b"|".join(pats), raw):
+                q = m.start()
+                c = raw[q]
+                if c == 0xE8:
+                    if q + 5 > len(raw) or a0 + q + 5 + struct.unpack_from("<i", raw, q + 1)[0] not in sigfn:
+                        continue
+                elif c == 0xFF:
+                    if q + 6 > len(raw) or (a0 + q + 6 + struct.unpack_from("<i", raw, q + 2)[0] not in got and
+                                            struct.unpack_from("<I", raw, q + 2)[0] not in got):
+                        continue
+                i = bisect.bisect_right(fstarts, a0 + q) - 1
+                if i >= 0 and a0 + q < funcs[i][0] + funcs[i][1]:
+                    hot.add(i)
+                if len(hot) > 4096:
+                    break
+        budget = 4 << 20
+        for i in sorted(hot):
+            a0, sz, nm = funcs[i]
+            if sz <= 0 or sz > 1 << 20:
+                continue
+            o = v2o(a0)
+            if o is None or budget <= 0:
+                continue
+            budget -= sz
+            win = []
+            for a, isz, mn, op in md.disasm_lite(data[o:o + sz], a0):
+                if mn in ("int3", "ud2", "ud1", "int1") or mn == "int" and op == "3":
+                    k = "int3" if mn == "int" else mn
+                    traps.append(k)
+                    tfun.append(nm)
+                if mn == "call":
+                    tgt = None
+                    m = re.fullmatch(r"0x[0-9a-f]+", op)
+                    if m:
+                        tgt = sigfn.get(int(op, 16))
+                    else:
+                        m = re.search(r"\[rip ([+-]) (0x[0-9a-f]+)\]", op)
+                        if m:
+                            n2 = relsym.get(a + isz + int(m.group(2), 16) * (1 if m.group(1) == "+" else -1),
+                                            "").split("@")[0]
+                            tgt = n2 if n2 in _EH_SIGFN else None
+                    if tgt:
+                        num, hnd = None, None
+                        for wa, wmn, wop in reversed(win):
+                            if num is None and wmn == "mov" and re.match(r"(edi|rdi), (0x[0-9a-f]+|\d+)$", wop):
+                                num = int(wop.split(", ")[1], 0)
+                            if num is None and wmn == "push" and re.fullmatch(r"(0x[0-9a-f]+|\d+)", wop) and \
+                                    mach == "EM_386":
+                                num = int(wop, 0)   # cdecl: last push before the call is arg0
+                            if hnd is None and wmn in ("lea", "mov", "push", "movabs"):
+                                m = re.search(r"\[rip ([+-]) (0x[0-9a-f]+)\]", wop) if wmn == "lea" else None
+                                m2 = re.search(r"(?:^|, )(0x[0-9a-f]+)$", wop) if not m and "[" not in wop else None
+                                cand = (wa + int(m.group(2), 16) * (1 if m.group(1) == "+" else -1)) if m else \
+                                    int(m2.group(1), 16) if m2 else None
+                                if cand in fset:
+                                    hnd = fname(cand)
+                        if num is not None:
+                            sigs.append((num, hnd))
+                    win = []
+                else:
+                    win.append((a + isz, mn, op))   # next-insn address: rip-relative base
+                    win = win[-24:]
+    sn = [_EH_SIGNUM.get(n, str(n)) for n, _ in sigs]
+    f["signals"] = list(dict.fromkeys(sn))
+    f["signal_numbers"] = list(dict.fromkeys(str(n) for n, _ in sigs))
+    f["signal_handlers"] = list(dict.fromkeys(f"{_EH_SIGNUM.get(n, n)}:{h or 'unknown'}" for n, h in sigs))
+    f["signal_handler_functions"] = list(dict.fromkeys(h for _, h in sigs if h))
+    f["trap_instructions"] = list(dict.fromkeys(traps))
+    f["trap_functions"] = list(dict.fromkeys(tfun))
+    f["int3_anti_debug"] = "true" if "int3" in traps and 5 in [n for n, _ in sigs] else "false"
+    f["has_exception_handlers"] = "true" if f["landing_pads"] or sigs else "false"
+    for k, h in sigs:
+        f.setdefault("handler:" + _EH_SIGNUM.get(k, str(k)), h or "unknown")
+    return _eh_out(f)
+
+
+def _eh_lsda(data, o, va, pc0, rng, pers, f, b64, e, fname, relsym, byaddr, v2o):
+    """Decode one LSDA (gcc_except_table): header, call-site table, action table, ttype table."""
+    p = o
+    lpenc = data[p]
+    p += 1
+    lpstart = pc0
+    if lpenc != 0xFF:
+        lpstart, p = _eh_read_enc(data, p, lpenc, va + p - o, b64, e)
+    ttenc = data[p]
+    p += 1
+    ttbase = None
+    if ttenc != 0xFF:
+        tto, p = _leb(data, p)
+        ttbase = p + tto
+    csenc = data[p]
+    cslen, p = _leb(data, p + 1)
+    cse = p + cslen
+    acts = cse
+    fn = fname(pc0)
+    if pers and pers not in f["personality"]:
+        f["personality"].append(pers)
+    n = 0
+    while p < cse and n < 4096:
+        n += 1
+        st, p = _eh_read_enc(data, p, csenc & 0x0F, 0, b64, e)
+        ln, p = _eh_read_enc(data, p, csenc & 0x0F, 0, b64, e)
+        lp, p = _eh_read_enc(data, p, csenc & 0x0F, 0, b64, e)
+        ac, p = _leb(data, p)
+        if not lp:
+            continue
+        lpa = lpstart + lp
+        f["landing_pads"].append(lpa)
+        f["call_sites"].append(f"{pc0 + st:#x}-{pc0 + st + ln:#x}->{lpa:#x}")
+        if fn not in f["eh_functions"]:
+            f["eh_functions"].append(fn)
+        f.setdefault("handler:" + fn, [])
+        if hex(lpa) not in f["handler:" + fn]:
+            f["handler:" + fn].append(hex(lpa))
+        typed = False
+        if ac:
+            q, guard = acts + ac - 1, 0
+            while q < len(data) and guard < 64:
+                guard += 1
+                filt, q2 = _leb(data, q, signed=True)
+                nxt, q3 = _leb(data, q2, signed=True)
+                if filt > 0 and ttbase is not None:
+                    typed = True
+                    sz = {0x00: 8 if b64 else 4, 0x03: 4, 0x0B: 4, 0x04: 8, 0x0C: 8, 0x02: 2, 0x0A: 2}.get(ttenc & 0x0F, 4)
+                    to = ttbase - filt * sz
+                    tva = va + to - o
+                    tv, _ = _eh_read_enc(data, to, ttenc & 0x7F, tva, b64, e)
+                    nm = None
+                    if not tv:
+                        nm = "..."
+                    else:
+                        if ttenc & 0x80:   # indirect: slot holding the typeinfo pointer
+                            nm = relsym.get(tv)
+                            if nm is None and v2o(tv) is not None:
+                                tv = struct.unpack_from(e + ("Q" if b64 else "I"), data, v2o(tv))[0]
+                        nm = nm or relsym.get(tva) or byaddr.get(tv)
+                    if nm:
+                        nm = nm.split("@")[0]
+                        if nm != "...":
+                            f["catch_typeinfo"].append(nm)
+                        f["catch_types"].append(_eh_demangle_type(nm[4:]) if nm.startswith("_ZTI") else nm)
+                elif filt < 0:
+                    typed = True
+                if not nxt:
+                    break
+                q = q2 + nxt
+        (f["catch_landing_pads"] if typed else f["cleanup_landing_pads"]).append(lpa)
+        if typed and fn not in f["catch_functions"]:
+            f["catch_functions"].append(fn)
+
+
+def _eh_pe(data):
+    import pefile
+    pe = pefile.PE(data=data, fast_load=True)
+    pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_IMPORT"],
+                                           pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_EXCEPTION"]])
+    apis, iat = [], {}
+    for d in getattr(pe, "DIRECTORY_ENTRY_IMPORT", []) or []:
+        for imp in d.imports:
+            if imp.name:
+                nm = imp.name.decode("latin-1")
+                iat[imp.address] = nm
+                if nm in _EH_PE_APIS or nm in ("signal", "raise"):
+                    apis.append(nm)
+    seh = 0
+    for rf in getattr(pe, "DIRECTORY_ENTRY_EXCEPTION", []) or []:
+        ui = getattr(rf, "unwindinfo", None)
+        if ui is not None and getattr(ui, "Flags", 0) & 3:
+            seh += 1
+    f = {"exception_apis": list(dict.fromkeys(apis)), "seh_handler_count": str(seh), "veh_handlers": [],
+         "landing_pads": [], "signals": [], "signal_handlers": [], "trap_instructions": [], "trap_functions": [],
+         "eh_functions": [], "catch_functions": [], "catch_types": [], "call_sites": []}
+    f["personality"], f["landing_pad_count"], f["int3_anti_debug"] = "none", "0", "false"
+    f["has_exception_handlers"] = "true" if apis or seh else "false"
+    return _eh_out(f)
+
+
+def exception_handler_field(data, name):
+    """One exception_handler_facts value by key; `handler:<function>` -> its landing pads, `handler:SIGTRAP` -> the
+    registered handler; "none" for an unknown key / absent field; None when unparseable."""
+    try:
+        if _EH_MEMO[0] is data:
+            f = _EH_MEMO[1]
+        else:
+            f = exception_handler_facts(data)
+            _EH_MEMO[:] = [data, f]
+        if not isinstance(f, dict):
+            return f
+        k = str(name).strip()
+        alias = {"landing_pad": "landing_pads", "signal": "signals", "signal_handler": "signal_handler_functions",
+                 "handlers": "signal_handlers", "catch_type": "catch_types", "veh": "veh_handlers"}
+        k = alias.get(k.lower(), k if k.startswith("handler:") else k.lower())
+        v = f.get(k, "none")
+        if isinstance(v, list) and k.startswith("handler:"):
+            return v or "none"
+        return v
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# --- garble-obfuscated Go (mvdan.cc/garble): randomized pclntab magic, hashed names, blanked buildinfo -----------
+_GO_PCLN_MAGICS = {b"\xfb\xff\xff\xff": "1.2", b"\xfa\xff\xff\xff": "1.16", b"\xf0\xff\xff\xff": "1.18",
+                   b"\xf1\xff\xff\xff": "1.20"}
+_GARBLE_MEMO = [None, None]
+
+
+def _go_pcln_hdr(data, o):
+    """Validate a pclntab header at o (any magic: garble randomizes it) -> (ptrsize, words, layout) or None."""
+    if o < 0 or o + 8 + 8 * 8 > len(data) or data[o + 4:o + 6] != b"\x00\x00" or data[o + 6] not in (1, 2, 4) \
+            or data[o + 7] not in (4, 8):
+        return None
+    p = data[o + 7]
+    w = struct.unpack_from("<8" + ("Q" if p == 8 else "I"), data, o + 8)
+    for n, lay in ((8, "1.18"), (7, "1.16")):
+        hw = w[:n]
+        offs = hw[n - 5:] if lay == "1.18" else hw[2:]
+        if not (0 < hw[0] < 1 << 20 and offs[0] == 8 + n * p and all(a <= b for a, b in zip(offs, offs[1:]))
+                and o + offs[-1] + 8 < len(data)):
+            continue
+        return p, hw, lay
+    return None
+
+
+def _go_pcln_find(data):
+    """File offset of the Go pclntab: ELF .gopclntab section, else a bounded header scan (PE .rdata / stripped)."""
+    if data[:4] == b"\x7fELF":
+        try:
+            from elftools.elf.elffile import ELFFile
+            s = ELFFile(io.BytesIO(data)).get_section_by_name(".gopclntab")
+            if s is not None and _go_pcln_hdr(data, s["sh_offset"]):
+                return s["sh_offset"]
+        except Exception:  # noqa: BLE001 - fall through to the scan
+            pass
+    for m in _GO_PCLN_RE.finditer(data):
+        o = m.start()
+        if o % 4 == 0 and _go_pcln_hdr(data, o):
+            return o
+    return None
+
+
+_GO_PCLN_RE = re.compile(rb"(?s)....\x00\x00[\x01\x02\x04][\x04\x08](?=[^\x00]...)")
+
+
+def _go_pcln_funcs(data, o, cap=200000):
+    """[(entry offset, name)] from the pclntab functab in entry order (1.16 and 1.18+ layouts)."""
+    p, w, lay = _go_pcln_hdr(data, o)
+    nfunc = w[0]
+    if lay == "1.18":
+        fname, pcln = o + w[3], o + w[7]
+        ent, fmt = 8, "<II"
+    else:
+        fname, pcln = o + w[2], o + w[6]
+        ent, fmt = 2 * p, "<" + ("QQ" if p == 8 else "II")
+    out = []
+    for k in range(min(nfunc, cap)):
+        q = pcln + k * ent
+        if q + ent > len(data):
+            break
+        e, fo = struct.unpack_from(fmt, data, q)
+        fq = pcln + fo + (4 if lay == "1.18" else p)
+        if fq + 4 > len(data):
+            break
+        no = struct.unpack_from("<i", data, fq)[0]
+        s = fname + no
+        if not 0 <= s < len(data):
+            continue
+        z = data.find(b"\x00", s, s + 4096)
+        out.append((e, data[s:z if z > 0 else s].decode("utf-8", "replace")))
+    return out
+
+
+def garble_facts(data):
+    """Go build obfuscated by garble? Pure pclntab/buildinfo parse. {has_garble true/false, pclntab_magic (8 hex),
+    pclntab_magic_known true/false, go_version (buildinfo version; garble writes "unknown"), buildinfo_stripped
+    true/false (version "unknown"/empty and no module path), go_module_path, func_count, file_count (pclntab nfunc /
+    nfiles), garble_tiny (-tiny: file table collapsed, nfiles*4 < nfunc), main_functions [main.* names in entry
+    order: garble keeps main.main / main.init and hashes the rest], literal_closures (count of `<pkg>.init.funcN`
+    closures garble -literals emits for package-level string vars), literals_recovered "none" (not decrypted)}.
+    Not a Go binary -> None; Go but unreadable pclntab -> has_garble from buildinfo only."""
+    try:
+        if _GARBLE_MEMO[0] is data:
+            return _GARBLE_MEMO[1]
+        f = None
+        bi = data.find(_GO_BI_MAGIC)
+        o = _go_pcln_find(data)
+        if bi < 0 and o is None:
+            f = None
+        else:
+            ver, mod = (None, None)
+            if bi >= 0:
+                try:
+                    ver, mod = _go_buildinfo_parse(data, None, "<")
+                except Exception:  # noqa: BLE001
+                    ver, mod = None, None
+            path = "none"
+            for ln in (mod or "").splitlines():
+                if ln.startswith("path\t"):
+                    path = ln[5:].strip() or "none"
+            bstrip = (not ver or ver == "unknown") and path == "none"
+            f = {"go_version": ver or "none", "buildinfo_stripped": "true" if bstrip else "false",
+                 "go_module_path": path, "pclntab_magic": "none", "pclntab_magic_known": "none",
+                 "func_count": "none", "file_count": "none", "garble_tiny": "false", "main_functions": "none",
+                 "literal_closures": "0", "literals_recovered": "none"}
+            known = None
+            if o is not None:
+                mg = data[o:o + 4]
+                known = mg in _GO_PCLN_MAGICS
+                _, w, _ = _go_pcln_hdr(data, o)
+                fn = _go_pcln_funcs(data, o)
+                f.update(pclntab_magic=mg.hex(), pclntab_magic_known="true" if known else "false",
+                         func_count=str(w[0]), file_count=str(w[1]))
+                mains = [n for _, n in sorted(fn) if n.startswith("main.")]
+                f["main_functions"] = mains or "none"
+                f["literal_closures"] = str(sum(1 for _, n in fn if re.fullmatch(r"[\w/.-]+\.init\.func\d+", n)))
+            garble = (known is False) or (known is None and ver == "unknown")
+            f["has_garble"] = "true" if garble else "false"
+            if garble and o is not None and int(f["file_count"]) * 4 < int(f["func_count"]):
+                f["garble_tiny"] = "true"
+        _GARBLE_MEMO[:] = [data, f]
+        return f
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def garble_field(data, name):
+    """One garble_facts value by key ("garble"/"is_garble" -> has_garble); "none" for an unknown key, None when not Go."""
+    f = garble_facts(data)
+    if not isinstance(f, dict):
+        return f
+    k = str(name).strip().lower()
+    k = {"garble": "has_garble", "is_garble": "has_garble", "garbled": "has_garble", "tiny": "garble_tiny",
+         "magic": "pclntab_magic", "module_path": "go_module_path"}.get(k, k)
+    return f.get(k, "none")

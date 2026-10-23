@@ -1,0 +1,14 @@
+{
+ "encoding": "envkey-body",
+ "expected_offset": 8256,
+ "expected_config": {
+  "c2": "198.51.100.61:443",
+  "campaign": "analysis-only",
+  "sleep": 15,
+  "flag": "flag{sh4_k3y3d_b0dy}"
+ },
+ "note": "C ELF (gcc -O2): plain HCFG header, body ^ sha256('analysis') (32-byte key) ^ header xor byte, env HCTF_SITE; runtime check: HCTF_SITE=analysis ./envkey_elf_sha256_body.bin",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/envkey_gen.sh  # python hashlib/zlib blob writer + gcc (C ELF) / dotnet 10 csc (C# dll)",
+ "oracle_cmd": "sh envkey_oracle.sh envkey_elf_sha256_body.bin sha256 analysis body",
+ "oracle_output": "{\"offset\": 8256, \"config\": {\"c2\": \"198.51.100.61:443\", \"campaign\": \"analysis-only\", \"sleep\": 15, \"flag\": \"flag{sh4_k3y3d_b0dy}\"}}"
+}

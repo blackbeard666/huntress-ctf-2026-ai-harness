@@ -1,0 +1,14 @@
+{
+ "encoding": "managed-base64",
+ "expected_offset": 1989,
+ "expected_config": {
+  "c2": "192.0.2.150:8080",
+  "campaign": "managed-vb",
+  "sleep": 50,
+  "flag": "flag{chrw_4r1thm3t1c_vb}"
+ },
+ "decoy": false,
+ "convention": "VB.NET Function D(s As String): r &= ChrW(AscW(s.Chars(i)) - 3) (Strings.ChrW + Conversions.ToString(char) + String.Concat); plain text = base64(HCFG blob); offset = first stored byte of the ciphertext operand",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/msdec_gen.sh tests/data/binary_fixtures   # dotnet 10 SDK (dotnet build C#/VB), javac; blob = printf header + crc32 from gzip trailer; ciphertext by perl; <name>.plain = the compiled program's own stdout (dotnet app.dll / java A)",
+ "oracle_cmd": "python3 -I tests/data/binary_fixtures/msdec_oracle.py tests/data/binary_fixtures vb_chrw   # program stdout -> base64 -> struct + zlib.crc32 + json; offset = bytes.find of the re-enciphered operand (UTF-16LE #US / FieldRVA bytes / CONSTANT_Utf8)"
+}

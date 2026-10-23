@@ -1,0 +1,9 @@
+{
+ "codec": "bigradix-b85-little",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "encoded": "(dx?_ArURc*kj*{0#*4A(7SQM+k9PC0coB%*&hM7#9!NNycJVB}u+@BLD_Vd4N!XA`hxnDRbc(<W~~EF7mV)*p4}y<<vpD@xhHpHKN$+NHJtc?CWGx}&L34AB!{%DvJ1",
+ "expected": "match",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c0 | tr a-f A-F | sed 's/^/obase=85; ibase=16; /' | BC_LINE_LENGTH=0 bc | awk '{A=ENVIRON[\"ALPHA\"]; for(i=NF;i>=1;i--) printf \"%s\", substr(A, $i+1, 1)}'  # GNU bc radix-85 digit groups -> ALPHA=\"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~\" (digits reversed)",
+ "oracle_cmd": ".venv/bin/python -I -c \"import sys,base58;t=sys.stdin.read().rstrip('\\\\n');A=sys.argv[1];t=t[::-1] if sys.argv[2]=='little' else t;n=base58.b58decode_int(t.encode(),alphabet=A.encode());b=n.to_bytes((n.bit_length()+7)//8,sys.argv[3]);print(b.decode())\" \"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~\" little big  # pip base58 2.1 b58decode_int(alphabet=A) over len(A) radix",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17"
+}

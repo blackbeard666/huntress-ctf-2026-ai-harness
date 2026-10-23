@@ -1,0 +1,7 @@
+{
+ "description": "game-script-language-route (pwn): hex(base64(plan)) with ^ddd; escapes under #pragma ctrlchar '^'",
+ "expected_plain": "v=3|language=pawn|role=staged_chain|verdict=suspicious|attack=T1105|adapter=operator_graph|host_profile=standalone|obfuscation_profile=hex_base64|stage_count=3|campaign_id=PAWN-e7f8091a|url=https://pawn-e7f8091a.example.invalid/stage|file_path=/tmp/huntress-pawn/.e7f8091a.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/gsl_gen.py OUT  # stdlib base64/binascii/json writer; fixture gsl_pawn_ctrlchar (hex(base64(plan)) with ^ddd; escapes under #pragma ctrlchar '^')",
+ "oracle_cmd": "perl -ne 'print $1=~s/\\^(\\d+);/chr $1/ger if /\\[\\] = \"([^\"]+)\"/' gsl_pawn_ctrlchar.pwn | xxd -r -p | base64 -d"
+}

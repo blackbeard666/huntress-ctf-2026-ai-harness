@@ -1,0 +1,7 @@
+{
+ "description": "game-script-language-route (mcfunction): base64(plan), single-quoted SNBT split by backslash continuation",
+ "expected_plain": "v=3|language=mcfunction|role=downloader|verdict=suspicious|attack=T1105|adapter=operator_graph|host_profile=standalone|obfuscation_profile=hex_base64|stage_count=3|campaign_id=MCFUNCTION-f8091a2b|url=https://mcfunction-f8091a2b.example.invalid/stage|file_path=/tmp/huntress-mcfunction/.f8091a2b.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/gsl_gen.py OUT  # stdlib base64/binascii/json writer; fixture gsl_mcfunction_continued (base64(plan), single-quoted SNBT split by backslash continuation)",
+ "oracle_cmd": "perl -0pe 's/\\\\\\n\\s*//g' gsl_mcfunction_continued.mcfunction | grep -oP \"set value '\\K[^']+\" | base64 -d"
+}

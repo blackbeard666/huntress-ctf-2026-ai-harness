@@ -1,0 +1,7 @@
+{
+ "description": "game-script-language-route (uc): hex(base64(plan))",
+ "expected_plain": "v=3|language=unrealscript|role=downloader|verdict=suspicious|attack=T1105|adapter=operator_graph|host_profile=standalone|obfuscation_profile=hex_base64|stage_count=3|campaign_id=UNREALSCRIPT-a3b4c5d6|url=https://unrealscript-a3b4c5d6.example.invalid/stage|file_path=/tmp/huntress-unrealscript/.a3b4c5d6.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/gsl_gen.py OUT  # stdlib base64/binascii/json writer; fixture gsl_unrealscript_defprops (hex(base64(plan)))",
+ "oracle_cmd": "grep -oP '^\\tDescriptor_\\w+=\"\\K[^\"]+' gsl_unrealscript_defprops.uc | xxd -r -p | base64 -d"
+}

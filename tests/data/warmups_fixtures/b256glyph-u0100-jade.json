@@ -1,0 +1,9 @@
+{
+ "codec": "glyph-bytes-u0100",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-88",
+ "encoded": "ŎũţťĠŷůŲūĠŤťţůŤũŮŧĠŴŨũųĠŷšŲŭŵŰġĠŔůĠųůŬŶťĬĠųŵŢŭũŴĠŴŨũųĠťŸšţŴĠšŮųŷťŲĠŴůĠŴŨťĠŇšŭťĠōšųŴťŲĺĠŪšŤťĭŨťŲůŮĭĸĸ",
+ "generator_cmd": "printf %s \"$plain\" | node -e 'let d=\"\";process.stdin.on(\"data\",c=>d+=c).on(\"end\",()=>process.stdout.write([...Buffer.from(d)].map(b=>String.fromCodePoint(0x100+b)).join(\"\")))'  # node Buffer bytes -> U+0100+byte",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -CI -0777 -ne 'print map { chr(ord($_) - 0x100) } split //'  # perl code points - 0x100",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-88",
+ "expected": "match"
+}

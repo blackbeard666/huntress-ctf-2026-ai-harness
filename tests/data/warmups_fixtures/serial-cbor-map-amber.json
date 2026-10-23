@@ -1,0 +1,9 @@
+{
+ "codec": "serialization-wrapper[cbor]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-gecko-30",
+ "encoded": "omR0ZXh0eGVOaWNlIHdvcmsgZGVjb2RpbmcgdGhpcyB3YXJtdXAhIFRvIHNvbHZlLCBzdWJtaXQgdGhpcyBleGFjdCBhbnN3ZXIgdG8gdGhlIEdhbWUgTWFzdGVyOiBhbWJlci1nZWNrby0zMGF2OQHz",
+ "generator_cmd": "python3 -c 'import cbor2,base64,os;print(base64.b64encode(cbor2.dumps({\"text\":os.environ[\"plain\"],\"v\":-500})).decode())'",
+ "oracle_cmd": "python3 -c 'import cbor2,base64,os;print(cbor2.loads(base64.b64decode(os.environ[\"encoded\"]))[\"text\"])'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-gecko-30",
+ "expected": "match"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "clean_device_scan",
+ "expected": "ANS-8c1e5a07d3f92b64",
+ "_why": "Guard.key folds verdicts: /proc/self/maps lines with frida/gadget/xposed/substrate, /memfd r-xp, [anon:dalvik-, libart.so are candidates, only frida-agent/frida-gadget/libgadget.so/XposedBridge.jar/libsubstrate or a non-jit-cache /memfd exec map is REAL (rest counted as false positives); /proc/net/tcp local port parsed (:69A2/:69A3 real, a bare 69A2 in a peer address is a false positive); Debug.isDebuggerConnected",
+ "generator_cmd": "python3 tests/data/android_fixtures/fpenv_src/gen_fpenv.py maps_tcp tests/data/android_fixtures/fpenv_maps_tcp.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: unshare -rn java -cp <javac out> com.huntress.mobile.d23.fpenv.Probe -> Vault.reveal(ctx) on the host JVM (a real uninstrumented process in a fresh netns: its own /proc/self/maps, empty /proc/net/tcp, CNFE for hook classes, stub stock package list) -> 'ANS-8c1e5a07d3f92b64'"
+}

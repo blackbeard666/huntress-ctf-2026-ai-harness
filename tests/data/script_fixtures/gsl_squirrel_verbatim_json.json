@@ -1,0 +1,7 @@
+{
+ "description": "game-script-language-route (nut): raw JSON plan in @\"..\" with \"\" doubling, split over 2 lines",
+ "expected_plain": "{\"v\":3,\"plan\":\"v=3|language=squirrel|role=downloader|verdict=suspicious|attack=T1105|adapter=operator_graph|host_profile=standalone|obfuscation_profile=hex_base64|stage_count=3|campaign_id=SQUIRREL-d6e7f809|url=https://squirrel-d6e7f809.example.invalid/stage|file_path=/tmp/huntress-squirrel/.d6e7f809.stage\"}",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/gsl_gen.py OUT  # stdlib base64/binascii/json writer; fixture gsl_squirrel_verbatim_json (raw JSON plan in @\"..\" with \"\" doubling, split over 2 lines)",
+ "oracle_cmd": "perl -0ne 'print $1 =~ s/\\n//gr =~ s/\"\"/\"/gr if /@\"((?:[^\"]|\"\")*)\"/' gsl_squirrel_verbatim_json.nut"
+}

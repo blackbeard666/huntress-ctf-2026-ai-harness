@@ -1,0 +1,10 @@
+{
+ "codec": "base58check-ripple",
+ "plain": null,
+ "encoded": "12X1w6Yisa5f2jgYvjZTtmEBb6YmxGLFtUBgN6bzQ4oh3E2QMpLtPsXW8QJJgagZEdj9ucMRW2r1N7UnajQSzXeN8niHMBPBSwSAJMVGaNNw5ydABmeLtXvxm33RA41UAY2bR92eVfbyyhEa4",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "pip base58 b58encode_check(b'\\0'+plain) with the BITCOIN alphabet: wrong alphabet for Ripple",
+ "oracle_cmd": "printf %s \"$encoded\" | NM=$PWD/tools/npm-bech32/node_modules tools/node/bin/node tests/data/warmups_fixtures/chkbase_oracle.mjs ripplecheck",
+ "oracle_plain": null
+}

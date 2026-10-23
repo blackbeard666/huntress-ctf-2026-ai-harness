@@ -1,0 +1,10 @@
+{
+ "codec": "bech32m",
+ "plain": null,
+ "encoded": "flag1fe5kxefqwahhy6eqv3jkxmmyd9hxwgr5dp5hxgrhv9ex6atsyys9gmeqwdhkcan99ss8xatzd45hggr5dp5hxgr90pskxapqv9h8xam9wgs8gmeqw35x2gz8v9kk2gzdv9ehgetj8gsx6ctsd3jj66r9wfhkutf38y8azw67",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "pip embit bech32_encode(Encoding.BECH32, 'flag', ...): a bech32 (const 1) string, not bech32m",
+ "oracle_cmd": "printf %s \"$encoded\" | NM=$PWD/tools/npm-bech32/node_modules tools/node/bin/node tests/data/warmups_fixtures/chkbase_oracle.mjs bech32m",
+ "oracle_plain": null
+}

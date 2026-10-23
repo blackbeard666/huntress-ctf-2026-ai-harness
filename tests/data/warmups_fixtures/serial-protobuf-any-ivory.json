@@ -1,0 +1,9 @@
+{
+ "codec": "serialization-wrapper[protobuf]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-ferret-22",
+ "encoded": "Ci90eXBlLmdvb2dsZWFwaXMuY29tL2dvb2dsZS5wcm90b2J1Zi5TdHJpbmdWYWx1ZRJoCmZOaWNlIHdvcmsgZGVjb2RpbmcgdGhpcyB3YXJtdXAhIFRvIHNvbHZlLCBzdWJtaXQgdGhpcyBleGFjdCBhbnN3ZXIgdG8gdGhlIEdhbWUgTWFzdGVyOiBpdm9yeS1mZXJyZXQtMjI=",
+ "generator_cmd": "python3 -c 'import base64,os;from google.protobuf import wrappers_pb2,any_pb2;a=any_pb2.Any();a.Pack(wrappers_pb2.StringValue(value=os.environ[\"plain\"]));print(base64.b64encode(a.SerializeToString()).decode())'",
+ "oracle_cmd": "python3 -c 'import base64,os;from google.protobuf import wrappers_pb2,any_pb2;a=any_pb2.Any();a.ParseFromString(base64.b64decode(os.environ[\"encoded\"]));v=wrappers_pb2.StringValue();a.Unpack(v);print(v.value)'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-ferret-22",
+ "expected": "match"
+}

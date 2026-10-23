@@ -1,0 +1,9 @@
+{
+ "codec": "base85-any",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-25",
+ "encoded": "C?KE=f+e!25cZBYE0PG$xUn<gr:GfoZpF)KaV1+][INO1[17iu!k!a]Y5-YOYTaw&M1fpLp}gx+uF@>eA@qo4Q<#A.g>+<&XjE?<[T%ehwV2b@/]<{n7@6[{bWy",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c 'import sys,zlib;print(zlib.compress(sys.stdin.buffer.read(),9).hex())' | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/b85sweep_cyberchef.mjs z85 hexin  # CyberChef To Base85 'Z85' alphabet over a zlib stream (partial last group truncated)",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl z85 | python3 -I -c 'import sys,zlib;sys.stdout.write(zlib.decompress(sys.stdin.buffer.read()).decode())'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-25",
+ "expected": "match"
+}

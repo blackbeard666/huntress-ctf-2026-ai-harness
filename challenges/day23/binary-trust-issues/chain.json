@@ -1,0 +1,11 @@
+{
+  "stage": "single_solve:generalizing",
+  "name": "\u2699\ufe0f Trust Issues",
+  "lane": "binary-reverse-engineering",
+  "worker": null,
+  "updated": "2026-10-23T21:53:12",
+  "launches": 1,
+  "attempt": 1,
+  "time_trial_result": "correct",
+  "mastery_result": "correct"
+}

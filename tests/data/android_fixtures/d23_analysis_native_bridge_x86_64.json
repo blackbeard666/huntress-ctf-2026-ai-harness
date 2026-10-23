@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-FB40A37095232860",
+ "generator_cmd": "GM D23 'Hook Line and Signal' Mastery 1d39aa76 set5 APK (codec: analysis, no data; Release.token() -> Util.nativeSecret03 -> static native long nativeShare(long) in lib/x86_64/libarena.so; dex literal decoy ANS-0123456789ABCDEF)",
+ "oracle_cmd": "GM-confirmed set5.answer (mastery/confirmed.json); independently: jadx -d j <apk> (Release/Core/Mix/Guard/Util/NativeLibrarySecrets .java) + stub android/content/Context.java + Main.java printing Release.code(null); javac -d out $(find . -name '*.java'); java -Djava.library.path=. -cp out Main  (harness validated: with set5's own lib/x86_64/libarena.so it prints the GM-confirmed ANS-FB40A37095232860) with -Djava.library.path=lib/x86_64"
+}

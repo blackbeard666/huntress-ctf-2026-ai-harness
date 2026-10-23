@@ -1,0 +1,8 @@
+{
+ "entry": "integrity_verdict_scan",
+ "expected": "ANS-c71f2a9e04b85d36",
+ "decoy": false,
+ "_why": "legacy SafetyNet RS256 JWS strings in res/raw/attest.json 'attempts' (+ one Play Integrity tokenPayloadExternal UNEVALUATED); clean = ctsProfileMatch+basicIntegrity true, HARDWARE_BACKED, nonce = base64(sha256(res/raw/session.json challenge)), apkCertificateDigestSha256 = signer",
+ "generator_cmd": "PYTHONPATH=tools/pylib python3 tests/data/android_fixtures/ivs_src/gen.py tests/data/android_fixtures  # keytool -genkeypair (signer) + json / jwcrypto RS256 JWS + python zipfile + apksigner sign (v1+v2)",
+ "oracle_cmd": "sh tests/data/android_fixtures/ivs_src/oracle.sh legacy tests/data/android_fixtures/ivs_safetynet_jws.apk  # keytool -printcert -jarfile (signer sha256) + unzip -p | jq select(clean verdict) / openssl dgst nonce  # -> ANS-c71f2a9e04b85d36"
+}

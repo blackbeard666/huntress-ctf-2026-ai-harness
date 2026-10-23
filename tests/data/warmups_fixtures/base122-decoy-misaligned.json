@@ -1,0 +1,10 @@
+{
+ "codec": "base122",
+ "plain": null,
+ "encoded": "\u001a,6)\u0001no9\u001ad\u0006#\u0015Fo2\u001a-f9\u0001hh4פ\u0007;\u0005dm:ք\u0012\u0002Q^ 9[mG3\u0014X 9],ӫ%h :\u001aʗ\u0019\u0001Jx0XnB\u0003\u0005׳;Y.΃Q^ :\u001a\fR\u0002\u001dBm2H\tV\u000bMhe9\u000eD\u0006k\u0005`l2K-w#QJr\u0016M\u0006\u0010",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "base122-maple's encoded with its first char dropped (every 7-bit group shifted): decodes to non-UTF-8 bytes",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;sys.path.insert(0,'tools/pip-base122');import base122;print(base122.b122decode([ord(c) for c in sys.stdin.buffer.read().decode('utf-8')]).decode('utf-8'))\"  # PyPI base122==2026.10.18 b122decode (kevinAlbs decode.js port; takes code points, like charCodeAt)  -> rejects: reference decode -> bytes 34b1b2903bb7b935903232b1..., not UTF-8 text (invalid start byte at 1)",
+ "oracle_plain": null
+}

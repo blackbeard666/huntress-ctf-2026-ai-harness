@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "_why": "near-miss: the same chain xor System.nanoTime() -> the JVM prints a different code every run; nothing static to evaluate",
+ "generator_cmd": "python3 tests/data/android_fixtures/pstatmemo_src/gen_pstatmemo.py decoy_runtime tests/data/android_fixtures/pstatmemo_decoy_runtime.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/pstatmemo_src/oracle.sh tests/data/android_fixtures/pstatmemo_decoy_runtime.apk  # d2j-dex2jar back to classes, RUN Release.code() twice on the JVM -> two different values (runtime-dependent)",
+ "decoy": true
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "serialization-wrapper[protobuf]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-bison-67",
+ "encoded": "Cm4KA21zZxJnGmVOaWNlIHdvcmsgZGVjb2RpbmcgdGhpcyB3YXJtdXAhIFRvIHNvbHZlLCBzdWJtaXQgdGhpcyBleGFjdCBhbnN3ZXIgdG8gdGhlIEdhbWUgTWFzdGVyOiBtYXBsZS1iaXNvbi02Nw==",
+ "generator_cmd": "python3 -c 'import base64,os;from google.protobuf import struct_pb2;m=struct_pb2.Struct();m.update({\"msg\":os.environ[\"plain\"]});print(base64.b64encode(m.SerializeToString()).decode())'",
+ "oracle_cmd": "python3 -c 'import base64,os;from google.protobuf import struct_pb2;m=struct_pb2.Struct();m.ParseFromString(base64.b64decode(os.environ[\"encoded\"]));print(m[\"msg\"])'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-bison-67",
+ "expected": "match"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "base65536",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "encoded": "鹎驣𔔠𓁯啫驤𒁣鹤鱮𓈠鹨啳陷ꕲ𒅵唡𒁔𓄠ꍯ驶唬𓍳ꕢ𓉩𓈠鹨啳𖡥顡啴𐙡𔕳𓁥𓈠啯鵴啥陇驭舠𓅡驴潲頠靯ꍡ扴驨𒁲扮氱",
+ "expected": "match",
+ "generator_cmd": "printf %s \"$plain\" | tools/node/bin/node --input-type=module -e \"import {encode} from './tools/npm-base65536/node_modules/base65536/src/index.js';import fs from 'fs';process.stdout.write(encode(fs.readFileSync(0)))\"  # qntm reference npm base65536@5.0.0 encode",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;sys.path.insert(0,'$PYLIB');import base65536;print(base65536.decode(sys.stdin.read()).decode())\"  # sublee PyPI base65536==0.1.1 (+six) decode, pip install --target $PYLIB",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17"
+}

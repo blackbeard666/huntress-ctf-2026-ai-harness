@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-E4F679E90A7D1CAE",
+ "generator_cmd": "GM D23 'Hook Line and Signal' Time Trial 2deb0b14 APK (codec: analysis, no data; dex literal decoy ANS-0123456789ABCDEF)",
+ "oracle_cmd": "GM-confirmed TT 2deb0b14 answer; jadx Release.code() = 64-bit mixer chain over 4096-step probe solvers"
+}

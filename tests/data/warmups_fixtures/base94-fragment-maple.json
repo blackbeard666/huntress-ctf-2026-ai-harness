@@ -1,0 +1,9 @@
+{
+ "codec": "base94",
+ "plain": "maple",
+ "encoded": "a\",O*H",
+ "expected": "match",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c0 | tr a-f A-F | sed 's/^/obase=94; ibase=16; /' | BC_LINE_LENGTH=0 bc | tr -s ' ' '\\n' | grep . | awk '{printf \"%c\", $1+33}'  # GNU bc radix-94 digit groups -> chr(d+33)",
+ "oracle_cmd": ".venv/bin/python -I -c \"import sys;from Crypto.Util.number import long_to_bytes;t=sys.stdin.read().rstrip('\\n');n=0\nfor c in t: n=n*94+ord(c)-33\nprint(long_to_bytes(n).decode())\"  # pycryptodome long_to_bytes over the radix-94 digits",
+ "oracle_plain": "maple"
+}

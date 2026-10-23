@@ -1,0 +1,14 @@
+{
+ "encoding": "envkey-xor",
+ "expected_offset": 3304,
+ "expected_config": {
+  "c2": "203.0.113.88:9443",
+  "campaign": "dotnet-truth",
+  "sleep": 25,
+  "flag": "flag{cs_sha256_w0rkst4t10n}"
+ },
+ "note": "C# dll (dotnet build, csc): static byte[] (FieldRVA) ^ SHA256.HashData(UTF8('workstation')); literal in #US as UTF-16",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/envkey_gen.sh  # python hashlib/zlib blob writer + gcc (C ELF) / dotnet 10 csc (C# dll)",
+ "oracle_cmd": "sh envkey_oracle.sh envkey_cs_sha256.bin sha256 workstation whole",
+ "oracle_output": "{\"offset\": 3304, \"config\": {\"c2\": \"203.0.113.88:9443\", \"campaign\": \"dotnet-truth\", \"sleep\": 25, \"flag\": \"flag{cs_sha256_w0rkst4t10n}\"}}"
+}

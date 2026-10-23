@@ -1,0 +1,19 @@
+{
+ "encoding": "smc-raw",
+ "expected_offset": 12288,
+ "expected_config": {
+  "campaign": "smc-data",
+  "mutex": "Global\\smc_cfgx",
+  "port": 8443,
+  "id": "SMC-2C9A"
+ },
+ "expected_facts": {
+  "decrypted_offset": 12288,
+  "decrypted_size": 90,
+  "xor_key": "none"
+ },
+ "decoy": false,
+ "generator_cmd": "bash smc_gen.sh data_lcg   # gcc + python3 stdlib (struct/zlib) blob writer + python3 post-link xor patch (readelf -sW symbol range)",
+ "oracle_cmd": "bash smc_oracle.sh data_lcg   # runs the program natively (it self-decrypts and prints the blob; python3 zlib.crc32/json check), readelf -SW / -sW / -lW + objdump -d of a python3-decrypted copy for offsets",
+ "note": "gcc -O2 PIE; raw blob in a read-only .cfgx section under an LCG keystream (k = k*0x6d+0x3b, seed 0x91; not a repeating xor), mprotect(RW) + in-place decrypt + fwrite; offset = .cfgx file offset"
+}

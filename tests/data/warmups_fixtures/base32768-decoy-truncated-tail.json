@@ -1,0 +1,10 @@
+{
+ "codec": "base32768",
+ "plain": null,
+ "encoded": "䵴缹䩎鵗㦙ᆑ焦闄嬗䀈㓍⋗㽃菥謺鯐㛐㭛詮嵖訓㫰杆鯂崔荨㓍⋗㽃㰡椦骀圗䌝錎䡇䦹ሑ眪䚇圖羨❌㵷䥫潈机蟐岒熻铮沷㞩",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "base32768 sentence from the generator above with its final (padding) char dropped -- truncated, padding bits no longer all 1s",
+ "oracle_cmd": "printf %s \"$encoded\" | tools/node/bin/node --input-type=module -e \"import {decode} from './tools/npm-base65536/node_modules/base32768/src/index.js';import fs from 'fs';process.stdout.write(Buffer.from(decode(fs.readFileSync(0,'utf8'))).toString())\"  # qntm reference npm base32768@5.0.1 decode  -> rejects: Error: Padding mismatch",
+ "oracle_plain": null
+}

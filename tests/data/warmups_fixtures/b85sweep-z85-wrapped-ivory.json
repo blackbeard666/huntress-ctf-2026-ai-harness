@@ -1,0 +1,9 @@
+{
+ "codec": "base85-any",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-crane-24242",
+ "encoded": "phaiHaA}:AyANe0v@C)(zF78lxLzJgCvtJeB-nGDrbS[2z!%PdefG1RvR]?3\naARphB0b4svpKy4vqZdgwPw]nzY<dnwGTGKzdK?:vrlK4AYLsSC5IzDeN@*f\nzE>yPg+{)y",
+ "generator_cmd": "printf %s \"$plain\" | basenc --z85 -w 60  # GNU coreutils basenc --z85 (needs len%4==0), wrapped at 60 cols",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl z85",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-crane-24242",
+ "expected": "match"
+}

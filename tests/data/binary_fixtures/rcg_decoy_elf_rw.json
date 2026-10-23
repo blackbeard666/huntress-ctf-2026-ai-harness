@@ -1,0 +1,20 @@
+{
+ "family": "runtime_codegen",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "has_runtime_codegen": "false",
+  "codegen_kind": "none",
+  "emitted_opcodes": "none",
+  "emitted_instructions": "none",
+  "emitted_constant": "none",
+  "emitted_constant_hex": "none",
+  "emitted_bytes": "none"
+ },
+ "generator_cmd": "bash rcg_gen.sh .   # gcc -O2 d.c: opcode bytes copied into an RW-only mapping, never executable",
+ "oracle_cmd": "python3 rcg_oracle.py rcg_decoy_elf_rw.bin   # objdump -d/-s + objdump -D -b binary (native) / ilspycmd -il (.NET); no capstone, no dnfile",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, int",
+ "decoy": true,
+ "note": "lib.binary.runtime_codegen_field(data, key) per expected_facts key; key vocabulary SPECULATIVE (GM label not seen)"
+}

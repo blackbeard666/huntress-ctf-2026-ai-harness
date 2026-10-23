@@ -1,0 +1,9 @@
+{
+ "codec": "glyph-bytes-braille",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "⡎⡩⡣⡥⠠⡷⡯⡲⡫⠠⡤⡥⡣⡯⡤⡩⡮⡧⠠⡴⡨⡩⡳⠠⡷⡡⡲⡭⡵⡰⠡⠠⡔⡯⠠⡳⡯⡬⡶⡥⠬⠠⡳⡵⡢⡭⡩⡴⠠⡴⡨⡩⡳⠠⡥⡸⡡⡣⡴⠠⡡⡮⡳⡷⡥⡲⠠⡴⡯⠠⡴⡨⡥⠠⡇⡡⡭⡥⠠⡍⡡⡳⡴⡥⡲⠺⠠⡡⡭⡢⡥⡲⠭⡦⡡⡬⡣⡯⡮⠭⠴⠲",
+ "generator_cmd": "printf %s \"$plain\" | perl -CO -0777 -ne 'print map { chr(0x2800 + ord) } split //'  # perl: one Braille cell U+2800+byte per byte",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -c 'import sys,unicodedata as u;print(bytes(sum(1<<(int(d)-1) for d in (u.name(c).split(\"DOTS-\")[1] if \"DOTS-\" in u.name(c) else \"\")) for c in sys.stdin.read()).decode())'  # Unicode names BRAILLE PATTERN DOTS-n.. -> dot bits",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

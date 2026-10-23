@@ -1,0 +1,7 @@
+using UnityEngine;
+// Unity MonoBehaviour loader
+public class HuntressLoader : MonoBehaviour
+{
+    [SerializeField] private string descriptor_b4c5d6e7 = "dj0zfGxhbmd1YWdlPXVuaXR5X2NzaGFycHxyb2xlPWxhdW5jaGVyfHZlcmRpY3Q9c3VzcGljaW91c3xhdHRhY2s9VDExMDV8YWRhcHRlcj1vcGVyYXRvcl9ncmFwaHxob3N0X3Byb2ZpbGU9c3RhbmRhbG9uZXxvYmZ1c2NhdGlvbl9wcm9maWxlPWhleF9iYXNlNjR8c3RhZ2VfY291bnQ9M3xjYW1wYWlnbl9pZD1VTklUWV9DU0hBUlAtYjRjNWQ2ZTd8dXJsPWh0dHBzOi8vdW5pdHlfY3NoYXJwLWI0YzVkNmU3LmV4YW1wbGUuaW52YWxpZC9zdGFnZXxmaWxlX3BhdGg9L3RtcC9odW50cmVzcy11bml0eV9jc2hhcnAvLmI0YzVkNmU3LnN0YWdl";
+    void Start() { Debug.Log("ready"); }
+}

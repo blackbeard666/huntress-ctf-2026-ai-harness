@@ -1,4 +1,4 @@
-"""SQLite 3 database fields (prebuilt, SPECULATIVE -- never GM-asked yet).
+"""SQLite 3 database fields (prebuilt, SPECULATIVE -- page_size_bytes GM-verified D23, registered in lib.meta._BUILTIN).
 
 Header (sqlite.org/fileformat2.html, 100 bytes, BIG-endian): "SQLite format 3\\0" @0, page size u16 @16 (1 = 65536),
 write/read version u8 @18/@19 (1 legacy, 2 WAL), reserved bytes per page u8 @20, file change counter u32 @24, in-header
@@ -27,7 +27,6 @@ from ..spell import Hex
 
 FIELDS = {
     ("sqlite", "page_size"): "sqlite_value",
-    ("sqlite", "page_size_bytes"): "sqlite_value",
     ("sqlite", "header_page_size"): "sqlite_value",
     ("sqlite", "database_page_size"): "sqlite_value",
     ("sqlite", "text_encoding"): "sqlite_value",

@@ -1,0 +1,26 @@
+{
+ "family": "predicate_branch",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "host_model_env": "none",
+  "host_models": "none",
+  "branch_for_analysis": "none",
+  "event_count_for_analysis": "none",
+  "analysis_detected_for_analysis": "none",
+  "branch_for_sandbox": "none",
+  "event_count_for_sandbox": "none",
+  "analysis_detected_for_sandbox": "none",
+  "branch_for_workstation": "none",
+  "event_count_for_workstation": "none",
+  "analysis_detected_for_workstation": "none",
+  "branch_unset": "none",
+  "event_count_unset": "none",
+  "analysis_detected_unset": "none"
+ },
+ "generator_cmd": "sh predbr_gen.sh   # gcc over predbr_src/*.c (see the per-file line in predbr_gen.sh)",
+ "oracle_cmd": "python3 predbr_oracle.py predbr_decoy_text.bin   # bwrap --unshare-all --clearenv run per HUNTRESS_HOST_MODEL candidate, json.loads of the trace line",
+ "decoy": true,
+ "note": "lib.binary.predicate_branch_field(data, key) per expected_facts key; branch/event_count/analysis_detected per host model from a sandboxed REAL run (oracle) vs lib's unicorn emulation of main with libc hooked"
+}

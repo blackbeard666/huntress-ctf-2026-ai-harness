@@ -1,0 +1,14 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "decrypted_offset": 4762,
+  "decrypted_size": 542,
+  "xor_key": "a7"
+ },
+ "decoy": true,
+ "generator_cmd": "bash smc_gen.sh decoy_badcrc   # gcc + python3 stdlib (struct/zlib) blob writer + python3 post-link xor patch (readelf -sW symbol range)",
+ "oracle_cmd": "bash smc_oracle.sh decoy_badcrc 0xa7   # runs the program natively (it self-decrypts and prints the blob; python3 zlib.crc32/json check), readelf -SW / -sW / -lW + objdump -d of a python3-decrypted copy for offsets",
+ "note": "same as func_O0 but the header crc32 is corrupted (^0x1111): the decryption is real (facts), the blob must NOT validate"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "serialization-wrapper[php]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-puffin-90",
+ "encoded": "a:4:{s:3:\"msg\";s:102:\"Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-puffin-90\";s:1:\"n\";i:3;s:2:\"ok\";b:1;s:1:\"f\";d:1.5;}",
+ "generator_cmd": "php -r 'echo serialize([\"msg\"=>getenv(\"plain\"),\"n\"=>3,\"ok\"=>true,\"f\"=>1.5]);'",
+ "oracle_cmd": "php -r 'echo unserialize(getenv(\"encoded\"), [\"allowed_classes\"=>false])[\"msg\"];'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-puffin-90",
+ "expected": "match"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "serialization-wrapper[msgpack]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-walrus-85",
+ "encoded": "ktlWTmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwISBUbyBzb2x2ZSwgc3VibWl0IHRoaXMgZXhhY3QgYW5zd2VyIHRvIHRoZSBHYW1lIE1hc3RlcjqvaXZvcnktd2FscnVzLTg1",
+ "generator_cmd": "python3 -c 'import msgpack,base64,os;p=os.environ[\"plain\"];i=p.rindex(\" \");print(base64.b64encode(msgpack.packb([p[:i],p[i+1:]])).decode())'",
+ "oracle_cmd": "python3 -c 'import msgpack,base64,os;print(\" \".join(msgpack.unpackb(base64.b64decode(os.environ[\"encoded\"]))))'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-walrus-85",
+ "expected": "match"
+}

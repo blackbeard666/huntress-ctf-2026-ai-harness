@@ -1,0 +1,12 @@
+{
+ "material": "ITxhcmNoPgpkZWJpYW4tYmluYXJ5ICAgMTc5Mjc3MjU1MSAgMCAgICAgMCAgICAgMTAwNjQ0ICA0ICAgICAgICAgYAoyLjAKY29udHJvbC50YXIuZ3ogIDE3OTI3NzI1NTEgIDAgICAgIDAgICAgIDEwMDY0NCAgMzA0ICAgICAgIGAKH4sIAAAAAAACA+3VQU+DMBwFcM79FH+n10G7DZpsajTxauLJi/FQWTcasSVtMfv41u1G4jwxZ/J+CRRK08vjQV5ko+OJLMv9mAzH/bUoZ1Ul+UJymealnMmMyuwE+hCVJ8q8c/HYut+e/1N5UTsbvWtHzr9aLH7MX1SD/IWYf+fPkf/onlT9rrZ6SU2fXgMdwjTd2cietQ/G2SWJnLN7Xzcm6jr2Pq1UbcselbExHdovyXWBrtPpTu/UR9fq3NhP1Zr1LXvQofami/uNDvtmcGb971yIxoY4bv+Pff8Fnw/7X85n6P8pXF4Ub8YWoWFBR5pqZjb0QpMrMaEbSr+Gjdmm0tPrimKjLbXrw9yKNobpnYnEUWkAAAAAAAAAAAAAAAAAAIC/9gUCgqPyACgAAGRhdGEudGFyLmd6ICAgICAxNzkyNzcyNTUxICAwICAgICAwICAgICAxMDA2NDQgIDEwMSAgICAgICBgCh+LCAAAAAAAAgPtyrENg0AQBMAr5SuAB/NcPa4ACUP/YEIHdmSimWRX2u36+Lt6ymxXnj7z6kMb5znrlDXj/X4MUVrcYH9tz7WUWJdl+/b7tQMAAAAAAAAAAMCNDifzRPEAKAAACg==",
+ "rep": "deb",
+ "transform": null,
+ "key": "",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "mkdir -p d/DEBIAN; printf 'Package: huntress-agent\\nVersion: 1.0\\nArchitecture: all\\n...' > d/DEBIAN/control; M=$(printf %s '<plan>' | gzip -9n | base64 -w0); printf '#!/bin/sh\\nset -e\\nif [ \"$1\" = configure ]; then ldconfig; fi\\nexit 0\\n' > d/DEBIAN/postinst; chmod 755 d/DEBIAN/postinst; dpkg-deb --root-owner-group -Zgzip --build d pkg_deb_decoy_ldconfig.deb  (dpkg-deb 1.21+ writer: ar + control.tar.gz); material = base64 -w0 pkg_deb_decoy_ldconfig.deb  (benign postinst, no descriptor)",
+ "oracle_cmd": "dpkg-deb --ctrl-tarfile pkg_deb_decoy_ldconfig.deb | tar -xO ./postinst   (ldconfig only: no plan)",
+ "source_file": "pkg_deb_decoy_ldconfig.deb",
+ "note": "linux-package-maintainer-scripts (T1546.016 / T1059.004): decode(rep=deb) -> pkg_scripts -> script body readers"
+}

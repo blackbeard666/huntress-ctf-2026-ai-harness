@@ -1,0 +1,9 @@
+{
+ "codec": "glyph-bytes",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-wren-29",
+ "encoded": "x┌%╔1\u000e┬0\f\u0005╨½|÷vaâ\u000b0┴─\u0005L·U\"Æ\u0018┘N├±ï╘⌡╜GN─P√`a╥%╖\u0015±╬Ä!V√≈äº┬╡l£α²Us\u001c╦ƒñÇ4\u001f4ä■æ╕I%εΓA╗\"\u0015▌h≤0╢∙|┘\u0001JH$.",
+ "generator_cmd": "printf %s \"$plain\" | python3 -c 'import sys,zlib;sys.stdout.buffer.write(zlib.compress(sys.stdin.buffer.read(),9))' | iconv -f CP437 -t UTF-8  # zlib level 9 bytes rendered one glyph per byte by glibc iconv CP437",
+ "oracle_cmd": "printf %s \"$encoded\" | iconv -f UTF-8 -t CP437 | python3 -c 'import sys,zlib;print(zlib.decompress(sys.stdin.buffer.read()).decode())'  # glibc iconv back to bytes + zlib",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-wren-29",
+ "expected": "match"
+}

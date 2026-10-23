@@ -1,0 +1,22 @@
+{
+ "corpus": {
+  "invoke-python-stage.ps1": "# benign\n$Interpreter = 'python.exe'\nWrite-Output 'hello'\n",
+  "4c1097.py": "print('hello world')\n",
+  "notes.txt": "nothing to see\n"
+ },
+ "text": "print('hello world')\n",
+ "expected_plain": null,
+ "decoy": true,
+ "expected_links_contains": [],
+ "expected_link_values": [
+  {
+   "dst": "4c1097.py",
+   "key": "handoff_id",
+   "value": null
+  }
+ ],
+ "expected_outlier": null,
+ "oracle_cmd": "grep -l -E 'NextStage|HandoffId|next_stage' * || echo none",
+ "generator_cmd": "python3 tests/data/script_fixtures/corpus_gen.py $TMPDIR/cgen  (stdlib base64 + PowerShell-shaped precursor text)",
+ "checks": "lib.codec.corpus_links(corpus) / link_value(dst, key, corpus) / stage_outlier(plans of corpus, edges)"
+}

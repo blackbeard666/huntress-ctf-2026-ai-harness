@@ -1,0 +1,9 @@
+{
+ "codec": "glyph-bytes-base256emoji-mb",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-17",
+ "encoded": "🚀👇🌟💃✋😅✔😓🥺🙃😅😳✋💃😓😳🌟😻😝😅😈😴🌟🌈😅✔🤤🥺🌷🤘⭐👏😅💋😓😅🌈😓🍀💦✋💪😅🌈🤘👉🌷🌟😈😅😈😴🌟🌈😅✋😣🤤💃😈😅🤤😻🌈✔✋🥺😅😈😓😅😈😴✋😅🤩🤤🌷✋😅🙈🤤🌈😈✋🥺✨😅💃😓👉🤤🍀😈😉😓😈😈✋🥺😉💜🎉",
+ "generator_cmd": "printf %s \"$plain\" | MF=$PWD/tools/npm-multiformats/node_modules/multiformats tools/node/bin/node tests/data/warmups_fixtures/b256emoji_multiformats.mjs mb  # npm multiformats@13 base256emoji.encode (multibase, 🚀 prefix)",
+ "oracle_cmd": "printf %s \"$encoded\" | .venv/bin/python -c 'import sys,multibase;print(multibase.decode(sys.stdin.read()).decode())'  # PyPI py-multibase 2.0.0 base256emoji",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-17",
+ "expected": "match"
+}

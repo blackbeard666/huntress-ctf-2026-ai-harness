@@ -1,0 +1,10 @@
+{
+ "codec": "base2048",
+ "plain": null,
+ "encoded": "สวัสดีครับยินดีต้อนรับ",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written decoy: Thai prose -- its combining vowel signs (U+0E31/U+0E35/U+0E34/U+0E49) are outside the base2048 repertoire",
+ "oracle_cmd": "printf %s \"$encoded\" | tools/node/bin/node --input-type=module -e \"import {decode} from './tools/npm-base65536/node_modules/base2048/src/index.js';import fs from 'fs';process.stdout.write(Buffer.from(decode(fs.readFileSync(0,'utf8'))).toString())\"  # qntm reference npm base2048@3.0.0 decode  -> rejects: Error: Unrecognised Base2048 character: ั",
+ "oracle_plain": null
+}

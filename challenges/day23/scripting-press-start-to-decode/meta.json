@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-23-game-resource-loader",
+  "lane": "script-analysis",
+  "name": "📜 Press Start to Decode",
+  "ids": {
+    "single_solve": "script-analysis-day-23-game-resource-loader",
+    "time_trial": "script-analysis-day-23-game-resource-loader/time_trial",
+    "mastery": "script-analysis-day-23-game-resource-loader/mastery"
+  }
+}

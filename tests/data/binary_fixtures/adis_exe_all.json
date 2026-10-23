@@ -1,0 +1,109 @@
+{
+ "family": "anti_disassembly",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "has_anti_disassembly": "true",
+  "anti_disassembly_techniques": [
+   "junk_bytes",
+   "opposite_jcc_pair",
+   "jmp_into_instruction",
+   "overlapping_instructions",
+   "call_pop",
+   "push_ret"
+  ],
+  "technique": "junk_bytes",
+  "anti_disassembly_functions": [
+   "check_key",
+   "skip_junk",
+   "get_flag",
+   "decode_it"
+  ],
+  "protected_function": "check_key",
+  "disassembly": [
+   "mov eax, 0x7",
+   "or eax, 0x1",
+   "je 0x401194",
+   "jne 0x401194",
+   "mov eax, 0x1337",
+   "add eax, 0x11",
+   "ret"
+  ],
+  "leaf_constant": "0x1348",
+  "uses:opposite_jcc_pair": "true",
+  "recover_code:check_key": [
+   "mov eax, 0x7",
+   "or eax, 0x1",
+   "je 0x401194",
+   "jne 0x401194",
+   "mov eax, 0x1337",
+   "add eax, 0x11",
+   "ret"
+  ],
+  "instruction_count:check_key": "7",
+  "leaf_constant:check_key": "0x1348",
+  "return_value:check_key": "4936",
+  "junk_bytes:check_key": "2",
+  "techniques:check_key": [
+   "junk_bytes",
+   "opposite_jcc_pair"
+  ],
+  "linear_sweep_desync:check_key": "true",
+  "recover_code:skip_junk": [
+   "xor eax, eax",
+   "jmp 0x4011a4",
+   "mov eax, 0xc0de",
+   "ret"
+  ],
+  "instruction_count:skip_junk": "4",
+  "leaf_constant:skip_junk": "0xc0de",
+  "return_value:skip_junk": "49374",
+  "junk_bytes:skip_junk": "3",
+  "techniques:skip_junk": [
+   "junk_bytes"
+  ],
+  "linear_sweep_desync:skip_junk": "true",
+  "recover_code:get_flag": [
+   "mov eax, 0x41",
+   "jmp 0x4011b8",
+   "inc eax",
+   "add eax, 0x100",
+   "ret"
+  ],
+  "instruction_count:get_flag": "5",
+  "leaf_constant:get_flag": "0x142",
+  "return_value:get_flag": "322",
+  "junk_bytes:get_flag": "0",
+  "techniques:get_flag": [
+   "jmp_into_instruction",
+   "overlapping_instructions"
+  ],
+  "linear_sweep_desync:get_flag": "true",
+  "recover_code:decode_it": [
+   "call 0x4011cd",
+   "pop rax",
+   "add rax, 0xd",
+   "push rax",
+   "ret",
+   "mov eax, 0xbeef",
+   "sub eax, 0xf",
+   "ret"
+  ],
+  "instruction_count:decode_it": "8",
+  "leaf_constant:decode_it": "0xbee0",
+  "return_value:decode_it": "48864",
+  "junk_bytes:decode_it": "4",
+  "techniques:decode_it": [
+   "junk_bytes",
+   "call_pop",
+   "push_ret"
+  ],
+  "linear_sweep_desync:decode_it": "true"
+ },
+ "generator_cmd": "bash adis_gen.sh   # gcc -O1 -masm=intel -c (top-level asm: .byte junk, jz+jnz, eb ff c0, call $+5;pop;push;ret)",
+ "oracle_cmd": "python3 adis_oracle.py   # gdb -batch stepi trace of adis_exe_all.bin (executed instructions, address order, returned eax), nm rebase to .o offsets; techniques/junk counts from the asm source; rizin `aa; pdf` cross-check",
+ "file_b": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamic",
+ "decoy": false,
+ "note": "lib.binary.anti_disasm_field(data, key) per expected_facts key ('key:<fn>' = per function); field vocabulary SPECULATIVE (GM label not seen). rizin pdf: agrees on get_flag, stops at the fake ret in decode_it, decodes the junk e8 of check_key as `call` -- the walker recovers the executed code instead"
+}

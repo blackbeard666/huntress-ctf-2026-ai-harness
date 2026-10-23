@@ -1,0 +1,11 @@
+{
+ "codec": "zalgo",
+ "plain": null,
+ "encoded": "नमस्ते दुनिया, यह एक परीक्षण है।",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written Hindi sentence: its Mn vowel signs / virama are part of the script; stripped remainder is not ASCII",
+ "oracle_cmd": "printf %s \"$encoded\" | uconv -x '::NFD; [[:Mn:][:Me:]] > ; ::NFC;'  # ICU transliterator: NFD, remove Mn/Me, NFC",
+ "oracle_plain": null,
+ "oracle_note": "raw combining marks in blob: 2; ICU strip -> 'नमसत दनिया, यह एक परीकषण ह।' (ascii=False)"
+}

@@ -1,0 +1,96 @@
+{
+  "result": "incorrect",
+  "full_result": "incorrect",
+  "attempt_id": "1d39aa76-a781-4833-93c4-a6a953e6c95c",
+  "window": null,
+  "elapsed": 11.92,
+  "in_window": 8.63,
+  "phases": {
+    "start": 3.29,
+    "download": 2.49,
+    "solve": 2.0,
+    "submit": 2.06
+  },
+  "per_set": {
+    "set7": {
+      "result": "incorrect",
+      "remaining": null
+    },
+    "set3": {
+      "result": "incorrect",
+      "remaining": null
+    },
+    "set1": {
+      "result": "incorrect",
+      "remaining": null
+    },
+    "set6": {
+      "result": "incorrect",
+      "remaining": null
+    },
+    "set2": {
+      "result": "incorrect",
+      "remaining": null
+    },
+    "set4": {
+      "result": "incorrect",
+      "remaining": null
+    },
+    "set5": {
+      "result": "incorrect",
+      "remaining": null
+    }
+  },
+  "bad_sets": [
+    "set7",
+    "set3",
+    "set1",
+    "set6",
+    "set2",
+    "set4",
+    "set5"
+  ],
+  "wrong": [
+    [
+      "set7.answer",
+      "ANS-0123456789ABCDEF"
+    ],
+    [
+      "set3.answer",
+      "ANS-0123456789ABCDEF"
+    ],
+    [
+      "set1.answer",
+      "ANS-0123456789ABCDEF"
+    ],
+    [
+      "set6.answer",
+      "ANS-0123456789ABCDEF"
+    ],
+    [
+      "set2.answer",
+      "ANS-0123456789ABCDEF"
+    ],
+    [
+      "set4.answer",
+      "ANS-0123456789ABCDEF"
+    ],
+    [
+      "set5.answer",
+      "ANS-0123456789ABCDEF"
+    ]
+  ],
+  "fixed": {},
+  "localize_complete": true,
+  "routed": "local",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {},
+  "attempts_remaining": 32,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 32,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 7
+}

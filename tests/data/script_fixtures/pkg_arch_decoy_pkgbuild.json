@@ -1,0 +1,12 @@
+{
+ "material": "pkgname=huntress-agent\npkgver=1.0\npkgrel=1\narch=('any')\nsource=('agent.tar.gz')\nsha256sums=('SKIP')\n\npackage() {\n  install -Dm755 agent \"$pkgdir/usr/bin/agent\"\n}\n",
+ "rep": "pkgbuild",
+ "transform": null,
+ "key": "",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "printf \"pkgname=huntress-agent\\npkgver=1.0\\n...package() {\\n  install -Dm755 agent ...\\n}\\n\" > pkg_arch_decoy_pkgbuild.PKGBUILD  (no install= and no pre_/post_ hooks)",
+ "oracle_cmd": "bash -c 'source pkg_arch_decoy_pkgbuild.PKGBUILD; declare -F; echo install=${install:-<unset>}'   (only package(); install unset)",
+ "source_file": "pkg_arch_decoy_pkgbuild.PKGBUILD",
+ "note": "linux-package-maintainer-scripts (T1546.016 / T1059.004): decode(rep=pkgbuild) -> pkg_scripts -> script body readers"
+}

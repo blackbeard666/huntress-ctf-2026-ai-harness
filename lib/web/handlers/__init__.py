@@ -26,14 +26,19 @@ _KEY_MAP = [
 
 def for_key(key, clues):
     """Ordered (name, fn) built-in handlers whose class the clue keys name: the dispatch key first, then every other
-    clue KEY (D22: the dispatch key was `current_user` / `preview_guide`, the class lived in a sibling key)."""
-    out = []
+    clue KEY (D22: the dispatch key was `current_user` / `preview_guide`, the class lived in a sibling key). A match on
+    a kit-furniture key (websolve.COMMON_KEYS: framework, current_role, secondary_route ...) only counts when no
+    concept key matched -- D23's kits were ALL furniture ({framework, current_role, feature_route[, secondary_route]}),
+    so their plugins key on it, but `framework` is in every kit and must not outrank D22's csrf / upload."""
+    out, furn = [], []
     keys = [key or ""] + [k for k in (clues if isinstance(clues, dict) else {}) if k != key]
     for k in keys:
         for pat, name in _KEY_MAP:
-            if re.search(pat, k, re.I) and name in _HANDLERS and (name, _HANDLERS[name]) not in out:
-                out.append((name, _HANDLERS[name]))
-    return out
+            if re.search(pat, k, re.I) and name in _HANDLERS:
+                dst = furn if k in websolve.COMMON_KEYS else out
+                if (name, _HANDLERS[name]) not in dst:
+                    dst.append((name, _HANDLERS[name]))
+    return out or furn
 
 
 def _routes(clues, base):

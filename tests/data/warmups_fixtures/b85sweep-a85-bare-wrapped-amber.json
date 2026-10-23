@@ -1,0 +1,9 @@
+{
+ "codec": "base85-any",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-24",
+ "encoded": ":2+3L+EqaECER/!@rGmlDJ()6BPDN1G@>N/F`8KH<,Wn#DesT./0K\"V@Voh$+EV:\n2F!,%=@:OC%@;^.1ATAo8D]j.8AKXKOD.Oha@<6O%E]P=OD.7's/S8F-@rH6:1,J",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/b85sweep_cyberchef.mjs std | fold -w 64  # CyberChef To Base85 'Standard' alphabet, no delimiters, wrapped at 64 cols",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl a85",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-24",
+ "expected": "match"
+}

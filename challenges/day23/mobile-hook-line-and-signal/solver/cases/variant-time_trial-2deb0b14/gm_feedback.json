@@ -1,0 +1,10 @@
+{
+ "attempt": "2deb0b14-03ce-4427-9bb6-62e568a0e09d",
+ "rejected": {
+  "answer": [
+   "ANS-0123456789ABCDEF"
+  ]
+ },
+ "require_complete": true,
+ "verified": 0
+}

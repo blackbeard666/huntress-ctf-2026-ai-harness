@@ -22,3 +22,8 @@ Targets (PLAN_SUB2MIN.md): 15/15 <= 2:00 on 4 of 5 days, 14/15 <= 1:00 median, 0
 | D21 | 2026-10-21 | 3:34 (15/15) | 1:54 | +18.0s | 3/5 (mobile, script, warmup) | 12/16 | 5 / 1125 / 82 (warmups) | 1 / 0 / 0 | 0 | 15.25 | 0.00 | 17:20 (9/9) |
 | D22 | 2026-10-22 | 1:35 (15/15) | 1:33 | +2.3s (launch +10s) | 5/5 (binary, metada, mobile, script, warmup) | 14/14 | 4 / 599 / 0 (script-analysis) | 2 / 0 / 0 | 0 | 8.65 | 0.00 | 7:50 (6/6) |
 | D22 replay-pm23c | 2026-10-22 | 1:29 (15/15) | 1:17 | - | 5/5 (binary, metada, mobile, script, warmup) | 10/10 | 0 / 0 / 0 (binary-reverse-engineering) | 0 / 0 / 0 | 0 | 10.11 | 13.03 | - |
+| D22 replay-upd1 | 2026-10-22 | 1:12 (15/15) | 1:06 | - | 5/5 (binary, metada, mobile, script, warmup) | 10/10 | 0 / 0 / 0 (binary-reverse-engineering) | 0 / 0 / 0 | 2 | 10.11 | 13.03 | - (0/6) |
+| D22 replay-cap120 | 2026-10-22 | 0:58 (15/15) | 0:51 | - | 5/5 (binary, metada, mobile, script, warmup) | 10/10 | 0 / 0 / 0 (binary-reverse-engineering) | 0 / 0 / 0 | 2 | 10.11 | 13.03 | - (0/6) |
+| D22 replay-cap120b | 2026-10-22 | 1:28 (15/15) | 1:27 | - | 5/5 (binary, metada, mobile, script, warmup) | 10/10 | 0 / 0 / 0 (script-analysis) | 0 / 0 / 0 | 2 | 10.11 | 13.03 | - (0/6) |
+| D22 replay-cap30 | 2026-10-22 | 1:07 (15/15) | 1:00 | - | 5/5 (binary, metada, mobile, script, warmup) | 10/10 | 0 / 0 / 0 (binary-reverse-engineering) | 0 / 0 / 0 | 2 | 10.11 | 13.03 | - (0/6) |
+| D23 | 2026-10-23 | 28:55 (15/15) | 16:10 | +2.6s (launch +13s) | 4/5 (binary, metada, mobile, script) | 12/16 | 12 / 891 / 320 (script-analysis) | 7 / 0 / 0 | 0 | 25.49 | 0.00 | 7:21 (9/9) |

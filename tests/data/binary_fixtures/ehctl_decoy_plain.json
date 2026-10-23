@@ -1,0 +1,30 @@
+{
+ "family": "exception_handler_control_flow",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "personality": "none",
+  "landing_pads": "none",
+  "landing_pad_count": "0",
+  "catch_landing_pads": "none",
+  "cleanup_landing_pads": "none",
+  "eh_functions": "none",
+  "catch_functions": "none",
+  "catch_types": "none",
+  "signals": "none",
+  "signal_numbers": "none",
+  "signal_handlers": "none",
+  "signal_handler_functions": "none",
+  "trap_instructions": "none",
+  "trap_functions": "none",
+  "int3_anti_debug": "false",
+  "has_exception_handlers": "false",
+  "handler:SIGTRAP": "none"
+ },
+ "generator_cmd": "bash ehctl_gen.sh   # g++ -O1 -no-pie / -O2 -pie (throw+catch std::runtime_error, .cold cleanup pad); gcc -O0 / -O2 -fno-plt sigaction(SIGTRAP/SIGILL)+signal(SIGSEGV)+int3+ud2; gcc plain C decoy; text decoy",
+ "oracle_cmd": "python3 ehctl_oracle.py <gen tmpdir>   # landing pads: gcc -S call-site table labels resolved by nm on the -Wa,-L twin, c++filt catch types; signals: gdb -batch breakpoints on sigaction/signal ($rdi + info symbol handler); traps: objdump -d main",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dyn",
+ "decoy": true,
+ "note": "lib.binary.exception_handler_field(data, key) per expected_facts key; field vocabulary SPECULATIVE (GM label not seen). Decoys: plain C ELF (fields absent / false), text (all none)."
+}

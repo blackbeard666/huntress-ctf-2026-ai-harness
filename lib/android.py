@@ -1121,6 +1121,12 @@ def _puzzle_candidates(apk, depth=3, seen=None, top=True):
     out = [c for c in out if c and c not in ptrs]
     if not top:
         return out
+    if names and not any(ANS_RE_T.search(c) for c in out) \
+            and any(isinstance(p, dict) and str(p.get("codec", "")).lower() == "analysis" for p in objs):
+        # D23 "Hook Line and Signal": `codec: analysis` and no data -- Release.code() computes the token (decoy literal)
+        out += dex_eval_scan(apk, deep=True)
+        if not any(ANS_RE_T.search(c) for c in out):  # v2: the chain reads assets / resources / PackageInfo via its Context
+            out += context_chain_scan(apk)
     if names and not any(ANS_RE_T.search(c) for c in out):  # unknown codec / xor mismatch: a per-index rolling keystream
         out += rolling_xor_scan(apk, [p for p in objs if isinstance(p, dict)])
     if names and not any(ANS_RE_T.search(c) for c in out):  # unknown codec: a custom base-n alphabet from dex / assets
@@ -1134,7 +1140,8 @@ def _puzzle_candidates(apk, depth=3, seen=None, top=True):
 
 # --- fallback scans (dex / resources / decompiled code) ------------------------------------------
 def raw_entry_scan(apk):
-    """Every zip entry's bytes, scanned for a literal ANS token (plaintext-anywhere fallback). When no ASCII token
+    """Every zip entry's bytes, scanned for a literal ANS token (plaintext-anywhere fallback; several tokens beside Play
+    Integrity / SafetyNet verdict blobs: integrity_verdict_scan()'s clean-verdict tokens first). When no ASCII token
     exists anywhere, falls back to zip_structure_scan() (duplicate-name / local-only / mismatched records, gap and
     post-EOCD bytes, comments, extra fields), then string_pool_scan() (UTF-16LE tokens + decoded AXML/resources.arsc pool strings), then
     proto_manifest_scan() (AAB / proto-format manifest values, then the bundle's base module re-laid as an APK), then
@@ -1147,20 +1154,24 @@ def raw_entry_scan(apk):
     jwt_scan() (header / claim values of a JWT / JWE shipped in dex / assets / arsc / .so), then
     protobuf_asset_scan() (field values of a schema-less protobuf message in any entry or base64 / hex run), then
     compact_dex_scan() (decoded pool strings of a CompactDex / vdex / OAT payload)."""
-    hits, arsc = [], False
+    hits, arsc, verdicts = [], False, False
     try:
         with zipfile.ZipFile(apk) as z:
             for n in z.namelist():
                 try:
-                    got = [m.decode() for m in ANS_RE_B.findall(z.read(n))]
+                    b = z.read(n)
+                    got = [m.decode() for m in ANS_RE_B.findall(b)]
                 except (OSError, RuntimeError):
                     continue
                 hits += got
                 arsc = arsc or (n == "resources.arsc" and bool(got))
+                verdicts = verdicts or bool(got) and _IVS_HINT.search(b) is not None
     except (OSError, zipfile.BadZipFile):
         pass
     if arsc:  # ANS-shaped strings.xml values: the ones the code reads by R id / getIdentifier go first
         hits = list(dict.fromkeys(resource_id_scan(apk) + hits))
+    if verdicts and len(set(hits)) > 1:  # several tokens beside Play Integrity verdicts: the clean verdict's go first
+        hits = list(dict.fromkeys(integrity_verdict_scan(apk) + hits))
     if not hits:
         hits = zip_structure_scan(apk)
     if not hits:
@@ -1962,7 +1973,7 @@ def dex_strings(apk):
     if not hits:
         hits = cert_pin_scan(apk)
     if not hits:
-        hits = split_native_assembly(apk)
+        hits = _eav_anchor(apk, split_native_assembly(apk))
     if not hits:
         hits = dex_array_scan(apk)
     if not hits:
@@ -2006,9 +2017,9 @@ def dex_strings(apk):
     if not hits:
         hits = biometric_auth_scan(apk)
     if not hits:
-        hits = digest_answer_scan(apk)
+        hits = _eav_anchor(apk, digest_answer_scan(apk))
     if not hits:
-        hits = ans_compose_scan(apk)
+        hits = _eav_anchor(apk, ans_compose_scan(apk))
     if not hits:
         hits = whitebox_table_scan(apk)
     if hits and not literal:  # a static decode that is an anti-debug machine's honeypot goes behind its clean value
@@ -2017,6 +2028,11 @@ def dex_strings(apk):
         if trap & set(hits):
             hits = list(dict.fromkeys([r["value"] for r in rows if r["clean"]] + [h for h in hits if h not in trap]
                                       + [h for h in hits if h in trap]))
+    hits = [h for h in hits if not _eav_alphabet(h)]
+    if len(hits) > 1 and not literal:  # row 98: the value the entry path computes leads its dead look-alikes
+        ev = set(entry_evaluated_values(apk)) & set(hits)
+        if ev:
+            hits = [h for h in hits if h in ev] + [h for h in hits if h not in ev]
     return hits
 
 
@@ -2217,7 +2233,7 @@ def split_native_assembly(apk, cap=64):
         native = [s for s in so_seqs if s]
 
         def add(c):
-            if ANS_RE_T.fullmatch(c) and c not in out:
+            if ANS_RE_T.fullmatch(c) and c not in out and not _eav_alphabet(c):
                 out.append(c)
 
         for meths in dex_classes:
@@ -7706,7 +7722,7 @@ def extract_answer(apk):
             return m.group(0)
     for stage in (classloader_shadow_scan, pinned_payload_scan, v1_tamper_scan, raw_entry_scan, dex_strings, nested_scan, static_key_cipher_scan, identity_key_scan,
                   signing_cert_scan, integrity_key_scan, dex_integrity_gate_scan, xamarin_assembly_scan, decompiled_scan):
-        hits = stage(apk)
+        hits = [h for h in stage(apk) if not _eav_alphabet(h)]
         if hits:
             return hits[0]
     return None
@@ -8042,6 +8058,7 @@ def manifest_facts(apk):
 # char/byte arrays, xor/add loops, StringBuilder chains, switch-flattened state machines and string-encryption helpers,
 # run statically over ONE method at a time (plus its in-dex callees and the <clinit>s it reads). Unknown invokes abort.
 _DXE_MAX_DEX, _DXE_STEPS, _DXE_BUDGET_S, _DXE_DEPTH, _DXE_MAX_ARR = 32 << 20, 50_000, 0.8, 6, 1 << 16
+_DXE_DEEP_STEPS, _DXE_DEEP_BUDGET_S = 2_000_000, 2.0   # dex_eval_scan(deep=True): D23 computed-code (`analysis`) apps
 _DXE_HOT = frozenset((0x23, 0x24, 0x26, 0x2B, 0x2C, 0x8E, 0x97, 0xB7, 0xD7, 0xDF))
 _DXE_LIB = re.compile(r"L(?:androidx|android|kotlinx?|java|javax|dalvik|okhttp3|okio|retrofit2|org/jetbrains|org/intellij"
                       r"|com/google|com/squareup|com/facebook|io/reactivex)/")
@@ -8347,12 +8364,380 @@ def _dxe_intrinsics():
     t["Ljava/util/Base64$Encoder;->encode([B)[B"] = lambda a: _dxe_barr(base64.b64encode(_dxe_bytes(a[1])))
     for lv in "vdiwe":
         t[f"Landroid/util/Log;->{lv}({S}{S})I"] = lambda a: 0
+    for k, v in _dxe_intr_numeric().items():  # new keys only, except the width-keeping Long.valueOf(J)
+        if k == "Ljava/lang/Long;->valueOf(J)Ljava/lang/Long;" or k not in t:
+            t[k] = v
+    return t
+
+
+# --- java.lang / kotlin numeric intrinsics a mixer chain may call (coverage atlas row 96: dex-eval-long-intrinsics) --
+# Long / Integer bit ops (rotate, reverse, bitCount, nlz/ntz, highest/lowestOneBit, signum), unsigned div / rem /
+# compare / toString / parse, Math floor / exact / multiplyHigh, String.format (%d %x %X %o %s %c %b %n, flags 0 - +
+# width; Long-boxed negatives format as 64-bit two's complement), Long / Arrays hashCode, CRC32 / Adler32 /
+# MessageDigest / BigInteger(1, d).toString(16), kotlin ULong / UInt helpers. Exact Java semantics: two's complement
+# wrap, ArithmeticException (div by zero, *Exact overflow) and bad input abort the method. Added with setdefault, so
+# every pre-existing intrinsic keeps its behaviour.
+class _DxJ(int):
+    """A boxed java.lang.Long (Long.valueOf(J)): an int that remembers it is 64-bit for String.format("%x")."""
+    __slots__ = ()
+
+
+_DXE_NEW = frozenset(("Ljava/util/zip/CRC32;", "Ljava/util/zip/Adler32;", "Ljava/math/BigInteger;"))
+_DXE_DIG = "0123456789abcdefghijklmnopqrstuvwxyz"
+_DXE_MD = {"md5": "md5", "sha-1": "sha1", "sha1": "sha1", "sha-256": "sha256", "sha256": "sha256", "sha-512": "sha512",
+           "sha-384": "sha384", "sha-224": "sha224", "sha512": "sha512"}
+
+
+def _dxe_radix(v, r):
+    if not isinstance(v, int) or not isinstance(r, int):
+        raise _DxAbort
+    r = r if 2 <= r <= 36 else 10
+    s, n = [], abs(v)
+    while True:
+        s.append(_DXE_DIG[n % r])
+        n //= r
+        if not n:
+            break
+    return ("-" if v < 0 else "") + "".join(reversed(s))
+
+
+def _dxe_ints(*xs):
+    if not all(isinstance(x, int) for x in xs):
+        raise _DxAbort
+    return xs
+
+
+def _dxe_exact(v, bits):
+    if not -(1 << (bits - 1)) <= v < 1 << (bits - 1):
+        raise _DxAbort  # ArithmeticException: integer overflow
+    return v
+
+
+def _dxe_fdiv(a, b, w):
+    _dxe_ints(a, b)
+    if b == 0:
+        raise _DxAbort
+    return w(a // b)
+
+
+def _dxe_fmod(a, b, w):
+    _dxe_ints(a, b)
+    if b == 0:
+        raise _DxAbort
+    return w(a % b)
+
+
+def _dxe_udivrem(a, b, bits, rem, w):
+    _dxe_ints(a, b)
+    m = (1 << bits) - 1
+    if not b & m:
+        raise _DxAbort
+    return w((a & m) % (b & m) if rem else (a & m) // (b & m))
+
+
+def _dxe_parse_u(s, radix, bits):
+    v = _dxe_parse(s, radix)
+    if v < 0 or v >> bits or s.startswith("-"):
+        raise _DxAbort  # NumberFormatException
+    return _dxe_w64(v) if bits == 64 else _dxe_w32(v)
+
+
+def _dxe_rev(v, bits, unit):
+    m = (1 << bits) - 1
+    v &= m
+    if unit == 1:
+        r = int(format(v, f"0{bits}b")[::-1], 2)
+    else:
+        r = int.from_bytes(v.to_bytes(bits // 8, "big"), "little")
+    return _dxe_w64(r) if bits == 64 else _dxe_w32(r)
+
+
+def _dxe_ffmt(f, args):  # noqa: C901 - one java.util.Formatter subset
+    """java.lang.String.format(f, args...) for integral / string / char / boolean conversions; aborts on the rest."""
+    if not isinstance(f, str) or not isinstance(args, list):
+        raise _DxAbort
+    out, k, pos = [], 0, 0
+    for m in re.finditer(r"%(?:(\d+)\$)?([-#+ 0,(]*)(\d+)?(?:\.(\d+))?([a-zA-Z%])", f):
+        out.append(f[pos:m.start()])
+        pos = m.end()
+        idx, flags, width, prec, c = m.groups()
+        if c == "%":
+            out.append("%")
+            continue
+        if c == "n":
+            out.append("\n")
+            continue
+        if idx:
+            i = int(idx) - 1
+        else:
+            i, k = k, k + 1
+        if not 0 <= i < len(args):
+            raise _DxAbort  # MissingFormatArgumentException
+        v = args[i]
+        if isinstance(v, _DxObj) and v.t == "Ljava/math/BigInteger;" and isinstance(v.f.get("v"), int):
+            v, big = v.f["v"], True
+        else:
+            big = False
+        cl = c.lower()
+        if cl == "s":
+            s = _dxe_str(v)
+            s = s[:int(prec)] if prec else s
+        elif cl == "b":
+            if isinstance(v, int):
+                raise _DxAbort  # a boxed Boolean and an Integer look alike here
+            s = "false" if v is None else "true"
+        elif cl == "c":
+            if not isinstance(v, int) or isinstance(v, bool):
+                raise _DxAbort
+            s = chr(v & 0xFFFF)
+        elif cl in ("d", "x", "o"):
+            if not isinstance(v, int) or isinstance(v, bool) or prec is not None or (cl == "d" and c == "D"):
+                raise _DxAbort  # IllegalFormatConversion / IllegalFormatPrecision
+            if cl == "d":
+                s = str(abs(v))
+                if "," in flags:
+                    s = f"{abs(v):,}"
+                sign = "-" if v < 0 else "+" if "+" in flags else " " if " " in flags else ""
+            else:
+                if v < 0 and not big:
+                    v &= (1 << 64) - 1 if isinstance(v, _DxJ) else 0xFFFFFFFF
+                sign = "-" if v < 0 else ""
+                s = format(abs(v), cl)
+                if "#" in flags:
+                    s = ("0x" if cl == "x" else "0") + s
+            if "0" in flags and width:
+                s = s.rjust(int(width) - len(sign), "0")
+            s = sign + s
+        else:
+            raise _DxAbort  # %f %e %h %t ...: not modelled
+        if c.isupper():
+            s = s.upper()
+        if width:
+            s = s.ljust(int(width)) if "-" in flags else s.rjust(int(width))
+        out.append(s)
+    out.append(f[pos:])
+    return "".join(out)
+
+
+def _dxe_ahash(a, el=lambda x: x):
+    if a is None:
+        return 0
+    if not isinstance(a, list):
+        raise _DxAbort
+    h = 1
+    for x in a:
+        h = (31 * h + el(x)) & 0xFFFFFFFF
+    return _dxe_w32(h)
+
+
+def _dxe_lhash(v):
+    return _dxe_w32((v ^ ((v & ((1 << 64) - 1)) >> 32)) & 0xFFFFFFFF)
+
+
+def _dxe_bi_init(a, v):
+    o = a[0]
+    if not isinstance(o, _DxObj):
+        raise _DxAbort
+    o.f["v"] = v
+    return None
+
+
+def _dxe_bi(v):
+    o = _DxObj("Ljava/math/BigInteger;")
+    o.f["v"] = v
+    return o
+
+
+def _dxe_biv(o):
+    if not isinstance(o, _DxObj) or not isinstance(o.f.get("v"), int):
+        raise _DxAbort
+    return o.f["v"]
+
+
+def _dxe_bi_mag(sig, mag):
+    b = _dxe_bytes(mag)
+    v = int.from_bytes(b, "big")
+    if sig not in (-1, 0, 1) or (sig == 0 and v):
+        raise _DxAbort  # NumberFormatException
+    return sig * v
+
+
+def _dxe_chk(a, fn, init):
+    o = a[0]
+    if not isinstance(o, _DxObj):
+        raise _DxAbort
+    v = o.f.get("v", init)
+    if len(a) == 2 and isinstance(a[1], int):
+        b = bytes([a[1] & 0xFF])
+    else:
+        b = _dxe_bytes(a[1])
+        if len(a) == 4:
+            _dxe_ints(a[2], a[3])
+            if a[2] < 0 or a[3] < 0 or a[2] + a[3] > len(b):
+                raise _DxAbort
+            b = b[a[2]:a[2] + a[3]]
+    o.f["v"] = fn(b, v)
+    return None
+
+
+def _dxe_md_get(a):
+    alg = _DXE_MD.get(_dxe_str(a[0]).lower())
+    if alg is None:
+        raise _DxAbort
+    m = _DxObj("Ljava/security/MessageDigest;")
+    m.f["md"] = hashlib.new(alg)
+    return m
+
+
+def _dxe_md(a, op):
+    o = a[0]
+    if not isinstance(o, _DxObj) or "md" not in o.f:
+        raise _DxAbort
+    md = o.f["md"]
+    if op == "update":
+        b = bytes([a[1] & 0xFF]) if isinstance(a[1], int) else _dxe_bytes(a[1])
+        if len(a) == 4:
+            _dxe_ints(a[2], a[3])
+            b = b[a[2]:a[2] + a[3]]
+        md.update(b)
+        return None
+    if op == "digest" and len(a) > 1:
+        md.update(_dxe_bytes(a[1]))
+    o.f["md"] = hashlib.new(md.name)
+    return None if op == "reset" else _dxe_barr(md.digest())
+
+
+def _dxe_intr_numeric():
+    S, L, I, M = "Ljava/lang/String;", "Ljava/lang/Long;", "Ljava/lang/Integer;", "Ljava/lang/Math;"
+    t = {}
+    for box, p, bits, w in ((L, "J", 64, _dxe_w64), (I, "I", 32, _dxe_w32)):
+        m = (1 << bits) - 1
+        t[f"{box}->rotateLeft({p}I){p}"] = (lambda m, b, w: lambda a: w(
+            (((a[0] & m) << (a[1] % b)) | ((a[0] & m) >> ((b - a[1] % b) % b))) & m))(m, bits, w)
+        t[f"{box}->rotateRight({p}I){p}"] = (lambda m, b, w: lambda a: w(
+            (((a[0] & m) >> (a[1] % b)) | ((a[0] & m) << ((b - a[1] % b) % b))) & m))(m, bits, w)
+        t[f"{box}->reverse({p}){p}"] = (lambda b: lambda a: _dxe_rev(_dxe_ints(a[0])[0], b, 1))(bits)
+        t[f"{box}->reverseBytes({p}){p}"] = (lambda b: lambda a: _dxe_rev(_dxe_ints(a[0])[0], b, 8))(bits)
+        t[f"{box}->bitCount({p})I"] = (lambda m: lambda a: bin(a[0] & m).count("1"))(m)
+        t[f"{box}->numberOfLeadingZeros({p})I"] = (lambda m, b: lambda a: b - (a[0] & m).bit_length())(m, bits)
+        t[f"{box}->numberOfTrailingZeros({p})I"] = (lambda m, b: lambda a: (
+            ((a[0] & m) & -(a[0] & m)).bit_length() - 1 if a[0] & m else b))(m, bits)
+        t[f"{box}->highestOneBit({p}){p}"] = (lambda m, w: lambda a: w(
+            1 << ((a[0] & m).bit_length() - 1) if a[0] & m else 0))(m, w)
+        t[f"{box}->lowestOneBit({p}){p}"] = (lambda m, w: lambda a: w((a[0] & m) & -(a[0] & m)))(m, w)
+        t[f"{box}->signum({p})I"] = lambda a: (a[0] > 0) - (a[0] < 0)
+        t[f"{box}->compare({p}{p})I"] = lambda a: (a[0] > a[1]) - (a[0] < a[1])
+        t[f"{box}->compareUnsigned({p}{p})I"] = (lambda m: lambda a: ((a[0] & m) > (a[1] & m)) -
+                                                ((a[0] & m) < (a[1] & m)))(m)
+        t[f"{box}->divideUnsigned({p}{p}){p}"] = (lambda b, w: lambda a: _dxe_udivrem(a[0], a[1], b, False, w))(bits, w)
+        t[f"{box}->remainderUnsigned({p}{p}){p}"] = (lambda b, w: lambda a: _dxe_udivrem(a[0], a[1], b, True, w))(bits,
+                                                                                                                 w)
+        t[f"{box}->toUnsignedString({p}){S}"] = (lambda m: lambda a: str(_dxe_ints(a[0])[0] & m))(m)
+        t[f"{box}->toUnsignedString({p}I){S}"] = (lambda m: lambda a: _dxe_radix(_dxe_ints(a[0])[0] & m, a[1]))(m)
+        t[f"{box}->toString({p}I){S}"] = lambda a: _dxe_radix(a[0], a[1])
+        t[f"{box}->toBinaryString({p}){S}"] = (lambda m: lambda a: format(_dxe_ints(a[0])[0] & m, "b"))(m)
+        t[f"{box}->toOctalString({p}){S}"] = (lambda m: lambda a: format(_dxe_ints(a[0])[0] & m, "o"))(m)
+        nm = "Long" if p == "J" else "Int"
+        t[f"{box}->parseUnsigned{nm}({S}){p}"] = (lambda b: lambda a: _dxe_parse_u(a[0], 10, b))(bits)
+        t[f"{box}->parseUnsigned{nm}({S}I){p}"] = (lambda b: lambda a: _dxe_parse_u(a[0], a[1], b))(bits)
+        for op, fn in (("sum", lambda x, y: x + y), ("max", max), ("min", min)):
+            t[f"{box}->{op}({p}{p}){p}"] = (lambda fn, w: lambda a: w(fn(*_dxe_ints(a[0], a[1]))))(fn, w)
+    t[f"{L}->hashCode(J)I"] = lambda a: _dxe_lhash(_dxe_ints(a[0])[0])
+    t[f"{L}->hashCode()I"] = lambda a: _dxe_lhash(_dxe_ints(a[0])[0])
+    t[f"{I}->hashCode(I)I"] = t[f"{I}->hashCode()I"] = lambda a: _dxe_ints(a[0])[0]
+    t[f"{L}->valueOf(J){L}"] = lambda a: _DxJ(_dxe_ints(a[0])[0])
+    t[f"{I}->toUnsignedLong(I)J"] = lambda a: _dxe_ints(a[0])[0] & 0xFFFFFFFF
+    t["Ljava/lang/Byte;->toUnsignedInt(B)I"] = t["Ljava/lang/Byte;->toUnsignedLong(B)J"] = lambda a: a[0] & 0xFF
+    t["Ljava/lang/Short;->toUnsignedInt(S)I"] = lambda a: a[0] & 0xFFFF
+    for mc in (M, "Ljava/lang/StrictMath;"):
+        for p, bits, w in (("J", 64, _dxe_w64), ("I", 32, _dxe_w32)):
+            t[f"{mc}->abs({p}){p}"] = (lambda w: lambda a: w(abs(a[0])))(w)
+            t[f"{mc}->max({p}{p}){p}"] = lambda a: max(a[0], a[1])
+            t[f"{mc}->min({p}{p}){p}"] = lambda a: min(a[0], a[1])
+            t[f"{mc}->floorDiv({p}{p}){p}"] = (lambda w: lambda a: _dxe_fdiv(a[0], a[1], w))(w)
+            t[f"{mc}->floorMod({p}{p}){p}"] = (lambda w: lambda a: _dxe_fmod(a[0], a[1], w))(w)
+            for op, fn in (("addExact", lambda x, y: x + y), ("subtractExact", lambda x, y: x - y),
+                           ("multiplyExact", lambda x, y: x * y)):
+                t[f"{mc}->{op}({p}{p}){p}"] = (lambda fn, b: lambda a: _dxe_exact(fn(*_dxe_ints(a[0], a[1])), b))(fn, bits)
+            t[f"{mc}->negateExact({p}){p}"] = (lambda b: lambda a: _dxe_exact(-_dxe_ints(a[0])[0], b))(bits)
+            t[f"{mc}->incrementExact({p}){p}"] = (lambda b: lambda a: _dxe_exact(_dxe_ints(a[0])[0] + 1, b))(bits)
+            t[f"{mc}->decrementExact({p}){p}"] = (lambda b: lambda a: _dxe_exact(_dxe_ints(a[0])[0] - 1, b))(bits)
+        t[f"{mc}->floorDiv(JI)J"] = lambda a: _dxe_fdiv(a[0], a[1], _dxe_w64)
+        t[f"{mc}->floorMod(JI)I"] = lambda a: _dxe_fmod(a[0], a[1], _dxe_w32)
+        t[f"{mc}->multiplyExact(JI)J"] = lambda a: _dxe_exact(a[0] * a[1], 64)
+        t[f"{mc}->toIntExact(J)I"] = lambda a: _dxe_exact(_dxe_ints(a[0])[0], 32)
+        t[f"{mc}->multiplyHigh(JJ)J"] = lambda a: _dxe_w64((a[0] * a[1]) >> 64)
+        t[f"{mc}->unsignedMultiplyHigh(JJ)J"] = lambda a: _dxe_w64(
+            ((a[0] & (1 << 64) - 1) * (a[1] & (1 << 64) - 1)) >> 64)
+        t[f"{mc}->multiplyFull(II)J"] = lambda a: a[0] * a[1]
+    # String.format / Locale / Arrays
+    t[f"{S}->format({S}[Ljava/lang/Object;){S}"] = lambda a: _dxe_ffmt(a[0], a[1])
+    t[f"{S}->format(Ljava/util/Locale;{S}[Ljava/lang/Object;){S}"] = lambda a: _dxe_ffmt(a[1], a[2])
+    t[f"{S}->formatted([Ljava/lang/Object;){S}"] = lambda a: _dxe_ffmt(a[0], a[1])
+    t[f"{S}->toUpperCase(Ljava/util/Locale;){S}"] = lambda a: a[0].upper()
+    t[f"{S}->toLowerCase(Ljava/util/Locale;){S}"] = lambda a: a[0].lower()
+    t[f"{S}->replace(CC){S}"] = lambda a: a[0].replace(chr(a[1] & 0xFFFF), chr(a[2] & 0xFFFF))
+    t[f"{S}->replace(Ljava/lang/CharSequence;Ljava/lang/CharSequence;){S}"] = \
+        lambda a: a[0].replace(_dxe_str(a[1]), _dxe_str(a[2]))
+    t[f"{S}->repeat(I){S}"] = lambda a: a[0] * a[1] if 0 <= a[1] <= _DXE_MAX_ARR else (_ for _ in ()).throw(_DxAbort)
+    t["Ljava/util/Locale;->getDefault()Ljava/util/Locale;"] = lambda a: "en-US"
+    t["Ljava/util/Arrays;->copyOf([Ljava/lang/Object;I)[Ljava/lang/Object;"] = \
+        lambda a: _DxArr(list(a[0][:a[1]]) + [None] * max(0, a[1] - len(a[0])))
+    for p in "BCSI":
+        t[f"Ljava/util/Arrays;->hashCode([{p})I"] = lambda a: _dxe_ahash(a[0])
+    t["Ljava/util/Arrays;->hashCode([J)I"] = lambda a: _dxe_ahash(a[0], _dxe_lhash)
+    t["Ljava/util/Arrays;->hashCode([Z)I"] = lambda a: _dxe_ahash(a[0], lambda x: 1231 if x else 1237)
+    # checksums / digests / BigInteger
+    for cls, fn, init in (("Ljava/util/zip/CRC32;", zlib.crc32, 0), ("Ljava/util/zip/Adler32;", zlib.adler32, 1)):
+        t[cls + "-><init>()V"] = t[cls + "->reset()V"] = (lambda i: lambda a: a[0].f.__setitem__("v", i))(init)
+        for sig in ("I", "[B", "[BII"):
+            t[f"{cls}->update({sig})V"] = (lambda fn, i: lambda a: _dxe_chk(a, fn, i))(fn, init)
+        t[cls + "->getValue()J"] = (lambda i: lambda a: a[0].f.get("v", i))(init)
+    md = "Ljava/security/MessageDigest;"
+    t[f"{md}->getInstance({S}){md}"] = _dxe_md_get
+    for sig in ("[B", "[BII", "B"):
+        t[f"{md}->update({sig})V"] = lambda a: _dxe_md(a, "update")
+    t[f"{md}->digest()[B"] = t[f"{md}->digest([B)[B"] = lambda a: _dxe_md(a, "digest")
+    t[f"{md}->reset()V"] = lambda a: _dxe_md(a, "reset")
+    bi = "Ljava/math/BigInteger;"
+    t[bi + "-><init>(I[B)V"] = lambda a: _dxe_bi_init(a, _dxe_bi_mag(a[1], a[2]))
+    t[bi + "-><init>([B)V"] = lambda a: _dxe_bi_init(a, int.from_bytes(_dxe_bytes(a[1]), "big", signed=True)
+                                                     if a[1] else (_ for _ in ()).throw(_DxAbort))
+    t[f"{bi}-><init>({S})V"] = lambda a: _dxe_bi_init(a, _dxe_parse(a[1]))
+    t[f"{bi}-><init>({S}I)V"] = lambda a: _dxe_bi_init(a, _dxe_parse(a[1], a[2]))
+    t[f"{bi}->valueOf(J){bi}"] = lambda a: _dxe_bi(_dxe_ints(a[0])[0])
+    t[f"{bi}->toString(I){S}"] = lambda a: _dxe_radix(_dxe_biv(a[0]), a[1])
+    t[f"{bi}->toString(){S}"] = lambda a: str(_dxe_biv(a[0]))
+    t[f"{bi}->longValue()J"] = lambda a: _dxe_w64(_dxe_biv(a[0]))
+    t[f"{bi}->intValue()I"] = lambda a: _dxe_w32(_dxe_biv(a[0]))
+    t[f"{bi}->signum()I"] = lambda a: (_dxe_biv(a[0]) > 0) - (_dxe_biv(a[0]) < 0)
+    # kotlin unsigned / text helpers (inline ULong ops compile to these static calls)
+    t["Lkotlin/ULong;->constructor-impl(J)J"] = t["Lkotlin/UInt;->constructor-impl(I)I"] = lambda a: a[0]
+    t["Lkotlin/ULong;->toString-impl(J)" + S] = lambda a: str(a[0] & (1 << 64) - 1)
+    t["Lkotlin/UInt;->toString-impl(I)" + S] = lambda a: str(a[0] & 0xFFFFFFFF)
+    uk = "Lkotlin/UnsignedKt;"
+    t[uk + "->ulongRemainder-eb3DHEI(JJ)J"] = lambda a: _dxe_udivrem(a[0], a[1], 64, True, _dxe_w64)
+    t[uk + "->ulongDivide-eb3DHEI(JJ)J"] = lambda a: _dxe_udivrem(a[0], a[1], 64, False, _dxe_w64)
+    t[uk + "->uintRemainder-J1ME1BU(II)I"] = lambda a: _dxe_udivrem(a[0], a[1], 32, True, _dxe_w32)
+    t[uk + "->uintDivide-J1ME1BU(II)I"] = lambda a: _dxe_udivrem(a[0], a[1], 32, False, _dxe_w32)
+    t[uk + "->ulongCompare(JJ)I"] = t[f"{L}->compareUnsigned(JJ)I"]
+    t[uk + "->uintCompare(II)I"] = t[f"{I}->compareUnsigned(II)I"]
+    t[uk + "->ulongToString(J)" + S] = t["Lkotlin/ULong;->toString-impl(J)" + S]
+    t[f"{uk}->ulongToString(JI){S}"] = lambda a: _dxe_radix(a[0] & (1 << 64) - 1, a[1])
+    t[f"Lkotlin/text/UStringsKt;->toString-JSWoG40(JI){S}"] = t[f"{uk}->ulongToString(JI){S}"]
+    t[f"Lkotlin/text/UStringsKt;->toString-V7xB4Y4(II){S}"] = lambda a: _dxe_radix(a[0] & 0xFFFFFFFF, a[1])
+    t["Lkotlin/text/CharsKt;->checkRadix(I)I"] = lambda a: a[0] if 2 <= a[0] <= 36 else (_ for _ in ()).throw(_DxAbort)
+    t[f"Lkotlin/text/StringsKt;->padStart({S}IC){S}"] = lambda a: _dxe_str(a[0]).rjust(a[1], chr(a[2] & 0xFFFF)) \
+        if a[1] >= 0 else (_ for _ in ()).throw(_DxAbort)
+    t[f"Lkotlin/text/StringsKt;->padEnd({S}IC){S}"] = lambda a: _dxe_str(a[0]).ljust(a[1], chr(a[2] & 0xFFFF)) \
+        if a[1] >= 0 else (_ for _ in ()).throw(_DxAbort)
     return t
 
 
 _DXE_INTR = _dxe_intrinsics()
 _DXE_SFIELDS = {"Ljava/nio/charset/StandardCharsets;->UTF_8": "utf-8", "Ljava/nio/charset/StandardCharsets;->US_ASCII":
-                "us-ascii", "Ljava/nio/charset/StandardCharsets;->ISO_8859_1": "iso-8859-1"}
+                "us-ascii", "Ljava/nio/charset/StandardCharsets;->ISO_8859_1": "iso-8859-1",
+                **{f"Ljava/util/Locale;->{k}": "en-US" for k in ("US", "ROOT", "ENGLISH", "UK")}}
 
 
 class _DxDex:
@@ -8551,6 +8936,8 @@ class _DxVM:
         return _DXE_UNK
 
     def new_instance(self, t):
+        if t in _DXE_NEW:  # CRC32 / Adler32 / BigInteger: state lives in .f, filled by their _DXE_INTR <init>
+            return _DxObj(t)
         raise _DxAbort
 
     def dyn(self, op, ins, p, r, depth):
@@ -8965,13 +9352,467 @@ def _dxe_default(p):
     return 0 if p in ("Z", "B", "S", "C", "I", "J") else ("" if p == "Ljava/lang/String;" else _DXE_UNK)
 
 
-def dex_eval_scan(apk):
+class _DxeDeepVM(_DxVM):
+    max_steps = _DXE_DEEP_STEPS
+    natives = None  # ref -> callable(int) -> int | None: the app's own JNI exports (D23 set5 `jni_secret` bridge)
+
+    def invoke(self, ref, raw, depth):
+        if ref in self.dx.code and _dxp_pure(self.dx, ref):  # pure static long/int fn: memoised compiled closures
+            ct = ref.split("->")[0]
+            memo = self.dx.__dict__.setdefault("_dxp_memo", {})
+            key = (ref, *raw)
+            v = memo.get(key, _DXE_UNK)
+            if v is not _DXE_UNK:
+                return v
+            if depth >= _DXE_DEPTH:
+                raise _DxAbort
+            self.init_class(ct)
+            v = _dxp_run(self, ref, raw, depth + 1)
+            if len(memo) < _DXP_MEMO_MAX:
+                memo[key] = v
+            return v
+        if ref not in self.dx.code and ref not in _DXE_INTR:
+            v = self.kotlin(ref, raw, depth)
+            if v is not _DXE_UNK:
+                return v
+        elif depth > 0 and ref in self.dx.code and len(self.dx.code[ref][2]) <= 16 and (
+                "->access$" in ref or self.dx.code[ref][3] & 0x1000):
+            depth -= 1  # a kotlinc synthetic accessor / bridge forwards one call: it costs no frame of _DXE_DEPTH
+        fn = None if self.natives is None or ref in self.dx.code or ref in _DXE_INTR else self.natives(ref)
+        if fn is None:
+            return super().invoke(ref, raw, depth)
+        if not raw or not isinstance(raw[0], int):
+            raise _DxAbort
+        v = fn(raw[0])
+        if v is None:
+            raise _DxAbort
+        return self.note(v)
+
+    def init_class(self, ct):
+        if not self.inited:  # first class of a run: the Locale constants a kotlinc `uppercase()` / `lowercase()` reads
+            for k in _KOBJ_LOCALES:
+                self.statics.setdefault(k, _DxObj("Ljava/util/Locale;"))
+        super().init_class(ct)
+
+    def new_instance(self, t):
+        if t in _dxx_supers(self.dx):  # an in-dex class with no statics: Release$Companion, $$ExternalSyntheticLambda0
+            self.init_class(t)
+            return _DxObj(t)
+        return super().new_instance(t)
+
+    def kotlin(self, ref, raw, depth):
+        """A Kotlin-compiled chain's out-of-dex call (coverage atlas row 96): Intrinsics.check* -> no-op, areEqual;
+        inline-class box-impl / unbox-impl (ULong / UInt / UShort / UByte); Number.xxxValue() on a boxed primitive;
+        an interface / abstract / inherited call (Function1.invoke on a d8 lambda, a `when` over a sealed class)
+        dispatched on the receiver's in-dex class. _DXE_UNK when none applies (the caller's own path decides)."""
+        ct, rest = ref.split("->", 1)
+        name = rest[:rest.find("(")]
+        o = raw[0] if raw else None
+        if ct == "Lkotlin/jvm/internal/Intrinsics;":
+            if name.startswith("check") and ref.endswith(")V"):
+                return None
+            if name == "areEqual" and len(raw) == 2 and all(isinstance(x, (int, str)) or x is None for x in raw):
+                return int(raw[0] == raw[1])
+            return _DXE_UNK
+        if ct in _KOBJ_INLINE:
+            if name == "box-impl" and len(raw) in (1, 2) and isinstance(o, int):
+                b = _DxObj(ct)
+                b.f["$v"] = o
+                return b
+            if name == "unbox-impl" and len(raw) == 1 and isinstance(o, _DxObj) and o.t == ct and "$v" in o.f:
+                return o.f["$v"]
+            return _DXE_UNK
+        if ct == "Ljava/lang/Number;" and len(raw) == 1 and isinstance(o, int) and not isinstance(o, bool):
+            w = {"longValue": _dxe_w64, "intValue": _dxe_w32, "shortValue": lambda x: ((x + 0x8000) & 0xFFFF) - 0x8000,
+                 "byteValue": lambda x: ((x + 0x80) & 0xFF) - 0x80}.get(name)
+            return _DXE_UNK if w is None else w(o)
+        if isinstance(o, _DxObj) and o.t != ct:
+            sup, t = _dxx_supers(self.dx), o.t
+            for _ in range(8):
+                if t is None or t not in sup:
+                    break
+                if f"{t}->{rest}" in self.dx.code:
+                    return self.invoke(f"{t}->{rest}", raw, depth)
+                t = sup.get(t)
+        return _DXE_UNK
+
+
+# Kotlin `object` / companion / inline-class chains (coverage atlas row 96): the boxes kotlinc emits for value classes
+# and the Locale constants of `uppercase()` / `lowercase()`; _DxeDeepVM.kotlin() runs them.
+_KOBJ_INLINE = frozenset(("Lkotlin/ULong;", "Lkotlin/UInt;", "Lkotlin/UShort;", "Lkotlin/UByte;"))
+_KOBJ_LOCALES = ("Ljava/util/Locale;->ROOT", "Ljava/util/Locale;->US", "Ljava/util/Locale;->ENGLISH")
+
+
+# --- pure static fns of a v2 chain, compiled once to per-instruction closures and memoised (coverage atlas:
+# dex-eval-pure-static-memo, rows 96/97). A static method with only int/long params + result whose body is moves /
+# consts / int+long ALU / cmp / if / goto / switch / returns and invoke-static of other such methods (or a
+# Long/Integer/Math intrinsic) touches no statics, arrays or objects: its value is a function of its args, so the deep
+# VM keys it by (ref, args) across every String method it runs, and executes it from a pre-decoded closure table
+# instead of re-decoding each code unit (Probe.s1/s2/s3's <=4096-step inverse searches dominate a D23 Mastery set).
+# Same semantics as _DxVM.run: anything the interpreter aborts on raises _DxAbort here; steps count toward max_steps.
+_DXP_MEMO_MAX = 1 << 16
+_DXP_OPS = frozenset([*range(0x01, 0x0C), 0x0F, 0x10, *range(0x12, 0x1A), 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x31,
+                      *range(0x32, 0x3E), 0x7B, 0x7C, 0x7D, 0x7E, 0x81, 0x84, 0x8D, 0x8E, 0x8F, *range(0x90, 0xA6),
+                      *range(0xB0, 0xC6), *range(0xD0, 0xE3), 0x71, 0x77])
+_DXP_INTR_OK = ("Ljava/lang/Long;->", "Ljava/lang/Integer;->", "Ljava/lang/Math;->")
+
+
+def _dxp_prim(ref):
+    ps = _dxe_params(ref)
+    return all(p in "ZBSCIJ" for p in ps) and ref[ref.rindex(")") + 1:] in ("Z", "B", "S", "C", "I", "J")
+
+
+def _dxp_walk(ins):
+    """[(pc, op, b1)] of real instructions (switch / array payloads skipped); None when the stream is malformed."""
+    out, pc, n = [], 0, len(ins) // 2
+    while pc < n:
+        p = 2 * pc
+        op, b1 = ins[p], ins[p + 1]
+        if op == 0 and b1 in (1, 2, 3):
+            if p + 8 > len(ins):
+                return None
+            sz = struct.unpack_from("<H", ins, p + 2)[0]
+            w = (sz * 2 + 4 if b1 == 1 else sz * 4 + 2 if b1 == 2 else
+                 (sz * struct.unpack_from("<I", ins, p + 4)[0] + 1) // 2 + 4)
+        else:
+            out.append((pc, op, b1))
+            w = _DOP_W[op]
+        pc += w
+    return out if pc == n else None
+
+
+def _dxp_pure(dx, ref):
+    """True when `ref` is a static primitive-only method of the pure kind above (cached on the _DxDex)."""
+    cache = dx.__dict__.setdefault("_dxp_pure", {})
+    if ref in cache:
+        return cache[ref]
+    cache[ref] = True  # provisional: a recursive cycle of otherwise-pure methods stays pure
+    ok = False
+    try:
+        nreg, nin, ins, acc = dx.code[ref]
+        walk = _dxp_walk(ins) if acc & 0x8 and nin <= nreg and _dxp_prim(ref) and len(ins) <= 1 << 16 else None
+        if walk is not None:
+            ok = True
+            for pc, op, b1 in walk:
+                if op not in _DXP_OPS or op == 0 and b1:
+                    ok = False
+                elif op in (0x71, 0x77):
+                    r2 = dx.mref(struct.unpack_from("<H", ins, 2 * pc + 2)[0])
+                    ok = (_dxp_pure(dx, r2) if r2 in dx.code else
+                          r2 in _DXE_INTR and r2.startswith(_DXP_INTR_OK) and _dxp_prim(r2))
+                if not ok:
+                    break
+    except Exception:  # noqa: BLE001 - malformed code item: interpret it instead
+        ok = False
+    cache[ref] = ok
+    return ok
+
+
+def _dxp_abort(r):
+    raise _DxAbort
+
+
+def _dxp_compile(dx, ref):  # noqa: C901 - one table of instruction closures
+    """(closures by pc, nreg, nin) of a pure method. Each closure takes the register list (regs + [ret, last, vm,
+    depth]) and returns the next pc, -1 on return."""
+    comp = dx.__dict__.setdefault("_dxp_comp", {})
+    if ref in comp:
+        return comp[ref]
+    nreg, nin, ins, _ = dx.code[ref]
+    n = len(ins) // 2
+    R, L, VM, DP = nreg, nreg + 1, nreg + 2, nreg + 3
+    code = [_dxp_abort] * (n + 1)
+    h16 = lambda p: struct.unpack_from("<h", ins, p)[0]  # noqa: E731
+    u16 = lambda p: struct.unpack_from("<H", ins, p)[0]  # noqa: E731
+    w32, w64, binop = _dxe_w32, _dxe_w64, _dxe_binop
+
+    def br(t):
+        return t if 0 <= t < n else n
+
+    for pc, op, b1 in _dxp_walk(ins):
+        p, A, B, nx = 2 * pc, b1 & 0xF, b1 >> 4, br(pc + _DOP_W[op])
+        f = None
+        if op in (0x01, 0x04, 0x07):
+            if op == 0x04:
+                def f(r, A=A, B=B, nx=nx):
+                    r[A], r[A + 1] = r[B], r[B + 1]
+                    return nx
+            else:
+                def f(r, A=A, B=B, nx=nx):
+                    r[A] = r[B]
+                    return nx
+        elif op in (0x02, 0x05, 0x08, 0x03, 0x06, 0x09):
+            a_, s_ = (b1, u16(p + 2)) if op in (0x02, 0x05, 0x08) else (u16(p + 2), u16(p + 4))
+            if op in (0x05, 0x06):
+                def f(r, a_=a_, s_=s_, nx=nx):
+                    r[a_], r[a_ + 1] = r[s_], r[s_ + 1]
+                    return nx
+            else:
+                def f(r, a_=a_, s_=s_, nx=nx):
+                    r[a_] = r[s_]
+                    return nx
+        elif op in (0x0A, 0x0B):
+            if op == 0x0B:
+                def f(r, a_=b1, nx=nx):
+                    r[a_], r[a_ + 1] = r[L], None
+                    return nx
+            else:
+                def f(r, a_=b1, nx=nx):
+                    r[a_] = r[L]
+                    return nx
+        elif op in (0x0F, 0x10):
+            def f(r, a_=b1):
+                r[R] = r[a_]
+                return -1
+        elif 0x12 <= op <= 0x19:
+            wide = op >= 0x16
+            a_ = A if op == 0x12 else b1
+            v = ((B ^ 8) - 8 if op == 0x12 else h16(p + 2) if op in (0x13, 0x16) else
+                 struct.unpack_from("<i", ins, p + 2)[0] if op in (0x14, 0x17) else w32(u16(p + 2) << 16)
+                 if op == 0x15 else struct.unpack_from("<q", ins, p + 2)[0] if op == 0x18 else w64(h16(p + 2) << 48))
+            if wide:
+                def f(r, a_=a_, v=v, nx=nx):
+                    r[a_], r[a_ + 1] = v, None
+                    return nx
+            else:
+                def f(r, a_=a_, v=v, nx=nx):
+                    r[a_] = v
+                    return nx
+        elif op in (0x28, 0x29, 0x2A):
+            off = (b1 ^ 0x80) - 0x80 if op == 0x28 else h16(p + 2) if op == 0x29 else \
+                struct.unpack_from("<i", ins, p + 2)[0]
+            if off or op == 0x2A:
+                f = (lambda r, t=br(pc + off): t)
+        elif op in (0x2B, 0x2C):
+            q = 2 * (pc + struct.unpack_from("<i", ins, p + 2)[0])
+            if 0 <= q and q + 4 <= len(ins):
+                cnt, tab = u16(q + 2), None
+                if op == 0x2B and ins[q:q + 2] == b"\x00\x01":
+                    k0 = struct.unpack_from("<i", ins, q + 4)[0]
+                    tab = {k0 + k: br(pc + struct.unpack_from("<i", ins, q + 8 + 4 * k)[0]) for k in range(cnt)}
+                elif op == 0x2C and ins[q:q + 2] == b"\x00\x02":
+                    keys = struct.unpack_from(f"<{cnt}i", ins, q + 4)
+                    tab = {}
+                    for k, kv in enumerate(keys):
+                        tab.setdefault(kv, br(pc + struct.unpack_from("<i", ins, q + 4 + 4 * cnt + 4 * k)[0]))
+                if tab is not None:
+                    def f(r, a_=b1, tab=tab, nx=nx):
+                        v = r[a_]
+                        if v.__class__ is not int:
+                            raise _DxAbort
+                        return tab.get(v, nx)
+        elif op == 0x31:
+            def f(r, a_=b1, x_=ins[p + 2], y_=ins[p + 3], nx=nx):
+                x, y = r[x_], r[y_]
+                if x.__class__ is not int or y.__class__ is not int:
+                    raise _DxAbort
+                r[a_] = (x > y) - (x < y)
+                return nx
+        elif 0x32 <= op <= 0x3D:
+            off, k, z = h16(p + 2), (op - 0x32) % 6, op >= 0x38
+            if off:
+                t = br(pc + off)
+                cmp = (int.__eq__, int.__ne__, int.__lt__, int.__ge__, int.__gt__, int.__le__)[k]
+
+                def f(r, xa=(b1 if z else A), yb=B, z=z, cmp=cmp, t=t, nx=nx):
+                    x = r[xa]
+                    y = 0 if z else r[yb]
+                    if x.__class__ is not int:
+                        if not z:
+                            raise _DxAbort
+                        x = 0 if x is None else 1
+                    if y.__class__ is not int:
+                        raise _DxAbort
+                    return t if cmp(x, y) else nx
+        elif 0x7B <= op <= 0x8F:
+            g = {0x7B: lambda v: w32(-v), 0x7C: lambda v: ~v, 0x7D: lambda v: w64(-v), 0x7E: lambda v: ~v,
+                 0x81: lambda v: v, 0x84: w32, 0x8D: lambda v: ((v + 0x80) & 0xFF) - 0x80, 0x8E: lambda v: v & 0xFFFF,
+                 0x8F: lambda v: ((v + 0x8000) & 0xFFFF) - 0x8000}[op]
+            if op in (0x7D, 0x7E, 0x81):
+                def f(r, A=A, B=B, g=g, nx=nx):
+                    v = r[B]
+                    if v.__class__ is not int:
+                        raise _DxAbort
+                    r[A], r[A + 1] = g(v), None
+                    return nx
+            else:
+                def f(r, A=A, B=B, g=g, nx=nx):
+                    v = r[B]
+                    if v.__class__ is not int:
+                        raise _DxAbort
+                    r[A] = g(v)
+                    return nx
+        elif 0x90 <= op <= 0xA5 or 0xB0 <= op <= 0xC5:
+            lo = 0x90 if op <= 0xA5 else 0xB0
+            k, wide = (op - lo, False) if op <= lo + 0xA else (op - lo - 0xB, True)
+            d_, x_, y_ = (b1, ins[p + 2], ins[p + 3]) if lo == 0x90 else (A, A, B)
+            if wide:
+                def f(r, k=k, d_=d_, x_=x_, y_=y_, nx=nx):
+                    r[d_], r[d_ + 1] = binop(k, r[x_], r[y_], True), None
+                    return nx
+            else:
+                def f(r, k=k, d_=d_, x_=x_, y_=y_, nx=nx):
+                    r[d_] = binop(k, r[x_], r[y_], False)
+                    return nx
+        elif 0xD0 <= op <= 0xE2:
+            if op <= 0xD7:
+                k, d_, s_, lit = op - 0xD0, A, B, h16(p + 2)
+            else:
+                k, d_, s_, lit = op - 0xD8, b1, ins[p + 2], (ins[p + 3] ^ 0x80) - 0x80
+            if k == 1:
+                def f(r, d_=d_, s_=s_, lit=lit, nx=nx):
+                    r[d_] = binop(1, lit, r[s_], False)
+                    return nx
+            else:
+                def f(r, k=k, d_=d_, s_=s_, lit=lit, nx=nx):
+                    r[d_] = binop(k, r[s_], lit, False)
+                    return nx
+        elif op in (0x71, 0x77):
+            ref2 = dx.mref(u16(p + 2))
+            if op == 0x71:
+                g_ = u16(p + 4)
+                regs = tuple([g_ & 0xF, (g_ >> 4) & 0xF, (g_ >> 8) & 0xF, g_ >> 12, A][:B])
+            else:
+                regs = tuple(range(u16(p + 4), u16(p + 4) + b1))
+
+            def f(r, ref2=ref2, regs=regs, nx=nx):
+                r[L] = r[VM].invoke(ref2, [r[x] for x in regs], r[DP])
+                return nx
+        if f is not None:
+            code[pc] = f
+    comp[ref] = (code, nreg, nin)
+    return comp[ref]
+
+
+def _dxp_run(vm, ref, raw, depth):
+    """Run a pure method's compiled closures on `vm` (its steps / deadline budget); the returned int."""
+    code, nreg, nin = _dxp_compile(vm.dx, ref)
+    r = [None] * (nreg + 4)
+    r[nreg - nin:nreg - nin + len(raw)] = raw[:nin]
+    r[nreg + 2], r[nreg + 3] = vm, depth
+    pc, k, now, dl = 0, 0, time.time, vm.deadline
+    while pc >= 0:
+        pc = code[pc](r)
+        k += 1
+        if not k & 1023 and (vm.steps + k > vm.max_steps or now() > dl):
+            raise _DxAbort
+    vm.steps += k
+    if vm.steps > vm.max_steps:
+        raise _DxAbort
+    return r[nreg]
+
+
+# --- JNI bridge: a static `native long f(long)` / `native int f(int)` run as its Java_* export under unicorn ----------
+_NLB_STEPS, _NLB_MAX_SO = 200_000, 8 << 20
+_NLB_ABI = {"EM_X86_64": ("UC_ARCH_X86", "UC_MODE_64", "UC_X86_REG_", ("RDI", "RSI", "RDX"), "RAX", "RSP"),
+            "EM_AARCH64": ("UC_ARCH_ARM64", "UC_MODE_ARM", "UC_ARM64_REG_", ("X0", "X1", "X2"), "X0", "SP")}
+_NLB_ABI_ORDER = ("x86_64", "arm64-v8a")
+
+
+def _nlb_mangle(s):
+    out = []
+    for ch in s:
+        if ch.isalnum() and ch.isascii():
+            out.append(ch)
+        else:
+            out.append({"/": "_", "_": "_1", ";": "_2", "[": "_3"}.get(ch, "_0%04x" % ord(ch)))
+    return "".join(out)
+
+
+def _nlb_call(elf, va, arg, wide):
+    """Run the export at `va` with (env, jclass, arg) in the arch's argument registers; the return register or None."""
+    import unicorn as U
+    ua, um, rp, regs, ret, sp = _NLB_ABI[elf.arch]
+    uc, page = U.Uc(getattr(U, ua), getattr(U, um)), 0x1000
+    base, top = 0x10000000, 0
+    for v, o, fs, ms in elf.segs:
+        lo, hi = (v & ~(page - 1)), (v + ms + page - 1) & ~(page - 1)
+        top = max(top, hi)
+    if not 0 < top <= 64 << 20:
+        return None
+    uc.mem_map(base, top, U.UC_PROT_ALL)
+    for v, o, fs, ms in elf.segs:
+        uc.mem_write(base + v, elf.b[o:o + fs])
+    stack, env, stop = 0x70000000, 0x60000000, 0x50000000
+    uc.mem_map(stack, 0x10000)
+    uc.mem_map(env, 0x10000)  # a zeroed JNIEnv: any call through it faults -> None
+    uc.mem_map(stop, page)
+    r = lambda n: getattr(U.x86_const if elf.arch == "EM_X86_64" else U.arm64_const, rp + n)
+    s = stack + 0x8000
+    uc.mem_write(env, struct.pack("<Q", env + 0x100))
+    if elf.arch == "EM_X86_64":
+        s -= 8
+        uc.mem_write(s, struct.pack("<Q", stop))
+    else:
+        uc.reg_write(U.arm64_const.UC_ARM64_REG_LR, stop)
+    uc.reg_write(r(sp), s)
+    a = arg & (0xFFFFFFFFFFFFFFFF if wide else 0xFFFFFFFF)
+    for n, val in zip(regs, (env, 0, a)):
+        uc.reg_write(r(n), val)
+    uc.emu_start(base + va, stop, count=_NLB_STEPS)
+    if uc.reg_read(getattr(U.x86_const if elf.arch == "EM_X86_64" else U.arm64_const,
+                           "UC_X86_REG_RIP" if elf.arch == "EM_X86_64" else "UC_ARM64_REG_PC")) != stop:
+        return None
+    v = uc.reg_read(r(ret))
+    return _dxe_w64(v) if wide else _dxe_w32(v)
+
+
+def _nlb_resolver(z):
+    """ref -> callable for static native (J)J / (I)I methods whose Java_<mangled> export sits in lib/<abi>/*.so; the
+    first ABI the bridge can run wins. None when the APK ships no runnable .so."""
+    sos = {}
+    for i in z.infolist():
+        m = re.fullmatch(r"lib/([^/]+)/[^/]+\.so", i.filename)
+        if m and m.group(1) in _NLB_ABI_ORDER and 0 < i.file_size <= _NLB_MAX_SO:
+            sos.setdefault(m.group(1), []).append(i)
+    elves = []
+    for abi in _NLB_ABI_ORDER:
+        for i in sos.get(abi, []):
+            try:
+                elf = _NsoElf(z.read(i))
+            except Exception:  # noqa: BLE001 - truncated / impostor .so
+                continue
+            if elf.arch in _NLB_ABI and elf.is64:
+                elves.append((elf, {n: va for n, va, _ in _nso_exports(elf) if n.startswith("Java_")}))
+    if not elves:
+        return None
+    cache = {}
+
+    def resolve(ref):
+        if ref in cache:
+            return cache[ref]
+        cache[ref] = None
+        m = re.fullmatch(r"L([^;]+);->([^(]+)\(([JI])\)([JI])", ref)
+        if not m or m.group(3) != m.group(4):
+            return None
+        name = "Java_%s_%s" % (_nlb_mangle(m.group(1)), _nlb_mangle(m.group(2)))
+        for elf, ex in elves:
+            if name in ex:
+                wide = m.group(3) == "J"
+
+                def fn(arg, elf=elf, va=ex[name], wide=wide):
+                    try:
+                        return _nlb_call(elf, va, arg, wide)
+                    except Exception:  # noqa: BLE001 - unmapped access / bad opcode: cannot answer
+                        return None
+                cache[ref] = fn
+                break
+        return cache[ref]
+    return resolve
+
+
+def dex_eval_scan(apk, deep=False):
     """ANS tokens computed by simple Dalvik bytecode: each app method (static String-returning ones and any method with
     an array / xor / switch / int-to-char op) is evaluated by a tiny static interpreter -- const / move / arrays /
     fill-array-data / int+long arithmetic / if / goto / packed+sparse switch, in-dex calls and the <clinit>s it reads,
     plus String / StringBuilder / Integer.parseInt / Base64 intrinsics; String params get "", int params 0; an
     unknown invoke or a float op aborts that method. Every string it builds or returns is regex'd. Covers string-
-    encryption helpers and switch-flattened control flow without a device. [] when absent; never raises; ~0.8 s."""
+    encryption helpers and switch-flattened control flow without a device. [] when absent; never raises; ~0.8 s.
+    deep=True (D23 `codec: analysis`, a puzzle with no data): only the String-returning methods, 2M steps each, return
+    values first -- `Release.code(Context)` = a chain of 64-bit mixers fed by 4096-iteration probe solvers, far past
+    the 50k cap; the dex also carries a literal decoy token (ANS-0123456789ABCDEF) that dex_strings stops on."""
+    if deep:
+        return _dex_eval_deep(apk)
     hits = []
     deadline = time.time() + _DXE_BUDGET_S
     try:
@@ -9016,6 +9857,60 @@ def dex_eval_scan(apk):
     except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
         pass
     return list(dict.fromkeys(hits))
+
+
+def _dex_eval_deep(apk, entry_only=False):
+    """dex_eval_scan(deep=True): returned ANS tokens of every static String-returning app method under _DxeDeepVM.
+    entry_only=True: only the methods _eav_reached() reaches from ChallengeActivity / MainActivity ([] without one)."""
+    rets, seen = [], []
+    deadline = time.time() + _DXE_DEEP_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            dexes = [z.read(i) for i in z.infolist() if i.file_size <= _DXE_MAX_DEX
+                     and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+            try:
+                natives = _nlb_resolver(z)
+            except Exception:  # noqa: BLE001 - no runnable JNI bridge
+                natives = None
+        for d in dexes:
+            if d[:4] != b"dex\n" or len(d) < 0x70 or time.time() > deadline:
+                continue
+            try:
+                dx = _DxDex(d)
+            except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+                continue
+            live = _eav_reached(dx, deadline) if entry_only else None
+            if entry_only and not live:
+                continue
+            try:
+                vmc = _DxeRflVM if _dxe_reflective(dx) else _DxeDeepVM
+            except (IndexError, struct.error):
+                vmc = _DxeDeepVM
+            for ref in dx.order:
+                nreg, nin, _ins, acc = dx.code[ref]
+                ps = _dxe_params(ref)
+                if not ref.endswith(")Ljava/lang/String;") or not acc & 0x8 or len(ps) > 4 or nin > nreg \
+                        or _DXE_LIB.match(ref) or (live is not None and ref not in live):
+                    continue
+                if time.time() > deadline:
+                    break
+                vm = vmc(dx, deadline)
+                vm.natives = natives
+                raw = []
+                for q in ps:
+                    raw += [_dxe_default(q)] + ([None] if q in "JD" else [])
+                try:
+                    vm.init_class(ref.split("->")[0])
+                    r = vm.run(ref, raw)
+                except (_DxAbort, IndexError, KeyError, TypeError, ValueError, AttributeError, OverflowError,
+                        RecursionError, struct.error):
+                    continue
+                if isinstance(r, str):
+                    rets += ANS_RE_T.findall(r)
+                seen += [m for s in vm.seen if isinstance(s, str) for m in ANS_RE_T.findall(s)]
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    return list(dict.fromkeys(rets + seen))
 
 
 
@@ -9746,7 +10641,45 @@ _ENV_FILES = {
                        "7a1b200000-7a1b2d0000 r--p 00000000 fd:05 2345 /apex/com.android.runtime/lib64/bionic/libc.so\n"
                        "7a1c000000-7a1c400000 r--p 00000000 fd:21 3456 /data/app/~~x==/base.apk\n"
                        "7ffd5000000-7ffd5021000 rw-p 00000000 00:00 0 [stack]\n"}
-_ENV_FILES["/proc/" + "12345/status"], _ENV_FILES["/proc/12345/maps"] = _ENV_FILES["/proc/self/status"], _ENV_FILES["/proc/self/maps"]
+# instrumentation false positives (rows 48, 91): the rest of a stock ART process's maps -- libart / libandroid_runtime /
+# boot oat, dalvik heaps, the JIT's r-xp memfd (an exec anon mapping that is NOT an injected agent), the app's oat; and
+# /proc/net/tcp{,6} with ephemeral :443 sockets only (no :69A2 / :69A3 local port; one peer IP hex holds a bare "69A2").
+_ENV_FILES["/proc/self/maps"] += (
+    "70a1e000-70c4a000 rw-p 00000000 00:00 0 [anon:dalvik-/system/framework/boot.art]\n"
+    "7a1d100000-7a1d900000 r--p 00000000 fd:05 4567 /apex/com.android.art/lib64/libart.so\n"
+    "7a1d900000-7a1dc80000 r-xp 00800000 fd:05 4567 /apex/com.android.art/lib64/libart.so\n"
+    "7a1e000000-7a1e0c0000 r-xp 00000000 fd:05 5678 /system/lib64/libandroid_runtime.so\n"
+    "7a1e400000-7a1e480000 r-xp 00000000 fd:05 6789 /system/lib64/libandroid.so\n"
+    "7a1e800000-7a1e900000 r-xp 00000000 fd:05 7890 /system/framework/arm64/boot-framework.oat\n"
+    "7a1f000000-7a1f040000 rw-p 00000000 00:00 0 [anon:dalvik-LinearAlloc]\n"
+    "7a1f100000-7a1f500000 rw-p 00000000 00:00 0 [anon:dalvik-main space (region space)]\n"
+    "7a1f600000-7a1f800000 r-xp 00000000 00:01 8901 /memfd:jit-cache (deleted)\n"
+    "7a1f800000-7a1fa00000 r--p 00000000 00:01 8901 /memfd:jit-cache (deleted)\n"
+    "7a20000000-7a20020000 r--p 00000000 fd:21 3457 /data/app/~~x==/oat/arm64/base.odex\n"
+    "7a20100000-7a20140000 r-xp 00000000 fd:05 9012 /system/lib64/libgui.so\n"
+    "7a20200000-7a20210000 r--s 00000000 00:16 9123 /dev/__properties__/u:object_r:default_prop:s0\n"
+    "7a20300000-7a20400000 r-xp 00000000 fd:05 9234 /apex/com.android.runtime/bin/linker64\n"
+    "7ffd5100000-7ffd5102000 r-xp 00000000 00:00 0 [vdso]\n")
+_ENV_FILES["/proc/12345/maps"] = _ENV_FILES["/proc/self/maps"]
+_ENV_FILES["/proc/net/tcp"] = _ENV_FILES["/proc/self/net/tcp"] = (
+    "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+    "   0: 172AB10A:A3F2 2E0E7A8E:01BB 01 00000000:00000000 00:00000000 00000000 10234        0 48213 1 0 20 4 30 10 -1\n"
+    "   1: 172AB10A:C81E 69A2FB8E:01BB 01 00000000:00000000 00:00000000 00000000 10234        0 48290 1 0 21 4 30 10 -1\n"
+    "   2: 172AB10A:D0A4 C1E8D9AC:01BB 06 00000000:00000000 03:00000F2A 00000000     0        0 0 3 0\n")
+_ENV_FILES["/proc/net/tcp6"] = _ENV_FILES["/proc/self/net/tcp6"] = (
+    "  sl  local_address                         remote_address                        st tx_queue rx_queue tr "
+    "tm->when retrnsmt   uid  timeout inode\n"
+    "   0: 0000000000000000FFFF0000172AB10A:B1C6 0000000000000000FFFF00004E0F7A8E:01BB 01 00000000:00000000 "
+    "00:00000000 00000000 10234        0 48311 1 0 20 4 30 10 -1\n")
+# PackageManager.getInstalledPackages / getInstalledApplications: a stock Pixel's apps + a few Play installs (no frida
+# server / Xposed / LSPosed / Magisk managers); near misses by design: com.google.android.gm(s), android.ext.shared
+_ENV_INSTALLED = ("android", "com.android.systemui", "com.android.settings", "com.android.phone", "com.android.vending",
+                  "com.google.android.gms", "com.google.android.gsf", "com.google.android.gm",
+                  "com.google.android.apps.maps", "com.google.android.youtube", "com.android.chrome",
+                  "com.google.android.apps.messaging", "com.google.android.dialer", "com.google.android.apps.photos",
+                  "com.google.android.inputmethod.latin", "com.android.providers.downloads", "android.ext.shared",
+                  "com.google.android.webview", "com.whatsapp", "com.spotify.music")
+_ENV_FILES["/proc/" + "12345/status"] = _ENV_FILES["/proc/self/status"]
 _ENV_PORTS = frozenset((27042, 27043, 27047, 23946, 5555, 5037))
 _ENV_NEW = frozenset(("Ljava/io/File;", "Ljava/io/FileReader;", "Ljava/io/FileInputStream;", "Ljava/io/InputStreamReader;",
                       "Ljava/io/BufferedReader;", "Ljava/net/Socket;", "Ljava/net/InetSocketAddress;", "Ljava/util/Scanner;",
@@ -9756,7 +10689,7 @@ _ENV_MARK = re.compile(r"(?i)Landroid/os/(?:Build|Debug)|isDebuggerConnected|wai
                        r"|Settings\$(?:Secure|Global)|Landroid/os/SystemClock;|Ljava/lang/System;->(?:nanoTime|currentTimeMillis)"
                        r"|Ldalvik/system/VMDebug;|Landroid/os/SystemProperties;|getStackTrace|getAllStackTraces"
                        r"|Ljava/lang/reflect/Modifier;->isNative|ClassLoader;->loadClass|Landroid/system/Os;->readlink"
-                       r"|Ljava/lang/System;->getenv"
+                       r"|Ljava/lang/System;->getenv|getInstalled(?:Packages|Applications)"
                        r"|Landroid/telephony/TelephonyManager;|Landroid/hardware/SensorManager;|Landroid/os/BatteryManager;"
                        r"|Ljava/net/NetworkInterface;->getNetworkInterfaces"
                        r"|getInstallerPackageName|getInstallSourceInfo|getPackageCodePath|getPackageResourcePath"
@@ -10102,7 +11035,7 @@ class _EnvVM(_DxVM):
                         "equalsIgnoreCase": x.lower() == y.lower()}[name])
         if cls in ("Landroid/os/Debug;", "Ldalvik/system/VMDebug;") and name in (
                 "isDebuggerConnected", "waitingForDebugger", "isDebuggingEnabled"):
-            return 0
+            return self.log_probe(name, "", 0)
         if _ENV_CLOCK.match(ref):
             self.ns += 1_000_000
             return self.ns if "Nanos" in ref or "nanoTime" in ref else self.ns // 1_000_000
@@ -10597,7 +11530,27 @@ class _EnvVM(_DxVM):
                     return self.frames(("dalvik.system.VMStack.getThreadStackTrace", "java.lang.Thread.getStackTrace"))
                 return self.frames(None)
             raise _DxAbort
+        if name in ("getInstalledPackages", "getInstalledApplications") and cls.startswith("Landroid/content/pm/"):
+            own = (self.apk or {}).get("pkg")
+            objs = []
+            for pk in _ENV_INSTALLED + ((own,) if own and own not in _ENV_INSTALLED else ()):
+                ai = _DxObj("Landroid/content/pm/ApplicationInfo;")
+                ai.f.update({"Landroid/content/pm/ApplicationInfo;->packageName": pk,
+                             "Landroid/content/pm/ApplicationInfo;->processName": pk,
+                             "Landroid/content/pm/ApplicationInfo;->flags": 0x38C8BE44 if pk == own else 0x30C8BE45})
+                if name == "getInstalledPackages":
+                    pi = _DxObj("Landroid/content/pm/PackageInfo;")
+                    pi.f.update({"Landroid/content/pm/PackageInfo;->packageName": pk,
+                                 "Landroid/content/pm/PackageInfo;->applicationInfo": ai,
+                                 "Landroid/content/pm/PackageInfo;->versionName": "1.0"})
+                    ai = pi
+                objs.append(ai)
+            lst = _DxObj("Ljava/util/List;")
+            lst.f["sl"] = objs
+            self.log_probe(name, "", f"{len(objs)} packages, no frida / xposed / lsposed / magisk manager")
+            return lst
         if cls == "Ljava/lang/Thread;" and name == "getAllStackTraces":
+            self.log_probe("Thread.getAllStackTraces", "", f"{len(_HK_THREADS)} ART threads, no gum-js-loop / gmain")
             m = _DxObj("Ljava/util/Map;")
             m.f["hk"] = []
             for n in _HK_THREADS:
@@ -10688,7 +11641,7 @@ class _EnvVM(_DxVM):
             m = re.fullmatch(r"/proc/self/fd/(\d+)", raw[0])
             if not m or int(m.group(1)) not in _HK_FDS:
                 raise _DxThrow("Landroid/system/ErrnoException;")
-            return _HK_FDS[int(m.group(1))]
+            return self.log_probe("Os.readlink", raw[0], _HK_FDS[int(m.group(1))])
         if cls == "Ljava/lang/System;" and name == "getenv" and raw and isinstance(raw[0], str):
             return None  # LD_PRELOAD / CLASSPATH / ... unset in a zygote-forked app
         if t == "Ljava/lang/Class;" and "d" in o.f:
@@ -10734,6 +11687,7 @@ class _EnvVM(_DxVM):
         if name in ("loadClass", "forName") and (t == "Ljava/lang/ClassLoader;" or cls == "Ljava/lang/Class;") and a \
                 and isinstance(a[0], str) and (name == "loadClass" or a[0] != "android.os.SystemProperties"):
             if _ENV_PKG.search(a[0]):
+                self.log_probe("ClassLoader." + name, a[0], "ClassNotFoundException")
                 raise _DxThrow("Ljava/lang/ClassNotFoundException;", "Ljava/lang/ReflectiveOperationException;")
             d = "L" + a[0].replace(".", "/") + ";"
             if d in self.dx.sfields:
@@ -10878,6 +11832,442 @@ def clean_device_scan(apk):
     except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
         pass
     return list(dict.fromkeys(hits))
+
+
+# --- the Context a v2 chain is handed, answering from the APK itself (coverage atlas: analysis-android-api-stubs) -------
+# D23 `Release.code(Context)` stores ctx in a static: the next chains read Android state through it. _CtxVM is the deep
+# evaluator on the clean retail Pixel (_EnvVM's Build / root / emulator / hook / installer / signature tables) plus a
+# Context backed by the APK's own bytes: getAssets().open(name) -> the zip entry (InputStream read / available /
+# readAllBytes / readers), org.json JSONObject / JSONArray over those bytes, getResources() / getString(id) /
+# getIdentifier via resources.arsc, getPackageName / PackageInfo (signer certs, versionCode / versionName from the
+# manifest, fixed install times), getApplicationInfo().flags (manifest debuggable bit), SharedPreferences (unset key ->
+# the default; put + apply / commit read back), Settings.Secure ANDROID_ID = a fixed 16-hex id, System.getProperty =
+# ART's values. Every stub hit lands in CONTEXT_STUB_HITS (kind, argument, answer) for the worker to audit.
+_CTX_TYPES = frozenset(("Landroid/content/Context;", "Landroid/content/ContextWrapper;", "Landroid/app/Activity;",
+                        "Landroid/app/Application;", "Landroid/app/Service;", "Landroid/view/ContextThemeWrapper;",
+                        "Landroidx/appcompat/app/AppCompatActivity;", "Landroidx/fragment/app/FragmentActivity;",
+                        "Landroidx/activity/ComponentActivity;", "Landroidx/core/app/ComponentActivity;"))
+_CTX_ANDROID_ID = "3f8a1c5e7b2d9046"
+_CTX_INSTALL_MS = 1_707_177_600_000  # firstInstallTime / lastUpdateTime (2024-02-06, the build date of _ENV_FP)
+_CTX_SYSPROPS = {"java.vm.name": "Dalvik", "java.vm.version": "2.1.0", "java.vm.vendor": "The Android Project",
+                 "java.vendor": "The Android Project", "java.vendor.url": "http://www.android.com/", "java.version": "0",
+                 "java.specification.version": "0.9", "java.vm.specification.version": "0.9", "java.home": "/system",
+                 "java.class.path": ".", "java.library.path": "/system/lib64:/system_ext/lib64", "os.name": "Linux",
+                 "os.arch": "aarch64", "os.version": "5.10.198-android13-4-00050-g12f3388846c3-ab11920634",
+                 "file.separator": "/", "path.separator": ":", "line.separator": "\n", "file.encoding": "UTF-8",
+                 "user.dir": "/", "user.home": "", "user.name": "", "user.language": "en", "user.region": "US",
+                 "http.agent": "Dalvik/2.1.0 (Linux; U; Android 14; Pixel 6 Build/UQ1A.240205.004)",
+                 "android.icu.library.version": "72.1", "android.icu.unicode.version": "15.0"}
+_CTX_MAX_ASSET, _CTX_BUDGET_S, _CTX_MAX_RUNS = 4 << 20, 1.5, 64
+_CTX_JSON = ("Lorg/json/JSONObject;", "Lorg/json/JSONArray;")
+_CTX_JEX = ("Lorg/json/JSONException;",)
+_CTX_RNF = ("Landroid/content/res/Resources$NotFoundException;", "Ljava/lang/RuntimeException;")
+_CTX_PREF = ("Landroid/content/SharedPreferences;", "Landroid/content/SharedPreferences$Editor;")
+# (kind, argument, stub answer) of the last context_chain_scan() call
+CONTEXT_STUB_HITS = []
+
+
+def _ctx_facts(apk):
+    """_env_apk_facts plus the manifest versionCode / versionName; None when the APK is not a readable zip."""
+    f = _env_apk_facts(apk)
+    if f is None:
+        return None
+    f.update(vc=1, vn=None)
+    try:
+        with zipfile.ZipFile(apk) as z:
+            b = z.read("AndroidManifest.xml") if z.getinfo("AndroidManifest.xml").file_size < 1 << 22 else b""
+        for kind, tag, attrs, _ in (_axml_events(b) if b[:2] == b"\x03\x00" else ()):
+            if kind == "start" and tag == "manifest" and attrs:
+                at = {k.split(":")[-1]: v for k, v in attrs.items()}
+                vc = at.get("versionCode")
+                f["vc"] = vc if isinstance(vc, int) and not isinstance(vc, bool) else int(vc) if str(vc).isdigit() else 1
+                f["vn"] = at.get("versionName") if isinstance(at.get("versionName"), str) else None
+                break
+    except Exception:  # noqa: BLE001 - unreadable manifest: versionCode 1, no versionName
+        pass
+    return f
+
+
+def _ctx_jstr(v):
+    """org.json's coercion of a value to String (getString / optString)."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, str)):
+        return str(v)
+    if isinstance(v, float):
+        return repr(v)  # Double.toString: 5.0, 0.25
+    raise _DxAbort
+
+
+def _ctx_jnum(v, w):
+    """org.json's coercion to int / long (getInt / getLong): numbers truncate, numeric strings parse; else None."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return w(int(v))
+    if isinstance(v, str):
+        try:
+            return w(int(float(v))) if re.fullmatch(r"\s*-?\d+(?:\.\d*)?(?:[eE][-+]?\d+)?\s*", v) else None
+        except (ValueError, OverflowError):
+            return None
+    return None
+
+
+class _CtxVM(_DxeDeepVM, _EnvVM):
+    """_DxeDeepVM on the clean Pixel (_EnvVM) holding a Context whose assets / resources / package facts are the APK's."""
+
+    def __init__(self, dx, deadline, facts, z, prefs):
+        _EnvVM.__init__(self, dx, deadline)
+        self.apk, self.z, self.prefs, self.tab = facts, z, prefs, None
+
+    def new_instance(self, t):
+        if t in _CTX_JSON:
+            return _DxObj(t)
+        return super().new_instance(t)
+
+    def env(self, ref, raw):
+        v = self.ctx(ref, raw)
+        return super().env(ref, raw) if v is _ENV_UNSET else v
+
+    def res_table(self):
+        if self.tab is None:
+            try:
+                self.tab = resource_table(self.z.read("resources.arsc")) if "resources.arsc" in self.z.NameToInfo \
+                    and self.z.getinfo("resources.arsc").file_size <= _RID_MAX_ARSC else {}
+            except Exception:  # noqa: BLE001 - unreadable table: no resources
+                self.tab = {}
+        return self.tab
+
+    def res(self, rid):
+        e = self.res_table().get(rid) if isinstance(rid, int) else None
+        if not e or not e["values"]:
+            self.log_probe("Resources.get", rid, "NotFoundException")
+            raise _DxThrow(*_CTX_RNF)
+        return _rid_resolve(self.tab, next((x for c, x in e["values"] if not c), e["values"][0][1]))
+
+    def stream(self, kind, arg, data):
+        s = _DxObj("Ljava/io/InputStream;")
+        s.f.update(B=data, pos=0)
+        self.log_probe(kind, arg, f"{len(data)} bytes")
+        return s
+
+    def json(self, t, v):
+        o = _DxObj(t)
+        o.f["J"] = v
+        return o
+
+    def ctx(self, ref, raw):  # noqa: C901 - one table of Context-backed models
+        cls, rest = ref.split("->", 1)
+        name, sig = rest.split("(", 1)
+        o = raw[0] if raw and isinstance(raw[0], _DxObj) else None
+        t = o.t if o is not None else None
+        a = raw[1:] if o is not None else raw
+        pkg = self.apk["pkg"]
+        if t in _CTX_JSON or cls in _CTX_JSON:
+            return self.json_call(cls, name, sig, o, a)
+        if o is not None and "B" in o.f:  # an asset stream
+            b, pos = o.f["B"], o.f["pos"]
+            if name == "read" and sig.startswith(")"):
+                o.f["pos"] = min(pos + 1, len(b))
+                return b[pos] if pos < len(b) else -1
+            if name == "read" and a and isinstance(a[0], list):
+                off, n = (a[1], a[2]) if len(a) >= 3 and isinstance(a[1], int) and isinstance(a[2], int) else (0, len(a[0]))
+                if off < 0 or n < 0 or off + n > len(a[0]):
+                    raise _DxAbort
+                if n == 0:
+                    return 0
+                if pos >= len(b):
+                    return -1
+                chunk = b[pos:pos + n]
+                a[0][off:off + len(chunk)] = [(x ^ 0x80) - 0x80 for x in chunk]
+                o.f["pos"] = pos + len(chunk)
+                return len(chunk)
+            if name in ("readAllBytes", "readBytes") or name == "readNBytes" and sig.startswith("I)"):
+                n = len(b) - pos if name != "readNBytes" else max(0, a[0])
+                o.f["pos"] = min(len(b), pos + n)
+                return _dxe_barr(b[pos:pos + n])
+            if name == "available":
+                return len(b) - pos
+            if name == "skip" and a and isinstance(a[0], int):
+                n = max(0, min(a[0], len(b) - pos))
+                o.f["pos"] = pos + n
+                return n
+            if name in ("close", "mark", "reset"):
+                return None
+            raise _DxAbort
+        if name == "<init>" and o is not None and cls in ("Ljava/io/InputStreamReader;", "Ljava/io/BufferedReader;",
+                                                         "Ljava/util/Scanner;", "Ljava/io/BufferedInputStream;",
+                                                         "Ljava/io/DataInputStream;"):
+            src = a[0] if a else None
+            if isinstance(src, _DxObj) and "B" in src.f:
+                if cls in ("Ljava/io/BufferedInputStream;", "Ljava/io/DataInputStream;"):
+                    o.f.update(B=src.f["B"][src.f["pos"]:], pos=0)
+                else:
+                    o.f["L"] = src.f["B"][src.f["pos"]:].decode("utf-8", "replace").splitlines()
+                src.f["pos"] = len(src.f["B"])
+                return None
+            return _ENV_UNSET
+        if cls == "Lkotlin/io/ByteStreamsKt;" and name == "readBytes" and a and isinstance(a[0], _DxObj) and "B" in a[0].f:
+            s = a[0]
+            out, s.f["pos"] = s.f["B"][s.f["pos"]:], len(s.f["B"])
+            return _dxe_barr(out)
+        if t in _CTX_PREF or cls in _CTX_PREF:
+            return self.pref_call(name, sig, o, a)
+        if cls == "Ljava/lang/String;" and name == "<init>" and sig in (
+                "[BIILjava/lang/String;)V", "[BIILjava/nio/charset/Charset;)V") and len(a) == 4 and isinstance(a[0], list):
+            off, n = a[1], a[2]
+            if not (isinstance(off, int) and isinstance(n, int) and 0 <= off and 0 <= n and off + n <= len(a[0])):
+                raise _DxAbort
+            return _dxe_bytes(a[0][off:off + n]).decode(_dxe_cs(a[3]), "replace")
+        if name == "getAssets" and sig == ")Landroid/content/res/AssetManager;":
+            return _DxObj("Landroid/content/res/AssetManager;")
+        if t == "Landroid/content/res/AssetManager;" or cls == "Landroid/content/res/AssetManager;":
+            if name in ("open", "openFd", "openNonAssetFd") and a and isinstance(a[0], str) and name == "open":
+                n = "assets/" + a[0].lstrip("/")
+                i = self.z.NameToInfo.get(n)
+                if i is None or i.file_size > _CTX_MAX_ASSET:
+                    self.log_probe("AssetManager.open", a[0], "FileNotFoundException")
+                    raise _DxThrow("Ljava/io/FileNotFoundException;", *_ENV_IOE)
+                return self.stream("AssetManager.open", a[0], self.z.read(i))
+            if name == "list" and a and isinstance(a[0], str):
+                d = ("assets/" + a[0].strip("/") + "/").replace("assets//", "assets/")
+                names = sorted({n[len(d):].split("/", 1)[0] for n in self.z.NameToInfo if n.startswith(d) and n != d})
+                r = _DxArr(names)
+                r.t = "Ljava/lang/String;"
+                return self.log_probe("AssetManager.list", a[0], r)
+            if name == "close":
+                return None
+            raise _DxAbort
+        if name == "getResources" and sig == ")Landroid/content/res/Resources;":
+            return _DxObj("Landroid/content/res/Resources;")
+        if name in ("getApplicationContext", "getBaseContext") and sig == ")Landroid/content/Context;":
+            return o if o is not None and (t in _CTX_TYPES or t in _dxx_supers(self.dx)) else _DxObj(
+                "Landroid/content/Context;")
+        if name in ("getString", "getText") and sig in ("I)Ljava/lang/String;", "I)Ljava/lang/CharSequence;") and a:
+            v = self.res(a[0])
+            if not isinstance(v, str):
+                raise _DxAbort
+            return self.log_probe("Resources." + name, f"{a[0]:#x}", v)
+        if t == "Landroid/content/res/Resources;" or cls == "Landroid/content/res/Resources;":
+            if name == "getIdentifier" and len(a) >= 2 and all(isinstance(x, str) or x is None for x in a[:3]):
+                n, ty = a[0], a[1]
+                m = re.fullmatch(r"(?:[\w.]+:)?(\w+)/(\w+)", n)
+                if m:
+                    ty, n = m[1], m[2]
+                rid = next((k for k, e in sorted(self.res_table().items()) if e["name"] == n and e["type"] == ty), 0)
+                return self.log_probe("Resources.getIdentifier", f"{ty}/{n}", rid)
+            if name in ("getInteger", "getBoolean") and a:
+                v = self.res(a[0])
+                if not isinstance(v, (int, bool)):
+                    raise _DxAbort
+                return self.log_probe("Resources." + name, f"{a[0]:#x}", int(v))
+            if name in ("getStringArray", "getTextArray") and a:
+                v = self.res(a[0])
+                if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+                    raise _DxAbort
+                r = _DxArr(v)
+                r.t = "Ljava/lang/String;"
+                return self.log_probe("Resources." + name, f"{a[0]:#x}", r)
+            if name in ("getResourceEntryName", "getResourceName", "getResourceTypeName") and a:
+                e = self.res_table().get(a[0])
+                if e is None:
+                    raise _DxThrow(*_CTX_RNF)
+                return {"getResourceEntryName": e["name"], "getResourceTypeName": e["type"],
+                        "getResourceName": f"{pkg}:{e['type']}/{e['name']}"}[name]
+            raise _DxAbort
+        if name == "getPackageName" and sig == ")Ljava/lang/String;" and pkg and o is not None:
+            return self.log_probe("getPackageName", "", pkg)
+        if name == "getSharedPreferences" and sig == "Ljava/lang/String;I)Landroid/content/SharedPreferences;" and a:
+            return self.pref_file(_dxe_str(a[0]))
+        if name == "getDefaultSharedPreferences" and cls == "Landroid/preference/PreferenceManager;" \
+                or cls == "Landroidx/preference/PreferenceManager;" and name == "getDefaultSharedPreferences":
+            return self.pref_file(f"{pkg}_preferences")
+        if name == "getPackageInfo" and cls.startswith("Landroid/content/pm/") and pkg and a \
+                and isinstance(a[0], str) and a[0].strip() == pkg:
+            pi = _EnvVM.env(self, ref, raw)
+            P = "Landroid/content/pm/PackageInfo;->"
+            pi.f.update({P + "versionCode": _dxe_w32(self.apk["vc"]), P + "versionName": self.apk["vn"],
+                         P + "firstInstallTime": _CTX_INSTALL_MS, P + "lastUpdateTime": _CTX_INSTALL_MS})
+            return pi
+        if t == "Landroid/content/pm/PackageInfo;" and name == "getLongVersionCode":
+            return self.apk["vc"]
+        if cls in ("Landroid/provider/Settings$Secure;", "Landroid/provider/Settings$System;") and name == "getString" \
+                and len(raw) > 1 and raw[1] == "android_id":
+            return self.log_probe("Settings.Secure", "android_id", _CTX_ANDROID_ID)
+        if cls == "Ljava/lang/System;" and name == "getProperty" and raw and isinstance(raw[0], str) \
+                and raw[0] in _CTX_SYSPROPS:
+            v = _CTX_SYSPROPS[raw[0]]
+            if raw[0] == "java.io.tmpdir" and pkg:
+                v = f"/data/user/0/{pkg}/cache"
+            return self.log_probe("System.getProperty", raw[0], v)
+        if cls == "Ljava/lang/System;" and name == "lineSeparator":
+            return "\n"
+        return _ENV_UNSET
+
+    def pref_file(self, n):
+        p = _DxObj("Landroid/content/SharedPreferences;")
+        p.f.update(P=self.prefs.setdefault(n, {}), n=n)
+        return p
+
+    def pref_call(self, name, sig, o, a):
+        if o is None or "P" not in o.f:
+            raise _DxAbort
+        P = o.f["P"]
+        if o.t == "Landroid/content/SharedPreferences;":
+            if name.startswith("get") and name != "getAll" and a and isinstance(a[0], str):
+                v = P.get(a[0], a[1] if len(a) > 1 else None)
+                self.log_probe("SharedPreferences." + name, f"{o.f['n']}:{a[0]}", v if a[0] in P else f"default {v!r}")
+                return v
+            if name == "contains" and a:
+                return int(a[0] in P)
+            if name == "edit":
+                e = _DxObj("Landroid/content/SharedPreferences$Editor;")
+                e.f.update(P=P, W={}, n=o.f["n"])
+                return e
+            raise _DxAbort
+        W = o.f["W"]
+        if name.startswith("put") and a and isinstance(a[0], str):
+            W[a[0]] = a[1] if len(a) > 1 else None
+            return o
+        if name == "remove" and a:
+            W[a[0]] = _ENV_UNSET
+            return o
+        if name == "clear":
+            P.clear()
+            return o
+        if name in ("apply", "commit"):
+            for k, v in W.items():
+                P.pop(k, None) if v is _ENV_UNSET else P.__setitem__(k, v)
+            W.clear()
+            return None if name == "apply" else 1
+        raise _DxAbort
+
+    def json_call(self, cls, name, sig, o, a):  # noqa: C901 - org.json's accessors
+        if name == "<init>":
+            if o is None or not a or not isinstance(a[0], str):
+                raise _DxAbort
+            try:
+                v = json.loads(a[0])
+            except ValueError:
+                raise _DxThrow(*_CTX_JEX) from None
+            if not isinstance(v, dict if o.t == "Lorg/json/JSONObject;" else list):
+                raise _DxThrow(*_CTX_JEX)
+            o.f["J"] = v
+            self.log_probe("org.json." + o.t[10:-1], a[0][:64], f"{len(v)} keys")
+            return None
+        if o is None or "J" not in o.f:
+            raise _DxAbort
+        J = o.f["J"]
+        if name in ("length", "size"):
+            return len(J)
+        if name == "toString" and not a:
+            return json.dumps(J, separators=(",", ":"))
+        if name in ("has", "isNull") and a:
+            x = J.get(a[0], None) if isinstance(J, dict) else (J[a[0]] if 0 <= a[0] < len(J) else None)
+            return int(a[0] in J if name == "has" else x is None)
+        if not a:
+            raise _DxAbort
+        k = a[0]
+        try:
+            v, miss = (J[k], False) if isinstance(J, dict) and isinstance(k, str) or isinstance(J, list) and isinstance(
+                k, int) and 0 <= k < len(J) else (None, True)
+        except (KeyError, TypeError):
+            v, miss = None, True
+        opt = name.startswith("opt")
+        base = name[3:] if opt else name[3:] if name.startswith("get") else None
+        if base is None:
+            raise _DxAbort
+        dflt = a[1] if opt and len(a) > 1 else None
+        if base == "String":
+            if miss or v is None:
+                if opt:
+                    return dflt if len(a) > 1 else ""
+                raise _DxThrow(*_CTX_JEX)
+            return _ctx_jstr(v)
+        if base in ("Int", "Long"):
+            w = _dxe_w32 if base == "Int" else _dxe_w64
+            n = None if miss else _ctx_jnum(v, w)
+            if n is None:
+                if opt:
+                    return dflt if isinstance(dflt, int) else 0
+                raise _DxThrow(*_CTX_JEX)
+            return n
+        if base == "Boolean":
+            b = v if isinstance(v, bool) else {"true": True, "false": False}.get(v.lower()) if isinstance(v, str) else None
+            if b is None or miss:
+                if opt:
+                    return dflt if isinstance(dflt, int) else 0
+                raise _DxThrow(*_CTX_JEX)
+            return int(b)
+        if base in ("JSONObject", "JSONArray"):
+            want = dict if base == "JSONObject" else list
+            if miss or not isinstance(v, want):
+                if opt:
+                    return None
+                raise _DxThrow(*_CTX_JEX)
+            return self.json("Lorg/json/" + base + ";", v)
+        raise _DxAbort
+
+
+def context_chain_scan(apk):
+    """ANS tokens of app methods handed a Context (D23-style `Release.code(Context)` and its v2 successors), run by the
+    deep evaluator on a clean retail Pixel whose Context answers from the APK's own bytes: assets (AssetManager.open ->
+    zip entry, InputStream read / available / readAllBytes, readers), org.json JSONObject / JSONArray accessors,
+    resources.arsc strings by id / getIdentifier, package name, PackageInfo (signer cert, versionCode / versionName,
+    install times), ApplicationInfo.flags (manifest debuggable), SharedPreferences (defaults; put + apply read back),
+    Settings.Secure ANDROID_ID (a fixed 16-hex id), System.getProperty (ART's values), plus clean_device_scan's root /
+    emulator / hook / installer / tamper / Build / clock tables. Returned values first, then strings the run built.
+    CONTEXT_STUB_HITS logs every stub answer. [] when absent; never raises; < 1.5 s."""
+    rets, seen = [], []
+    del CONTEXT_STUB_HITS[:]
+    deadline = time.time() + _CTX_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            dexes = [z.read(i) for i in z.infolist() if i.file_size <= _DXE_MAX_DEX
+                     and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+            dexes = [d for d in dexes if d[:4] == b"dex\n" and len(d) >= 0x70 and b"Landroid/content/Context;" in d]
+            if not dexes:
+                return []
+            facts = _ctx_facts(apk) or {"pkg": None, "dbg": False, "certs": [], "ent": {}, "vc": 1, "vn": None,
+                                        "path": "/data/app/app-1/base.apk"}
+            prefs, runs = {}, 0
+            for d in dexes:
+                if time.time() > deadline:
+                    break
+                try:
+                    dx = _DxDex(d)
+                except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+                    continue
+                todo = []
+                for ref in dx.order:
+                    nreg, nin, _ins, acc = dx.code[ref]
+                    ps = _dxe_params(ref)
+                    if not any(p in _CTX_TYPES for p in ps) or len(ps) > 4 or nin > nreg or _DXE_LIB.match(ref):
+                        continue
+                    todo.append((not ref.endswith(")Ljava/lang/String;"), not acc & 0x8, ref, ps, acc))
+                todo.sort(key=lambda x: x[:2])
+                for _, _, ref, ps, acc in todo:
+                    if time.time() > deadline or runs >= _CTX_MAX_RUNS:
+                        break
+                    runs += 1
+                    vm = _CtxVM(dx, deadline, facts, z, prefs)
+                    raw = [] if acc & 0x8 else [_DxObj(ref.split("->")[0])]
+                    for p in ps:
+                        raw += [_DxObj(p) if p in _CTX_TYPES else _dxe_default(p)] + ([None] if p in "JD" else [])
+                    r = None
+                    try:
+                        vm.init_class(ref.split("->")[0])
+                        r = vm.run(ref, raw)
+                    except (_DxAbort, IndexError, KeyError, TypeError, ValueError, AttributeError, OverflowError,
+                            RecursionError, struct.error, UnicodeError):
+                        pass
+                    if isinstance(r, str):
+                        rets += ANS_RE_T.findall(r)
+                    seen += [m for s in vm.seen if isinstance(s, str) for m in ANS_RE_T.findall(s)]
+                    CONTEXT_STUB_HITS.extend(x for x in vm.probe_log if x not in CONTEXT_STUB_HITS)
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    return list(dict.fromkeys(rets + seen))
 
 
 # --- exception-driven control flow: a probe throws, the catch handler picks the path (coverage atlas row 90) ----------
@@ -12923,6 +14313,65 @@ def _rfl_callers(dx):
     return out
 
 
+# --- a v2 chain whose mixers are reached by reflection (coverage atlas: analysis-chain-obfuscation-hardening) --------
+# Class.forName(x("..Mix")).getDeclaredMethod(x("f1"), Long.TYPE).invoke(null, Long.valueOf(v)) -> ((Long) r).longValue():
+# _dex_eval_deep runs the chain under _DxeDeepVM + _RflVM when the dex has a getDeclaredMethod / getMethod ref. Boxing is
+# the identity in the evaluator (Long.valueOf / longValue / check-cast pass the int through); the Class[] of the lookup
+# picks the exact overload (Long.TYPE -> J). Flattened / string-switch / opaque-predicate / tiny-VM chains need nothing
+# extra: the deep VM runs them concretely (fixtures obfv2_*).
+_DXE_PRIM_TYPES = {f"Ljava/lang/{b};->TYPE": p for b, p in (("Long", "J"), ("Integer", "I"), ("Short", "S"),
+                   ("Byte", "B"), ("Character", "C"), ("Boolean", "Z"), ("Double", "D"), ("Float", "F"),
+                   ("Void", "V"))}
+
+
+class _DxeRflMethod(_RflMem):
+    __slots__ = ("ps",)
+
+
+class _DxeRflVM(_DxeDeepVM, _RflVM):
+    def __init__(self, dx, deadline):
+        super().__init__(dx, deadline)
+        for k, p in _DXE_PRIM_TYPES.items():
+            self.statics[k] = _RflCls(p)
+
+    def invoke(self, ref, raw, depth):
+        cls, _, rest = ref.partition("->")
+        name = rest[:rest.find("(")]
+        if cls == "Ljava/lang/Class;" and name in ("getDeclaredMethod", "getMethod") and len(raw) == 3 \
+                and isinstance(raw[2], list) and all(isinstance(c, _RflCls) for c in raw[2]):
+            ct, mn = self._cls(raw[0]), raw[1]
+            ps = [c.t for c in raw[2]]
+            if not isinstance(mn, str) or not [m for m in self._methods(ct, mn, len(ps)) if _dxe_params(m) == ps]:
+                raise _DxAbort
+            m = _DxeRflMethod(ct, mn, len(ps))
+            m.ps = ps
+            return m
+        if cls == "Ljava/lang/reflect/Method;" and name == "invoke" and len(raw) == 3 \
+                and isinstance(raw[0], _DxeRflMethod):
+            o, args = raw[0], raw[2] if isinstance(raw[2], list) else []
+            for mref in self._methods(o.t, o.name, len(args)):
+                if _dxe_params(mref) != o.ps:
+                    continue
+                call = [] if self.dx.code[mref][3] & 0x8 else [raw[1]]
+                for p, a in zip(o.ps, args):
+                    call += [a] + ([None] if p in "JD" else [])
+                if depth >= _DXE_DEPTH:
+                    raise _DxAbort
+                self.init_class(o.t)
+                return self.note(self.invoke(mref, call, depth))
+            raise _DxAbort
+        return super().invoke(ref, raw, depth)
+
+
+def _dxe_reflective(dx):
+    """True when the dex references Class.getDeclaredMethod / getMethod (a reflected mixer chain)."""
+    for mi in range(dx.n_met):
+        c, _, n = struct.unpack_from("<HHI", dx.d, dx.o_met + 8 * mi)
+        if dx.typ(c) == "Ljava/lang/Class;" and dx.s(n) in ("getDeclaredMethod", "getMethod"):
+            return True
+    return False
+
+
 def reflection_scan(apk):
     """ANS tokens reached through reflection with encoded names: every app method that calls Class.getDeclaredField /
     getDeclaredMethod (or getField / getMethod) is run by the dex_eval_scan interpreter, with Class.forName /
@@ -13726,7 +15175,7 @@ def ans_compose_scan(apk):
     long[] / int[] elements, and xor / add / sub of two long constants when the method has that op. Case follows the
     code (toHexString / %x -> lower, %X / toUpperCase -> upper; both when it gives no sign). These are CANDIDATES for
     proof_flow ranking -- several per method -- never one to submit blind. [] when absent; never raises; < 1 s."""
-    hits = []
+    hits, dead = [], []
     deadline = time.time() + _ACS_BUDGET_S
     try:
         with zipfile.ZipFile(apk) as z:
@@ -13746,10 +15195,11 @@ def ans_compose_scan(apk):
             except (ValueError, struct.error, IndexError):
                 continue
             pats = re.compile(b"|".join(re.escape(struct.pack("<H" if i < 1 << 16 else "<I", i)) for i in pre_ids))
+            live = _eav_reached(dx, deadline)
             for ref, (_, _, ins, _) in dx.code.items():
-                if time.time() > deadline or len(hits) >= _ACS_MAX:
+                if time.time() > deadline or len(hits) + len(dead) >= _ACS_MAX:
                     break
-                if not pats.search(ins):
+                if not pats.search(ins) or _eav_table_walk(dx, ins):
                     continue
                 try:
                     r = _acs_method(dx, ins, pre_ids)
@@ -13766,10 +15216,11 @@ def ans_compose_scan(apk):
                 else:
                     cases = ("upper", "lower")
                 for c in cases:
-                    hits += [f"ANS-{h if c == 'upper' else h.lower()}" for h in hx]
+                    (hits if live is None or ref in live else dead).extend(
+                        f"ANS-{h if c == 'upper' else h.lower()}" for h in hx)
     except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
         pass
-    return list(dict.fromkeys(hits))[:_ACS_MAX]
+    return [h for h in dict.fromkeys(hits + dead) if not _eav_alphabet(h)][:_ACS_MAX]
 
 
 # --- digest / HMAC-derived answers (coverage atlas rows 33, 69: "ANS-" + hex prefix of MessageDigest / Mac output) ----
@@ -14892,6 +16343,259 @@ def attestation_claims(apk):
     return out
 
 
+# --- Play Integrity / SafetyNet verdict selection (coverage atlas row 87: play-integrity-verdict-select) -------------
+# Several verdict blobs (plain JSON assets, JWS strings inside them, or tokens jwt_tokens() decodes / opens) may each be
+# tied to an ANS value; the app's branch takes the strongest CLEAN one. A verdict root is a dict carrying requestDetails
+# / appIntegrity / deviceIntegrity / accountDetails / tokenPayloadExternal or a legacy SafetyNet ctsProfileMatch /
+# basicIntegrity; its "owner" is the largest enclosing subtree holding no other root, and the ANS strings in it (plain,
+# else decode_any) are the root's value. Clean = PLAY_RECOGNIZED (when present), MEETS_DEVICE / MEETS_STRONG_INTEGRITY
+# (when present), LICENSED (when present), ctsProfileMatch / basicIntegrity true (when present), cert digest = APK
+# signer, package = manifest package, nonce = a host-side value (a dex / JSON string, its sha256) when any root's nonce
+# matches one. Everything else is a decoy.
+_IVS_ROOT = {"requestDetails", "appIntegrity", "deviceIntegrity", "accountDetails", "tokenPayloadExternal",
+             "ctsProfileMatch", "basicIntegrity", "appRecognitionVerdict", "deviceRecognitionVerdict",
+             "appLicensingVerdict"}
+_IVS_MAX_ENTRY, _IVS_MAX_NODES, _IVS_MAX_HOST = 4 << 20, 50000, 20000
+_IVS_HINT = re.compile(rb"RecognitionVerdict|ctsProfileMatch|tokenPayloadExternal|eyJ")
+_IVS_JWS = re.compile(r"eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*")
+
+
+def _ivs_expand(o, budget, depth=0):
+    """The JSON tree with every JWS string replaced by its decoded claims dict (unverified)."""
+    budget[0] -= 1
+    if depth > 14 or budget[0] < 0:
+        return None
+    if isinstance(o, dict):
+        return {str(k): _ivs_expand(v, budget, depth + 1) for k, v in list(o.items())[:2000]}
+    if isinstance(o, list):
+        return [_ivs_expand(v, budget, depth + 1) for v in o[:2000]]
+    if isinstance(o, str) and len(o) < 65536 and _IVS_JWS.fullmatch(o.strip()):
+        rec = _jwt_parse(o.strip(), "")
+        if rec and isinstance(rec.get("payload"), dict):
+            budget[1].add(rec["token"])
+            return {"_jws": _ivs_expand(rec["payload"], budget, depth + 1)}
+    return o
+
+
+def _ivs_roots(o, anc, out):
+    if isinstance(o, dict):
+        if _IVS_ROOT & set(o):
+            out.append((o, list(anc)))
+            return
+        for v in o.values():
+            _ivs_roots(v, anc + [o], out)
+    elif isinstance(o, list):
+        for v in o:
+            _ivs_roots(v, anc + [o], out)
+
+
+def _ivs_strings(o, out, depth=0, skip=()):
+    """String leaves of a JSON tree (dict nodes whose id is in `skip` left out)."""
+    if depth > 16 or len(out) > 4000:
+        return
+    if isinstance(o, dict):
+        if id(o) in skip:
+            return
+        for v in o.values():
+            _ivs_strings(v, out, depth + 1, skip)
+    elif isinstance(o, list):
+        for v in o:
+            _ivs_strings(v, out, depth + 1, skip)
+    elif isinstance(o, str):
+        out.append(o)
+
+
+def _ivs_bool(v):
+    if isinstance(v, bool):
+        return v
+    return {"true": True, "false": False}.get(str(v).strip().lower()) if v is not None else None
+
+
+def _ivs_digests(c):
+    digs = c.get("apkCertificateDigestSha256") or c.get("certificateSha256Digest")
+    digs = [digs] if isinstance(digs, str) else digs if isinstance(digs, list) else []
+    hexes = set()
+    for d in digs:
+        d = str(d)
+        if re.fullmatch(r"(?:[0-9a-fA-F]{2}:?){32}", d):
+            hexes.add(d.replace(":", "").lower())
+        else:
+            raw = _jwt_b64(d.rstrip("=").translate(str.maketrans("+/", "-_")))
+            if raw and len(raw) == 32:
+                hexes.add(raw.hex())
+    return hexes
+
+
+def _ivs_judge(c):
+    """(fails, score, verdict summary) of one claims dict, before the cert / package / nonce comparisons."""
+    fails, score = [], 0
+    app = c.get("appRecognitionVerdict")
+    dev = c.get("deviceRecognitionVerdict")
+    devs = {dev} if isinstance(dev, str) else {str(x) for x in dev} if isinstance(dev, list) else set()
+    lic = c.get("appLicensingVerdict")
+    cts, basic = _ivs_bool(c.get("ctsProfileMatch")), _ivs_bool(c.get("basicIntegrity"))
+    if app is not None:
+        if app == "PLAY_RECOGNIZED":
+            score += 2
+        else:
+            fails.append("app:%s" % app)
+    if dev is not None:
+        if "MEETS_STRONG_INTEGRITY" in devs:
+            score += 4
+        elif "MEETS_DEVICE_INTEGRITY" in devs:
+            score += 3
+        else:
+            fails.append("device:%s" % (",".join(sorted(devs)) or "none"))
+    if lic is not None:
+        if lic == "LICENSED":
+            score += 1
+        else:
+            fails.append("licensing:%s" % lic)
+    if "ctsProfileMatch" in c:
+        score += 2 if cts else 0
+        if not cts:
+            fails.append("ctsProfileMatch:false")
+    if "basicIntegrity" in c:
+        score += 1 if basic else 0
+        if not basic:
+            fails.append("basicIntegrity:false")
+    et = str(c.get("evaluationType") or "")
+    if "HARDWARE_BACKED" in et:
+        score += 1
+    if not (app == "PLAY_RECOGNIZED" or devs & {"MEETS_DEVICE_INTEGRITY", "MEETS_STRONG_INTEGRITY"} or cts):
+        fails.append("no-positive-verdict")
+    return fails, score, {"app": app, "device": sorted(devs), "licensing": lic, "ctsProfileMatch": cts,
+                          "basicIntegrity": basic, "evaluationType": et or None}
+
+
+def _ivs_jwe_strs(tr):
+    out = []
+    _ivs_strings(tr, out)
+    return [s for s in out if s.count(".") == 4]
+
+
+def integrity_verdict_candidates(apk):
+    """Every Play Integrity / SafetyNet verdict blob in the APK, ranked strongest clean first (row 87):
+    [{"entry", "verdict" (app / device / licensing / ctsProfileMatch / basicIntegrity / evaluationType), "claims",
+    "cert_match", "package_match", "nonce_match" (True / False / None = not comparable), "fails" ([] = clean),
+    "clean", "score", "tokens" (ANS values tied to the blob)}]. [] when absent; never raises."""
+    rows = []
+    try:
+        deadline = time.time() + 1.2
+        trees, host, dex_has_jwt, used = [], [], False, set()
+        with zipfile.ZipFile(apk) as z:
+            for info in z.infolist():
+                if info.is_dir() or info.file_size > _IVS_MAX_ENTRY or time.time() > deadline:
+                    continue
+                n = info.filename
+                isdex = re.fullmatch(r"classes\d*\.dex", n) is not None
+                if not (isdex or n.endswith((".json", ".txt", ".jwt", ".jws")) or n.startswith(("assets/", "res/raw/"))):
+                    continue
+                try:
+                    b = z.read(info)
+                except (OSError, RuntimeError, zipfile.BadZipFile, zlib.error):
+                    continue
+                if isdex:
+                    dex_has_jwt |= b"eyJ" in b
+                    for m in _JWT_DEXSTR.finditer(b, 0x70):
+                        if len(host) < _IVS_MAX_HOST and m.group(1)[0] == len(m.group(2)):
+                            host.append(m.group(2).decode("ascii", "replace"))
+                    continue
+                for enc in ("utf-8-sig", "utf-16"):
+                    try:
+                        t = b.decode(enc).strip()
+                        if t[:1] in "{[":
+                            budget = [_IVS_MAX_NODES, used]
+                            trees.append((n, _ivs_expand(json.loads(t), budget)))
+                            break
+                    except (UnicodeDecodeError, ValueError, RecursionError):
+                        continue
+                else:
+                    dex_has_jwt |= b"eyJ" in b
+            pkg = None
+            if "AndroidManifest.xml" in z.namelist():
+                b = z.read("AndroidManifest.xml")
+                if b[:2] == b"\x03\x00":
+                    pkg = next((t for t in _pool_strings(b)[:400] if _IDK_PKG.fullmatch(t) and not t.startswith(_IDK_SYS)), None)
+        if dex_has_jwt or any("eyJ" in s for _, tr in trees for s in _ivs_jwe_strs(tr)):
+            for r in jwt_tokens(apk):
+                if isinstance(r.get("payload"), dict) and r["token"] not in used:
+                    trees.append((r["entry"] + "#" + r["kind"], {"_jws": r["payload"]}))
+        found = []
+        for n, tr in trees:
+            rs = []
+            _ivs_roots(tr, [], rs)
+            cnt = {}
+            for root, anc in rs:
+                for a in anc:
+                    cnt[id(a)] = cnt.get(id(a), 0) + 1
+            for root, anc in rs:
+                owner = root
+                for a in reversed(anc):
+                    if cnt[id(a)] != 1:
+                        break
+                    owner = a
+                found.append((n, root, owner))
+            outside = []
+            _ivs_strings(tr, outside, skip={id(root) for root, _ in rs})
+            host += outside[:_IVS_MAX_HOST]
+        if not found:
+            return []
+        hset = set(host)
+        hdig = {hashlib.sha256(s.encode("utf-8", "ignore")).digest() for s in hset if s}
+        hhex = {d.hex() for d in hdig}
+        signers = {x["sha256"] for x in signing_certs(apk)}
+        for n, root, owner in found:
+            c = {}
+            _att_walk(root, c)
+            fails, score, verdict = _ivs_judge(c)
+            hexes = _ivs_digests(c)
+            cert = bool(hexes & signers) if hexes and signers else None
+            claim_pkg = c.get("apkPackageName") or c.get("packageName") or c.get("requestPackageName")
+            pmatch = (claim_pkg == pkg) if claim_pkg and pkg else None
+            nonce, nmatch = c.get("nonce"), None
+            if isinstance(nonce, str) and nonce.strip() and hset:
+                nonce = nonce.strip()
+                nb = _jwt_b64(nonce.rstrip("=").translate(str.maketrans("+/", "-_")))
+                nmatch = nonce in hset or nonce.lower() in hhex or nb is not None and (
+                    nb in hdig or nb.decode("latin-1") in hset)
+            strs = []
+            _ivs_strings(owner, strs)
+            toks = [t for s in strs for t in ANS_RE_T.findall(s)]
+            if not toks:
+                for s in strs[:32]:
+                    if 16 <= len(s) <= 1024 and time.time() < deadline + 0.4:
+                        toks += ANS_RE_T.findall(decode_any(s, depth=2, cap=600, chain=False) or "")
+            if cert is False:
+                fails.append("cert-mismatch")
+            if pmatch is False:
+                fails.append("package-mismatch")
+            score += 2 * (cert is True) + 2 * (nmatch is True) + (pmatch is True)
+            rows.append({"entry": n, "verdict": verdict, "claims": c, "cert_match": cert, "package_match": pmatch,
+                         "nonce_match": nmatch, "fails": fails, "score": score, "tokens": list(dict.fromkeys(toks))})
+        if any(r["nonce_match"] is True for r in rows):
+            for r in rows:
+                if r["nonce_match"] is not True:
+                    r["fails"].append("nonce-mismatch" if r["nonce_match"] is False else "nonce-unmatched")
+        for r in rows:
+            r["clean"] = not r["fails"]
+        rows.sort(key=lambda r: (not r["clean"], -r["score"]))
+    except Exception:  # noqa: BLE001 - truncated / impostor APK
+        return []
+    return rows
+
+
+def integrity_verdict_scan(apk):
+    """ANS values tied to the clean Play Integrity / SafetyNet verdict blobs, strongest first (row 87); decoy verdicts
+    (UNRECOGNIZED_VERSION / UNEVALUATED, MEETS_BASIC / VIRTUAL only, UNLICENSED, cts false, foreign cert digest, wrong
+    nonce) contribute nothing. [] when absent; never raises."""
+    out = []
+    for r in integrity_verdict_candidates(apk):
+        if r.get("clean"):
+            out += [t for t in r["tokens"] if t not in out]
+    return out
+
+
 def _jwt_values(o, out, depth=0):
     if depth > 8 or len(out) > 256:
         return
@@ -15384,6 +17088,99 @@ def entry_reachable_scan(apk):
     """Only the ANS values whose method is reachable from the entry activities (see entry_reachable_candidates);
     unreachable look-alike twins are decoys. [] when absent."""
     return list(dict.fromkeys(c["value"] for c in entry_reachable_candidates(apk) if c["reachable"]))
+
+
+# --- entry-anchored candidate veto (coverage atlas row 98) ------------------------------------------------------------
+# D23 v2: Release.code() builds "ANS-" + "0123456789ABCDEF".charAt(x >>> i & 15) over a mixer chain, next to unreferenced
+# look-alike mixers (sealTrampolineNN / sealHookNN / K* longs). The shape-only composers (split_native_assembly,
+# digest_answer_scan, ans_compose_scan) turn that into ANS-0123456789ABCDEF (the harness placeholder too) and several
+# ANS-shaped decoys. Veto: never the hex alphabet; a value the entry method actually computes (proof_flow_scan / the
+# deep evaluator over entry-reachable static String methods) replaces every shape-only candidate; compose candidates of
+# methods unreachable from the entry activities (callers all dead included) go last.
+_EAV_ALPHA = frozenset(("0123456789ABCDEF", "FEDCBA9876543210"))
+_EAV_BUDGET_S, _EAV_UNITS = 0.4, 2_000_000
+
+
+def _eav_alphabet(c):
+    """True for ANS-<the hex digit table> (a lookup-table const, never a token)."""
+    return isinstance(c, str) and c[4:].upper() in _EAV_ALPHA
+
+
+def _eav_table_walk(dx, ins):
+    """True when a method spells its hex through the "0123456789ABCDEF" table AND calls in-dex code: its numeric
+    constants are mixer inputs, not the printed value (D23 Release.code), so composing "ANS-" + a constant is a decoy."""
+    if b"0123456789" not in dx.d and b"0123456789abcdef" not in dx.d:
+        return False
+    try:
+        _, calls, strs, _, _ = _erc_ops(dx, ins)
+    except Exception:  # noqa: BLE001
+        return False
+    return any(s and s.upper() in _EAV_ALPHA for s in strs) and any(m in dx.code for _, m in calls)
+
+
+def _eav_reached(dx, deadline=None):
+    """App method refs reached from ChallengeActivity / MainActivity (by class name) over static and virtual call edges
+    -- a virtual / unresolved call reaches every app method with that name+signature, a new-instance / const-class every
+    method of that class, a touched class its <clinit> -- over-approximate so a live method is never called dead. None
+    (= no verdict, demote nothing) without an entry class, on reflection / MethodHandle / Proxy use, or out of budget."""
+    try:
+        entries = [r for r in dx.code if _ERC_ENTRY.search(r.split("->")[0])]
+        if not entries:
+            return None
+        deadline = min(deadline or 1e18, time.time() + _EAV_BUDGET_S)
+        by_sig, by_cls = {}, {}
+        for r in dx.code:
+            c, sig = r.split("->", 1)
+            by_sig.setdefault(sig, []).append(r)
+            by_cls.setdefault(c, []).append(r)
+        reached, work, units = set(), list(entries), 0
+        while work:
+            ref = work.pop()
+            if ref in reached or ref not in dx.code:
+                continue
+            reached.add(ref)
+            ins = dx.code[ref][2]
+            units += len(ins) // 2
+            if units > _EAV_UNITS or time.time() > deadline:
+                return None
+            _, calls, _, types, fcls = _erc_ops(dx, ins)
+            nxt = [dx.clinit.get(ref.split("->")[0])]
+            for virt, m in calls:
+                if _ERC_REFL.match(m) or "Ljava/lang/invoke/" in m or "Ljava/lang/reflect/Proxy;" in m:
+                    return None
+                c, sig = m.split("->", 1)
+                nxt.append(dx.clinit.get(c))
+                nxt += by_sig.get(sig, ()) if virt or m not in dx.code else (m,)
+            for t in types:
+                nxt += by_cls.get(t, ())
+            nxt += [dx.clinit.get(t) for t in fcls]
+            work += [r for r in nxt if r and r not in reached]
+        return reached
+    except Exception:  # noqa: BLE001 - a malformed dex gives no verdict
+        return None
+
+
+def entry_evaluated_values(apk):
+    """ANS values the entry path itself produces: proof_flow_scan() (the request builder's `proof=` value), else the deep
+    evaluator's returns of static String methods reachable from ChallengeActivity / MainActivity. Hex-alphabet never.
+    [] when absent; never raises."""
+    try:
+        vals = proof_flow_scan(apk) or _dex_eval_deep(apk, entry_only=True)
+    except Exception:  # noqa: BLE001
+        vals = []
+    return [v for v in dict.fromkeys(vals) if not _eav_alphabet(v)]
+
+
+def _eav_anchor(apk, hits):
+    """Shape-only candidates -> the entry-evaluated value(s) when the entry path computes one (those already among the
+    hits first), else the hits minus the hex alphabet."""
+    hits = [h for h in hits or () if not _eav_alphabet(h)]
+    if not hits:
+        return hits
+    ev = entry_evaluated_values(apk)
+    if not ev:
+        return hits
+    return list(dict.fromkeys([h for h in hits if h in ev] + ev))
 
 
 # --- native code calling back into Java by name: FindClass / GetStaticMethodID (coverage atlas row 82) ----------------

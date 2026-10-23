@@ -1,0 +1,10 @@
+{
+ "codec": "base65536",
+ "plain": null,
+ "encoded": "我们今天去公园散步吧天气很好",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written decoy: plain Chinese prose (U+4E00..U+9EFF, inside the base65536 repertoire) -- decodes to non-text bytes",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;sys.path.insert(0,'$PYLIB');import base65536;print(base65536.decode(sys.stdin.read()).decode())\"  # sublee PyPI base65536==0.1.1 (+six) decode, pip install --target $PYLIB  -> rejects: UnicodeDecodeError: 'utf-8' codec can't decode byte 0xec in position 2: invalid continuation byte",
+ "oracle_plain": null
+}

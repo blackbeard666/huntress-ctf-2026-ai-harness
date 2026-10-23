@@ -1,0 +1,27 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "519a0e26-c61c-4d01-8e3f-d5a5dd9b5afd",
+  "window": null,
+  "elapsed": 5.1,
+  "in_window": 5.09,
+  "phases": {
+    "start": 0.01,
+    "download": 0.0,
+    "solve": 0.75,
+    "submit": 4.34
+  },
+  "routed": "local",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "bright-signal-ridge-32"
+  },
+  "attempts_remaining": 256,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 256,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

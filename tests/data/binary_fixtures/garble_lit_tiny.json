@@ -1,0 +1,27 @@
+{
+ "family": "garble_go",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "buildinfo_stripped": "true",
+  "file_count": "180",
+  "func_count": "3131",
+  "garble_tiny": "true",
+  "go_module_path": "none",
+  "go_version": "unknown",
+  "has_garble": "true",
+  "literal_closures": "0",
+  "literals_recovered": "none",
+  "main_functions": [
+   "main.(*kdVoYhuu4kJn).Replace"
+  ],
+  "pclntab_magic": "aa3b37a2",
+  "pclntab_magic_known": "false"
+ },
+ "generator_cmd": "bash garble_gen.sh   # garble -literals -tiny build; garble v0.16.0 + go1.26.8, src garble_src_main.go",
+ "oracle_cmd": "go run garble_oracle.go garble_lit_tiny.bin   # Go stdlib debug/elf+debug/gosym (magic restored)+debug/buildinfo",
+ "file_b": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, stripped",
+ "decoy": false,
+ "note": "lib.binary.garble_facts(data) / garble_field(data, key); literals_recovered is a placeholder (literal decryption not implemented)"
+}

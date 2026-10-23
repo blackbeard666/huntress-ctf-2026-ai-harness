@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-11-template-temper",
+  "lane": "web",
+  "name": "🌐 Template Temper",
+  "ids": {
+    "single_solve": "web-exploitation-day-11-template-temper",
+    "time_trial": "web-exploitation-day-11-template-temper/time_trial",
+    "mastery": "web-exploitation-day-11-template-temper/mastery"
+  }
+}

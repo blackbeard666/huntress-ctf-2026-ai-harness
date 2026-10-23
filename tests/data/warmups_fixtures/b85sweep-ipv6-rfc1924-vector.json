@@ -1,0 +1,9 @@
+{
+ "codec": "base85-any",
+ "plain": "1080::8:800:200c:417a",
+ "encoded": "4)+k&C#VzJ4br>0wv%Yp",
+ "generator_cmd": "printf %s \"4)+k&C#VzJ4br>0wv%Yp\"  # RFC 1924 section 5 worked example (1080:0:0:0:8:800:200C:417A)",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl ipv6 | python3 -I -c 'import sys,ipaddress;sys.stdout.write(str(ipaddress.IPv6Address(sys.stdin.read().strip())))'",
+ "oracle_plain": "1080::8:800:200c:417a",
+ "expected": "match"
+}

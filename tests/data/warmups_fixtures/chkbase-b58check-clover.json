@@ -1,0 +1,9 @@
+{
+ "codec": "base58check-bitcoin",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-falcon-58",
+ "encoded": "1WZh6sLebN1RcCScHgUYhd6nNYjgcbu7ij5BBJiJrRYPqabRzwwAw3onPCQYJvVLJPbjdN8SvvweiHmu92pun24rBH48f1tR1djSSSxLW3CqEDqZUC3Tue4BXThXmwNP7pv4gPG5FJsGvKHNCuk",
+ "generator_cmd": "python3 -c \"import sys,base58;print(base58.b58encode_check(b\\\"\\\\0\\\"+sys.argv[1].encode()).decode())\" \"$plain\"  # pip base58 2.1.1, version byte 0x00",
+ "oracle_cmd": "printf %s \"$encoded\" | NM=$PWD/tools/npm-bech32/node_modules tools/node/bin/node tests/data/warmups_fixtures/chkbase_oracle.mjs b58check",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-falcon-58",
+ "expected": "match"
+}

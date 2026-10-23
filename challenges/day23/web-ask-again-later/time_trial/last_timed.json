@@ -1,0 +1,22 @@
+{
+  "result": "solver_incomplete",
+  "attempt_id": "cec52bc0-3e29-4b58-a6f5-a43226aac6df",
+  "window": null,
+  "phases": {
+    "start": 6.08,
+    "download": 0.0,
+    "solve": 41.09
+  },
+  "routed": "local (web live target)",
+  "missing": [
+    "proof-1"
+  ],
+  "deadline": null,
+  "attempts_remaining": 16,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 16,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

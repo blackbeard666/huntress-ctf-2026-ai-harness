@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=python|role=collector|verdict=malicious|attack=T1005|adapter=lyr_mismatch|steps=peel_layers|campaign_id=LYR-mis|url=https://lyr-mis.example.invalid/c",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | xxd -p | tr -d '\\n' | base64 -w0 ; written under a WRONG tag `# HUNTRESS_ANALYSIS_V1:LYR-b32_rot13-<data>` (tag mismatch -> shape peel fallback)",
+ "oracle_cmd": "sed -n 's/.*LYR-b32_rot13-//p' lyr_mismatch_shape.py | base64 -d | xxd -r -p"
+}

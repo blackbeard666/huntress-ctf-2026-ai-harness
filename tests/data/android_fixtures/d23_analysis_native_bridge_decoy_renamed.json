@@ -1,0 +1,7 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "d23_analysis_native_bridge_arena.c.txt with NAME=nativeShore; aarch64-linux-gnu-gcc -O2 -shared -fPIC -nostdlib -o lib/arm64-v8a/libarena.so; classes.dex + AndroidManifest.xml + assets/huntress_puzzle.json copied from GM D23 Mastery 1d39aa76 set5 (codec: analysis, no data); zip -q -X -r out.apk AndroidManifest.xml classes.dex assets lib  (near miss: export renamed, the dex's nativeShare has no Java_* symbol)",
+ "oracle_cmd": "nm -D lib/arm64-v8a/libarena.so | grep Java_  -> only ..._NativeLibrarySecrets_nativeShore: nativeShare is unbound (UnsatisfiedLinkError on device), Release.code() never returns"
+}

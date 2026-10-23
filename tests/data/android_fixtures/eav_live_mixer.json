@@ -1,0 +1,8 @@
+{
+ "entry": "extract_answer",
+ "expected": "ANS-5397D1CEC2EBC0DB",
+ "decoy": false,
+ "_why": "row 98: ChallengeActivity -> Release.code() = 'ANS-' + '0123456789ABCDEF'.charAt(v>>>i&15) over a mixer chain; dead look-alike mixers (sealTrampolinec7, sealHook30, K* longs) and a dead Ghost.code() (only caller Ghost.relay(), itself dead) computing ANS-F4E2D3949FD749B5; ans_compose_scan used to offer 'ANS-'+constant decoys, dex_eval_scan listed Ghost first",
+ "generator_cmd": "python3 tests/data/android_fixtures/eav_src/gen_eav.py live_mixer tests/data/android_fixtures/eav_live_mixer.apk  # javac --release 8 (app + android.* compile stubs) + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "python3 tests/data/android_fixtures/eav_src/gen_eav.py live_mixer /dev/null --oracle  # host JVM runs Release.code(null) -> 'live=ANS-5397D1CEC2EBC0DB' (and the dead Ghost.code() -> 'ghost=ANS-F4E2D3949FD749B5', the decoy)"
+}

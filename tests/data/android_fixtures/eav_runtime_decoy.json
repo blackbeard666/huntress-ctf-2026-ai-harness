@@ -1,0 +1,8 @@
+{
+ "entry": "dex_strings",
+ "expected": null,
+ "decoy": true,
+ "_why": "row 98 decoy: same Release.code() hex-table builder and dead mixers, seed = new Random().nextLong() (no static token); the dex still holds 'ANS-' + '0123456789ABCDEF' + long constants, which the shape-only composers used to turn into ANS-0123456789ABCDEF / ANS-<const>",
+ "generator_cmd": "python3 tests/data/android_fixtures/eav_src/gen_eav.py runtime_decoy tests/data/android_fixtures/eav_runtime_decoy.apk  # javac --release 8 (app + android.* compile stubs) + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "python3 tests/data/android_fixtures/eav_src/gen_eav.py runtime_decoy /dev/null --oracle  # two runs print two different 'live=' values (runtime-random): no static answer exists"
+}

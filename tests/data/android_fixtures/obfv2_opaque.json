@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-E4F679E90A7D1CAE",
+ "decoy": false,
+ "_why": "analysis-chain-obfuscation-hardening: opaque predicates over non-final statics ((gx*gx+gx)&1==0, 7*gy*gy%7!=1, gy(gy+1)(gy+2)%3==0, ((gx|1)&1)==0) guard the real mixers; the never-taken arms run the decoy mixer sealHook30",
+ "generator_cmd": "python3 tests/data/android_fixtures/obfv2_src/gen_obfv2.py opaque tests/data/android_fixtures/obfv2_opaque.apk  # javac --release 8 (app + android.content.Context stub) -> dex2jar d2j-jar2dex.sh -> zipfile (+ assets/huntress_puzzle.json codec: analysis, no data)",
+ "oracle_cmd": "same generator: the host JVM (java -cp <javac out> <pkg>.Oracle) runs Release.code(null) and prints 'oracle=ANS-E4F679E90A7D1CAE' (= the GM-confirmed D23 TT 2deb0b14 answer for the untransformed chain)"
+}

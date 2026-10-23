@@ -1,0 +1,9 @@
+{
+ "codec": "serialization-wrapper[pickle]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-27",
+ "encoded": "Vk5pY2Ugd29yayBkZWNvZGluZyB0aGlzIHdhcm11cCEgVG8gc29sdmUsIHN1Ym1pdCB0aGlzIGV4YWN0IGFuc3dlciB0byB0aGUgR2FtZSBNYXN0ZXI6IGNvYmFsdC1oZXJvbi0yNwpwMAou",
+ "generator_cmd": "python3 -c 'import pickle,base64,os;print(base64.b64encode(pickle.dumps(os.environ[\"plain\"],protocol=0)).decode())'",
+ "oracle_cmd": "python3 -c 'import pickletools,base64,os;b=base64.b64decode(os.environ[\"encoded\"]);print([a for o,a,p in pickletools.genops(b) if isinstance(a,str)][0])'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-27",
+ "expected": "match"
+}

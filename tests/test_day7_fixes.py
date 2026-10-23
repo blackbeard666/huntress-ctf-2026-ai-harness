@@ -1233,3 +1233,47 @@ assert _web22.solve_target({"artifact": "Target 3"}, _c22) is None and _tm22.tim
 _o22 = _web22.solve(_c22)
 assert _o22 == {"proof-1": "proof_" + "c5" * 16, "proof-2": "proof_" + "a7" * 16}, _o22
 print("ok  lib.web: D22 csrf + upload handlers, parallel targets, dead target skipped")
+
+# Day 23 "Eighty-Five Alive": Adobe Ascii85 (<~ ~>) of the UTF-8 sentence -- GM-confirmed single slug, byte-exact
+_s23 = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: crisp-starfish-quartz-70"
+_u23 = _wc.day_codec(23)[1](_s23)
+assert _u23 == ("<~:2+3L+EqaECER/!@rGmlDJ()6BPDN1G@>N/F`8KH<,Wn#DesT./0K\"V@Voh$+EV:2F!,%=@:OC%@;^.1ATAo8D]j.8AKXKOD.Oha"
+                "@<6O%E]P=QEbTT6/TZ#BEb9$,BJ\"4H@<-I9/N5?~>")
+assert _wc.day_codec(23)[2](_u23) == _s23 and _wc.day_codec(23)[3] is False and _dc(_u23) == _s23
+print("ok  warmups_codecs: D23 Adobe Ascii85 exact encoder")
+
+# Day 23 "Page Me Maybe": sqlite.page_size_bytes promoted from prebuilt sqlite.sqlite_value (verified D23; 1 = 65536),
+# zip CD names and macho fat cputypes SORTED (GM rejected CD / fat_arch order on TT / Mastery)
+_sq23 = b"SQLite format 3\0" + _st17.pack(">H", 1) + b"\1\1\0\x40\x20\x20" + b"\0" * 76
+assert _meta14.lookup("sqlite", "page_size_bytes")[0].tier == _meta14.VERIFIED
+assert ("sqlite", "page_size_bytes") not in _meta14._prebuilt_fields(_meta14.PREBUILT_DIR / "sqlite.py")
+assert _meta14.answer("d23-sqlite-001-sqlite-page-size-bytes", {}, _sq23) == ("65536", _meta14.VERIFIED)
+assert _meta14.answer("d23-sqlite-001-sqlite-page-size-bytes", {}, _sq23[:16] + b"\x10\0" + _sq23[18:])[0] == "4096"
+_fat23 = b"\xca\xfe\xba\xbe" + _st17.pack(">I", 3) + _st17.pack(">5I", 0x0100000c, 0, 4096, 32, 12) \
+    + _st17.pack(">5I", 0x0000000c, 9, 8192, 32, 14) + _st17.pack(">5I", 7, 3, 12288, 32, 12)
+assert _meta14.answer("d20-macho-001-macho-cpu-type-set", {}, _fat23)[0] == '["0x00000007","0x0000000c","0x0100000c"]'
+_zb23 = _io27.BytesIO()
+with zipfile.ZipFile(_zb23, "w") as _z23:
+    for _n23 in ("room-18/item-5.log", "box-06/part-6.log", "cabinet-10/entry-6.txt"):
+        _z23.writestr(_n23, "x")
+assert _meta14.answer("d07-zip-001-zip-central-directory-member-names", {}, _zb23.getvalue())[0] \
+    == '["box-06/part-6.log","cabinet-10/entry-6.txt","room-18/item-5.log"]'
+print("ok  lib.meta: sqlite.page_size_bytes verified D23; zip CD names / macho cpu set sorted (D23)")
+
+# Day 23 "Hook Line and Signal": `codec: analysis` puzzle (no data) -> puzzle_candidates runs the static String methods
+# under the deep dex evaluator (Release.code(), 2M steps) instead of stopping on the dex's literal decoy token
+from lib import android as _and23  # noqa: E402
+_apk23 = Path(__file__).resolve().parent / "data" / "android_fixtures" / "d23_analysis_release_code.apk"
+_c23 = [c for c in _and23.puzzle_candidates(str(_apk23)) if _and23.ANS_RE_T.search(c)]
+assert _c23 and _c23[0] == "ANS-E4F679E90A7D1CAE" and "ANS-0123456789ABCDEF" not in _c23, _c23
+print("ok  android: D23 codec=analysis computed code via dex_eval_scan(deep=True)")
+
+# Day 23 "Press Start to Decode": HUNTRESS_ANALYSIS_V1:LYR-<encode layers>-<material> -> codec.peel_plan undoes the named
+# chain last-first (a frag below the top layer, e.g. hex_frag_hex, defeated the generic BFS)
+from lib import codec as _cx23  # noqa: E402
+import base64 as _b6423  # noqa: E402
+_h23 = b"v=3|role=stager|campaign_id=c-1".hex()
+_m23 = _b6423.b32encode((_h23[:20] + "." + _h23[20:]).encode()).decode()   # encode order: hex, frag, b32
+assert _cx23.peel_plan("hex_frag_b32-" + _m23, "LYR") == "v=3|role=stager|campaign_id=c-1"
+assert _cx23.lyr_undo("LYR-hex_frag_b32-" + _m23) == "v=3|role=stager|campaign_id=c-1"
+print("ok  codec: D23 LYR-<layers> named chain peel")

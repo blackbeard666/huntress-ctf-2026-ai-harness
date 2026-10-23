@@ -1,0 +1,11 @@
+{
+ "codec": "zalgo",
+ "plain": null,
+ "encoded": "Café crème à côté de l'hôtel: déjà vu, señor.",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written genuine French/Spanish prose, NFC (precomposed accents, no raw combining marks) -> not zalgo noise",
+ "oracle_cmd": "printf %s \"$encoded\" | uconv -x '::NFD; [[:Mn:][:Me:]] > ; ::NFC;'  # ICU transliterator: NFD, remove Mn/Me, NFC",
+ "oracle_plain": null,
+ "oracle_note": "raw combining marks in blob: 0; ICU strip -> \"Cafe creme a cote de l'hotel: deja vu, senor.\" (ascii=True)"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "extract_answer",
+ "expected": "ANS-C9AC961E957B190A",
+ "decoy": false,
+ "_why": "row 96: Proof.token() = 'ANS-' + String.format(\"%016X\", v), v = 6 rounds of a mixer that CALLS Long.rotateLeft/Right, reverse, reverseBytes, bitCount, nlz/ntz, highestOneBit, signum, divideUnsigned/remainderUnsigned/compareUnsigned, Math.multiplyHigh/floorMod/floorDiv/multiplyExact, Integer.* twins, Long.hashCode, seeded by Long.parseUnsignedLong(..,16), then Long.toString(..,36)/parseLong(..,36); no ANS literal",
+ "generator_cmd": "python3 tests/data/android_fixtures/intrlong_src/gen_intrlong.py bits_mix tests/data/android_fixtures/intrlong_bits_mix.apk  # javac --release 11 -XDstringConcat=inline + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "python3 tests/data/android_fixtures/intrlong_src/gen_intrlong.py bits_mix /dev/null --oracle  # host JVM RUNS the same compiled Proof.token() -> token -> ANS-C9AC961E957B190A"
+}

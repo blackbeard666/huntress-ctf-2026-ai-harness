@@ -1,0 +1,44 @@
+{
+ "family": "exception_handler_control_flow",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "personality": "__gxx_personality_v0",
+  "landing_pads": [
+   "0x40129b",
+   "0x4012c1"
+  ],
+  "landing_pad_count": "2",
+  "catch_landing_pads": [
+   "0x4012c1"
+  ],
+  "cleanup_landing_pads": [
+   "0x40129b"
+  ],
+  "eh_functions": [
+   "_Z9check_keyi",
+   "_Z9real_pathi"
+  ],
+  "catch_functions": [
+   "_Z9real_pathi"
+  ],
+  "catch_types": [
+   "std::runtime_error"
+  ],
+  "signals": "none",
+  "signal_numbers": "none",
+  "signal_handlers": "none",
+  "signal_handler_functions": "none",
+  "trap_instructions": "none",
+  "trap_functions": "none",
+  "int3_anti_debug": "false",
+  "handler:SIGTRAP": "none",
+  "has_exception_handlers": "true"
+ },
+ "generator_cmd": "bash ehctl_gen.sh   # g++ -O1 -no-pie / -O2 -pie (throw+catch std::runtime_error, .cold cleanup pad); gcc -O0 / -O2 -fno-plt sigaction(SIGTRAP/SIGILL)+signal(SIGSEGV)+int3+ud2; gcc plain C decoy; text decoy",
+ "oracle_cmd": "python3 ehctl_oracle.py <gen tmpdir>   # landing pads: gcc -S call-site table labels resolved by nm on the -Wa,-L twin, c++filt catch types; signals: gdb -batch breakpoints on sigaction/signal ($rdi + info symbol handler); traps: objdump -d main",
+ "file_b": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamic",
+ "decoy": false,
+ "note": "lib.binary.exception_handler_field(data, key) per expected_facts key; field vocabulary SPECULATIVE (GM label not seen). Decoys: plain C ELF (fields absent / false), text (all none)."
+}

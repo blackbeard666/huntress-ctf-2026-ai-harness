@@ -1,0 +1,9 @@
+{
+ "codec": "base85-any",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-lynx-24",
+ "encoded": "xbtoa Begin\n:2+3L+EqaECER/!@rGmlDJ()6BPDN1G@>N/F`8KH<,Wn#DesT./0K\"V@Voh$+EV:2F!,%=@:OC%@;^\n.1ATAo8D]j.8AKXKOD.Oha@<6O%E]P=[@;p$o/So]MGV([-\nxbtoa End N 100 64 E 0 S 0 R 0\n",
+ "generator_cmd": "printf %s \"$plain\" | python3 -I -c 'import base64,sys;b=sys.stdin.buffer.read();x=base64.a85encode(b+bytes(-len(b)%4),foldspaces=True,wrapcol=78).decode();print(\"xbtoa Begin\");print(x);print(\"xbtoa End N %d %x E 0 S 0 R 0\"%(len(b),len(b)))'  # btoa 4.x framing: whole zero-padded groups, 78 cols, N trims",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl btoa",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-lynx-24",
+ "expected": "match"
+}

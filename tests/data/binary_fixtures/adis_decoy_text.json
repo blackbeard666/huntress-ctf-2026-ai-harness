@@ -1,0 +1,21 @@
+{
+ "family": "anti_disassembly",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "has_anti_disassembly": "none",
+  "anti_disassembly_techniques": "none",
+  "anti_disassembly_functions": "none",
+  "technique": "none",
+  "protected_function": "none",
+  "disassembly": "none",
+  "leaf_constant": "none",
+  "uses:junk_bytes": "none"
+ },
+ "generator_cmd": "bash adis_gen.sh   # gcc -O1 -masm=intel -c (top-level asm: .byte junk, jz+jnz, eb ff c0, call $+5;pop;push;ret)",
+ "oracle_cmd": "python3 adis_oracle.py   # gdb -batch stepi trace of adis_exe_all.bin (executed instructions, address order, returned eax), nm rebase to .o offsets; techniques/junk counts from the asm source; rizin `aa; pdf` cross-check",
+ "file_b": "ASCII text",
+ "decoy": true,
+ "note": "lib.binary.anti_disasm_field(data, key) per expected_facts key ('key:<fn>' = per function); field vocabulary SPECULATIVE (GM label not seen). rizin pdf: agrees on get_flag, stops at the fake ret in decode_it, decodes the junk e8 of check_key as `call` -- the walker recovers the executed code instead"
+}

@@ -1,0 +1,14 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "decrypted_offset": "none",
+  "decrypted_size": "none",
+  "xor_key": "none"
+ },
+ "decoy": true,
+ "generator_cmd": "bash smc_gen.sh decoy_trunc   # gcc + python3 stdlib (struct/zlib) blob writer + python3 post-link xor patch (readelf -sW symbol range)",
+ "oracle_cmd": "head -c 4100 smc_func_O0.bin; readelf -lW smc_decoy_trunc.bin (truncated: program headers only)",
+ "note": "first 4100 bytes of smc_func_O0.bin (truncated ELF: no PT_LOAD content / main) -> no hit, facts 'none'"
+}

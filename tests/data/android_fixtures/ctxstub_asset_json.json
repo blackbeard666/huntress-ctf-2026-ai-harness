@@ -1,0 +1,8 @@
+{
+ "entry": "context_chain_scan",
+ "expected": "ANS-bfa8609806cfe729",
+ "decoy": false,
+ "_why": "static Release.code(Context) stores ctx, then 64-bit mixes JSONObject(getAssets().open(build.json)).getLong/getInt/optString, getPackageName, getResources().getString(R.string.seed), getString(getIdentifier(salt)), PackageInfo GET_SIGNATURES Signature.hashCode + versionCode + versionName, flags & DEBUGGABLE, Build.TAGS/TYPE/FINGERPRINT, SharedPreferences default + put/apply readback, ANDROID_ID length, SystemClock delta",
+ "generator_cmd": "python3 tests/data/android_fixtures/ctxstub_src/gen_ctx.py asset_json tests/data/android_fixtures/ctxstub_asset_json.apk  # javac --release 8 (app + android.*/org.json stubs) + dex2jar d2j-jar2dex.sh + apktool's aapt2 compile/link (arsc, manifest, R ids) + zipfile (assets) + keytool RSA + apksigner sign v1+v2",
+ "oracle_cmd": "same generator, oracle stage: openssl pkcs7 -print_certs | openssl x509 -outform DER on META-INF/*.RSA (signer DER), aapt dump badging (package / versionCode / versionName / application-debuggable), aapt2 dump resources (ids + values), then java -Dctx.apk=<signed apk> ... -cp <javac out> <pkg>.Probe runs Release.code(new Context()) on the host JVM: assets read by the real java.util.zip.ZipFile, Build release-keys/user, ANDROID_ID 16 hex, SharedPreferences map -> 'ANS-bfa8609806cfe729'"
+}

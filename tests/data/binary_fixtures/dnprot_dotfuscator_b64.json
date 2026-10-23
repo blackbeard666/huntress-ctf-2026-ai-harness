@@ -1,0 +1,22 @@
+{
+ "encoding": "utf16le-base64",
+ "expected_offset": 1803,
+ "expected_config": {
+  "host": "dotf.hunt.local",
+  "port": 9001,
+  "tag": "DF-55"
+ },
+ "expected_facts": {
+  "obfuscator": "Dotfuscator",
+  "obfuscator_marker": "Dotfuscator Community 6.5.3",
+  "has_suppress_ildasm": "false",
+  "renamed_types": "1",
+  "module_cctor": "false",
+  "encrypted_bodies": "0",
+  "cctor_decrypts_bodies": "false"
+ },
+ "generator_cmd": "python3 dnprot_gen.py .   # dotnet build (Roslyn C#: [module: ConfusedBy]/[SuppressIldasm]/[ModuleInitializer]/Dotfuscator attr) + stdlib byte patches (xor'd FieldRVA blob, xor'd method body, control-byte #Strings name)",
+ "oracle_cmd": "bash dnprot_oracle.sh dnprot_dotfuscator_b64.bin   # System.Reflection.Metadata + Reflection.Emit.OpCodes IL walk; HCFG via the .NET runtime (RunModuleConstructor, then static byte[] fields / #US base64), not dnfile",
+ "decoy": false,
+ "note": "Dotfuscator marker attribute, 1 renamed (Cyrillic) type, HCFG as a base64 ldstr (#US UTF-16LE); no cctor"
+}

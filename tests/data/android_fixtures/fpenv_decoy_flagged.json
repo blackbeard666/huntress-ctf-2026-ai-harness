@@ -1,0 +1,8 @@
+{
+ "entry": "clean_device_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "maps_tcp's app, bytes keyed for a NAIVE verdict (every candidate maps line, incl. ART's own libart/dalvik mappings, counted real): the clean-device path yields garbage",
+ "generator_cmd": "python3 tests/data/android_fixtures/fpenv_src/gen_fpenv.py decoy_flagged tests/data/android_fixtures/fpenv_decoy_flagged.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: unshare -rn java -cp <javac out> com.huntress.mobile.d23.fpenv.Probe -> Vault.reveal(ctx) on the host JVM (a real uninstrumented process in a fresh netns: its own /proc/self/maps, empty /proc/net/tcp, CNFE for hook classes, stub stock package list) -> garbage (NAIVE-keyed bytes), no ANS token"
+}

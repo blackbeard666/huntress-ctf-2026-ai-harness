@@ -1,0 +1,7 @@
+{
+ "entry": "clean_device_scan",
+ "expected": "ANS-e47b02c9a58d16f3",
+ "_why": "Guard.key = weighted score 4*hook-manager packages (getInstalledPackages(0).packageName + getInstalledApplications(0).get(i).packageName vs re.frida.server / xposed installer / lsposed / magisk) + 3*loadClass(XposedBridge)/forName(com.saurik.substrate.MS) found + 5*real maps signals; clean only at score 0 (near-miss com.google.android.gm / android.ext.shared must not count)",
+ "generator_cmd": "python3 tests/data/android_fixtures/fpenv_src/gen_fpenv.py pkgs_classes tests/data/android_fixtures/fpenv_pkgs_classes.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: unshare -rn java -cp <javac out> com.huntress.mobile.d23.fpenv.Probe -> Vault.reveal(ctx) on the host JVM (a real uninstrumented process in a fresh netns: its own /proc/self/maps, empty /proc/net/tcp, CNFE for hook classes, stub stock package list) -> 'ANS-e47b02c9a58d16f3'"
+}

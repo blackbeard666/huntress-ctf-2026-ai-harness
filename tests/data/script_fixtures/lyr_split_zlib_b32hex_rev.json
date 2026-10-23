@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=google_apps_script|role=stager|verdict=malicious|attack=T1059.007|adapter=split_lyr|steps=join_chunks,peel_layers|campaign_id=LYR-z32hr|url=https://lyr-z32h.example.invalid/gate",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | python3 -c 'import sys,zlib;sys.stdout.buffer.write(zlib.compress(sys.stdin.buffer.read(),9))' | basenc --base32hex -w0 | rev ; 'LYR-zlib_b32hex_rev-'+data cut into 24-char chunks in a Google Apps Script `const PARTS = [..]; PARTS.join(\"\")` under `// HUNTRESS_ANALYSIS_V1:SPLIT`",
+ "oracle_cmd": "grep -o '\"[^\"]*\"' lyr_split_zlib_b32hex_rev.gs | grep -v '^\"\"$' | tr -d '\"\\n' | sed 's/^LYR-zlib_b32hex_rev-//' | rev | basenc -d --base32hex | python3 -c 'import sys,zlib;sys.stdout.buffer.write(zlib.decompress(sys.stdin.buffer.read()))'"
+}

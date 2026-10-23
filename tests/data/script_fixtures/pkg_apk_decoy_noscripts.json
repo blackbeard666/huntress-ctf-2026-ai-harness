@@ -1,0 +1,12 @@
+{
+ "material": "H4sIAAAAAAACA+3NMQrCQBCF4alzir1AwiS4pLJVRFCvsMUSQVxkd+P5HdIE7BXB/2ve8F4x3eW4P5x2Z/kgNaP3S5r3VPX9ei/9qJtBnMoXzKWGbC/lPz1uUwr36LbuOqeaYyltmGKqjQ3PmK3vO22zNgIAAAAAAAAAAAAAAAAA+CUvyNLMmgAoAAAfiwgAAAAAAAID7dExDoJAFATQrTkFxgOwIsTzICEuDSYs3F+kMbHXxPheMz/TTPHXPFfXcaq62zAt4TPi5tK2e27eM8a6ft3P/hTPTRPKGL5gzUs3b/PhPx0P+/tzKoY+3cs0FgEAAAAAAAAAAIAf8ADkD8mQACgAAA==",
+ "rep": "apk",
+ "transform": null,
+ "key": "",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "same stdlib writer as pkg_apk_post_install with only .PKGINFO in the control segment",
+ "oracle_cmd": "tar -tzf pkg_apk_decoy_noscripts.apk --ignore-zeros   (.PKGINFO + usr/bin/agent: no .pre-/.post- scripts)",
+ "source_file": "pkg_apk_decoy_noscripts.apk",
+ "note": "linux-package-maintainer-scripts (T1546.016 / T1059.004): decode(rep=apk) -> pkg_scripts -> script body readers"
+}

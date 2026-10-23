@@ -1,0 +1,1 @@
+jz/jnz same target, eb ff c0, call $+5; pop; ret -- a write-up, not code

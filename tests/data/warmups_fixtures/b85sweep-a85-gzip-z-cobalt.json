@@ -1,0 +1,9 @@
+{
+ "codec": "base85-any",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-24",
+ "encoded": "+,^C)z!Wsaj5n6.6&4YWZr:XsFap\"kK\\\\P-M%IH]!W8hZ&q7\\e5a2jDRXR'KjEJ*XbOXZ\"]W\\=f[cA-3!]``9Rjd2KgU1R.S.EE>S0Let#eAKBpV_qq[R^W(nQ\"16&AcMf2",
+ "generator_cmd": "printf %s \"$plain\" | gzip -n -9 | xxd -p -c0 | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/b85sweep_cyberchef.mjs std hexin  # gzip -n: mtime 0 -> an all-zero group -> 'z' shortcut",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl a85 | gunzip",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-24",
+ "expected": "match"
+}

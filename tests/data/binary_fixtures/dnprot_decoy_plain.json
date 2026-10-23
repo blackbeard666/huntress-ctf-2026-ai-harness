@@ -1,0 +1,18 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "obfuscator": "none",
+  "obfuscator_marker": "none",
+  "has_suppress_ildasm": "false",
+  "renamed_types": "0",
+  "module_cctor": "false",
+  "encrypted_bodies": "0",
+  "cctor_decrypts_bodies": "false"
+ },
+ "generator_cmd": "python3 dnprot_gen.py .   # dotnet build (Roslyn C#: [module: ConfusedBy]/[SuppressIldasm]/[ModuleInitializer]/Dotfuscator attr) + stdlib byte patches (xor'd FieldRVA blob, xor'd method body, control-byte #Strings name)",
+ "oracle_cmd": "bash dnprot_oracle.sh dnprot_decoy_plain.bin   # System.Reflection.Metadata + Reflection.Emit.OpCodes IL walk; HCFG via the .NET runtime (RunModuleConstructor, then static byte[] fields / #US base64), not dnfile",
+ "decoy": true,
+ "note": "plain C# exe: no protector; a blob xor'd with a 4-byte key that appears nowhere (no module ctor) -> no hcfg, every protector field none/false/0"
+}

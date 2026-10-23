@@ -1,0 +1,10 @@
+{
+ "codec": "bech32",
+ "plain": null,
+ "encoded": "huntress1fe5kxefqwahqy6eqv3jkxmmyd9hxwgr5dp5hxgrhv9ex6atsyys9gmeqwdhkcan99ss8xatzd45hggr5dp5hxgr90pskxapqv9h8xam9wgs8gmeqw35x2gz8v9kk2gzdv9ehgetj8gsxxmmzv9k8gttv09h8stf5xu6lvfft",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "pip bech32 1.2.0 bech32_encode('huntress', convertbits(plain)) then symbol 20 replaced (q<->p): checksum must fail",
+ "oracle_cmd": "printf %s \"$encoded\" | NM=$PWD/tools/npm-bech32/node_modules tools/node/bin/node tests/data/warmups_fixtures/chkbase_oracle.mjs bech32",
+ "oracle_plain": null
+}

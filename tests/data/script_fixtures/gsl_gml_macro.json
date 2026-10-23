@@ -1,0 +1,7 @@
+{
+ "description": "game-script-language-route (gml): hex(base64(plan))",
+ "expected_plain": "v=3|language=gml|role=downloader|verdict=suspicious|attack=T1105|adapter=operator_graph|host_profile=standalone|obfuscation_profile=hex_base64|stage_count=3|campaign_id=GML-4d5e6f70|url=https://gml-4d5e6f70.example.invalid/stage|file_path=/tmp/huntress-gml/.4d5e6f70.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/gsl_gen.py OUT  # stdlib base64/binascii/json writer; fixture gsl_gml_macro (hex(base64(plan)))",
+ "oracle_cmd": "grep -oP '^#macro DESCRIPTOR_\\w+ \"\\K[^\"]+' gsl_gml_macro.gml | xxd -r -p | base64 -d"
+}

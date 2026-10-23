@@ -1,0 +1,10 @@
+{
+ "codec": "base94",
+ "plain": null,
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwIf/+",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -c 'import base64;print(base64.b64encode(b\"Nice work decoding this warmup!\\xff\\xfe\").decode())'  # base64 line (inside the base94 alphabet)",
+ "oracle_cmd": ".venv/bin/python -I -c \"import sys;from Crypto.Util.number import long_to_bytes;t=sys.stdin.read().rstrip('\\n');n=0\nfor c in t: n=n*94+ord(c)-33\nprint(long_to_bytes(n).decode())\"  # pycryptodome long_to_bytes over the radix-94 digits",
+ "oracle_plain": null
+}

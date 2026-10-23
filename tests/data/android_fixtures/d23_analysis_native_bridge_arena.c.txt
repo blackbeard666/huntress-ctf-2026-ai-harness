@@ -1,0 +1,8 @@
+#include <stdint.h>
+typedef int64_t jlong; typedef void *JNIEnv; typedef void *jclass;
+static inline uint64_t rol(uint64_t x, int r) { return (x << r) | (x >> (64 - r)); }
+jlong Java_com_huntress_mobile_d15_vdaee0a5a01ee_NativeLibrarySecrets_NAME(JNIEnv *env, jclass c, jlong j) {
+    uint64_t x = (uint64_t)j;
+    for (int i = 0; i < 5; i++) { x ^= 0x9E3779B97F4A7C15ULL + (uint64_t)i; x = rol(x, 23) * 0xBF58476D1CE4E5B9ULL; x ^= x >> 31; }
+    return (jlong)x;
+}

@@ -1,0 +1,48 @@
+{
+ "family": "anti_disassembly",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "has_anti_disassembly": "true",
+  "anti_disassembly_techniques": [
+   "jmp_into_instruction",
+   "overlapping_instructions"
+  ],
+  "technique": "jmp_into_instruction",
+  "anti_disassembly_functions": [
+   "get_flag"
+  ],
+  "protected_function": "get_flag",
+  "disassembly": [
+   "mov eax, 0x41",
+   "jmp 0x6",
+   "inc eax",
+   "add eax, 0x100",
+   "ret"
+  ],
+  "leaf_constant": "0x142",
+  "uses:opposite_jcc_pair": "false",
+  "recover_code:get_flag": [
+   "mov eax, 0x41",
+   "jmp 0x6",
+   "inc eax",
+   "add eax, 0x100",
+   "ret"
+  ],
+  "instruction_count:get_flag": "5",
+  "leaf_constant:get_flag": "0x142",
+  "return_value:get_flag": "322",
+  "junk_bytes:get_flag": "0",
+  "techniques:get_flag": [
+   "jmp_into_instruction",
+   "overlapping_instructions"
+  ],
+  "linear_sweep_desync:get_flag": "true"
+ },
+ "generator_cmd": "bash adis_gen.sh   # gcc -O1 -masm=intel -c (top-level asm: .byte junk, jz+jnz, eb ff c0, call $+5;pop;push;ret)",
+ "oracle_cmd": "python3 adis_oracle.py   # gdb -batch stepi trace of adis_exe_all.bin (executed instructions, address order, returned eax), nm rebase to .o offsets; techniques/junk counts from the asm source; rizin `aa; pdf` cross-check",
+ "file_b": "ELF 64-bit LSB relocatable, x86-64, version 1 (SYSV), not st",
+ "decoy": false,
+ "note": "lib.binary.anti_disasm_field(data, key) per expected_facts key ('key:<fn>' = per function); field vocabulary SPECULATIVE (GM label not seen). rizin pdf: agrees on get_flag, stops at the fake ret in decode_it, decodes the junk e8 of check_key as `call` -- the walker recovers the executed code instead"
+}

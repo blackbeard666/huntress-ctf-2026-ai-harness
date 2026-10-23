@@ -1,0 +1,12 @@
+{
+ "family": "garble_go",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": null,
+ "generator_cmd": "bash garble_gen.sh   # head -c 262144 garble_names.bin; garble v0.16.0 + go1.26.8, src garble_src_main.go",
+ "oracle_cmd": "go run garble_oracle.go garble_decoy_trunc.bin   # Go stdlib debug/elf+debug/gosym (magic restored)+debug/buildinfo",
+ "file_b": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, too larg",
+ "decoy": true,
+ "note": "lib.binary.garble_facts(data) / garble_field(data, key); literals_recovered is a placeholder (literal decryption not implemented)"
+}

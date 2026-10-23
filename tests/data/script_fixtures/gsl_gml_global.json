@@ -1,0 +1,7 @@
+{
+ "description": "game-script-language-route (gml): dotted hex fragments",
+ "expected_plain": "v=3|language=gml|role=launcher|verdict=suspicious|attack=T1105|adapter=operator_graph|host_profile=standalone|obfuscation_profile=hex_base64|stage_count=3|campaign_id=GML-5e6f7081|url=https://gml-5e6f7081.example.invalid/stage|file_path=/tmp/huntress-gml/.5e6f7081.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/gsl_gen.py OUT  # stdlib base64/binascii/json writer; fixture gsl_gml_global (dotted hex fragments)",
+ "oracle_cmd": "grep -oP 'global\\.descriptor_\\w+ = \"\\K[^\"]+' gsl_gml_global.gml | tr -d . | xxd -r -p"
+}

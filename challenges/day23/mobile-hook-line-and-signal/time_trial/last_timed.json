@@ -1,0 +1,42 @@
+{
+  "result": "incorrect",
+  "full_result": "incorrect",
+  "attempt_id": "2deb0b14-03ce-4427-9bb6-62e568a0e09d",
+  "window": null,
+  "elapsed": 5.79,
+  "in_window": 5.79,
+  "phases": {
+    "start": 0.0,
+    "download": 0.0,
+    "solve": 0.48,
+    "submit": 1.77
+  },
+  "per_set": {
+    "_": {
+      "result": "incorrect",
+      "remaining": null
+    }
+  },
+  "bad_sets": [
+    "_"
+  ],
+  "wrong": [
+    [
+      "answer",
+      "ANS-0123456789ABCDEF"
+    ]
+  ],
+  "fixed": {},
+  "localize_complete": true,
+  "routed": "local",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {},
+  "attempts_remaining": 32,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 32,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

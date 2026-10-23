@@ -1,0 +1,8 @@
+{
+ "entry": "integrity_verdict_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "DECOY: same layout as ivs_plain_multi minus the clean payload -- every remaining verdict fails one check (near-misses), so no ANS may be reported",
+ "generator_cmd": "PYTHONPATH=tools/pylib python3 tests/data/android_fixtures/ivs_src/gen.py tests/data/android_fixtures  # keytool -genkeypair (signer) + json / jwcrypto RS256 JWS + python zipfile + apksigner sign (v1+v2)",
+ "oracle_cmd": "sh tests/data/android_fixtures/ivs_src/oracle.sh plain tests/data/android_fixtures/ivs_decoy_no_clean.apk  # keytool -printcert -jarfile (signer sha256) + unzip -p | jq select(clean verdict) / openssl dgst nonce  # -> (nothing)"
+}

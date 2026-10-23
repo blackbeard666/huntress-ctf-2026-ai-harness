@@ -1,0 +1,9 @@
+{
+ "codec": "bigradix-sorted",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-crane-71",
+ "encoded": "IGLPRHRKIGJSROPKGMDSNMOTGGQKLGFDHFDNMQLNPJQJRMLNKQRTCECQAASQDACDENSEIPFEMKOJGNTBJHMBHDSKTPAAHSAPIDQKQHMASJRJBNASPDBNIRADQDAANCMGBGODOHOGTPIAIRNMKIAGMODGEBSNRODENJKLGMCNTHLJIPEEMAIONLGNN",
+ "expected": "match",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c0 | tr a-f A-F | sed 's/^/obase=20; ibase=16; /' | BC_LINE_LENGTH=0 bc | awk '{A=ENVIRON[\"ALPHA\"]; for(i=1;i<=NF;i++) printf \"%s\", substr(A, $i+1, 1)}'  # GNU bc radix-20 digit groups -> ALPHA=\"ABCDEFGHIJKLMNOPQRST\"",
+ "oracle_cmd": ".venv/bin/python -I -c \"import sys,base58;t=sys.stdin.read().rstrip('\\\\n');A=''.join(sorted(set(t)));t=t[::-1] if sys.argv[2]=='little' else t;n=base58.b58decode_int(t.encode(),alphabet=A.encode());b=n.to_bytes((n.bit_length()+7)//8,sys.argv[3]);print(b.decode())\" SORTED big big  # pip base58 2.1 b58decode_int(alphabet=A) over len(A) radix",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-crane-71"
+}

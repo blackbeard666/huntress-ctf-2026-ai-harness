@@ -1,0 +1,16 @@
+{
+ "-expansion": {
+  "call_double": {
+   "for_indirect": 6
+  }
+ },
+ "-role": {
+  "benign_utility": {
+   "downloader": 1,
+   "dropper": 2,
+   "launcher": 1,
+   "staged_chain": 1,
+   "uploader": 2
+  }
+ }
+}

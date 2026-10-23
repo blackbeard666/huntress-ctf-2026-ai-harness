@@ -1,0 +1,22 @@
+{
+ "encoding": "antitamper-raw",
+ "expected_offset": 3040,
+ "expected_config": {
+  "c2": "tamper.hunt.local:8443",
+  "id": "AT-7731",
+  "sleep": 45
+ },
+ "expected_facts": {
+  "obfuscator": "ConfuserEx",
+  "obfuscator_marker": "ConfuserEx v1.6.0+447341964f",
+  "has_suppress_ildasm": "true",
+  "renamed_types": "2",
+  "module_cctor": "true",
+  "encrypted_bodies": "1",
+  "cctor_decrypts_bodies": "true"
+ },
+ "generator_cmd": "python3 dnprot_gen.py .   # dotnet build (Roslyn C#: [module: ConfusedBy]/[SuppressIldasm]/[ModuleInitializer]/Dotfuscator attr) + stdlib byte patches (xor'd FieldRVA blob, xor'd method body, control-byte #Strings name)",
+ "oracle_cmd": "bash dnprot_oracle.sh dnprot_confuser_antitamper.bin   # System.Reflection.Metadata + Reflection.Emit.OpCodes IL walk; HCFG via the .NET runtime (RunModuleConstructor, then static byte[] fields / #US base64), not dnfile",
+ "decoy": false,
+ "note": "ConfuserEx-style: ConfusedBy marker + SuppressIldasm, 2 renamed types (Thai / control bytes), <Module>..cctor -> [ModuleInitializer] xors the FieldRVA blob with uint 0x5A3C9E17 (LE, phase 0), Payload.Beacon body xor'd (invalid IL). Oracle runs the real module ctor."
+}

@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3 uid="uid://c8k2q1v0x7y5m"]
+
+[sub_resource type="GDScript" id="GDScript_7h3kq"]
+script/source = "extends Node
+const GREETING: String = \"hello \\\"world\\\"\"
+func _ready():
+	print(GREETING)
+"
+
+[node name="Loader" type="Node"]
+script = SubResource("GDScript_7h3kq")

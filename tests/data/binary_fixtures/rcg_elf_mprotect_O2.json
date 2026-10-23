@@ -1,0 +1,20 @@
+{
+ "family": "runtime_codegen",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "has_runtime_codegen": "true",
+  "codegen_kind": "native_jit",
+  "emitted_opcodes": "[\"push\", \"mov\", \"mov\", \"pop\", \"ret\"]",
+  "emitted_instructions": "[\"push rbp\", \"mov rbp, rsp\", \"mov eax, 0xbadbeef\", \"pop rbp\", \"ret\"]",
+  "emitted_constant": "195935983",
+  "emitted_constant_hex": "0xbadbeef",
+  "emitted_bytes": "554889e5b8efbead0b5dc3"
+ },
+ "generator_cmd": "bash rcg_gen.sh .   # gcc -O2 -s j2.c: mmap(RW) + memcpy(p, jit_buf, 11) (inlined to qword+dword loads/stores) + mprotect(R|X)",
+ "oracle_cmd": "python3 rcg_oracle.py rcg_elf_mprotect_O2.bin   # objdump -d/-s + objdump -D -b binary (native) / ilspycmd -il (.NET); no capstone, no dnfile",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, int",
+ "decoy": false,
+ "note": "lib.binary.runtime_codegen_field(data, key) per expected_facts key; key vocabulary SPECULATIVE (GM label not seen)"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-FD220FB9942A992F",
+ "_why": "v2 analysis: Release.code() = mixer chain over 6 Probe.s1/s2/s3 4096-step inverse searches (pure static memo + compiled closures; ~1.4 s on the plain interpreter)",
+ "generator_cmd": "python3 tests/data/android_fixtures/pstatmemo_src/gen_pstatmemo.py probe6 tests/data/android_fixtures/pstatmemo_probe6.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "sh tests/data/android_fixtures/pstatmemo_src/oracle.sh tests/data/android_fixtures/pstatmemo_probe6.apk  # d2j-dex2jar back to classes, RUN Release.code() twice on the JVM -> ANS-FD220FB9942A992F"
+}

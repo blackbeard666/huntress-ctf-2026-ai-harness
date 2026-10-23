@@ -1,0 +1,7 @@
+# Ren'Py script: options.rpy
+define config.name = _("Press Start")
+define descriptor_2b3c4d5e = "dj0zfGxhbmd1YWdlPXJlbnB5fHJvbGU9bGF1bmNoZXJ8dmVyZGljdD1zdXNwaWNpb3VzfGF0dGFjaz1UMTEwNXxhZGFwdGVyPW9wZXJhdG9yX2dyYXBofGhvc3RfcHJvZmlsZT1zdGFuZGFsb25lfG9iZnVzY2F0aW9uX3Byb2ZpbGU9aGV4X2Jhc2U2NHxzdGFnZV9jb3VudD0zfGNhbXBhaWduX2lkPVJFTlBZLTJiM2M0ZDVlfHVybD1odHRwczovL3JlbnB5LTJiM2M0ZDVlLmV4YW1wbGUuaW52YWxpZC9zdGFnZXxmaWxlX3BhdGg9L3RtcC9odW50cmVzcy1yZW5weS8uMmIzYzRkNWUuc3RhZ2U="
+
+label start:
+    "Loading..."
+    return

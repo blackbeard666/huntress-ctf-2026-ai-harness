@@ -1,0 +1,9 @@
+{
+ "codec": "zalgo",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "N̨͂̆i̎̊͝c̢̫͙e̮̊͝ w̨̞ͣo̢ͩŗ̝̆k̶̪͐ dͨ͑͡e̙͛͢c̵̮̊ö͈́͢d̫ͦ͜i̡͚͗n̨͛͞g̵̥͋ t̡͎́h̥ͬ͠i̬͐̓sͨ͒͟ w͓ͨ͝a̴̹͓r̗̿͢m̜̿͡uͨͪ͟p̼̆̾! T̛͈͡o̲̓̈ ș͈̿oͯ̓̕ĺ̪̙v̯͕͟e̵̅͢, s̅̀͠u̧̟ͫb͙̾͠m̴̻̾i̸ͣ̿ť̯̓ t̞̕͡h̢̯ͩi͎̭͡ŝ̨̘ e̿̕͝x͙̄͘ǎ̧̪c͑̏̇ţ̥́ ä̳͂n̲̜̳s̗̈́͢w̱̆͝ë͖́̚r̵̾ͅ t̴̻͝ȍͭ͜ t̯̽̕h͇̪͟e͎̓͡ G͗̄ͤa͖̚͜mͯ̽̕e̠ͩ͠ M͕͠a̭ͮ͟s̴̜͊t͗́͘e̼̊͞r̖̰͜: á̫ͅm̡̠͢b̠̦ͯe̪̱ͤr̫̀̎-f̟͒͘ą̷̥l͌ͫ͌c̩ͫ͡o̷͔ͪn̵ͦ̏-42",
+ "generator_cmd": "PYTHONPATH=$TMPDIR/zpk python3 -I -c 'import sys,random;random.seed(42);from zalgo_text import zalgo;print(zalgo.zalgo().zalgofy(sys.argv[1]),end=\"\")' \"$plain\"  # pip zalgo-text 0.6",
+ "oracle_cmd": "printf %s \"$encoded\" | uconv -x '::NFD; [[:Mn:][:Me:]] > ; ::NFC;'  # ICU transliterator: NFD, remove Mn/Me, NFC",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

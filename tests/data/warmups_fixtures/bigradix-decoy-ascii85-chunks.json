@@ -1,0 +1,10 @@
+{
+ "codec": "bigradix-a85-big",
+ "plain": null,
+ "encoded": ":2+3L+EqaECER/!@rGmlDJ()6BPDN1G@>N/F`8KH<,Wn#DesT./0K\"V@Voh$+EV:2F!,%=@:OC%@;^.1ATAo8D]j.8AKXKOD.Oha@<6O%E]P=OD.7's/RiF8Df.-e0E",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -c 'import base64;print(base64.a85encode(SENTENCE.encode()).decode())'  # 4-byte-chunk Ascii85, not one big integer",
+ "oracle_cmd": ".venv/bin/python -I -c \"import sys,base58;t=sys.stdin.read().rstrip('\\\\n');A=sys.argv[1];t=t[::-1] if sys.argv[2]=='little' else t;n=base58.b58decode_int(t.encode(),alphabet=A.encode());b=n.to_bytes((n.bit_length()+7)//8,sys.argv[3]);print(b.decode())\" \"!\\\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\\]^_`abcdefghijklmnopqrstu\" big big  # pip base58 2.1 b58decode_int(alphabet=A) over len(A) radix -> not UTF-8 (exit 1)",
+ "oracle_plain": null
+}

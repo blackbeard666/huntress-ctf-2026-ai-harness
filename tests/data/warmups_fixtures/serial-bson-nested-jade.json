@@ -1,0 +1,9 @@
+{
+ "codec": "serialization-wrapper[bson]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-condor-46",
+ "encoded": "860000000361007a00000004620072000000023000660000004e69636520776f726b206465636f64696e672074686973207761726d75702120546f20736f6c76652c207375626d6974207468697320657861637420616e7377657220746f207468652047616d65204d61737465723a206a6164652d636f6e646f722d34360000000874000100",
+ "generator_cmd": "python3 -c 'import bson,os;print(bson.encode({\"a\":{\"b\":[os.environ[\"plain\"]]},\"t\":True}).hex())'",
+ "oracle_cmd": "python3 -c 'import bson,os;print(bson.decode(bytes.fromhex(os.environ[\"encoded\"]))[\"a\"][\"b\"][0])'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-condor-46",
+ "expected": "match"
+}

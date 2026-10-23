@@ -1,0 +1,7 @@
+{
+ "description": "game-script-language-route (uc): truncated odd-length hex",
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/gsl_gen.py OUT  # stdlib base64/binascii/json writer; fixture gsl_decoy_unrealscript_trunc (truncated odd-length hex)",
+ "oracle_cmd": "grep -oP 'Descriptor_X=\"\\K[^\"]+' gsl_decoy_unrealscript_trunc.uc | xxd -r -p | base64 -d || echo none"
+}

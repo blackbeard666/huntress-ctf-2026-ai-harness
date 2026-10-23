@@ -1,0 +1,10 @@
+{
+ "codec": "base122",
+ "plain": null,
+ "encoded": "ԼԠൻҭݵணહƗڝɵ൸പภचഡƜݗb൲ณ൪ஐࠐƇܚaඔ൷ڤॶߥܖڅێػҭӼкೞƘށƋඡҬɑѩඥ૯ʝਨಕแࡈचʆϸڛRמฤӺடาƖ۱ޛঘฏ൝Иथພݏہԯ",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "base2048-clover.json's encoded (qntm npm base2048): another dense U+0080..U+0FFF packing, not base122",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;sys.path.insert(0,'tools/pip-base122');import base122;print(base122.b122decode([ord(c) for c in sys.stdin.buffer.read().decode('utf-8')]).decode('utf-8'))\"  # PyPI base122==2026.10.18 b122decode (kevinAlbs decode.js port; takes code points, like charCodeAt)  -> rejects: reference decode raises IndexError: list index out of range",
+ "oracle_plain": null
+}

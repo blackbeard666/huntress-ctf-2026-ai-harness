@@ -1,0 +1,12 @@
+{
+ "codec": "serialization-wrapper[bson]",
+ "plain": null,
+ "encoded": "iwAAABBfaWQAAQAAAAJtc2cAaAAAAE5pY2Ugd29yayBkZWNvZGluZyB0aGlzIHdhcm11cCEgVG8gc29sdmUsIHN1Ym1pdCB0aGlzIGV4YWN0IGFuc3dlciB0byB0aGUgR2FtZSBNYXN0ZXI6IGNsb3Zlci1tYW50aXMtMTkAAWYAAAAAAAAA+D8A",
+ "generator_cmd": "serial-bson-doc-clover bytes with the document int32 length +1, base64",
+ "oracle_cmd": "python3 -c 'import bson,base64,os;bson.decode(base64.b64decode(os.environ[\"encoded\"]))'",
+ "oracle_plain": null,
+ "oracle_rc": 1,
+ "oracle_err": "bson.errors.InvalidBSON: objsize too large",
+ "decoy": true,
+ "expected": "none"
+}

@@ -1,0 +1,61 @@
+{
+ "attempt": "e24c070d-e220-4b63-8362-b3a2f4b1e3c0",
+ "rejected": {
+  "set1.batch-9fe290-style": [
+   "single|if_guard|percent"
+  ],
+  "set2.batch-34c1d9-style": [
+   "fallback_retry|call_subroutine|percent"
+  ],
+  "set2.batch-0292c4-style": [
+   "linear|errorlevel_guard|percent"
+  ],
+  "set2.python-4c1097-handoff-id": [
+   "PSPY-D4F3AA323D584FBF"
+  ],
+  "set3.batch-0292c4-style": [
+   "diamond|direct|percent"
+  ],
+  "set3.batch-d8acd3-style": [
+   "same_language|goto_dispatch|percent"
+  ],
+  "set3.python-4c1097-handoff-id": [
+   "PSPY-D4F3AA323D584FBF"
+  ],
+  "set4.batch-9fe290-style": [
+   "linear|call_subroutine|percent"
+  ],
+  "set4.python-4c1097-handoff-id": [
+   "PSPY-D4F3AA323D584FBF"
+  ],
+  "set5.batch-dfbb80-style": [
+   "linear|errorlevel_guard|percent"
+  ],
+  "set5.batch-2222ac-style": [
+   "linear|call_subroutine|percent"
+  ],
+  "set5.batch-398c3e-style": [
+   "diamond|goto_dispatch|percent"
+  ],
+  "set5.python-4c1097-handoff-id": [
+   "PSPY-D4F3AA323D584FBF"
+  ],
+  "set6.python-4c1097-handoff-id": [
+   "PSPY-D4F3AA323D584FBF"
+  ],
+  "set7.batch-9fe290-style": [
+   "linear|direct|percent"
+  ],
+  "set7.batch-dfbb80-style": [
+   "diamond|call_subroutine|percent"
+  ],
+  "set7.batch-a66e24-style": [
+   "linear|direct|percent"
+  ],
+  "set7.python-4c1097-handoff-id": [
+   "PSPY-D4F3AA323D584FBF"
+  ]
+ },
+ "require_complete": true,
+ "verified": 10447
+}

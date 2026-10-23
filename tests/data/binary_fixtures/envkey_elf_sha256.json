@@ -1,0 +1,14 @@
+{
+ "encoding": "envkey-xor",
+ "expected_offset": 12320,
+ "expected_config": {
+  "c2": "10.13.37.21:8443",
+  "campaign": "truthforce",
+  "sleep": 40,
+  "flag": "flag{f0rc3_th3_truth_0ut}"
+ },
+ "note": "C ELF (gcc -O1 -s): whole HCFG ^ sha256('workstation') repeating, decrypted only when getenv(HUNTRESS_HOST_MODEL)=='workstation'; runtime check: HUNTRESS_HOST_MODEL=workstation ./envkey_elf_sha256.bin prints the same JSON",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/envkey_gen.sh  # python hashlib/zlib blob writer + gcc (C ELF) / dotnet 10 csc (C# dll)",
+ "oracle_cmd": "sh envkey_oracle.sh envkey_elf_sha256.bin sha256 workstation whole",
+ "oracle_output": "{\"offset\": 12320, \"config\": {\"c2\": \"10.13.37.21:8443\", \"campaign\": \"truthforce\", \"sleep\": 40, \"flag\": \"flag{f0rc3_th3_truth_0ut}\"}}"
+}

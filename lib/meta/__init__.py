@@ -92,6 +92,9 @@ _BUILTIN = {
     # D22: META-INF/MANIFEST.MF main-section Main-Class, verbatim (continuation lines joined) -- prebuilt
     # jar.jar_manifest promoted via jar.py: "arena.evidence.ArtifactMain" (single, TT, all 6 Mastery sets)
     ("jar", "main_class"): _v("jar:main_class", 22),
+    # D23: SQLite header page size (u16 BE @16, 1 = 65536) as a base-10 int -- prebuilt sqlite.sqlite_value promoted:
+    # 4096 single, 8192 TT, 512..65536 on all 7 Mastery sets (24/24 cases)
+    ("sqlite", "page_size_bytes"): _v("prebuilt.sqlite:sqlite_value", 23),
 }
 
 PREBUILT_DIR = Path(__file__).resolve().parent / "prebuilt"
@@ -223,22 +226,26 @@ def _field(fmt, field):
 
 
 _ID_PATTERNS = []
+_ID_EXACT = {}      # "<fmt>-<dashed field>" -> (size, order, fmt, field) of the first REGISTRY key spelling it
+_ID_FAM_ORDER = {}  # (fmt, `_*` family field) -> REGISTRY order
 
 
 def _id_patterns():
-    """[(fmt, field, compiled `-<fmt>-<field>$` id-suffix regex, size)] of every non-identity REGISTRY key, compiled
-    ONCE: ~700 keys x 2 re.search per answer id overflowed re's cache (D16 lane Mastery: 68k compiles, 1 s of 1.05 s)."""
-    if not _ID_PATTERNS:
-        for fmt, fld in REGISTRY:
+    """[(fmt, field, compiled `-<fmt>-<field-prefix>([a-z0-9-]+)$` regex, size)] of every non-identity `_*` FAMILY key,
+    plus _ID_EXACT for the exact keys, built ONCE. Exact keys are a dict lookup over the id's dash-boundary suffixes:
+    ~13k prebuilt keys as one regex each cost 0.63 s per process (D23 lane cases over the 1 s budget); ~700 keys x 2
+    re.search per answer id once overflowed re's cache (D16 lane Mastery: 68k compiles, 1 s of 1.05 s)."""
+    if not _ID_PATTERNS and not _ID_EXACT:
+        for order, (fmt, fld) in enumerate(REGISTRY):
             if fmt == "file":
                 continue
             dashed = fld.replace("_", "-")
             if fld.endswith("_*"):
                 rx = re.compile(rf"(?:^|-){re.escape(fmt)}-{re.escape(dashed[:-1])}([a-z0-9-]+)$")
                 _ID_PATTERNS.append((fmt, fld, rx, len(dashed) - 1))
+                _ID_FAM_ORDER[(fmt, fld)] = order
             else:
-                _ID_PATTERNS.append((fmt, fld, re.compile(rf"(?:^|-){re.escape(fmt)}-{re.escape(dashed)}$"),
-                                     len(dashed)))
+                _ID_EXACT.setdefault(f"{fmt}-{dashed}", (len(dashed), order, fmt, fld))
     return _ID_PATTERNS
 
 
@@ -255,16 +262,18 @@ def parse_field(aid, q=None):
     m = _ID.match(tail)
     if m:
         return _field(m.group(1), m.group(2).replace("-", "_"))
-    best = None
-    for fmt, fld, rx, size in _id_patterns():
+    best = None   # (size, -registry order, (fmt, field)): the longest field wins, ties go to the earlier key
+    fams = _id_patterns()
+    for i in [0] + [j + 1 for j, c in enumerate(tail) if c == "-"]:
+        e = _ID_EXACT.get(tail[i:])
+        if e and (best is None or (e[0], -e[1]) > best[:2]):
+            best = (e[0], -e[1], (e[2], e[3]))
+    for fmt, fld, rx, size in fams:
         mm = rx.search(tail)
-        if not mm:
-            continue
-        hit = (fmt, fld[:-1] + mm.group(1).replace("-", "_")) if fld.endswith("_*") else (fmt, fld)
-        if best is None or size > best[0]:
-            best = (size, hit)
+        if mm and (best is None or (size, -_ID_FAM_ORDER[(fmt, fld)]) > best[:2]):
+            best = (size, -_ID_FAM_ORDER[(fmt, fld)], (fmt, fld[:-1] + mm.group(1).replace("-", "_")))
     if best:
-        return _field(*best[1])
+        return _field(*best[2])
     for rx, name in _IDENT:
         mm = rx.search(tail)
         if mm:

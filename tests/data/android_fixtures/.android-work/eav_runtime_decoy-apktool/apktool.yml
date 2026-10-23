@@ -1,0 +1,4 @@
+version: 3.0.3
+apkFileName: eav_runtime_decoy.apk
+sdkInfo:
+  minSdkVersion: 23

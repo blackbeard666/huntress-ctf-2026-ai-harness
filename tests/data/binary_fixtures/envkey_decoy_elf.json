@@ -1,0 +1,11 @@
+{
+ "encoding": "none",
+ "decoy": true,
+ "expected": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "note": "C ELF comparing 'workstation'/'sandbox', blob ^ sha256('workstation-77') -- a key NOT derivable from any literal in the binary -> no crc-valid HCFG",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/envkey_gen.sh  # python hashlib/zlib blob writer + gcc (C ELF) / dotnet 10 csc (C# dll)",
+ "oracle_cmd": "sh envkey_oracle.sh envkey_decoy_elf.bin sha256 workstation whole; sh envkey_oracle.sh envkey_decoy_elf.bin sha256 sandbox whole",
+ "oracle_output": "exit=1 (no literal-derived key verifies)"
+}

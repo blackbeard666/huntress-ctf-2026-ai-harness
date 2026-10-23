@@ -1,0 +1,9 @@
+{
+ "codec": "serialization-wrapper[msgpack]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-lynx-12",
+ "encoded": "gqFt2WROaWNlIHdvcmsgZGVjb2RpbmcgdGhpcyB3YXJtdXAhIFRvIHNvbHZlLCBzdWJtaXQgdGhpcyBleGFjdCBhbnN3ZXIgdG8gdGhlIEdhbWUgTWFzdGVyOiBtYXBsZS1seW54LTEyoWuTActABAAAAAAAAMA=",
+ "generator_cmd": "python3 -c 'import msgpack,base64,os;print(base64.b64encode(msgpack.packb({\"m\":os.environ[\"plain\"],\"k\":[1,2.5,None]})).decode())'",
+ "oracle_cmd": "python3 -c 'import msgpack,base64,os;print(msgpack.unpackb(base64.b64decode(os.environ[\"encoded\"]))[\"m\"])'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-lynx-12",
+ "expected": "match"
+}

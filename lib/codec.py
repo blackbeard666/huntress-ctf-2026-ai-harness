@@ -477,6 +477,9 @@ def decode(material, rep, transform, key=None):
     if re.sub(r"[^a-z]", "", rep.lower()) in ("asar", "electronasar", "appasar", "squirrel", "squirrelnupkg", "nupkg",
                                               "squirrelsetup", "electronapp"):   # electron-asar-squirrel-route
         return _electron_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("deb", "rpm", "apk", "ipk", "pkgscripts", "maintainerscripts",
+                                              "linuxpackage", "rpmspec", "pkgbuild", "apkbuild"):   # linux-package-maintainer-scripts
+        return _pkg_decode(material, transform, key)
     transform, key = _spec(rep, transform, key)
     if known(rep, transform):
         for data in _rep_candidates(rep, material):
@@ -1147,6 +1150,9 @@ def _find_codecs_uncached(src, _depth=0):
         x = [c for c in _wix_codecs(src, raw, _depth) if not have or
              any(c["plain"] != p and c["plain"].startswith(p) for p in have)]
         out = x + out
+    if _depth < 2 and not any(c.get("plain") for c in out) and (_GD_CUE.search((src or "")[:1 << 16]) or
+                                                                  (src or "")[-4:] == "GDPC"):
+        out = out + _godot_codecs(src, raw, _depth)  # Godot .tscn/.tres script/source, .pck members, .gdc tokens
     if _depth < 2 and not any(c.get("plain") for c in out):
         out = out + _carrier_codecs(src, raw, _depth)
     if _depth < 2 and not any(c.get("plain") for c in out):
@@ -1261,6 +1267,12 @@ def _find_codecs_uncached(src, _depth=0):
         have = [c.get("plain") for c in out if c.get("plain")]
         x = [c for c in _cl_codecs(src, extend_only=bool(have)) if not have or
              any(c["plain"] != p and c["plain"].startswith(p) and c["plain"][len(p):].isprintable() for p in have)]
+        out = x + out
+    if _depth < 2 and isinstance(src, str) and _GM_DESC.search(src[:1 << 20]):
+        # game-script verbatim `@".."`, Pawn `descriptor_x[] =` / escapes, mcfunction `set value` (_gm_literals)
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _gm_codecs(src) if c["plain"] not in have and (not have or any(
+            c["plain"] != p and c["plain"].startswith(p) for p in have))]
         out = x + out
     return out
 
@@ -1870,6 +1882,108 @@ def _peel_ext(lits, tag="", tried=(), budget=1.5):
     return None, None
 
 
+# Game-engine / modding script descriptors (target game-script-language-route), the D23 GDScript siblings. Luau, Ren'Py
+# (`define` / `init python:` / `$ x =`), GML `#macro` / `global.x`, AngelScript `const string`, UnrealScript
+# `defaultproperties`, Unity C# `[SerializeField]` and LÖVE Lua already read through _descriptor_literals_ext; this adds
+# the forms it misses: a Squirrel / C# / GML verbatim `@"..."` (`""` -> `"`, multi-line), a Pawn array `new const
+# descriptor_x[] = "..."` (packed `!"`, adjacent / `...`-joined pieces, `\xHH;` / `\ddd;` / backslash-newline escapes,
+# `#pragma ctrlchar`), and an mcfunction `data modify storage ns:descriptor_x set value "..."` (SNBT escapes, `\` line
+# continuation). Only those special forms are returned; find_codecs() uses them for a gap or a full plan ahead of a
+# lossy first-piece reading, so every earlier reading keeps its place.
+_GM_DESC = re.compile(r"""descriptor[_-](?P<id>\w+)(?P<arr>[ \t]*\[[ \t]*\w*[ \t]*\])?(?:[ \t]*:[ \t]*[\w.<>\[\]]+)?"""
+                      r"""(?P<op>[ \t]*=(?!=)|(?:[ \t]|\\\r?\n)+set(?:[ \t]|\\\r?\n)+value(?:[ \t]|\\\r?\n)+)[ \t]*""", re.I)
+_GM_CTRL = re.compile(r"""^[ \t]*#[ \t]*pragma[ \t]+ctrlchar[ \t]+(?:'(?P<c>[^'\r\n])'|(?P<n>\d{1,3}))""", re.M)
+_GM_JOIN = re.compile(r"""\s*(?:\.\.\.|\+|\.\.)?\s*(?=[!@]?["'])""")
+
+
+def _gm_string(src, i, ctrl="\\"):
+    """(value, end, special) of the game-script string literal at src[i], else (None, i, False)."""
+    lim, n = i + (1 << 16), len(src)
+    pre = src[i] if src[i:i + 1] in ("@", "!") else ""
+    j = i + len(pre)
+    q = src[j:j + 1]
+    if q not in ("'", '"'):
+        return None, i, False
+    out, j, special = [], j + 1, bool(pre)
+    while j < n and j < lim:
+        c = src[j]
+        if pre == "@":                                               # verbatim: no escapes, `""` is one quote
+            if c == q:
+                if src[j + 1:j + 2] == q:
+                    out.append(q)
+                    j += 2
+                    continue
+                return "".join(out), j + 1, True
+            out.append(c)
+            j += 1
+            continue
+        if c == ctrl and j + 1 < n:
+            special = True
+            m = re.match(r"x([0-9A-Fa-f]{1,6});?|(\d{1,3});?|(\r?\n)[ \t]*|(.)", src[j + 1:j + 10], re.S)
+            if m.group(1):
+                out.append(chr(int(m.group(1), 16)))
+            elif m.group(2):
+                out.append(chr(int(m.group(2)) & 0x10FFFF))
+            elif m.group(4):
+                out.append({"n": "\n", "t": "\t", "r": "\r", "a": "\a", "b": "\b", "e": "\x1b", "f": "\f",
+                            "v": "\v"}.get(m.group(4), m.group(4)))
+            j += 1 + m.end()
+            continue
+        if c == q:
+            return "".join(out), j + 1, special
+        if c in "\r\n":
+            return None, i, False
+        out.append(c)
+        j += 1
+    return None, i, False
+
+
+def _gm_literals(src, limit=24):
+    """(id, literal) of the special-form game-script descriptor assignments above (concatenated pieces joined)."""
+    out = []
+    if not src or "descriptor" not in src.lower():
+        return out
+    cm = _GM_CTRL.search(src[:1 << 16])
+    ctrl = (cm.group("c") or chr(int(cm.group("n")))) if cm else "\\"
+    for m in _GM_DESC.finditer(src):
+        if len(out) >= limit:
+            break
+        i = m.end()
+        v, end, special = _gm_string(src, i, ctrl)
+        if v is None:
+            continue
+        pieces = [v]
+        while len(pieces) < 64:
+            c = _GM_JOIN.match(src, end)
+            if not c or c.end() == end:
+                break
+            nxt, e2, sp2 = _gm_string(src, c.end(), ctrl)
+            if nxt is None:
+                break
+            pieces.append(nxt)
+            special, end = special or sp2, e2
+        if special or m.group("arr") or "set" in m.group("op").lower():
+            out.append((m.group("id"), "".join(pieces)))
+    return out
+
+
+def _gm_codecs(src, extend_only=False, budget=0.4):
+    """Plan codecs of game-script descriptor literals (see _gm_literals); [] when none reads to a plan."""
+    try:
+        end, out = time.time() + budget, []
+        am = _ANALYSIS_RE.search(src or "")
+        for ident, lit in _gm_literals(src):
+            if time.time() > end:
+                break
+            plain = _peel_ext([(ident, lit)], am.group("tag") if am else "", budget=max(0.05, end - time.time()))[1]
+            if plain:
+                out.append({"id": ident, "rep": "descriptor", "transform": "identity", "key": "", "material": lit,
+                            "plain": plain})
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
 _MARK_CONT_RE = re.compile(r"""^[ \t]*(?:#|//|--|;+|'|REM\b|::|\*|%|!)?[ \t]*([A-Za-z0-9+/=_\-.%~:]+)[ \t]*\r?$""")
 
 
@@ -2018,8 +2132,8 @@ def _split_array_plain(src, budget=0.8):
             starts = [0] + [i for i, v in enumerate(run) if i and _SPLIT_TAG.match(v)]
             for i in starts[:6]:
                 j = "".join(run[i:])
-                if len(j) < 16 or not _SPLIT_VAL.fullmatch(j):
-                    continue
+                if len(j) < 16 or not (_SPLIT_VAL.fullmatch(j) or _LYR_ANY_RE.match("-" + j) and not re.search(r"\s", j)):
+                    continue                                    # a LYR head may carry b85/a85/z85 punctuation
                 tm = _SPLIT_TAG.match(j)
                 for tag, mat in ([(tm.group(1), tm.group(2))] if tm else []) + [("", j)]:
                     if mat in seen or time.time() > end:
@@ -2144,6 +2258,286 @@ def _peel_children(b, tag):
                 yield x
 
 
+# D23 "Press Start to Decode": `HUNTRESS_ANALYSIS_V1:LYR-<l1>_<l2>_..-<material>` -- the tag lists the ENCODE layers in
+# order (b64, b32, hex, rev = reverse, frag = dot-joined fragments); undo them last-first. A frag below the top layer
+# (e.g. hex_frag_hex) defeats the generic BFS (112/634 day-23 payloads), so the named chain is tried first.
+_LYR_LAYERS = ("b64", "b32", "hex", "rev", "frag")
+_LYR_RE = re.compile(r"(?:^|-)LYR-((?:%s)(?:_(?:%s))*)-(.+)$" % ("|".join(_LYR_LAYERS), "|".join(_LYR_LAYERS)), re.S)
+
+
+def lyr_undo(text):
+    """The plan under a `LYR-<layers>-<material>` (tag and material joined, or the material alone) chain, or None."""
+    m = _LYR_RE.search((text or "").strip().strip("\"'"))
+    if not m or _max_day() < 23:
+        return None
+    s = m.group(2).strip().encode()
+    try:
+        for name in reversed(m.group(1).split("_")):
+            if name == "frag":
+                s = s.replace(b".", b"")
+            elif name == "rev":
+                s = s[::-1]
+            elif name == "hex":
+                s = binascii.unhexlify(re.sub(rb"\s", b"", s))
+            elif name == "b32":
+                t = re.sub(rb"\s", b"", s).upper()
+                s = base64.b32decode(t + b"=" * (-len(t) % 8))
+            else:
+                t = re.sub(rb"\s", b"", s).replace(b"-", b"+").replace(b"_", b"/")
+                s = base64.b64decode(t + b"=" * (-len(t) % 4))
+    except (ValueError, binascii.Error):
+        return None
+    return s.decode("utf-8", "ignore").lstrip("\ufeff") if looks_like_plan(s) else None
+
+
+# Target lyr-tag-layer-peel: the next LYR "power-up" may list layers beyond D23's five. lyr_peel() reads the tag's layer
+# list with tolerant names (b64u/urlsafe, b32hex, b58, b85/a85/z85, gz/zlib/deflate/bz2/xz/lzma/zstd/br/lz4, rot13/rotN/
+# rot47, xor<hex>, url/pct, uu, qp, utf16, bin, rev, frag; `_ , + | >` separators, up to 6 layers), undoes them last-first
+# over a small DFS of each name's readings, and falls back to the name-agnostic shape peel when the tag does not match
+# the bytes. Only a `v=` plan is accepted. Bounded, never raises.
+_LYR_ANY_RE = re.compile(r"(?:^|[-:\s])LYR[-:]([A-Za-z0-9_,+|>]{1,96})-(.+)$", re.S | re.I)
+_LYR_SEP = re.compile(r"[_,+|>]+")
+_B58_ALPHA = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+_Z85_ALPHA = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#"
+
+
+def _lyr_ws(s):
+    return re.sub(rb"\s", b"", s)
+
+
+def _lyr_b64(s, url=False):
+    t = _lyr_ws(s).rstrip(b"=")
+    if url or b"-" in t or b"_" in t:
+        t = t.replace(b"-", b"+").replace(b"_", b"/")
+    return base64.b64decode(t + b"=" * (-len(t) % 4), validate=True)
+
+
+def _lyr_b32(s, ext=False):
+    t = _lyr_ws(s).upper().rstrip(b"=")
+    t += b"=" * (-len(t) % 8)
+    return base64.b32hexdecode(t) if ext else base64.b32decode(t)
+
+
+def _lyr_b58(s):
+    t = _lyr_ws(s)
+    n = 0
+    for c in t:
+        i = _B58_ALPHA.find(bytes([c]))
+        if i < 0:
+            raise ValueError("b58")
+        n = n * 58 + i
+    body = n.to_bytes((n.bit_length() + 7) // 8, "big") if n else b""
+    return b"\0" * (len(t) - len(t.lstrip(b"1"))) + body
+
+
+def _lyr_z85(s):
+    t = _lyr_ws(s)
+    if len(t) % 5:
+        raise ValueError("z85")
+    out = bytearray()
+    for i in range(0, len(t), 5):
+        n = 0
+        for c in t[i:i + 5]:
+            j = _Z85_ALPHA.find(bytes([c]))
+            if j < 0:
+                raise ValueError("z85")
+            n = n * 85 + j
+        out += n.to_bytes(4, "big")
+    return bytes(out)
+
+
+def _lyr_a85(s):
+    t = _lyr_ws(s)
+    return base64.a85decode(t, adobe=t.startswith(b"<~"))
+
+
+def _lyr_rot(s, n):
+    def sh(c):
+        if 65 <= c <= 90:
+            return 65 + (c - 65 - n) % 26
+        if 97 <= c <= 122:
+            return 97 + (c - 97 - n) % 26
+        return c
+    return bytes(sh(c) for c in s)
+
+
+def _lyr_xor(s, key, last):
+    if not key:
+        if not (last and s):
+            raise ValueError("xor key")
+        key = bytes([s[0] ^ 0x76])                                   # known plaintext: a plan starts `v=`
+    return bytes(c ^ key[i % len(key)] for i, c in enumerate(s))
+
+
+def _lyr_decomp(s, kind):
+    import zlib
+    if kind == "gz":
+        import gzip
+        return gzip.decompress(s)
+    if kind == "zlib":
+        return zlib.decompress(s)
+    if kind == "deflate":
+        return zlib.decompressobj(-15).decompress(s, 1 << 22)
+    if kind == "bz2":
+        import bz2
+        return bz2.decompress(s)
+    if kind == "xz":
+        import lzma
+        return lzma.decompress(s)
+    if kind == "zstd":
+        import zstandard
+        return zstandard.ZstdDecompressor().decompress(s, max_output_size=1 << 22)
+    if kind == "br":
+        import brotli
+        return brotli.decompress(s)
+    import lz4.frame
+    return lz4.frame.decompress(s)
+
+
+def _lyr_utf16(s):
+    for enc in ("utf-16-le", "utf-16-be", "utf-16"):
+        try:
+            t = s.decode(enc)
+        except UnicodeDecodeError:
+            continue
+        if t and all(c.isprintable() or c in "\r\n\t﻿" for c in t[:64]):
+            return t.lstrip("﻿").encode("utf-8")
+    raise ValueError("utf16")
+
+
+_LYR_NAMES = (   # (name regex, list of reading builders: key-group -> fn(bytes, last) -> bytes)
+    (r"b64u|b64url|base64u|base64url|urlsafe|urlsafeb64|u64|websafe", [lambda k: lambda s, l: _lyr_b64(s, True)]),
+    (r"b64|base64|64|bas64", [lambda k: lambda s, l: _lyr_b64(s)]),
+    (r"b32hex|base32hex|b32h|b32x|b32ext", [lambda k: lambda s, l: _lyr_b32(s, True), lambda k: lambda s, l: _lyr_b32(s)]),
+    (r"b32|base32|32", [lambda k: lambda s, l: _lyr_b32(s), lambda k: lambda s, l: _lyr_b32(s, True)]),
+    (r"hex|b16|base16|16|hx", [lambda k: lambda s, l: binascii.unhexlify(_lyr_ws(s).replace(b"\\x", b"").replace(b"0x", b""))]),
+    (r"b58|base58|58", [lambda k: lambda s, l: _lyr_b58(s)]),
+    (r"z85", [lambda k: lambda s, l: _lyr_z85(s), lambda k: lambda s, l: base64.b85decode(_lyr_ws(s))]),
+    (r"a85|ascii85|adobe85", [lambda k: lambda s, l: _lyr_a85(s), lambda k: lambda s, l: base64.b85decode(_lyr_ws(s))]),
+    (r"b85|base85|85", [lambda k: lambda s, l: base64.b85decode(_lyr_ws(s)), lambda k: lambda s, l: _lyr_a85(s),
+                        lambda k: lambda s, l: _lyr_z85(s)]),
+    (r"gz|gzip|gunzip", [lambda k: lambda s, l: _lyr_decomp(s, "gz"), lambda k: lambda s, l: _lyr_decomp(s, "zlib")]),
+    (r"zlib|zl|z", [lambda k: lambda s, l: _lyr_decomp(s, "zlib"), lambda k: lambda s, l: _lyr_decomp(s, "deflate")]),
+    (r"deflate|raw|rawdeflate|inflate|dfl", [lambda k: lambda s, l: _lyr_decomp(s, "deflate"),
+                                             lambda k: lambda s, l: _lyr_decomp(s, "zlib")]),
+    (r"bz2|bzip2|bz|bzip", [lambda k: lambda s, l: _lyr_decomp(s, "bz2")]),
+    (r"xz|lzma|lz", [lambda k: lambda s, l: _lyr_decomp(s, "xz")]),
+    (r"zstd|zst", [lambda k: lambda s, l: _lyr_decomp(s, "zstd")]),
+    (r"br|brotli", [lambda k: lambda s, l: _lyr_decomp(s, "br")]),
+    (r"lz4", [lambda k: lambda s, l: _lyr_decomp(s, "lz4")]),
+    (r"rot47", [lambda k: lambda s, l: bytes(33 + (c - 33 + 47) % 94 if 33 <= c <= 126 else c for c in s)]),
+    (r"(?:rot|caesar|shift)(\d{0,2})", [lambda k: lambda s, l: _lyr_rot(s, int(k or 13)),
+                                        lambda k: lambda s, l: _lyr_rot(s, -int(k or 13))]),
+    (r"xor(?:0x)?([0-9a-f]*)", [lambda k: lambda s, l: _lyr_xor(s, bytes.fromhex(k) if k and len(k) % 2 == 0 else
+                                                          (bytes([int(k, 16)]) if k and len(k) <= 2 else b""), l)]),
+    (r"url|pct|percent|urlenc|urlencode|uri", [lambda k: lambda s, l: _lyr_url(s)]),
+    (r"uu|uue|uuencode", [lambda k: lambda s, l: _lyr_uu(s)]),
+    (r"qp|quotedprintable|quopri", [lambda k: lambda s, l: binascii.a2b_qp(s)]),
+    (r"utf16|utf16le|utf16be|u16|wide|unicode|utf_16", [lambda k: lambda s, l: _lyr_utf16(s)]),
+    (r"bin|binary|bits", [lambda k: lambda s, l: bytes(int(x, 2) for x in re.findall(rb"[01]{8}", _lyr_ws(s)))]),
+    (r"rev|reverse|reversed|flip", [lambda k: lambda s, l: s[::-1]]),
+    (r"frag|frags|split|dots|chunks", [lambda k: lambda s, l: s.replace(b".", b""),
+                                       lambda k: lambda s, l: re.sub(rb"[.\s,|]", b"", s)]),
+)
+_LYR_NAME_RES = [(re.compile(p + "$", re.I), fs) for p, fs in _LYR_NAMES]
+
+
+def _lyr_url(s):
+    from urllib.parse import unquote_to_bytes
+    return unquote_to_bytes(s.replace(b"+", b" ") if b"%" in s else s)
+
+
+def _lyr_uu(s):
+    out = b""
+    for line in s.splitlines():
+        line = line.strip(b"\r")
+        if not line or line.startswith((b"begin ", b"end")) or line == b"`":
+            continue
+        out += binascii.a2b_uu(line)
+    return out
+
+
+def _lyr_readings(name):
+    """The candidate decode functions of one layer name, else None (unknown name)."""
+    for rx, fs in _LYR_NAME_RES:
+        m = rx.match(name)
+        if m:
+            k = m.group(1) if m.groups() else None
+            return [f(k) for f in fs]
+    return None
+
+
+def _lyr_layers(spec):
+    """'b64_xor_5a_rot_13' -> ['b64', 'xor5a', 'rot13']: a bare key/shift token after xor/rot joins it."""
+    out = []
+    for t in _LYR_SEP.split(spec or ""):
+        if not t:
+            continue
+        if out and _lyr_readings(t) is None and (re.fullmatch(r"xor", out[-1], re.I) and re.fullmatch(r"(?:0x)?[0-9a-fA-F]{1,32}", t)
+                                                  or re.fullmatch(r"(?:rot|caesar|shift)", out[-1], re.I) and t.isdigit()):
+            out[-1] += t
+        else:
+            out.append(t)
+    return out
+
+
+def _lyr_v(b):
+    try:
+        t = b.decode("utf-8").lstrip("﻿ \r\n\t")
+    except (UnicodeDecodeError, AttributeError):
+        return None
+    return t if t.startswith("v=") else None
+
+
+def lyr_peel(tag, data, budget=0.4):
+    """The `v=` plan under a LYR layer chain: `tag` = `LYR-<l1>_<l2>..` / `<l1>_<l2>..` (ENCODE order, undone
+    last-first) and `data` = the material, or tag empty / None and data = `LYR-<layers>-<material>`. A tag that does not
+    match the bytes falls back to the shape peel. Returns str or None; never raises."""
+    try:
+        if _max_day() < 23:
+            return None
+        tag = (tag or "").strip().strip("\"'")
+        data = (data or "").strip().strip("\"'")
+        if not tag or tag.upper() == "LYR":
+            m = _LYR_ANY_RE.search((tag + "-" if tag else "") + data) or _LYR_ANY_RE.search(data)
+            if m:
+                tag, data = m.group(1), m.group(2).strip()
+        else:
+            tag = re.sub(r"^(?:HUNTRESS_ANALYSIS_V\d+:)?LYR[-:]", "", tag, flags=re.I).strip("-")
+        if not data:
+            return None
+        end = time.time() + budget
+        layers = _lyr_layers(tag)[:6]
+        reads = [_lyr_readings(n) for n in layers]
+        if layers and all(reads):
+            chain = list(reversed(reads))
+            steps = [0]
+
+            def dfs(i, s):
+                if i == len(chain):
+                    return _lyr_v(s)
+                for f in chain[i]:
+                    steps[0] += 1
+                    if steps[0] > 2000 or time.time() > end:
+                        return None
+                    try:
+                        o = f(s, i == len(chain) - 1)
+                    except Exception:  # noqa: BLE001 - this reading does not fit; try the next
+                        continue
+                    if o and len(o) < (1 << 22):
+                        r = dfs(i + 1, o)
+                        if r:
+                            return r
+                return None
+            r = dfs(0, data.encode("utf-8", "ignore"))
+            if r:
+                return r
+        p = peel_plan(data, "", depth=6, max_nodes=4000, budget=max(0.05, end - time.time()))   # shape peel
+        return p if p and _lyr_v(p.encode("utf-8")) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def peel_plan(material, tag="", depth=4, max_nodes=3000, budget=0.5):
     """The plan (str) under up to `depth` generic layers of a v=3 marker/descriptor material, or None. Bounded by
     `max_nodes` and `budget` seconds; never raises."""
@@ -2152,6 +2546,10 @@ def peel_plan(material, tag="", depth=4, max_nodes=3000, budget=0.5):
         mat = (material or "").strip().strip("\"'")
         if not mat:
             return None
+        if "LYR-" in (tag or "").upper() + "-" + mat[:4]:   # D23 named layer chain
+            lyr = lyr_undo((tag or "") + "-" + mat) or lyr_peel(tag, mat, budget=min(0.3, budget))
+            if lyr:
+                return lyr
         tag = (tag or "").upper()
         end = time.time() + budget
         frontier = [mat.encode()]
@@ -3486,6 +3884,265 @@ def nsis_extract(data, budget=0.6):
     return {}
 
 
+# ------------------------------------------------------------------------------------------- Godot resources / packs
+# Target godot-resource-pck-carrier (D23 GDScript moved into a Godot resource): text resources `.tscn`/`.tres`
+# (`[gd_scene ..]` / `[gd_resource ..]`, `[sub_resource type="GDScript" id=..]` + `script/source = "<escaped>"`: Godot 4
+# writes c_escape_multiline -- `\\` `\"` only, newlines literal -- Godot 3 / hand-made ones use \n \t \" \uXXXX),
+# `.pck` packs (GDPC; v1 Godot 3: u32 ver, u32 major/minor/patch, 16 x u32 reserved, u32 count, {u32 padded path len,
+# path, u64 offset, u64 size, md5[16]}; v2 Godot 4.0-4.3: + u32 pack_flags, u64 file_base, + u32 per-file flags; v3
+# Godot 4.4+: + u64 dir_offset; encrypted directory / files skipped; embedded = trailing u64 size + `GDPC`), `.gdc`
+# tokenized scripts (GDSC; Godot 3: identifiers XOR 0xb6 + encode_variant constants; Godot 4.3+ v100+: zstd body,
+# UTF-32 identifiers XOR 0xb6) and RSCC-compressed binary resources. godot_members(data) -> [(path, bytes)] never
+# runs anything; _godot_codecs() runs the normal readings on each text member. Bounded, never raises.
+_GD_CUE = re.compile(r"\A(?:GDPC|GDSC|RSCC|RSRC)|^\[gd_(?:scene|resource)\b|^[ \t]*script/source[ \t]*=[ \t]*\"", re.M)
+_GD_SRC = re.compile(r"""^[ \t]*script/source[ \t]*=[ \t]*\"""", re.M)
+_GD_ESC = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "\\": "\\", '"': '"', "'": "'"}
+_GD_TEXT_EXT = (".gd", ".tscn", ".tres", ".cfg", ".json", ".godot", ".txt", ".csv", ".import", ".remap", ".cs",
+                ".gdshader", ".md", ".xml", ".ini", ".lua", ".py", ".js", ".ps1", ".sh", ".bat", ".vbs")
+_GD_U32RUN = re.compile(rb"(?:[\t\n\r\x20-\x7e]\x00\x00\x00){2,}")
+
+
+def _gd_bytes(data):
+    if isinstance(data, (bytes, bytearray)):
+        return bytes(data)
+    try:
+        return data.encode("latin-1")
+    except UnicodeEncodeError:
+        return data.encode("utf-8", "surrogateescape")
+
+
+def _gd_string(s, i):
+    """Godot VariantParser string literal body starting after the opening quote at s[i]: (text, end) or None."""
+    out, n = [], len(s)
+    while i < n:
+        c = s[i]
+        if c == '"':
+            return "".join(out), i + 1
+        if c == "\\" and i + 1 < n:
+            e = s[i + 1]
+            if e in "uU":
+                w = 4 if e == "u" else 6
+                h = s[i + 2:i + 2 + w]
+                if len(h) == w and all(x in "0123456789abcdefABCDEF" for x in h):
+                    try:
+                        out.append(chr(int(h, 16)))
+                    except ValueError:
+                        pass
+                    i += 2 + w
+                    continue
+            out.append(_GD_ESC.get(e, e))
+            i += 2
+            continue
+        out.append(c)
+        i += 1
+    return None
+
+
+def _gd_text_sources(text, limit=32):
+    """Unescaped `script/source = ".."` bodies of a Godot text resource."""
+    out = []
+    for m in _GD_SRC.finditer(text):
+        r = _gd_string(text, m.end())
+        if r and r[0].strip():
+            out.append(r[0])
+            if len(out) >= limit:
+                break
+    return out
+
+
+def _gd_pck(b, start=0, end=None):
+    """[(path, bytes)] of a GDPC pack at b[start:end] (offsets validated, md5 picks the base when ambiguous)."""
+    import hashlib
+    import struct
+    end = len(b) if end is None else end
+    u32 = lambda o: struct.unpack_from("<I", b, o)[0]  # noqa: E731
+    u64 = lambda o: struct.unpack_from("<Q", b, o)[0]  # noqa: E731
+    if b[start:start + 4] != b"GDPC":
+        return []
+    ver, out = u32(start + 4), []
+    if ver in (0, 1):
+        flags, bases, pos = 0, (start, 0), start + 20 + 64
+    elif ver in (2, 3):
+        flags, fb = u32(start + 20), u64(start + 24)
+        if flags & 1:                                         # encrypted directory: needs the export key
+            return []
+        bases = (start + fb, fb)
+        pos = start + 32
+        if ver == 3:
+            dofs = u64(pos)
+            pos = start + dofs if start + dofs < end else dofs
+        else:
+            pos += 64
+    else:
+        return []
+    count = u32(pos)
+    pos += 4
+    for _ in range(min(count, 4096)):
+        n = u32(pos)
+        if n > 4096:
+            break
+        path = b[pos + 4:pos + 4 + n].rstrip(b"\0").decode("utf-8", "replace")
+        pos += 4 + n
+        off, size = struct.unpack_from("<QQ", b, pos)
+        md5 = b[pos + 16:pos + 32]
+        pos += 32
+        fflags = 0
+        if ver >= 2:
+            fflags = u32(pos)
+            pos += 4
+        if fflags & 1 or size > (8 << 20):
+            continue
+        cands = [base + off for base in bases if 0 <= base + off and base + off + size <= end]
+        if not cands:
+            continue
+        good = next((a for a in cands if hashlib.md5(b[a:a + size]).digest() == md5), cands[0])
+        out.append((path, b[good:good + size]))
+    return out
+
+
+def _gd_gdc_text(b):
+    """Identifiers + string constants of a tokenized GDScript (.gdc) as one text (one item per line)."""
+    import struct
+    ver = struct.unpack_from("<I", b, 4)[0]
+    idents, strs = [], []
+    if ver >= 100:                                            # Godot 4.3+ binary tokens: optional zstd body
+        dsize = struct.unpack_from("<I", b, 8)[0]
+        body = b[12:]
+        if dsize:
+            import zstandard
+            body = zstandard.ZstdDecompressor().decompress(body, max_output_size=min(dsize, 16 << 20))
+        x = bytes(c ^ 0xB6 for c in body[:1 << 22])
+        idents = [r.decode("utf-32-le", "ignore") for r in _GD_U32RUN.findall(x)]
+    else:                                                     # Godot 3: counts, XOR'd identifiers, variants
+        ni, nc = struct.unpack_from("<II", b, 8)
+        body, pos = b, 24
+        for _ in range(min(ni, 1 << 16)):
+            n = struct.unpack_from("<I", b, pos)[0]
+            idents.append(bytes(c ^ 0xB6 for c in b[pos + 4:pos + 4 + n]).rstrip(b"\0").decode("utf-8", "ignore"))
+            pos += 4 + n
+        for _ in range(min(nc, 1 << 16)):
+            t = struct.unpack_from("<I", b, pos)[0]
+            ty, wide = t & 0xFF, bool(t & (1 << 16))
+            if ty == 0:
+                pos += 4
+            elif ty in (1, 2, 3):
+                pos += 4 + (8 if wide and ty != 1 else 4)
+            elif ty == 4:
+                n = struct.unpack_from("<I", b, pos + 4)[0]
+                strs.append(b[pos + 8:pos + 8 + n].decode("utf-8", "ignore"))
+                pos += 8 + n + (-n % 4)
+            else:
+                break
+    if not strs:                                              # any layout: length-prefixed STRING variants
+        i = body.find(b"\x04\x00\x00\x00")
+        while 0 <= i and len(strs) < 512:
+            n = int.from_bytes(body[i + 4:i + 8], "little")
+            s = body[i + 8:i + 8 + n]
+            if 2 <= n <= (1 << 20) and len(s) == n:
+                try:
+                    strs.append(s.decode("utf-8"))
+                except UnicodeDecodeError:
+                    pass
+            i = body.find(b"\x04\x00\x00\x00", i + 1)
+    return "\n".join([i for i in idents if i] + [f'"{s}"' for s in strs if s])
+
+
+def _gd_rscc(b):
+    """Decompressed body of a Godot FileAccessCompressed resource (RSCC; deflate / zstd / gzip blocks)."""
+    import struct
+    import zlib
+    mode, bs, total = struct.unpack_from("<III", b, 4)
+    if not 0 < bs <= (16 << 20) or total > (32 << 20):
+        return b""
+    nb = total // bs + 1
+    sizes = struct.unpack_from("<%dI" % nb, b, 16)
+    pos, out = 16 + 4 * nb, []
+    for s in sizes:
+        blk = b[pos:pos + s]
+        pos += s
+        if mode == 1:
+            out.append(zlib.decompress(blk))
+        elif mode == 3:
+            out.append(zlib.decompressobj(31).decompress(blk))
+        elif mode == 2:
+            import zstandard
+            out.append(zstandard.ZstdDecompressor().decompress(blk, max_output_size=bs))
+        else:                                                 # FastLZ: no stdlib reader
+            return b""
+    return b"".join(out)[:total]
+
+
+def _gd_walk(b, name, out, depth, end):
+    if depth > 3 or time.time() > end or len(out) > 256:
+        return
+    try:
+        if b[:4] == b"GDPC" or (b[-4:] == b"GDPC" and len(b) > 12):
+            if b[:4] == b"GDPC":
+                mem = _gd_pck(b)
+            else:
+                size = int.from_bytes(b[-12:-4], "little")
+                st = len(b) - 12 - size
+                mem = _gd_pck(b, st, len(b) - 12) if 0 <= st else []
+            for p, fb in mem:
+                out.append((f"{name}!{p}" if name else p, fb))
+                _gd_walk(fb, f"{name}!{p}" if name else p, out, depth + 1, end)
+        elif b[:4] == b"GDSC":
+            out.append((name + "#gdc", _gd_gdc_text(b).encode("utf-8")))
+        elif b[:4] == b"RSCC":
+            d = _gd_rscc(b)
+            if d:
+                out.append((name + "#rscc", d))
+        elif b"script/source" in b[:1 << 22] and b"\x00" not in b[:4096]:
+            t = b.decode("utf-8", "replace")
+            out.extend((f"{name}#script/source{k or ''}", s.encode("utf-8"))
+                       for k, s in enumerate(_gd_text_sources(t)))
+    except Exception:  # noqa: BLE001 - truncated / impostor: keep what was read
+        return
+
+
+def godot_members(data, budget=0.5):
+    """[(path, bytes)] of a Godot carrier: .pck members (recursively expanded), unescaped `script/source` bodies of a
+    .tscn/.tres, the identifier/string text of a .gdc, the body of an RSCC resource. [] when it is none of these."""
+    out = []
+    try:
+        _gd_walk(_gd_bytes(data), "", out, 0, time.time() + budget)
+    except Exception:  # noqa: BLE001
+        return out
+    return out
+
+
+def _gd_is_text(path, b):
+    p = path.lower()
+    if p.endswith(("#gdc", "#rscc")) or "#script/source" in p or p.endswith(_GD_TEXT_EXT):
+        return True
+    return b[:4] not in (b"GDPC", b"GDSC", b"RSCC", b"RSRC") and b"\x00" not in b[:4096]
+
+
+def _godot_codecs(src, raw=None, depth=0):
+    """find_codecs readings of the text members of a Godot resource / pack / tokenized script."""
+    try:
+        end = time.time() + 0.6
+        texts = [(p, fb.decode("utf-8", "ignore")) for p, fb in godot_members(raw if raw is not None else src)
+                 if _gd_is_text(p, fb)]
+        for p, t in texts:
+            for c in (find_codecs(t, depth + 1) if depth < 1 else _find_codecs_text(t)):
+                if c.get("plain"):
+                    return [dict(c, id=f"{c.get('id')}@{p}")]
+        seen = set()
+        for p, t in texts:
+            for tok in _MAT_TOKEN.findall(t)[:48]:
+                if tok in seen or time.time() > end:
+                    continue
+                seen.add(tok)
+                plain = peel_plan(tok, budget=min(0.15, max(0.02, end - time.time())))
+                if plain:
+                    return [{"id": f"godot@{p}", "rep": "carrier", "transform": "identity", "key": "",
+                             "material": tok, "plain": plain}]
+    except Exception:  # noqa: BLE001
+        return []
+    return []
+
+
 def _carrier_blobs(b, name="", depth=0, budget=None):
     """(member name, bytes) of every stream inside a container, recursively (zip / OLE+VBA / gzip / OneNote)."""
     import io
@@ -3496,7 +4153,10 @@ def _carrier_blobs(b, name="", depth=0, budget=None):
         return
     yield name, b
     try:
-        if b[:4] == b"PK\x03\x04":
+        if b[:4] in (b"GDPC", b"GDSC", b"RSCC") or b[-4:] == b"GDPC":   # Godot pack / tokenized script / resource
+            for p, fb in godot_members(b, budget=max(0.05, min(0.5, budget - time.time()))):
+                yield f"{name}!{p}", fb
+        elif b[:4] == b"PK\x03\x04":
             import zipfile
             z = zipfile.ZipFile(io.BytesIO(b))
             for zi in z.infolist()[:200]:
@@ -3551,6 +4211,10 @@ def _carrier_blobs(b, name="", depth=0, budget=None):
                 if o["body"]:
                     yield from _carrier_blobs(o["body"], f"{name}#http:{o['uri'] or o['direction']}", depth + 1,
                                               budget)
+        elif b[:8] == b"!<arch>\n" or b[:4] in (b"\xed\xab\xee\xdb", b"\x8e\xad\xe8\x01"):   # .deb / .rpm scripts
+            for r in pkg_scripts(name, b)[:32]:
+                if isinstance(r.get("body"), str) and r["body"].strip():
+                    yield f"{name}#{r['format']}:{r['hook']}", r["body"].encode("utf-8", "surrogateescape")
         elif b[:2] == b"\x1f\x8b":
             yield from _carrier_blobs(zlib.decompressobj(31).decompress(b, 1 << 22), name + "|gunzip", depth + 1, budget)
         elif _is_asar(b):                                # Electron app.asar: its files, package.json `main` first
@@ -4239,6 +4903,298 @@ def pkgmgr_scripts(members):
     except Exception:  # noqa: BLE001
         return res
     return res
+
+
+# ------------------------------------------------------------------------------- linux package maintainer scripts
+# Target linux-package-maintainer-scripts (T1546.016 installer packages / T1059.004): the Linux side of the installer
+# script chain -- the package manager runs the maintainer script as root at install time. pkg_scripts(name, data) ->
+# [{format, hook, interpreter, body}]: `.deb` = ar (`!<arch>\n`, 60-byte member headers) -> control.tar[.gz|.xz|.bz2|
+# .zst] -> preinst/postinst/prerm/postrm/config/triggers; `.rpm` = 96-byte lead `ED AB EE DB` -> signature header
+# (8-byte aligned) -> main header (`8E AD E8 01`, 16-byte index entries tag/type/offset/count) -> PREIN 1023 .. POSTUN
+# 1026, PRETRANS 1151 / POSTTRANS 1152, VERIFYSCRIPT 1079, TRIGGERSCRIPTS 1065 (+ *PROG interpreter tags); `.spec`
+# `%post -p /bin/sh` sections; Arch PKGBUILD `install=x.install` + `.install` `post_install() {..}`; Alpine `.apk`
+# (gzip-concatenated tars) / APKBUILD `.pre-install`/`.post-install` files. Bodies go through the normal readers
+# (find_codecs) -- decode(material, rep='deb'|'rpm'|'pkg_scripts', transform=''|'hooks'|'interpreter', key=hook).
+
+_PKG_DEB_HOOKS = ("preinst", "postinst", "prerm", "postrm", "config", "triggers")
+_PKG_RPM_TAGS = {1023: ("%pre", 1085), 1024: ("%post", 1086), 1025: ("%preun", 1087), 1026: ("%postun", 1088),
+                 1151: ("%pretrans", 1153), 1152: ("%posttrans", 1154), 1079: ("%verifyscript", 1091)}
+_PKG_RPM_TRIG = ((1 << 25, "%triggerprein"), (1 << 16, "%triggerin"), (1 << 17, "%triggerun"),
+                 (1 << 18, "%triggerpostun"))
+_PKG_APK_HOOKS = ("pre-install", "post-install", "pre-upgrade", "post-upgrade", "pre-deinstall", "post-deinstall",
+                  "trigger")
+_PKG_ARCH_FN = re.compile(r"(?m)^[ \t]*(?:function[ \t]+)?((?:pre|post)_(?:install|upgrade|remove))[ \t]*\(\)[ \t]*\{")
+_PKG_SPEC_SEC = re.compile(r"(?m)^%(pre|post|preun|postun|pretrans|posttrans|preuntrans|postuntrans|verifyscript|"
+                           r"trigger(?:prein|in|un|postun)|filetrigger(?:in|un|postun)|transfiletrigger(?:in|un|postun)"
+                           r")\b([^\n]*)\n")
+_PKG_SPEC_END = re.compile(r"(?m)^%(?:package|description|prep|build|install|check|clean|files|changelog|pre|post|"
+                           r"preun|postun|pretrans|posttrans|preuntrans|postuntrans|verifyscript|trigger\w*|"
+                           r"filetrigger\w*|transfiletrigger\w*|generate_buildrequires|conf|patchlist|sourcelist)\b")
+
+
+def _pkg_interp(body, default=None):
+    s = body.lstrip("﻿") if isinstance(body, str) else ""
+    if s.startswith("#!"):
+        return s[2:].split("\n", 1)[0].strip() or default
+    return default
+
+
+def _pkg_text(b):
+    b = bytes(b or b"")[:4 << 20]
+    u = _utf16(b) if b[:2] in (b"\xff\xfe", b"\xfe\xff") else None
+    return u if isinstance(u, str) else b.decode("utf-8", "replace").lstrip("﻿")
+
+
+def _pkg_unpack(b, cap=32 << 20):
+    """Decompressed bytes of a gz / xz / bz2 / zstd stream (concatenated gzip members joined), or b itself."""
+    import zlib
+    if b[:2] == b"\x1f\x8b":
+        out, rest = [], b
+        while rest[:2] == b"\x1f\x8b" and sum(map(len, out)) < cap:
+            d = zlib.decompressobj(31)
+            out.append(d.decompress(rest, cap))
+            rest = d.unused_data
+        return b"".join(out)
+    if b[:6] == b"\xfd7zXZ\x00":
+        import lzma
+        return lzma.LZMADecompressor().decompress(b, cap)
+    if b[:3] == b"BZh":
+        import bz2
+        return bz2.BZ2Decompressor().decompress(b, cap)
+    if b[:4] == b"\x28\xb5\x2f\xfd":
+        import zstandard
+        return zstandard.ZstdDecompressor().decompressobj().decompress(b)[:cap]
+    return b
+
+
+def _pkg_tar(b):
+    """[(member basename, bytes)] of a (compressed) tar, end-of-archive blocks ignored (Alpine's cut tars)."""
+    import io
+    import tarfile
+    out = []
+    with tarfile.open(fileobj=io.BytesIO(_pkg_unpack(b)), mode="r:", ignore_zeros=True) as tf:
+        for ti in tf:
+            if len(out) >= 256:
+                break
+            if ti.isfile() and ti.size < (8 << 20):
+                out.append((ti.name.replace("\\", "/").rsplit("/", 1)[-1], tf.extractfile(ti).read()))
+    return out
+
+
+def _pkg_ar(b):
+    """[(name, bytes)] of a Unix ar archive (`!<arch>\n`, 60-byte headers, even-padded data, GNU `name/`)."""
+    out, i = [], 8
+    while i + 60 <= len(b) and len(out) < 64:
+        h = b[i:i + 60]
+        if h[58:60] != b"`\n":
+            break
+        try:
+            n = int(h[48:58].decode("ascii").strip() or "0")
+        except ValueError:
+            break
+        out.append((h[:16].decode("ascii", "replace").strip().rstrip("/"), b[i + 60:i + 60 + n]))
+        i += 60 + n + (n & 1)
+    return out
+
+
+def _pkg_rpm_header(b, i):
+    """({tag: value}, end offset) of one RPM header structure at b[i:] (`8E AD E8 01`), or (None, i)."""
+    import struct
+    if b[i:i + 4] != b"\x8e\xad\xe8\x01" or i + 16 > len(b):
+        return None, i
+    nidx, hsize = struct.unpack(">II", b[i + 8:i + 16])
+    if nidx > 4096 or hsize > (64 << 20):
+        return None, i
+    st = i + 16 + 16 * nidx
+    store = b[st:st + hsize]
+    if len(store) < hsize:
+        return None, i
+    tags = {}
+    for k in range(nidx):
+        tag, typ, off, cnt = struct.unpack(">IIII", b[i + 16 + 16 * k:i + 32 + 16 * k])
+        if off >= hsize:
+            continue
+        if typ in (6, 8, 9):                            # STRING / STRING_ARRAY / I18NSTRING
+            vals, j = [], off
+            for _ in range(1 if typ == 6 else min(cnt, 4096)):
+                e = store.find(b"\x00", j)
+                e = hsize if e < 0 else e
+                vals.append(store[j:e].decode("utf-8", "replace"))
+                j = e + 1
+            tags[tag] = vals[0] if typ in (6, 9) and vals else vals
+        elif typ == 4:                                  # INT32
+            tags[tag] = list(struct.unpack(">%dI" % min(cnt, 4096), store[off:off + 4 * min(cnt, 4096)]))
+    return tags, st + hsize
+
+
+def _pkg_rpm(b):
+    i = 0
+    if b[:4] == b"\xed\xab\xee\xdb":
+        sig, e = _pkg_rpm_header(b, 96)
+        if sig is None:
+            return []
+        i = e + (-e % 8)
+    tags, _e = _pkg_rpm_header(b, i)
+    if not tags:
+        return []
+    out = []
+    for t, (hook, pt) in _PKG_RPM_TAGS.items():
+        body = tags.get(t)
+        if isinstance(body, str) or pt in tags:
+            p = tags.get(pt)
+            p = " ".join(p) if isinstance(p, list) else (p or "/bin/sh")
+            out.append({"format": "rpm", "hook": hook, "interpreter": p, "body": body if isinstance(body, str) else ""})
+    trig = tags.get(1065)
+    if isinstance(trig, list):
+        progs, flags, idx = tags.get(1092) or [], tags.get(1068) or [], tags.get(1069) or []
+        for n, body in enumerate(trig):
+            fl = next((f for f, ix in zip(flags, idx) if ix == n), 0)
+            hook = next((h for bit, h in _PKG_RPM_TRIG if fl & bit), "%trigger")
+            out.append({"format": "rpm", "hook": hook, "interpreter": progs[n] if n < len(progs) else "/bin/sh",
+                        "body": body})
+    return out
+
+
+def _pkg_spec(t):
+    out = []
+    for m in _PKG_SPEC_SEC.finditer(t):
+        opts = m.group(2)
+        p = re.search(r"(?:^|\s)-p[ \t]+(\S+)", opts)
+        end = _PKG_SPEC_END.search(t, m.end())
+        out.append({"format": "rpm-spec", "hook": "%" + m.group(1), "interpreter": p.group(1) if p else "/bin/sh",
+                    "body": t[m.end():end.start() if end else len(t)].rstrip("\n") + "\n"})
+    return out
+
+
+def _pkg_shell_fn(t, i):
+    """Body of a shell function whose `{` ends at t[i-1] (brace depth, quotes skipped)."""
+    d, q, j = 1, None, i
+    while j < len(t) and j - i < (1 << 18):
+        ch = t[j]
+        if q:
+            if ch == "\\" and q == '"':
+                j += 1
+            elif ch == q:
+                q = None
+        elif ch == "\\":
+            j += 1
+        elif ch in "\"'":
+            q = ch
+        elif ch == "#" and (j == i or t[j - 1] in " \t\n;"):
+            nl = t.find("\n", j)
+            j = len(t) if nl < 0 else nl
+            continue
+        elif ch == "{":
+            d += 1
+        elif ch == "}":
+            d -= 1
+            if d == 0:
+                break
+        j += 1
+    return t[i:j]
+
+
+def pkg_scripts(name, data):
+    """Linux package maintainer scripts -> [{format (deb|rpm|rpm-spec|pkgbuild|arch-install|apk|apkbuild), hook,
+    interpreter, body}]. `data` = bytes or text of a .deb / .rpm / .apk / .spec / PKGBUILD / .install / APKBUILD /
+    Alpine `<pkg>.post-install` file. [] when it is none. Never raises."""
+    out = []
+    try:
+        b = data if isinstance(data, (bytes, bytearray)) else str(data or "").encode("utf-8", "surrogateescape")
+        b = bytes(b)[:64 << 20]
+        nm = str(name or "").replace("\\", "/").rsplit("/", 1)[-1]
+        low = nm.lower()
+        if b[:8] == b"!<arch>\n":
+            for mn, mb in _pkg_ar(b):
+                if mn.startswith("control.tar"):
+                    for fn, fb in _pkg_tar(mb):
+                        if fn in _PKG_DEB_HOOKS:
+                            t = _pkg_text(fb)
+                            out.append({"format": "deb", "hook": fn,
+                                        "interpreter": _pkg_interp(t, None if fn == "triggers" else "/bin/sh"),
+                                        "body": t})
+            return out
+        if b[:4] in (b"\xed\xab\xee\xdb", b"\x8e\xad\xe8\x01"):
+            return _pkg_rpm(b)
+        if b[:2] == b"\x1f\x8b" and (low.endswith(".apk") or b"PKGINFO" in _pkg_unpack(b[:1 << 20], 1 << 20)):
+            for fn, fb in _pkg_tar(b):
+                if fn.startswith(".") and fn[1:] in _PKG_APK_HOOKS:
+                    t = _pkg_text(fb)
+                    out.append({"format": "apk", "hook": fn[1:], "interpreter": _pkg_interp(t, "/bin/sh"), "body": t})
+            return out
+        if b"\x00" in b[:4096]:
+            return out
+        t = _pkg_text(b)
+        if low.endswith(".spec") or (re.search(r"(?mi)^Name[ \t]*:", t[:1 << 16]) and _PKG_SPEC_SEC.search(t)):
+            return _pkg_spec(t)
+        ext = next((h for h in _PKG_APK_HOOKS if low.endswith("." + h)), None)
+        if ext:
+            return [{"format": "apk", "hook": ext, "interpreter": _pkg_interp(t, "/bin/sh"), "body": t}]
+        is_pb = low in ("pkgbuild", "apkbuild") or re.search(r"(?m)^[ \t]*(?:pkgname|pkgver)=", t[:1 << 16])
+        if is_pb:
+            fmt = "apkbuild" if low == "apkbuild" or (low != "pkgbuild" and re.search(
+                r"\$pkgname\.(?:pre|post)-|^[ \t]*subpackages=", t[:1 << 16], re.M)) else "pkgbuild"
+            m = re.search(r"""(?m)^[ \t]*install=(?:"([^"]*)"|'([^']*)'|(\S*))""", t)
+            if m:
+                for ref in (m.group(1) or m.group(2) or m.group(3) or "").split():
+                    out.append({"format": fmt, "hook": "install", "interpreter": None, "body": ref})
+        for m in _PKG_ARCH_FN.finditer(t):
+            out.append({"format": "pkgbuild" if is_pb else "arch-install", "hook": m.group(1),
+                        "interpreter": "/bin/bash", "body": _pkg_shell_fn(t, m.end()).strip("\n") + "\n"})
+    except Exception:  # noqa: BLE001 - truncated / impostor package: keep what was read
+        return out
+    return out
+
+
+def _pkg_codecs(raw, name="", budget=1.0):
+    """find_codecs-shaped hits from the maintainer scripts of a Linux package, or []. Never raises."""
+    try:
+        end = time.time() + budget
+        rows = [r for r in pkg_scripts(name, raw) if isinstance(r.get("body"), str) and r["body"].strip()]
+        for r in rows:
+            for c in _find_codecs_text(r["body"]):
+                if c.get("plain"):
+                    return [dict(c, id=f"{c['id']}@{r['format']}:{r['hook']}")]
+        for r in rows:
+            if time.time() > end:
+                break
+            for c in find_codecs(r["body"], 2):
+                if c.get("plain"):
+                    return [dict(c, id=f"{c['id']}@{r['format']}:{r['hook']}")]
+    except Exception:  # noqa: BLE001
+        return []
+    return []
+
+
+def _pkg_decode(material, transform=None, key=None):
+    """decode() route for rep deb / rpm / apk / pkg_scripts / maintainer_scripts: the material is the package (base64,
+    hex, latin-1 bytes or the text itself). transform '' / plan -> the plan of its first plan-bearing script (key = a
+    hook filter); hooks -> `hook,hook`; interpreter -> the key hook's (or first script's) interpreter. None if none."""
+    try:
+        m = (material or "").strip()
+        tr = re.sub(r"[^a-z]", "", (transform or "").lower())
+        k = (key or "").strip().lstrip("%").lower()
+        for b in (b64(m), hex_bytes(m) if re.fullmatch(r"[0-9a-fA-F\s]+", m) else None,
+                  m.encode("latin-1") if max(m or "\0") < "Ā" else m.encode("utf-8")):
+            rows = pkg_scripts("", b) if b else []
+            if not rows:
+                continue
+            sel = [r for r in rows if not k or r["hook"].lstrip("%").lower() == k] or ([] if k else rows)
+            if tr in ("hooks", "hook", "hooklist"):
+                return ",".join(r["hook"] for r in rows)
+            if tr in ("interpreter", "interp", "prog"):
+                return next((r["interpreter"] for r in sel if r.get("interpreter")), None)
+            if tr in ("format", "type"):
+                return rows[0]["format"]
+            for r in sel:
+                if isinstance(r.get("body"), str) and r["body"].strip():
+                    for c in find_codecs(r["body"], 1):
+                        if c.get("plain"):
+                            return c["plain"]
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+    return None
 
 
 # ------------------------------------------------------------------------------------------------ build-manifest hooks
@@ -18988,3 +19944,245 @@ def _iac_codecs(src, budget=0.5):
                 seen.add(p)
                 out.append(dict(c, id=f"{c.get('id')}@{s['resource']}/{s['field']}"))
     return out
+
+
+# Target corpus-stage-correlation (D23 `python-<6hex>-handoff-id`, "correlate its stage relationships with the rest of
+# the corpus to find the level that doesn't belong"): a cumulative zip links its members -- a PowerShell precursor names
+# the next stage (`$NextStage = 'x.py'`, `--handoff-id`, $HandoffId in an ArgumentVector), a plan carries
+# `next_stage=` / `file_path=` / `next_language=` / `url=`. A Mastery bundle repeats the same member stems once per set,
+# so every link resolves inside the source's own container (`evidence-02.zip/...` never reaches set 1). Values go out
+# in their original spelling; a missing target stays the raw literal with via `<via>:missing`.
+_CL_ASSIGN = re.compile(r"""(?im)^[ \t]*(?:\$|set[ \t]+"?|(?:var|let|const|local|my|Dim)[ \t]+\$?)?([A-Za-z_][\w]*)"""
+                        r"""[ \t]*(?::[ \t]*[\w\[\]]+[ \t]*)?=[ \t]*(?:\[string\][ \t]*)?(['"])([^'"\r\n]{1,400})\2""")
+_CL_FIELD = re.compile(r"""(?im)^[ \t]*['"]?([A-Za-z_][\w]*)['"]?[ \t]*[=:][ \t]*(?:(['"])([^'"\r\n]{1,400})\2|"""
+                       r"""\$([A-Za-z_]\w*))""")
+_CL_ARGV_FLAG = re.compile(r"""['"]?--?([A-Za-z][\w-]*)['"]?[ \t]*,?[ \t]*(?:(['"])([^'"\r\n]{1,400})\2|\$([A-Za-z_]\w*))""")
+_CL_URL = re.compile(r"""https?://[^\s'"<>|`]{4,300}""")
+_CL_URL_NS = re.compile(r"(?i)^https?://(?:schemas\.|www\.w3\.org|purl\.org|ns\.adobe\.com|json-schema\.org)")
+_CL_LANG_EXT = {"powershell": (".ps1", ".psm1", ".psd1"), "python": (".py", ".pyw"), "jscript": (".js", ".jse", ".wsf"),
+                "javascript": (".js", ".mjs", ".cjs"), "vbscript": (".vbs", ".vbe"), "batch": (".bat", ".cmd"),
+                "bash": (".sh",), "node": (".mjs", ".js", ".cjs"), "php": (".php",), "perl": (".pl",),
+                "lua": (".lua",), "ruby": (".rb",), "groovy": (".groovy",), "autoit": (".au3",),
+                "auto_hotkey": (".ahk",), "applescript": (".applescript", ".scpt"), "gdscript": (".gd",),
+                "csharp_script": (".csx",), "google_apps_script": (".gs",), "typescript": (".ts",)}
+_CL_LINK_KEYS = ("next_stage", "file_path", "handoff_id", "next_language", "url")
+
+
+def _cl_norm(k):
+    return re.sub(r"[^a-z0-9]", "", str(k or "").lower())
+
+
+def _cl_split(name):
+    n = str(name or "").replace("\\", "/")
+    return (n.rsplit("/", 1)[0], n.rsplit("/", 1)[1]) if "/" in n else ("", n)
+
+
+def _cl_vars(text):
+    """{normalised name: (original name, value)} of every scalar string assignment / object field in a script."""
+    out = {}
+    t = str(text or "")[:1 << 20]
+    for rx in (_CL_ASSIGN, _CL_FIELD):
+        for m in rx.finditer(t):
+            name, val = m.group(1), m.group(3)
+            if val is None and rx is _CL_FIELD:
+                ref = out.get(_cl_norm(m.group(4)))
+                val = ref[1] if ref else None
+            if val is not None:
+                out.setdefault(_cl_norm(name), (name, val))
+    return out
+
+
+def _cl_plan(plan):
+    try:
+        d = _plan_dict(plan) if plan is not None else {}
+    except Exception:  # noqa: BLE001
+        d = {}
+    return {str(k): v for k, v in (d or {}).items() if isinstance(v, (str, int, float))}
+
+
+def _cl_plans(members, plans):
+    out = {}
+    for n in members:
+        p = (plans or {}).get(n)
+        if p is None and isinstance(members.get(n), str) and plans is None:
+            try:
+                p = next((c.get("plain") for c in find_codecs(members[n]) if c.get("plain")), None)
+            except Exception:  # noqa: BLE001
+                p = None
+        out[n] = _cl_plan(p)
+    for n in (plans or {}):
+        out.setdefault(n, _cl_plan(plans[n]))
+    return out
+
+
+def corpus_links(members, plans=None):
+    """Cross-file stage links of ONE corpus. members: {name: text} (a name may carry its container prefix,
+    `evidence-02.zip/x.py`); plans: {name: decoded plan text|dict} (None = read each with find_codecs).
+    -> [(src, dst, via, value)], via in next_stage|file_path|handoff_id|next_language|url. dst is the target member's
+    own name; an unresolved next_stage/file_path keeps the raw literal as dst and via `<via>:missing`. Never raises."""
+    try:
+        members = {str(k): (v.decode("utf-8", "replace") if isinstance(v, (bytes, bytearray)) else str(v or ""))
+                   for k, v in (members or {}).items()}
+        pl = _cl_plans(members, plans)
+        names = list(dict.fromkeys(list(members) + list(pl)))
+        by_leaf = {}
+        for n in names:
+            c, leaf = _cl_split(n)
+            by_leaf.setdefault((c, leaf.lower()), n)
+        edges, seen = [], set()
+
+        def add(src, dst, via, val):
+            if src != dst and (src, dst, via) not in seen:
+                seen.add((src, dst, via))
+                edges.append((src, dst, via, val))
+
+        def target(src, val):
+            c = _cl_split(src)[0]
+            leaf = re.split(r"[\\/]", str(val).strip())[-1].lower()
+            return by_leaf.get((c, leaf)) if leaf else None
+
+        for src in names:
+            txt, p = members.get(src, ""), pl.get(src, {})
+            vs = _cl_vars(txt)
+            pk = {_cl_norm(k): (k, str(v)) for k, v in p.items()}
+            for key in ("next_stage", "file_path"):
+                cands = [x for x in (pk.get(_cl_norm(key)), vs.get(_cl_norm(key))) if x]
+                if key == "next_stage":
+                    cands += [x for k2, x in vs.items() if k2 in ("nextstage", "stage", "nextscript", "stagepath",
+                                                                     "payload", "script", "scriptpath")]
+                for _, val in cands:
+                    dst = target(src, val)
+                    if dst:
+                        add(src, dst, key, val)
+                    elif key == "next_stage" and re.search(r"\.\w{1,12}$", val.strip()):
+                        add(src, val, key + ":missing", val)
+            hid = pk.get("handoffid") or vs.get("handoffid")
+            if hid and len(hid[1]) >= 6:
+                for dst in names:
+                    if dst != src and _cl_split(dst)[0] == _cl_split(src)[0] and hid[1] in members.get(dst, ""):
+                        add(src, dst, "handoff_id", hid[1])
+                for dst in [e[1] for e in edges if e[0] == src and e[2] == "next_stage"]:
+                    add(src, dst, "handoff_id", hid[1])
+            nl = pk.get("nextlanguage")
+            if nl and str(nl[1]).strip().lower() not in ("", "none", "null"):
+                lang = str(nl[1]).strip().lower()
+                exts = _CL_LANG_EXT.get(lang, ())
+                for dst in names:
+                    if dst == src or _cl_split(dst)[0] != _cl_split(src)[0]:
+                        continue
+                    dl = str(pl.get(dst, {}).get("language", "")).lower()
+                    if dl == lang or (not dl and exts and dst.lower().endswith(exts)):
+                        add(src, dst, "next_language", nl[1])
+            urls = [str(pk["url"][1])] if "url" in pk else []
+            urls += [m.group(0) for m in _CL_URL.finditer(txt[:1 << 18]) if not _CL_URL_NS.search(m.group(0))][:16]
+            for u in dict.fromkeys(urls):
+                for dst in names:
+                    if dst != src and _cl_split(dst)[0] == _cl_split(src)[0] and \
+                            (u in members.get(dst, "") or str(pl.get(dst, {}).get("url", "")) == u):
+                        add(src, dst, "url", u)
+        order = {"next_stage": 0, "handoff_id": 1, "file_path": 2, "next_stage:missing": 3, "url": 4}
+        edges.sort(key=lambda e: order.get(e[2], 5))
+        return edges[:4096]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def link_value(dst, key, members, plans=None, edges=None):
+    """'What does the precursor pass to <dst>?': the `key` value (handoff_id, interpreter, adapter, ...) of the member
+    that links to dst (next_stage/file_path) inside dst's own set, original spelling. Reads `$Key = '..'`, object fields
+    `Key = $Var`, a `--key <value|$var>` argument vector and the source's plan. dst may be the bare member name when
+    members carry container prefixes only if it is unique. None = no linking source carries the key."""
+    try:
+        members = {str(k): (v.decode("utf-8", "replace") if isinstance(v, (bytes, bytearray)) else str(v or ""))
+                   for k, v in (members or {}).items()}
+        if dst not in members and dst not in (plans or {}):
+            hits = [n for n in members if _cl_split(n)[1].lower() == _cl_split(dst)[1].lower()
+                    and (not _cl_split(dst)[0] or _cl_split(n)[0] == _cl_split(dst)[0])]
+            if len(hits) != 1:
+                return None
+            dst = hits[0]
+        if edges is None:
+            edges = corpus_links(members, plans)
+        nk = _cl_norm(key)
+        srcs = [e[0] for e in edges if e[1] == dst and e[2] in ("next_stage", "file_path")]
+        srcs += [e[0] for e in edges if e[1] == dst and e[2] == "handoff_id" and e[0] not in srcs]
+        pl = _cl_plans({s: members.get(s, "") for s in srcs}, plans if plans is not None else None)
+        # an explicit `--key <value|$var>` argument wins over a bare assignment, which wins over the source's plan
+        for s in srcs:
+            txt = members.get(s, "")
+            for m in _CL_ARGV_FLAG.finditer(txt[:1 << 18]):
+                if _cl_norm(m.group(1)) == nk:
+                    if m.group(3) is not None:
+                        return m.group(3)
+                    ref = _cl_vars(txt).get(_cl_norm(m.group(4)))
+                    if ref:
+                        return ref[1]
+        for s in srcs:
+            vs = _cl_vars(members.get(s, ""))
+            if nk in vs:
+                return vs[nk][1]
+        for s in srcs:
+            for k, v in pl.get(s, {}).items():
+                if _cl_norm(k) == nk:
+                    return str(v)
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+_CL_FD_KEYS = ("stage_profile", "steps", "stage_count", "next_language", "role", "graph", "adapter", "verdict",
+               "attack", "obfuscation_profile")
+
+
+def stage_outlier(plans, edges=None, members=None):
+    """The corpus member that doesn't belong: (1) the only source whose next_stage target is missing from its set, else
+    (2) the member that breaks the most near-functional dependencies its siblings obey (same plan key set = one
+    cohort; for A -> B over stage_profile/steps/stage_count/next_language/role/graph..., a group of >= 3 siblings
+    sharing A where all but one agree on B votes against that one). Returns the member name as given, None when no
+    single member stands out. Never raises."""
+    try:
+        if edges is None and members is not None:
+            edges = corpus_links(members, plans)
+        miss = list(dict.fromkeys(e[0] for e in (edges or []) if str(e[2]).endswith(":missing")))
+        if len(miss) == 1:
+            return miss[0]
+        pl = {n: _cl_plan(p) for n, p in (plans or {}).items()}
+        pl = {n: {k.lower(): str(v).strip() for k, v in p.items()} for n, p in pl.items() if p}
+        cohorts = {}
+        for n, p in pl.items():
+            cohorts.setdefault((p.get("v"), frozenset(k for k in p if k in _CL_FD_KEYS)), []).append(n)
+        votes = {}
+        for (_, ks), group in cohorts.items():
+            if len(group) < 4:
+                continue
+            for a in ks:
+                for b in ks:
+                    if a == b:
+                        continue
+                    by = {}
+                    for n in group:
+                        by.setdefault(pl[n][a], []).append(n)
+                    bad = []
+                    for ns in by.values():
+                        vals = {}
+                        for n in ns:
+                            vals.setdefault(pl[n][b], []).append(n)
+                        if len(vals) == 1:
+                            continue
+                        top = max(vals.values(), key=len)
+                        rest = [n for v2 in vals.values() if v2 is not top for n in v2]
+                        if len(ns) >= 3 and len(rest) == 1 and len(top) >= 2:
+                            bad += rest
+                        else:
+                            bad = None
+                            break
+                    if bad and len(bad) == 1:
+                        votes[bad[0]] = votes.get(bad[0], 0) + 1
+        if not votes:
+            return miss[0] if miss else None
+        best = sorted(votes.items(), key=lambda kv: -kv[1])
+        if len(best) > 1 and best[0][1] == best[1][1]:
+            return None
+        return best[0][0]
+    except Exception:  # noqa: BLE001
+        return None

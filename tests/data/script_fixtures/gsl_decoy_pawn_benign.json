@@ -1,0 +1,7 @@
+{
+ "description": "game-script-language-route (pwn): benign",
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/gsl_gen.py OUT  # stdlib base64/binascii/json writer; fixture gsl_decoy_pawn_benign (benign)",
+ "oracle_cmd": "grep -oP '\\[\\] = \"\\K[^\"]+' gsl_decoy_pawn_benign.pwn  # benign title text, not an encoding"
+}

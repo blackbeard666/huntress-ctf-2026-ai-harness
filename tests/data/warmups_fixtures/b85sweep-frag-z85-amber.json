@@ -1,0 +1,9 @@
+{
+ "codec": "b85-free",
+ "plain": "submit th",
+ "encoded": "B9g@ex(>FtxA",
+ "generator_cmd": "printf %s \"$plain\" | CC=$PWD/tools/npm-cyberchef/node_modules/cyberchef tools/node/bin/node tests/data/warmups_fixtures/b85sweep_cyberchef.mjs z85  # 9-byte fragment, partial last group",
+ "oracle_cmd": "printf %s \"$encoded\" | perl tests/data/warmups_fixtures/b85sweep_oracle.pl z85",
+ "oracle_plain": "submit th",
+ "expected": "match"
+}

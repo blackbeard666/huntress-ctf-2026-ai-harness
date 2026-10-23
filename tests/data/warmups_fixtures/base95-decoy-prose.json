@@ -1,0 +1,10 @@
+{
+ "codec": "base95",
+ "plain": null,
+ "encoded": "Nice work decoding this warmup, now submit the answer",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written English prose decoy (every char inside the base95 alphabet)",
+ "oracle_cmd": ".venv/bin/python -I -c \"import sys;from Crypto.Util.number import long_to_bytes;t=sys.stdin.read().rstrip('\\n');n=0\nfor c in t: n=n*95+ord(c)-32\nprint(long_to_bytes(n).decode())\"  # pycryptodome long_to_bytes over the radix-95 digits",
+ "oracle_plain": null
+}

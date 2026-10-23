@@ -1,0 +1,9 @@
+{
+ "codec": "base2048",
+ "plain": "-ivory-",
+ "encoded": "ϳԥভดर7",
+ "expected": "match",
+ "generator_cmd": "printf %s \"$plain\" | tools/node/bin/node --input-type=module -e \"import {encode} from './tools/npm-base65536/node_modules/base2048/src/index.js';import fs from 'fs';process.stdout.write(encode(fs.readFileSync(0)))\"  # qntm reference npm base2048@3.0.0 encode",
+ "oracle_cmd": "printf %s \"$encoded\" | tools/node/bin/node --input-type=module -e \"import {decode} from './tools/npm-base65536/node_modules/base2048/src/index.js';import fs from 'fs';process.stdout.write(Buffer.from(decode(fs.readFileSync(0,'utf8'))).toString())\"  # qntm reference npm base2048@3.0.0 decode",
+ "oracle_plain": "-ivory-"
+}

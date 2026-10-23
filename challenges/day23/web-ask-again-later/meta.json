@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-12-ask-again-later",
+  "lane": "web",
+  "name": "🌐 Ask Again Later",
+  "ids": {
+    "single_solve": "web-exploitation-day-12-ask-again-later",
+    "time_trial": "web-exploitation-day-12-ask-again-later/time_trial",
+    "mastery": "web-exploitation-day-12-ask-again-later/mastery"
+  }
+}

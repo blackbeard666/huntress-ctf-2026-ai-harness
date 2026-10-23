@@ -1,0 +1,9 @@
+{
+ "codec": "serialization-wrapper[marshal]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-falcon-58",
+ "encoded": "YwAAAAAAAAAAAAAAAAEAAAAAAAAA8wgAAACXAGQAWgB5ASkCemVOaWNlIHdvcmsgZGVjb2RpbmcgdGhpcyB3YXJtdXAhIFRvIHNvbHZlLCBzdWJtaXQgdGhpcyBleGFjdCBhbnN3ZXIgdG8gdGhlIEdhbWUgTWFzdGVyOiBqYWRlLWZhbGNvbi01OE4pAdoDbXNnqQDzAAAAANoBd9oIPG1vZHVsZT5yBQAAAAEAAABzCgAAAPADAQEB2AZtgQNyAwAAAA==",
+ "generator_cmd": "python3 -c 'import marshal,base64,os;print(base64.b64encode(marshal.dumps(compile(\"msg = %r\" % os.environ[\"plain\"],\"w\",\"exec\"))).decode())'",
+ "oracle_cmd": "python3 -c 'import marshal,base64,os;c=marshal.loads(base64.b64decode(os.environ[\"encoded\"]));print([x for x in c.co_consts if isinstance(x,str)][0])'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-falcon-58",
+ "expected": "match"
+}

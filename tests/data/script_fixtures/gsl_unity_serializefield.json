@@ -1,0 +1,7 @@
+{
+ "description": "game-script-language-route (cs): base64(plan)",
+ "expected_plain": "v=3|language=unity_csharp|role=launcher|verdict=suspicious|attack=T1105|adapter=operator_graph|host_profile=standalone|obfuscation_profile=hex_base64|stage_count=3|campaign_id=UNITY_CSHARP-b4c5d6e7|url=https://unity_csharp-b4c5d6e7.example.invalid/stage|file_path=/tmp/huntress-unity_csharp/.b4c5d6e7.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/gsl_gen.py OUT  # stdlib base64/binascii/json writer; fixture gsl_unity_serializefield (base64(plan))",
+ "oracle_cmd": "grep -oP '\\[SerializeField\\] private string descriptor_\\w+ = \"\\K[^\"]+' gsl_unity_serializefield.cs | base64 -d"
+}

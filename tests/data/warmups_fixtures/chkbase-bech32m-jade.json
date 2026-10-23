@@ -1,0 +1,9 @@
+{
+ "codec": "bech32m",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-osprey-62",
+ "encoded": "flag1fe5kxefqwahhy6eqv3jkxmmyd9hxwgr5dp5hxgrhv9ex6atsyys9gmeqwdhkcan99ss8xatzd45hggr5dp5hxgr90pskxapqv9h8xam9wgs8gmeqw35x2gz8v9kk2gzdv9ehgetj8gsx5ctyv5kk7umswfjhjtfkxgwg96f6",
+ "generator_cmd": "python3 -c \"import sys;sys.path.insert(0,\\\"tools/pip-embit\\\");from embit import bech32 as b;print(b.bech32_encode(b.Encoding.BECH32M,\\\"flag\\\",b.convertbits(sys.argv[1].encode(),8,5)))\" \"$plain\"  # pip embit (BIP350)",
+ "oracle_cmd": "printf %s \"$encoded\" | NM=$PWD/tools/npm-bech32/node_modules tools/node/bin/node tests/data/warmups_fixtures/chkbase_oracle.mjs bech32m",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-osprey-62",
+ "expected": "match"
+}

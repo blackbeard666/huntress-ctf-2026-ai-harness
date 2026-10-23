@@ -1,0 +1,16 @@
+{
+ "family": "vm_bytecode",
+ "encoding": "vm-base64",
+ "expected_offset": 8224,
+ "expected_config": {
+  "c2": "198.51.100.23:53",
+  "beacon": "vm-b64-heron",
+  "sleep": 9,
+  "flag": "flag{byt3c0d3_b4s364_0ut}"
+ },
+ "expected_program_size": 876,
+ "generator_cmd": "sh vmbc_gen.sh   # vmbc_asm.py (stdlib) assembles the program, system python3 zlib.crc32 header, coreutils base64, gcc 15.2",
+ "oracle_cmd": "sh vmbc_oracle.sh vmbc_gcc_O0_b64.bin   # -DORACLE twin run natively + nm -S/readelf -SW for prog",
+ "oracle_output": "{\"encoding\": \"vm-base64\", \"offset\": 8224, \"prog_size\": 876, \"config\": {\"c2\": \"198.51.100.23:53\", \"beacon\": \"vm-b64-heron\", \"sleep\": 9, \"flag\": \"flag{byt3c0d3_b4s364_0ut}\"}}",
+ "note": "gcc -O0 -no-pie: compare-tree dispatch (no jump table), program stores the base64 TEXT of the blob into .bss; lib.binary.hcfg_scan -> first valid hit (offset = bytecode blob start, SPECULATIVE)"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "base58check-bitcoin",
+ "plain": null,
+ "encoded": "1ET8sLZsYPuN2nQMfXsA512ZKjiPehBA7J3oEyE6pxCziEEBUX5HPThHxuQPm4QUkMkTgJ2uyaCZUqnF71TNrQ6yH3dmsoN8h2bCS6mMMstwrxp9SgCp9mNhUiBnTfZAjsEfvmfmfym",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -c 'base58.b58encode(b\"\\0\"+plain)'  # pip base58 2.1.1: version byte but NO sha256d checksum",
+ "oracle_cmd": "printf %s \"$encoded\" | NM=$PWD/tools/npm-bech32/node_modules tools/node/bin/node tests/data/warmups_fixtures/chkbase_oracle.mjs b58check",
+ "oracle_plain": null
+}

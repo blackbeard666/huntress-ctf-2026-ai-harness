@@ -1,0 +1,53 @@
+{
+ "corpus": {
+  "evidence-01.zip/invoke-python-stage.ps1": "# inert typed PowerShell-to-Python handoff precursor\n$HandoffId = 'PSPY-1F2E3D4C5B6A7980'\n$Interpreter = 'python.exe'\n$NextStage = '4c1097.py'\n$ArgumentVector = @($NextStage, '--handoff-id', $HandoffId)\n$ExecutionPlan = [pscustomobject]@{\n    Adapter = 'Start-Process'\n    Interpreter = $Interpreter\n    Arguments = $ArgumentVector\n    HandoffId = $HandoffId\n    Executed = $false\n}\n",
+  "evidence-01.zip/4c1097.py": "import base64\n# inert analyst fixture\nPLAN = base64.b64decode('dj0yfHN0ZXBzPWRlY29kZV9jb25maWd1cmF0aW9uLGxvY2F0ZV9pbnRlcnByZXRlcixkaXNwYXRjaF9uZXh0X3N0YWdlfGFkYXB0ZXI9cHl0aG9uX3RvX3dzY3JpcHR8c3RhZ2VfY291bnQ9M3xjYW1wYWlnbl9pZD1jYW1wYWlnbi0xYTJiM2M0ZDVlfGZpbGVfcGF0aD1DOi9Qcm9ncmFtRGF0YS9IdW50cmVzc0xhYi8udXBkYXRlLTFhMmIzYzRkNWUucHl8bmV4dF9zdGFnZT1sb2NhbC1kaXNwYXRjaC52YnM=').decode()\n",
+  "evidence-01.zip/local-dispatch.vbs": "' inert\nDim cfg : cfg = \"locate_local,dispatch_process\"\n",
+  "evidence-02.zip/invoke-python-stage.ps1": "# inert typed PowerShell-to-Python handoff precursor\n$HandoffId = 'PSPY-0A9B8C7D6E5F4031'\n$Interpreter = 'python.exe'\n$NextStage = '4c1097.py'\n$ArgumentVector = @($NextStage, '--handoff-id', $HandoffId)\n$ExecutionPlan = [pscustomobject]@{\n    Adapter = 'Start-Process'\n    Interpreter = $Interpreter\n    Arguments = $ArgumentVector\n    HandoffId = $HandoffId\n    Executed = $false\n}\n",
+  "evidence-02.zip/4c1097.py": "import base64\n# inert analyst fixture\nPLAN = base64.b64decode('dj0yfHN0ZXBzPWRlY29kZV9jb25maWd1cmF0aW9uLGxvY2F0ZV9pbnRlcnByZXRlcixkaXNwYXRjaF9uZXh0X3N0YWdlfGFkYXB0ZXI9cHl0aG9uX3RvX3dzY3JpcHR8c3RhZ2VfY291bnQ9M3xjYW1wYWlnbl9pZD1jYW1wYWlnbi0yYTJiM2M0ZDVlfGZpbGVfcGF0aD1DOi9Qcm9ncmFtRGF0YS9IdW50cmVzc0xhYi8udXBkYXRlLTJhMmIzYzRkNWUucHl8bmV4dF9zdGFnZT1sb2NhbC1kaXNwYXRjaC52YnM=').decode()\n",
+  "evidence-02.zip/local-dispatch.vbs": "' inert\nDim cfg : cfg = \"locate_local,dispatch_process\"\n"
+ },
+ "text": "import base64\n# inert analyst fixture\nPLAN = base64.b64decode('dj0yfHN0ZXBzPWRlY29kZV9jb25maWd1cmF0aW9uLGxvY2F0ZV9pbnRlcnByZXRlcixkaXNwYXRjaF9uZXh0X3N0YWdlfGFkYXB0ZXI9cHl0aG9uX3RvX3dzY3JpcHR8c3RhZ2VfY291bnQ9M3xjYW1wYWlnbl9pZD1jYW1wYWlnbi0yYTJiM2M0ZDVlfGZpbGVfcGF0aD1DOi9Qcm9ncmFtRGF0YS9IdW50cmVzc0xhYi8udXBkYXRlLTJhMmIzYzRkNWUucHl8bmV4dF9zdGFnZT1sb2NhbC1kaXNwYXRjaC52YnM=').decode()\n",
+ "expected_plain": "v=2|steps=decode_configuration,locate_interpreter,dispatch_next_stage|adapter=python_to_wscript|stage_count=3|campaign_id=campaign-2a2b3c4d5e|file_path=C:/ProgramData/HuntressLab/.update-2a2b3c4d5e.py|next_stage=local-dispatch.vbs",
+ "expected_link_values": [
+  {
+   "dst": "evidence-01.zip/4c1097.py",
+   "key": "handoff_id",
+   "value": "PSPY-1F2E3D4C5B6A7980"
+  },
+  {
+   "dst": "evidence-02.zip/4c1097.py",
+   "key": "handoff_id",
+   "value": "PSPY-0A9B8C7D6E5F4031"
+  },
+  {
+   "dst": "4c1097.py",
+   "key": "handoff_id",
+   "value": null
+  }
+ ],
+ "expected_links_contains": [
+  [
+   "evidence-02.zip/invoke-python-stage.ps1",
+   "evidence-02.zip/4c1097.py",
+   "next_stage",
+   "4c1097.py"
+  ],
+  [
+   "evidence-02.zip/4c1097.py",
+   "evidence-02.zip/local-dispatch.vbs",
+   "next_stage",
+   "local-dispatch.vbs"
+  ]
+ ],
+ "expected_links_absent": [
+  [
+   "evidence-01.zip/invoke-python-stage.ps1",
+   "evidence-02.zip/4c1097.py"
+  ]
+ ],
+ "expected_outlier": null,
+ "oracle_cmd": "awk -F\"'\" '/^\\$HandoffId/{print FILENAME\"\\t\"$2}' */invoke-python-stage.ps1 && sed -n \"s/.*b64decode('\\(.*\\)').*/\\1/p\" evidence-02.zip/4c1097.py | base64 -d",
+ "generator_cmd": "python3 tests/data/script_fixtures/corpus_gen.py $TMPDIR/cgen  (stdlib base64 + PowerShell-shaped precursor text)",
+ "checks": "lib.codec.corpus_links(corpus) / link_value(dst, key, corpus) / stage_outlier(plans of corpus, edges)"
+}

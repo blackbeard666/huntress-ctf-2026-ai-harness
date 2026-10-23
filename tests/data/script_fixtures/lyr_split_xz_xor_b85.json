@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=powershell|role=loader|verdict=malicious|attack=T1027|adapter=lyr_tag|steps=peel_layers,exec|campaign_id=LYR-xzb85|url=https://lyr-xz85.example.invalid/p",
+ "decoy": false,
+ "generator_cmd": "printf %s '<plan>' | xz -9 -c | python3 -c 'import sys,base64;b=sys.stdin.buffer.read();print(base64.b85encode(bytes(c^0x5a for c in b)).decode())' ; 'LYR-xz_xor_5a_b85-'+data cut into 30-char chunks in a PowerShell `@('..','..') -join ''` under `# HUNTRESS_ANALYSIS_V1:SPLIT`",
+ "oracle_cmd": "grep -o \"'[^']*'\" lyr_split_xz_xor_b85.ps1 | grep -v \"^''$\" | tr -d \"'\\n\" | sed 's/^LYR-xz_xor_5a_b85-//' | python3 -c 'import sys,base64;sys.stdout.buffer.write(bytes(c^0x5a for c in base64.b85decode(sys.stdin.read().strip())))' | xz -dc"
+}

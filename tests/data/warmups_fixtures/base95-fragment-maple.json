@@ -1,0 +1,9 @@
+{
+ "codec": "base95",
+ "plain": "maple",
+ "encoded": "\\cfNl\"",
+ "expected": "match",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p -c0 | tr a-f A-F | sed 's/^/obase=95; ibase=16; /' | BC_LINE_LENGTH=0 bc | tr -s ' ' '\\n' | grep . | awk '{printf \"%c\", $1+32}'  # GNU bc radix-95 digit groups -> chr(d+32)",
+ "oracle_cmd": ".venv/bin/python -I -c \"import sys;from Crypto.Util.number import long_to_bytes;t=sys.stdin.read().rstrip('\\n');n=0\nfor c in t: n=n*95+ord(c)-32\nprint(long_to_bytes(n).decode())\"  # pycryptodome long_to_bytes over the radix-95 digits",
+ "oracle_plain": "maple"
+}

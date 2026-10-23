@@ -1,0 +1,8 @@
+{
+ "entry": "extract_answer",
+ "expected": "ANS-5a5043b623f7b47d",
+ "decoy": false,
+ "_why": "row 96: CRC32 + Adler32(update [BII) + Arrays.hashCode([B/[J) + String.hashCode -> String.format(Locale.US, \"%08x:%08X:%d:%s\", .., Integer.toUnsignedString(h,7)) -> SHA-256 -> MD5 -> new BigInteger(1,d).toString(16) padded via %32s+replace(' ','0') -> substring(5,21); lowercase",
+ "generator_cmd": "python3 tests/data/android_fixtures/intrlong_src/gen_intrlong.py fmt_digest tests/data/android_fixtures/intrlong_fmt_digest.apk  # javac --release 11 -XDstringConcat=inline + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "python3 tests/data/android_fixtures/intrlong_src/gen_intrlong.py fmt_digest /dev/null --oracle  # host JVM RUNS the same compiled Proof.token() -> token -> ANS-5a5043b623f7b47d"
+}

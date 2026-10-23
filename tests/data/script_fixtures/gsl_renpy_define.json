@@ -1,0 +1,7 @@
+{
+ "description": "game-script-language-route (rpy): base64(plan)",
+ "expected_plain": "v=3|language=renpy|role=launcher|verdict=suspicious|attack=T1105|adapter=operator_graph|host_profile=standalone|obfuscation_profile=hex_base64|stage_count=3|campaign_id=RENPY-2b3c4d5e|url=https://renpy-2b3c4d5e.example.invalid/stage|file_path=/tmp/huntress-renpy/.2b3c4d5e.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/gsl_gen.py OUT  # stdlib base64/binascii/json writer; fixture gsl_renpy_define (base64(plan))",
+ "oracle_cmd": "grep -oP '^define descriptor_\\w+ = \"\\K[^\"]+' gsl_renpy_define.rpy | base64 -d"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "base65536",
+ "plain": "amber-",
+ "encoded": "ꕡ驢扲",
+ "expected": "match",
+ "generator_cmd": "printf %s \"$plain\" | tools/node/bin/node --input-type=module -e \"import {encode} from './tools/npm-base65536/node_modules/base65536/src/index.js';import fs from 'fs';process.stdout.write(encode(fs.readFileSync(0)))\"  # qntm reference npm base65536@5.0.0 encode",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c \"import sys;sys.path.insert(0,'$PYLIB');import base65536;print(base65536.decode(sys.stdin.read()).decode())\"  # sublee PyPI base65536==0.1.1 (+six) decode, pip install --target $PYLIB",
+ "oracle_plain": "amber-"
+}

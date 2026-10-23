@@ -1,0 +1,8 @@
+{
+ "entry": "integrity_verdict_scan",
+ "expected": "ANS-9e4b7c21d03f5a68",
+ "decoy": false,
+ "_why": "6 Play Integrity verdict payloads in assets/integrity/verdicts.json, each tied to an 'unlock' ANS; only one is PLAY_RECOGNIZED + MEETS_STRONG/DEVICE + LICENSED + certificateSha256Digest = apksigner signer + nonce = assets/integrity/request.json nonce (decoys: UNRECOGNIZED_VERSION, BASIC+VIRTUAL only, foreign cert, replayed nonce, UNLICENSED)",
+ "generator_cmd": "PYTHONPATH=tools/pylib python3 tests/data/android_fixtures/ivs_src/gen.py tests/data/android_fixtures  # keytool -genkeypair (signer) + json / jwcrypto RS256 JWS + python zipfile + apksigner sign (v1+v2)",
+ "oracle_cmd": "sh tests/data/android_fixtures/ivs_src/oracle.sh plain tests/data/android_fixtures/ivs_plain_multi.apk  # keytool -printcert -jarfile (signer sha256) + unzip -p | jq select(clean verdict) / openssl dgst nonce  # -> ANS-9e4b7c21d03f5a68"
+}

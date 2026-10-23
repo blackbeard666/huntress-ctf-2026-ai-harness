@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "printf %s 'hello from a benign config loader, nothing to see here' | bzip2 -9 | base64 -w0 ; printf '// HUNTRESS_ANALYSIS_V1:LYR-bz2_b64-%s' <data> (DECOY: a valid LYR chain whose plaintext is not a v= plan)",
+ "oracle_cmd": "sed -n 's/.*LYR-bz2_b64-//p' lyr_decoy_bz2_noplan.js | base64 -d | bunzip2   # -> 'hello from a benign config loader...', no v= plan"
+}

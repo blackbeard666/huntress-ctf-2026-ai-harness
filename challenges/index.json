@@ -131,6 +131,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Bridge Troll"
   },
+  "binary-reverse-engineering-day-23-anti-analysis-recognition": {
+    "day": 23,
+    "dir": "day23/binary-trust-issues",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Trust Issues"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -263,6 +269,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Main Character Energy"
   },
+  "metadata-forensics-day-23-page-me-maybe": {
+    "day": 23,
+    "dir": "day23/metadata-page-me-maybe",
+    "lane": "metadata-forensics",
+    "name": "🔎 Page Me Maybe"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -394,6 +406,12 @@
     "dir": "day22/mobile-root-of-trust",
     "lane": "mobile-android",
     "name": "📱 Root of Trust"
+  },
+  "mobile-android-day-23-hook-line-and-signal": {
+    "day": 23,
+    "dir": "day23/mobile-hook-line-and-signal",
+    "lane": "mobile-android",
+    "name": "📱 Hook Line and Signal"
   },
   "read-the-rules": {
     "day": 1,
@@ -533,6 +551,12 @@
     "lane": "script-analysis",
     "name": "📜 Next, Next, Finish"
   },
+  "script-analysis-day-23-game-resource-loader": {
+    "day": 23,
+    "dir": "day23/scripting-press-start-to-decode",
+    "lane": "script-analysis",
+    "name": "📜 Press Start to Decode"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -665,6 +689,12 @@
     "lane": "warmups",
     "name": "👶 Deflated Ego"
   },
+  "warmups-day-23": {
+    "day": 23,
+    "dir": "day23/warmups-eighty-five-alive",
+    "lane": "warmups",
+    "name": "👶 Eighty-Five Alive"
+  },
   "web-exploitation-day-01-backup-exposure": {
     "day": 19,
     "dir": "day01/web-back-up-a-minute",
@@ -724,6 +754,24 @@
     "dir": "day22/web-uploading-expectations",
     "lane": "web",
     "name": "🌐 Uploading Expectations"
+  },
+  "web-exploitation-day-11-template-temper": {
+    "day": 23,
+    "dir": "day23/web-template-temper",
+    "lane": "web",
+    "name": "🌐 Template Temper"
+  },
+  "web-exploitation-day-12-ask-again-later": {
+    "day": 23,
+    "dir": "day23/web-ask-again-later",
+    "lane": "web",
+    "name": "🌐 Ask Again Later"
+  },
+  "web-exploitation-day-13-posted-too-much": {
+    "day": 23,
+    "dir": "day23/web-posted-too-much",
+    "lane": "web",
+    "name": "🌐 Posted Too Much"
   },
   "welcome-robots": {
     "day": 1,

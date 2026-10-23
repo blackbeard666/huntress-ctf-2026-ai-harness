@@ -1,0 +1,10 @@
+{
+ "codec": "glyph-bytes",
+ "plain": null,
+ "encoded": "🚩🚓🚲🚆🚉🛄🚌🚮🚇🛀🚛🚄🚋🚷🚵🚈🚞🚋🚶🚇🚏🚜🚇🚲🚆🚜🚅🚑🚥🚵🚒🚏🚧🚗🚍🚘🚯🚌🚈🚇🚚🚿🛄🚶🚨🚻🚺🚮🚦🚟🚗🚟🚊🚦🛃🚿🚫🚹🚤🚉🚏🛁🚵🚕🚫🚓🚾🚵🚅🚉🚨🚫🚬🚿🚺🚈🚋🚢🚼🚈🚇🚧🚹🚤🚱🚬🚂🚻🚭🚕🚎🚿🚇🚛🚤🚐🚟🚲🚲🚿🚊🚕🚹🚳🚣",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -c 'import random;r=random.Random(7);print(\"\".join(chr(r.randrange(0x1F680,0x1F6C5)) for _ in range(105)),end=\"\")'  # 105 random transport emoji: right length, not the base256emoji table",
+ "oracle_cmd": "printf %s \"$encoded\" | .venv/bin/python -c 'import sys,multibase;multibase.decode(\"🚀\"+sys.stdin.read())'  # py-multibase base256emoji -> ValueError (non-table emoji) = none",
+ "oracle_plain": null
+}

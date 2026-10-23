@@ -156,6 +156,13 @@ ZIP_EOCD_TOTAL_ENTRIES_FMT = "{n}"
 # central-directory order -- no basename, dedupe or sort, e.g. ["room-01/item-1.txt","room-02/item-1.txt"] (basenames
 # collide, so the directory part is load-bearing). Eocd total entries re-confirmed "2" on the same zip.
 ZIP_CD_MEMBER_NAMES_FMT = {"separators": (",", ":")}   # json.dumps(names, **FMT); non-ASCII names not seen yet
+# Day 23 "Page Me Maybe" TT b604de80 (12 CD entries in shuffled order): raw central-directory order REJECTED, the same
+# names SORTED (plain str order) CORRECT; Mastery 6762559b re-confirmed sorted on 7/7 sets. Every D8 list was already
+# sorted, so "CD order" above was never distinguishable. lib.meta.zipx.central_directory_member_names sorts.
+ZIP_CD_MEMBER_NAMES_ORDER = "sorted"
+ZIP_CD_MEMBER_NAMES_REJECTED = ['["room-18/item-5.log","cabinet-10/entry-6.txt","room-33/doc-6.log","room-37/entry-8.txt",'
+                                '"drop-13/item-2.md","cabinet-09/item-8.log","tray-14/item-2.csv","drop-27/item-5.csv",'
+                                '"box-18/part-8.txt","drop-18/item-7.csv","box-06/part-6.log","shelf-20/doc-8.txt"]']
 
 # Day 9 "Built Different" (metadata-forensics), confirmed 2026-10-09 (single, TT, Mastery 5 sets; 0 wrong):
 # pe.coff_machine_u16_hex is IMAGE_FILE_HEADER.Machine (u16 LE at e_lfanew+4, after 'PE\0\0') as "0x" + 4 zero-padded
@@ -229,7 +236,15 @@ EMAIL_MESSAGE_ID_REJECTED = ["artifact-assembly-line@example.test", "none"]
 # one. Every variant was thin arm64 -> ["0x0100000c"]; the arch-name list ["arm64"] was REJECTED on the single. Fat order
 # and dedupe are unverified. lib.meta.macho.cpu_type_set.
 MACHO_CPU_TYPE_SET = 'json(["0x%08x" % cputype for each fat_arch slice, else the thin header])'
-MACHO_CPU_TYPE_SET_REJECTED = ['["arm64"]']
+# Day 23 "Page Me Maybe" Mastery 6762559b (fat files, 2-3 slices): fat_arch order REJECTED (e.g. set5
+# ["0x0100000c","0x0000000c","0x00000007"]), the list SORTED ascending CORRECT on 7/7 sets ("set" = sorted); dedupe
+# still unseen. lib.meta.macho.cpu_type_set sorts.
+MACHO_CPU_TYPE_SET_REJECTED = ['["arm64"]', '["0x0100000c","0x0000000c","0x00000007"]']
+
+# Day 23 "Page Me Maybe" (metadata-forensics), confirmed 2026-10-23 (single 4096, TT 8192, Mastery 7 sets 512..65536):
+# d23-sqlite-NNN-sqlite-page-size-bytes = the database header page size (u16 BIG-endian @16; the stored 1 = 65536) as a
+# base-10 int. lib.meta.prebuilt.sqlite.sqlite_value (verified entry in lib.meta._BUILTIN).
+SQLITE_PAGE_SIZE_BYTES = "u16be @16 of 'SQLite format 3\\0', 1 -> 65536, base-10"
 
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {

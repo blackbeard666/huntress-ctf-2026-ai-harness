@@ -1,0 +1,16 @@
+{
+ "family": "vm_bytecode",
+ "encoding": "vm-raw",
+ "expected_offset": 8288,
+ "expected_config": {
+  "c2": "10.13.37.2:8443",
+  "beacon": "vm-raven",
+  "sleep": 42,
+  "flag": "flag{v1rtu4l_m4ch1n3_st0r3s}"
+ },
+ "expected_program_size": 642,
+ "generator_cmd": "sh vmbc_gen.sh   # vmbc_asm.py (stdlib) assembles the program, system python3 zlib.crc32 header, coreutils base64, gcc 15.2",
+ "oracle_cmd": "sh vmbc_oracle.sh vmbc_gcc_O2_pie.bin   # -DORACLE twin run natively + nm -S/readelf -SW for prog",
+ "oracle_output": "{\"encoding\": \"vm-raw\", \"offset\": 8288, \"prog_size\": 642, \"config\": {\"c2\": \"10.13.37.2:8443\", \"beacon\": \"vm-raven\", \"sleep\": 42, \"flag\": \"flag{v1rtu4l_m4ch1n3_st0r3s}\"}}",
+ "note": "gcc -O2 -s PIE: switch -> notrack jump table, output buffer on the stack, wiped by a volatile loop before exit; lib.binary.hcfg_scan -> first valid hit (offset = bytecode blob start, SPECULATIVE)"
+}
