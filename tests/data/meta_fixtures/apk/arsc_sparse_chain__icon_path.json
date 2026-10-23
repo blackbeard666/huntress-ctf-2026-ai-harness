@@ -1,0 +1,8 @@
+{
+ "field": "apk.icon_path",
+ "expected": "res/drawable/launcher_glyph.png",
+ "generator_cmd": "aapt2 link -I fw.apk --manifest AndroidManifest.xml --enable-sparse-encoding -o app2.apk res.zip (minSdk 26 so the -ja string type chunk is SPARSE, flags 0x01; android:label=@string/display_name whose default value is @string/brand -> 'Contoso Field Notes 7712' / ja 'コントソ 7712'; 60 filler strings; android:icon=@drawable/launcher_glyph)",
+ "oracle_cmd": "aapt dump badging app2.apk -> application-label:'Contoso Field Notes 7712' application-label-ja:'コントソ 7712' application: icon='res/drawable/launcher_glyph.png'; aapt2 dump resources -> Package name=org.example.clone.notes id=7f, string/display_name () @string/brand; aapt2 dump chunks -> ja ResTable_type flags: 0x01 (sparse); androguard get_app_name() agrees",
+ "decoy": false,
+ "member": "app2.apk"
+}

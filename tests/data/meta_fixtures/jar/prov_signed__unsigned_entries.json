@@ -1,0 +1,8 @@
+{
+ "field": "jar.unsigned_entries",
+ "expected": "[\"com/acme/ledger/Backdoor.class\"]",
+ "generator_cmd": "javac --release 8 Activator.java Util.java; META-INF/maven/{com.acme/ledger-core,org.slf4j/slf4j-api}/pom.properties; jar --create --file ledger-core-2.4.1.jar --manifest mf.txt (OSGi Bundle-* / Export-Package / Import-Package) -C o .; keytool -genkeypair -alias acme -dname 'CN=Acme Release Signing, O=Acme Corp, C=US' -keystore ks.p12; jarsigner -keystore ks.p12 signed.jar acme; zip signed.jar com/acme/ledger/Backdoor.class (injected after signing)",
+ "oracle_cmd": "java Oracle.java signed.jar (java.util.jar.JarFile verify=true: JarEntry.getCodeSigners()==null, getManifest().getMainAttributes(), java.util.Properties of META-INF/maven/*/*/pom.properties)",
+ "decoy": false,
+ "member": "ledger-core-2.4.1.jar"
+}

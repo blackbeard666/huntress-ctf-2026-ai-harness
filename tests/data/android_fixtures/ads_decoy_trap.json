@@ -1,0 +1,8 @@
+{
+ "entry": "anti_debug_state_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same int_switch machine, but the clean terminal emits a 14-hex near-miss; the only full token is the honeypot reached when a probe says 'debugged' -> must be demoted out of anti_debug_state_scan",
+ "generator_cmd": "python3 tests/data/android_fixtures/ads_src/gen_ads.py decoy_trap tests/data/android_fixtures/ads_decoy_trap.apk  # javac --release 8 (app + clean android.* stubs) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> Probe runs the machine on the host JVM with CLEAN stubs (Debug false, flags & 2 == 0, adb_enabled 0) + real /proc/self/status + System.nanoTime -> 'proof=ANS-5e8d1b0c4a7f93' (14 hex: near-miss, no valid token); `gen_ads.py decoy_trap /dev/null --debugged` (DEBUGGED stubs) -> 'proof=ANS-d3adb33fc0ffee11' (the honeypot that must be demoted)"
+}

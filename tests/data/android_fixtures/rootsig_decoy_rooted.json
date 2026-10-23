@@ -1,0 +1,8 @@
+{
+ "entry": "root_signal_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "bitset_enum's code with ENC keyed on the ROOTED stubs (test-keys, ro.debuggable 1, ro.secure 0, permissive): the clean vector and the all-false forced vector both decode to garbage, so no token",
+ "generator_cmd": "python3 tests/data/android_fixtures/rootsig_src/gen_rootsig.py decoy_rooted tests/data/android_fixtures/rootsig_decoy_rooted.apk  # javac --release 8 (app + clean-Pixel android.* stubs: TAGS release-keys, ro.secure 1, ro.debuggable 0, ro.boot.selinux enforcing, PackageManager NameNotFound) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d22.rootsig.Probe -> Vault.reveal(new Context()) run by the host JVM on the clean stubs + real File.exists / /proc/mounts / Runtime.exec -> 'Cj[\\xdf7F8\\xcag\\x17l\\xc3d\\x12i\\xc6;G:\\xc5' (no token on the clean path)"
+}

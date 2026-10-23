@@ -1,0 +1,10 @@
+{
+  "base": "warmups-day-22",
+  "lane": "warmups",
+  "name": "👶 Deflated Ego",
+  "ids": {
+    "single_solve": "warmups-day-22",
+    "time_trial": "warmups-day-22/time_trial",
+    "mastery": "warmups-day-22/mastery"
+  }
+}

@@ -1,0 +1,8 @@
+{
+ "field": "class.has_main_method",
+ "expected": "none",
+ "generator_cmd": "copied from java/decoy_fat__this_class.bin (Mach-O fat cafebabe)",
+ "oracle_cmd": "file fat.bin -> Mach-O universal binary",
+ "decoy": true,
+ "member": "fat.bin"
+}

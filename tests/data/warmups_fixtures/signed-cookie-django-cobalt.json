@@ -1,0 +1,10 @@
+{
+ "codec": "signed-cookie-django",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-badger-73",
+ "encoded": ".eJwlyTEOgzAMBdCrfDKXqUMlLsDUTlzASSyISnBlm6ZSxd2L1PW9b6hhCI-SGE30icxJctlm-FIMjbTurw6TwGR98wW2x1r8v_yh5KDNGitcTmSMVBl3MmcdkCTS6n2kPLP2t2s4foPtJuc:1xJsy5:iDgVc-SNQbIPwRk2Mfg2w6___VB4YJeBA0PEMNzxGa4",
+ "generator_cmd": "PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_gen.py django \"$plain\"",
+ "oracle_cmd": "printf %s \"${encoded#}\" | PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_oracle.py django",
+ "oracle_output": "{\"m\":\"Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-badger-73\"}",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-badger-73",
+ "expected": "match"
+}

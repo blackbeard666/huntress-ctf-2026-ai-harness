@@ -1,0 +1,7 @@
+{
+ "field": "entitlements.application_identifier",
+ "expected": "none",
+ "generator_cmd": "python3 plistlib.dumps({CFBundleIdentifier com.northwind.fieldkit, CFBundlePackageType APPL, ...}) > Info.plist (plain app, no NSExtension)",
+ "oracle_cmd": "exiftool -j Info.plist -> CFBundle* keys only, no application-identifier",
+ "decoy": true
+}

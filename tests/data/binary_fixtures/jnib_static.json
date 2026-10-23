@@ -1,0 +1,68 @@
+{
+ "family": "jni_bridge",
+ "jar": "jnib_static.jar",
+ "so": "jnib_static.bin",
+ "decoy": false,
+ "generator_cmd": "bash tests/data/binary_fixtures/jnib_gen.sh <workdir>  (javac/jar, javac -h, gcc / aarch64-linux-gnu-gcc -shared -I$JAVA_HOME/include, coreutils base64 + gzip crc)",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/jnib_oracle.py jnib_static.jar jnib_static.bin <workdir>/s/org_hctf_native_x_Gate.h   # javap -p -s/-c, readelf -W --dyn-syms/-s/-r/-S/-d, grep -obUa, javac -h header",
+ "note": "static-export pair: javac -h mangling (pkg _1, overload __sig); HCFG base64 in the jar class constant pool",
+ "expected_facts": {
+  "soname": "libgatekeeper.so",
+  "jni_onload": "false",
+  "registered_natives": "none",
+  "registered_count": "0",
+  "jni_export_count": "4",
+  "native_methods": [
+   {
+    "class": "org.hctf.native_x.Gate",
+    "name": "open",
+    "descriptor": "(Ljava/lang/String;)Ljava/lang/String;",
+    "static": "false",
+    "binding": "export",
+    "symbol": "Java_org_hctf_native_1x_Gate_open",
+    "fn_address": "0x1109"
+   },
+   {
+    "class": "org.hctf.native_x.Gate",
+    "name": "check",
+    "descriptor": "([I)I",
+    "static": "true",
+    "binding": "export",
+    "symbol": "Java_org_hctf_native_1x_Gate_check___3I",
+    "fn_address": "0x1101"
+   },
+   {
+    "class": "org.hctf.native_x.Gate",
+    "name": "check",
+    "descriptor": "(Ljava/lang/String;)I",
+    "static": "true",
+    "binding": "export",
+    "symbol": "Java_org_hctf_native_1x_Gate_check__Ljava_lang_String_2",
+    "fn_address": "0x10f9"
+   },
+   {
+    "class": "org.hctf.native_x.Gate",
+    "name": "xor_key",
+    "descriptor": "([BI)[B",
+    "static": "false",
+    "binding": "export",
+    "symbol": "Java_org_hctf_native_1x_Gate_xor_1key",
+    "fn_address": "0x1111"
+   }
+  ],
+  "native_method_count": "4",
+  "load_library": "gatekeeper",
+  "load_libraries": [
+   "gatekeeper"
+  ],
+  "native_method_names": [
+   "open",
+   "check",
+   "check",
+   "xor_key"
+  ],
+  "hcfg_member": "jar",
+  "hcfg_entry": "org/hctf/native_x/Gate.class",
+  "hcfg_offset": "91"
+ }
+}

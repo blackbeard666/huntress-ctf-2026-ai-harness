@@ -1,0 +1,10 @@
+{
+ "codec": "signed-cookie",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: none",
+ "encoded": "Nice.work.decoding:this:warmup",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "literal dotted/colon prose shaped like a cookie token",
+ "oracle_cmd": "printf %s \"$encoded\" | PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_oracle.py its-frag",
+ "oracle_output": "None BadPayload"
+}

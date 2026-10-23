@@ -1,0 +1,27 @@
+cProfile of `cases/variant-mastery-664b2505` (25023644 function calls (24322669 primitive calls) in 9.906 seconds, INTERRUPTED at 10s):
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     25/1    0.001    0.000    9.906    9.906 {built-in method builtins.exec}
+        1    0.000    0.000    9.906    9.906 solve.py:1(<module>)
+        1    0.001    0.001    9.858    9.858 solve.py:289(main)
+       10    0.001    0.000    9.685    0.968 solve.py:219(peel)
+      383    0.000    0.000    9.680    0.025 solve.py:210(expand)
+695550/383    1.969    0.000    9.677    0.025 solve.py:38(candidates)
+   180/14    0.005    0.000    9.630    0.688 solve.py:186(per_line)
+  613/285    0.519    0.001    9.627    0.034 solve.py:119(best_line)
+   718912    0.779    0.000    4.382    0.000 solve.py:21(printable)
+   724488    0.995    0.000    3.427    0.000 {built-in method builtins.sum}
+  6428165    1.506    0.000    2.305    0.000 solve.py:26(<genexpr>)
+  5600472    0.997    0.000    0.997    0.000 solve.py:100(<genexpr>)
+  5747797    0.799    0.000    0.799    0.000 {method 'isprintable' of 'str' objects}
+    47759    0.059    0.000    0.377    0.000 solve.py:110(english)
+    23572    0.212    0.000    0.332    0.000 base64.py:369(a85decode)
+   720000    0.260    0.000    0.260    0.000 {method 'decode' of 'bytes' objects}
+    23572    0.184    0.000    0.249    0.000 base64.py:461(b85decode)
+1051801/1051690    0.170    0.000    0.170    0.000 {built-in method builtins.len}
+   614067    0.159    0.000    0.159    0.000 {method 'encode' of 'str' objects}
+    95456    0.087    0.000    0.147    0.000 __init__.py:280(_compile)
+       10    0.000    0.000    0.143    0.014 solve.py:173(fast_per_line)
+ 5475/691    0.018    0.000    0.138    0.000 {method 'join' of 'str' objects}
+      220    0.000    0.000    0.138    0.001 solve.py:182(<genexpr>)
+      210    0.006    0.000    0.137    0.001 solve.py:147(strict_line)
+    41203    0.036    0.000    0.135    0.000 base64.py:65(b64decode)

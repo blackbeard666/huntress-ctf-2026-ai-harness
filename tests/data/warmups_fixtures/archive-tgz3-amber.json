@@ -1,0 +1,9 @@
+{
+ "codec": "archive-container[tar.gz]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-crane-65",
+ "encoded": "H4sIAAAAAAACA+3TSwrCMBCA4Rxl3FtJ6UPwAq505QWm6aBB00iS2h7fqAtBQVeWWubbTJgsAoEfF6EP4rdkVJb5fUavU8o8fZ5v+1QWWSZAigG0PqCLzztrP/7Dt/s/tdWKoLPuCDUpW+tmD+GgPXToTHuewU6wKavG2n/O/Q/BgrenC83Bt5XR4RE/9agCYOM7cpzIpKlR9J+997/k/ocAwcbmCdZoCDboA7kVoKnIJcphQ0lZcCSMMTZBV+ygQBIAEAAA",
+ "generator_cmd": "d=$(mktemp -d); cd $d; printf %s \"$p1\" > a.txt; printf %s \"$p2\" > b.txt; printf %s \"$p3\" > c.txt; tar --format=ustar -b1 --owner=0 --group=0 --mtime=@0 -cf - a.txt b.txt c.txt | gzip -9n | base64 -w0; rm -rf $d",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | tar -xzOf -",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-crane-65",
+ "expected": "match"
+}

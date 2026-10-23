@@ -1,0 +1,7 @@
+{
+ "field": "apk.cd_member_names",
+ "expected": "[\"AndroidManifest.xml\",\"classes.dex\",\"assets/a.bin\",\"classes.dex\"]",
+ "generator_cmd": "python3 zipfile writer: AndroidManifest.xml, classes.dex(d2), assets/a.bin STORED, classes.dex(d39) again (Janus dup), all date_time 1980-01-01",
+ "oracle_cmd": "zipinfo -1 dupes.apk",
+ "decoy": false
+}

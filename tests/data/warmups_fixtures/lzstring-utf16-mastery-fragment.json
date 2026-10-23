@@ -1,0 +1,9 @@
+{
+ "codec": "lzstring-utf16 (Mastery line fragment)",
+ "plain": " Master: clover-lynx-05",
+ "encoded": "¢摁䆼̀匢㠫䰣ణそ䂎砶䪢㰣堡燠̠噀 ",
+ "generator_cmd": "LZ=$PWD/tools/npm-cyberchef/node_modules/lz-string tools/node/bin/node tests/data/warmups_fixtures/lzstring_gen.js utf16 \"$plain\"  # pieroxy lz-string 1.5.0 (npm) compressToUTF16",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/lzstring_oracle.py utf16  # PyPI lzstring 1.0.4 (independent port)",
+ "oracle_plain": " Master: clover-lynx-05",
+ "expected": "match"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "bz2-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-20",
+ "encoded": "QlpoOTFBWSZTWRSshN0AAAwfgGAGUBAAgwQAPv/f4CAASIp6Q9TQ02oANP1TT1BFPU8po/VD1GRoBoNFJw2F0nnXqEtBsaxSJKaSypbT0Q5JMxMNMocPZ1HdQIOjdo3qvSfzQ6hGJMLSwpPMKFIjfNENwX8XckU4UJAUrITd",
+ "generator_cmd": "printf %s \"$plain\" | bzip2 -9 | base64 -w0  # bzip2 CLI + base64 wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | bzip2 -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-20",
+ "expected": "match"
+}

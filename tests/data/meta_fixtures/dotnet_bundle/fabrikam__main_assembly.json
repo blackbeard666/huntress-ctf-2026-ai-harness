@@ -1,0 +1,8 @@
+{
+ "field": "dotnet_bundle.main_assembly",
+ "expected": "Fabrikam.Agent.dll",
+ "generator_cmd": "dotnet publish -c Release -o out2 -p:AssemblyName=Fabrikam.Agent (HelloBundle.csproj: net10.0, AssemblyName=Contoso.Updater, RuntimeIdentifier=ubuntu.26.04-x64, PublishSingleFile=true, SelfContained=false, IncludeAllContentForSelfExtract=true, + Content settings.json; Program.cs = one Console.WriteLine)",
+ "oracle_cmd": "dotnet oracle.dll <file> (C# console app over ILSpy 11.1 ICSharpCode.Decompiler.SingleFileBundle.IsBundle/ReadManifest printing MajorVersion.MinorVersion, FileCount, BundleID, entries Type/Offset/Size/RelativePath) -> the Assembly entry named after the apphost",
+ "decoy": false,
+ "member": "Fabrikam.Agent"
+}

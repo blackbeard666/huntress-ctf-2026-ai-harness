@@ -1,0 +1,8 @@
+{
+ "field": "apk.application_label",
+ "expected": "Huntress Evidence 08281778",
+ "generator_cmd": "GM D21 artifact: python3 -c \"import zipfile; zipfile.ZipFile('challenges/day21/metadata-package-deal/single_solve/artifacts/20261021T130021Z/metadata-day-21-evidence.zip').extract('mobile-001.apk')\"",
+ "oracle_cmd": "aapt dump badging/xmltree mobile-001.apk (Android Asset Packaging Tool v0.2) aapt dump xmltree AndroidManifest.xml -> application android:label(0x01010001)=\"Huntress Evidence 08281778\" (badging prints label='' : no resources.arsc)",
+ "decoy": false,
+ "member": "mobile-001.apk"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "packages_xml.package_names",
+ "expected": "[\"com.android.chrome\",\"com.evil.loader\"]",
+ "generator_cmd": "python3 -I gen.py (stdlib tarfile USTAR + zlib.compress writer; ABX via a hand-rolled BinaryXmlSerializer token writer; source kept at tests/data/meta_fixtures/android_backup/gen_android_fixtures.py.txt)",
+ "oracle_cmd": "ABX twin of packages_text.xml (same document): xml.dom.minidom on packages_text.xml",
+ "decoy": false,
+ "member": "packages_abx.xml"
+}

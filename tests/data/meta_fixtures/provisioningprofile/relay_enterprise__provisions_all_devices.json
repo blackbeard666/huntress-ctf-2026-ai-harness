@@ -1,0 +1,7 @@
+{
+ "field": "provisioningprofile.provisions_all_devices",
+ "expected": "true",
+ "generator_cmd": "python3 plistlib.dumps(enterprise profile {AppIDName 'Relay Enterprise', ProvisionsAllDevices true, Entitlements{application-identifier, get-task-allow false}, NO DeveloperCertificates}) > ent.plist; openssl cms -sign -nodetach -binary -outform DER -in ent.plist -signer signer.pem -inkey signer.key -out ent.mobileprovision",
+ "oracle_cmd": "openssl cms -verify -noverify -inform DER -in ent.mobileprovision -out out.plist && exiftool -j -struct out.plist -> ProvisionsAllDevices true",
+ "decoy": false
+}

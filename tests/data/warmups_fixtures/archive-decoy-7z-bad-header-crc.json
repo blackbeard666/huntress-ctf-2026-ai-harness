@@ -1,0 +1,10 @@
+{
+ "codec": "archive-container[7z]",
+ "plain": null,
+ "encoded": "N3q8ryccAARBHmrJZwAAAAAAAABPAAAAAAAAABbgcLbgAGQAX10AJxpIZm6y5uOuO+3sjJiqvA+Jj3qdlSxTd8BP9NRXc9xa0fv74vSaBO/CEF41MM+luuMwsVD2IpIF89qhMel510vxA5Ou+gQeHiBA0HxquTKWRQpkugurcZHFN8ifoAAAAQQGAAEJZwAHCwEAASEhAQAMZQAICgEmJwoGAAAFARkMAAAAAAAAAAAAAAAAERMAZgBsAGEAZwAuAHQAeAB0AAAAGQAVBgEAIIC0gQAA",
+ "generator_cmd": "archive-7z-cobalt bytes with nextHeaderSize low bit flipped (start-header CRC mismatch), base64 -w0",
+ "oracle_cmd": "f=$(mktemp); printf %s \"$encoded\" | base64 -d > $f; 7z x -so -pinfected -t7z $f 2>/dev/null </dev/null; r=$?; rm -f $f; exit $r",
+ "oracle_plain": null,
+ "decoy": true,
+ "expected": "none"
+}

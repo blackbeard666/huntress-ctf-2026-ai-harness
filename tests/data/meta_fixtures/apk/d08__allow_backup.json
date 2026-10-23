@@ -1,0 +1,8 @@
+{
+ "field": "apk.allow_backup",
+ "expected": "false",
+ "generator_cmd": "GM D08 mobile-lane artifact (aapt-built APK): cp challenges/day08/mobile-cleartext-session/single_solve/artifacts/20261008T130009Z/cleartext_session.apk",
+ "oracle_cmd": "aapt dump badging/xmltree cleartext_session.apk (Android Asset Packaging Tool v0.2) aapt dump xmltree -> android:allowBackup(0x01010280)=(type 0x12)0x0",
+ "decoy": false,
+ "member": "cleartext_session.apk"
+}

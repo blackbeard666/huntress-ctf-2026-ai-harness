@@ -1,0 +1,24 @@
+{
+ "family": "dynlink",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "loader": "dynlink_ocaml_d21.bin",
+ "plugin": "dynlink_ocaml_d21.plugin.bin",
+ "expected_facts": {
+  "loaded_library": "none",
+  "resolved_symbols": "[\"caml_plugin_header\"]",
+  "loader_needs_libdl": "true",
+  "plugin_exports": "[\"caml_plugin_header\",\"_fini\",\"camlPlugin_000__frametable\",\"_init\",\"__bss_start\",\"_end\",\"caml_globals\",\"camlPlugin_000__data_begin\",\"caml_shared_startup__frametable\",\"camlPlugin_000__data_end\",\"_edata\",\"caml_shared_startup__data_end\",\"caml_shared_startup__data_begin\",\"camlPlugin_000__code_begin\",\"camlPlugin_000\",\"camlPlugin_000__code_end\",\"caml_shared_startup__code_begin\",\"camlPlugin_000__1\",\"caml_shared_startup__code_end\",\"camlPlugin_000__entry\"]",
+  "plugin_header_magic": "Caml2007D002",
+  "loader_kind": "ocaml_natdynlink",
+  "init_export": "caml_plugin_header",
+  "plugin_unit_names": "Plugin_000",
+  "plugin_unit_crc": "d8f8b38757ecb5e2277307c3b9fae3d7",
+  "ocaml_plugin_check": "true"
+ },
+ "generator_cmd": "GM D21 evidence.zip members d21--variant-000-{loader.elf,plugin.cmxs} (real ocamlopt natdynlink build), copied verbatim",
+ "oracle_cmd": "python3 dynlink_oracle.py dynlink_ocaml_d21.bin dynlink_ocaml_d21.plugin.bin   # readelf --dyn-syms/-d/-lW + objdump -d -Mintel (lea/mov arg before call dlopen/dlsym); objdump: 692bb lea rsi,'caml_plugin_header' -> call caml_dlsym; xxd -s 0x1010 plugin: 8495a6be .. a0 2c 'Caml2007D002' a0 d0 2a 'Plugin_000' 30 <crc d8f8b387..e3d7>",
+ "decoy": false,
+ "note": "real OCaml pair; loader dlopen/dlsym args are runtime values (no literal path) so loaded_library none; lib.binary.dynlink_facts(loader, plugin); field names SPECULATIVE (GM label not seen)"
+}

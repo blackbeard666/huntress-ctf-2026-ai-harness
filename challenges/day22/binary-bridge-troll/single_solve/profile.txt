@@ -1,0 +1,27 @@
+cProfile of `cases/single_solve` (918512 function calls (907031 primitive calls) in 1.899 seconds):
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    215/1    0.003    0.000    1.750    1.750 {built-in method builtins.exec}
+      2/1    0.000    0.000    1.750    1.750 solve.py:1(<module>)
+      2/1    0.007    0.004    1.750    1.750 solve.py:1011(main)
+      2/1    0.003    0.001    1.742    1.742 solve.py:971(_solve_pairs)
+      264    0.006    0.000    1.303    0.005 solve.py:865(answer)
+      264    0.003    0.000    0.930    0.004 solve.py:256(group_members)
+      264    0.002    0.000    0.907    0.003 solve.py:167(resolve)
+      336    0.002    0.000    0.905    0.003 _base.py:428(result)
+     67/9    0.029    0.000    0.884    0.098 threading.py:323(wait)
+     28/1    0.035    0.001    0.853    0.853 thread.py:54(run)
+     1904    0.149    0.000    0.820    0.000 {method 'join' of 'bytes' objects}
+     28/1    0.001    0.000    0.819    0.819 solve.py:74(_aes_member)
+       73    0.001    0.000    0.774    0.011 solve.py:691(facts)
+       25    0.000    0.000    0.604    0.024 solve.py:697(_facts)
+   231/19    0.001    0.000    0.458    0.024 <frozen importlib._bootstrap>:1349(_find_and_load)
+   230/19    0.001    0.000    0.457    0.024 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+      2/1    0.001    0.000    0.440    0.440 solve.py:112(sha)
+    52/26    0.001    0.000    0.399    0.015 queue.py:154(get)
+   217/20    0.001    0.000    0.393    0.020 <frozen importlib._bootstrap>:911(_load_unlocked)
+   191/20    0.001    0.000    0.392    0.020 <frozen importlib._bootstrap_external>:993(exec_module)
+   496/37    0.001    0.000    0.372    0.010 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+    36/24    0.337    0.009    0.337    0.014 {method 'decompress' of 'zlib.Decompress' objects}
+       19    0.002    0.000    0.336    0.018 solve.py:649(elf_facts)
+       19    0.003    0.000    0.317    0.017 solve.py:353(native_hcfg)
+       19    0.044    0.002    0.312    0.016 solve.py:360(_native_hcfg)

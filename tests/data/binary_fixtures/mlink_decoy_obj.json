@@ -1,0 +1,29 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "cputype": "16777228",
+  "arch": "arm64",
+  "filetype": "object",
+  "dylib_commands": "none",
+  "dylibs": "none",
+  "dylib_versions": "none",
+  "rpaths": "none",
+  "weak_dylibs": "none",
+  "rpath_dylibs": "none",
+  "loader_path_dylibs": "none",
+  "install_name": "none",
+  "current_version": "none",
+  "compatibility_version": "none",
+  "exports": "none",
+  "has_chained_fixups": "false",
+  "chained_imports_qualified": "none",
+  "chained_weak_imports": "none",
+  "has_hcfg_section": "false"
+ },
+ "decoy": true,
+ "generator_cmd": "bash mlink_gen.sh mlink_decoy_obj.bin decoy_obj",
+ "oracle_cmd": "python3 mlink_oracle.py mlink_decoy_obj.bin   # llvm-objdump-18 --macho --private-header(s) / --exports-trie / --chained-fixups, llvm-lipo-18 -archs, llvm-readobj-18 --sections",
+ "note": "lib.binary.macho_link_facts(data)[field] == expected_facts[field] for each key (null facts -> macho_link_facts is None and every macho_link_field is \"none\"); hcfg_scan first valid hit == expected_offset/config. GM vocabulary for these fields NOT yet confirmed (format label 'macho' presumed by the atlas; cputype as decimal str, arch = lipo name)."
+}

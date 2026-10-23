@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>KeepAlive</key>
+	<true/>
+	<key>Label</key>
+	<string>com.apple.audio.helper</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/bin/osascript</string>
+		<string>-e</string>
+		<string>-- HUNTRESS_ANALYSIS_V1:SPLIT</string>
+		<string>-e</string>
+		<string>set parts to {"B64-dj0zfGxhbmd1YWdlPWFwcGxlc2NyaXB0fHJvbGU9", "cGVyc2lzdGVuY2V8dmVyZGljdD1tYWxpY2lvdXN8", "YXR0YWNrPVQxNTQzLjAwMXxjYW1wYWlnbl9pZD1P", "U0EtN2MxZTlhMjB8dXJsPWh0dHBzOi8vb3NhLTdj", "MWU5YTIwLmV4YW1wbGUuaW52YWxpZC9hZ2VudHxm", "aWxlX3BhdGg9L1VzZXJzL1NoYXJlZC8uN2MxZTlh", "MjAvYWdlbnQuc2NwdA=="}</string>
+		<string>-e</string>
+		<string>set AppleScript's text item delimiters to ""</string>
+		<string>-e</string>
+		<string>set plan to parts as text</string>
+		<string>-e</string>
+		<string>do shell script "echo " &amp; quoted form of plan &amp; " &gt; /dev/null"</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+</dict>
+</plist>

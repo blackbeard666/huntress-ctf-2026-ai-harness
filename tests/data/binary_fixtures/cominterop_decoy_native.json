@@ -1,0 +1,18 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "com_interfaces": "none",
+  "com_iids": "none",
+  "com_clsids": "none",
+  "com_pinvokes": "none",
+  "assembly_guid": "none",
+  "guid_strings": "none",
+  "IBeacon_vtable_base": "none"
+ },
+ "generator_cmd": "bash cominterop_gen.sh .   # dotnet build (C# [ComImport]/[Guid]/[InterfaceType]/[DispId]/[CoClass], [GeneratedComInterface], ole32 DllImport)",
+ "oracle_cmd": "bash cominterop_oracle.sh cominterop_decoy_native.bin   # System.Reflection.Metadata (BCL ECMA-335 reader + IL reader), not dnfile  -> {\"_all\":\"none\"}",
+ "decoy": true,
+ "note": "native ELF (/usr/bin/true), no CLI header -> every field 'none'"
+}

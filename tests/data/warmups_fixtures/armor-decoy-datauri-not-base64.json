@@ -1,0 +1,10 @@
+{
+ "codec": "data-uri-base64",
+ "plain": null,
+ "encoded": "data:text/plain;base64,Nice*work*decoding*this*warmup!",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written decoy: ;base64 data: URI whose payload has '*' and '!'",
+ "oracle_cmd": "printf %s \"${encoded#*,}\" | base64 -d",
+ "oracle_plain": null
+}

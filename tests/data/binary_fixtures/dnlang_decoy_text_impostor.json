@@ -1,0 +1,10 @@
+{
+ "family": "dotnet_language_of",
+ "decoy": true,
+ "expected": {
+  "_all": "none"
+ },
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/dnlang_gen.sh   # dotnet 10 SDK: dotnet new console -lang (printf impostor) + dotnet build -c Release (Deterministic)",
+ "oracle_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/dnlang_oracle.sh tests/data/binary_fixtures/dnlang_decoy_text_impostor.bin   # System.Reflection.Metadata (BCL, not dnfile); language = the generator's -lang",
+ "note": "DECOY: MZ + marker text, no PE/CLI header -> not answerable"
+}

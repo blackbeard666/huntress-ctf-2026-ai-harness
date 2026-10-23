@@ -1,0 +1,10 @@
+{
+ "codec": "signed-cookie-flask",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": ".eJwlyTEOwjAMBdCrfDLTBTH1AkwwcQE3dUtEHSPbbZAQdwep63ufJD6nPt1KZjS1J0bOOpY6Ix7F0chkfR1wV7guGx_h6yAl9uU35QBVb2wI_SPjQsK4kgdbD5KBrZtoyVq78yl9f7qWJ10.atoRXA.DQ7-bc818f2ckNsIG9aLiCBwVzM",
+ "generator_cmd": "PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_gen.py flask \"$plain\"",
+ "oracle_cmd": "printf %s \"${encoded#}\" | PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_oracle.py flask",
+ "oracle_output": "{\"msg\":\"Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42\"}",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

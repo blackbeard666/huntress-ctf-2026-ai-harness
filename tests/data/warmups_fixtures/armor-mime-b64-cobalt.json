@@ -1,0 +1,9 @@
+{
+ "codec": "mime-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-raven-73",
+ "encoded": "Content-Type: text/plain; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\n\nTmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwISBUbyBzb2x2ZSwgc3VibWl0IHRoaXMgZXhh\nY3QgYW5zd2VyIHRvIHRoZSBHYW1lIE1hc3RlcjogY29iYWx0LXJhdmVuLTcz\n",
+ "generator_cmd": "python3 -c 'import sys; from email.mime.text import MIMEText; sys.stdout.write(MIMEText(sys.argv[1], \"plain\", \"utf-8\").as_string())' \"$plain\"",
+ "oracle_cmd": "ruby -e 'print ARGV[0].split(/\\r?\\n\\r?\\n/, 2)[1].unpack1(\"m\")' \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-raven-73",
+ "expected": "match"
+}

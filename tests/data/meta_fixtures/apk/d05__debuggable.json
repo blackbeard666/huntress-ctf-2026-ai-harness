@@ -1,0 +1,8 @@
+{
+ "field": "apk.debuggable",
+ "expected": "false",
+ "generator_cmd": "GM D05 mobile-lane artifact (aapt-built APK): cp challenges/day05/mobile-backup-spill/single_solve/artifacts/20261005T130307Z/backup_spill.apk",
+ "oracle_cmd": "aapt dump badging/xmltree backup_spill.apk (Android Asset Packaging Tool v0.2) aapt dump xmltree -> android:debuggable(0x0101000f)=(type 0x12)0x0",
+ "decoy": false,
+ "member": "backup_spill.apk"
+}

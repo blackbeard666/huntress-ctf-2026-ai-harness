@@ -1,0 +1,9 @@
+{
+ "codec": "pdf-filter-chain",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-thimble-54",
+ "encoded": "674E69636520776F726B206465636F64696E672074686973207761726D75702120546F20736F6C76652C207375626D6974207468697320657861637420616E7377657220746F207468652047616D65204D61737465723A20636F62616C742D7468696D626C652D353480>",
+ "generator_cmd": "printf %s \"$plain\" | /home/testpwn/huntress-2026/.venv/bin/python3 -I -c 'import sys,io;from PIL import Image;d=sys.stdin.buffer.read();c=sys.argv[1];im=Image.frombytes(\"L\",(len(d),1),d);b=io.BytesIO();im.save(b,\"TIFF\",compression=c);t=Image.open(io.BytesIO(b.getvalue()));o=t.tag_v2[273][0];n=t.tag_v2[279][0];sys.stdout.buffer.write(b.getvalue()[o:o+n]+(b\"\\x80\" if c==\"packbits\" else b\"\"))' packbits | /home/testpwn/huntress-2026/.venv/bin/python3 -I -c 'import sys;sys.stdout.buffer.write(sys.stdin.buffer.read().hex().upper().encode()+b\">\")'",
+ "oracle_cmd": "printf %s \"$encoded\" | /home/testpwn/huntress-2026/.venv/bin/python3 -I -c 'import sys,base64;from pypdf.filters import ASCIIHexDecode, RunLengthDecode;d=sys.stdin.buffer.read();d=ASCIIHexDecode.decode(d);d=RunLengthDecode.decode(d);sys.stdout.buffer.write(d)'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-thimble-54",
+ "expected": "match"
+}

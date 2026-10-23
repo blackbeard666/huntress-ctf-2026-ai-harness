@@ -1,0 +1,8 @@
+{
+ "field": "apk.application_label_resolved",
+ "expected": "Huntress Evidence 08281778",
+ "generator_cmd": "GM D21 artifact: python3 -c \"import zipfile; zipfile.ZipFile('challenges/day21/metadata-package-deal/single_solve/artifacts/20261021T130021Z/metadata-day-21-evidence.zip').extract('mobile-001.apk')\"",
+ "oracle_cmd": "aapt dump xmltree mobile-001.apk AndroidManifest.xml -> android:label(0x01010001)=\"Huntress Evidence 08281778\" (inline string, no reference)",
+ "decoy": false,
+ "member": "mobile-001.apk"
+}

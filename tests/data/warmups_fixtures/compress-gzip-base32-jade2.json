@@ -1,0 +1,9 @@
+{
+ "codec": "gzip-base32",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-42",
+ "encoded": "D6FQQAAAAAAAAAQDEXETCDUDGAIEJUNLJR5GQIRKF2IIUVFZYBRI7QAQWOIXPQI4D6SHIX7PX5JSBKUWCWIUCY62E34JYDCVJLPH6D34CSTN7AYNNQPXH4X74UU4CIM3KULLRXSIXQSBHA4YWP2FQJFSKW73X3M6C5O2AMISMQAAAAA=",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | base32 -w0  # gzip CLI + base32 wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | base32 -d | gzip -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-42",
+ "expected": "match"
+}

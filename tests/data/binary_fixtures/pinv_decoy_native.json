@@ -1,0 +1,10 @@
+{
+ "kind": "dotnet_pinvoke_facts",
+ "decoy": true,
+ "expected": {
+  "_all": "none"
+ },
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/pinv_gen.sh tests/data/binary_fixtures   # dotnet 10 SDK: dotnet build -c Release (Deterministic) of a C# and an F# project (+ a P/Invoke-free C# library decoy); native decoy = cp /usr/bin/true; trunc decoy = head -c 1024",
+ "oracle_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/pinv_oracle.sh tests/data/binary_fixtures/pinv_decoy_native.bin   # System.Reflection.Metadata PEReader/MetadataReader (MethodDefinition.GetImport, DecodeSignature, GetMarshallingDescriptor, StandaloneSignature header) + System.Reflection.Emit.OpCodes IL walk for the ldstr->NativeLibrary call strings (BCL, not dnfile); cross-checked by eye against ilspycmd -il",
+ "note": "DECOY: native ELF (/usr/bin/true), no CLI header: dotnet_pinvoke_facts -> None  Labels/vocabulary SPECULATIVE (GM D22 contract not seen): callconv winapi/cdecl/stdcall/thiscall/fastcall, charset none/ansi/unicode/auto, best_fit/throw_on_unmappable default/true/false, C# types with IntPtr/UIntPtr for native int."
+}

@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=wix_msi|role=installer|verdict=malicious|attack=T1218.007|adapter=custom_action|stage_count=2|steps=run_custom_action,run_script|campaign_id=MSI-7c2a9e41|url=https://msi-7c2a9e41.example.invalid/stage|file_path=C:\\ProgramData\\.7c2a9e41.vbs",
+ "decoy": false,
+ "generator_cmd": "M=$(printf %s '<plan>' | gzip -9n | base64 -w0); hand-written WiX v3 .wxs: <Property CFGPART1=${M:0:60}> <Property CFGPART2=${M:60}>, <CustomAction Id=StageCfg Script=vbscript><![CDATA[descriptor_7c2a9e41 = \"[CFGPART1][CFGPART2]\" ...]]>, <Custom Action=StageCfg After=InstallInitialize>NOT Installed</Custom>",
+ "oracle_cmd": "python3 -I -c \"import sys,re,base64,gzip,xml.etree.ElementTree as E;r=E.parse(sys.argv[1]).getroot();n=\\\"{http://schemas.microsoft.com/wix/2006/wi}\\\";p={e.get(\\\"Id\\\"):e.get(\\\"Value\\\") for e in r.iter(n+\\\"Property\\\")};b=[e.text for e in r.iter(n+\\\"CustomAction\\\") if e.get(\\\"Script\\\")][0];b=re.sub(r\\\"\\[(\\w+)\\]\\\",lambda m:p.get(m.group(1),m.group(0)),b);print(gzip.decompress(base64.b64decode(re.search(r\\\"descriptor_\\w+ = \\\\\\\"([^\\\\\\\"]+)\\\",b).group(1))).decode())\" wix_ca_props.wxs",
+ "note": "the descriptor only exists after MSI [PROP] formatting of the CDATA body; raw-text readers see two halves"
+}

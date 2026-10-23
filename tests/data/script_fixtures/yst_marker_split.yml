@@ -1,0 +1,21 @@
+# HUNTRESS_ANALYSIS_V1:B64-dj0zfGxhbmd1YWdlPWdpdGh1Yl9hY3Rpb25zfHJvbGU9YmVuaWduX3V0aWxp
+# dHl8dmVyZGljdD1zdXNwaWNpb3VzfGF0dGFjaz1UMTA1OXxhZGFwdGVyPXByb2Nl
+# c3NfYnVpbGRlcnxob3N0X3Byb2ZpbGU9c3RhbmRhbG9uZXxvYmZ1c2NhdGlvbl9w
+# cm9maWxlPWJhc2U2NHxzdGFnZV9jb3VudD0yfHN0ZXBzPWRlY29kZV9jb25maWd1
+# cmF0aW9uLGRpc3BhdGNoX3Byb2Nlc3N8Y2FtcGFpZ25faWQ9R0lUSFVCX0FDVElP
+# TlMtNzdlMTliMDV8dXJsPWh0dHBzOi8vZ2l0aHViX2FjdGlvbnMtNzdlMTliMDUu
+# ZXhhbXBsZS5pbnZhbGlkL3N0YWdlfGZpbGVfcGF0aD0vdG1wL2h1bnRyZXNzLWdp
+# dGh1Yl9hY3Rpb25zLy43N2UxOWIwNS5zdGFnZQ==
+---
+name: Huntress inert analysis 77e19b05
+on:
+  workflow_dispatch:
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    env:
+      HUNTRESS_DESCRIPTOR: "redacted"
+    steps:
+      - name: Preserve modeled descriptor
+        run: ':'
+...

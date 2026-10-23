@@ -1,0 +1,10 @@
+{
+ "codec": "compress-sweep",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-heron-44",
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwISBUbyBzb2x2ZSwgc3VibWl0IHRoaXMgZXhhY3QgYW5zd2VyIHRvIHRoZSBHYW1lIE1hc3RlcjogYW1iZXItaGVyb24tNDQ=",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$plain\" | base64 -w0  # no compressor: a D1-style plain base64 line",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | file -b -  # ASCII text, no compressor magic -> none",
+ "oracle_output": "ASCII text, with no line terminators"
+}

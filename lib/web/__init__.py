@@ -69,12 +69,20 @@ def _safe_answer(mod, question, contract):
     return v if v and websolve.PROOF_RE.fullmatch(str(v).strip()) else None
 
 
-def solve_target(question, contract, budget=40):
-    """Proof for one live target (a contract question whose `artifact` is a Target), or None."""
+def solve_target(question, contract, budget=40, clues=None):
+    """Proof for one live target (a contract question whose `artifact` is a Target), or None. `clues`: an already
+    fetched /api/clues dict (skips the refetch). A target whose clues name no route and whose home page is not 2xx/3xx
+    is gone (expired = 410 `{"state":"completed"}`): None at once instead of burning the race budget (D22: 9-40 s)."""
     base = websolve.base_of(question, contract)
     if not base:
         return None
-    clues_json, key = websolve.clues(base)
+    if isinstance(clues, dict):
+        clues_json, key = clues, websolve.dispatch_key(clues)
+    else:
+        clues_json, key = websolve.clues(base)
+    if not any(isinstance(v, str) and v.startswith("/") for v in clues_json.values()) \
+            and not 200 <= websolve.fetch(base)[0] < 400:
+        return None
     return websolve.race(candidates(base, clues_json, key, question, contract), budget=budget)
 
 
@@ -84,19 +92,23 @@ def _iter_pairs(contract):
     return [(aid, qs[i] if i < len(qs) else {}) for i, aid in enumerate(ids)]
 
 
+def _run_target(job):
+    """run_sets job (module level: the fork pool pickles it by name -- a local closure failed every target)."""
+    aid, q, contract = job
+    p = solve_target(q, contract)
+    return {aid: p} if p else {}
+
+
+def _jobs(contract):
+    return [(aid, q, contract) for aid, q in _iter_pairs(contract)]
+
+
 def solve(contract, artifacts=None):
     """{answer_id: proof} for every target in the contract. Targets run in parallel (I/O bound); partials are emitted
     at the deadline by the caller's emit path."""
     out, pool = {}, []
     solverrt.arm_deadline(out, pool)
-    jobs = _iter_pairs(contract)
-
-    def run(job):
-        aid, q = job
-        p = solve_target(q, contract)
-        return {aid: p} if p else {}
-
-    solverrt.run_sets(jobs, run, out, pool, io_bound=True)
+    solverrt.run_sets(_jobs(contract), _run_target, out, pool, io_bound=True)
     return out
 
 
@@ -109,10 +121,8 @@ def main():
     contract = json.loads(Path(a.contract).read_text())
     out, pool = {}, []
     solverrt.arm_deadline(out, pool)
-    for aid, q in _iter_pairs(contract):
-        p = solve_target(q, contract)
-        if p:
-            out[aid] = p
+    # targets in parallel (D22: serial targets ran 40-47 s on a 3-target Mastery)
+    solverrt.run_sets(_jobs(contract), _run_target, out, pool, io_bound=True)
     solverrt.emit_and_exit(out, pool)
 
 

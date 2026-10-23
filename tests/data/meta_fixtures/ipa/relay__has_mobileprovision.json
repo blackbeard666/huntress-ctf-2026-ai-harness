@@ -1,0 +1,8 @@
+{
+ "field": "ipa.has_mobileprovision",
+ "expected": "false",
+ "generator_cmd": "plistlib XML Info.plist {CFBundleIdentifier org.example.relay, CFBundleDisplayName 'Relay ✓', UIDeviceFamily [1]} -> Payload/Relay.app/Info.plist; cp macho/lipo_fat_x86_arm64 Payload/Relay.app/Relay; nested PlugIns/Share.appex/Info.plist; no embedded.mobileprovision; zip -X -r Relay.ipa Payload",
+ "oracle_cmd": "unzip -l Relay.ipa -> no embedded.mobileprovision",
+ "decoy": false,
+ "member": "Relay.ipa"
+}

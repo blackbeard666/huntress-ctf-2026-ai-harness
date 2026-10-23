@@ -1,0 +1,30 @@
+{
+ "kind": "dotnet_pinvoke_facts",
+ "decoy": true,
+ "expected": {
+  "native_modules": "[]",
+  "native_module_count": "0",
+  "pinvoke_count": "0",
+  "pinvoke_methods": "[]",
+  "pinvoke_entries": "[]",
+  "pinvoke_imports": "[]",
+  "pinvoke_details": "[]",
+  "pinvoke_modules": "[]",
+  "set_last_error_methods": "[]",
+  "library_import_methods": "[]",
+  "library_import_count": "0",
+  "unmanaged_callers_only": "[]",
+  "unmanaged_callers_only_entries": "[]",
+  "unmanaged_fnptr_count": "0",
+  "unmanaged_fnptr_callconvs": "[]",
+  "native_library_apis": "[]",
+  "native_library_strings": "[]"
+ },
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/pinv_gen.sh tests/data/binary_fixtures   # dotnet 10 SDK: dotnet build -c Release (Deterministic) of a C# and an F# project (+ a P/Invoke-free C# library decoy); native decoy = cp /usr/bin/true; trunc decoy = head -c 1024",
+ "oracle_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/pinv_oracle.sh tests/data/binary_fixtures/pinv_decoy_managed.bin   # System.Reflection.Metadata PEReader/MetadataReader (MethodDefinition.GetImport, DecodeSignature, GetMarshallingDescriptor, StandaloneSignature header) + System.Reflection.Emit.OpCodes IL walk for the ldstr->NativeLibrary call strings (BCL, not dnfile); cross-checked by eye against ilspycmd -il",
+ "note": "DECOY: a real CLI assembly with no ImplMap/ModuleRef: counts '0', lists '[]', any <method>_module -> 'none'  Labels/vocabulary SPECULATIVE (GM D22 contract not seen): callconv winapi/cdecl/stdcall/thiscall/fastcall, charset none/ansi/unicode/auto, best_fit/throw_on_unmappable default/true/false, C# types with IntPtr/UIntPtr for native int.",
+ "expected_absent": {
+  "getpid_module": "none",
+  "GetModuleHandleW_charset": "none"
+ }
+}

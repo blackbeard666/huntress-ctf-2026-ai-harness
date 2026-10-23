@@ -1,0 +1,8 @@
+{
+ "field": "class.super_class_dotted",
+ "expected": "java.lang.Thread",
+ "generator_cmd": "javac 21.0.12 --release 17 -d o src/kotlin/Metadata.java src/com/acme/tool/{Runner,NoMain,MainKt}.java",
+ "oracle_cmd": "javap -v -p Runner.class -> super_class: // java/lang/Thread",
+ "decoy": false,
+ "member": "Runner.class"
+}

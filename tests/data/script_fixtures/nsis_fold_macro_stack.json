@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=nsis|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=vbscript|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=NSIS-28f26fc7|url=https://nsis-28f26fc731.example.invalid/stage|file_path=/tmp/huntress-nsis/.28f26fc7318bb0d3.stage",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/nsis_fold_gen.py challenges/day22/scripting-next-next-finish/single_solve/work/extracted/evidence tests/data/script_fixtures  (stdlib re-wrap of the D22 GM-verified polyglot-nsis-staged-chain.nsi StrCpy literal; compiles clean with tools/nsis makensis 3.10)",
+ "oracle_cmd": "{ NSISDIR=tools/nsis/usr/share/nsis tools/nsis/usr/bin/makensis -PPO nsis_fold_macro_stack.nsi | grep -o 'Push `[^`]*`' | cut -d'`' -f2 | tac; NSISDIR=tools/nsis/usr/share/nsis tools/nsis/usr/bin/makensis -PPO nsis_fold_macro_stack.nsi | grep -o 'LangString TAIL [^ ]* \"[^\"]*\"' | cut -d'\"' -f2; } | tr -d '\\n' | base64 -d   (== D22 staged-chain literal | base64 -d)",
+ "twists": "!macro/!insertmacro ${param} with '..' and `..` quotes, Push/Pop LIFO handoff, Var /GLOBAL $blob appends, LangString $(TAIL), StrCpy $1 \"XX$\\\"..$$9\" -2 3 slicing with $\\\" and $$ escapes, # comment marker"
+}

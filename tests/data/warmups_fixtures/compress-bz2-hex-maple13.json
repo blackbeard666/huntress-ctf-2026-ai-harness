@@ -1,0 +1,9 @@
+{
+ "codec": "bz2-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-heron-65",
+ "encoded": "425a6839314159265359c426187500000c1f8060060310008304003eefdfc020006a2a7a4327a836a0f5069e89faa0d53d328f51ea68d1a64068d11cf656c67815ead03626249424e421b3e817eae738f153a0034f227cdb221eadc319f19b42b6a452af8f6bacd6619ce60f32d9919002848ccaffc5dc914e14243109861d40",
+ "generator_cmd": "printf %s \"$plain\" | bzip2 -9 | xxd -p | tr -d '\\n'  # bzip2 CLI + xxd wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | bzip2 -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-heron-65",
+ "expected": "match"
+}

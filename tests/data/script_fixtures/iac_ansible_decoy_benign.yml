@@ -1,0 +1,7 @@
+- hosts: web
+  become: true
+  tasks:
+    - name: restart nginx
+      ansible.builtin.shell: systemctl restart nginx
+      args:
+        executable: /bin/bash

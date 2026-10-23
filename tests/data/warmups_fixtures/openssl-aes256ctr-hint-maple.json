@@ -1,0 +1,13 @@
+{
+ "codec": "openssl-salted",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-badger-19",
+ "encoded": "U2FsdGVkX180VKzm80DkgCMg7E05k1ZxhbhkhMt9g8BFXM5AGVc7JnFkO73/1eyoG4rwdChnOJCHXZ11nSdHjm85DUpRNRahx7SuZ68Ia/UlsMzhi4j0/JfdqxwrXJyAvjsn9b08BXIWzpOIqo1o7OOCj57TkA==",
+ "generator_cmd": "printf %s \"$plain\" | openssl enc -aes-256-ctr -pbkdf2 -pass pass:Pepper -a -A",
+ "oracle_cmd": "printf '%s\\n' \"$encoded\" | openssl enc -d -aes-256-ctr -pbkdf2 -pass pass:Pepper -a -A",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-badger-19",
+ "expected": "match",
+ "hints": [
+  "Pepper and Salt",
+  "Season to taste: the familiar wrapper."
+ ]
+}

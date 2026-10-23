@@ -1,0 +1,8 @@
+{
+ "field": "zip.pe_overlay_offset_hex",
+ "expected": "0x00002e00",
+ "generator_cmd": "cat <PE32 i386 console exe, tests/data/meta_fixtures/pe/arch_cli32__coff_machine_constant.bin> plain.zip > sfx_zip.exe (echo readme > readme.txt; zip -qX plain.zip readme.txt)",
+ "oracle_cmd": "python3 -c \"import pefile; print(hex(pefile.PE(f).get_overlay_data_start_offset()))\" -> 0x2e00",
+ "decoy": false,
+ "member": "sfx_zip.exe"
+}

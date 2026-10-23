@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=inno_setup|role=benign_utility|verdict=benign|attack=none|adapter=local_parser|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=powershell|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=INNO_SETUP-5cfc9a46|url=https://inno-setup-5cfc9a46e1.example.invalid/stage|file_path=/tmp/huntress-inno/.5cfc9a46e17cfcb5.stage",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/inno_fold_gen.py challenges/day22/scripting-next-next-finish/single_solve/work/extracted/evidence tests/data/script_fixtures  (stdlib binascii/base64 re-encode of the D22 GM-verified polyglot-nsis-benign-utility plan relabelled language=inno_setup / INNO_SETUP-; no ISCC on this host)",
+ "oracle_cmd": "cd tests/data/script_fixtures; grep -o 'D=[0-9a-f]*' inno_fold_run_params.iss | cut -c3- | xxd -r -p | base64 -d",
+ "twists": "; section-comment marker, [Run] Parameters: \"/c set D=<hex(base64)>\" only"
+}

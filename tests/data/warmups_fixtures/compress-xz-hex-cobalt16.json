@@ -1,0 +1,9 @@
+{
+ "codec": "xz-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-moth-14",
+ "encoded": "fd377a585a0000016922de3604c067652101160000000000000000004879902ee00064005f5d00271a48666eb2e6e3ae3bedec8c98aabc0f898f7a9d952c5377c04ff4d45773dc5ad1fbfbe2f49a04efc2105e3530cfa5bae330b150f6229205f3daa131e979d74bf10393aefa041e1e2040d07c6ab93296450a64ba08e32cb90bfa8c8482000000741623b000017f65c545f9b59042990d010000000001595a",
+ "generator_cmd": "printf %s \"$plain\" | xz --check=crc32 -c | xxd -p | tr -d '\\n'  # xz CLI + xxd wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | xz -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-moth-14",
+ "expected": "match"
+}

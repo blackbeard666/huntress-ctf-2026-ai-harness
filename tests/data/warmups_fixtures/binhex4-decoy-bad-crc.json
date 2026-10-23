@@ -1,0 +1,10 @@
+{
+ "codec": "binhex4",
+ "plain": null,
+ "encoded": "(This file must be converted with BinHex 4.0)\r\r:&QCXB@GIE@&`E'8YE(PZH#de1#jdH(3!9%9B9$q3\"!#3\"@3!N!3DMdjTBf8JGfp\rbDb\"NC@0[C'PZCb\"dD'ac)(GKFQeeF#%J9'mJFfpXGQ8X)(0eBQeTG#\"dD'Pc)'9\riB@0d)'&ZFhGPFL\"dEb\"dD'8J4f&YC5\"0BA0dCA)k)'eKF'aP,@ajERJY06J!LJ!\r!:\r",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "maple-lynx-58 .hqx from binhex.binhex with one data-fork character flipped (byte 20 after the first line break)",
+ "oracle_cmd": "tools/python/cpython-3.10-linux-x86_64-gnu/bin/python3.10 -I -c 'import binhex;binhex.hexbin(\"decoy.hqx\",\"o\")'  # -> binhex.Error: CRC error, computed 8208, read 8a",
+ "oracle_plain": null
+}

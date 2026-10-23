@@ -1,0 +1,11 @@
+{
+ "material": "YnBsaXN0MDDUAQIDBAUGBwhfEBJDRkJ1bmRsZUlkZW50aWZpZXJcQ0ZCdW5kbGVOYW1lXxAPQ0ZCdW5kbGVWZXJzaW9uXxAWTFNNaW5pbXVtU3lzdGVtVmVyc2lvbl8QEWNvbS5leGFtcGxlLm5vdGVzVU5vdGVzUzEuMFUxMC4xNQgRJjNFXnJ4fAAAAAAAAAEBAAAAAAAAAAkAAAAAAAAAAAAAAAAAAACC",
+ "rep": "plist_scripts",
+ "transform": "plain",
+ "key": null,
+ "expected": null,
+ "decoy": true,
+ "note": "launchd-plist-route: lib.codec.plist_scripts / plist_answer; find_codecs reads ProgramArguments script bodies (sh -c, osascript -e) -- binary Info.plist (CFBundle*/LS* keys only): no launchd job, no script -> None",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/plist_launchd_gen.py tests/data/script_fixtures  (stdlib plistlib.dumps FMT_XML / FMT_BINARY; no lib code)",
+ "oracle_cmd": "python3 -I -c \"import plistlib,sys,base64;print(sorted(plistlib.loads(base64.b64decode(open(sys.argv[1]).read()))))\" tests/data/script_fixtures/plist_launchd_decoy_info_bin.b64  # no Label/ProgramArguments"
+}

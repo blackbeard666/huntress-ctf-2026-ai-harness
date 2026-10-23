@@ -1,0 +1,166 @@
+{
+ "family": "dwarf",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "has_dwarf": "true",
+  "dwarf_version": "5",
+  "cu_count": "2",
+  "cu_name": "dwarf_src.c",
+  "language": "DW_LANG_C11",
+  "producer": "Ubuntu clang version 18.1.8 (20ubuntu8) /usr/lib/llvm-18/bin/clang -O0 -g -fdebug-prefix-map=/home/testpwn/huntress-2026/.run/tmp/tmp.hC9aAIzfDb=/src/clang dwarf_src.c dwarf_util.c -o c18 -dumpdir c18-",
+  "comp_dir": "/src/clang",
+  "cu_names": [
+   "dwarf_src.c",
+   "dwarf_util.c"
+  ],
+  "languages": [
+   "DW_LANG_C11"
+  ],
+  "cus": [
+   [
+    "dwarf_src.c",
+    "DW_LANG_C11",
+    "Ubuntu clang version 18.1.8 (20ubuntu8) /usr/lib/llvm-18/bin/clang -O0 -g -fdebug-prefix-map=/home/testpwn/huntress-2026/.run/tmp/tmp.hC9aAIzfDb=/src/clang dwarf_src.c dwarf_util.c -o c18 -dumpdir c18-"
+   ],
+   [
+    "dwarf_util.c",
+    "DW_LANG_C11",
+    "Ubuntu clang version 18.1.8 (20ubuntu8) /usr/lib/llvm-18/bin/clang -O0 -g -fdebug-prefix-map=/home/testpwn/huntress-2026/.run/tmp/tmp.hC9aAIzfDb=/src/clang dwarf_src.c dwarf_util.c -o c18 -dumpdir c18-"
+   ]
+  ],
+  "functions": [
+   {
+    "name": "beacon_send",
+    "low_pc": "0x1160",
+    "high_pc": "0x11cc",
+    "size": 108
+   },
+   {
+    "name": "checksum_config",
+    "low_pc": "0x11d0",
+    "high_pc": "0x1255",
+    "size": 133
+   },
+   {
+    "name": "main",
+    "low_pc": "0x1260",
+    "high_pc": "0x12e8",
+    "size": 136
+   },
+   {
+    "name": "util_rotate_key",
+    "low_pc": "0x12f0",
+    "high_pc": "0x1355",
+    "size": 101
+   }
+  ],
+  "function_names": [
+   "beacon_send",
+   "checksum_config",
+   "main",
+   "util_rotate_key"
+  ],
+  "files": [
+   "dwarf_src.c",
+   "dwarf_cfg.h",
+   "__stddef_size_t.h",
+   "dwarf_util.c"
+  ],
+  "file_paths": [
+   "/src/clang/dwarf_src.c",
+   "/src/clang/./dwarf_cfg.h",
+   "/usr/lib/llvm-18/lib/clang/18/include/__stddef_size_t.h",
+   "/src/clang/dwarf_util.c"
+  ],
+  "global_variables": [
+   "g_config",
+   "g_state",
+   "g_counter"
+  ],
+  "structs": [
+   "beacon_config"
+  ],
+  "struct_fields": {
+   "beacon_config": [
+    "c2_host",
+    "port",
+    "jitter_pct",
+    "campaign",
+    "key"
+   ],
+   "session_t": [
+    "id",
+    "started"
+   ]
+  },
+  "typedefs": [
+   "size_t",
+   "session_t"
+  ],
+  "enums": [
+   "beacon_state"
+  ],
+  "enumerators": [
+   "BEACON_SLEEPING",
+   "BEACON_ACTIVE",
+   "BEACON_EXITING"
+  ],
+  "params": {
+   "beacon_send": [
+    "msg",
+    "len"
+   ],
+   "checksum_config": [
+    "c"
+   ],
+   "main": [
+    "argc",
+    "argv"
+   ],
+   "util_rotate_key": [
+    "k",
+    "n"
+   ]
+  },
+  "locals": {
+   "beacon_send": [],
+   "checksum_config": [
+    "s",
+    "i"
+   ],
+   "main": [
+    "s"
+   ],
+   "util_rotate_key": [
+    "t",
+    "i"
+   ]
+  },
+  "low_pc:beacon_send": "0x1160",
+  "high_pc:beacon_send": "0x11cc",
+  "size:beacon_send": "108",
+  "fields:beacon_config": [
+   "c2_host",
+   "port",
+   "jitter_pct",
+   "campaign",
+   "key"
+  ],
+  "params:beacon_send": [
+   "msg",
+   "len"
+  ],
+  "locals:main": [
+   "s"
+  ],
+  "fields:nosuch_struct": "none",
+  "low_pc:nosuch_fn": "none"
+ },
+ "decoy": false,
+ "file_b": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=41f1bbf8686c7f9e114cafcd2e3b3fa2da7ffe4a, for GNU/Linux 3.2.0, with debug_info, not stripped",
+ "generator_cmd": "bash dwarf_gen.sh   # gcc 15.2 -g -gdwarf-4 / -gdwarf-5 + objcopy --compress-debug-sections=zstd; clang-18 -g (DWARF5 strx/addrx) + objcopy --compress-debug-sections=zlib-gnu (.zdebug_*); strip --strip-debug decoy; printf text decoy",
+ "oracle_cmd": "python3 dwarf_mkjson.py -> python3 dwarf_oracle.py dwarf_clang18_dwarf5.bin   # objcopy --decompress-debug-sections + llvm-dwarfdump-18 --debug-info / --debug-line text parse",
+ "note": "lib.binary.dwarf_field(data, key) per expected_facts key; key vocabulary SPECULATIVE (no GM label seen)"
+}

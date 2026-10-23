@@ -1,0 +1,8 @@
+Manifest-Version: 1.0
+
+Name: AndroidManifest.xml
+SHA-256-Digest: q3JxHHJTK5G/opUzqNzVDlVeDvoaWEWfgV268wxGTXQ=
+
+Name: classes.dex
+SHA-256-Digest: 7s+bimC2KBDtKygufyhZ5NcKdwkeiydlqtvYMjpBQxA=
+

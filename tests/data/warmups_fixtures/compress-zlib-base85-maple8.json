@@ -1,0 +1,9 @@
+{
+ "codec": "zlib-base85",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-74",
+ "encoded": "c-ke&K@LPf5QX8ZJbQK$i3?cGtX!b97t<N7q^oGhC$ap${~H5QH2*O(=p45N{)>hpIURe2QDM5CtYOELqQ94y1cz)^nBn>$F-RglV$R$n$-c5tf1>Hy8%dHRBm",
+ "generator_cmd": "printf %s \"$plain\" | pigz -z -9 | python3 -I -c 'import sys,base64;sys.stdout.write(base64.b85encode(sys.stdin.buffer.read()).decode())'  # pigz CLI + python3 wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys,base64;sys.stdout.buffer.write(base64.b85decode(sys.stdin.read()))' | pigz -dz",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-74",
+ "expected": "match"
+}

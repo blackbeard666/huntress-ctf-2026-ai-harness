@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-a43e7c10d95b26f8",
+ "generator_cmd": "python3 tests/data/android_fixtures/pef_src/gen_pef.py host_ptr_xor tests/data/android_fixtures/pef_host_ptr_xor.apk  # javac+d2j-jar2dex Module dex xor 0x5A -> assets/stage/payload.bin; host classes.dex const 'assets/stage/payload.bin:com.huntress.mobile.d22.payload.Module'; puzzle data='loader' (not a pointer)",
+ "oracle_cmd": "unzip -p pef_host_ptr_xor.apk classes.dex | strings -a | grep payload.bin: && unzip -p pef_host_ptr_xor.apk assets/stage/payload.bin | python3 -I -c \"import sys;sys.stdout.buffer.write(bytes(b^0x5a for b in sys.stdin.buffer.read()))\" | strings -a | grep -o 'ANS-[0-9a-fA-F]\\{16\\}'"
+}

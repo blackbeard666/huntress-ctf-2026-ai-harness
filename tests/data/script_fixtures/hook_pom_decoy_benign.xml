@@ -1,0 +1,33 @@
+<?xml version='1.0' encoding='utf-8'?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.example.inert</groupId>
+  <artifactId>inert-fixture</artifactId>
+  <version>1.0.0</version>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <id>bootstrap</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>powershell</executable>
+              <arguments>
+                <argument>-NoProfile</argument>
+                <argument>-EncodedCommand</argument>
+                <argument>VwByAGkAdABlAC0ASABvAHMAdAAgACcAZwBlAG4AZQByAGEAdABpAG4AZwAgAHMAbwB1AHIAYwBlAHMAIABmAG8AcgAgAGkAbgBlAHIAdAAtAGYAaQB4AHQAdQByAGUAIABiAHUAaQBsAGQAIABvAGsAJwA=</argument>
+              </arguments>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

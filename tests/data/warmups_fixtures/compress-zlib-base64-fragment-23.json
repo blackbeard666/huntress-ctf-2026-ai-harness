@@ -1,0 +1,10 @@
+{
+ "codec": "zlib-base64",
+ "plain": " warmup!",
+ "encoded": "eNpTKE8syi0tUAQADN0C3g==",
+ "generator_cmd": "printf %s \"$plain\" | pigz -z -9 | base64 -w0  # pigz CLI + base64 wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | pigz -dz",
+ "oracle_plain": " warmup!",
+ "expected": "match",
+ "mastery_fragment": true
+}

@@ -1,0 +1,21 @@
+{
+ "kind": "dotnet_native_facts",
+ "decoy": true,
+ "expected": {
+  "cor20_flags": "0x00000001",
+  "mixed_mode": "false",
+  "has_native_code": "false",
+  "vtfixup_count": "0",
+  "readytorun": "false",
+  "shellcode_count": "0",
+  "shellcode_return": "none",
+  "shellcode_hex": "none",
+  "alloc_apis": "[]"
+ },
+ "expected_lookups": {
+  "shellcode1_return": "none"
+ },
+ "generator_cmd": "bash tests/data/binary_fixtures/mmnat_gen.sh tests/data/binary_fixtures (dotnet 10 build/publish of the inline C#; mixed-mode patch with pefile)",
+ "oracle_cmd": "bash tests/data/binary_fixtures/mmnat_oracle.sh FILE (System.Reflection.PortableExecutable CorHeader/VtableFixupsDirectory/ManagedNativeHeaderDirectory/FieldRVA)",
+ "oracle_output": "oracle: machine=0x014c flags=0x00000001 [ILOnly]; one fieldrva (a byte[] that starts like mov eax,1;ret) but no P/Invoke at all"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "xor-compressed:huntress-gzip",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-33",
+ "encoded": "d/5mdHJlc3Nqdku9Q2vwQ3gxv98+n8sBr3DG5lhyK7/gLd8tljhDtG9ciwuN+GCi3YheR5v5pHaWuOha34uocHfwB02K4Z4gpYvRSFdcF8amc7lv+zRZgnoG2HUn07HTFjLmhXCfzufeEG50cg==",
+ "key": "huntress",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | perl -0777 -ne 'my $k=$ENV{key}; my $r=$k x (length($_)/length($k)+1); print $_ ^ substr($r,0,length($_))' | base64 -w0  # gzip -9n, perl string XOR (key repeated), base64 -w0",
+ "oracle_cmd": "python3 -c \"import os,base64,gzip,zlib,bz2,lzma;from Crypto.Util.strxor import strxor;e=os.environ['encoded'];c=base64.b64decode(e);k=os.environ['key'].encode();print(gzip.decompress(strxor(c,(k*len(c))[:len(c)])).decode())\"  # pycryptodome strxor + python stdlib decompressor",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-33",
+ "expected": "match"
+}

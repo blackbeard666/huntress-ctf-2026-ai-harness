@@ -1,0 +1,10 @@
+{
+ "codec": "xor-compressed:salt-gzip",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-badger-71",
+ "encoded": "6cea647473616c74716249bd426fee346364bcdf0f1b45dc3fddec61253d0cac8ea029e24252efbf8254dd099c307ea5a73fa438e9aad254eda4bdb0999082445a3ddb7b5c910fda569fa72721211a1b47e592e4cb2a493282c1b1c43907533f2d0991018b63335a4b3709747361",
+ "key": "salt",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | perl -0777 -ne 'my $k=$ENV{key}; my $r=$k x (length($_)/length($k)+1); print $_ ^ substr($r,0,length($_))' | xxd -p | tr -d '\\n'  # gzip -9n, perl string XOR (key repeated), xxd -p | tr -d '\\n'",
+ "oracle_cmd": "python3 -c \"import os,base64,gzip,zlib,bz2,lzma;from Crypto.Util.strxor import strxor;e=os.environ['encoded'];c=bytes.fromhex(e);k=os.environ['key'].encode();print(gzip.decompress(strxor(c,(k*len(c))[:len(c)])).decode())\"  # pycryptodome strxor + python stdlib decompressor",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-badger-71",
+ "expected": "match"
+}

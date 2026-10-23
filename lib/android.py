@@ -895,27 +895,232 @@ def custom_alphabet_scan(apk, puzzle_objs=None):
     return list(dict.fromkeys(hits))
 
 
+# --- puzzle field that names a zip entry (coverage atlas row 42; D20 codec `dynamic`, data=`assets/payload.dex`) ---------
+# A puzzle field (data / path / module / entry / payload / file, then any other string value) equal to -- or ending at a
+# `/` boundary in -- an existing entry name (also with `assets/` added / stripped, `file:///android_asset/` mapped to
+# `assets/`, `<entry>:<dotted.Class>` cut at the colon) is a pointer: that entry's bytes run the candidate chain (literal
+# ASCII / UTF-16LE tokens, dex string pool, nested zip/jar/apk incl. multi-dex + its own puzzle, ELF printable runs,
+# payload_unwrap'd wrappers, a text / JSON body), depth <= 3, each entry read once. Host-dex `<entry>:<Class>` strings
+# are pointers too. The pointer string itself is never a candidate.
+_PEF_KEYS = ("data", "path", "module", "entry", "payload", "file")
+_PEF_ASSET_URL = "file:///android_asset/"
+_PEF_BUDGET_S, _PEF_MAX_ENTRY, _PEF_MAX_STRS, _PEF_DECODE_CAP = 1.0, 32 << 20, 64, 24
+_PEF_RUN = re.compile(rb"[\x21-\x7e]{16,4096}")
+
+
+def _pef_strings(p, depth=0):
+    """String values of a parsed puzzle object, pointer-named keys first."""
+    out = []
+    if depth > 4:
+        return out
+    if isinstance(p, dict):
+        for k in sorted(p, key=lambda k: str(k).lower() not in _PEF_KEYS):
+            out += _pef_strings(p[k], depth + 1)
+    elif isinstance(p, list):
+        for v in p[:256]:
+            out += _pef_strings(v, depth + 1)
+    elif isinstance(p, str) and 0 < len(p) <= 512:
+        out.append(p)
+    return out[:_PEF_MAX_STRS]
+
+
+def _pef_resolve(s, names):
+    """The entry name pointer string `s` names among `names` (a set), or None."""
+    s = s.strip()
+    m = _MC_PTR.fullmatch(s)
+    if m:
+        s = m.group(1)
+    if s.startswith(_PEF_ASSET_URL):
+        s = "assets/" + s[len(_PEF_ASSET_URL):]
+    s = s.lstrip("/")
+    if not s or s.endswith("/"):
+        return None
+    for c in (s, "assets/" + s, s[7:] if s.startswith("assets/") else None):
+        if c and c in names:
+            return c
+    tails = [n for n in names if s.endswith("/" + n)]
+    return max(tails, key=len) if tails else None
+
+
+def _pef_tokens(b):
+    return [m.decode() for m in ANS_RE_B.findall(b)] + [m.decode("utf-16-le") for m in ANS_RE_U16.findall(b)]
+
+
+def _pef_decode(strs, deadline):
+    """Tokens of encoded-looking strings run through decode_any (bounded)."""
+    out = []
+    for s in strs[:_PEF_DECODE_CAP]:
+        if time.time() > deadline:
+            break
+        try:
+            r = decode_any(s, accept=ANS_RE_T.search, depth=2, cap=600, chain=False)
+        except Exception:  # noqa: BLE001
+            continue
+        if r:
+            out += ANS_RE_T.findall(r)
+    return out
+
+
+def _pef_blob(b, depth, deadline, seen):
+    """ANS tokens of one pointed-to payload (bytes): literal, then by format; [] when none."""
+    hits = _pef_tokens(b)
+    if depth <= 0 or time.time() > deadline:
+        return hits
+    kind, inner = (_unwrap_nested(b) or (None, b))
+    if kind is None and b[:4] == b"\x7fELF":
+        kind = "elf"
+    if kind == "dex":
+        strs = _cdx_pool(inner, 0, ()) if len(inner) >= 0x70 else []
+        hits += [m for s in strs for m in ANS_RE_T.findall(s)]
+        if not hits:
+            hits += _pef_decode([s for s in strs if _CDX_ENCODED.fullmatch(s)], deadline)
+        if not hits and inner is not b:
+            hits += _pef_tokens(inner)
+        return hits
+    if kind == "zip":
+        try:
+            bio = io.BytesIO(inner)
+            hits += [m for c in _puzzle_candidates(bio, depth - 1, seen, top=False) for m in ANS_RE_T.findall(c)]
+            with zipfile.ZipFile(bio) as z:
+                for i in z.infolist():
+                    if i.is_dir() or i.file_size > _PEF_MAX_ENTRY or time.time() > deadline:
+                        continue
+                    hits += _pef_blob(z.read(i), depth - 1, deadline, seen)
+        except Exception:  # noqa: BLE001 - truncated / impostor inner archive
+            pass
+        return hits
+    if kind == "elf":
+        if not hits:
+            hits += _pef_decode([r.decode() for r in _PEF_RUN.findall(b)], deadline)
+        return hits
+    if hits:
+        return hits
+    try:
+        got = payload_unwrap(b, min(deadline, time.time() + 0.4))
+    except Exception:  # noqa: BLE001
+        got = None
+    if got:
+        return _pef_blob(got[1], depth - 1, deadline, seen)
+    try:
+        t = b.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return hits
+    if t[:1] in "{[":
+        try:
+            o = json.loads(t)
+            for p in (o if isinstance(o, list) else [o]):
+                if isinstance(p, dict):
+                    hits += [m for c in _puzzle_obj_candidates(p) if isinstance(c, str) for m in ANS_RE_T.findall(c)]
+        except Exception:  # noqa: BLE001
+            pass
+    if not hits and 16 <= len(t) <= 1 << 16:
+        hits += _pef_decode([t], deadline)
+    return hits
+
+
+def _pef_follow(z, strs, depth, deadline, seen):
+    """(tokens, pointer strings) for the pointers among `strs` into zip `z`; each entry is read once per chain."""
+    names = {i.filename for i in z.infolist() if not i.is_dir()}
+    hits, ptrs = [], []
+    for s in strs:
+        n = _pef_resolve(s, names)
+        if n is None:
+            continue
+        ptrs.append(s)
+        try:
+            info = z.getinfo(n)
+            if info.file_size > _PEF_MAX_ENTRY:
+                continue
+            b = z.read(info)
+        except Exception:  # noqa: BLE001
+            continue
+        key = (n, len(b), hash(b[:4096]))
+        if key in seen:
+            continue
+        seen.add(key)
+        hits += _pef_blob(b, depth, deadline, seen)
+    return list(dict.fromkeys(hits)), ptrs
+
+
+def puzzle_pointer_candidates(apk, depth=3):
+    """ANS tokens reached through puzzle fields (or host-dex `<entry>:<Class>` strings) that name a zip entry of `apk`.
+    [] when no field is a pointer / the pointed-to entry holds no token; never raises."""
+    try:
+        with zipfile.ZipFile(apk) as z:
+            objs = []
+            for i in z.infolist():
+                if i.filename.endswith("huntress_puzzle.json"):
+                    try:
+                        objs.append(json.loads(z.read(i)))
+                    except ValueError:
+                        continue
+            hits, _ = _pef_follow(z, [s for p in objs for s in _pef_strings(p)], depth,
+                                  time.time() + _PEF_BUDGET_S, set())
+            return list(dict.fromkeys(hits))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _pef_host_ptrs(z):
+    """`<entry>:<dotted.Class>` strings of the top-level classes*.dex."""
+    out = []
+    for i in z.infolist():
+        if re.fullmatch(r"classes\d*\.dex", i.filename) and i.file_size <= _PEF_MAX_ENTRY:
+            try:
+                for m in re.finditer(_MC_PTR.pattern.encode(), z.read(i)):
+                    v = m.group(0)  # a 1-byte uleb string length the regex swallowed (`4assets/...`) is not the name
+                    out.append((v[1:] if v[0] == len(v) - 1 else v).decode())
+            except Exception:  # noqa: BLE001
+                continue
+    return list(dict.fromkeys(out))[:_PEF_MAX_STRS]
+
+
 def puzzle_candidates(apk):
-    """Decoded candidate strings from assets/*huntress_puzzle.json (the primary, fast path)."""
-    out, names, objs = [], [], []
+    """Decoded candidate strings from assets/*huntress_puzzle.json (the primary, fast path). A field that names a zip
+    entry (D20 `dynamic`: data=`assets/payload.dex`; see puzzle_pointer_candidates) yields that entry's tokens first,
+    never the pointer string itself."""
+    return _puzzle_candidates(apk)
+
+
+def _puzzle_candidates(apk, depth=3, seen=None, top=True):
+    out, names, objs, ptrs = [], [], [], []
+    seen = set() if seen is None else seen
     try:
         with zipfile.ZipFile(apk) as z:
             # every central record in archive order (a duplicated name is read per record, the first -- the one Android
             # installs -- first; z.read(name) would only ever return the last, a decoy shadowing the real puzzle)
             names = [i for i in z.infolist() if i.filename.endswith("huntress_puzzle.json")]
+            deadline = time.time() + _PEF_BUDGET_S
             for n in names:
                 try:
                     p = json.loads(z.read(n))
                 except ValueError:
                     continue
                 objs.append(p)
+                got = []
+                if depth > 0:  # a field naming an entry: that entry's candidate chain first
+                    try:
+                        got, ptr = _pef_follow(z, _pef_strings(p), depth, deadline, seen)
+                    except Exception:  # noqa: BLE001
+                        got, ptr = [], []
+                    out, ptrs = out + got, ptrs + ptr
+                if any(ANS_RE_T.search(c) for c in got):
+                    continue
                 try:
                     out += _puzzle_obj_candidates(p)
                 except Exception:  # noqa: BLE001 - e.g. a list-valued `data` under an unknown codec
                     continue
+            if names and depth > 0 and not any(c and ANS_RE_T.search(c) for c in out):  # host dex `<entry>:<Class>`
+                try:
+                    got, ptr = _pef_follow(z, _pef_host_ptrs(z), depth, deadline, seen)
+                except Exception:  # noqa: BLE001
+                    got, ptr = [], []
+                out, ptrs = got + out, ptrs + ptr
     except (OSError, zipfile.BadZipFile):
         pass
-    out = [c for c in out if c]
+    out = [c for c in out if c and c not in ptrs]
+    if not top:
+        return out
     if names and not any(ANS_RE_T.search(c) for c in out):  # unknown codec / xor mismatch: a per-index rolling keystream
         out += rolling_xor_scan(apk, [p for p in objs if isinstance(p, dict)])
     if names and not any(ANS_RE_T.search(c) for c in out):  # unknown codec: a custom base-n alphabet from dex / assets
@@ -1717,8 +1922,10 @@ def dex_strings(apk):
     token exists, falls back to cert_pin_scan() (a token encoded as a `sha256/<b64>` pin / NSC <pin>), then
     split_native_assembly() (an `ANS-` prefix + hex fragments split across dex and .so), then
     dex_array_scan() (a <clinit> byte/char array xor'd with a class constant), then rolling_xor_scan() (a puzzle value /
-    dex byte array under a per-index rolling keystream), then clean_device_scan() (the value a root / emulator / debugger /
-    Frida check lets through, evaluated on a clean Pixel), then dex_gated_branch_scan() (an encoded
+    dex byte array under a per-index rolling keystream), then clean_device_scan() (the value a root / emulator /
+    debugger / Frida check lets through, evaluated on a clean Pixel), then root_signal_facts()'s clean tokens (a
+    multi-signal vector in a mask / score / boolean[] / BitSet / EnumSet / Map keys the token), then
+    exception_flow_scan() (the clean-device run with throw / catch handlers live), then dex_gated_branch_scan() (an encoded
     const-string behind a Java root / emulator / signature check), then native_export_scan() (a token computed by a .so export: xor constants, then unicorn emulation), then
     renamed_chain_scan(), then reflection_scan() (a static field / method reached via Class.forName + getDeclaredField/
     Method with encoded names), then method_handle_scan() (invoke-custom lambdas / MethodHandle invokeExact / Proxy
@@ -1726,11 +1933,18 @@ def dex_strings(apk):
     FindClass / GetStaticMethodID, run with the native's NewStringUTF literals), then dex_eval_scan() (a token computed by simple Dalvik bytecode, run by a tiny
     evaluator), then bytecode_vm_scan() (a custom bytecode program run by an in-dex switch VM, larger step budget),
     then flattened_cfg_scan() (a while/switch(state) flattened method: long run + static unflattening),
+    then anti_debug_state_scan() (an anti-debug state machine's clean terminal value; 'debugged'-only values demoted),
     then coroutine_state_scan() (a Kotlin invokeSuspend state machine resumed in label order, L$0/I$0 spills),
     then decrypt_call_scan() (a decrypt helper run with its call sites' constant args), then
     string_obfuscator_scan() (StringFog / obfuscapk / Allatori call sites decoded by signature), then dex_slack_scan() (bytes appended past the header file_size / map_list slack / orphan strings),
+    then binder_transact_scan() (a bound service's onTransact / Messenger handleMessage case, run per transaction code
+    with the Parcel / Bundle reads answering the constants the case compares against),
+    then biometric_auth_scan() (an AuthenticationCallback.onAuthenticationSucceeded run with a null and an identity
+    CryptoObject, a createConfirmDeviceCredentialIntent caller's onActivityResult(RESULT_OK); failure-only values demoted),
     then digest_answer_scan() (`"ANS-"` + hex prefix of a MessageDigest / Mac over the method's inputs:
-    candidates), then ans_compose_scan() (`"ANS-"` + numeric constants of the same method: candidates, not one answer)."""
+    candidates), then ans_compose_scan() (`"ANS-"` + numeric constants of the same method: candidates, not one answer).
+    then whitebox_table_scan() (a white-box / T-table / S-box chain decrypt walk evaluated over static / asset arrays).
+    A fallback hit that an anti-debug state machine only reaches when 'debugged' is demoted behind its clean value."""
     hits = []
     try:
         with zipfile.ZipFile(apk) as z:
@@ -1744,6 +1958,7 @@ def dex_strings(apk):
         dem = set(sh.get("demoted") or ())
         if dem & set(hits):
             hits = list(dict.fromkeys(sh["live"] + [h for h in hits if h not in dem] + [h for h in hits if h in dem]))
+    literal = bool(hits)
     if not hits:
         hits = cert_pin_scan(apk)
     if not hits:
@@ -1754,6 +1969,10 @@ def dex_strings(apk):
         hits = rolling_xor_scan(apk)
     if not hits:
         hits = clean_device_scan(apk)
+    if not hits:
+        hits = root_signal_facts(apk)["clean"]
+    if not hits:
+        hits = exception_flow_scan(apk)
     if not hits:
         hits = dex_gated_branch_scan(apk)
     if not hits:
@@ -1773,6 +1992,8 @@ def dex_strings(apk):
     if not hits:
         hits = flattened_cfg_scan(apk)
     if not hits:
+        hits = anti_debug_state_scan(apk)
+    if not hits:
         hits = coroutine_state_scan(apk)
     if not hits:
         hits = decrypt_call_scan(apk)
@@ -1781,9 +2002,21 @@ def dex_strings(apk):
     if not hits:
         hits = dex_slack_scan(apk)
     if not hits:
+        hits = binder_transact_scan(apk)
+    if not hits:
+        hits = biometric_auth_scan(apk)
+    if not hits:
         hits = digest_answer_scan(apk)
     if not hits:
         hits = ans_compose_scan(apk)
+    if not hits:
+        hits = whitebox_table_scan(apk)
+    if hits and not literal:  # a static decode that is an anti-debug machine's honeypot goes behind its clean value
+        rows = anti_debug_state_facts(apk)
+        trap = {r["value"] for r in rows if not r["clean"]}
+        if trap & set(hits):
+            hits = list(dict.fromkeys([r["value"] for r in rows if r["clean"]] + [h for h in hits if h not in trap]
+                                      + [h for h in hits if h in trap]))
     return hits
 
 
@@ -3322,6 +3555,7 @@ def renamed_chain_scan(apk, hints=None):
 # --- JNI secret computed inside a .so export, not a literal (coverage atlas rows 37, 39, 40) --------------------------
 _NSO_MAX_SO, _NSO_MAX_BYTES, _NSO_MAX_FUNCS, _NSO_FUNC_CAP = 8, 32 << 20, 48, 16384
 _NSO_BUDGET_S, _NSO_DECODE_S, _NSO_FN_US, _NSO_FN_INSNS = 1.2, 0.3, 150_000, 2_000_000
+_NSO_PROBE_S = 0.6  # the clean-device probe pass (row 66), on top of the plain emulation
 _NSO_DATA = re.compile(r"\.(rodata|data)(\.|$)|\.data\.rel\.ro")
 _NSO_JNI = {6: "FindClass", 167: "NewStringUTF", 169: "GetStringUTFChars", 215: "RegisterNatives"}
 _NSO_ALLOC = {"malloc", "_Znwm", "_Znam", "_Znwj", "_Znaj", "calloc", "realloc", "strdup"}
@@ -3339,6 +3573,134 @@ _NSO_ARCH = {
                (), "EAX", b"\xc3", {8: "rel", 6: "sym", 7: "sym", 1: "abs"}),
 }
 
+
+# Clean-device libc answers for the unicorn runner's probe pass (row 66: anti-debug inside the JNI export): ptrace /
+# prctl succeed, fork's child never runs, /proc/<self>/status says TracerPid 0, /proc/<self>/maps has no frida/xposed,
+# su / frida / emulator paths are absent, kill / raise / exit end the run as a trap path, clocks step 1 us per call,
+# pthread_create runs its start routine inline once (until it returns, sleeps or exits).
+_NSO_PROBE_IMPORTS = {"ptrace", "prctl", "fork", "vfork", "fopen", "fopen64", "open", "open64", "__open_2", "openat",
+                      "__openat_2", "access", "faccessat", "stat", "lstat", "stat64", "lstat64", "__xstat", "__lxstat",
+                      "fstatat", "newfstatat", "pthread_create", "kill", "raise", "tgkill", "getppid",
+                      "clock_gettime", "gettimeofday", "time", "__system_property_get", "__system_property_find",
+                      "__system_property_read", "__system_property_read_callback", "popen", "opendir", "dlopen"}
+_NSO_PROBE_STATUS = (b"Name:\tarena\nUmask:\t0077\nState:\tS (sleeping)\nTgid:\t4242\nNgid:\t0\nPid:\t4242\n"
+                     b"PPid:\t600\nTracerPid:\t0\nUid:\t10123\t10123\t10123\t10123\nGid:\t10123\t10123\t10123\t10123\n"
+                     b"FDSize:\t128\nThreads:\t17\nSigQ:\t0/31424\n")
+_NSO_PROBE_MAPS = (b"12c00000-2ac00000 rw-p 00000000 00:00 0                          [anon:dalvik-main space]\n"
+                   b"70000000-70100000 r-xp 00000000 fd:00 1201                       /system/lib64/libc.so\n"
+                   b"70100000-70200000 r-xp 00000000 fd:00 1202                       /system/lib64/libart.so\n"
+                   b"7ffff0000000-7ffff0021000 rw-p 00000000 00:00 0                  [stack]\n")
+_NSO_PROBE_PROC = re.compile(rb"/proc/(?:self|thread-self|\d+)(?:/task/(?:self|\d+))?/(\w+)$")
+# rows 66 / 95: a stock, locked, unrooted phone's system properties (unset ones read ""), its mount table (no magisk /
+# tmpfs-on-/system / overlay) and what popen'd probe commands print there (`which su` / `ls /data/adb`: nothing)
+_NSO_PROBE_PROPS = {b"ro.build.tags": b"release-keys", b"ro.debuggable": b"0", b"ro.secure": b"1",
+                    b"ro.build.type": b"user", b"ro.boot.verifiedbootstate": b"green", b"ro.boot.flash.locked": b"1",
+                    b"ro.boot.vbmeta.device_state": b"locked", b"ro.boot.veritymode": b"enforcing",
+                    b"ro.boot.warranty_bit": b"0", b"ro.warranty_bit": b"0", b"ro.adb.secure": b"1",
+                    b"ro.hardware": b"qcom", b"ro.board.platform": b"kona", b"ro.product.board": b"kona",
+                    b"ro.boot.hardware": b"qcom", b"ro.product.model": b"Pixel 5", b"ro.product.brand": b"google",
+                    b"ro.product.manufacturer": b"Google", b"ro.product.device": b"redfin",
+                    b"ro.product.name": b"redfin", b"ro.build.product": b"redfin",
+                    b"ro.build.fingerprint": b"google/redfin/redfin:13/TQ3A.230805.001/10316531:user/release-keys",
+                    b"ro.build.characteristics": b"nosdcard", b"ro.build.version.sdk": b"33",
+                    b"ro.build.version.release": b"13", b"ro.zygote": b"zygote64_32", b"ro.crypto.state": b"encrypted",
+                    b"init.svc.adbd": b"stopped", b"sys.usb.config": b"mtp", b"persist.sys.usb.config": b"mtp",
+                    b"service.adb.root": b"0", b"ro.allow.mock.location": b"0", b"selinux.status": b"1"}
+_NSO_PROBE_MOUNTS = (b"/dev/block/dm-6 / ext4 ro,seclabel,relatime 0 0\n"
+                     b"tmpfs /dev tmpfs rw,seclabel,nosuid,relatime,mode=755 0 0\n"
+                     b"proc /proc proc rw,relatime,gid=3009,hidepid=invisible 0 0\n"
+                     b"sysfs /sys sysfs rw,seclabel,relatime 0 0\n"
+                     b"/dev/block/dm-7 /system_ext ext4 ro,seclabel,relatime 0 0\n"
+                     b"/dev/block/dm-8 /product ext4 ro,seclabel,relatime 0 0\n"
+                     b"/dev/block/dm-9 /vendor ext4 ro,seclabel,relatime 0 0\n"
+                     b"tmpfs /apex tmpfs rw,seclabel,nosuid,nodev,noexec,relatime,mode=755 0 0\n"
+                     b"/dev/block/dm-40 /data f2fs rw,lazytime,seclabel,nosuid,nodev,noatime 0 0\n")
+_NSO_PROBE_MOUNTINFO = b"".join(b"%d 1 253:%d / %s %s - %s %s %s\n" % (20 + i, i, f[1], f[3].split(b",")[0], f[2], f[0],
+                                                                         f[3])
+                                for i, f in enumerate(ln.split() for ln in _NSO_PROBE_MOUNTS.splitlines()))
+# Raw syscalls issued inline (`syscall` / `svc #0`) to dodge Frida's libc hooks: number -> the libc probe answering it
+# from the same clean-device model (failures become -errno: ENOENT for absent paths, EBADF for unknown fds, ENOSYS).
+_NSO_SYSCALLS = {"EM_X86_64": {0: "read", 3: "close", 17: "pread64", 39: "getpid", 62: "kill", 60: "exit", 89: "readlink",
+                               101: "ptrace", 102: "getuid", 104: "getgid", 107: "geteuid", 110: "getppid", 157: "prctl",
+                               186: "gettid", 200: "tgkill", 228: "clock_gettime", 231: "exit", 234: "tgkill",
+                               257: "openat", 262: "newfstatat", 267: "readlinkat", 269: "faccessat", 2: "open",
+                               4: "stat", 6: "lstat", 21: "access", 439: "faccessat2"},
+                 "EM_AARCH64": {63: "read", 57: "close", 67: "pread64", 172: "getpid", 129: "kill", 93: "exit",
+                                117: "ptrace", 174: "getuid", 176: "getgid", 175: "geteuid", 173: "getppid",
+                                167: "prctl", 178: "gettid", 130: "tgkill", 113: "clock_gettime", 94: "exit",
+                                131: "tgkill", 56: "openat", 79: "newfstatat", 78: "readlinkat", 48: "faccessat",
+                                439: "faccessat2"}}
+
+
+def _nso_has_svc(elf):
+    """True when a .text section holds an inline `syscall` (x86_64) / 4-aligned `svc #0` (arm64)."""
+    pat = {"EM_X86_64": b"\x0f\x05", "EM_AARCH64": b"\x01\x00\x00\xd4"}.get(elf.arch)
+    for name, addr, data in elf.sections() if pat else ():
+        if not name.startswith(".text"):
+            continue
+        j = data.find(pat)
+        while j >= 0:
+            if elf.arch == "EM_X86_64" or (addr + j) % 4 == 0:
+                return True
+            j = data.find(pat, j + 1)
+    return False
+
+
+_NSO_PROBE_SAVE = {"EM_X86_64": ("RBX", "RBP", "R12", "R13", "R14", "R15", "RSP"),
+                   "EM_386": ("EBX", "ESI", "EDI", "EBP", "ESP"),
+                   "EM_AARCH64": tuple(f"X{i}" for i in range(19, 29)) + ("FP", "LR", "SP"),
+                   "EM_ARM": ("R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11", "SP", "LR")}
+
+
+def _nso_probe_file(path):
+    """Contents a clean device shows for a probed path; None = absent (su, frida, emulator, any non-/proc path)."""
+    if path == b"/proc/mounts":
+        return _NSO_PROBE_MOUNTS
+    m = _NSO_PROBE_PROC.match(path)
+    if not m:
+        return None
+    leaf = m.group(1)
+    return (_NSO_PROBE_STATUS if leaf == b"status" else _NSO_PROBE_MAPS if leaf in (b"maps", b"smaps") else
+            _NSO_PROBE_MOUNTS if leaf == b"mounts" else _NSO_PROBE_MOUNTINFO if leaf == b"mountinfo" else
+            b"com.huntress.arena\0" if leaf == b"cmdline" else
+            b"4242 (huntress.arena) S 600 600 0 0 -1 4194624 0 0 0 0 0 0 0 0 20 0 17 0\n" if leaf == b"stat" else b"")
+
+
+def _nso_probe_popen(cmd):
+    """What a popen'd probe command prints on a clean device: getprop [name], mount / cat <mounts>, id; else nothing
+    (`which su`, `ls /data/adb`, `pm list packages | grep magisk`, ...)."""
+    w = cmd.split(b"|")[0].split()
+    if not w:
+        return b""
+    if w[0].endswith(b"getprop"):
+        if len(w) > 1:
+            return _NSO_PROBE_PROPS.get(w[1], b"") + b"\n"
+        return b"".join(b"[%s]: [%s]\n" % kv for kv in sorted(_NSO_PROBE_PROPS.items()))
+    if w[0].endswith(b"mount"):
+        return _NSO_PROBE_MOUNTS
+    if w[0].endswith(b"cat") and len(w) > 1:
+        return _nso_probe_file(w[1]) or b""
+    if w[0].endswith(b"id"):
+        return b"uid=10123(u0_a123) gid=10123(u0_a123) groups=10123(u0_a123),3003(inet) context=u:r:untrusted_app:s0\n"
+    return b""
+
+
+def _nso_strtol(b, base=10):
+    """(value, chars consumed) of a C strtol over bytes `b` (base 0 = auto)."""
+    i = len(b) - len(b.lstrip(b" \t\n\r\f\v"))
+    neg = b[i:i + 1] == b"-"
+    i += b[i:i + 1] in (b"-", b"+")
+    if base in (0, 16) and b[i:i + 2].lower() == b"0x":
+        base, i = 16, i + 2
+    elif base == 0:
+        base = 8 if b[i:i + 1] == b"0" else 10
+    j, v = i, 0
+    while j < len(b) and j - i < 40:
+        d = b[j] - 48 if 48 <= b[j] <= 57 else (b[j] | 32) - 87 if 97 <= (b[j] | 32) <= 122 else 99
+        if d >= base:
+            break
+        v, j = v * base + d, j + 1
+    return (-v if neg else v), (j if j > i else 0)
 
 class _NsoElf:
     """Struct-level ELF view: header + PT_LOAD via pyelftools, section headers / symbols / RELA / RELR unpacked with
@@ -3765,11 +4127,15 @@ def _nso_ctors(elf, word, W):
     return list(dict.fromkeys(out))
 
 
-def _nso_emulate(elf, arch, funcs, deadline, gate=None):
+def _nso_emulate(elf, arch, funcs, deadline, gate=None, probes=False):
     """Run the exports in unicorn: JNI_OnLoad (fake JavaVM; RegisterNatives' fn pointers are queued), Java_* and the
     registered natives with a fake JNIEnv (NewStringUTF strings are captured), every other export with no args (its
     char* return is read). Imports: malloc/calloc/new bump-allocate, mem/str copies are done, the rest return 0.
-    The memory touched (image, heap, stack) and every string handed to a stub is scanned for the token."""
+    The memory touched (image, heap, stack) and every string handed to a stub is scanned for the token.
+    probes=True (row 66: anti-debug inside the export): libc answers as on a clean, untraced device (_NSO_PROBE_*:
+    fake /proc/self/status|maps FILEs / fds read by fgets / read / getline / fread, str/mem compares and strtol done,
+    pthread_create runs the routine inline), SetByteArrayRegion buffers are captured, and a run that reaches kill /
+    raise / exit / abort is a trap path whose strings are dropped."""
     import unicorn as U
     spec = _NSO_ARCH[arch]
     if spec[0] is None:
@@ -3851,6 +4217,11 @@ def _nso_emulate(elf, arch, funcs, deadline, gate=None):
                     put(BASE + r_off, STUB + 16 * (400 + imports[name]) if name in imports else RET)
     slot_name = {v: k for k, v in imports.items()}
     strs, natives, heap = [], [], [HEAP + 0x100]
+    files, threads, pst = {}, [], {"fd": 64, "t": 0, "trap": False}  # probes: open handles, inline threads, state
+    props = {}  # probes: __system_property_find handle -> name
+    save = [getattr(rc, pfx + r) for r in _NSO_PROBE_SAVE[arch]]
+    pcr = getattr(rc, pfx + {"EM_X86_64": "RIP", "EM_386": "EIP", "EM_AARCH64": "PC", "EM_ARM": "PC"}[arch])
+    spr = save[-2 if arch == "EM_ARM" else -1]
 
     def rd(p, n=256):
         try:
@@ -3870,6 +4241,183 @@ def _nso_emulate(elf, arch, funcs, deadline, gate=None):
             heap[0] = HEAP + 0x100
         return p
 
+    def thread_end():  # back to pthread_create's caller as if it returned 0 (the routine returned / slept / exited)
+        for r, v in zip(save, threads.pop()):
+            uc.reg_write(r, v)
+        return 0
+
+    def probe(n, a):
+        """Clean-device answer of libc import `n`; None = not a probe (the plain stubs handle it)."""
+        if n in ("ptrace", "prctl", "signal", "sigaction", "pthread_join", "pthread_detach", "close", "fclose",
+                 "closedir", "waitpid", "pclose"):
+            if n in ("close", "fclose", "pclose"):
+                files.pop(a[0], None)
+            return 0
+        if n in ("__system_property_get", "__system_property_find"):  # rows 66 / 95: stock-device properties
+            name = cstr(a[0])
+            if n == "__system_property_find":
+                if name not in _NSO_PROBE_PROPS:
+                    return 0
+                h = alloc(16)
+                props[h] = name
+                return h
+            v = _NSO_PROBE_PROPS.get(name, b"")[:91]
+            if a[1]:
+                uc.mem_write(a[1], v + b"\0")
+            return len(v)
+        if n in ("__system_property_read", "__system_property_read_callback"):
+            name = props.get(a[0])
+            if name is None:
+                return 0
+            v = _NSO_PROBE_PROPS[name][:91]
+            if n == "__system_property_read":
+                if a[1]:
+                    uc.mem_write(a[1], name + b"\0")
+                if a[2]:
+                    uc.mem_write(a[2], v + b"\0")
+                return len(v)
+            if not a[1]:
+                return 0
+            pn, pv = alloc(len(name) + 1), alloc(len(v) + 1)
+            uc.mem_write(pn, name + b"\0")
+            uc.mem_write(pv, v + b"\0")
+            # tail call callback(cookie, name, value, serial): it returns straight to read_callback's caller
+            if argr:
+                for r, x in zip(argr, (a[2], pn, pv, 1)):
+                    uc.reg_write(r, x)
+            else:
+                uc.mem_write(uc.reg_read(rc.UC_X86_REG_ESP) + 4, struct.pack("<4I", a[2] & MASK, pn, pv, 1))
+            uc.reg_write(pcr, a[1])
+            return a[2]  # arg 0 doubles as the return register on ARM
+        if n == "popen":  # rows 66 / 95: `which su` / getprop / mount read back through fgets / fread
+            h = alloc(64)
+            files[h] = [_nso_probe_popen(cstr(a[0])), 0]
+            return h
+        if n in ("fork", "vfork", "clone"):
+            return 4243  # parent side: the watchdog child never runs
+        if n in ("getpid", "gettid"):
+            return 4242
+        if n == "getppid":
+            return 600  # zygote
+        if n in ("getuid", "geteuid", "getgid"):
+            return 10123
+        if n in ("__errno", "__errno_location"):
+            return TLS + 0x100
+        if n in ("clock_gettime", "gettimeofday", "time"):
+            pst["t"] += 1000
+            sec, ns = 1000 + pst["t"] // 10 ** 9, pst["t"] % 10 ** 9
+            dst = a[1] if n == "clock_gettime" else a[0]
+            if n == "time":
+                sec += 1_700_000_000
+            if dst and n != "time":
+                uc.mem_write(dst, ((sec & MASK).to_bytes(W, "little") +
+                                   (ns if n == "clock_gettime" else ns // 1000).to_bytes(W, "little")))
+            elif dst:
+                uc.mem_write(dst, (sec & MASK).to_bytes(W, "little"))
+            return sec if n == "time" else 0
+        if n in ("kill", "raise", "tgkill", "abort", "exit", "_exit", "_Exit", "pthread_exit", "sleep", "usleep",
+                 "nanosleep"):
+            if threads:  # inside an inline thread: its run ends here
+                return thread_end()
+            if "sleep" in n:
+                return 0
+            pst["trap"] = True
+            uc.emu_stop()
+            return 0
+        if n == "pthread_create":
+            if len(threads) >= 4 or not a[2]:
+                return 0
+            threads.append([uc.reg_read(r) for r in save])
+            if a[0]:
+                uc.mem_write(a[0], (0x7000 + len(threads)).to_bytes(W, "little"))
+            sp = uc.reg_read(spr) - 0x200 & ~15
+            if arch == "EM_X86_64":
+                sp -= 8
+                uc.mem_write(sp, (STUB + 16 * 399).to_bytes(8, "little"))
+            elif arch == "EM_386":
+                sp -= 12
+                uc.mem_write(sp, struct.pack("<II", STUB + 16 * 399, a[3] & MASK))
+            else:
+                uc.reg_write(save[-1 if arch == "EM_ARM" else -2], STUB + 16 * 399)
+            uc.reg_write(spr, sp)
+            if argr:
+                uc.reg_write(argr[0], a[3])
+            uc.reg_write(pcr, a[2])
+            return a[3]  # the routine's first argument (arg 0 doubles as the return register on ARM)
+        if n in ("fopen", "fopen64", "open", "open64", "__open_2", "__open", "openat", "__openat_2", "opendir"):
+            data = _nso_probe_file(cstr(a[1] if "openat" in n else a[0])) if n != "opendir" else None
+            if data is None:
+                return -1 if "open" in n and n not in ("opendir", "fopen", "fopen64") else 0  # opendir: NULL
+            if n.startswith("fopen"):
+                h = alloc(64)
+            else:
+                h, pst["fd"] = pst["fd"], pst["fd"] + 1
+            files[h] = [data, 0]
+            return h
+        if n in ("access", "faccessat", "stat", "lstat", "stat64", "lstat64", "__xstat", "__lxstat", "fstatat",
+                 "newfstatat", "__xstat64", "__lxstat64"):
+            path = cstr(a[1] if n in ("faccessat", "fstatat", "newfstatat", "__xstat", "__lxstat", "__xstat64",
+                                      "__lxstat64") else a[0])
+            return 0 if _NSO_PROBE_PROC.match(path) or path == b"/proc/mounts" else -1
+        if n in ("read", "__read_chk", "pread", "pread64", "fread", "fread_unlocked", "fgets", "__fgets_chk",
+                 "fgets_unlocked", "getline", "__getline", "getdelim", "fgetc", "getc", "feof"):
+            h = next((x for x in ((a[0],) if n in ("read", "__read_chk", "pread", "pread64", "fgetc", "getc", "feof")
+                                  else (a[3], a[2]) if n in ("fread", "fread_unlocked", "getdelim") else
+                                  (a[2], a[3])) if x in files), None)
+            if h is None:
+                return None
+            data, pos = files[h]
+            rest = data[pos:]
+            if n == "feof":
+                return int(not rest)
+            if n in ("fgetc", "getc"):
+                files[h][1] += 1 if rest else 0
+                return rest[0] if rest else -1
+            if n.startswith(("read", "__read", "pread")):
+                chunk = rest[:min(a[2], 1 << 16)]
+            elif n.startswith("fread"):
+                chunk = rest[:min(a[1] * a[2], 1 << 16)]
+            else:
+                lim = (min(a[1], 4096) - 1) if "fgets" in n else 4096
+                nl = rest.find(b"\n" if n != "getdelim" else bytes([a[2] & 0xFF]))
+                chunk = rest[:min(lim, nl + 1 if nl >= 0 else len(rest))]
+                if not chunk:
+                    return 0 if "fgets" in n else -1
+            files[h][1] += len(chunk)
+            if n.startswith(("getline", "__getline", "getdelim")):
+                buf = alloc(len(chunk) + 16)
+                uc.mem_write(buf, chunk + b"\0")
+                uc.mem_write(a[0], buf.to_bytes(W, "little"))
+                uc.mem_write(a[1], (len(chunk) + 16).to_bytes(W, "little"))
+                return len(chunk)
+            uc.mem_write(a[1] if n.startswith(("read", "__read", "pread")) else a[0],
+                         chunk + (b"\0" if "fgets" in n else b""))
+            return a[0] if "fgets" in n else len(chunk) // (a[1] or 1) if n.startswith("fread") else len(chunk)
+        if n in ("strstr", "strcasestr", "memmem"):
+            hay = rd(a[0], min(a[1], 1 << 16)) if n == "memmem" else rd(a[0], 1 << 16).split(b"\0")[0]
+            nee = rd(a[2], min(a[3], 256)) if n == "memmem" else cstr(a[1])
+            j = hay.lower().find(nee.lower()) if n == "strcasestr" else hay.find(nee)
+            return a[0] + j if j >= 0 else 0
+        if n in ("strcmp", "strncmp", "strcasecmp", "strncasecmp", "memcmp", "bcmp"):
+            m = a[2] if "n" in n[3:] or n in ("memcmp", "bcmp") else 4096
+            x, y = rd(a[0], min(m, 4096)), rd(a[1], min(m, 4096))
+            if not n.endswith(("memcmp", "bcmp")):
+                x, y = x.split(b"\0")[0] + b"\0", y.split(b"\0")[0] + b"\0"
+                x, y = x[:m], y[:m]
+            if "case" in n:
+                x, y = x.lower(), y.lower()
+            return 0 if x == y else -1 if x < y else 1
+        if n in ("strchr", "strrchr"):
+            b = rd(a[0], 4096).split(b"\0")[0] + b"\0"
+            j = (b.find if n == "strchr" else b.rfind)(bytes([a[1] & 0xFF]))
+            return a[0] + j if j >= 0 else 0
+        if n in ("atoi", "atol", "atoll") or re.fullmatch(r"(__isoc23_)?strto(u?ll?|u?l|imax|umax)", n):
+            v, used = _nso_strtol(rd(a[0], 64).split(b"\0")[0], a[2] if n.startswith(("strto", "__isoc23")) else 10)
+            if n.startswith(("strto", "__isoc23")) and a[1]:
+                uc.mem_write(a[1], (a[0] + used).to_bytes(W, "little"))
+            return v
+        return None
+
     def hook(uc, addr, size, _):
         if addr == RET:
             uc.emu_stop()
@@ -3883,7 +4431,11 @@ def _nso_emulate(elf, arch, funcs, deadline, gate=None):
             if len(s) >= 4:
                 strs.append(s)
         i, ret = (addr - STUB) // 16, 0
-        if i < 300:
+        if probes and i == 399 and threads:  # an inline thread's routine returned
+            ret = thread_end()
+        elif probes and i == 208:  # SetByteArrayRegion(env, array, start, len, buf): the export's byte[] result
+            strs.append(rd(a[4], min(a[3], 4096)))
+        elif i < 300:
             if i == 6:
                 ret = 1
             elif i == 167:
@@ -3900,7 +4452,10 @@ def _nso_emulate(elf, arch, funcs, deadline, gate=None):
                 uc.mem_write(a[1], JNI.to_bytes(W, "little"))
         elif i - 400 in slot_name:
             n = slot_name[i - 400]
-            if n in _NSO_ALLOC:
+            pr = probe(n, a) if probes else None
+            if pr is not None:
+                ret = pr
+            elif n in _NSO_ALLOC:
                 ret = alloc(a[0] * a[1] if n == "calloc" else len(cstr(a[0])) + 1 if n == "strdup" else a[1]
                             if n == "realloc" else a[0])
                 if n in ("realloc", "strdup") and a[0]:
@@ -3922,10 +4477,46 @@ def _nso_emulate(elf, arch, funcs, deadline, gate=None):
         uc.reg_write(retr, ret & MASK)
 
     uc.hook_add(U.UC_HOOK_CODE, hook, begin=STUB, end=STUB + 0xFFFF)
+    sysno = _NSO_SYSCALLS.get(arch) if probes else None
+    if sysno:  # inline syscall / svc #0 probes (Frida libc-hook bypass) answer from the same clean-device model
+        sregs = [getattr(rc, pfx + r) for r in (("RDI", "RSI", "RDX", "R10", "R8", "R9") if arch == "EM_X86_64" else
+                                                 ("X0", "X1", "X2", "X3", "X4", "X5"))]
+        nrr = getattr(rc, pfx + ("RAX" if arch == "EM_X86_64" else "X8"))
+
+        def syscall(uc, *x):
+            if arch == "EM_AARCH64" and x[0] != 2:  # not EXCP_SWI (brk / udf): this run ends
+                uc.emu_stop()
+                return
+            n, a = sysno.get(uc.reg_read(nrr)), [uc.reg_read(r) for r in sregs]
+            try:
+                if n in ("readlinkat", "readlink"):  # nothing links anywhere but our own exe / std fds
+                    path = cstr(a[1] if n == "readlinkat" else a[0])
+                    t = (b"/system/bin/app_process64" if re.fullmatch(rb"/proc/(self|\d+)/exe", path) else
+                         b"/dev/null" if re.fullmatch(rb"/proc/(self|\d+)/fd/[012]", path) else None)
+                    buf, cap = a[2:4] if n == "readlinkat" else a[1:3]
+                    if t is not None and buf:
+                        uc.mem_write(buf, t[:cap])
+                    r = -2 if t is None else min(len(t), cap)
+                else:
+                    r = probe(n, a) if n else None
+                    if r is None:
+                        r = -9 if n in ("read", "pread64") else -38  # EBADF / ENOSYS
+                    elif r == -1 and n != "ptrace":
+                        r = -2  # ENOENT: su / frida / emulator paths are absent
+            except Exception:  # noqa: BLE001 - a bad pointer: EFAULT
+                r = -14
+            uc.reg_write(retr, r & MASK)
+
+        if arch == "EM_X86_64":
+            uc.hook_add(U.UC_HOOK_INSN, syscall, None, 1, 0, U.x86_const.UC_X86_INS_SYSCALL)
+        else:
+            uc.hook_add(U.UC_HOOK_INTR, syscall)
 
     def call(va, args):
         if time.time() > deadline:
             return
+        mark, pst["trap"] = len(strs), False
+        threads.clear()
         sp = STACK + (1 << 20) - 0x1000
         for r, v in zip(argr, list(args) + [0] * 6):
             uc.reg_write(r, v)
@@ -3947,6 +4538,9 @@ def _nso_emulate(elf, arch, funcs, deadline, gate=None):
             uc.emu_start(va, RET, timeout=_NSO_FN_US, count=_NSO_FN_INSNS)
         except Exception:  # noqa: BLE001 - a fault (or a hook error) ends this export's run only
             pass
+        if probes and pst["trap"]:  # kill / raise / exit reached: the debugged side, not the answer
+            del strs[mark:]
+            return
         s = cstr(uc.reg_read(retr))
         if s:
             strs.append(s)
@@ -4363,7 +4957,14 @@ def native_export_scan(apk, _assets=True):
                 if abi in done:
                     continue
                 try:
-                    note(_nso_emulate(elf, arch, funcs, deadline), abi)
+                    new = _nso_emulate(elf, arch, funcs, deadline)
+                    if not new and (_NSO_PROBE_IMPORTS & {y[0].split("@")[0] for i, ys in elf.syms.items()
+                                                             if elf.secs[i][1] == 11 for y in ys if not y[4]}
+                                    or _nso_has_svc(elf)):  # raw syscall probes: no libc import to see
+                        # row 66: the export folds its anti-debug probes (ptrace / TracerPid / su / fork) into the
+                        # value: rerun with libc answering as a clean device (own budget: the plain pass may spend all)
+                        new = _nso_emulate(elf, arch, funcs, max(deadline, time.time() + _NSO_PROBE_S), probes=True)
+                    note(new, abi)
                 except Exception:  # noqa: BLE001
                     continue
             hits = list(dict.fromkeys(hits))
@@ -7444,6 +8045,50 @@ _DXE_MAX_DEX, _DXE_STEPS, _DXE_BUDGET_S, _DXE_DEPTH, _DXE_MAX_ARR = 32 << 20, 50
 _DXE_HOT = frozenset((0x23, 0x24, 0x26, 0x2B, 0x2C, 0x8E, 0x97, 0xB7, 0xD7, 0xDF))
 _DXE_LIB = re.compile(r"L(?:androidx|android|kotlinx?|java|javax|dalvik|okhttp3|okio|retrofit2|org/jetbrains|org/intellij"
                       r"|com/google|com/squareup|com/facebook|io/reactivex)/")
+# exception control flow (coverage atlas row 90; only _ExcVM): ops that throw -- `throw`, array-length / aget / aput /
+# iget / iput / instance invoke on null, a bad array index, int/long div/rem by zero -- and java.lang's exception tree
+_DXX_DIV = frozenset((0x93, 0x94, 0x9E, 0x9F, 0xB3, 0xB4, 0xBE, 0xBF, 0xD3, 0xD4, 0xDB, 0xDC))
+_DXX_OPS = frozenset((0x21, 0x27, 0x6E, 0x6F, 0x70, 0x72, 0x74, 0x75, 0x76, 0x78, *range(0x44, 0x60), *_DXX_DIV))
+_DXX_TREE = {f"L{c};": f"L{q};" for c, q in (
+    ("java/lang/Exception", "java/lang/Throwable"), ("java/lang/Error", "java/lang/Throwable"),
+    ("java/lang/RuntimeException", "java/lang/Exception"), ("java/lang/SecurityException", "java/lang/RuntimeException"),
+    ("java/lang/IllegalStateException", "java/lang/RuntimeException"),
+    ("java/lang/IllegalArgumentException", "java/lang/RuntimeException"),
+    ("java/lang/NumberFormatException", "java/lang/IllegalArgumentException"),
+    ("java/lang/ArithmeticException", "java/lang/RuntimeException"),
+    ("java/lang/NullPointerException", "java/lang/RuntimeException"),
+    ("java/lang/ClassCastException", "java/lang/RuntimeException"),
+    ("java/lang/UnsupportedOperationException", "java/lang/RuntimeException"),
+    ("java/lang/IndexOutOfBoundsException", "java/lang/RuntimeException"),
+    ("java/lang/ArrayIndexOutOfBoundsException", "java/lang/IndexOutOfBoundsException"),
+    ("java/lang/StringIndexOutOfBoundsException", "java/lang/IndexOutOfBoundsException"),
+    ("java/lang/NegativeArraySizeException", "java/lang/RuntimeException"),
+    ("java/util/NoSuchElementException", "java/lang/RuntimeException"),
+    ("java/util/ConcurrentModificationException", "java/lang/RuntimeException"),
+    ("java/lang/ReflectiveOperationException", "java/lang/Exception"),
+    ("java/lang/ClassNotFoundException", "java/lang/ReflectiveOperationException"),
+    ("java/lang/NoSuchMethodException", "java/lang/ReflectiveOperationException"),
+    ("java/lang/NoSuchFieldException", "java/lang/ReflectiveOperationException"),
+    ("java/lang/IllegalAccessException", "java/lang/ReflectiveOperationException"),
+    ("java/lang/InstantiationException", "java/lang/ReflectiveOperationException"),
+    ("java/lang/reflect/InvocationTargetException", "java/lang/ReflectiveOperationException"),
+    ("java/lang/CloneNotSupportedException", "java/lang/Exception"),
+    ("java/lang/InterruptedException", "java/lang/Exception"),
+    ("java/util/concurrent/TimeoutException", "java/lang/Exception"),
+    ("java/security/GeneralSecurityException", "java/lang/Exception"),
+    ("java/security/NoSuchAlgorithmException", "java/security/GeneralSecurityException"),
+    ("java/io/IOException", "java/lang/Exception"), ("java/io/FileNotFoundException", "java/io/IOException"),
+    ("java/io/EOFException", "java/io/IOException"), ("java/net/SocketException", "java/io/IOException"),
+    ("java/net/ConnectException", "java/net/SocketException"),
+    ("android/util/AndroidException", "java/lang/Exception"),
+    ("android/content/pm/PackageManager$NameNotFoundException", "android/util/AndroidException"),
+    ("android/system/ErrnoException", "java/lang/Exception"), ("java/lang/AssertionError", "java/lang/Error"),
+    ("java/lang/LinkageError", "java/lang/Error"), ("java/lang/NoClassDefFoundError", "java/lang/LinkageError"),
+    ("java/lang/UnsatisfiedLinkError", "java/lang/LinkageError"),
+    ("java/lang/VirtualMachineError", "java/lang/Error"), ("java/lang/StackOverflowError", "java/lang/VirtualMachineError"),
+    ("java/lang/OutOfMemoryError", "java/lang/VirtualMachineError"),
+    ("kotlin/KotlinNullPointerException", "java/lang/NullPointerException"),
+    ("kotlin/UninitializedPropertyAccessException", "java/lang/RuntimeException"))}
 
 
 class _DxAbort(Exception):
@@ -7467,6 +8112,16 @@ class _DxThrow(_DxAbort):
     def __init__(self, *types):
         super().__init__(types[0])
         self.types = (*types, "Ljava/lang/Exception;", "Ljava/lang/Throwable;")
+
+    obj = None  # the thrown object (_DxExc: a `throw` / VM fault of exception_flow_scan's VM); None = framework-raised
+
+
+class _DxExc(_DxThrow):
+    """An exception object thrown inside the evaluator (`throw vX`, div by zero, null receiver, bad index)."""
+
+    def __init__(self, obj, types):
+        _DxAbort.__init__(self, types[0])
+        self.obj, self.types = obj, types
 
 
 class _DxObj:
@@ -7796,6 +8451,38 @@ class _DxDex:
         return r
 
 
+def _dxe_enum_call(ref, raw):
+    """java.lang.Enum / array members an in-dex enum inherits (coverage atlas row 89): Enum.<init>(name, ordinal) tags
+    the _DxObj, ordinal() / name() / toString() / compareTo() / equals() read it back, values()'s `[LE;->clone()`
+    copies $VALUES -- enough for an enum <clinit>, javac's `<Outer>$1.$SwitchMap$<pkg>$<Enum>` / kotlinc's
+    `<Outer>$WhenMappings.$EnumSwitchMapping$N` <clinit> and the `aget map[e.ordinal()]` before a packed-switch.
+    _DXE_UNK when the call is none of these (the caller aborts)."""
+    name = ref[ref.find("->") + 2:ref.find("(")]
+    o = raw[0] if raw else None
+    if ref == "Ljava/lang/Enum;-><init>(Ljava/lang/String;I)V":
+        if not isinstance(o, _DxObj) or len(raw) < 3 or not isinstance(raw[2], int):
+            return _DXE_UNK
+        o.f["$name"], o.f["$ordinal"] = raw[1], raw[2]
+        return None
+    if ref.startswith("[") and name == "clone" and isinstance(o, _DxArr) and len(raw) == 1:
+        c = _DxArr(o)
+        c.t = getattr(o, "t", "")
+        return c
+    if not isinstance(o, _DxObj) or "$ordinal" not in o.f:
+        return _DXE_UNK
+    if name == "ordinal" and len(raw) == 1:
+        return o.f["$ordinal"]
+    if name in ("name", "toString") and len(raw) == 1 and ref.endswith(")Ljava/lang/String;"):
+        return o.f["$name"]
+    if name == "compareTo" and len(raw) == 2 and isinstance(raw[1], _DxObj) and "$ordinal" in raw[1].f:
+        return o.f["$ordinal"] - raw[1].f["$ordinal"]
+    if name == "equals" and len(raw) == 2:
+        return int(o is raw[1])
+    if name == "hashCode" and len(raw) == 1:
+        return id(o) & 0x7FFFFFFF
+    return _DXE_UNK
+
+
 def _dxe_params(ref):
     """Parameter descriptors of a method ref string."""
     p = ref[ref.index("(") + 1:ref.index(")")]
@@ -7805,6 +8492,8 @@ def _dxe_params(ref):
 class _DxVM:
     max_steps = _DXE_STEPS
     inst_of = False  # instance-of: exact in-dex class match (only _KcoVM turns it on)
+    trace = None  # switch keys taken, in order (only _AdsVM records them)
+    exc = False  # model `throw` + runtime faults through the try/catch tables (only _ExcVM turns it on)
 
     def __init__(self, dx, deadline):
         self.dx, self.deadline, self.statics, self.inited, self.seen = dx, deadline, {}, set(), []
@@ -7887,7 +8576,10 @@ class _DxVM:
                 raise _DxAbort
             self.init_class(ref.split("->")[0])
             return self.note(self.run(ref, raw, depth + 1))
-        raise _DxAbort
+        v = _dxe_enum_call(ref, raw)
+        if v is _DXE_UNK:
+            raise _DxAbort
+        return self.note(v)
 
     def handler(self, ref, pc, types):
         """Catch-handler address (code units) covering `pc` in `ref` for an exception of `types`; None when uncaught."""
@@ -7922,6 +8614,64 @@ class _DxVM:
             return None
         return None
 
+    def exc_types(self, t):
+        """`t` and its supertypes, in-dex superclasses first, then java.lang's tree; () when `t` is not a Throwable (an
+        unknown framework *Exception / *Error type hangs under Exception / Error)."""
+        sup = _dxx_supers(self.dx)
+        out = [t]
+        for _ in range(24):
+            q = sup.get(t) or _DXX_TREE.get(t)
+            if q is None and t not in ("Ljava/lang/Throwable;", "Ljava/lang/Object;"):
+                q = "Ljava/lang/Error;" if t.endswith("Error;") else "Ljava/lang/Exception;" if t.endswith(
+                    "Exception;") else None
+            if q is None or q in out:
+                break
+            out.append(t := q)
+        return tuple(out) if out[-1] == "Ljava/lang/Throwable;" else ()
+
+    def exc_new(self, t, msg=None):
+        o = _DxObj(t)
+        if msg is not None:
+            o.f["$msg"] = msg
+        return _DxExc(o, self.exc_types(t))
+
+    def fault(self, op, ins, p, r):
+        """The exception op at `p` throws with these registers (an _DxExc), or None when it runs normally."""
+        b1 = ins[p + 1]
+        A, B = b1 & 0xF, b1 >> 4
+        npe = "Ljava/lang/NullPointerException;"
+        null = lambda v: v is None or v.__class__ is int and v == 0  # noqa: E731 - `const/4 vX, 0` is also null
+        if op == 0x27:
+            v = r[b1]
+            if null(v):
+                return self.exc_new(npe)
+            if isinstance(v, _DxThrow):  # rethrow of a framework exception bound by move-exception
+                return v
+            ts = self.exc_types(v.t) if isinstance(v, _DxObj) else ()
+            if not ts:
+                raise _DxAbort
+            return _DxExc(v, ts)
+        if op == 0x21 or 0x52 <= op <= 0x5F:
+            return self.exc_new(npe) if null(r[B]) else None
+        if 0x44 <= op <= 0x51:
+            a_, ix = r[ins[p + 2]], r[ins[p + 3]]
+            if null(a_):
+                return self.exc_new(npe)
+            if isinstance(a_, list) and isinstance(ix, int) and not 0 <= ix < len(a_):
+                return self.exc_new("Ljava/lang/ArrayIndexOutOfBoundsException;",
+                                    f"length={len(a_)}; index={ix}")
+            return None
+        if op in _DXX_DIV:
+            dv = (r[ins[p + 3]] if op < 0xB0 else r[B] if op < 0xD0 else struct.unpack_from("<h", ins, p + 2)[0]
+                  if op < 0xD8 else (ins[p + 3] ^ 0x80) - 0x80)
+            return self.exc_new("Ljava/lang/ArithmeticException;", "divide by zero") if dv == 0 else None
+        cnt = B if op <= 0x72 else b1
+        if cnt:
+            rcv = r[struct.unpack_from("<H", ins, p + 4)[0] & (0xF if op <= 0x72 else 0xFFFF)]
+            if null(rcv):
+                return self.exc_new(npe)
+        return None
+
     def run(self, ref, raw_args, depth=0):  # noqa: C901 - one dispatch loop
         nreg, nin, ins, _ = self.dx.code[ref]
         n_ins = len(ins) // 2
@@ -7929,7 +8679,7 @@ class _DxVM:
         r[nreg - nin:nreg - nin + len(raw_args)] = raw_args[:nin]
         h16 = lambda p: struct.unpack_from("<h", ins, p)[0]  # noqa: E731
         u16 = lambda p: struct.unpack_from("<H", ins, p)[0]  # noqa: E731
-        dx, last, pc = self.dx, None, 0
+        dx, last, pc, exc = self.dx, None, 0, self.exc
         while True:
             self.steps += 1
             if self.steps > self.max_steps or (self.steps & 1023 == 0 and time.time() > self.deadline):
@@ -7940,6 +8690,14 @@ class _DxVM:
             op, b1 = ins[p], ins[p + 1]
             A, B = b1 & 0xF, b1 >> 4
             w = _DOP_W[op]
+            if exc and op in _DXX_OPS:
+                e = self.fault(op, ins, p, r)
+                if e is not None:
+                    h = self.handler(ref, pc, e.types)
+                    if h is None:
+                        raise e
+                    last, pc = e, h
+                    continue
             if op == 0x00:
                 if b1:
                     raise _DxAbort  # fell into a payload
@@ -8032,7 +8790,7 @@ class _DxVM:
                 for k in range(n):
                     a_[k] = int.from_bytes(ins[q + 8 + ew * k:q + 8 + ew * (k + 1)], "little", signed=sg)
             elif op == 0x0D and isinstance(last, _DxThrow):  # only reached via handler(): base VM never throws
-                r[b1] = last
+                r[b1] = last if last.obj is None else last.obj
             elif op == 0x20 and self.inst_of:
                 v = r[B]
                 r[A] = int(isinstance(v, _DxObj) and v.t == dx.typ(u16(p + 2)))
@@ -8050,6 +8808,8 @@ class _DxVM:
                 v = r[b1]
                 if not isinstance(v, int) or q < 0 or q + 4 > len(ins):
                     raise _DxAbort
+                if self.trace is not None and len(self.trace) < 256:
+                    self.trace.append(v)
                 n = u16(q + 2)
                 if op == 0x2B and ins[q:q + 2] == b"\x00\x01":
                     k0 = struct.unpack_from("<i", ins, q + 4)[0]
@@ -8257,6 +9017,199 @@ def dex_eval_scan(apk):
         pass
     return list(dict.fromkeys(hits))
 
+
+
+
+# --- white-box / table-driven cipher: evaluate the table walk (coverage atlas: whitebox-table-cipher-eval) -----------
+_WBT_STEPS, _WBT_BUDGET_S, _WBT_MIN_SCORE, _WBT_MAX_IN, _WBT_MAX_RUNS = 400_000, 0.8, 8, 4096, 48
+_WBT_AGET = frozenset(range(0x44, 0x4B))
+_WBT_XOR = frozenset((0x97, 0xA2, 0xB7, 0xC2, 0xD7, 0xDF))
+
+
+class _WbtVM(_DxVM):
+    max_steps = _WBT_STEPS  # 10-16 rounds of aget/xor over every block of the input
+
+
+def _wbt_score(ins):
+    """aget + xor op count of one method (a T-box / S-box walk is dense in both)."""
+    ops = ins[0::2]
+    return sum(1 for o in ops if o in _WBT_AGET) + sum(1 for o in ops if o in _WBT_XOR)
+
+
+def _wbt_bytes(v):
+    if isinstance(v, str):
+        return v.encode("utf-8", "replace")
+    if isinstance(v, list) and v and all(isinstance(x, int) for x in v):
+        t = getattr(v, "t", "B")
+        if t == "C":
+            return "".join(chr(x & 0xFFFF) for x in v).encode("utf-8", "replace")
+        if t == "I":
+            return b"".join((x & 0xFFFFFFFF).to_bytes(4, "big") for x in v) + bytes(x & 0xFF for x in v)
+        return bytes(x & 0xFF for x in v)
+    return b""
+
+
+def _wbt_inputs(z):
+    """Small asset blobs a table cipher may read (raw, plus a clean base64 / hex text reading)."""
+    out = []
+    for i in z.infolist():
+        if not i.filename.startswith(("assets/", "res/raw/")) or not 16 <= i.file_size <= _WBT_MAX_IN:
+            continue
+        b = z.read(i)
+        out.append(b)
+        t = b.strip()
+        if re.fullmatch(rb"(?:[0-9a-fA-F]{2}){16,}", t):
+            out.append(bytes.fromhex(t.decode()))
+        elif re.fullmatch(rb"[A-Za-z0-9+/_-]{16,}={0,2}", t):
+            try:
+                out.append(base64.b64decode(t.replace(b"-", b"+").replace(b"_", b"/") + b"=" * (-len(t) % 4)))
+            except ValueError:
+                pass
+    return out
+
+
+def whitebox_table_scan(apk):
+    """ANS tokens a white-box / table-driven cipher decrypts (lookup-table AES with the round keys folded into int[]
+    T-tables, Tyi / T-box byte tables, chained byte S-boxes): the key is never recovered -- the table walk itself is
+    evaluated. Methods dense in aget + xor (own ops plus their in-dex callees') that take an array are run by the Dalvik
+    evaluator with a larger step budget, their <clinit> tables preloaded, the array parameter bound to each static
+    byte/int/char array of the app (non-256-long first) and each small asset blob, int params 0 / length. The returned
+    (or in-place / output-param) array is regex'd. [] when absent; never raises; ~0.8 s."""
+    hits = []
+    deadline = time.time() + _WBT_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            dexes = [z.read(i) for i in z.infolist() if i.file_size <= _DXE_MAX_DEX
+                     and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+            blobs = _wbt_inputs(z)
+        for d in dexes:
+            if d[:4] != b"dex\n" or len(d) < 0x70 or time.time() > deadline:
+                continue
+            try:
+                dx = _DxDex(d)
+            except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+                continue
+            own = {ref: _wbt_score(dx.code[ref][2]) for ref in dx.order}
+            cands = []
+            for ref in dx.order:
+                ps = _dxe_params(ref)
+                if not any(p in ("[B", "[I", "[C") for p in ps) or len(ps) > 5:
+                    continue
+                ins = dx.code[ref][2]
+                callee = 0
+                for k in range(0, len(ins) - 4, 2):  # invoke-* of in-dex methods (operand alignment is approximate)
+                    if 0x6E <= ins[k] <= 0x78 and ins[k] != 0x73:
+                        mi = struct.unpack_from("<H", ins, k + 2)[0]
+                        if mi < dx.n_met:
+                            callee = max(callee, own.get(dx.mref(mi), 0))
+                sc = own[ref] + callee
+                if sc >= _WBT_MIN_SCORE:
+                    cands.append((-sc, ref, ps))
+            if not cands:
+                continue
+            cands.sort()
+            pool = _WbtVM(dx, deadline)
+            for ct in dict.fromkeys(r.split("->")[0] for r in dx.order):
+                if time.time() > deadline:
+                    break
+                pool.init_class(ct)
+            arrs = [v for v in pool.statics.values() if isinstance(v, list) and 16 <= len(v) <= _WBT_MAX_IN
+                    and getattr(v, "t", "") in ("B", "I", "C") and all(isinstance(x, int) for x in v)]
+            arrs.sort(key=lambda v: len(v) == 256)
+            inputs = [(list(v), v.t) for v in arrs] + [([(x ^ 0x80) - 0x80 for x in b], "B") for b in blobs]
+            runs = 0
+            for _, ref, ps in cands[:8]:
+                ai = next(k for k, p in enumerate(ps) if p in ("[B", "[I", "[C"))
+                for vals, t in inputs:
+                    if time.time() > deadline or runs >= _WBT_MAX_RUNS:
+                        break
+                    if ps[ai] != "[" + t and not (ps[ai] == "[B" and t == "B"):
+                        continue
+                    runs += 1
+                    vm = _WbtVM(dx, deadline)
+                    vm.statics, vm.inited = dict(pool.statics), set(pool.inited)
+                    arr = _DxArr(vals)
+                    arr.t = t
+                    acc = dx.code[ref][3]
+                    raw = [] if acc & 0x8 else [_DxObj(ref.split("->")[0])]
+                    outs = [arr]
+                    for k, p in enumerate(ps):
+                        if k == ai:
+                            raw.append(arr)
+                        elif p in ("[B", "[I", "[C"):  # an output buffer the walk writes into
+                            o = _DxArr([0] * len(vals))
+                            o.t = p[1]
+                            raw.append(o)
+                            outs.append(o)
+                        elif p in "JD":
+                            raw += [0, None]
+                        else:
+                            raw.append(len(vals) if p == "I" and k == ai + 2 else _dxe_default(p))
+                    try:
+                        if not acc & 0x8 and ref.split("->")[0] + "-><init>()V" in dx.code:
+                            vm.run(ref.split("->")[0] + "-><init>()V", raw[:1])
+                        outs.append(vm.note(vm.run(ref, raw)))
+                    except (_DxAbort, IndexError, KeyError, TypeError, ValueError, AttributeError, OverflowError,
+                            RecursionError, struct.error):
+                        pass
+                    for v in outs + vm.seen:
+                        b = _wbt_bytes(v)
+                        hits += [m.decode() for m in ANS_RE_B.findall(b)]
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    return list(dict.fromkeys(hits))
+
+_SWM_FIELD = re.compile(r"->(?:\$SwitchMap\$(.+)|\$EnumSwitchMapping\$\d+)$")
+
+
+def switchmap_table(apk):
+    """Enum switch maps of every dex (coverage atlas row 89): javac's `<Outer>$1.$SwitchMap$<pkg>$<Enum>` and kotlinc's
+    `<Outer>$WhenMappings.$EnumSwitchMapping$N` int[]s, filled by their <clinit> from the enum's own <clinit>
+    (Enum.<init>(name, ordinal) + $VALUES) and run by the dex_eval_scan interpreter. -> {"<map class>-><field>":
+    {"enum": "L<pkg>/<Enum>;" | None, "cases": {"<CONST>" (or the ordinal when the enum is unknown): case key}}} --
+    the packed-switch key each constant takes. {} when absent; never raises."""
+    out = {}
+    deadline = time.time() + 1.0
+    try:
+        with zipfile.ZipFile(apk) as z:
+            dexes = [z.read(i) for i in z.infolist() if i.file_size <= _DXE_MAX_DEX
+                     and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+        for d in dexes:
+            if d[:4] != b"dex\n" or len(d) < 0x70 or time.time() > deadline:
+                continue
+            try:
+                dx = _DxDex(d)
+            except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+                continue
+            for ct, (sfl, _) in dx.sfields.items():
+                maps = [(dx.fref(fi)[1], m) for fi in sfl for m in [_SWM_FIELD.search(dx.fref(fi)[1])] if m
+                        and dx.fref(fi)[2] == "[I"]
+                if not maps or time.time() > deadline:
+                    continue
+                vm = _DxVM(dx, deadline)
+                try:
+                    vm.init_class(ct)
+                except (_DxAbort, IndexError, KeyError, TypeError, ValueError, AttributeError, OverflowError,
+                        RecursionError, struct.error):
+                    continue
+                enums = {}  # enum class -> {ordinal: name}, from the constants its <clinit> built
+                for fk, v in vm.statics.items():
+                    if isinstance(v, _DxObj) and "$ordinal" in v.f and fk.startswith(v.t + "->"):
+                        enums.setdefault(v.t, {})[v.f["$ordinal"]] = v.f["$name"]
+                for fk, m in maps:
+                    arr = vm.statics.get(fk)
+                    if not isinstance(arr, list) or not all(isinstance(x, int) for x in arr):
+                        continue
+                    if m.group(1):
+                        e = [t for t in enums if t[1:-1].replace("/", "$") == m.group(1)]
+                    else:
+                        e = [t for t in enums if len(enums[t]) == len(arr)]
+                    names = enums[e[0]] if len(e) == 1 else {}
+                    out[fk] = {"enum": e[0] if len(e) == 1 else None,
+                               "cases": {names.get(o, o): k for o, k in enumerate(arr) if k}}
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no table
+        pass
+    return out
 
 # --- secondary-dex module contract (D20 TT `moduleContract`, coverage atlas) -------------------------------------------
 # The host dex names a payload as `<entry>:<dotted class>` (`assets/payload.dex:com.huntress.arena.payload.Module`) and
@@ -8780,7 +9733,11 @@ _ENV_ABSENT = re.compile(r"(?i)(?:^|/)(?:su|busybox|daemonsu|sugote\w*|supolicy)
                          r"|/system/(?:xbin|sd/xbin|bin/failsafe)/|/data/local/(?:tmp/|bin/|xbin/)|/su/|kinguser|rootcloak"
                          r"|/dev/socket/(?:qemud|baseband)|vbox|andy|/system/app/super")
 _ENV_PKG = re.compile(r"(?i)magisk|supersu|superuser|chainfire|koushikdutta|kingroot|kinguser|xposed|lsposed|edxp"
-                      r"|saurik|substrate|rootcloak|devadvance|zachspong|ramdroid|frida|luckypatcher|chelpus|root")
+                      r"|saurik|substrate|rootcloak|devadvance|zachspong|ramdroid|frida|luckypatcher|chelpus|root"
+                      r"|zygisk|riru|shamiko|kernelsu|apatch")
+# probe args built at runtime (rows 47, 48, 94): the stubs see the evaluated string, normalised (// collapsed, trailing
+# / stripped, casefolded) before lookup; an unknown path under the root-tool trees is absent on a clean device.
+_ENV_ROOTTREE = re.compile(r"/(?:system|sbin|su|data/local|data/adb|cache)/.")
 _ENV_FILES = {
     "/proc/self/status": "Name:\tapp\nUmask:\t0077\nState:\tS (sleeping)\nTgid:\t12345\nNgid:\t0\nPid:\t12345\n"
                          "PPid:\t678\nTracerPid:\t0\nUid:\t10234\t10234\t10234\t10234\nGid:\t10234\t10234\t10234\t10234\n"
@@ -8792,14 +9749,184 @@ _ENV_FILES = {
 _ENV_FILES["/proc/" + "12345/status"], _ENV_FILES["/proc/12345/maps"] = _ENV_FILES["/proc/self/status"], _ENV_FILES["/proc/self/maps"]
 _ENV_PORTS = frozenset((27042, 27043, 27047, 23946, 5555, 5037))
 _ENV_NEW = frozenset(("Ljava/io/File;", "Ljava/io/FileReader;", "Ljava/io/FileInputStream;", "Ljava/io/InputStreamReader;",
-                      "Ljava/io/BufferedReader;", "Ljava/net/Socket;", "Ljava/net/InetSocketAddress;", "Ljava/util/Scanner;"))
+                      "Ljava/io/BufferedReader;", "Ljava/net/Socket;", "Ljava/net/InetSocketAddress;", "Ljava/util/Scanner;",
+                      "Ljava/lang/ProcessBuilder;"))
 _ENV_MARK = re.compile(r"(?i)Landroid/os/(?:Build|Debug)|isDebuggerConnected|waitingForDebugger|getPackageInfo"
-                       r"|getApplicationInfo|Ljava/net/Socket;|Ljava/io/File;-><init>|getProperty|forName|Runtime;->exec"
-                       r"|Settings\$(?:Secure|Global)")
+                       r"|getApplicationInfo|Ljava/net/Socket;|Ljava/io/File;-><init>|getProperty|forName|Runtime;->exec|ProcessBuilder;-><init>"
+                       r"|Settings\$(?:Secure|Global)|Landroid/os/SystemClock;|Ljava/lang/System;->(?:nanoTime|currentTimeMillis)"
+                       r"|Ldalvik/system/VMDebug;|Landroid/os/SystemProperties;|getStackTrace|getAllStackTraces"
+                       r"|Ljava/lang/reflect/Modifier;->isNative|ClassLoader;->loadClass|Landroid/system/Os;->readlink"
+                       r"|Ljava/lang/System;->getenv"
+                       r"|Landroid/telephony/TelephonyManager;|Landroid/hardware/SensorManager;|Landroid/os/BatteryManager;"
+                       r"|Ljava/net/NetworkInterface;->getNetworkInterfaces"
+                       r"|getInstallerPackageName|getInstallSourceInfo|getPackageCodePath|getPackageResourcePath"
+                       r"|Landroid/content/pm/(?:Signature|SigningInfo);|Ljava/util/(?:zip/ZipFile|jar/JarFile);-><init>")
+# timing anti-debug + debug-flag probes (rows 50, 88): every clock read advances a monotonic counter by 1 ms, so a
+# `t1 - t0 < threshold` check passes; Thread.sleep is a no-op; hidden SystemProperties (direct or via reflection) and
+# VMDebug answer as a user build with adb off. BuildConfig.DEBUG keeps its encoded value AND is re-run as false.
+_ENV_CLOCK = re.compile(r"Ljava/lang/System;->(?:nanoTime|currentTimeMillis)\(|Landroid/os/SystemClock;->"
+                        r"(?:elapsedRealtime|uptimeMillis|currentThreadTime)|Landroid/os/Debug;->threadCpuTimeNanos\(")
+_ENV_PROPS = {"ro.debuggable": "0", "ro.secure": "1", "service.adb.root": "0", "ro.adb.secure": "1",
+              "ro.build.tags": "release-keys", "ro.build.type": "user", "ro.build.fingerprint": _ENV_FP,
+              "ro.product.model": "Pixel 6", "ro.hardware": "oriole", "ro.boot.verifiedbootstate": "green",
+              "ro.boot.flash.locked": "1", "ro.kernel.qemu": "", "ro.boot.qemu": "", "ro.kernel.android.qemud": "",
+              "init.svc.adbd": "stopped", "sys.usb.config": "mtp", "persist.sys.usb.config": "mtp"}
+_ENV_BCDBG = re.compile(r"/BuildConfig;->DEBUG$")
 _ENV_STEPS, _ENV_BUDGET_S, _ENV_MAX_RUNS = 100_000, 0.8, 96
 _ENV_NNF = ("Landroid/content/pm/PackageManager$NameNotFoundException;", "Landroid/util/AndroidException;")
 _ENV_IOE = ("Ljava/io/IOException;",)
 _ENV_UNSET = object()
+# hook-framework introspection (row 91): Frida / Xposed / Substrate checks that read the VM's own stack, its threads,
+# /proc/self/task/*/comm, /proc/self/fd links, reflection modifiers or env vars see a stock ART process: frames are
+# VMStack / Thread, the evaluator's own call chain, then one ActivityThread -> ZygoteInit tail (no XposedBridge / MS$2);
+# threads are ART's daemons + binders (no gum-js-loop / gmain / pool-frida); fds point at /dev/null, apks and sockets.
+_HK_TAIL = ("android.os.Handler.dispatchMessage", "android.os.Looper.loop", "android.app.ActivityThread.main",
+            "java.lang.reflect.Method.invoke", "com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run",
+            "com.android.internal.os.ZygoteInit.main")
+_HK_THREADS = ("main", "Signal Catcher", "perfetto_hprof_listener", "Jit thread pool", "HeapTaskDaemon",
+               "ReferenceQueueDaemon", "FinalizerDaemon", "FinalizerWatchdogDaemon", "Binder:12345_1", "Binder:12345_2",
+               "Binder:12345_3", "Profile Saver", "RenderThread")
+_HK_TASKS = {12345 + i: n[:15] for i, n in enumerate(("app",) + _HK_THREADS[1:])}
+_HK_FDS = {0: "/dev/null", 1: "/dev/null", 2: "/dev/null", 3: "/apex/com.android.art/javalib/core-oj.jar",
+           4: "/apex/com.android.art/javalib/core-libart.jar", 5: "/system/framework/framework.jar", 6: "/dev/binder",
+           7: "anon_inode:[eventfd]", 8: "anon_inode:[eventpoll]", 9: "socket:[48213]", 10: "pipe:[48214]",
+           11: "pipe:[48214]", 12: "/dev/ashmem", 13: "/data/app/~~x==/base.apk", 14: "/dev/hwbinder"}
+_HK_DIRS = {"/proc/self/task": [str(t) for t in _HK_TASKS], "/proc/self/fd": [str(f) for f in _HK_FDS]}
+for _t, _n in _HK_TASKS.items():
+    _ENV_FILES[f"/proc/self/task/{_t}/comm"] = _n + "\n"
+    _ENV_FILES[f"/proc/self/task/{_t}/status"] = f"Name:\t{_n}\nState:\tS (sleeping)\nTracerPid:\t0\n"
+_HK_NEW = frozenset(("Ljava/lang/Throwable;", "Ljava/lang/Exception;", "Ljava/lang/RuntimeException;"))
+# emulator checks beyond Build fields (row 48): a retail phone on T-Mobile -- IMEI-shaped device id, GSM, SIM ready, 24
+# vendor sensors (no Goldfish / AOSP), battery 63 % / 28.5 C / unplugged / discharging, arm64 /proc/cpuinfo without
+# Goldfish / hypervisor, wlan0 + rmnet + lo interfaces (no 10.0.2.15 / eth0); qemu pipes / sockets are _ENV_ABSENT.
+_EMU_TEL = {"getDeviceId": "352099001761481", "getImei": "352099001761481", "getMeid": None,
+            "getSubscriberId": "310260417291538", "getLine1Number": "+12065550147", "getVoiceMailNumber": "+18056377243",
+            "getSimSerialNumber": "8901260417291538470", "getNetworkOperatorName": "T-Mobile",
+            "getSimOperatorName": "T-Mobile", "getNetworkOperator": "310260", "getSimOperator": "310260",
+            "getNetworkCountryIso": "us", "getSimCountryIso": "us", "getPhoneType": 1, "getSimState": 5,
+            "getNetworkType": 13, "getDataNetworkType": 13, "getCallState": 0, "getDataState": 2,
+            "isNetworkRoaming": 0, "hasIccCard": 1, "getPhoneCount": 2, "getActiveModemCount": 2,
+            "getDeviceSoftwareVersion": "01", "getMmsUserAgent": "pixel6", "isVoiceCapable": 1, "isSmsCapable": 1}
+_EMU_SENSORS = tuple((t, n, v) for t, n, v in (
+    (1, "LSM6DSR Accelerometer", "STMicro"), (2, "MMC56X3X Magnetometer", "memsic"), (4, "LSM6DSR Gyroscope", "STMicro"),
+    (5, "TMD3702V Ambient Light Sensor", "AMS"), (6, "ICP10101 Pressure Sensor", "TDK-Invensense"),
+    (8, "TMD3702V Proximity Sensor", "AMS"), (9, "Gravity Sensor", "Google"), (10, "Linear Acceleration Sensor", "Google"),
+    (11, "Rotation Vector Sensor", "Google"), (14, "MMC56X3X Magnetometer Uncalibrated", "memsic"),
+    (15, "Game Rotation Vector Sensor", "Google"), (16, "LSM6DSR Gyroscope Uncalibrated", "STMicro"),
+    (17, "Significant Motion Detector", "Google"), (18, "Step Detector", "Google"), (19, "Step Counter", "Google"),
+    (20, "Geomagnetic Rotation Vector Sensor", "Google"), (22, "Tilt Detector", "Google"),
+    (25, "Pick Up Gesture", "Google"), (27, "Device Orientation", "Google"),
+    (35, "LSM6DSR Accelerometer Uncalibrated", "STMicro"), (30, "Motion Detect", "Google"),
+    (65536, "Double Twist", "Google"), (65537, "Double Tap", "Google"), (65538, "Device Temperature", "Google")))
+_EMU_BATTERY = {"level": 63, "scale": 100, "temperature": 285, "voltage": 3871, "status": 3, "plugged": 0, "health": 2,
+                "icon-small": 17303637, "present": 1, "technology": "Li-ion", "battery_low": 0}
+_EMU_BATPROP = {1: 2_904_000, 2: -352_000, 3: -341_000, 4: 63, 5: 0, 6: 3}  # BatteryManager.BATTERY_PROPERTY_*
+_EMU_IFACES = (("wlan0", ("192.168.1.23", "fe80::8a3b:2dff:fe14:9c07%wlan0")), ("rmnet_data1", ("10.177.42.9",)),
+               ("dummy0", ()), ("lo", ("127.0.0.1", "::1%1")))
+_EMU_SVC = {"phone": "Landroid/telephony/TelephonyManager;", "sensor": "Landroid/hardware/SensorManager;",
+            "batterymanager": "Landroid/os/BatteryManager;"}
+_EMU_LIST = frozenset(("Ljava/util/List;", "Ljava/util/ArrayList;", "Ljava/util/Collection;", "Ljava/lang/Iterable;",
+                       "Ljava/util/Iterator;", "Ljava/util/Enumeration;"))
+_ENV_FILES["/proc/cpuinfo"] = "".join(
+    f"processor\t: {i}\nBogoMIPS\t: 49.15\nFeatures\t: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp"
+    f" cpuid asimdrdm lrcpc dcpop asimddp\nCPU implementer\t: 0x41\nCPU architecture: 8\nCPU variant\t: "
+    f"{'0x1' if i > 3 else '0x2'}\nCPU part\t: {'0xd05' if i < 4 else '0xd41' if i < 6 else '0xd44'}\nCPU revision\t: 0\n\n"
+    for i in range(8)) + "Hardware\t: Tensor\n"
+_ENV_FILES["/proc/version"] = ("Linux version 5.10.157-android13-4-00001-g5c7ff5dc7aac-ab10381520 (build-user@build-host) "
+                               "(Android (8508608, based on r450784e) clang version 14.0.7) #1 SMP PREEMPT Tue Jun 27 "
+                               "14:13:03 UTC 2023\n")
+# shell probes (row 95): Runtime.exec(String | String[]) and ProcessBuilder(..).start() run on the clean Pixel's
+# toybox. su / magisk / busybox and absent paths throw IOException ("Cannot run program"); `which su` prints nothing
+# and exits 1; getprop / getenforce / id / whoami / mount / cat / ls / uname / echo / sh -c "<one command>" print what
+# the retail phone prints (exit 0); any other command aborts the run. The mount table has no rw /system, magisk, tmpfs
+# over /system or overlay; File("/proc/mounts" | "/proc/self/mountinfo") reads give the same table.
+_ENV_MOUNTS = (("/dev/block/dm-6", "/", "ext4", "ro,seclabel,relatime"),
+               ("/dev/block/dm-7", "/system_ext", "ext4", "ro,seclabel,relatime"),
+               ("/dev/block/dm-8", "/product", "ext4", "ro,seclabel,relatime"),
+               ("/dev/block/dm-9", "/vendor", "ext4", "ro,seclabel,relatime"),
+               ("tmpfs", "/dev", "tmpfs", "rw,seclabel,nosuid,relatime,mode=755"),
+               ("/dev/block/dm-48", "/data", "f2fs", "rw,lazytime,seclabel,nosuid,nodev,noatime"))
+_ENV_FILES["/proc/mounts"] = _ENV_FILES["/proc/self/mounts"] = "".join(f"{d} {m} {t} {o} 0 0\n" for d, m, t, o in _ENV_MOUNTS)
+_ENV_FILES["/proc/self/mountinfo"] = "".join(f"{20 + i} {19 if i else 1} 253:{6 + i} / {m} {o.split(',seclabel')[0]} "
+                                             f"shared:{i + 1} - {t} {d} {o}\n" for i, (d, m, t, o) in enumerate(_ENV_MOUNTS))
+_ENV_ID = "uid=10234(u0_a234) gid=10234(u0_a234) groups=10234(u0_a234),3003(inet),9997(everybody),20234(u0_a234_cache)," \
+          "50234(all_a234) context=u:r:untrusted_app:s0:c234,c256,c512,c768"
+_ENV_TOYBOX = frozenset(("sh", "getprop", "getenforce", "id", "whoami", "mount", "cat", "ls", "uname", "echo", "which",
+                         "toybox", "test", "ps", "pm", "settings", "grep", "stat", "df", "env", "setprop", "logcat"))
+_ENV_SH_PROBES = frozenset(("getprop", "getenforce", "which", "mount", "/system/bin/getprop", "/system/bin/sh"))
+_ENV_SH_META = re.compile(r"[|;&<>$`()*?\[\]'\"\\]")
+
+
+def _env_shell(argv):
+    """(stdout text, exit code) of one command line on the clean Pixel; _DxThrow(IOException) when the program does
+    not exist; _DxAbort for a command the model does not know."""
+    if not argv or not all(isinstance(x, str) for x in argv):
+        raise _DxAbort
+    prog, args = argv[0].strip(), [x.strip() for x in argv[1:]]
+    base = prog.rsplit("/", 1)[-1]
+    if "/" in prog and not (_env_norm(prog).rsplit("/", 1)[0] == "/system/bin" and base in _ENV_TOYBOX):
+        if _env_absent(prog):
+            raise _DxThrow(*_ENV_IOE)
+        raise _DxAbort
+    if base not in _ENV_TOYBOX:
+        if _ENV_ABSENT.search(base) or _ENV_PKG.search(base):
+            raise _DxThrow(*_ENV_IOE)
+        raise _DxAbort
+    if base == "toybox" and args:
+        return _env_shell(args)
+    if base == "sh" and len(args) == 2 and args[0] == "-c" and not _ENV_SH_META.search(args[1]):
+        return _env_shell(args[1].split())
+    if base == "which" and len(args) == 1:
+        t = args[0].rsplit("/", 1)[-1]
+        if t in _ENV_TOYBOX and "/" not in args[0]:
+            return f"/system/bin/{t}\n", 0
+        if _ENV_ABSENT.search(args[0]) or _ENV_PKG.search(t):
+            return "", 1
+        raise _DxAbort
+    if base == "getprop":
+        if not args:
+            return "".join(f"[{k}]: [{v}]\n" for k, v in sorted(_ENV_PROPS.items())), 0
+        if len(args) <= 2 and (args[0] in _ENV_PROPS or _ENV_ABSENT.search(args[0])):
+            v = _ENV_PROPS.get(args[0], "")
+            return (v or (args[1] if len(args) > 1 else "")) + "\n", 0
+        raise _DxAbort
+    if base == "getenforce" and not args:
+        return "Enforcing\n", 0
+    if base == "id" and not args:
+        return _ENV_ID + "\n", 0
+    if base == "id" and args in (["-u"], ["-g"]):
+        return "10234\n", 0
+    if base == "whoami" and not args or base == "id" and args in (["-un"], ["-nu"], ["-u", "-n"], ["-n", "-u"]):
+        return "u0_a234\n", 0
+    if base == "mount" and not args:
+        return "".join(f"{d} on {m} type {t} ({o})\n" for d, m, t, o in _ENV_MOUNTS), 0
+    if base == "uname" and len(args) == 1 and args[0] in ("-r", "-m", "-s"):
+        return {"-r": "5.10.157-android13-4-00001-g5c7ff5dc7aac-ab10381520\n", "-m": "aarch64\n",
+                "-s": "Linux\n"}[args[0]], 0
+    if base == "echo" and not _ENV_SH_META.search(" ".join(args)):
+        return " ".join(args) + "\n", 0
+    if base in ("cat", "ls") and len(args) == 1 and not args[0].startswith("-"):
+        if _env_absent(args[0]):
+            return "", 1
+        f = _env_file(args[0])
+        if base == "cat" and f is not None:
+            return f, 0
+        if base == "ls" and f is not None:
+            return args[0] + "\n", 0
+    if base == "test" and len(args) == 2 and args[0] in ("-e", "-f", "-x", "-d") and _env_absent(args[1]):
+        return "", 1
+    raise _DxAbort
+
+
+def _env_argv(v):
+    """The argv of an exec / ProcessBuilder command: a String (StringTokenizer split), a String[] or a List."""
+    if isinstance(v, str):
+        return v.split()
+    if isinstance(v, _DxObj):
+        v = v.f.get("rs", v.f.get("sl"))
+    if isinstance(v, list) and v and all(isinstance(x, str) for x in v):
+        return list(v)
+    raise _DxAbort
 
 
 def _env_path(v):
@@ -8810,17 +9937,140 @@ def _env_path(v):
     return v
 
 
+def _env_norm(p):
+    """A probe path as the kernel resolves it, casefolded for lookup: // collapsed, trailing / stripped."""
+    q = re.sub(r"/{2,}", "/", p.strip())
+    return (q.rstrip("/") or q).casefold()
+
+
+def _env_absent(p):
+    """True when a clean retail device has no such file: a root / emulator / hook marker, or an unknown path under
+    /system, /sbin, /su, /data/local, /data/adb, /cache (both on the raw and the normalised path)."""
+    n = _env_norm(p)
+    return bool(_ENV_ABSENT.search(p) or _ENV_ABSENT.search(n)) or n not in _ENV_FILES and bool(_ENV_ROOTTREE.match(n))
+
+
+def _env_file(p):
+    """The clean device's content of a modelled file (exact, then normalised path), else None."""
+    v = _ENV_FILES.get(p)
+    return v if v is not None else _ENV_FILES.get(_env_norm(p))
+
+
+# anti-tamper / repackaging probes (coverage atlas rows 49, 50): the untampered Play install of THIS apk. Installer
+# (getInstallerPackageName / InstallSourceInfo installing + initiating) is com.android.vending; getPackageInfo(own pkg,
+# GET_SIGNATURES | GET_SIGNING_CERTIFICATES).signatures / signingInfo hold the APK's real signer DER (toByteArray,
+# hashCode = Arrays.hashCode, toCharsString); ApplicationInfo.flags carries FLAG_DEBUGGABLE only when the manifest sets
+# it; sourceDir / publicSourceDir / getPackageCodePath = /data/app/<pkg>-1/base.apk, and ZipFile / JarFile of that path
+# reads the real central directory (getEntry(n).getCrc / getSize / getCompressedSize); MessageDigest / CRC32 / Adler32
+# hash the bytes, so a digest-keyed answer comes out of the true values.
+_ENV_TAMPER_NEW = frozenset(("Ljava/util/zip/ZipFile;", "Ljava/util/jar/JarFile;", "Ljava/util/zip/CRC32;",
+                             "Ljava/util/zip/Adler32;"))
+_ENV_SIG = "Landroid/content/pm/Signature;"
+_ENV_MD = {"md5": "md5", "sha1": "sha1", "sha-1": "sha1", "sha": "sha1", "sha-256": "sha256", "sha256": "sha256",
+           "sha-512": "sha512", "sha512": "sha512", "sha-384": "sha384", "sha384": "sha384", "sha-224": "sha224"}
+
+
+def _env_apk_facts(apk):
+    """{"pkg", "dbg" (manifest android:debuggable), "certs" (signer DERs), "ent" ({name: (crc, size, csize)}), "path"}
+    of the APK for the clean-device tamper probes; None when it is not a readable zip."""
+    try:
+        with zipfile.ZipFile(apk) as z:
+            ent = {i.filename: (i.CRC, i.file_size, i.compress_size) for i in z.infolist()[:4096]}
+            pkg, dbg = None, False
+            try:
+                b = z.read("AndroidManifest.xml") if z.getinfo("AndroidManifest.xml").file_size < 1 << 22 else b""
+                for kind, tag, attrs, _ in (_axml_events(b) if b[:2] == b"\x03\x00" else ()):
+                    if kind == "start" and attrs and tag in ("manifest", "application"):
+                        at = {k.split(":")[-1]: v for k, v in attrs.items()}
+                        if tag == "manifest":
+                            pkg = at.get("package") if isinstance(at.get("package"), str) else pkg
+                        else:
+                            dbg = str(at.get("debuggable")).lower() in ("true", "-1", "1")
+                            break
+            except Exception:  # noqa: BLE001 - unreadable manifest: package unknown, not debuggable
+                pass
+    except Exception:  # noqa: BLE001 - not a zip
+        return None
+    certs = [c["der"] for c in signing_certs(apk)]
+    return {"pkg": pkg, "dbg": dbg, "certs": certs, "ent": ent,
+            "path": f"/data/app/{pkg or 'app'}-1/base.apk"}
+
+
+# (probe, resolved argument, stub answer) of the last clean_device_scan() call, for the worker to audit
+CLEAN_DEVICE_PROBES = []
+
+
 class _EnvVM(_DxVM):
     """_DxVM on a clean physical Pixel: framework probes used by root / emulator / debugger / Frida checks answer the
     way an unrooted, untraced retail device would; any other unknown call still aborts."""
     max_steps = _ENV_STEPS
+    apk = None  # _env_apk_facts() of the scanned APK (tamper probes); None = not modelled
 
-    def __init__(self, dx, deadline):
+    def __init__(self, dx, deadline, release=False):
         super().__init__(dx, deadline)
         self.statics.update(_ENV_STATICS)
+        self.ns, self.release, self.stack = 1_700_000_000_000_000_000, release, []
+        self.probe_log = []
+
+    def log_probe(self, kind, arg, answer):
+        if len(self.probe_log) < 256:
+            self.probe_log.append((kind, arg, answer))
+        return answer
+
+    def run(self, ref, raw_args, depth=0):
+        self.stack.append(ref)
+        try:
+            return super().run(ref, raw_args, depth)
+        finally:
+            self.stack.pop()
+
+    def init_class(self, ct):
+        super().init_class(ct)
+        if self.release and ct.endswith("/BuildConfig;") and f"{ct}->DEBUG" in self.statics:
+            self.statics[f"{ct}->DEBUG"] = 0
+
+    def process(self, kind, argv):
+        """A java.lang.Process running argv on the clean Pixel (_env_shell); IOException when the program is absent."""
+        try:
+            out, rc = _env_shell(argv)
+        except _DxThrow:
+            self.log_probe(kind, " ".join(argv), "IOException")
+            raise
+        p = _DxObj("Ljava/lang/Process;")
+        p.f.update(out=self.log_probe(kind, " ".join(argv), out), rc=rc)
+        return p
+
+    @staticmethod
+    def read1(lines):
+        """Reader.read() / InputStream.read() over a line-split stream: one char code, -1 at the end."""
+        if not lines:
+            return -1
+        if not lines[0]:
+            lines.pop(0)
+            return 10
+        c, lines[0] = lines[0][0], lines[0][1:]
+        return ord(c)
+
+    def prop(self, name, a):
+        k = a[0] if a and isinstance(a[0], str) else None
+        if k is None or k not in _ENV_PROPS and not _ENV_ABSENT.search(k):
+            raise _DxAbort
+        v = _ENV_PROPS.get(k, "")
+        d = a[1] if len(a) > 1 else None
+        if name == "get":
+            return v if v or d is None else d
+        if name in ("getInt", "getLong"):
+            return int(v) if re.fullmatch(r"-?\d{1,18}", v) else d if isinstance(d, int) else _ENV_UNSET
+        if name == "getBoolean":
+            return int(v in ("1", "y", "yes", "on", "true")) if v else d if isinstance(d, int) else _ENV_UNSET
+        raise _DxAbort
+
+    def const_class(self, t):
+        return self.klass(t) if t in self.dx.sfields else super().const_class(t)
 
     def new_instance(self, t):
-        if t in _ENV_NEW:
+        if t in _ENV_NEW or t in _HK_NEW or t in ("Landroid/content/IntentFilter;", "Ljava/util/ArrayList;") or (
+                self.apk is not None and t in _ENV_TAMPER_NEW):
             return _DxObj(t)
         return super().new_instance(t)
 
@@ -8837,27 +10087,100 @@ class _EnvVM(_DxVM):
         name, sig = rest.split("(", 1)
         a = raw[1:] if raw and isinstance(raw[0], _DxObj) and name != "<init>" else raw
         o = raw[0] if raw and isinstance(raw[0], _DxObj) else None
+        v = self.tamper(cls, name, sig, a, o) if self.apk is not None else _ENV_UNSET
+        if v is _ENV_UNSET:
+            v = self.hook(cls, name, sig, raw, a, o)
+        if v is _ENV_UNSET:
+            v = self.emu(cls, name, sig, a, o)
+        if v is not _ENV_UNSET:
+            return v
         if cls == "Ljava/lang/String;" and name in ("contains", "startsWith", "endsWith", "equalsIgnoreCase") and raw:
             x, y = _dxe_str(raw[0]), _dxe_str(raw[1])
             if name == "startsWith" and len(raw) > 2:
                 return int(isinstance(raw[2], int) and x.startswith(y, raw[2]))
             return int({"contains": y in x, "startsWith": x.startswith(y), "endsWith": x.endswith(y),
                         "equalsIgnoreCase": x.lower() == y.lower()}[name])
-        if cls == "Landroid/os/Debug;" and name in ("isDebuggerConnected", "waitingForDebugger"):
+        if cls in ("Landroid/os/Debug;", "Ldalvik/system/VMDebug;") and name in (
+                "isDebuggerConnected", "waitingForDebugger", "isDebuggingEnabled"):
             return 0
+        if _ENV_CLOCK.match(ref):
+            self.ns += 1_000_000
+            return self.ns if "Nanos" in ref or "nanoTime" in ref else self.ns // 1_000_000
+        if name == "sleep" and cls in ("Ljava/lang/Thread;", "Landroid/os/SystemClock;"):
+            return None
+        if cls == "Landroid/os/SystemProperties;":
+            v = self.prop(name, raw)
+            if v is _ENV_UNSET:
+                raise _DxAbort
+            return v
+        if cls == "Ljava/lang/Boolean;" and name == "parseBoolean" and raw and isinstance(raw[0], str):
+            return int(raw[0].lower() == "true")
         if cls == "Ljava/lang/System;" and name in ("getProperty", "getenv"):
             return raw[1] if len(raw) > 1 else None
+        if cls == "Ljava/lang/Class;" and name == "forName" and raw and raw[0] == "android.os.SystemProperties":
+            c = _DxObj(cls)
+            c.f["n"] = raw[0]
+            return c
+        if o is not None and o.t == "Ljava/lang/Class;" and o.f.get("n") == "android.os.SystemProperties":
+            if name in ("getMethod", "getDeclaredMethod") and a and isinstance(a[0], str):
+                m = _DxObj("Ljava/lang/reflect/Method;")
+                m.f["n"] = a[0]
+                return m
+            raise _DxAbort
+        if o is not None and o.t == "Ljava/lang/reflect/Method;" and "n" in o.f:
+            if name == "setAccessible":
+                return None
+            if name == "invoke" and len(a) > 1 and isinstance(a[1], list) and o.f["n"] == "get":
+                v = self.prop("get", list(a[1]))
+                if v is not _ENV_UNSET:
+                    return v
+            raise _DxAbort
         if cls == "Ljava/lang/Class;" and name == "forName" and raw and isinstance(raw[0], str):
             if _ENV_PKG.search(raw[0]):
+                self.log_probe("Class.forName", raw[0], "ClassNotFoundException")
                 raise _DxThrow("Ljava/lang/ClassNotFoundException;", "Ljava/lang/ReflectiveOperationException;")
             raise _DxAbort
         if cls == "Ljava/lang/Runtime;":
             if name == "getRuntime":
                 return _DxObj(cls)
-            if name == "exec" and a and re.search(r"(?:^|/|\b)su\b|which|magisk|busybox", " ".join(
-                    x for x in (a[0] if isinstance(a[0], list) else [a[0]]) if isinstance(x, str))):
+            if name == "exec" and a:
+                try:
+                    return self.process("Runtime.exec", _env_argv(a[0]))
+                except _DxThrow:
+                    raise
+                except _DxAbort:  # an unmodelled command naming su / which / magisk / busybox: not on this device
+                    if not re.search(r"(?:^|/|\b)su\b|which|magisk|busybox", " ".join(
+                            x for x in (a[0] if isinstance(a[0], list) else [a[0]]) if isinstance(x, str))):
+                        raise
+                self.log_probe("Runtime.exec", a[0], "IOException")
                 raise _DxThrow(*_ENV_IOE)
             raise _DxAbort
+        if cls == "Ljava/lang/ProcessBuilder;" and o is not None:
+            if name in ("<init>", "command") and len(raw) > 1:
+                o.f["argv"] = _env_argv(raw[1])
+                return None if name == "<init>" else o
+            if name in ("redirectErrorStream", "directory") and len(raw) > 1:
+                return o
+            if name == "start" and "argv" in o.f:
+                return self.process("ProcessBuilder.start", o.f["argv"])
+            raise _DxAbort
+        if o is not None and o.t == "Ljava/lang/Process;":
+            if name in ("waitFor", "exitValue"):
+                return 1 if sig.startswith("JLjava/util/concurrent/TimeUnit;") else o.f["rc"]
+            if name in ("getInputStream", "getErrorStream"):
+                k = "so" if name == "getInputStream" else "se"
+                if k not in o.f:
+                    o.f[k] = _DxObj("Ljava/io/InputStream;")
+                    o.f[k].f["L"] = o.f["out"].splitlines() if k == "so" else []
+                return o.f[k]
+            if name in ("destroy", "destroyForcibly", "isAlive"):
+                return 0 if name == "isAlive" else None if name == "destroy" else o
+            raise _DxAbort
+        if cls in ("Lkotlin/io/TextStreamsKt;", "Lkotlin/io/ByteStreamsKt;") and name in ("readText", "readBytes") \
+                and a and isinstance(a[0], _DxObj) and "L" in a[0].f:
+            txt = "".join(x + "\n" for x in a[0].f["L"])
+            del a[0].f["L"][:]
+            return txt if name == "readText" else _DxArr((b ^ 0x80) - 0x80 for b in txt.encode())
         if o is not None and o.t == "Ljava/io/File;" or cls == "Ljava/io/File;":
             if name == "<init>" and o is not None:
                 parts = [_env_path(x) for x in raw[1:3]]
@@ -8865,20 +10188,24 @@ class _EnvVM(_DxVM):
                 return None
             if o is not None and name in ("exists", "canRead", "canExecute", "canWrite", "isFile", "isDirectory", "length"):
                 p = _env_path(o)
-                if _ENV_ABSENT.search(p):
-                    return 0
-                if p in _ENV_FILES:
-                    return len(_ENV_FILES[p]) if name == "length" else int(name in ("exists", "canRead", "isFile"))
+                if _env_absent(p):
+                    return self.log_probe("File." + name, p, 0)
+                f = _env_file(p)
+                if f is not None:
+                    return self.log_probe("File." + name, p, len(f) if name == "length" else int(name in (
+                        "exists", "canRead", "isFile")))
             if o is not None and name in ("getPath", "getAbsolutePath", "toString"):
                 return _env_path(o)
             raise _DxAbort
         if cls in ("Ljava/io/FileReader;", "Ljava/io/FileInputStream;") and name == "<init>" and o is not None:
             p = _env_path(raw[1] if len(raw) > 1 else None)
-            if _ENV_ABSENT.search(p):
+            if _env_absent(p):
+                self.log_probe(cls[1:-1].rsplit("/", 1)[-1], p, "FileNotFoundException")
                 raise _DxThrow("Ljava/io/FileNotFoundException;", *_ENV_IOE)
-            if p not in _ENV_FILES:
+            f = _env_file(p)
+            if f is None:
                 raise _DxAbort
-            o.f["L"] = _ENV_FILES[p].splitlines()
+            o.f["L"] = self.log_probe(cls[1:-1].rsplit("/", 1)[-1], p, f).splitlines()
             return None
         if cls in ("Ljava/io/InputStreamReader;", "Ljava/io/BufferedReader;", "Ljava/util/Scanner;") and o is not None:
             if name == "<init>":
@@ -8891,7 +10218,22 @@ class _EnvVM(_DxVM):
             if lines is None:
                 raise _DxAbort
             if name in ("readLine", "nextLine"):
+                if name == "nextLine" and not lines:
+                    raise _DxThrow("Ljava/util/NoSuchElementException;", "Ljava/lang/RuntimeException;")
                 return lines.pop(0) if lines else None
+            if name == "useDelimiter" and len(raw) > 1 and raw[1] in ("\\A", "\\Z"):
+                o.f["all"] = 1
+                return o
+            if name == "next" and o.f.get("all"):
+                if not lines:
+                    raise _DxThrow("Ljava/util/NoSuchElementException;", "Ljava/lang/RuntimeException;")
+                txt = "".join(x + "\n" for x in lines)
+                del lines[:]
+                return txt
+            if name in ("ready", "hasNext"):
+                return int(bool(lines))
+            if name == "read" and sig.startswith(")"):
+                return self.read1(lines)
             if name == "hasNextLine":
                 return int(bool(lines))
             if name == "close":
@@ -8899,6 +10241,14 @@ class _EnvVM(_DxVM):
             raise _DxAbort
         if cls in ("Ljava/io/FileReader;", "Ljava/io/FileInputStream;") and name == "close":
             return None
+        if cls == "Ljava/io/InputStream;" and o is not None and "L" in o.f:
+            if name == "close":
+                return None
+            if name == "read" and sig.startswith(")"):
+                return self.read1(o.f["L"])
+            if name == "available":
+                return len("".join(x + "\n" for x in o.f["L"]).encode())
+            raise _DxAbort
         if cls in ("Ljava/net/Socket;", "Ljava/net/InetSocketAddress;"):
             if name == "<init>" and o is not None:
                 port = next((x for x in raw[2:] if isinstance(x, int)), None)
@@ -8921,17 +10271,17 @@ class _EnvVM(_DxVM):
         if name == "getContentResolver" and sig.endswith(")Landroid/content/ContentResolver;"):
             return _DxObj("Landroid/content/ContentResolver;")
         if name == "getApplicationInfo" and sig.endswith(")Landroid/content/pm/ApplicationInfo;"):
-            if a and isinstance(a[0], str) and _ENV_PKG.search(a[0]):
+            if a and isinstance(a[0], str) and _ENV_PKG.search(a[0].strip()):
+                self.log_probe(name, a[0], "NameNotFoundException")
                 raise _DxThrow(*_ENV_NNF)
             if a:
                 raise _DxAbort
-            ai = _DxObj("Landroid/content/pm/ApplicationInfo;")
-            ai.f["Landroid/content/pm/ApplicationInfo;->flags"] = 0x38C8BE44  # FLAG_DEBUGGABLE (0x2) clear
-            return ai
+            return self.app_info()
         if name == "getPackageInfo" and cls.startswith("Landroid/content/pm/") or name == "getLaunchIntentForPackage":
-            if a and isinstance(a[0], str) and _ENV_PKG.search(a[0]):
+            if a and isinstance(a[0], str) and _ENV_PKG.search(a[0].strip()):
                 if name == "getLaunchIntentForPackage":
-                    return None
+                    return self.log_probe(name, a[0], None)
+                self.log_probe(name, a[0], "NameNotFoundException")
                 raise _DxThrow(*_ENV_NNF)
             raise _DxAbort
         if name in ("getInstallerPackageName",) and cls.startswith("Landroid/content/pm/"):
@@ -8943,16 +10293,470 @@ class _EnvVM(_DxVM):
             raise _DxAbort
         return _ENV_UNSET
 
+    def app_info(self):
+        ai = _DxObj("Landroid/content/pm/ApplicationInfo;")
+        ai.f["Landroid/content/pm/ApplicationInfo;->flags"] = 0x38C8BE44  # FLAG_DEBUGGABLE (0x2) clear
+        if self.apk is not None:
+            A = "Landroid/content/pm/ApplicationInfo;->"
+            ai.f[A + "flags"] |= 2 if self.apk["dbg"] else 0
+            ai.f[A + "sourceDir"] = ai.f[A + "publicSourceDir"] = self.apk["path"]
+            if self.apk["pkg"]:
+                ai.f[A + "packageName"] = ai.f[A + "processName"] = self.apk["pkg"]
+                ai.f[A + "dataDir"] = f"/data/user/0/{self.apk['pkg']}"
+        return ai
 
-def _env_resolve(dx, ref):
-    """An invoke ref re-pointed at the in-dex superclass that defines it (inherited app methods); else unchanged."""
-    if ref in dx.code:
-        return ref
+    def sigs(self):
+        out = _DxArr()
+        out.t = _ENV_SIG
+        for der in self.apk["certs"]:
+            x = _DxObj(_ENV_SIG)
+            x.f["der"] = der
+            out.append(x)
+        return out
+
+    def tamper(self, cls, name, sig, a, o):  # noqa: C901 - one table of anti-tamper probe models
+        """Installer / signature / debuggable / APK-path / dex-CRC probes of the untampered install (rows 49, 50);
+        _ENV_UNSET otherwise."""
+        import hashlib
+        import zlib
+        t = o.t if o is not None else None
+        ap, pkg = self.apk, self.apk["pkg"]
+        own = bool(a) and isinstance(a[0], str) and pkg is not None and a[0].strip() == pkg
+        if name == "getPackageName" and sig == ")Ljava/lang/String;" and pkg and (cls in self.dx.sfields or cls in (
+                "Landroid/content/Context;", "Landroid/content/ContextWrapper;", "Landroid/app/Activity;",
+                "Landroid/app/Application;", "Landroid/app/Service;")):
+            return pkg
+        if name in ("getPackageCodePath", "getPackageResourcePath") and sig == ")Ljava/lang/String;":
+            return self.log_probe(name, "", ap["path"])
+        if cls.startswith("Landroid/content/pm/") and t != _ENV_SIG:
+            if name == "getInstallerPackageName" and own:
+                return self.log_probe(name, a[0], "com.android.vending")
+            if name == "getInstallSourceInfo" and own:
+                return _DxObj("Landroid/content/pm/InstallSourceInfo;")
+            if t == "Landroid/content/pm/InstallSourceInfo;":
+                if name in ("getInstallingPackageName", "getInitiatingPackageName", "getUpdateOwnerPackageName"):
+                    return self.log_probe(name, "", "com.android.vending")
+                if name in ("getOriginatingPackageName", "getInstallingPackageSigningInfo"):
+                    return None
+                if name == "getPackageSource":
+                    return 2  # PACKAGE_SOURCE_STORE
+                raise _DxAbort
+            if name == "getPackageInfo" and own:
+                pi = _DxObj("Landroid/content/pm/PackageInfo;")
+                P = "Landroid/content/pm/PackageInfo;->"
+                flags = a[1] if len(a) > 1 and isinstance(a[1], int) else 0
+                pi.f[P + "packageName"], pi.f[P + "applicationInfo"] = pkg, self.app_info()
+                if flags & 0x40:  # GET_SIGNATURES
+                    pi.f[P + "signatures"] = self.sigs()
+                if flags & 0x8000000:  # GET_SIGNING_CERTIFICATES
+                    pi.f[P + "signingInfo"] = _DxObj("Landroid/content/pm/SigningInfo;")
+                self.log_probe(name, a[0], f"PackageInfo(flags={flags:#x})")
+                return pi
+            if name == "getApplicationInfo" and own:
+                return self.app_info()
+            if t == "Landroid/content/pm/SigningInfo;":
+                if name in ("getApkContentsSigners", "getSigningCertificateHistory"):
+                    return self.sigs()
+                if name in ("hasMultipleSigners", "hasPastSigningCertificates"):
+                    return int(name == "hasMultipleSigners" and len(ap["certs"]) > 1)
+                raise _DxAbort
+        if t == _ENV_SIG and "der" in o.f:
+            der = o.f["der"]
+            if name == "toByteArray":
+                return _dxe_barr(der)
+            if name == "hashCode":
+                h = 1
+                for x in der:
+                    h = (31 * h + ((x ^ 0x80) - 0x80)) & 0xFFFFFFFF
+                return _dxe_w32(h)
+            if name in ("toCharsString", "toString"):
+                return der.hex() if name == "toCharsString" else f"android.content.pm.Signature@{id(o) & 0xFFFFFFF:x}"
+            if name == "equals":
+                return int(isinstance(a[0], _DxObj) and a[0].f.get("der") == der) if a else 0
+            raise _DxAbort
+        if t in ("Ljava/util/zip/ZipFile;", "Ljava/util/jar/JarFile;"):
+            if name == "<init>":
+                p = a[1] if len(a) > 1 else None
+                p = p.f.get("p") if isinstance(p, _DxObj) else p
+                if p != ap["path"]:
+                    raise _DxAbort
+                o.f["zip"] = True
+                return self.log_probe("ZipFile", p, "base.apk")
+            if not o.f.get("zip"):
+                raise _DxAbort
+            if name in ("getEntry", "getJarEntry") and a and isinstance(a[0], str):
+                e = ap["ent"].get(a[0])
+                if e is None:
+                    return None
+                z = _DxObj("Ljava/util/zip/ZipEntry;")
+                z.f.update(zn=a[0], ze=e)
+                return z
+            if name == "close":
+                return None
+            if name == "size":
+                return len(ap["ent"])
+            raise _DxAbort
+        if t in ("Ljava/util/zip/ZipEntry;", "Ljava/util/jar/JarEntry;") and "ze" in o.f:
+            v = {"getCrc": o.f["ze"][0], "getSize": o.f["ze"][1], "getCompressedSize": o.f["ze"][2],
+                 "getName": o.f["zn"], "toString": o.f["zn"], "isDirectory": int(o.f["zn"].endswith("/"))}
+            if name not in v:
+                raise _DxAbort
+            return self.log_probe(f"ZipEntry.{name}", o.f["zn"], v[name])
+        if t in ("Ljava/util/zip/CRC32;", "Ljava/util/zip/Adler32;"):
+            fn, v = (zlib.crc32, o.f.get("v", 0)) if t.endswith("CRC32;") else (zlib.adler32, o.f.get("v", 1))
+            if name in ("<init>", "reset"):
+                o.f["v"] = 0 if fn is zlib.crc32 else 1
+                return None
+            if name == "update" and a:
+                b = bytes([a[0] & 0xFF]) if isinstance(a[0], int) else _dxe_bytes(a[0])
+                if len(a) == 3 and isinstance(a[1], int) and isinstance(a[2], int):
+                    b = b[a[1]:a[1] + a[2]]
+                o.f["v"] = fn(b, v)
+                return None
+            if name == "getValue":
+                return v
+            raise _DxAbort
+        if cls == "Ljava/security/MessageDigest;" and name == "getInstance" and a and isinstance(a[0], str):
+            alg = _ENV_MD.get(a[0].lower())
+            if alg is None:
+                raise _DxAbort
+            m = _DxObj(cls)
+            m.f["md"] = hashlib.new(alg)
+            return m
+        if t == "Ljava/security/MessageDigest;" and "md" in o.f:
+            md = o.f["md"]
+            if name == "update" and a:
+                b = bytes([a[0] & 0xFF]) if isinstance(a[0], int) else _dxe_bytes(a[0])
+                if len(a) == 3 and isinstance(a[1], int) and isinstance(a[2], int):
+                    b = b[a[1]:a[1] + a[2]]
+                md.update(b)
+                return None
+            if name == "digest":
+                if a:
+                    md.update(_dxe_bytes(a[0]))
+                o.f["md"] = hashlib.new(md.name)  # digest() resets the engine
+                return _dxe_barr(md.digest())
+            if name == "reset":
+                o.f["md"] = hashlib.new(md.name)
+                return None
+            raise _DxAbort
+        if cls == "Ljava/security/MessageDigest;" and name == "isEqual" and len(a) == 2:
+            return int(_dxe_bytes(a[0]) == _dxe_bytes(a[1]))
+        return _ENV_UNSET
+
+    def emu(self, cls, name, sig, a, o):  # noqa: C901 - one table of retail-phone models
+        """Telephony / sensor / battery / network-interface probes on a retail phone (row 48); _ENV_UNSET otherwise."""
+        t = o.t if o is not None else None
+        if name == "getSystemService" and a and isinstance(a[0], str) and sig.startswith("Ljava/lang/String;)"):
+            if a[0] not in _EMU_SVC:
+                raise _DxAbort
+            return _DxObj(_EMU_SVC[a[0]])
+        if t == "Landroid/telephony/TelephonyManager;" or cls == "Landroid/telephony/TelephonyManager;" and o:
+            if name not in _EMU_TEL:
+                raise _DxAbort
+            return _EMU_TEL[name]
+        if t == "Landroid/hardware/SensorManager;":
+            if name in ("getSensorList", "getDefaultSensor", "getDynamicSensorList") and a and isinstance(a[0], int):
+                ss = [] if name == "getDynamicSensorList" else [s for s in _EMU_SENSORS if a[0] == -1 or s[0] == a[0]]
+                objs = []
+                for st, sn, sv in ss:
+                    x = _DxObj("Landroid/hardware/Sensor;")
+                    x.f.update(st=st, sn=sn, sv=sv)
+                    objs.append(x)
+                if name == "getDefaultSensor":
+                    return objs[0] if objs else None
+                lst = _DxObj("Ljava/util/List;")
+                lst.f["sl"] = objs
+                return lst
+            raise _DxAbort
+        if t == "Landroid/hardware/Sensor;" and "st" in o.f:
+            v = {"getName": o.f["sn"], "getVendor": o.f["sv"], "getType": o.f["st"], "getVersion": 1, "getPower": 0.0,
+                 "getMaximumRange": 100.0, "getResolution": 0.01, "getMinDelay": 5000, "isWakeUpSensor": 0,
+                 "toString": f'{{Sensor name="{o.f["sn"]}", vendor="{o.f["sv"]}", version=1, type={o.f["st"]}}}'}
+            if name not in v:
+                raise _DxAbort
+            return v[name]
+        if t in _EMU_LIST and o is not None and "sl" in o.f:
+            sl = o.f["sl"]
+            if name in ("size", "isEmpty"):
+                return len(sl) if name == "size" else int(not sl)
+            if name == "get" and a and isinstance(a[0], int):
+                if not 0 <= a[0] < len(sl):
+                    raise _DxThrow("Ljava/lang/IndexOutOfBoundsException;", "Ljava/lang/RuntimeException;")
+                return sl[a[0]]
+            if name == "iterator":
+                it = _DxObj("Ljava/util/Iterator;")
+                it.f["sl"] = list(sl)
+                return it
+            if name in ("hasNext", "hasMoreElements"):
+                return int(bool(sl))
+            if name in ("next", "nextElement"):
+                if not sl:
+                    raise _DxThrow("Ljava/util/NoSuchElementException;", "Ljava/lang/RuntimeException;")
+                return sl.pop(0)
+            raise _DxAbort
+        if cls == "Ljava/util/Collections;" and name == "list" and a and isinstance(a[0], _DxObj) and "sl" in a[0].f:
+            lst = _DxObj("Ljava/util/ArrayList;")
+            lst.f["sl"] = list(a[0].f["sl"])
+            return lst
+        if t == "Landroid/content/IntentFilter;" and name in ("<init>", "addAction"):
+            act = a[1] if name == "<init>" and len(a) > 1 else a[0] if name == "addAction" and a else None
+            if isinstance(act, str):
+                o.f["act"] = act
+            return None
+        if name == "registerReceiver" and len(a) > 1 and isinstance(a[1], _DxObj) and a[1].t == "Landroid/content/IntentFilter;":
+            if a[1].f.get("act") != "android.intent.action.BATTERY_CHANGED" or a[0] not in (None, 0):
+                raise _DxAbort  # a live receiver / other broadcast: nothing sticky to hand back
+            it = _DxObj("Landroid/content/Intent;")
+            it.f["bat"] = True
+            return it
+        if t == "Landroid/content/Intent;" and o.f.get("bat"):
+            k = a[0] if a and isinstance(a[0], str) else None
+            if name == "getAction":
+                return "android.intent.action.BATTERY_CHANGED"
+            if name in ("getIntExtra", "getBooleanExtra", "getStringExtra") and k is not None:
+                v = _EMU_BATTERY.get(k)
+                if v is None or isinstance(v, str) != (name == "getStringExtra"):
+                    return a[1] if len(a) > 1 else None
+                return v
+            raise _DxAbort
+        if t == "Landroid/os/BatteryManager;":
+            if name in ("getIntProperty", "getLongProperty") and a and isinstance(a[0], int):
+                return _EMU_BATPROP.get(a[0], -2 ** 31 if name == "getIntProperty" else -2 ** 63)
+            if name == "isCharging":
+                return 0
+            raise _DxAbort
+        if cls == "Ljava/net/NetworkInterface;" and name in ("getNetworkInterfaces", "getByName"):
+            nis = []
+            for n, addrs in _EMU_IFACES:
+                ni = _DxObj(cls)
+                ni.f.update(nn=n, na=addrs)
+                nis.append(ni)
+            if name == "getByName":
+                return next((x for x in nis if a and x.f["nn"] == a[0]), None)
+            e = _DxObj("Ljava/util/Enumeration;")
+            e.f["sl"] = nis
+            return e
+        if t == "Ljava/net/NetworkInterface;" and "nn" in o.f:
+            n = o.f["nn"]
+            if name in ("getName", "getDisplayName", "toString"):
+                return n if name != "toString" else f"name:{n} ({n})"
+            if name in ("isUp", "isLoopback", "isVirtual", "isPointToPoint"):
+                return int({"isUp": n != "dummy0", "isLoopback": n == "lo"}.get(name, False))
+            if name in ("getInetAddresses", "getInterfaceAddresses"):
+                e = _DxObj("Ljava/util/Enumeration;" if name == "getInetAddresses" else "Ljava/util/List;")
+                e.f["sl"] = []
+                for ad in o.f["na"]:
+                    x = _DxObj("Ljava/net/InetAddress;")
+                    x.f["ha"] = ad
+                    e.f["sl"].append(x)
+                return e
+            raise _DxAbort
+        if t in ("Ljava/net/InetAddress;", "Ljava/net/Inet4Address;", "Ljava/net/Inet6Address;") and "ha" in o.f:
+            h = o.f["ha"]
+            if name in ("getHostAddress", "toString"):
+                return h if name == "getHostAddress" else "/" + h
+            if name in ("isLoopbackAddress", "isSiteLocalAddress", "isLinkLocalAddress"):
+                return int({"isLoopbackAddress": h in ("127.0.0.1", "::1%1"), "isLinkLocalAddress": h.startswith("fe80"),
+                            "isSiteLocalAddress": h.startswith(("192.168.", "10."))}[name])
+            raise _DxAbort
+        return _ENV_UNSET
+
+    def frames(self, top=()):
+        """StackTraceElement[] of the current call chain as stock ART reports it (innermost first); a daemon thread's
+        (top None) is just its run loop."""
+        names = ["java.lang.Object.wait", "java.lang.Thread.run"] if top is None else list(top) + [
+            r.split("(", 1)[0].replace("->", ".")[1:].replace("/", ".").replace(";.", ".")
+            for r in reversed(self.stack)] + list(_HK_TAIL)
+        out = _DxArr()
+        out.t = "Ljava/lang/StackTraceElement;"
+        for n in names:
+            e = _DxObj("Ljava/lang/StackTraceElement;")
+            e.f["c"], e.f["m"] = n.rsplit(".", 1)
+            e.f["nat"] = n in ("java.lang.reflect.Method.invoke", "dalvik.system.VMStack.getThreadStackTrace")
+            out.append(e)
+        return out
+
+    def klass(self, desc):
+        c = _DxObj("Ljava/lang/Class;")
+        c.f["d"] = desc
+        return c
+
+    def hook(self, cls, name, sig, raw, a, o):  # noqa: C901 - one table of introspection models
+        """Hook-framework introspection probes on a stock device (row 91); _ENV_UNSET when not one of them."""
+        t = o.t if o is not None else None
+        if cls == "Ljava/lang/Thread;" and name == "currentThread":
+            th = _DxObj(cls)
+            th.f["n"] = "main"
+            return th
+        if t == "Ljava/lang/Thread;" and "n" in o.f:
+            if name == "getName":
+                return o.f["n"]
+            if name == "getStackTrace":
+                if o.f["n"] == "main":
+                    return self.frames(("dalvik.system.VMStack.getThreadStackTrace", "java.lang.Thread.getStackTrace"))
+                return self.frames(None)
+            raise _DxAbort
+        if cls == "Ljava/lang/Thread;" and name == "getAllStackTraces":
+            m = _DxObj("Ljava/util/Map;")
+            m.f["hk"] = []
+            for n in _HK_THREADS:
+                th = _DxObj(cls)
+                th.f["n"] = n
+                m.f["hk"].append((th, self.frames(("dalvik.system.VMStack.getThreadStackTrace",
+                                                    "java.lang.Thread.getStackTrace") if n == "main" else None)))
+            return m
+        if t in _HK_NEW:
+            if name == "<init>":
+                o.f["st"] = self.frames(())
+                return None
+            if name == "getStackTrace" and "st" in o.f:
+                return o.f["st"]
+            raise _DxAbort
+        if o is not None and "hk" in o.f and t in ("Ljava/util/Map;", "Ljava/util/Set;", "Ljava/util/Collection;",
+                                                   "Ljava/util/Iterator;", "Ljava/util/Map$Entry;"):
+            hk = o.f["hk"]
+            if name in ("keySet", "values", "entrySet"):
+                c = _DxObj("Ljava/util/Set;")
+                if name == "entrySet":
+                    c.f["hk"] = []
+                    for k, v in hk:
+                        e = _DxObj("Ljava/util/Map$Entry;")
+                        e.f["hk"] = (k, v)
+                        c.f["hk"].append(e)
+                else:
+                    c.f["hk"] = [kv[name == "values"] for kv in hk]
+                return c
+            if t == "Ljava/util/Map$Entry;" and name in ("getKey", "getValue"):
+                return hk[name == "getValue"]
+            if name == "get" and t == "Ljava/util/Map;" and a:
+                return next((v for k, v in hk if k is a[0]), None)
+            if name == "iterator":
+                it = _DxObj("Ljava/util/Iterator;")
+                it.f["hk"] = list(hk)
+                return it
+            if name == "hasNext":
+                return int(bool(hk))
+            if name == "next":
+                if not hk:
+                    raise _DxAbort
+                return hk.pop(0)
+            if name in ("size", "isEmpty"):
+                return len(hk) if name == "size" else int(not hk)
+            raise _DxAbort
+        if t == "Ljava/lang/StackTraceElement;":
+            c, m = o.f["c"], o.f["m"]
+            if name in ("getClassName", "getMethodName"):
+                return c if name == "getClassName" else m
+            if name == "isNativeMethod":
+                return int(o.f["nat"])
+            if name == "toString":
+                return f"{c}.{m}({'Native Method' if o.f['nat'] else 'Unknown Source'})"
+            raise _DxAbort
+        if t == "Ljava/io/File;" or cls == "Ljava/io/File;" and o is not None:
+            p = o.f.get("p")
+            if isinstance(p, str) and p.rstrip("/") in _HK_DIRS:
+                p = p.rstrip("/")
+                if name in ("exists", "isDirectory", "canRead"):
+                    return 1
+                if name == "isFile":
+                    return 0
+                if name in ("list", "listFiles"):
+                    out = _DxArr()
+                    for n in _HK_DIRS[p]:
+                        if name == "list":
+                            out.append(n)
+                        else:
+                            f = _DxObj("Ljava/io/File;")
+                            f.f["p"] = f"{p}/{n}"
+                            out.append(f)
+                    out.t = "Ljava/lang/String;" if name == "list" else "Ljava/io/File;"
+                    return out
+            if isinstance(p, str) and name == "getName" and re.match(r"/proc/self/(?:task|fd)/", p):
+                return p.rsplit("/", 1)[1]
+            if isinstance(p, str) and name in ("getCanonicalPath", "getCanonicalFile") and p.startswith("/proc/self/fd/"):
+                tgt = _HK_FDS.get(int(p[14:])) if p[14:].isdigit() else None
+                if tgt is None:
+                    raise _DxThrow(*_ENV_IOE)
+                if name == "getCanonicalPath":
+                    return tgt
+                f = _DxObj("Ljava/io/File;")
+                f.f["p"] = tgt
+                return f
+            return _ENV_UNSET
+        if cls == "Landroid/system/Os;" and name == "readlink" and raw and isinstance(raw[0], str):
+            m = re.fullmatch(r"/proc/self/fd/(\d+)", raw[0])
+            if not m or int(m.group(1)) not in _HK_FDS:
+                raise _DxThrow("Landroid/system/ErrnoException;")
+            return _HK_FDS[int(m.group(1))]
+        if cls == "Ljava/lang/System;" and name == "getenv" and raw and isinstance(raw[0], str):
+            return None  # LD_PRELOAD / CLASSPATH / ... unset in a zygote-forked app
+        if t == "Ljava/lang/Class;" and "d" in o.f:
+            d = o.f["d"]
+            if name == "getName":
+                return d[1:-1].replace("/", ".")
+            if name == "getDeclaredMethods":
+                out = _DxArr()
+                out.t = "Ljava/lang/reflect/Method;"
+                for r in self.dx.code:
+                    if r.startswith(d + "->") and "-><init>(" not in r and "-><clinit>(" not in r:
+                        m = _DxObj("Ljava/lang/reflect/Method;")
+                        m.f["m"] = r
+                        out.append(m)
+                return out
+            if name in ("getDeclaredMethod", "getMethod") and a and isinstance(a[0], str):
+                r = next((r for r in self.dx.code if r.startswith(f"{d}->{a[0]}(")), None)
+                if r is None:
+                    raise _DxThrow("Ljava/lang/NoSuchMethodException;", "Ljava/lang/ReflectiveOperationException;")
+                m = _DxObj("Ljava/lang/reflect/Method;")
+                m.f["m"] = r
+                return m
+            if name == "getClassLoader":
+                return _DxObj("Ljava/lang/ClassLoader;")
+            raise _DxAbort
+        if t == "Ljava/lang/reflect/Method;" and "m" in o.f:
+            if name == "getModifiers":
+                return self.dx.code[o.f["m"]][3] & 0x0DFF  # has dex code: never ACC_NATIVE unless hooked
+            if name == "getName":
+                return o.f["m"].split("->", 1)[1].split("(", 1)[0]
+            raise _DxAbort
+        if cls == "Ljava/lang/reflect/Modifier;" and name.startswith("is") and raw and isinstance(raw[0], int):
+            bit = {"isNative": 0x100, "isStatic": 0x8, "isPublic": 0x1, "isPrivate": 0x2, "isProtected": 0x4,
+                   "isFinal": 0x10, "isSynchronized": 0x20, "isAbstract": 0x400}.get(name)
+            if bit is None:
+                raise _DxAbort
+            return int(bool(raw[0] & bit))
+        if name == "getClass" and sig == ")Ljava/lang/Class;" and o is not None and o.t in self.dx.sfields:
+            return self.klass(o.t)
+        if name == "getClassLoader" and sig.endswith(")Ljava/lang/ClassLoader;") or (
+                cls == "Ljava/lang/ClassLoader;" and name == "getSystemClassLoader"):
+            return _DxObj("Ljava/lang/ClassLoader;")
+        if name in ("loadClass", "forName") and (t == "Ljava/lang/ClassLoader;" or cls == "Ljava/lang/Class;") and a \
+                and isinstance(a[0], str) and (name == "loadClass" or a[0] != "android.os.SystemProperties"):
+            if _ENV_PKG.search(a[0]):
+                raise _DxThrow("Ljava/lang/ClassNotFoundException;", "Ljava/lang/ReflectiveOperationException;")
+            d = "L" + a[0].replace(".", "/") + ";"
+            if d in self.dx.sfields:
+                return self.klass(d)
+            raise _DxAbort
+        return _ENV_UNSET
+
+
+def _dxx_supers(dx):
+    """{class descriptor: superclass descriptor} of every class_def in the dex (cached on it)."""
     sup = getattr(dx, "supers", None)
     if sup is None:
         u32 = lambda o: struct.unpack_from("<I", dx.d, o)[0]  # noqa: E731
         n_cls, o_cls = u32(0x60), u32(0x64)
         sup = dx.supers = {dx.typ(u32(o_cls + 32 * c)): dx.typ(u32(o_cls + 32 * c + 8)) for c in range(n_cls)}
+    return sup
+
+
+def _env_resolve(dx, ref):
+    """An invoke ref re-pointed at the in-dex superclass that defines it (inherited app methods); else unchanged."""
+    if ref in dx.code:
+        return ref
+    sup = _dxx_supers(dx)
     cls, rest = ref.split("->", 1)
     for _ in range(8):
         cls = sup.get(cls)
@@ -8972,9 +10776,15 @@ def _env_scan_ins(dx, ins):
         if op in (0x1A, 0x1B):
             s = dx.s(struct.unpack_from("<H" if op == 0x1A else "<I", ins, p + 2)[0]) or ""
             marked |= bool(len(s) < 200 and (_ENV_ABSENT.search(s) or s in _ENV_FILES or "TracerPid" in s
-                                             or s in ("ro.kernel.qemu", "test-keys", "ro.debuggable", "ro.secure")))
+                                             or s in ("ro.kernel.qemu", "test-keys", "ro.debuggable", "ro.secure",
+                                                      "service.adb.root", "adb_enabled", "development_settings_enabled",
+                                                      "/proc/self/task", "/proc/self/fd", "gum-js-loop", "gmain",
+                                                      "LD_PRELOAD", "CLASSPATH", "/proc/cpuinfo", "/proc/version",
+                                                      "android.intent.action.BATTERY_CHANGED"))
+                                             or s[:48].split(" ", 1)[0] in _ENV_SH_PROBES)
         elif 0x60 <= op <= 0x6D:
-            marked |= dx.fref(struct.unpack_from("<H", ins, p + 2)[0])[1].startswith("Landroid/os/Build")
+            f = dx.fref(struct.unpack_from("<H", ins, p + 2)[0])[1]
+            marked |= f.startswith("Landroid/os/Build") or bool(_ENV_BCDBG.search(f))
         elif 0x6E <= op <= 0x78 and op != 0x73:
             m = _env_resolve(dx, dx.mref(struct.unpack_from("<H", ins, p + 2)[0]))
             if m in dx.code:
@@ -8999,11 +10809,16 @@ def clean_device_scan(apk):
     code touches an environment probe (File.exists on su / magisk / busybox / frida paths, Build.TAGS / FINGERPRINT /
     HARDWARE / MODEL / PRODUCT, Debug.isDebuggerConnected, ApplicationInfo.flags, System.getProperty("ro.kernel.qemu"),
     /proc/self/status TracerPid, /proc/self/maps, Socket :27042, PackageManager.getPackageInfo(magisk / xposed),
-    Class.forName(XposedBridge), Runtime.exec("su")), plus its in-dex callers two levels up, is run by the Dalvik
+    Class.forName(XposedBridge), Runtime.exec("su"), timing deltas of SystemClock / nanoTime / currentTimeMillis /
+    threadCpuTimeNanos (1 ms per read, Thread.sleep a no-op), Settings adb_enabled / development_settings_enabled,
+    SystemProperties ro.debuggable / ro.secure / service.adb.root (direct or reflective), VMDebug.isDebuggingEnabled,
+    BuildConfig.DEBUG (encoded value, then re-run as the release build's false)), plus its in-dex callers two levels
+    up, is run by the Dalvik
     evaluator with those probes answering as an unrooted retail Pixel (catch handlers taken for NameNotFound /
     ClassNotFound / ConnectException). Only the clean path runs, so a value keyed on the check results (a score folded
     into an xor key) comes out right and a trap behind `if (rooted)` stays unread. [] when absent; never raises; ~0.8 s."""
-    hits = []
+    hits, facts_apk = [], None
+    del CLEAN_DEVICE_PROBES[:]
     deadline = time.time() + _ENV_BUDGET_S
     try:
         with zipfile.ZipFile(apk) as z:
@@ -9011,7 +10826,12 @@ def clean_device_scan(apk):
                      and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
         for d in dexes:
             if d[:4] != b"dex\n" or len(d) < 0x70 or time.time() > deadline or not _DGB_PRE.search(d) and not re.search(
-                    rb"Landroid/os/(?:Build|Debug);|/proc/self/|Ljava/net/Socket;", d):
+                    rb"Landroid/os/(?:Build|Debug|SystemClock|SystemProperties);|/proc/self/|Ljava/net/Socket;|VMDebug;"
+                    rb"|nanoTime|currentTimeMillis|adb_enabled|development_settings_enabled|BuildConfig;"
+                    rb"|getStackTrace|getAllStackTraces|isNative|loadClass|TelephonyManager;|SensorManager;"
+                    rb"|BatteryManager;|BATTERY_CHANGED|NetworkInterface;|/proc/cpuinfo|Ljava/lang/(?:Runtime|Process\w*);"
+                    rb"|getInstallerPackageName|getInstallSourceInfo|getPackageCodePath|Landroid/content/pm/Signature;", d) and b"\x0egetPackageInfo\0" not in d and not (
+                    b"\x0eLjava/io/File;\0" in d and b"\x06exists\0" in d):  # probe args built at runtime
                 continue
             try:
                 dx = _DxDex(d)
@@ -9021,6 +10841,10 @@ def clean_device_scan(apk):
             marked = {r for r, f in facts.items() if f[0]}
             if not marked:
                 continue
+            if facts_apk is None and re.search(rb"getInstall|getPackageCodePath|getPackageResourcePath|ApplicationInfo;"
+                                               rb"|Landroid/content/pm/(?:Signature|SigningInfo);|getPackageInfo", d):
+                facts_apk = _env_apk_facts(apk) or {"pkg": None, "dbg": False, "certs": [], "ent": {},
+                                                     "path": "/data/app/app-1/base.apk"}
             todo, layer = list(marked), marked
             for _ in range(2):
                 layer = {r for r, f in facts.items() if f[1] & layer} - set(todo)
@@ -9032,19 +10856,167 @@ def clean_device_scan(apk):
                 ps = _dxe_params(ref)
                 if len(ps) > 4 or nin > nreg:
                     continue
-                vm = _EnvVM(dx, deadline)
-                raw = [] if acc & 0x8 else [_DxObj(ref.split("->")[0])]
-                for p in ps:
-                    raw += [_DxObj(p) if p in ("Landroid/content/Context;", "Landroid/app/Activity;", "Landroid/app/Application;")
-                            else _dxe_default(p)] + ([None] if p in "JD" else [])
-                try:
-                    vm.init_class(ref.split("->")[0])
-                    vm.note(vm.run(ref, raw))
-                except (_DxAbort, IndexError, KeyError, TypeError, ValueError, AttributeError, OverflowError,
-                        RecursionError, struct.error):
-                    pass
-                for s in vm.seen + [v for v in vm.statics.values() if isinstance(v, str)]:
-                    hits += ANS_RE_T.findall(s)
+                for release in (False, True):
+                    vm = _EnvVM(dx, deadline, release)
+                    vm.apk = facts_apk
+                    raw = [] if acc & 0x8 else [_DxObj(ref.split("->")[0])]
+                    for p in ps:
+                        raw += [_DxObj(p) if p in ("Landroid/content/Context;", "Landroid/app/Activity;",
+                                                   "Landroid/app/Application;") else _dxe_default(p)] + (
+                            [None] if p in "JD" else [])
+                    try:
+                        vm.init_class(ref.split("->")[0])
+                        vm.note(vm.run(ref, raw))
+                    except (_DxAbort, IndexError, KeyError, TypeError, ValueError, AttributeError, OverflowError,
+                            RecursionError, struct.error):
+                        pass
+                    for s in vm.seen + [v for v in vm.statics.values() if isinstance(v, str)]:
+                        hits += ANS_RE_T.findall(s)
+                    CLEAN_DEVICE_PROBES.extend(x for x in vm.probe_log if x not in CLEAN_DEVICE_PROBES)
+                    if release or not any(v for k, v in vm.statics.items() if _ENV_BCDBG.search(k)):
+                        break  # a DEBUG build's BuildConfig.DEBUG read true: the release (false) path runs too
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    return list(dict.fromkeys(hits))
+
+
+# --- exception-driven control flow: a probe throws, the catch handler picks the path (coverage atlas row 90) ----------
+# _EnvVM (clean Pixel) with the dex try_item / encoded_catch_handler tables live: `throw vX` and runtime faults (div /
+# rem by zero, null receiver, array index out of range, Integer.parseInt on a non-number, the stubbed probes'
+# NameNotFound / ClassNotFound / FileNotFound) go to the first covering handler whose type is a supertype of the thrown
+# class (in-dex hierarchy + java.lang's tree), catch-alls (`finally`) included, unwinding through in-dex callers;
+# move-exception binds the thrown object (getMessage / getCause / toString modelled). A trap in the handler of a throw
+# that only fires when debugged / rooted stays unread.
+_DXX_STEPS, _DXX_BUDGET_S, _DXX_MAX_RUNS = 100_000, 0.8, 96
+_DXX_PARSE = re.compile(r"Ljava/lang/(?:Integer|Long|Short|Byte);->(?:parse\w+|valueOf|decode)\(Ljava/lang/String;")
+
+
+class _ExcVM(_EnvVM):
+    """_EnvVM whose throws and runtime faults reach the method's catch handlers (see exception_flow_scan)."""
+    max_steps = _DXX_STEPS
+    exc = True
+
+    def new_instance(self, t):
+        if t not in self.dx.sfields and self.exc_types(t):
+            return _DxObj(t)
+        return super().new_instance(t)
+
+    def invoke(self, ref, raw, depth):
+        o = raw[0] if raw else None
+        if isinstance(o, _DxObj) and _env_resolve(self.dx, ref) not in self.dx.code and self.exc_types(o.t):
+            name, a = ref.split("->", 1)[1].split("(", 1)[0], raw[1:]
+            if name == "<init>":
+                for x in a[:2]:
+                    if isinstance(x, str) and "$msg" not in o.f:
+                        o.f["$msg"] = x
+                    elif isinstance(x, (_DxObj, _DxThrow)):
+                        o.f["$cause"] = x
+                return super().invoke(ref, raw, depth) if o.t in _HK_NEW else None
+            if name in ("getMessage", "getLocalizedMessage"):
+                return self.note(o.f.get("$msg"))
+            if name == "getCause":
+                return o.f.get("$cause")
+            if name == "toString":
+                m = o.f.get("$msg")
+                return self.note(o.t[1:-1].replace("/", ".") + (f": {m}" if m is not None else ""))
+            if name in ("initCause", "fillInStackTrace"):
+                if name == "initCause" and a:
+                    o.f["$cause"] = a[0]
+                return o
+            if name in ("printStackTrace", "addSuppressed", "setStackTrace"):
+                return None
+        if _DXX_PARSE.match(ref):
+            try:
+                return super().invoke(ref, raw, depth)
+            except _DxAbort:
+                if raw and isinstance(raw[0], str):
+                    raise self.exc_new("Ljava/lang/NumberFormatException;", f'For input string: "{raw[0]}"') from None
+                raise
+        return super().invoke(ref, raw, depth)
+
+
+def _dxx_marked(dx, ref):
+    """A method with a try block (tries_size > 0) or a `throw` op."""
+    code = dx.coff.get(ref)
+    if code is None:
+        return False
+    if struct.unpack_from("<H", dx.d, code + 6)[0]:
+        return True
+    ins, pc = dx.code[ref][2], 0
+    n = len(ins) // 2
+    while pc < n:
+        p = 2 * pc
+        op = ins[p]
+        if op == 0x27:
+            return True
+        if op == 0 and ins[p + 1] in (1, 2, 3):
+            if ins[p + 1] == 1:
+                pc += 4 + 2 * struct.unpack_from("<H", ins, p + 2)[0]
+            elif ins[p + 1] == 2:
+                pc += 2 + 4 * struct.unpack_from("<H", ins, p + 2)[0]
+            else:
+                w, k = struct.unpack_from("<HI", ins, p + 2)
+                pc += 4 + (w * k + 1) // 2
+            continue
+        pc += _DOP_W[op]
+    return False
+
+
+def exception_flow_scan(apk):
+    """ANS tokens of anti-debug / anti-tamper code that uses try/catch as control flow (row 90): every app method with
+    a try block or a `throw`, plus its in-dex callers two levels up, runs on the clean-device evaluator (_EnvVM probes)
+    with exceptions modelled -- `throw` (custom SecurityException subclasses included), ArithmeticException on div /
+    rem by zero, NullPointerException on a null receiver, ArrayIndexOutOfBounds, NumberFormatException from parseInt,
+    the probes' NameNotFound / ClassNotFound / FileNotFound -- each dispatched through the dex's try_item /
+    encoded_catch_handler tables to the first handler whose type is a supertype (in-dex class hierarchy + java.lang
+    exception tree, catch-all `finally` handlers, nested tries, unwinding through in-dex callees). So a value built
+    only inside a handler comes out, and a decoy in the handler of a debugged-path throw stays unread.
+    [] when absent; never raises; ~0.8 s."""
+    hits = []
+    deadline = time.time() + _DXX_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            dexes = [z.read(i) for i in z.infolist() if i.file_size <= _DXE_MAX_DEX
+                     and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+        for d in dexes:
+            if d[:4] != b"dex\n" or len(d) < 0x70 or time.time() > deadline:
+                continue
+            try:
+                dx = _DxDex(d)
+                marked = [r for r in dx.order if _dxx_marked(dx, r)]
+            except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+                continue
+            if not marked:
+                continue
+            facts = {ref: _env_scan_ins(dx, dx.code[ref][2])[1] for ref in dx.order}
+            todo, layer = list(marked), set(marked)
+            for _ in range(2):
+                layer = {r for r, c in facts.items() if c & layer} - set(todo)
+                todo += sorted(layer)
+            for ref in todo[:_DXX_MAX_RUNS]:
+                if time.time() > deadline:
+                    break
+                nreg, nin, _, acc = dx.code[ref]
+                ps = _dxe_params(ref)
+                if len(ps) > 4 or nin > nreg:
+                    continue
+                for release in (False, True):
+                    vm = _ExcVM(dx, deadline, release)
+                    raw = [] if acc & 0x8 else [_DxObj(ref.split("->")[0])]
+                    for p in ps:
+                        raw += [_DxObj(p) if p in ("Landroid/content/Context;", "Landroid/app/Activity;",
+                                                   "Landroid/app/Application;") else _dxe_default(p)] + (
+                            [None] if p in "JD" else [])
+                    try:
+                        vm.init_class(ref.split("->")[0])
+                        vm.note(vm.run(ref, raw))
+                    except (_DxAbort, IndexError, KeyError, TypeError, ValueError, AttributeError, OverflowError,
+                            RecursionError, struct.error):
+                        pass
+                    for s in vm.seen + [v for v in vm.statics.values() if isinstance(v, str)]:
+                        hits += ANS_RE_T.findall(s)
+                    if release or not any(v for k, v in vm.statics.items() if _ENV_BCDBG.search(k)):
+                        break
     except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
         pass
     return list(dict.fromkeys(hits))
@@ -9316,6 +11288,161 @@ def flattened_cfg_scan(apk):
     return list(dict.fromkeys(hits))
 
 
+# --- anti-debug state machines: the clean terminal state emits the answer (coverage atlas rows 41, 79, 89) ------------
+# An app method holding a loop that re-assigns a state (switch dispatcher, a field written >= 3 times, String.equals
+# chain) and reaching a debugger / tracer / timing / adb probe within two calls is run by ONE evaluator that is both the
+# flattening VM (sink args emitted) and the clean-device VM (probe table), after <clinit> / <init>()V / onCreate set the
+# initial state. A second run answers the probes as DEBUGGED (debugger attached, FLAG_DEBUGGABLE, TracerPid != 0,
+# adb_enabled, 3 s timing deltas): tokens only that run reaches are the decoy / honeypot branch and are demoted.
+_ADS_BUDGET_S, _ADS_MAX_RUNS = 0.75, 48
+_ADS_TIME = re.compile(r"Ljava/lang/System;->(?:nanoTime|currentTimeMillis)|Landroid/os/SystemClock;->"
+                       r"(?:elapsedRealtime|uptimeMillis|currentThreadTimeMillis)|Landroid/os/Debug;->threadCpuTimeNanos")
+_ADS_ENTRY = ("onCreate(Landroid/os/Bundle;)V", "onResume()V", "onStart()V")
+
+
+class _AdsVM(_FcfVM, _EnvVM):
+    """Flattening VM x clean-device VM in one env (MRO: sink emission -> probe table -> dex evaluator); `dbg` flips the
+    debugger-facing probes so the honeypot branch can be told apart. Monotonic clocks advance 50 us per read (3 s
+    when debugged)."""
+
+    def __init__(self, dx, deadline, dbg=False):
+        super().__init__(dx, deadline)
+        self.dbg, self.trace, self.ns = dbg, [], 1_700_000_000_000_000_000
+
+    def env(self, ref, raw):
+        if _ADS_TIME.match(ref):
+            self.ns += 3_000_000_000 if self.dbg else 50_000
+            return self.ns if "Nanos" in ref or "nanoTime" in ref else self.ns // 1_000_000
+        v = super().env(ref, raw)
+        if not self.dbg:
+            return v
+        cls, rest = ref.split("->", 1)
+        name = rest.split("(")[0]
+        if cls in ("Landroid/os/Debug;", "Ldalvik/system/VMDebug;") and name in (
+                "isDebuggerConnected", "waitingForDebugger", "isDebuggingEnabled"):
+            return 1
+        if isinstance(v, _DxObj) and v.t == "Landroid/content/pm/ApplicationInfo;":
+            v.f["Landroid/content/pm/ApplicationInfo;->flags"] |= 2
+        if cls.startswith("Landroid/provider/Settings$") and v == 0 and name in ("getInt", "getLong"):
+            return 1
+        if name == "<init>" and raw and isinstance(raw[0], _DxObj) and isinstance(raw[0].f.get("L"), list):
+            raw[0].f["L"] = ["TracerPid:\t4242" if ln.startswith("TracerPid:") else ln for ln in raw[0].f["L"]]
+        return v
+
+
+def _ads_shape(dx, ins):
+    """(state loop, touches a timing / env probe, {in-dex callees}) of one method's code."""
+    marked, calls = _env_scan_ins(dx, ins)
+    at = _fcf_insns(ins)
+    loop, switch, eq, puts, timing = False, False, 0, {}, False
+    for pc, (op, b1, w) in at.items():
+        p = 2 * pc
+        if op in (0x28, 0x29, 0x2A, *range(0x32, 0x3E)):
+            off = ((b1 ^ 0x80) - 0x80 if op == 0x28 else struct.unpack_from("<i", ins, p + 2)[0] if op == 0x2A else
+                   struct.unpack_from("<h", ins, p + 2)[0])
+            loop |= off < 0
+        elif op in (0x2B, 0x2C):
+            switch = True
+        elif 0x59 <= op <= 0x5F or 0x67 <= op <= 0x6D:
+            k = struct.unpack_from("<H", ins, p + 2)[0]
+            puts[k] = puts.get(k, 0) + 1
+        elif 0x6E <= op <= 0x78 and op != 0x73:
+            m = dx.mref(struct.unpack_from("<H", ins, p + 2)[0])
+            eq += m == "Ljava/lang/String;->equals(Ljava/lang/Object;)Z"
+            timing |= bool(_ADS_TIME.match(m))
+    return loop and (switch or eq >= 2 or max(puts.values(), default=0) >= 3), marked or timing, calls
+
+
+def _ads_run(dx, ref, deadline, dbg):
+    """One evaluation of `ref` (after <clinit>, <init>()V and the class's onCreate) -> (texts, switch-key path)."""
+    nreg, nin, _, acc = dx.code[ref]
+    ct, ps = ref.split("->")[0], _dxe_params(ref)
+    vm = _AdsVM(dx, deadline, dbg)
+    obj = _DxObj(ct)
+    texts = []
+    try:
+        vm.init_class(ct)
+        pre = [f"{ct}-><init>()V"] + [f"{ct}->{e}" for e in _ADS_ENTRY if not ref.endswith("->" + e)]
+        for r0 in pre if not acc & 0x8 else []:
+            if r0 in dx.code:
+                vm.steps = 0
+                try:
+                    vm.run(r0, [obj] + [None] * (dx.code[r0][1] - 1))
+                except _FCF_CATCH:
+                    pass
+        vm.trace, vm.steps = [], 0
+        raw = [] if acc & 0x8 else [obj]
+        for p in ps:
+            raw += [_DxObj(p) if p in ("Landroid/content/Context;", "Landroid/app/Activity;") else _dxe_default(p)] + (
+                [None] if p in "JD" else [])
+        res = vm.run(ref, raw)
+        texts.append(_dxe_str(res) if isinstance(res, _DxSB) else res)
+    except _FCF_CATCH:
+        pass
+    texts += vm.seen + ["".join(vm.out)] + [v for v in vm.statics.values() if isinstance(v, str)]
+    texts += [_dxe_str(v) if isinstance(v, _DxSB) else v for v in obj.f.values()]
+    return [t for t in texts if isinstance(t, str)], vm.trace
+
+
+def anti_debug_state_facts(apk):
+    """[{"value", "method", "path", "clean"}] of an anti-debug state machine's terminal values: clean-path tokens first
+    (path = switch keys taken), then tokens reached only when a probe says 'debugged' (clean False: decoy / trap /
+    honeypot). [] when absent; never raises; < 0.8 s."""
+    rows, seen = [], set()
+    deadline = time.time() + _ADS_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            dexes = [z.read(i) for i in z.infolist() if i.file_size <= _DXE_MAX_DEX
+                     and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+        for d in dexes:
+            if d[:4] != b"dex\n" or len(d) < 0x70 or time.time() > deadline or not re.search(
+                    rb"Landroid/os/(?:Debug|SystemClock);|TracerPid|ApplicationInfo;|nanoTime|Settings\$|adb_enabled", d):
+                continue
+            try:
+                dx = _DxDex(d)
+            except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+                continue
+            facts = {}
+            for ref in dx.order:
+                if _DXE_LIB.match(ref.split("->")[0]):
+                    continue
+                try:
+                    facts[ref] = _ads_shape(dx, dx.code[ref][2])
+                except (struct.error, IndexError, KeyError):
+                    pass
+            probed = {r for r, f in facts.items() if f[1]}
+            for _ in range(2):
+                probed |= {r for r, f in facts.items() if f[2] & probed}
+            sms = [r for r, f in facts.items() if f[0] and (f[1] or f[2] & probed)]
+            entries = sms + sorted({r for r, f in facts.items() if f[2] & set(sms)} - set(sms))
+            clean, trap = [], []
+            for ref in entries[:_ADS_MAX_RUNS]:
+                if time.time() > deadline:
+                    break
+                if len(_dxe_params(ref)) > 4 or dx.code[ref][1] > dx.code[ref][0]:
+                    continue
+                for dbg, sink in ((False, clean), (True, trap)):
+                    texts, path = _ads_run(dx, ref, deadline, dbg)
+                    sink += [(m, ref, path) for t in texts for m in ANS_RE_T.findall(t)]
+            good = {m for m, _, _ in clean}
+            for (m, ref, path), ok in [(c, True) for c in clean] + [(t, False) for t in trap if t[0] not in good]:
+                if (m, ok) not in seen:
+                    seen.add((m, ok))
+                    rows.append({"value": m, "method": ref, "path": path[:64], "clean": ok})
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    return sorted(rows, key=lambda r: not r["clean"])
+
+
+def anti_debug_state_scan(apk):
+    """ANS tokens a clean-room anti-debug state machine emits on its CLEAN terminal state (int / String state re-assigned
+    in a loop or switch dispatcher, transitions on Debug.isDebuggerConnected / waitingForDebugger, ApplicationInfo.flags
+    & FLAG_DEBUGGABLE, TracerPid, timing deltas, Settings adb_enabled), run from the state <clinit> / <init> / onCreate
+    set. Values only a 'debugged' probe answer reaches (honeypots) are left out -- anti_debug_state_facts lists them,
+    demoted. [] when absent; never raises; < 0.8 s."""
+    return [r["value"] for r in anti_debug_state_facts(apk) if r["clean"]]
+
+
 # --- Kotlin coroutine state machines: invokeSuspend resumed in label order (coverage atlas, mobile kotlin row) --------
 _KCO_REF = "->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;"
 _KCO_CONT = "Lkotlin/coroutines/Continuation;"
@@ -9397,6 +11524,820 @@ def coroutine_state_scan(apk):
     except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
         pass
     return list(dict.fromkeys(hits))
+
+
+# --- bound Service / AIDL / Messenger: transaction code -> reply value (coverage atlas: binder-ontransact-code-map) ------
+# Binder.onTransact(int code, Parcel data, Parcel reply, int flags) (an AIDL `I*$Stub` or a hand-written Binder) and
+# Handler.handleMessage(Message) (a Messenger service switching on msg.what) are run once per case key with a stub
+# Parcel / Bundle: reads answer the constants the case compares them against (String.equals / TextUtils.equals wants,
+# else the code's own int / string literals), writes to `reply`, Bundle.put*, Message.obj and Messenger.send are kept.
+_BND_ENTRY = ("->onTransact(ILandroid/os/Parcel;Landroid/os/Parcel;I)Z", "->handleMessage(Landroid/os/Message;)V",
+              "->handleMessage(Landroid/os/Message;)Z")
+_BND_PRE = re.compile(rb"onTransact\0|handleMessage\0")
+_BND_EQ = frozenset(("Ljava/lang/String;->equals(Ljava/lang/Object;)Z", "Ljava/lang/String;->equalsIgnoreCase(Ljava/lang/String;)Z",
+                     "Ljava/lang/String;->contentEquals(Ljava/lang/CharSequence;)Z",
+                     "Ljava/util/Objects;->equals(Ljava/lang/Object;Ljava/lang/Object;)Z",
+                     "Landroid/text/TextUtils;->equals(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Z"))
+_BND_NOOP = ("Landroid/os/Binder;", "Landroid/os/Handler;", "Landroid/app/Service;", "Ljava/lang/Object;",
+             "Landroid/os/Messenger;", "Landroid/os/Bundle;", "Landroid/os/Message;", "Landroid/os/Parcel;")
+_BND_NAMED = re.compile(r"->(?:TRANSACTION|MSG|CODE|WHAT|TX|CMD|OP)_?(\w+)$")
+_BND_PREF = re.compile(r"(?i)secret|flag|answer|token|reveal|unlock|key|vault|ans\b")
+_BND_BUDGET_S, _BND_MAX_ENTRY, _BND_MAX_CODES, _BND_MAX_RUNS = 0.8, 24, 40, 48
+_BND_ITF = 0x5F4E5446  # IBinder.INTERFACE_TRANSACTION ('_NTF')
+
+
+class _BndStr(str):
+    """A string a Parcel / Bundle read returned; `k` is the read's index in this run."""
+    k = -1
+
+
+class _BndVM(_DxVM):
+    """_DxVM for one binder transaction: Parcel / Bundle / Message / Messenger modelled, app virtual calls resolved on
+    the receiver's runtime class (an abstract Stub's onTransact reaching the concrete Impl), framework constructors and
+    super.onTransact no-ops; the reads made, the equality wants on them and the reply values are recorded."""
+
+    def __init__(self, dx, deadline, answers):
+        super().__init__(dx, deadline)
+        self.answers, self.reads, self.wants, self.out, self.desc, self.lits = answers, [], {}, [], [], set()
+
+    def new_instance(self, t):
+        return _DxObj(t)
+
+    def read(self, kind, dflt=None):
+        k = len(self.reads)
+        self.reads.append((k, kind))
+        v = self.answers.get(k, dflt if dflt is not None else ("" if kind == "S" else 0))
+        if kind == "S" and isinstance(v, str):
+            v = _BndStr(v)
+            v.k = k
+        return v
+
+    def keep(self, v):
+        v = _dxe_str(v) if isinstance(v, _DxSB) else v
+        if isinstance(v, str):
+            self.out.append(str(v))
+        elif isinstance(v, int) and not isinstance(v, bool):
+            self.out.append(str(v))
+        elif isinstance(v, list) and v and all(isinstance(c, int) for c in v):
+            self.out.append(bytes(c & 0xFF for c in v).decode("latin-1"))
+        elif isinstance(v, _DxObj) and v.t == "Landroid/os/Bundle;":
+            for x in v.f.get("$m", {}).values():
+                self.keep(x)
+        elif isinstance(v, _DxObj) and v.t == "Landroid/os/Message;":
+            self.keep(v.f.get("Landroid/os/Message;->obj"))
+            self.keep(v.f.get("$data"))
+
+    def invoke(self, ref, raw, depth):  # noqa: C901 - one framework model
+        ct, rest = ref.split("->", 1)
+        name = rest[:rest.index("(")]
+        ps = _dxe_params(ref)
+        inst = len(raw) == sum(2 if p in "JD" else 1 for p in ps) + 1
+        o = raw[0] if raw else None
+        if inst and isinstance(o, _DxObj) and o.t != ct and not _DXE_LIB.match(o.t):
+            r2 = _env_resolve(self.dx, f"{o.t}->{rest}")
+            if r2 in self.dx.code:
+                ref, ct = r2, r2.split("->")[0]
+        if ref in self.dx.code:
+            self.lits.add(ref)
+        if ref in _BND_EQ:
+            a, b = raw[0], raw[1] if len(raw) > 1 else None
+            for x, y in ((a, b), (b, a)):
+                if isinstance(x, _BndStr) and isinstance(y, str) and not isinstance(y, _BndStr):
+                    self.wants[x.k] = str(y)
+            if not isinstance(a, str) or not isinstance(b, str):
+                return int(a is b)
+            return int(a.lower() == b.lower() if name == "equalsIgnoreCase" else a == b)
+        if ct == "Landroid/os/Parcel;":
+            if name == "obtain":
+                p = _DxObj(ct)
+                p.f["$role"] = "reply"
+                return p
+            role = o.f.get("$role") if isinstance(o, _DxObj) else None
+            if name == "enforceInterface":
+                self.desc.append(raw[1] if len(raw) > 1 else None)
+                return None
+            if name.startswith("read") and role == "data":
+                kind = {"readString": "S", "readInt": "I", "readLong": "J", "readByte": "I"}.get(name)
+                if kind is None:
+                    raise _DxAbort
+                return self.read(kind)
+            if name.startswith("write") and role == "reply":
+                for v in raw[1:]:
+                    self.keep(v)
+                return None
+            if name in ("recycle", "readException", "setDataPosition", "writeNoException", "dataPosition"):
+                return 0 if name == "dataPosition" else None
+            raise _DxAbort
+        if ct == "Landroid/os/Message;":
+            if name == "obtain":
+                m = _DxObj(ct)
+                vals = raw[1:] if ps and ps[0] == "Landroid/os/Handler;" else raw
+                for k_, v in zip(("what", "arg1", "arg2"), [v for v, p in zip(vals, ps[1:] if ps and ps[0] ==
+                                                           "Landroid/os/Handler;" else ps) if p == "I"]):
+                    m.f["Landroid/os/Message;->" + k_] = v
+                if ps and ps[-1] == "Ljava/lang/Object;":
+                    m.f["Landroid/os/Message;->obj"] = raw[-1]
+                return m
+            if name in ("getData", "peekData") and isinstance(o, _DxObj):
+                b = o.f.get("$data")
+                if b is None and name == "getData":
+                    b = o.f["$data"] = _DxObj("Landroid/os/Bundle;")
+                return b
+            if name == "setData" and isinstance(o, _DxObj):
+                o.f["$data"] = raw[1]
+                return None
+            if name in ("recycle", "sendToTarget"):
+                self.keep(o)
+                return None
+        if ct == "Landroid/os/Bundle;" and isinstance(o, _DxObj):
+            m = o.f.setdefault("$m", {})
+            if name.startswith("put") and len(raw) >= 3:
+                m[raw[1]] = raw[2]
+                return None
+            if name in ("getString", "getInt", "getCharSequence", "getLong") and len(raw) >= 2:
+                if raw[1] in m:
+                    return m[raw[1]]
+                return self.read("I" if name in ("getInt", "getLong") else "S",
+                                 raw[2] if len(raw) > 2 and not isinstance(raw[2], _DxObj) else None)
+            if name in ("containsKey", "isEmpty"):
+                return int(raw[1] in m) if name == "containsKey" else int(not m)
+        if ct == "Landroid/os/Messenger;" and name == "send":
+            self.keep(raw[1] if len(raw) > 1 else None)
+            return None
+        if ct == "Landroid/os/Binder;" and name in ("getCallingUid", "getCallingPid"):
+            return 10123 if name == "getCallingUid" else 4321
+        if ct == "Landroid/os/Process;" and name in ("myUid", "myPid"):
+            return 10123 if name == "myUid" else 4321
+        if ct == "Landroid/util/Log;":
+            for v in raw:
+                self.note(_dxe_str(v) if isinstance(v, _DxSB) else v)
+            return 0
+        if ref not in self.dx.code and ref not in _DXE_INTR and (ct.startswith(_BND_NOOP) or ct in self.dx.sfields
+                                                                  or _dxx_supers(self.dx).get(ct)):
+            if name in ("<init>", "attachInterface", "handleMessage", "onCreate", "onDestroy", "removeMessages"):
+                return None
+            if name in ("onTransact", "sendMessage", "sendEmptyMessage", "post", "asBinder", "getBinder"):
+                return 0 if ref.endswith(")Z") else None
+        return super().invoke(ref, raw, depth)
+
+
+def _bnd_literals(dx, refs):
+    """(int literals, const-strings) of the given methods' code items, in order (the candidate read answers)."""
+    ints, strs = [], []
+    for ref in refs:
+        ins = dx.code[ref][2]
+        for op, o in _dga_ops(ins):
+            b1 = ins[o + 1]
+            if op == 0x12:
+                ints.append(((b1 >> 4) ^ 8) - 8)
+            elif op == 0x13 or 0xD0 <= op <= 0xD7:
+                ints.append(struct.unpack_from("<h", ins, o + 2)[0])
+            elif op == 0x14:
+                ints.append(struct.unpack_from("<i", ins, o + 2)[0])
+            elif 0xD8 <= op <= 0xE2:
+                ints.append((ins[o + 3] ^ 0x80) - 0x80)
+            elif op in (0x1A, 0x1B):
+                strs.append(dx.s(struct.unpack_from("<H" if op == 0x1A else "<I", ins, o + 2)[0]))
+    return (list(dict.fromkeys(i for i in ints if i not in (0, 1, -1)))[:24],
+            list(dict.fromkeys(s for s in strs if isinstance(s, str) and 0 < len(s) <= 128))[:24])
+
+
+def _bnd_codes(ins):
+    """Case keys of every packed / sparse switch of `ins`."""
+    at = _fcf_insns(ins)
+    keys = []
+    for pc, (op, _, _) in at.items():
+        if op in (0x2B, 0x2C):
+            keys += sorted(_fcf_table(ins, pc, op))
+    return list(dict.fromkeys(keys))
+
+
+def _bnd_run(dx, ref, recv, code, answers, deadline):
+    vm = _BndVM(dx, deadline, answers)
+    is_tx = ref.endswith(_BND_ENTRY[0])
+    try:
+        vm.init_class(recv.t)
+        if is_tx:
+            data, reply = _DxObj("Landroid/os/Parcel;"), _DxObj("Landroid/os/Parcel;")
+            data.f["$role"], reply.f["$role"] = "data", "reply"
+            vm.run(ref, [recv, code, data, reply, 0])
+        else:
+            msg = _DxObj("Landroid/os/Message;")
+            msg.f.update({"Landroid/os/Message;->what": code, "Landroid/os/Message;->arg1": 0,
+                          "Landroid/os/Message;->arg2": 0, "Landroid/os/Message;->replyTo": _DxObj(
+                              "Landroid/os/Messenger;"), "$data": _DxObj("Landroid/os/Bundle;")})
+            vm.run(ref, [recv, msg])
+    except _FCF_CATCH:
+        pass
+    return vm
+
+
+def _bnd_solve(dx, ref, recv, code, deadline, runs, run=None):
+    """The run of one case whose reads answer the case's comparisons (wants, then literal candidates, 2 levels)."""
+    best = None
+    run = run or _bnd_run
+
+    def solve(ans, depth):
+        nonlocal best
+        vm = None
+        for _ in range(6):
+            if runs[0] <= 0 or time.time() > deadline:
+                return vm
+            runs[0] -= 1
+            vm = run(dx, ref, recv, code, ans, deadline)
+            if best is None or len(vm.out) > len(best.out):
+                best = vm
+            if any(ANS_RE_T.search(s) for s in vm.out + vm.seen):
+                return vm
+            new = {k: v for k, v in vm.wants.items() if ans.get(k) != v}
+            if not new:
+                break
+            ans = {**ans, **new}
+        free = [(k, kind) for k, kind in vm.reads if k not in ans]
+        if depth >= 2 or not free:
+            return vm
+        k, kind = free[0]
+        ints, strs = _bnd_literals(dx, [ref] + sorted(vm.lits))
+        for c in (strs if kind == "S" else ints):
+            r = solve({**ans, k: c}, depth + 1)
+            if r is not None and any(ANS_RE_T.search(s) for s in r.out + r.seen):
+                return r
+        return vm
+
+    vm = solve({}, 0)
+    return vm if vm is not None and any(ANS_RE_T.search(s) for s in vm.out + vm.seen) else best
+
+
+def binder_transact_facts(apk):
+    """[{"class", "entry": "onTransact" | "handleMessage", "code", "name", "descriptor", "values", "tokens"}] per case of
+    every in-dex Binder.onTransact / Handler.handleMessage (receiver: the class or its in-dex subclasses, e.g. an
+    abstract AIDL Stub's Impl), the case's reads answered with the constants it compares against; `name` is the
+    TRANSACTION_* / MSG_* static naming that code. [] when absent; never raises; < 1 s."""
+    rows = []
+    deadline = time.time() + _BND_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            dexes = [z.read(i) for i in z.infolist() if i.file_size <= _DXE_MAX_DEX
+                     and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+        for d in dexes:
+            if d[:4] != b"dex\n" or len(d) < 0x70 or not _BND_PRE.search(d) or time.time() > deadline:
+                continue
+            try:
+                dx = _DxDex(d)
+            except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+                continue
+            sup = _dxx_supers(dx)
+            entries = [r for r in dx.order if r.endswith(_BND_ENTRY)][:_BND_MAX_ENTRY]
+            for ref in entries:
+                ct = ref.split("->")[0]
+                subs = [c for c in sup if c != ct and (sup.get(c) == ct or sup.get(sup.get(c)) == ct)]
+                names = {}
+                nvm = _DxVM(dx, deadline)
+                for c in [ct] + subs + [ct.split("$")[0] + ";"]:
+                    try:
+                        nvm.init_class(c)
+                    except _FCF_CATCH:
+                        pass
+                for k, v in nvm.statics.items():
+                    m = _BND_NAMED.search(k)
+                    if m and isinstance(v, int):
+                        names.setdefault(v, m.group(1))
+                codes = _bnd_codes(dx.code[ref][2])
+                codes = list(dict.fromkeys(codes + sorted(names) + [1]))[:_BND_MAX_CODES]
+                runs = [_BND_MAX_RUNS * 4]
+                for code in codes:
+                    if time.time() > deadline:
+                        break
+                    vm = None
+                    for rc in subs[:4] + [ct]:
+                        per = [min(runs[0], _BND_MAX_RUNS)]
+                        before = per[0]
+                        vm = _bnd_solve(dx, ref, _DxObj(rc), code, deadline, per)
+                        runs[0] -= before - per[0]
+                        if vm is not None and (vm.out or vm.seen):
+                            break
+                    if vm is None or not (vm.out or vm.desc):
+                        continue
+                    toks = list(dict.fromkeys(m for s in vm.out + vm.seen for m in ANS_RE_T.findall(s)))
+                    rows.append({"class": ct, "entry": "onTransact" if "onTransact" in ref else "handleMessage",
+                                 "code": code, "name": names.get(code, "INTERFACE" if code == _BND_ITF else None),
+                                 "descriptor": next((x for x in vm.desc if isinstance(x, str)), None),
+                                 "values": list(dict.fromkeys(vm.out))[:16], "tokens": toks})
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    return rows
+
+
+def binder_transact_scan(apk):
+    """ANS tokens a bound service hands back per transaction code / msg.what (binder_transact_facts), the code a
+    TRANSACTION_* / MSG_* name calls secret / flag / token / reveal first. [] when absent; never raises; < 1 s."""
+    rows = binder_transact_facts(apk)
+    rows.sort(key=lambda r: not (r["name"] and _BND_PREF.search(r["name"])))
+    return list(dict.fromkeys(t for r in rows for t in r["tokens"]))
+
+
+# --- broadcast receiver: (action, extras) -> emitted value (coverage atlas: broadcast-receiver-action-map) -------------
+# Every in-dex BroadcastReceiver.onReceive(Context, Intent) is run once per action it can receive: the manifest
+# <receiver>'s intent-filter actions, IntentFilter(action) / addAction strings of dynamic registerReceiver calls and the
+# action-like const-strings of onReceive itself. The delivered Intent's getAction returns that action; its extras (and
+# getExtras Bundle reads) answer the constants the code compares them against (_bnd_solve). setResultData /
+# setResult / setResultExtras, Log, Toast, sendBroadcast extras and SharedPreferences.put* are kept; receivers sharing
+# an action run in priority order with getResultData chaining the previous receiver's result (ordered broadcast).
+_BRC_ENTRY = "->onReceive(Landroid/content/Context;Landroid/content/Intent;)V"
+_BRC_PRE = re.compile(rb"onReceive\0")
+_BRC_ACT = re.compile(r"[A-Za-z_][\w$]*(?:\.[\w$]+)+")
+_BRC_IF = ("Landroid/content/IntentFilter;-><init>(Ljava/lang/String;", "Landroid/content/IntentFilter;->addAction(")
+_BRC_BR = ("Landroid/content/BroadcastReceiver;", "Landroid/content/BroadcastReceiver$PendingResult;")
+_BRC_CTX = ("Landroid/content/Context;", "Landroid/content/ContextWrapper;", "Landroid/app/Application;",
+            "Landroid/app/Activity;", "Landroid/app/Service;")
+_BRC_STR = {"startsWith": str.startswith, "endsWith": str.endswith, "contains": lambda x, y: y in x}
+_BRC_BUDGET_S, _BRC_MAX_RECV, _BRC_MAX_ACT, _BRC_MAX_RUNS = 0.8, 24, 12, 48
+
+
+class _BrcVM(_BndVM):
+    """_BndVM for one delivered broadcast: the Intent / Bundle / Context / SharedPreferences / BroadcastReceiver result
+    API modelled; extra reads go through read() so equality wants answer them."""
+
+    def __init__(self, dx, deadline, answers, action, prev=None, pkg=None):
+        super().__init__(dx, deadline, answers)
+        self.action, self.prev, self.pkg, self.result = action, prev, pkg, prev
+
+    def keep(self, v):
+        if isinstance(v, _DxObj) and v.t == "Landroid/content/Intent;":
+            for x in v.f.get("$m", {}).values():
+                self.keep(x)
+            return
+        super().keep(v)
+
+    def invoke(self, ref, raw, depth):  # noqa: C901 - one framework model
+        ct, rest = ref.split("->", 1)
+        name = rest[:rest.index("(")]
+        o = raw[0] if raw else None
+        a = raw[1:]
+        own = ref not in self.dx.code and ref not in _DXE_INTR
+        if isinstance(o, _DxObj) and o.t == "Landroid/content/Intent;":
+            if o.f.get("$in"):
+                if name == "getAction":
+                    return self.action
+                if name in ("getStringExtra", "getCharSequenceExtra", "getDataString"):
+                    return self.read("S")
+                if name in ("getIntExtra", "getBooleanExtra", "getShortExtra", "getByteExtra", "getCharExtra"):
+                    return self.read("I", a[1] if len(a) > 1 and isinstance(a[1], int) and a[1] not in (0, -1) else None)
+                if name == "getLongExtra":
+                    return self.read("I")
+                if name == "hasExtra":
+                    return 1
+                if name == "getExtras":
+                    b = o.f.get("$b")
+                    if b is None:
+                        b = o.f["$b"] = _DxObj("Landroid/os/Bundle;")
+                    return b
+                if name in ("getPackage", "getType", "getScheme"):
+                    return None
+                raise _DxAbort
+            m = o.f.setdefault("$m", {})
+            if name == "<init>":
+                if a and isinstance(a[0], str):
+                    o.f["act"] = a[0]
+                return None
+            if name in ("putExtra", "putExtras") and a:
+                if name == "putExtra" and len(a) >= 2:
+                    m[a[0]] = a[1]
+                elif isinstance(a[0], _DxObj):
+                    m.update(a[0].f.get("$m", {}))
+                return o
+            if name == "setAction" and a:
+                o.f["act"] = a[0]
+                return o
+            if name in ("setPackage", "setClass", "setClassName", "setComponent", "addFlags", "setFlags", "setData"):
+                return o
+            if name in ("getStringExtra", "getIntExtra") and a:
+                return m.get(a[0], a[1] if len(a) > 1 else None)
+            if name == "getAction":
+                return o.f.get("act")
+            raise _DxAbort
+        if ct in ("Landroid/content/SharedPreferences;", "Landroid/content/SharedPreferences$Editor;"):
+            if name == "edit":
+                return _DxObj("Landroid/content/SharedPreferences$Editor;")
+            if name.startswith("put") and len(a) >= 2:
+                self.keep(a[1])
+                return o
+            if name in ("apply", "remove", "clear"):
+                return None if name == "apply" else o
+            if name == "commit":
+                return 1
+            if name.startswith("get") and len(a) >= 2:
+                return a[1]
+            raise _DxAbort
+        if ct == "Landroid/util/Log;":
+            for v in a:
+                self.keep(v)
+            return 0
+        if ct == "Ljava/lang/String;" and isinstance(o, str) and ref not in _DXE_INTR and a and isinstance(a[0], str):
+            if name in _BRC_STR:
+                return int(_BRC_STR[name](o, a[0]))
+        if ct == "Landroid/widget/Toast;":
+            if name == "makeText":
+                if len(a) > 1:
+                    self.keep(a[1])
+                return _DxObj(ct)
+            return None
+        if own and name in ("sendBroadcast", "sendOrderedBroadcast", "sendStickyBroadcast", "startService",
+                            "startActivity", "startForegroundService") and a and isinstance(a[0], _DxObj):
+            self.keep(a[0])
+            return None
+        if own and name == "getSharedPreferences":
+            return _DxObj("Landroid/content/SharedPreferences;")
+        if own and name in ("getApplicationContext", "getBaseContext"):
+            return _DxObj("Landroid/content/Context;")
+        if own and name == "getPackageName" and self.pkg:
+            return self.pkg
+        if own and (ct.startswith(_BRC_BR) or ct in _BRC_CTX or _dxx_supers(self.dx).get(ct)):
+            if name in ("setResultData", "setResult", "setResultExtras"):
+                for v in a:
+                    if v is not None and not isinstance(v, int):
+                        self.keep(v)
+                vs = [v for v in a if isinstance(v, (str, _DxSB))]
+                if vs:
+                    self.result = _dxe_str(vs[0]) if isinstance(vs[0], _DxSB) else str(vs[0])
+                return None
+            if name == "getResultData":
+                return self.read("S", self.prev) if self.prev else self.read("S")
+            if name == "getResultExtras":
+                return _DxObj("Landroid/os/Bundle;")
+            if name in ("getResultCode", "isOrderedBroadcast", "isInitialStickyBroadcast"):
+                return -1 if name == "getResultCode" else int(name == "isOrderedBroadcast")
+            if name == "goAsync":
+                return _DxObj("Landroid/content/BroadcastReceiver$PendingResult;")
+            if name in ("setResultCode", "abortBroadcast", "clearAbortBroadcast", "finish", "<init>", "onReceive",
+                        "setOrderedHint", "unregisterReceiver", "registerReceiver"):
+                return None
+        return super().invoke(ref, raw, depth)
+
+
+def _brc_manifest(z):
+    """({receiver class descriptor: {"actions", "exported", "permission", "priority"}}, package) of the manifest."""
+    out, pkg = {}, None
+    try:
+        b = z.read("AndroidManifest.xml")
+        ev = _axml_events(b) if b[:2] == b"\x03\x00" else _xml_events(b)
+        cur, prio = None, 0
+        for kind, tag, attrs, _ in ev:
+            if kind == "start" and tag == "manifest":
+                pkg = attrs.get("package")
+            elif kind == "start" and tag == "receiver":
+                n = attrs.get("name") or ""
+                n = (pkg or "") + n if n.startswith(".") else n if "." in n else f"{pkg}.{n}"
+                cur = out.setdefault("L" + n.replace(".", "/") + ";", {
+                    "actions": [], "exported": attrs.get("exported"), "permission": attrs.get("permission"),
+                    "priority": 0})
+            elif kind == "end" and tag == "receiver":
+                cur = None
+            elif kind == "start" and tag == "intent-filter" and cur is not None:
+                try:
+                    prio = int(attrs.get("priority") or 0)
+                except ValueError:
+                    prio = 0
+                prio = prio - (1 << 32) if prio >= 1 << 31 else prio
+                cur["priority"] = max(cur["priority"], prio)
+                if cur["exported"] is None:
+                    cur["exported"] = "true"
+            elif kind == "start" and tag == "action" and cur is not None and attrs.get("name"):
+                cur["actions"].append(attrs["name"])
+    except Exception:  # noqa: BLE001 - no / unreadable manifest: dex-side actions only
+        pass
+    return out, pkg
+
+
+def _brc_dyn_actions(dx, budget=400):
+    """Action strings handed to IntentFilter(String) / addAction anywhere in the dex (dynamic registerReceiver)."""
+    acts = []
+    for ref in dx.order[:budget]:
+        ins = dx.code[ref][2]
+        last = None
+        for op, o in _dga_ops(ins):
+            if op in (0x1A, 0x1B):
+                last = dx.s(struct.unpack_from("<H" if op == 0x1A else "<I", ins, o + 2)[0])
+            elif 0x6E <= op <= 0x72 or 0x74 <= op <= 0x78:
+                try:
+                    r = dx.mref(struct.unpack_from("<H", ins, o + 2)[0])
+                except Exception:  # noqa: BLE001
+                    continue
+                if isinstance(r, str) and r.startswith(_BRC_IF) and isinstance(last, str):
+                    acts.append(last)
+    return list(dict.fromkeys(acts))
+
+
+def broadcast_receiver_facts(apk):
+    """[{"class", "action", "exported", "permission", "priority", "result", "values", "tokens"}] per (receiver, action)
+    of every in-dex BroadcastReceiver.onReceive, run with a delivered Intent of that action whose extras answer the
+    code's comparisons; receivers sharing an action chain getResultData in priority order. [] when absent; never
+    raises; < 1 s."""
+    rows = []
+    deadline = time.time() + _BRC_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            man, pkg = _brc_manifest(z)
+            dexes = [z.read(i) for i in z.infolist() if i.file_size <= _DXE_MAX_DEX
+                     and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+        for d in dexes:
+            if d[:4] != b"dex\n" or len(d) < 0x70 or not _BRC_PRE.search(d) or time.time() > deadline:
+                continue
+            try:
+                dx = _DxDex(d)
+            except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+                continue
+            entries = [r for r in dx.order if r.endswith(_BRC_ENTRY)][:_BRC_MAX_RECV]
+            if not entries:
+                continue
+            dyn = _brc_dyn_actions(dx)
+            plan = {}
+            for ref in entries:
+                ct = ref.split("->")[0]
+                meta = man.get(ct, {})
+                own = [s for s in _bnd_literals(dx, [ref])[1] if _BRC_ACT.fullmatch(s) and s.split(".")[-1].isupper()]
+                acts = list(dict.fromkeys(meta.get("actions", []) + own + dyn))[:_BRC_MAX_ACT] or [None]
+                for act in acts:
+                    plan.setdefault(act, []).append((ref, ct, meta))
+            runs = [_BRC_MAX_RUNS * 4]
+            for act, recvs in plan.items():
+                prev = None
+                for ref, ct, meta in sorted(recvs, key=lambda t: -t[2].get("priority", 0)):
+                    if time.time() > deadline or runs[0] <= 0:
+                        break
+
+                    tried = []
+
+                    def run(dx_, ref_, recv, action, ans, dl, prev_=prev, tried_=tried):
+                        vm = _BrcVM(dx_, dl, ans, action, prev_, pkg)
+                        tried_.append((len(ans), vm))
+                        it = _DxObj("Landroid/content/Intent;")
+                        it.f["$in"] = True
+                        try:
+                            vm.init_class(recv.t)
+                            vm.run(ref_, [recv, _DxObj("Landroid/content/Context;"), it])
+                        except _FCF_CATCH:
+                            pass
+                        return vm
+
+                    per = [min(runs[0], _BRC_MAX_RUNS)]
+                    before = per[0]
+                    vm = _bnd_solve(dx, ref, _DxObj(ct), act, deadline, per, run=run)
+                    runs[0] -= before - per[0]
+                    if vm is None:
+                        continue
+                    if not any(ANS_RE_T.search(t) for t in vm.out + vm.seen):
+                        # no token: the run whose reads were answered most (the guarded path, not the bail-out)
+                        vm = max(((n, v.steps, -k, v) for k, (n, v) in enumerate(tried) if v.out), default=(0, 0, 0, vm))[3]
+                    prev = vm.result if vm.result is not None else prev
+                    if not vm.out:
+                        continue
+                    toks = list(dict.fromkeys(m for s in vm.out + vm.seen for m in ANS_RE_T.findall(s)))
+                    rows.append({"class": ct, "action": act, "exported": meta.get("exported"),
+                                 "permission": meta.get("permission"), "priority": meta.get("priority", 0),
+                                 "result": vm.result, "values": list(dict.fromkeys(vm.out))[:16], "tokens": toks})
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    return rows
+
+
+def broadcast_receiver_scan(apk):
+    """ANS tokens a broadcast receiver emits per action (broadcast_receiver_facts), result-data tokens first.
+    [] when absent; never raises; < 1 s."""
+    rows = broadcast_receiver_facts(apk)
+    rows.sort(key=lambda r: not (r["result"] and ANS_RE_T.search(r["result"])))
+    return list(dict.fromkeys(t for r in rows for t in r["tokens"]))
+
+
+# --- biometric / local-auth success callback holds the secret (coverage atlas row 92, MASVS-AUTH) --------------------
+# Every in-dex onAuthenticationSucceeded(AuthenticationResult) of a BiometricPrompt / FingerprintManager(Compat)
+# AuthenticationCallback subclass is run twice: with a result whose getCryptoObject() is null (the event-bound bypass a
+# hook forces) and with a CryptoObject whose Cipher / Mac is an identity stub (doFinal / update return their input).
+# onActivityResult of a class reaching KeyguardManager.createConfirmDeviceCredentialIntent runs with resultCode -1
+# (RESULT_OK) per requestCode literal. Values only reached on onAuthenticationFailed / onAuthenticationError /
+# a non-OK result are kept but demoted. Key-spec flags: setUserAuthenticationRequired(false), and a spec that never
+# calls setInvalidatedByBiometricEnrollment (or calls it with false).
+_BIO_CB = ("Landroidx/biometric/BiometricPrompt$AuthenticationCallback;",
+           "Landroid/hardware/biometrics/BiometricPrompt$AuthenticationCallback;",
+           "Landroid/hardware/fingerprint/FingerprintManager$AuthenticationCallback;",
+           "Landroidx/core/hardware/fingerprint/FingerprintManagerCompat$AuthenticationCallback;",
+           "Landroid/support/v4/hardware/fingerprint/FingerprintManagerCompat$AuthenticationCallback;")
+_BIO_OK = re.compile(r"->onAuthenticationSucceeded\(L[\w/$]*AuthenticationResult;\)V$")
+_BIO_BAD = ("->onAuthenticationFailed()V", "->onAuthenticationError(ILjava/lang/CharSequence;)V")
+_BIO_KG = "->onActivityResult(IILandroid/content/Intent;)V"
+_BIO_PRE = re.compile(rb"onAuthenticationSucceeded\0|createConfirmDeviceCredentialIntent\0")
+_BIO_UAR = "Landroid/security/keystore/KeyGenParameterSpec$Builder;->setUserAuthenticationRequired(Z)"
+_BIO_INV = "Landroid/security/keystore/KeyGenParameterSpec$Builder;->setInvalidatedByBiometricEnrollment(Z)"
+_BIO_STUB = ("Ljavax/crypto/Cipher;", "Ljavax/crypto/Mac;")
+_BIO_BUDGET_S, _BIO_MAX_ENTRY, _BIO_MAX_RQ, _BIO_MAX_RUNS = 0.8, 16, 6, 32
+
+
+class _BioVM(_BrcVM):
+    """_BrcVM for one auth callback: AuthenticationResult.getCryptoObject() -> `crypto` (None or a CryptoObject whose
+    Cipher / Mac doFinal / update are the identity), KeyguardManager / Activity / TextView modelled, super callbacks
+    no-ops."""
+
+    def __init__(self, dx, deadline, answers, crypto):
+        super().__init__(dx, deadline, answers, None)
+        self.crypto = crypto
+
+    def invoke(self, ref, raw, depth):  # noqa: C901 - one framework model
+        ct, rest = ref.split("->", 1)
+        name = rest[:rest.index("(")]
+        o = raw[0] if raw else None
+        a = raw[1:]
+        own = ref not in self.dx.code and ref not in _DXE_INTR
+        if not own:
+            return super().invoke(ref, raw, depth)
+        if ct.endswith("$AuthenticationResult;"):
+            if name == "getCryptoObject":
+                return self.crypto
+            if name == "getAuthenticationType":
+                return 2
+            raise _DxAbort
+        if ct.endswith("$CryptoObject;"):
+            if name == "getCipher":
+                return _DxObj(_BIO_STUB[0]) if self.crypto is not None else None
+            if name == "getMac":
+                return _DxObj(_BIO_STUB[1]) if self.crypto is not None else None
+            if name in ("getSignature", "getIdentityCredential", "getPresentationSession", "getOperationHandle"):
+                return None if name != "getOperationHandle" else 0
+            if name == "<init>":
+                return None
+            raise _DxAbort
+        if ct in _BIO_STUB and isinstance(o, _DxObj):
+            if name in ("doFinal", "update"):
+                if not a:
+                    return _DxArr([])
+                v = a[0]
+                if not isinstance(v, list):
+                    raise _DxAbort
+                if len(a) >= 3 and isinstance(a[1], int) and isinstance(a[2], int):
+                    v = v[a[1]:a[1] + a[2]]
+                c = _DxArr(v)
+                c.t = getattr(v, "t", "B")
+                return c
+            if name in ("init", "updateAAD"):
+                return None
+            if name in ("getIV", "getBlockSize", "getMacLength"):
+                return _DxArr([0] * 16) if name == "getIV" else 16
+            raise _DxAbort
+        if name.startswith("onAuthentication") or name in ("onActivityResult", "onCreate", "startActivityForResult",
+                                                            "authenticate", "cancel", "finish", "setResult"):
+            return None
+        if ct == "Landroid/app/KeyguardManager;":
+            if name == "createConfirmDeviceCredentialIntent":
+                return _DxObj("Landroid/content/Intent;")
+            if name in ("isKeyguardSecure", "isDeviceSecure", "isKeyguardLocked", "isDeviceLocked"):
+                return 1
+            raise _DxAbort
+        if name == "getSystemService":
+            return _DxObj("Landroid/app/KeyguardManager;") if a and a[0] == "keyguard" else _DxObj("Ljava/lang/Object;")
+        if name in ("findViewById", "requireViewById"):
+            return _DxObj("Landroid/widget/TextView;")
+        if name in ("setText", "append", "setTitle", "setSubtitle", "setMessage") and a:
+            self.keep(a[0])
+            return None
+        if name in ("setVisibility", "setEnabled", "setTextColor"):
+            return None
+        return super().invoke(ref, raw, depth)
+
+
+def _bio_kind(dx, ct):
+    """The framework AuthenticationCallback `ct` extends (up to 4 in-dex levels), or None."""
+    sup = _dxx_supers(dx)
+    for _ in range(4):
+        ct = sup.get(ct)
+        if ct is None:
+            return None
+        if ct in _BIO_CB:
+            return ("androidx." if ct.startswith("Landroidx/") else "") + ct.split("/")[-1].split("$")[0]
+    return None
+
+
+def _bio_flags(dx):
+    """{"user_auth_required_false", "invalidated_by_enrollment": True / False / None (never called)} of the dex's
+    KeyGenParameterSpec.Builder calls; the boolean is the const/4 last written to the argument register."""
+    out = {"user_auth_required_false": False, "user_auth_required": False, "invalidated_by_enrollment": None}
+    for ref in dx.order[:2000]:
+        ins = dx.code[ref][2]
+        regs = {}
+        for op, o in _dga_ops(ins):
+            b1 = ins[o + 1]
+            if op == 0x12:
+                regs[b1 & 0xF] = ((b1 >> 4) ^ 8) - 8
+            elif op in (0x6E, 0x74):
+                try:
+                    r = dx.mref(struct.unpack_from("<H", ins, o + 2)[0])
+                except Exception:  # noqa: BLE001
+                    continue
+                if not isinstance(r, str) or not r.startswith((_BIO_UAR, _BIO_INV)):
+                    continue
+                g = struct.unpack_from("<H", ins, o + 4)[0]
+                arg = regs.get((g >> 4) & 0xF) if op == 0x6E else regs.get(g + 1)
+                if r.startswith(_BIO_UAR):
+                    out["user_auth_required"] = True
+                    out["user_auth_required_false"] |= arg == 0
+                else:
+                    out["invalidated_by_enrollment"] = (out["invalidated_by_enrollment"] is not False) and arg != 0
+            elif op not in (0x0E, 0x0F, 0x10, 0x11) and 0x01 <= op <= 0xE2 and op not in range(0x32, 0x3E):
+                regs.pop(b1 & 0xF, None)
+                regs.pop(b1, None)
+    out["invalidated_missing"] = out["user_auth_required"] and not out["invalidated_by_enrollment"]
+    return out
+
+
+def biometric_auth_facts(apk):
+    """{"rows": [{"class", "kind", "entry", "mode", "primary", "values", "tokens"}], "flags": {...}} -- every in-dex
+    BiometricPrompt / FingerprintManager(Compat) AuthenticationCallback run per mode: "crypto_null" (getCryptoObject()
+    null: event-bound bypass) / "crypto_stub" (CryptoObject over an identity Cipher / Mac) on onAuthenticationSucceeded,
+    "failed" / "error" (primary False) on the failure callbacks; onActivityResult of a createConfirmDeviceCredentialIntent
+    caller run as "result_ok" (resultCode -1, per requestCode literal) and "result_canceled" (primary False). flags:
+    _bio_flags of the dex (setUserAuthenticationRequired(false), setInvalidatedByBiometricEnrollment missing / false).
+    {"rows": [], "flags": {}} when absent; never raises; < 1 s."""
+    rows, flags = [], {}
+    deadline = time.time() + _BIO_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            dexes = [z.read(i) for i in z.infolist() if i.file_size <= _DXE_MAX_DEX
+                     and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+        for d in dexes:
+            if d[:4] != b"dex\n" or len(d) < 0x70 or time.time() > deadline:
+                continue
+            if not _BIO_PRE.search(d) and b"setUserAuthenticationRequired\0" not in d:
+                continue
+            try:
+                dx = _DxDex(d)
+            except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+                continue
+            if b"setUserAuthenticationRequired\0" in d or b"setInvalidatedByBiometricEnrollment\0" in d:
+                for k, v in _bio_flags(dx).items():
+                    flags[k] = flags.get(k) or v
+            if not _BIO_PRE.search(d):
+                continue
+            kg = b"createConfirmDeviceCredentialIntent\0" in d
+            plan = []
+            for ref in dx.order:
+                ct = ref.split("->")[0]
+                if _DXE_LIB.match(ct):
+                    continue
+                if _BIO_OK.search(ref):
+                    kind = _bio_kind(dx, ct) or "callback"
+                    plan += [(ref, ct, kind, "crypto_null", None), (ref, ct, kind, "crypto_stub", None)]
+                elif ref.endswith(_BIO_BAD) and _bio_kind(dx, ct):
+                    plan.append((ref, ct, _bio_kind(dx, ct), "failed" if "Failed" in ref else "error", None))
+                elif kg and ref.endswith(_BIO_KG):
+                    rqs = (_bnd_literals(dx, [ref])[0] + [0])[:_BIO_MAX_RQ]
+                    plan += [(ref, ct, "keyguard", m, rq) for m in ("result_ok", "result_canceled") for rq in rqs]
+            runs = [_BIO_MAX_RUNS * 4]
+            for ref, ct, kind, mode, rq in plan[:_BIO_MAX_ENTRY * 4]:
+                if time.time() > deadline or runs[0] <= 0:
+                    break
+
+                def run(dx_, ref_, recv, mode_, ans, dl, rq_=rq):
+                    crypto = _DxObj("Landroidx/biometric/BiometricPrompt$CryptoObject;") if mode_ == "crypto_stub" else None
+                    vm = _BioVM(dx_, dl, ans, crypto)
+                    ps = _dxe_params(ref_)
+                    if mode_.startswith("crypto"):
+                        args = [_DxObj("L" + ps[0][1:-1] + ";" if ps else "LAuthenticationResult;")]
+                    elif mode_ == "error":
+                        args = [7, "Too many attempts. Try again later."]
+                    elif mode_.startswith("result"):
+                        it = _DxObj("Landroid/content/Intent;")
+                        it.f["$in"] = True
+                        args = [rq_, -1 if mode_ == "result_ok" else 0, it]
+                    else:
+                        args = []
+                    try:
+                        vm.init_class(recv.t)
+                        vm.run(ref_, [recv] + args)
+                    except _FCF_CATCH:
+                        pass
+                    return vm
+
+                per = [min(runs[0], _BIO_MAX_RUNS)]
+                before = per[0]
+                vm = _bnd_solve(dx, ref, _DxObj(ct), mode, deadline, per, run=run)
+                runs[0] -= before - per[0]
+                if vm is None or not (vm.out or vm.seen):
+                    continue
+                toks = list(dict.fromkeys(m for s in vm.out + vm.seen for m in ANS_RE_T.findall(s)))
+                rows.append({"class": ct, "kind": kind, "entry": ref.split("->")[1].split("(")[0], "mode": mode,
+                             "request_code": rq, "primary": mode in ("crypto_null", "crypto_stub", "result_ok"),
+                             "values": list(dict.fromkeys(vm.out))[:16], "tokens": toks})
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    return {"rows": rows, "flags": flags}
+
+
+def biometric_auth_scan(apk):
+    """ANS tokens an auth success callback yields (biometric_auth_facts): null-CryptoObject and identity-CryptoObject
+    success runs and RESULT_OK onActivityResult first, failure / error / cancelled-only tokens demoted behind them.
+    [] when absent; never raises; < 1 s."""
+    rows = biometric_auth_facts(apk)["rows"]
+    good = [t for r in rows if r["primary"] for t in r["tokens"]]
+    bad = [t for r in rows if not r["primary"] for t in r["tokens"]]
+    return list(dict.fromkeys(good + [t for t in bad if t not in good]))
 
 
 # --- decrypt helper evaluated with each call site's constant arguments (coverage atlas rows 35, 70) --------------------
@@ -13141,3 +16082,863 @@ def xamarin_assembly_scan(apk):
     except Exception:  # noqa: BLE001
         pass
     return list(dict.fromkeys(hits))
+
+
+# --- Flutter / Dart AOT snapshot strings in libapp.so; debug kernel_blob.bin (coverage atlas row 52) ----------------
+# A release Flutter app keeps its Dart code and every string literal in lib/<abi>/libapp.so, an ELF exporting
+# _kDart{Vm,Isolate}Snapshot{Data,Instructions}. Each snapshot starts with magic 0xdcdcf5f5 (LE), int64 length, int64
+# kind (3 = FullAOT), a 32-char version hash (identifies the Dart SDK) and a NUL-terminated features string. Strings
+# appear either in the cluster stream (unsigned varint (len << 1) | two_byte, last byte >= 0x80, then Latin-1 or UTF-16LE
+# bytes) or as heap objects (tags word, Smi length = 2 * len as u32 (compressed pointers) / u64, then the bytes). No
+# blutter (arm64-only, builds the SDK): strings are carved by length prefix with a raw printable / UTF-16LE fallback.
+# A debug build ships assets/flutter_assets/kernel_blob.bin (kernel magic 0x90abcdef) holding the Dart source as text.
+_DART_MAGIC = (b"\xf5\xf5\xdc\xdc", b"\xdc\xdc\xf5\xf5")
+_DART_SYMS = ("_kDartVmSnapshotData", "_kDartVmSnapshotInstructions", "_kDartIsolateSnapshotData",
+              "_kDartIsolateSnapshotInstructions")
+_DART_KINDS = {0: "Full", 1: "FullCore", 2: "FullJIT", 3: "FullAOT"}
+_DART_MAX_ENTRY = 64 << 20
+_DART_RUN_A = re.compile(rb"[\x20-\x7e]{4,}")
+_DART_RUN_U = re.compile(rb"(?:[\x20-\x7e]\x00){4,}")
+_DART_LIT = re.compile(r"""'([^'\\]{1,4096})'|"([^"\\]{1,4096})\"""")
+_DART_DECODE_BUDGET, _DART_BUDGET_S = 300, 0.8
+
+
+def _dart_elf_syms(b):
+    """{name: (file offset, size)} of the _kDart* dynsym exports of an ELF32/64 LE .so (struct only); {} otherwise."""
+    out = {}
+    try:
+        if b[:4] != b"\x7fELF" or b[5] != 1:
+            return out
+        is64 = b[4] == 2
+        if is64:
+            shoff, shentsize, shnum = struct.unpack_from("<Q", b, 0x28)[0], *struct.unpack_from("<HH", b, 0x3A)
+        else:
+            shoff, shentsize, shnum = struct.unpack_from("<I", b, 0x20)[0], *struct.unpack_from("<HH", b, 0x2E)
+        if not shoff or shnum > 4096 or shoff + shnum * shentsize > len(b):
+            return out
+        secs = []
+        for i in range(shnum):
+            o = shoff + i * shentsize
+            if is64:
+                _, typ, _, addr, off, size, link = struct.unpack_from("<IIQQQQI", b, o)
+            else:
+                _, typ, _, addr, off, size, link = struct.unpack_from("<IIIIIII", b, o)
+            secs.append((typ, addr, off, size, link))
+        for typ, _, off, size, link in secs:
+            if typ != 11 or link >= len(secs):   # SHT_DYNSYM
+                continue
+            stro, strsz = secs[link][2], secs[link][3]
+            ent = 24 if is64 else 16
+            for k in range(min(size // ent, 100_000)):
+                o = off + k * ent
+                if is64:
+                    nm, _, _, shndx, val, sz = struct.unpack_from("<IBBHQQ", b, o)
+                else:
+                    nm, val, sz, _, _, shndx = struct.unpack_from("<IIIBBH", b, o)
+                if not nm or nm >= strsz or not 0 < shndx < len(secs):
+                    continue
+                name = b[stro + nm:b.index(b"\0", stro + nm)].decode("latin-1")
+                if name in _DART_SYMS:
+                    s = secs[shndx]
+                    fo = s[2] + val - s[1]
+                    if 0 <= fo < len(b):
+                        out[name] = (fo, min(sz or len(b) - fo, len(b) - fo))
+    except (struct.error, IndexError, ValueError):
+        return {}
+    return out
+
+
+def dart_snapshot_info(b):
+    """Header of every Dart snapshot in a libapp.so (bytes): [{symbol, offset, size, kind, version_hash, features}].
+    The version hash names the Dart SDK the app was built with (blutter / reFlutter key their builds on it). [] when
+    the .so exports no _kDart* symbol and carries no snapshot magic; never raises."""
+    out = []
+    try:
+        syms = _dart_elf_syms(b) or {"?": (b.find(m), 0) for m in _DART_MAGIC if b.find(m) >= 0}
+        for name, (off, size) in sorted(syms.items(), key=lambda kv: kv[1][0]):
+            h = b[off:off + 52]
+            if h[:4] not in _DART_MAGIC or len(h) < 52:
+                out.append({"symbol": name, "offset": off, "size": size, "kind": None})
+                continue
+            ln, kind = struct.unpack_from("<qq", h, 4)
+            feat = b[off + 52:off + 52 + 1024].split(b"\0")[0].decode("latin-1")
+            out.append({"symbol": name, "offset": off, "size": size or ln + 4, "kind": _DART_KINDS.get(kind, kind),
+                        "version_hash": h[20:52].decode("latin-1"), "features": feat})
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _dart_prefixed(b, s, n, two):
+    """True when the bytes before offset s encode a Dart string length n: cluster varint (len << 1 | two_byte, 7 bits
+    per byte, last byte | 0x80) or a heap Smi (2 * len) as u32 / u64 (64-bit layout) or followed by a u32 hash (32-bit)."""
+    v, enc = (n << 1) | two, bytearray()
+    while v > 0x7F:
+        enc.append(v & 0x7F)
+        v >>= 7
+    enc.append(v | 0x80)
+    smi = (2 * n).to_bytes(8, "little")
+    return (b[s - len(enc):s] == enc or b[s - 4:s] == smi[:4] or b[s - 8:s] == smi or b[s - 8:s - 4] == smi[:4]) \
+        and s >= 4
+
+
+def dart_strings(b):
+    """Ordered strings of a Dart snapshot / kernel region: each printable Latin-1 run (>= 4) and UTF-16LE run, cut to
+    its length prefix when one is found (so a following object header never glues on), stripped."""
+    found = []
+    for rx, two in ((_DART_RUN_A, 0), (_DART_RUN_U, 1)):
+        for m in rx.finditer(b):
+            s, raw = m.start(), m.group(0)
+            n = len(raw) // (2 if two else 1)
+            for cut in range(n, 3, -1):   # longest prefixed cut; a run with no length prefix stays whole
+                if _dart_prefixed(b, s, cut, two):
+                    n = cut
+                    break
+                if n - cut >= 8:
+                    break
+            t = (raw[:2 * n].decode("utf-16-le") if two else raw[:n].decode("latin-1")).strip()
+            if len(t) >= 4:
+                found.append((s, t))
+    found.sort()
+    return [t for _, t in found]
+
+
+def _dart_regions(apk):
+    """(label, bytes) of every Dart snapshot region (libapp.so _kDart* exports, or the whole .so when it carries the
+    magic but no symbols) and every kernel_blob.bin / *snapshot_data file under flutter_assets."""
+    out = []
+    with zipfile.ZipFile(apk) as z:
+        for info in z.infolist():
+            n = info.filename
+            if info.is_dir() or info.file_size > _DART_MAX_ENTRY:
+                continue
+            base = n.rsplit("/", 1)[-1]
+            if n.endswith(".so") and n.startswith("lib/"):
+                with z.open(info) as f:
+                    if f.read(4) != b"\x7fELF":
+                        continue
+                b = z.read(info)
+                syms = _dart_elf_syms(b)
+                if syms:
+                    out += [(f"{n}:{k}", b[o:o + sz]) for k, (o, sz) in sorted(syms.items(), key=lambda kv: kv[1][0])
+                            if "Data" in k]
+                elif any(m in b for m in _DART_MAGIC) and (base == "libapp.so" or b"_kDartIsolateSnapshot" in b):
+                    out.append((n, b))
+            elif base in ("kernel_blob.bin", "isolate_snapshot_data", "vm_snapshot_data") or (
+                    "flutter_assets/" in n and base.endswith((".dill", ".bin"))):
+                out.append((n, z.read(info)))
+    return out
+
+
+def dart_snapshot_scan(apk):
+    """ANS tokens from a Flutter app's Dart code: libapp.so snapshot strings (Latin-1 + UTF-16 objects) and a debug
+    build's kernel_blob.bin source. A literal token first; then an `ANS-` anchor string joined with the hex-fragment
+    strings stored next to it (parts.join / interpolation of consts); then quoted literals / encoded runs through
+    decode_any. [] when the APK is not Flutter or nothing matches; never raises."""
+    hits, cands = [], []
+    try:
+        seqs = []
+        for _, b in _dart_regions(apk):
+            strs = dart_strings(b)
+            seqs.append(strs)
+            for t in strs:
+                hits += ANS_RE_T.findall(t)
+        if hits:
+            return list(dict.fromkeys(hits))
+        for strs in seqs:
+            toks = []
+            for t in strs:   # kernel source text: each string literal is its own token
+                lits = [a or c for a, c in _DART_LIT.findall(t)]
+                toks += [x.strip() for x in lits] if lits else [t]
+            for a, t in enumerate(toks):
+                if not _ANCHOR.fullmatch(t):
+                    continue
+                need = 20 - len(t)
+                for seq in (toks[a + 1:a + 9], toks[max(0, a - 8):a][::-1]):
+                    for w in _windows(seq, need):
+                        if ANS_RE_T.fullmatch(t + w) and t + w not in hits:
+                            hits.append(t + w)
+                    if hits:
+                        break
+            for t in toks:
+                for lit in [t] + _POOL_ENCODED.findall(t):
+                    if 16 <= len(lit) <= _CHAIN_MAX_IN:
+                        cands.append(lit)
+        if hits:
+            return hits
+        end = time.monotonic() + _DART_BUDGET_S
+        for r in sorted(dict.fromkeys(cands), key=_hbc_rank)[:_DART_DECODE_BUDGET]:
+            if time.monotonic() > end:
+                break
+            d = decode_any(r, depth=2, cap=200, chain=False)
+            if d:
+                hits += ANS_RE_T.findall(d)
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    return list(dict.fromkeys(hits))
+
+
+# --- multi-signal root detection: the whole clean vector keys the answer (coverage atlas rows 47, 94) -----------------
+# N probe methods (su paths, Build.TAGS test-keys, magisk / superuser packages, ro.debuggable / ro.secure, a rw /system
+# in /proc/mounts, `which su`, SELinux enforcing) each answer a boolean / int; a combiner folds them into a mask
+# (or-int / shl-int), a weighted score, a fragment string, or a boolean[] / int[] / BitSet / EnumSet / Map<String,
+# Boolean>, and that keys the xor / hash yielding the token. _RsgVM is _EnvVM (clean retail Pixel) plus java.util
+# collections (HashMap bucket order, LinkedHashMap / Tree* / EnumSet / EnumMap orders, BitSet) and the extra probes;
+# its forced mode answers 0 (false) from every probe method -- the "patch every check to pass" bypass -- whose value is
+# reported separately, demoted: a clean ro.secure=1 / SELinux-enforcing bit makes that vector differ from the real one.
+_RSG_BUDGET_S, _RSG_MAX_RUNS, _RSG_LAYERS = 0.75, 96, 4
+_RSG_PROPS = {"ro.boot.selinux": "enforcing", "ro.build.selinux": "1", "ro.boot.veritymode": "enforcing",
+              "ro.boot.vbmeta.device_state": "locked", "ro.boot.warranty_bit": "0", "ro.warranty_bit": "0",
+              "ro.build.version.sdk": "34", "ro.boot.mode": "normal", "ro.bootmode": "unknown", "ro.boot.selinux_mode": ""}
+_RSG_FILES = {"/proc/mounts": "/dev/block/dm-6 / ext4 ro,seclabel,relatime 0 0\n"
+                              "/dev/block/dm-7 /system_ext ext4 ro,seclabel,relatime 0 0\n"
+                              "/dev/block/dm-8 /product ext4 ro,seclabel,relatime 0 0\n"
+                              "/dev/block/dm-9 /vendor ext4 ro,seclabel,relatime 0 0\n"
+                              "tmpfs /dev tmpfs rw,seclabel,nosuid,relatime,mode=755 0 0\n"
+                              "/dev/block/dm-48 /data f2fs rw,lazytime,seclabel,nosuid,nodev,noatime 0 0\n",
+              "/sys/fs/selinux/enforce": "1"}
+_RSG_FILES["/proc/self/mounts"] = _RSG_FILES["/proc/self/mountinfo"] = _RSG_FILES["/proc/mounts"]
+_RSG_MAPS = frozenset(("Ljava/util/HashMap;", "Ljava/util/LinkedHashMap;", "Ljava/util/TreeMap;", "Ljava/util/Hashtable;",
+                       "Ljava/util/concurrent/ConcurrentHashMap;", "Ljava/util/EnumMap;", "Landroid/util/ArrayMap;"))
+_RSG_SEQS = frozenset(("Ljava/util/ArrayList;", "Ljava/util/LinkedList;", "Ljava/util/HashSet;", "Ljava/util/LinkedHashSet;",
+                       "Ljava/util/TreeSet;", "Ljava/util/Vector;", "Ljava/util/ArrayDeque;", "Landroid/util/ArraySet;"))
+_RSG_PRE = re.compile(rb"Landroid/os/(?:Build|Debug|SystemProperties);|/proc/(?:self/)?mount|selinux|test-keys|ro\.secure"
+                      rb"|ro\.debuggable|getPackageInfo|Runtime;|ProcessBuilder;|/su\x00|magisk|superuser|busybox|Ljava/io/File;")
+
+
+def _rsg_hash(k):
+    """Java hashCode of a String / boxed int key; None for anything else (identity hash: order not knowable)."""
+    if isinstance(k, str):
+        return _dxe_hash(k) & 0xFFFFFFFF
+    if isinstance(k, int):
+        return k & 0xFFFFFFFF
+    return None
+
+
+def _rsg_order(t, keys):
+    """Iteration order Java gives `keys` (insertion order) in a container of type t."""
+    if t in ("Ljava/util/TreeMap;", "Ljava/util/TreeSet;"):
+        return sorted(keys)
+    if t in ("Ljava/util/EnumSet;", "Ljava/util/EnumMap;"):
+        return sorted(keys, key=lambda e: e.f["$ordinal"])
+    if t in ("Ljava/util/HashMap;", "Ljava/util/HashSet;", "Ljava/util/concurrent/ConcurrentHashMap;"):
+        hs = [_rsg_hash(k) for k in keys]
+        if None in hs:
+            raise _DxAbort
+        cap = 16
+        while len(keys) > cap * 3 // 4:
+            cap *= 2
+        idx = [(h ^ (h >> 16)) & (cap - 1) for h in hs]
+        return [k for _, _, k in sorted(zip(idx, range(len(keys)), keys), key=lambda x: x[:2])]
+    if t in ("Ljava/util/Hashtable;", "Landroid/util/ArrayMap;", "Landroid/util/ArraySet;"):
+        raise _DxAbort
+    return list(keys)
+
+
+class _RsgVM(_EnvVM):
+    """_EnvVM with java.util collections, the SELinux / mount probes, and (forced=True) every probe method answering
+    0; `vector` records what each probe method returned (see root_signal_facts)."""
+
+    def __init__(self, dx, deadline, probes, forced=False):
+        super().__init__(dx, deadline)
+        self.probes, self.forced, self.vector = probes, forced, {}
+        self.statics.update({"Ljava/lang/Boolean;->TRUE": 1, "Ljava/lang/Boolean;->FALSE": 0})
+
+    def new_instance(self, t):
+        if t in _RSG_MAPS or t in _RSG_SEQS or t == "Ljava/util/BitSet;":
+            return _DxObj(t)
+        return super().new_instance(t)
+
+    def invoke(self, ref, raw, depth):
+        r = _env_resolve(self.dx, ref)
+        if r in self.probes:
+            if self.forced:
+                self.vector[r] = 0
+                return 0
+            v = super().invoke(ref, raw, depth)
+            self.vector.setdefault(r, v)
+            return v
+        return super().invoke(ref, raw, depth)
+
+    def prop(self, name, a):
+        k = a[0] if a and isinstance(a[0], str) else None
+        if k in _RSG_PROPS:
+            v, d = _RSG_PROPS[k], a[1] if len(a) > 1 else None
+            if name == "get":
+                return v if v or d is None else d
+            if name in ("getInt", "getLong", "getBoolean"):
+                return (int(v) if v.isdigit() else int(v == "true")) if v else d if isinstance(d, int) else 0
+            raise _DxAbort
+        return super().prop(name, a)
+
+    def env(self, ref, raw):
+        cls, rest = ref.split("->", 1)
+        name = rest[:rest.index("(")]
+        v = self.coll(cls, name, raw, rest)
+        if v is not _ENV_UNSET:
+            return v
+        o = raw[0] if raw and isinstance(raw[0], _DxObj) else None
+        if cls in ("Ljava/io/FileReader;", "Ljava/io/FileInputStream;") and name == "<init>" and o is not None:
+            p = _env_path(raw[1] if len(raw) > 1 else None)
+            if p in _RSG_FILES:
+                o.f["L"] = _RSG_FILES[p].splitlines()
+                return None
+        if o is not None and o.t == "Ljava/io/File;" and name in ("exists", "canRead", "isFile", "length"):
+            p = _env_path(o)
+            if p in _RSG_FILES:
+                return len(_RSG_FILES[p]) if name == "length" else 1
+        return super().env(ref, raw)
+
+    def _box(self, t, items, **kw):
+        c = _DxObj(t)
+        c.f["rs"] = list(items)
+        c.f.update(kw)
+        return c
+
+    def coll(self, cls, name, raw, rest=""):  # noqa: C901 - one table of java.util models
+        if cls == "Ljava/lang/Boolean;" and name == "booleanValue" and raw and isinstance(raw[0], int):
+            return raw[0]
+        if cls == "Ljava/util/EnumSet;" and name in ("noneOf", "allOf", "of", "copyOf"):
+            if name == "copyOf" and raw and isinstance(raw[0], _DxObj) and "rs" in raw[0].f:
+                return self._box(cls, dict.fromkeys(raw[0].f["rs"]), set=1)
+            if name == "noneOf":
+                return self._box(cls, (), set=1)
+            if name == "allOf" and raw and isinstance(raw[0], _DxObj) and "d" in raw[0].f:
+                self.init_class(raw[0].f["d"])
+                vals = self.statics.get(raw[0].f["d"] + "->$VALUES")
+                if isinstance(vals, list):
+                    return self._box(cls, vals, set=1)
+            if name == "of" and raw:
+                its = raw[-1] if isinstance(raw[-1], list) else []
+                return self._box(cls, dict.fromkeys([x for x in raw if isinstance(x, _DxObj)] + list(its)), set=1)
+            raise _DxAbort
+        o = raw[0] if raw and isinstance(raw[0], _DxObj) else None
+        if o is None:
+            return _ENV_UNSET
+        f, a = o.f, raw[1:]
+        if name == "<init>" and o.t == cls and (cls in _RSG_MAPS or cls in _RSG_SEQS or cls == "Ljava/util/BitSet;"):
+            src = a[0] if a and isinstance(a[0], _DxObj) else None
+            if cls == "Ljava/util/BitSet;":
+                f["bits"] = 0
+            elif cls in _RSG_MAPS:
+                f["rm"] = dict(src.f["rm"]) if src is not None and "rm" in src.f else {}
+            else:
+                f["set"] = int("Set" in cls)
+                f["rs"] = list(dict.fromkeys(src.f["rs"]) if f["set"] else src.f["rs"]) if src is not None and \
+                    "rs" in src.f else []
+            return None
+        if "rm" in f:
+            m = f["rm"]
+            if name in ("put", "putIfAbsent") and len(a) == 2:
+                old = m.get(a[0])
+                if name == "put" or a[0] not in m:
+                    m[a[0]] = a[1]
+                return old
+            if name in ("get", "getOrDefault", "containsKey", "remove") and a:
+                if name == "containsKey":
+                    return int(a[0] in m)
+                return m.pop(a[0], None) if name == "remove" else m.get(a[0], a[1] if len(a) > 1 else None)
+            if name in ("size", "isEmpty"):
+                return len(m) if name == "size" else int(not m)
+            if name == "containsValue" and a:
+                return int(a[0] in m.values())
+            if name in ("keySet", "values", "entrySet"):
+                ks = _rsg_order(o.t, list(m))
+                if name == "keySet":
+                    return self._box("Ljava/util/Set;", ks, set=1)
+                if name == "values":
+                    return self._box("Ljava/util/Collection;", [m[k] for k in ks])
+                es = []
+                for k in ks:
+                    e = _DxObj("Ljava/util/Map$Entry;")
+                    e.f.update(ek=k, ev=m[k], em=m)
+                    es.append(e)
+                return self._box("Ljava/util/Set;", es, set=1)
+            raise _DxAbort
+        if "ek" in f:
+            if name in ("getKey", "getValue"):
+                return f["ek"] if name == "getKey" else f["ev"]
+            if name == "setValue" and a:
+                old, f["ev"] = f["ev"], a[0]
+                f["em"][f["ek"]] = a[0]
+                return old
+            raise _DxAbort
+        if "it" in f:
+            if name == "hasNext":
+                return int(bool(f["it"]))
+            if name == "next":
+                if not f["it"]:
+                    raise _DxThrow("Ljava/util/NoSuchElementException;", "Ljava/lang/RuntimeException;")
+                return f["it"].pop(0)
+            raise _DxAbort
+        if "rs" in f:
+            s = f["rs"]
+            if name == "add" and len(a) == 1:
+                if f.get("set") and a[0] in s:
+                    return 0
+                s.append(a[0])
+                return 1
+            if name == "add" and len(a) == 2 and isinstance(a[0], int):
+                s.insert(a[0], a[1])
+                return None
+            if name == "addAll" and a and isinstance(a[0], _DxObj) and "rs" in a[0].f:
+                n = len(s)
+                s.extend(x for x in a[0].f["rs"] if not (f.get("set") and x in s))
+                return int(len(s) > n)
+            if name in ("get", "set") and a and isinstance(a[0], int) and not f.get("set"):
+                if not 0 <= a[0] < len(s):
+                    raise _DxThrow("Ljava/lang/IndexOutOfBoundsException;", "Ljava/lang/RuntimeException;")
+                old = s[a[0]]
+                if name == "set":
+                    s[a[0]] = a[1]
+                return old
+            if name in ("size", "isEmpty"):
+                return len(s) if name == "size" else int(not s)
+            if name in ("contains", "indexOf") and a:
+                return int(a[0] in s) if name == "contains" else s.index(a[0]) if a[0] in s else -1
+            if name == "remove" and a and (f.get("set") or not isinstance(a[0], int)):
+                if a[0] in s:
+                    s.remove(a[0])
+                    return 1
+                return 0
+            if name in ("iterator", "toArray"):
+                items = _rsg_order(o.t, s) if f.get("set") else list(s)
+                if name == "toArray":
+                    return _DxArr(items)
+                it = _DxObj("Ljava/util/Iterator;")
+                it.f["it"] = items
+                return it
+            raise _DxAbort
+        if "bits" in f:
+            b = f["bits"]
+            if name in ("set", "clear", "flip") and a and isinstance(a[0], int):
+                if a[0] < 0 or len(a) > 1 and isinstance(a[1], int) and name != "set" and a[1] < a[0]:
+                    raise _DxThrow("Ljava/lang/IndexOutOfBoundsException;", "Ljava/lang/RuntimeException;")
+                if name == "set" and "(IZ)" in rest:
+                    on, mask = a[1], 1 << a[0]
+                else:
+                    hi = a[1] if len(a) > 1 and isinstance(a[1], int) else a[0] + 1
+                    on, mask = name == "set", ((1 << hi) - 1) ^ ((1 << a[0]) - 1)
+                f["bits"] = b ^ mask if name == "flip" else b | mask if on else b & ~mask
+                return None
+            if name == "clear" and not a:
+                f["bits"] = 0
+                return None
+            if name == "get" and len(a) == 1 and isinstance(a[0], int):
+                return (b >> a[0]) & 1
+            if name in ("cardinality", "length", "isEmpty", "hashCode", "size"):
+                h = 1234
+                for i, w in enumerate(_rsg_words(b)):
+                    h ^= (w & ((1 << 64) - 1)) * (i + 1)
+                h &= (1 << 64) - 1
+                return {"cardinality": bin(b).count("1"), "length": b.bit_length(), "isEmpty": int(not b),
+                        "hashCode": _dxe_w32((h >> 32) ^ h), "size": max(64, -(-b.bit_length() // 64) * 64)}[name]
+            if name == "nextSetBit" and a and isinstance(a[0], int):
+                x = b >> a[0]
+                return -1 if not x else a[0] + (x & -x).bit_length() - 1
+            if name in ("toLongArray", "toByteArray"):
+                if name == "toLongArray":
+                    return _DxArr(_rsg_words(b))
+                n = -(-b.bit_length() // 8)
+                return _DxArr(((b >> (8 * i)) & 0xFF ^ 0x80) - 0x80 for i in range(n))
+            if name in ("or", "and", "xor", "andNot") and a and isinstance(a[0], _DxObj) and "bits" in a[0].f:
+                y = a[0].f["bits"]
+                f["bits"] = {"or": b | y, "and": b & y, "xor": b ^ y, "andNot": b & ~y}[name]
+                return None
+            raise _DxAbort
+        return _ENV_UNSET
+
+
+def _rsg_words(b):
+    out = []
+    while b:
+        w = b & ((1 << 64) - 1)
+        out.append(w - (1 << 64) if w >> 63 else w)
+        b >>= 64
+    return out
+
+
+def root_signal_facts(apk):
+    """Multi-signal root detection (see the section comment): {"clean": [ANS tokens the probes-as-clean-Pixel path
+    shows], "forced": [ANS tokens of the all-probes-patched-to-false path, a DECOY unless also clean], "vector":
+    {probe method: clean return value}}. Empty lists when absent; never raises; < 0.8 s."""
+    out = {"clean": [], "forced": [], "vector": {}}
+    deadline = time.time() + _RSG_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            dexes = [z.read(i) for i in z.infolist() if i.file_size <= _DXE_MAX_DEX
+                     and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+        for d in dexes:
+            if d[:4] != b"dex\n" or len(d) < 0x70 or time.time() > deadline or not _RSG_PRE.search(d):
+                continue
+            try:
+                dx = _DxDex(d)
+            except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+                continue
+            facts = {ref: _env_scan_ins(dx, dx.code[ref][2]) for ref in dx.order}
+            for ref in dx.order:  # the probes _env_scan_ins does not know: SELinux, /proc/mounts
+                if not facts[ref][0] and any(s in _RSG_FILES or s in _RSG_PROPS for s in _rsg_consts(dx, ref)):
+                    facts[ref] = (True, facts[ref][1])
+            probes = {r for r, fc in facts.items() if fc[0] and r.endswith((")Z", ")I", ")Ljava/lang/Boolean;"))}
+            if not probes:
+                continue
+            layers, seen = [{r for r, fc in facts.items() if fc[0]}], set()
+            seen |= layers[0]
+            for _ in range(_RSG_LAYERS):
+                nxt = {r for r, fc in facts.items() if fc[1] & layers[-1]} - seen
+                if not nxt:
+                    break
+                seen |= nxt
+                layers.append(nxt)
+            todo = [r for layer in reversed(layers) for r in sorted(layer)][:_RSG_MAX_RUNS]
+            for forced in (False, True):
+                stop = deadline if forced else time.time() + (deadline - time.time()) * 0.6
+                key = "forced" if forced else "clean"
+                for ref in todo:
+                    if time.time() > stop:
+                        break
+                    nreg, nin, _, acc = dx.code[ref]
+                    ps = _dxe_params(ref)
+                    if len(ps) > 4 or nin > nreg or forced and ref in probes:
+                        continue
+                    vm = _RsgVM(dx, stop, probes, forced)
+                    raw = [] if acc & 0x8 else [_DxObj(ref.split("->")[0])]
+                    for p in ps:
+                        raw += [_DxObj(p) if p in ("Landroid/content/Context;", "Landroid/app/Activity;",
+                                                   "Landroid/app/Application;") else _dxe_default(p)] + (
+                            [None] if p in "JD" else [])
+                    try:
+                        vm.init_class(ref.split("->")[0])
+                        vm.note(vm.run(ref, raw))
+                    except (_DxAbort, IndexError, KeyError, TypeError, ValueError, AttributeError, OverflowError,
+                            RecursionError, struct.error):
+                        pass
+                    for s in vm.seen + [v for v in vm.statics.values() if isinstance(v, str)]:
+                        out[key] += ANS_RE_T.findall(s)
+                    if not forced:
+                        for r, v in vm.vector.items():
+                            if isinstance(v, int):
+                                out["vector"].setdefault(r, v)
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    out["clean"] = list(dict.fromkeys(out["clean"]))
+    out["forced"] = [t for t in dict.fromkeys(out["forced"]) if t not in out["clean"]]
+    return out
+
+
+def _rsg_consts(dx, ref):
+    """const-string literals of one method."""
+    ins, pc, n, out = dx.code[ref][2], 0, len(dx.code[ref][2]) // 2, []
+    while pc < n:
+        p = 2 * pc
+        op = ins[p]
+        if op in (0x1A, 0x1B):
+            out.append(dx.s(struct.unpack_from("<H" if op == 0x1A else "<I", ins, p + 2)[0]) or "")
+        elif op == 0 and ins[p + 1] in (1, 2, 3):
+            if ins[p + 1] == 1:
+                pc += 4 + 2 * struct.unpack_from("<H", ins, p + 2)[0]
+            elif ins[p + 1] == 2:
+                pc += 2 + 4 * struct.unpack_from("<H", ins, p + 2)[0]
+            else:
+                w, k = struct.unpack_from("<HI", ins, p + 2)
+                pc += 4 + (w * k + 1) // 2
+            continue
+        pc += _DOP_W[op]
+    return out
+
+
+def root_signal_scan(apk):
+    """ANS tokens of a multi-signal root check evaluated on the CLEAN vector (root_signal_facts), first; then, labelled
+    and demoted, any different token the forced all-probes-false path shows ("forced-success DECOY: ANS-..."), which a
+    solver must not submit as the clean answer. [] when absent; never raises; < 0.8 s."""
+    f = root_signal_facts(apk)
+    return f["clean"] + [f"forced-success DECOY (not the clean vector): {t}" for t in f["forced"]]
+
+
+# --- Android hardware key attestation: KeyDescription / RootOfTrust (coverage atlas row 93) --------------------------
+# An attestation leaf cert carries extension 1.3.6.1.4.1.11129.2.1.17 = KeyDescription SEQUENCE {attestationVersion,
+# attestationSecurityLevel ENUM, keyMint/keymasterVersion, keyMint/keymasterSecurityLevel ENUM, attestationChallenge
+# OCTET STRING, uniqueId OCTET STRING, softwareEnforced AuthorizationList, teeEnforced AuthorizationList}; each
+# AuthorizationList is a SEQUENCE of EXPLICIT [tag] fields, [704] rootOfTrust = SEQUENCE {verifiedBootKey OCTET STRING,
+# deviceLocked BOOLEAN, verifiedBootState ENUM(0 Verified, 1 SelfSigned, 2 Unverified, 3 Failed), verifiedBootHash
+# OCTET STRING (v3+)}, [705] osVersion, [706] osPatchLevel, [709] attestationApplicationId = OCTET STRING(DER SEQUENCE
+# {SET OF {packageName OCTET STRING, version INTEGER}, SET OF signatureDigest OCTET STRING}). The OID is located in
+# raw DER, PEM blocks and base64 / hex text of every entry (puzzle JSON fields, dex constants), parsed by a minimal
+# pure-python TLV walker (no asn1crypto schema: a hand-rolled / truncated extension still yields what parses).
+_KA_OID = b"\x06\x0a\x2b\x06\x01\x04\x01\xd6\x79\x02\x01\x11"
+_KA_PEM = re.compile(rb"-----BEGIN (?:TRUSTED )?CERTIFICATE-----([A-Za-z0-9+/=\s\\rn]{40,}?)-----END", re.S)
+_KA_B64 = re.compile(rb"[A-Za-z0-9+/_-]{120,}={0,2}")
+_KA_HEX = re.compile(rb"(?:[0-9a-fA-F]{2}){100,}")
+_KA_STATE = {0: "Verified", 1: "SelfSigned", 2: "Unverified", 3: "Failed"}
+_KA_LEVEL = {0: "Software", 1: "TrustedEnvironment", 2: "StrongBox"}
+_KA_TAGS = {1: "purpose", 2: "algorithm", 3: "keySize", 5: "digest", 6: "padding", 10: "ecCurve",
+            200: "rsaPublicExponent", 203: "mgfDigest", 303: "rollbackResistance", 305: "earlyBootOnly",
+            400: "activeDateTime", 401: "originationExpireDateTime", 402: "usageExpireDateTime",
+            405: "usageCountLimit", 503: "noAuthRequired", 504: "userAuthType", 505: "authTimeout",
+            506: "allowWhileOnBody", 507: "trustedUserPresenceRequired", 508: "trustedConfirmationRequired",
+            509: "unlockedDeviceRequired", 600: "allApplications", 601: "applicationId", 701: "creationDateTime",
+            702: "origin", 703: "rollbackResistant", 704: "rootOfTrust", 705: "osVersion", 706: "osPatchLevel",
+            709: "attestationApplicationId", 710: "attestationIdBrand", 711: "attestationIdDevice",
+            712: "attestationIdProduct", 713: "attestationIdSerial", 714: "attestationIdImei",
+            715: "attestationIdMeid", 716: "attestationIdManufacturer", 717: "attestationIdModel",
+            718: "vendorPatchLevel", 719: "bootPatchLevel", 720: "deviceUniqueAttestation",
+            723: "attestationIdSecondImei", 724: "moduleHash"}
+_KA_MAX_ENTRY, _KA_MAX_HITS, _KA_BUDGET_S = 8 << 20, 32, 1.2
+_KA_STATE_DEX = re.compile(rb"(?i)\b(?:verified_?boot_?state|self_?signed|unverified|(?:^|[^a-z])verified|"
+                           rb"device_?locked|root_?of_?trust)\b")
+
+
+def _ka_tlv(d, i, end):
+    """(cls, constructed, tag, content_start, content_end) of the DER element at i, or None."""
+    if i + 2 > end:
+        return None
+    b0 = d[i]
+    cls, cons, tag, i = b0 >> 6, bool(b0 & 0x20), b0 & 0x1F, i + 1
+    if tag == 0x1F:
+        tag = 0
+        for _ in range(4):
+            if i >= end:
+                return None
+            tag, i = (tag << 7) | (d[i] & 0x7F), i + 1
+            if not d[i - 1] & 0x80:
+                break
+        else:
+            return None
+    if i >= end:
+        return None
+    ln, i = d[i], i + 1
+    if ln & 0x80:
+        n = ln & 0x7F
+        if not 1 <= n <= 4 or i + n > end:
+            return None
+        ln, i = int.from_bytes(d[i:i + n], "big"), i + n
+    if i + ln > end:
+        return None
+    return cls, cons, tag, i, i + ln
+
+
+def _ka_children(d, s, e):
+    out, i = [], s
+    while i < e and len(out) < 256:
+        t = _ka_tlv(d, i, e)
+        if t is None:
+            break
+        out.append(t)
+        i = t[4]
+    return out
+
+
+def _ka_int(d, t):
+    return int.from_bytes(d[t[3]:t[4]], "big", signed=True) if t and t[3] < t[4] <= t[3] + 16 else None
+
+
+def _ka_value(d, t, depth=0):
+    """Python value of a universal element (INTEGER/ENUM/BOOLEAN -> int/bool, OCTET STRING -> bytes, SET/SEQUENCE ->
+    list)."""
+    cls, cons, tag, s, e = t
+    if cls == 0 and tag in (2, 10):
+        return _ka_int(d, t)
+    if cls == 0 and tag == 1:
+        return bool(d[s]) if e > s else None
+    if cls == 0 and tag == 5:
+        return None
+    if cons and depth < 4:
+        return [_ka_value(d, c, depth + 1) for c in _ka_children(d, s, e)]
+    return bytes(d[s:e])
+
+
+def _ka_appid(b):
+    """AttestationApplicationId DER -> {"packages": [[name, version]], "signature_digests": [hex]}."""
+    out = {"packages": [], "signature_digests": []}
+    t = _ka_tlv(b, 0, len(b))
+    if not t or t[2] != 16:
+        return out
+    kids = _ka_children(b, t[3], t[4])
+    if kids:
+        for p in _ka_children(b, kids[0][3], kids[0][4]):
+            f = _ka_children(b, p[3], p[4])
+            if f:
+                out["packages"].append([b[f[0][3]:f[0][4]].decode("utf-8", "replace"),
+                                        _ka_int(b, f[1]) if len(f) > 1 else None])
+    if len(kids) > 1:
+        out["signature_digests"] = [b[c[3]:c[4]].hex() for c in _ka_children(b, kids[1][3], kids[1][4])]
+    return out
+
+
+def _ka_authlist(d, t):
+    out = {}
+    if not t or not t[1]:
+        return out
+    for c in _ka_children(d, t[3], t[4]):
+        if c[0] != 2:
+            continue
+        name = _KA_TAGS.get(c[2], f"tag{c[2]}")
+        inner = _ka_children(d, c[3], c[4])
+        if not inner:
+            out[name] = True
+            continue
+        if c[2] == 704:
+            f = _ka_children(d, inner[0][3], inner[0][4])
+            vals = [_ka_value(d, x) for x in f]
+            rot = {"verifiedBootKey": vals[0].hex() if vals and isinstance(vals[0], bytes) else None,
+                   "deviceLocked": vals[1] if len(vals) > 1 else None,
+                   "verifiedBootState": vals[2] if len(vals) > 2 else None,
+                   "verifiedBootHash": vals[3].hex() if len(vals) > 3 and isinstance(vals[3], bytes) else None}
+            rot["verifiedBootStateName"] = _KA_STATE.get(rot["verifiedBootState"])
+            rot["clean"] = rot["verifiedBootState"] == 0 and rot["deviceLocked"] is True
+            out[name] = rot
+        elif c[2] == 709:
+            v = _ka_value(d, inner[0])
+            out[name] = _ka_appid(v) if isinstance(v, bytes) else v
+            if isinstance(v, bytes):
+                out[name]["raw"] = v.hex()
+        else:
+            v = _ka_value(d, inner[0])
+            out[name] = v.decode("latin-1") if isinstance(v, bytes) and v.isascii() and v.isprintable() else (
+                v.hex() if isinstance(v, bytes) else v)
+    return out
+
+
+def _ka_desc(d, s, e):
+    """KeyDescription SEQUENCE content [s, e) -> dict, or None."""
+    f = _ka_children(d, s, e)
+    if len(f) < 6 or f[4][2] != 4:
+        return None
+    lv = lambda t: _KA_LEVEL.get(_ka_int(d, t), _ka_int(d, t))  # noqa: E731
+    sw = _ka_authlist(d, f[6]) if len(f) > 6 else {}
+    hw = _ka_authlist(d, f[7]) if len(f) > 7 else {}
+    rot = hw.get("rootOfTrust") or sw.get("rootOfTrust")
+    ch = bytes(d[f[4][3]:f[4][4]])
+    uid = bytes(d[f[5][3]:f[5][4]]) if f[5][2] == 4 else b""
+    return {"attestationVersion": _ka_int(d, f[0]), "attestationSecurityLevel": lv(f[1]),
+            "keymasterVersion": _ka_int(d, f[2]), "keymasterSecurityLevel": lv(f[3]),
+            "attestationChallenge": ch.hex(), "challenge_text": ch.decode("latin-1"), "uniqueId": uid.hex(),
+            "softwareEnforced": sw, "teeEnforced": hw, "rootOfTrust": rot,
+            "verifiedBootState": rot and rot.get("verifiedBootStateName"),
+            "deviceLocked": rot and rot.get("deviceLocked"), "clean": bool(rot and rot.get("clean")),
+            "osVersion": hw.get("osVersion", sw.get("osVersion")),
+            "osPatchLevel": hw.get("osPatchLevel", sw.get("osPatchLevel")),
+            "attestationApplicationId": sw.get("attestationApplicationId") or hw.get("attestationApplicationId")}
+
+
+def _ka_blob_descs(b, out, seen, depth=0):
+    """Every KeyDescription in a blob: raw DER at each OID hit, then PEM / base64 / hex text decoded (2 levels)."""
+    i = b.find(_KA_OID)
+    while i >= 0 and len(out) < _KA_MAX_HITS:
+        j = i + len(_KA_OID)
+        t = _ka_tlv(b, j, len(b))
+        if t and t[0] == 0 and t[2] == 1:  # critical BOOLEAN
+            t = _ka_tlv(b, t[4], len(b))
+        if t and t[0] == 0 and t[2] == 4:
+            s = _ka_tlv(b, t[3], t[4])
+            if s and s[2] == 16 and bytes(b[s[3]:s[4]]) not in seen:
+                seen.add(bytes(b[s[3]:s[4]]))
+                try:
+                    r = _ka_desc(b, s[3], s[4])
+                except (IndexError, ValueError, TypeError, AttributeError):
+                    r = None
+                if r:
+                    out.append(r)
+        i = b.find(_KA_OID, j)
+    if depth >= 2:
+        return
+    cands = []
+    for m in _KA_PEM.finditer(b):
+        cands.append(re.sub(rb"\\[rn]|\s", b"", m.group(1)))
+    if b"\x2b\x06\x01\x04\x01\xd6\x79" not in b or depth:
+        cands += [m.group(0) for m in _KA_B64.finditer(b)][:64]
+    for c in cands:
+        if len(out) >= _KA_MAX_HITS:
+            return
+        for alt in (False, True):
+            try:
+                raw = base64.b64decode(c + b"=" * (-len(c) % 4), altchars=b"-_" if alt else None, validate=False)
+            except (binascii.Error, ValueError):
+                continue
+            if b"\x2b\x06\x01\x04\x01\xd6\x79" in raw or b"CERTIFICATE" in raw:
+                _ka_blob_descs(raw, out, seen, depth + 1)
+                break
+    for m in list(_KA_HEX.finditer(b))[:64]:
+        raw = bytes.fromhex(m.group(0).decode())
+        if b"\x2b\x06\x01\x04\x01\xd6\x79" in raw:
+            _ka_blob_descs(raw, out, seen, depth + 1)
+
+
+def _ka_tokens(r):
+    """ANS tokens in a KeyDescription's octet strings: ASCII, ASCII-hex text, then decode_any on printable strings."""
+    vals = [r["attestationChallenge"], r["uniqueId"]]
+    for al in (r["softwareEnforced"], r["teeEnforced"]):
+        for k, v in al.items():
+            if isinstance(v, str):
+                vals += [v.encode("latin-1", "replace").hex()] + ([v] if re.fullmatch(r"(?:[0-9a-f]{2})+", v) else [])
+            elif k == "rootOfTrust" and isinstance(v, dict):
+                vals += [v.get("verifiedBootKey") or "", v.get("verifiedBootHash") or ""]
+            elif k == "attestationApplicationId" and isinstance(v, dict):
+                vals += [p[0].encode("utf-8", "replace").hex() for p in v.get("packages", [])]
+                vals += v.get("signature_digests", [])
+    toks = []
+    for h in vals:
+        try:
+            raw = bytes.fromhex(h or "")
+        except ValueError:
+            continue
+        txt = raw.decode("latin-1")
+        toks += ANS_RE_T.findall(txt)
+        for m in re.finditer(r"(?:[0-9a-fA-F]{2}){20,}", txt):
+            toks += ANS_RE_T.findall(bytes.fromhex(m.group(0)).decode("latin-1"))
+        if not toks:
+            for s in re.findall(r"[\x21-\x7e]{16,512}", txt)[:4]:
+                toks += ANS_RE_T.findall(decode_any(s, depth=2, cap=600, chain=False) or "")
+    return list(dict.fromkeys(toks))
+
+
+def key_attestation_scan(apk):
+    """Android hardware key attestation certs shipped in the APK (row 93): [{"entry", "attestationVersion",
+    "attestationSecurityLevel" / "keymasterSecurityLevel" (Software / TrustedEnvironment / StrongBox),
+    "attestationChallenge" (hex) / "challenge_text", "uniqueId", "softwareEnforced" / "teeEnforced" (AuthorizationList
+    {field name: value}), "rootOfTrust" {verifiedBootKey, deviceLocked, verifiedBootState (int) +
+    verifiedBootStateName (Verified / SelfSigned / Unverified / Failed), verifiedBootHash, clean}, "verifiedBootState",
+    "deviceLocked", "clean" (Verified + locked), "osVersion", "osPatchLevel", "attestationApplicationId" {packages
+    [[name, version]], signature_digests [hex]}, "sig_match" (an app-id digest equals the APK signer's sha256; None
+    when no signer / digest), "dex_boot_markers" (boot-state strings the dex compares), "tokens" (ANS-...)}].
+    Searches raw DER, PEM and base64 / hex text of every entry (assets, res/raw, META-INF, puzzle JSON, dex).
+    [] when absent; never raises; < 1.2 s."""
+    out = []
+    try:
+        deadline = time.time() + _KA_BUDGET_S
+        markers = set()
+        with zipfile.ZipFile(apk) as z:
+            for info in z.infolist():
+                if time.time() > deadline or len(out) >= _KA_MAX_HITS:
+                    break
+                if info.is_dir() or info.file_size > _KA_MAX_ENTRY:
+                    continue
+                try:
+                    b = z.read(info)
+                except Exception:  # noqa: BLE001 - corrupt / encrypted entry
+                    continue
+                if info.filename.endswith(".dex"):
+                    markers.update(m.group(0).decode("latin-1").strip() for m in _KA_STATE_DEX.finditer(b))
+                found = []
+                _ka_blob_descs(b, found, set())
+                for r in found:
+                    r["entry"] = info.filename
+                out += found
+        if out:
+            signers = {x["sha256"] for x in signing_certs(apk)}
+            for r in out:
+                dig = set((r.get("attestationApplicationId") or {}).get("signature_digests") or []) \
+                    if isinstance(r.get("attestationApplicationId"), dict) else set()
+                r["sig_match"] = bool(dig & signers) if dig and signers else None
+                r["dex_boot_markers"] = sorted(markers)[:16]
+                r["tokens"] = _ka_tokens(r)
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        return out
+    return out
+
+
+def key_attestation_tokens(apk):
+    """ANS tokens from key_attestation_scan, clean (Verified + locked) attestations first. [] when absent."""
+    recs = key_attestation_scan(apk)
+    recs.sort(key=lambda r: not r.get("clean"))
+    return list(dict.fromkeys(t for r in recs for t in r.get("tokens", [])))

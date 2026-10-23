@@ -1,0 +1,8 @@
+{
+ "decoy": false,
+ "expected_plain": "v=3|language=bicep|role=downloader|verdict=malicious|attack=T1105|adapter=http_client|host_profile=bicep_host|stage_count=2|steps=acquire_remote,write_file|campaign_id=IAC-a8c2e4f6|url=https://iac-a8c2e4f6.example.invalid/stage|file_path=/tmp/huntress-iac/.a8c2e4f6.stage",
+ "host": "iac",
+ "note": "cloud-iac-userdata-route: script body embedded in an IaC template (lib.codec.iac_scripts / _iac_codecs)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/iac_gen.py tests/data/script_fixtures  (stdlib: XOR 0x41 + hex, D21 bash Material_/Codec_ pair)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/script_fixtures/iac_oracle.py tests/data/script_fixtures/iac_bicep_escaped.bicep  (python-hcl2 [pip --target tools/pylib-hcl2] / PyYAML with CFN tag constructors / json + ARM concat evaluator / Bicep regex, then stdlib hex + XOR)"
+}

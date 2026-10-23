@@ -1,0 +1,7 @@
+{
+ "entry": "biometric_auth_scan",
+ "expected": "ANS-5d0e8b37a1c4f962",
+ "_why": "VaultCallback extends androidx BiometricPrompt$AuthenticationCallback; onAuthenticationSucceeded: null CryptoObject -> Log \"event-only\"; CryptoObject -> getCipher().doFinal(ENC) xor (0x29+i) -> SharedPreferences token. onAuthenticationFailed logs a xor-encoded trap ANS-0f1e2d3c4b5a6978 (must be demoted behind the success value)",
+ "generator_cmd": "python3 tests/data/android_fixtures/bio_src/gen_bio.py crypto_androidx tests/data/android_fixtures/bio_crypto_androidx.apk  # javac --release 8 (app + androidx.biometric / android.hardware.biometrics / KeyguardManager stubs) + dex2jar d2j-jar2dex.sh; manifest: apktool-bundled aapt2 link -I prebuilt/android-framework.jar; zipfile",
+ "oracle_cmd": "same generator, stage 2: host-JVM Probe calls VaultCallback.onAuthenticationSucceeded with AuthenticationResult(null) -> \"crypto_null=null log=event-only\", then with CryptoObject(identity javax.crypto.Cipher over a CipherSpi whose engineDoFinal returns its input) -> \"crypto_stub=ANS-5d0e8b37a1c4f962\", then onAuthenticationFailed -> \"failed=ANS-0f1e2d3c4b5a6978\""
+}

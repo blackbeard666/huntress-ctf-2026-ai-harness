@@ -1,0 +1,9 @@
+{
+ "codec": "decompress-redecode",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-73",
+ "encoded": "U4fVNNNNNNNPNlKWZEXPZONS0Xg8r6xfaCRPISu5tFK5N0TFqoXYtqieQB17mkFVciJAlXNkyDx+W0BGzesCOF+S6seySonABsz53PH4cSuwurfsvI4lZLt56jBYEUoeHsohsifOzaYskJZNNNN=",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | base64 -w0 | tr 'A-Za-z' 'N-ZA-Mn-za-m'",
+ "oracle_cmd": "printf %s \"$encoded\" | tr 'A-Za-z' 'N-ZA-Mn-za-m' | base64 -d | gzip -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-73",
+ "expected": "match"
+}

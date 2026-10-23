@@ -1,0 +1,10 @@
+{
+ "codec": "gzip-base64 (8-byte trailer missing)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-bison-26",
+ "encoded": "H4sIAAAAAAACAyXJMQ7CMAwF0Kt8drowMHABJpi4gJN+gdUmRrZLOH6RWN+7ayWG+YKZ1WbtT+RLA0O8be8DHoaw9cMjYitN87/8Sk1Ij0FH2g+JqzTiJpH0C6QV+lQ0rE+n8w4=",
+ "expected": "match",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | head -c -8 | base64 -w0",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc 2>&1",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-bison-26",
+ "oracle_output": "full plain, then 'gzip: stdin: unexpected end of file'"
+}

@@ -1,0 +1,11 @@
+{
+ "material": "trigger: none\nschedules:\n  - cron: \"30 2 * * 1-5\"\n    displayName: weekday refresh\n    branches:\n      include: [main]\n    always: true\npool:\n  vmImage: ubuntu-latest\nsteps:\n  - script: ./refresh.sh\n",
+ "rep": "schedule_entries",
+ "transform": "schedule",
+ "key": null,
+ "expected": "30 2 * * 1-5",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes azure.yml: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && python3 -I -c \"import yaml,sys;print(yaml.safe_load(open(sys.argv[1]))['schedules'][0]['cron'])\" azure.yml)"
+}

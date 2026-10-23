@@ -1,0 +1,10 @@
+{
+ "codec": "signed-cookie-django-plain",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-stoat-29",
+ "encoded": "Ik5pY2Ugd29yayBkZWNvZGluZyB0aGlzIHdhcm11cCEgVG8gc29sdmUsIHN1Ym1pdCB0aGlzIGV4YWN0IGFuc3dlciB0byB0aGUgR2FtZSBNYXN0ZXI6IG1hcGxlLXN0b2F0LTI5Ig:1xJsy5:lfofxjZGuqRJoxk-CYAcp6O7sN5_iSAW1C8T9YtLESI",
+ "generator_cmd": "PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_gen.py django-plain \"$plain\"",
+ "oracle_cmd": "printf %s \"${encoded#}\" | PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_oracle.py django-plain",
+ "oracle_output": "\"Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-stoat-29\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-stoat-29",
+ "expected": "match"
+}

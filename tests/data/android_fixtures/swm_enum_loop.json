@@ -1,0 +1,8 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-4be81c07d93fa265",
+ "decoy": false,
+ "_why": "while/switch(Phase) state machine: Phase declared TRAP,EMIT,MIX,BOOT,CHECK,DONE but switched BOOT,CHECK,MIX,TRAP,EMIT, so the packed-switch keys are Gate$1.$SwitchMap$..Phase[ordinal] (1..5), not ordinals; the evaluator must run Phase.<clinit> + Gate$1.<clinit> and aget by ordinal",
+ "generator_cmd": "python3 tests/data/android_fixtures/swm_src/gen_swm.py enum_loop tests/data/android_fixtures/swm_enum_loop.apk  # javac --release 8 (enum + switch(enum) -> Gate$1.$SwitchMap$) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> Probe runs the enum switch on the host JVM -> 'proof=ANS-4be81c07d93fa265'; `javap -c -p 'Gate$1.class'` shows the <clinit> aput order"
+}

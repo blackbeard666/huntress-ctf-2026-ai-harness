@@ -1,0 +1,8 @@
+{
+ "field": "jar.main_class_entry_name",
+ "expected": "none",
+ "generator_cmd": "printf 'Implementation-Title: dep-lib\\nImplementation-Version: 1.4.2\\n' > dep.mf; jar --create --file dep.jar --manifest dep.mf -C od . (library jar, no Main-Class)",
+ "oracle_cmd": "java Oracle.java dep.jar (java.util.jar.JarFile getManifest().getMainAttributes()/getEntries(), jf.getEntry(Main-Class.replace('.','/')+\".class\"), JarFile.entries() *.jar|*.war, JarInputStream.getManifest(), ZipInputStream entry index) -> no Main-Class",
+ "decoy": true,
+ "member": "dep.jar"
+}

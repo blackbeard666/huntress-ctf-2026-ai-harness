@@ -1,0 +1,8 @@
+{
+ "field": "oci.config_entrypoint",
+ "expected": "[\"/opt/beacon/run\",\"--quiet\"]",
+ "generator_cmd": "docker import base.tar hctf-fixture-base:1; docker build -t hctf-fixture-beacon:2.1 . (FROM hctf-fixture-base:1; LABEL org.opencontainers.image.title=beacon maintainer=ops@example.test; ENV APP_MODE=prod PATH=/usr/local/bin:/usr/bin; WORKDIR /opt/beacon; COPY; EXPOSE 8443/tcp 53/udp; USER 1001:1001; ENTRYPOINT [\"/opt/beacon/run\",\"--quiet\"]; CMD [\"--port\",\"8443\"]); docker save -o beacon.tar hctf-fixture-beacon:2.1  (Docker 29.6)",
+ "oracle_cmd": "docker image inspect hctf-fixture-beacon:2.1 --format '{{json .Config.Entrypoint}}'",
+ "decoy": false,
+ "member": "beacon.tar"
+}

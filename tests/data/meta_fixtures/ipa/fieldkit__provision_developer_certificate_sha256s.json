@@ -1,0 +1,8 @@
+{
+ "field": "ipa.provision_developer_certificate_sha256s",
+ "expected": "[\"d776d265a49b1111795cc99b11212f5f80210d3be5dd8f04fea54350ab0be206\",\"73a47afcc6c0281f6087d1e32300b4df8367897a661f9eae8adb123c35791730\"]",
+ "generator_cmd": "mkdir -p Payload/FieldKit.app/PlugIns/ShareExt.appex; cp Info.plist, dev.mobileprovision (as embedded.mobileprovision), appex Info.plist (bplist); zip -X -r FieldKit.ipa Payload; openssl req -x509 -newkey rsa:2048 -nodes -subj '/CN=Apple Development: Jane Roe (Q7XK2M9P4L)/...' -outform DER -out dev1.der; same for dev2.der (CN=iPhone Distribution: Northwind Labs LLC (AB12CD34EF)); python3 plistlib.dumps(profile dict with DeveloperCertificates=[dev1.der, dev2.der], Entitlements{...}, ProvisionedDevices[3], dates 2026-03-14T09:26:53Z/2027-03-14T09:26:53Z) > dev.plist; openssl cms -sign -nodetach -binary -outform DER -in dev.plist -signer signer.pem -inkey signer.key -out dev.mobileprovision",
+ "oracle_cmd": "unzip -p FieldKit.ipa Payload/FieldKit.app/embedded.mobileprovision | cmp - dev.mobileprovision; openssl x509 -inform DER -in dev1.der -noout -fingerprint -sha256 (then dev2.der), colons stripped, lowercased",
+ "decoy": false,
+ "member": "FieldKit.ipa"
+}

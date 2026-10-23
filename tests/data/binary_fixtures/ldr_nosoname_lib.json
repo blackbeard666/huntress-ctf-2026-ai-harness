@@ -1,0 +1,28 @@
+{
+ "family": "loader_resolution",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "interpreter": "none",
+  "has_interp": "false",
+  "needed": [],
+  "soname": "none",
+  "rpath": "none",
+  "runpath": "none",
+  "search_path_tag": "none",
+  "search_path": "none",
+  "dst_tokens": [],
+  "has_origin": "false",
+  "flags": [],
+  "flags_1": [],
+  "bind_now": "false",
+  "pie": "false",
+  "nodeflib": "false"
+ },
+ "generator_cmd": "bash ldr_gen.sh   # gcc -shared, no SONAME / RPATH / flags (group member libhfoo.so",
+ "oracle_cmd": "python3 ldr_oracle.py ldr_nosoname_lib.bin   # GNU readelf -dW (NEEDED/SONAME/RPATH/RUNPATH/FLAGS/FLAGS_1) + readelf -lW (Requesting program interpreter)",
+ "file_b": "ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dyna",
+ "decoy": false,
+ "note": "lib.binary.elf_loader_facts(data) per key; gcc -shared, no SONAME / RPATH / flags (group member libhfoo.so: basename match only)"
+}

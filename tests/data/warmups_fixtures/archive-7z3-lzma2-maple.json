@@ -1,0 +1,9 @@
+{
+ "codec": "archive-container[7z]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-gecko-36",
+ "encoded": "N3q8ryccAAS/fJ4xwgAAAAAAAAAgAAAAAAAAAFJ5Tk8BACBOaWNlIHdvcmsgZGVjb2RpbmcgdGhpcyB3YXJtdXAhIFQAAQAgbyBzb2x2ZSwgc3VibWl0IHRoaXMgZXhhY3QgYW5zd2VyAAEAIiB0byB0aGUgR2FtZSBNYXN0ZXI6IG1hcGxlLWdlY2tvLTM2AAAAgTMHrk+gwqUux4gyz0FtfGCKYmRvYtgH4MlCrKzBAxOmYMgR94lb4SCbe1mAiBBPsbB8wuNJeXDSAJ398v5QJ/VjBvs8GwVv2bAeAvUAABcGcQEJUQAHCwEAASMDAQEFXQAQAAAMdgoBoxHnIAAA",
+ "generator_cmd": "d=$(mktemp -d); cd $d; printf %s \"$p1\" > a.txt; printf %s \"$p2\" > b.txt; printf %s \"$p3\" > c.txt; f=$(mktemp -u).7z; 7za a -bd -bso0 -mtm=off -mtc=off -mta=off -ms=off $f a.txt b.txt c.txt; base64 -w0 $f; rm -rf $d $f",
+ "oracle_cmd": "f=$(mktemp); printf %s \"$encoded\" | base64 -d > $f; 7z x -so -pinfected -t7z $f 2>/dev/null </dev/null; r=$?; rm -f $f; exit $r",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-gecko-36",
+ "expected": "match"
+}

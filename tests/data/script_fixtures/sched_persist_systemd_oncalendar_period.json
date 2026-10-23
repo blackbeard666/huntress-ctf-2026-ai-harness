@@ -1,0 +1,11 @@
+{
+ "material": "[Unit]\nDescription=Updater\n\n[Timer]\nOnBootSec=2min\nOnCalendar=*:0/10\nUnit=updater-agent.service\n\n[Install]\nWantedBy=timers.target\n",
+ "rep": "schedule_entries",
+ "transform": "period@OnCalendar",
+ "key": null,
+ "expected": "600",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes updater.timer: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && systemd-analyze calendar --iterations=2 \"$(sed -n 's/^OnCalendar=//p' updater.timer)\" | grep -oP '(?<=\\(in UTC\\): ).*' | head -2 | xargs -I{} date -d {} +%s | paste -sd' ' | awk '{print $2-$1}')"
+}

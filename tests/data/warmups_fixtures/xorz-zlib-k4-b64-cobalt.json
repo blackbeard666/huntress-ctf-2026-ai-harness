@@ -1,0 +1,10 @@
+{
+ "codec": "xor-compressed:mask-zlib",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-moose-90",
+ "encoded": "FbtWoixvNyt9ZKPAEZrisx9gWD1DMamkhbE50ecXj/qhl85aa8Mbtd1Rm3niTg/m60NKNgrkOgrXvo+rw1g2lEJ+emVUzUOomCTR/CltEaWxQJtH1rY6vjXWvmQDLFcW",
+ "key": "mask",
+ "generator_cmd": "printf %s \"$plain\" | pigz -9z -c | perl -0777 -ne 'my $k=$ENV{key}; my $r=$k x (length($_)/length($k)+1); print $_ ^ substr($r,0,length($_))' | base64 -w0  # pigz -9z -c, perl string XOR (key repeated), base64 -w0",
+ "oracle_cmd": "python3 -c \"import os,base64,gzip,zlib,bz2,lzma;from Crypto.Util.strxor import strxor;e=os.environ['encoded'];c=base64.b64decode(e);k=os.environ['key'].encode();print(zlib.decompress(strxor(c,(k*len(c))[:len(c)])).decode())\"  # pycryptodome strxor + python stdlib decompressor",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-moose-90",
+ "expected": "match"
+}

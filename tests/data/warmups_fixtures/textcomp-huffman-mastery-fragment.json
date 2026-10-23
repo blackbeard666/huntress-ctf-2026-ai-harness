@@ -1,0 +1,9 @@
+{
+ "codec": "textcomp-huffman (Mastery line fragment)",
+ "plain": "submit this exact",
+ "encoded": "{' ': '000', 'b': '0010', 'c': '0011', 'e': '0100', 'h': '0101', 'i': '011', 'm': '1000', 'u': '1001', 's': '101', 't': '110', 'x': '1110', 'a': '11111'}\n101100100101000011110000110010101110100001001110111110011110",
+ "generator_cmd": "PYTHONPATH=tools/pylibs python3 -s tests/data/warmups_fixtures/textcomp_gen.py huffman \"$plain\"  # PyPI dahuffman 0.4 code table (pip install --target tools/pylibs dahuffman)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/textcomp_oracle.py huffman",
+ "oracle_plain": "submit this exact",
+ "expected": "match"
+}

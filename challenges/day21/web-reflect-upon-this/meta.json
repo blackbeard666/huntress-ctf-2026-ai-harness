@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-06-reflect-upon-this",
+  "lane": "web",
+  "name": "🌐 Reflect Upon This",
+  "ids": {
+    "single_solve": "web-exploitation-day-06-reflect-upon-this",
+    "time_trial": "web-exploitation-day-06-reflect-upon-this/time_trial",
+    "mastery": "web-exploitation-day-06-reflect-upon-this/mastery"
+  }
+}

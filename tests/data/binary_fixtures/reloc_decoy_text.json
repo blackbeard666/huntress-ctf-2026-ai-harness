@@ -1,0 +1,12 @@
+{
+ "family": "reloc",
+ "file": "reloc_decoy_text.bin",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": null,
+ "decoy": true,
+ "generator_cmd": "FX=$PWD sh reloc_gen.sh   # run from an empty scratch dir with FX=tests/data/binary_fixtures; gcc 15 + GNU ld 2.45, HCFG blobs by python3 stdlib zlib/struct/base64, RELATIVE slots of cfg_tab zeroed after linking (lld-style)",
+ "oracle_cmd": "python3 reloc_oracle.py reloc_decoy_text.bin   # readelf -rW/-dW/-lW/-sW/-SW + objdump -d -j .plt -j .plt.sec (<name@plt> labels)",
+ "note": "DECOY: text mentioning relocation types + HCFG -> elf_reloc_facts None, no blob; lib.binary.elf_reloc_facts / hcfg_scan 'reloc-ptrtable' pass; field names SPECULATIVE (GM label not seen)"
+}

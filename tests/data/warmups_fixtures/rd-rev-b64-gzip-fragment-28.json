@@ -1,0 +1,9 @@
+{
+ "codec": "decompress-redecode",
+ "plain": "Game Master: maple-",
+ "encoded": "AAAATIBn9LNAFUdSIzSTILlstkkLs0E8V1EzPN3ACAAAAAAAIs4H",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | base64 -w0 | rev",
+ "oracle_cmd": "printf %s \"$encoded\" | rev | base64 -d | gzip -dc",
+ "oracle_plain": "Game Master: maple-",
+ "expected": "match"
+}

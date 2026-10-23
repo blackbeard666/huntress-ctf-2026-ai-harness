@@ -1,0 +1,8 @@
+{
+ "field": "apk.signer_serial_hex",
+ "expected": "4fb6190de3820493a4956d24613a1f40b066a77c",
+ "generator_cmd": "GM D21 artifact (v1 FIXTURE-.RSA + v2 block): cp tests/data/meta_fixtures/apk/d21__version_code.bin (= mobile-001.apk of challenges/day21/metadata-package-deal evidence zip)",
+ "oracle_cmd": "keytool -printcert -jarfile mobile-001.apk -> Serial number",
+ "decoy": false,
+ "member": "mobile-001.apk"
+}

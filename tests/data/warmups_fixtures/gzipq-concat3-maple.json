@@ -1,0 +1,9 @@
+{
+ "codec": "gzip-base64 (3 concatenated members, XFL 2/4/0)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-heron-84",
+ "encoded": "H4sIAAAAAAACA/PLTE5VKM8vylZISU3OT8nMS1coycgsVihPLMotLQAAFEPjwh4AAAAfiwgAAAAAAAQDU1QIyVcozs8pS9VRKC5Nys0sUSjJyCxWSK1ITC5RSMwrLk8tUijJVwAAgQPQUigAAAAfiwgAAAAAAAADK8lIVXBPzE1V8E0sLkktslLITSzISdXNSC3Kz9O1MAEAbTCWwx8AAAA=",
+ "expected": "match",
+ "generator_cmd": "{ printf %s \"${plain:0:30}\" | gzip -9n; printf %s \"${plain:30:40}\" | gzip -1n; printf %s \"${plain:70}\" | pigz -n; } | base64 -w0",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-heron-84"
+}

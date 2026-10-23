@@ -1,0 +1,21 @@
+{
+ "family": "dynlink",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "loader": "dynlink_c_pie_o2.bin",
+ "plugin": "dynlink_c_pie_o2.plugin.bin",
+ "expected_facts": {
+  "loaded_library": "./libhplug.so",
+  "resolved_symbols": "[\"hplug_init\",\"hplug_register_handlers\"]",
+  "loader_needs_libdl": "false",
+  "plugin_exports": "[\"hplug_register_handlers\",\"hplug_version\",\"hplug_init\"]",
+  "plugin_header_magic": "none",
+  "loader_kind": "c_dlopen",
+  "init_export": "hplug_init"
+ },
+ "generator_cmd": "FX=$PWD bash dynlink_gen.sh   # run from an empty scratch dir with FX=tests/data/binary_fixtures; gcc 13 -ldl",
+ "oracle_cmd": "python3 dynlink_oracle.py dynlink_c_pie_o2.bin dynlink_c_pie_o2.plugin.bin   # readelf --dyn-syms/-d/-lW + objdump -d -Mintel (lea/mov arg before call dlopen/dlsym)",
+ "decoy": false,
+ "note": "gcc -O2 PIE loader: lea rdi,[rip+x] / call dlopen@plt via IBT .plt.sec; .so has a .hcfg section; lib.binary.dynlink_facts(loader, plugin); field names SPECULATIVE (GM label not seen)"
+}

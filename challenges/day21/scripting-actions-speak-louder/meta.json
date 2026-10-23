@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-21-github-actions-persistence",
+  "lane": "script-analysis",
+  "name": "📜 Actions Speak Louder",
+  "ids": {
+    "single_solve": "script-analysis-day-21-github-actions-persistence",
+    "time_trial": "script-analysis-day-21-github-actions-persistence/time_trial",
+    "mastery": "script-analysis-day-21-github-actions-persistence/mastery"
+  }
+}

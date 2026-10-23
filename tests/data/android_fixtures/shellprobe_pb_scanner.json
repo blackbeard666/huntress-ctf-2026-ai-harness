@@ -1,0 +1,7 @@
+{
+ "entry": "clean_device_scan",
+ "expected": "ANS-a83d05e6c1f94b72",
+ "_why": "Shell.pb(String...) = new ProcessBuilder(argv).redirectErrorStream(true).start() + new Scanner(getInputStream()).useDelimiter(\"\\\\A\").next() + waitFor + exitValue; vector = sh -c getprop ro.boot.verifiedbootstate, id -u, a toybox `mount` line-count / rw-/system / magisk score, ProcessBuilder(su) -> IOException, which magisk (exit 1), getenforce",
+ "generator_cmd": "python3 tests/data/android_fixtures/shellprobe_src/gen_shellprobe.py pb_scanner tests/data/android_fixtures/shellprobe_pb_scanner.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.shellprobe.Probe with env PATH=<fake clean-Pixel toybox dir: getprop/getenforce/id/which/mount shell scripts + sh->/bin/sh, NO su> -> the host JVM's real Runtime.exec / ProcessBuilder / BufferedReader / Scanner print Sig.vector() + Vault.reveal() -> 'green#0|10234#0|96|ioe|#1|Enforcing#0' + 'ANS-a83d05e6c1f94b72'"
+}

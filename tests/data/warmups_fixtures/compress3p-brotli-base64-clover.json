@@ -1,0 +1,9 @@
+{
+ "codec": "brotli-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-wren-23",
+ "encoded": "G2QAAMTe26d61hWaEiSh2HMbG57hfx5w0Y8pKUWKaJ6yktg0En9jEwIoCkW9GIofL+/xLYOkONp/3h0ig1Ghj0d8K9vJGhZKgHS9sW9zWucB",
+ "generator_cmd": "printf %s \"$plain\" | PYTHONPATH=tools/pycramjam python3 -c 'import sys,cramjam;sys.stdout.buffer.write(bytes(cramjam.brotli.compress(sys.stdin.buffer.read())))' | base64 -w0  # cramjam.brotli.compress (Rust brotli)",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | python3 -c 'import sys,brotli;sys.stdout.buffer.write(brotli.decompress(sys.stdin.buffer.read()))'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-wren-23",
+ "expected": "match"
+}

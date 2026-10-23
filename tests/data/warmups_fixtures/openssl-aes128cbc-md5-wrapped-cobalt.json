@@ -1,0 +1,9 @@
+{
+ "codec": "openssl-salted",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-57",
+ "encoded": "U2FsdGVkX1+9p9bH2iDVSAkHQwOEQdZt1+Xt7bZ1fMoPStaU+uWDFfx2L1HC0/lU\n0cAK8CbcAFrv4YcsQzoHihzCPEID6CLiDeHGvH+w9jsCreATq7R8UhNYXjCwMvwQ\nzcCAFAyWIGwDPQJNBvjN1J5hZ/G5sdIvTfrixERnMaY=",
+ "generator_cmd": "printf %s \"$plain\" | openssl enc -aes-128-cbc -md md5 -pass pass:password -a",
+ "oracle_cmd": "printf '%s\\n' \"$encoded\" | openssl enc -d -aes-128-cbc -md md5 -pass pass:password -a",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-57",
+ "expected": "match"
+}

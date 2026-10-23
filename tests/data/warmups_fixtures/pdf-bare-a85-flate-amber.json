@@ -1,0 +1,9 @@
+{
+ "codec": "pdf-filter-chain",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-sprocket-91",
+ "encoded": "<~GhOIc0b/h$$j=ALD#-t)Oq4@?M@Z(a'i&]bfnR]AM3N0qaGHj1.qU-!oDV$,fho`2Gs!c1>doVepc4TZs5d<[5^'=fK`7'X9-JWOTY2IZU,@CeVNoPNm1$VE-!1~>",
+ "generator_cmd": "printf %s \"$plain\" | /home/testpwn/huntress-2026/.venv/bin/python3 -I -c 'import sys,zlib;sys.stdout.buffer.write(zlib.compress(sys.stdin.buffer.read(),9))' | /home/testpwn/huntress-2026/.venv/bin/python3 -I -c 'import sys,base64;sys.stdout.buffer.write(base64.a85encode(sys.stdin.buffer.read(),adobe=True,wrapcol=int(sys.argv[1]))[int(sys.argv[2]):])' 0 0",
+ "oracle_cmd": "printf %s \"$encoded\" | /home/testpwn/huntress-2026/.venv/bin/python3 -I -c 'import sys,base64;from pypdf.filters import ASCII85Decode, FlateDecode;d=sys.stdin.buffer.read();d=ASCII85Decode.decode(d);d=FlateDecode.decode(d);sys.stdout.buffer.write(d)'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-sprocket-91",
+ "expected": "match"
+}

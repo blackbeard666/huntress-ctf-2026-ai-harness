@@ -1,0 +1,7 @@
+{
+ "field": "apk.dex_count",
+ "expected": "none",
+ "generator_cmd": "printf '\\x89PNG\\r\\n\\x1a\\nnotazip' > notzip.apk",
+ "oracle_cmd": "file notzip.apk -> data/PNG magic; unzip -l -> End-of-central-directory signature not found",
+ "decoy": true
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "gzip-ascii85",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-finch-08",
+ "encoded": "+,^C)z!Wsaj5n8K3$jG\"YI.i`51gY\\IY.R\";^<jqpag=#K?PBm:4Z!bql5MOCbutn$WfAD`++&d@_/9)=!^EQ`EA#\"h!`H\\9,4(B/+IO(cKCt6Uqo8W3-*@.=p&d(UKE5Wa!!!",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | python3 -I -c 'import sys,base64;sys.stdout.write(base64.a85encode(sys.stdin.buffer.read()).decode())'  # gzip CLI + python3 wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys,base64;sys.stdout.buffer.write(base64.a85decode(sys.stdin.read()))' | gzip -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-finch-08",
+ "expected": "match"
+}

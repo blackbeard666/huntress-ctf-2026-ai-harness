@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "note": "ci-yaml-sibling-route: bare HUNTRESS_DESCRIPTOR key (D21 GHA shape) in a CI sibling host (lib.codec._HDESC_RE)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ci_sib_gen.py tests/data/script_fixtures  (stdlib base64 of a v=3 plan in a CI YAML host)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/ci_sib_oracle.py tests/data/script_fixtures/ci_sib_decoy_azure_trunc.yml  (PyYAML safe_load + shlex export + stdlib base64)"
+}

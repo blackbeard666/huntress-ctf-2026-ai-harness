@@ -1,0 +1,9 @@
+{
+ "codec": "json-envelope[base64]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-shrew-38",
+ "encoded": "{\"encoding\":\"base64\",\"data\":\"TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwISBUbyBzb2x2ZSwgc3VibWl0IHRoaXMgZXhhY3QgYW5zd2VyIHRvIHRoZSBHYW1lIE1hc3RlcjogbWFwbGUtc2hyZXctMzg=\"}\n",
+ "generator_cmd": "jq -cn --arg d \"$(printf %s \"$plain\" | base64 -w0)\" \"{encoding: \\\"base64\\\", data: \\$d}\"",
+ "oracle_cmd": "printf %s \"$encoded\" | jq -r .data | base64 -d",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-shrew-38",
+ "expected": "match"
+}

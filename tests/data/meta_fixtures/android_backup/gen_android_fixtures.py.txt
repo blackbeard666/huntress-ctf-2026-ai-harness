@@ -1,0 +1,56 @@
+import io, tarfile, zlib, struct, sys, os, zipfile
+out = sys.argv[1]
+def tarbytes(entries):
+    bio = io.BytesIO()
+    with tarfile.open(fileobj=bio, mode="w", format=tarfile.USTAR_FORMAT) as tf:
+        for name, data in entries:
+            ti = tarfile.TarInfo(name); ti.size = len(data); ti.mtime = 1700000000; ti.mode = 0o600
+            tf.addfile(ti, io.BytesIO(data))
+    return bio.getvalue()
+def man(pkg, vc, sdk, inst, sigs):
+    return ("1\n%s\n%d\n%d\n%s\n0\n%d\n" % (pkg, vc, sdk, inst, len(sigs)) + "".join(s + "\n" for s in sigs)).encode()
+t = tarbytes([("apps/com.example.notes/_manifest", man("com.example.notes", 42, 30, "com.android.vending", ["3082abcd01"])),
+              ("apps/com.example.notes/f/notes.txt", b"hello\n"),
+              ("apps/com.example.notes/db/notes.db", b"SQLite format 3\x00" + b"\x00" * 84),
+              ("apps/com.example.chat/_manifest", man("com.example.chat", 7, 30, "", [])),
+              ("apps/com.example.chat/sp/prefs.xml", b"<map/>\n")])
+open(f"{out}/v5_compressed.ab", "wb").write(b"ANDROID BACKUP\n5\n1\nnone\n" + zlib.compress(t, 9))
+t1 = tarbytes([("apps/org.sample.app/_manifest", man("org.sample.app", 1001, 23, "com.android.vending", ["aa", "bb"])),
+               ("apps/org.sample.app/a/base.apk", b"PK\x05\x06" + b"\x00" * 18)])
+open(f"{out}/v1_plain.ab", "wb").write(b"ANDROID BACKUP\n1\n0\nnone\n" + t1)
+open(f"{out}/v5_encrypted.ab", "wb").write(b"ANDROID BACKUP\n5\n1\nAES-256\n" + b"00112233445566778899AABBCCDDEEFF\n" * 2
+    + b"10000\n0102030405060708090A0B0C0D0E0F10\n" + b"DEADBEEF" * 24 + b"\n" + os.urandom(64))
+open(f"{out}/decoy_tar.ab", "wb").write(t1)                       # bare tar renamed .ab (no header)
+zb = io.BytesIO(); zipfile.ZipFile(zb, "w").writestr("apps/x/_manifest", "1\nx\n"); open(f"{out}/decoy_zip.ab", "wb").write(zb.getvalue())
+# packages.xml text + ABX twin
+pk = [("com.android.chrome", "/data/app/~~Ab12==/com.android.chrome-Cd34==", 0x18b5f2a1c40, 571234567, 10123, "com.android.vending"),
+      ("com.evil.loader", "/data/app/~~Zz99==/com.evil.loader-Yy88==", 0x18c0a1b2c3d, 3, 10245, "com.android.packageinstaller")]
+txt = "<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<packages>\n" \
+      '    <version sdkVersion="33" databaseVersion="3" fingerprint="google/oriole/oriole:13/TQ3A.230901.001/1:user/release-keys" />\n'
+for n, cp, it, vc, uid, inst in pk:
+    txt += f'    <package name="{n}" codePath="{cp}" primaryCpuAbi="arm64-v8a" ft="{it+5:x}" it="{it:x}" ut="{it+999:x}" version="{vc}" userId="{uid}" installer="{inst}">\n        <sigs count="1" schemeVersion="2"><cert index="0" key="3082" /></sigs>\n    </package>\n'
+txt += '    <shared-user name="android.uid.system" userId="1000" />\n</packages>\n'
+open(f"{out}/packages_text.xml", "w").write(txt)
+class W:
+    def __init__(s): s.b = bytearray(b"ABX\x00"); s.pool = []
+    def utf(s, x): e = x.encode(); s.b += struct.pack(">H", len(e)) + e
+    def intern(s, x):
+        if x in s.pool: s.b += struct.pack(">H", s.pool.index(x))
+        else: s.pool.append(x); s.b += b"\xff\xff"; s.utf(x)
+    def start(s, tag): s.b.append(0x32); s.intern(tag)
+    def end(s, tag): s.b.append(0x33); s.intern(tag)
+    def a_str(s, k, v): s.b.append(0x2f); s.intern(k); s.utf(v)
+    def a_int(s, k, v): s.b.append(0x6f); s.intern(k); s.b += struct.pack(">i", v)
+    def a_long(s, k, v): s.b.append(0x8f); s.intern(k); s.b += struct.pack(">q", v)
+    def a_longhex(s, k, v): s.b.append(0x9f); s.intern(k); s.b += struct.pack(">q", v)
+w = W(); w.b.append(0x10); w.start("packages"); w.start("version"); w.a_int("sdkVersion", 33); w.a_int("databaseVersion", 3)
+w.a_str("fingerprint", "google/oriole/oriole:13/TQ3A.230901.001/1:user/release-keys"); w.end("version")
+for n, cp, it, vc, uid, inst in pk:
+    w.start("package"); w.a_str("name", n); w.a_str("codePath", cp); w.a_str("primaryCpuAbi", "arm64-v8a")
+    w.a_longhex("ft", it + 5); w.a_longhex("it", it); w.a_longhex("ut", it + 999); w.a_long("version", vc); w.a_int("userId", uid)
+    w.a_str("installer", inst); w.start("sigs"); w.a_int("count", 1); w.end("sigs"); w.end("package")
+w.start("shared-user"); w.a_str("name", "android.uid.system"); w.a_int("userId", 1000); w.end("shared-user")
+w.end("packages"); w.b.append(0x11)
+open(f"{out}/packages_abx.xml", "wb").write(bytes(w.b))
+open(f"{out}/packages.list", "w").write("com.android.chrome 10123 0 /data/user/0/com.android.chrome default:targetSdkVersion=33 3002,3003\n"
+    "com.evil.loader 10245 1 /data/user/0/com.evil.loader default:targetSdkVersion=28 none\n")

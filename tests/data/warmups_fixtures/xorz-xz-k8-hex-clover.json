@@ -1,0 +1,10 @@
+{
+ "codec": "xor-compressed:xzstream-xz",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-gecko-85",
+ "encoded": "854d092c286561699eacc73276a5090b597b65747265616d787a737402c4afa8987a16741238614a6232151ac08382c343979ff8eacfdd62f1f509e9e749321ab83587a02516bd37a981889686ff6582ba6a2d4142aac4d79b4ac2248447f3688ba0d2459b1cb6268979e0da88617f73583aa30818dc53fe305e1b33b6be0ac9aa8b34106e8b616dcd216e63534ccbe3787bf7751465616d04792a11c3a106967a7a737472613837",
+ "key": "xzstream",
+ "generator_cmd": "printf %s \"$plain\" | xz -6 | perl -0777 -ne 'my $k=$ENV{key}; my $r=$k x (length($_)/length($k)+1); print $_ ^ substr($r,0,length($_))' | xxd -p | tr -d '\\n'  # xz -6, perl string XOR (key repeated), xxd -p | tr -d '\\n'",
+ "oracle_cmd": "python3 -c \"import os,base64,gzip,zlib,bz2,lzma;from Crypto.Util.strxor import strxor;e=os.environ['encoded'];c=bytes.fromhex(e);k=os.environ['key'].encode();print(lzma.decompress(strxor(c,(k*len(c))[:len(c)])).decode())\"  # pycryptodome strxor + python stdlib decompressor",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-gecko-85",
+ "expected": "match"
+}

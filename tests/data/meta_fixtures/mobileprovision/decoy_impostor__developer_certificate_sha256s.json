@@ -1,0 +1,8 @@
+{
+ "field": "mobileprovision.developer_certificate_sha256s",
+ "expected": "none",
+ "generator_cmd": "openssl req -x509 ... -outform DER -out dev1.der; cp dev1.der impostor.mobileprovision (a bare X.509 cert renamed)",
+ "oracle_cmd": "openssl cms -verify -noverify -inform DER -in impostor.mobileprovision -> not CMS (Error reading SMIME/CMS); openssl x509 -inform DER parses it",
+ "decoy": true,
+ "member": "impostor.mobileprovision"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "clickonce.entry_point_command_file",
+ "expected": "none",
+ "generator_cmd": "pefile: RT_MANIFEST (type 24) resource of setuptools cli-64.exe (a plain Win32 side-by-side manifest, no ClickOnce elements)",
+ "oracle_cmd": "python3 -c \"from lxml import etree; print(etree.parse('app.manifest').xpath(\\\"string(/*[local-name()='assembly']/*[local-name()='entryPoint']/*[local-name()='commandLine']/@file)\\\").strip() or 'none')\"",
+ "decoy": true,
+ "member": "app.manifest"
+}

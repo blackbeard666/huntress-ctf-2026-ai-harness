@@ -1,0 +1,9 @@
+{
+ "codec": "saml-redirect",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-heron-42",
+ "encoded": "JckxDsIwDAXQq3x2uiAmLtCpTFzATb%2BaqE2MbJdw%2FCKxvvcsiehqGxYmXUpbEbk4ulg93he8FK77h1f4MdcS%2F%2BVXUkCadxpCf0iMUolJPGgPSJ1pQ6ZpG%2B63Ew%3D%3D",
+ "generator_cmd": "printf %s \"$plain\" | sh tests/data/warmups_fixtures/saml_redirect_gen.sh raw quote",
+ "oracle_cmd": "tools/node/bin/node tests/data/warmups_fixtures/saml_redirect_oracle.mjs \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-heron-42",
+ "expected": "match"
+}

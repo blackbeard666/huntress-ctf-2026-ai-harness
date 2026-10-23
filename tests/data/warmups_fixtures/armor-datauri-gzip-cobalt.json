@@ -1,0 +1,9 @@
+{
+ "codec": "data-uri-base64[gzip]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-27",
+ "encoded": "data:application/gzip;base64,H4sIAAAAAAACAyXJQQ5AMBBG4av89mxsJC5gxcoFRk1oaEc6Qx1fE8v3vck7RpZ0YGUnq48bbPeKTCncV4VZoHI+XEPvJXj7L7/kDBQ1c4JJQcZAgTGSGqceThY6rREr1bTdBy81AzJmAAAA",
+ "generator_cmd": "printf \"data:application/gzip;base64,%s\" \"$(printf %s \"$plain\" | gzip -9n | base64 -w0)\"",
+ "oracle_cmd": "python3 -c 'import sys,urllib.request; sys.stdout.buffer.write(urllib.request.urlopen(sys.argv[1]).read())' \"$encoded\" | gunzip",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-27",
+ "expected": "match"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "mobileprovision.uuid",
+ "expected": "none",
+ "generator_cmd": "plistlib FMT_BINARY FieldKit Info.plist (an Info.plist, not a profile)",
+ "oracle_cmd": "exiftool -j -> CFBundle* keys only, no UUID/TeamIdentifier",
+ "decoy": true,
+ "member": "Info_bin.plist"
+}

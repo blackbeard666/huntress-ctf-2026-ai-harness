@@ -1,0 +1,8 @@
+{
+ "field": "apk.signing_block_ids_hex",
+ "expected": "[\"0x7109871a\",\"0xf05368c0\",\"0x42726577\"]",
+ "generator_cmd": "unzip d21.apk AndroidManifest.xml classes.dex && zip -X unsigned.apk AndroidManifest.xml classes.dex && keytool -genkeypair -keystore ks.p12 -storetype PKCS12 -alias clone -keyalg EC -groupname secp256r1 -sigalg SHA256withECDSA -dname 'CN=Repack Clone Signer, OU=Mobile, O=Evil Corp, C=RU' -validity 3650 -startdate '2026/01/02 03:04:05' (PST) && apksigner sign --ks ks.p12 --ks-key-alias clone --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --min-sdk-version 21 --out ec_v123.apk unsigned.apk",
+ "oracle_cmd": "python3 -c \"from androguard.core.apk import APK; a=APK('ec_v123.apk'); a.parse_v2_v3_signature(); print(['0x%08x'%b.id for b in a._v2_blocks], a.is_signed_v1(), a.is_signed_v2(), a.is_signed_v3(), a.get_signature_names())\" -> ['0x7109871a', '0xf05368c0', '0x42726577']",
+ "decoy": false,
+ "member": "ec_v123.apk"
+}

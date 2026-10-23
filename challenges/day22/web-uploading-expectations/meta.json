@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-10-uploading-expectations",
+  "lane": "web",
+  "name": "🌐 Uploading Expectations",
+  "ids": {
+    "single_solve": "web-exploitation-day-10-uploading-expectations",
+    "time_trial": "web-exploitation-day-10-uploading-expectations/time_trial",
+    "mastery": "web-exploitation-day-10-uploading-expectations/mastery"
+  }
+}

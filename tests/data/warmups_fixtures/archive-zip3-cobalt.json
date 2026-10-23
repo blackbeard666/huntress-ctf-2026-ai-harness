@@ -1,0 +1,9 @@
+{
+ "codec": "archive-container[zip]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-58",
+ "encoded": "UEsDBBQACAAIAFCvVV0AAAAAAAAAACIAAAAFAAAAYS50eHTzy0xOVSjPL8pWSElNzk/JzEtXKMnI\nLFYoTyzKLS1QVAjJBwBQSwcI3EXDryQAAAAiAAAAUEsDBBQACAAIAFCvVV0AAAAAAAAAACIAAAAF\nAAAAYi50eHRTKM7PKUvVUSguTcrNLFEoycgsVkitSEwuUUjMKy5PLVIoAQBQSwcI0UELQSQAAAAi\nAAAAUEsDBBQACAAIAFCvVV0AAAAAAAAAACIAAAAFAAAAYy50eHTLVyjJSFVwT8xNVfBNLC5JLbJS\nSM5PSswp0c1ILcrP0zW1AABQSwcIdStS0yQAAAAiAAAAUEsBAh4DFAAIAAgAUK9VXdxFw68kAAAA\nIgAAAAUAAAAAAAAAAQAAALSBAAAAAGEudHh0UEsBAh4DFAAIAAgAUK9VXdFBC0EkAAAAIgAAAAUA\nAAAAAAAAAQAAALSBVwAAAGIudHh0UEsBAh4DFAAIAAgAUK9VXXUrUtMkAAAAIgAAAAUAAAAAAAAA\nAQAAALSBrgAAAGMudHh0UEsFBgAAAAADAAMAmQAAAAUBAAAAAA==",
+ "generator_cmd": "d=$(mktemp -d); cd $d; printf %s \"$p1\" > a.txt; printf %s \"$p2\" > b.txt; printf %s \"$p3\" > c.txt; zip -qX - a.txt b.txt c.txt | base64 -w76; rm -rf $d",
+ "oracle_cmd": "f=$(mktemp); printf %s \"$encoded\" | base64 -d > $f; 7z x -so -pinfected -tzip $f 2>/dev/null </dev/null; r=$?; rm -f $f; exit $r",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-58",
+ "expected": "match"
+}

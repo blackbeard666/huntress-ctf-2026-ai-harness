@@ -1,0 +1,8 @@
+{
+ "entry": "binder_transact_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same layout as binder_aidl_stub but the getSecret transaction's xor'd byte[] decodes to a 15-hex near miss 'ANS-0e7c91a4d26b3f5': no valid token on any code",
+ "generator_cmd": "python3 tests/data/android_fixtures/binder_src/gen_binder.py decoy_nearmiss tests/data/android_fixtures/binder_decoy_nearmiss.apk  # javac --release 8 (app + android.os stubs) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: the host-JVM client (writeInterfaceToken, writeInt(5), writeString('hunter2-vault') -> onTransact(7)) prints 'ANS-0e7c91a4d26b3f5' (4+15 chars, not ANS-<16 hex>)"
+}

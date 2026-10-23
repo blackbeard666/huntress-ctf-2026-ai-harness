@@ -1,0 +1,8 @@
+{
+ "field": "jar.implementation_title",
+ "expected": "dep-lib",
+ "generator_cmd": "app.jar as above; zip -qX x.zip app.jar",
+ "oracle_cmd": "java Oracle.java x.zip app.jar BOOT-INF/lib/dep.jar -> main Implementation-Title=dep-lib",
+ "decoy": false,
+ "member": "app.jar -> BOOT-INF/lib/dep.jar"
+}

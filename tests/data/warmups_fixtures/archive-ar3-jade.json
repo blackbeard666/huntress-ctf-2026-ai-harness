@@ -1,0 +1,9 @@
+{
+ "codec": "archive-container[ar]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-mole-61",
+ "encoded": "ITxhcmNoPgphLnR4dC8gICAgICAgICAgMCAgICAgICAgICAgMCAgICAgMCAgICAgNjQ0ICAgICAzMyAgICAgICAgYApOaWNlIHdvcmsgZGVjb2RpbmcgdGhpcyB3YXJtdXAhIFQKYi50eHQvICAgICAgICAgIDAgICAgICAgICAgIDAgICAgIDAgICAgIDY0NCAgICAgMzMgICAgICAgIGAKbyBzb2x2ZSwgc3VibWl0IHRoaXMgZXhhY3QgYW5zd2VyCmMudHh0LyAgICAgICAgICAwICAgICAgICAgICAwICAgICAwICAgICA2NDQgICAgIDMzICAgICAgICBgCiB0byB0aGUgR2FtZSBNYXN0ZXI6IGphZGUtbW9sZS02MQo=",
+ "generator_cmd": "d=$(mktemp -d); cd $d; printf %s \"$p1\" > a.txt; printf %s \"$p2\" > b.txt; printf %s \"$p3\" > c.txt; f=$(mktemp -u).a; ar rcD $f a.txt b.txt c.txt; base64 -w0 $f; rm -rf $d $f",
+ "oracle_cmd": "f=$(mktemp); printf %s \"$encoded\" | base64 -d > $f; 7z x -so -pinfected -tar $f 2>/dev/null </dev/null; r=$?; rm -f $f; exit $r",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-mole-61",
+ "expected": "match"
+}

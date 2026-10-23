@@ -1,0 +1,12 @@
+{
+ "family": "pe_link",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": null,
+ "pair_with": null,
+ "generator_cmd": "bash pelink_gen.sh   # printf: MZ text impostor (e_lfanew -> nowhere) -> None",
+ "oracle_cmd": "python3 pelink_oracle.py pelink_decoy_text.bin   # pefile directories + strings -a/-el + struct/zlib on the .hcfg section",
+ "decoy": true,
+ "note": "lib.binary.pe_link_facts(data)[key] (lists compared after a JSON round trip); pair:* keys = lib.binary.pe_link_pair(this, pair_with). Delay imports: not exercised (zig/lld MinGW cannot emit them); hcfg_scan must find the valid blob only in the plugins"
+}

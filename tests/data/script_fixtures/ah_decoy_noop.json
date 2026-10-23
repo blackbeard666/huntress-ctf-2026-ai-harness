@@ -1,0 +1,11 @@
+{
+ "decoy": true,
+ "material": "{\n \"polyglot-github_actions-benign-utility.yml\": \"name: Huntress inert analysis 278f1c07\\non:\\n  workflow_dispatch:\\njobs:\\n  analyze:\\n    runs-on: ubuntu-latest\\n    env:\\n      HUNTRESS_DESCRIPTOR: \\\"dj0zfGxhbmd1YWdl\\\"\\n    steps:\\n      - name: Preserve modeled descriptor\\n        run: ':'\\n\"\n}\n",
+ "rep": "action_handoffs",
+ "transform": "to_lang",
+ "key": null,
+ "expected": null,
+ "note": "github-action-definition-route: lib.codec.action_handoffs over a synthetic repo tree {member: text} -- D21 member shape (descriptor in env, only `run: ':'`): no handoff",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ah_gen.py tests/data/script_fixtures  (stdlib json; literal action.yml / workflow / Dockerfile / JS members)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/ah_oracle.py tests/data/script_fixtures/ah_decoy_noop.tree to_lang  (PyYAML safe_load + GitHub Actions shell/runs.using rules)"
+}

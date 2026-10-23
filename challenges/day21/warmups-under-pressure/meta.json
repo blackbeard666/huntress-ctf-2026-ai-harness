@@ -1,0 +1,10 @@
+{
+  "base": "warmups-day-21",
+  "lane": "warmups",
+  "name": "👶 Under Pressure",
+  "ids": {
+    "single_solve": "warmups-day-21",
+    "time_trial": "warmups-day-21/time_trial",
+    "mastery": "warmups-day-21/mastery"
+  }
+}

@@ -1,0 +1,8 @@
+{
+ "field": "npm.scripts_postinstall",
+ "expected": "node lib/telemetry.js",
+ "generator_cmd": "hand-written package.json (cat heredoc), the same file packed into app.asar",
+ "oracle_cmd": "node -e 'const p=require(\"./plain_package.json\");console.log(p.name,p.scripts.postinstall)'",
+ "decoy": false,
+ "member": "plain_package.json"
+}

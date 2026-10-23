@@ -1,0 +1,10 @@
+{
+ "codec": "mime-base64",
+ "plain": null,
+ "encoded": "MIME-Version: 1.0\nContent-Type: text/plain\nContent-Transfer-Encoding: base64\n\nNice work - decoding this WARMUP!\n",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written decoy: base64 CTE header over prose (space, '-', '!' lie outside the base64 alphabet)",
+ "oracle_cmd": "python3 -c 'import sys,base64; base64.b64decode(sys.argv[1].split(\"\\n\\n\",1)[1].replace(\"\\n\",\"\"), validate=True)' \"$encoded\"",
+ "oracle_plain": null
+}

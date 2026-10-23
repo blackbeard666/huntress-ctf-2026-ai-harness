@@ -1,0 +1,8 @@
+{
+ "field": "war.servlet_classes",
+ "expected": "[\"org.legacy.CmdServlet\"]",
+ "generator_cmd": "zip -qr legacy.war WEB-INF/web.xml (hand-written DTD 2.3 no-namespace web.xml)",
+ "oracle_cmd": "java OracleXml.java legacy.war WEB-INF/web.xml \"//*[local-name()='servlet']/*[local-name()='servlet-class']\" (javax.xml DOM namespace-aware + XPath local-name())",
+ "decoy": false,
+ "member": "legacy.war"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "pdf-filter-chain",
+ "plain": null,
+ "encoded": "%PDF-1.4\n1 0 obj\n<< /Length 124 /Filter [/ASCII85Decode /FlateDecode] >>\nstream\nGhUl80b/gi&-TePD#-t)Oq4@?M@U^#b#i$]q2RG\\-W8Zd.0lS]h%1G\\js.^oChQ_iFZqK09_T'iY\\P]@s3%SKLE+lIiVGq$/VP%\\SFqR[kKY\\O9_>J0DJ`i.@/~>\nendstream\nendobj\n2 0 obj\n<< /Type /Catalog /Pages 3 0 R >>\nendobj\n3 0 obj\n<< /Type /Pages /Kids [4 0 R] /Count 1 >>\nendobj\n4 0 obj\n<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] >>\nendobj\ntrailer\n<< /Size 5 /Root 2 0 R >>\n%%EOF\n",
+ "generator_cmd": "printf %s \"$plain\" | /home/testpwn/huntress-2026/.venv/bin/python3 -I -c 'import sys,zlib;sys.stdout.buffer.write(zlib.compress(sys.stdin.buffer.read(),9))' | /home/testpwn/huntress-2026/.venv/bin/python3 -I -c 'import sys;b=bytearray(sys.stdin.buffer.read());b[2]^=0xFF;b[3]^=0x5A;sys.stdout.buffer.write(bytes(b))' | /home/testpwn/huntress-2026/.venv/bin/python3 -I -c 'import sys,base64;sys.stdout.buffer.write(base64.a85encode(sys.stdin.buffer.read(),adobe=True,wrapcol=int(sys.argv[1]))[int(sys.argv[2]):])' 0 2 | /home/testpwn/huntress-2026/.venv/bin/python3 -I -c 'import sys,base64;b=sys.stdin.buffer.read();f=sys.argv[1].encode();sys.stdout.buffer.write(b\"%PDF-1.4\\n1 0 obj\\n<< /Length \"+str(len(b)).encode()+b\" /Filter \"+f+b\" >>\\nstream\\n\"+b+b\"\\nendstream\\nendobj\\n2 0 obj\\n<< /Type /Catalog /Pages 3 0 R >>\\nendobj\\n3 0 obj\\n<< /Type /Pages /Kids [4 0 R] /Count 1 >>\\nendobj\\n4 0 obj\\n<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] >>\\nendobj\\ntrailer\\n<< /Size 5 /Root 2 0 R >>\\n%%EOF\\n\")' '[/ASCII85Decode /FlateDecode]'",
+ "oracle_cmd": "f=$(mktemp); printf %s \"$encoded\"  > $f; qpdf --show-object=1 --filtered-stream-data $f; r=$?; rm -f $f; exit $r",
+ "oracle_plain": null,
+ "decoy": true,
+ "expected": "none"
+}

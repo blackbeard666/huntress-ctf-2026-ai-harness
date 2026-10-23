@@ -1,0 +1,7 @@
+{
+ "entry": "root_signal_scan",
+ "expected": "ANS-7c3e19a0d45b82f6",
+ "_why": "Sig.mask(): 8 probe methods (su paths, TAGS test-keys, magisk package, ro.debuggable, ro.secure, which su, rw /system in /proc/mounts, ro.boot.selinux) into a boolean[], folded by or-int/shl-int into a mask; Vault.reveal() xors ENC with a hash of the mask behind an isRooted() gate. The clean mask is 0x90 (ro.secure + SELinux set), so an all-false bypass keys garbage",
+ "generator_cmd": "python3 tests/data/android_fixtures/rootsig_src/gen_rootsig.py mask_bool tests/data/android_fixtures/rootsig_mask_bool.apk  # javac --release 8 (app + clean-Pixel android.* stubs: TAGS release-keys, ro.secure 1, ro.debuggable 0, ro.boot.selinux enforcing, PackageManager NameNotFound) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d22.rootsig.Probe -> Vault.reveal(new Context()) run by the host JVM on the clean stubs + real File.exists / /proc/mounts / Runtime.exec -> 'ANS-7c3e19a0d45b82f6'"
+}

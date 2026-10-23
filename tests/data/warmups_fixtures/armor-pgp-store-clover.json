@@ -1,0 +1,9 @@
+{
+ "codec": "pgp-literal",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lynx-52",
+ "encoded": "-----BEGIN PGP MESSAGE-----\n\ny3JiB21zZy50eHRq2MOFTmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwISBU\nbyBzb2x2ZSwgc3VibWl0IHRoaXMgZXhhY3QgYW5zd2VyIHRvIHRoZSBHYW1lIE1h\nc3RlcjogY2xvdmVyLWx5bngtNTI=\n=J3d4\n-----END PGP MESSAGE-----\n",
+ "generator_cmd": "printf %s \"$plain\" | gpg --batch --quiet --armor --store --compress-algo none --set-filename msg.txt",
+ "oracle_cmd": "printf %s \"$encoded\" | gpg --batch --quiet --decrypt",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lynx-52",
+ "expected": "match"
+}

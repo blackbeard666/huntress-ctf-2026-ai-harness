@@ -1,0 +1,8 @@
+{
+ "field": "wasm.target_features",
+ "expected": "[\"mutable-globals\",\"sign-ext\"]",
+ "generator_cmd": "printf 'int add(int a,int b){return a+b;}' > a.c; clang-18 --target=wasm32 -O1 -c a.c -o a.o (Ubuntu clang 18.1.8, no -g)",
+ "oracle_cmd": "wasm-objdump -x a.o -> target_features [+] mutable-globals, [+] sign-ext",
+ "decoy": false,
+ "member": "a.o"
+}

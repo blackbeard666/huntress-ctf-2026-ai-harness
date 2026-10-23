@@ -1,0 +1,9 @@
+{
+ "codec": "xor-compressed",
+ "plain": null,
+ "encoded": "6cea647473616c74716249bd4273ee347f64bcdf0f1b056c594e0cf1e67664bf24160c433f7330fadc52da9bae124eeea9ebe93de43d33fc041758c5",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | perl string XOR key=salt | head -c 60 | xxd -p  # cut mid-stream",
+ "oracle_cmd": "python3 -c \"import os,gzip;from Crypto.Util.strxor import strxor;c=bytes.fromhex(os.environ['encoded']);k=b'salt';gzip.decompress(strxor(c,(k*len(c))[:len(c)]))\"  # raises EOFError: truncated -> none",
+ "expected": "none",
+ "decoy": true
+}

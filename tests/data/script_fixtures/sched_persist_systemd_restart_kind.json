@@ -1,0 +1,11 @@
+{
+ "material": "[Unit]\nDescription=watchdog\n\n[Service]\nExecStart=/usr/local/bin/wd --quiet\nRestart=always\nRestartSec=30\n\n[Install]\nWantedBy=multi-user.target\n",
+ "rep": "schedule_entries",
+ "transform": "mechanism!watchdog.service",
+ "key": "systemd_timer,systemd_restart,cron",
+ "expected": "systemd_restart",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes watchdog.service: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && python3 -I -c \"import configparser,sys;c=configparser.ConfigParser();c.read(sys.argv[1]);print('systemd_restart' if c['Service']['Restart']=='always' else 'none')\" watchdog.service)"
+}

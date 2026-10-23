@@ -1,0 +1,8 @@
+{
+ "field": "apk.signature_schemes",
+ "expected": "[\"v1\",\"v2\"]",
+ "generator_cmd": "GM D21 artifact (v1 FIXTURE-.RSA + v2 block): cp tests/data/meta_fixtures/apk/d21__version_code.bin (= mobile-001.apk of challenges/day21/metadata-package-deal evidence zip)",
+ "oracle_cmd": "apksigner verify --print-certs -v mobile-001.apk -> v1 true, v2 true, v3 false",
+ "decoy": false,
+ "member": "mobile-001.apk"
+}

@@ -1,0 +1,54 @@
+{
+ "family": "ffi_boundary",
+ "file": "ffi_jni_vault.bin",
+ "decoy": false,
+ "generator_cmd": "bash tests/data/binary_fixtures/ffi_gen.sh <workdir>",
+ "oracle_cmd": "readelf --dyn-syms -W <bin> (defined GLOBAL/WEAK, table order; UND = imports) + javac -h header Method/Signature comments + javap class name",
+ "expected_facts": {
+  "ffi_kind": "jni",
+  "ffi_kinds": [
+   "jni"
+  ],
+  "exports": [
+   "Java_com_huntress_ctf_12026_Vault_check___3I",
+   "Java_com_huntress_ctf_12026_Vault_unlock",
+   "Java_com_huntress_ctf_12026_Vault_check__Ljava_lang_String_2",
+   "vault_banner",
+   "JNI_OnLoad",
+   "Java_com_huntress_ctf_12026_Vault_ping_1now"
+  ],
+  "export_count": "6",
+  "jni_methods": [
+   {
+    "symbol": "Java_com_huntress_ctf_12026_Vault_check___3I",
+    "class": "com.huntress.ctf_2026.Vault",
+    "method": "check",
+    "signature": "[I"
+   },
+   {
+    "symbol": "Java_com_huntress_ctf_12026_Vault_unlock",
+    "class": "com.huntress.ctf_2026.Vault",
+    "method": "unlock",
+    "signature": "none"
+   },
+   {
+    "symbol": "Java_com_huntress_ctf_12026_Vault_check__Ljava_lang_String_2",
+    "class": "com.huntress.ctf_2026.Vault",
+    "method": "check",
+    "signature": "Ljava/lang/String;"
+   },
+   {
+    "symbol": "Java_com_huntress_ctf_12026_Vault_ping_1now",
+    "class": "com.huntress.ctf_2026.Vault",
+    "method": "ping_now",
+    "signature": "none"
+   }
+  ],
+  "jni_class": "com.huntress.ctf_2026.Vault",
+  "jni_method": "check",
+  "jni_onload": "true",
+  "jni_onunload": "false",
+  "python_module": "none",
+  "go_version": "none"
+ }
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "jwt",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: none",
+ "encoded": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkYXRhIjp7Im5vdGUiOiJ",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "PYTHONPATH=tools/pylib-jwcrypto .venv/bin/python tests/data/warmups_fixtures/jwt_gen.py hs256-nested \"$plain\" | python3 -c 'import sys; h, c, _ = sys.stdin.read().split(\".\"); print(h + \".\" + c[:23])'  # cut-off claims, no signature",
+ "oracle_cmd": "printf %s \"$encoded\" | PYTHONPATH=tools/pylib-jwcrypto .venv/bin/python tests/data/warmups_fixtures/jwt_oracle.py hs256-nested",
+ "oracle_output": "None DecodeError"
+}

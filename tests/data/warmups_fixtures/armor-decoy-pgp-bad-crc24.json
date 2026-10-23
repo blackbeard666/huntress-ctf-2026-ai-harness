@@ -1,0 +1,10 @@
+{
+ "codec": "pgp",
+ "plain": null,
+ "encoded": "-----BEGIN PGP ARMORED FILE-----\nComment: Use \"gpg --dearmor\" for unpacking\n\nB4sIAAAAAAACAyXJMQ6DMAwF0Kv87rAx9QJMZeICJnzRCBJXtml6/CKxvjflRDS1\nHSuTrrluiHd2NLFyfh6YFa7Hlx38XEqOe/mTFJDqjYbQC4lRCvESD9oTUhZan0wq\n+2H4A1WsmFRlAAAA\n=tEKi\n-----END PGP ARMORED FILE-----\n",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "gpg --enarmor of gzip(plain), then the first body char changed by hand (CRC24 line kept)",
+ "oracle_cmd": "printf %s \"$encoded\" | gpg --batch --quiet --dearmor | gunzip",
+ "oracle_plain": null
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "root_signal_scan",
+ "expected": "ANS-e2a95d0c7b16f348",
+ "_why": "the 8 probes as LinkedHashMap<String,Boolean>; key = hash of the 'k1/k0' fragment string * 31 + weighted score; a score==0 branch (what patching every probe to false reaches) decodes the decoy ANS-0000dead0000beef, which root_signal_scan reports labelled as a forced-success DECOY",
+ "generator_cmd": "python3 tests/data/android_fixtures/rootsig_src/gen_rootsig.py map_score tests/data/android_fixtures/rootsig_map_score.apk  # javac --release 8 (app + clean-Pixel android.* stubs: TAGS release-keys, ro.secure 1, ro.debuggable 0, ro.boot.selinux enforcing, PackageManager NameNotFound) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d22.rootsig.Probe -> Vault.reveal(new Context()) run by the host JVM on the clean stubs + real File.exists / /proc/mounts / Runtime.exec -> 'ANS-e2a95d0c7b16f348'"
+}

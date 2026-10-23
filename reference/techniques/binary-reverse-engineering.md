@@ -1,52 +1,61 @@
-# binary-reverse-engineering — technique log (days 1-20; updated after every day)
+# binary-reverse-engineering — technique log (days 1-22; updated after every day)
 
 How this lane has looked so far (OBSERVATIONS, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
   guarantee for Time Trial / Mastery -- solvers derive structure and degrade per field.
-- One `evidence.zip` (AES, password `infected`). From Day 3 on it is CUMULATIVE: members `dNN--variant-XXX.<ext>`, one group per
+- One `evidence.zip` (AES, password `infected`). From Day 3 on it is CUMULATIVE: members `dNN--variant-XXX.<ext>` (`dNN--sample.<ext>` since D22), one group per
   past day, plus ONE new container/language per day: D1 C ELF, D2 C++ (ELF or MinGW PE32+), D3 .NET dll, D4 static stripped Go,
-  D5 static Rust, D6 Java .jar, D7 Kotlin fat .jar, D8 Swift ELF (67 MB), D9 Nim, D10 Zig (PE `.exe` in Mastery), D11 D (DMD),
-  D12 Free Pascal, D13 Crystal, D14 Objective-C (GNUstep), D15 a PAIR of C ELFs (`-stripped`/`-symbolized`), D16 a PAIR of WASM
-  modules (`-compact`/`-direct`), D17 Ada ELF (GNAT 14.2), D18 Fortran ELF (gfortran), D19 GnuCOBOL ELF + packed `PK19`
-  overlay, **D20 Haskell GHC 9.12.2 ELF** (1.2 MB, dynamic libgmp/libm/libc, not stripped, `.debug-ghc-link-info` section)
-  **with an `RS20` resource overlay** (plain HCFG resource + private "scratch" bytes + sha256). D19-D20 = a "hidden storage"
-  arc (prompt D20: "attics: resources, overlays, bytes past the end of the sections ... map every boundary").
-  Answer ids `dNN_artifact_sha256_K` / `dNN_analysis_<field>`; a multi-member group adds a member qualifier:
-  `dNN_analysis_<qualifier>_<field>` (D15 `stripped_`/`symbolized_`, D16 `compact_`/`direct_`).
+  D5 static Rust, D6 Java .jar, D7 Kotlin fat .jar, D8 Swift ELF (67 MB), D9 Nim, D10 Zig (PE `.exe` in Mastery), D11 D, D12 Free
+  Pascal, D13 Crystal, D14 Objective-C, D15 PAIR of C ELFs (`-stripped`/`-symbolized`), D16 PAIR of WASM (`-compact`/`-direct`),
+  D17 Ada, D18 Fortran, D19 GnuCOBOL + packed `PK19` overlay, D20 Haskell GHC + `RS20` resource overlay, **D21 a LOADER/PLUGIN
+  pair** (`-loader.elf` OCaml 4.02.3 native PIE + Dynlink, `-plugin.cmxs` OCaml natdynlink ET_DYN; HCFG RAW in the plugin),
+  **D22 F# .NET** (`sample.dll` pe_cli i386 ILONLY + support members `sample.runtimeconfig.json` + `FSharp.Core.dll` 5.7 MB).
+  Since D18 each day is a binary-STRUCTURE theme on a new language: call graph (D18), packing (D19), resources/overlays (D20),
+  shared libraries / loader handshake (D21), managed<->native bridge (D22: "P/Invoke and FFI ... trace every crossing").
+  D22 is the FIRST re-used runtime (.NET again, new language F#): expect more "new language on an old runtime" (Scala/Clojure
+  on the JVM -- leaked for D26 --, VB.NET, Elixir/BEAM, Haxe->Neko).
+  Ids `dNN_artifact_sha256_K` / `dNN_analysis_<field>`; a multi-member group adds a qualifier `dNN_analysis_<tag>_<field>` (D15
+  `stripped_`/`symbolized_`, D16 `compact_`/`direct_`, D21 `loader_`/`plugin_`) -- and D21 also has UNQUALIFIED ids whose
+  QUESTION names the member ("Use the d21-- plugin.cmxs member; the loader has no scored HCFG config").
 - From Day 2 on, every new-day member carries the same embedded **HCFG** config blob: `'HCFG' | u8 ver | u8 xor_key | u16 len (LE) |
   u32 crc32 | xor'd JSON` (JSON at offset 12; crc32 is over the decoded plaintext). Only its storage changes (`.hcfg` section
   D2/D10/D14, .NET FieldRVA, Go/Rust rodata, base64 in a Java/Kotlin constant pool, base64 Swift/Nim/D/Crystal literal, RAW in FPC
-  `.data`, WASM data segment 0, Ada/Fortran `.rodata`) -- D19: NOT byte-visible (unpacked payload of the appended PK19
-  overlay); D20: RAW again, at +48 inside the appended RS20 overlay (a plain `HCFG` scan finds it). Scan raw bytes for `HCFG` AND its base64 form `SENGR...` (crc-gate every hit); when both miss, look
-  for an overlay past the ELF image and read the question text -- it spells the unpacker.
+  `.data`, WASM data segment 0, Ada/Fortran `.rodata`, D21 OCaml plugin `.data`) -- D19: NOT byte-visible (packed PK19 overlay);
+  D20: RAW at +48 inside the RS20 overlay. Scan raw bytes for `HCFG` AND base64 `SENGR...` (crc-gate every hit); when both miss,
+  look for an overlay past the ELF image and read the question text -- it spells the unpacker.
   The JSON carries never-asked keys too (ipv4, windows_path, linux_path, service, host_model): parse the whole dict.
 - The analysis is easy (headers, symbols, one config blob). The hard part is the GM's exact label for `exact_text` fields
   (format, machine, symbol, D17 `hcfg_storage`). **The organizers RE-ISSUE the contract mid-day** when a label is unguessable
   (D17 `hcfg_storage` -> `kind: enum` + ordered rule list). Since D17 the question texts are SPECS: D19's config questions give
   the whole unpacking algorithm byte by byte. `format` is now `kind: enum` on d12-d19: `elf, pe, pe_cli, jar, wasm, neko_bytecode`.
-- **The contract LEAKS future days**: D19's `format` enum listed `neko_bytecode` (still unseen on D20 -> a Neko VM member is
-  coming) and `overlay_offset` named "RS20 for Day 20" (it came true). D19+D20 `d07_analysis_method_count` also says "for Day 26
-  use the primary classfile named by that unit" (=> a JVM classfile member on D26, primary class NOT the Main-Class). Grep every
-  new contract for `[A-Z]{2}\d\d` tokens, `Day NN` and enum values not seen yet.
-- **Since D19 the theme IS asked on its own group**: D5-D18 never asked the day's prompt theme, D19 (unpacking: `overlay_offset`
-  / `overlay_size`) and D20 (resources: `overlay_offset` + NEW `hcfg_resource_size`) did. The D17 backfill also re-asked old
-  days' themes on their groups.
-- **Every member since D2 also embeds a "dynamic trace" template** (unasked so far): `{"schema":"huntress.binary.dynamic_trace.v1",
-  "branch":"<b>","event_count":<n>,"campaign":...,"family":"<lang>_<theme>_trace","effects":"...","network":"none"}` gated on env
-  `HUNTRESS_HOST_MODEL` (`analysis`/`sandbox`/`workstation`). D18 `fortran_indirect_flow_trace`; D19 `cobol_static_unpack_trace`,
-  effects `memory_only_inert_payload_hash`; D20 `haskell_resource_overlay_trace` / `private_scratch_hash_only`.
+- **The contract LEAKS future days**: D19's `overlay_offset` named "RS20 for Day 20" (came true); still open after D22: format
+  enum value `neko_bytecode` (a Neko VM member is coming) and d07 `method_count` "for Day 26 use the primary classfile named by
+  that unit" (JVM classfile member on D26, primary class NOT the Main-Class). Grep every new contract for `[A-Z]{2}\d\d` tokens,
+  `Day NN` and unseen enum values (D21, D22: nothing new; D22 only reworded basenames `variant-` -> `sample`).
+- **The theme is asked on its own group only sometimes**: D5-D18 never; D19 (unpacking: `overlay_offset`/`overlay_size`) and D20
+  (resources: + `hcfg_resource_size`) yes; D21 (shared libs) NO -- only per-member `machine` (integer) + config; D22 (P/Invoke
+  bridge) NO -- the d22 ids are a copy of the d03 family (format/machine/metadata_version/config/hcfg_version). Imports/exports/
+  dlopen handshake/ImplMap = backfill candidates. The D17 backfill re-asked old days' themes on their groups.
+- **Every member since D2 embeds a "dynamic trace" template** (unasked): `huntress.binary.dynamic_trace.v1` {branch, event_count,
+  campaign, family `<lang>_<theme>_trace`, effects, network none} gated on env `HUNTRESS_HOST_MODEL` (analysis/sandbox/
+  workstation). family/effects: D19 `cobol_static_unpack_trace`/`memory_only_inert_payload_hash`, D20 `haskell_resource_overlay_
+  trace`/`private_scratch_hash_only`, D21 `ocaml_controlled_dynlink_trace`/`controlled_library_resolution_only`, D22
+  `fsharp_managed_native_bridge_trace`/`inert_native_process_id_bridge` (+ `native_bridge_result_positive`).
 - Question count: 80 on D8, +10/day to 160 on D16, D17 = 204 (backfill #2: every old group padded to 11 ids), then +12/day:
-  D18 216, D19 228, **D20 240**, no backfill D18-D20. Mastery = `setN.` prefixed copies (2 sets D2-D7, 5 D8-D9, 3 D10-D14,
-  5 D15-D17, 4 D18, 5 D19-D20 = 1200 ids on D20); artifacts named `delivery N: evidence.zip`. Timed end to end: D19 TT 4.2 s /
-  Mastery 10 s; D20 TT 4.8 s / Mastery 9.3 s (solve 5.5 s).
+  D18 216, D19 228, D20 240, D21 252, **D22 264**, no backfill D18-D22. Mastery = `setN.` prefixed copies (2 sets D2-D7, 5 D8-D9,
+  3 D10-D14, 5 D15-D17, 4 D18, 5 D19-D21, **6 on D22 = 1584 ids**); artifacts named `delivery N: evidence.zip`. Timed end to end:
+  D19 TT 4.2 s / M 10 s; D20 4.8 / 9.3 s; D21 4.2 / 9.9 s; D22 TT 12.3 s (download 6 s) / M 18.2 s (solve 7.3 s for 6 sets).
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
 - **HCFG location / encoding** -- same blob, different storage per container (`.hcfg` section, .NET FieldRVA, Go/Rust rodata,
-  base64 in a constant pool / string literal, raw FPC `.data`, WASM data segment 0, Ada/Fortran `.rodata`, D19 packed overlay):
+  base64 in a constant pool / string literal, raw FPC `.data`, WASM data segment 0, Ada/Fortran `.rodata`, D19 packed overlay,
+  D20 RS20 overlay, D21 RAW in the OCaml plugin's `.data` (data symbol `camlPlugin_000__1`; loader: no HCFG at all), D22 RAW
+  TWICE in the F# dll: in `.text` (@15891, F# static-array blob `T4022_380Bytes@`, no FieldRVA row) AND a byte-identical copy
+  appended as a PE overlay past the last section (@18432 = EOF-380); question: "accept the FIRST record that validates"):
   scan raw bytes for `HCFG` and `SENGR[A-Za-z0-9+/_-]*=*`, decode, accept only if crc32(plain) matches AND the JSON parses -- keep
   scanning past a failing hit (D9 Nim had two raw decoys); never a fixed offset. Storage did NOT change across a day's variants on
   any day (D18 offset 8512, D19 overlay 10808/424, D20 overlay 1200888 / resource 380 in single, TT and all 5 Mastery sets
-  while key/campaign/crc re-rolled).
+  while key/campaign/crc re-rolled; D21 plugin/loader machine 62 in every set, campaign BR21-00V re-rolled).
 - **Overlay layout per day (D19 PK19, D20 RS20)** -- both appended exactly at the end of the section-header table
   (`e_shoff + e_shnum*e_shentsize`), magic `<2 caps><day>`, a fixed header the QUESTION spells field by field:
   PK19 = `magic | u8 ver | u8 k1 | u8 k2 | pad | u32le packed_len @8 | sha256(unpacked) @12 | packed @44`, unpack
@@ -71,16 +80,33 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
 - **xor key / config values** -- re-roll per variant (`BRNN-00V`, `node-00V.dayNN...`, crc, key); derive from the header byte.
 - **Container per member** -- ELF vs PE32+ `.exe` re-rolls per member in Mastery (d02 C++, d04 Go, d10 Zig PE `pe`). Labels come
   from THIS member's header. Dispatch on MAGIC, not extension: `7f454c46` ELF, `MZ` PE, `PK` jar, `\0asm` WASM (next: `NEKO`).
-  A re-asked symbol field on a PE member follows the D2 PE convention: COMDAT section name `.text$<mangled>`.
+  A re-asked symbol field on a PE member follows the D2 PE convention: COMDAT section name `.text$<mangled>`. Extensions lie
+  about the role, not the container: D21 `.cmxs` = ELF ET_DYN shared object (OCaml natdynlink plugin).
 - **Member qualifier in the id (multi-member group, D15-D16)** -- `dNN_analysis_<qualifier>_<field>` names ONE member by a token of
   its FILE NAME. Rule: peel the longest field prefix that is a `[^a-z0-9]+`-separated token of exactly one member name. Tags seen:
-  `stripped`/`symbolized`, `compact`/`direct`; same HCFG in both. `sha256_K` = ARCHIVE order (central directory), never sorted.
-- **Variant index per group** -- `dNN--variant-XXX` re-rolls per group and mode; a carry-over d01 can re-roll STRIPPED (D15-D17
+  `stripped`/`symbolized`, `compact`/`direct` (same HCFG in both), `loader`/`plugin` (D21: roles, HCFG only in the plugin).
+  `sha256_K` = ARCHIVE order (central directory), never sorted.
+- **Member named in the QUESTION, not the id (D21)** -- unqualified `d21_analysis_config_*` say "Use the d21-- plugin.cmxs
+  member; the loader has no scored HCFG config"; qualified ones say "Use the unique d21-- member whose basename ends
+  loader.elf". Rule: after peeling the id qualifier, if the group still has >1 member, restrict it to the member whose basename
+  ends with the token after `basename ends` / `Use the dNN--` in the question. ORDER MATTERS: run it AFTER the qualifier peel
+  (running it first broke the D15/D16 qualified ids on D21: 26 ids missing from the first POST).
+- **Member basename vocabulary (D22)** -- every member was RENAMED from `dNN--variant-000.<ext>` (D3-D21) to `dNN--sample.<ext>`
+  (`d15--sample-stripped.elf`, `d21--sample-plugin.cmxs`, `d22--FSharp.Core.dll`) and the carried-over questions changed with it
+  ("basename starts d03--variant-" -> "starts d03--"). Inner names keep `variant-000` (jar `Day06Variant000`, .NET
+  `OriginalFilename variant-000.dll`). Rule: group by the `dNN--` prefix + extension/role tag only; never parse `variant-`.
+- **Primary vs support members (D3, D22)** -- a managed group ships the primary assembly + `.runtimeconfig.json` (+ D22 a
+  dependency DLL `FSharp.Core.dll`, sha256 constant across all sets); the question says "Use the unique dNN-- primary managed
+  assembly whose basename starts dNN-- and ends .dll; .runtimeconfig.json and dependency DLL members are delivery support only".
+  Rule: when several `.dll`s qualify, the primary = the one whose basename after `dNN--` is NOT a known framework/dependency
+  name (FSharp.Core, System.*, Microsoft.*, Newtonsoft.*), equivalently the one carrying the HCFG / the `<Program>` entry point.
+  `sha256_K` still covers ALL members in archive order (D22: primary, runtimeconfig, FSharp.Core).
+- **Variant index per group** -- `dNN--variant-XXX` (now `sample`) re-rolls per group and mode; a carry-over d01 can re-roll STRIPPED (D15-D17
   Mastery, D17 TT) -> symbols/disassembly `[]`, has_symtab `false`, `recover_code` `none` (D17 CONFIRMED; the leaf heuristic's
   8106/8114 rejected); D18 not stripped; D19 TT d01 stripped again (`none` accepted). Pair by sha256, never index.
 - **Contract wording per fetch (D17)** -- the same id's question/answer_format can change between fetches (exact_text -> enum,
   "equivalents accepted"). The solver reads `answer_format` per id at run time; assert enum tokens are in `accepted_values`.
-- **Mastery packaging** -- `setN.` prefixed ids, each set its own `delivery N: evidence.zip`: pair by sha256. Each set's 1st question
+- **Mastery packaging** -- `setN.` prefixed ids (2-6 sets; 6 on D22), each set its own `delivery N: evidence.zip`: pair by sha256. Each set's 1st question
   ends `Evidence case: dNN-m-<16hex>. [assigned-artifact-sha256:<zip sha256>]` (TT `dNN-tt-...`) = set->delivery map.
 - **answer_format.kind for the same field name** -- D8/D15: `elf_class`/`machine` exact_text on d01 but INTEGER (`64`/`62`) on
   d08/d15 in ONE contract. Dispatch on `kind`, not on the field name.
@@ -102,6 +128,8 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
 | C++ / "mangled" / "vtable" / "RTTI" | `nm -C` / `c++filt`; `_ZTV`/`_ZTI`/`_ZTS`; `score` method `_ZNK<len><Class>5scoreEPKc`; PE: `objdump -t file.exe` (COMDAT names) |
 | `PE32+` MinGW `.exe` | `objdump -t` (COFF symbols + string table), `pefile` (Machine, OPTIONAL_HEADER.Magic, sections incl. `.hcfg`) |
 | "CLI metadata", `.dll` + `runtimeconfig.json`, `BSJB` | `ilspycmd file.dll` or Python `dnfile`; config = `<PrivateImplementationDetails>` FieldRVA static array; `BSJB v4.0.30319` |
+| F# assembly (AssemblyRef `FSharp.Core`, resources `FSharpSignatureData.*`/`FSharpOptimizationData.*`, types `$Program`, `<>f__AnonymousType<n>`, closures `name@<line>`) + a big `FSharp.Core.dll` member | Same as C#: format `pe_cli`, machine `i386` (AnyCPU ILONLY = 0x14c), metadata `v4.0.30319`; answer from the PRIMARY dll only; raw `grep -abo HCFG` -> first crc-valid hit (D22: `.text` copy + identical overlay copy) |
+| P/Invoke / "bridge" / "crossing" (`DllImportAttribute`, ModuleRef `libc`/`kernel32.dll`, `System.Runtime.InteropServices`) | dnfile: `md.ModuleRef` names, `md.ImplMap` rows (ImportName, ImportScope -> ModuleRef, MemberForwarded -> MethodDef, MappingFlags callconv/charset/SetLastError); `ilspycmd` shows the `[DllImport]` signatures (D22: `getpid`@libc, `GetCurrentProcessId`@kernel32.dll, Winapi) |
 | Go ("build info, function names, file paths") | `go version -m file`; `lib.binary.go_buildinfo` / `go_pclntab_funcs` (stripped names survive in `.gopclntab`) |
 | Rust (mangled `_R`/`_ZN..17h<hash>E`, panic strings) | `readelf -hS` + `HCFG` scan; `rustfilt` / `lib.binary.rustfilt` if symbols are asked |
 | `.jar` / "constant pool" / methods / access flags | unzip the jar, `META-INF/MANIFEST.MF` Main-Class, `javap -v -p Main.class` (method table order, `flags: (0x0031)`); `ConstantValue: String` base64 config |
@@ -111,8 +139,9 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
 | Free Pascal / Objective-C / Ada / Fortran ELF (`FPC 3.2.2`; `__objc_*`; `GNAT Version`; `libgfortran.so.5`, `MAIN__`) | Plain ELF, carried-over solver answers it (`elf`/`x86-64`/`62`); HCFG RAW (`grep -abo HCFG`, crc-gate, offset = the `H`): FPC `.data`, ObjC own `.hcfg` section, Ada/Fortran `.rodata` |
 | GnuCOBOL ELF (`libcob.so.1` NEEDED, `cob_init`/`cob_set_programid`/`cob_display`/`cob_get_environment` imports, `variant-000.cob`, libvbisam/libgmp/libncurses) | Plain ELF for the header ids; config is NOT in the image: look past the end of the section-header table (D19) |
 | Haskell GHC ELF (`Main_main*_closure`/`_info` symbols, z-encoded `ghczminternal_GHCziInternalzi...`, `GHC 9.x` / `UnitLinkOpts {hsLibs = [-lHSbase...` strings, `.debug-ghc-link-info` section, NEEDED libgmp) | Plain ELF for header ids (`elf`/`x86-64`); D20 config sat in the RS20 overlay, not in the image -- check the file tail first |
+| OCaml native (`caml_startup`, `camlStdlib__*`/`camlCamlinternalFormat__*` symbols, `OCAMLRUNPARAM`, version string `4.02.3`; `.cmxs` = natdynlink plugin: dynsyms `caml_plugin_header`, `caml_globals`, `caml<Unit>__entry`/`__code_begin`/`__data_begin`, header magic `Caml2007D002` + unit name `Plugin_000`; loader imports `caml_natdynlink_open`/`camlDynlink__*`, `dlopen`, NEEDED libdl) | Plain ELF for header ids; HCFG RAW in the plugin `.data` (`grep -abo HCFG`, crc-gate); `nm -D --defined-only plugin.cmxs` for exports, `readelf -dW` for NEEDED |
 | File size > `e_shoff + e_shnum*e_shentsize` (or > max section end), with or without a crc-valid HCFG | Appended OVERLAY: `xxd -s <image_end> F`; magic `<2 caps><day>` (`PK19` D19, `RS20` D20); parse the header fields the question lists, verify its bounds/sha256, run its transform if any, HCFG at the stated offset. A raw HCFG hit INSIDE the overlay (D20) still needs the header fields (`hcfg_resource_size`, offsets) |
-| Two members differing by a name tag, ids `dNN_analysis_<tag>_<field>` | Route each id to the member whose file name carries `<tag>`; same HCFG in both |
+| Two members differing by a name tag (D15/D16 builds, D21 loader+plugin), ids `dNN_analysis_<tag>_<field>` | Route each id to the member whose file name carries `<tag>`; UNqualified ids -> the member the QUESTION names; a role member (loader) may carry no HCFG |
 | `00 61 73 6d 01 00 00 00` (`\0asm`), `.wasm` | `lib.binary.wasm_layout(data)` or `wasm-objdump -x f.wasm`; format `wasm`, architecture `wasm32`; HCFG RAW in data segment 0 |
 | `NEKO` magic / `.n` file (format enum lists `neko_bytecode` since D19) | Neko VM bytecode (Haxe/nekoc): `neko`/`haxe` are apt-installable; globals table holds the string constants -> HCFG scan; format `neko_bytecode` |
 | `answer_format.kind: enum` + `accepted_values`, question says "Apply these mutually exclusive rules in order" | The question IS the spec: implement the rules top-down over the parsed facts, emit one listed token (D17 hcfg_storage) |
@@ -132,32 +161,34 @@ Up"** (91 s): compact/direct wasm pair, `wasm`/`wasm32` first try via the prebui
 **D17 "Decoder Ring"** (204 Qs; T+4:03): Ada ELF, HCFG RAW `.rodata`; backfill #2 (32 old-group ids, one POST); `hcfg_storage`
 burned ~10.9k rejected POSTs / 3.5 h until the organizers revised it to an enum; stripped d01 -> `recover_code` `none`.
 **D18 "Flow State"** (216 Qs; T+11 s, 0 wrong): Fortran ELF, HCFG RAW `.rodata` (8512); call-graph theme unasked; zero new code.
-**D19 "Jack in the Box"** (static-unpacking; 228 Qs; T+2:25; TT 4.2 s / Mastery 10 s first try): stripped GnuCOBOL ELF (11 KB,
-libcob.so.1), no HCFG in the image; 424-B `PK19` overlay at e_shoff+e_shnum*64 (10808). NEW `overlay_offset`/`overlay_size`;
-config questions spelled the stub (k1 +5, k2 +6, len +8, sha256 +12, data +44, `ror8(b^k2,3)^k1`). Lost ~1 min guessing the
-transform from bytes before reading the question; race harness `none` placeholders for hidden config were rejected.
+**D19 "Jack in the Box"** (unpacking; 228 Qs; T+2:25): stripped GnuCOBOL ELF, HCFG only in a 424-B `PK19` overlay at
+e_shoff+e_shnum*64; NEW `overlay_offset`/`overlay_size`; the config questions spelled the stub (lost ~1 min reversing it).
+**D20 "Resourceful"** (240 Qs; T+49 s): Haskell GHC ELF + 463-B `RS20` overlay (HCFG RAW @+48, scratch sha256 @16); NEW
+`hcfg_resource_size` (u32le @ RS20+8). **D21 "Shared Custody"** (252 Qs; T+1:33): OCaml `-loader.elf` (no HCFG) +
+`-plugin.cmxs` ET_DYN (HCFG RAW `.data`); only ROUTING changed (question-named member, run AFTER the qualifier peel -- running
+it first dropped 26 ids). Themes of D21 (exports/imports/dlopen) unasked.
 
-**D20 "Resourceful"** (slug `resources-and-overlays`; 240 Qs; **CORRECT at T+49 s, 0 wrong**; TT 4.8 s and Mastery 9.3 s CORRECT
-first try). Prompt: "Binaries have attics: resources, overlays, bytes past the end of the sections. Rummage through this one's
-hidden storage and map every boundary." New group = ONE Haskell ELF (GHC 9.12.2, gold-linked, 1201351 B, dynamic libgmp/libm/libc,
-not stripped; trace family `haskell_resource_overlay_trace`). A 463-byte `RS20` overlay starts at 1200888 = e_shoff 1198776 +
-33*64; inside it the HCFG resource (380 B) is stored RAW at +48, followed by 35 B of scratch (`private-scratch:BR20-000:inert-only`)
-whose sha256 sits at +16.
-- Contract = the 228 D19 ids unchanged + 12 d20 ids: sha256, architecture, format, machine, config_* x5 + hcfg_version (question =
-  full RS20 layout spec + "verify exact end bounds and scratch SHA-256"), `overlay_offset` (same text as d19: magic offset), NEW
-  `hcfg_resource_size` (u32le at RS20+8). No `overlay_size` on d20.
-- Timeline: the race harness POSTed carried-over + prebuilt answers at T+26-27 s: 228 old ids + 11 d20 ids accepted (the prebuilt
-  `rs20-overlay-candidates` / question-spec unpacker + plain HCFG scan covered config and overlay_offset). Only
-  `hcfg_resource_size` was unknown; the worker added a field branch (`struct.unpack_from('<I', blob, rfind(magic)+8)`; also
-  `scratch_size` = u16le @12 pre-emptively) -> CORRECT in one POST. Overlay offset/resource size identical in TT and all Mastery
-  sets; campaign BR20-00V re-rolled; Mastery set1 d01 stripped again (`none`/`[]` accepted).
+**D22 "Bridge Troll"** (slug `managed-native-bridge`; 264 Qs; **CORRECT T+47 s by the race harness's carried-over solver, 0
+wrong**; TT 12.3 s / Mastery 6 sets 18.2 s first try). New group (archive order): `d22--sample.dll` (18.8 KB F# .NET 8 assembly,
+PE32 i386 ILONLY, BSJB `v4.0.30319`, AssemblyRefs System.Runtime/FSharp.Core/System.Text.Json/netstandard), `sample.runtimeconfig.json`
+(98 B, tfm net8.0 -- byte-identical to d03's, same sha256), `FSharp.Core.dll` (5.7 MB stock dependency, constant across sets).
+- Bridge = two P/Invoke ImplMap rows: `getpid` -> ModuleRef `libc`, `GetCurrentProcessId` -> `kernel32.dll` (Winapi callconv,
+  charset not specified); the PID feeds the trace (`fsharp_managed_native_bridge_trace`). NOTHING of it was asked: the 12 new
+  ids = 3 sha256 + the d03 family verbatim (format `pe_cli`, machine `i386`, metadata_version, 4 config_*, crc32_hex, hcfg_version).
+- HCFG RAW twice: `.text` @15891 (F# array literal type `T4022_380Bytes@`, NOT a FieldRVA row) and an identical copy as a PE
+  overlay @18432 (ends at EOF). The question now says "accept the FIRST record whose bounds, CRC32 and JSON validate" -> the
+  generic first-crc-valid scan was already right.
+- Silent contract change: all members renamed `dNN--variant-000.*` -> `dNN--sample.*` and the d03 questions dropped
+  "variant-" from the basename rule; the solver keyed on `dNN--` + extension/tag and was unaffected.
+- Insight: zero new code needed -- a group shaped like an old one (managed .dll + runtimeconfig) inherits the old group's
+  field family. Recorded the bridge facts (ModuleRef/ImplMap/trace) for a future backfill.
 
 ## GM answer conventions learned
 | Field family | Accepted form | Rejected (never resubmit) |
 |---|---|---|
 | elf_class (`kind` exact_text) | `ELF64` / `ELF32` (readelf style) | ELFCLASS64 |
 | elf_class (`kind: integer`, D8) | the bit width `64` / `32` | `2` / `1` (raw EI_CLASS byte) |
-| machine (`kind: integer`, D8-D9, D15) | decimal e_machine (`62` = x86-64) | — |
+| machine (`kind: integer`, D8-D9, D15, D21 loader/plugin) | decimal e_machine (`62` = x86-64), also for an ET_DYN `.cmxs` | — |
 | endianness | `little` / `big` | little endian, lsb, msb |
 | machine (ELF) | `x86-64`, `x86`, `AArch64`, `ARM` (D19 text: tool labels and decimal/hex codes also accepted) | EM_X86_64, x86_64, amd64 (pre-D17 exact_text) |
 | machine (PE FILE_HEADER) | 0x14c → `i386`; 0x8664 → `x86-64` | x86 (for PE i386); raw `0x8664` |
@@ -170,14 +201,15 @@ whose sha256 sits at +16.
 | format (enum since D17-D19 on d12+) | `elf`, `pe`, `pe_cli` (.NET), `jar`, `wasm`, `neko_bytecode` (listed, unseen) | ELF, ELF64, elf64-x86-64, exe, pe32+, jar_jvm, ~50 .NET synonyms |
 | format / architecture (any compiled language ELF, D8-D19 incl. Ada, Fortran, COBOL) | `elf` / `x86-64` (language never changes the label) | — |
 | format / architecture (WebAssembly, D16) | `wasm` / `wasm32` | — |
+| format / machine (.NET any language: C# D3, F# D22) | `pe_cli` / `i386` (PE Machine 0x14c of an AnyCPU ILONLY assembly) | x86 |
 | C++ symbols (ELF) incl. `mangled_score_symbol`, `typeinfo_symbol` (D17) | bare Itanium mangled name (`_ZNK15DiscoveryEngine5scoreEPKc`, `_ZTI15DiscoveryEngine`) | the demangled form |
 | C++ symbols (PE/MinGW) | COMDAT section name `.text$<mangled>` / `.rdata$<mangled>` | bare mangled name |
 | section_names (JSON) | pyelftools order INCLUDING the leading `""` (D17 text: omitting it also accepted) | list without "" (pre-D17) |
 | symbols (JSON) | non-empty .symtab names, table order, dupes kept | list with the "" entries |
 | disassembly (JSON) | capstone intel `"mov eax, 8100"`, `"ret"`, decimal immediates | hex imm, `"ret "` |
 | methods / access_flags / method_count (jar, D17) | Main-Class `method_info` names in table order incl. `<init>` (JSON) / decimal `49` / count incl. `<init>`/`<clinit>` | — |
-| metadata_version | BSJB root string `v4.0.30319` | net8.0 / TFM |
-| config_* | values verbatim from the decoded HCFG JSON (mutex keeps ONE backslash); D19: from the UNPACKED overlay's HCFG | JSON-escaped `\\`; `none` when the blob is merely hidden (D19) |
+| metadata_version (d03, d22 F#) | BSJB root string `v4.0.30319` (D22: same for F#) | net8.0 / TFM |
+| config_* | values verbatim from the decoded HCFG JSON (mutex keeps ONE backslash); D19: from the UNPACKED overlay's HCFG; D21: from the member the question names (plugin) | JSON-escaped `\\`; `none` when the blob is merely hidden (D19) |
 | hcfg_version / xor_key_hex | header byte 4 decimal / header byte 5 as `0x%02x` | — |
 | has_hcfg_section (enum) | `true` when a section is literally named `.hcfg` | — |
 | hcfg_offset (integer) | decimal FILE offset: base64 text start (`S`), RAW = the `HCFG` magic | — |
@@ -200,14 +232,18 @@ Java broke the compound law (`jar`); bytecode VMs get `<vm>_bytecode` (`neko_byt
   field inherits it), wrong when it is merely HIDDEN (D19 config: packed, the race harness's `none` placeholders were rejected).
 - **A multi-field POST is all-or-nothing.** One wrong field fails the set and hides which one (D2). Submit unconfirmed/new fields
   ALONE; batch the bytes-derived ones (D17: 10 new fields in one POST; D19: 8 in one POST).
-- **Theme facts**: D5-D18 themes were not asked on their own day, but D19's was, and D17 backfilled old themes -- always record the
-  day's theme facts (stub, overlay header, call graph, trace family) in NOTES.md and expose them in the facts dict.
+- **Support members** (D3, D22): a managed group can hold several `.dll`s; answer only from the PRIMARY assembly (the question
+  says so), but hash every member in archive order. A 5.7 MB framework DLL would dominate a naive HCFG/brute pass -- skip it.
+- **Theme facts**: D5-D18 and D21-D22 themes were not asked on their own day, D19/D20's were, and D17 backfilled old themes -- always
+  record the day's theme facts (stub, overlay header, call graph, NEEDED/exports/dlopen handshake, P/Invoke ImplMap, trace family)
+  in NOTES.md.
 - **Formatting**: build submit JSON with python/jq (`Global\Huntress...` mutex = ONE backslash); capstone `ret` has an empty
   op_str (`"ret "` -> strip), immediates in decimal.
 - **Cumulative zip**: old groups' answers carry over when their sha256 match; POST the known ids first (they bank as `accepted`),
   then the new/unknown ids (D17: 188 at T+18 s; D18 all 216 at T+11 s; D19 216 at T+26 s).
-- **Id shape / kind**: peel a member qualifier off the front before declaring a field unknown (D15 `analysis_stripped_machine`);
-  the same field name can change `kind` (D8 elf_class/machine integer) -- read `answer_format.kind` per id.
+- **Id shape / kind / routing**: peel a member qualifier off the front before declaring a field unknown (D15
+  `analysis_stripped_machine`); a question-named-member router runs AFTER that peel (D21: running it first dropped 26 ids); the
+  same field name can change `kind` (D8 elf_class/machine integer) -- read `answer_format.kind` per id.
 - **Archives**: never unzip recursively (nested .jar/.apk lose their `dNN--` prefix); jar members are deflated, so `grep HCFG
   file.jar` finds nothing -- inflate the class and read constant-pool strings.
 - **Huge members** (D8: 67 MB Swift): no per-key xor brute force or per-field re-parse; cheap encodings first, crc-gate every hit.
@@ -215,6 +251,6 @@ Java broke the compound law (`jar`); bytecode VMs get `<vm>_bytecode` (`neko_byt
   JSON that parses, keep scanning. Overlays: the question says "final" -> `rfind`, and verify the stated sha256.
 - **Location fields per scan path** (D12): a decoder with raw AND base64 branches must return the hit offset (and encoding) from
   BOTH; take offsets from `grep -abo` / `re.finditer().start()`, not `strings -t d` (off by 1).
-- **Timed windows**: download dominates (D16 TT 52 s of 64 s). After editing hctf/*.py, restart the orchestrator.
-- **WASM parsing**: section sizes are 5-byte PADDED LEB128; read LEB128 generically (`lib.binary.wasm_layout`).
+- **Timed windows**: download dominates (D16 TT 52 s of 64 s). After editing hctf/*.py, restart the orchestrator. WASM section
+  sizes are 5-byte PADDED LEB128: read LEB128 generically (`lib.binary.wasm_layout`).
 - **PE machine map must include 0x8664 → `x86-64`**: a from-scratch replay once emitted `0x8664` and failed TT twice.

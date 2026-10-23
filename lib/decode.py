@@ -272,6 +272,23 @@ def decode_chunk(p, _nested=False):
                 cands.append((_ascii(b.decode(enc).encode("utf-8")), 0))
             except (UnicodeDecodeError, UnicodeEncodeError):
                 pass
+    if _max_day() >= 21 and t.startswith(("H4sI", "eAE", "eF", "eJ", "eN", "Qlpo", "/Td6")) \
+            and _B64U.match(t.replace("+", "-").replace("/", "_")) and len(t.rstrip("=")) % 4 != 1:
+        # BASE64 OF A COMPRESSED STREAM (warmups Day 21 "Under Pressure", "A familiar wrapper. Something compressed
+        # inside": 'H4sIAAAAAAACA...' = base64 of gzip; zlib/bz2/xz magics too, std or url-safe, padding optional)
+        u = t.rstrip("=").replace("-", "+").replace("_", "/")
+        try:
+            raw = base64.b64decode(u + "=" * (-len(u) % 4))
+        except Exception:
+            raw = b""
+        for magic, fn in ((b"\x1f\x8b", gzip.decompress), (b"BZh", bz2.decompress),
+                          (b"\xfd7zXZ", lzma.decompress), (b"x", zlib.decompress)):
+            if raw.startswith(magic):
+                try:
+                    cands.append((_ascii(fn(raw)), 0))
+                except Exception:
+                    pass
+                break
     if _B32S.match(t) and len(t) % 8 == 0:
         try:
             cands.append((_ascii(base64.b32decode(t)), 5))

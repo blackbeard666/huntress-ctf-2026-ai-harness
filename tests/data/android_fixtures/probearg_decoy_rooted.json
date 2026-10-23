@@ -1,0 +1,8 @@
+{
+ "entry": "dex_strings",
+ "expected": null,
+ "decoy": true,
+ "_why": "same Guard as probearg_frag_xor but Vault's bytes are keyed with Guard.fold(all probes true) = a ROOTED device: the token only shows on the trap path; the clean path is garbage",
+ "generator_cmd": "python3 tests/data/android_fixtures/probearg_src/gen_probearg.py decoy_rooted tests/data/android_fixtures/probearg_decoy_rooted.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d22.probearg.Probe -> new Vault().reveal() on the clean host JVM prints non-ANS bytes ('b\\xc86\\xba\\x7f\\xe5...'), i.e. no token on the clean path"
+}

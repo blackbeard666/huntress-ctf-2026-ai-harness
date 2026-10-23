@@ -1,0 +1,8 @@
+{
+ "field": "npm.dependencies",
+ "expected": "{\"chalk\":\"^5.3.0\"}",
+ "generator_cmd": "cd pk && npm pack --ignore-scripts  (npm 10, node tools/node) -> acme-color-utils-1.0.9.tgz",
+ "oracle_cmd": "tar -xOzf acme-color-utils-1.0.9.tgz package/package.json | node -e 'JSON.parse(...)' (JSON.stringify of each key)",
+ "decoy": false,
+ "member": "acme-color-utils-1.0.9.tgz"
+}

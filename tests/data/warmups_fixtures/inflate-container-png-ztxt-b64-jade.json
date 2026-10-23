@@ -1,0 +1,9 @@
+{
+ "codec": "inflate-container PNG zTXt",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-73",
+ "encoded": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAa3pUWHRDb21tZW50AAB4nCXJMQ6DMBBE0atMeqhSIHGBVKTKBRZ7BIaYjbwL5vggpft6/50CUbWsiAwa0zbB52SoUvL+e+CjMP0ebGD7mJP/L08JDtmsssD1RuIlmRjEnKXHIpGt+t1t97wAI+IjqCfEDVIAAAAUSURBVHicY+QSkWOAASYGJICbAwAMqABEXjp07gAAAABJRU5ErkJggg==",
+ "generator_cmd": "python3 -c 'import sys; from PIL import Image, PngImagePlugin as P; i=P.PngInfo(); i.add_text(\"Comment\", sys.argv[1], zip=True); Image.new(\"RGB\",(4,4),(10,20,30)).save(\"z.png\", pnginfo=i)' \"$plain\"; base64 -w0 z.png  # Pillow zTXt writer",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d > t.png; pngcheck -q t.png >/dev/null && exiftool -s3 -Comment t.png || echo none  # pngcheck (CRCs) + exiftool PNG reader",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-73",
+ "expected": "match"
+}

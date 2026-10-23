@@ -1,0 +1,8 @@
+{
+ "field": "entitlements.application_identifier",
+ "expected": "AB12CD34EF.com.northwind.fieldkit",
+ "generator_cmd": "python3 plistlib.dumps(Entitlements dict, fmt=plistlib.FMT_BINARY) > app.xcent (bplist00)",
+ "oracle_cmd": "cp app.xcent x.plist; exiftool -j x.plist -> Application-Identifier",
+ "decoy": false,
+ "member": "FieldKit.app.xcent"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "srec[gzip]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-koala-57",
+ "encoded": "S00E00002F6465762F7374646F7574B1\r\nS315000000001F8B080000000000020325C9310E833053\r\nS315000000101004C0AF2C7D2811523E4045AA7CE0B0AA\r\nS3150000002057C48039E43B629E4FA4B433AF1488AA08\r\nS31500000030654564D098F619FE49862A259F4783B7F9\r\nS31500000040C274FBF2013BA79CFCBFBC243864B7CA50\r\nS3150000005002D71F128364621473962716896C57950C\r\nS312000000604DDAAEBF0175AA7486640000007B\r\nS70500000000FA\r\n",
+ "generator_cmd": "f=$(mktemp); printf %s \"$plain\" | gzip -9n > $f; objcopy -I binary -O srec --srec-forceS3 $f /dev/stdout; rm -f $f",
+ "oracle_cmd": "f=$(mktemp); printf \"%s\\n\" \"$encoded\" > $f; objcopy -I srec -O binary $f /dev/stdout | gunzip; rm -f $f",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-koala-57",
+ "expected": "match"
+}

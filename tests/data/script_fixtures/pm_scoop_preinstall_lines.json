@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=powershell|role=downloader|verdict=malicious|attack=T1105|adapter=scoop_pre_install|stage_count=2|steps=fetch_stage,write_file|campaign_id=SCP-5e1f0a77|url=https://scoop-5e1f0a77.example.invalid/s2|file_path=C:\\Users\\Public\\scoop-5e1f0a77.dat",
+ "decoy": false,
+ "host": "scoop",
+ "generator_cmd": "M=$(printf %s \"$PLAN\" | gzip -9n | base64 -w0); jq -n --arg h \"${M:0:60}\" --arg t \"${M:60}\" '{version:..,url:..,hash:..,pre_install:[\"# stage helper\", (\"$descriptor_5e1f0a77 = '\"'\"'\"+$h+\"'\"'\"' +\"), (\"    '\"'\"'\"+$t+\"'\"'\"'\"), \"$raw = [Convert]::FromBase64String($descriptor_5e1f0a77)\", ..GZipStream..]}' > pm_scoop_preinstall_lines.scoop  (Scoop pre_install as an array of lines; the descriptor is split over two lines with a PS `+` continuation, so the array must be joined with \\n)",
+ "oracle_cmd": "jq -r '.pre_install|join(\"\\n\")' tests/data/script_fixtures/pm_scoop_preinstall_lines.scoop | sed -n 2,3p | grep -o \"'[^']*'\" | tr -d \"'\\n\" | base64 -d | gunzip"
+}

@@ -1,0 +1,35 @@
+name: Huntress inert analysis c0de4a27
+on:
+  workflow_dispatch:
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    env:
+      SEED: &d !!binary |
+        NzYzZDMzN2M2YzYxNmU2Nzc1NjE2NzY1LjNkNjc2OTc0Njg3NTYyNWY2MTYz
+        NzQ2OS42ZjZlNzM3YzcyNmY2YzY1M2Q2YzYxNzUuNmU2MzY4NjU3MjdjNzY2
+        NTcyNjQ2OTYzLjc0M2Q3Mzc1NzM3MDY5NjM2OTZmNzU3My43YzYxNzQ3NDYx
+        NjM2YjNkNTQzMTMwMzUuMzk3YzYxNjQ2MTcwNzQ2NTcyM2Q3MDcyLjZmNjM2
+        NTczNzM1ZjYyNzU2OTZjNjQ2NS43MjdjNjg2ZjczNzQ1ZjcwNzI2ZjY2Njku
+        NmM2NTNkNzM3NDYxNmU2NDYxNmM2ZjZlLjY1N2M2ZjYyNjY3NTczNjM2MTc0
+        Njk2Zi42ZTVmNzA3MjZmNjY2OTZjNjUzZDY2NzIuNjE2NzZkNjU2ZTc0NjU2
+        NDVmNjg2NTc4LjdjNzM3NDYxNjc2NTVmNjM2Zjc1NmU3NC4zZDMyN2M3Mzc0
+        NjU3MDczM2Q2NDY1NjMuNmY2NDY1NWY2MzZmNmU2NjY5Njc3NTcyLjYxNzQ2
+        OTZmNmUyYzY0Njk3MzcwNjE3NC42MzY4NWY3MDcyNmY2MzY1NzM3MzdjNjMu
+        NjE2ZDcwNjE2OTY3NmU1ZjY5NjQzZDQ3LjQ5NTQ0ODU1NDI1ZjQxNDM1NDQ5
+        NGY0ZS41MzJkNjMzMDY0NjUzNDYxMzIzNzdjNzUuNzI2YzNkNjg3NDc0NzA3
+        MzNhMmYyZjY3LjY5NzQ2ODc1NjI1ZjYxNjM3NDY5NmY2ZS43MzJkNjMzMDY0
+        NjUzNDYxMzIzNzJlNjUuNzg2MTZkNzA2YzY1MmU2OTZlNzY2MTZjLjY5NjQy
+        ZjczNzQ2MTY3NjU3YzY2Njk2Yy42NTVmNzA2MTc0NjgzZDJmNzQ2ZDcwMmYu
+        Njg3NTZlNzQ3MjY1NzM3MzJkNjc2OTc0LjY4NzU2MjVmNjE2Mzc0Njk2ZjZl
+        NzMyZi4yZTYzMzA2NDY1MzQ2MTMyMzcyZTczNzQuNjE2NzY1
+    steps:
+      - name: Preserve modeled descriptor
+        run: ':'
+  stage:
+    runs-on: ubuntu-latest
+    env:
+      HUNTRESS_DESCRIPTOR: *d
+    steps:
+      - name: Preserve modeled descriptor
+        run: ':'

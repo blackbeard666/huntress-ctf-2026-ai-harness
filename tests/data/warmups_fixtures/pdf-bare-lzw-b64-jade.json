@@ -1,0 +1,9 @@
+{
+ "codec": "pdf-filter-chain",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lantern-36",
+ "encoded": "gBONJjMogO5vORrEBkMpjN5kNJuM4gOhoNJzgxhORtOpwEIgKhvEBzN5sOxlFkjOpiNppOkUi0YMp4MJjl5hNxzO5lOUUkUVgpHMJtgpNMJzOk8HQgNRhhgtNk4pJyNwtGY2gIA=",
+ "generator_cmd": "printf %s \"$plain\" | /home/testpwn/huntress-2026/.venv/bin/python3 -I -c 'import sys,io;from PIL import Image;d=sys.stdin.buffer.read();c=sys.argv[1];im=Image.frombytes(\"L\",(len(d),1),d);b=io.BytesIO();im.save(b,\"TIFF\",compression=c);t=Image.open(io.BytesIO(b.getvalue()));o=t.tag_v2[273][0];n=t.tag_v2[279][0];sys.stdout.buffer.write(b.getvalue()[o:o+n]+(b\"\\x80\" if c==\"packbits\" else b\"\"))' tiff_lzw | base64 -w0",
+ "oracle_cmd": "printf %s \"$encoded\" | /home/testpwn/huntress-2026/.venv/bin/python3 -I -c 'import sys,base64;from pypdf.filters import LZWDecode;d=sys.stdin.buffer.read();d=base64.b64decode(d);d=LZWDecode.decode(d);sys.stdout.buffer.write(d)'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lantern-36",
+ "expected": "match"
+}

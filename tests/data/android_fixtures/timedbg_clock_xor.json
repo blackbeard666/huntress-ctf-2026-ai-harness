@@ -1,0 +1,7 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-7c3e19a05bd2f846",
+ "_why": "Vault.reveal(ctx) xors a byte[] with Guard.key(): timing deltas of SystemClock.elapsedRealtime/uptimeMillis/elapsedRealtimeNanos, System.nanoTime/currentTimeMillis, Debug.threadCpuTimeNanos around work + Thread.sleep(1) must be < 500 ms, plus Debug.isDebuggerConnected || VMDebug.isDebuggingEnabled -- only a clean-device run with a fast monotonic clock gives the key",
+ "generator_cmd": "python3 tests/data/android_fixtures/timedbg_src/gen_timedbg.py clock_xor tests/data/android_fixtures/timedbg_clock_xor.apk  # javac --release 8 (app + clean-Pixel android.*/dalvik.* stubs) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d21.timedbg.Probe -> Vault.reveal(ctx) run by the host JVM on clean release stubs (SystemClock / threadCpuTimeNanos on the JVM's real clocks, nanoTime / currentTimeMillis / Thread.sleep real) -> 'ANS-7c3e19a05bd2f846'"
+}

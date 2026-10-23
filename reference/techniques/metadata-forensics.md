@@ -1,88 +1,81 @@
-# metadata-forensics — technique log (days 1-20; updated after every day)
+# metadata-forensics — technique log (days 1-22; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
-- **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
-  guarantee for Time Trial / Mastery -- solvers derive structure and degrade per field.
-- Every day = ONE evidence zip (plain Deflate, no password so far). D1-7: one tiny member, ONE structural fact. D8-9:
-  the cumulative kit, every field in every mode. D10-14: one member + one field everywhere. **D15+ split the modes**:
-  single = 1 field (the new member), TT = cumulative kit (D15 20 -> D20 25 fields, +1 per day = the day's new member),
-  Mastery = 5 kits x the TT set, incl. a cross-member "synthesis" question every day. Pre-arm EVERY earlier family AND
-  the synthesis before the timed run; the timed field set is not the single's.
+- **Timed variants MUTATE** (organizer, D8: "new, dynamic variations/mutations"): solvers derive structure, degrade per field.
+- Every day = ONE evidence zip (plain Deflate, no password). D1-7: one tiny member, one fact; D8-9: cumulative kit in
+  every mode; D10-14: one field everywhere. **D15+ split the modes**: single = 1 field (the new member), TT = cumulative
+  kit (D15 20 -> D22 27 fields, +1/day), Mastery = 5 kits (D22: SIX) x the TT set, incl. a cross-member "synthesis"
+  question. Pre-arm EVERY earlier family AND the synthesis before the timed run.
 - Member families: note/text -> jpg -> png -> pdf -> inner zip -> Go PE (D9-11) -> .NET dll (D12) -> MSI (D13) -> LNK
-  (D14) -> OOXML `.docx` (D15) -> `.eml` (D16) -> RIFF/WAVE audio (D17) -> MP4 h264+aac video (D18) -> Linux ELF (D19)
-  -> Mach-O `macos-001.bin` (D20). Executables now span PE/ELF/Mach-O, one header field each (the "architecture" trio).
-  The fmt word is sometimes an ABSTRACT namespace (`email` not `eml`; `media` for BOTH audio D17 and video D18, with
-  ffprobe vocabulary) and sometimes the plain format (`elf` D19, `macho` D20, like `pe`/`msi`/`lnk`) -- read it.
-- A new `<fmt>.<field>` each day: identity -> magic prefix -> `text.utf8_bom_present` -> `jpeg.sof_dimensions_pixels` ->
+  (D14) -> OOXML `.docx` (D15) -> `.eml` (D16) -> WAV (D17) -> MP4 (D18) -> ELF (D19) -> Mach-O `macos-001.bin` (D20)
+  -> APK `mobile-001.apk` (D21) -> JAR `application-001.jar` (D22). Executables PE/ELF/Mach-O one header field each;
+  D21-22 = zip-based PACKAGES (APK binary-AXML manifest; JAR text `META-INF/MANIFEST.MF`), one identity/launch field.
+  fmt word = an ABSTRACT namespace sometimes (`email` not `eml`; `media` for audio D17 AND video D18, ffprobe
+  vocabulary), else the plain format (`pe` `msi` `lnk` `elf` `macho` `apk` `jar`) -- read it from the question.
+- Fields, one new per day: identity -> magic prefix -> `text.utf8_bom_present` -> `jpeg.sof_dimensions_pixels` ->
   `png.ihdr_dimensions_pixels` -> `pdf.header_version` -> `zip.eocd_total_entries` -> `zip.central_directory_member_names`
   -> `pe.coff_machine_u16_hex` -> `pe.address_of_entry_point_rva_hex` -> `pe.version_original_filename` ->
   `dotnet.mvid_guid` -> `msi.product_code_guid` -> `lnk.target_path_windows` -> `ooxml.external_relationship_targets` ->
   `email.message_id` -> `media.primary_audio_codec_name` -> `media.primary_video_dimensions` -> `elf.e_machine_u16_hex`
-  -> `macho.cpu_type_set` (first SET-valued header field: JSON list of raw hex cputypes, one per slice).
-  The question names the field (`Determine <fmt>.<field> for <member>`); ids `dNN-<family>-NNN-<fmt>-<field>` (`.`/`_`
-  -> `-`); `dNN` = the family's first day; `<family>` != `<fmt>` for media (`d17-audio-001-media-`, `d18-video-...`).
-- The flavor text promises extra findings ("the collision", "the impossible destination", "equivalent recordings",
-  "crops ... the claimed device", D19 "several systems ... rebuild deployment groups", D20 "thin and universal binaries
-  mixed with archives ... what truly supports the advertised fleet") that were NEVER asked; the sample delivers less (D9
-  "several architectures" -> one i386 PE; D19 -> one x86-64 ELF; D20 "universal" -> one THIN arm64 header). The graded
-  field is the STRUCTURAL truth from header bytes; names/extensions/secondary metadata are the lie. Pre-arm siblings
-  without guessing spellings. Titles are puns (D19 "Little Endian" = EI_DATA; D20 "Universal Appeal" = universal/fat).
-- Singles: D1-9 first-submit CORRECT ~27-60 s; D10, D13, D15 lost ONE submit to a convention (padding, braces, list
-  order); D16 lost TWO (parser -> `none`, stripped brackets); D17 ~24 s; D18 ~5 s and D19 ~13 s (race probe answered
-  from the prebuilt `lib.meta` registry before any LLM work); D20 lost ONE to vocabulary (`["arm64"]` name -> hex won,
-  ~39 s). TT/Mastery: CORRECT every day, but D15-D17 AND D19 only after an offline generalize (synthesis dispatch
-  missing from the day's solver); D18 and D20 in-window first try (D20 TT 3.9 s / Mastery 5.8 s in window).
+  -> `macho.cpu_type_set` (JSON list, one raw hex cputype per slice) -> `apk.package_name` -> `jar.main_class`.
+  Question `Determine <fmt>.<field> for <member>`; id `dNN-<family>-NNN-<fmt>-<field>` (`.`/`_` -> `-`), `dNN` = the
+  family's first day; `<family>` != `<fmt>` only for media (`d17-audio-001-media-`, `d18-video-...`).
+- Flavor text promises extra findings that are NEVER asked (collisions, equivalent recordings, crops/claimed device,
+  D19 deployment groups, D20 advertised fleet, D21 rebuilds vs clones, D22 "nested dependencies whose manifests disagree
+  with their launchers"); the sample delivers less (D20 "universal" -> one THIN header; D22 "libraries ... nested" ->
+  one flat 4-entry JAR). Graded = the STRUCTURAL truth; names/extensions/secondary metadata are the lie. Titles are
+  puns on the field (D19 "Little Endian" = EI_DATA; D20 "Universal Appeal" = fat; D21 "Package Deal" = package name;
+  D22 "Main Character Energy" = `Main-Class`).
+- Singles: D1-9 first-submit ~27-60 s; D10, D13, D15 lost ONE submit to a convention (padding, braces, list order);
+  D16 lost TWO (`none`, stripped `<>`); D20 lost ONE (`["arm64"]` -> hex won). Race probe from the prebuilt `lib.meta`
+  registry: D18 ~5 s, D19 ~13 s, D22 ~19 s (`lib/meta/prebuilt/jar.py`); registry MISS -> live worker D17 ~24 s, D21 ~32 s.
+  TT/Mastery: CORRECT every day; D15-17 + D19 only after an offline generalize (synthesis dispatch missing); D18,
+  D20-22 in-window first try (D22 TT 5.4 s / Mastery 5.9 s in window).
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
-- **Delivery layout** -- see "Delivery layouts seen". Container NAMES drift: D1-14 `metadata-day-NN-evidence[-0N].zip`;
-  D15-20 TT `evidence.zip`, Mastery `evidence-01.zip` holding `evidence-01..05.zip`. Route by the ref's text before
-  `->` and by sha256, never a hard-coded name.
-- **Field-set size** -- per mode: D7 TT 11 / Mastery 22; D8-9 12-13 everywhere; D10-14 one; D15 1/20/100; D16 1/21/105;
-  D17 1/22/110; D18 1/23/115; D19 1/24/120; D20 1/25/125. Families: identity + `d04-jpeg-*`, `d05-png-*`, `d06-pdf-*`,
-  `d07-zip-*` (eocd + CD names), `d09-pe-*` (machine, entry RVA, OriginalFilename), `d12-dotnet-*`, `d13-msi-*`,
-  `d14-lnk-*`, `d15-ooxml-*`, `d16-email-*`, `d17-audio-*`, `d18-video-*`, `d19-elf-*`, `d20-macho-*` + synthesis.
-  Dispatch on the answer-id SUFFIX (reference solver answering all 25:
-  `challenges/day20/metadata-universal-appeal/solver/solve.py`).
-- **fmt word vs registry key vs id family word** (D16-D20) -- D16 `email.*` (prebuilt said `eml`); D17
-  `media.primary_audio_codec_name` id `d17-audio-...`; D18 `media.primary_video_dimensions` id `d18-video-...` (one
-  `media` namespace spans two families); D19 plain `elf.e_machine_u16_hex` id `d19-elf-001-elf-e-machine-u16-hex`
-  (family = fmt; spec name `e_machine` keeps its own underscore -> `e-machine`); D20 plain `macho.cpu_type_set` id
-  `d20-macho-001-macho-cpu-type-set`. Vocabulary = the field's home tool (ffprobe for media) or the spec struct
-  (`e_machine`, `coff_machine`, Mach-O `cputype`) -- for binary headers ALWAYS the raw struct integer in `0x` hex, even
-  when the id has no `_hex` suffix (D20 `cpu_type_set` -> `0x0100000c`, name `arm64` REJECTED). Rule: take `<fmt>.<field>` from the QUESTION
-  text (or the slug after `-NNN-`), map fmt synonyms (`email`<->`eml`/`mime`; `media`<->`audio`/`video`/`av`/...),
-  route the extractor by the member's MAGIC, fall back to the same field under any fmt.
+- **Delivery layout** -- see "Delivery layouts seen". Names drift: D1-14 `metadata-day-NN-evidence[-0N].zip`; D15-22
+  TT `evidence.zip`, Mastery `evidence-01.zip` holding `evidence-01..0N.zip` (N=5; D22 N=6). Route by the ref's text
+  before `->` and by sha256, never a hard-coded name.
+- **Field-set / set count** -- D7 TT 11 / Mastery 22; D8-9 12-13 everywhere; D10-14 one; D15 1/20/100 ... D21 1/26/130
+  (+1 field/day); D22 1/27/162 = SIX sets x 27 (first non-5). Enumerate `setN.` prefixes from the live ids. Families:
+  identity + `d04-jpeg` `d05-png` `d06-pdf` `d07-zip` (eocd, CD names) `d09-pe` (machine, entry RVA, OriginalFilename)
+  `d12-dotnet` `d13-msi` `d14-lnk` `d15-ooxml` `d16-email` `d17-audio` `d18-video` `d19-elf` `d20-macho` `d21-apk`
+  `d22-jar` + synthesis. Dispatch on the answer-id SUFFIX (reference solver answering all 27:
+  `challenges/day22/metadata-main-character-energy/solver/solve.py`; lane seed `local_answer` + `synthesis_answer` + lib.meta).
+- **fmt word vs registry key vs id family** -- D16 `email.*` (prebuilt said `eml`); D17/D18 `media.*` ids
+  `d17-audio-`/`d18-video-`; D19 `elf.e_machine_u16_hex` (spec name keeps its underscore -> `e-machine`); D20
+  `macho.cpu_type_set`; D21 `apk.package_name` (container word, not `android`/`axml`); D22 `jar.main_class` (container
+  word, not `java`/`manifest`; field = manifest attribute `Main-Class` snake_cased). Vocabulary = the field's home tool
+  (ffprobe) or the spec struct/attribute; binary-header codes ALWAYS raw `0x` hex, even without `_hex` (D20). Rule: take
+  `<fmt>.<field>` from the question (or the slug after `-NNN-`), map fmt synonyms (`email`<->`eml`/`mime`;
+  `media`<->`audio`/`video`/`av`; `jar`<->`java_archive`/`war`), route the extractor by MAGIC + member names, fall back
+  to the same field under any fmt.
 - **Identity member roster** (D15+) -- THREE small text members (`evidence-note.txt` 33 B, `evidence-note-copy.txt`
-  33 B, `roster.csv` 29 B); EACH identity question picks one at random per set: ids `<member-stem>-{filename,size-bytes,
-  md5,sha1,sha256,magic-prefix-hex-16,text-utf8-bom-present}`. The filename question's artifact = the container only
-  ("the exact filename of the roster") -> map the id stem to the member. Never assume `evidence-note-*`.
+  33 B, `roster.csv` 29 B); each identity question picks one per set: ids `<member-stem>-{filename,size-bytes,md5,sha1,
+  sha256,magic-prefix-hex-16,text-utf8-bom-present}`. Filename question artifact = the container only -> map the stem.
 - **Synthesis / cross-member** (D15+) -- id `metadata-day-NN-synthesis-<algo>-order` (TODAY's NN), kind `json`, norm
-  `case_insensitive`: "Compute the full-file SHA-256 digest of each named file, then submit a compact JSON array of
-  their filenames in ascending digest order. Files: [...]". The `artifact` names ONE member; the inputs are the
-  `Files:` list, same container. Rule: regex `Files:\s*(\[.*?\])`, resolve each under the ref's container,
-  `hashlib.new(algo)` over raw bytes, sort by hex digest (descending only if said), emit names --
-  `lib.meta.synthesis.digest_order(question, get_bytes, algo)`, get_bytes bound to the artifacts root INSIDE the per-set
-  worker. Shape: note + 2 re-picked kit members (jpg/exe/docx D15, png/dll D17, png/msi D18, pdf/lnk D19) + TODAY's
-  member (D20 live: pdf/lnk + `macos-001.bin`; the pre-fetched contract listed zip/docx -- Files differ between the 409
-  body and the live attempt, always read the live text); order re-rolls per set. Only sha256 seen so far.
-- **Decoys** -- renamed copies, misleading extensions, secondary metadata (EXIF, catalog /Version) that disagree with the
-  header: answer from the structural bytes of the member the question names. D19 kit pools `collector-001.elf` with
-  `MZ` members (`telemetry-agent-001.exe`, `managed-001.dll`): an `elf.*` field of a non-ELF = literal `none`.
-- **Member values** -- re-roll per variant; never cache across sets. Seen re-rolled: note case id; D7 entry count
-  2-5; jpg/png dims per set (423x1089, 1255x1059); D10 entry RVA; D11 PE arch (0x014c/0x8664/0xaa64, OriginalFilename
-  `pe-base-<goarch>.exe` follows); D12 MVID; synthesis order. Constant so far (don't rely on it): D13 ProductCode,
-  D14 lnk target, D15 docx targets, kit exe/dll/msi/lnk, D17 codec `pcm_s16le`, D18 video `320x180`, D19 ELF (the same
-  14 408-B x86-64 LSB ELF64 ET_EXEC in single, TT and all 5 Mastery sets), D20 Mach-O (the same 56-B thin MH_MAGIC_64
-  arm64 header + one LC_UUID everywhere) -- the flavors' transcodes/crops/"several systems"/"universal" (BE MIPS/PPC,
-  fat x86_64+arm64) are still due: read with the file's own EI_CLASS/EI_DATA / Mach-O magic, walk every fat slice.
-- **Answer kinds** -- `exact_text`, `integer`, `pattern` (hashes case-insensitive; `0x`-hex is `trim` only -> lowercase),
-  `enum` (`accepted_values`), `json` ("compact valid JSON array with exact values and order"). Emit per kind; read
-  `syntax` for prefix/case. JSON ORDER is field-specific -- see conventions. A `json` kind on a field that is a scalar
-  in the struct (`*_set`, `*_names`, `*_targets`) = a list even with ONE element (D20 thin -> `["0x0100000c"]`).
-- **Question-text tags** -- D9 timed: ` [assigned-artifact-sha256:<64 hex>]` suffix; D15+ timed: ``Inspect `<member>`. ``
+  `case_insensitive`, text "Compute the full-file SHA-256 digest of each named file, then submit a compact JSON array
+  of their filenames in ascending digest order. Files: [...]". Rule: regex `Files:\s*(\[.*?\])`, resolve each under the
+  ref's container, `hashlib.new(algo)` over raw bytes, sort by hex digest, emit names --
+  `lib.meta.synthesis.digest_order(question, get_bytes, algo)` with get_bytes bound INSIDE the per-set worker. Shape:
+  note + re-picked kit members + TODAY's member; 4 names D15-20, FIVE D21-22. The list differs between the 409
+  contract and the live attempt (D20, D22) AND, D22, between sets of ONE Mastery (TT + set1-4 note/png/msi/wav/jar;
+  set5-6 note/pdf/msi/wav/jar) -- parse each set's own text; order re-rolls per set. Only sha256 seen.
+- **Decoys** -- renamed copies, misleading extensions, secondary metadata (EXIF, catalog /Version): answer from the
+  structural bytes of the named member. Kits pool `collector-001.elf` with `MZ` members: `elf.*` of a non-ELF = `none`.
+- **Member values** -- re-roll per variant; never cache across sets. Re-rolled: note case id; D7 entry count 2-5;
+  jpg/png dims per set; D10 entry RVA; D11 PE arch (0x014c/0x8664/0xaa64, OriginalFilename follows); D12 MVID;
+  synthesis order. Constant so far (don't rely on it): ProductCode, lnk target, docx targets, codec `pcm_s16le`, video
+  `320x180`, the D19 ELF, the D20 thin arm64 Mach-O, the D21 APK, the D22 JAR (1 146 B, one Main-Class) in every
+  mode/set. The flavors' BE/fat/nested/launcher variants are still due: read byte order from the file, walk every
+  slice, parse the whole manifest.
+- **Answer kinds** -- `exact_text`, `integer`, `pattern` (hashes case-insensitive; `0x`-hex `trim` only -> lowercase),
+  `enum` (`accepted_values`), `json` (compact array, "exact values and order" -- ORDER is field-specific, see
+  conventions). `*_set`/`*_names`/`*_targets` under `json` = a list even with ONE element (D20 `["0x0100000c"]`).
+- **Question-text tags** -- D9 timed ` [assigned-artifact-sha256:<64 hex>]` suffix; D15+ timed ``Inspect `<member>`. ``
   prefix. Strip both before reading names; route by id + `artifact`.
 - **Nesting depth** -- the asked file may sit 2-3 zips deep (Mastery D7); resolve by the name after `->`, never answer
-  from an enclosing zip. An OOXML member is itself a zip -- parse it as the asked member, not as a wrapper to descend.
+  from an enclosing zip. OOXML/APK/JAR members ARE zips -- parse them as the asked member, don't descend as a wrapper.
 
 ## Recognition cues -> first move
 | You see | First move |
@@ -101,6 +94,8 @@ How this lane has looked so far (observations, not guarantees):
 | `pe.version_*` | `pefile` resource dir only -> `FileInfo..StringTable..entries`; id tail -> key ignoring case/`-_`. Shell: `strings -e l f.exe \| grep -A1 OriginalFilename` |
 | `elf.*` (`7f 45 4c 46`) | EI_CLASS @4 (1=32, 2=64), EI_DATA @5 (1=LSB `<`, 2=MSB `>`) picks the struct byte order for EVERYTHING after @16: e_type u16 @16, e_machine u16 @18, e_version u32 @20, e_entry @24 (u32/u64 by class). `xxd -s 16 -l 4 f` + `readelf -h f`. In-window: `lib.meta` fmt `elf` (~45 fields: ei_*, e_type, e_entry_hex, e_flags, interp, build-id, section names). D19 `3e 00` LSB -> `0x003e` |
 | `macho.*` (`cf fa ed fe` LE-64, `ce fa ed fe` LE-32, `fe ed fa ce/cf` BE; fat `ca fe ba be` / fat64 `ca fe ba bf`, always BE) | thin: cputype u32 @4, cpusubtype @8, filetype @12, ncmds @16 (byte order from the magic). Fat: nfat_arch u32 @4, then 20-B (fat64 32-B) fat_arch {cputype, cpusubtype, offset, size, align}; Java class shares `cafebabe` (major @6 >= 45). D20 `cpu_type_set` = JSON list `"0x%08x"` per slice (thin = 1). `xxd -l 32 f`; `rabin2 -I f`; `lipo -archs` (M). `lib.meta` fmt `macho` |
+| `apk.*` / `.apk` (`PK` + `AndroidManifest.xml` + `classes.dex`, `META-INF/*.RSA/.SF/MANIFEST.MF`) | manifest is BINARY AXML (`03 00 08 00`): `aapt dump badging f.apk \| head -1` -> `package: name='..' versionCode versionName platformBuild..` (on PATH after `source bin/env.sh`); `androguard` `APK(b, raw=True).get_package()`; stdlib: `lib/meta/apk.py manifest_attr(axml, 'manifest', 'package')` (string pool + START_ELEMENT walk). `strings -e l AndroidManifest.xml` for orientation. Triage routes APKs to `$mobile-android` -- ignore it, the question is a header field |
+| `jar.*` / `.jar/.war/.ear` (`PK` + `META-INF/MANIFEST.MF` + `*.class` `cafebabe`) | `unzip -p f.jar META-INF/MANIFEST.MF` (text, CRLF, 72-B lines, continuation = ONE leading space joined); main section = up to the first blank line; attr names case-insensitive. D22 `main_class` = `Main-Class` value verbatim (dotted name, no `.class`). Cross-check `<name with / >.class` exists + `javap -v` (or u16 BE major @6) only as a diagnostic. Spring Boot: `Main-Class` = `org.springframework.boot.loader.*Launcher`, app = `Start-Class`; nested `BOOT-INF/lib/*.jar`. In-window: `lib/meta/prebuilt/jar.py` (fmt `jar`, ~40 manifest/class-version fields). Triage routes `.class` to `$binary-re` -- ignore |
 | `dotnet.*` / Mono assembly | data dir 14 -> CLI header -> `BSJB` -> `#~` (HeapSizes @+6, Valid @+8, rows @+24) -> Module row 0 Mvid (1-based #GUID idx) -> `uuid.UUID(bytes_le=..)`. `lib/meta/dotnet.py` |
 | `msi.*` / `.msi` (OLE `d0 cf 11 e0`) | fast: `strings -n 6 x.msi \| grep -aoE 'ProductCode\{[0-9A-F-]{36}\}'`; exact: CFB streams -> `!_StringPool`/`!_StringData` -> `!Property` (column-major). `olefile` in venv; `day13/.../solve.py msi_property` |
 | `lnk.*` / `.lnk` (`4c 00 00 00` + CLSID 00021401) | LinkFlags @0x14 (0x1 IDList, 0x2 LinkInfo, 0x80 Unicode); target = LinkInfo LocalBasePath (+CommonPathSuffix) verbatim, else IDList. `lib.meta.lnk:target_path` |
@@ -122,27 +117,34 @@ How this lane has looked so far (observations, not guarantees):
 `version_original_filename` verbatim -> D12 `dotnet.mvid_guid` (`uuid.UUID(bytes_le)` lowercase, no braces) -> D13
 `msi.product_code_guid` (stored WITH braces; brace-less REJECTED) -> D14 `lnk.target_path_windows` (LinkInfo path).
 
-**Days 15-19** (single = 1 new-family field; TT/Mastery = cumulative kit + synthesis): D15 `ooxml.external_relationship_
+**Days 15-21** (single = 1 new-family field; TT/Mastery = cumulative kit + synthesis): D15 `ooxml.external_relationship_
 targets` (rels `TargetMode="External"` Targets SORTED; rels order REJECTED). D16 `email.message_id` (VERBATIM with `<>`;
 2 lost: id regex -> `none`, stripped brackets). D17 `media.primary_audio_codec_name` (WAV PCM16 -> `pcm_s16le`). D18
 `media.primary_video_dimensions` (first `vide` trak stsd -> `320x180`; prebuilt hit ~5 s). D19 "Little Endian"
 `elf.e_machine_u16_hex` (e_machine @18 in EI_DATA order -> `0x003e`; i386 `0x0003`, MIPS `0x0008`, PPC `0x0014`, ARM
-`0x0028`, AArch64 `0x00b7`, RISC-V `0x00f3`; prebuilt hit ~13 s). Timed D15-D17 + D19: synthesis dispatch missing from
-the day's template -> `solver_incomplete` -> offline generalize -> CORRECT; D18 pre-wired -> first try.
+`0x0028`, AArch64 `0x00b7`, RISC-V `0x00f3`; prebuilt hit ~13 s). D20 "Universal Appeal" `macho.cpu_type_set` (56-B
+THIN `cffaedfe` arm64 header, cputype u32 @4 -> `["0x0100000c"]`: raw struct hex in a JSON list, thin = one element;
+`["arm64"]` REJECTED +5 s; fat/archives/fleet flavor only; ~39 s). D21 "Package Deal" `apk.package_name` (8 535-B
+APK, binary-AXML `<manifest package=>` verbatim `com.huntress.arena.p<8 digits>` -- NOT the inline `android:label`, NOT
+the filename; `aapt dump badging | head -1`; registry MISS -> ~32 s live). Timed D15-D17 + D19: synthesis dispatch
+missing from the day's template -> `solver_incomplete` -> offline generalize -> CORRECT; D18, D20, D21 pre-wired -> first try.
 
-**Day 20 — Universal Appeal** (`macho.cpu_type_set`, kind `json` "compact valid JSON array with exact values and
-order", norm `trim`, id `d20-macho-001-macho-cpu-type-set`). Prompt: "A macOS deployment includes thin and universal
-binaries mixed with archives. Enumerate every CPU type and identify what truly supports the advertised fleet."
-- Artifact: `macos-001.bin`, 56 B, header-only THIN Mach-O: `cffaedfe` (MH_MAGIC_64, LE), cputype `0c 00 00 01` =
-  0x0100000c (ARM 12 | ABI64 0x01000000 = CPU_TYPE_ARM64), subtype 0, filetype 2 EXECUTE, ncmds 1 (LC_UUID 0x1b).
-  Identical in single, TT and all 5 Mastery sets; universal/archives/fleet were flavor only.
-- Insight: "universal" = fat -> a SET field (one cputype per fat_arch slice); thin -> one element. Spelling = the raw
-  u32 struct value like D9/D19: `["0x0100000c"]` (8 padded digits, ABI64 bit kept). `["arm64"]` was REJECTED.
-- Tools: `xxd -l 32 f` (cputype @4, byte order from the magic); `rabin2 -I` / lief for orientation. Prebuilt `macho`
-  matched `cpu_type_set` via its scalar `cpu_type` branch (bare hex) -> the worker wrapped it in a list. Fat order
-  (fat_arch order vs sorted, dedupe) is NOT yet GM-verified.
-- Single: wrong `["arm64"]` +34 s, CORRECT +39 s. TT 25 / Mastery 125 CORRECT in-window first try (solver carried the
-  D19 synthesis dispatch forward; no generalize).
+**Day 22 — Main Character Energy** (`jar.main_class`, kind `exact_text`, norm `trim`, id `d22-jar-001-jar-main-class`).
+Prompt: "Java archives contain libraries, applications, and nested dependencies whose manifests disagree with their
+launchers. Determine what is runnable and where execution begins."
+- Artifact: `metadata-day-22-evidence.zip` (741 B) -> `application-001.jar` (1 146 B, 4 deflated entries):
+  `META-INF/MANIFEST.MF` (111 B, CRLF: `Manifest-Version: 1.0` / `Main-Class: arena.evidence.ArtifactMain` /
+  `Created-By: Huntress Artifact Assembly Line` + blank line), `arena/evidence/ArtifactMain.class` (370 B, major 52 =
+  Java 8 -- the class the manifest names DOES exist), filler `evidence/header.bin` (`HUNTRESS`) + `evidence/marker.txt`
+  (12 hex chars). No nested jars, no Spring Boot launcher, no signature, no Class-Path: the "disagree" flavor was unasked.
+- Insight: `main_class` = the manifest's `Main-Class` attribute value verbatim (binary name with dots, no `.class`, no
+  `/`, CRLF/trailing space trimmed). Not the class path in the zip, not `Created-By`, not a decompiled `main` hunt.
+- Tools: `unzip -p f.jar META-INF/MANIFEST.MF`; stdlib `zipfile` + manifest parse (continuations, case-insensitive
+  keys). Prebuilt `lib/meta/prebuilt/jar.py` (D21-night `jar-manifest-class-versions` gap) answered it in the race probe
+  -> GM CORRECT at +19 s. A `--from-solver` submit of `none` from the unwired day template landed at +28 s, AFTER the
+  CORRECT (`already_solved`, harmless) -- it would have been a wrong submit had the probe missed.
+- Timed: TT 27 / Mastery 162 (six sets) CORRECT first try in-window (5.4 s / 5.9 s); synthesis Files varied per set.
+  Spelling confirmed: dotted binary name verbatim; nothing rejected. Time to CORRECT: single ~19 s, 0 wrong.
 
 ## GM answer conventions learned
 - Filenames: exact base name incl. extension, no directory. Sizes: base-10 integer, no units. Hashes: hex, case ignored.
@@ -164,10 +166,10 @@ binaries mixed with archives. Enumerate every CPU type and identify what truly s
   binary lane's machine wants `i386` and accepted unpadded entry points -- different generator.)
 - GUIDs: .NET MVID `Guid.ToString()` lowercase no braces (D12); MSI ProductCode the stored string uppercase WITH braces
   (D13). Spelling follows the source, not answer_format.
-- Windows paths (`lnk.target_path_windows`): stored LinkInfo path verbatim (backslashes, case, drive letter, no quotes).
-- Version-resource strings (`pe.version_<field>`): StringFileInfo value verbatim incl. extension.
-- URLs (`ooxml` Targets): the attribute value verbatim -- scheme, host, path as stored; no trailing-slash or case fixups.
-- E-mail headers (`email.<field>`): header value as stored after RFC 5322 unfolding; Message-ID WITH `<>` (D16).
+- Stored strings VERBATIM (no quotes, case kept, delimiters kept): LNK LinkInfo path (backslashes, drive letter; D14),
+  PE StringFileInfo value incl. extension (D11), OOXML Target URL as stored (D15), e-mail header after RFC 5322
+  unfolding -- Message-ID WITH `<>` (D16), Android manifest `package` attribute (dotted applicationId, D21), JAR
+  manifest `Main-Class` value after continuation-joining (dotted binary name, no `.class`, D22).
 - Media codec names (`media.*codec_name`, D17): ffprobe `codec_name`: WAV tag 1 -> `pcm_u8`/`pcm_s16le`/`pcm_s24le`/
   `pcm_s32le` by bits (RIFX `..be`), 3 `pcm_f32le`, 6 `pcm_alaw`, 7 `pcm_mulaw`, 0x55 `mp3`; only `pcm_s16le` verified.
 - Rejected spellings: `0x65bd0` (D10, unpadded); brace-less MSI GUID (D13); rels-file-order target list (D15);
@@ -180,50 +182,51 @@ binaries mixed with archives. Enumerate every CPU type and identify what truly s
 
 ## Delivery layouts seen (resolve these before parsing)
 - Single / TT: one zip; members named in `artifact` after `->` (filename questions: artifact = the zip only). Mastery
-  (most days, all of D15-20): ONE download holding `-01.zip`..`-0N.zip` (D7 three levels; D15+ five full kits); refs
+  (most days, all of D15-22): ONE download holding `-01.zip`..`-0N.zip` (D7 three levels; D15-21 five kits, D22 six); refs
   `<set zip> -> <member>`, names reused per set -> resolve by (set zip, member). D9: download `<id>-mastery.zip` vs refs
   `...-evidence-0N.zip` -> resolve by sha256 (`lib.common.container_by_sha`). D6: two same-named downloads ->
   `delivery N: <zip>` refs. Member numbering shifts between pre-fetched contract and live attempt -- never hardcode.
 
 ## Pitfalls that cost time
-- **Synthesis dispatch lost AGAIN (D15, D16, D17, D19)**: every day the single's `solve.py` answers the new field but the
-  timed kit adds `metadata-day-NN-synthesis-sha256-order` -> `solver_incomplete` -> an offline generalize (~1 min per
-  mode). D18 was clean only because the single worker pre-wired it. Right after single CORRECT: `grep -n synthesis
-  solver/solve.py` must show a dispatch calling `lib.meta.synthesis.digest_order`, with the artifacts root set INSIDE
-  the per-set worker (`_solve_pairs`; Mastery forks one process per set), plus identity for ANY member stem and every
-  carry-over family. Start from the previous day's solver, not a fresh template.
-- Id-slug parsing (D16, 1 wrong): ids repeat the fmt word (`d16-email-001-email-message-id`); a regex on the first
-  `email-` yields `001-email-message-id` -> lookup miss -> `none`. Anchor `-\d+-<fmt>-(.+)$`. Never submit `none`
-  without grepping the bytes for the field -- `none` means absent in the artifact, not "my parser returned None".
-- Registry misses (D14 key one suffix short `lnk.target_path`; D16 fmt `eml` vs GM `email`; D17 `wav.*` vs `media.*`):
-  `python3 -c "import lib.meta as m; print([k for k in m.known_fields() if k[0]=='<fmt>'])"` and grep
-  `lib/meta/prebuilt/*.py` for the FIELD name; call the nearest extractor directly. D18-D20 HIT the registry. D20
-  substring trap: `cpu_type_set` fell into macho's scalar `cpu_type` branch -> bare hex where `json` wants a list --
-  check the SHAPE vs answer_format; `_set`/`_list`/`_names` = one entry per slice/member (wrap a thin value in `[...]`).
-- Endianness (D19 pun): never `struct.unpack('<H')` an ELF/Mach-O field blindly -- EI_DATA (ELF @5) / the Mach-O magic
-  byte order decide (`cffaedfe` = LE; fat headers are ALWAYS BE, their slices carry their own magic); ELF32 vs ELF64
-  moves every offset after e_version. Fat: cputype is in BOTH fat_arch and the slice header -- they may disagree in a
-  variant ("what truly supports"): the set field reads fat_arch; note the slice header if they differ.
-- Video geometry has FOUR sources (stsd w/h, SPS crop = ffprobe width/height, tkhd display w/h, tkhd matrix rotation);
-  D18 they agreed. If a variant's stsd and SPS disagree, trust the SPS-cropped size.
-- Field suffix picks the spelling: `_u16_hex` = the raw struct value (D9: not `i386`/GOARCH; D19: not `x86-64`);
-  `_codec_name` = the tool vocabulary (D17: `pcm_s16le`, not the raw format tag `1` nor mediainfo's `PCM`). NO suffix
-  on a binary-header code (D20 `cpu_type_set`, 1 wrong + 5 s): still the raw struct hex (`0x0100000c`), not `arm64`.
-  Only a field that SAYS `_name`/`_arch_names` gets a name.
-- JSON list ORDER (D15, 1 wrong + ~26 s): "exact values and order" does not say WHICH order. File order was rejected
-  for rels targets; sorted won. Decide per field (conventions above) before the first submit.
+- **Synthesis dispatch** (lost D15, D16, D17, D19 -> `solver_incomplete` -> ~1 min offline generalize per mode): the
+  timed kit always adds `metadata-day-NN-synthesis-sha256-order`. Use the lane seed (`local_answer` +
+  `synthesis_answer` -> `lib.meta.synthesis.digest_order`, artifacts root set INSIDE `_solve_pairs`; Mastery forks one
+  process per set) and only add today's field -- D18, D20-D22 were clean that way. Identity must accept ANY member stem.
+- Registry misses: D14 key one suffix short (`lnk.target_path`); D16 fmt `eml` vs GM `email`; D17 `wav.*` vs `media.*`;
+  D21 no `apk` fmt at all (prebuilt had `dex`/`jar`/`java` -- a new CONTAINER family needs its own fmt word, not just
+  its inner members) -> ~32 s LLM solve instead of ~5-19 s. D22 HIT: the D21-night gap built fmt `jar` (container
+  word + manifest fields) -> probe CORRECT ~19 s. Check `python3 -c "import lib.meta as m; print([k for k in
+  m.known_fields() if k[0]=='<fmt>'])"`, grep `lib/meta/prebuilt/*.py` for the FIELD, call the nearest extractor.
+  D20 substring trap: `cpu_type_set` hit macho's scalar `cpu_type` -> bare hex where `json` wants a list: check the
+  SHAPE vs answer_format (`_set`/`_list`/`_names` = one entry per slice/member; wrap a thin value in `[...]`).
+- Unwired day template (D22): `hctf submit --from-solver` before today's field is dispatched emits literal `none`
+  for it. Only submit from the solver once `solve.py` prints a real value for EVERY id (the race probe saved D22).
+- Manifest attributes (D22): text, but parse it properly -- CRLF, 72-byte wrap with ONE-space continuations, case-
+  insensitive names, main section only (per-entry `Name:` sections after the first blank line are NOT main attrs).
+  Spring Boot / launcher jars: `Main-Class` is the launcher, `Start-Class` the app -- answer the attribute the field names.
+- Id-slug parsing (D16, 1 wrong): ids repeat the fmt word (`d16-email-001-email-message-id`); anchor `-\d+-<fmt>-(.+)$`.
+  Never submit `none` without grepping the bytes -- `none` = absent in the artifact, not "my parser returned None".
+- Field suffix picks the spelling: `_u16_hex` = raw struct value (D9 not `i386`; D19 not `x86-64`); `_codec_name` =
+  tool vocabulary (D17 `pcm_s16le`, not tag `1`/mediainfo `PCM`); NO suffix on a binary-header code (D20, 1 wrong) is
+  still raw hex, not `arm64`. Only a field that SAYS `_name`/`_arch_names`/`_label` gets a name; `apk.package_name` is
+  the applicationId, not the human label (`android:label` = the "product name").
+- Byte order (D19 pun): ELF EI_DATA @5 / the Mach-O magic decide (`cffaedfe` = LE; fat headers ALWAYS BE, slices carry
+  their own magic); ELF32 vs ELF64 moves every offset after e_version. Fat cputype is in BOTH fat_arch and the slice
+  header -- may disagree in a variant: the set field reads fat_arch. Video geometry has FOUR sources (stsd, SPS crop =
+  ffprobe, tkhd display, tkhd matrix); D18 agreed; on disagreement trust the SPS-cropped size.
+- JSON list ORDER (D15, 1 wrong + ~26 s): "exact values and order" does not say WHICH order -- decide per field
+  (conventions) before the first submit. Don't reshape stored strings (D13 braces); hex width (D10) `0x%0{2*size}x`.
 - A pre-fetched TT/Mastery `contract.json` is the 409 `start_required` body (questions, NO `answer_ids`); answer under
-  the live `answer_ids`. Don't let the flavor widen the question: only the named field is graded.
-- Container-of-containers: a naive `rfind(PK\x05\x06)` on the downloaded zip reads the OUTER EOCD, a name lookup on
-  zip-of-zips returned `PK` as the "magic". Resolve the named member's bytes first (recurse), then parse.
-- Name-list fields: emit CD bytes as-is for hostile names (`../`, `/abs`, `\`, dupes). Decoy names (`*-with-bom.txt`,
-  `.exe` that is text, `.bin` that is PDF): bytes win every time.
-- Timed windows are seconds; most of it is GM round-trips (D20 start 1.4-4.0 s + download 0-2 s + submit 2-2.3 s;
-  solve ~1.6 s). Parse in memory, never shell out/extract to disk in-window; decompress each member once, cache by
-  (set zip, member).
-- Don't reshape a stored string (D13 braces). Hex width (D10): `"0x%x"` drops zeros; print `0x%0{2*size}x`; `_rva` =
-  raw field. Require `PE\0\0` / `\x7fELF` / a Mach-O magic before any field of that format (else `none`).
+  the live ids. Only the named field is graded -- the flavor never widens it.
+- Container-of-containers: a naive `rfind(PK\x05\x06)` reads the OUTER EOCD; a name lookup on zip-of-zips returned `PK`
+  as the "magic". Resolve the named member's bytes first (recurse), then parse. Hostile CD names (`../`, dupes) as-is.
+- Decoys: `*-with-bom.txt`, `.exe` that is text, `.bin` that is PDF, friendly APK filenames: bytes win. Require
+  `PE\0\0` / `\x7fELF` / a Mach-O magic / `AndroidManifest.xml` / `META-INF/MANIFEST.MF` before any field of that
+  format (else `none`; a jar WITHOUT a `Main-Class` -- a library -- is `none` for `main_class`).
+- Timed windows are seconds, mostly GM round-trips (D22 TT start 1.9 s + solve 3.3 s + submit 2.1 s; Mastery 2.0 +
+  2.6 + 3.3 s for 162 fields). Parse in memory, never shell out in-window; decompress each member once, cache by (set zip, member).
 - Tools installed: exiftool, poppler, qpdf, mutool, pdf-parser, pdfid, pngcheck, zsteg, steghide, binwalk, foremost,
-  mediainfo, sqlite3, ImageMagick, readelf/objdump, olevba/oleid, olefile, pefile, pyelftools, LnkParse3, dnfile,
-  mutagen (.venv); msitools under tools/msitools; ffmpeg 7.0.2 (no ffprobe) at
-  `tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2` (not on PATH). NOT installed: ffprobe, sox.
+  mediainfo, sqlite3, ImageMagick, readelf/objdump, aapt + apktool/jadx (`source bin/env.sh`), olevba/oleid, olefile,
+  pefile, pyelftools, LnkParse3, dnfile, mutagen, androguard (.venv; androguard is gate-allowed in-window); msitools
+  under tools/msitools; ffmpeg 7.0.2 (no ffprobe) at `tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/
+  ffmpeg-linux-x86_64-v7.0.2` (not on PATH). NOT installed: ffprobe, sox.

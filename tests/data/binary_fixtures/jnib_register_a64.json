@@ -1,0 +1,83 @@
+{
+ "family": "jni_bridge",
+ "jar": "jnib_register.jar",
+ "so": "jnib_register_a64.bin",
+ "decoy": false,
+ "generator_cmd": "bash tests/data/binary_fixtures/jnib_gen.sh <workdir>  (javac/jar, javac -h, gcc / aarch64-linux-gnu-gcc -shared -I$JAVA_HOME/include, coreutils base64 + gzip crc)",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/jnib_oracle.py jnib_register.jar jnib_register_a64.bin   # javap -p -s/-c, readelf -W --dyn-syms/-s/-r/-S/-d, grep -obUa, javac -h header",
+ "note": "same RegisterNatives source for aarch64 (R_AARCH64_RELATIVE), -s stripped: fn_symbol none",
+ "expected_facts": {
+  "soname": "none",
+  "jni_onload": "true",
+  "registered_natives": [
+   {
+    "name": "verify",
+    "signature": "(Ljava/lang/String;J)Z",
+    "fn_address": "0x768",
+    "fn_symbol": "none",
+    "table": "0",
+    "slot": "0x1fda0"
+   },
+   {
+    "name": "table",
+    "signature": "()[I",
+    "fn_address": "0x778",
+    "fn_symbol": "none",
+    "table": "0",
+    "slot": "0x1fdb8"
+   },
+   {
+    "name": "reset",
+    "signature": "()V",
+    "fn_address": "0x798",
+    "fn_symbol": "none",
+    "table": "0",
+    "slot": "0x1fdd0"
+   }
+  ],
+  "registered_count": "3",
+  "jni_export_count": "0",
+  "native_methods": [
+   {
+    "class": "com.acme.Licensor",
+    "name": "verify",
+    "descriptor": "(Ljava/lang/String;J)Z",
+    "static": "true",
+    "binding": "register",
+    "symbol": "none",
+    "fn_address": "0x768"
+   },
+   {
+    "class": "com.acme.Licensor",
+    "name": "table",
+    "descriptor": "()[I",
+    "static": "false",
+    "binding": "register",
+    "symbol": "none",
+    "fn_address": "0x778"
+   },
+   {
+    "class": "com.acme.Licensor",
+    "name": "reset",
+    "descriptor": "()V",
+    "static": "false",
+    "binding": "register",
+    "symbol": "none",
+    "fn_address": "0x798"
+   }
+  ],
+  "native_method_count": "3",
+  "load_library": "licz",
+  "load_libraries": [
+   "licz"
+  ],
+  "native_method_names": [
+   "verify",
+   "table",
+   "reset"
+  ],
+  "hcfg_member": "so",
+  "hcfg_entry": "<lib>",
+  "hcfg_offset": "2264"
+ }
+}

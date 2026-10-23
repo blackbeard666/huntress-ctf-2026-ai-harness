@@ -1,0 +1,83 @@
+{
+ "family": "jni_bridge",
+ "jar": "jnib_register.jar",
+ "so": "jnib_register.bin",
+ "decoy": false,
+ "generator_cmd": "bash tests/data/binary_fixtures/jnib_gen.sh <workdir>  (javac/jar, javac -h, gcc / aarch64-linux-gnu-gcc -shared -I$JAVA_HOME/include, coreutils base64 + gzip crc)",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/jnib_oracle.py jnib_register.jar jnib_register.bin   # javap -p -s/-c, readelf -W --dyn-syms/-s/-r/-S/-d, grep -obUa, javac -h header",
+ "note": "JNI_OnLoad + FindClass + RegisterNatives; JNINativeMethod table in .data.rel.ro via R_X86_64_RELATIVE; HCFG base64 in the .so",
+ "expected_facts": {
+  "soname": "none",
+  "jni_onload": "true",
+  "registered_natives": [
+   {
+    "name": "verify",
+    "signature": "(Ljava/lang/String;J)Z",
+    "fn_address": "0x1119",
+    "fn_symbol": "lic_verify",
+    "table": "0",
+    "slot": "0x3dc0"
+   },
+   {
+    "name": "table",
+    "signature": "()[I",
+    "fn_address": "0x1128",
+    "fn_symbol": "lic_table",
+    "table": "0",
+    "slot": "0x3dd8"
+   },
+   {
+    "name": "reset",
+    "signature": "()V",
+    "fn_address": "0x1143",
+    "fn_symbol": "lic_reset",
+    "table": "0",
+    "slot": "0x3df0"
+   }
+  ],
+  "registered_count": "3",
+  "jni_export_count": "0",
+  "native_methods": [
+   {
+    "class": "com.acme.Licensor",
+    "name": "verify",
+    "descriptor": "(Ljava/lang/String;J)Z",
+    "static": "true",
+    "binding": "register",
+    "symbol": "lic_verify",
+    "fn_address": "0x1119"
+   },
+   {
+    "class": "com.acme.Licensor",
+    "name": "table",
+    "descriptor": "()[I",
+    "static": "false",
+    "binding": "register",
+    "symbol": "lic_table",
+    "fn_address": "0x1128"
+   },
+   {
+    "class": "com.acme.Licensor",
+    "name": "reset",
+    "descriptor": "()V",
+    "static": "false",
+    "binding": "register",
+    "symbol": "lic_reset",
+    "fn_address": "0x1143"
+   }
+  ],
+  "native_method_count": "3",
+  "load_library": "licz",
+  "load_libraries": [
+   "licz"
+  ],
+  "native_method_names": [
+   "verify",
+   "table",
+   "reset"
+  ],
+  "hcfg_member": "so",
+  "hcfg_entry": "<lib>",
+  "hcfg_offset": "8288"
+ }
+}

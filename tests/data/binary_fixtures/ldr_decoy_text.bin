@@ -1,0 +1,1 @@
+ELF loader notes: DT_RPATH=$ORIGIN/lib DT_RUNPATH=/opt/x INTERP=/lib/ld.so SONAME=libfake.so.1

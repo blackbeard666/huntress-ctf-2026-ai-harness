@@ -1,0 +1,11 @@
+{
+ "family": "symbol_versioning",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": null,
+ "generator_cmd": "bash symver_gen.sh   # printf: a version-script-looking text file renamed .bin (not an ELF -> None); compiled, never run/preloaded",
+ "oracle_cmd": "python3 symver_oracle.py symver_decoy_text.bin   # readelf -VW / readelf --dyn-syms -W / objdump -d -Mintel / nm -D --defined-only libc.so.6 / pyelftools",
+ "decoy": true,
+ "note": "lib.binary.elf_version_field(data, key) per expected_facts key (null expected_facts: elf_version_facts -> None); key names SPECULATIVE (GM label not seen)"
+}

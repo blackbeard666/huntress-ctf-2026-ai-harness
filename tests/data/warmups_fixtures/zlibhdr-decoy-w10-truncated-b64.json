@@ -1,0 +1,11 @@
+{
+ "codec": "zlib-header-sweep decoy",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-73",
+ "encoded": "KM8lyTEOwjAMBdCr/O506oDEBZjK1AuY5IumNDGyXcLxQWJ971YS0dWeyEyaS3sg1uLoYvV4DVgUrvubJ/hxryX+y4+kgDTvNIT+kLhKJWbxoF2wSea40g==",
+ "decoy": true,
+ "why": "stream cut before the final block ends",
+ "generator_cmd": "printf %s \"$plain\" | perl -MCompress::Raw::Zlib -e '($w,$l,$d)=@ARGV; ($z)=Compress::Raw::Zlib::Deflate->new(-WindowBits=>$w,-Level=>$l,-AppendOutput=>1,(length $d ? (-Dictionary=>$d) : ())); local $/; $i=<STDIN>; $z->deflate($i,$o); $z->flush($o); print $o' -- 10 9 '' | head -c -9 | base64 -w0  # perl Compress::Raw::Zlib writer + coreutils",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | python3 -c 'import sys,zlib\ntry: o=zlib.decompressobj(int(sys.argv[1])); r=o.decompress(sys.stdin.buffer.read()); print(r.decode() if o.eof else \"none\")\nexcept Exception: print(\"none\")' 15  # python zlib, no dictionary",
+ "oracle_plain": "none",
+ "expected": "none"
+}

@@ -1,0 +1,1 @@
+{"unicode": true, "comp": "deflate", "strcpy": ["Installation complete", "https://example.org/help"], "files": [["readme.txt", "Thanks for installing Huntress Notepad.\n"], ["license.txt", "MIT License\n"]]}

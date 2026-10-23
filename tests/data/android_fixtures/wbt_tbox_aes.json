@@ -1,0 +1,8 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-5e0b7a93c1d26f48",
+ "decoy": false,
+ "_why": "WhiteBox.decrypt(byte[]): AES-128 equivalent-inverse-cipher as a T-table walk (Td0..Td3 int[256], Td4 byte[256], decrypt round keys folded into int[44] RK), 9 Td rounds + Td4 last round per 16-byte block; ciphertext only in assets/wb.bin, read by reveal(InputStream) -- no literal, no evaluable caller",
+ "generator_cmd": "python3 tests/data/android_fixtures/wbt_src/gen_wbt.py tbox_aes tests/data/android_fixtures/wbt_tbox_aes.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile (pycryptodome AES-ECB / python S-box shuffle only as the encrypting writer)",
+ "oracle_cmd": "same generator, stage 2: host JVM runs WhiteBox.reveal(FileInputStream(wb.bin)) -> 'ANS-5e0b7a93c1d26f48'; cross-check `openssl enc -d -aes-128-ecb -nopad -K 2b7e151628aed2a6abf7158809cf4f3c -in wb.bin` -> b'ANS-5e0b7a93c1d26f48' + PKCS7 pad (unzip -p wbt_tbox_aes.apk assets/wb.bin | openssl enc -d -aes-128-ecb -nopad -K 2b7e151628aed2a6abf7158809cf4f3c | head -c 20)"
+}

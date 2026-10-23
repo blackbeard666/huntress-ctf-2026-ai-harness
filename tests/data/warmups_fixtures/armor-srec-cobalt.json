@@ -1,0 +1,9 @@
+{
+ "codec": "srec",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-finch-23",
+ "encoded": "S00E00002F6465762F7374646F7574B1\r\nS11300004E69636520776F726B206465636F646902\r\nS11300106E672074686973207761726D7570212032\r\nS1130020546F20736F6C76652C207375626D6974E0\r\nS1130030207468697320657861637420616E7377D6\r\nS1130040657220746F207468652047616D65204D6A\r\nS113005061737465723A20636F62616C742D6669B2\r\nS10900606E63682D3233CB\r\nS9030000FC\r\n",
+ "generator_cmd": "f=$(mktemp); printf %s \"$plain\" > $f; objcopy -I binary -O srec $f /dev/stdout; rm -f $f",
+ "oracle_cmd": "f=$(mktemp); printf \"%s\\n\" \"$encoded\" > $f; objcopy -I srec -O binary $f /dev/stdout; rm -f $f",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-finch-23",
+ "expected": "match"
+}

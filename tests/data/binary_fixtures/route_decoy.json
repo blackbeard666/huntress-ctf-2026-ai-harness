@@ -1,0 +1,51 @@
+{
+ "format": "zip of a multi-member dNN-- group",
+ "members": [
+  "d24--variant-000-loader.elf",
+  "d24--variant-000-plugin_x.so",
+  "d24--variant-000-plugin_y.so",
+  "d24--variant-000-notes.elf"
+ ],
+ "expected_sha256": [
+  "58100819bfecca5ef8704280d0e6defbe82e0152761bb7a2d8731e404bd039ea",
+  "b9a36c8feffbd57cb5cac982841e1f82e5bd0434817b8b8a095625a2ea4075da",
+  "b9a36c8feffbd57cb5cac982841e1f82e5bd0434817b8b8a095625a2ea4075da",
+  "64f82c49ba282b001759fadf09bf629fda3a80cebd6ea9b0cbf38270e9e489b1"
+ ],
+ "routes": [
+  {
+   "id": "d24_analysis_config_campaign",
+   "question": "In evidence.zip, Use all d24-- members in ZIP central-directory order. Scan the specified member for literal HCFG magic and accept the first record whose bounds, CRC32, and decoded JSON validate.",
+   "member": null,
+   "residual": "config_campaign"
+  },
+  {
+   "id": "d24_analysis_plugin_machine",
+   "question": "In evidence.zip, Use all d24-- members in ZIP central-directory order. Read the ELF e_machine field and submit its unsigned base-10 numeric value.",
+   "member": null,
+   "residual": "plugin_machine"
+  },
+  {
+   "id": "d24_analysis_soname",
+   "question": "Use the member that exports beta_run.",
+   "member": null,
+   "residual": "soname"
+  },
+  {
+   "id": "d24_analysis_soname",
+   "question": "Use the library named by the loader's DT_NEEDED entry.",
+   "member": null,
+   "residual": "soname"
+  },
+  {
+   "id": "d24_analysis_plugin_x_soname",
+   "question": "In evidence.zip, Use all d24-- members in ZIP central-directory order. ",
+   "member": "d24--variant-000-plugin_x.so",
+   "residual": "soname"
+  }
+ ],
+ "generator_cmd": "FX=$PWD bash route_gen.sh   # gcc -shared -Wl,-soname / gcc -ldl, strip, wat2wasm, python3 zlib.crc32 header, zip -X -j",
+ "oracle_cmd": "bash route_oracle.sh route_decoy.bin   # unzip -Z1, readelf -hW/-lW/-dW/--dyn-syms, strings, grep -obUa HCFG + binascii.crc32",
+ "decoy": true,
+ "note": "DECOY: the only HCFG is the loader's bad-crc one (and a text impostor); plugin_x/plugin_y identical"
+}

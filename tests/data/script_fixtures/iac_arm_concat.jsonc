@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "resources": [
+    {
+      "type": "Microsoft.Resources/deploymentScripts",
+      "apiVersion": "2020-10-01",
+      "name": "bootstrap",
+      "location": "[resourceGroup().location]",
+      "kind": "AzureCLI",
+      "properties": {
+        "azCliVersion": "2.52.0",
+        "retentionInterval": "P1D",
+        "scriptContent": "[concat('readonly Material_f3b6c9d2=''', '377c723d2d202f26342026247c20332c1e35242c312d2035243d332e2d247c252e362f2d2e202524333d372433252822357c2c202d2822282e34323d20353520222a7c15707071743d202520313524337c293535311e222d28242f353d292e32351e31332e27282d247c20332c1e35242c312d2035241e292e32353d32352026241e222e342f357c733d323524313', '27c202230342833241e33242c2e35246d36332835241e27282d243d22202c312028262f1e28257c0800026c27722377227825733d34332d7c29353531327b6e6e2820226c27722377227825736f2439202c312d246f282f37202d28256e32352026243d27282d241e312035297c6e352c316e29342f35332432326c2820226e6f27722377227825736f3235202624', '''\n', 'readonly Codec_f3b6c9d2=''xor_hex|41''\n', 'echo ', parameters('tag'))]"
+      }
+    }
+  ]
+}

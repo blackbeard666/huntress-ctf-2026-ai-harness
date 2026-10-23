@@ -1,0 +1,10 @@
+{
+ "codec": "gzip-base64 (trailing garbage after a CRC-checked member)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-moose-37",
+ "encoded": "H4sIAAAAAAACAyXJQQ5EQBAF0Kt8+7GykLiAFSsXKO1ndGglXUU7/khm+94YA1E0b1gYdInHF75GQ5GcrrPCpDDdb35g15yi/5ePBIccVpjh+iLRSyIGMWfuEHSW3eukaqyb9gd7NJtHZgAAAEpVTktKVU5LSlVOSw==",
+ "expected": "match",
+ "generator_cmd": "{ printf %s \"$plain\" | gzip -9n; printf 'JUNKJUNKJUNK'; } | base64 -w0",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc 2>&1",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-moose-37",
+ "oracle_output": "full plain, then 'gzip: stdin: decompression OK, trailing garbage ignored'"
+}

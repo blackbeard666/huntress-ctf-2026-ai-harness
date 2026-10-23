@@ -1,0 +1,9 @@
+{
+ "codec": "textcomp-lz77 (Mastery line fragment)",
+ "plain": "this warmup! To so",
+ "encoded": "(0, 0, 't') (0, 0, 'h') (0, 0, 'i') (0, 0, 's') (0, 0, ' ') (0, 0, 'w') (0, 0, 'a') (0, 0, 'r') (0, 0, 'm') (0, 0, 'u') (0, 0, 'p') (0, 0, '!') (8, 1, 'T') (0, 0, 'o') (3, 1, 's') (0, 0, 'o')",
+ "generator_cmd": "python3 -I tests/data/warmups_fixtures/textcomp_gen.py lz77 \"$plain\"  # independent textbook implementation, not lib/",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/textcomp_oracle.py lz77",
+ "oracle_plain": "this warmup! To so",
+ "expected": "match"
+}

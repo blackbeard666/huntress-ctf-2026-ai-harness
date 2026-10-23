@@ -1,0 +1,8 @@
+{
+ "field": "apk.version_code_u32_hex",
+ "expected": "0x00000001",
+ "generator_cmd": "GM D21 artifact: python3 -c \"import zipfile; zipfile.ZipFile('challenges/day21/metadata-package-deal/single_solve/artifacts/20261021T130021Z/metadata-day-21-evidence.zip').extract('mobile-001.apk')\"",
+ "oracle_cmd": "aapt dump badging/xmltree mobile-001.apk (Android Asset Packaging Tool v0.2) aapt dump xmltree -> android:versionCode(0x0101021b)=(type 0x10)0x1",
+ "decoy": false,
+ "member": "mobile-001.apk"
+}

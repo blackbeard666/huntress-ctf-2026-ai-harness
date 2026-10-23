@@ -1,0 +1,8 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 tests/data/script_fixtures/inno_fold_gen.py challenges/day22/scripting-next-next-finish/single_solve/work/extracted/evidence tests/data/script_fixtures  (stdlib binascii/base64 re-encode of the D22 GM-verified polyglot-nsis-(none: benign banner) plan relabelled language=inno_setup / INNO_SETUP-; no ISCC on this host)",
+ "oracle_cmd": "cd tests/data/script_fixtures; grep -oP \"\\x27[A-Za-z0-9+/=]*\\x27\" inno_fold_decoy_banner.iss | tr -d \"\\047\\n\" | base64 -d   (-> the benign banner text, not a plan)",
+ "twists": "decoy: Pascal '..' + '..' of a base64 benign banner, no marker -> no plan",
+ "oracle_output": "Thank you for installing Huntress Notepad 1.2 -- see readme.txt"
+}

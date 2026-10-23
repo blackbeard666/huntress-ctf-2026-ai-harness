@@ -1,0 +1,9 @@
+{
+ "codec": "lzma-HEX",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-86",
+ "encoded": "5D00008000FFFFFFFFFFFFFFFF00271A48666EB2E6E3AE3BEDEC8C98AABC0F898F7A9D952C5377C04FF4D45773DC5AD1FBFBE2F49A04EFC2105E3530CFA5BAE330B150F6229205F3DAA131E979D74BF10393AEFA041E1E2040D07C6AB9329348246847C53D79D8532854BA02991EFFF05DC400",
+ "generator_cmd": "printf %s \"$plain\" | xz --format=lzma -c | basenc --base16 -w0  # xz CLI + basenc wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | basenc --base16 -d | xz --format=lzma -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-86",
+ "expected": "match"
+}

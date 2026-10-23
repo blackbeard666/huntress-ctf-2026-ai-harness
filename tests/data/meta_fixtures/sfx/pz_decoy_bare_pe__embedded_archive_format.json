@@ -1,0 +1,8 @@
+{
+ "field": "sfx.embedded_archive_format",
+ "expected": "none",
+ "generator_cmd": "PE32 exe from tests/data/meta_fixtures/pe/arch_cli32__coff_machine_constant.bin (no overlay)",
+ "oracle_cmd": "7z l stub.exe -> PE only, no embedded archive; pefile overlay None",
+ "decoy": true,
+ "member": "stub.exe"
+}

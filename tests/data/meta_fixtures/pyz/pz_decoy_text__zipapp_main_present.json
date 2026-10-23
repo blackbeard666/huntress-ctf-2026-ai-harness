@@ -1,0 +1,8 @@
+{
+ "field": "pyz.zipapp_main_present",
+ "expected": "none",
+ "generator_cmd": "echo readme > readme.txt",
+ "oracle_cmd": "file readme.txt -> ASCII text; unzip -l -> End-of-central-directory signature not found",
+ "decoy": true,
+ "member": "readme.txt"
+}

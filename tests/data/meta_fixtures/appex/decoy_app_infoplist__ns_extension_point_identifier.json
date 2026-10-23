@@ -1,0 +1,7 @@
+{
+ "field": "appex.ns_extension_point_identifier",
+ "expected": "none",
+ "generator_cmd": "python3 plistlib.dumps({CFBundleIdentifier com.northwind.fieldkit, CFBundlePackageType APPL, ...}) > Info.plist (plain app, no NSExtension)",
+ "oracle_cmd": "exiftool -j Info.plist -> no NSExtension*",
+ "decoy": true
+}

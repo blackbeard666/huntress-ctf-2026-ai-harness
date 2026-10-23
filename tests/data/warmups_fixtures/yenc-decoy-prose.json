@@ -1,0 +1,10 @@
+{
+ "codec": "yenc",
+ "plain": null,
+ "encoded": "Nice work - decoding this WARMUP!",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written ASCII prose: no =ybegin frame and no high (>=0x80) chars, so not a yEnc body",
+ "oracle_cmd": "python3 -c 'print(bytes((c-42)%256 for c in b\"Nice work - decoding this WARMUP!\"))'  # -> control bytes b'$?9;\\xf6M...', not text",
+ "oracle_plain": null
+}

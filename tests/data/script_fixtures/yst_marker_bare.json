@@ -1,0 +1,7 @@
+{
+ "decoy": false,
+ "expected_plain": "v=3|language=github_actions|role=staged_chain|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=plain_hex|stage_count=2|steps=decode_configuration,dispatch_process|campaign_id=GITHUB_ACTIONS-5d2b90ee|url=https://github_actions-5d2b90ee.example.invalid/stage|file_path=/tmp/huntress-github_actions/.5d2b90ee.stage",
+ "note": "yaml-scalar-carrier-twists: bare `# HUNTRESS_ANALYSIS_V1:` with HEX-<material> on the indented `#` lines below (lib.codec find_codecs)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/yst_gen.py  (stdlib base64 / bytes.hex, D21 GitHub Actions carrier with the YAML twist)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/yst_oracle.py tests/data/script_fixtures/yst_marker_bare.yml  (PyYAML safe_load_all / raw `#` comment block + stdlib base64 / bytes.fromhex)"
+}

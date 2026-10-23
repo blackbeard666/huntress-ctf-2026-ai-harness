@@ -1,0 +1,8 @@
+package com.huntress.ctf_2026;
+public class Vault {
+    static { System.loadLibrary("vault"); }
+    public native String unlock(String key);
+    public native int check(int[] a);
+    public static native int check(String s);
+    private native void ping_now();
+}

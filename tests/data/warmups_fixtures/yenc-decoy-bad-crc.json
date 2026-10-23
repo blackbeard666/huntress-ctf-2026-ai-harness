@@ -1,0 +1,11 @@
+{
+ "codec": "yenc",
+ "plain": null,
+ "encoded": "=ybegin line=128 size=100 name=flag.txt\r\nxJ¡JJJ¡KJ~J VJJJ¢J¡JJJqJwdJWW^\\\r\n=yend size=100 crc32=deadbeef\r\n",
+ "decoy": true,
+ "expected": "none",
+ "encoded_charset": "latin-1",
+ "generator_cmd": "jade-otter-42 sabyenc3 article with the =yend crc32 replaced by deadbeef",
+ "oracle_cmd": "python3 -c 'import sabyenc3;print(sabyenc3.decode_usenet_chunks([open(\"decoy.yenc\",\"rb\").read()])[2])'  # -> False (CRC mismatch)",
+ "oracle_plain": null
+}

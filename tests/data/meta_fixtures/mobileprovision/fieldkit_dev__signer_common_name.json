@@ -1,0 +1,7 @@
+{
+ "field": "mobileprovision.signer_common_name",
+ "expected": "Apple iPhone OS Provisioning Profile Signing",
+ "generator_cmd": "openssl req -x509 -newkey rsa:2048 -nodes -subj '/CN=Apple Development: Jane Roe (Q7XK2M9P4L)/...' -outform DER -out dev1.der; same for dev2.der (CN=iPhone Distribution: Northwind Labs LLC (AB12CD34EF)); python3 plistlib.dumps(profile dict with DeveloperCertificates=[dev1.der, dev2.der], Entitlements{...}, ProvisionedDevices[3], dates 2026-03-14T09:26:53Z/2027-03-14T09:26:53Z) > dev.plist; openssl cms -sign -nodetach -binary -outform DER -in dev.plist -signer signer.pem -inkey signer.key -out dev.mobileprovision",
+ "oracle_cmd": "openssl cms -cmsout -print -inform DER -in dev.mobileprovision | grep subject:",
+ "decoy": false
+}

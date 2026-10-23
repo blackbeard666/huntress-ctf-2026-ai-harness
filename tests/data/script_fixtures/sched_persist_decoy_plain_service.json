@@ -1,0 +1,11 @@
+{
+ "material": "[Unit]\nDescription=one shot\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/true\nRestart=no\n",
+ "rep": "schedule_entries",
+ "transform": "kind",
+ "key": null,
+ "expected": null,
+ "decoy": true,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>) ; decoy -> no persistence row -> None (oracle stdout: 'no')",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes plain.service: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && python3 -I -c \"import configparser,sys;c=configparser.ConfigParser();c.read(sys.argv[1]);print(c['Service']['Restart'])\" plain.service  # no -> not persistent)"
+}

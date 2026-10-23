@@ -1,0 +1,14 @@
+trigger: none
+pool:
+  vmImage: ubuntu-22.04
+variables:
+- name: buildConfiguration
+  value: Release
+- name: HUNTRESS_DESCRIPTOR
+  value: 'dj0zfGxhbmd1YWdlPWF6dXJlX3BpcGVsaW5lc3xyb2xlPWRvd25sb2FkZXJ8dmVyZGljdD1tYWxpY2lvdXN8YXR0YWNrPVQxMTA1fGFkYXB0ZXI9Y2lfcnVubmVyfGhvc3RfcHJvZmlsZT1zdGFuZGFsb25lfG9iZnVzY2F0aW9uX3Byb2ZpbGU9YmFzZTY0fHN0YWdlX3Byb2ZpbGU9dHdvX3N0YWdlX2Rvd25sb2FkX2V4ZWN1dGV8bmV4dF9sYW5ndWFnZT1wb3dlcnNoZWxsfHN0YWdlX2NvdW50PTJ8c3RlcHM9YWNxdWlyZV9yZW1vdGUsd3JpdGVfZmlsZXxjYW1wYWlnbl9pZD1BWlVSRV9QSVBFTElORVMtYTkwZTJmNDR8dXJsPWh0dHBzOi8vYXp1cmVfcGlwZWxpbmVzLWE5MGUyZjQ0LmV4YW1wbGUuaW52YWxpZC9zdGFnZXxmaWxlX3BhdGg9L3RtcC9odW50cmVzcy1henVyZV9waXBlbGluZXMvLmE5MGUyZjQ0LnN0YWdl'
+steps:
+- task: PowerShell@2
+  inputs:
+    targetType: inline
+    script: |
+      Write-Host ':'

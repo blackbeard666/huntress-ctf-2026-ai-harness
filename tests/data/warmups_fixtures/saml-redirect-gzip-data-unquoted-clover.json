@@ -1,0 +1,9 @@
+{
+ "codec": "saml-redirect",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-bison-55",
+ "encoded": "data=H4sIAAAAAAACAyXJMRKCQAwF0Kt8eyhpvICVVl4gLH8wI7txksB6fJ2hfe+hhejmbywstmhbkS8NdPG6fy54GsK2gwNin6vmufxKSUiLTkfaH4mbVOIukfQrymYHfZw1rI3T9AMx5aR2ZgAAAA==&id=7",
+ "generator_cmd": "printf %s \"$plain\" | sh tests/data/warmups_fixtures/saml_redirect_gen.sh gzip plain  # wrapped as data={v}&id=7",
+ "oracle_cmd": "tools/node/bin/node tests/data/warmups_fixtures/saml_redirect_oracle.mjs \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-bison-55",
+ "expected": "match"
+}

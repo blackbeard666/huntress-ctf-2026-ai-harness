@@ -1,0 +1,16 @@
+{
+ "encoding": "raw",
+ "decoy": true,
+ "expected_offset": 120,
+ "expected_config": {
+  "c2": "198.51.100.23:4444",
+  "campaign": "boundary",
+  "sleep": 60,
+  "flag": "flag{ring0_m0dinf0}"
+ },
+ "expected_kmod_fields": "none",
+ "generator_cmd": "bash kmod_gen.sh kmod_decoy_trunc.bin trunc '{\"c2\":\"198.51.100.23:4444\",\"campaign\":\"boundary\",\"sleep\":60,\"flag\":\"flag{ring0_m0dinf0}\"}' 0",
+ "oracle_cmd": "bash kmod_oracle.sh kmod_decoy_trunc.bin   # file -b, GNU readelf -h (Type/Machine/Entry), readelf -p .modinfo (section order), kmod modinfo on a .ko copy (prints reversed), modprobe --dump-modversions (__versions), readelf -sW (__ksymtab_* syms + their ___ksymtab[_gpl]+ sections; FUNC syms sharing init_module/cleanup_module's address), readelf -x .gnu.linkonce.this_module (name at +24), grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "file: missing section headers at 3880 | readelf: Error: Reading 1152 bytes extends past end of file for section headers | kmod modinfo: Invalid argument (truncated .ko: kmod_fields -> None) | blob@120 valid (hcfg_scan still finds it)",
+ "note": "ET_REL .ko; .modinfo order = readelf -p (gcc -O2 emits the MODULE_* statics in reverse source order, the bytes win); vermagic = value with kbuild's trailing blank stripped (vermagic_raw keeps it); field names beyond format/elf_type/machine/entry_point are SPECULATIVE (GM .ko vocabulary not seen); expected_offset = FILE offset of the 'H' (OFFSET LAW raw, = hcfg_scan)"
+}

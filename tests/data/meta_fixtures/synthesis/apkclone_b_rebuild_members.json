@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.rebuild_members",
+ "expected": "[\"chat-a.apk\",\"chat-b.apk\",\"chat-c.apk\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/synthesis/gen_apk_clone_kit.sh $T/w $T/out -> kit_b.zip (aapt2 compile/link against a stub 'android' attr framework, keytool RSA-2048 signers alpha/bravo/charlie, apksigner sign v1+v2+v3, zip -X; non-APK decoy members readme.txt / renamed text *.apk)",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/synthesis/oracle_apk_clone.py kit_b.zip (aapt dump badging package/versionCode/application-label + apksigner verify --print-certs Signer #1 SHA-256 + hashlib file digest; key 'rebuild_members')",
+ "decoy": false
+}

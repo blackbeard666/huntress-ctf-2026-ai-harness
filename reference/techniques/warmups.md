@@ -1,4 +1,4 @@
-# warmups — technique log (days 1-20; updated after every day)
+# warmups — technique log (days 1-22; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -13,35 +13,36 @@ How this lane has looked so far (observations, not guarantees):
   a's and b's" -> BACONIAN 5-groups whose values 0-15 are HEX nibbles, "Three rails ... zigzag" -> RAIL FENCE 3/offset 0
   (D18, first true transposition; the prompt's number was the key), "Two bytes walk into a bar. The little one goes
   first."/"Little Things" (D19) -> hex of UTF-16LE + `fffe` BOM, "Same bar. This time the big one goes first."/"Big
-  Entrance" (D20) -> hex of UTF-16BE + `feff` BOM. D1-D15 one layer; D16-D17 and D19-D20 two layers, the pun naming BOTH
-  (every number/word in a prompt may be a layer or a key). D20 was the first day whose twist was a PARAMETER of the
+  Entrance" (D20) -> hex of UTF-16BE + `feff` BOM, "A familiar wrapper. Something compressed inside."/"Under Pressure"
+  (D21) -> GZIP inside BASE64 (`H4sI...`), "Another familiar wrapper. This one needs a little inflation."/"Deflated Ego"
+  (D22) -> ZLIB (`78da`) inside BASE64 (`eNo...`). D1-D15 one layer; D16-D17 and D19-D22 two layers, the pun naming BOTH
+  (every number/word in a prompt may be a layer or a key; "familiar" = an already-seen codec as the outer layer). D20 was the first day whose twist was a PARAMETER of the
   previous day's codec ("Same bar" = callback, "big" = the one knob turned), not a new codec.
   Families: D12-D15 free-text letter maps, D16-D17 carriers over hex, D18 transposition, D19-D20 byte representation
-  under hex. Hex was a layer on 4 of the last 5 days: read endianness/width words, and read "Same ..." as "yesterday's
-  codec, one knob turned".
-- Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, ..., 83, 88). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, html-entity, `"\uXXXX"`, base32, unpadded base64url, plain reversed text, Atbash, Caesar+7, ROT47, Morse-over-hex, Bacon-over-hex, rail-fence-3, UTF-16LE+BOM hex, UTF-16BE+BOM hex, in that order so far). The last line has no trailing newline. The fragments join verbatim (split mid-word) into the same sentence.
+  under hex, D21-D22 COMPRESSION under base64. Rhythm since D19: NEW family on day N, ONE knob turned on day N+1 (D19
+  LE -> D20 BE; D21 gzip -> D22 zlib, "Another familiar wrapper" = callback), so D23 is likely a NEW family and D24 its
+  knob turn. Read "Same ..."/"Another ..." as "yesterday's codec, one knob turned".
+- Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, ..., 83, 88). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, html-entity, `"\uXXXX"`, base32, unpadded base64url, plain reversed text, Atbash, Caesar+7, ROT47, Morse-over-hex, Bacon-over-hex, rail-fence-3, UTF-16LE+BOM hex, UTF-16BE+BOM hex, gzip-in-base64, zlib-in-base64, in that order so far; 108 x 22 on D22). The last line has no trailing newline. The fragments join verbatim (split mid-word) into the same sentence.
 - Clocks: TT about 5-8 s from day 2 on (30 s on day 1 and again on day 12), mastery about 5-9 s (30 s on day 12; the window does not reliably grow with the set count). Only a deterministic solver survives these windows. The single_solve is untimed.
 - D16 GM regime change: TT/Mastery are "regular scored challenges by default" (contract `deadline: null`, no window);
   `run_for_time: true` on start/retry requests a timed Hall of Fame attempt. The HARNESS still kills solve.py after 60 s
   (D17 Mastery: `exec_error`, `solver_too_slow`, nothing submitted) -- keep every set well under 1 s.
   D18 the clocks were back: TT start returned a 30 s deadline, Mastery a 105 s window (88 sets). D19 `deadline: null`
   again (TT 3.7 s end to end, Mastery 93 x 19 in 9.9 s with solve 2.5 s). D20 `deadline: null` (TT 1.3 s; Mastery
-  98 x 20 in 20.4 s with solve 18.6 s -- a 7x jump for +1 line, a third of the 60 s kill budget; see Pitfalls).
+  98 x 20 in 20.4 s with solve 18.6 s). D21 `deadline: null`: TT 4.1 s end to end (solve 0.21 s); Mastery 103 x 21
+  first run KILLED at 60 s (ad-hoc solver, see Pitfalls), the carried lane solver + one branch then did 0.34 s solve.
+  D22 `deadline: null`: TT 2.4 s end to end (solve 0.03 s); Mastery 108 x 22 in 28.2 s (solve 15.9 s, submit 11.8 s).
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
-- **Encoding per line** -- Mastery line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, `&#NNN;`
-  entities, `"\uXXXX"` JSON escapes, ...); detect each line's encoding from its alphabet, not its position (position-based detection breaks if the order
-  changes). Rule for "escape-token" encodings (url `%xx`, entities): accept when the WHOLE fragment is tokens of that kind
-  (`re.sub(token,'',frag).strip()==''`), then use the stdlib decoder (`unquote`, `html.unescape`) so the unseen forms
-  (`%XX` upper, `&#x6d;` hex, `&amp;` named) are covered too. Day 8 GM bytes used only decimal `&#NNN;` in all 40 blobs.
-  Day 9 backslash escapes: every char as lowercase `\u00XX`, the fragment WRAPPED IN DOUBLE QUOTES (a JSON string
-  literal) in all 45 blobs (single, TT, 43 mastery lines); no `\x`, `\n`, `\"`, uppercase hex or non-ASCII seen. Rule: if
-  the fragment matches `^"?(?:\\(?:u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|[nrt"\\/]))+"?$`, decode with `json.loads` (add the quotes if missing) -- that also covers
-  `\n`, `\"`, surrogate pairs and non-ASCII; fall back to `codecs.decode(t,'unicode_escape')` for `\xNN`. Drop the quotes.
-- **Base64 alphabet/padding** (D11) -- standard `+/` with `=` (D1) vs URL-safe `-_` with NO `=` (D11): the single was
-  147 chars (len%4==3) and its bytes happened to hold no `-`/`_`; the TT blob was len%4==0 (strict b64 also decodes it);
-  mastery line 11 is 14 chars (`bi1tYXBsZS00OA` -> `n-maple-48`). Rule: `[A-Za-z0-9_-]+` with len%4 in {0,2,3} -> re-pad
-  `'='*(-len%4)` and `urlsafe_b64decode`; len%4==1 is never base64. `lib.decode.decode_chunk` has this branch since D11.
+- **Encoding per line** -- Mastery line k uses day k's encoding; detect each line's encoding from its ALPHABET, never its
+  position. Escape-token encodings (url `%xx`, entities): accept when the WHOLE fragment is tokens of that kind, then the
+  stdlib decoder (`unquote`, `html.unescape`) covers unseen forms (`%XX`, `&#x6d;`, `&amp;`); GM used only decimal
+  `&#NNN;` (D8). D9 escapes: every char lowercase `\u00XX`, fragment WRAPPED IN DOUBLE QUOTES (all 45 blobs) -> if it
+  matches `^"?(?:\\(?:u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|[nrt"\\/]))+"?$`, `json.loads` (add quotes if missing; covers
+  `\n`, surrogates, non-ASCII), fall back to `codecs.decode(t,'unicode_escape')` for `\xNN`.
+- **Base64 alphabet/padding** (D11, D21-D22) -- std `+/` with `=` (D1, D21, D22: `=` or `==`) vs URL-safe `-_` with NO
+  `=` (D11; Mastery line 11 = 14 chars). Rule: `[A-Za-z0-9+/_-]+` with len%4 in {0,2,3} -> re-pad `'='*(-len%4)`,
+  translate `+/`->`-_`, `urlsafe_b64decode`; len%4==1 is never base64 (`lib.decode.decode_chunk` since D11).
 - **Direction (D12)** -- the text itself can be BACK-TO-FRONT: single/TT = the whole sentence reversed
   (`56-ztrauq-tesnus-ytsez :retsaM emaG ...`), Mastery line 12 = a reversed slug tail (`69-enud-m` -> `m-dune-96`,
   `21-teggun`, `36-yvi-ma`). Rot-N "decodes" such a line into plausible garbage (`69-fove-n`) -- 11/58 Mastery sets went
@@ -83,8 +84,23 @@ How this lane has looked so far (observations, not guarantees):
   solver's BOM-aware `_hex_utf16` and lib `decode_chunk` took D20 (single, TT, all 98 line-20 fragments) UNCHANGED:
   writing the BOM-honouring generic rule on day N covered day N+1's knob turn. Next knobs on this axis: no BOM (NUL
   position), UTF-32 (`fffe0000`/`0000feff`), UTF-8 BOM, another outer layer (b64/b32/binary) -- all prebuilt.
+- **Compressor under a text wrapper (D21-D22)** -- values seen: D21 single/TT = ONE std padded base64 string (`=` 152 B,
+  `==` 156 B) of a GZIP member, header always `1f8b 08 00 00000000 02 03` (b64 `H4sIAAAAAAACA`); Mastery line 21 = a
+  36-char padded fragment that is its OWN gzip member. D22 single/TT = ONE std padded base64 string (136 B, `=` single,
+  `==` TT) of a ZLIB stream, header `78da` (level 9, 32 KiB window, no FDICT) -> b64 `eNo`/`eNp`/`eNq`/`eNr` (3rd char
+  follows the first deflate byte, so match `eN`, not `eNo`); Mastery line 22 = a 20-char padded fragment, its OWN zlib
+  stream (108/108: `eNrL` 48, `eNpL` 45, `eNor` 13, `eNqr` 2), next to line 21's gzip members in the same blob. Payload
+  plain UTF-8, no inner layer, no url-safe/unpadded/bz2/xz yet. Compressed bytes are NOT printable: any b64 branch gated
+  on printable output rejects the line and the rot-N catch-all returns garbage. Parse rule (D21 solver `_b64z`, took
+  D22 UNCHANGED): strip whitespace/quotes; `[A-Za-z0-9+/_-]+={0,2}`, len%4 != 1 -> re-pad, urlsafe-decode (both
+  alphabets) -> sniff (`1f8b` gzip, zlib, `BZh` bz2, `fd377a585a` xz) -> decompress -> UTF-8; whole blob BEFORE the
+  numbered-line check + `register_free("b64z", 21, ...)` for Mastery lines. Its zlib test is `startswith(b"\x78")`:
+  widen it to the RFC 1950 rule `b[0]&0x0f==8 and b[0]>>4<=7 and (b[0]<<8|b[1])%31==0` (smaller windows `08`-`68`, any
+  level byte `01/5e/9c/da`, FDICT -> `zdict=` the crib), and try raw deflate `zlib.decompress(b,-15)` when no magic
+  matches. Same rule for any other wrapper (hex/b32/b85/binary) and compressor (lzma-alone `5d00`, zstd `28b52ffd`,
+  lz4 `04224d18`); re-run the full decoder on the inflated text (it may be another day's codec).
 - **Line wrapper** -- `NN<TAB>fragment` numbering; fragments split mid-word and join verbatim in number order.
-- **Set count** -- grows by 5 per day, 5N-2 (33 on day 7, ..., 78 on day 16, 83 x 17 lines on day 17, 88 x 18 on day 18, 93 x 19 on day 19, 98 x 20 on day 20); the solver must loop over whatever the contract lists, and its cost grows with sets x lines.
+- **Set count** -- grows by 5 per day, 5N-2 (33 on day 7, ..., 78 on day 16, 83 x 17 lines on day 17, 88 x 18 on day 18, 93 x 19 on day 19, 98 x 20 on day 20, 103 x 21 on day 21, 108 x 22 on day 22); the solver must loop over whatever the contract lists, and its cost grows with sets x lines.
 - **Delivery shape** -- mastery bytes arrive as ONE zip saved under the first member's name (`blob-01.txt`; the contract has NO
   `artifacts[]`, only a top-level `sha256` = the zip; same on days 7-9). Set 1's question names that same file: read the MEMBER, never decode the whole bundle.
 - **Payload only** -- TT/single differ only in the slug and length (day 7: 318 vs 333 bytes; day 8: 620 vs 621; day 9: 644 vs 650); same sentence and encoding.
@@ -114,109 +130,83 @@ How this lane has looked so far (observations, not guarantees):
 | Only `[0-9a-f]`, starts `fffe` (D19, LE: `4e00`) or `feff` (D20, BE: `004e`), every other byte `00`, ~4 hex digits per char (prompt "two bytes", "little"/"big", "first", "endian", "wide", "Same bar") | hex of UTF-16: `xxd -r -p blob.txt \| iconv -f UTF-16 -t UTF-8` or `bytes.fromhex(t).decode('utf-16')` -- both honour EITHER BOM; no BOM -> `utf-16-le`/`-be` by the NUL position; `fffe0000`/`0000feff` -> `utf-32`. Triage labels it "looks base64" (hex is a b64 subset) -- trust the charset |
 | Magic `PK\x03\x04` even if named `.txt` (mastery `blob-01.txt`) | `unzip -l`. It is a bundle of all sets `blob-01..NN.txt` |
 | Lines `01<TAB>...`, `02<TAB>...` | Strip the `NN\t` prefix. Decode EACH line with its own encoding and concatenate without separators. Keep leading/trailing spaces |
-| Magic `1f8b`/`78`/`BZh`/`fd377a58` | gunzip / zlib / bzip2 / xz (in the toolbox. Not seen in the GM bytes yet) |
+| base64 starting `H4sI` gzip (D21) or `eN` zlib `78da` (D22; prompt "wrapper", "compressed", "pressure", "squeeze", "inflation", "deflated"); also `eJ`/`eF`/`eAE` other zlib levels, `QlpoOTFBWSZT` bz2, `/Td6WFo` xz, `KLUv/` zstd, `BCJNGA` lz4, `UEsDB` zip. Hex: `1f8b`, `78xx`, `425a68`, `fd377a585a`, `28b52ffd`, `504b0304` | `base64 -d blob.txt \| gzip -dc` (D21); `python3 -c "import base64,zlib,sys;print(zlib.decompress(base64.b64decode(open(sys.argv[1]).read())).decode())" blob.txt` (D22; `zlib.decompress(b,47)` auto-detects zlib OR gzip, `-15` = headerless); `lib.decode.peel` does the stdlib ones. Triage says "looks base64" -- right, but the bytes are binary: decompress, don't score |
 | peel finds nothing | keyed/classical cipher: `lib.ciphers` (caesar_all, atbash, vigenere_crack, xor_crack, morse, base58, QP) |
 The generic path is `lib.decode.peel(data, accept)` (BFS over encodings) plus the day solvers in `challenges/day0N/warmups-*/solver/solve.py`. Each later solver re-checks every earlier day's cases.
 
 ## Day by day
-**Days 1-6** (base64, ROT13, hex, 8-bit binary, decimal, zero-padded octal): one layer each, solved in seconds-minutes.
-Lessons that still matter: D1 mastery failed ~12x because same-named `blob.txt` downloads overwrote each other (match by
-sha256); D3 mastery timed out when single letters/hex counted as English (score 2+-letter words, cap peel at 0.6 s); D4 a
-rot-N must beat the UNSHIFTED text by a margin ("er:" -> "an:"); D6 a shell `read` loop dropped the last token (no trailing
-newline), octal vs decimal = zero padding + lowercase share. Mastery from D2 on = ONE zip saved as `blob-01.txt`.
+**Days 1-13** (base64, ROT13, hex, 8-bit binary, decimal, zero-padded octal, URL `%xx`, decimal entities, quoted
+`"\u00XX"`, base32, unpadded base64url, reversed sentence, Atbash): one layer each, CORRECT in 5-73 s. Lessons (details in
+Pitfalls): D1 same-named downloads overwrote each other (match by sha256); D3 a slow English scorer timed Mastery out; D4
+rot-N needs a margin over the unshifted text; D6 a shell `read` loop lost the unterminated last token; D7 decoding the
+WHOLE Mastery zip gave another set's slug (read the member); D8 a `str.replace` patch silently no-op'd; D11 strict len%4
+refused unpadded b64; D12 rot-N "decoded" reversed text (`69-fove-n`); D13 free lines must be assigned JOINTLY.
 
-**Days 7-9** (URL `%xx`, decimal HTML entities, quoted `"\u00XX"` JSON string): one layer each, CORRECT in 18-53 s.
-Lessons that still matter: D7 mastery attempt 1 decoded the WHOLE zip (bundle saved as `blob-01.txt`, a name match
-returned the outer file) -> another set's slug fragment `py-storm-dune-80` -> incorrect; `lib.common.find_artifact` now
-returns the same-named member. D8 a `str.replace` solver patch silently matched nothing (assert anchors). D9 lib's `\u`
-path is ASCII-only (`\u00e9`, `\n`, `\"` would fall through to rot-N garbage; not in GM bytes yet). Strict whole-fragment
-`%xx` and entity branches live in `lib.decode.decode_chunk`.
+**Days 14-21** (Caesar +7; ROT47; Morse over hex; Bacon a/b 5-groups over hex; rail fence 3/offset 0; hex of UTF-16LE
++ `fffe` BOM; hex of UTF-16BE + `feff` BOM; gzip inside base64): CORRECT in 4.5-39 s, first submit each day. Lessons
+that still matter: D14 set22 went MISSING when a rev/Atbash swap ended in a 2-word slug (rank 3-word slugs first). D15
+ROT47 is beyond rot-N/Atbash/reversal -> `register_free`. D16/D17 a carrier's 16-symbol output is a middle layer
+(`fromhex`). D17 Mastery (83 x 17) hit the 60 s budget until `answer()` returned early. D18 the anagram was cracked by
+rail r 2..N x every offset (accept only reads starting `Nice work`); lib's `rail_solve` existed but the carried solver
+never routed to it; a TT start before a verified solver burned the 30 s clock. D19's BOM-aware `_hex_utf16` carried
+D20 byte-identical. D21 Mastery LOST its first run: `solve.py` was an ad-hoc per-line BFS instead of the carried D20
+lane solver -> 60 s kill; the D20 solver + ONE branch (`_b64z` whole blob + `register_free("b64z", 21)`) did 0.34 s.
 
-**Days 10-13** (base32; unpadded base64url; reversed sentence; Atbash): one layer each, CORRECT in 5-73 s.
-Lessons that still matter: D11 `base64 -d`/strict len%4 b64 refused the unpadded blob and old `decode_chunk` fell through
-to rot-N garbage (re-pad first). D12 the carried-over solver answered in 5 s, but Mastery lost the timed attempt: a 28 s
-generic fallback, then 11/58 sets where rot-N "decoded" the reversed line 12 (`69-fove-n`). D13 the probe submitted a rot-N
-of Atbash text (`ovisx-tviskr-fbvecw-31`, rejected: gibberish words); Mastery 39/63 until free lines were assigned
-JOINTLY (`lib.decode._joint_free`, `FREE_CODECS`; each transform used once per blob).
-
-**Days 14-19** (Caesar +7; ROT47; Morse over hex; Bacon a/b 5-groups over hex; rail fence 3/offset 0; hex of UTF-16LE
-+ `fffe` BOM): CORRECT in 4.5-39 s, first submit each day. Lessons that still matter: D14 set22 went MISSING when a
-rev/Atbash swap ended in a 2-word slug (rank 3-word slugs first). D15 ROT47 is beyond rot-N/Atbash/reversal ->
-`register_free`. D16/D17 a carrier's 16-symbol output is a middle layer (`fromhex`). D17 Mastery (83 x 17) hit the 60 s
-harness budget until `answer()` returned early. D18 the anagram was cracked by rail r 2..N x every offset (wrong offsets
-give ROTATED copies; accept only reads starting `Nice work`); lib's `rail_solve` existed but the carried solver never
-routed to it; a TT start before a verified solver burned the 30 s clock. D19 one command (`xxd -r -p | iconv -f UTF-16
--t UTF-8`), ~26 s; the duel worker added BOM-aware `_hex_utf16` (LE/BE fallback, printable gate) as the FIRST whole-blob
-candidate -- which then carried D20 unchanged.
-
-**Day 20: Big Entrance** ("Same bar. This time the big one goes first." -- hex of UTF-16BE with BOM).
-- 440-byte blob, no newline, lowercase hex: `feff004e0069006300650020...` = BOM `fe ff` then `\0N\0i\0c\0e`. Same two
-  layers as D19 with the byte order flipped; the pun is a callback ("Same bar" = D19's "walk into a bar") plus the one
-  changed knob ("big one first" = big-endian). Triage again said "looks base64"; its preview showed the `feff00..00` rhythm.
-- Single worker, ONE command: `xxd -r -p blob.txt | iconv -f UTF-16 -t UTF-8` (iconv's `UTF-16` reads the BOM, so the
-  D19 command works verbatim) piped straight into `hctf submit`. Start 13:00:09.98Z -> CORRECT 13:00:24.36Z (~14 s,
-  first submit). Slug shape/normalization unchanged (`trim`, `adj-noun-noun-NN`), accepted as decoded.
-- Solver: the D19 `solve.py` carried over BYTE-IDENTICAL and passed everything first try -- TT 1.3 s, Mastery 98 x 20
-  (line 19 `fffe`+LE, line 20 `feff`+BE). Only cost: Mastery solve 18.6 s (D19 2.5 s); per-line `decode_chunk` on a
-  line-20 fragment is instant, so the time is in the joint/fallback path or host load (not isolated).
+**Day 22: Deflated Ego** ("Another familiar wrapper. This one needs a little inflation." -- ZLIB inside base64).
+- 136-byte blob, no newline, std base64 with one `=`: `eNolyTEO...Jg8=` -> `78da 25c9...` zlib (level 9) -> the usual
+  sentence. "Another familiar wrapper" = D21's base64 again (callback), "inflation"/"Deflated" = deflate in its zlib
+  container -- the D19->D20 pattern (same codec family, one knob) repeated on D21->D22. Triage: "looks base64 -> $warmups".
+- Single: the race probe (carried D21 path, whose magic sniff already listed `\x78` -> zlib) submitted:
+  start 13:00:11.9Z -> CORRECT 13:00:23.7Z (~12 s, first submit; the worker only reported READY). One command:
+  `python3 -c "import base64,zlib,sys;print(zlib.decompress(base64.b64decode(open(sys.argv[1]).read())).decode())" blob.txt`
+  (`base64 -d | zlib-flate -uncompress` / `openssl zlib -d` if present; `gzip -dc` does NOT take a zlib header).
+- TT (136 B, `==`) CORRECT, 2.4 s end to end. Mastery 108 x 22 CORRECT first try with the D21 solver unchanged except
+  the `solverrt` partial-emit wrapper; solve 15.9 s (D21 was 0.34 s for 103 x 21 -- watch it, 60 s is the kill line).
+- Lesson: the generic rule written on day N (wrapper -> magic sniff -> any stdlib decompressor) covered day N+1's knob
+  again, exactly as D19's BOM rule covered D20. The remaining hole is the sniff itself (0x78-only, no raw deflate).
 
 ## GM answer conventions learned
 - Submit the slug ONLY, exactly as decoded (lowercase, hyphens, 2-digit number). Not the whole sentence and not "Game Master: ...". `trim` normalization only.
-- No correctly decoded warmups answer has been rejected (days 1-20; day 8's 40 and day 9's 45 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
+- No correctly decoded warmups answer has been rejected (days 1-22; day 8's 40 and day 9's 45 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
 - Mastery ids are per set (`setN.message` style). Each question names `blob-0N.txt`, but the bytes may arrive as a zip member, as same-named `blob.txt` downloads, or de-duplicated (`blob_2.txt`). Map set -> file by sha256 from `contract["artifacts"]` when present. When it is absent (day 7), open the zip and read member `blob-0N.txt`.
 - No GM-side label grammar in this lane: the answer is a derived VALUE, never a synthetic label.
 
 ## Pitfalls that cost time
-- Mastery bytes missing: duplicate `blob.txt` downloads overwrote each other or were never fetched (day 1, about 12 failed attempts). If a set's bytes aren't on disk, it is a downloader problem. Don't spawn solver-hardening workers.
-- A `.txt` file that is really a ZIP (check the magic, not the extension). Prefer the exact inner member over the outer same-named container. Day 7 mastery lost an attempt to this: set 1 decoded the whole bundle. A slug that is a word suffix (`py-...`), or a set1 answer that doesn't come from its own last line, is the tell. Dry runs on renamed per-set copies do NOT reproduce the zip-named-`blob-01.txt` layout, so test on the raw delivery.
-- English scoring: count single letters and hex reads as English (day 3 timeout). Score common 2-letter words without a margin and a correct line gets rot-shifted (day 4). Require a margin over the unshifted text.
-- Encoding confusion: binary is also valid hex (try binary first), and decimal is also valid octal (use padding and case).
-- Fragments are split mid-word. Join with "" and keep payload whitespace. Joining with spaces corrupts the sentence and the slug.
-- No trailing newline: shell `read` loops lose the last token. Use python or `tr ' ' '\n'` plus an explicit newline. Always regex-check the slug against the answer syntax.
-- Timed windows (5-9 s, with GM start/submit eating 3-5 s of it) leave no room for an LLM or a slow BFS. Keep every per-question decode under about 1 s with a hard BFS cap.
-- Solver patches made with `str.replace`/sed silently no-op when the anchor text doesn't match exactly (day 8 fallback). Assert
-  the anchor count or re-grep the file after patching.
-- Hand-testing escape decoders: in a ratchet session, a literal backslash-u sequence typed into a Bash/heredoc command
-  reached python ALREADY decoded (the tool layer unescaped it), so a test "passed" on plain text. Test on the artifact file
-  or build escapes with `chr(92)+'u%04x'`.
-- Unpadded base64: tools that demand `len%4==0` reject it or (worse) a length-gated classifier skips it and a fallback
-  returns plausible-looking rot-N text. Re-pad before decoding; `len%4==1` is the only impossible length.
-- Rot-N is the catch-all of `decode_chunk`, so ANY unrecognised plain-text transform (reversal on D12) comes back as
-  plausible-looking rot garbage, not as a failure. When a new day's line has no strict class, check `[::-1]` and other
-  plain transforms BEFORE trusting rot-N, and verify the slug's words read as English (`fove`, `ulev` don't). D13's
-  rejected `ovisx-tviskr-fbvecw-31` was a rot-N of Atbash text: gibberish slug words = an unknown transform, not a GM quirk.
-- Several free-text transforms in one blob (D13: rot13 / reversal / Atbash): decide them JOINTLY with each used once, not
-  per fragment -- short edge-split fragments score ambiguously and cost 24/63 Mastery sets.
-- A synthetic "today's codec on line N" check (compound-today cases) passing does NOT prove the joint assignment: D14's
-  real set22 still broke on edge-split rev/Atbash lines. Any fallback path must classify free lines exactly as
-  `lib.decode._free_line` does (rot / reversal / Atbash / new codec), and a slug check should demand the full 3-word shape.
-- The joint free-codec search grows with every new free codec (D15 Mastery solve 3.46 s with 5 free lines vs 0.2-0.3 s on
-  D8-D11). Prune by alphabet first: a ROT47 fragment has non-letters, so test that strict branch before the joint search.
-- A collapsed-alphabet outer layer (D16 Morse) decodes to something that is NOT English (`4E696365...`): a decoder that
-  stops after one layer returns no slug (or, scored as "wordy", a junk reading). When a decode yields only hex/digit
-  characters, it is an inner layer: decode again. Prompts with two cues ("sixteen" + "dot dot dot") = two layers.
-- lib has TWO Morse tables: `lib.ciphers.morse_decode` knows letters/digits only (drops `!` `,` `:` and the slug hyphen
-  `-....-`); `lib.warmups_codecs.morse_dec` knows punctuation. Use `morse_dec` for plain-text Morse.
-- CHEAP PATH FIRST, RETURN EARLY (D17): a solver that builds `[decode_chunked(t)] + decode_candidates(t)` and then picks
-  pays the joint rot/rev/Atbash/... search on EVERY set. At 83 sets x 17 lines that passed 60 s and the Mastery run died
-  with no submission. Return the first candidate that yields a full slug; call the joint ranker only on a miss. Time the
-  real Mastery case (`hctf solver-test`) after every new free codec -- the cost grows with sets x lines x codecs (a
-  per-set `peel` BFS x 58 sets blew a 30 s window on D12; D19 93 x 19 = 2.5 s solve; D20 98 x 20 = 18.6 s solve with
-  NO code change -- watch the trend, profile `answer()` per set before adding any new branch; 60 s kills the run).
-- A carrier decode that "works" can still be a middle layer: Bacon-26 letters of D17 came out as `a`-`p` only. An output
-  alphabet of exactly 16 symbols (0-9A-F, a-p, 16 words) = hex nibbles; decode again.
-- TRANSPOSITIONS (D18 rail fence): spaces are ciphertext -- a rail can start or end with a space, so strip only `\r\n`,
-  never `.strip()`. Wrong offsets give ROTATED readings that still contain the slug (`29Nice work ... dapper-summit-brook-`):
-  accept only a read that STARTS with `Nice work` / ends in a full `adj-noun-noun-NN`. Charset tells you nothing (it is
-  the plaintext's), the cue is "readable letters, wrong order, exactly one `!` `,` `:`".
-- A prebuilt lib codec is useless if the carried solver never routes to it (D18: `rail_solve` existed, prior solver 0/1).
-  First move on a new day: run lib's whole-blob candidates (`decode_chunk` + `warmups_codecs.CANDIDATES`/`*_solve`).
-- Mastery fragments of a keyed/transposition codec restart the key PER LINE and are short (6-8 chars on D18); only a
-  slug/crib gate over the joined text can confirm them. Test today's codec on the last Mastery line (compound-today probe).
-- BYTE-LEVEL layers (D19 UTF-16 under hex): a hex decoder that tries only UTF-8, or falls back to latin-1, returns
-  `ÿþN\x00i\x00c\x00...` or nothing -- never a slug. When `fromhex` output has a BOM (`fffe`, `feff`, `efbbbf`,
-  `fffe0000`) or NULs in a fixed rhythm, decode with the matching Unicode codec; never just strip the NULs (the BOM stays).
-  Python's BOM-less `utf-16` defaults to the platform order, so name `-le`/`-be` explicitly when there is no BOM.
-  Never hard-code the byte order a day used: D20 flipped it, and Mastery holds BOTH orders (lines 19/20) at once.
+- DELIVERY: Mastery = ONE zip saved as `blob-01.txt` (check magic, not extension); read member `blob-0N.txt`, never the
+  bundle (D7: a slug that is a word suffix `py-...` is the tell). Missing set bytes = a downloader problem (D1, ~12 fails),
+  not a solver one. Dry runs on renamed per-set copies do NOT reproduce the real layout: test on the raw delivery.
+- NEVER REPLACE THE LANE SOLVER (D21): copy the previous day's warmups `solve.py` and add the new codec as ONE branch
+  (whole-blob step + `register_free(name, day, fn)`). A fresh generic brute-force solver passes single/TT (one short
+  blob) and then dies at 60 s on Mastery (103 sets x 21 lines). A prebuilt lib codec is equally useless if the carried
+  solver never routes to it (D18 `rail_solve`). First move on a new day: lib's whole-blob candidates (`decode_chunk` +
+  `warmups_codecs.CANDIDATES`/`*_solve`).
+- CHEAP PATH FIRST, RETURN EARLY (D17): return the first candidate that yields a full slug; call the joint ranker only on
+  a miss (83 x 17 passed 60 s when every set paid the joint search; a per-set `peel` BFS blew a 30 s window on D12). Time
+  the real Mastery case (`hctf solver-test`) after every new codec; profile `answer()` per set when solve passes ~5 s.
+- ENGLISH SCORING: don't count single letters/hex reads as English (D3 timeout); a rot-N must beat the unshifted text by a
+  margin (D4). Rot-N is `decode_chunk`'s catch-all, so ANY unknown plain transform comes back as plausible rot garbage
+  (D12 reversal `69-fove-n`, D13's rejected `ovisx-tviskr-fbvecw-31` = rot-N of Atbash): gibberish slug words = an unknown
+  transform, not a GM quirk. Several free transforms in one blob (rot13/rev/Atbash/Caesar/ROT47) -> decide JOINTLY, each
+  once (`_joint_free`), rank full 3-word slugs first (D14 set22); prune by alphabet before the joint search (D15).
+- CLASS CONFUSION: binary is also hex (try binary first); decimal is also octal (padding + case); hex is a base64 subset
+  (triage says "looks base64" on D19-D20 hex); unpadded base64 must be re-padded (`len%4==1` is the only impossible length).
+- FRAGMENTS: split mid-word; join with "" and keep payload whitespace (never `.strip()` a decoded fragment; spaces are
+  ciphertext in transpositions). No trailing newline: shell `read` loops lose the last token. Regex-check the slug.
+- STACKED LAYERS: a decode whose output is only hex/digits/`a`-`p`/16 symbols is a MIDDLE layer (D16 Morse -> hex, D17
+  Bacon -> nibbles): decode again. Two prompt cues ("sixteen" + "dot dot dot"; "wrapper" + "compressed") = two layers.
+- COMPRESSED layers (D21): the decoded bytes are binary, so printable/English gates reject the RIGHT branch; sniff the
+  magic bytes after every base-N/hex decode and decompress before scoring. Use `zlib.decompressobj(31)` / `wbits=-15`
+  when a gzip/deflate stream is truncated or headerless (`gzip.decompress` raises on a missing CRC trailer). `gzip -dc`
+  rejects zlib (`78xx`) input; detect zlib by the header checksum `(CMF<<8|FLG)%31==0`, not only `0x78` (D22).
+- BYTE-LEVEL layers (D19-D20 UTF-16 under hex): UTF-8-only or latin-1 hex decoders give `ÿþN\x00i\x00...`, never a slug.
+  BOM (`fffe`, `feff`, `efbbbf`, `fffe0000`) or NUL rhythm -> the matching Unicode codec, UTF-32 before UTF-16; BOM-less
+  `utf-16` uses the platform order, so name `-le`/`-be`. Never hard-code a day's byte order (Mastery holds both).
+- TRANSPOSITIONS (D18): wrong rail offsets give ROTATED readings that still contain the slug; accept only a read that
+  STARTS `Nice work` and ends in a full slug. Mastery fragments restart the key PER LINE (6-8 chars) -- only the joined
+  slug gate confirms them; `decode_chunked` alone leaves line 18 scrambled (D21 duel: `Master:i rbsk-...`).
+- TOOLING: `str.replace`/sed solver patches silently no-op on a mismatched anchor (D8) -- assert the count. A literal
+  backslash-u typed into a Bash/heredoc reached python already unescaped -- test on the artifact or `chr(92)+'u%04x'`.
+  Two Morse tables: `lib.ciphers.morse_decode` drops `!` `,` `:` `-`; use `lib.warmups_codecs.morse_dec`.
+- A TT start before a verified solver burns the clock (D18, 30 s). Timed windows leave no room for an LLM.
 - Don't over-read the prompt: "Again" (day 6) was flavour, not a second layer. Decode what the bytes show.
 - Don't contact anything beyond the GM. The decoded sentence states the answer outright.

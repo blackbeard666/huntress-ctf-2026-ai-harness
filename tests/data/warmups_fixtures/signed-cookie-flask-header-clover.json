@@ -1,0 +1,10 @@
+{
+ "codec": "signed-cookie-flask",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-88",
+ "encoded": "session=.eJwlyUEOgjAQBdCrfLuGPeECrnDlBcbyA420Y2YKJTHeXRO3771D9iWM4ZYi0dSemBl1TmVBXZOjieX9dcFd4bod7OD7I6f6X54SK6R4o6HqD4mrZGISr7QRcdOD1q80Lf0whM8XvRonlA.atoRXA.9WF3EW1S1cjeLklvhGxePh119LI",
+ "generator_cmd": "PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_gen.py flask \"$plain\" | sed 's/^/session=/'",
+ "oracle_cmd": "printf %s \"${encoded#session=}\" | PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_oracle.py flask",
+ "oracle_output": "{\"msg\":\"Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-88\"}",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-88",
+ "expected": "match"
+}

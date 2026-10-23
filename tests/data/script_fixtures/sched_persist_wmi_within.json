@@ -1,0 +1,11 @@
+{
+ "material": "#pragma namespace(\"\\\\\\\\.\\\\root\\\\subscription\")\ninstance of __EventFilter as $F\n{\n    Name = \"SysUptimeFilter\";\n    EventNamespace = \"root\\\\cimv2\";\n    QueryLanguage = \"WQL\";\n    Query = \"SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA 'Win32_PerfFormattedData_PerfOS_System'\";\n};\ninstance of CommandLineEventConsumer as $C\n{\n    Name = \"SysUptimeConsumer\";\n    CommandLineTemplate = \"cmd.exe /c C:\\\\ProgramData\\\\b.exe\";\n};\ninstance of __FilterToConsumerBinding { Filter = $F; Consumer = $C; };\n",
+ "rep": "schedule_entries",
+ "transform": "interval",
+ "key": null,
+ "expected": "60",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes filter.mof: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && grep -oP 'WITHIN \\K\\d+' filter.mof)"
+}

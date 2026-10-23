@@ -1,0 +1,8 @@
+{
+ "field": "provision.uuid",
+ "expected": "none",
+ "generator_cmd": "openssl req -x509 ... -outform DER -out dev1.der; cp dev1.der impostor.mobileprovision (a bare X.509 cert renamed)",
+ "oracle_cmd": "openssl x509 -inform DER -in impostor.mobileprovision -noout -subject (a cert, not a CMS profile)",
+ "decoy": true,
+ "member": "impostor.mobileprovision"
+}

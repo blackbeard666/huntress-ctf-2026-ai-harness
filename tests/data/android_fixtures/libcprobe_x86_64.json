@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": "ANS-7c3e91d04ab2f658",
+ "decoy": false,
+ "generator_cmd": "tests/data/android_fixtures/libcprobe_src/gen_libcprobe.sh tests/data/android_fixtures  # gcc / aarch64-linux-gnu-gcc -shared -fPIC -O2 libcprobe_src/libc_probe.c (Java_..._nativeCheck folds /proc/self/status TracerPid via fopen+fgets+strncmp+atoi, /proc/self/maps via open+read+strstr frida/xposed, access(su), a joined pthread watchdog, ptrace(TRACEME), prctl, fork watchdog child, clock_gettime delta into key K; out[i] = ENC[i] ^ ((K*(i+1)+0x3d)&0xff)); ENC from a python3 xor one-liner with K=0x0c; zip -qX -r <name>.apk assets lib",
+ "oracle_cmd": "unzip libcprobe_x86_64.apk 'lib/*' && gcc -rdynamic -o h native_src/antigate_harness.c -ldl && ./h lib/x86_64/libguard.so Java_com_huntress_arena_Guard_nativeCheck  # the real .so on a clean, untraced host (real fopen/open/read/access/fork/pthread/clock_gettime; ptrace TRACEME answered 0): 'NewStringUTF ANS-7c3e91d04ab2f658'"
+}

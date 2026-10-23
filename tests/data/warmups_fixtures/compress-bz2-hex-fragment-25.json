@@ -1,0 +1,10 @@
+{
+ "codec": "bz2-hex",
+ "plain": "Game M",
+ "encoded": "425a6839314159265359149ee00e0000009500400000822202200021800c02c736e2ee48a70a120293dc01c0",
+ "generator_cmd": "printf %s \"$plain\" | bzip2 -9 | xxd -p | tr -d '\\n'  # bzip2 CLI + xxd wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | bzip2 -dc",
+ "oracle_plain": "Game M",
+ "expected": "match",
+ "mastery_fragment": true
+}

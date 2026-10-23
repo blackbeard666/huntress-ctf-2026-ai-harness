@@ -1,0 +1,7 @@
+{
+ "entry": "biometric_auth_scan",
+ "expected": "ANS-e2961fd0c4b8a753",
+ "_why": "MainActivity.onCreate: KeyguardManager.createConfirmDeviceCredentialIntent + startActivityForResult(i, 42); onActivityResult(42, RESULT_OK=-1) setText(xor-decoded token), else setText(\"cancelled\")",
+ "generator_cmd": "python3 tests/data/android_fixtures/bio_src/gen_bio.py keyguard_result tests/data/android_fixtures/bio_keyguard_result.apk  # javac --release 8 (app + androidx.biometric / android.hardware.biometrics / KeyguardManager stubs) + dex2jar d2j-jar2dex.sh; manifest: apktool-bundled aapt2 link -I prebuilt/android-framework.jar; zipfile",
+ "oracle_cmd": "same generator, stage 2: host-JVM Probe calls MainActivity.onActivityResult(42, -1, null) -> TextView.LAST \"result_ok=ANS-e2961fd0c4b8a753\"; onActivityResult(42, 0, null) -> \"result_canceled=cancelled\""
+}

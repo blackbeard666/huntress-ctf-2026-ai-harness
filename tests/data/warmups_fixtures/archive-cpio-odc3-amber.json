@@ -1,0 +1,9 @@
+{
+ "codec": "archive-container[cpio-odc]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-badger-90",
+ "encoded": "MDcwNzA3MDAwMDAwMDAwMDAwMTAwNjY0MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDMwMDAwMDAwMDA0MnAxAE5pY2Ugd29yayBkZWNvZGluZyB0aGlzIHdhcm11cCEgVG8wNzA3MDcwMDAwMDAwMDAwMDAxMDA2NjQwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMzAwMDAwMDAwMDQycDIAIHNvbHZlLCBzdWJtaXQgdGhpcyBleGFjdCBhbnN3ZXIgdDA3MDcwNzAwMDAwMDAwMDAwMDEwMDY2NDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAzMDAwMDAwMDAwNDJwMwBvIHRoZSBHYW1lIE1hc3RlcjogYW1iZXItYmFkZ2VyLTkwMDcwNzA3MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAxMDAwMDAwMDAwMDAwMDAwMDAwMDAwMTMwMDAwMDAwMDAwMFRSQUlMRVIhISEA",
+ "generator_cmd": "python3.14 -c 'import libarchive,os,sys,base64;fs=sys.argv[2:];c=libarchive.custom_writer(sys.stdout.buffer.write,sys.argv[1]);w=c.__enter__();[w.add_file_from_memory(f,len(os.environ[f].encode()),os.environ[f].encode()) for f in fs];c.__exit__(None,None,None)' cpio p1 p2 p3 | base64 -w0",
+ "oracle_cmd": "f=$(mktemp); printf %s \"$encoded\" | base64 -d > $f; 7z x -so -tcpio $f 2>/dev/null </dev/null; r=$?; rm -f $f; exit $r",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-badger-90",
+ "expected": "match"
+}

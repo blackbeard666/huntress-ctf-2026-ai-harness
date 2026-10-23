@@ -1,0 +1,8 @@
+{
+ "field": "ipa.provision_developer_certificate_sha1s",
+ "expected": "none",
+ "generator_cmd": "mkdir -p Payload/Relay.app; cp Info.plist (plain app, no profile, no PlugIns); zip -X -r Relay.ipa Payload",
+ "oracle_cmd": "unzip -l Relay.ipa -> no embedded.mobileprovision",
+ "decoy": true,
+ "member": "Relay.ipa"
+}

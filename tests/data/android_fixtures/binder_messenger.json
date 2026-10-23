@@ -1,0 +1,7 @@
+{
+ "entry": "binder_transact_scan",
+ "expected": "ANS-b83f06d2e9a1c475",
+ "_why": "Messenger service: VaultService$IncomingHandler extends Handler, handleMessage sparse-switches on msg.what {0x10, 0x200, 0x7001}; MSG_REVEAL (0x7001) reads msg.getData().getString('pin'), requires '4729', builds the token in a StringBuilder from a byte[] xor (0x5A+i), puts it in a Bundle 'token' on Message.obtain(null, 0x7002) and msg.replyTo.send()s it",
+ "generator_cmd": "python3 tests/data/android_fixtures/binder_src/gen_binder.py messenger tests/data/android_fixtures/binder_messenger.apk  # javac --release 8 (app + android.os Handler/Message/Bundle/Messenger stubs) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d23.ipc.Probe -> Message.obtain(null, 0x7001) with data pin=4729 and replyTo=a client Messenger sent to new VaultService().messenger on the host JVM; reply getData().getString('token') = 'ANS-b83f06d2e9a1c475'"
+}

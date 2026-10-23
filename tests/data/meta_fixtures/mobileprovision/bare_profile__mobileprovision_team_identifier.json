@@ -1,0 +1,8 @@
+{
+ "field": "mobileprovision.team_identifier",
+ "expected": "7QX4N2LM9B",
+ "generator_cmd": "the FieldKit profile alone: openssl cms -sign -in profile.plist -signer c.pem -inkey k.pem -outform DER -nodetach -binary -out embedded.mobileprovision",
+ "oracle_cmd": "openssl cms -verify -noverify -inform DER -in embedded.mobileprovision | python3 -c plistlib.loads ['TeamIdentifier'][0]",
+ "decoy": false,
+ "member": "embedded.mobileprovision"
+}

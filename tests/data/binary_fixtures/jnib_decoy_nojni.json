@@ -1,0 +1,24 @@
+{
+ "family": "jni_bridge",
+ "jar": "jnib_decoy_nojni.jar",
+ "so": "jnib_decoy_nojni.bin",
+ "decoy": true,
+ "generator_cmd": "bash tests/data/binary_fixtures/jnib_gen.sh <workdir>  (javac/jar, javac -h, gcc / aarch64-linux-gnu-gcc -shared -I$JAVA_HOME/include, coreutils base64 + gzip crc)",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/jnib_oracle.py jnib_decoy_nojni.jar jnib_decoy_nojni.bin   # javap -p -s/-c, readelf -W --dyn-syms/-s/-r/-S/-d, grep -obUa, javac -h header",
+ "note": "DECOY: jar without ACC_NATIVE / System.loadLibrary (a user method named loadLibrary) + plain C .so holding a descriptor-looking string -> every field none",
+ "expected_facts": {
+  "soname": "none",
+  "jni_onload": "false",
+  "registered_natives": "none",
+  "registered_count": "0",
+  "jni_export_count": "0",
+  "native_methods": "none",
+  "native_method_count": "0",
+  "load_library": "none",
+  "load_libraries": "none",
+  "native_method_names": "none",
+  "hcfg_member": "none",
+  "hcfg_entry": "none",
+  "hcfg_offset": "none"
+ }
+}

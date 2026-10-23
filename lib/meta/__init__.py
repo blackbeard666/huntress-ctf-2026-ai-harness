@@ -42,7 +42,7 @@ def _s(fn):
     return Extractor(f"lib.meta.{fn}", SPECULATIVE, ())
 
 
-# Every GM-verified field family D1-D20 (+ the never-asked extras the day solvers already carried, speculative).
+# Every GM-verified field family D1-D21 (+ the never-asked extras the day solvers already carried, speculative).
 _BUILTIN = {
     ("file", "filename"): _v("identity:filename", 1),
     ("file", "size_bytes"): _v("identity:size_bytes", 1),
@@ -86,6 +86,12 @@ _BUILTIN = {
     # D20: cputype of every slice, fat_arch order (thin = header), "0x%08x" in a compact JSON list -- thin arm64 ->
     # ["0x0100000c"] (single, TT, all 5 Mastery sets; the arch-name list ["arm64"] was REJECTED)
     ("macho", "cpu_type_set"): _v("macho:cpu_type_set", 20),
+    # D21: <manifest package> of the APK's binary AndroidManifest.xml, verbatim (stdlib AXML walk) --
+    # "com.huntress.arena.p08281778" (single, TT, all 5 Mastery sets)
+    ("apk", "package_name"): _v("apk:package_name", 21),
+    # D22: META-INF/MANIFEST.MF main-section Main-Class, verbatim (continuation lines joined) -- prebuilt
+    # jar.jar_manifest promoted via jar.py: "arena.evidence.ArtifactMain" (single, TT, all 6 Mastery sets)
+    ("jar", "main_class"): _v("jar:main_class", 22),
 }
 
 PREBUILT_DIR = Path(__file__).resolve().parent / "prebuilt"

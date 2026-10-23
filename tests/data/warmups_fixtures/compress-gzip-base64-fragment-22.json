@@ -1,0 +1,10 @@
+{
+ "codec": "gzip-base64",
+ "plain": "ecoding",
+ "encoded": "H4sIAAAAAAACA0tNzk/JzEsHAH0DCgoHAAAA",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | base64 -w0  # gzip CLI + base64 wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc",
+ "oracle_plain": "ecoding",
+ "expected": "match",
+ "mastery_fragment": true
+}

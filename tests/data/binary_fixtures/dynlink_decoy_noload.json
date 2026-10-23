@@ -1,0 +1,21 @@
+{
+ "family": "dynlink",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "loader": "dynlink_decoy_noload.bin",
+ "plugin": "dynlink_decoy_noload.plugin.bin",
+ "expected_facts": {
+  "loaded_library": "none",
+  "resolved_symbols": "none",
+  "loader_needs_libdl": "none",
+  "plugin_exports": "[\"add2\"]",
+  "plugin_header_magic": "none",
+  "loader_kind": "none",
+  "init_export": "none"
+ },
+ "generator_cmd": "FX=$PWD bash dynlink_gen.sh   # run from an empty scratch dir with FX=tests/data/binary_fixtures; gcc 13 -ldl",
+ "oracle_cmd": "python3 dynlink_oracle.py dynlink_decoy_noload.bin dynlink_decoy_noload.plugin.bin   # readelf --dyn-syms/-d/-lW + objdump -d -Mintel (lea/mov arg before call dlopen/dlsym)",
+ "decoy": true,
+ "note": "DECOY: plain program (no dl* imports) + plain .so: every handshake fact 'none', exports still listed; lib.binary.dynlink_facts(loader, plugin); field names SPECULATIVE (GM label not seen)"
+}

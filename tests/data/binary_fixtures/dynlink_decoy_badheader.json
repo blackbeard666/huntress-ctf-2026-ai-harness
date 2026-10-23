@@ -1,0 +1,23 @@
+{
+ "family": "dynlink",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "loader": "dynlink_ocaml_d21.bin",
+ "plugin": "dynlink_decoy_badheader.plugin.bin",
+ "expected_facts": {
+  "loaded_library": "none",
+  "resolved_symbols": "[\"caml_plugin_header\"]",
+  "loader_needs_libdl": "true",
+  "plugin_exports": "[\"camlFoo__entry\",\"caml_plugin_header\"]",
+  "plugin_header_magic": "none",
+  "plugin_unit_names": "none",
+  "plugin_unit_crc": "none",
+  "loader_kind": "ocaml_natdynlink",
+  "init_export": "caml_plugin_header"
+ },
+ "generator_cmd": "FX=$PWD bash dynlink_gen.sh   # run from an empty scratch dir with FX=tests/data/binary_fixtures; gcc 13 -ldl",
+ "oracle_cmd": "python3 dynlink_oracle.py dynlink_ocaml_d21.bin dynlink_decoy_badheader.plugin.bin   # readelf --dyn-syms/-d/-lW + objdump -d -Mintel (lea/mov arg before call dlopen/dlsym); loader side = the D21 loader (objdump: lea rsi,'caml_plugin_header' -> call caml_dlsym); only the plugin is the decoy",
+ "decoy": true,
+ "note": "DECOY: caml_plugin_header exported but points at a non-Marshal string -> magic/units 'none'; lib.binary.dynlink_facts(loader, plugin); field names SPECULATIVE (GM label not seen)"
+}

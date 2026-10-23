@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-22-managed-native-bridge",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Bridge Troll",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-22-managed-native-bridge",
+    "time_trial": "binary-reverse-engineering-day-22-managed-native-bridge/time_trial",
+    "mastery": "binary-reverse-engineering-day-22-managed-native-bridge/mastery"
+  }
+}

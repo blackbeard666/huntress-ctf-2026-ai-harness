@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": "ANS-a61f2c8e04d97b35",
+ "decoy": false,
+ "generator_cmd": "tests/data/android_fixtures/sysprop_src/gen_sysprop.sh tests/data/android_fixtures  # gcc / aarch64-linux-gnu-gcc -shared -fPIC -O2 sysprop_src/sysprop_probe.c (Java_..._nativeCheck folds __system_property_get of ro.build.tags/ro.debuggable/ro.secure/ro.boot.verifiedbootstate/ro.kernel.qemu/ro.hardware, __system_property_find + __system_property_read_callback(ro.boot.flash.locked), popen('which su') / popen('getprop ro.build.tags') + fgets, fopen('/proc/self/mounts') + fgets + strstr magisk / 'tmpfs /system ', opendir('/data/adb'), dlopen('libfrida-gadget.so') into key K; out[i] = ENC[i] ^ ((K*(i+1)+0x29)&0xff)); K and ENC from python3 one-liners; zip -qX -r <name>.apk assets lib",
+ "oracle_cmd": "unzip sysprop_mounts_arm64.apk 'lib/*' && aarch64-linux-gnu-gcc -rdynamic -o ha sysprop_src/sysprop_harness.c -ldl && qemu-aarch64 -L /usr/aarch64-linux-gnu ./ha lib/arm64-v8a/libguard.so Java_com_huntress_arena_Guard_nativeCheck  # the real .so; the harness exports bionic's __system_property_* with stock locked-Pixel values (ro.kernel.qemu unset) and popen ('which su' -> nothing, getprop -> value); real host /proc/self/mounts, opendir, dlopen: 'NewStringUTF ANS-a61f2c8e04d97b35'"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "entitlement.get_task_allow",
+ "expected": "true",
+ "generator_cmd": "python3 plistlib.dumps(dev profile's Entitlements dict) > app.entitlements (XML)",
+ "oracle_cmd": "cp app.entitlements x.plist; exiftool -j x.plist -> Get-Task-Allow true",
+ "decoy": false,
+ "member": "FieldKit.entitlements"
+}

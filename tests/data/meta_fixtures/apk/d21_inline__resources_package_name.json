@@ -1,0 +1,8 @@
+{
+ "field": "apk.resources_package_name",
+ "expected": "none",
+ "generator_cmd": "GM D21 artifact: python3 -c \"import zipfile; zipfile.ZipFile('challenges/day21/metadata-package-deal/single_solve/artifacts/20261021T130021Z/metadata-day-21-evidence.zip').extract('mobile-001.apk')\"",
+ "oracle_cmd": "unzip -l mobile-001.apk -> no resources.arsc (aapt dump resources: no resource table; badging label='')",
+ "decoy": true,
+ "member": "mobile-001.apk"
+}

@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "sed 's/7c2a9e41/0d0f1e2a/g; s/descriptor_0d0f1e2a/cfgPath/; CFGPART1=C:\\Program Files\\AcmeTray\\tray CFGPART2=.ini' wix_ca_props.wxs (same shape, benign config path, no codec)",
+ "oracle_cmd": "grep -c 'descriptor_\\|HUNTRESS' wix_ca_decoy_benign.wxs  # 0: no descriptor, nothing to decode"
+}

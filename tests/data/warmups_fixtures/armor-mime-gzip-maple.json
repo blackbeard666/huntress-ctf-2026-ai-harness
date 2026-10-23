@@ -1,0 +1,9 @@
+{
+ "codec": "mime-base64[gzip]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-gecko-86",
+ "encoded": "Content-Type: application/gzip; Name=\"note.txt.gz\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: base64\nSubject: warmup\n\nH4sIAAAAAAACAyXJQQ5EQBAF0Kt8e7YycQErVi5Q037o0Eq6yrTjm8T2vTEGomjeMDPoHI8FvkZD\nkZyus8KkMN1/rGHXN0V/l7cEhxxWmOH6R6KXRAxiztwhybmzWRg2bT7tA3Ef1jRlAAAA\n",
+ "generator_cmd": "python3 -c 'import sys; from email.mime.application import MIMEApplication; m=MIMEApplication(sys.stdin.buffer.read(), \"gzip\", Name=\"note.txt.gz\"); m[\"Subject\"]=\"warmup\"; sys.stdout.write(m.as_string())' < <(printf %s \"$plain\" | gzip -9n)",
+ "oracle_cmd": "ruby -e 'print ARGV[0].split(/\\r?\\n\\r?\\n/, 2)[1].unpack1(\"m\")' \"$encoded\" | gunzip",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-gecko-86",
+ "expected": "match"
+}

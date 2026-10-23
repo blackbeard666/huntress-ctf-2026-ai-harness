@@ -19,9 +19,11 @@ free-line assignment tries them only for a blob with more free lines than the co
 than the newest confirmed codec's day -- never on D1-D13 bytes. Pure stdlib.
 """
 import base64
+import binascii
 import codecs
 import collections
 import functools
+import gzip
 import html
 import itertools
 import json
@@ -33,6 +35,7 @@ import string
 import time
 import unicodedata
 import urllib.parse
+import zlib
 
 SENTENCE = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: {slug}"
 SLUG = re.compile(r"[a-z]+(?:-[a-z]+)+-\d{2,}")
@@ -63,6 +66,18 @@ def _b64pad(t):
 
 def _toks(t):
     return [x for x in re.split(r"[\s,]+", t.strip()) if x]
+
+
+def _gz9f(b):
+    """gzip as the GM writes it (D21): zlib wbits 31 (mtime 0, OS 3), level 9 (XFL 2), memLevel 8, Z_FILTERED."""
+    c = zlib.compressobj(9, zlib.DEFLATED, 31, 8, zlib.Z_FILTERED)
+    return c.compress(b) + c.flush()
+
+
+def _zl9f(b):
+    """zlib as the GM writes it (D22): wbits 15 (header 78 da), level 9, memLevel 8, Z_FILTERED."""
+    c = zlib.compressobj(9, zlib.DEFLATED, 15, 8, zlib.Z_FILTERED)
+    return c.compress(b) + c.flush()
 
 
 DAYS = [
@@ -107,6 +122,15 @@ DAYS = [
     # separators (byte-exact on the Single, TT de73f228 and 98/98 Mastery 91bb3658 line 20)
     (20, "utf16be-hex", lambda s: (b"\xfe\xff" + s.encode("utf-16-be")).hex(),
      lambda t: bytes.fromhex(re.sub(r"\s+", "", t)).decode("utf-16"), False),
+    # D21 "Under Pressure" ("A familiar wrapper. Something compressed inside."): std base64 (padded) of gzip -- mtime 0,
+    # XFL 2, OS 3, deflate level 9 strategy Z_FILTERED (byte-exact on the Single, TT 4c426659 and 103/103 Mastery
+    # 664b2505 line 21; Python's default gzip.compress stream differs on the long sentence)
+    (21, "b64-gzip", lambda s: base64.b64encode(_gz9f(_u(s))).decode(),
+     lambda t: _t(gzip.decompress(base64.b64decode(_b64pad(t)))), False),
+    # D22 "Deflated Ego" ("Another familiar wrapper. This one needs a little inflation."): std base64 (padded) of a zlib
+    # stream (78 da), level 9 Z_FILTERED (byte-exact on the Single, TT 2a0bae7a and 108/108 Mastery 6bd39775 line 22)
+    (22, "b64-zlib", lambda s: base64.b64encode(_zl9f(_u(s))).decode(),
+     lambda t: _t(zlib.decompress(base64.b64decode(_b64pad(t)))), False),
 ]
 
 try:   # fair runs (HCTF_CODEC_MAX_DAY=<N-1>, as lib/codec.py): only codecs GM-confirmed before day N
@@ -7805,6 +7829,15 @@ def infer(plain, blob, hints=()):
             if dec is keyb64_dec:
                 kb = keyb64_solve(want)
                 return kb[0], kb[2]
+            if dec is decompress_dec:
+                dz = decompress_solve(want)
+                return dz[0], dz[2]
+            if dec is armor_dec:
+                ar = armor_solve(want)
+                return ar[0], ar[2]
+            if dec is openssl_dec:
+                os_ = openssl_solve(want)
+                return os_[0], os_[2] or (lambda s: None)
             return name, enc
     st = stack_fit(p, want)
     if st:
@@ -7846,6 +7879,9 @@ def infer(plain, blob, hints=()):
     dc = dcol_solve(blob, hints) if p.startswith(_CRIB) else None
     if dc and dc[1] == p:
         return dc[0], dc[2]
+    os_ = openssl_solve(want, hints) if hints else None   # passphrase = a title / prompt word
+    if os_ and os_[1] == p:
+        return os_[0], os_[2] or (lambda s: None)
     sub = _fit_subst(p, want)
     if sub:
         return "subst", lambda s: "".join(sub.get(c, c) for c in s)
@@ -7859,6 +7895,10 @@ def plaintext(blob, slug, deadline=None, hints=()):
     text = reader_text(blob)
     if not slug:
         return None
+    _zd_learn(hints)
+    tc = textcomp_dec(text.strip())   # whole-input text compression (RLE '1N1i..'): a looser stage reads it as junk + slug
+    if tc and _TPL in tc and tc.rstrip().endswith(slug):
+        return tc.strip()
     try:
         d = decode.decode_chunk(text.strip())
     except Exception:  # noqa: BLE001
@@ -7908,6 +7948,12 @@ def plaintext(blob, slug, deadline=None, hints=()):
     xk = xorkey_solve(text, hints)
     if xk and slug in xk[1]:
         return xk[1]
+    xz = xorz_solve(text, hints) if hints else None   # hint-word key over a compressed stream (no-hint: CANDIDATES)
+    if xz and slug in xz[1]:
+        return xz[1]
+    os_ = openssl_solve(text, hints) if hints else None   # OpenSSL envelope keyed by a title / prompt word
+    if os_ and slug in os_[1]:
+        return os_[1]
     pf = playfair_solve(text, hints)
     if pf and slug in pf[1]:
         return pf[1]
@@ -8210,6 +8256,135 @@ CANDIDATES += [(f"wswap{w}-{fmt}" + ("" if pad else "-rawtail"),
                for w in _WSWAP for fmt, pad in (("hex", True), ("hex", False), ("hex-upper", True), ("words", True),
                                                 ("base64", True))
                if f"wswap{w}-{fmt}" not in _have]
+del _have
+
+
+# ------------------------------------------------- middle-endian / PDP-11 32-bit words (2143, 3412)
+# PDP-11 stores a 32-bit value as two little-endian 16-bit halves, high half first: 0x0A0B0C0D -> 0b 0a 0d 0c ("2143"
+# against big-endian); the other middle-endian (Honeywell 316, ARM FPA doubles) is 0c 0d 0a 0b ("3412"). 'N' as UTF-32
+# in PDP order = 00 00 4e 00 (`iconv -t UTF-32BE | dd conv=swab`), in 3412 = 00 4e 00 00 (`iconv -t UTF-32LE | dd
+# conv=swab`). Cue: hex whose 4-byte words read neither as utf-32-le nor -be, often a permuted BOM (00 00 ff fe /
+# fe ff 00 00). The free decoder tries all 24 byte orders of each word under utf-32-be / utf-16-be / utf-8, crib +
+# English ranked; a read must beat the buffer's own plain utf-32/16/8 reading on bigrams (plain text is declined).
+_PERM4 = tuple("".join(p) for p in itertools.permutations("1234"))
+_PDP_UNITS = {"utf-32": "utf-32-be", "utf-16": "utf-16-be", "utf-8": "utf-8"}
+
+
+def permute4(b, order):
+    """b cut to whole 4-byte words, each word rearranged: output byte k = input byte int(order[k]) - 1."""
+    n = len(b) - len(b) % 4
+    out = bytearray(n)
+    for k, c in enumerate(order):
+        out[k::4] = b[int(c) - 1:n:4]
+    return bytes(out)
+
+
+def _perm4_inv(order):
+    """The order that undoes permute4(., order)."""
+    return "".join(str(order.index(str(k)) + 1) for k in range(1, 5))
+
+
+def pdp_enc(s, order="2143", unit="utf-32", fmt="hex", bom=False):
+    """Text -> its utf-32 / utf-16 / utf-8 big-endian code units (optional BOM, NUL-padded to whole 4-byte words) with
+    every 32-bit word in byte order `order`, as hex / hex-upper / words (8-digit groups) / base64."""
+    b = (("﻿" if bom else "") + s).encode(_PDP_UNITS[unit])
+    b += b"\0" * (-len(b) % 4)
+    x = permute4(b, order)
+    if fmt == "words":
+        return " ".join(x[i:i + 4].hex() for i in range(0, len(x), 4))
+    if fmt == "base64":
+        return base64.b64encode(x).decode()
+    return x.hex().upper() if fmt == "hex-upper" else x.hex()
+
+
+def _pdp_ok(s):
+    """Reads as the (mostly ASCII) English sentence: printable, texty, >= 80 % ASCII (random words decode as CJK)."""
+    return bool(s) and all(c.isprintable() or c in "\n\t" for c in s) and _texty(s) >= 0.85 \
+        and sum(c < "\x80" for c in s) >= 0.8 * len(s)
+
+
+def _pdp_text(x, unit):
+    """Printable text of the big-endian code units x under unit (leading BOM and pad NULs stripped), else None."""
+    try:
+        s = x.decode(_PDP_UNITS[unit]).lstrip("﻿").strip("\0")
+    except (UnicodeDecodeError, ValueError):
+        return None
+    return s if _pdp_ok(s) else None
+
+
+def _pdp_plain(b):
+    """b already reads as text in a standard form (utf-32/16 either endianness, BOM or not, or utf-8) -> that text."""
+    for enc in ("utf-32-be", "utf-32-le", "utf-16-be", "utf-16-le", "utf-8"):
+        try:
+            s = b.decode(enc).lstrip("﻿").strip("\0")
+        except (UnicodeDecodeError, ValueError):
+            continue
+        if _pdp_ok(s):
+            return s
+    return None
+
+
+def _pdp_better(s, raw):
+    """A permuted read s beats the bytes' own plain reading raw (None = not plain text at all) on English bigrams."""
+    from lib.decode import _bigram
+    return s is not None and s != raw and (raw is None or _bigram(s) > _bigram(raw))
+
+
+def pdp_dec(t, order="2143", unit="utf-32"):
+    """Undo pdp_enc(., order, unit, any fmt, any bom) -> text, else None. Gated: the read must beat the bytes' own
+    plain utf-32/16/8 reading (a plain utf-32 line is not a middle-endian dump)."""
+    try:
+        b = _wsw_bytes(t)
+        if b is None or len(b) % 4:
+            return None
+        s = _pdp_text(permute4(b, _perm4_inv(order)), unit)
+        return s if _pdp_better(s, _pdp_plain(b)) else None
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return None
+
+
+def pdp_reads(t):
+    """[(variant, text)] for a hex/base64 blob of whole 4-byte words read under every one of the 24 word byte orders
+    (variant 'pdp<order>-<unit>' = the order the words were STORED in), crib first, then most English."""
+    from lib.decode import _bigram
+    b = _wsw_bytes(t)
+    if b is None or len(b) < 4 or len(b) % 4:
+        return []
+    raw = _pdp_plain(b)
+    seen, reads = set(), []
+    for order in _PERM4[1:]:   # 1234 = plain big-endian = raw
+        x = permute4(b, _perm4_inv(order))
+        for unit in _PDP_UNITS:
+            s = _pdp_text(x, unit)
+            if s not in seen and _pdp_better(s, raw):
+                seen.add(s)
+                reads.append((f"pdp{order}-{unit}", s))
+    def crib(s):
+        return len(s) if len(s) >= 4 and s in SENTENCE.replace("{slug}", "") else _crib_piece(s)
+    return [(v, s) for v, s in sorted(reads, key=lambda r: (crib(r[1]), round(_texty(r[1]), 2), _bigram(r[1])),
+                                      reverse=True)]
+
+
+def pdp_free(p):
+    """Speculative Mastery-line decoder: the middle-endian word-order readings of a hex/base64 line."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + s for _v, s in pdp_reads(p.strip())[:4]]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+_have = {n for n, _e, _d in CANDIDATES}
+CANDIDATES += [(f"pdp{o}-{u}-{fmt}" + ("-bom" if bom else ""),
+                (lambda o, u, f, bm: lambda s: pdp_enc(s, o, u, f, bm))(o, u, fmt, bom),
+                (lambda o, u: lambda t: pdp_dec(t, o, u))(o, u))
+               for o in ("2143", "3412") for u in ("utf-32", "utf-16", "utf-8")
+               for fmt, bom in (("hex", False), ("hex", True), ("hex-upper", False), ("words", False),
+                                ("base64", False))
+               if not (bom and u == "utf-8") and not (u == "utf-16" and o == "2143")   # = utf-16-le, not middle-endian
+               and f"pdp{o}-{u}-{fmt}" not in _have]
 del _have
 
 
@@ -10434,6 +10609,3778 @@ CANDIDATES += [(n + ("-pad" if pad else ""), (lambda n, pad: lambda s: alt64_enc
 CANDIDATES.append(("keyed-base64", lambda s: None, keyb64_dec))
 
 
+# --------------------------------- compressor sweep (speculative, coverage atlas target compression-family-sweep)
+# D21 = std padded base64 of gzip ("A familiar wrapper. Something compressed inside."). The lane turns ONE knob a day
+# (D19 -> D20), so expect the same wrapper with another squeeze or the same gzip under another wrapper: every wrapper
+# reading (base64 std / url, padded or not; hex any case / spaced / 0x; base32 any case / pad; ascii85 / base85; 8-bit
+# binary; decimal) x a magic sniff (1f8b gzip, zlib CMF/FLG % 31, BZh bz2, fd377a585a00 xz, lzma-alone props + 0x00
+# range-coder byte, zstd 28b52ffd, lz4 frame 04224d18) -> bounded decompress of COMPLETE streams (concatenated
+# members allowed); raw deflate by trial (wbits -15) when no magic. Text = printable ASCII. Never raises.
+_DZ_MAX = 1 << 20
+_A85 = re.compile(r"(?:<~)?[!-uz\s]+(?:~>)?")
+_B85 = re.compile(r"[0-9A-Za-z!#$%&()*+\-;<=>?@^_`{|}~]+")
+_Z85_ABC = string.digits + string.ascii_lowercase + string.ascii_uppercase + ".-:+=^!/*?&<>()[]{}@%$#"
+_B85_ABC = string.digits + string.ascii_uppercase + string.ascii_lowercase + "!#$%&()*+-;<=>?@^_`{|}~"
+_Z85_TO_B85 = str.maketrans(_Z85_ABC, _B85_ABC)
+
+
+def _dz_wrappers(t):
+    """[(wrapper, bytes)] for every text wrapper `t` strictly parses as (labels re-encode via _dz_out)."""
+    if isinstance(t, (bytes, bytearray)):
+        b = bytes(t)
+        out = [("raw", b)]
+        try:
+            t = b.decode("ascii")
+        except UnicodeDecodeError:
+            return out
+    else:
+        out = []
+    s = t.strip() if isinstance(t, str) else ""
+    if not s or len(s) > 400000:
+        return out
+    flat = re.sub(r"\s+", "", s)
+    h = re.sub(r"(?i)0x|\\x|[:,\-]", "", flat)
+    if h and re.fullmatch(r"[0-9a-fA-F]+", h) and len(h) % 2 == 0:
+        out.append(("HEX" if h.isupper() and not h.isdigit() else "hex-spaced" if flat != s else "hex",
+                    bytes.fromhex(h)))
+    toks = s.split()
+    if re.fullmatch(r"[01]+", flat) and len(flat) % 8 == 0 and all(len(x) % 8 == 0 for x in toks):
+        out.append(("binary8" if len(toks) > 1 else "binary8-nospace",
+                    bytes(int(flat[i:i + 8], 2) for i in range(0, len(flat), 8))))
+    if len(toks) > 1 and all(x.isdigit() and int(x) < 256 for x in toks):
+        out.append(("decimal", bytes(int(x) for x in toks)))
+    u = flat.rstrip("=")
+    if re.fullmatch(r"[A-Za-z0-9+/\-_]+", u) and len(u) % 4 != 1 and not ("+" in u or "/" in u) & ("-" in u or "_" in u):
+        url = "-" in u or "_" in u
+        try:
+            out.append((("base64url" if url else "base64") + ("" if u != flat or len(u) % 4 == 0 else "-nopad"),
+                        base64.b64decode(u.replace("-", "+").replace("_", "/") + "=" * (-len(u) % 4), validate=True)))
+        except (ValueError, TypeError):
+            pass
+    if re.fullmatch(r"[A-Z2-7]+|[a-z2-7]+", u) and len(u) % 8 in (0, 2, 4, 5, 7):
+        try:
+            out.append(("base32" + ("-lower" if u.islower() else "") + ("" if u != flat or len(u) % 8 == 0 else "-nopad"),
+                        base64.b32decode(u.upper() + "=" * (-len(u) % 8))))
+        except (ValueError, TypeError):
+            pass
+    if _A85.fullmatch(s):
+        try:
+            out.append(("ascii85-armored" if s.startswith("<~") else "ascii85",
+                        base64.a85decode(s, adobe=s.startswith("<~") and s.endswith("~>"), ignorechars=" \t\r\n")))
+        except (ValueError, TypeError):
+            pass
+    if _B85.fullmatch(flat):
+        try:
+            out.append(("base85", base64.b85decode(flat)))
+        except (ValueError, TypeError):
+            pass
+    if len(flat) % 5 == 0 and all(c in _Z85_ABC for c in flat):
+        try:
+            out.append(("z85", base64.b85decode(flat.translate(_Z85_TO_B85))))
+        except (ValueError, TypeError):
+            pass
+    return out
+
+
+def _dz_out(b, wrapper):
+    """bytes -> `wrapper` text (a _dz_wrappers label)."""
+    if wrapper == "raw":
+        return b.decode("latin-1")
+    if wrapper.startswith("base64"):
+        x = (base64.urlsafe_b64encode(b) if wrapper.startswith("base64url") else base64.b64encode(b)).decode()
+        return x.rstrip("=") if wrapper.endswith("-nopad") else x
+    if wrapper.startswith("base32"):
+        x = base64.b32encode(b).decode()
+        x = x.lower() if "-lower" in wrapper else x
+        return x.rstrip("=") if wrapper.endswith("-nopad") else x
+    if wrapper == "binary8-nospace":
+        return "".join(f"{x:08b}" for x in b)
+    if wrapper == "ascii85-armored":
+        return base64.a85encode(b, adobe=True).decode()
+    if wrapper == "z85":
+        return base64.b85encode(b + b"\0" * (-len(b) % 4)).decode().translate(str.maketrans(_B85_ABC, _Z85_ABC))
+    return _bytes_out(b, wrapper)
+
+
+def _dz_kind(b):
+    """The compressor a byte string's magic names, else 'deflate' (raw, by trial)."""
+    if b[:2] == b"\x1f\x8b":
+        return "gzip"
+    if len(b) > 2 and b[0] & 0x0F == 8 and b[0] >> 4 <= 7 and (b[0] << 8 | b[1]) % 31 == 0:
+        return "zlib-dict" if b[1] & 0x20 else "zlib"
+    if b[:3] == b"BZh" and b[3:4] in (b"1", b"2", b"3", b"4", b"5", b"6", b"7", b"8", b"9"):
+        return "bz2"
+    if b[:6] == b"\xfd7zXZ\x00":
+        return "xz"
+    if len(b) >= 18 and b[0] < 225 and b[13] == 0 and b[0] in (0x5D, 0x5E, 0x2C, 0x5B, 0x6C, 0x09, 0x03, 0x00):
+        return "lzma"
+    if b[:4] == b"\x28\xb5\x2f\xfd":
+        return "zstd"
+    if b[:4] == b"\x04\x22\x4d\x18":
+        return "lz4"
+    if b[:10] == _SNAPPY_ID:
+        return "snappy"
+    return "deflate"
+
+
+def _dz_obj(kind):
+    import bz2
+    import lzma
+    if kind in ("gzip", "zlib", "deflate"):
+        return zlib.decompressobj({"gzip": 31, "zlib": 15, "deflate": -15}[kind])
+    if kind == "bz2":
+        return bz2.BZ2Decompressor()
+    if kind in ("xz", "lzma"):
+        return lzma.LZMADecompressor(lzma.FORMAT_XZ if kind == "xz" else lzma.FORMAT_ALONE, memlimit=1 << 26)
+    return None
+
+
+def _dz_stream(kind, b):
+    """(output, unused) of ONE complete `kind` stream at the head of `b`, else None (truncated / corrupt / bomb)."""
+    try:
+        if kind == "zstd":
+            import zstandard
+            d = zstandard.ZstdDecompressor().decompressobj()
+            out = d.decompress(b)
+            return (out, d.unused_data) if d.eof and len(out) <= _DZ_MAX else None
+        if kind == "lz4":
+            import lz4.frame
+            d = lz4.frame.LZ4FrameDecompressor()
+            out = d.decompress(b, max_length=_DZ_MAX)
+            return (out, d.unused_data or b"") if d.eof else None   # unused_data is None when nothing trails
+        if kind == "brotli":
+            import brotli
+            d = brotli.Decompressor()
+            out = d.process(b, output_buffer_limit=_DZ_MAX)
+            return (out, b"") if d.is_finished() and len(out) <= _DZ_MAX else None
+        if kind == "snappy":
+            out = _snappy_framed(b)
+            return None if out is None else (out, b"")
+        if kind == "snappy-raw":
+            out = _snappy_raw(b)
+            return None if out is None else (out, b"")
+        if kind == "zlib-dict":
+            zd = _zd_lookup(b)
+            if zd is None:
+                return None
+            d = zlib.decompressobj(15, zdict=zd)
+            out = d.decompress(b, _DZ_MAX)
+            return (out, d.unused_data) if d.eof else None
+        d = _dz_obj(kind)
+        out = d.decompress(b, _DZ_MAX)
+        return (out, d.unused_data) if d.eof else None
+    except Exception:   # noqa: BLE001 -- zlib.error / OSError / LZMAError / EOFError / ImportError
+        return None
+
+
+# Third-party squeezes (coverage atlas target third-party-compressors): zstd / lz4 frame sniffed above; snappy framed
+# (stream id ff060000 'sNaPpY', masked CRC-32C per chunk verified) and raw snappy (varint length must match exactly)
+# by a pure-python reader; brotli (no magic) by trial after raw deflate fails. Raw snappy / brotli run only when no
+# magic matched, and the text gate still applies.
+_SNAPPY_ID = b"\xff\x06\x00\x00sNaPpY"
+_CRC32C = []
+for _i in range(256):
+    _c = _i
+    for _ in range(8):
+        _c = (_c >> 1) ^ (0x82F63B78 if _c & 1 else 0)
+    _CRC32C.append(_c)
+
+
+def _crc32c_masked(b):
+    c = 0xFFFFFFFF
+    for x in b:
+        c = _CRC32C[(c ^ x) & 0xFF] ^ (c >> 8)
+    c ^= 0xFFFFFFFF
+    return (((c >> 15) | (c << 17)) + 0xA282EAD8) & 0xFFFFFFFF
+
+
+def _snappy_raw(b):
+    """Raw snappy block -> bytes, else None (bad varint / tag / offset / length mismatch / over _DZ_MAX)."""
+    n = sh = i = 0
+    while True:
+        if i >= len(b) or sh > 28:
+            return None
+        x = b[i]
+        n |= (x & 0x7F) << sh
+        i, sh = i + 1, sh + 7
+        if not x & 0x80:
+            break
+    if n > _DZ_MAX or n == 0:
+        return None
+    out = bytearray()
+    while i < len(b):
+        tag = b[i]
+        i += 1
+        t = tag & 3
+        if t == 0:
+            ln = tag >> 2
+            if ln >= 60:
+                k = ln - 59
+                if i + k > len(b):
+                    return None
+                ln = int.from_bytes(b[i:i + k], "little")
+                i += k
+            ln += 1
+            if i + ln > len(b):
+                return None
+            out += b[i:i + ln]
+            i += ln
+        else:
+            if t == 1:
+                if i >= len(b):
+                    return None
+                ln, off = 4 + ((tag >> 2) & 7), (tag >> 5) << 8 | b[i]
+                i += 1
+            else:
+                k = 2 if t == 2 else 4
+                if i + k > len(b):
+                    return None
+                ln, off = (tag >> 2) + 1, int.from_bytes(b[i:i + k], "little")
+                i += k
+            if off == 0 or off > len(out):
+                return None
+            for _ in range(ln):
+                out.append(out[-off])
+        if len(out) > n:
+            return None
+    return bytes(out) if len(out) == n else None
+
+
+def _snappy_framed(b):
+    """Snappy framing format (stream id first; concatenated streams allowed) -> bytes, else None (bad CRC / reserved
+    unskippable chunk / truncated)."""
+    if b[:10] != _SNAPPY_ID:
+        return None
+    out, i = bytearray(), 0
+    while i < len(b):
+        if i + 4 > len(b):
+            return None
+        typ, ln = b[i], int.from_bytes(b[i + 1:i + 4], "little")
+        body, i = b[i + 4:i + 4 + ln], i + 4 + ln
+        if len(body) != ln:
+            return None
+        if typ == 0xFF:
+            if body != b"sNaPpY":
+                return None
+        elif typ in (0, 1):
+            if ln < 4:
+                return None
+            data = body[4:] if typ == 1 else _snappy_raw(body[4:])
+            if data is None or _crc32c_masked(data) != int.from_bytes(body[:4], "little"):
+                return None
+            out += data
+            if len(out) > _DZ_MAX:
+                return None
+        elif typ < 0x80:
+            return None
+    return bytes(out)
+
+
+def _snappy_raw_enc(b):
+    """A valid raw snappy block (literal runs only: decoders accept it; not byte-identical to a matching compressor)."""
+    n, v = len(b), bytearray()
+    while True:
+        v.append((n & 0x7F) | (0x80 if n > 0x7F else 0))
+        n >>= 7
+        if not n:
+            break
+    for j in range(0, len(b), 65536):
+        lit = b[j:j + 65536]
+        m = len(lit) - 1
+        v += bytes([m << 2]) if m < 60 else bytes([(59 + (1 if m < 256 else 2)) << 2]) + m.to_bytes(
+            1 if m < 256 else 2, "little")
+        v += lit
+    return bytes(v)
+
+
+def _snappy_framed_enc(b):
+    out = bytearray(_SNAPPY_ID)
+    for j in range(0, len(b), 65536):
+        blk = b[j:j + 65536]
+        # literal-only never saves the 1/8 the reference writers require -> they (and we) emit an uncompressed chunk
+        body = _crc32c_masked(blk).to_bytes(4, "little") + blk
+        out += b"\x01" + len(body).to_bytes(3, "little") + body
+    return bytes(out)
+
+
+_GZ_OS = {0: "FAT", 1: "Amiga", 2: "VMS", 3: "Unix", 4: "VM/CMS", 5: "Atari", 6: "HPFS", 7: "Macintosh", 8: "Z-System",
+          9: "CP/M", 10: "TOPS-20", 11: "NTFS", 12: "QDOS", 13: "Acorn", 255: "unknown"}
+
+
+def _gz_header(b):
+    """ONE gzip member header at the head of `b` (RFC 1952: FEXTRA / FNAME / FCOMMENT / FHCRC) -> dict (hlen, flg,
+    mtime, xfl, os, fextra, fname, fcomment), else None (wrong magic / reserved flag bits / header cut short)."""
+    if len(b) < 10 or b[:3] != b"\x1f\x8b\x08" or b[3] & 0xE0:
+        return None
+    flg, i = b[3], 10
+    h = {"flg": flg, "mtime": int.from_bytes(b[4:8], "little"), "xfl": b[8], "os": b[9], "fextra": None,
+         "fname": None, "fcomment": None}
+    if flg & 4:
+        if len(b) < 12:
+            return None
+        n = int.from_bytes(b[10:12], "little")
+        h["fextra"], i = b[12:12 + n], 12 + n
+    for bit, key in ((8, "fname"), (16, "fcomment")):
+        if flg & bit:
+            j = b.find(b"\x00", i)
+            if j < 0:
+                return None
+            h[key], i = b[i:j].decode("latin-1"), j + 1
+    i += 2 if flg & 2 else 0
+    if i > len(b):
+        return None
+    h["hlen"] = i
+    return h
+
+
+def _gz_lenient(b):
+    """(output, members, tail) of a gzip blob zlib's wbits-31 path rejects: every member = parsed header + raw-deflate
+    body (wbits -15) that reaches its final block; a full 8-byte trailer must match CRC32 + ISIZE; the LAST member may
+    carry a truncated trailer (0-7 bytes, which must be a prefix of the true one) or be followed by non-gzip trailing
+    garbage. tail = trailer bytes present on the last member. None when any body is cut / corrupt or a CRC is wrong."""
+    out, rest, n = b"", b, 0
+    while True:
+        h = _gz_header(rest)
+        if h is None:
+            return None
+        d = zlib.decompressobj(-15)
+        try:
+            data = d.decompress(rest[h["hlen"]:], _DZ_MAX)
+        except zlib.error:
+            return None
+        if not d.eof or len(out) + len(data) > _DZ_MAX:
+            return None
+        trl = (zlib.crc32(data).to_bytes(4, "little") + (len(data) & 0xFFFFFFFF).to_bytes(4, "little"))
+        got, rest, n = d.unused_data[:8], d.unused_data[8:], n + 1
+        if got != trl[:len(got)]:
+            return None
+        out += data
+        if len(got) < 8 or rest[:2] != b"\x1f\x8b":
+            return out, n, len(got)
+
+
+def gzip_hints(t):
+    """[{wrapper, member, fname, fcomment, fextra, mtime, xfl, os}] for every gzip member header under any wrapper
+    reading of `t`. An FNAME (base64 'H4sICA') may hint the NEXT layer -- surface it in solver notes, NEVER as the
+    answer. Never raises."""
+    out = []
+    try:
+        for wrapper, b in _dz_wrappers(t):
+            rest, m = b, 0
+            while m < 16:
+                h = _gz_header(rest)
+                if h is None:
+                    break
+                out.append({"wrapper": wrapper, "member": m, "fname": h["fname"], "fcomment": h["fcomment"],
+                            "fextra": h["fextra"].hex() if h["fextra"] is not None else None, "mtime": h["mtime"],
+                            "xfl": h["xfl"], "os": _GZ_OS.get(h["os"], h["os"])})
+                d = zlib.decompressobj(-15)
+                try:
+                    d.decompress(rest[h["hlen"]:], _DZ_MAX)
+                except zlib.error:
+                    break
+                if not d.eof:
+                    break
+                rest, m = d.unused_data[8:], m + 1
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return out
+    return out
+
+
+def _dz_inflate(b):
+    """[(kind, bytes)]: the sniffed compressor's output (concatenated members of the same kind allowed, trailing NUL
+    padding ignored), then a lenient gzip read (truncated trailer / trailing garbage after a CRC-checked member), then
+    raw deflate by trial if that fails."""
+    kind = _dz_kind(b)
+    for k in dict.fromkeys((kind, "gzip+", "deflate") + (("brotli", "snappy-raw") if kind == "deflate" else ())):
+        if k == "gzip+":
+            lz = _gz_lenient(b) if kind == "gzip" else None
+            if lz and lz[0]:
+                return [("gzip", lz[0])]
+            continue
+        out, rest = b"", b
+        while rest:
+            got = _dz_stream(k, rest)
+            if got is None or len(out) + len(got[0]) > _DZ_MAX:
+                out = None
+                break
+            out, rest = out + got[0], got[1]
+            if not rest.strip(b"\x00") or k == "deflate" or _dz_kind(rest) != k:
+                rest = rest.strip(b"\x00")
+                break
+        if out and not rest:
+            return [(k, out)]
+    return []
+
+
+# zlib header knobs (coverage atlas target zlib-header-sweep): D22 = base64 of zlib 78da. The next knob may be a
+# smaller window (CMF 08..68: b64 'CI'..'aI'), another level (FLG 01/5e/9c/da), raw deflate (no header) or an FDICT
+# preset dictionary (FLG bit 5 + DICTID = adler32(dict)). The dictionary is picked by its adler32 among the crib
+# sentence's word runs / prefixes / suffixes and the title/prompt words (`_zd_learn(hints)`); no match -> None.
+_ZD_EXTRA = {}
+
+
+def _zd_learn(hints=()):
+    """Add the title / prompt words (each hint whole, its words, adjacent word runs, lower/title case) as FDICT
+    dictionary candidates."""
+    try:
+        for h in hints or ():
+            if not isinstance(h, str) or not h.strip():
+                continue
+            ws = re.findall(r"[A-Za-z0-9']+", h)
+            runs = [h.strip()] + [" ".join(ws[i:j]) for i in range(len(ws)) for j in range(i + 1, min(len(ws), i + 6) + 1)]
+            for r in runs:
+                for v in (r, r.lower(), r.title(), r.upper(), r.replace(" ", "")):
+                    _ZD_EXTRA.setdefault(zlib.adler32(v.encode()), v.encode())
+    except Exception:   # noqa: BLE001
+        pass
+
+
+@functools.lru_cache(maxsize=1)
+def _zd_base():
+    """{adler32: dict bytes} over the fixed sentence: whole, every prefix / suffix, every word run (+/- a trailing
+    space), and lane words."""
+    s = _CRIB
+    ws = s.split()
+    cands = [s, s.strip(), SENTENCE.replace("{slug}", "")] + [s[:i] for i in range(1, len(s) + 1)] + \
+        [s[i:] for i in range(len(s))] + ["huntress", "Huntress", "warmup", "warmups", "Game Master", "deflate",
+                                          "inflate", "zlib", "dictionary", "answer", "slug"]
+    for i in range(len(ws)):
+        for j in range(i + 1, len(ws) + 1):
+            r = " ".join(ws[i:j])
+            cands += [r, r + " ", " " + r, " " + r + " ", r.strip("!:"), r.lower()]
+    out = {}
+    for c in cands:
+        if c:
+            out.setdefault(zlib.adler32(c.encode()), c.encode())
+    return out
+
+
+def _zd_lookup(b):
+    """The FDICT dictionary whose adler32 is a zlib stream's DICTID, else None."""
+    if len(b) < 6:
+        return None
+    did = int.from_bytes(b[2:6], "big")
+    return _ZD_EXTRA.get(did) or _zd_base().get(did)
+
+
+def zlib_any(b, hints=()):
+    """Inflate one zlib-family stream under any header knob: RFC 1950 (any window 08..78, any level, FDICT with a
+    crib / hint dictionary), else raw deflate, else gzip/zlib auto-detect (wbits 47). Complete streams only (bounded
+    to 1 MiB); None when nothing inflates. Never raises."""
+    try:
+        b = bytes(b)
+        if len(b) < 2:
+            return None
+        if hints:
+            _zd_learn(hints)
+        trials = []
+        if b[0] & 0x0F == 8 and b[0] >> 4 <= 7 and (b[0] << 8 | b[1]) % 31 == 0:
+            if b[1] & 0x20:
+                zd = _zd_lookup(b)
+                if zd is not None:
+                    trials.append((15, zd))
+            else:
+                trials.append((15, None))
+        trials += [(-15, None), (47, None)]
+        for wb, zd in trials:
+            try:
+                d = zlib.decompressobj(wb, zdict=zd) if zd is not None else zlib.decompressobj(wb)
+                out = d.decompress(b, _DZ_MAX)
+                if d.eof and not d.unused_data.strip(b"\x00"):
+                    return out
+            except zlib.error:
+                continue
+    except Exception:   # noqa: BLE001
+        return None
+    return None
+
+
+def _dz_text(b):
+    try:
+        s = b.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    return s if s and s.isascii() and all(c.isprintable() or c in "\t\r\n" for c in s) else None
+
+
+def decompress_reads(t):
+    """[(name, text, kind, wrapper, raw)] for every wrapper x compressor reading of `t` that inflates to printable
+    ASCII (name = '<kind>-<wrapper>'). Never raises."""
+    out = []
+    try:
+        for wrapper, b in _dz_wrappers(t):
+            if len(b) < 6:
+                continue
+            for kind, data in _dz_inflate(b):
+                s = _dz_text(data)
+                if s is not None:
+                    out.append((f"{kind}-{wrapper}", s, kind, wrapper, b))
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+    return out
+
+
+def decompress_sweep(t, gate=SLUG):
+    """The first wrapper x compressor reading of `t` whose text matches `gate` (None = any printable text), else None."""
+    return next((s for _n, s, *_r in decompress_reads(t) if gate is None or gate.search(s)), None)
+
+
+def _dz_enc(kind, raw):
+    """A compressor re-encoder that copies the observed stream's knobs (gzip header / zlib level + window / bz2 block
+    size / xz check)."""
+    import bz2
+    import lzma
+    if kind == "gzip":
+        lvl = {2: 9, 4: 1}.get(raw[8], 6)
+        h = _gz_header(raw)
+        # the observed header verbatim (mtime / XFL / OS / FEXTRA / FNAME / FCOMMENT / FHCRC: all header-only bytes)
+        hdr = raw[:h["hlen"]] if h else b"\x1f\x8b\x08\x00\x00\x00\x00\x00" + raw[8:10]
+        lz = None if _dz_stream("gzip", raw) else _gz_lenient(raw)
+        tail = lz[2] if lz and lz[1] == 1 else 8   # a single member's truncated trailer is cut the same way
+
+        def gz(b):
+            c = zlib.compressobj(lvl, zlib.DEFLATED, -15)
+            return hdr + c.compress(b) + c.flush() + (zlib.crc32(b).to_bytes(4, "little") +
+                                                      (len(b) & 0xFFFFFFFF).to_bytes(4, "little"))[:tail]
+        return gz
+    if kind == "zlib":
+        lvl, wb = (1, 6, 6, 9)[raw[1] >> 6], (raw[0] >> 4) + 8
+
+        def zl(b):
+            c = zlib.compressobj(lvl, zlib.DEFLATED, wb)
+            return c.compress(b) + c.flush()
+        return zl
+    if kind == "zlib-dict":
+        lvl, wb, zd = (1, 6, 6, 9)[raw[1] >> 6], (raw[0] >> 4) + 8, _zd_lookup(raw) or b""
+        return lambda b: (lambda c: c.compress(b) + c.flush())(zlib.compressobj(lvl, zlib.DEFLATED, wb, zdict=zd))
+    if kind == "deflate":
+        return lambda b: (lambda c: c.compress(b) + c.flush())(zlib.compressobj(9, zlib.DEFLATED, -15))
+    if kind == "bz2":
+        return lambda b: bz2.compress(b, int(chr(raw[3])))
+    if kind == "xz":
+        chk = {0: lzma.CHECK_NONE, 1: lzma.CHECK_CRC32, 4: lzma.CHECK_CRC64, 10: lzma.CHECK_SHA256}.get(raw[7] & 15,
+                                                                                                         lzma.CHECK_CRC64)
+        return lambda b: lzma.compress(b, lzma.FORMAT_XZ, chk)
+    if kind == "lzma":
+        return lambda b: lzma.compress(b, lzma.FORMAT_ALONE)
+    if kind == "zstd":
+        import zstandard
+        return lambda b: zstandard.ZstdCompressor().compress(b)
+    if kind == "brotli":
+        import brotli
+        return lambda b: brotli.compress(b)
+    if kind == "snappy":
+        return _snappy_framed_enc
+    if kind == "snappy-raw":
+        return _snappy_raw_enc
+    import lz4.frame
+    flg, bd = (raw[4], raw[5]) if len(raw) > 5 else (0x64, 0x40)   # the observed frame descriptor's knobs
+
+    def lz(b):
+        z = lz4.frame.compress(b, block_size=(bd >> 4) & 7 if (bd >> 4) & 7 >= 4 else 0, block_linked=not flg & 0x20,
+                               block_checksum=bool(flg & 0x10), content_checksum=bool(flg & 4), store_size=bool(flg & 8))
+        # liblz4 marks a one-block frame block-independent; a linked-mode writer (Rust lz4_flex, lz4 CLI) does not:
+        # copy the observed B.Indep bit and recompute the descriptor checksum HC = (xxh32(FLG..) >> 8) & 0xFF
+        if (z[4] ^ flg) == 0x20:
+            dl = 2 + (8 if flg & 8 else 0) + (4 if flg & 1 else 0)
+            desc = bytes([flg]) + z[5:4 + dl]
+            z = z[:4] + desc + bytes([(_xxh32(desc) >> 8) & 0xFF]) + z[5 + dl:]
+        return z
+    return lz
+
+
+def _xxh32(b, seed=0):
+    """XXH32 (the lz4 frame descriptor checksum), pure python."""
+    p1, p2, p3, p4, p5, m = 2654435761, 2246822519, 3266489917, 668265263, 374761393, 0xFFFFFFFF
+    rl = lambda x, r: ((x << r) | (x >> (32 - r))) & m   # noqa: E731
+    n, i = len(b), 0
+    if n >= 16:
+        v = [(seed + p1 + p2) & m, (seed + p2) & m, seed & m, (seed - p1) & m]
+        while i + 16 <= n:
+            for j in range(4):
+                v[j] = (rl((v[j] + int.from_bytes(b[i + 4 * j:i + 4 * j + 4], "little") * p2) & m, 13) * p1) & m
+            i += 16
+        h = (rl(v[0], 1) + rl(v[1], 7) + rl(v[2], 12) + rl(v[3], 18)) & m
+    else:
+        h = (seed + p5) & m
+    h = (h + n) & m
+    while i + 4 <= n:
+        h = (rl((h + int.from_bytes(b[i:i + 4], "little") * p3) & m, 17) * p4) & m
+        i += 4
+    while i < n:
+        h = (rl((h + b[i] * p5) & m, 11) * p1) & m
+        i += 1
+    h = ((h ^ (h >> 15)) * p2) & m
+    h = ((h ^ (h >> 13)) * p3) & m
+    return h ^ (h >> 16)
+
+
+# Stacked on D21 (atlas row 140): the inflated text may be ANOTHER seen codec (gzip of hex / rot13 / Morse / base64),
+# or an old free transform may sit over the compressed wrapper (reversed / rot13 / Atbash / ROT47 base64 of gzip:
+# rot13('H4sI') = 'U4fV', reversed ends 'Is4H'). Undo the free transform only when the blob as-is inflates to nothing;
+# re-run nested decompress + decode_chunk + CANDIDATES on an inflated text that isn't English (depth cap 3, slug gate).
+_RD_PRE = (("rev", lambda t: t[::-1]), ("rot13", lambda t: rot(t, 13)), ("atbash", atbash), ("rot47", rot47))
+_RD_OK = -6.0   # _kbd_score of the plain sentence ~ -3.4, of its rot13 ~ -8, of hex / Morse / base64 <= -11
+
+
+def _rd_pre_reads(t):
+    """[(pre, f, reads)]: decompress_reads of the blob as-is, else of the blob with one free transform undone (all
+    involutions, so f also re-applies it)."""
+    r = decompress_reads(t)
+    if r or not isinstance(t, str):
+        return [("", None, r)] if r else []
+    return [(pre, f, r) for pre, f in _RD_PRE for r in (decompress_reads(f(t)),) if r]
+
+
+def _rd_inner(s, depth, deadline):
+    """(name, plain, enc|None) for an inflated text `s` that is another codec: a nested squeeze, decode_chunk, then the
+    CANDIDATES decoders -- plain slug-gated and more English than `s`; enc = the first CANDIDATES encoder that
+    reproduces `s` exactly (None = decodes but can't re-encode)."""
+    if depth <= 0:
+        return None
+    base = _kbd_score(s)
+    r = decompress_solve(s, _depth=depth)
+    if r and _kbd_score(r[1]) > base:
+        return r
+    r = xorkey_solve(s)   # XOR of the text, then compressed: the inflated hex / base64 is a crib-keyed xorkey blob
+    if r:
+        return r
+    from lib.decode import decode_chunk
+    hit = None
+    p = safe(decode_chunk, s)
+    if p and SLUG.search(p) and _kbd_score(p) > base:
+        hit = ("chunk", p)
+    for name, _enc, dec in CANDIDATES:
+        if hit or time.monotonic() > deadline:
+            break
+        if dec is not None and dec is not decompress_dec:
+            p = safe(dec, s)
+            if p and SLUG.search(p) and _kbd_score(p) > base:
+                hit = (name, p)
+    if not hit:
+        return None
+    want = s.strip()
+    for name, enc, _dec in CANDIDATES:
+        if time.monotonic() > deadline + 0.3:
+            break
+        if (safe(enc, hit[1]) or "").strip() == want:
+            return name, hit[1], enc
+    return hit[0], hit[1], None
+
+
+def decompress_solve(blob, hints=(), _depth=3):
+    """(name, sentence, enc) for the first slug-gated wrapper x compressor reading of the blob (after undoing a free
+    transform over the wrapper, and re-decoding an inflated text that is another codec), else None."""
+    try:
+        deadline = time.monotonic() + 0.5
+        for pre, f, reads in _rd_pre_reads(blob):
+            for name, s, kind, wrapper, raw in reads:
+                z = _dz_enc(kind, raw)
+                outer = (lambda z, w, f: lambda x: (lambda y: f(y) if f else y)(_dz_out(z(_u(x)), w)))(z, wrapper, f)
+                nm = f"{pre}({name})" if pre else name
+                if SLUG.search(s) and _kbd_score(s) >= _RD_OK:
+                    return nm, s, outer
+                rd = _rd_inner(s, _depth - 1, deadline) if _depth > 1 else None
+                if rd:
+                    ie = rd[2]
+                    return (f"{nm}[{rd[0]}]", rd[1], (lambda o, ie: lambda x: (lambda y: y and o(y))(safe(ie, x)))(outer, ie)
+                            if ie else (lambda x: None))
+                if SLUG.search(s):
+                    return nm, s, outer
+    except Exception:   # noqa: BLE001
+        return None
+    return None
+
+
+def decompress_dec(t):
+    r = decompress_solve(t)
+    return r[1] if r else None
+
+
+def _rd_free(s, depth=2):
+    """Mastery-fragment re-decodes of an inflated text (no slug in a fragment): nested squeeze + decode_chunk, kept
+    only when more English than `s`."""
+    if depth <= 0 or _kbd_score(s) >= _RD_OK:
+        return []
+    from lib.decode import decode_chunk
+    base = _kbd_score(s)
+    outs = [x for _p, _f, rs in _rd_pre_reads(s) for _n, x, *_r in rs]
+    outs = [y for x in outs for y in (_rd_free(x, depth - 1) or [x])]
+    outs += [x for x in (safe(decode_chunk, s),) if x]
+    return sorted((x for x in dict.fromkeys(outs) if _kbd_score(x) > base), key=_kbd_score, reverse=True)
+
+
+def decompress_free(p):
+    """Speculative Mastery-line decoder: the inflated text of a line (a per-fragment member under any wrapper, maybe
+    under a free transform), its re-decode first when the inflated text is another codec."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        outs = [y for _p, _f, rs in _rd_pre_reads(p) for _n, s, *_r in rs for y in _rd_free(s) + [s]]
+        return [lead + s for s in dict.fromkeys(outs)][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+CANDIDATES.append(("decompress-sweep", lambda s: None, decompress_dec))
+
+
+# XOR over a compressed stream (coverage atlas target xor-over-compressed-magic): wrapper decode -> no magic; the
+# repeating key = first bytes ^ a known compressor header (gzip 1f8b0800 00000000 xfl os = 10 bytes, bz2 'BZh'+level
+# +314159265359 = 10, xz magic+flags+crc32 = 12, lzma-alone props+dict+size = 13, zip local header = 10, zstd 4,
+# zlib 78xx = 2), cut at the smallest period that fits (1..10). zlib's 2 known bytes leave key bytes 2.. of a
+# period-3/4 key open: those are swept (any byte for 3, letters for 4) behind a cheap prefix-inflate filter. Title /
+# prompt words are tried as keys too. The reverse order (XOR of the text, then compressed) is decompress_solve's
+# inflated text routed into xorkey_solve.
+def _xz_hdrs():
+    out = [("gzip", b"\x1f\x8b\x08\x00\x00\x00\x00\x00" + bytes([x, o])) for x in (0, 2, 4) for o in (3, 255, 0, 11, 7)]
+    out += [("bz2", b"BZh" + bytes([d]) + b"\x31\x41\x59\x26\x53\x59") for d in b"987654321"]
+    out += [("xz", b"\xfd7zXZ\x00\x00" + bytes([c]) + zlib.crc32(bytes([0, c])).to_bytes(4, "little")) for c in (4, 1, 10, 0)]
+    out += [("lzma", b"\x5d\x00\x00" + bytes([d]) + b"\x00" + b"\xff" * 8) for d in (0x80, 0x10, 0x01, 0x40, 0x20)]
+    out += [("zip", b"PK\x03\x04" + v + b"\x00\x00" + m) for v in (b"\x14\x00", b"\x0a\x00") for m in (b"\x08\x00", b"\x00\x00")]
+    out += [("gzip", b"\x1f\x8b\x08\x08"), ("gzip", b"\x1f\x8b\x08\x00"), ("zstd", b"\x28\xb5\x2f\xfd")]
+    out += [("zlib", b"\x78" + bytes([f])) for f in (0xDA, 0x9C, 0x01, 0x5E)]
+    return out
+
+
+_XZ_HDRS = _xz_hdrs()
+
+
+def _xz_x(b, key):
+    """Repeating-key XOR via one big-int op (the sweep runs ~1000 of these)."""
+    n = len(b)
+    k = (key * (n // len(key) + 1))[:n]
+    return (int.from_bytes(b, "big") ^ int.from_bytes(k, "big")).to_bytes(n, "big")
+
+
+def _xz_keys(b, hints=()):
+    """[(kind|None, key)] candidate keys for a byte string that carries no compressor magic of its own."""
+    keys, seen = [], set()
+
+    def add(kind, k):
+        if k and any(k) and k not in seen:
+            seen.add(k)
+            keys.append((kind, k))
+    for kind, h in _XZ_HDRS:
+        if len(b) <= len(h) + 4:
+            continue
+        ks = bytes(x ^ y for x, y in zip(b, h))
+        for p in range(1, min(10, len(h)) + 1):
+            if all(ks[i] == ks[i % p] for i in range(p, len(h))):
+                add(kind, ks[:p])
+    for k in _hint_keys(hints):
+        add(None, k.encode())
+    return keys
+
+
+def _xz_zlib_sweep(b):
+    """Period-3 (any byte) / period-4 (letters) keys over a zlib 78xx stream: key bytes 0-1 from the header, the rest
+    swept; a candidate survives only if its 40-byte prefix inflates without error."""
+    out = []
+    head = b[:40]
+    for f in (0xDA, 0x9C, 0x01, 0x5E):
+        k01 = bytes([b[0] ^ 0x78, b[1] ^ f])
+        for tail in [bytes([x]) for x in range(256)] + [bytes([x, y]) for x in range(97, 123) for y in range(97, 123)]:
+            k = k01 + tail
+            try:
+                zlib.decompressobj(15).decompress(_xz_x(head, k))
+            except zlib.error:
+                continue
+            out.append(("zlib", k))
+    return out
+
+
+def _xz_texts(d, kind):
+    """[(kind, text)] the decrypted bytes inflate to (zip = the archive's joined members)."""
+    if kind == "zip" or d[:4] == b"PK\x03\x04":
+        r = safe(archive_solve, d)
+        return [("zip", r[1])] if r else []
+    if _dz_kind(d) == "deflate" and kind is not None:
+        return []
+    return [(k, s) for k, data in _dz_inflate(d) for s in (_dz_text(data),) if s]
+
+
+def xorz_reads(t, hints=(), sweep=True):
+    """[(name, text, kind, wrapper, key, decrypted)] for every wrapper reading of `t` that has no magic, XORs (key from
+    a known header / a hint word) to a compressor stream and inflates to printable ASCII. Never raises."""
+    out = []
+    try:
+        deadline = time.monotonic() + 0.6
+        for i, (wrapper, b) in enumerate(_dz_wrappers(t)):
+            if len(b) < 14 or _dz_kind(b) != "deflate":
+                continue
+            keys = _xz_keys(b, hints)
+            # the sweep reads only the blob's most specific wrapper (a hex blob also parses as base64)
+            if sweep and i == 0 and len(b) <= 4096 and not any(_dz_kind(_xz_x(b, k)) == "zlib" and len(k) <= 2 and _xz_texts(_xz_x(b, k), "zlib")
+                                 for _kd, k in keys):
+                keys += _xz_zlib_sweep(b)
+            for kind, key in keys:
+                if time.monotonic() > deadline:
+                    break
+                d = _xz_x(b, key)
+                for k, s in _xz_texts(d, kind):
+                    out.append((f"xor{len(key)}[{key.hex()}]({k}-{wrapper})", s, k, wrapper, key, d))
+                if out:
+                    return out
+    except Exception:   # noqa: BLE001
+        return out
+    return out
+
+
+def xorz_solve(blob, hints=()):
+    """(name, sentence, enc) for a slug-gated XOR-over-compressed reading of the blob (the inflated text may itself be
+    XORed / another codec: xorkey_solve, then decompress_solve's inner re-decode), else None."""
+    try:
+        for name, s, kind, wrapper, key, d in xorz_reads(blob, hints):
+            z = None if kind == "zip" else _dz_enc(kind, d)
+            enc = (lambda z, key, w: lambda x: _dz_out(_xz_x(z(_u(x)), key), w))(z, key, wrapper) if z else (lambda x: None)
+            if SLUG.search(s) and _kbd_score(s) >= _RD_OK:
+                return name, s, enc
+            xk = xorkey_solve(s, hints)
+            if xk:
+                return (f"{name}[{xk[0]}]", xk[1],
+                        (lambda o, ie: lambda x: (lambda y: y and o(y))(safe(ie, x)))(enc, xk[2]) if z else (lambda x: None))
+            rd = _rd_inner(s, 2, time.monotonic() + 0.4)
+            if rd:
+                return (f"{name}[{rd[0]}]", rd[1],
+                        (lambda o, ie: lambda x: (lambda y: y and o(y))(safe(ie, x)))(enc, rd[2]) if z and rd[2] else (lambda x: None))
+            if SLUG.search(s):
+                return name, s, enc
+    except Exception:   # noqa: BLE001
+        return None
+    return None
+
+
+def xorz_dec(t):
+    r = xorz_solve(t)
+    return r[1] if r else None
+
+
+def xorz_free(p):
+    """Speculative Mastery-line decoder: one line = a whole XOR-keyed compressed member (key restarting per line); the
+    header-derived keys only (no sweep), the inflated text as-is."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + s for s in dict.fromkeys(s for _n, s, *_r in xorz_reads(p, sweep=False))][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+CANDIDATES.append(("xor-compressed", lambda s: None, xorz_dec))
+
+
+# ------------------------------------- text armor wrappers (speculative, coverage atlas target text-armor-wrappers)
+# "A familiar wrapper" read literally: a body inside a standard text armor -- data: URI ([mime][;base64]), PEM
+# -----BEGIN X----- (RFC 1421 headers), PGP ASCII armor (headers, =CRC24 verified when present; literal / compressed
+# OpenPGP packets opened; cleartext-signed text undashed), MIME part / email (each part by its CTE), begin-base64
+# (uuencode -m), Intel HEX (:LLAAAATT..CC, checksum) / Motorola S-record (S0-S9, checksum), JSON / XML envelope (each
+# string leaf). unarmor(t) -> [(form, bytes, rewrap)]; rewrap(bytes) -> the blob with ITS body swapped (headers, label,
+# line width, record size kept verbatim), so a re-encode reproduces the observed wrapper. Body bytes -> printable text,
+# else decompress_reads (gzip & co.), else a nested codec (_rd_inner). Never raises.
+_ARM_MAX = 400000
+_ARM_PEM = re.compile(r"-----BEGIN ([A-Z0-9 ._-]+)-----[ \t]*\r?\n(.*?)\r?\n-----END \1-----", re.S)
+_ARM_HDRS = re.compile(r"(?i)(?:mime-version|content-[a-z-]+|from|to|subject|date|message-id|return-path|received|"
+                       r"x-[a-z0-9-]+)[ \t]*:")
+
+
+def _crc24(b):
+    crc = 0xB704CE
+    for x in b:
+        crc ^= x << 16
+        for _ in range(8):
+            crc <<= 1
+            if crc & 0x1000000:
+                crc ^= 0x1864CFB
+    return crc & 0xFFFFFF
+
+
+def _arm_b64(body):
+    """Strict base64 of a (whitespace-wrapped) body, padding optional -> bytes | None."""
+    flat = re.sub(r"\s+", "", body)
+    u = flat.rstrip("=")
+    if not u or len(u) % 4 == 1 or not re.fullmatch(r"[A-Za-z0-9+/]+", u):
+        return None
+    try:
+        return base64.b64decode(u + "=" * (-len(u) % 4), validate=True)
+    except (ValueError, TypeError):
+        return None
+
+
+def _arm_lines(body):
+    """(width, newline, padded) of an observed wrapped base64 body (width None = one line)."""
+    nl = "\r\n" if "\r\n" in body else "\n"
+    ls = [x for x in body.strip().splitlines() if x.strip()]
+    return (len(ls[0].strip()) if len(ls) > 1 else None), nl, body.strip().endswith("=") or len(re.sub(r"\s", "", body)) % 4 == 0
+
+
+def _arm_b64out(b, shape):
+    width, nl, pad = shape
+    x = base64.b64encode(b).decode()
+    x = x if pad else x.rstrip("=")
+    return nl.join(x[i:i + width] for i in range(0, len(x), width)) if width else x
+
+
+def _arm_swap(blob, start, end, new):
+    return blob[:start] + new + blob[end:]
+
+
+def _pgp_len(b, i, new):
+    """(length, header_end) of an OpenPGP packet body length at b[i:] (new / old format), None = indeterminate."""
+    if new:
+        o = b[i]
+        if o < 192:
+            return o, i + 1
+        if o < 224:
+            return ((o - 192) << 8) + b[i + 1] + 192, i + 2
+        if o == 255:
+            return int.from_bytes(b[i + 1:i + 5], "big"), i + 5
+        return None
+    return None
+
+
+def _pgp_open(b, depth=3):
+    """bytes inside OpenPGP literal (tag 11) / compressed (tag 8: zip / zlib / bzip2) packets, else None."""
+    import bz2
+    if depth <= 0 or not b or not b[0] & 0x80:
+        return None
+    ctb = b[0]
+    if ctb & 0x40:
+        tag, ln = ctb & 0x3F, _pgp_len(b, 1, True)
+    else:
+        tag, lt = (ctb >> 2) & 0x0F, ctb & 3
+        ln = ((int.from_bytes(b[1:1 + (1, 2, 4)[lt]], "big"), 1 + (1, 2, 4)[lt]) if lt < 3 else (len(b) - 1, 1))
+    if not ln:
+        return None
+    n, h = ln
+    body = b[h:h + n]
+    if len(body) != n:
+        return None
+    if tag == 11 and len(body) >= 6:
+        fl = body[1]
+        return body[2 + fl + 4:] if body[0:1] in (b"b", b"t", b"u", b"m", b"l", b"1") and len(body) >= 6 + fl else None
+    if tag == 8 and body:
+        try:
+            d = zlib.decompressobj(-15) if body[0] == 1 else zlib.decompressobj() if body[0] == 2 else None
+            data = d.decompress(body[1:], _DZ_MAX) if d else bz2.decompress(body[1:]) if body[0] == 3 else \
+                body[1:] if body[0] == 0 else None
+        except (zlib.error, OSError, ValueError):
+            return None
+        return _pgp_open(data, depth - 1) if data else None
+    return None
+
+
+def _pgp_wrap(new, packets):
+    """Re-wrap bytes as the observed literal packet (old / new CTB, format, filename, date); compressed packets are
+    not rebuilt (None)."""
+    b = packets
+    ctb = b[0]
+    if ctb & 0x40:
+        tag, (n, h) = ctb & 0x3F, _pgp_len(b, 1, True)
+    else:
+        lt = ctb & 3
+        tag, n, h = (ctb >> 2) & 0x0F, int.from_bytes(b[1:1 + (1, 2, 4)[lt]], "big") if lt < 3 else len(b) - 1, \
+            1 + (1, 2, 4)[lt] if lt < 3 else 1
+    if tag != 11:
+        return None
+    body = b[h:h + n]
+    lit = body[:2 + body[1] + 4] + new
+    if ctb & 0x40:
+        m = len(lit)
+        hdr = bytes([m]) if m < 192 else bytes([((m - 192) >> 8) + 192, (m - 192) & 0xFF]) if m < 8384 else \
+            b"\xff" + m.to_bytes(4, "big")
+    else:
+        lt = ctb & 3
+        hdr = b"" if lt == 3 else len(lit).to_bytes((1, 2, 4)[lt], "big")
+    return bytes([ctb]) + hdr + lit
+
+
+def _arm_pem(blob):
+    out = []
+    for m in _ARM_PEM.finditer(blob):
+        label, inner = m.group(1), m.group(2)
+        a = m.start(2)
+        # RFC 1421 / OpenPGP armor headers ("Key: value" lines) end at the first blank line
+        hm = re.match(r"((?:[A-Za-z][A-Za-z0-9-]*:[^\r\n]*\r?\n(?:[ \t][^\r\n]*\r?\n)*)+)\r?\n", inner)
+        b0 = hm.end() if hm else 0
+        if not hm and label.startswith("PGP") and re.match(r"\r?\n", inner):
+            b0 = len(re.match(r"\r?\n", inner).group())
+        body = inner[b0:]
+        crc = None
+        cm = re.search(r"\r?\n=([A-Za-z0-9+/]{4})\s*$", body)
+        if cm and label.startswith("PGP"):
+            crc = base64.b64decode(cm.group(1))
+            body = body[:cm.start()]
+        raw = _arm_b64(body)
+        if raw is None:
+            continue
+        if crc is not None and int.from_bytes(crc, "big") != _crc24(raw):
+            continue   # a corrupted armor: the checksum is the format's own verdict
+        shape = _arm_lines(body)
+        ba, bz = a + b0, a + b0 + len(body)
+        crc_at = (a + b0 + cm.start(), a + b0 + cm.end()) if crc is not None else None
+
+        def rewrap(new, ba=ba, bz=bz, shape=shape, crc_at=crc_at):
+            enc = _arm_b64out(new, shape)
+            if crc_at:
+                tail = blob[crc_at[0]:crc_at[1]]
+                nl = re.match(r"\r?\n", tail).group()
+                return blob[:ba] + enc + nl + "=" + base64.b64encode(_crc24(new).to_bytes(3, "big")).decode() + \
+                    tail[len(nl) + 5:] + blob[crc_at[1]:]
+            return blob[:ba] + enc + blob[bz:]
+        lit = _pgp_open(raw) if label.startswith("PGP") else None
+        if lit is not None:
+            out.append(("pgp-literal", lit, (lambda raw, rw: lambda b: (lambda p: p and rw(p))(_pgp_wrap(b, raw)))(raw, rewrap)))
+        out.append(("pgp" if label.startswith("PGP") else "pem", raw, rewrap))
+    return out
+
+
+def _arm_clearsig(blob):
+    """PGP cleartext signature: Hash: headers, blank line, dash-escaped text, then the signature block."""
+    m = re.search(r"-----BEGIN PGP SIGNED MESSAGE-----[ \t]*\r?\n((?:[A-Za-z-]+: [^\r\n]*\r?\n)*)\r?\n", blob)
+    sig = blob.find("-----BEGIN PGP SIGNATURE-----", m.end()) if m else -1
+    if sig < 0:
+        return []
+    t0 = m.end()
+    txt = blob[t0:sig].rstrip("\r\n")
+    nl = "\r\n" if "\r\n" in txt else "\n"
+    plain = re.sub(r"(?m)^- ", "", txt).replace("\r\n", "\n")
+    return [("pgp-cleartext", _u(plain), lambda b: _arm_swap(
+        blob, t0, t0 + len(txt), nl.join(("- " + x if x.startswith("-") else x) for x in _t(b).split("\n"))))]
+
+
+def _arm_datauri(blob):
+    s = blob.strip()
+    m = re.fullmatch(r"data:([^,\s]*),(\S*)", s)
+    if not m:
+        return []
+    meta, body = m.groups()
+    a = blob.find(",") + 1
+    z = a + len(body)
+    if meta.lower().endswith(";base64"):
+        raw = _arm_b64(body)
+        pad = body.endswith("=") or len(body) % 4 == 0
+        return [] if raw is None else [("data-uri-base64", raw, lambda b: _arm_swap(blob, a, z, _arm_b64out(b, (None, "", pad))))]
+    lit = set(re.sub(r"%[0-9A-Fa-f]{2}", "", body)) | set(string.ascii_letters + string.digits)
+    up = not re.search(r"%[0-9A-F]?[a-f]", body)
+    raw = urllib.parse.unquote_to_bytes(body)
+
+    def rw(b):
+        enc = "".join(chr(x) if chr(x) in lit and x < 128 else (f"%{x:02X}" if up else f"%{x:02x}") for x in b)
+        return _arm_swap(blob, a, z, enc)
+    return [("data-uri", raw, rw)]
+
+
+def _arm_beginb64(blob):
+    m = re.search(r"(?m)^begin-base64(?:-encoded)? [0-7]{3,4} [^\r\n]*\r?\n(.*?)\r?\n====[ \t]*$", blob, re.S)
+    if not m:
+        return []
+    raw = _arm_b64(m.group(1))
+    shape = _arm_lines(m.group(1))
+    a, z = m.start(1), m.end(1)
+    return [] if raw is None else [("begin-base64", raw, lambda b: _arm_swap(blob, a, z, _arm_b64out(b, shape)))]
+
+
+def _arm_mime(blob):
+    s = blob.lstrip()
+    if not _ARM_HDRS.match(s) or not re.search(r"(?im)^content-(?:transfer-encoding|type)[ \t]*:", s):
+        return []
+    import email
+    import email.policy
+    msg = email.message_from_string(s, policy=email.policy.compat32)
+    out = []
+    for part in msg.walk():
+        if part.is_multipart():
+            continue
+        cte = (part.get("Content-Transfer-Encoding") or "7bit").strip().lower()
+        src = part.get_payload(decode=False)
+        if not isinstance(src, str) or not src.strip():
+            continue
+        if cte == "base64" and _arm_b64(src) is None:
+            continue   # email's own base64 is lenient: a non-base64 body under the header is a decoy
+        raw = part.get_payload(decode=True)
+        if raw is None:
+            continue
+        at = blob.find(src.strip())
+        body = src.strip()
+        if at < 0:
+            continue
+
+        def rw(b, at=at, body=body, cte=cte):
+            if cte == "base64":
+                enc = _arm_b64out(b, _arm_lines(body))
+            elif cte == "quoted-printable":
+                enc = quopri.encodestring(b).decode("ascii").rstrip("\n")
+                enc = enc.replace("\n", "\r\n") if "\r\n" in body else enc
+            elif cte in ("x-uuencode", "uuencode", "x-uue"):
+                return None
+            else:
+                enc = b.decode("latin-1")
+            return _arm_swap(blob, at, at + len(body), enc)
+        out.append((f"mime-{cte}", raw, rw))
+    return out
+
+
+def _arm_ihex(blob):
+    ls = [x.strip() for x in blob.strip().splitlines() if x.strip()]
+    if not ls or not all(re.fullmatch(r":[0-9A-Fa-f]{10,}", x) for x in ls):
+        return []
+    base, recs, eof = 0, [], False
+    for x in ls:
+        r = bytes.fromhex(x[1:])
+        if len(r) != r[0] + 5 or sum(r) & 0xFF or eof:
+            return []
+        typ, addr, data = r[3], int.from_bytes(r[1:3], "big"), r[4:-1]
+        if typ == 0:
+            recs.append((base + addr, data))
+        elif typ == 1:
+            eof = True
+        elif typ == 2 and len(data) == 2:
+            base = int.from_bytes(data, "big") << 4
+        elif typ == 4 and len(data) == 2:
+            base = int.from_bytes(data, "big") << 16
+        elif typ not in (3, 5):
+            return []
+    if not recs:
+        return []
+    raw = b"".join(d for _a, d in sorted(recs, key=lambda r: r[0]))
+    first = next(x for x in ls if x[7:9] == "00")
+    width, start, lower = int(first[1:3], 16), int(first[3:7], 16), any(c in "abcdef" for c in "".join(ls))
+    pre = [x for x in ls[:ls.index(first)]]
+    post = [x for x in ls[ls.index(first):] if x[7:9] not in ("00",)]
+    nl = "\r\n" if "\r\n" in blob else "\n"
+    tail = nl if blob.endswith(("\n", "\r\n")) else ""
+
+    def rec(addr, typ, data):
+        r = bytes([len(data)]) + (addr & 0xFFFF).to_bytes(2, "big") + bytes([typ]) + data
+        x = ":" + (r + bytes([-sum(r) & 0xFF])).hex().upper()
+        return x.lower() if lower else x
+
+    def rw(b):
+        if start + len(b) > 0x10000:
+            return None
+        body = [rec(start + i, 0, b[i:i + width]) for i in range(0, len(b), width)]
+        return nl.join(pre + body + post) + tail
+    return [("intel-hex", raw, rw)]
+
+
+def _arm_srec(blob):
+    ls = [x.strip() for x in blob.strip().splitlines() if x.strip()]
+    if not ls or not all(re.fullmatch(r"S[0-9][0-9A-Fa-f]{6,}", x) and len(x) % 2 == 0 for x in ls):
+        return []
+    recs, typs = [], []
+    for x in ls:
+        r = bytes.fromhex(x[2:])
+        if len(r) != r[0] + 1 or (sum(r[:-1]) + r[-1]) & 0xFF != 0xFF:
+            return []
+        t = int(x[1])
+        if t == 4:
+            return []
+        al = {0: 2, 1: 2, 2: 3, 3: 4, 5: 2, 6: 3, 7: 4, 8: 3, 9: 2}[t]
+        if r[0] < al + 1:
+            return []
+        if t in (1, 2, 3):
+            recs.append((int.from_bytes(r[1:1 + al], "big"), r[1 + al:-1]))
+        typs.append(t)
+    if not recs:
+        return []
+    raw = b"".join(d for _a, d in sorted(recs, key=lambda r: r[0]))
+    di = next(i for i, x in enumerate(ls) if x[1] in "123")
+    dt, first = int(ls[di][1]), bytes.fromhex(ls[di][2:])
+    al = {1: 2, 2: 3, 3: 4}[dt]
+    width, start = first[0] - al - 1, int.from_bytes(first[1:1 + al], "big")
+    pre = ls[:di]
+    post = [x for x in ls[di:] if x[1] not in "123"]
+    lower = any(c in "abcdef" for c in "".join(ls))
+    nl = "\r\n" if "\r\n" in blob else "\n"
+    tail = nl if blob.endswith(("\n", "\r\n")) else ""
+
+    def rec(t, addr, data, al):
+        r = bytes([al + len(data) + 1]) + addr.to_bytes(al, "big") + data
+        x = f"S{t}" + (r + bytes([~sum(r) & 0xFF])).hex().upper()
+        return x.lower().replace("s", "S", 1) if lower else x
+
+    def rw(b):
+        body = [rec(dt, start + i, b[i:i + width], al) for i in range(0, len(b), width)]
+        n = len(body)
+        po = [rec(5, n, b"", 2) if x[1] == "5" else rec(6, n, b"", 3) if x[1] == "6" else x for x in post]
+        return nl.join(pre + body + po) + tail
+    return [("srec", raw, rw)]
+
+
+def _arm_envelope(blob):
+    """JSON / XML envelope: every string leaf (value / element text / attribute) as a body."""
+    s = blob.strip()
+    leaves = []
+    if s[:1] in "{[":
+        try:
+            obj = json.loads(s)
+        except ValueError:
+            return []
+        stack = [obj]
+        while stack:
+            o = stack.pop()
+            if isinstance(o, dict):
+                stack.extend(reversed(list(o.values())))
+            elif isinstance(o, list):
+                stack.extend(reversed(o))
+            elif isinstance(o, str):
+                leaves.append(o)
+        form = "json"
+    elif s[:1] == "<" and "<!ENTITY" not in s.upper():
+        import xml.etree.ElementTree as ET
+        try:
+            root = ET.fromstring(s)
+        except ET.ParseError:
+            return []
+        for el in root.iter():
+            leaves += list(el.attrib.values()) + ([el.text] if el.text else [])
+        form = "xml"
+    else:
+        return []
+    out = []
+    for v in leaves:
+        v = v.strip()
+        at = blob.find(v)
+        if len(v) < 8 or at < 0:
+            continue
+        out.append((f"{form}-envelope", _u(v), (lambda at, n: lambda b: _arm_swap(blob, at, at + n, _t(b)))(at, len(v))))
+    return out
+
+
+_ARM_PARSERS = (_arm_datauri, _arm_clearsig, _arm_pem, _arm_beginb64, _arm_mime, _arm_ihex, _arm_srec, _arm_envelope)
+
+
+def unarmor(t):
+    """[(form, body bytes, rewrap)] for every text armor `t` strictly parses as; rewrap(bytes) -> the same armor text
+    around new body bytes (None = can't rebuild). Never raises."""
+    try:
+        blob = t.decode("utf-8") if isinstance(t, (bytes, bytearray)) else t
+        if not isinstance(blob, str) or not blob.strip() or len(blob) > _ARM_MAX:
+            return []
+        out = []
+        for parse in _ARM_PARSERS:
+            try:
+                out += [(f, b, rw) for f, b, rw in parse(blob) if b]
+            except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+                continue
+        return out
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def armor_reads(t):
+    """[(name, text, raw_bytes, rewrap, kind|None)]: the printable body of every armor reading, else its inflated
+    text (kind = the compressor). Never raises."""
+    out = []
+    try:
+        for form, b, rw in unarmor(t):
+            s = _dz_text(b)
+            if s is not None and s.strip():
+                out.append((form, s, b, rw, None))
+            for name, x, kind, _w, raw in decompress_reads(b):
+                if raw == b:
+                    out.append((f"{form}[{kind}]", x, b, rw, kind))
+    except Exception:   # noqa: BLE001
+        return []
+    return out
+
+
+def armor_solve(blob, hints=()):
+    """(name, sentence, enc) for the first slug-gated armor reading (a body that is another codec re-decoded), else
+    None. enc(sentence) rebuilds the observed wrapper (None when the wrapper can't be rebuilt)."""
+    try:
+        deadline = time.monotonic() + 0.5
+        reads = armor_reads(blob)
+        for name, s, b, rw, kind in reads:
+            z = _dz_enc(kind, b) if kind else (lambda x: x)
+            enc = (lambda rw, z: lambda x: (lambda y: rw(y))(z(_u(x))))(rw, z)
+            if SLUG.search(s) and _kbd_score(s) >= _RD_OK:
+                return name, s, enc
+        for name, s, b, rw, kind in reads:
+            z = _dz_enc(kind, b) if kind else (lambda x: x)
+            rd = _rd_inner(s, 2, deadline)
+            if rd:
+                ie = rd[2]
+                return (f"{name}[{rd[0]}]", rd[1],
+                        (lambda rw, z, ie: lambda x: (lambda y: y and rw(z(_u(y))))(safe(ie, x)))(rw, z, ie)
+                        if ie else (lambda x: None))
+        for name, s, b, rw, kind in reads:
+            if SLUG.search(s):
+                z = _dz_enc(kind, b) if kind else (lambda x: x)
+                return name, s, (lambda rw, z: lambda x: rw(z(_u(x))))(rw, z)
+    except Exception:   # noqa: BLE001
+        return None
+    return None
+
+
+def armor_dec(t):
+    r = armor_solve(t)
+    return r[1] if r else None
+
+
+def armor_free(p):
+    """Speculative Mastery-line decoder: the unwrapped (maybe inflated) body of a one-line armor (data: URI, JSON)."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        outs = [s for _n, s, *_r in armor_reads(p)]
+        outs = [y for x in outs for y in (_rd_free(x) + [x])]
+        return [lead + s for s in dict.fromkeys(outs)][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+CANDIDATES.append(("text-armor", lambda s: None, armor_dec))
+
+
+# ------------------------------------- archive containers (speculative, coverage atlas target archive-container-in-base64)
+# "A wrapper / package / bundle" read literally: an archive inside base64 / hex / raw bytes -- zip (stored / deflated /
+# bzip2 / lzma; ZipCrypto or AES tried with b"infected"), tar (plain or gzip / bzip2 / xz: 'ustar' at 257), 7z (copy /
+# LZMA / LZMA2 / deflate / bzip2 coders, encoded header; no AES), cpio (newc / crc 070701-2, odc 070707, binary 0x71c7)
+# and ar (!<arch>, GNU / BSD long names). Every file member is read in archive order, each decoded with the pipeline
+# (printable text, else decompress_reads, else a nested codec) and joined. archive_members(b) -> [(form, [(name,
+# bytes)])]. Never raises.
+_ARC_MAX = 4 << 20
+_ARC_PW = (b"infected",)
+
+
+def _arc_zip(b):
+    import io
+    import zipfile
+    out = []
+    with zipfile.ZipFile(io.BytesIO(b)) as z:
+        for zi in z.infolist()[:64]:
+            if zi.is_dir() or zi.file_size > _ARC_MAX or zi.filename.startswith("__MACOSX/"):
+                continue
+            if not zi.flag_bits & 1:
+                out.append((zi.filename, z.read(zi)))
+                continue
+            got = None
+            for pw in _ARC_PW:
+                try:
+                    got = z.read(zi, pwd=pw)
+                    break
+                except Exception:   # noqa: BLE001 -- AES (compress_type 99) or a wrong password
+                    try:
+                        import pyzipper
+                        with pyzipper.AESZipFile(io.BytesIO(b)) as az:
+                            got = az.read(zi.filename, pwd=pw)
+                        break
+                    except Exception:   # noqa: BLE001
+                        continue
+            if got is None:
+                raise ValueError("encrypted member")
+            out.append((zi.filename, got))
+    return [("zip", out)] if out else []
+
+
+def _arc_tar(b):
+    import io
+    import tarfile
+    out = []
+    with tarfile.open(fileobj=io.BytesIO(b), mode="r:") as tf:
+        for m in tf.getmembers()[:64]:
+            if m.isfile() and m.size <= _ARC_MAX:
+                out.append((m.name, tf.extractfile(m).read()))
+    return [("tar", out)] if out else []
+
+
+def _arc_ar(b):
+    if not b.startswith(b"!<arch>\n"):
+        return []
+    i, out, longnames = 8, [], b""
+    while i + 60 <= len(b):
+        h = b[i:i + 60]
+        if h[58:60] != b"`\n":
+            raise ValueError("bad ar header")
+        name, size = h[:16].decode("ascii").rstrip(), int(h[48:58].decode("ascii").strip() or "x")
+        data = b[i + 60:i + 60 + size]
+        if len(data) != size:
+            raise ValueError("truncated ar member")
+        i += 60 + size + (size & 1)
+        if name in ("/", "/SYM64/", "__.SYMDEF", "__.SYMDEF SORTED"):
+            continue
+        if name == "//":
+            longnames = data
+            continue
+        if name.startswith("#1/"):    # BSD: the name leads the data
+            n = int(name[3:])
+            name, data = data[:n].rstrip(b"\x00").decode("latin-1"), data[n:]
+        elif re.fullmatch(r"/\d+", name):
+            off = int(name[1:])
+            name = longnames[off:].split(b"\n")[0].decode("latin-1").rstrip("/")
+        else:
+            name = name.rstrip("/")
+        out.append((name, data))
+    if i != len(b) and b[i:].strip(b"\n"):
+        raise ValueError("trailing ar bytes")
+    return [("ar", out)] if out else []
+
+
+def _arc_cpio(b):
+    import struct
+    i, out, form = 0, [], None
+    while i < len(b):
+        m = b[i:i + 6]
+        if m in (b"070701", b"070702"):
+            form = "cpio-newc"
+            f = [int(b[i + 6 + 8 * k:i + 14 + 8 * k], 16) for k in range(13)]
+            mode, fsize, nsize = f[1], f[6], f[11]
+            hl, pad = 110, 4
+        elif m == b"070707":
+            form = "cpio-odc"
+            mode, nsize, fsize = int(b[i + 18:i + 24], 8), int(b[i + 59:i + 65], 8), int(b[i + 65:i + 76], 8)
+            hl, pad = 76, 1
+        elif b[i:i + 2] in (b"\xc7\x71", b"\x71\xc7"):
+            form = "cpio-bin"
+            e = "<" if b[i:i + 2] == b"\xc7\x71" else ">"
+            v = struct.unpack(e + "13H", b[i:i + 26])
+            mode, nsize, fsize = v[2], v[10], (v[11] << 16) | v[12]
+            hl, pad = 26, 2
+        else:
+            raise ValueError("bad cpio header")
+        name = b[i + hl:i + hl + nsize].rstrip(b"\x00").decode("latin-1")
+        i += hl + nsize
+        i += -i % pad
+        data = b[i:i + fsize]
+        if len(data) != fsize:
+            raise ValueError("truncated cpio member")
+        i += fsize
+        i += -i % pad
+        if name == "TRAILER!!!":
+            break
+        if mode & 0o170000 == 0o100000 and fsize <= _ARC_MAX:
+            out.append((name, data))
+    return [(form, out)] if out else []
+
+
+def _7z_num(b, i):
+    first, mask, v = b[i], 0x80, 0
+    for k in range(8):
+        if not first & mask:
+            return v | ((first & (mask - 1)) << (8 * k)), i + 1 + k
+        v |= b[i + 1 + k] << (8 * k)
+        mask >>= 1
+    return v, i + 9
+
+
+def _7z_bits(b, i, n):
+    bits = [bool(b[i + k // 8] & (0x80 >> (k % 8))) for k in range(n)]
+    return bits, i + (n + 7) // 8
+
+
+def _7z_digests(b, i, n):
+    if b[i]:
+        defined, i = [True] * n, i + 1
+    else:
+        defined, i = _7z_bits(b, i + 1, n)
+    return i + 4 * sum(defined)
+
+
+def _7z_streams(b, i):
+    """StreamsInfo at b[i] -> (pack_pos, pack_sizes, folders [(coders, unpack_sizes)], substream counts, sizes), i."""
+    pack_pos, packs, folders, nsub, subsizes = 0, [], [], None, None
+    while True:
+        t = b[i]
+        i += 1
+        if t == 0:
+            break
+        if t == 0x06:
+            pack_pos, i = _7z_num(b, i)
+            n, i = _7z_num(b, i)
+            while b[i] != 0:
+                if b[i] == 0x09:
+                    i += 1
+                    for _ in range(n):
+                        x, i = _7z_num(b, i)
+                        packs.append(x)
+                elif b[i] == 0x0A:
+                    i = _7z_digests(b, i + 1, n)
+                else:
+                    raise ValueError("7z packinfo")
+            i += 1
+        elif t == 0x07:
+            if b[i] != 0x0B:
+                raise ValueError("7z folder")
+            nf, i = _7z_num(b, i + 1)
+            if b[i]:
+                raise ValueError("7z external")
+            i += 1
+            for _ in range(nf):
+                nc, i = _7z_num(b, i)
+                coders, outs = [], 0
+                for _ in range(nc):
+                    flag = b[i]
+                    cid, i = b[i + 1:i + 1 + (flag & 0xF)], i + 1 + (flag & 0xF)
+                    nin = nout = 1
+                    if flag & 0x10:
+                        nin, i = _7z_num(b, i)
+                        nout, i = _7z_num(b, i)
+                    props = b""
+                    if flag & 0x20:
+                        ps, i = _7z_num(b, i)
+                        props, i = b[i:i + ps], i + ps
+                    coders.append((cid, props, nin, nout))
+                    outs += nout
+                if nc != 1 or outs != 1:
+                    raise ValueError("7z coder chain")   # one coder per folder (7z's default for text)
+                folders.append([coders, []])
+            if b[i] != 0x0C:
+                raise ValueError("7z unpack sizes")
+            i += 1
+            for f in folders:
+                x, i = _7z_num(b, i)
+                f[1].append(x)
+            while b[i] != 0:
+                if b[i] == 0x0A:
+                    i = _7z_digests(b, i + 1, len(folders))
+                else:
+                    raise ValueError("7z unpackinfo")
+            i += 1
+        elif t == 0x08:
+            nsub = [1] * len(folders)
+            while b[i] != 0:
+                if b[i] == 0x0D:
+                    i += 1
+                    for k in range(len(folders)):
+                        nsub[k], i = _7z_num(b, i)
+                elif b[i] == 0x09:
+                    i += 1
+                    subsizes = []
+                    for k, f in enumerate(folders):
+                        if not nsub[k]:
+                            continue
+                        left = f[1][0]
+                        for _ in range(nsub[k] - 1):
+                            x, i = _7z_num(b, i)
+                            subsizes.append(x)
+                            left -= x
+                        subsizes.append(left)
+                elif b[i] == 0x0A:
+                    unknown = sum(n for n in nsub if n != 1) + sum(1 for n in nsub if n == 1)
+                    i = _7z_digests(b, i + 1, unknown)
+                else:
+                    raise ValueError("7z substreams")
+            i += 1
+        else:
+            raise ValueError("7z streams")
+    if nsub is None:
+        nsub = [1] * len(folders)
+    if subsizes is None:
+        subsizes = [f[1][0] for k, f in enumerate(folders) if nsub[k]]
+    return (pack_pos, packs, folders, nsub, subsizes), i
+
+
+def _7z_unpack(b, si):
+    """[folder bytes] of a parsed StreamsInfo (pack streams start at 32 + pack_pos)."""
+    import bz2
+    import lzma
+    pack_pos, packs, folders, _n, _s = si
+    at, out = 32 + pack_pos, []
+    for (coders, sizes), psize in zip(folders, packs):
+        cid, props, _ni, _no = coders[0]
+        raw, at = b[at:at + psize], at + psize
+        if len(raw) != psize:
+            raise ValueError("7z truncated pack")
+        if cid == b"\x00":
+            data = raw
+        elif cid in (b"\x03\x01\x01", b"\x21"):
+            fid = lzma.FILTER_LZMA1 if cid != b"\x21" else lzma.FILTER_LZMA2
+            flt = lzma._decode_filter_properties(fid, props)
+            data = lzma.LZMADecompressor(lzma.FORMAT_RAW, filters=[flt]).decompress(raw, sizes[0])
+        elif cid == b"\x04\x01\x08":
+            data = zlib.decompressobj(-15).decompress(raw, sizes[0])
+        elif cid == b"\x04\x02\x02":
+            data = bz2.decompress(raw)
+        else:
+            raise ValueError("7z coder unsupported")   # AES, BCJ, PPMd ...
+        if len(data) < sizes[0]:
+            raise ValueError("7z short folder")
+        out.append(data[:sizes[0]])
+    return out
+
+
+def _arc_7z(b):
+    import struct
+    if not b.startswith(b"7z\xbc\xaf\x27\x1c") or len(b) < 32:
+        return []
+    off, size = struct.unpack("<QQ", b[12:28])
+    if zlib.crc32(b[12:32]) != struct.unpack("<I", b[8:12])[0]:
+        raise ValueError("7z start header crc")
+    hdr = b[32 + off:32 + off + size]
+    if len(hdr) != size or zlib.crc32(hdr) != struct.unpack("<I", b[28:32])[0]:
+        raise ValueError("7z next header crc")
+    for _ in range(4):
+        if hdr[:1] != b"\x17":
+            break
+        si, _i = _7z_streams(hdr, 1)
+        hdr = _7z_unpack(b, si)[0]
+    if hdr[:1] != b"\x01":
+        raise ValueError("7z header")
+    i, si, names, empty = 1, None, [], []
+    while hdr[i] != 0:
+        t = hdr[i]
+        i += 1
+        if t == 0x04:
+            si, i = _7z_streams(hdr, i)
+        elif t == 0x05:
+            nfiles, i = _7z_num(hdr, i)
+            empty = [False] * nfiles
+            while True:
+                pt, i = _7z_num(hdr, i)
+                if pt == 0:
+                    break
+                ps, i = _7z_num(hdr, i)
+                body, i = hdr[i:i + ps], i + ps
+                if pt == 0x0E:
+                    empty = _7z_bits(body, 0, nfiles)[0]
+                elif pt == 0x11 and body[:1] == b"\x00":
+                    names = body[1:].decode("utf-16-le").split("\x00")[:nfiles]
+        else:
+            raise ValueError("7z header property")
+    if si is None:
+        return []
+    blobs = _7z_unpack(b, si)
+    streams = []
+    sizes = iter(si[4])
+    for k, data in enumerate(blobs):
+        at = 0
+        for _ in range(si[3][k]):
+            n = next(sizes)
+            streams.append(data[at:at + n])
+            at += n
+    out, it = [], iter(streams)
+    for k, e in enumerate(empty):
+        if not e:
+            out.append((names[k] if k < len(names) else str(k), next(it)))
+    return [("7z", out)] if out else []
+
+
+def _arc_kind(b):
+    if b.startswith(b"PK\x03\x04") or b.startswith(b"PK\x05\x06"):
+        return _arc_zip
+    if b.startswith(b"7z\xbc\xaf\x27\x1c"):
+        return _arc_7z
+    if b.startswith(b"!<arch>\n"):
+        return _arc_ar
+    if b[:6] in (b"070701", b"070702", b"070707") or b[:2] in (b"\xc7\x71", b"\x71\xc7"):
+        return _arc_cpio
+    if b[257:262] == b"ustar":
+        return _arc_tar
+    return None
+
+
+def archive_members(t):
+    """[(form, [(name, bytes)])] for every archive `t` (raw bytes, or base64 / hex / ... text) strictly opens as --
+    directly or after one compressor (tar.gz / tar.xz / tar.bz2). A corrupt / encrypted-unknown archive yields
+    nothing. Never raises."""
+    out = []
+    try:
+        for wrapper, b in _dz_wrappers(t):
+            tries = [("", b)]
+            if not _arc_kind(b):
+                tries += [(f"{k}+", x) for k, x in _dz_inflate(b) if x[257:262] == b"ustar"]
+            for pre, x in tries:
+                f = _arc_kind(x)
+                if not f:
+                    continue
+                try:
+                    out += [(f"{pre}{form}-{wrapper}", ms) for form, ms in f(x)]
+                except Exception:   # noqa: BLE001 -- a decoy archive reads as nothing
+                    continue
+    except Exception:   # noqa: BLE001
+        return []
+    return out
+
+
+def _arc_member_text(b, deadline):
+    """Candidate texts of one member: printable as is, else inflated, then its nested-codec re-decodes."""
+    s = _dz_text(b)
+    outs = [s] if s is not None else []
+    outs += [x for _n, x, *_r in decompress_reads(b)]
+    if time.monotonic() < deadline:
+        outs = [y for x in outs for y in (_rd_free(x) + [x])]
+    return list(dict.fromkeys(outs))
+
+
+def archive_solve(t):
+    """(name, sentence) for the first archive reading whose members, decoded and joined in archive order (else name
+    order), hold the slug in English; else None."""
+    try:
+        deadline = time.monotonic() + 0.6
+        for form, ms in archive_members(t):
+            raw = [m for _n, m in ms]
+            texts = [_dz_text(m) for m in raw]
+            if all(x is not None for x in texts):
+                for joined in ("".join(texts), "".join(x.rstrip("\r\n") for x in texts)):
+                    if SLUG.search(joined) and _kbd_score(joined) >= _RD_OK:
+                        return form, joined
+                    rd = _rd_inner(joined, 2, deadline)
+                    if rd:
+                        return f"{form}[{rd[0]}]", rd[1]
+            for order in (ms, sorted(ms, key=lambda m: m[0])):
+                best = []
+                for _n, m in order:
+                    c = _arc_member_text(m, deadline)
+                    if not c:
+                        best = None
+                        break
+                    best.append(max(c, key=_kbd_score))
+                if not best:
+                    continue
+                for joined in ("".join(best), "".join(x.rstrip("\r\n") for x in best)):
+                    if SLUG.search(joined) and _kbd_score(joined) >= _RD_OK:
+                        return f"{form}[members]", joined
+    except Exception:   # noqa: BLE001
+        return None
+    return None
+
+
+def archive_dec(t):
+    r = archive_solve(t)
+    return r[1] if r else None
+
+
+def archive_free(p):
+    """Speculative Mastery-line decoder: the joined member text of a one-line base64 / hex archive."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        outs = []
+        for _f, ms in archive_members(p.strip()):
+            texts = [_dz_text(m) for _n, m in ms]
+            if all(x is not None for x in texts):
+                j = "".join(x.rstrip("\r\n") for x in texts)
+                outs += _rd_free(j) + [j]
+        return [lead + s for s in dict.fromkeys(outs)][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+CANDIDATES.append(("archive-container", lambda s: None, archive_dec))
+
+
+# ------------------------------------ OpenSSL enc envelope (speculative, coverage atlas target openssl-salted-envelope)
+# `openssl enc -e [-a] -pass pass:<pw>`: b"Salted__" + 8-byte salt + ciphertext (base64 'U2FsdGVkX1...', hex or raw).
+# key || iv = EVP_BytesToKey(md5 = OpenSSL < 1.1 default, sha256 = 1.1+ default, sha1) or PBKDF2-HMAC-SHA256 10000
+# iterations (-pbkdf2 default); both streams are prefix-stable, so one 48-byte derivation serves every cipher. Ciphers:
+# aes-128/192/256-cbc / -ecb / -ctr, des-ede3-cbc, bf-cbc, rc4, chacha20. Passphrases: the title / prompt words (as
+# written, lower, Title, UPPER, run together) + password / infected / huntress puns. Gate: a CBC / ECB key must leave
+# valid PKCS#7 padding, then the plaintext (or its decompress_reads inflation, or a nested codec) must read as the
+# slug sentence (Single) / English (Mastery fragment). openssl_solve(t, hints) -> (name, plain, enc). Never raises.
+_OS_MAGIC = b"Salted__"
+_OS_PW = ("password", "infected", "huntress", "Huntress", "HUNTRESS", "salted", "Salted", "salt", "openssl", "secret",
+          "warmup", "warmups")
+_OS_KDF = ("pbkdf2-sha256", "md5", "sha256", "sha1")
+# name -> (module, key len, iv len, mode); iv len 0 = stream cipher keyed by the key alone
+_OS_CIPHERS = (("aes-256-cbc", "AES", 32, 16, "cbc"), ("aes-128-cbc", "AES", 16, 16, "cbc"),
+               ("aes-192-cbc", "AES", 24, 16, "cbc"), ("aes-256-ctr", "AES", 32, 16, "ctr"),
+               ("aes-128-ctr", "AES", 16, 16, "ctr"), ("aes-192-ctr", "AES", 24, 16, "ctr"),
+               ("aes-256-ecb", "AES", 32, 0, "ecb"), ("aes-128-ecb", "AES", 16, 0, "ecb"),
+               ("des-ede3-cbc", "DES3", 24, 8, "cbc"), ("bf-cbc", "Blowfish", 16, 8, "cbc"),
+               ("rc4", "ARC4", 16, 0, "stream"), ("chacha20", "ChaCha20", 32, 16, "chacha"))
+
+
+def _os_kdf(pw, salt, kdf, n=48):
+    import hashlib
+    if kdf.startswith("pbkdf2"):
+        return hashlib.pbkdf2_hmac(kdf.split("-")[1], pw, salt, 10000, n)
+    out, d = b"", b""
+    while len(out) < n:
+        d = hashlib.new(kdf, d + pw + salt).digest()
+        out += d
+    return out[:n]
+
+
+def _os_cipher(spec, km):
+    """A fresh pycryptodome cipher object for `spec` keyed from the derived stream `km` (None: library missing)."""
+    _n, mod, kl, il, mode = spec
+    try:
+        from Crypto.Cipher import AES, ARC4, DES3, Blowfish, ChaCha20
+    except Exception:   # noqa: BLE001 -- no pycryptodome: no OpenSSL envelope reads
+        return None
+    key, iv = km[:kl], km[kl:kl + il]
+    if mode == "stream":
+        return ARC4.new(key)
+    if mode == "chacha":   # openssl chacha20 iv = 4-byte little-endian block counter || 12-byte nonce
+        c = ChaCha20.new(key=key, nonce=iv[4:])
+        c.seek(int.from_bytes(iv[:4], "little") * 64)
+        return c
+    m = {"AES": AES, "DES3": DES3, "Blowfish": Blowfish}[mod]
+    if mode == "ctr":
+        return m.new(key, m.MODE_CTR, nonce=b"", initial_value=iv)
+    if mode == "ecb":
+        return m.new(key, m.MODE_ECB)
+    return m.new(key, m.MODE_CBC, iv=iv)
+
+
+def _os_unpad(spec, km, ct):
+    """Plaintext bytes of `ct`, or None when a block mode's PKCS#7 padding is invalid (checked on the last block first)."""
+    mode = spec[4]
+    if mode in ("cbc", "ecb"):
+        bs = 8 if spec[1] in ("DES3", "Blowfish") else 16
+        if not ct or len(ct) % bs:
+            return None
+        if mode == "cbc":   # the last block alone: CBC chains on the previous ciphertext block
+            prev = ct[-2 * bs:-bs] if len(ct) > bs else km[spec[2]:spec[2] + bs]
+            last = bytes(a ^ b for a, b in zip(_os_cipher((None, spec[1], spec[2], 0, "ecb"), km).decrypt(ct[-bs:]),
+                                               prev))
+        else:
+            last = _os_cipher(spec, km).decrypt(ct[-bs:])
+        p = last[-1]
+        if not 1 <= p <= bs or last[-p:] != bytes([p]) * p:
+            return None
+        pt = _os_cipher(spec, km).decrypt(ct)
+        return pt[:-p]
+    return _os_cipher(spec, km).decrypt(ct)
+
+
+def _os_passwords(hints):
+    out = []
+    for h in hints or ():
+        h = unicodedata.normalize("NFKD", str(h)).encode("ascii", "ignore").decode().strip()
+        words = re.findall(r"[A-Za-z0-9]{2,}", h)
+        for w in words + ["".join(words), "".join(x.capitalize() for x in words), h] if words else ():
+            for v in (w, w.lower(), w.capitalize(), w.upper()):
+                if v and v not in out:
+                    out.append(v)
+    return out[:48] + [p for p in _OS_PW if p not in out]
+
+
+def openssl_envelopes(t):
+    """[(wrapper, salt, ciphertext)] for every wrapper reading of `t` that starts with the OpenSSL 'Salted__' magic."""
+    try:
+        return [(w, b[8:16], b[16:]) for w, b in _dz_wrappers(t) if b[:8] == _OS_MAGIC and len(b) > 16]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def _os_texts(pt, deadline, fragment):
+    """[(tag, text, kind)] readings of decrypted bytes: printable as is, inflated, or a nested codec; crib-gated."""
+    out = []
+    s = _dz_text(pt)
+    if s is not None:
+        if (SLUG.search(s) or fragment) and _kbd_score(s) >= _RD_OK:
+            return [("", s, None)]
+        rd = _rd_inner(s, 2, deadline) if time.monotonic() < deadline else None
+        if rd:
+            return [(f"[{rd[0]}]", rd[1], None)]
+        if SLUG.search(s):
+            out.append(("", s, None))
+    if _dz_kind(pt) == "deflate":   # no compressor magic: random bytes of a wrong key, never trial-inflated
+        return out
+    for _n, x, kind, _w, _raw in decompress_reads(pt):
+        if (SLUG.search(x) or fragment) and _kbd_score(x) >= _RD_OK:
+            return [(f"+{kind}", x, kind)] + out
+    return out
+
+
+def openssl_reads(t, hints=(), fragment=False, budget=0.5):
+    """[(name, text, enc)] for the first passphrase x KDF x cipher that opens an OpenSSL 'Salted__' envelope of `t`;
+    enc re-encrypts with the observed salt / passphrase / KDF / cipher / wrapper (None = nested codec). Never raises."""
+    try:
+        envs = openssl_envelopes(t)
+        if not envs:
+            return []
+        deadline = time.monotonic() + budget
+        flat = t.strip() if isinstance(t, str) else ""
+        wrap = next((len(x) for x in flat.splitlines()[:1] if "\n" in flat), 0)   # openssl -a: 64-column lines
+        for pw in _os_passwords(hints):
+            for wrapper, salt, ct in envs:
+                for kdf in _OS_KDF:
+                    if time.monotonic() > deadline:
+                        return []
+                    km = _os_kdf(pw.encode(), salt, kdf)
+                    for spec in _OS_CIPHERS:
+                        try:
+                            pt = _os_unpad(spec, km, ct)
+                        except Exception:   # noqa: BLE001
+                            pt = None
+                        if pt is None:
+                            continue
+                        for tag, text, kind in _os_texts(pt, deadline, fragment):
+                            name = f"openssl-{spec[0]}-{kdf}:{pw}-{wrapper}{tag}"
+                            enc = None if tag.startswith("[") else (
+                                lambda spec, km, salt, wrapper, z: lambda x: _os_wrap(_dz_out(
+                                    _OS_MAGIC + salt + _os_encrypt(spec, km, z(_u(x)) if z else _u(x)), wrapper), wrap)
+                            )(spec, km, salt, wrapper, _dz_enc(kind, pt) if kind else None)
+                            return [(name, text, enc)]
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+    return []
+
+
+def _os_encrypt(spec, km, b):
+    if spec[4] in ("cbc", "ecb"):
+        bs = 8 if spec[1] in ("DES3", "Blowfish") else 16
+        b += bytes([bs - len(b) % bs]) * (bs - len(b) % bs)
+    return _os_cipher(spec, km).encrypt(b)
+
+
+def _os_wrap(x, n):
+    return "\n".join(x[i:i + n] for i in range(0, len(x), n)) if n else x
+
+
+def openssl_solve(t, hints=()):
+    r = openssl_reads(t, hints)
+    return r[0] if r and SLUG.search(r[0][1]) else None
+
+
+def openssl_dec(t, hints=()):
+    r = openssl_solve(t, hints)
+    return r[1] if r else None
+
+
+def openssl_free(p):
+    """Speculative Mastery-line decoder: one line = one base64 / hex OpenSSL envelope under a default passphrase."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + s for _n, s, _e in openssl_reads(p.strip(), fragment=True, budget=0.25)][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+CANDIDATES.append(("openssl-salted", lambda s: None, openssl_dec))
+
+
+# ------------------------------------------------------------ LZ-String (pieroxy lz-string 1.5, the JS web compressor)
+# compressToBase64 (A-Za-z0-9+/ + '=' pad), compressToEncodedURIComponent (A-Za-z0-9+-, no pad; '$' = 64 never
+# emitted), compressToUTF16 (15-bit units + 32: dense U+0020..U+801F CJK-range chars + a trailing ' ') and
+# compressToUint8Array (16-bit units big-endian, as hex). No magic: the gate is the stream itself -- an LZW bitstream
+# that must hit its end marker (code 2) with every later bit zero, inside the input, and read as text.
+_LZ_B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+_LZ_URI = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$"
+_LZ_MAX = 1 << 16
+
+
+def _lz_compress(s, bits, out):
+    """Port of lz-string _compress over UTF-16 code units -> [ints of `bits` width] (fed to `out`)."""
+    b = s.encode("utf-16-be", "surrogatepass")
+    units = [chr(int.from_bytes(b[i:i + 2], "big")) for i in range(0, len(b), 2)]
+    dic, create, w = {}, set(), ""
+    st = {"enl": 2, "size": 3, "nb": 2, "val": 0, "pos": 0}
+    data = []
+
+    def put(bit):
+        st["val"] = (st["val"] << 1) | bit
+        if st["pos"] == bits - 1:
+            st["pos"] = 0
+            data.append(st["val"])
+            st["val"] = 0
+        else:
+            st["pos"] += 1
+
+    def emit(v, n):
+        for _ in range(n):
+            put(v & 1)
+            v >>= 1
+
+    def grow():
+        st["enl"] -= 1
+        if st["enl"] == 0:
+            st["enl"] = 1 << st["nb"]
+            st["nb"] += 1
+
+    def flush_w():
+        if w in create:
+            o = ord(w[0])
+            if o < 256:
+                emit(0, st["nb"])
+                emit(o, 8)
+            else:
+                emit(1, st["nb"])
+                emit(o, 16)
+            grow()
+            create.discard(w)
+        else:
+            emit(dic[w], st["nb"])
+        grow()
+
+    for c in units:
+        if c not in dic:
+            dic[c] = st["size"]
+            st["size"] += 1
+            create.add(c)
+        if w + c in dic:
+            w = w + c
+        else:
+            flush_w()
+            dic[w + c] = st["size"]
+            st["size"] += 1
+            w = c
+    if w:
+        flush_w()
+    emit(2, st["nb"])
+    while True:
+        st["val"] <<= 1
+        if st["pos"] == bits - 1:
+            data.append(st["val"])
+            break
+        st["pos"] += 1
+    return out(data)
+
+
+def lzstring_enc(s, form="base64"):
+    """lz-string compressTo<form>: base64 / uri / utf16 / hex (compressToUint8Array as hex)."""
+    if form == "base64":
+        r = _lz_compress(s, 6, lambda d: "".join(_LZ_B64[v] for v in d))
+        return r + "=" * ((4 - len(r) % 4) % 4)
+    if form == "uri":
+        return _lz_compress(s, 6, lambda d: "".join(_LZ_URI[v] for v in d))
+    if form == "utf16":
+        return _lz_compress(s, 15, lambda d: "".join(chr(v + 32) for v in d)) + " "
+    if form == "hex":
+        return _lz_compress(s, 16, lambda d: b"".join(v.to_bytes(2, "big") for v in d).hex())
+    raise ValueError(form)
+
+
+def _lz_decompress(vals, bits):
+    """lz-string _decompress over a list of `bits`-wide ints -> str, else None (overrun, bad code, junk after end)."""
+    n = len(vals)
+    if not n:
+        return None
+    reset = 1 << (bits - 1)
+    st = {"val": vals[0], "pos": reset, "idx": 1}
+
+    def read(k):
+        r = 0
+        for i in range(k):
+            if st["idx"] > n:
+                raise ValueError("overrun")
+            if st["val"] & st["pos"]:
+                r |= 1 << i
+            st["pos"] >>= 1
+            if st["pos"] == 0:
+                st["pos"] = reset
+                st["val"] = vals[st["idx"]] if st["idx"] < n else 0
+                st["idx"] += 1
+        return r
+
+    def tail_zero():
+        return st["idx"] <= n and not (st["val"] & ((st["pos"] << 1) - 1)) and not any(vals[st["idx"]:])
+
+    try:
+        dic = ["", "", ""]
+        nb, enl = 3, 4
+        k = read(2)
+        if k == 2:
+            return "" if tail_zero() else None
+        if k == 3:
+            return None
+        c = chr(read(8 if k == 0 else 16))
+        dic.append(c)
+        w, out, total = c, [c], 1
+        while True:
+            k = read(nb)
+            if k == 2:
+                return "".join(out) if tail_zero() else None
+            if k in (0, 1):
+                dic.append(chr(read(8 if k == 0 else 16)))
+                k = len(dic) - 1
+                enl -= 1
+                if enl == 0:
+                    enl = 1 << nb
+                    nb += 1
+            if k < len(dic) and k >= 3:
+                e = dic[k]
+            elif k == len(dic):
+                e = w + w[0]
+            else:
+                return None
+            out.append(e)
+            total += len(e)
+            if total > _LZ_MAX:
+                return None
+            dic.append(w + e[0])
+            enl -= 1
+            w = e
+            if enl == 0:
+                enl = 1 << nb
+                nb += 1
+    except (ValueError, IndexError):
+        return None
+
+
+def lzstring_reads(t):
+    """Every (form, text) lz-string reading of one blob/line: base64 / uri / utf16 / hex, text-gated."""
+    out = []
+    try:
+        if not isinstance(t, str):
+            return out
+        x = t.strip("\r\n")
+        cands = []
+        s = x.strip()
+        if 4 <= len(s) and re.fullmatch(r"[A-Za-z0-9+/]+={0,3}", s):
+            cands.append(("base64", [_LZ_B64.index(c) for c in s.rstrip("=")], 6))
+        u = s.replace(" ", "+")
+        if 4 <= len(u) and re.fullmatch(r"[A-Za-z0-9+\-$]+", u):
+            cands.append(("uri", [_LZ_URI.index(c) for c in u], 6))
+        v = x[:-1] if x.endswith(" ") else x
+        if len(v) >= 2 and all(0x20 <= ord(c) <= 0x801F for c in v) and sum(ord(c) > 0x7F for c in v) >= len(v) // 2:
+            cands.append(("utf16", [ord(c) - 32 for c in v], 15))
+        h = s.lower()
+        if len(h) >= 8 and len(h) % 4 == 0 and re.fullmatch(r"[0-9a-f]+", h):
+            cands.append(("hex", [int(h[i:i + 4], 16) for i in range(0, len(h), 4)], 16))
+        for form, vals, bits in cands:
+            r = _lz_decompress(vals, bits)
+            if r and r.isprintable() and _texty(r) >= 0.6:
+                out.append((form, r))
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+    return out
+
+
+def lzstring_dec(t, form=None):
+    """Undo lzstring_enc (any form, or the pinned one) -> text, else None."""
+    return next((s for f, s in lzstring_reads(t) if form is None or f == form), None)
+
+
+def lzstring_free(p):
+    """Speculative Mastery-line decoder: the lz-string reading(s) of a line."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + s for s in dict.fromkeys(s for _f, s in lzstring_reads(p))][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+CANDIDATES += [(f"lzstring-{f}", (lambda f: lambda s: lzstring_enc(s, f))(f), (lambda f: lambda t: lzstring_dec(t, f))(f))
+               for f in ("base64", "uri", "utf16", "hex")]
+
+
+
+# ------------------------------------------------------------ signed web cookies (itsdangerous / Flask / Django signing)
+# "Familiar wrapper": a Flask session cookie '.eJ<b64url(zlib(json))>.<ts>.<sig>' (leading dot = deflated), the plain
+# itsdangerous 'eyJ<b64url(json)>[.<ts>].<sig>', and Django signing '[.]eJ...:<ts>:<sig>'. Payload part 0 is
+# urlsafe base64 without padding; the signature is never checked (no key). The JSON body must parse: a bare base64
+# line of prose is someone else's codec. A Mastery fragment may be only the '.eJ..' / 'eyJ..' payload part.
+_SC_TOKEN = re.compile(r"\.?[A-Za-z0-9_-]{4,}={0,2}(?:[.:][A-Za-z0-9_=-]*)*")
+_SC_HDR = re.compile(r"^\s*(?:set-)?cookie\s*:\s*", re.I)
+_SC_NAME = re.compile(r"^[A-Za-z_][\w-]*=(?=[.A-Za-z0-9_-])")
+
+
+def _sc_b64(s):
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
+def signed_cookie_enc(s, form="flask", ts="ZPm9Gg", key=b"secret-key"):
+    """Sign `s` (a JSON string) like itsdangerous / Django: form flask (deflated + ts), itsdangerous (+ts), its-nots,
+    django (deflated) / django-plain. HMAC-SHA1 under a dummy key: the signature is shape only."""
+    import hashlib
+    import hmac
+    import zlib
+    b = json.dumps(s, separators=(",", ":")).encode()
+    deflate = form in ("flask", "django")
+    if deflate:
+        b = zlib.compress(b)
+    p = ("." if deflate else "") + base64.urlsafe_b64encode(b).decode().rstrip("=")
+    sep = ":" if form.startswith("django") else "."
+    v = p if form == "its-nots" else p + sep + ts
+    sig = base64.urlsafe_b64encode(hmac.new(key, v.encode(), hashlib.sha1).digest()).decode().rstrip("=")
+    return v + sep + sig
+
+
+def _sc_leaves(o):
+    """String leaves of a decoded JSON body, depth-first; Flask's tagged {" b": b64} bytes unwrapped to text."""
+    out, stack = [], [o]
+    while stack and len(out) < 256:
+        x = stack.pop()
+        if isinstance(x, dict):
+            if len(x) == 1 and " b" in x and isinstance(x[" b"], str):
+                try:
+                    out.append(base64.b64decode(x[" b"], validate=True).decode("utf-8"))
+                except Exception:   # noqa: BLE001
+                    pass
+                continue
+            stack.extend(reversed(list(x.values())))
+        elif isinstance(x, list):
+            stack.extend(reversed(x))
+        elif isinstance(x, str):
+            out.append(x)
+    return out
+
+
+def signed_cookie_reads(t):
+    """[(form, json_text, leaves)] for every signed-cookie part of one line/blob that is (deflated) base64url JSON.
+    Never raises."""
+    out = []
+    try:
+        if isinstance(t, (bytes, bytearray)):
+            t = t.decode("utf-8")
+        if not isinstance(t, str) or len(t) > 1 << 20:
+            return out
+        s = _SC_HDR.sub("", t.strip()).strip().strip("\"'")
+        s = _SC_NAME.sub("", s, count=1).split(";")[0].strip().strip("\"'")
+        if not _SC_TOKEN.fullmatch(s):
+            return out
+        sep = ":" if ":" in s and "." not in s.lstrip(".") else "."
+        parts = s.split(":") if sep == ":" else s.split(".")
+        if s.startswith("."):   # leading dot = deflated payload (split left an empty part 0)
+            parts = ["." + parts[1]] + parts[2:] if sep == "." else parts
+        for i, part in enumerate(parts):
+            dot = part.startswith(".")
+            body = part.lstrip(".").rstrip("=")
+            if len(body) < 4 or len(body) % 4 == 1:
+                continue
+            try:
+                raw = _sc_b64(body)
+            except Exception:   # noqa: BLE001
+                continue
+            if dot or raw[:1] == b"x":
+                import zlib
+                try:
+                    d = zlib.decompressobj()
+                    z = d.decompress(raw, 1 << 20)
+                    if not d.eof:
+                        z = None
+                except zlib.error:
+                    z = None
+                if z is None and dot:
+                    continue
+                raw = z if z is not None else raw
+            try:
+                txt = raw.decode("utf-8")
+                obj = json.loads(txt)
+            except (UnicodeDecodeError, ValueError):
+                continue
+            if not isinstance(obj, (str, dict, list)):
+                continue
+            form = ("django" if sep == ":" else "itsdangerous") + ("-zlib" if dot else "") + ("" if i == 0 else f"-p{i}")
+            out.append((form, txt, _sc_leaves(obj)))
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+    return out
+
+
+def _sc_pick(txt, leaves):
+    """The slug-holding string leaf, else the only string leaf, else the whole JSON text."""
+    hit = next((x for x in leaves if SLUG.search(x)), None)
+    if hit is not None:
+        return hit
+    if len(leaves) == 1 and leaves[0].strip():
+        return leaves[0]
+    return txt if txt.strip() not in ("", '""', "{}", "[]") else None
+
+
+def signed_cookie_dec(t):
+    """Undo a Flask/itsdangerous/Django signed cookie -> the slug string leaf (or the lone leaf / JSON text), else
+    None."""
+    for _f, txt, leaves in signed_cookie_reads(t):
+        got = _sc_pick(txt, leaves)
+        if got is not None:
+            return got
+    return None
+
+
+def signed_cookie_free(p):
+    """Speculative Mastery-line decoder: the decoded payload of a one-line signed cookie / its '.eJ..' fragment."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        outs = [x for _f, txt, lv in signed_cookie_reads(p) for x in (_sc_pick(txt, lv),) if x is not None]
+        return [lead + s for s in dict.fromkeys(outs)][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+CANDIDATES += [(f"signed-cookie-{f}", (lambda f: lambda s: signed_cookie_enc(s, f))(f), signed_cookie_dec)
+               for f in ("flask", "itsdangerous", "its-nots", "django", "django-plain")]
+
+
+# ------------------------------------------------------------ JWT / JWS / JWE compact tokens (JOSE, "Familiar wrapper")
+# 'eyJ<hdr>.eyJ<claims>.<sig>' (JWS; alg none leaves the sig empty) and the 5-part JWE 'hdr.key.iv.ct.tag'. Every
+# segment is urlsafe base64 without padding; the header is JSON and, with "zip":"DEF", the payload is RAW deflate
+# (RFC 7516, wbits -15). The signature is never checked. The claim string holding the slug wins (nested objects and
+# JSON-in-a-string claims are walked), else the one non-registered claim. A Mastery fragment may be one segment alone
+# (it must then be JSON). Prose, plain base64 of text, a truncated token or an encrypted JWE body -> None.
+_JW_PREFIX = re.compile(r"^(?:[A-Za-z_][\w-]*\s*[:=]\s*)?(?:bearer\s+)?", re.I)
+_JW_TOKEN = re.compile(r"[A-Za-z0-9_-]+={0,2}(?:\.[A-Za-z0-9_-]*={0,2}){0,4}")
+_JW_REG = frozenset(("alg", "typ", "cty", "kid", "enc", "zip", "iss", "aud", "jti", "iat", "nbf", "exp", "sub",
+                     "crit", "jku", "x5u", "x5t", "epk", "apu", "apv", "iv", "tag", "p2s", "p2c"))
+
+
+def jwt_enc(s, form="hs256", key=b"secret"):
+    """`s` as the "msg" claim of a compact JOSE token. form: none (alg none, empty sig), hs256, nested
+    ({"data": {"msg": s}}), def (JWS-shaped, "zip":"DEF" raw-deflated claims), jwe (5-part, unencrypted raw-deflated
+    ciphertext) or seg (the claims segment alone, a Mastery fragment)."""
+    import hashlib
+    import hmac
+
+    def e(b):
+        return base64.urlsafe_b64encode(b).decode().rstrip("=")
+
+    def j(o):
+        return json.dumps(o, separators=(",", ":")).encode()
+    claims = j({"data": {"msg": s}} if form == "nested" else {"sub": "warmup", "msg": s})
+    if form == "seg":
+        return e(claims)
+    hdr = {"alg": "none" if form == "none" else "HS256", "typ": "JWT"}
+    if form in ("def", "jwe"):
+        c = zlib.compressobj(9, zlib.DEFLATED, -15)
+        claims = c.compress(claims) + c.flush()
+        hdr["zip"] = "DEF"
+    if form == "jwe":
+        return ".".join((e(j({"alg": "dir", "enc": "A128GCM", "zip": "DEF"})), "", e(b"\0" * 12), e(claims),
+                         e(b"\0" * 16)))
+    v = e(j(hdr)) + "." + e(claims)
+    return v + "." + ("" if form == "none" else e(hmac.new(key, v.encode(), hashlib.sha256).digest()))
+
+
+def _jw_b64(s):
+    s = s.rstrip("=")
+    if len(s) % 4 == 1:
+        raise ValueError("bad base64url length")
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
+def _jw_inflate(b, wbits):
+    try:
+        d = zlib.decompressobj(wbits)
+        z = d.decompress(b, 1 << 20)
+        return z if d.eof and not d.unused_data else None
+    except zlib.error:
+        return None
+
+
+def _jw_leaves(o, key=""):
+    """[(claim_key, string)] depth-first; a string claim that is itself a JSON object/array is walked too."""
+    out, stack = [], [(key, o, 0)]
+    while stack and len(out) < 256:
+        k, x, d = stack.pop()
+        if isinstance(x, dict):
+            stack.extend((str(kk), v, d) for kk, v in reversed(list(x.items())))
+        elif isinstance(x, list):
+            stack.extend((k, v, d) for v in reversed(x))
+        elif isinstance(x, str):
+            if d < 3 and x[:1] in "{[":
+                try:
+                    y = json.loads(x)
+                    if isinstance(y, (dict, list)):
+                        stack.append((k, y, d + 1))
+                        continue
+                except ValueError:
+                    pass
+            out.append((k, x))
+    return out
+
+
+def _jw_body(b, zipdef, need_json):
+    """Decoded payload bytes -> leaves ([(key, str)]), else None. DEF = raw deflate (zlib-wrapped tolerated)."""
+    if zipdef:
+        b = _jw_inflate(b, -15) or _jw_inflate(b, 15)
+        if b is None:
+            return None
+    try:
+        txt = b.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    try:
+        o = json.loads(txt)
+    except ValueError:
+        o = None
+    if isinstance(o, (dict, list)):
+        return _jw_leaves(o)
+    if isinstance(o, str) and not need_json:
+        return [("", o)]
+    if need_json or not txt.strip() or not txt.isprintable() or _texty(txt) < 0.8:
+        return None
+    return [("", txt)]
+
+
+def jwt_reads(t):
+    """[(form, payload_leaves, header_leaves)] for one line/blob that is a compact JWS / JWE (or one JSON segment of
+    one). Never raises."""
+    out = []
+    try:
+        if isinstance(t, (bytes, bytearray)):
+            t = t.decode("utf-8")
+        if not isinstance(t, str) or len(t) > 1 << 20:
+            return out
+        s = t.strip().strip("\"'")
+        s = _JW_PREFIX.sub("", s, count=1).split(";")[0].strip().strip("\"'")
+        if not _JW_TOKEN.fullmatch(s):
+            return out
+        parts = s.split(".")
+        if len(parts) == 1:
+            try:
+                raw = _jw_b64(parts[0])
+            except ValueError:
+                return out
+            for zd in (False, True):
+                lv = _jw_body(raw, zd, True)
+                if lv:
+                    out.append(("jose-seg" + ("-def" if zd else ""), lv, []))
+                    break
+            return out
+        if len(parts) not in (2, 3, 5):
+            return out
+        try:
+            hdr = json.loads(_jw_b64(parts[0]).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return out
+        if not isinstance(hdr, dict) or not ({"alg", "enc", "typ"} & set(hdr)):
+            return out
+        zipdef = str(hdr.get("zip", "")).upper() == "DEF"
+        hl = [(k, v) for k, v in _jw_leaves(hdr) if k not in _JW_REG]
+        seg = parts[3] if len(parts) == 5 else parts[1]
+        lv = None
+        if seg:
+            try:
+                lv = _jw_body(_jw_b64(seg), zipdef, False)
+            except ValueError:
+                lv = None
+        form = ("jwe" if len(parts) == 5 else "jws") + ("-def" if zipdef else "")
+        if lv or hl:
+            out.append((form, lv or [], hl))
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+    return out
+
+
+def _jw_pick(lv, hl):
+    """The slug-holding claim, else the one non-registered payload claim (else the longest), else a header field."""
+    for k, x in lv + hl:
+        if SLUG.search(x):
+            return x
+    for pool in (lv, hl):
+        free = [x for k, x in pool if k not in _JW_REG and x.strip()]
+        if len(free) == 1:
+            return free[0]
+        if free:
+            return max(free, key=len)
+    rest = [x for _k, x in lv if x.strip()]
+    return max(rest, key=len) if rest else None
+
+
+def jwt_dec(t):
+    """Undo a compact JWT / JWS / JWE (zip DEF inflated) or one JSON segment -> the slug claim (else the message
+    claim), else None."""
+    for _f, lv, hl in jwt_reads(t):
+        got = _jw_pick(lv, hl)
+        if got is not None:
+            return got
+    return None
+
+
+def jwt_free(p):
+    """Speculative Mastery-line decoder: the message claim of a one-line JOSE token / its lone claims segment."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        outs = [x for _f, lv, hl in jwt_reads(p) for x in (_jw_pick(lv, hl),) if x is not None]
+        return [lead + s for s in dict.fromkeys(outs)][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+CANDIDATES += [(f"jwt-{f}", (lambda f: lambda s: jwt_enc(s, f))(f), jwt_dec)
+               for f in ("none", "hs256", "nested", "def", "jwe", "seg")]
+
+
+# ------------------------------------------------------------ SAML HTTP-Redirect (url-quoted base64 of raw deflate)
+# Three seen layers stacked: D7 %XX over D1 base64 over D22 deflate with the zlib header removed (wbits -15), the
+# SAML HTTP-Redirect binding. Cues: %2B / %2F / %3D inside base64-ish text, a 'SAMLRequest=' / 'data=' query key. The
+# value may sit in a query string / URL / Location header, be form-decoded ('+' -> ' '), double-quoted (%252B), or
+# carry a zlib / gzip header instead. The deflate stream must end exactly (no trailing bytes) and read as printable
+# UTF-8; an XML body yields the text node / attribute holding the slug.
+_SR_KV = re.compile(r"(?:^|[?&;\s])([A-Za-z_][\w.\-]*)=([^&;\s#\"'<>]*)")
+_SR_B64 = re.compile(r"[A-Za-z0-9+/_\-]+={0,2}")
+
+
+def saml_redirect_enc(s, kind="raw", form="quoted"):
+    """`s` -> base64 of `kind` (raw deflate / zlib / gzip) -> form: quoted (%XX, uppercase), query
+    ('SAMLRequest=<quoted>&RelayState=token') or bare (no quoting)."""
+    wb = {"raw": -15, "zlib": 15, "gzip": 31}[kind]
+    c = zlib.compressobj(9, zlib.DEFLATED, wb)
+    b = base64.b64encode(c.compress(_u(s)) + c.flush()).decode()
+    if form == "bare":
+        return b
+    q = urllib.parse.quote(b, safe="")
+    return "SAMLRequest=" + q + "&RelayState=token" if form == "query" else q
+
+
+def _sr_values(s):
+    """Candidate (still-quoted) base64 values: query values (SAML / data keys first), then the whole token."""
+    kv = [(k, v) for k, v in _SR_KV.findall(s) if v]
+    kv.sort(key=lambda x: (not re.search(r"(?i)saml|^data$|^payload$", x[0]),))
+    return list(dict.fromkeys([v for _k, v in kv] + [re.sub(r"\s+", "", s)]))
+
+
+def _sr_unquote(v):
+    """Every distinct base64 reading of a quoted value: %XX undone (once / twice), '+' kept or form-decoded ' ' -> '+'."""
+    outs, cur = [], v
+    for _ in range(3):
+        outs.append(cur)
+        if not re.search(r"%[0-9A-Fa-f]{2}", cur):
+            break
+        try:
+            cur = urllib.parse.unquote(cur, errors="strict")
+        except UnicodeDecodeError:
+            break
+    outs += [x.replace(" ", "+") for x in list(outs)]
+    return [x for x in dict.fromkeys(outs) if _SR_B64.fullmatch(x)]
+
+
+def _sr_inflate(b):
+    """(kind, bytes) of the one complete raw / zlib / gzip stream `b` is, else None."""
+    for kind, wb in (("raw", -15), ("zlib", 15), ("gzip", 31)):
+        try:
+            d = zlib.decompressobj(wb)
+            out = d.decompress(b, 1 << 20)
+            if d.eof and not d.unused_data and not d.unconsumed_tail:
+                return kind, out
+        except zlib.error:
+            continue
+    return None
+
+
+def _sr_pick(txt):
+    """An XML body -> the slug-holding text node / attribute value (else the lone text node); prose -> itself."""
+    import html
+    if not txt.lstrip().startswith("<"):
+        return txt
+    leaves = [html.unescape(x).strip() for x in re.findall(r">([^<]+)<", txt) + re.findall(r"=\s*\"([^\"]*)\"", txt)
+              + re.findall(r"=\s*'([^']*)'", txt)]
+    leaves = [x for x in leaves if x]
+    hit = next((x for x in leaves if SLUG.search(x)), None)
+    if hit is not None:
+        return hit
+    texts = [html.unescape(x).strip() for x in re.findall(r">([^<]+)<", txt) if x.strip()]
+    return texts[0] if len(texts) == 1 else txt
+
+
+def saml_redirect_reads(t):
+    """[(form, text)] for every query value / bare token of `t` that is (url-quoted) base64 of a complete raw deflate
+    / zlib / gzip stream reading as printable UTF-8. form = '<kind>-<quoted|bare>'. Never raises."""
+    out = []
+    try:
+        if isinstance(t, (bytes, bytearray)):
+            t = bytes(t).decode("utf-8")
+        if not isinstance(t, str) or not t.strip() or len(t) > 1 << 20:
+            return out
+        for v in _sr_values(t.strip()):
+            for u in _sr_unquote(v):
+                body = u.rstrip("=")
+                if len(body) < 4 or len(body) % 4 == 1 or (re.search(r"[+/]", body) and re.search(r"[-_]", body)):
+                    continue
+                try:
+                    raw = base64.b64decode(body.replace("-", "+").replace("_", "/") + "=" * (-len(body) % 4),
+                                           validate=True)
+                except (ValueError, TypeError):
+                    continue
+                got = _sr_inflate(raw)
+                if got is None:
+                    continue
+                try:
+                    txt = got[1].decode("utf-8")
+                except UnicodeDecodeError:
+                    continue
+                if not txt.strip() or not all(c.isprintable() or c in "\t\r\n" for c in txt):
+                    continue
+                out.append((f"{got[0]}-{'quoted' if u != v else 'bare'}", txt))
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+    return list(dict.fromkeys(out))
+
+
+def saml_redirect_dec(t):
+    """Undo a SAML HTTP-Redirect value (query / %XX / base64 / raw deflate) -> the sentence (or the XML leaf holding
+    the slug), else None."""
+    r = saml_redirect_reads(t)
+    return _sr_pick(r[0][1]) if r else None
+
+
+def saml_redirect_free(p):
+    """Speculative Mastery-line decoder: the inflated text of one SAML-redirect line."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + s for s in dict.fromkeys(_sr_pick(x) for _f, x in saml_redirect_reads(p))][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+CANDIDATES += [(f"saml-redirect-{k}-{f}", (lambda k, f: lambda s: saml_redirect_enc(s, k, f))(k, f), saml_redirect_dec)
+               for k in ("raw", "zlib", "gzip") for f in ("quoted", "query")]
+
+
+# ------------------------------------------------------------ PDF stream filter chains (ISO 32000-1 7.4)
+# A document-flavoured 'inflate': `/Filter /Name` or `/Filter [/A /B ...]` (abbreviations AHx A85 LZW Fl RL too) applied
+# in order to the bytes between 'stream\r?\n' and 'endstream' (/Length when direct and consistent, else up to the EOL
+# before 'endstream'). ASCIIHexDecode = hex up to '>', ASCII85Decode = Adobe a85 up to '~>', FlateDecode = zlib (raw /
+# gzip fallbacks), LZWDecode = MSB-first 9..12-bit LZW with /EarlyChange (default 1), RunLengthDecode = len <128 copy
+# len+1, >128 repeat 257-len, 128 EOD. The PDF may come as text or base64 / hex of the file. Without the skeleton a
+# bare chain is peeled only through a PDF-only marker ('~>'-closed a85, '>'-closed hex, LZW opening on its clear code
+# and closing on EOD, RL closing on 128), up to 4 layers. A content stream yields its shown text ((..) Tj / [..] TJ).
+_PDF_FN = {"ASCIIHexDecode": "AHx", "AHx": "AHx", "ASCII85Decode": "A85", "A85": "A85", "FlateDecode": "Fl",
+           "Fl": "Fl", "LZWDecode": "LZW", "LZW": "LZW", "RunLengthDecode": "RL", "RL": "RL"}
+_PDF_MAXOUT = 1 << 22
+_PDF_STREAM = re.compile(rb"(?<![A-Za-z])stream(?:\r\n|\n|\r)")
+_PDF_FILTER = re.compile(rb"/Filter\s*(\[[^\]]*\]|/[A-Za-z0-9]+)")
+_PDF_LEN = re.compile(rb"/Length\s+(\d+)(?!\s+\d+\s+R)")
+_PDF_TJ = re.compile(rb"\((?:\\.|[^\\)])*\)\s*(?:Tj|'|\")|\[(?:[^\]\\]|\\.)*\]\s*TJ", re.S)
+_PDF_STR = re.compile(rb"\(((?:\\.|[^\\)])*)\)", re.S)
+_PDF_ESC = {b"n": b"\n", b"r": b"\r", b"t": b"\t", b"b": b"\b", b"f": b"\f"}
+
+
+def _pdf_ahx(b, strict=False):
+    s = re.sub(rb"\s+", b"", b)
+    if strict and s.startswith(b"<"):
+        s = s[1:]
+    i = s.find(b">")
+    if strict and (i < 0 or s[i + 1:]):
+        raise ValueError("AHx EOD")
+    s = s if i < 0 else s[:i]
+    if not re.fullmatch(rb"[0-9A-Fa-f]*", s) or (strict and len(s) < 2):
+        raise ValueError("AHx")
+    return bytes.fromhex((s + b"0" * (len(s) % 2)).decode())
+
+
+def _pdf_a85(b, strict=False):
+    s = re.sub(rb"\s+", b"", b)
+    if s.startswith(b"<~"):
+        s = s[2:]
+    i = s.find(b"~>")
+    if strict and (i < 0 or s[i + 2:]):
+        raise ValueError("A85 EOD")
+    s = s if i < 0 else s[:i]
+    if not re.fullmatch(rb"[!-uz]*", s) or (strict and len(s) < 2):
+        raise ValueError("A85")
+    return base64.a85decode(s)
+
+
+def _pdf_flate(b, strict=False):
+    for wb in ((15,) if strict else (15, -15, 31)):
+        try:
+            d = zlib.decompressobj(wb)
+            out = d.decompress(b, _PDF_MAXOUT)
+            if out and (d.eof or not strict):
+                return out
+        except zlib.error:
+            continue
+    raise ValueError("Fl")
+
+
+def _pdf_lzw(b, strict=False, early=1):
+    if strict and (len(b) < 3 or b[0] != 0x80 or b[1] & 0x80):
+        raise ValueError("LZW clear")
+    tab = [bytes([i]) for i in range(256)] + [b"", b""]
+    out, prev, bits, acc, nacc = bytearray(), None, 9, 0, 0
+    for byte in b:
+        acc, nacc = (acc << 8) | byte, nacc + 8
+        while nacc >= bits:
+            nacc -= bits
+            code = (acc >> nacc) & ((1 << bits) - 1)
+            acc &= (1 << nacc) - 1
+            if code == 256:
+                del tab[258:]
+                prev, bits = None, 9
+                continue
+            if code == 257:
+                return bytes(out)
+            if code < len(tab) and (code < 256 or code > 257):
+                e = tab[code]
+            elif code == len(tab) and prev is not None:
+                e = prev + prev[:1]
+            else:
+                raise ValueError("LZW code")
+            out += e
+            if len(out) > _PDF_MAXOUT:
+                raise ValueError("LZW size")
+            if prev is not None and len(tab) < 4096:
+                tab.append(prev + e[:1])
+            prev = e
+            n = len(tab) + early
+            bits = 9 if n < 512 else 10 if n < 1024 else 11 if n < 2048 else 12
+    if strict:
+        raise ValueError("LZW EOD")
+    return bytes(out)
+
+
+def _pdf_rl(b, strict=False):
+    out, i = bytearray(), 0
+    while i < len(b):
+        n = b[i]
+        i += 1
+        if n == 128:
+            if strict and i != len(b):
+                raise ValueError("RL tail")
+            return bytes(out)
+        if n < 128:
+            if i + n + 1 > len(b):
+                raise ValueError("RL short")
+            out += b[i:i + n + 1]
+            i += n + 1
+        else:
+            if i >= len(b):
+                raise ValueError("RL short")
+            out += b[i:i + 1] * (257 - n)
+            i += 1
+        if len(out) > _PDF_MAXOUT:
+            raise ValueError("RL size")
+    if strict:
+        raise ValueError("RL EOD")
+    return bytes(out)
+
+
+_PDF_DEC = {"AHx": _pdf_ahx, "A85": _pdf_a85, "Fl": _pdf_flate, "LZW": _pdf_lzw, "RL": _pdf_rl}
+
+
+def _pdf_unesc(s):
+    out, i = bytearray(), 0
+    while i < len(s):
+        c = s[i:i + 1]
+        if c != b"\\" or i + 1 >= len(s):
+            out += c
+            i += 1
+            continue
+        n = s[i + 1:i + 2]
+        m = re.match(rb"[0-7]{1,3}", s[i + 1:i + 4])
+        if m:
+            out.append(int(m.group(), 8) & 0xFF)
+            i += 1 + len(m.group())
+        elif n in (b"\r", b"\n"):
+            i += 3 if s[i + 1:i + 3] == b"\r\n" else 2
+        else:
+            out += _PDF_ESC.get(n, n)
+            i += 2
+    return bytes(out)
+
+
+def _pdf_shown(b):
+    """The text a content stream shows ((..) Tj / ' / " and [(..) n (..)] TJ), joined; None if it shows none."""
+    parts = [_pdf_unesc(s) for m in _PDF_TJ.finditer(b) for s in _PDF_STR.findall(m.group())]
+    return b"".join(parts) if parts else None
+
+
+def pdf_streams(data):
+    """[(filters, decoded bytes)] for every stream object of the PDF `data` (bytes) whose /Filter chain is all
+    supported and decodes. Never raises."""
+    out = []
+    try:
+        for m in _PDF_STREAM.finditer(data):
+            head = data[max(0, m.start() - 4096):m.start()]
+            k = head.rfind(b"obj")
+            head = head[k + 3:] if k >= 0 else head
+            k = head.rfind(b"endobj")
+            head = head[k + 6:] if k >= 0 else head
+            st, e = m.end(), data.find(b"endstream", m.end())
+            if e < 0:
+                continue
+            ln = _PDF_LEN.search(head)
+            if ln and st + int(ln.group(1)) <= e and not data[st + int(ln.group(1)):e].strip(b"\r\n \t"):
+                body = data[st:st + int(ln.group(1))]
+            else:
+                body = data[st:e]
+                body = body[:-2] if body.endswith(b"\r\n") else body[:-1] if body.endswith((b"\n", b"\r")) else body
+            fm = _PDF_FILTER.search(head)
+            names = [x.decode() for x in re.findall(rb"/([A-Za-z0-9]+)", fm.group(1))] if fm else []
+            if any(n not in _PDF_FN for n in names):
+                continue
+            early = 0 if re.search(rb"/EarlyChange\s+0\b", head) else 1
+            try:
+                for n in names:
+                    f = _PDF_FN[n]
+                    body = _pdf_lzw(body, early=early) if f == "LZW" else _PDF_DEC[f](body)
+            except Exception:   # noqa: BLE001 -- a broken stream reads as nothing
+                continue
+            out.append(([_PDF_FN[n] for n in names], body))
+    except Exception:   # noqa: BLE001
+        return out
+    return out
+
+
+def _pdf_bare(b, depth=4):
+    """[(chain, bytes)] for every skeleton-less peel of `b` through strict PDF filters (outermost first)."""
+    out, todo, seen = [], [((), b)], set()
+    while todo:
+        chain, x = todo.pop(0)
+        if len(chain) >= depth:
+            continue
+        for f in ("A85", "AHx", "Fl", "LZW", "RL"):
+            if chain and chain[-1] == f and f in ("A85", "AHx"):
+                continue
+            try:
+                y = _PDF_DEC[f](x, strict=True)
+            except Exception:   # noqa: BLE001
+                continue
+            if not y or (f, y) in seen:
+                continue
+            seen.add((f, y))
+            out.append((chain + (f,), y))
+            todo.append((chain + (f,), y))
+    return out
+
+
+def _pdf_sources(t):
+    """[(form, pdf bytes)] for `t` as PDF text / bytes, or base64 / hex / ... of a PDF file."""
+    if isinstance(t, (bytes, bytearray)):
+        raw = bytes(t)
+    elif isinstance(t, str):
+        raw = t.encode("latin-1", "replace") if all(ord(c) < 256 for c in t) else t.encode("utf-8")
+    else:
+        return []
+    out = [("pdf", raw)] if _PDF_STREAM.search(raw) and b"endstream" in raw else []
+    if not out and len(raw) < 400000:
+        out += [(f"pdf-{w}", b) for w, b in _dz_wrappers(raw.decode("latin-1").strip())
+                if _PDF_STREAM.search(b) and b"endstream" in b]
+    return out
+
+
+def pdf_chain_reads(t):
+    """[(name, text)] for every PDF stream (or bare PDF filter chain) of `t` that decodes to printable text; a content
+    stream also yields its shown text first. Never raises."""
+    out = []
+    try:
+        srcs = _pdf_sources(t)
+        hits = [(f"{form}[{'+'.join(ch) or 'none'}]", b) for form, data in srcs for ch, b in pdf_streams(data) if ch]
+        if not srcs:
+            s = t.strip() if isinstance(t, str) else bytes(t).strip()
+            s = s.encode("latin-1") if isinstance(s, str) and all(ord(c) < 256 for c in s) else s
+            if isinstance(s, bytes) and 4 <= len(s) <= 400000:
+                hits = [(f"pdf-bare[{'+'.join(ch)}]", b) for ch, b in _pdf_bare(s) if set(ch) - {"Fl"}]
+                for w, x in _dz_wrappers(s.decode("latin-1")):   # base64 / hex of a binary chain: LZW / RL only
+                    hits += [(f"pdf-bare-{w}[{'+'.join(ch)}]", b) for ch, b in _pdf_bare(x, 3)
+                             if set(ch) & {"LZW", "RL"}]
+        for name, b in hits:
+            sh = _pdf_shown(b)
+            for tag, x in ((f"{name}:Tj", sh), (name, b)):
+                txt = _dz_text(x) if x else None
+                if txt is not None:
+                    out.append((tag, txt))
+    except Exception:   # noqa: BLE001
+        return out
+    return list(dict.fromkeys(out))
+
+
+def pdf_chain_solve(t):
+    """(name, sentence) for the first PDF stream reading holding the slug in English, else None."""
+    reads = pdf_chain_reads(t)
+    for name, s in reads:
+        if SLUG.search(s) and _kbd_score(s) >= _RD_OK:
+            return name, s.strip("\r\n")
+    for name, s in reads:
+        rd = _rd_inner(s, 2, time.monotonic() + 0.4)
+        if rd:
+            return f"{name}[{rd[0]}]", rd[1]
+    return None
+
+
+def pdf_chain_dec(t):
+    r = pdf_chain_solve(t)
+    return r[1] if r else None
+
+
+def pdf_chain_free(p):
+    """Speculative Mastery-line decoder: the decoded stream text of a one-line PDF (base64 / hex) or bare chain."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        outs = []
+        for _n, s in pdf_chain_reads(p.strip()):
+            s = s.strip("\r\n")
+            outs += _rd_free(s) + [s]
+        return [lead + s for s in dict.fromkeys(outs)][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def _pdf_lzw_enc(b):
+    """PDF LZWDecode encoder (EarlyChange 1): clear, codes MSB-first 9..12 bits (width of the next free code), EOD."""
+    def width(n):
+        return 9 if n < 512 else 10 if n < 1024 else 11 if n < 2048 else 12
+
+    tab, codes, w, nxt = {bytes([i]): i for i in range(256)}, [(256, 9)], b"", 258
+    for c in b:
+        wc = w + bytes([c])
+        if wc in tab or not w:
+            w = wc
+            continue
+        codes.append((tab[w], width(nxt)))
+        tab[wc], nxt = nxt, nxt + 1
+        if nxt >= 4094:
+            codes.append((256, width(nxt)))
+            tab, nxt = {bytes([i]): i for i in range(256)}, 258
+        w = bytes([c])
+    if w:
+        codes.append((tab[w], width(nxt)))
+        nxt += 1
+    codes.append((257, width(nxt)))
+    acc = n = 0
+    out = bytearray()
+    for v, k in codes:
+        acc, n = (acc << k) | v, n + k
+        while n >= 8:
+            n -= 8
+            out.append((acc >> n) & 0xFF)
+    if n:
+        out.append((acc << (8 - n)) & 0xFF)
+    return bytes(out)
+
+
+def _pdf_rl_enc(b):
+    out = bytearray()
+    for i in range(0, len(b), 128):
+        c = b[i:i + 128]
+        out += bytes([len(c) - 1]) + c
+    return bytes(out + b"\x80")
+
+
+_PDF_ENC = {"AHx": lambda b: b.hex().encode() + b">", "A85": lambda b: base64.a85encode(b, adobe=True)[2:],
+            "Fl": zlib.compress, "LZW": _pdf_lzw_enc, "RL": _pdf_rl_enc}
+_PDF_LONG = {v: k for k, v in _PDF_FN.items() if len(k) > 3}
+
+
+def pdf_chain_enc(s, chain=("A85", "Fl"), skeleton=True):
+    """`s` under the PDF filter chain (first = outermost, as in /Filter): a one-object PDF (base64 when binary), or
+    the bare chain bytes (a85 keeps its '<~' when outermost) as text / base64."""
+    b = _u(s)
+    for f in reversed(chain):
+        b = _PDF_ENC[f](b)
+    if not skeleton:
+        if chain[0] == "A85":
+            b = b"<~" + b
+        return b.decode("ascii") if chain[0] in ("A85", "AHx") else base64.b64encode(b).decode()
+    flt = "/" + _PDF_LONG[chain[0]] if len(chain) == 1 else "[" + " ".join("/" + _PDF_LONG[f] for f in chain) + "]"
+    pdf = (b"%PDF-1.4\n1 0 obj\n<< /Length " + str(len(b)).encode() + b" /Filter " + flt.encode() + b" >>\nstream\n"
+           + b + b"\nendstream\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n")
+    return pdf.decode("ascii") if chain[0] in ("A85", "AHx") else base64.b64encode(pdf).decode()
+
+
+CANDIDATES += [(f"pdf-{'-'.join(c).lower()}{'' if k else '-bare'}", (lambda c, k: lambda s: pdf_chain_enc(s, c, k))(c, k),
+                pdf_chain_dec)
+               for c, k in ((("A85", "Fl"), False), (("AHx", "Fl"), False), (("A85", "Fl"), True),
+                            (("Fl",), True), (("A85", "LZW"), True), (("AHx", "RL"), True))]
+
+# ------------------------------------ inflate-then-header containers (speculative, coverage atlas target inflate-container-headers)
+# D22's zlib, but the inflated bytes carry a container header that a strict 'starts with Nice work' gate (and the
+# printable-text gate of decompress_reads) rejects: a git loose object (zlib of 'blob|commit|tag|tree <len>\0' + body;
+# the length must match, a commit / tag yields its message), a PNG text chunk (tEXt, zTXt = zlib, iTXt optionally
+# zlib; every chunk CRC verified), and an HTTP message ('Transfer-Encoding: chunked' hex size lines de-chunked, then
+# Content-Encoding gzip / x-gzip / deflate (zlib or raw) / br / zstd undone right to left), also a bare chunked body.
+# Under any _dz_wrappers reading (base64 / hex / ... / raw bytes) or as the raw text itself. After every inflate a git
+# header is stripped. container_reads(t) -> [(form, text)]; an XML / HTML body yields its slug-holding leaf. Never raises.
+_IC_GIT = re.compile(rb"(blob|commit|tag|tree) (\d+)\x00")
+_IC_PNG = b"\x89PNG\r\n\x1a\n"
+_IC_HTTP = re.compile(rb"(?:HTTP/\d(?:\.\d)? \d{3}[^\r\n]*|[A-Z]+ \S+ HTTP/\d(?:\.\d)?)\r?\n")
+
+
+def _ic_git(d):
+    """Body of a git object `d` ('<type> <len>\\0' + exactly len bytes): blob = all, commit / tag = the message after
+    the header block, tree = None (binary). `d` without the header -> None."""
+    m = _IC_GIT.match(d)
+    if not m or int(m.group(2)) != len(d) - m.end():
+        return None
+    kind, body = m.group(1), d[m.end():]
+    if kind == b"tree":
+        return None
+    if kind != b"blob":
+        body = body.split(b"\n\n", 1)[1].rstrip(b"\n") if b"\n\n" in body else None
+    return body
+
+
+def _ic_inflate(b):
+    """(kind, bytes) of the one complete zlib / raw deflate / gzip stream `b` is, else None."""
+    for kind, wb in (("zlib", 15), ("raw", -15), ("gzip", 31)):
+        try:
+            d = zlib.decompressobj(wb)
+            out = d.decompress(b, _DZ_MAX)
+            if d.eof and not d.unused_data and not d.unconsumed_tail:
+                return kind, out
+        except zlib.error:
+            continue
+    return None
+
+
+def _ic_png(b):
+    """[(form, bytes)] for the text chunks of a PNG (CRC-checked; a bad CRC / truncation drops the chunk and stops)."""
+    out, i = [], 8
+    while i + 12 <= len(b):
+        n, typ = int.from_bytes(b[i:i + 4], "big"), b[i + 4:i + 8]
+        data, crc = b[i + 8:i + 8 + n], b[i + 8 + n:i + 12 + n]
+        if len(data) != n or len(crc) != 4 or zlib.crc32(typ + data) != int.from_bytes(crc, "big"):
+            break
+        i += 12 + n
+        if typ == b"IEND":
+            break
+        kw, _s, rest = data.partition(b"\x00")
+        if not _s:
+            continue
+        if typ == b"tEXt":
+            out.append(("png-text", rest.decode("latin-1").encode("utf-8")))
+        elif typ == b"zTXt" and rest[:1] == b"\x00":
+            z = _ic_inflate(rest[1:])
+            if z and z[0] == "zlib":
+                out.append(("png-ztxt", z[1].decode("latin-1").encode("utf-8")))
+        elif typ == b"iTXt" and len(rest) >= 2:
+            flag, meth = rest[0], rest[1]
+            parts = rest[2:].split(b"\x00", 2)
+            if len(parts) != 3:
+                continue
+            txt = parts[2]
+            if flag == 1:
+                z = _ic_inflate(txt) if meth == 0 else None
+                if not z or z[0] != "zlib":
+                    continue
+                txt = z[1]
+            out.append(("png-itxt" + ("-z" if flag == 1 else ""), txt))
+    return out
+
+
+def _ic_dechunk(b):
+    """HTTP/1.1 chunked body -> bytes (size line hex [;ext], CRLF or LF, a 0 chunk ends; trailers ignored), else None."""
+    out, i = bytearray(), 0
+    while True:
+        j = b.find(b"\n", i)
+        if j < 0:
+            return None
+        m = re.fullmatch(rb"\s*([0-9A-Fa-f]{1,8})\s*(?:;[^\r\n]*)?\r?", b[i:j])
+        if not m:
+            return None
+        n, i = int(m.group(1), 16), j + 1
+        if n == 0:
+            return bytes(out)
+        if i + n > len(b):
+            return None
+        out += b[i:i + n]
+        i += n
+        if b[i:i + 2] == b"\r\n":
+            i += 2
+        elif b[i:i + 1] == b"\n":
+            i += 1
+        else:
+            return None
+
+
+def _ic_coding(b, enc):
+    """Undo one Content-Encoding token, else None."""
+    enc = enc.strip().lower()
+    if enc in ("", "identity", "chunked"):
+        return b
+    if enc in ("gzip", "x-gzip", "deflate"):
+        z = _ic_inflate(b)
+        return z[1] if z and (z[0] == "gzip") == (enc != "deflate") else None
+    try:
+        if enc == "br":
+            import brotli
+            return brotli.decompress(b)
+        if enc == "zstd":
+            import zstandard
+            return zstandard.ZstdDecompressor().decompressobj().decompress(b)
+    except Exception:   # noqa: BLE001
+        return None
+    return None
+
+
+def _ic_http(b):
+    """(form, body bytes) of one HTTP request / response with its transfer + content codings undone, else None."""
+    m = _IC_HTTP.match(b)
+    if not m:
+        return None
+    k = b.find(b"\r\n\r\n", m.end() - 2)
+    k, sep = (k, 4) if k >= 0 else (b.find(b"\n\n", m.end() - 1), 2)
+    if k < 0:
+        return None
+    hdr = {}
+    for ln in b[m.end():k].decode("latin-1").splitlines():
+        name, _c, v = ln.partition(":")
+        if _c:
+            hdr[name.strip().lower()] = (hdr.get(name.strip().lower(), "") + "," + v.strip()).strip(",")
+    body = b[k + sep:]
+    te = [x.strip().lower() for x in hdr.get("transfer-encoding", "").split(",") if x.strip()]
+    if "chunked" in te:
+        body = _ic_dechunk(body)
+    elif hdr.get("content-length", "").strip().isdigit():
+        n = int(hdr["content-length"])
+        body = body[:n] if len(body) >= n else None
+    if body is None:
+        return None
+    ce = [x for x in hdr.get("content-encoding", "").split(",") if x.strip()]
+    for enc in reversed(ce):
+        body = _ic_coding(body, enc)
+        if body is None:
+            return None
+    form = "http" + ("-chunked" if "chunked" in te else "") + "".join("-" + x.strip().lower() for x in ce)
+    return form, body
+
+
+def _ic_text(form, d):
+    """[(form, text)] for an opened container body: printable UTF-8 as-is, else a git object / one more inflate."""
+    s = _txt(d) if d else None
+    if s is not None and s.strip():
+        return [(form, s)]
+    g = _ic_git(d or b"")
+    if g is not None:
+        return _ic_text(form + "-git", g)
+    z = _ic_inflate(d) if d and form.count("-") < 6 else None
+    return _ic_text(f"{form}-{z[0]}", z[1]) if z else []
+
+
+def _ic_bytes(b):
+    """[(form, text)] for one candidate byte string."""
+    out = []
+    if b.startswith(_IC_PNG):
+        for form, d in _ic_png(b):
+            out += _ic_text(form, d)
+        return out
+    h = _ic_http(b)
+    if h:
+        return _ic_text(*h)
+    if re.match(rb"\s*[0-9A-Fa-f]{1,8}\s*(?:;[^\r\n]*)?\r?\n", b):
+        d = _ic_dechunk(b)
+        if d:
+            z = _ic_inflate(d)
+            if z:
+                return _ic_text("chunked-" + z[0], z[1])
+            for enc in ("br", "zstd"):
+                x = _ic_coding(d, enc)
+                if x:
+                    return _ic_text("chunked-" + enc, x)
+    z = _ic_inflate(b)
+    if z:
+        g = _ic_git(z[1])
+        if g is not None:
+            out += _ic_text(f"git-{z[0]}", g)
+    return out
+
+
+def container_reads(t):
+    """[(form, text)] for every wrapper reading of `t` that opens as a git loose object / PNG text chunk / HTTP message
+    (chunked + content-coded) / bare chunked compressed body. Never raises."""
+    out = []
+    try:
+        if isinstance(t, (bytes, bytearray)):
+            cands = _dz_wrappers(bytes(t))
+        elif isinstance(t, str) and t.strip() and len(t) <= 1 << 20:
+            cands = _dz_wrappers(t)
+            try:
+                cands = [("text", t.lstrip().encode("latin-1"))] + cands
+            except UnicodeEncodeError:
+                pass
+        else:
+            return out
+        for wrapper, b in cands:
+            if len(b) >= 8:
+                out += [(f"{form}-{wrapper}", s) for form, s in _ic_bytes(b)]
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+    return list(dict.fromkeys(out))
+
+
+def container_dec(t):
+    """The slug-holding container text of `t` (else the first one), else None."""
+    r = [_sr_pick(s) for _f, s in container_reads(t)]
+    return next((s for s in r if SLUG.search(s)), r[0] if r else None)
+
+
+def container_free(p):
+    """Speculative Mastery-line decoder: the opened container text of one line."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + s for s in dict.fromkeys(_sr_pick(x) for _f, x in container_reads(p))][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def _ic_chunk(n, tag, data):
+    return n.to_bytes(4, "big") + tag + data + zlib.crc32(tag + data).to_bytes(4, "big")
+
+
+def container_enc(s, form="git-blob"):
+    """`s` -> base64 of: git-blob (zlib level 1 of 'blob <len>\\0' + s, as git writes loose objects), png-ztxt /
+    png-itxt (a 1x1 PNG with a zTXt / compressed iTXt 'Comment'), http-chunked-gzip (an HTTP/1.1 200 response,
+    gzip Content-Encoding, 'Transfer-Encoding: chunked' in 32-byte chunks)."""
+    b = _u(s)
+    if form == "git-blob":
+        return base64.b64encode(zlib.compress(b"blob %d\x00" % len(b) + b, 1)).decode()
+    if form.startswith("png-"):
+        txt = (b"Comment\x00\x00" + zlib.compress(b) if form == "png-ztxt"
+               else b"Comment\x00\x01\x00\x00\x00" + zlib.compress(b))
+        tag = b"zTXt" if form == "png-ztxt" else b"iTXt"
+        png = (_IC_PNG + _ic_chunk(13, b"IHDR", b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x00\x00\x00\x00")
+               + _ic_chunk(len(txt), tag, txt) + _ic_chunk(10, b"IDAT", zlib.compress(b"\x00\x00"))
+               + _ic_chunk(0, b"IEND", b""))
+        return base64.b64encode(png).decode()
+    if form == "http-chunked-gzip":
+        z = gzip.compress(b, mtime=0)
+        body = b"".join(b"%x\r\n" % len(z[i:i + 32]) + z[i:i + 32] + b"\r\n" for i in range(0, len(z), 32))
+        msg = (b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Encoding: gzip\r\n"
+               b"Transfer-Encoding: chunked\r\n\r\n" + body + b"0\r\n\r\n")
+        return base64.b64encode(msg).decode()
+    return None
+
+
+CANDIDATES += [(f"inflate-container-{f}", (lambda f: lambda s: container_enc(s, f))(f), container_dec)
+               for f in ("git-blob", "png-ztxt", "png-itxt", "http-chunked-gzip")]
+
+
+# ------------------------------------------------------------ text-level compression (keyless 'pressure' / 'squeeze')
+# Compression written out as TEXT, no binary bytes: run-length ('3a2b' count-first / 'a3b2' count-after, count always
+# >= 1 or omitted for a single char, a digit char optionally '\'-escaped), LZ77 '(offset,length,char)' tuples (offset =
+# distance back; also the (length,offset) order), LZW as an integer list (ASCII codes, later ones >= 256: initial dict
+# 256, 8-bit + clear 256 / end 257 first-free 258, 7-bit 128) and Huffman as a '{char: bits}' table + a bit string.
+# Every read must consume the whole input and come out printable; a speculative Mastery line must also be a piece of
+# the warmups template (or its tail + slug chars), so prose, hex or decimal char codes don't read as compression.
+_TC_SLUGBIT = re.compile(r"[a-z0-9-]*")
+_TC_WORDS = set(re.findall(r"[a-z]+", _TPL.lower()))
+
+
+def _tc_piece(x):
+    """`x` if it is a piece of the warmups sentence (template substring, its tail + slug chars, or slug chars)."""
+    if not x or len(x) < 3 or not x.isprintable():
+        return None
+    if x in _TPL:
+        return x
+    for i in range(len(_TPL)):
+        if x.startswith(_TPL[i:]) and _TC_SLUGBIT.fullmatch(x[len(_TPL) - i:]):
+            return x
+    if re.fullmatch(r"[a-z]*(?:-[a-z]+)*-?\d*", x) and ("-" in x or x[-1].isdigit()) and not re.search(r"(.)\1\1", x):
+        return x
+    return None
+
+
+def _tc_score(s):
+    return (bool(SLUG.search(s)) and _TPL in s, bool(_tc_piece(s)),
+            sum(w in _TC_WORDS for w in re.findall(r"[a-z]+", s.lower())), _texty(s))
+
+
+def _tc_best(reads):
+    """The most sentence-like reading; None unless it is a template piece / holds a slug / reads as template words."""
+    reads = [s for s in reads if s and (s.isprintable() or s.replace("\n", "").isprintable())]
+    reads = [s for s in reads if _tc_piece(s) or SLUG.search(s) or (_tc_score(s)[2] >= 2 and _texty(s) >= 0.9)]
+    return max(reads, key=_tc_score) if reads else None
+
+
+def rle_enc(s, order="cf", ones=True):
+    """Run-length: order cf = '3a' (count first) / ca = 'a3'; ones=False omits the count of a single char."""
+    out = []
+    for ch, g in itertools.groupby(s):
+        n = len(list(g))
+        c = str(n) if (ones or n > 1) else ""
+        out.append(c + ch if order == "cf" else ch + c)
+    return "".join(out)
+
+
+def rle_reads(t, cap=6):
+    """Every whole-input RLE reading of `t` (4 layouts, counts 1-2 digits, '\\'-escaped chars), up to `cap` per layout."""
+    out = []
+    n = len(t)
+    nd = sum(c.isdigit() for c in t)
+    if not 2 <= n <= 1500 or not nd:
+        return out
+    for order in ("cf", "ca"):
+        for ones in (True, False):
+            if ones and nd * 3 < n:   # every token carries a count: about half the input is digits
+                continue
+            # res[i] = up to `cap` (text, counts-seen) decodes of t[i:]
+            res = [None] * (n + 1)
+            res[n] = [("", 0)]
+            for i in range(n - 1, -1, -1):
+                acc = []
+                chars = [(t[i], 1)] + ([(t[i + 1], 2)] if t[i] == "\\" and i + 1 < n else [])
+                cnts = [(int(t[i:i + k]), k) for k in (1, 2) if i + k <= n and t[i:i + k].isdigit() and t[i] != "0"]
+                if order == "cf":
+                    opts = [(c, k, ch, w) for c, k in cnts if i + k < n for ch, w in
+                            ([(t[i + k], 1)] + ([(t[i + k + 1], 2)] if t[i + k] == "\\" and i + k + 1 < n else []))]
+                    toks = [(i + k + w, ch * c, 1) for c, k, ch, w in opts if ones or c >= 2]
+                    if not ones:
+                        toks += [(i + w, ch, 0) for ch, w in chars]
+                else:
+                    toks = []
+                    for ch, w in chars:
+                        j = i + w
+                        for k in (1, 2):
+                            if j + k <= n and t[j:j + k].isdigit() and t[j] != "0" and (ones or int(t[j:j + k]) >= 2):
+                                toks.append((j + k, ch * int(t[j:j + k]), 1))
+                        if not ones:
+                            toks.append((j, ch, 0))
+                for j, piece, c in toks:
+                    for rest, rc in res[j] or ():
+                        acc.append((piece + rest, c + rc))
+                        if len(acc) >= cap:
+                            break
+                    if len(acc) >= cap:
+                        break
+                res[i] = acc
+            for s, c in res[0] or ():
+                if c >= (2 if ones else 1) and s != t:
+                    out.append(s)
+    return list(dict.fromkeys(out))
+
+
+def rle_dec(t):
+    return _tc_best(rle_reads(t.strip()))
+
+
+_LZ77_TUP = re.compile(r"[(\[<{]\s*(\d+)\s*[,;]\s*(\d+)\s*(?:[,;]\s?(?:'(\\.|.)'|\"(\\.|.)\"|(None|null|nil|NULL|EOF|''|\"\"|\\0)|([^\s)\]>}]))|[,;]( ))?\s*[)\]>}]")
+
+
+def _tc_unesc(c):
+    if len(c) == 2 and c[0] == "\\":
+        return {"n": "\n", "t": "\t", "s": " ", "0": ""}.get(c[1], c[1])
+    return c
+
+
+def lz77_enc(s, window=255, fmt="({o},{l},{c})", sep=""):
+    """Greedy LZ77 (offset = distance back, longest match, the next literal always emitted)."""
+    out, i = [], 0
+    while i < len(s):
+        bo = bl = 0
+        for o in range(1, min(i, window) + 1):
+            k = 0
+            while i + k < len(s) - 1 and s[i - o + k] == s[i + k]:
+                k += 1
+            if k > bl:
+                bo, bl = o, k
+        out.append(fmt.format(o=bo, l=bl, c=s[i + bl]))
+        i += bl + 1
+    return sep.join(out)
+
+
+def lz77_reads(t):
+    t = t.strip()
+    toks, pos = [], 0
+    for m in _LZ77_TUP.finditer(t):
+        if t[pos:m.start()].strip(" \t\r\n,;[]"):
+            return []
+        q = m.group(3) or m.group(4) or m.group(6) or m.group(7)
+        toks.append((int(m.group(1)), int(m.group(2)), _tc_unesc(q) if q else ""))
+        pos = m.end()
+    if len(toks) < 2 or t[pos:].strip(" \t\r\n,;[]"):
+        return []
+    out = []
+    for swap in (False, True):
+        buf = []
+        try:
+            for a, b, c in toks:
+                o, ln = (b, a) if swap else (a, b)
+                if ln and not 1 <= o <= len(buf) or len(buf) + ln > 8000:
+                    raise ValueError
+                for _ in range(ln):
+                    buf.append(buf[-o])
+                buf.append(c)
+        except (ValueError, IndexError):
+            continue
+        out.append("".join(buf))
+    return list(dict.fromkeys(out))
+
+
+def lz77_dec(t):
+    return _tc_best(lz77_reads(t))
+
+
+def lzw_enc(s, first=256, clear=False, sep=", ", brackets=True):
+    """Classic LZW over a 256-char dict -> decimal code list ('[78, 105, ..., 256, ...]'); clear=True: 256 clear,
+    257 end, first free code 258."""
+    if clear:
+        first = 258
+    d = {chr(i): i for i in range(min(first, 256))}
+    nxt, w, out = first, "", [256] if clear else []
+    for ch in s:
+        if w + ch in d:
+            w += ch
+        else:
+            out.append(d[w])
+            d[w + ch] = nxt
+            nxt += 1
+            w = ch
+    if w:
+        out.append(d[w])
+    if clear:
+        out.append(257)
+    body = sep.join(map(str, out))
+    return "[" + body + "]" if brackets else body
+
+
+_LZW_LIST = re.compile(r"[\[({]?\s*\d+(?:\s*[,;\s]\s*\d+)+\s*[\])}]?")
+
+
+def lzw_reads(t):
+    t = t.strip()
+    if not _LZW_LIST.fullmatch(t):
+        return []
+    codes = [int(x) for x in re.findall(r"\d+", t)]
+    out = []
+    for first, clear, end in ((256, None, None), (258, 256, 257), (128, None, None)):
+        base = min(first, 256) if clear is None else 256
+        if max(codes) < first or len(codes) > 20000:
+            continue
+        d, prev, buf, ok = {}, None, [], True
+        for c in codes:
+            if c == clear:
+                d, prev = {}, None
+                continue
+            if c == end:
+                break
+            if c < base:
+                e = chr(c)
+            elif c in d:
+                e = d[c]
+            elif c == first + len(d) and prev is not None:
+                e = prev + prev[0]
+            else:
+                ok = False
+                break
+            if prev is not None:
+                d[first + len(d)] = prev + e[0]
+            buf.append(e)
+            prev = e
+        if ok and buf:
+            out.append("".join(buf))
+    return list(dict.fromkeys(out))
+
+
+def lzw_dec(t):
+    return _tc_best(lzw_reads(t))
+
+
+_HUF_Q = r"""(?:'((?:\\.|[^'\\]){1,6})'|"((?:\\.|[^"\\]){1,6})")"""
+_HUF_C2B = re.compile(_HUF_Q + r"""\s*[:=]\s*['"]?([01]{1,24})\b['"]?""")
+_HUF_B2C = re.compile(r"""['"]([01]{1,24})['"]\s*[:=]\s*""" + _HUF_Q)
+_HUF_TUP = re.compile(_HUF_Q + r"\s*:\s*[(\[]\s*(\d{1,2})\s*,\s*(\d{1,7})\s*[)\]]")
+_HUF_BARE = re.compile(r"(?:(?<=[\s,{])|^)([^\s,{}'\"])\s*[:=]\s*([01]{1,24})(?=[\s,}]|$)")
+_HUF_NAMES = {"space": " ", "sp": " ", "␣": " ", "nl": "\n", "newline": "\n", "\\s": " "}
+
+
+def _huf_char(c):
+    c = _HUF_NAMES.get(c.lower(), c) if len(c) > 1 else c
+    if len(c) > 1 and c.startswith("\\"):
+        try:
+            c = codecs.decode(c, "unicode_escape")
+        except (UnicodeDecodeError, ValueError):
+            return None
+    return c if len(c) == 1 else None
+
+
+def huffman_reads(t):
+    """A '{char: bits}' (or '{bits: char}' / dahuffman '{char: (nbits, value)}') table + the longest bit run outside it."""
+    t = t.strip()
+    if len(t) > 20000:
+        return []
+    table, spans = {}, []
+    for rx, kind in ((_HUF_C2B, 0), (_HUF_B2C, 1), (_HUF_TUP, 2), (_HUF_BARE, 3)):
+        ms = list(rx.finditer(t))
+        if len(ms) < 2:
+            continue
+        for m in ms:
+            g = m.groups()
+            if kind == 0:
+                ch, bits = _huf_char(g[0] or g[1]), g[2]
+            elif kind == 1:
+                ch, bits = _huf_char(g[1] or g[2]), g[0]
+            elif kind == 2:
+                ch, bits = _huf_char(g[0] or g[1]), format(int(g[3]), f"0{int(g[2])}b")
+                if len(bits) != int(g[2]):
+                    ch = None
+            else:
+                ch, bits = _huf_char(g[0]), g[1]
+            if ch is None or table.get(bits, ch) != ch:
+                return []
+            table[bits] = ch
+            spans.append(m.span())
+        break
+    if len(table) < 2:
+        return []
+    codes = sorted(table)
+    if any(b.startswith(a) for a, b in zip(codes, codes[1:])):
+        return []   # not prefix-free
+    lo, hi = min(s for s, _e in spans), max(e for _s, e in spans)
+    rest = t[:lo] + " " + t[hi:]
+    runs = [re.sub(r"\s", "", m.group()) for m in re.finditer(r"[01](?:[01 ]*[01])?", rest)]
+    bits = max(runs, key=len, default="")
+    if len(bits) < 4:
+        return []
+    out, cur = [], ""
+    for b in bits:
+        cur += b
+        if cur in table:
+            out.append(table[cur])
+            cur = ""
+    if cur and (len(cur) >= 8 or not any(c.startswith(cur) for c in codes)):
+        return []   # leftover = byte padding only
+    return ["".join(out)] if out else []
+
+
+def huffman_dec(t):
+    return _tc_best(huffman_reads(t))
+
+
+_TC_READERS = (("rle", rle_reads), ("lz77", lz77_reads), ("lzw", lzw_reads), ("huffman", huffman_reads))
+
+
+def textcomp_reads(t):
+    """[(family, text)] of every text-level compression reading of `t`."""
+    out = []
+    for name, fn in _TC_READERS:
+        try:
+            out += [(name, s) for s in fn(t)]
+        except Exception:   # noqa: BLE001
+            continue
+    return out
+
+
+def textcomp_dec(t):
+    try:
+        return _tc_best([s for _n, s in textcomp_reads(t)])
+    except Exception:   # noqa: BLE001
+        return None
+
+
+def textcomp_free(p):
+    """Speculative Mastery-line decoder: a text-compression reading that is a piece of the warmups sentence."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return list(dict.fromkeys(lead + s for _n, s in textcomp_reads(p) if _tc_piece(s)))[:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+CANDIDATES += [(f"rle-{o}", (lambda o: lambda s: rle_enc(s, o))(o), rle_dec) for o in ("cf", "ca")]
+CANDIDATES += [("lz77-tuples", lz77_enc, lz77_dec), ("lz77-tuples-spaced", lambda s: lz77_enc(s, sep=" "), lz77_dec),
+               ("lzw-codes", lzw_enc, lzw_dec), ("lzw-codes-clear", lambda s: lzw_enc(s, clear=True), lzw_dec),
+               ("huffman-table", lambda s: None, huffman_dec)]
+
+# yEnc and BinHex 4.0: retro binary-to-text wrappers. yEnc body = (byte + 42) % 256 as Latin-1 chars, critical chars
+# (NUL LF CR =) and edge TAB/space escaped as '=' + (c + 64), framed by `=ybegin ... name=` / optional `=ypart` /
+# `=yend size= crc32=` (size and CRC-32 checked when present). BinHex 4.0 (.hqx): optional banner
+# `(This file must be converted with BinHex 4.0)`, then `:...:` over a 64-char 6-bit alphabet, RLE90 (0x90 n), and a
+# header (name, type, creator, flags, data/rsrc lengths) + data fork + resource fork, each CRC-16/XMODEM checked
+# (binascii.a2b_hqx is gone in 3.11+). Both decoders return the data fork as text, never raise, and refuse a bad CRC.
+_HQX = "!\"#$%&'()*+,-012345689@ABCDEFGHIJKLMNPQRSTUVXYZ[`abcdefhijklmpqr"
+_UNHQX = {c: i for i, c in enumerate(_HQX)}
+_HQX_BANNER = "(This file must be converted with BinHex 4.0)"
+
+
+def yenc_enc(s, name="data.txt", line=128, frame=True):
+    b = _u(s)
+    rows, cur = [], []
+    for i, x in enumerate(b):
+        c = (x + 42) % 256
+        edge = not cur or i == len(b) - 1 or len(cur) >= line - 1
+        if c in (0, 10, 13, 61) or (edge and c in (9, 32)) or (not cur and c == 46):
+            cur += ["=", chr(c + 64 & 255)]
+        else:
+            cur.append(chr(c))
+        if len(cur) >= line:
+            rows.append("".join(cur))
+            cur = []
+    if cur:
+        rows.append("".join(cur))
+    if not frame:
+        return "\n".join(rows)
+    return "\r\n".join([f"=ybegin line={line} size={len(b)} name={name}", *rows,
+                        f"=yend size={len(b)} crc32={zlib.crc32(b):08x}", ""])
+
+
+def _ykv(ln):
+    kv = {}
+    head, _s, name = ln.partition(" name=")
+    for m in re.finditer(r"(\w+)=(\S*)", head):
+        kv[m.group(1)] = m.group(2)
+    if _s:
+        kv["name"] = name.strip()
+    return kv
+
+
+def yenc_bytes(t, bare=True):
+    """Decoded bytes of a yEnc article (framed, or a bare body when `bare` and it has high chars), else None."""
+    if not isinstance(t, str) or not t.strip() or any(ord(c) > 255 for c in t):
+        return None
+    lines = re.split(r"\r\n|\n|\r", t)
+    begin = next((i for i, ln in enumerate(lines) if ln.startswith("=ybegin ")), None)
+    head, part, end = {}, {}, {}
+    if begin is None:
+        if not bare or "=y" in t or not any(ord(c) >= 0x80 for c in t):
+            return None
+        body = [ln for ln in t.strip().splitlines() if ln]
+    else:
+        head, body = _ykv(lines[begin]), []
+        for ln in lines[begin + 1:]:
+            if ln.startswith("=ypart "):
+                part = _ykv(ln)
+            elif ln.startswith("=yend"):
+                end = _ykv(ln)
+                break
+            elif ln:
+                body.append(ln)
+    out = bytearray()
+    for ln in body:
+        it = iter(ln)
+        for c in it:
+            if c == "=":
+                c = next(it, None)
+                if c is None:
+                    return None
+                out.append((ord(c) - 106) % 256)
+            else:
+                out.append((ord(c) - 42) % 256)
+    try:
+        size = end.get("size") or (head.get("size") if not part else None)
+        if size is not None and int(size) != len(out):
+            return None
+        crc = end.get("pcrc32") if part else end.get("crc32")
+        if crc and int(crc, 16) != zlib.crc32(out):
+            return None
+    except ValueError:
+        return None
+    return bytes(out) if out else None
+
+
+def yenc_dec(t, bare=True):
+    try:
+        b = yenc_bytes(t, bare)
+        s = _t(b) if b else None
+        return s if s and (s.isprintable() or _texty(s) >= 0.9) else None
+    except (UnicodeDecodeError, ValueError, TypeError):
+        return None
+
+
+def _rle90(b):
+    out, i = bytearray(), 0
+    while i < len(b):
+        c, n = b[i], 1
+        if c == 0x90:
+            out += b"\x90\x00"
+        else:
+            while i + n < len(b) and b[i + n] == c and n < 255:
+                n += 1
+            out += bytes([c, 0x90, n]) if n > 3 else bytes([c])
+            n = 1 if n <= 3 else n
+        i += n
+    return bytes(out)
+
+
+def _unrle90(b):
+    out, i = bytearray(), 0
+    while i < len(b):
+        if b[i] != 0x90:
+            out.append(b[i])
+            i += 1
+            continue
+        if i + 1 >= len(b):
+            return None
+        n = b[i + 1]
+        if n == 0:
+            out.append(0x90)
+        elif not out:
+            return None
+        else:
+            out += bytes([out[-1]]) * (n - 1)
+        i += 2
+    return bytes(out)
+
+
+def binhex_enc(s, name="data.txt", ftype=b"TEXT", creator=b"????", eol="\r"):
+    """BinHex 4.0 file laid out like CPython <=3.10 binhex.binhex(): banner, ':' + 63 chars, 64-char lines, ':'."""
+    data, nm = _u(s), _u(name)
+    hdr = bytes([len(nm)]) + nm + b"\0" + ftype + creator + b"\0\0" + len(data).to_bytes(4, "big") + bytes(4)
+    raw = b"".join(x + binascii.crc_hqx(x, 0).to_bytes(2, "big") for x in (hdr, data, b""))
+    r = _rle90(raw)
+    acc = nb = 0
+    chars = []
+    for x in r:
+        acc, nb = acc << 8 | x, nb + 8
+        while nb >= 6:
+            nb -= 6
+            chars.append(_HQX[acc >> nb & 63])
+    if nb:
+        chars.append(_HQX[acc << (6 - nb) & 63])
+    h = "".join(chars)
+    rows, first = [], 0
+    while len(h) - first >= (63 if not rows else 64):
+        n = 63 if not rows else 64
+        rows.append(h[first:first + n])
+        first += n
+    rows.append(h[first:] + ":")
+    return _HQX_BANNER + eol + eol + ":" + eol.join(rows) + eol
+
+
+def binhex_parse(t):
+    """{name, type, creator, flags, data, rsrc} of a BinHex 4.0 text (banner optional), None unless every CRC holds."""
+    if not isinstance(t, str):
+        return None
+    m = t.find(_HQX_BANNER)
+    s = t[m + len(_HQX_BANNER):] if m >= 0 else t.strip()
+    i = s.find(":")
+    j = s.find(":", i + 1)
+    if i < 0 or j < 0 or (m < 0 and (i or j != len(s) - 1)):
+        return None
+    body = re.sub(r"\s", "", s[i + 1:j])
+    if len(body) < 30 or any(c not in _UNHQX for c in body):
+        return None
+    acc = nb = 0
+    raw = bytearray()
+    for c in body:
+        acc, nb = (acc << 6 | _UNHQX[c]) & 0xFFFF, nb + 6
+        if nb >= 8:
+            nb -= 8
+            raw.append(acc >> nb & 255)
+    b = _unrle90(bytes(raw))
+    if not b:
+        return None
+    nl = b[0]
+    h = nl + 20
+    if not 1 <= nl <= 63 or len(b) < h + 2 or b[nl + 1] != 0:
+        return None
+    if binascii.crc_hqx(b[:h], 0) != int.from_bytes(b[h:h + 2], "big"):
+        return None
+    dlen, rlen = int.from_bytes(b[nl + 12:nl + 16], "big"), int.from_bytes(b[nl + 16:nl + 20], "big")
+    d0, r0 = h + 2, h + 4 + dlen
+    data, rsrc = b[d0:d0 + dlen], b[r0:r0 + rlen]
+    if len(b) < r0 or binascii.crc_hqx(data, 0) != int.from_bytes(b[d0 + dlen:r0], "big"):
+        return None
+    if len(b) >= r0 + rlen + 2 and binascii.crc_hqx(rsrc, 0) != int.from_bytes(b[r0 + rlen:r0 + rlen + 2], "big"):
+        return None
+    return {"name": b[1:1 + nl].decode("latin-1"), "type": b[nl + 2:nl + 6].decode("latin-1"),
+            "creator": b[nl + 6:nl + 10].decode("latin-1"), "flags": int.from_bytes(b[nl + 10:nl + 12], "big"),
+            "data": data, "rsrc": rsrc}
+
+
+def binhex_dec(t):
+    try:
+        r = binhex_parse(t)
+        s = _t(r["data"]) if r and r["data"] else None
+        return s if s and (s.isprintable() or _texty(s) >= 0.9) else None
+    except (UnicodeDecodeError, ValueError, TypeError, IndexError):
+        return None
+
+
+def retro_free(p):
+    """Speculative Mastery-line decoder: a one-line BinHex `:...:` or bare/framed yEnc reading of a sentence piece."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        reads = (binhex_dec(p), yenc_dec(p))
+        return list(dict.fromkeys(lead + s for s in reads if s and _tc_piece(s)))[:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+CANDIDATES += [("yenc", yenc_enc, lambda t: yenc_dec(t, bare=False)),
+               ("yenc-bare", lambda s: yenc_enc(s, frame=False), yenc_dec),
+               ("binhex4", binhex_enc, binhex_dec),
+               ("binhex4-lf", lambda s: binhex_enc(s, eol="\n"), binhex_dec)]
+
+
 SPECULATIVE_FREE = (
     ("rot47", lambda p: [rot47(p)]),
     ("rot8000", lambda p: [b for b in (rot8000_dec(p),) if b]),
@@ -10502,6 +14449,7 @@ SPECULATIVE_FREE = (
     ("subst", subst_fragment),
     ("xorkey", xorkey_fragment),
     ("wordswap", wordswap_free),
+    ("middle-endian", pdp_free),
     ("nibswap-hex", nibswap_free),
     ("wide-int", wint_free),
     ("leb128", leb_free),
@@ -10515,6 +14463,19 @@ SPECULATIVE_FREE = (
     ("byteadd", byteadd_free),
     ("byterot", byterot_free),
     ("altbase", altbase_free),
+    ("compress-sweep", decompress_free),
+    ("xor-compressed", xorz_free),
+    ("text-armor", armor_free),
+    ("archive-container", archive_free),
+    ("openssl-salted", openssl_free),
+    ("lzstring", lzstring_free),
+    ("jwt-jose", jwt_free),
+    ("signed-cookie", signed_cookie_free),
+    ("saml-redirect", saml_redirect_free),
+    ("pdf-filter-chain", pdf_chain_free),
+    ("inflate-container", container_free),
+    ("text-compression", textcomp_free),
+    ("yenc-binhex", retro_free),
 )
 
 

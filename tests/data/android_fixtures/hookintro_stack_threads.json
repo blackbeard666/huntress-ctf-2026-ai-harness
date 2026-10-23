@@ -1,0 +1,7 @@
+{
+ "entry": "clean_device_scan",
+ "expected": "ANS-3d8f0b61e2a47c95",
+ "_why": "Guard.key folds hook checks: Thread.currentThread().getStackTrace() and new Throwable().getStackTrace() scanned for de.robv.android.xposed / com.saurik.substrate / MS$*.invoked / a second ZygoteInit, Thread.getAllStackTraces().keySet() names (gum-js-loop, gmain, pool-frida), Modifier.isNative over Vault.class.getDeclaredMethods() + Class.forName(Guard).getDeclaredMethod(threads), ctx.getClassLoader().loadClass(XposedBridge) / Class.forName(com.saurik.substrate.MS$2) caught as CNFE",
+ "generator_cmd": "python3 tests/data/android_fixtures/hookintro_src/gen_hookintro.py stack_threads tests/data/android_fixtures/hookintro_stack_threads.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d22.hookintro.Probe -> Vault.reveal(ctx) on the host JVM (a real unhooked process: its own stack frames and threads, CNFE for hook classes) -> 'ANS-3d8f0b61e2a47c95'"
+}

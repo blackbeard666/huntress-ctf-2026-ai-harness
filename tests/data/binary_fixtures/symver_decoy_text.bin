@@ -1,0 +1,2 @@
+V1 { global: cfg_get; };
+GLIBC_2.2.5 open@@V2 dlsym(RTLD_NEXT)

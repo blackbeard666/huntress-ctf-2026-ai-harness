@@ -1,0 +1,11 @@
+{
+ "material": "name: ci\non:\n  push:\n    branches: [main]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Test\n        run: make test\n",
+ "rep": "ci_expressions",
+ "transform": "injectable_step",
+ "key": null,
+ "expected": "none",
+ "decoy": false,
+ "note": "ci-expression-injection-secrets: lib.codec.ci_expressions/ci_expr_answer via decode(rep='ci_expressions', transform=<field>[@job|step])",
+ "generator_cmd": "cat > cix_w4.yml <<'EOF' (hand-authored synthetic CI file, heredoc; no lib code); tests/data/script_fixtures/cix_gen.py writes the json",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/cix_oracle.py tests/data/script_fixtures/cix_w4.yml injectable_step  (PyYAML 6 safe_load)"
+}

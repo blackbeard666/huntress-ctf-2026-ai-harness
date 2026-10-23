@@ -1,0 +1,9 @@
+{
+ "codec": "decompress-redecode",
+ "plain": "submit this exact answer",
+ "encoded": "H4sIAAAAAAACA0vLyK8qS1dILy1LUyjKzitIV8hLTMsqSgUADYug5RgAAAA=",
+ "generator_cmd": "printf %s \"$plain\" | tr 'A-Za-z' 'N-ZA-Mn-za-m' | gzip -9n | base64 -w0",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc | tr 'A-Za-z' 'N-ZA-Mn-za-m'",
+ "oracle_plain": "submit this exact answer",
+ "expected": "match"
+}

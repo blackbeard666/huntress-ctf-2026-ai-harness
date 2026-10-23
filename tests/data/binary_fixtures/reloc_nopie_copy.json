@@ -1,0 +1,44 @@
+{
+ "family": "reloc",
+ "file": "reloc_nopie_copy.bin",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "bind_now": "false",
+  "copy_count": 2,
+  "copy_symbols": "[\"stdout\", \"__environ\"]",
+  "counts": {
+   "R_X86_64_COPY": 2,
+   "R_X86_64_GLOB_DAT": 2,
+   "R_X86_64_IRELATIVE": 1,
+   "R_X86_64_JUMP_SLOT": 6
+  },
+  "glob_dat_count": 2,
+  "has_relro": "false",
+  "irelative_count": 1,
+  "jump_slot_count": 6,
+  "lazy_binding": "true",
+  "plt_import_count": 7,
+  "plt_imports": "[\"free\", \"strlen\", \"malloc\", \"__strcpy_chk\", \"__printf_chk\", \"fwrite\", \"*ABS*+0x401210\"]",
+  "plt_stubs": {
+   "0x4010a0": "free",
+   "0x4010b0": "strlen",
+   "0x4010c0": "*ABS*+0x401210",
+   "0x4010d0": "malloc",
+   "0x4010e0": "__strcpy_chk",
+   "0x4010f0": "__printf_chk",
+   "0x401100": "fwrite"
+  },
+  "rela_dyn_count": 4,
+  "rela_plt_count": 7,
+  "relative_count": 0,
+  "relocation_count": 11,
+  "relocation_sections": "[\".rela.dyn\", \".rela.plt\"]",
+  "relro": "none"
+ },
+ "decoy": false,
+ "generator_cmd": "FX=$PWD sh reloc_gen.sh   # run from an empty scratch dir with FX=tests/data/binary_fixtures; gcc 15 + GNU ld 2.45, HCFG blobs by python3 stdlib zlib/struct/base64, RELATIVE slots of cfg_tab zeroed after linking (lld-style)",
+ "oracle_cmd": "python3 reloc_oracle.py reloc_nopie_copy.bin   # readelf -rW/-dW/-lW/-sW/-SW + objdump -d -j .plt -j .plt.sec (<name@plt> labels)",
+ "note": "-no-pie -Wl,-z,norelro -Wl,-z,lazy: no GNU_RELRO, R_X86_64_COPY in .rela.dyn, IRELATIVE in .rela.plt, absolute pointers (no RELATIVE); lib.binary.elf_reloc_facts / hcfg_scan 'reloc-ptrtable' pass; field names SPECULATIVE (GM label not seen)"
+}

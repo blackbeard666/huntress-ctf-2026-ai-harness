@@ -1,0 +1,7 @@
+{
+ "decoy": true,
+ "expected_plain": null,
+ "note": "yaml-scalar-carrier-twists: DECOY: escaped dq / !!binary / bare-marker shapes carrying benign text, no plan (lib.codec find_codecs)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/yst_gen.py  (stdlib base64 / bytes.hex, D21 GitHub Actions carrier with the YAML twist)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/yst_oracle.py tests/data/script_fixtures/yst_decoy_benign.yml  (PyYAML safe_load_all / raw `#` comment block + stdlib base64 / bytes.fromhex)"
+}

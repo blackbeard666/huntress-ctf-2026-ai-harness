@@ -1,0 +1,8 @@
+{
+ "field": "packages_xml.first_install_time_utc",
+ "expected": "2023-10-24T00:51:17Z",
+ "generator_cmd": "python3 -I gen.py (stdlib tarfile USTAR + zlib.compress writer; ABX via a hand-rolled BinaryXmlSerializer token writer; source kept at tests/data/meta_fixtures/android_backup/gen_android_fixtures.py.txt)",
+ "oracle_cmd": "grep -o ' it=\"[^\"]*\"' packages_text.xml | head -1 -> 18b5f2a1c40; date -u -d @$(( 0x18b5f2a1c40 / 1000 )) +%FT%TZ",
+ "decoy": false,
+ "member": "packages_text.xml"
+}

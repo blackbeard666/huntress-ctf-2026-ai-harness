@@ -1,0 +1,9 @@
+{
+ "codec": "saml-redirect",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-08",
+ "encoded": "eJwlyTEOgzAQRNGrTHqQUiIukIpUucBij8AQs5F3wRwfpHRf779TIKqWFZFBY9om%2BJwMVUrefw98FKbfgw1sH3Py%2F%2BUpwSGbVRa43ki8JBODmLP0WCSyVb%2B7fXYXI9kjpg%3D%3D",
+ "generator_cmd": "printf %s \"$plain\" | sh tests/data/warmups_fixtures/saml_redirect_gen.sh zlib quote",
+ "oracle_cmd": "tools/node/bin/node tests/data/warmups_fixtures/saml_redirect_oracle.mjs \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-08",
+ "expected": "match"
+}

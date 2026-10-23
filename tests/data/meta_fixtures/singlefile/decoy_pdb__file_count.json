@@ -1,0 +1,8 @@
+{
+ "field": "singlefile.file_count",
+ "expected": "none",
+ "generator_cmd": "dotnet publish -c Release -o out (HelloBundle.csproj: net10.0, AssemblyName=Contoso.Updater, RuntimeIdentifier=ubuntu.26.04-x64, PublishSingleFile=true, SelfContained=false; Program.cs = one Console.WriteLine) -> out/Contoso.Updater.pdb (portable PDB, no bundle marker)",
+ "oracle_cmd": "dotnet oracle.dll <file> (C# console app over ILSpy 11.1 ICSharpCode.Decompiler.SingleFileBundle.IsBundle/ReadManifest printing MajorVersion.MinorVersion, FileCount, BundleID, entries Type/Offset/Size/RelativePath) -> NOT_A_BUNDLE",
+ "decoy": true,
+ "member": "Contoso.Updater.pdb"
+}

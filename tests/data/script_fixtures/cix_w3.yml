@@ -1,0 +1,13 @@
+stages: [test]
+variables:
+  GREETING: "hello"
+lint:
+  stage: test
+  script:
+    - echo "commit says $CI_COMMIT_MESSAGE"
+    - make lint GREET="${GREETING}"
+deploy:
+  stage: test
+  script:
+    - echo "$DEPLOY_TOKEN" > /tmp/t
+    - echo "branch ${CI_COMMIT_REF_SLUG}"

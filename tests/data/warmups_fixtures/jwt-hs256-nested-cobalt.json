@@ -1,0 +1,10 @@
+{
+ "codec": "jwt-hs256-nested",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-58",
+ "encoded": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkYXRhIjp7Im5vdGUiOiJOaWNlIHdvcmsgZGVjb2RpbmcgdGhpcyB3YXJtdXAhIFRvIHNvbHZlLCBzdWJtaXQgdGhpcyBleGFjdCBhbnN3ZXIgdG8gdGhlIEdhbWUgTWFzdGVyOiBjb2JhbHQtbHlueC01OCJ9LCJpYXQiOjE3NjAwMDAwMDAsImlzcyI6Imh1bnRyZXNzIn0.LR9fpmdKG_55kNiQAWaNPgzgo39Y0T_JCSJMsj_bs8s",
+ "generator_cmd": "PYTHONPATH=tools/pylib-jwcrypto .venv/bin/python tests/data/warmups_fixtures/jwt_gen.py hs256-nested \"$plain\"",
+ "oracle_cmd": "printf %s \"$encoded\" | PYTHONPATH=tools/pylib-jwcrypto .venv/bin/python tests/data/warmups_fixtures/jwt_oracle.py hs256-nested",
+ "oracle_output": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-58",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-58",
+ "expected": "match"
+}

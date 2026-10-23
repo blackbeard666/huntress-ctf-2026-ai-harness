@@ -1,0 +1,8 @@
+{
+ "entry": "dex_strings",
+ "expected": null,
+ "decoy": true,
+ "_why": "same enum_loop layout; the terminal state emits a 14-hex near-miss ANS-9c3e71b0a5d248 -> no valid token",
+ "generator_cmd": "python3 tests/data/android_fixtures/swm_src/gen_swm.py decoy_nearmiss tests/data/android_fixtures/swm_decoy_nearmiss.apk  # javac --release 8 (enum + switch(enum) -> Gate$1.$SwitchMap$) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> Probe runs the enum switch on the host JVM -> 'proof=ANS-9c3e71b0a5d248' (14 hex: not an answer); `javap -c -p 'Gate$1.class'` shows the <clinit> aput order"
+}

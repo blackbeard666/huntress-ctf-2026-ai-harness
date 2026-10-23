@@ -1,0 +1,20 @@
+{
+  "version": "0.9.0",
+  "architecture": {
+    "64bit": {
+      "url": "https://example.invalid/app-x64.7z",
+      "hash": "sha256:00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+    }
+  },
+  "installer": {
+    "script": [
+      "Expand-7zipArchive \"$dir\\app-x64.7z\" \"$dir\"",
+      "$descriptor_9a3c4471 = 'H4sIAAAAAAACA02NywrCMBAAf8ajlkYrUmFP4lEQ9CiEZbO2' +",
+      "  'wW0S8qiXfLzFg3gcZmBm2FVBNxQcGIJ/c0wji9TohUGwOBo51pmjsZRhQrFkfUkVc0Z6wV21+75pW1XRYMgcIZH3QVuXMopw1ImiDbkuOLAmX1yG7UIcEhgmb1h/1ToWp//+hFNAOzhtDdxO102PO+q6g6pPK6wD5hFW7Obj/Xy5Pr7PX9KEpD4itiCh1wAAAA=='",
+      "$b = [Convert]::FromBase64String($descriptor_9a3c4471)"
+    ]
+  },
+  "uninstaller": {
+    "script": "Remove-Item \"$dir\\cache\" -Recurse"
+  }
+}

@@ -1,0 +1,7 @@
+{
+ "field": "mobileprovision.developer_certificate_sha1s",
+ "expected": "none",
+ "generator_cmd": "python3 plistlib.dumps(enterprise profile {AppIDName 'Relay Enterprise', ProvisionsAllDevices true, Entitlements{application-identifier, get-task-allow false}, NO DeveloperCertificates}) > ent.plist; openssl cms -sign -nodetach -binary -outform DER -in ent.plist -signer signer.pem -inkey signer.key -out ent.mobileprovision",
+ "oracle_cmd": "openssl cms -verify -noverify -inform DER -in ent.mobileprovision -out out.plist && exiftool -j -struct out.plist -> no DeveloperCertificates key",
+ "decoy": true
+}

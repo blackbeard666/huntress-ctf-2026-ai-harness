@@ -1,0 +1,9 @@
+{
+ "codec": "deflate-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-finch-12",
+ "encoded": "JckxEoJADAXQq3x6KbT0AlRYeYEYImRkN0wSWI+vM7TvPZQFzfyDSdgmrTNy0UAjL/vW4WkIWw+5IPZX0TxXvsQJqtHEkfZHwUBFMFKk+B282iHev7Xy0l9vPw==",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | tail -c +11 | head -c -8 | base64 -w0  # gzip CLI + base64 wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | { printf '\\037\\213\\010\\000\\000\\000\\000\\000\\000\\003'; cat; } | gzip -dc 2>/dev/null",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-finch-12",
+ "expected": "match"
+}

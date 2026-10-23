@@ -1,0 +1,27 @@
+cProfile of `cases/variant-mastery-ff8db5ea` (155885 function calls (151790 primitive calls) in 9.982 seconds, INTERRUPTED at 10s):
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        2    0.000    0.000    9.983    4.991 solve.py:1(<module>)
+    116/1    0.002    0.000    9.982    9.982 {built-in method builtins.exec}
+        1    0.000    0.000    9.889    9.889 solve.py:208(main)
+        1    0.000    0.000    9.888    9.888 solve.py:187(_solve_pairs)
+        7    0.000    0.000    9.881    1.412 request.py:138(urlopen)
+        7    0.000    0.000    9.879    1.411 request.py:496(open)
+        7    0.000    0.000    9.878    1.411 request.py:525(_open)
+       18    0.000    0.000    9.878    0.549 request.py:485(_call_chain)
+        7    0.000    0.000    9.878    1.411 request.py:1404(https_open)
+        7    0.000    0.000    9.878    1.411 request.py:1316(do_open)
+        1    0.000    0.000    8.772    8.772 solve.py:157(fallback)
+        1    0.000    0.000    8.771    8.771 solve.py:114(answer)
+        5    0.000    0.000    8.770    1.754 solve.py:68(_get)
+        6    0.000    0.000    6.154    1.026 client.py:1434(getresponse)
+        6    0.000    0.000    6.153    1.026 client.py:336(begin)
+        6    0.000    0.000    6.150    1.025 client.py:303(_read_status)
+       18    0.000    0.000    6.150    0.342 socket.py:706(readinto)
+      102    0.000    0.000    6.150    0.060 {method 'readline' of '_io.BufferedReader' objects}
+       18    0.000    0.000    6.150    0.342 ssl.py:1261(recv_into)
+       18    0.000    0.000    6.149    0.342 ssl.py:1119(read)
+       18    6.149    0.342    6.149    0.342 {method 'read' of '_ssl._SSLSocket' objects}
+        1    0.000    0.000    4.550    4.550 solve.py:93(_routes)
+        7    0.000    0.000    3.723    0.532 client.py:1383(request)
+        7    0.000    0.000    3.723    0.532 client.py:1388(_send_request)
+        7    0.000    0.000    3.723    0.532 client.py:1370(endheaders)

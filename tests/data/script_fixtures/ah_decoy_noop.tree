@@ -1,0 +1,3 @@
+{
+ "polyglot-github_actions-benign-utility.yml": "name: Huntress inert analysis 278f1c07\non:\n  workflow_dispatch:\njobs:\n  analyze:\n    runs-on: ubuntu-latest\n    env:\n      HUNTRESS_DESCRIPTOR: \"dj0zfGxhbmd1YWdl\"\n    steps:\n      - name: Preserve modeled descriptor\n        run: ':'\n"
+}

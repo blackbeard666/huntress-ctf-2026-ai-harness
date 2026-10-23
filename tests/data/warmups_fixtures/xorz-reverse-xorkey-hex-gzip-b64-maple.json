@@ -1,0 +1,11 @@
+{
+ "codec": "gzip-base64[xorkey:stack-hex]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-lynx-29",
+ "encoded": "H4sIAAAAAAACA02OyxVCIQxEW8oNCUg5jwD9l+CoG3dz5t8229x6LAsWzV6xGCCu7PLwSGtcaRsXKuS2orPSM1paKWss26SdvBk43SZHifzP2rEljzO04ep2QpxM/FoGZRHNtcH8oq61IbUzY2bok6vtQnzeub5XVJL+BvA05KfIAAAA",
+ "key": "stack",
+ "route": "decompress_solve",
+ "generator_cmd": "printf %s \"$plain\" | perl string XOR (key=stack, repeated) | xxd -p | tr -d '\\n' | gzip -9n | base64 -w0  # reverse order: XOR the text, then compress",
+ "oracle_cmd": "python3 -c \"import os,base64,gzip;from Crypto.Util.strxor import strxor;c=bytes.fromhex(gzip.decompress(base64.b64decode(os.environ['encoded'])).decode());k=os.environ['key'].encode();print(strxor(c,(k*len(c))[:len(c)]).decode())\"  # stdlib gzip + pycryptodome strxor",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-lynx-29",
+ "expected": "match"
+}

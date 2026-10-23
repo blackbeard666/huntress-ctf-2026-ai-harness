@@ -1,0 +1,8 @@
+{
+ "field": "clickonce.assembly_identity_public_key_token",
+ "expected": "e3b0c44298fc1c14",
+ "generator_cmd": "dotnet w.dll: C# over Microsoft.Build.Tasks.Core (SDK 10.0.113) Deployment.ManifestUtilities -- ApplicationManifest (AssemblyIdentity Fabrikam.Agent.exe 3.2.1.7 e3b0c44298fc1c14 neutral amd64, EntryPoint Fabrikam.Agent.exe) and DeployManifest (DeploymentUrl https://deploy.fabrikam.example/agent/Fabrikam.Agent.application, Install, Publisher, Product) -> ManifestWriter.WriteManifest",
+ "oracle_cmd": "python3 -c \"from lxml import etree; print(etree.parse('Fabrikam.Agent.application').xpath(\\\"string(/*[local-name()='assembly']/*[local-name()='assemblyIdentity']/@publicKeyToken)\\\").strip() or 'none')\"",
+ "decoy": false,
+ "member": "Fabrikam.Agent.application"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "pyz.prefix_length_bytes",
+ "expected": "23",
+ "generator_cmd": "echo 'print(\"hello from zipapp\")' > app/__main__.py; python3 -m zipapp app -p '/usr/bin/env python3' -o hello.pyz",
+ "oracle_cmd": "python3 -c \"import zipfile; z=zipfile.ZipFile(f); print(min(i.header_offset for i in z.infolist()))\"; 7z l -slt f -> Offset; unzip -t f -> 'N extra bytes at beginning' -> 23 / Offset = 23",
+ "decoy": false,
+ "member": "hello.pyz"
+}

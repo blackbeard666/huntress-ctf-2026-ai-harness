@@ -1,0 +1,11 @@
+{
+ "material": "# m h dom mon dow command\n@reboot /home/user/.local/bin/agent --daemon\n0 4 * * 0 /usr/bin/backup.sh\n",
+ "rep": "schedule_entries",
+ "transform": "command@@reboot!crontab",
+ "key": null,
+ "expected": "/home/user/.local/bin/agent --daemon",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes crontab: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && awk '$1==\"@reboot\"{$1=\"\";sub(/^ /,\"\");print}' crontab)"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "pdp2143-utf-32-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-19",
+ "encoded": "AABOAAAAaQAAAGMAAABlAAAAIAAAAHcAAABvAAAAcgAAAGsAAAAgAAAAZAAAAGUAAABjAAAAbwAAAGQAAABpAAAAbgAAAGcAAAAgAAAAdAAAAGgAAABpAAAAcwAAACAAAAB3AAAAYQAAAHIAAABtAAAAdQAAAHAAAAAhAAAAIAAAAFQAAABvAAAAIAAAAHMAAABvAAAAbAAAAHYAAABlAAAALAAAACAAAABzAAAAdQAAAGIAAABtAAAAaQAAAHQAAAAgAAAAdAAAAGgAAABpAAAAcwAAACAAAABlAAAAeAAAAGEAAABjAAAAdAAAACAAAABhAAAAbgAAAHMAAAB3AAAAZQAAAHIAAAAgAAAAdAAAAG8AAAAgAAAAdAAAAGgAAABlAAAAIAAAAEcAAABhAAAAbQAAAGUAAAAgAAAATQAAAGEAAABzAAAAdAAAAGUAAAByAAAAOgAAACAAAABqAAAAYQAAAGQAAABlAAAALQAAAG8AAAB0AAAAdAAAAGUAAAByAAAALQAAADEAAAA5AA==",
+ "generator_cmd": "printf %s \"$plain\" | iconv -f utf-8 -t UTF-32BE | dd conv=swab status=none | base64 -w0  # PDP-11 2143 words, no BOM, base64",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | perl -0777 -ne 'print pack(\"N*\", map { (($_ & 0xffff) << 16 | $_ >> 16) } unpack(\"V*\", $_))' | iconv -f UTF-32BE -t utf-8  # perl halves swap -> UTF-32BE -> iconv",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-19",
+ "expected": "match"
+}

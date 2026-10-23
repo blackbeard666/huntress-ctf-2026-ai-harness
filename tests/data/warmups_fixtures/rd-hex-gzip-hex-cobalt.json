@@ -1,0 +1,9 @@
+{
+ "codec": "decompress-redecode",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-wren-84",
+ "encoded": "1f8b08000000000002034d8ec915033108435bb25924bb9cc44bff258c9897434e80f842c4c18423ad91b8347cad2190d2aeeac401b50b0c4cfa4b75519bc966dd5a06aed4a217a13bab2626c4c811ff5e24073abc54d5238ed2ec65ee8fd427a10cb9abdb4a135f947fe4aa1cd376e9c626f549e2d8f6e1f100199e6501ca000000",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p | tr -d \"\\n\" | gzip -9n | xxd -p | tr -d \"\\n\"",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | gzip -dc | xxd -r -p",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-wren-84",
+ "expected": "match"
+}

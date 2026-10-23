@@ -1,0 +1,8 @@
+{
+ "field": "entitlements.entitlement_keys",
+ "expected": "[\"application-identifier\",\"aps-environment\",\"com.apple.developer.team-identifier\",\"com.apple.security.application-groups\",\"get-task-allow\",\"keychain-access-groups\"]",
+ "generator_cmd": "python3 plistlib.dumps(dev profile's Entitlements dict) > app.entitlements (XML)",
+ "oracle_cmd": "grep -o '<key>[^<]*' app.entitlements | sort",
+ "decoy": false,
+ "member": "FieldKit.entitlements"
+}

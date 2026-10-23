@@ -1,0 +1,105 @@
+{
+ "family": "symbol_versioning",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "verdefs": [
+   {
+    "index": 1,
+    "flags": "BASE",
+    "name": "libcfg.so.2",
+    "parents": []
+   },
+   {
+    "index": 2,
+    "flags": "none",
+    "name": "V1",
+    "parents": []
+   },
+   {
+    "index": 3,
+    "flags": "none",
+    "name": "V2",
+    "parents": [
+     "V1"
+    ]
+   }
+  ],
+  "verdef_names": [
+   "libcfg.so.2",
+   "V1",
+   "V2"
+  ],
+  "base_version": "libcfg.so.2",
+  "verneeds": {
+   "libc.so.6": [
+    "GLIBC_2.2.5"
+   ]
+  },
+  "needed_versions": [
+   "GLIBC_2.2.5"
+  ],
+  "versioned_symbols": [
+   "puts@GLIBC_2.2.5",
+   "__cxa_finalize@GLIBC_2.2.5",
+   "cfg_level@@V2",
+   "cfg_unique@@V2",
+   "cfg_get@@V2",
+   "cfg_get@V1",
+   "cfg_hook@@V2",
+   "cfg_count@@V1"
+  ],
+  "default_versions": {
+   "cfg_level": "V2",
+   "cfg_unique": "V2",
+   "cfg_get": "V2",
+   "cfg_hook": "V2",
+   "cfg_count": "V1"
+  },
+  "hidden_versions": [
+   "cfg_get@V1"
+  ],
+  "weak_symbols": [
+   "_ITM_deregisterTMCloneTable",
+   "__gmon_start__",
+   "_ITM_registerTMCloneTable",
+   "__cxa_finalize",
+   "cfg_hook"
+  ],
+  "unique_symbols": [
+   "cfg_unique"
+  ],
+  "protected_symbols": [
+   "cfg_level"
+  ],
+  "exported_symbols": [
+   "cfg_level",
+   "cfg_unique",
+   "V1",
+   "cfg_get",
+   "cfg_hook",
+   "cfg_count",
+   "V2"
+  ],
+  "imports": [
+   "_ITM_deregisterTMCloneTable",
+   "puts",
+   "__gmon_start__",
+   "_ITM_registerTMCloneTable",
+   "__cxa_finalize"
+  ],
+  "interposed": "none",
+  "rtld_next_callers": "none",
+  "calls_rtld_next": "false",
+  "returns": {
+   "cfg_get@@V2": "HCFG{symver_default_v2_wins}",
+   "cfg_get@V1": "HCFG{decoy_v1_not_this_one}"
+  },
+  "default_return": "HCFG{symver_default_v2_wins}"
+ },
+ "generator_cmd": "bash symver_gen.sh   # gcc -O2 -fPIC -shared -Wl,--version-script (V1 {cfg_get; cfg_count}; V2 {cfg_get; cfg_hook; cfg_level; cfg_unique} V1) + .symver cfg_get@V1 (decoy HCFG) / cfg_get@@V2 (HCFG), weak/protected/gnu_unique_object; compiled, never run/preloaded",
+ "oracle_cmd": "python3 symver_oracle.py symver_cfg_lib.bin   # readelf -VW / readelf --dyn-syms -W / objdump -d -Mintel / nm -D --defined-only libc.so.6 / pyelftools",
+ "decoy": false,
+ "note": "lib.binary.elf_version_field(data, key) per expected_facts key (null expected_facts: elf_version_facts -> None); key names SPECULATIVE (GM label not seen)"
+}

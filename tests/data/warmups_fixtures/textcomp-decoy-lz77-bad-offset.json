@@ -1,0 +1,10 @@
+{
+ "codec": "textcomp-lz77 (decoy)",
+ "plain": "none",
+ "encoded": "(0, 0, 'N') (5, 3, 'i') (0, 0, 'c')",
+ "generator_cmd": "hand-written: offset 5 points before the start of the output",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/textcomp_oracle.py lz77",
+ "oracle_plain": "none",
+ "decoy": true,
+ "expected": "none"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "yenc",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-64",
+ "encoded": "=ybegin line=128 size=102 name=flag.txt\r\nxJ¡JJJ¡KJ~J VJJJ¢J¡JJJqJwdJWW`^\r\n=yend size=102 crc32=822c2c69\r\n",
+ "encoded_charset": "latin-1 (each yEnc byte = one U+0000..U+00FF char)",
+ "generator_cmd": "python3 -m pip install sabyenc3 && python3 -c 'import sabyenc3,sys;p=sys.argv[1].encode();b,c=sabyenc3.encode(p);sys.stdout.buffer.write(b\"=ybegin line=128 size=%d name=flag.txt\\r\\n\"%len(p)+b+b\"\\r\\n=yend size=%d crc32=%08x\\r\\n\"%(len(p),c))' \"$plain\" > out.yenc  # SABnzbd's sabyenc3 C encoder",
+ "oracle_cmd": "python3 -c 'import sabyenc3;print(sabyenc3.decode_usenet_chunks([open(\"out.yenc\",\"rb\").read()]))'  # sabyenc3 decoder -> (data, 'flag.txt', crc_correct=True)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-64",
+ "expected": "match"
+}

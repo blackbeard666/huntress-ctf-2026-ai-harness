@@ -1,0 +1,123 @@
+{
+ "family": "symbol_versioning",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "verdefs": [
+   {
+    "index": 1,
+    "flags": "BASE",
+    "name": "symver_noplt_shim.bin",
+    "parents": []
+   },
+   {
+    "index": 2,
+    "flags": "none",
+    "name": "VERS_1.0",
+    "parents": []
+   },
+   {
+    "index": 3,
+    "flags": "none",
+    "name": "VERS_1.1",
+    "parents": [
+     "VERS_1.0"
+    ]
+   },
+   {
+    "index": 4,
+    "flags": "none",
+    "name": "VERS_2.0",
+    "parents": [
+     "VERS_1.1"
+    ]
+   }
+  ],
+  "verdef_names": [
+   "symver_noplt_shim.bin",
+   "VERS_1.0",
+   "VERS_1.1",
+   "VERS_2.0"
+  ],
+  "base_version": "symver_noplt_shim.bin",
+  "verneeds": {
+   "libc.so.6": [
+    "GLIBC_2.2.5",
+    "GLIBC_2.34"
+   ]
+  },
+  "needed_versions": [
+   "GLIBC_2.2.5",
+   "GLIBC_2.34"
+  ],
+  "versioned_symbols": [
+   "dlsym@GLIBC_2.34",
+   "__cxa_finalize@GLIBC_2.2.5",
+   "api_cfg@VERS_1.0",
+   "api_cfg@@VERS_2.0",
+   "unsetenv@@VERS_1.0",
+   "api_cfg@VERS_1.1",
+   "free@@VERS_1.0",
+   "malloc@@VERS_1.0",
+   "dlsym_hook@@VERS_2.0"
+  ],
+  "default_versions": {
+   "api_cfg": "VERS_2.0",
+   "unsetenv": "VERS_1.0",
+   "free": "VERS_1.0",
+   "malloc": "VERS_1.0",
+   "dlsym_hook": "VERS_2.0"
+  },
+  "hidden_versions": [
+   "api_cfg@VERS_1.0",
+   "api_cfg@VERS_1.1"
+  ],
+  "weak_symbols": [
+   "_ITM_deregisterTMCloneTable",
+   "__gmon_start__",
+   "_ITM_registerTMCloneTable",
+   "__cxa_finalize",
+   "dlsym_hook"
+  ],
+  "unique_symbols": "none",
+  "protected_symbols": "none",
+  "exported_symbols": [
+   "api_cfg",
+   "unsetenv",
+   "free",
+   "VERS_2.0",
+   "VERS_1.0",
+   "malloc",
+   "VERS_1.1",
+   "dlsym_hook"
+  ],
+  "imports": [
+   "_ITM_deregisterTMCloneTable",
+   "__gmon_start__",
+   "dlsym",
+   "_ITM_registerTMCloneTable",
+   "__cxa_finalize"
+  ],
+  "interposed": [
+   "unsetenv",
+   "free",
+   "malloc"
+  ],
+  "rtld_next_callers": [
+   "free",
+   "malloc"
+  ],
+  "calls_rtld_next": "true",
+  "returns": {
+   "api_cfg@VERS_1.0": "HCFG{old_api_decoy}",
+   "api_cfg@@VERS_2.0": "HCFG{vers_2_0_default}",
+   "api_cfg@VERS_1.1": "HCFG{mid_api_decoy}"
+  },
+  "default_return": "HCFG{vers_2_0_default}"
+ },
+ "generator_cmd": "bash symver_gen.sh   # gcc -O0 -fno-plt -fPIC -shared -Wl,--version-script (VERS_1.0 <- VERS_1.1 <- VERS_2.0): malloc/free resolve RTLD_NEXT in a static lazy helper (call [rip+GOT]); api_cfg@VERS_1.0/@VERS_1.1 decoys, api_cfg@@VERS_2.0 HCFG; compiled, never run/preloaded",
+ "oracle_cmd": "python3 symver_oracle.py symver_noplt_shim.bin   # readelf -VW / readelf --dyn-syms -W / objdump -d -Mintel / nm -D --defined-only libc.so.6 / pyelftools",
+ "decoy": false,
+ "note": "lib.binary.elf_version_field(data, key) per expected_facts key (null expected_facts: elf_version_facts -> None); key names SPECULATIVE (GM label not seen)"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "pgp[gzip]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-moose-19",
+ "encoded": "-----BEGIN PGP ARMORED FILE-----\nComment: Use \"gpg --dearmor\" for unpacking\n\nH4sIAAAAAAACAyXJMRKCQAwF0Kt8eyks9QJWUnGBsPzRHQhhkuByfJyxfa+vhWjm\nMyYWm+r6Rn5qoInrvl0wGMKWL6+IfdSa/+UhJSFrNDrSfkg8RYmXRNIfEB3pnZoF\nu9v9BNL5p+ZlAAAA\n=BYan\n-----END PGP ARMORED FILE-----\n",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | gpg --batch --quiet --enarmor",
+ "oracle_cmd": "printf %s \"$encoded\" | gpg --batch --quiet --dearmor | gunzip",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-moose-19",
+ "expected": "match"
+}

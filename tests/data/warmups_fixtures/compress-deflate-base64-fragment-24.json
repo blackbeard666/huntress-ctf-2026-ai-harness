@@ -1,0 +1,10 @@
+{
+ "codec": "deflate-base64",
+ "plain": "submit t",
+ "encoded": "Ky5Nys0sUSgBAA==",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | tail -c +11 | head -c -8 | base64 -w0  # gzip CLI + base64 wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | { printf '\\037\\213\\010\\000\\000\\000\\000\\000\\000\\003'; cat; } | gzip -dc 2>/dev/null",
+ "oracle_plain": "submit t",
+ "expected": "match",
+ "mastery_fragment": true
+}

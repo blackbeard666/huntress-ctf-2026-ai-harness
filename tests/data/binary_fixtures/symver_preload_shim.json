@@ -1,0 +1,83 @@
+{
+ "family": "symbol_versioning",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "verdefs": "none",
+  "verdef_names": "none",
+  "base_version": "none",
+  "verneeds": {
+   "libc.so.6": [
+    "GLIBC_2.34",
+    "GLIBC_2.4",
+    "GLIBC_2.2.5"
+   ]
+  },
+  "needed_versions": [
+   "GLIBC_2.34",
+   "GLIBC_2.4",
+   "GLIBC_2.2.5"
+  ],
+  "versioned_symbols": [
+   "stdout@GLIBC_2.2.5",
+   "__stack_chk_fail@GLIBC_2.4",
+   "fputs@GLIBC_2.2.5",
+   "strcmp@GLIBC_2.2.5",
+   "dlsym@GLIBC_2.34",
+   "fwrite@GLIBC_2.2.5",
+   "__cxa_finalize@GLIBC_2.2.5",
+   "strstr@GLIBC_2.2.5",
+   "stderr@GLIBC_2.2.5"
+  ],
+  "default_versions": "none",
+  "hidden_versions": "none",
+  "weak_symbols": [
+   "_ITM_deregisterTMCloneTable",
+   "__gmon_start__",
+   "_ITM_registerTMCloneTable",
+   "__cxa_finalize"
+  ],
+  "unique_symbols": "none",
+  "protected_symbols": "none",
+  "exported_symbols": [
+   "getenv",
+   "puts",
+   "shim_ready",
+   "open",
+   "__libc_start_main"
+  ],
+  "imports": [
+   "_ITM_deregisterTMCloneTable",
+   "stdout",
+   "__stack_chk_fail",
+   "fputs",
+   "strcmp",
+   "__gmon_start__",
+   "dlsym",
+   "fwrite",
+   "_ITM_registerTMCloneTable",
+   "__cxa_finalize",
+   "strstr",
+   "stderr"
+  ],
+  "interposed": [
+   "getenv",
+   "puts",
+   "open",
+   "__libc_start_main"
+  ],
+  "rtld_next_callers": [
+   "getenv",
+   "open",
+   "__libc_start_main"
+  ],
+  "calls_rtld_next": "true",
+  "returns": "none",
+  "default_return": "none"
+ },
+ "generator_cmd": "bash symver_gen.sh   # gcc -O2 -fPIC -shared shim.c -ldl: LD_PRELOAD shim exporting open/getenv/__libc_start_main (dlsym(RTLD_NEXT, ..)) + puts (no RTLD_NEXT); compiled, never run/preloaded",
+ "oracle_cmd": "python3 symver_oracle.py symver_preload_shim.bin   # readelf -VW / readelf --dyn-syms -W / objdump -d -Mintel / nm -D --defined-only libc.so.6 / pyelftools",
+ "decoy": false,
+ "note": "lib.binary.elf_version_field(data, key) per expected_facts key (null expected_facts: elf_version_facts -> None); key names SPECULATIVE (GM label not seen)"
+}

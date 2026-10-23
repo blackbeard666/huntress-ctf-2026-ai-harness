@@ -1,0 +1,11 @@
+{
+ "codec": "inflate-container decoy",
+ "plain": "none",
+ "decoy": true,
+ "why": "the zTXt chunk's CRC-32 last byte flipped (corrupt chunk)",
+ "encoded": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAanpUWHRDb21tZW50AAB4nCXJMRKCQAwF0Kt8emksLLwAlVZeICx/MCNLnCSwHB9nbN97aiGa+QcTi026zsi3Bpp43b4dXoawZecFsY1V8788pCRkjUZH2g+JQSrxkEj6HWWxnd7rqNHfridJryQWPBLrbQAAABRJREFUeJxj5BKRY4ABJgYkgJsDAAyoAEReOnTuAAAAAElFTkSuQmCC",
+ "generator_cmd": "(Pillow zTXt writer as png-ztxt, text '... clover-ibis-62') then python3 -c 'b=bytearray(open(\"bad.png\",\"rb\").read()); k=b.find(b\"zTXt\"); n=int.from_bytes(b[k-4:k],\"big\"); b[k+4+n+3]^=255; open(\"bad.png\",\"wb\").write(b)'; base64 -w0 bad.png",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d > t.png; pngcheck -q t.png >/dev/null && exiftool -s3 -Comment t.png || echo none  # pngcheck: 'CRC error in chunk zTXt'",
+ "oracle_plain": "none",
+ "expected": "none"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "clean_device_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same layout as emustub_tele_sensor but the byte[] is keyed for the EMULATOR stubs (IMEI 000000000000000, 15555215554, operator 'Android', 6 AOSP sensors): the token only appears on the emulator path; a retail phone shows garbage",
+ "generator_cmd": "python3 tests/data/android_fixtures/emustub_src/gen_emustub.py decoy_emulator tests/data/android_fixtures/emustub_decoy_emulator.apk  # javac --release 8 (app + retail-phone android.* stubs) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d22.emuq.Probe -> Vault.reveal(new Context()) on the retail stubs prints non-ANS bytes ('\\xb7V\\xa6\\xdb\\xcf)...'), i.e. no token on the retail path"
+}

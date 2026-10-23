@@ -1,0 +1,8 @@
+{
+ "field": "sfx.embedded_archive_format",
+ "expected": "7z",
+ "generator_cmd": "7z a payload.7z readme.txt; cat <PE32 exe, tests/data/meta_fixtures/pe/arch_cli32__coff_machine_constant.bin> payload.7z > sfx_7z.exe",
+ "oracle_cmd": "7z l -slt sfx_7z.exe -> Type = 7z, Offset = 11776",
+ "decoy": false,
+ "member": "sfx_7z.exe"
+}

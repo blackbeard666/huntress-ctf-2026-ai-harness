@@ -1,0 +1,9 @@
+{
+ "codec": "lzstring-uri",
+ "plain": "~~~ ÿ€ jade",
+ "encoded": "H4gEH-BqCUCsEMAmBTIA",
+ "generator_cmd": "LZ=$PWD/tools/npm-cyberchef/node_modules/lz-string tools/node/bin/node tests/data/warmups_fixtures/lzstring_gen.js uri \"$plain\"  # pieroxy lz-string 1.5.0 (npm) compressToEncodedURIComponent",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/lzstring_oracle.py uri  # PyPI lzstring 1.0.4 (independent port)",
+ "oracle_plain": "~~~ ÿ€ jade",
+ "expected": "match"
+}

@@ -1,0 +1,23 @@
+{
+ "family": "dotnet_language_of",
+ "decoy": false,
+ "expected": {
+  "language": "vbnet",
+  "assembly_name": "vb",
+  "assembly_version": "1.0.0.0",
+  "fsharp_core_version_ref": "none",
+  "fsharp_core_version_def": "none",
+  "fsharp_resources": [],
+  "fsharp_resource_count": "0",
+  "startup_code": "none",
+  "vb_runtime_ref": "Microsoft.VisualBasic.Core",
+  "vb_runtime_version": "15.0.0.0",
+  "anon_type_count": "1",
+  "vb_local_fields": "1",
+  "il_only": "true",
+  "closure_count": "2"
+ },
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/dnlang_gen.sh   # dotnet 10 SDK: dotnet new console -lang VB + dotnet build -c Release (Deterministic)",
+ "oracle_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/dnlang_oracle.sh tests/data/binary_fixtures/dnlang_vbnet_net10.bin   # System.Reflection.Metadata (BCL, not dnfile); language = the generator's -lang",
+ "note": "VB.NET console: lambda closure (_Closure$__), anonymous type, LINQ, Microsoft.VisualBasic.Core ref"
+}

@@ -1,0 +1,55 @@
+{
+ "format": "zip of a multi-member dNN-- group",
+ "members": [
+  "d23--variant-000.so",
+  "d23--variant-001.elf",
+  "d23--variant-002.so"
+ ],
+ "expected_sha256": [
+  "b9a36c8feffbd57cb5cac982841e1f82e5bd0434817b8b8a095625a2ea4075da",
+  "5d6d68b00c0f105655c48366eb901fbfa4e337a90537e609fbe19b29f2b30798",
+  "db247c826051a83bac0cf95291274c1febf40b08dc0669c00af428c3d5992fa8"
+ ],
+ "routes": [
+  {
+   "id": "d23_analysis_loader_machine",
+   "question": "In evidence.zip, Use all d23-- members in ZIP central-directory order. Read the ELF e_machine field and submit its unsigned base-10 numeric value.",
+   "member": "d23--variant-001.elf",
+   "residual": "machine"
+  },
+  {
+   "id": "d23_analysis_stub_entry_point",
+   "question": "In evidence.zip, Use all d23-- members in ZIP central-directory order. ",
+   "member": "d23--variant-001.elf",
+   "residual": "entry_point"
+  },
+  {
+   "id": "d23_analysis_config_domain",
+   "question": "In evidence.zip, Use all d23-- members in ZIP central-directory order. Scan the specified member for literal HCFG magic and accept the first record whose bounds, CRC32, and decoded JSON validate.",
+   "member": "d23--variant-002.so",
+   "residual": "config_domain"
+  },
+  {
+   "id": "d23_analysis_payload_machine",
+   "question": "In evidence.zip, Use all d23-- members in ZIP central-directory order. Read the ELF e_machine field and submit its unsigned base-10 numeric value.",
+   "member": null,
+   "residual": "payload_machine"
+  },
+  {
+   "id": "d23_analysis_exports",
+   "question": "Use the member which exports alpha_init.",
+   "member": "d23--variant-002.so",
+   "residual": "exports"
+  },
+  {
+   "id": "d23_analysis_needed",
+   "question": "Use the plugin loaded by the host via dlopen.",
+   "member": "d23--variant-000.so",
+   "residual": "needed"
+  }
+ ],
+ "generator_cmd": "FX=$PWD bash route_gen.sh   # gcc -shared -Wl,-soname / gcc -ldl, strip, wat2wasm, python3 zlib.crc32 header, zip -X -j",
+ "oracle_cmd": "bash route_oracle.sh route_renamed.bin   # unzip -Z1, readelf -hW/-lW/-dW/--dyn-syms, strings, grep -obUa HCFG + binascii.crc32",
+ "decoy": false,
+ "note": "same bytes renamed without role tokens: roles by ELF kind (PT_INTERP = executable)"
+}

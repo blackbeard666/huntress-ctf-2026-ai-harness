@@ -1,0 +1,8 @@
+{
+ "field": "jar.module_name",
+ "expected": "none",
+ "generator_cmd": "jar --create --file lib.jar -C o kotlin (no Main-Class, no module-info)",
+ "oracle_cmd": "unzip -l lib.jar -> no module-info.class",
+ "decoy": true,
+ "member": "lib.jar"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "jar.prefix_length_bytes",
+ "expected": "35",
+ "generator_cmd": "javac --release 11 -d cls Hello.java; jar --create --file app.jar --main-class com.acme.Hello -C cls .; printf '#!/bin/sh\\nexec java -jar \"$0\" \"$@\"\\n' > stub.sh; cat stub.sh app.jar > app.run",
+ "oracle_cmd": "python3 -c \"import zipfile; z=zipfile.ZipFile(f); print(min(i.header_offset for i in z.infolist()))\"; 7z l -slt f -> Offset; unzip -t f -> 'N extra bytes at beginning' -> 35",
+ "decoy": false,
+ "member": "app.run"
+}

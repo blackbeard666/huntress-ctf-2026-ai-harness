@@ -1,0 +1,8 @@
+{
+ "field": "ios_app.executable_lc_uuid",
+ "expected": "none",
+ "generator_cmd": "mkdir META-INF; MANIFEST.MF + text 'CFBundleIdentifier=com.fake' as Info.plist at root (no Payload/*.app); zip -X -r impostor.ipa (a renamed jar)",
+ "oracle_cmd": "unzip -l impostor.ipa -> META-INF/MANIFEST.MF, Info.plist (no Payload/*.app, no Mach-O); file Info.plist -> ASCII text",
+ "decoy": true,
+ "member": "impostor.ipa"
+}

@@ -1,0 +1,7 @@
+{
+ "field": "apk.classes_dex_checksum_u32_hex",
+ "expected": "none",
+ "generator_cmd": "cd plain && zip -X ../plainjar.zip Main.class (a zip with no AndroidManifest.xml)",
+ "oracle_cmd": "zipinfo -1 plainjar.zip -> no classes.dex / AndroidManifest.xml",
+ "decoy": true
+}

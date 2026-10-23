@@ -1,0 +1,48 @@
+{
+ "encoding": "raw",
+ "expected_offset": 12320,
+ "expected_config": {
+  "c2": "198.51.100.7:443",
+  "campaign": "pairing",
+  "sleep": 45,
+  "flag": "flag{dyl1b_p41r}"
+ },
+ "expected_facts": {
+  "cputype": "16777223",
+  "arch": "x86_64",
+  "filetype": "dylib",
+  "dylib_commands": [
+   "LC_LOAD_DYLIB:/usr/lib/libSystem.B.dylib"
+  ],
+  "dylibs": [
+   "/usr/lib/libSystem.B.dylib"
+  ],
+  "dylib_versions": [
+   "/usr/lib/libSystem.B.dylib 1359.0.0 1.0.0"
+  ],
+  "rpaths": "none",
+  "weak_dylibs": "none",
+  "rpath_dylibs": "none",
+  "loader_path_dylibs": "none",
+  "install_name": "@rpath/libpair.dylib",
+  "current_version": "2.1.0",
+  "compatibility_version": "2.0.0",
+  "exports": [
+   "_hcfg_blob",
+   "_pair_api",
+   "_pair_table",
+   "_pair_ver",
+   "__mh_dylib_header",
+   "___dso_handle"
+  ],
+  "has_chained_fixups": "false",
+  "chained_imports_qualified": "none",
+  "chained_weak_imports": "none",
+  "has_hcfg_section": "true"
+ },
+ "decoy": false,
+ "generator_cmd": "bash mlink_gen.sh mlink_x64_dylib.bin x64_dylib",
+ "oracle_cmd": "python3 mlink_oracle.py mlink_x64_dylib.bin   # llvm-objdump-18 --macho --private-header(s) / --exports-trie / --chained-fixups, llvm-lipo-18 -archs, llvm-readobj-18 --sections; bash macho_oracle.sh mlink_x64_dylib.bin (HCFG offset/config)",
+ "note": "lib.binary.macho_link_facts(data)[field] == expected_facts[field] for each key (null facts -> macho_link_facts is None and every macho_link_field is \"none\"); hcfg_scan first valid hit == expected_offset/config. GM vocabulary for these fields NOT yet confirmed (format label 'macho' presumed by the atlas; cputype as decimal str, arch = lipo name).",
+ "oracle_output": "thin | X86-64 (0x1000007) | 0 | __TEXT,__text __TEXT,__cstring __TEXT,__unwind_info __TEXT,__eh_frame __DATA_CONST,__got __DATA,__data __DATA,__hcfg | 12320 | HCFG 1 0 83 3655971230 3655971230 | {\"c2\":\"198.51.100.7:443\",\"campaign\":\"pairing\",\"sleep\":45,\"flag\":\"flag{dyl1b_p41r}\"}"
+}

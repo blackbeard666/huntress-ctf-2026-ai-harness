@@ -1,0 +1,7 @@
+{
+ "field": "apk.dex_versions",
+ "expected": "[\"035\",\"039\"]",
+ "generator_cmd": "aarch64-linux-gnu-gcc / gcc / gcc -m32 -shared -nostdlib -s f.c -> lib/<abi>/libnative.so (x86_64 ELF copied into lib/armeabi-v7a = mismatch); classes.dex/classes2.dex = dex fixtures d2/d39; AndroidManifest.xml from D21 GM APK; zip -X -D -n .arsc:.json:.txt multi.apk AndroidManifest.xml classes.dex classes2.dex resources.arsc lib/... assets/config.json assets/sub/readme.txt (touch -t 202610211200 all, readme 202610201000)",
+ "oracle_cmd": "unzip -p multi.apk classesN.dex | head -c8 | xxd -> dex\\n035\\0, dex\\n039\\0",
+ "decoy": false
+}

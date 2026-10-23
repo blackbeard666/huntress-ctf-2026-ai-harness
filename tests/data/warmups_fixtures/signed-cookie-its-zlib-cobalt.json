@@ -1,0 +1,10 @@
+{
+ "codec": "signed-cookie-its",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-305",
+ "encoded": ".eJwlyTEOgzAMBdCrfJhBQqq6cIFOMHEBE6w2IolRbEh6eyp1fa-dvWMUyTs2drL59IZ9vKJQjufRYBGohIs76LlGb__lSs5ASQtnmPyQ8aLImEiN8wgnKwXrwzfV_jE82xugCiSY.ucgPHEVMpV7N4CJ8iBfqOY6l67I",
+ "generator_cmd": "PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_gen.py its \"$plain\"",
+ "oracle_cmd": "printf %s \"${encoded#}\" | PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_oracle.py its",
+ "oracle_output": "\"Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-305\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-305",
+ "expected": "match"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "war.welcome_files",
+ "expected": "[\"index.jsp\",\"home.html\"]",
+ "generator_cmd": "zip -qr portal.war WEB-INF/web.xml (hand-written jakarta-ns 6.0 web.xml)",
+ "oracle_cmd": "java OracleXml.java portal.war WEB-INF/web.xml \"//*[local-name()='welcome-file-list']/*[local-name()='welcome-file']\" (javax.xml DOM namespace-aware + XPath local-name())",
+ "decoy": false,
+ "member": "portal.war"
+}

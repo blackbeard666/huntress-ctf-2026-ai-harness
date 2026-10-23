@@ -1,0 +1,11 @@
+{
+ "material": "name: ping\non:\n  repository_dispatch:\n    types: [ping]\njobs:\n  pong:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          curl -X POST -H \"Authorization: token ${{ secrets.PAT }}\" \\\n            https://api.github.com/repos/${{ github.repository }}/dispatches -d '{\"event_type\":\"ping\"}'\n",
+ "rep": "schedule_entries",
+ "transform": "kind",
+ "key": "gha_schedule,gha_workflow_run,gha_repository_dispatch",
+ "expected": "gha_repository_dispatch",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes gha_dispatch.yml: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && python3 -I -c \"import yaml,sys;y=yaml.safe_load(open(sys.argv[1]));on=y.get(True,y.get('on'));r=' '.join(s.get('run','') for s in y['jobs']['pong']['steps']);print('gha_repository_dispatch' if 'repository_dispatch' in on and '/dispatches' in r else 'none')\" gha_dispatch.yml)"
+}

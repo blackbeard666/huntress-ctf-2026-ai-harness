@@ -1,0 +1,8 @@
+{
+ "field": "jar.jar_input_stream_main_class",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"zipfile.ZipFile('dupe.jar','w'): writestr readme.txt, write a/Real.class (javac), writestr META-INF/MANIFEST.MF 'Manifest-Version: 1.0\\r\\nMain-Class: a.Decoy\\r\\nCreated-By: hand\\r\\nMain-Class: a.Real\\r\\n\\r\\n'\" (stdlib zip writer; manifest is the 3rd stream entry)",
+ "oracle_cmd": "java Oracle.java dupe.jar (java.util.jar.JarFile getManifest().getMainAttributes()/getEntries(), jf.getEntry(Main-Class.replace('.','/')+\".class\"), JarFile.entries() *.jar|*.war, JarInputStream.getManifest(), ZipInputStream entry index) -> JarInputStream manifest false",
+ "decoy": true,
+ "member": "dupe.jar"
+}

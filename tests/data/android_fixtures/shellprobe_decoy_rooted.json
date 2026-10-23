@@ -1,0 +1,8 @@
+{
+ "entry": "clean_device_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "exec_readline's code with ENC keyed on a ROOTED persona (which su -> /system/xbin/su exit 0, test-keys, ro.debuggable 1, ro.secure 0, Permissive, su -c id -> uid=0(root)): the clean device's vector decodes garbage, so no token",
+ "generator_cmd": "python3 tests/data/android_fixtures/shellprobe_src/gen_shellprobe.py decoy_rooted tests/data/android_fixtures/shellprobe_decoy_rooted.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.shellprobe.Probe with env PATH=<fake clean-Pixel toybox dir: getprop/getenforce/id/which/mount shell scripts + sh->/bin/sh, NO su> -> the host JVM's real Runtime.exec / ProcessBuilder / BufferedReader / Scanner print Sig.vector() + Vault.reveal() -> '1/release-keys;0/0;0/1;0/Enforcing;0/ioe/uid=10234(u0_a234)' + 'a?\\x13)\\x16?rf\\x19?$0F?wg\\x13?u<' (no token on the clean path)"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "apkm.split_names",
+ "expected": "[\"base\",\"config.arm64_v8a\"]",
+ "generator_cmd": "python3 tests/data/meta_fixtures/aab/gen_fixtures.py OUT tests/data/meta_fixtures/apk/d21__version_name.bin SPLITS (google.protobuf dynamic messages for the proto manifest/BundleConfig.pb; zipfile containers; config splits from `aapt2 link -o config.<x>.apk --manifest <manifest package=... split=config.<x>>`) -> bundle.apkm",
+ "oracle_cmd": "for base.apk, split_config.arm64_v8a.apk (unzip -Z1 order): aapt dump xmltree <apk> AndroidManifest.xml -> (no split attr)=base, split=\"config.arm64_v8a\"",
+ "decoy": false,
+ "member": "bundle.apkm"
+}

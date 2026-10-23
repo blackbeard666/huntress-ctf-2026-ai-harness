@@ -1,0 +1,20 @@
+{
+ "family": "ffi_boundary",
+ "file": "ffi_pyext.bin",
+ "decoy": false,
+ "generator_cmd": "bash tests/data/binary_fixtures/ffi_gen.sh <workdir>",
+ "oracle_cmd": "readelf --dyn-syms -W <bin> (defined GLOBAL/WEAK, table order; UND = imports) + /usr/bin/python3 ExtensionFileLoader import -> module.__name__",
+ "expected_facts": {
+  "ffi_kind": "python_ext",
+  "ffi_kinds": [
+   "python_ext"
+  ],
+  "exports": [
+   "PyInit_hcfg_native"
+  ],
+  "python_module": "hcfg_native",
+  "jni_methods": "none",
+  "jni_onload": "false",
+  "rustc_version": "none"
+ }
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "root_signal_scan",
+ "expected": "ANS-19f4b6c0e8d27a53",
+ "_why": "the 8 probes into an EnumSet<Signal>, then a BitSet (bit 2*ordinal+1) + int[] weights; key from cardinality, get(i) and the weights",
+ "generator_cmd": "python3 tests/data/android_fixtures/rootsig_src/gen_rootsig.py bitset_enum tests/data/android_fixtures/rootsig_bitset_enum.apk  # javac --release 8 (app + clean-Pixel android.* stubs: TAGS release-keys, ro.secure 1, ro.debuggable 0, ro.boot.selinux enforcing, PackageManager NameNotFound) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d22.rootsig.Probe -> Vault.reveal(new Context()) run by the host JVM on the clean stubs + real File.exists / /proc/mounts / Runtime.exec -> 'ANS-19f4b6c0e8d27a53'"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "saml-redirect",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: none",
+ "encoded": "SAMLRequest=H6Yc1nJy6x%2B2ACQb3EVMhq9dg%2B2NhDMgjfI1kvwV49oDQtMNnjvBneDpEyXF2%2BSj&RelayState=abc",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "SAMLRequest=$(openssl rand -base64 48 | jq -sRrj @uri)&RelayState=abc",
+ "oracle_cmd": "tools/node/bin/node tests/data/warmups_fixtures/saml_redirect_oracle.mjs \"$encoded\"",
+ "oracle_output": "None"
+}

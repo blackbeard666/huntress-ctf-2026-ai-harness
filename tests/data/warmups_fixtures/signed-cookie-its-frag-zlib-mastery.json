@@ -1,0 +1,10 @@
+{
+ "codec": "signed-cookie-its-frag",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-wren-61",
+ "encoded": ".eJwlyTESgkAMBdCrfKmhsLHgAlRaeYG4_IEd2A2TBNfj64zte90jJ6KpbZiZdM51QazZ0cTKeVzwVLjub_bw81Vy_JcfSQGp3mgI_SExSSHu4kEbUeTYOTRjHW7X7gtWDSPy",
+ "generator_cmd": "PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_gen.py its-frag \"$plain\"",
+ "oracle_cmd": "printf %s \"${encoded#}\" | PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_oracle.py its-frag",
+ "oracle_output": "\"Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-wren-61\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-wren-61",
+ "expected": "match"
+}

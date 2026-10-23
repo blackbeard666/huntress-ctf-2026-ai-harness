@@ -1,0 +1,32 @@
+{
+ "family": "loader_resolution",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "interpreter": "none",
+  "has_interp": "false",
+  "needed": [],
+  "soname": "libhfoo.so.1",
+  "rpath": "none",
+  "runpath": "${ORIGIN}",
+  "search_path_tag": "DT_RUNPATH",
+  "search_path": "${ORIGIN}",
+  "dst_tokens": [
+   "ORIGIN"
+  ],
+  "has_origin": "true",
+  "flags": [],
+  "flags_1": [
+   "NODEFLIB"
+  ],
+  "bind_now": "false",
+  "pie": "false",
+  "nodeflib": "true"
+ },
+ "generator_cmd": "bash ldr_gen.sh   # gcc -shared -soname libhfoo.so.1 --enable-new-dtags -rpath '${ORIGIN}' -z nodefaultlib (resolves NEEDED libhfoo.so.1 as group member libhfoo.so.1.2.3)",
+ "oracle_cmd": "python3 ldr_oracle.py ldr_soname_lib.bin   # GNU readelf -dW (NEEDED/SONAME/RPATH/RUNPATH/FLAGS/FLAGS_1) + readelf -lW (Requesting program interpreter)",
+ "file_b": "ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dyna",
+ "decoy": false,
+ "note": "lib.binary.elf_loader_facts(data) per key; gcc -shared -soname libhfoo.so.1 --enable-new-dtags -rpath '${ORIGIN}' -z nodefaultlib (resolves NEEDED libhfoo.so.1 as group member libhfoo.so.1.2.3)"
+}

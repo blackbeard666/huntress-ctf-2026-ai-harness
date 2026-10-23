@@ -1,0 +1,39 @@
+{
+ "family": "loader_resolution",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "interpreter": "/opt/hctf/ld-hctf.so.2",
+  "has_interp": "true",
+  "needed": [
+   "libhfoo.so.1",
+   "libc.so.6"
+  ],
+  "soname": "none",
+  "rpath": "none",
+  "runpath": "$ORIGIN/../$LIB:/opt/hctf/lib",
+  "search_path_tag": "DT_RUNPATH",
+  "search_path": "$ORIGIN/../$LIB:/opt/hctf/lib",
+  "dst_tokens": [
+   "LIB",
+   "ORIGIN"
+  ],
+  "has_origin": "true",
+  "flags": [],
+  "flags_1": [],
+  "bind_now": "false",
+  "pie": "false",
+  "nodeflib": "false"
+ },
+ "generator_cmd": "bash ldr_gen.sh   # gcc --enable-new-dtags -rpath '$ORIGIN/../$LIB",
+ "oracle_cmd": "python3 ldr_oracle.py ldr_runpath_lib.bin   # GNU readelf -dW (NEEDED/SONAME/RPATH/RUNPATH/FLAGS/FLAGS_1) + readelf -lW (Requesting program interpreter)",
+ "file_b": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamic",
+ "decoy": false,
+ "note": "lib.binary.elf_loader_facts(data) per key; gcc --enable-new-dtags -rpath '$ORIGIN/../$LIB:/opt/hctf/lib' --dynamic-linker=/opt/hctf/ld-hctf.so.2 -no-pie; dlopen(\"./plugins/libplug.so\") literal -> relative",
+ "expected_field": {
+  "dlopen_path": "./plugins/libplug.so",
+  "dlopen_path_kind": "relative"
+ },
+ "field_oracle_cmd": "strings -a ldr_runpath_lib.bin | grep plugins/ ; objdump -d -Mintel --no-show-raw-insn ldr_runpath_lib.bin | grep -B3 'call.*dlopen@plt'"
+}

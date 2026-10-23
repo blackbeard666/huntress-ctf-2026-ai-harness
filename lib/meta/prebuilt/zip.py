@@ -97,7 +97,9 @@ def central_directory(b):
     if eo is None:
         return None
     _n, _cd_size, cd_off = struct.unpack_from("<HII", b, eo + 10)
-    p = cd_off if b[cd_off:cd_off + 4] == b"PK\x01\x02" else b.find(b"PK\x01\x02")
+    # a prefixed zip (shebang jar / SFX / `cat stub a.zip`): the CD sits right before the EOCD, at eo - cd_size, while
+    # cd_off is still relative to the zip start; `zip -A` makes it absolute (both forms hold then)
+    p = next((c for c in (eo - _cd_size, cd_off) if 0 <= c and b[c:c + 4] == b"PK\x01\x02"), b.find(b"PK\x01\x02"))
     out = []
     while 0 <= p and b[p:p + 4] == b"PK\x01\x02" and p + 46 <= len(b):
         (_vm, _vn, flags, meth, mtime, mdate, crc, csize, usize, nl, el, cl) = struct.unpack_from("<HHHHHHIIIHHH", b, p + 4)

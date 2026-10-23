@@ -1,0 +1,17 @@
+{
+  "version": "2.4.1",
+  "description": "Portable toolkit",
+  "homepage": "https://example.invalid/tool",
+  "license": "MIT",
+  "url": "https://example.invalid/tool-2.4.1.zip",
+  "hash": "3b9d0e2c8f1a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c",
+  "bin": "tool.exe",
+  "pre_install": [
+    "# stage helper",
+    "$descriptor_5e1f0a77 = 'H4sIAAAAAAACA11Py4oCMRD8odVxXEQQ+uQPCOveBkJv0jPT2CYh6cx4yMeb' +",
+    "    '9eDBS0FR1GuB7yrop4ITQQwrpTyTSE1BCFxYvQR0lOpCybFVuKOw5VByRVW0N7j2/e5Q0WFUSpBtCNHERIZ9VmxBDScyNhSvsG+MYoaR1M7mpXytiZXMyELV4j0iT96wg5/zZXOgftzh8VhLEphVYz513avhLW3p0UxCW/ZLW+a6vK//WSaiznA+Db+5PRou5a/NHj68DvUJ7IJZPP8AAAA='",
+    "$raw = [Convert]::FromBase64String($descriptor_5e1f0a77)",
+    "$gz = New-Object IO.Compression.GZipStream([IO.MemoryStream]$raw, [IO.Compression.CompressionMode]::Decompress)",
+    "$plan = (New-Object IO.StreamReader($gz)).ReadToEnd()"
+  ]
+}

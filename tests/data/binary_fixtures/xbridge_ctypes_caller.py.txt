@@ -1,0 +1,6 @@
+import ctypes
+lib = ctypes.CDLL("libhcfg_bridge.so.1")
+lib.hcfg_open.argtypes = [ctypes.c_char_p, ctypes.c_int]
+lib.hcfg_open.restype = ctypes.c_void_p
+lib.hcfg_read.restype = ctypes.c_int
+print(lib.hcfg_close(None))

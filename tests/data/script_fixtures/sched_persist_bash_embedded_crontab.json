@@ -1,0 +1,11 @@
+{
+ "material": "#!/bin/bash\nmkdir -p ~/.cache/.x && cp ./x ~/.cache/.x/x\n(crontab -l 2>/dev/null; echo \"*/30 * * * * $HOME/.cache/.x/x\") | crontab -\n",
+ "rep": "schedule_entries",
+ "transform": "period!install.sh",
+ "key": null,
+ "expected": "1800",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes install.sh: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && grep -oP 'echo \"\\K[^\"]+' install.sh | python3 -I -c \"import sys,datetime as D;sys.path.insert(0,'tools/pylib-cron');from croniter import croniter;i=croniter(' '.join(sys.stdin.read().split()[:5]),D.datetime(2026,1,5));a=i.get_next(float);print(int(i.get_next(float)-a))\")"
+}

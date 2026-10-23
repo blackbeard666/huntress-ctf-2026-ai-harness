@@ -1,0 +1,9 @@
+{
+ "codec": "textcomp-lzw",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-58",
+ "encoded": "[78, 105, 99, 101, 32, 119, 111, 114, 107, 32, 100, 101, 99, 111, 100, 105, 110, 103, 32, 116, 104, 105, 115, 260, 97, 114, 109, 117, 112, 33, 32, 84, 111, 32, 115, 111, 108, 118, 101, 44, 289, 117, 98, 109, 105, 116, 274, 276, 278, 101, 120, 97, 99, 301, 97, 110, 115, 119, 101, 114, 274, 288, 275, 259, 71, 97, 109, 259, 77, 97, 115, 116, 314, 58, 32, 109, 97, 112, 108, 101, 45, 111, 116, 327, 114, 45, 53, 56]",
+ "generator_cmd": "python3 -I tests/data/warmups_fixtures/textcomp_gen.py lzw \"$plain\"  # independent textbook implementation, not lib/",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/textcomp_oracle.py lzw",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-58",
+ "expected": "match"
+}

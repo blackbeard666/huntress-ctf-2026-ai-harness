@@ -1,0 +1,11 @@
+{
+ "codec": "inflate-container decoy",
+ "plain": "none",
+ "decoy": true,
+ "why": "chunked gzip response cut 20 bytes short (no terminating 0 chunk, gzip trailer missing)",
+ "encoded": "SFRUUC8xLjEgMjAwIA0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluDQpDb250ZW50LUVuY29kaW5nOiBnemlwDQpUcmFuc2Zlci1FbmNvZGluZzogY2h1bmtlZA0KDQoyOA0KH4sIAAAAAAAC/yXJMQ7CMAwF0Kt8drp0QeICnWDqBUzyVQxNDbHTcA0KMjgNCnyQWN+7aiK61Scyk2XdFsRdHV1qaa8DZoPbuvMIb7ei8V9+JAVk884NCjFkDQqKsB8SkxTiIh6sZzwkc3g3",
+ "generator_cmd": "/usr/bin/python3 -c 'import sys,gzip,zlib,h11; c=h11.Connection(h11.SERVER); c.receive_data(b\"GET / HTTP/1.1\\r\\nHost: x\\r\\n\\r\\n\"); c.next_event(); z=gzip.compress(sys.argv[1].encode(),mtime=0); o=c.send(h11.Response(status_code=200,headers=[(\"Content-Type\",\"text/plain\"),(\"Content-Encoding\",\"gzip\"),(\"Transfer-Encoding\",\"chunked\")])); o+=b\"\".join(c.send(h11.Data(data=z[i:i+40])) for i in range(0,len(z),40)); sys.stdout.buffer.write(o+c.send(h11.EndOfMessage()))' \"$plain\" | head -c -20 | base64 -w0  # plain = '... jade-quail-27'",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | python3 -c 'import sys,dpkt,gzip\ntry: r=dpkt.http.Response(sys.stdin.buffer.read()); print(gzip.decompress(r.body).decode())\nexcept Exception: print(\"none\")'  # dpkt raises NeedData",
+ "oracle_plain": "none",
+ "expected": "none"
+}

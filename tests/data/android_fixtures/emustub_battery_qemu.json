@@ -1,0 +1,7 @@
+{
+ "entry": "clean_device_scan",
+ "expected": "ANS-e2049b7f1c6da385",
+ "_why": "Vault extends Guard extends Activity; reveal() decodes with inherited key(): File.exists on /dev/qemu_pipe, /dev/socket/qemud, libc_malloc_debug_qemu.so, /sys/qemu_trace, /dev/goldfish_pipe, qemu-props; /proc/cpuinfo scanned for Goldfish/hypervisor; registerReceiver(null, IntentFilter(BATTERY_CHANGED)) level*100/scale, temperature, plugged; BatteryManager.getIntProperty(CAPACITY), isCharging",
+ "generator_cmd": "python3 tests/data/android_fixtures/emustub_src/gen_emustub.py battery_qemu tests/data/android_fixtures/emustub_battery_qemu.apk  # javac --release 8 (app + retail-phone android.* stubs) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d22.emuq.Probe -> new Vault().reveal() on the host JVM (real File.exists: no qemu/goldfish nodes; Guard.CPU pointed at a retail arm64 cpuinfo; stub battery 63/100, 285, unplugged) -> 'key=ANS-e2049b7f1c6da385'"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "key_attestation_scan",
+ "expected": "ANS-a1c0ffee5d2b7e94",
+ "_why": "Android key attestation KeyDescription/RootOfTrust (row 93): base64 DER chain in assets/huntress_puzzle.json; token = teeEnforced [704] rootOfTrust.verifiedBootHash (ASCII + zero pad)",
+ "generator_cmd": "python3 tests/data/android_fixtures/ka_src/gen_ka.py puzzle_b64_boothash tests/data/android_fixtures/ka_puzzle_b64_boothash.apk  # pyasn1 DER KeyDescription/RootOfTrust + cryptography x509 builder (ext 1.3.6.1.4.1.11129.2.1.17) + zip -qrX",
+ "oracle_cmd": "unzip -p ka_puzzle_b64_boothash.apk assets/huntress_puzzle.json | python3 -c \"import sys,json,base64;sys.stdout.buffer.write(base64.b64decode(json.load(sys.stdin)['chain'][0]))\" | openssl asn1parse -inform DER -strparse 263 -i | grep -A0 'OCTET STRING' | sed -n 5p | grep -oE '[0-9A-F]{40}' | xxd -r -p"
+}

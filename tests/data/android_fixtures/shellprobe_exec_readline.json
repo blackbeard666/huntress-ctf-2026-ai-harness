@@ -1,0 +1,7 @@
+{
+ "entry": "clean_device_scan",
+ "expected": "ANS-4f1c9e07b2a6d385",
+ "_why": "Shell.run(String) = Runtime.exec(String) + BufferedReader(InputStreamReader(getInputStream())).readLine loop + waitFor; Sig.vector() folds `which su` (silent, exit 1), getprop ro.build.tags / ro.debuggable / ro.secure, getenforce, exec(String[]{su,-c,id}) -> IOException, and the `id` uid prefix into a string whose hashCode keys Vault's xor",
+ "generator_cmd": "python3 tests/data/android_fixtures/shellprobe_src/gen_shellprobe.py exec_readline tests/data/android_fixtures/shellprobe_exec_readline.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.shellprobe.Probe with env PATH=<fake clean-Pixel toybox dir: getprop/getenforce/id/which/mount shell scripts + sh->/bin/sh, NO su> -> the host JVM's real Runtime.exec / ProcessBuilder / BufferedReader / Scanner print Sig.vector() + Vault.reveal() -> '1/release-keys;0/0;0/1;0/Enforcing;0/ioe/uid=10234(u0_a234)' + 'ANS-4f1c9e07b2a6d385'"
+}

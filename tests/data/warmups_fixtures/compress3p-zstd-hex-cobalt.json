@@ -1,0 +1,9 @@
+{
+ "codec": "zstd-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-62",
+ "encoded": "28b52ffd2065d50200f245141980a96d46d064efa5fb73a19256148b91073ea773132e91150d82815952e3983d76e499a0be6a061f59c14fd6b9565f9acc7bb67c111d8a3a70c64975220c582848d9b262b24e2444f28e58a172f98787010010060505",
+ "generator_cmd": "printf %s \"$plain\" | PYTHONPATH=tools/pycramjam python3 -c 'import sys,cramjam;sys.stdout.buffer.write(bytes(cramjam.zstd.compress(sys.stdin.buffer.read())))' | xxd -p | tr -d '\\n'  # cramjam.zstd.compress (Rust zstd)",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | python3 -c 'import sys,zstandard;d=zstandard.ZstdDecompressor().decompressobj();o=d.decompress(sys.stdin.buffer.read());assert d.eof;sys.stdout.buffer.write(o)'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-62",
+ "expected": "match"
+}

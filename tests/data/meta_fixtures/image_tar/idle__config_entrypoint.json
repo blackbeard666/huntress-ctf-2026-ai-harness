@@ -1,0 +1,8 @@
+{
+ "field": "image_tar.config_entrypoint",
+ "expected": "none",
+ "generator_cmd": "docker build -t hctf-fixture-idle:0.9 -t hctf-fixture-idle:latest . (FROM hctf-fixture-base:1; ENV TZ=UTC; CMD /bin/sh -c \"echo idle\"); docker save hctf-fixture-idle:0.9 hctf-fixture-idle:latest | gzip -n > idle.tar.gz  (Docker 29.6)",
+ "oracle_cmd": "docker image inspect hctf-fixture-idle:0.9 --format '{{json .Config.Entrypoint}}' | sed 's/^null$/none/'",
+ "decoy": true,
+ "member": "idle.tar.gz"
+}

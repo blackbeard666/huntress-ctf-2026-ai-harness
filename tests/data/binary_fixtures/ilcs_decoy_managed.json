@@ -1,0 +1,38 @@
+{
+ "kind": "dotnet_il_facts",
+ "decoy": true,
+ "expected": {
+  "il_methods": "[\"Plain.Beacon::Native\",\"Plain.Beacon::Twice\",\"Plain.Beacon::.ctor\"]",
+  "il_method_count": "3",
+  "managed_edges": "[[\"Plain.Beacon::Twice\",\"Plain.Beacon::Native\"]]",
+  "native_edges": "[]",
+  "external_edges": "[[\"Plain.Beacon::Native\",\"System.Int32::ToString\"],[\"Plain.Beacon::Native\",\"System.String::Concat\"],[\"Plain.Beacon::Twice\",\"System.String::get_Length\"],[\"Plain.Beacon::.ctor\",\"System.Object::.ctor\"]]",
+  "ldftn_edges": "[]",
+  "pinvoke_callers": "{}",
+  "native_callers": "[]",
+  "call_edge_count": "5",
+  "calli_count": "0",
+  "user_strings": "[\"kernel32.dll\"]",
+  "user_string_count": "1",
+  "ldstr_strings": "[\"kernel32.dll\"]",
+  "array_init_count": "0",
+  "array_inits_brief": "[]"
+ },
+ "expected_lookups": {
+  "getpid_callers": "none"
+ },
+ "field_owner_probes": [],
+ "unordered": [
+  "il_methods",
+  "managed_edges",
+  "external_edges",
+  "native_edges",
+  "native_callers",
+  "pinvoke_callers",
+  "ldstr_strings",
+  "array_inits_brief"
+ ],
+ "note": "ilspy prints nested types before their enclosing type's remaining methods, so cross-method order keys compare order-insensitively; IL order within a method and #US heap order are exact; decoy: managed bodies but no P/Invoke and no array-init blob -> native edges/callers empty, array_inits empty, getpid_callers 'none'",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/ilcs_gen.sh tests/data/binary_fixtures   # dotnet 10 SDK: dotnet build -c Release (Deterministic) of a C# and an F# project + a plain C# library; /usr/bin/true; head -c 1024",
+ "oracle_cmd": "source bin/env.sh; python3 tests/data/binary_fixtures/ilcs_oracle.py tests/data/binary_fixtures/ilcs_decoy_managed.bin   # ilspycmd -il text (ICSharpCode.Decompiler IL disassembler) + ilcs_us.cs (System.Reflection.Metadata UserStrings) + pefile rva->offset"
+}

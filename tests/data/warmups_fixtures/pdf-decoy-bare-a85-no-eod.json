@@ -1,0 +1,10 @@
+{
+ "codec": "pdf-filter-chain",
+ "plain": null,
+ "encoded": "<~GhOIc5n8K3$jG\"YI.i_b\\FTd)E5`\"'b`>^?8uBStpmS^@n\"GSO<``fYbITnMM`R<VEZQ5JKA6+^\"b+`cj1kL_$HVXp'k'<PmS\\j<4BQNH8S3Hc=uZ0,i<r/g,O5",
+ "generator_cmd": "printf %s \"$plain\" | /home/testpwn/huntress-2026/.venv/bin/python3 -I -c 'import sys,zlib;sys.stdout.buffer.write(zlib.compress(sys.stdin.buffer.read(),9))' | /home/testpwn/huntress-2026/.venv/bin/python3 -I -c 'import sys,base64;sys.stdout.buffer.write(base64.a85encode(sys.stdin.buffer.read(),adobe=True,wrapcol=int(sys.argv[1]))[int(sys.argv[2]):])' 0 0 | sed 's/~>$//'",
+ "oracle_cmd": "printf %s \"$encoded\" | /home/testpwn/huntress-2026/.venv/bin/python3 -I -c 'import sys,re;s=sys.stdin.read();sys.exit(0 if re.search(r\"~>\\s*$\",s) else 1)'  # no a85 EOD marker -> not a PDF ASCII85Decode stream",
+ "oracle_plain": null,
+ "decoy": true,
+ "expected": "none"
+}

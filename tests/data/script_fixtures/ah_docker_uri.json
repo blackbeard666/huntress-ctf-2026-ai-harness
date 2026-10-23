@@ -1,0 +1,11 @@
+{
+ "decoy": false,
+ "material": "{\n \"action.yml\": \"name: remote\\nruns:\\n  using: docker\\n  image: docker://ghcr.io/octo/tool:1\\n  entrypoint: python3\\n  args: ['-c', 'print(2)']\\n\"\n}\n",
+ "rep": "action_handoffs",
+ "transform": "to_lang",
+ "key": null,
+ "expected": "container,python",
+ "note": "github-action-definition-route: lib.codec.action_handoffs over a synthetic repo tree {member: text}",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ah_gen.py tests/data/script_fixtures  (stdlib json; literal action.yml / workflow / Dockerfile / JS members)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/ah_oracle.py tests/data/script_fixtures/ah_docker_uri.tree to_lang  (PyYAML safe_load + GitHub Actions shell/runs.using rules)"
+}

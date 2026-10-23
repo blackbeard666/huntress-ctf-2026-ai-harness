@@ -1,0 +1,7 @@
+{
+ "field": "apk.entry_count",
+ "expected": "none",
+ "generator_cmd": "cd plain && zip -X ../plainjar.zip Main.class (a zip with no AndroidManifest.xml)",
+ "oracle_cmd": "zipinfo -1 plainjar.zip -> no AndroidManifest.xml: not an APK",
+ "decoy": true
+}

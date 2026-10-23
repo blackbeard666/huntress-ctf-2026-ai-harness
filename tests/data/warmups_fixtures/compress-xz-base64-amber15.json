@@ -1,0 +1,9 @@
+{
+ "codec": "xz-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-finch-90",
+ "encoded": "/Td6WFoAAATm1rRGBMBnZSEBFgAAAAAAAAAAAEh5kC7gAGQAX10AJxpIZm6y5uOuO+3sjJiqvA+Jj3qdlSxTd8BP9NRXc9xa0fv74vSaBO/CEF41MM+luuMwsVD2IpIF89qhMel510vxA5Ou+gQeHiBA0HxquVELyqPZCf1c67ynb8Uk6TYAANhpig0JJ2VfAAGDAWUAAAAqnOlqscRn+wIAAAAABFla",
+ "generator_cmd": "printf %s \"$plain\" | xz -6 -c | base64 -w0  # xz CLI + base64 wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | xz -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-finch-90",
+ "expected": "match"
+}

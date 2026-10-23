@@ -119,6 +119,18 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Resourceful"
   },
+  "binary-reverse-engineering-day-21-shared-library-boundaries": {
+    "day": 21,
+    "dir": "day21/binary-shared-custody",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Shared Custody"
+  },
+  "binary-reverse-engineering-day-22-managed-native-bridge": {
+    "day": 22,
+    "dir": "day22/binary-bridge-troll",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Bridge Troll"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -239,6 +251,18 @@
     "lane": "metadata-forensics",
     "name": "🔎 Universal Appeal"
   },
+  "metadata-forensics-day-21-package-deal": {
+    "day": 21,
+    "dir": "day21/metadata-package-deal",
+    "lane": "metadata-forensics",
+    "name": "🔎 Package Deal"
+  },
+  "metadata-forensics-day-22-main-character-energy": {
+    "day": 22,
+    "dir": "day22/metadata-main-character-energy",
+    "lane": "metadata-forensics",
+    "name": "🔎 Main Character Energy"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -358,6 +382,18 @@
     "dir": "day20/mobile-loaded-later",
     "lane": "mobile-android",
     "name": "📱 Loaded Later"
+  },
+  "mobile-android-day-21-debug-me-if-you-can": {
+    "day": 21,
+    "dir": "day21/mobile-debug-me-if-you-can",
+    "lane": "mobile-android",
+    "name": "📱 Debug Me If You Can"
+  },
+  "mobile-android-day-22-root-of-trust": {
+    "day": 22,
+    "dir": "day22/mobile-root-of-trust",
+    "lane": "mobile-android",
+    "name": "📱 Root of Trust"
   },
   "read-the-rules": {
     "day": 1,
@@ -485,6 +521,18 @@
     "lane": "script-analysis",
     "name": "📜 The Butler Did It"
   },
+  "script-analysis-day-21-github-actions-persistence": {
+    "day": 21,
+    "dir": "day21/scripting-actions-speak-louder",
+    "lane": "script-analysis",
+    "name": "📜 Actions Speak Louder"
+  },
+  "script-analysis-day-22-installer-script-chain": {
+    "day": 22,
+    "dir": "day22/scripting-next-next-finish",
+    "lane": "script-analysis",
+    "name": "📜 Next, Next, Finish"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -605,6 +653,18 @@
     "lane": "warmups",
     "name": "👶 Big Entrance"
   },
+  "warmups-day-21": {
+    "day": 21,
+    "dir": "day21/warmups-under-pressure",
+    "lane": "warmups",
+    "name": "👶 Under Pressure"
+  },
+  "warmups-day-22": {
+    "day": 22,
+    "dir": "day22/warmups-deflated-ego",
+    "lane": "warmups",
+    "name": "👶 Deflated Ego"
+  },
   "web-exploitation-day-01-backup-exposure": {
     "day": 19,
     "dir": "day01/web-back-up-a-minute",
@@ -634,6 +694,36 @@
     "dir": "day20/web-administratively-speaking",
     "lane": "web",
     "name": "🌐 Administratively Speaking"
+  },
+  "web-exploitation-day-06-reflect-upon-this": {
+    "day": 21,
+    "dir": "day21/web-reflect-upon-this",
+    "lane": "web",
+    "name": "🌐 Reflect Upon This"
+  },
+  "web-exploitation-day-07-stored-xss": {
+    "day": 21,
+    "dir": "day21/web-stored-for-later",
+    "lane": "web",
+    "name": "🌐 Stored for Later"
+  },
+  "web-exploitation-day-08-session-impression": {
+    "day": 21,
+    "dir": "day21/web-session-impression",
+    "lane": "web",
+    "name": "🌐 Session Impression"
+  },
+  "web-exploitation-day-09-forged-with-care": {
+    "day": 22,
+    "dir": "day22/web-forged-with-care",
+    "lane": "web",
+    "name": "🌐 Forged With Care"
+  },
+  "web-exploitation-day-10-uploading-expectations": {
+    "day": 22,
+    "dir": "day22/web-uploading-expectations",
+    "lane": "web",
+    "name": "🌐 Uploading Expectations"
   },
   "welcome-robots": {
     "day": 1,

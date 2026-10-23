@@ -1,0 +1,37 @@
+{
+ "kind": "dotnet_native_facts",
+ "decoy": false,
+ "expected": {
+  "cor20_flags": "0x00000004",
+  "cor20_flag_names": "[\"IL_LIBRARY\"]",
+  "ilonly": "false",
+  "mixed_mode": "false",
+  "machine": "x86-64",
+  "readytorun": "true",
+  "has_native_code": "true",
+  "vtfixup_count": "0",
+  "shellcode_count": "2",
+  "shellcode_returns": "[\"4879\",\"1077952583\"]",
+  "shellcode_hex": "31c0b90500000001c8e2fc0500130000c3",
+  "shellcode_size": "17",
+  "shellcode_field": "<PrivateImplementationDetails>::BFE6870A17339FE9A02FEC0316B85065017F31A09DF1FD7040FB3F37EB75CFC4",
+  "shellcode_method": "Hunt.Mixed.Loader::Second",
+  "shellcode_mode": "x86-64",
+  "shellcode_return": "4879",
+  "shellcode_return_hex": "0x130f",
+  "shellcode_disasm": "[\"xor eax, eax\",\"mov ecx, 5\",\"add eax, ecx\",\"loop 7\",\"add eax, 0x1300\",\"ret\"]",
+  "alloc_apis": "[\"mmap\",\"VirtualAlloc\"]",
+  "exec_apis": "[\"Marshal::Copy\",\"Marshal::GetDelegateForFunctionPointer\"]"
+ },
+ "expected_lookups": {
+  "shellcode2_return": "1077952583",
+  "shellcode_2_hex": "b844434241350403020183c007c3",
+  "shellcode2_field": "<PrivateImplementationDetails>::7B20FBA0C3CD465979C2BA8139510966A3692DCAF48F787F7FEC3C15F124166B",
+  "shellcode2_method": "Hunt.Mixed.Loader::.cctor",
+  "return value": "4879",
+  "is_readytorun": "true"
+ },
+ "generator_cmd": "bash tests/data/binary_fixtures/mmnat_gen.sh tests/data/binary_fixtures (dotnet 10 build/publish of the inline C#; mixed-mode patch with pefile)",
+ "oracle_cmd": "bash tests/data/binary_fixtures/mmnat_oracle.sh FILE (System.Reflection.PortableExecutable CorHeader/VtableFixupsDirectory/ManagedNativeHeaderDirectory/FieldRVA); shellcode returns: `dotnet Mm.dll` (x64 build) really runs both stubs through mmap + Marshal.Copy + GetDelegateForFunctionPointer and prints 1077952583 then 4879; field names: printf <bytes> | sha256sum (Roslyn <PrivateImplementationDetails> name = SHA-256 of the data); disasm: objdump -D -b binary -m i386:x86-64 -M intel (identical under -m i386); decoy Tables::Key (sum 1806) never reaches the allocator",
+ "oracle_output": "oracle: machine=0xfd1d (^ linux cookie 0x7b79 = 0x8664) flags=0x00000004 [ILLibrary]; managed_native_header rva=0x107a0 size=148 sig=RTR"
+}

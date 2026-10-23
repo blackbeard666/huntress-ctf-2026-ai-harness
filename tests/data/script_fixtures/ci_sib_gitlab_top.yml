@@ -1,0 +1,15 @@
+include:
+  - project: 'ops/templates'
+    file: '/ci/base.yml'
+variables:
+  GIT_DEPTH: "1"
+  HUNTRESS_DESCRIPTOR: "dj0zfGxhbmd1YWdlPWdpdGxhYl9jaXxyb2xlPWRvd25sb2FkZXJ8dmVyZGljdD1tYWxpY2lvdXN8YXR0YWNrPVQxMTA1fGFkYXB0ZXI9Y2lfcnVubmVyfGhvc3RfcHJvZmlsZT1zdGFuZGFsb25lfG9iZnVzY2F0aW9uX3Byb2ZpbGU9YmFzZTY0fHN0YWdlX3Byb2ZpbGU9dHdvX3N0YWdlX2Rvd25sb2FkX2V4ZWN1dGV8bmV4dF9sYW5ndWFnZT1wb3dlcnNoZWxsfHN0YWdlX2NvdW50PTJ8c3RlcHM9YWNxdWlyZV9yZW1vdGUsd3JpdGVfZmlsZXxjYW1wYWlnbl9pZD1HSVRMQUJfQ0ktNGMxZDllMDJ8dXJsPWh0dHBzOi8vZ2l0bGFiX2NpLTRjMWQ5ZTAyLmV4YW1wbGUuaW52YWxpZC9zdGFnZXxmaWxlX3BhdGg9L3RtcC9odW50cmVzcy1naXRsYWJfY2kvLjRjMWQ5ZTAyLnN0YWdl"
+.base:
+  image: alpine:3.19
+  before_script:
+    - !reference [.setup, script]
+analyze:
+  extends: .base
+  stage: test
+  script:
+    - ':'

@@ -1,0 +1,8 @@
+{
+ "field": "jar.main_class_entry_name",
+ "expected": "com/acme/Ghost.class",
+ "generator_cmd": "printf 'Main-Class: com.acme.Ghost\\n' > ghost.mf; jar --create --file ghost.jar --manifest ghost.mf -C oh . (Main-Class names a class the jar lacks)",
+ "oracle_cmd": "java Oracle.java ghost.jar (java.util.jar.JarFile getManifest().getMainAttributes()/getEntries(), jf.getEntry(Main-Class.replace('.','/')+\".class\"), JarFile.entries() *.jar|*.war, JarInputStream.getManifest(), ZipInputStream entry index) -> mainEntry com/acme/Ghost.class",
+ "decoy": false,
+ "member": "ghost.jar"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "jwt-none",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-heron-31",
+ "encoded": "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ3YXJtdXAiLCJtc2ciOiJOaWNlIHdvcmsgZGVjb2RpbmcgdGhpcyB3YXJtdXAhIFRvIHNvbHZlLCBzdWJtaXQgdGhpcyBleGFjdCBhbnN3ZXIgdG8gdGhlIEdhbWUgTWFzdGVyOiBhbWJlci1oZXJvbi0zMSJ9.",
+ "generator_cmd": "PYTHONPATH=tools/pylib-jwcrypto .venv/bin/python tests/data/warmups_fixtures/jwt_gen.py none \"$plain\"",
+ "oracle_cmd": "printf %s \"$encoded\" | PYTHONPATH=tools/pylib-jwcrypto .venv/bin/python tests/data/warmups_fixtures/jwt_oracle.py none",
+ "oracle_output": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-heron-31",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-heron-31",
+ "expected": "match"
+}

@@ -1,0 +1,7 @@
+{
+ "file": "hook_pom_cmdline_gzip.xml",
+ "expected_plain": "v=3|language=maven|role=staged_chain|verdict=suspicious|attack=T1059.001|adapter=exec_plugin|host_profile=maven_cmdline|obfuscation_profile=gzip_base64|stage_count=2|steps=build_hook,inflate,dispatch_process|campaign_id=MVN-e04b7d31|url=https://mvn-e04b7d31.example.invalid/next|file_path=C:\\ProgramData\\huntress-mvn\\e04b7d31.ps1",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/hook_gen.py  # stdlib xml.etree.ElementTree pom writer + base64 UTF-16LE -EncodedCommand  (<commandlineArgs>, gzip+base64 descriptor)",
+ "oracle_cmd": "python3 -c \"import base64,gzip,re,sys,xml.etree.ElementTree as E;r=E.parse(sys.argv[1]).getroot();t=' '.join(x.text or '' for x in r.iter() if x.tag.split('}')[-1] in ('argument','commandlineArgs'));ps=base64.b64decode(re.search(r'-(?:EncodedCommand|enc)\\s+(\\S+)',t).group(1)).decode('utf-16-le');m=re.search(r\\\"descriptor_\\w+ = '([^']+)'\\\",ps);v=m.group(1) if m else '';b=bytes.fromhex(v) if re.fullmatch(r'[0-9a-f]+',v) else base64.b64decode(v);print((gzip.decompress(b) if b[:2]==b'\\x1f\\x8b' else b).decode() or None, end='')\" tests/data/script_fixtures/hook_pom_cmdline_gzip.xml"
+}

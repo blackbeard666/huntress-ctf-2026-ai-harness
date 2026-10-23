@@ -1,0 +1,9 @@
+{
+ "codec": "lzstring-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-heron-88",
+ "encoded": "1c84b0c60a60040ee0f602703594026131d5201d81cca005c00b10067580430405b015c0070108a0054e28cb801b00dc200349ce80231a2109152142000f4a612651c6460404443896801c528d68016529942ea017141a941b70801698bab839ec00e3740000",
+ "generator_cmd": "LZ=$PWD/tools/npm-cyberchef/node_modules/lz-string tools/node/bin/node tests/data/warmups_fixtures/lzstring_gen.js hex \"$plain\"  # pieroxy lz-string 1.5.0 (npm) Buffer.from(compressToUint8Array(s)).toString('hex')",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/lzstring_oracle.py hex  # PyPI lzstring 1.0.4 (independent port)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-heron-88",
+ "expected": "match"
+}

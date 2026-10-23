@@ -1,0 +1,9 @@
+{
+ "codec": "decompress-redecode",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-66",
+ "encoded": "H4sIAAAAAAACAzWMvQ6CMBgAX0m+hoG1iUoNDrbYv422SSt+lcREoDy9OLjeXa7POFpBiSOXNztzNNA8B1W/WMunQV9jgFNxWi5M0LsrdHOwghVL9EQ+nMLDv7M6JUNu0ah6CyDLzuef29+tURWyY5U84ejHKRpY55Bl6VRCn5tP1xv4AlrqDOOIAAAA",
+ "generator_cmd": "printf %s \"$plain\" | base64 -w0 | gzip -9n | base64 -w0",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc | base64 -d",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-66",
+ "expected": "match"
+}

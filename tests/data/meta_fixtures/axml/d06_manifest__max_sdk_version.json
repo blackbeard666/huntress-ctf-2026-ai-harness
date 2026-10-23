@@ -1,0 +1,8 @@
+{
+ "field": "axml.max_sdk_version",
+ "expected": "none",
+ "generator_cmd": "unzip -p challenges/day06/mobile-provider-paths/single_solve/artifacts/20261006T130124Z/provider_paths.apk AndroidManifest.xml > AndroidManifest.xml",
+ "oracle_cmd": "aapt dump xmltree provider_paths.apk AndroidManifest.xml -> uses-sdk has only minSdkVersion/targetSdkVersion (no maxSdkVersion)",
+ "decoy": true,
+ "member": "AndroidManifest.xml"
+}

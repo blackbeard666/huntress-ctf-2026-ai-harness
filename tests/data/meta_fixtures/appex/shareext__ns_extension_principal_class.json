@@ -1,0 +1,8 @@
+{
+ "field": "appex.ns_extension_principal_class",
+ "expected": "ShareExt.ShareViewController",
+ "generator_cmd": "python3 plistlib.dumps({CFBundleIdentifier com.northwind.fieldkit.ShareExt, CFBundlePackageType XPC!, NSExtension{NSExtensionPointIdentifier com.apple.share-services, NSExtensionPrincipalClass ShareExt.ShareViewController}}, fmt=FMT_BINARY) > Info.plist",
+ "oracle_cmd": "exiftool -j Info.plist -> NSExtensionNSExtensionPrincipalClass",
+ "decoy": false,
+ "member": "Info.plist"
+}

@@ -1,0 +1,34 @@
+<?xml version='1.0' encoding='utf-8'?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.example.inert</groupId>
+  <artifactId>inert-fixture</artifactId>
+  <version>1.0.0</version>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <id>bootstrap</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>powershell</executable>
+              <arguments>
+                <argument>-NoProfile</argument>
+                <argument>-NonInteractive</argument>
+                <argument>-EncodedCommand</argument>
+                <argument>JABkAGUAcwBjAHIAaQBwAHQAbwByAF8ANQBjADEAZQA5AGEAMAAyACAAPQAgACcAZABqADAAegBmAEcAeABoAGIAbQBkADEAWQBXAGQAbABQAFcAMQBoAGQAbQBWAHUAZgBIAEoAdgBiAEcAVQA5AGIARwBGADEAYgBtAE4AbwBaAFgASgA4AGQAbQBWAHkAWgBHAGwAagBkAEQAMQB0AFkAVwB4AHAAWQAyAGwAdgBkAFgATgA4AFkAWABSADAAWQBXAE4AcgBQAFYAUQB4AE0AVABrADEATABqAEEAdwBNAG4AeABoAFoARwBGAHcAZABHAFYAeQBQAFcAVgA0AFoAVwBOAGYAYwBHAHgAMQBaADIAbAB1AGYARwBoAHYAYwAzAFIAZgBjAEgASgB2AFoAbQBsAHMAWgBUADEAdABZAFgAWgBsAGIAbAA5AGwAZQBHAFYAagBmAEgATgAwAFkAVwBkAGwAWAAyAE4AdgBkAFcANQAwAFAAVABKADgAYwAzAFIAbABjAEgATQA5AFkAbgBWAHAAYgBHAFIAZgBhAEcAOQB2AGEAeQB4AHoAYwBHAEYAMwBiAGwAOQB6AGEARwBWAHMAYgBIAHgAagBZAFcAMQB3AFkAVwBsAG4AYgBsADkAcABaAEQAMQBOAFYAawA0AHQATgBXAE0AeABaAFQAbABoAE0ARABKADgAZABYAEoAcwBQAFcAaAAwAGQASABCAHoATwBpADgAdgBiAFgAWgB1AEwAVABWAGoATQBXAFUANQBZAFQAQQB5AEwAbQBWADQAWQBXADEAdwBiAEcAVQB1AGEAVwA1ADIAWQBXAHgAcABaAEMAOQB6AGQARwBGAG4AWgBYAHgAbQBhAFcAeABsAFgAMwBCAGgAZABHAGcAOQBMADMAUgB0AGMAQwA5AG8AZABXADUAMABjAG0AVgB6AGMAeQAxAHQAZABtADQAdgBMAGoAVgBqAE0AVwBVADUAWQBUAEEAeQBMAG4ATgAwAFkAVwBkAGwAJwA7ACAAJABzACAAPQAgAFsAVABlAHgAdAAuAEUAbgBjAG8AZABpAG4AZwBdADoAOgBVAFQARgA4AC4ARwBlAHQAUwB0AHIAaQBuAGcAKABbAEMAbwBuAHYAZQByAHQAXQA6ADoARgByAG8AbQBCAGEAcwBlADYANABTAHQAcgBpAG4AZwAoACQAZABlAHMAYwByAGkAcAB0AG8AcgBfADUAYwAxAGUAOQBhADAAMgApACkAOwAgACQAbgB1AGwAbAAgAD0AIAAkAHMA</argument>
+              </arguments>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

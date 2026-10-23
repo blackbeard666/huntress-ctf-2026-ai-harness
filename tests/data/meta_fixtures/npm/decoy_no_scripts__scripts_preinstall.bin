@@ -1,0 +1,14 @@
+{
+  "name": "quarterly-sync",
+  "productName": "Quarterly Sync",
+  "version": "3.4.1",
+  "main": "lib/bootstrap.js",
+  "scripts": {
+    "start": "electron .",
+    "postinstall": "node lib/telemetry.js"
+  },
+  "dependencies": {
+    "electron-updater": "^6.1.7",
+    "node-fetch": "2.7.0"
+  }
+}

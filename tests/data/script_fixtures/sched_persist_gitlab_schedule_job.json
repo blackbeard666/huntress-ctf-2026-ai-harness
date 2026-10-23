@@ -1,0 +1,11 @@
+{
+ "material": "stages: [build, maint]\nbuild:\n  stage: build\n  script:\n    - make\ncleanup_cache:\n  stage: maint\n  rules:\n    - if: '$CI_PIPELINE_SOURCE == \"schedule\"'\n  script:\n    - ./tools/refresh.sh\n",
+ "rep": "schedule_entries",
+ "transform": "job",
+ "key": null,
+ "expected": "cleanup_cache",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes gitlab.yml: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && python3 -I -c \"import yaml,sys;y=yaml.safe_load(open(sys.argv[1]));print([k for k,v in y.items() if isinstance(v,dict) and 'schedule' in str(v.get('rules'))][0])\" gitlab.yml)"
+}

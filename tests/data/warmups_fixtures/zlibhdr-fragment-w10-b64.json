@@ -1,0 +1,10 @@
+{
+ "codec": "zlib-w10-l9-b64",
+ "plain": " warmup! To",
+ "encoded": "KM9TKE8syi0tUFQIyQcAFu4DwQ==",
+ "generator_cmd": "printf %s \"$plain\" | perl -MCompress::Raw::Zlib -e '($w,$l,$d)=@ARGV; ($z)=Compress::Raw::Zlib::Deflate->new(-WindowBits=>$w,-Level=>$l,-AppendOutput=>1,(length $d ? (-Dictionary=>$d) : ())); local $/; $i=<STDIN>; $z->deflate($i,$o); $z->flush($o); print $o' -- 10 9 \"$dict\" | base64 -w0  # perl Compress::Raw::Zlib writer (WindowBits, Level, Dictionary) + coreutils wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | python3 -c 'import sys,zlib; w=int(sys.argv[1]); d=sys.argv[2].encode(); o=zlib.decompressobj(w,zdict=d) if d else zlib.decompressobj(w); sys.stdout.buffer.write(o.decompress(sys.stdin.buffer.read()))' 10 \"$dict\"  # coreutils unwrap + python zlib.decompressobj(wbits, zdict)",
+ "oracle_plain": " warmup! To",
+ "expected": "match",
+ "mastery_fragment": true
+}

@@ -1,0 +1,11 @@
+{
+ "material": "@echo off\nschtasks /create /sc minute /mo 5 /tn \"WinUpdateCheck\" /tr \"C:\\Users\\Public\\u.exe\" /f\n",
+ "rep": "schedule_entries",
+ "transform": "period",
+ "key": null,
+ "expected": "300",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes persist.bat: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && grep -oiP '/sc \\Kminute /mo \\d+' persist.bat | awk '{print $3*60}')"
+}

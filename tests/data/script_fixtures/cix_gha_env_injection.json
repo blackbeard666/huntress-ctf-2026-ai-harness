@@ -1,0 +1,11 @@
+{
+ "material": "name: pr-bot\non:\n  pull_request_target:\n    types: [opened, synchronize]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - name: Export branch\n        env:\n          HEAD: ${{ github.head_ref }}\n        run: echo \"BRANCH=$HEAD\" >> \"$GITHUB_ENV\"\n      - name: Comment\n        uses: actions/github-script@v7\n        with:\n          github-token: ${{ secrets.GITHUB_TOKEN }}\n          script: |\n            const t = \"${{ github.event.pull_request.title }}\"\n            console.log(t)\n      - name: Mask\n        run: echo \"::add-mask::${{ secrets.DEPLOY_KEY }}\"\n",
+ "rep": "ci_expressions",
+ "transform": "env_injection",
+ "key": null,
+ "expected": "Export branch",
+ "decoy": false,
+ "note": "ci-expression-injection-secrets: lib.codec.ci_expressions/ci_expr_answer via decode(rep='ci_expressions', transform=<field>[@job|step])",
+ "generator_cmd": "cat > cix_w2.yml <<'EOF' (hand-authored synthetic CI file, heredoc; no lib code); tests/data/script_fixtures/cix_gen.py writes the json",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/cix_oracle.py tests/data/script_fixtures/cix_w2.yml env_injection  (PyYAML 6 safe_load)"
+}

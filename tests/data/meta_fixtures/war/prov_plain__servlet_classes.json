@@ -1,0 +1,8 @@
+{
+ "field": "war.servlet_classes",
+ "expected": "none",
+ "generator_cmd": "jar --create --file plain.jar readme.txt (renamed .war, no WEB-INF/web.xml)",
+ "oracle_cmd": "java OracleXml.java plain.jar WEB-INF/web.xml -> absent",
+ "decoy": true,
+ "member": "plain.war"
+}

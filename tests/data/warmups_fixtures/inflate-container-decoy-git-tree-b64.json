@@ -1,0 +1,12 @@
+{
+ "codec": "inflate-container decoy",
+ "plain": "none",
+ "decoy": true,
+ "why": "a git TREE object (binary mode/name/sha entries): inflates past the header but holds no text",
+ "encoded": "eAErKUpNVTA2YzA0MDAzMVHIyy9J1SupKGF4duqD/if/8D0b2XSy/ySp6z3+23YTAFU4EjA=",
+ "oid": "b0b7f42f3853e0618dae4a505df1710c1551c410",
+ "generator_cmd": "printf '100644 blob %s\\tnote.txt\\n' e6caf02ff24f57bcb1062c6bfc62272ee3fd86d9 | git -C repo mktree; base64 -w0 repo/.git/objects/b0/b7f42f3853e0618dae4a505df1710c1551c410",
+ "oracle_cmd": "d=$(mktemp -d); git init -q $d; mkdir -p $d/.git/objects/${oid:0:2}; printf %s \"$encoded\" | base64 -d > $d/.git/objects/${oid:0:2}/${oid:2}; [ \"$(git -C $d cat-file -t $oid)\" = blob ] && git -C $d cat-file -p $oid || echo none  # git cat-file (independent reader of the loose object)",
+ "oracle_plain": "none",
+ "expected": "none"
+}

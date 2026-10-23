@@ -1,0 +1,8 @@
+{
+ "field": "ear.ear_modules",
+ "expected": "none",
+ "generator_cmd": "jar --create --file plain.jar readme.txt (renamed .ear, no META-INF/application.xml)",
+ "oracle_cmd": "java OracleXml.java plain.jar META-INF/application.xml -> absent",
+ "decoy": true,
+ "member": "plain.ear"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "gzip-base64",
+ "plain": "ice work d",
+ "encoded": "H4sIAAAAAAACA8tMTlUozy/KVkgBAD59iqsKAAAA",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | base64 -w0  # gzip CLI + base64 wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc",
+ "oracle_plain": "ice work d",
+ "expected": "match",
+ "mastery_fragment": true
+}

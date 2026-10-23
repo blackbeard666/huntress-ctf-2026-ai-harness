@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "scoop",
+ "generator_cmd": "M=$(printf %s \"$PLAN\" | gzip -9n | base64 -w0 | cut -c1-40); jq -n --arg m \"$M\" '{version:\"1.0.0\",url:..,hash:..,pre_install:[\"Write-Host ..\", (\"$descriptor_00000000 = '\"'\"'\"+$m+\"'\"'\"'\"), \"# truncated stage, never decoded\"],post_install:\"Write-Host ..\"}' > pm_scoop_decoy_truncated.scoop  (descriptor gzip stream truncated to 40 base64 chars: no plan)",
+ "oracle_cmd": "jq -r '.pre_install[1]' tests/data/script_fixtures/pm_scoop_decoy_truncated.scoop | grep -o \"'[^']*'\" | tr -d \"'\" | base64 -d | gunzip  (-> 'gzip: stdin: unexpected end of file', exit 1)"
+}

@@ -1,0 +1,21 @@
+{
+ "family": "dynlink",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "loader": "dynlink_c_noplt_o0.bin",
+ "plugin": "dynlink_c_noplt_o0.plugin.bin",
+ "expected_facts": {
+  "loaded_library": "/opt/hctf/plugins/libnoplt.so",
+  "resolved_symbols": "[\"noplt_module_init\",\"noplt_register\"]",
+  "loader_needs_libdl": "false",
+  "plugin_exports": "[\"noplt_module_init\",\"noplt_version\",\"noplt_register\"]",
+  "plugin_header_magic": "none",
+  "loader_kind": "c_dlopen",
+  "init_export": "noplt_module_init"
+ },
+ "generator_cmd": "FX=$PWD bash dynlink_gen.sh   # run from an empty scratch dir with FX=tests/data/binary_fixtures; gcc 13 -ldl",
+ "oracle_cmd": "python3 dynlink_oracle.py dynlink_c_noplt_o0.bin dynlink_c_noplt_o0.plugin.bin   # readelf --dyn-syms/-d/-lW + objdump -d -Mintel (lea/mov arg before call dlopen/dlsym)",
+ "decoy": false,
+ "note": "gcc -O0 -no-pie -fno-plt: mov edi,imm / lea rax + mov rsi,rax / call [rip+got]; lib.binary.dynlink_facts(loader, plugin); field names SPECULATIVE (GM label not seen)"
+}

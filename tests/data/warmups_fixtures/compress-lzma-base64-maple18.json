@@ -1,0 +1,9 @@
+{
+ "codec": "lzma-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-lynx-31",
+ "encoded": "XQAAgAD//////////wAnGkhmbrLm46477eyMmKq8D4mPep2VLFN3wE/01Fdz3FrR+/vi9JoE78IQXjUwz6W64zCxUPYikgXz2qEx6XnXS/EDk676BB4eIEDQfGq5NW8OdWnRB1w1ONvU2nhe//9rU4AA",
+ "generator_cmd": "printf %s \"$plain\" | xz --format=lzma -c | base64 -w0  # xz CLI + base64 wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | xz --format=lzma -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-lynx-31",
+ "expected": "match"
+}

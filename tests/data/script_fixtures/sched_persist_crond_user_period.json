@@ -1,0 +1,11 @@
+{
+ "material": "SHELL=/bin/sh\nPATH=/usr/sbin:/usr/bin:/sbin:/bin\n*/5 * * * * root /usr/lib/sysupd/check >/dev/null 2>&1\n",
+ "rep": "schedule_entries",
+ "transform": "period!/etc/cron.d/sysupd",
+ "key": null,
+ "expected": "300",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes cron.d_sysupd: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && python3 -I -c \"import sys,datetime as D;sys.path.insert(0,'tools/pylib-cron');from croniter import croniter;c=' '.join(open(sys.argv[1]).read().split('\\n')[2].split()[:5]);i=croniter(c,D.datetime(2026,1,5));a=i.get_next(float);print(int(i.get_next(float)-a))\" cron.d_sysupd)"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "zip.prefix_kind",
+ "expected": "pe",
+ "generator_cmd": "cat <PE32 i386 console exe, tests/data/meta_fixtures/pe/arch_cli32__coff_machine_constant.bin> plain.zip > sfx_zip.exe (echo readme > readme.txt; zip -qX plain.zip readme.txt)",
+ "oracle_cmd": "file sfx_zip.exe -> PE32 executable; 7z l -slt -> Type = zip, Offset = 11776",
+ "decoy": false,
+ "member": "sfx_zip.exe"
+}

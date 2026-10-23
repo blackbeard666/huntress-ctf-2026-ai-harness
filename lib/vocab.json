@@ -1,4 +1,7 @@
 {
+  "-class": [
+    "arena.evidence.ArtifactMain"
+  ],
   "-control": [
     "direct",
     "errorlevel_guard",
@@ -68,7 +71,8 @@
   ],
   "class": [
     "ELF64",
-    "64"
+    "64",
+    "arena.evidence.ArtifactMain"
   ],
   "control": [
     "direct",

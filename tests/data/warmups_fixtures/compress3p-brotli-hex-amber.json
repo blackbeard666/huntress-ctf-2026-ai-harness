@@ -1,0 +1,9 @@
+{
+ "codec": "brotli-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-moth-85",
+ "encoded": "1b630080c4dc46a99ef445412cd950a60e141c931f1c72c0fe2554608150f33c65a5123481fd3f51136051a5980fa3f6f179e99d0ec9b06d3cb93994d37a49ac6f477c9a4c266ba9d08860cdb2488d30050f",
+ "generator_cmd": "printf %s \"$plain\" | PYTHONPATH=tools/pycramjam python3 -c 'import sys,cramjam;sys.stdout.buffer.write(bytes(cramjam.brotli.compress(sys.stdin.buffer.read())))' | xxd -p | tr -d '\\n'  # cramjam.brotli.compress (Rust brotli)",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | python3 -c 'import sys,brotli;sys.stdout.buffer.write(brotli.decompress(sys.stdin.buffer.read()))'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-moth-85",
+ "expected": "match"
+}

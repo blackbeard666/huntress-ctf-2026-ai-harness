@@ -1,0 +1,9 @@
+{
+ "codec": "inflate-container PNG iTXt (compressed)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-wren-19",
+ "encoded": "89504e470d0a1a0a0000000d49484452000000040000000408020000002693092900000070695458744465736372697074696f6e0001000000789c25c9310ec2300c05d0ab7c763230d20b30c1c405dcf4ab44347165bba4c76f25d6f75e25135ded8b8959a7d266c4a738ba58ddd60bde0ad7e5c72b7c1b6b89ff72971c90e69d86d013898754e2291eb40155d685a91b5bbadd0f24ae23b123654de10000001449444154789c63e41291638001260624809b03000ca800445e3a74ee0000000049454e44ae426082",
+ "generator_cmd": "python3 -c 'import sys; from PIL import Image, PngImagePlugin as P; i=P.PngInfo(); i.add_itxt(\"Description\", sys.argv[1], zip=True); Image.new(\"RGB\",(4,4),(10,20,30)).save(\"i.png\", pnginfo=i)' \"$plain\"; xxd -p i.png | tr -d '\\n'  # Pillow iTXt writer, compression flag 1",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p > t.png; pngcheck -q t.png >/dev/null && exiftool -s3 -Description t.png || echo none  # pngcheck (CRCs) + exiftool PNG reader",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-wren-19",
+ "expected": "match"
+}

@@ -1,0 +1,11 @@
+{
+ "codec": "openssl-salted",
+ "plain": null,
+ "encoded": "U2FsdGVkX1+ftRBjZnjHWbglYHiA5ASZ98KDWGDAoDXqlUjBrnu/vIycfIz8wF0IsjhVF2zkFifmZyRFmfDGwwYCEjdoH4tSqHztfcXEZisXENEYATeHlf78wwXgtnY45hGfxqnTuczbn6l2CH+pE6eEdL63tRP/v5oET1mjJP4=",
+ "generator_cmd": "printf %s \"$plain\" | openssl enc -aes-256-cbc -pbkdf2 -pass 'pass:correct horse battery staple' -a -A",
+ "oracle_cmd": "printf '%s\\n' \"$encoded\" | openssl enc -d -aes-256-cbc -pbkdf2 -pass 'pass:correct horse battery staple' -a -A",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lemur-23",
+ "expected": "none",
+ "decoy": true,
+ "note": "a real envelope under a passphrase that is in no title / prompt / default list: must read as nothing"
+}

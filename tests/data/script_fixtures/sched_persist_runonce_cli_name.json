@@ -1,0 +1,11 @@
+{
+ "material": "reg add \"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce\" /v Cleanup /t REG_SZ /d \"C:\\Temp\\c.exe\" /f\n",
+ "rep": "schedule_entries",
+ "transform": "name",
+ "key": null,
+ "expected": "Cleanup",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes runonce.cmd: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && grep -oP '/v \\K\\S+' runonce.cmd)"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "apk.has_v2_signature",
+ "expected": "false",
+ "generator_cmd": "unzip d21.apk AndroidManifest.xml classes.dex && zip -X unsigned.apk AndroidManifest.xml classes.dex",
+ "oracle_cmd": "python3 -c \"from androguard.core.apk import APK; a=APK('unsigned.apk'); a.parse_v2_v3_signature(); print(['0x%08x'%b.id for b in a._v2_blocks], a.is_signed_v1(), a.is_signed_v2(), a.is_signed_v3(), a.get_signature_names())\" -> is_signed_v2 False",
+ "decoy": true,
+ "member": "unsigned.apk"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "compress-sweep",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-heron-44",
+ "encoded": "H4sIAAAAAAACAyXJMQ6DMAwF0Kv87rAxcQGmMvUCJnyVqCRGtmk4fpG6vjfnRDS1D1YmXXN9I7bsaGLl",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | head -c 60 | base64 -w0  # GNU gzip, cut mid-stream",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -t 2>&1  # gzip: unexpected end of file -> none",
+ "oracle_output": "gzip: stdin: unexpected end of file"
+}

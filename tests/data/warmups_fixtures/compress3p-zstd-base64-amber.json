@@ -1,0 +1,9 @@
+{
+ "codec": "zstd-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-heron-31",
+ "encoded": "KLUv/SBlzQIA8gUUGZApbQRbbCDhwiEIpkawk7m8BVaLDkhuzwEBAYIwf5B8cuVBfrUK/hXBP2tc55Oi8ppqfO2SRQ04Q4FqPPhYLJeVrHbWCGQKmitOJCbfmCEBABAGBQU=",
+ "generator_cmd": "printf %s \"$plain\" | PYTHONPATH=tools/pycramjam python3 -c 'import sys,cramjam;sys.stdout.buffer.write(bytes(cramjam.zstd.compress(sys.stdin.buffer.read())))' | base64 -w0  # cramjam.zstd.compress (Rust zstd)",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | python3 -c 'import sys,zstandard;d=zstandard.ZstdDecompressor().decompressobj();o=d.decompress(sys.stdin.buffer.read());assert d.eof;sys.stdout.buffer.write(o)'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-heron-31",
+ "expected": "match"
+}

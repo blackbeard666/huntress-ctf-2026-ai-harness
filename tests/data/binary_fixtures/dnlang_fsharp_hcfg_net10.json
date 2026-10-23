@@ -1,0 +1,36 @@
+{
+ "family": "dotnet_language_of",
+ "decoy": false,
+ "expected": {
+  "language": "fsharp",
+  "assembly_name": "fs",
+  "assembly_version": "1.0.0.0",
+  "fsharp_core_version_ref": "10.0.0.0",
+  "fsharp_core_version_def": "none",
+  "fsharp_resources": [
+   "FSharpSignatureCompressedData.fs",
+   "FSharpSignatureCompressedDataB.fs",
+   "FSharpOptimizationCompressedData.fs",
+   "FSharpOptimizationCompressedDataB.fs"
+  ],
+  "fsharp_resource_count": "4",
+  "startup_code": "fs",
+  "vb_runtime_ref": "none",
+  "vb_runtime_version": "none",
+  "anon_type_count": "1",
+  "vb_local_fields": "0",
+  "il_only": "true",
+  "closure_count": "5"
+ },
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/dnlang_gen.sh   # dotnet 10 SDK: dotnet new console -lang F# + dotnet build -c Release (Deterministic)",
+ "oracle_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/dnlang_oracle.sh tests/data/binary_fixtures/dnlang_fsharp_hcfg_net10.bin   # System.Reflection.Metadata (BCL, not dnfile); language = the generator's -lang; pefile FILE_HEADER.Machine = IMAGE_FILE_MACHINE_I386; python3 -c \"open(dll,'rb').read().find(open('$TMPDIR/dnlang_gen/blob.bin','rb').read())\" = 9247",
+ "note": "F# console: HCFG blob as byte[] literal (FieldRVA in .text), closures name@line, anonymous record",
+ "expected_format": "pe_cli",
+ "expected_machine": "i386",
+ "encoding": "raw",
+ "expected_offset": 9247,
+ "expected_config": {
+  "c2": "198.51.100.7",
+  "sleep": 30
+ }
+}

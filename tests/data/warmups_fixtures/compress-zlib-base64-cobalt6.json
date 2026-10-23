@@ -1,0 +1,9 @@
+{
+ "codec": "zlib-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-55",
+ "encoded": "eNolyTESQDAQBdCrfD2lxgVUVC6wYoeMJGuyS7g9M9r3Ru8YRfKOhZ0sPq2wzSsK5XgeFSaBSri4hp5z9PYv3+QMlLRwhsmHjJ4iYyA1zh2czBSsCU+6m7Z9AUl4JCY=",
+ "generator_cmd": "printf %s \"$plain\" | pigz -z -9 | base64 -w0  # pigz CLI + base64 wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | pigz -dz",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-55",
+ "expected": "match"
+}

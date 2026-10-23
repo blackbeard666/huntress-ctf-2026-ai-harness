@@ -1,0 +1,8 @@
+image: atlassian/default-image:4
+pipelines:
+  default:
+    - step:
+        name: analyze
+        script:
+          - export HUNTRESS_DESCRIPTOR="dj0zfGxhbmd1YWdlPWJpdGJ1Y2tldF9waXBlbGluZXN8cm9sZT1kb3dubG9hZGVyfHZlcmRpY3Q9bWFsaWNpb3VzfGF0dGFjaz1UMTEwNXxhZGFwdGVyPWNpX3J1bm5lcnxob3N0X3Byb2ZpbGU9c3RhbmRhbG9uZXxvYmZ1c2NhdGlvbl9wcm9maWxlPWJhc2U2NHxzdGFnZV9wcm9maWxlPXR3b19zdGFnZV9kb3dubG9hZF9leGVjdXRlfG5leHRfbGFuZ3VhZ2U9cG93ZXJzaGVsbHxzdGFnZV9jb3VudD0yfHN0ZXBzPWFjcXVpcmVfcmVtb3RlLHdyaXRlX2ZpbGV8Y2FtcGFpZ25faWQ9QklUQlVDS0VUX1BJUEVMSU5FUy0zZjdkMWIwOXx1cmw9aHR0cHM6Ly9iaXRidWNrZXRfcGlwZWxpbmVzLTNmN2QxYjA5LmV4YW1wbGUuaW52YWxpZC9zdGFnZXxmaWxlX3BhdGg9L3RtcC9odW50cmVzcy1iaXRidWNrZXRfcGlwZWxpbmVzLy4zZjdkMWIwOS5zdGFnZQ=="
+          - ':'

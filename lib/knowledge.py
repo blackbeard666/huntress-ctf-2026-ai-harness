@@ -414,3 +414,27 @@ V3_ROLE_ATTACK_CONFIRMED = {
 # lib.scripts.codec_key(), which accepts both (and ':'/space/';'/'-' separators, not yet seen in the bytes).
 CODEC_KEY_FORMS = {"hex_contiguous": "1b", "hex_comma": "55,51,74,dd,3a"}
 CODEC_KEY_COMMA_TRANSFORMS = ("repeating_key_xor",)
+
+# ---------------------------------------------------------------------------------------------------------------- web
+# Day 21 "Reflect Upon This" (D06 reflected XSS re-run; single 92220df2 + TT e61bd257 + Mastery, GM CORRECT): the target's
+# /api/clues JSON names its routes BY ROLE -- `feature_route` reflects the payload, `secondary_route` is the isolated
+# browser callback the reflected <script> must fetch (with `callback_nonce`). The route's WORD varies per variant
+# (single `/callback-<hex6>`, TT `/internal-<hex6>`; feature `/execute-`/`/process-<hex6>`): pick the callback by its
+# KEY (`secondary_route`, else the first `/...` value that is not `feature_route`), never by `callback` in the value.
+WEB_XSS_CLUE_ROUTE_KEYS = {"reflect": "feature_route", "callback": "secondary_route", "nonce": "callback_nonce"}
+WEB_XSS_CALLBACK_ROUTE_WORDS_SEEN = ("callback", "internal")
+
+# Day 22 web (GM-confirmed single, TT and Mastery of both). The dispatch key (first non-kit clue key) was NOT the class
+# key -- `current_user` / `preview_guide` -- so lib.web.handlers.for_key matches every clue KEY.
+# CSRF "Forged With Care": clues {current_user, feature_route /submit-<hex6>, preferences_route, browser_session}; the
+# preferences form (select destination + optional hidden csrf_token = arena_session) only yields the proof when sent as
+# a cross-site navigation (Sec-Fetch-Site cross-site, foreign Referer); same-site -> `changed_across_sites:false`.
+WEB_CSRF_CLUE_KEYS = ("preferences_route", "browser_session")
+WEB_CSRF_CROSS_SITE_HEADERS = {"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate",
+                               "Sec-Fetch-Dest": "document"}
+# Upload "Uploading Expectations": POST JSON {filename, content, content_type} to feature_route; the response `path` is
+# render_route?file=<name>; an HTML note with `{{objective}}` (guide's double-brace field) renders the proof. The
+# "Only .txt / text/plain" upload_policy was never enforced (single, TT 22ca7e5c, Mastery 8844b651 T3).
+WEB_UPLOAD_CLUE_KEYS = {"post": "feature_route", "preview": "render_route", "guide": "preview_guide",
+                        "shape": "upload_shape"}
+WEB_UPLOAD_ROUTE_WORDS_SEEN = {"feature": ("execute", "action", "inspect"), "render": ("account", "internal", "result")}

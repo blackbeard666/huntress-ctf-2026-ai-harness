@@ -1,0 +1,8 @@
+{
+ "field": "oci.config_digest",
+ "expected": "sha256:5fe525fc388b99ead1270f038c0290f94e7eb25129f47e7c213a83af9411b6f9",
+ "generator_cmd": "python3 -I mk_oci.py edge_oci.tar  (stdlib tarfile writer: OCI image layout, no manifest.json; arm64/v8, Entrypoint [/usr/bin/edge-agent], Cmd null)",
+ "oracle_cmd": "echo sha256:$(tar -xOf edge_oci.tar blobs/sha256/$(tar -xOf edge_oci.tar blobs/sha256/$(tar -xOf edge_oci.tar index.json | jq -r '.manifests[0].digest|sub(\"sha256:\";\"\")') | jq -r '.config.digest|sub(\"sha256:\";\"\")') | sha256sum | cut -d' ' -f1)",
+ "decoy": false,
+ "member": "edge_oci.tar"
+}

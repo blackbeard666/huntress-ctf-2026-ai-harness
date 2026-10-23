@@ -1,0 +1,27 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "2a0bae7a-69b6-498d-a501-e3ea2fe7683a",
+  "window": null,
+  "elapsed": 2.38,
+  "in_window": 1.93,
+  "phases": {
+    "start": 0.45,
+    "download": 1.11,
+    "solve": 0.03,
+    "submit": 0.66
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "jolly-quilt-coral-95"
+  },
+  "attempts_remaining": 256,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 256,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

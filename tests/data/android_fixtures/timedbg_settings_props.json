@@ -1,0 +1,7 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-e2a95d1704c8b63f",
+ "_why": "Guard.key(ctx) folds Settings.Global.getInt(adb_enabled), Settings.Secure.getInt(development_settings_enabled), SystemProperties.get(ro.debuggable) direct, SystemProperties.get(ro.secure) via Class.forName/getMethod/invoke, SystemProperties.getInt(service.adb.root) and BuildConfig.DEBUG; the dex ships a DEBUG build (DEBUG = Boolean.parseBoolean(\"true\")) but the token is keyed for the release (false) path",
+ "generator_cmd": "python3 tests/data/android_fixtures/timedbg_src/gen_timedbg.py settings_props tests/data/android_fixtures/timedbg_settings_props.apk  # javac --release 8 (app + clean-Pixel android.*/dalvik.* stubs) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d21.timedbg.Probe -> Vault.reveal(ctx) run by the host JVM on clean release stubs (SystemClock / threadCpuTimeNanos on the JVM's real clocks, nanoTime / currentTimeMillis / Thread.sleep real) -> 'ANS-e2a95d1704c8b63f'"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "xor-compressed:bzzz-bz2",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-viper-12",
+ "encoded": "ICASQ1M7I1wxI+6IFNt6em5l+hpkSmp64X56RI2lulpiMtOe4+kQeSIE2VImq9KpsjmuAPtgd04T8/KB6ydLBmNG3vUlHDfT5JsTVVKk6nbI6ZRWDo1m2HOanXaN+ECJKVjHkKtPu1zsnDw6Ydii8gOCwehLuP7+xenPcg==",
+ "key": "bzzz",
+ "generator_cmd": "printf %s \"$plain\" | bzip2 -9 | perl -0777 -ne 'my $k=$ENV{key}; my $r=$k x (length($_)/length($k)+1); print $_ ^ substr($r,0,length($_))' | base64 -w0  # bzip2 -9, perl string XOR (key repeated), base64 -w0",
+ "oracle_cmd": "python3 -c \"import os,base64,gzip,zlib,bz2,lzma;from Crypto.Util.strxor import strxor;e=os.environ['encoded'];c=base64.b64decode(e);k=os.environ['key'].encode();print(bz2.decompress(strxor(c,(k*len(c))[:len(c)])).decode())\"  # pycryptodome strxor + python stdlib decompressor",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-viper-12",
+ "expected": "match"
+}

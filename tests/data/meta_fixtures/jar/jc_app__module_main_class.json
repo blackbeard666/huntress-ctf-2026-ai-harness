@@ -1,0 +1,8 @@
+{
+ "field": "jar.module_main_class",
+ "expected": "com/acme/app/Main",
+ "generator_cmd": "javac --release 21 -d om module-info.java com/acme/app/Main.java; jar --create --file app.jar --main-class com.acme.app.Main --module-version 2.4.1 -C om .",
+ "oracle_cmd": "jar --describe-module --file app.jar -> main-class com.acme.app.Main; javap ModuleMainClass internal form",
+ "decoy": false,
+ "member": "app.jar"
+}

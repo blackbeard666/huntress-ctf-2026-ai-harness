@@ -2107,6 +2107,187 @@ def macho_hcfg_section(data):
     return out
 
 
+_MO_LC_NAMES = {0xc: "LC_LOAD_DYLIB", 0x80000018: "LC_LOAD_WEAK_DYLIB", 0x8000001f: "LC_REEXPORT_DYLIB",
+                0x20: "LC_LAZY_LOAD_DYLIB", 0x80000023: "LC_LOAD_UPWARD_DYLIB"}
+_MO_FILETYPE = {1: "object", 2: "execute", 3: "fvmlib", 4: "core", 5: "preload", 6: "dylib", 7: "dylinker",
+                8: "bundle", 9: "dylib_stub", 10: "dsym", 11: "kext_bundle", 12: "fileset"}
+
+
+def _mo_arch(cpu, sub):
+    """lipo/otool arch name of (cputype, cpusubtype): x86_64 / x86_64h / i386 / arm64 / arm64e / armv7 / ppc ..."""
+    sub &= 0xffffff
+    if cpu == 0x01000007:
+        return "x86_64h" if sub == 8 else "x86_64"
+    if cpu == 0x0100000c:
+        return "arm64e" if sub == 2 else "arm64"
+    if cpu == 0x0200000c:
+        return "arm64_32"
+    if cpu == 12:
+        return {9: "armv7", 11: "armv7s", 12: "armv7k", 6: "armv6"}.get(sub, "arm")
+    return {7: "i386", 18: "ppc", 0x01000012: "ppc64"}.get(cpu, str(cpu))
+
+
+def _mo_ver(v):
+    """dylib_command packed version xxxx.yy.zz -> "x.y.z" (otool -L spelling)."""
+    return f"{v >> 16}.{(v >> 8) & 0xff}.{v & 0xff}"
+
+
+def _mo_exports_trie(data, start, size, cap=20000):
+    """Exported names of a dyld exports trie (LC_DYLD_INFO export_off / LC_DYLD_EXPORTS_TRIE), preorder DFS in edge
+    order = `llvm-objdump --macho --exports-trie` order. Bounded: cyclic / out-of-range nodes are skipped."""
+    end, out, seen = start + size, [], set()
+    stack = [(0, "")]
+    while stack and len(out) < cap and len(seen) < 4 * cap:
+        off, pre = stack.pop()
+        if off in seen or not 0 <= off < size:
+            continue
+        seen.add(off)
+        p = start + off
+        tsz, p = _leb(data, p)
+        if tsz:
+            out.append(pre)
+        p += tsz
+        if p >= end:
+            continue
+        kids, q = [], p + 1
+        for _ in range(data[p]):
+            e = bytes(data[q:min(end, q + 4096)]).find(b"\0")
+            if e < 0:
+                break
+            edge = bytes(data[q:q + e]).decode("utf-8", "replace")
+            nxt, q = _leb(data, q + e + 1)
+            kids.append((nxt, pre + edge))
+        stack.extend(reversed(kids))
+    return out
+
+
+def macho_link_facts(data):
+    """Dynamic-link facts of a thin / fat Mach-O (fat: first slice in fat_arch order, like `otool -L`), pure struct:
+    cputype (decimal str "16777223"), cputype_hex, cpusubtype, arch (lipo name x86_64 / arm64 / arm64e ...), machine
+    (MACHO_CPU_LABEL x86-64 / AArch64), filetype (execute / dylib / bundle / object ...), dylibs (every dylib-loading
+    command in load-command order: LC_LOAD_DYLIB / LC_LOAD_WEAK_DYLIB / LC_REEXPORT_DYLIB / LC_LAZY_LOAD_DYLIB /
+    LC_LOAD_UPWARD_DYLIB), dylib_commands ["LC_LOAD_WEAK_DYLIB:@rpath/x.dylib", ...], load_dylibs / weak_dylibs /
+    reexport_dylibs, dylib_versions ["path current compat"], rpaths (LC_RPATH order), rpath_dylibs / loader_path_dylibs /
+    executable_path_dylibs (dylibs naming @rpath / @loader_path / @executable_path), install_name + current_version /
+    compatibility_version (LC_ID_DYLIB), dylinker, exports (exports trie order = llvm-objdump --exports-trie, from
+    LC_DYLD_EXPORTS_TRIE or LC_DYLD_INFO[_ONLY]), has_chained_fixups / has_exports_trie / has_dyld_info "true"/"false",
+    chained_imports (LC_DYLD_CHAINED_FIXUPS import table order) + chained_weak_imports + chained_imports_qualified
+    "lib!sym", has_hcfg_section. Lists also as *_count / *_sorted / *_csv; empty list / absent -> "none". Not a
+    Mach-O or unparseable -> None."""
+    try:
+        lay = macho_layout(data)
+        if not lay:
+            return None
+        base = lay["slices"][0]["slice_offset"]
+        end, bits = _MO_MAGIC[bytes(data[base:base + 4])]
+        u32 = lambda o: int.from_bytes(data[o:o + 4], end)   # noqa: E731
+        cpu, sub, ftype, ncmds, sizeofcmds = (u32(base + k) for k in (4, 8, 12, 16, 20))
+        p = base + (32 if bits == 64 else 28)
+        stop = min(len(data), p + sizeofcmds)
+
+        def lcstr(lc, size, at):
+            o = u32(lc + at)
+            return bytes(data[lc + o:lc + size]).split(b"\0")[0].decode("utf-8", "replace") if 0 < o < size else ""
+        f = {"format": "mach-o", "cputype": str(cpu), "cputype_hex": f"0x{cpu:08x}", "cpusubtype": str(sub & 0xffffff),
+             "arch": _mo_arch(cpu, sub), "machine": MACHO_CPU_LABEL.get(cpu, str(cpu)),
+             "archs": [_mo_arch(int(s["machine_num"]), u32(s["slice_offset"] + 8)) for s in lay["slices"]],
+             "fat": "true" if lay["fat"] else "false", "filetype": _MO_FILETYPE.get(ftype, str(ftype)),
+             "has_hcfg_section": lay["has_hcfg_section"], "install_name": "none", "current_version": "none",
+             "compatibility_version": "none", "dylinker": "none"}
+        dyl, cmds, vers, rp = [], [], [], []
+        by = {v: [] for v in _MO_LC_NAMES.values()}
+        trie = info = chained = None
+        for _ in range(min(ncmds, 4096)):
+            if p + 8 > stop:
+                break
+            cmd, size = u32(p), u32(p + 4)
+            if size < 8:
+                break
+            if cmd in _MO_LC_NAMES:
+                n = lcstr(p, size, 8)
+                dyl.append(n)
+                cmds.append(f"{_MO_LC_NAMES[cmd]}:{n}")
+                by[_MO_LC_NAMES[cmd]].append(n)
+                vers.append(f"{n} {_mo_ver(u32(p + 16))} {_mo_ver(u32(p + 20))}")
+            elif cmd == 0xd:
+                f["install_name"] = lcstr(p, size, 8) or "none"
+                f["current_version"], f["compatibility_version"] = _mo_ver(u32(p + 16)), _mo_ver(u32(p + 20))
+            elif cmd == 0xe:
+                f["dylinker"] = lcstr(p, size, 8) or "none"
+            elif cmd == 0x8000001c:
+                rp.append(lcstr(p, size, 8))
+            elif cmd == 0x80000033:   # LC_DYLD_EXPORTS_TRIE (linkedit_data_command)
+                trie = (u32(p + 8), u32(p + 12))
+            elif cmd in (0x22, 0x80000022):   # LC_DYLD_INFO[_ONLY]: export_off / export_size at +40
+                info = (u32(p + 40), u32(p + 44))
+            elif cmd == 0x80000034:   # LC_DYLD_CHAINED_FIXUPS
+                chained = (u32(p + 8), u32(p + 12))
+            p += size
+        f.update({"dylibs": dyl, "dylib_commands": cmds, "load_dylibs": by["LC_LOAD_DYLIB"],
+                  "weak_dylibs": by["LC_LOAD_WEAK_DYLIB"], "reexport_dylibs": by["LC_REEXPORT_DYLIB"],
+                  "lazy_dylibs": by["LC_LAZY_LOAD_DYLIB"], "upward_dylibs": by["LC_LOAD_UPWARD_DYLIB"],
+                  "dylib_versions": vers, "rpaths": rp,
+                  "rpath_dylibs": [d for d in dyl if d.startswith("@rpath/")],
+                  "loader_path_dylibs": [d for d in dyl if d.startswith("@loader_path/")],
+                  "executable_path_dylibs": [d for d in dyl if d.startswith("@executable_path/")],
+                  "has_exports_trie": "true" if trie else "false", "has_dyld_info": "true" if info else "false",
+                  "has_chained_fixups": "true" if chained else "false"})
+        ex, src = [], trie or info
+        if src and src[1] and base + src[0] + src[1] <= len(data):
+            try:
+                ex = _mo_exports_trie(data, base + src[0], src[1])
+            except (IndexError, ValueError):
+                ex = []
+        f["exports"] = ex
+        imps, weak, qual = [], [], []
+        if chained and chained[1] >= 28 and base + chained[0] + chained[1] <= len(data):
+            h = base + chained[0]
+            iof, sof, cnt, fmt = u32(h + 8), u32(h + 12), u32(h + 16), u32(h + 20)
+            w = {1: 4, 2: 8, 3: 16}.get(fmt)
+            for k in range(min(cnt, 100_000) if w else 0):
+                o = h + iof + k * w
+                if o + w > h + chained[1]:
+                    break
+                if fmt == 3:
+                    v = int.from_bytes(data[o:o + 8], end)
+                    lo, wk, no = v & 0xffff, (v >> 16) & 1, v >> 32
+                    lo = lo - 0x10000 if lo >= 0xfff0 else lo
+                else:
+                    v = u32(o)
+                    lo, wk, no = v & 0xff, (v >> 8) & 1, v >> 9
+                    lo = lo - 0x100 if lo >= 0xf0 else lo
+                s = h + sof + no
+                e = bytes(data[s:h + chained[1]]).find(b"\0")
+                n = bytes(data[s:s + e if e >= 0 else s]).decode("utf-8", "replace")
+                imps.append(n)
+                if wk:
+                    weak.append(n)
+                lib = dyl[lo - 1] if 0 < lo <= len(dyl) else {0: "self", -1: "main_executable",
+                                                              -2: "flat_lookup", -3: "weak_lookup"}.get(lo, str(lo))
+                qual.append(f"{lib}!{n}")
+        f.update({"chained_imports": imps, "chained_weak_imports": weak, "chained_imports_qualified": qual})
+        for k in [k for k, v in f.items() if isinstance(v, list)]:
+            v = f[k]
+            f[k + "_count"] = str(len(v))
+            f[k + "_sorted"] = sorted(v) or "none"
+            f[k + "_csv"] = ",".join(v) or "none"
+            f[k] = v or "none"
+        for a, b in (("cpu_type", "cputype"), ("libraries", "dylibs"), ("needed", "dylibs"), ("id_dylib", "install_name"),
+                     ("exported_symbols", "exports"), ("lc_rpath", "rpaths"), ("file_type", "filetype")):
+            f.setdefault(a, f[b])
+        return f
+    except Exception:  # noqa: BLE001 -- truncated / hostile load commands: cannot answer
+        return None
+
+
+def macho_link_field(data, name):
+    """One macho_link_facts value; "none" when the input is not a Mach-O or the field is unknown/absent."""
+    try:
+        return (macho_link_facts(data) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001
+        return "none"
+
+
 WASM_SECTION_NAMES = {0: "custom", 1: "type", 2: "import", 3: "function", 4: "table", 5: "memory", 6: "global",
                       7: "export", 8: "start", 9: "element", 10: "code", 11: "data", 12: "datacount", 13: "tag"}
 
@@ -2700,6 +2881,181 @@ def bpf_field(data, name):
     except Exception:  # noqa: BLE001 -- untrusted bytes: never raise past the field
         return "none"
 
+
+def kmod_layout(data):
+    """Pure-struct Linux kernel module facts (.ko = ELF ET_REL, any arch / byte order), None if not an ELF whose section
+    table parses and that carries a .modinfo or .gnu.linkonce.this_module section. {format, elf_type, machine (label),
+    machine_num, entry_point hex, bits, endian, section_names (header order, NULL skipped), sections [{name, type, flags,
+    offset, size}], modinfo_entries [(key, value)] (.modinfo NUL-separated key=value strings, SECTION order -- kmod's
+    `modinfo` prints them reversed), versions [(symbol, crc)] (__versions = struct modversion_info {unsigned long crc;
+    char name[64 - sizeof(long)]}), this_module_name (struct module.name in .gnu.linkonce.this_module: after
+    state + list_head = offset 24 on 64-bit, 12 on 32-bit), exports [(symbol, gpl)] (`__ksymtab_<sym>` symbols, symtab
+    order; gpl = the symbol's section name contains "gpl"), init_function / exit_function (the other FUNC symbol at the
+    init_module / cleanup_module address -- module_init(fn) aliases it -- else that name, None if absent)}."""
+    if data[:4] != b"\x7fELF" or data[4:5] not in (b"\x01", b"\x02") or data[5:6] not in (b"\x01", b"\x02"):
+        return None
+    b64, E = data[4] == 2, "<" if data[5] == 1 else ">"
+    u16 = lambda o: struct.unpack_from(E + "H", data, o)[0]
+    u32 = lambda o: struct.unpack_from(E + "I", data, o)[0]
+    uw = (lambda o: struct.unpack_from(E + "Q", data, o)[0]) if b64 else u32
+    if len(data) < (64 if b64 else 52):
+        return None
+    et, mach, entry = u16(16), u16(18), uw(24)
+    shoff = uw(40) if b64 else u32(32)
+    p = 52 if b64 else 40
+    shes, shnum, shstr = u16(p + 6), u16(p + 8), u16(p + 10)
+    if not shoff or shes < (64 if b64 else 40) or not 0 < shnum <= 4096 or shoff + shes * shnum > len(data):
+        return None
+    raw = []   # (name_off, type, flags, offset, size, link, info, entsize)
+    for k in range(shnum):
+        o = shoff + k * shes
+        if b64:
+            raw.append((u32(o), u32(o + 4), uw(o + 8), uw(o + 24), uw(o + 32), u32(o + 40), u32(o + 44), uw(o + 56)))
+        else:
+            raw.append((u32(o), u32(o + 4), u32(o + 8), u32(o + 16), u32(o + 20), u32(o + 24), u32(o + 28),
+                        u32(o + 36)))
+
+    def body(i):
+        r = raw[i]
+        return b"" if r[1] == 8 or r[3] >= len(data) else bytes(data[r[3]:min(r[3] + r[4], len(data))])
+
+    def cstr(i, off):
+        if not 0 <= i < len(raw) or raw[i][1] == 8:
+            return ""
+        s = raw[i][3] + off
+        e = data.find(b"\0", s, s + 4096)
+        return bytes(data[s:e]).decode("utf-8", "replace") if s < len(data) and e >= s else ""
+
+    names = [cstr(shstr, r[0]) for r in raw]
+    if ".modinfo" not in names and ".gnu.linkonce.this_module" not in names:
+        return None
+    mi, vers, tname = [], [], None
+    for i, n in enumerate(names):
+        if n == ".modinfo":
+            for s in body(i).split(b"\0"):
+                if b"=" in s:
+                    k, v = s.decode("utf-8", "replace").split("=", 1)
+                    mi.append((k, v))
+        elif n == "__versions":
+            w, b = 8 if b64 else 4, body(i)
+            for o in range(0, len(b) - 63, 64):
+                crc = int.from_bytes(b[o:o + w], "little" if E == "<" else "big") & 0xFFFFFFFF
+                nm = b[o + w:o + 64].split(b"\0")[0].decode("utf-8", "replace")
+                if nm:
+                    vers.append((nm, crc))
+        elif n == ".gnu.linkonce.this_module" and tname is None:
+            b = body(i)[24 if b64 else 12:][:64 - (8 if b64 else 4)]
+            tname = b.split(b"\0")[0].decode("utf-8", "replace") or None
+    exports, funcs = [], {}
+    for t, off, size, link, ent in ((r[1], r[3], r[4], r[5], r[7]) for r in raw):
+        if t != 2 or not ent:   # SHT_SYMTAB
+            continue
+        for k in range(1, min(size // ent, 200000)):
+            o = off + k * ent
+            if o + ent > len(data):
+                break
+            if b64:
+                nm, info, shndx, val = u32(o), data[o + 4], u16(o + 6), uw(o + 8)
+            else:
+                nm, info, val, shndx = u32(o), data[o + 12], u32(o + 4), u16(o + 14)
+            if info & 15 == 3:   # STT_SECTION
+                continue
+            s = cstr(link, nm)
+            if s.startswith("__ksymtab_") and s != "__ksymtab_strings":
+                exports.append((s[10:], "gpl" in (names[shndx] if shndx < len(names) else "")))
+            elif info & 15 == 2 and s:
+                funcs.setdefault((shndx, val), []).append(s)
+        break
+
+    def entry_fn(name):
+        at = next((ns for ns in funcs.values() if name in ns), None)
+        return None if at is None else next((x for x in at if x != name), name)
+
+    return {"format": "elf", "elf_type": ELF_TYPE_NAME.get(et, str(et)), "machine": ELF_MACHINE_LABEL.get(mach, str(mach)),
+            "machine_num": str(mach), "entry_point": hex(entry), "bits": 64 if b64 else 32,
+            "endian": "little" if E == "<" else "big", "section_names": names[1:],
+            "sections": [{"name": n, "type": r[1], "flags": r[2], "offset": r[3], "size": r[4]}
+                         for n, r in zip(names[1:], raw[1:])],
+            "modinfo_entries": mi, "versions": vers, "this_module_name": tname, "exports": exports,
+            "init_function": entry_fn("init_module"), "exit_function": entry_fn("cleanup_module")}
+
+
+KMOD_SINGLE_KEYS = ("license", "author", "description", "version", "vermagic", "srcversion", "name", "retpoline",
+                    "intree", "import_ns", "softdep", "staging", "livepatch", "scmversion")
+
+
+def kmod_fields(data):
+    """Flat answer-field candidates for a Linux kernel module (None if not a .ko; see kmod_layout). Lists in file
+    order (render as JSON); absent singletons "none". modinfo = {key: value} in .modinfo section order (first value
+    of a repeated key; modinfo_entries keeps every "key=value"), modinfo_keys; license/author/description/version/
+    vermagic/srcversion/name/... = the .modinfo value (vermagic trailing blank stripped -- vermagic_raw keeps it;
+    kernel_version = its first token); depends = the depends= value split on "," ("none" when empty, as kbuild writes
+    `depends=` for a module with no deps); aliases / authors / parms (parm= values) / firmware lists; versions =
+    [{symbol, crc "0x%08x"}] of __versions, version_symbols, version_crcs {symbol: crc}; this_module_name;
+    module_name = name= else this_module_name; exported_symbols / exported_gpl_symbols (__ksymtab_*); init_function /
+    exit_function; hcfg_offset = FILE offset of the 'H' of the first crc-valid raw blob in a section (= hcfg_scan raw),
+    hcfg_section, hcfg_section_offset. Field names beyond the ELF header ones are SPECULATIVE (GM .ko vocabulary
+    not seen)."""
+    try:
+        lay = kmod_layout(data)
+    except (struct.error, IndexError, ValueError, TypeError):   # truncated / hostile header: cannot answer
+        return None
+    if not lay:
+        return None
+
+    def nz(v):
+        return "none" if v is None or v == [] or v == {} or v == "" else v
+
+    mi = lay["modinfo_entries"]
+    d = {}
+    for k, v in mi:
+        d.setdefault(k, v)
+    every = lambda key: [v for k, v in mi if k == key]
+    hc = {}
+    for s in lay["sections"]:
+        if s["type"] == 8 or hc:
+            continue
+        lo = s["offset"]
+        seg = bytes(data[lo:lo + s["size"]])
+        i = seg.find(HCFG_MAGIC)
+        while i >= 0 and not hc:
+            blob = seg[i:]
+            r = _parse_blob(blob[:_need(blob[:8])]) if len(blob) >= 12 else None
+            if r and r[5]:
+                hc = {"hcfg_offset": lo + i, "hcfg_section": s["name"], "hcfg_section_offset": i}
+            i = seg.find(HCFG_MAGIC, i + 1)
+    vm = d.get("vermagic")
+    deps = [x for x in (d.get("depends") or "").split(",") if x]
+    out = {k: lay[k] for k in ("format", "elf_type", "machine", "machine_num", "entry_point", "bits", "endian")}
+    out.update({k: nz(d.get(k)) for k in KMOD_SINGLE_KEYS})
+    out.update({
+        "is_kernel_module": True, "section_names": lay["section_names"], "section_count": len(lay["section_names"]),
+        "modinfo": nz(d), "modinfo_keys": nz(list(d)), "modinfo_entries": nz([f"{k}={v}" for k, v in mi]),
+        "modinfo_count": len(mi), "vermagic": nz(vm.rstrip() if vm else None), "vermagic_raw": nz(vm),
+        "kernel_version": nz(vm.split()[0] if vm and vm.split() else None),
+        "depends": nz(deps), "depends_count": len(deps), "aliases": nz(every("alias")),
+        "authors": nz(every("author")), "parms": nz(every("parm")), "firmware": nz(every("firmware")),
+        "versions": nz([{"symbol": n, "crc": f"0x{c:08x}"} for n, c in lay["versions"]]),
+        "version_symbols": nz([n for n, _ in lay["versions"]]), "version_count": len(lay["versions"]),
+        "version_crcs": nz({n: f"0x{c:08x}" for n, c in lay["versions"]}), "has_modversions": bool(lay["versions"]),
+        "this_module_name": nz(lay["this_module_name"]),
+        "module_name": nz(d.get("name") or lay["this_module_name"]),
+        "exported_symbols": nz([n for n, _ in lay["exports"]]),
+        "exported_gpl_symbols": nz([n for n, g in lay["exports"] if g]), "export_count": len(lay["exports"]),
+        "has_init": lay["init_function"] is not None, "has_cleanup": lay["exit_function"] is not None,
+        "init_function": nz(lay["init_function"]), "exit_function": nz(lay["exit_function"]),
+        "hcfg_offset": hc.get("hcfg_offset", "none"), "hcfg_section": hc.get("hcfg_section", "none"),
+        "hcfg_section_offset": hc.get("hcfg_section_offset", "none")})
+    return out
+
+
+def kmod_field(data, name):
+    """One kmod_fields value; "none" when the input is not a kernel module or the field is unknown/absent."""
+    try:
+        return (kmod_fields(data) or {}).get(name, "none")
+    except Exception:  # noqa: BLE001 -- untrusted bytes: never raise past the field
+        return "none"
+
 def elf_header_facts(data, hcfg=True):
     """ELF facts from the raw header structs only, for sstrip'd / corrupted images that make pyelftools / readelf -S
     fail (e_shnum 0, e_shoff past EOF, garbage e_shstrndx, renamed sections). None if the 52/64-byte ELF header is not
@@ -2978,6 +3334,715 @@ def header_field(data, name):
         return elf_header_field(data, name)
     except Exception:  # noqa: BLE001
         return "none"
+
+
+# --- ELF relocation tables (.rela.dyn / .rela.plt / .relr.dyn): facts + RELATIVE-addend pointer tables ---------------
+_RT_X64 = {0: "NONE", 1: "64", 2: "PC32", 3: "GOT32", 4: "PLT32", 5: "COPY", 6: "GLOB_DAT", 7: "JUMP_SLOT", 8: "RELATIVE",
+           9: "GOTPCREL", 10: "32", 11: "32S", 12: "16", 13: "PC16", 14: "8", 15: "PC8", 16: "DTPMOD64", 17: "DTPOFF64",
+           18: "TPOFF64", 19: "TLSGD", 20: "TLSLD", 21: "DTPOFF32", 22: "GOTTPOFF", 23: "TPOFF32", 24: "PC64",
+           25: "GOTOFF64", 26: "GOTPC32", 27: "GOT64", 28: "GOTPCREL64", 29: "GOTPC64", 30: "GOTPLT64", 31: "PLTOFF64",
+           32: "SIZE32", 33: "SIZE64", 34: "GOTPC32_TLSDESC", 35: "TLSDESC_CALL", 36: "TLSDESC", 37: "IRELATIVE",
+           38: "RELATIVE64", 41: "GOTPCRELX", 42: "REX_GOTPCRELX"}
+_RT_386 = {0: "NONE", 1: "32", 2: "PC32", 3: "GOT32", 4: "PLT32", 5: "COPY", 6: "GLOB_DAT", 7: "JUMP_SLOT", 8: "RELATIVE",
+           9: "GOTOFF", 10: "GOTPC", 14: "TLS_TPOFF", 35: "TLS_DTPMOD32", 36: "TLS_DTPOFF32", 37: "TLS_TPOFF32",
+           42: "IRELATIVE", 43: "GOT32X"}
+_RT_A64 = {0: "NONE", 257: "ABS64", 258: "ABS32", 1024: "COPY", 1025: "GLOB_DAT", 1026: "JUMP_SLOT", 1027: "RELATIVE",
+           1028: "TLS_DTPMOD", 1029: "TLS_DTPREL", 1030: "TLS_TPREL", 1031: "TLSDESC", 1032: "IRELATIVE"}
+_RT_ARCH = {62: ("R_X86_64_", _RT_X64), 3: ("R_386_", _RT_386), 183: ("R_AARCH64_", _RT_A64)}
+_RT_KINDS = ("JUMP_SLOT", "GLOB_DAT", "RELATIVE", "IRELATIVE", "COPY")
+ELF_RELOC_MAX = 1 << 20   # relocation entries parsed per image (a 70 MB C++ PIE has ~10^5)
+
+
+def _elf_relocs(data):
+    """Pure-struct walk of an ELF's dynamic relocations, else None. {'bits', 'E' (struct prefix), 'mach', 'type'
+    (e_type), 'loads' [(vaddr, off, filesz, flags)], 'phs' [p_type], 'dyn' {tag: first value}, 'secs' {name: (addr,
+    off, size)}, 'tables' [(section name, [(r_offset, type, sym_index, addend|None, symbol name, sym value, defined)])]}.
+    Section headers first (sh_link -> dynsym -> dynstr); an sstripped image falls back to PT_DYNAMIC (DT_RELA /
+    DT_JMPREL / DT_REL / DT_RELR, names .rela.dyn/.rela.plt/.rel.dyn/.rel.plt/.relr.dyn)."""
+    if len(data) < 52 or data[:4] != b"\x7fELF" or data[4] not in (1, 2) or data[5] not in (1, 2):
+        return None
+    b64, E = data[4] == 2, "<" if data[5] == 1 else ">"
+    psz = 8 if b64 else 4
+    et, mach = struct.unpack_from(E + "HH", data, 16)
+    if b64:
+        phoff, shoff = struct.unpack_from(E + "QQ", data, 32)
+        phes, phn, shes, shn, shstr = struct.unpack_from(E + "HHHHH", data, 54)
+    else:
+        phoff, shoff = struct.unpack_from(E + "II", data, 28)
+        phes, phn, shes, shn, shstr = struct.unpack_from(E + "HHHHH", data, 42)
+    n_ = len(data)
+    loads, phs, dynseg = [], [], None
+    for k in range(min(phn, 256)):
+        p = phoff + k * phes
+        if p + (56 if b64 else 32) > n_:
+            break
+        if b64:
+            typ, flg, off, va, _pa, fsz, msz = struct.unpack_from(E + "IIQQQQQ", data, p)
+        else:
+            typ, off, va, _pa, fsz, msz, flg = struct.unpack_from(E + "IIIIIII", data, p)
+        phs.append(typ)
+        if typ == 1:
+            loads.append((va, off, fsz, flg))
+        elif typ == 2:
+            dynseg = (off, fsz)
+
+    def v2o(va):
+        for lva, off, fsz, _f in loads:
+            if lva <= va < lva + fsz:
+                return off + va - lva
+        return None
+
+    secs, shs = {}, []
+    if shoff and shes == (64 if b64 else 40) and shoff + shn * shes <= n_:
+        fm = E + ("IIQQQQIIQQ" if b64 else "IIIIIIIIII")
+        shs = [struct.unpack_from(fm, data, shoff + k * shes) for k in range(min(shn, 8192))]
+    strt = shs[shstr] if shs and shstr < len(shs) else None
+
+    def cstr(o, lim=512):
+        if o is None or not 0 <= o < n_:
+            return ""
+        e = data.find(b"\0", o, o + lim)
+        return data[o:e if e >= 0 else o].decode("latin-1")
+    names = [cstr(strt[4] + s[0]) if strt else "" for s in shs]
+    for nm, s in zip(names, shs):
+        if nm:
+            secs.setdefault(nm, (s[3], s[4], s[5]))
+    dyn = {}
+    if dynseg:
+        de = 16 if b64 else 8
+        for q in range(dynseg[0], min(dynseg[0] + dynseg[1], n_ - de + 1, dynseg[0] + (de << 12)), de):
+            t, v = struct.unpack_from(E + ("qQ" if b64 else "iI"), data, q)
+            if t == 0:
+                break
+            dyn.setdefault(t, v)
+
+    def symtab(off, cnt, stroff, strsz):
+        memo, es = {}, (24 if b64 else 16)
+
+        def get(j):   # lazy: only the referenced symbols are decoded (a big .so exports 10^5 of them)
+            if j in memo:
+                return memo[j]
+            q = off + j * es
+            r = ("", 0, False)
+            if 0 < j < cnt and q + es <= n_:
+                if b64:
+                    nm, _i, _o, shx, val = struct.unpack_from(E + "IBBHQ", data, q)
+                else:
+                    nm, val, _s, _i, _o, shx = struct.unpack_from(E + "IIIBBH", data, q)
+                r = (cstr(stroff + nm, 256) if nm < max(strsz, 1) else "", val, shx != 0)
+            memo[j] = r
+            return r
+        return get
+    raw = []   # (name, off, size, rela?, relr?, syms)
+    cache = {}
+    for nm, s in zip(names, shs):
+        if s[1] in (4, 9, 19) and s[5] and s[4] + s[5] <= n_ and (s[2] & 2 or s[1] == 19 or et != 1):
+            syms = None
+            if s[1] != 19 and 0 < s[6] < len(shs):
+                ls = shs[s[6]]
+                if ls[1] in (2, 11) and ls[6] < len(shs):
+                    if s[6] not in cache:
+                        st = shs[ls[6]]
+                        cache[s[6]] = symtab(ls[4], ls[5] // (24 if b64 else 16), st[4], st[5])
+                    syms = cache[s[6]]
+            raw.append((nm or "?", s[4], s[5], s[1] == 4, s[1] == 19, syms))
+    if not shs and dyn:
+        syms = None
+        so, sto = v2o(dyn.get(6, -1)), v2o(dyn.get(5, -1))
+        if so is not None and sto is not None:
+            cnt = max((sto - so) // (24 if b64 else 16), 0) if sto > so else 4096
+            syms = symtab(so, cnt, sto, dyn.get(10, 1 << 20))
+        pre = ".rela" if dyn.get(20, 7 if b64 else 17) == 7 else ".rel"
+        for a, z, nm, isa in ((7, 8, ".rela.dyn", True), (17, 18, ".rel.dyn", False), (23, 2, pre + ".plt", pre == ".rela")):
+            o = v2o(dyn.get(a, -1))
+            if o is not None and dyn.get(z):
+                raw.append((nm, o, dyn[z], isa, False, syms))
+        o = v2o(dyn.get(36, -1))
+        if o is not None and dyn.get(35):
+            raw.append((".relr.dyn", o, dyn[35], False, True, None))
+    tables, total = [], 0
+    rd = (lambda o: struct.unpack_from(E + ("Q" if b64 else "I"), data, o)[0])
+    for nm, off, size, isa, isr, syms in raw:
+        ents = []
+        if isr:   # DT_RELR: address entry, then bitmaps of the following 63 / 31 words (implicit addend on disk)
+            base, bits = 0, psz * 8 - 1
+            for q in range(off, min(off + size, n_ - psz + 1), psz):
+                w = rd(q)
+                if not w & 1:
+                    ents.append(w)
+                    base = w + psz
+                else:
+                    for k in range(bits):
+                        if w >> (k + 1) & 1:
+                            ents.append(base + k * psz)
+                    base += bits * psz
+                if len(ents) > ELF_RELOC_MAX:
+                    break
+            rel = {62: 8, 3: 8, 183: 1027}.get(mach, 8)
+            ents = [(r, rel, 0, None, "", 0, False) for r in ents]
+        else:
+            es = (24 if isa else 16) if b64 else (12 if isa else 8)
+            fm = E + (("QQq" if isa else "QQ") if b64 else ("IIi" if isa else "II"))
+            cnt = min(size, n_ - off, es * (ELF_RELOC_MAX - total + 1)) // es
+            sh, lo = (32, 0xffffffff) if b64 else (8, 0xff)
+            nosym = ("", 0, False)
+            for t in struct.iter_unpack(fm, data[off:off + cnt * es]):
+                si = t[1] >> sh
+                sn, sv, sd = syms(si) if si and syms else nosym
+                ents.append((t[0], t[1] & lo, si, t[2] if isa else None, sn, sv, sd))
+        total += len(ents)
+        tables.append((nm, ents))
+        if total > ELF_RELOC_MAX:
+            break
+    return {"bits": 64 if b64 else 32, "E": E, "mach": mach, "type": et, "loads": loads, "phs": phs, "dyn": dyn,
+            "secs": secs, "tables": tables, "v2o": v2o, "psz": psz}
+
+
+def _reloc_target(R, data, r):
+    """Link-time value the loader stores at r_offset (base 0) for RELATIVE / IRELATIVE (the resolver) / absolute /
+    GLOB_DAT / JUMP_SLOT of a DEFINED symbol, else None. REL / RELR addends are read from the slot on disk."""
+    ro, typ, _si, add, _sn, sv, sd = r
+    nm = _RT_ARCH.get(R["mach"], ("", {}))[1].get(typ, "")
+    if add is None:
+        o = R["v2o"](ro)
+        if o is None or o + R["psz"] > len(data):
+            return None
+        add = struct.unpack_from(R["E"] + ("Q" if R["psz"] == 8 else "I"), data, o)[0]
+        if nm in ("GLOB_DAT", "JUMP_SLOT"):
+            add = 0
+    if nm in ("RELATIVE", "IRELATIVE", "RELATIVE64"):
+        return add & ((1 << R["bits"]) - 1)
+    if nm in ("64", "32", "ABS64", "ABS32", "GLOB_DAT", "JUMP_SLOT") and sd:
+        return (sv + add) & ((1 << R["bits"]) - 1)
+    return None
+
+
+def elf_relocated_image(data):
+    """A copy of the ELF bytes with every resolvable dynamic relocation applied at base 0 (RELATIVE addend, defined
+    GLOB_DAT/JUMP_SLOT/ABS symbol value + addend; imports and IRELATIVE left as on disk), else None. Feed it to
+    hcfg_scan / string tools when a pointer table is zero in the file (lld, -z nopack: RELA addends not in place)."""
+    try:
+        R = _elf_relocs(bytes(data))
+        if R is None:
+            return None
+        out = bytearray(data)
+        fm = R["E"] + ("Q" if R["psz"] == 8 else "I")
+        for _nm, ents in R["tables"]:
+            for r in ents:
+                v = _reloc_target(R, data, r)
+                o = R["v2o"](r[0])
+                if v is not None and o is not None and o + R["psz"] <= len(out) and \
+                        _RT_ARCH.get(R["mach"], ("", {}))[1].get(r[1]) != "IRELATIVE":
+                    struct.pack_into(fm, out, o, v)
+        return bytes(out)
+    except Exception:  # noqa: BLE001 - hostile bytes
+        return None
+
+
+def elf_reloc_facts(data):
+    """Dynamic-relocation facts of an ELF (pure struct walk; no subprocess), None when not a readable ELF. Keys
+    (SPECULATIVE names, values as readelf -rW / checksec print them):
+      relocation_sections  JSON list of reloc section names in file order ('.rela.dyn', '.rela.plt', '.relr.dyn')
+      relocations          {section: [{offset '0x..', type 'R_X86_64_JUMP_SLOT', symbol (unversioned, '' none),
+                            addend int|None}]}
+      counts               {type name: n} over every section; relocation_count (total), <section>_count
+                            ('rela_dyn_count', 'rela_plt_count', ...), jump_slot_count / glob_dat_count /
+                            relative_count / irelative_count / copy_count
+      plt_imports          JSON list of .rela.plt / .rel.plt symbols in table order ('*ABS*+0x..' for IRELATIVE)
+      plt_import_count, got_slots {'0x<GOT r_offset>': name} (JUMP_SLOT + GLOB_DAT), plt_stubs {'0x<stub>': name}
+                            (x86-64: .plt.sec[i] or .plt[i+1] for the i-th GOT slot, the objdump '<name@plt>' labels)
+      copy_symbols         JSON list of R_*_COPY symbols; glob_dat_symbols JSON list
+      bind_now             'true' iff DT_BIND_NOW / DT_FLAGS BIND_NOW / DT_FLAGS_1 NOW; lazy_binding = PLT relocs
+                            present and not bind_now ('true'/'false')
+      relro                full / partial / none (GNU_RELRO + bind_now, checksec rules); has_relro
+      config_pointer       '0x<r_offset>' of the first relocation whose target is an HCFG blob ('none')."""
+    try:
+        data = bytes(data)
+        R = _elf_relocs(data)
+        if R is None:
+            return None
+        pre, tab = _RT_ARCH.get(R["mach"], ("R_", {}))
+        tn = (lambda t: pre + tab[t] if t in tab else f"unrecognized: {t:x}")
+        rels, counts, kinds = {}, {}, {k: 0 for k in _RT_KINDS}
+        plt, got, cps, gds, stubs, pslot = [], {}, [], [], {}, []
+        cfg_ptr = "none"
+        for nm, ents in R["tables"]:
+            lst = rels.setdefault(nm, [])
+            for r in ents:
+                t = tn(r[1])
+                short = tab.get(r[1], "")
+                lst.append({"offset": f"0x{r[0]:x}", "type": t, "symbol": r[4], "addend": r[3]})
+                counts[t] = counts.get(t, 0) + 1
+                if short in kinds:
+                    kinds[short] += 1
+                if nm.endswith(".plt"):
+                    plt.append(r[4] if r[4] or short != "IRELATIVE" else f"*ABS*+0x{(r[3] or 0):x}")
+                    pslot.append((r[0], plt[-1]))
+                if short in ("JUMP_SLOT", "GLOB_DAT") and r[4]:
+                    got[f"0x{r[0]:x}"] = r[4]
+                if short == "COPY":
+                    cps.append(r[4])
+                elif short == "GLOB_DAT":
+                    gds.append(r[4])
+                if cfg_ptr == "none":
+                    v = _reloc_target(R, data, r)
+                    o = R["v2o"](v) if v is not None else None
+                    if o is not None and data[o:o + 4] == HCFG_MAGIC:
+                        cfg_ptr = f"0x{r[0]:x}"
+        if R["mach"] == 62 and plt:
+            sec = R["secs"].get(".plt.sec")
+            first, s = (0, sec) if sec else (1, R["secs"].get(".plt"))
+            if s and s[0]:
+                for i, (_g, n) in enumerate(sorted(pslot)):   # stub i <-> i-th GOT slot (ld sorts IRELATIVE last in .rela.plt)
+                    stubs[f"0x{s[0] + 16 * (i + first):x}"] = n
+        d = R["dyn"]
+        now = 24 in d or bool(d.get(30, 0) & 8) or bool(d.get(0x6ffffffb, 0) & 1)
+        relro = ("full" if now else "partial") if 0x6474e552 in R["phs"] else "none"
+        tf = (lambda v: "true" if v else "false")
+        out = {"relocation_sections": json.dumps([nm for nm, _ in R["tables"]]), "relocations": rels,
+               "counts": counts, "relocation_count": sum(counts.values()),
+               "plt_imports": json.dumps(plt), "plt_import_count": len(plt), "got_slots": got, "plt_stubs": stubs,
+               "copy_symbols": json.dumps(cps), "glob_dat_symbols": json.dumps(gds),
+               "bind_now": tf(now), "lazy_binding": tf(plt and not now), "relro": relro, "has_relro": tf(relro != "none"),
+               "config_pointer": cfg_ptr}
+        for k, v in kinds.items():
+            out[k.lower() + "_count"] = v
+        for nm, ents in R["tables"]:
+            out[nm.strip(".").replace(".", "_") + "_count"] = len(ents)
+        return out
+    except Exception:  # noqa: BLE001 - truncated / hostile ELF
+        return None
+
+
+def elf_reloc_field(data, name):
+    """One elf_reloc_facts value ('none' for an absent field); None when the input is not a readable ELF."""
+    f = elf_reloc_facts(data)
+    if f is None:
+        return None
+    k = name.strip().lower().replace("-", "_").replace(" ", "_")
+    if k in f:
+        return f[k]
+    for t, n in f["counts"].items():   # 'R_X86_64_JUMP_SLOT' / 'jump_slot' -> its count
+        if k in (t.lower(), t.lower().split("_", 3)[-1], t.lower() + "_count"):
+            return n
+    return "none"
+
+
+# libc names an LD_PRELOAD shim typically re-exports (defined dynsym with one of these names == interposition)
+LIBC_INTERPOSE_NAMES = frozenset((
+    "__libc_start_main open open64 openat openat64 creat fopen fopen64 freopen fdopen close fclose read write pread "
+    "pwrite readv writev fread fwrite fgets fputs puts printf fprintf vprintf vfprintf sprintf snprintf dprintf "
+    "putchar fputc getc fgetc getchar ungetc perror stat stat64 lstat lstat64 fstat fstat64 __xstat __xstat64 "
+    "__lxstat __lxstat64 __fxstat __fxstat64 fstatat statx access faccessat unlink unlinkat rename renameat "
+    "mkdir rmdir chdir getcwd opendir readdir readdir64 closedir scandir readlink readlinkat realpath chmod chown "
+    "truncate ftruncate lseek lseek64 dup dup2 pipe mmap mmap64 munmap mprotect brk sbrk malloc calloc realloc "
+    "free memalign posix_memalign aligned_alloc valloc memcpy memmove memset memcmp strcmp strncmp strcasecmp "
+    "strlen strcpy strncpy strcat strdup strstr strchr strrchr getenv setenv unsetenv putenv secure_getenv "
+    "clearenv dlopen dlsym dlvsym dlclose dlerror dladdr fork vfork clone execve execv execvp execvpe execl "
+    "execlp execle system popen pclose posix_spawn posix_spawnp kill raise signal sigaction exit _exit abort "
+    "atexit getpid getppid getuid geteuid getgid getegid setuid setgid getlogin getpwnam getpwuid gethostname "
+    "uname sysinfo time gettimeofday clock_gettime sleep usleep nanosleep rand srand random srandom ptrace "
+    "prctl ioctl fcntl syscall socket connect bind listen accept accept4 send sendto sendmsg recv recvfrom "
+    "recvmsg getaddrinfo gethostbyname inet_ntoa inet_pton select poll epoll_wait pthread_create "
+    "pthread_mutex_lock SSL_read SSL_write SSL_connect PAM_authenticate pam_authenticate").split())
+
+_VD_FLAGS = ((1, "BASE"), (2, "WEAK"), (4, "INFO"))
+_ST_BIND = {0: "LOCAL", 1: "GLOBAL", 2: "WEAK", 10: "UNIQUE"}
+_ST_TYPE = {0: "NOTYPE", 1: "OBJECT", 2: "FUNC", 3: "SECTION", 4: "FILE", 5: "COMMON", 6: "TLS", 10: "IFUNC"}
+_ST_VIS = {0: "DEFAULT", 1: "INTERNAL", 2: "HIDDEN", 3: "PROTECTED"}
+SYMVER_MAX_SYMS = 1 << 17      # dynsym entries decoded per image
+SYMVER_DISASM_FUNCS = 64       # functions disassembled (RTLD_NEXT / returned-string checks)
+_SV_MEMO = [None, None]
+
+
+def _vd_flags(f):
+    s = [n for b, n in _VD_FLAGS if f & b]
+    return " | ".join(s) if s else "none"
+
+
+def elf_version_facts(data):
+    """GNU symbol versioning + interposition facts of an ELF .so/executable (pure struct walk + capstone), None when
+    not a readable ELF. Labels as readelf -VW / --dyn-syms -W print them. Keys (SPECULATIVE names):
+      verdefs           [{index, flags ('BASE'/'WEAK'/'none'), name, parents [..]}] in .gnu.version_d order ("none")
+      verdef_names      [names] (base = soname first); base_version; version_count (non-base verdefs)
+      verneeds          {file: [version names]} in .gnu.version_r order ("none"); verneed_files; needed_versions
+      dynsyms           [{index, name, label ('cfg_get@@V2' / 'cfg_get@V1' / 'puts@GLIBC_2.2.5'), version, default
+                         ('@@' defined default, '@' hidden/needed, '' none), hidden, versym, bind, type, vis, ndx,
+                         value '0x..', size}] (index 0 skipped)
+      versioned_symbols [labels with @/@@]; default_versions {sym: ver}; hidden_versions [sym@ver];
+      symbol_versions   {sym: [ver, ..]} (defined, default first); multi_version_symbols [sym]
+      weak_symbols / unique_symbols / local_symbols / protected_symbols / hidden_symbols [names] ("none")
+      exported_symbols  [defined non-LOCAL names]; imports [undefined names]
+      interposed        [defined FUNC dynsyms named like libc (open, getenv, dlsym, __libc_start_main ...)]
+      rtld_next_callers [defined functions calling dlsym/dlvsym(RTLD_NEXT=-1, ..)]; calls_rtld_next 'true'/'false'
+      interposed_rtld_next {name: 'true'/'false'}; returns {label: C string a versioned function returns}
+      default_return    string returned by the '@@' version of a multi-version symbol ("none")."""
+    try:
+        if _SV_MEMO[0] is data:
+            return _SV_MEMO[1]
+        f = _elf_version_facts(bytes(data))
+        _SV_MEMO[:] = [data, f]
+        return f
+    except Exception:  # noqa: BLE001 - truncated / hostile ELF
+        return None
+
+
+def _elf_version_facts(data):
+    R = _elf_relocs(data)
+    if R is None:
+        return None
+    E, b64, n_ = R["E"], R["bits"] == 64, len(data)
+    secs, dyn, v2o = R["secs"], R["dyn"], R["v2o"]
+    es = 24 if b64 else 16
+
+    def loc(sec, tag):   # (file offset, size|None) from the section header, else the PT_DYNAMIC tag
+        s = secs.get(sec)
+        if s and s[1] and s[1] < n_:
+            return s[1], s[2]
+        o = v2o(dyn[tag]) if tag in dyn else None
+        return (o, None) if o is not None else (None, None)
+    so, ssz = loc(".dynsym", 6)
+    sto, stsz = loc(".dynstr", 5)
+    stsz = stsz or dyn.get(10) or (n_ - sto if sto is not None else 0)
+
+    def cstr(o, lim=512):
+        if sto is None or not 0 <= o < stsz or sto + o >= n_:
+            return ""
+        e = data.find(b"\0", sto + o, sto + o + lim)
+        return data[sto + o:e if e >= 0 else sto + o].decode("latin-1")
+    if so is None or sto is None:
+        nsym = 0
+    elif ssz:
+        nsym = ssz // es
+    else:
+        nsym = (sto - so) // es if sto > so else 4096
+    nsym = max(0, min(nsym, (n_ - so) // es if so is not None else 0, SYMVER_MAX_SYMS))
+    syms = []
+    for j in range(nsym):
+        q = so + j * es
+        if b64:
+            nm, info, oth, shx, val, sz = struct.unpack_from(E + "IBBHQQ", data, q)
+        else:
+            nm, val, sz, info, oth, shx = struct.unpack_from(E + "IIIBBH", data, q)
+        syms.append((cstr(nm, 256), info >> 4, info & 15, oth & 3, shx, val, sz))
+    # .gnu.version_d: Verdef {vd_version u16, vd_flags u16, vd_ndx u16, vd_cnt u16, vd_hash u32, vd_aux u32, vd_next}
+    verdefs, vdname = [], {}
+    o, _ = loc(".gnu.version_d", 0x6ffffffc)
+    seen = set()
+    while o is not None and o + 20 <= n_ and len(verdefs) < 4096 and o not in seen:
+        seen.add(o)
+        _v, fl, ndx, cnt, _h, aux, nxt = struct.unpack_from(E + "HHHHIII", data, o)
+        names, a = [], o + aux
+        for _k in range(min(cnt, 64)):
+            if a + 8 > n_:
+                break
+            vn, an = struct.unpack_from(E + "II", data, a)
+            names.append(cstr(vn))
+            if not an:
+                break
+            a += an
+        if names:
+            verdefs.append({"index": ndx, "flags": _vd_flags(fl), "name": names[0], "parents": names[1:]})
+            vdname[ndx] = names[0]
+        if not nxt:
+            break
+        o += nxt
+    # .gnu.version_r: Verneed {vn_version u16, vn_cnt u16, vn_file u32, vn_aux u32, vn_next u32};
+    #                 Vernaux {vna_hash u32, vna_flags u16, vna_other u16, vna_name u32, vna_next u32}
+    verneeds, vnname = {}, {}
+    o, _ = loc(".gnu.version_r", 0x6ffffffe)
+    seen = set()
+    while o is not None and o + 16 <= n_ and len(verneeds) < 4096 and o not in seen:
+        seen.add(o)
+        _v, cnt, fil, aux, nxt = struct.unpack_from(E + "HHIII", data, o)
+        lst, a = verneeds.setdefault(cstr(fil), []), o + aux
+        for _k in range(min(cnt, 256)):
+            if a + 16 > n_:
+                break
+            _h, _fl, oth, vn, an = struct.unpack_from(E + "IHHII", data, a)
+            lst.append(cstr(vn))
+            vnname[oth] = lst[-1]
+            if not an:
+                break
+            a += an
+        if not nxt:
+            break
+        o += nxt
+    vo, _ = loc(".gnu.version", 0x6ffffff0)
+    maxdef = max(vdname) if vdname else 0
+    dsy, symvers = [], {}
+    for j, (nm, bind, typ, vis, shx, val, sz) in enumerate(syms):
+        if j == 0:
+            continue
+        vs = struct.unpack_from(E + "H", data, vo + 2 * j)[0] if vo is not None and vo + 2 * j + 2 <= n_ else 0
+        idx, hid = vs & 0x7fff, bool(vs & 0x8000)
+        ver, how = "", ""
+        if idx > 1:   # readelf get_symbol_version_string: defined & visible -> verdef, else verneed
+            if shx != 0 and not hid and idx <= maxdef and idx in vdname:
+                ver, how = vdname[idx], "@@"
+            elif idx in vnname:
+                ver, how = vnname[idx], "@"
+            elif idx in vdname:
+                ver, how = vdname[idx], "@"
+        lab = nm
+        if ver and not (shx == 0xfff1 and nm == ver):   # the version's own ABS symbol prints bare
+            lab = f"{nm}{how}{ver}"
+        d = {"index": j, "name": nm, "label": lab, "version": ver or "none", "default": how, "hidden": hid,
+             "versym": idx, "bind": _ST_BIND.get(bind, str(bind)), "type": _ST_TYPE.get(typ, str(typ)),
+             "vis": _ST_VIS[vis], "ndx": "UND" if shx == 0 else "ABS" if shx == 0xfff1 else shx,
+             "value": f"0x{val:x}", "size": sz, "_va": val}
+        dsy.append(d)
+        if ver and shx != 0 and shx != 0xfff1:
+            symvers.setdefault(nm, []).append((how != "@@", ver))
+    nz = (lambda v: v if v else "none")
+    defd = [d for d in dsy if d["ndx"] != "UND"]
+    names_of = (lambda pred: nz(list(dict.fromkeys(d["name"] for d in dsy if d["name"] and pred(d)))))
+    sv = {k: [v for _h, v in sorted(vs)] for k, vs in symvers.items()}
+    interposed = list(dict.fromkeys(d["name"] for d in defd if d["name"] in LIBC_INTERPOSE_NAMES
+                                    and d["type"] in ("FUNC", "IFUNC", "NOTYPE") and d["bind"] != "LOCAL"))
+    multi = [k for k, v in sv.items() if len(v) > 1]
+    rtl, rets = _symver_code(data, R, defd, interposed, multi)
+    dret = "none"
+    for k in multi:
+        lab = f"{k}@@{sv[k][0]}"
+        if rets.get(lab):
+            dret = rets[lab]
+            break
+    for d in dsy:
+        d.pop("_va", None)
+    return {
+        "verdefs": nz(verdefs), "verdef_names": nz([v["name"] for v in verdefs]),
+        "base_version": next((v["name"] for v in verdefs if v["flags"].startswith("BASE")), "none"),
+        "version_count": len([v for v in verdefs if not v["flags"].startswith("BASE")]),
+        "verneeds": nz(verneeds), "verneed_files": nz(list(verneeds)),
+        "needed_versions": nz([v for vs in verneeds.values() for v in vs]),
+        "dynsyms": nz(dsy), "versioned_symbols": nz([d["label"] for d in dsy if d["label"] != d["name"]]),
+        "default_versions": nz({d["name"]: d["version"] for d in dsy if d["default"] == "@@" and d["label"] != d["name"]}),
+        "hidden_versions": nz([d["label"] for d in dsy if d["hidden"] and d["ndx"] != "UND" and d["version"] != "none"]),
+        "symbol_versions": nz(sv), "multi_version_symbols": nz(multi),
+        "weak_symbols": names_of(lambda d: d["bind"] == "WEAK"),
+        "unique_symbols": names_of(lambda d: d["bind"] == "UNIQUE"),
+        "local_symbols": names_of(lambda d: d["bind"] == "LOCAL"),
+        "protected_symbols": names_of(lambda d: d["vis"] == "PROTECTED"),
+        "hidden_symbols": names_of(lambda d: d["vis"] in ("HIDDEN", "INTERNAL")),
+        "exported_symbols": names_of(lambda d: d["ndx"] != "UND" and d["bind"] != "LOCAL"),
+        "imports": names_of(lambda d: d["ndx"] == "UND"),
+        "interposed": nz(interposed), "rtld_next_callers": nz(rtl),
+        "calls_rtld_next": "true" if rtl else "false",
+        "interposed_rtld_next": nz({k: "true" if k in rtl else "false" for k in interposed}),
+        "returns": nz(rets), "default_return": dret,
+    }
+
+
+def _symver_code(data, R, defd, interposed, multi):
+    """(functions calling dlsym/dlvsym with RTLD_NEXT (-1) as 1st arg, {label: string a short versioned function
+    returns}) via capstone over x86 / x86-64 function bodies (dynsym st_size); helpers they call directly are followed
+    one level (a lazy `real_open = dlsym(RTLD_NEXT, ..)` resolver)."""
+    if R["mach"] not in (62, 3):
+        return [], {}
+    import capstone
+    b64, v2o = R["mach"] == 62, R["v2o"]
+    md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64 if b64 else capstone.CS_MODE_32)
+    dls = set()   # dlsym call targets: PLT stubs + GOT slots (call [rip+X] under -fno-plt)
+    f = elf_reloc_facts(data) or {}
+    for k, v in (f.get("plt_stubs") or {}).items():
+        if v in ("dlsym", "dlvsym"):
+            dls.add(int(k, 16))
+    for k, v in (f.get("got_slots") or {}).items():
+        if v in ("dlsym", "dlvsym"):
+            dls.add(int(k, 16))
+    if not b64:   # i386 PLT: .plt[i+1] <-> i-th .rel.plt entry
+        s = R["secs"].get(".plt")
+        for nm, ents in R["tables"]:
+            if nm.endswith(".plt") and s:
+                for i, r in enumerate(ents):
+                    if r[4] in ("dlsym", "dlvsym"):
+                        dls.add(s[0] + 16 * (i + 1))
+    budget = [SYMVER_DISASM_FUNCS * 4]
+    ts = R["secs"].get(".text")
+    text = (ts[0], ts[0] + ts[2]) if ts else (0, 1 << 64)
+
+    def body(va, size):
+        o = v2o(va)
+        if o is None or budget[0] <= 0:
+            return []
+        budget[0] -= 1
+        return list(md.disasm_lite(data[o:o + (size if 0 < size <= 1 << 16 else 2048)], va))
+
+    def tgt(a, sz, op):
+        m = re.fullmatch(r"(?:(?:qword|dword) ptr )?\[rip ([+-]) (0x[0-9a-f]+|\d+)\]", op)
+        if m:
+            return a + sz + int(m.group(2), 0) * (1 if m.group(1) == "+" else -1)
+        try:
+            return int(op, 0)
+        except ValueError:
+            return None
+
+    def rtld(insns, depth):
+        neg, pushes = False, []
+        for a, sz, mn, op in insns:
+            if mn in ("call", "jmp"):
+                t = tgt(a, sz, op)
+                if t in dls and (neg or "0xffffffff" in pushes[-3:]):
+                    return True
+                if mn == "call" and depth and t is not None and text[0] <= t < text[1]:
+                    if rtld(body(t, 0), depth - 1):
+                        return True
+                neg, pushes = False, []
+                if mn == "jmp" and t is None and depth == 0:
+                    break
+                continue
+            if mn in ("ret", "hlt", "ud2"):
+                if depth == 0:
+                    break
+                continue
+            if op.startswith(("rdi,", "edi,", "dil,", "di,")) and mn not in ("cmp", "test", "push"):
+                neg = mn in ("mov", "or") and op.split(",", 1)[1].strip() in ("0xffffffffffffffff", "-1")
+            elif mn == "push":
+                pushes.append(op)
+            elif mn == "mov" and op.startswith("dword ptr [esp],"):
+                pushes.append(op.split(",", 1)[1].strip())
+        return False
+    rtl = []
+    for d in defd:
+        # every interposed libc name; other exports only in a small (shim-sized) .so
+        if d["type"] in ("FUNC", "IFUNC") and (d["name"] in interposed or len(defd) <= SYMVER_DISASM_FUNCS):
+            if rtld(body(d["_va"], d["size"]), 1):
+                rtl.append(d["name"])
+    rets = {}
+    for d in defd:
+        if d["name"] in multi and d["type"] == "FUNC" and 0 < d["size"] <= 256:
+            for a, sz, mn, op in body(d["_va"], d["size"]):
+                if mn == "lea" and op.startswith(("rax,", "eax,")):
+                    t = tgt(a, sz, op.split(",", 1)[1].strip())
+                    o = v2o(t) if t is not None else None
+                    if o is not None:
+                        e = data.find(b"\0", o, o + 4096)
+                        s = data[o:e] if e > o else b""
+                        if s and all(32 <= c < 127 for c in s):
+                            rets[d["label"]] = s.decode()
+                    break
+                if mn == "ret":
+                    break
+    return list(dict.fromkeys(rtl)), rets
+
+
+def elf_version_field(data, name):
+    """One elf_version_facts value by key ("none" for an absent field / unknown key; None when not a readable ELF).
+    Per-symbol keys: version:<sym> (default '@@' version first, else the needed/hidden one), versions:<sym>,
+    label:<sym>, binding:<sym>, visibility:<sym>, type:<sym>, interposed:<sym> / rtld_next:<sym> ('true'/'false'),
+    returns:<sym|label> (the '@@' one for a bare multi-version name), verneed:<file>, flags:<ver>, index:<ver>."""
+    try:
+        f = elf_version_facts(data)
+        if not isinstance(f, dict):
+            return f
+        k, _, arg = name.strip().partition(":")
+        k, arg = k.strip().lower().replace("-", "_").replace(" ", "_"), arg.strip()
+        if not arg:
+            return f.get(k, "none")
+        ds = [d for d in f["dynsyms"] if d["name"] == arg or d["label"] == arg] if f["dynsyms"] != "none" else []
+        ds.sort(key=lambda d: (d["label"] != arg, d["default"] != "@@", d["ndx"] == "UND"))
+        if k in ("version", "versions", "label", "binding", "bind", "visibility", "vis", "type"):
+            if not ds:
+                return "none"
+            if k == "versions":
+                return [d["version"] for d in ds if d["version"] != "none"] or "none"
+            return ds[0][{"version": "version", "label": "label", "binding": "bind", "bind": "bind",
+                          "visibility": "vis", "vis": "vis", "type": "type"}[k]]
+        if k in ("interposed", "rtld_next", "calls_rtld_next"):
+            lst = f["interposed"] if k == "interposed" else f["rtld_next_callers"]
+            return "true" if lst != "none" and arg in lst else "false"
+        if k == "returns":
+            r = f["returns"] if f["returns"] != "none" else {}
+            for d in ds:
+                if d["label"] in r:
+                    return r[d["label"]]
+            return r.get(arg, "none")
+        if k == "verneed":
+            return (f["verneeds"] if f["verneeds"] != "none" else {}).get(arg, "none")
+        if k in ("flags", "index", "parents"):
+            v = next((v for v in (f["verdefs"] if f["verdefs"] != "none" else []) if v["name"] == arg), None)
+            return "none" if v is None else (v[k] or "none") if k == "parents" else v[k]
+        return "none"
+    except Exception:  # noqa: BLE001
+        return None
+
+
+RELOC_TABLE_RUNS = 4096   # pointer-table runs looked at per image; nested scans capped separately
+
+
+def _reloc_ptr_scan(data, emit, late, deadline):
+    """HCFG pieces reachable only through relocations: a table of pointers (bytes 0 on disk under lld / RELA, or the
+    addend written in place by GNU ld) filled by RELATIVE (or defined-symbol ABS/GLOB_DAT) relocations at a constant
+    stride. stride = pointer size: NUL-terminated chunks; stride = 2 pointers: {ptr, len} pairs (len read on disk at
+    slot + ptr size, else NUL-terminated). Chunks are joined in TABLE order (not file order) and the join is scanned;
+    only crc-valid blobs are emitted: 'reloc-ptrtable' (raw) / 'reloc-ptrtable-<inner encoding>', offset = file
+    offset of the chunk holding the blob's first byte, detail table=0x<vaddr> chunks=N."""
+    R = _elf_relocs(data)
+    if R is None:
+        return
+    psz, v2o, E = R["psz"], R["v2o"], R["E"]
+    slots = {}
+    for _nm, ents in R["tables"]:
+        for r in ents:
+            v = _reloc_target(R, data, r)
+            if v is not None:
+                slots.setdefault(r[0], v)
+    if len(slots) < 2:
+        return
+    offs = sorted(slots)
+    runs = []
+    for stride in (psz, 2 * psz):
+        i = 0
+        while i < len(offs) and len(runs) < RELOC_TABLE_RUNS:
+            j = i
+            while j + 1 < len(offs) and offs[j + 1] - offs[j] == stride:
+                j += 1
+            if j > i:   # {ptr, len} tables: the len words are not relocated -> consecutive at 2*psz
+                runs.append((stride, offs[i:j + 1]))
+            i = j + 1
+    rd = (lambda o: struct.unpack_from(E + ("Q" if psz == 8 else "I"), data, o)[0])
+    nested = [64]
+    groups = []   # each run split at entries that are not a readable chunk (a junk/NUL target ends a sub-table)
+    for stride, run in runs:
+        parts, total = [], 0
+        for so in run + [None]:
+            o = v2o(slots[so]) if so is not None else None
+            n = None
+            if o is not None and stride == 2 * psz:
+                lo = v2o(so + psz)
+                n = rd(lo) if lo is not None and lo + psz <= len(data) else None
+                n = n if n and n <= 4096 else None
+            if o is not None and n is None:
+                e = data.find(b"\0", o, o + 4096)
+                n = e - o if e >= 0 else 0
+            if o is None or n <= 0 or o + n > len(data) or total + n > 1 << 16:
+                if len(parts) >= 2:
+                    groups.append(parts)
+                parts, total = [], 0
+                continue
+            parts.append((o, data[o:o + n]))
+            total += n
+    for parts in groups:
+        if late() or nested[0] <= 0:
+            return
+        cat = b"".join(p for _, p in parts)
+        if not _ANCHORS.search(cat):
+            continue
+        nested[0] -= 1
+        for h in hcfg_scan(cat, deadline=deadline, stop_on_valid=True, _depth=1):
+            if not h.valid:
+                continue
+            at, pos = h.offset, parts[0][0]
+            for o, p in parts:
+                if at < len(p):
+                    pos = o + at
+                    break
+                at -= len(p)
+            blob = HCFG_MAGIC + struct.pack("<BBHI", h.version, h.key, h.length, h.crc) + bytes(c ^ h.key for c in h.plain)
+            emit(pos, "reloc-ptrtable" + ("" if h.encoding == "raw" else "-" + h.encoding), blob,
+                 f"chunks={len(parts)}")
+            return
 
 
 _WASM_MEMARG = set(range(0x28, 0x3f))            # loads/stores: memarg (align [+memidx], offset)
@@ -4742,6 +5807,9 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False, _depth=0):
         # SHF_COMPRESSED (Chdr zlib/zstd) / legacy .zdebug section, decoded by its header (a zlib window / zstd frame
         # the anchor + zpack passes miss)
         _zsec_scan(data, emit, late)
+    if not valid() and not late() and _depth == 0 and data[:4] == b"\x7fELF":
+        # PIE pointer table filled only by RELATIVE relocations (slots 0 on disk): join the chunks in TABLE order
+        _reloc_ptr_scan(data, emit, late, deadline)
     if not valid() and not late():
         # ROT13 / case-swapped base64, optionally reversed per line: one bytes.find per transformed 'SENGR' (kept out
         # of the anchor regex -- first bytes e/r/s/f made that pass ~33% slower)
@@ -4924,6 +5992,17 @@ def hcfg_scan(data, *, deadline=None, ext=None, stop_on_valid=False, _depth=0):
             if j >= 0:
                 emit(r["packed_offset"] + j, "overlay-stub", r["out"][j:],
                      f"overlay@{r['overlay_offset']} {r['method']} {r['transform']}" + (f" unpacked+{j}" if j else ""))
+    if ext and not valid() and not late() and _depth == 0 and (data[:4] == b"PK\x03\x04" or (
+            data[:2] == b"MZ" and data.find(b"BSJB", 0, 1 << 24) > 0)):
+        # a second module loaded by reflection (Costura deflate resource -> Assembly.Load, xor'd class -> defineClass):
+        # decode it and scan it; offset INSIDE the decoded module, detail module=<path> <stored enc> data@<stored start>
+        for m in embedded_modules(data, hcfg="encoded", deadline=deadline):
+            h = m.get("_hit")
+            if h is not None:
+                h.encoding = "module-" + h.encoding
+                h.detail = f"module={m['path']} {m['encoding']} data@{m['stored_offset']} {h.detail}".strip()
+                hits.append(h)
+                break
     return _rank(hits)
 
 
@@ -8075,7 +9154,1334 @@ def dotnet_meta_field(data, name):
     f = dotnet_meta_facts(data)
     if f is None:
         return None
-    return f.get(_DN_FIELD_ALIASES.get(name, name))
+    k = _DN_FIELD_ALIASES.get(name, name)
+    if k not in f:   # P/Invoke bridge fields (pinvoke_count, native_modules, <method>_module, ...)
+        return (dotnet_pinvoke_facts(data) or {}).get(k)
+    return f[k]
+
+
+_FS_CLOSURE = re.compile(r"@\d+(?:-\d+)*$")   # F# closure / inner-lambda class: main@10, main@10-3, fs@7
+_DN_LANG_ALIASES = {"dotnet_language": "language", "lang": "language", "fsharp_core": "fsharp_core_version",
+                    "fsharp_core_ref_version": "fsharp_core_version_ref", "closures_count": "closure_count",
+                    "anonymous_type_count": "anon_type_count", "fsharp_resource_names": "fsharp_resources"}
+
+
+def dotnet_language_of(data):
+    """Source language of a .NET (CLI) assembly from its ECMA-335 metadata (dnfile) -> {language: csharp / fsharp /
+    vbnet / cppcli, evidence [..], confidence "compiler" (compiler-emitted artifacts) / "reference" (AssemblyRef only) /
+    "default", + language facts}. Compiler artifacts win over references (a C# app may reference FSharp.Core):
+      F#   <StartupCode$asm> namespaces + `$Module` types, FSharpSignature*/FSharpOptimization*Data.<asm> resources,
+           closures `name@<line>[-n]`, <PrivateImplementationDetails$asm>; ref FSharp.Core
+      VB   _Closure$__ / VB$AnonymousType_ / VB$StateMachine_ types, $VB$Local_ / $VB$Me fields, _Lambda$__ methods,
+           `My` namespace (MyProject / MyApplication); ref Microsoft.VisualBasic[.Core]
+      C++/CLI  <CrtImplementationDetails> namespace, COR flags without ILONLY (mixed mode); ref Microsoft.VisualC
+      C#   default; <>c / <>c__DisplayClass closures, <Main>$ top-level statements.
+    facts: assembly_name, assembly_version, assembly_refs, fsharp_core_version_ref (FSharp.Core AssemblyRef a.b.c.d),
+    fsharp_core_version_def (AssemblyDef version when the member IS FSharp.Core.dll), fsharp_core_version (ref, else
+    def), fsharp_resources / fsharp_resource_count, startup_code (the <StartupCode$X> X), vb_runtime_ref / vb_runtime_version,
+    vb_my_namespace, vb_local_fields, closures / closure_count, anon_types / anon_type_count, il_only, scripting_host
+    (ironpython / powershell / none). Lists stay lists; absent -> "none". None when not a CLI assembly; never raises."""
+    try:
+        import dnfile
+        pe = dnfile.dnPE(data=bytes(data), fast_load=True, clr_lazy_load=True)   # rows on demand: FSharp.Core 1.2 s -> ~0.1 s
+        pe.parse_data_directories(directories=[14])
+        net = pe.net
+        if net is None or net.mdtables is None:
+            return None
+        t = net.mdtables
+        rows = lambda tab: list(getattr(t, tab, None) or ())   # noqa: E731
+        nm = lambda x: "" if x is None else str(x)   # noqa: E731
+        ver = lambda r: f"{r.MajorVersion}.{r.MinorVersion}.{r.BuildNumber}.{r.RevisionNumber}"   # noqa: E731
+        asm = rows("Assembly")
+        aname = nm(asm[0].Name) if asm else "none"
+        refs = {}
+        for r in rows("AssemblyRef"):
+            refs.setdefault(nm(r.Name), ver(r))
+        types = [(nm(x.TypeNamespace), nm(x.TypeName)) for x in rows("TypeDef")]
+        fields = [nm(f.Name) for f in rows("Field")]
+        methods = [nm(m.Name) for m in rows("MethodDef")]
+        res = [nm(r.Name) for r in rows("ManifestResource")]
+        try:
+            il_only = bool(int(net.struct.Flags) & 1)
+        except Exception:   # noqa: BLE001
+            il_only = True
+        out = {"assembly_name": aname or "none", "assembly_version": ver(asm[0]) if asm else "none",
+               "assembly_refs": list(refs)}
+        fs_res = [r for r in res if r.startswith(("FSharpSignature", "FSharpOptimization"))]
+        startup = sorted({ns.split(">", 1)[0][len("<StartupCode$"):] for ns, _ in types if ns.startswith("<StartupCode$")})
+        fs_clo = [n for ns, n in types if _FS_CLOSURE.search(n)]
+        vb_clo = [n for ns, n in types if n.startswith("_Closure$__")]
+        cs_clo = [n for ns, n in types if n == "<>c" or n.startswith("<>c__DisplayClass")]
+        vb_types = [n for ns, n in types if n.startswith(("VB$AnonymousType_", "VB$StateMachine_"))]
+        vb_fields = [f for f in fields if f.startswith(("$VB$Local_", "$VB$Me", "$VB$NonLocal_", "$VB$ResumableLocal_"))]
+        my_ns = any(ns == "My" or ns.endswith(".My") for ns, _ in types) and \
+            any(n in ("MyProject", "MyApplication", "MySettings", "MyComputer") for _, n in types)
+        crt = any(ns == "<CrtImplementationDetails>" or n.startswith("<CrtImplementationDetails>") for ns, n in types)
+        fs_core = refs.get("FSharp.Core")
+        is_fs_core = aname == "FSharp.Core"
+        vb_ref = next((r for r in refs if r in ("Microsoft.VisualBasic", "Microsoft.VisualBasic.Core")), None)
+        strong = {"fsharp": [], "vbnet": [], "cppcli": [], "csharp": []}
+        if startup:
+            strong["fsharp"].append("<StartupCode$%s> namespace" % startup[0])
+        if fs_res:
+            strong["fsharp"].append("resource " + fs_res[0])
+        if fs_clo and (startup or fs_res):
+            strong["fsharp"].append(f"{len(fs_clo)} closure types name@line ({fs_clo[0]})")
+        if vb_clo:
+            strong["vbnet"].append("type " + vb_clo[0])
+        if vb_types:
+            strong["vbnet"].append("type " + vb_types[0])
+        if vb_fields:
+            strong["vbnet"].append("field " + vb_fields[0])
+        if any(m.startswith("_Lambda$__") for m in methods):
+            strong["vbnet"].append("method _Lambda$__*")
+        if my_ns:
+            strong["vbnet"].append("My namespace (MyProject)")
+        if crt:
+            strong["cppcli"].append("<CrtImplementationDetails> types")
+        if not il_only:
+            strong["cppcli"].append("COR flags: mixed mode (no ILONLY)")
+        if cs_clo:
+            strong["csharp"].append("type " + cs_clo[0])
+        if any(m == "<Main>$" for m in methods):
+            strong["csharp"].append("top-level statements <Main>$")
+        weak = {"fsharp": ["AssemblyRef FSharp.Core " + fs_core] if fs_core else [],
+                "vbnet": [f"AssemblyRef {vb_ref} {refs[vb_ref]}"] if vb_ref else [],
+                "cppcli": ["AssemblyRef Microsoft.VisualC"] if "Microsoft.VisualC" in refs else []}
+        if is_fs_core:
+            weak["fsharp"].append("AssemblyDef FSharp.Core " + out["assembly_version"])
+        lang = next((k for k in ("cppcli", "fsharp", "vbnet") if strong[k]), None)
+        if lang is None and strong["csharp"]:
+            lang, conf = "csharp", "compiler"
+        elif lang is None:
+            lang = next((k for k in ("fsharp", "vbnet", "cppcli") if weak[k]), None)
+            conf = "reference" if lang else "default"
+            lang = lang or "csharp"
+        else:
+            conf = "compiler"
+        ev = ["PE CLI header + metadata"] + strong.get(lang, []) + weak.get(lang, [])
+        host = "ironpython" if "IronPython" in refs or "Microsoft.Scripting" in refs else \
+            ("powershell" if "System.Management.Automation" in refs else "none")
+        clo = {"fsharp": fs_clo, "vbnet": vb_clo, "csharp": cs_clo}.get(lang, cs_clo)
+        anon = [n for _, n in types if n.startswith(("<>f__AnonymousType", "VB$AnonymousType_"))]
+        out.update(language=lang, confidence=conf, evidence=ev,
+                   fsharp_core_version_ref=fs_core or "none",
+                   fsharp_core_version_def=out["assembly_version"] if is_fs_core else "none",
+                   fsharp_core_version=fs_core or (out["assembly_version"] if is_fs_core else "none"),
+                   fsharp_resources=fs_res, fsharp_resource_count=str(len(fs_res)),
+                   startup_code=startup[0] if startup else "none",
+                   vb_runtime_ref=vb_ref or "none", vb_runtime_version=refs[vb_ref] if vb_ref else "none",
+                   vb_my_namespace="true" if my_ns else "false", vb_local_fields=str(len(vb_fields)),
+                   closures=clo, closure_count=str(len(clo)), anon_types=anon, anon_type_count=str(len(anon)),
+                   il_only="true" if il_only else "false", scripting_host=host)
+        return out
+    except Exception:   # noqa: BLE001 -- hostile/truncated PE: cannot answer
+        return None
+
+
+def dotnet_language_field(data, name="language"):
+    """One dotnet_language_of value (lists as compact JSON); "none" when not a CLI assembly or the field is unknown."""
+    try:
+        f = dotnet_language_of(data)
+        v = (f or {}).get(_DN_LANG_ALIASES.get(name, name), "none")
+        return json.dumps(v, separators=(",", ":"), ensure_ascii=False) if isinstance(v, list) else v
+    except Exception:   # noqa: BLE001
+        return "none"
+
+
+# ------------------------------------------------------------------ .NET P/Invoke bridge (D22 theme; labels SPECULATIVE)
+_PINV_CC = {1: "winapi", 2: "cdecl", 3: "stdcall", 4: "thiscall", 5: "fastcall"}   # MappingFlags & 0x700 >> 8
+_PINV_CS = {0: "none", 2: "ansi", 4: "unicode", 6: "auto"}                          # MappingFlags & 0x6
+_PINV_TRI = {0: "default", 1: "true", 2: "false"}                                   # BestFit 0x30 / ThrowOnUnmappable 0x3000
+_PINV_ET = {1: ("void", "void"), 2: ("bool", "bool"), 3: ("char", "char"), 4: ("sbyte", "int8"), 5: ("byte", "uint8"),
+            6: ("short", "int16"), 7: ("ushort", "uint16"), 8: ("int", "int32"), 9: ("uint", "uint32"),
+            0xA: ("long", "int64"), 0xB: ("ulong", "uint64"), 0xC: ("float", "float32"), 0xD: ("double", "float64"),
+            0xE: ("string", "string"), 0x16: ("TypedReference", "typedref"), 0x18: ("IntPtr", "native int"),
+            0x19: ("UIntPtr", "native uint"), 0x1C: ("object", "object")}
+_PINV_FNPTR_CC = {1: "cdecl", 2: "stdcall", 3: "thiscall", 4: "fastcall", 9: "unmanaged"}
+_PINV_NATIVE_APIS = {("NativeLibrary", "Load"), ("NativeLibrary", "TryLoad"), ("NativeLibrary", "GetExport"),
+                     ("NativeLibrary", "TryGetExport"), ("NativeLibrary", "Free"), ("NativeLibrary", "GetMainProgramHandle"),
+                     ("Marshal", "GetDelegateForFunctionPointer"), ("Marshal", "GetFunctionPointerForDelegate"),
+                     ("NativeLibrary", "SetDllImportResolver")}
+# UnmanagedType (ECMA-335 II.23.4 NATIVE_TYPE_*) by FieldMarshal blob byte 0 -> the C# enum name
+_PINV_UT = {2: "Bool", 3: "I1", 4: "U1", 5: "I2", 6: "U2", 7: "I4", 8: "U4", 9: "I8", 10: "U8", 11: "R4", 12: "R8",
+            15: "Currency", 19: "BStr", 20: "LPStr", 21: "LPWStr", 22: "LPTStr", 23: "ByValTStr", 25: "IUnknown",
+            26: "IDispatch", 27: "Struct", 28: "Interface", 29: "SafeArray", 30: "ByValArray", 31: "SysInt",
+            32: "SysUInt", 34: "VBByRefStr", 35: "AnsiBStr", 36: "TBStr", 37: "VariantBool", 38: "FunctionPtr",
+            40: "AsAny", 42: "LPArray", 43: "LPStruct", 44: "CustomMarshaler", 45: "Error", 46: "IInspectable",
+            47: "HString", 48: "LPUTF8Str"}
+
+
+def _pinv_cu(b, p):
+    """ECMA-335 II.23.2 compressed unsigned int -> (value, next)."""
+    x = b[p]
+    if not x & 0x80:
+        return x, p + 1
+    if not x & 0x40:
+        return ((x & 0x3F) << 8) | b[p + 1], p + 2
+    return ((x & 0x1F) << 24) | int.from_bytes(b[p + 1:p + 4], "big"), p + 4
+
+
+def _pinv_type(b, p, tname, depth=0):
+    """One sig Type at p -> ((csharp, il), next). tname(coded TypeDefOrRef) -> simple type name."""
+    if depth > 16:
+        raise ValueError("deep sig")
+    e = b[p]
+    p += 1
+    if e in _PINV_ET:
+        return _PINV_ET[e], p
+    if e in (0x1F, 0x20):   # CMOD_REQD / CMOD_OPT: skip the modifier type
+        _, p = _pinv_cu(b, p)
+        return _pinv_type(b, p, tname, depth + 1)
+    if e == 0x45:           # PINNED
+        return _pinv_type(b, p, tname, depth + 1)
+    if e in (0x0F, 0x10):   # PTR / BYREF
+        (c, i), p = _pinv_type(b, p, tname, depth + 1)
+        return ((c + "*", i + "*") if e == 0x0F else ("ref " + c, i + "&")), p
+    if e in (0x11, 0x12):   # VALUETYPE / CLASS
+        v, p = _pinv_cu(b, p)
+        n = tname(v)
+        return (n, n), p
+    if e == 0x1D:           # SZARRAY
+        (c, i), p = _pinv_type(b, p, tname, depth + 1)
+        return (c + "[]", i + "[]"), p
+    if e == 0x14:           # ARRAY: rank, sizes, lobounds
+        (c, i), p = _pinv_type(b, p, tname, depth + 1)
+        rank, p = _pinv_cu(b, p)
+        for _ in range(2):
+            n, p = _pinv_cu(b, p)
+            for _ in range(n):
+                _, p = _pinv_cu(b, p)
+        s = "[" + "," * max(rank - 1, 0) + "]"
+        return (c + s, i + s), p
+    if e in (0x13, 0x1E):   # VAR / MVAR
+        n, p = _pinv_cu(b, p)
+        return (f"T{n}", ("!" if e == 0x13 else "!!") + str(n)), p
+    if e == 0x15:           # GENERICINST (CLASS|VALUETYPE) Type GenArgCount Type*
+        (c, i), p = _pinv_type(b, p, tname, depth + 1)
+        n, p = _pinv_cu(b, p)
+        args = []
+        for _ in range(min(n, 32)):
+            a, p = _pinv_type(b, p, tname, depth + 1)
+            args.append(a)
+        c = c.split("`")[0]
+        i = i.split("`")[0]
+        return (c + "<" + ",".join(x[0] for x in args) + ">", i + "<" + ",".join(x[1] for x in args) + ">"), p
+    if e == 0x1B:           # FNPTR MethodDefSig/RefSig
+        cc = b[p] & 0xF
+        r, ps, p = _pinv_msig(b, p, tname, depth + 1)
+        k = _PINV_FNPTR_CC.get(cc)
+        head = f"delegate* unmanaged[{k.capitalize()}]" if k and k != "unmanaged" else (
+            "delegate* unmanaged" if k else "delegate*")
+        c = head + "<" + ",".join([x[0] for x in ps] + [r[0]]) + ">"
+        return (c, "method " + (f"unmanaged {k} " if k else "") + r[1] + " *(" + ",".join(x[1] for x in ps) + ")"), p
+    raise ValueError(f"element type 0x{e:x}")
+
+
+def _pinv_msig(b, p, tname, depth=0):
+    """MethodDefSig at p -> (ret, [params], next); each (csharp, il)."""
+    cc = b[p]
+    p += 1
+    if cc & 0x10:
+        _, p = _pinv_cu(b, p)
+    n, p = _pinv_cu(b, p)
+    ret, p = _pinv_type(b, p, tname, depth)
+    ps = []
+    for _ in range(min(n, 256)):
+        if b[p] == 0x41:    # SENTINEL (vararg call site)
+            p += 1
+        t, p = _pinv_type(b, p, tname, depth)
+        ps.append(t)
+    return ret, ps, p
+
+
+def _pinv_named(blob, want="EntryPoint"):
+    """Named string arg `want` of a custom-attribute blob (after the fixed args, which must be 0 or 1 SerString)."""
+    try:
+        if blob[:2] != b"\x01\x00":
+            return None
+        p = 2
+        for nfix in (1, 0):   # LibraryImport(string) has one fixed SerString, UnmanagedCallersOnly() none
+            q = p
+            try:
+                if nfix:
+                    if blob[q] == 0xFF:
+                        q += 1
+                    else:
+                        n, q = _pinv_cu(blob, q)
+                        q += n
+                cnt = int.from_bytes(blob[q:q + 2], "little")
+                q += 2
+                got = None
+                for _ in range(cnt):
+                    kind, et = blob[q], blob[q + 1]
+                    q += 2
+                    if kind not in (0x53, 0x54):
+                        raise ValueError
+                    if et == 0x55:   # enum: type name SerString
+                        n, q = _pinv_cu(blob, q)
+                        q += n
+                    n, q = _pinv_cu(blob, q)
+                    name = blob[q:q + n].decode("utf-8", "replace")
+                    q += n
+                    if et in (0x0E, 0x50):
+                        if blob[q] == 0xFF:
+                            val, q = None, q + 1
+                        else:
+                            n, q = _pinv_cu(blob, q)
+                            val, q = blob[q:q + n].decode("utf-8", "replace"), q + n
+                    elif et in (0x02, 0x04, 0x05):
+                        val, q = blob[q], q + 1
+                    elif et in (0x06, 0x07):
+                        val, q = None, q + 2
+                    elif et in (0x08, 0x09, 0x0C, 0x55):
+                        val, q = None, q + 4
+                    elif et in (0x0A, 0x0B, 0x0D):
+                        val, q = None, q + 8
+                    else:
+                        raise ValueError
+                    if name == want and isinstance(val, str):
+                        got = val
+                if q == len(blob):
+                    return got
+            except (IndexError, ValueError):
+                continue
+    except Exception:   # noqa: BLE001
+        pass
+    return None
+
+
+def dotnet_pinvoke_facts(data):
+    """.NET P/Invoke bridge facts via dnfile (ECMA-335 ImplMap II.22.22 joined to ModuleRef + MethodDef, FieldMarshal):
+    pinvoke_count, pinvoke_methods / pinvoke_entries (ImplMap = MethodDef order), pinvoke_imports (JSON
+    [{"method","entry","module"}]), pinvoke_details (JSON, + type/token/callconv/charset/flags/return/params/marshal),
+    native_modules (ModuleRef order, names as written: 'libc', 'kernel32.dll') / native_module_count / pinvoke_modules
+    (distinct, first-use order), set_last_error_methods, library_import_methods (+ _count; methods carrying
+    [LibraryImport]), unmanaged_callers_only (+ _entries, the EntryPoint= export names), unmanaged_fnptr_count /
+    unmanaged_fnptr_callconvs (StandAloneSig blobs with an unmanaged calling convention: `delegate* unmanaged` calli),
+    native_library_apis (NativeLibrary.Load/GetExport, Marshal.GetDelegateForFunctionPointer MemberRefs),
+    native_library_strings (the ldstr feeding each such call, IL order); and per P/Invoke method m (managed name AND
+    entry name): m_module, m_entry, m_callconv (winapi/cdecl/stdcall/thiscall/fastcall), m_charset
+    (none/ansi/unicode/auto), m_set_last_error / m_exact_spelling / m_preserve_sig ("true"/"false"), m_best_fit /
+    m_throw_on_unmappable (default/true/false), m_flags (0x...), m_token, m_return / m_params (C# keywords; IntPtr for
+    native int), m_return_il / m_params_il (IL names), m_param_names, m_signature ('int getpid()'), m_return_marshal /
+    m_param_marshal (UnmanagedType names, "none"). Lists are compact JSON. None when not a CLI assembly."""
+    try:
+        import dnfile
+        pe = dnfile.dnPE(data=bytes(data), fast_load=False)
+        net = pe.net
+        if net is None or net.mdtables is None:
+            return None
+        t = net.mdtables
+    except Exception:   # noqa: BLE001 -- hostile/truncated PE: cannot answer
+        return None
+    js = lambda xs: json.dumps(list(xs), separators=(",", ":"), ensure_ascii=False)   # noqa: E731
+    rows = lambda tab: list(getattr(t, tab, None) or ())   # noqa: E731
+    nm = lambda x: "" if x is None else str(x)   # noqa: E731
+    blob = lambda x: bytes(getattr(x, "value", x) or b"")   # noqa: E731
+    out = {}
+    mds, prm, tds, trs = rows("MethodDef"), rows("Param"), rows("TypeDef"), rows("TypeRef")
+    mrefs = rows("ModuleRef")
+    out["native_modules"] = js(nm(r.Name) for r in mrefs)
+    out["native_module_count"] = str(len(mrefs))
+
+    def tname(coded):
+        tag, i = coded & 3, coded >> 2
+        tab = tds if tag == 0 else trs if tag == 1 else None
+        return nm(tab[i - 1].TypeName) if tab and 0 < i <= len(tab) else "?"
+    owner = {}   # MethodDef row -> declaring Namespace.Type (TypeDef MethodList runs)
+    starts = [int(r.struct.MethodList_Index) for r in tds]
+    for k, r in enumerate(tds):
+        end = starts[k + 1] if k + 1 < len(starts) else len(mds) + 1
+        full = (nm(r.TypeNamespace) + "." if nm(r.TypeNamespace) else "") + nm(r.TypeName)
+        for i in range(starts[k], min(end, len(mds) + 1)):
+            owner[i] = full
+    pstart = [int(r.struct.ParamList_Index) for r in mds]
+    marsh = {}   # Param row -> UnmanagedType name
+    for r in rows("FieldMarshal"):
+        c = int(r.struct.Parent_CodedIndex)
+        nb = blob(r.NativeType)
+        if c & 1 and nb:
+            marsh[c >> 1] = _PINV_UT.get(nb[0], f"0x{nb[0]:x}")
+    attrs = {}   # MethodDef row -> {attr type name: blob}
+    for r in rows("CustomAttribute"):
+        try:
+            pc, tc = int(r.struct.Parent_CodedIndex), int(r.struct.Type_CodedIndex)
+            if pc & 0x1F != 0:   # HasCustomAttribute tag 0 = MethodDef
+                continue
+            an = None
+            if tc & 7 == 3:      # CustomAttributeType: MemberRef
+                mr = t.MemberRef[(tc >> 3) - 1]
+                an = tname({1: 1, 0: 0}.get(int(mr.struct.Class_CodedIndex) & 7, 9) | (int(mr.struct.Class_CodedIndex) >> 3 << 2)) \
+                    if int(mr.struct.Class_CodedIndex) & 7 in (0, 1) else None
+            elif tc & 7 == 2:    # MethodDef ctor
+                an = owner.get(tc >> 3, "").rsplit(".", 1)[-1]
+            if an:
+                attrs.setdefault(pc >> 5, {})[an] = blob(r.Value)
+        except Exception:   # noqa: BLE001
+            continue
+    imps, det = [], []
+    for r in rows("ImplMap"):
+        try:
+            mf, sc, fw = int(r.struct.MappingFlags), int(r.struct.ImportScope_Index), int(r.struct.MemberForwarded_CodedIndex)
+            if not fw & 1:   # MemberForwarded tag 0 = Field (not callable), 1 = MethodDef
+                continue
+            mi = fw >> 1
+            if not 0 < mi <= len(mds):
+                continue
+            m = mds[mi - 1]
+            name = nm(m.Name)
+            entry = nm(r.ImportName) or name
+            mod = nm(mrefs[sc - 1].Name) if 0 < sc <= len(mrefs) else "none"
+            d = {"method": name, "entry": entry, "module": mod, "type": owner.get(mi, "none"),
+                 "token": f"0x{0x06000000 | mi:08x}", "callconv": _PINV_CC.get((mf >> 8) & 7, "none"),
+                 "charset": _PINV_CS[mf & 6], "set_last_error": "true" if mf & 0x40 else "false",
+                 "exact_spelling": "true" if mf & 1 else "false", "best_fit": _PINV_TRI.get((mf >> 4) & 3, "default"),
+                 "throw_on_unmappable": _PINV_TRI.get((mf >> 12) & 3, "default"),
+                 "preserve_sig": "true" if int(m.struct.ImplFlags) & 0x80 else "false", "flags": f"0x{mf:04x}"}
+            try:
+                ret, ps, _ = _pinv_msig(blob(m.Signature), 0, tname)
+            except Exception:   # noqa: BLE001 -- unknown element type: leave the signature unanswered
+                ret, ps = ("none", "none"), []
+            p0 = pstart[mi - 1]
+            p1 = pstart[mi] if mi < len(pstart) else len(prm) + 1
+            seq = {int(prm[j - 1].struct.Sequence): j for j in range(p0, min(p1, len(prm) + 1)) if j >= 1}
+            pn = [nm(prm[seq[k] - 1].Name) if k in seq else f"arg{k - 1}" for k in range(1, len(ps) + 1)]
+            d.update({"return": ret[0], "params": [x[0] for x in ps], "return_il": ret[1], "params_il": [x[1] for x in ps],
+                      "param_names": pn, "return_marshal": marsh.get(seq.get(0), "none"),
+                      "param_marshal": [marsh.get(seq.get(k), "none") for k in range(1, len(ps) + 1)],
+                      "signature": f"{ret[0]} {name}(" + ", ".join(f"{a[0]} {b}" for a, b in zip(ps, pn)) + ")"})
+            det.append(d)
+            imps.append({"method": name, "entry": entry, "module": mod})
+        except Exception:   # noqa: BLE001 -- one broken row must not hide the others
+            continue
+    out["pinvoke_count"] = str(len(det))
+    out["pinvoke_methods"] = js(d["method"] for d in det)
+    out["pinvoke_entries"] = js(d["entry"] for d in det)
+    out["pinvoke_imports"] = js(imps)
+    out["pinvoke_details"] = js(det)
+    out["pinvoke_modules"] = js(dict.fromkeys(d["module"] for d in det))
+    out["set_last_error_methods"] = js(d["method"] for d in det if d["set_last_error"] == "true")
+    li = [nm(mds[i - 1].Name) for i in sorted(attrs) if "LibraryImportAttribute" in attrs[i] and 0 < i <= len(mds)]
+    out["library_import_methods"], out["library_import_count"] = js(li), str(len(li))
+    uco = [i for i in sorted(attrs) if "UnmanagedCallersOnlyAttribute" in attrs[i] and 0 < i <= len(mds)]
+    out["unmanaged_callers_only"] = js(nm(mds[i - 1].Name) for i in uco)
+    out["unmanaged_callers_only_entries"] = js(e for e in (_pinv_named(attrs[i]["UnmanagedCallersOnlyAttribute"]) for i in uco) if e)
+    ccs = []
+    for r in rows("StandAloneSig"):
+        b = blob(r.Signature)
+        if b and b[0] & 0xF in _PINV_FNPTR_CC and b[0] != 7:
+            ccs.append(_PINV_FNPTR_CC[b[0] & 0xF])
+    out["unmanaged_fnptr_count"] = str(len(ccs))
+    out["unmanaged_fnptr_callconvs"] = js(dict.fromkeys(ccs))
+    apis = {}   # MemberRef token -> "Type.Method"
+    for k, r in enumerate(rows("MemberRef")):
+        try:
+            c = int(r.struct.Class_CodedIndex)
+            if c & 7 != 1:
+                continue
+            key = (tname((c >> 3 << 2) | 1), nm(r.Name))
+            if key in _PINV_NATIVE_APIS:
+                apis[0x0A000001 + k] = ".".join(key)
+        except Exception:   # noqa: BLE001
+            continue
+    out["native_library_apis"] = js(dict.fromkeys(apis.values()))
+    strs = []
+    if apis:
+        try:
+            us = bytes(getattr(net.user_strings, "__data__", b"") or b"")
+            pat = re.compile(rb"\x72(...)\x70(?:[\x02-\x0e\x11\x06-\x09]|\x11.|\x0e.)?\x28(...)\x0a", re.S)
+            for m in mds:
+                rva = int(m.struct.Rva or 0)
+                if not rva:
+                    continue
+                body = pe.get_data(rva, 1)
+                if not body:
+                    continue
+                if body[0] & 3 == 2:
+                    code = pe.get_data(rva + 1, body[0] >> 2)
+                else:
+                    hdr = pe.get_data(rva, 12)
+                    code = pe.get_data(rva + (hdr[1] >> 4) * 4, int.from_bytes(hdr[4:8], "little"))
+                for x in pat.finditer(code[:1 << 16]):
+                    tok = 0x0A000000 | int.from_bytes(x.group(2), "little")
+                    if tok in apis:
+                        o = int.from_bytes(x.group(1), "little")
+                        n, q = _pinv_cu(us, o)
+                        strs.append(us[q:q + n - 1].decode("utf-16-le", "replace"))
+        except Exception:   # noqa: BLE001
+            pass
+    out["native_library_strings"] = js(strs)
+    for d in det:
+        for key in (d["method"], d["entry"]):
+            for f, v in d.items():
+                if f in ("method",):
+                    continue
+                k = f"{key}_{f}"
+                if k not in out:
+                    out[k] = js(v) if isinstance(v, list) else v
+    return out
+
+
+def dotnet_pinvoke_field(data, name):
+    """One dotnet_pinvoke_facts value: "none" when absent (no such P/Invoke / field), None when not a CLI assembly."""
+    f = dotnet_pinvoke_facts(data)
+    if f is None:
+        return None
+    return f.get(name, "none")
+
+# ------------------------------------------------------------------ .NET COM interop (managed<->native bridge)
+# ComImport is a pseudo-attribute (TypeDef flag tdImport 0x1000); Guid/InterfaceType/DispId/CoClass/ProgId/ComVisible are
+# real custom attributes. Vtable slot of interface method i = i + base: IUnknown 3, dual/IDispatch 7, IInspectable 6.
+_COM_ITYPE = {0: "dual", 1: "iunknown", 2: "idispatch", 3: "iinspectable"}
+_COM_VT_BASE = {"dual": 7, "iunknown": 3, "idispatch": 7, "iinspectable": 6}
+_COM_ATTRS = {"GuidAttribute", "InterfaceTypeAttribute", "DispIdAttribute", "CoClassAttribute", "ProgIdAttribute",
+              "ComVisibleAttribute", "GeneratedComInterfaceAttribute", "GeneratedComClassAttribute",
+              "ClassInterfaceAttribute", "ComDefaultInterfaceAttribute", "ComSourceInterfacesAttribute"}
+_COM_APIS = {("Type", "GetTypeFromCLSID"), ("Type", "GetTypeFromProgID"), ("Marshal", "GetActiveObject"),
+             ("Marshal", "BindToMoniker"), ("Marshal", "GetObjectForIUnknown"), ("Marshal", "GetIUnknownForObject"),
+             ("Marshal", "QueryInterface"), ("Marshal", "ReleaseComObject"), ("Marshal", "FinalReleaseComObject"),
+             ("Marshal", "GetComInterfaceForObject"), ("Marshal", "GetTypedObjectForIUnknown"), ("Marshal", "AddRef"),
+             ("Marshal", "Release"), ("Marshal", "CreateWrapperOfType"), ("Activator", "CreateInstance"),
+             ("ComWrappers", "GetOrCreateObjectForComInstance"), ("StrategyBasedComWrappers", "GetOrCreateObjectForComInstance"),
+             ("ComWrappers", "GetOrCreateComInterfaceForObject")}
+_COM_NATIVE = {"CoCreateInstance", "CoCreateInstanceEx", "CoGetClassObject", "CoInitialize", "CoInitializeEx",
+               "CoUninitialize", "CLSIDFromProgID", "CLSIDFromString", "IIDFromString", "ProgIDFromCLSID",
+               "GetActiveObject", "CoGetObject", "LoadTypeLib", "LoadTypeLibEx", "LoadRegTypeLib", "RegisterTypeLib",
+               "CoRegisterClassObject", "DllGetClassObject", "CoTaskMemAlloc", "CoTaskMemFree", "OleInitialize"}
+_GUID_RE = re.compile(r"^\{?([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})\}?$")
+
+
+def _com_guid(s):
+    m = _GUID_RE.match((s or "").strip())
+    return m.group(1).lower() if m else None
+
+
+def dotnet_com_facts(data):
+    """COM-interop facts of a .NET (CLI) PE via dnfile (ECMA-335 TypeDef flags + CustomAttribute blobs + ImplMap + IL):
+    com_interfaces / com_interfaces_full / com_interface_count / com_iids (lowercase dashed guids, aligned) -- interfaces
+    flagged ComImport (tdImport) or [GeneratedComInterface], TypeDef order; com_classes / com_clsids ([ComImport]
+    coclasses); com_exposed_classes (non-import classes carrying [Guid]); guid_attributes (JSON [{"target","guid"}], CA
+    order, target 'assembly' or Namespace.Type); assembly_guid; com_activation_apis (MemberRef 'Type.Method', e.g.
+    Type.GetTypeFromCLSID); com_pinvokes (JSON 'module!entry' of ole32/oleaut32/combase or a known COM entry);
+    com_progids (ProgId attrs + ldstr fed to GetTypeFromProgID/GetActiveObject); guid_strings (GUID-shaped user strings,
+    lowercase, #US order). Per COM type T (short name and Namespace.Name): T_guid (= T_iid / T_clsid), T_guid_upper,
+    T_interface_type (dual default / iunknown / idispatch / iinspectable), T_vtable_base (3/6/7), T_methods (JSON, MethodDef
+    = vtable order), T_method_count, T_vtable_slots (JSON {method: slot}), T_coclass, T_progid, T_generated; per method
+    M of T: T_M_vtable_slot, T_M_vtable_offset (hex, slot*8 x64), T_M_vtable_offset_x86 (slot*4), T_M_dispid, and the
+    same keys without T_ when M is unique. "none" when absent; None when not a CLI assembly."""
+    try:
+        import dnfile
+        pe = dnfile.dnPE(data=bytes(data), fast_load=False)
+        net = pe.net
+        if net is None or net.mdtables is None:
+            return None
+        t = net.mdtables
+    except Exception:   # noqa: BLE001 -- hostile/truncated PE: cannot answer
+        return None
+    js = lambda xs: json.dumps(list(xs), separators=(",", ":"), ensure_ascii=False)   # noqa: E731
+    rows = lambda tab: list(getattr(t, tab, None) or ())   # noqa: E731
+    nm = lambda x: "" if x is None else str(x)   # noqa: E731
+    blob = lambda x: bytes(getattr(x, "value", x) or b"")   # noqa: E731
+    tds, trs, mds, mrs = rows("TypeDef"), rows("TypeRef"), rows("MethodDef"), rows("MemberRef")
+    full = [(nm(r.TypeNamespace) + "." if nm(r.TypeNamespace) else "") + nm(r.TypeName) for r in tds]
+    starts = [int(r.struct.MethodList_Index) for r in tds]
+    owner = {}   # MethodDef row -> TypeDef row
+    for k in range(len(tds)):
+        end = starts[k + 1] if k + 1 < len(starts) else len(mds) + 1
+        for i in range(starts[k], min(end, len(mds) + 1)):
+            owner[i] = k + 1
+
+    def ca_type(tc):
+        if tc & 7 == 3 and 0 < tc >> 3 <= len(mrs):
+            c = int(mrs[(tc >> 3) - 1].struct.Class_CodedIndex)
+            tab = trs if c & 7 == 1 else tds if c & 7 == 0 else None
+            i = c >> 3
+            return nm(tab[i - 1].TypeName) if tab and 0 < i <= len(tab) else None
+        if tc & 7 == 2:
+            k = owner.get(tc >> 3)
+            return nm(tds[k - 1].TypeName) if k else None
+        return None
+    ca = {}   # (parent tag, row) -> {attr name: blob}
+    gattr = []
+    for r in rows("CustomAttribute"):
+        try:
+            pc, an = int(r.struct.Parent_CodedIndex), ca_type(int(r.struct.Type_CodedIndex))
+            if an not in _COM_ATTRS:
+                continue
+            b = blob(r.Value)
+            ca.setdefault((pc & 0x1F, pc >> 5), {})[an] = b
+            if an == "GuidAttribute":
+                g = _com_guid(_dn_serstr(b))
+                tgt = "assembly" if pc & 0x1F == 14 else full[(pc >> 5) - 1] if pc & 0x1F == 3 and 0 < pc >> 5 <= len(tds) else None
+                if g and tgt:
+                    gattr.append({"target": tgt, "guid": g})
+        except Exception:   # noqa: BLE001 -- one broken row must not hide the others
+            continue
+    dispid = {}   # MethodDef row -> dispid (method attr, or its property's attr via MethodSemantics)
+    for (tag, i), a in ca.items():
+        b = a.get("DispIdAttribute")
+        if tag == 0 and b and len(b) >= 6:
+            dispid[i] = int.from_bytes(b[2:6], "little", signed=True)
+    for r in rows("MethodSemantics"):
+        try:
+            asc = int(r.struct.Association_CodedIndex)
+            b = ca.get((9, asc >> 1), {}).get("DispIdAttribute") if asc & 1 else None
+            if b and len(b) >= 6:
+                dispid.setdefault(int(r.struct.Method_Index), int.from_bytes(b[2:6], "little", signed=True))
+        except Exception:   # noqa: BLE001
+            continue
+    out, ifs, cls, exp = {}, [], [], []
+    put = lambda k, v: out.setdefault(k, v)   # noqa: E731 -- first (TypeDef-order) owner of a short key wins
+    for k, r in enumerate(tds, 1):
+        fl, a = int(r.struct.Flags), ca.get((3, k), {})
+        isif, imp, gen = bool(fl & 0x20), bool(fl & 0x1000), "GeneratedComInterfaceAttribute" in a
+        if not (imp or gen or ("GuidAttribute" in a and not isif)):
+            continue
+        g = _com_guid(_dn_serstr(a.get("GuidAttribute", b""))) or "none"
+        short, fn = nm(r.TypeName), full[k - 1]
+        facts = {"guid": g, "guid_upper": g.upper() if g != "none" else "none", "generated": "true" if gen else "false"}
+        if isif:
+            ifs.append((short, fn, g))
+            facts["iid"] = g
+            it = a.get("InterfaceTypeAttribute", b"")
+            ityp = "iunknown" if gen else _COM_ITYPE.get(
+                int.from_bytes(it[2:6] if len(it) >= 8 else it[2:4], "little") if len(it) >= 6 else 0, "none")
+            base = _COM_VT_BASE.get(ityp)
+            end = starts[k] if k < len(starts) else len(mds) + 1
+            ms = list(range(starts[k - 1], min(end, len(mds) + 1)))
+            names = [nm(mds[i - 1].Name) for i in ms]
+            facts.update({"interface_type": ityp, "vtable_base": str(base) if base is not None else "none",
+                          "methods": js(names), "method_count": str(len(names)),
+                          "vtable_slots": json.dumps({n: j + base for j, n in enumerate(names)} if base is not None else {},
+                                                     separators=(",", ":"))})
+            cc = _dn_serstr(a.get("CoClassAttribute", b""))
+            facts["coclass"] = cc.rsplit(".", 1)[-1] if cc else "none"
+            for j, (i, n) in enumerate(zip(ms, names)):
+                mf = {"dispid": str(dispid[i]) if i in dispid else "none"}
+                if base is not None:
+                    mf.update({"vtable_slot": str(j + base), "vtable_offset": hex((j + base) * 8),
+                               "vtable_offset_x86": hex((j + base) * 4)})
+                for f, v in mf.items():
+                    for key in (f"{short}_{n}_{f}", f"{fn}_{n}_{f}", f"{short}.{n}_{f}"):
+                        put(key, v)
+                    out.setdefault(f"_cand_{n}_{f}", set()).add(v)
+        else:
+            (cls if imp else exp).append((short, fn, g))
+            facts["clsid"] = g
+        pid = _dn_serstr(a.get("ProgIdAttribute", b""))
+        facts["progid"] = pid or "none"
+        for f, v in facts.items():
+            put(f"{short}_{f}", v)
+            put(f"{fn}_{f}", v)
+    for key in [x for x in out if x.startswith("_cand_")]:
+        vs = out.pop(key)
+        if len(vs) == 1:
+            out.setdefault(key[6:], next(iter(vs)))
+    if not (ifs or cls or exp):
+        return {}
+    out["com_interfaces"], out["com_interfaces_full"] = js(x[0] for x in ifs), js(x[1] for x in ifs)
+    out["com_interface_count"], out["com_iids"] = str(len(ifs)), js(x[2] for x in ifs)
+    out["com_classes"], out["com_clsids"] = js(x[0] for x in cls), js(x[2] for x in cls)
+    out["com_exposed_classes"], out["com_exposed_clsids"] = js(x[0] for x in exp), js(x[2] for x in exp)
+    out["guid_attributes"] = js(gattr)
+    out["assembly_guid"] = next((x["guid"] for x in gattr if x["target"] == "assembly"), "none")
+    apis = {}   # MemberRef token -> "Type.Method"
+    for k, r in enumerate(mrs):
+        try:
+            c = int(r.struct.Class_CodedIndex)
+            if c & 7 == 1 and 0 < c >> 3 <= len(trs):
+                key = (nm(trs[(c >> 3) - 1].TypeName), nm(r.Name))
+                if key in _COM_APIS:
+                    apis[0x0A000001 + k] = ".".join(key)
+        except Exception:   # noqa: BLE001
+            continue
+    out["com_activation_apis"] = js(dict.fromkeys(apis.values()))
+    mrefs, pinv = rows("ModuleRef"), []
+    for r in rows("ImplMap"):
+        try:
+            fw, sc = int(r.struct.MemberForwarded_CodedIndex), int(r.struct.ImportScope_Index)
+            if not fw & 1 or not 0 < fw >> 1 <= len(mds):
+                continue
+            entry = nm(r.ImportName) or nm(mds[(fw >> 1) - 1].Name)
+            mod = nm(mrefs[sc - 1].Name) if 0 < sc <= len(mrefs) else "none"
+            if mod.lower().rsplit(".", 1)[0] in ("ole32", "oleaut32", "combase") or entry in _COM_NATIVE:
+                pinv.append(f"{mod}!{entry}")
+        except Exception:   # noqa: BLE001
+            continue
+    out["com_pinvokes"] = js(pinv)
+    us = b""
+    try:
+        us = bytes(getattr(net.user_strings, "__data__", b"") or b"")
+    except Exception:   # noqa: BLE001
+        pass
+    gs, p = [], 1
+    while p < len(us):   # #US heap walk: compressed length, UTF-16LE, trailing flag byte
+        try:
+            n, q = _pinv_cu(us, p)
+        except IndexError:
+            break
+        if n == 0 and q == p + 1 and us[p] == 0:
+            p = q
+            continue
+        g = _com_guid(us[q:q + n - 1].decode("utf-16-le", "replace")) if n > 1 else None
+        if g:
+            gs.append(g)
+        p = q + n
+    out["guid_strings"] = js(dict.fromkeys(gs))
+    progs = [x for x in (_dn_serstr(a.get("ProgIdAttribute", b"")) for a in ca.values()) if x]
+    want = {tk for tk, v in apis.items() if v in ("Type.GetTypeFromProgID", "Marshal.GetActiveObject", "Marshal.BindToMoniker")}
+    if want and us:
+        pat = re.compile(rb"\x72(...)\x70(?:\x16|\x17)?\x28(...)\x0a", re.S)
+        for m in mds:
+            try:
+                rva = int(m.struct.Rva or 0)
+                body = pe.get_data(rva, 1) if rva else b""
+                if not body:
+                    continue
+                if body[0] & 3 == 2:
+                    code = pe.get_data(rva + 1, body[0] >> 2)
+                else:
+                    hdr = pe.get_data(rva, 12)
+                    code = pe.get_data(rva + (hdr[1] >> 4) * 4, int.from_bytes(hdr[4:8], "little"))
+                for x in pat.finditer(code[:1 << 16]):
+                    if 0x0A000000 | int.from_bytes(x.group(2), "little") in want:
+                        n, q = _pinv_cu(us, int.from_bytes(x.group(1), "little"))
+                        progs.append(us[q:q + n - 1].decode("utf-16-le", "replace"))
+            except Exception:   # noqa: BLE001
+                continue
+    out["com_progids"] = js(dict.fromkeys(progs))
+    return out
+
+
+def dotnet_com_field(data, name):
+    """One dotnet_com_facts value: "none" when absent (no COM interop / no such type or method / not a CLI assembly)."""
+    try:
+        f = dotnet_com_facts(data)
+    except Exception:   # noqa: BLE001
+        return None
+    return "none" if not f else f.get(name, "none")
+
+# ------------------------------------------------------------------ .NET IL bodies: call sites, ldstr, array init blobs
+# ECMA-335 III opcode operand sizes: -1 = metadata token, -2 = switch table, n = n raw operand bytes; absent = invalid
+_IL_OPS = {**{o: 0 for o in (*range(0x00, 0x0E), 0x14, *range(0x15, 0x1F), 0x25, 0x26, 0x2A, *range(0x46, 0x6F), 0x76,
+                             0x7A, *range(0x82, 0x8C), 0x8E, *range(0x90, 0xA3), *range(0xB3, 0xBB), 0xC3,
+                             *range(0xD1, 0xDD), 0xDF, 0xE0)},
+           **{o: 1 for o in (*range(0x0E, 0x14), 0x1F, *range(0x2B, 0x38), 0xDE)},
+           **{o: 4 for o in (0x20, 0x22, *range(0x38, 0x45), 0xDD)}, 0x21: 8, 0x23: 8, 0x45: -2,
+           **{o: -1 for o in (0x27, 0x28, 0x29, 0x6F, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x79, *range(0x7B, 0x82), 0x8C,
+                              0x8D, 0x8F, 0xA3, 0xA4, 0xA5, 0xC2, 0xC6, 0xD0)}}
+_IL_OPS2 = {**{o: 0 for o in (0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x0F, 0x11, 0x13, 0x14, 0x17, 0x18, 0x1A, 0x1D, 0x1E)},
+            **{o: 2 for o in range(0x09, 0x0F)}, 0x12: 1, 0x19: 1,
+            **{o: -1 for o in (0x06, 0x07, 0x15, 0x16, 0x1C)}}
+_IL_CALL_OPS = {0x27: "jmp", 0x28: "call", 0x29: "calli", 0x6F: "callvirt", 0x73: "newobj", 0xFE06: "ldftn",
+                0xFE07: "ldvirtftn"}
+_IL_MAX_CODE = 1 << 20
+
+
+def il_decode(code, limit=1 << 18):
+    """Decode one IL code stream (ECMA-335 III, single-byte + 0xFE two-byte opcodes) -> [(il_offset, opcode, operand)];
+    opcode is 0xFExx for two-byte ops, operand an int (token / immediate / branch delta) or a tuple (switch targets).
+    Stops at an invalid opcode or truncated operand (the instructions decoded so far are returned)."""
+    out, p, n = [], 0, min(len(code), _IL_MAX_CODE)
+    while p < n and len(out) < limit:
+        at, op = p, code[p]
+        p += 1
+        if op == 0xFE:
+            if p >= n:
+                break
+            op = 0xFE00 | code[p]
+            p += 1
+            sz = _IL_OPS2.get(op & 0xFF)
+        else:
+            sz = _IL_OPS.get(op)
+        if sz is None:
+            break
+        if sz == -2:
+            if p + 4 > n:
+                break
+            k = int.from_bytes(code[p:p + 4], "little")
+            if p + 4 + 4 * k > n:
+                break
+            arg = tuple(int.from_bytes(code[q:q + 4], "little", signed=True) for q in range(p + 4, p + 4 + 4 * k))
+            p += 4 + 4 * k
+        else:
+            w = 4 if sz == -1 else sz
+            if p + w > n:
+                break
+            arg = int.from_bytes(code[p:p + w], "little", signed=sz in (1, 2, 4, 8) and op not in (0x22, 0x23)) if w else None
+            p += w
+        out.append((at, op, arg))
+    return out
+
+
+def _il_body(pe, rva):
+    """Method body at RVA (ECMA-335 II.25.4): {"header": "tiny"|"fat", "header_size", "code_size", "max_stack",
+    "local_sig" (token or 0), "init_locals", "eh_clauses", "code"} or None when unreadable."""
+    b0 = pe.get_data(rva, 1)
+    if not b0:
+        return None
+    if b0[0] & 3 == 2:
+        n = b0[0] >> 2
+        code = pe.get_data(rva + 1, n) if n else b""
+        return {"header": "tiny", "header_size": 1, "code_size": n, "max_stack": 8, "local_sig": 0,
+                "init_locals": False, "eh_clauses": 0, "code": bytes(code)}
+    if b0[0] & 3 != 3:
+        return None
+    h = pe.get_data(rva, 12)
+    if len(h) < 12:
+        return None
+    fl, ms, n, ls = struct.unpack_from("<HHII", h)
+    hs = (fl >> 12) * 4
+    if hs < 12 or n > _IL_MAX_CODE:
+        return None
+    code = bytes(pe.get_data(rva + hs, n))
+    eh, s, more = 0, (rva + hs + n + 3) & ~3, fl & 0x8
+    for _ in range(16):   # extra data sections (II.25.4.5): EH tables, small (12-byte) or fat (24-byte) clauses
+        if not more:
+            break
+        k = pe.get_data(s, 4)
+        if len(k) < 4:
+            break
+        fat = k[0] & 0x40
+        size = int.from_bytes(k[1:4], "little") if fat else k[1]
+        if k[0] & 1 and size >= 4:
+            eh += (size - 4) // (24 if fat else 12)
+        more = k[0] & 0x80
+        if size < 4:
+            break
+        s = (s + size + 3) & ~3
+    return {"header": "fat", "header_size": hs, "code_size": n, "max_stack": ms, "local_sig": ls,
+            "init_locals": bool(fl & 0x10), "eh_clauses": eh, "code": code}
+
+
+def dotnet_il_facts(data):
+    """IL call-site facts of a .NET (CLI) PE ("trace every crossing") via dnfile + an ECMA-335 III opcode decoder.
+    Names are ilspy-style 'Namespace.Type::Method' (nested 'Outer/Inner', no generic args, no [scope]).
+    il_methods / il_method_count (MethodDefs with a body, MethodDef order), il_bodies (JSON per body: method, token, rva,
+    offset, header tiny|fat, header_size, code_size, max_stack, local_sig, eh_clauses, instructions); call_edges (JSON
+    [{"caller","op","callee","kind","il"}] in method/IL order; op call|callvirt|newobj|calli|jmp|ldftn|ldvirtftn, kind
+    managed (a MethodDef with a body) | native (an ImplMap P/Invoke) | external (MemberRef/abstract) | indirect (calli));
+    managed_edges / native_edges / external_edges (distinct [caller, callee] pairs, first-use order; ldftn excluded --
+    see ldftn_edges); pinvoke_callers (JSON {pinvoke method name: [callers]}, ImplMap order) and native_callers (all
+    callers of any P/Invoke); user_strings (the whole #US heap in heap order) / user_string_count; ldstr_strings (IL
+    order, repeats kept) and ldstr_sites ([{"method","il","string","us_offset"}]); static_field_loads (ldsfld/ldsflda/
+    ldtoken field targets, distinct, IL order); array_inits (JSON [{"method","il","field","field_type","rva","offset",
+    "size","hex"}] for each ldtoken <field> + RuntimeHelpers::InitializeArray|CreateSpan); field_rvas (every FieldRVA
+    field: field, field_type, rva, offset, size -- the C# <PrivateImplementationDetails> / F# T<n>_<len>Bytes@ .text
+    data); calli_count. Per-method lookups go through dotnet_il_field. None when not a CLI assembly."""
+    try:
+        return _dotnet_il_facts(data)
+    except Exception:   # noqa: BLE001 -- hostile tables (rows past their targets, bad coded indexes): cannot answer
+        return None
+
+
+def _dotnet_il_facts(data):
+    try:
+        import dnfile
+        pe = dnfile.dnPE(data=bytes(data), fast_load=False)
+        net = pe.net
+        if net is None or net.mdtables is None:
+            return None
+        t = net.mdtables
+    except Exception:   # noqa: BLE001 -- hostile/truncated PE: cannot answer
+        return None
+    js = lambda xs: json.dumps(list(xs), separators=(",", ":"), ensure_ascii=False)   # noqa: E731
+    rows = lambda tab: list(getattr(t, tab, None) or ())   # noqa: E731
+    nm = lambda x: "" if x is None else str(x)   # noqa: E731
+    blob = lambda x: bytes(getattr(x, "value", x) or b"")   # noqa: E731
+    mds, tds, trs, flds = rows("MethodDef"), rows("TypeDef"), rows("TypeRef"), rows("Field")
+    mrs, msp, tsp, sas = rows("MemberRef"), rows("MethodSpec"), rows("TypeSpec"), rows("StandAloneSig")
+    enclosing = {}
+    for r in rows("NestedClass"):
+        try:
+            enclosing[int(r.struct.NestedClass_Index)] = int(r.struct.EnclosingClass_Index)
+        except Exception:   # noqa: BLE001
+            continue
+    tdn = {}
+
+    def tdname(i, depth=0):
+        if i in tdn:
+            return tdn[i]
+        if not 0 < i <= len(tds):
+            return "?"
+        r = tds[i - 1]
+        if i in enclosing and depth < 16:
+            s = tdname(enclosing[i], depth + 1) + "/" + nm(r.TypeName)
+        else:
+            s = (nm(r.TypeNamespace) + "." if nm(r.TypeNamespace) else "") + nm(r.TypeName)
+        tdn[i] = s
+        return s
+
+    def trname(i, depth=0):
+        if not 0 < i <= len(trs):
+            return "?"
+        r = trs[i - 1]
+        rs = int(r.struct.ResolutionScope_CodedIndex)
+        if rs & 3 == 3 and depth < 16:   # ResolutionScope TypeRef: nested reference
+            return trname(rs >> 2, depth + 1) + "/" + nm(r.TypeName)
+        return (nm(r.TypeNamespace) + "." if nm(r.TypeNamespace) else "") + nm(r.TypeName)
+
+    def tdor(c):   # TypeDefOrRef coded index (2-bit tag)
+        tag, i = c & 3, c >> 2
+        return tdname(i) if tag == 0 else trname(i) if tag == 1 else tsname(i) if tag == 2 else "?"
+
+    def tsname(i):
+        if not 0 < i <= len(tsp):
+            return "?"
+        b = blob(tsp[i - 1].Signature)
+        try:
+            p = 1 if b[0] == 0x15 else 0   # GENERICINST (CLASS|VALUETYPE) TypeDefOrRef ...
+            if b[p] in (0x11, 0x12):
+                return tdor(_pinv_cu(b, p + 1)[0])
+        except IndexError:
+            pass
+        return "?"
+    mowner, starts = {}, [int(r.struct.MethodList_Index) for r in tds]
+    fowner, fstarts = {}, [int(r.struct.FieldList_Index) for r in tds]
+    for k in range(len(tds)):
+        for own, st, total in ((mowner, starts, len(mds)), (fowner, fstarts, len(flds))):
+            end = st[k + 1] if k + 1 < len(st) else total + 1
+            for i in range(st[k], min(end, total + 1)):
+                own[i] = k + 1
+    mdname = lambda i: f"{tdname(mowner.get(i, 0))}::{nm(mds[i - 1].Name)}" if 0 < i <= len(mds) else "?"   # noqa: E731
+    fdname = lambda i: f"{tdname(fowner.get(i, 0))}::{nm(flds[i - 1].Name)}" if 0 < i <= len(flds) else "?"   # noqa: E731
+
+    def mrname(i):
+        if not 0 < i <= len(mrs):
+            return "?"
+        r = mrs[i - 1]
+        c = int(r.struct.Class_CodedIndex)   # MemberRefParent: TypeDef, TypeRef, ModuleRef, MethodDef, TypeSpec
+        tag, j = c & 7, c >> 3
+        own = {0: tdname, 1: trname, 4: tsname}.get(tag)
+        if tag == 3:
+            return mdname(j)
+        return f"{own(j) if own else '?'}::{nm(r.Name)}"
+    pinv = {}   # MethodDef row -> P/Invoke entry info
+    mrefs = rows("ModuleRef")
+    for r in rows("ImplMap"):
+        try:
+            fw, sc = int(r.struct.MemberForwarded_CodedIndex), int(r.struct.ImportScope_Index)
+            if fw & 1 and 0 < fw >> 1 <= len(mds):
+                mi = fw >> 1
+                pinv[mi] = (nm(r.ImportName) or nm(mds[mi - 1].Name),
+                            nm(mrefs[sc - 1].Name) if 0 < sc <= len(mrefs) else "none")
+        except Exception:   # noqa: BLE001
+            continue
+
+    pinv_of = {mdname(mi): v for mi, v in pinv.items()}
+
+    def resolve(tok):
+        tab, i = tok >> 24, tok & 0xFFFFFF
+        if tab == 0x06:
+            if i in pinv:
+                return mdname(i), "native"
+            ok = 0 < i <= len(mds) and int(mds[i - 1].struct.Rva or 0)
+            return mdname(i), "managed" if ok else "external"
+        if tab == 0x0A:
+            c = int(mrs[i - 1].struct.Class_CodedIndex) if 0 < i <= len(mrs) else 0
+            if c & 7 == 3:
+                return resolve(0x06000000 | c >> 3)
+            return mrname(i), "external"
+        if tab == 0x2B and 0 < i <= len(msp):
+            c = int(msp[i - 1].struct.Method_CodedIndex)   # MethodDefOrRef
+            return resolve((0x0A if c & 1 else 0x06) << 24 | c >> 1)
+        if tab == 0x11:
+            return "calli", "indirect"
+        return f"0x{tok:08x}", "external"
+    us = b""
+    try:
+        us = bytes(getattr(net.user_strings, "__data__", b"") or b"")
+    except Exception:   # noqa: BLE001
+        pass
+
+    def us_at(o):
+        try:
+            n, q = _pinv_cu(us, o)
+            return us[q:q + max(n - 1, 0)].decode("utf-16-le", "replace") if n else ""
+        except IndexError:
+            return None
+    heap, o = [], 1
+    while o < len(us) and len(heap) < 100000:
+        try:
+            n, q = _pinv_cu(us, o)
+        except IndexError:
+            break
+        if n == 0 and q >= len(us):
+            break
+        if n:
+            heap.append(us[q:q + n - 1].decode("utf-16-le", "replace"))
+        o = q + n
+    clay = {}
+    for r in rows("ClassLayout"):
+        try:
+            clay[int(r.struct.Parent_Index)] = int(r.struct.ClassSize)
+        except Exception:   # noqa: BLE001
+            continue
+
+    def ftype(i):
+        """FieldDef -> (type name, byte size or None) from its signature (II.23.2.4) + ClassLayout."""
+        b = blob(flds[i - 1].Signature) if 0 < i <= len(flds) else b""
+        try:
+            if len(b) > 1 and b[0] == 0x06 and b[1] in (0x11, 0x12):
+                c = _pinv_cu(b, 2)[0]
+                name = tdor(c)
+                size = clay.get(c >> 2) if c & 3 == 0 else None
+                if size is None:
+                    m = re.search(r"(?:=|_)(\d+)(?:Bytes@)?$", name)
+                    size = int(m.group(1)) if m else None
+                return name, size
+            prim = {0x02: ("bool", 1), 0x03: ("char", 2), 0x04: ("int8", 1), 0x05: ("uint8", 1), 0x06: ("int16", 2),
+                    0x07: ("uint16", 2), 0x08: ("int32", 4), 0x09: ("uint32", 4), 0x0A: ("int64", 8), 0x0B: ("uint64", 8),
+                    0x0C: ("float32", 4), 0x0D: ("float64", 8)}
+            if len(b) > 1 and b[1] in prim:
+                return prim[b[1]]
+        except IndexError:
+            pass
+        return "?", None
+    frva = {}
+    for r in rows("FieldRva"):
+        try:
+            fi, rva = int(r.struct.Field_Index), int(r.struct.Rva)
+            name, size = ftype(fi)
+            try:
+                off = pe.get_offset_from_rva(rva)
+            except Exception:   # noqa: BLE001
+                off = None
+            frva[fi] = {"field": fdname(fi), "field_type": name, "rva": f"0x{rva:x}",
+                        "offset": off, "size": size}
+        except Exception:   # noqa: BLE001
+            continue
+    methods, bodies, edges, sites, sloads, arrays = [], [], [], [], [], []
+    calli = 0
+    for mi in range(1, len(mds) + 1):
+        try:
+            rva = int(mds[mi - 1].struct.Rva or 0)
+            if not rva or mi in pinv:
+                continue
+            b = _il_body(pe, rva)
+            if b is None:
+                continue
+            me = mdname(mi)
+            ins = il_decode(b["code"])
+            methods.append(me)
+            try:
+                off = pe.get_offset_from_rva(rva)
+            except Exception:   # noqa: BLE001
+                off = None
+            bodies.append({"method": me, "token": f"0x{0x06000000 | mi:08x}", "rva": f"0x{rva:x}", "offset": off,
+                           "header": b["header"], "header_size": b["header_size"], "code_size": b["code_size"],
+                           "max_stack": b["max_stack"], "local_sig": f"0x{b['local_sig']:08x}" if b["local_sig"] else "none",
+                           "eh_clauses": b["eh_clauses"], "instructions": len(ins)})
+            for k, (at, op, arg) in enumerate(ins):
+                if op in _IL_CALL_OPS:
+                    callee, kind = resolve(arg)
+                    calli += op == 0x29
+                    edges.append({"caller": me, "op": _IL_CALL_OPS[op], "callee": callee, "kind": kind, "il": at})
+                    if kind == "native":
+                        edges[-1]["entry"], edges[-1]["module"] = pinv_of.get(callee, ("?", "?"))
+                elif op == 0x72:
+                    s = us_at(arg & 0xFFFFFF) if arg >> 24 == 0x70 else None
+                    if s is not None:
+                        sites.append({"method": me, "il": at, "string": s, "us_offset": arg & 0xFFFFFF})
+                elif op in (0x7E, 0x7F, 0xD0) and arg >> 24 == 0x04:
+                    fi = arg & 0xFFFFFF
+                    sloads.append(fdname(fi))
+                    if op == 0xD0 and k + 1 < len(ins) and ins[k + 1][1] == 0x28:
+                        callee, _ = resolve(ins[k + 1][2])
+                        if callee.startswith("System.Runtime.CompilerServices.RuntimeHelpers::") and \
+                                callee.endswith(("InitializeArray", "CreateSpan")):
+                            fr = frva.get(fi) or {"field": fdname(fi), "field_type": ftype(fi)[0], "rva": "none",
+                                                  "offset": None, "size": ftype(fi)[1]}
+                            hx = "none"
+                            if fr["offset"] is not None and fr["size"]:
+                                hx = bytes(data[fr["offset"]:fr["offset"] + min(fr["size"], 1 << 16)]).hex()
+                            arrays.append({"method": me, "il": at, **fr, "hex": hx})
+        except Exception:   # noqa: BLE001 -- one broken body must not hide the others
+            continue
+    pairs = lambda kinds, ops=("call", "callvirt", "newobj", "calli", "jmp"): list(dict.fromkeys(   # noqa: E731
+        (e["caller"], e["callee"]) for e in edges if e["kind"] in kinds and e["op"] in ops))
+    pc = {nm(mds[mi - 1].Name): [] for mi in sorted(pinv)}
+    for c, callee in pairs(("native",)):
+        pc.setdefault(callee.rsplit("::", 1)[-1], []).append(c)
+    out = {"il_methods": js(methods), "il_method_count": str(len(methods)), "il_bodies": js(bodies),
+           "call_edges": js(edges), "call_edge_count": str(len(edges)),
+           "managed_edges": js(map(list, pairs(("managed",)))), "native_edges": js(map(list, pairs(("native",)))),
+           "external_edges": js(map(list, pairs(("external",)))),
+           "ldftn_edges": js(map(list, pairs(("managed", "external", "native"), ("ldftn", "ldvirtftn")))),
+           "pinvoke_callers": json.dumps(pc, separators=(",", ":"), ensure_ascii=False),
+           "native_callers": js(dict.fromkeys(c for c, _ in pairs(("native",)))),
+           "user_strings": js(heap), "user_string_count": str(len(heap)),
+           "ldstr_strings": js(s["string"] for s in sites), "ldstr_sites": js(sites),
+           "static_field_loads": js(dict.fromkeys(sloads)), "array_inits": js(arrays),
+           "array_init_count": str(len(arrays)), "field_rvas": js(frva[k] for k in sorted(frva)),
+           "calli_count": str(calli)}
+    return out
+
+
+def _il_key(q):
+    return re.sub(r"[^a-z0-9]", "", str(q).lower())
+
+
+def dotnet_il_field(data, name):
+    """One dotnet_il_facts value by name, plus per-method lookups where <m> is 'Method', 'Type::Method' or
+    'Namespace.Type::Method': '<m>_callers' / 'callers:<m>' (distinct callers, any call op), '<m>_callees' / 'calls:<m>'
+    (distinct callees), '<m>_strings' (ldstr in IL order), '<m>_array_inits'. "none" when absent; None when not a CLI
+    assembly."""
+    f = dotnet_il_facts(data)
+    if f is None:
+        return None
+    if name in f:
+        return f[name]
+    m = re.match(r"^(callers|calls|callees|strings|array_inits):(.+)$", name) or \
+        re.match(r"^(.+)_(callers|callees|calls|strings|array_inits)$", name)
+    if not m:
+        return "none"
+    what, who = (m.group(1), m.group(2)) if ":" in name and m.re.pattern.startswith("^(callers") else (m.group(2), m.group(1))
+    hit = lambda full: full == who or full.endswith("::" + who) or full.endswith("." + who) or full.endswith("/" + who)   # noqa: E731
+    js = lambda xs: json.dumps(list(xs), separators=(",", ":"), ensure_ascii=False)   # noqa: E731
+    edges = [e for e in json.loads(f["call_edges"]) if e["op"] not in ("ldftn", "ldvirtftn")]
+    if what == "callers":
+        got = [e["caller"] for e in edges if hit(e["callee"]) or e.get("entry") == who]
+        known = any(hit(x) for x in json.loads(f["il_methods"])) or got or \
+            any(hit(e["callee"]) for e in json.loads(f["call_edges"])) or who in json.loads(f["pinvoke_callers"])
+        return js(dict.fromkeys(got)) if known else "none"
+    if not any(hit(x) for x in json.loads(f["il_methods"])):
+        return "none"
+    if what in ("calls", "callees"):
+        return js(dict.fromkeys(e["callee"] for e in edges if hit(e["caller"])))
+    if what == "strings":
+        return js(s["string"] for s in json.loads(f["ldstr_sites"]) if hit(s["method"]))
+    return js(a for a in json.loads(f["array_inits"]) if hit(a["method"]))
+
+
+def dotnet_field_owner(data, offset):
+    """Which FieldRVA field owns file offset `offset` (e.g. an HCFG hit inside .text of a .NET assembly): the
+    field_rvas record + "delta" (offset - field data start) + "initialized_by" (methods that InitializeArray it), or
+    None when no RVA field covers it / not a CLI assembly."""
+    f = dotnet_il_facts(data)
+    if f is None:
+        return None
+    for r in json.loads(f["field_rvas"]):
+        if r["offset"] is not None and r["size"] and r["offset"] <= offset < r["offset"] + r["size"]:
+            ini = [a["method"] for a in json.loads(f["array_inits"]) if a["field"] == r["field"]]
+            return dict(r, delta=offset - r["offset"], initialized_by=list(dict.fromkeys(ini)))
+    return None
+
+
+_COR_FLAGS = ((0x1, "ILONLY"), (0x2, "32BITREQUIRED"), (0x4, "IL_LIBRARY"), (0x8, "STRONGNAMESIGNED"),
+              (0x10, "NATIVE_ENTRYPOINT"), (0x10000, "TRACKDEBUGDATA"), (0x20000, "32BITPREFERRED"))
+_VTF_FLAGS = ((0x1, "32BIT"), (0x2, "64BIT"), (0x4, "FROM_UNMANAGED"), (0x8, "FROM_UNMANAGED_RETAIN_APPDOMAIN"),
+              (0x10, "CALL_MOST_DERIVED"))
+_SC_ALLOC = {"virtualalloc", "virtualallocex", "virtualalloc2", "virtualallocexnuma", "virtualprotect",
+             "virtualprotectex", "ntallocatevirtualmemory", "zwallocatevirtualmemory", "ntprotectvirtualmemory",
+             "zwprotectvirtualmemory", "mmap", "mmap64", "mprotect", "heapcreate", "heapalloc"}
+_SC_EXEC = ("Marshal::Copy", "Marshal::GetDelegateForFunctionPointer", "Marshal::WriteByte", "Marshal::WriteInt32",
+            "Marshal::WriteInt64", "Buffer::MemoryCopy", "Unsafe::CopyBlock")
+
+
+def _sc_emulate(code, mode):
+    """Run a position-independent stub with unicorn until it returns to a sentinel: (return int32 signed, full
+    return register) or None (fault / no ret within 100k instructions)."""
+    try:
+        import unicorn as U
+        base, stk, sent = 0x10000000, 0x20000000, 0x30000000
+        if mode == "AArch64":
+            from unicorn import arm64_const as A
+            mu = U.Uc(U.UC_ARCH_ARM64, U.UC_MODE_ARM)
+            sp, lr, ret, pc = A.UC_ARM64_REG_SP, A.UC_ARM64_REG_LR, A.UC_ARM64_REG_X0, A.UC_ARM64_REG_PC
+        else:
+            from unicorn import x86_const as X
+            b64 = mode == "x86-64"
+            mu = U.Uc(U.UC_ARCH_X86, U.UC_MODE_64 if b64 else U.UC_MODE_32)
+            sp, lr = (X.UC_X86_REG_RSP if b64 else X.UC_X86_REG_ESP), None
+            ret, pc = (X.UC_X86_REG_RAX if b64 else X.UC_X86_REG_EAX), (X.UC_X86_REG_RIP if b64 else X.UC_X86_REG_EIP)
+        mu.mem_map(base, (len(code) + 0xFFFF) & ~0xFFF)
+        mu.mem_write(base, bytes(code))
+        mu.mem_map(stk, 0x20000)
+        top = stk + 0x10000
+        if lr is None:
+            mu.mem_write(top, sent.to_bytes(8 if mode == "x86-64" else 4, "little"))
+        else:
+            mu.reg_write(lr, sent)
+        mu.reg_write(sp, top)
+        mu.emu_start(base, sent, timeout=300_000, count=100_000)
+        if mu.reg_read(pc) != sent:
+            return None
+        v = mu.reg_read(ret)
+        lo = v & 0xFFFFFFFF
+        return lo - (1 << 32) if lo >> 31 else lo, v
+    except Exception:   # noqa: BLE001 -- faults, unmapped access, bad opcodes: no answer
+        return None
+
+
+def _sc_disasm(code, mode, limit=256):
+    """[ 'mnemonic op_str' ] linear sweep with capstone, and whether it covered every byte."""
+    try:
+        import capstone as C
+        if mode == "AArch64":
+            md = C.Cs(C.CS_ARCH_ARM64, C.CS_MODE_ARM)
+        else:
+            md = C.Cs(C.CS_ARCH_X86, C.CS_MODE_64 if mode == "x86-64" else C.CS_MODE_32)
+        ins, end = [], 0
+        for i in md.disasm(bytes(code), 0):
+            ins.append((i.mnemonic + " " + i.op_str).strip())
+            end = i.address + i.size
+            if len(ins) >= limit:
+                break
+        return ins, end >= len(code)
+    except Exception:   # noqa: BLE001
+        return [], False
+
+
+def dotnet_native_facts(data):
+    """Native code inside or carried by a .NET (CLI) assembly. COR20 header: cor20_flags ("0x%08x"), cor20_flag_names
+    (JSON, ILONLY 32BITREQUIRED IL_LIBRARY STRONGNAMESIGNED NATIVE_ENTRYPOINT TRACKDEBUGDATA 32BITPREFERRED),
+    cor20_version (major.minor), ilonly / mixed_mode (ILONLY clear and not R2R: C++/CLI) / 32bit_required / 32bit_preferred
+    true|false, entry_point (MethodDef token "0x06......" or native RVA when NATIVE_ENTRYPOINT, "none"); machine (R2R
+    OS cookie removed); vtfixup_rva / vtfixup_size / vtfixup_count (entries) / vtfixup_slots (sum of counts) /
+    vtfixups (JSON [{"rva","count","type","kinds","tokens"}]); readytorun (ManagedNativeHeader 'RTR'); has_native_code
+    (mixed mode, VTableFixups or R2R). Shellcode carried as data: a byte[] initialiser (ldtoken + InitializeArray) whose
+    method -- or a method of the same type -- reaches an allocation P/Invoke (VirtualAlloc/VirtualProtect/
+    NtAllocateVirtualMemory/mmap/mprotect...) through managed calls, disassembled with capstone in the PE's mode
+    (x86-64 for AMD64 and AnyCPU, i386 when 32BITREQUIRED) and run with unicorn to its ret: shellcode_count,
+    shellcodes (JSON [{"method","field","size","hex","mode","disasm","return","return_hex"}]), shellcode_hex /
+    shellcode_size / shellcode_field / shellcode_method / shellcode_mode / shellcode_disasm (JSON) /
+    shellcode_return (int32 decimal of eax/x0) / shellcode_return_hex for the first, shellcode_returns (JSON);
+    alloc_apis (P/Invoke entries of that family, JSON), exec_apis (Marshal.Copy / GetDelegateForFunctionPointer ...
+    called, JSON), alloc_callers. Absent single values are "none". None when not a CLI assembly / truncated."""
+    try:
+        return _dotnet_native_facts(bytes(data))
+    except Exception:   # noqa: BLE001 -- hostile tables: cannot answer
+        return None
+
+
+def _dotnet_native_facts(data):
+    lay = _pe_layout(data)
+    if not lay or len(lay[2]) <= 14 or not lay[2][14][0]:
+        return None
+    secs = lay[1]
+    co = _pe_rva(secs, lay[2][14][0])
+    if co is None or co + 72 > len(data):
+        return None
+    cb, vmaj, vmin, _md, _mds, flags, ep = struct.unpack_from("<IHHIIII", data, co)
+    vtr, vts = struct.unpack_from("<II", data, co + 48)
+    mnh = struct.unpack_from("<I", data, co + 64)[0]
+    mdo = _pe_rva(secs, _md) if _md else None
+    if cb < 72 or mdo is None or mdo + _mds > len(data) or data[mdo:mdo + 4] != b"BSJB":   # metadata past EOF: truncated
+        return None
+    js = lambda xs: json.dumps(list(xs), separators=(",", ":"), ensure_ascii=False)   # noqa: E731
+    tf = lambda b: "true" if b else "false"   # noqa: E731
+    bf = dotnet_build_facts(data) or {}
+    mf = machine_facts(data) or {}
+    machine = bf.get("machine") or mf.get("machine") or "none"
+    vtf = []
+    vo = _pe_rva(secs, vtr) if vtr and vts else None
+    for k in range(min(vts // 8, 256) if vo is not None else 0):
+        if vo + 8 * k + 8 > len(data):
+            break
+        r, n, ty = struct.unpack_from("<IHH", data, vo + 8 * k)
+        so, w = _pe_rva(secs, r) if r else None, 8 if ty & 2 else 4
+        toks = []
+        for j in range(min(n, 64) if so is not None else 0):
+            if so + w * j + w <= len(data):
+                toks.append("0x%08x" % (int.from_bytes(data[so + w * j:so + w * j + w], "little") & 0xFFFFFFFF))
+        vtf.append({"rva": "0x%x" % r, "count": n, "type": "0x%04x" % ty,
+                    "kinds": [s for b, s in _VTF_FLAGS if ty & b], "tokens": toks})
+    mo = _pe_rva(secs, mnh) if mnh else None
+    r2r = mo is not None and data[mo:mo + 4] == b"RTR\0"
+    out = {"cor20_flags": "0x%08x" % flags, "cor20_flag_names": js(s for b, s in _COR_FLAGS if flags & b),
+           "cor20_version": "%d.%d" % (vmaj, vmin), "ilonly": tf(flags & 1), "mixed_mode": tf(not flags & 1 and not r2r),
+           "32bit_required": tf(flags & 2), "32bit_preferred": tf(flags & 0x20000),
+           "entry_point": ("0x%x" % ep if flags & 0x10 else "0x%08x" % ep) if ep else "none", "machine": machine,
+           "vtfixup_rva": "0x%x" % vtr if vtr else "none", "vtfixup_size": str(vts if vtr else 0),
+           "vtfixup_count": str(len(vtf)), "vtfixup_slots": str(sum(v["count"] for v in vtf)), "vtfixups": js(vtf),
+           "readytorun": tf(r2r), "has_native_code": tf(not flags & 1 or vtf or r2r)}
+    # shellcode carried as an InitializeArray blob that reaches an allocation P/Invoke
+    il = dotnet_il_facts(data) or {}
+    edges = [e for e in json.loads(il.get("call_edges") or "[]")]
+    alloc = [e for e in edges if e["kind"] == "native" and
+             (str(e.get("entry", "")).lower() in _SC_ALLOC or e["callee"].rsplit("::", 1)[-1].lower() in _SC_ALLOC)]
+    rev = {}
+    for e in edges:
+        if e["kind"] == "managed":
+            rev.setdefault(e["callee"], set()).add(e["caller"])
+    reach, todo = set(), [e["caller"] for e in alloc]
+    while todo and len(reach) < 4096:
+        m = todo.pop()
+        if m not in reach:
+            reach.add(m)
+            todo.extend(rev.get(m, ()))
+    rtypes = {m.rsplit("::", 1)[0] for m in reach}
+    if alloc:
+        mode = machine if machine in ("x86-64", "AArch64") else \
+            "i386" if machine == "i386" and flags & 2 else "x86-64" if machine == "i386" else None
+    else:
+        mode = None
+    scs = []
+    for a in json.loads(il.get("array_inits") or "[]") if mode else ():
+        if a.get("hex") in (None, "none") or not (a["method"] in reach or a["method"].rsplit("::", 1)[0] in rtypes):
+            continue
+        code = bytes.fromhex(a["hex"])
+        modes = (mode, "i386") if mode == "x86-64" and machine == "i386" else (mode,)
+        for md in modes:
+            ins, full = _sc_disasm(code, md)
+            rv = _sc_emulate(code, md)
+            if rv is not None or full:
+                break
+        if rv is None and not full:
+            continue
+        scs.append({"method": a["method"], "field": a["field"], "size": len(code), "hex": a["hex"], "mode": md,
+                    "disasm": ins, "return": str(rv[0]) if rv else "none",
+                    "return_hex": "0x%x" % (rv[0] & 0xFFFFFFFF) if rv else "none"})
+    first = scs[0] if scs else {}
+    out.update({"shellcode_count": str(len(scs)), "shellcodes": js(scs),
+                "shellcode_returns": js(s["return"] for s in scs),
+                "alloc_apis": js(dict.fromkeys(str(e.get("entry") or e["callee"].rsplit("::", 1)[-1]) for e in alloc)),
+                "alloc_callers": js(dict.fromkeys(e["caller"] for e in alloc)),
+                "exec_apis": js(dict.fromkeys(e["callee"].rsplit(".", 1)[-1] for e in edges
+                                              if e["callee"].endswith(_SC_EXEC)))})
+    for k in ("hex", "size", "field", "method", "mode", "return", "return_hex"):
+        out["shellcode_" + k] = str(first[k]) if first else "none"
+    out["shellcode_disasm"] = js(first.get("disasm", ())) if first else "none"
+    return out
+
+
+_DN_NATIVE_ALIAS = {"corflags": "cor20_flags", "cor20flags": "cor20_flags", "clrflags": "cor20_flags",
+                    "comimageflags": "cor20_flags", "corflagnames": "cor20_flag_names", "ismixedmode": "mixed_mode",
+                    "mixedmode": "mixed_mode", "cppcli": "mixed_mode", "isilonly": "ilonly", "ilonlyflag": "ilonly",
+                    "vtablefixups": "vtfixups", "vtablefixupcount": "vtfixup_count", "vtfixupentries": "vtfixup_count",
+                    "numvtfixups": "vtfixup_count", "vtablefixupscount": "vtfixup_count", "vtfixupscount": "vtfixup_count",
+                    "isreadytorun": "readytorun", "r2r": "readytorun",
+                    "nativecode": "has_native_code", "containsnativecode": "has_native_code",
+                    "shellcodereturnvalue": "shellcode_return", "returnvalue": "shellcode_return",
+                    "shellcodelength": "shellcode_size", "shellcodebytes": "shellcode_hex",
+                    "requires32bit": "32bit_required", "prefers32bit": "32bit_preferred"}
+
+
+def dotnet_native_field(data, name):
+    """One dotnet_native_facts value by name (case/punctuation-insensitive, a few aliases: cor_flags, is_mixed_mode,
+    vtable_fixups, is_readytorun, return_value ...); shellcode<N>_<k> / shellcode_<N>_<k> picks the N-th (1-based)
+    shellcode record. None when not a CLI assembly, "none" for an unknown name."""
+    f = dotnet_native_facts(data)
+    if f is None:
+        return None
+    k = _il_key(name)
+    keys = {_il_key(x): x for x in f}
+    if k in keys:
+        return f[keys[k]]
+    if k in _DN_NATIVE_ALIAS:
+        return f[_DN_NATIVE_ALIAS[k]]
+    m = re.fullmatch(r"shellcode(\d+)(\w+)", k)
+    if m:
+        scs = json.loads(f["shellcodes"])
+        i, sub = int(m.group(1)) - 1, m.group(2)
+        if not 0 <= i < len(scs):
+            return "none"
+        for kk, v in scs[i].items():
+            if _il_key(kk) == sub:
+                return json.dumps(v, separators=(",", ":")) if isinstance(v, list) else str(v)
+    return "none"
 
 
 # ------------------------------------------------------------------ container slots: PE/.NET resources, overlay
@@ -8248,6 +10654,377 @@ def dotnet_resources(data, limit=4096):
         out.append({"offset": p + 4, "size": n})
         p += 4 + n
     return out
+
+
+# --- reflection / dynamic loading of a second module (coverage atlas: reflection-dynamic-load) -----------------------
+# A loader carries a second managed/JVM module as DATA and loads it at run time: .NET Assembly.Load(byte[]) of a manifest
+# resource (Costura.Fody `costura.<name>.dll.compressed` = raw deflate via DeflateStream; also gzip/zlib/plain) or of a
+# byte[] initializer (FieldRVA blob), AppDomain.AssemblyResolve, Activator.CreateInstance / MethodInfo.Invoke by string
+# name; JVM ClassLoader.defineClass of a jar entry / blob stored xor'd (short repeating key, recovered from the class /
+# DOS header known plaintext). embedded_modules finds them, decodes them, and recurses (provenance path " > ").
+EMB_MAX_DEPTH = 3
+EMB_MAX_BYTES = int(os.environ.get("HCTF_EMB_MAX", str(48 << 20)))   # decoded bytes over all candidates
+_EMB_CLASS_KP = b"\xca\xfe\xba\xbe\x00\x00\x00"        # magic + minor 0 + major high byte
+_EMB_MZ_KP = b"MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00\xff\xff"   # the DOS header every MSVC/Roslyn PE starts with
+_EMB_DOS_STUB = b"This program cannot be run in DOS mode"
+_EMB_DN_API = ("Load", "LoadFrom", "LoadFile", "UnsafeLoadFrom", "add_AssemblyResolve", "add_TypeResolve",
+               "add_ResourceResolve", "CreateInstance", "CreateInstanceFrom", "GetType", "GetMethod", "GetMethods",
+               "GetProperty", "GetField", "GetConstructor", "Invoke", "InvokeMember", "GetManifestResourceStream",
+               "GetManifestResourceNames", "DefineDynamicAssembly", "CreateDelegate", "GetDelegateForFunctionPointer")
+_EMB_DN_TYPES = ("Assembly", "AppDomain", "Activator", "Type", "MethodInfo", "MethodBase", "ConstructorInfo",
+                 "PropertyInfo", "FieldInfo", "AssemblyLoadContext", "Delegate", "Marshal", "AssemblyBuilder")
+_EMB_JVM_API = (b"defineClass", b"defineHiddenClass", b"loadClass", b"findClass", b"forName", b"getMethod",
+                b"getDeclaredMethod", b"getConstructor", b"getDeclaredConstructor", b"newInstance", b"invoke",
+                b"getResourceAsStream", b"URLClassLoader", b"InMemoryClassLoader", b"MethodHandles", b"findStatic",
+                b"findVirtual", b"Unsafe")
+
+
+def _emb_kind(b):
+    """'dotnet' / 'pe' / 'class' / 'jar' / 'elf' for a decoded module's leading bytes, else None."""
+    try:
+        if b[:2] == b"MZ":
+            e = int.from_bytes(b[60:64], "little")
+            if b[e:e + 4] != b"PE\0\0":
+                return None
+            return "dotnet" if b.find(b"BSJB", 0, 1 << 22) > 0 else "pe"
+        if b[:4] == b"\xca\xfe\xba\xbe":
+            return "class" if classfile_parse(b) else None
+        if b[:4] == b"PK\x03\x04":
+            return "jar"
+        if b[:4] == b"\x7fELF":
+            return "elf"
+    except _PARSE_ERR:
+        return None
+    return None
+
+
+def _emb_xor(b, kp, maxk=8):
+    """(key bytes, decoded) when `b` is `kp`-prefixed plaintext xor'd with a repeating key of 1..maxk bytes."""
+    n = min(len(kp), len(b))
+    for k in range(1, min(maxk, n) + 1):
+        key = bytes(b[i] ^ kp[i] for i in range(k))
+        if not any(key) or any(b[i] ^ key[i % k] != kp[i] for i in range(k, n)):
+            continue
+        if len(key) > 1 and len(set(key)) == 1:   # 'k' repeated: the 1-byte key already covered it
+            continue
+        ks = (key * (len(b) // k + 1))[:len(b)]
+        return key, (int.from_bytes(b, "big") ^ int.from_bytes(ks, "big")).to_bytes(len(b), "big")
+    return None
+
+
+def _emb_head_ok(data, o):
+    """Cheap test on the first bytes at data[o]: could a module (plain / deflated / short-xor'd) start here?"""
+    h = bytes(data[o:o + 16])
+    if h[:2] == b"MZ" or h[:4] in (b"\xca\xfe\xba\xbe", b"PK\x03\x04", b"\x7fELF") or h[:2] == b"\x1f\x8b":
+        return True
+    if any(_emb_xor(h, kp) for kp in (_EMB_CLASS_KP, _EMB_MZ_KP)):
+        return True
+    for wb in (-15, 15):
+        try:
+            r = zlib.decompressobj(wb).decompress(bytes(data[o:o + 4096]), 8)
+        except zlib.error:
+            continue
+        if r[:2] == b"MZ" or r[:4] in (b"\xca\xfe\xba\xbe", b"PK\x03\x04"):
+            return True
+    return False
+
+
+def _emb_decode(b):
+    """[(encoding, decoded bytes)] of the module forms of blob `b` (plain, raw deflate / zlib / gzip, short xor)."""
+    out = []
+    if _emb_kind(b):
+        return [("raw", b)]
+    for enc, wb in (("deflate", -15), ("zlib", 15), ("gzip", 31)):
+        try:
+            d = zlib.decompressobj(wb)
+            r = d.decompress(b, EMB_MAX_BYTES)
+        except zlib.error:
+            continue
+        if len(r) >= 64 and _emb_kind(r):
+            out.append((enc, r))
+            return out
+    for kp in (_EMB_CLASS_KP, _EMB_MZ_KP):
+        r = _emb_xor(b, kp)
+        if r and _emb_kind(r[1]):
+            out.append(("xor:" + r[0].hex(), r[1]))
+            return out
+    return out
+
+
+def _emb_trim(kind, b):
+    """The module's own bytes (a class / PE stops where its structure ends; trailing data is dropped)."""
+    try:
+        if kind == "class":
+            p = classfile_parse(b)
+            return b[:len(b) - p["trailing"]] if p else b
+        if kind in ("pe", "dotnet"):
+            pe = _pe_layout(b)
+            end = max((rp + rs for _, _, _, rp, rs in pe[1]), default=0) if pe else 0
+            return b[:end] if end and end <= len(b) else b
+    except _PARSE_ERR:
+        pass
+    return b
+
+
+def _emb_dn_meta(data, refs=False):
+    """dnfile view of a CLI PE: {name, resources [(name, file offset of data, size)], field_rvas [file offsets],
+    us [#US strings], refs [(type, member) MemberRef names]} or None."""
+    try:
+        import dnfile
+        pe = dnfile.dnPE(data=bytes(data), fast_load=True, clr_lazy_load=True)
+        pe.parse_data_directories(directories=[14])
+        net = pe.net
+        if net is None or net.mdtables is None:
+            return None
+        t = net.mdtables
+        rows = lambda tab: list(getattr(t, tab, None) or ())   # noqa: E731
+        nm = lambda x: "" if x is None else str(x)   # noqa: E731
+        asm = rows("Assembly")
+        out = {"name": nm(asm[0].Name) if asm else "", "resources": [], "field_rvas": [], "us": [], "refs": []}
+        lay = _pe_layout(data)
+        cli = _pe_rva(lay[1], lay[2][14][0])
+        rrva, rsize = struct.unpack_from("<II", data, cli + 24)
+        lo = _pe_rva(lay[1], rrva) if rrva else None
+        for r in rows("ManifestResource"):
+            if int(getattr(r.struct, "Implementation_CodedIndex", 0) or 0) >> 2:
+                continue   # lives in another file / assembly (raw coded index: r.Implementation full-loads, ~2 s)
+            if lo is None:
+                break
+            p = lo + int(r.Offset or 0)
+            n = int.from_bytes(data[p:p + 4], "little")
+            if p + 4 + n <= len(data) and int(r.Offset or 0) + 4 + n <= rsize:
+                out["resources"].append((nm(r.Name), p + 4, n))
+        for r in rows("FieldRva"):
+            o = _pe_rva(lay[1], int(getattr(r, "Rva", 0) or 0)) if getattr(r, "Rva", 0) else None
+            if o is not None:
+                out["field_rvas"].append(o)
+        h, p = bytes(getattr(net.user_strings, "__data__", b"") or b""), 1
+        while refs and p < len(h) and len(out["us"]) < 20000:
+            n, q = h[p], p + 1
+            if n & 0x80:
+                n, q = (((n & 0x3F) << 8) | h[p + 1], p + 2) if not n & 0x40 else \
+                    (((n & 0x1F) << 24) | int.from_bytes(h[p + 1:p + 4], "big"), p + 4)
+            if n == 0 and h[p] == 0:
+                break
+            if n > 1:
+                out["us"].append(h[q:q + n - 1].decode("utf-16-le", "replace"))
+            p = q + n
+        trs = rows("TypeRef") if refs else ()
+        for r in rows("MemberRef") if refs else ():
+            mn = nm(r.Name)   # MemberRefParent coded index: 3-bit tag (1 = TypeRef), row = ci >> 3 (decoded by hand:
+            if mn not in _EMB_DN_API:   # dnfile's r.Class resolution full-loads every table, ~1.2 s on FSharp.Core)
+                continue
+            ci = int(getattr(r.struct, "Class_CodedIndex", 0) or 0)
+            tn = nm(trs[(ci >> 3) - 1].TypeName) if ci & 7 == 1 and 0 < ci >> 3 <= len(trs) else ""
+            out["refs"].append((tn, mn))
+        return out
+    except Exception:   # noqa: BLE001 -- hostile/truncated metadata: not a CLI PE we can walk
+        return None
+
+
+def _emb_jvm_strings(cls):
+    """(api names, string constants) of one .class: CONSTANT_Utf8 entries naming loader/reflection APIs, + Strings."""
+    p = classfile_parse(cls)
+    if not p:
+        return [], []
+    utf = {e[1] for e in p["cp"] if e and e[0] == 1 and isinstance(e[1], str)}
+    apis = [a.decode() for a in _EMB_JVM_API if any(a.decode() == s or ("/" + a.decode()) in s for s in utf)]
+    strs = []
+    for e in p["cp"]:
+        if e and e[0] == 8:
+            try:
+                s = p["_u"](e[1])
+            except Exception:   # noqa: BLE001
+                s = None
+            if s is not None:
+                strs.append(s)
+    return apis, strs
+
+
+def reflection_calls(data):
+    """Reflective / dynamic-load call evidence of one module: {"apis": ['Assembly.Load', 'Activator.CreateInstance',
+    ...] (.NET MemberRef Type.Member) or ['defineClass', ...] (JVM constant-pool names, over every class of a jar),
+    "strings": #US strings (.NET) / CONSTANT_String values (JVM) = the type/method/resource names passed by string}.
+    None when `data` is neither a CLI PE, a class nor a jar."""
+    data = bytes(data)
+    kind = _emb_kind(data)
+    if kind in ("dotnet", "pe"):
+        m = _emb_dn_meta(data, refs=True)
+        if m is None:
+            return None
+        apis = []
+        for tn, mn in m["refs"]:
+            if tn in _EMB_DN_TYPES and mn in _EMB_DN_API and f"{tn}.{mn}" not in apis:
+                apis.append(f"{tn}.{mn}")
+        return {"apis": apis, "strings": m["us"]}
+    classes = []
+    if kind == "class":
+        classes = [data]
+    elif kind == "jar" or data[:4] == b"PK\x03\x04":
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(data))
+            classes = [zf.read(i) for i in zf.infolist()[:4000] if i.filename.endswith(".class") and i.file_size < 1 << 22]
+        except Exception:   # noqa: BLE001
+            return None
+    else:
+        return None
+    apis, strs = [], []
+    for c in classes:
+        a, s = _emb_jvm_strings(c)
+        apis += [x for x in a if x not in apis]
+        strs += [x for x in s if x not in strs]
+    return {"apis": apis, "strings": strs}
+
+
+def _emb_candidates(data, kind):
+    """[(provenance, stored offset, blob bytes)] places a second module may hide in a module of `kind`."""
+    out = []
+    if kind in ("dotnet", "pe"):
+        m = _emb_dn_meta(data) if kind == "dotnet" else None
+        for name, o, n in (m or {}).get("resources", ()):
+            if _emb_head_ok(data, o):
+                out.append(("resource:" + name, o, data[o:o + n]))
+        for o in (m or {}).get("field_rvas", ())[:4096]:
+            if _emb_head_ok(data, o):
+                out.append((f"field_rva@{o}", o, data[o:o + (16 << 20)]))
+        i, k = data.find(_EMB_DOS_STUB, 0x80), 0   # a raw PE inside (array / overlay): DOS stub text at MZ+0x4e
+        while i >= 0 and k < 64:
+            o = i - 0x4e
+            if data[o:o + 2] == b"MZ":
+                lay = _pe_layout(data[o:o + 0x1000])
+                n = max((rp + rs for _, _, _, rp, rs in lay[1]), default=0) if lay else 0
+                if n:
+                    out.append((f"raw@{o}", o, data[o:o + n]))
+            i, k = data.find(_EMB_DOS_STUB, i + 1), k + 1
+    elif kind == "jar" or data[:4] == b"PK\x03\x04":
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(data))
+            infos = zf.infolist()[:20000]
+        except Exception:   # noqa: BLE001
+            infos, zf = [], None
+        for zi in infos:
+            if zi.filename.endswith("/") or zi.file_size < 64 or zi.file_size > (16 << 20):
+                continue
+            if zi.filename.lower().endswith((".class", ".jar", ".so", ".dylib", ".jnilib")):
+                continue   # an ordinary app class / bundled library under its own name, not a hidden payload
+            p = zi.header_offset
+            dstart = p + 30 + int.from_bytes(data[p + 26:p + 28], "little") + int.from_bytes(data[p + 28:p + 30], "little")
+            try:
+                out.append(("zip:" + zi.filename, dstart, zf.read(zi)))
+            except Exception:   # noqa: BLE001 -- encrypted / unsupported entry
+                continue
+    if kind in ("dotnet", "pe", "elf", "class"):   # a raw class constant inside a native/managed blob
+        i, k = data.find(b"\xca\xfe\xba\xbe", 1), 0
+        while i >= 0 and k < 64:
+            if 45 <= int.from_bytes(data[i + 6:i + 8], "big") <= 80:
+                out.append((f"raw@{i}", i, data[i:i + (4 << 20)]))
+            i, k = data.find(b"\xca\xfe\xba\xbe", i + 1), k + 1
+    return out
+
+
+def embedded_modules(data, *, max_depth=EMB_MAX_DEPTH, hcfg=True, deadline=None):
+    """Every second module carried as data by `data` (a .NET PE, a jar/zip, a class, a native PE/ELF), recursively:
+    [{path (provenance, ' > '-joined: 'resource:costura.payload.dll.compressed', 'zip:payload.bin', 'field_rva@N',
+    'raw@N'), depth (1 = directly inside `data`), stored_offset (first stored byte in its container), encoding ('raw' /
+    'deflate' / 'zlib' / 'gzip' / 'xor:<key hex>'), kind ('dotnet' / 'pe' / 'class' / 'jar' / 'elf'), name (assembly /
+    class name), size, sha256, md5, reflection (reflection_calls of the module), hcfg ({offset (INSIDE the decoded
+    module), encoding, config} of the first crc-valid blob, or None; hcfg="encoded": only modules whose stored form
+    is not raw -- a raw one is already in the outer bytes)}]. [] when nothing is embedded; never raises."""
+    import hashlib
+    end = _ends(deadline)
+    budget, out, seen = [EMB_MAX_BYTES], [], set()
+
+    def walk(buf, kind, prefix, depth):
+        if depth > max_depth or (end is not None and time.time() > end):
+            return
+        try:
+            cands = _emb_candidates(buf, kind)
+        except Exception:   # noqa: BLE001
+            return
+        for prov, off, blob in cands:
+            if budget[0] <= 0 or (end is not None and time.time() > end):
+                return
+            try:
+                forms = _emb_decode(blob)
+            except Exception:   # noqa: BLE001
+                continue
+            for enc, mod in forms:
+                k = _emb_kind(mod)
+                mod = _emb_trim(k, mod)
+                h = hashlib.sha256(mod).hexdigest()
+                if h in seen or (enc == "raw" and len(mod) == len(buf)):
+                    continue
+                seen.add(h)
+                budget[0] -= len(mod)
+                if k in ("dotnet", "pe"):
+                    name = (_emb_dn_meta(mod) or {}).get("name", "") if k == "dotnet" else ""
+                else:
+                    name = (classfile_parse(mod) or {}).get("this") or "" if k == "class" else ""
+                rec = {"path": prefix + prov, "depth": depth, "stored_offset": off, "encoding": enc, "kind": k,
+                       "name": name or "none", "size": len(mod), "sha256": h, "md5": hashlib.md5(mod).hexdigest(),
+                       "reflection": None, "hcfg": None}
+                try:
+                    rec["reflection"] = reflection_calls(mod)
+                except Exception:   # noqa: BLE001
+                    pass
+                if hcfg and (hcfg != "encoded" or enc != "raw"):
+                    try:
+                        hit = next((x for x in hcfg_scan(mod, deadline=deadline, stop_on_valid=True, _depth=2)
+                                    if x.valid), None)
+                    except Exception:   # noqa: BLE001
+                        hit = None
+                    if hit:
+                        rec["hcfg"] = {"offset": hit.offset, "encoding": hit.encoding, "config": hit.config}
+                        rec["_hit"] = hit   # the HcfgHit itself (hcfg_scan re-labels it module-<enc>)
+                out.append(rec)
+                walk(mod, k, rec["path"] + " > ", depth + 1)
+
+    try:
+        data = bytes(data)
+        walk(data, _emb_kind(data) or ("jar" if data[:4] == b"PK\x03\x04" else None), "", 1)
+    except Exception:   # noqa: BLE001
+        pass
+    return out
+
+
+def embedded_module_field(data, name):
+    """One answer string about the embedded modules: module_count, module_paths / module_names / module_kinds /
+    module_encodings / module_sha256 (JSON lists, discovery order), first_module_<key> (path/name/kind/encoding/sha256/
+    md5/size/stored_offset), loader_apis / loader_strings (reflection_calls of `data` itself, JSON list), module_apis /
+    module_strings (of the first module), hcfg_path (module holding a valid HCFG), hcfg_offset (inside that module).
+    "none" when absent (no module / empty), None when `data` is not a parsable container."""
+    js = lambda xs: json.dumps(list(xs), separators=(",", ":"), ensure_ascii=False)   # noqa: E731
+    try:
+        data = bytes(data)
+        if name in ("loader_apis", "loader_strings"):
+            r = reflection_calls(data)
+            if r is None:
+                return None
+            v = r["apis" if name == "loader_apis" else "strings"]
+            return js(v) if v else "none"
+        mods = embedded_modules(data)
+        if name == "module_count":
+            return str(len(mods))
+        if not mods:
+            return "none"
+        if name.startswith("module_") and name[7:-1] in ("path", "name", "kind", "encoding") and name.endswith("s"):
+            return js(m[name[7:-1]] for m in mods)
+        if name == "module_sha256":
+            return js(m["sha256"] for m in mods)
+        if name.startswith("first_module_") and name[13:] in mods[0]:
+            return str(mods[0][name[13:]])
+        if name in ("module_apis", "module_strings"):
+            r = mods[0]["reflection"] or {}
+            v = r.get("apis" if name == "module_apis" else "strings") or []
+            return js(v) if v else "none"
+        h = next((m for m in mods if m["hcfg"]), None)
+        if name == "hcfg_path":
+            return h["path"] if h else "none"
+        if name == "hcfg_offset":
+            return str(h["hcfg"]["offset"]) if h else "none"
+    except Exception:   # noqa: BLE001
+        return None
+    return None
 
 
 def hcfg_locate(data, off):
@@ -15473,3 +18250,2487 @@ def aot_image_field(data, name):
     if k is None:
         return f.get(f["runtime"] + "_version", "none")
     return f.get(k, "none")
+
+
+# --- dlopen-style loader/plugin pairs (D21 theme: OCaml natdynlink loader + .cmxs plugin) -----------------------------
+_DL_LOADERS = {"dlopen": 0, "dlmopen": 1, "LoadLibraryA": 0, "LoadLibraryW": 0, "LoadLibraryExA": 0,
+               "LoadLibraryExW": 0}
+_DL_RESOLVERS = {"dlsym": 1, "dlvsym": 1, "GetProcAddress": 1}
+_DL_ARGREG = {"x64": ("di", "si", "dx", "cx", "r8", "r9")}
+_DL_INIT = re.compile(r"(^|_)(plugin_init|init_plugin|module_init|register\w*|\w*_register|\w*_init|init|"
+                      r"get_plugin\w*|plugin_entry|caml_plugin_header)$", re.I)
+_REG64 = {"rax": "ax", "eax": "ax", "rbx": "bx", "ebx": "bx", "rcx": "cx", "ecx": "cx", "rdx": "dx", "edx": "dx",
+          "rsi": "si", "esi": "si", "rdi": "di", "edi": "di", "rbp": "bp", "ebp": "bp",
+          **{f"r{i}": f"r{i}" for i in range(8, 16)}, **{f"r{i}d": f"r{i}" for i in range(8, 16)}}
+
+
+def caml_unmarshal(data, o=0, max_objs=200_000):
+    """Decode one OCaml Marshal value (intext small 0x8495A6BE / big 0x8495A6BD header) at data[o:]: ints -> int,
+    strings -> bytes, blocks -> (tag, [fields]) tuples, doubles -> float. None on a bad header / unsupported code."""
+    try:
+        mg = struct.unpack_from(">I", data, o)[0]
+        if mg == 0x8495A6BE:
+            dlen, p = struct.unpack_from(">I", data, o + 4)[0], o + 20
+        elif mg == 0x8495A6BD:
+            dlen, p = struct.unpack_from(">Q", data, o + 8)[0], o + 32
+        else:
+            return None
+        end = min(len(data), p + dlen)
+        objs, root, stack = [], [None], []   # stack: [fields list, next index]
+        slot = (root, 0)
+        while True:
+            if p >= end or len(objs) > max_objs:
+                return None
+            c = data[p]
+            p += 1
+            if c >= 0x80 or c in (0x08, 0x13):
+                if c >= 0x80:
+                    tag, size = c & 0xF, (c >> 4) & 7
+                else:
+                    w = 4 if c == 0x08 else 8
+                    h = int.from_bytes(data[p:p + w], "big")
+                    p += w
+                    tag, size = h & 0xFF, h >> 10
+                if size > end - p:
+                    return None
+                v = (tag, [None] * size)
+                if size:
+                    objs.append(v)
+            elif c >= 0x40:
+                v = c & 0x3F
+            elif c >= 0x20 or c in (0x09, 0x0A, 0x15):
+                if c >= 0x20:
+                    n = c & 0x1F
+                else:
+                    w = {0x09: 1, 0x0A: 4, 0x15: 8}[c]
+                    n = int.from_bytes(data[p:p + w], "big")
+                    p += w
+                v = bytes(data[p:p + n])
+                p += n
+                objs.append(v)
+            elif c <= 0x03:
+                w = (1, 2, 4, 8)[c]
+                v = int.from_bytes(data[p:p + w], "big", signed=True)
+                p += w
+            elif c in (0x04, 0x05, 0x06, 0x14):
+                w = {0x04: 1, 0x05: 2, 0x06: 4, 0x14: 8}[c]
+                k = int.from_bytes(data[p:p + w], "big")
+                p += w
+                if not 0 < k <= len(objs):
+                    return None
+                v = objs[len(objs) - k]
+            elif c in (0x0B, 0x0C):
+                v = struct.unpack_from(">d" if c == 0x0B else "<d", data, p)[0]
+                p += 8
+                objs.append(v)
+            else:
+                return None
+            slot[0][slot[1]] = v
+            if isinstance(v, tuple) and v[1] and all(x is None for x in v[1]) and (not objs or objs[-1] is v):
+                stack.append([v[1], 0])
+            while stack and stack[-1][1] >= len(stack[-1][0]):
+                stack.pop()
+            if not stack:
+                return root[0]
+            slot = (stack[-1][0], stack[-1][1])
+            stack[-1][1] += 1
+    except Exception:  # noqa: BLE001 -- untrusted bytes
+        return None
+
+
+def _caml_list(v, cap=100_000):
+    out = []
+    while isinstance(v, tuple) and v[0] == 0 and len(v[1]) == 2 and len(out) < cap:
+        out.append(v[1][0])
+        v = v[1][1]
+    return out if v == 0 else None
+
+
+def caml_dynheader(blob):
+    """Decode a natdynlink `caml_plugin_header` (Marshal'd Cmx_format.dynheader) -> {magic, units:[{name, crc,
+    imports_cmi, imports_cmx, defines}]}; None when it is not one."""
+    v = caml_unmarshal(blob)
+    if not (isinstance(v, tuple) and len(v[1]) >= 2 and isinstance(v[1][0], bytes)):
+        return None
+    units = []
+    for u in _caml_list(v[1][1]) or []:
+        if not (isinstance(u, tuple) and u[1] and isinstance(u[1][0], bytes)):
+            continue
+        f = u[1]
+        rec = {"name": f[0].decode("latin-1"),
+               "crc": f[1].hex() if len(f) > 1 and isinstance(f[1], bytes) else "none"}
+        imps = []
+        for x in f[2:]:
+            lst = _caml_list(x)
+            if lst is None:
+                continue
+            if lst and all(isinstance(t, tuple) and len(t[1]) == 2 for t in lst):
+                imps.append([t[1][0].decode("latin-1") for t in lst if isinstance(t[1][0], bytes)])
+            elif all(isinstance(t, bytes) for t in lst):
+                if not lst and len(imps) < 2:
+                    imps.append([])
+                else:
+                    rec["defines"] = [t.decode("latin-1") for t in lst]
+        rec["imports_cmi"] = imps[0] if imps else []
+        rec["imports_cmx"] = imps[1] if len(imps) > 1 else []
+        rec.setdefault("defines", [])
+        units.append(rec)
+    return {"magic": v[1][0].decode("latin-1"), "units": units}
+
+
+def _dl_elf(data):
+    """pyelftools view of one ELF: {segs, dynsym [(name, value, defined)], got {slot va: sym}, x86 machine}."""
+    from elftools.elf.elffile import ELFFile
+    from elftools.elf.relocation import RelocationSection
+    e = ELFFile(io.BytesIO(data))
+    segs = [(s["p_vaddr"], s["p_offset"], s["p_filesz"]) for s in e.iter_segments() if s["p_type"] == "PT_LOAD"]
+    dyn = e.get_section_by_name(".dynsym")
+    syms = []
+    if dyn is not None:
+        for s in dyn.iter_symbols():
+            if s.name:
+                syms.append((s.name.split("@")[0], s["st_value"], s["st_shndx"] != "SHN_UNDEF"))
+    got = {}
+    for sec in e.iter_sections():
+        if isinstance(sec, RelocationSection) and dyn is not None and sec["sh_link"] and \
+                e.get_section(sec["sh_link"]).name == ".dynsym":
+            for r in sec.iter_relocations():
+                if r["r_info_sym"]:
+                    got[r["r_offset"]] = _dl_symname(dyn, r["r_info_sym"])
+    text = [(s.name, s["sh_addr"], s["sh_offset"], s["sh_size"]) for s in e.iter_sections()
+            if s["sh_flags"] & 4 and s["sh_type"] == "SHT_PROGBITS"]
+    needed = [t.needed for sec in e.iter_sections() if sec["sh_type"] == "SHT_DYNAMIC"
+              for t in sec.iter_tags() if t.entry.d_tag == "DT_NEEDED"]
+    return {"segs": segs, "syms": syms, "got": got, "text": text, "machine": e["e_machine"],
+            "bits": e.elfclass, "needed": needed}
+
+
+def _dl_symname(dyn, i):
+    try:
+        return dyn.get_symbol(i).name.split("@")[0]
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _va_off(segs, va):
+    for v, o, n in segs:
+        if v <= va < v + n:
+            return o + va - v
+    return None
+
+
+def _cstr_at(data, segs, va, cap=1024):
+    o = _va_off(segs, va)
+    if o is None:
+        return None
+    e = data.find(b"\0", o, o + cap)
+    s = data[o:e] if e > o else b""
+    try:
+        t = s.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    return t if t and t.isprintable() else None
+
+
+def _dl_calls(data, E, deadline):
+    """[(api, string arg or None)] for every call to a dl*/LoadLibrary*/GetProcAddress import, file order. x86-64 only:
+    `call stub@plt` (lazy / IBT .plt.sec / .plt.got stubs resolved through their GOT relocation) and `call [rip+got]`
+    (-fno-plt); string args tracked through lea/mov reg,imm/mov reg,reg in the ~40 insns before the call."""
+    from capstone import Cs, CS_ARCH_X86, CS_MODE_64
+    if E["machine"] != "EM_X86_64":
+        return []
+    md = Cs(CS_ARCH_X86, CS_MODE_64)
+    want = set(_DL_LOADERS) | set(_DL_RESOLVERS)
+    gotw = {va: n for va, n in E["got"].items() if n in want}
+    if not gotw:
+        return []
+    stub = {}
+    for name, va, off, size in E["text"]:
+        if not name.startswith(".plt"):
+            continue
+        start = va
+        for a, sz, mn, ops in md.disasm_lite(bytes(data[off:off + size]), va):
+            if a == start and (mn in ("nop", "int3") or mn.startswith("nop")):   # inter-stub padding
+                start = a + sz
+            elif "jmp" in mn or ops.startswith("jmp"):   # jmp / bnd jmp / notrack jmp
+                m = re.search(r"\[rip \+ 0x([0-9a-f]+)\]", ops)
+                if m and (a + sz + int(m.group(1), 16)) in gotw:
+                    stub[start] = stub[a] = gotw[a + sz + int(m.group(1), 16)]
+                start = a + sz
+    calls = []
+    for name, va, off, size in E["text"]:
+        if name.startswith(".plt") or name in (".init", ".fini"):
+            continue
+        sec = data[off:off + size]
+        for m in re.finditer(rb"\xe8|\xff\x15", sec):
+            if time.time() > deadline:
+                return calls
+            i = m.start()
+            if m.group() == b"\xe8":
+                if i + 5 > len(sec):
+                    continue
+                tgt = (va + i + 5 + struct.unpack_from("<i", sec, i + 1)[0]) & (2 ** 64 - 1)
+                api = stub.get(tgt)
+            else:
+                if i + 6 > len(sec):
+                    continue
+                api = gotw.get(va + i + 6 + struct.unpack_from("<i", sec, i + 2)[0])
+            if not api:
+                continue
+            site = va + i
+            regs = None
+            for back in range(min(i, 160), 0, -1):   # resync linear disassembly onto the call site
+                ins = list(md.disasm_lite(bytes(sec[i - back:i + 6]), site - back))
+                if any(a == site for a, *_ in ins) and back > 8:
+                    regs = {}
+                    for a, sz, mn, ops in ins:
+                        if a >= site:
+                            break
+                        if mn == "call":
+                            regs = {}
+                            continue
+                        dst, _, src = ops.partition(", ")
+                        d = _REG64.get(dst)
+                        if d is None:
+                            continue
+                        rm = re.fullmatch(r"(?:qword ptr )?\[rip \+ 0x([0-9a-f]+)\]", src)
+                        if mn == "lea" and rm:
+                            regs[d] = a + sz + int(rm.group(1), 16)
+                        elif mn == "mov" and re.fullmatch(r"0x[0-9a-f]+", src):
+                            regs[d] = int(src, 16)
+                        elif mn == "mov" and src in _REG64:
+                            regs[d] = regs.get(_REG64[src])
+                        else:
+                            regs.pop(d, None)
+                    break
+            k = (_DL_LOADERS.get(api) if api in _DL_LOADERS else _DL_RESOLVERS[api])
+            va_s = (regs or {}).get(_DL_ARGREG["x64"][k])
+            calls.append((api, _cstr_at(data, E["segs"], va_s) if va_s else None))
+    return calls
+
+
+def dynlink_facts(loader, plugin=None, deadline_s=0.5):
+    """Loader/plugin handshake facts for a dlopen-style pair (either argument order; the member importing
+    dlopen/dlsym or defining caml_natdynlink_open is the loader). Keys:
+    loader_kind ocaml_natdynlink | c_dlopen | none, loader_member 1|2 (argument position of the loader),
+    loader_imports (dl* imports, dynsym order), loader_needs_libdl, ocaml_plugin_check ('not an OCaml plugin' string),
+    loaded_library (first literal dlopen path arg), loaded_libraries / resolved_symbols (JSON, call order; OCaml:
+    caml_plugin_header when the loader carries that literal), init_export (first resolved symbol the plugin defines,
+    else an *_init/*_register/plugin_init/caml_plugin_header export), plugin_exports (JSON, defined .dynsym names in
+    dynsym order), plugin_header_magic (Caml2007D002 ...), plugin_units (JSON [{name, crc, imports_cmi, imports_cmx,
+    defines}]), plugin_unit_names (comma-joined), plugin_unit_crc (first unit). Absent -> "none"; None if unreadable."""
+    try:
+        deadline = time.time() + deadline_s
+        mem = [m for m in (loader, plugin) if m is not None]
+        Es = [(_dl_elf(bytes(m)) if bytes(m[:4]) == b"\x7fELF" else None) for m in mem]
+        if not any(Es):
+            return None
+
+        def is_loader(E):
+            if not E:
+                return False
+            imp = {n for n, _, d in E["syms"] if not d}
+            dfn = {n for n, _, d in E["syms"] if d}
+            return bool(imp & (set(_DL_LOADERS) | set(_DL_RESOLVERS))) or "caml_natdynlink_open" in dfn
+
+        li = next((i for i, E in enumerate(Es) if is_loader(E) and not any(
+            n == "caml_plugin_header" and d for n, _, d in E["syms"])), None)
+        out = {k: "none" for k in ("loader_kind", "loader_member", "loader_imports", "loader_needs_libdl",
+                                   "ocaml_plugin_check", "loaded_library", "loaded_libraries", "resolved_symbols",
+                                   "init_export", "plugin_exports", "plugin_header_magic", "plugin_units",
+                                   "plugin_unit_names", "plugin_unit_crc")}
+        j = lambda v: json.dumps(v, separators=(",", ":"))
+        resolved = []
+        if li is not None:
+            L, E = bytes(mem[li]), Es[li]
+            ocaml = "caml_natdynlink_open" in {n for n, _, _ in E["syms"]} or b"caml_natdynlink_open" in L \
+                or b"not an OCaml plugin" in L
+            out["loader_member"] = str(li + 1)
+            out["loader_kind"] = "ocaml_natdynlink" if ocaml else "c_dlopen"
+            imps = [n for n, _, d in E["syms"] if not d and (n in _DL_LOADERS or n in _DL_RESOLVERS
+                                                            or n in ("dlclose", "dlerror"))]
+            out["loader_imports"] = j(list(dict.fromkeys(imps))) if imps else "none"
+            out["loader_needs_libdl"] = "true" if any(n.startswith("libdl.") for n in E["needed"]) else "false"
+            out["ocaml_plugin_check"] = "true" if b"not an OCaml plugin" in L else "false"
+            calls = _dl_calls(L, E, deadline)
+            libs = [s for a, s in calls if a in _DL_LOADERS and s]
+            resolved = [s for a, s in calls if a in _DL_RESOLVERS and s]
+            if ocaml and not resolved and b"caml_plugin_header\0" in L:
+                resolved = ["caml_plugin_header"]
+            if libs:
+                out["loaded_library"], out["loaded_libraries"] = libs[0], j(libs)
+            if resolved:
+                out["resolved_symbols"] = j(resolved)
+        pi = (len(Es) - 1 if li is None and plugin is not None and Es[-1] else
+              next((i for i in range(len(Es)) if i != li and Es[i]), None))
+        if pi is not None:
+            P, E = bytes(mem[pi]), Es[pi]
+            exps = [n for n, _, d in E["syms"] if d]
+            if exps:
+                out["plugin_exports"] = j(exps)
+            init = next((s for s in resolved if s in exps), None) or next(
+                (n for n in exps if _DL_INIT.search(n) and n not in ("_init", "_fini")), None)
+            if init:
+                out["init_export"] = init
+            hdr = next((v for n, v, d in E["syms"] if n == "caml_plugin_header" and d), None)
+            o = _va_off(E["segs"], hdr) if hdr is not None else None
+            dh = caml_dynheader(P[o:o + (1 << 20)]) if o is not None else None
+            if dh:
+                out["plugin_header_magic"] = dh["magic"]
+                if dh["units"]:
+                    out["plugin_units"] = j(dh["units"])
+                    out["plugin_unit_names"] = ",".join(u["name"] for u in dh["units"])
+                    out["plugin_unit_crc"] = dh["units"][0]["crc"]
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def dynlink_field(loader, plugin, name):
+    """One dynlink_facts value ("none" for an unknown field); None when neither member is readable."""
+    f = dynlink_facts(loader, plugin)
+    if f is None:
+        return None
+    k = str(name).strip().lower().replace("-", "_").replace(" ", "_")
+    k = {"dlopen_path": "loaded_library", "library": "loaded_library", "dlsym_symbols": "resolved_symbols",
+         "symbols": "resolved_symbols", "header_magic": "plugin_header_magic", "magic": "plugin_header_magic",
+         "units": "plugin_units", "unit_names": "plugin_unit_names", "exports": "plugin_exports",
+         "init_symbol": "init_export", "entry_export": "init_export"}.get(k, k)
+    return f.get(k, "none")
+
+
+# --- loader library-resolution facts (D21 trace effect controlled_library_resolution_only: RPATH/RUNPATH, INTERP).
+
+_DF_FLAGS = ((0x1, "ORIGIN"), (0x2, "SYMBOLIC"), (0x4, "TEXTREL"), (0x8, "BIND_NOW"), (0x10, "STATIC_TLS"))
+_DF_FLAGS_1 = ("NOW", "GLOBAL", "GROUP", "NODELETE", "LOADFLTR", "INITFIRST", "NOOPEN", "ORIGIN", "DIRECT", "TRANS",
+               "INTERPOSE", "NODEFLIB", "NODUMP", "CONFALT", "ENDFILTEE", "DISPRELDNE", "DISPRELPND", "NODIRECT",
+               "IGNMULDEF", "NOKSYMS", "NOHDR", "EDITED", "NORELOC", "SYMINTPOSE", "GLOBAUDIT", "SINGLETON", "STUB",
+               "PIE", "KMOD", "WEAKFILTER", "NOCOMMON")   # bit order = binutils readelf print order
+
+
+def _elf_dyn_raw(data):
+    """(interp, [(tag, val)], strtab bytes, e_type) of an ELF from PT_INTERP / PT_DYNAMIC (+ PT_LOAD for DT_STRTAB),
+    falling back to SHT_DYNAMIC + its sh_link strtab when there are no program headers. None if not an ELF."""
+    if len(data) < 52 or data[:4] != b"\x7fELF" or data[4] not in (1, 2) or data[5] not in (1, 2):
+        return None
+    b64, E = data[4] == 2, "<" if data[5] == 1 else ">"
+    n_ = len(data)
+    et = struct.unpack_from(E + "H", data, 16)[0]
+    if b64:
+        if n_ < 64:
+            return None
+        phoff, shoff = struct.unpack_from(E + "QQ", data, 32)
+        phes, phn, shes, shn, _ = struct.unpack_from(E + "HHHHH", data, 54)
+    else:
+        phoff, shoff = struct.unpack_from(E + "II", data, 28)
+        phes, phn, shes, shn, _ = struct.unpack_from(E + "HHHHH", data, 42)
+    interp, loads, dyn = "none", [], None
+    for k in range(min(phn, 512)):
+        p = phoff + k * phes
+        if phes < (56 if b64 else 32) or p + (56 if b64 else 32) > n_:
+            break
+        if b64:
+            typ, _f, off, va, _pa, fsz, _msz = struct.unpack_from(E + "IIQQQQQ", data, p)
+        else:
+            typ, off, va, _pa, fsz, _msz, _f = struct.unpack_from(E + "IIIIIII", data, p)
+        if typ == 3 and off < n_:   # PT_INTERP
+            interp = data[off:off + fsz].split(b"\0", 1)[0].decode("utf-8", "replace") or "none"
+        elif typ == 1:
+            loads.append((va, off, fsz))
+        elif typ == 2 and dyn is None:
+            dyn = (off, fsz)
+    strtab = None
+    if dyn is None and shoff and shes >= (64 if b64 else 40):   # no PT_DYNAMIC: section table walk
+        secs = []
+        for k in range(min(shn, 4096)):
+            s = shoff + k * shes
+            if s + (64 if b64 else 40) > n_:
+                break
+            if b64:
+                _nm, st, _fl, _ad, so, ssz, lk = struct.unpack_from(E + "IIQQQQI", data, s)
+            else:
+                _nm, st, _fl, _ad, so, ssz, lk = struct.unpack_from(E + "IIIIIII", data, s)
+            secs.append((st, so, ssz, lk))
+        for st, so, ssz, lk in secs:
+            if st == 6:   # SHT_DYNAMIC
+                dyn = (so, ssz)
+                if lk < len(secs):
+                    strtab = data[secs[lk][1]:secs[lk][1] + secs[lk][2]]
+                break
+    ents = []
+    if dyn is not None:
+        es = 16 if b64 else 8
+        o, end = dyn[0], min(n_, dyn[0] + dyn[1])
+        while o + es <= end and len(ents) < 4096:
+            tag, val = struct.unpack_from(E + ("qQ" if b64 else "iI"), data, o)
+            if tag == 0:
+                break
+            ents.append((tag, val))
+            o += es
+    if strtab is None:
+        sva = next((v for t, v in ents if t == 5), None)   # DT_STRTAB (vaddr)
+        ssz = next((v for t, v in ents if t == 10), 1 << 20)
+        so = next((off + sva - va for va, off, fsz in loads if va <= (sva or -1) < va + fsz), None) \
+            if sva is not None else None
+        if so is None and sva is not None and sva < n_ and et == 1:
+            so = sva
+        strtab = data[so:so + min(ssz, 1 << 22)] if so is not None else b""
+    return interp, ents, strtab, et
+
+
+def elf_loader_facts(data):
+    """How ld.so resolves this ELF's libraries, from PT_INTERP + the dynamic section (pure struct walk). Keys:
+    interpreter (PT_INTERP path, else "none"), has_interp, needed (DT_NEEDED names, table order, [] if none),
+    soname, rpath / runpath (raw DT_RPATH / DT_RUNPATH strings, $ORIGIN/$LIB/$PLATFORM NOT expanded; several entries
+    joined with ':'), rpath_dirs / runpath_dirs (split on ':'), search_path_tag DT_RUNPATH|DT_RPATH|none (RUNPATH wins:
+    ld.so ignores DT_RPATH when DT_RUNPATH exists), search_path (the effective raw string), dst_tokens (sorted
+    $ORIGIN/$LIB/$PLATFORM names used, braces or not), has_origin ($ORIGIN in rpath/runpath), origin_flag (DF_ORIGIN or
+    DF_1_ORIGIN), flags / flags_1 (token lists exactly as readelf -d prints FLAGS / FLAGS_1; unknown bits as hex),
+    flags_value / flags_1_value hex, bind_now (DT_BIND_NOW or DF_BIND_NOW or DF_1_NOW), pie (DF_1_PIE), nodeflib
+    (DF_1_NODEFLIB), audit / depaudit / filter / auxiliary strings. Absent string -> "none"; booleans 'true'/'false';
+    not an ELF / unreadable -> None."""
+    try:
+        r = _elf_dyn_raw(data)
+        if r is None:
+            return None
+        interp, ents, strtab, _et = r
+
+        def s(v):
+            if not isinstance(v, int) or v >= len(strtab):
+                return None
+            return strtab[v:strtab.find(b"\0", v) if b"\0" in strtab[v:] else len(strtab)].decode("utf-8", "replace")
+
+        def strs(tag):
+            return [x for x in (s(v) for t, v in ents if t == tag) if x is not None]
+
+        def bits(val, names):
+            out, i = [], 0
+            for i, nm in enumerate(names):
+                if val & (1 << i):
+                    out.append(nm)
+            rest = val & ~((1 << len(names)) - 1)
+            return out + (["%x" % rest] if rest else [])
+
+        tf = lambda b: "true" if b else "false"
+        rp, rn = strs(15), strs(29)
+        rpath, runpath = (":".join(rp) if rp else "none"), (":".join(rn) if rn else "none")
+        fl = next((v for t, v in ents if t == 30), None)
+        f1 = next((v for t, v in ents if t == 0x6ffffffb), None)
+        flags = []
+        if fl is not None:
+            flags = [nm for b, nm in _DF_FLAGS if fl & b] + (["%x" % (fl & ~0x1f)] if fl & ~0x1f else [])
+        flags_1 = bits(f1, _DF_FLAGS_1) if f1 is not None else []
+        paths = " ".join(p for p in (rpath, runpath) if p != "none")
+        toks = sorted({m.group(1) for m in re.finditer(r"\$\{?(ORIGIN|LIB|PLATFORM)\b\}?", paths)})
+        eff = runpath if runpath != "none" else rpath
+        one = lambda tag: (strs(tag) or ["none"])[0]
+        return {
+            "interpreter": interp, "has_interp": tf(interp != "none"), "needed": strs(1),
+            "soname": one(14), "rpath": rpath, "runpath": runpath,
+            "rpath_dirs": rpath.split(":") if rp else [], "runpath_dirs": runpath.split(":") if rn else [],
+            "search_path_tag": "DT_RUNPATH" if rn else ("DT_RPATH" if rp else "none"), "search_path": eff,
+            "dst_tokens": toks, "has_origin": tf("ORIGIN" in toks),
+            "origin_flag": tf((fl or 0) & 0x1 or "ORIGIN" in flags_1),
+            "flags": flags, "flags_1": flags_1,
+            "flags_value": hex(fl) if fl is not None else "none", "flags_1_value": hex(f1) if f1 is not None else "none",
+            "bind_now": tf(any(t == 24 for t, _ in ents) or (fl or 0) & 0x8 or "NOW" in flags_1),
+            "pie": tf("PIE" in flags_1), "nodeflib": tf("NODEFLIB" in flags_1),
+            "audit": one(0x6ffffefc), "depaudit": one(0x6ffffefb), "filter": one(0x7fffffff),
+            "auxiliary": one(0x7ffffffd)}
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+_LDR_ALIAS = {"interp": "interpreter", "pt_interp": "interpreter", "dynamic_linker": "interpreter",
+              "program_interpreter": "interpreter", "loader": "interpreter", "dt_needed": "needed",
+              "dt_soname": "soname", "dt_rpath": "rpath", "dt_runpath": "runpath", "dt_flags": "flags",
+              "dt_flags_1": "flags_1", "search_path_type": "search_path_tag", "rpath_kind": "search_path_tag",
+              "uses_origin": "has_origin", "origin": "has_origin", "now": "bind_now", "df_1_pie": "pie",
+              "df_1_nodeflib": "nodeflib", "dlopen_path": "dlopen_path", "loaded_library": "dlopen_path"}
+
+
+def elf_loader_field(data, name):
+    """One elf_loader_facts value ("none" for an unknown key; None when not a readable ELF). Extra keys:
+    dlopen_path (first literal dlopen() argument, via dynlink_facts), dlopen_path_kind absolute ('/...') | relative
+    (has a '/', e.g. './x.so' -- resolved against the CWD, no search) | search (bare name: RPATH/LD_LIBRARY_PATH/
+    RUNPATH/cache/default dirs), flag:<TOKEN> 'true'/'false' (in flags or flags_1)."""
+    f = elf_loader_facts(data)
+    if f is None:
+        return None
+    k, _, arg = str(name).strip().partition(":")
+    k = k.strip().lower().replace("-", "_").replace(" ", "_")
+    k = _LDR_ALIAS.get(k, k)
+    if k == "flag" and arg:
+        a = arg.strip().upper().replace("DF_1_", "").replace("DF_", "")
+        return "true" if a in f["flags"] or a in f["flags_1"] else "false"
+    if k in ("dlopen_path", "dlopen_path_kind"):
+        d = dynlink_facts(data) or {}
+        p = d.get("loaded_library", "none")
+        if k == "dlopen_path" or p == "none":
+            return p
+        return "absolute" if p.startswith("/") else ("relative" if "/" in p else "search")
+    return f.get(k, "none")
+
+
+def resolve_library(loader, name, members):
+    """Group member that satisfies a NEEDED / dlopen name: members = {filename: bytes} or [(filename, bytes)].
+    A name with a '/' matches on its basename. SONAME match first (DT_SONAME == name), then member basename == name.
+    Returns the member filename, "none" when nothing matches. name None/'' -> {needed: member|"none"} for every
+    DT_NEEDED of `loader` (None when loader is unreadable)."""
+    try:
+        items = list(members.items()) if isinstance(members, dict) else [tuple(m) for m in members]
+        if not name:
+            lf = elf_loader_facts(loader) if loader is not None else None
+            if lf is None:
+                return None
+            return {n: resolve_library(None, n, items) for n in lf["needed"]}
+        want = str(name).rsplit("/", 1)[-1]
+        base = lambda fn: str(fn).replace("\\", "/").rsplit("/", 1)[-1]
+        for fn, b in items:
+            f = elf_loader_facts(bytes(b)) if b is not None else None
+            if f and f["soname"] == want:
+                return fn
+        for fn, _b in items:
+            if base(fn) == want:
+                return fn
+        return "none"
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# --- multi-member groups (D15 stripped/symbolized, D16 compact/direct, D21 loader + plugin.cmxs; 3+ members: loader +
+# plugins, stub + payload, client + server). HCFG sits in ONE member, a decoy (bad crc) may sit in another. Ids name the
+# member by a qualifier (`dNN_analysis_<tag>_<field>`) or leave it to the question text ("Use the d21-- plugin.cmxs
+# member; the loader has no scored HCFG config").
+_RM_EXEC_ROLES = {"loader", "host", "launcher", "stub", "client", "main", "exe", "executable", "dropper", "runner",
+                  "app", "program", "driver", "harness"}
+_RM_LIB_ROLES = {"plugin", "library", "lib", "module", "payload", "dll", "so", "shared", "sharedlib", "extension",
+                 "addon", "component"}
+_RM_NAME = r"[`'\"]?([\w.\-+@]+?)[`'\"]?(?=[\s,;:)]|\.\s|\.$|$)"
+_RM_PHRASES = (   # (regex over the question, kind); first that picks exactly one member wins
+    (re.compile(r"basename\s+starts\s+(?:with\s+)?" + _RM_NAME + r"\s+and\s+ends\s+(?:with\s+)?" + _RM_NAME, re.I),
+     "starts_ends"),
+    (re.compile(r"basename\s+ends\s+(?:with\s+)?" + _RM_NAME, re.I), "ends"),
+    (re.compile(r"basename\s+(?:is|equals)\s+" + _RM_NAME, re.I), "is"),
+    (re.compile(r"\buse\s+the\s+(?:unique\s+)?(?:d\d+--\s*)?" + _RM_NAME + r"\s+member\b", re.I), "ends"),
+    (re.compile(r"\bmember\s+(?:named|called)\s+" + _RM_NAME, re.I), "ends"),
+    (re.compile(r"\b(?:member|library|module|plugin|object|image|binary)\s+(?:that|which)\s+exports?\s+(?:the\s+)?"
+                r"(?:symbol\s+|function\s+|export\s+)?" + _RM_NAME, re.I), "exports"),
+    (re.compile(r"\b(?:member|library|module|plugin|object|image|binary)\s+(?:that|which)\s+(?:imports?|calls?)\s+"
+                r"(?:the\s+)?(?:symbol\s+|function\s+)?" + _RM_NAME, re.I), "imports"),
+    (re.compile(r"\bDT_NEEDED\b", re.I), "needed"),
+    (re.compile(r"\b(?:loaded|dlopen(?:ed|s)?|opened|mapped)\s+(?:at\s+run[\s-]?time\s+)?by\s+(?:the\s+)?"
+                r"(?:d\d+--\s*)?(?:loader|host|launcher|stub|client|main|executable|program)\b", re.I), "loaded"),
+    (re.compile(r"\buse\s+the\s+(?:unique\s+)?(?:d\d+--\s*)?(" + "|".join(sorted(_RM_EXEC_ROLES | _RM_LIB_ROLES))
+                + r")\s+member\b", re.I), "role"),
+)
+_RM_CFG = ("config_", "hcfg_", "xor_key", "crc32", "config")
+
+
+def _rm_base(n):
+    return str(n).replace("\\", "/").rsplit("/", 1)[-1]
+
+
+def _rm_bytes(b):
+    return bytes(b) if isinstance(b, (bytes, bytearray, memoryview)) else None
+
+
+def _rm_kind(b):
+    """'exec' (ELF with PT_INTERP / ET_EXEC, PE EXE), 'lib' (ELF ET_DYN without PT_INTERP, PE DLL), else None."""
+    try:
+        f = object_facts(b, max_syms=1) if b else None
+        if not f:
+            return None
+        if f.get("format") == "pe":
+            return "lib" if f.get("is_dll") in (True, "true") else "exec"
+        if f.get("elf_type") == "ET_EXEC" or f.get("has_interp") in (True, "true"):
+            return "exec"
+        if f.get("elf_type") == "ET_DYN":
+            return "lib"
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _rm_role(role, items):
+    """Indices of the members a role word names: whole name tokens first, else by kind (only exec / only lib)."""
+    hit = [i for i, (n, _b) in enumerate(items) if _pair_name_hit(role, _pair_tokens(n))]
+    if hit:
+        return hit
+    want = "exec" if role in _RM_EXEC_ROLES else "lib" if role in _RM_LIB_ROLES else None
+    if want is None:
+        return []
+    return [i for i, (_n, b) in enumerate(items) if _rm_kind(_rm_bytes(b)) == want]
+
+
+def _rm_loaders(items):
+    ex = [i for i, (_n, b) in enumerate(items) if _rm_kind(_rm_bytes(b)) == "exec"]
+    return ex or list(range(len(items)))
+
+
+def _rm_resolve(name, items):
+    r = resolve_library(None, name, [(n, _rm_bytes(b)) for n, b in items])
+    return [i for i, (n, _b) in enumerate(items) if n == r]
+
+
+def _rm_phrase(kind, m, items):
+    bases = [_rm_base(n).lower() for n, _b in items]
+    if kind in ("ends", "is", "starts_ends"):
+        g = [x.lower().rstrip(".") for x in m.groups()]
+        if kind == "starts_ends":
+            return [i for i, s in enumerate(bases) if s.startswith(g[0]) and s.endswith(g[1])]
+        if kind == "is":
+            return [i for i, s in enumerate(bases) if s == g[0]]
+        hit = [i for i, s in enumerate(bases) if s.endswith(g[0])]
+        return hit or [i for i, s in enumerate(bases) if s.split("--", 1)[-1] == g[0]]
+    if kind == "role":
+        return _rm_role(m.group(1).lower(), items)
+    if kind in ("exports", "imports"):
+        sym, key = m.group(1).rstrip("."), kind
+        out = []
+        for i, (_n, b) in enumerate(items):
+            f = native_import_facts(_rm_bytes(b)) if _rm_bytes(b) else None
+            v = f.get(key) if f else None
+            if isinstance(v, list) and (sym in v or sym.lstrip("_") in [s.lstrip("_") for s in v]):
+                out.append(i)
+        return out
+    if kind == "needed":   # the member a loader's DT_NEEDED / PE import names
+        out = set()
+        for li in _rm_loaders(items):
+            f = native_import_facts(_rm_bytes(items[li][1]) or b"") or {}
+            v = f.get("needed")
+            for nm in v if isinstance(v, list) else []:
+                out.update(j for j in _rm_resolve(nm, items) if j != li)
+        return sorted(out)
+    if kind == "loaded":   # the member the loader dlopen()s / LoadLibrary()s by a literal path
+        out = set()
+        for li in _rm_loaders(items):
+            d = dynlink_facts(_rm_bytes(items[li][1]) or b"") or {}
+            try:
+                libs = json.loads(d.get("loaded_libraries") or "[]")
+            except ValueError:
+                libs = []
+            for nm in libs if isinstance(libs, list) else []:
+                out.update(j for j in _rm_resolve(nm, items) if j != li)
+        return sorted(out)
+    return []
+
+
+def _rm_hcfg_members(items, budget_s=0.5):
+    """Indices of the members holding a crc-valid HCFG record: raw magic first (cheap), then hcfg_find (one shared
+    budget over all members; a member the budget cut off counts as no record)."""
+    raw = []
+    for i, (_n, b) in enumerate(items):
+        b = _rm_bytes(b)
+        if not b:
+            continue
+        p, k = b.find(HCFG_MAGIC), 0
+        while p >= 0 and k < 256:
+            r = _parse_blob(b[p:p + 12 + 0x10000])
+            if r and r[5]:
+                raw.append(i)
+                break
+            p, k = b.find(HCFG_MAGIC, p + 1), k + 1
+    if raw:
+        return raw
+    out, end = [], time.time() + budget_s
+    for i, (_n, b) in enumerate(items):
+        b = _rm_bytes(b)
+        if time.time() >= end:
+            return []   # unscanned members: uniqueness unknown
+        try:
+            if b and hcfg_find(b, deadline=end):
+                out.append(i)
+        except Exception:  # noqa: BLE001
+            pass
+    return out
+
+
+def _route_member(group, field, question=""):
+    items = list(group.items()) if isinstance(group, dict) else [tuple(m)[:2] for m in group or []]
+    f = re.sub(r"^(?:d\d+_)?(?:analysis_)?", "", str(field or "").lower())
+    if len(items) == 1:
+        return 0, f, "single"
+    if not items:
+        return None, f, "empty"
+    # 1) qualifier peel: LONGEST leading tag naming exactly one member by whole file-name tokens, else role / pair family
+    parts = [p for p in f.split("_") if p]
+    if len(parts) >= 2 and parts[0] not in _PAIR_SKIP and not parts[0].isdigit():
+        toks = [_pair_tokens(n) for n, _b in items]
+        for k in range(len(parts) - 1, 0, -1):
+            if parts[k - 1] in _PAIR_SKIP:
+                continue
+            hit = [i for i, t in enumerate(toks) if _pair_name_hit("".join(parts[:k]), t)]
+            if len(hit) == 1:
+                return hit[0], "_".join(parts[k:]), "qualifier"
+            if hit:
+                break
+        if parts[0] in _RM_EXEC_ROLES or parts[0] in _RM_LIB_ROLES:
+            hit = _rm_role(parts[0], items)
+            if len(hit) == 1:
+                return hit[0], "_".join(parts[1:]), "qualifier-role"
+        r = pair_route(f, [(n, _rm_bytes(b) or b"") for n, b in items])
+        if r is not None:
+            return r[0], r[1], "qualifier-" + r[2]
+    # 2) the question names the member
+    q = question.get("question", "") if isinstance(question, dict) else str(question or "")
+    for rx, kind in _RM_PHRASES:
+        for m in rx.finditer(q):
+            hit = _rm_phrase(kind, m, items)
+            if len(hit) == 1:
+                return hit[0], f, "question-" + kind
+    # 3) structural: config_* / hcfg_* -> the only member with a crc-valid HCFG (a bad-crc decoy elsewhere is no record)
+    if f.startswith(_RM_CFG) or f in ("xor_key_hex", "hcfg_version", "hcfg_offset", "hcfg_storage"):
+        hit = _rm_hcfg_members(items)
+        if len(hit) == 1:
+            return hit[0], f, "struct-hcfg"
+    return None, f, "unrouted"
+
+
+def route_member(group, field, question=""):
+    """Route one id of a multi-member group to ONE member: (member index into `group`, residual field) where `group` =
+    [(name, bytes)] / {name: bytes} in central-directory order, `field` = `dNN_analysis_<...>` / `analysis_<...>` /
+    the bare part, `question` = question text or the contract question dict. Residual drops `dNN_analysis_` and the
+    peeled qualifier. Order: 1) qualifier peel (longest leading tag that is whole adjacent file-name tokens of exactly
+    one member, `pie` never matches `no-pie`; else a role word loader/stub/client/... = the only executable,
+    plugin/library/payload/... = the only shared object; else pair_route's build-pair families); 2) question phrases
+    ('basename [starts X and] ends Y', 'Use the dNN-- X member', 'member named X', 'the member that exports/imports
+    S', '... DT_NEEDED' = the group member a loader's DT_NEEDED resolves to (SONAME, then basename), 'loaded by the
+    loader' = its literal dlopen path, 'Use the loader/plugin member'); 3) config_*/hcfg_*: the only member with a
+    crc-valid HCFG. (None, residual) when nothing picks exactly one member (caller keeps the whole group);
+    (0, residual) for a one-member group. Never raises."""
+    try:
+        i, rest, _how = _route_member(group, field, question)
+        return i, rest
+    except Exception:  # noqa: BLE001
+        return None, re.sub(r"^(?:d\d+_)?(?:analysis_)?", "", str(field or "").lower())
+
+
+# --- PE loader/plugin pair (D21 shape re-rolled to Windows; prebuild pe-dll-loader-plugin-pair, 2026-10-21) ----------
+# Raw-struct walk of the export / import / delay-import / TLS directories (no pefile: it is the fixtures' oracle).
+# Fixtures: tests/data/binary_fixtures/pelink_* (zig cc x86_64/x86-windows-gnu + .def ordinals/NONAME/forwarder).
+_PE_LOADER_APIS = ("LoadLibraryA", "LoadLibraryW", "LoadLibraryExA", "LoadLibraryExW", "GetProcAddress",
+                   "LdrLoadDll", "LdrGetProcedureAddress", "GetModuleHandleA", "GetModuleHandleW", "FreeLibrary")
+_PE_DLLSTR = re.compile(rb"(?:[\w.\-\\/:]{1,200}?\.dll)(?=\0)", re.I)
+_PE_DLLSTR16 = re.compile(rb"(?:(?:[\w.\-\\/:])\0){1,200}?\.\0[dD]\0[lL]\0[lL]\0(?=\0\0)")
+
+
+def _pe_cstr(data, secs, rva, cap=512):
+    o = _pe_rva(secs, rva) if rva else None
+    if o is None or o >= len(data):
+        return None
+    e = data.find(b"\0", o, o + cap)
+    return bytes(data[o:e if e >= 0 else o + cap]).decode("utf-8", "replace")
+
+
+def _pe_thunks(data, secs, rva, p64, cap=65536):
+    """Names of an ILT/INT thunk array ("ord<N>" for by-ordinal imports)."""
+    out, o = [], _pe_rva(secs, rva) if rva else None
+    w, flag = (8, 1 << 63) if p64 else (4, 1 << 31)
+    while o is not None and o + w <= len(data) and len(out) < cap:
+        v = int.from_bytes(data[o:o + w], "little")
+        if not v:
+            break
+        if v & flag:
+            out.append(f"ord{v & 0xffff}")
+        else:
+            n = _pe_cstr(data, secs, (v & 0x7fffffff) + 2)
+            if n is None:
+                break
+            out.append(n)
+        o += w
+    return out
+
+
+def pe_link_facts(data):
+    """Loader/plugin link facts of ONE PE member (exe or dll). Keys: format pe, pe_type, machine (PE_MACHINE_LABEL) /
+    machine_num (decimal) / machine_hex, characteristics hex, is_dll / dll_flag (IMAGE_FILE_DLL 0x2000),
+    dll_name (export-directory Name), export_ordinal_base, export_count (non-zero EAT slots), exports
+    [[ordinal, name|None, rva hex, forwarder|None]] in ordinal order (forwarder = "DLL.Func" when the EAT RVA points
+    inside the export directory), export_names (name-pointer-table order = sorted), noname_ordinals,
+    forwarders [[name, target]], import_dlls (directory order), imports [[dll, [funcs]]] (ILT order, "ord<N>" by
+    ordinal), import_functions, imports_qualified ["dll!fn"], delay_import_dlls / delay_imports (same shapes),
+    tls_callbacks (VA hex list, AddressOfCallBacks array) + tls_callback_count, loader_apis (LoadLibrary* /
+    GetProcAddress / Ldr* imports), is_loader, loaded_libraries / loaded_library (".dll" string literals, ASCII or
+    UTF-16LE, file order, NOT in the import/delay/export-name lists = runtime LoadLibrary targets), config_symbol
+    (export whose RVA lands on the valid HCFG blob), config_section (section holding it, e.g. .hcfg/.rdata/.rsrc),
+    config_offset (file offset), config (JSON). Lists are Python lists; absent -> "none"; None if not a PE."""
+    try:
+        data = bytes(data)
+        pe = int.from_bytes(data[0x3c:0x40], "little")
+        if data[:2] != b"MZ" or data[pe:pe + 4] != b"PE\0\0" or len(data) < pe + 26:
+            return None
+        m, _, _, _, _, _, ch = struct.unpack_from("<HHIIIHH", data, pe + 4)
+        opt = pe + 24
+        p64 = data[opt:opt + 2] == b"\x0b\x02"
+        bo = opt + (24 if p64 else 28)
+        base = int.from_bytes(data[bo:bo + (8 if p64 else 4)], "little")
+        _, secs, dirs = _pe_layout(data) or (0, [], [])   # truncated headers: COFF facts only, directories "none"
+        d = lambda k: dirs[k] if len(dirs) > k else (0, 0)
+        out = {"format": "pe", "pe_type": "PE32+" if p64 else "PE32", "machine": PE_MACHINE_LABEL.get(m, f"0x{m:x}"),
+               "machine_num": str(m), "machine_hex": f"0x{m:x}", "characteristics": hex(ch),
+               "is_dll": "true" if ch & 0x2000 else "false"}
+        out["dll_flag"] = out["is_dll"]
+        # export directory
+        exports, names, noname, fwd = [], [], [], []
+        erva, esz = d(0)
+        eo = _pe_rva(secs, erva) if erva else None
+        if eo is not None and eo + 40 <= len(data):
+            nrva, obase, nfun, nnam, afun, anam, aord = struct.unpack_from("<12xIIIIIII", data, eo)
+            out["dll_name"] = _pe_cstr(data, secs, nrva) or "none"
+            out["export_ordinal_base"] = str(obase)
+            nfun, nnam = min(nfun, 65536), min(nnam, 65536)
+            fo, no, oo = (_pe_rva(secs, a) for a in (afun, anam, aord))
+            byidx = {}
+            for i in range(nnam if no is not None and oo is not None else 0):
+                nm = _pe_cstr(data, secs, struct.unpack_from("<I", data, no + 4 * i)[0])
+                ix = struct.unpack_from("<H", data, oo + 2 * i)[0]
+                names.append(nm)
+                byidx.setdefault(ix, nm)
+            for i in range(nfun if fo is not None else 0):
+                r = struct.unpack_from("<I", data, fo + 4 * i)[0]
+                if not r:
+                    continue
+                f = _pe_cstr(data, secs, r) if erva <= r < erva + esz else None
+                nm = byidx.get(i)
+                exports.append([obase + i, nm, hex(r), f])
+                if nm is None:
+                    noname.append(obase + i)
+                if f:
+                    fwd.append([nm, f])
+            out["export_count"] = str(len(exports))
+        out.update(exports=exports, export_names=names, noname_ordinals=noname, forwarders=fwd)
+        # import + delay-import directories
+        imps, o = [], _pe_rva(secs, d(1)[0]) if d(1)[0] else None
+        while o is not None and o + 20 <= len(data) and len(imps) < 4096:
+            ilt, _, _, nrva, iat = struct.unpack_from("<5I", data, o)
+            if not (ilt or nrva or iat):
+                break
+            dll = _pe_cstr(data, secs, nrva)
+            if dll is None:
+                break
+            imps.append([dll, _pe_thunks(data, secs, ilt or iat, p64)])
+            o += 20
+        dimps, o = [], _pe_rva(secs, d(13)[0]) if d(13)[0] else None
+        while o is not None and o + 32 <= len(data) and len(dimps) < 4096:
+            attr, nrva, _, _, dint = struct.unpack_from("<5I", data, o)
+            if not (nrva or dint):
+                break
+            va2rva = (lambda v: v - base if v >= base else v) if not attr & 1 else (lambda v: v)   # v1 = VAs
+            dll = _pe_cstr(data, secs, va2rva(nrva))
+            if dll is None:
+                break
+            dimps.append([dll, _pe_thunks(data, secs, va2rva(dint), p64)])
+            o += 32
+        for key, tab in (("import", imps), ("delay_import", dimps)):
+            out[f"{key}_dlls"] = [x for x, _ in tab]
+            out[f"{key}s"] = tab
+            out[f"{key}_functions"] = [f for _, fs in tab for f in fs]
+            out[f"{key}s_qualified"] = [f"{x}!{f}" for x, fs in tab for f in fs]
+        # TLS callbacks (AddressOfCallBacks is a VA; the array holds VAs, 0-terminated)
+        cbs, trva = [], d(9)[0]
+        to = _pe_rva(secs, trva) if trva else None
+        w = 8 if p64 else 4
+        if to is not None and to + 4 * w <= len(data):
+            acb = int.from_bytes(data[to + 3 * w:to + 4 * w], "little")
+            co = _pe_rva(secs, acb - base) if acb > base else None
+            while co is not None and co + w <= len(data) and len(cbs) < 256:
+                v = int.from_bytes(data[co:co + w], "little")
+                if not v:
+                    break
+                cbs.append(hex(v))
+                co += w
+        out["tls_callbacks"], out["tls_callback_count"] = cbs, str(len(cbs))
+        # LoadLibrary / GetProcAddress handshake
+        allf = set(out["import_functions"]) | set(out["delay_import_functions"])
+        out["loader_apis"] = [a for a in _PE_LOADER_APIS if a in allf]
+        out["is_loader"] = "true" if {"GetProcAddress", "LdrGetProcedureAddress"} & allf and any(
+            a.startswith(("LoadLibrary", "LdrLoadDll")) for a in allf) else "false"
+        known = {x.lower() for x in out["import_dlls"] + out["delay_import_dlls"] + [out.get("dll_name") or ""]}
+        hits = [(mm.start(), mm.group().decode("latin-1")) for mm in _PE_DLLSTR.finditer(data)]
+        hits += [(mm.start(), mm.group().decode("utf-16-le", "replace")) for mm in _PE_DLLSTR16.finditer(data)]
+        libs = []
+        for _, s in sorted(hits):
+            if s.lower() not in known and s not in libs and s.lower() not in ("kernel32.dll", "ntdll.dll"):
+                libs.append(s)
+        out["loaded_libraries"] = libs
+        out["loaded_library"] = libs[0] if libs else "none"
+        # config blob: exported data symbol / named section / .rsrc
+        hit = next((h for h in hcfg_scan(data, stop_on_valid=True) if h.valid), None)
+        if hit:
+            out["config_offset"] = str(hit.offset)
+            out["config"] = json.dumps(hit.config, separators=(",", ":"))
+            out["config_section"] = next((s[0] for s in secs if s[3] <= hit.offset < s[3] + s[4]), "none")
+            out["config_symbol"] = next((e[1] for e in exports if e[1] and not e[3]
+                                         and _pe_rva(secs, int(e[2], 16)) == hit.offset), "none")
+        for k, v in list(out.items()):
+            if v == [] or v is None:
+                out[k] = "none"
+        for k in ("dll_name", "export_ordinal_base", "export_count", "config_offset", "config", "config_section",
+                  "config_symbol"):
+            out.setdefault(k, "none")
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def pe_link_field(data, name):
+    """One pe_link_facts value; per-export lookups `ordinal:<name>`, `rva:<name>`, `forwarder:<name>`,
+    `name:<ordinal>`. "none" for an absent field / export; None when the input is no PE."""
+    f = pe_link_facts(data)
+    if f is None:
+        return None
+    k = str(name).strip()
+    kind, _, arg = k.partition(":")
+    kind = kind.lower().replace("-", "_").replace(" ", "_")
+    if arg and isinstance(f["exports"], list):
+        for o, nm, rva, fw in f["exports"]:
+            if (kind == "name" and str(o) == arg.strip()) or (kind != "name" and nm == arg):
+                v = {"ordinal": o, "rva": rva, "forwarder": fw, "name": nm}.get(kind)
+                return "none" if v is None else str(v)
+        return "none"
+    kind = {"dll_characteristic": "dll_flag", "machine_int": "machine_num", "ordinal_base": "export_ordinal_base",
+            "delay_imports_dlls": "delay_import_dlls", "tls": "tls_callbacks"}.get(kind, kind)
+    return f.get(kind, "none")
+
+
+def pe_link_pair(loader, plugin):
+    """Handshake of a PE loader/plugin pair (either order): the member with is_loader true (else the non-DLL) is the
+    loader. Keys: loader_member 1|2, loaded_library (first runtime .dll literal), resolved_symbols (plugin export
+    names present as NUL-terminated ASCII literals in the loader, loader file order), init_export (first resolved),
+    sideload_match true|false (basename of loaded_library == plugin dll_name, case-insensitive), plugin_* = the
+    plugin's pe_link_facts (plugin_exports = export_names). None when neither member is a PE."""
+    try:
+        mem = [bytes(loader or b""), bytes(plugin or b"")]
+        F = [pe_link_facts(x) for x in mem]
+        if not any(F):
+            return None
+        li = next((i for i in (0, 1) if F[i] and F[i]["is_loader"] == "true"), None)
+        if li is None:
+            li = next((i for i in (0, 1) if F[i] and F[i]["is_dll"] == "false"), 0)
+        pi = 1 - li
+        L, P = F[li] or {}, F[pi] or {}
+        out = {"loader_member": str(li + 1), "loaded_library": L.get("loaded_library", "none")}
+        names = P.get("export_names") if isinstance(P.get("export_names"), list) else []
+        pos = [(mem[li].find(n.encode() + b"\0"), n) for n in names if n]
+        res = [n for p, n in sorted(pos) if p >= 0 and mem[li][p - 1:p] in (b"\0", b"")]
+        out["resolved_symbols"] = res or "none"
+        out["init_export"] = res[0] if res else "none"
+        lib = out["loaded_library"]
+        dn = P.get("dll_name", "none")
+        out["sideload_match"] = "none" if lib == "none" or dn == "none" else \
+            str(re.split(r"[\\/]", lib)[-1].lower() == dn.lower()).lower()
+        for k, v in P.items():
+            out[f"plugin_{k}"] = v
+        out["plugin_exports"] = P.get("export_names", "none")
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+# --- cross-language ABI boundary (FFI) exports: Rust cdylib / Go c-shared / JNI / CPython ext / OCaml stubs ----------
+FFI_KINDS = ("go_c_shared", "rust_cdylib", "jni", "python_ext", "ocaml_stub", "plain_c")
+FFI_MAX_SYMS = 1 << 17
+_GO_BI_MAGIC = b"\xff Go buildinf:"
+_CGO_RUNTIME = re.compile(r"^(_cgo_|x_cgo_|x_crosscall|_cgoexp_|crosscall\d|fatalf$|_rt0_|__cgo_)")
+_RUST_PANIC_PATH = re.compile(rb"/rustc/[0-9a-f]{40}/library/")
+
+
+def _ffi_elf(data):
+    """(sections {name: (offset, size)}, dynsym [(name, defined, bind, type)] in table order, PT_LOAD maps)."""
+    E, b64 = ("<" if data[5] == 1 else ">"), data[4] == 2
+    u16 = lambda o: struct.unpack_from(E + "H", data, o)[0]
+    u32 = lambda o: struct.unpack_from(E + "I", data, o)[0]
+    uw = (lambda o: struct.unpack_from(E + "Q", data, o)[0]) if b64 else u32
+    phoff, shoff = (uw(32), uw(40)) if b64 else (u32(28), u32(32))
+    p = 52 if b64 else 40
+    phes, phn, shes, shn, shstr = u16(p + 2), u16(p + 4), u16(p + 6), u16(p + 8), u16(p + 10)
+    loads, dyn = [], None
+    for k in range(min(phn, 256) if phoff else 0):
+        o = phoff + k * phes
+        if o + (56 if b64 else 32) > len(data):
+            break
+        t = u32(o)
+        off, va, fsz = (uw(o + 8), uw(o + 16), uw(o + 32)) if b64 else (u32(o + 4), u32(o + 8), u32(o + 16))
+        if t == 1:
+            loads.append((va, off, fsz))
+        elif t == 2:
+            dyn = (off, fsz)
+    secs = []   # (name_off, type, offset, size, link, entsize)
+    if shoff and shes >= (64 if b64 else 40):
+        for k in range(min(shn, 4096)):
+            o = shoff + k * shes
+            if o + shes > len(data):
+                break
+            if b64:
+                secs.append((u32(o), u32(o + 4), uw(o + 24), uw(o + 32), u32(o + 40), uw(o + 56)))
+            else:
+                secs.append((u32(o), u32(o + 4), u32(o + 16), u32(o + 20), u32(o + 24), u32(o + 36)))
+
+    def cstr(base, off, lim=4096):
+        s = base + off
+        e = data.find(b"\0", s, s + lim)
+        return data[s:e].decode("utf-8", "replace") if 0 <= s < len(data) and e >= s else ""
+
+    def v2o(va):
+        for lva, loff, fsz in loads:
+            if lva <= va < lva + fsz:
+                return va - lva + loff
+        return None
+
+    named = {}
+    if shstr < len(secs):
+        for s in secs:
+            named.setdefault(cstr(secs[shstr][2], s[0]), (s[2], s[3]))
+    symtab = None   # (offset, count, entsize, strtab offset)
+    for _, t, off, size, link, ent in secs:
+        if t == 11 and ent and link < len(secs):
+            symtab = (off, size // ent, ent, secs[link][2])
+            break
+    if symtab is None and dyn:   # no section headers: DT_SYMTAB / DT_STRTAB (dynstr conventionally follows dynsym)
+        w, tags = (16 if b64 else 8), {}
+        for o in range(dyn[0], min(dyn[0] + dyn[1], len(data) - (16 if b64 else 8) + 1), 16 if b64 else 8):
+            tag = uw(o)
+            if tag == 0:
+                break
+            tags.setdefault(tag, uw(o + w // 2))
+        so, sto, ent = v2o(tags.get(6, -1)), v2o(tags.get(5, -1)), tags.get(11) or (24 if b64 else 16)
+        if so is not None and sto is not None and sto > so:
+            symtab = (so, (sto - so) // ent, ent, sto)
+    if not symtab:
+        return named, None, v2o, b64, E
+    syms = []
+    if symtab:
+        off, n, ent, stro = symtab
+        for k in range(1, min(n, FFI_MAX_SYMS)):
+            o = off + k * ent
+            if o + ent > len(data):
+                break
+            if b64:
+                nm, info, other, shndx = u32(o), data[o + 4], data[o + 5], u16(o + 6)
+            else:
+                nm, info, other, shndx = u32(o), data[o + 12], data[o + 13], u16(o + 14)
+            name = cstr(stro, nm, 1024)
+            if not name:
+                continue
+            defined = shndx != 0 and (info >> 4) in (1, 2, 10) and other & 3 in (0, 3) and (info & 15) != 4
+            syms.append((name, defined, info >> 4, info & 15))
+    return named, syms, v2o, b64, E
+
+
+def _go_uvarint(b, p):
+    v = s = 0
+    while p < len(b) and s < 64:
+        c = b[p]
+        p += 1
+        v |= (c & 0x7f) << s
+        if c < 0x80:
+            return v, p
+        s += 7
+    return None, p
+
+
+def _go_buildinfo_parse(data, v2o, E):
+    """`go version -m` fields from the buildinfo blob: (version, modinfo text) or (None, None)."""
+    i = data.find(_GO_BI_MAGIC)
+    while i >= 0 and i % 16:
+        i = data.find(_GO_BI_MAGIC, i + 1)
+    if i < 0 or i + 32 > len(data):
+        return None, None
+    ptr, flags = data[i + 14], data[i + 15]
+    out = []
+    if flags & 2:   # go1.18+: inline varint-prefixed strings
+        p = i + 32
+        for _ in range(2):
+            n, p = _go_uvarint(data, p)
+            if n is None or n > 1 << 20:
+                return None, None
+            out.append(data[p:p + n].decode("utf-8", "replace"))
+            p += n
+    else:           # older: two pointers to Go string headers {ptr, len}
+        if ptr not in (4, 8) or v2o is None:
+            return None, None
+        E2 = ">" if flags & 1 else "<"
+        fmt = E2 + ("Q" if ptr == 8 else "I")
+        for k in range(2):
+            o = v2o(struct.unpack_from(fmt, data, i + 16 + k * ptr)[0])
+            if o is None or o + 2 * ptr > len(data):
+                return None, None
+            sp, sl = struct.unpack_from(E2 + ("QQ" if ptr == 8 else "II"), data, o)
+            so = v2o(sp)
+            if so is None or sl > 1 << 20:
+                return None, None
+            out.append(data[so:so + sl].decode("utf-8", "replace"))
+    ver, mod = out
+    if len(mod) >= 33 and mod[-17] == "\n":   # 16-byte sentinels around modinfo
+        mod = mod[16:-16]
+    return ver or None, mod
+
+
+def _jni_unmangle(s):
+    """JNI short/long native name body -> (class dotted, method, arg descriptor or "none"), or None."""
+    parts, cur, i = [[]], [], 0   # parts: [name chars], [sig chars]; '/' marks package/class separators
+    while i < len(s):
+        c = s[i]
+        if c == "_":
+            n = s[i + 1:i + 2]
+            if n == "0" and re.fullmatch(r"[0-9a-fA-F]{4}", s[i + 2:i + 6] or ""):
+                parts[-1].append(chr(int(s[i + 2:i + 6], 16)))
+                i += 6
+                continue
+            if n in ("1", "2", "3"):
+                parts[-1].append({"1": "_", "2": ";", "3": "["}[n])
+                i += 2
+                continue
+            if n == "_" and len(parts) == 1:
+                parts.append([])
+                i += 2
+                continue
+            parts[-1].append("/")
+            i += 1
+            continue
+        parts[-1].append(c)
+        i += 1
+    name = "".join(parts[0])
+    if "/" not in name:
+        return None
+    cls, meth = name.rsplit("/", 1)
+    if not cls or not meth:
+        return None
+    sig = "".join(parts[1]) if len(parts) > 1 else "none"
+    return cls.replace("/", "."), meth, sig
+
+
+def ffi_facts(data):
+    """Cross-language ABI boundary facts of an ELF shared object (pure parse, no subprocess).
+    {ffi_kind: go_c_shared|rust_cdylib|jni|python_ext|ocaml_stub|plain_c (implementing toolchain wins over the
+    C-side interface), ffi_kinds [every matching token, that priority order], exports [defined GLOBAL/WEAK dynsym
+    names in .dynsym table order = `readelf --dyn-syms` minus UND], export_count, user_exports [exports minus the cgo
+    runtime (_cgo_*, x_cgo_*, _cgoexp_*, crosscall*, fatalf)], jni_methods [{symbol, class (dotted), method,
+    signature (long-name arg descriptor or "none")}], jni_class (first), jni_method (first), jni_onload/jni_onunload
+    true/false, python_module (PyInit_<mod>), ocaml_stubs [exported caml_*], ocaml_runtime_imports, go_exports
+    (//export names = _cgoexp_<hash>_<Name>), go_version, go_path, go_module, go_module_version, go_buildmode,
+    go_settings {build k: v}, go_deps [path@version], rustc_version (.comment)}. Absent -> "none"; not ELF -> None."""
+    try:
+        if not (data[:4] == b"\x7fELF" and data[4:5] in (b"\x01", b"\x02") and data[5:6] in (b"\x01", b"\x02")
+                and len(data) >= 64):
+            return None
+        named, syms, v2o, b64, E = _ffi_elf(data)
+        if syms is None:   # truncated / no dynamic symbol table: cannot tell the boundary
+            return None
+        exports = [n for n, d, _, t in syms if d and t in (0, 1, 2, 6, 10) and n not in _NOT_EXPORTS]
+        imports = [n for n, d, _, _ in syms if not d]
+        ex = set(exports)
+        f = {"exports": exports or "none", "export_count": str(len(exports))}
+        user = [n for n in exports if not _CGO_RUNTIME.match(n)]
+        f["user_exports"] = user or "none"
+        jm = []
+        for n in exports:
+            if n.startswith("Java_"):
+                r = _jni_unmangle(n[5:].split("@", 1)[0])
+                if r:
+                    jm.append({"symbol": n, "class": r[0], "method": r[1], "signature": r[2]})
+        f["jni_methods"] = jm or "none"
+        f["jni_class"] = jm[0]["class"] if jm else "none"
+        f["jni_method"] = jm[0]["method"] if jm else "none"
+        f["jni_onload"] = "true" if "JNI_OnLoad" in ex else "false"
+        f["jni_onunload"] = "true" if "JNI_OnUnload" in ex else "false"
+        py = "none"
+        for n in exports:
+            if n.startswith("PyInit_") and len(n) > 7:
+                py = n[7:]
+                break
+            if n.startswith("PyInitU_") and len(n) > 8:   # PEP 489 non-ASCII module: punycode, '-' -> '_'
+                try:
+                    b = n[8:]
+                    k = b.rfind("_")
+                    py = (b[:k] + "-" + b[k + 1:] if k >= 0 else b).encode().decode("punycode")
+                except Exception:  # noqa: BLE001
+                    py = n[8:]
+                break
+        f["python_module"] = py
+        oc = [n for n in exports if n.startswith("caml_")]
+        oci = [n for n in imports if n.startswith("caml_")]
+        f["ocaml_stubs"] = oc or "none"
+        f["ocaml_runtime_imports"] = oci or "none"
+        cgoexp = {}
+        for n in exports:
+            m = re.match(r"^_cgoexp_[0-9a-f]+_(\w+)$", n)
+            if m:
+                cgoexp[m.group(1)] = n
+        f["go_exports"] = [n for n in exports if n in cgoexp] or "none"
+        ver, mod = _go_buildinfo_parse(data, v2o, E)
+        f["go_version"] = ver or "none"
+        lines = [ln.split("\t") for ln in (mod or "").splitlines()]
+        get = lambda k: next((ln[1] for ln in lines if ln[0] == k and len(ln) > 1), "none")
+        f["go_path"] = get("path")
+        mline = next((ln for ln in lines if ln[0] == "mod"), None)
+        f["go_module"] = mline[1] if mline and len(mline) > 1 else "none"
+        f["go_module_version"] = mline[2] if mline and len(mline) > 2 and mline[2] else "none"
+        settings = {}
+        for ln in lines:
+            if ln[0] == "build" and len(ln) > 1:
+                k, _, v = ln[1].partition("=")
+                settings.setdefault(k, v)
+        f["go_settings"] = settings or "none"
+        f["go_buildmode"] = settings.get("-buildmode", "none")
+        f["go_deps"] = ["{}@{}".format(ln[1], ln[2]) for ln in lines if ln[0] == "dep" and len(ln) > 2] or "none"
+        rv = "none"
+        c = named.get(".comment")
+        if c:
+            m = re.search(rb"rustc version [^\x00]+", data[c[0]:c[0] + min(c[1], 1 << 16)])
+            if m:
+                rv = m.group(0)[14:].decode("utf-8", "replace")
+        f["rustc_version"] = rv
+        kinds = []
+        if cgoexp or "crosscall2" in ex or f["go_buildmode"] == "c-shared":
+            kinds.append("go_c_shared")
+        if rv != "none" or ".rustc" in named or any(n in ex for n in ("rust_eh_personality", "__rust_alloc")) \
+                or _RUST_PANIC_PATH.search(data):
+            kinds.append("rust_cdylib")
+        if jm or "JNI_OnLoad" in ex:
+            kinds.append("jni")
+        if py != "none":
+            kinds.append("python_ext")
+        if oc or oci:
+            kinds.append("ocaml_stub")
+        f["ffi_kinds"] = kinds or ["plain_c"]
+        f["ffi_kind"] = f["ffi_kinds"][0]
+        return f
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def ffi_field(data, name):
+    f = ffi_facts(data)
+    return None if f is None else f.get(name, "none")
+
+
+# --- script-runtime native extensions (lib.binary.extension_bridge_facts): the native side of an FFI bridge. Pure
+# ELF parse (sections, .symtab/.dynsym with values, REL/RELA relocations) so pointer tables in a PIC .so resolve:
+# PyModuleDef (m_name slot -> m_doc/m_size/m_methods/m_slots) -> PyMethodDef[] {ml_name, ml_meth, int ml_flags, ml_doc}
+# until a NULL name; Lua luaL_Reg[] {name, func} pairs; cffi _cffi_globals[] {name, addr, op, fn}. A .pyc / .py partner
+# gives the ctypes side (CDLL library strings + functions given argtypes/restype or called on the CDLL handle).
+_XB_RELATIVE = {62: (8,), 183: (1027,), 3: (8,), 40: (23,), 243: (3,), 21: (22,), 8: (3,)}   # e_machine -> RELATIVE
+_XB_ABS = {62: (1,), 183: (257,), 3: (1,), 40: (2,), 243: (2,), 21: (38,), 8: (2,)}          # R_*_64 / R_*_32 (S+A)
+_METH_FLAGS = ((0x1, "METH_VARARGS"), (0x2, "METH_KEYWORDS"), (0x4, "METH_NOARGS"), (0x8, "METH_O"),
+               (0x10, "METH_CLASS"), (0x20, "METH_STATIC"), (0x40, "METH_COEXIST"), (0x80, "METH_FASTCALL"),
+               (0x100, "METH_STACKLESS"), (0x200, "METH_METHOD"))
+_XB_IDENT = re.compile(rb"[A-Za-z_][A-Za-z0-9_.]{0,127}\Z")
+_XB_CTYPES_API = {"ctypes", "CDLL", "cdll", "PyDLL", "pydll", "WinDLL", "windll", "OleDLL", "oledll", "LoadLibrary",
+                  "argtypes", "restype", "errcheck", "POINTER", "pointer", "byref", "cast", "sizeof", "util",
+                  "find_library", "create_string_buffer", "create_unicode_buffer", "Structure", "Union", "CFUNCTYPE",
+                  "_fields_", "value", "raw", "contents"}
+_XB_LIBSTR = re.compile(r"^(?:[\w.+/-]*/)?[\w.+-]+\.(?:so(?:\.\d+)*|dll|dylib|pyd)$", re.I)
+
+
+def meth_flags_token(v):
+    """'METH_VARARGS|METH_KEYWORDS' for a PyMethodDef ml_flags int (unknown bits as hex)."""
+    names = [n for b, n in _METH_FLAGS if v & b]
+    rest = v & ~0x3ff
+    return "|".join(names + ([hex(rest)] if rest else [])) or "0"
+
+
+def _xb_elf(data):
+    """Minimal ELF view: dict(E, w, machine, etype, loads [(va, off, fsz, flags)], secs [(name, type, off, size,
+    link, entsize, info)], syms [(name, value, size, bind, type, shndx, from_symtab)], dynsym [names by index])."""
+    E, b64 = ("<" if data[5] == 1 else ">"), data[4] == 2
+    w = 8 if b64 else 4
+    u16 = lambda o: struct.unpack_from(E + "H", data, o)[0]
+    u32 = lambda o: struct.unpack_from(E + "I", data, o)[0]
+    uw = (lambda o: struct.unpack_from(E + "Q", data, o)[0]) if b64 else u32
+    etype, mach = u16(16), u16(18)
+    phoff, shoff = (uw(32), uw(40)) if b64 else (u32(28), u32(32))
+    p = 52 if b64 else 40
+    phes, phn, shes, shn, shstr = u16(p + 2), u16(p + 4), u16(p + 6), u16(p + 8), u16(p + 10)
+    loads = []
+    for k in range(min(phn, 256) if phoff else 0):
+        o = phoff + k * phes
+        if o + (56 if b64 else 32) > len(data):
+            break
+        if u32(o) == 1:
+            if b64:
+                loads.append((uw(o + 16), uw(o + 8), uw(o + 32), u32(o + 4)))
+            else:
+                loads.append((u32(o + 8), u32(o + 4), u32(o + 16), u32(o + 24)))
+    raw = []
+    if shoff and shes >= (64 if b64 else 40):
+        for k in range(min(shn, 4096)):
+            o = shoff + k * shes
+            if o + shes > len(data):
+                break
+            if b64:
+                raw.append((u32(o), u32(o + 4), uw(o + 24), uw(o + 32), u32(o + 40), uw(o + 56), u32(o + 44)))
+            else:
+                raw.append((u32(o), u32(o + 4), u32(o + 16), u32(o + 20), u32(o + 24), u32(o + 36), u32(o + 28)))
+
+    def cstr(off, lim=1024):
+        e = data.find(b"\0", off, off + lim) if 0 <= off < len(data) else -1
+        return data[off:e].decode("utf-8", "replace") if e >= 0 else ""
+
+    secs = [((cstr(raw[shstr][2] + r[0]) if shstr < len(raw) else ""),) + r[1:] for r in raw]
+    syms, dynsym = [], []
+    for kind in (2, 11):   # .symtab names win over .dynsym for the same address
+        for name, t, off, size, link, ent, _ in secs:
+            if t != kind or not ent or link >= len(secs):
+                continue
+            stro = secs[link][2]
+            for k in range(min(size // ent, FFI_MAX_SYMS)):
+                o = off + k * ent
+                if o + ent > len(data):
+                    break
+                if b64:
+                    nm, info, shndx, val, sz = u32(o), data[o + 4], u16(o + 6), uw(o + 8), uw(o + 16)
+                else:
+                    nm, val, sz, info, shndx = u32(o), u32(o + 4), u32(o + 8), data[o + 12], u16(o + 14)
+                n = cstr(stro + nm) if nm else ""
+                if kind == 11:
+                    dynsym.append((n, val if shndx else None))
+                if n:
+                    syms.append((n, val, sz, info >> 4, info & 15, shndx, kind == 2))
+            break
+    return dict(E=E, w=w, b64=b64, machine=mach, etype=etype, loads=loads, secs=secs, syms=syms, dynsym=dynsym,
+                uw=uw, u32=u32)
+
+
+class _XbMem:
+    """Pointer reads over an ELF image: relocation targets first (PIC slots hold 0 under RELA), raw words otherwise."""
+
+    def __init__(self, data, x):
+        self.d, self.x, self.w, self.uw = data, x, x["w"], x["uw"]
+        self.rel, self.imp = {}, {}
+        rel_t, abs_t = _XB_RELATIVE.get(x["machine"], ()), _XB_ABS.get(x["machine"], ())
+        b64, E = x["b64"], x["E"]
+        for name, t, off, size, link, ent, _ in x["secs"]:
+            if t not in (4, 9) or not ent:
+                continue
+            fmt = (E + ("QQq" if t == 4 else "QQ")) if b64 else (E + ("IIi" if t == 4 else "II"))
+            n = struct.calcsize(fmt)
+            if ent < n:
+                continue
+            for k in range(min(size // ent, 1 << 21)):
+                o = off + k * ent
+                if o + n > len(data):
+                    break
+                r = struct.unpack_from(fmt, data, o)
+                va, info = r[0], r[1]
+                typ, si = (info & 0xffffffff, info >> 32) if b64 else (info & 0xff, info >> 8)
+                if t == 4:
+                    add = r[2]
+                else:
+                    so = self.off(va)
+                    add = self.uw(so) if so is not None and so + self.w <= len(data) else 0
+                if typ in rel_t:
+                    self.rel[va] = add & ((1 << (8 * self.w)) - 1)
+                elif typ in abs_t and si < len(x["dynsym"]):
+                    nm, val = x["dynsym"][si]
+                    if val is not None:
+                        self.rel[va] = (val + add) & ((1 << (8 * self.w)) - 1)
+                    elif nm:
+                        self.imp[va] = nm
+        self.fn = {}
+        for n, val, sz, bind, typ, shndx, st in x["syms"]:
+            if typ == 2 and shndx and val:
+                self.fn.setdefault(val, n)
+
+    def off(self, va):
+        for lva, loff, fsz, _ in self.x["loads"]:
+            if lva <= va < lva + fsz:
+                return va - lva + loff
+        return None
+
+    def is_exec(self, va):
+        return any(lva <= va < lva + fsz and fl & 1 for lva, _, fsz, fl in self.x["loads"])
+
+    def word(self, va):
+        o = self.off(va)
+        return self.uw(o) if o is not None and o + self.w <= len(self.d) else None
+
+    def ptr(self, va):
+        if va in self.rel:
+            return self.rel[va]
+        if va in self.imp:
+            return None
+        return self.word(va) or 0
+
+    def s(self, va, lim=4096):
+        o = self.off(va) if va else None
+        if o is None:
+            return None
+        e = self.d.find(b"\0", o, o + lim)
+        if e < 0:
+            return None
+        try:
+            t = self.d[o:e].decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        return t if all(c.isprintable() or c in "\t\n\r" for c in t) else None
+
+    def func(self, va):
+        if va in self.fn:
+            return self.fn[va]
+        return "sub_%x" % va if va else "none"
+
+
+def _xb_methods(m, va, entry_words=4, cap=1024):
+    """PyMethodDef[] at va -> [{name, function, flags, flags_value, doc}] until a NULL ml_name."""
+    out, w = [], m.w
+    for k in range(cap):
+        e = va + k * entry_words * w
+        np_ = m.ptr(e)
+        if not np_:
+            break
+        name = m.s(np_, 256)
+        if not name or not _XB_IDENT.match(name.encode()):
+            break
+        fp = m.ptr(e + w)
+        fo = m.off(e + 2 * w)
+        flags = struct.unpack_from(m.x["E"] + "I", m.d, fo)[0] if fo is not None and fo + 4 <= len(m.d) else 0
+        dp = m.ptr(e + 3 * w)
+        doc = m.s(dp, 1 << 16) if dp else None
+        out.append({"name": name, "function": m.func(fp or 0) if fp is not None else "none",
+                    "flags": meth_flags_token(flags), "flags_value": str(flags), "doc": doc if doc is not None
+                    else "none"})
+    return out
+
+
+def _xb_luareg(m, cap=4096):
+    """Every luaL_Reg[] (name, lua_CFunction) run that ends in a {NULL, NULL} pair -> [[{name, function}]]."""
+    w, tables, seen = m.w, [], set()
+    for va in sorted(m.rel):
+        if va in seen:
+            continue
+        run, e = [], va
+        while len(run) < cap:
+            n = m.s(m.ptr(e) or 0, 256) if m.ptr(e) else None
+            fp = m.ptr(e + w)
+            if not n or not _XB_IDENT.match(n.encode()) or not fp or not m.is_exec(fp):
+                break
+            run.append({"name": n, "function": m.func(fp)})
+            seen.add(e)
+            e += 2 * w
+        if run and not m.ptr(e) and not m.ptr(e + w) and e not in m.imp:
+            tables.append(run)
+    return tables
+
+
+def _xb_marshal(data, p, ver):
+    """Bounded, non-executing marshal reader (never builds a code object): returns the top object where code objects
+    are dicts {code, consts, names, varnames}. ver = (3, minor). Raises ValueError on anything malformed."""
+    refs, n_items = [], [0]
+
+    def need(k):
+        if p_[0] + k > len(data):
+            raise ValueError("short")
+
+    def i32():
+        need(4)
+        v = struct.unpack_from("<i", data, p_[0])[0]
+        p_[0] += 4
+        return v
+
+    def raw(k):
+        if k < 0:
+            raise ValueError("len")
+        need(k)
+        b = data[p_[0]:p_[0] + k]
+        p_[0] += k
+        return b
+
+    def obj(depth):
+        n_items[0] += 1
+        if depth > 64 or n_items[0] > 200000:
+            raise ValueError("deep")
+        need(1)
+        c = data[p_[0]]
+        p_[0] += 1
+        flag, t = c & 0x80, chr(c & 0x7f)
+        slot = None
+        if flag and t not in "r":
+            slot = len(refs)
+            refs.append(None)
+
+        def keep(v):
+            if slot is not None:
+                refs[slot] = v
+            return v
+        if t in "0NFTS.":
+            return keep({"N": None, "F": False, "T": True}.get(t))
+        if t == "i":
+            return keep(i32())
+        if t == "I":
+            return keep(struct.unpack("<q", raw(8))[0])
+        if t == "g":
+            return keep(struct.unpack("<d", raw(8))[0])
+        if t == "y":
+            raw(16)
+            return keep(0j)
+        if t == "f":
+            raw(raw(1)[0])
+            return keep(0.0)
+        if t == "x":
+            raw(raw(1)[0])
+            raw(raw(1)[0])
+            return keep(0j)
+        if t == "l":
+            n = i32()
+            raw(abs(n) * 2)
+            return keep(0)
+        if t == "s":
+            return keep(raw(i32()))
+        if t in "tuaA":
+            return keep(raw(i32()).decode("utf-8", "surrogatepass" if t == "u" else "replace"))
+        if t in "zZ":
+            return keep(raw(raw(1)[0]).decode("latin-1"))
+        if t in "()[<>":
+            n = raw(1)[0] if t == ")" else i32()
+            if n < 0 or n > 1 << 20:
+                raise ValueError("len")
+            out = keep([])
+            for _ in range(n):
+                out.append(obj(depth + 1))
+            return out
+        if t == "{":
+            out = keep({})
+            while True:
+                k = obj(depth + 1)
+                if k is None and data[p_[0] - 1] & 0x7f == 0x30:
+                    return out
+                v = obj(depth + 1)
+                try:
+                    out[k] = v
+                except TypeError:
+                    pass
+        if t == ":":
+            return keep([obj(depth + 1) for _ in range(3)])
+        if t == "r":
+            k = i32()
+            if not 0 <= k < len(refs):
+                raise ValueError("ref")
+            return refs[k]
+        if t == "c":
+            co = keep({})
+            for _ in range(6 if ver < (3, 11) else 5):
+                i32()
+            co["code"] = obj(depth + 1)
+            co["consts"] = obj(depth + 1)
+            co["names"] = obj(depth + 1)
+            co["varnames"] = obj(depth + 1)
+            for _ in range(4 if ver < (3, 11) else 4):   # freevars, cellvars, filename, name | kinds, file, name, qual
+                obj(depth + 1)
+            i32()
+            obj(depth + 1)
+            if ver >= (3, 11):
+                obj(depth + 1)
+            return co
+        raise ValueError("type %r" % t)
+
+    p_ = [p]
+    return obj(0)
+
+
+# magic-number ranges (Lib/importlib/_bootstrap_external.py) -> minor version; opcode numbers per family:
+# (LOAD_ATTR, STORE_ATTR, LOAD_NAME, STORE_NAME, LOAD_GLOBAL, STORE_GLOBAL, LOAD_FAST*, STORE_FAST, LOAD_METHOD,
+#  LOAD_CONST, EXTENDED_ARG, attr>>1, global>>1). 3.13 opcode numbers unverified here -> names-only fallback.
+_PYC_VER = ((3400, 3420, 8), (3420, 3430, 9), (3430, 3450, 10), (3450, 3500, 11), (3500, 3550, 12),
+            (3550, 3600, 13), (3600, 3650, 14))
+_PYC_OPS = {8: (106, 95, 101, 90, 116, 97, (124,), 125, 160, 100, 144, 0, 0),
+            9: (106, 95, 101, 90, 116, 97, (124,), 125, 160, 100, 144, 0, 0),
+            10: (106, 95, 101, 90, 116, 97, (124,), 125, 160, 100, 144, 0, 0),
+            11: (106, 95, 101, 90, 116, 97, (124,), 125, 160, 100, 144, 0, 1),
+            12: (106, 95, 101, 90, 116, 97, (124,), 125, None, 100, 144, 1, 1),
+            14: (80, 110, 93, 116, 92, 115, (84, 86), 112, None, 82, 69, 1, 1)}
+_XB_DLL = {"CDLL", "PyDLL", "WinDLL", "OleDLL", "LoadLibrary", "cdll", "windll", "oledll", "pydll"}
+
+
+def _xb_pyc_scan(data):
+    """(libs, funcs, method) from a .pyc's marshalled code objects (no unmarshal into live objects, no exec)."""
+    magic = struct.unpack_from("<H", data, 0)[0]
+    minor = next((v for lo, hi, v in _PYC_VER if lo <= magic < hi), None)
+    if minor is None:
+        return None
+    top = _xb_marshal(data, 16, (3, minor))
+    codes, todo, seen = [], [top], set()
+    while todo and len(codes) < 4096:
+        c = todo.pop(0)
+        if isinstance(c, dict) and "code" in c and id(c) not in seen:
+            seen.add(id(c))
+            codes.append(c)
+            todo += [k for k in (c.get("consts") or ()) if isinstance(k, dict)]
+    libs, funcs = [], []
+    for c in codes:
+        for k in c.get("consts") or ():
+            if isinstance(k, str) and _XB_LIBSTR.match(k):
+                libs.append(k)
+    ops = _PYC_OPS.get(minor)
+    if ops is None:   # opcode numbering not known: co_names order (X then argtypes/restype on first use)
+        for c in codes:
+            nm = [n for n in c.get("names") or () if isinstance(n, str)]
+            for i, t in enumerate(nm):
+                if t in ("argtypes", "restype", "errcheck") and i and nm[i - 1] not in _XB_CTYPES_API and \
+                        not nm[i - 1].startswith("c_"):
+                    funcs.append(nm[i - 1])
+        return libs, funcs, "names"
+    LA, SA, LN, SN, LG, SG, LF, SF, LM, LC, EXT, sa, sg = ops
+    for c in codes:
+        code, names = c.get("code"), [n if isinstance(n, str) else "" for n in c.get("names") or ()]
+        vn = [n if isinstance(n, str) else "" for n in c.get("varnames") or ()]
+        if not isinstance(code, bytes):
+            continue
+        ins, ext = [], 0
+        for i in range(0, len(code) - 1, 2):
+            op, arg = code[i], code[i + 1] | ext
+            if op == EXT:
+                ext = arg << 8
+                continue
+            ext = 0
+            if op == 0 and minor >= 11:   # CACHE
+                continue
+            nm = None
+            if op in (LA, SA, LN, SN, SG, LG, LM):
+                k = arg >> (sa if op == LA else sg if op == LG else 0)
+                nm = names[k] if k < len(names) else None
+            elif op in LF or op == SF:
+                nm = vn[arg] if arg < len(vn) else None
+            ins.append((op, nm))
+        pending, libvars = False, set()
+        for i, (op, nm) in enumerate(ins):
+            if op in (LA, LN, LG, LM) and nm in _XB_DLL:
+                pending = True
+            elif op in (SN, SG, SF, SA) and pending:
+                libvars.add(nm)
+                pending = False
+            if op == SA and nm in ("argtypes", "restype", "errcheck") and i and ins[i - 1][0] in (LA, LM):
+                funcs.append(ins[i - 1][1])
+            if op in (LA, LM) and i and ins[i - 1][1] in libvars and ins[i - 1][0] in (LN, LG) + tuple(LF) and \
+                    nm not in _XB_CTYPES_API:
+                funcs.append(nm)
+    return libs, [f_ for f_ in funcs if f_], "bytecode"
+
+
+def _xb_pyc_ctypes(data):
+    """ctypes side of a .pyc / .py partner: (libraries, functions, method) or None when it is neither."""
+    libs, funcs, method = [], [], "none"
+    if len(data) >= 16 and data[2:4] == b"\r\n":
+        if not any(s in data for s in (b"ctypes", b"CDLL", b"cdll", b"windll")):
+            return None
+        try:
+            r = _xb_pyc_scan(data)
+        except (ValueError, IndexError, struct.error, RecursionError):
+            r = None
+        if r is None:   # unknown magic / damaged stream: marshal string tokens in stream order
+            strs = []
+            for mm in re.finditer(rb"[\x5a\xda\x7a\xfa]([\x01-\x7f])|[\x61\xe1\x41\xc1\x75\xf5]([\x01-\xff])\0\0\0",
+                                  data[16:]):
+                n = (mm.group(1) or mm.group(2))[0]
+                b = data[16 + mm.end():16 + mm.end() + n]
+                if len(b) == n and all(32 <= c < 127 for c in b):
+                    strs.append(b.decode())
+            for i, t in enumerate(strs):
+                if _XB_LIBSTR.match(t):
+                    libs.append(t)
+                if t in ("argtypes", "restype", "errcheck") and i and strs[i - 1] not in _XB_CTYPES_API and \
+                        not strs[i - 1].startswith("c_") and re.match(r"^[A-Za-z_]\w*$", strs[i - 1]):
+                    funcs.append(strs[i - 1])
+            method = "strings"
+        else:
+            libs, funcs, method = r
+    else:
+        try:
+            src = data.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        if not re.search(r"\b(?:import|from)\s+ctypes\b", src):
+            return None
+        method = "source"
+        libs = re.findall(r"""(?:CDLL|PyDLL|WinDLL|OleDLL|LoadLibrary)\(\s*[rbu]?['"]([^'"]+)['"]""", src)
+        hv = set(re.findall(r"""(\w+)\s*=\s*(?:ctypes\.)?(?:cdll\.|windll\.)?(?:CDLL|PyDLL|WinDLL|OleDLL|LoadLibrary)\(""",
+                            src))
+        for mm in re.finditer(r"\b(\w+)\.(\w+)\s*(?:\.\s*(argtypes|restype|errcheck)\b|\()", src):
+            if (mm.group(3) or mm.group(1) in hv) and mm.group(1) in hv and mm.group(2) not in _XB_CTYPES_API:
+                funcs.append(mm.group(2))
+    dd = lambda xs: list(dict.fromkeys(xs))
+    return dd(libs), dd(funcs), method
+
+
+def extension_bridge_facts(data):
+    """Script-runtime native extension facts (bytes in, pure parse). ELF .so: extension_kind (cython > cffi >
+    python_ext > napi > lua_c > ruby_ext > plain_c) + extension_kinds, init_export (PyInit_<m> /
+    napi_register_module_v1 / node_register_module_v<N> / luaopen_<m> / Init_<m>), module_name, module_doc,
+    module_size (PyModuleDef.m_size), multi_phase (m_slots set, PEP 489), methods [{name, function (symbol or
+    sub_<hex>), flags 'METH_VARARGS|METH_KEYWORDS', flags_value, doc}] from the PyMethodDef[] walk (RELATIVE / R_*_64
+    relocs; NULL name ends it), method_names, method_count, method_flags {name: flags}, method_functions {name: fn},
+    cython_version / pyx_path / pyx_paths (embedded .pyx sources), cffi_functions (_cffi_globals), napi_abi (the
+    node_register_module_v<N> ABI), napi_imports, lua_module / lua_functions (luaL_Reg[] tables) / lua_imports,
+    ruby_module / ruby_imports. .pyc / .py partner: extension_kind "ctypes", ctypes_libraries, ctypes_functions,
+    ctypes_method (bytecode|strings|source). Field absent -> "none"; not an ELF / .pyc / ctypes source -> None."""
+    try:
+        if not isinstance(data, (bytes, bytearray)) or len(data) < 16:
+            return None
+        data = bytes(data)
+        if data[:4] != b"\x7fELF":
+            r = _xb_pyc_ctypes(data)
+            if r is None:
+                return None
+            libs, funcs, how = r
+            k = "ctypes" if libs or funcs else "none"   # a .pyc that merely mentions ctypes: no bridge evidence
+            return {"extension_kind": k, "extension_kinds": [k] if libs or funcs else "none",
+                    "ctypes_libraries": libs or "none",
+                    "ctypes_functions": funcs or "none", "ctypes_method": how, "init_export": "none",
+                    "module_name": "none", "methods": "none", "method_names": "none", "method_count": "0"}
+        if not (data[4:5] in (b"\x01", b"\x02") and data[5:6] in (b"\x01", b"\x02") and len(data) >= 64):
+            return None
+        x = _xb_elf(data)
+        if not x["syms"]:
+            return None
+        m = _XbMem(data, x)
+        dyn_def = [n for n, v in x["dynsym"] if n and v is not None]
+        dyn_und = [n for n, v in x["dynsym"] if n and v is None]
+        exports = set(dyn_def)
+        allsyms = {s[0] for s in x["syms"]}
+        f = {}
+        init = mod = "none"
+        py = next((n for n in dyn_def if n.startswith(("PyInit_", "PyInitU_")) and len(n) > 8), None)
+        nap = next((n for n in dyn_def if n == "napi_register_module_v1" or n.startswith("node_register_module_v")),
+                   None)
+        lua = next((n for n in dyn_def if n.startswith("luaopen_") and len(n) > 8), None)
+        rb = next((n for n in dyn_def if n.startswith("Init_") and len(n) > 5), None)
+        kinds = []
+        cython = py and (any(n.startswith("__pyx_") for n in allsyms) or b"__pyx_" in data or b"_cython_" in data)
+        cffi = py and ("_cffi_types" in allsyms or "_cffi_globals" in allsyms or b"_cffi_backend" in data
+                       or any(n.startswith("_cffi_pypyinit_") for n in exports))
+        if cython:
+            kinds.append("cython")
+        if cffi:
+            kinds.append("cffi")
+        if py:
+            kinds.append("python_ext")
+        if nap or "napi_module_register" in dyn_und:
+            kinds.append("napi")
+        if lua:
+            kinds.append("lua_c")
+        if rb and any(n.startswith("rb_") for n in dyn_und):
+            kinds.append("ruby_ext")
+        kinds = kinds or ["plain_c"]
+        f["extension_kind"], f["extension_kinds"] = kinds[0], kinds
+        if py:
+            init = py
+            if py.startswith("PyInitU_"):
+                try:
+                    b = py[8:]
+                    k = b.rfind("_")
+                    mod = (b[:k] + "-" + b[k + 1:] if k >= 0 else b).encode().decode("punycode")
+                except Exception:  # noqa: BLE001
+                    mod = py[8:]
+            else:
+                mod = py[7:]
+        elif nap:
+            init = nap
+        elif lua:
+            init, mod = lua, lua[8:]
+        elif rb:
+            init, mod = rb, rb[5:]
+        f["init_export"], f["module_name"] = init, mod
+        # PyModuleDef: the relocated slot whose target is the module-name string is m_name (base + 5 words)
+        w = m.w
+        mdoc = msize = mslots = "none"
+        meths = []
+        if py:
+            cands = [va for va, t in m.rel.items() if m.s(t, 512) == mod]
+            for nva in sorted(cands):
+                base = nva - 5 * w
+                if m.ptr(base + 2 * w) or m.ptr(base + 3 * w) not in (0, None):
+                    continue
+                mp = m.ptr(nva + 3 * w)
+                ms = _xb_methods(m, mp) if mp else []
+                if not ms and meths:
+                    continue
+                dp = m.ptr(nva + w)
+                mdoc = (m.s(dp, 1 << 16) or "none") if dp else "none"
+                so = m.off(nva + 2 * w)
+                if so is not None and so + w <= len(data):
+                    v = m.uw(so)
+                    msize = str(v - (1 << (8 * w)) if v >> (8 * w - 1) else v)
+                mslots = "true" if m.ptr(nva + 4 * w) else "false"
+                meths = ms
+                if ms:
+                    break
+        f["module_doc"], f["module_size"], f["multi_phase"] = mdoc, msize, mslots
+        f["methods"] = meths or "none"
+        f["method_names"] = [e["name"] for e in meths] or "none"
+        f["method_count"] = str(len(meths))
+        f["method_flags"] = {e["name"]: e["flags"] for e in meths} or "none"
+        f["method_functions"] = {e["name"]: e["function"] for e in meths} or "none"
+        # Cython
+        cv = re.search(rb"_cython_(\d+)_(\d+)_(\d+)(?:([abrc]+)(\d+))?", data) if cython else None
+        f["cython_version"] = ".".join(x_.decode() for x_ in cv.groups()[:3]) + (
+            (cv.group(4) + cv.group(5)).decode() if cv and cv.group(4) else "") if cv else "none"
+        pyx = list(dict.fromkeys(mm.group(1).decode() for mm in re.finditer(
+            rb"(?<![\w./-])((?:[\w.-]+/)*[\w.-]+\.(?:pyx|pxd|py))\x00", data))) if cython else []
+        pyx = [p_ for p_ in pyx if p_.endswith((".pyx", ".pxd", ".py"))]
+        # Cython def/cpdef wrappers: one single-entry PyMethodDef each (__pyx_mdef_<mangled>, .symtab only)
+        cyf = []
+        for n, val, sz, bind, typ, shndx, st in (x["syms"] if cython else ()):
+            if n.startswith("__pyx_mdef_") and typ == 1 and val:
+                cyf += [e["name"] for e in _xb_methods(m, val, cap=1)]
+        f["cython_functions"] = sorted(set(cyf)) or "none"
+        f["pyx_paths"] = [p_ for p_ in pyx if p_.endswith(".pyx")] or "none"
+        f["pyx_path"] = f["pyx_paths"][0] if pyx and f["pyx_paths"] != "none" else "none"
+        # cffi: _cffi_globals[] {name, address, type_op, size_or_direct_fn}
+        cf = []
+        g = next((s for s in x["syms"] if s[0] == "_cffi_globals" and s[1]), None) if cffi else None
+        if g:
+            for k in range(min(g[2] // (4 * w) if g[2] else 512, 4096)):
+                n = m.s(m.ptr(g[1] + k * 4 * w) or 0, 256)
+                if not n:
+                    break
+                cf.append(n)
+        f["cffi_functions"] = cf or "none"
+        # N-API
+        mm = re.match(r"node_register_module_v(\d+)$", nap or "")
+        f["napi_abi"] = mm.group(1) if mm else "none"
+        f["napi_imports"] = [n for n in dyn_und if n.startswith(("napi_", "node_api_"))] or "none"
+        # Lua
+        lt = _xb_luareg(m) if lua else []
+        f["lua_module"] = lua[8:] if lua else "none"
+        f["lua_tables"] = lt or "none"
+        f["lua_functions"] = list(dict.fromkeys(e["name"] for t in lt for e in t)) or "none"
+        f["lua_imports"] = [n for n in dyn_und if n.startswith(("lua_", "luaL_"))] or "none"
+        # Ruby
+        f["ruby_module"] = rb[5:] if rb and "ruby_ext" in kinds else "none"
+        f["ruby_imports"] = [n for n in dyn_und if n.startswith("rb_")] or "none"
+        f["python_imports"] = [n for n in dyn_und if n.startswith(("Py", "_Py"))] or "none"
+        return f
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def extension_bridge_field(data, name):
+    f = extension_bridge_facts(data)
+    return None if f is None else f.get(name, "none")
+
+
+# --- DWARF deep facts (lib.binary.dwarf_facts): CUs (name / DW_LANG_* token as llvm-dwarfdump prints it / producer /
+# comp_dir), subprograms with low_pc / high_pc (high_pc absolute: an offset-class form is added to low_pc, like
+# llvm-dwarfdump), line-table file list (table order, all CUs), globals / struct fields / typedefs / enums, per-function
+# params / locals. .debug_* sections compressed by SHF_COMPRESSED (zlib / zstd Chdr) or legacy .zdebug (zlib-gnu) are
+# decoded here (pyelftools 0.33 knows neither zstd nor a mixed file), then handed to DWARFInfo directly.
+DWARF_CAP = 64 << 20   # decompressed bytes per .debug_* section
+_DWARF_SECS = (".debug_info", ".debug_aranges", ".debug_abbrev", ".debug_frame", ".debug_str", ".debug_loc",
+               ".debug_ranges", ".debug_line", ".debug_pubtypes", ".debug_pubnames", ".debug_addr",
+               ".debug_str_offsets", ".debug_line_str", ".debug_loclists", ".debug_rnglists", ".debug_sup",
+               ".gnu_debugaltlink", ".debug_types")
+_DWARF_LAST = [None, None]
+_DWARF_LIB_CU = re.compile(r"^(?:library/|/rustc/|\.\./src_musl/|/usr/(?:src|include|lib)/|/build/glibc|\.\./sysdeps/|"
+                           r"/home/runner/work/|<artificial>)|\bcrt\w*\.[cSs]$|^/?src/libstd/")
+
+
+def _dwarf_open(d):
+    """DWARFInfo over d's .debug_* sections (compressed ones inflated by their header), or None (no .debug_info)."""
+    from elftools.elf.elffile import ELFFile
+    from elftools.dwarf.dwarfinfo import DWARFInfo, DebugSectionDescriptor, DwarfConfig
+    ef = ELFFile(io.BytesIO(d))
+    comp = {r["index"]: r for r in (elf_compressed_sections(d, inflate=False) or ())}
+    descs = {}
+    for k in range(ef.num_sections()):
+        sh = ef._get_section_header(k)
+        nm = ef._get_section_name(sh)
+        base = "." + nm[2:] if nm.startswith(".zdebug") else nm
+        if base not in _DWARF_SECS or base in descs or sh["sh_type"] == "SHT_NOBITS":
+            continue
+        o, n = sh["sh_offset"], sh["sh_size"]
+        raw = d[o:o + n]
+        r = comp.get(k)
+        if r is not None:
+            raw = _zsec_inflate(r["compression"], raw[r["stream_offset"] - o:], cap=DWARF_CAP) \
+                if r["compression"] != "unknown" else None
+            if raw is None:
+                continue
+        elif nm.startswith(".zdebug"):
+            continue
+        descs[base] = DebugSectionDescriptor(io.BytesIO(raw), base, o, len(raw), sh["sh_addr"])
+    if not descs.get(".debug_info"):
+        return None
+    kw = {s.lstrip(".") + "_sec": descs.get(s) for s in _DWARF_SECS}
+    return DWARFInfo(config=DwarfConfig(little_endian=ef.little_endian, machine_arch=ef.get_machine_arch(),
+                                        default_address_size=ef.elfclass // 8), eh_frame_sec=None, **kw)
+
+
+def dwarf_facts(data, budget=0.5, max_dies=200000):
+    """DWARF facts of an ELF (pyelftools; bytes in). None for a non-ELF / unparsable header; an ELF without
+    .debug_info gives has_dwarf "false" with every other field "none". Values (strings / lists / dicts):
+    has_dwarf, dwarf_version (first CU) + dwarf_versions, cu_count, cu_name / language (DW_LANG_C11 ...) /
+    language_code / producer / comp_dir of the first CU, cu_names, languages (sorted distinct), producers, comp_dirs,
+    cus [[name, language, producer]]; functions [{name, low_pc '0x1139', high_pc (absolute end), size}] (DIE order,
+    defined subprograms only), function_names; files (line-table file names, table order, distinct over all CUs) /
+    file_paths (dir joined, a relative dir under comp_dir like llvm-dwarfdump); global_variables (CU-level
+    DW_TAG_variable definitions), structs (named struct / class / union), struct_fields {struct or typedef-of-anon:
+    [member, ...]}, typedefs, enums, enumerators, params {func: [..]}, locals {func: [..]} (lexical blocks included).
+    Bounded: the DIE / line-table walk stops after `budget` s / `max_dies` (later CUs then give only their CU-level
+    facts, up to 1.5 x budget); a DWARF the library cannot finish keeps what was read."""
+    try:
+        d = bytes(data)
+        if d[:4] != b"\x7fELF" or len(d) < 52 or d[4] not in (1, 2) or d[5] not in (1, 2):
+            return None
+        if _DWARF_LAST[0] is not None and _DWARF_LAST[0] == (len(d), hash(d)):
+            return _DWARF_LAST[1]
+        out = _dwarf_facts(d, budget, max_dies)
+        _DWARF_LAST[:] = [(len(d), hash(d)), out]
+        return out
+    except Exception:   # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def _dwarf_facts(d, budget, max_dies):
+    from elftools.dwarf.enums import ENUM_DW_LANG
+    lang_name = {v: k for k, v in ENUM_DW_LANG.items()}
+    keys = ("dwarf_version", "cu_count", "cu_name", "language", "language_code", "producer", "comp_dir")
+    lists = ("dwarf_versions", "cu_names", "languages", "producers", "comp_dirs", "cus", "functions", "function_names",
+             "files", "file_paths", "global_variables", "structs", "typedefs", "enums", "enumerators")
+    out = {k: "none" for k in keys + lists + ("struct_fields", "params", "locals")}
+    try:
+        dw = _dwarf_open(d)
+    except Exception:   # noqa: BLE001
+        dw = None
+    out["has_dwarf"] = "true" if dw is not None else "false"
+    if dw is None:
+        return out
+    t0, n = time.time(), [0]
+    L = {k: [] for k in lists}
+    fields, params, locs = {}, {}, {}
+
+    def s(v):
+        return v.decode("utf-8", "replace") if isinstance(v, bytes) else str(v)
+
+    def add(lst, v):
+        if v not in lst:
+            lst.append(v)
+
+    def name_of(die, depth=0):
+        a = die.attributes
+        if "DW_AT_name" in a:
+            return s(a["DW_AT_name"].value)
+        for ref in ("DW_AT_specification", "DW_AT_abstract_origin"):
+            if ref in a and depth < 4:
+                try:
+                    return name_of(die.get_DIE_from_attribute(ref), depth + 1)
+                except Exception:   # noqa: BLE001
+                    return None
+        return None
+
+    def members(die):
+        return [s(k.attributes["DW_AT_name"].value) for k in die.iter_children()
+                if k.tag == "DW_TAG_member" and "DW_AT_name" in k.attributes]
+
+    def scope_vars(die, acc):
+        for k in die.iter_children():
+            if k.tag == "DW_TAG_variable" and "DW_AT_name" in k.attributes:
+                add(acc, s(k.attributes["DW_AT_name"].value))
+            elif k.tag == "DW_TAG_lexical_block":
+                scope_vars(k, acc)
+
+    def late():
+        n[0] += 1
+        return n[0] > max_dies or (n[0] & 255 == 0 and time.time() - t0 > budget)
+
+    units = []
+    try:
+        for cu in dw.iter_CUs():
+            if time.time() - t0 > budget * 1.5:
+                break
+            top = cu.get_top_DIE()
+            a = top.attributes
+            g = lambda k: a[k].value if k in a else None   # noqa: E731
+            lc = g("DW_AT_language")
+            ln = lang_name.get(lc, f"0x{lc:x}") if isinstance(lc, int) else "none"
+            nm, pr = s(g("DW_AT_name")) if g("DW_AT_name") is not None else "none", \
+                s(g("DW_AT_producer")) if g("DW_AT_producer") is not None else "none"
+            cdir = s(g("DW_AT_comp_dir")) if g("DW_AT_comp_dir") is not None else "none"
+            ver = str(cu.header.get("version"))
+            if not L["cus"]:
+                out.update(dwarf_version=ver, cu_name=nm, language=ln, producer=pr, comp_dir=cdir,
+                           language_code=str(lc) if isinstance(lc, int) else "none")
+            L["cus"].append([nm, ln, pr])
+            L["cu_names"].append(nm)
+            for k, v in (("dwarf_versions", ver), ("languages", ln), ("producers", pr), ("comp_dirs", cdir)):
+                if v != "none":
+                    add(L[k], v)
+            units.append((cu, top, nm, cdir))
+        # deep walk, the program's own CUs first (Rust std / libc / crt CUs of 70k DIEs each come after, in budget)
+        for cu, top, nm, cdir in sorted(units, key=lambda u: bool(_DWARF_LIB_CU.search(u[2]))):
+            if time.time() - t0 > budget or n[0] > max_dies:
+                break
+            # DIE walk (explicit stack: depth 1 = CU level)
+            stack = [(k, 1) for k in reversed(list(top.iter_children()))]
+            while stack and not late():
+                die, depth = stack.pop()
+                tag, at = die.tag, die.attributes
+                if tag == "DW_TAG_subprogram" and "DW_AT_low_pc" in at and "DW_AT_high_pc" in at:
+                    fn = name_of(die)
+                    lo, hi = at["DW_AT_low_pc"].value, at["DW_AT_high_pc"]
+                    hi = hi.value if hi.form.startswith("DW_FORM_addr") else lo + hi.value
+                    if fn and isinstance(lo, int) and not any(x["name"] == fn and x["low_pc"] == f"0x{lo:x}"
+                                                              for x in L["functions"]):
+                        L["functions"].append({"name": fn, "low_pc": f"0x{lo:x}", "high_pc": f"0x{hi:x}",
+                                               "size": hi - lo})
+                        add(L["function_names"], fn)
+                        params[fn] = [s(k.attributes["DW_AT_name"].value) for k in die.iter_children()
+                                      if k.tag == "DW_TAG_formal_parameter" and "DW_AT_name" in k.attributes]
+                        locs[fn] = []
+                        scope_vars(die, locs[fn])
+                elif tag == "DW_TAG_variable" and depth == 1 and "DW_AT_declaration" not in at:
+                    v = name_of(die)
+                    if v:
+                        add(L["global_variables"], v)
+                elif tag in ("DW_TAG_structure_type", "DW_TAG_class_type", "DW_TAG_union_type") \
+                        and "DW_AT_name" in at:
+                    sn = s(at["DW_AT_name"].value)
+                    add(L["structs"], sn)
+                    m = members(die)
+                    if m and sn not in fields:
+                        fields[sn] = m
+                elif tag == "DW_TAG_typedef" and "DW_AT_name" in at:
+                    tn = s(at["DW_AT_name"].value)
+                    add(L["typedefs"], tn)
+                    if "DW_AT_type" in at and tn not in fields:
+                        try:
+                            t = die.get_DIE_from_attribute("DW_AT_type")
+                            if t.tag in ("DW_TAG_structure_type", "DW_TAG_union_type") and \
+                                    "DW_AT_name" not in t.attributes and members(t):
+                                fields[tn] = members(t)
+                        except Exception:   # noqa: BLE001
+                            pass
+                elif tag == "DW_TAG_enumeration_type" and "DW_AT_name" in at:
+                    add(L["enums"], s(at["DW_AT_name"].value))
+                elif tag == "DW_TAG_enumerator" and "DW_AT_name" in at:
+                    add(L["enumerators"], s(at["DW_AT_name"].value))
+                if die.has_children:
+                    stack.extend((k, depth + 1) for k in reversed(list(die.iter_children())))
+            # line table: file names in table order (DWARF < 5: dir 0 = comp_dir, dirs 1-based)
+            try:
+                lp = dw.line_program_for_CU(cu)
+            except Exception:   # noqa: BLE001
+                lp = None
+            if lp is not None:
+                v5 = lp.header.version >= 5
+                dirs = [s(x.DW_LNCT_path) if hasattr(x, "DW_LNCT_path") else s(x)
+                        for x in lp.header.include_directory]
+                for fe in lp.header.file_entry:
+                    fnm = s(fe.DW_LNCT_path if hasattr(fe, "DW_LNCT_path") else fe.name)
+                    di = fe.DW_LNCT_directory_index if hasattr(fe, "DW_LNCT_directory_index") else fe.dir_index
+                    dd = (dirs[di] if di < len(dirs) else "") if v5 else \
+                        (cdir if di == 0 else (dirs[di - 1] if di - 1 < len(dirs) else ""))
+                    if dd == "none":
+                        dd = ""
+                    if dd and not dd.startswith("/") and cdir != "none":
+                        dd = cdir + "/" + dd
+                    add(L["files"], fnm)
+                    add(L["file_paths"], fnm if fnm.startswith("/") or not dd else dd + "/" + fnm)
+    except Exception:   # noqa: BLE001 -- odd / truncated DWARF: keep what was read
+        pass
+    out["cu_count"] = str(len(L["cus"])) if L["cus"] else "none"
+    L["languages"].sort()
+    for k in lists:
+        out[k] = L[k] if L[k] else "none"
+    out["struct_fields"], out["params"], out["locals"] = fields or "none", params or "none", locs or "none"
+    return out
+
+
+_DWARF_ALIASES = {"dw_at_producer": "producer", "dwarf_producer": "producer", "dw_at_language": "language",
+                  "dwarf_language": "language", "dw_at_comp_dir": "comp_dir", "dwarf_comp_dir": "comp_dir",
+                  "compilation_directory": "comp_dir", "dw_at_name": "cu_name", "compile_unit": "cu_name",
+                  "source_file": "cu_name", "compile_units": "cu_names", "source_files": "files",
+                  "line_table_files": "files", "subprograms": "function_names", "globals": "global_variables",
+                  "global_vars": "global_variables", "version": "dwarf_version", "types": "structs"}
+
+
+def dwarf_field(data, name):
+    """One dwarf_facts value; per-entity lookups: low_pc:<func> / high_pc:<func> / size:<func> (first definition),
+    params:<func>, locals:<func>, fields:<struct|typedef>, member_count:<struct>. "none" when absent or the input is
+    no ELF at all (like provenance_field). Never raises."""
+    try:
+        f = dwarf_facts(data)
+        if f is None:
+            return "none"
+        key, _, arg = str(name).partition(":")
+        key = key.strip().lower()
+        if arg:
+            arg = arg.strip()
+            if key in ("low_pc", "high_pc", "size"):
+                fn = next((x for x in (f["functions"] if f["functions"] != "none" else ()) if x["name"] == arg), None)
+                return "none" if fn is None else (str(fn[key]) if key == "size" else fn[key])
+            if key in ("params", "locals"):
+                m = f[key] if f[key] != "none" else {}
+                return m.get(arg, "none") or "none"
+            if key in ("fields", "members", "member_count"):
+                m = (f["struct_fields"] if f["struct_fields"] != "none" else {}).get(arg)
+                return "none" if not m else (str(len(m)) if key == "member_count" else m)
+            return "none"
+        return f.get(_DWARF_ALIASES.get(key, key), "none")
+    except Exception:   # noqa: BLE001
+        return "none"
+
+
+# --- JVM <-> native JNI bridge (lib.binary.jni_bridge_facts): ACC_NATIVE methods + System.loadLibrary("x") from the
+# jar/class side, Java_<mangled> exports and JNI_OnLoad/RegisterNatives JNINativeMethod {name, signature, fnPtr}
+# tables from the .so/.dll side, each native method mapped to the symbol / function address that implements it.
+_JNI_SIG = re.compile(r"^\((\[*([ZBCSIJFDV]|L[^;()\[]+;))*\)\[*([ZBCSIJFDV]|L[^;()\[]+;)$")
+_JNI_IDENT = re.compile(r"^[A-Za-z_$][\w$]*$")
+_JNI_CLASS_STR = re.compile(rb"[A-Za-z_$][\w$]*(?:/[A-Za-z_$][\w$]*)+(?:\$[\w$]+)?")
+_JNI_RELATIVE = {62: 8, 183: 1027, 3: 8, 40: 23, 243: 3}   # e_machine -> R_*_RELATIVE
+_JNI_ABS = {62: (1,), 183: (257,), 3: (1,), 40: (2,), 243: (2,)}  # R_*_64 / ABS64 / R_386_32 / ABS32 / RISCV_64
+JNI_SCAN_SLOTS = 1 << 18   # pointer slots tried when the lib has no relocations (non-PIC)
+
+
+def jni_mangle(cls, name, descriptor=None):
+    """JNI spec native symbol: Java_<class>_<method>[__<arg descriptor>] (class dotted or slashed)."""
+    def m(s):
+        out = []
+        for ch in s:
+            if ch in "/.":
+                out.append("_")
+            elif ch == "_":
+                out.append("_1")
+            elif ch == ";":
+                out.append("_2")
+            elif ch == "[":
+                out.append("_3")
+            elif ch.isascii() and ch.isalnum():
+                out.append(ch)
+            else:
+                out.append("".join("_0%04x" % u for u in struct.unpack("<%dH" % (len(ch.encode("utf-16-le")) // 2),
+                                                                         ch.encode("utf-16-le"))))
+        return "".join(out)
+    s = "Java_" + m(cls) + "_" + m(name)
+    if descriptor is not None:
+        s += "__" + m(descriptor[1:descriptor.index(")")] if descriptor.startswith("(") else descriptor)
+    return s
+
+
+def _jni_jvm_side(data):
+    """(natives [{class, name, descriptor, static}], libraries [(kind, arg, class)], classes {entry: bytes})."""
+    import zipfile
+    classes = {}
+    if data[:4] == b"\xca\xfe\xba\xbe":
+        classes["<class>"] = data
+    else:
+        z = zipfile.ZipFile(io.BytesIO(data))
+        for zi in z.infolist()[:20000]:
+            if zi.filename.endswith(".class") and not zi.filename.startswith("META-INF/versions/") \
+                    and zi.file_size < (8 << 20):
+                classes[zi.filename] = z.read(zi)
+    natives, libs = [], []
+    for ent, cb in classes.items():
+        p = classfile_parse(cb)
+        if not p:
+            continue
+        cp, u, cname = p["cp"], p["_u"], p["_cname"]
+        cls = (p["this"] or "").replace("/", ".")
+        for mt in p["methods"]:
+            if mt["access"] & 0x0100:
+                natives.append({"class": cls, "name": mt["name"], "descriptor": mt["descriptor"],
+                                "static": "true" if mt["access"] & 0x0008 else "false"})
+        loaders = {}
+        for i, e in enumerate(cp):
+            if e and e[0] in (10, 11) and isinstance(e[1], tuple):
+                c, nt = e[1]
+                ce = cname(c)
+                nte = cp[nt] if 0 < nt < len(cp) else None
+                if ce in ("java/lang/System", "java/lang/Runtime") and nte and nte[0] == 12:
+                    mn = u(nte[1][0])
+                    if mn in ("loadLibrary", "load"):
+                        loaders[i] = mn
+        if not loaders:
+            continue
+        for mt in p["methods"]:
+            for an, raw in mt["attributes"]:
+                if an != "Code" or len(raw) < 8:
+                    continue
+                code = raw[8:8 + struct.unpack_from(">I", raw, 4)[0]]
+                for k in range(len(code) - 2):
+                    if code[k] not in (0xb8, 0xb6) or (code[k + 1] << 8 | code[k + 2]) not in loaders:
+                        continue
+                    idx = code[k - 1] if k >= 2 and code[k - 2] == 0x12 else \
+                        (code[k - 2] << 8 | code[k - 1]) if k >= 3 and code[k - 3] == 0x13 else None
+                    e = cp[idx] if idx and 0 < idx < len(cp) else None
+                    arg = u(e[1]) if e and e[0] == 8 else None
+                    libs.append((loaders[code[k + 1] << 8 | code[k + 2]], arg if arg is not None else "none", cls))
+    return natives, libs, classes
+
+
+def _jni_elf_image(data):
+    """ELF -> (ptr size, endian, v2o, reloc {slot va: value}, exec ranges [(lo, hi)], {addr: func name}, data sections
+    [(va, size)], soname)."""
+    E, b64 = ("<" if data[5] == 1 else ">"), data[4] == 2
+    ps = 8 if b64 else 4
+    mach = struct.unpack_from(E + "H", data, 18)[0]
+    uw = (lambda o: struct.unpack_from(E + "Q", data, o)[0]) if b64 else (lambda o: struct.unpack_from(E + "I", data, o)[0])
+    u32 = lambda o: struct.unpack_from(E + "I", data, o)[0]
+    shoff = uw(40) if b64 else u32(32)
+    shes, shn = struct.unpack_from(E + "HH", data, 58 if b64 else 46)
+    secs = []   # (type, flags, addr, off, size, link, entsize)
+    for k in range(min(shn, 4096) if shoff else 0):
+        o = shoff + k * shes
+        if o + shes > len(data):
+            break
+        if b64:
+            secs.append((u32(o + 4), uw(o + 8), uw(o + 16), uw(o + 24), uw(o + 32), u32(o + 40), uw(o + 56)))
+        else:
+            secs.append((u32(o + 4), u32(o + 8), u32(o + 12), u32(o + 16), u32(o + 20), u32(o + 24), u32(o + 36)))
+    mapped = [(a, of, sz) for t, fl, a, of, sz, _, _ in secs if fl & 2 and t != 8 and a]
+
+    def v2o(va):
+        for a, of, sz in mapped:
+            if a <= va < a + sz:
+                return of + va - a
+        return None
+
+    def cstr(o, lim=1024):
+        e = data.find(b"\0", o, o + lim)
+        return data[o:e] if e >= 0 else b""
+    syms, symvals = {}, {}
+    for si, (t, fl, a, of, sz, link, ent) in enumerate(secs):
+        if t in (2, 11) and ent and link < len(secs):
+            stro = secs[link][3]
+            vals = []
+            for k in range(min(sz // ent, FFI_MAX_SYMS)):
+                o = of + k * ent
+                if o + ent > len(data):
+                    break
+                if b64:
+                    nm, info, shx, val = u32(o), data[o + 4], struct.unpack_from(E + "H", data, o + 6)[0], uw(o + 8)
+                else:
+                    nm, val, info, shx = u32(o), u32(o + 4), data[o + 12], struct.unpack_from(E + "H", data, o + 14)[0]
+                vals.append(val)
+                if info & 15 == 2 and shx and val:
+                    syms.setdefault(val & ~1 if mach == 40 else val, cstr(stro + nm).decode("utf-8", "replace"))
+            symvals[si] = vals
+    rel, rtype = {}, _JNI_RELATIVE.get(mach)
+    for t, fl, a, of, sz, link, ent in secs:
+        if t not in (4, 9) or not ent:
+            continue
+        for k in range(min(sz // ent, 1 << 20)):
+            o = of + k * ent
+            if o + ent > len(data):
+                break
+            off, info = uw(o), uw(o + ps)
+            rt, rs = (info & 0xffffffff, info >> 32) if b64 else (info & 0xff, info >> 8)
+            if t == 4:
+                add = struct.unpack_from(E + ("q" if b64 else "i"), data, o + 2 * ps)[0]
+            else:
+                fo = v2o(off)
+                add = uw(fo) if fo is not None and fo + ps <= len(data) else 0
+            if rt == rtype:
+                rel[off] = add & ((1 << (8 * ps)) - 1)
+            elif rt in _JNI_ABS.get(mach, ()) and link in symvals and rs < len(symvals[link]):
+                rel[off] = (symvals[link][rs] + add) & ((1 << (8 * ps)) - 1)
+    exe = [(a, a + sz) for t, fl, a, of, sz, _, _ in secs if fl & 4 and a]
+    dsec = [(a, sz) for t, fl, a, of, sz, _, _ in secs if t == 1 and fl & 2 and not fl & 4 and a]
+    soname = "none"
+    for t, fl, a, of, sz, link, ent in secs:
+        if t == 6 and link < len(secs):
+            for o in range(of, min(of + sz, len(data) - 2 * ps + 1), 2 * ps):
+                tag = uw(o)
+                if tag == 0:
+                    break
+                if tag == 14:
+                    soname = cstr(secs[link][3] + uw(o + ps)).decode("utf-8", "replace") or "none"
+    return ps, E, v2o, rel, exe, syms, dsec, soname
+
+
+def _jni_pe_image(data):
+    import pefile
+    pe = pefile.PE(data=data, fast_load=True)
+    pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_EXPORT"],
+                                           pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_BASERELOC"]])
+    ps = 8 if pe.FILE_HEADER.Machine in (0x8664, 0xaa64) else 4
+    base = pe.OPTIONAL_HEADER.ImageBase
+    secs = [(base + s.VirtualAddress, s.PointerToRawData, s.SizeOfRawData, s.Characteristics) for s in pe.sections]
+
+    def v2o(va):
+        for a, of, sz, _ in secs:
+            if a <= va < a + sz:
+                return of + va - a
+        return None
+    syms, exports = {}, []
+    for e in getattr(getattr(pe, "DIRECTORY_ENTRY_EXPORT", None), "symbols", []) or []:
+        if e.name:
+            n = e.name.decode("utf-8", "replace")
+            exports.append(n)
+            syms.setdefault(base + e.address, n)
+    rel = {}
+    for blk in getattr(pe, "DIRECTORY_ENTRY_BASERELOC", []) or []:
+        for r in blk.entries:
+            if r.type in (3, 10):
+                fo = v2o(base + r.rva)
+                if fo is not None and fo + ps <= len(data):
+                    rel[base + r.rva] = int.from_bytes(data[fo:fo + ps], "little")
+    exe = [(a, a + sz) for a, of, sz, ch in secs if ch & 0x20000000]
+    dsec = [(a, sz) for a, of, sz, ch in secs if ch & 0x40 and not ch & 0x20000000]
+    return ps, "<", v2o, rel, exe, syms, dsec, exports
+
+
+def jni_registered_natives(data, image=None):
+    """RegisterNatives JNINativeMethod {char *name, char *signature, void *fnPtr} tables of an ELF/PE native library:
+    every run of pointer triples whose name is a Java identifier, signature a JNI method descriptor and fnPtr inside
+    an executable section. Pointers resolve through RELATIVE / absolute relocations (PIC .data.rel.ro) or the stored
+    word. -> [{name, signature, fn_address (0x..), fn_symbol, table (0-based), slot (0x.. va)}], or None."""
+    try:
+        img = image or (_jni_elf_image(data) if data[:4] == b"\x7fELF" else _jni_pe_image(data))
+        ps, E, v2o, rel, exe, syms, dsec, _ = img
+        fmt = E + ("Q" if ps == 8 else "I")
+        strc = {}
+
+        def ptr(va):
+            if va in rel:
+                return rel[va]
+            o = v2o(va)
+            return struct.unpack_from(fmt, data, o)[0] if o is not None and o + ps <= len(data) else 0
+
+        def s(va):
+            if va not in strc:
+                o = v2o(va) if va else None
+                e = data.find(b"\0", o, o + 2048) if o is not None else -1
+                strc[va] = data[o:e].decode("utf-8", "replace") if e > o else None
+            return strc[va]
+        slots = sorted(rel) if rel else [a + k for a, sz in dsec for k in range(0, sz - sz % ps, ps)]
+        out, last, tbl = [], None, -1
+        seen = set()
+        for va in slots[:JNI_SCAN_SLOTS]:
+            if va in seen:
+                continue
+            nm = ptr(va)
+            if not nm:
+                continue
+            n = s(nm)
+            if not n or not _JNI_IDENT.match(n):
+                continue
+            sg = s(ptr(va + ps))
+            if not sg or not _JNI_SIG.match(sg):
+                continue
+            fn = ptr(va + 2 * ps)
+            fa = fn & ~1 if data[:4] == b"\x7fELF" and data[18] == 40 else fn
+            if not any(lo <= fa < hi for lo, hi in exe):
+                continue
+            seen.update((va, va + ps, va + 2 * ps))
+            if last is None or va != last + 3 * ps:
+                tbl += 1
+            last = va
+            out.append({"name": n, "signature": sg, "fn_address": "0x%x" % fa, "fn_symbol": syms.get(fa, "none"),
+                        "table": str(tbl), "slot": "0x%x" % va})
+        return out
+    except Exception:  # noqa: BLE001 -- untrusted bytes
+        return None
+
+
+def jni_bridge_facts(jar_bytes, so_bytes=None, hcfg=True):
+    """JVM <-> native JNI pair facts (either argument may be the jar/.class or the .so/.dll; order-free):
+    {native_methods [{class (dotted), name, descriptor, static, binding export|register|none, symbol, fn_address}]
+    in class/method table order, native_method_count, native_classes, native_method_names, load_library (first
+    System.loadLibrary arg), load_libraries, load_paths (System.load args), library_file (lib<x>.so), soname,
+    library_matches, jni_exports [{symbol, class, method, signature}] (ffi_facts), jni_export_count, jni_onload,
+    registered_natives [{name, signature, fn_address, fn_symbol, table, slot}], registered_count,
+    register_tables, registered_classes (FindClass-style slash strings of the lib that own a native),
+    jni_kind static_export|register_natives|mixed|none, unbound_natives [class.name], hcfg_member jar|so|none,
+    hcfg_entry, hcfg_offset, hcfg_encoding}. Absent -> "none"; neither input recognised -> None."""
+    try:
+        jar = nat = None
+        for b in (jar_bytes, so_bytes):
+            if not b:
+                continue
+            b = bytes(b)
+            if b[:4] == b"\xca\xfe\xba\xbe" and len(b) > 8 and b[6:8] >= b"\x00\x2d" or b[:4] == b"PK\x03\x04":
+                jar = jar or b
+            elif b[:4] == b"\x7fELF" and len(b) >= 64 or b[:2] == b"MZ":
+                nat = nat or b
+        if jar is None and nat is None:
+            return None
+        f = {}
+        natives, libs, classes = _jni_jvm_side(jar) if jar else ([], [], {})
+        ll = [a for k, a, _ in libs if k == "loadLibrary"]
+        f["load_libraries"] = ll or "none"
+        f["load_library"] = ll[0] if ll else "none"
+        f["load_paths"] = [a for k, a, _ in libs if k == "load"] or "none"
+        f["library_file"] = "lib%s.so" % ll[0] if ll and ll[0] != "none" else "none"
+        exports, jexp, img, regs, soname = [], [], None, [], "none"
+        if nat:
+            if nat[:4] == b"\x7fELF":
+                ff = ffi_facts(nat) or {}
+                exports = ff.get("exports") if isinstance(ff.get("exports"), list) else []
+                img = _jni_elf_image(nat)
+                soname = img[7]
+            else:
+                img = _jni_pe_image(nat)
+                exports = img[7]
+            for n in exports:
+                b = n.lstrip("_").split("@", 1)[0] if not n.startswith("Java_") else n.split("@", 1)[0]
+                if b.startswith("Java_"):
+                    r = _jni_unmangle(b[5:])
+                    if r:
+                        jexp.append({"symbol": n, "class": r[0], "method": r[1], "signature": r[2]})
+            regs = jni_registered_natives(nat, img) or []
+        f["soname"] = soname
+        f["library_matches"] = ("true" if soname in (f["library_file"], ll[0] + ".dll") else "false") \
+            if ll and soname != "none" else "none"
+        f["jni_exports"] = jexp or "none"
+        f["jni_export_count"] = str(len(jexp))
+        f["jni_onload"] = "true" if any(n.lstrip("_").split("@")[0] == "JNI_OnLoad" for n in exports) else "false"
+        f["registered_natives"] = regs or "none"
+        f["registered_count"] = str(len(regs))
+        f["register_tables"] = str(len({r["table"] for r in regs}))
+        bysym = {n.lstrip("_").split("@", 1)[0]: n for n in exports}
+        addr = {}
+        if img:
+            for a, n in img[5].items():
+                addr.setdefault(n, "0x%x" % a)
+        nat_cls = {n["class"].replace(".", "/") for n in natives}
+        rc = []
+        if nat and regs:
+            for m in _JNI_CLASS_STR.finditer(nat):
+                c = m.group(0).decode()
+                if (c in nat_cls or not nat_cls) and c not in rc and not c.startswith(("java/", "javax/")):
+                    rc.append(c)
+        f["registered_classes"] = rc or "none"
+        out, unbound, kinds = [], [], set()
+        for n in natives:
+            short, long_ = jni_mangle(n["class"], n["name"]), jni_mangle(n["class"], n["name"], n["descriptor"])
+            sym = bysym.get(long_) or bysym.get(short)
+            e = dict(n, binding="none", symbol="none", fn_address="none")
+            if sym:
+                e.update(binding="export", symbol=sym, fn_address=addr.get(sym, "none"))
+                kinds.add("static_export")
+            else:
+                r = [x for x in regs if x["name"] == n["name"] and x["signature"] == n["descriptor"]]
+                if r:
+                    e.update(binding="register", symbol=r[0]["fn_symbol"], fn_address=r[0]["fn_address"])
+                    kinds.add("register_natives")
+                else:
+                    unbound.append(n["class"] + "." + n["name"])
+            out.append(e)
+        if not natives:
+            kinds.update(["static_export"] if jexp else [])
+            kinds.update(["register_natives"] if regs else [])
+        f["native_methods"] = out or "none"
+        f["native_method_count"] = str(len(out))
+        f["native_classes"] = list(dict.fromkeys(n["class"] for n in natives)) or "none"
+        f["native_method_names"] = [n["name"] for n in natives] or "none"
+        f["unbound_natives"] = unbound or "none"
+        f["jni_kind"] = "mixed" if len(kinds) == 2 else (kinds.pop() if kinds else "none")
+        f.update(hcfg_member="none", hcfg_entry="none", hcfg_offset="none", hcfg_encoding="none")
+        if hcfg:
+            dl = time.time() + 0.5
+            for member, ent, b in ([("so", "<lib>", nat)] if nat else []) + [("jar", k, v) for k, v in classes.items()]:
+                if time.time() > dl:
+                    break
+                h = next((x for x in hcfg_scan(b, deadline=dl) if x.valid), None)
+                if h:
+                    f.update(hcfg_member=member, hcfg_entry=ent, hcfg_offset=str(h.offset), hcfg_encoding=h.encoding)
+                    break
+        return f
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def jni_bridge_field(jar_bytes, so_bytes, name):
+    f = jni_bridge_facts(jar_bytes, so_bytes)
+    return None if f is None else f.get(name, "none")

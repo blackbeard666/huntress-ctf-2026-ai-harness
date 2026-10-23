@@ -1,0 +1,8 @@
+{
+ "field": "wasm.memory_min_pages",
+ "expected": "none",
+ "generator_cmd": "printf 'MZ\\x90\\x00not wasm' > fake.wasm (renamed impostor)",
+ "oracle_cmd": "file fake.wasm -> MZ for MS-DOS (not wasm)",
+ "decoy": true,
+ "member": "fake.wasm"
+}

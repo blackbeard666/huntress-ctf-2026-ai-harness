@@ -1,0 +1,9 @@
+{
+ "codec": "textcomp-lz77",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-hollow-11",
+ "encoded": "(0, 0, 'N') (0, 0, 'i') (0, 0, 'c') (0, 0, 'e') (0, 0, ' ') (0, 0, 'w') (0, 0, 'o') (0, 0, 'r') (0, 0, 'k') (5, 1, 'd') (8, 1, 'c') (7, 1, 'd') (14, 1, 'n') (0, 0, 'g') (9, 1, 't') (0, 0, 'h') (6, 1, 's') (19, 2, 'a') (19, 1, 'm') (0, 0, 'u') (0, 0, 'p') (0, 0, '!') (8, 1, 'T') (20, 1, ' ') (13, 1, 'o') (0, 0, 'l') (0, 0, 'v') (28, 1, ',') (7, 2, 'u') (0, 0, 'b') (18, 1, 'i') (28, 1, ' ') (30, 5, 'e') (0, 0, 'x') (31, 1, 'c') (11, 2, 'a') (45, 1, 's') (39, 1, 'e') (39, 1, ' ') (9, 1, 'o') (21, 3, 'e') (4, 1, 'G') (15, 1, 'm') (5, 2, 'M') (5, 1, 's') (12, 1, 'e') (19, 1, ':') (8, 1, 'j') (8, 1, 'd') (7, 1, '-') (21, 1, 'o') (57, 1, 'l') (3, 1, 'w') (7, 1, '1') (0, 0, '1')",
+ "generator_cmd": "python3 -I tests/data/warmups_fixtures/textcomp_gen.py lz77 \"$plain\"  # independent textbook implementation, not lib/",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/textcomp_oracle.py lz77",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-hollow-11",
+ "expected": "match"
+}

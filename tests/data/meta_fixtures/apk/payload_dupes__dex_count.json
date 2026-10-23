@@ -1,0 +1,7 @@
+{
+ "field": "apk.dex_count",
+ "expected": "2",
+ "generator_cmd": "python3 zipfile writer: AndroidManifest.xml, classes.dex(d2), assets/a.bin STORED, classes.dex(d39) again (Janus dup), all date_time 1980-01-01",
+ "oracle_cmd": "zipinfo -1 dupes.apk | grep -cE '^classes[0-9]*\\.dex$' -> 2 (same name twice)",
+ "decoy": false
+}

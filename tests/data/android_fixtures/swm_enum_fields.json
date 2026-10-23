@@ -1,0 +1,8 @@
+{
+ "entry": "dex_eval_scan",
+ "expected": "ANS-0d6e93a1f2c754b8",
+ "decoy": false,
+ "_why": "two enums switched in one class (Gate$1 holds $SwitchMap$..Op and $SwitchMap$..Mode); Op(int k) constructor fields + ordinal() fold a key over a static Op[] program; the terminal xors ENC with it",
+ "generator_cmd": "python3 tests/data/android_fixtures/swm_src/gen_swm.py enum_fields tests/data/android_fixtures/swm_enum_fields.apk  # javac --release 8 (enum + switch(enum) -> Gate$1.$SwitchMap$) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> Probe runs the enum switch on the host JVM -> 'proof=ANS-0d6e93a1f2c754b8'; `javap -c -p 'Gate$1.class'` shows the <clinit> aput order"
+}

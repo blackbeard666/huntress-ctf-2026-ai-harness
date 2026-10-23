@@ -1,0 +1,10 @@
+{
+ "codec": "textcomp-huffman (decoy)",
+ "plain": "none",
+ "encoded": "{'N': '0', 'i': '01', 'c': '11'}\n0011011",
+ "generator_cmd": "hand-written: table not prefix-free ('0' prefixes '01')",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/textcomp_oracle.py huffman",
+ "oracle_plain": "NNcNc",
+ "decoy": true,
+ "expected": "none"
+}

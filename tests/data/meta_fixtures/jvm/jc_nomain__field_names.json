@@ -1,0 +1,8 @@
+{
+ "field": "jvm.field_names",
+ "expected": "[\"a\",\"b\",\"BIG\",\"PI2\"]",
+ "generator_cmd": "javac 21.0.12 --release 17 -d o src/kotlin/Metadata.java src/com/acme/tool/{Runner,NoMain,MainKt}.java",
+ "oracle_cmd": "javap -v -p NoMain.class -> long a; double b; static final long BIG; static final double PI2",
+ "decoy": false,
+ "member": "NoMain.class"
+}

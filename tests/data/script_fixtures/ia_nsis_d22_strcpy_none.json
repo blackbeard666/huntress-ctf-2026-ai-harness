@@ -1,0 +1,11 @@
+{
+ "decoy": false,
+ "material": "Unicode True\nName \"Huntress Analysis 95e72522\"\nOutFile \"huntress-95e72522.exe\"\nSection\n  StrCpy $0 \"763d337c6c616e67756167653d6e736973\"\nSectionEnd\n",
+ "rep": "installer_actions",
+ "transform": "handoff",
+ "key": "ia_nsis_strcpy_only.nsi",
+ "expected": "none",
+ "note": "installer-action-model: lib.codec.installer_actions -> installer_answer(field); key = member name",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ia_gen.py tests/data/script_fixtures/ia_src  (stdlib; literal installer sources)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/ia_oracle.py tests/data/script_fixtures/ia_src/ia_nsis_strcpy_only.nsi handoff"
+}

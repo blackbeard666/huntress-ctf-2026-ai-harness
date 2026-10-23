@@ -1,0 +1,8 @@
+{
+ "field": "ipa.app_bundle_name",
+ "expected": "FieldKit.app",
+ "generator_cmd": "python3 plistlib.dumps(FMT_BINARY) Info.plist {CFBundleIdentifier com.huntress.fieldkit, ...} -> Payload/FieldKit.app/Info.plist; cp macho/zig_arm64_exe (zig cc arm64 Mach-O) Payload/FieldKit.app/FieldKit; plistlib XML profile -> openssl cms -sign -nodetach -binary -outform DER -> Payload/FieldKit.app/embedded.mobileprovision; plistlib iTunesMetadata.plist; zip -X -r FieldKit.ipa Payload iTunesMetadata.plist",
+ "oracle_cmd": "unzip -l FieldKit.ipa -> Payload/FieldKit.app/",
+ "decoy": false,
+ "member": "FieldKit.ipa"
+}

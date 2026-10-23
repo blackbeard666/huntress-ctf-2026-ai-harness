@@ -1,0 +1,10 @@
+{
+ "codec": "lzstring-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: none",
+ "encoded": "58f1077ec7607a3e15581fb8f3ddb7e5264420ba8d1892a0aaf2e66b705d2cf002430ad2913ce8ee3eb6996d4acb19264731578ada969f572e178f97820f2257",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "sha256('lz-decoy') + sha256('lz-decoy-2') as hex (64 random bytes)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/lzstring_oracle.py hex  # PyPI lzstring 1.0.4 (independent port)",
+ "oracle_output": "''"
+}

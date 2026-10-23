@@ -1,0 +1,10 @@
+{
+ "codec": "gzip-base64 (trailer cut to the 4 CRC bytes)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-raven-15",
+ "encoded": "H4sIAAAAAAACAyXJMQ7CMAwF0Kv87nTowMIFmMrEBUz6BVGbuLLdpMcHifW9R05EV1uxMOmS6xvxyY4uVo59wFPhujVe4Mer5PgvT0kBqd5pCP0hcZdCzOJBuyFt2mijSWMdp+sXa9bhRw==",
+ "expected": "match",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | head -c -4 | base64 -w0",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc 2>&1",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-raven-15",
+ "oracle_output": "full plain, then 'gzip: stdin: unexpected end of file'"
+}

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="AcmeTray" Language="1033" Version="1.0.0" Manufacturer="Acme" UpgradeCode="0d0f1e2a-1234-4321-8888-123456789012">
+    <Package InstallerVersion="200" Compressed="yes" />
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLDIR" Name="AcmeTray">
+          <Component Id="Reg" Guid="0d0f1e2a-2222-3333-4444-555555555555">
+            <RegistryValue Root="HKCU" Key="Software\AcmeTray" Name="v" Type="string" Value="1" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+    <Feature Id="F" Level="1"><ComponentRef Id="Reg" /></Feature>
+    <Property Id="CFGPART1" Value="C:\Program Files\AcmeTray\tray" />
+    <Property Id="CFGPART2" Value=".ini" />
+    <CustomAction Id="StageCfg" Script="vbscript" Execute="immediate" Return="ignore"><![CDATA[
+Dim cfgPath, sh
+cfgPath = "[CFGPART1][CFGPART2]"
+Set sh = CreateObject("WScript.Shell")
+sh.RegWrite "HKCU\Software\AcmeTray\cfg", cfgPath
+]]></CustomAction>
+    <InstallExecuteSequence>
+      <Custom Action="StageCfg" After="InstallInitialize">NOT Installed</Custom>
+    </InstallExecuteSequence>
+  </Product>
+</Wix>

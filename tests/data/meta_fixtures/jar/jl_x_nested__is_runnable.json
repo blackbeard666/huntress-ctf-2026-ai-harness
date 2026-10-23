@@ -1,0 +1,8 @@
+{
+ "field": "jar.is_runnable",
+ "expected": "false",
+ "generator_cmd": "app.jar as above; zip -qX x.zip app.jar",
+ "oracle_cmd": "java Oracle.java x.zip (java.util.jar.JarFile getManifest().getMainAttributes()/getEntries(), jf.getEntry(Main-Class.replace('.','/')+\".class\"), JarFile.entries() *.jar|*.war, JarInputStream.getManifest(), ZipInputStream entry index) -> nested dep.jar: no Main-Class",
+ "decoy": false,
+ "member": "app.jar -> BOOT-INF/lib/dep.jar"
+}

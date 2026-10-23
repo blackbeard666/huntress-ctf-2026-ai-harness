@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=javascript|role=loader|verdict=malicious|attack=T1059.007|adapter=electron_asar|stage_count=2|steps=load_main,fetch_stage|campaign_id=ASAR-7e1ec7a0|url=https://asar-7e1ec7a0.example.invalid/update|file_path=%LOCALAPPDATA%\\\\SquirrelTemp\\\\7e1ec7a0.js",
+ "decoy": false,
+ "generator_cmd": "M=$(printf %s '<plan>' | gzip -9n | base64 -w0); app/{package.json main=lib/boot.js, lib/boot.js with `const descriptor_7e1ec7a0 = \"$M\";` + `// HUNTRESS_ANALYSIS_V1:GZ64-$M`, index.html, node_modules/left-pad/index.js}; tools/npm-asar/node_modules/.bin/asar pack app electron_asar_main.asar  (@electron/asar 4.3 writer)",
+ "oracle_cmd": "tools/npm-asar/node_modules/.bin/asar extract-file electron_asar_main.asar lib/boot.js && grep -o 'descriptor_7e1ec7a0 = \"[^\"]*' boot.js | cut -d'\"' -f2 | base64 -d | gunzip",
+ "note": "Chromium-pickle header (u32 4, header_size, payload, json_len, {files:..}); asar_files() lists lib/boot.js first (package.json main)"
+}

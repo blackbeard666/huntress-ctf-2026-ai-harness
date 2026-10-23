@@ -1,0 +1,8 @@
+{
+ "field": "zip.shebang_line",
+ "expected": "none",
+ "generator_cmd": "echo readme > readme.txt; zip -qX plain.zip readme.txt",
+ "oracle_cmd": "head -c 2 plain.zip -> 'PK' (no #!)",
+ "decoy": true,
+ "member": "plain.zip"
+}

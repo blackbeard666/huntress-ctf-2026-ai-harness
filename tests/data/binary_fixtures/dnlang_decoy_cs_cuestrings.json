@@ -1,0 +1,23 @@
+{
+ "family": "dotnet_language_of",
+ "decoy": true,
+ "expected": {
+  "language": "csharp",
+  "assembly_name": "csimp",
+  "assembly_version": "1.0.0.0",
+  "fsharp_core_version_ref": "none",
+  "fsharp_core_version_def": "none",
+  "fsharp_resources": [],
+  "fsharp_resource_count": "0",
+  "startup_code": "none",
+  "vb_runtime_ref": "none",
+  "vb_runtime_version": "none",
+  "anon_type_count": "1",
+  "vb_local_fields": "0",
+  "il_only": "true",
+  "closure_count": "1"
+ },
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/dnlang_gen.sh   # dotnet 10 SDK: dotnet new console -lang C# + dotnet build -c Release (Deterministic)",
+ "oracle_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/dnlang_oracle.sh tests/data/binary_fixtures/dnlang_decoy_cs_cuestrings.bin   # System.Reflection.Metadata (BCL, not dnfile); language = the generator's -lang",
+ "note": "DECOY: C# whose string literals name F#/VB/C++CLI markers; must stay csharp, no fsharp/vb facts"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "archive-container[zip+zipcrypto]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-44",
+ "encoded": "UEsDBBQACQAIAFCvVV0AAFCvAAAAAGMAAAAIAAAAZmxhZy50eHQ0bGBBJlwg8g2I+wG22q1ASmhpbYGM9htzfPjEaGPJwKhX4MF48G6g8b6iTwQxYE7s+Vxyodhya4E4WpbAI9dAUi9iOHfgFewiL6v73elx2YqbvfAMi92xHRpchxJJeOZVEGe75+ZQSwcI+rSWcGYAAABjAAAAUEsBAh4DFAAJAAgAUK9VXfq0lnBmAAAAYwAAAAgAAAAAAAAAAQAAALSBAAAAAGZsYWcudHh0UEsFBgAAAAABAAEANgAAAJwAAAAAAA==",
+ "generator_cmd": "d=$(mktemp -d); cd $d; printf %s \"$plain\" > flag.txt; zip -qX -P infected - flag.txt | base64 -w0; rm -rf $d",
+ "oracle_cmd": "f=$(mktemp); printf %s \"$encoded\" | base64 -d > $f; 7z x -so -pinfected -tzip $f 2>/dev/null </dev/null; r=$?; rm -f $f; exit $r",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-44",
+ "expected": "match"
+}

@@ -1,0 +1,131 @@
+{
+ "family": "pe_link",
+ "encoding": "raw",
+ "expected_offset": 77312,
+ "expected_config": {
+  "plugin": "beta",
+  "c2": "10.0.0.7"
+ },
+ "expected_facts": {
+  "machine": "i386",
+  "machine_num": "332",
+  "machine_hex": "0x14c",
+  "is_dll": "true",
+  "dll_name": "plugin32.dll",
+  "export_ordinal_base": "3",
+  "exports": [
+   [
+    3,
+    "plugin_init",
+    "0x1000",
+    null
+   ],
+   [
+    4,
+    "plugin_version",
+    "0x1020",
+    null
+   ],
+   [
+    7,
+    "plugin_config",
+    "0x16000",
+    null
+   ],
+   [
+    9,
+    null,
+    "0x1030",
+    null
+   ],
+   [
+    10,
+    "fwd_sleep",
+    "0x13a10",
+    "KERNEL32.Sleep"
+   ]
+  ],
+  "export_names": [
+   "fwd_sleep",
+   "plugin_config",
+   "plugin_init",
+   "plugin_version"
+  ],
+  "noname_ordinals": [
+   9
+  ],
+  "forwarders": [
+   [
+    "fwd_sleep",
+    "KERNEL32.Sleep"
+   ]
+  ],
+  "export_count": "5",
+  "import_dlls": [
+   "api-ms-win-crt-runtime-l1-1-0.dll",
+   "KERNEL32.dll",
+   "api-ms-win-crt-stdio-l1-1-0.dll",
+   "api-ms-win-crt-heap-l1-1-0.dll"
+  ],
+  "imports": [
+   [
+    "api-ms-win-crt-runtime-l1-1-0.dll",
+    [
+     "_execute_onexit_table",
+     "_exit",
+     "_initialize_onexit_table",
+     "_initterm",
+     "_initterm_e",
+     "_register_onexit_function",
+     "abort"
+    ]
+   ],
+   [
+    "KERNEL32.dll",
+    [
+     "DeleteCriticalSection",
+     "EnterCriticalSection",
+     "GetLastError",
+     "InitializeCriticalSection",
+     "LeaveCriticalSection",
+     "Sleep",
+     "TlsGetValue",
+     "VirtualProtect",
+     "VirtualQuery"
+    ]
+   ],
+   [
+    "api-ms-win-crt-stdio-l1-1-0.dll",
+    [
+     "__acrt_iob_func",
+     "__stdio_common_vfprintf",
+     "fwrite"
+    ]
+   ],
+   [
+    "api-ms-win-crt-heap-l1-1-0.dll",
+    [
+     "free"
+    ]
+   ]
+  ],
+  "delay_import_dlls": "none",
+  "tls_callbacks": [
+   "0x10001360",
+   "0x100013d0"
+  ],
+  "tls_callback_count": "2",
+  "loader_apis": "none",
+  "loaded_libraries": "none",
+  "loaded_library": "none",
+  "config": "{\"plugin\":\"beta\",\"c2\":\"10.0.0.7\"}",
+  "config_offset": "77312",
+  "config_section": ".hcfg",
+  "config_symbol": "plugin_config"
+ },
+ "pair_with": null,
+ "generator_cmd": "bash pelink_gen.sh   # zig cc -target x86-windows-gnu -shared, same .def, -o plugin32.dll, HCFG key 0",
+ "oracle_cmd": "python3 pelink_oracle.py pelink_plugin_x86.bin   # pefile directories + strings -a/-el + struct/zlib on the .hcfg section",
+ "decoy": false,
+ "note": "lib.binary.pe_link_facts(data)[key] (lists compared after a JSON round trip); pair:* keys = lib.binary.pe_link_pair(this, pair_with). Delay imports: not exercised (zig/lld MinGW cannot emit them); hcfg_scan must find the valid blob only in the plugins"
+}

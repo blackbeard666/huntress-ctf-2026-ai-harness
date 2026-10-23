@@ -1,0 +1,8 @@
+{
+ "field": "pyz.shebang_line",
+ "expected": "#!/usr/bin/env python3",
+ "generator_cmd": "echo 'print(\"hello from zipapp\")' > app/__main__.py; python3 -m zipapp app -p '/usr/bin/env python3' -o hello.pyz",
+ "oracle_cmd": "head -1 hello.pyz -> #!/usr/bin/env python3",
+ "decoy": false,
+ "member": "hello.pyz"
+}

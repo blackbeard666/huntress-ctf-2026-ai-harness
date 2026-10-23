@@ -1,0 +1,8 @@
+{
+ "field": "oci.image_layout_version",
+ "expected": "1.0.0",
+ "generator_cmd": "python3 -I mk_oci.py edge_oci.tar  (stdlib tarfile writer: OCI image layout, no manifest.json; arm64/v8, Entrypoint [/usr/bin/edge-agent], Cmd null)",
+ "oracle_cmd": "tar -xOf edge_oci.tar oci-layout | jq -r .imageLayoutVersion",
+ "decoy": false,
+ "member": "edge_oci.tar"
+}

@@ -1,0 +1,7 @@
+{
+ "field": "apk.zip_alignment_ok",
+ "expected": "true",
+ "generator_cmd": "python3 zipfile writer: AndroidManifest.xml, classes.dex(d2), assets/a.bin STORED, classes.dex(d39) again (Janus dup), all date_time 1980-01-01",
+ "oracle_cmd": "python3 -I -c 'zipfile infolist: header_offset+30+LFH name_len+extra_len for compress_type==0' -> assets/a.bin data @2280 (%4=0)",
+ "decoy": false
+}

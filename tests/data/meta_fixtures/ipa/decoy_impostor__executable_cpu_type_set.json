@@ -1,0 +1,8 @@
+{
+ "field": "ipa.executable_cpu_type_set",
+ "expected": "none",
+ "generator_cmd": "mkdir META-INF; MANIFEST.MF + text 'CFBundleIdentifier=com.fake' as Info.plist at root (no Payload/*.app); zip -X -r impostor.ipa (a renamed jar)",
+ "oracle_cmd": "unzip -l impostor.ipa -> no .app bundle / no Mach-O",
+ "decoy": true,
+ "member": "impostor.ipa"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "decompress-redecode",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-58",
+ "encoded": "H4sIAAAAAAACAyXJMQqAMAxG4av87joK4ubkBZzcjDTRCmkbtGhPr+D4vjfkaPDkbiSLlPJyQq7M8OrKtlYYCUzPbjV4CyXLf+3QKNCFvTkIfWiYtBhmZTHXI1LQRxqSr5q2ewGUdS6qZgAAAA==",
+ "generator_cmd": "printf %s \"$plain\" | tr 'A-Za-z' 'N-ZA-Mn-za-m' | gzip -9n | base64 -w0",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc | tr 'A-Za-z' 'N-ZA-Mn-za-m'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-58",
+ "expected": "match"
+}

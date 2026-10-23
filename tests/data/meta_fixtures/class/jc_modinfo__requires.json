@@ -1,0 +1,8 @@
+{
+ "field": "class.requires",
+ "expected": "[\"java.base\",\"java.logging\",\"java.sql\"]",
+ "generator_cmd": "javac --release 21 -d om module-info.java com/acme/app/Main.java; jar --create --file app.jar --main-class com.acme.app.Main --module-version 2.4.1 -C om .; unzip app.jar module-info.class",
+ "oracle_cmd": "jar --describe-module -> requires java.base mandated / java.logging / java.sql transitive",
+ "decoy": false,
+ "member": "module-info.class"
+}

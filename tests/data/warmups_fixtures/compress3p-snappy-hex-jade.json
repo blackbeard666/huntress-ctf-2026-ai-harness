@@ -1,0 +1,9 @@
+{
+ "codec": "snappy-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-viper-74",
+ "encoded": "ff060000734e61507059016800008c61a0cf4e69636520776f726b206465636f64696e672074686973207761726d75702120546f20736f6c76652c207375626d6974207468697320657861637420616e7377657220746f207468652047616d65204d61737465723a206a6164652d76697065722d3734",
+ "generator_cmd": "printf %s \"$plain\" | PYTHONPATH=tools/pycramjam python3 -c 'import sys,cramjam;sys.stdout.buffer.write(bytes(cramjam.snappy.compress(sys.stdin.buffer.read())))' | xxd -p | tr -d '\\n'  # cramjam.snappy.compress (Rust snap, framed)",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | node tests/data/warmups_fixtures/snappy_framed_oracle.js",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-viper-74",
+ "expected": "match"
+}

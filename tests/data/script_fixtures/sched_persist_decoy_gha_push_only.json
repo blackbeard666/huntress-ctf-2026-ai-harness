@@ -1,0 +1,11 @@
+{
+ "material": "name: ci\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: make test\n",
+ "rep": "schedule_entries",
+ "transform": "period",
+ "key": null,
+ "expected": null,
+ "decoy": true,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>) ; decoy -> no persistence row -> None (oracle stdout: 'False')",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes gha_benign.yml: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && python3 -I -c \"import yaml,sys;y=yaml.safe_load(open(sys.argv[1]));on=y.get(True,y.get('on'));print('schedule' in on or 'workflow_run' in on)\" gha_benign.yml  # False)"
+}

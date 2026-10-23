@@ -1,0 +1,11 @@
+{
+ "decoy": true,
+ "material": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Wix xmlns=\"http://schemas.microsoft.com/wix/2006/wi\">\n  <Product Id=\"*\" Name=\"AcmeSvc\" Language=\"1033\" Version=\"1.0.0\" Manufacturer=\"Acme\" UpgradeCode=\"12345678-1234-1234-1234-123456789012\">\n    <Package InstallerVersion=\"200\" Compressed=\"yes\" />\n    <Media Id=\"1\" Cabinet=\"a.cab\" EmbedCab=\"yes\" />\n    ",
+ "rep": "installer_actions",
+ "transform": "handoff",
+ "key": "ia_wix_setup.wxs",
+ "expected": null,
+ "note": "installer-action-model: lib.codec.installer_actions -> installer_answer(field); key = member name",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ia_gen.py tests/data/script_fixtures/ia_src  (stdlib; literal installer sources) + truncated at <Directory Id=TARGETDIR>",
+ "oracle_cmd": "python3 -I -c \"import xml.dom.minidom,sys; xml.dom.minidom.parseString(open(sys.argv[1]).read())\" <file> -> ExpatError (truncated WiX)"
+}

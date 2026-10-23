@@ -1,0 +1,11 @@
+{
+ "material": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>Label</key>\n\t<string>com.apple.softwareupdate.agent</string>\n\t<key>ProgramArguments</key>\n\t<array>\n\t\t<string>/Users/Shared/.u/u</string>\n\t\t<string>-q</string>\n\t</array>\n\t<key>RunAtLoad</key>\n\t<true/>\n\t<key>StartInterval</key>\n\t<integer>300</integer>\n</dict>\n</plist>\n",
+ "rep": "schedule_entries",
+ "transform": "interval",
+ "key": null,
+ "expected": "300",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes com.apple.softwareupdate.agent.plist: hand-authored heredoc via stdlib plistlib.dumps; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && python3 -I -c \"import xml.etree.ElementTree as E,sys;k=E.parse(sys.argv[1]).getroot()[0];c=list(k);print([c[i+1].text for i in range(0,len(c),2) if c[i].text=='StartInterval'][0])\" com.apple.softwareupdate.agent.plist)"
+}

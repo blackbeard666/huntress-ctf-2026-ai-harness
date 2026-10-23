@@ -1,0 +1,10 @@
+kind: pipeline
+type: docker
+name: default
+steps:
+- name: analyze
+  image: alpine:3.19
+  environment:
+    HUNTRESS_DESCRIPTOR: "dj0zfGxhbmd1YWdlPWRyb25lX2NpfHJvbGU9ZG93bmxvYWRlcnx2ZXJkaWN0PW1hbGljaW91c3xhdHRhY2s9VDExMDV8YWRhcHRlcj1jaV9ydW5uZXJ8aG9zdF9wcm9maWxlPXN0YW5kYWxvbmV8b2JmdXNjYXRpb25fcHJvZmlsZT1iYXNlNjR8c3RhZ2VfcHJvZmlsZT10d29fc3RhZ2VfZG93bmxvYWRfZXhlY3V0ZXxuZXh0X2xhbmd1YWdlPXBvd2Vyc2hlbGx8c3RhZ2VfY291bnQ9MnxzdGVwcz1hY3F1aXJlX3JlbW90ZSx3cml0ZV9maWxlfGNhbXBhaWduX2lkPURST05FX0NJLWIyZTRjNmE4fHVybD1odHRwczovL2Ryb25lX2NpLWIyZTRjNmE4LmV4YW1wbGUuaW52YWxpZC9zdGFnZXxmaWxlX3BhdGg9L3RtcC9odW50cmVzcy1kcm9uZV9jaS8uYjJlNGM2YTguc3RhZ2U="
+  commands:
+  - ':'

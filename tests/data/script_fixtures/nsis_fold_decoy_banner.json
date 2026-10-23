@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 tests/data/script_fixtures/nsis_fold_gen.py ... (same !define + StrCpy $0 \"$0${B}\" shapes, base64 of a benign banner)",
+ "oracle_cmd": "NSISDIR=tools/nsis/usr/share/nsis tools/nsis/usr/bin/makensis -PPO nsis_fold_decoy_banner.nsi | grep -o 'StrCpy \\$0 \"[^\"]*\"' | cut -d'\"' -f2 | sed 's/^\\$0//' | tr -d '\\n' | base64 -d   -> 'Thank you for installing Huntress Notepad 1.2 -- see readme.txt' (no v= plan)"
+}

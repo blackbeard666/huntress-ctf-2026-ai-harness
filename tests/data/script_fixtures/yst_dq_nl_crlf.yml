@@ -1,0 +1,11 @@
+name: Huntress inert analysis 8b0e7f11
+on:
+  workflow_dispatch:
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    env:
+      HUNTRESS_DESCRIPTOR: "dj0zfGxhbmd1YWdlPWdpdGh1Yl9hY3Rpb25zfHJvbGU9ZG93\nbmxvYWRlcnx2ZXJkaWN0PXN1c3BpY2lvdXN8YXR0YWNrPVQx\nMDU5fGFkYXB0ZXI9cHJvY2Vzc19idWlsZGVyfGhvc3RfcHJv\nZmlsZT1zdGFuZGFsb25lfG9iZnVzY2F0aW9uX3Byb2ZpbGU9\nYmFzZTY0fHN0YWdlX2NvdW50PTJ8c3RlcHM9ZGVjb2RlX2Nv\nbmZpZ3VyYXRpb24sZGlzcGF0Y2hfcHJvY2Vzc3xjYW1wYWln\nbl9pZD1HSVRIVUJfQUNUSU9OUy04YjBlN2YxMXx1cmw9aHR0\ncHM6Ly9naXRodWJfYWN0aW9ucy04YjBlN2YxMS5leGFtcGxl\nLmludmFsaWQvc3RhZ2V8ZmlsZV9wYXRoPS90bXAvaHVudHJl\nc3MtZ2l0aHViX2FjdGlvbnMvLjhiMGU3ZjExLnN0YWdl"  # cache seed
+    steps:
+      - name: Preserve modeled descriptor
+        run: ':'

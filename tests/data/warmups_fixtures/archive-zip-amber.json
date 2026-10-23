@@ -1,0 +1,9 @@
+{
+ "codec": "archive-container[zip]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-otter-31",
+ "encoded": "UEsDBBQACAAIAFCvVV0AAAAAAAAAAGUAAAAIAAAAZmxhZy50eHQlyTEOg0AMRNGrTHooonS5ABVUuYBZRrCCxZFtsjk+SJT//SEnoqqtmJh0yvuMWLKjipXj+8BH4br92MCPseS4L/+SArJ7pSH0QqKTQvTiQXtDykhrNa5oX88TUEsHCHcjybZbAAAAZQAAAFBLAQIeAxQACAAIAFCvVV13I8m2WwAAAGUAAAAIAAAAAAAAAAEAAAC0gQAAAABmbGFnLnR4dFBLBQYAAAAAAQABADYAAACRAAAAAAA=",
+ "generator_cmd": "d=$(mktemp -d); cd $d; printf %s \"$plain\" > flag.txt; zip -qX9 - flag.txt | base64 -w0; rm -rf $d",
+ "oracle_cmd": "f=$(mktemp); printf %s \"$encoded\" | base64 -d > $f; 7z x -so -pinfected -tzip $f 2>/dev/null </dev/null; r=$?; rm -f $f; exit $r",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-otter-31",
+ "expected": "match"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "apk.signer_subject_dn",
+ "expected": "C=US,O=Huntress Labs,CN=Huntress Artifact Assembly Line",
+ "generator_cmd": "GM D21 artifact (v1 FIXTURE-.RSA + v2 block): cp tests/data/meta_fixtures/apk/d21__version_code.bin (= mobile-001.apk of challenges/day21/metadata-package-deal evidence zip)",
+ "oracle_cmd": "unzip -p mobile-001.apk META-INF/FIXTURE-.RSA | openssl pkcs7 -inform DER -print_certs | openssl x509 -noout -serial -dates -subject -nameopt RFC2253 -fingerprint -sha256 -> subject=",
+ "decoy": false,
+ "member": "mobile-001.apk"
+}

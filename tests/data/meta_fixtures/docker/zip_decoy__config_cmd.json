@@ -1,0 +1,8 @@
+{
+ "field": "docker.config_cmd",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import zipfile;z=zipfile.ZipFile('zip_decoy.tar','w');z.writestr('manifest.json','[]');z.close()\"  (zip renamed .tar impostor)",
+ "oracle_cmd": "file -b zip_decoy.tar | grep -q '^Zip' && echo none",
+ "decoy": true,
+ "member": "zip_decoy.tar"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "pem[gzip]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-badger-48",
+ "encoded": "-----BEGIN CERTIFICATE-----\nH4sIAAAAAAACAyXJMQ6DMAwF0Kt89rIxoF6gE516AZN80QiCkW0ajt9KXd97lkQ0\ntRWZSXPZF8S7OJpYPY8OL4Xr9uENfs61xH95SQrI7o2G0B8SD6nEJB60O6ocG/tZ\n8kLrh/ELqnGLUGYAAAA=\n-----END CERTIFICATE-----\n",
+ "generator_cmd": "python3 -c 'import ssl,sys,gzip; sys.stdout.write(ssl.DER_cert_to_PEM_cert(sys.stdin.buffer.read()))' < <(printf %s \"$plain\" | gzip -9n)",
+ "oracle_cmd": "printf %s \"$encoded\" | sed '1d;$d' | openssl base64 -d | gunzip",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-badger-48",
+ "expected": "match"
+}

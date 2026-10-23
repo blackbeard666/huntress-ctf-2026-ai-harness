@@ -1,0 +1,7 @@
+{
+ "field": "apk.zip_alignment_ok",
+ "expected": "true",
+ "generator_cmd": "D08 GM APK (mobile lane, day08) copied from tests/data/meta_fixtures/apk/d08__allow_backup.bin",
+ "oracle_cmd": "python3 -I -c 'zipfile infolist: header_offset+30+LFH name_len+extra_len for compress_type==0' -> assets/huntress_puzzle.json data @1264 (%4=0)",
+ "decoy": false
+}

@@ -1,0 +1,30 @@
+{
+ "family": "symbol_versioning",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "verdefs": "none",
+  "verdef_names": "none",
+  "base_version": "none",
+  "verneeds": "none",
+  "needed_versions": "none",
+  "versioned_symbols": "none",
+  "default_versions": "none",
+  "hidden_versions": "none",
+  "weak_symbols": "none",
+  "unique_symbols": "none",
+  "protected_symbols": "none",
+  "exported_symbols": "none",
+  "imports": "none",
+  "interposed": "none",
+  "rtld_next_callers": "none",
+  "calls_rtld_next": "false",
+  "returns": "none",
+  "default_return": "none"
+ },
+ "generator_cmd": "bash symver_gen.sh   # gcc -O2 -static + strip: no .dynsym / .gnu.version* (every field 'none'); compiled, never run/preloaded",
+ "oracle_cmd": "python3 symver_oracle.py symver_decoy_static.bin   # readelf -VW / readelf --dyn-syms -W / objdump -d -Mintel / nm -D --defined-only libc.so.6 / pyelftools",
+ "decoy": true,
+ "note": "lib.binary.elf_version_field(data, key) per expected_facts key (null expected_facts: elf_version_facts -> None); key names SPECULATIVE (GM label not seen)"
+}

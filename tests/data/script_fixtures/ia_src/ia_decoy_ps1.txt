@@ -1,0 +1,2 @@
+# not an installer: a PowerShell note that mentions [Run] and Section words inline
+Write-Output 'Section Main; [Run] later'

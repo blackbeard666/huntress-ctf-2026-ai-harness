@@ -1,0 +1,9 @@
+{
+ "codec": "saml-redirect",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-finch-63",
+ "encoded": "Location: https://idp.example.com/sso?SAMLRequest=JckxDoJAEAXQq3x6qUwsvAAVVl5gWL4wkd0hO4Pr8TWhfe%2BhiWhW35iZbNayIFZ1NKn52Ds8DW7bhxf4MWWNc%2FmVFJDijRVhfyQGycQoHqx3ZNk39i8tae1v1x8%3D&RelayState=xyz",
+ "generator_cmd": "printf %s \"$plain\" | sh tests/data/warmups_fixtures/saml_redirect_gen.sh raw quote  # wrapped as Location: https://idp.example.com/sso?SAMLRequest={v}&RelayState=xyz",
+ "oracle_cmd": "tools/node/bin/node tests/data/warmups_fixtures/saml_redirect_oracle.mjs \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-finch-63",
+ "expected": "match"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "dex_strings",
+ "expected": null,
+ "decoy": true,
+ "_why": "sbox_chain layout, decrypts to the near-miss 'ANS-4f1c2d9e7b30a5x8' (14 hex + 'x8'): no valid token anywhere",
+ "generator_cmd": "python3 tests/data/android_fixtures/wbt_src/gen_wbt.py decoy tests/data/android_fixtures/wbt_decoy.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile (pycryptodome AES-ECB / python S-box shuffle only as the encrypting writer)",
+ "oracle_cmd": "same generator, stage 2: host JVM prints 'ANS-4f1c2d9e7b30a5x8' -> grep -E 'ANS-[0-9A-Fa-f]{16}' finds nothing"
+}

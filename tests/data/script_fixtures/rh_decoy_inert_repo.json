@@ -1,0 +1,11 @@
+{
+ "decoy": true,
+ "material": "{\n \".devcontainer/devcontainer.json\": \"{\\\"image\\\": \\\"mcr.microsoft.com/devcontainers/base:ubuntu\\\", \\\"features\\\": {}}\\n\",\n \".git/config\": \"[core]\\n\\trepositoryformatversion = 0\\n\\tfilemode = true\\n\\tbare = false\\n\\tlogallrefupdates = true\\n\",\n \".git/hooks/pre-commit.sample\": \"#!/bin/sh\\nexit 0\\n\",\n \".gitattributes\": \"*.txt text eol=lf\\n*.png binary\\n\",\n \".vscode/tasks.json\": \"{\\\"version\\\": \\\"2.0.0\\\", \\\"tasks\\\": [{\\\"label\\\": \\\"build\\\", \\\"type\\\": \\\"shell\\\", \\\"command\\\": \\\"make\\\"}]}\\n\",\n \"README.md\": \"# readme\\nRun `git config core.hooksPath .githooks` to enable hooks.\\n\"\n}",
+ "rep": "repo_hooks",
+ "transform": "surface",
+ "key": null,
+ "expected": null,
+ "note": "git-repo-hooks-route: lib.codec.repo_hooks over a synthetic repo tree {member: text} -- decoy: only *.sample hooks, plain attributes, no lifecycle/folderOpen command",
+ "generator_cmd": "bash tests/data/script_fixtures/rh_gen.sh tests/data/script_fixtures  (real git init / git config writes .git/config + .gitmodules; PyYAML/json write pre-commit, devcontainer, tasks; stdlib json dump)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/rh_oracle.py tests/data/script_fixtures/rh_decoy_tree.tree 'surface'  (git config --get-regexp / git check-attr / PyYAML / json / shebang line)"
+}

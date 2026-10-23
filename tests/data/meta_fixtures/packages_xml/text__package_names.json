@@ -1,0 +1,8 @@
+{
+ "field": "packages_xml.package_names",
+ "expected": "[\"com.android.chrome\",\"com.evil.loader\"]",
+ "generator_cmd": "python3 -I gen.py (stdlib tarfile USTAR + zlib.compress writer; ABX via a hand-rolled BinaryXmlSerializer token writer; source kept at tests/data/meta_fixtures/android_backup/gen_android_fixtures.py.txt)",
+ "oracle_cmd": "python3 -I -c \"import xml.dom.minidom as m; print([p.getAttribute('name') for p in m.parse('packages_text.xml').getElementsByTagName('package')])\"",
+ "decoy": false,
+ "member": "packages_text.xml"
+}

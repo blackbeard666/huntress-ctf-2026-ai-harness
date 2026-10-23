@@ -1,0 +1,9 @@
+{
+ "codec": "textcomp-lzw-clear",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-summit-73",
+ "encoded": "[256, 78, 105, 99, 101, 32, 119, 111, 114, 107, 32, 100, 101, 99, 111, 100, 105, 110, 103, 32, 116, 104, 105, 115, 262, 97, 114, 109, 117, 112, 33, 32, 84, 111, 32, 115, 111, 108, 118, 101, 44, 291, 117, 98, 109, 105, 116, 276, 278, 280, 101, 120, 97, 99, 303, 97, 110, 115, 119, 101, 114, 276, 290, 277, 261, 71, 97, 109, 261, 77, 97, 115, 116, 316, 58, 32, 99, 108, 111, 295, 114, 45, 115, 117, 109, 301, 116, 45, 55, 51, 257]",
+ "generator_cmd": "python3 -I tests/data/warmups_fixtures/textcomp_gen.py lzw-clear \"$plain\"  # independent textbook implementation, not lib/",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/textcomp_oracle.py lzw-clear",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-summit-73",
+ "expected": "match"
+}

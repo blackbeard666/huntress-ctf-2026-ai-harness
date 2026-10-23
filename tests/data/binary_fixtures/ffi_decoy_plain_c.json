@@ -1,0 +1,25 @@
+{
+ "family": "ffi_boundary",
+ "file": "ffi_decoy_plain_c.bin",
+ "decoy": true,
+ "generator_cmd": "bash tests/data/binary_fixtures/ffi_gen.sh <workdir>",
+ "oracle_cmd": "readelf --dyn-syms -W <bin> (defined GLOBAL/WEAK, table order; UND = imports) (JNI/PyInit/crosscall2/rustc names live only in .rodata strings)",
+ "expected_facts": {
+  "ffi_kind": "plain_c",
+  "ffi_kinds": [
+   "plain_c"
+  ],
+  "exports": [
+   "names",
+   "plain_entry",
+   "plain_other"
+  ],
+  "jni_methods": "none",
+  "jni_onload": "false",
+  "python_module": "none",
+  "go_version": "none",
+  "go_exports": "none",
+  "rustc_version": "none",
+  "ocaml_stubs": "none"
+ }
+}

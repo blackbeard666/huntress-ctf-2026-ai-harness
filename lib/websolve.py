@@ -107,10 +107,14 @@ def clues(base):
         j = {}
     if not isinstance(j, dict):
         j = {}
+    return j, dispatch_key(j)
+
+
+def dispatch_key(j):
+    """The first clue key NOT in the common kit set (the concept-specific one), or None."""
     common = {"framework", "feature_route", "secondary_route", "current_role", "routes", "role",
               "username", "user", "message"}
-    key = next((k for k in j if k not in common), None)
-    return j, key
+    return next((k for k in (j if isinstance(j, dict) else {}) if k not in common), None)
 
 
 def race(probes, budget=40):

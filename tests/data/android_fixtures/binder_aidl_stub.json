@@ -1,0 +1,7 @@
+{
+ "entry": "binder_transact_scan",
+ "expected": "ANS-5d0b7e29c4a1f863",
+ "_why": "exported bound service: abstract AIDL IVault$Stub extends Binder overrides onTransact; sparse-switch on code {INTERFACE_TRANSACTION, FIRST_CALL_TRANSACTION+0 ping, +1 rotate, +6 getSecret}; case 7 enforceInterface(DESCRIPTOR), readInt version, readString pass, then the concrete Impl.getSecret returns a byte[] xor'd with version*17+0x1D only when version == 5 and pass equals 'hunter2-vault'",
+ "generator_cmd": "python3 tests/data/android_fixtures/binder_src/gen_binder.py aidl_stub tests/data/android_fixtures/binder_aidl_stub.apk  # javac --release 8 (app + android.os Binder/Parcel stubs) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d23.ipc.Probe -> a client Parcel (writeInterfaceToken(IVault), writeInt(5), writeString('hunter2-vault')) sent to new VaultService.Impl().onTransact(7, ...) on the host JVM; reply.q[1] = 'ANS-5d0b7e29c4a1f863'"
+}

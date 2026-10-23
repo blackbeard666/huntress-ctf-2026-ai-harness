@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "benign/{package.json main=src/main.js, src/main.js with a truncated/garbage `descriptor_00c10c4` gz64 literal}; tools/npm-asar/node_modules/.bin/asar pack benign electron_asar_decoy_benign.asar",
+ "oracle_cmd": "tools/npm-asar/node_modules/.bin/asar extract-file electron_asar_decoy_benign.asar src/main.js && grep -o 'descriptor_00c10c4 = \"[^\"]*' main.js | cut -d'\"' -f2 | base64 -d | gunzip   # -> base64: invalid input / gzip: unexpected end (no plan)"
+}

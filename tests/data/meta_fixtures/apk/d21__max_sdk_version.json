@@ -1,0 +1,8 @@
+{
+ "field": "apk.max_sdk_version",
+ "expected": "none",
+ "generator_cmd": "GM D21 artifact: python3 -c \"import zipfile; zipfile.ZipFile('challenges/day21/metadata-package-deal/single_solve/artifacts/20261021T130021Z/metadata-day-21-evidence.zip').extract('mobile-001.apk')\"",
+ "oracle_cmd": "aapt dump xmltree mobile-001.apk AndroidManifest.xml -> uses-sdk has only minSdkVersion/targetSdkVersion (no maxSdkVersion)",
+ "decoy": true,
+ "member": "mobile-001.apk"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "inflate-container git loose object (blob)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-heron-41",
+ "encoded": "eAElyTEOwjAMBVCO8tmpRCQmLsAEExdw0i8a0cTIdgnHB4n1vbxqRjqm3a0WYqg9MbPoXPsDsVTHEGvba4+7wnV98wDfcqvxX36kBKT7oCH0h8RFGnEVD9oZ0jJtWmjap1P6AkEJJlU=",
+ "oid": "e6caf02ff24f57bcb1062c6bfc62272ee3fd86d9",
+ "generator_cmd": "git init -q repo; oid=$(printf %s \"$plain\" | git -C repo hash-object -w --stdin); base64 -w0 repo/.git/objects/${oid:0:2}/${oid:2}  # git writes zlib('blob <len>\\0' + body)",
+ "oracle_cmd": "d=$(mktemp -d); git init -q $d; mkdir -p $d/.git/objects/${oid:0:2}; printf %s \"$encoded\" | base64 -d > $d/.git/objects/${oid:0:2}/${oid:2}; [ \"$(git -C $d cat-file -t $oid)\" = blob ] && git -C $d cat-file -p $oid || echo none  # git cat-file (independent reader of the loose object)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-heron-41",
+ "expected": "match"
+}

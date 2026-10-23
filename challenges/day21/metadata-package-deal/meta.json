@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-21-package-deal",
+  "lane": "metadata-forensics",
+  "name": "🔎 Package Deal",
+  "ids": {
+    "single_solve": "metadata-forensics-day-21-package-deal",
+    "time_trial": "metadata-forensics-day-21-package-deal/time_trial",
+    "mastery": "metadata-forensics-day-21-package-deal/mastery"
+  }
+}

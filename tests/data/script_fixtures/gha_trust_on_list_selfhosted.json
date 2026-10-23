@@ -1,0 +1,11 @@
+{
+ "material": "name: list\non: [push, pull_request]\npermissions: read-all\njobs:\n  test:\n    runs-on: [self-hosted, linux, x64]\n    container:\n      image: node:20-alpine\n    steps:\n      - name: Test\n        run: npm test\n",
+ "rep": "gha_workflow",
+ "transform": "runner_type",
+ "key": null,
+ "expected": "self-hosted",
+ "decoy": false,
+ "note": "gha-trigger-trust-model: lib.codec.gha_workflow/gha_answer via decode(rep='gha_workflow', transform=<field>[@job], key=<accepted csv>)",
+ "generator_cmd": "cat > w2.yml <<'EOF' (hand-authored synthetic workflow, heredoc; no lib code); tests/data/script_fixtures/gha_trust_gen.py writes the json",
+ "oracle_cmd": "python3 -I -c \"import yaml,sys;y=yaml.safe_load(open(sys.argv[1]));ro=y['jobs']['test']['runs-on'];print('self-hosted' if 'self-hosted' in ro else 'github-hosted')\" w2.yml  (PyYAML 6 safe_load)"
+}

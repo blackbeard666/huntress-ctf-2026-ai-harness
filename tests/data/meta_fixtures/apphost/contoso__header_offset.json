@@ -1,0 +1,8 @@
+{
+ "field": "apphost.header_offset",
+ "expected": "83931",
+ "generator_cmd": "dotnet publish -c Release -o out (HelloBundle.csproj: net10.0, AssemblyName=Contoso.Updater, RuntimeIdentifier=ubuntu.26.04-x64, PublishSingleFile=true, SelfContained=false; Program.cs = one Console.WriteLine)",
+ "oracle_cmd": "dotnet oracle.dll <file> (C# console app over ILSpy 11.1 ICSharpCode.Decompiler.SingleFileBundle.IsBundle/ReadManifest printing MajorVersion.MinorVersion, FileCount, BundleID, entries Type/Offset/Size/RelativePath) -> bundleHeaderOffset from IsBundle",
+ "decoy": false,
+ "member": "Contoso.Updater"
+}

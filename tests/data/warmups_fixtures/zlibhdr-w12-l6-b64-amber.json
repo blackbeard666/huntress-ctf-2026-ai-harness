@@ -1,0 +1,9 @@
+{
+ "codec": "zlib-w12-l6-b64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-lynx-40",
+ "encoded": "SIklyTEOgkAQBdCrfHpJKKy8gBVWXGBYfmQju0NmBhdvr4nte4+ciKb2wsKkS65PxJodTawce4dJ4bq9eYEfc8nxX56SAlK90RD6Q+IuhRjFg3aDlJnWb5969tfhCyRmI7I=",
+ "generator_cmd": "printf %s \"$plain\" | perl -MCompress::Raw::Zlib -e '($w,$l,$d)=@ARGV; ($z)=Compress::Raw::Zlib::Deflate->new(-WindowBits=>$w,-Level=>$l,-AppendOutput=>1,(length $d ? (-Dictionary=>$d) : ())); local $/; $i=<STDIN>; $z->deflate($i,$o); $z->flush($o); print $o' -- 12 6 \"$dict\" | base64 -w0  # perl Compress::Raw::Zlib writer (WindowBits, Level, Dictionary) + coreutils wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | python3 -c 'import sys,zlib; w=int(sys.argv[1]); d=sys.argv[2].encode(); o=zlib.decompressobj(w,zdict=d) if d else zlib.decompressobj(w); sys.stdout.buffer.write(o.decompress(sys.stdin.buffer.read()))' 12 \"$dict\"  # coreutils unwrap + python zlib.decompressobj(wbits, zdict)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-lynx-40",
+ "expected": "match"
+}

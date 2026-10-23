@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<packages>
+    <version sdkVersion="33" databaseVersion="3" fingerprint="google/oriole/oriole:13/TQ3A.230901.001/1:user/release-keys" />
+    <package name="com.android.chrome" codePath="/data/app/~~Ab12==/com.android.chrome-Cd34==" primaryCpuAbi="arm64-v8a" ft="18b5f2a1c45" it="18b5f2a1c40" ut="18b5f2a2027" version="571234567" userId="10123" installer="com.android.vending">
+        <sigs count="1" schemeVersion="2"><cert index="0" key="3082" /></sigs>
+    </package>
+    <package name="com.evil.loader" codePath="/data/app/~~Zz99==/com.evil.loader-Yy88==" primaryCpuAbi="arm64-v8a" ft="18c0a1b2c42" it="18c0a1b2c3d" ut="18c0a1b3024" version="3" userId="10245" installer="com.android.packageinstaller">
+        <sigs count="1" schemeVersion="2"><cert index="0" key="3082" /></sigs>
+    </package>
+    <shared-user name="android.uid.system" userId="1000" />
+</packages>

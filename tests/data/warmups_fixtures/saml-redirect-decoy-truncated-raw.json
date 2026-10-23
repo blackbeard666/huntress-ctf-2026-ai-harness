@@ -1,0 +1,10 @@
+{
+ "codec": "saml-redirect",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: none",
+ "encoded": "SAMLRequest=JckxDsIwDAXQq3x2uiAmLtCpTFzATb%2BaqE2MbJdw%2FCKxvvcsiehqGxYmXUpbEbk4",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "first half of saml_redirect_gen.sh raw quote output (deflate stream cut)",
+ "oracle_cmd": "tools/node/bin/node tests/data/warmups_fixtures/saml_redirect_oracle.mjs \"$encoded\"",
+ "oracle_output": "None"
+}

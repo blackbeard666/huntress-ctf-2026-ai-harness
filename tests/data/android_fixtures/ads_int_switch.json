@@ -1,0 +1,8 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-7c21e9a05fd384b6",
+ "decoy": false,
+ "_why": "Gate.debuggerGate(): while(true) switch(state) on an int field set to 0x11 in <init>; transitions on Debug.isDebuggerConnected, getApplicationInfo().flags & 2, /proc/self/status TracerPid, a System.nanoTime delta fold a long key; clean terminal 0x55 xors ENC with it, the debugged terminal 0x66 decodes a static xor-0x5A honeypot that dex_array_scan / rolling_xor_scan read first -- dex_strings must rank the clean value first",
+ "generator_cmd": "python3 tests/data/android_fixtures/ads_src/gen_ads.py int_switch tests/data/android_fixtures/ads_int_switch.apk  # javac --release 8 (app + clean android.* stubs) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> Probe runs the machine on the host JVM with CLEAN stubs (Debug false, flags & 2 == 0, adb_enabled 0) + real /proc/self/status + System.nanoTime -> 'proof=ANS-7c21e9a05fd384b6'; `gen_ads.py int_switch /dev/null --debugged` (DEBUGGED stubs) -> 'proof=ANS-d3adb33fc0ffee11' (the honeypot that must be demoted)"
+}

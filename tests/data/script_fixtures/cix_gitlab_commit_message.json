@@ -1,0 +1,11 @@
+{
+ "material": "stages: [test]\nvariables:\n  GREETING: \"hello\"\nlint:\n  stage: test\n  script:\n    - echo \"commit says $CI_COMMIT_MESSAGE\"\n    - make lint GREET=\"${GREETING}\"\ndeploy:\n  stage: test\n  script:\n    - echo \"$DEPLOY_TOKEN\" > /tmp/t\n    - echo \"branch ${CI_COMMIT_REF_SLUG}\"\n",
+ "rep": "ci_expressions",
+ "transform": "untrusted_context",
+ "key": null,
+ "expected": "CI_COMMIT_MESSAGE",
+ "decoy": false,
+ "note": "ci-expression-injection-secrets: lib.codec.ci_expressions/ci_expr_answer via decode(rep='ci_expressions', transform=<field>[@job|step])",
+ "generator_cmd": "cat > cix_w3.yml <<'EOF' (hand-authored synthetic CI file, heredoc; no lib code); tests/data/script_fixtures/cix_gen.py writes the json",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/cix_oracle.py tests/data/script_fixtures/cix_w3.yml untrusted_context  (PyYAML 6 safe_load)"
+}

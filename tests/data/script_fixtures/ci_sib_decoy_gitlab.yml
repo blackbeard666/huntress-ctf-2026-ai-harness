@@ -1,0 +1,5 @@
+variables:
+  HUNTRESS_DESCRIPTOR: "bm90IGEgcGxhbiwganVzdCBhIGJ1aWxkIGNhY2hlIHNlZWQ="
+build:
+  script:
+    - make

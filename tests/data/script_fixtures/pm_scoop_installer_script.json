@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=powershell|role=launcher|verdict=malicious|attack=T1059.001|adapter=scoop_installer_script|stage_count=2|steps=decode_stage,run_powershell|campaign_id=SCP-9a3c4471|file_path=$env:TEMP\\scoop-9a3c4471.ps1",
+ "decoy": false,
+ "host": "scoop",
+ "generator_cmd": "M=$(printf %s \"$PLAN\" | gzip -9n | base64 -w0); jq -n --arg h \"${M:0:48}\" --arg t \"${M:48}\" '{version:..,architecture:{\"64bit\":{url:..,hash:..}},installer:{script:[\"Expand-7zipArchive ..\", (\"$descriptor_9a3c4471 = '\"'\"'\"+$h+\"'\"'\"' +\"), (\"  '\"'\"'\"+$t+\"'\"'\"'\"), \"$b = [Convert]::FromBase64String($descriptor_9a3c4471)\"]},uninstaller:{script:\"Remove-Item ..\"}}' > pm_scoop_installer_script.scoop  (Scoop installer.script line array, descriptor split over two lines)",
+ "oracle_cmd": "jq -r '.installer.script|join(\"\\n\")' tests/data/script_fixtures/pm_scoop_installer_script.scoop | sed -n 2,3p | grep -o \"'[^']*'\" | tr -d \"'\\n\" | base64 -d | gunzip"
+}

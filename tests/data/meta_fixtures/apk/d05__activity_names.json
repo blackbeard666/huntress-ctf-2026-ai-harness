@@ -1,0 +1,8 @@
+{
+ "field": "apk.activity_names",
+ "expected": "[\"com.huntress.mobile.d05.v9e904790496a.MainActivity\",\"com.huntress.mobile.d05.v9e904790496a.ChallengeActivity\"]",
+ "generator_cmd": "GM D05 mobile-lane artifact (aapt-built APK): cp challenges/day05/mobile-backup-spill/single_solve/artifacts/20261005T130307Z/backup_spill.apk",
+ "oracle_cmd": "aapt dump badging/xmltree backup_spill.apk (Android Asset Packaging Tool v0.2) aapt dump xmltree -> activity android:name=\".MainActivity\" (line 11), \".ChallengeActivity\" (line 17); package com.huntress.mobile.d05.v9e904790496a",
+ "decoy": false,
+ "member": "backup_spill.apk"
+}

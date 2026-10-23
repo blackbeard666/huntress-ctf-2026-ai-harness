@@ -1,0 +1,8 @@
+{
+ "field": "ear.ear_modules",
+ "expected": "[\"ledger-portal.war\",\"ledger-ejb.jar\",\"ledger-client.jar\"]",
+ "generator_cmd": "zip -qr ledger.ear META-INF/application.xml (hand-written javaee 8 ns, web/ejb/java modules)",
+ "oracle_cmd": "java OracleXml.java ledger.ear META-INF/application.xml \"//*[local-name()='module']/*[local-name()='web']/*[local-name()='web-uri'] | //*[local-name()='module']/*[local-name()='ejb' or local-name()='java' or local-name()='connector']\" (javax.xml DOM namespace-aware + XPath local-name())",
+ "decoy": false,
+ "member": "ledger.ear"
+}

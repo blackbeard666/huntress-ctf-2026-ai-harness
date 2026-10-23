@@ -1,0 +1,10 @@
+{
+ "codec": "signed-cookie-its-frag",
+ "plain": "rk decoding this warmup! To solve, sub",
+ "encoded": "InJrIGRlY29kaW5nIHRoaXMgd2FybXVwISBUbyBzb2x2ZSwgc3ViIg",
+ "generator_cmd": "PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_gen.py its-frag \"$plain\"",
+ "oracle_cmd": "printf %s \"${encoded#}\" | PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_oracle.py its-frag",
+ "oracle_output": "\"rk decoding this warmup! To solve, sub\"",
+ "oracle_plain": "rk decoding this warmup! To solve, sub",
+ "expected": "match"
+}

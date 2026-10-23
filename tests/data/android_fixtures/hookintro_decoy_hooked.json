@@ -1,0 +1,8 @@
+{
+ "entry": "clean_device_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same app as hookintro_proc_task_fd but the byte[] is keyed for a FRIDA-injected process (stage-1 Os.readlink stub: fd 3 -> /memfd:frida-agent-64.so): the token only appears on the hooked path; a clean device shows garbage",
+ "generator_cmd": "python3 tests/data/android_fixtures/hookintro_src/gen_hookintro.py decoy_hooked tests/data/android_fixtures/hookintro_decoy_hooked.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d22.hookintro.Probe -> Vault.reveal(ctx) on the host JVM (clean stubs) -> non-ANS bytes ('\\xbbyS-\\xcfQ2c...'), i.e. no token on the clean path"
+}

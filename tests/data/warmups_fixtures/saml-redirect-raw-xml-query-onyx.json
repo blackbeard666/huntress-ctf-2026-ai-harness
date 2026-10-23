@@ -1,0 +1,10 @@
+{
+ "codec": "saml-redirect",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: onyx-crane-91",
+ "encoded": "SAMLRequest=fZDBSsNAEIZfZdxzo0kOgkMSKAhSaD1o8eBFptvBLia7cWfWxLd3TS%2F1Isxl%2Fu%2BHb5hGaOhHXCc9%2BSf%2BTCwK89B7wQW0JkWPgcQJehpYUC0%2Br3dbrK9LHGPQYENvYHPfmjeqDrWBF47igm9NbmQgknjjRclrjsr6tqjKoq73ZYnLvJqu%2BVXh0owX8v%2FdJMJRs8h0j84yTCF%2BwJFtODr%2FDnpyAhPFIY1XsA8gof%2FiFUg6DE7PlGeyCuRlylYNOWR4yBrYkShHhOC%2F58JG8lzcVc3NxZHdefv7tu4H",
+ "generator_cmd": "plain=$(printf '<samlp:AuthnRequest xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\" ID=\"_a1b2\" Version=\"2.0\" IssueInstant=\"2026-10-22T00:00:00Z\"><saml:Issuer xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\">{s}</saml:Issuer></samlp:AuthnRequest>' \"$plain\"); printf %s \"$plain\" | sh tests/data/warmups_fixtures/saml_redirect_gen.sh raw quote  # wrapped as SAMLRequest={v}",
+ "oracle_cmd": "tools/node/bin/node tests/data/warmups_fixtures/saml_redirect_oracle.mjs \"$encoded\" | python3 -c 'import sys,xml.etree.ElementTree as E; print(next(t for t in E.fromstring(sys.stdin.read()).itertext() if t.strip()))'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: onyx-crane-91",
+ "expected": "match",
+ "oracle_inflated": "<samlp:AuthnRequest xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\" ID=\"_a1b2\" Version=\"2.0\" IssueInstant=\"2026-10-22T00:00:00Z\"><saml:Issuer xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\">Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: onyx-crane-91</saml:Issuer></samlp:AuthnRequest>"
+}

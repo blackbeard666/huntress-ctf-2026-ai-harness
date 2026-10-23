@@ -1,0 +1,9 @@
+{
+ "codec": "zlib-HEX",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-36",
+ "encoded": "780125C9310EC2300C05D0ABFCEE74AAC4C00598CAD40B98E48BA63431B25DC2F141627DEF5612D1D59EC84C9A4B7B20D6E2E862F5780D5814AEFB9B27F871AF25FECB8FA48034EF3484FE90B84A2566F1A05DB049E6B8D2B48DD3F90B23522395",
+ "generator_cmd": "printf %s \"$plain\" | pigz -z -1 | basenc --base16 -w0  # pigz CLI + basenc wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | basenc --base16 -d | zlib-flate -uncompress",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-36",
+ "expected": "match"
+}

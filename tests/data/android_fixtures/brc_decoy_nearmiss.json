@@ -1,0 +1,8 @@
+{
+ "entry": "broadcast_receiver_scan",
+ "expected": null,
+ "_why": "decoy: the dynamic_extra layout whose guarded result is the 15-hex near miss ANS-7e2b04c9d1f6a38",
+ "generator_cmd": "python3 tests/data/android_fixtures/brc_src/gen_brc.py decoy_nearmiss tests/data/android_fixtures/brc_decoy_nearmiss.apk  # javac --release 8 (app + android.content stubs) + dex2jar d2j-jar2dex.sh; manifest: apktool-bundled aapt2 link -I prebuilt/android-framework.jar; zipfile",
+ "oracle_cmd": "same generator, stage 2: host-JVM Probe prints 'ANS-7e2b04c9d1f6a38' (15 hex digits: no valid ANS-<16 hex> token)",
+ "decoy": true
+}

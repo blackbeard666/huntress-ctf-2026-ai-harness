@@ -1,0 +1,11 @@
+{
+ "material": "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\n<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\n  <RegistrationInfo><URI>\\Microsoft\\Windows\\OneDriveSync</URI></RegistrationInfo>\n  <Triggers>\n    <TimeTrigger>\n      <Repetition><Interval>PT5M</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition>\n      <StartBoundary>2026-01-01T00:00:00</StartBoundary>\n      <Enabled>true</Enabled>\n    </TimeTrigger>\n    <LogonTrigger><Enabled>true</Enabled></LogonTrigger>\n  </Triggers>\n  <Actions Context=\"Author\">\n    <Exec><Command>powershell.exe</Command><Arguments>-w hidden -f C:\\ProgramData\\s.ps1</Arguments></Exec>\n  </Actions>\n</Task>\n",
+ "rep": "schedule_entries",
+ "transform": "command",
+ "key": null,
+ "expected": "powershell.exe -w hidden -f C:\\ProgramData\\s.ps1",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes task.xml: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && python3 -I -c \"import xml.dom.minidom as M,sys;t=M.parseString(open(sys.argv[1]).read().replace('UTF-16','UTF-8'));g=lambda n:t.getElementsByTagName(n)[0].firstChild.data;print(g('Command'),g('Arguments'))\" task.xml)"
+}

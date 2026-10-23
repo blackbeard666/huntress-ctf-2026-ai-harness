@@ -1,0 +1,11 @@
+{
+ "material": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>CFBundleName</key>\n\t<string>Notes</string>\n\t<key>CFBundleVersion</key>\n\t<string>1.0</string>\n</dict>\n</plist>\n",
+ "rep": "schedule_entries",
+ "transform": "kind",
+ "key": null,
+ "expected": null,
+ "decoy": true,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>) ; decoy -> no persistence row -> None (oracle stdout: \"['CFBundleName', 'CFBundleVersion']\")",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes Info.plist: hand-authored heredoc via stdlib plistlib.dumps; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && python3 -I -c \"import xml.etree.ElementTree as E,sys;print([e.text for e in E.parse(sys.argv[1]).getroot()[0]][::2])\" Info.plist  # no Label/Program/StartInterval)"
+}

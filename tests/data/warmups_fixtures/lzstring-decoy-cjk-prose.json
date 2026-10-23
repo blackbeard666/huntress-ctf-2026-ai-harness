@@ -1,0 +1,10 @@
+{
+ "codec": "lzstring-utf16",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: none",
+ "encoded": "这是一个普通的中文句子，没有任何压缩。我们只是在测试解码器是否会误报。",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "literal Chinese prose (CJK range, not compressToUTF16 output)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/lzstring_oracle.py utf16  # PyPI lzstring 1.0.4 (independent port)",
+ "oracle_output": "None"
+}

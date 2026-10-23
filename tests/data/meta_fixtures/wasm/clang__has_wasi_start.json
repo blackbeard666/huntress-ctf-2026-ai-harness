@@ -1,0 +1,8 @@
+{
+ "field": "wasm.has_wasi_start",
+ "expected": "false",
+ "generator_cmd": "printf 'int add(int a,int b){return a+b;}' > a.c; clang-18 --target=wasm32 -O1 -c a.c -o a.o (Ubuntu clang 18.1.8, no -g)",
+ "oracle_cmd": "wasm-objdump -x a.o -> no Export section (relocatable object)",
+ "decoy": true,
+ "member": "a.o"
+}

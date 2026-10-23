@@ -460,6 +460,23 @@ def decode(material, rep, transform, key=None):
         return _locus_decode(material, transform)
     if re.sub(r"[^a-z]", "", rep.lower()) in ("jenkinshome", "jenkinssecrets", "jenkinsartifacts"):   # jenkins-artifact-secrets
         return _jenkins_decode(material, transform)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("ghaworkflow", "ghatrust", "githubactions"):   # gha-trigger-trust-model
+        return _gha_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("ciexpressions", "ciexpression", "expressioninjection", "ciinjection"):   # ci-expression-injection-secrets
+        return _cix_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("actionhandoffs", "actionhandoff", "actiondefinition"):   # github-action-definition-route
+        return _ah_decode(material, transform)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("repohooks", "repohook", "githooks", "repoautorun"):   # git-repo-hooks-route
+        return _rh_decode(material, transform)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("plistscripts", "launchd", "plist", "launchdplist"):   # launchd-plist-route
+        return _plist_decode(material, transform)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("scheduleentries", "persistence", "schedulepersistence"):   # ci-schedule-persistence-model
+        return _sched_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("installeractions", "installeraction", "installerscript"):   # installer-action-model
+        return _ia_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("asar", "electronasar", "appasar", "squirrel", "squirrelnupkg", "nupkg",
+                                              "squirrelsetup", "electronapp"):   # electron-asar-squirrel-route
+        return _electron_decode(material, transform, key)
     transform, key = _spec(rep, transform, key)
     if known(rep, transform):
         for data in _rep_candidates(rep, material):
@@ -1103,6 +1120,33 @@ def _find_codecs_uncached(src, _depth=0):
         src = raw.decode("utf-8", "ignore")
     src = wsh_decode(src) or src                         # JScript.Encode / VBScript.Encode blocks: read the plain
     out = _find_codecs_text(src)
+    if _depth < 2 and _PL_CUE.search((src or "")[:4096]):
+        # launchd / plist carrier (launchd-plist-route): a gap, or the full plan ahead of a first-piece reading of an
+        # XML-escaped body it extends
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _plist_codecs(src, raw, _depth) if not have or
+             any(c["plain"] != p and c["plain"].startswith(p) for p in have)]
+        out = x + out
+    if _depth < 2 and isinstance(src, str) and _NSIS_CUE.search(src[:1 << 20]):
+        # NSIS `!define`/`${X}`/`StrCpy $0 "$0.."` folded descriptor: a gap, or the full plan ahead of a piece it extends
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _nsis_codecs(src) if not have or
+             any(c["plain"] != p and c["plain"].startswith(p) for p in have)]
+        out = x + out
+    if _depth < 2 and isinstance(src, str) and _INNO_CUE.search(src[:1 << 20]):
+        # Inno Setup ISPP `{#X}` / Pascal `'..' + #13#10 + X` / [Run] Parameters folded descriptor: same rule as NSIS
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _inno_codecs(src) if not have or
+             any(c["plain"] != p and c["plain"].startswith(p) for p in have)]
+        out = x + out
+    if _depth < 2 and isinstance(src, str) and (_WIX_CUE.search(src[:1 << 20]) or
+                                                src[:8] == "\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
+        # WiX `<CustomAction>` / MSI CustomAction table: `[PROP]`-formatted script bodies, a gap, or the full plan
+        # ahead of a piece it extends
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _wix_codecs(src, raw, _depth) if not have or
+             any(c["plain"] != p and c["plain"].startswith(p) for p in have)]
+        out = x + out
     if _depth < 2 and not any(c.get("plain") for c in out):
         out = out + _carrier_codecs(src, raw, _depth)
     if _depth < 2 and not any(c.get("plain") for c in out):
@@ -1131,6 +1175,9 @@ def _find_codecs_uncached(src, _depth=0):
         x = [c for c in _build_host_codecs(src) if any(c["plain"] != p and c["plain"].startswith(p)
                                                        for p in (o.get("plain") for o in out) if p)]
         out = x + out
+    if _depth < 2 and not any(c.get("plain") for c in out) and _HK_CUE.search((src or "")[:1 << 16]) and \
+            re.search(r"<executable>|<exec\b", (src or "")[:1 << 20]):
+        out = out + _hook_codecs(src, _depth)            # Maven / Ant build hook: argv split over XML elements
     if _depth < 2 and not any(c.get("plain") for c in out):
         out = out + _saas_host_codecs(src, raw, _depth)     # SaaS / add-in host: JSON-escaped script, zip / CRX package
     if _depth < 2 and _JC_CUE.search((src or "")[:1 << 16]) and (src or "").lstrip("\ufeff \t\r\n")[:1] in "{[/":
@@ -1189,6 +1236,18 @@ def _find_codecs_uncached(src, _depth=0):
         have = {c.get("plain") for c in out if c.get("plain")}
         x = [(c, ck) for c, ck in _pipeline_codecs(src) if c["plain"] not in have]
         out = [c for c, ck in x if ck] + out + ([c for c, ck in x if not ck] if not have else [])
+    if _depth < 1 and isinstance(src, str) and _K8S_CUE.search(src[:1 << 18]):
+        # Kubernetes / Helm manifest: a Helm-rendered / Secret-decoded body goes first, else a script body fills a gap
+        have = {c.get("plain") for c in out if c.get("plain")}
+        x = [(c, ck) for c, ck in _k8s_codecs(src) if c["plain"] not in have]
+        out = [c for c, ck in x if ck] + out + ([c for c, ck in x if not ck] if not have else [])
+    if _depth < 1 and isinstance(src, str) and _IAC_CUE.search(src[:1 << 18]):
+        # IaC template (Terraform / CloudFormation / ARM / Bicep / Ansible): a gap, or the full plan ahead of a piece
+        # it extends (a `Fn::Join` / `concat()` / HCL-escaped body reads as its first piece only)
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _iac_codecs(src) if c["plain"] not in have and (not have or any(
+            c["plain"] != p and c["plain"].startswith(p) for p in have))]
+        out = x + out
     if _depth < 1 and not any(c.get("plain") for c in out):
         out = out + _nested_codecs(src)              # inner script carried as an escaped / encoded host string literal
     elif _depth < 1 and _NS_LOSSY.search((src or "")[:1 << 20]):
@@ -1236,7 +1295,7 @@ def _find_codecs_text(src):
         mat = bm.group("mat") if bm else None
         out.append({"id": "batch", "rep": rep, "transform": tr, "key": key, "material": mat,
                     "plain": decode(mat, rep, tr, key)})
-    am = _ANALYSIS_RE.search(src or "")
+    am = _ANALYSIS_RE.search(src or "") or _marker_bare(src or "")
     if am:
         rep = _ANALYSIS_TAG_REP.get(am.group("tag").upper(), am.group("tag").lower())
         dm = re.search(r"descriptor_(\w+)", src)
@@ -1244,6 +1303,8 @@ def _find_codecs_text(src):
         # _fallback, whose transform guesses can turn UTF-16 NULs into a plan-shaped 'v==33||ll..' (known tags unchanged)
         known_tag = am.group("tag").upper() in _ANALYSIS_TAG_REP
         plain = decode(am.group("mat"), rep, "identity") if known_tag else peel_plan(am.group("mat"), am.group("tag"))
+        if plain:                                # a wrapped marker whose first line alone peels to a prefix plan
+            plain = _marker_extended(src, am, plain)
         if plain is None:
             plain = peel_plan(am.group("mat"), am.group("tag")) if known_tag else decode(am.group("mat"), rep, "identity")
             for lit in ([] if plain else _descriptor_literals(src)):
@@ -1309,6 +1370,10 @@ def _descriptor_literals(src, with_id=False):
 # YAML block scalars) and XML elements (`<descriptor_x>..</..>`, `<string name="descriptor_x">`, plist <key>). Only
 # consulted after _descriptor_literals found no plan, so every earlier reading is unchanged.
 _XDESC_RE = re.compile(r"""descriptor[_-](?P<id>[\w-]+)["']?""", re.I)
+# D21 GitHub Actions (and its CI siblings: GitLab `variables:`, Azure `- name: X` + `value:`, CircleCI / Drone
+# `environment:`, Buildkite / Tekton `env:`, Bitbucket `export X=..`) bind the descriptor to a bare UPPERCASE
+# `HUNTRESS_DESCRIPTOR` key with no id. Read after every `descriptor_<id>` match, so earlier readings keep priority.
+_HDESC_RE = re.compile(r"""(?<![\w-])HUNTRESS[_-](?P<id>DESCRIPTOR)(?![\w-])["']?""", re.I)
 _XBIND_RE = re.compile(r"""[ \t]*(?::[ \t]*&?(?:'static[ \t]+)?[\w.\[\]<>]+[ \t]*(?==))?(?:[ \t]+-?[A-Za-z_][\w.\[\]]*[ \t]*(?==))?"""
                        r"""[ \t]*(?P<op><<-|<-|:=|=>|->|=|:|,)?[ \t]*""")
 _XML_DESC_RES = (
@@ -1515,10 +1580,37 @@ def _jvm_readings(src, ident, lit, end, out):
             out.append((ident, r))
 
 
+# YAML scalar semantics the raw literal reading above keeps verbatim (target yaml-scalar-carrier-twists): a double-quoted
+# value's escapes (`\x41` `A` `\U0001..` `\n`, `\`-newline folding) and a `!!binary` value's base64 -> bytes (the
+# descriptor text, e.g. dotted FRAG hex). Appended after the raw reading, so an existing plan keeps its place.
+def _yaml_scalar_variants(src, i, op, lit, ident, out):
+    if op != ":" or not lit:
+        return
+    try:
+        pre = ""
+        al = re.match(r"\*([\w-]+)", src[i:i + 80])
+        if al:                                                       # alias: read the anchored node's tag / quoting
+            a = re.search(r"(?<![\w*-])&" + re.escape(al.group(1)) + r"(?=[ \t\r\n])", src)
+            if not a:
+                return
+            i, pre = a.start(), src[src.rfind("\n", 0, a.start()) + 1:a.start()]
+        pm = _YAML_PROPS.match(src, i)
+        props = (re.search(r"(?:!!?[\w:/.-]*[ \t]+)+$", pre) or re.match("", "")).group(0) + (pm.group(0) if pm else "")
+        k = pm.end() if pm else i
+        if src.startswith('"', k) and "\\" in lit:
+            out.append((ident, _ci_ydq(lit)))
+        elif re.search(r"!!binary\b|tag:yaml\.org,2002:binary", props):
+            t = base64.b64decode(re.sub(r"\s+", "", lit), validate=True).decode("ascii")
+            if t.isprintable():
+                out.append((ident, t))
+    except (ValueError, OverflowError, binascii.Error):
+        pass
+
+
 def _descriptor_literals_ext(src, limit=24):
     """(id, literal) of descriptor assignments in the wider syntax set above; concatenated pieces joined."""
     out = []
-    for m in _XDESC_RE.finditer(src or ""):
+    for m in list(_XDESC_RE.finditer(src or "")) + list(_HDESC_RE.finditer(src or ""))[:8]:
         if len(out) >= limit:
             break
         b = _XBIND_RE.match(src, m.end())
@@ -1556,6 +1648,7 @@ def _descriptor_literals_ext(src, limit=24):
         out.append((m.group("id"), "".join(pieces)))
         if "\\\n" in out[-1][1] or "\\\r\n" in out[-1][1]:      # F# "aa\<newline>   bb": backslash-newline + indent dropped
             out.append((m.group("id"), re.sub(r"\\\r?\n[ \t]*", "", out[-1][1])))
+        _yaml_scalar_variants(src, i, op, lit, m.group("id"), out)
         jm = _YAML_JINJA.fullmatch(out[-1][1])                       # Ansible "{{ 'blob' | b64decode }}"
         if jm:
             out.append((m.group("id"), jm.group(2)))
@@ -1783,6 +1876,8 @@ _MARK_CONT_RE = re.compile(r"""^[ \t]*(?:#|//|--|;+|'|REM\b|::|\*|%|!)?[ \t]*([A
 def _marker_continued(src, am):
     """The v=3 marker material with its wrapped continuation lines appended (block comments / =begin / <# #> / YAML
     folded lines): following lines holding one material-charset token after an optional comment leader."""
+    if am.string is not src:
+        return []
     parts, pos = [am.group("mat")], am.end()
     rest = src[pos:pos + (1 << 16)]
     if rest[:1] not in ("\r", "\n"):
@@ -1797,6 +1892,58 @@ def _marker_continued(src, am):
         parts.append(m.group(1))
         variants.append("".join(parts))
     return variants[::-1][:4]
+
+
+# The marker split across several comment lines (target yaml-scalar-carrier-twists): `# HUNTRESS_ANALYSIS_V1:` (or
+# `:<TAG>-`) with the material on the following lines, and a `<TAG>-<material>` whose first line alone peels to a
+# truncated prefix plan. Continuation lines must carry the marker line's own comment leader (`#`, `//`, `;` ..), so
+# code / YAML (`---`, `end`) after a one-line marker never extends it; a one-line marker reads exactly as before.
+_ANALYSIS_BARE_RE = re.compile(r"HUNTRESS_ANALYSIS_V(\d+):(?:([A-Za-z0-9_]+)-)?[ \t]*\r?\n")
+
+
+def _marker_lines(src, start, end):
+    """Material tokens of the comment lines after the marker line [start:end) sharing its leader; [] when none."""
+    ls = src.rfind("\n", 0, start) + 1
+    lead = src[ls:start].strip()
+    if not lead or len(lead) > 4:
+        return []
+    parts = []
+    for line in src[end:end + (1 << 16)].lstrip("\r").split("\n")[1:65]:
+        s = line.strip()
+        m = _MARK_CONT_RE.match(line) if s.startswith(lead) else None
+        if not m or not m.group(1):
+            break
+        parts.append(m.group(1))
+    return parts
+
+
+def _marker_bare(src):
+    """An _ANALYSIS_RE match over the rejoined `HUNTRESS_ANALYSIS_V1:` + continuation-line material, else None."""
+    try:
+        bm = _ANALYSIS_BARE_RE.search(src, 0, 1 << 20)
+        if not bm:
+            return None
+        parts = _marker_lines(src, bm.start(), bm.end() - 1)
+        joined = (bm.group(2) + "-" if bm.group(2) else "") + "".join(parts)
+        return _ANALYSIS_RE.fullmatch("HUNTRESS_ANALYSIS_V%s:%s" % (bm.group(1), joined)) if parts else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _marker_extended(src, am, plain):
+    """The longer plan of a marker wrapped over same-leader comment lines when it extends `plain`; else `plain`."""
+    try:
+        if am.string is not src or src[am.end():am.end() + 1] not in ("\r", "\n"):
+            return plain
+        parts = _marker_lines(src, am.start(), am.end())
+        if not parts:
+            return plain
+        p = peel_plan(am.group("mat") + "".join(parts), am.group("tag"))
+        if p and len(p) >= len(plain) + 8 and p.startswith(plain[:max(8, len(plain) - 8)]):
+            return p
+    except Exception:  # noqa: BLE001
+        pass
+    return plain
 
 # D18 Google Apps Script v=3 fixtures: a bare `// HUNTRESS_ANALYSIS_V1:SPLIT` marker (no `-<material>`) and the material
 # as an array of string-literal chunks, `const X = ["<TAG>-chunk", "chunk", ..].join("")` (TAG = B64/HEX/HB64/FRAG),
@@ -3182,6 +3329,163 @@ def _vba_dir_offsets(d):
     return out
 
 
+# Target nsis-compiled-installer-extract: the BUILT NSIS setup EXE (D22 OutFile `huntress-<8hex>.exe`). The PE overlay
+# holds firstheader (flags, EF BE AD DE, `NullsoftInst`, header_size, archive_size) at a 512-aligned offset, then
+# either non-solid blocks (u32 len, high bit = compressed) or one solid stream (u32 header_size + header + raw blocks).
+# Compressors: raw deflate, LZMA (props 5D + dict u32, optional x86-filter flag byte); NSIS's modified bzip2 -> {}. The header
+# holds 8 block headers (pages, sections, entries, strings, langtables, ...); the string table is UTF-16LE for
+# `Unicode True`, with NSIS 3 codes 1-4 (LANG/SHELL/VAR/SKIP) + CODE_SHORT, Park 0xE000-3, NSIS 2 ANSI 252-255.
+# 7-Zip 26 lists/extracts the files but no longer emits `[NSIS].nsi`. Inno Setup is only detected (use innoextract).
+_NSIS_SIG = b"\xef\xbe\xad\xdeNullsoftInst"
+_NSIS_VARS = {20: "$CMDLINE", 21: "$INSTDIR", 22: "$OUTDIR", 23: "$EXEDIR", 24: "$LANGUAGE"}
+_INNO_SIG = re.compile(rb"Inno Setup Setup Data \((\d+\.\d+\.\d+[^)]{0,16})\)")
+
+
+def _nsis_inflate(c, cap):
+    """Decompress one NSIS stream `c` (format sniffed: LZMA / raw deflate) -> bytes, "" when neither reads it. NSIS
+    bzip2 is a modified stream (1-byte block signatures, no CRCs) that stdlib bz2 cannot read: not supported."""
+    import lzma
+    import zlib
+    tries = []
+    for k in (0, 1):                                          # LZMA props, optionally after the BCJ-x86 flag byte
+        if len(c) > 5 + k and c[k] == 0x5D and (k == 0 or c[0] in (0, 1)):
+            tries.append(("lzma", k))
+    tries.append(("zlib", 0))
+    for kind, k in tries:
+        try:
+            if kind == "lzma":
+                d = lzma.LZMADecompressor(lzma.FORMAT_ALONE).decompress(c[k:k + 5] + b"\xff" * 8 + c[k + 5:], cap)
+            else:
+                d = zlib.decompressobj(-15).decompress(c, cap)
+            if d:
+                return d
+        except (OSError, ValueError, EOFError, lzma.LZMAError, zlib.error):
+            continue
+    return b""
+
+
+def _nsis_string(tab, i, uni, ver):
+    """String at char index `i` of an NSIS string table, escape codes rendered as `$VAR` / `$(LANG_n)` / `$SHELL_n`."""
+    unit, out = (2 if uni else 1), []
+    p = i * unit
+    while p + unit <= len(tab) and len(out) < 8192:
+        c = int.from_bytes(tab[p:p + unit], "little")
+        p += unit
+        if c == 0:
+            break
+        code = (c if ver == 3 and 1 <= c <= 4 else c - 0xE000 + 1 if ver == 1 and 0xE000 <= c <= 0xE003 else
+                256 - c if ver == 2 and c >= 252 else 0)
+        if not code:
+            out.append(chr(c))
+            continue
+        code = {1: 4, 2: 3, 3: 2, 4: 1}[code] if ver == 1 else code   # Park: SKIP E000 VAR E001 SHELL E002 LANG E003
+        if code == 4:                                         # NS_SKIP: next char is literal
+            if p + unit <= len(tab):
+                out.append(chr(int.from_bytes(tab[p:p + unit], "little")))
+                p += unit
+            continue
+        raw = tab[p:p + 2]
+        p += unit if uni else 2
+        if len(raw) < 2:
+            break
+        n = (raw[0] & 0x7F) | (raw[1] & 0x7F) << 7
+        if code == 3:
+            out.append(f"${n}" if n < 10 else f"$R{n - 10}" if n < 20 else _NSIS_VARS.get(n, f"$_{n}_"))
+        elif code == 2:
+            out.append(f"$SHELL_{raw[0]:02x}{raw[1]:02x}")
+        else:
+            out.append(f"$(LSTR_{n})")
+    return "".join(out)
+
+
+def nsis_extract(data, budget=0.6):
+    """Strings and files of a compiled NSIS installer (PE with the NSIS overlay, or the bare overlay) without running
+    it: {"format": "nsis", "unicode", "solid", "strings": [..], "files": [(name, bytes)], "offset"}; an Inno Setup
+    EXE -> {"format": "inno", "version", "unsupported": "use innoextract"}; anything else -> {}. Never raises."""
+    import struct
+    import time
+    end, cap = time.time() + budget, 32 << 20
+    try:
+        data = bytes(data or b"")
+        if b"NullsoftInst" not in data:
+            m = _INNO_SIG.search(data[:64 << 20])
+            return {"format": "inno", "version": m.group(1).decode("latin-1"), "unsupported": "use innoextract"} \
+                if m else {}
+        offs = [m.start() - 4 for m in re.finditer(re.escape(_NSIS_SIG), data) if m.start() >= 4][:16]
+        for off in sorted(offs, key=lambda o: o % 512 != 0):
+            if time.time() > end:
+                break
+            hsize, total = struct.unpack_from("<II", data, off + 20) if off + 28 <= len(data) else (0, 0)
+            if not 0 < hsize < cap:
+                continue
+            arc = data[off + 28:off + max(total, 28) if total > 28 else len(data)]
+            head, blocks, solid = None, b"", False
+            n0 = int.from_bytes(arc[:4], "little")
+            if n0 & 0x80000000 and 0 < (n0 & 0x7FFFFFFF) <= len(arc) - 4:
+                h = _nsis_inflate(arc[4:4 + (n0 & 0x7FFFFFFF)], hsize + 1)
+                if len(h) == hsize:
+                    head, blocks = h, arc[4 + (n0 & 0x7FFFFFFF):]
+            elif 0 < n0 == hsize <= len(arc) - 4:                # stored header
+                head, blocks = arc[4:4 + n0], arc[4 + n0:]
+            if head is None:                                    # solid: one stream, header_size first
+                s = _nsis_inflate(arc, cap)
+                if len(s) >= 4 + hsize and int.from_bytes(s[:4], "little") == hsize:
+                    head, blocks, solid = s[4:4 + hsize], s[4 + hsize:], True
+            if head is None or len(head) < 68:
+                continue
+            bh = [struct.unpack_from("<II", head, 4 + 8 * k) for k in range(8)]
+            s0 = bh[3][0]
+            s1 = min([o for o, _ in bh if o > s0] + [len(head)])
+            tab = head[s0:s1] if 0 < s0 < len(head) else b""
+            if not tab:
+                continue
+            odd = tab[1::2][:4096]
+            uni = len(tab) >= 2 and tab[:2] == b"\0\0" and odd.count(0) > len(odd) * 0.6
+            unit = 2 if uni else 1
+            chars = [int.from_bytes(tab[p:p + unit], "little") for p in range(0, min(len(tab), 1 << 20), unit)]
+            ver = 3 if any(1 <= c <= 4 for c in chars) else 1 if uni and any(0xE000 <= c <= 0xE003 for c in chars) \
+                else 2 if not uni and any(c >= 252 for c in chars) else 3
+            starts, i = [], 1 if chars[:1] == [0] else 0
+            while i < len(chars) and len(starts) < 20000:
+                starts.append(i)
+                while i < len(chars) and chars[i]:
+                    if (ver == 3 and 1 <= chars[i] <= 3) or (ver == 1 and 0xE001 <= chars[i] <= 0xE003) or \
+                            (ver == 2 and 253 <= chars[i] <= 255):
+                        i += 1 if uni else 2                    # skip the coded index (it may hold no NUL)
+                    elif (ver == 3 and chars[i] == 4) or (ver == 1 and chars[i] == 0xE000) or \
+                            (ver == 2 and chars[i] == 252):
+                        i += 1
+                    i += 1
+                i += 1
+            strs = {k: _nsis_string(tab, k, uni, ver) for k in starts}
+            files, seen = [], {}
+            p = 0
+            while p + 4 <= len(blocks) and len(files) < 256 and time.time() < end:
+                n = int.from_bytes(blocks[p:p + 4], "little")
+                ln = n & 0x7FFFFFFF
+                if ln > len(blocks) - p - 4:
+                    break
+                body = blocks[p + 4:p + 4 + ln]
+                body = _nsis_inflate(body, 8 << 20) if n & 0x80000000 and not solid else body
+                seen[p] = len(files)
+                files.append([f"block@{p}", body])
+                p += 4 + ln
+                if not solid and p + 4 >= len(blocks):             # trailing CRC32
+                    break
+            e0, en = bh[2]
+            ents = [struct.unpack_from("<i4xii", head, e0 + 28 * k) for k in range(min(en, 50000))
+                    if e0 + 28 * k + 28 <= len(head)]
+            for ops in ((20,), (18, 19, 21, 22)):                  # EW_EXTRACTFILE (NSIS 3), then version shifts
+                for w, nm, dof in ents:
+                    if w in ops and dof in seen and strs.get(nm) and files[seen[dof]][0].startswith("block@"):
+                        files[seen[dof]][0] = strs[nm].rsplit("\\", 1)[-1]
+            return {"format": "nsis", "unicode": uni, "solid": solid, "offset": off,
+                    "strings": [s for s in strs.values() if s], "files": [tuple(f) for f in files]}
+    except Exception:  # noqa: BLE001 - truncated / impostor installer: no answer
+        return {}
+    return {}
+
+
 def _carrier_blobs(b, name="", depth=0, budget=None):
     """(member name, bytes) of every stream inside a container, recursively (zip / OLE+VBA / gzip / OneNote)."""
     import io
@@ -3223,6 +3527,11 @@ def _carrier_blobs(b, name="", depth=0, budget=None):
                         continue
                 yield from _carrier_blobs(s, f"{name}:{'/'.join(ent)}", depth + 1, budget)
         elif b[:2] == b"MZ" and depth == 0:                    # compiled AHK (Ahk2Exe) / any PE: RT_RCDATA members
+            ns = nsis_extract(b, budget=max(0.05, min(0.5, budget - time.time()))) if b"NullsoftInst" in b else {}
+            if ns.get("format") == "nsis":                      # NSIS overlay: the string table, then the files
+                yield f"{name}#nsis:strings", "\n".join(ns["strings"]).encode("utf-8")
+                for fn, fb in ns["files"][:64]:
+                    yield from _carrier_blobs(fb, f"{name}#nsis:{fn}", depth + 1, budget)
             import pefile
             pe = pefile.PE(data=b, fast_load=True)
             pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"]])
@@ -3244,6 +3553,11 @@ def _carrier_blobs(b, name="", depth=0, budget=None):
                                               budget)
         elif b[:2] == b"\x1f\x8b":
             yield from _carrier_blobs(zlib.decompressobj(31).decompress(b, 1 << 22), name + "|gunzip", depth + 1, budget)
+        elif _is_asar(b):                                # Electron app.asar: its files, package.json `main` first
+            for p, fb in asar_files(b).items():
+                if time.time() > budget:
+                    break
+                yield from _carrier_blobs(fb, f"{name}!/{p}", depth + 1, budget)
         else:
             i = b.find(_ONE_FDSO)
             while 0 <= i and i + 36 <= len(b):
@@ -3300,9 +3614,182 @@ def _carrier_codecs(src, raw, depth=0):
                 if plain:
                     return [{"id": f"carrier@{name}", "rep": "carrier", "transform": "identity", "key": "",
                              "material": tok, "plain": plain}]
+        if raw is not None and depth < 1 and (raw[:4] == b"PK\x03\x04" or raw[:2] == b"MZ"):
+            return _electron_codecs(raw)                # Squirrel Setup.exe / .nupkg chains deeper than the walk above
     except Exception:  # noqa: BLE001 - unknown -> nothing, never an exception
         return []
     return []
+
+
+# ------------------------------------------------------------------------------------- Electron app.asar / Squirrel
+# Target electron-asar-squirrel-route: installer-delivered Electron apps hide their Node JS in resources/app.asar -- a
+# Chromium pickle header (u32 4, u32 header_size, u32 pickle payload size, u32 json_len, JSON `{"files":{name:{offset
+# (string), size, unpacked?, link?} | {"files":{...}}}}`, padded to 4) with the file data at 8 + header_size. Squirrel
+# ships it as Setup.exe (PE resource "DATA"/131 = a zip of Update.exe + RELEASES + <App>-<ver>-full.nupkg) -> the
+# .nupkg (zip) -> lib/net45/<App>.exe + lib/net45/resources/app.asar. asar_files() lists one archive; electron_members()
+# unwraps the whole chain; _electron_codecs() runs the text readers over each member, package.json `main` first.
+# Reached from find_codecs(bytes) (via _carrier_blobs) and from decode(rep=asar|squirrel|nupkg, base64/hex material).
+# Bounded, never raises; a lossy utf-8 text read keeps working when the JSON + JS survived (the header u32s may not).
+_ASAR_HDR = b'{"files":'
+_ASAR_TEXT_EXT = re.compile(r"\.(?:[cm]?js|json|html?|ps1|psm1|bat|cmd|vbs|txt|nuspec|xml|config|sh|py)$|(?:^|/)RELEASES$",
+                            re.I)
+
+
+def _is_asar(b):
+    return len(b) >= 24 and b[:4] == b"\x04\x00\x00\x00" and b.find(_ASAR_HDR, 8, 64) >= 0
+
+
+def asar_files(data, limit=4000):
+    """{path: bytes} of an Electron app.asar (packed members only: `unpacked` / `link` entries live outside it), in
+    header order with package.json's `main` first. {} when `data` is not an asar or is truncated. Never raises."""
+    import json
+    import struct
+    out = {}
+    try:
+        b = bytes(data or b"")
+        if not _is_asar(b):
+            return {}
+        hdr = base = None
+        hs, _ps, jl = struct.unpack_from("<III", b, 4)
+        if 8 + jl <= hs <= len(b) - 8 and b[16:17] == b"{":
+            try:
+                hdr, base = json.loads(b[16:16 + jl].decode("utf-8")), 8 + hs
+            except ValueError:
+                hdr = None
+        if not isinstance(hdr, dict):                   # lossy read: the u32s are mangled, the JSON is intact
+            i = b.find(_ASAR_HDR, 8, 64)
+            t = b[i:i + (16 << 20)].decode("utf-8", "replace")
+            hdr, end = json.JSONDecoder().raw_decode(t)
+            jl = len(t[:end].encode("utf-8"))
+            base = i + jl + (-jl % 4)
+        stack = [("", hdr.get("files") if isinstance(hdr, dict) else None)]
+        while stack and len(out) < limit:
+            pre, node = stack.pop(0)
+            if not isinstance(node, dict):
+                continue
+            for name, ent in list(node.items())[:limit]:
+                if not isinstance(ent, dict):
+                    continue
+                path = f"{pre}{name}"
+                if "files" in ent:
+                    stack.append((path + "/", ent["files"]))
+                elif not ent.get("unpacked") and "link" not in ent:
+                    off, size = int(ent.get("offset", -1)), int(ent.get("size", -1))
+                    if off >= 0 and 0 <= size <= len(b) - base - off:
+                        out[path] = b[base + off:base + off + size]
+        main = None
+        if "package.json" in out:
+            try:
+                main = json.loads(out["package.json"].decode("utf-8-sig")).get("main")
+            except (ValueError, AttributeError):
+                main = None
+        main = re.sub(r"^(?:\./)+", "", str(main or "index.js")).strip("/")
+        for k in (main, main + ".js", main + "/index.js"):
+            if k in out:
+                return {k: out[k], **{p: v for p, v in out.items() if p != k}}
+    except Exception:  # noqa: BLE001 - impostor / truncated archive: whatever parsed so far
+        return out
+    return out
+
+
+def electron_members(data, name="", depth=0, end=None):
+    """[(path, bytes)] of every leaf inside an Electron / Squirrel delivery chain: Setup.exe (PE resources holding a
+    zip or asar) -> zip / .nupkg members -> app.asar files (gzip peeled). Leaves are returned as-is. Never raises."""
+    import io
+    import zlib
+    end = end if end is not None else time.time() + 0.8
+    out = []
+    try:
+        b = bytes(data or b"")
+        if depth > 6 or time.time() > end or len(b) < 8:
+            return [(name, b)] if b else []
+        if _is_asar(b):
+            for p, fb in asar_files(b).items():
+                out += electron_members(fb, f"{name}!/{p}", depth + 1, end)
+            return out or [(name, b)]
+        if b[:4] == b"PK\x03\x04":
+            import zipfile
+            z = zipfile.ZipFile(io.BytesIO(b))
+            for zi in z.infolist()[:400]:
+                if not zi.is_dir() and not zi.flag_bits & 1 and zi.file_size <= (32 << 20) and time.time() < end:
+                    try:
+                        out += electron_members(z.read(zi), f"{name}/{zi.filename}", depth + 1, end)
+                    except Exception:  # noqa: BLE001 - one bad member, keep walking
+                        continue
+            return out or [(name, b)]
+        if b[:2] == b"\x1f\x8b":
+            return electron_members(zlib.decompressobj(31).decompress(b, 32 << 20), name + "|gunzip", depth + 1, end)
+        if b[:2] == b"MZ":
+            import pefile
+            pe = pefile.PE(data=b, fast_load=True)
+            pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"]])
+            for t in getattr(getattr(pe, "DIRECTORY_ENTRY_RESOURCE", None), "entries", [])[:64]:
+                for n in getattr(getattr(t, "directory", None), "entries", [])[:64]:
+                    for lang in getattr(getattr(n, "directory", None), "entries", [])[:8]:
+                        d = getattr(getattr(lang, "data", None), "struct", None)
+                        if d is None or not 0 < d.Size <= (64 << 20) or time.time() > end:
+                            continue
+                        rb = pe.get_data(d.OffsetToData, d.Size)
+                        if rb[:4] == b"PK\x03\x04" or _is_asar(rb) or rb[:2] == b"\x1f\x8b":
+                            tn = str(t.name) if t.name else t.id
+                            out += electron_members(rb, f"{name}#{tn}/{n.name or n.id}", depth + 1, end)
+            return [(name, b)] + out
+    except Exception:  # noqa: BLE001 - truncated / impostor container: keep what was found
+        return out or ([(name, bytes(data))] if isinstance(data, (bytes, bytearray)) else [])
+    return [(name, b)]
+
+
+def _electron_codecs(raw, budget=1.2):
+    """find_codecs-shaped hits from the script members of an Electron / Squirrel chain, or []. Never raises."""
+    try:
+        end = time.time() + budget
+        mem = electron_members(raw, end=end - budget / 3)
+        if len(mem) < 2 and not _is_asar(bytes(raw[:64])):
+            return []
+        texts = []
+        for p, b in mem:
+            if not b or not (_ASAR_TEXT_EXT.search(p) or b"\x00" not in b[:4096]) or b[:2] == b"MZ":
+                continue
+            u = _utf16(b) if b[:2] in (b"\xff\xfe", b"\xfe\xff") else None
+            texts.append((p, u if isinstance(u, str) else (u or b).decode("utf-8-sig", "replace")))
+        for p, t in texts:
+            for c in _find_codecs_text(t):
+                if c.get("plain"):
+                    return [dict(c, id=f"{c['id']}@{p}")]
+        for p, t in texts:
+            if time.time() > end:
+                break
+            for c in find_codecs(t, 2):
+                if c.get("plain"):
+                    return [dict(c, id=f"{c['id']}@{p}")]
+        seen = set()
+        for p, t in texts:
+            for tok in _MAT_TOKEN.findall(t)[:48]:
+                if tok in seen or time.time() > end:
+                    continue
+                seen.add(tok)
+                plain = peel_plan(tok, budget=min(0.15, max(0.02, end - time.time())))
+                if plain:
+                    return [{"id": f"asar@{p}", "rep": "carrier", "transform": "identity", "key": "",
+                             "material": tok, "plain": plain}]
+    except Exception:  # noqa: BLE001 - unknown -> nothing, never an exception
+        return []
+    return []
+
+
+def _electron_decode(material, transform=None, key=None):
+    """decode() route for rep asar / electron_asar / squirrel / nupkg: the material is the container itself (base64,
+    hex, or latin-1 bytes). The plan of its first plan-bearing script member, or None."""
+    try:
+        m = (material or "").strip()
+        for b in (b64(m), hex_bytes(m) if re.fullmatch(r"[0-9a-fA-F\s]+", m) else None, m.encode("latin-1", "ignore")):
+            if b and (_is_asar(b) or b[:4] == b"PK\x03\x04" or b[:2] in (b"MZ", b"\x1f\x8b")):
+                hits = _electron_codecs(b)
+                if hits:
+                    return hits[0]["plain"]
+    except Exception:  # noqa: BLE001
+        return None
+    return None
 
 
 # ------------------------------------------------------------------------------------------------ SaaS / add-in hosts
@@ -3457,12 +3944,14 @@ def _saas_host_codecs(src, raw, depth=0, name=""):
 # find_codecs. Consulted when nothing produced a plan, or when the plan read so far is a prefix (lossy) of its reading.
 
 _JC_CUE = re.compile(r'"(?:cells|nbformat|scripts|tasks|configurations|command|args|(?:postCreate|postStart|postAttach|'
-                     r'onCreate|updateContent|initialize)Command|definition|actions|inputs|preLaunchTask)"\s*:')
+                     r'onCreate|updateContent|initialize)Command|definition|actions|inputs|preLaunchTask|'
+                     r'(?:pre|post)_(?:un)?install|(?:un)?installer)"\s*:')
 _JC_TOKS = re.compile(r'"(?:[^"\\]|\\.)*"|//[^\n]*|/\*.*?\*/|,(?=(?:\s|//[^\n]*|/\*.*?\*/)*[}\]])', re.S)
 _JC_DEVC = ("initializeCommand", "onCreateCommand", "updateContentCommand", "postCreateCommand", "postStartCommand",
             "postAttachCommand")
 _JC_SCRIPT_KEYS = ("preinstall", "install", "postinstall", "prepare", "prepublish", "prepublishOnly", "preuninstall",
                    "postuninstall", "pretest", "test", "start", "build")
+_JC_SCOOP = ("pre_install", "post_install", "installer", "pre_uninstall", "post_uninstall", "uninstaller")
 _JC_MAGIC = {"bash": "bash", "sh": "bash", "zsh": "bash", "script": None, "powershell": "powershell", "pwsh": "powershell",
              "javascript": "javascript", "js": "javascript", "node": "javascript", "perl": "perl", "ruby": "ruby",
              "python": "python", "python3": "python", "python2": "python", "pypy": "python", "cmd": "batch",
@@ -3583,6 +4072,12 @@ def json_scripts(name, data):
                         t = _jc_argv(cv)
                         if t:
                             out.append({"path": f"{path}.{k}{'.' + kk if kk else ''}", "lang": _jc_lang(t), "text": t})
+                for k in _JC_SCOOP:      # Scoop: a PowerShell body as a string or an array of lines (joined)
+                    c = v.get(k)
+                    c = c.get("script") if isinstance(c, dict) and k.endswith("installer") else c
+                    t = "\n".join(x for x in c[:4096] if isinstance(x, str)) if isinstance(c, list) else c
+                    if isinstance(t, str) and t.strip():
+                        out.append({"path": f"{path}.{k}", "lang": "powershell", "text": t})
                 if isinstance(v.get("scripts"), dict):
                     sc = v["scripts"]
                     for k in sorted(sc, key=lambda k: k not in _JC_SCRIPT_KEYS and not k.startswith(("pre", "post"))):
@@ -3644,6 +4139,317 @@ def _json_carrier_codecs(src, raw=None, depth=0, name="", budget=0.6):
                 if plain:
                     return [{"id": f"split@json:{d['path']}", "rep": "split_array", "transform": "identity",
                              "key": "", "material": mat, "plain": plain}]
+    except Exception:  # noqa: BLE001
+        return []
+    return []
+
+
+# ------------------------------------------------------------------------------------- package-manager install manifests
+# Target package-manager-install-manifests (T1195.002 / T1059.001 / T1105): a package manager runs the package's own
+# script or fetches its installer. pkgmgr_scripts() lists them by manager: Chocolatey `.nupkg` tools/chocolatey*.ps1,
+# NuGet tools/install.ps1|init.ps1 + `.nuspec`, Scoop JSON pre_/post_install + installer/uninstaller.script (string or
+# line array, joined) + url, winget YAML InstallerUrl / InstallerType / InstallerSwitches.Custom, Homebrew formula
+# `def install|post_install` + cask `postflight do`, MSIX `.appinstaller` `<MainPackage Uri=>`, ClickOnce `.application`
+# `<deploymentProvider codebase=>`. The plan itself is read by find_codecs (zip carrier / json_scripts route).
+
+_PM_CHOCO = re.compile(r"(?i)(?:^|/)tools/chocolatey(install|beforemodify|uninstall)\.ps1$")
+_PM_NUGET = re.compile(r"(?i)(?:^|/)tools/(install|init|uninstall)\.ps1$")
+_PM_WINGET = re.compile(r"(?m)^[ \t-]*(InstallerUrl|InstallerType|Custom)[ \t]*:[ \t]*(?:[>|][-+]?[ \t]*\r?\n"
+                        r"((?:[ \t]+\S[^\n]*\n?)+)|['\"]?([^'\"\r\n#]*)['\"]?)")
+_PM_RB_DEF = re.compile(r"(?m)^([ \t]*)(def[ \t]+(install|post_install)\b|(postflight|preflight|uninstall_postflight|"
+                        r"uninstall_preflight)[ \t]+do\b)[^\n]*\n")
+_PM_XML_URI = re.compile(r"(?is)<(MainPackage|MainBundle|deploymentProvider|AppInstaller)\b[^>]*?\b(Uri|codebase)"
+                         r"\s*=\s*[\"']([^\"']+)[\"']")
+
+
+def _pm_members(members):
+    items = list(members.items()) if isinstance(members, dict) else list(members or [])
+    out = []
+    for name, data in items[:512]:
+        b = data if isinstance(data, (bytes, bytearray)) else str(data or "").encode("utf-8", "ignore")
+        if bytes(b[:4]) == b"PK\x03\x04":
+            try:
+                import io
+                import zipfile
+                with zipfile.ZipFile(io.BytesIO(bytes(b))) as z:
+                    for zi in z.infolist()[:256]:
+                        if not zi.is_dir() and zi.file_size < (4 << 20):
+                            out.append((f"{name}!{zi.filename}", z.read(zi)))
+            except Exception:  # noqa: BLE001 - truncated / impostor zip
+                pass
+            continue
+        out.append((str(name), bytes(b)))
+    return out
+
+
+def pkgmgr_scripts(members):
+    """Package-manager install hooks -> [{manager, hook, lang, body_or_url}]. `members` = {name: bytes|str} or
+    [(name, data)]; a `.nupkg` / zip member is expanded. [] when nothing is a package manifest. Never raises."""
+    res = []
+    try:
+        for name, b in _pm_members(members):
+            t = (_utf16(b[:4 << 20]) or b[:4 << 20]).decode("utf-8", "ignore").lstrip("\ufeff")
+            inner = name.rsplit("!", 1)[-1].replace("\\", "/")
+            low = inner.lower()
+            m = _PM_CHOCO.search(inner) or _PM_NUGET.search(inner)
+            if m:
+                res.append({"manager": "chocolatey" if m.re is _PM_CHOCO else "nuget", "hook": m.group(1).lower(),
+                            "lang": "powershell", "body_or_url": t})
+                continue
+            if low.endswith(".nuspec") and "<package" in t:
+                for u in re.findall(r"(?is)<(projectUrl|licenseUrl|iconUrl|packageSourceUrl)>\s*([^<\s]+)", t)[:8]:
+                    res.append({"manager": "nuget", "hook": u[0], "lang": "url", "body_or_url": u[1]})
+                continue
+            if low.endswith((".appinstaller", ".application", ".manifest")) or "<AppInstaller" in t[:4096] or \
+                    "<deploymentProvider" in t:
+                for tag, _a, u in _PM_XML_URI.findall(t)[:16]:
+                    res.append({"manager": "clickonce" if tag.lower() == "deploymentprovider" else "msix",
+                                "hook": tag, "lang": "url", "body_or_url": u})
+                continue
+            if t.lstrip()[:1] == "{" and any(f'"{k}"' in t for k in _JC_SCOOP + ("url",)):
+                doc = _jc_load(t)
+                if isinstance(doc, dict) and any(k in doc for k in _JC_SCOOP + ("url", "architecture")):
+                    for k in _JC_SCOOP:
+                        c = doc.get(k)
+                        c = c.get("script") if isinstance(c, dict) and k.endswith("installer") else c
+                        s = "\n".join(x for x in c if isinstance(x, str)) if isinstance(c, list) else c
+                        if isinstance(s, str) and s.strip():
+                            res.append({"manager": "scoop", "hook": k, "lang": "powershell", "body_or_url": s})
+                    archs = [doc] + [a for a in (doc.get("architecture") or {}).values() if isinstance(a, dict)]
+                    for a in archs[:8]:
+                        for u in (a.get("url") if isinstance(a.get("url"), list) else [a.get("url")])[:16]:
+                            if isinstance(u, str) and u:
+                                res.append({"manager": "scoop", "hook": "url", "lang": "url", "body_or_url": u})
+                    continue
+            if re.search(r"(?m)^[ \t]*(?:PackageIdentifier|ManifestType)[ \t]*:", t[:1 << 16]):
+                for k, blk, one in _PM_WINGET.findall(t)[:64]:
+                    v = " ".join(x.strip() for x in blk.splitlines() if x.strip()) if blk else one.strip()
+                    if v:
+                        res.append({"manager": "winget", "hook": k, "lang": "url" if k == "InstallerUrl" else
+                                    ("text" if k == "InstallerType" else "cmd"), "body_or_url": v})
+                continue
+            if re.search(r"(?m)^[ \t]*(?:class[ \t]+\w+[ \t]*<[ \t]*Formula\b|cask[ \t]+['\"])", t[:1 << 16]):
+                mgr = "homebrew-cask" if re.search(r"(?m)^[ \t]*cask[ \t]+['\"]", t[:1 << 16]) else "homebrew"
+                for m in _PM_RB_DEF.finditer(t):
+                    end = re.compile(r"(?m)^" + re.escape(m.group(1)) + r"end\b").search(t, m.end())
+                    res.append({"manager": mgr, "hook": m.group(3) or m.group(4), "lang": "ruby",
+                                "body_or_url": t[m.end():end.start() if end else len(t)]})
+                for u in re.findall(r"(?m)^[ \t]*url[ \t]+['\"]([^'\"]+)", t)[:8]:
+                    res.append({"manager": mgr, "hook": "url", "lang": "url", "body_or_url": u})
+    except Exception:  # noqa: BLE001
+        return res
+    return res
+
+
+# ------------------------------------------------------------------------------------------------ build-manifest hooks
+# Target build-manifest-hooks (supply-chain sibling of the Jenkins / CI hosts): a package or build manifest runs a
+# command at install / build / test / import time -- npm `package.json` lifecycle scripts (json_scripts), node-gyp
+# `binding.gyp` actions, setup.py `cmdclass={'install': ..}` / pyproject `[tool.setuptools.cmdclass]`, `.pth` `import`
+# lines, gemspec `extensions` + extconf.rb, Rust build.rs `Command::new`, Go `//go:generate`, Maven exec-maven-plugin
+# `<executable>` + `<arguments><argument>` / antrun `<exec><arg value=>`, Gradle `commandLine` / `exec {}`, MSBuild
+# `<Target BeforeTargets=..><Exec Command=..>`, NuGet tools/install.ps1, CMake `execute_process` / `add_custom_command`.
+# hooks() lists them; _hook_codecs() reads the argv a manifest splits over XML elements (a pom `<argument>` list is bare
+# element text no literal reader joins) and is consulted only when nothing else read a plan.
+
+_HK_CUE = re.compile(r"<argument>|<executable>|<commandlineArgs>|cmdclass|go:generate|execute_process|"
+                     r"add_custom_command|Command::new|commandLine|<Exec\b|<exec\b|extconf|\.extensions\b|\"action\"|"
+                     r"'action'|^import[ \t]", re.I | re.M)
+_HK_WHEN = {"preinstall": "install", "install": "install", "postinstall": "install", "prepare": "install",
+            "preuninstall": "install", "uninstall": "install", "postuninstall": "install", "test": "test",
+            "pretest": "test", "posttest": "test", "develop": "install", "egg_info": "install", "bdist_wheel": "build",
+            "build_py": "build", "build_ext": "build", "build": "build", "sdist": "build"}
+_HK_SUB = {"powershell": "T1059.001", "applescript": "T1059.002", "batch": "T1059.003", "bash": "T1059.004",
+           "vbscript": "T1059.005", "python": "T1059.006", "javascript": "T1059.007"}
+_HK_DEP = ("npm", "node-gyp", "setuptools", "pth", "gem", "cargo", "go", "nuget")   # dependency manager -> .001
+
+
+def _hk_xml_text(s):
+    import html
+    return html.unescape(re.sub(r"<!\[CDATA\[(.*?)\]\]>", r"\1", s or "", flags=re.S)).strip()
+
+
+def _hk_join(argv):
+    return " ".join(a if a and not re.search(r"\s", a) or '"' in a else f'"{a}"' for a in argv if a)
+
+
+def _hk_strs(body, limit=256):
+    """Quoted string literals of a call / list body, in order ('..', "..", Rust r#".."#)."""
+    out = []
+    for m in re.finditer(r'r(#*)"(.*?)"\1|"((?:[^"\\\n]|\\.)*)"|\'((?:[^\'\\\n]|\\.)*)\'', body or "", re.S):
+        v = m.group(2) if m.group(2) is not None else (m.group(3) if m.group(3) is not None else m.group(4))
+        if m.group(2) is None:
+            v = re.sub(r"\\(.)", lambda e: {"n": "\n", "t": "\t"}.get(e.group(1), e.group(1)), v)
+        out.append(v)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _hk_call_bodies(src, head, limit=64):
+    """Bodies of `head(...)` calls (balanced parentheses, quotes skipped)."""
+    out = []
+    for m in re.finditer(head, src):
+        i, d, q, j = m.end(), 1, None, m.end()
+        while j < len(src) and j - i < (1 << 18):
+            ch = src[j]
+            if q:
+                if ch == "\\":
+                    j += 1
+                elif ch == q:
+                    q = None
+            elif ch in "\"'":
+                q = ch
+            elif ch in "([{":
+                d += 1
+            elif ch in ")]}":
+                d -= 1
+                if d == 0:
+                    break
+            j += 1
+        out.append(src[i:j])
+        if len(out) >= limit:
+            break
+    return out
+
+
+def hooks(name, src):
+    """Install / build / test / import-time hooks of a package or build manifest -> [{hook, when, command, lang,
+    host, attack}] (`attack` = T1195.001 dependency / T1195.002 build supply chain + T1059.x of the command's
+    language). [] when it is none. `src` = text or bytes. Never raises."""
+    out = []
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            b = bytes(src)[:4 << 20]
+            src = (_utf16(b) or b).decode("utf-8", "ignore") if b[:2] in (b"\xff\xfe", b"\xfe\xff") else \
+                b.decode("utf-8", "ignore")
+        src = (src or "")[:1 << 20].lstrip("﻿")
+        nm = (name or "").replace("\\", "/").lower()
+        base = nm.rsplit("/", 1)[-1]
+
+        def add(hook, when, argv, host, lang=None):
+            cmd = argv if isinstance(argv, str) else _hk_join(argv)
+            if cmd and cmd.strip():
+                out.append({"hook": hook, "when": when, "command": cmd.strip(), "lang": lang or _jc_lang(cmd),
+                            "host": host})
+
+        head = src.lstrip()[:1]
+        if head in "{[" and (base in ("package.json", "binding.gyp") or base.endswith((".gyp", ".gypi")) or
+                             re.search(r'["\'](?:scripts|targets|actions)["\']\s*:', src[:1 << 16])):
+            for d in json_scripts(name, src):
+                m = re.search(r"\.scripts\.([\w:.-]+)$", d["path"])
+                if m:
+                    k = m.group(1)
+                    add(k, _HK_WHEN.get(k, _HK_WHEN.get(re.sub(r"^(?:pre|post)", "", k), "build")), d["text"], "npm",
+                        d["lang"] or "bash")
+            for body in _hk_call_bodies(src, r"""["']action["']\s*:\s*\["""):      # gyp: JSON or Python literal
+                add("action", "install", _hk_strs(body), "node-gyp")
+        if re.search(r"<project\b|<Project\b|<target\b", src[:1 << 16]):        # Maven / Ant / MSBuild XML
+            for m in re.finditer(r"(?s)<execution\b.*?</execution>|<plugin\b(?:(?!<execution\b).)*?</plugin>", src):
+                blk = m.group(0)
+                ex = re.search(r"(?s)<executable>(.*?)</executable>", blk)
+                if not ex:
+                    continue
+                argv = [_hk_xml_text(ex.group(1))]
+                argv += [_hk_xml_text(a) for a in re.findall(r"(?s)<argument>(.*?)</argument>", blk)[:256]]
+                cl = re.search(r"(?s)<commandlineArgs>(.*?)</commandlineArgs>", blk)
+                if cl:
+                    argv.append(_hk_xml_text(cl.group(1)))
+                ph = re.search(r"<phase>\s*([\w-]+)\s*</phase>", blk)
+                ph = ph.group(1) if ph else "build"
+                add("exec-maven-plugin:" + ph, "test" if "test" in ph else ("install" if ph in ("install", "deploy")
+                                                                             else "build"), argv, "maven")
+            for m in re.finditer(r"(?s)<exec\b([^>]*?)(/>|>(.*?)</exec>)", src):
+                ex = re.search(r"""\bexecutable\s*=\s*(["'])(.*?)\1""", m.group(1), re.S)
+                if not ex:
+                    continue
+                argv = [_hk_xml_text(ex.group(2))]
+                for a in re.finditer(r"""<arg\b[^>]*?\b(value|line)\s*=\s*(["'])(.*?)\2""", m.group(3) or "", re.S):
+                    argv.append(_hk_xml_text(a.group(3)))
+                add("antrun:exec", "build", argv, "maven" if "<artifactId>maven-antrun" in src else "ant")
+            for m in re.finditer(r"(?s)<Target\b([^>]*)>(.*?)</Target>", src):
+                at = re.search(r"""\b(BeforeTargets|AfterTargets)\s*=\s*(["'])(.*?)\2""", m.group(1))
+                tn = re.search(r"""\bName\s*=\s*(["'])(.*?)\1""", m.group(1))
+                for e in re.finditer(r"""<Exec\b[^>]*?\bCommand\s*=\s*(["'])(.*?)\1""", m.group(2), re.S):
+                    hook = (tn.group(2) if tn else "Target") + (f":{at.group(1)}={at.group(3)}" if at else "")
+                    add(hook, "test" if at and "test" in at.group(3).lower() else "build", _hk_xml_text(e.group(2)),
+                        "msbuild")
+        if base.endswith(".pth"):
+            for ln in src.splitlines()[:4096]:
+                if re.match(r"import[ \t]", ln):
+                    add("pth:import", "import", ln, "pth", "python")
+        if base == "setup.py" or re.search(r"\bcmdclass\s*=", src[:1 << 18]):
+            cm = re.search(r"cmdclass\s*=\s*(?:dict\s*\(|\{)(.*?)[})]", src, re.S)
+            pairs = re.findall(r"""["']?(\w+)["']?\s*[:=]\s*([\w.]+)""", cm.group(1)) if cm else []
+            for k, cls in pairs[:32]:
+                c = re.search(rf"(?ms)^class[ \t]+{re.escape(cls.rsplit('.', 1)[-1])}\b.*?(?=^\S|\Z)", src)
+                body = c.group(0) if c else ""
+                calls = [_hk_strs(b) for b in _hk_call_bodies(
+                    body, r"\b(?:subprocess\.(?:call|run|Popen|check_call|check_output)|os\.(?:system|popen))\s*\(")]
+                for argv in calls or [[cls]]:
+                    add(f"cmdclass:{k}", _HK_WHEN.get(k, "install"), argv, "setuptools", None if calls else "python")
+        if base == "pyproject.toml" or "[tool.setuptools" in src[:1 << 16]:
+            m = re.search(r"(?ms)^\[tool\.setuptools\.cmdclass\][ \t]*\n(.*?)(?=^\[|\Z)", src)
+            for k, v in re.findall(r"""(?m)^[ \t]*["']?(\w+)["']?[ \t]*=[ \t]*["']([^"'\n]+)["']""",
+                                   m.group(1) if m else ""):
+                add(f"cmdclass:{k}", _HK_WHEN.get(k, "install"), v, "setuptools", "python")
+        if base.endswith(".gemspec") or re.search(r"\.extensions\s*=", src[:1 << 16]):
+            for m in re.finditer(r"\.extensions\s*=\s*(?:%w[\[(](.*?)[\])]|\[(.*?)\]|([\"'][^\"']+[\"']))", src, re.S):
+                for e in (m.group(1) or "").split() + _hk_strs(m.group(2) or m.group(3) or ""):
+                    add("gemspec:extensions", "install", e, "gem", "ruby")
+        if base == "extconf.rb" or "mkmf" in src[:4096]:
+            for b in _hk_call_bodies(src, r"(?<![\w.])(?:system|exec|spawn|IO\.popen|Open3\.\w+)\s*\("):
+                add("extconf.rb", "install", _hk_strs(b), "gem")
+            for m in re.finditer(r"`([^`\n]+)`|%x\{([^}\n]+)\}", src):
+                add("extconf.rb", "install", m.group(1) or m.group(2), "gem")
+        if base == "build.rs" or "Command::new" in src:
+            for m in re.finditer(r"Command::new\s*\(", src):
+                tail = src[m.end():m.end() + 8192]
+                end = re.search(r"\.(?:status|output|spawn)\s*\(|;", tail)
+                chain = tail[:end.start() if end else len(tail)]
+                add("build.rs", "build", _hk_strs(chain), "cargo")
+        for m in re.finditer(r"(?m)^//go:generate[ \t]+(.+)$", src):
+            add("go:generate", "build", m.group(1), "go")
+        if base.endswith((".gradle", ".gradle.kts")) or re.search(r"\bcommandLine\b|type\s*:\s*Exec\b", src[:1 << 16]):
+            for m in re.finditer(r"\bcommandLine\b\s*\(?([^\n]*(?:\n[ \t]*[,'\"][^\n]*)*)", src):
+                argv = _hk_strs(m.group(1))
+                add("gradle:exec", "build", argv, "gradle")
+        for b in _hk_call_bodies(src, r"(?i)\b(?:execute_process|add_custom_command|add_custom_target)\s*\("):
+            mm = re.search(r"(?s)\bCOMMAND\b(.*?)(?=\b(?:COMMAND|WORKING_DIRECTORY|OUTPUT_VARIABLE|RESULT_VARIABLE|"
+                           r"OUTPUT|DEPENDS|COMMENT|VERBATIM)\b|\Z)", b)
+            if mm:
+                argv = _hk_strs(mm.group(1)) or mm.group(1).split()
+                add("cmake:COMMAND", "build", argv, "cmake")
+        if re.search(r"(?:^|/)tools/(?:install|init|uninstall)\.ps1$", nm) or base in ("install.ps1", "init.ps1"):
+            add("nuget:" + base, "install", src, "nuget", "powershell")
+        for d in out:
+            lang = d["lang"] or ""
+            d["attack"] = ["T1195.001" if d["host"] in _HK_DEP else "T1195.002"] + \
+                ([_HK_SUB[lang]] if lang in _HK_SUB else [])
+        return out[:512]
+    except Exception:  # noqa: BLE001 - truncated / impostor: what was read so far
+        return out[:512]
+
+
+def _hk_argv_xml(src):
+    """Commands a Maven / Ant XML splits over `<executable>` + `<argument>` / `<arg value=>` elements."""
+    return [d for d in hooks("pom.xml", src) if d["host"] in ("maven", "ant")]
+
+
+def _hook_codecs(src, depth=0, budget=0.4):
+    """find_codecs readings of a manifest hook's argv (joined command first, then each long argument)."""
+    try:
+        end = time.time() + budget
+        for d in _hk_argv_xml(src)[:64]:
+            for t in [d["command"]] + [a for a in re.split(r'\s+(?=(?:[^"]*"[^"]*")*[^"]*$)', d["command"])
+                                       if len(a) >= 16]:
+                if time.time() > end:
+                    return []
+                t = t.strip('"')
+                if t == src:
+                    continue
+                hit = next((c for c in find_codecs(t, depth + 1)[:8] if c.get("plain")), None)
+                if hit:
+                    return [dict(hit, id=f"{hit.get('id')}@hook:{d['hook']}")]
     except Exception:  # noqa: BLE001
         return []
     return []
@@ -13461,3 +14267,4724 @@ def evidence_kind(name, data):
         return _ek("script", "find_codecs")
     except Exception:  # noqa: BLE001 - impostor / truncated member: unknown, never an exception
         return _ek("unknown")
+
+
+# --- gha-trigger-trust-model: GitHub Actions trigger / permission / runner trust boundaries ----------------------------
+# gha_workflow(src) -> {name, triggers, trigger_filters, permissions, jobs:[{id, runs_on, runner, self_hosted, container,
+# environment, permissions, token, needs, if, uses, steps}], secrets_used, untrusted_contexts, privileged_triggers,
+# pwn_request}; None when the text is no GitHub Actions workflow. Pure indentation walk (block + flow YAML subset,
+# _ci_yscalar for scalars); `on:` / 'on': / true: all name the trigger key (PyYAML 1.1 reads bare `on` as True).
+_GHA_PRIV = ("pull_request_target", "workflow_run", "issue_comment", "issues", "discussion", "discussion_comment",
+             "pull_request_review_comment", "pull_request_review")
+_GHA_WHO = {   # event -> who can fire it (actor trust), most specific first
+    "pull_request_target": ("any_user", "fork", "external", "untrusted", "public", "anyone", "privileged"),
+    "pull_request": ("any_user", "fork", "external", "untrusted", "contributor", "public", "anyone", "unprivileged"),
+    "pull_request_review": ("any_user", "fork", "untrusted", "public", "anyone"),
+    "pull_request_review_comment": ("any_user", "untrusted", "public", "anyone", "commenter"),
+    "issue_comment": ("any_user", "commenter", "untrusted", "public", "anyone", "external"),
+    "issues": ("any_user", "untrusted", "public", "anyone", "external"),
+    "discussion": ("any_user", "untrusted", "public", "anyone"),
+    "discussion_comment": ("any_user", "commenter", "untrusted", "public", "anyone"),
+    "fork": ("any_user", "public", "anyone"), "watch": ("any_user", "public", "anyone"),
+    "workflow_dispatch": ("write_access", "manual", "maintainer", "collaborator", "repo_writer", "trusted", "operator"),
+    "push": ("write_access", "committer", "collaborator", "maintainer", "trusted"),
+    "release": ("write_access", "maintainer", "trusted"), "create": ("write_access", "trusted"),
+    "delete": ("write_access", "trusted"), "merge_group": ("write_access", "maintainer", "trusted"),
+    "repository_dispatch": ("token_holder", "api", "external_api", "write_access", "pat"),
+    "schedule": ("scheduler", "cron", "system", "github", "nobody", "automatic", "trusted"),
+    "workflow_call": ("caller", "calling_workflow", "inherited", "reusable"),
+    "workflow_run": ("upstream_workflow", "workflow", "chained", "privileged", "untrusted"),
+}
+_GHA_UNTRUSTED = re.compile(
+    r"github\.(?:event\.(?:issue\.(?:title|body)|pull_request\.(?:title|body|head\.(?:ref|label|repo\.default_branch))|"
+    r"comment\.body|review\.body|review_comment\.body|discussion\.(?:title|body)|pages\.[\w*\[\]]+\.page_name|"
+    r"commits\.[\w*\[\]]+\.(?:message|author\.(?:email|name))|head_commit\.(?:message|author\.(?:email|name))|"
+    r"workflow_run\.(?:head_branch|head_commit\.(?:message|author\.(?:email|name)))|inputs\.[\w-]+|"
+    r"client_payload\.[\w.-]+)|head_ref)")
+_GHA_FKEY = re.compile(r"""\s*("[^"]*"|'[^']*'|[^,:{}\[\]]+?)\s*:(?:\s+|(?=[,}]))""")
+
+
+def _gha_flow(s, i=0):
+    """(value, end) of a YAML flow node at s[i] ({...} / [...] / scalar)."""
+    while i < len(s) and s[i] in " \t\n":
+        i += 1
+    if i >= len(s):
+        return None, i
+    c = s[i]
+    if c in "[{":
+        out, i, close = ([] if c == "[" else {}), i + 1, "]" if c == "[" else "}"
+        for _ in range(512):
+            while i < len(s) and s[i] in " \t\n,":
+                i += 1
+            if i >= len(s) or s[i] == close:
+                return out, i + 1
+            if c == "{":
+                m = _GHA_FKEY.match(s, i)
+                if not m:
+                    k, i = _gha_flow(s, i)
+                    out[str(k)] = None
+                    continue
+                k, (v, i) = m.group(1).strip().strip("'\""), _gha_flow(s, m.end())
+                out[k] = v
+            else:
+                v, i = _gha_flow(s, i)
+                out.append(v)
+        return out, i
+    if c in "'\"":
+        e = s.find(c, i + 1)
+        e = len(s) if e < 0 else e
+        return s[i + 1:e], e + 1
+    m = re.compile(r"[^,\]}]*").match(s, i)
+    return m.group(0).strip(), m.end()
+
+
+def _gha_ind(ln):
+    return len(ln) - len(ln.lstrip(" "))
+
+
+def _gha_next(lines, i):
+    while i < len(lines) and (not lines[i].strip() or lines[i].lstrip().startswith("#") or
+                              lines[i].strip() in ("---", "...")):
+        i += 1
+    return i
+
+
+def _gha_node(lines, i, ind, depth=0):
+    """(value, next_line) of the block node whose first line is lines[i] at column `ind`."""
+    i = _gha_next(lines, i)
+    if i >= len(lines) or _gha_ind(lines[i]) != ind or depth > 40:
+        return None, i
+    s = lines[i][ind:]
+    if s == "-" or s.startswith("- ") or s.startswith("-\t"):
+        out = []
+        while i < len(lines) and len(out) < 4096:
+            i = _gha_next(lines, i)
+            if i >= len(lines) or _gha_ind(lines[i]) != ind:
+                break
+            s = lines[i][ind:]
+            if not (s == "-" or s.startswith("- ")):
+                break
+            rest = s[1:].lstrip(" ")
+            if not rest or rest.startswith("#"):
+                j = _gha_next(lines, i + 1)
+                if j < len(lines) and _gha_ind(lines[j]) > ind:
+                    v, i = _gha_node(lines, j, _gha_ind(lines[j]), depth + 1)
+                else:
+                    v, i = None, i + 1
+            elif _CI_YKEY.match(rest) and rest[:1] not in "[{'\"" or re.match(r"""(["'])[^"'\n]*\1\s*:(?:\s|$)""", rest):
+                col = len(s) - len(rest) + ind
+                lines[i] = " " * col + rest
+                v, i = _gha_node(lines, i, col, depth + 1)
+            else:
+                v, i = _gha_scalar(lines, i, rest, ind)
+            out.append(v)
+        return out, i
+    out = {}
+    while i < len(lines) and len(out) < 4096:
+        i = _gha_next(lines, i)
+        if i >= len(lines) or _gha_ind(lines[i]) != ind:
+            break
+        s = lines[i][ind:]
+        m = _CI_YKEY.match(s)
+        if not m or s.startswith("- "):
+            break
+        k = m.group(1).strip()
+        k = k[1:-1] if len(k) > 1 and k[0] == k[-1] and k[0] in "'\"" else k
+        rest = re.sub(r"^(?:[&!][^\s]*\s*)+", "", m.group(2).strip())
+        if not rest or rest.startswith("#"):
+            j = _gha_next(lines, i + 1)
+            if j < len(lines) and (_gha_ind(lines[j]) > ind or
+                                   (_gha_ind(lines[j]) == ind and lines[j][ind:ind + 2] in ("- ", "-"))):
+                v, i = _gha_node(lines, j, _gha_ind(lines[j]), depth + 1)
+            else:
+                v, i = None, i + 1
+        else:
+            v, i = _gha_scalar(lines, i, rest, ind)
+        out[k] = v
+    return out, i
+
+
+def _gha_scalar(lines, i, rest, ind):
+    if rest[:1] in "[{":
+        buf, j = rest, i
+        while buf.count(rest[0]) > buf.count("]" if rest[0] == "[" else "}") and j + 1 < len(lines) and j - i < 200:
+            j += 1
+            buf += "\n" + lines[j]
+        return _gha_flow(re.sub(r"(?m)[ \t]+#.*$", "", buf))[0], j + 1
+    v, _cooked, nxt = _ci_yscalar(lines, i, rest, ind)
+    return v, max(nxt, i + 1)
+
+
+def _gha_yaml(src):
+    lines = src.replace("\t", "  ").replace("\r", "").splitlines()[:20000]
+    i = _gha_next(lines, 0)
+    if i >= len(lines):
+        return None
+    return _gha_node(lines, i, _gha_ind(lines[i]))[0]
+
+
+def _gha_list(v):
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [str(x).strip() for x in v if x is not None and str(x).strip()]
+    if isinstance(v, dict):
+        return [str(x) for x in v]
+    return [x for x in re.split(r"[\s,]+", str(v).strip()) if x] if "\n" not in str(v) else \
+        [x.strip() for x in str(v).splitlines() if x.strip()]
+
+
+def _gha_perms(v):
+    """'write-all' | 'read-all' | 'none' ({}) | {scope: read|write|none} | None (not declared)."""
+    if v is None:
+        return None
+    if isinstance(v, dict):
+        return {str(k): str(x).strip().lower() for k, x in v.items()} or "none"
+    s = str(v).strip().lower()
+    return "none" if s in ("{}", "") else s
+
+
+def _gha_token(p):
+    if p is None:
+        return "default"
+    if isinstance(p, dict):
+        vals = set(p.values())
+        return "write" if "write" in vals else "read" if "read" in vals else "none"
+    return "write" if "write" in p else "read" if "read" in p else "none"
+
+
+def _gha_pstr(p):
+    if p is None:
+        return "default"
+    if isinstance(p, dict):
+        return ",".join("%s:%s" % kv for kv in p.items()) or "none"
+    return p
+
+
+def gha_workflow(src, name=""):
+    """Trust model of a GitHub Actions workflow (see the block comment); None when `src` is not one. Never raises."""
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            src = bytes(src).decode("utf-8", "ignore")
+        src = (src or "")[:1 << 19].lstrip("﻿")
+        if not re.search(r"(?m)^[\"']?jobs[\"']?\s*:", src):
+            return None
+        doc = _gha_yaml(src)
+        if not isinstance(doc, dict) or not isinstance(doc.get("jobs"), dict):
+            return None
+        on = next((doc[k] for k in ("on", "'on'", "true", "True", "\"on\"") if k in doc), None)
+        if on is None and not any(k in doc for k in ("on", "true", "True")):
+            return None
+        filters = {}
+        if isinstance(on, dict):
+            for ev, f in on.items():
+                filters[ev] = f if isinstance(f, (dict, list)) else ({} if f in (None, "") else f)
+        else:
+            for ev in _gha_list(on):
+                filters[ev] = {}
+        triggers = list(filters)
+        wperm = _gha_perms(doc.get("permissions"))
+        jobs = []
+        for jid, j in doc["jobs"].items():
+            if not isinstance(j, dict):
+                continue
+            ro = j.get("runs-on")
+            if isinstance(ro, dict):
+                labels = _gha_list(ro.get("labels")) + (["group:" + str(ro["group"])] if ro.get("group") else [])
+            else:
+                labels = _gha_list(ro)
+            cont = j.get("container")
+            if isinstance(cont, dict):
+                cont = cont.get("image")
+            env_ = j.get("environment")
+            if isinstance(env_, dict):
+                env_ = env_.get("name")
+            selfh = any(lb.lower() == "self-hosted" for lb in labels) or any(
+                lb.startswith("group:") for lb in labels)
+            if j.get("uses") and not labels:
+                runner = "reusable"
+            elif selfh:
+                runner = "self-hosted"
+            elif any("${{" in lb for lb in labels):
+                runner = "expression"
+            else:
+                runner = "github-hosted" if labels else "none"
+            jperm = _gha_perms(j.get("permissions"))
+            eff = jperm if jperm is not None else wperm
+            steps = []
+            for st in j.get("steps") or []:
+                if isinstance(st, dict):
+                    steps.append({k: st.get(k) for k in ("name", "id", "uses", "run", "shell", "with", "env", "if")})
+            needs = _gha_list(j.get("needs"))
+            jobs.append({"id": jid, "name": j.get("name"), "runs_on": ",".join(labels), "labels": labels,
+                         "runner": runner, "self_hosted": selfh, "container": cont, "environment": env_,
+                         "permissions": eff, "job_permissions": jperm, "token": _gha_token(eff), "needs": needs,
+                         "if": j.get("if"), "uses": j.get("uses"), "steps": steps,
+                         "secrets": j.get("secrets")})
+        sec = []
+        for m in re.finditer(r"secrets\s*(?:\.\s*([A-Za-z_][\w-]*)|\[\s*['\"]([^'\"]+)['\"]\s*\])", src):
+            s = m.group(1) or m.group(2)
+            if s not in sec:
+                sec.append(s)
+        unt = []
+        for m in _GHA_UNTRUSTED.finditer(src):
+            if m.group(0) not in unt:
+                unt.append(m.group(0))
+        priv = [t for t in triggers if t in _GHA_PRIV]
+        pwn = any(t in ("pull_request_target", "workflow_run") for t in triggers) and bool(re.search(
+            r"github\.event\.(?:pull_request\.head\.(?:sha|ref)|workflow_run\.head_(?:sha|branch))|github\.head_ref|"
+            r"refs/pull/", " ".join(str(s.get("with")) for jb in jobs for s in jb["steps"]
+                                    if s.get("uses") and "checkout" in str(s.get("uses")))))
+        return {"name": doc.get("name"), "file": name, "triggers": triggers, "trigger_filters": filters,
+                "permissions": wperm, "jobs": jobs, "secrets_used": sec, "untrusted_contexts": unt,
+                "privileged_triggers": priv, "pwn_request": pwn}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _gha_job(model, what):
+    jobs = model.get("jobs") or []
+    if not jobs:
+        return None
+    w = (what or "").strip().lower()
+    return next((j for j in jobs if w and w in (str(j["id"]).lower(), str(j.get("name") or "").lower())), None) or \
+        next((j for j in jobs if j["self_hosted"]), None) or jobs[0]
+
+
+def _gha_tokens(model, field, job):
+    """Descriptive labels (best first) for matching an enum by its own spelling."""
+    trig = model["triggers"]
+    if field == "trigger":
+        out = list(trig) + [("manual" if t == "workflow_dispatch" else t) for t in trig]
+        return out + [t.replace("_", "") for t in trig]
+    if field == "who":
+        out = []
+        for t in trig:
+            out += list(_GHA_WHO.get(t, ()))
+        return out
+    if field == "runner":
+        if job is None:
+            return []
+        if job["runner"] == "self-hosted":
+            r = ["self-hosted", "self_hosted", "selfhosted", "persistent", "custom", "on_prem", "private"]
+        elif job["runner"] == "github-hosted":
+            r = ["github-hosted", "github_hosted", "hosted", "ephemeral", "managed", "cloud"]
+        else:
+            r = [job["runner"]]
+        return r + (["container"] if job["container"] else []) + job["labels"]
+    if field == "permissions":
+        p = job["permissions"] if job else model["permissions"]
+        tok = _gha_token(p)
+        return [_gha_pstr(p), tok, tok + "_only" if tok != "none" else "none", tok + "-all",
+                "default" if p is None else "explicit"]
+    if field == "trust":
+        out = []
+        if model["pwn_request"]:
+            out += ["pwn_request", "untrusted_checkout", "fork_checkout", "privileged_untrusted_code"]
+        if model["privileged_triggers"]:
+            out += ["privileged_trigger", "privileged", "base_repo_secrets"] + model["privileged_triggers"]
+        if job and job["runner"] == "self-hosted":
+            out += ["self_hosted_runner", "self-hosted", "persistent_runner"]
+        if job and job["container"]:
+            out += ["container", "job_container"]
+        if job and job["environment"]:
+            out += ["environment", "environment_gate", str(job["environment"])]
+        if any(t in ("pull_request", "issue_comment", "issues") for t in trig):
+            out += ["untrusted_input", "fork"]
+        if "workflow_dispatch" in trig:
+            out += ["manual_dispatch", "maintainer", "write_access", "trusted_actor", "manual"]
+        if job and job["runner"] == "github-hosted":
+            out += ["github_hosted_runner", "github-hosted", "hosted_runner", "ephemeral_runner", "hosted"]
+        return out + _gha_tokens(model, "who", job)
+    return []
+
+
+def gha_answer(model, field, accepted_values=None, what=None):
+    """One value out of gha_workflow(): field (question-id suffix accepted) trigger(s) | trigger_filters | runner |
+    runner_type | self_hosted | trust_boundary | who | permissions | token | container | environment | secrets |
+    untrusted | privileged | pwn_request | jobs | needs | if | name. what = job id/name (default: the self-hosted job, else
+    the first). With accepted_values the answer is the accepted value matching a descriptive label by its own spelling.
+    'none' when the field is absent, None when it cannot answer."""
+    try:
+        if isinstance(model, (str, bytes, bytearray)):
+            model = gha_workflow(model)
+        if not model:
+            return None
+        f = re.sub(r"[^a-z]", "", (field or "").lower())
+        job = _gha_job(model, what)
+        acc = [v for v in (accepted_values or []) if str(v).strip()]
+        norm = lambda s: re.sub(r"[^a-z0-9]", "", str(s).lower())  # noqa: E731
+        kind = next((k for k, hit in (
+            ("filter", "filter" in f), ("untrusted", "untrusted" in f or "injection" in f or "tainted" in f),
+            ("pwn", "pwn" in f), ("privileged", "privileged" in f), ("secret", "secret" in f),
+            ("who", any(x in f for x in ("who", "actor", "caller"))),
+            ("trigger", "trigger" in f or f.endswith(("event", "events", "on")) and "runson" not in f),
+            ("trust", "trust" in f or "boundary" in f),
+            ("runnertype", f.endswith(("runnertype", "hosting", "selfhosted", "runnerkind"))),
+            ("runner", "runner" in f or "runson" in f), ("token", "token" in f or "scope" in f),
+            ("permissions", "perm" in f)) if hit), None) or next(
+            (x for x in ("container", "environment", "needs", "if", "jobs", "name") if f.endswith(x)), f)
+        if acc:
+            labels = _gha_tokens(model, {"runnertype": "runner", "token": "permissions",
+                                         "filter": "trigger"}.get(kind, kind), job)
+            if not labels:
+                labels = [str(gha_answer(model, field, None, what))]
+            for lb in labels:
+                for v in acc:
+                    if norm(v) and norm(v) == norm(lb):
+                        return v
+            for lb in labels:
+                for v in acc:
+                    nv, nl = norm(v), norm(lb)
+                    if len(nl) > 3 and len(nv) > 3 and (nl in nv or nv in nl):
+                        return v
+            return None
+        if kind == "trigger":
+            return ",".join(model["triggers"]) or "none"
+        if kind == "filter":
+            out = []
+            for ev, fl in model["trigger_filters"].items():
+                if isinstance(fl, dict) and fl:
+                    out.append("%s:%s" % (ev, ";".join("%s=%s" % (k, ",".join(_gha_list(v)) if isinstance(v, list)
+                                                                  else v if not isinstance(v, (dict, list)) else
+                                                                  ",".join(_gha_list(v))) for k, v in fl.items())))
+                elif isinstance(fl, list) and fl:
+                    out.append("%s:%s" % (ev, ";".join(
+                        ",".join("%s=%s" % kv for kv in x.items()) if isinstance(x, dict) else str(x) for x in fl)))
+            return "|".join(out) or "none"
+        if kind == "who":
+            return (_gha_tokens(model, "who", job) or ["none"])[0]
+        if job is None and kind in ("runner", "runnertype", "container", "environment", "needs", "if"):
+            return "none"
+        if kind == "runner":
+            return job["runs_on"] or "none"
+        if kind == "runnertype":
+            return ("true" if job["self_hosted"] else "false") if f.endswith("selfhosted") else job["runner"]
+        if kind == "trust":
+            return (_gha_tokens(model, "trust", job) or ["none"])[0]
+        if kind == "permissions":
+            return _gha_pstr(job["permissions"] if job else model["permissions"])
+        if kind == "token":
+            return _gha_token(job["permissions"] if job else model["permissions"])
+        if kind in ("container", "environment", "if"):
+            return str(job[kind]) if job[kind] else "none"
+        if kind == "needs":
+            return ",".join(job["needs"]) or "none"
+        if kind == "secret":
+            return ",".join(model["secrets_used"]) or "none"
+        if kind == "untrusted":
+            return ",".join(model["untrusted_contexts"]) or "none"
+        if kind == "privileged":
+            return ",".join(model["privileged_triggers"]) or "none"
+        if kind == "pwn":
+            return "true" if model["pwn_request"] else "false"
+        if kind == "jobs":
+            return ",".join(j["id"] for j in model["jobs"]) or "none"
+        if kind == "name":
+            return str(model["name"]) if model["name"] else "none"
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _gha_decode(material, transform, key=None):
+    """decode() hook for rep 'gha_workflow': material = workflow text, transform = gha_answer field[@job], key =
+    ','-joined accepted values (optional)."""
+    t = (transform or "trigger").strip()
+    field, _, what = t.partition("@")
+    acc = [x.strip() for x in str(key).split(",")] if key else None
+    return gha_answer(gha_workflow(material), field, acc, what or None)
+
+
+# --- ci-expression-injection-secrets: `${{ }}` / `$CI_*` interpolation into run bodies, secret / token exposure --------
+# ci_expressions(src) -> [{job, step, step_index, field, expr, refs, context_root, untrusted, sink, injectable,
+# env_write, secrets}] one row per `${{ .. }}` (GitHub Actions workflow or composite action.yml) or, for a GitLab CI file,
+# per `$VAR` / `${VAR}` in script / before_script / after_script / variables. sink: run | with.script (github-script) |
+# with | env | if | script (GitLab) | other. injectable: an untrusted root reaches a shell/script sink, or an env value
+# that the step writes to $GITHUB_ENV/$GITHUB_PATH/$GITHUB_OUTPUT (env injection). [] for a workflow without expressions,
+# None for text that is no CI file. ci_expr_answer(src, field, accepted) answers trust-boundary questions.
+_CIX_EVT = re.compile(
+    r"github\.event\.(?:issue|pull_request|comment|review|review_comment|discussion|discussion_comment|pages|commits|"
+    r"head_commit|workflow_run)(?:\.[\w*\[\]-]+)*\.(?:title|body|name|message|label|ref|email|default_branch|head_ref|"
+    r"page_name|head_branch|labels)\b")
+_CIX_WHOLE = re.compile(r"github\.event(?:\.(?:issue|pull_request|comment|review|review_comment|discussion|"
+                        r"discussion_comment|head_commit|commits|pages|workflow_run))?")
+_CIX_REF = re.compile(r"\b(github|secrets|env|inputs|vars|steps|needs|matrix|job|jobs|runner|strategy)"
+                      r"((?:\s*\.\s*[\w*-]+|\s*\[\s*['\"][^'\"]*['\"]\s*\])*)")
+_CIX_GL_UNTRUSTED = {"CI_COMMIT_MESSAGE", "CI_COMMIT_TITLE", "CI_COMMIT_DESCRIPTION", "CI_COMMIT_TAG_MESSAGE",
+                     "CI_COMMIT_BRANCH", "CI_COMMIT_REF_NAME", "CI_COMMIT_TAG", "CI_COMMIT_AUTHOR",
+                     "CI_MERGE_REQUEST_TITLE", "CI_MERGE_REQUEST_DESCRIPTION", "CI_MERGE_REQUEST_SOURCE_BRANCH_NAME",
+                     "CI_MERGE_REQUEST_LABELS", "CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_NAME", "GITLAB_USER_NAME",
+                     "CI_MERGE_REQUEST_SOURCE_BRANCH_SHA"}
+_CIX_GL_SECRET = re.compile(r"^(?:CI_JOB_TOKEN|CI_JOB_JWT(?:_V2)?|CI_REGISTRY_PASSWORD|CI_DEPLOY_PASSWORD|"
+                            r"CI_DEPENDENCY_PROXY_PASSWORD|GITLAB_TOKEN|.*(?:TOKEN|SECRET|PASSW(?:OR)?D|API_?KEY|"
+                            r"PRIVATE_KEY|CREDENTIALS?)\w*)$")
+_CIX_ENVW = re.compile(r">>?\s*[\"']?\$\{?(GITHUB_(?:ENV|OUTPUT|PATH|STEP_SUMMARY))\b")
+_CIX_LEAK = re.compile(r"\b(?:echo|printf|print|curl|wget|tee|cat|nc|ncat|Write-(?:Host|Output)|base64|xxd)\b|>>?\s*\S")
+_CIX_GL_KEYS = ("script", "before_script", "after_script")
+_CIX_GL_RESERVED = {"stages", "variables", "default", "include", "workflow", "image", "services", "cache",
+                    "before_script", "after_script", "types", "pages"}
+
+
+def _cix_untrusted(term, tainted_env=()):
+    t = re.sub(r"\s+", "", term)
+    t = re.sub(r"\[['\"]([^'\"]*)['\"]\]", r".\1", t)
+    if _CIX_EVT.search(t) or _GHA_UNTRUSTED.fullmatch(t) or _GHA_UNTRUSTED.match(t) or _CIX_WHOLE.fullmatch(t):
+        return True
+    return t.startswith("env.") and t[4:].split(".")[0] in tainted_env
+
+
+def _cix_leaky(ln):
+    return "add-mask" not in ln and bool(_CIX_LEAK.search(ln))
+
+
+def _cix_line(text, m):
+    e = text.find("\n", m.end())
+    return text[text.rfind("\n", 0, m.start()) + 1:e if e >= 0 else len(text)]
+
+
+def _cix_text(v):
+    if v is None or isinstance(v, (dict, list)):
+        return ""
+    return str(v)
+
+
+def _cix_gha_rows(job, si, step, field, sink, text, tainted_env, env_write):
+    rows = []
+    for m in re.finditer(r"\$\{\{(.*?)\}\}", text, re.S):
+        inner = m.group(1).strip()
+        refs = [re.sub(r"\s+", "", r.group(0)) for r in _CIX_REF.finditer(re.sub(r"'[^']*'", "''", inner))]
+        unt = [r for r in refs if _cix_untrusted(r, tainted_env)]
+        sec = [r.split(".", 1)[1] if "." in r else r for r in refs if r.startswith("secrets")]
+        sec = [re.sub(r"^\[['\"]|['\"]\]$", "", s) for s in sec]
+        if "github.token" in refs:
+            sec.append("GITHUB_TOKEN")
+        root = (unt or refs or [""])[0].split(".")[0].split("[")[0] or None
+        rows.append({"job": job, "step": step, "step_index": si, "field": field, "expr": inner, "refs": refs,
+                     "context_root": root, "untrusted": bool(unt), "untrusted_refs": unt, "sink": sink,
+                     "injectable": bool(unt) and sink in ("run", "with.script", "script"),
+                     "env_write": env_write, "secrets": sec, "dialect": "gha",
+                     "leaks": bool(sec) and sink in ("run", "with.script") and _cix_leaky(_cix_line(text, m))})
+    return rows
+
+
+def _cix_gha(doc):
+    rows = []
+    wenv = doc.get("env") if isinstance(doc.get("env"), dict) else {}
+    tainted = {k for k, v in wenv.items() if any(_cix_untrusted(r.group(0)) for r in _CIX_REF.finditer(_cix_text(v)))}
+    for k, v in wenv.items():
+        rows += _cix_gha_rows(None, None, None, "env." + str(k), "env", _cix_text(v), tainted, None)
+    if isinstance(doc.get("jobs"), dict):
+        jobs = list(doc["jobs"].items())
+    else:   # composite action.yml
+        runs = doc.get("runs") if isinstance(doc.get("runs"), dict) else {}
+        jobs = [("(action)", {"steps": runs.get("steps") or []})]
+    for jid, j in jobs:
+        if not isinstance(j, dict):
+            continue
+        jenv = j.get("env") if isinstance(j.get("env"), dict) else {}
+        jt = set(tainted) | {k for k, v in jenv.items() if any(_cix_untrusted(r.group(0), tainted)
+                                                               for r in _CIX_REF.finditer(_cix_text(v)))}
+        for k, v in jenv.items():
+            rows += _cix_gha_rows(jid, None, None, "env." + str(k), "env", _cix_text(v), jt, None)
+        for k in ("if", "runs-on", "environment", "container"):
+            rows += _cix_gha_rows(jid, None, None, k, "if" if k == "if" else "other", _cix_text(j.get(k)), jt, None)
+        for si, st in enumerate(j.get("steps") or [] if isinstance(j.get("steps"), list) else []):
+            if not isinstance(st, dict):
+                continue
+            label = str(st.get("name") or st.get("id") or st.get("uses") or "#%d" % (si + 1))
+            run = _cix_text(st.get("run"))
+            ew = ",".join(sorted(set(_CIX_ENVW.findall(run)))) or None
+            senv = st.get("env") if isinstance(st.get("env"), dict) else {}
+            env_rows = []
+            for k, v in senv.items():
+                rr = _cix_gha_rows(jid, si, label, "env." + str(k), "env", _cix_text(v), jt, ew)
+                use = [ln for ln in run.splitlines() if re.search(r"\$\{?%s\b" % re.escape(str(k)), ln)]
+                for r in rr:   # env value echoed into $GITHUB_ENV / $GITHUB_PATH / $GITHUB_OUTPUT: env injection
+                    if r["untrusted"] and any(_CIX_ENVW.search(ln) for ln in use):
+                        r["injectable"] = True
+                    if r["secrets"] and any(_cix_leaky(ln) for ln in use):
+                        r["leaks"] = True
+                env_rows += rr
+            rows += _cix_gha_rows(jid, si, label, "run", "run", run, jt, ew)
+            w = st.get("with") if isinstance(st.get("with"), dict) else {}
+            for k, v in w.items():
+                sk = "with.script" if str(k) == "script" and "github-script" in str(st.get("uses") or "") else "with"
+                rows += _cix_gha_rows(jid, si, label, "with." + str(k), sk, _cix_text(v), jt, ew)
+            rows += env_rows
+            for k in ("if", "name", "uses"):
+                rows += _cix_gha_rows(jid, si, label, k, "if" if k == "if" else "other", _cix_text(st.get(k)), jt, ew)
+    return rows
+
+
+def _cix_gitlab(doc):
+    rows = []
+
+    def scan(job, field, sink, text, si=None):
+        for m in re.finditer(r"\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))", text):
+            n = m.group(1) or m.group(2)
+            ln = _cix_line(text, m)
+            unt = n in _CIX_GL_UNTRUSTED
+            rows.append({"job": job, "step": "%s[%d]" % (field, si) if si is not None else field, "step_index": si,
+                         "field": field, "expr": n, "refs": [n],
+                         "context_root": "predefined" if n.startswith(("CI_", "GITLAB_")) else "variables",
+                         "untrusted": unt, "untrusted_refs": [n] if unt else [], "sink": sink,
+                         "injectable": unt and sink == "script", "env_write": None,
+                         "secrets": [n] if _CIX_GL_SECRET.match(n) else [], "line": ln.strip(), "dialect": "gitlab",
+                         "leaks": sink == "script" and bool(_CIX_GL_SECRET.match(n)) and _cix_leaky(ln)})
+    if isinstance(doc.get("variables"), dict):
+        for k, v in doc["variables"].items():
+            scan(None, "variables." + str(k), "env", _cix_text(v.get("value") if isinstance(v, dict) else v))
+    for jid, j in doc.items():
+        if not isinstance(j, dict) or str(jid) in _CIX_GL_RESERVED or str(jid).startswith("."):
+            if not (isinstance(j, dict) and str(jid).startswith(".") and any(k in j for k in _CIX_GL_KEYS)):
+                continue
+        for key in _CIX_GL_KEYS:
+            v = j.get(key)
+            for si, ln in enumerate(v if isinstance(v, list) else [v] if v is not None else []):
+                if isinstance(ln, list):
+                    ln = "\n".join(_cix_text(x) for x in ln)
+                scan(jid, key, "script", _cix_text(ln), si)
+        if isinstance(j.get("variables"), dict):
+            for k, v in j["variables"].items():
+                scan(jid, "variables." + str(k), "env", _cix_text(v.get("value") if isinstance(v, dict) else v))
+    return rows
+
+
+def ci_expressions(src):
+    """Expression / variable interpolation rows of a CI file (see the block comment). [] when there is none, None when
+    `src` is no GitHub Actions workflow / action.yml / GitLab CI file. Never raises."""
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            src = bytes(src).decode("utf-8", "ignore")
+        src = (src or "")[:1 << 19].lstrip("﻿")
+        doc = _gha_yaml(src) if re.search(r"(?m)^\S[^:\n]*:", src) else None
+        if not isinstance(doc, dict):
+            return None
+        if isinstance(doc.get("jobs"), dict) or (isinstance(doc.get("runs"), dict) and
+                                                 isinstance(doc["runs"].get("steps"), list)):
+            return _cix_gha(doc)
+        if any(isinstance(j, dict) and any(k in j for k in _CIX_GL_KEYS) for j in doc.values()) or \
+                isinstance(doc.get("stages"), list):
+            return _cix_gitlab(doc)
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _cix_join(xs):
+    out = []
+    for x in xs:
+        if x is not None and str(x) not in out:
+            out.append(str(x))
+    return ",".join(out) or "none"
+
+
+def ci_expr_answer(src, field, accepted_values=None, what=None):
+    """One value out of ci_expressions(): field injectable_step | injectable_job | expression | untrusted_context |
+    context_root | sink | secret(s) | leaked_secret | masked | env_injection | env_write | pwn_request | token | technique
+    | count | untrusted_count. what = job id / step name filter. accepted_values -> the accepted spelling. 'none' when the
+    field is absent, None when it cannot answer."""
+    try:
+        text = bytes(src).decode("utf-8", "ignore") if isinstance(src, (bytes, bytearray)) else str(src or "")
+        rows = ci_expressions(text)
+        if rows is None:
+            return None
+        w = (what or "").strip().lower()
+        if w:
+            rows = [r for r in rows if w in (str(r["job"]).lower(), str(r["step"]).lower())] or rows
+        f = re.sub(r"[^a-z]", "", (field or "").lower())
+        inj = [r for r in rows if r["injectable"]]
+        unt = [r for r in rows if r["untrusted"]]
+        leaked = [s for r in rows for s in r["secrets"] if r.get("leaks")]
+        gha = not any(r.get("dialect") == "gitlab" for r in rows)
+        masked = re.findall(r"::add-mask::\s*([^\"'\n]+)", text)
+        ew = [r for r in rows if r.get("env_write")]
+        envinj = [r for r in rows if r["injectable"] and r["sink"] == "env"] or [
+            r for r in rows if r["untrusted"] and r.get("env_write") and r["sink"] in ("run", "script")]
+        kind = next((k for k, hit in (
+            ("envinj", "envinj" in f or ("env" in f and "inject" in f)),
+            ("envwrite", "envwrite" in f or "githubenv" in f or "envfile" in f),
+            ("mask", "mask" in f),
+            ("leak", "leak" in f or "expos" in f or "exfil" in f),
+            ("pwn", "pwn" in f),
+            ("technique", "technique" in f or "attack" in f or "mitre" in f),
+            ("token", "token" in f or "oidc" in f),
+            ("secret", "secret" in f or "credential" in f),
+            ("job", "job" in f and ("inject" in f or "vuln" in f or "unsafe" in f)),
+            ("step", "step" in f), ("sink", "sink" in f),
+            ("root", "root" in f), ("context", "context" in f or "input" in f or "source" in f or "taint" in f),
+            ("count", "count" in f or f.startswith(("num", "n"))),
+            ("expr", "expr" in f or "inject" in f or "interpol" in f)) if hit), "step")
+        if kind == "count":
+            return str(len(unt if ("untrusted" in f or "inject" in f) else rows))
+        if kind == "step":
+            vals = [r["step"] for r in (inj or unt)]
+        elif kind == "job":
+            vals = [r["job"] for r in (inj or unt)]
+        elif kind == "expr":
+            vals = [("$" if r.get("dialect") == "gitlab" else "") + r["expr"] for r in (inj or unt)]
+        elif kind == "context":
+            vals = [u for r in (inj or unt) for u in r["untrusted_refs"]]
+        elif kind == "root":
+            vals = [r["context_root"] for r in (inj or unt or rows)]
+        elif kind == "sink":
+            vals = [r["sink"] for r in (inj or unt)]
+        elif kind == "secret":
+            vals = [s for r in rows for s in r["secrets"]] + (
+                ["GITHUB_TOKEN"] if re.search(r"\bGITHUB_TOKEN\b", text) else [])
+        elif kind == "leak":
+            vals = leaked
+        elif kind == "mask":
+            vals = [re.sub(r"^\$\{\{\s*secrets\.([\w-]+)\s*\}\}$", r"\1", m.strip()) for m in masked]
+        elif kind == "envwrite":
+            vals = [x for r in ew for x in r["env_write"].split(",")]
+        elif kind == "envinj":
+            vals = [r["step"] for r in envinj]
+        elif kind == "pwn":
+            m = gha_workflow(text)
+            return ("true" if m and m["pwn_request"] else "false") if m is not None or not gha else "false"
+        elif kind == "token":
+            vals = re.findall(r"\b(GITHUB_TOKEN|ACTIONS_ID_TOKEN_REQUEST_(?:TOKEN|URL)|CI_JOB_TOKEN|CI_JOB_JWT(?:_V2)?|"
+                              r"github\.token)\b", text) + (["id-token: write"] if re.search(
+                                  r"id-token\s*:\s*write", text) else [])
+        else:   # technique
+            vals = (["T1059.004"] if inj else []) + (
+                ["T1528"] if re.search(r"ACTIONS_ID_TOKEN_REQUEST_|github\.token|GITHUB_TOKEN|CI_JOB_TOKEN", text)
+                and re.search(r"curl|wget|Invoke-WebRequest|fetch\(", text) else []) + (
+                ["T1552.001"] if leaked else [])
+        out = _cix_join(vals)
+        acc = [v for v in (accepted_values or []) if str(v).strip()]
+        if acc:
+            norm = lambda s: re.sub(r"[^a-z0-9]", "", str(s).lower())  # noqa: E731
+            labels = out.split(",") if out != "none" else []
+            for lb in labels:
+                for v in acc:
+                    if norm(v) and norm(v) == norm(lb):
+                        return v
+            for lb in labels:
+                for v in acc:
+                    nv, nl = norm(v), norm(lb)
+                    if len(nl) > 3 and len(nv) > 3 and (nl in nv or nv in nl):
+                        return v
+            return None
+        return out
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _cix_decode(material, transform, key=None):
+    """decode() hook for rep 'ci_expressions': material = CI file text, transform = ci_expr_answer field[@job/step],
+    key = ','-joined accepted values (optional)."""
+    field, _, what = (transform or "injectable_step").strip().partition("@")
+    acc = [x.strip() for x in str(key).split(",")] if key else None
+    return ci_expr_answer(material, field, acc, what or None)
+
+
+# --- github-action-definition-route ---------------------------------------------------------------------------------
+# D21 "follow the static handoff into the next language": where a GitHub action definition / workflow hands control to
+# another language. action_handoffs({member: text}) -> [{from, via, to_lang, body_or_target, resolved}], one row per
+# handoff: action.yml `runs: using: composite` steps (`run` + `shell`), `using: node16|node20|node24` `main/pre/post`
+# JS entries (resolved to a member relative to the action dir), `using: docker` `image: Dockerfile|docker://..` +
+# `entrypoint` / `pre-|post-entrypoint` / `args` (a resolved Dockerfile routes through the Dockerfile build-host
+# reading of find_codecs), workflow steps `uses: ./local/action` / reusable `owner/repo/.github/workflows/x.yml@ref`
+# (`with` / `secrets: inherit` kept), `actions/github-script` `with: script:` (JS body) and `run:` under
+# `shell:` (bash|sh|pwsh|powershell|python|cmd|custom `perl {0}`; `defaults: run: shell:` honoured, windows runners
+# default to pwsh). to_lang uses the v=3 next_language spellings (bash, powershell, batch, python, node, ...). No-op
+# bodies (`:` / `true` / comments) are no handoff. decode(material, rep='action_handoffs', transform) answers from it.
+_AH_EXT = {".sh": "bash", ".bash": "bash", ".ps1": "powershell", ".psm1": "powershell", ".py": "python",
+           ".js": "node", ".cjs": "node", ".mjs": "node", ".ts": "typescript", ".mts": "typescript",
+           ".bat": "batch", ".cmd": "batch", ".vbs": "vbscript", ".pl": "perl", ".rb": "ruby", ".php": "php",
+           ".lua": "lua", ".jse": "jscript", ".wsf": "jscript", ".hta": "hta"}
+_AH_NOOP = re.compile(r"^(?:\s*(?:#[^\n]*|:|true|exit(?:\s+0)?|echo)?\s*(?:\n|$))*\Z")
+
+
+def _ah_norm(p):
+    parts = []
+    for seg in str(p).replace("\\", "/").split("/"):
+        if seg in ("", "."):
+            continue
+        if seg == "..":
+            parts = parts[:-1]
+        else:
+            parts.append(seg)
+    return "/".join(parts)
+
+
+def _ah_resolve(members, base, rel, exts=("",)):
+    """Member name for path `rel` relative to directory `base` (full-path match first, then the longest suffix)."""
+    want = _ah_norm(base + "/" + rel if base else rel)
+    names = {_ah_norm(n): n for n in members}
+    for e in exts:
+        if want + e in names:
+            return names[want + e]
+    best = None
+    for e in exts:
+        w = (want + e).lower()
+        for k, n in names.items():
+            kl = k.lower()
+            if kl == w or w.endswith("/" + kl) or kl.endswith("/" + w):
+                cand = len(kl)
+                if best is None or cand > best[0]:
+                    best = (cand, n)
+    return best[1] if best else None
+
+
+def _ah_lang(shell, default="bash"):
+    s = (shell or "").strip()
+    if not s:
+        return default
+    w = s.split()[0].rsplit("/", 1)[-1].lower()
+    if w in ("cmd", "cmd.exe"):
+        return "batch"
+    if w == "env" and len(s.split()) > 1:
+        return _ah_lang(" ".join(s.split()[1:]), default)
+    return _ci_lang(w, default)
+
+
+def _ah_entry_lang(cmd, args=""):
+    """Language of a docker entrypoint / node entry: interpreter word (sh/pwsh/python3/node) or script extension."""
+    toks = [t for t in re.split(r"[\s,\[\]\"']+", str(cmd or "")) if t]
+    if not toks:
+        return None
+    w = toks[0].rsplit("/", 1)[-1].lower()
+    if w == "env" and len(toks) > 1:
+        w = toks[1].rsplit("/", 1)[-1].lower()
+    ext = re.search(r"(\.[A-Za-z0-9]{1,5})$", w)
+    if ext and ext.group(1) in _AH_EXT:
+        return _AH_EXT[ext.group(1)]
+    lang = _ah_lang(w, None)
+    if lang and lang != w:
+        return lang
+    for t in toks[1:] + [a for a in re.split(r"\s+", str(args or "")) if a]:
+        ext = re.search(r"(\.[A-Za-z0-9]{1,5})$", t.lower())
+        if ext and ext.group(1) in _AH_EXT:
+            return _AH_EXT[ext.group(1)]
+    return lang
+
+
+def _ah_text(v):
+    if isinstance(v, list):
+        return " ".join(str(x) for x in v if x is not None)
+    return None if v is None or isinstance(v, dict) else str(v)
+
+
+def _ah_steps(name, steps, shell_default, members, base, rows):
+    for st in steps if isinstance(steps, list) else []:
+        if not isinstance(st, dict) or len(rows) >= 256:
+            continue
+        uses, run, w = _ah_text(st.get("uses")) or "", st.get("run"), st.get("with")
+        w = w if isinstance(w, dict) else {}
+        if run is not None and not isinstance(run, (dict, list)):
+            body = str(run)
+            if not _AH_NOOP.match(body):
+                rows.append({"from": name, "via": "run", "to_lang": _ah_lang(_ah_text(st.get("shell")), shell_default),
+                             "body_or_target": body, "resolved": None})
+        if not uses:
+            continue
+        ul = uses.strip().lower()
+        if re.match(r"actions/github-script(?:@|$)", ul):
+            body = _ah_text(w.get("script"))
+            if body and not _AH_NOOP.match(body):
+                rows.append({"from": name, "via": "github_script", "to_lang": "node", "body_or_target": body,
+                             "resolved": None})
+        elif ul.startswith("docker://"):
+            rows.append({"from": name, "via": "docker_image", "to_lang": _ah_entry_lang(
+                _ah_text(w.get("entrypoint")), _ah_text(w.get("args"))) or "container",
+                "body_or_target": uses.strip(), "resolved": None})
+        elif re.search(r"(?:^|/)\.github/workflows/[^/@]+\.ya?ml(?:@|$)", ul):
+            path = uses.split("@")[0].strip()
+            local = path.startswith("./")
+            res = _ah_resolve(members, "", path) if local else _ah_resolve(
+                members, "", ".github/workflows/" + path.rsplit("/", 1)[-1])
+            row = {"from": name, "via": "reusable_workflow", "to_lang": "github_actions", "body_or_target": uses.strip(),
+                   "resolved": res if res != name else None}
+            if st.get("secrets") is not None:
+                row["secrets"] = "inherit" if _ah_text(st.get("secrets")) == "inherit" else "explicit"
+            if w:
+                row["with"] = sorted(str(k) for k in w)
+            rows.append(row)
+        elif ul.startswith("./") or ul.startswith("../"):
+            path = uses.split("@")[0].strip()
+            res = _ah_resolve(members, "", path, ("/action.yml", "/action.yaml", ""))
+            kind = None
+            if res is not None and res != name:
+                kind = _ah_using(_gha_yaml(str(members[res])) or {})
+            rows.append({"from": name, "via": "local_action", "to_lang": kind or "github_actions",
+                         "body_or_target": path, "resolved": res if res != name else None})
+
+
+def _ah_using(tree):
+    r = tree.get("runs") if isinstance(tree, dict) else None
+    u = (_ah_text(r.get("using")) or "").strip().lower() if isinstance(r, dict) else ""
+    return "node" if u.startswith("node") else ("composite" if u == "composite" else ("docker" if u == "docker" else None))
+
+
+def action_handoffs(members):
+    """{member name: text} -> [{from, via, to_lang, body_or_target, resolved}] (see the section comment); [] when no
+    member hands off. Never raises."""
+    rows = []
+    try:
+        if isinstance(members, (str, bytes, bytearray)):
+            members = {"action.yml": members}
+        mem = {}
+        for n, t in list((members or {}).items())[:4096]:
+            if isinstance(t, (bytes, bytearray)):
+                t = bytes(t).decode("utf-8", "ignore")
+            if isinstance(t, str):
+                mem[str(n)] = t[:1 << 20].lstrip("﻿")
+        for name, src in mem.items():
+            if not re.search(r"(?m)^[ \t]*(?:runs|jobs|steps)[ \t]*:", src[:1 << 16]):
+                continue
+            tree = _gha_yaml(src)
+            if not isinstance(tree, dict):
+                continue
+            base = _ah_norm(name).rpartition("/")[0]
+            runs = tree.get("runs")
+            if isinstance(runs, dict):
+                using = (_ah_text(runs.get("using")) or "").strip().lower()
+                if using == "composite":
+                    _ah_steps(name, runs.get("steps"), "bash", mem, base, rows)
+                elif using.startswith("node"):
+                    for k in ("pre", "main", "post"):
+                        ent = _ah_text(runs.get(k))
+                        if not ent or not ent.strip():
+                            continue
+                        res = _ah_resolve(mem, base, ent.strip())
+                        rows.append({"from": name, "via": "node_" + k,
+                                     "to_lang": _ah_entry_lang(ent) if _ah_entry_lang(ent) in ("typescript", "node")
+                                     else "node", "body_or_target": ent.strip(), "resolved": res})
+                elif using == "docker":
+                    img = (_ah_text(runs.get("image")) or "").strip()
+                    args = _ah_text(runs.get("args")) or ""
+                    if img.lower().startswith("docker://"):
+                        rows.append({"from": name, "via": "docker_image", "to_lang": "container",
+                                     "body_or_target": img, "resolved": None})
+                    elif img:
+                        rows.append({"from": name, "via": "docker_image", "to_lang": "dockerfile",
+                                     "body_or_target": img, "resolved": _ah_resolve(mem, base, img)})
+                    for k in ("pre-entrypoint", "entrypoint", "post-entrypoint"):
+                        ent = _ah_text(runs.get(k))
+                        if ent and ent.strip():
+                            body = (ent.strip() + " " + args).strip() if k == "entrypoint" else ent.strip()
+                            ext = re.search(r"(?:^|[\s/])([\w.-]+\.[A-Za-z0-9]{1,5})(?:\s|$)", ent)
+                            rows.append({"from": name, "via": "docker_" + k.replace("-", "_"),
+                                         "to_lang": _ah_entry_lang(ent, args) or "container", "body_or_target": body,
+                                         "resolved": _ah_resolve(mem, base, ext.group(1)) if ext else None})
+                continue
+            jobs = tree.get("jobs")
+            if not isinstance(jobs, dict):
+                continue
+            dflt = tree.get("defaults")
+            wshell = _ah_text(((dflt or {}).get("run") or {}).get("shell")) if isinstance(dflt, dict) and \
+                isinstance(dflt.get("run"), dict) else None
+            for job in list(jobs.values())[:256]:
+                if not isinstance(job, dict):
+                    continue
+                jd = job.get("defaults")
+                jshell = _ah_text(jd["run"].get("shell")) if isinstance(jd, dict) and isinstance(jd.get("run"), dict) \
+                    else None
+                ro = (_ah_text(job.get("runs-on")) or "").lower()
+                default = _ah_lang(jshell or wshell, "powershell" if "windows" in ro else "bash")
+                if job.get("uses") is not None:
+                    _ah_steps(name, [{"uses": job.get("uses"), "with": job.get("with"), "secrets": job.get("secrets")}],
+                              default, mem, base, rows)
+                _ah_steps(name, job.get("steps"), default, mem, base, rows)
+    except Exception:  # noqa: BLE001
+        pass
+    return rows
+
+
+def _ah_decode(material, transform=None):
+    """decode() hook for rep 'action_handoffs': material = one workflow / action text or a JSON {member: text};
+    transform = None|'json' (rows as JSON) | '<field>[@<from member>]' (','-joined, e.g. 'to_lang@action.yml')."""
+    import json
+    mem = material
+    if isinstance(material, (bytes, bytearray)):
+        material = bytes(material).decode("utf-8", "ignore")
+    if isinstance(material, str) and material.lstrip()[:1] == "{":
+        try:
+            mem = json.loads(material)
+        except ValueError:
+            mem = material
+    rows = action_handoffs(mem)
+    if not rows:
+        return None
+    t = (transform or "json").strip()
+    if t.lower() in ("json", "rows", "none", "identity"):
+        return json.dumps(rows, sort_keys=True, separators=(",", ":"))
+    field, _, frm = t.partition("@")
+    vals = [str(r.get(field)) for r in rows if r.get(field) is not None and (not frm or r["from"] == frm)]
+    return ",".join(vals) or None
+
+
+# --- git-repo-hooks-route -------------------------------------------------------------------------------------------
+# Repository-level auto-run surfaces (supply-chain persistence next to CI; T1195.002 / T1546 / T1059.x).
+# repo_hooks({member: text}) -> [{surface, trigger, command, lang, interpreter, path, key, pattern, technique, active}]:
+# `.git/hooks/<hook>` and `<core.hooksPath>/<hook>` (surface git_hook; *.sample skipped; shebang -> lang, no shebang
+# -> sh), other `*hooks/<hook>` dirs (hooks_dir), `.git/config` / `.gitconfig` [core] hooksPath / fsmonitor (non-bool)
+# / sshCommand / pager / editor, [filter "x"] clean/smudge/process (+ `.gitattributes` `pat filter=x` -> pattern),
+# [diff "x"] textconv/command, [merge "x"] driver, [alias] x = !cmd; `.husky/<hook>` (husky; `.husky/_/` internals
+# skipped) and package.json `husky.hooks` / `simple-git-hooks`; `.pre-commit-config.yaml` / `.pre-commit-hooks.yaml`
+# hooks[].entry + language (+ stages -> trigger; remote repos -> `repo#id`); lefthook.yml run; `.gitmodules`
+# update=!cmd / url (trigger update|clone); devcontainer.json lifecycle commands and `.vscode/tasks.json`
+# `runOn: folderOpen` tasks (via json_scripts). decode(material, rep='repo_hooks', transform) answers from it.
+_RH_HOOKS = frozenset((
+    "applypatch-msg pre-applypatch post-applypatch pre-commit pre-merge-commit prepare-commit-msg commit-msg "
+    "post-commit pre-rebase post-checkout post-merge pre-push pre-receive update proc-receive post-receive "
+    "post-update reference-transaction push-to-checkout pre-auto-gc post-rewrite sendemail-validate "
+    "fsmonitor-watchman p4-changelist p4-prepare-changelist p4-post-changelist p4-pre-submit post-index-change").split())
+_RH_TECH = {"bash": "T1059.004", "powershell": "T1059.001", "batch": "T1059.003", "python": "T1059.006",
+            "node": "T1059.007", "javascript": "T1059.007", "typescript": "T1059.007", "jscript": "T1059.007",
+            "vbscript": "T1059.005", "perl": "T1059", "ruby": "T1059", "php": "T1059", "lua": "T1059"}
+_RH_PC_LANG = {"python": "python", "python_venv": "python", "node": "node", "system": None, "script": None,
+               "docker": "container", "docker_image": "container", "golang": "go", "rust": "rust", "ruby": "ruby",
+               "perl": "perl", "lua": "lua", "dotnet": "dotnet", "conda": "python", "pygrep": "regex", "fail": None,
+               "r": "r", "swift": "swift", "dart": "dart", "coursier": "java", "haskell": "haskell", "julia": "julia"}
+
+
+def _rh_interp(cmd):
+    """(interpreter basename, lang family) of a shebang line or a command's first word."""
+    s = (cmd or "").strip()
+    if s.startswith("#!"):
+        s = s[2:].strip()
+    s = re.sub(r"^(?:[A-Za-z_]\w*=\S*\s+)+", "", s)                          # FOO=1 cmd
+    ws = re.split(r"[\s\"']+", s.strip("\"'"))
+    w = (ws[0] if ws else "").replace("\\", "/").rsplit("/", 1)[-1].lower()
+    if w == "env":
+        w = next((x.rsplit("/", 1)[-1].lower() for x in ws[1:] if x and not x.startswith("-")), "")
+    w = re.sub(r"\.exe$", "", w)
+    if w in ("npx", "npm", "yarn", "pnpm", "deno", "bun", "node", "nodejs"):
+        return w, "node"
+    fam = {"sh": "bash", "bash": "bash", "zsh": "bash", "dash": "bash", "ksh": "bash", "ash": "bash",
+           "pwsh": "powershell", "powershell": "powershell", "cmd": "batch", "perl": "perl", "ruby": "ruby",
+           "php": "php", "lua": "lua", "wscript": "jscript", "cscript": "jscript", "osascript": "applescript",
+           "docker": "container", "podman": "container"}.get(w)
+    if fam is None and re.match(r"^(?:python[\d.]*|py|pypy3?|uv|pipx)$", w):
+        fam = "python"
+    if fam is None and w:
+        ext = re.search(r"\.[A-Za-z0-9]{1,5}$", w)
+        fam = _AH_EXT.get(ext.group(0)) if ext else None
+    return (w or None), fam
+
+
+def _rh_body(src):
+    lines = (src or "").replace("\r", "").split("\n")
+    sb = lines[0] if lines and lines[0].startswith("#!") else ""
+    body = "\n".join(lines[1:] if sb else lines).strip()
+    return sb, body
+
+
+def _rh_gitconfig(src):
+    """git-config text -> [(section, subsection, key, value)] (keys lower-cased; quotes, escapes, `\\` continuation)."""
+    out, sec, sub = [], "", None
+    text = re.sub(r"\\\r?\n", "", (src or "")[:1 << 20])
+    for raw in text.split("\n")[:20000]:
+        ln = raw.strip()
+        if not ln or ln[0] in "#;":
+            continue
+        m = re.match(r'^\[\s*([A-Za-z0-9.-]+)(?:\s+"((?:[^"\\]|\\.)*)")?\s*\](.*)$', ln)
+        if m:
+            sec, sub = m.group(1).lower(), (re.sub(r"\\(.)", r"\1", m.group(2)) if m.group(2) is not None else None)
+            if sub is None and "." in sec:
+                sec, sub = sec.split(".", 1)
+            ln = m.group(3).strip()
+            if not ln or ln[0] in "#;":
+                continue
+        m = re.match(r"^([A-Za-z][A-Za-z0-9-]*)\s*(?:=\s*(.*))?$", ln)
+        if not m:
+            continue
+        v, val, q = m.group(2), [], False
+        if v is None:
+            out.append((sec, sub, m.group(1).lower(), "true"))
+            continue
+        i = 0
+        while i < len(v):
+            c = v[i]
+            if c == '"':
+                q = not q
+            elif c == "\\" and i + 1 < len(v):
+                i += 1
+                val.append({"n": "\n", "t": "\t", "b": "\b"}.get(v[i], v[i]))
+            elif c in "#;" and not q:
+                break
+            else:
+                val.append(c)
+            i += 1
+        out.append((sec, sub, m.group(1).lower(), "".join(val).strip()))
+    return out
+
+
+def _rh_attrs(src):
+    """.gitattributes text -> [(pattern, attr, value)] for filter= / diff= / merge= bindings."""
+    out = []
+    for ln in (src or "").replace("\r", "").split("\n")[:20000]:
+        ln = ln.strip()
+        if not ln or ln.startswith("#"):
+            continue
+        parts = ln.split()
+        for a in parts[1:]:
+            m = re.match(r"^(filter|diff|merge)=(\S+)$", a)
+            if m:
+                out.append((parts[0], m.group(1), m.group(2)))
+    return out
+
+
+def _rh_row(rows, surface, trigger, command, path, key=None, pattern=None, interp=None, lang=None):
+    if not isinstance(command, str) or not command.strip():
+        return
+    command = command.strip()[:4096]
+    if interp is None and lang is None:
+        interp, lang = _rh_interp(command)
+    rows.append({"surface": surface, "trigger": trigger, "command": command, "lang": lang,
+                 "interpreter": interp, "path": path, "key": key, "pattern": pattern,
+                 "technique": _RH_TECH.get(lang or "")})
+
+
+def _rh_script(rows, surface, trigger, path, src):
+    sb, body = _rh_body(src)
+    if not body or _AH_NOOP.match(body):
+        return
+    interp, lang = _rh_interp(sb) if sb else ("sh", "bash")
+    _rh_row(rows, surface, trigger, body, path, interp=interp, lang=lang or "bash")
+
+
+def repo_hooks(members):
+    """{member name: text} -> repository auto-run rows (see the section comment); [] when none. Never raises."""
+    rows = []
+    try:
+        if isinstance(members, (str, bytes, bytearray)):
+            members = {".git/config": members}
+        mem = {}
+        for n, t in list((members or {}).items())[:4096]:
+            if isinstance(t, (bytes, bytearray)):
+                t = bytes(t).decode("utf-8", "ignore")
+            if isinstance(t, str):
+                mem[_ah_norm(str(n))] = t[:1 << 20].lstrip("﻿")
+        attrs = [a for n, t in mem.items() if n.rsplit("/", 1)[-1] == ".gitattributes" for a in _rh_attrs(t)]
+        hook_dirs = set()
+        cfgs = [n for n in mem if re.search(r"(?:^|/)\.git/config$|(?:^|/)\.?gitconfig$|^config$", n)]
+        for n in cfgs:
+            for sec, sub, k, v in _rh_gitconfig(mem[n]):
+                full = ".".join(x for x in (sec, sub, k) if x)
+                if sec == "core" and k == "hookspath" and v and v != "true":
+                    hook_dirs.add(_ah_norm(v).strip("/"))
+                    rows.append({"surface": "hooks_path", "trigger": "hooksPath", "command": v, "lang": None,
+                                 "interpreter": None, "path": n, "key": "core.hooksPath", "pattern": None,
+                                 "technique": "T1546"})
+                elif sec == "core" and k in ("fsmonitor", "sshcommand", "pager", "editor", "askpass") and \
+                        v.lower() not in ("true", "false", "yes", "no", "on", "off", "1", "0", ""):
+                    nm = {"fsmonitor": "fsmonitor", "sshcommand": "sshCommand", "pager": "pager",
+                          "editor": "editor", "askpass": "askPass"}[k]
+                    _rh_row(rows, nm.lower() if k == "fsmonitor" else "core_" + nm.lower(), nm, v, n, "core." + nm)
+                elif sec == "filter" and sub and k in ("clean", "smudge", "process"):
+                    pats = [p for p, a, x in attrs if a == "filter" and x == sub]
+                    _rh_row(rows, "filter", k, v, n, full, ",".join(pats) or None)
+                elif sec == "diff" and sub and k in ("textconv", "command"):
+                    pats = [p for p, a, x in attrs if a == "diff" and x == sub]
+                    _rh_row(rows, "diff_" + k, k, v, n, full, ",".join(pats) or None)
+                elif sec == "merge" and sub and k == "driver":
+                    pats = [p for p, a, x in attrs if a == "merge" and x == sub]
+                    _rh_row(rows, "merge_driver", "driver", v, n, full, ",".join(pats) or None)
+                elif sec == "alias" and v.startswith("!"):
+                    _rh_row(rows, "alias", "alias." + k, v[1:], n, "alias." + k)
+                elif sec == "submodule" and sub and k == "update" and v.startswith("!"):
+                    _rh_row(rows, "submodule", "update", v[1:], n, full)
+        for n, t in mem.items():
+            d, _, b = n.rpartition("/")
+            low = n.lower()
+            if b in _RH_HOOKS and (d.endswith(".git/hooks") or d == "hooks" and ".git/config" in "".join(cfgs)
+                                   or d in hook_dirs):
+                _rh_script(rows, "git_hook", b, n, t)
+            elif b in _RH_HOOKS and re.search(r"(?:^|/)\.husky$", d):
+                _rh_script(rows, "husky", b, n, t)
+            elif b in _RH_HOOKS and re.search(r"(?:^|/)[.\w-]*hooks?$", d, re.I) and "/.husky/_" not in "/" + n:
+                _rh_script(rows, "hooks_dir", b, n, t)
+            elif b == ".gitmodules":
+                for sec, sub, k, v in _rh_gitconfig(t):
+                    if sec != "submodule" or not sub:
+                        continue
+                    if k == "update" and v.startswith("!"):
+                        _rh_row(rows, "submodule", "update", v[1:], n, f"submodule.{sub}.update")
+                    elif k == "url" and v:
+                        rows.append({"surface": "submodule", "trigger": "clone", "command": v,
+                                     "lang": "container" if v.startswith("ext::") else None, "interpreter": None,
+                                     "path": n, "key": f"submodule.{sub}.url", "pattern": None,
+                                     "technique": "T1195.002"})
+            elif b in (".pre-commit-config.yaml", ".pre-commit-config.yml", ".pre-commit-hooks.yaml"):
+                tree = _gha_yaml(t)
+                repos = tree.get("repos") if isinstance(tree, dict) else [{"repo": "local", "hooks": tree}] \
+                    if isinstance(tree, list) else None
+                dstages = tree.get("default_stages") if isinstance(tree, dict) else None
+                for r in (repos if isinstance(repos, list) else [])[:256]:
+                    if not isinstance(r, dict) or not isinstance(r.get("hooks"), list):
+                        continue
+                    repo = _ah_text(r.get("repo")) or ""
+                    for h in r["hooks"][:256]:
+                        if not isinstance(h, dict):
+                            continue
+                        st = h.get("stages") or dstages or ["pre-commit"]
+                        st = ",".join(str(s) for s in (st if isinstance(st, list) else [st]))
+                        ent = _ah_text(h.get("entry"))
+                        pl = (_ah_text(h.get("language")) or "").strip().lower()
+                        if ent:
+                            interp, fam = _rh_interp(ent)
+                            lang = _RH_PC_LANG.get(pl, pl or None) if pl not in ("system", "script", "") else fam
+                            args = h.get("args")
+                            cmd = ent + (" " + " ".join(str(a) for a in args) if isinstance(args, list) else "")
+                            _rh_row(rows, "pre_commit", st, cmd, n, f"{repo}#{_ah_text(h.get('id')) or ''}",
+                                    _ah_text(h.get("files")), interp, lang or fam)
+                        elif h.get("id") and repo not in ("local", "meta"):
+                            rows.append({"surface": "pre_commit", "trigger": st, "command": f"{repo}#{h['id']}",
+                                         "lang": _RH_PC_LANG.get(pl, pl or None), "interpreter": None, "path": n,
+                                         "key": f"{repo}#{h['id']}", "pattern": None, "technique": "T1195.002"})
+            elif re.match(r"^\.?lefthook(?:-local)?\.ya?ml$", b):
+                tree = _gha_yaml(t)
+                for hk, hv in (tree.items() if isinstance(tree, dict) else []):
+                    if hk not in _RH_HOOKS or not isinstance(hv, dict):
+                        continue
+                    for grp in ("commands", "scripts", "jobs"):
+                        g = hv.get(grp)
+                        for cn, cv in (g.items() if isinstance(g, dict) else enumerate(g or [])
+                                       if isinstance(g, list) else []):
+                            if isinstance(cv, dict):
+                                c = _ah_text(cv.get("run")) or (_ah_text(cv.get("runner")) + " " + str(cn)
+                                                                 if grp == "scripts" and cv.get("runner") else None)
+                                _rh_row(rows, "lefthook", hk, c, n, f"{hk}.{grp}.{cv.get('name', cn)}",
+                                        _ah_text(cv.get("glob")))
+            elif b == "package.json":
+                doc = _jc_load(t)
+                if isinstance(doc, dict):
+                    hs = (doc.get("husky") or {}).get("hooks") if isinstance(doc.get("husky"), dict) else None
+                    for src_, hv in (("husky", hs), ("simple_git_hooks", doc.get("simple-git-hooks"))):
+                        for hk, c in (hv.items() if isinstance(hv, dict) else []):
+                            if hk in _RH_HOOKS and isinstance(c, str):
+                                _rh_row(rows, src_, hk, c, n, f"{src_.replace('_', '-')}.{hk}")
+            elif low.endswith(".json") and ("devcontainer" in low or low.endswith(".vscode/tasks.json")):
+                for d_ in json_scripts(n, t):
+                    p = d_.get("path") or ""
+                    m = re.search(r"\.(%s)(?:\.([\w-]+))?$" % "|".join(_JC_DEVC), p)
+                    if "devcontainer" in low and m:
+                        _rh_row(rows, "devcontainer", m.group(1), d_["text"], n, p[2:])
+                    elif p.endswith(".command[folderOpen]"):
+                        _rh_row(rows, "vscode_task", "folderOpen", d_["text"], n, p[2:-len(".command[folderOpen]")])
+        for r in rows:   # git runs <core.hooksPath>/<hook> instead of .git/hooks/<hook> once hooksPath is set
+            r["active"] = not (r["surface"] == "git_hook" and hook_dirs and r["path"].rpartition("/")[0]
+                               not in hook_dirs)
+    except Exception:  # noqa: BLE001
+        pass
+    return rows
+
+
+def _rh_decode(material, transform=None):
+    """decode() hook for rep 'repo_hooks': material = a JSON {member: text} (or one .git/config text); transform =
+    None|'json' (rows) | '<field>[@<surface|trigger|path>]' (','-joined, e.g. 'command@post-checkout', 'lang@husky')."""
+    import json
+    mem = material
+    if isinstance(material, (bytes, bytearray)):
+        material = bytes(material).decode("utf-8", "ignore")
+    if isinstance(material, str) and material.lstrip()[:1] == "{":
+        try:
+            mem = json.loads(material)
+        except ValueError:
+            mem = material
+    rows = repo_hooks(mem)
+    if not rows:
+        return None
+    t = (transform or "json").strip()
+    if t.lower() in ("json", "rows", "none", "identity"):
+        return json.dumps(rows, sort_keys=True, separators=(",", ":"))
+    field, _, sel = t.partition("@")
+    vals = [str(r.get(field)) for r in rows if r.get(field) is not None and
+            (not sel or sel in (r["surface"], r["trigger"], r["path"], r["key"]))]
+    return ",".join(vals) or None
+
+
+# --- ci-schedule-persistence-model ----------------------------------------------------------------------------------
+# "The job that keeps coming back": schedule / re-trigger persistence across CI, OS and orchestrator descriptors.
+# schedule_entries(name, src) -> [{kind, expr, period_s, target, name, lang, attack, attack_alt, self_trigger}], one row
+# per trigger (GHA schedule cron / workflow_run self-chain / repository_dispatch re-fire, GitLab schedule rules, Azure
+# schedules, K8s CronJob, systemd timer + Restart=, crontab / cron.d / @reboot, launchd plist, Task Scheduler XML +
+# schtasks CLI, WMI MOF filters / interval timers, Run / RunOnce keys). schedule_graph(files) marks workflow_run cycles.
+# persistence_answer(entries, field, accepted_values) picks the recurring row. [] when nothing persists. Never raises.
+_SP_CRON_F = r"(?:\*|\?|[0-9]{1,2}|[A-Za-z]{3})(?:[-/][0-9A-Za-z]{1,3})?(?:,(?:\*|[0-9]{1,2}|[A-Za-z]{3})(?:[-/][0-9A-Za-z]{1,3})?)*"
+_SP_CRON = re.compile(r"(?:%s\s+){4}%s" % (_SP_CRON_F, _SP_CRON_F))
+_SP_CRON_LINE = re.compile(r"^\s*(@(?:reboot|yearly|annually|monthly|weekly|daily|midnight|hourly)|(?:%s[ \t]+){4}%s)"
+                           r"[ \t]+(\S.*)$" % (_SP_CRON_F, _SP_CRON_F))
+_SP_AT = {"@hourly": 3600, "@daily": 86400, "@midnight": 86400, "@weekly": 604800}
+_SP_MON = {m: i + 1 for i, m in enumerate("jan feb mar apr may jun jul aug sep oct nov dec".split())}
+_SP_DOW = {d: i for i, d in enumerate("sun mon tue wed thu fri sat".split())}
+_SP_RUNKEY = re.compile(r"(?i)(?:HKEY_(?:CURRENT_USER|LOCAL_MACHINE)|HK[CL]MU?:?)\\+(?:SOFTWARE\\+)?(?:WOW6432Node\\+)?"
+                        r"Microsoft\\+Windows\\+CurrentVersion\\+(Run(?:Once(?:Ex)?|Services(?:Once)?)?)(?=[\\\]\"'\s]|$)")
+
+
+def _sp_cron_field(f, lo, hi, names=None):
+    out = set()
+    for part in f.lower().split(","):
+        step = 1
+        if "/" in part:
+            part, st = part.split("/", 1)
+            step = int(st)
+            if step <= 0:
+                return None
+        if part in ("*", "?"):
+            a, b = lo, hi
+        else:
+            ab = part.split("-", 1)
+            v = [int(x) if x.isdigit() else (names or {}).get(x) for x in ab]
+            if None in v:
+                return None
+            a, b = (v[0], v[-1]) if len(v) == 2 else (v[0], hi if step > 1 else v[0])
+        if a < lo or b > hi + (1 if hi == 6 else 0) or a > b:
+            return None
+        out.update(x % 7 if hi == 6 else x for x in range(a, b + 1, step))
+    return sorted(out)
+
+
+def _sp_uniform(vals, span):
+    if not vals:
+        return None
+    if len(vals) == 1:
+        return span
+    gaps = {b - a for a, b in zip(vals, vals[1:])} | {span - vals[-1] + vals[0]}
+    return gaps.pop() if len(gaps) == 1 else None
+
+
+def cron_period(expr):
+    """Seconds between fires of a 5-field POSIX cron (or @nickname) when they are evenly spaced, else None."""
+    try:
+        e = (expr or "").strip().lower()
+        if e.startswith("@"):
+            return _SP_AT.get(e)
+        f = e.split()
+        if len(f) != 5:
+            return None
+        mi, hr = _sp_cron_field(f[0], 0, 59), _sp_cron_field(f[1], 0, 23)
+        dom, mon, dow = (_sp_cron_field(f[2], 1, 31), _sp_cron_field(f[3], 1, 12, _SP_MON),
+                         _sp_cron_field(f[4], 0, 6, _SP_DOW))
+        if None in (mi, hr, dom, mon, dow):
+            return None
+        tod = sorted(h * 60 + m for h in hr for m in mi)
+        if len(mon) < 12 or (len(dom) < 31 and len(dow) < 7):
+            return None
+        if len(dom) == 31 and len(dow) == 7:
+            g = _sp_uniform(tod, 1440)
+            return g * 60 if g else None
+        if len(tod) == 1 and len(dow) < 7:
+            g = _sp_uniform(dow, 7)
+            return g * 86400 if g else None
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+_SP_UNITS = {"us": 1e-6, "usec": 1e-6, "ms": 1e-3, "msec": 1e-3, "s": 1, "sec": 1, "second": 1, "seconds": 1, "m": 60,
+             "min": 60, "minute": 60, "minutes": 60, "h": 3600, "hr": 3600, "hour": 3600, "hours": 3600, "d": 86400,
+             "day": 86400, "days": 86400, "w": 604800, "week": 604800, "weeks": 604800}
+
+
+def _sp_timespan(s):
+    """systemd time span ('5min', '1h 30min', '90') -> seconds, or None."""
+    s = (s or "").strip()
+    toks = re.findall(r"(\d+(?:\.\d+)?)\s*([A-Za-z]*)", s)
+    if not toks or re.sub(r"[\d.\sA-Za-z]", "", s):
+        return None
+    tot = 0.0
+    for n, u in toks:
+        if u.lower() not in _SP_UNITS and u:
+            return None
+        tot += float(n) * _SP_UNITS.get(u.lower(), 1)
+    return int(tot) if tot == int(tot) else tot
+
+
+def _sp_oncalendar(s):
+    s = (s or "").strip().lower()
+    nick = {"minutely": 60, "hourly": 3600, "daily": 86400, "weekly": 604800}
+    if s in nick:
+        return nick[s]
+    parts = s.split()
+    if not parts or len(parts) > 3:
+        return None
+    tm = parts[-1] if ":" in parts[-1] else None
+    date = [p for p in parts if p != tm]
+    if any(re.search(r"[a-z]", p) for p in date) or any(p not in ("*-*-*", "*-*") for p in date):
+        return None
+    if tm is None:
+        return 86400 if date else None
+    hms = tm.split(":")
+    if len(hms) == 2:
+        hms.append("0")
+    if len(hms) != 3:
+        return None
+    rng = (24, 60, 60)
+    sizes = []
+    for f, n in zip(hms, rng):
+        vals = _sp_cron_field(f.replace("..", "-"), 0, n - 1)
+        if vals is None:
+            return None
+        sizes.append(vals)
+    secs = sorted(h * 3600 + m * 60 + x for h in sizes[0] for m in sizes[1] for x in sizes[2])
+    return _sp_uniform(secs, 86400)
+
+
+def _sp_iso(s):
+    m = re.fullmatch(r"\s*P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?\s*", s or "")
+    if not m or not any(m.groups()):
+        return None
+    w, d, h, mi, sec = (float(x or 0) for x in m.groups())
+    t = w * 604800 + d * 86400 + h * 3600 + mi * 60 + sec
+    return int(t) if t == int(t) else t
+
+
+def _sp_row(kind, expr, period, target, name, lang, attack, alt=(), self_trigger=False, **kw):
+    r = {"kind": kind, "expr": expr, "period_s": period, "target": (str(target).strip() if target else None),
+         "name": name, "lang": lang, "attack": attack, "attack_alt": list(alt), "self_trigger": bool(self_trigger)}
+    r.update(kw)
+    return r
+
+
+def _sp_text(src):
+    if isinstance(src, (bytes, bytearray)):
+        b = bytes(src)[:1 << 20]
+        if b[:2] in (b"\xff\xfe", b"\xfe\xff"):
+            return b.decode("utf-16", "ignore")
+        if len(b) > 3 and b[1:2] == b"\0" and b[3:4] == b"\0":
+            return b.decode("utf-16-le", "ignore")
+        return b.decode("utf-8", "ignore")
+    return str(src or "")[:1 << 20]
+
+
+_GHA_CI_ALT = ("T1053", "T1098", "T1195.002")
+
+
+def _sp_gha(name, src, rows):
+    m = gha_workflow(src, name)
+    if not m:
+        return None
+    jobs = ",".join(j["id"] for j in m["jobs"]) or None
+    wname = m["name"] or re.sub(r"^.*[\\/]|\.ya?ml$", "", name or "") or None
+    fl = m["trigger_filters"]
+    sch = fl.get("schedule")
+    for it in (sch if isinstance(sch, list) else [sch] if isinstance(sch, dict) else []):
+        c = it.get("cron") if isinstance(it, dict) else None
+        if c:
+            c = str(c).strip()
+            rows.append(_sp_row("gha_schedule", c, cron_period(c), jobs, wname, "github_actions", "T1053",
+                                _GHA_CI_ALT, tz="UTC"))
+    wr = fl.get("workflow_run")
+    if "workflow_run" in fl:
+        wf = _gha_list(wr.get("workflows")) if isinstance(wr, dict) else []
+        ty = _gha_list(wr.get("types")) if isinstance(wr, dict) else []
+        stem = re.sub(r"^.*[\\/]|\.ya?ml$", "", name or "")
+        selfc = any(w.strip() in (str(m["name"] or "\0"), stem, name) for w in wf)
+        rows.append(_sp_row("gha_workflow_run", "workflow_run:%s:%s" % (",".join(wf), ",".join(ty) or "completed"),
+                            None, jobs, wname, "github_actions", "T1053", _GHA_CI_ALT, selfc, upstream=wf,
+                            types=ty))
+    steps = " ".join("%s %s %s" % (s.get("uses") or "", s.get("run") or "", s.get("with") or "")
+                     for j in m["jobs"] for s in j["steps"])
+    refire = re.search(r"/dispatches\b|\bgh\s+workflow\s+run\b|\bgh\s+api\b[^\n]*dispatch|repository-dispatch|"
+                       r"workflow-dispatch|createWorkflowDispatch|createDispatchEvent", steps)
+    for ev in ("repository_dispatch", "workflow_dispatch"):
+        if ev in fl and refire:
+            f = fl.get(ev)
+            ty = _gha_list(f.get("types")) if isinstance(f, dict) else []
+            rows.append(_sp_row("gha_" + ev, "%s:%s" % (ev, ",".join(ty)) if ty else ev, None, jobs, wname,
+                                "github_actions", "T1053", _GHA_CI_ALT, True, call=refire.group(0)))
+    return m
+
+
+def _sp_gitlab(src, rows):
+    lines = src.splitlines()
+    for i, ln in enumerate(lines):
+        if re.search(r"\$\{?CI_PIPELINE_SOURCE\}?\s*==\s*[\"']schedule[\"']", ln) or \
+                (re.match(r"\s*-\s*schedules?\s*$", ln) and re.search(r"^\s*only\s*:", "\n".join(lines[max(0, i - 3):i]),
+                                                                      re.M)):
+            job = next((mm.group(1).strip("\"'") for mm in (re.match(r"^([^\s#-][^:]*):\s*(?:#.*)?$", lines[k])
+                                                           for k in range(i - 1, -1, -1)) if mm), None)
+            cmd = None
+            for k in range(i + 1, min(len(lines), i + 40)):
+                mm = re.match(r"^\s*-\s+(.+)$", lines[k])
+                if re.match(r"^\S", lines[k]):
+                    break
+                if mm and re.search(r"^\s*script\s*:", "\n".join(lines[i:k]), re.M) and "if:" not in mm.group(1):
+                    cmd = mm.group(1).strip().strip("\"'")
+                    break
+            if job == "workflow":
+                job = None
+            rows.append(_sp_row("gitlab_schedule", "$CI_PIPELINE_SOURCE == \"schedule\"", None, job, job, "gitlab_ci",
+                                "T1053", _GHA_CI_ALT, command=cmd))
+
+
+def _sp_azure(src, rows):
+    lines = src.splitlines()
+    for i, ln in enumerate(lines):
+        if not re.match(r"^schedules\s*:", ln):
+            continue
+        for k in range(i + 1, len(lines)):
+            if re.match(r"^\S", lines[k]):
+                break
+            mm = re.match(r"^\s*-\s*cron\s*:\s*[\"']?([^\"'#]+?)[\"']?\s*(?:#.*)?$", lines[k])
+            if mm:
+                c = mm.group(1).strip()
+                dn = None
+                for q in range(k + 1, min(len(lines), k + 12)):
+                    if re.match(r"^\s*-\s", lines[q]) or re.match(r"^\S", lines[q]):
+                        break
+                    dm = re.match(r"^\s*displayName\s*:\s*[\"']?(.+?)[\"']?\s*$", lines[q])
+                    if dm:
+                        dn = dm.group(1)
+                tgt = next((mt.group(1) for mt in re.finditer(r"(?m)^\s*-\s*(?:job|stage|deployment)\s*:\s*(\S+)", src)),
+                           None) or next((mt.group(1).strip() for mt in re.finditer(
+                               r"(?m)^\s*-\s*(?:script|bash|pwsh|powershell)\s*:\s*(.+)$", src)), None)
+                rows.append(_sp_row("azure_schedule", c, cron_period(c), tgt, dn, "azure_pipelines", "T1053",
+                                    _GHA_CI_ALT, tz="UTC"))
+
+
+def _sp_k8s(src, rows):
+    for doc in re.split(r"(?m)^---[^\n]*$", src):
+        if not re.search(r"(?m)^kind\s*:\s*[\"']?CronJob[\"']?\s*$", doc):
+            continue
+        sm = re.search(r"(?m)^\s+schedule\s*:\s*[\"']?([^\"'#\n]+?)[\"']?\s*(?:#.*)?$", doc)
+        if not sm:
+            continue
+        c = sm.group(1).strip()
+        nm = re.search(r"(?ms)^metadata\s*:\s*\n(?:\s+.*\n)*?\s+name\s*:\s*[\"']?([\w.-]+)", doc)
+        cmd = None
+        cm = re.search(r"(?m)^(\s*)(?:-\s+)?(command|args)\s*:\s*(\[.*\])?\s*$", doc)
+        if cm:
+            if cm.group(3):
+                cmd = " ".join(x.strip().strip("\"'") for x in cm.group(3)[1:-1].split(",") if x.strip())
+            else:
+                items = []
+                for ln in doc[cm.end():].splitlines()[1:]:
+                    im = re.match(r"^\s*-\s+(.*)$", ln)
+                    if not im:
+                        break
+                    items.append(im.group(1).strip().strip("\"'"))
+                cmd = " ".join(items) or None
+        img = re.search(r"(?m)^\s*(?:-\s+)?image\s*:\s*[\"']?([^\s\"']+)", doc)
+        tz = re.search(r"(?m)^\s+timeZone\s*:\s*[\"']?([^\"'\s]+)", doc)
+        rows.append(_sp_row("k8s_cronjob", c, cron_period(c) if not c.startswith("CRON_TZ") else None,
+                            cmd or (img.group(1) if img else None), nm.group(1) if nm else None, "kubernetes",
+                            "T1053.007", ("T1053", "T1610"), image=img.group(1) if img else None,
+                            tz=tz.group(1) if tz else "controller-local"))
+
+
+def _sp_ini(src):
+    secs, cur = {}, None
+    for ln in src.splitlines():
+        s = ln.strip()
+        if not s or s[0] in "#;":
+            continue
+        mm = re.match(r"^\[([^\]]+)\]$", s)
+        if mm:
+            cur = secs.setdefault(mm.group(1).strip(), [])
+        elif cur is not None and "=" in s:
+            k, v = s.split("=", 1)
+            cur.append((k.strip(), v.strip()))
+    return secs
+
+
+def _sp_systemd(name, src, rows):
+    if not re.search(r"(?m)^\s*\[(?:Timer|Service|Unit)\]\s*$", src):
+        return
+    secs = _sp_ini(src)
+    stem = re.sub(r"^.*[\\/]", "", name or "")
+    tm = secs.get("Timer")
+    if tm:
+        unit = next((v for k, v in tm if k == "Unit"), None) or (re.sub(r"\.timer$", ".service", stem) if stem
+                                                                  else None)
+        for k, v in tm:
+            if k == "OnCalendar":
+                p = _sp_oncalendar(v)
+            elif k in ("OnBootSec", "OnStartupSec", "OnUnitActiveSec", "OnUnitInactiveSec", "OnActiveSec"):
+                p = _sp_timespan(v)
+            else:
+                continue
+            rows.append(_sp_row("systemd_timer", "%s=%s" % (k, v), p if k in ("OnCalendar", "OnUnitActiveSec",
+                                                                              "OnUnitInactiveSec") else None,
+                                unit, stem or None, "systemd", "T1053.006", ("T1053",), delay_s=p
+                                if k in ("OnBootSec", "OnStartupSec", "OnActiveSec") else None, key=k))
+    sv = secs.get("Service")
+    if sv:
+        d = dict(sv)
+        rs = (d.get("Restart") or "").lower()
+        if rs in ("always", "on-failure", "on-abnormal", "on-abort", "on-watchdog", "on-success"):
+            rsec = _sp_timespan(d.get("RestartSec") or "0.1")
+            rows.append(_sp_row("systemd_restart", "Restart=%s" % rs, rsec, d.get("ExecStart"), stem or None,
+                                "systemd", "T1543.002", ("T1543",), self_trigger=True, restart=rs))
+
+
+def _sp_crontab(name, src, rows):
+    nm = (name or "").lower()
+    sysfmt = "cron.d" in nm or nm.endswith("/etc/crontab") or nm == "crontab" and False
+    sysfmt = sysfmt or bool(re.search(r"(?m)^\s*(?:SHELL|PATH|MAILTO)=", src)) and bool(
+        re.search(r"(?m)^\s*\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+root\s+\S", src))
+    named = bool(re.search(r"(?:^|[\\/])(?:crontab|cron\.(?:d|daily|hourly)|[\w.-]*\.cron|root|cron)(?:$|[\\/.])", nm))
+    lines = src.splitlines()
+    cands = []
+    for ln in lines:
+        if ln.lstrip().startswith("#"):
+            continue
+        cands.append((ln, False))
+    if re.search(r"crontab|/etc/cron|/var/spool/cron", src):
+        for mm in re.finditer(r"""(?:echo|printf|<<<|cat\s*<<)\s*(?:-e\s+|-n\s+)?(["']?)([^"'\n]+)\1""", src):
+            cands.append((mm.group(2).replace("\\n", "\n").split("\n")[0], True))
+    for ln, emb in cands:
+        mm = _SP_CRON_LINE.match(ln)
+        if not mm:
+            continue
+        expr, rest = re.sub(r"\s+", " ", mm.group(1)), mm.group(2).strip()
+        if not emb and not named and "*" not in expr and not expr.startswith("@"):
+            continue
+        if not (emb or named or sysfmt) and not re.match(r"[/~$.\w\"'(]", rest):
+            continue
+        if not expr.startswith("@") and cron_period(expr) is None and not all(
+                _sp_cron_field(f, 0, 59, {**_SP_MON, **_SP_DOW}) is not None for f in expr.split()):
+            continue
+        user = None
+        if sysfmt:
+            um = re.match(r"([a-z_][\w-]*)\s+(.+)$", rest)
+            if um:
+                user, rest = um.group(1), um.group(2)
+        if not (emb or named or sysfmt) and len([1 for c, _ in cands if _SP_CRON_LINE.match(c)]) < 1:
+            continue
+        rows.append(_sp_row("cron_reboot" if expr == "@reboot" else "cron", expr,
+                            None if expr == "@reboot" else cron_period(expr), rest, name or None, "crontab",
+                            "T1053.003", ("T1053",), user=user, embedded=emb))
+
+
+def _sp_launchd(name, src, raw, rows):
+    import plistlib
+    b = raw if isinstance(raw, (bytes, bytearray)) and bytes(raw[:8]) == b"bplist00" else None
+    if b is None:
+        if not re.search(r"<plist\b", src):
+            return
+        b = src.encode("utf-8")
+    try:
+        d = plistlib.loads(bytes(b))
+    except Exception:  # noqa: BLE001
+        return
+    if not isinstance(d, dict) or not any(k in d for k in ("Label", "ProgramArguments", "Program")):
+        return
+    pa = d.get("ProgramArguments")
+    tgt = " ".join(map(str, pa)) if isinstance(pa, list) else d.get("Program")
+    daemon = "launchdaemons" in (name or "").lower() or "UserName" in d
+    att = "T1543.004" if daemon else "T1543.001"
+    lab = d.get("Label")
+    if isinstance(d.get("StartInterval"), int):
+        rows.append(_sp_row("launchd_interval", "StartInterval=%d" % d["StartInterval"], d["StartInterval"], tgt, lab,
+                            "launchd", att, ("T1543", "T1053")))
+    sci = d.get("StartCalendarInterval")
+    for c in (sci if isinstance(sci, list) else [sci] if isinstance(sci, dict) else []):
+        if not isinstance(c, dict):
+            continue
+        p = 604800 if "Weekday" in c and "Day" not in c and "Month" not in c else None if (
+            "Day" in c or "Month" in c) else 86400 if "Hour" in c else 3600 if "Minute" in c else 60
+        rows.append(_sp_row("launchd_calendar", "StartCalendarInterval=" + ",".join(
+            "%s:%s" % kv for kv in sorted(c.items())), p, tgt, lab, "launchd", att, ("T1543", "T1053")))
+    if d.get("RunAtLoad") is True:
+        rows.append(_sp_row("launchd_runatload", "RunAtLoad=true", None, tgt, lab, "launchd", att, ("T1543",)))
+    ka = d.get("KeepAlive")
+    if ka is True or (isinstance(ka, dict) and ka):
+        rows.append(_sp_row("launchd_keepalive", "KeepAlive=" + ("true" if ka is True else ",".join(
+            "%s:%s" % kv for kv in sorted(ka.items()))), d.get("ThrottleInterval", 10) if ka is True else None,
+                            tgt, lab, "launchd", att, ("T1543",), self_trigger=True))
+
+
+def _sp_schtask_xml(name, src, rows):
+    if not re.search(r"<Task\b[^>]*>", src) or "<Triggers" not in src:
+        return
+    import xml.etree.ElementTree as ET
+    try:
+        x = re.sub(r"^\s*<\?xml[^>]*\?>", "", src.lstrip("﻿"))
+        root = ET.fromstring(x)
+    except Exception:  # noqa: BLE001
+        return
+    for el in root.iter():
+        if isinstance(el.tag, str) and "}" in el.tag:
+            el.tag = el.tag.split("}", 1)[1]
+    ex = root.find(".//Actions/Exec")
+    tgt = None
+    if ex is not None:
+        tgt = " ".join(t for t in ((ex.findtext("Command") or "").strip(), (ex.findtext("Arguments") or "").strip())
+                       if t) or None
+    elif root.find(".//Actions/ComHandler") is not None:
+        tgt = (root.findtext(".//Actions/ComHandler/ClassId") or "").strip() or None
+    nm = (root.findtext("RegistrationInfo/URI") or "").strip() or re.sub(r"^.*[\\/]|\.xml$", "", name or "") or None
+    trg = root.find("Triggers")
+    for t in (list(trg) if trg is not None else []):
+        if not isinstance(t.tag, str) or (t.findtext("Enabled") or "true").strip().lower() == "false":
+            continue
+        rep = (t.findtext("Repetition/Interval") or "").strip()
+        p = _sp_iso(rep) if rep else None
+        if p is None and t.tag == "CalendarTrigger":
+            dI, wI = t.findtext("ScheduleByDay/DaysInterval"), t.findtext("ScheduleByWeek/WeeksInterval")
+            p = int(dI) * 86400 if dI and dI.strip().isdigit() else int(wI) * 604800 if wI and wI.strip().isdigit() \
+                else 86400 if t.find("ScheduleByDay") is not None else None
+        expr = t.tag + ("(Repetition=%s)" % rep if rep else "") + (
+            "(Delay=%s)" % t.findtext("Delay").strip() if t.findtext("Delay") else "")
+        rows.append(_sp_row("schtask_" + re.sub(r"Trigger$", "", t.tag).lower(), expr, p, tgt, nm, "task_scheduler",
+                            "T1053.005", ("T1053",), start=(t.findtext("StartBoundary") or "").strip() or None))
+
+
+_SP_SC = {"minute": 60, "hourly": 3600, "daily": 86400, "weekly": 604800}
+
+
+def _sp_schtasks_cli(name, src, rows):
+    for mm in re.finditer(r"(?i)\bschtasks(?:\.exe)?\s+/create\b([^\r\n]*)", src):
+        a = mm.group(1)
+        g = lambda k: (re.search(r"(?i)/%s\s+(\"[^\"]*\"|'[^']*'|\S+)" % k, a) or [None, None])[1]  # noqa: E731
+        sc, mo, tn, tr = g("sc"), g("mo"), g("tn"), g("tr")
+        if not sc:
+            continue
+        sc = sc.strip("\"'").lower()
+        n = int(mo.strip("\"'")) if mo and mo.strip("\"'").isdigit() else 1
+        rows.append(_sp_row("schtasks_cli", "/sc %s%s" % (sc, " /mo %d" % n if mo else ""),
+                            _SP_SC[sc] * n if sc in _SP_SC else None, tr.strip("\"'") if tr else None,
+                            tn.strip("\"'") if tn else None, "task_scheduler", "T1053.005", ("T1053",)))
+
+
+def _sp_wmi(name, src, rows):
+    if not re.search(r"__EventFilter|__IntervalTimerInstruction|__AbsoluteTimerInstruction", src):
+        return
+    cons = re.search(r"(?is)(?:CommandLineTemplate|ExecutablePath|ScriptText)\s*=\s*\"((?:[^\"\\]|\\.)*)\"", src)
+    tgt = cons.group(1).replace('\\"', '"').replace("\\\\", "\\") if cons else None
+    timers = {}
+    for mm in re.finditer(r"(?is)__IntervalTimerInstruction\b(.{0,400}?)(?:\}|$)", src):
+        body = mm.group(1)
+        tid = re.search(r"(?i)TimerId\s*=\s*\"([^\"]*)\"", body)
+        iv = re.search(r"(?i)IntervalBetweenEvents\s*=\s*(\d+)", body)
+        if iv:
+            p = int(iv.group(1)) / 1000.0
+            p = int(p) if p == int(p) else p
+            timers[tid.group(1) if tid else ""] = p
+            rows.append(_sp_row("wmi_interval_timer", "IntervalBetweenEvents=%s" % iv.group(1), p, tgt,
+                                tid.group(1) if tid else None, "wmi", "T1546.003", ("T1546",)))
+    for mm in re.finditer(r"(?is)__EventFilter\b(.{0,1200}?)(?:\n\s*\}|$)", src):
+        body = mm.group(1)
+        q = re.search(r"(?is)Query\s*=\s*\"((?:[^\"\\]|\\.)*)\"", body) or re.search(r"(?is)Query\s*=\s*'([^']*)'",
+                                                                                         body)
+        if not q:
+            continue
+        qs = q.group(1)
+        fn = re.search(r"(?i)\bName\s*=\s*[\"']([^\"']*)[\"']", body)
+        w = re.search(r"(?i)\bWITHIN\s+(\d+(?:\.\d+)?)", qs)
+        tm = re.search(r"(?i)__TimerEvent\b.*?TimerId\s*=\s*['\"]([^'\"]*)", qs)
+        p = timers.get(tm.group(1)) if tm else None
+        if p is None and w:
+            p = float(w.group(1))
+            p = int(p) if p == int(p) else p
+        rows.append(_sp_row("wmi_event_filter", qs, p, tgt, fn.group(1) if fn else None, "wmi", "T1546.003",
+                            ("T1546",), within_s=(float(w.group(1)) if w else None)))
+
+
+def _sp_runkeys(name, src, rows):
+    if not _SP_RUNKEY.search(src):
+        return
+    seen = set()
+
+    def add(sub, vname, data):
+        k = (sub, vname, data)
+        if k in seen:
+            return
+        seen.add(k)
+        rows.append(_sp_row("registry_" + sub.lower(), "\\".join(("Software\\Microsoft\\Windows\\CurrentVersion", sub)),
+                            None, data, vname, "registry", "T1547.001", ("T1547",)))
+    lines = src.splitlines()
+    cur = None
+    for ln in lines:
+        s = ln.strip()
+        if s.startswith("["):
+            mm = _SP_RUNKEY.search(s)
+            cur = mm.group(1) if mm and re.search(r"(?i)\\(Run(?:Once)?(?:Ex|Services(?:Once)?)?)\]\s*$", s) else None
+            continue
+        if cur:
+            vm = re.match(r"^\"((?:[^\"\\]|\\.)*)\"\s*=\s*\"((?:[^\"\\]|\\.)*)\"", s)
+            if vm:
+                add(cur, vm.group(1), vm.group(2).replace("\\\\", "\\").replace('\\"', '"'))
+    for mm in re.finditer(r"(?i)\breg(?:\.exe)?\s+add\s+(\"[^\"]+\"|\S+)([^\r\n]*)", src):
+        km = _SP_RUNKEY.search(mm.group(1))
+        if not km:
+            continue
+        a = mm.group(2)
+        v = re.search(r"(?i)/v\s+(\"[^\"]*\"|\S+)", a)
+        d = re.search(r"(?i)/d\s+(\"(?:[^\"\\]|\\.)*\"|\S+)", a)
+        add(km.group(1), v.group(1).strip("\"") if v else None,
+            d.group(1).strip("\"").replace('\\"', '"') if d else None)
+    for mm in re.finditer(r"(?i)\b(?:New|Set)-ItemProperty\b([^\r\n]*)", src):
+        a = mm.group(1)
+        km = _SP_RUNKEY.search(a)
+        if not km:
+            continue
+        v = re.search(r"(?i)-Name\s+(\"[^\"]*\"|'[^']*'|\S+)", a)
+        d = re.search(r"(?i)-Value\s+(\"[^\"]*\"|'[^']*'|\S+)", a)
+        add(km.group(1), v.group(1).strip("\"'") if v else None, d.group(1).strip("\"'") if d else None)
+    for mm in re.finditer(r"(?i)\.RegWrite\s*\(?\s*\"([^\"]+)\"\s*,\s*\"((?:[^\"]|\"\")*)\"", src):
+        km = _SP_RUNKEY.search(mm.group(1))
+        if km:
+            add(km.group(1), mm.group(1).rsplit("\\", 1)[-1] or None, mm.group(2).replace('""', '"'))
+
+
+def schedule_entries(name, src):
+    """Schedule / re-trigger persistence rows of one descriptor (see the block comment). [] when none. Never raises."""
+    rows = []
+    try:
+        raw = src
+        txt = _sp_text(src).lstrip("﻿")
+        if not txt.strip() and not (isinstance(raw, (bytes, bytearray)) and bytes(raw[:8]) == b"bplist00"):
+            return []
+        m = None
+        if re.search(r"(?m)^[\"']?jobs[\"']?\s*:", txt):
+            m = _sp_gha(name, txt, rows)
+        if m is None:
+            if re.search(r"CI_PIPELINE_SOURCE|^\s*only\s*:", txt, re.M):
+                _sp_gitlab(txt, rows)
+            if re.search(r"(?m)^schedules\s*:", txt):
+                _sp_azure(txt, rows)
+            if re.search(r"(?m)^kind\s*:\s*[\"']?CronJob", txt):
+                _sp_k8s(txt, rows)
+        for fn in (_sp_systemd, _sp_schtask_xml, _sp_schtasks_cli, _sp_wmi, _sp_runkeys):
+            fn(name, txt, rows)
+        _sp_launchd(name, txt, raw, rows)
+        if m is None and not any(r["lang"] in ("kubernetes", "azure_pipelines", "task_scheduler", "launchd")
+                                 for r in rows):
+            _sp_crontab(name, txt, rows)
+        return rows
+    except Exception:  # noqa: BLE001
+        return rows
+
+
+def schedule_graph(files):
+    """schedule_entries over {name: src} (or [(name, src)]), marking GHA workflow_run chains that close a cycle
+    (cycle=True, self_trigger=True: the workflow keeps coming back)."""
+    rows = []
+    try:
+        items = list(files.items()) if isinstance(files, dict) else list(files or [])
+        names = {}
+        for n, s in items:
+            er = schedule_entries(n, s)
+            m = gha_workflow(_sp_text(s), n)
+            if m:
+                stem = re.sub(r"^.*[\\/]|\.ya?ml$", "", n or "")
+                names[n] = {str(m["name"] or stem), stem, n}
+            rows += [dict(r, file=n) for r in er]
+        edges = {}
+        for r in rows:
+            if r["kind"] == "gha_workflow_run" and r["file"] in names:
+                for up in r.get("upstream") or []:
+                    for f2, al in names.items():
+                        if up in al:
+                            edges.setdefault(f2, set()).add(r["file"])
+
+        def reach(a, b):
+            seen, st = set(), [a]
+            while st:
+                x = st.pop()
+                for y in edges.get(x, ()):
+                    if y == b:
+                        return True
+                    if y not in seen:
+                        seen.add(y)
+                        st.append(y)
+            return False
+        for r in rows:
+            if r["kind"] == "gha_workflow_run":
+                r["cycle"] = reach(r["file"], r["file"])
+                r["self_trigger"] = r["self_trigger"] or r["cycle"]
+        return rows
+    except Exception:  # noqa: BLE001
+        return rows
+
+
+def _sp_pick(rows, what=None):
+    if what:
+        w = what.strip().lower()
+        hit = [r for r in rows if any(w == str(r.get(k) or "").lower() for k in ("name", "kind", "file", "target"))] or \
+            [r for r in rows if any(w in str(r.get(k) or "").lower() for k in ("name", "target", "expr", "file"))]
+        if hit:
+            return hit[0]
+    return sorted(rows, key=lambda r: (not r["self_trigger"], r["period_s"] is None, r["period_s"] or 0))[0]
+
+
+def _sp_labels(r, f):
+    if f == "kind":
+        k = r["kind"]
+        return [k, k.split("_", 1)[-1], r["lang"], k.replace("_", "-"), r["lang"].replace("_", " ")]
+    if f == "attack":
+        a = r["attack"]
+        return [a, a.split(".")[0]] + list(r["attack_alt"])
+    if f == "period":
+        p = r["period_s"]
+        if p is None:
+            return []
+        out = [str(p)]
+        if p % 60 == 0:
+            out += ["%dm" % (p // 60), "%dmin" % (p // 60), "%dminutes" % (p // 60)]
+        if p % 3600 == 0:
+            out += ["%dh" % (p // 3600), "%dhours" % (p // 3600)]
+        out += {60: ["minutely", "every_minute"], 3600: ["hourly"], 86400: ["daily"], 604800: ["weekly"]}.get(p, [])
+        return out
+    v = r.get({"expr": "expr", "target": "target", "name": "name", "lang": "lang"}.get(f, f))
+    return [str(v)] if v not in (None, "") else []
+
+
+def persistence_answer(entries, field, accepted_values=None, what=None):
+    """One value out of schedule_entries()/schedule_graph() rows: field (question-id suffix accepted) kind | expr
+    (cron/schedule/interval/trigger) | period (seconds) | target (job/command/program) | name (label/task) | lang |
+    attack (technique) | count | kinds | self_trigger. what = row name/kind/target; default the self-retriggering row,
+    else the shortest period. accepted_values -> the accepted value matching a label by its own spelling.
+    'none' when no row / field absent, None when it cannot answer."""
+    try:
+        if isinstance(entries, (str, bytes, bytearray)):
+            entries = schedule_entries("", entries)
+        rows = list(entries or [])
+        f = re.sub(r"[^a-z]", "", (field or "").lower())
+        kind = next((k for k, hit in (
+            ("count", f.endswith(("count", "number", "num"))), ("kinds", f.endswith("kinds")),
+            ("attack", any(x in f for x in ("attack", "mitre", "technique", "ttp"))),
+            ("period", any(x in f for x in ("period", "interval", "seconds", "frequency", "every", "often"))),
+            ("self", "self" in f or "cycle" in f or "loop" in f),
+            ("expr", any(x in f for x in ("cron", "expr", "schedule", "calendar", "trigger", "when"))),
+            ("target", any(x in f for x in ("target", "command", "job", "program", "payload", "action", "exec"))),
+            ("lang", any(x in f for x in ("lang", "platform", "descriptor", "format", "system"))),
+            ("kind", any(x in f for x in ("kind", "type", "mechanism", "method"))),
+            ("name", any(x in f for x in ("name", "label", "task", "unit")))) if hit), None)
+        if kind == "count":
+            return str(len(rows))
+        if not rows:
+            return "none" if kind else None
+        if kind == "kinds":
+            return ",".join(dict.fromkeys(r["kind"] for r in rows))
+        r = _sp_pick(rows, what)
+        acc = [v for v in (accepted_values or []) if str(v).strip()]
+        if acc:
+            norm = lambda s: re.sub(r"[^a-z0-9]", "", str(s).lower())  # noqa: E731
+            labels = _sp_labels(r, kind or "kind")
+            for lb in labels:
+                for v in acc:
+                    if norm(v) and norm(v) == norm(lb):
+                        return v
+            for lb in labels:
+                for v in acc:
+                    nv, nl = norm(v), norm(lb)
+                    if len(nl) > 3 and len(nv) > 3 and (nl in nv or nv in nl):
+                        return v
+            return None
+        if kind == "self":
+            return "true" if r["self_trigger"] else "false"
+        if kind == "period":
+            return str(r["period_s"]) if r["period_s"] is not None else "none"
+        if kind is None:
+            return None
+        v = r.get(kind)
+        return str(v) if v not in (None, "") else "none"
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _sched_decode(material, transform, key=None):
+    """decode() hook for rep 'schedule_entries': material = descriptor text, transform = field[@what][!filename],
+    key = ','-joined accepted values (optional)."""
+    t = (transform or "kind").strip()
+    t, _, fname = t.partition("!")
+    field, _, what = t.partition("@")
+    acc = [x.strip() for x in str(key).split(",")] if key else None
+    rows = schedule_entries(fname, material)
+    if not rows:
+        return None
+    return persistence_answer(rows, field, acc, what or None)
+
+
+# ------------------------------------------------------------------------------------- Kubernetes / Helm / Kustomize
+# Target k8s-helm-manifest-route (T1053.007 orchestration sibling of CI YAML): a multi-doc `---` manifest carries the
+# script in a container's `command`/`args` (`["/bin/sh","-c",".."]` flow or block lists, `- |` block scalars) of a
+# Pod / Deployment / DaemonSet / StatefulSet / Job / CronJob (`jobTemplate`, `spec.schedule`), `initContainers`,
+# `lifecycle.postStart|preStop.exec.command`, a ConfigMap `data:` block (`binaryData:` base64), a Secret `data:`
+# (base64) / `stringData:`, or a Kustomize `configMapGenerator`/`secretGenerator` `literals: [k=v]`. Helm templates are
+# rendered just enough to read literals: `{{ "lit" | b64dec }}` / `b64enc` / quote / default fold, `{{ .Values.a.b }}`
+# from a values doc (a `---` doc with neither apiVersion nor kind, or `values=`), control actions dropped.
+# k8s_scripts() lists the bodies; _k8s_codecs() runs find_codecs on each. Bounded, never raises.
+
+_K8S_CUE = re.compile(r"(?m)^[ \t]*(?:apiVersion|kind)[ \t]*:[ \t]*\S|^[ \t]*(?:configMapGenerator|secretGenerator)[ \t]*:")
+_K8S_HELM = re.compile(r"\{\{-?\s*(?:\.Values\b|\.Release\b|\.Chart\b|\$\.Values\b|include\s|\"[^\"\n]*\"\s*\|\s*b64(?:dec|enc)\b)")
+_K8S_ACT = re.compile(r"\{\{(-?)\s*(.*?)\s*(-?)\}\}", re.S)
+_K8S_TERM = re.compile(r'"((?:[^"\\]|\\.)*)"|`([^`]*)`|\$?(\.[\w.]+)|(\w+)((?:[ \t]+(?:"(?:[^"\\]|\\.)*"|[\w.$-]+))*)')
+_K8S_INTERP = {"sh": "sh", "ash": "sh", "dash": "sh", "bash": "bash", "zsh": "zsh", "busybox": "sh", "pwsh": "pwsh",
+               "powershell": "powershell", "python": "python", "python3": "python", "python2": "python",
+               "node": "javascript", "perl": "perl", "ruby": "ruby", "php": "php", "cmd": "batch", "lua": "lua"}
+_K8S_EXT = {"sh": "sh", "bash": "bash", "ps1": "powershell", "py": "python", "js": "javascript", "mjs": "javascript",
+            "pl": "perl", "rb": "ruby", "php": "php", "bat": "batch", "cmd": "batch", "vbs": "vbscript", "lua": "lua"}
+
+
+def _k8s_flow(t):
+    """Items of a YAML flow sequence body (no brackets): quoted (escapes honoured) or plain scalars."""
+    out, i, n = [], 0, len(t)
+    while i < n and len(out) < 4096:
+        while i < n and t[i] in " \t\r\n,":
+            i += 1
+        if i >= n:
+            break
+        q = t[i]
+        if q in "\"'":
+            j = i + 1
+            while j < n:
+                if q == '"' and t[j] == "\\":
+                    j += 2
+                    continue
+                if t[j] == q:
+                    if q == "'" and t[j + 1:j + 2] == "'":
+                        j += 2
+                        continue
+                    break
+                j += 1
+            body = t[i + 1:j]
+            out.append(_ci_ydq(body) if q == '"' else re.sub(r"[ \t]*\n[ \t]*", " ", body).replace("''", "'"))
+            i = j + 1
+        else:
+            j = t.find(",", i)
+            j = n if j < 0 else j
+            out.append(re.sub(r"\s+", " ", t[i:j]).strip())
+            i = j
+    return out
+
+
+def _k8s_flowmap(t):
+    d = {}
+    for m in re.finditer(r"""\s*("[^"]*"|'[^']*'|[^:,{}]+?)\s*:\s*("[^"]*"|'[^']*'|[^,{}]*)""", t):
+        d[m.group(1).strip("'\"")] = m.group(2).strip().strip("'\"")
+    return d
+
+
+def _k8s_node(lines, i, ind, depth=0):
+    """(node, next index) of the YAML block node starting on lines[i] at column `ind`: dict / list / str / None."""
+    n = len(lines)
+    while i < n and (not lines[i].strip() or lines[i].lstrip().startswith("#")):
+        i += 1
+    if i >= n or depth > 48:
+        return None, i
+    s = lines[i]
+    if len(s) - len(s.lstrip(" ")) != ind:
+        return None, i
+    if s.lstrip().startswith("- ") or s.strip() == "-":
+        seq = []
+        while i < n and len(seq) < 4096:
+            while i < n and (not lines[i].strip() or lines[i].lstrip().startswith("#")):
+                i += 1
+            if i >= n:
+                break
+            s = lines[i]
+            if len(s) - len(s.lstrip(" ")) != ind or not (s.lstrip().startswith("- ") or s.strip() == "-"):
+                break
+            rest = s[ind + 1:]
+            c = ind + 1 + len(rest) - len(rest.lstrip(" "))
+            rest = rest.strip()
+            if not rest:
+                j = i + 1
+                while j < n and (not lines[j].strip() or lines[j].lstrip().startswith("#")):
+                    j += 1
+                ci = len(lines[j]) - len(lines[j].lstrip(" ")) if j < n else 0
+                v, i = _k8s_node(lines, j, ci, depth + 1) if j < n and ci > ind else (None, i + 1)
+            elif _CI_YKEY.match(rest) and rest[:1] not in "\"'[{":
+                lines[i] = " " * c + rest
+                v, i = _k8s_node(lines, i, c, depth + 1)
+            else:
+                v, i = _k8s_scalar(lines, i, rest, ind)
+            seq.append(v)
+        return seq, i
+    mp = {}
+    while i < n and len(mp) < 4096:
+        while i < n and (not lines[i].strip() or lines[i].lstrip().startswith("#")):
+            i += 1
+        if i >= n:
+            break
+        s = lines[i]
+        if len(s) - len(s.lstrip(" ")) != ind or s.lstrip().startswith("- "):
+            break
+        km = _CI_YKEY.match(s, ind)
+        if not km:
+            break
+        key, rest = km.group(1).strip("'\""), km.group(2).strip()
+        rest = _YAML_PROPS.sub("", rest, 1) if rest[:1] in "!&" else rest
+        if not rest or rest.startswith("#"):
+            j = i + 1
+            while j < n and (not lines[j].strip() or lines[j].lstrip().startswith("#")):
+                j += 1
+            ci = len(lines[j]) - len(lines[j].lstrip(" ")) if j < n else -1
+            if j < n and (ci > ind or (ci == ind and lines[j].lstrip().startswith("- "))):
+                v, i = _k8s_node(lines, j, ci, depth + 1)
+            else:
+                v, i = None, i + 1
+        else:
+            v, i = _k8s_scalar(lines, i, rest, ind)
+        mp[key] = v
+    return mp, i
+
+
+def _k8s_scalar(lines, i, rest, base):
+    if rest[:1] == "[":
+        buf, j = rest, i
+        while buf.count("[") - buf.count("]") > 0 and j + 1 < len(lines) and j - i < 512:
+            j += 1
+            buf += "\n" + lines[j]
+        e = buf.rfind("]")
+        return _k8s_flow(buf[1:e if e > 0 else len(buf)]), j + 1
+    if rest[:1] == "{":
+        return _k8s_flowmap(rest[1:rest.rfind("}")]), i + 1
+    v, _ck, j = _ci_yscalar(lines, i, rest, base)
+    return v, max(j, i + 1)
+
+
+def _k8s_docs(text):
+    """[parsed top-level mapping] of a `---` multi-doc YAML stream (non-mapping docs -> {})."""
+    out = []
+    for d in re.split(r"(?m)^---[ \t]*(?:#.*)?$|^\.\.\.[ \t]*$", text.replace("\t", "  "))[:256]:
+        lines = d.splitlines()[:20000]
+        k = 0
+        while k < len(lines) and (not lines[k].strip() or lines[k].lstrip().startswith(("#", "%"))):
+            k += 1
+        if k >= len(lines):
+            continue
+        node, _ = _k8s_node(lines, k, len(lines[k]) - len(lines[k].lstrip(" ")))
+        out.append(node if isinstance(node, dict) else {})
+    return out
+
+
+def _k8s_get(d, path):
+    for p in path.split("."):
+        if not isinstance(d, dict):
+            return None
+        d = d.get(p)
+    return d
+
+
+def _k8s_helm(text, values):
+    """Render the Helm actions of a template just enough to read literals; drop the rest."""
+    def ev(expr):
+        val, ok = None, True
+        for k, part in enumerate(re.split(r"\s*\|\s*", expr.strip())[:12]):
+            m = _K8S_TERM.fullmatch(part.strip())
+            if not m:
+                return None
+            if m.group(1) is not None or m.group(2) is not None:
+                lit = _ci_ydq(m.group(1)) if m.group(1) is not None else m.group(2)
+                if k == 0:
+                    val = lit
+                    continue
+                return None
+            if m.group(3):
+                if k:
+                    return None
+                p = m.group(3)
+                val = _k8s_get(values, p[len(".Values."):]) if p.startswith(".Values.") else None
+                if val is None:
+                    ok = False
+                continue
+            fn, args = m.group(4), [_ci_ydq(a[1:-1]) if a[:1] == '"' else a
+                                    for a in re.findall(r'"(?:[^"\\]|\\.)*"|\S+', m.group(5) or "")]
+            if k == 0:
+                return None
+            if fn == "default":
+                if (not ok or val in (None, "")) and args:
+                    val, ok = args[0], True
+            elif not ok or not isinstance(val, str):
+                return None
+            elif fn == "b64dec":
+                try:
+                    val = base64.b64decode(val.strip() + "=" * (-len(val.strip()) % 4), validate=True).decode("utf-8")
+                except Exception:  # noqa: BLE001
+                    return None
+            elif fn == "b64enc":
+                val = base64.b64encode(val.encode()).decode()
+            elif fn in ("quote", "squote"):
+                val = ('"%s"' if fn == "quote" else "'%s'") % val
+            elif fn in ("trim", "upper", "lower", "toString"):
+                val = {"trim": val.strip(), "upper": val.upper(), "lower": val.lower()}.get(fn, val)
+            elif fn == "trimSuffix" and args:
+                val = val[:-len(args[0])] if args[0] and val.endswith(args[0]) else val
+            else:
+                return None
+        return val if ok and isinstance(val, (str, int, float)) else None
+
+    out = []
+    for ln in text.splitlines():
+        if "{{" not in ln:
+            out.append(ln)
+            continue
+        if not _K8S_ACT.sub("", ln).strip():
+            only = [m.group(2) for m in _K8S_ACT.finditer(ln)]
+            if all(re.match(r"(?:if|else|end|range|with|define|template|include|/\*|-?\s*/\*|\$\w+\s*:?=)\b|"
+                            r"include\b|/\*", a) for a in only):
+                continue                                   # control / include line: drops out of the render
+        r = _K8S_ACT.sub(lambda m: str(ev(m.group(2)) if ev(m.group(2)) is not None else ""), ln)
+        out.append(r)
+    return "\n".join(out)
+
+
+def _k8s_lang(argv, key=""):
+    for a in (argv or [])[:2]:
+        b = re.split(r"[\\/]", str(a))[-1].lower().removesuffix(".exe")
+        b = re.sub(r"[\d.]+$", "", b) if b not in _K8S_INTERP else b
+        if b in _K8S_INTERP:
+            return _K8S_INTERP[b]
+    ext = key.rsplit(".", 1)[-1].lower() if "." in key else ""
+    return _K8S_EXT.get(ext)
+
+
+def _k8s_script(cmd, args):
+    """(script body, lang) of a container argv: `sh -c <s>` / `pwsh -Command <s>` / `python -c` / `node -e`."""
+    argv = [str(x) for x in (cmd or []) + (args or []) if x is not None]
+    lang = _k8s_lang(argv)
+    for k, a in enumerate(argv[:16]):
+        if a in ("-c", "-lc", "-ec", "-xc", "/c", "-Command", "-command", "-e", "--eval", "-EncodedCommand", "-enc") \
+                and k + 1 < len(argv):
+            return argv[k + 1], lang
+    if lang and len(argv) > 1 and "\n" in argv[-1]:
+        return argv[-1], lang
+    return None, lang
+
+
+def k8s_scripts(name, src, values=None):
+    """Scripts carried by a Kubernetes / Helm / Kustomize manifest stream: [{doc_index, kind, name, container, source,
+    command, args, script, script_lang, schedule, privileged, host_paths}]; source is container | initContainer |
+    postStart | preStop | configmap | secret | generator. [] when it is none. Never raises."""
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            src = bytes(src).decode("utf-8", "ignore")
+        src = (src or "")[:1 << 20].lstrip("﻿")
+        if not _K8S_CUE.search(src[:1 << 18]):
+            return []
+        vals = values if isinstance(values, dict) else {}
+        if _K8S_HELM.search(src):
+            raw = _k8s_docs(_K8S_ACT.sub("", src))
+            for d in raw:
+                if d and "apiVersion" not in d and "kind" not in d and not any(
+                        k in d for k in ("resources", "configMapGenerator", "secretGenerator")):
+                    for k, v in d.items():
+                        vals.setdefault(k, v)
+            src = _k8s_helm(src, vals)
+        rows = []
+        for di, d in enumerate(_k8s_docs(src)):
+            if len(rows) >= 256:
+                break
+            kind, md = str(d.get("kind") or ""), d.get("metadata") if isinstance(d.get("metadata"), dict) else {}
+            nm = md.get("name") if isinstance(md.get("name"), str) else None
+            base = {"doc_index": di, "kind": kind or None, "name": nm, "schedule": None, "privileged": False,
+                    "host_paths": []}
+
+            def add(**kw):
+                r = dict(base, container=None, source=None, command=None, args=None, script=None, script_lang=None)
+                r.update(kw)
+                rows.append(r)
+            if kind in ("ConfigMap", "Secret"):
+                for sect in ("data", "stringData", "binaryData"):
+                    m = d.get(sect)
+                    for k, v in (m.items() if isinstance(m, dict) else []):
+                        if not isinstance(v, str):
+                            continue
+                        if sect != "stringData" and (kind == "Secret" or sect == "binaryData"):
+                            try:
+                                b = base64.b64decode(re.sub(r"\s+", "", v), validate=True)
+                                v = b.decode("utf-8")
+                            except Exception:  # noqa: BLE001
+                                continue
+                        add(container=k, source=kind.lower(), script=v,
+                            script_lang=_k8s_lang([v[2:].split("\n", 1)[0].split()[-1]] if v.startswith("#!") and
+                                                  v[2:].split("\n", 1)[0].split() else [], k))
+                continue
+            for gk in ("configMapGenerator", "secretGenerator"):
+                for g in (d.get(gk) if isinstance(d.get(gk), list) else []):
+                    if not isinstance(g, dict):
+                        continue
+                    for lit in (g.get("literals") if isinstance(g.get("literals"), list) else []):
+                        if isinstance(lit, str) and "=" in lit:
+                            k, v = lit.split("=", 1)
+                            add(name=g.get("name") if isinstance(g.get("name"), str) else nm, container=k,
+                                source="generator", script=v, script_lang=_k8s_lang([], k))
+            spec = d.get("spec") if isinstance(d.get("spec"), dict) else {}
+            if kind == "CronJob":
+                base["schedule"] = spec.get("schedule") if isinstance(spec.get("schedule"), str) else None
+                pod = _k8s_get(spec, "jobTemplate.spec.template.spec")
+            elif kind == "Pod":
+                pod = spec
+            else:
+                pod = _k8s_get(spec, "template.spec")
+            pods = [pod] if isinstance(pod, dict) else []
+            if not pods:                                       # CRDs (Argo, Tekton, ..): any dict holding containers
+                stack, seen = [d], 0
+                while stack and seen < 4000 and len(pods) < 32:
+                    x = stack.pop()
+                    seen += 1
+                    if isinstance(x, dict):
+                        if isinstance(x.get("containers"), list) or isinstance(x.get("initContainers"), list):
+                            pods.append(x)
+                        stack.extend(v for v in x.values() if isinstance(v, (dict, list)))
+                    elif isinstance(x, list):
+                        stack.extend(v for v in x if isinstance(v, (dict, list)))
+            for p in pods:
+                hp = [str(_k8s_get(v, "hostPath.path")) for v in (p.get("volumes") or [])
+                      if isinstance(v, dict) and isinstance(v.get("hostPath"), dict)]
+                hostns = any(str(p.get(k)).lower() == "true" for k in ("hostPID", "hostNetwork", "hostIPC"))
+                for sect in ("initContainers", "containers", "ephemeralContainers"):
+                    for c in (p.get(sect) if isinstance(p.get(sect), list) else [])[:64]:
+                        if not isinstance(c, dict):
+                            continue
+                        env = {e.get("name"): e.get("value") for e in (c.get("env") or [])
+                               if isinstance(e, dict) and isinstance(e.get("name"), str) and
+                               isinstance(e.get("value"), str)}
+
+                        def lst(v):
+                            v = [v] if isinstance(v, str) else v if isinstance(v, list) else None
+                            if v is None:
+                                return None
+                            return [re.sub(r"(?<!\$)\$\(([A-Za-z_][\w.-]*)\)",
+                                           lambda m: env.get(m.group(1), m.group(0)), str(x)) for x in v if x is not None]
+                        priv = str(_k8s_get(c, "securityContext.privileged")).lower() == "true" or hostns
+                        cn = c.get("name") if isinstance(c.get("name"), str) else None
+                        cmd, args = lst(c.get("command")), lst(c.get("args"))
+                        body, lang = _k8s_script(cmd, args)
+                        add(container=cn, source="initContainer" if sect == "initContainers" else "container",
+                            command=cmd, args=args, script=body, script_lang=lang, privileged=priv, host_paths=hp)
+                        for hook in ("postStart", "preStop"):
+                            hc = lst(_k8s_get(c, f"lifecycle.{hook}.exec.command"))
+                            if hc:
+                                body, lang = _k8s_script(hc, None)
+                                add(container=cn, source=hook, command=hc, script=body, script_lang=lang,
+                                    privileged=priv, host_paths=hp)
+        return rows
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _k8s_codecs(src, budget=0.5):
+    """find_codecs readings of every script body a manifest carries: [(codec, rendered)] (rendered: Helm-folded /
+    Secret-decoded, a reading the raw text cannot give)."""
+    out, seen = [], set()
+    end = time.time() + budget
+    helm = bool(_K8S_HELM.search(src or ""))
+    for r in k8s_scripts("", src):
+        body = r.get("script")
+        if time.time() > end:
+            break
+        if not body or not isinstance(body, str) or len(body) < 16:
+            continue
+        for c in find_codecs(body, 1):
+            p = c.get("plain")
+            if p and p not in seen:
+                seen.add(p)
+                out.append((dict(c, id=f"{c.get('id')}@k8s/{r['kind'] or ''}/{r['name'] or ''}/{r['container'] or ''}"),
+                            helm or r["source"] == "secret"))
+    return out
+
+
+# ------------------------------------------------------------------------------------- launchd / plist persistence
+# Target launchd-plist-route (T1543.001 LaunchAgent / T1543.004 LaunchDaemon, T1647 plist modification; OS-side
+# "keeps coming back" sibling of the D13 AppleScript): an XML or binary `bplist00` property list whose
+# ProgramArguments / Program runs a script (`/bin/sh -c '..'`, `osascript -e '..' -e '..'`, `python3 -c`, `perl -e`,
+# `node -e`, `pwsh -EncodedCommand`). _bplist_load is a pure-Python bplist00 reader (trailer, offset table, object
+# refs; null/bool/int/real/date/data/ASCII + UTF-16BE strings/uid/array/set/dict), bounded and cycle-safe; XML goes
+# through stdlib plistlib. plist_scripts(name, data) -> [{label, program, program_arguments, run_at_load, keep_alive,
+# start_interval, lang, script, scripts, kind, attack, attack_alt}]; _plist_codecs runs find_codecs on each body (an
+# `osascript -e` body is the AppleScript route). decode(material, rep='plist_scripts', transform=<field>[!name]):
+# material = XML text, or the bplist as base64 / latin-1 text. Never raises; 'none' = field absent, None = no plist.
+
+_PL_CUE = re.compile(r"\A\ufeff?(?:bplist0|\s*YnBsaXN0MD)|<plist\b")
+
+
+class _BplistError(ValueError):
+    pass
+
+
+def _bplist_load(b, max_objects=20000):
+    """Top object of a binary plist (bplist00), as plain Python values. Raises _BplistError on a malformed file."""
+    b = bytes(b)
+    if len(b) < 40 or b[:6] != b"bplist":
+        raise _BplistError("magic")
+    t = b[-32:]
+    osz, rsz = t[6], t[7]
+    nobj, top, otab = (int.from_bytes(t[8 + 8 * i:16 + 8 * i], "big") for i in range(3))
+    if not (1 <= osz <= 8 and 1 <= rsz <= 8) or nobj > max_objects or top >= nobj or \
+            otab + nobj * osz > len(b) - 32 or otab < 8:
+        raise _BplistError("trailer")
+    offs = [int.from_bytes(b[otab + i * osz:otab + (i + 1) * osz], "big") for i in range(nobj)]
+    import struct
+    import datetime as _dt
+    budget = [max_objects * 4]
+
+    def length(pos, low):
+        if low != 0xF:
+            return pos, low
+        m = b[pos]
+        if m >> 4 != 1:
+            raise _BplistError("len")
+        n = 1 << (m & 0xF)
+        return pos + 1 + n, int.from_bytes(b[pos + 1:pos + 1 + n], "big")
+
+    def obj(ref, stack):
+        budget[0] -= 1
+        if budget[0] < 0 or ref >= nobj or ref in stack or len(stack) > 64:
+            raise _BplistError("ref")
+        pos = offs[ref]
+        if pos >= otab:
+            raise _BplistError("offset")
+        m = b[pos]
+        hi, low = m >> 4, m & 0xF
+        if hi == 0:
+            return {0: None, 8: False, 9: True}.get(low)
+        if hi == 1:
+            n = 1 << low
+            return int.from_bytes(b[pos + 1:pos + 1 + n], "big", signed=n >= 8)
+        if hi == 2:
+            n = 1 << low
+            return struct.unpack(">d" if n == 8 else ">f", b[pos + 1:pos + 1 + n])[0] if n in (4, 8) else None
+        if hi == 3:
+            s = struct.unpack(">d", b[pos + 1:pos + 9])[0]
+            return _dt.datetime(2001, 1, 1) + _dt.timedelta(seconds=s)
+        if hi == 8:
+            return int.from_bytes(b[pos + 1:pos + 2 + low], "big")
+        p, n = length(pos + 1, low)
+        if hi == 4:
+            return b[p:p + n]
+        if hi == 5:
+            return b[p:p + n].decode("latin-1")
+        if hi == 6:
+            return b[p:p + 2 * n].decode("utf-16-be", "replace")
+        if hi == 7:
+            return b[p:p + n].decode("utf-8", "replace")
+        if p + n * rsz * (2 if hi == 0xD else 1) > otab:
+            raise _BplistError("refs")
+        refs = [int.from_bytes(b[p + i * rsz:p + (i + 1) * rsz], "big") for i in range(n * (2 if hi == 0xD else 1))]
+        st = stack | {ref}
+        if hi in (0xA, 0xC):
+            return [obj(r, st) for r in refs]
+        if hi == 0xD:
+            ks = [obj(r, st) for r in refs[:n]]
+            return {(k if isinstance(k, (str, int)) else str(k)): obj(r, st) for k, r in zip(ks, refs[n:])}
+        raise _BplistError("marker")
+
+    try:
+        return obj(top, frozenset())
+    except (IndexError, struct.error, OverflowError, RecursionError) as e:
+        raise _BplistError(repr(e)) from None
+
+
+def _plist_bytes(data):
+    """Raw plist bytes of bytes / text (XML text, latin-1 or base64 bplist text), or None when it is not a plist."""
+    if isinstance(data, (bytes, bytearray)):
+        b = bytes(data)
+    elif isinstance(data, str):
+        s = data.lstrip("\ufeff")
+        if s.startswith("bplist"):
+            try:
+                b = s.encode("latin-1")
+            except UnicodeEncodeError:
+                return None
+        elif re.match(r"\s*YnBsaXN0", s):
+            try:
+                b = base64.b64decode(re.sub(r"\s+", "", s), validate=True)
+            except (binascii.Error, ValueError):
+                return None
+        else:
+            b = s.encode("utf-8")
+    else:
+        return None
+    if b[:6] == b"bplist":
+        return b
+    head = b[:4096].lstrip(b"\xef\xbb\xbf \t\r\n")
+    return b if re.search(rb"<plist\b", head) or (head.startswith(b"<?xml") and b"<plist" in b[:1 << 16]) else None
+
+
+def _plist_load(data):
+    b = _plist_bytes(data)
+    if b is None:
+        return None
+    try:
+        if b[:6] == b"bplist":
+            return _bplist_load(b)
+        import plistlib
+        return plistlib.loads(b, fmt=plistlib.FMT_XML)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _pl_words(s, limit=4096):
+    """POSIX-ish shell words of a command string ('..', ".." with \\ escapes, bare words); `;`, `|`, `&`, newline
+    become separator words."""
+    out, i, n = [], 0, len(s)
+    while i < n and len(out) < limit:
+        c = s[i]
+        if c in " \t\\" and (c != "\\" or s[i + 1:i + 2] == "\n"):
+            i += 2 if c == "\\" else 1
+            continue
+        if c in ";|&\n":
+            out.append(c)
+            i += 1
+            continue
+        w = []
+        while i < n and s[i] not in " \t;|&\n":
+            c = s[i]
+            if c == "'":
+                j = s.find("'", i + 1)
+                j = n if j < 0 else j
+                w.append(s[i + 1:j])
+                i = j + 1
+            elif c == '"':
+                i += 1
+                while i < n and s[i] != '"':
+                    if s[i] == "\\" and i + 1 < n and s[i + 1] in '"\\$`\n':
+                        i += 1
+                    w.append(s[i])
+                    i += 1
+                i += 1
+            elif c == "\\" and i + 1 < n:
+                w.append(s[i + 1])
+                i += 2
+            else:
+                w.append(c)
+                i += 1
+        out.append("".join(w))
+    return out
+
+
+_PL_INTERP = {"sh": ("sh", "-c"), "bash": ("bash", "-c"), "zsh": ("zsh", "-c"), "dash": ("sh", "-c"),
+              "ksh": ("sh", "-c"), "python": ("python", "-c"), "python3": ("python", "-c"),
+              "python2": ("python", "-c"), "perl": ("perl", "-e"), "ruby": ("ruby", "-e"), "node": ("javascript", "-e"),
+              "php": ("php", "-r"), "pwsh": ("powershell", "-c"), "powershell": ("powershell", "-c"),
+              "osascript": ("applescript", "-e"), "tclsh": ("tcl", None), "lua": ("lua", "-e")}
+
+
+def _pl_argv_scripts(argv, depth=0):
+    """[(lang, body)] of the inline scripts an argv runs (interpreter + -c/-e; osascript -e lines joined; nested shell
+    `osascript -e` / `sh -c` re-read)."""
+    out = []
+    i = 0
+    while i < len(argv) and depth < 3:
+        a = argv[i]
+        base = re.sub(r"^.*/", "", str(a)).lower()
+        base = re.sub(r"(?<=python)[0-9.]+$", "3", base) if base.startswith("python") else base
+        lang, flag = _PL_INTERP.get(base, (None, None))
+        if not lang:
+            i += 1
+            continue
+        j, bodies = i + 1, []
+        while j < len(argv) and argv[j] not in (";", "|", "&", "\n"):
+            x = str(argv[j]).lower()
+            if base == "osascript" and x == "-l" and j + 1 < len(argv):
+                lang = "jxa" if str(argv[j + 1]).lower().startswith("javascript") else lang
+                j += 2
+                continue
+            if lang == "powershell" and re.fullmatch(r"-e(?:nc(?:odedcommand)?|c)?", x) and j + 1 < len(argv):
+                try:
+                    bodies.append(base64.b64decode(argv[j + 1]).decode("utf-16-le"))
+                except (binascii.Error, ValueError, UnicodeDecodeError):
+                    pass
+                j += 2
+                continue
+            if flag and (x == flag or (lang == "powershell" and x in ("-command", "-c")) or
+                         (lang in ("sh", "bash", "zsh") and re.fullmatch(r"-[a-z]*c[a-z]*", x))) and j + 1 < len(argv):
+                bodies.append(str(argv[j + 1]))
+                j += 2
+                if base != "osascript":
+                    break
+                continue
+            j += 1
+        if bodies:
+            body = "\n".join(bodies)
+            out.append((lang, body))
+            if lang in ("sh", "bash", "zsh"):
+                out += _pl_argv_scripts(_pl_words(body), depth + 1)
+        i = max(j, i + 1)
+    return out
+
+
+def plist_scripts(name, data):
+    """Launchd / plist persistence rows of one property list (see the section comment). [] when not a plist."""
+    try:
+        top = _plist_load(data)
+        dicts = [top] if isinstance(top, dict) else [d for d in top if isinstance(d, dict)][:64] \
+            if isinstance(top, list) else []
+        rows = []
+        lname = (name or "").lower()
+        for d in dicts:
+            pa = d.get("ProgramArguments")
+            pa = [str(x) for x in pa] if isinstance(pa, list) else None
+            prog = d.get("Program") if isinstance(d.get("Program"), str) else None
+            argv = pa or ([prog] if prog else [])
+            if prog and pa and pa[0] != prog:
+                argv = [prog] + pa[1:]
+            scripts = _pl_argv_scripts(argv) if argv else []
+            launchd = any(k in d for k in ("Label", "ProgramArguments", "Program"))
+            if not launchd and not scripts:
+                continue
+            daemon = "launchdaemons" in lname or "UserName" in d or "GroupName" in d
+            ka = d.get("KeepAlive")
+            si = d.get("StartInterval")
+            alt = ["T1543"]
+            if any(str(k).startswith(("CFBundle", "LS")) for k in d) or "info.plist" in lname or \
+                    "LSEnvironment" in d or "DYLD_INSERT_LIBRARIES" in str(d.get("EnvironmentVariables") or ""):
+                alt.insert(0, "T1647")
+            if any(lg in ("applescript", "jxa") for lg, _ in scripts):
+                alt.append("T1059.002")
+            rows.append({
+                "label": d.get("Label") if isinstance(d.get("Label"), str) else None,
+                "program": prog or (pa[0] if pa else None),
+                "program_arguments": pa if pa is not None else ([prog] if prog else None),
+                "run_at_load": d.get("RunAtLoad") if isinstance(d.get("RunAtLoad"), bool) else None,
+                "keep_alive": ka if isinstance(ka, (bool, dict)) else None,
+                "start_interval": si if isinstance(si, int) and not isinstance(si, bool) else None,
+                "lang": scripts[-1][0] if scripts else None,
+                "script": scripts[-1][1] if scripts else None,
+                "scripts": scripts,
+                "kind": ("launch_daemon" if daemon else "launch_agent") if launchd else "plist",
+                "attack": ("T1543.004" if daemon else "T1543.001") if launchd else "T1647",
+                "attack_alt": alt,
+            })
+        return rows
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def plist_answer(rows, field, name=""):
+    """One field of plist_scripts() rows (first launchd row). 'none' when the field is absent, None when no plist."""
+    try:
+        if isinstance(rows, (str, bytes, bytearray)):
+            rows = plist_scripts(name, rows)
+        if not rows:
+            return None
+        r = rows[0]
+        f = re.sub(r"[^a-z]", "", (field or "").lower())
+        if f in ("count", "rows"):
+            return str(len(rows))
+        if f.endswith("plain") or f in ("plan", "decoded"):
+            for _lg, body in r["scripts"]:
+                for c in find_codecs(body, 1):
+                    if c.get("plain"):
+                        return c["plain"]
+            return "none"
+        key = next((k for k, hit in (
+            ("program_arguments", "arg" in f or "argv" in f), ("run_at_load", "load" in f),
+            ("keep_alive", "alive" in f), ("start_interval", "interval" in f or "period" in f),
+            ("attack", "attack" in f or "technique" in f or "mitre" in f), ("lang", "lang" in f or "interp" in f),
+            ("script", "script" in f or "body" in f or "command" in f), ("program", "program" in f or "path" in f),
+            ("kind", "kind" in f or "type" in f), ("label", "label" in f or "name" in f)) if hit), None)
+        if key is None:
+            return None
+        v = r.get(key)
+        if v is None or v == "":
+            return "none"
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        if isinstance(v, list):
+            return " ".join(map(str, v))
+        if isinstance(v, dict):
+            return ",".join("%s:%s" % (k, str(x).lower() if isinstance(x, bool) else x) for k, x in sorted(v.items()))
+        return str(v)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _plist_decode(material, transform):
+    """decode() hook for rep 'plist_scripts': transform = field[!filename]."""
+    field, _, fname = (transform or "label").partition("!")
+    return plist_answer(plist_scripts(fname, material), field)
+
+
+def _plist_codecs(src, raw, depth=0):
+    """find_codecs entries of the inline scripts a launchd / plist runs (each body re-read as its own source)."""
+    out, seen = [], set()
+    for r in plist_scripts("", raw if raw is not None else src)[:16]:
+        for lang, body in r["scripts"][:8]:
+            for c in find_codecs(body, depth + 1):
+                p = c.get("plain")
+                if p and p not in seen:
+                    seen.add(p)
+                    out.append(dict(c, id=f"{c.get('id')}@plist/{r['label'] or ''}/{lang}"))
+    return out
+
+
+# --- installer-action-model -----------------------------------------------------------------------------------------
+# D22 "Separate the real setup actions from the modeled payload behavior, and recover every cross-language handoff"
+# (base id installer-script-chain). installer_actions(name, src) -> [{section, scope, op, args, kind, lang_to, target,
+# technique, chain}] for NSIS (.nsi/.nsh), Inno Setup (.iss) and WiX (.wxs/.wxi) sources, one row per statement:
+# kind 'setup' (SetOutPath / File / WriteUninstaller / CreateDirectory / CreateShortCut / WriteReg* / Delete / RMDir,
+# Inno [Files] [Dirs] [Icons] [Registry] [INI], WiX File / CreateFolder / Shortcut / RegistryValue / ServiceInstall),
+# 'payload' (Exec* / nsExec / ExecDos / ExecShell / System::Call / !system|!execute (compile_time) / inetc|NSISdl|
+# INetC|NScurl downloads (T1105) / Run|RunOnce|Winlogon registry values and Startup shortcuts (T1547.001), Inno
+# [Run] [UninstallRun] and [Code] Exec / ShellExec / DownloadTemporaryFile, WiX CustomAction ExeCommand / Script /
+# VBScriptCall / JScriptCall / WixQuietExec CmdLine), 'ui' (MessageBox / DetailPrint / Page / MsgBox ...), 'data'
+# (StrCpy -- D22's only statement). lang_to = the next language of a handoff command line (interpreter image or
+# script extension, v=3 spellings: powershell, jscript, vbscript, batch, python, nodejs, bash, hta, msi, scriptlet);
+# `cmd /c powershell ..` keeps the whole chain in `chain`. StrCpy / !define / Inno #define values are substituted
+# first. installer_answer(rows, field) answers setup-actions / payload-actions / handoff / handoff-count /
+# next-stage / persistence / download-url ...; decode(material, rep='installer_actions', transform=field, key=name).
+_IA_RUNKEY = re.compile(r"\\CurrentVersion\\(?:Run|RunOnce|RunServices|RunServicesOnce|RunOnceEx|Policies\\Explorer\\Run)"
+                        r"(?:\\|$)|\\Winlogon(?:\\|$)|\\Windows\\(?:Load|Run)$", re.I)
+_IA_STARTUP = re.compile(r"\$SMSTARTUP|\\Start ?Menu\\Programs\\Startup|\$SMPROGRAMS[\\/]+Startup|\{(?:user|common)?"
+                         r"startup\}|^StartupFolder$", re.I)
+_IA_EXT = {"ps1": "powershell", "psm1": "powershell", "bat": "batch", "cmd": "batch", "vbs": "vbscript",
+           "vbe": "vbscript", "js": "jscript", "jse": "jscript", "wsf": "jscript", "py": "python", "pyw": "python",
+           "hta": "hta", "sh": "bash", "mjs": "nodejs", "cjs": "nodejs", "msi": "msi", "sct": "scriptlet",
+           "pl": "perl", "rb": "ruby", "php": "php", "lua": "lua"}
+_IA_UI = frozenset("messagebox detailprint setdetailsprint page uninstpage showinstdetails showuninstdetails "
+                   "bringtofront hidewindow setautoclose banner::show banner::destroy nsdialogs::create "
+                   "nsdialogs::show msgbox suppressiblemsgbox setdetailsview caption subcaption".split())
+_IA_SETUP = frozenset("setoutpath file writeuninstaller createdirectory createshortcut delete rmdir copyfiles rename "
+                      "writeregstr writeregexpandstr writeregdword writeregbin writeregmultistr writeregnone "
+                      "deleteregkey deleteregvalue writeinistr deleteinistr deleteinisec setshellvarcontext regdll "
+                      "unregdll setfileattributes setoverwrite setregview".split())
+_IA_EXEC = frozenset("exec execwait execshell execshellwait nsexec::exec nsexec::exectolog nsexec::exectostack "
+                     "execdos::exec execcmd::exec".split())
+_IA_DL = frozenset("inetc::get inetc::post inetc::put inetc::head nsisdl::download nsisdl::download_quiet "
+                   "nscurl::http inetload::load".split())
+
+
+def _ia_split(cmd):
+    """Windows-ish argv split of a command line (quotes kept off), bounded."""
+    out, cur, q, i, s = [], "", None, 0, str(cmd or "")[:8192]
+    while i < len(s):
+        c = s[i]
+        if q:
+            if c == q:
+                q = None
+            else:
+                cur += c
+        elif c in "\"'" and (not cur or c == '"'):
+            q = c
+        elif c.isspace():
+            if cur:
+                out.append(cur)
+                cur = ""
+        else:
+            cur += c
+        i += 1
+    if cur:
+        out.append(cur)
+    return out
+
+
+def _ia_lang(cmd, _depth=0):
+    """(lang_to, target, chain) of a command line whose image is an interpreter / script, else (None, None, [])."""
+    a = _ia_split(cmd)
+    if not a:
+        return None, None, []
+    img = re.split(r"[\\/\]}]", a[0])[-1].lower()
+    img = re.sub(r"\.(?:exe|com)$", "", img)
+    rest = a[1:]
+    low = [x.lower() for x in rest]
+    m = re.match(r'\s*(?:"[^"]*"|\'[^\']*\'|\S+)\s*(.*)\Z', str(cmd)[:8192], re.S)
+    raw = m.group(1).strip() if m else " ".join(rest)
+    ext = img.rsplit(".", 1)[-1] if "." in img else ""
+
+    def tgt_after(flags):
+        for i, x in enumerate(low):
+            if x in flags and i + 1 < len(rest):
+                return rest[i + 1]
+        return None
+
+    if img in ("powershell", "pwsh", "powershell_ise"):
+        t = tgt_after(("-enc", "-e", "-ec", "-encodedcommand", "-en", "-enco")) or tgt_after(("-file", "-f")) or \
+            (" ".join(rest[low.index("-command") + 1:]) if "-command" in low else None) or \
+            (" ".join(rest[low.index("-c") + 1:]) if "-c" in low else None) or (rest[-1] if rest else None)
+        return "powershell", t, ["powershell"]
+    if img in ("cscript", "wscript"):
+        eng = next((x.split(":", 1)[1] for x in low if x.startswith(("//e:", "/e:"))), "")
+        scr = next((x for x in rest if not x.startswith("/")), None)
+        lang = "jscript" if eng in ("jscript", "javascript", "jscript.encode") else \
+            "vbscript" if eng in ("vbscript", "vbscript.encode", "vbs") else \
+            _IA_EXT.get((scr or "").rsplit(".", 1)[-1].lower()) if scr and "." in scr else None
+        return lang or "vbscript", scr, [lang or "vbscript"]
+    if img == "mshta":
+        body = raw
+        bl = body.lower().lstrip("\"' ")
+        lang = "jscript" if bl.startswith("javascript:") else "vbscript" if bl.startswith("vbscript:") else "hta"
+        return lang, body or None, [lang]
+    if img == "rundll32":
+        body = raw
+        if re.search(r"javascript:", body, re.I):
+            return "jscript", body, ["jscript"]
+        if re.search(r"vbscript:", body, re.I):
+            return "vbscript", body, ["vbscript"]
+        return None, None, []
+    if img == "cmd":
+        i = next((k for k, x in enumerate(low) if x in ("/c", "/k", "/r")), None)
+        if i is None:
+            return ("batch", None, ["batch"]) if not rest else (None, None, [])
+        mm = re.search(r"(?i)(?:^|\s)[/-][ckr]\s+(.*)\Z", raw, re.S)
+        body = mm.group(1).strip() if mm else " ".join(rest[i + 1:])
+        if len(body) >= 2 and body[0] == body[-1] == '"' and body.count('"') == 2:
+            body = body[1:-1]
+        nxt = _ia_lang(body, _depth + 1) if _depth < 4 else (None, None, [])
+        return "batch", body or None, ["batch"] + nxt[2]
+    if img == "msiexec":
+        return "msi", tgt_after(("/i", "/package", "-i", "/a", "/j")), ["msi"]
+    if img == "regsvr32":
+        t = next((x[3:] for x in rest if x.lower().startswith(("/i:", "-i:"))), None)
+        return ("scriptlet", t, ["scriptlet"]) if t else (None, None, [])
+    if re.fullmatch(r"pythonw?[\d.]*|py|pyw", img):
+        return "python", tgt_after(("-c",)) or next((x for x in rest if not x.startswith("-")), None), ["python"]
+    if img in ("node", "nodejs", "deno", "bun"):
+        return "nodejs", tgt_after(("-e", "--eval")) or next((x for x in rest if not x.startswith("-")), None), \
+            ["nodejs"]
+    if img in ("bash", "sh", "wsl", "zsh", "dash"):
+        return "bash", tgt_after(("-c",)) or next((x for x in rest if not x.startswith("-")), None), ["bash"]
+    if img in ("perl", "ruby", "php", "lua"):
+        return img, next((x for x in rest if not x.startswith("-")), None), [img]
+    if ext in _IA_EXT and ext not in ("msi",):
+        return _IA_EXT[ext], a[0], [_IA_EXT[ext]]
+    if ext == "msi":
+        return "msi", a[0], ["msi"]
+    return None, None, []
+
+
+def _ia_row(section, scope, op, args, kind, cmd=None, **kw):
+    lang, tgt, chain = _ia_lang(cmd) if cmd else (None, None, [])
+    r = {"section": section, "scope": scope, "op": op, "args": [str(x) for x in args][:16], "kind": kind,
+         "lang_to": lang, "target": kw.pop("target", None) or tgt or kw.pop("dflt_target", None),
+         "technique": kw.pop("technique", None), "chain": chain}
+    kw.pop("dflt_target", None)
+    if lang and not r["technique"]:
+        r["technique"] = {"powershell": "T1059.001", "batch": "T1059.003", "vbscript": "T1059.005",
+                          "jscript": "T1059.007", "nodejs": "T1059.007", "python": "T1059.006",
+                          "bash": "T1059.004", "hta": "T1218.005", "msi": "T1218.007",
+                          "scriptlet": "T1218.010"}.get(lang, "T1059")
+    r.update(kw)
+    return r
+
+
+def _ia_regrow(section, scope, op, args, root, key, val, cmd_valued=True):
+    run = bool(_IA_RUNKEY.search(str(key or "").rstrip("\\")))
+    return _ia_row(section, scope, op, args, "payload" if run else "setup", val if run and cmd_valued else None,
+                   technique="T1547.001" if run else None, location=f"{root}\\{key}" if run else None,
+                   persistence=run)
+
+
+# NSIS -----------------------------------------------------------------------------------------------------------------
+def _ia_nsis_toks(line):
+    out, cur, q, i, had = [], "", None, 0, False
+    while i < len(line):
+        c = line[i]
+        if q:
+            if c == "$" and line[i + 1:i + 2] == "\\" and i + 2 < len(line):
+                cur += {"n": "\n", "r": "\r", "t": "\t"}.get(line[i + 2], line[i + 2])
+                i += 3
+                continue
+            if c == q:
+                q = None
+            else:
+                cur += c
+        elif c in "\"'`":
+            q, had = c, True
+        elif c in ";#" and not cur:
+            break
+        elif c.isspace():
+            if cur or had:
+                out.append(cur)
+            cur, had = "", False
+        else:
+            cur += c
+        i += 1
+    if cur or had:
+        out.append(cur)
+    return out
+
+
+def _ia_nsis(src):
+    rows, var, sec, scope = [], {}, "", "global"
+    src = re.sub(r"/\*.*?\*/", " ", src[:1 << 20], flags=re.S)
+    src = re.sub(r"\\[ \t]*\r?\n", " ", src)
+
+    def sub(s):
+        for _ in range(3):
+            n = re.sub(r"\$\{(\w+)\}|\$(\d|R\d|\w+)\b",
+                       lambda m: var.get("${%s}" % m.group(1) if m.group(1) else "$" + m.group(2), m.group(0)), s)
+            if n == s:
+                break
+            s = n[:8192]
+        return s
+
+    for raw in src.splitlines()[:65536]:
+        t = _ia_nsis_toks(raw.strip())
+        if not t or len(rows) >= 4096:
+            continue
+        op, ol = t[0], t[0].lower()
+        args = [sub(x) for x in t[1:]]
+        if ol == "!define" and args:
+            a = [x for x in args if not x.startswith("/")]
+            if a:
+                var["${%s}" % a[0]] = a[1] if len(a) > 1 else ""
+            continue
+        if ol in ("section", "section/o") or (ol == "section" and args):
+            nm = [x for x in args if not x.startswith("/")]
+            sec, scope = (nm[0] if nm else "Section"), "section"
+            continue
+        if ol == "function" and args:
+            sec, scope = args[0], "function"
+            continue
+        if ol in ("sectionend", "functionend"):
+            sec, scope = "", "global"
+            continue
+        if ol in ("sectiongroup", "sectiongroupend"):
+            continue
+        if ol == "strcpy" and args:
+            var[args[0]] = args[1] if len(args) > 1 else ""
+            rows.append(_ia_row(sec, scope, op, args, "data"))
+            continue
+        if ol in ("!system", "!execute", "!finalize", "!uninstfinalize", "!packhdr"):
+            cmd = args[-1] if ol == "!packhdr" and len(args) > 1 else (args[0] if args else "")
+            rows.append(_ia_row(sec or "<compile>", "compile", op, args, "payload", cmd, compile_time=True,
+                                target=cmd))
+            continue
+        if ol in _IA_EXEC:
+            a = [x for x in args if not re.match(r"/(?:oem|timeout=\S*|nounload|async|disablefsr|end|"
+                                                 r"detailed|tostack|tolog|endfunc=\S*)$", x, re.I)]
+            if ol.startswith("execshell"):
+                a = [x for x in a if not re.match(r"/(?:invokeidlist|doseenvsubst|allowerrorui)$", x, re.I)]
+                verb, f, p = (a + ["", "", ""])[:3]
+                cmd = (f'"{f}" {p}').strip() if f else ""
+                rows.append(_ia_row(sec, scope, op, args, "payload", cmd, dflt_target=f or None, verb=verb))
+            else:
+                cmd = a[0] if a else ""
+                rows.append(_ia_row(sec, scope, op, args, "payload", cmd, dflt_target=cmd or None))
+            continue
+        if ol in _IA_DL:
+            url = next((x for x in args if re.match(r"(?:https?|ftp)://", x, re.I)), None)
+            rows.append(_ia_row(sec, scope, op, args, "payload", technique="T1105", target=url,
+                                dest=(args[args.index(url) + 1] if url and args.index(url) + 1 < len(args)
+                                      else None)))
+            continue
+        if ol == "system::call":
+            body = " ".join(args)
+            m = re.search(r"(?:createprocess\w*|winexec|shellexecute\w*)\b[^\"'(]*\(\s*[^,]*?,?\s*[tw]\s*['\"]?([^'\")]+)",
+                          body, re.I)
+            rows.append(_ia_row(sec, scope, op, args, "payload", m.group(1) if m else None, technique=None,
+                                target=body))
+            if not rows[-1]["technique"]:
+                rows[-1]["technique"] = "T1106"
+            continue
+        if ol == "createshortcut" and args:
+            st = bool(_IA_STARTUP.search(args[0]))
+            cmd = (f'"{args[1]}" ' + (args[2] if len(args) > 2 else "")).strip() if len(args) > 1 else None
+            rows.append(_ia_row(sec, scope, op, args, "payload" if st else "setup", cmd if st else None,
+                                technique="T1547.001" if st else None, location=args[0] if st else None,
+                                persistence=st))
+            continue
+        if ol.startswith("writereg") and len(args) >= 2:
+            rows.append(_ia_regrow(sec, scope, op, args, args[0], args[1], args[3] if len(args) > 3 else ""))
+            continue
+        if ol in _IA_SETUP:
+            rows.append(_ia_row(sec, scope, op, args, "setup"))
+        elif ol in _IA_UI or re.match(r"(?:nsdialogs|banner|mui)::", ol):
+            rows.append(_ia_row(sec, scope, op, args, "ui"))
+    return rows
+
+
+# Inno Setup -----------------------------------------------------------------------------------------------------------
+def _ia_inno_params(line):
+    out, i, s = {}, 0, line
+    for part in re.findall(r'(?:[^;"]|"(?:[^"]|"")*")+', s):
+        k, sep, v = part.partition(":")
+        if not sep:
+            continue
+        v = v.strip()
+        if len(v) >= 2 and v[0] == '"' and v[-1] == '"':
+            v = v[1:-1].replace('""', '"')
+        out[k.strip().lower()] = v
+    return out
+
+
+def _ia_pascal_args(s):
+    """Top-level comma args of a Pascal call body; each arg -> concatenation of its '..' literals (or raw)."""
+    args, depth, cur, q = [], 0, "", False
+    for c in s:
+        if q:
+            cur += c
+            if c == "'":
+                q = False
+            continue
+        if c == "'":
+            q = True
+            cur += c
+        elif c == "(":
+            depth += 1
+            cur += c
+        elif c == ")":
+            if depth == 0:
+                break
+            depth -= 1
+            cur += c
+        elif c == "," and depth == 0:
+            args.append(cur)
+            cur = ""
+        else:
+            cur += c
+    args.append(cur)
+    out = []
+    for a in args:
+        lits = re.findall(r"'((?:[^']|'')*)'", a)
+        out.append("".join(x.replace("''", "'") for x in lits) if lits else a.strip())
+    return out
+
+
+def _ia_inno(src):
+    rows, defs, sec = [], {}, ""
+    for m in re.finditer(r'(?mi)^[ \t]*#define[ \t]+(\w+)[ \t]+"?([^"\r\n]*)"?', src):
+        defs[m.group(1)] = m.group(2)
+    src = re.sub(r"\{#(\w+)\}", lambda m: defs.get(m.group(1), m.group(0)), src[:1 << 20])
+    code = []
+    for raw in src.splitlines()[:65536]:
+        line = raw.strip()
+        m = re.fullmatch(r"\[(\w+)\]", line)
+        if m:
+            sec = m.group(1)
+            continue
+        if sec.lower() == "code":
+            code.append(raw)
+            continue
+        if not line or line.startswith((";", "//", "#")) or len(rows) >= 4096:
+            continue
+        p = _ia_inno_params(line)
+        sl, tag = sec.lower(), "[%s]" % sec
+        if sl == "files" and "source" in p:
+            rows.append(_ia_row(tag, "section", "File", [p["source"], p.get("destdir", "")], "setup"))
+        elif sl == "dirs" and "name" in p:
+            rows.append(_ia_row(tag, "section", "CreateDirectory", [p["name"]], "setup"))
+        elif sl == "icons" and "name" in p:
+            st = bool(_IA_STARTUP.search(p["name"]))
+            cmd = (f'"{p.get("filename", "")}" ' + p.get("parameters", "")).strip()
+            rows.append(_ia_row(tag, "section", "CreateShortCut", [p["name"], p.get("filename", "")],
+                                "payload" if st else "setup", cmd if st else None,
+                                technique="T1547.001" if st else None, location=p["name"] if st else None,
+                                persistence=st))
+        elif sl == "registry" and "subkey" in p:
+            rows.append(_ia_regrow(tag, "section", "WriteReg", [p.get("root", ""), p["subkey"], p.get("valuename", ""),
+                                                                p.get("valuedata", "")],
+                                   p.get("root", ""), p["subkey"], p.get("valuedata", "")))
+        elif sl in ("ini", "installdelete", "uninstalldelete"):
+            rows.append(_ia_row(tag, "section", sec, [p.get("filename", p.get("name", ""))], "setup"))
+        elif sl in ("run", "uninstallrun") and "filename" in p:
+            cmd = (f'"{p["filename"]}" ' + p.get("parameters", "")).strip()
+            rows.append(_ia_row(tag, "section", sec, [p["filename"], p.get("parameters", "")], "payload", cmd,
+                                dflt_target=p["filename"], flags=p.get("flags", "")))
+    if code:
+        body = "\n".join(code)
+        body = re.sub(r"'(?:[^'\n]|'')*'|\{[^}#]*\}|\(\*.*?\*\)|//[^\n]*", lambda m: m.group(0) if m.group(0)[:1] == "'"
+            or re.fullmatch(
+            r"\{(?:app|tmp|sys|win|src|pf|cf|userappdata|commonappdata|localappdata|userstartup|commonstartup|"
+            r"startup|userdesktop|group|cmd|syswow64|sd|dotnet\w*|autopf|autoappdata)[^}]*\}", m.group(0), re.I)
+            else " ", body, flags=re.S)
+        procs = [(m.start(), m.group(1)) for m in re.finditer(r"(?im)^[ \t]*(?:procedure|function)[ \t]+(\w+)", body)]
+        for m in re.finditer(r"\b(Exec|ExecAsOriginalUser|ShellExec|ShellExecAsOriginalUser|DownloadTemporaryFile|"
+                             r"RegWrite(?:String|ExpandString|DWord|MultiString|Binary)Value|CreateShellLink|"
+                             r"MsgBox|SuppressibleMsgBox|ExtractTemporaryFiles?|FileCopy|CreateDir|ForceDirectories|"
+                             r"SaveStringToFile|DeleteFile)\s*\(", body):
+            if len(rows) >= 4096:
+                break
+            fn = next((n for p0, n in reversed(procs) if p0 < m.start()), "[Code]")
+            op, a = m.group(1), _ia_pascal_args(body[m.end():m.end() + 8192])
+            ol = op.lower()
+            if ol.startswith("exec"):
+                cmd = (f'"{a[0]}" ' + (a[1] if len(a) > 1 else "")).strip()
+                rows.append(_ia_row(fn, "code", op, a[:3], "payload", cmd, dflt_target=a[0]))
+            elif ol.startswith("shellexec"):
+                cmd = (f'"{a[1]}" ' + (a[2] if len(a) > 2 else "")).strip() if len(a) > 1 else ""
+                rows.append(_ia_row(fn, "code", op, a[:4], "payload", cmd,
+                                    dflt_target=a[1] if len(a) > 1 else None, verb=a[0]))
+            elif ol == "downloadtemporaryfile":
+                rows.append(_ia_row(fn, "code", op, a[:3], "payload", technique="T1105", target=a[0],
+                                    dest=a[1] if len(a) > 1 else None))
+            elif ol.startswith("regwrite") and len(a) >= 2:
+                rows.append(_ia_regrow(fn, "code", op, a[:4], a[0], a[1], a[3] if len(a) > 3 else ""))
+            elif ol == "createshelllink" and a:
+                st = bool(_IA_STARTUP.search(a[0]))
+                cmd = (f'"{a[2]}" ' + (a[3] if len(a) > 3 else "")).strip() if len(a) > 2 else None
+                rows.append(_ia_row(fn, "code", op, a[:4], "payload" if st else "setup", cmd if st else None,
+                                    technique="T1547.001" if st else None, location=a[0] if st else None,
+                                    persistence=st))
+            elif ol in ("msgbox", "suppressiblemsgbox"):
+                rows.append(_ia_row(fn, "code", op, a[:2], "ui"))
+            else:
+                rows.append(_ia_row(fn, "code", op, a[:3], "setup"))
+    return rows
+
+
+# WiX ------------------------------------------------------------------------------------------------------------------
+def _ia_wix(src):
+    import xml.etree.ElementTree as ET
+    if re.search(r"<!(?:DOCTYPE|ENTITY)", src[:1 << 16], re.I):
+        src = re.sub(r"<!DOCTYPE[^\[>]*(?:\[.*?\])?\s*>", "", src[:1 << 20], flags=re.S | re.I)
+    try:
+        root = ET.fromstring(src[:1 << 20])
+    except ET.ParseError:
+        return []
+    rows, parent = [], {}
+    for p in root.iter():
+        for c in p:
+            parent[c] = p
+
+    def tag(e):
+        return e.tag.rsplit("}", 1)[-1] if isinstance(e.tag, str) else ""
+
+    def attr(e, *ks):
+        low = {k.rsplit("}", 1)[-1].lower(): v for k, v in e.attrib.items()}
+        for k in ks:
+            if k.lower() in low:
+                return low[k.lower()]
+        return None
+
+    def ctx(e):
+        p = e
+        while p is not None:
+            if tag(p) in ("Component", "CustomAction", "Feature", "Fragment") and attr(p, "Id"):
+                return attr(p, "Id")
+            p = parent.get(p)
+        return ""
+
+    def in_dir(e, rx):
+        p = e
+        while p is not None:
+            for k in ("Directory", "Id"):
+                v = attr(p, k) if (k == "Directory" or tag(p) in ("Directory", "StandardDirectory",
+                                                                   "DirectoryRef")) else None
+                if v and rx.search(v):
+                    return True
+            p = parent.get(p)
+        return False
+
+    props = {attr(e, "Id"): attr(e, "Value") or (e.text or "") for e in root.iter() if tag(e) == "Property"}
+    for e in root.iter():
+        if len(rows) >= 4096:
+            break
+        t = tag(e)
+        if t == "CustomAction":
+            cid = attr(e, "Id") or ""
+            exe, script = attr(e, "ExeCommand"), attr(e, "Script")
+            vbc, jsc, dll = attr(e, "VBScriptCall"), attr(e, "JScriptCall"), attr(e, "DllEntry")
+            if exe is not None:
+                img = attr(e, "FileKey", "FileRef") or attr(e, "Property") or attr(e, "Directory")
+                img = props.get(img, img) if attr(e, "Property") else img
+                cmd = exe if not img or attr(e, "Directory") else f'"{img}" {exe}'
+                rows.append(_ia_row(cid, "custom_action", "CustomAction.ExeCommand", [cmd], "payload", cmd,
+                                    dflt_target=cmd))
+            elif script:
+                lang = "jscript" if script.lower().startswith("j") else "vbscript"
+                rows.append(_ia_row(cid, "custom_action", "CustomAction.Script", [script, (e.text or "").strip()],
+                                    "payload", target=(e.text or "").strip() or None, lang_to=lang, chain=[lang],
+                                    technique="T1059.007" if lang == "jscript" else "T1059.005"))
+            elif vbc is not None or jsc is not None:
+                lang = "vbscript" if vbc is not None else "jscript"
+                rows.append(_ia_row(cid, "custom_action", "CustomAction." + ("VBScriptCall" if vbc is not None
+                                                                            else "JScriptCall"),
+                                    [vbc or jsc or "", attr(e, "BinaryKey", "BinaryRef", "FileKey") or ""],
+                                    "payload", target=attr(e, "BinaryKey", "BinaryRef", "FileKey"), lang_to=lang,
+                                    chain=[lang], technique="T1059.007" if lang == "jscript" else "T1059.005"))
+            elif dll is not None:
+                rows.append(_ia_row(cid, "custom_action", "CustomAction.DllEntry",
+                                    [dll, attr(e, "BinaryKey", "BinaryRef", "FileKey") or ""], "payload",
+                                    target=attr(e, "BinaryKey", "BinaryRef", "FileKey")))
+            elif attr(e, "Value") is not None and re.search(r"Quiet(?:Exec)?(?:64)?CmdLine|^Wix\w*Exec", attr(
+                    e, "Property") or "", re.I):
+                cmd = attr(e, "Value")
+                rows.append(_ia_row(cid, "custom_action", "CustomAction.QuietExec", [cmd], "payload", cmd,
+                                    dflt_target=cmd))
+        elif t == "File":
+            rows.append(_ia_row(ctx(e), "component", "File", [attr(e, "Source", "Name", "Id") or ""], "setup"))
+        elif t == "CreateFolder":
+            rows.append(_ia_row(ctx(e), "component", "CreateDirectory", [attr(e, "Directory") or ""], "setup"))
+        elif t == "Shortcut":
+            st = in_dir(e, _IA_STARTUP)
+            tg = attr(e, "Target") or ""
+            cmd = (f'"{tg}" ' + (attr(e, "Arguments") or "")).strip()
+            rows.append(_ia_row(ctx(e), "component", "CreateShortCut", [attr(e, "Name") or "", tg],
+                                "payload" if st else "setup", cmd if st and tg else None,
+                                technique="T1547.001" if st else None, location=attr(e, "Name") if st else None,
+                                persistence=st))
+        elif t == "RegistryValue":
+            p = parent.get(e)
+            key = attr(e, "Key") or (attr(p, "Key") if p is not None and tag(p) == "RegistryKey" else "") or ""
+            rt = attr(e, "Root") or (attr(p, "Root") if p is not None else "") or ""
+            val = attr(e, "Value") or (e.text or "").strip()
+            rows.append(_ia_regrow(ctx(e), "component", "WriteReg", [rt, key, attr(e, "Name") or "", val], rt, key,
+                                   val))
+        elif t == "ServiceInstall":
+            rows.append(_ia_row(ctx(e), "component", "ServiceInstall", [attr(e, "Name") or ""], "setup"))
+    return rows
+
+
+def installer_actions(name, src):
+    """[{section, scope, op, args, kind, lang_to, target, technique, chain, ...}] of an NSIS / Inno / WiX source
+    (see the section comment); [] for anything else. Never raises."""
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            b = bytes(src)
+            src = b.decode("utf-16", "ignore") if b[:2] in (b"\xff\xfe", b"\xfe\xff") else b.decode("utf-8", "ignore")
+        if not isinstance(src, str) or not src.strip():
+            return []
+        src = src.lstrip("﻿")
+        ext = str(name or "").lower().rsplit(".", 1)[-1] if "." in str(name or "") else ""
+        head = src[:1 << 16]
+        if ext in ("wxs", "wxi", "wixproj") or (ext not in ("nsi", "nsh", "iss") and re.search(r"<Wix\b", head)):
+            return _ia_wix(src)
+        if ext == "iss" or (ext not in ("nsi", "nsh") and re.search(r"(?mi)^\[(?:Setup|Run|Files|Code|Icons)\]\s*$",
+                                                                     head)):
+            return _ia_inno(src)
+        if ext in ("nsi", "nsh") or re.search(r"(?mi)^[ \t]*(?:OutFile|SectionEnd|FunctionEnd|!include|"
+                                              r"RequestExecutionLevel|InstallDir)\b", head):
+            return _ia_nsis(src)
+    except Exception:  # noqa: BLE001
+        pass
+    return []
+
+
+def _ia_pick(vals, accepted_values):
+    if not accepted_values:
+        return None
+    acc = {str(a).strip().lower(): a for a in accepted_values}
+    for v in vals:
+        if str(v).strip().lower() in acc:
+            return acc[str(v).strip().lower()]
+    return None
+
+
+def installer_answer(rows, field, accepted_values=None, what=None):
+    """Answer for an installer-script question from installer_actions rows. field = the answer id or its suffix:
+    setup-actions / payload-actions / ui-actions (ops, ','-joined in order, unique), *-count, handoff[s] /
+    handoff-languages / next-language (lang_to of the handoff rows), handoff-count, next-stage (first handoff target,
+    or its language when accepted_values names languages), persistence (technique) / persistence-target,
+    download-url, compile-time, callbacks. 'none' when the field is absent; None when the field is unknown."""
+    try:
+        f = re.sub(r"[^a-z]+", "-", str(field or "").lower()).strip("-")
+        rows = [r for r in (rows or []) if isinstance(r, dict)]
+        hand = [r for r in rows if r.get("lang_to")]
+
+        def uniq(xs):
+            seen, out = set(), []
+            for x in xs:
+                if x is not None and x not in seen:
+                    seen.add(x)
+                    out.append(x)
+            return out
+
+        def out(vals):
+            vals = uniq([str(v) for v in vals])
+            if not vals:
+                return "none"
+            p = _ia_pick(vals, accepted_values)
+            return p if p is not None else ",".join(vals)
+
+        for kind in ("setup", "payload", "ui"):
+            if re.search(r"(?:^|-)%s-(?:actions?-)?count$" % kind, f):
+                return str(sum(1 for r in rows if r.get("kind") == kind))
+            if re.search(r"(?:^|-)%s(?:-actions?|-ops|-operations)?$" % kind, f):
+                return out(r["op"] for r in rows if r.get("kind") == kind)
+        if re.search(r"handoffs?-count$|handoff-total$", f):
+            return str(len(hand))
+        if re.search(r"(?:handoffs?|handoff-languages?|next-languages?|languages?|to-lang)$", f):
+            if f.endswith(("next-language", "next-lang")):
+                return out([hand[0]["lang_to"]] if hand else [])
+            return out(r["lang_to"] for r in hand)
+        if re.search(r"handoff-chain$|chain$", f):
+            return ">".join(uniq(x for r in hand for x in r.get("chain") or [r["lang_to"]])) or "none"
+        if f.endswith("next-stage"):
+            if not hand:
+                return "none"
+            p = _ia_pick([hand[0]["lang_to"]], accepted_values)
+            return p if p is not None else str(hand[0].get("target") or hand[0]["lang_to"])
+        if f.endswith(("persistence", "persistence-technique")):
+            return out(r.get("technique") for r in rows if r.get("persistence"))
+        if f.endswith(("persistence-target", "persistence-location")):
+            return out(r.get("location") for r in rows if r.get("persistence"))
+        if f.endswith(("download-url", "url")):
+            return out(r.get("target") for r in rows if r.get("technique") == "T1105")
+        if f.endswith(("compile-time", "compile-time-command")):
+            return out(r.get("target") for r in rows if r.get("compile_time"))
+        if f.endswith("callbacks"):
+            return out(r["section"] for r in rows if str(r.get("section") or "").startswith((".", "un.")))
+        if f.endswith(("techniques", "attack")):
+            return out(r.get("technique") for r in rows if r.get("kind") == "payload")
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _ia_decode(material, transform=None, key=None):
+    """decode() hook for rep 'installer_actions': material = installer source (or JSON {"name", "text"});
+    key = member name (format hint); transform = None|'json' (rows) | an installer_answer field."""
+    import json
+    if isinstance(material, (bytes, bytearray)):
+        material = bytes(material).decode("utf-8", "ignore")
+    name, text = key or "", material
+    if isinstance(material, str) and material.lstrip()[:1] == "{":
+        try:
+            j = json.loads(material)
+            if isinstance(j, dict) and isinstance(j.get("text"), str):
+                name, text = j.get("name") or name, j["text"]
+        except ValueError:
+            pass
+    rows = installer_actions(name, text)
+    if not rows:
+        return None
+    t = (transform or "json").strip()
+    if t.lower() in ("json", "rows", "none", "identity"):
+        return json.dumps(rows, sort_keys=True, separators=(",", ":"))
+    return installer_answer(rows, t)
+
+
+# ------------------------------------------------------------------------------------------------ NSIS string fold
+# Target nsis-string-define-fold: D22 NSIS carriers were a plain `StrCpy $0 "<data>"`; the twist hides the descriptor in
+# NSIS string semantics. nsis_strings() is a bounded single-pass interpreter of the string subset: `\` line continuation,
+# `;` / `#` / `/* */` comments, `!define [/ifndef|/redef] NAME v` (`/math` folded, `/date`/`/file` ignored) / `!undef`,
+# `!ifdef`/`!ifndef`/`!else`/`!endif`, `${NAME}` (line-level, recursive), `!macro`/`!insertmacro` with `${param}`,
+# `!include` of a member in `files`, `Var [/GLOBAL] x`, `StrCpy dst src [len [start]]` ($0 appends, slicing),
+# `Push`/`Pop`/`Exch`, `LangString` + `$(NAME)`, quotes " ' ` and the `$\x` / `$$` escapes. Values peel via peel_plan.
+_NSIS_CUE = re.compile(r"(?im)^[ \t]*(?:StrCpy|!define|LangString|!insertmacro)\b")
+_NSIS_MARK = re.compile(r"HUNTRESS_ANALYSIS_V\d+:([A-Za-z0-9_]+)-")
+
+
+def _nsis_toks(line):
+    """Tokens of one NSIS line: [(text, quoted)] with the quotes removed and `$\\x` escapes kept raw."""
+    out, cur, q, i, had = [], "", None, 0, False
+    while i < len(line):
+        c = line[i]
+        if q:
+            if c == "$" and line[i + 1:i + 2] == "\\" and i + 2 < len(line):
+                cur += line[i:i + 3]
+                i += 3
+                continue
+            if c == q:
+                q = None
+            else:
+                cur += c
+        elif c in "\"'`" and not cur:
+            q, had = c, True
+        elif c in ";#" and not cur and not had:
+            break
+        elif c.isspace():
+            if cur or had:
+                out.append(cur)
+            cur, had = "", False
+        else:
+            cur += c
+        i += 1
+    if cur or had:
+        out.append(cur)
+    return out
+
+
+def _nsis_math(a, op, b):
+    try:
+        a, b = int(a, 0), int(b, 0)
+        return str({"+": a + b, "-": a - b, "*": a * b, "/": a // b if b else 0, "%": a % b if b else 0,
+                    "&": a & b, "|": a | b, "^": a ^ b, "<<": a << b, ">>": a >> b}[op])
+    except (ValueError, KeyError, TypeError):
+        return ""
+
+
+def nsis_strings(src, files=None, budget=0.5):
+    """{name: value} of an NSIS source: `$0`/`$R1`/`$x` runtime variables (final values), `${NAME}` defines,
+    `$(NAME)` language strings and `stack#N` leftovers, plus `@comments` (the joined comment text). {} when it is
+    not NSIS; never raises."""
+    import time
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            src = bytes(src).decode("utf-8", "ignore")
+        if not isinstance(src, str) or not _NSIS_CUE.search(src[:1 << 20]):
+            return {}
+        end = time.time() + budget
+        files = {str(k).replace("\\", "/").rsplit("/", 1)[-1].lower(): v for k, v in (files or {}).items()}
+        defs, var, lang, stack, macros, comments = {}, {}, {}, [], {}, []
+        names = set()
+        state = {"steps": 0}
+
+        def cdef(s):                                  # compile-time ${NAME} (recursive, bounded)
+            for _ in range(8):
+                n = re.sub(r"\$\{([^${}\s]+)\}", lambda m: defs.get(m.group(1), m.group(0)), s)
+                if n == s:
+                    break
+                s = n[:65536]
+            return s
+
+        def rt(s):                                    # runtime: $\x escapes, $$, $(LANG), $VAR
+            o, i = [], 0
+            while i < len(s):
+                c = s[i]
+                if c != "$" or i + 1 >= len(s):
+                    o.append(c)
+                    i += 1
+                    continue
+                n = s[i + 1]
+                if n == "\\" and i + 2 < len(s):
+                    o.append({"n": "\n", "r": "\r", "t": "\t"}.get(s[i + 2], s[i + 2]))
+                    i += 3
+                    continue
+                if n == "$":
+                    o.append("$")
+                    i += 2
+                    continue
+                if n == "(":
+                    j = s.find(")", i)
+                    if j > 0 and s[i + 2:j] in lang:
+                        o.append(lang[s[i + 2:j]])
+                        i = j + 1
+                        continue
+                m = re.match(r"R\d|\d", s[i + 1:i + 3])
+                if m:
+                    o.append(var.get("$" + m.group(0), ""))
+                    i += 1 + len(m.group(0))
+                    continue
+                m = re.match(r"\w+", s[i + 1:])
+                hit = None
+                if m:
+                    w = m.group(0)
+                    hit = next((w[:k] for k in range(len(w), 0, -1) if w[:k] in names), None)
+                if hit:
+                    o.append(var.get("$" + hit, ""))
+                    i += 1 + len(hit)
+                    continue
+                o.append(c)
+                i += 1
+            return "".join(o)[:65536]
+
+        def run(text, depth=0):
+            text = re.sub(r"\\[ \t]*\r?\n[ \t]*", "", text[:1 << 20])          # `\` continuation (comments too)
+
+            def cm(m):
+                comments.append(m.group(0)[2:-2])
+                return " "
+            text = re.sub(r"/\*.*?\*/", cm, text, flags=re.S)
+            skip, rec = [], None
+            for raw in text.splitlines()[:65536]:
+                state["steps"] += 1
+                if state["steps"] > 200000 or time.time() > end:
+                    return
+                line = raw.strip()
+                cmt = re.match(r"[;#](.*)", line)
+                if cmt:
+                    comments.append(cmt.group(1))
+                    continue
+                if rec is not None:
+                    if re.match(r"(?i)!macroend\b", line):
+                        rec = None
+                    else:
+                        macros[rec][1].append(raw)
+                    continue
+                t = _nsis_toks(cdef(line) if not re.match(r"(?i)!(?:macro|if|else|endif)", line) else line)
+                if not t:
+                    continue
+                tl = line.find(";") if '"' not in line and "'" not in line else -1
+                if tl > 0:
+                    comments.append(line[tl + 1:])
+                op = t[0].lower()
+                if op in ("!ifdef", "!ifndef", "!ifmacrodef", "!ifmacrondef"):
+                    on = (len(t) > 1 and (t[1] in defs if op.endswith("def") and "macro" not in op
+                                          else t[1] in macros))
+                    skip.append(not on if op in ("!ifdef", "!ifmacrodef") else on)
+                    continue
+                if op == "!else" and skip:
+                    skip[-1] = not skip[-1]
+                    continue
+                if op == "!endif" and skip:
+                    skip.pop()
+                    continue
+                if any(skip):
+                    continue
+                a = t[1:]
+                if op == "!define" and a:
+                    fl = [x.lower() for x in a if x.startswith("/")]
+                    a = [x for x in a if not x.startswith("/")]
+                    if not a or "/date" in fl or "/utcdate" in fl or "/file" in fl:
+                        continue
+                    if "/ifndef" in fl and a[0] in defs:
+                        continue
+                    defs[a[0]] = _nsis_math(*a[1:4]) if "/math" in fl and len(a) >= 4 else (a[1] if len(a) > 1 else "")
+                elif op == "!undef" and a:
+                    defs.pop(a[0], None)
+                elif op == "!macro" and a:
+                    rec = a[0]
+                    macros[rec] = (a[1:], [])
+                elif op == "!insertmacro" and a and a[0] in macros and depth < 8:
+                    ps, body = macros[a[0]]
+                    sv = {p: defs.get(p) for p in ps}
+                    for k, p in enumerate(ps):
+                        defs[p] = a[1 + k] if 1 + k < len(a) else ""
+                    run("\n".join(body), depth + 1)
+                    for p, v in sv.items():
+                        if v is None:
+                            defs.pop(p, None)
+                        else:
+                            defs[p] = v
+                elif op == "!include" and a and depth < 8:
+                    f = files.get(a[-1].replace("\\", "/").rsplit("/", 1)[-1].lower())
+                    if isinstance(f, (bytes, bytearray)):
+                        f = bytes(f).decode("utf-8", "ignore")
+                    if isinstance(f, str):
+                        run(f, depth + 1)
+                elif op == "var" and a:
+                    nm = [x for x in a if not x.startswith("/")]
+                    if nm:
+                        names.add(nm[0])
+                elif op == "strcpy" and a:
+                    s = rt(a[1]) if len(a) > 1 else ""
+                    try:
+                        if len(a) > 3 and rt(a[3]).strip():
+                            st = int(rt(a[3]), 0)
+                            s = s[st:] if st >= 0 else s[max(0, len(s) + st):]
+                        if len(a) > 2 and rt(a[2]).strip():
+                            n = int(rt(a[2]), 0)
+                            s = s[:n] if n else s
+                    except ValueError:
+                        pass
+                    var[a[0]] = s
+                elif op == "push" and a:
+                    stack.append(rt(a[0]))
+                elif op == "pop" and a:
+                    var[a[0]] = stack.pop() if stack else ""
+                elif op == "exch" and len(stack) > 1 and not a:
+                    stack[-1], stack[-2] = stack[-2], stack[-1]
+                elif op == "langstring" and len(a) >= 3:
+                    lang[a[0]] = rt(a[2])
+
+        run(src)
+        out = {k: v for k, v in var.items()}
+        out.update({"${%s}" % k: v for k, v in defs.items()})
+        out.update({"$(%s)" % k: v for k, v in lang.items()})
+        out.update({"stack#%d" % k: v for k, v in enumerate(stack)})
+        out["@comments"] = "".join(c.strip() for c in comments)
+        return out
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _nsis_codecs(src, files=None, budget=0.6):
+    """find_codecs rows for an NSIS source whose descriptor is assembled in NSIS string semantics (nsis_strings)."""
+    import time
+    vals = nsis_strings(src, files)
+    if not vals:
+        return []
+    end = time.time() + budget
+    cm = vals.pop("@comments", "")
+    mk = _NSIS_MARK.search(cm) or _NSIS_MARK.search(src or "")
+    tag = mk.group(1) if mk else ""
+    cands = sorted(((k, v) for k, v in vals.items() if isinstance(v, str) and len(v) >= 16),
+                   key=lambda kv: -len(kv[1]))
+    if mk and mk.re is _NSIS_MARK and mk.string is cm:
+        m2 = re.match(r"[^\s\"'<]+", cm[mk.end():])
+        if m2:
+            cands.append(("analysis", m2.group(0)))
+    out, seen = [], set()
+    for k, v in cands[:64]:
+        if time.time() > end:
+            break
+        plain = peel_plan(v, tag, budget=max(0.05, min(0.3, end - time.time())))
+        if plain and plain not in seen:
+            seen.add(plain)
+            out.append({"id": k, "rep": "nsis_strings", "transform": "identity", "key": "", "material": v,
+                        "plain": plain})
+    return out
+
+
+# ------------------------------------------------------------------------------------------------ Inno Setup fold
+# Target inno-setup-iss-route: the installer sibling of D22 NSIS. inno_strings() folds the string subset of an Inno
+# Setup .iss: ISPP `#define NAME "v"` / `#define NAME A + "x" + B` and `{#NAME}` expansion, section `Key=Value`
+# ([Setup] / [Messages] / [CustomMessages], `english.` prefixes) and `Key: "v"; ..` entries ([Run] Parameters with
+# `""` doubling, `{cm:NAME}` / `{{`), and the Pascal Script [Code]: `{ }` / `(* *)` / `//` comments (kept for the
+# marker), `'..'` literals with `''` doubling glued to `#13#10` / `#$41` char codes, `+` concatenation, `const X = ..;`,
+# `X := ..;` (self-appends), ExpandConstant()/Trim() pass-through and every call's folded string arguments.
+_INNO_CUE = re.compile(r"(?im)^[ \t]*\[(?:Setup|Code|Run|UninstallRun|CustomMessages|Messages|Files|Registry|Icons)\]"
+                       r"[ \t]*\r?$")
+_INNO_SECT = re.compile(r"(?m)^[ \t]*\[(\w+)\][ \t]*\r?$")
+
+
+def _inno_pascal(code, vals, comments, budget_end):
+    """Fold the Pascal Script [Code] text into vals (name -> value); comments collected. Never raises."""
+    import time
+    toks, i, n = [], 0, len(code)
+    while i < n and len(toks) < 200000:
+        c = code[i]
+        if c in "'#":
+            s, j, ok = "", i, False
+            while j < n:
+                if code[j] == "'":
+                    k = j + 1
+                    while k < n:
+                        if code[k] == "'":
+                            if code[k + 1:k + 2] == "'":
+                                s += "'"
+                                k += 2
+                                continue
+                            break
+                        s += code[k]
+                        k += 1
+                    j, ok = k + 1, True
+                    continue
+                m = re.match(r"#(\$[0-9A-Fa-f]+|\d+)", code[j:j + 12]) if code[j] == "#" else None
+                if not m:
+                    break
+                v = m.group(1)
+                try:
+                    s += chr(int(v[1:], 16) if v[0] == "$" else int(v))
+                except (ValueError, OverflowError):
+                    pass
+                j, ok = j + len(m.group(0)), True
+            if ok:
+                toks.append(("s", s))
+                i = j
+                continue
+            i += 1
+            continue
+        if c == "{":
+            j = code.find("}", i)
+            j = n if j < 0 else j
+            comments.append(code[i + 1:j])
+            i = j + 1
+            continue
+        if code.startswith("(*", i):
+            j = code.find("*)", i + 2)
+            j = n if j < 0 else j
+            comments.append(code[i + 2:j])
+            i = j + 2
+            continue
+        if code.startswith("//", i):
+            j = code.find("\n", i)
+            j = n if j < 0 else j
+            comments.append(code[i + 2:j])
+            i = j
+            continue
+        if c.isalpha() or c == "_":
+            m = re.match(r"\w+", code[i:])
+            toks.append(("i", m.group(0)))
+            i += len(m.group(0))
+            continue
+        if code.startswith(":=", i):
+            toks.append(("p", ":="))
+            i += 2
+            continue
+        if not c.isspace():
+            toks.append(("p", c))
+        i += 1
+    low = {}
+    calls = [0]
+
+    def get(nm):
+        return low.get(nm.lower())
+
+    def expr(k, depth=0):
+        """(value or None, next index) of a `+` concatenation starting at toks[k]."""
+        parts, known = [], False
+        while k < len(toks) and depth < 16:
+            t, v = toks[k]
+            if t == "s":
+                parts.append(v)
+                known = True
+                k += 1
+            elif t == "i" and k + 1 < len(toks) and toks[k + 1] == ("p", "("):
+                args, k = call(k + 2, depth + 1)
+                if v.lower() in ("expandconstant", "trim", "string", "lowercase", "uppercase") and args and \
+                        args[0] is not None:
+                    parts.append(args[0].lower() if v.lower() == "lowercase" else
+                                 args[0].upper() if v.lower() == "uppercase" else
+                                 args[0].strip() if v.lower() == "trim" else args[0])
+                    known = True
+            elif t == "i":
+                g = get(v)
+                if g is not None:
+                    parts.append(g)
+                    known = True
+                k += 1
+            elif t == "p" and v == "(":
+                x, k = expr(k + 1, depth + 1)
+                if x is not None:
+                    parts.append(x)
+                    known = True
+                if k < len(toks) and toks[k] == ("p", ")"):
+                    k += 1
+            else:
+                break
+            if k < len(toks) and toks[k] == ("p", "+"):
+                k += 1
+                continue
+            break
+        return ("".join(parts)[:1 << 18] if known else None), k
+
+    def call(k, depth):
+        args = []
+        while k < len(toks) and depth < 16:
+            x, k2 = expr(k, depth)
+            args.append(x)
+            k = k2
+            while k < len(toks) and toks[k] not in (("p", ","), ("p", ")")) and toks[k] != ("p", ";"):
+                k += 1                                # skip an operand the folder does not read
+            if k < len(toks) and toks[k] == ("p", ","):
+                k += 1
+                continue
+            if k < len(toks) and toks[k] == ("p", ")"):
+                k += 1
+            break
+        calls[0] += 1
+        for j, a in enumerate(args):
+            if a is not None and len(a) >= 8:
+                vals["call#%d.%d" % (calls[0], j)] = a
+        return args, k
+
+    k, const = 0, False
+    while k < len(toks):
+        if time.time() > budget_end:
+            break
+        t, v = toks[k]
+        vl = v.lower() if t == "i" else ""
+        if vl in ("const", "resourcestring"):
+            const = True
+        elif vl in ("var", "begin", "procedure", "function", "type"):
+            const = False
+        if t == "i" and k + 1 < len(toks) and toks[k + 1] == ("p", ":="):
+            x, k = expr(k + 2)
+            if x is not None:
+                low[vl] = x
+                vals[v] = x
+            continue
+        if t == "i" and const and k + 1 < len(toks) and toks[k + 1] == ("p", "="):
+            x, k = expr(k + 2)
+            if x is not None:
+                low[vl] = x
+                vals[v] = x
+            continue
+        if t == "i" and const and k + 3 < len(toks) and toks[k + 1] == ("p", ":") and toks[k + 3] == ("p", "="):
+            x, k = expr(k + 4)                        # typed constant `X: String = '..';`
+            if x is not None:
+                low[vl] = x
+                vals[v] = x
+            continue
+        if t == "i" and k + 1 < len(toks) and toks[k + 1] == ("p", "(") and vl not in ("procedure", "function"):
+            _, k = call(k + 2, 1)
+            continue
+        k += 1
+
+
+def inno_strings(src, budget=0.5):
+    """{name: value} of an Inno Setup .iss source: `{#NAME}` ISPP defines, `[Section]Key` values, `[Run]#N.param`
+    entry parameters, Pascal [Code] constants / variables (final values) and `call#N.J` folded call arguments, plus
+    `@comments` (the joined comment text). {} when it is not Inno Setup; never raises."""
+    import time
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            src = bytes(src).decode("utf-8", "ignore")
+        if not isinstance(src, str) or not _INNO_CUE.search(src[:1 << 20]):
+            return {}
+        src = src[:1 << 20].lstrip("﻿")
+        end = time.time() + budget
+        defs, vals, comments, cm = {}, {}, [], {}
+
+        def ispp_val(e):
+            parts = []
+            for m in re.finditer(r'"((?:[^"]|"")*)"|\'((?:[^\']|\'\')*)\'|(\w+)|\S', e):
+                if m.group(1) is not None:
+                    parts.append(m.group(1).replace('""', '"'))
+                elif m.group(2) is not None:
+                    parts.append(m.group(2).replace("''", "'"))
+                elif m.group(3) is not None:
+                    if m.group(3) in defs:
+                        parts.append(defs[m.group(3)])
+                    elif not m.group(3).isdigit():
+                        return None
+                    else:
+                        parts.append(m.group(3))
+                elif m.group(0) != "+":
+                    return None
+            return "".join(parts)[:1 << 18]
+
+        lines = []
+        for raw in re.sub(r"\\[ \t]*\r?\n", "", src).splitlines()[:65536]:   # ISPP `\` line continuation
+            m = re.match(r"[ \t]*#[ \t]*(?:define|dim)[ \t]+(?:(?:public|private|protected)[ \t]+)?(\w+)"
+                         r"(?:[ \t]*(?:=[ \t]*)?(.*))?$", raw)
+            if m:
+                v = ispp_val((m.group(2) or "").strip())
+                if v is not None:
+                    defs[m.group(1)] = v
+                continue
+            m = re.match(r"[ \t]*#[ \t]*undef[ \t]+(\w+)", raw)
+            if m:
+                defs.pop(m.group(1), None)
+                continue
+            if re.match(r"[ \t]*#[ \t]*(?:include|if|ifdef|ifndef|else|elif|endif|emit|expr|pragma|sub|endsub)\b",
+                        raw):
+                continue
+            lines.append(raw)
+
+        def isx(s):                                   # ISPP inline `{#NAME}` / `{#emit NAME}`
+            for _ in range(8):
+                n2 = re.sub(r"\{#(?:emit[ \t]+)?[ \t]*(\w+)[ \t]*\}", lambda m: defs.get(m.group(1), m.group(0)), s)
+                if n2 == s:
+                    break
+                s = n2[:1 << 19]
+            return s
+
+        text = isx("\n".join(lines))
+        parts = _INNO_SECT.split(text)
+        secs = [("", parts[0])] + [(parts[j], parts[j + 1]) for j in range(1, len(parts) - 1, 2)]
+        for name, body in secs:                       # messages first: {cm:X} may be used before its section
+            if name.lower() in ("custommessages", "messages"):
+                for raw in body.splitlines():
+                    m = re.match(r"[ \t]*(?:\w+\.)?(\w+)[ \t]*=(.*)$", raw)
+                    if m and not raw.lstrip().startswith(";"):
+                        cm[m.group(1)] = m.group(2).strip()
+                        vals["[%s]%s" % (name, m.group(1))] = m.group(2).strip()
+
+        def const(s):
+            s = re.sub(r"\{cm:(\w+)[^}]*\}", lambda m: cm.get(m.group(1), m.group(0)), s)
+            return s.replace("{{", "{")
+
+        row = 0
+        for name, body in secs:
+            if time.time() > end:
+                break
+            nl = name.lower()
+            if nl == "code":
+                _inno_pascal(body, vals, comments, end)
+                continue
+            for raw in body.splitlines()[:65536]:
+                line = raw.strip()
+                if line.startswith(";"):
+                    comments.append(line[1:])
+                    continue
+                if not line or nl in ("custommessages", "messages"):
+                    continue
+                m = re.match(r"(\w+)[ \t]*=(.*)$", line)
+                if m and ":" not in line.split("=", 1)[0]:
+                    vals["[%s]%s" % (name, m.group(1))] = const(m.group(2).strip())
+                    continue
+                row += 1
+                for pm in re.finditer(r'(\w+)[ \t]*:[ \t]*("(?:[^"]|"")*"|[^;]*)', line):
+                    v = pm.group(2).strip()
+                    if len(v) >= 2 and v[0] == '"' and v[-1] == '"':
+                        v = v[1:-1].replace('""', '"')
+                    vals["[%s]#%d.%s" % (name, row, pm.group(1).lower())] = const(v)
+        out = dict(vals)
+        out.update({"{#%s}" % k: v for k, v in defs.items()})
+        out["@comments"] = "".join(c.strip() for c in comments)
+        return out
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _inno_codecs(src, budget=0.6):
+    """find_codecs rows for an Inno Setup source whose descriptor is assembled in .iss / Pascal semantics."""
+    import time
+    vals = inno_strings(src)
+    if not vals:
+        return []
+    end = time.time() + budget
+    cm = vals.pop("@comments", "")
+    mk = _NSIS_MARK.search(cm) or _NSIS_MARK.search(src or "")
+    tag = mk.group(1) if mk else ""
+    cands = []
+    for k, v in vals.items():
+        if not isinstance(v, str) or len(v) < 16:
+            continue
+        cands.append((k, v))
+        w = re.findall(r"[A-Za-z0-9+/._\-]{16,}={0,2}", v)  # a `/c echo <data>` / `set D=<data>` argument: its token
+        if w and max(w, key=len) != v:
+            cands.append((k + "~", max(w, key=len)))
+    cands.sort(key=lambda kv: -len(kv[1]))
+    if mk and mk.string is cm:
+        m2 = re.match(r"[^\s\"'<]+", cm[mk.end():])
+        if m2:
+            cands.append(("analysis", m2.group(0)))
+    out, seen = [], set()
+    for k, v in cands[:64]:
+        if time.time() > end:
+            break
+        plain = peel_plan(v, tag, budget=max(0.05, min(0.3, end - time.time())))
+        if plain and plain not in seen:
+            seen.add(plain)
+            out.append({"id": k, "rep": "inno_strings", "transform": "identity", "key": "", "material": v,
+                        "plain": plain})
+    return out
+
+
+# ------------------------------------------------------------------------------------------- WiX / MSI custom actions
+# wix-msi-custom-action-route: an installer hands off to an inner script through a custom action. WiX source
+# (`.wxs`): `<CustomAction Id Script="vbscript|jscript">` CDATA bodies, `BinaryKey`/`BinaryRef` + `<Binary SourceFile>`
+# (a sibling member), `ExeCommand`; `[PROP]` / `[#file]` / `[DIR]` are formatted from `<Property>` / `<File>` /
+# `<Directory>`. Built `.msi` (OLE): stream names pack base-64 symbols into 0x3800-0x483F (0x4840 = table prefix),
+# `_StringPool`/`_StringData` hold the strings, `_Columns` the schema, tables are column-major with 2- or 3-byte
+# string refs. Types: base & 7 = 1 dll, 2 exe, 5 jscript, 6 vbscript; source bits 0x30 = binary / file / inline text
+# (directory for exe) / property. Every body is then read by find_codecs like any script.
+
+_WIX_CUE = re.compile(r"(?i)<CustomAction\b")
+_MSI_B64 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz._"
+_WIX_FMT = re.compile(r"\[(\\.|[#!$]?[A-Za-z_][\w.]*)\]")
+
+
+def msi_stream_name(name):
+    """Decoded MSI stream name ('!' prefix = table stream); other characters pass through."""
+    out = []
+    for ch in name:
+        c = ord(ch)
+        if 0x3800 <= c < 0x4800:
+            c -= 0x3800
+            out.append(_MSI_B64[c & 0x3F] + _MSI_B64[(c >> 6) & 0x3F])
+        elif 0x4800 <= c < 0x4840:
+            out.append(_MSI_B64[c - 0x4800])
+        elif c == 0x4840:
+            out.append("!")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def _msi_tables(b, want=("CustomAction", "Binary", "Property", "InstallExecuteSequence", "InstallUISequence",
+                         "AdminExecuteSequence", "File", "Directory")):
+    """({table: [row dict]}, {decoded stream name: bytes}) of an MSI database, or None when it is not one."""
+    import io
+    import olefile
+    ole = olefile.OleFileIO(io.BytesIO(b))
+    streams = {}
+    for ent in ole.listdir(streams=True, storages=False)[:2000]:
+        if len(ent) == 1 and ole.get_size(ent[0]) <= (16 << 20):
+            streams[msi_stream_name(ent[0])] = ent[0]
+
+    def rd(n):
+        return ole.openstream(streams[n]).read() if n in streams else None
+    pool, sdata = rd("!_StringPool"), rd("!_StringData")
+    cols_raw = rd("!_Columns")
+    if pool is None or sdata is None or cols_raw is None or len(pool) < 4:
+        return None
+    cp = int.from_bytes(pool[0:2], "little") | ((int.from_bytes(pool[2:4], "little") & 0x7FFF) << 16)
+    sref = 3 if pool[3] & 0x80 else 2
+    enc = "utf-8" if cp == 65001 else ("cp%d" % cp if cp in (874, 932, 936, 949, 950, 1250, 1251, 1252, 1253, 1254,
+                                                              1255, 1256, 1257, 1258) else "cp1252")
+    words = [int.from_bytes(pool[i:i + 2], "little") for i in range(4, len(pool) - 1, 2)]
+    strs, off, i, n = {}, 0, 0, 1
+    while i + 1 < len(words) and n < 1 << 20:
+        ln, refs = words[i], words[i + 1]
+        if ln == 0 and refs == 0:
+            i, n = i + 2, n + 1
+            continue
+        if ln == 0 and i + 3 < len(words):         # > 64k string: the null entry carries the high word
+            ln, i = (refs << 16) | words[i + 2], i + 4
+        else:
+            i += 2
+        strs[n] = sdata[off:off + ln].decode(enc, "replace")
+        off, n = off + ln, n + 1
+
+    def rows(raw, types):
+        widths = [2 if t & 0x0FFF == 0x0900 or (not t & 0x0800 and t & 0xFF <= 2) else sref if t & 0x0800 else 4
+                  for t in types]
+        rs = sum(widths)
+        cnt = len(raw) // rs if rs else 0
+        out = [dict() for _ in range(min(cnt, 1 << 16))]
+        pos = 0
+        for ci, (w, t) in enumerate(zip(widths, types)):
+            for r in range(len(out)):
+                v = int.from_bytes(raw[pos + r * w:pos + r * w + w], "little")
+                if t & 0x0800 and t & 0x0FFF != 0x0900:
+                    v = strs.get(v, "") if v else None
+                elif t & 0x0800:
+                    v = None                                  # stream column: `Table.Key` stream
+                else:
+                    v = (v - (0x8000 if w == 2 else 0x80000000)) if v else None
+                out[r][ci] = v
+            pos += cnt * w
+        return out
+    schema = {}
+    for r in rows(cols_raw, [0x0D00 | 0x0800 | 64, 0x0502, 0x0D00 | 0x0800 | 64, 0x0502]):
+        if r[0] and r[1] and r[2] and r[3] is not None:
+            schema.setdefault(r[0], []).append((r[1], r[2], r[3] & 0xFFFF))
+    tabs = {}
+    for t in want:
+        raw = rd("!" + t)
+        if t not in schema or raw is None:
+            continue
+        cs = sorted(schema[t])
+        tabs[t] = [{cs[k][1]: v for k, v in r.items()} for r in rows(raw, [c[2] for c in cs])]
+    return tabs, {k: v for k, v in streams.items() if not k.startswith("!") and k.startswith("Binary.")}, rd
+
+
+def _wix_format(s, props, files, dirs, depth=0):
+    if not s or "[" not in s or depth > 3:
+        return s
+
+    def sub(m):
+        k = m.group(1)
+        if k[0] == "\\":
+            return k[1:]
+        if k[0] in "#!":
+            return files.get(k[1:], m.group(0))
+        if k[0] == "$":
+            return m.group(0)
+        return props[k] if k in props else dirs.get(k, m.group(0))
+    t = _WIX_FMT.sub(sub, s)
+    return t if t == s else _wix_format(t, props, files, dirs, depth + 1)
+
+
+def _wix_row(aid, typ, lang, body, exe, seq, cond, body_raw=None):
+    return {"id": aid, "type": typ, "script_lang": lang or "none", "body": body if body is not None else "none",
+            "exe_command": exe if exe is not None else "none", "sequence": seq if seq is not None else "none",
+            "condition": cond if cond is not None else "none",
+            "body_raw": body_raw if body_raw is not None else (body if body is not None else "none")}
+
+
+def _wix_actions_msi(b):
+    got = _msi_tables(b)
+    if not got:
+        return []
+    tabs, bins, rd = got
+    props = {r.get("Property"): r.get("Value") or "" for r in tabs.get("Property", []) if r.get("Property")}
+    files = {r.get("File"): (r.get("FileName") or "").split("|")[-1] for r in tabs.get("File", []) if r.get("File")}
+    dirs = {}
+    for r in tabs.get("Directory", []):
+        if r.get("Directory"):
+            dirs[r["Directory"]] = (r.get("DefaultDir") or "").split(":")[-1].split("|")[-1]
+    seqs = {}
+    for t in ("InstallExecuteSequence", "InstallUISequence", "AdminExecuteSequence"):
+        for r in tabs.get(t, []):
+            if r.get("Action") and r["Action"] not in seqs:
+                seqs[r["Action"]] = (r.get("Sequence"), r.get("Condition"))
+    out = []
+    for r in tabs.get("CustomAction", [])[:512]:
+        aid, typ = r.get("Action") or "", r.get("Type") or 0
+        src, tgt = r.get("Source") or "", r.get("Target") or ""
+        base, kind = typ & 7, typ & 0x30
+        lang = {5: "jscript", 6: "vbscript"}.get(base)
+        body = exe = None
+        if lang:
+            if kind == 0x00:
+                s = rd("Binary." + src) if "Binary." + src in bins else None
+                if s is not None:
+                    s = s[3:] if s[:3] == b"\xef\xbb\xbf" else s
+                    body = (_utf16(s) if s[:2] in (b"\xff\xfe", b"\xfe\xff") else None) or s.decode("cp1252", "replace")
+            elif kind == 0x20:
+                body = tgt
+            elif kind == 0x30:
+                body = props.get(src)
+        elif base == 2:
+            img = {0x20: dirs.get(src, src), 0x30: props.get(src, src), 0x10: files.get(src, src)}.get(kind, src)
+            exe = (f'"{img}" ' if img and kind != 0x20 else "") + _wix_format(tgt, props, files, dirs)
+        sq, cond = seqs.get(aid, (None, None))
+        out.append(_wix_row(aid, typ, lang, _wix_format(body, props, files, dirs) if body is not None else None, exe,
+                            sq, cond, body))
+    return out
+
+
+def _wix_actions_xml(src, files_in=None):
+    import xml.etree.ElementTree as ET
+    if re.search(r"<!(?:DOCTYPE|ENTITY)", src[:1 << 16], re.I):
+        src = re.sub(r"<!DOCTYPE[^\[>]*(?:\[.*?\])?\s*>", "", src[:1 << 20], flags=re.S | re.I)
+    try:
+        root = ET.fromstring(src[:1 << 20].lstrip("﻿ \t\r\n"))
+    except ET.ParseError:
+        return []
+
+    def tag(e):
+        return e.tag.rsplit("}", 1)[-1] if isinstance(e.tag, str) else ""
+
+    def attr(e, *ks):
+        low = {k.rsplit("}", 1)[-1].lower(): v for k, v in e.attrib.items()}
+        return next((low[k.lower()] for k in ks if k.lower() in low), None)
+    els = list(root.iter())[:20000]
+    props = {attr(e, "Id"): attr(e, "Value") if attr(e, "Value") is not None else (e.text or "").strip()
+             for e in els if tag(e) == "Property" and attr(e, "Id")}
+    files = {attr(e, "Id"): attr(e, "Name") or (attr(e, "Source") or "").replace("\\", "/").rsplit("/", 1)[-1]
+             for e in els if tag(e) == "File" and attr(e, "Id")}
+    dirs = {attr(e, "Id"): attr(e, "Name") or attr(e, "Id") for e in els if tag(e) == "Directory" and attr(e, "Id")}
+    bins = {attr(e, "Id"): attr(e, "SourceFile", "Source") or "" for e in els if tag(e) == "Binary" and attr(e, "Id")}
+    files_in = files_in or {}
+
+    def member(path):
+        if not path:
+            return None
+        p = path.replace("\\", "/")
+        for k, v in files_in.items():
+            kk = k.replace("\\", "/")
+            if kk == p or kk.rsplit("/", 1)[-1].lower() == p.rsplit("/", 1)[-1].lower():
+                if isinstance(v, (bytes, bytearray)):
+                    v = bytes(v)
+                    v = v[3:] if v[:3] == b"\xef\xbb\xbf" else v
+                    v = (_utf16(v) if v[:2] in (b"\xff\xfe", b"\xfe\xff") else None) or v.decode("utf-8", "replace")
+                return v
+        return None
+    seqs = {}
+    for e in els:
+        if tag(e) == "Custom" and attr(e, "Action") and attr(e, "Action") not in seqs:
+            pos = attr(e, "Sequence") or (("After " + attr(e, "After")) if attr(e, "After") else
+                                          ("Before " + attr(e, "Before")) if attr(e, "Before") else None)
+            cond = attr(e, "Condition") or (e.text or "").strip() or None
+            seqs[attr(e, "Action")] = (pos, cond)
+    flags = {"ignore": 0x40, "asyncwait": 0x80, "asyncnowait": 0xC0}
+    ex = {"deferred": 0x400, "rollback": 0x500, "commit": 0x600, "firstsequence": 0x100, "oncepersession": 0x100,
+          "onceperprocess": 0x200, "secondsequence": 0x300, "clientrepeat": 0x300}
+    out = []
+    for e in els:
+        if tag(e) != "CustomAction" or len(out) >= 512:
+            continue
+        aid = attr(e, "Id") or ""
+        script, bkey = attr(e, "Script"), attr(e, "BinaryKey", "BinaryRef")
+        vbc, jsc, exe = attr(e, "VBScriptCall"), attr(e, "JScriptCall"), attr(e, "ExeCommand")
+        lang = body = cmd = None
+        typ = 0
+        if script:
+            lang = "jscript" if script.lower().startswith("j") else "vbscript"
+            typ, body = (37 if lang == "jscript" else 38), (e.text or "").strip("\r\n")
+        elif vbc is not None or jsc is not None:
+            lang = "vbscript" if vbc is not None else "jscript"
+            fk = attr(e, "FileKey", "FileRef")
+            typ = (5 if lang == "jscript" else 6) | (0x10 if fk and not bkey else 0)
+            body = member(bins.get(bkey)) if bkey else member(files.get(fk))
+        elif exe is not None:
+            img = None
+            if attr(e, "Directory"):
+                typ = 34
+            elif attr(e, "Property"):
+                typ, img = 50, props.get(attr(e, "Property"), attr(e, "Property"))
+            elif attr(e, "FileKey", "FileRef"):
+                typ, img = 18, files.get(attr(e, "FileKey", "FileRef"), attr(e, "FileKey", "FileRef"))
+            else:
+                typ, img = 2, bkey
+            cmd = (f'"{img}" ' if img else "") + _wix_format(exe, props, files, dirs)
+        elif attr(e, "DllEntry") is not None:
+            typ = 1 if bkey else 17
+        elif attr(e, "Property") and attr(e, "Value") is not None:
+            typ = 51
+        elif attr(e, "Directory") and attr(e, "Value") is not None:
+            typ = 35
+        typ |= flags.get((attr(e, "Return") or "").lower(), 0) | ex.get((attr(e, "Execute") or "").lower(), 0)
+        if (attr(e, "Impersonate") or "").lower() == "no" and typ & 0x400:
+            typ |= 0x800
+        sq, cond = seqs.get(aid, (None, None))
+        out.append(_wix_row(aid, typ, lang, _wix_format(body, props, files, dirs) if body is not None else None, cmd,
+                            sq, cond, body))
+    return out
+
+
+def wix_actions(src, files=None):
+    """[{id, type, script_lang, body, exe_command, sequence, condition, body_raw}] of a WiX source (text) or a built
+    MSI database (bytes, or latin-1 text of them). `body` is formatted (`[PROP]`, `[#file]`, `[DIR]`); `files` maps
+    sibling member names to bytes / text for `<Binary SourceFile>` bodies. Absent fields read "none"; [] when the
+    input is neither."""
+    try:
+        raw = None
+        if isinstance(src, (bytes, bytearray)):
+            raw = bytes(src)
+        elif isinstance(src, str) and src[:4] == "\xd0\xcf\x11\xe0" and max(src[:1 << 16]) < "Ā":
+            raw = src.encode("latin-1", "ignore")
+        if raw is not None and raw[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
+            return _wix_actions_msi(raw)
+        text = raw.decode("utf-8", "replace") if raw is not None else (src or "")
+        if not _WIX_CUE.search(text[:1 << 20]):
+            return []
+        return _wix_actions_xml(text, files)
+    except Exception:  # noqa: BLE001 - truncated / impostor database or XML: nothing
+        return []
+
+
+def _wix_codecs(src, raw=None, depth=0, budget=0.6):
+    """find_codecs rows for every WiX / MSI custom-action body (formatted, then raw) and command line."""
+    import time
+    end = time.time() + budget
+    out, seen = [], set()
+    for a in wix_actions(raw if raw is not None else src)[:128]:
+        for k in ("body", "body_raw", "exe_command"):
+            t = a.get(k)
+            if not t or t == "none" or t in seen or time.time() > end:
+                continue
+            seen.add(t)
+            for c in find_codecs(t, depth + 1):
+                if c.get("plain") and c["plain"] not in {o["plain"] for o in out}:
+                    out.append(dict(c, id=f"{c['id']}@wix:{a['id']}"))
+    return out
+
+
+# ------------------------------------------------------------------------------------------------ IaC embedded scripts
+# Target cloud-iac-userdata-route (after CI, infra-as-code is the next "build that runs code" surface): a Terraform HCL
+# `provisioner "local-exec" { command = <<-EOT .. EOT  interpreter = ["pwsh", "-c"] }` / remote-exec `inline = [..]` /
+# `user_data = base64encode(..)` / `join("", [..])` / `base64decode("..")` / `data "external" { program = [..] }`, a
+# CloudFormation JSON / YAML `UserData: Fn::Base64: !Sub |` / `!Join ['', [..]]` (short-form tags read tag-tolerantly),
+# `AWS::SSM::Document` `runCommand`, Lambda `Code.ZipFile`, `cfn-init` commands, an ARM `deploymentScripts`
+# `scriptContent` (+ `[concat(..)]` expressions, `kind: AzurePowerShell|AzureCLI`), a Bicep `scriptContent: '''..'''`,
+# or an Ansible `shell` / `command` / `raw` / `script` / `win_shell` task (`args: executable:`) carries a prior-language
+# script. iac_scripts() reads every body with the host's own string semantics (`${var}` interpolation left as-is;
+# file()/filebase64()/templatefile()/loadTextContent() bodies live elsewhere and read as absent); _iac_codecs() runs
+# find_codecs on each body. Readings fill a gap, or go ahead of a first-piece reading they extend. Bounded, never raises.
+
+_IAC_CUE = re.compile(r"""(?m)^[ \t]*(?:resource|data)[ \t]+"[\w-]+"[ \t]+"[\w-]+"[ \t]*\{|provisioner[ \t]+"[\w-]+"|"""
+                      r"""AWSTemplateFormatVersion|^Resources[ \t]*:|"Resources"[ \t]*:|Fn::(?:Base64|Join|Sub)|"""
+                      r"""![ \t]*(?:Base64|Sub|Join)\b|Microsoft\.Resources/deploymentScripts|\bscriptContent\b|"""
+                      r"""AWS::SSM::Document|\bansible\.(?:builtin|windows|legacy)\.|^[ \t]*-?[ \t]*(?:hosts|tasks)[ \t]*:""")
+_IAC_HHDR = re.compile(r"""(?m)^[ \t]*(resource|data|provisioner|module)[ \t]+((?:"[^"\n]*"[ \t]*){1,2})\{""")
+_IAC_HATTR = re.compile(r"""(?m)^[ \t]*"?(command|inline|user_data|user_data_base64|custom_data|metadata_startup_script|"""
+                        r"""startup[_-]script|script|scripts|program|content|interpreter|windows-startup-script-ps1|"""
+                        r"""user-data)"?[ \t]*=[ \t]*""")
+_IAC_HESC = re.compile(r"\\(u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|.)|\$\$\{|%%\{", re.S)
+_IAC_HSIMPLE = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\"}
+_IAC_ANS = {"shell": "bash", "command": "bash", "raw": "bash", "script": "bash", "win_shell": "powershell",
+            "win_command": "batch", "win_powershell": "powershell", "psexec": "batch", "expect": "bash"}
+_IAC_YKEY = re.compile(r"""("[^"\n]*"|'[^'\n]*'|[^\s#'"\[\]{},&*!|>-][^#\n]*?)[ \t]*:(?=[ \t]|$)[ \t]*(.*)$""")
+_IAC_TAG = re.compile(r"!(\w+)(?:[ \t]+|$)")
+
+
+def _iac_shebang_lang(body, default):
+    head = (body or "").lstrip()[:256]
+    m = re.match(r"#!\s*(\S+)(?:[ \t]+(\S+))?", head)
+    if m:
+        w = m.group(1).rsplit("/", 1)[-1]
+        return _ci_lang(m.group(2) if w == "env" and m.group(2) else w, default)
+    if re.match(r"<(?:powershell|ps1_sysnative)>", head, re.I):
+        return "powershell"
+    if re.match(r"<script>", head, re.I):
+        return "batch"
+    if head.startswith("#cloud-config"):
+        return "cloud-config"
+    return default
+
+
+def _iac_hunesc(t):
+    def esc(m):
+        x = m.group(0)
+        if x == "$${":
+            return "${"
+        if x == "%%{":
+            return "%{"
+        x = m.group(1)
+        if x[0] in "uU" and len(x) > 1:
+            return chr(int(x[1:], 16))
+        return _IAC_HSIMPLE.get(x, "\\" + x)
+    return _IAC_HESC.sub(esc, t)
+
+
+def _iac_hval(s, i, depth=0):
+    """(value, end) of the HCL expression at s[i]: str / list / None (a file or an unreadable expression)."""
+    n = len(s)
+    while i < n and s[i] in " \t":
+        i += 1
+    if depth > 16 or i >= n:
+        return None, i
+    m = re.match(r"<<(-?)[ \t]*([A-Za-z_]\w*)[ \t]*\r?\n", s[i:i + 80])
+    if m:
+        st = i + m.end()
+        e = re.compile(r"(?m)^[ \t]*" + re.escape(m.group(2)) + r"[ \t]*\r?$").search(s, st)
+        if not e:
+            return None, n
+        lines = s[st:e.start()].split("\n")
+        if m.group(1):
+            ind = min((len(x) - len(x.lstrip(" \t")) for x in lines if x.strip()), default=0)
+            lines = [x[ind:] for x in lines]
+        return "\n".join(lines).replace("$${", "${").replace("%%{", "%{"), e.end()
+    c = s[i]
+    if c == '"':
+        j, buf = i + 1, []
+        while j < n and s[j] != "\n":
+            if s[j] == "\\":
+                j += 2
+                continue
+            if s.startswith("${", j) or s.startswith("%{", j):
+                if j > 0 and s[j - 1] == s[j]:
+                    j += 2
+                    continue
+                d, j = 0, j + 1
+                while j < n:
+                    if s[j] == "{":
+                        d += 1
+                    elif s[j] == "}":
+                        d -= 1
+                        if d == 0:
+                            break
+                    elif s[j] == '"':
+                        k = s.find('"', j + 1)
+                        j = k if k > 0 else n
+                    j += 1
+                j += 1
+                continue
+            if s[j] == '"':
+                return _iac_hunesc(s[i + 1:j]), j + 1
+            j += 1
+        return None, j
+    if c == "[":
+        out, j = [], i + 1
+        while j < n and len(out) < 4096:
+            while j < n and (s[j] in " \t\r\n," or s.startswith(("#", "//"), j)):
+                if s[j] in "#/":
+                    k = s.find("\n", j)
+                    j = n if k < 0 else k
+                j += 1
+            if j >= n or s[j] == "]":
+                return out, j + 1
+            v, k = _iac_hval(s, j, depth + 1)
+            out.append(v)
+            j = max(k, j + 1)
+        return out, j
+    m = re.match(r"([A-Za-z_][\w.]*)[ \t]*\(", s[i:i + 64])
+    if m:
+        args, j = [], i + m.end()
+        while j < n and len(args) < 64:
+            while j < n and s[j] in " \t\r\n,":
+                j += 1
+            if j >= n or s[j] == ")":
+                break
+            v, k = _iac_hval(s, j, depth + 1)
+            args.append(v)
+            j = max(k, j + 1)
+        f = m.group(1).lower()
+        a0 = args[0] if args else None
+        if f in ("base64encode", "base64gzip", "trimspace", "chomp", "indent", "templatestring", "sensitive",
+                 "nonsensitive", "tostring", "trim", "trimsuffix", "trimprefix"):
+            v = args[-1] if f == "indent" and len(args) > 1 else a0
+            return (v if isinstance(v, str) else None), j + 1
+        if f == "base64decode" and isinstance(a0, str):
+            try:
+                return base64.b64decode(a0, validate=True).decode("utf-8"), j + 1
+            except Exception:  # noqa: BLE001
+                return None, j + 1
+        if f == "join" and len(args) > 1 and isinstance(a0, str) and isinstance(args[1], list):
+            return a0.join(x if isinstance(x, str) else "" for x in args[1]), j + 1
+        return None, j + 1
+    m = re.match(r"[^\s,\])}]+", s[i:])
+    return (s[i:i + m.end()] if m else None), i + (m.end() if m else 1)
+
+
+def _iac_hcl(src):
+    hdrs = [(m.start(), m.group(1), re.findall(r'"([^"\n]*)"', m.group(2))) for m in _IAC_HHDR.finditer(src)]
+    out = []
+    for m in _IAC_HATTR.finditer(src):
+        field = m.group(1)
+        if field == "interpreter" or len(out) > 256:
+            continue
+        p = m.start()
+        res = prov = None
+        for h in hdrs:
+            if h[0] > p:
+                break
+            if h[1] == "provisioner":
+                prov = h
+            else:
+                res, prov = h, None
+        v, end = _iac_hval(src, m.end())
+        if v is None:
+            continue
+        rname = ".".join(res[2]) if res else ""
+        if res and res[1] == "data":
+            rname = "data." + rname
+        lang = "bash"
+        if prov:
+            rname += f"/provisioner.{prov[2][0] if prov[2] else ''}"
+            nxt = min([h[0] for h in hdrs if h[0] > prov[0]] + [len(src)])
+            im = re.search(r"(?m)^[ \t]*interpreter[ \t]*=[ \t]*", src[prov[0]:nxt])
+            if im:
+                iv, _ = _iac_hval(src, prov[0] + im.end())
+                if isinstance(iv, list) and iv and isinstance(iv[0], str):
+                    lang = _ci_lang(iv[0])
+        if isinstance(v, list):
+            items = [x for x in v if isinstance(x, str)]
+            if field == "program" and items:
+                k = next((q for q, x in enumerate(items) if x.lower() in ("-c", "-command", "/c", "-e")), -1)
+                lang = _ci_lang(items[0])
+                v = items[k + 1] if 0 <= k < len(items) - 1 else " ".join(items)
+            else:
+                v = "\n".join(items)
+        if field.endswith("_base64") and re.fullmatch(r"[A-Za-z0-9+/=\s]{8,}", v or ""):
+            try:
+                v = base64.b64decode(v).decode("utf-8")
+            except Exception:  # noqa: BLE001
+                pass
+        if field.endswith("ps1"):
+            lang = "powershell"
+        elif not prov and field != "program":
+            lang = _iac_shebang_lang(v, lang)
+        out.append({"resource": rname, "field": field, "lang": lang, "body": v})
+    return out
+
+
+def _iac_flow(t, i, depth=0):
+    """(value, end) of the YAML flow node at t[i]: list / dict / str, short-form `!Tag x` -> {Fn::Tag: x}."""
+    n = len(t)
+    while i < n and t[i] in " \t\r\n":
+        i += 1
+    if i >= n or depth > 24:
+        return None, i
+    m = _IAC_TAG.match(t, i)
+    if m:
+        v, j = _iac_flow(t, m.end(), depth + 1)
+        return {_iac_tagkey(m.group(1)): v}, j
+    c = t[i]
+    if c in "[{":
+        close, out, j = "]" if c == "[" else "}", ([] if c == "[" else {}), i + 1
+        while j < n and len(out) < 4096:
+            while j < n and t[j] in " \t\r\n,":
+                j += 1
+            if j >= n or t[j] == close:
+                return out, j + 1
+            v, k = _iac_flow(t, j, depth + 1)
+            k = max(k, j + 1)
+            if c == "{":
+                while k < n and t[k] in " \t":
+                    k += 1
+                if k < n and t[k] == ":":
+                    v2, k = _iac_flow(t, k + 1, depth + 1)
+                    out[str(v)] = v2
+                else:
+                    out[str(v)] = None
+            else:
+                out.append(v)
+            j = k
+        return out, j
+    if c in "\"'":
+        j = i + 1
+        while j < n:
+            if c == '"' and t[j] == "\\":
+                j += 2
+                continue
+            if t[j] == c:
+                if c == "'" and t[j + 1:j + 2] == "'":
+                    j += 2
+                    continue
+                break
+            j += 1
+        body = t[i + 1:j]
+        return (_ci_ydq(body) if c == '"' else re.sub(r"[ \t]*\n[ \t]*", " ", body).replace("''", "'")), j + 1
+    m = re.compile(r"[^,\[\]{}\n]*?(?=[ \t]*(?:[,\]}\n]|:[ \t]|$))").match(t, i)
+    j = m.end() if m and m.end() > i else i + 1
+    return t[i:j].strip(), j
+
+
+def _iac_tagkey(tag):
+    return tag if tag == "Ref" else "Fn::" + tag
+
+
+def _iac_yrest(lines, i, rest, base, depth):
+    """(value, next line) of the YAML value text `rest` of lines[i] (node at column `base`)."""
+    tag = None
+    m = _IAC_TAG.match(rest)
+    if m:
+        tag, rest = m.group(1), rest[m.end():].strip()
+    if not rest or rest.startswith("#"):
+        j = i + 1
+        while j < len(lines) and (not lines[j].strip() or lines[j].lstrip().startswith("#")):
+            j += 1
+        ci = len(lines[j]) - len(lines[j].lstrip(" ")) if j < len(lines) else -1
+        if j < len(lines) and (ci > base or (ci == base and lines[j].lstrip().startswith("- "))):
+            v, i = _iac_ynode(lines, j, ci, depth + 1)
+        else:
+            v, i = None, i + 1
+    elif rest[:1] in "[{":
+        buf, j = rest, i
+        while buf.count(rest[0]) > buf.count("]" if rest[0] == "[" else "}") and j + 1 < len(lines) and j - i < 512:
+            j += 1
+            buf += "\n" + lines[j]
+        v, _ = _iac_flow(buf, 0)
+        i = j + 1
+    else:
+        v, _ck, j = _ci_yscalar(lines, i, rest, base)
+        i = max(j, i + 1)
+    return ({_iac_tagkey(tag): v} if tag else v), i
+
+
+def _iac_ynode(lines, i, ind, depth=0):
+    """(node, next index) of the YAML block node on lines[i] at column `ind` (tags kept as {Fn::Tag: value})."""
+    n = len(lines)
+    while i < n and (not lines[i].strip() or lines[i].lstrip().startswith("#")):
+        i += 1
+    if i >= n or depth > 48 or len(lines[i]) - len(lines[i].lstrip(" ")) != ind:
+        return None, i
+    if lines[i].lstrip().startswith("- ") or lines[i].strip() == "-":
+        seq = []
+        while i < n and len(seq) < 4096:
+            while i < n and (not lines[i].strip() or lines[i].lstrip().startswith("#")):
+                i += 1
+            if i >= n:
+                break
+            s = lines[i]
+            if len(s) - len(s.lstrip(" ")) != ind or not (s.lstrip().startswith("- ") or s.strip() == "-"):
+                break
+            rest = s[ind + 1:]
+            c = ind + 1 + len(rest) - len(rest.lstrip(" "))
+            rest = rest.strip()
+            if rest.startswith("- ") or (rest[:1] not in "\"'[{!|>" and _IAC_YKEY.match(rest)):
+                lines[i] = " " * c + rest
+                v, i = _iac_ynode(lines, i, c, depth + 1)
+            else:
+                v, i = _iac_yrest(lines, i, rest, ind, depth)
+            seq.append(v)
+        return seq, i
+    mp = {}
+    while i < n and len(mp) < 4096:
+        while i < n and (not lines[i].strip() or lines[i].lstrip().startswith("#")):
+            i += 1
+        if i >= n:
+            break
+        s = lines[i]
+        if len(s) - len(s.lstrip(" ")) != ind or s.lstrip().startswith("- "):
+            break
+        km = _IAC_YKEY.match(s, ind)
+        if not km:
+            break
+        v, i = _iac_yrest(lines, i, km.group(2).strip(), ind, depth)
+        mp[km.group(1).strip("'\"")] = v
+    return mp, i
+
+
+def _iac_docs(text):
+    import json
+    t = text.lstrip("\ufeff \t\r\n")
+    if t[:1] in "{[":
+        try:
+            d = json.loads(t)
+            return [d]
+        except Exception:  # noqa: BLE001
+            pass
+    out = []
+    for d in re.split(r"(?m)^---[ \t]*(?:#.*)?$|^\.\.\.[ \t]*$", text.replace("\t", "  "))[:64]:
+        lines = d.splitlines()[:20000]
+        k = 0
+        while k < len(lines) and (not lines[k].strip() or lines[k].lstrip().startswith(("#", "%"))):
+            k += 1
+        if k < len(lines):
+            out.append(_iac_ynode(lines, k, len(lines[k]) - len(lines[k].lstrip(" ")))[0])
+    return out
+
+
+def _iac_fn(v, depth=0):
+    """CloudFormation intrinsic value -> text (`Fn::Base64` / `Fn::Sub` / `Fn::Join`; Ref / GetAtt -> `${..}`)."""
+    if depth > 24 or v is None:
+        return None
+    if isinstance(v, str):
+        return v
+    if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, dict) and len(v) == 1:
+        k, x = next(iter(v.items()))
+        k = k[4:] if k.startswith("Fn::") else k
+        if k == "Base64":
+            return _iac_fn(x, depth + 1)
+        if k == "Sub":
+            return _iac_fn(x[0] if isinstance(x, list) and x else x, depth + 1)
+        if k == "Join" and isinstance(x, list) and len(x) == 2 and isinstance(x[1], list):
+            return (_iac_fn(x[0], depth + 1) or "").join(_iac_fn(y, depth + 1) or "" for y in x[1])
+        if k == "Ref":
+            return "${%s}" % x
+        if k == "GetAtt":
+            return "${%s}" % (".".join(map(str, x)) if isinstance(x, list) else x)
+        return "${%s}" % k
+    return None
+
+
+def _iac_arm(s, depth=0):
+    """ARM template expression `[concat('a', ..)]` -> text (non-literal parts left as `[..]`)."""
+    if not isinstance(s, str) or not (s.startswith("[") and s.endswith("]")) or s.startswith("[["):
+        return s[1:] if isinstance(s, str) and s.startswith("[[") else s
+
+    def ev(t, i, d):
+        while i < len(t) and t[i] in " \t\r\n,":
+            i += 1
+        if d > 16 or i >= len(t):
+            return None, i
+        if t[i] == "'":
+            j = i + 1
+            while j < len(t):
+                if t[j] == "'":
+                    if t[j + 1:j + 2] == "'":
+                        j += 2
+                        continue
+                    break
+                j += 1
+            return t[i + 1:j].replace("''", "'"), j + 1
+        m = re.match(r"([A-Za-z_][\w.]*)[ \t]*\(", t[i:])
+        if m:
+            args, j = [], i + m.end()
+            while j < len(t) and len(args) < 64:
+                while j < len(t) and t[j] in " \t\r\n,":
+                    j += 1
+                if j >= len(t) or t[j] == ")":
+                    break
+                a, k = ev(t, j, d + 1)
+                args.append(a)
+                j = max(k, j + 1)
+            f, end = m.group(1).lower(), j + 1
+            if f == "concat" and all(isinstance(a, str) for a in args):
+                return "".join(args), end
+            if f in ("base64", "string", "trim") and args and isinstance(args[0], str):
+                return args[0], end
+            if f == "base64tostring" and args and isinstance(args[0], str):
+                try:
+                    return base64.b64decode(args[0]).decode("utf-8"), end
+                except Exception:  # noqa: BLE001
+                    return None, end
+            if f == "format" and args and isinstance(args[0], str):
+                return re.sub(r"\{(\d+)\}", lambda mm: args[int(mm.group(1)) + 1] if int(mm.group(1)) + 1 < len(args)
+                              and isinstance(args[int(mm.group(1)) + 1], str) else mm.group(0), args[0]), end
+            return "[%s]" % t[i:end], end
+        m = re.match(r"[^,()]+", t[i:])
+        return "[%s]" % m.group(0).strip() if m else None, i + (m.end() if m else 1)
+    v, _ = ev(s[1:-1], 0, depth)
+    return v if isinstance(v, str) else s
+
+
+def _iac_walk(node, key, depth=0):
+    """Every value under a mapping key `key` in a parsed tree (depth-first, bounded)."""
+    if depth > 12:
+        return
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k == key:
+                yield v
+            else:
+                yield from _iac_walk(v, key, depth + 1)
+    elif isinstance(node, list):
+        for v in node[:4096]:
+            yield from _iac_walk(v, key, depth + 1)
+
+
+def _iac_tree(doc):
+    out = []
+    if not isinstance(doc, (dict, list)):
+        return out
+    res = doc.get("Resources") if isinstance(doc, dict) else None
+    if isinstance(res, dict):                                           # CloudFormation / SAM
+        for name, r in list(res.items())[:4096]:
+            if not isinstance(r, dict):
+                continue
+            typ, props = str(r.get("Type") or ""), r.get("Properties") or {}
+            for v in _iac_walk(props, "UserData"):
+                b = _iac_fn(v)
+                if isinstance(b, str):
+                    out.append({"resource": f"{name}:{typ}", "field": "UserData", "lang": _iac_shebang_lang(b, "bash"),
+                                "body": b})
+            if typ == "AWS::SSM::Document" or "mainSteps" in str(props)[:1 << 16]:
+                for st in _iac_walk(props, "mainSteps"):
+                    for s in (st if isinstance(st, list) else []):
+                        if not isinstance(s, dict) or not isinstance(s.get("inputs"), dict):
+                            continue
+                        rc = s["inputs"].get("runCommand")
+                        rc = rc if isinstance(rc, list) else [rc]
+                        b = "\n".join(x for x in (_iac_fn(y) for y in rc) if isinstance(x, str))
+                        act = str(s.get("action") or "").lower()
+                        out.append({"resource": f"{name}:{typ}", "field": "runCommand",
+                                    "lang": "powershell" if "powershell" in act else "bash", "body": b})
+            code = props.get("Code") if isinstance(props, dict) else None
+            if isinstance(code, dict) and code.get("ZipFile") is not None:
+                b = _iac_fn(code.get("ZipFile"))
+                rt = str(props.get("Runtime") or "").lower()
+                if isinstance(b, str):
+                    out.append({"resource": f"{name}:{typ}", "field": "Code.ZipFile",
+                                "lang": "node" if rt.startswith("nodejs") else "python", "body": b})
+            for cmds in _iac_walk(r.get("Metadata"), "commands"):
+                for cn, cv in (cmds.items() if isinstance(cmds, dict) else []):
+                    c = cv.get("command") if isinstance(cv, dict) else None
+                    b = " ".join(map(str, c)) if isinstance(c, list) else _iac_fn(c)
+                    if isinstance(b, str):
+                        out.append({"resource": f"{name}:cfn-init/{cn}", "field": "command", "lang": "bash",
+                                    "body": b})
+    rl = doc.get("resources") if isinstance(doc, dict) else None
+    stack = list(rl.values() if isinstance(rl, dict) else rl if isinstance(rl, list) else [])
+    while stack and len(out) < 512:                                         # ARM template (+ nested resources)
+        r = stack.pop(0)
+        if not isinstance(r, dict):
+            continue
+        sub = r.get("resources")
+        stack.extend(sub.values() if isinstance(sub, dict) else sub if isinstance(sub, list) else [])
+        typ, props = str(r.get("type") or ""), r.get("properties")
+        if not isinstance(props, dict):
+            continue
+        name = _iac_arm(str(r.get("name") or ""))
+        if "deploymentscripts" in typ.lower() and props.get("scriptContent") is not None:
+            b = _iac_arm(props.get("scriptContent"))
+            kind = str(r.get("kind") or "").lower()
+            out.append({"resource": f"{name}:{typ}", "field": "scriptContent",
+                        "lang": "powershell" if "powershell" in kind else "bash", "body": b})
+        for v in _iac_walk(props, "customData"):
+            b = _iac_arm(v)
+            if isinstance(b, str):
+                out.append({"resource": f"{name}:{typ}", "field": "customData", "lang": _iac_shebang_lang(b, "bash"),
+                            "body": b})
+    plays = doc if isinstance(doc, list) else []
+    stack = [(t, 0) for t in plays[:4096]]
+    while stack and len(out) < 512:                                         # Ansible playbook / task list
+        t, d = stack.pop(0)
+        if not isinstance(t, dict) or d > 8:
+            continue
+        for k in ("tasks", "pre_tasks", "post_tasks", "handlers", "block", "rescue", "always"):
+            if isinstance(t.get(k), list):
+                stack.extend((x, d + 1) for x in t[k][:4096])
+        for k, v in t.items():
+            mod = re.sub(r"^(?:ansible\.(?:builtin|windows|legacy)|community\.\w+)\.", "", str(k))
+            if mod not in _IAC_ANS:
+                continue
+            args = t.get("args") if isinstance(t.get("args"), dict) else {}
+            if isinstance(v, dict):
+                args = dict(args, **v)
+                v = next((v[x] for x in ("cmd", "_raw_params", "script", "argv", "free_form") if v.get(x) is not None),
+                         None)
+                v = " ".join(map(str, v)) if isinstance(v, list) else v
+            if not isinstance(v, str):
+                continue
+            exe = args.get("executable")
+            lang = _ci_lang(str(exe)) if exe else _IAC_ANS[mod]
+            out.append({"resource": str(t.get("name") or mod), "field": str(k), "lang": lang, "body": v})
+    return out
+
+
+def _iac_bicep(src):
+    out = []
+    hdrs = [(m.start(), m.group(1), m.group(2)) for m in
+            re.finditer(r"(?m)^[ \t]*resource[ \t]+(\w+)[ \t]+'([^'\n]+)'", src)]
+    for m in re.finditer(r"(?m)^[ \t]*(scriptContent|customData|userData)[ \t]*:[ \t]*", src):
+        i = m.end()
+        if src.startswith("'''", i):
+            e = src.find("'''", i + 3)
+            if e < 0:
+                continue
+            body = src[i + 3:e]
+            body = body[1:] if body.startswith("\n") else body[2:] if body.startswith("\r\n") else body
+        elif src.startswith("'", i):
+            j = i + 1
+            while j < len(src) and src[j] not in "'\n":
+                j += 2 if src[j] == "\\" else 1
+            body = re.sub(r"\\(u\{[0-9a-fA-F]{1,6}\}|.)", lambda mm: chr(int(mm.group(1)[2:-1], 16))
+                          if mm.group(1)[0] == "u" else {"n": "\n", "r": "\r", "t": "\t"}.get(mm.group(1), mm.group(1)),
+                          src[i + 1:j])
+        else:
+            continue
+        res = None
+        for h in hdrs:
+            if h[0] < m.start():
+                res = h
+        kind = re.search(r"(?m)^[ \t]*kind[ \t]*:[ \t]*'(\w+)'", src[res[0] if res else 0:m.start()])
+        lang = "powershell" if kind and "powershell" in kind.group(1).lower() else (
+            "bash" if m.group(1) == "scriptContent" else _iac_shebang_lang(body, "bash"))
+        out.append({"resource": f"{res[1]}:{res[2]}" if res else "", "field": m.group(1), "lang": lang, "body": body})
+    return out
+
+
+def iac_scripts(name, src):
+    """Scripts embedded in an IaC template: [{resource, field, lang, body}] of a Terraform HCL, CloudFormation
+    JSON / YAML, ARM JSON, Bicep or Ansible playbook. [] when it is none. Never raises."""
+    try:
+        if isinstance(src, (bytes, bytearray)):
+            src = bytes(src).decode("utf-8", "ignore")
+        src = (src or "")[:1 << 20].lstrip("\ufeff")
+        nm = (name or "").lower()
+        out = []
+        if nm.endswith((".tf", ".hcl", ".tfvars")) or re.search(r"""(?m)^[ \t]*(?:resource|data|provisioner)[ \t]+"[\w-]+""", src[:1 << 18]):
+            out += _iac_hcl(src)
+        if nm.endswith(".bicep") or re.search(r"(?m)^[ \t]*resource[ \t]+\w+[ \t]+'[^'\n]+@[\w-]+'", src[:1 << 18]):
+            out += _iac_bicep(src)
+        if not out:
+            for d in _iac_docs(src):
+                out += _iac_tree(d)
+        return [s for s in out if isinstance(s.get("body"), str)][:512]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _iac_codecs(src, budget=0.5):
+    """find_codecs readings of every IaC-embedded script body."""
+    out, seen = [], set()
+    end = time.time() + budget
+    for s in iac_scripts("", src):
+        if time.time() > end:
+            break
+        if not _NS_HINT.search(s["body"]):
+            continue
+        for c in find_codecs(s["body"], 1):
+            p = c.get("plain")
+            if p and p not in seen:
+                seen.add(p)
+                out.append(dict(c, id=f"{c.get('id')}@{s['resource']}/{s['field']}"))
+    return out

@@ -1,0 +1,7 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "generator_cmd": "python3 tests/data/android_fixtures/pef_src/gen_pef.py decoy_nearmiss tests/data/android_fixtures/pef_decoy_nearmiss.apk  # same as elf_stripped but the .so holds the 15-hex near-miss 'ANS-c27e9a04b1f6d38'; puzzle data='native/libmod.so'",
+ "oracle_cmd": "unzip -p pef_decoy_nearmiss.apk assets/native/libmod.so | strings -a | grep ANS-  # -> ANS-c27e9a04b1f6d38 (15 hex); unzip -p pef_decoy_nearmiss.apk | grep -ac 'ANS-[0-9a-fA-F]\\{16\\}' -> 0",
+ "decoy": true
+}

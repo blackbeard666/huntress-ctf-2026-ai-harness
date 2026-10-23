@@ -1,0 +1,7 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-7c3e19a5d04bf268",
+ "_why": "Guard builds every root-probe argument at runtime -- '/sys'+'tem/'+1-byte-xor'd byte[] (/system/bin/su), reversed StringBuilder with a doubled slash (/system//xbin/busybox), char[] with a trailing slash (/data/adb/modules/), upper-case unknown /SYSTEM/etc/.installed_su_daemon, unknown /cache//recovery/.r00t, packages from base64 (com.topjohnwu.magisk), reversed (io.github.lsposed.manager), xor'd mixed-case dev.Zygisk.next; none is a dex literal. File.exists / getPackageInfo answers fold into Vault's xor key, so the stubs must answer on the evaluated, normalised argument",
+ "generator_cmd": "python3 tests/data/android_fixtures/probearg_src/gen_probearg.py frag_xor tests/data/android_fixtures/probearg_frag_xor.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d22.probearg.Probe -> new Vault().reveal() on the host JVM (real File.exists on a host without /system, /cache, /data/adb; stub PackageManager throws NameNotFound) -> 'flag{ANS-7c3e19a5d04bf268}'; stage 1 prints the JVM-resolved probe args"
+}

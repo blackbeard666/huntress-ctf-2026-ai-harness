@@ -1,0 +1,9 @@
+{
+ "codec": "bz2-base64url",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-otter-38",
+ "encoded": "QlpoOTFBWSZTWTM4itoAAAwfgGAGCFAAgwQAPu_fwCAASIp5Jo9RiA0NH6pp6g1TGo02KGj0gBozJAsx2pvmH4A3FGSSLI20RtvhbDpNRUNWPLjVks8ukJMaLUsoVSPM-PqUAwNAz3MhKtoEXzSBE4_xdyRThQkDM4itoA==",
+ "generator_cmd": "printf %s \"$plain\" | bzip2 -9 | basenc --base64url -w0  # bzip2 CLI + basenc wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | basenc --base64url -d | bzip2 -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-otter-38",
+ "expected": "match"
+}

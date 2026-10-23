@@ -1,0 +1,10 @@
+{
+ "codec": "xz-base64url-nopad",
+ "plain": "ct answer",
+ "encoded": "_Td6WFoAAATm1rRGBMANCSEBFgAAAAAAAAAAAF9PM-QBAAhjdCBhbnN3ZXIAAAAAgu1UX0rn7lwAASkJZJIcHR-2830BAAAAAARZWg",
+ "generator_cmd": "printf %s \"$plain\" | xz -6 -c | basenc --base64url -w0 | tr -d =  # xz CLI + basenc wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | tr -- '-_' '+/' | { read x; printf %s \"$x\"; printf %.$(( (4 - ${#x} % 4) % 4 ))s '==='; } | base64 -d | xz -dc",
+ "oracle_plain": "ct answer",
+ "expected": "match",
+ "mastery_fragment": true
+}

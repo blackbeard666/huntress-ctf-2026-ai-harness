@@ -1,0 +1,8 @@
+{
+ "field": "oci.rootfs_diff_ids",
+ "expected": "[\"sha256:ba53bba2ef1f46e78abadc7e8498e9e0ddb4e933b53cc08839784034d5cacb14\",\"sha256:5197f5ce2fcf25cf517cbfe70234bdfead8bdb6d6f7bcdce93263bd93f3d2ace\",\"sha256:43bf67ca3593910d94d23cab81c4ba6257428e61e9d1ed974b40aa72f2ffedf4\"]",
+ "generator_cmd": "docker import base.tar hctf-fixture-base:1; docker build -t hctf-fixture-beacon:2.1 . (FROM hctf-fixture-base:1; LABEL org.opencontainers.image.title=beacon maintainer=ops@example.test; ENV APP_MODE=prod PATH=/usr/local/bin:/usr/bin; WORKDIR /opt/beacon; COPY; EXPOSE 8443/tcp 53/udp; USER 1001:1001; ENTRYPOINT [\"/opt/beacon/run\",\"--quiet\"]; CMD [\"--port\",\"8443\"]); docker save -o beacon.tar hctf-fixture-beacon:2.1  (Docker 29.6)",
+ "oracle_cmd": "docker image inspect hctf-fixture-beacon:2.1 --format '{{json .RootFS.Layers}}'",
+ "decoy": false,
+ "member": "beacon.tar"
+}

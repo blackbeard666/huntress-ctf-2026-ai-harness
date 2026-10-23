@@ -1,0 +1,8 @@
+{
+ "field": "jar.signer_cert_sha256",
+ "expected": "none",
+ "generator_cmd": "javac --release 8 Activator.java Util.java; META-INF/maven/{com.acme/ledger-core,org.slf4j/slf4j-api}/pom.properties; jar --create --file ledger-core-2.4.1.jar --manifest mf.txt (OSGi Bundle-* / Export-Package / Import-Package) -C o .",
+ "oracle_cmd": "keytool -printcert -jarfile ledger-core-2.4.1.jar -> 'Not a signed jar file'",
+ "decoy": true,
+ "member": "ledger-core-2.4.1.jar"
+}

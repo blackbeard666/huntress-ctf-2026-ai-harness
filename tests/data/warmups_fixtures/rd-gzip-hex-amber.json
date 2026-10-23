@@ -1,0 +1,9 @@
+{
+ "codec": "decompress-redecode",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "H4sIAAAAAAACA02OyRVDIQwDWwIv0qechKX/Er7MyyEnYzFjOzYGHGmNxKHhaw2BVHZUBzaov8CDQb9UF7WYbNatZeAoLXoSmjOrY0KMjPh3kXzQ4ZWqbnFUZpc5P1KXhHbIrtfSNvFF+edaS5PLWYC6ee/ctjzcXlhZFj3MAAAA",
+ "generator_cmd": "printf %s \"$plain\" | xxd -p | tr -d \"\\n\" | gzip -9n | base64 -w0",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc | xxd -r -p",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

@@ -1,0 +1,5 @@
+{
+  "error": "challenge_unavailable",
+  "message": "That challenge isn't released yet, or the ID doesn't match one.",
+  "next": "Use op=list to get exact challenge IDs. New days unlock daily at 9:00 AM Eastern."
+}

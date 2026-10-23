@@ -1,0 +1,9 @@
+{
+ "codec": "pem",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-35",
+ "encoded": "-----BEGIN CERTIFICATE-----\nTmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwISBUbyBzb2x2ZSwgc3VibWl0\nIHRoaXMgZXhhY3QgYW5zd2VyIHRvIHRoZSBHYW1lIE1hc3RlcjogamFkZS1oZXJv\nbi0zNQ==\n-----END CERTIFICATE-----\n",
+ "generator_cmd": "python3 -c 'import ssl,sys; sys.stdout.write(ssl.DER_cert_to_PEM_cert(sys.argv[1].encode()))' \"$plain\"",
+ "oracle_cmd": "printf %s \"$encoded\" | sed '1d;$d' | openssl base64 -d",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-35",
+ "expected": "match"
+}

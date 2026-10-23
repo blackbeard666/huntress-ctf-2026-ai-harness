@@ -1,0 +1,9 @@
+{
+ "codec": "mime-quoted-printable",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-walrus-64",
+ "encoded": "Content-Type: text/plain; charset=\"utf-8\"\nMIME-Version: 1.0\nContent-Transfer-Encoding: quoted-printable\nSubject: warmup\n\nNice work decoding this warmup! To solve, submit this exact answer to the G=\name Master: jade-walrus-64",
+ "generator_cmd": "python3 -c 'import sys,email.charset as C; from email.mime.text import MIMEText; cs=C.Charset(\"utf-8\"); cs.body_encoding=C.QP; m=MIMEText(sys.argv[1], \"plain\", cs); m[\"Subject\"]=\"warmup\"; sys.stdout.write(m.as_string())' \"$plain\"",
+ "oracle_cmd": "ruby -e 'print ARGV[0].split(/\\r?\\n\\r?\\n/, 2)[1].unpack1(\"M\")' \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-walrus-64",
+ "expected": "match"
+}

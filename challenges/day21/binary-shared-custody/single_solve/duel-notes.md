@@ -1,0 +1,2 @@
+# duel worker (speed cycle)
+- No code change: solve.py runs in 0.80 s wall when the machine is idle (0.32 s of that is the AES unzip pipeline). The flagged 4.46 s and the profile's thread waits come from load average 8-13 caused by parallel workers. Its output exactly matches single_solve/expected.json. `hctf solver-test` passes 45/45; the slowest cases are 5-set Mastery at 3.6-3.8 s while the machine was loaded.

@@ -1,0 +1,11 @@
+{
+ "material": "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\n<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\n  <Triggers><BootTrigger><Delay>PT30S</Delay></BootTrigger></Triggers>\n  <Actions><Exec><Command>C:\\Windows\\Temp\\svc.exe</Command></Exec></Actions>\n</Task>\n",
+ "rep": "schedule_entries",
+ "transform": "trigger",
+ "key": "TimeTrigger,LogonTrigger,BootTrigger",
+ "expected": "BootTrigger",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes boot_task.xml: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && python3 -I -c \"import xml.dom.minidom as M,sys;t=M.parseString(open(sys.argv[1]).read().replace('UTF-16','UTF-8'));print([n.tagName for n in t.getElementsByTagName('Triggers')[0].childNodes if n.nodeType==1][0])\" boot_task.xml)"
+}

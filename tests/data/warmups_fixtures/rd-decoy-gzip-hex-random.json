@@ -1,0 +1,10 @@
+{
+ "codec": "decompress-redecode",
+ "plain": "",
+ "encoded": "H4sIAAAAAAACAwXBgQGAMAgDsJcAS2HnUIf/n2Dy2ey8DkEFoJ32WKP3im7MtdMZdSMgX57LuIsKT60qpltGO6wNsRKhGijfmbFa6gd9X3R7YAAAAA==",
+ "generator_cmd": "head -c 48 /dev/urandom | xxd -p | tr -d \"\\n\" | gzip -9n | base64 -w0",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc | xxd -r -p | file -b -  # random bytes, no sentence -> none",
+ "decoy": true,
+ "expected": "none",
+ "oracle_output": "data"
+}

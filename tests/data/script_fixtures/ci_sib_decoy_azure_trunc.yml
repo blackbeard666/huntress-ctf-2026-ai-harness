@@ -1,0 +1,5 @@
+variables:
+- name: HUNTRESS_DESCRIPTOR
+  value: 'dj0zfGxhbmd1YWdlPWF6dXJlX3BpcGVsaW5lc3xyb2xlPWRvd25sb2FkZ'
+steps:
+- bash: echo ok

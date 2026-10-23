@@ -1,0 +1,11 @@
+{
+ "material": "just some notes\nnot: a ci file\n",
+ "rep": "ci_expressions",
+ "transform": "injectable_step",
+ "key": null,
+ "expected": null,
+ "decoy": true,
+ "note": "ci-expression-injection-secrets: lib.codec.ci_expressions/ci_expr_answer via decode(rep='ci_expressions', transform=<field>[@job|step])",
+ "generator_cmd": "cat > cix_w5.txt <<'EOF' (hand-authored synthetic CI file, heredoc; no lib code); tests/data/script_fixtures/cix_gen.py writes the json",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/cix_oracle.py tests/data/script_fixtures/cix_w5.txt injectable_step  (PyYAML 6 safe_load)"
+}

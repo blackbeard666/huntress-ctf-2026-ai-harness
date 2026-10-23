@@ -1,0 +1,8 @@
+{
+ "field": "jar.main_class_has_main_method",
+ "expected": "true",
+ "generator_cmd": "javac --release 21 -d om module-info.java com/acme/app/Main.java; jar --create --file app.jar --main-class com.acme.app.Main --module-version 2.4.1 -C om .",
+ "oracle_cmd": "unzip -p app.jar META-INF/MANIFEST.MF -> Main-Class: com.acme.app.Main; javap -v -p Main.class -> public static void main (0x0009)",
+ "decoy": false,
+ "member": "app.jar"
+}

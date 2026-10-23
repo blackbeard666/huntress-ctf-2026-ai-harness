@@ -1,0 +1,10 @@
+{
+ "codec": "archive-container[zip]",
+ "plain": null,
+ "encoded": "UEsDBAoACAAAAFCvVV3/AAAAIQAAACEAAAAFAAAAYS50eHRuaWNlIHdvcmsgZGVjb2RpbmcgdGhpcyB3YXJtdXAhIFRQSwcI4OA0xiEAAAAhAAAAUEsDBAoACAAAAFCvVV0AAAAAIQAAACEAAAAFAAAAYi50eHRvIHNvbHZlLCBzdWJtaXQgdGhpcyBleGFjdCBhbnN3ZXJQSwcISZbMaCEAAAAhAAAAUEsDBAoACAAAAFCvVV0AAAAAIwAAACMAAAAFAAAAYy50eHQgdG8gdGhlIEdhbWUgTWFzdGVyOiBtYXBsZS1iaXNvbi03MlBLBwiT+vzKIwAAACMAAABQSwECHgMKAAgAAABQr1Vd4OA0xiEAAAAhAAAABQAAAAAAAAAAAAAAtIEAAAAAYS50eHRQSwECHgMKAAgAAABQr1VdSZbMaCEAAAAhAAAABQAAAAAAAAAAAAAAtIFUAAAAYi50eHRQSwECHgMKAAgAAABQr1Vdk/r8yiMAAAAjAAAABQAAAAAAAAAAAAAAtIGoAAAAYy50eHRQSwUGAAAAAAMAAwCZAAAA/gAAAAAA",
+ "generator_cmd": "archive-zip-hex-maple bytes with the first member's CRC byte and first data byte flipped, base64 -w0",
+ "oracle_cmd": "f=$(mktemp); printf %s \"$encoded\" | base64 -d > $f; 7z x -so -pinfected -tzip $f 2>/dev/null </dev/null; r=$?; rm -f $f; exit $r",
+ "oracle_plain": null,
+ "decoy": true,
+ "expected": "none"
+}

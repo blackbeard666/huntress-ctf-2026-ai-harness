@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-09-forged-with-care",
+  "lane": "web",
+  "name": "🌐 Forged With Care",
+  "ids": {
+    "single_solve": "web-exploitation-day-09-forged-with-care",
+    "time_trial": "web-exploitation-day-09-forged-with-care/time_trial",
+    "mastery": "web-exploitation-day-09-forged-with-care/mastery"
+  }
+}

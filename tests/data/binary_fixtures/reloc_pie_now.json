@@ -1,0 +1,45 @@
+{
+ "family": "reloc",
+ "file": "reloc_pie_now.bin",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "bind_now": "true",
+  "copy_count": 2,
+  "copy_symbols": "[\"stdout\", \"__environ\"]",
+  "counts": {
+   "R_X86_64_COPY": 2,
+   "R_X86_64_GLOB_DAT": 5,
+   "R_X86_64_IRELATIVE": 1,
+   "R_X86_64_JUMP_SLOT": 6,
+   "R_X86_64_RELATIVE": 6
+  },
+  "glob_dat_count": 5,
+  "has_relro": "true",
+  "irelative_count": 1,
+  "jump_slot_count": 6,
+  "lazy_binding": "false",
+  "plt_import_count": 7,
+  "plt_imports": "[\"free\", \"strlen\", \"malloc\", \"__strcpy_chk\", \"__printf_chk\", \"fwrite\", \"*ABS*+0x1223\"]",
+  "plt_stubs": {
+   "0x10b0": "free",
+   "0x10c0": "strlen",
+   "0x10d0": "*ABS*+0x1223",
+   "0x10e0": "malloc",
+   "0x10f0": "__strcpy_chk",
+   "0x1100": "__printf_chk",
+   "0x1110": "fwrite"
+  },
+  "rela_dyn_count": 13,
+  "rela_plt_count": 7,
+  "relative_count": 6,
+  "relocation_count": 20,
+  "relocation_sections": "[\".rela.dyn\", \".rela.plt\"]",
+  "relro": "full"
+ },
+ "decoy": false,
+ "generator_cmd": "FX=$PWD sh reloc_gen.sh   # run from an empty scratch dir with FX=tests/data/binary_fixtures; gcc 15 + GNU ld 2.45, HCFG blobs by python3 stdlib zlib/struct/base64, RELATIVE slots of cfg_tab zeroed after linking (lld-style)",
+ "oracle_cmd": "python3 reloc_oracle.py reloc_pie_now.bin   # readelf -rW/-dW/-lW/-sW/-SW + objdump -d -j .plt -j .plt.sec (<name@plt> labels)",
+ "note": "same source, -Wl,-z,now: FLAGS BIND_NOW + FLAGS_1 NOW -> full RELRO; lib.binary.elf_reloc_facts / hcfg_scan 'reloc-ptrtable' pass; field names SPECULATIVE (GM label not seen)"
+}

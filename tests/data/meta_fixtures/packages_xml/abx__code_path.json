@@ -1,0 +1,8 @@
+{
+ "field": "packages_xml.code_path",
+ "expected": "/data/app/~~Ab12==/com.android.chrome-Cd34==",
+ "generator_cmd": "python3 -I gen.py (stdlib tarfile USTAR + zlib.compress writer; ABX via a hand-rolled BinaryXmlSerializer token writer; source kept at tests/data/meta_fixtures/android_backup/gen_android_fixtures.py.txt)",
+ "oracle_cmd": "ABX twin: xml.dom.minidom packages_text.xml getElementsByTagName('package')[0].getAttribute('codePath')",
+ "decoy": false,
+ "member": "packages_abx.xml"
+}

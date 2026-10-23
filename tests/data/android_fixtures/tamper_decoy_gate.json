@@ -1,0 +1,8 @@
+{
+ "entry": "clean_device_scan",
+ "expected": null,
+ "_why": "same sig_crc digest, but Guard returns 'verified' when installer == com.android.vending and not debuggable: the token is only built on a sideloaded / debuggable (tampered) device, so the clean path yields no ANS (entry clean_device_scan: dex_strings' last-resort digest_answer_scan lists unverified sha-256 prefix CANDIDATES for any MessageDigest + 'ANS-' method; the clean-path scans must emit nothing)",
+ "generator_cmd": "python3 tests/data/android_fixtures/tamper_src/gen_tamper.py decoy_gate tests/data/android_fixtures/tamper_decoy_gate.apk  # javac --release 8 (app + android.* stubs) + dex2jar d2j-jar2dex.sh + apktool's aapt2 link (manifest) + zipfile + keytool RSA + apksigner sign v1+v2",
+ "oracle_cmd": "same generator, oracle stage: openssl pkcs7 -print_certs | openssl x509 -outform DER on META-INF/*.RSA (signer DER), aapt dump badging (application-debuggable), then java -Dtamper.apk=<signed apk> -Dtamper.cert=<der> -cp <javac out> com.huntress.mobile.d22.tamper.Probe -> Guard.reveal() on the host JVM, real java.util.zip.ZipFile reading classes.dex CRC -> 'verified'",
+ "decoy": true
+}

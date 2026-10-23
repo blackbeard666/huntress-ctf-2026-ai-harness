@@ -1,0 +1,7 @@
+{
+ "entry": "biometric_auth_scan",
+ "expected": "ANS-b7c41e09d2a5f368",
+ "_why": "AuthCb extends android.hardware.biometrics.BiometricPrompt$AuthenticationCallback, event-bound: onAuthenticationSucceeded ignores the CryptoObject and Logs the xor-decoded token; KeyVault.spec() calls setUserAuthenticationRequired(false) and never setInvalidatedByBiometricEnrollment (flags)",
+ "generator_cmd": "python3 tests/data/android_fixtures/bio_src/gen_bio.py event_framework tests/data/android_fixtures/bio_event_framework.apk  # javac --release 8 (app + androidx.biometric / android.hardware.biometrics / KeyguardManager stubs) + dex2jar d2j-jar2dex.sh; manifest: apktool-bundled aapt2 link -I prebuilt/android-framework.jar; zipfile",
+ "oracle_cmd": "same generator, stage 2: host-JVM Probe calls AuthCb.onAuthenticationSucceeded(new AuthenticationResult(null)) and prints Log.LAST -> \"crypto_null=ANS-b7c41e09d2a5f368\""
+}

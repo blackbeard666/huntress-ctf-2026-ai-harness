@@ -1,0 +1,8 @@
+{
+ "entry": "exception_flow_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "the ANS token is decoded only in the handler of a TamperException thrown when Debug.isDebuggerConnected(); the clean path returns the near-miss 'ANS-cleanpath-nohex' (the debugger-attached JVM run prints the trap ANS-3a9f0c61d7e2b854)",
+ "generator_cmd": "python3 tests/data/android_fixtures/excflow_src/gen_excflow.py decoy_debug tests/data/android_fixtures/excflow_decoy_debug.apk  # javac --release 8 (app + clean-device android.* stubs) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d21.exc.Probe -> Vault.reveal() run by the host JVM on the clean stubs (Debug.isDebuggerConnected false, PackageManager NameNotFound, real FileInputStream / Class.forName) -> 'ANS-cleanpath-nohex'"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "clean_device_scan",
+ "expected": "ANS-7c3e91a0d54b28f6",
+ "_why": "static Vault.reveal(Context) xors a byte[] with Guard.key(Context): a score folded from TelephonyManager (getDeviceId length, getImei hashCode, getSubscriberId != 310260000000000, getLine1Number not 155552155xx, getNetworkOperatorName hashCode 'T-Mobile', getSimOperatorName != Android, getPhoneType GSM, getSimState READY) and SensorManager (getSensorList(TYPE_ALL).size() >= 20, no Goldfish/AOSP vendor, getDefaultSensor non-null) -- only a retail-phone evaluation gives the key",
+ "generator_cmd": "python3 tests/data/android_fixtures/emustub_src/gen_emustub.py tele_sensor tests/data/android_fixtures/emustub_tele_sensor.apk  # javac --release 8 (app + retail-phone android.* stubs) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d22.emuq.Probe -> Vault.reveal(new Context()) run by the host JVM on the retail stubs -> 'ANS-7c3e91a0d54b28f6'"
+}

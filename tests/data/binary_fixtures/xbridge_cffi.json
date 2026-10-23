@@ -1,0 +1,24 @@
+{
+ "family": "extension_bridge",
+ "file": "xbridge_cffi.bin",
+ "decoy": false,
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "extension_kind": "cffi",
+  "extension_kinds": [
+   "cffi",
+   "python_ext"
+  ],
+  "init_export": "PyInit__hcfg_cffi",
+  "module_name": "_hcfg_cffi",
+  "cffi_functions": [
+   "hc_add",
+   "hc_tag"
+  ]
+ },
+ "generator_cmd": "bash tests/data/binary_fixtures/xbridge_gen.sh   # gcc -shared (+python3-config / .venv Cython 3.3 / .venv cffi 2.1), py_compile (.venv 3.12, /usr/bin/python3 3.14)",
+ "oracle_cmd": ".venv/bin/python tests/data/binary_fixtures/xbridge_oracle.py   # lief relocs+symbols, real import (CPython 3.14 / 3.12), lua require(), ast over the caller source",
+ "note": "lib.binary.extension_bridge_facts(data): every expected_facts key must match; None = not an ELF/.pyc/ctypes source"
+}

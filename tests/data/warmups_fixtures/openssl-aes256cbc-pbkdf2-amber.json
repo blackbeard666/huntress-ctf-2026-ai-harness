@@ -1,0 +1,9 @@
+{
+ "codec": "openssl-salted",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-otter-31",
+ "encoded": "U2FsdGVkX18ZL2T8lJsHGu0jhgrZWx2Y6kT3yiTBUBZpolYjelecBos14ORJUXSorkMrc/TNOrVNUD6Hr4DbeaIIA6WegDjVWz6hNMhytZAuyNWz1blu6EX14wpY4EGym3wx7LjfesJ9RgDNRpylm/CrE7FF5CvwYuHZ7bLJ8h0=",
+ "generator_cmd": "printf %s \"$plain\" | openssl enc -aes-256-cbc -pbkdf2 -pass pass:infected -a -A",
+ "oracle_cmd": "printf '%s\\n' \"$encoded\" | openssl enc -d -aes-256-cbc -pbkdf2 -pass pass:infected -a -A",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-otter-31",
+ "expected": "match"
+}

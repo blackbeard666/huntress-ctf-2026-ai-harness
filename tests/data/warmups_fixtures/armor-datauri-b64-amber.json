@@ -1,0 +1,9 @@
+{
+ "codec": "data-uri-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-61",
+ "encoded": "data:text/plain;base64,TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwISBUbyBzb2x2ZSwgc3VibWl0IHRoaXMgZXhhY3QgYW5zd2VyIHRvIHRoZSBHYW1lIE1hc3RlcjogYW1iZXItZmFsY29uLTYx",
+ "generator_cmd": "printf \"data:text/plain;base64,%s\" \"$(printf %s \"$plain\" | base64 -w0)\"",
+ "oracle_cmd": "python3 -c 'import sys,urllib.request; sys.stdout.write(urllib.request.urlopen(sys.argv[1]).read().decode())' \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-61",
+ "expected": "match"
+}

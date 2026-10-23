@@ -1,0 +1,9 @@
+{
+ "codec": "xor-compressed",
+ "plain": null,
+ "encoded": "BolBr0PZvEyYLLsnQxJrw8C1+rscfoxH5ztIN+v72G/NunKoDgmYrBQ82wxiCcIk0N1pKRps5b9G7vd7gQpd0oneAn9YjRiD+TBzM/RAk6I8lwpqi9xEEJx7iZFAX2PN",
+ "generator_cmd": "head -c 96 /dev/urandom | base64 -w0",
+ "oracle_cmd": "python3 -c \"import base64,os,zlib,gzip;b=base64.b64decode(os.environ['encoded']);print([b[:2].hex()])\"  # no compressor magic under any single-header XOR key -> none",
+ "expected": "none",
+ "decoy": true
+}

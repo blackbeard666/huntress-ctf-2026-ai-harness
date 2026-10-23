@@ -1,0 +1,8 @@
+{
+ "field": "jar.main_class_has_main_method",
+ "expected": "none",
+ "generator_cmd": "jar --create --file lib.jar -C o kotlin (no Main-Class, no module-info)",
+ "oracle_cmd": "unzip -p lib.jar META-INF/MANIFEST.MF -> no Main-Class",
+ "decoy": true,
+ "member": "lib.jar"
+}

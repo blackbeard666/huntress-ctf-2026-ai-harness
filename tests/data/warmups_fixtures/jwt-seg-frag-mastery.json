@@ -1,0 +1,10 @@
+{
+ "codec": "jwt-seg",
+ "plain": "ce work decoding this warmup! To sol",
+ "encoded": "eyJkYXRhIjp7Im5vdGUiOiJjZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwISBUbyBzb2wifSwiaWF0IjoxNzYwMDAwMDAwLCJpc3MiOiJodW50cmVzcyJ9",
+ "generator_cmd": "PYTHONPATH=tools/pylib-jwcrypto .venv/bin/python tests/data/warmups_fixtures/jwt_gen.py seg \"$plain\"",
+ "oracle_cmd": "printf %s \"$encoded\" | PYTHONPATH=tools/pylib-jwcrypto .venv/bin/python tests/data/warmups_fixtures/jwt_oracle.py seg",
+ "oracle_output": "ce work decoding this warmup! To sol",
+ "oracle_plain": "ce work decoding this warmup! To sol",
+ "expected": "match"
+}

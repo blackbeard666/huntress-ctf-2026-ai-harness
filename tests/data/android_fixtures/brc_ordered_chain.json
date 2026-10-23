@@ -1,0 +1,7 @@
+{
+ "entry": "broadcast_receiver_scan",
+ "expected": "ANS-a41f7c0e98d3b265",
+ "_why": "ordered broadcast: manifest receivers StageOne (priority 100) and StageTwo (priority 10, android:permission VAULT) on action CHAIN; StageOne needs extra who == 'alpha' and setResultData('k=43'); StageTwo reads getResultData(), startsWith('k='), parseInt(substring(2)) as the xor key and puts the decoded token in SharedPreferences('vault').putString('token')",
+ "generator_cmd": "python3 tests/data/android_fixtures/brc_src/gen_brc.py ordered_chain tests/data/android_fixtures/brc_ordered_chain.apk  # javac --release 8 (app + android.content stubs) + dex2jar d2j-jar2dex.sh; manifest: apktool-bundled aapt2 link -I prebuilt/android-framework.jar; zipfile",
+ "oracle_cmd": "same generator, stage 2: host-JVM Probe delivers Intent(CHAIN).putExtra('who','alpha') to StageOne, copies its result data into StageTwo as the ordered dispatcher does, prints SharedPreferences STORE['token'] = 'ANS-a41f7c0e98d3b265'; `aapt dump xmltree <apk> AndroidManifest.xml` shows both receivers, priorities 0x64/0xa and the CHAIN/PING actions"
+}

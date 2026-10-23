@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-08-session-impression",
+  "lane": "web",
+  "name": "🌐 Session Impression",
+  "ids": {
+    "single_solve": "web-exploitation-day-08-session-impression",
+    "time_trial": "web-exploitation-day-08-session-impression/time_trial",
+    "mastery": "web-exploitation-day-08-session-impression/mastery"
+  }
+}

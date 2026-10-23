@@ -1,0 +1,9 @@
+{
+ "codec": "binhex4",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-31",
+ "encoded": "(This file must be converted with BinHex 4.0)\r\r:''CXB@GIB@eLCA)YCQ&XBfpZ,6-a,R4iG!\"849K82j!%!*!&CJ#3\"!4j6QPMC5\"\rhEh*V)'4PBfpND@jR)(4SDA-JGf&bEA9`)5\"8Eb\"cEfafC5`JFh9LE@Pd)(4SDA-\rJCAKKBh3JB@jcGf9b)(4[)(4SC5\"(B@eP)%eKFh4PFMSJB@eLCA)YCQ&XBfpZ,6-\rap`m!!!:\r",
+ "generator_cmd": "printf %s \"$plain\" > flag.txt && tools/python/cpython-3.10-linux-x86_64-gnu/bin/python3.10 -I -c 'import binhex;binhex.binhex(\"flag.txt\",\"out.hqx\")'  # CPython 3.10 stdlib binhex writer (CR line ends, type TEXT, creator ????)",
+ "oracle_cmd": "tools/python/cpython-3.10-linux-x86_64-gnu/bin/python3.10 -I -c 'import binhex;binhex.hexbin(\"out.hqx\",\"out.bin\")' && cat out.bin  # CPython 3.10 stdlib hexbin reader (checks all three CRCs)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-31",
+ "expected": "match"
+}

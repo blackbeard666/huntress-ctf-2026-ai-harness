@@ -1,0 +1,8 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-90d7e2c41b5f3a68",
+ "decoy": false,
+ "_why": "sbox_chain tables, ciphertext as hex text in assets/blob.txt (CT field is a 1-byte stub): the array param must be bound to the hex-decoded asset",
+ "generator_cmd": "python3 tests/data/android_fixtures/wbt_src/gen_wbt.py sbox_asset tests/data/android_fixtures/wbt_sbox_asset.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile (pycryptodome AES-ECB / python S-box shuffle only as the encrypting writer)",
+ "oracle_cmd": "same generator, stage 2: host JVM hex-parses blob.txt (Integer.parseInt) and prints new String(WhiteBox.decrypt(c)) -> 'ANS-90d7e2c41b5f3a68'"
+}

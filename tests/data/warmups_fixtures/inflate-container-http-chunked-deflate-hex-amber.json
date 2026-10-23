@@ -1,0 +1,9 @@
+{
+ "codec": "inflate-container HTTP chunked + Content-Encoding deflate",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-gecko-84",
+ "encoded": "485454502f312e3120323030200d0a436f6e74656e742d547970653a20746578742f706c61696e0d0a436f6e74656e742d456e636f64696e673a206465666c6174650d0a5472616e736665722d456e636f64696e673a206368756e6b65640d0a0d0a31390d0a78da25c9310e83400c04c0af6cfad051a07c2015547cc01c2b0d0a31390d0a38c161649b5c9e4fa4b433434e4455db3033e99c8f05b166470d0a31390d0a152bd7f9c0a870dd3f7cc2afa9e4f82fbf92027278a521f4870d0a31360d0ac45b0ad18b07ed052913ad5998366dbaf606481823f80d0a300d0a0d0a",
+ "generator_cmd": "/usr/bin/python3 -c 'import sys,gzip,zlib,h11; c=h11.Connection(h11.SERVER); c.receive_data(b\"GET / HTTP/1.1\\r\\nHost: x\\r\\n\\r\\n\"); c.next_event(); z=zlib.compress(sys.argv[1].encode(),9); o=c.send(h11.Response(status_code=200,headers=[(\"Content-Type\",\"text/plain\"),(\"Content-Encoding\",\"deflate\"),(\"Transfer-Encoding\",\"chunked\")])); o+=b\"\".join(c.send(h11.Data(data=z[i:i+25])) for i in range(0,len(z),25)); sys.stdout.buffer.write(o+c.send(h11.EndOfMessage()))' \"$plain\" | xxd -p | tr -d '\\n'  # h11 HTTP/1.1 writer (chunked framing) + zlib",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | python3 -c 'import sys,dpkt,zlib\ntry: r=dpkt.http.Response(sys.stdin.buffer.read()); print(zlib.decompress(r.body).decode())\nexcept Exception: print(\"none\")'  # dpkt.http (de-chunks) + zlib",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-gecko-84",
+ "expected": "match"
+}

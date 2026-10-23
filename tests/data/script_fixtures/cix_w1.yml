@@ -1,0 +1,22 @@
+name: triage
+on:
+  issues:
+    types: [opened]
+permissions:
+  issues: write
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Greet reporter
+        run: |
+          echo "Thanks for ${{ github.event.issue.number }}"
+          echo "Title: ${{ github.event.issue.title }}"
+      - name: Safe env use
+        env:
+          BODY: ${{ github.event.issue.body }}
+        run: echo "$BODY" | wc -c
+      - name: Notify
+        run: |
+          curl -s -H "Authorization: Bearer ${{ secrets.SLACK_TOKEN }}" https://hooks.example.invalid/x

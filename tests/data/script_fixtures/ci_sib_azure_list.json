@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=azure_pipelines|role=downloader|verdict=malicious|attack=T1105|adapter=ci_runner|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=powershell|stage_count=2|steps=acquire_remote,write_file|campaign_id=AZURE_PIPELINES-a90e2f44|url=https://azure_pipelines-a90e2f44.example.invalid/stage|file_path=/tmp/huntress-azure_pipelines/.a90e2f44.stage",
+ "decoy": false,
+ "note": "ci-yaml-sibling-route: bare HUNTRESS_DESCRIPTOR key (D21 GHA shape) in a CI sibling host (lib.codec._HDESC_RE)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ci_sib_gen.py tests/data/script_fixtures  (stdlib base64 of a v=3 plan in a CI YAML host)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/ci_sib_oracle.py tests/data/script_fixtures/ci_sib_azure_list.yml  (PyYAML safe_load + shlex export + stdlib base64)"
+}

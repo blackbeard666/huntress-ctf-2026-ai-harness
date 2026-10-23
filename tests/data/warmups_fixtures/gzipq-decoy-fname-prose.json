@@ -1,0 +1,10 @@
+{
+ "codec": "gzip-quirks*",
+ "plain": null,
+ "encoded": "H4sIGJLB2GoCA3JlYWRtZS50eHQAaGludDogdHJ5IGhhcmRlcgDzKi0uUUhUyMsvSbUCkRmZeekKJfkKxaVJuZklChmpRal6ACvEHswkAAAA",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'Just a note: nothing to submit here.' > readme.txt; pigz -9 -C 'hint: try harder' -c readme.txt | base64 -w0  # FNAME/FCOMMENT set, no answer inside",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc",
+ "oracle_output": "Just a note: nothing to submit here. (no answer slug; FNAME 'readme.txt' / FCOMMENT are hints, never the answer -> none)"
+}

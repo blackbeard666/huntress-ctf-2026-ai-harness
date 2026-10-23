@@ -1,0 +1,7 @@
+{
+ "field": "apk.entry_dos_times_constant",
+ "expected": "true",
+ "generator_cmd": "python3 zipfile writer: AndroidManifest.xml, classes.dex(d2), assets/a.bin STORED, classes.dex(d39) again (Janus dup), all date_time 1980-01-01",
+ "oracle_cmd": "zipinfo dupes.apk -> all 80-Jan-01 00:00",
+ "decoy": false
+}

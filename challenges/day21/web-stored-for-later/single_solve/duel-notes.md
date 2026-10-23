@@ -1,0 +1,1 @@
+- /api/clues -> moderator_data_route + receipt_route_template; stored <script> in POST /api/messages {message} fetches data route, POSTs {evidence} to receipt route; proof shows on /messages/{id} | chain worker got CORRECT (proof_0b5f...) | duel solver implements same + D01 backup / clue-route fallbacks; target now 410 so not re-verified live

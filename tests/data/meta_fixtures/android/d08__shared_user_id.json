@@ -1,0 +1,8 @@
+{
+ "field": "android.shared_user_id",
+ "expected": "none",
+ "generator_cmd": "GM D08 mobile-lane artifact (aapt-built APK): cp challenges/day08/mobile-cleartext-session/single_solve/artifacts/20261008T130009Z/cleartext_session.apk",
+ "oracle_cmd": "aapt dump xmltree cleartext_session.apk AndroidManifest.xml -> <manifest> has no android:sharedUserId(0x0101000b)",
+ "decoy": true,
+ "member": "cleartext_session.apk"
+}

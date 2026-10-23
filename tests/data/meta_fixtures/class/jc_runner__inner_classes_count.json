@@ -1,0 +1,8 @@
+{
+ "field": "class.inner_classes_count",
+ "expected": "3",
+ "generator_cmd": "javac 21.0.12 --release 17 -d o src/kotlin/Metadata.java src/com/acme/tool/{Runner,NoMain,MainKt}.java",
+ "oracle_cmd": "javap -v -p Runner.class -> InnerClasses: Cb, Helper, MethodHandles$Lookup",
+ "decoy": false,
+ "member": "Runner.class"
+}

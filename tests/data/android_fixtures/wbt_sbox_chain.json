@@ -1,0 +1,8 @@
+{
+ "entry": "whitebox_table_scan",
+ "expected": "ANS-b3d91f0e6a2c4875",
+ "decoy": false,
+ "_why": "WhiteBox.decrypt(byte[]): 4 chained inverse byte[256] S-boxes with per-round xor constants + position xor, ciphertext a static byte[] CT; the only caller show(Object) calls an unmodelled method",
+ "generator_cmd": "python3 tests/data/android_fixtures/wbt_src/gen_wbt.py sbox_chain tests/data/android_fixtures/wbt_sbox_chain.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile (pycryptodome AES-ECB / python S-box shuffle only as the encrypting writer)",
+ "oracle_cmd": "same generator, stage 2: host JVM prints new String(WhiteBox.decrypt(WhiteBox.CT)) -> 'ANS-b3d91f0e6a2c4875'"
+}

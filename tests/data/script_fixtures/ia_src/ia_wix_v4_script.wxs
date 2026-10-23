@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="AcmeHelper" Manufacturer="Acme" Version="1.0.0" UpgradeCode="22345678-1234-1234-1234-123456789012">
+    <StandardDirectory Id="StartupFolder">
+      <Component Id="StartLnk">
+        <Shortcut Id="S1" Name="helper" Target="[System64Folder]wscript.exe" Arguments="//E:jscript &quot;[INSTALLFOLDER]h.dat&quot;" />
+        <RegistryValue Root="HKCU" Key="Software\\Acme" Name="lnk" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="AcmeHelper">
+        <Component Id="Main">
+          <File Source="helper.exe" />
+          <CreateFolder />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+    <CustomAction Id="Hta" Directory="INSTALLFOLDER" ExeCommand="mshta.exe javascript:close()" Return="ignore" />
+    <CustomAction Id="Vbs" Script="vbscript" Return="ignore">CreateObject("WScript.Shell").Run "notepad"</CustomAction>
+    <CustomAction Id="Native" BinaryRef="CaDll" DllEntry="DoThing" />
+  </Package>
+</Wix>

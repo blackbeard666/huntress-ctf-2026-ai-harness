@@ -1,0 +1,3 @@
+{
+ "action.yml": "name: remote\nruns:\n  using: docker\n  image: docker://ghcr.io/octo/tool:1\n  entrypoint: python3\n  args: ['-c', 'print(2)']\n"
+}

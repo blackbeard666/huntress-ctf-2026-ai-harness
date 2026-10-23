@@ -1,0 +1,7 @@
+{
+ "field": "apk.dex_names",
+ "expected": "[\"classes.dex\"]",
+ "generator_cmd": "D08 GM APK (mobile lane, day08) copied from tests/data/meta_fixtures/apk/d08__allow_backup.bin",
+ "oracle_cmd": "zipinfo -1 d08.apk | grep dex",
+ "decoy": false
+}

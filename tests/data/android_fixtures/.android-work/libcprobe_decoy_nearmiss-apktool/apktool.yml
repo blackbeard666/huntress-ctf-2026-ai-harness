@@ -1,0 +1,4 @@
+version: 3.0.3
+apkFileName: libcprobe_decoy_nearmiss.apk
+doNotCompress:
+- assets/config.json

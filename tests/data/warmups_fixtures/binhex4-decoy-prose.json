@@ -1,0 +1,10 @@
+{
+ "codec": "binhex4",
+ "plain": null,
+ "encoded": ":Nice work, decoding this warmup!:",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written prose between colons (space, 'o', 'g', 'n', 's', 't', 'w' lie outside the BinHex 4.0 alphabet)",
+ "oracle_cmd": "tools/python/cpython-3.10-linux-x86_64-gnu/bin/python3.10 -I -c 'import binascii;binascii.a2b_hqx(\"Nice work, decoding this warmup!\")'  # -> binascii.Error: Illegal char",
+ "oracle_plain": null
+}

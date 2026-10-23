@@ -1,0 +1,11 @@
+{
+ "material": "# HUNTRESS_ANALYSIS_V1:B64-dj0zfGxhbmd1YWdlPWdpdGh1Yl9hY3Rpb25zfHJvbGU9YmVuaWduX3V0aWxpdHl8dmVyZGljdD1iZW5pZ258YXR0YWNrPW5vbmV8YWRhcHRlcj1sb2NhbF9wYXJzZXJ8aG9zdF9wcm9maWxlPXN0YW5kYWxvbmV8b2JmdXNjYXRpb25fcHJvZmlsZT1iYXNlNjR8c3RhZ2VfcHJvZmlsZT10d29fc3RhZ2VfZG93bmxvYWRfZXhlY3V0ZXxuZXh0X2xhbmd1YWdlPXBvd2Vyc2hlbGx8c3RhZ2VfY291bnQ9MnxzdGVwcz1hY3F1aXJlX3JlbW90ZSxkaXNwYXRjaF9wcm9jZXNzfGNhbXBhaWduX2lkPUdJVEhVQl9BQ1RJT05TLTk1YjVmZTczfHVybD1odHRwczovL2dpdGh1Yl9hY3Rpb25zLTk1YjVmZTczZmMuZXhhbXBsZS5pbnZhbGlkL3N0YWdlfGZpbGVfcGF0aD0vdG1wL2h1bnRyZXNzLWdpdGh1Yl9hY3Rpb25zLy45NWI1ZmU3M2ZjOTc3ZDA5LnN0YWdl\nname: Huntress inert analysis 278f1c07\non:\n  workflow_dispatch:\njobs:\n  analyze:\n    runs-on: ubuntu-latest\n    env:\n      HUNTRESS_DESCRIPTOR: \"dj0zfGxhbmd1YWdlPWdpdGh1Yl9hY3Rpb25zfHJvbGU9YmVuaWduX3V0aWxpdHl8dmVyZGljdD1iZW5pZ258YXR0YWNrPW5vbmV8YWRhcHRlcj1sb2NhbF9wYXJzZXJ8aG9zdF9wcm9maWxlPXN0YW5kYWxvbmV8b2JmdXNjYXRpb25fcHJvZmlsZT1iYXNlNjR8c3RhZ2VfcHJvZmlsZT10d29fc3RhZ2VfZG93bmxvYWRfZXhlY3V0ZXxuZXh0X2xhbmd1YWdlPXBvd2Vyc2hlbGx8c3RhZ2VfY291bnQ9MnxzdGVwcz1hY3F1aXJlX3JlbW90ZSxkaXNwYXRjaF9wcm9jZXNzfGNhbXBhaWduX2lkPUdJVEhVQl9BQ1RJT05TLTk1YjVmZTczfHVybD1odHRwczovL2dpdGh1Yl9hY3Rpb25zLTk1YjVmZTczZmMuZXhhbXBsZS5pbnZhbGlkL3N0YWdlfGZpbGVfcGF0aD0vdG1wL2h1bnRyZXNzLWdpdGh1Yl9hY3Rpb25zLy45NWI1ZmU3M2ZjOTc3ZDA5LnN0YWdl\"\n    steps:\n      - name: Preserve modeled descriptor\n        run: ':'\n",
+ "rep": "gha_workflow",
+ "transform": "runner",
+ "key": "self_hosted,github_hosted,container",
+ "expected": "github_hosted",
+ "decoy": false,
+ "note": "gha-trigger-trust-model: lib.codec.gha_workflow/gha_answer via decode(rep='gha_workflow', transform=<field>[@job], key=<accepted csv>)",
+ "generator_cmd": "cp challenges/day21/scripting-actions-speak-louder/single_solve/work/extracted/evidence/polyglot-github_actions-benign-utility.yml d21.yml  (real D21 member bytes)",
+ "oracle_cmd": "python3 -I -c \"import yaml,sys;y=yaml.safe_load(open(sys.argv[1]));ro=y['jobs']['analyze']['runs-on'];print('self_hosted' if 'self-hosted' in str(ro) else 'github_hosted')\" d21.yml  (PyYAML 6 safe_load)"
+}

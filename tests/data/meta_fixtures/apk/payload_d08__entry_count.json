@@ -1,0 +1,7 @@
+{
+ "field": "apk.entry_count",
+ "expected": "6",
+ "generator_cmd": "D08 GM APK (mobile lane, day08) copied from tests/data/meta_fixtures/apk/d08__allow_backup.bin",
+ "oracle_cmd": "zipinfo d08.apk -> number of entries: 6",
+ "decoy": false
+}

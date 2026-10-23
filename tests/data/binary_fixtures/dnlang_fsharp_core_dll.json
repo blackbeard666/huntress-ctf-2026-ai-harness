@@ -1,0 +1,28 @@
+{
+ "family": "dotnet_language_of",
+ "decoy": false,
+ "expected": {
+  "language": "fsharp",
+  "assembly_name": "FSharp.Core",
+  "assembly_version": "10.0.0.0",
+  "fsharp_core_version_ref": "none",
+  "fsharp_core_version_def": "10.0.0.0",
+  "fsharp_resources": [
+   "FSharpSignatureCompressedData.FSharp.Core",
+   "FSharpSignatureCompressedDataB.FSharp.Core",
+   "FSharpOptimizationCompressedData.FSharp.Core",
+   "FSharpOptimizationCompressedDataB.FSharp.Core"
+  ],
+  "fsharp_resource_count": "4",
+  "startup_code": "FSharp-Core",
+  "vb_runtime_ref": "none",
+  "vb_runtime_version": "none",
+  "anon_type_count": "0",
+  "vb_local_fields": "0",
+  "il_only": "true",
+  "closure_count": "1579"
+ },
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/dnlang_gen.sh   # dotnet 10 SDK: dotnet new console -lang F# (its FSharp.Core.dll dependency member) + dotnet build -c Release (Deterministic)",
+ "oracle_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/dnlang_oracle.sh tests/data/binary_fixtures/dnlang_fsharp_core_dll.bin   # System.Reflection.Metadata (BCL, not dnfile); language = the generator's -lang",
+ "note": "the FSharp.Core.dll the F# build copies to out/: AssemblyDef FSharp.Core = fsharp_core_version_def"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "textcomp-rle-ca (decoy)",
+ "plain": "none",
+ "encoded": "Meet me at gate 7 at noon, bring 2 maps",
+ "generator_cmd": "printf 'Meet me at gate 7 at noon, bring 2 maps'  # prose with digits, not RLE",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/textcomp_oracle.py rle-ca",
+ "oracle_plain": "Meet me at gate        at noon, bring   maps",
+ "decoy": true,
+ "expected": "none"
+}

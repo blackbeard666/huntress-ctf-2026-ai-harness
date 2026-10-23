@@ -1,0 +1,8 @@
+{
+ "field": "dotnet_bundle.framework_name",
+ "expected": "Microsoft.NETCore.App",
+ "generator_cmd": "dotnet publish -c Release -o out2 -p:AssemblyName=Fabrikam.Agent (HelloBundle.csproj: net10.0, AssemblyName=Contoso.Updater, RuntimeIdentifier=ubuntu.26.04-x64, PublishSingleFile=true, SelfContained=false, IncludeAllContentForSelfExtract=true, + Content settings.json; Program.cs = one Console.WriteLine)",
+ "oracle_cmd": "dd if=Fabrikam.Agent bs=1 skip=83008 count=435 status=none | python3 -c \"import json,sys; r=json.load(sys.stdin)['runtimeOptions']; print(r['tfm'], r['framework']['name'], r['framework']['version'])\" (offset/size of the RuntimeConfigJson entry from the ILSpy oracle)",
+ "decoy": false,
+ "member": "Fabrikam.Agent"
+}

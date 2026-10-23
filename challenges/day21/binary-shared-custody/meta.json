@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-21-shared-library-boundaries",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Shared Custody",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-21-shared-library-boundaries",
+    "time_trial": "binary-reverse-engineering-day-21-shared-library-boundaries/time_trial",
+    "mastery": "binary-reverse-engineering-day-21-shared-library-boundaries/mastery"
+  }
+}

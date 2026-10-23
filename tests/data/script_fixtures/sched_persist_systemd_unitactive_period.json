@@ -1,0 +1,11 @@
+{
+ "material": "[Timer]\nOnUnitActiveSec=1h\n",
+ "rep": "schedule_entries",
+ "transform": "period",
+ "key": null,
+ "expected": "3600",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes sync.timer: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && systemd-analyze timespan \"$(sed -n 's/^OnUnitActiveSec=//p' sync.timer)\" | awk '/\u03bcs:/{print $2/1000000}')"
+}

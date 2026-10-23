@@ -1,0 +1,8 @@
+{
+ "field": "oci.config_entrypoint",
+ "expected": "none",
+ "generator_cmd": "tar -C root -cf base.tar .  (a plain rootfs tarball -- NOT an image: no manifest.json / index.json)",
+ "oracle_cmd": "tar -tf base.tar | grep -cE '^(\\./)?(manifest|index)\\.json$' | sed 's/^0$/none/'",
+ "decoy": true,
+ "member": "base.tar"
+}

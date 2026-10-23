@@ -1,0 +1,8 @@
+{
+ "field": "ab.manifest_version_code",
+ "expected": "42",
+ "generator_cmd": "python3 -I gen.py (stdlib tarfile USTAR + zlib.compress writer; ABX via a hand-rolled BinaryXmlSerializer token writer; source kept at tests/data/meta_fixtures/android_backup/gen_android_fixtures.py.txt)",
+ "oracle_cmd": "tail -c +25 v5_compressed.ab | zlib-flate -uncompress | tar xOf - apps/com.example.notes/_manifest | sed -n 3p",
+ "decoy": false,
+ "member": "v5_compressed.ab"
+}

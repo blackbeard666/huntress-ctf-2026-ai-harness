@@ -1,0 +1,49 @@
+{
+ "encoding": "raw",
+ "decoy": false,
+ "expected_offset": 96,
+ "expected_config": {
+  "c2": "203.0.113.9:8080",
+  "campaign": "keyshim",
+  "sleep": 15,
+  "flag": "flag{kbd_sh1m_ko}"
+ },
+ "expected_kmod_fields": {
+  "format": "elf",
+  "elf_type": "ET_REL",
+  "machine": "x86-64",
+  "machine_num": "62",
+  "entry_point": "0x0",
+  "is_kernel_module": true,
+  "license": "Dual MIT/GPL",
+  "author": "r00t",
+  "description": "keylogger shim (objcopy-built)",
+  "version": "none",
+  "vermagic": "5.15.0-122-generic SMP mod_unload modversions",
+  "kernel_version": "5.15.0-122-generic",
+  "name": "kbd_shim",
+  "module_name": "kbd_shim",
+  "this_module_name": "none",
+  "depends": "none",
+  "modinfo": {
+   "license": "Dual MIT/GPL",
+   "description": "keylogger shim (objcopy-built)",
+   "author": "r00t",
+   "depends": "",
+   "name": "kbd_shim",
+   "vermagic": "5.15.0-122-generic SMP mod_unload modversions "
+  },
+  "versions": "none",
+  "has_modversions": false,
+  "exported_symbols": "none",
+  "init_function": "init_module",
+  "exit_function": "cleanup_module",
+  "hcfg_offset": 96,
+  "hcfg_section": ".data",
+  "hcfg_section_offset": 0
+ },
+ "generator_cmd": "bash kmod_gen.sh kmod_objcopy_data.bin objcopy '{\"c2\":\"203.0.113.9:8080\",\"campaign\":\"keyshim\",\"sleep\":15,\"flag\":\"flag{kbd_sh1m_ko}\"}' 0x5a",
+ "oracle_cmd": "bash kmod_oracle.sh kmod_objcopy_data.bin   # file -b, GNU readelf -h (Type/Machine/Entry), readelf -p .modinfo (section order), kmod modinfo on a .ko copy (prints reversed), modprobe --dump-modversions (__versions), readelf -sW (__ksymtab_* syms + their ___ksymtab[_gpl]+ sections; FUNC syms sharing init_module/cleanup_module's address), readelf -x .gnu.linkonce.this_module (name at +24), grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "ELF 64-bit LSB relocatable, x86-64 | REL | Entry 0x0 | modinfo(section order): license=Dual MIT/GPL|description=keylogger shim (objcopy-built)|author=r00t|depends=|name=kbd_shim|vermagic=5.15.0-122-generic SMP mod_unload modversions  | modversions: FATAL No data available | ksymtab: (none) | FUNC 1/0x0 init_module, 1/0x10 cleanup_module | this_module: (no section) | blob@96 HCFG 1 90 84 2918126311 gzipcrc=2918126311 | section .data off 96",
+ "note": "ET_REL .ko; .modinfo order = readelf -p (gcc -O2 emits the MODULE_* statics in reverse source order, the bytes win); vermagic = value with kbuild's trailing blank stripped (vermagic_raw keeps it); field names beyond format/elf_type/machine/entry_point are SPECULATIVE (GM .ko vocabulary not seen); expected_offset = FILE offset of the 'H' (OFFSET LAW raw, = hcfg_scan)"
+}

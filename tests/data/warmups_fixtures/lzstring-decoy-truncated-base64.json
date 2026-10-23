@@ -1,0 +1,10 @@
+{
+ "codec": "lzstring-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: none",
+ "encoded": "HISwxgpgBA7g9gJwNZQCYTHVIB2BzKAFwAsQBnWAQwQFsBXABwEIoAVOKMuAGwDcIANJ",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "lzstring_gen.js base64 \"$plain\" | head -c half  # compressToBase64 cut in half: no end marker",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/lzstring_oracle.py base64  # PyPI lzstring 1.0.4 (independent port)",
+ "oracle_output": "ERROR: mbda index: getBaseValue(keyStrBase64, compressed[index]))\n                                                                                     ~~~~~~~~~~^^^^^^^\nIndexError: string index out of range\n"
+}

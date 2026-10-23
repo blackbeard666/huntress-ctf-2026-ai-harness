@@ -1,0 +1,10 @@
+{
+ "codec": "compress-sweep",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: none",
+ "encoded": "ff060000734e6150705901690000cefc2e8b4e69636520776f726b206465636f64696e672074686973207761726d75702120546f20736f6c76652c207375626d6974207468697320657861637420616e7377657220746f207468652047616d65204d61737465723a20636f62616c742d696269732d3339",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "cramjam.snappy.compress(plain) framed, first chunk CRC-32C byte ^1, | xxd -p",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | node tests/data/warmups_fixtures/snappy_framed_oracle.js",
+ "oracle_output": "ERROR: bad CRC-32C\n"
+}

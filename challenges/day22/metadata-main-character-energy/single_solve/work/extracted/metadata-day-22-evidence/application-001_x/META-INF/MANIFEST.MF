@@ -1,0 +1,4 @@
+Manifest-Version: 1.0
+Main-Class: arena.evidence.ArtifactMain
+Created-By: Huntress Artifact Assembly Line
+

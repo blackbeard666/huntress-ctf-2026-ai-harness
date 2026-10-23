@@ -1,0 +1,8 @@
+{
+ "field": "asar.package_name",
+ "expected": "quarterly-sync",
+ "generator_cmd": "bin/asar pack src app.asar --unpack '*.node'  (@electron/asar 4.3.1; src = package.json, index.html, lib/{bootstrap,telemetry}.js, native/helper.node)",
+ "oracle_cmd": "node oracle.mjs app.asar  (@electron/asar 4.3.1 getRawHeader + extractFile('package.json'); `asar list app.asar` agrees)",
+ "decoy": false,
+ "member": "app.asar"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "node.scripts_preinstall",
+ "expected": "none",
+ "generator_cmd": "hand-written package.json without preinstall/bin/exports",
+ "oracle_cmd": "node -e 'const p=require(\"./plain_package.json\");console.log(p.scripts.preinstall, p.bin, p.exports)' -> undefined x3",
+ "decoy": true,
+ "member": "plain_package.json"
+}

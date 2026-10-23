@@ -1,0 +1,8 @@
+{
+ "field": "apk.provider_names",
+ "expected": "[\"com.huntress.mobile.d06.ve69baaf4fe7f.ProviderPathsProvider\"]",
+ "generator_cmd": "GM D06 mobile-lane artifact (aapt-built APK): cp challenges/day06/mobile-provider-paths/single_solve/artifacts/20261006T130124Z/provider_paths.apk",
+ "oracle_cmd": "aapt dump badging/xmltree provider_paths.apk (Android Asset Packaging Tool v0.2) aapt dump xmltree -> provider android:name=\".ProviderPathsProvider\"; package com.huntress.mobile.d06.ve69baaf4fe7f",
+ "decoy": false,
+ "member": "provider_paths.apk"
+}

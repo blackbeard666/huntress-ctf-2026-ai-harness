@@ -1,0 +1,54 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "cputype": "16777223",
+  "arch": "x86_64",
+  "filetype": "execute",
+  "dylib_commands": [
+   "LC_LOAD_DYLIB:/usr/lib/libSystem.B.dylib",
+   "LC_LOAD_DYLIB:@rpath/libpair.dylib",
+   "LC_LOAD_WEAK_DYLIB:@loader_path/libweak.dylib"
+  ],
+  "dylibs": [
+   "/usr/lib/libSystem.B.dylib",
+   "@rpath/libpair.dylib",
+   "@loader_path/libweak.dylib"
+  ],
+  "dylib_versions": [
+   "/usr/lib/libSystem.B.dylib 1359.0.0 1.0.0",
+   "@rpath/libpair.dylib 2.1.0 2.0.0",
+   "@loader_path/libweak.dylib 1.0.0 1.0.0"
+  ],
+  "rpaths": [
+   "@executable_path/../Frameworks",
+   "@loader_path/lib"
+  ],
+  "weak_dylibs": [
+   "@loader_path/libweak.dylib"
+  ],
+  "rpath_dylibs": [
+   "@rpath/libpair.dylib"
+  ],
+  "loader_path_dylibs": [
+   "@loader_path/libweak.dylib"
+  ],
+  "install_name": "none",
+  "current_version": "none",
+  "compatibility_version": "none",
+  "exports": [
+   "_main",
+   "___dso_handle",
+   "__mh_execute_header"
+  ],
+  "has_chained_fixups": "false",
+  "chained_imports_qualified": "none",
+  "chained_weak_imports": "none",
+  "has_hcfg_section": "false"
+ },
+ "decoy": false,
+ "generator_cmd": "bash mlink_gen.sh mlink_x64_app.bin x64_app",
+ "oracle_cmd": "python3 mlink_oracle.py mlink_x64_app.bin   # llvm-objdump-18 --macho --private-header(s) / --exports-trie / --chained-fixups, llvm-lipo-18 -archs, llvm-readobj-18 --sections",
+ "note": "lib.binary.macho_link_facts(data)[field] == expected_facts[field] for each key (null facts -> macho_link_facts is None and every macho_link_field is \"none\"); hcfg_scan first valid hit == expected_offset/config. GM vocabulary for these fields NOT yet confirmed (format label 'macho' presumed by the atlas; cputype as decimal str, arch = lipo name)."
+}

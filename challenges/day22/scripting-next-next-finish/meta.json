@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-22-installer-script-chain",
+  "lane": "script-analysis",
+  "name": "📜 Next, Next, Finish",
+  "ids": {
+    "single_solve": "script-analysis-day-22-installer-script-chain",
+    "time_trial": "script-analysis-day-22-installer-script-chain/time_trial",
+    "mastery": "script-analysis-day-22-installer-script-chain/mastery"
+  }
+}

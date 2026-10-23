@@ -1,0 +1,37 @@
+{
+ "family": "reloc",
+ "file": "reloc_decoy_badcrc.bin",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "bind_now": "true",
+  "copy_count": 0,
+  "copy_symbols": "[]",
+  "counts": {
+   "R_X86_64_GLOB_DAT": 5,
+   "R_X86_64_JUMP_SLOT": 1,
+   "R_X86_64_RELATIVE": 8
+  },
+  "glob_dat_count": 5,
+  "has_relro": "true",
+  "irelative_count": 0,
+  "jump_slot_count": 1,
+  "lazy_binding": "false",
+  "plt_import_count": 1,
+  "plt_imports": "[\"__printf_chk\"]",
+  "plt_stubs": {
+   "0x1050": "__printf_chk"
+  },
+  "rela_dyn_count": 13,
+  "rela_plt_count": 1,
+  "relative_count": 8,
+  "relocation_count": 14,
+  "relocation_sections": "[\".rela.dyn\", \".rela.plt\"]",
+  "relro": "full"
+ },
+ "decoy": true,
+ "generator_cmd": "FX=$PWD sh reloc_gen.sh   # run from an empty scratch dir with FX=tests/data/binary_fixtures; gcc 15 + GNU ld 2.45, HCFG blobs by python3 stdlib zlib/struct/base64, RELATIVE slots of cfg_tab zeroed after linking (lld-style)",
+ "oracle_cmd": "python3 reloc_oracle.py reloc_decoy_badcrc.bin   # readelf -rW/-dW/-lW/-sW/-SW + objdump -d -j .plt -j .plt.sec (<name@plt> labels)",
+ "note": "DECOY: same {ptr,len} table layout but header crc ^ 0x5a5a -> no crc-valid blob; lib.binary.elf_reloc_facts / hcfg_scan 'reloc-ptrtable' pass; field names SPECULATIVE (GM label not seen)"
+}

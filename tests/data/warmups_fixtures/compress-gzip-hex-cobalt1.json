@@ -1,0 +1,9 @@
+{
+ "codec": "gzip-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "encoded": "1f8b080000000000020325c9310e83300c05d0abfcee65e854a917602a131730e10ba29218d9a6e1f854eafade9013d1d43e989974ce7541acd9d1c4cab1df302a5cb72feff0632a39fecb535240aa371a427f48f45288b778d05e483ac916dd4ad3da3d9e1714eb645466000000",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | xxd -p | tr -d '\\n'  # gzip CLI + xxd wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | gzip -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "expected": "match"
+}

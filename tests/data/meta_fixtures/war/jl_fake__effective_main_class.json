@@ -1,0 +1,8 @@
+{
+ "field": "war.effective_main_class",
+ "expected": "none",
+ "generator_cmd": "printf '\\x89PNG\\r\\n\\x1a\\nnot a jar at all' > fake.jar (PNG magic renamed .jar)",
+ "oracle_cmd": "java Oracle.java fake.jar (java.util.jar.JarFile getManifest().getMainAttributes()/getEntries(), jf.getEntry(Main-Class.replace('.','/')+\".class\"), JarFile.entries() *.jar|*.war, JarInputStream.getManifest(), ZipInputStream entry index) -> JarFile error zip END header not found",
+ "decoy": true,
+ "member": "fake.jar"
+}

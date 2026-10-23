@@ -1,0 +1,7 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-a7a7c43d09c2e08e",
+ "_why": "manifest android:debuggable=true; key = CRC32(getApkContentsSigners()[0] DER || InstallSourceInfo installing + initiating pkg) << 32 ^ ZipFile(ApplicationInfo.sourceDir) classes.dex CRC ^ (flags & FLAG_DEBUGGABLE) << 40 ^ Signature.hashCode << 8, as 16 hex",
+ "generator_cmd": "python3 tests/data/android_fixtures/tamper_src/gen_tamper.py install_signing tests/data/android_fixtures/tamper_install_signing.apk  # javac --release 8 (app + android.* stubs) + dex2jar d2j-jar2dex.sh + apktool's aapt2 link (manifest) + zipfile + keytool RSA + apksigner sign v1+v2",
+ "oracle_cmd": "same generator, oracle stage: openssl pkcs7 -print_certs | openssl x509 -outform DER on META-INF/*.RSA (signer DER), aapt dump badging (application-debuggable), then java -Dtamper.apk=<signed apk> -Dtamper.cert=<der> -cp <javac out> com.huntress.mobile.d22.tamper.Probe -> Guard.reveal() on the host JVM, real java.util.zip.ZipFile reading classes.dex CRC -> 'ANS-a7a7c43d09c2e08e'"
+}

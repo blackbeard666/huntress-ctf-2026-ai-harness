@@ -1,0 +1,10 @@
+{
+ "family": "jni_bridge",
+ "jar": "jnib_decoy_text.jar",
+ "so": "jnib_decoy_text.bin",
+ "decoy": true,
+ "generator_cmd": "bash tests/data/binary_fixtures/jnib_gen.sh <workdir>  (javac/jar, javac -h, gcc / aarch64-linux-gnu-gcc -shared -I$JAVA_HOME/include, coreutils base64 + gzip crc)",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/jnib_oracle.py jnib_decoy_text.jar jnib_decoy_text.bin   # javap -p -s/-c, readelf -W --dyn-syms/-s/-r/-S/-d, grep -obUa, javac -h header",
+ "note": "DECOY: neither member is a jar/class nor ELF/PE -> None",
+ "expected_facts": null
+}

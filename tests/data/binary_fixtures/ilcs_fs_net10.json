@@ -1,0 +1,48 @@
+{
+ "kind": "dotnet_il_facts",
+ "decoy": false,
+ "expected": {
+  "il_methods": "[\"Hunt.Fsx::blob\",\"Hunt.Fsx::probe\",\"Hunt.Fsx::main\"]",
+  "il_method_count": "3",
+  "managed_edges": "[]",
+  "native_edges": "[[\"Hunt.Fsx::probe\",\"Hunt.Fsx::cstrlen\"],[\"Hunt.Fsx::probe\",\"Hunt.Fsx::getpid\"],[\"Hunt.Fsx::main\",\"Hunt.Fsx::cstrlen\"],[\"Hunt.Fsx::main\",\"Hunt.Fsx::getpid\"]]",
+  "external_edges": "[[\"Hunt.Fsx::blob\",\"System.Runtime.CompilerServices.RuntimeHelpers::InitializeArray\"],[\"Hunt.Fsx::main\",\"System.Runtime.CompilerServices.RuntimeHelpers::InitializeArray\"],[\"Hunt.Fsx::main\",\"Microsoft.FSharp.Core.PrintfFormat`5::.ctor\"],[\"Hunt.Fsx::main\",\"System.Console::get_Out\"],[\"Hunt.Fsx::main\",\"Microsoft.FSharp.Core.PrintfModule::PrintFormatLineToTextWriter\"],[\"Hunt.Fsx::main\",\"Microsoft.FSharp.Core.FSharpFunc`2::Invoke\"]]",
+  "ldftn_edges": "[]",
+  "pinvoke_callers": "{\"cstrlen\":[\"Hunt.Fsx::probe\",\"Hunt.Fsx::main\"],\"getpid\":[\"Hunt.Fsx::probe\",\"Hunt.Fsx::main\"]}",
+  "native_callers": "[\"Hunt.Fsx::probe\",\"Hunt.Fsx::main\"]",
+  "call_edge_count": "10",
+  "calli_count": "0",
+  "user_strings": "[\"%s\",\"fsx crossing\",\"hcfg\"]",
+  "user_string_count": "3",
+  "ldstr_strings": "[\"%s\",\"fsx crossing\",\"hcfg\"]",
+  "array_init_count": "2",
+  "array_inits_brief": "[{\"method\":\"Hunt.Fsx::blob\",\"il\":8,\"field\":\"Hunt.Fsx::field3948@\",\"rva\":\"0x317a\",\"offset\":4986},{\"method\":\"Hunt.Fsx::main\",\"il\":8,\"field\":\"Hunt.Fsx::field3949@\",\"rva\":\"0x3188\",\"offset\":5000}]"
+ },
+ "expected_lookups": {
+  "cstrlen_callers": "[\"Hunt.Fsx::probe\",\"Hunt.Fsx::main\"]",
+  "getpid_callers": "[\"Hunt.Fsx::probe\",\"Hunt.Fsx::main\"]"
+ },
+ "field_owner_probes": [
+  {
+   "offset": 4989,
+   "field": "Hunt.Fsx::field3948@"
+  },
+  {
+   "offset": 5003,
+   "field": "Hunt.Fsx::field3949@"
+  }
+ ],
+ "unordered": [
+  "il_methods",
+  "managed_edges",
+  "external_edges",
+  "native_edges",
+  "native_callers",
+  "pinvoke_callers",
+  "ldstr_strings",
+  "array_inits_brief"
+ ],
+ "note": "ilspy prints nested types before their enclosing type's remaining methods, so cross-method order keys compare order-insensitively; IL order within a method and #US heap order are exact",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/ilcs_gen.sh tests/data/binary_fixtures   # dotnet 10 SDK: dotnet build -c Release (Deterministic) of a C# and an F# project + a plain C# library; /usr/bin/true; head -c 1024",
+ "oracle_cmd": "source bin/env.sh; python3 tests/data/binary_fixtures/ilcs_oracle.py tests/data/binary_fixtures/ilcs_fs_net10.bin   # ilspycmd -il text (ICSharpCode.Decompiler IL disassembler) + ilcs_us.cs (System.Reflection.Metadata UserStrings) + pefile rva->offset"
+}

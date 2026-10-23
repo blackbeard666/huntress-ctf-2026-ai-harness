@@ -1091,3 +1091,140 @@ assert _ro20["offset"] == 64 and _ro20["hcfg_resource_size"] == len(_hc19) and _
 assert _bin27.overlay_unpack(_rs20, "RS20") == _hc19 and _bin27.resource_overlay(_rs20 + b"x") is None
 assert _bin27.resource_overlay(_ov19) is None and _bin27.overlay_unpack(_ov19, "PK19") == _hc19
 print("ok  binary: D20 RS20 resource overlay -> HCFG (resource_overlay)")
+
+# Day 21 "Under Pressure" ("A familiar wrapper. Something compressed inside."): std base64 of gzip (mtime 0, XFL 2, OS 3,
+# level 9 Z_FILTERED) -- lib.warmups_codecs.DAYS day 21 exact encoder (the Single's own bytes) + decode_chunk's
+# base64-of-compressed branch (gzip and zlib); GM-confirmed D21 single slug.
+_s21 = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: eager-compass-mosaic-50"
+_u21 = _wc.day_codec(21)[1](_s21)
+assert _u21 == ("H4sIAAAAAAACAyXJMQ7CQAwEwK8sPSfR0PABKqj4gHFWyQkcR7bD8XwKpp17V2J4vDBRferrjFp6YkjYvh3wcKS/Pzwi96f1+i+/ogVZ"
+                "czBQjlqIqxhxkyzGBZSZ0dRtk8xmntK1nU8/iFIChW4AAAA=")
+assert _wc.day_codec(21)[2](_u21) == _s21 and _wc.day_codec(21)[3] is False
+assert _dc(_u21) == _s21 and _dc("H4sIAAAAAAACA8urrNA1NQMA2EdrhAYAAAA=") == "nyx-56"
+assert _dc(_b64.b64encode(_bin27.zlib.compress(_s21.encode())).decode()) == _s21
+print("ok  decode: base64 of gzip (D21) exact encoder + decode_chunk branch")
+
+# Day 21 "Package Deal": apk.package_name verified (<manifest package> of the binary AndroidManifest.xml, stdlib AXML
+# walk; GM-confirmed "com.huntress.arena.p08281778" on single/TT/Mastery).
+def _axml21(pkg):
+    strs = ["package", "manifest", pkg]
+    data = b"".join(_st17.pack("<H", len(s)) + s.encode("utf-16-le") + b"\0\0" for s in strs)
+    offs, o = [], 0
+    for s in strs:
+        offs.append(o)
+        o += 2 + 2 * len(s) + 2
+    data += b"\0" * (-len(data) % 4)
+    sp_hdr = 28
+    sp = _st17.pack("<HHIIIIII", 1, sp_hdr, sp_hdr + 4 * len(strs) + len(data), len(strs), 0, 0,
+                    sp_hdr + 4 * len(strs), 0) + b"".join(_st17.pack("<I", x) for x in offs) + data
+    attr = _st17.pack("<IIIHBBI", 0xFFFFFFFF, 0, 2, 8, 0, 3, 2)
+    el = _st17.pack("<HHIII", 0x0102, 16, 16 + 20 + len(attr), 1, 0xFFFFFFFF) \
+        + _st17.pack("<IIHHHHHH", 0xFFFFFFFF, 1, 20, 20, 1, 0, 0, 0) + attr
+    return _st17.pack("<HHI", 3, 8, 8 + len(sp) + len(el)) + sp + el
+
+
+_zb21 = _io27.BytesIO()
+with zipfile.ZipFile(_zb21, "w") as _z21:
+    _z21.writestr("AndroidManifest.xml", _axml21("com.huntress.arena.p08281778"))
+assert _meta14.lookup("apk", "package_name")[0].tier == _meta14.VERIFIED
+assert _meta14.answer("d21-apk-001-apk-package-name", {"question": "Determine apk.package_name for mobile-001.apk."},
+                      _zb21.getvalue()) == ("com.huntress.arena.p08281778", _meta14.VERIFIED)
+print("ok  lib.meta: apk.package_name registered (verified D21)")
+
+# Day 21 "Reflect Upon This": the XSS callback is /api/clues `secondary_route` by KEY (single /callback-, TT /internal-)
+from lib import knowledge as _K21  # noqa: E402
+assert _K21.WEB_XSS_CLUE_ROUTE_KEYS["callback"] == "secondary_route" and "internal" in _K21.WEB_XSS_CALLBACK_ROUTE_WORDS_SEEN
+print("ok  knowledge: D21 web XSS callback route picked by clue key")
+
+# Day 22 "Deflated Ego": std padded base64 of zlib (78 da, level 9 Z_FILTERED) -- GM-confirmed single slug, byte-exact
+_s22 = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: tidy-cloud-tulip-70"
+_u22 = _wc.day_codec(22)[1](_s22)
+assert _u22 == ("eNolyTEOgzAMBdCr/O5E6obUC3SCiQu4iVUsEoxih5Tbd+Ctb5bI6Fo3JI6aZP/CVzF0qqUdDywK03zyAGufIn4v/yg6aLfOFa7wlfGmwpjI"
+                "nOsLLukKMWtLwVuWI4zPPwZ3Jg8=")
+assert _wc.day_codec(22)[2](_u22) == _s22 and _wc.day_codec(22)[3] is False and _dc(_u22) == _s22
+print("ok  warmups_codecs: D22 base64 of zlib exact encoder")
+
+# Day 22 "Main Character Energy": jar.main_class promoted from prebuilt jar.jar_manifest (verified D22)
+_zb22 = _io27.BytesIO()
+with zipfile.ZipFile(_zb22, "w") as _z22:
+    _z22.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\r\nMain-Class: arena.evidence.Artifact\r\n Main\r\n\r\n")
+assert _meta14.lookup("jar", "main_class")[0].tier == _meta14.VERIFIED
+assert _meta14.answer("d22-jar-001-jar-main-class", {"question": "Determine jar.main_class for application-001.jar."},
+                      _zb22.getvalue()) == ("arena.evidence.ArtifactMain", _meta14.VERIFIED)
+print("ok  lib.meta: jar.main_class registered (verified D22)")
+
+# Day 22 web: csrf + upload handlers keyed on ANY clue key (dispatch key was current_user / preview_guide), lib.web
+# targets in parallel (module-level job: the old local closure failed every target of a >=2-target contract), and an
+# expired target (410 {"state":"completed"}) returns None at once.
+import json as _j22  # noqa: E402
+import threading as _th22  # noqa: E402
+import time as _tm22  # noqa: E402
+import urllib.parse as _up22  # noqa: E402
+from http.server import BaseHTTPRequestHandler as _BH22, ThreadingHTTPServer as _HS22  # noqa: E402
+from lib import web as _web22  # noqa: E402
+from lib.web import handlers as _wh22  # noqa: E402
+
+
+class _H22(_BH22):
+    def _send(self, st, body, cookie=None):
+        self.send_response(st)
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
+        self.end_headers()
+        self.wfile.write(body.encode())
+
+    def do_GET(self):
+        u = _up22.urlparse(self.path)
+        kind, path, qs = self.server.kind, u.path, _up22.parse_qs(u.query)
+        if kind == "dead":
+            return self._send(410, '{"state":"completed"}')
+        if path == "/api/clues":
+            return self._send(200, _j22.dumps(
+                {"framework": "x", "current_user": "analyst", "feature_route": "/submit-ab12cd",
+                 "preferences_route": "/preferences", "browser_session": "established"} if kind == "csrf" else
+                {"feature_route": "/action-ef679c", "framework": "net/http", "preview_guide": "/preview-guide",
+                 "render_route": "/internal-a0d2c4", "upload_shape": "POST JSON: filename, content, content_type"}))
+        if kind == "csrf" and path == "/preferences":
+            return self._send(200, "<p>Current: daily</p><form method='get' action='/submit-ab12cd'><select "
+                                   "name=destination><option value=daily><option value='review-7@outside.example."
+                                   "invalid'></select><input type=hidden name=csrf_token value=s1></form>",
+                              "arena_session=s1; Path=/")
+        if kind == "csrf" and path == "/submit-ab12cd":
+            xs = self.headers.get("Sec-Fetch-Site") == "cross-site" and "@" in qs.get("destination", [""])[0]
+            return self._send(200, "proof_" + "c5" * 16 if xs else '{"changed_across_sites":false}')
+        if kind == "up" and path == "/internal-a0d2c4":
+            return self._send(200, "proof_" + "a7" * 16 if self.server.notes.get(qs.get("file", [""])[0]) else "no")
+        return self._send(404, "nf")
+
+    def do_POST(self):
+        body = _j22.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+        if self.server.kind == "up" and self.path == "/action-ef679c":
+            self.server.notes[body.get("filename", "")] = "{{objective}}" in body.get("content", "")
+            return self._send(200, _j22.dumps({"path": "/internal-a0d2c4?file=" + body.get("filename", "")}))
+        return self._send(404, "nf")
+
+    def log_message(self, *a):
+        pass
+
+
+_b22 = {}
+for _kind22 in ("csrf", "up", "dead"):
+    _s22v = _HS22(("127.0.0.1", 0), _H22)
+    _s22v.kind, _s22v.notes = _kind22, {}
+    _th22.Thread(target=_s22v.serve_forever, daemon=True).start()
+    _b22[_kind22] = f"http://127.0.0.1:{_s22v.server_address[1]}/"
+_cl22, _k22 = _wh22.websolve.clues(_b22["csrf"])
+assert _k22 == "current_user" and [n for n, _ in _wh22.for_key(_k22, _cl22)][0] == "csrf", (_k22, _cl22)
+assert _wh22.csrf(_b22["csrf"], _cl22) == "proof_" + "c5" * 16
+_cu22, _ku22 = _wh22.websolve.clues(_b22["up"])
+assert [n for n, _ in _wh22.for_key(_ku22, _cu22)] == ["upload"], (_ku22, _cu22)
+assert _wh22.upload(_b22["up"], _cu22) == "proof_" + "a7" * 16
+_c22 = {"answer_ids": ["proof-1", "proof-2", "proof-3"],
+        "questions": [{"artifact": "Target 1"}, {"artifact": "Target 2"}, {"artifact": "Target 3"}],
+        "targets": [{"id": "Target 1", "url": _b22["csrf"]}, {"id": "Target 2", "url": _b22["up"]},
+                    {"id": "Target 3", "url": _b22["dead"]}]}
+_t022 = _tm22.time()
+assert _web22.solve_target({"artifact": "Target 3"}, _c22) is None and _tm22.time() - _t022 < 3
+_o22 = _web22.solve(_c22)
+assert _o22 == {"proof-1": "proof_" + "c5" * 16, "proof-2": "proof_" + "a7" * 16}, _o22
+print("ok  lib.web: D22 csrf + upload handlers, parallel targets, dead target skipped")

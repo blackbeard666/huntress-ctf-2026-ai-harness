@@ -1,0 +1,7 @@
+{
+ "decoy": false,
+ "expected_plain": "v=3|language=github_actions|role=downloader|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=base64|stage_count=2|steps=decode_configuration,dispatch_process|campaign_id=GITHUB_ACTIONS-8b0e7f11|url=https://github_actions-8b0e7f11.example.invalid/stage|file_path=/tmp/huntress-github_actions/.8b0e7f11.stage",
+ "note": "yaml-scalar-carrier-twists: double-quoted base64 split by \\n escapes, CRLF line endings, comment after the value (lib.codec find_codecs)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/yst_gen.py  (stdlib base64 / bytes.hex, D21 GitHub Actions carrier with the YAML twist)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/yst_oracle.py tests/data/script_fixtures/yst_dq_nl_crlf.yml  (PyYAML safe_load_all / raw `#` comment block + stdlib base64 / bytes.fromhex)"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "gzip-z85",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-wolf-27",
+ "encoded": "abZy80000000sK?f+h5O3<C1UE0i99aAmBVgi0sx@J]B>8RCR+[J*Sj)[></!Mbw/i*Ca.exc2Qyi#PxrjD//P5zoK6945piuU}T8Bw{A*[+TUC*Ht&NRk7u)kndKuW*eaA+2dI00000",
+ "generator_cmd": "printf %s \"$plain\" | gzip -6n | { cat > /tmp/dz.$$; truncate -s %4 /tmp/dz.$$; basenc --z85 -w0 /tmp/dz.$$; rm -f /tmp/dz.$$; }  # gzip CLI + { wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | basenc --z85 -d | gzip -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-wolf-27",
+ "expected": "match"
+}

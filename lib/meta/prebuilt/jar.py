@@ -14,7 +14,10 @@ Fields (fmt jar, aliases java_archive / war / ear; manifest + class-set fields a
     java_version_min = min major - 44 as text ("8", "11", "17", "21"; 45..48 -> "1.1".."1.4").
   class_count: number of `*.class` file members (directories excluded).
   signature_files: META-INF/<name>.SF/.RSA/.DSA/.EC directly under META-INF (not subdirs), central-directory order.
-Not a zip / no manifest -> "none" (class fields also accept a manifest-less zip that holds .class members)."""
+Not a zip / no manifest -> "none" (class fields also accept a manifest-less zip that holds .class members).
+Nested refs (`x.zip -> app.jar -> BOOT-INF/lib/dep.jar`, `app.jar!/BOOT-INF/lib/dep.jar`, `jar:file:...!/`): every
+field first walks descend() down the artifact text from the bytes it was handed, so a nested jar's own manifest
+answers (the lane solver may hand the outer jar for a 3-deep ref)."""
 import io
 import re
 import struct
@@ -28,7 +31,6 @@ _CLASS_FIELDS = {"class_major_version_set": "set", "class_major_versions": "set"
 
 FIELDS = {
     ("jar", "manifest_main_class"): "jar_manifest",
-    ("jar", "main_class"): "jar_manifest",
     ("jar", "manifest_created_by"): "jar_manifest",
     ("jar", "created_by"): "jar_manifest",
     ("jar", "manifest_version"): "jar_manifest",
@@ -167,6 +169,45 @@ def _zip(data):
         return None
 
 
+_SEG = re.compile(r"\s*->\s*|!/")
+
+
+def _member(z, seg):
+    names = z.namelist()
+    if seg in names:
+        return seg
+    low = seg.lower()
+    return next((n for n in names if n.lower() == low), None)
+
+
+def descend(data, ctx):
+    """The innermost zip member the artifact ref names below `data` (each `->` / `!/` segment the current zip holds
+    and whose bytes are a zip; a segment it lacks -- the container name -- is skipped), else `data` unchanged."""
+    if not isinstance(data, (bytes, bytearray)) or not ctx:
+        return data
+    ref = str(ctx.get("artifact") or ctx.get("member") or "")
+    segs = [re.sub(r"^(?:jar:)?(?:file:)?/*", "", s.strip()).rstrip("/") for s in _SEG.split(ref)]
+    segs = [s for s in segs if s]
+    if len(segs) < 2:
+        return data
+    cur = data
+    for seg in segs:
+        z = _zip(cur)
+        if z is None:
+            break
+        name = _member(z, seg)
+        if name is None:
+            continue
+        try:
+            nxt = z.read(name)
+        except Exception:  # noqa: BLE001 -- encrypted / bad CRC
+            break
+        if nxt[:2] != b"PK":
+            break           # a leaf that is not an archive (a .class / the manifest itself): stay on this jar
+        cur = nxt
+    return cur
+
+
 def _manifest_bytes(z):
     names = {i.filename.upper(): i for i in z.infolist()}
     info = names.get(_MF)
@@ -238,6 +279,7 @@ def jar_manifest(data, ctx):
     """<fmt>.manifest_<attr> / <attr>: the main-section value, stored text trimmed."""
     if data is None:
         return None
+    data = descend(data, ctx)
     mf = _jar_manifest(data)
     if mf is None:
         return "none"
@@ -248,6 +290,7 @@ def jar_manifest(data, ctx):
 def jar_multi_release(data, ctx):
     if data is None:
         return None
+    data = descend(data, ctx)
     mf = _jar_manifest(data)
     if mf is None:
         return "none"
@@ -258,6 +301,7 @@ def jar_multi_release(data, ctx):
 def jar_class_path(data, ctx):
     if data is None:
         return None
+    data = descend(data, ctx)
     mf = _jar_manifest(data)
     if mf is None:
         return "none"
@@ -275,6 +319,7 @@ def jar_classes(data, ctx):
     """Class-file version set / count over every *.class member."""
     if data is None:
         return None
+    data = descend(data, ctx)
     z = _zip(data)
     if z is None:
         return "none"
@@ -306,6 +351,7 @@ def jar_classes(data, ctx):
 def jar_signature_files(data, ctx):
     if data is None:
         return None
+    data = descend(data, ctx)
     z = _zip(data)
     if z is None or _manifest_bytes(z) is None:
         return "none"

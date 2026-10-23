@@ -1,0 +1,9 @@
+{
+ "codec": "lzstring-base64 (Mastery line fragment)",
+ "plain": "rk decodi",
+ "encoded": "E4awBAJgpgxg9hAlkA==",
+ "generator_cmd": "LZ=$PWD/tools/npm-cyberchef/node_modules/lz-string tools/node/bin/node tests/data/warmups_fixtures/lzstring_gen.js base64 \"$plain\"  # pieroxy lz-string 1.5.0 (npm) compressToBase64",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/lzstring_oracle.py base64  # PyPI lzstring 1.0.4 (independent port)",
+ "oracle_plain": "rk decodi",
+ "expected": "match"
+}

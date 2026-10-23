@@ -1,0 +1,7 @@
+{
+ "entry": "exception_flow_scan",
+ "expected": "ANS-7c2e91f04ab3d658",
+ "_why": "Guard.key() folds which catch each probe level reaches (custom TamperException<-SecurityException, 7/0 ArithmeticException, T[9] ArrayIndexOutOfBounds caught as IndexOutOfBounds, null String receiver NPE caught as RuntimeException, parseInt NumberFormatException caught as IllegalArgumentException, finally catch-alls); the token is decoded ONLY in reveal()'s catch (SecurityException) keyed on the thrown message's hashCode",
+ "generator_cmd": "python3 tests/data/android_fixtures/excflow_src/gen_excflow.py handler_only tests/data/android_fixtures/excflow_handler_only.apk  # javac --release 8 (app + clean-device android.* stubs) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d21.exc.Probe -> Vault.reveal() run by the host JVM on the clean stubs (Debug.isDebuggerConnected false, PackageManager NameNotFound, real FileInputStream / Class.forName) -> 'ANS-7c2e91f04ab3d658'"
+}

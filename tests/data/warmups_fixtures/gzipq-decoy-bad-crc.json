@@ -1,0 +1,11 @@
+{
+ "codec": "gzip-quirks*",
+ "plain": null,
+ "encoded": "H4sIAAAAAAACAyXJMQ7CMAwF0Kt8djIywAWY2qkXMOlXidrEle0Sjl8k1vfGkomutmJm1rm0BfEuji5Wj/2CSeG6fXiFH69a4r/8Sg5I805D6A+Jp1RiEA/aA1X2jSmbNKbb/QTerb7vYwAAAA==",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "{ printf %s \"$sentence\" | gzip -9n | head -c -8; printf '\\xde\\xad\\xbe\\xef\\x63\\x00\\x00\\x00'; } | base64 -w0  # complete deflate body, forged CRC32/ISIZE",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc 2>&1",
+ "oracle_output": "gzip: stdin: invalid compressed data--crc error / length error -> none",
+ "sentence_slug": "maple-crane-59"
+}

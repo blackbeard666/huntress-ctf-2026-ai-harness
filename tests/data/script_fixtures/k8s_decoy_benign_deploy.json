@@ -1,0 +1,7 @@
+{
+ "decoy": true,
+ "expected_plain": null,
+ "note": "k8s-helm-manifest-route: decoy: benign nginx Deployment, no carrier (lib.codec.k8s_scripts / _k8s_codecs)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/k8s_gen.py tests/data/script_fixtures  (stdlib base64 + add 0x10 plan, D21 bash Material_/Codec_ pair wrapped in k8s/Helm YAML)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/k8s_oracle.py tests/data/script_fixtures/k8s_decoy_benign_deploy.yaml  (PyYAML safe_load_all + stdlib base64 / byte subtract) -> none"
+}

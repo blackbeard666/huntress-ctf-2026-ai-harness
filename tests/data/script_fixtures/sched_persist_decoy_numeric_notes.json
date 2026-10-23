@@ -1,0 +1,11 @@
+{
+ "material": "Inventory 2026\n1 2 3 4 5 apples and pears\n10 20 30 40 50 boxes\n",
+ "rep": "schedule_entries",
+ "transform": "period!notes.txt",
+ "key": null,
+ "expected": null,
+ "decoy": true,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>) ; decoy -> no persistence row -> None (oracle stdout: \"crontab: invalid option -- 'T'\\ncrontab: usage error: unrecog\")",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes notes.txt: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && crontab -T notes.txt 2>&1 || true  # not a crontab (prose with numbers))"
+}

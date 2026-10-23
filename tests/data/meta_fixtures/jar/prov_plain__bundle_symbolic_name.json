@@ -1,0 +1,8 @@
+{
+ "field": "jar.bundle_symbolic_name",
+ "expected": "none",
+ "generator_cmd": "jar --create --file plain.jar readme.txt",
+ "oracle_cmd": "unzip -p plain.jar META-INF/MANIFEST.MF (no Bundle-SymbolicName)",
+ "decoy": true,
+ "member": "plain.jar"
+}

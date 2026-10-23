@@ -1,0 +1,9 @@
+{
+ "codec": "archive-container[cpio-newc]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-falcon-52",
+ "encoded": "MDcwNzAxMDAwMDAwMDAwMDAwODFiNDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwNjcwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA2MDAwMDAwMDBwbGFpbgBOaWNlIHdvcmsgZGVjb2RpbmcgdGhpcyB3YXJtdXAhIFRvIHNvbHZlLCBzdWJtaXQgdGhpcyBleGFjdCBhbnN3ZXIgdG8gdGhlIEdhbWUgTWFzdGVyOiBjbG92ZXItZmFsY29uLTUyADA3MDcwMTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDEwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwYjAwMDAwMDAwVFJBSUxFUiEhIQAAAAA=",
+ "generator_cmd": "python3.14 -c 'import libarchive,os,sys,base64;fs=sys.argv[2:];c=libarchive.custom_writer(sys.stdout.buffer.write,sys.argv[1]);w=c.__enter__();[w.add_file_from_memory(f,len(os.environ[f].encode()),os.environ[f].encode()) for f in fs];c.__exit__(None,None,None)' cpio_newc plain | base64 -w0",
+ "oracle_cmd": "f=$(mktemp); printf %s \"$encoded\" | base64 -d > $f; 7z x -so -tcpio $f 2>/dev/null </dev/null; r=$?; rm -f $f; exit $r",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-falcon-52",
+ "expected": "match"
+}

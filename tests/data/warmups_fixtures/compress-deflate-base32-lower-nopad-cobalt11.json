@@ -1,0 +1,9 @@
+{
+ "codec": "deflate-base32-lower-nopad",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-wolf-83",
+ "encoded": "exetcesagaialuflpq6zlrvyqcfmubkwfqzbe25sjmoj6gpnpobxpdbmnhd4yttgp6wlbtjlgksxrhifi2auvofzqrpfh5hwf476iddundtajeypdeoukrspnkofuoezfbmjkjjmkvj36",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | tail -c +11 | head -c -8 | base32 -w0 | tr -d = | tr A-Z a-z  # gzip CLI + base32 wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | tr a-z A-Z | { read x; printf %s \"$x\"; printf %.$(( (8 - ${#x} % 8) % 8 ))s '======='; } | base32 -d | { printf '\\037\\213\\010\\000\\000\\000\\000\\000\\000\\003'; cat; } | gzip -dc 2>/dev/null",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-wolf-83",
+ "expected": "match"
+}

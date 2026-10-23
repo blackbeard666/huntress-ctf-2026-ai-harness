@@ -1,0 +1,8 @@
+{
+ "field": "pyz.lfh_offsets_relative",
+ "expected": "false",
+ "generator_cmd": "echo 'print(\"hello from zipapp\")' > app/__main__.py; python3 -m zipapp app -p '/usr/bin/env python3' -o hello.pyz",
+ "oracle_cmd": "unzip -t hello.pyz -> no 'extra bytes' warning (zipapp writes absolute offsets)",
+ "decoy": false,
+ "member": "hello.pyz"
+}

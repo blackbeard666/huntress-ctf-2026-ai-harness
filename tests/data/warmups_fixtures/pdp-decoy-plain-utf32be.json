@@ -1,0 +1,10 @@
+{
+ "codec": "pdp*",
+ "plain": null,
+ "encoded": "00000074000000680000006500000020000000710000007500000069000000630000006b0000002000000062000000720000006f000000770000006e00000020000000660000006f00000078000000200000006a000000750000006d0000007000000073000000200000006f00000076000000650000007200000020000000740000006800000065000000200000006c000000610000007a0000007900000020000000640000006f00000067",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'the quick brown fox jumps over the lazy dog' | iconv -f utf-8 -t UTF-32BE | xxd -p | tr -d '\\n'  # PLAIN big-endian UTF-32, not middle-endian",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | iconv -f UTF-32BE -t utf-8  # reads directly: the unicode-form codecs own it, the PDP decoder must decline",
+ "oracle_plain": "the quick brown fox jumps over the lazy dog"
+}

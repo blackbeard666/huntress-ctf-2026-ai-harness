@@ -1,0 +1,7 @@
+{
+ "entry": "dart_snapshot_scan",
+ "expected": "ANS-e3b0c44298fc1c14",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/android_fixtures/dart_src/gen.py tests/data/android_fixtures  # C byte arrays laid out as Dart snapshots (magic 0xdcdcf5f5, kind 3 FullAOT, version hash, features) -> aarch64-linux-gnu-gcc -shared -nostdlib -> lib/arm64-v8a/libapp.so exporting _kDart{Vm,Isolate}Snapshot{Data,Instructions}; zip -qX -r <name>.apk .  [heap-layout OneByteStrings 'ANS-', 'e3b0c442', '98fc1c14' (tags + compressed Smi length) amid app strings]",
+ "oracle_cmd": "unzip -p dart_aot_split.apk lib/arm64-v8a/libapp.so > l.so && strings -a -n 4 l.so | grep -x -A2 'ANS-' | tr -d '\\n'  # -> ANS-e3b0c44298fc1c14"
+}

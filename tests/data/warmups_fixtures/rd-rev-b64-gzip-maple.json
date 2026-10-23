@@ -1,0 +1,9 @@
+{
+ "codec": "decompress-redecode",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-badger-19",
+ "encoded": "=AAAAYmW7XbeB4HM9jmXL9zYjV5R2NIxYWZIiPk+QEdvZHQSv8C+Wm7zBzrPdDXphH95rOxRXgng77SazIitmiokPv36puV8D3kswEkGvIJYvMlo0tg0wIj98tK0FwAMD6QMJXyACAAAAAAAIs4H",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | base64 -w0 | rev",
+ "oracle_cmd": "printf %s \"$encoded\" | rev | base64 -d | gzip -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-badger-19",
+ "expected": "match"
+}

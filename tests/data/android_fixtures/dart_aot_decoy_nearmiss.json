@@ -1,0 +1,7 @@
+{
+ "entry": "dart_snapshot_scan",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "python3 tests/data/android_fixtures/dart_src/gen.py tests/data/android_fixtures  # C byte arrays laid out as Dart snapshots (magic 0xdcdcf5f5, kind 3 FullAOT, version hash, features) -> aarch64-linux-gnu-gcc -shared -nostdlib -> lib/arm64-v8a/libapp.so exporting _kDart{Vm,Isolate}Snapshot{Data,Instructions}; zip -qX -r <name>.apk .  [decoy: 'ANS-' + non-hex parts 'notahex!' 'ghijklmn', anchor 'ANS-12ab34cd' with no hex neighbours, UTF-16 15-hex near miss, base64('ANS-NOT-A-REAL-TOKEN')]",
+ "oracle_cmd": "unzip -p dart_aot_decoy_nearmiss.apk lib/arm64-v8a/libapp.so > l.so && { strings -a -n 4 l.so; strings -a -el l.so; } | grep -o 'ANS-[0-9a-fA-F]\\{16\\}' | wc -l  # -> 0; strings -a -el shows only ANS-4f0c2e9a7b1d356 (15 hex)"
+}

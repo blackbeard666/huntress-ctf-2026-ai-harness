@@ -1,0 +1,57 @@
+{
+ "family": "extension_bridge",
+ "file": "xbridge_pyext_vault.bin",
+ "decoy": false,
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "extension_kind": "python_ext",
+  "init_export": "PyInit_hcfg_vault",
+  "module_name": "hcfg_vault",
+  "module_doc": "Native vault bridge.",
+  "module_size": "-1",
+  "method_count": "3",
+  "method_names": [
+   "unlock",
+   "peek",
+   "xor_key"
+  ],
+  "method_flags": {
+   "unlock": "METH_NOARGS",
+   "peek": "METH_VARARGS|METH_KEYWORDS",
+   "xor_key": "METH_O"
+  },
+  "method_functions": {
+   "unlock": "vault_unlock",
+   "peek": "vault_peek",
+   "xor_key": "vault_xor_key"
+  },
+  "methods": [
+   {
+    "name": "unlock",
+    "function": "vault_unlock",
+    "flags": "METH_NOARGS",
+    "flags_value": "4",
+    "doc": "Return the unlock tag."
+   },
+   {
+    "name": "peek",
+    "function": "vault_peek",
+    "flags": "METH_VARARGS|METH_KEYWORDS",
+    "flags_value": "3",
+    "doc": "Peek at a slot."
+   },
+   {
+    "name": "xor_key",
+    "function": "vault_xor_key",
+    "flags": "METH_O",
+    "flags_value": "8",
+    "doc": "none"
+   }
+  ]
+ },
+ "generator_cmd": "bash tests/data/binary_fixtures/xbridge_gen.sh   # gcc -shared (+python3-config / .venv Cython 3.3 / .venv cffi 2.1), py_compile (.venv 3.12, /usr/bin/python3 3.14)",
+ "oracle_cmd": ".venv/bin/python tests/data/binary_fixtures/xbridge_oracle.py   # lief relocs+symbols, real import (CPython 3.14 / 3.12), lua require(), ast over the caller source",
+ "note": "lib.binary.extension_bridge_facts(data): every expected_facts key must match; None = not an ELF/.pyc/ctypes source"
+}

@@ -1,0 +1,14 @@
+# HUNTRESS_ANALYSIS_V1:
+#   B64-Y2FjaGUgd2FybXVwIG9ubHksIG5vdGhpbmcgc3RhZ2Vk
+name: Huntress inert analysis 00000000
+on:
+  workflow_dispatch:
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    env:
+      HUNTRESS_DESCRIPTOR: "\x68\u0065llo\nworld"
+      NOTE: !!binary YnVpbGQgbm90ZXM6IGxpbnQsIHRlc3QsIHBhY2thZ2U=
+    steps:
+      - name: Preserve modeled descriptor
+        run: ':'

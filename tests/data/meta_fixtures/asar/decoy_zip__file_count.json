@@ -1,0 +1,8 @@
+{
+ "field": "asar.file_count",
+ "expected": "none",
+ "generator_cmd": "python3 -I -c \"import zipfile;z=zipfile.ZipFile('decoy.asar','w');z.writestr('package.json','{\\\"name\\\":\\\"x\\\"}')\"  (zip renamed .asar impostor)",
+ "oracle_cmd": "file -b decoy.asar -> Zip archive data (not an asar Pickle header; `asar list decoy.asar` fails)",
+ "decoy": true,
+ "member": "decoy.asar"
+}

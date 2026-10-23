@@ -1,0 +1,9 @@
+{
+ "codec": "lzma-ascii85",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-otter-09",
+ "encoded": ">lXkT!<<*!s8W-!rr=Db87lbFk2WU+mHfe!Wk8k!O*[@^/5pc.:\\<.<F50sHqtoCFRKW)r&7.4Jc_\\550X4IJ,*E-$g7^7cH.P^Z\"-]na\"<JU,5gXmn\\PWaWUY-!(Zp=>SfKn`2_Z-E3?iU",
+ "generator_cmd": "printf %s \"$plain\" | xz --format=lzma -c | python3 -I -c 'import sys,base64;sys.stdout.write(base64.a85encode(sys.stdin.buffer.read()).decode())'  # xz CLI + python3 wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys,base64;sys.stdout.buffer.write(base64.a85decode(sys.stdin.read()))' | xz --format=lzma -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-otter-09",
+ "expected": "match"
+}

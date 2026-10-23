@@ -1,0 +1,7 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-f40ffa756dba84bd",
+ "_why": "Guard.reveal() = 'ANS-' + sha256(signatures[0].toByteArray() || getInstallerPackageName || Long.toString(ZipFile(getPackageCodePath()).getEntry(classes.dex).getCrc()) || Signature.hashCode || FLAG_DEBUGGABLE bit)[:8] hex: computed from the untampered install's probe answers (Play installer, real v1/v2 signer, real dex CRC), never stored",
+ "generator_cmd": "python3 tests/data/android_fixtures/tamper_src/gen_tamper.py sig_crc tests/data/android_fixtures/tamper_sig_crc.apk  # javac --release 8 (app + android.* stubs) + dex2jar d2j-jar2dex.sh + apktool's aapt2 link (manifest) + zipfile + keytool RSA + apksigner sign v1+v2",
+ "oracle_cmd": "same generator, oracle stage: openssl pkcs7 -print_certs | openssl x509 -outform DER on META-INF/*.RSA (signer DER), aapt dump badging (application-debuggable), then java -Dtamper.apk=<signed apk> -Dtamper.cert=<der> -cp <javac out> com.huntress.mobile.d22.tamper.Probe -> Guard.reveal() on the host JVM, real java.util.zip.ZipFile reading classes.dex CRC -> 'ANS-f40ffa756dba84bd'"
+}

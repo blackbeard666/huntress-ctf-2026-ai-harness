@@ -1,0 +1,10 @@
+{
+ "codec": "gzip-base64 (FEXTRA BC subfield, BGZF + empty EOF member)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-73",
+ "encoded": "H4sIBAAAAAAA/wYAQkMCAHUAJckxEoIwEAXQq3x7qSyc8QJUWHmBJfkDQZJ1souB2+sM7XvPFIim9Y3IoDGVCT4nQ5Oat88FL4Xp+uUVto05+bncJTikWGOF6x+JXjIxiDnrA4tEdutR9u5++wGact/FYwAAAB+LCAQAAAAAAP8GAEJDAgAbAAMAAAAAAAAAAAA=",
+ "expected": "match",
+ "generator_cmd": "python3 -c \"import sys; from Bio import bgzf; w=bgzf.BgzfWriter('bg.gz','wb'); w.write(sys.argv[1].encode()); w.close()\" \"$plain\"; base64 -w0 bg.gz  # Biopython 1.88 BGZF writer",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc; printf %s \"$encoded\" | base64 -d | file -",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-73",
+ "oracle_header": "gzip compressed data, extra field Blocked GNU Zip Format (BGZF; gzip compatible), block length 117"
+}

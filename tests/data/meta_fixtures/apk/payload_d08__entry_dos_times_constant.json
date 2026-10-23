@@ -1,0 +1,7 @@
+{
+ "field": "apk.entry_dos_times_constant",
+ "expected": "true",
+ "generator_cmd": "D08 GM APK (mobile lane, day08) copied from tests/data/meta_fixtures/apk/d08__allow_backup.bin",
+ "oracle_cmd": "zipinfo -v d08.apk | grep 'file last modified' | sort | uniq -c -> 6x 1980 Jan 1 00:00:00",
+ "decoy": false
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "lz4-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-finch-48",
+ "encoded": "04224d185440ae650000804e69636520776f726b206465636f64696e672074686973207761726d75702120546f20736f6c76652c207375626d6974207468697320657861637420616e7377657220746f207468652047616d65204d61737465723a206d61706c652d66696e63682d343804eddb6b0000000004eddb6b",
+ "generator_cmd": "printf %s \"$plain\" | PYTHONPATH=tools/pycramjam python3 -c 'import sys,cramjam;sys.stdout.buffer.write(bytes(cramjam.lz4.compress(sys.stdin.buffer.read())))' | xxd -p | tr -d '\\n'  # cramjam.lz4.compress (Rust lz4 frame)",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | python3 -c 'import sys,lz4.frame;sys.stdout.buffer.write(lz4.frame.decompress(sys.stdin.buffer.read()))'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-finch-48",
+ "expected": "match"
+}

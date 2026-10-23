@@ -1,0 +1,8 @@
+{
+ "field": "axml.version_code",
+ "expected": "6",
+ "generator_cmd": "unzip -p challenges/day06/mobile-provider-paths/single_solve/artifacts/20261006T130124Z/provider_paths.apk AndroidManifest.xml > AndroidManifest.xml",
+ "oracle_cmd": "aapt dump badging provider_paths.apk -> versionCode='6' (xmltree: android:versionCode(0x0101021b)=(type 0x10)0x6)",
+ "decoy": false,
+ "member": "AndroidManifest.xml"
+}

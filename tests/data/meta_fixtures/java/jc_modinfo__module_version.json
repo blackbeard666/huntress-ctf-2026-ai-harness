@@ -1,0 +1,8 @@
+{
+ "field": "java.module_version",
+ "expected": "2.4.1",
+ "generator_cmd": "javac --release 21 -d om module-info.java com/acme/app/Main.java; jar --create --file app.jar --main-class com.acme.app.Main --module-version 2.4.1 -C om .; unzip app.jar module-info.class",
+ "oracle_cmd": "jar --describe-module --file app.jar -> com.acme.app@2.4.1",
+ "decoy": false,
+ "member": "module-info.class"
+}

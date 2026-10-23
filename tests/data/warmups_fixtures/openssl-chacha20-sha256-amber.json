@@ -1,0 +1,9 @@
+{
+ "codec": "openssl-salted",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-walrus-46",
+ "encoded": "U2FsdGVkX1/Doiz/Pri1hrjXj/wTsId2DlndH8s+wPf177oysec5CZfwh/OGPMGgeUmq4NyiVuHi8O5mfc4sV2qa44u4JEwpBFB+vF4x8utRiYcWSbjjmORV+CknZbbklHsbWA9tS/pVHal3PCI683xQxkeZvw==",
+ "generator_cmd": "printf %s \"$plain\" | openssl enc -chacha20 -md sha256 -pass pass:huntress -a -A",
+ "oracle_cmd": "printf '%s\\n' \"$encoded\" | openssl enc -d -chacha20 -md sha256 -pass pass:huntress -a -A",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-walrus-46",
+ "expected": "match"
+}

@@ -1,0 +1,11 @@
+{
+  "version": "1.0.0",
+  "url": "https://example.invalid/benign.zip",
+  "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "pre_install": [
+    "Write-Host \"Preparing $app\"",
+    "$descriptor_00000000 = 'H4sIAAAAAAACA11Py4oCMRD8odVxXEQQ+uQPCOve'",
+    "# truncated stage, never decoded"
+  ],
+  "post_install": "Write-Host \"Installed $app\""
+}

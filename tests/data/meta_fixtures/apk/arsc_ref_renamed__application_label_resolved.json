@@ -1,0 +1,8 @@
+{
+ "field": "apk.application_label_resolved",
+ "expected": "Huntress Evidence 40417733",
+ "generator_cmd": "aapt2 compile --dir res -o res.zip && aapt2 link -I fw.apk --manifest AndroidManifest.xml --rename-resources-package com.vendor.borrowed.product -o app1.apk res.zip (manifest package com.huntress.evidence.viewer, application android:label=@string/app_name android:icon=@mipmap/ic_launcher; res/values{,-fr,-de-rAT}/strings.xml app_name; mipmap-hdpi + mipmap-xxhdpi PNGs from Pillow; fw.apk = aapt2-linked stub 'android' package declaring attr label/icon/name/... with their android.R.attr public ids)",
+ "oracle_cmd": "aapt dump badging app1.apk -> application-label:'Huntress Evidence 40417733' application-label-de-AT:'Huntress Beweis 40417733' application-label-fr:'Preuve Huntress 40417733' application: icon='res/mipmap-hdpi-v4/ic_launcher.png'; aapt2 dump resources app1.apk -> Package name=com.vendor.borrowed.product id=7f; string/app_name () / (fr) / (de-rAT) in that stored order; aapt dump xmltree app1.apk AndroidManifest.xml -> android:label(0x01010001)=@0x7f020001; androguard APK.get_app_name() agrees",
+ "decoy": false,
+ "member": "app1.apk"
+}

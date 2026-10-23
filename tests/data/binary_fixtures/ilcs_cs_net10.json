@@ -1,0 +1,48 @@
+{
+ "kind": "dotnet_il_facts",
+ "decoy": false,
+ "expected": {
+  "il_methods": "[\"Hunt.Cross.Beacon::.ctor\",\"Hunt.Cross.Beacon::Pid\",\"Hunt.Cross.Beacon::Emit\",\"Hunt.Cross.Beacon::Sum\",\"Hunt.Cross.Beacon::Echo\",\"Hunt.Cross.Beacon::Route\",\"Hunt.Cross.Beacon::.cctor\",\"Hunt.Cross.Program/<>c__DisplayClass0_0::.ctor\",\"Hunt.Cross.Program/<>c__DisplayClass0_0::<Main>b__0\",\"Hunt.Cross.Program::Main\"]",
+  "il_method_count": "10",
+  "managed_edges": "[[\"Hunt.Cross.Program/<>c__DisplayClass0_0::<Main>b__0\",\"Hunt.Cross.Beacon::Pid\"],[\"Hunt.Cross.Program::Main\",\"Hunt.Cross.Program/<>c__DisplayClass0_0::.ctor\"],[\"Hunt.Cross.Program::Main\",\"Hunt.Cross.Beacon::.ctor\"],[\"Hunt.Cross.Program::Main\",\"Hunt.Cross.Beacon::Route\"],[\"Hunt.Cross.Program::Main\",\"Hunt.Cross.Beacon::Emit\"],[\"Hunt.Cross.Program::Main\",\"Hunt.Cross.Beacon::Echo\"],[\"Hunt.Cross.Program::Main\",\"Hunt.Cross.Beacon::Sum\"]]",
+  "native_edges": "[[\"Hunt.Cross.Beacon::Pid\",\"Hunt.Cross.Native::getpid\"],[\"Hunt.Cross.Beacon::Emit\",\"Hunt.Cross.Native::SysWrite\"],[\"Hunt.Cross.Program::Main\",\"Hunt.Cross.Native::getpid\"]]",
+  "external_edges": "[[\"Hunt.Cross.Beacon::.ctor\",\"System.Object::.ctor\"],[\"Hunt.Cross.Beacon::Emit\",\"System.Text.Encoding::get_UTF8\"],[\"Hunt.Cross.Beacon::Emit\",\"System.String::Concat\"],[\"Hunt.Cross.Beacon::Emit\",\"System.Text.Encoding::GetBytes\"],[\"Hunt.Cross.Beacon::.cctor\",\"System.Runtime.CompilerServices.RuntimeHelpers::InitializeArray\"],[\"Hunt.Cross.Program/<>c__DisplayClass0_0::.ctor\",\"System.Object::.ctor\"],[\"Hunt.Cross.Program::Main\",\"System.Collections.Generic.List`1::.ctor\"],[\"Hunt.Cross.Program::Main\",\"System.Collections.Generic.List`1::Add\"],[\"Hunt.Cross.Program::Main\",\"System.Func`2::.ctor\"],[\"Hunt.Cross.Program::Main\",\"System.String::Concat\"],[\"Hunt.Cross.Program::Main\",\"System.Func`2::Invoke\"],[\"Hunt.Cross.Program::Main\",\"System.Console::WriteLine\"],[\"Hunt.Cross.Program::Main\",\"System.Collections.Generic.List`1::get_Count\"]]",
+  "ldftn_edges": "[[\"Hunt.Cross.Program::Main\",\"Hunt.Cross.Program/<>c__DisplayClass0_0::<Main>b__0\"]]",
+  "pinvoke_callers": "{\"getpid\":[\"Hunt.Cross.Beacon::Pid\",\"Hunt.Cross.Program::Main\"],\"SysWrite\":[\"Hunt.Cross.Beacon::Emit\"]}",
+  "native_callers": "[\"Hunt.Cross.Beacon::Pid\",\"Hunt.Cross.Beacon::Emit\",\"Hunt.Cross.Program::Main\"]",
+  "call_edge_count": "25",
+  "calli_count": "0",
+  "user_strings": "[\"\\n\",\"alpha\",\"bravo\",\"c2.hunt.example\",\"hunt.example\",\"one\",\"HCFG beacon \",\"done\"]",
+  "user_string_count": "8",
+  "ldstr_strings": "[\"\\n\",\"alpha\",\"bravo\",\"c2.hunt.example\",\"hunt.example\",\"one\",\"HCFG beacon \",\"done\"]",
+  "array_init_count": "2",
+  "array_inits_brief": "[{\"method\":\"Hunt.Cross.Beacon::.cctor\",\"il\":8,\"field\":\"<PrivateImplementationDetails>::E0757D490EA4DFA2AC6040ECAE085504FFFFB382FD7CF50540ACCFF43090B175\",\"rva\":\"0x2ee8\",\"offset\":4328},{\"method\":\"Hunt.Cross.Beacon::.cctor\",\"il\":30,\"field\":\"<PrivateImplementationDetails>::86E35567F06CCEC7E03BA6B9167132C5157C48C12EADCC9652AE2B6A163F0158\",\"rva\":\"0x2ed8\",\"offset\":4312}]"
+ },
+ "expected_lookups": {
+  "getpid_callers": "[\"Hunt.Cross.Beacon::Pid\",\"Hunt.Cross.Program::Main\"]",
+  "SysWrite_callers": "[\"Hunt.Cross.Beacon::Emit\"]"
+ },
+ "field_owner_probes": [
+  {
+   "offset": 4331,
+   "field": "<PrivateImplementationDetails>::E0757D490EA4DFA2AC6040ECAE085504FFFFB382FD7CF50540ACCFF43090B175"
+  },
+  {
+   "offset": 4315,
+   "field": "<PrivateImplementationDetails>::86E35567F06CCEC7E03BA6B9167132C5157C48C12EADCC9652AE2B6A163F0158"
+  }
+ ],
+ "unordered": [
+  "il_methods",
+  "managed_edges",
+  "external_edges",
+  "native_edges",
+  "native_callers",
+  "pinvoke_callers",
+  "ldstr_strings",
+  "array_inits_brief"
+ ],
+ "note": "ilspy prints nested types before their enclosing type's remaining methods, so cross-method order keys compare order-insensitively; IL order within a method and #US heap order are exact",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/ilcs_gen.sh tests/data/binary_fixtures   # dotnet 10 SDK: dotnet build -c Release (Deterministic) of a C# and an F# project + a plain C# library; /usr/bin/true; head -c 1024",
+ "oracle_cmd": "source bin/env.sh; python3 tests/data/binary_fixtures/ilcs_oracle.py tests/data/binary_fixtures/ilcs_cs_net10.bin   # ilspycmd -il text (ICSharpCode.Decompiler IL disassembler) + ilcs_us.cs (System.Reflection.Metadata UserStrings) + pefile rva->offset"
+}

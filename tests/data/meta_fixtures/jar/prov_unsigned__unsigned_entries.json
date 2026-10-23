@@ -1,0 +1,8 @@
+{
+ "field": "jar.unsigned_entries",
+ "expected": "none",
+ "generator_cmd": "javac --release 8 Activator.java Util.java; META-INF/maven/{com.acme/ledger-core,org.slf4j/slf4j-api}/pom.properties; jar --create --file ledger-core-2.4.1.jar --manifest mf.txt (OSGi Bundle-* / Export-Package / Import-Package) -C o .",
+ "oracle_cmd": "java Oracle.java ledger-core-2.4.1.jar -> no META-INF/*.SF, every entry unsigned (jar not signed: field absent)",
+ "decoy": true,
+ "member": "ledger-core-2.4.1.jar"
+}

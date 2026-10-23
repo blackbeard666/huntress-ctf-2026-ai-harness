@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-22-main-character-energy",
+  "lane": "metadata-forensics",
+  "name": "🔎 Main Character Energy",
+  "ids": {
+    "single_solve": "metadata-forensics-day-22-main-character-energy",
+    "time_trial": "metadata-forensics-day-22-main-character-energy/time_trial",
+    "mastery": "metadata-forensics-day-22-main-character-energy/mastery"
+  }
+}

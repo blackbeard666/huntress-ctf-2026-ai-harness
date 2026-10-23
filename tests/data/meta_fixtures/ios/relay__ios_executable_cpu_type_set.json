@@ -1,0 +1,8 @@
+{
+ "field": "ios.executable_cpu_type_set",
+ "expected": "[\"0x01000007\",\"0x0100000c\"]",
+ "generator_cmd": "plistlib XML Info.plist {CFBundleIdentifier org.example.relay, CFBundleDisplayName 'Relay ✓', UIDeviceFamily [1]} -> Payload/Relay.app/Info.plist; cp macho/lipo_fat_x86_arm64 Payload/Relay.app/Relay; nested PlugIns/Share.appex/Info.plist; no embedded.mobileprovision; zip -X -r Relay.ipa Payload",
+ "oracle_cmd": "python3 macholib.MachO(exe).headers cputype / LC_UUID",
+ "decoy": false,
+ "member": "Relay.ipa"
+}

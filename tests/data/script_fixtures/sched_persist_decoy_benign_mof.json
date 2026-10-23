@@ -1,0 +1,11 @@
+{
+ "material": "#pragma namespace(\"\\\\\\\\.\\\\root\\\\cimv2\")\nclass Demo_Inventory { [key] string Name; uint32 Count; };\ninstance of Demo_Inventory { Name = \"widgets\"; Count = 3; };\n",
+ "rep": "schedule_entries",
+ "transform": "kind",
+ "key": null,
+ "expected": null,
+ "decoy": true,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>) ; decoy -> no persistence row -> None (oracle stdout: '0')",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes benign.mof: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && grep -c '__EventFilter\\|__IntervalTimer' benign.mof || true  # 0)"
+}

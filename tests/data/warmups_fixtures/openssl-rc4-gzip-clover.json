@@ -1,0 +1,9 @@
+{
+ "codec": "openssl-salted",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-mantis-64",
+ "encoded": "U2FsdGVkX19U+if/sIQL4UJll5t8TG7tgNwvmOwsRHu5b6+fEEGuXATQM9/rZjWv5FN6X+UBr9z4PAWmSYiaQMxHD1oim9Jt/R3XGxaQU5BJf7ULE8cRqOC+84kZn6FdT8PUpJq5Or8pPtCgDdBsNaw95YZSuHZvQJshwkRo",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | openssl enc -rc4 -pbkdf2 -pass pass:password -a -A -provider legacy -provider default",
+ "oracle_cmd": "printf '%s\\n' \"$encoded\" | openssl enc -d -rc4 -pbkdf2 -pass pass:password -a -A -provider legacy -provider default | gzip -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-mantis-64",
+ "expected": "match"
+}

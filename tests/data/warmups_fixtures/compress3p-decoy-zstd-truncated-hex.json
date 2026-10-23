@@ -1,0 +1,10 @@
+{
+ "codec": "compress-sweep",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: none",
+ "encoded": "28b52ffd2065cd0200f205141990296d045b6c20e1c22108a646b093b9bc05568b0e486ecf01010182307f907c72e5417eb50afe15c13f6b5ce793a2f29a6a7ced92450d3843816a3cf8582c9795ac76d608640a9a2b4e2426df9821",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "cramjam.zstd.compress(plain) with the last 6 bytes cut, | xxd -p",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | python3 -c 'import sys,zstandard;d=zstandard.ZstdDecompressor().decompressobj();o=d.decompress(sys.stdin.buffer.read());assert d.eof;sys.stdout.buffer.write(o)'",
+ "oracle_output": "ERROR: Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nAssertionError\n"
+}

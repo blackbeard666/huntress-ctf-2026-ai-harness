@@ -1,0 +1,8 @@
+{
+ "field": "wasm.producers_sdk",
+ "expected": "none",
+ "generator_cmd": "printf 'int add(int a,int b){return a+b;}' > a.c; clang-18 --target=wasm32 -g -O1 -c a.c -o g.o (Ubuntu clang 18.1.8)",
+ "oracle_cmd": "wasm-objdump -s -j producers g.o -> fields language, processed-by only",
+ "decoy": true,
+ "member": "g.o"
+}

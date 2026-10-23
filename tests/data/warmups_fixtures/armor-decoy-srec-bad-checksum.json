@@ -1,0 +1,10 @@
+{
+ "codec": "srec",
+ "plain": null,
+ "encoded": "S00E00002F6465762F7374646F7574B1\r\nS11300004E69636520776F726B206465636F646902\r\nS11300106E672074686973207761726D75702120300\nS1130020546F20736F6C76652C207375626D6974E0\r\nS1130030207468697320657861637420616E7377D6\r\nS1130040657220746F207468652047616D65204D6A\r\nS113005061737465723A206A6164652D73746F61AB\r\nS1070060742D36368B\r\nS9030000FC\r\n",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "objcopy -I binary -O srec, then record 3's checksum byte edited by hand",
+ "oracle_cmd": "f=$(mktemp); printf \"%s\\n\" \"$encoded\" > $f; objcopy -I srec -O binary $f /dev/stdout; r=$?; rm -f $f; exit $r",
+ "oracle_plain": null
+}

@@ -1,0 +1,81 @@
+{
+ "encoding": "raw",
+ "decoy": false,
+ "expected_offset": 120,
+ "expected_config": {
+  "c2": "198.51.100.23:4444",
+  "campaign": "boundary",
+  "sleep": 60,
+  "flag": "flag{ring0_m0dinf0}"
+ },
+ "expected_kmod_fields": {
+  "format": "elf",
+  "elf_type": "ET_REL",
+  "machine": "x86-64",
+  "machine_num": "62",
+  "entry_point": "0x0",
+  "is_kernel_module": true,
+  "license": "GPL",
+  "author": "Huntress Arena <arena@example.invalid>",
+  "description": "boundary crossing LKM sample",
+  "version": "1.3.7",
+  "vermagic": "6.8.0-45-generic SMP preempt mod_unload modversions",
+  "kernel_version": "6.8.0-45-generic",
+  "srcversion": "4F1C2A9D0B3E8E7A6C5D4B3",
+  "name": "hcfg_rootkit",
+  "module_name": "hcfg_rootkit",
+  "this_module_name": "hcfg_rootkit",
+  "depends": [
+   "nf_tables",
+   "x_tables"
+  ],
+  "aliases": [
+   "net-pf-31"
+  ],
+  "parms": [
+   "hide_pid:pid to hide (int)"
+  ],
+  "modinfo_keys": [
+   "parmtype",
+   "parm",
+   "alias",
+   "version",
+   "description",
+   "author",
+   "license",
+   "srcversion",
+   "vermagic",
+   "depends",
+   "name",
+   "retpoline"
+  ],
+  "version_symbols": [
+   "module_layout",
+   "_printk",
+   "kallsyms_lookup_name",
+   "nf_register_net_hook"
+  ],
+  "version_crcs": {
+   "module_layout": "0x7f4e2a1b",
+   "_printk": "0x92997ed8",
+   "kallsyms_lookup_name": "0x0c1a2b3d",
+   "nf_register_net_hook": "0xdeadbeef"
+  },
+  "exported_symbols": [
+   "rk_filter_dirent",
+   "rk_hide_pid"
+  ],
+  "exported_gpl_symbols": [
+   "rk_filter_dirent"
+  ],
+  "init_function": "rootkit_init",
+  "exit_function": "rootkit_exit",
+  "hcfg_offset": 120,
+  "hcfg_section": ".rodata",
+  "hcfg_section_offset": 0
+ },
+ "generator_cmd": "bash kmod_gen.sh kmod_attr_rodata.bin attr '{\"c2\":\"198.51.100.23:4444\",\"campaign\":\"boundary\",\"sleep\":60,\"flag\":\"flag{ring0_m0dinf0}\"}' 0",
+ "oracle_cmd": "bash kmod_oracle.sh kmod_attr_rodata.bin   # file -b, GNU readelf -h (Type/Machine/Entry), readelf -p .modinfo (section order), kmod modinfo on a .ko copy (prints reversed), modprobe --dump-modversions (__versions), readelf -sW (__ksymtab_* syms + their ___ksymtab[_gpl]+ sections; FUNC syms sharing init_module/cleanup_module's address), readelf -x .gnu.linkonce.this_module (name at +24), grep -obUa HCFG, perl unpack + xor, gzip trailer crc32",
+ "oracle_output": "ELF 64-bit LSB relocatable, x86-64 | REL | Entry 0x0 | modinfo(section order): parmtype=hide_pid:int|parm=hide_pid:pid to hide (int)|alias=net-pf-31|version=1.3.7|description=boundary crossing LKM sample|author=Huntress Arena <arena@example.invalid>|license=GPL|srcversion=4F1C2A9D0B3E8E7A6C5D4B3|vermagic=6.8.0-45-generic SMP preempt mod_unload modversions |depends=nf_tables,x_tables|name=hcfg_rootkit|retpoline=Y | modversions: 0x7f4e2a1b module_layout|0x92997ed8 _printk|0x0c1a2b3d kallsyms_lookup_name|0xdeadbeef nf_register_net_hook | ksymtab: 6:__ksymtab_rk_filter_dirent 7:__ksymtab_rk_hide_pid in ___ksymtab_gpl+rk_filter_dirent ___ksymtab+rk_hide_pid | FUNC 1/0x20 rootkit_init = init_module, 1/0x30 rootkit_exit = cleanup_module | this_module: ........hcfg_roo tkit | blob@120 HCFG 1 0 89 3364131930 gzipcrc=3364131930 | section .rodata off 120",
+ "note": "ET_REL .ko; .modinfo order = readelf -p (gcc -O2 emits the MODULE_* statics in reverse source order, the bytes win); vermagic = value with kbuild's trailing blank stripped (vermagic_raw keeps it); field names beyond format/elf_type/machine/entry_point are SPECULATIVE (GM .ko vocabulary not seen); expected_offset = FILE offset of the 'H' (OFFSET LAW raw, = hcfg_scan)"
+}

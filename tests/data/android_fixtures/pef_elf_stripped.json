@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-0e8b5d27f1c4a693",
+ "generator_cmd": "python3 tests/data/android_fixtures/pef_src/gen_pef.py elf_stripped tests/data/android_fixtures/pef_elf_stripped.apk  # gcc -shared .so returning the token -> assets/native/libmod.so; puzzle entry='native/libmod.so' (assets/ prefix stripped)",
+ "oracle_cmd": "unzip -p pef_elf_stripped.apk assets/native/libmod.so | strings -a | grep -o 'ANS-[0-9a-fA-F]\\{16\\}'"
+}

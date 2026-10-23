@@ -1,0 +1,9 @@
+{
+ "codec": "gzip-base64url-nopad",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-lynx-63",
+ "encoded": "H4sIAAAAAAACAyXJMQ6CQBAF0Kt8eqlILLyAFVZcYFh-ZCO7Q2YGF2-vie17j5yIpvbCwqRLrk_Emh1NrBx7h0nhur15gR9zyfFfnpICUr3REPpD4i6FGMWDdoOUmdZvn3r21-ELHZHna2QAAAA",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | basenc --base64url -w0 | tr -d =  # gzip CLI + basenc wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | tr -- '-_' '+/' | { read x; printf %s \"$x\"; printf %.$(( (4 - ${#x} % 4) % 4 ))s '==='; } | base64 -d | gzip -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-lynx-63",
+ "expected": "match"
+}

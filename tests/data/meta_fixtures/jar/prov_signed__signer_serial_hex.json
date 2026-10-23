@@ -1,0 +1,8 @@
+{
+ "field": "jar.signer_serial_hex",
+ "expected": "ccb8003009ab763a",
+ "generator_cmd": "javac --release 8 Activator.java Util.java; META-INF/maven/{com.acme/ledger-core,org.slf4j/slf4j-api}/pom.properties; jar --create --file ledger-core-2.4.1.jar --manifest mf.txt (OSGi Bundle-* / Export-Package / Import-Package) -C o .; keytool -genkeypair -alias acme -dname 'CN=Acme Release Signing, O=Acme Corp, C=US' -keystore ks.p12; jarsigner -keystore ks.p12 signed.jar acme; zip signed.jar com/acme/ledger/Backdoor.class (injected after signing)",
+ "oracle_cmd": "unzip -p signed.jar META-INF/ACME.RSA | openssl pkcs7 -inform DER -print_certs | openssl x509 -noout -serial (CCB8003009AB763A, lowercased)",
+ "decoy": false,
+ "member": "ledger-core-2.4.1.jar"
+}

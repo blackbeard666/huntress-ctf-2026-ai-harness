@@ -1,0 +1,10 @@
+{
+ "codec": "gzip-hex (FNAME + FCOMMENT, XFL 4)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-52",
+ "encoded": "1f8b081892c1d86a04036c617965722e747874006e6578743a20726f7431330025c9410e40301046e1abfcf66c24362e60c5ca05464d6868473a431d5f13cbf7bdc93b469674606527ab8f1b6cf78a4c29dc578559a0723e5c43ef2578fb2fbfe40c143573824941c6408131921aa71e4e163aad112bd574ed076757280d66000000",
+ "expected": "match",
+ "generator_cmd": "printf %s \"$plain\" > layer.txt; pigz -1 -C 'next: rot13' -c layer.txt | xxd -p | tr -d '\\n'  # pigz writes FCOMMENT",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | gzip -dc; printf %s \"$encoded\" | xxd -r -p | file -",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-52",
+ "oracle_header": "gzip compressed data, was \"layer.txt\", has comment, max speed, from Unix"
+}

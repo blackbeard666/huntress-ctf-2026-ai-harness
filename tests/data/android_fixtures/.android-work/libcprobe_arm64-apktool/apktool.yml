@@ -1,0 +1,4 @@
+version: 3.0.3
+apkFileName: libcprobe_arm64.apk
+doNotCompress:
+- assets/config.json

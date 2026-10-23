@@ -1,0 +1,10 @@
+{
+ "codec": "compress-sweep",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: none",
+ "encoded": "eOFOQjJjY5q7P4pb3iFuW9TnWg2BVhKAO+13lhB8mDVLPfRCMzOb9H47lbdmUALz0lbUSlj9o+brdGIpJ04K7w==",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "sha256('brotli-decoy') + sha256('brotli-decoy-2') (64 random bytes, no magic), | base64 -w0",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | python3 -c 'import sys,brotli;sys.stdout.buffer.write(brotli.decompress(sys.stdin.buffer.read()))'",
+ "oracle_output": "ERROR: Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nbrotli.error: brotli: decoder failed\n"
+}

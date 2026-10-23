@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-07-stored-xss",
+  "lane": "web",
+  "name": "🌐 Stored for Later",
+  "ids": {
+    "single_solve": "web-exploitation-day-07-stored-xss",
+    "time_trial": "web-exploitation-day-07-stored-xss/time_trial",
+    "mastery": "web-exploitation-day-07-stored-xss/mastery"
+  }
+}

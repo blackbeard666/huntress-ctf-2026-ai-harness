@@ -1,0 +1,1 @@
+{"ts": "20261022T130727Z", "attempt": "7abe728c-8c93-4f21-add4-9a640fcaba9e", "answers": {"proof-3": "proof_efda637e8a344f0c854835d29c04a4f0", "proof-2": "proof_cc0341c9ba204e2b96142988ea07496e", "proof-1": "proof_3ba51e2afe3c4b6faa07c76e15712c17"}, "http": 200, "kind": "correct", "confirmed": ["proof-1", "proof-2", "proof-3"], "body": null, "via": "homebase"}

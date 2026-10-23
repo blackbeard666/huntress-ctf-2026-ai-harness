@@ -1,0 +1,8 @@
+{
+ "field": "zip.prefix_kind",
+ "expected": "none",
+ "generator_cmd": "echo readme > readme.txt; zip -qX plain.zip readme.txt",
+ "oracle_cmd": "zipinfo/7z l -slt plain.zip -> Offset = 0, zipfile min header_offset 0 (no prefix)",
+ "decoy": true,
+ "member": "plain.zip"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "exception_flow_scan",
+ "expected": "ANS-e5039bd7a1c46f28",
+ "_why": "Shield.probes(): getPackageInfo(magisk) NameNotFound caught and rethrown as IllegalStateException, unwinding a nested try/finally one frame up; FileInputStream(/system/xbin/su) FileNotFound before IOException; Class.forName(XposedBridge) ClassNotFound; reveal() decodes only in the NPE handler of a null-receiver hashCode()",
+ "generator_cmd": "python3 tests/data/android_fixtures/excflow_src/gen_excflow.py stub_nested tests/data/android_fixtures/excflow_stub_nested.apk  # javac --release 8 (app + clean-device android.* stubs) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d21.exc.Probe -> new Shield().reveal() run by the host JVM on the clean stubs (Debug.isDebuggerConnected false, PackageManager NameNotFound, real FileInputStream / Class.forName) -> 'ANS-e5039bd7a1c46f28'"
+}

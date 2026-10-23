@@ -1,0 +1,8 @@
+{
+ "field": "wasm.has_wasi_start",
+ "expected": "true",
+ "generator_cmd": "wat2wasm 1.0.36 --debug-names wasi.wat -o wasi.wasm ((module $evidence_mod: imports wasi_snapshot_preview1.fd_write/proc_exit + env.abort, memory 2 17, mut global, table 1, funcs $init/$_start, exports _start/memory/g/tbl, (start $init)))",
+ "oracle_cmd": "wasm-objdump -x wasi.wasm -> Export: func[4] <_start> -> \"_start\"",
+ "decoy": false,
+ "member": "wasi.wasm"
+}

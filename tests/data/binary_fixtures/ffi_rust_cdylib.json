@@ -1,0 +1,28 @@
+{
+ "family": "ffi_boundary",
+ "file": "ffi_rust_cdylib.bin",
+ "decoy": false,
+ "generator_cmd": "bash tests/data/binary_fixtures/ffi_gen.sh <workdir>",
+ "oracle_cmd": "readelf --dyn-syms -W <bin> (defined GLOBAL/WEAK, table order; UND = imports) + readelf -p .comment",
+ "expected_facts": {
+  "ffi_kind": "rust_cdylib",
+  "ffi_kinds": [
+   "rust_cdylib"
+  ],
+  "exports": [
+   "HCFG_PLUGIN_ABI",
+   "hcfg_plugin_init",
+   "hcfg_plugin_name"
+  ],
+  "user_exports": [
+   "HCFG_PLUGIN_ABI",
+   "hcfg_plugin_init",
+   "hcfg_plugin_name"
+  ],
+  "export_count": "3",
+  "rustc_version": "1.93.1 (01f6ddf75 2026-02-11) (built from a source tarball)",
+  "go_version": "none",
+  "jni_methods": "none",
+  "python_module": "none"
+ }
+}

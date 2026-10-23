@@ -1,0 +1,9 @@
+{
+ "codec": "intel-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-ibis-15",
+ "encoded": ":100000004E69636520776F726B206465636F646906\r\n:100010006E672074686973207761726D7570212036\r\n:10002000546F20736F6C76652C207375626D6974E4\r\n:10003000207468697320657861637420616E7377DA\r\n:10004000657220746F207468652047616D65204D6E\r\n:1000500061737465723A20636C6F7665722D6962A4\r\n:0500600069732D31352C\r\n:00000001FF\r\n",
+ "generator_cmd": "f=$(mktemp); printf %s \"$plain\" > $f; objcopy -I binary -O ihex $f /dev/stdout; rm -f $f",
+ "oracle_cmd": "f=$(mktemp); printf \"%s\\n\" \"$encoded\" > $f; objcopy -I ihex -O binary $f /dev/stdout; rm -f $f",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-ibis-15",
+ "expected": "match"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "anti_debug_state_scan",
+ "expected": "ANS-a3f0d81b6c5e2947",
+ "decoy": false,
+ "_why": "Gate.walk(): String state (BOOT set in <clinit>) re-assigned in a while(!state.equals(DONE)) if-chain, key seeded in <clinit> and bumped by onCreate; transitions on Debug.waitingForDebugger, Settings.Secure adb_enabled, TracerPid; terminal Log.i(proof=...) of ENC xor key -- needs onCreate run first and both VMs' models in one env",
+ "generator_cmd": "python3 tests/data/android_fixtures/ads_src/gen_ads.py string_state tests/data/android_fixtures/ads_string_state.apk  # javac --release 8 (app + clean android.* stubs) + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> Probe runs the machine on the host JVM with CLEAN stubs (Debug false, flags & 2 == 0, adb_enabled 0) + real /proc/self/status + System.nanoTime -> 'proof=ANS-a3f0d81b6c5e2947'; `gen_ads.py string_state /dev/null --debugged` (DEBUGGED stubs) -> 'proof=ANS-d3adb33fc0ffee11' (the honeypot that must be demoted)"
+}

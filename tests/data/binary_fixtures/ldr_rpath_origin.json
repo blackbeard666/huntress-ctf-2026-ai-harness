@@ -1,0 +1,53 @@
+{
+ "family": "loader_resolution",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "interpreter": "/lib64/ld-linux-x86-64.so.2",
+  "has_interp": "true",
+  "needed": [
+   "libhfoo.so.1",
+   "libc.so.6"
+  ],
+  "soname": "none",
+  "rpath": "$ORIGIN/lib",
+  "runpath": "none",
+  "search_path_tag": "DT_RPATH",
+  "search_path": "$ORIGIN/lib",
+  "dst_tokens": [
+   "ORIGIN"
+  ],
+  "has_origin": "true",
+  "flags": [],
+  "flags_1": [
+   "NOW",
+   "ORIGIN",
+   "PIE"
+  ],
+  "bind_now": "true",
+  "pie": "true",
+  "nodeflib": "false"
+ },
+ "generator_cmd": "bash ldr_gen.sh   # gcc --disable-new-dtags -rpath '$ORIGIN/lib' -z origin -z now",
+ "oracle_cmd": "python3 ldr_oracle.py ldr_rpath_origin.bin   # GNU readelf -dW (NEEDED/SONAME/RPATH/RUNPATH/FLAGS/FLAGS_1) + readelf -lW (Requesting program interpreter)",
+ "file_b": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dyn",
+ "decoy": false,
+ "note": "lib.binary.elf_loader_facts(data) per key; gcc --disable-new-dtags -rpath '$ORIGIN/lib' -z origin -z now: DT_RPATH raw (not expanded), FLAGS_1 NOW ORIGIN PIE",
+ "resolve": {
+  "members": {
+   "libhfoo.so.1.2.3": "ldr_soname_lib.bin",
+   "libhfoo.so": "ldr_nosoname_lib.bin"
+  },
+  "expected": {
+   "libhfoo.so.1": "libhfoo.so.1.2.3",
+   "./plugins/libhfoo.so": "libhfoo.so",
+   "libmissing.so.9": "none"
+  },
+  "expected_needed_map": {
+   "libhfoo.so.1": "libhfoo.so.1.2.3",
+   "libc.so.6": "none"
+  },
+  "oracle_cmd": "for m in ldr_soname_lib.bin ldr_nosoname_lib.bin; do readelf -dW $m | grep SONAME; done   # SONAME libhfoo.so.1 only on ldr_soname_lib -> member libhfoo.so.1.2.3; else basename == member name"
+ }
+}

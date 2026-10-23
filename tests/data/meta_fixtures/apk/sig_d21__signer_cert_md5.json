@@ -1,0 +1,8 @@
+{
+ "field": "apk.signer_cert_md5",
+ "expected": "70157d1ef412db6116ee91645272d13f",
+ "generator_cmd": "GM D21 artifact (v1 FIXTURE-.RSA + v2 block): cp tests/data/meta_fixtures/apk/d21__version_code.bin (= mobile-001.apk of challenges/day21/metadata-package-deal evidence zip)",
+ "oracle_cmd": "apksigner verify --print-certs -v mobile-001.apk -> Signer #1 certificate MD5 digest",
+ "decoy": false,
+ "member": "mobile-001.apk"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "sfx.overlay_magic_hex_8",
+ "expected": "377abcaf271c0004",
+ "generator_cmd": "7z a payload.7z readme.txt; cat <PE32 exe, tests/data/meta_fixtures/pe/arch_cli32__coff_machine_constant.bin> payload.7z > sfx_7z.exe",
+ "oracle_cmd": "python3 -c \"import pefile; print(hex(pefile.PE(f).get_overlay_data_start_offset()))\" -> 0x2e00; xxd -s 0x2e00 -l 8 -p",
+ "decoy": false,
+ "member": "sfx_7z.exe"
+}

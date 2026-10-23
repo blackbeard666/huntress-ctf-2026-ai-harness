@@ -1,0 +1,8 @@
+{
+ "field": "apk.application_label_resolved",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"import zipfile; z=zipfile.ZipFile('fake.apk','w'); z.writestr('readme.txt','not an android package\\n'); z.writestr('classes.txt','x'); z.close()\"",
+ "oracle_cmd": "unzip -l fake.apk -> readme.txt, classes.txt only; aapt dump badging fake.apk -> ERROR: dump failed because no AndroidManifest.xml found",
+ "decoy": true,
+ "member": "fake.apk"
+}

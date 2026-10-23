@@ -1,0 +1,9 @@
+{
+ "kind": "dotnet_native_facts",
+ "decoy": true,
+ "expected": null,
+ "expected_lookups": {},
+ "generator_cmd": "bash tests/data/binary_fixtures/mmnat_gen.sh tests/data/binary_fixtures (dotnet 10 build/publish of the inline C#; mixed-mode patch with pefile)",
+ "oracle_cmd": "bash tests/data/binary_fixtures/mmnat_oracle.sh FILE (System.Reflection.PortableExecutable CorHeader/VtableFixupsDirectory/ManagedNativeHeaderDirectory/FieldRVA)",
+ "oracle_output": "oracle: none (BadImageFormatException) -- first 1024 bytes of mmnat_shellcode_x64.bin"
+}

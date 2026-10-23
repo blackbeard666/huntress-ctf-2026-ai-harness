@@ -1,0 +1,27 @@
+{
+ "family": "ffi_boundary",
+ "file": "ffi_ocaml_stub.bin",
+ "decoy": false,
+ "generator_cmd": "bash tests/data/binary_fixtures/ffi_gen.sh <workdir>",
+ "oracle_cmd": "readelf --dyn-syms -W <bin> (defined GLOBAL/WEAK, table order; UND = imports)",
+ "expected_facts": {
+  "ffi_kind": "ocaml_stub",
+  "ffi_kinds": [
+   "ocaml_stub"
+  ],
+  "exports": [
+   "caml_hcfg_blob",
+   "caml_hcfg_decode",
+   "ocs_internal_check"
+  ],
+  "ocaml_stubs": [
+   "caml_hcfg_blob",
+   "caml_hcfg_decode"
+  ],
+  "ocaml_runtime_imports": [
+   "caml_alloc_string",
+   "caml_copy_string"
+  ],
+  "python_module": "none"
+ }
+}

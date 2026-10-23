@@ -1,0 +1,8 @@
+{
+ "field": "jar.maven_coordinates",
+ "expected": "none",
+ "generator_cmd": "jar --create --file plain.jar readme.txt",
+ "oracle_cmd": "unzip -l plain.jar (no META-INF/maven/)",
+ "decoy": true,
+ "member": "plain.jar"
+}

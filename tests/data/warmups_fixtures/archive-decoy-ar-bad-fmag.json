@@ -1,0 +1,10 @@
+{
+ "codec": "archive-container[ar]",
+ "plain": null,
+ "encoded": "ITxhcmNoPgpmbGFnLnR4dC8gICAgICAgMCAgICAgICAgICAgMCAgICAgMCAgICAgNjQ0ICAgICAxMDIgICAgICAgIQpOaWNlIHdvcmsgZGVjb2RpbmcgdGhpcyB3YXJtdXAhIFRvIHNvbHZlLCBzdWJtaXQgdGhpcyBleGFjdCBhbnN3ZXIgdG8gdGhlIEdhbWUgTWFzdGVyOiBjb2JhbHQtc2hyZXctMTQ=",
+ "generator_cmd": "archive-ar-cobalt bytes with the member header's `\\n terminator overwritten, base64 -w0",
+ "oracle_cmd": "f=$(mktemp); printf %s \"$encoded\" | base64 -d > $f; 7z x -so -pinfected -tar $f 2>/dev/null </dev/null; r=$?; rm -f $f; exit $r",
+ "oracle_plain": null,
+ "decoy": true,
+ "expected": "none"
+}

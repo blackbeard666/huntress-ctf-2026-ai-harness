@@ -1,0 +1,8 @@
+{
+ "field": "jar.start_class",
+ "expected": "none",
+ "generator_cmd": "javac --release 17 Hello.java; jar --create --file hello.jar --main-class com.acme.Hello -C oh .",
+ "oracle_cmd": "java Oracle.java hello.jar (java.util.jar.JarFile getManifest().getMainAttributes()/getEntries(), jf.getEntry(Main-Class.replace('.','/')+\".class\"), JarFile.entries() *.jar|*.war, JarInputStream.getManifest(), ZipInputStream entry index) -> no Start-Class attribute",
+ "decoy": true,
+ "member": "hello.jar"
+}

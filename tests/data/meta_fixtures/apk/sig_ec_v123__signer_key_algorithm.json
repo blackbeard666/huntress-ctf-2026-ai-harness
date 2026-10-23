@@ -1,0 +1,8 @@
+{
+ "field": "apk.signer_key_algorithm",
+ "expected": "EC",
+ "generator_cmd": "unzip d21.apk AndroidManifest.xml classes.dex && zip -X unsigned.apk AndroidManifest.xml classes.dex && keytool -genkeypair -keystore ks.p12 -storetype PKCS12 -alias clone -keyalg EC -groupname secp256r1 -sigalg SHA256withECDSA -dname 'CN=Repack Clone Signer, OU=Mobile, O=Evil Corp, C=RU' -validity 3650 -startdate '2026/01/02 03:04:05' (PST) && apksigner sign --ks ks.p12 --ks-key-alias clone --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --min-sdk-version 21 --out ec_v123.apk unsigned.apk",
+ "oracle_cmd": "apksigner verify --print-certs -v ec_v123.apk -> Signer #1 key algorithm: EC",
+ "decoy": false,
+ "member": "ec_v123.apk"
+}

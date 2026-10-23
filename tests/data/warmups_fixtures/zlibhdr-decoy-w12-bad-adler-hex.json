@@ -1,0 +1,11 @@
+{
+ "codec": "zlib-header-sweep decoy",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-finch-72",
+ "encoded": "488925c9b10d83400c05d0553e3d34349158808a542c608c0356b8333a9b5cc64f24daf79eca826ae58d55d856cd1b625747a592aeb3c16c703b3ed2c2af2569dc2b5fe20065af5210f647c1484930918794016c0b1dd1bd34f3de3dfa1f6d9f24ff",
+ "decoy": true,
+ "why": "adler32 trailer's last byte replaced",
+ "generator_cmd": "printf %s \"$plain\" | perl -MCompress::Raw::Zlib -e '($w,$l,$d)=@ARGV; ($z)=Compress::Raw::Zlib::Deflate->new(-WindowBits=>$w,-Level=>$l,-AppendOutput=>1,(length $d ? (-Dictionary=>$d) : ())); local $/; $i=<STDIN>; $z->deflate($i,$o); $z->flush($o); print $o' -- 12 6 '' | head -c -1 | { cat; printf '\\377'; } | xxd -p | tr -d '\\n'  # perl Compress::Raw::Zlib writer + coreutils",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | python3 -c 'import sys,zlib\ntry: o=zlib.decompressobj(int(sys.argv[1])); r=o.decompress(sys.stdin.buffer.read()); print(r.decode() if o.eof else \"none\")\nexcept Exception: print(\"none\")' 15  # python zlib, no dictionary",
+ "oracle_plain": "none",
+ "expected": "none"
+}

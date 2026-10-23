@@ -1,0 +1,8 @@
+{
+ "field": "jar.main_class_entry_name",
+ "expected": "org/springframework/boot/loader/launch/JarLauncher.class",
+ "generator_cmd": "javac --release 17 JarLauncher.java (pkg org.springframework.boot.loader.launch) App.java (com.acme) Dep.java; jar --create --file dep.jar --manifest dep.mf -C od .; jar --create --file util-2.0.jar ...; stage BOOT-INF/classes + BOOT-INF/lib/{dep.jar,util-2.0.jar} + launcher class; jar --create --file app.jar --manifest app.mf -C stage . (app.mf: Main-Class JarLauncher, Start-Class com.acme.App, Spring-Boot-Version 3.3.1, Spring-Boot-Classes/Lib, Add-Opens, Enable-Native-Access, Launcher-Agent-Class, Sealed: true, per-entry sections com/acme/ and BOOT-INF/classes/com/acme/App.class)",
+ "oracle_cmd": "java Oracle.java app.jar (java.util.jar.JarFile getManifest().getMainAttributes()/getEntries(), jf.getEntry(Main-Class.replace('.','/')+\".class\"), JarFile.entries() *.jar|*.war, JarInputStream.getManifest(), ZipInputStream entry index) -> mainEntry org/springframework/boot/loader/launch/JarLauncher.class",
+ "decoy": false,
+ "member": "app.jar"
+}

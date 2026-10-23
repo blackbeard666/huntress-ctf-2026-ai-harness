@@ -1,0 +1,23 @@
+{
+ "family": "dynlink",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "loader": "dynlink_ocaml_d21.bin",
+ "plugin": "dynlink_ocaml_synth.plugin.bin",
+ "expected_facts": {
+  "loaded_library": "none",
+  "resolved_symbols": "[\"caml_plugin_header\"]",
+  "loader_needs_libdl": "true",
+  "plugin_exports": "[\"caml_plugin_header\",\"camlPlugin_042__entry\",\"camlHelper__entry\"]",
+  "plugin_header_magic": "Caml2007D002",
+  "loader_kind": "ocaml_natdynlink",
+  "init_export": "caml_plugin_header",
+  "plugin_unit_names": "Helper,Plugin_042",
+  "plugin_unit_crc": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ "generator_cmd": "FX=$PWD bash dynlink_gen.sh   # run from an empty scratch dir with FX=tests/data/binary_fixtures; gcc 13 -ldl",
+ "oracle_cmd": "python3 dynlink_oracle.py dynlink_ocaml_d21.bin dynlink_ocaml_synth.plugin.bin   # readelf --dyn-syms/-d/-lW + objdump -d -Mintel (lea/mov arg before call dlopen/dlsym); units by construction of the gen.sh Marshal writer (L(u2,u1): Helper crc aa*16, Plugin_042 crc 10..1f)",
+ "decoy": false,
+ "note": "gcc .so whose caml_plugin_header (.rodata) is a hand-written intext Marshal dynheader, 2 units, shared-string refs absent; lib.binary.dynlink_facts(loader, plugin); field names SPECULATIVE (GM label not seen)"
+}

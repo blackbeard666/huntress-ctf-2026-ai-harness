@@ -1,0 +1,9 @@
+{
+ "codec": "xz-base32",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-wolf-57",
+ "encoded": "7U3XUWC2AAAAJZWWWRDAJQDFMMQQCFQAAAAAAAAAAAAAAODCDNX6AADCABOV2ABHDJEGM3VS43R24O7N5SGJRKV4B6EY66U5SUWFG56AJ72NIV3T3RNND6734L2JUBHPYIIF4NJQZ6S3VYZQWFIPMIUSAXZ5VIJR5F45OS7RAOJ256QEDYPCAQGQPRVLSNFFHNJG36ZKPZZGASGPYBYAAAAAACHP3LAY5EY3WHYAAGAQCYYAAAAP2YSKAKY4IZ73AIAAAAAAARMVU===",
+ "generator_cmd": "printf %s \"$plain\" | xz -6 -c | base32 -w0  # xz CLI + base32 wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | base32 -d | xz -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-wolf-57",
+ "expected": "match"
+}

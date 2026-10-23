@@ -1,0 +1,9 @@
+{
+ "codec": "snappy-raw-base64",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-crane-56",
+ "encoded": "ZcBOaWNlIHdvcmsgZGVjb2RpbmcgdGhpcyB3YXJtdXAhIFRvIHNvbHZlLCBzdWJtaXQgBR64ZXhhY3QgYW5zd2VyIHRvIHRoZSBHYW1lIE1hc3RlcjogbWFwbGUtY3JhbmUtNTY=",
+ "generator_cmd": "printf %s \"$plain\" | PYTHONPATH=tools/pycramjam python3 -c 'import sys,cramjam;sys.stdout.buffer.write(bytes(cramjam.snappy.compress_raw(sys.stdin.buffer.read())))' | base64 -w0  # cramjam.snappy.compress_raw (Rust snap, raw block)",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | node tests/data/warmups_fixtures/snappy_framed_oracle.js --raw",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-crane-56",
+ "expected": "match"
+}

@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-6d1f0b8e3a92c457",
+ "generator_cmd": "python3 tests/data/android_fixtures/pef_src/gen_pef.py jar_multidex_url tests/data/android_fixtures/pef_jar_multidex_url.apk  # javac+d2j-jar2dex two dexes, Info-ZIP `zip` -> assets/modules/core.jar (token in classes2.dex); puzzle data='file:///android_asset/modules/core.jar'",
+ "oracle_cmd": "unzip -p pef_jar_multidex_url.apk assets/modules/core.jar > j.jar && unzip -p j.jar classes2.dex | strings -a | grep -o 'ANS-[0-9a-fA-F]\\{16\\}'"
+}

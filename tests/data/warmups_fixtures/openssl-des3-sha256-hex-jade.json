@@ -1,0 +1,9 @@
+{
+ "codec": "openssl-salted",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-falcon-82",
+ "encoded": "53616c7465645f5f671cd92579e72b60e08fd3a297923357043df1f89eaa83ceb2bcb993e6e19af0f2050841307a486d095f730cdd9b3c167972db10fd87976ffe93f10b9ae2e9c0e11fbc53091b0ecd2909d3a5b77ce1e204bb2a6c2c89b0f1726d14499b9a88123d030c7c48550441e588a413c3eff3c2",
+ "generator_cmd": "printf %s \"$plain\" | openssl enc -des-ede3-cbc -md sha256 -pass pass:huntress | xxd -p | tr -d '\\n'",
+ "oracle_cmd": "printf '%s\\n' \"$encoded\" | xxd -r -p | openssl enc -d -des-ede3-cbc -md sha256 -pass pass:huntress",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-falcon-82",
+ "expected": "match"
+}

@@ -1,0 +1,11 @@
+{
+ "decoy": true,
+ "material": "# not an installer: a PowerShell note that mentions [Run] and Section words inline\nWrite-Output 'Section Main; [Run] later'\n",
+ "rep": "installer_actions",
+ "transform": "handoff",
+ "key": "ia_decoy_ps1.txt",
+ "expected": null,
+ "note": "installer-action-model: lib.codec.installer_actions -> installer_answer(field); key = member name",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ia_gen.py tests/data/script_fixtures/ia_src  (stdlib; literal installer sources)",
+ "oracle_cmd": "file tests/data/script_fixtures/ia_src/ia_decoy_ps1.txt -> ASCII text (no Section/OutFile/[Setup]/<Wix>: not an installer)"
+}

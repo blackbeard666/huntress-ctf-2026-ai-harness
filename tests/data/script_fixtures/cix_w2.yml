@@ -1,0 +1,24 @@
+name: pr-bot
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Export branch
+        env:
+          HEAD: ${{ github.head_ref }}
+        run: echo "BRANCH=$HEAD" >> "$GITHUB_ENV"
+      - name: Comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const t = "${{ github.event.pull_request.title }}"
+            console.log(t)
+      - name: Mask
+        run: echo "::add-mask::${{ secrets.DEPLOY_KEY }}"

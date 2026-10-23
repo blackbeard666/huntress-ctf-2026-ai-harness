@@ -1,0 +1,8 @@
+{
+ "family": "ffi_boundary",
+ "file": "ffi_decoy_notelf.bin",
+ "decoy": true,
+ "generator_cmd": "bash tests/data/binary_fixtures/ffi_gen.sh <workdir>",
+ "oracle_cmd": "file <bin> -> Java source, ASCII text (not ELF): cannot answer",
+ "expected_facts": null
+}

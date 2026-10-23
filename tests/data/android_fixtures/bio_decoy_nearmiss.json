@@ -1,0 +1,8 @@
+{
+ "entry": "biometric_auth_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "crypto_androidx layout whose success token and failed-only trap are 15-hex near misses: no valid ANS token anywhere",
+ "generator_cmd": "python3 tests/data/android_fixtures/bio_src/gen_bio.py decoy_nearmiss tests/data/android_fixtures/bio_decoy_nearmiss.apk  # javac --release 8 (app + androidx.biometric / android.hardware.biometrics / KeyguardManager stubs) + dex2jar d2j-jar2dex.sh; manifest: apktool-bundled aapt2 link -I prebuilt/android-framework.jar; zipfile",
+ "oracle_cmd": "same generator, stage 2: host-JVM Probe -> \"crypto_stub=ANS-5d0e8b37a1c4f96\" / \"failed=ANS-0f1e2d3c4b5a697\" (15 hex: not ANS-<16 hex>)"
+}

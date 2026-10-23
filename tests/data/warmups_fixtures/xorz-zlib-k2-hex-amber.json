@@ -1,0 +1,10 @@
+{
+ "codec": "xor-compressed:hi-zlib",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-raven-26",
+ "encoded": "10b34da05967aa59646cb8c2141fda59581969cf1e8b6a07923cca5f59dbb5ef8b7ee19cd5d80ccbc3c4f0f01d470528d4e2cbe2bd941ba82388d274d4ab9fc0fe9147d6fa6abad5bb79922a8a40fd71acea9ee9bce0fe2566df1cd2f721f24d6f",
+ "key": "hi",
+ "generator_cmd": "printf %s \"$plain\" | pigz -9z -c | perl -0777 -ne 'my $k=$ENV{key}; my $r=$k x (length($_)/length($k)+1); print $_ ^ substr($r,0,length($_))' | xxd -p | tr -d '\\n'  # pigz -9z -c, perl string XOR (key repeated), xxd -p | tr -d '\\n'",
+ "oracle_cmd": "python3 -c \"import os,base64,gzip,zlib,bz2,lzma;from Crypto.Util.strxor import strxor;e=os.environ['encoded'];c=bytes.fromhex(e);k=os.environ['key'].encode();print(zlib.decompress(strxor(c,(k*len(c))[:len(c)])).decode())\"  # pycryptodome strxor + python stdlib decompressor",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-raven-26",
+ "expected": "match"
+}

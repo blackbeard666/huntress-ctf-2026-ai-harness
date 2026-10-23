@@ -1,0 +1,8 @@
+{
+ "field": "wasm.memory_max_pages",
+ "expected": "none",
+ "generator_cmd": "printf 'int add(int a,int b){return a+b;}' > a.c; clang-18 --target=wasm32 -O1 -c a.c -o a.o (Ubuntu clang 18.1.8, no -g)",
+ "oracle_cmd": "wasm-objdump -x -j Import a.o -> memory[0] pages: initial=0 (no max)",
+ "decoy": true,
+ "member": "a.o"
+}

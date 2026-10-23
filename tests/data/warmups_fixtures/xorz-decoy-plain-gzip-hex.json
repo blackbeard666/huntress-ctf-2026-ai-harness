@@ -1,0 +1,9 @@
+{
+ "codec": "xor-compressed",
+ "plain": null,
+ "encoded": "1f8b080000000000020325c9310e82401005d0ab7c7a29a84cbc8015565c60d8fdc14596313383cbf135b17def5112d1d45ec84c9acbbe209ec5d1c4eaf1ee30295cb70f2ff063ae25fecb535240766f3484fe90b84b2546f1a0ddb04a663f4b5e68fd75f8025f2e385665000000",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | xxd -p  # NOT XORed: the plain decompress-sweep codec, not this one",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | gzip -dc  # inflates as-is -> xor-compressed must answer none",
+ "expected": "none",
+ "decoy": true
+}

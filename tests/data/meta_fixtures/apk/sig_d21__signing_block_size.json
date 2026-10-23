@@ -1,0 +1,8 @@
+{
+ "field": "apk.signing_block_size",
+ "expected": "4088",
+ "generator_cmd": "GM D21 artifact (v1 FIXTURE-.RSA + v2 block): cp tests/data/meta_fixtures/apk/d21__version_code.bin (= mobile-001.apk of challenges/day21/metadata-package-deal evidence zip)",
+ "oracle_cmd": "python3 -c \"import zipfile,struct; b=open('mobile-001.apk','rb').read(); cd=zipfile.ZipFile('mobile-001.apk').start_dir; print(struct.unpack_from('<Q',b,cd-24)[0], b[cd-16:cd])\" -> 4088 b'APK Sig Block 42'",
+ "decoy": false,
+ "member": "mobile-001.apk"
+}

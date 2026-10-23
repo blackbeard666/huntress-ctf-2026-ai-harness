@@ -1,0 +1,20 @@
+{
+ "decoy": true,
+ "encoding": null,
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_modules": [],
+ "expected_loader_apis": [
+  "Assembly.GetManifestResourceStream",
+  "AppDomain.add_AssemblyResolve",
+  "Assembly.Load",
+  "Assembly.GetType",
+  "Activator.CreateInstance",
+  "Type.GetMethod",
+  "MethodBase.Invoke"
+ ],
+ "oracle_output": "costura.payload.dll.compressed inflates to 131 B ASCII text, no HCFG",
+ "field": "embedded_modules",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/emb_gen.sh tests/data/binary_fixtures   # dotnet 10 (Roslyn) Host+Payload, Costura-style raw deflate via stdlib zlib wbits=-15; javac --release 11 + jar, xor 'k3y' by a python one-liner",
+ "oracle_cmd": "PY=$PWD/.venv/bin/python bash tests/data/binary_fixtures/emb_oracle.sh tests/data/binary_fixtures   # dnfile ManifestResource + zlib -15 + file + sha256sum + grep -obUa HCFG + strings -el/-a; unzip + javap -v + sha256sum + grep -obUa SENGR"
+}

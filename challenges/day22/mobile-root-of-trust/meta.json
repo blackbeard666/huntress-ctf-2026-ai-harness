@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-22-root-of-trust",
+  "lane": "mobile-android",
+  "name": "📱 Root of Trust",
+  "ids": {
+    "single_solve": "mobile-android-day-22-root-of-trust",
+    "time_trial": "mobile-android-day-22-root-of-trust/time_trial",
+    "mastery": "mobile-android-day-22-root-of-trust/mastery"
+  }
+}

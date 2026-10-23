@@ -1,0 +1,9 @@
+{
+ "codec": "textcomp-huffman",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-glacier-29",
+ "encoded": "{'u': '00000', 'v': '000010', 'x': '000011', 'o': '0001', 'e': '001', 'h': '01000', 'w': '01001', 'i': '0101', 'r': '0110', 's': '0111', 'a': '1000', 't': '1001', ' ': '101', '!': '1100001', ',': '1100010', '2': '1100011', '-': '110010', '9': '1100110', ':': '1100111', 'G': '1101000', 'M': '1101001', 'N': '1101010', 'T': '1101011', 'b': '110110', 'd': '110111', 'c': '11100', 'g': '111010', 'k': '1110110', 'p': '1110111', 'l': '111100', 'n': '111101', 'm': '11111'}\n11010100101111000011010100100010110111011010111011100111100000111011101011111011110101011001010000101011110101001100001101111100000111011111000011011101011000110101110001111100000010001110001010101110000011011011111010110011011001010000101011110100100001110001110010011011000111101011101001001011010110010001101100101000001101110100010001111100110111010011000011110010010110110011110110001111111011000101101100101110101111001000111000101001011011001011000111100110",
+ "generator_cmd": "PYTHONPATH=tools/pylibs python3 -s tests/data/warmups_fixtures/textcomp_gen.py huffman \"$plain\"  # PyPI dahuffman 0.4 code table (pip install --target tools/pylibs dahuffman)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/textcomp_oracle.py huffman",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-glacier-29",
+ "expected": "match"
+}

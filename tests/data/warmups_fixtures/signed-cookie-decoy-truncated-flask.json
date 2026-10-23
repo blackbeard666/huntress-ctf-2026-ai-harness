@@ -1,0 +1,10 @@
+{
+ "codec": "signed-cookie",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: none",
+ "encoded": ".eJwlyTEOwjAMBdCrfDLTBTH1AkwwcQE3dUtEHSPbbZAQdwep63ufJD6nPt1",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "cut -c1-60 of signed-cookie-flask-amber encoded  # .eJ payload with a truncated zlib stream",
+ "oracle_cmd": "printf %s \"$encoded\" | PYTHONPATH=tools/pylib-signing python3 tests/data/warmups_fixtures/signed_cookie_oracle.py its-frag  # itsdangerous load_payload: zlib error",
+ "oracle_output": "None BadPayload"
+}

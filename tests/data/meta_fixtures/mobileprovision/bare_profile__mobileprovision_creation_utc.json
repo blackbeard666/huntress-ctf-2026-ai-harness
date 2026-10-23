@@ -1,0 +1,8 @@
+{
+ "field": "mobileprovision.creation_utc",
+ "expected": "2026-09-01T08:30:15Z",
+ "generator_cmd": "the FieldKit profile alone: openssl cms -sign -in profile.plist -signer c.pem -inkey k.pem -outform DER -nodetach -binary -out embedded.mobileprovision",
+ "oracle_cmd": "openssl cms -verify -noverify -inform DER -in embedded.mobileprovision | python3 -c plistlib.loads ['CreationDate']",
+ "decoy": false,
+ "member": "embedded.mobileprovision"
+}

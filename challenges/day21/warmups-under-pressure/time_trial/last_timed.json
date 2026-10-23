@@ -1,0 +1,27 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "4c426659-c079-4c43-911c-2eb3534373e5",
+  "window": null,
+  "elapsed": 4.14,
+  "in_window": 2.77,
+  "phases": {
+    "start": 1.37,
+    "download": 0.0,
+    "solve": 0.21,
+    "submit": 2.56
+  },
+  "routed": "local",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "silly-crater-boulder-37"
+  },
+  "attempts_remaining": 256,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 256,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

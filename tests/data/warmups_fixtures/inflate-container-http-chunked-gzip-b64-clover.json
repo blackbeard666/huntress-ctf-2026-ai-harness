@@ -1,0 +1,9 @@
+{
+ "codec": "inflate-container HTTP chunked + Content-Encoding gzip",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-moth-36",
+ "encoded": "SFRUUC8xLjEgMjAwIA0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluDQpDb250ZW50LUVuY29kaW5nOiBnemlwDQpUcmFuc2Zlci1FbmNvZGluZzogY2h1bmtlZA0KDQoyOA0KH4sIAAAAAAAC/yXJMQ6DQAwEwK9seqgiUfCBVEmVD5hjFU7hMLINxw0KMjgNCvNBop355ERUtT9GJh3z8kNM2VHFyrY+8FW4zjsb+DaUHPfykBSQxSsNCjFkDQoNoRcSLynEWzxoPdKsO60tGlP77E7y+7xHZQAAAA0KMA0KDQo=",
+ "generator_cmd": "/usr/bin/python3 -c 'import sys,gzip,zlib,h11; c=h11.Connection(h11.SERVER); c.receive_data(b\"GET / HTTP/1.1\\r\\nHost: x\\r\\n\\r\\n\"); c.next_event(); z=gzip.compress(sys.argv[1].encode(),mtime=0); o=c.send(h11.Response(status_code=200,headers=[(\"Content-Type\",\"text/plain\"),(\"Content-Encoding\",\"gzip\"),(\"Transfer-Encoding\",\"chunked\")])); o+=b\"\".join(c.send(h11.Data(data=z[i:i+40])) for i in range(0,len(z),40)); sys.stdout.buffer.write(o+c.send(h11.EndOfMessage()))' \"$plain\" | base64 -w0  # h11 HTTP/1.1 writer (chunked framing) + gzip",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | python3 -c 'import sys,dpkt,gzip\ntry: r=dpkt.http.Response(sys.stdin.buffer.read()); print(gzip.decompress(r.body).decode())\nexcept Exception: print(\"none\")'  # dpkt.http (de-chunks) + gzip",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-moth-36",
+ "expected": "match"
+}

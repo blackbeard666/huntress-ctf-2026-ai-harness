@@ -1,0 +1,8 @@
+{
+ "field": "appex.bundle_identifier",
+ "expected": "com.northwind.fieldkit.ShareExt",
+ "generator_cmd": "mkdir -p Payload/FieldKit.app/PlugIns/ShareExt.appex; cp Info.plist, dev.mobileprovision (as embedded.mobileprovision), appex Info.plist (bplist); zip -X -r FieldKit.ipa Payload",
+ "oracle_cmd": "unzip -p FieldKit.ipa Payload/FieldKit.app/PlugIns/ShareExt.appex/Info.plist > x.plist; exiftool -j x.plist -> CFBundleIdentifier",
+ "decoy": false,
+ "member": "FieldKit.ipa"
+}

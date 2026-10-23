@@ -1,0 +1,10 @@
+{
+ "codec": "compress-sweep",
+ "plain": "ice work",
+ "encoded": "aWNlIHdvcms=",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$plain\" | base64 -w0  # a short plain fragment, not compressed",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | file -b -  # ASCII text -> none",
+ "oracle_output": "ASCII text, with no line terminators"
+}

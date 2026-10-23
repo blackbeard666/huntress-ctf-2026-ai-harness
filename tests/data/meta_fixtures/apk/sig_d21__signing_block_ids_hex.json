@@ -1,0 +1,8 @@
+{
+ "field": "apk.signing_block_ids_hex",
+ "expected": "[\"0x7109871a\",\"0x42726577\"]",
+ "generator_cmd": "GM D21 artifact (v1 FIXTURE-.RSA + v2 block): cp tests/data/meta_fixtures/apk/d21__version_code.bin (= mobile-001.apk of challenges/day21/metadata-package-deal evidence zip)",
+ "oracle_cmd": "python3 -c \"from androguard.core.apk import APK; a=APK('mobile-001.apk'); a.parse_v2_v3_signature(); print(['0x%08x'%b.id for b in a._v2_blocks], a.is_signed_v1(), a.is_signed_v2(), a.is_signed_v3(), a.get_signature_names())\" -> ['0x7109871a', '0x42726577']",
+ "decoy": false,
+ "member": "mobile-001.apk"
+}

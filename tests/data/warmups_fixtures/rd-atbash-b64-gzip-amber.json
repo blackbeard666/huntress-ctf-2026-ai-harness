@@ -1,0 +1,9 @@
+{
+ "codec": "decompress-redecode",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-raven-31",
+ "encoded": "S4hRZZZZZZZXZbCQNJ7XNZdU0Pg8wqRtMr7Z1V5xdV2/HgJnIiyyxKdrhy43opc0gIFah86oOBs3xCHcfm8fvXoxg4MC+W7EVe/oE3QZnmxzJm9RKPFHt3qJSkZ60AOQdAyfgcKR/ABaAJZZZZ==",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | base64 -w0 | tr 'A-Za-z' 'ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba'",
+ "oracle_cmd": "printf %s \"$encoded\" | tr 'A-Za-z' 'ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba' | base64 -d | gzip -dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-raven-31",
+ "expected": "match"
+}

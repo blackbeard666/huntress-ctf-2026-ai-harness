@@ -1,0 +1,13 @@
+{
+ "family": "dynlink",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "loader": "dynlink_decoy_text.bin",
+ "plugin": "dynlink_decoy_text.plugin.bin",
+ "expected_facts": null,
+ "generator_cmd": "printf 'not an elf: dlopen(...) ... Caml2007D002' (impostor text naming every keyword)",
+ "oracle_cmd": "python3 dynlink_oracle.py dynlink_decoy_text.bin dynlink_decoy_text.plugin.bin   # readelf --dyn-syms/-d/-lW + objdump -d -Mintel (lea/mov arg before call dlopen/dlsym)",
+ "decoy": true,
+ "note": "DECOY: not ELF -> dynlink_facts returns None; lib.binary.dynlink_facts(loader, plugin); field names SPECULATIVE (GM label not seen)"
+}

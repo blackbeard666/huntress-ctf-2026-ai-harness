@@ -1,0 +1,11 @@
+{
+ "material": "YnBsaXN0MDDVAQIDBAUGBwsMDVVMYWJlbF8QEFByb2dyYW1Bcmd1bWVudHNZUnVuQXRMb2FkXVN0YXJ0SW50ZXJ2YWxYVXNlck5hbWVfEBdjb20uYXBwbGUubWR3b3JrZXIuc3luY6MICQpYL2Jpbi96c2hSLWNvEQGQACMAIAByAOkAcwB1AG0A6QAgJxMAIABzAHkAbgBjACAAaABlAGwAcABlAHIACgAjACAASABVAE4AVABSAEUAUwBTAF8AQQBOAEEATABZAFMASQBTAF8AVgAxADoAQgA2ADQALQBkAGoAMAB6AGYARwB4AGgAYgBtAGQAMQBZAFcAZABsAFAAWABwAHoAYQBIAHgAeQBiADIAeABsAFAAWABCAGwAYwBuAE4AcABjADMAUgBsAGIAbQBOAGwAZgBIAFoAbABjAG0AUgBwAFkAMwBRADkAYgBXAEYAcwBhAFcATgBwAGIAMwBWAHoAZgBHAEYAMABkAEcARgBqAGEAegAxAFUATQBUAFUAMABNAHkANAB3AE0ARABSADgAWQAyAEYAdABjAEcARgBwAFoAMgA1AGYAYQBXAFEAOQBUAEUAUQB0AE0AMgBZAHcAWQBqAFUAMQBaAFQARgA4AGQAWABKAHMAUABXAGgAMABkAEgAQgB6AA==",
+ "rep": "plist_scripts",
+ "transform": "plain",
+ "key": null,
+ "expected": null,
+ "decoy": true,
+ "note": "launchd-plist-route: lib.codec.plist_scripts / plist_answer; find_codecs reads ProgramArguments script bodies (sh -c, osascript -e) -- first half of the daemon bplist (trailer gone): plistlib raises InvalidFileException -> None",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/plist_launchd_gen.py tests/data/script_fixtures  (stdlib plistlib.dumps FMT_XML / FMT_BINARY; no lib code)",
+ "oracle_cmd": "python3 -I -c \"import plistlib,sys,base64;print(sorted(plistlib.loads(base64.b64decode(open(sys.argv[1]).read()))))\" tests/data/script_fixtures/plist_launchd_decoy_trunc_bin.b64  # -> InvalidFileException"
+}

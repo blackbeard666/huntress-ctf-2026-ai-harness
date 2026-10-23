@@ -1,0 +1,43 @@
+{
+ "family": "reloc",
+ "file": "reloc_hcfg_strtab.bin",
+ "encoding": "reloc-ptrtable-base64",
+ "expected_offset": 8320,
+ "expected_config": {
+  "campaign": "RL-2",
+  "domain": "relative.addend.example.invalid",
+  "mutex": "Global\\HRELOC2",
+  "port": 8443
+ },
+ "expected_facts": {
+  "bind_now": "true",
+  "copy_count": 0,
+  "copy_symbols": "[]",
+  "counts": {
+   "R_X86_64_GLOB_DAT": 5,
+   "R_X86_64_JUMP_SLOT": 2,
+   "R_X86_64_RELATIVE": 8
+  },
+  "glob_dat_count": 5,
+  "has_relro": "true",
+  "irelative_count": 0,
+  "jump_slot_count": 2,
+  "lazy_binding": "false",
+  "plt_import_count": 2,
+  "plt_imports": "[\"strlen\", \"__printf_chk\"]",
+  "plt_stubs": {
+   "0x1060": "strlen",
+   "0x1070": "__printf_chk"
+  },
+  "rela_dyn_count": 13,
+  "rela_plt_count": 2,
+  "relative_count": 8,
+  "relocation_count": 15,
+  "relocation_sections": "[\".rela.dyn\", \".rela.plt\"]",
+  "relro": "full"
+ },
+ "decoy": false,
+ "generator_cmd": "FX=$PWD sh reloc_gen.sh   # run from an empty scratch dir with FX=tests/data/binary_fixtures; gcc 15 + GNU ld 2.45, HCFG blobs by python3 stdlib zlib/struct/base64, RELATIVE slots of cfg_tab zeroed after linking (lld-style)",
+ "oracle_cmd": "python3 reloc_oracle.py reloc_hcfg_strtab.bin --hcfg   # readelf -rW/-dW/-lW/-sW/-SW + objdump -d -j .plt -j .plt.sec (<name@plt> labels)",
+ "note": "base64 of the HCFG cut into 5 NUL-terminated literals in shuffled order; const char *const cfg_tab[] filled only by RELATIVE (slots zero on disk). offset = first base64 char (c0, SPECULATIVE); lib.binary.elf_reloc_facts / hcfg_scan 'reloc-ptrtable' pass; field names SPECULATIVE (GM label not seen)"
+}

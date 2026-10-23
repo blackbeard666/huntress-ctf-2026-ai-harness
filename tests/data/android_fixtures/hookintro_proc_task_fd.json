@@ -1,0 +1,7 @@
+{
+ "entry": "clean_device_scan",
+ "expected": "ANS-a6e14c0f97b3d258",
+ "_why": "Guard.key folds /proc/self/task/*/comm (gum-js-loop / gmain / gdbus / pool-frida), /proc/self/fd/* via android.system.Os.readlink (linjector / frida), System.getenv LD_PRELOAD / CLASSPATH; File.listFiles + new File(dir, comm) + BufferedReader must be followed",
+ "generator_cmd": "python3 tests/data/android_fixtures/hookintro_src/gen_hookintro.py proc_task_fd tests/data/android_fixtures/hookintro_proc_task_fd.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d22.hookintro.Probe -> Vault.reveal(ctx) on the host JVM (real /proc/self/task comms and /proc/self/fd links of the unhooked JVM, Os.readlink stub = Files.readSymbolicLink) -> 'ANS-a6e14c0f97b3d258'"
+}

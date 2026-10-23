@@ -1,0 +1,138 @@
+{
+ "family": "pe_link",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "machine": "x86-64",
+  "machine_num": "34404",
+  "machine_hex": "0x8664",
+  "is_dll": "false",
+  "dll_name": "none",
+  "export_ordinal_base": "none",
+  "exports": "none",
+  "export_names": "none",
+  "import_dlls": [
+   "USER32.dll",
+   "api-ms-win-crt-heap-l1-1-0.dll",
+   "api-ms-win-crt-locale-l1-1-0.dll",
+   "api-ms-win-crt-runtime-l1-1-0.dll",
+   "api-ms-win-crt-stdio-l1-1-0.dll",
+   "KERNEL32.dll",
+   "api-ms-win-crt-environment-l1-1-0.dll",
+   "api-ms-win-crt-math-l1-1-0.dll"
+  ],
+  "imports": [
+   [
+    "USER32.dll",
+    [
+     "MessageBoxA"
+    ]
+   ],
+   [
+    "api-ms-win-crt-heap-l1-1-0.dll",
+    [
+     "_set_new_mode",
+     "free",
+     "malloc"
+    ]
+   ],
+   [
+    "api-ms-win-crt-locale-l1-1-0.dll",
+    [
+     "_configthreadlocale"
+    ]
+   ],
+   [
+    "api-ms-win-crt-runtime-l1-1-0.dll",
+    [
+     "__p___argc",
+     "__p___argv",
+     "_cexit",
+     "_configure_narrow_argv",
+     "_crt_atexit",
+     "_exit",
+     "_initialize_narrow_environment",
+     "_initterm",
+     "_initterm_e",
+     "_seh_filter_exe",
+     "_set_app_type",
+     "_set_invalid_parameter_handler",
+     "abort",
+     "exit"
+    ]
+   ],
+   [
+    "api-ms-win-crt-stdio-l1-1-0.dll",
+    [
+     "__acrt_iob_func",
+     "__p__commode",
+     "__p__fmode",
+     "__stdio_common_vfprintf",
+     "fflush",
+     "fwrite",
+     "setvbuf"
+    ]
+   ],
+   [
+    "KERNEL32.dll",
+    [
+     "DeleteCriticalSection",
+     "EnterCriticalSection",
+     "GetLastError",
+     "GetProcAddress",
+     "InitializeCriticalSection",
+     "LeaveCriticalSection",
+     "LoadLibraryA",
+     "SetUnhandledExceptionFilter",
+     "Sleep",
+     "TlsGetValue",
+     "VirtualProtect",
+     "VirtualQuery"
+    ]
+   ],
+   [
+    "api-ms-win-crt-environment-l1-1-0.dll",
+    [
+     "__p__environ"
+    ]
+   ],
+   [
+    "api-ms-win-crt-math-l1-1-0.dll",
+    [
+     "__setusermatherr"
+    ]
+   ]
+  ],
+  "delay_import_dlls": "none",
+  "tls_callbacks": [
+   "0x140001000",
+   "0x1400014f0",
+   "0x140001570"
+  ],
+  "tls_callback_count": "3",
+  "loader_apis": [
+   "LoadLibraryA",
+   "GetProcAddress"
+  ],
+  "loaded_libraries": [
+   "plugin.dll"
+  ],
+  "loaded_library": "plugin.dll",
+  "config": "none",
+  "config_offset": "none",
+  "config_section": "none",
+  "config_symbol": "none",
+  "pair:loaded_library": "plugin.dll",
+  "pair:resolved_symbols": [
+   "plugin_init"
+  ],
+  "pair:init_export": "plugin_init",
+  "pair:sideload_match": "true"
+ },
+ "pair_with": "pelink_plugin_x64.bin",
+ "generator_cmd": "bash pelink_gen.sh   # zig cc -target x86_64-windows-gnu: TLS callback + LoadLibraryA(\"plugin.dll\") + GetProcAddress(\"plugin_init\")",
+ "oracle_cmd": "python3 pelink_oracle.py pelink_loader_x64.bin pelink_plugin_x64.bin   # pefile directories + strings -a/-el + struct/zlib on the .hcfg section",
+ "decoy": false,
+ "note": "lib.binary.pe_link_facts(data)[key] (lists compared after a JSON round trip); pair:* keys = lib.binary.pe_link_pair(this, pair_with). Delay imports: not exercised (zig/lld MinGW cannot emit them); hcfg_scan must find the valid blob only in the plugins"
+}

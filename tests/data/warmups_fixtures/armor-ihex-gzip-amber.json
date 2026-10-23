@@ -1,0 +1,9 @@
+{
+ "codec": "intel-hex[gzip]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-yak-90",
+ "encoded": ":100000001F8B080000000000020325C9410E82403A\r\n:100010000C05D0AB7CF790B8850BB8D2951728C3E8\r\n:100020008F4EC6A1A62D8CDC1E12B7EF3D72229A10\r\n:100030005AC1CCA4735E5E88777634B1BA7E2F78CD\r\n:100040002A5C3F1B3BF83AD51CFFE54F5240166F28\r\n:1000500034849E48DCA41277F1A08D903AD1FA5DE9\r\n:0C0060004A3F5C0F27B8451A63000000FF\r\n:00000001FF\r\n",
+ "generator_cmd": "f=$(mktemp); printf %s \"$plain\" | gzip -9n > $f; objcopy -I binary -O ihex $f /dev/stdout; rm -f $f",
+ "oracle_cmd": "f=$(mktemp); printf \"%s\\n\" \"$encoded\" > $f; objcopy -I ihex -O binary $f /dev/stdout | gunzip; rm -f $f",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-yak-90",
+ "expected": "match"
+}

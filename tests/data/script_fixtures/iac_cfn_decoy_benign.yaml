@@ -1,0 +1,11 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  Box:
+    Type: AWS::EC2::Instance
+    Properties:
+      UserData:
+        Fn::Base64: !Join
+          - ''
+          - - "#!/bin/bash\n"
+            - "yum install -y httpd\n"
+            - !Sub "echo ${AWS::StackName} > /var/www/html/index.html\n"

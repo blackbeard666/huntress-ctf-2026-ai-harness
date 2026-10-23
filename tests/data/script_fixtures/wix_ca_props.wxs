@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="AcmeUpd" Language="1033" Version="1.0.0" Manufacturer="Acme" UpgradeCode="7c2a9e41-1234-4321-8888-123456789012">
+    <Package InstallerVersion="200" Compressed="yes" />
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLDIR" Name="AcmeUpd">
+          <Component Id="Reg" Guid="7c2a9e41-2222-3333-4444-555555555555">
+            <RegistryValue Root="HKCU" Key="Software\AcmeUpd" Name="v" Type="string" Value="1" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+    <Feature Id="F" Level="1"><ComponentRef Id="Reg" /></Feature>
+    <Property Id="CFGPART1" Value="H4sIAAAAAAACA1VOS0sDMRD+Q3a3uwqthTnpxYMgtMdCGLNjOjQvJpO1h/x4" />
+    <Property Id="CFGPART2" Value="o4eCx+/9rfDYPEZX0RF8882Ewk2SJ+BYFL0naSvJwlYhoGfLqZaGqmivcJrmaT9st7uGC2YlAVuLpmDQKqfYeoEjY1ONCnNHlAtIjeaf6+GXKVY4a7MYMrKLhhd4P75tdnbGZ3qaWhUPF9VcDuPYH96FgW494mnguPZ3y/g32b7Yk8moF3g5nD8kOcHwiorn4R5cP8sPnO6RxfwAAAA=" />
+    <CustomAction Id="StageCfg" Script="vbscript" Execute="immediate" Return="ignore"><![CDATA[
+Dim descriptor_7c2a9e41, sh
+descriptor_7c2a9e41 = "[CFGPART1][CFGPART2]"
+Set sh = CreateObject("WScript.Shell")
+sh.RegWrite "HKCU\Software\AcmeUpd\cfg", descriptor_7c2a9e41
+]]></CustomAction>
+    <InstallExecuteSequence>
+      <Custom Action="StageCfg" After="InstallInitialize">NOT Installed</Custom>
+    </InstallExecuteSequence>
+  </Product>
+</Wix>

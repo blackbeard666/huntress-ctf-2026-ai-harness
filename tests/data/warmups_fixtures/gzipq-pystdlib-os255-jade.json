@@ -1,0 +1,10 @@
+{
+ "codec": "gzip-base64 (CPython GzipFile: FNAME, mtime 1760000000, OS 255)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-wolf-48",
+ "encoded": "H4sICAB452gC/3BheWxvYWQuYmluACXJMRKCMBAF0Kt8e9NZOF7ACiovsCRfCBDWyS6E4+uM7Xt9jkTTuiAxasrbCJ+yoUkt++eCl8J0PXiF7UPJ/l+eEh2yWWOF6w+JpxSiE3PWB2ZJDE3Xd7jdv6+icANjAAAA",
+ "expected": "match",
+ "generator_cmd": "python3 -c \"import gzip,io,sys,base64; b=io.BytesIO(); g=gzip.GzipFile(filename='payload.bin', mode='wb', fileobj=b, mtime=1760000000); g.write(sys.argv[1].encode()); g.close(); print(base64.b64encode(b.getvalue()).decode(), end='')\" \"$plain\"",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc; printf %s \"$encoded\" | base64 -d | file -",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-wolf-48",
+ "oracle_header": "gzip compressed data, was \"payload.bin\", last modified: Thu Oct  9 08:53:20 2025, max compression"
+}

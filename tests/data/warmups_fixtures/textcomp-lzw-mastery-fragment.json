@@ -1,0 +1,9 @@
+{
+ "codec": "textcomp-lzw (Mastery line fragment)",
+ "plain": "e Game Master: amb",
+ "encoded": "[101, 32, 71, 97, 109, 256, 77, 97, 115, 116, 101, 114, 58, 32, 259, 98]",
+ "generator_cmd": "python3 -I tests/data/warmups_fixtures/textcomp_gen.py lzw \"$plain\"  # independent textbook implementation, not lib/",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/textcomp_oracle.py lzw",
+ "oracle_plain": "e Game Master: amb",
+ "expected": "match"
+}

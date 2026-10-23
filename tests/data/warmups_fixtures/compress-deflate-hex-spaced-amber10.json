@@ -1,0 +1,9 @@
+{
+ "codec": "deflate-hex-spaced",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-moth-49",
+ "encoded": "25 c9 31 12 82 40 0c 05 d0 ab 7c 7b e9 6c f4 02 56 52 71 81 b0 fc 91 1d 08 61 92 e0 72 7c 9d b1 7d af af 85 68 e6 0b 26 16 9b ea f6 46 ce 35 d0 c4 f5 d8 2f 18 0c 61 eb 87 57 c4 31 6a cd ff f2 94 92 90 2d 1a 1d 69 3f 24 9e a2 c4 4b 22 e9 0f 88 8e f4 4e 2d e7 ee 76 ff 02",
+ "generator_cmd": "printf %s \"$plain\" | gzip -9n | tail -c +11 | head -c -8 | od -An -tx1 -v | tr -s ' \\n' '  ' | sed 's/^ //;s/ $//'  # gzip CLI + od wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | { printf '\\037\\213\\010\\000\\000\\000\\000\\000\\000\\003'; cat; } | gzip -dc 2>/dev/null",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-moth-49",
+ "expected": "match"
+}

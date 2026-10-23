@@ -1,0 +1,10 @@
+{
+ "kind": "dotnet_il_facts",
+ "decoy": true,
+ "expected": {
+  "_all": "none"
+ },
+ "note": "first 1024 bytes of ilcs_cs_net10.bin: CLI metadata past EOF -> dotnet_il_facts None, dotnet_il_field None, dotnet_field_owner None",
+ "generator_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/ilcs_gen.sh tests/data/binary_fixtures   # dotnet 10 SDK: dotnet build -c Release (Deterministic) of a C# and an F# project + a plain C# library; /usr/bin/true; head -c 1024",
+ "oracle_cmd": "file tests/data/binary_fixtures/ilcs_trunc.bin; ilspycmd -il fails on it"
+}

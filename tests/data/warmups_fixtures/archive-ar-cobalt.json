@@ -1,0 +1,9 @@
+{
+ "codec": "archive-container[ar]",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-shrew-14",
+ "encoded": "ITxhcmNoPgpmbGFnLnR4dC8gICAgICAgMCAgICAgICAgICAgMCAgICAgMCAgICAgNjQ0ICAgICAxMDIgICAgICAgYApOaWNlIHdvcmsgZGVjb2RpbmcgdGhpcyB3YXJtdXAhIFRvIHNvbHZlLCBzdWJtaXQgdGhpcyBleGFjdCBhbnN3ZXIgdG8gdGhlIEdhbWUgTWFzdGVyOiBjb2JhbHQtc2hyZXctMTQ=",
+ "generator_cmd": "d=$(mktemp -d); cd $d; printf %s \"$plain\" > flag.txt; f=$(mktemp -u).a; ar rcD $f flag.txt; base64 -w0 $f; rm -rf $d $f",
+ "oracle_cmd": "f=$(mktemp); printf %s \"$encoded\" | base64 -d > $f; 7z x -so -pinfected -tar $f 2>/dev/null </dev/null; r=$?; rm -f $f; exit $r",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-shrew-14",
+ "expected": "match"
+}

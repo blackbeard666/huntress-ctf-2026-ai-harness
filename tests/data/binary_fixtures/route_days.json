@@ -1,0 +1,85 @@
+{
+ "format": "zip of a multi-member dNN-- group",
+ "members": [
+  "d15--variant-000-stripped.elf",
+  "d15--variant-000-symbolized.elf",
+  "d16--variant-000-compact.wasm",
+  "d16--variant-000-direct.wasm",
+  "d21--variant-000-loader.elf",
+  "d21--variant-000-plugin.cmxs"
+ ],
+ "expected_sha256": [
+  "cdeed79287e14ab095fdf9223f2c6038d537e8c29667c8ff4dbbcb6e828797bd",
+  "3d407624b0218b2a8141725f973f5591d1e0b18d4ebfa851428418629152e435",
+  "2f86461b8716b7a993a700fded433de41052cb955653ab62a237abf2719827f7",
+  "81be81b4725edc190326f52bad698ebf837ef47e002f6bfe4319c2f81c81e817",
+  "5d6d68b00c0f105655c48366eb901fbfa4e337a90537e609fbe19b29f2b30798",
+  "db247c826051a83bac0cf95291274c1febf40b08dc0669c00af428c3d5992fa8"
+ ],
+ "routes": [
+  {
+   "id": "d15_analysis_stripped_machine",
+   "question": "In evidence.zip, Use the unique d15-- member whose basename ends stripped.elf. Read the ELF e_machine field and submit its unsigned base-10 numeric value.",
+   "member": "d15--variant-000-stripped.elf",
+   "residual": "machine"
+  },
+  {
+   "id": "d15_analysis_symbolized_config_campaign",
+   "question": "In evidence.zip, Use the unique d15-- member whose basename ends symbolized.elf. Scan the specified member for literal HCFG magic and accept the first record whose bounds, CRC32, and decoded JSON validate.",
+   "member": "d15--variant-000-symbolized.elf",
+   "residual": "config_campaign"
+  },
+  {
+   "id": "d16_analysis_compact_format",
+   "question": "In evidence.zip, Use the unique d16-- member whose basename ends compact.wasm. Classify final bytes by magic.",
+   "member": "d16--variant-000-compact.wasm",
+   "residual": "format"
+  },
+  {
+   "id": "d16_analysis_direct_config_url",
+   "question": "In evidence.zip, Use the unique d16-- member whose basename ends direct.wasm. Parse the WebAssembly section stream.",
+   "member": "d16--variant-000-direct.wasm",
+   "residual": "config_url"
+  },
+  {
+   "id": "d21_analysis_loader_machine",
+   "question": "In evidence.zip, Use the unique d21-- member whose basename ends loader.elf. Read the ELF e_machine field and submit its unsigned base-10 numeric value.",
+   "member": "d21--variant-000-loader.elf",
+   "residual": "machine"
+  },
+  {
+   "id": "d21_analysis_plugin_machine",
+   "question": "In evidence.zip, Use the unique d21-- member whose basename ends plugin.cmxs. Read the ELF e_machine field and submit its unsigned base-10 numeric value.",
+   "member": "d21--variant-000-plugin.cmxs",
+   "residual": "machine"
+  },
+  {
+   "id": "d21_analysis_config_campaign",
+   "question": "In evidence.zip, Use the d21-- plugin.cmxs member; the loader has no scored HCFG config. Scan the specified member for literal HCFG magic and accept the first record whose bounds, CRC32, and decoded JSON validate.",
+   "member": "d21--variant-000-plugin.cmxs",
+   "residual": "config_campaign"
+  },
+  {
+   "id": "d21_analysis_plugin_config_mutex",
+   "question": "In evidence.zip, Use the unique d21-- member whose basename ends plugin.cmxs. Scan the specified member for literal HCFG magic and accept the first record whose bounds, CRC32, and decoded JSON validate.",
+   "member": "d21--variant-000-plugin.cmxs",
+   "residual": "config_mutex"
+  },
+  {
+   "id": "d21_analysis_config_url",
+   "question": "In evidence.zip, Use all d21-- members in ZIP central-directory order. Scan the specified member for literal HCFG magic and accept the first record whose bounds, CRC32, and decoded JSON validate.",
+   "member": "d21--variant-000-plugin.cmxs",
+   "residual": "config_url"
+  },
+  {
+   "id": "d15_analysis_entry_point",
+   "question": "In evidence.zip, Use all d15-- members in ZIP central-directory order. ",
+   "member": null,
+   "residual": "entry_point"
+  }
+ ],
+ "generator_cmd": "FX=$PWD bash route_gen.sh   # gcc -shared -Wl,-soname / gcc -ldl, strip, wat2wasm, python3 zlib.crc32 header, zip -X -j",
+ "oracle_cmd": "bash route_oracle.sh route_days.bin   # unzip -Z1, readelf -hW/-lW/-dW/--dyn-syms, strings, grep -obUa HCFG + binascii.crc32",
+ "decoy": false,
+ "note": "D15 / D16 / D21 question shapes (verbatim prefixes from the D21 contract)"
+}

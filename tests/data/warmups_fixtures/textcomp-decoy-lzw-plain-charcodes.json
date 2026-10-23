@@ -1,0 +1,10 @@
+{
+ "codec": "textcomp-lzw (decoy)",
+ "plain": "none",
+ "encoded": "[78, 105, 99, 101, 32, 119, 111, 114, 107]",
+ "generator_cmd": "python3 -c 'print(list(b\"Nice work\"))'  # decimal char codes, no LZW dictionary code",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/textcomp_oracle.py lzw",
+ "oracle_plain": "Nice work",
+ "decoy": true,
+ "expected": "none"
+}

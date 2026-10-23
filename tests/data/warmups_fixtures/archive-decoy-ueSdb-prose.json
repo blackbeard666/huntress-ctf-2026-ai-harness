@@ -1,0 +1,10 @@
+{
+ "codec": "archive-container[zip]",
+ "plain": null,
+ "encoded": "UEsDBCBpcyBub3QgYSB6aXAsIHRoaXMgaXMganVzdCB3b3Jkcw==",
+ "generator_cmd": "printf 'PK\\003\\004 is not a zip, this is just words' | base64 -w0",
+ "oracle_cmd": "f=$(mktemp); printf %s \"$encoded\" | base64 -d > $f; 7z x -so -pinfected -tzip $f 2>/dev/null </dev/null; r=$?; rm -f $f; exit $r",
+ "oracle_plain": null,
+ "decoy": true,
+ "expected": "none"
+}

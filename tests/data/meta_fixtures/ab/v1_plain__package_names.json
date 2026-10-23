@@ -1,0 +1,8 @@
+{
+ "field": "ab.package_names",
+ "expected": "[\"org.sample.app\"]",
+ "generator_cmd": "python3 -I gen.py (stdlib tarfile USTAR + zlib.compress writer; ABX via a hand-rolled BinaryXmlSerializer token writer; source kept at tests/data/meta_fixtures/android_backup/gen_android_fixtures.py.txt)",
+ "oracle_cmd": "tail -c +25 v1_plain.ab | tar tf - | cut -d/ -f2 | uniq",
+ "decoy": false,
+ "member": "v1_plain.ab"
+}

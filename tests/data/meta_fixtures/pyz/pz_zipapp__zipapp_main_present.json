@@ -1,0 +1,8 @@
+{
+ "field": "pyz.zipapp_main_present",
+ "expected": "true",
+ "generator_cmd": "echo 'print(\"hello from zipapp\")' > app/__main__.py; python3 -m zipapp app -p '/usr/bin/env python3' -o hello.pyz",
+ "oracle_cmd": "unzip -l hello.pyz -> __main__.py",
+ "decoy": false,
+ "member": "hello.pyz"
+}

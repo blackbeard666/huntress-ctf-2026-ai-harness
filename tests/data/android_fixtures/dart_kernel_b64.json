@@ -1,0 +1,7 @@
+{
+ "entry": "dart_snapshot_scan",
+ "expected": "ANS-5d2a9f7e01c4b836",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/android_fixtures/dart_src/gen.py tests/data/android_fixtures  # C byte arrays laid out as Dart snapshots (magic 0xdcdcf5f5, kind 3 FullAOT, version hash, features) -> aarch64-linux-gnu-gcc -shared -nostdlib -> lib/arm64-v8a/libapp.so exporting _kDart{Vm,Isolate}Snapshot{Data,Instructions}; zip -qX -r <name>.apk .  [debug build: assets/flutter_assets/kernel_blob.bin = kernel magic 0x90abcdef + Dart source with const kSecret = '<base64>']",
+ "oracle_cmd": "unzip -p dart_kernel_b64.apk assets/flutter_assets/kernel_blob.bin | strings | grep -o \"kSecret = '[^']*'\" | cut -d\"'\" -f2 | base64 -d  # -> ANS-5d2a9f7e01c4b836"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "native_export_scan",
+ "expected": "ANS-3b9e07c15da28f46",
+ "decoy": false,
+ "generator_cmd": "tests/data/android_fixtures/rawsys_src/gen_rawsys.sh tests/data/android_fixtures  # gcc / aarch64-linux-gnu-gcc -shared -fPIC -O2 -nostdlib -ffreestanding rawsys_src/raw_syscall_probe.c (no libc imports: Java_..._nativeCheck issues inline `syscall` / `svc #0` openat+read+close /proc/self/status TracerPid, faccessat(su)==-ENOENT, newfstatat(/sbin/su), readlinkat(frida-server), ptrace(TRACEME)!=-EPERM, getppid()!=1, folded into key K; out[i] = ENC[i] ^ ((K*(i+1)+0x3d)&0xff)); ENC from a python3 xor one-liner with K=0x0c; zip -qX -r <name>.apk assets lib",
+ "oracle_cmd": "unzip rawsys_x86_64.apk 'lib/*' && gcc -o h rawsys_src/rawsys_harness.c -ldl && ./h lib/x86_64/libguard.so Java_com_huntress_arena_Guard_nativeCheck  # the real .so; its raw syscalls answered by the host kernel on a clean, untraced, unrooted host: 'NewStringUTF ANS-3b9e07c15da28f46'"
+}

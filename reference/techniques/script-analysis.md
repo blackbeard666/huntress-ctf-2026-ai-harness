@@ -1,4 +1,4 @@
-# script-analysis — technique log (days 1-20; updated after every day)
+# script-analysis — technique log (days 1-22; updated after every day)
 
 How this lane has looked so far (these are observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -11,11 +11,14 @@ How this lane has looked so far (these are observations, not guarantees):
   + perl_cgi host (d15, 1026) -> +Ruby `.rb` + ruby_rack host (d16, 1095; 123 members) -> +AutoHotkey `.ahk` (d17, 1139; 127
   members, no host file, no new Bash) -> +Google Apps Script `.gs` + `google_docs_sidebar` host (d18, 1194; 132 members, no new
   Bash) -> +Roslyn C# script `.csx` + `aspx_inline_csharp` host (d19, 1249; 137 members, no new Bash) -> +Groovy `.groovy` +
-  `jenkins_pipeline` host + a `classic_asp` host for OLD VBScript + 2 Bash (d20, 1329; 145 members). Most days also add 2
-  Bash advanced fixtures (not d12, d15, d17-d19). Since D8 the TITLE/PROMPT is a pun or narrative; the new language shows up
+  `jenkins_pipeline` host + a `classic_asp` host for OLD VBScript + 2 Bash (d20, 1329; 145 members) -> +GitHub Actions `.yml`
+  (d21, 1373; 149 members, no host, no Bash) -> +NSIS `.nsi` (d22, 1417; 153 members, no host, no Bash). Most days also add 2
+  Bash advanced fixtures (not d12, d15, d17-d19, d21-d22). Since D8 the TITLE/PROMPT is a pun or narrative; the new language shows up
   only in the member list (D16 "Same Same, But Different" -> Ruby; D17 "Fetch Quest" -> AutoHotkey; D18 "Orphan Process" ->
   Apps Script; D19 "Sharp Practice" / base `managed-assembly-bridge` -> C#; D20 "The Butler Did It" (= Jenkins) / base
-  `jenkins-pipeline-intrusion` -> Groovy). Diff the contract ids against yesterday's.
+  `jenkins-pipeline-intrusion` -> Groovy; D21 "Actions Speak Louder" / base `github-actions-persistence` -> GH Actions YAML;
+  D22 "Next, Next, Finish" / base `installer-script-chain` -> NSIS installer script).
+  Diff the contract ids against yesterday's.
 - From day 2 on, every fixture hides a **self-describing plan**: `v=N|steps=a,b|adapter=..|stage_count=..|campaign_id=..|<indicators>`.
   It sits behind a codec, usually named in a `Codec_<id>` / `CODEC_<id>` / `rem HUNTRESS-CODEC:` const of the form `rep|transform|key`.
   Most exact_text answers are plan values copied verbatim. From D8 there is also a **`v=3` plan**: it carries `role=` and `attack=`
@@ -29,17 +32,23 @@ How this lane has looked so far (these are observations, not guarantees):
   equivalent, expose the variant that quietly changed the plot", D17 "reconcile source fetch targets with the generated network
   evidence ... the indicator on only one side", D18 "native telemetry keeps its own record ... reconstruct the static process
   tree, catch the child claiming a parent it never had", D19 "work out where the bridge actually leads" = just the per-file
-  `next-language` id, D20 "separate controller semantics from agent semantics, trace the build into its prior-language stages") have NEVER been asked as a question; no network/process telemetry has shipped. Answer the contract ids.
+  `next-language` id, D20 "separate controller semantics from agent semantics, trace the build into its prior-language stages",
+  D21 "identify each trigger and trust boundary ... find the job that keeps coming back", D22 "separate the real setup actions
+  from the modeled payload behavior, recover every cross-language handoff") have NEVER been asked as a question;
+  no network/process telemetry has shipped. Answer the contract ids.
 - Time Trial windows ~5-17 s. Mastery has `setN.` ids: 2 sets d2-d7 and d10-d14, **5 sets d8, d9, d15 (5130 ids) and d16 (5475
-  ids), d17 (5695), d18 (5970), d19 (6245), d20 (6645)**. The artifact was `evidence-0N.zip`, `delivery N: evidence.zip` (d6), or one
+  ids), d17 (5695), d18 (5970), d19 (6245), d20 (6645), d21 (6865); D22 = 6 SETS (8502 ids)** -- first 6-set Mastery (outer
+  `evidence-01.zip` holding `evidence-01..06.zip`); the set loop is count-agnostic, so it just worked. The artifact was `evidence-0N.zip`, `delivery N: evidence.zip` (d6), or one
   `evidence-01.zip` holding every `evidence-0N.zip` (d7-d9). Same-named deliveries: pair by sha256. Timed questions carry `[assigned-artifact-sha256:<hex>]`.
   From D15 the timed contracts are the untimed regular pool (`run_for_time:false`, `variant_fresh:true`, no deadline).
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants of the SAME day -- parse every value listed)
 Each miss cost one failed timed attempt + a ~45-90 s generalize cycle (D6: 4 cycles; D7: 1; D8-D14: 0; D15: TT localize + 1
-Mastery cycle; D16: runner timeouts only). **D17-D20: no axis** -- TT/Mastery first try, 0 new VARIANT AXIS lines, `novel_labels:
-{}`; each day's new carrier shape (D18 SPLIT array, D19 escaped-nested ASPX, D20 plain Groovy/ASP one-liners) was identical in
-every mode, only values re-rolled. D20 auto cases (TT 717b8371, Mastery 1478867c) are value re-rolls only.
+Mastery cycle; D16: runner timeouts only). **D17-D22: no axis** -- TT/Mastery first try, 0 new VARIANT AXIS lines, `novel_labels:
+{}`; each day's new carrier shape (D18 SPLIT array, D19 escaped-nested ASPX, D20 plain Groovy/ASP one-liners, D21 YAML `#`
+marker + `env: HUNTRESS_DESCRIPTOR`, D22 NSIS `;` marker + `StrCpy $0 ".."`) was identical in every mode (D22: all 6 Mastery
+sets, same tag per file), only values re-rolled. Auto cases D20 (TT 717b8371, M 1478867c), D21 (TT f01e0ff9, M 2620b793) and
+D22 (TT c355207f, M c8d60ca4) are value re-rolls only.
 - **GM label regime (batch `expansion`; D15 pool-keyed, D16 DATE-keyed)** -- SAME bytes, SAME question text, DIFFERENT label.
   Old regime (every D3-D14 case + the D15 single): the whole handoff is labelled, `echo(!var!)` => `delayed` unless a FOR/h-pool
   rule fires. Statement regime (D15 TT/Mastery `run_for_time:false`; D16+ every mode incl. the single): label the JOIN
@@ -55,31 +64,24 @@ every mode, only values re-rolled. D20 auto cases (TT 717b8371, Mastery 1478867c
 - **Codec spec arity** -- `rep|transform|key`, `rep|` (empty transform = identity; Bash advanced D7-D16), or transform folded
   into the rep with the key second (`xor_hex|cd`, D16 `xor_hex|ec`). Split on `|`, never index blindly (lib.codec `_spec`).
 - **Plan carrier tag (v=3, D8-D16)** -- `HUNTRESS_ANALYSIS_V1:<TAG>-<data>` + the same data in a descriptor literal. Tags `B64`,
-  `HEX`, `HB64` (hex of base64), `FRAG` (hex split by `.` every 24 chars); stayed fixed per file in every delivery D8-D17, only
+  `HEX`, `HB64` (hex of base64), `FRAG` (hex split by `.` every 24 chars); stayed fixed per file in every delivery D8-D22, only
   values re-rolled. Parse rule: ignore the tag name; peel by shape, recurse (max 3-4 layers); accept only `v=`. Tag =
   `obfuscation_profile` (B64 base64, HEX plain_hex, HB64 hex_base64, FRAG fragmented_hex). `lib.codec.find_codecs(src)` returns it.
-  **D18 `SPLIT` is a LAYOUT tag, not an encoding**: `// HUNTRESS_ANALYSIS_V1:SPLIT` stands alone on its line and the data is the
-  next multi-line literal array `const HUNTRESS_ANALYSIS_V1_SPLIT_<8hex> = ["<TAG>-chunk", "chunk", ..].join("")`; the real tag
-  (FRAG/HEX/HB64/B64) is the first chunk's prefix, and `buildAnalysisPlan_<id>()` holds an untagged copy (`const encoded_<id> =
-  [..].join("")`). Parse rule: if the marker match has no data, join every all-literal array / concat run in the file
-  (quotes `"` `'` and backticks), strip a leading `[A-Za-z0-9_]{1,12}-`, peel; keep the one that yields `v=`. Patched in the
-  D18 solve.py (`_v3` candidates); lib.codec.v3_plan handles it since the D18-night prebuild.
-- **Plan carrier NESTING (D10 MOF ScriptText, D19 ASPX)** -- the whole inner script is a string literal of the host:
-  `<%@ Page Language="C#" %><script runat="server"> private static readonly string EmbeddedCsx_<8hex> = "// HUNTRESS_ANALYSIS_V1:
-  HEX-<data>\n#nullable enable\n..string descriptor_<id> = \"<data>\";\n";`. In raw bytes the marker data runs on into a
-  literal `\n#nullable` and the descriptor is `\"`-quoted, so the carried regexes find nothing. Parse rule: when a v=3 file
-  yields no plan, unescape string-literal escapes (`\n \" \\ \t`, C# verbatim `""`, VB `""`, XML `&quot;`/CDATA, JSON
-  `\u0022`) and rescan; or stop marker data at `\`. `lib.codec.v3_plan` already decoded the D19 ASPX file at solve time
-  (the carried solve.py did not call it) -- **fall back to lib.codec.v3_plan before anything else**.
+  **D18 `SPLIT` is a LAYOUT tag**: `// HUNTRESS_ANALYSIS_V1:SPLIT` has no data; the data is the next multi-line literal array
+  `const HUNTRESS_ANALYSIS_V1_SPLIT_<8hex> = ["<TAG>-chunk", ..].join("")` (real tag on chunk 1). Parse rule: if the marker has
+  no data, join every all-literal array / concat run, strip a leading `[A-Za-z0-9_]{1,12}-`, peel, keep the `v=` one.
+- **Plan carrier NESTING (D10 MOF ScriptText, D19 ASPX)** -- the inner script is an escaped string literal of the host
+  (`EmbeddedCsx_<8hex> = "// HUNTRESS_ANALYSIS_V1:HEX-<data>\n#nullable ..descriptor_<id> = \"<data>\";"`), so raw-byte
+  regexes find nothing. Parse rule: unescape (`\n \" \\`, `""`, `&quot;`/CDATA, `\u0022`) and rescan; **call
+  lib.codec.v3_plan before anything else** (it read D18 and D19 at solve time; the carried solve.py did not call it).
 - **Plan carrier host syntax (v=3)** -- marker in whatever comment the host uses: `//` (PHP, JS, HTA, WSF, SCT, MOF, TS), `--`
-  (Lua, AppleScript), `;` (AutoIt, AutoHotkey), `<!-- -->` (MSBuild), `#` (Perl D15, Ruby D16). Descriptor forms: `$descriptor_<id>`,
-  `var/local descriptor_<id>`, `Global Const $descriptor_<id>`, `property descriptor_<id> :`, `<HuntressDescriptor>` element
-  (MSBuild, no name), `my $descriptor_<id> = "..";` (Perl), `DESCRIPTOR_<8HEX> = ".."` uppercase Ruby constant (D16),
-  **`descriptor_<8hex> := ".."` AutoHotkey v2 (D17)**, C# `string descriptor_<8hex> = "..";` + `BuildPlan_<id>() => new
-  Dictionary<string,string> { ["descriptor"] = .. }` (D19), Apps Script `const HUNTRESS_ANALYSIS_V1_SPLIT_<id> = [..].join("")` +
-  `Object.freeze({ descriptor: encoded_<id> })` (D18), Groovy `final String descriptor_<8hex> = ".."` + `def buildPlan_<id> = { ->
-  [descriptor: ..].asImmutable() }` (D20), classic ASP `Dim descriptor_<8hex>` then `descriptor_<8hex> = ".."` on the NEXT line
-  inside `<% %>` with a `'` marker (D20). Never anchor on `=` / `:=` / `set` / `<-` -- parse rule: regex
+  (Lua, AppleScript), `;` (AutoIt, AutoHotkey, NSIS), `<!-- -->` (MSBuild), `#` (Perl, Ruby, YAML), `'` in `<% %>` (classic ASP).
+  Descriptor forms seen: `$descriptor_<id>`, `var/local/const/final String/string/my descriptor_<id> = ".."`, `Global Const
+  $descriptor_`, `property descriptor_<id> :`, AHK `:=`, Ruby `DESCRIPTOR_<8HEX>`, `<HuntressDescriptor>` element, ASP `Dim`
+  then assign on the next line, builder maps (`BuildPlan_<id>() =>`, `buildPlan_<id> = { -> [descriptor: ..] }`,
+  `Object.freeze({descriptor: ..})`), **YAML `env:` key `HUNTRESS_DESCRIPTOR: ".."` -- UPPERCASE, NO `_<id>` suffix**
+  (D21 GH Actions; `#` marker on line 1), **NSIS `StrCpy $0 ".."` inside `Section`..`SectionEnd` -- NO descriptor NAME at
+  all** (D22). Never anchor on `=` / `:=` / `set` / `<-` -- parse rule: regex
   `HUNTRESS_ANALYSIS_V\d+\s*:\s*(\w*)-?\s*([^\s"'<>\]]+)` over raw bytes, any comment syntax/case/extension; if the data group
   is empty (`SPLIT`), fall through to the literal-array join above.
 - **Literal shapes (D6-D7)** -- radix: decimal `23,7`, hex `0x17`, or a joined string read by `parseInt(x, R)`/`int(x, R)` --
@@ -97,7 +99,7 @@ every mode, only values re-rolled. D20 auto cases (TT 717b8371, Mastery 1478867c
 | You see | First move |
 |---|---|
 | `evidence.zip`, "method=AES Encrypted" | Triage already extracted it (`work/extracted/`) and decoded every plan. Diff the member list / contract ids against yesterday's to find the new language (D16: 4 `polyglot-ruby-*.rb` + `host-ruby-rack-ruby.rb` + 2 `.sh`). Triage used to skip new extensions (D7 `.mjs`, D8 `.php`, D9 `.lua`); D15-D16 it decoded them. Open members with `lib.common.read_member` (zipfile can't read AES). |
-| Prior-day languages in the contract | Cumulative: rerun the carried marker-routed solver FIRST (D9-D17 and D20: it covered each new v=3 language unchanged; D18 and D19 each needed a CARRIER patch). Any file it leaves planless: try `lib.codec.v3_plan(text)` next (it had D19's fix already). Spend thinking on the new language and on synthetic-label regimes. |
+| Prior-day languages in the contract | Cumulative: rerun the carried marker-routed solver FIRST (D9-D17, D20-D22: it covered each new v=3 language unchanged; D18 and D19 each needed a CARRIER patch). Any file it leaves planless: try `lib.codec.v3_plan(text)` next (it had D19's fix already). Spend thinking on the new language and on synthetic-label regimes. |
 | `.ps1` `$encodedMaterial = [Convert]::FromBase64String('..')` + `$nativeTypes` | `base64 -d` -> JSON descriptor: url/wallet/mutex/UA/file/ext/note by SHAPE. `$nativeTypes` gives the scenario: Process/Registry+wallet=resource, ZipFile/HttpWebRequest=collection, Aes/DirectoryInfo=impact. |
 | `.js` WSH, `decode_*`/`recover_*`/`inspect_*`, XOR key arrays, `"52:90:.."` | Run each file in an empty `node` `vm` (no require/ActiveXObject, `eval` -> capture); keep the first object with `steps`. Styles come off the `inspect_*` body. |
 | `.bat/.cmd` `rem HUNTRESS-CODEC:` / `HUNTRESS-MATERIAL:`, `set "itemN=..`, `:HUNTRESS_INSPECT` | Plan is in `set` fragments. Emulate cmd expansion in Python. MATERIAL = second encoded copy to cross-check. Expansion label: statement regime by default (Variant axes). Never run cmd. |
@@ -105,12 +107,11 @@ every mode, only values re-rolled. D20 auto cases (TT 717b8371, Mastery 1478867c
 | `.py` `*-recovered.py` with `MATERIAL_<id>`, `CODEC_<id>` | Decode from CODEC (or AST-whitelisted `decode_(load_(..))`). Plan v=2 carries syntax/obfuscation/carrier/windows_chain verbatim. |
 | `.sh` `readonly Material_<id>` + `readonly Codec_<id>` (+ `Feature_<id>()`) | Decode from the Codec const (multi-byte key = COMMA list). `Feature_` fixtures: role `advanced_syntax`, feature/primitive/campaign/stage_count/steps plan-verbatim, attack T1059.004. Never run bash. |
 | `.mjs` ESM `const Material_<id>`, async `load_/decode_/recover_/inspect_/plan_<id>` | Static decode (`lib.codec.find_codecs` + shape fallback). Don't run it. Plan fields verbatim; role from `steps`. |
-| `HUNTRESS_ANALYSIS_V1:<B64|HEX|HB64|FRAG>-..` in any comment + a descriptor literal (`.php .lua .js(HTA/WSF/SCT) .vbs(WSF) .mof .ts .au3 .applescript .proj .pl .rb .ahk`) | **Route by the marker before the extension.** Peel to `v=3|language=..|role=..|attack=..|adapter=..|host_profile=..|obfuscation_profile=..|stage_profile=..|next_language=..|stage_count=..|steps=..|campaign_id=..|url=..|file_path=..`. EVERY answer incl. role/attack is plan-verbatim. |
+| `HUNTRESS_ANALYSIS_V1:<B64|HEX|HB64|FRAG>-..` in any comment + a descriptor literal (`.php .lua .js(HTA/WSF/SCT) .vbs(WSF) .mof .ts .au3 .applescript .proj .pl .rb .ahk .gs .csx .groovy .yml`) | **Route by the marker before the extension.** Peel to `v=3|language=..|role=..|attack=..|adapter=..|host_profile=..|obfuscation_profile=..|stage_profile=..|next_language=..|stage_count=..|steps=..|campaign_id=..|url=..|file_path=..`. EVERY answer incl. role/attack is plan-verbatim. |
 | Prompt about fetch targets vs "network evidence" / "only one side" (D17), zip holds only scripts | Flavour: answer the per-file ids. If a pcap/HAR/Zeek/proxy/DNS/Sysmon file ships: `lib.codec.network_indicators(bytes)`, `reconcile({member: plan}, bytes)` -> `reconcile_answer(r, kind, accepted_values, what=)` (original spelling); declared side `fetch_sites(src)`; chain/root/leaf ids `download_graph(plans)` + `download_graph_answer`; tshark = oracle only. |
 | `HUNTRESS_ANALYSIS_V1:SPLIT` (marker with NO data on its line) + `const HUNTRESS_ANALYSIS_V1_SPLIT_<id> = [ "FRAG-..", "..", ..].join("")` (D18 `.gs`) | Multi-line literal-array carrier. Join the array's literals, drop the `<TAG>-` head of chunk 1, peel as usual (lib.codec.v3_plan and the D18+ solve.py `_v3` loop both do). If the 44 new ids come back unanswered, fix the CARRIER read first -- never walk the role enum. |
-| `.csx` `#nullable enable` / `using System..;` / `string descriptor_<8hex> = ".."` / `BuildPlan_<id>() =>` (D19 Roslyn C# script) | Ordinary v=3 marker + descriptor: plan-verbatim. `language=csharp_script`, campaign `CSHARP_SCRIPT-<8hex>`, url host `csharp_script-<10hex>` (underscore kept), attack T1059/T1105/none. |
 | `<%@ Page Language="C#" %>` + `<script runat="server">` + `EmbeddedCsx_<id> = "// HUNTRESS_ANALYSIS_V1:..\n..\"..\";"` (D19 host `aspx_inline_csharp`, file `.csx`) | NESTED carrier: the inner script is an escaped string. Unescape `\n`/`\"`/`\\` (and `""`, `&quot;`, CDATA for siblings: .ashx/.asmx/.cshtml/.jsp/classic .asp) and rescan; `lib.codec.v3_plan` already does. The `InertRequest_<id>` method and `<%= .. %>` output are noise. |
-| `.groovy` `final String descriptor_<8hex> = ".."` / `def buildPlan_<id> = { -> [descriptor: ..].asImmutable() }` / `pipeline { agent none; stages { stage(..) { steps { echo .. } } } }` (D20 Groovy + `jenkins_pipeline` host) | Ordinary one-line v=3 (`//` marker): plan-verbatim, carried solver answered all. `language=groovy`, campaign `GROOVY-<8hex>`, url host `groovy-<10hex>`, attack T1059/T1105/none. The `pipeline {}` block is inert noise; controller/agent split never asked. |
+| A new language with a plain one-line marker: `.csx` (`#nullable enable`, `string descriptor_<8hex>`, `BuildPlan_<id>() =>`; D19), `.groovy` (`final String descriptor_<8hex>`, `def buildPlan_<id> = { -> [..] }`, inert `pipeline { agent none .. }`; D20), `.yml` (line-1 `# HUNTRESS_ANALYSIS_V1:<TAG>-..`, `on: workflow_dispatch:`, `jobs: analyze: runs-on: ubuntu-latest`, `env: HUNTRESS_DESCRIPTOR: ".."`, `run: ':'`; D21 GitHub Actions), `.nsi` (line-1 `; HUNTRESS_ANALYSIS_V1:<TAG>-..`, `Unicode True`, `Name "Huntress Analysis <8hex>"`, `OutFile "huntress-<8hex>.exe"`, `Section` / `StrCpy $0 "<same data>"` / `SectionEnd`; D22 NSIS) | Carried solver answers all unpatched: plan-verbatim. Spellings: `language=<family>` (csharp_script / groovy / github_actions / nsis), campaign `<FAMILY_UPPER>-<8hex>`, url host `<family>-<10hex>` (underscore kept), attack T1059 parent / T1105 / none, polyglot host_profile `standalone`. Surrounding host syntax (Jenkins pipeline, GHA triggers/runner/permissions, NSIS Name/OutFile/Section) is inert noise; controller/agent, trust-boundary, persistence and setup-vs-payload questions were never asked. Don't YAML-parse for the plan (PyYAML 1.1 turns `on:` into `True`); regex the raw bytes. |
 | `<%@ Language=VBScript %>` + `<% ' HUNTRESS_ANALYSIS_V1:..` + `Dim descriptor_<id>` / `Response.Write` in a `.vbs` (D20 `host-classic-asp-vbscript`) | A v=3 host for an OLD language: the marker plan says `language=vbscript`, campaign `VBSCRIPT-`, host_profile `classic_asp`. Route by the marker before `.vbs` (there is no Codec_ const); plan-verbatim. |
 | Prompt about a process tree / "native telemetry" / "child claiming a parent it never had" (D18) | Flavour so far. If Sysmon EID 1 / 4688 / auditd / ps-forest evidence ships: `lib.codec.process_events(bytes)` -> `process_tree` -> `process_tree_answer`; declared side `declared_spawns(plans, sources)` (+ `spawn_parent_candidates` for WMI/COM/schtasks proxy parents); liar = `reconcile_processes(declared, observed)` -> `reconcile_processes_answer` (PPID spoofing T1134.004). |
 | An id whose field suffix is a plan key never asked before (`-verdict`, `-language`, ...) | `lib.codec.plan_answer(answer_id, plan, q)` / `plan_key_for` (longest suffix, hyphen->underscore, aliases). Copy plan-verbatim. |
@@ -143,24 +144,27 @@ T+17 s; TT and Mastery (5 sets) missed ~25 batch-expansion ids -> the label-regi
 **D16-D17 (+Ruby `.rb` + `ruby_rack` host + 2 Bash; then +AutoHotkey `.ahk`, no host; 1095 -> 1139 ids)**: equivalence and
 network-reconcile prompts never asked. Ruby `DESCRIPTOR_<8HEX> = ".."`, AHK `descriptor_<8hex> := ".."`, plan-verbatim. D16
 single lost 5 probes on batch expansion (statement regime keyed on `started_at`), CORRECT T+4 min 23 s; D17 carried solver T+13 s.
-**D18 Orphan Process (+4 Apps Script `.gs` + `google_docs_sidebar` host; 1194 ids)**: process-tree prompt = flavour. Twist =
-SPLIT carrier (marker without data + multi-line `[..].join("")` array). Carried solver left 55 ids planless -> ~30 rejected enum
-probes; array-join patch -> CORRECT T+54 s; TT 11.7 s, Mastery 17.7 s first try.
-**D19 Sharp Practice (base `managed-assembly-bridge`; +4 `.csx` + `host-aspx-inline-csharp-csharp-script.csx`; 1249 ids)**:
-"where the bridge leads" = per-file `next-language`. Twist = NESTED escaped carrier (ASPX `EmbeddedCsx_<id>` C# string holding
-the inner csx with `\n`/`\"`) -> 11 host ids planless; a guessed role/attack in a 46-id bulk POST sank the whole POST;
-unescape-and-rescan patch -> CORRECT T+39 s (2 wrong probes). `lib.codec.v3_plan` already read it. TT 5.3 s, Mastery 12.2 s.
-**D20 The Butler Did It (base `jenkins-pipeline-intrusion`; 1329 ids, 145 members)**: +4 `polyglot-groovy-*.groovy`,
-`host-jenkins-pipeline-groovy.groovy` (profile `jenkins_pipeline`), **`host-classic-asp-vbscript.vbs`** (profile `classic_asp`,
-`language=vbscript` -- first host file for a PRIOR language, and first day with TWO host files), + Bash `coprocess-block`
-(feature `coprocess_block`, primitive `coproc_declaration`) and `mapfile-process` (`mapfile_process`,
-`mapfile_process_substitution`). Artifact: all one-line v=3 carriers (`//` marker + `final String descriptor_<8hex>` in Groovy;
-`'` marker inside `<% %>` + `Dim`/assign in ASP); tags HEX/B64/HB64/FRAG as usual; no twist. Prompt ("controller vs agent
-semantics, trace the modeled build into its prior-language stages") = flavour; nothing asked beyond the per-file ids.
-Plans: Groovy attack T1059 parent (not a sub-id), launcher steps `decode_embedded>write_file>dispatch_process`, staged_chain
-`profile_host>decode_configuration>dispatch_language`; both hosts staged_chain/T1059/operation_graph. Carried solver (with the
-D19 unescape patch + lib fallback) answered 1329/1329: race harness CORRECT **T+13 s, 0 wrong**; TT 717b8371 5.0 s (solve
-0.95 s), Mastery 1478867c (6645 ids) 11.9 s, first try.
+**D18 Orphan Process (+Apps Script `.gs` + `google_docs_sidebar` host; 1194)**: twist = SPLIT carrier (marker without data +
+multi-line `[..].join("")` array); 55 ids planless -> ~30 rejected enum probes; array-join patch -> CORRECT T+54 s.
+**D19 Sharp Practice (+`.csx` + ASPX host; 1249)**: twist = NESTED escaped carrier (`EmbeddedCsx_<id>` C# string holding the
+inner csx with `\n`/`\"`); a guessed value in a 46-id bulk POST sank it; unescape patch -> CORRECT T+39 s (2 wrong).
+**D20 The Butler Did It (+Groovy + `jenkins_pipeline` host + `classic_asp` host wrapping OLD VBScript + Bash `coprocess_block`/
+`mapfile_process`; 1329)**: plain one-line carriers, no twist; CORRECT T+13 s 0 wrong; TT 5.0 s, Mastery 11.9 s first try.
+**D21 Actions Speak Louder (base `github-actions-persistence`; 1373)**: +4 `polyglot-github_actions-*.yml` only. Inert workflows:
+line-1 `#` marker, `on: workflow_dispatch:`, job `analyze` `runs-on: ubuntu-latest`, `env: HUNTRESS_DESCRIPTOR: ".."`, `run:
+':'` -- no schedule/permissions/secrets, so the trigger/trust/"keeps coming back" prompt had nothing behind it. Carried
+solver unpatched: CORRECT T+23 s 0 wrong; TT 9.2 s, Mastery 8.5 s first try.
+**D22 Next, Next, Finish (base `installer-script-chain`; 1417 ids = +44, 153 members)**: +4
+`polyglot-nsis-{benign-utility,downloader,launcher,staged-chain}.nsi` ONLY -- no host file, no Bash. Artifact: 7-line inert
+NSIS scripts: line 1 `; HUNTRESS_ANALYSIS_V1:<B64|HEX|HB64|FRAG>-<data>`, `Unicode True`, `Name "Huntress Analysis <8hex>"`,
+`OutFile "huntress-<8hex>.exe"`, `Section` / `StrCpy $0 "<same data>"` / `SectionEnd`. No `File`/`SetOutPath`/`WriteRegStr`/
+`ExecWait`/`nsExec`/`inetc` -- the prompt's "real setup actions vs modeled payload, every cross-language handoff" had nothing
+behind it beyond the plan's `next_language` (powershell/jscript/batch/vbscript) and was never asked. Plans: `language=nsis`,
+campaign `NSIS-<8hex>`, url `https://nsis-<10hex>.example.invalid/stage`, file_path `/tmp/huntress-nsis/.<16hex>.stage`; attack
+T1059 parent / T1105 / none; host_profile `standalone`; role independent of steps again (benign_utility with `decode_embedded>
+write_file>dispatch_process`, launcher with `decode_configuration>return_configuration`). Carried solver (D21 copy, byte-
+identical, no patch) answered 1417/1417 in ONE submit: CORRECT **T+25 s, 0 wrong**; TT c355207f 6.8 s (solve 1.4 s, start 2.3 +
+submit 3.1), Mastery c8d60ca4 (**6 sets**, 8502 ids) 18.2 s (solve 3.7 s, start 7.2 + submit 7.2), all first try.
 
 ## GM answer conventions learned
 - **Check `answer_format.kind` first.** `enum` lists values (scenario, role). `mitre_attack_id` takes `T####[.###]` or literal
@@ -172,10 +176,11 @@ D19 unescape patch + lib fallback) answered 1329/1329: race harness CORRECT **T+
   batch `graph` (linear/single/diamond/fan_out/fallback_retry/cross_language/same_language); Python syntax/obfuscation/carrier/
   windows_chain; Bash feature/primitive (16 seen D7-D16); v=3 host_profile (standalone, wsf_jscript, wsf_mixed, hta_jscript,
   php_webshell, sct_scriptlet, lua_openresty, perl_cgi, ruby_rack, google_docs_sidebar (D18), aspx_inline_csharp (D19),
-  jenkins_pipeline + classic_asp (D20)),
+  jenkins_pipeline + classic_asp (D20); D21 GH Actions and D22 NSIS polyglots were `standalone` -- a CI file or an installer
+  script is not automatically a host),
   obfuscation (base64/plain_hex/hex_base64/fragmented_hex), stage_profile (single_descriptor/two_stage_download_execute/three_stage_decode_write_launch/cross_language_handoff), next_language.
 - **v=3 role and attack too.** GM accepted the plan's PARENT ids `T1059` (launcher, staged_chain, every host) and `T1053`
-  (persistence_descriptor); AutoHotkey (D17) too, not `.010`; Apps Script (D18) too, not `.007`; C# script (D19); Groovy + classic ASP (D20). The attack
+  (persistence_descriptor); AutoHotkey (D17) too, not `.010`; Apps Script (D18) too, not `.007`; C# script (D19); Groovy + classic ASP (D20); GitHub Actions (D21); NSIS (D22). The attack
   question TEXT explains it: "the parent Command and Scripting Interpreter technique is also accepted when a language-specific
   sub-technique is canonical; for a staged chain or relay the earlier ingress-transfer technique is also accepted; none is
   also accepted for a relay" -- read the question's precedence text before probing ATT&CK. **v=3 role does NOT follow
@@ -227,7 +232,7 @@ D19 unescape patch + lib fallback) answered 1329/1329: race harness CORRECT **T+
   `-<field>` suffix (`stage-count`/`stage-profile` before `stage`).
 - **GM error body saved as the artifact** (D7 TT): check size + sha256 against the start response first; tiny `{"error":..}` =
   transport failure (re-download, exit non-zero), never a regression case.
-- **Stale notes travel with copied solvers** (D8-D20 `solver/NOTES.md` is still the D7 copy; D15-D16 regime fixes live only in
+- **Stale notes travel with copied solvers** (D8-D22 `solver/NOTES.md` is still the D7 copy; D15-D16 regime fixes live only in
   solve.py comments). Date every VARIANT AXIS line by day + attempt id; diagnose EVERY failed attempt.
 - **Unknown codec rep name -> silent no-plan** (D7 TT, 15 ids): fall back to material-shape readings.
 - **cmd parsing**: `%item0%` is a variable, not `%0`+`item`; CRLF/LF mixes and `SeT` casing occur. **Bash Codec key** comma
@@ -235,7 +240,7 @@ D19 unescape patch + lib fallback) answered 1329/1329: race harness CORRECT **T+
 - **Timed modes are a transport race** (D7 TT 13.5 s for 0.4 s of solving; D16 5-set Mastery hit the 60 s runner cap): fork
   per set, submit all sets in one call (chunks <= 500 answers / 512 KiB); pair same-named Mastery deliveries by sha256; index
   nested AES zips once, never decrypt script leaves to sniff for PK.
-- **Reading the narrative prompt as the task** (D8, D15-D20): seven prompts promised comparison/reconciliation/tree questions
-  that never came. Diff `answer_ids` first; spend time only on ids the carried solver cannot answer.
+- **Reading the narrative prompt as the task** (D8, D15-D22): nine prompts promised comparison/reconciliation/tree/trust/
+  setup-vs-payload questions that never came. Diff `answer_ids` first; spend time only on ids the carried solver cannot answer.
 - **Never execute fixtures.** Decode from the Codec const / descriptor plus a restricted interpreter; accept a plan only if it
   parses as `k=v|..` with `steps` (or `feature`).

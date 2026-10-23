@@ -1,0 +1,9 @@
+{
+ "codec": "zlib-w15-l6-hex",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-vole-49",
+ "encoded": "789c25c9310ec2300c05d0abfcee74eb0217602a131730e917444deaca76931e1f24d6f71e39115d6dc5c2a44bdede884f7674b17aec039e0ad7d278811faf9ae3bf3c250564f34e43e80f89bb5462160fda0da968a38d4d0bc7e9fa054a32242a",
+ "generator_cmd": "printf %s \"$plain\" | perl -MCompress::Raw::Zlib -e '($w,$l,$d)=@ARGV; ($z)=Compress::Raw::Zlib::Deflate->new(-WindowBits=>$w,-Level=>$l,-AppendOutput=>1,(length $d ? (-Dictionary=>$d) : ())); local $/; $i=<STDIN>; $z->deflate($i,$o); $z->flush($o); print $o' -- 15 6 \"$dict\" | xxd -p | tr -d '\\n'  # perl Compress::Raw::Zlib writer (WindowBits, Level, Dictionary) + coreutils wrapper",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | python3 -c 'import sys,zlib; w=int(sys.argv[1]); d=sys.argv[2].encode(); o=zlib.decompressobj(w,zdict=d) if d else zlib.decompressobj(w); sys.stdout.buffer.write(o.decompress(sys.stdin.buffer.read()))' 15 \"$dict\"  # coreutils unwrap + python zlib.decompressobj(wbits, zdict)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-vole-49",
+ "expected": "match"
+}

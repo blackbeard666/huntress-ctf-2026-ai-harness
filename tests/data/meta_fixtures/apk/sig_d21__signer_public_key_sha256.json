@@ -1,0 +1,8 @@
+{
+ "field": "apk.signer_public_key_sha256",
+ "expected": "4bbd391651410dfafa0f51d15725adb031a53a4db6393f375e79091ebce04b54",
+ "generator_cmd": "GM D21 artifact (v1 FIXTURE-.RSA + v2 block): cp tests/data/meta_fixtures/apk/d21__version_code.bin (= mobile-001.apk of challenges/day21/metadata-package-deal evidence zip)",
+ "oracle_cmd": "apksigner verify --print-certs -v mobile-001.apk -> Signer #1 public key SHA-256 digest",
+ "decoy": false,
+ "member": "mobile-001.apk"
+}

@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=applescript|role=persistence|verdict=malicious|attack=T1543.001|campaign_id=OSA-7c1e9a20|url=https://osa-7c1e9a20.example.invalid/agent|file_path=/Users/Shared/.7c1e9a20/agent.scpt",
+ "decoy": false,
+ "note": "launchd-plist-route: lib.codec.plist_scripts / plist_answer; find_codecs reads ProgramArguments script bodies (sh -c, osascript -e) -- XML LaunchAgent, osascript -e AppleScript split list",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/plist_launchd_gen.py tests/data/script_fixtures  (stdlib plistlib.dumps FMT_XML / FMT_BINARY; no lib code)",
+ "oracle_cmd": "python3 -I -c \"import plistlib,sys,base64,re;a=plistlib.load(open(sys.argv[1],'rb'))['ProgramArguments'];print(base64.b64decode(''.join(re.findall(r'\\\"(?:B64-)?([A-Za-z0-9+/=]+)\\\"',' '.join(a)))).decode())\" tests/data/script_fixtures/plist_launchd_xml_osascript.plist"
+}

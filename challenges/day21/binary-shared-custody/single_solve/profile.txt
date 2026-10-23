@@ -1,0 +1,27 @@
+cProfile of `cases/single_solve` (886056 function calls (875667 primitive calls) in 1.834 seconds):
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    215/1    0.003    0.000    1.677    1.677 {built-in method builtins.exec}
+      2/1    0.000    0.000    1.677    1.677 solve.py:1(<module>)
+      2/1    0.004    0.002    1.677    1.677 solve.py:1011(main)
+      2/1    0.001    0.001    1.672    1.672 solve.py:971(_solve_pairs)
+    65/24    0.005    0.000    1.506    0.063 threading.py:323(wait)
+      252    0.003    0.000    1.396    0.006 solve.py:256(group_members)
+      252    0.001    0.000    1.371    0.005 solve.py:167(resolve)
+      300    0.001    0.000    1.370    0.005 _base.py:428(result)
+     25/1    0.005    0.000    1.324    1.324 thread.py:54(run)
+     1901    0.614    0.000    1.321    0.001 {method 'join' of 'bytes' objects}
+     25/1    0.002    0.000    1.320    1.320 solve.py:74(_aes_member)
+      252    0.003    0.000    1.035    0.004 solve.py:865(answer)
+    51/26    0.001    0.000    0.518    0.020 queue.py:154(get)
+   232/19    0.002    0.000    0.389    0.020 <frozen importlib._bootstrap>:1349(_find_and_load)
+   231/19    0.002    0.000    0.388    0.020 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+   217/20    0.001    0.000    0.385    0.019 <frozen importlib._bootstrap>:911(_load_unlocked)
+        1    0.000    0.000    0.384    0.384 solve.py:112(sha)
+   191/20    0.001    0.000    0.384    0.019 <frozen importlib._bootstrap_external>:993(exec_module)
+   496/37    0.001    0.000    0.363    0.010 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+       70    0.000    0.000    0.343    0.005 solve.py:691(facts)
+    36/22    0.310    0.009    0.304    0.014 {method 'decompress' of 'zlib.Decompress' objects}
+       24    0.000    0.000    0.295    0.012 solve.py:697(_facts)
+       79    0.002    0.000    0.290    0.004 solve.py:818(d17_extra)
+    51/42    0.000    0.000    0.216    0.005 {built-in method builtins.__import__}
+       19    0.001    0.000    0.177    0.009 solve.py:649(elf_facts)

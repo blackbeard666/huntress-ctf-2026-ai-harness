@@ -1,0 +1,8 @@
+{
+ "field": "aab.min_sdk_version",
+ "expected": "24",
+ "generator_cmd": "python3 tests/data/meta_fixtures/aab/gen_fixtures.py OUT tests/data/meta_fixtures/apk/d21__version_name.bin SPLITS (google.protobuf dynamic messages for the proto manifest/BundleConfig.pb; zipfile containers; config splits from `aapt2 link -o config.<x>.apk --manifest <manifest package=... split=config.<x>>`) -> aab_full.aab",
+ "oracle_cmd": "unzip -p aab_full.aab base/manifest/AndroidManifest.xml > AndroidManifest.xml && zip t.apk AndroidManifest.xml && aapt2 dump xmltree t.apk --file AndroidManifest.xml -> uses-sdk android:minSdkVersion(0x0101020c)=24",
+ "decoy": false,
+ "member": "aab_full.aab"
+}

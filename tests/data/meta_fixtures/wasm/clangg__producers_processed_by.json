@@ -1,0 +1,8 @@
+{
+ "field": "wasm.producers_processed_by",
+ "expected": "[\"Ubuntu clang 18.1.8 (20ubuntu8)\"]",
+ "generator_cmd": "printf 'int add(int a,int b){return a+b;}' > a.c; clang-18 --target=wasm32 -g -O1 -c a.c -o g.o (Ubuntu clang 18.1.8)",
+ "oracle_cmd": "clang-18 --version -> 'Ubuntu clang version 18.1.8 (20ubuntu8)'; wasm-objdump -s -j producers g.o -> 'processed-by' 01 'Ubuntu clang' '18.1.8 (20ubuntu8)'",
+ "decoy": false,
+ "member": "g.o"
+}

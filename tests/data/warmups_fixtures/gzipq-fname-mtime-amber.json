@@ -1,0 +1,10 @@
+{
+ "codec": "gzip-base64 (FNAME + mtime)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-31",
+ "encoded": "H4sICPBf12oCA3N0YWdlMi5iNjQAJckxEoJADAXQq3x6KRg6L2CFlRcIy1d3YDdMElyOrzO2791zIpraioVJl1xfiHd2NLFy7B0eCtftwwv8mEuO//KUFJDqjYbQHxI3KcQkHrQrpMy0/ilb0tqPwxezMsRiZgAAAA==",
+ "expected": "match",
+ "generator_cmd": "printf %s \"$plain\" > stage2.b64; touch -d '2026-10-20 12:34:56' stage2.b64; gzip -9 -c stage2.b64 | base64 -w0  # GNU gzip keeps FNAME + mtime",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | gzip -dc; printf %s \"$encoded\" | base64 -d | file -",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-31",
+ "oracle_header": "gzip compressed data, was \"stage2.b64\", last modified: Tue Oct 20 12:34:56 2026, max compression, from Unix"
+}
