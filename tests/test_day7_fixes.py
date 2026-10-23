@@ -9,6 +9,7 @@ import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+os.environ.setdefault("HCTF_AUTO_EARLY", "0")   # D23 #2 auto-armed early event: covered by test_d23_postmortem
 from hctf import orchestrate, remote, timed, triage  # noqa: E402
 from lib.common import find_artifact  # noqa: E402
 

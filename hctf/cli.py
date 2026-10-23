@@ -468,12 +468,43 @@ def _questions(start):
 def _normalize(value, q):
     """Apply the question's normalization. 'exact' is left untouched; everything else is at least trimmed."""
     norm = (q or {}).get("normalization")
+    v = _json_coerce(value, q)
     if norm == "exact":
-        return value
-    v = value.strip()
+        return v
+    v = v.strip()
     if norm == "case_insensitive":
         v = v.lower()
     return v
+
+
+def _json_coerce(value, q):
+    """answer_format.kind == "json" but the value is a Python literal (`['a', 'b']`, `{'k': 1}`, True/None): send the
+    same data as compact JSON. D23 metadata Mastery: a solver returned a list that was str()'d -> `['box-06/...', ...]`
+    rejected on every set; the compact JSON of the same list was accepted. Valid JSON is never touched."""
+    af = (q or {}).get("answer_format") if isinstance((q or {}).get("answer_format"), dict) else {}
+    if str(af.get("kind")) != "json" or not isinstance(value, str):
+        return value
+    s = value.strip()
+    if not s or s[0] not in "[{(":
+        return value
+    try:
+        json.loads(s)
+        return value
+    except ValueError:
+        pass
+    import ast
+    try:
+        obj = ast.literal_eval(s)
+    except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+        return value
+    if isinstance(obj, tuple):
+        obj = list(obj)
+    if not isinstance(obj, (list, dict)):
+        return value
+    try:
+        return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+    except (TypeError, ValueError):
+        return value
 
 
 def _format_problem(value, q):

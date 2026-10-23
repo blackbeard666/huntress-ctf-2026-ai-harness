@@ -140,22 +140,145 @@ def resolve_labels_online(cid, sdir, wrong_aids, lane=None, log=print, budget=8)
         log(f"[{cid}] online-resolve solve error: {e}")
         answers = {}
     vocab = labels.load_vocab()
-    resolved = set()
+    qmap = {q.get("id"): q for q in contract.get("questions") or [] if isinstance(q, dict)}
+    plan, skipped = {}, []
     for aid in targets:
         sv = answers.get(aid)
         if sv and sv in vocab.get(labels.ending(aid), []):
             continue  # this variant uses an already-confirmed construct for this field; nothing to resolve
-        left = seconds_left(contract)
-        if left is not None and left < 2:
-            break
-        cands = [c for c in playbook.seed_candidates(lane, aid, solver_value=sv) if c not in labels.judged_wrong(cid, aid)]
-        if not cands:
+        if _composite_label(sv, qmap.get(aid)):
+            skipped.append(aid)   # a `a|b|c` triple: one-word seeds can never match it (D23 batch-*-style)
             continue
-        r = labels.probe(cid, aid, cands, budget=budget, delay=0.3, log=log)
-        if r.get("accepted"):
-            resolved.add(aid)
-            log(f"[{cid}] online-resolved label {aid} = {r['accepted']} (cached to vocab.json)")
+        cands = [c for c in playbook.seed_candidates(lane, aid, solver_value=sv)
+                 if c not in labels.judged_wrong(cid, aid) and _same_arity(c, sv)][:budget]
+        if cands:
+            plan[aid] = cands
+    if skipped:
+        log(f"[{cid}] online-resolve: {len(skipped)} composite label field(s) skipped (no one-word seed can match "
+            f"them; live answer / generalize own them): {skipped[:4]}")
+    if not plan:
+        return set()
+    # every field's candidates in parallel, bounded by time (D23 script Mastery: 8 seeds x 12 fields sequentially at
+    # ~10 s per GM submit on a 10465-field attempt = ~10 min before any LLM looked at the bytes)
+    left = seconds_left(contract)
+    stop_at = time.time() + (min(LABEL_ONLINE_MAX_S, max(0.0, left - 2)) if left is not None else LABEL_ONLINE_MAX_S)
+    resolved = set()
+    from concurrent.futures import ThreadPoolExecutor, wait
+    ex = ThreadPoolExecutor(max_workers=min(len(plan), LABEL_ONLINE_CONC))
+    futs = {ex.submit(labels.probe_first, cid, aid, cands, conc=2, harness="label", deadline=stop_at): aid
+            for aid, cands in plan.items()}
+    done, pending = wait(futs, timeout=max(0.0, stop_at - time.time()) + 15)
+    ex.shutdown(wait=False, cancel_futures=True)
+    for f in done:
+        try:
+            v = f.result()
+        except Exception:  # noqa: BLE001 - an unjudged probe resolves nothing
+            v = None
+        if v:
+            resolved.add(futs[f])
+            log(f"[{cid}] online-resolved label {futs[f]} = {v} (cached to vocab.json)")
+    if pending:
+        log(f"[{cid}] online-resolve: {len(pending)} field(s) still probing after the {LABEL_ONLINE_MAX_S:g}s budget: "
+            "moving on")
     return resolved
+
+
+def list_alternates(value, q=None):
+    """Cheap, deterministic re-spellings of a LIST-valued answer the GM rejected, most likely first: the same items
+    sorted / reversed / de-duplicated, as compact JSON (or in the value's own `, `-separated form). D23 metadata: the
+    central-directory names in archive order were rejected, the same names sorted accepted (a live worker spent 4 min
+    on byte forensics first); Mastery's Mach-O cpu-type set likewise wanted ascending order. [] for non-lists."""
+    import ast
+    s = str(value or "").strip()
+    fmt = (q or {}).get("answer_format") or {}
+    items, as_json = None, False
+    if s.startswith("["):
+        for parse in (json.loads, ast.literal_eval):
+            try:
+                v = parse(s)
+            except (ValueError, SyntaxError, TypeError):
+                continue
+            if isinstance(v, list):
+                items, as_json = v, True
+                break
+    elif str(fmt.get("kind")) != "json" and re.fullmatch(r"[^,\n]+(,\s*[^,\n]+)+", s):
+        sep = ", " if ", " in s else ","
+        items = [x.strip() for x in s.split(",")]
+    if not items or len(items) < 2 or not all(isinstance(x, (str, int, float)) for x in items):
+        return []
+
+    def render(xs):
+        if as_json:
+            return json.dumps(xs, separators=(",", ":"), ensure_ascii=False)
+        return sep.join(str(x) for x in xs)
+
+    def key(x):
+        return (isinstance(x, str), x if not isinstance(x, str) else x)
+
+    dedup = list(dict.fromkeys(items))
+    orders = [sorted(items, key=key), list(reversed(items)), sorted(items, key=key, reverse=True), dedup,
+              sorted(dedup, key=key), items]
+    out = []
+    for xs in orders:
+        r = render(xs)
+        if r != s and r not in out:
+            out.append(r)
+    return out
+
+
+def resolve_format_alternates(cid, wrong, log=print, budget_s=None):
+    """For every GM-rejected LIST-valued field: probe list_alternates (parallel one-field submits on the open attempt,
+    time-bounded). Returns the set of answer_ids the GM accepted an alternate for (recorded like a label probe)."""
+    from . import labels
+    contract = cli.load(cid, "start.json") or {}
+    qmap = {q.get("id"): q for q in contract.get("questions") or [] if isinstance(q, dict)}
+    plan = {}
+    for aid, v in wrong or []:
+        cands = [c for c in list_alternates(v, qmap.get(aid)) if c not in labels.judged_wrong(cid, aid)]
+        if cands:
+            plan[aid] = cands[:6]
+    if not plan:
+        return set()
+    budget_s = FORMAT_ALT_MAX_S if budget_s is None else budget_s
+    stop_at = time.time() + budget_s
+    from concurrent.futures import ThreadPoolExecutor, wait
+    ex = ThreadPoolExecutor(max_workers=min(len(plan), LABEL_ONLINE_CONC))
+    futs = {ex.submit(labels.probe_first, cid, aid, cands, conc=3, harness="alt", deadline=stop_at): aid
+            for aid, cands in plan.items()}
+    done, _ = wait(futs, timeout=budget_s + 15)
+    ex.shutdown(wait=False, cancel_futures=True)
+    got = set()
+    for f in done:
+        try:
+            v = f.result()
+        except Exception:  # noqa: BLE001
+            v = None
+        if v:
+            got.add(futs[f])
+            log(f"[{cid}] format alternate accepted for {futs[f]}: {str(v)[:120]}")
+    if plan and not got:
+        log(f"[{cid}] format alternates: none of {sum(map(len, plan.values()))} re-ordering(s) for "
+            f"{len(plan)} list field(s) accepted")
+    return got
+
+
+FORMAT_ALT_MAX_S = float(__import__("os").environ.get("HCTF_FORMAT_ALT_MAX_S", "20"))
+LABEL_ONLINE_MAX_S = float(__import__("os").environ.get("HCTF_LABEL_ONLINE_MAX_S", "30"))   # whole online-resolve step
+LABEL_ONLINE_CONC = int(__import__("os").environ.get("HCTF_LABEL_ONLINE_CONC", "6"))       # fields probed at once
+
+
+def _composite_label(value, q=None):
+    """A multi-part label (`topology|wrapper|expansion`): the value is `|`-joined or the question asks for labels
+    'joined by |'. Playbook seeds are single labels, so probing one against it can only be wrong."""
+    if value and "|" in str(value):
+        return True
+    text = str((q or {}).get("question") or "")
+    return bool(re.search(r"joined by\s*[`'\"]?\|", text))
+
+
+def _same_arity(cand, value):
+    """A candidate is only worth a submit when it has the solver value's shape (same number of `|` parts)."""
+    return value in (None, "") or str(cand).count("|") == str(value).count("|")
 
 
 MAX_AUTO_CASES = int(__import__("os").environ.get("HCTF_MAX_AUTO_CASES", "40"))

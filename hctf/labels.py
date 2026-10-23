@@ -580,13 +580,18 @@ def label_like(cid, aid, lane=None):
     return bool(sib) and all(re.fullmatch(r"[a-z][a-z0-9]*(?:[_-][a-z0-9]+){0,4}", v) and len(v) <= 40 for v in sib)
 
 
-def probe_first(cid, aid, cands, conc=None, harness="label", log=None):
+def probe_first(cid, aid, cands, conc=None, harness="label", log=None, deadline=None):
     """Probe cands for aid in parallel waves of `conc` one-field submits; the first accepted value, or None. Harness
-    probes never count against a worker's per-field cap (cli.submit harness=)."""
+    probes never count against a worker's per-field cap (cli.submit harness=). `deadline` (epoch s): no new wave
+    starts after it; a mode that went CORRECT meanwhile ends the probing too."""
     from concurrent.futures import ThreadPoolExecutor
     from . import grouptest
     conc = max(1, conc or grouptest.CONC)
     for i in range(0, len(cands), conc):
+        if deadline is not None and time.time() >= deadline:
+            return None
+        if i and cli.is_complete(cid):
+            return None
         wave = cands[i:i + conc]
 
         def one(v):

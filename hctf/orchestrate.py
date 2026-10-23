@@ -77,6 +77,70 @@ def label_only_failure(wrong):
     return all(field_family(a) in CACHEABLE_FAMILIES for a in ids)
 
 
+def _case_problem(r, max_fields=None):
+    """One failing baseline case as ONE bounded prompt line: at most `max_fields` diff fields with short values, then a
+    count. A replay timeout says so instead of listing every field as got=None (D23 script: 6 Mastery cases timed out
+    under load -> 2.6 MB of diff -> a 1.39M-token generalize prompt the API refused)."""
+    max_fields = PROB_DIFF_FIELDS if max_fields is None else max_fields
+    diff, err = r.get("diff") or {}, r.get("error")
+    case = r.get("case")
+    if err and "timeout" in str(err).lower():
+        line = (f"case {case}: error={err} (the replay timed out -- usually host load, not a wrong answer; "
+                f"{len(diff) if isinstance(diff, dict) else '?'} field(s) unproduced; rerun it alone with "
+                f"`hctf solver-test <id> --case {case}`)")
+    else:
+        if isinstance(diff, dict) and diff:
+            def short(v):
+                s = json.dumps(v, ensure_ascii=False) if not isinstance(v, str) else v
+                return s if len(s) <= 160 else s[:157] + "..."
+            shown = {k: {kk: short(vv) for kk, vv in (v.items() if isinstance(v, dict) else {"value": v}.items())}
+                     for k, v in list(diff.items())[:max_fields]}
+            more = len(diff) - len(shown)
+            dtxt = f"{shown}" + (f" ... (+{more} more field(s); `hctf solver-test <id> --case {case}` lists them)"
+                                 if more > 0 else "")
+        else:
+            dtxt = f"{diff}"
+        line = f"case {case}: error={err} diff={dtxt} unverified={r.get('unverified')}"
+    if r.get("rejected_hits"):
+        got = r.get("rejected_got") or {}
+        sample = dict(list(got.items())[:max_fields]) if isinstance(got, dict) else got
+        line += (f" answered={r.get('answered')}/{r.get('total')} GM-REJECTED values produced again={sample}"
+                 + (f" (+{len(got) - max_fields} more)" if isinstance(got, dict) and len(got) > max_fields else ""))
+    return line
+
+
+def _code_sig(d):
+    """{relative path: sha1} of a solver dir's code (cases/ and __pycache__ excluded) -- did a worker change anything?
+    Content, not mtimes: the snapshot is a copy (copytree keeps mtimes, but a touch-only save must not count)."""
+    import hashlib
+    d = Path(d)
+    out = {}
+    if not d.is_dir():
+        return out
+    for p in sorted(d.rglob("*")):
+        rel = p.relative_to(d)
+        if not p.is_file() or rel.parts[0] == "cases" or "__pycache__" in rel.parts:
+            continue
+        try:
+            out[str(rel)] = hashlib.sha1(p.read_bytes()).hexdigest()
+        except OSError:
+            continue
+    return out
+
+
+def _cap_lines(lines, limit=None):
+    """Join prompt lines but stop at `limit` characters with a count of what was left out."""
+    limit = PROBS_MAX_CHARS if limit is None else limit
+    out, n = [], 0
+    for i, ln in enumerate(lines):
+        if n + len(ln) > limit:
+            out.append(f"  - ... (+{len(lines) - i} more problem line(s) omitted to keep the prompt bounded)")
+            break
+        out.append(ln)
+        n += len(ln) + 1
+    return "\n".join(out)
+
+
 def _rel(p):
     try:
         return Path(p).relative_to(ROOT)
@@ -167,6 +231,26 @@ LIVE_ANSWER = os.environ.get("HCTF_LIVE_ANSWER", "1") == "1"
 # worker on the open untimed attempt would have answered them (reference/PLAN_SUB2MIN.md P0)
 LIVE_MAX_FIELDS = int(os.environ.get("HCTF_LIVE_MAX_FIELDS", "80"))
 LIVE_TIMEOUT = float(os.environ.get("HCTF_LIVE_TIMEOUT", "900"))
+# D23 post-mortem (reference/D23_POSTMORTEM.md):
+# #1b the live answer starts at the block, BESIDE the online label/format resolution (it used to wait behind ~10 min of
+#     label probes on script Mastery); #1e an attempt is never re-run on a solver the generalize left unchanged (the TT
+#     re-bisected 593 answers for 100 s on the same code); #1f a live pass moves the chain on at once (no generalize prep,
+#     no full transactional replay in front of the next mode: mobile 58 s, script 76 s).
+LIVE_FIRST = os.environ.get("HCTF_LIVE_FIRST", "1") != "0"
+SKIP_UNCHANGED_RERUN = os.environ.get("HCTF_SKIP_UNCHANGED_RERUN", "1") != "0"
+FAST_LIVE_ACCEPT = os.environ.get("HCTF_FAST_LIVE_ACCEPT", "1") != "0"
+# #2 contract-ahead: the first timed attempt whose solver leaves >= EARLY_MIN_MISSING fields empty (or whose status-time
+#    contract asks >= AHEAD_MIN_NEW ids new to the lane) starts the generalize the moment its bytes are solved, while
+#    the runner still banks/localizes the answered part (D23 script TT: worker at T+1:55 instead of T+5:08)
+AUTO_EARLY = os.environ.get("HCTF_AUTO_EARLY", "1") != "0"
+EARLY_MIN_MISSING = int(os.environ.get("HCTF_EARLY_MIN_MISSING", "25"))
+AHEAD_MIN_NEW = int(os.environ.get("HCTF_AHEAD_MIN_NEW", "25"))
+# #1d generalize prompt: per-case diff fields shown / whole problem list (D23: 6 timed-out Mastery cases = 2.6 MB ->
+#     prompt_too_long, the worker died in 5 s)
+PROB_DIFF_FIELDS = int(os.environ.get("HCTF_PROB_DIFF_FIELDS", "12"))
+PROBS_MAX_CHARS = int(os.environ.get("HCTF_PROBS_MAX_CHARS", "40000"))
+EVIDENCE_MAX_CHARS = int(os.environ.get("HCTF_EVIDENCE_MAX_CHARS", "60000"))
+EVIDENCE_MAX_FIELDS = int(os.environ.get("HCTF_EVIDENCE_MAX_FIELDS", "120"))
 # D22 post-mortem #8/#9: at a web single's CORRECT a background worker codifies the winning exploit as a clue-keyed
 # plugin (lib/web/handlers/<slug>.py) so the Time Trial / Mastery solver dispatches to it instead of each fresh target
 # being cracked by hand again. It runs beside the Time Trial; HOLD > 0 makes the first web TT attempt wait up to that
@@ -278,6 +362,20 @@ def live_method_text(log, limit=1500):
     work = [c for c in cmds if "hctf submit" not in c][-2:]
     out = ("\n".join(texts[-1:]) + "\n" if texts else "") + "\n---\n".join(work + sub[-1:])
     return out[-limit:] if out.strip() else ""
+
+
+def _no_clock(last):
+    """The attempt has no deadline (untimed regular pool / practice / no_clock): it stays open between cycles."""
+    return last.get("deadline") is None and bool(last.get("untimed") or last.get("no_clock")
+                                                 or last.get("run_for_time") is False)
+
+
+def _fully_judged(last):
+    """The attempt's in-window localization finished: every answered field has its verdict (the partial-submit flag
+    when the solver left fields empty)."""
+    if last.get("missing"):
+        return last.get("partial_localize_complete") is True
+    return last.get("localize_complete") is True
 
 
 def _live_fields(last, wrong, fixed):
@@ -1658,6 +1756,8 @@ COMPOUND_PROBE_SECONDS = float(os.environ.get("HCTF_COMPOUND_PROBE_SECONDS", "45
 WEB_LIVE_COMPOUND = os.environ.get("HCTF_WEB_LIVE_COMPOUND", "1") != "0"
 WEB_COMPOUND_SECONDS = float(os.environ.get("HCTF_WEB_COMPOUND_SECONDS", "30"))   # earlier challenges started by then
 WEB_COMPOUND_WAIT = float(os.environ.get("HCTF_WEB_COMPOUND_WAIT", "90"))
+WEB_READY_POLL = float(os.environ.get("HCTF_WEB_READY_POLL", "5"))         # s between status polls
+WEB_READY_POLL_MAX = float(os.environ.get("HCTF_WEB_READY_POLL_MAX", "600"))  # give up polling after
 # Mastery speed gate: estimated Mastery solve (mutation probe's 2-set mastery-shape run) vs the known TT window. Mastery
 # windows were 1-2.7x the TT window on D3-D8, so only an estimate over MASTERY_GATE_RATIO x TT window acts.
 MASTERY_GATE_RATIO = float(os.environ.get("HCTF_MASTERY_GATE_RATIO", "2.0"))
@@ -2127,6 +2227,10 @@ class Chain:
         `wrong`: (answer_id, solver_value) pairs the GM rejected; `fixed`: {answer_id: value} the GM accepted as the
         right label on that attempt; `diag`: facts about the attempt (window, elapsed, how much was judged), so the
         worker is told the truth — "timing" only when every field was actually judged correct."""
+        if FAST_LIVE_ACCEPT and live is not None and (live.passed or cli.is_complete(cid)):
+            # D23 script Mastery: CORRECT already on the GM, yet 55 s of prep + three workers spawned only to be killed
+            say(f"[{cid}] mode already CORRECT on the GM (live answer): no generalize")
+            return
         self._bg_gen_take(cid, "a new generalize starts")
         tg = {"t0": time.time()}   # D22 post-mortem #12: prep phases before the worker spawns (alt: 1:23-2:24 under load)
         mode = solvers.mode_of(cid)
@@ -2152,9 +2256,7 @@ class Chain:
         self._pre_res = res
         for r in (res or []):
             if not r.get("ok"):
-                probs.append(f"case {r['case']}: error={r.get('error')} diff={r.get('diff')} unverified={r.get('unverified')}"
-                             + (f" answered={r.get('answered')}/{r.get('total')} GM-REJECTED values produced again="
-                                f"{r.get('rejected_got')}" if r.get("rejected_hits") else ""))
+                probs.append(_case_problem(r))
         lines = []
         for a, v in (wrong or []):
             if fixed and a in fixed:
@@ -2166,7 +2268,7 @@ class Chain:
                              "from the bytes and make the solver reproduce the GM's value")
         d = diag or {}
         if lines:
-            gm_wrong = "\n".join(lines)
+            gm_wrong = _cap_lines(lines, PROBS_MAX_CHARS // 2)   # D23: 902 missing-field lines
         elif wrong == [] and d.get("complete") and d.get("probed") == d.get("total"):
             gm_wrong = (f"  - every one of the {d.get('total')} fields was judged CORRECT individually, so this is a TIMING "
                         f"failure: window {d.get('window')}s, attempt took {d.get('elapsed')}s, phases {d.get('phases')}. "
@@ -2319,7 +2421,9 @@ class Chain:
                     ftxt = fam.result(timeout=FAMILY_EVIDENCE_WAIT)   # ~2 s typical; never hold the launch for long
                 except Exception as e:  # noqa: BLE001
                     ftxt = f"(codec-family probe note: {e})"
-            evidence = failing_evidence(self.sdir, mode, [a for a, _ in (wrong or [])], lane=self.lane,
+            # bounded: the prompt shows ~EVIDENCE_MAX_CHARS anyway (D23 script TT: 902 fields -> 35-42 s of prep)
+            evidence = failing_evidence(self.sdir, mode, [a for a, _ in (wrong or [])][:EVIDENCE_MAX_FIELDS],
+                                        lane=self.lane,
                                         family_text=ftxt if fam is not None else "")
         except Exception as e:  # noqa: BLE001 - advisory
             evidence = ""
@@ -2332,11 +2436,12 @@ class Chain:
                                 chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
                                 persona=workers.lane_persona(self.lane), playbook=playbook,
                                 variant_axes=variant_axes(self.lane) or "(none recorded yet for this lane)",
-                                problems="\n".join(f"  - {p}" for p in probs) or (
+                                problems=_cap_lines([f"  - {p}" for p in probs]) or (
                                     "  - every case passes -- the problem is SPEED" if d.get("solver_too_slow")
                                     else "  - solver did not produce all answers"),
                                 gm_wrong=gm_wrong,
-                                evidence=evidence or "(not extracted -- open the newest variant-* case yourself)")
+                                evidence=(evidence[:EVIDENCE_MAX_CHARS] + "\n... (evidence truncated; open the variant-* case for the rest)" if len(evidence or "") > EVIDENCE_MAX_CHARS else evidence) or
+                                "(not extracted -- open the newest variant-* case yourself)")
         set_state(self.base, stage=f"{mode}:generalizing")
         targets = {r["case"] for r in (res or []) if not r.get("ok") and not r.get("unverified")}
         # A failed variant has no GM-verified answers (unverified), so "passes" can't be judged -- but fields the solver
@@ -2357,6 +2462,11 @@ class Chain:
         say(f"[{cid}] generalize prep {tg['snapshot'] - tg['t0']:.1f}s before the worker: case-check "
             f"{tg['case'] - tg['t0']:.1f}s, baseline replay {tg['baseline'] - tg['case']:.1f}s ({len(res or [])} cases), "
             f"evidence/prompt {tg['prompt'] - tg['baseline']:.1f}s, snapshot {tg['snapshot'] - tg['prompt']:.1f}s")
+        if FAST_LIVE_ACCEPT and live is not None and (live.passed or cli.is_complete(cid)):
+            # the live answer passed the mode DURING the prep: no worker ran, nothing to judge
+            shutil.rmtree(self._snap_dir(), ignore_errors=True)
+            say(f"[{cid}] the live answer passed the mode during the generalize prep: no worker")
+            return
         green, done, harvesting = threading.Event(), threading.Event(), threading.Event()
         if live is not None:
             live.link(green)   # a live-answer pass ends this worker (its edits are still judged by _accept_or_restore)
@@ -2418,7 +2528,10 @@ class Chain:
                 reaper.join(timeout=HARVEST_JOIN_MAX)
                 if reaper.is_alive():
                     say(f"[{cid}] harvest still busy {HARVEST_JOIN_MAX:g}s after the worker ended: not waiting for it")
-            self._accept_or_restore(cid)
+            if FAST_LIVE_ACCEPT and live is not None and (live.passed or cli.is_complete(cid)):
+                self._accept_after_live(cid, mode)
+            else:
+                self._accept_or_restore(cid)
             if reaper:
                 # The last harvested attempt may still be live: a retry now would RESUME it (start is idempotent
                 # while the clock runs) with its clock half spent.
@@ -2428,13 +2541,43 @@ class Chain:
     #    generalize worker on the failed variant while hb_timed still localizes in-window (~15 s on D13 warmups Mastery).
     def _early_kw(self, cid, untimed=False):
         self._early = None
-        if not workers.EARLY_GENERALIZE or untimed:
-            return {}
-        return {"on_event": lambda data: self._early_event(cid, data)}
+        if workers.EARLY_GENERALIZE and not untimed:
+            return {"on_event": lambda data: self._early_event(cid, data)}
+        if AUTO_EARLY:
+            # D23 #2: armed on every timed attempt (incl. the untimed pool); _early_event only acts when the solver left
+            # a large gap -- the attempt can't pass in-window then, so its generalize may as well start now
+            return {"on_event": lambda data: self._early_event(cid, data)}
+        return {}
+
+    def _ahead_new(self, mode):
+        """Status-time contract-ahead: how many of `mode`'s ids (the GM's 409 start_required reply carries the full
+        question list; D23 verified identical to the real attempt, 1495/1495 TT and 10465/10465 Mastery) have a shape
+        no earlier day of this lane nor today's single asked. Metadata only, cached per mode."""
+        cache = self.__dict__.setdefault("_ahead_cache", {})
+        if mode not in cache:
+            try:
+                dm = re.match(r"day(\d+)", self.sdir.parent.parent.name)
+                single = cli.load(self.base, "start.json") or cli.load(self.base, "contract.json") or {}
+                known = (lane_known_shapes(self.lane, int(dm.group(1))) if dm else set()) | {
+                    field_shape(a) for a in _contract_ids(single)}
+                tc = cli.load(f"{self.base}/{mode}", "contract.json") or {}
+                cache[mode] = sum(1 for a in dict.fromkeys(_contract_ids(tc)) if field_shape(a) not in known)
+            except Exception:  # noqa: BLE001 - advisory
+                cache[mode] = 0
+        return cache[mode]
 
     def _early_event(self, cid, data):
         if data.get("event") != "solved" or not data.get("local") or getattr(self, "_early", None) is not None:
             return
+        if not workers.EARLY_GENERALIZE:
+            missing = list(data.get("missing") or [])
+            mode = solvers.mode_of(cid)
+            ahead = self._ahead_new(mode)
+            if data.get("result") != "solver_incomplete" or not (
+                    len(missing) >= EARLY_MIN_MISSING or (missing and ahead >= AHEAD_MIN_NEW)):
+                return
+            say(f"[{cid}] contract-ahead: the solver left {len(missing)} field(s) empty (status-time contract: {ahead} "
+                f"id(s) new to the lane) -- the attempt can't pass as is: generalizing NOW, beside its banking")
         tc = json.loads((Path(data["local"]) / "contract.json").read_text())
         if not data.get("attempt_id") or cli.attempt_id(tc) != data["attempt_id"]:
             return
@@ -2449,12 +2592,13 @@ class Chain:
             f"{case.name} while the attempt is still judged")
         t = threading.Thread(target=self.generalize, daemon=True,
                              args=(cid, [(a, None) for a in missing] or None, {}, diag))
-        self._early = {"thread": t, "case": case, "attempt": data["attempt_id"]}
+        self._early = {"thread": t, "case": case, "attempt": data["attempt_id"], "sig": _code_sig(self.sdir)}
         t.start()
 
     def _early_join(self, cid):
         """After the attempt's final result: fold its GM verdicts into the early variant case (and into the running
-        generalize's expected snapshot, so its restore keeps them), then wait for that worker. True if one ran."""
+        generalize's expected snapshot, so its restore keeps them), then wait for that worker. True if one ran AND
+        changed the solver (an unchanged one would only repeat the same attempt's verdicts -- D23 #1e)."""
         e, self._early = getattr(self, "_early", None), None
         if not e:
             return False
@@ -2485,6 +2629,9 @@ class Chain:
         except Exception as ex:  # noqa: BLE001 - the worker still has the bytes
             say(f"[{cid}] early verdict merge note: {ex}")
         e["thread"].join()
+        if _code_sig(self.sdir) == e.get("sig"):
+            say(f"[{cid}] early generalize left the solver unchanged: no re-run of the same attempt")
+            return False
         return True
 
     def _start_profile(self, cid, single):
@@ -2767,9 +2914,9 @@ class Chain:
             except OSError as e:
                 say(f"[{cid}] {fname} restore note: {e}")
 
-    def _accept_or_restore(self, cid):
+    def _accept_or_restore(self, cid, case_timeout=None):
         """After the generalize worker exits for ANY reason: keep its edits only if every case that passed before
-        still passes (and the solver still runs at all)."""
+        still passes (and the solver still runs at all). `case_timeout`: per-case replay cap (a live pass: short)."""
         snap = self._snap_dir()
         if not snap.exists():
             return
@@ -2780,7 +2927,8 @@ class Chain:
                 # run only adds 5-10 s between "green" and the retry (rehearsal Day 7: 14 s / 20 s gaps on the script lane).
                 res = cached[2]
             else:
-                res = solvers.test_solver(self.sdir) if (self.sdir / "solve.py").exists() else []
+                kw = {"timeout": case_timeout} if case_timeout else {}
+                res = solvers.test_solver(self.sdir, **kw) if (self.sdir / "solve.py").exists() else []
         except Exception as e:  # noqa: BLE001
             res = None
             err = repr(e)
@@ -2795,6 +2943,33 @@ class Chain:
             return
         self._restore_snapshot(f"broke previously-passing cases {broken[:6]}" if res else
                                f"solver no longer runs ({err if res is None else 'no solve.py / no cases'})")
+
+    def _accept_after_live(self, cid, mode):
+        """The mode passed through the LIVE answer while this generalize's worker was still editing. Never hold the
+        chain on a full transactional replay of unfinished edits (D23 mobile TT: 58 s; script Mastery: 22 s + 55 s of
+        prep): unchanged code -> nothing to judge; Mastery (the chain's last mode) -> keep the known-good pre-worker
+        solver now, the post-run speed-harden teaches it the GM-verified case; Time Trial -> start the Mastery pre-start
+        first, then judge the edits with the short per-case timeout (a slow case counts as broken -> restore)."""
+        snap = self._snap_dir()
+        if not snap.exists():
+            return
+        if _code_sig(self.sdir) == _code_sig(snap):
+            shutil.rmtree(snap, ignore_errors=True)
+            return
+        if mode != "time_trial":
+            aside = self.root / ".generalize-unjudged"
+            shutil.rmtree(aside, ignore_errors=True)
+            if self.sdir.exists():
+                shutil.move(str(self.sdir), str(aside))
+            shutil.move(str(snap), str(self.sdir))
+            say(f"[{self.base}] live pass: pre-worker solver kept; the worker's unfinished edits are in "
+                f"{aside.relative_to(ROOT)} (not judged on the critical path; the post-run speed-harden learns the case)")
+            return
+        try:
+            self._prefetch_mastery_start()   # overlaps the judgement below
+        except Exception as e:  # noqa: BLE001 - an optimisation only
+            say(f"[{cid}] Mastery pre-start note: {e}")
+        self._accept_or_restore(cid, case_timeout=BASELINE_CASE_TIMEOUT)
 
     def recover_interrupted_generalize(self):
         """A snapshot left on disk means the orchestrator died mid-generalize (killed run): restore it."""
@@ -3918,13 +4093,14 @@ class Chain:
             self.generalize(cid, wrong=None, fixed=None, diag={"compound_today": tp.summary(res)})
         say(f"[{cid}] today-probe recheck: still missing after {TODAY_RECHECKS} fresh draw(s); Mastery starts now")
 
-    def _await_probes(self, timeout):
-        """Wait up to `timeout` s for the beside-the-TT probes -> True when every started one has finished."""
+    def _await_probes(self, timeout, ready=None):
+        """Wait up to `timeout` s for the beside-the-TT probes -> True when every started one has finished. `ready`
+        (an Event): stop waiting as soon as it is set (the web Mastery target is up) -> False if probes still run."""
         futs = [f for f in (getattr(self, a, None) for a in ("_fam_pre_fut", "_mut_pre_fut", "_cmp_pre_fut"))
                 if f is not None]
         end = time.time() + timeout
         while not all(f.done() for f in futs):
-            if time.time() >= end:
+            if time.time() >= end or (ready is not None and ready.is_set()):
                 return False
             time.sleep(0.05)
         return True
@@ -3986,13 +4162,26 @@ class Chain:
             return
         mcid = m["id"]
 
+        ready = self._web_m_ready = threading.Event()
+
         def run():
             t0 = time.time()
             with cli.quiet():
                 env = cli.call(mcid, "start", mcid, timeout=60)
             body = env.get("body") or {}
-            say(f"[{mcid}] web Mastery target requested before the pre-Mastery checks: "
-                f"{body.get('result') or body.get('error') or env.get('http')} ({time.time() - t0:.1f}s)")
+            state = str(body.get("result") or body.get("error") or env.get("http"))
+            say(f"[{mcid}] web Mastery target requested before the pre-Mastery checks: {state} ({time.time() - t0:.1f}s)")
+            # D23 template-temper: the target was `active` at once, yet Mastery sat on the 90 s compound check ->
+            # tell timed_stage the moment it is ready (poll while `preparing`)
+            end = time.time() + WEB_READY_POLL_MAX
+            while state.lower() in webtarget.PREPARING and time.time() < end:
+                time.sleep(WEB_READY_POLL)
+                with cli.quiet():
+                    body = cli.call(mcid, "status", mcid, timeout=30).get("body") or {}
+                state = str(body.get("result") or body.get("error") or "")
+            if state and state.lower() not in webtarget.PREPARING and not body.get("error"):
+                ready.set()
+                say(f"[{mcid}] web Mastery target ready ({state}) after {time.time() - t0:.0f}s")
         threading.Thread(target=lambda: _quiet_errors(run, mcid), daemon=True, name=f"web-m-kick-{self.base}").start()
 
     def _prefetch_tt(self):
@@ -4735,7 +4924,9 @@ class Chain:
                 # web: the Mastery target first (its provisioning can take ~5 min), then the live compounding check;
                 # a miss is generalized now, while the target provisions (user 2026-10-21: before Mastery starts)
                 self._web_mastery_kick()
-                done = self._await_probes(WEB_COMPOUND_WAIT)
+                # the check only waits while the target still provisions: a ready target starts Mastery now and a
+                # still-running check's misses go to a failure generalize (D23 template-temper: 90 s on an active one)
+                done = self._await_probes(WEB_COMPOUND_WAIT, ready=getattr(self, "_web_m_ready", None))
             else:
                 # untimed pool: no clock, and the probes' misses are only HELD for a failure generalize -> never wait
                 # for them (rehearsal fair D16: binary Mastery sat 2 s on `probes still running`; warmups' codec wait is up
@@ -4746,7 +4937,10 @@ class Chain:
                 say(f"[{cid}] probes still running after {LATE_PROBE_WAIT:g}s: Mastery starts now (a failure "
                     "generalize takes their results)")
             elif not done and web_m:
-                say(f"[{cid}] web live compound check still running after {WEB_COMPOUND_WAIT:g}s: Mastery starts now")
+                rdy = getattr(self, "_web_m_ready", None)
+                say(f"[{cid}] web live compound check still running "
+                    + ("but the Mastery target is ready" if rdy is not None and rdy.is_set()
+                       else f"after {WEB_COMPOUND_WAIT:g}s") + ": Mastery starts now")
             if late and mode == "mastery" and self._tt_pool_untimed() and not web_m:
                 # misses are adopted as cases already; the failure generalize (if Mastery fails at all) gets the diag
                 self._late_held = late
@@ -4769,12 +4963,18 @@ class Chain:
                 self._mastery_speed_gate(cid)
         if mode == "time_trial":
             self._codify_hold(cid)
+        if AUTO_EARLY:
+            n_new = self._ahead_new(mode)
+            if n_new >= AHEAD_MIN_NEW:
+                say(f"[{cid}] contract-ahead: the status-time contract asks {n_new} id(s) new to the lane -- a solver "
+                    "gap starts the generalize the moment this attempt's bytes are solved")
         clock_retries = 0
         resume_continues = 0
         rate_retries = 0
         start_retries = 0
         untimed = False     # True once the fresh timed pool is spent: every further attempt is untimed (no clock)
         attempt = -1
+        skip_rerun = False
         while attempt < MAX_TIMED_RETRIES:
             attempt += 1
             while not self.gov.allow_timed():
@@ -4792,7 +4992,7 @@ class Chain:
                 (left is not None and left > 0) or (left is None and prev.get("deadline") is None
                                                     and (prev.get("untimed") or prev.get("no_clock")
                                                          or prev.get("run_for_time") is False)))
-            if live_banked:
+            if live_banked and not skip_rerun:
                 say(f"[{cid}] retry_skipped_banked: attempt {str(prev.get('attempt_id'))[:8]} holds GM-accepted ids "
                     f"({'untimed' if left is None else f'{left:.1f}s left'}) -- reconnecting with start, never retry")
             if left is not None and 0 < left < need and not live_banked:
@@ -4826,7 +5026,13 @@ class Chain:
                 lf = {"budget": workers.WEB_LIVE_FIRST_BUDGET}
                 say(f"[{cid}] live-first: first web attempt capped to {workers.WEB_LIVE_FIRST_BUDGET:g}s solver -> "
                     "blocks fast, live-answer takes the open attempt (retry runs the full solver)")
-            res = timed.run(cid, self.sdir, log=say, **op, **lf, **self._early_kw(cid, untimed))
+            if skip_rerun:
+                skip_rerun = False
+                res = "blocked"
+                say(f"[{cid}] the generalize left the solver unchanged: not re-running it on attempt "
+                    f"{str((timed.last_result(cid) or {}).get('attempt_id'))[:8]} (same verdicts) -- straight to the next fix")
+            else:
+                res = timed.run(cid, self.sdir, log=say, **op, **lf, **self._early_kw(cid, untimed))
             if res == "error:exec" and self._gm_passed(cid):
                 res = "correct"
             if res == "correct" and mode == "time_trial":
@@ -5024,38 +5230,58 @@ class Chain:
                     record_timed_case(cid, self.sdir)
                     return True
                 capture_variant(cid, self.sdir)  # expected.json now enriched by the probe-confirmed fields
-            # Online label resolution FIRST: for closed-vocab label fields, probe the GM (the only authority on the
-            # spelling) rather than letting the offline generalize worker GUESS and burn another attempt (the Q6 pain).
-            # only fields the solver DID answer (wrongly) and the GM has NOT already corrected in-window: an empty field
-            # is a solver gap, and a `fixed` label is confirmed + cached already (rehearsal D13 replay: a GM start of 4-6 s
-            # per blocked cycle for nothing)
+            # D23 #1b: the live answer starts NOW, beside the online resolution below (it used to wait behind it: script
+            # Mastery's label probes ran ~10 min before any LLM looked at the 18 fields' bytes).
+            live = None
+            fields = _live_fields(last, wrong, fixed) if LIVE_ANSWER else []
+            if LIVE_FIRST and fields and len(fields) <= LIVE_MAX_FIELDS:
+                live = self._start_live(cid, last, fields, wrong, fixed)
+            # Online resolution (parallel probes, time-bounded): GM-judged spellings for closed-vocab label fields and
+            # ORDER/format alternates for list-valued fields (D23 metadata TT: the CD-order list was wrong, the sorted
+            # list right -- a live worker took 4 min to try it). Only fields the solver DID answer (wrongly) and the GM
+            # has NOT already corrected in-window: an empty field is a solver gap, a `fixed` label is cached already.
             unresolved = [a for a, v in (wrong or []) if v is not None and a not in (fixed or {})]
+            got = set()
             if unresolved:
                 try:
-                    got = timed.resolve_labels_online(cid, self.sdir, unresolved, self.lane, log=say)
+                    got |= timed.resolve_format_alternates(cid, [(a, v) for a, v in wrong if a in unresolved], log=say)
                 except Exception as e:  # noqa: BLE001
-                    got = set()
-                    say(f"[{cid}] online label resolve note: {e}")
-                if got:
-                    if cli.is_complete(cid):
-                        set_state(self.base, **{f"{mode}_result": "correct"})
-                        record_timed_case(cid, self.sdir)
-                        return True
-                    wrong = [(a, v) for a, v in wrong if a not in got]
-                    if not wrong:
-                        say(f"[{cid}] resolved {len(got)} label(s) online (cached); retrying without generalize")
-                        continue
+                    say(f"[{cid}] format-alternates note: {e}")
+                left_ids = [a for a in unresolved if a not in got]
+                if left_ids and not cli.is_complete(cid):
+                    try:
+                        got |= timed.resolve_labels_online(cid, self.sdir, left_ids, self.lane, log=say)
+                    except Exception as e:  # noqa: BLE001
+                        say(f"[{cid}] online label resolve note: {e}")
+            if cli.is_complete(cid) or (live is not None and live.passed):
+                self._end_live(live)
+                say(f"[{cid}] passed during the online resolution"
+                    + (" / live answer" if live is not None and live.passed else ""))
+                set_state(self.base, **{f"{mode}_result": "correct"})
+                self._live_pass_prefetch(mode)
+                record_timed_case(cid, self.sdir)
+                if live is not None and live.passed:
+                    self._start_bg_gen(cid, last)
+                return True
+            if got:
+                wrong = [(a, v) for a, v in wrong if a not in got]
+                if not wrong:
+                    self._end_live(live)
+                    say(f"[{cid}] resolved {len(got)} field(s) online (cached); retrying without generalize")
+                    continue
             if wrong == [] and diag.get("complete") and attempt < MAX_TIMED_RETRIES:
                 # The probe judged EVERY field and found none wrong: the solver is right, the failure was the
                 # environment or the clock (rehearsal rehearsal: 399/399 ok after a Homebase-only failure, yet a 12-min
                 # generalize started). Retry instead; the Homebase 7z shim / local fallback handle the environment.
+                self._end_live(live)
                 say(f"[{cid}] probe: every field correct -> environment/timing, retrying without generalize")
                 set_state(self.base, stage=f"{mode}:retrying")
                 continue
             if self._bg_gen_take(cid, "the attempt failed", only_won=True):
+                self._end_live(live)
                 say(f"[{cid}] {res}: retrying with the background generalize's solver (no new generalize)")
                 continue
-            if label_only_failure(wrong):
+            if label_only_failure(wrong) and live is None:
                 fixed = dict(fixed or {})
                 if self._label_scout(cid, mode, wrong, fixed):
                     return True
@@ -5067,27 +5293,57 @@ class Chain:
             if held:
                 self._late_held = None
                 diag.update({k: v for k, v in held.items() if k not in diag})
-            live = None
-            fields = _live_fields(last, wrong, fixed) if LIVE_ANSWER else []
-            if fields and len(fields) <= LIVE_MAX_FIELDS:
-                try:
-                    live = LiveAnswer(self, cid, last, fields, wrong, fixed).start()
-                except Exception as e:  # noqa: BLE001 - the generalize path stands on its own
-                    say(f"[{cid}] live-answer not started: {e}")
+            if live is None and fields and len(fields) <= LIVE_MAX_FIELDS:
+                live = self._start_live(cid, last, fields, wrong, fixed)
+            sig = _code_sig(self.sdir)
             self.generalize(cid, wrong=wrong, fixed=fixed, diag=diag, live=live)
             if live is not None:
                 live.finish()
                 if live.passed or cli.is_complete(cid):
                     say(f"[{cid}] passed by the live-answer worker (attempt {str(live.attempt)[:8]})")
                     set_state(self.base, **{f"{mode}_result": "correct"})
+                    self._live_pass_prefetch(mode)
                     record_timed_case(cid, self.sdir)
                     self._start_bg_gen(cid, last)
                     return True
                 if live.all_accepted:
                     say(f"[{cid}] live-answer: every listed field accepted -> reconnecting to complete the attempt")
                     attempt -= 1
+                    continue
+            if (SKIP_UNCHANGED_RERUN and res == "blocked" and _no_clock(last) and last.get("attempt_id")
+                    and _fully_judged(last) and _code_sig(self.sdir) == sig):
+                # D23 #1e: the generalize left the solver EXACTLY as it was (worker died / edits rejected) and the last
+                # run already judged everything it answered: re-running it on the same open attempt only repeats the
+                # same verdicts. (A cut-short localization still re-runs -- it learns more, and hb_timed no longer
+                # resubmits the values already rejected there: D23 script TT re-bisected 593 answers for 100 s.)
+                skip_rerun = True
         set_state(self.base, stage=f"{mode}:blocked")
         return False
+
+    def _live_pass_prefetch(self, mode):
+        """A Time Trial passed off the runner's own path (live answer / online resolution): pre-start Mastery now, as a
+        runner pass does (record_timed_case + the bg generalize otherwise sit in front of its start + download)."""
+        if mode == "time_trial":
+            try:
+                self._prefetch_mastery_start()
+            except Exception as e:  # noqa: BLE001 - an optimisation only
+                say(f"[{self.base}] Mastery pre-start note: {e}")
+
+    def _start_live(self, cid, last, fields, wrong, fixed):
+        try:
+            return LiveAnswer(self, cid, last, fields, wrong, fixed).start()
+        except Exception as e:  # noqa: BLE001 - the generalize path stands on its own
+            say(f"[{cid}] live-answer not started: {e}")
+            return None
+
+    @staticmethod
+    def _end_live(live):
+        """Stop a live-answer worker the chain no longer needs (resolved online / retrying)."""
+        if live is not None:
+            try:
+                live.finish()
+            except Exception:  # noqa: BLE001
+                pass
 
     def _start_bg_gen(self, cid, last):
         """The Time Trial passed through the LIVE answer while its solver still MISSES fields (`missing`) Mastery asks
@@ -5691,6 +5947,8 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
     groups = {}
     for c in (wait_for_release(day) if wait_release and day is not None else released_challenges(day)):
         groups.setdefault(solvers.base_id(c["id"]), []).append(c)
+    from . import ressample   # D23 #4: memory / CPU pressure at the drop, measured (see hctf/ressample.py)
+    ressample.start(say)
     if only:
         groups = {b: v for b, v in groups.items() if any(o in b for o in only)}
     skip = {x.strip() for x in os.environ.get("HCTF_SKIP_IDS", "").split(",") if x.strip()}
@@ -5741,6 +5999,7 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
         elif keep_homebase:
             say("[homebase] left running (--keep-homebase); power it off with `hctf hb off` when done")
     say("all chains finished")
+    ressample.stop(say)
     try:   # earlier web Time Trials the live compound checks left open: re-solve them now that every web chain is done
         from . import compound
         if WEB_LIVE_COMPOUND and (compound.ROOT / ".run" / "webcmp" / "touched.jsonl").exists():

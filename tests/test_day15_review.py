@@ -19,6 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "hctf"))
 import hb_timed  # noqa: E402
+import os
+os.environ.setdefault("HCTF_SKIP_UNCHANGED_RERUN", "0")   # stub generalizes edit nothing: D23 #1e is covered by test_d23_postmortem
 from hctf import orchestrate  # noqa: E402
 
 hb_timed.UNJUDGED_RESENDS = (0.0, 0.0)

@@ -14,6 +14,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import os
+os.environ.setdefault("HCTF_AUTO_EARLY", "0")   # D23 #2 auto-armed early event: covered by test_d23_postmortem
 from hctf import hb_timed, mutate, orchestrate  # noqa: E402
 
 NOTE = b"\xef\xbb\xbfcase notes\nline two\n"

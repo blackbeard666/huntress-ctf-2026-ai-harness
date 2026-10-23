@@ -21,6 +21,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+os.environ.setdefault("HCTF_AUTO_EARLY", "0")   # D23 #2 auto-armed early event: covered by test_d23_postmortem
 from hctf import coordinator, duel, inbox, paths, retrieval, solvers, workers  # noqa: E402
 from hctf import hb_timed  # noqa: E402
 
