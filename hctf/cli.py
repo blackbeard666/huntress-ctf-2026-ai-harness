@@ -24,7 +24,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from . import paths, remote
+from . import contract, paths, remote
 from .paths import ROOT
 
 # Wrong-answer budgets. Per-field probing lets the harness resolve the GM's exact wording for structured,
@@ -132,6 +132,16 @@ def result_kind(body):
     if r in ("incorrect", "accepted", "expired", "already_solved"):
         return r
     return None
+
+
+def classify_reply(env):
+    """Canonical GM-reply classifier -> 'correct' | 'accepted' | 'incorrect' | 'already_solved' | 'expired'
+    | 'unjudged'. UNJUDGED means the GM never scored the request and folds in rate_limited, an empty /
+    non-JSON body, a body with no `result` key, and any transport failure (http 0, or a non-200 carrying no
+    scored verdict). The rule that costs points if a call site forgets it: UNJUDGED is NEVER `incorrect` --
+    back off and re-send, never eliminate a candidate on it. (result_kind sees only the body string, so every
+    caller had to re-layer this; route the whole envelope through here instead.)"""
+    return result_kind((env or {}).get("body")) or "unjudged"
 
 
 def call(cid, op, *args, timeout=180):
@@ -451,10 +461,8 @@ def c_artifact(a):
 
 
 def _questions(start):
-    """Map answer_id -> question dict, using the aligned questions/answer_ids arrays."""
-    ids = (start or {}).get("answer_ids") or []
-    qs = (start or {}).get("questions") or []
-    return {aid: (qs[i] if i < len(qs) and isinstance(qs[i], dict) else {}) for i, aid in enumerate(ids)}
+    """Map answer_id -> question dict, keyed by answer_ids (the authority; never drops an id)."""
+    return contract.answer_map(start)
 
 
 def _normalize(value, q):
@@ -839,7 +847,7 @@ def submit(cid, answers, force=False, max_wrong=MAX_WRONG_PER_ATTEMPT, global_ca
             env = call(cid, "submit", cid, json.dumps(answers))
     dt_call = round(time.time() - t_call, 2)
     body = env["body"] if env["body"] is not None else env
-    kind = result_kind(env["body"]) or ("error" if env["http"] != 200 else "unknown")
+    kind = classify_reply(env)   # 'correct'|'accepted'|'incorrect'|'already_solved'|'expired'|'unjudged'
 
     # Which answers does this result prove correct?
     newly = {}

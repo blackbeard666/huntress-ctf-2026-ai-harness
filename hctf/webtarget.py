@@ -96,12 +96,23 @@ def dead(body):
     return _result(body) in DEAD
 
 
+# GM errors that are TRANSIENT -- resend, never give up: a rate limit, and `control_unavailable`, which was
+# measured 2026-10-22 as a transient op=start hiccup (a 26.7 s hang) that a plain resend cleared on try 1. Both
+# read as a non-rate-limit error otherwise, so a naive "error -> terminal" test would abandon a workable route.
+_TRANSIENT_ERRORS = ("rate_limited", "control_unavailable")
+
+
+def _transient_error(err):
+    e = str(err or "")
+    return any(t in e for t in _TRANSIENT_ERRORS)
+
+
 def terminal(body):
-    """Nothing to wait for: a verdict, or a GM refusal other than a rate limit."""
+    """Nothing to wait for: a verdict, or a GM refusal that is NOT transient (not a rate limit / control_unavailable)."""
     if not isinstance(body, dict):
         return True
     if body.get("error"):
-        return "rate_limited" not in str(body.get("error"))
+        return not _transient_error(body.get("error"))
     return _result(body) in TERMINAL
 
 
@@ -208,8 +219,8 @@ def await_target(cid, body, status, revive=None, log=print, wait=None, poll=None
             nb = status(cid)
         except Exception:  # noqa: BLE001 - one failed poll: keep waiting
             nb = None
-        if isinstance(nb, dict) and nb and "rate_limited" not in str(nb.get("error") or ""):
-            body = nb
+        if isinstance(nb, dict) and nb and not _transient_error(nb.get("error")):
+            body = nb   # a transient error (rate_limited / control_unavailable) never overwrites the good body
 
 
 # ------------------------------------------------------------------ orchestrator-side GM helpers (need hctf.*)

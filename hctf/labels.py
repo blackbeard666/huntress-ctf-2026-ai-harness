@@ -346,7 +346,7 @@ def resolve_parallel(cid, wrong, harness="label", conc=None, log=None, extra=Non
     the best-ranked one. Flags are never probed; closed-vocab non-enum values the GM accepts are cached in vocab.json."""
     from concurrent.futures import ThreadPoolExecutor
     import threading
-    from . import grouptest
+    from . import grouptest, ratebucket
     if not RESOLVE or not wrong:
         return {}
     conf = cli.confirmed_answers(cid)
@@ -384,7 +384,8 @@ def resolve_parallel(cid, wrong, harness="label", conc=None, log=None, extra=Non
             with lock:
                 won.setdefault(aid, v)
     t0 = time.time()
-    with ThreadPoolExecutor(max_workers=max(1, min(conc or grouptest.CONC, len(tasks) or 1))) as ex:
+    with ThreadPoolExecutor(max_workers=max(1, min(ratebucket.wave_width(conc or grouptest.CONC),
+                                                   len(tasks) or 1))) as ex:
         list(ex.map(one, tasks))
     if won:
         try:

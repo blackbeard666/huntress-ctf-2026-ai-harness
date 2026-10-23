@@ -243,7 +243,12 @@ def _worker_env(env_extra):
     if env.get("HCTF_STAGE") in NO_GM_STAGES:
         env.pop("HUNTRESS_GM_TOKEN", None)
     env["HCTF_WORKER_START"] = str(time.time())
-    env["TMPDIR"] = str(TMP)  # keep every worker's scratch files inside the project
+    # A unique scratch dir per worker, inside the project (not the shared .run/tmp): two workers writing an
+    # identically-named temp file into one $TMPDIR clobber each other -- a sibling once overwrote a 3075-entry
+    # seating map with an 8-key summary, and one worker's script was replaced mid-run so it ran another's code.
+    _tmp = TMP / f"{paths.slugify(env.get('HCTF_STAGE') or 'worker')}-{uuid.uuid4().hex[:8]}"
+    _tmp.mkdir(parents=True, exist_ok=True)
+    env["TMPDIR"] = str(_tmp)
     env["PYTHONPATH"] = f"{ROOT}:{env.get('PYTHONPATH', '')}"  # so solvers/tools can `import lib.*`
     env["PATH"] = f"{BIN}:{TOOLS / 'node' / 'bin'}:{ROOT / '.venv' / 'bin'}:{Path.home() / '.local/bin'}:{env.get('PATH', '')}"
     # Cap a Bash call that hangs (Day 8 binary single: the Day 7 solver's brute force over a 67 MB Swift ELF sat the

@@ -33,6 +33,35 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+def _load_ratebucket():
+    """Account-wide GM rate governor, imported robustly however gm.py was loaded: as the `hctf.gm`
+    package module, as a standalone script (`python3 hctf/gm.py`), OR as a bare file-path module with
+    no package and hctf/ off sys.path -- which is how the orchestrator loads it (remote.gm_client via
+    importlib.spec_from_file_location). The first two import styles miss that third case, so fall back
+    to loading the sibling ratebucket.py by its path next to this file."""
+    try:
+        from . import ratebucket as rb
+        return rb
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import ratebucket as rb
+        return rb
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import importlib.util
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ratebucket.py")
+        spec = importlib.util.spec_from_file_location("hctf_ratebucket", p)
+        rb = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(rb)
+        return rb
+    except Exception:  # noqa: BLE001
+        return None
+
+
+ratebucket = _load_ratebucket()
+
 # Public GM (pairing-token) by default; override with the inside proxy URL when running in-network.
 # Note: the inside proxy 404s if a trailing slash is added before the query string, so never append one.
 GM = os.environ.get("HUNTRESS_GAME_MASTER_URL", "https://2026.huntress.ctf.games")
@@ -175,21 +204,26 @@ def _request(method, params=None, payload=None):
     # POSTs (start/submit) get a longer timeout and no blind retry -- the GM may have processed them.
     timeout, net_retries = (GET_TIMEOUT, 1) if method == "GET" else (TIMEOUT, 0)
     for attempt in range(RATE_RETRIES + 1):
+        if ratebucket:
+            ratebucket.admit()          # account-wide rolling-window governor (fail-open; no-op unless a cap is set)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 return r.status, dict(r.headers), _gunzip(r.read(), r.headers.get("Content-Encoding"))
         except urllib.error.HTTPError as e:
             raw = _gunzip(e.read(), (e.headers or {}).get("Content-Encoding"))
-            if e.code in (429, 503) and attempt < RATE_RETRIES and not _refusal(raw):
-                wait = _retry_after(e.headers, attempt)
-                # rate-limited: back off, don't fail the caller -- but SAY so (Day 7: 9.5-18 s single submits with no
-                # trace of why; the envelope's retries/slept + this line make 429 backoff visible in log.jsonl)
-                STATS["retries"] += 1
-                STATS["slept"] += wait
-                print(f"gm.py: HTTP {e.code} on {method} {(params or payload or {}).get('op', '')}; retry "
-                      f"{attempt + 1}/{RATE_RETRIES} in {wait:g}s", file=sys.stderr)
-                time.sleep(wait)
-                continue
+            if e.code in (429, 503) and not _refusal(raw):
+                if ratebucket:
+                    ratebucket.note_429()   # tell every other worker to narrow its fan-out NOW
+                if attempt < RATE_RETRIES:
+                    wait = _retry_after(e.headers, attempt)
+                    # rate-limited: back off, don't fail the caller -- but SAY so (Day 7: 9.5-18 s single submits with no
+                    # trace of why; the envelope's retries/slept + this line make 429 backoff visible in log.jsonl)
+                    STATS["retries"] += 1
+                    STATS["slept"] += wait
+                    print(f"gm.py: HTTP {e.code} on {method} {(params or payload or {}).get('op', '')}; retry "
+                          f"{attempt + 1}/{RATE_RETRIES} in {wait:g}s", file=sys.stderr)
+                    time.sleep(wait)
+                    continue
             return e.code, dict(e.headers or {}), raw
         except (urllib.error.URLError, OSError) as e:
             if net_retries > 0:
@@ -209,6 +243,8 @@ def _request_pooled(method, params=None, payload=None):
         headers["Authorization"] = "Bearer " + tok
     timeout, net_retries = (GET_TIMEOUT, 1) if method == "GET" else (TIMEOUT, 0)
     for attempt in range(RATE_RETRIES + 1):
+        if ratebucket:
+            ratebucket.admit()          # account-wide rolling-window governor (fail-open; no-op unless a cap is set)
         try:
             status, hdrs, raw = _pooled(method, params, data, headers, timeout)
         except OSError as e:
@@ -221,14 +257,17 @@ def _request_pooled(method, params=None, payload=None):
                 net_retries -= 1
                 continue
             return 0, {}, json.dumps({"error": "unreachable", "detail": repr(e)}).encode()
-        if status in (429, 503) and attempt < RATE_RETRIES and not _refusal(raw):
-            wait = _retry_after(hdrs, attempt)
-            STATS["retries"] += 1
-            STATS["slept"] += wait
-            print(f"gm.py: HTTP {status} on {method} {(params or payload or {}).get('op', '')}; retry "
-                  f"{attempt + 1}/{RATE_RETRIES} in {wait:g}s", file=sys.stderr)
-            time.sleep(wait)
-            continue
+        if status in (429, 503) and not _refusal(raw):
+            if ratebucket:
+                ratebucket.note_429()   # tell every other worker to narrow its fan-out NOW
+            if attempt < RATE_RETRIES:
+                wait = _retry_after(hdrs, attempt)
+                STATS["retries"] += 1
+                STATS["slept"] += wait
+                print(f"gm.py: HTTP {status} on {method} {(params or payload or {}).get('op', '')}; retry "
+                      f"{attempt + 1}/{RATE_RETRIES} in {wait:g}s", file=sys.stderr)
+                time.sleep(wait)
+                continue
         return status, hdrs, raw
 
 

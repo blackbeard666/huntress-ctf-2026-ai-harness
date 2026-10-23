@@ -149,3 +149,19 @@ How the lane has looked so far (observations, not guarantees):
 - Trusting the app's stated policy ("txt only", "token required"): D09 token and D10 type rules were decorative --
   try the forbidden form first, it is one request.
 - `curl` without `--max-time` is blocked by the hook; urllib's default UA can draw a Cloudflare 403.
+
+## reviewer cross-check (measured on a parallel agent; folded into the drivers)
+- **Blind SQLi oracle trap.** The search interpolates `q` into an EVEN number of `col LIKE '%q%'` clauses, so the
+  classic tautology PAIR is NOT an oracle: `' OR '1'='1` and `' OR '1'='2` BOTH return all rows (the first clause
+  degenerates to `LIKE '%'`). "Same result both ways" is not "not injectable." What works is QUOTE BALANCE:
+  `nope' OR (<cond>) OR '1'='2` makes every literal clause false and reduces the WHERE to `<cond>` (rows = TRUE,
+  0 rows = FALSE); calibrate on `1=1`/`1=2`. Backend is SQLite (`information_schema` absent); the proof is the
+  `summary` of the hidden row — `... WHERE summary LIKE char(112,114,111,111,102,37)` spells `'proof%'` without a
+  quote. Odd-quote / `--` / `#` / `;` / `%'`-breakout payloads all dead-end. (`lib/web/handlers` ladder now carries a
+  quote-balanced payload.)
+- **LFI.** The `?doc=` viewer silently returns the NORMAL page for depth 1-2 traversal; escalate to >= 3 `../` into the
+  absolute path the prompt names (measured `/run/huntress/objective.txt`). The viewer script/param name re-rolls —
+  read it off the root page's links. (`doc` + a deep huntress-objective payload added to the ladder.)
+- **`control_unavailable` is TRANSIENT, not terminal.** An `op=start` can answer `control_unavailable` after a hang
+  (measured 26.7 s on 2026-10-22); a plain `op=start` resend succeeded on try 1. Treat it as unjudged — back off and
+  re-send — never as a gate or a dead route. (`webtarget.terminal()` now classes it with `rate_limited`.)

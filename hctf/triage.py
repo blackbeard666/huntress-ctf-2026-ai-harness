@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from . import cli, paths
+from .contract import answer_map, check_shape
 
 TEXT_EXrE = re.compile(rb"[^\x09\x0a\x0d\x20-\x7e]")
 
@@ -161,7 +162,7 @@ def _family_table(contract, conf):
     # Script ids are <lang>-<fixture>-<field> but Python fixtures are multi-token (python-embedded-runtime-relay-...):
     # group by the question's artifact member instead, and take the field as what follows the group's common prefix.
     by_art = {}
-    for aid, q in zip(contract.get("answer_ids", []), contract.get("questions", [])):
+    for aid, q in answer_map(contract).items():   # keyed by answer_ids (authority); TEMPLATE loses no id
         art = str(q.get("artifact") or "")
         if "-" in aid and "->" in art:
             by_art.setdefault(art, []).append(aid)
@@ -173,7 +174,7 @@ def _family_table(contract, conf):
             n += 1
         for i in ids:
             pre[i] = (n, art.split("->")[-1].strip())
-    for aid, q in zip(contract.get("answer_ids", []), contract.get("questions", [])):
+    for aid, q in answer_map(contract).items():
         m = _re.match(r"((?:set\d+\.)?d\d+_[a-z]+)_(.*)", aid)          # binary: d04_analysis_machine
         if m:
             fam, field = m.group(1), m.group(2)
@@ -466,6 +467,7 @@ def triage(cid, defer_recon=None, log=None):
         return None
     files = sorted(p for p in latest.iterdir() if p.is_file() and p.name != "manifest.json")
     contract = cli.load(cid, "start.json") or cli.load(cid, "contract.json") or {}
+    check_shape(contract, cid=cid, log=log)   # loudly surface a TEMPLATE contract (answer_ids cross-product) if ever served
     out = [f"# Triage: {cid}", ""]
     if contract.get("prompt"):
         out += [f"**Prompt:** {contract['prompt']}", ""]
@@ -488,7 +490,7 @@ def triage(cid, defer_recon=None, log=None):
     elif qn:
         out.append(f"**{qn} answer(s) expected.** Formats (remaining fields only):" if conf else
                    f"**{qn} answer(s) expected.** Formats:")
-        for aid, q in zip(contract.get("answer_ids", []), contract.get("questions", [])):
+        for aid, q in answer_map(contract).items():
             if aid in conf:
                 continue
             fmt = q.get("answer_format", {})

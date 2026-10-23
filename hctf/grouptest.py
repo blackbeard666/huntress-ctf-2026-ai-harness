@@ -23,6 +23,8 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from . import ratebucket
+
 CONC = max(1, int(os.environ.get("HCTF_PROBE_CONC", "12")))
 CONC_MIN = 2
 TARGET_GROUPS = int(os.environ.get("HCTF_PROBE_GROUPS", str(CONC)))   # wave 1 = one round at full concurrency
@@ -60,7 +62,7 @@ def find_rejected(probe, answers, budget=None, conc=None, groups=None, families=
     worker took over). whole_known_bad: the caller already saw the whole batch rejected (no probe of it again)."""
     t0 = time.time()
     cmax = max(1, conc or CONC)
-    c = cmax
+    c = ratebucket.wave_width(cmax, CONC_MIN)   # start narrow if another worker is already being throttled
     stats = {"probes": 0, "waves": 0, "rate_limited": 0, "unjudged": 0, "solved": False, "conc_min": c,
              "seconds": 0.0, "unjudged_fields": 0, "unjudged_ids": []}
     bad, unjudged_left = set(), []
@@ -139,7 +141,7 @@ def find_rejected(probe, answers, budget=None, conc=None, groups=None, families=
             stats["conc_min"] = min(stats["conc_min"], c)
             time.sleep(1.0 + random.random())
         else:
-            c = min(cmax, c + 2)
+            c = min(ratebucket.wave_width(cmax, CONC_MIN), c + 2)   # add back, but stay narrow under run-wide pressure
         if log:
             log(f"grouptest wave {stats['waves']}: {len(wave)} probe(s), {len(bad)} rejected so far, "
                 f"{len(todo)} open, conc {c}")

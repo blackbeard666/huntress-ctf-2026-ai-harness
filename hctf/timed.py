@@ -10,7 +10,7 @@ import re
 import time
 from pathlib import Path
 
-from . import cli, remote, solvers, webtarget
+from . import cli, contract, remote, solvers, webtarget
 
 SUBMIT_MARGIN = 8          # seconds kept in reserve for the final submit round-trip (~1-3s over ssh)
 MAX_WRONG_TIMED = 6        # incorrect submissions allowed per timed attempt (several sets per bundle)
@@ -25,8 +25,9 @@ def seconds_left(contract):
 
 
 def _set_key(aid):
-    m = re.match(r"(set\d+)\.", aid)
-    return m.group(1) if m else "_"
+    # Peel the container prefix on BOTH separators (setN. dot AND slotN_ underscore): grouping a mastery's
+    # fields by set/slot used to bucket every `slotN_...` id into "_" because it matched only the dot form.
+    return contract.container_key(aid)
 
 
 def latest_artifacts(cid):

@@ -22,6 +22,32 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+def _load_ratebucket():
+    """GM rate governor, imported however hb_timed was loaded (package, standalone script, or bare
+    file-path module). Falls back to loading the sibling ratebucket.py by path. See gm.py for why."""
+    try:
+        from . import ratebucket as rb
+        return rb
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import ratebucket as rb
+        return rb
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import importlib.util
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ratebucket.py")
+        spec = importlib.util.spec_from_file_location("hctf_ratebucket", p)
+        rb = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(rb)
+        return rb
+    except Exception:  # noqa: BLE001
+        return None
+
+
+ratebucket = _load_ratebucket()
+
 GM = os.environ.get("HUNTRESS_GAME_MASTER_URL", "https://2026.huntress.ctf.games")
 HW = Path(__file__).resolve().parent.parent          # project root locally; ~/hw on Homebase
 CAP_RE = re.compile(r"(?:/download/|[?&]capability=)([0-9a-f]{64})")  # Homebase proxy or public GM
@@ -221,6 +247,8 @@ class _Pool:
                     if str(r.getheader("Content-Encoding") or "").lower() == "gzip":
                         import gzip
                         raw = gzip.decompress(raw)
+                    if ratebucket and (r.status == 429 or b"rate_limited" in (raw or b"")):
+                        ratebucket.note_429()   # participate in the account-wide pressure signal
                     return r.status, raw
                 except (http.client.HTTPException, ConnectionError, OSError):
                     c.close()
@@ -1399,7 +1427,10 @@ def _attempt(a):
         if sets:
             piped = _pipelined(sets, plan, body, ids, adir, solve, env, _fetch, left, out, t_started)
         elif plan and not prefetched:
-            with ThreadPoolExecutor(max_workers=min(int(_opt("HCTF_DL_PARALLEL", "48")), len(plan))) as ex:
+            dlw = int(_opt("HCTF_DL_PARALLEL", "48"))
+            if ratebucket:
+                dlw = ratebucket.wave_width(dlw)   # narrow the download burst only while under run-wide 429 pressure
+            with ThreadPoolExecutor(max_workers=min(dlw, len(plan))) as ex:
                 for _ in ex.map(_fetch, plan):  # propagate any download exception
                     pass
     except GMError as e:
