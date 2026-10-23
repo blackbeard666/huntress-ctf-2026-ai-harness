@@ -294,6 +294,19 @@ BATCH_EXPANSION_STATEMENT_REJECTED = {"for_h": ["call_double"], "percent": ["del
 # solver used: run_for_time is False OR contract started_at >= "2026-10-16" (the saved D16 TT contract carries no
 # started_at -- a date-only switch must also read the attempt's start time).
 BATCH_EXPANSION_STATEMENT_SINCE = "2026-10-16"
+# Day 23 "Press Start to Decode": a new per-file field `batch-<stem>-style` = THREE labels `topology|wrapper|expansion`
+# joined by `|` (e.g. `single|if_guard|call_double`). Its 3rd part does NOT follow the statement rule above: a
+# `call set "x=%%frag0%%%%frag1%%.."` join is `call_double` on ANY fragment pool (FrAg / v_a / item.., not only h) --
+# GM-verified TT b10c4da4 4/4 + Mastery e24c070d 12/12 -- while the older `batch-*-expansion` field keeps `percent`
+# for the same construct (D15/D16 Mastery cases). `!x!` joins = delayed, `%x%` = percent there too.
+# Topology labels seen: linear, single, diamond, cross_language, same_language, fallback_retry; the wrapper part is
+# the control-form vocab below. One-word label seeds can never match the triple (probe it whole, or not at all).
+BATCH_STYLE_TRIPLE = ("topology", "wrapper", "expansion")
+BATCH_STYLE_CALL_SET_EXPANSION = "call_double"
+# Day 23 (same challenge): `python-<stem>-handoff-id` = the `$HandoffId = 'PSPY-<16 hex>'` assigned in THAT set's
+# PowerShell precursor (e119e7.ps1 in every Mastery set: same member name, a DIFFERENT id per set -- set 1's id reused
+# for sets 2-7 was rejected 6/6). Key every per-file lookup by (set, member), never by member name alone.
+SCRIPT_HANDOFF_ID_RE = r"\$HandoffId\s*=\s*'(PSPY-[0-9A-F]{16})'"
 # Batch "control-flow form" vocabulary (Day 3 "Expansion Pack", GM-confirmed): `direct` (no control construct on the
 # executed path), `errorlevel_guard` (`ver >nul` + `if errorlevel 1 exit /b 1`), `goto_dispatch` (`goto :LABEL` +
 # `:LABEL`), `call_subroutine` (`call :LABEL` ... `exit /b 0`). Rejected for `direct`: linear, straight_line,
